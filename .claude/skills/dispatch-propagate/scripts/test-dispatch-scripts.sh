@@ -67,6 +67,7 @@ setup() {
   cp "$SCRIPT_DIR/dispatch-check-blockers" "$TMPDIR_TEST/dispatch-check-blockers"
   cp "$SCRIPT_DIR/dispatch-complete-phase" "$TMPDIR_TEST/dispatch-complete-phase"
   cp "$SCRIPT_DIR/dispatch-apply-office-hours" "$TMPDIR_TEST/dispatch-apply-office-hours"
+  cp "$SCRIPT_DIR/dispatch-qa-apply-main-qa-labels" "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels"
   cp "$SCRIPT_DIR/dispatch-apply-planned" "$TMPDIR_TEST/dispatch-apply-planned"
   # dispatch-plan-finalize resolves its three siblings (dispatch-write-plan,
   # dispatch-mark-complete, dispatch-apply-planned) via SCRIPT_DIR, which
@@ -88,6 +89,10 @@ setup() {
   # SCRIPT_DIR (= TMPDIR_TEST for this copy) — both already copied below/above,
   # so both resolve.
   cp "$SCRIPT_DIR/dispatch-auto-merge" "$TMPDIR_TEST/dispatch-auto-merge"
+  # dispatch-retriage-orphaned-followups (#1812) sources lib.sh (gh_issue_list_rest,
+  # gh_retry) and calls dispatch-apply-office-hours via its SCRIPT_DIR (= TMPDIR_TEST
+  # for this copy) — both already copied here, so both resolve.
+  cp "$SCRIPT_DIR/dispatch-retriage-orphaned-followups" "$TMPDIR_TEST/dispatch-retriage-orphaned-followups"
   # dispatch-select-target's JIT scan calls dispatch-config-load and
   # dispatch-project-status-read as "$SCRIPT_DIR/<name>". SCRIPT_DIR resolves to
   # TMPDIR_TEST for the copied dispatch-select-target, so the two helpers must
@@ -122,13 +127,15 @@ setup() {
            "$TMPDIR_TEST/dispatch-check-blockers" \
            "$TMPDIR_TEST/dispatch-complete-phase" \
            "$TMPDIR_TEST/dispatch-apply-office-hours" \
+           "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" \
            "$TMPDIR_TEST/dispatch-apply-planned" \
            "$TMPDIR_TEST/dispatch-resolve-worktree" \
            "$TMPDIR_TEST/dispatch-reconcile-ready" \
            "$TMPDIR_TEST/dispatch-config-load" \
            "$TMPDIR_TEST/dispatch-project-status-read" \
            "$TMPDIR_TEST/dispatch-sync-merge-queue" \
-           "$TMPDIR_TEST/dispatch-auto-merge"
+           "$TMPDIR_TEST/dispatch-auto-merge" \
+           "$TMPDIR_TEST/dispatch-retriage-orphaned-followups"
 
   # Default no-op stub for dispatch-provision-worktree. dispatch-route now invokes
   # it (after the worktree cross-check, before phase derivation). The real script
@@ -273,6 +280,42 @@ case "$args" in
       echo "[]"
     fi
     ;;
+  api\ *repos/*/issues\?*labels=dispatch-test-*)
+    # gh_issue_list_rest edge-case tests (#1652): sentinel label prefix
+    # `dispatch-test-` routes to in-test fixtures without polluting the shared
+    # issue-list fixture paths. MUST precede the generic api *repos/*/issues?*
+    # branch (case is first-wins). Log the full $args so tests can assert whether
+    # --paginate was passed and what per_page= value was used.
+    echo "$args" >> "$STUB_DIR/gh-issue-list-rest-calls.log"
+    if [[ -f "$STUB_DIR/gh-fail-rest" ]]; then
+      echo "stub forced gh api failure" >&2
+      exit 1
+    fi
+    rest_path_dt=$(printf '%s' "$args" | grep -oE 'repos/[^ ]+')
+    rest_query_dt="${rest_path_dt#*\?}"
+    rest_label_dt=""
+    for kv in ${rest_query_dt//&/ }; do
+      case "$kv" in
+        labels=*) rest_label_dt="${kv#labels=}" ;;
+      esac
+    done
+    rest_label_dt="${rest_label_dt//%20/ }"
+    case "$rest_label_dt" in
+      dispatch-test-empty)
+        echo '[]'
+        ;;
+      dispatch-test-paginate)
+        cat "$STUB_DIR/rest-page-1.json"
+        cat "$STUB_DIR/rest-page-2.json"
+        ;;
+      dispatch-test-limit)
+        cat "$STUB_DIR/rest-limit.json"
+        ;;
+      *)
+        echo '[]'
+        ;;
+    esac
+    ;;
   api\ *repos/*/issues\?*)
     # gh_issue_list_rest (#1601): the four converted dispatch issue scans now hit
     # the REST issues endpoint instead of `gh issue list`. The fake-gh receives
@@ -296,6 +339,14 @@ case "$args" in
     if [[ "$rest_repo" == "{owner}/{repo}" ]]; then
       # Current-repo scans: open-ISSUE_LIST (no label) and the main-broken latch.
       if [[ -z "$rest_label" ]]; then
+        # #1812: persistent-failure injection for the open-issue scan
+        # (gh_issue_list_rest --state open). A marker makes gh fail on every
+        # attempt so gh_retry exhausts and forwards the failure — driving
+        # dispatch-retriage-orphaned-followups' early-exit-on-scan-failure branch.
+        if [[ -f "$STUB_DIR/gh-fail-issue-list-open" ]]; then
+          echo "stub forced gh api failure (open issue-list)" >&2
+          exit 1
+        fi
         if [[ -f "$STUB_DIR/issue-list.json" ]]; then cat "$STUB_DIR/issue-list.json"; else echo "[]"; fi
       elif [[ "$rest_label" == "dispatch:main-broken" ]]; then
         # #1085 per-episode latch read. Default [] (gate fires); a fixture models
@@ -372,9 +423,28 @@ case "$args" in
     # Batched blockedBy lookup for dispatch-select-target (#794). The query text
     # arrives in $args as the -f query= value; extract each issue number and
     # project the existing blockers-<num>.json fixture (default []) into the
-    # GraphQL alias shape _<num>: { number, blockedBy { nodes { state } } }. This
-    # reuses the same fixtures the REST blocked_by case serves, so the
+    # GraphQL alias shape _<num>: { number, blockedBy { nodes { state } }, parent }.
+    # This reuses the same fixtures the REST blocked_by case serves, so the
     # select-target blocked-skip tests pass via either delivery mechanism.
+    #
+    # parent fixture: parent-<num>.json holds a single parent number (e.g. "100"),
+    # or is absent. When absent, parent is null. When present, the parent chain is
+    # built recursively (following parent-<k>.json for each ancestor) up to 7
+    # levels deep, producing {number, parent:{number, parent:...null}}.
+    build_parent_json() {
+      local n="$1" depth="${2:-0}"
+      # Cap at 7 levels to prevent infinite loops on cyclic fixtures.
+      if [[ "$depth" -ge 7 ]] || [[ ! -f "$STUB_DIR/parent-${n}.json" ]]; then
+        echo "null"
+        return
+      fi
+      local p
+      p=$(cat "$STUB_DIR/parent-${n}.json")
+      [[ -z "$p" ]] && { echo "null"; return; }
+      local grandparent_json
+      grandparent_json=$(build_parent_json "$p" $(( depth + 1 )))
+      printf '{"number":%s,"parent":%s}' "$p" "$grandparent_json"
+    }
     echo "api graphql" >> "$STUB_DIR/gh-graphql-calls.log"
     nums=$(printf '%s' "$args" | grep -oE 'issue\(number: [0-9]+' | grep -oE '[0-9]+')
     aliases="{}"
@@ -386,8 +456,9 @@ case "$args" in
         fixture="[]"
       fi
       node=$(printf '%s' "$fixture" | jq -c '{nodes: [.[] | {state: .state}]}')
-      aliases=$(printf '%s' "$aliases" | jq -c --arg k "_${n}" --argjson num "$n" --argjson bb "$node" \
-        '.[$k] = {number: $num, blockedBy: $bb}')
+      parent_json=$(build_parent_json "$n" 0)
+      aliases=$(printf '%s' "$aliases" | jq -c --arg k "_${n}" --argjson num "$n" --argjson bb "$node" --argjson par "$parent_json" \
+        '.[$k] = {number: $num, blockedBy: $bb, parent: $par}')
     done <<< "$nums"
     printf '{"data":{"repository":%s}}\n' "$aliases"
     ;;
@@ -488,6 +559,17 @@ case "$args" in
       echo '{"headRefName":""}'
     fi
     ;;
+  pr\ view\ *\ --json\ state,mergedAt,labels)
+    # dispatch-retriage-orphaned-followups (#1812): gh pr view <N> --json
+    # state,mergedAt,labels. $STUB_DIR/retriage-pr-<N>.json supplies the per-PR
+    # state object; absence defaults to an OPEN PR (no action taken).
+    num=$(echo "$args" | awk '{print $3}')
+    if [[ -f "$STUB_DIR/retriage-pr-${num}.json" ]]; then
+      cat "$STUB_DIR/retriage-pr-${num}.json"
+    else
+      echo '{"state":"OPEN","mergedAt":null,"labels":[]}'
+    fi
+    ;;
   label\ create\ *)
     # dispatch-complete-phase / dispatch-apply-office-hours create the label only
     # when the apply reported it missing.
@@ -525,7 +607,8 @@ case "$args" in
     fi
     ;;
   issue\ edit\ *)
-    # dispatch-apply-office-hours applies the label to the ISSUE.
+    # Multiple scripts (dispatch-apply-office-hours, dispatch-qa-apply-main-qa-labels, ...)
+    # route their `gh issue edit` calls through this block.
     # $STUB_DIR/issue-edit-mode selects behavior (default: succeed and log args).
     mode="ok"
     [[ -f "$STUB_DIR/issue-edit-mode" ]] && mode=$(cat "$STUB_DIR/issue-edit-mode")
@@ -540,6 +623,26 @@ case "$args" in
           echo "failed to update: '$label' not found" >&2
           exit 1
         fi
+        ;;
+      remove-label-missing)
+        # Model step 1's tolerated "not found" on the help-wanted removal ONLY.
+        # The main-qa add and office-hours add must still succeed.
+        if [[ "$args" == *"--remove-label"* ]]; then
+          echo "failed to update: 'help wanted' not found" >&2
+          exit 1
+        fi
+        echo "$args" >> "$STUB_DIR/gh-issue-edit.log"
+        ;;
+      main-qa-missing)
+        # Model step 2's add-then-create-on-not-found for main-qa ONLY: the first
+        # --add-label main-qa fails "not found" until gh label create main-qa runs;
+        # the retry then succeeds. remove-label and the office-hours
+        # --add-label dispatch:office-hours fall through to log+succeed.
+        if [[ "$args" == *"--add-label main-qa"* && ! -f "$STUB_DIR/gh-label-create.log" ]]; then
+          echo "failed to update: 'main-qa' not found" >&2
+          exit 1
+        fi
+        echo "$args" >> "$STUB_DIR/gh-issue-edit.log"
         ;;
       *)
         echo "$args" >> "$STUB_DIR/gh-issue-edit.log"
@@ -1055,6 +1158,140 @@ printf '%s' '{"check_runs":[{"status":"completed","conclusion":"failure"}]}' \
 cached=$(source "$TMPDIR_TEST/lib.sh"; dispatch_ci_verdict_rest "sha-cache")
 assert_eq "verdict cache: second call → cached passing despite changed fixture" "passing" "$cached"
 unset DISPATCH_CI_VERDICT_CACHE
+teardown
+
+# ============================================================================
+# gh_issue_list_rest edge-case tests (#1652)
+# ============================================================================
+# These three tests drive the REAL gh_issue_list_rest helper (sourced from the
+# copied lib.sh) via the `dispatch-test-*` sentinel stub branch above. They cover
+# the three behaviors that were previously unexercised:
+#   (a) empty result (`[]` from the endpoint)
+#   (b) pagination boundary (two concatenated arrays merged by jq -s 'add')
+#   (c) --limit single-page branch (per_page=<limit>, no --paginate)
+echo "=== gh_issue_list_rest (edge cases) ==="
+
+echo "Test: empty result -- helper returns [] with length 0"
+setup
+# Create the call-log file before invocation so the grep assertion below has a
+# valid target even if gh is never called.
+: > "$STUB_DIR/gh-issue-list-rest-calls.log"
+actual_empty=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --label dispatch-test-empty)
+assert_eq "empty result: length == 0" "0" "$(jq 'length' <<<"$actual_empty")"
+assert_eq "empty result: .[0].number is absent" "" "$(jq -r '.[0].number // empty' <<<"$actual_empty")"
+# No --limit was passed, so the helper must take the full-paginate path.
+if grep -q -- '--paginate' "$STUB_DIR/gh-issue-list-rest-calls.log"; then
+  assert_eq "empty result: log contains --paginate" "yes" "yes"
+else
+  assert_eq "empty result: log contains --paginate" "yes" "no"
+fi
+teardown
+
+echo "Test: pagination boundary -- two pages merged, all numbers present, PR objects filtered"
+setup
+# Page 1: two real issues + one object with pull_request key (must be filtered out).
+printf '%s\n' '[
+  {"number":101,"created_at":"2024-01-01T00:00:00Z","closed_at":null,"labels":[]},
+  {"number":102,"created_at":"2024-01-02T00:00:00Z","closed_at":null,"labels":[],"pull_request":{"merged_at":null}},
+  {"number":103,"created_at":"2024-01-03T00:00:00Z","closed_at":null,"labels":[]}
+]' > "$STUB_DIR/rest-page-1.json"
+# Page 2: two more real issues on a distinct page.
+printf '%s\n' '[
+  {"number":201,"created_at":"2024-01-04T00:00:00Z","closed_at":null,"labels":[]},
+  {"number":202,"created_at":"2024-01-05T00:00:00Z","closed_at":null,"labels":[]}
+]' > "$STUB_DIR/rest-page-2.json"
+# Create the call-log file before invocation so the grep assertion below has a
+# valid target even if gh is never called.
+: > "$STUB_DIR/gh-issue-list-rest-calls.log"
+actual_pag=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --label dispatch-test-paginate)
+# Page-1 issue numbers 101 and 103 must appear (PR object 102 must NOT).
+assert_eq "paginate: issue 101 present" "true" "$(jq 'any(.[]; .number == 101)' <<<"$actual_pag")"
+assert_eq "paginate: issue 103 present" "true" "$(jq 'any(.[]; .number == 103)' <<<"$actual_pag")"
+# Page-2 numbers must also appear -- proves jq -s 'add' merged both pages.
+assert_eq "paginate: issue 201 present" "true" "$(jq 'any(.[]; .number == 201)' <<<"$actual_pag")"
+assert_eq "paginate: issue 202 present" "true" "$(jq 'any(.[]; .number == 202)' <<<"$actual_pag")"
+# PR object 102 must be absent (helper filters .pull_request != null).
+assert_eq "paginate: PR object 102 filtered out" "false" "$(jq 'any(.[]; .number == 102)' <<<"$actual_pag")"
+# No --limit was passed, so the helper must take the --paginate path. This pins
+# the code path: a regression to single-page would still merge the two fixture
+# pages here but would not pass --paginate.
+if grep -q -- '--paginate' "$STUB_DIR/gh-issue-list-rest-calls.log"; then
+  assert_eq "paginate: log contains --paginate" "yes" "yes"
+else
+  assert_eq "paginate: log contains --paginate" "yes" "no"
+fi
+teardown
+
+echo "Test: --limit flag -- single-page branch (per_page=limit, no --paginate)"
+setup
+printf '%s\n' '[
+  {"number":301,"created_at":"2024-01-06T00:00:00Z","closed_at":null,"labels":[]},
+  {"number":302,"created_at":"2024-01-07T00:00:00Z","closed_at":null,"labels":[]},
+  {"number":303,"created_at":"2024-01-08T00:00:00Z","closed_at":null,"labels":[]}
+]' > "$STUB_DIR/rest-limit.json"
+# Create the call-log file before invocation so the grep assertions below have a
+# valid target even if gh is never called.
+: > "$STUB_DIR/gh-issue-list-rest-calls.log"
+actual_lim=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --limit 50 --label dispatch-test-limit)
+assert_eq "limit: result length matches fixture (3 items)" "3" "$(jq 'length' <<<"$actual_lim")"
+# The call log must contain per_page=50 (limit was passed through) ...
+# Anchor with a trailing non-digit so this cannot spuriously match per_page=500.
+if grep -q 'per_page=50[^0-9]' "$STUB_DIR/gh-issue-list-rest-calls.log"; then
+  assert_eq "limit: log contains per_page=50" "yes" "yes"
+else
+  assert_eq "limit: log contains per_page=50" "yes" "no"
+fi
+# ... and must NOT contain --paginate (single-page branch was taken).
+if grep -q -- '--paginate' "$STUB_DIR/gh-issue-list-rest-calls.log"; then
+  assert_eq "limit: log does not contain --paginate" "no" "yes"
+else
+  assert_eq "limit: log does not contain --paginate" "no" "no"
+fi
+teardown
+
+echo "Test: gh-failure -- both branches return non-zero with diagnostic stderr"
+setup
+: > "$STUB_DIR/gh-issue-list-rest-calls.log"
+: > "$STUB_DIR/gh-fail-rest"
+rc_fail=0
+err_fail=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --label dispatch-test-empty 2>&1 >/dev/null) || rc_fail=$?
+assert_eq "gh-failure: --paginate branch returns non-zero" "1" "$rc_fail"
+case "$err_fail" in *"gh_issue_list_rest: gh api failed"*) m=yes ;; *) m=no ;; esac
+assert_eq "gh-failure: stderr names the helper failure" "yes" "$m"
+rc_fail_lim=0
+err_fail_lim=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --limit 50 --label dispatch-test-empty 2>&1 >/dev/null) || rc_fail_lim=$?
+assert_eq "gh-failure: single-page branch returns non-zero" "1" "$rc_fail_lim"
+case "$err_fail_lim" in *"gh_issue_list_rest: gh api failed"*) m_lim=yes ;; *) m_lim=no ;; esac
+assert_eq "gh-failure: single-page stderr names the helper failure" "yes" "$m_lim"
+teardown
+
+echo "Test: --repo flag -- cross-repo path uses owner/other-repo segment, not placeholder"
+setup
+: > "$STUB_DIR/gh-issue-list-rest-calls.log"
+actual_repo=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --repo owner/other-repo --label dispatch-test-empty)
+if grep -q 'repos/owner/other-repo/issues' "$STUB_DIR/gh-issue-list-rest-calls.log"; then seg=yes; else seg=no; fi
+assert_eq "--repo: API path uses cross-repo segment" "yes" "$seg"
+if grep -q 'repos/{owner}/{repo}/issues' "$STUB_DIR/gh-issue-list-rest-calls.log"; then ph=yes; else ph=no; fi
+assert_eq "--repo: placeholder absent from cross-repo call" "no" "$ph"
+assert_eq "--repo: returns the stub's empty array" "[]" "$actual_repo"
+# Single-page (--limit) branch with --repo: pin that the cross-repo segment is
+# emitted under the per_page= (no --paginate) path too, not just --paginate.
+: > "$STUB_DIR/gh-issue-list-rest-calls.log"
+actual_repo_lim=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --limit 50 --repo owner/other-repo --label dispatch-test-empty)
+assert_eq "--repo+--limit: returns the stub's empty array" "[]" "$actual_repo_lim"
+if grep -q 'repos/owner/other-repo/issues' "$STUB_DIR/gh-issue-list-rest-calls.log"; then seg_lim=yes; else seg_lim=no; fi
+assert_eq "--repo+--limit: single-page API path uses cross-repo segment" "yes" "$seg_lim"
+# Prove it was the single-page branch (not --paginate) that emitted the segment.
+if grep -q 'per_page=50[^0-9]' "$STUB_DIR/gh-issue-list-rest-calls.log"; then
+  assert_eq "--repo+--limit: log contains per_page=50" "yes" "yes"
+else
+  assert_eq "--repo+--limit: log contains per_page=50" "yes" "no"
+fi
+if grep -q -- '--paginate' "$STUB_DIR/gh-issue-list-rest-calls.log"; then
+  assert_eq "--repo+--limit: log does not contain --paginate" "no" "yes"
+else
+  assert_eq "--repo+--limit: log does not contain --paginate" "no" "no"
+fi
 teardown
 
 # ============================================================================
@@ -4557,6 +4794,238 @@ result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
 assert_eq "--priority-only returns priority issue" "issue 400" "$result"
 teardown
 
+# Build the shared ancestor-priority fixture for the PO-ANC* tests.
+#
+# Args:
+#   $1 depth         — 1 (issues 100/101/200, parent 101->100) or
+#                      2 (issues 100/102/101/200, parent 101->102->100, the
+#                        `priority` label sits on grandparent 100 via neutral 102)
+#   $2 pr20_rollup   — the rollup JSON for PR 20 ($FAILING_ROLLUP for the
+#                      selection tests, $PENDING_ROLLUP for the CI-pending
+#                      waiting-fallback test)
+#
+# Writes pr-list-union.json (PR 10 closes 200 / always $FAILING_ROLLUP;
+# PR 20 closes 101 / $2), issue-list.json, worktree-list.txt, and the parent
+# stub(s) into $STUB_DIR. Caller runs setup first and teardown after.
+#
+# INVARIANT (do NOT change): issue 101 carries ONLY [help wanted] and NEVER an
+# own `priority` label — priority reaches it solely through the ancestor chain.
+# Several callers (esp. PO-ANC5) depend on 101 being non-priority to exercise the
+# correct branch; adding `priority` to 101 here would silently break that
+# coverage for ALL five tests at once. See the PO-ANC5 block comment.
+setup_ancestor_priority_fixture() {
+  local depth="$1" pr20_rollup="$2"
+  local union
+  union='['
+  union+="$(make_pr_union 10 "10-bug-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
+  union+="$(make_pr_union 20 "20-leaf-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$pr20_rollup" '[{"number":101}]')"
+  union+=']'
+  setup_union_pr_list "$union"
+  printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+  if [[ "$depth" == 2 ]]; then
+    printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]},{"number":102,"created_at":"2024-01-01T00:00:00Z","labels":[]},{"number":101,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
+      > "$STUB_DIR/issue-list.json"
+    printf '102' > "$STUB_DIR/parent-101.json"   # 101 -> 102
+    printf '100' > "$STUB_DIR/parent-102.json"   # 102 -> 100 (priority grandparent)
+  else
+    printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]},{"number":101,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
+      > "$STUB_DIR/issue-list.json"
+    printf '100' > "$STUB_DIR/parent-101.json"   # 101 -> 100 (priority epic)
+  fi
+}
+
+# PO-ANC1. A PR whose closing issue carries NO own `priority` label, but whose
+#           ancestor epic IS open and carries `priority`, is lifted into the
+#           priority tier via ancestor inheritance (#1914). In DEFAULT mode this
+#           PR (priority-via-ancestor) outranks an older PR whose closing issue
+#           carries `bug` but no priority. The priority axis is the outermost
+#           sort key, so the inherited-priority PR wins regardless of topic
+#           category or creation order.
+#
+#           Fixture:
+#             issue 100  labels: [priority]        (the open ancestor epic)
+#             issue 101  labels: [help wanted]      (leaf; child of 100 via parent-101.json)
+#             issue 200  labels: [bug]              (unrelated, non-priority issue)
+#             PR 10 (older, 2024-01-01) closes issue 200 (bug, no priority)
+#             PR 20 (newer, 2024-01-02) closes issue 101 (help wanted, no own
+#                     priority — priority only via ancestor 100)
+#           parent-101.json → 100; no parent-100.json; no parent-200.json
+#           issue-list.json: 100, 101, 200 — all open; issue 101 is help-wanted
+#             but has no own `priority` so it stays OUT of the issue priority
+#             tier (ISSUE_SORTED uses own labels only). Issues 100 and 200 lack
+#             `help wanted` and are never startable. The issue queue produces
+#             no priority-1 selection — only the PR path selects here.
+#
+#           This is the ONLY assertion that proves ancestor-priority lifts PR 20
+#           above PR 10. Without ancestor inheritance, both PRs have pri=0 and
+#           PR 10 (older) wins. With it, PR 20 gets pri=1 and wins outright.
+echo "Test: default mode — ancestor priority lifts PR over non-priority PR"
+setup
+setup_ancestor_priority_fixture 1 "$FAILING_ROLLUP"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "ancestor priority lifts PR 20 over older PR 10 (default mode)" "pr 20 20-leaf-pr fix-checks" "$result"
+teardown
+
+# PO-ANC-TRUNC. The depth-7 truncation warning must fire WITHOUT disabling
+#           ancestor-priority evaluation across the supported window. This is a
+#           two-PR contest, not an uncontested selection: without ancestor
+#           inheritance PR 10 wins on the higher `bug` topic category (and is
+#           also older); with it, issue 95's depth-6 priority lifts PR 20 on the
+#           outermost priority axis. So a correct result REQUIRES ancestor
+#           priority to be evaluated correctly across the supported window WHILE
+#           the depth-7 chain trips the truncation warning. Placing `priority`
+#           on the depth-6 (deepest in-window) ancestor proves both happen at
+#           once.
+#
+#           Fixture:
+#             issue 101  labels: [help wanted]   (leaf; closed by PR 20; no own priority)
+#             issue 95   labels: [priority]       (depth-6 ancestor of 101; priority-only)
+#             issue 200  labels: [bug]            (closed by PR 10; no priority)
+#             PR 10 (older, 2024-01-01) closes issue 200 (bug, no priority)
+#             PR 20 (newer, 2024-01-02) closes issue 101 (help wanted, no own
+#                     priority — priority only via depth-6 ancestor 95)
+#           Issue 95 is `priority`-only (NOT `help wanted`), so it never enters
+#           the startable issue queue and acts solely as an inherited-priority
+#           ancestor.
+#           Deep parent chain: 7 parent links (101->100->...->94). The closing
+#           issue 101 MUST itself have parent-101.json or the 7th-hop sentinel
+#           never fires. Issue 95 is the depth-6 (deepest in-window) ancestor;
+#           94 (the 7th-level ancestor) has no parent file. build_parent_json
+#           caps at depth>=7.
+echo "Test: default mode — ancestor chain deeper than supported depth emits truncation warning"
+setup
+UNION='['
+UNION+="$(make_pr_union 10 "10-bug-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
+UNION+="$(make_pr_union 20 "20-deep-chain-leaf" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":101}]')"
+UNION+=']'
+setup_union_pr_list "$UNION"
+printf '[{"number":101,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":95,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+for i in 101 100 99 98 97 96 95; do
+  printf '%d' $((i - 1)) > "$STUB_DIR/parent-$i.json"
+done
+result=$("$TMPDIR_TEST/dispatch-select-target" 2>"$TMPDIR_TEST/stderr") && rc=0 || rc=$?
+stderr=$(cat "$TMPDIR_TEST/stderr")
+assert_eq "deep-chain selection still exits 0" "0" "$rc"
+assert_eq "ancestor priority lifts PR 20 over older PR 10 despite truncation" "pr 20 20-deep-chain-leaf fix-checks" "$result"
+assert_eq "truncation warning on stderr" "1" "$(grep -c 'ancestor chain deeper than supported depth (6) for issue 101' <<<"$stderr")"
+teardown
+
+echo "Test: default mode — ancestor chain at supported depth (6) emits no truncation warning"
+setup
+UNION='['"$(make_pr_union 10 "10-deep-chain-leaf" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":101}]')"']'
+setup_union_pr_list "$UNION"
+printf '[{"number":101,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+# Chain exactly 6 levels deep (101->100->...->95), parent-95.json ABSENT so the
+# 7th .parent hop resolves to null and the sentinel stays silent.
+for i in 101 100 99 98 97 96; do
+  printf '%d' $((i - 1)) > "$STUB_DIR/parent-$i.json"
+done
+result=$("$TMPDIR_TEST/dispatch-select-target" 2>"$TMPDIR_TEST/stderr") && rc=0 || rc=$?
+stderr=$(cat "$TMPDIR_TEST/stderr")
+assert_eq "depth-6 selection exits 0" "0" "$rc"
+assert_eq "uncontested PR selected at depth 6" "pr 10 10-deep-chain-leaf fix-checks" "$result"
+# Harness has no assert_not_contains; assert absence by counting matches.
+assert_eq "no truncation warning at depth 6" "0" "$(grep -c 'ancestor chain deeper' <<<"$stderr")"
+teardown
+
+# PO-ANC2. Same fixture, --priority-only mode. PR 10 (closes issue 200, no priority)
+#           is filtered by the early-skip guard. PR 20 (closes issue 101, no own
+#           priority but ancestor 100 is priority) passes the guard via inherited
+#           priority. The discriminator: without ancestor inheritance --priority-only
+#           returns empty (both bits 0); with it, returns pr 20.
+echo "Test: --priority-only — ancestor priority qualifies PR (PO-ANC2)"
+setup
+setup_ancestor_priority_fixture 1 "$FAILING_ROLLUP"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
+assert_eq "--priority-only ancestor priority qualifies PR 20" "pr 20 20-leaf-pr fix-checks" "$result"
+teardown
+
+# PO-ANC3. Depth-2 ancestor priority. Same shape as PO-ANC1, but the `priority`
+#           label sits on the GRANDPARENT (issue 100), reached through a
+#           NON-priority intermediate parent (issue 102). The assertion passes
+#           only if ancestor detection recurses to depth 2: a 1-level recursion
+#           bug would see only the intermediate 102 (no priority), fail to lift
+#           PR 20, and let the older PR 10 win. So this assertion proves the
+#           depth-2 `recurse`/`.[1:7]` ancestor path detects inherited priority
+#           through a multi-hop chain.
+#
+#           Fixture:
+#             issue 100  labels: [priority]        (open grandparent epic)
+#             issue 102  labels: []                (intermediate parent; NO priority)
+#             issue 101  labels: [help wanted]     (leaf; child of 102 via parent-101.json)
+#             issue 200  labels: [bug]             (unrelated, non-priority issue)
+#             PR 10 (older, 2024-01-01) closes issue 200 (bug, no priority)
+#             PR 20 (newer, 2024-01-02) closes issue 101 (help wanted, no own
+#                     priority — priority only via grandparent 100)
+#           parent-101.json → 102; parent-102.json → 100; no parent-100.json.
+#           Issue 102's neutral labels keep it out of the startable issue queue so
+#           it does not perturb selection. Without depth-2 recursion both PRs have
+#           pri=0 and PR 10 (older) wins; with it PR 20 gets pri=1 and wins.
+echo "Test: default mode — depth-2 ancestor priority lifts PR over non-priority PR"
+setup
+# Fixture written by setup_ancestor_priority_fixture 2: grandparent 100 carries
+# `priority`; neutral intermediate 102 connects 101→102→100 (see helper comment).
+setup_ancestor_priority_fixture 2 "$FAILING_ROLLUP"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "depth-2 ancestor priority lifts PR 20 over older PR 10 (PO-ANC3)" "pr 20 20-leaf-pr fix-checks" "$result"
+teardown
+
+# PO-ANC4. Depth-2 ancestor priority, --priority-only mode. Same fixture as
+#           PO-ANC3, but exercises the `--priority-only` early-skip guard, which
+#           also calls pr_priority_bit (dispatch-select-target line 811-812) and
+#           its depth-2 ANCESTOR_NUMS traversal. PR 10 (closes issue 200, no
+#           priority) is filtered by the guard; PR 20 (closes issue 101, priority
+#           only via grandparent 100 through intermediate 102) passes the guard via
+#           inherited priority. The discriminator: a 1-level recursion bug would see
+#           only the neutral intermediate 102, leave PR 20 with pri=0, and
+#           --priority-only would return empty (both bits 0); with depth-2 recursion
+#           it returns pr 20. Mirrors the PO-ANC1/PO-ANC2 (depth-1) pattern at depth 2.
+echo "Test: --priority-only — depth-2 ancestor priority qualifies PR (PO-ANC4)"
+setup
+setup_ancestor_priority_fixture 2 "$FAILING_ROLLUP"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
+assert_eq "--priority-only depth-2 ancestor priority qualifies PR 20 (PO-ANC4)" "pr 20 20-leaf-pr fix-checks" "$result"
+teardown
+
+# PO-ANC5. Same fixture as PO-ANC2 but PR 20's rollup is PENDING, not FAILING.
+#           This exercises the CI-pending ancestor-priority WAITING_NUM FALLBACK
+#           path — the orthogonal case to PO-ANC1/PO-ANC2's *selection* assertions.
+#
+#           PR 20 qualifies for the priority tier (ci_rc path at line 849 checks
+#           --priority-only + inherited ancestor priority to enter WAITING_NUM arm).
+#           Its CI is pending (ci_rc==1), so it is NOT selectable. The selector
+#           emits `waiting <first-closing-issue-num>` from the fallback arm of the
+#           jq at dispatch-select-target:864-869:
+#
+#             ( map(.number|tostring|select(own-priority-label?)) | .[0] )
+#             // ( [.[].number|tostring] | .[0] )
+#             // empty
+#
+#           CRITICAL INVARIANT — do NOT change this: issue 101 carries ONLY
+#           [help wanted] and has NO own `priority` label. Priority comes solely
+#           from ancestor 100 (via parent-101.json). This is exactly what forces
+#           the jq FALLBACK arm: the first arm (select own priority-labeled issues)
+#           returns null because 101 is not directly priority-labeled, so the
+#           fallback `[.[].number|tostring]|.[0]` resolves to "101". If anyone
+#           adds `priority` to issue 101, the FIRST arm would fire and also return
+#           101 — the assertion would still pass while silently testing the WRONG
+#           branch. So 101 MUST stay non-priority. A broken fallback arm yields
+#           `empty` (no `waiting` line; the PR falls through), not `waiting 101`.
+#
+#           PR 10 (older, closes issue 200, $FAILING_ROLLUP) is dropped by the
+#           --priority-only early-skip guard (issue 200 has `bug` only, no priority,
+#           no ancestor with priority), proving the ancestor-priority PR is the only
+#           candidate and does not interfere with the waiting result.
+echo "Test: --priority-only — CI-pending ancestor priority → waiting fallback (PO-ANC5)"
+setup
+setup_ancestor_priority_fixture 1 "$PENDING_ROLLUP"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
+assert_eq "--priority-only CI-pending ancestor priority → waiting (fallback target) (PO-ANC5)" \
+  "waiting 101" "$result"
+teardown
+
 # PO3. main is red and no latch issue open → main-broken fires first, before the
 #      priority scan (the gate runs ahead of the ladder, same as default mode).
 echo "Test: --priority-only — main red, no latch → main-broken (gate first)"
@@ -6375,6 +6844,248 @@ assert_eq "403 auth → 1 attempt (fail fast)" "1" "$(cat "$TMPDIR_TEST/c-e")"
 teardown
 
 # ============================================================================
+# playwright_install_with_deps tests
+# ============================================================================
+echo ""
+echo "=== playwright_install_with_deps ==="
+
+# Group-local stub writers (not hoisted into setup() — other groups rely on
+# real timeout/sleep for hang protection). Each writes to $TMPDIR_TEST/bin,
+# already first on PATH.
+write_playwright_npx_stub() {
+  cat > "$TMPDIR_TEST/bin/npx" <<'FAKE'
+#!/usr/bin/env bash
+cf="$NPX_COUNT_FILE"
+c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
+exit "${NPX_EXIT:-0}"
+FAKE
+  chmod +x "$TMPDIR_TEST/bin/npx"
+}
+write_playwright_hang_stubs() {
+  cat > "$TMPDIR_TEST/bin/timeout" <<'FAKE'
+#!/usr/bin/env bash
+while [[ "$1" == -* ]]; do shift; done
+shift
+exec "$@"
+FAKE
+  chmod +x "$TMPDIR_TEST/bin/timeout"
+  cat > "$TMPDIR_TEST/bin/sleep" <<'FAKE'
+#!/usr/bin/env bash
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/bin/sleep"
+}
+
+# 1. Skip-guard: PLAYWRIGHT_BROWSERS_PATH set → return 0, 0 npx calls.
+echo "Test: playwright_install_with_deps skip-guard → rc 0, 0 npx calls"
+setup
+write_playwright_npx_stub
+NPX_COUNT_FILE="$TMPDIR_TEST/npx-1"
+(
+  source "$TMPDIR_TEST/lib.sh"
+  export PLAYWRIGHT_BROWSERS_PATH=/nix/some/path
+  export NPX_COUNT_FILE="$TMPDIR_TEST/npx-1"
+  playwright_install_with_deps
+)
+rc=$?
+count=$( [[ -f "$NPX_COUNT_FILE" ]] && cat "$NPX_COUNT_FILE" || echo 0 )
+assert_eq "skip-guard → rc 0" "0" "$rc"
+assert_eq "skip-guard → 0 npx calls" "0" "$count"
+teardown
+
+# 2. First-attempt success: npx exits 0 → rc 0, exactly 1 npx call.
+echo "Test: playwright_install_with_deps first-attempt success → rc 0, 1 npx call"
+setup
+cat > "$TMPDIR_TEST/bin/npx" <<'FAKE'
+#!/usr/bin/env bash
+cf="$NPX_COUNT_FILE"
+c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
+[[ -n "${NPX_ARGS_FILE:-}" ]] && echo "$@" >> "$NPX_ARGS_FILE"
+exit "${NPX_EXIT:-0}"
+FAKE
+chmod +x "$TMPDIR_TEST/bin/npx"
+cat > "$TMPDIR_TEST/bin/timeout" <<'FAKE'
+#!/usr/bin/env bash
+[[ -n "${TIMEOUT_LOG_FILE:-}" ]] && echo "$@" >> "$TIMEOUT_LOG_FILE"
+while [[ "$1" == -* ]]; do shift; done
+shift
+exec "$@"
+FAKE
+chmod +x "$TMPDIR_TEST/bin/timeout"
+cat > "$TMPDIR_TEST/bin/sleep" <<'FAKE'
+#!/usr/bin/env bash
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/bin/sleep"
+NPX_COUNT_FILE="$TMPDIR_TEST/npx-2"
+TIMEOUT_LOG_FILE="$TMPDIR_TEST/timeout-calls-2.log"
+NPX_ARGS_FILE="$TMPDIR_TEST/npx-args-2"
+rc=0
+(
+  source "$TMPDIR_TEST/lib.sh"
+  unset PLAYWRIGHT_BROWSERS_PATH
+  export NPX_EXIT=0
+  export NPX_COUNT_FILE="$TMPDIR_TEST/npx-2"
+  export TIMEOUT_LOG_FILE="$TMPDIR_TEST/timeout-calls-2.log"
+  export NPX_ARGS_FILE="$TMPDIR_TEST/npx-args-2"
+  playwright_install_with_deps
+) || rc=$?
+assert_eq "first-attempt success → rc 0" "0" "$rc"
+assert_eq "first-attempt success → 1 npx call" "1" "$(cat "$NPX_COUNT_FILE")"
+timeout_calls=$( [[ -s "$TIMEOUT_LOG_FILE" ]] && echo nonempty || echo empty )
+assert_eq "first-attempt success → timeout invoked" "nonempty" "$timeout_calls"
+assert_eq "first-attempt success → npx args" \
+  "playwright install --with-deps chromium" \
+  "$( [[ -f "$NPX_ARGS_FILE" ]] && cat "$NPX_ARGS_FILE" || echo '<file missing>' )"
+teardown
+
+# 3. Both attempts fail: npx exits 1 twice → rc non-zero, exactly 2 npx calls.
+echo "Test: playwright_install_with_deps both-attempts fail → rc non-zero, 2 npx calls"
+setup
+cat > "$TMPDIR_TEST/bin/npx" <<'FAKE'
+#!/usr/bin/env bash
+cf="$NPX_COUNT_FILE"
+c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
+[[ -n "${NPX_ARGS_FILE:-}" ]] && echo "$@" >> "$NPX_ARGS_FILE"
+exit "${NPX_EXIT:-0}"
+FAKE
+chmod +x "$TMPDIR_TEST/bin/npx"
+cat > "$TMPDIR_TEST/bin/timeout" <<'FAKE'
+#!/usr/bin/env bash
+[[ -n "${TIMEOUT_LOG_FILE:-}" ]] && echo "$@" >> "$TIMEOUT_LOG_FILE"
+while [[ "$1" == -* ]]; do shift; done
+shift
+exec "$@"
+FAKE
+chmod +x "$TMPDIR_TEST/bin/timeout"
+cat > "$TMPDIR_TEST/bin/sleep" <<'FAKE'
+#!/usr/bin/env bash
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/bin/sleep"
+NPX_COUNT_FILE="$TMPDIR_TEST/npx-3"
+TIMEOUT_LOG_FILE="$TMPDIR_TEST/timeout-calls-3.log"
+NPX_ARGS_FILE="$TMPDIR_TEST/npx-args-3"
+rc=0
+(
+  source "$TMPDIR_TEST/lib.sh"
+  unset PLAYWRIGHT_BROWSERS_PATH
+  export NPX_EXIT=1
+  export PLAYWRIGHT_INSTALL_ATTEMPTS=2
+  export NPX_COUNT_FILE="$TMPDIR_TEST/npx-3"
+  export TIMEOUT_LOG_FILE="$TMPDIR_TEST/timeout-calls-3.log"
+  export NPX_ARGS_FILE="$TMPDIR_TEST/npx-args-3"
+  playwright_install_with_deps 2>/dev/null
+) || rc=$?
+[[ "$rc" -ne 0 ]] && rc_state="nonzero" || rc_state="zero"
+assert_eq "both-attempts fail → rc non-zero" "nonzero" "$rc_state"
+assert_eq "both-attempts fail → 2 npx calls" "2" "$(cat "$NPX_COUNT_FILE")"
+timeout_calls=$( [[ -s "$TIMEOUT_LOG_FILE" ]] && echo nonempty || echo empty )
+assert_eq "both attempts fail → timeout invoked" "nonempty" "$timeout_calls"
+assert_eq "both-attempts fail → npx args (retry path)" \
+  $'playwright install --with-deps chromium\nplaywright install --with-deps chromium' \
+  "$( [[ -f "$NPX_ARGS_FILE" ]] && cat "$NPX_ARGS_FILE" || echo '<file missing>' )"
+teardown
+
+# 4. First attempt fails, second succeeds: npx exits 1 then 0 → rc 0, 2 npx calls.
+#    Exercises the retry loop's core recovery behavior (the #1899 motivation).
+echo "Test: playwright_install_with_deps first fails then succeeds → rc 0, 2 npx calls"
+setup
+cat > "$TMPDIR_TEST/bin/npx" <<'FAKE'
+#!/usr/bin/env bash
+cf="$NPX_COUNT_FILE"
+c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
+[[ -n "${NPX_ARGS_FILE:-}" ]] && echo "$@" >> "$NPX_ARGS_FILE"
+if [[ "$c" -le 1 ]]; then exit 1; else exit 0; fi
+FAKE
+chmod +x "$TMPDIR_TEST/bin/npx"
+cat > "$TMPDIR_TEST/bin/timeout" <<'FAKE'
+#!/usr/bin/env bash
+[[ -n "${TIMEOUT_LOG_FILE:-}" ]] && echo "$@" >> "$TIMEOUT_LOG_FILE"
+while [[ "$1" == -* ]]; do shift; done
+shift
+exec "$@"
+FAKE
+chmod +x "$TMPDIR_TEST/bin/timeout"
+cat > "$TMPDIR_TEST/bin/sleep" <<'FAKE'
+#!/usr/bin/env bash
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/bin/sleep"
+NPX_COUNT_FILE="$TMPDIR_TEST/npx-4"
+TIMEOUT_LOG_FILE="$TMPDIR_TEST/timeout-calls-4.log"
+NPX_ARGS_FILE="$TMPDIR_TEST/npx-args-4"
+rc=0
+(
+  source "$TMPDIR_TEST/lib.sh"
+  unset PLAYWRIGHT_BROWSERS_PATH
+  export PLAYWRIGHT_INSTALL_ATTEMPTS=2
+  export NPX_COUNT_FILE="$TMPDIR_TEST/npx-4"
+  export TIMEOUT_LOG_FILE="$TMPDIR_TEST/timeout-calls-4.log"
+  export NPX_ARGS_FILE="$TMPDIR_TEST/npx-args-4"
+  playwright_install_with_deps 2>/dev/null
+) || rc=$?
+assert_eq "first-fails-then-succeeds → rc 0" "0" "$rc"
+assert_eq "first-fails-then-succeeds → 2 npx calls" "2" "$(cat "$NPX_COUNT_FILE")"
+timeout_calls=$( [[ -s "$TIMEOUT_LOG_FILE" ]] && echo nonempty || echo empty )
+assert_eq "first fails then succeeds → timeout invoked" "nonempty" "$timeout_calls"
+assert_eq "first-fails-then-succeeds → npx args (retry path)" \
+  $'playwright install --with-deps chromium\nplaywright install --with-deps chromium' \
+  "$( [[ -f "$NPX_ARGS_FILE" ]] && cat "$NPX_ARGS_FILE" || echo '<file missing>' )"
+teardown
+
+# 5. Timeout expiry (exit 124, stall) → retry exhausted → rc non-zero, 2 npx calls.
+#    Proves the timeout-expiry path works: timeout starts npx (counter increments)
+#    then returns 124 (simulating the child stalling past the deadline).  With
+#    PLAYWRIGHT_INSTALL_ATTEMPTS=2 both attempts time out and the wrapper fails.
+echo "Test: playwright_install_with_deps timeout-stall → rc non-zero, 2 npx calls"
+setup
+cat > "$TMPDIR_TEST/bin/npx" <<'FAKE'
+#!/usr/bin/env bash
+cf="$NPX_COUNT_FILE"
+c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
+[[ -n "${NPX_ARGS_FILE:-}" ]] && echo "$@" >> "$NPX_ARGS_FILE"
+exit "${NPX_EXIT:-0}"
+FAKE
+chmod +x "$TMPDIR_TEST/bin/npx"
+cat > "$TMPDIR_TEST/bin/timeout" <<'FAKE'
+#!/usr/bin/env bash
+[[ -n "${TIMEOUT_LOG_FILE:-}" ]] && echo "$@" >> "$TIMEOUT_LOG_FILE"
+while [[ "$1" == -* ]]; do shift; done
+shift                     # drop the <timeout_s> duration arg
+"$@"                      # run npx (increments NPX_COUNT_FILE); not exec
+exit 124                  # simulate timeout killing the stalled child
+FAKE
+chmod +x "$TMPDIR_TEST/bin/timeout"
+cat > "$TMPDIR_TEST/bin/sleep" <<'FAKE'
+#!/usr/bin/env bash
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/bin/sleep"
+NPX_COUNT_FILE="$TMPDIR_TEST/npx-5"
+TIMEOUT_LOG_FILE="$TMPDIR_TEST/timeout-calls-5.log"
+NPX_ARGS_FILE="$TMPDIR_TEST/npx-args-5"
+rc=0
+(
+  source "$TMPDIR_TEST/lib.sh"
+  unset PLAYWRIGHT_BROWSERS_PATH
+  export PLAYWRIGHT_INSTALL_ATTEMPTS=2
+  export NPX_COUNT_FILE="$TMPDIR_TEST/npx-5"
+  export TIMEOUT_LOG_FILE="$TMPDIR_TEST/timeout-calls-5.log"
+  export NPX_ARGS_FILE="$TMPDIR_TEST/npx-args-5"
+  playwright_install_with_deps 2>/dev/null
+) || rc=$?
+[[ "$rc" -ne 0 ]] && rc_state="nonzero" || rc_state="zero"
+timeout_calls=$( [[ -s "$TIMEOUT_LOG_FILE" ]] && echo nonempty || echo empty )
+assert_eq "timeout-stall → 2 npx calls" "2" "$(cat "$NPX_COUNT_FILE")"
+assert_eq "timeout-stall → timeout invoked" "nonempty" "$timeout_calls"
+assert_eq "timeout-stall → rc non-zero" "nonzero" "$rc_state"
+assert_eq "timeout-stall → npx args (timeout path)" \
+  $'playwright install --with-deps chromium\nplaywright install --with-deps chromium' \
+  "$( [[ -f "$NPX_ARGS_FILE" ]] && cat "$NPX_ARGS_FILE" || echo '<file missing>' )"
+teardown
+
+# ============================================================================
 # dispatch-complete-phase tests
 # ============================================================================
 echo ""
@@ -6612,6 +7323,116 @@ echo "Test: missing issue number → non-zero exit"
 setup
 if "$TMPDIR_TEST/dispatch-apply-planned" 2>/dev/null; then rc=0; else rc=$?; fi
 assert_eq "missing issue number exits non-zero" "1" "$rc"
+teardown
+
+# ============================================================================
+# dispatch-qa-apply-main-qa-labels tests (#1758)
+# ============================================================================
+echo ""
+echo "=== dispatch-qa-apply-main-qa-labels (#1758) ==="
+
+# Happy path: both main-qa and dispatch:office-hours labels exist in the repo
+# (default stub mode), so remove-label succeeds, both adds succeed, and the
+# script exits 0. No label create needed.
+echo "Test: happy path → remove help-wanted, add main-qa, route to office-hours; exit 0"
+setup
+if "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" 42; then rc=0; else rc=$?; fi
+assert_eq "happy path: exit 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if grep -q -- "--remove-label help wanted" "$STUB_DIR/gh-issue-edit.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: removed help wanted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: removed help wanted"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q -- "--add-label main-qa" "$STUB_DIR/gh-issue-edit.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: added main-qa"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: added main-qa"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q -- "--add-label dispatch:office-hours" "$STUB_DIR/gh-issue-edit.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: routed to office-hours"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: routed to office-hours"
+fi
+assert_eq "no gh label create" "absent" "$(log_state gh-label-create.log)"
+teardown
+
+# Idempotent re-run: the "help wanted" label is no longer on the issue so the
+# remove-label call returns "not found". The script must tolerate this and still
+# apply main-qa and dispatch:office-hours, exiting 0.
+echo "Test: remove-label-missing → tolerated, main-qa and office-hours still applied; exit 0"
+setup
+echo "remove-label-missing" > "$STUB_DIR/issue-edit-mode"
+if "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" 42; then rc=0; else rc=$?; fi
+assert_eq "not-found removal tolerated, exit 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if grep -q -- "--add-label main-qa" "$STUB_DIR/gh-issue-edit.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: main-qa applied after tolerated removal"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: main-qa applied after tolerated removal"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q -- "--add-label dispatch:office-hours" "$STUB_DIR/gh-issue-edit.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: office-hours routing still runs"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: office-hours routing still runs"
+fi
+TOTAL=$((TOTAL + 1))
+if ! grep -q -- "--remove-label" "$STUB_DIR/gh-issue-edit.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: remove-label not logged (not-found path fired)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: remove-label unexpectedly logged"
+fi
+teardown
+
+# Lazy label-create: the main-qa label does not yet exist in the repo. The
+# first add attempt fails "not found"; the script creates the label with
+# canonical metadata (5319E7) and retries the add. The office-hours step runs
+# unaffected.
+echo "Test: main-qa-missing → create with canonical metadata, retry add, office-hours unaffected; exit 0"
+setup
+echo "main-qa-missing" > "$STUB_DIR/issue-edit-mode"
+if "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" 42; then rc=0; else rc=$?; fi
+assert_eq "lazy create: exit 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if grep -q "^label create main-qa --color 5319E7 --description QA verification that can only run against deployed main/production" "$STUB_DIR/gh-label-create.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: created with canonical metadata"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: created with canonical metadata"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q -- "--add-label main-qa" "$STUB_DIR/gh-issue-edit.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: main-qa applied on retry"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: main-qa applied on retry"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q -- "--add-label dispatch:office-hours" "$STUB_DIR/gh-issue-edit.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: office-hours unaffected by lazy create"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: office-hours unaffected by lazy create"
+fi
+teardown
+
+# Non-numeric, flag-like issue number → hard error (exit 1), no gh calls. The
+# guard exists so a flag-like value can never be parsed by gh as an option that
+# redirects the label writes.
+echo "Test: non-numeric issue number → non-zero exit, no edit/label-create"
+setup
+if "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" "--repo other/repo" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "non-numeric issue number exits non-zero" "1" "$rc"
+assert_eq "non-numeric: no label edit" "absent" "$(log_state gh-issue-edit.log)"
+assert_eq "non-numeric: no label create" "absent" "$(log_state gh-label-create.log)"
+teardown
+
+# Missing arg → hard error (exit 1).
+echo "Test: missing issue number → non-zero exit"
+setup
+if "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "missing issue number exits non-zero" "1" "$rc"
+assert_eq "missing arg: no label edit" "absent" "$(log_state gh-issue-edit.log)"
 teardown
 
 # ============================================================================
@@ -21840,6 +22661,20 @@ echo called >> "$STUB_DIR/auto-merge-calls.log"
 exit 0
 FAKE
   chmod +x "$TMPDIR_TEST/dispatch-auto-merge"
+  # #1812: fake dispatch-retriage-orphaned-followups invoked unconditionally by
+  # Step 2e. Logs its invocation and emits a configurable line so a wiring test
+  # can assert the tick prefixes it with `retriage: `. SILENT by default (emits
+  # nothing unless SEL_RETRIAGE_OUT is set, exit 0) so RETRIAGE_OUT stays empty
+  # and every existing tick test is byte-identical to the pre-#1812 no-op. The
+  # real re-triage logic has its own unit tests below; here we only verify wiring.
+  cat > "$TMPDIR_TEST/dispatch-retriage-orphaned-followups" <<'FAKE'
+#!/usr/bin/env bash
+STUB_DIR="$(cd "$(dirname "$0")/stub" && pwd)"
+echo called >> "$STUB_DIR/retriage-calls.log"
+[[ -n "${SEL_RETRIAGE_OUT:-}" ]] && printf '%s\n' "$SEL_RETRIAGE_OUT"
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/dispatch-retriage-orphaned-followups"
   # Sourced helper: provides claude_agents_count_busy_workers (driven by
   # SEL_LIVE_COUNT*) and claude_agents_list_all (driven by SEL_AGENTS_*, used by
   # the reservation-ledger sweep the gate runs before counting). The heredoc is
@@ -21969,7 +22804,7 @@ sel_tick_teardown() {
     DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE SEL_GIT_MERGE_LOG \
     SEL_SESSIONS_UNDER_RC SEL_SESSIONS_UNDER_TSV \
     DISPATCH_LOCK_PROBE_TIMEOUT DISPATCH_LOCK_FLOCK_TIMEOUT \
-    SEL_AUTO_MERGE_OUT
+    SEL_AUTO_MERGE_OUT SEL_RETRIAGE_OUT
 }
 
 # Run the orchestrator, capturing full stdout; the decision is the last line.
@@ -22129,6 +22964,24 @@ else
 fi
 assert_eq "auto-merge suppressed: dispatch-auto-merge NOT invoked" "absent" \
   "$([[ -f "$STUB_DIR/auto-merge-calls.log" ]] && echo present || echo absent)"
+sel_tick_teardown
+
+# --- Step 2e: re-triage orphaned follow-ups wiring (#1812) -------------------
+# Step 2e runs dispatch-retriage-orphaned-followups unconditionally and prefixes
+# each of its stdout lines with `retriage: `. The fake emits SEL_RETRIAGE_OUT.
+echo "Test: select-tick re-triage wiring → retriage: line, retriage script invoked"
+sel_tick_setup
+export SEL_RETRIAGE_OUT="retriaged #101 (source PR #1704 closed unmerged)"
+out=$(run_sel_tick)
+TOTAL=$((TOTAL + 1))
+if grep -q '^retriage: retriaged #101 (source PR #1704 closed unmerged)$' <<<"$out"; then
+  PASS=$((PASS + 1)); echo "  PASS: tick emits 'retriage: retriaged #101 ...'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: tick emits 'retriage: retriaged #101 ...'"
+  echo "    actual stdout: '$out'"
+fi
+assert_eq "re-triage wiring: dispatch-retriage-orphaned-followups invoked" "present" \
+  "$([[ -f "$STUB_DIR/retriage-calls.log" ]] && echo present || echo absent)"
 sel_tick_teardown
 
 # --- #1495: dirty main → sync-failed, reseed armed, counter bumped -----------
@@ -25801,7 +26654,7 @@ assert_eq "verify-drop: i1 non-Required kept without verify key" "false" "$(prin
 
 echo "Test: dispatch-qa-disposition"
 
-# All branches in one object (order: f1..f6) plus a separate passthrough check.
+# All branches in one object (order: f1..f8) plus a separate passthrough check.
 # f1: opus-fixable  → final_class=opus-fixable, verify=n/a
 # f2: needs-main    → final_class=needs-main,   verify=n/a
 # f3: needs-human, aesthetic:false, votes=[refuted,upheld] → opus-fixable, Refuted
@@ -25809,7 +26662,8 @@ echo "Test: dispatch-qa-disposition"
 # f5: needs-human, aesthetic:false, NO entry in votes map  → needs-human,  Unverified (INVERTED EDGE)
 # f6: needs-human, aesthetic:true,  votes=[refuted,refuted]→ needs-human,  n/a (aesthetic bypasses)
 # f7: already-satisfied (no votes entry) → final_class=already-satisfied, verify=n/a (first-branch pass-through)
-IN='{"items":[{"id":"f1","class":"opus-fixable","aesthetic":false},{"id":"f2","class":"needs-main","aesthetic":false},{"id":"f3","class":"needs-human","aesthetic":false},{"id":"f4","class":"needs-human","aesthetic":false},{"id":"f5","class":"needs-human","aesthetic":false},{"id":"f6","class":"needs-human","aesthetic":true},{"id":"f7","class":"already-satisfied","aesthetic":false}],"votes":{"f3":["refuted","upheld"],"f4":["upheld","upheld"],"f6":["refuted","refuted"]}}'
+# f8: already-satisfied, votes=[refuted,refuted] present → final_class=already-satisfied, verify=n/a (votes ignored; vote-bypass invariant)
+IN='{"items":[{"id":"f1","class":"opus-fixable","aesthetic":false},{"id":"f2","class":"needs-main","aesthetic":false},{"id":"f3","class":"needs-human","aesthetic":false},{"id":"f4","class":"needs-human","aesthetic":false},{"id":"f5","class":"needs-human","aesthetic":false},{"id":"f6","class":"needs-human","aesthetic":true},{"id":"f7","class":"already-satisfied","aesthetic":false},{"id":"f8","class":"already-satisfied","aesthetic":false}],"votes":{"f3":["refuted","upheld"],"f4":["upheld","upheld"],"f6":["refuted","refuted"],"f8":["refuted","refuted"]}}'
 out=$(printf '%s' "$IN" | "$SCRIPT_DIR/dispatch-qa-disposition")
 
 # Branch: opus-fixable passes through
@@ -25841,6 +26695,10 @@ assert_eq "qa-disposition: aesthetic needs-human with refuted votes → verify=n
 assert_eq "qa-disposition: already-satisfied → final_class=already-satisfied" "already-satisfied" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f7") | .final_class')"
 assert_eq "qa-disposition: already-satisfied → verify=n/a" "n/a" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f7") | .verify')"
 
+# Branch: already-satisfied with refuting votes present → still first-branch pass-through (votes ignored; the vote-bypass invariant f7 cannot catch)
+assert_eq "qa-disposition: already-satisfied with refuted votes → final_class=already-satisfied" "already-satisfied" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f8") | .final_class')"
+assert_eq "qa-disposition: already-satisfied with refuted votes → verify=n/a" "n/a" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f8") | .verify')"
+
 # Passthrough: original class and aesthetic fields survive on output items
 assert_eq "qa-disposition: passthrough class field preserved" "needs-human" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f3") | .class')"
 assert_eq "qa-disposition: passthrough aesthetic field preserved" "false" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f3") | .aesthetic')"
@@ -25850,14 +26708,79 @@ IN_TITLE='{"items":[{"id":"t1","class":"needs-human","aesthetic":false,"title":"
 out_title=$(printf '%s' "$IN_TITLE" | "$SCRIPT_DIR/dispatch-qa-disposition")
 assert_eq "qa-disposition: passthrough title field preserved" "Check me" "$(printf '%s' "$out_title" | jq -r '.dispositions[0].title')"
 
-# Output order: items must appear in input order (f1..f7)
+# Output order: items must appear in input order (f1..f8)
 assert_eq "qa-disposition: output order preserved" "f1
 f2
 f3
 f4
 f5
 f6
-f7" "$(printf '%s' "$out" | jq -r '.dispositions[].id')"
+f7
+f8" "$(printf '%s' "$out" | jq -r '.dispositions[].id')"
+
+# ============================================================================
+# === qa-fix partition (#1844) ===
+# ============================================================================
+# CI vector: run-unit-tests.sh has no mapping for .claude/workflows/*, so a PR
+# touching only qa-fix.js triggers no vitest suite. The hook-tests job (this
+# script) is the only test that runs on every PR, so coverage for
+# partitionDispositions must live here. The probe slices the pure function out
+# of qa-fix.js between sentinel comments and evals just that slice.
+
+echo "Test: qa-fix partition (#1844)"
+
+out=$(node "$SCRIPT_DIR/qa-fix-partition-probe.mjs")
+
+# already-satisfied id (p4) is partitioned OUT of dispositions
+assert_eq "qa-fix partition: already-satisfied id absent from dispositions" "false" "$(printf '%s' "$out" | jq -r '.dispositions | any(. == "p4")')"
+# already-satisfied id (p4) is partitioned INTO already_satisfied
+assert_eq "qa-fix partition: already-satisfied id present in already_satisfied" "true" "$(printf '%s' "$out" | jq -r '.already_satisfied | any(. == "p4")')"
+# inverse guard: a non-already-satisfied id (p1, opus-fixable) stays in dispositions
+assert_eq "qa-fix partition: non-already-satisfied id present in dispositions" "true" "$(printf '%s' "$out" | jq -r '.dispositions | any(. == "p1")')"
+# anti-over-filtering: needs-main (p2) and needs-human (p3) must ALSO survive in
+# dispositions. Without these, a regression like `class !== 'needs-main'` in the
+# dispositions filter would pass (p1 still present, p4 still absent).
+assert_eq "qa-fix partition: needs-main id present in dispositions" "true" "$(printf '%s' "$out" | jq -r '.dispositions | any(. == "p2")')"
+assert_eq "qa-fix partition: needs-human id present in dispositions" "true" "$(printf '%s' "$out" | jq -r '.dispositions | any(. == "p3")')"
+# count guard: exactly the 3 non-already-satisfied items land in dispositions.
+assert_eq "qa-fix partition: dispositions count is 3" "3" "$(printf '%s' "$out" | jq -r '.dispositions | length')"
+# shape guard: the already_satisfied projection keeps exactly {id, title, kind,
+# rationale} — class/aesthetic/verify are stripped. A regression that omits a
+# key or leaks a stripped field changes this sorted key set.
+assert_eq "qa-fix partition: already_satisfied element keys" '["id","kind","rationale","title"]' "$(printf '%s' "$out" | jq -c '.already_satisfied_keys')"
+# call-site coverage: qa-fix.js still invokes the function the probe slices.
+# This file defines its own assert_eq (it does not source test-helpers.sh), so
+# use the grep -c | assert_eq convention the rest of the suite uses.
+# Match `= partitionDispositions(allDispositions)` (the call site), not the bare
+# `function partitionDispositions(allDispositions)` definition — both contain the
+# call substring, so the `= ` prefix isolates the invocation to exactly one line.
+assert_eq "qa-fix partition: call site present in qa-fix.js" "1" "$(grep -c '= partitionDispositions(allDispositions)' "$REPO_ROOT/.claude/workflows/qa-fix.js" || true)"
+
+# planned-deferral branch (issue #1891) — three separate input objects to avoid
+# disturbing the f1..f7 order assertion above.
+#
+# (a) opus-fixable + planned_deferral:true → authoritatively needs-human / n/a
+#     (the literal original failure mode: an opus-fixable item routed to the
+#     auto-fix loop because the planned-deferral branch was absent)
+IN_PD_A='{"items":[{"id":"pd1","class":"opus-fixable","aesthetic":false,"planned_deferral":true}],"votes":{}}'
+out_pd_a=$(printf '%s' "$IN_PD_A" | "$SCRIPT_DIR/dispatch-qa-disposition")
+assert_eq "qa-disposition: planned_deferral opus-fixable → final_class=needs-human" "needs-human" "$(printf '%s' "$out_pd_a" | jq -r '.dispositions[0].final_class')"
+assert_eq "qa-disposition: planned_deferral opus-fixable → verify=n/a" "n/a" "$(printf '%s' "$out_pd_a" | jq -r '.dispositions[0].verify')"
+
+# (b) needs-human + planned_deferral:true WITH a refuting vote → stays needs-human/n/a
+#     (NOT downgraded to opus-fixable — the fan-out is bypassed by the first branch)
+IN_PD_B='{"items":[{"id":"pd2","class":"needs-human","aesthetic":false,"planned_deferral":true}],"votes":{"pd2":["refuted"]}}'
+out_pd_b=$(printf '%s' "$IN_PD_B" | "$SCRIPT_DIR/dispatch-qa-disposition")
+assert_eq "qa-disposition: planned_deferral needs-human with refuted vote → final_class=needs-human (not downgraded)" "needs-human" "$(printf '%s' "$out_pd_b" | jq -r '.dispositions[0].final_class')"
+assert_eq "qa-disposition: planned_deferral needs-human with refuted vote → verify=n/a (not Refuted)" "n/a" "$(printf '%s' "$out_pd_b" | jq -r '.dispositions[0].verify')"
+
+# (c) regression guard — non-flagged needs-human with refuting vote still downgrades
+#     (genuine opus-fixable behavior unchanged; f3 above already proves this but
+#     we repeat it inline as a named regression guard for clarity)
+IN_PD_C='{"items":[{"id":"pd3","class":"needs-human","aesthetic":false}],"votes":{"pd3":["refuted"]}}'
+out_pd_c=$(printf '%s' "$IN_PD_C" | "$SCRIPT_DIR/dispatch-qa-disposition")
+assert_eq "qa-disposition: regression guard non-flagged needs-human + refuted → final_class=opus-fixable" "opus-fixable" "$(printf '%s' "$out_pd_c" | jq -r '.dispositions[0].final_class')"
+assert_eq "qa-disposition: regression guard non-flagged needs-human + refuted → verify=Refuted" "Refuted" "$(printf '%s' "$out_pd_c" | jq -r '.dispositions[0].verify')"
 
 # dispatch-jit-skill tests
 # ============================================================================
@@ -28276,27 +29199,40 @@ else
 fi
 rm -rf "$wp_forge"
 
+# Build a bare-repo + worktree fixture whose origin remote is <url>. Creates a
+# temp root with .bare/, seeds one commit on main via a throwaway seed repo,
+# adds a worktree at worktrees/42-foo, and echoes the root path for the caller
+# to capture. Serves both the real-github.com 5a case and the malformed-URL
+# 5b-5e cases:
+#   root=$(make_bare_worktree_fixture <url>)
+make_bare_worktree_fixture() {
+  set -e
+  local url="$1"
+  local root seed
+  root=$(mktemp -d)
+  git init --bare "$root/.bare" >/dev/null 2>&1
+  git --git-dir="$root/.bare" config user.email "t@t" 2>/dev/null
+  git --git-dir="$root/.bare" config user.name "t" 2>/dev/null
+  git --git-dir="$root/.bare" remote add origin "$url"
+  seed=$(mktemp -d)
+  git -C "$seed" init -q
+  git -C "$seed" config user.email "t@t"; git -C "$seed" config user.name "t"
+  git -C "$seed" commit -q --allow-empty -m seed
+  git -C "$seed" remote add bare "$root/.bare"
+  git -C "$seed" push -q bare HEAD:refs/heads/main
+  rm -rf "$seed"
+  mkdir -p "$root/worktrees"
+  git --git-dir="$root/.bare" worktree add -q "$root/worktrees/42-foo" main 2>/dev/null
+  printf '%s' "$root"
+}
+
 # 5. bare+worktree repo resolution: from a worktree whose dirname(common_dir) is
 # NOT a git repo (the real bare-repo + worktrees layout), with GH_REPO unset, both
 # scripts must still resolve the repo for gh. This would FAIL against the pre-fix
 # `cd "$(dirname "$common_dir")"` version, which lands in the non-repo container and
 # leaves gh's {owner}/{repo} unresolvable (and GH_REPO unset). The fake gh below
 # requires GH_REPO and never reads cwd, so it stands in for that failure.
-bw_root=$(mktemp -d)
-git init --bare "$bw_root/.bare" >/dev/null 2>&1
-git --git-dir="$bw_root/.bare" config user.email "t@t" 2>/dev/null
-git --git-dir="$bw_root/.bare" config user.name "t" 2>/dev/null
-git --git-dir="$bw_root/.bare" remote add origin https://github.com/natb1/commons.systems.git
-# Seed one commit on the bare repo so `worktree add` works, then add the worktree.
-bw_seed=$(mktemp -d)
-git -C "$bw_seed" init -q
-git -C "$bw_seed" config user.email "t@t"; git -C "$bw_seed" config user.name "t"
-git -C "$bw_seed" commit -q --allow-empty -m seed
-git -C "$bw_seed" remote add bare "$bw_root/.bare"
-git -C "$bw_seed" push -q bare HEAD:refs/heads/main
-mkdir -p "$bw_root/worktrees"
-git --git-dir="$bw_root/.bare" worktree add -q "$bw_root/worktrees/42-foo" main 2>/dev/null
-rm -rf "$bw_seed"
+bw_root=$(make_bare_worktree_fixture https://github.com/natb1/commons.systems.git)
 
 # Fake gh that requires GH_REPO (never reads cwd) over a fresh JSON store.
 mkdir -p "$bw_root/bin"
@@ -28335,20 +29271,7 @@ rm -rf "$bw_root"
 # 5b. malformed-URL format guard: SSH-with-port → read-plan rejects it.
 # ssh://git@github.com:22/owner/repo.git strips to "22/owner/repo" — two slashes,
 # would pass the old */* check but fails the strict ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ regex.
-mf_ssh_root=$(mktemp -d)
-git init --bare "$mf_ssh_root/.bare" >/dev/null 2>&1
-git --git-dir="$mf_ssh_root/.bare" config user.email "t@t" 2>/dev/null
-git --git-dir="$mf_ssh_root/.bare" config user.name "t" 2>/dev/null
-git --git-dir="$mf_ssh_root/.bare" remote add origin ssh://git@github.com:22/owner/repo.git
-mf_ssh_seed=$(mktemp -d)
-git -C "$mf_ssh_seed" init -q
-git -C "$mf_ssh_seed" config user.email "t@t"; git -C "$mf_ssh_seed" config user.name "t"
-git -C "$mf_ssh_seed" commit -q --allow-empty -m seed
-git -C "$mf_ssh_seed" remote add bare "$mf_ssh_root/.bare"
-git -C "$mf_ssh_seed" push -q bare HEAD:refs/heads/main
-rm -rf "$mf_ssh_seed"
-mkdir -p "$mf_ssh_root/worktrees"
-git --git-dir="$mf_ssh_root/.bare" worktree add -q "$mf_ssh_root/worktrees/42-foo" main 2>/dev/null
+mf_ssh_root=$(make_bare_worktree_fixture ssh://git@github.com:22/owner/repo.git)
 if err=$( cd "$mf_ssh_root/worktrees/42-foo" && env -u GH_REPO "$WP_READ" 42 2>&1 1>/dev/null ); then rc=0; else rc=$?; fi
 assert_eq "read-plan: SSH-with-port malformed URL exits 1" "1" "$rc"
 TOTAL=$((TOTAL + 1))
@@ -28364,31 +29287,50 @@ rm -rf "$mf_ssh_root"
 # 5c. malformed-URL format guard: non-GitHub remote → write-plan rejects it.
 # https://gitlab.com/owner/repo.git has no "github.com" to strip, so repo stays the
 # full URL (contains ":") — has slashes, would pass the old */* check but fails the regex.
-mf_gl_root=$(mktemp -d)
-git init --bare "$mf_gl_root/.bare" >/dev/null 2>&1
-git --git-dir="$mf_gl_root/.bare" config user.email "t@t" 2>/dev/null
-git --git-dir="$mf_gl_root/.bare" config user.name "t" 2>/dev/null
-git --git-dir="$mf_gl_root/.bare" remote add origin https://gitlab.com/owner/repo.git
-mf_gl_seed=$(mktemp -d)
-git -C "$mf_gl_seed" init -q
-git -C "$mf_gl_seed" config user.email "t@t"; git -C "$mf_gl_seed" config user.name "t"
-git -C "$mf_gl_seed" commit -q --allow-empty -m seed
-git -C "$mf_gl_seed" remote add bare "$mf_gl_root/.bare"
-git -C "$mf_gl_seed" push -q bare HEAD:refs/heads/main
-rm -rf "$mf_gl_seed"
-mkdir -p "$mf_gl_root/worktrees"
-git --git-dir="$mf_gl_root/.bare" worktree add -q "$mf_gl_root/worktrees/42-foo" main 2>/dev/null
+mf_gl_root=$(make_bare_worktree_fixture https://gitlab.com/owner/repo.git)
 if err=$( cd "$mf_gl_root/worktrees/42-foo" && env -u GH_REPO "$WP_WRITE" 42 <<<"PLAN" 2>&1 1>/dev/null ); then rc=0; else rc=$?; fi
 assert_eq "write-plan: non-GitHub remote malformed URL exits 1" "1" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ "$err" == *"unexpected owner/repo format"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: write-plan rejects non-GitHub remote URL with format-guard diagnostic"
+if [[ "$err" == *"remote is not a GitHub repository"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: write-plan rejects non-GitHub remote URL with not-GitHub diagnostic"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: write-plan rejects non-GitHub remote URL with format-guard diagnostic"
+  FAIL=$((FAIL + 1)); echo "  FAIL: write-plan rejects non-GitHub remote URL with not-GitHub diagnostic"
   echo "    actual: '$err'"
 fi
 git --git-dir="$mf_gl_root/.bare" worktree prune 2>/dev/null || true
 rm -rf "$mf_gl_root"
+
+# 5d. malformed-URL format guard: SSH-with-port → write-plan rejects it.
+# Symmetric counterpart to 5b: same ssh://git@github.com:22/owner/repo.git fixture,
+# exercised against dispatch-write-plan instead of dispatch-read-plan.
+mf_ssh_w_root=$(make_bare_worktree_fixture ssh://git@github.com:22/owner/repo.git)
+if err=$( cd "$mf_ssh_w_root/worktrees/42-foo" && env -u GH_REPO "$WP_WRITE" 42 <<<"PLAN" 2>&1 1>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "write-plan: SSH-with-port malformed URL exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"unexpected owner/repo format"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: write-plan rejects SSH-with-port malformed URL with format-guard diagnostic"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: write-plan rejects SSH-with-port malformed URL with format-guard diagnostic"
+  echo "    actual: '$err'"
+fi
+git --git-dir="$mf_ssh_w_root/.bare" worktree prune 2>/dev/null || true
+rm -rf "$mf_ssh_w_root"
+
+# 5e. malformed-URL format guard: non-GitHub remote → read-plan rejects it.
+# Symmetric counterpart to 5c: same https://gitlab.com/owner/repo.git fixture,
+# exercised against dispatch-read-plan instead of dispatch-write-plan.
+mf_gl_r_root=$(make_bare_worktree_fixture https://gitlab.com/owner/repo.git)
+if err=$( cd "$mf_gl_r_root/worktrees/42-foo" && env -u GH_REPO "$WP_READ" 42 2>&1 1>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "read-plan: non-GitHub remote malformed URL exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"remote is not a GitHub repository"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: read-plan rejects non-GitHub remote URL with not-GitHub diagnostic"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: read-plan rejects non-GitHub remote URL with not-GitHub diagnostic"
+  echo "    actual: '$err'"
+fi
+git --git-dir="$mf_gl_r_root/.bare" worktree prune 2>/dev/null || true
+rm -rf "$mf_gl_r_root"
 
 # 7. two-matching-plan-comments: when the store contains two comments both
 #    authored by plan-bot and both carrying the marker, read-plan must return
@@ -28441,6 +29383,61 @@ rm -rf "$wp_two"
 
 rm -rf "$wp_root"
 unset DISPATCH_PLAN_AUTHOR_ID
+
+echo ""
+echo "=== gh_repo_from_remote ==="
+
+# gh_repo_from_remote is pure string logic (no git, no gh), so each case sources
+# the real lib.sh in a subshell and calls the helper directly. Success cases
+# assert the derived owner/repo; failure cases assert a non-zero return and that
+# the caller-name prefix appears in the stderr diagnostic (AC: error messages
+# include the caller name).
+
+# Success — HTTPS with .git suffix.
+if out=$( source "$SCRIPT_DIR/lib.sh"; gh_repo_from_remote "https://github.com/natb1/commons.systems.git" probe 2>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "gh_repo_from_remote: https .git → owner/repo" "natb1/commons.systems" "$out"
+assert_eq "gh_repo_from_remote: https .git → exit 0" "0" "$rc"
+
+# Success — HTTPS without .git suffix.
+out=$( source "$SCRIPT_DIR/lib.sh"; gh_repo_from_remote "https://github.com/natb1/commons.systems" probe 2>/dev/null )
+assert_eq "gh_repo_from_remote: https no-.git → owner/repo" "natb1/commons.systems" "$out"
+
+# Success — SSH scp-style.
+out=$( source "$SCRIPT_DIR/lib.sh"; gh_repo_from_remote "git@github.com:natb1/commons.systems.git" probe 2>/dev/null )
+assert_eq "gh_repo_from_remote: ssh → owner/repo" "natb1/commons.systems" "$out"
+
+# Failure — empty URL: non-zero return, caller-prefixed "could not resolve" diagnostic.
+if err=$( source "$SCRIPT_DIR/lib.sh"; gh_repo_from_remote "" probe 2>&1 1>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "gh_repo_from_remote: empty URL exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"probe: could not resolve owner/repo"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: gh_repo_from_remote empty URL emits caller-prefixed diagnostic"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: gh_repo_from_remote empty URL emits caller-prefixed diagnostic"
+  echo "    actual: '$err'"
+fi
+
+# Failure — non-GitHub remote: non-zero return, caller-prefixed not-GitHub diagnostic.
+if err=$( source "$SCRIPT_DIR/lib.sh"; gh_repo_from_remote "https://gitlab.com/a/b" probe 2>&1 1>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "gh_repo_from_remote: non-GitHub remote exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"probe: remote is not a GitHub repository"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: gh_repo_from_remote non-GitHub remote emits caller-prefixed diagnostic"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: gh_repo_from_remote non-GitHub remote emits caller-prefixed diagnostic"
+  echo "    actual: '$err'"
+fi
+
+# Failure — malformed owner/repo (no slash): non-zero return, format diagnostic.
+if err=$( source "$SCRIPT_DIR/lib.sh"; gh_repo_from_remote "https://github.com/onlyowner" probe 2>&1 1>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "gh_repo_from_remote: malformed owner/repo exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"probe: unexpected owner/repo format"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: gh_repo_from_remote malformed owner/repo emits caller-prefixed diagnostic"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: gh_repo_from_remote malformed owner/repo emits caller-prefixed diagnostic"
+  echo "    actual: '$err'"
+fi
 
 # ============================================================================
 # claim_fixed_vite_port (fixed Vite-port pool) tests
@@ -30864,6 +31861,105 @@ else
 fi
 assert_eq "dup-close: no spurious create" "absent" "$(log_state gh-merge-issue-create.log)"
 assert_eq "dup-close: no edit (.[0] title matches)" "absent" "$(log_state gh-merge-issue-edit.log)"
+teardown
+
+# ============================================================================
+# dispatch-retriage-orphaned-followups (#1812)
+# ============================================================================
+echo "=== dispatch-retriage-orphaned-followups (#1812) ==="
+
+# The open-issue scan is served from issue-list.json (REST shape: {number,labels})
+# via the shared `api *repos/*/issues?*` branch; gh_issue_list_rest remaps it.
+# Per-PR state comes from retriage-pr-<N>.json (gh pr view --json state,mergedAt,labels).
+# The office-hours park flows through the REAL copied dispatch-apply-office-hours,
+# which logs to gh-issue-edit.log / gh-issue-comment.log; the per-PR processed
+# marker hits the generic `pr edit *` branch, logged to gh-pr-edit.log.
+
+# (a) closed-unmerged source PR + open source-pr:-marked follow-up → park + mark
+echo "Test: closed-unmerged source PR → park follow-up on office-hours + mark PR"
+setup
+printf '[{"number":101,"labels":[{"name":"source-pr:1704"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '{"state":"CLOSED","mergedAt":null,"labels":[]}\n' > "$STUB_DIR/retriage-pr-1704.json"
+out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null)
+assert_eq "a: office-hours applied to the follow-up issue" \
+  "issue edit 101 --add-label dispatch:office-hours" "$(cat "$STUB_DIR/gh-issue-edit.log")"
+assert_eq "a: why-comment posted to the follow-up issue" "present" "$(log_state gh-issue-comment.log)"
+TOTAL=$((TOTAL + 1))
+if grep -q 'issue comment 101 ' "$STUB_DIR/gh-issue-comment.log" \
+   && grep -q 'closed unmerged' "$STUB_DIR/gh-issue-comment.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: a: why-comment names issue 101 and the closed-unmerged reason"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: a: why-comment names issue 101 and the closed-unmerged reason"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q 'pr edit 1704 --add-label dispatch:orphans-retriaged' "$STUB_DIR/gh-pr-edit.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: a: source PR #1704 marked dispatch:orphans-retriaged"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: a: source PR #1704 marked dispatch:orphans-retriaged"
+fi
+assert_eq "a: one retriaged stdout line" \
+  "retriaged #101 (source PR #1704 closed unmerged)" "$out"
+teardown
+
+# (b) MERGED source PR (mergedAt non-null) → no action (AC3)
+echo "Test: merged source PR → no action"
+setup
+printf '[{"number":102,"labels":[{"name":"source-pr:1688"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '{"state":"MERGED","mergedAt":"2026-01-01T00:00:00Z","labels":[]}\n' > "$STUB_DIR/retriage-pr-1688.json"
+out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null)
+assert_eq "b: no office-hours edit on a merged source PR" "absent" "$(log_state gh-issue-edit.log)"
+assert_eq "b: no PR marker on a merged source PR" "absent" "$(log_state gh-pr-edit.log)"
+assert_eq "b: no stdout on a merged source PR" "" "$out"
+teardown
+
+# (c) OPEN source PR → no action
+echo "Test: still-open source PR → no action"
+setup
+printf '[{"number":103,"labels":[{"name":"source-pr:1900"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '{"state":"OPEN","mergedAt":null,"labels":[]}\n' > "$STUB_DIR/retriage-pr-1900.json"
+out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null)
+assert_eq "c: no office-hours edit on an open source PR" "absent" "$(log_state gh-issue-edit.log)"
+assert_eq "c: no PR marker on an open source PR" "absent" "$(log_state gh-pr-edit.log)"
+assert_eq "c: no stdout on an open source PR" "" "$out"
+teardown
+
+# (d) closed-unmerged PR ALREADY carrying dispatch:orphans-retriaged → idempotent no-op
+echo "Test: source PR already marked dispatch:orphans-retriaged → no action"
+setup
+printf '[{"number":104,"labels":[{"name":"source-pr:1704"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '{"state":"CLOSED","mergedAt":null,"labels":[{"name":"dispatch:orphans-retriaged"}]}\n' > "$STUB_DIR/retriage-pr-1704.json"
+out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null)
+assert_eq "d: no re-park when PR already marked" "absent" "$(log_state gh-issue-edit.log)"
+assert_eq "d: no re-mark when PR already marked" "absent" "$(log_state gh-pr-edit.log)"
+assert_eq "d: no stdout when PR already marked" "" "$out"
+teardown
+
+# (e) no open issue carries a source-pr: label → clean no-op, exit 0
+echo "Test: no source-pr:-marked open issues → clean no-op, exit 0"
+setup
+printf '[{"number":105,"labels":[{"name":"bug"}]}]\n' > "$STUB_DIR/issue-list.json"
+if out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "e: exits 0 with no labeled issues" "0" "$rc"
+assert_eq "e: no office-hours edit" "absent" "$(log_state gh-issue-edit.log)"
+assert_eq "e: no PR marker" "absent" "$(log_state gh-pr-edit.log)"
+assert_eq "e: no stdout" "" "$out"
+teardown
+
+# (f) gh_issue_list_rest --state open fails → warn, exit 0, no work (lines 51-55)
+echo "Test: open-issue scan failure → warning, exit 0, no office-hours or PR marker"
+setup
+: > "$STUB_DIR/gh-fail-issue-list-open"
+err=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>&1 >/dev/null); rc=$?
+assert_eq "f: exits 0 when the open-issue scan fails" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if grep -q 'gh_issue_list_rest --state open failed; skipping scan' <<<"$err"; then
+  PASS=$((PASS + 1)); echo "  PASS: f: warns about the skipped scan on stderr"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: f: warns about the skipped scan on stderr"
+  echo "    actual stderr: '$err'"
+fi
+assert_eq "f: no office-hours edit when the scan fails" "absent" "$(log_state gh-issue-edit.log)"
+assert_eq "f: no PR marker when the scan fails" "absent" "$(log_state gh-pr-edit.log)"
 teardown
 
 # ============================================================================

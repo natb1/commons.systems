@@ -99,4 +99,73 @@ echo "--- _require_nonneg_int count fields still accept 0 ---"
 # accepts 0 independently of the baseline value.
 assert_eq "count field 0 accepted"        0 "$(run_emit --issue 1 --findings-surfaced 0)"
 
+# ============================================================================
+# Suite 3: enum validation — bash-array _in_set (#1903)
+#
+# Verifies that:
+#   a) every current enum value still validates (exit 0)
+#   b) unknown values are rejected (exit 2) with the full set listed in stderr
+#   c) multi-word elements match correctly via the quoted-"$@" spread form
+# ============================================================================
+
+echo ""
+echo "Testing dispatch-emit-outcome enum validation (#1903)..."
+echo ""
+echo "--- every valid phase exits 0 ---"
+
+# run_sut / COMMON / RC / OUT are defined above (Suite 1) and reused here.
+
+run_sut --disposition completed --phase review
+assert_eq "phase review exits 0" "0" "$RC"
+
+run_sut --disposition completed --phase qa
+assert_eq "phase qa exits 0" "0" "$RC"
+
+echo ""
+echo "--- every valid disposition exits 0 ---"
+
+run_sut --phase review --disposition completed
+assert_eq "disposition completed exits 0" "0" "$RC"
+
+run_sut --phase review --disposition completed_with_fixes
+assert_eq "disposition completed_with_fixes exits 0" "0" "$RC"
+
+run_sut --phase review --disposition escalated --terminated-reason 'some reason'
+assert_eq "disposition escalated exits 0" "0" "$RC"
+
+echo ""
+echo "--- unknown phase rejected with full set listed ---"
+
+run_sut --disposition completed --phase bogus
+assert_eq "unknown phase exits 2" "2" "$RC"
+assert_contains "unknown phase stderr lists review qa" "review qa" "$OUT"
+
+echo ""
+echo "--- unknown disposition rejected with full set listed ---"
+
+run_sut --phase review --disposition bogus
+assert_eq "unknown disposition exits 2" "2" "$RC"
+assert_contains "unknown disposition stderr lists all values" "completed completed_with_fixes escalated" "$OUT"
+
+echo ""
+echo "--- multi-word match guarantee (_in_set mirrors SUT) ---"
+
+# Define a local array with a multi-word element.
+_test_arr=("completed with fixes" "escalated")
+# Local copy of _in_set identical to the SUT's — mirrors the SUT's idiom.
+_in_set_local() {
+  local val="$1"; shift
+  local item
+  for item in "$@"; do
+    [[ "$item" == "$val" ]] && return 0
+  done
+  return 1
+}
+_in_set_local "completed with fixes" "${_test_arr[@]}" \
+  && assert_eq "multi-word element matches" "0" "0" \
+  || assert_eq "multi-word element matches" "0" "1"
+_in_set_local "completed" "${_test_arr[@]}" \
+  && assert_eq "partial word does not match multi-word element" "1" "0" \
+  || assert_eq "partial word does not match multi-word element" "1" "1"
+
 report_results

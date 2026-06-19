@@ -1,4 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 
 vi.mock("firebase/firestore", () => {
   class MockTimestamp {
@@ -23,8 +25,9 @@ vi.mock("firebase/firestore", () => {
 });
 
 import { renderBudgetsContent } from "../src/pages/budgets";
+import { AppShell } from "../src/AppShell";
 import { Timestamp } from "firebase/firestore";
-import type { Budget, BudgetPeriod, WeeklyAggregate, BudgetId, BudgetPeriodId, GroupId } from "../src/firestore";
+import type { Budget, BudgetPeriod, WeeklyAggregate, GroupId } from "../src/firestore";
 
 function makeBudget(overrides: Partial<Budget> & { id: string; name: string }): Budget {
   return {
@@ -125,5 +128,91 @@ describe("renderBudgetsContent", () => {
   it("renders 'No budgets found' for empty budget list", () => {
     const html = renderBudgetsContent([], [], weeklyAggregates, false);
     expect(html).toContain("No budgets found");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SSG shell + injection
+// Tests the exact shell+content that prerender.tsx bakes into <div id="root">
+// without running the file-I/O script. Uses React.createElement to stay in a
+// .ts file (no JSX transform required); mirrors prerender.tsx exactly.
+// ---------------------------------------------------------------------------
+
+describe("prerender SSG shell + injection", () => {
+  // Reuse the same small fixture as renderBudgetsContent tests above.
+  const budgets: Budget[] = [
+    makeBudget({ id: "food", name: "Food", allowance: 150 }),
+    makeBudget({ id: "fun", name: "Fun", allowance: 50 }),
+  ];
+
+  const periods: BudgetPeriod[] = [
+    makePeriod({ id: "bp-1", budgetId: "food" }),
+    makePeriod({ id: "bp-2", budgetId: "fun" }),
+  ];
+
+  const weeklyAggregates: WeeklyAggregate[] = [
+    {
+      id: "2025-01-13",
+      weekStart: Timestamp.fromMillis(1705104000000),
+      creditTotal: 500,
+      unbudgetedTotal: 75,
+      groupId: null as GroupId | null,
+    },
+  ];
+
+  // Matches prerender.tsx: sync string render of the "/" route body.
+  const budgetsHtml = renderBudgetsContent(budgets, periods, weeklyAggregates, false);
+
+  // Render the same pure shell the prerender script composes.
+  // React.createElement avoids JSX in this .ts file while producing the same tree.
+  const shellHtml = renderToStaticMarkup(
+    React.createElement(
+      AppShell,
+      { current: "/" },
+      React.createElement("main", {
+        id: "app",
+        dangerouslySetInnerHTML: { __html: budgetsHtml },
+      }),
+    ),
+  );
+
+  it("contains the <h1>Budget</h1> heading", () => {
+    expect(shellHtml).toContain("<h1>Budget</h1>");
+  });
+
+  it("renders nav links as real anchor elements", () => {
+    // The ds Nav renders every link as <a>, including the current one.
+    expect(shellHtml).toMatch(/<a[^>]+href="\/"[^>]*>budgets<\/a>/);
+    expect(shellHtml).toMatch(/<a[^>]+href="\/transactions"[^>]*>transactions<\/a>/);
+    expect(shellHtml).toMatch(/<a[^>]+href="\/accounts"[^>]*>accounts<\/a>/);
+    expect(shellHtml).toMatch(/<a[^>]+href="\/rules"[^>]*>rules<\/a>/);
+  });
+
+  it("marks the '/' nav link as aria-current='page'", () => {
+    expect(shellHtml).toContain('aria-current="page"');
+  });
+
+  it("renders the empty #hero-container placeholder (no hero baked)", () => {
+    expect(shellHtml).toContain('id="hero-container"');
+  });
+
+  it("renders the <main id='app'> wrapper", () => {
+    expect(shellHtml).toContain('<main id="app"');
+  });
+
+  it("injects the budgets content — h2 heading", () => {
+    expect(shellHtml).toContain("<h2>Budgets</h2>");
+  });
+
+  it("injects the budgets content — budgets-table", () => {
+    expect(shellHtml).toContain('id="budgets-table"');
+  });
+
+  it("injects the budgets content — seed-data-notice (unauthorized fixture)", () => {
+    expect(shellHtml).toContain('id="seed-data-notice"');
+  });
+
+  it("renders the CC-BY-SA footer badge", () => {
+    expect(shellHtml).toContain('alt="CC-BY-SA"');
   });
 });
