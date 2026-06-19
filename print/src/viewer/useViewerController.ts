@@ -133,7 +133,6 @@ interface ControllerInternals {
   readFailed: boolean;
   gotoMode: "page" | "percent" | null;
   gotoInFlight: boolean;
-  cancelled: boolean;
 }
 
 export function useViewerController(
@@ -175,7 +174,6 @@ export function useViewerController(
     readFailed: false,
     gotoMode: null,
     gotoInFlight: false,
-    cancelled: false,
   });
 
   // The handler API closures live inside the effect (like initViewer) and are
@@ -197,7 +195,11 @@ export function useViewerController(
   useEffect(() => {
     const { createRenderer, resolveSource, mediaId, store } = argsRef.current;
     const st = internals.current;
-    st.cancelled = false;
+    // Per-effect-invocation cancellation token. A local (not a shared ref field)
+    // so each (re)mount gets its own copy: a prior mount's in-flight async init
+    // keeps seeing its own `cancelled = true` even after a new mount starts,
+    // making same-instance remounts (incl. React StrictMode double-invoke) safe.
+    let cancelled = false;
 
     const spreadKey = `spread-mode:${mediaId}`;
     document.body.classList.add("viewer-active");
@@ -496,14 +498,14 @@ export function useViewerController(
       } catch (err) {
         reportError(new Error("Failed to restore reading position", { cause: err }));
         st.readFailed = true;
-        setReadFailed(true);
+        if (!cancelled) setReadFailed(true);
       }
-      if (st.cancelled) return;
+      if (cancelled) return;
       st.lastSavedPosition = savedPosition;
       const source = await resolveSource();
-      if (st.cancelled) return;
+      if (cancelled) return;
       await renderer.init(canvasWrap, source, savedPosition ?? undefined);
-      if (st.cancelled) return;
+      if (cancelled) return;
       // Sync to actual start page: init may have clamped savedPosition. Without
       // this, lastSavedPosition would differ from renderer.position and trigger
       // a spurious write on first navigation.
@@ -517,7 +519,7 @@ export function useViewerController(
         if (controller.loadPreference()) {
           controller.enter(renderer.currentPage);
           await controller.render();
-          if (st.cancelled) return;
+          if (cancelled) return;
           setSpreadEnabled(true);
         }
       }
@@ -528,12 +530,12 @@ export function useViewerController(
       syncNav();
     })().catch((err) => {
       reportError(new Error("Viewer initialization failed", { cause: err }));
-      setLoadError("Failed to load");
+      if (!cancelled) setLoadError("Failed to load");
     });
 
     // --- Full teardown (double-invoke-safe) ---
     return () => {
-      st.cancelled = true;
+      cancelled = true;
       flushSave();
       document.body.classList.remove("viewer-active");
       orientationQuery.removeEventListener("change", updateOrientation);

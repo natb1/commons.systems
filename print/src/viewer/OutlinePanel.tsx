@@ -93,12 +93,13 @@ export function OutlinePanel({
     if (loadedRef.current) return;
     const r = controller.getRenderer();
     if (!r || !r.getOutline || !r.goToOutlineEntry) return;
-    loadedRef.current = true;
     r.getOutline()
       .then((e) => {
+        loadedRef.current = true;
         if (!destroyedRef.current) setEntries(e as OutlineEntry[]);
       })
       .catch((err) => {
+        // Leave loadedRef.current = false so the next navSignal change retries.
         reportError(new Error("Failed to load outline", { cause: err }));
       });
   }, [controller.navSignal]);

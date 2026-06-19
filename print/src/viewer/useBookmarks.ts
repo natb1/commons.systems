@@ -90,7 +90,7 @@ export function useBookmarks(
     const pos = controller.getRenderer()?.position;
     return pos != null && bookmarks.some((b) => b.position === pos);
     // navSignal is the signal that renderer.position has changed.
-  }, [controller.navSignal, bookmarks, controller]);
+  }, [controller.navSignal, bookmarks]);
 
   function toggleBookmark() {
     const r = controller.getRenderer();
