@@ -4770,6 +4770,46 @@ result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
 assert_eq "--priority-only returns priority issue" "issue 400" "$result"
 teardown
 
+# Build the shared ancestor-priority fixture for the PO-ANC* tests.
+#
+# Args:
+#   $1 depth         — 1 (issues 100/101/200, parent 101->100) or
+#                      2 (issues 100/102/101/200, parent 101->102->100, the
+#                        `priority` label sits on grandparent 100 via neutral 102)
+#   $2 pr20_rollup   — the rollup JSON for PR 20 ($FAILING_ROLLUP for the
+#                      selection tests, $PENDING_ROLLUP for the CI-pending
+#                      waiting-fallback test)
+#
+# Writes pr-list-union.json (PR 10 closes 200 / always $FAILING_ROLLUP;
+# PR 20 closes 101 / $2), issue-list.json, worktree-list.txt, and the parent
+# stub(s) into $STUB_DIR. Caller runs setup first and teardown after.
+#
+# INVARIANT (do NOT change): issue 101 carries ONLY [help wanted] and NEVER an
+# own `priority` label — priority reaches it solely through the ancestor chain.
+# Several callers (esp. PO-ANC5) depend on 101 being non-priority to exercise the
+# correct branch; adding `priority` to 101 here would silently break that
+# coverage for ALL five tests at once. See the PO-ANC5 block comment.
+setup_ancestor_priority_fixture() {
+  local depth="$1" pr20_rollup="$2"
+  local union
+  union='['
+  union+="$(make_pr_union 10 "10-bug-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
+  union+="$(make_pr_union 20 "20-leaf-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$pr20_rollup" '[{"number":101}]')"
+  union+=']'
+  setup_union_pr_list "$union"
+  printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+  if [[ "$depth" == 2 ]]; then
+    printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]},{"number":102,"created_at":"2024-01-01T00:00:00Z","labels":[]},{"number":101,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
+      > "$STUB_DIR/issue-list.json"
+    printf '102' > "$STUB_DIR/parent-101.json"   # 101 -> 102
+    printf '100' > "$STUB_DIR/parent-102.json"   # 102 -> 100 (priority grandparent)
+  else
+    printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]},{"number":101,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
+      > "$STUB_DIR/issue-list.json"
+    printf '100' > "$STUB_DIR/parent-101.json"   # 101 -> 100 (priority epic)
+  fi
+}
+
 # PO-ANC1. A PR whose closing issue carries NO own `priority` label, but whose
 #           ancestor epic IS open and carries `priority`, is lifted into the
 #           priority tier via ancestor inheritance (#1914). In DEFAULT mode this
@@ -4797,20 +4837,7 @@ teardown
 #           PR 10 (older) wins. With it, PR 20 gets pri=1 and wins outright.
 echo "Test: default mode — ancestor priority lifts PR over non-priority PR"
 setup
-UNION='['
-UNION+="$(make_pr_union 10 "10-bug-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
-UNION+="$(make_pr_union 20 "20-leaf-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":101}]')"
-UNION+=']'
-setup_union_pr_list "$UNION"
-# issue 100: priority epic (open ancestor of 101); issue 101: leaf (no own priority);
-# issue 200: plain bug. Neither 100 nor 200 has `help wanted`, so neither enters the
-# startable issue queue. Issue 101 has `help wanted` but no own `priority`, so it is
-# not in the priority issue tier and does not preempt the PR selection.
-printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]},{"number":101,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
-  > "$STUB_DIR/issue-list.json"
-printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
-# parent fixture: issue 101's parent is 100 (the priority epic); no grandparent.
-printf '100' > "$STUB_DIR/parent-101.json"
+setup_ancestor_priority_fixture 1 "$FAILING_ROLLUP"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "ancestor priority lifts PR 20 over older PR 10 (default mode)" "pr 20 20-leaf-pr fix-checks" "$result"
 teardown
@@ -4860,15 +4887,7 @@ teardown
 #           returns empty (both bits 0); with it, returns pr 20.
 echo "Test: --priority-only — ancestor priority qualifies PR (PO-ANC2)"
 setup
-UNION='['
-UNION+="$(make_pr_union 10 "10-bug-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
-UNION+="$(make_pr_union 20 "20-leaf-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":101}]')"
-UNION+=']'
-setup_union_pr_list "$UNION"
-printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]},{"number":101,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
-  > "$STUB_DIR/issue-list.json"
-printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
-printf '100' > "$STUB_DIR/parent-101.json"
+setup_ancestor_priority_fixture 1 "$FAILING_ROLLUP"
 result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
 assert_eq "--priority-only ancestor priority qualifies PR 20" "pr 20 20-leaf-pr fix-checks" "$result"
 teardown
@@ -4896,22 +4915,9 @@ teardown
 #           pri=0 and PR 10 (older) wins; with it PR 20 gets pri=1 and wins.
 echo "Test: default mode — depth-2 ancestor priority lifts PR over non-priority PR"
 setup
-UNION='['
-UNION+="$(make_pr_union 10 "10-bug-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
-UNION+="$(make_pr_union 20 "20-leaf-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":101}]')"
-UNION+=']'
-setup_union_pr_list "$UNION"
-# issue 100: priority grandparent epic; issue 102: neutral intermediate parent (no
-# priority); issue 101: leaf (help wanted, no own priority); issue 200: plain bug.
-# Only the grandparent carries priority, reached via the 102 → 100 hop.
-printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]},{"number":102,"created_at":"2024-01-01T00:00:00Z","labels":[]},{"number":101,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
-  > "$STUB_DIR/issue-list.json"
-printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
-# 2-hop parent chain: 101 → 102 → 100. Priority sits on the grandparent (100),
-# so the assertion proves ancestor detection recurses to depth 2.
-printf '102' > "$STUB_DIR/parent-101.json"   # 101 → 102
-printf '100' > "$STUB_DIR/parent-102.json"   # 102 → 100
-# no parent-100.json — chain terminates at the grandparent
+# Fixture written by setup_ancestor_priority_fixture 2: grandparent 100 carries
+# `priority`; neutral intermediate 102 connects 101→102→100 (see helper comment).
+setup_ancestor_priority_fixture 2 "$FAILING_ROLLUP"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "depth-2 ancestor priority lifts PR 20 over older PR 10 (PO-ANC3)" "pr 20 20-leaf-pr fix-checks" "$result"
 teardown
@@ -4928,18 +4934,7 @@ teardown
 #           it returns pr 20. Mirrors the PO-ANC1/PO-ANC2 (depth-1) pattern at depth 2.
 echo "Test: --priority-only — depth-2 ancestor priority qualifies PR (PO-ANC4)"
 setup
-UNION='['
-UNION+="$(make_pr_union 10 "10-bug-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
-UNION+="$(make_pr_union 20 "20-leaf-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":101}]')"
-UNION+=']'
-setup_union_pr_list "$UNION"
-printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]},{"number":102,"created_at":"2024-01-01T00:00:00Z","labels":[]},{"number":101,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
-  > "$STUB_DIR/issue-list.json"
-printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
-# 2-hop parent chain: 101 → 102 → 100. Priority sits on the grandparent (100).
-printf '102' > "$STUB_DIR/parent-101.json"   # 101 → 102
-printf '100' > "$STUB_DIR/parent-102.json"   # 102 → 100
-# no parent-100.json — chain terminates at the grandparent
+setup_ancestor_priority_fixture 2 "$FAILING_ROLLUP"
 result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
 assert_eq "--priority-only depth-2 ancestor priority qualifies PR 20 (PO-ANC4)" "pr 20 20-leaf-pr fix-checks" "$result"
 teardown
@@ -4975,15 +4970,7 @@ teardown
 #           candidate and does not interfere with the waiting result.
 echo "Test: --priority-only — CI-pending ancestor priority → waiting fallback (PO-ANC5)"
 setup
-UNION='['
-UNION+="$(make_pr_union 10 "10-bug-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
-UNION+="$(make_pr_union 20 "20-leaf-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$PENDING_ROLLUP" '[{"number":101}]')"
-UNION+=']'
-setup_union_pr_list "$UNION"
-printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]},{"number":101,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
-  > "$STUB_DIR/issue-list.json"
-printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
-printf '100' > "$STUB_DIR/parent-101.json"
+setup_ancestor_priority_fixture 1 "$PENDING_ROLLUP"
 result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
 assert_eq "--priority-only CI-pending ancestor priority → waiting (fallback target) (PO-ANC5)" \
   "waiting 101" "$result"
