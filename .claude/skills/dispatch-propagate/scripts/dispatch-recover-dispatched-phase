@@ -29,7 +29,11 @@
 #             FIRST match so a sub-skill the session later invoked cannot shadow
 #             the top-level dispatched command.
 #   Fallback: grep -m1 for .claude/skills/<skill> path string embedded in the
-#             first user record — used only when the primary key yields nothing.
+#             FIRST transcript record only (JSONL line 1) — used only when the
+#             primary key yields nothing.  Scoping to line 1 distrusts paths in
+#             later records (tool output, Read results, sub-skill SKILL.md docs
+#             that reference a different phase skill's path), which would
+#             otherwise let a whole-file grep return the wrong skill name.
 #
 # WHY grep the file directly (not via echo): zsh's builtin echo interprets
 # backslash escapes (\t, \n, \uXXXX), corrupting JSONL content.  Grepping the
@@ -49,9 +53,14 @@ SKILL=$(grep -m1 -oE 'command-name>/[a-z-]+</command-name' "$TRANSCRIPT" \
   | sed 's|command-name>/||; s|</command-name||' \
   || true)
 
-# Fallback: .claude/skills/<skill> path embedded in the transcript.
+# Fallback: .claude/skills/<skill> path embedded in the FIRST transcript record
+# only (JSONL line 1).  Restricting to line 1 (vs the whole file) prevents a
+# later record — tool output, a Read result, or a sub-skill SKILL.md that
+# documents a different phase skill's path — from shadowing the dispatched
+# command and returning the wrong skill name.
 if [ -z "$SKILL" ]; then
-  SKILL=$(grep -m1 -oE '\.claude/skills/[a-z-]+' "$TRANSCRIPT" \
+  SKILL=$(head -n1 "$TRANSCRIPT" \
+    | grep -m1 -oE '\.claude/skills/[a-z-]+' \
     | sed 's|.*\.claude/skills/||' \
     || true)
 fi

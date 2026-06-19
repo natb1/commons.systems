@@ -21022,8 +21022,13 @@ fi
 stop_teardown
 
 # --- Test #2025-2: per-phase advance pairs → advance for each -----------------
-# (implement→qa), (qa→review), (review→done): all must advance.
-for _pair in "implement:qa" "qa:review" "review:done"; do
+# (implement→qa), (qa→review), (review→done): main-chain forward moves advance.
+# (fix-checks→qa), (fix-conflicts→implement): fix-* phases also advance once
+# their structural side-effect (green CI / resolved conflict) lands and the
+# chain re-derives the downstream phase. These two guard fix-phase recovery,
+# which the main-chain-only pairs never exercise.
+for _pair in "implement:qa" "qa:review" "review:done" \
+             "fix-checks:qa" "fix-conflicts:implement"; do
   _dispatched="${_pair%%:*}"
   _current="${_pair##*:}"
   echo "Test: #2025 stop recovery: dispatched=$_dispatched, current=$_current → advance (spawn+self-close+sweep, no park)"
@@ -21180,6 +21185,47 @@ if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: #2025 idle-poll precedence: NOT self-closed (wakeup gate fired, no advance)"
   echo "    self-close-calls: $(cat "$STUB_DIR/self-close-calls.log")"
+fi
+stop_teardown
+
+# --- Test #2025-7: backwards phase (dispatched=qa, current=implement) → park --
+# The recovery block must advance ONLY when the chain moved FORWARD past the
+# dispatched phase. A dispatched=qa session whose PR was closed mid-phase
+# re-derives to implement — a BACKWARDS move. The chain did not progress past
+# the dispatched phase, so the structural side-effects of qa never landed: this
+# must park on office-hours, NOT self-close-and-advance.
+#
+# NOTE: this asserts forward-only recovery. It passes only once the recovery
+# block's `[ "$DISPATCHED_PHASE" != "$CURRENT_PHASE" ]` comparison is replaced
+# with a forward-only (phase-rank) check. Under the current `!=` comparison the
+# hook treats any inequality — including this backwards move — as an advance, so
+# this test is RED until that sibling hook fix lands in the same commit. Its
+# redness is the point: it is the regression guard the finding asks for.
+echo "Test: #2025 stop recovery: dispatched=qa, current=implement (backwards) → genuine park, no advance"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "qa"        > "$STUB_DIR/dispatched-phase.txt"
+echo "implement" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "#2025 qa→implement backwards-park: hook exits 0" "0" "$rc"
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
+apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
+TOTAL=$((TOTAL + 1))
+if [[ "$apply_issue" == "123" && -n "$apply_reason" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2025 qa→implement backwards-park: office-hours applied to issue 123 + non-empty reason"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2025 qa→implement backwards-park: office-hours applied to issue 123 + non-empty reason"
+  echo "    apply-log: $apply_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2025 qa→implement backwards-park: self-close NOT invoked (no false advance)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2025 qa→implement backwards-park: self-close NOT invoked (no false advance)"
 fi
 stop_teardown
 
@@ -33460,6 +33506,41 @@ printf '%s\n' \
 if out=$("$DRDP" "$TMPDIR_TEST/firstmatch.jsonl" 2>/dev/null); then rc=0; else rc=$?; fi
 assert_eq "recover first-match: stdout is 'implement' (not shadowed by commit-merge-push)" "implement" "$out"
 assert_eq "recover first-match: exit 0" "0" "$rc"
+drdp_teardown
+
+# --- Test 11: fallback path (no command-name tag) → recognized skill, exit 0 --
+# Transcript has NO <command-name> tag; line 1 embeds a .claude/skills/<skill>
+# path. The fallback grep must recover the skill and map it to its phase.
+echo "Test: fallback path (no tag, .claude/skills/qa-fix on line 1) → 'qa', exit 0"
+drdp_setup
+printf '%s\n' \
+  '{"type":"user","message":{"content":[{"type":"text","text":"see .claude/skills/qa-fix/SKILL.md"}]}}' \
+  > "$TMPDIR_TEST/fallback.jsonl"
+if out=$("$DRDP" "$TMPDIR_TEST/fallback.jsonl" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "recover fallback: stdout is 'qa'" "qa" "$out"
+assert_eq "recover fallback: exit 0" "0" "$rc"
+drdp_teardown
+
+# --- Test 12: fallback ignores skills paths in later records → exit 1 --------
+# No tag anywhere; line 1 carries NO skills path, but line 2 references
+# .claude/skills/implement (e.g. tool output / Read result). The fallback is
+# scoped to line 1, so it must NOT recover "implement" from the later record —
+# any doubt → empty stdout, non-zero exit. A whole-file grep would wrongly
+# return "implement"; this test proves the line-1 restriction.
+echo "Test: fallback ignores skills path in later record → empty stdout, exit 1"
+drdp_setup
+printf '%s\n' \
+  '{"type":"user","message":{"content":[{"type":"text","text":"recover this dead session"}]}}' \
+  '{"type":"assistant","message":{"content":[{"type":"text","text":"reading .claude/skills/implement/SKILL.md"}]}}' \
+  > "$TMPDIR_TEST/fallback-later.jsonl"
+if out=$("$DRDP" "$TMPDIR_TEST/fallback-later.jsonl" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "recover fallback-later: stdout is empty" "" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ "$rc" -ne 0 ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: recover fallback-later: exit non-zero"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: recover fallback-later: exit non-zero (got 0)"
+fi
 drdp_teardown
 
 # ============================================================================
