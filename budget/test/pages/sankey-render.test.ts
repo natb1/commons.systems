@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 
 import type { CategoryNode } from "../../src/pages/category-node";
 import { renderSankeySvg, type SankeyRenderInput } from "../../src/pages/sankey-render";
+import { makeContainer } from "../helpers";
 
 function makeNode(name: string, fullPath: string, value: number, children: CategoryNode[] = []): CategoryNode {
   return { name, fullPath, value, count: 1, children };
@@ -17,6 +18,7 @@ function defaultInput(overrides: Partial<SankeyRenderInput> = {}): SankeyRenderI
   const transport = makeNode("Transport", "Transport", 400);
   const rootData = makeRoot([food, transport]);
   return {
+    container: makeContainer(),
     rootData,
     collapsedPaths: new Set(),
     containerWidth: 800,
