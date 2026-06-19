@@ -952,6 +952,50 @@ describe("clearSearch()", () => {
     expect(restored).toBeDefined();
   });
 
+  // SEQUENTIAL (two awaited renderPageInto calls, not concurrent). Exercises a
+  // DIFFERENT invariant than the adjacent "concurrent renderPageInto" test above:
+  // that test uses Promise.all to verify the spreadGen cancellation guard (one
+  // wrapper survives); this test verifies that applyHighlight's leading
+  // unwrapHighlights() restores the first wrapper's stale highlight span on the
+  // spread path — the regression introduced by #1726 and covered for the
+  // single-page path but not the spread path.
+  it("sequential double renderPageInto() on the same page leaves no stale highlight in the first wrapper", async () => {
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf");
+
+    const results = await renderer.search!("the");
+    const page1Result = results.find((r) => r.label === "Page 1");
+    expect(page1Result).toBeDefined();
+
+    // Arm pendingHighlight for page 1 (goToResult is arm-only — no render yet).
+    await renderer.goToResult!(page1Result!);
+
+    // A fresh spread target with a non-zero rect so renderPageInto proceeds past
+    // the 0×0 guard.
+    const target = document.createElement("div");
+    target.getBoundingClientRect = makeTargetRect;
+
+    // Call #1: renders page 1 into target, applying the highlight.
+    await renderer.renderPageInto!(1, target);
+    const firstWrapper = target.querySelector(".pdf-page-wrapper") as HTMLElement;
+    expect(firstWrapper).not.toBeNull();
+    expect(firstWrapper.querySelector(".search-highlight")).not.toBeNull();
+
+    // Call #2 (same page, same target): a new wrapper replaces the first.
+    // applyHighlight's leading unwrapHighlights() must restore the now-detached
+    // firstWrapper's stale highlight span. On unfixed code the firstWrapper
+    // retains its .search-highlight span and the assertion below fails.
+    await renderer.renderPageInto!(1, target);
+
+    // THE discriminating assertion: firstWrapper's highlight is gone because
+    // unwrapHighlights() ran before the second applyHighlight wrote the new one.
+    expect(firstWrapper.querySelector(".search-highlight")).toBeNull();
+
+    // Only the live (second) wrapper carries a highlight.
+    expect(target.querySelectorAll(".search-highlight").length).toBe(1);
+    expect(target.querySelectorAll(".search-highlight")[0].textContent).toBe("the");
+  });
+
   it("goToPosition() drains the active highlight and disarms pendingHighlight", async () => {
     const renderer = createPdfRenderer();
     await renderer.init(container, "fake://source.pdf");
