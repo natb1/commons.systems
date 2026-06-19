@@ -6749,28 +6749,37 @@ teardown
 echo ""
 echo "=== playwright_install_with_deps ==="
 
-# 1. Skip-guard: PLAYWRIGHT_BROWSERS_PATH set → return 0, 0 npx calls.
-echo "Test: playwright_install_with_deps skip-guard → rc 0, 0 npx calls"
-setup
-cat > "$TMPDIR_TEST/bin/npx" <<'FAKE'
+# Group-local stub writers (not hoisted into setup() — other groups rely on
+# real timeout/sleep for hang protection). Each writes to $TMPDIR_TEST/bin,
+# already first on PATH.
+write_playwright_npx_stub() {
+  cat > "$TMPDIR_TEST/bin/npx" <<'FAKE'
 #!/usr/bin/env bash
 cf="$NPX_COUNT_FILE"
 c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
 exit "${NPX_EXIT:-0}"
 FAKE
-chmod +x "$TMPDIR_TEST/bin/npx"
-cat > "$TMPDIR_TEST/bin/timeout" <<'FAKE'
+  chmod +x "$TMPDIR_TEST/bin/npx"
+}
+write_playwright_hang_stubs() {
+  cat > "$TMPDIR_TEST/bin/timeout" <<'FAKE'
 #!/usr/bin/env bash
 while [[ "$1" == -* ]]; do shift; done
 shift
 exec "$@"
 FAKE
-chmod +x "$TMPDIR_TEST/bin/timeout"
-cat > "$TMPDIR_TEST/bin/sleep" <<'FAKE'
+  chmod +x "$TMPDIR_TEST/bin/timeout"
+  cat > "$TMPDIR_TEST/bin/sleep" <<'FAKE'
 #!/usr/bin/env bash
 exit 0
 FAKE
-chmod +x "$TMPDIR_TEST/bin/sleep"
+  chmod +x "$TMPDIR_TEST/bin/sleep"
+}
+
+# 1. Skip-guard: PLAYWRIGHT_BROWSERS_PATH set → return 0, 0 npx calls.
+echo "Test: playwright_install_with_deps skip-guard → rc 0, 0 npx calls"
+setup
+write_playwright_npx_stub
 NPX_COUNT_FILE="$TMPDIR_TEST/npx-1"
 (
   source "$TMPDIR_TEST/lib.sh"
@@ -6787,25 +6796,8 @@ teardown
 # 2. First-attempt success: npx exits 0 → rc 0, exactly 1 npx call.
 echo "Test: playwright_install_with_deps first-attempt success → rc 0, 1 npx call"
 setup
-cat > "$TMPDIR_TEST/bin/npx" <<'FAKE'
-#!/usr/bin/env bash
-cf="$NPX_COUNT_FILE"
-c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
-exit "${NPX_EXIT:-0}"
-FAKE
-chmod +x "$TMPDIR_TEST/bin/npx"
-cat > "$TMPDIR_TEST/bin/timeout" <<'FAKE'
-#!/usr/bin/env bash
-while [[ "$1" == -* ]]; do shift; done
-shift
-exec "$@"
-FAKE
-chmod +x "$TMPDIR_TEST/bin/timeout"
-cat > "$TMPDIR_TEST/bin/sleep" <<'FAKE'
-#!/usr/bin/env bash
-exit 0
-FAKE
-chmod +x "$TMPDIR_TEST/bin/sleep"
+write_playwright_npx_stub
+write_playwright_hang_stubs
 NPX_COUNT_FILE="$TMPDIR_TEST/npx-2"
 rc=0
 (
@@ -6822,25 +6814,8 @@ teardown
 # 3. Both attempts fail: npx exits 1 twice → rc non-zero, exactly 2 npx calls.
 echo "Test: playwright_install_with_deps both-attempts fail → rc non-zero, 2 npx calls"
 setup
-cat > "$TMPDIR_TEST/bin/npx" <<'FAKE'
-#!/usr/bin/env bash
-cf="$NPX_COUNT_FILE"
-c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
-exit "${NPX_EXIT:-0}"
-FAKE
-chmod +x "$TMPDIR_TEST/bin/npx"
-cat > "$TMPDIR_TEST/bin/timeout" <<'FAKE'
-#!/usr/bin/env bash
-while [[ "$1" == -* ]]; do shift; done
-shift
-exec "$@"
-FAKE
-chmod +x "$TMPDIR_TEST/bin/timeout"
-cat > "$TMPDIR_TEST/bin/sleep" <<'FAKE'
-#!/usr/bin/env bash
-exit 0
-FAKE
-chmod +x "$TMPDIR_TEST/bin/sleep"
+write_playwright_npx_stub
+write_playwright_hang_stubs
 NPX_COUNT_FILE="$TMPDIR_TEST/npx-3"
 rc=0
 (
@@ -6867,18 +6842,7 @@ c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
 if [[ "$c" -le 1 ]]; then exit 1; else exit 0; fi
 FAKE
 chmod +x "$TMPDIR_TEST/bin/npx"
-cat > "$TMPDIR_TEST/bin/timeout" <<'FAKE'
-#!/usr/bin/env bash
-while [[ "$1" == -* ]]; do shift; done
-shift
-exec "$@"
-FAKE
-chmod +x "$TMPDIR_TEST/bin/timeout"
-cat > "$TMPDIR_TEST/bin/sleep" <<'FAKE'
-#!/usr/bin/env bash
-exit 0
-FAKE
-chmod +x "$TMPDIR_TEST/bin/sleep"
+write_playwright_hang_stubs
 NPX_COUNT_FILE="$TMPDIR_TEST/npx-4"
 rc=0
 (
