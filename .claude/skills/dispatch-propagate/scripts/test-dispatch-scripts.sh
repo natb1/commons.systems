@@ -28968,10 +28968,11 @@ rm -rf "$bw_root"
 
 # Build a bare-repo + worktree fixture whose origin remote is <url>, for the
 # malformed-URL format-guard tests (5b-5e). Creates a temp root with .bare/,
-# seeds one commit on main via a throwaway seed clone, adds a worktree at
+# seeds one commit on main via a throwaway seed repo, adds a worktree at
 # worktrees/42-foo, and echoes the root path for the caller to capture:
 #   root=$(make_malformed_remote_fixture <url>)
 make_malformed_remote_fixture() {
+  set -e
   local url="$1"
   local root seed
   root=$(mktemp -d)
