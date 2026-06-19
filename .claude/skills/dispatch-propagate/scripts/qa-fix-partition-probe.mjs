@@ -64,6 +64,11 @@ const endIdx = source.indexOf(END);
 // the slice start with `function`, yielding a same-line function expression.
 const fnSource = source.slice(startIdx, endIdx).trim();
 
+if (!fnSource) {
+  process.stderr.write('qa-fix-partition-probe: empty function body between sentinels\n');
+  process.exit(1);
+}
+
 const partitionDispositions = new Function('return ' + fnSource)();
 
 // Fixture mirroring the f7-fixture class vocabulary, with the real disposition
@@ -113,5 +118,10 @@ process.stdout.write(
   JSON.stringify({
     dispositions: dispositions.map((d) => d.id),
     already_satisfied: already_satisfied.map((d) => d.id),
+    // Shape probe: the keys of an already_satisfied element, sorted. The
+    // projection in partitionDispositions strips class/aesthetic/verify and
+    // must keep exactly {id, title, kind, rationale}; a regression that omits
+    // a key or leaks a stripped one changes this set.
+    already_satisfied_keys: Object.keys(already_satisfied[0]).sort(),
   }) + '\n'
 );

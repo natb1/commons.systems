@@ -26223,6 +26223,17 @@ assert_eq "qa-fix partition: already-satisfied id absent from dispositions" "fal
 assert_eq "qa-fix partition: already-satisfied id present in already_satisfied" "true" "$(printf '%s' "$out" | jq -r '.already_satisfied | any(. == "p4")')"
 # inverse guard: a non-already-satisfied id (p1, opus-fixable) stays in dispositions
 assert_eq "qa-fix partition: non-already-satisfied id present in dispositions" "true" "$(printf '%s' "$out" | jq -r '.dispositions | any(. == "p1")')"
+# anti-over-filtering: needs-main (p2) and needs-human (p3) must ALSO survive in
+# dispositions. Without these, a regression like `class !== 'needs-main'` in the
+# dispositions filter would pass (p1 still present, p4 still absent).
+assert_eq "qa-fix partition: needs-main id present in dispositions" "true" "$(printf '%s' "$out" | jq -r '.dispositions | any(. == "p2")')"
+assert_eq "qa-fix partition: needs-human id present in dispositions" "true" "$(printf '%s' "$out" | jq -r '.dispositions | any(. == "p3")')"
+# count guard: exactly the 3 non-already-satisfied items land in dispositions.
+assert_eq "qa-fix partition: dispositions count is 3" "3" "$(printf '%s' "$out" | jq -r '.dispositions | length')"
+# shape guard: the already_satisfied projection keeps exactly {id, title, kind,
+# rationale} — class/aesthetic/verify are stripped. A regression that omits a
+# key or leaks a stripped field changes this sorted key set.
+assert_eq "qa-fix partition: already_satisfied element keys" '["id","kind","rationale","title"]' "$(printf '%s' "$out" | jq -c '.already_satisfied_keys')"
 # call-site coverage: qa-fix.js still invokes the function the probe slices.
 # This file defines its own assert_eq (it does not source test-helpers.sh), so
 # use the grep -c | assert_eq convention the rest of the suite uses.
