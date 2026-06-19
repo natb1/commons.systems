@@ -6,11 +6,13 @@
 #
 # Runs the lock acquisition, origin/main sync (only on `main`), the run-scoped
 # concurrency gate, the JIT engine, the Calendar JIT importer, the statements
-# scan, and target selection as one deterministic sequence and prints exactly ONE
+# scan, the orphaned-follow-up re-triage scan,
+# and target selection as one deterministic sequence and prints exactly ONE
 # decision line as its LAST stdout line. Any JIT
 # `created`/`skipped`/`debounced` lines are passed through first, each prefixed
 # `jit: `, followed by any `calendar: ...` lines, followed by any
-# `statements: ...` lines. The router (SKILL.md)
+# `statements: ...` lines, and any
+# `retriage: ...` lines. The router (SKILL.md)
 # routes on the final decision line; a model-decision seam (`main-broken` /
 # `jit-reminder`) and the worktree materialization (`dispatch-materialize-spawn`)
 # live on the other side of the seam, not here.
@@ -558,6 +560,18 @@ if [[ -n "$STMT_OUT" ]]; then
   while IFS= read -r stmt_line; do
     [[ -n "$stmt_line" ]] && echo "statements: $stmt_line"
   done <<< "$STMT_OUT"
+fi
+
+# --- Step 2d: re-triage orphaned review follow-ups (best-effort) -------------
+# Parks open source-pr:<N>-labeled review follow-up issues on office-hours when
+# their source PR is found closed-unmerged (abandoned/superseded) — their
+# findings point at code that never landed on main. Pass its stdout lines
+# through, prefixed.
+RETRIAGE_OUT=$("$SCRIPT_DIR/dispatch-retriage-orphaned-followups") || true
+if [[ -n "$RETRIAGE_OUT" ]]; then
+  while IFS= read -r retriage_line; do
+    [[ -n "$retriage_line" ]] && echo "retriage: $retriage_line"
+  done <<< "$RETRIAGE_OUT"
 fi
 
 # --- Step 3: select the target -----------------------------------------------

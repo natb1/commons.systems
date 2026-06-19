@@ -10,12 +10,13 @@ export type ChartMode = "spending" | "credits";
 /** Custom event name dispatched by home-hydrate.ts after scroll-loading older transactions. The chart listens for this to incorporate the new data and re-apply filters. */
 export const TRANSACTIONS_APPENDED_EVENT = "transactions-appended";
 
-/** The currently-registered TRANSACTIONS_APPENDED_EVENT handler.
+/** Teardown for the legacy DOM-blob hydration path's current run.
  * hydrateCategorySankey re-runs on every navigation back to /transactions
- * (MutationObserver re-hydrate), so each run removes the prior run's handler
- * before registering its own — otherwise listeners accumulate, keep dead
- * containers alive, and re-run filterTable with stale closure state (#1267). */
-let appendedListener: EventListener | null = null;
+ * (MutationObserver re-hydrate), so each run tears down the prior run before
+ * registering its own — otherwise listeners accumulate, keep dead containers
+ * alive, and re-run filterTable with stale closure state (#1267). The React
+ * island uses the effect-returned teardown instead of this module-level handle. */
+let hydrateTeardown: ChartTeardown | null = null;
 
 export interface SerializedChartTransaction {
   category: string;
@@ -187,13 +188,13 @@ function filterTable(opts: FilterTableOptions): void {
   }
 }
 
-function attachFilterListeners(input: HTMLInputElement, options: string[], onBlur: (value: string) => void): void {
-  input.addEventListener("focus", () => showDropdown(input, options, ""));
-  input.addEventListener("input", () => showDropdown(input, options));
+function attachFilterListeners(input: HTMLInputElement, options: string[], onBlur: (value: string) => void, signal: AbortSignal): void {
+  input.addEventListener("focus", () => showDropdown(input, options, ""), { signal });
+  input.addEventListener("input", () => showDropdown(input, options), { signal });
   input.addEventListener("blur", () => {
     if (input.value && !options.includes(input.value) && !options.some(o => o.startsWith(input.value + ":"))) input.value = "";
     onBlur(input.value);
-  });
+  }, { signal });
 }
 
 function assertChartTransactions(data: unknown): asserts data is SerializedChartTransaction[] {
@@ -209,42 +210,48 @@ function assertChartTransactions(data: unknown): asserts data is SerializedChart
   }
 }
 
-export function hydrateCategorySankey(container: HTMLElement): void {
-  const scriptEl = container.querySelector('script[type="application/json"]');
-  if (!scriptEl?.textContent) {
-    throw new Error("category-sankey container is missing transaction data");
-  }
-  const parsed: unknown = JSON.parse(scriptEl.textContent);
-  assertChartTransactions(parsed);
+/**
+ * Tear down the listeners and observers a single chart-core run registered.
+ * The arg-based React island returns this from its effect (React runs it before
+ * the effect re-runs / on unmount), which is the #1267 stale-listener fix without
+ * the module-level `appendedListener` bookkeeping. `hydrateCategorySankey` stores
+ * its run's teardown in a module-level `let` and calls it before re-running.
+ */
+export type ChartTeardown = () => void;
 
-  // Remove any prior run's document listener before this run can early-return,
-  // so an empty-data re-hydration cannot leave a stale listener firing with the
-  // previous run's closed-over state (#1267).
-  if (appendedListener) {
-    document.removeEventListener(TRANSACTIONS_APPENDED_EVENT, appendedListener);
-    appendedListener = null;
-  }
+const NOOP_TEARDOWN: ChartTeardown = () => {};
 
-  const allTxns = parsed;
+/**
+ * Build the category Sankey chart imperatively into `container` from chart data
+ * passed in as an argument (NOT read from a DOM JSON blob). Wires the
+ * #sankey-controls inputs (rendered as siblings of the container), the
+ * TRANSACTIONS_APPENDED_EVENT scroll-append listener, and a ResizeObserver.
+ * Returns a teardown that removes the document listener and disconnects the
+ * observer; callers MUST invoke it before re-running against the same document
+ * (or on unmount) to avoid stale listeners firing with prior closure state (#1267).
+ *
+ * `categoryOptions`/`budgetOptions` arrive as args (previously read from
+ * `#sankey-controls` data attributes).
+ */
+export function buildCategorySankey(
+  container: HTMLElement,
+  chartData: SerializedChartTransaction[],
+  categoryOptions: string[],
+  budgetOptions: string[],
+): ChartTeardown {
+  assertChartTransactions(chartData);
+
+  const allTxns = chartData;
   if (allTxns.length === 0) {
     container.textContent = "No transaction data to chart.";
-    return;
+    return NOOP_TEARDOWN;
   }
 
   let weeks = distinctWeeks(allTxns);
   if (weeks.length === 0) {
     container.textContent = "No dated transactions to chart.";
-    return;
+    return NOOP_TEARDOWN;
   }
-
-  const collapsedPaths = new Set<string>();
-  let currentNumWeeks = 12;
-  let currentEndWeekIdx = weeks.length - 1;
-  let currentMode: ChartMode = "spending";
-  let currentUnbudgetedOnly = false;
-  let currentShowCardPayment = false;
-  let currentCategoryFilter = "";
-  let currentBudgetFilter = "";
 
   const controlsDiv = document.getElementById("sankey-controls");
   if (!controlsDiv) throw new Error("sankey-controls element not found");
@@ -263,8 +270,26 @@ export function hydrateCategorySankey(container: HTMLElement): void {
   }
   const categoryFilterInput = categoryFilterInputEl;
   const budgetFilterInput = budgetFilterInputEl;
-  const categoryOptions = parseJsonArray(controlsDiv.dataset.categoryOptions);
-  const budgetOptions = parseJsonArray(controlsDiv.dataset.budgetOptions);
+
+  // Seed the chart's filter state FROM the persisted controls rather than from
+  // hardcoded defaults. The component instance is not remounted on scroll-append
+  // (Transactions dropped the key), so an in-progress filter survives the rebuild
+  // and must be honored here. On the FIRST mount the controls hold their defaults
+  // (spending radio checked, empty filter inputs, weeks="12"), so these reads
+  // yield exactly the prior hardcoded behavior. currentEndWeekIdx is NOT
+  // preserved — it always tracks the latest window; collapsedPaths starts fresh.
+  const checkedMode = controlsDiv.querySelector<HTMLInputElement>('input[name="sankey-mode"]:checked')?.value;
+  const currentModeInit: ChartMode = checkedMode === "credits" ? "credits" : "spending";
+  const parsedWeeks = parseInt(weeksInput.value, 10);
+
+  const collapsedPaths = new Set<string>();
+  let currentNumWeeks = Number.isFinite(parsedWeeks) && parsedWeeks >= 1 ? parsedWeeks : 12;
+  let currentEndWeekIdx = weeks.length - 1;
+  let currentMode: ChartMode = currentModeInit;
+  let currentUnbudgetedOnly = unbudgetedCheckbox.checked;
+  let currentShowCardPayment = cardPaymentCheckbox.checked;
+  let currentCategoryFilter = categoryFilterInput.value;
+  let currentBudgetFilter = budgetFilterInput.value;
 
   endSlider.min = "0";
   endSlider.max = String(weeks.length - 1);
@@ -342,9 +367,9 @@ export function hydrateCategorySankey(container: HTMLElement): void {
   // serialization or render must not skip the table re-filter, which is the only
   // thing that re-applies the active filter to scroll-loaded rows (#578).
   //
-  // The prior run's listener was already removed near the top of this function
-  // (before the early-return checks); this run just registers its own (#1267).
-  appendedListener = ((e: CustomEvent<SerializedChartTransaction[]>) => {
+  // This run registers its own listener and hands ownership to the returned
+  // teardown; the caller removes it before re-running (#1267).
+  const localAppendedListener = ((e: CustomEvent<SerializedChartTransaction[]>) => {
     const newTxns = e.detail;
 
     // Chart-update block — skipped when the container is gone. Calls render()
@@ -374,9 +399,16 @@ export function hydrateCategorySankey(container: HTMLElement): void {
       setTimeout(() => { throw error; }, 0);
     }
   }) as EventListener;
-  document.addEventListener(TRANSACTIONS_APPENDED_EVENT, appendedListener);
+  document.addEventListener(TRANSACTIONS_APPENDED_EVENT, localAppendedListener);
 
   const debounced = makeDebounced();
+
+  // All control-element listeners are registered with this controller's signal
+  // so the returned teardown can remove every one with a single abort(). The
+  // React island reruns buildCategorySankey on each scroll-append against the
+  // same persistent control DOM nodes, so without this they would stack (#1267).
+  const controlListeners = new AbortController();
+  const controlSignal = controlListeners.signal;
 
   weeksInput.addEventListener("input", () => {
     const v = parseInt(weeksInput.value, 10);
@@ -384,7 +416,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
       currentNumWeeks = v;
       debounced(update, 100);
     }
-  });
+  }, { signal: controlSignal });
 
   endSlider.addEventListener("input", () => {
     const v = parseInt(endSlider.value, 10);
@@ -393,7 +425,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
       endLabel.textContent = formatDate(weeks[currentEndWeekIdx]);
       debounced(update, 100);
     }
-  });
+  }, { signal: controlSignal });
 
   modeRadios.forEach(radio => {
     radio.addEventListener("change", () => {
@@ -415,29 +447,29 @@ export function hydrateCategorySankey(container: HTMLElement): void {
         }
         update();
       }
-    });
+    }, { signal: controlSignal });
   });
 
   unbudgetedCheckbox.addEventListener("change", () => {
     currentUnbudgetedOnly = unbudgetedCheckbox.checked;
     update();
-  });
+  }, { signal: controlSignal });
 
   cardPaymentCheckbox.addEventListener("change", () => {
     currentShowCardPayment = cardPaymentCheckbox.checked;
     update();
-  });
+  }, { signal: controlSignal });
 
   registerAutocompleteListeners();
 
   attachFilterListeners(categoryFilterInput, categoryOptions, (value) => {
     currentCategoryFilter = value;
     update();
-  });
+  }, controlSignal);
   attachFilterListeners(budgetFilterInput, budgetOptions, (value) => {
     currentBudgetFilter = value;
     update();
-  });
+  }, controlSignal);
 
   let resizeTimer: ReturnType<typeof setTimeout> | undefined;
   const observer = new ResizeObserver(() => {
@@ -445,4 +477,43 @@ export function hydrateCategorySankey(container: HTMLElement): void {
     resizeTimer = setTimeout(update, 150);
   });
   observer.observe(container);
+
+  return () => {
+    document.removeEventListener(TRANSACTIONS_APPENDED_EVENT, localAppendedListener);
+    controlListeners.abort();
+    observer.disconnect();
+    clearTimeout(resizeTimer);
+  };
+}
+
+/**
+ * DOM-blob entry point preserved for the legacy hydration path and existing
+ * tests. Reads the serialized chart data from the `<script type="application/json">`
+ * blob and the option lists from `#sankey-controls` data attributes, then
+ * delegates to `buildCategorySankey`. Stores the prior run's teardown in a
+ * module-level `let` and invokes it before re-running so listeners do not
+ * accumulate across re-hydrations (#1267).
+ */
+export function hydrateCategorySankey(container: HTMLElement): void {
+  const scriptEl = container.querySelector('script[type="application/json"]');
+  if (!scriptEl?.textContent) {
+    throw new Error("category-sankey container is missing transaction data");
+  }
+  const parsed: unknown = JSON.parse(scriptEl.textContent);
+  assertChartTransactions(parsed);
+
+  // Tear down the prior run before this run can early-return, so an empty-data
+  // re-hydration cannot leave a stale listener firing with the previous run's
+  // closed-over state (#1267).
+  if (hydrateTeardown) {
+    hydrateTeardown();
+    hydrateTeardown = null;
+  }
+
+  const controlsDiv = document.getElementById("sankey-controls");
+  if (!controlsDiv) throw new Error("sankey-controls element not found");
+  const categoryOptions = parseJsonArray(controlsDiv.dataset.categoryOptions);
+  const budgetOptions = parseJsonArray(controlsDiv.dataset.budgetOptions);
+
+  hydrateTeardown = buildCategorySankey(container, parsed, categoryOptions, budgetOptions);
 }
