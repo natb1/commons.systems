@@ -365,7 +365,7 @@ export function applyRollingAverage(data: PerBudgetPoint[], windowSize: number):
   return result;
 }
 
-export function hydrateBudgetChart(container: HTMLElement): void {
+export function hydrateBudgetChart(container: HTMLElement): () => void {
   const budgetsRaw = container.dataset.budgets;
   const periodsRaw = container.dataset.periods;
   if (!budgetsRaw || !periodsRaw)
@@ -431,12 +431,12 @@ export function hydrateBudgetChart(container: HTMLElement): void {
     render();
     reattachScrollSync();
   });
-  wireChartResize(container, render, getAllScrollWrappers, [container, areaEl], reattachScrollSync);
+  const resizeObserver = wireChartResize(container, render, getAllScrollWrappers, [container, areaEl], reattachScrollSync);
 
   const weeksInput = document.getElementById("area-chart-weeks") as HTMLInputElement | null;
   if (!weeksInput) throw new DataIntegrityError("area-chart-weeks input not found in page markup");
   const debounced = makeDebounced();
-  weeksInput.addEventListener("input", () => {
+  const onWeeksInput = (): void => {
     const v = parseInt(weeksInput.value, 10);
     if (Number.isFinite(v) && v >= 1 && v <= 104) {
       currentWindowSize = v;
@@ -446,7 +446,19 @@ export function hydrateBudgetChart(container: HTMLElement): void {
         reattachScrollSync();
       }, 100);
     }
-  });
+  };
+  weeksInput.addEventListener("input", onWeeksInput);
+
+  // Teardown for a React island host that remounts (App re-keys per navEpoch):
+  // disconnect the ResizeObserver, abort the document-level scroll-sync listeners,
+  // and drop the weeks-input listener. The date-picker listener lives on a
+  // JSX-owned element that React removes on unmount, so it needs no explicit
+  // cleanup. The legacy LegacyRoute caller ignores this return.
+  return () => {
+    resizeObserver.disconnect();
+    if (scrollAbort) { scrollAbort.abort(); scrollAbort = null; }
+    weeksInput.removeEventListener("input", onWeeksInput);
+  };
 }
 
 function collectOverridesForBudget(container: HTMLElement, budgetId: string): BudgetOverride[] | null {
