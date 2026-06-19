@@ -4824,6 +4824,34 @@ printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 assert_eq "--priority-only --top 3 → exit 0 (no rejection)" "0" "$rc"
 teardown
 
+# PT6. Shared startable leaf across sibling roots is emitted EXACTLY ONCE (#1915).
+#      Two distinct help-wanted+priority roots 1858 and 1861 carry the SAME topic
+#      category (dispatch), so they fall in ONE (category, priority, enh, phase)
+#      bucket. Both roots descend (via their sub-issues) to the SAME startable
+#      leaf 1863. Before the fix, each root re-seeded `root_excl` only from the
+#      frozen global EXCLUDED and `bucket_append` did no value-level dedup, so the
+#      leaf recorded while descending root 1858 was not excluded when sibling root
+#      1861 descended to it — emitting `issue 1863` twice and inflating N_PRIO.
+#      The fix records every successfully-appended leaf in a global
+#      RECORDED_LEAVES set and, at TOP>1, seeds each root's `root_excl` from it,
+#      so a leaf reached from a sibling root is skipped. Run at --top 3 (NOT
+#      --top 1): the TOP=1 byte-identity guard means the cross-root dedup is a
+#      TOP>1 concern. Assert the shared leaf appears exactly once.
+echo "Test: --priority-only --top 3 shared leaf across sibling roots emitted once (#1915)"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":1858,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"dispatch"}]},{"number":1861,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"dispatch"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+# Both sibling roots descend to the SAME shared leaf 1863 via their sub-issues.
+printf '[{"number":1863}]\n' > "$STUB_DIR/subissues-1858.json"
+printf '[{"number":1863}]\n' > "$STUB_DIR/subissues-1861.json"
+printf '{"title":"Issue 1863","body":"","comments":[],"number":1863,"state":"OPEN"}\n' > "$STUB_DIR/issue-1863.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only --top 3)
+assert_eq "--priority-only --top 3 shared leaf 1863 emitted exactly once" "1" "$(printf '%s\n' "$result" | grep -c '^issue 1863$')"
+assert_eq "--priority-only --top 3 shared leaf → single issue line" "issue 1863" "$result"
+teardown
+
 # ============================================================================
 # --- JIT scan ---
 # dispatch-select-target's JIT scan runs before the main-broken health gate.
@@ -25206,6 +25234,55 @@ assert_eq "surface: non-.claude sh → code no app_or_rules" "surface=code
 deps=false
 app_or_rules=false" "$out"
 
+# src/foo.test.ts → tests
+out=$(printf '%s\n' "src/foo.test.ts" | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: tests .test.ts" "surface=tests
+deps=false
+app_or_rules=false" "$out"
+
+# landing/src/app.spec.tsx → tests
+out=$(printf '%s\n' "landing/src/app.spec.tsx" | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: tests .spec.tsx" "surface=tests
+deps=false
+app_or_rules=false" "$out"
+
+# budget-etl/main_test.go → tests
+out=$(printf '%s\n' "budget-etl/main_test.go" | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: tests _test.go" "surface=tests
+deps=false
+app_or_rules=false" "$out"
+
+# src/__tests__/foo.ts → tests
+out=$(printf '%s\n' "src/__tests__/foo.ts" | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: tests __tests__ dir" "surface=tests
+deps=false
+app_or_rules=false" "$out"
+
+# test/fixtures/x.json → tests
+out=$(printf '%s\n' "test/fixtures/x.json" | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: tests test/ dir prefix" "surface=tests
+deps=false
+app_or_rules=false" "$out"
+
+# .claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh → tests
+out=$(printf '%s\n' ".claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh" | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: tests test-*.sh script" "surface=tests
+deps=false
+app_or_rules=false" "$out"
+
+# mixed README.md + src/foo.test.ts → code (not all-docs, not all-tests);
+# .test.ts still carries the .ts extension so app_or_rules=true
+out=$(printf '%s\n' "README.md" "src/foo.test.ts" | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: mixed doc+test → code" "surface=code
+deps=false
+app_or_rules=true" "$out"
+
+# mixed src/foo.test.ts + src/bar.ts → code (a real source file present)
+out=$(printf '%s\n' "src/foo.test.ts" "src/bar.ts" | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: mixed test+source → code" "surface=code
+deps=false
+app_or_rules=true" "$out"
+
 # ============================================================================
 # === dispatch-changed-files ===
 # ============================================================================
@@ -25613,6 +25690,11 @@ assert_eq "finders: code surface → codeql present" "1" "$n"
 # codeql gating: absent on docs surface
 n=$(printf 'surface=docs\ndeps=false\napp_or_rules=false\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -c '^codeql$' || true)
 assert_eq "finders: docs surface → codeql absent" "0" "$n"
+
+# tests surface → exactly code-review and review (no security finders)
+out=$(printf 'surface=tests\ndeps=false\napp_or_rules=false\n' | "$SCRIPT_DIR/dispatch-review-finders")
+assert_eq "finders: tests → code-review,review only" "code-review
+review" "$out"
 
 # ============================================================================
 # === dispatch-review-dedup ===
@@ -31507,6 +31589,49 @@ assert_eq "idiom leaves the bug topic label" "absent" \
   "$(printf '%s\n' "$removed" | grep -qx 'bug' && echo present || echo absent)"
 assert_eq "idiom leaves the similarly-prefixed ci-wait-attempt-2" "absent" \
   "$(printf '%s\n' "$removed" | grep -qx 'dispatch:ci-wait-attempt-2' && echo present || echo absent)"
+rm -rf "$TMPDIR_TEST"
+TMPDIR_TEST=""
+
+# ============================================================================
+# resolve_dirty_apps (#1887)
+# ============================================================================
+#
+# Covers the longest-prefix workspace resolution and shared-package retrigger
+# path introduced in #1887. A synthetic fixture declares three workspaces:
+# landing (flat), blog (flat, consumes @commons-systems/ds), and packages/ds
+# (nested). Each case is sorted before asserting because resolve_dirty_apps
+# emits names in hash-iteration order.
+
+echo ""
+echo "=== resolve_dirty_apps: nested workspace resolution ==="
+
+echo "Test: resolve_dirty_apps -- nested direct + shared retrigger"
+TMPDIR_TEST=$(mktemp -d)
+mkdir -p "$TMPDIR_TEST/landing" "$TMPDIR_TEST/blog" "$TMPDIR_TEST/packages/ds"
+printf '%s' '{"workspaces":["landing","blog","packages/ds"]}' > "$TMPDIR_TEST/package.json"
+printf '%s' '{}' > "$TMPDIR_TEST/landing/package.json"
+printf '%s' '{"dependencies":{"@commons-systems/ds":"*"}}' > "$TMPDIR_TEST/blog/package.json"
+printf '%s' '{}' > "$TMPDIR_TEST/packages/ds/package.json"
+
+out=$(printf '%s\n' "packages/ds/base.css" | (source "$SCRIPT_DIR/lib.sh"; resolve_dirty_apps "$TMPDIR_TEST") | sort)
+assert_eq "resolve_dirty_apps: nested direct + shared retrigger" \
+  $'blog\npackages/ds' "$out"
+
+echo "Test: resolve_dirty_apps -- flat workspace regression"
+out=$(printf '%s\n' "landing/index.html" | (source "$SCRIPT_DIR/lib.sh"; resolve_dirty_apps "$TMPDIR_TEST") | sort)
+assert_eq "resolve_dirty_apps: flat workspace regression" \
+  "landing" "$out"
+
+echo "Test: resolve_dirty_apps -- prefix boundary marks nothing"
+out=$(printf '%s\n' "packages/dsx/foo" | (source "$SCRIPT_DIR/lib.sh"; resolve_dirty_apps "$TMPDIR_TEST") | sort)
+assert_eq "resolve_dirty_apps: prefix boundary marks nothing" \
+  "" "$out"
+
+echo "Test: resolve_dirty_apps -- root-config fan-out marks all workspaces"
+out=$(printf '%s\n' "package.json" | (source "$SCRIPT_DIR/lib.sh"; resolve_dirty_apps "$TMPDIR_TEST") | sort)
+assert_eq "resolve_dirty_apps: root-config fan-out marks all workspaces" \
+  $'blog\nlanding\npackages/ds' "$out"
+
 rm -rf "$TMPDIR_TEST"
 TMPDIR_TEST=""
 

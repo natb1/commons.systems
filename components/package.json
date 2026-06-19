@@ -9,6 +9,7 @@
     "./panel-toggle": "./src/panel-toggle.ts",
     "./scroll-indicator": "./src/scroll-indicator.ts",
     "./nav": "./src/nav.ts",
+    "./footer": "./src/footer.ts",
     "./autocomplete": "./src/autocomplete.ts"
   },
   "peerDependencies": {

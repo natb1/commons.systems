@@ -35,7 +35,7 @@ The built-in plan-mode workflow normally injects its instructions as tool
 guidance when `EnterPlanMode` is active. This session does **not** enter plan
 mode, so it never receives them. The adopted plan-mode instructions are therefore
 reproduced **verbatim in the appendix** below — follow them as the authority for
-how to explore, design, review, and shape the plan artifact, with the two
+how to explore, design, review, and shape the plan artifact, with the
 substitutions the appendix documents.
 
 ## Idempotency preamble and target resolution
@@ -203,9 +203,7 @@ searches for existing implementations to reuse, another explores related
 components, a third investigates testing patterns). Follow the appendix's
 *Exploration* block.
 
-Collect from the agents: the relevant filenames, the code-path traces, and the
-reuse candidates with their file paths. This is the exploration context Step 4
-hands to the design agents.
+**Return contract (output format only — does not change how the agent explores).** Instruct each `Explore` agent to RETURN a compact structured findings block, and to NOT dump whole files into its reply. Each agent returns: a **summary** of what it found relevant to the issue scope; **relevant excerpts** as small `path:line`-anchored spans (the few lines that matter), not whole-file contents or large verbatim blocks; and **reuse candidates** — existing functions/utilities/patterns to reuse, each with its `path:line`. The parent context then carries these findings, not the files. Mirror the disposition-struct discipline from `review-fix`/`qa-fix`: the orchestrator "never holds raw findings — only this compact summary." This is the exploration context Step 4 hands to the design agents.
 
 ### 4. Design — built-in `Plan` subagent, direct fan-out
 
@@ -219,9 +217,9 @@ warranted).
 
 In each `Plan` agent's prompt, provide:
 
-1. The **Step-3 exploration context** — the filenames and code-path traces the
-   `Explore` agents surfaced. The `Plan` agents skip `CLAUDE.md`/git too, so this
-   context must be inline.
+1. The **Step-3 exploration context** — the compact findings the `Explore`
+   agents returned (summary, path:line-anchored excerpts, and reuse candidates).
+   The `Plan` agents skip `CLAUDE.md`/git too, so this context must be inline.
 2. The **issue scope and acceptance criteria**.
 3. The **`/implement-unit` model-selection heuristic, inline** (the `Plan` agent
    will not read `implement-unit/SKILL.md`, so reproduce it):
@@ -244,10 +242,18 @@ recommended approach only, not all alternatives.
 
 ### 5. Self-review — main thread
 
-Read the **critical files** the `Explore`/`Plan` subagents flagged before
-finalizing, to deepen your own understanding and confirm the plan is executable
-and aligned with the issue's acceptance criteria (the appendix's *Review* block).
-Resolve any disagreement between multiple `Plan` proposals here.
+Finalize from the **compact findings** the `Explore`/`Plan` subagents returned
+(Step 3's return contract) — not by re-reading critical files whole. Confirm the
+plan is executable and aligned with the issue's acceptance criteria, and resolve
+any disagreement between multiple `Plan` proposals here.
+
+**Bounded confirmatory read (escape hatch).** If a single specific decision
+turns on a detail the findings did not capture, you may `Read` **one specific
+span** (a named `path:line` range, not a whole file) to confirm it — a narrow,
+targeted check, never a re-hydration of the critical files. If you find yourself
+wanting to re-read files wholesale, the findings were insufficient: re-run a
+focused `Explore` agent (Step 3) with a tighter ask rather than pulling whole
+files into the parent.
 
 ### 6. Clarification / deviation gate — main thread
 
@@ -397,13 +403,17 @@ assemble the plan.
 
 This session does **not** have plan mode active, so it cannot receive these as
 injected tool instructions. They are reproduced verbatim and govern Steps 3–7,
-with two substitutions:
+with these substitutions:
 
 - (i) "the user's request" / "the user provided specific file paths" → the
   **issue scope / acceptance criteria** (there is no live user supplying paths).
 - (ii) "Use `AskUserQuestion` to clarify any remaining questions" is the
   **escalation trigger** (Step 6: ambiguity or major scope deviation →
   office-hours), **not** a routine default.
+- (iii) the *Review* block's "Read the critical files identified by agents" →
+  Step 5's **findings-first** discipline: finalize from the compact findings, and
+  only `Read` one named `path:line` span as a bounded confirmatory check — never
+  re-hydrate the critical files whole.
 
 ### Exploration (built-in `Explore`)
 

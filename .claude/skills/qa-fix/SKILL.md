@@ -383,9 +383,27 @@ Otherwise run all steps in order.
       IIFE — `(async () => { … })()` — because a top-level `await` raises
       `SyntaxError: await is only valid in async functions`.
 
+      **Minimize browser payload.** A `computer` `screenshot`/`zoom` returns the
+      full image into context, so prefer cheaper text/element queries whenever the
+      check is non-visual:
+      - Verify an `Expected outcome` with `get_page_text` / `find` whenever the
+        check is textual or element-presence.
+      - Use `find` (≤20 targeted elements) over `get_page_text` when checking for
+        a SPECIFIC element or value; reserve `get_page_text` for genuinely
+        text-heavy reads.
+      - Take a `computer` screenshot ONLY when the check is genuinely visual
+        (layout/rendering) or as FAIL evidence. When you do, CROP to the relevant
+        area with the `zoom` action and a `region` rather than a full-viewport
+        `screenshot`, unless the failure is viewport-wide.
+      - If an accessibility-tree read is needed, use `read_page` with a bounded
+        `max_chars` / `depth` (or a `ref_id` focus / `filter:"interactive"`) —
+        never an unbounded dump.
+      - Applies to HOW evidence is captured, not WHAT is checked: the same
+        checks run and the clean-pass cadence is untouched (AC#2).
+
       1. Load chrome tools via:
          ```
-         ToolSearch("select:mcp__claude-in-chrome__tabs_create_mcp,mcp__claude-in-chrome__navigate,mcp__claude-in-chrome__javascript_tool,mcp__claude-in-chrome__get_page_text,mcp__claude-in-chrome__read_console_messages,mcp__claude-in-chrome__read_network_requests,mcp__claude-in-chrome__gif_creator,mcp__claude-in-chrome__computer,mcp__claude-in-chrome__form_input,mcp__claude-in-chrome__tabs_context_mcp,mcp__claude-in-chrome__list_connected_browsers,mcp__claude-in-chrome__select_browser")
+         ToolSearch("select:mcp__claude-in-chrome__tabs_create_mcp,mcp__claude-in-chrome__navigate,mcp__claude-in-chrome__javascript_tool,mcp__claude-in-chrome__get_page_text,mcp__claude-in-chrome__find,mcp__claude-in-chrome__read_page,mcp__claude-in-chrome__read_console_messages,mcp__claude-in-chrome__read_network_requests,mcp__claude-in-chrome__gif_creator,mcp__claude-in-chrome__computer,mcp__claude-in-chrome__form_input,mcp__claude-in-chrome__tabs_context_mcp,mcp__claude-in-chrome__list_connected_browsers,mcp__claude-in-chrome__select_browser")
          ```
          If ToolSearch fails or the tools are unavailable → the browser lanes cannot run. Note "Chrome extension unavailable" in results, record every `needs-browser` and single-assertion `script-verifiable` item as a user-input blocker, and escalate per the **Escalation** section (these items cannot be machine-verified without the browser).
       2. **Select the browser.** Default to the Windows Chrome — it reaches the WSL QA server over WSL2's shared `localhost` with no tunnel. Call `list_connected_browsers`, find the entry whose `osPlatform` is `"Windows"`, and `select_browser` it. (DeviceIds change on re-registration — never hard-code one; always match on `osPlatform`.) If no Windows entry is found and the user has not explicitly requested macOS → record this as a user-input blocker and escalate per the **Escalation** section (do not silently fall back to macOS). Use the macOS Chrome only on explicit user request: because macOS is a separate machine, first hand the user the `ssh -L` tunnel command that `run-qa-server.sh` printed in its "Remote access" block (it forwards the Vite port plus every emulator port) — if that block has scrolled out of context, reproduce it from the known Vite and emulator ports: `http://localhost:<vite>/` plus `ssh -L <vite>:localhost:<vite> [-L <emu>:localhost:<emu> ...] <ssh-host>`; once the tunnel is up, `select_browser` the entry whose `osPlatform` is `"macOS"`. See `.claude/docs/chrome-extension.md` § Browser selection for the authoritative policy.
@@ -393,7 +411,7 @@ Otherwise run all steps in order.
       4. Navigate to the App URL.
       5. Suppress JS dialogs via `javascript_tool`: override `window.alert`, `window.confirm`, `window.prompt` with no-ops.
       6. Clear baselines: `read_console_messages` and `read_network_requests` with `clear: true`.
-      7. Start GIF recording: `gif_creator` with `action: "start_recording"`. Take an initial screenshot.
+      7. Start GIF recording: `gif_creator` with `action: "start_recording"`. Take an initial `computer` screenshot ONLY IF a later visual / before-after comparison will need it; otherwise establish the baseline with `get_page_text`.
       8. **Single-assertion lane — for each `script-verifiable` item whose `Command`
          is a single `javascript_tool` assertion:** `navigate` to the item's `URL
          path` (if not "current"), then run the **one** assertion `Command` (wrapped
@@ -404,12 +422,16 @@ Otherwise run all steps in order.
          record-and-continue" at the top of Step 3).
       9. **Walkthrough lane — for each `needs-browser` item:**
          a. **Set up state.** Navigate to the item's `URL path` (if not "current"). Execute the `Steps` using `computer`, `form_input`, `navigate`. Capture extra GIF frames before and after.
-         b. **Check output.** Take a screenshot only on genuine state transitions — not on every iterative debug step. Read `get_page_text` to verify the `Expected outcome`. Check `read_console_messages` (filter for errors). Check `read_network_requests` for 4xx/5xx using the tool's filter parameter (e.g. filter to error status codes); request a count rather than full metadata when only request counts or specific requests matter — do not pull the full request dump.
+         b. **Check output.** Verify the `Expected outcome` via `get_page_text` / `find` by default. Take a `computer` screenshot ONLY when the transition is genuinely visual (and not on every iterative debug step), cropping with the `zoom` action and a `region` to the changed area. Check `read_console_messages` (filter for errors). Check `read_network_requests` for 4xx/5xx using the tool's filter parameter (e.g. filter to error status codes); request a count rather than full metadata when only request counts or specific requests matter — do not pull the full request dump.
 
             **Screenshot capture on a walkthrough FAIL (verify-early-or-fall-back).**
             On a FAIL in this lane, take a screenshot with the `computer` tool
-            action `screenshot, save_to_disk: true` and record the returned saved
-            path as the residue item's `screenshot_path`. Passing this path to a
+            and record the returned saved path as the residue item's
+            `screenshot_path`. When the failure locus is a known region, CROP to
+            it — `zoom` action with a `region`, `save_to_disk: true` — rather than
+            a full-viewport shot; use a full-viewport `screenshot, save_to_disk: true`
+            only when the failure is viewport-wide. Passing
+            this path to a
             **separate** Agent/Workflow invocation (the disposition classifier,
             Step 3.5) is **UNVERIFIED**: if `save_to_disk`
             does not return a Readable path, or the disposition subagent cannot Read
@@ -686,6 +708,27 @@ Otherwise run all steps in order.
       of the turn — continue to the next unit, then Steps 4 and 5 and the marker;
       do not emit a closing summary. The terminal rule is the **CRITICAL
       invariants** block below (the fix path HARD-STOPS the skill).
+
+      **Track a `fixes_applied_count` tally** (agent-maintained running count, NOT
+      a shell variable — this loop is an agent-driven sequence of Skill calls, not
+      a bash `for`-loop): initialize it to `0` before the first `/implement-unit`
+      invocation. After each invocation, increment by `1` **only** when the
+      invocation hands control back per its Step 4 (the unit's commit landed
+      cleanly). Do **not** increment when an invocation errors, dies, or returns
+      without a landed commit. This tally feeds `--fixes-applied` in item 5 of
+      this path (the outcome envelope call, below — replacing the planned
+      `units.length`).
+
+      **If `fixes_applied_count == 0` after the loop** (every `/implement-unit`
+      invocation errored, died, or returned without a landed commit), do **NOT**
+      continue down this fix finalize path — its outcome envelope hard-codes
+      `--disposition completed_with_fixes`, which the `outcome-envelope.md`
+      contract defines as "the phase finished and applied one or more fixes."
+      Emitting it with `fixes_applied = 0` violates the contract and corrupts
+      downstream hit-rate metrics. Instead take the **escalate finalize path**
+      below with a `terminated_reason` of `fix-pass-landed-nothing` (all planned
+      opus-fixable units failed to land a commit). This restores the implicit
+      guard that held when the value was the planned `units.length` (always ≥ 1).
    2. Run **Step 4** (post the PR-comment summary; its disposition section uses the
       **fixing-pass** prose — see Step 4).
    3. Run **Step 5** (cleanup — it self-guards and no-ops if the QA server never
@@ -696,16 +739,52 @@ Otherwise run all steps in order.
       .claude/skills/dispatch-propagate/scripts/dispatch-mark-complete \
         --phase qa --pr "$PR_NUM"
       ```
-   5. **STOP.**
+   5. **Emit the outcome envelope** (contract: `.claude/docs/outcome-envelope.md`).
+      This call runs **sandboxed** — `dispatch-emit-outcome` is pure (no
+      gh/git/network), so do **not** pass `dangerouslyDisableSandbox`. The fix
+      finalize path always runs after Step 3.5, so `result` is in scope. **Override**
+      `--disposition` to `completed_with_fixes` and **recompute** the counts the
+      Workflow could not — do **NOT** forward `result.fixes_applied` /
+      `result.followups_filed` (both literal `0` from the Workflow):
+      - `--fixes-applied` = `fixes_applied_count` — the count of units that
+        completed successfully this pass (the tally maintained by the loop above,
+        per the `outcome-envelope.md` contract that `fixes_applied` = items the
+        phase actually fixed). Do **not** use `result.fix_plan.units.length` (the
+        planned count) or `result.fixes_applied` (a literal `0` from the Workflow,
+        which plans but never executes).
+      - `--followups-filed` = the count of `needs-main` follow-ups Step 3.6 actually
+        filed this pass (newly-filed only, not already-tracked); `0` if Step 3.6 did
+        not run.
+      - `--subagents-launched` = `result.subagents_launched` (Workflow fan-out)
+        **plus** the Step-2b Opus triage subagent (always +1) **plus** the Step-3.6
+        filing subagents spawned **plus** the Step-3.7 `/implement-unit` invocations.
 
-   **Escalate finalize path** (cap reached, scope-deviation, planning-failed, or
-   the gate printed `escalate`):
+      qa-fix keeps **no** merge base (Step 1 runs only a name-only
+      `git diff origin/main...HEAD`), so **omit** `--base-sha` (it serializes as
+      null). Derive `repo` from the local remote (read-only git, sandbox-safe):
+      ```bash
+      REPO=$(git remote get-url origin | sed -E 's#.*github.com[:/]##; s#\.git$##')
+      .claude/skills/dispatch-propagate/scripts/dispatch-emit-outcome \
+        --phase qa --repo "$REPO" --issue "$N" --pr "$PR_NUM" \
+        --findings-surfaced <result.findings_surfaced> \
+        --findings-actionable <result.findings_actionable> \
+        --fixes-applied <fixes_applied_count> \
+        --followups-filed <count of needs-main follow-ups Step 3.6 newly filed> \
+        --subagents-launched <result.subagents_launched + 1 (Step-2b triage) + Step-3.6 filing subagents + Step-3.7 /implement-unit invocations> \
+        --disposition completed_with_fixes
+      ```
+   6. **STOP.**
+
+   **Escalate finalize path** (cap reached, scope-deviation, planning-failed,
+   fix-pass-landed-nothing, or the gate printed `escalate`):
    1. Run **Step 4** (post the PR-comment summary; non-fixing-pass / escalation
       prose).
    2. Run **Step 5** (cleanup — self-guards).
    3. Escalate per the **Escalation** section (`dispatch-mark-deviation`), tailored
       to the reason that fired (cap reached / scope-deviation with
-      `deviation_reason` / planning-failed).
+      `deviation_reason` / planning-failed / fix-pass-landed-nothing — every
+      planned opus-fixable unit failed to land a commit, so `fixes_applied_count`
+      stayed `0`).
    4. **STOP.**
 
    **CRITICAL invariants — state and obey these:**
@@ -783,12 +862,20 @@ Otherwise run all steps in order.
 
      The remaining terminal-behavior prose is **conditional** on which Step-3.7 path
      this pass took:
-     - **Fixing pass** (Step 3.7 took the fix finalize path): say which items were
-       fixed and which were deferred — e.g. **"Fixed this pass: \<opus-fixable
-       items>; deferred to re-QA: \<needs-human items>; filed as follow-ups:
-       \<needs-main items>."** The fixed commits restart CI and the chain re-QAs once
-       it passes; the deferred `needs-human` items re-surface on a later pass, while
-       the `needs-main` items were already filed in Step 3.6.
+     - **Fixing pass** (Step 3.7 took the fix finalize path): say which items
+       actually landed and which were deferred. List only the items confirmed
+       landed by the `fixes_applied_count` tally — **not** the full planned
+       opus-fixable set — so the PR comment matches the outcome envelope's
+       `fixes_applied`. Any opus-fixable unit whose `/implement-unit` invocation
+       did not reach its Step 4 (errored, died, or returned without a landed
+       commit, so it was not counted) goes in a separate "failed to land" list,
+       not the fixed list — e.g. **"Fixed this pass: \<opus-fixable items where
+       /implement-unit landed a commit, i.e. counted in fixes_applied_count>;
+       failed to land: \<opus-fixable items where /implement-unit did not reach
+       its Step 4>; deferred to re-QA: \<needs-human items>; filed as follow-ups:
+       \<needs-main items>."** The fixed commits restart CI and the chain re-QAs
+       once it passes; the deferred `needs-human` items re-surface on a later
+       pass, while the `needs-main` items were already filed in Step 3.6.
      - **Non-fixing pass** (no opus-fixable items, so residue escalates; or the
        Step-3.7 escalate finalize path fired) — keep the existing escalation
        framing: every `opus-fixable`/`needs-human` residue item escalates to
@@ -907,6 +994,38 @@ Otherwise run all steps in order.
      --phase qa --pr "$PR_NUM"
    ```
 
+   **Then emit the outcome envelope** (contract:
+   `.claude/docs/outcome-envelope.md`). This call runs **sandboxed** —
+   `dispatch-emit-outcome` is pure, so do **not** pass
+   `dangerouslyDisableSandbox`. Pass `--disposition completed`, `--fixes-applied 0`,
+   and **omit** `--terminated-reason` (forbidden on a non-escalated disposition).
+   Source the counts by whether Step 3.5 ran this pass:
+
+   - **Step 3.5 ran** (clean pass via only-`needs-main` or only-`already-satisfied`
+     residue): use `result.findings_surfaced` / `result.findings_actionable`;
+     `--followups-filed` = the Step-3.6 newly-filed count (`0` if Step 3.6 did not
+     run); `--subagents-launched` = `result.subagents_launched` + 1 (Step-2b triage)
+     + any Step-3.6 filing subagents.
+   - **Step 3.5 was skipped** (the common clean pass — residue list was empty, so
+     `result` is absent): pass `--findings-surfaced 0 --findings-actionable 0
+     --followups-filed 0` and `--subagents-launched 1` (only the Step-2b Opus triage
+     subagent ran).
+
+   qa-fix keeps **no** merge base, so **omit** `--base-sha`. Derive `repo` from the
+   local remote (read-only git, sandbox-safe):
+
+   ```bash
+   REPO=$(git remote get-url origin | sed -E 's#.*github.com[:/]##; s#\.git$##')
+   .claude/skills/dispatch-propagate/scripts/dispatch-emit-outcome \
+     --phase qa --repo "$REPO" --issue "$N" --pr "$PR_NUM" \
+     --findings-surfaced <result.findings_surfaced, or 0 if Step 3.5 was skipped> \
+     --findings-actionable <result.findings_actionable, or 0 if Step 3.5 was skipped> \
+     --fixes-applied 0 \
+     --followups-filed <Step-3.6 newly-filed count, or 0> \
+     --subagents-launched <result.subagents_launched + 1 + Step-3.6 subagents when Step 3.5 ran; else 1> \
+     --disposition completed
+   ```
+
    Then **stop**. The Stop hook reads the marker and advances the chain.
 
    **User-input blocker** — the escalation set (defined above) is **non-empty**.
@@ -951,7 +1070,51 @@ plan, `needs-human-judgment` item, `script-verifiable`/`needs-browser` FAIL, fai
 pre-QA check, Chrome extension unavailable, multi-app choice, merge conflict, **the
 qa-fix attempt cap reached on opus-fixable residue**, or **a planner scope-deviation
 on the opus-fixable residue** — pass `result.fix_plan.deviation_reason` for the
-latter). Then **stop**.
+latter).
+
+**Then emit the outcome envelope** (contract:
+`.claude/docs/outcome-envelope.md`). This call runs **sandboxed** —
+`dispatch-emit-outcome` is pure, so do **not** pass `dangerouslyDisableSandbox`.
+It must fire **before** the session stops; order relative to
+`dispatch-mark-deviation` does not matter. Pass `--disposition escalated` and
+`--terminated-reason` set to the **same tailored reason string** passed to
+`dispatch-mark-deviation` above.
+
+This Escalation section is the funnel for **two kinds** of escalate route, which
+differ in whether the Step-3.5 Workflow ran — source the counts accordingly:
+
+- **Step-3.5 ran** (the Step-3.7 escalate-finalize path: cap reached,
+  scope-deviation, planning-failed, or fix-pass-landed-nothing) — `result` is in
+  scope. Use
+  `result.findings_surfaced` / `result.findings_actionable`; `fixes-applied 0` and
+  `followups-filed` = the Step-3.6 newly-filed count (the escalate path applied no
+  fixes); `subagents-launched` = `result.subagents_launched` + 1 (Step-2b triage)
+  + any Step-3.6 filing subagents.
+- **An early blocker before Step 3.5** (Step 0.5 merge conflict, Step 1 multi-app,
+  Step 3 malformed/empty plan, Step 3b acceptance fail, Step 3c Chrome
+  unavailable) — `result` is **absent**. Pass `--findings-surfaced 0
+  --findings-actionable 0 --fixes-applied 0 --followups-filed 0` and
+  `--subagents-launched <1 if the Step-2b triage subagent had already been spawned
+  before the blocker fired, else 0>` (Step 0.5 / Step 1 blockers fire before Step
+  2, so 0; a Step 3/3b/3c blocker fires after, so 1).
+
+qa-fix keeps **no** merge base, so **omit** `--base-sha`. Derive `repo` from the
+local remote (read-only git, sandbox-safe):
+
+```bash
+REPO=$(git remote get-url origin | sed -E 's#.*github.com[:/]##; s#\.git$##')
+.claude/skills/dispatch-propagate/scripts/dispatch-emit-outcome \
+  --phase qa --repo "$REPO" --issue "$N" --pr "$PR_NUM" \
+  --findings-surfaced <result.findings_surfaced, or 0 if Step 3.5 did not run> \
+  --findings-actionable <result.findings_actionable, or 0 if Step 3.5 did not run> \
+  --fixes-applied 0 \
+  --followups-filed <Step-3.6 newly-filed count, or 0> \
+  --subagents-launched <result.subagents_launched + 1 + Step-3.6 filing subagents when Step 3.5 ran; else 0 or 1 per the early-blocker rule above> \
+  --disposition escalated \
+  --terminated-reason "<the same tailored reason string passed to dispatch-mark-deviation>"
+```
+
+Then **stop**.
 Marking a deviation is **terminal** for the walkthrough — do not restart the QA
 server or re-run the walkthrough after escalating.
 

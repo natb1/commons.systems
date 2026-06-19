@@ -635,3 +635,228 @@ describe("office-hours issue-samples", () => {
     );
   });
 });
+
+describe("office-hours audit-aggregates", () => {
+  let env: RulesTestEnvironment;
+
+  beforeAll(async () => {
+    env = await getTestEnv();
+  });
+
+  setupCleanup();
+
+  const aggregateDoc = {
+    memberEmails: ["owner@test.com"],
+    computedAt: new Date("2026-06-07T12:00:00Z"),
+    windowDays: 1,
+    groupId: "owner-group",
+    phaseSpend: { "plan-implement": 5.5, "review-fix": 3.2 },
+    cacheRead: 3_000_000,
+    cacheCreation: 1_000_000,
+  };
+
+  const demoAggregateDoc = {
+    memberEmails: ["demo@example.com"],
+    computedAt: new Date("2026-06-07T11:00:00Z"),
+    windowDays: 1,
+    groupId: "demo-group",
+    phaseSpend: { "plan-implement": 2.0, "qa-fix": 1.5 },
+    cacheRead: 1_200_000,
+    cacheCreation: 1_180_000,
+  };
+
+  beforeEach(async () => {
+    await adminSetDoc(
+      env,
+      `office-hours/${ENV}/audit-aggregates/agg-owner`,
+      aggregateDoc,
+    );
+    await adminSetDoc(
+      env,
+      `office-hours/demo/audit-aggregates/agg-demo`,
+      demoAggregateDoc,
+    );
+  });
+
+  it("allows owner to read test-env doc", async () => {
+    const ctx = authenticatedContext(env, "owner@test.com");
+    const db = ctx.firestore();
+    await assertSucceeds(
+      getDoc(doc(db, `office-hours/${ENV}/audit-aggregates/agg-owner`)),
+    );
+  });
+
+  it("denies non-owner read of test-env doc", async () => {
+    const ctx = authenticatedContext(env, "stranger@test.com");
+    const db = ctx.firestore();
+    await assertFails(
+      getDoc(doc(db, `office-hours/${ENV}/audit-aggregates/agg-owner`)),
+    );
+  });
+
+  it("denies unauthenticated read of test-env doc", async () => {
+    const ctx = unauthenticatedContext(env);
+    const db = ctx.firestore();
+    await assertFails(
+      getDoc(doc(db, `office-hours/${ENV}/audit-aggregates/agg-owner`)),
+    );
+  });
+
+  it("allows unauthenticated read of demo-env doc", async () => {
+    const ctx = unauthenticatedContext(env);
+    const db = ctx.firestore();
+    await assertSucceeds(
+      getDoc(doc(db, `office-hours/demo/audit-aggregates/agg-demo`)),
+    );
+  });
+
+  it("denies owner setDoc on test-env doc", async () => {
+    const ctx = authenticatedContext(env, "owner@test.com");
+    const db = ctx.firestore();
+    await assertFails(
+      setDoc(doc(db, `office-hours/${ENV}/audit-aggregates/agg-owner`), {
+        memberEmails: ["owner@test.com"],
+      }),
+    );
+  });
+
+  it("denies owner updateDoc on test-env doc", async () => {
+    const ctx = authenticatedContext(env, "owner@test.com");
+    const db = ctx.firestore();
+    await assertFails(
+      updateDoc(doc(db, `office-hours/${ENV}/audit-aggregates/agg-owner`), {
+        cacheRead: 9_000_000,
+      }),
+    );
+  });
+
+  it("denies owner deleteDoc on test-env doc", async () => {
+    const ctx = authenticatedContext(env, "owner@test.com");
+    const db = ctx.firestore();
+    await assertFails(
+      deleteDoc(doc(db, `office-hours/${ENV}/audit-aggregates/agg-owner`)),
+    );
+  });
+
+  it("denies unauthenticated setDoc on demo-env doc", async () => {
+    const ctx = unauthenticatedContext(env);
+    const db = ctx.firestore();
+    await assertFails(
+      setDoc(doc(db, `office-hours/demo/audit-aggregates/agg-demo`), {
+        memberEmails: ["demo@example.com"],
+      }),
+    );
+  });
+
+  it("allows owner list query on test-env collection", async () => {
+    const ctx = authenticatedContext(env, "owner@test.com");
+    const db = ctx.firestore();
+    await assertSucceeds(
+      getDocs(
+        query(
+          collection(db, `office-hours/${ENV}/audit-aggregates`),
+          where("memberEmails", "array-contains", "owner@test.com"),
+        ),
+      ),
+    );
+  });
+
+  it("denies unfiltered owner list query on test-env audit-aggregates collection", async () => {
+    const ctx = authenticatedContext(env, "owner@test.com");
+    const db = ctx.firestore();
+    await assertFails(
+      getDocs(collection(db, `office-hours/${ENV}/audit-aggregates`)),
+    );
+  });
+
+  it("denies unfiltered stranger list query on test-env audit-aggregates collection", async () => {
+    const ctx = authenticatedContext(env, "stranger@test.com");
+    const db = ctx.firestore();
+    await assertFails(
+      getDocs(collection(db, `office-hours/${ENV}/audit-aggregates`)),
+    );
+  });
+
+  // A non-member cannot list another member's aggregates: filtering for an email
+  // they are not in is denied, because the matching docs carry a memberEmails
+  // the requester is absent from. (A self-targeted array-contains filter is
+  // always rule-compliant and returns an empty set, so it is not a denial
+  // case.)
+  it("denies authenticated non-member list query for another member's aggregates", async () => {
+    const ctx = authenticatedContext(env, "stranger@test.com");
+    const db = ctx.firestore();
+    await assertFails(
+      getDocs(
+        query(
+          collection(db, `office-hours/${ENV}/audit-aggregates`),
+          where("memberEmails", "array-contains", "owner@test.com"),
+        ),
+      ),
+    );
+  });
+
+  // "Rules are not filters": a list query is allowed when its where-clause
+  // provably satisfies the rule. A non-member filtering to their own membership
+  // is allowed and simply returns the empty subset they are entitled to.
+  it("allows non-member list query filtered to own (empty) membership", async () => {
+    const ctx = authenticatedContext(env, "stranger@test.com");
+    const db = ctx.firestore();
+    await assertSucceeds(
+      getDocs(
+        query(
+          collection(db, `office-hours/${ENV}/audit-aggregates`),
+          where("memberEmails", "array-contains", "stranger@test.com"),
+        ),
+      ),
+    );
+  });
+
+  it("denies unauthenticated list query on test-env collection", async () => {
+    const ctx = unauthenticatedContext(env);
+    const db = ctx.firestore();
+    await assertFails(
+      getDocs(
+        query(
+          collection(db, `office-hours/${ENV}/audit-aggregates`),
+          where("memberEmails", "array-contains", "owner@test.com"),
+        ),
+      ),
+    );
+  });
+
+  it("denies unauthenticated list query on demo-env collection", async () => {
+    const ctx = unauthenticatedContext(env);
+    const db = ctx.firestore();
+    await assertFails(
+      getDocs(collection(db, `office-hours/demo/audit-aggregates`)),
+    );
+  });
+
+  it("denies authenticated setDoc on demo-env doc", async () => {
+    const ctx = authenticatedContext(env, "demo@example.com");
+    const db = ctx.firestore();
+    await assertFails(
+      setDoc(doc(db, `office-hours/demo/audit-aggregates/agg-demo`), {
+        memberEmails: ["demo@example.com"],
+      }),
+    );
+  });
+
+  it("denies authenticated updateDoc on demo-env doc", async () => {
+    const ctx = authenticatedContext(env, "demo@example.com");
+    const db = ctx.firestore();
+    await assertFails(
+      updateDoc(doc(db, `office-hours/demo/audit-aggregates/agg-demo`), {
+        cacheRead: 5,
+      }),
+    );
+  });
+
+  it("denies authenticated deleteDoc on demo-env doc", async () => {
+    const ctx = authenticatedContext(env, "demo@example.com");
+    const db = ctx.firestore();
+    await assertFails(
+      deleteDoc(doc(db, `office-hours/demo/audit-aggregates/agg-demo`)),
+    );
+  });
+});
