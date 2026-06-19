@@ -4786,6 +4786,49 @@ result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
 assert_eq "--priority-only ancestor priority qualifies PR 20" "pr 20 20-leaf-pr fix-checks" "$result"
 teardown
 
+# PO-ANC3. Depth-2 ancestor priority. Same shape as PO-ANC1, but the `priority`
+#           label sits on the GRANDPARENT (issue 100), reached through a
+#           NON-priority intermediate parent (issue 102). The assertion passes
+#           only if ancestor detection recurses to depth 2: a 1-level recursion
+#           bug would see only the intermediate 102 (no priority), fail to lift
+#           PR 20, and let the older PR 10 win. So this assertion proves the
+#           depth-2 `recurse`/`.[1:7]` ancestor path detects inherited priority
+#           through a multi-hop chain.
+#
+#           Fixture:
+#             issue 100  labels: [priority]        (open grandparent epic)
+#             issue 102  labels: []                (intermediate parent; NO priority)
+#             issue 101  labels: [help wanted]     (leaf; child of 102 via parent-101.json)
+#             issue 200  labels: [bug]             (unrelated, non-priority issue)
+#             PR 10 (older, 2024-01-01) closes issue 200 (bug, no priority)
+#             PR 20 (newer, 2024-01-02) closes issue 101 (help wanted, no own
+#                     priority — priority only via grandparent 100)
+#           parent-101.json → 102; parent-102.json → 100; no parent-100.json.
+#           Issue 102's neutral labels keep it out of the startable issue queue so
+#           it does not perturb selection. Without depth-2 recursion both PRs have
+#           pri=0 and PR 10 (older) wins; with it PR 20 gets pri=1 and wins.
+echo "Test: default mode — depth-2 ancestor priority lifts PR over non-priority PR"
+setup
+UNION='['
+UNION+="$(make_pr_union 10 "10-bug-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
+UNION+="$(make_pr_union 20 "20-leaf-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":101}]')"
+UNION+=']'
+setup_union_pr_list "$UNION"
+# issue 100: priority grandparent epic; issue 102: neutral intermediate parent (no
+# priority); issue 101: leaf (help wanted, no own priority); issue 200: plain bug.
+# Only the grandparent carries priority, reached via the 102 → 100 hop.
+printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]},{"number":102,"created_at":"2024-01-01T00:00:00Z","labels":[]},{"number":101,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+# 2-hop parent chain: 101 → 102 → 100. Priority sits on the grandparent (100),
+# so the assertion proves ancestor detection recurses to depth 2.
+printf '102' > "$STUB_DIR/parent-101.json"   # 101 → 102
+printf '100' > "$STUB_DIR/parent-102.json"   # 102 → 100
+# no parent-100.json — chain terminates at the grandparent
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "depth-2 ancestor priority lifts PR 20 over older PR 10 (PO-ANC3)" "pr 20 20-leaf-pr fix-checks" "$result"
+teardown
+
 # PO3. main is red and no latch issue open → main-broken fires first, before the
 #      priority scan (the gate runs ahead of the ladder, same as default mode).
 echo "Test: --priority-only — main red, no latch → main-broken (gate first)"
