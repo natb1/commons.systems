@@ -15727,11 +15727,14 @@ if (
   else
     FAIL=$((FAIL + 1)); echo "  FAIL: .service ExecStart does not point at dispatch-spawn-sweep"
   fi
+  grep -q 'daemon-reload' "$est_log" \
+    && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: cold path ran daemon-reload"; } \
+    || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: cold path did not run daemon-reload"; }
   grep -q 'enable --now dispatch-sweep-periodic.timer' "$est_log" \
     && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: cold path ran enable --now dispatch-sweep-periodic.timer"; } \
     || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: cold path did not run enable --now dispatch-sweep-periodic.timer"; }
 else
-  TOTAL=$((TOTAL + 5)); FAIL=$((FAIL + 5))
+  TOTAL=$((TOTAL + 6)); FAIL=$((FAIL + 6))
   echo "  FAIL: ensure_sweep_timer (cold path) returned non-zero"
 fi
 
@@ -15751,10 +15754,19 @@ if (
   ensure_sweep_timer "$est_main"
 ); then
   TOTAL=$((TOTAL + 1))
-  if ! grep -q 'enable' "$est_log"; then
+  if ! grep -qF 'enable --now dispatch-sweep-periodic.timer' "$est_log"; then
     PASS=$((PASS + 1)); echo "  PASS: idempotent path did not re-run enable"
   else
     FAIL=$((FAIL + 1)); echo "  FAIL: idempotent path re-ran enable (hot-path skip did not fire)"
+  fi
+  # Positive assertion that the hot-path check was actually exercised: an empty
+  # log would silently pass the negative enable assertion above, so confirm the
+  # is-active short-circuit probe ran.
+  TOTAL=$((TOTAL + 1))
+  if grep -q 'is-active' "$est_log"; then
+    PASS=$((PASS + 1)); echo "  PASS: idempotent path ran the is-active hot-path probe"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: idempotent path did not run the is-active hot-path probe"
   fi
   TOTAL=$((TOTAL + 1))
   if ! grep -q 'daemon-reload' "$est_log"; then
@@ -15769,11 +15781,191 @@ if (
     FAIL=$((FAIL + 1)); echo "  FAIL: idempotent path rewrote the .service (inode changed)"
   fi
 else
-  TOTAL=$((TOTAL + 3)); FAIL=$((FAIL + 3))
+  TOTAL=$((TOTAL + 4)); FAIL=$((FAIL + 4))
   echo "  FAIL: ensure_sweep_timer (idempotent path) returned non-zero"
 fi
 
+# --- (a) 3. Inactive self-heal ----------------------------------------------
+# Both units on disk match byte-for-byte, but is-active reports inactive (RC=3)
+# — the lingering-disabled state after a user-session restart. The hot-path
+# short-circuit requires content match AND is-active=0, so it must NOT fire:
+# the call proceeds to daemon-reload + enable --now WITHOUT rewriting either
+# unit (inode stable). Mirrors the ensure_daemon_service inactive self-heal.
+: > "$est_log"
+est_service_inode_heal=$(stat -c '%i' "$est_service" 2>/dev/null || echo missing)
+est_timer_inode_heal=$(stat -c '%i' "$est_timer" 2>/dev/null || echo missing)
+if (
+  export DISPATCH_SWEEP_TIMER_UNIT_DIR="$est_unit_dir"
+  export DISPATCH_SWEEP_TIMER_SYSTEMCTL_CMD="$est_tmp/bin/systemctl"
+  export STUB_LOG="$est_log"
+  export STUB_IS_ACTIVE_RC=3 STUB_ENABLE_RC=0 STUB_RELOAD_RC=0
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_sweep_timer "$est_main"
+); then
+  TOTAL=$((TOTAL + 1))
+  if grep -qF 'enable --now dispatch-sweep-periodic.timer' "$est_log"; then
+    PASS=$((PASS + 1)); echo "  PASS: inactive self-heal ran enable --now"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: inactive self-heal did not run enable --now"
+  fi
+  TOTAL=$((TOTAL + 1))
+  if grep -q 'daemon-reload' "$est_log"; then
+    PASS=$((PASS + 1)); echo "  PASS: inactive self-heal ran daemon-reload"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: inactive self-heal skipped daemon-reload"
+  fi
+  TOTAL=$((TOTAL + 1))
+  if [ "$(stat -c '%i' "$est_service" 2>/dev/null || echo missing)" = "$est_service_inode_heal" ] \
+     && [ "$(stat -c '%i' "$est_timer" 2>/dev/null || echo missing)" = "$est_timer_inode_heal" ]; then
+    PASS=$((PASS + 1)); echo "  PASS: inactive self-heal did not rewrite the unchanged units (inodes stable)"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: inactive self-heal rewrote the unchanged units (inode changed)"
+  fi
+else
+  TOTAL=$((TOTAL + 3)); FAIL=$((FAIL + 3))
+  echo "  FAIL: ensure_sweep_timer (inactive self-heal) returned non-zero"
+fi
+
 rm -rf "$est_tmp"
+
+# ============================================================================
+# ensure_sweep_timer: input-validation rejection guards (#2023)
+# ============================================================================
+# Each malformed main_worktree path (newline, space, double-quote, backslash)
+# must be rejected: ensure_sweep_timer returns non-zero, emits a WARNING, and
+# writes no unit file. Mirrors the ensure_recover_unit double-quote/backslash
+# rejection tests. A shared recording systemctl stub stands in so a missing
+# guard that fell through to the install path would still be detectable.
+est_rej_tmp=$(mktemp -d)
+mkdir -p "$est_rej_tmp/bin"
+cat > "$est_rej_tmp/bin/systemctl" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+chmod +x "$est_rej_tmp/bin/systemctl"
+est_rej_service="$est_rej_tmp/systemd-user/dispatch-sweep-periodic.service"
+est_rej_timer="$est_rej_tmp/systemd-user/dispatch-sweep-periodic.timer"
+
+# Each entry: a label and a path fragment carrying the forbidden character.
+# The newline case uses an ANSI-C $'...' literal.
+est_run_reject() {
+  local label="$1" badpath="$2"
+  local rc=0 err
+  err=$( (
+    export DISPATCH_SWEEP_TIMER_UNIT_DIR="$est_rej_tmp/systemd-user"
+    export DISPATCH_SWEEP_TIMER_SYSTEMCTL_CMD="$est_rej_tmp/bin/systemctl"
+    source "$SCRIPT_DIR/lib.sh"
+    ensure_sweep_timer "$badpath"
+  ) 2>&1 1>/dev/null ) || rc=$?
+  TOTAL=$((TOTAL + 1))
+  if [[ "$rc" -ne 0 ]]; then
+    PASS=$((PASS + 1)); echo "  PASS: reject-$label: ensure_sweep_timer returned non-zero"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: reject-$label: ensure_sweep_timer returned zero"
+  fi
+  TOTAL=$((TOTAL + 1))
+  if [[ "$err" == *WARNING* ]]; then
+    PASS=$((PASS + 1)); echo "  PASS: reject-$label: emitted a WARNING to stderr"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: reject-$label: no WARNING on stderr"
+  fi
+  TOTAL=$((TOTAL + 1))
+  if [[ ! -e "$est_rej_service" && ! -e "$est_rej_timer" ]]; then
+    PASS=$((PASS + 1)); echo "  PASS: reject-$label: no unit file was written"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: reject-$label: a unit file was written"
+  fi
+}
+echo ""
+echo "=== ensure_sweep_timer rejects malformed main worktree paths ==="
+est_run_reject "newline" "$est_rej_tmp/has"$'\n'"newline"
+est_run_reject "space" "$est_rej_tmp/has a space"
+est_run_reject "double-quote" "$est_rej_tmp/has\"a\"quote"
+est_run_reject "backslash" "$est_rej_tmp/has\\a\\slash"
+unset -f est_run_reject
+rm -rf "$est_rej_tmp"
+
+# ============================================================================
+# ensure_sweep_timer: systemctl failure paths warn + return non-zero (#2023)
+# ============================================================================
+# daemon-reload failure and enable --now failure must each cause a non-zero
+# return with a WARNING to stderr (warn + return per the helper's contract —
+# never a hard exit). Mirrors the ensure_daemon_service degrade tests.
+est_fail_tmp=$(mktemp -d)
+mkdir -p "$est_fail_tmp/bin"
+cat > "$est_fail_tmp/bin/systemctl" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$STUB_LOG"
+for a in "$@"; do
+  case "$a" in
+    is-active) exit "${STUB_IS_ACTIVE_RC:-0}" ;;
+    enable) exit "${STUB_ENABLE_RC:-0}" ;;
+    daemon-reload) exit "${STUB_RELOAD_RC:-0}" ;;
+  esac
+done
+exit 0
+STUB
+chmod +x "$est_fail_tmp/bin/systemctl"
+est_fail_log="$est_fail_tmp/systemctl.log"
+est_fail_main="$est_fail_tmp/main-worktree"
+
+echo ""
+echo "=== ensure_sweep_timer degrades on systemctl failures ==="
+# --- daemon-reload failure ---------------------------------------------------
+: > "$est_fail_log"
+est_reload_rc=0
+est_reload_err=$( (
+  export DISPATCH_SWEEP_TIMER_UNIT_DIR="$est_fail_tmp/reload-fail"
+  export DISPATCH_SWEEP_TIMER_SYSTEMCTL_CMD="$est_fail_tmp/bin/systemctl"
+  export STUB_LOG="$est_fail_log"
+  export STUB_IS_ACTIVE_RC=0 STUB_ENABLE_RC=0 STUB_RELOAD_RC=1
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_sweep_timer "$est_fail_main"
+) 2>&1 1>/dev/null ) || est_reload_rc=$?
+TOTAL=$((TOTAL + 1))
+if [[ "$est_reload_rc" -ne 0 ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: daemon-reload failure → non-zero return"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: daemon-reload failure returned zero"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$est_reload_err" == *WARNING* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: daemon-reload failure emitted a WARNING"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: daemon-reload failure did not emit a WARNING"
+fi
+TOTAL=$((TOTAL + 1))
+if ! grep -q 'enable' "$est_fail_log"; then
+  PASS=$((PASS + 1)); echo "  PASS: daemon-reload failure did not reach enable"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: daemon-reload failure reached enable despite reload failure"
+fi
+
+# --- enable --now failure ----------------------------------------------------
+: > "$est_fail_log"
+est_enable_rc=0
+est_enable_err=$( (
+  export DISPATCH_SWEEP_TIMER_UNIT_DIR="$est_fail_tmp/enable-fail"
+  export DISPATCH_SWEEP_TIMER_SYSTEMCTL_CMD="$est_fail_tmp/bin/systemctl"
+  export STUB_LOG="$est_fail_log"
+  export STUB_IS_ACTIVE_RC=0 STUB_ENABLE_RC=1 STUB_RELOAD_RC=0
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_sweep_timer "$est_fail_main"
+) 2>&1 1>/dev/null ) || est_enable_rc=$?
+TOTAL=$((TOTAL + 1))
+if [[ "$est_enable_rc" -ne 0 ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: enable --now failure → non-zero return"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: enable --now failure returned zero"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$est_enable_err" == *WARNING* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: enable --now failure emitted a WARNING"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: enable --now failure did not emit a WARNING"
+fi
+echo "  (test shell survived the degrade paths)"
+rm -rf "$est_fail_tmp"
 
 # --- (b) AC#4: the timer path invokes the sweep with no live worker ----------
 # Model the timer firing by running the .service's ExecStart command directly
