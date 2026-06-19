@@ -2836,6 +2836,67 @@ FAKE
   export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/bin/claude"
 }
 
+# office_hours_state_fake_claude — fake `claude` for the state-gated office-hours
+# selector + entry path (#2011). Each argument is a `name:state` pair; each pair
+# `<name>:<state>` produces one session row:
+#   sessionId = "s-<name>", id = "j-<name>"  (DISTINCT, so an entry test proves
+#                                              attach uses the job `id`, not the
+#                                              sessionId),
+#   state     = <state>,
+#   status    = "busy" when state == "working", else JSON null (the derived
+#               coarse status — status:"busy" ⟺ state:"working"),
+#   name      = <name>, pid = 1, cwd = "".
+#
+# --all FAITHFULNESS — the load-bearing property. Production hides `done`
+# sessions from the default `claude agents --json` and surfaces them ONLY under
+# `--all`. This fake mirrors that exactly: on `agents`, it scans argv for
+# `--all`; if present it returns the FULL payload (including any `done` rows),
+# and if absent it returns the payload with `done` rows stripped. That faithful
+# behaviour is why a green suite cannot lie: if a future regression drops `--all`
+# from the selector's `claude_sessions_with_name_all` or the entry's
+# attach_session, the `done` row vanishes from that path and the done-attach
+# cases (OHST3f / OH5b) turn red — exactly the regression this unit guards
+# against. (A naive fake that returned `done` regardless of `--all` would let a
+# `--all`-forgetting path still pass.)
+#
+# The fake branches on its first arg: `agents` returns the (possibly
+# done-filtered) JSON payload; any other invocation — `attach <id>` or
+# `/office-hours` — prints `LAUNCH: $*`. Wires both OFFICE_HOURS_CLAUDE_CMD (the
+# entry script's launch + sessionId→job-id resolution) and CLAUDE_AGENTS_CMD
+# (the selector subprocess's state query), mirroring office_hours_fake_claude.
+office_hours_state_fake_claude() {
+  local payload="[" pair name state status_json first=1
+  for pair in "$@"; do
+    name="${pair%%:*}"; state="${pair#*:}"
+    if [[ "$state" == "working" ]]; then status_json='"busy"'; else status_json='null'; fi
+    if (( first )); then first=0; else payload+=","; fi
+    payload+="{\"sessionId\":\"s-$name\",\"id\":\"j-$name\",\"pid\":1,\"state\":\"$state\",\"status\":$status_json,\"name\":\"$name\",\"cwd\":\"\"}"
+  done
+  payload+="]"
+  printf '%s' "$payload" > "$TMPDIR_TEST/claude-payload.json"
+  cat > "$TMPDIR_TEST/bin/claude" <<'FAKE'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "agents" ]]; then
+  PAYLOAD="$(cd "$(dirname "$0")/.." && pwd)/claude-payload.json"
+  # --all faithfulness: a `done` row is visible ONLY when --all is in argv.
+  # Production calls `agents --json --all`, so scan ALL args (not a fixed
+  # position) for --all.
+  for arg in "$@"; do
+    [[ "$arg" == "--all" ]] && { cat "$PAYLOAD"; exit 0; }
+  done
+  # No --all → hide `done` rows, exactly as the real daemon's default query does.
+  jq -c 'map(select(.state != "done"))' "$PAYLOAD"
+  exit 0
+fi
+# A launch (`attach <id>` or `/office-hours`): record which one fired.
+echo "LAUNCH: $*"
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/bin/claude"
+  export OFFICE_HOURS_CLAUDE_CMD="$TMPDIR_TEST/bin/claude"
+  export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/bin/claude"
+}
+
 # 1. A non-QA PR is chosen over a QA PR and a help-wanted issue.
 echo "Test: non-QA PR beats QA PR and issue"
 setup
@@ -5802,47 +5863,136 @@ result=$("$TMPDIR_TEST/office-hours-select-target")
 assert_eq "qa item selected with its PR number" "office-hours 50 qa 7 -" "$result"
 teardown
 
-# OHST3. The oldest labeled item whose <N>-* worktree has a live session is
-# ATTACHED — live wins over a sessionless newer sibling.
-echo "Test: oldest live-session item is attached (live wins over fresh sibling)"
+# OHST3. The oldest labeled item whose <N>-* worktree has an idle (attachable)
+# session is ATTACHED — idle wins over a sessionless newer sibling.
+echo "Test: oldest idle-session item is attached (idle wins over fresh sibling)"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/oh-issue-list.json"
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
   > "$STUB_DIR/worktree-list.txt"
-select_target_fake_claude "42-x"   # 42's worktree has a live session; 99 sessionless
+office_hours_state_fake_claude "42-x:waiting"   # 42's session is idle; 99 sessionless
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "live item attached over sessionless sibling 99" "live s-42-x" "$result"
+assert_eq "idle item attached over sessionless sibling 99" "idle s-42-x" "$result"
 teardown
 
-# OHST3b. Two labeled items both live → attach the oldest one's session
+# OHST3b. Two labeled items both idle → attach the oldest one's session
 # (mirrors OH2 on the entry-point side).
-echo "Test: two live items → oldest attached"
+echo "Test: two idle items → oldest attached"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/oh-issue-list.json"
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\nworktree /worktrees/99-y\nHEAD aaa111\nbranch refs/heads/99-y\n\n' \
   > "$STUB_DIR/worktree-list.txt"
-select_target_fake_claude "42-x" "99-y"   # both worktrees live
+office_hours_state_fake_claude "42-x:waiting" "99-y:waiting"   # both idle
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "oldest of two live items attached" "live s-42-x" "$result"
+assert_eq "oldest of two idle items attached" "idle s-42-x" "$result"
 teardown
 
-# OHST3c. Older sessionless item + newer live item → attach the live one
-# (mirrors OH5: live wins regardless of age order).
-echo "Test: older sessionless + newer live → attach the live one"
+# OHST3c. Older sessionless item + newer idle item → attach the idle one
+# (mirrors OH5: idle wins regardless of age order).
+echo "Test: older sessionless + newer idle → attach the idle one"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/oh-issue-list.json"
 echo '[]' > "$STUB_DIR/pr-list-full.json"
-# 42 (older) has no worktree at all → sessionless; 99 (newer) has a live worktree.
+# 42 (older) has no worktree at all → sessionless; 99 (newer) has an idle worktree.
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/99-y\nHEAD aaa111\nbranch refs/heads/99-y\n\n' \
   > "$STUB_DIR/worktree-list.txt"
-select_target_fake_claude "99-y"   # only 99's worktree is live
+office_hours_state_fake_claude "99-y:idle"   # only 99's worktree is idle (attachable)
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "live item attached regardless of age order" "live s-99-y" "$result"
+assert_eq "idle item attached regardless of age order" "idle s-99-y" "$result"
+teardown
+
+# OHST3d. Working-skip, sibling chosen: 42 (older) has a `working` session in its
+# worktree → SKIPPED (rc 3, not fresh-launched); 99 (newer) is sessionless → it
+# wins fresh. Proves a working session is neither attached nor mistaken for fresh.
+echo "Test: working-session item skipped → sessionless sibling chosen fresh"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+# 42 has a worktree (its session is working → skipped); 99 has none → sessionless.
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+office_hours_state_fake_claude "42-x:working"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "working item skipped; sessionless sibling 99 chosen fresh" "office-hours 99 plan - -" "$result"
+teardown
+
+# OHST3e. Working-skip, lone → empty: the only labeled item (42) has a `working`
+# session → skipped (rc 3), so it is neither attached nor fresh-launched. With no
+# other item and no parked `dispatch-*` router under main, the selector emits
+# `empty`. (The fall-through reaches the parked-router block, so point it at a
+# controlled main-worktree path where the fake daemon reports no router; the
+# working row's name is `42-x`, not `dispatch-*`, so it cannot false-match.)
+echo "Test: lone working item → neither attached nor fresh → empty"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+office_hours_state_fake_claude "42-x:working"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "lone working item → empty" "empty" "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
+# OHST3f. Done-attach (selector, --all-faithful): the only labeled item (42) has
+# a `done` session in its worktree → ATTACH. The selector sees the `done` row
+# ONLY because claude_sessions_with_name_all passes `--all`; the faithful fake
+# strips `done` rows when `--all` is absent, so a regression that dropped `--all`
+# would hide the row and turn this case red. This is the selector-side proof that
+# the selector queries with `--all`.
+echo "Test: done-session item attached (proves selector passes --all)"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+office_hours_state_fake_claude "42-x:done"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "done session is attachable (visible only under --all)" "idle s-42-x" "$result"
+teardown
+
+# OHST3g. Stopped-exclude: the only labeled item (42) has a `stopped` session →
+# EXCLUDED from attach (skip, like working) and not fresh-launched. With no other
+# item and no parked `dispatch-*` router under main → `empty`.
+echo "Test: lone stopped item → excluded from attach, not fresh → empty"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+office_hours_state_fake_claude "42-x:stopped"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "lone stopped item → empty" "empty" "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
+# OHST3h. Two-name skip-then-attach: the only labeled item (42) has TWO sessions
+# in its one worktree — the basename name (`42-x`) is `working` (queried first,
+# not attachable, skip) and the `office-hours-42` name is `waiting` (attachable).
+# The inner two-name loop must keep looking PAST the basename skip and return the
+# attachable `office-hours-42` session. A regression that turned `saw_skip=1` into
+# an immediate `return 3` would skip the issue and emit `empty` instead — every
+# other OHST3* case pairs exactly one name:state per issue, so only this case
+# exercises the continue-past-skip branch.
+echo "Test: basename working + office-hours-N waiting → attach the waiting one (continue past skip)"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+office_hours_state_fake_claude "42-x:working" "office-hours-42:waiting"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "skip basename working, attach office-hours-42 waiting" "idle s-office-hours-42" "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
 # OHST4. An empty office-hours queue with no parked router prints `empty`. The
@@ -6030,27 +6180,28 @@ echo "=== office-hours (entry point) ==="
 # case asserts which launch fired (or that none did). The fake's sessionId
 # convention is `s-<worktree-basename>`.
 
-# OH1. One labeled item whose <N>-* worktree has a live session → attach it.
-echo "Test: live-session labeled item → attach its session"
+# OH1. One labeled item whose <N>-* worktree has an idle (attachable) session →
+# attach it. The entry handles the renamed `idle` verb (was `live`).
+echo "Test: idle-session labeled item → attach its session"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
   > "$STUB_DIR/worktree-list.txt"
-office_hours_fake_claude "42-x"   # 42's worktree has a live session
+office_hours_state_fake_claude "42-x:waiting"   # 42's worktree has an idle session
 result=$("$TMPDIR_TEST/office-hours")
-assert_eq "attaches the live session by its job id" "LAUNCH: attach j-42-x" "$result"
+assert_eq "attaches the idle session by its job id" "LAUNCH: attach j-42-x" "$result"
 teardown
 
-# OH2. Two labeled items both live → attach the oldest one's session.
-echo "Test: two live items → attach the oldest"
+# OH2. Two labeled items both idle → attach the oldest one's session.
+echo "Test: two idle items → attach the oldest"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/oh-issue-list.json"
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\nworktree /worktrees/99-y\nHEAD aaa111\nbranch refs/heads/99-y\n\n' \
   > "$STUB_DIR/worktree-list.txt"
-office_hours_fake_claude "42-x" "99-y"   # both worktrees live
+office_hours_state_fake_claude "42-x:waiting" "99-y:waiting"   # both worktrees idle
 result=$("$TMPDIR_TEST/office-hours")
-assert_eq "attaches the oldest live item's session by its job id" "LAUNCH: attach j-42-x" "$result"
+assert_eq "attaches the oldest idle item's session by its job id" "LAUNCH: attach j-42-x" "$result"
 teardown
 
 # OH3. Labeled items but none with a live session → launch the fresh /office-hours
@@ -6081,17 +6232,17 @@ oh_pwd=$(head -1 "$TMPDIR_TEST/oh-pwd-log" 2>/dev/null || true)
 assert_eq "fresh: spawn cwd is the worktree" "$(realpath "$TMPDIR_TEST/worktrees/42-x")" "$(realpath "$oh_pwd" 2>/dev/null)"
 teardown
 
-# OH3c. A labeled item whose worktree has a live session named office-hours-<N>
+# OH3c. A labeled item whose worktree has an idle session named office-hours-<N>
 # (the renamed office-hours session, #1311) → attach it directly. Before the
 # two-name fix the selector keyed only on the basename and missed it.
-echo "Test: live office-hours-<N> session → selector attaches it directly"
+echo "Test: idle office-hours-<N> session → selector attaches it directly"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
   > "$STUB_DIR/worktree-list.txt"
-office_hours_fake_claude "office-hours-42"   # the live session is the office-hours-<N> one
+office_hours_state_fake_claude "office-hours-42:waiting"   # idle office-hours-<N> session
 result=$("$TMPDIR_TEST/office-hours")
-assert_eq "attaches the live office-hours-<N> session by its job id" "LAUNCH: attach j-office-hours-42" "$result"
+assert_eq "attaches the idle office-hours-<N> session by its job id" "LAUNCH: attach j-office-hours-42" "$result"
 teardown
 
 # OH3b. Sessionless item with NO <N>-* worktree on disk (the worktree was swept) →
@@ -6121,18 +6272,50 @@ assert_eq "empty queue → queue-empty message, no launch" "office-hours: queue 
 unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
-# OH5. Mixed: an older sessionless item + a newer live-session item → attach the
-# live one (live wins over fresh whenever any labeled item is live).
-echo "Test: older sessionless + newer live → attach the live one"
+# OH5. Mixed: an older sessionless item + a newer idle-session item → attach the
+# idle one (idle wins over fresh whenever any labeled item is attachable).
+echo "Test: older sessionless + newer idle → attach the idle one"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/oh-issue-list.json"
-# 42 (older) has no worktree at all → sessionless; 99 (newer) has a live worktree.
+# 42 (older) has no worktree at all → sessionless; 99 (newer) has an idle worktree.
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/99-y\nHEAD aaa111\nbranch refs/heads/99-y\n\n' \
   > "$STUB_DIR/worktree-list.txt"
-office_hours_fake_claude "99-y"   # only 99's worktree is live
+office_hours_state_fake_claude "99-y:idle"   # only 99's worktree is idle
 result=$("$TMPDIR_TEST/office-hours")
-assert_eq "live wins over fresh whenever any labeled item is live" "LAUNCH: attach j-99-y" "$result"
+assert_eq "idle wins over fresh whenever any labeled item is attachable" "LAUNCH: attach j-99-y" "$result"
+teardown
+
+# OH5b. Done-attach (entry, end-to-end, --all-faithful): one labeled item (42)
+# with a `done` session in its worktree. The selector emits `idle s-42-x` (it
+# passed `--all`, so it saw the `done` row), and the entry's attach_session
+# resolves s-42-x → j-42-x via `agents --json --all`. With the faithful fake the
+# entry can ONLY resolve the `done` row because Unit 3's attach_session passes
+# `--all`; a regression dropping it would hide the row and turn this red. This is
+# the end-to-end (selector + entry) proof that both ends query with `--all`.
+echo "Test: done-session item → end-to-end attach (proves both ends pass --all)"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+office_hours_state_fake_claude "42-x:done"
+result=$("$TMPDIR_TEST/office-hours")
+assert_eq "done session attached end-to-end by its job id" "LAUNCH: attach j-42-x" "$result"
+teardown
+
+# OH5c. Working-skip (entry): a lone labeled item (42) whose session is `working`
+# → the selector skips it (neither attach nor fresh) and, with no parked router,
+# emits `empty`; the entry prints the queue-empty message and launches nothing.
+echo "Test: lone working item → queue-empty message, no launch"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+office_hours_state_fake_claude "42-x:working"
+result=$("$TMPDIR_TEST/office-hours")
+assert_eq "lone working item → queue-empty message, no launch" "office-hours: queue is empty — nothing to resume or start." "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
 # OH6. UNKNOWN daemon (claude unqueryable). Under the single fail-safe convention
