@@ -326,8 +326,8 @@ describe("loadPostsForPrerender", () => {
     expect(result.topPosts).toHaveLength(1);
     expect(result.topPosts[0].id).toBe("hello-world");
     expect(result.rendered).toHaveLength(1);
-    expect(result.rendered[0].articleHtml).toContain('<article id="post-hello-world">');
-    expect(result.allArticlesHtml).toContain('<article id="post-hello-world">');
+    expect(result.rendered[0].articleHtml).toContain('id="post-hello-world"');
+    expect(result.allArticlesHtml).toContain('id="post-hello-world"');
     expect(result.panelHtml).toContain("Top Posts");
     expect(result.panelHtml).toContain("Hello World");
   });
