@@ -74,7 +74,11 @@ sanitize_launch_env() {
         fi
       fi
     done
-    export PATH="$rebuilt"
+    # Guard the export: if dedup produced nothing (e.g. a malformed PATH of all
+    # separators like `:::`), leave the original PATH untouched rather than
+    # clobbering it to empty — an empty PATH would break the `env`/`wc` forks in
+    # step 3 with a confusing "command not found".
+    [[ -n "$rebuilt" ]] && export PATH="$rebuilt"
   fi
 
   # --- Step 3: size guard (acceptance criterion 3) ---------------------------
