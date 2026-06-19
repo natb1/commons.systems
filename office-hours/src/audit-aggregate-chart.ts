@@ -2,6 +2,7 @@ import * as Plot from "@observablehq/plot";
 import { type AuditAggregate } from "./audit-aggregates.js";
 import {
   getThemeFg,
+  readChartPalette,
   assembleChartLayout,
   buildLegend,
   computeChartWidth,
@@ -15,21 +16,6 @@ import {
 } from "./chart-util.js";
 
 const SERIES_HIT_RATE = "cache hit %";
-const COLOR_HIT_RATE = "#26a69a";
-
-// Fixed palette cycled by phase index, so each phase line's color is known and
-// can be reused verbatim in the legend (vs. Plot's auto categorical scale,
-// whose assignment we'd have to reverse-engineer).
-const PHASE_PALETTE = [
-  "#42a5f5",
-  "#ab47bc",
-  "#ffa726",
-  "#66bb6a",
-  "#ec407a",
-  "#29b6f6",
-  "#d4e157",
-  "#8d6e63",
-];
 
 interface SpendPoint {
   x: Date;
@@ -77,6 +63,13 @@ export function renderAuditAggregateChart(aggregates: AuditAggregate[]): HTMLEle
     return container;
   }
 
+  // DS categorical palette, read from the container at runtime. There are up to
+  // 8 audit phases but only 6 DS tokens, so the per-phase color cycles the 6
+  // tokens by index (i % 6). The hit-rate line takes a distinct DS hue.
+  const palette = readChartPalette(container);
+  const phaseColor = (i: number): string => palette[i % palette.length];
+  const COLOR_HIT_RATE = palette[2]; // --chart-3 terracotta
+
   // Union of phase keys across all windows, sorted for stable line/legend order.
   const phaseSet = new Set<string>();
   for (const a of sorted) {
@@ -86,7 +79,7 @@ export function renderAuditAggregateChart(aggregates: AuditAggregate[]): HTMLEle
 
   const phaseEntries: LegendEntry[] = phases.map((phase, i) => ({
     label: phase,
-    color: PHASE_PALETTE[i % PHASE_PALETTE.length],
+    color: phaseColor(i),
   }));
 
   // Per-phase point series. A phase missing from a given window yields an
@@ -153,7 +146,7 @@ export function renderAuditAggregateChart(aggregates: AuditAggregate[]): HTMLEle
       Plot.lineY(phaseSeries[phase], {
         x: "x",
         y: "spend",
-        stroke: PHASE_PALETTE[i % PHASE_PALETTE.length],
+        stroke: phaseColor(i),
         strokeWidth: 2,
         curve: "monotone-x",
       }),
