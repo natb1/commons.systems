@@ -4402,6 +4402,40 @@ assert_eq "transient trace fail on root 55 -> select-target still exits 0" "0" "
 assert_eq "transient trace fail on root 55 -> next startable root 66 selected" "issue 66" "$result"
 teardown
 
+# 39f. The mirror-image of 39e, guarding the exit-1 abort path against a future
+#      refactor that extends the exit-3 skip to exit-1 (the invariant documented
+#      at dispatch-select-target's trace-status block: exit 1 is a usage/program
+#      error — a hard failure affecting every root, never swallowed as a skip).
+#      Same two-root 55/66 fixture as 39e, but dispatch-trace-leaf exits 1
+#      UNCONDITIONALLY. Unlike the exit-3 skip (which continues to root 66), the
+#      exit-1 path must ABORT: select-target exits non-zero and must NOT reach,
+#      let alone select, the otherwise-startable root 66. Test 39 already proves
+#      the single-root exit-1 hard-fail; this adds the two-root case so the
+#      "abort vs skip-and-continue" distinction (the precise opposite of 39e) is
+#      regression-tested — an exit-1-treated-as-exit-3 refactor would surface
+#      "issue 66" here and trip the assertion below.
+echo "Test: trace-leaf exit 1 on root 55 -> select-target aborts, does NOT select 66"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+# Replace the copied leaf-trace script with a stub that always exits 1 (a
+# usage/programming error, NOT a transient gh failure). setup re-copies a fresh
+# real trace-leaf for the next test, so this override does not leak.
+cat > "$TMPDIR_TEST/dispatch-trace-leaf" <<'STUB'
+#!/usr/bin/env bash
+echo "error: usage" >&2
+exit 1
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-trace-leaf"
+if result=$("$TMPDIR_TEST/dispatch-select-target" 2>/dev/null); then rc=0; else rc=$?; fi
+[[ "$rc" -ne 0 ]] && rc_nonzero=yes || rc_nonzero=no
+assert_eq "trace-leaf exit 1 on root 55 -> select-target exits non-zero" "yes" "$rc_nonzero"
+[[ "$result" != "issue 66" ]] && not_66=yes || not_66=no
+assert_eq "trace-leaf exit 1 on root 55 -> 66 NOT selected (abort, not skip)" "yes" "$not_66"
+teardown
+
 # --- --top N: single-pass multi-target selection (#1317) ---------------------
 # `--top N` emits up to N DISTINCT ranked decision lines in ONE queue scan,
 # preserving the existing priority order (priority axis 1→0, then topic category,
