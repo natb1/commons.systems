@@ -143,15 +143,17 @@ fork site below (same discipline as the `fixes_applied_count` tally in Step 3.7)
    .claude/skills/dispatch-propagate/scripts/commit-merge-push --merge-only
    ```
 
-   Exit 0 → proceed to Step 1. On a non-zero exit, fall back to the fork — the
-   canonical fork recipe `/implement-unit` Step 2 documents (`subagent_type` is
-   `general-purpose`, never the skill name). This invocation runs with no pending
-   working-tree changes — `/commit-merge-push` tolerates that and creates no
-   commit. If the fallback fork is spawned, increment `SKILL_SUBAGENTS` by 1 —
-   only on the fork path; do **not** increment on the exit-0 (script-only) path.
-   If the script exits 3 (merge conflict) or the fork reports a merge
-   conflict, escalate to office-hours per the **Escalation** section and stop — do
-   not begin the QA walkthrough.
+   Exit 0 → proceed to Step 1. If the script exits 3 (merge conflict), escalate
+   directly to office-hours per the **Escalation** section and stop — do not spawn
+   the fork and do **not** increment `SKILL_SUBAGENTS`; do not begin the QA
+   walkthrough. On a non-zero exit *other than* exit 3, fall back to the fork —
+   the canonical fork recipe `/implement-unit` Step 2 documents (`subagent_type`
+   is `general-purpose`, never the skill name). This invocation runs with no
+   pending working-tree changes — `/commit-merge-push` tolerates that and creates
+   no commit. When the fallback fork is spawned, increment `SKILL_SUBAGENTS` by 1
+   — only on the fork path; do **not** increment on the exit-0 (script-only) path.
+   If the fork then reports a merge conflict, escalate to office-hours per the
+   **Escalation** section and stop — do not begin the QA walkthrough.
 
 1. **Detect whether the implementation has a browser component.**
 
