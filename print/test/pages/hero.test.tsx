@@ -1,8 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { renderHero } from "../../src/pages/hero";
+import { renderToStaticMarkup } from "react-dom/server";
+import { Hero } from "../../src/pages/Hero.tsx";
 
-describe("renderHero", () => {
-  const html = renderHero();
+describe("Hero", () => {
+  const html = renderToStaticMarkup(<Hero />);
 
   it("contains headline", () => {
     expect(html).toContain("This is Not an App.");
@@ -17,10 +18,20 @@ describe("renderHero", () => {
     expect(matches).toHaveLength(3);
   });
 
-  it("contains Easy, Medium, Hard badges", () => {
-    expect(html).toContain("chip-badge--easy");
-    expect(html).toContain("chip-badge--medium");
-    expect(html).toContain("chip-badge--hard");
+  it("contains Easy, Medium, Hard badge labels", () => {
+    expect(html).toContain("Easy");
+    expect(html).toContain("Medium");
+    expect(html).toContain("Hard");
+  });
+
+  it("chip-badge base class appears three times", () => {
+    expect(html.match(/chip-badge/g)).toHaveLength(3);
+  });
+
+  it("ds badge variants are present", () => {
+    expect(html).toContain("cs-badge--success");
+    expect(html).toContain("cs-badge--accent");
+    expect(html).toContain("cs-badge--error");
   });
 
   it("panels are hidden by default", () => {

@@ -70,6 +70,7 @@ import {
   cleanupView,
   pickPositionStore,
   makeLocalStoragePositionStore,
+  getViewFrame,
 } from "../../src/pages/view";
 import type { MediaItem } from "../../src/types";
 import { getMediaDownloadUrl } from "../../src/storage";
@@ -199,7 +200,7 @@ describe("local-folder view path", () => {
     expect(getMediaDownloadUrl).not.toHaveBeenCalled();
 
     const outlet = document.createElement("div");
-    afterRenderView(outlet, mockUser);
+    afterRenderView(outlet, mockUser, () => {});
 
     // Signed-in user viewing a LOCAL item still routes to the sidecar — never Firestore.
     expect(mockMakeSidecarPositionStore).toHaveBeenCalledWith("book.pdf");
@@ -243,15 +244,19 @@ describe("local-folder view path", () => {
 
     await renderView("local:book.pdf", null);
     const outlet = document.createElement("div");
-    afterRenderView(outlet, null);
+    const renderError = vi.fn();
+    afterRenderView(outlet, null, renderError);
 
     const resolveSource = vi.mocked(initViewer).mock.calls[0][2];
-    // The closure fully handles the failure (reportError + #view-error UI) and
-    // returns a never-settling promise so initViewer does not re-enter its own
-    // catch for the same error — so assert the side effects, not a rejection.
+    // The closure fully handles the failure (reportError + error frame via
+    // renderError) and returns a never-settling promise so initViewer does not
+    // re-enter its own catch for the same error — so assert the side effects,
+    // not a rejection. renderError() re-renders the React root from the now
+    // "error" frame, keeping React in control of the outlet subtree.
     resolveSource();
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(outlet.innerHTML).toContain('id="view-error"');
+    expect(getViewFrame()).toEqual({ kind: "error" });
+    expect(renderError).toHaveBeenCalledTimes(1);
     expect(globalThis.reportError).toHaveBeenCalledTimes(1);
   });
 });
@@ -270,7 +275,7 @@ describe("afterRenderView", () => {
     outlet.innerHTML = '<div class="viewer"></div>';
 
     await renderView("item-1", null);
-    afterRenderView(outlet, null);
+    afterRenderView(outlet, null, () => {});
 
     expect(initViewer).toHaveBeenCalled();
     // Verify the factory passed to initViewer creates an image archive renderer
@@ -416,7 +421,7 @@ describe("renderView", () => {
       await renderView("item-1", mockUser);
 
       const outlet = document.createElement("div");
-      afterRenderView(outlet, mockUser);
+      afterRenderView(outlet, mockUser, () => {});
 
       expect(mockMakeFirestorePositionStore).toHaveBeenCalledWith("user-123", "item-1");
       expect(initViewer).toHaveBeenCalledWith(
