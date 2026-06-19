@@ -491,6 +491,40 @@ ensure_deps() {
   fi
 }
 
+# ---- playwright_install_with_deps — bounded, timed Playwright browser install -
+# Wraps `npx playwright install --with-deps chromium` (which shells out to apt-get
+# and can stall indefinitely on a flaky archive mirror — #1899) in a per-attempt
+# `timeout` plus a small retry loop, so a transient network stall fails fast and
+# retries instead of hanging until GitHub's 6-hour job cap. Skips entirely when
+# PLAYWRIGHT_BROWSERS_PATH is set (nix provides browsers). Must run from the app
+# directory (npx resolves the project's playwright). Tunables (env):
+# PLAYWRIGHT_INSTALL_TIMEOUT (default 300 seconds, per attempt),
+# PLAYWRIGHT_INSTALL_ATTEMPTS (default 2 = 1 try + 1 retry). Returns non-zero (so
+# the caller's `set -e` aborts) once attempts are exhausted.
+playwright_install_with_deps() {
+  if [ -n "${PLAYWRIGHT_BROWSERS_PATH:-}" ]; then
+    return 0
+  fi
+  local timeout_s="${PLAYWRIGHT_INSTALL_TIMEOUT:-300}"
+  local attempts="${PLAYWRIGHT_INSTALL_ATTEMPTS:-2}"
+  local attempt=1
+  while [ "$attempt" -le "$attempts" ]; do
+    if [ "$attempt" -gt 1 ]; then
+      echo "playwright_install_with_deps: attempt $attempt/$attempts" >&2
+    fi
+    if timeout --kill-after=30 "$timeout_s" npx playwright install --with-deps chromium; then
+      return 0
+    fi
+    echo "playwright_install_with_deps: attempt $attempt/$attempts failed or timed out after ${timeout_s}s" >&2
+    attempt=$((attempt + 1))
+    if [ "$attempt" -le "$attempts" ]; then
+      sleep 5
+    fi
+  done
+  echo "playwright_install_with_deps: failed after $attempts attempts" >&2
+  return 1
+}
+
 # Ensure Playwright browsers are resolvable. When PLAYWRIGHT_BROWSERS_PATH is
 # unset and nix is available (NixOS), re-exec the calling script under
 # `nix develop --command` so the devShell shellHook exports the nix-provisioned
