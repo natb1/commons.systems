@@ -15356,6 +15356,16 @@ st_setup 'echo "Unit dispatch-tick.service already exists" >&2; exit 1'
 if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-tick" 2>/dev/null); then rc=0; else rc=$?; fi
 assert_eq "deduped: dispatch-spawn-tick exits 0" "0" "$rc"
 assert_eq "deduped: stdout is 'deduped'" "deduped" "$out"
+# Negative assertion: is-failed returns non-zero (ST_IS_FAILED_RC unset → default
+# exit 1), so the gate must not invoke reset-failed on a running tick (#2013).
+sclog=$(cat "$TMPDIR_TEST/systemctl-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$sclog" != *"reset-failed"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: deduped: reset-failed was NOT called (is-failed gate held)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: deduped: reset-failed was NOT called (is-failed gate held)"
+  echo "    systemctl-log: $sclog"
+fi
 st_teardown
 
 # --- Test 4: a generic systemd-run failure passes the exit code through -------

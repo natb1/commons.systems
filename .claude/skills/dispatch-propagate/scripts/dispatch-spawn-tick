@@ -183,7 +183,7 @@ else
 fi
 
 # ---- Step 2: launch the transient unit immediately --------------------------
-# Free the fixed unit name from a lingering failed/inactive transient unit.
+# Free the fixed unit name from a lingering failed transient unit.
 # --collect is supposed to GC a failed transient unit, but empirically does
 # not always (#2013): a failed dispatch-tick unit can linger indefinitely and
 # then collide forever, silently wedging every launch. is-failed gates this so
