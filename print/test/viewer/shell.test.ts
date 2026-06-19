@@ -626,30 +626,44 @@ describe("initViewer go-to input", () => {
     expect(renderer.goToFraction).toHaveBeenCalledWith(0.5);
   });
 
-  it("percent mode: input disabled with 'Calculating…' while pending, re-enabled after resolve", async () => {
+  it("percent mode: input readOnly + aria-busy + aria-live status while pending, restored + focus returned after resolve", async () => {
     let resolveFraction!: () => void;
     const pending = new Promise<void>((resolve) => { resolveFraction = resolve; });
     const renderer = makeMockRenderer({
       goToFraction: vi.fn().mockReturnValue(pending),
     });
-    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.epub"), "m1", fakeStore(null), null);
-    await flushInit();
+    // Attach outlet to document so focus() is observable.
+    document.body.appendChild(outlet);
+    try {
+      initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.epub"), "m1", fakeStore(null), null);
+      await flushInit();
 
-    const input = outlet.querySelector(".viewer-goto-input") as HTMLInputElement;
-    input.value = "50";
-    pressEnter(input);
-    await flushInit();
+      const input = outlet.querySelector(".viewer-goto-input") as HTMLInputElement;
+      const statusEl = outlet.querySelector(".viewer-goto-status") as HTMLElement;
+      input.value = "50";
+      pressEnter(input);
+      await flushInit();
 
-    // Generation pending: input disabled, Calculating indicator shown.
-    expect(input.disabled).toBe(true);
-    expect(input.placeholder).toBe("Calculating…");
+      // While pending: readOnly, aria-busy, status text — never disabled.
+      expect(input.readOnly).toBe(true);
+      expect(input.getAttribute("aria-busy")).toBe("true");
+      expect(input.placeholder).toBe("Calculating…");
+      expect(statusEl.textContent).toBe("Calculating location…");
+      expect(input.disabled).toBe(false);
 
-    resolveFraction();
-    await flushInit();
+      resolveFraction();
+      await flushInit();
 
-    // After resolve: re-enabled, placeholder restored.
-    expect(input.disabled).toBe(false);
-    expect(input.placeholder).toBe("%");
+      // After resolve: restored, focus returned, never disabled.
+      expect(input.readOnly).toBe(false);
+      expect(input.hasAttribute("aria-busy")).toBe(false);
+      expect(input.placeholder).toBe("%");
+      expect(statusEl.textContent).toBe("");
+      expect(input.disabled).toBe(false);
+      expect(document.activeElement).toBe(input);
+    } finally {
+      document.body.removeChild(outlet);
+    }
   });
 
   it("hidden: pageCount <= 1 and no goToFraction keeps input hidden", async () => {

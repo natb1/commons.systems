@@ -35,6 +35,7 @@ export function renderViewerShell(item: MediaItem): string {
           <button class="viewer-prev" disabled aria-label="Previous page">&larr;</button>
           <span class="viewer-position">Loading...</span>
           <input class="viewer-goto-input goto-hidden" type="number" inputmode="numeric" />
+          <span class="viewer-goto-status visually-hidden" role="status" aria-live="polite"></span>
           <button class="viewer-next" disabled aria-label="Next page">&rarr;</button>
           <button class="viewer-zoom-in zoom-hidden" aria-label="Zoom in">+</button>
           <button class="viewer-zoom-out zoom-hidden" aria-label="Zoom out">&minus;</button>
@@ -100,6 +101,7 @@ export function initViewer(
   const nextBtn = viewer.querySelector(".viewer-next") as HTMLButtonElement;
   const position = viewer.querySelector(".viewer-position") as HTMLElement;
   const gotoInput = viewer.querySelector(".viewer-goto-input") as HTMLInputElement;
+  const gotoStatus = viewer.querySelector(".viewer-goto-status") as HTMLElement;
   const toggleBtn = viewer.querySelector(".viewer-panel-toggle") as HTMLButtonElement;
   const panel = viewer.querySelector(".viewer-panel") as HTMLElement;
   const zoomInBtn = viewer.querySelector(".viewer-zoom-in") as HTMLButtonElement;
@@ -341,14 +343,19 @@ export function initViewer(
         const frac = Math.max(0, Math.min(100, pct)) / 100;
         const savedValue = gotoInput.value;
         gotoInput.value = "";
-        gotoInput.disabled = true;
+        gotoInput.readOnly = true;
+        gotoInput.setAttribute("aria-busy", "true");
         gotoInput.placeholder = "Calculating…";
+        gotoStatus.textContent = "Calculating location…";
         try {
           await renderer.goToFraction!(frac);
         } finally {
           gotoInput.value = savedValue;
-          gotoInput.disabled = false;
+          gotoInput.readOnly = false;
+          gotoInput.removeAttribute("aria-busy");
           gotoInput.placeholder = "%";
+          gotoStatus.textContent = "";
+          gotoInput.focus();
         }
         updateNav();
       } else if (gotoMode === "page") {
