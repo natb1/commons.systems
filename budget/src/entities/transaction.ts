@@ -147,6 +147,11 @@ function requireReimbursement(value: unknown): number {
 
 // ── Firestore → Transaction ───────────────────────────────────────────────────
 
+/**
+ * @public knip baseline (#2066): residual unused export, not deleted per the
+ * no-bulk-delete line — part of the symmetric per-entity parseFirestore* set.
+ * Deletion candidate; see PR notes.
+ */
 export function parseFirestoreTransaction(docSnap: QueryDocumentSnapshot<DocumentData, DocumentData>): Transaction {
   const data = docSnap.data();
   return {

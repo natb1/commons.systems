@@ -82,6 +82,11 @@ export interface SeedReconciliationNote {
 
 // ── Firestore → ReconciliationNote ────────────────────────────────────────────
 
+/**
+ * @public knip baseline (#2066): residual unused export, not deleted per the
+ * no-bulk-delete line — part of the symmetric per-entity parseFirestore* set.
+ * Deletion candidate; see PR notes.
+ */
 export function parseFirestoreReconciliationNote(docSnap: QueryDocumentSnapshot<DocumentData, DocumentData>): ReconciliationNote {
   const data = docSnap.data();
   return {
