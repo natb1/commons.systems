@@ -400,8 +400,21 @@ summary. The subagent:
    ```
 
    If this fails with a `*"not found"*` message, the label does not exist yet —
-   create it with `gh label create "source-pr:<PR_NUM>" --color 1d76db --description "review follow-up: surfaced reviewing this PR"` then retry the add once, following the create-on-not-found idiom in
-   `dispatch-apply-office-hours` (lines 67–83).
+   create it, then retry the add once, following the create-on-not-found idiom
+   in `dispatch-apply-office-hours` (lines 67–83):
+
+   ```bash
+   gh label create "source-pr:<PR_NUM>" --color 1d76db \
+     --description "review follow-up: surfaced reviewing this PR" || true
+   gh issue edit <N> --add-label "source-pr:<PR_NUM>"
+   ```
+
+   The `|| true` is load-bearing: when multiple 5a/5b subagents fan out in
+   parallel, two may hit `not found` for the same `source-pr:<PR_NUM>` label at
+   once and both attempt the create — only one wins, the other fails with
+   `already exists`. Treat create as best-effort; the unconditional retry of the
+   add is what matters, and it succeeds once the label exists regardless of which
+   subagent created it.
 4. Returns every `<N>` to this thread.
 
 Capture each `<N>` against its source finding for the Step 7 comment.
@@ -472,7 +485,17 @@ summary. Each subagent:
    gh issue edit <N> --add-label security --add-label bug --add-label "source-pr:$PR_NUM"
    ```
 
-   Since `/file-issue` (step 2) now classifies and applies a type label at creation via `ref-issue-labels`, and a `dispatch-security-followup` body describes an identified failure mode — a CodeQL alert at a specific location, or named npm advisories with severities — the classifier already applies `bug`; this `--add-label bug` is therefore idempotent reinforcement, `--add-label security` adds the topic, and exactly one type label results with no atomic type-swap needed. If the `source-pr:$PR_NUM` label does not exist yet the edit fails with a `*"not found"*` message — apply the same create-on-not-found idiom as 5a (`gh label create "source-pr:$PR_NUM" --color 1d76db --description "review follow-up: surfaced reviewing this PR"` then retry once).
+   Since `/file-issue` (step 2) now classifies and applies a type label at creation via `ref-issue-labels`, and a `dispatch-security-followup` body describes an identified failure mode — a CodeQL alert at a specific location, or named npm advisories with severities — the classifier already applies `bug`; this `--add-label bug` is therefore idempotent reinforcement, `--add-label security` adds the topic, and exactly one type label results with no atomic type-swap needed. If the
+   `source-pr:$PR_NUM` label does not exist yet the edit fails with a
+   `*"not found"*` message — apply the same create-on-not-found idiom as 5a,
+   with the same parallel-race rationale (create is best-effort via `|| true`,
+   the add retry is what matters):
+
+   ```bash
+   gh label create "source-pr:$PR_NUM" --color 1d76db \
+     --description "review follow-up: surfaced reviewing this PR" || true
+   gh issue edit <N> --add-label "source-pr:$PR_NUM"
+   ```
 
 4. Returns `<N>` mapped to the follow-up's `identifier`.
 

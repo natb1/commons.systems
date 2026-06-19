@@ -48,8 +48,7 @@ RETRIAGED_DESC="dispatch: orphaned review follow-ups re-triaged after source PR 
 
 # ---- Step 1: gather the open `source-pr:<N>`-labeled follow-up issues --------
 # REST keeps this scan off the shared GraphQL rate-limit bucket (#1601).
-OPEN_JSON=$(gh_issue_list_rest --state open)
-if [[ $? -ne 0 ]]; then
+if ! OPEN_JSON=$(gh_issue_list_rest --state open); then
   # Cannot scan without the open-issue set — best-effort, exit 0.
   echo "dispatch-retriage-orphaned-followups: warning: gh_issue_list_rest --state open failed; skipping scan" >&2
   exit 0
@@ -94,21 +93,32 @@ for N in "${!PR_FOLLOWUPS[@]}"; do
   fi
 
   # ---- Step 3: park each open follow-up of this orphaned PR ------------------
+  ALL_PARKED=true
   for issue in ${PR_FOLLOWUPS[$N]}; do
     [[ -z "$issue" ]] && continue
     if ! "$SCRIPT_DIR/dispatch-apply-office-hours" "$issue" \
         "source PR #$N was closed unmerged — orphaned review finding; re-triage: close as moot or retarget to the shipped design on main"; then
       echo "dispatch-retriage-orphaned-followups: warning: dispatch-apply-office-hours failed for issue #$issue (source PR #$N)" >&2
+      ALL_PARKED=false
       continue
     fi
     echo "retriaged #$issue (source PR #$N closed unmerged)"
   done
 
+  # If any park failed, skip the idempotency marker so a future tick retries the
+  # unparked orphans. dispatch-apply-office-hours is idempotent, so re-running
+  # the already-succeeded parks on that retry is harmless; the per-PR marker
+  # still prevents re-processing once every orphan is parked.
+  if [[ "$ALL_PARKED" != "true" ]]; then
+    echo "dispatch-retriage-orphaned-followups: warning: not all follow-ups of PR #$N parked; deferring $RETRIAGED_LABEL marker for retry" >&2
+    continue
+  fi
+
   # ---- Mark the PR processed (idempotency key) ------------------------------
-  # Apply unconditionally after the issue loop — even if an individual park
-  # warned. dispatch-apply-office-hours is itself idempotent, so re-running a
-  # park is harmless; what must NOT happen is re-parking a resolved orphan on a
-  # later tick, which the per-PR marker prevents. Create-on-not-found mirrors
+  # Apply after all parks succeeded. dispatch-apply-office-hours is itself
+  # idempotent, so re-running a park is harmless; what must NOT happen is
+  # re-parking a resolved orphan on a later tick, which the per-PR marker
+  # prevents. Create-on-not-found mirrors
   # dispatch-apply-office-hours: capture the gh_retry call's COMBINED output
   # (2>&1 on the gh_retry invocation, since gh_retry forwards stderr to fd2 and
   # returns only stdout) so the `*"not found"*` match can fire.
