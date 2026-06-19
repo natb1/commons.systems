@@ -4926,6 +4926,51 @@ result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
 assert_eq "--priority-only depth-2 ancestor priority qualifies PR 20 (PO-ANC4)" "pr 20 20-leaf-pr fix-checks" "$result"
 teardown
 
+# PO-ANC5. Same fixture as PO-ANC2 but PR 20's rollup is PENDING, not FAILING.
+#           This exercises the CI-pending ancestor-priority WAITING_NUM FALLBACK
+#           path — the orthogonal case to PO-ANC1/PO-ANC2's *selection* assertions.
+#
+#           PR 20 qualifies for the priority tier (ci_rc path at line 849 checks
+#           --priority-only + inherited ancestor priority to enter WAITING_NUM arm).
+#           Its CI is pending (ci_rc==1), so it is NOT selectable. The selector
+#           emits `waiting <first-closing-issue-num>` from the fallback arm of the
+#           jq at dispatch-select-target:864-869:
+#
+#             ( map(.number|tostring|select(own-priority-label?)) | .[0] )
+#             // ( [.[].number|tostring] | .[0] )
+#             // empty
+#
+#           CRITICAL INVARIANT — do NOT change this: issue 101 carries ONLY
+#           [help wanted] and has NO own `priority` label. Priority comes solely
+#           from ancestor 100 (via parent-101.json). This is exactly what forces
+#           the jq FALLBACK arm: the first arm (select own priority-labeled issues)
+#           returns null because 101 is not directly priority-labeled, so the
+#           fallback `[.[].number|tostring]|.[0]` resolves to "101". If anyone
+#           adds `priority` to issue 101, the FIRST arm would fire and also return
+#           101 — the assertion would still pass while silently testing the WRONG
+#           branch. So 101 MUST stay non-priority. A broken fallback arm yields
+#           `empty` (no `waiting` line; the PR falls through), not `waiting 101`.
+#
+#           PR 10 (older, closes issue 200, $FAILING_ROLLUP) is dropped by the
+#           --priority-only early-skip guard (issue 200 has `bug` only, no priority,
+#           no ancestor with priority), proving the ancestor-priority PR is the only
+#           candidate and does not interfere with the waiting result.
+echo "Test: --priority-only — CI-pending ancestor priority → waiting fallback (PO-ANC5)"
+setup
+UNION='['
+UNION+="$(make_pr_union 10 "10-bug-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
+UNION+="$(make_pr_union 20 "20-leaf-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$PENDING_ROLLUP" '[{"number":101}]')"
+UNION+=']'
+setup_union_pr_list "$UNION"
+printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]},{"number":101,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf '100' > "$STUB_DIR/parent-101.json"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
+assert_eq "--priority-only CI-pending ancestor priority → waiting (fallback target) (PO-ANC5)" \
+  "waiting 101" "$result"
+teardown
+
 # PO3. main is red and no latch issue open → main-broken fires first, before the
 #      priority scan (the gate runs ahead of the ladder, same as default mode).
 echo "Test: --priority-only — main red, no latch → main-broken (gate first)"
