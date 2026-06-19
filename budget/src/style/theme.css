@@ -688,7 +688,7 @@ svg [aria-label="tip"] text { fill: #222; }
   display: inline-block;
   font-size: 0.7em;
   padding: 1px 5px;
-  border-radius: 3px;
+  border-radius: var(--radius-none);
   background: color-mix(in srgb, var(--fg) 10%, transparent);
   color: var(--fg);
   opacity: 0.7;
