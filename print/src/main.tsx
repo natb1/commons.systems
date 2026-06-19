@@ -7,59 +7,60 @@ import { renderHome, afterRenderHome, wireDownloadActions } from "./pages/home.j
 import { wireMarkdownActions } from "./markdown-actions.js";
 import { initLocalFolder } from "./local-folder-ui.js";
 import { renderView, afterRenderView, cleanupView, NOT_FOUND_HTML } from "./pages/view.js";
-import { renderAbout } from "./pages/about.js";
-import "@commons-systems/components/nav";
-import type { AppNavElement } from "@commons-systems/components/nav";
+import { createRoot, type Root } from "react-dom/client";
+import { AppNav } from "./components/AppNav.js";
+import { Hero } from "./pages/Hero.js";
+import { About } from "./pages/About.js";
 import { signIn, signOut, onAuthStateChanged } from "./auth.js";
 import type { User } from "./auth.js";
 import { setViewerEmail, markLocalFolderReady } from "./library.js";
 import { trackPageView } from "./firebase.js";
-import { renderHero } from "./pages/hero.js";
-import { mountHero } from "@commons-systems/components/hero";
 
-const navEl = document.getElementById("nav") as AppNavElement;
-if (!navEl) throw new Error("#nav element not found");
+const navMount = document.getElementById("nav");
+if (!navMount) throw new Error("#nav element not found");
 const app = document.getElementById("app");
 if (!app) throw new Error("#app element not found");
 
 const heroContainer = document.getElementById("hero-container") as HTMLElement;
 if (!heroContainer) throw new Error("#hero-container element not found");
-mountHero(heroContainer, renderHero);
-
-navEl.links = [
-  { href: "/", label: "Library" },
-  { href: "/about", label: "About" },
-];
-navEl.addEventListener("sign-in", () => signIn());
-navEl.addEventListener("sign-out", () => void signOut());
-
-// Insert the local-folder button into the nav, immediately before the
-// Login/user controls. Inserted as a sibling of .nav-auth (not inside it) so
-// the nav component's innerHTML rewrite on auth state change does not touch it.
-// The CSS rule `app-nav > .nav-links + * { margin-left: auto }` then pushes
-// this span (and .nav-auth) to the right.
-const navAuthEl = navEl.querySelector(".nav-auth");
-if (navAuthEl) {
-  const localFolderNavEl = document.createElement("span");
-  localFolderNavEl.id = "local-folder";
-  navEl.insertBefore(localFolderNavEl, navAuthEl);
-  initLocalFolder(localFolderNavEl, app, () => router.navigate())
-    .catch((err) => logError(err, { operation: "init-local-folder" }))
-    .finally(() => markLocalFolderReady());
-} else {
-  // No .nav-auth means the local-folder UI is never mounted, so initLocalFolder
-  // never runs to settle the readiness gate. Mark it ready here so renderView()
-  // for a local: id never hangs forever waiting on a promise that can't resolve.
-  markLocalFolderReady();
-}
+createRoot(heroContainer).render(<Hero />);
 
 let currentUser: User | null = null;
 
-// Show login UI immediately; onAuthStateChanged will update once auth resolves.
-navEl.user = null;
+// Childless mount node we own outright. AppNav injects it (opaquely) into the
+// ds Nav's `end` slot; initLocalFolder fills it imperatively below. Because the
+// node has no React children, React never re-touches its injected content, so
+// the local-folder button survives nav re-renders on auth state change.
+const localFolderSlot = document.createElement("span");
+localFolderSlot.id = "local-folder";
+
+const navRoot = createRoot(navMount);
+function renderNav() {
+  navRoot.render(
+    <AppNav
+      user={currentUser}
+      onSignIn={() => signIn()}
+      onSignOut={() => void signOut()}
+      localFolderSlot={localFolderSlot}
+    />,
+  );
+}
+renderNav();
+
+// Mount the local-folder UI once, after the nav's first render places the slot
+// in the DOM. We own the mount node, so this runs unconditionally.
+initLocalFolder(localFolderSlot, app, () => router.navigate())
+  .catch((err) => logError(err, { operation: "init-local-folder" }))
+  .finally(() => markLocalFolderReady());
 
 wireDownloadActions(app);
 wireMarkdownActions(app);
+
+// Generalized router→React page lifecycle. A page route renders an empty
+// `#page-root` placeholder (string), then mounts a React root into it in
+// afterRender. The previous page's root is unmounted in onNavigate, before the
+// router wipes the outlet's innerHTML.
+let currentPageRoot: Root | null = null;
 
 const router = createHistoryRouter(
   app,
@@ -84,10 +85,21 @@ const router = createHistoryRouter(
       },
       afterRender: (outlet) => afterRenderView(outlet, currentUser),
     },
-    { path: "/about", render: renderAbout },
+    {
+      path: "/about",
+      render: () => '<div id="page-root"></div>',
+      afterRender: (outlet) => {
+        const mount = outlet.querySelector("#page-root");
+        if (!mount) return;
+        currentPageRoot = createRoot(mount as HTMLElement);
+        currentPageRoot.render(<About />);
+      },
+    },
   ],
   {
     onNavigate: ({ path }) => {
+      currentPageRoot?.unmount();
+      currentPageRoot = null;
       cleanupView();
       trackPageView(path);
     },
@@ -101,7 +113,7 @@ const router = createHistoryRouter(
 
 onAuthStateChanged((user) => {
   currentUser = user;
-  navEl.user = user;
+  renderNav();
   heroContainer.hidden = user !== null;
   setViewerEmail(user?.email ?? null);
   router.navigate();
