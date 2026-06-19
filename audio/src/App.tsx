@@ -7,6 +7,8 @@ import { clearCache } from "./audio-cache.js";
 import { useRouter } from "./router.js";
 import { NavControls } from "./components/NavControls.js";
 import { RouteErrorBoundary } from "./components/RouteErrorBoundary.js";
+import { Player } from "./Player.js";
+import type { PlayerHandle } from "./player.js";
 import { Home } from "./pages/Home.js";
 import { About } from "./pages/About.js";
 
@@ -14,6 +16,7 @@ export function App() {
   const { path, navigate } = useRouter();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [open, setOpen] = useState(false);
+  const [playerHandle, setPlayerHandle] = useState<PlayerHandle | null>(null);
 
   // Auth state (ports main.ts:106-118). Sets currentUser immediately so the Nav
   // re-renders before any await; clears the cache once on sign-out.
@@ -112,7 +115,11 @@ export function App() {
       <div className="content-grid">
         <main id="app">
           <RouteErrorBoundary>
-            {activePath === "/about" ? <About /> : <Home user={currentUser} />}
+            {activePath === "/about" ? (
+              <About />
+            ) : (
+              <Home user={currentUser} player={playerHandle} />
+            )}
           </RouteErrorBoundary>
         </main>
         <aside
@@ -120,13 +127,9 @@ export function App() {
           className={open ? "sidebar open" : "sidebar"}
           ref={panelRef}
         >
-          {/* PERSISTENT player — Unit 4 replaces these placeholders with the
-              real React player. Lives outside the route switch so it never
-              remounts on navigation. */}
-          <div id="now-playing">
-            <p className="playlist-empty">Add tracks to queue</p>
-          </div>
-          <audio id="audio-player" controls />
+          {/* PERSISTENT player — lives outside the route switch so it never
+              remounts on navigation. The imperative engine owns its DOM. */}
+          <Player onReady={setPlayerHandle} />
         </aside>
       </div>
       <footer>

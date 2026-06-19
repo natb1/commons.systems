@@ -7,9 +7,11 @@ import type { User } from "../auth.js";
 import type { LibraryItem } from "../types.js";
 import { listLibrary } from "../library.js";
 import { formatDuration } from "../player.js";
+import type { PlayerHandle } from "../player.js";
 
 export interface HomeProps {
   user: User | null;
+  player: PlayerHandle | null;
 }
 
 type LibraryState =
