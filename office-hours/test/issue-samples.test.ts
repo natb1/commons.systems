@@ -54,6 +54,29 @@ describe("toIssueSample old-format migration", () => {
     expect(result.openOther).toBe(42);
     expect(result.groupId).toBe("group-abc");
   });
+
+  it("defaults missing openOther to 0 when folding openHelpWanted", () => {
+    // Old-format doc with openHelpWanted present but openOther absent. This
+    // exercises the silent-default-to-0 path in toIssueSample: the help-wanted
+    // total is the entire openOther bucket.
+    const oldDoc: Record<string, unknown> = {
+      sampledAt: Timestamp.fromDate(new Date("2026-06-07T10:00:00Z")),
+      openHelpWanted: 12,
+      groupId: "group-abc",
+      memberEmails,
+    };
+    const result = toIssueSample("auto-id", oldDoc);
+
+    expect(result).not.toBeNull();
+    if (result === null) return;
+
+    expect(result.openSecurity).toBe(0);
+    expect(result.openBug).toBe(0);
+    expect(result.openEnhancement).toBe(0);
+    // Help-wanted total is fully folded in; the absent openOther defaults to 0.
+    expect(result.openOther).toBe(12);
+    expect(result.groupId).toBe("group-abc");
+  });
 });
 
 describe("toIssueSample malformed-doc cases", () => {

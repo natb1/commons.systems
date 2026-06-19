@@ -47,7 +47,7 @@ export const issueSampleSeeds: IssueSampleSeed[] = [
     groupId: "demo-group",
     memberEmails: ["demo@example.com"],
   },
-  // Day -5.5 — small uptick (new issues filed) against the overall trend (total 56)
+  // Day -5.5 — deceleration: total drops only 1 vs the prior 2-3 per half-day (total 56)
   {
     sampledAtOffsetMin: -7920,
     openSecurity: 2,
