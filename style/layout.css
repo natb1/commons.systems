@@ -1,3 +1,16 @@
+/*
+ * Token dependency: this stylesheet uses var(--sidebar-width) for the two-column
+ * grid column width (at ≥768px) and the absolute-positioned sidebar width (at <768px).
+ * That token is defined in @commons-systems/ds/tokens/spacing.css and is provided
+ * transitively by @commons-systems/style/default.css. Consumers MUST import
+ * default.css (or otherwise load the ds spacing tokens) BEFORE importing layout.css.
+ *
+ * Without --sidebar-width, var(--sidebar-width) resolves to empty and the two-column
+ * layout collapses silently to 0 — no console error, just a broken grid.
+ *
+ * The scaffolding/firebase/templates/app template already imports default.css first,
+ * so new apps inherit the correct load order automatically.
+ */
 .content-grid {
   display: grid;
   grid-template-columns: 1fr;
