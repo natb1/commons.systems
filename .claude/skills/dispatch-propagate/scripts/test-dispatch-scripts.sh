@@ -4778,8 +4778,8 @@ printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 for i in 101 100 99 98 97 96 95; do
   printf '%d' $((i - 1)) > "$STUB_DIR/parent-$i.json"
 done
-result=$("$TMPDIR_TEST/dispatch-select-target" 2>"$TMPDIR_TEST/stderr.txt") && rc=0 || rc=$?
-stderr=$(cat "$TMPDIR_TEST/stderr.txt")
+result=$("$TMPDIR_TEST/dispatch-select-target" 2>"$TMPDIR_TEST/stderr") && rc=0 || rc=$?
+stderr=$(cat "$TMPDIR_TEST/stderr")
 assert_eq "deep-chain selection still exits 0" "0" "$rc"
 assert_eq "uncontested PR selected despite truncation" "pr 10 10-deep-chain-leaf fix-checks" "$result"
 assert_eq "truncation warning on stderr" "1" "$(grep -c 'ancestor chain deeper than supported depth (6) for issue 101' <<<"$stderr")"
@@ -4796,8 +4796,8 @@ printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 for i in 101 100 99 98 97 96; do
   printf '%d' $((i - 1)) > "$STUB_DIR/parent-$i.json"
 done
-result=$("$TMPDIR_TEST/dispatch-select-target" 2>"$TMPDIR_TEST/stderr.txt") && rc=0 || rc=$?
-stderr=$(cat "$TMPDIR_TEST/stderr.txt")
+result=$("$TMPDIR_TEST/dispatch-select-target" 2>"$TMPDIR_TEST/stderr") && rc=0 || rc=$?
+stderr=$(cat "$TMPDIR_TEST/stderr")
 assert_eq "depth-6 selection exits 0" "0" "$rc"
 assert_eq "uncontested PR selected at depth 6" "pr 10 10-deep-chain-leaf fix-checks" "$result"
 # Harness has no assert_not_contains; assert absence by counting matches.
