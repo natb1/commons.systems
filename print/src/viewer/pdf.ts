@@ -13,6 +13,13 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 // ---------------------------------------------------------------------------
 
 /**
+ * The subset of a pdf.js `getTextContent().items` entry that page
+ * reconstruction reads. Consolidated here so a future pdfjs-dist typed import
+ * can replace this one shape in a single place.
+ */
+type TextContentItem = { str?: string; hasEOL?: boolean };
+
+/**
  * An index-aligned layout for a reconstructed page: the plain `text` plus, for
  * each input item, the half-open `[start, start+length)` slice of `text` it
  * occupies. `items` is index-aligned with the source `getTextContent().items`
@@ -39,7 +46,7 @@ export interface PageLayout {
  * the stored offsets are byte-identical to the pre-separator behaviour.
  */
 export function reconstructPage(
-  items: ReadonlyArray<{ str?: string; hasEOL?: boolean }>,
+  items: ReadonlyArray<TextContentItem>,
 ): PageLayout {
   let text = "";
   const layout: { start: number; length: number }[] = [];
@@ -324,7 +331,7 @@ export function createPdfRenderer(onError?: (err: unknown) => void): SearchableR
     // layout.items stays index-aligned with tl.textDivs. hasEOL is read from
     // textContent.items (the source), not from the rendered TextLayer.
     const layout = reconstructPage(
-      textContent.items as { str?: string; hasEOL?: boolean }[],
+      textContent.items as TextContentItem[],
     );
 
     targetDiv.replaceChildren();
@@ -667,7 +674,7 @@ export function createPdfRenderer(onError?: (err: unknown) => void): SearchableR
             throw err;
           }
           if (destroyed) return results;
-          layout = reconstructPage(tc.items as { str?: string; hasEOL?: boolean }[]);
+          layout = reconstructPage(tc.items as TextContentItem[]);
           pageLayoutCache.set(i, layout);
         }
 

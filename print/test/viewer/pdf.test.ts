@@ -118,6 +118,15 @@ describe("reconstructPage", () => {
     ]);
   });
 
+  it("inserts a space separator after a hasEOL item, excluded from item ranges", () => {
+    const layout = reconstructPage([{ str: "foo", hasEOL: true }, { str: "bar" }]);
+    expect(layout.text).toBe("foo bar");
+    expect(layout.items).toEqual([
+      { start: 0, length: 3 },
+      { start: 4, length: 3 },
+    ]);
+  });
+
   it("marked-content items (no str key) contribute empty string", () => {
     // {} has no `str` property; should not throw and contributes ""
     const layout = reconstructPage([{ str: "a" }, {}, { str: "b" }]);
