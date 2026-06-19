@@ -1,4 +1,7 @@
 @import "@commons-systems/style/default.css";
+@import "@commons-systems/ds/tokens/colors.css";
+@import "@commons-systems/ds/tokens/typography.css";
+@import "@commons-systems/ds/tokens/spacing.css";
 @import "@commons-systems/style/hero.css";
 @import "./viewer.css";
 
@@ -22,32 +25,32 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0.5rem 0;
-  border-bottom: 1px solid var(--muted-fg, #888);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--muted);
 }
 
 .media-info {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-2);
   flex-wrap: wrap;
 }
 
 .media-title {
-  font-weight: 700;
+  font-weight: var(--weight-bold);
 }
 
 .media-badge {
   display: inline-block;
   padding: 0.1rem 0.4rem;
-  font-size: 0.75rem;
-  border: 1px solid var(--muted-fg, #888);
+  font-size: var(--text-xs);
+  border: 1px solid var(--muted);
   border-radius: 3px;
 }
 
 .media-actions {
   display: flex;
-  gap: 0.25rem;
+  gap: var(--space-1);
   align-items: center;
 }
 
@@ -57,7 +60,7 @@
   background: none;
   border: none;
   font-size: 1.2rem;
-  padding: 0.25rem;
+  padding: var(--space-1);
   text-decoration: none;
   color: inherit;
 }
@@ -68,9 +71,9 @@
 }
 
 .download-error {
-  color: var(--error-fg, #c00);
-  font-size: 0.85rem;
-  margin: 0.25rem 0 0;
+  color: var(--error);
+  font-size: var(--text-sm);
+  margin: var(--space-1) 0 0;
 }
 
 /* Local-folder items + controls */
@@ -90,13 +93,13 @@
 .local-folder-button {
   cursor: pointer;
   padding: 0.4rem 0.8rem;
-  font-size: 0.9rem;
-  border: 1px solid var(--muted-fg, #888);
+  font-size: var(--text-sm);
+  border: 1px solid var(--muted);
   border-radius: 3px;
   background: none;
   color: inherit;
 }
 
 .local-folder-button:hover {
-  border-color: var(--fg, #ddd);
+  border-color: var(--fg);
 }
