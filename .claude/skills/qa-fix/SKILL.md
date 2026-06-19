@@ -715,8 +715,20 @@ Otherwise run all steps in order.
       invocation. After each invocation, increment by `1` **only** when the
       invocation hands control back per its Step 4 (the unit's commit landed
       cleanly). Do **not** increment when an invocation errors, dies, or returns
-      without a landed commit. This tally feeds `--fixes-applied` in Step 5
-      (replacing the planned `units.length`).
+      without a landed commit. This tally feeds `--fixes-applied` in item 5 of
+      this path (the outcome envelope call, below — replacing the planned
+      `units.length`).
+
+      **If `fixes_applied_count == 0` after the loop** (every `/implement-unit`
+      invocation errored, died, or returned without a landed commit), do **NOT**
+      continue down this fix finalize path — its outcome envelope hard-codes
+      `--disposition completed_with_fixes`, which the `outcome-envelope.md`
+      contract defines as "the phase finished and applied one or more fixes."
+      Emitting it with `fixes_applied = 0` violates the contract and corrupts
+      downstream hit-rate metrics. Instead take the **escalate finalize path**
+      below with a `terminated_reason` of `fix-pass-landed-nothing` (all planned
+      opus-fixable units failed to land a commit). This restores the implicit
+      guard that held when the value was the planned `units.length` (always ≥ 1).
    2. Run **Step 4** (post the PR-comment summary; its disposition section uses the
       **fixing-pass** prose — see Step 4).
    3. Run **Step 5** (cleanup — it self-guards and no-ops if the QA server never
@@ -763,14 +775,16 @@ Otherwise run all steps in order.
       ```
    6. **STOP.**
 
-   **Escalate finalize path** (cap reached, scope-deviation, planning-failed, or
-   the gate printed `escalate`):
+   **Escalate finalize path** (cap reached, scope-deviation, planning-failed,
+   fix-pass-landed-nothing, or the gate printed `escalate`):
    1. Run **Step 4** (post the PR-comment summary; non-fixing-pass / escalation
       prose).
    2. Run **Step 5** (cleanup — self-guards).
    3. Escalate per the **Escalation** section (`dispatch-mark-deviation`), tailored
       to the reason that fired (cap reached / scope-deviation with
-      `deviation_reason` / planning-failed).
+      `deviation_reason` / planning-failed / fix-pass-landed-nothing — every
+      planned opus-fixable unit failed to land a commit, so `fixes_applied_count`
+      stayed `0`).
    4. **STOP.**
 
    **CRITICAL invariants — state and obey these:**
@@ -848,12 +862,20 @@ Otherwise run all steps in order.
 
      The remaining terminal-behavior prose is **conditional** on which Step-3.7 path
      this pass took:
-     - **Fixing pass** (Step 3.7 took the fix finalize path): say which items were
-       fixed and which were deferred — e.g. **"Fixed this pass: \<opus-fixable
-       items>; deferred to re-QA: \<needs-human items>; filed as follow-ups:
-       \<needs-main items>."** The fixed commits restart CI and the chain re-QAs once
-       it passes; the deferred `needs-human` items re-surface on a later pass, while
-       the `needs-main` items were already filed in Step 3.6.
+     - **Fixing pass** (Step 3.7 took the fix finalize path): say which items
+       actually landed and which were deferred. List only the items confirmed
+       landed by the `fixes_applied_count` tally — **not** the full planned
+       opus-fixable set — so the PR comment matches the outcome envelope's
+       `fixes_applied`. Any opus-fixable unit whose `/implement-unit` invocation
+       did not reach its Step 4 (errored, died, or returned without a landed
+       commit, so it was not counted) goes in a separate "failed to land" list,
+       not the fixed list — e.g. **"Fixed this pass: \<opus-fixable items where
+       /implement-unit landed a commit, i.e. counted in fixes_applied_count>;
+       failed to land: \<opus-fixable items where /implement-unit did not reach
+       its Step 4>; deferred to re-QA: \<needs-human items>; filed as follow-ups:
+       \<needs-main items>."** The fixed commits restart CI and the chain re-QAs
+       once it passes; the deferred `needs-human` items re-surface on a later
+       pass, while the `needs-main` items were already filed in Step 3.6.
      - **Non-fixing pass** (no opus-fixable items, so residue escalates; or the
        Step-3.7 escalate finalize path fired) — keep the existing escalation
        framing: every `opus-fixable`/`needs-human` residue item escalates to
@@ -1062,7 +1084,8 @@ This Escalation section is the funnel for **two kinds** of escalate route, which
 differ in whether the Step-3.5 Workflow ran — source the counts accordingly:
 
 - **Step-3.5 ran** (the Step-3.7 escalate-finalize path: cap reached,
-  scope-deviation, or planning-failed) — `result` is in scope. Use
+  scope-deviation, planning-failed, or fix-pass-landed-nothing) — `result` is in
+  scope. Use
   `result.findings_surfaced` / `result.findings_actionable`; `fixes-applied 0` and
   `followups-filed` = the Step-3.6 newly-filed count (the escalate path applied no
   fixes); `subagents-launched` = `result.subagents_launched` + 1 (Step-2b triage)
