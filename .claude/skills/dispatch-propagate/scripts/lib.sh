@@ -1654,18 +1654,26 @@ EOF
   fi
 
   # Write each unit atomically only when its content differs: temp file in the
-  # same dir, then mv into place.
+  # same dir (umask 077 so the temp file is 0600 during write), chmod 0644 before
+  # mv so systemd can read the installed unit.
+  local old_umask
+  old_umask=$(umask)
+
   if [ ! -f "$SERVICE_PATH" ] || [ "$(cat "$SERVICE_PATH")" != "$desired_service" ]; then
     local tmp_service
+    umask 077
     tmp_service=$(mktemp "$UNIT_DIR/.dispatch-heartbeat.service.XXXXXX") || {
+      umask "$old_umask"
       echo "WARNING: ensure_heartbeat_units: could not create temp file in $UNIT_DIR; periodic heartbeat unavailable" >&2
       return 1
     }
+    umask "$old_umask"
     if ! printf '%s\n' "$desired_service" > "$tmp_service"; then
       echo "WARNING: ensure_heartbeat_units: failed to write $tmp_service; periodic heartbeat unavailable" >&2
       rm -f "$tmp_service"
       return 1
     fi
+    chmod 0644 "$tmp_service"
     if ! mv "$tmp_service" "$SERVICE_PATH"; then
       echo "WARNING: ensure_heartbeat_units: failed to install $SERVICE_PATH; periodic heartbeat unavailable" >&2
       rm -f "$tmp_service"
@@ -1675,15 +1683,19 @@ EOF
 
   if [ ! -f "$TIMER_PATH" ] || [ "$(cat "$TIMER_PATH")" != "$desired_timer" ]; then
     local tmp_timer
+    umask 077
     tmp_timer=$(mktemp "$UNIT_DIR/.dispatch-heartbeat.timer.XXXXXX") || {
+      umask "$old_umask"
       echo "WARNING: ensure_heartbeat_units: could not create temp file in $UNIT_DIR; periodic heartbeat unavailable" >&2
       return 1
     }
+    umask "$old_umask"
     if ! printf '%s\n' "$desired_timer" > "$tmp_timer"; then
       echo "WARNING: ensure_heartbeat_units: failed to write $tmp_timer; periodic heartbeat unavailable" >&2
       rm -f "$tmp_timer"
       return 1
     fi
+    chmod 0644 "$tmp_timer"
     if ! mv "$tmp_timer" "$TIMER_PATH"; then
       echo "WARNING: ensure_heartbeat_units: failed to install $TIMER_PATH; periodic heartbeat unavailable" >&2
       rm -f "$tmp_timer"
