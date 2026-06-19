@@ -674,7 +674,7 @@ svg [aria-label="tip"] text { fill: #222; }
 }
 
 .variance-positive {
-  color: var(--variance-positive);
+  color: var(--positive);
 }
 
 .variance-negative {
