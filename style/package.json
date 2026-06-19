@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "dependencies": {
+    "@commons-systems/ds": "*"
+  },
   "scripts": {
     "lint": "echo 'CSS-only package, nothing to lint'"
   },
