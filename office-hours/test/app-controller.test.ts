@@ -43,6 +43,7 @@ const queueMetricsFixture = {
 
 const reminders: Reminder[] = [
   {
+    kind: "reminder",
     jitKey: "jit-weekly-review",
     title: "weekly-review",
     repo: "natb1/office-hours-test",

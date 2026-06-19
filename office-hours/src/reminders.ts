@@ -1,10 +1,24 @@
 export interface Reminder {
+  kind: "reminder";
   jitKey: string;
   title: string;
   repo: string;
   issueNumber: number;
   dueAt: Date;
 }
+
+export interface MergePrItem {
+  kind: "merge-pr";
+  title: string;
+  repo: string;
+  issueNumber: number;
+  prTitle: string;
+  prUrl: string;
+  prNumber: number;
+  prRepo: string;
+}
+
+export type OfficeHoursItem = Reminder | MergePrItem;
 
 const MINUTE = 60_000;
 const HOUR = 3_600_000;

@@ -10,21 +10,21 @@ import { getDemoIssueSamples } from "./issue-data.js";
 import { renderAuditAggregateChart } from "./audit-aggregate-chart.js";
 import { getDemoAuditAggregates } from "./audit-data.js";
 import { selectLatestSample, type UsageSample } from "./usage-samples.js";
-import type { Reminder } from "./reminders.js";
+import type { OfficeHoursItem, Reminder } from "./reminders.js";
 import type { QueueMetricsSnapshot } from "./queue-metrics.js";
 import type { IssueSample } from "./issue-samples.js";
 import type { AuditAggregate } from "./audit-aggregates.js";
 
 export type ViewState =
   | { tier: "demo" }                                                  // unauthenticated → labeled demo
-  | { tier: "owner"; samples: UsageSample[]; reminders: Reminder[]; queueMetrics: QueueMetricsSnapshot | null; issueSamples: IssueSample[]; auditAggregates: AuditAggregate[] }  // authenticated → real (possibly empty)
+  | { tier: "owner"; samples: UsageSample[]; reminders: OfficeHoursItem[]; queueMetrics: QueueMetricsSnapshot | null; issueSamples: IssueSample[]; auditAggregates: AuditAggregate[] }  // authenticated → real (possibly empty)
   | { tier: "error" };                                                // authenticated load failed
 
 type PanelTier = "demo" | "owner";
 
 interface PanelContext {
   samples: UsageSample[];
-  reminders: Reminder[];
+  reminders: OfficeHoursItem[];
   queueMetrics: QueueMetricsSnapshot | null;
   issueSamples: IssueSample[];
   auditAggregates: AuditAggregate[];
@@ -104,7 +104,7 @@ const PANELS: readonly Panel[] = [
     title: "Reminders",
     availableIn: ["demo", "owner"],
     timeSensitive: true,
-    load: (c) => c.reminders,
+    load: (c) => c.reminders.filter((r): r is Reminder => r.kind === "reminder"),
     render: (r, now) => renderReminderList(r, now),
   }),
   definePanel({

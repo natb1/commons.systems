@@ -9,6 +9,7 @@ describe("sortByDueAscending", () => {
   const now = new Date("2026-01-01T12:00:00Z");
 
   const makeReminder = (jitKey: string, offsetMs: number) => ({
+    kind: "reminder" as const,
     jitKey,
     title: `Reminder ${jitKey}`,
     repo: "natb1/office-hours-nate",
