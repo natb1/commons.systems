@@ -1,0 +1,175 @@
+#!/usr/bin/env bash
+# Net code-erosion finder: flag the structural decay a PR introduces vs main.
+# Usage: printf '%s\n' path/to/file ... | dispatch-review-erosion [MERGE_BASE]
+#        (MERGE_BASE may also be supplied via the MERGE_BASE env var.)
+#
+# Reads the newline-separated changed-file list on stdin (the same feed as
+# dispatch-security-surface). Computes two OBJECTIVE structural metrics against
+# each changed file's pre-PR state (git show "$MERGE_BASE":<file>) and emits
+# ONLY the NET increase the PR introduces:
+#   - per-function cyclomatic complexity (eslint `complexity` rule, threshold 0)
+#   - code duplication (jscpd clone count / duplicated-line percentage)
+# Prints {"findings":[ ... ]} to stdout, each entry in the Per-finding schema of
+# .claude/workflows/review-fix.js (lines 62-99) with Source="erosion". No net
+# increase → {"findings":[]}. Stateless: "net vs origin/main" is the entire
+# signal, recomputed each run — no persisted series.
+#
+# v1 LIMITATION (AC1 "code-surface"): TS/JS only. A bash-only or docs PR yields
+# no erosion findings — the repo's ~100 bash scripts under .claude/ are out of
+# scope for v1. The language-scope filter below drops every non-TS/JS path.
+#
+# SANDBOX: the duplication metric runs `npx jscpd` (pinned to the pure-JS 3.x
+# line — see the VERSION PIN note at the jscpd section), which downloads from
+# the npm registry on first use. Per .claude/rules/sandbox.md that needs
+# `dangerouslyDisableSandbox: true` on the CALLER's Bash invocation (the
+# review-fix SKILL.md Step 1 wiring, Unit 2) — the override lives on the caller,
+# not in this script. The complexity metric uses the repo's installed eslint at
+# node_modules/.bin/eslint (NOT npx) and needs no override.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ESLINT_CONFIG="$SCRIPT_DIR/dispatch-review-erosion-eslint.config.mjs"
+DIFF_SIDECAR="$SCRIPT_DIR/dispatch-review-erosion-diff.mjs"
+ESLINT_BIN="node_modules/.bin/eslint"
+
+# --- merge base: positional arg overrides env var ---------------------------
+MERGE_BASE="${1:-${MERGE_BASE:-}}"
+if [[ -z "$MERGE_BASE" ]]; then
+  echo "dispatch-review-erosion: MERGE_BASE required (positional arg or env var)" >&2
+  exit 1
+fi
+
+if [[ ! -x "$ESLINT_BIN" ]]; then
+  echo "dispatch-review-erosion: eslint not found at $ESLINT_BIN — run from repo root" >&2
+  exit 1
+fi
+
+# --- read stdin, apply language-scope filter --------------------------------
+# Keep only TS/JS source extensions. Everything else (bash, docs, go, ...) is
+# out of scope for v1.
+LANG_RE='\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$'
+
+paths=()
+while IFS= read -r line; do
+  [[ -z "${line//[[:space:]]/}" ]] && continue
+  [[ "$line" =~ $LANG_RE ]] || continue
+  paths+=("$line")
+done
+
+if [[ ${#paths[@]} -eq 0 ]]; then
+  echo '{"findings":[]}'
+  exit 0
+fi
+
+# --- HEAD-existence filter ---------------------------------------------------
+# A PR may DELETE or RENAME a .ts/.js file: the path is still in the changed
+# list and passes the language filter, but no HEAD working-tree copy exists.
+# eslint emits empty stdout for a missing file, which would break the sidecar's
+# JSON.parse. A deletion is a complexity DECREASE, never erosion, so drop
+# HEAD-absent paths from the metric runs (their pre-PR blob is irrelevant
+# without a HEAD counterpart). Keep this list for the eslint/jscpd HEAD runs.
+head_paths=()
+for path in "${paths[@]}"; do
+  [[ -f "$path" ]] && head_paths+=("$path")
+done
+
+if [[ ${#head_paths[@]} -eq 0 ]]; then
+  echo '{"findings":[]}'
+  exit 0
+fi
+
+# --- baseline materialization (repo-local temp dir) -------------------------
+# eslint v9 refuses files outside the project base path, so the baseline tree
+# MUST live inside the repo — `mktemp -d -p .`, not $TMPDIR.
+BASELINE_DIR="$(mktemp -d -p . .erosion-baseline.XXXXXX)"
+# A jscpd report dir per tree (also repo-local is fine; kept beside baseline).
+JSCPD_HEAD_DIR="$(mktemp -d -p . .erosion-jscpd-head.XXXXXX)"
+JSCPD_BASE_DIR="$(mktemp -d -p . .erosion-jscpd-base.XXXXXX)"
+trap 'rm -rf "$BASELINE_DIR" "$JSCPD_HEAD_DIR" "$JSCPD_BASE_DIR"' EXIT
+
+# Materialize each in-scope HEAD-present file's pre-PR blob into the baseline
+# tree, preserving relative paths. Files ABSENT in the baseline (added by the
+# PR) are skipped — they have no net-vs-main baseline and must not crash under
+# set -e (correction 3): guard with `git cat-file -e`.
+baseline_paths=()
+for path in "${head_paths[@]}"; do
+  if git cat-file -e "$MERGE_BASE":"$path" 2>/dev/null; then
+    mkdir -p "$BASELINE_DIR/$(dirname "$path")"
+    git show "$MERGE_BASE":"$path" > "$BASELINE_DIR/$path"
+    baseline_paths+=("$BASELINE_DIR/$path")
+  fi
+done
+
+# --- complexity metric (eslint) ---------------------------------------------
+# eslint exits non-zero whenever it reports a violation — and at threshold 0
+# every function "violates" — so capture+parse the JSON regardless of exit code
+# (|| true). The sidecar diffs the two reports.
+ESLINT_HEAD_JSON="$JSCPD_HEAD_DIR/.eslint-head.json"
+ESLINT_BASE_JSON="$JSCPD_BASE_DIR/.eslint-base.json"
+
+eslint_run() {
+  # $@ = file paths to lint; empty list ⇒ emit an empty report. eslint exits
+  # non-zero on reported violations; capture stdout regardless. If stdout is
+  # empty for any reason (e.g. a path eslint declines to lint), normalize to a
+  # valid empty JSON array so the sidecar's JSON.parse never sees "".
+  if [[ $# -eq 0 ]]; then
+    echo '[]'
+    return 0
+  fi
+  local out
+  out="$("$ESLINT_BIN" --config "$ESLINT_CONFIG" --no-config-lookup --no-ignore \
+    --format json "$@" 2>/dev/null || true)"
+  [[ -n "$out" ]] && printf '%s\n' "$out" || echo '[]'
+}
+
+eslint_run "${head_paths[@]}"     > "$ESLINT_HEAD_JSON"
+eslint_run "${baseline_paths[@]}" > "$ESLINT_BASE_JSON"
+
+# --- duplication metric (jscpd) ---------------------------------------------
+# jscpd's json reporter does NOT print to stdout — it writes
+# <output-dir>/jscpd-report.json (correction 4). Run it over the HEAD changed
+# files and (separately) the materialized baseline files, then hand both report
+# paths to the sidecar. jscpd may exit non-zero when it finds clones; tolerate
+# the EXIT CODE but require the report FILE to appear.
+#
+# VERSION PIN — `jscpd@3.5.10`: the spec named a bare `npx jscpd`, but jscpd v4+
+# ships a native Rust `cpd` binary that a NixOS host (this repo's dev/dispatch
+# environment) cannot run ("NixOS cannot run dynamically linked executables").
+# /review-fix runs inline in dispatch Claude sessions on that same host, so a
+# bare `npx jscpd` would silently never produce a duplication finding here. The
+# 3.x line is pure JS, runs on NixOS, and writes the identical
+# statistics.total.{clones,duplicatedLines,percentage} the sidecar reads. Unit
+# 3's "bash spec sync" should reconcile this pin with the spec text.
+JSCPD="jscpd@3.5.10"
+
+# Fail LOUDLY if the report file never materializes (per
+# .claude/rules/code-style.md): a missing jscpd report is a misconfigured
+# environment, NOT zero duplication. Silently substituting a zero report would
+# hide a real regression as a clean PR.
+run_jscpd() {
+  # $1 = output dir; $2.. = files
+  local outdir="$1"; shift
+  npx --yes "$JSCPD" --reporters json --output "$outdir" --silent "$@" \
+    >/dev/null 2>&1 || true
+  if [[ ! -f "$outdir/jscpd-report.json" ]]; then
+    echo "dispatch-review-erosion: jscpd produced no report in $outdir — is $JSCPD runnable on this host? (NixOS needs the pure-JS 3.x line)" >&2
+    exit 1
+  fi
+}
+
+run_jscpd "$JSCPD_HEAD_DIR" "${head_paths[@]}"
+JSCPD_HEAD_JSON="$JSCPD_HEAD_DIR/jscpd-report.json"
+
+JSCPD_BASE_ARGS=()
+if [[ ${#baseline_paths[@]} -gt 0 ]]; then
+  run_jscpd "$JSCPD_BASE_DIR" "${baseline_paths[@]}"
+  JSCPD_BASE_ARGS=(--jscpd-base "$JSCPD_BASE_DIR/jscpd-report.json")
+fi
+
+# --- diff + emit findings ----------------------------------------------------
+node "$DIFF_SIDECAR" \
+  --eslint-head "$ESLINT_HEAD_JSON" \
+  --eslint-base "$ESLINT_BASE_JSON" \
+  --jscpd-head "$JSCPD_HEAD_JSON" \
+  "${JSCPD_BASE_ARGS[@]}" \
+  --baseline-dir "$BASELINE_DIR"
