@@ -26,10 +26,11 @@
 # Downgrade rule (applied in order; first matching branch wins):
 #
 #   planned_deferral == true  (issue #1891 — FIRST branch, before everything)
-#     → final_class = "needs-human", verify = "n/a"
+#     → final_class = "needs-main", verify = "n/a"
 #       (planned-deferral residue: criterion non-assertable at merge time, so it
-#       is authoritatively needs-human and never auto-fixable — regardless of
-#       the class the classify agent assigned. Must precede the
+#       is authoritatively needs-main and never auto-fixable — regardless of
+#       the class the classify agent assigned. needs-main items are filed as
+#       blocked_by follow-ups in Step 3.6. Must precede the
 #       class != "needs-human" pass-through or an opus-fixable planned-deferral
 #       item would slip through and re-enter the auto-fix loop)
 #
@@ -89,11 +90,13 @@ jq '
       if ($item.planned_deferral // false) == true then
         # Planned-deferral residue item (issue #1891): its acceptance criterion is
         # documented as non-assertable at merge time, so it is authoritatively
-        # needs-human and never auto-fixable. FIRST branch — fires regardless of
+        # needs-main and never auto-fixable. FIRST branch — fires regardless of
         # the class the classify agent assigned, symmetric with the aesthetic
         # bypass below; placing it after the `class != "needs-human"` pass-through
         # would let an opus-fixable planned-deferral item reintroduce the auto-fix loop.
-        $item + {final_class: "needs-human", verify: "n/a"}
+        # needs-main items are filed as blocked_by follow-ups in Step 3.6 — never
+        # auto-fixed, never skeptic-downgraded.
+        $item + {final_class: "needs-main", verify: "n/a"}
 
       elif $item.class == "already-satisfied" then
         # Already-satisfied: the criterion is already provably met by evidence the
