@@ -15267,13 +15267,24 @@ STUB
   # isolation would write to the real ~/.config/systemd/user/ and run a real
   # `systemctl --user daemon-reload`. Redirect the unit dir into the tmp tree
   # and point its systemctl at a no-op stub so daemon-reload is harmless.
-  cat > "$TMPDIR_TEST/bin/systemctl" <<'STUB'
+  cat > "$TMPDIR_TEST/bin/systemctl" <<STUB
 #!/usr/bin/env bash
-exit 0
+# subcommand-aware systemctl stub (#2013). Find the first non-flag arg.
+sub=""
+for a in "\$@"; do
+  case "\$a" in --*) ;; *) sub="\$a"; break ;; esac
+done
+echo "\$*" >> "$TMPDIR_TEST/systemctl-log"
+case "\$sub" in
+  is-failed)    exit "\${ST_IS_FAILED_RC:-1}" ;;
+  reset-failed) exit 0 ;;
+  *)            exit 0 ;;
+esac
 STUB
   chmod +x "$TMPDIR_TEST/bin/systemctl"
   export DISPATCH_RECOVER_UNIT_DIR="$TMPDIR_TEST/systemd-user"
   export DISPATCH_RECOVER_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/systemctl"
+  export DISPATCH_SPAWN_TICK_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/systemctl"
 }
 
 st_teardown() {
@@ -15282,6 +15293,7 @@ st_teardown() {
   unset DISPATCH_SPAWN_TICK_SYSTEMD_RUN_CMD
   unset DISPATCH_SPAWN_TICK_MAIN_WORKTREE
   unset DISPATCH_RECOVER_UNIT_DIR DISPATCH_RECOVER_SYSTEMCTL_CMD
+  unset DISPATCH_SPAWN_TICK_SYSTEMCTL_CMD ST_IS_FAILED_RC
 }
 
 # --- Test 1: no-arg launch → spawned, exit 0, correct argv -------------------
@@ -15391,6 +15403,33 @@ if [[ ! -e "$TMPDIR_TEST/systemd-log" ]]; then
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: bad-target-nonnum: no systemd-run invocation recorded"
   echo "    log: $(cat "$TMPDIR_TEST/systemd-log")"
+fi
+st_teardown
+
+# --- Test 7: a stale failed unit is reset-failed, then the tick spawns --------
+
+echo "Test: a pre-existing failed dispatch-tick unit yields a spawned tick (not a silent deduped), and reset-failed was called (#2013)"
+st_setup
+export ST_IS_FAILED_RC=0
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-tick" 2>/dev/null); then rc=0; else rc=$?; fi
+unset ST_IS_FAILED_RC
+assert_eq "failed-unit: dispatch-spawn-tick exits 0" "0" "$rc"
+assert_eq "failed-unit: stdout is 'spawned' (not deduped)" "spawned" "$out"
+sclog=$(cat "$TMPDIR_TEST/systemctl-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$sclog" == *"reset-failed dispatch-tick.service"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: failed-unit: reset-failed dispatch-tick.service was called"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: failed-unit: reset-failed dispatch-tick.service was called"
+  echo "    systemctl-log: $sclog"
+fi
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ -e "$TMPDIR_TEST/systemd-log" && "$log" == *"--unit=dispatch-tick"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: failed-unit: the launch happened (--unit=dispatch-tick recorded)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: failed-unit: the launch happened (--unit=dispatch-tick recorded)"
+  echo "    log: $log"
 fi
 st_teardown
 

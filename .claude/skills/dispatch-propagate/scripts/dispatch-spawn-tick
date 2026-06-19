@@ -26,6 +26,12 @@
 #   so the fixed name frees for the next tick. Without --collect a non-zero
 #   dispatch-tick exit would leave a lingering failed unit and the next
 #   `--unit=dispatch-tick` would collide forever — wedging all future ticks.
+#   --collect does not always GC a failed unit empirically (#2013), so before
+#   each launch we also `reset-failed` the unit name when `is-failed` reports
+#   it stale — the robust belt-and-suspenders that frees the name and lets the
+#   chain self-heal even when --collect leaves the failed unit behind. The
+#   `is-failed` gate leaves a genuinely running tick untouched, preserving the
+#   intentional `deduped` collision for a real in-flight tick.
 #
 # OnFailure recovery (#1150):
 #   Before launching, ensure_recover_unit (lib.sh) idempotently installs the
@@ -97,6 +103,8 @@
 # Environment overrides for testability (mirroring dispatch-schedule-reseed):
 #   DISPATCH_SPAWN_TICK_SYSTEMD_RUN_CMD  The `systemd-run` binary. Default:
 #                                        `systemd-run`.
+#   DISPATCH_SPAWN_TICK_SYSTEMCTL_CMD    The `systemctl` binary. Default:
+#                                        `systemctl`.
 #   DISPATCH_SPAWN_TICK_MAIN_WORKTREE    The main worktree path. When set, the
 #                                        script does NOT require a git repo.
 #                                        Default: <project-root>/worktrees/main,
@@ -163,6 +171,7 @@ ensure_recover_unit "$MAIN_WORKTREE" || true
 ensure_daemon_service || true
 
 SYSTEMD_RUN_CMD="${DISPATCH_SPAWN_TICK_SYSTEMD_RUN_CMD:-systemd-run}"
+SYSTEMCTL_CMD="${DISPATCH_SPAWN_TICK_SYSTEMCTL_CMD:-systemctl}"
 TICK_PATH="$MAIN_WORKTREE/.claude/skills/dispatch-propagate/scripts/dispatch-tick"
 
 # Fixed unit name — the dedup mechanism (see header). `dispatch-tick` when no
@@ -174,6 +183,18 @@ else
 fi
 
 # ---- Step 2: launch the transient unit immediately --------------------------
+# Free the fixed unit name from a lingering failed/inactive transient unit.
+# --collect is supposed to GC a failed transient unit, but empirically does
+# not always (#2013): a failed dispatch-tick unit can linger indefinitely and
+# then collide forever, silently wedging every launch. is-failed gates this so
+# a genuinely running tick is untouched (its --unit collision still yields the
+# intentional `deduped` below); reset-failed only clears a unit in the failed
+# state. Best-effort: systemctl may be absent on a degraded host — never abort
+# the launch on its account.
+if "$SYSTEMCTL_CMD" --user is-failed --quiet "$UNIT_NAME.service" 2>/dev/null; then
+  "$SYSTEMCTL_CMD" --user reset-failed "$UNIT_NAME.service" >/dev/null 2>&1 || true
+fi
+
 RUN_STDERR=$(mktemp)
 trap 'rm -f "$RUN_STDERR"' EXIT
 # Capture the exit code directly — after `if cmd; then ... fi`, `$?` is the exit
