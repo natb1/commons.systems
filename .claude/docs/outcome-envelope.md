@@ -153,6 +153,13 @@ source 2 before calling the emit script. The emitted value is the total.
 - Only top-level worker sessions emit. The reader excludes subagent transcripts,
   so a subagent that happens to print the marker does not produce a stray
   envelope.
+- **Strict count validation**: an envelope that parses as JSON but is missing
+  any of the three rate-feeding counts — `findings_surfaced`,
+  `findings_actionable`, `fixes_applied` (each non-nullable here) — is null-ified
+  and treated as **absent**, exactly like a session with no envelope. The reader
+  never coerces a partial envelope into a zero-count object, so a partial
+  envelope can never produce a fabricated `0` rate. (`followups_filed` and
+  `subagents_launched` are not validated this way — they do not feed any rate.)
 
 ## Adoption recipe for a new phase
 

@@ -473,5 +473,65 @@ assert_eq "P4 stdout pure JSON (no leak): valid JSON" "object" \
 assert_eq "P4 stdout pure JSON (no leak): token absent" "0" \
   "$(grep -c 'LEAKED-DOCID' <<<"$OUT_P4" || true)"
 
+# ---------------------------------------------------------------------------
+# Partial-envelope null-ification (#1909). ISOLATED fixture: a fresh projects
+# root with ONE non-subagent worker session whose envelope OMITS the required
+# count key `findings_surfaced` (otherwise well-formed). The reader must treat
+# this partial envelope as ABSENT (outcome:null) — never coerce the missing
+# count to a zero, which rate()'s `($num // 0)` would otherwise turn into a
+# fabricated 0 rate.
+#
+# Built in its own mktemp root (NOT the shared setup() tree) so the existing
+# count assertions are untouched. The session lives under a -worktrees- path,
+# NOT a /subagents/ one, so a clean fix (not the unrelated subagent exclusion)
+# is what keeps it out of by_phase_outcome.
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "--- partial-envelope null-ification (#1909) ---"
+
+# Partial envelope: findings_surfaced OMITTED; everything else mirrors the valid
+# worker envelope (phase "review", the other two counts present as numbers).
+PARTIAL_ENV_JSON='{"schema":"dispatch.outcome.v1","phase":"review","repo":"natb1/commons.systems","issue":1909,"pr":2000,"base_sha":"aaa111","findings_actionable":5,"fixes_applied":3,"followups_filed":2,"subagents_launched":12,"disposition":"completed_with_fixes","terminated_reason":null}'
+PARTIAL_BLOCK="$(envelope_block "$PARTIAL_ENV_JSON")"
+
+PARTIAL_ROOT=$(mktemp -d)
+partial_worktree="$PARTIAL_ROOT/-home-x-worktrees-1909-partial"
+mkdir -p "$partial_worktree"
+partial_jsonl="$partial_worktree/sess-partial.jsonl"
+
+# line 1: first user line — classifies as worker (mirror line 68)
+printf '%s\n' '{"type":"user","message":{"content":"<command-name>/dispatch-worker</command-name>"}}' \
+  >> "$partial_jsonl"
+# line 2: assistant — opus, minimal usage (mirror the worker assistant shape)
+printf '%s\n' '{"type":"assistant","attributionSkill":"review-fix","isSidechain":false,"gitBranch":"1909-partial","message":{"model":"claude-opus-4-8","content":[{"type":"tool_use","id":"toolu_p01","name":"Bash","input":{"command":"echo hi"}}],"usage":{"input_tokens":1,"cache_creation_input_tokens":2,"cache_read_input_tokens":4,"output_tokens":1}}}' \
+  >> "$partial_jsonl"
+# line 3: partial outcome-envelope tool_result (mirror lines 106–108)
+jq -nc --arg c "$PARTIAL_BLOCK" \
+  '{type:"user",message:{content:[{type:"tool_result",tool_use_id:"toolu_p01",content:$c}]}}' \
+  >> "$partial_jsonl"
+jq . "$partial_jsonl" >/dev/null
+touch "$partial_jsonl"
+
+OUT_PARTIAL=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$PARTIAL_ROOT"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
+)
+
+# (a) the session's per-run outcome is null (partial envelope treated as absent)
+assert_eq "partial-envelope sessions[sess-partial].outcome is null" "null" \
+  "$(jq '[.sessions[]|select(.id=="sess-partial")][0].outcome' <<<"$OUT_PARTIAL")"
+# (b) its outcome_rates is null too (no fabricated 0 rate)
+assert_eq "partial-envelope sessions[sess-partial].outcome_rates is null" "null" \
+  "$(jq '[.sessions[]|select(.id=="sess-partial")][0].outcome_rates' <<<"$OUT_PARTIAL")"
+# (c) by_phase_outcome carries NO entry for the envelope's "review" phase — the
+# null outcome is filtered at the pool, so the whole object is empty ({}). An
+# absent bucket is `null`, not `0`, so we assert the object is {} (not
+# .review.sessions == 0, which would itself be null).
+assert_eq "partial-envelope by_phase_outcome is empty {} (no fabricated entry)" "{}" \
+  "$(jq -c '.by_phase_outcome' <<<"$OUT_PARTIAL")"
+
+rm -rf "$PARTIAL_ROOT"
+
 report_results
 exit $FAIL
