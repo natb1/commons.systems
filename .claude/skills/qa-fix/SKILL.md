@@ -795,8 +795,9 @@ Otherwise run all steps in order.
    3. Escalate per the **Escalation** section (`dispatch-mark-deviation`), tailored
       to the reason that fired (cap reached / scope-deviation with
       `deviation_reason` / planning-failed / fix-pass-landed-nothing — no
-      opus-fixable finding was resolved this pass (no unit landed a commit, so no
-      `resolves_ids` were accumulated and `fixes_applied_count` stayed `0`).
+      opus-fixable finding was resolved this pass — either no unit landed a commit,
+      or the landed units collectively resolved zero findings, so
+      `fixes_applied_count` stayed `0`).
    4. **STOP.**
 
    **CRITICAL invariants — state and obey these:**
