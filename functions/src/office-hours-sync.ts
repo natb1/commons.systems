@@ -46,7 +46,8 @@ const NAMESPACE = defineString("OFFICE_HOURS_FIRESTORE_NAMESPACE", { default: "o
 
 const adminApp = getApps().length > 0 ? getApps()[0] : initializeApp();
 
-export interface JitIssue {
+export interface ReminderItem {
+  kind: "reminder";
   number: number;
   title: string;
   body: string;
@@ -55,10 +56,21 @@ export interface JitIssue {
   dueAt: Date | null;
 }
 
+export interface MergePrItem {
+  kind: "merge-pr";
+  number: number; // tracking-issue number
+  title: string; // tracking-issue title
+  repo: string; // scanned repo (office-hours-nate)
+  marker: MergePrMarker | null; // parsed PR fields; null ⇒ malformed (skip)
+}
+
+export type OfficeHoursItem = ReminderItem | MergePrItem;
+
 export interface SyncResult {
   written: number;
   deleted: number;
   skippedNoDate: number;
+  skippedMalformed: number;
 }
 
 // Matches the marker written by dispatch-jit-engine:
@@ -74,6 +86,59 @@ export function parseJitDueMarker(body: string): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+export interface MergePrMarker {
+  prRepo: string;
+  prNumber: number;
+  prUrl: string;
+  prTitle: string;
+}
+
+// Matches the marker written by dispatch-sync-merge-queue:
+//   <!-- oh-merge-pr: {"repo":"natb1/commons.systems","number":42,"url":"https://...","title":"..."} -->
+// Mirrors the null-on-malformed contract of parseJitDueMarker: returns null for
+// any missing/wrong-typed field so callers need no additional guards.
+const OH_MERGE_PR_RE = /<!--\s*oh-merge-pr:\s*(\{.*?\})\s*-->/;
+
+export function parseMergePrMarker(body: string): MergePrMarker | null {
+  const match = body.match(OH_MERGE_PR_RE);
+  if (!match) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(match[1]);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null) return null;
+  const obj = parsed as Record<string, unknown>;
+  const prRepo = obj["repo"];
+  const prNumber = obj["number"];
+  const prUrl = obj["url"];
+  const prTitle = obj["title"];
+  if (
+    typeof prRepo !== "string" ||
+    prRepo === "" ||
+    // Enforce the GitHub owner/name shape so injectivity of the merge-pr doc ID
+    // is provable by construction: a "~"-free prRepo means replaceAll("/","~") is
+    // reversible and the "~" delimiter in syncOfficeHoursCore can never be forged
+    // by the repo field (#1896).
+    !/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(prRepo) ||
+    typeof prUrl !== "string" ||
+    !prUrl.startsWith("https://github.com/") ||
+    typeof prTitle !== "string" ||
+    prTitle === "" ||
+    !Number.isInteger(prNumber) ||
+    (prNumber as number) <= 0
+  ) {
+    return null;
+  }
+  return {
+    prRepo,
+    prNumber: prNumber as number,
+    prUrl,
+    prTitle,
+  };
+}
+
 // A jitKey is the `jit:<key>` label suffix and becomes a Firestore document ID.
 // The label name is external input from the scanned repo, so guard it: a key
 // containing a slash would make `collection.doc(key)` resolve to a nested path
@@ -86,7 +151,7 @@ export function isValidJitKey(key: string): boolean {
 }
 
 export async function syncOfficeHoursCore(deps: {
-  fetchOpenJitIssues: () => Promise<JitIssue[]>;
+  fetchOpenJitIssues: () => Promise<OfficeHoursItem[]>;
   firestore: Firestore;
   namespace: string;
   memberEmails: string[];
@@ -101,38 +166,85 @@ export async function syncOfficeHoursCore(deps: {
   const writtenKeys = new Set<string>();
   let written = 0;
   let skippedNoDate = 0;
+  let skippedMalformed = 0;
 
   for (const issue of issues) {
-    if (!isValidJitKey(issue.jitKey)) {
-      console.warn(
-        `syncOfficeHours: issue #${issue.number} has invalid jitKey "${issue.jitKey}"; skipping`,
-      );
-      continue;
-    }
+    switch (issue.kind) {
+      case "reminder": {
+        if (!isValidJitKey(issue.jitKey)) {
+          console.warn(
+            `syncOfficeHours: issue #${issue.number} has invalid jitKey "${issue.jitKey}"; skipping`,
+          );
+          continue;
+        }
 
-    if (!issue.dueAt) {
-      skippedNoDate += 1;
-      console.warn(
-        `syncOfficeHours: issue #${issue.number} has no jit-due marker; skipping`,
-      );
-      continue;
-    }
+        if (!issue.dueAt) {
+          skippedNoDate += 1;
+          console.warn(
+            `syncOfficeHours: issue #${issue.number} has no jit-due marker; skipping`,
+          );
+          continue;
+        }
 
-    const dueAt = Timestamp.fromDate(issue.dueAt);
-    const docRef = itemsCollection.doc(issue.jitKey);
-    writes.push(
-      writer.set(docRef, {
-        title: issue.title,
-        dueAt,
-        repo: issue.repo,
-        issueNumber: issue.number,
-        jitKey: issue.jitKey,
-        memberEmails: deps.memberEmails,
-        updatedAt: FieldValue.serverTimestamp(),
-      }),
-    );
-    writtenKeys.add(issue.jitKey);
-    written += 1;
+        const dueAt = Timestamp.fromDate(issue.dueAt);
+        const docRef = itemsCollection.doc(issue.jitKey);
+        writes.push(
+          writer.set(docRef, {
+            kind: "reminder",
+            title: issue.title,
+            dueAt,
+            repo: issue.repo,
+            issueNumber: issue.number,
+            jitKey: issue.jitKey,
+            memberEmails: deps.memberEmails,
+            updatedAt: FieldValue.serverTimestamp(),
+          }),
+        );
+        writtenKeys.add(issue.jitKey);
+        written += 1;
+        break;
+      }
+      case "merge-pr": {
+        if (issue.marker === null) {
+          skippedMalformed += 1;
+          console.warn(
+            `syncOfficeHours: issue #${issue.number} has no/invalid oh-merge-pr marker; skipping`,
+          );
+          continue;
+        }
+
+        // Firestore doc IDs may not contain "/". GitHub full-names
+        // ([A-Za-z0-9._-]+/[A-Za-z0-9._-]+) never contain "~", so using "~" as both
+        // the slash-replacement and the repo↔number delimiter keeps the ID injective:
+        // distinct (prRepo, prNumber) pairs map to distinct IDs, so two PRs with the
+        // same number in different repos can no longer collide (#1896). replaceAll
+        // guards a malformed multi-slash prRepo against escaping the items collection.
+        const repoKey = issue.marker.prRepo.replaceAll("/", "~");
+        const docId = `merge-pr-${repoKey}~${issue.marker.prNumber}`;
+        const docRef = itemsCollection.doc(docId);
+        writes.push(
+          writer.set(docRef, {
+            kind: "merge-pr",
+            title: issue.title,
+            prUrl: issue.marker.prUrl,
+            prTitle: issue.marker.prTitle,
+            prNumber: issue.marker.prNumber,
+            prRepo: issue.marker.prRepo,
+            repo: issue.repo,
+            issueNumber: issue.number,
+            memberEmails: deps.memberEmails,
+            updatedAt: FieldValue.serverTimestamp(),
+          }),
+        );
+        writtenKeys.add(docId);
+        written += 1;
+        break;
+      }
+      default: {
+        const _exhaustive: never = issue;
+        throw new Error("syncOfficeHours: unhandled item kind: " + String(_exhaustive));
+      }
+    }
   }
 
   const existing = await itemsCollection.get();
@@ -147,7 +259,7 @@ export async function syncOfficeHoursCore(deps: {
   await writer.close(); // flushes all enqueued writes in ≤500-op chunks
   await Promise.all(writes); // BulkWriter routes per-op failures to the individual op promises, not to close(); this is what re-raises them
 
-  return { written, deleted, skippedNoDate };
+  return { written, deleted, skippedNoDate, skippedMalformed };
 }
 
 // Builds a GitHub App JWT (RS256) signed with the App's private key. GitHub
@@ -265,7 +377,7 @@ async function githubGraphQL<T>(
 export async function fetchOpenJitIssuesLive(
   repo: string,
   token: string,
-): Promise<JitIssue[]> {
+): Promise<OfficeHoursItem[]> {
   const slash = repo.indexOf("/");
   if (slash <= 0 || slash === repo.length - 1) {
     throw new Error(`Invalid repo "${repo}"; expected "owner/name"`);
@@ -289,7 +401,7 @@ export async function fetchOpenJitIssuesLive(
     }
   `;
 
-  const results: JitIssue[] = [];
+  const results: OfficeHoursItem[] = [];
   let cursor: string | null = null;
 
   while (true) {
@@ -300,16 +412,35 @@ export async function fetchOpenJitIssuesLive(
     );
 
     for (const node of data.repository.issues.nodes) {
+      // A `merge-pr:` label wins over a `jit:` label if both somehow appear on
+      // one issue, so the discrimination is deterministic.
+      const mergePrLabel = node.labels.nodes.find((l) =>
+        l.name.startsWith("merge-pr:"),
+      );
+      if (mergePrLabel) {
+        results.push({
+          kind: "merge-pr",
+          number: node.number,
+          title: node.title,
+          repo,
+          marker: parseMergePrMarker(node.body),
+        });
+        continue;
+      }
+
       const jitLabel = node.labels.nodes.find((l) => l.name.startsWith("jit:"));
-      if (!jitLabel) continue;
-      results.push({
-        number: node.number,
-        title: node.title,
-        body: node.body,
-        jitKey: jitLabel.name.slice("jit:".length),
-        repo,
-        dueAt: parseJitDueMarker(node.body),
-      });
+      if (jitLabel) {
+        results.push({
+          kind: "reminder",
+          number: node.number,
+          title: node.title,
+          body: node.body,
+          jitKey: jitLabel.name.slice("jit:".length),
+          repo,
+          dueAt: parseJitDueMarker(node.body),
+        });
+        continue;
+      }
     }
 
     const { hasNextPage, endCursor } = data.repository.issues.pageInfo;
@@ -386,7 +517,7 @@ export const syncOfficeHours = onSchedule(
     });
 
     console.log(
-      `syncOfficeHours: wrote ${result.written}, deleted ${result.deleted}, skipped ${result.skippedNoDate} (no due date)`,
+      `syncOfficeHours: wrote ${result.written}, deleted ${result.deleted}, skipped ${result.skippedNoDate} (no due date), ${result.skippedMalformed} (malformed merge-pr)`,
     );
   },
 );

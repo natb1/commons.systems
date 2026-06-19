@@ -3,12 +3,14 @@ import type { User } from "firebase/auth";
 
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
 import { logError } from "@commons-systems/errorutil/log";
+import "@commons-systems/components/footer";
 import { deferAppCheckInit } from "@commons-systems/firebaseutil/defer-appcheck";
 
-import { renderApp } from "./app-view.js";
+import { createAppController } from "./app-controller.js";
 import { getOwnerReminders, getOwnerQueueMetrics } from "./data.js";
 import { getOwnerSamples } from "./usage-data.js";
 import { getOwnerIssueSamples } from "./issue-data.js";
+import { getOwnerAuditAggregates } from "./audit-data.js";
 import {
   db,
   NAMESPACE,
@@ -31,26 +33,31 @@ function updateAuthButton(user: User | null): void {
   authToggle!.textContent = user ? "Sign out" : "Sign in";
 }
 
+// Owns the live view plus its single 60s tick timer; each paint re-renders and
+// restarts the timer (clearing any prior interval — see createAppController).
+const controller = createAppController(app!);
+
 // Paint the demo tier immediately so the view is meaningful before auth resolves.
-renderApp(app!, { tier: "demo" }, new Date());
+controller.paint({ tier: "demo" }, new Date());
 
 async function refresh(): Promise<void> {
   const refreshUser = currentUser;
   if (refreshUser === null) {
-    renderApp(app!, { tier: "demo" }, new Date());
+    controller.paint({ tier: "demo" }, new Date());
     return;
   }
   try {
-    const [samples, reminders, queueMetrics, issueSamples] = await Promise.all([
+    const [samples, reminders, queueMetrics, issueSamples, auditAggregates] = await Promise.all([
       getOwnerSamples(db, NAMESPACE, refreshUser),
       getOwnerReminders(db, NAMESPACE, refreshUser),
       getOwnerQueueMetrics(db, NAMESPACE, refreshUser),
       getOwnerIssueSamples(db, NAMESPACE, refreshUser),
+      getOwnerAuditAggregates(db, NAMESPACE, refreshUser),
     ]);
     // Auth may have changed while the Firestore calls were in flight — skip the
     // render so the in-flight result does not clobber the already-updated view.
     if (currentUser !== refreshUser) return;
-    renderApp(app!, { tier: "owner", samples, reminders, queueMetrics, issueSamples }, new Date());
+    controller.paint({ tier: "owner", samples, reminders, queueMetrics, issueSamples, auditAggregates }, new Date());
   } catch (error) {
     // Auth may have changed while the Firestore calls were in flight — skip the
     // render so the in-flight error does not clobber the already-updated view.
@@ -60,7 +67,7 @@ async function refresh(): Promise<void> {
     if (!deferProgrammerError(error)) {
       logError(error, { operation: "load-owner-data" });
     }
-    renderApp(app!, { tier: "error" }, new Date());
+    controller.paint({ tier: "error" }, new Date());
   }
 }
 

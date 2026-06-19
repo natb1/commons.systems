@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { Timestamp } from "firebase/firestore";
-import { toUsageSample, usageSampleToDoc, type UsageSample } from "../src/usage-samples.js";
+import { selectLatestSample, toUsageSample, usageSampleToDoc, type UsageSample } from "../src/usage-samples.js";
 
 const baseSample: UsageSample = {
   sampledAt: new Date("2026-06-07T10:00:00Z"),
@@ -14,6 +14,39 @@ const baseSample: UsageSample = {
 };
 
 const memberEmails = ["alice@example.com", "bob@example.com"];
+
+const make = (o: Partial<UsageSample> = {}): UsageSample => ({ ...baseSample, ...o });
+
+describe("selectLatestSample", () => {
+  it("returns null for an empty array", () => {
+    expect(selectLatestSample([])).toBeNull();
+  });
+
+  it("returns the sample with the maximum sampledAt from an unordered array", () => {
+    const a = make({ sampledAt: new Date("2026-06-07T08:00:00Z") });
+    const b = make({ sampledAt: new Date("2026-06-07T12:00:00Z") });
+    const c = make({ sampledAt: new Date("2026-06-07T10:00:00Z") });
+    const samples = [a, b, c];
+
+    const result = selectLatestSample(samples);
+    expect(result).toBe(b);
+  });
+
+  it("does not mutate the input array", () => {
+    const a = make({ sampledAt: new Date("2026-06-07T08:00:00Z") });
+    const b = make({ sampledAt: new Date("2026-06-07T12:00:00Z") });
+    const c = make({ sampledAt: new Date("2026-06-07T10:00:00Z") });
+    const samples = [a, b, c];
+    const originalRefs = samples.map((s) => s);
+
+    selectLatestSample(samples);
+
+    // Input array order is unchanged
+    expect(samples[0]).toBe(originalRefs[0]);
+    expect(samples[1]).toBe(originalRefs[1]);
+    expect(samples[2]).toBe(originalRefs[2]);
+  });
+});
 
 describe("usageSampleToDoc / toUsageSample round-trip", () => {
   it("round-trips a UsageSample through doc and back", () => {

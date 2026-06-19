@@ -252,6 +252,7 @@ run-all-cleanup-preview.sh <pr-number>
 ## Where to go next
 
 - **Landing page** — [commons.systems](https://commons.systems): the deployed apps and project overview.
+- **Design system** — [packages/ds](packages/ds/README.md): tokens, components, and the visual language.
 - **License** — CC-BY-SA; forking is encouraged.
 
 ## Usage and Contributing

@@ -1,5 +1,5 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
-import type { ContentRenderer, SearchResult } from "./types.js";
+import type { SearchableRenderer, SearchResult } from "./types.js";
 
 export function renderSearchSection(): string {
   return `
@@ -30,10 +30,9 @@ function renderResultItem(result: SearchResult, index: number): string {
 
 export function initSearch(
   container: HTMLElement,
-  renderer: ContentRenderer,
+  renderer: SearchableRenderer,
   onNavigate: () => void,
-): (() => void) | null {
-  if (!renderer.search || !renderer.goToResult) return null;
+): () => void {
   const search = renderer.search;
   const goToResult = renderer.goToResult;
 
@@ -86,7 +85,7 @@ export function initSearch(
     currentQuery = trimmed;
 
     if (!trimmed) {
-      renderer.clearSearch?.();
+      renderer.clearSearch();
       clearResults();
       return;
     }
@@ -101,7 +100,7 @@ export function initSearch(
     if (searchTimer) clearTimeout(searchTimer);
     if (!input.value.trim()) {
       currentQuery = "";
-      renderer.clearSearch?.();
+      renderer.clearSearch();
       clearResults();
       return;
     }

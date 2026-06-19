@@ -96,6 +96,17 @@ REGRESSIONS=()
 for ws in "${APP_DIRS[@]}"; do
   echo "=== Typecheck: $ws ==="
 
+  # CSS-only / non-TS workspaces have no tsconfig.json; `tsc --project <ws>`
+  # exits TS5057 with no project to load. Skip them — there is nothing for tsc
+  # to typecheck. This also removes the fragile coincidence whereby a
+  # tsconfig-less workspace that happens to exist on origin/main (e.g. `style`)
+  # was skipped only because its baseline tsc invocation *also* errored and got
+  # misreported as a pre-existing typecheck failure.
+  if [ ! -f "$REPO_ROOT/$ws/tsconfig.json" ]; then
+    echo "$ws: no tsconfig.json — skipping (non-TS workspace)"
+    continue
+  fi
+
   pass_suffix=""
   if git -C "$REPO_ROOT" rev-parse --verify "origin/main:$ws" >/dev/null 2>&1; then
     TOUCHED_WORKSPACES+=("$ws")

@@ -33,9 +33,12 @@ import {
   syncOfficeHoursCore,
   fetchOpenJitIssuesLive,
   parseJitDueMarker,
+  parseMergePrMarker,
   buildAppJwt,
   mintInstallationToken,
-  type JitIssue,
+  type ReminderItem,
+  type MergePrItem,
+  type MergePrMarker,
 } from "../src/office-hours-sync";
 import { truncateForLog } from "../src/log-utils";
 
@@ -144,14 +147,35 @@ function createInMemoryFirestore(
   return { doc, collection, batch, bulkWriter, _docs: docs };
 }
 
-function makeIssue(overrides: Partial<JitIssue> = {}): JitIssue {
+function makeIssue(overrides: Partial<ReminderItem> = {}): ReminderItem {
   return {
+    kind: "reminder",
     number: 1,
     title: "Daily chore",
     body: "Recurring daily chore. Close when done.",
     jitKey: "daily-chore",
     repo: "natb1/office-hours-nate",
     dueAt: new Date("2026-01-15T12:00:00Z"),
+    ...overrides,
+  };
+}
+
+function makeMergePrIssue(
+  overrides: Partial<MergePrItem> = {},
+  markerOverrides: Partial<MergePrMarker> = {},
+): MergePrItem {
+  return {
+    kind: "merge-pr",
+    number: 100,
+    title: "Merge PR #42",
+    repo: "natb1/office-hours-nate",
+    marker: {
+      prRepo: "natb1/commons.systems",
+      prNumber: 42,
+      prUrl: "https://github.com/natb1/commons.systems/pull/42",
+      prTitle: "Some PR",
+      ...markerOverrides,
+    },
     ...overrides,
   };
 }
@@ -176,12 +200,18 @@ describe("syncOfficeHoursCore", () => {
       memberEmails: ["owner@example.com"],
     });
 
-    expect(result).toEqual({ written: 1, deleted: 0, skippedNoDate: 0 });
+    expect(result).toEqual({
+      written: 1,
+      deleted: 0,
+      skippedNoDate: 0,
+      skippedMalformed: 0,
+    });
 
     const written = store._docs.get("office-hours/prod/items/daily-chore") as Record<
       string,
       unknown
     > & { dueAt: { toDate: () => Date } };
+    expect(written.kind).toBe("reminder");
     expect(written.title).toBe("Daily chore");
     expect(written.repo).toBe("natb1/office-hours-nate");
     expect(written.issueNumber).toBe(42);
@@ -203,7 +233,12 @@ describe("syncOfficeHoursCore", () => {
       memberEmails: ["owner@example.com"],
     });
 
-    expect(result).toEqual({ written: 1, deleted: 0, skippedNoDate: 1 });
+    expect(result).toEqual({
+      written: 1,
+      deleted: 0,
+      skippedNoDate: 1,
+      skippedMalformed: 0,
+    });
     expect(store._docs.has("office-hours/prod/items/daily-chore")).toBe(true);
     expect(store._docs.has("office-hours/prod/items/budget-review")).toBe(false);
   });
@@ -222,7 +257,12 @@ describe("syncOfficeHoursCore", () => {
       memberEmails: ["owner@example.com"],
     });
 
-    expect(result).toEqual({ written: 0, deleted: 1, skippedNoDate: 0 });
+    expect(result).toEqual({
+      written: 0,
+      deleted: 1,
+      skippedNoDate: 0,
+      skippedMalformed: 0,
+    });
     expect(store._docs.has("office-hours/prod/items/stale-key")).toBe(false);
   });
 
@@ -240,10 +280,112 @@ describe("syncOfficeHoursCore", () => {
     const first = await syncOfficeHoursCore(deps);
     const second = await syncOfficeHoursCore(deps);
 
-    expect(first).toEqual({ written: 1, deleted: 0, skippedNoDate: 0 });
-    expect(second).toEqual({ written: 1, deleted: 0, skippedNoDate: 0 });
+    expect(first).toEqual({
+      written: 1,
+      deleted: 0,
+      skippedNoDate: 0,
+      skippedMalformed: 0,
+    });
+    expect(second).toEqual({
+      written: 1,
+      deleted: 0,
+      skippedNoDate: 0,
+      skippedMalformed: 0,
+    });
     expect(store._docs.size).toBe(1);
     expect(store._docs.has("office-hours/prod/items/daily-chore")).toBe(true);
+  });
+
+  it("writes a merge-pr item with a valid marker", async () => {
+    const store = createInMemoryFirestore();
+    const issue = makeMergePrIssue({ number: 200 });
+
+    const result = await syncOfficeHoursCore({
+      fetchOpenJitIssues: async () => [issue],
+      firestore: store as unknown as Firestore,
+      namespace: "office-hours/prod",
+      memberEmails: ["owner@example.com"],
+    });
+
+    expect(result).toEqual({
+      written: 1,
+      deleted: 0,
+      skippedNoDate: 0,
+      skippedMalformed: 0,
+    });
+
+    const written = store._docs.get("office-hours/prod/items/merge-pr-natb1~commons.systems~42") as
+      | Record<string, unknown>
+      | undefined;
+    expect(written).toBeDefined();
+    expect(written!.kind).toBe("merge-pr");
+    expect(written!.title).toBe("Merge PR #42");
+    expect(written!.prUrl).toBe("https://github.com/natb1/commons.systems/pull/42");
+    expect(written!.prTitle).toBe("Some PR");
+    expect(written!.prNumber).toBe(42);
+    expect(written!.prRepo).toBe("natb1/commons.systems");
+    expect(written!.repo).toBe("natb1/office-hours-nate");
+    expect(written!.issueNumber).toBe(200);
+    expect(written!.memberEmails).toEqual(["owner@example.com"]);
+    expect(written!.updatedAt).toBe("__server_timestamp__");
+    // merge-pr docs carry no dueAt field.
+    expect("dueAt" in written!).toBe(false);
+  });
+
+  it("skips a merge-pr issue with a null (malformed) marker", async () => {
+    const store = createInMemoryFirestore();
+    const issue = makeMergePrIssue({ number: 201, marker: null });
+
+    const result = await syncOfficeHoursCore({
+      fetchOpenJitIssues: async () => [issue],
+      firestore: store as unknown as Firestore,
+      namespace: "office-hours/prod",
+      memberEmails: ["owner@example.com"],
+    });
+
+    expect(result).toEqual({
+      written: 0,
+      deleted: 0,
+      skippedNoDate: 0,
+      skippedMalformed: 1,
+    });
+    expect(store._docs.size).toBe(0);
+  });
+
+  it("delete-reconciles stale docs of both kinds while writing the fresh set", async () => {
+    const store = createInMemoryFirestore();
+    // Seed one stale reminder and one stale merge-pr doc.
+    store._docs.set("office-hours/prod/items/stale-chore", {
+      kind: "reminder",
+      title: "Stale chore",
+      jitKey: "stale-chore",
+    });
+    store._docs.set("office-hours/prod/items/merge-pr-99", {
+      kind: "merge-pr",
+      title: "Stale merge",
+      prNumber: 99,
+    });
+
+    const freshReminder = makeIssue({ number: 1, jitKey: "fresh-chore" });
+    const freshMergePr = makeMergePrIssue({ number: 2 }, { prNumber: 7 });
+
+    const result = await syncOfficeHoursCore({
+      fetchOpenJitIssues: async () => [freshReminder, freshMergePr],
+      firestore: store as unknown as Firestore,
+      namespace: "office-hours/prod",
+      memberEmails: ["owner@example.com"],
+    });
+
+    expect(result).toEqual({
+      written: 2,
+      deleted: 2,
+      skippedNoDate: 0,
+      skippedMalformed: 0,
+    });
+    expect(store._docs.has("office-hours/prod/items/stale-chore")).toBe(false);
+    expect(store._docs.has("office-hours/prod/items/merge-pr-99")).toBe(false);
+    expect(store._docs.has("office-hours/prod/items/fresh-chore")).toBe(true);
+    expect(store._docs.has("office-hours/prod/items/merge-pr-natb1~commons.systems~7")).toBe(true);
   });
 
   it("skips an issue whose jitKey would escape the items collection", async () => {
@@ -262,7 +404,7 @@ describe("syncOfficeHoursCore", () => {
 
     // Only the valid key is written; the path-escaping / invalid keys are
     // skipped before any Firestore write, so no nested doc is created.
-    expect(result.written).toBe(1);
+    expect(result).toEqual({ written: 1, deleted: 0, skippedNoDate: 0, skippedMalformed: 0 });
     expect(store._docs.has("office-hours/prod/items/daily-chore")).toBe(true);
     expect(store._docs.has("office-hours/prod/items/a/b/c")).toBe(false);
     expect([...store._docs.keys()]).toEqual(["office-hours/prod/items/daily-chore"]);
@@ -387,6 +529,53 @@ describe("syncOfficeHoursCore", () => {
     // The failed op must not have deleted its doc.
     expect(store._docs.has("office-hours/prod/items/stale-key")).toBe(true);
   });
+
+  it("assigns distinct doc IDs to merge-pr items with the same prNumber in different repos", async () => {
+    // Regression guard for #1896: two PRs with the same number in different repos
+    // must not collide to a single doc.
+    const store = createInMemoryFirestore();
+    const issueA = makeMergePrIssue(
+      { number: 10 },
+      {
+        prNumber: 5,
+        prRepo: "natb1/commons.systems",
+        prUrl: "https://github.com/natb1/commons.systems/pull/5",
+      },
+    );
+    const issueB = makeMergePrIssue(
+      { number: 11 },
+      {
+        prNumber: 5,
+        prRepo: "natb1/office-hours-nate",
+        prUrl: "https://github.com/natb1/office-hours-nate/pull/5",
+      },
+    );
+
+    const result = await syncOfficeHoursCore({
+      fetchOpenJitIssues: async () => [issueA, issueB],
+      firestore: store as unknown as Firestore,
+      namespace: "office-hours/prod",
+      memberEmails: ["owner@example.com"],
+    });
+
+    expect(result).toEqual({
+      written: 2,
+      deleted: 0,
+      skippedNoDate: 0,
+      skippedMalformed: 0,
+    });
+    const docA = store._docs.get(
+      "office-hours/prod/items/merge-pr-natb1~commons.systems~5",
+    ) as Record<string, unknown> | undefined;
+    const docB = store._docs.get(
+      "office-hours/prod/items/merge-pr-natb1~office-hours-nate~5",
+    ) as Record<string, unknown> | undefined;
+    expect(docA).toBeDefined();
+    expect(docB).toBeDefined();
+    // Each doc must carry its own repo — confirms no cross-write between the two.
+    expect(docA!.prRepo).toBe("natb1/commons.systems");
+    expect(docB!.prRepo).toBe("natb1/office-hours-nate");
+  });
 });
 
 describe("parseJitDueMarker", () => {
@@ -408,6 +597,119 @@ describe("parseJitDueMarker", () => {
 
   it("returns null when the marker is malformed", () => {
     expect(parseJitDueMarker("<!-- jit-due: not-a-date -->")).toBeNull();
+  });
+});
+
+describe("parseMergePrMarker", () => {
+  const WELL_FORMED_BODY =
+    'Body text\n\n<!-- oh-merge-pr: {"repo":"natb1/commons.systems","number":42,"url":"https://github.com/natb1/commons.systems/pull/42","title":"Some PR"} -->';
+
+  it("parses a well-formed marker", () => {
+    const result = parseMergePrMarker(WELL_FORMED_BODY);
+    expect(result).not.toBeNull();
+    expect(result!.prRepo).toBe("natb1/commons.systems");
+    expect(result!.prNumber).toBe(42);
+    expect(result!.prUrl).toBe(
+      "https://github.com/natb1/commons.systems/pull/42"
+    );
+    expect(result!.prTitle).toBe("Some PR");
+  });
+
+  it("tolerates extra whitespace inside the marker", () => {
+    const body =
+      '<!--   oh-merge-pr:   {"repo":"natb1/commons.systems","number":42,"url":"https://github.com/natb1/commons.systems/pull/42","title":"Some PR"}   -->';
+    const result = parseMergePrMarker(body);
+    expect(result).not.toBeNull();
+    expect(result!.prNumber).toBe(42);
+  });
+
+  it("returns null when no marker is present", () => {
+    expect(parseMergePrMarker("Plain body, no marker.")).toBeNull();
+  });
+
+  it("returns null for invalid JSON", () => {
+    expect(
+      parseMergePrMarker("<!-- oh-merge-pr: {not json} -->")
+    ).toBeNull();
+  });
+
+  it("returns null when a field is missing (title omitted)", () => {
+    expect(
+      parseMergePrMarker(
+        '<!-- oh-merge-pr: {"repo":"natb1/commons.systems","number":42,"url":"https://github.com/natb1/commons.systems/pull/42"} -->'
+      )
+    ).toBeNull();
+  });
+
+  it("returns null when number is zero", () => {
+    expect(
+      parseMergePrMarker(
+        '<!-- oh-merge-pr: {"repo":"natb1/commons.systems","number":0,"url":"https://github.com/natb1/commons.systems/pull/42","title":"Some PR"} -->'
+      )
+    ).toBeNull();
+  });
+
+  it("returns null when number is negative", () => {
+    expect(
+      parseMergePrMarker(
+        '<!-- oh-merge-pr: {"repo":"natb1/commons.systems","number":-1,"url":"https://github.com/natb1/commons.systems/pull/42","title":"Some PR"} -->'
+      )
+    ).toBeNull();
+  });
+
+  it("returns null when number is non-integer (1.5)", () => {
+    expect(
+      parseMergePrMarker(
+        '<!-- oh-merge-pr: {"repo":"natb1/commons.systems","number":1.5,"url":"https://github.com/natb1/commons.systems/pull/42","title":"Some PR"} -->'
+      )
+    ).toBeNull();
+  });
+
+  it("returns null when number is a string", () => {
+    expect(
+      parseMergePrMarker(
+        '<!-- oh-merge-pr: {"repo":"natb1/commons.systems","number":"42","url":"https://github.com/natb1/commons.systems/pull/42","title":"Some PR"} -->'
+      )
+    ).toBeNull();
+  });
+
+  it("returns null when repo contains a tilde (would forge the doc-ID delimiter, #1896)", () => {
+    expect(
+      parseMergePrMarker(
+        '<!-- oh-merge-pr: {"repo":"natb1~commons.systems","number":5,"url":"https://github.com/natb1/commons.systems/pull/5","title":"Some PR"} -->'
+      )
+    ).toBeNull();
+  });
+
+  it("returns null when an otherwise-valid owner/name has a tilde inside the name (#1896)", () => {
+    // Distinct from the no-slash tilde case above: this repo IS owner/name shaped,
+    // so only the per-segment [A-Za-z0-9._-]+ class rejects the "~". The merge-pr
+    // doc ID uses "~" as both the slash-replacement and the repo↔number delimiter;
+    // its injectivity proof depends on a valid prRepo never containing "~". This
+    // makes that assumption machine-verifiable: a "~"-bearing name is rejected at
+    // the parser, so it can never reach the ID builder to forge a delimiter and
+    // alias another PR's doc.
+    expect(
+      parseMergePrMarker(
+        '<!-- oh-merge-pr: {"repo":"natb1/foo~bar","number":5,"url":"https://github.com/natb1/foo~bar/pull/5","title":"Some PR"} -->'
+      )
+    ).toBeNull();
+  });
+
+  it("returns null when repo is not in owner/name shape (no slash)", () => {
+    expect(
+      parseMergePrMarker(
+        '<!-- oh-merge-pr: {"repo":"commons.systems","number":5,"url":"https://github.com/natb1/commons.systems/pull/5","title":"Some PR"} -->'
+      )
+    ).toBeNull();
+  });
+
+  it("returns null when repo has an extra slash segment", () => {
+    expect(
+      parseMergePrMarker(
+        '<!-- oh-merge-pr: {"repo":"natb1/commons/systems","number":5,"url":"https://github.com/natb1/commons.systems/pull/5","title":"Some PR"} -->'
+      )
+    ).toBeNull();
   });
 });
 
@@ -449,6 +751,13 @@ describe("fetchOpenJitIssuesLive", () => {
                     body: "Body",
                     labels: { nodes: [{ name: "bug" }] },
                   },
+                  {
+                    number: 60,
+                    title: "Merge PR #42",
+                    body:
+                      'Body\n\n<!-- oh-merge-pr: {"repo":"natb1/commons.systems","number":42,"url":"https://github.com/natb1/commons.systems/pull/42","title":"Some PR"} -->',
+                    labels: { nodes: [{ name: "merge-pr:42" }] },
+                  },
                 ],
               },
             },
@@ -478,19 +787,39 @@ describe("fetchOpenJitIssuesLive", () => {
       cursor: null,
     });
 
-    expect(issues).toHaveLength(2);
-    expect(issues[0]).toMatchObject({
+    expect(issues).toHaveLength(3);
+
+    const reminder0 = issues[0] as ReminderItem;
+    expect(reminder0).toMatchObject({
+      kind: "reminder",
       number: 42,
       title: "Daily chore",
       jitKey: "daily-chore",
       repo: "natb1/office-hours-nate",
     });
-    expect(issues[0].dueAt?.toISOString()).toBe("2026-01-15T12:00:00.000Z");
-    expect(issues[1]).toMatchObject({
+    expect(reminder0.dueAt?.toISOString()).toBe("2026-01-15T12:00:00.000Z");
+
+    const reminder1 = issues[1] as ReminderItem;
+    expect(reminder1).toMatchObject({
+      kind: "reminder",
       number: 50,
       jitKey: "legacy",
       dueAt: null,
     });
+
+    // The merge-pr node yields a MergePrItem with a parsed marker.
+    const mergePr = issues[2] as MergePrItem;
+    expect(mergePr.kind).toBe("merge-pr");
+    expect(mergePr.number).toBe(60);
+    expect(mergePr.title).toBe("Merge PR #42");
+    expect(mergePr.repo).toBe("natb1/office-hours-nate");
+    expect(mergePr.marker).not.toBeNull();
+    expect(mergePr.marker!.prNumber).toBe(42);
+    expect(mergePr.marker!.prRepo).toBe("natb1/commons.systems");
+    expect(mergePr.marker!.prUrl).toBe(
+      "https://github.com/natb1/commons.systems/pull/42",
+    );
+    expect(mergePr.marker!.prTitle).toBe("Some PR");
   });
 
   it("throws when the fetch returns non-OK", async () => {
@@ -591,8 +920,8 @@ describe("fetchOpenJitIssuesLive", () => {
     expect(secondBody.variables.cursor).toBe("cursor-abc");
 
     expect(issues).toHaveLength(2);
-    expect(issues[0].jitKey).toBe("page1-key");
-    expect(issues[1].jitKey).toBe("page2-key");
+    expect((issues[0] as ReminderItem).jitKey).toBe("page1-key");
+    expect((issues[1] as ReminderItem).jitKey).toBe("page2-key");
   });
 
   it("stops pagination when hasNextPage is true but endCursor is null", async () => {
@@ -628,7 +957,7 @@ describe("fetchOpenJitIssuesLive", () => {
     // Must not loop — one fetch only.
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(issues).toHaveLength(1);
-    expect(issues[0].jitKey).toBe("solo-key");
+    expect((issues[0] as ReminderItem).jitKey).toBe("solo-key");
   });
 });
 

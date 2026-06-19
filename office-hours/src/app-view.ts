@@ -1,4 +1,4 @@
-import { renderCapacityBand, selectLatestSample } from "./capacity-band.js";
+import { renderCapacityBand } from "./capacity-band.js";
 import { renderPacePositionPanel } from "./pace-position-panel.js";
 import { renderHistoryBand } from "./history-band.js";
 import { renderReminderList } from "./office-hours.js";
@@ -7,14 +7,17 @@ import { renderIssueHistoryChart } from "./issue-history-chart.js";
 import { getDemoSamples } from "./usage-data.js";
 import { getDemoReminders, getDemoQueueMetrics } from "./data.js";
 import { getDemoIssueSamples } from "./issue-data.js";
-import type { UsageSample } from "./usage-samples.js";
+import { renderAuditAggregateChart } from "./audit-aggregate-chart.js";
+import { getDemoAuditAggregates } from "./audit-data.js";
+import { selectLatestSample, type UsageSample } from "./usage-samples.js";
 import type { Reminder } from "./reminders.js";
 import type { QueueMetricsSnapshot } from "./queue-metrics.js";
 import type { IssueSample } from "./issue-samples.js";
+import type { AuditAggregate } from "./audit-aggregates.js";
 
 export type ViewState =
   | { tier: "demo" }                                                  // unauthenticated → labeled demo
-  | { tier: "owner"; samples: UsageSample[]; reminders: Reminder[]; queueMetrics: QueueMetricsSnapshot | null; issueSamples: IssueSample[] }  // authenticated → real (possibly empty)
+  | { tier: "owner"; samples: UsageSample[]; reminders: Reminder[]; queueMetrics: QueueMetricsSnapshot | null; issueSamples: IssueSample[]; auditAggregates: AuditAggregate[] }  // authenticated → real (possibly empty)
   | { tier: "error" };                                                // authenticated load failed
 
 type PanelTier = "demo" | "owner";
@@ -24,6 +27,7 @@ interface PanelContext {
   reminders: Reminder[];
   queueMetrics: QueueMetricsSnapshot | null;
   issueSamples: IssueSample[];
+  auditAggregates: AuditAggregate[];
   now: Date;
 }
 
@@ -32,6 +36,7 @@ interface Panel {
   title: string;                    // reserved metadata; renderApp does NOT render it
   availableIn: readonly PanelTier[];
   fullWidth?: boolean;
+  timeSensitive?: boolean;          // re-rendered in place on each tick
   renderInto(ctx: PanelContext): HTMLElement;
 }
 
@@ -40,6 +45,7 @@ function definePanel<T>(spec: {
   title: string;
   availableIn: readonly PanelTier[];
   fullWidth?: boolean;
+  timeSensitive?: boolean;
   load(ctx: PanelContext): T;
   render(data: T, now: Date): HTMLElement;
 }): Panel {
@@ -48,6 +54,7 @@ function definePanel<T>(spec: {
     title: spec.title,
     availableIn: spec.availableIn,
     fullWidth: spec.fullWidth,
+    timeSensitive: spec.timeSensitive,
     renderInto: (ctx) => spec.render(spec.load(ctx), ctx.now),
   };
 }
@@ -57,6 +64,7 @@ const PANELS: readonly Panel[] = [
     id: "capacity",
     title: "Capacity",
     availableIn: ["demo", "owner"],
+    timeSensitive: true,
     load: (c) => selectLatestSample(c.samples),
     render: (s, now) => renderCapacityBand(s, now),
   }),
@@ -84,9 +92,18 @@ const PANELS: readonly Panel[] = [
     render: (s) => renderIssueHistoryChart(s),
   }),
   definePanel({
+    id: "audit",
+    title: "Audit",
+    availableIn: ["demo", "owner"],
+    fullWidth: true,
+    load: (c) => c.auditAggregates,
+    render: (a) => renderAuditAggregateChart(a),
+  }),
+  definePanel({
     id: "reminders",
     title: "Reminders",
     availableIn: ["demo", "owner"],
+    timeSensitive: true,
     load: (c) => c.reminders,
     render: (r, now) => renderReminderList(r, now),
   }),
@@ -109,6 +126,7 @@ function buildContext(
       reminders: getDemoReminders(),
       queueMetrics: getDemoQueueMetrics(),
       issueSamples: getDemoIssueSamples(),
+      auditAggregates: getDemoAuditAggregates(),
       now,
     };
   return {
@@ -116,11 +134,32 @@ function buildContext(
     reminders: state.reminders,
     queueMetrics: state.queueMetrics,
     issueSamples: state.issueSamples,
+    auditAggregates: state.auditAggregates,
     now,
   };
 }
 
-export function renderApp(container: Element, state: ViewState, now: Date): void {
+/**
+ * Builds a panel's element for a given context, applying the full-width grid
+ * class. Used both for the first paint and for the in-place tick re-render, so
+ * a time-sensitive panel can never lose its full-width class on refresh.
+ */
+function buildPanelElement(panel: Panel, ctx: PanelContext): HTMLElement {
+  const el = panel.renderInto(ctx);
+  if (panel.fullWidth) el.classList.add("panel-grid-full");
+  return el;
+}
+
+/**
+ * Controller returned by renderApp. `tick(now)` re-renders only the
+ * time-sensitive panels (capacity, reminders) in place against a fresh `now`,
+ * leaving the history charts' DOM untouched so they don't re-scroll or flicker.
+ */
+export interface AppView {
+  tick(now: Date): void;
+}
+
+export function renderApp(container: Element, state: ViewState, now: Date): AppView {
   container.replaceChildren();
 
   if (state.tier === "error") {
@@ -129,7 +168,7 @@ export function renderApp(container: Element, state: ViewState, now: Date): void
     error.setAttribute("role", "alert");
     error.textContent = "Couldn't load your queue. Please try again.";
     container.appendChild(error);
-    return;
+    return { tick: () => {} };
   }
 
   if (state.tier === "demo") {
@@ -138,16 +177,31 @@ export function renderApp(container: Element, state: ViewState, now: Date): void
     banner.setAttribute("role", "status");
     banner.textContent = "Demo data — sign in to see your queue.";
     container.appendChild(banner);
+  } else if (state.tier !== "owner") {
+    const _exhaustive: never = state;
+    throw new Error("unhandled ViewState tier: " + String(_exhaustive));
   }
 
   const ctx = buildContext(state, now);
+
   const grid = document.createElement("div");
   grid.className = "panel-grid";
+  const timeSensitive: { panel: Panel; element: HTMLElement }[] = [];
   for (const panel of PANELS) {
     if (!panel.availableIn.includes(state.tier)) continue;
-    const el = panel.renderInto(ctx);
-    if (panel.fullWidth) el.classList.add("panel-grid-full");
+    const el = buildPanelElement(panel, ctx);
+    if (panel.timeSensitive) timeSensitive.push({ panel, element: el });
     grid.appendChild(el);
   }
   container.appendChild(grid);
+
+  return {
+    tick(nextNow: Date) {
+      for (const entry of timeSensitive) {
+        const fresh = buildPanelElement(entry.panel, { ...ctx, now: nextNow });
+        grid.replaceChild(fresh, entry.element);
+        entry.element = fresh;
+      }
+    },
+  };
 }
