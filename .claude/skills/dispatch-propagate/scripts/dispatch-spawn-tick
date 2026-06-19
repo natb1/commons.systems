@@ -169,6 +169,8 @@ ensure_recover_unit "$MAIN_WORKTREE" || true
 # transient unit's cgroup. Best-effort: a failure here is non-fatal — the
 # on-demand daemon then falls back to surviving via KillMode=process (#1196).
 ensure_daemon_service || true
+# Install+enable the durable periodic sweep timer so idle/drained chains still GC worktrees (#2023).
+ensure_sweep_timer "$MAIN_WORKTREE" || true
 
 # Install the durable heartbeat timer (#2022) — a 15-min drumbeat that fires
 # dispatch-tick independently of Stop-hooks and reseed timers, so abnormal

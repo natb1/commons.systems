@@ -11,13 +11,13 @@ import { render, cleanup } from "@testing-library/react";
 import { BacklogPanel } from "../src/components/BacklogPanel.js";
 import type { IssueSample } from "../src/issue-samples.js";
 
-/** Draining fixture: openHelpWanted descending over consecutive days. */
+/** Draining fixture: four-bucket totals descending over consecutive days. */
 const drainingFixture: IssueSample[] = [
-  { sampledAt: new Date("2026-06-07T00:00:00Z"), openHelpWanted: 18, openOther: 5, groupId: "g" },
-  { sampledAt: new Date("2026-06-08T00:00:00Z"), openHelpWanted: 15, openOther: 4, groupId: "g" },
-  { sampledAt: new Date("2026-06-09T00:00:00Z"), openHelpWanted: 12, openOther: 3, groupId: "g" },
-  { sampledAt: new Date("2026-06-10T00:00:00Z"), openHelpWanted: 9, openOther: 2, groupId: "g" },
-  { sampledAt: new Date("2026-06-11T00:00:00Z"), openHelpWanted: 6, openOther: 1, groupId: "g" },
+  { sampledAt: new Date("2026-06-07T00:00:00Z"), openSecurity: 2, openBug: 9, openEnhancement: 7, openOther: 5, groupId: "g" },
+  { sampledAt: new Date("2026-06-08T00:00:00Z"), openSecurity: 2, openBug: 7, openEnhancement: 6, openOther: 4, groupId: "g" },
+  { sampledAt: new Date("2026-06-09T00:00:00Z"), openSecurity: 1, openBug: 6, openEnhancement: 5, openOther: 3, groupId: "g" },
+  { sampledAt: new Date("2026-06-10T00:00:00Z"), openSecurity: 1, openBug: 4, openEnhancement: 4, openOther: 2, groupId: "g" },
+  { sampledAt: new Date("2026-06-11T00:00:00Z"), openSecurity: 1, openBug: 3, openEnhancement: 2, openOther: 1, groupId: "g" },
 ];
 
 beforeEach(() => {
