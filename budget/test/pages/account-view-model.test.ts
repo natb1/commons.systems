@@ -14,6 +14,8 @@ import {
   formatSignedPercent,
   formatPercent,
   varianceClass,
+  parseReconcileQuery,
+  parseReconcilePeriod,
 } from "../../src/pages/account-view-model";
 import type { Transaction, Statement } from "../../src/firestore";
 
@@ -178,5 +180,43 @@ describe("varianceClass", () => {
   it("inverts the sense for the expense side (less spending is favorable)", () => {
     expect(varianceClass(-5, "expense")).toBe("variance-positive");
     expect(varianceClass(5, "expense")).toBe("variance-negative");
+  });
+});
+
+// Migrated from accounts-reconcile.test.ts (the legacy renderer suite, deleted in
+// Unit 4). These pure parsers were relocated into account-view-model.ts; the
+// rest of that suite tested renderReconcileHtml and is covered by
+// AccountsReconcile.test.tsx.
+describe("parseReconcileQuery", () => {
+  it("returns nulls for an empty query string", () => {
+    const q = parseReconcileQuery("");
+    expect(q.institution).toBeNull();
+    expect(q.account).toBeNull();
+    expect(q.period).toBeNull();
+  });
+
+  it("parses institution, account, and period", () => {
+    const q = parseReconcileQuery("?institution=Bank&account=Checking&period=2025-02");
+    expect(q.institution).toBe("Bank");
+    expect(q.account).toBe("Checking");
+    expect(q.period).toBe("2025-02");
+  });
+
+  it("does not expose a tolerance field", () => {
+    const q = parseReconcileQuery("?tolerance=7");
+    expect(q).not.toHaveProperty("toleranceDays");
+  });
+});
+
+describe("parseReconcilePeriod", () => {
+  it("parses a valid YYYY-MM into a year and 1-based month", () => {
+    expect(parseReconcilePeriod("2025-02")).toEqual({ year: 2025, month: 2 });
+    expect(parseReconcilePeriod("2024-12")).toEqual({ year: 2024, month: 12 });
+  });
+
+  it("throws a RangeError on a non-numeric or out-of-range period", () => {
+    expect(() => parseReconcilePeriod("2025-13")).toThrow(RangeError);
+    expect(() => parseReconcilePeriod("2025-00")).toThrow(RangeError);
+    expect(() => parseReconcilePeriod("notaperiod")).toThrow(RangeError);
   });
 });

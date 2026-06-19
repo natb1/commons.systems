@@ -23,8 +23,6 @@ vi.mock("@commons-systems/ds", () => ({
 }));
 vi.mock("../src/pages/home.js", () => ({ renderHome: vi.fn().mockResolvedValue("<div>home</div>") }));
 vi.mock("../src/pages/budgets.js", () => ({ renderBudgets: vi.fn().mockResolvedValue("<div>budgets</div>") }));
-vi.mock("../src/pages/accounts.js", () => ({ renderAccounts: vi.fn().mockResolvedValue("<div>accounts</div>") }));
-vi.mock("../src/pages/accounts-reconcile.js", () => ({ renderAccountsReconcile: vi.fn().mockResolvedValue("<div>reconcile</div>") }));
 vi.mock("../src/pages/rules.js", () => ({ renderRules: vi.fn().mockResolvedValue("<div>rules</div>") }));
 vi.mock("../src/pages/home-hydrate.js", () => ({ hydrateTransactionTable: vi.fn() }));
 vi.mock("../src/pages/home-chart.js", () => ({ hydrateCategorySankey: vi.fn() }));
@@ -32,8 +30,6 @@ vi.mock("../src/pages/budgets-hydrate.js", () => ({
   hydrateBudgetTable: vi.fn(), hydrateBudgetChart: vi.fn(), hydrateOverridesTable: vi.fn(),
 }));
 vi.mock("../src/pages/rules-hydrate.js", () => ({ hydrateRulesTable: vi.fn() }));
-vi.mock("../src/pages/accounts-hydrate.js", () => ({ hydrateAccountsCharts: vi.fn() }));
-vi.mock("../src/pages/accounts-reconcile-hydrate.js", () => ({ hydrateAccountsReconcile: vi.fn() }));
 vi.mock("../src/legacy-hydrate.js", () => ({ hydrateTable: vi.fn(), runHydrationSpecs: vi.fn() }));
 vi.mock("../src/pages/hero.js", () => ({ renderHero: vi.fn().mockReturnValue("<div id='hero'>hero</div>") }));
 vi.mock("@commons-systems/components/hero", () => ({ hydrateHero: vi.fn(), mountHero: vi.fn() }));

@@ -115,6 +115,37 @@ export function formatPercent(ratio: number | null): string {
   return `${(ratio * 100).toFixed(1)}%`;
 }
 
+// ── Reconcile query/period parsing ──────────────────────────────────────────
+// Relocated from accounts-reconcile.ts (the legacy renderer, deleted in Unit 4)
+// so the React <AccountsReconcile> page keeps a stable pure-function home. These
+// compute values (parse the URL query, validate a YYYY-MM period) with no DOM.
+
+export interface ReconcileQuery {
+  institution: string | null;
+  account: string | null;
+  period: string | null;
+}
+
+export function parseReconcileQuery(search: string): ReconcileQuery {
+  const params = new URLSearchParams(search);
+  return {
+    institution: params.get("institution"),
+    account: params.get("account"),
+    period: params.get("period"),
+  };
+}
+
+/** Parse and validate a `YYYY-MM` reconcile period into its year and 1-based month. */
+export function parseReconcilePeriod(period: string): { year: number; month: number } {
+  const [yearRaw, monthRaw] = period.split("-");
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
+    throw new RangeError(`Invalid reconcile period: ${period}`);
+  }
+  return { year, month };
+}
+
 export type VarianceSide = "income" | "expense";
 
 /**

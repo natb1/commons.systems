@@ -8,9 +8,8 @@
 // SCOPE (Unit 2): the markup → JSX (DS Metric/Card/Badge for the headline
 // figures, the virtual badge, and section grouping; the income-statement /
 // cash-flow tables and the divergence warning ported as JSX with the same class
-// names), and the charts as a working imperative island. The page is built and
-// unit-tested but NOT yet routed (App.tsx still routes legacy renderAccounts);
-// routing is Unit 4.
+// names), and the charts as a working imperative island. Routed at /accounts in
+// App.tsx (Unit 4); the legacy renderAccounts string renderer has been removed.
 //
 // The data-loading pipeline is renderAccounts' Promise.all moved into a
 // mount-once useEffect, UNCHANGED in behavior: per-source logError + rethrow,

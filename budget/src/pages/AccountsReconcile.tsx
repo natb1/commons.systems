@@ -51,7 +51,7 @@ import {
 } from "../reconciliation.js";
 import { suggestClearedLegs, SUGGESTION_TOLERANCE_DAYS } from "../reconcile-hints.js";
 import { type RenderPageOptions } from "./render-options.js";
-import { parseReconcileQuery, parseReconcilePeriod } from "./accounts-reconcile.js";
+import { parseReconcileQuery, parseReconcilePeriod } from "./account-view-model.js";
 
 // ── Query state + URL sync (parseReconcileQuery / replaceQueryParam) ───────────
 
@@ -240,6 +240,13 @@ interface LegItemState {
   checked: boolean;
   /** Whether the suggested treatment (class + badge) is still showing. */
   suggested: boolean;
+  /**
+   * The last persisted cleared value, surfaced as `data-cleared-saved` on the
+   * row — a settle signal for e2e (and the legacy contract). `null` while a
+   * write is in flight or before any toggle, matching the legacy hydrate's
+   * `delete row.dataset.clearedSaved` before the await + set after it resolves.
+   */
+  savedChecked: boolean | null;
 }
 
 function LegList({ rows, legState, onToggle }: {
@@ -270,6 +277,7 @@ function LegList({ rows, legState, onToggle }: {
             data-leg-id={leg.id}
             data-signed-amount={row.signedAmount}
             {...(state.suggested ? { "data-suggested": "" } : {})}
+            {...(state.savedChecked !== null ? { "data-cleared-saved": String(state.savedChecked) } : {})}
           >
             {/* DS Checkbox owns the label/styling contract (cs-checkbox), but the
                 input keeps the legacy `reconcile-cleared-checkbox` class the CSS
@@ -373,7 +381,9 @@ function LoadedReconcile({ data, query, vm, onReload, onSelectAccount, onSelectP
     for (const row of vm.rows) {
       const reconciled = row.leg.reconciledEventId !== null || row.leg.reconciledAt !== null;
       const suggested = !row.leg.cleared && !reconciled && vm.suggestedIds.has(row.leg.id);
-      map.set(row.leg.id, { checked: row.leg.cleared, suggested });
+      // savedChecked starts null → no data-cleared-saved attribute on initial
+      // render (matching the legacy hydrate, which only stamps it post-persist).
+      map.set(row.leg.id, { checked: row.leg.cleared, suggested, savedChecked: null });
     }
     return map;
   });
@@ -404,7 +414,9 @@ function LoadedReconcile({ data, query, vm, onReload, onSelectAccount, onSelectP
       const cur = prev.get(legId);
       if (!cur) return prev;
       const map = new Map(prev);
-      map.set(legId, { ...cur, checked: next });
+      // Optimistic flip; clear the settle signal (legacy: delete clearedSaved
+      // before the await) so a stale "true" cannot be read as the new write.
+      map.set(legId, { ...cur, checked: next, savedChecked: null });
       return map;
     });
     getActiveDataSource()
@@ -412,12 +424,13 @@ function LoadedReconcile({ data, query, vm, onReload, onSelectAccount, onSelectP
       .then(() => {
         // Any explicit toggle dismisses the suggestion — checking confirms it,
         // unchecking rejects it. Either way the row leaves the suggested pool so a
-        // later Confirm-all cannot re-clear a rejection.
+        // later Confirm-all cannot re-clear a rejection. Stamp the settled write
+        // (legacy: row.dataset.clearedSaved = String(nextChecked)).
         setLegState((prev) => {
           const cur = prev.get(legId);
-          if (!cur || !cur.suggested) return prev;
+          if (!cur) return prev;
           const map = new Map(prev);
-          map.set(legId, { ...cur, suggested: false });
+          map.set(legId, { ...cur, suggested: false, savedChecked: next });
           return map;
         });
       })
@@ -445,7 +458,8 @@ function LoadedReconcile({ data, query, vm, onReload, onSelectAccount, onSelectP
       const map = new Map(prev);
       for (const id of suggestedIds) {
         const cur = map.get(id)!;
-        map.set(id, { ...cur, checked: true });
+        // Optimistic bulk-check; clear the settle signal until each write lands.
+        map.set(id, { ...cur, checked: true, savedChecked: null });
       }
       return map;
     });
@@ -458,7 +472,9 @@ function LoadedReconcile({ data, query, vm, onReload, onSelectAccount, onSelectP
             const cur = prev.get(id);
             if (!cur) return prev;
             const map = new Map(prev);
-            map.set(id, { ...cur, suggested: false }); // promote: drop suggestion styling
+            // promote: drop suggestion styling + stamp the settled write
+            // (legacy: row.dataset.clearedSaved = "true" after each persist).
+            map.set(id, { ...cur, suggested: false, savedChecked: true });
             return map;
           });
         } catch (error: unknown) {
