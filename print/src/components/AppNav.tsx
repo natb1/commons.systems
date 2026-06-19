@@ -8,10 +8,10 @@ export interface AppNavProps {
   localFolderSlot: HTMLElement;
 }
 
-// Stub AppNav (Unit 3 makes this verbatim — home link, #user-display, exact
-// ordering). For now it composes the ds Nav with the two app links, mounts the
-// imperatively-managed localFolderSlot as an opaque DOM node, and renders a
-// minimal Login/Logout control so the tree builds and is navigable.
+// Verbatim replacement for the old imperative <app-nav> custom element
+// (components/src/nav.ts), composing the ds Nav. The `end` slot reproduces the
+// production right-aligned chrome in DOM order: home link, the imperatively
+// managed local-folder mount, then the auth control.
 export function AppNav(props: AppNavProps) {
   return (
     <Nav
@@ -21,6 +21,7 @@ export function AppNav(props: AppNavProps) {
       ]}
       end={
         <>
+          <a href="https://commons.systems/">commons.systems</a>
           <span
             ref={(el) => {
               if (el && !el.contains(props.localFolderSlot))
@@ -28,18 +29,25 @@ export function AppNav(props: AppNavProps) {
             }}
           />
           {props.user ? (
-            <a
-              href="#"
-              onClick={(e) => {
-                e.preventDefault();
-                props.onSignOut();
-              }}
-            >
-              Logout
-            </a>
+            <>
+              <span id="user-display">
+                {props.user.displayName || props.user.email || "User"}
+              </span>
+              <a
+                href="#"
+                id="sign-out"
+                onClick={(e) => {
+                  e.preventDefault();
+                  props.onSignOut();
+                }}
+              >
+                Logout
+              </a>
+            </>
           ) : (
             <a
               href="#"
+              id="sign-in"
               onClick={(e) => {
                 e.preventDefault();
                 props.onSignIn();
