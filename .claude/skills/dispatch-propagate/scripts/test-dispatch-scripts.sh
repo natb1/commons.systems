@@ -26198,6 +26198,33 @@ f5
 f6
 f7" "$(printf '%s' "$out" | jq -r '.dispositions[].id')"
 
+# ============================================================================
+# === qa-fix partition (#1844) ===
+# ============================================================================
+# CI vector: run-unit-tests.sh has no mapping for .claude/workflows/*, so a PR
+# touching only qa-fix.js triggers no vitest suite. The hook-tests job (this
+# script) is the only test that runs on every PR, so coverage for
+# partitionDispositions must live here. The probe slices the pure function out
+# of qa-fix.js between sentinel comments and evals just that slice.
+
+echo "Test: qa-fix partition (#1844)"
+
+out=$(node "$SCRIPT_DIR/qa-fix-partition-probe.mjs")
+
+# already-satisfied id (p4) is partitioned OUT of dispositions
+assert_eq "qa-fix partition: already-satisfied id absent from dispositions" "false" "$(printf '%s' "$out" | jq -r '.dispositions | any(. == "p4")')"
+# already-satisfied id (p4) is partitioned INTO already_satisfied
+assert_eq "qa-fix partition: already-satisfied id present in already_satisfied" "true" "$(printf '%s' "$out" | jq -r '.already_satisfied | any(. == "p4")')"
+# inverse guard: a non-already-satisfied id (p1, opus-fixable) stays in dispositions
+assert_eq "qa-fix partition: non-already-satisfied id present in dispositions" "true" "$(printf '%s' "$out" | jq -r '.dispositions | any(. == "p1")')"
+# call-site coverage: qa-fix.js still invokes the function the probe slices.
+# This file defines its own assert_eq (it does not source test-helpers.sh), so
+# use the grep -c | assert_eq convention the rest of the suite uses.
+# Match `= partitionDispositions(allDispositions)` (the call site), not the bare
+# `function partitionDispositions(allDispositions)` definition — both contain the
+# call substring, so the `= ` prefix isolates the invocation to exactly one line.
+assert_eq "qa-fix partition: call site present in qa-fix.js" "1" "$(grep -c '= partitionDispositions(allDispositions)' "$REPO_ROOT/.claude/workflows/qa-fix.js" || true)"
+
 # dispatch-jit-skill tests
 # ============================================================================
 #
