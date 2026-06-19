@@ -1250,6 +1250,24 @@ assert_eq "--repo: API path uses cross-repo segment" "yes" "$seg"
 if grep -q 'repos/{owner}/{repo}/issues' "$STUB_DIR/gh-issue-list-rest-calls.log"; then ph=yes; else ph=no; fi
 assert_eq "--repo: placeholder absent from cross-repo call" "no" "$ph"
 assert_eq "--repo: returns the stub's empty array" "[]" "$actual_repo"
+# Single-page (--limit) branch with --repo: pin that the cross-repo segment is
+# emitted under the per_page= (no --paginate) path too, not just --paginate.
+: > "$STUB_DIR/gh-issue-list-rest-calls.log"
+actual_repo_lim=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --limit 50 --repo owner/other-repo --label dispatch-test-empty)
+assert_eq "--repo+--limit: returns the stub's empty array" "[]" "$actual_repo_lim"
+if grep -q 'repos/owner/other-repo/issues' "$STUB_DIR/gh-issue-list-rest-calls.log"; then seg_lim=yes; else seg_lim=no; fi
+assert_eq "--repo+--limit: single-page API path uses cross-repo segment" "yes" "$seg_lim"
+# Prove it was the single-page branch (not --paginate) that emitted the segment.
+if grep -q 'per_page=50[^0-9]' "$STUB_DIR/gh-issue-list-rest-calls.log"; then
+  assert_eq "--repo+--limit: log contains per_page=50" "yes" "yes"
+else
+  assert_eq "--repo+--limit: log contains per_page=50" "yes" "no"
+fi
+if grep -q -- '--paginate' "$STUB_DIR/gh-issue-list-rest-calls.log"; then
+  assert_eq "--repo+--limit: log does not contain --paginate" "no" "yes"
+else
+  assert_eq "--repo+--limit: log does not contain --paginate" "no" "no"
+fi
 teardown
 
 # ============================================================================
