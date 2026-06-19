@@ -67,6 +67,7 @@ setup() {
   cp "$SCRIPT_DIR/dispatch-check-blockers" "$TMPDIR_TEST/dispatch-check-blockers"
   cp "$SCRIPT_DIR/dispatch-complete-phase" "$TMPDIR_TEST/dispatch-complete-phase"
   cp "$SCRIPT_DIR/dispatch-apply-office-hours" "$TMPDIR_TEST/dispatch-apply-office-hours"
+  cp "$SCRIPT_DIR/dispatch-qa-apply-main-qa-labels" "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels"
   cp "$SCRIPT_DIR/dispatch-apply-planned" "$TMPDIR_TEST/dispatch-apply-planned"
   # dispatch-plan-finalize resolves its three siblings (dispatch-write-plan,
   # dispatch-mark-complete, dispatch-apply-planned) via SCRIPT_DIR, which
@@ -122,6 +123,7 @@ setup() {
            "$TMPDIR_TEST/dispatch-check-blockers" \
            "$TMPDIR_TEST/dispatch-complete-phase" \
            "$TMPDIR_TEST/dispatch-apply-office-hours" \
+           "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" \
            "$TMPDIR_TEST/dispatch-apply-planned" \
            "$TMPDIR_TEST/dispatch-resolve-worktree" \
            "$TMPDIR_TEST/dispatch-reconcile-ready" \
@@ -577,7 +579,8 @@ case "$args" in
     fi
     ;;
   issue\ edit\ *)
-    # dispatch-apply-office-hours applies the label to the ISSUE.
+    # Multiple scripts (dispatch-apply-office-hours, dispatch-qa-apply-main-qa-labels, ...)
+    # route their `gh issue edit` calls through this block.
     # $STUB_DIR/issue-edit-mode selects behavior (default: succeed and log args).
     mode="ok"
     [[ -f "$STUB_DIR/issue-edit-mode" ]] && mode=$(cat "$STUB_DIR/issue-edit-mode")
@@ -592,6 +595,26 @@ case "$args" in
           echo "failed to update: '$label' not found" >&2
           exit 1
         fi
+        ;;
+      remove-label-missing)
+        # Model step 1's tolerated "not found" on the help-wanted removal ONLY.
+        # The main-qa add and office-hours add must still succeed.
+        if [[ "$args" == *"--remove-label"* ]]; then
+          echo "failed to update: 'help wanted' not found" >&2
+          exit 1
+        fi
+        echo "$args" >> "$STUB_DIR/gh-issue-edit.log"
+        ;;
+      main-qa-missing)
+        # Model step 2's add-then-create-on-not-found for main-qa ONLY: the first
+        # --add-label main-qa fails "not found" until gh label create main-qa runs;
+        # the retry then succeeds. remove-label and the office-hours
+        # --add-label dispatch:office-hours fall through to log+succeed.
+        if [[ "$args" == *"--add-label main-qa"* && ! -f "$STUB_DIR/gh-label-create.log" ]]; then
+          echo "failed to update: 'main-qa' not found" >&2
+          exit 1
+        fi
+        echo "$args" >> "$STUB_DIR/gh-issue-edit.log"
         ;;
       *)
         echo "$args" >> "$STUB_DIR/gh-issue-edit.log"
@@ -6818,6 +6841,116 @@ echo "Test: missing issue number → non-zero exit"
 setup
 if "$TMPDIR_TEST/dispatch-apply-planned" 2>/dev/null; then rc=0; else rc=$?; fi
 assert_eq "missing issue number exits non-zero" "1" "$rc"
+teardown
+
+# ============================================================================
+# dispatch-qa-apply-main-qa-labels tests (#1758)
+# ============================================================================
+echo ""
+echo "=== dispatch-qa-apply-main-qa-labels (#1758) ==="
+
+# Happy path: both main-qa and dispatch:office-hours labels exist in the repo
+# (default stub mode), so remove-label succeeds, both adds succeed, and the
+# script exits 0. No label create needed.
+echo "Test: happy path → remove help-wanted, add main-qa, route to office-hours; exit 0"
+setup
+if "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" 42; then rc=0; else rc=$?; fi
+assert_eq "happy path: exit 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if grep -q -- "--remove-label help wanted" "$STUB_DIR/gh-issue-edit.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: removed help wanted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: removed help wanted"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q -- "--add-label main-qa" "$STUB_DIR/gh-issue-edit.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: added main-qa"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: added main-qa"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q -- "--add-label dispatch:office-hours" "$STUB_DIR/gh-issue-edit.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: routed to office-hours"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: routed to office-hours"
+fi
+assert_eq "no gh label create" "absent" "$(log_state gh-label-create.log)"
+teardown
+
+# Idempotent re-run: the "help wanted" label is no longer on the issue so the
+# remove-label call returns "not found". The script must tolerate this and still
+# apply main-qa and dispatch:office-hours, exiting 0.
+echo "Test: remove-label-missing → tolerated, main-qa and office-hours still applied; exit 0"
+setup
+echo "remove-label-missing" > "$STUB_DIR/issue-edit-mode"
+if "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" 42; then rc=0; else rc=$?; fi
+assert_eq "not-found removal tolerated, exit 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if grep -q -- "--add-label main-qa" "$STUB_DIR/gh-issue-edit.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: main-qa applied after tolerated removal"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: main-qa applied after tolerated removal"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q -- "--add-label dispatch:office-hours" "$STUB_DIR/gh-issue-edit.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: office-hours routing still runs"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: office-hours routing still runs"
+fi
+TOTAL=$((TOTAL + 1))
+if ! grep -q -- "--remove-label" "$STUB_DIR/gh-issue-edit.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: remove-label not logged (not-found path fired)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: remove-label unexpectedly logged"
+fi
+teardown
+
+# Lazy label-create: the main-qa label does not yet exist in the repo. The
+# first add attempt fails "not found"; the script creates the label with
+# canonical metadata (5319E7) and retries the add. The office-hours step runs
+# unaffected.
+echo "Test: main-qa-missing → create with canonical metadata, retry add, office-hours unaffected; exit 0"
+setup
+echo "main-qa-missing" > "$STUB_DIR/issue-edit-mode"
+if "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" 42; then rc=0; else rc=$?; fi
+assert_eq "lazy create: exit 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if grep -q "^label create main-qa --color 5319E7 --description QA verification that can only run against deployed main/production" "$STUB_DIR/gh-label-create.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: created with canonical metadata"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: created with canonical metadata"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q -- "--add-label main-qa" "$STUB_DIR/gh-issue-edit.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: main-qa applied on retry"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: main-qa applied on retry"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q -- "--add-label dispatch:office-hours" "$STUB_DIR/gh-issue-edit.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: office-hours unaffected by lazy create"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: office-hours unaffected by lazy create"
+fi
+teardown
+
+# Non-numeric, flag-like issue number → hard error (exit 1), no gh calls. The
+# guard exists so a flag-like value can never be parsed by gh as an option that
+# redirects the label writes.
+echo "Test: non-numeric issue number → non-zero exit, no edit/label-create"
+setup
+if "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" "--repo other/repo" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "non-numeric issue number exits non-zero" "1" "$rc"
+assert_eq "non-numeric: no label edit" "absent" "$(log_state gh-issue-edit.log)"
+assert_eq "non-numeric: no label create" "absent" "$(log_state gh-label-create.log)"
+teardown
+
+# Missing arg → hard error (exit 1).
+echo "Test: missing issue number → non-zero exit"
+setup
+if "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "missing issue number exits non-zero" "1" "$rc"
+assert_eq "missing arg: no label edit" "absent" "$(log_state gh-issue-edit.log)"
 teardown
 
 # ============================================================================
