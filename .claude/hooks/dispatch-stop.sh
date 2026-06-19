@@ -212,8 +212,13 @@ clear_rate_limit_retry_labels() {
 }
 
 spawn_tick() {
-  "$SCRIPTS/dispatch-spawn-tick" >/dev/null 2>&1 \
-    || echo "[dispatch-stop] WARNING: dispatch-spawn-tick failed" >&2
+  local out
+  if out=$("$SCRIPTS/dispatch-spawn-tick" 2>&1); then
+    echo "[dispatch-stop] dispatch-spawn-tick: ${out:-<no output>}" >&2
+  else
+    echo "[dispatch-stop] WARNING: dispatch-spawn-tick failed: ${out:-<no output>}" >&2
+  fi
+  return 0
 }
 
 spawn_sweep() {
