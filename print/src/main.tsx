@@ -3,14 +3,16 @@ import "./style/theme.css";
 import { createHistoryRouter } from "@commons-systems/router";
 import { classifyError } from "@commons-systems/errorutil/classify";
 import { logError } from "@commons-systems/errorutil/log";
-import { renderHome, afterRenderHome, wireDownloadActions } from "./pages/home.js";
+import { loadMediaHtml, afterRenderHome, wireDownloadActions } from "./pages/home.js";
 import { wireMarkdownActions } from "./markdown-actions.js";
 import { initLocalFolder } from "./local-folder-ui.js";
 import { renderView, afterRenderView, cleanupView, NOT_FOUND_HTML } from "./pages/view.js";
 import { createRoot, type Root } from "react-dom/client";
+import { flushSync } from "react-dom";
 import { AppNav } from "./components/AppNav.js";
 import { Hero } from "./pages/Hero.js";
 import { About } from "./pages/About.js";
+import { Home } from "./pages/Home.js";
 import { signIn, signOut, onAuthStateChanged } from "./auth.js";
 import type { User } from "./auth.js";
 import { setViewerEmail, markLocalFolderReady } from "./library.js";
@@ -61,14 +63,32 @@ wireMarkdownActions(app);
 // afterRender. The previous page's root is unmounted in onNavigate, before the
 // router wipes the outlet's innerHTML.
 let currentPageRoot: Root | null = null;
+let homeState: { mediaHtml: string; user: User | null } | null = null;
 
 const router = createHistoryRouter(
   app,
   [
     {
       path: "/",
-      render: () => renderHome(currentUser),
-      afterRender: afterRenderHome,
+      render: async () => {
+        homeState = { mediaHtml: await loadMediaHtml(), user: currentUser };
+        return '<div id="page-root"></div>';
+      },
+      afterRender: (outlet) => {
+        const mount = outlet.querySelector("#page-root");
+        if (!mount || !homeState) return;
+        const state = homeState;
+        currentPageRoot = createRoot(mount as HTMLElement);
+        // flushSync so the dangerouslySetInnerHTML media DOM is committed
+        // synchronously BEFORE afterRenderHome queries #media-list to prepend
+        // local items. React 18 createRoot.render is otherwise concurrent/deferred.
+        flushSync(() =>
+          currentPageRoot!.render(
+            <Home mediaHtml={state.mediaHtml} user={state.user} />,
+          ),
+        );
+        afterRenderHome(outlet);
+      },
     },
     {
       path: /^\/view\/([^/]+)$/,
