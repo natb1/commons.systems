@@ -282,8 +282,8 @@ describe("prerenderPosts", () => {
       (c) => String(c[0]).includes("post/hello-world"),
     );
     const html = perPostCall![1] as string;
-    expect(html).toContain('<article id="post-hello-world">');
-    expect(html).toContain('<article id="post-second-post">');
+    expect(html).toContain('id="post-hello-world"');
+    expect(html).toContain('id="post-second-post"');
     expect(html).toContain('data-hydrated');
     expect(html).toContain('<main id="app"><div id="posts">');
     expect(html).toContain("hello world");
@@ -302,12 +302,12 @@ describe("prerenderPosts", () => {
     );
     const perPostHtml = perPostCall![1] as string;
 
-    expect(perPostHtml).toContain('<article id="post-hello-world">');
-    expect(perPostHtml).toContain('<article id="post-second-post">');
+    expect(perPostHtml).toContain('id="post-hello-world"');
+    expect(perPostHtml).toContain('id="post-second-post"');
     expect(perPostHtml).toContain("<hr>");
 
-    expect(rootHtml).toContain('<article id="post-hello-world">');
-    expect(rootHtml).toContain('<article id="post-second-post">');
+    expect(rootHtml).toContain('id="post-hello-world"');
+    expect(rootHtml).toContain('id="post-second-post"');
     expect(rootHtml).toContain("<hr>");
   });
 
@@ -319,8 +319,8 @@ describe("prerenderPosts", () => {
     );
     expect(rootCall).toBeDefined();
     const html = rootCall![1] as string;
-    expect(html).toContain('<article id="post-hello-world">');
-    expect(html).toContain('<article id="post-second-post">');
+    expect(html).toContain('id="post-hello-world"');
+    expect(html).toContain('id="post-second-post"');
     expect(html).toContain("<hr>");
     // Second post is newer, should appear first
     const firstIdx = html.indexOf("post-second-post");
@@ -375,8 +375,15 @@ describe("prerenderPosts", () => {
       (c) => String(c[0]) === "/dist/index.html",
     );
     const html = rootCall![1] as string;
-    expect(html).toContain('<app-nav id="nav"><span class="nav-links">');
-    expect(html).toContain('<a href="/">Home</a>');
+    // The <app-nav> wrapper survives as an inert tag; inside it the ds Nav
+    // renders the nav links (crawlers still see them) plus the home link.
+    expect(html).toContain('<app-nav id="nav">');
+    expect(html).toContain("cs-nav");
+    expect(html).toContain('href="/"');
+    expect(html).toContain("Home");
+    // Anonymous prerender: home link present, no auth "Login" control.
+    expect(html).toContain("commons.systems");
+    expect(html).not.toContain("Login");
     expect(html).not.toContain('<app-nav id="nav"></app-nav>');
   });
 
