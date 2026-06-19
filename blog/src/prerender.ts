@@ -1,7 +1,10 @@
 import * as fs from "node:fs";
 import { join } from "node:path";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { escapeHtml } from "@commons-systems/htmlutil";
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
+import { BlogNav } from "./components/BlogNav.tsx";
 import type { InfoPanelData } from "./components/info-panel.ts";
 import {
   siteDefaultOgEntries,
@@ -85,14 +88,19 @@ function ogTagsToHtml(entries: OgTagEntry[]): string {
     .join("\n    ");
 }
 
+// Render the nav anonymously (showAuth=false, user=null) so no stray "Login"
+// control leaks into the static HTML; show the home link so crawlers see it.
 function renderNavHtml(links: NavLink[]): string {
-  const anchors = links
-    .map((l) => {
-      const alignAttr = l.align === "end" ? ` data-align="end"` : "";
-      return `<a href="${escapeHtml(l.href)}"${alignAttr}>${escapeHtml(l.label)}</a>`;
-    })
-    .join("");
-  return `<span class="nav-links">${anchors}</span>`;
+  return renderToStaticMarkup(
+    createElement(BlogNav, {
+      links,
+      showHomeLink: true,
+      showAuth: false,
+      user: null,
+      onSignIn: () => {},
+      onSignOut: () => {},
+    }),
+  );
 }
 
 interface RenderedPost {
