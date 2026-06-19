@@ -666,6 +666,21 @@ has_priority_in_labels() {
   printf '%s' "$1" | jq -r "$JQ_LABEL_DEFS"' has_priority'
 }
 
+# 1 if any closing issue — or any of its open ancestors — carries the `priority`
+# label; else 0. Inherits priority from the epic subtree by including each
+# closing issue's ancestor numbers (from ANCESTOR_NUMS) in the label union.
+# Closed ancestors are absent from ISSUE_LABELS_JSON (which holds open issues
+# only), so they contribute nothing — "open ancestor" semantics are automatic.
+# A PR with no closing issues, or whose closing issues and ancestors are absent
+# from the map, returns 0.
+pr_priority_bit() {
+  printf '%s' "$1" | jq -r --argjson map "$ISSUE_LABELS_JSON" --argjson anc "$ANCESTOR_NUMS" \
+    "$JQ_LABEL_DEFS"'
+      [ .[].number | tostring as $n
+        | ( ($map[$n] // [])[], ( ($anc[$n] // [])[] | tostring as $a | ($map[$a] // [])[] ) ) ]
+      | has_priority'
+}
+
 # Top-N ranked PRs per (category, priority-bit, phase): key =
 # "<category>|<priority-bit>|<phase>", value = a NEWLINE-DELIMITED list (no
 # leading/trailing newline) of up to TOP entries, each "<num> <branch>", oldest
@@ -792,7 +807,7 @@ while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
   # per-PR dispatch-ci-ready / dispatch-phase gh calls — a non-priority PR is
   # never selectable in this mode, so it pays nothing.
   if [[ "$PRIORITY_ONLY" == "true" ]] \
-     && [[ "$(has_priority_in_labels "$(pr_combined_labels "$pr_closing")")" != "1" ]]; then
+     && [[ "$(pr_priority_bit "$pr_closing")" != "1" ]]; then
     continue
   fi
 
@@ -901,7 +916,7 @@ while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
   # first-seen guard.
   pr_combined=$(pr_combined_labels "$pr_closing")
   pr_cat=$(category_of_labels "$pr_combined")
-  pr_pri=$(has_priority_in_labels "$pr_combined")
+  pr_pri=$(pr_priority_bit "$pr_closing")
   pr_key="$pr_cat|$pr_pri|$phase"
   bucket_append FIRST_PR "$pr_key" "$pr_num $pr_branch" || true
 done <<< "$PR_SORTED"
