@@ -404,7 +404,7 @@ describe("syncOfficeHoursCore", () => {
 
     // Only the valid key is written; the path-escaping / invalid keys are
     // skipped before any Firestore write, so no nested doc is created.
-    expect(result.written).toBe(1);
+    expect(result).toEqual({ written: 1, deleted: 0, skippedNoDate: 0, skippedMalformed: 0 });
     expect(store._docs.has("office-hours/prod/items/daily-chore")).toBe(true);
     expect(store._docs.has("office-hours/prod/items/a/b/c")).toBe(false);
     expect([...store._docs.keys()]).toEqual(["office-hours/prod/items/daily-chore"]);

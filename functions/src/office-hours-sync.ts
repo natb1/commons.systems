@@ -118,7 +118,7 @@ export function parseMergePrMarker(body: string): MergePrMarker | null {
     typeof prRepo !== "string" ||
     prRepo === "" ||
     typeof prUrl !== "string" ||
-    prUrl === "" ||
+    !prUrl.startsWith("https://github.com/") ||
     typeof prTitle !== "string" ||
     prTitle === "" ||
     !Number.isInteger(prNumber) ||
