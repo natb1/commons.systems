@@ -254,6 +254,8 @@ result = {
   security_followup_input: [ ...codeql/npm out-of-scope subset... ],
   verify_report:        [ {id, location, verdict, skeptic_votes, rationale} ],
   deviation:            <bool>,
+  coverage_incomplete:  <bool>,
+  coverage_note?:       <string>,
   security_note?:       <string>
 }
 ```

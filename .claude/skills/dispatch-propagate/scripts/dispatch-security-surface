@@ -70,10 +70,14 @@ if [[ "$all_docs" == true ]]; then
 fi
 
 # --- check all-tests ---------------------------------------------------------
+# A path that is also a dependency manifest (e.g. test/package.json) matches
+# TEST_RE via the directory-prefix patterns but still carries dependency attack
+# surface. Treat any such path as non-test so the diff falls through to the
+# surface=code branch, where DEPS_RE runs and the npm/CodeQL fan-out fires.
 
 all_tests=true
 for path in "${paths[@]}"; do
-  if ! [[ "$path" =~ $TEST_RE ]]; then
+  if ! [[ "$path" =~ $TEST_RE ]] || [[ "$path" =~ $DEPS_RE ]]; then
     all_tests=false
     break
   fi

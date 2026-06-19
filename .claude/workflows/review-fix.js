@@ -17,7 +17,7 @@
  * node:* — the skill does all of that around the call.
  *
  * args IN:
- *   { pr_num, merge_base, changed_files:[...], surface:"empty"|"docs"|"code",
+ *   { pr_num, merge_base, changed_files:[...], surface:"empty"|"docs"|"tests"|"code",
  *     deps:bool, app_or_rules:bool,
  *     prescanned_findings:[...Per-finding items, Source "codeql"|"npm",
  *       carrying their source-specific fields...],
@@ -30,7 +30,7 @@
  *     deferred_filings:[{title, body, blocker_issue_nums:[N,...]|"independent"}],
  *     security_followup_input:[...codeql/npm out-of-scope subset...],
  *     verify_report:[{id, location, verdict, skeptic_votes, rationale}],
- *     deviation:bool, security_note? }
+ *     deviation:bool, security_note?, coverage_incomplete:bool, coverage_note?:string }
  *
  * NORMATIVE SPECS for the three inline kernel helpers below are the pure bash/jq
  * scripts (unit-tested by test-dispatch-scripts.sh). The JS helpers are kept
@@ -655,7 +655,7 @@ if (requiredFindings.length) {
 const { kept: keptFindings, dropped: refutedFindings } = applyVerifyDrop(deduped, votesById);
 
 // verify_report — one entry per Required finding (upheld / refuted / unverified).
-// "unverified" = both skeptics failed to vote: distinct from a clean upheld pass
+// "unverified" = every skeptic failed to vote: distinct from a clean upheld pass
 // so the PR comment shows the verification could not run rather than masking it
 // as verdict "upheld" with empty evidence.
 const verify_report = requiredFindings.map((f) => {
@@ -774,7 +774,7 @@ const blockerNums =
 
 const deferred_filings = deduped
   // Deferred code-review/review findings, plus Unverified Required findings
-  // (both skeptics failed): not auto-fixed in this terminal phase, so file a
+  // (every skeptic failed): not auto-fixed in this terminal phase, so file a
   // follow-up rather than silently dropping them.
   .filter((f) => f.bucket === 'Deferred' || unverifiedIds.has(f.id))
   .map((f) => {
