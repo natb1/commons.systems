@@ -19,7 +19,7 @@
 // boundary cannot catch an async-effect throw, the hard-error path (renderLoadError
 // rethrow of programmer/data-integrity/range, then LegacyRoute's formatRouteError
 // mapping) is reproduced inline as error state — the same shift Transactions made.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { Metric } from "@commons-systems/ds";
 import { classifyError } from "@commons-systems/errorutil/classify";
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
@@ -52,6 +52,7 @@ import { toISODate } from "./hydrate-util.js";
 import { type RenderPageOptions } from "./render-options.js";
 import { type SerializedBudget } from "./budgets.js";
 import { hydrateBudgetChart } from "./budgets-hydrate.js";
+import { useBudgetTableInteractivity, useOverridesTableInteractivity } from "./use-budget-table.js";
 
 const rolloverOptions: { value: Rollover; label: string }[] = [
   { value: "none", label: "None" },
@@ -158,12 +159,14 @@ function serializeCategoryRows(rows: readonly CategoryActualRow[]): string {
   return JSON.stringify(rows);
 }
 
-// renderBudgetTable (budgets.ts:94-124) → JSX.
-function BudgetTable({ budgets, authorized, stats, variances }: {
+// renderBudgetTable (budgets.ts:94-124) → JSX. The containerRef is the host for
+// useBudgetTableInteractivity (toggle/blur/change delegation).
+function BudgetTable({ budgets, authorized, stats, variances, containerRef }: {
   budgets: Budget[];
   authorized: boolean;
   stats: Map<Budget["id"], PerBudgetStats>;
   variances: Map<Budget["id"], PerBudgetCategoryVariance>;
+  containerRef: RefObject<HTMLDivElement>;
 }) {
   if (budgets.length === 0) {
     return <p>No budgets found.</p>;
@@ -172,7 +175,7 @@ function BudgetTable({ budgets, authorized, stats, variances }: {
   const sorted = [...budgets].sort((a, b) => a.name.localeCompare(b.name));
 
   return (
-    <div id="budgets-table">
+    <div id="budgets-table" ref={containerRef}>
       <div className="budget-header">
         <span>Name</span>
         <span>Allowance</span>
@@ -306,8 +309,9 @@ function OverrideRow({ budgetId, budgetName, override, index, editable }: {
   );
 }
 
-// renderOverridesTable (budgets.ts:225-253) → JSX.
-function OverridesTable({ budgets, authorized }: { budgets: Budget[]; authorized: boolean }) {
+// renderOverridesTable (budgets.ts:225-253) → JSX. The containerRef is the host
+// for useOverridesTableInteractivity (blur/click delegation + add/delete CRUD).
+function OverridesTable({ budgets, authorized, containerRef }: { budgets: Budget[]; authorized: boolean; containerRef: RefObject<HTMLDivElement> }) {
   const allOverrides: { budgetId: string; budgetName: string; override: BudgetOverride; index: number }[] = [];
   for (const b of budgets) {
     for (let i = 0; i < b.overrides.length; i++) {
@@ -317,7 +321,7 @@ function OverridesTable({ budgets, authorized }: { budgets: Budget[]; authorized
   allOverrides.sort((a, b) => a.override.date.toMillis() - b.override.date.toMillis());
 
   return (
-    <div id="overrides-table">
+    <div id="overrides-table" ref={containerRef}>
       <h3>Balance Overrides</h3>
       <div className="override-header">
         <span>Budget</span>
@@ -426,6 +430,15 @@ function useBudgetsData(options: RenderPageOptions): LoadState {
 }
 
 function LoadedBudgets({ data, authorized }: { data: LoadedData; authorized: boolean }) {
+  // Two sibling containers (not nested): #budgets-table and #overrides-table.
+  // Each interactivity hook delegates onto its own container ref, mirroring the
+  // legacy hydrateBudgetTable / hydrateOverridesTable being called separately.
+  const tableRef = useRef<HTMLDivElement>(null);
+  const overridesRef = useRef<HTMLDivElement>(null);
+
+  useBudgetTableInteractivity(tableRef, authorized);
+  useOverridesTableInteractivity(overridesRef, authorized);
+
   return (
     <>
       <ChartContainers
@@ -441,8 +454,9 @@ function LoadedBudgets({ data, authorized }: { data: LoadedData; authorized: boo
         authorized={authorized}
         stats={data.budgetStats}
         variances={data.budgetVariances}
+        containerRef={tableRef}
       />
-      {data.budgets.length > 0 ? <OverridesTable budgets={data.budgets} authorized={authorized} /> : null}
+      {data.budgets.length > 0 ? <OverridesTable budgets={data.budgets} authorized={authorized} containerRef={overridesRef} /> : null}
     </>
   );
 }

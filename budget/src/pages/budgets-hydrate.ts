@@ -13,7 +13,7 @@ import { toSundayEntry, computeRollingAverage, type CategoryActualRow, type PerB
 import { formatCurrency } from "../format.js";
 import type { SerializedBudget, SerializedBudgetOverride } from "./budgets.js";
 
-function rowBudgetId(el: HTMLElement): BudgetId | null {
+export function rowBudgetId(el: HTMLElement): BudgetId | null {
   const row = el.closest(".budget-row");
   if (!(row instanceof HTMLElement)) return null;
   return (row.dataset.budgetId ?? null) as BudgetId | null;
@@ -155,7 +155,7 @@ function renderVarianceDetails(
   }
 }
 
-function hydrateVarianceDetails(row: HTMLDetailsElement): void {
+export function hydrateVarianceDetails(row: HTMLDetailsElement): void {
   const varianceEl = row.querySelector<HTMLElement>(".budget-variance");
   if (!varianceEl) throw new DataIntegrityError(".budget-variance element missing from expanded budget row");
   if (varianceEl.dataset.hydrated === "true" || varianceEl.dataset.hydrated === "error") return;
@@ -268,7 +268,7 @@ export function hydrateBudgetTable(container: HTMLElement): void {
   });
 }
 
-function deserializeBudgets(raw: string): Budget[] {
+export function deserializeBudgets(raw: string): Budget[] {
   let parsed: Array<Omit<SerializedBudget, "rollover" | "allowancePeriod" | "overrides"> & { rollover: string; allowancePeriod?: string; overrides?: SerializedBudgetOverride[] }>;
   try { parsed = JSON.parse(raw); } catch (e) { throw new DataIntegrityError(`Invalid budget chart data: ${e instanceof Error ? e.message : e}`); }
   return parsed.map(b => {
@@ -461,7 +461,7 @@ export function hydrateBudgetChart(container: HTMLElement): () => void {
   };
 }
 
-function collectOverridesForBudget(container: HTMLElement, budgetId: string): BudgetOverride[] | null {
+export function collectOverridesForBudget(container: HTMLElement, budgetId: string): BudgetOverride[] | null {
   const rows = container.querySelectorAll<HTMLElement>(`.override-row[data-budget-id="${budgetId}"]`);
   const overrides = new Map<number, BudgetOverride>();
   for (const row of rows) {
