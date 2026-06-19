@@ -1239,6 +1239,16 @@ err_fail_lim=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --l
 assert_eq "gh-failure: single-page branch returns non-zero" "1" "$rc_fail_lim"
 teardown
 
+echo "Test: --repo flag -- cross-repo path uses owner/other-repo segment, not placeholder"
+setup
+: > "$STUB_DIR/gh-issue-list-rest-calls.log"
+actual_repo=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --repo owner/other-repo --label dispatch-test-empty)
+if grep -q 'repos/owner/other-repo/issues' "$STUB_DIR/gh-issue-list-rest-calls.log"; then seg=yes; else seg=no; fi
+assert_eq "--repo: API path uses cross-repo segment" "yes" "$seg"
+if grep -q 'repos/{owner}/{repo}/issues' "$STUB_DIR/gh-issue-list-rest-calls.log"; then ph=yes; else ph=no; fi
+assert_eq "--repo: placeholder absent from cross-repo call" "no" "$ph"
+teardown
+
 # ============================================================================
 # dispatch-phase tests
 # ============================================================================
