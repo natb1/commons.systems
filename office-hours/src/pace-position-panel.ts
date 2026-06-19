@@ -4,17 +4,14 @@ import { segmentByWeek, aheadBehindDelta, paceBackdrop } from "./pace-position.j
 import { elapsedWeekFraction } from "./weekly-pace-curve.js";
 import {
   getThemeFg,
+  readChartPalette,
   assembleChartLayout,
   buildLegend,
   renderAxisSvg,
-  CHART_PALETTE,
   AXIS_WIDTH,
   MARGIN_RIGHT,
   MARGIN_BOTTOM,
 } from "./chart-util.js";
-
-const COLOR_WEEKLY = CHART_PALETTE.secondary;
-const COLOR_BACKDROP = CHART_PALETTE.tertiary;
 
 /** Approximate visible width; the x domain is bounded [0, 1] so no scrolling. */
 const CONTAINER_WIDTH = 640;
@@ -55,6 +52,10 @@ export function renderPacePositionPanel(samples: UsageSample[]): HTMLElement {
   const nowX = elapsedWeekFraction(latest.sampledAt, latest.weeklyResetsAt);
 
   const fg = getThemeFg(section);
+  // DS categorical palette, read from the section at runtime.
+  const palette = readChartPalette(section);
+  const COLOR_WEEKLY = palette[5]; // --chart-6 teal
+  const COLOR_BACKDROP = palette[4]; // --chart-5 tan (dashed W(x) backdrop)
   const sharedStyle = { background: "transparent", color: fg };
 
   const chartWidth = CONTAINER_WIDTH - AXIS_WIDTH;

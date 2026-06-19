@@ -4,11 +4,11 @@ import { weeklyPaceCurve } from "./weekly-pace-curve.js";
 import {
   getThemeFg,
   readThemeVar,
+  readChartPalette,
   assembleChartLayout,
   buildLegend,
   computeChartWidth,
   renderAxisSvg,
-  CHART_PALETTE,
   MARGIN_RIGHT,
   MARGIN_BOTTOM,
   POINT_WIDTH,
@@ -19,10 +19,6 @@ import {
 const SERIES_FIVE_HOUR = "5-hour %";
 const SERIES_WEEKLY = "weekly %";
 const SERIES_PACE = "pace W";
-
-const COLOR_FIVE_HOUR = CHART_PALETTE.primary;
-const COLOR_WEEKLY = CHART_PALETTE.secondary;
-const COLOR_PACE = CHART_PALETTE.tertiary;
 
 interface UsagePoint {
   x: Date;
@@ -82,6 +78,11 @@ export function renderUsageHistoryChart(samples: UsageSample[]): HTMLElement {
   const yDomain: [number, number] = [0, 100];
 
   const fg = getThemeFg(container);
+  // DS categorical palette, read from the container at runtime.
+  const palette = readChartPalette(container);
+  const COLOR_FIVE_HOUR = palette[1]; // --chart-2 amber
+  const COLOR_WEEKLY = palette[5]; // --chart-6 teal
+  const COLOR_PACE = palette[4]; // --chart-5 tan (dashed pace overlay)
   // Reset/danger color is a runtime read of the --danger theme token (warm red),
   // falling back to #ff6b6b — matching theme.css's var(--danger, #ff6b6b) usages.
   const COLOR_RESET = readThemeVar(container, "--danger") || "#ff6b6b";

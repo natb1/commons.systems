@@ -3,11 +3,11 @@ import { type IssueSample } from "./issue-samples.js";
 import { fitBacklogRunway, runwayVerdict } from "./backlog-runway.js";
 import {
   getThemeFg,
+  readChartPalette,
   assembleChartLayout,
   buildLegend,
   computeChartWidth,
   renderAxisSvg,
-  CHART_PALETTE,
   MARGIN_RIGHT,
   MARGIN_BOTTOM,
   AXIS_WIDTH,
@@ -18,10 +18,6 @@ const POINT_WIDTH = 60;
 /** Approximate visible width before horizontal scrolling kicks in. */
 const CONTAINER_WIDTH = 640;
 const CHART_HEIGHT = 220;
-
-const COLOR_HELP_WANTED = CHART_PALETTE.primary;
-const COLOR_OTHER = CHART_PALETTE.secondary;
-const COLOR_PROJECTION = CHART_PALETTE.tertiary;
 
 interface Point {
   x: Date;
@@ -75,6 +71,11 @@ export function renderIssueHistoryChart(samples: IssueSample[]): HTMLElement {
   const yDomain: [number, number] = [0, Math.max(1, Math.ceil(maxTotal * 1.1))];
 
   const fg = getThemeFg(container);
+  // DS categorical palette, read from the container at runtime.
+  const palette = readChartPalette(container);
+  const COLOR_HELP_WANTED = palette[1]; // --chart-2 amber
+  const COLOR_OTHER = palette[5]; // --chart-6 teal
+  const COLOR_PROJECTION = palette[4]; // --chart-5 tan (dashed projection)
   const sharedStyle = { background: "transparent", color: fg };
 
   const axisSvg = renderAxisSvg({ height: CHART_HEIGHT, style: sharedStyle, yDomain, label: "issues" });

@@ -2,11 +2,11 @@ import * as Plot from "@observablehq/plot";
 import { type UsageSample } from "./usage-samples.js";
 import {
   getThemeFg,
+  readChartPalette,
   assembleChartLayout,
   buildLegend,
   computeChartWidth,
   renderAxisSvg,
-  CHART_PALETTE,
   MARGIN_RIGHT,
   MARGIN_BOTTOM,
   POINT_WIDTH,
@@ -16,9 +16,6 @@ import {
 
 const SERIES_ACTIVE = "active workers";
 const SERIES_TARGET = "target (step)";
-
-const COLOR_ACTIVE = CHART_PALETTE.primary;
-const COLOR_TARGET = CHART_PALETTE.tertiary;
 
 interface WorkerPoint {
   x: Date;
@@ -62,6 +59,10 @@ export function renderWorkerHistoryChart(samples: UsageSample[]): HTMLElement {
   const chartWidth = computeChartWidth(points.length, POINT_WIDTH, CONTAINER_WIDTH);
 
   const fg = getThemeFg(container);
+  // DS categorical palette, read from the container at runtime.
+  const palette = readChartPalette(container);
+  const COLOR_ACTIVE = palette[1]; // --chart-2 amber
+  const COLOR_TARGET = palette[4]; // --chart-5 tan (dashed target overlay)
   const sharedStyle = { background: "transparent", color: fg };
 
   const axisSvg = renderAxisSvg({ height: CHART_HEIGHT, style: sharedStyle, yDomain, label: "workers" });
