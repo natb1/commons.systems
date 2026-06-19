@@ -170,8 +170,7 @@ issue_live_session_id() {
         # rc 0 with non-empty output → a matching session row; rc 0 with empty
         # output → no session of that name (continue). Guard before cutting.
         if [[ -n "$sessions" ]]; then
-          sid=$(printf '%s\n' "$sessions" | head -n 1 | cut -f1)
-          state=$(printf '%s\n' "$sessions" | head -n 1 | cut -f2)
+          IFS=$'\t' read -r sid state _ <<< "$(printf '%s\n' "$sessions" | head -n 1)"
           case "$state" in
             waiting|done|idle)
               # Attachable — return immediately.
