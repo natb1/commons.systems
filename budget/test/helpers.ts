@@ -160,6 +160,12 @@ export function createMockDataSource(overrides: Partial<DataSource> = {}): DataS
 export function makeContainer(): HTMLElement {
   const container = document.createElement("div");
   container.style.setProperty("--fg", "#e0e0e0");
+  container.style.setProperty("--chart-1", "#4d6f8f");
+  container.style.setProperty("--chart-2", "#c98a3c");
+  container.style.setProperty("--chart-3", "#a35d5d");
+  container.style.setProperty("--chart-4", "#7a8c5a");
+  container.style.setProperty("--chart-5", "#b08a4f");
+  container.style.setProperty("--chart-6", "#5f8a8a");
   document.body.appendChild(container);
   Object.defineProperty(container, "clientWidth", { value: 640 });
   return container;
