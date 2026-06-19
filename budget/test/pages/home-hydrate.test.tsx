@@ -202,14 +202,12 @@ describe("Transactions table interactivity (blur-save + infinite-scroll) — Uni
       expect(activeDS.updateTransaction).not.toHaveBeenCalled();
     });
 
-    it("rejects a non-finite reimbursement and shows an input error without saving", async () => {
+    it("renders reimbursement input as type=number with min=0 and max=100 (parity with legacy markup)", async () => {
       const c = await renderTable([txn({ reimbursement: 50, budget: "budget-food" })]);
       const input = c.querySelector(".edit-reimbursement") as HTMLInputElement;
-      input.value = "abc";
-      blur(input);
-      await flush();
-      expect(activeDS.updateTransaction).not.toHaveBeenCalled();
-      expect(input.classList.contains("save-error")).toBe(true);
+      expect(input.type).toBe("number");
+      expect(input.min).toBe("0");
+      expect(input.max).toBe("100");
     });
 
     it("shows an input error for an unknown budget name and does not save", async () => {

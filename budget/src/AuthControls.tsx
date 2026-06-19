@@ -59,7 +59,6 @@ export function AuthControls(props: AppApi) {
   return (
     <span>
       <span className="nav-upload" hidden={isLocal}>
-        {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex */}
         <label
           className="upload-label"
           tabIndex={0}

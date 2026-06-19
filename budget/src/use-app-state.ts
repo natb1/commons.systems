@@ -503,7 +503,6 @@ export function useAppState(): AppApi {
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("focus", onFocus);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const onUploadInputChange = useCallback((file: File) => {
@@ -523,7 +522,7 @@ export function useAppState(): AppApi {
     });
   }, []);
 
-  const onUploadLabelKeydown = useCallback((_key: string) => {
+  const onUploadLabelKeydown = useCallback(() => {
     apiRef.current?.pickAndLoad().catch((error) => {
       if (deferProgrammerError(error)) return;
       logError(error, { operation: "upload" });

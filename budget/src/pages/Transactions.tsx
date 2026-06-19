@@ -19,7 +19,7 @@
 // React error boundary cannot catch an async-effect throw, the hard-error path
 // (renderLoadError's rethrow of programmer/data-integrity/range, then
 // LegacyRoute's formatRouteError mapping) is reproduced inline as error state.
-import { Fragment, useEffect, useState, type ReactNode } from "react";
+import { Component, Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Timestamp } from "firebase/firestore";
 import { classifyError } from "@commons-systems/errorutil/classify";
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
@@ -44,6 +44,12 @@ import {
 } from "./home.js";
 import type { SerializedChartTransaction } from "./home-chart.js";
 import { CategorySankey } from "./CategorySankey.js";
+import {
+  useTableInteractivity,
+  useInfiniteScroll,
+  type ScrollAppend,
+  type ScrollErrorKind,
+} from "./use-transaction-table.js";
 
 // formatCategory (home.ts:21-23) ported for JSX: the string form joined
 // colon-segments with the HTML entity " &gt; "; the displayed text is " > ", so
@@ -72,6 +78,20 @@ interface RowContext {
   editable: boolean;
   budgetIdToName: Map<string, string>;
   groupName: string;
+  // txnIds whose balance was cleared to "--" by an in-place edit (budget/
+  // reimbursement change) or a period-sync failure. The React-state equivalent of
+  // the imperative clearBalanceDisplay: a cleared row renders "--" regardless of
+  // the computed balance; recalculation happens on the next navigation re-mount.
+  clearedBalances: Set<string>;
+}
+
+// Resolve what a row's Budget Balance <dd> should display: "--" when the balance
+// was cleared by an edit, the formatted number when one is available, or null to
+// omit the row entirely (the home.test.tsx "omits when null" parity assertion).
+function balanceDisplay(txnId: string, balance: number | null, cleared: Set<string>): string | null {
+  if (cleared.has(txnId)) return "--";
+  if (balance !== null) return balance.toFixed(2);
+  return null;
 }
 
 // The shared row "parts" — the summary cells, the data-* attributes for the
@@ -117,6 +137,7 @@ function BudgetCell({ budgetName, editable }: { budgetName: string; editable: bo
 
 // The detail <dl> shared by single rows and normalized groups (home.ts:74-83).
 function DetailDl({ txn, budgetName, balance, ctx }: { txn: Transaction; budgetName: string; balance: number | null; ctx: RowContext }) {
+  const balanceText = balanceDisplay(txn.id, balance, ctx.clearedBalances);
   return (
     <dl>
       <dt>Date</dt><dd>{formatTimestamp(txn.timestamp)}</dd>
@@ -124,7 +145,7 @@ function DetailDl({ txn, budgetName, balance, ctx }: { txn: Transaction; budgetN
       <dt>Account</dt><dd>{txn.account}</dd>
       <dt>Reimbursement</dt><dd><ReimbursementCell txn={txn} editable={ctx.editable} /></dd>
       <dt>Budget</dt><dd><BudgetCell budgetName={budgetName} editable={ctx.editable} /></dd>
-      {balance !== null ? (<><dt>Budget Balance</dt><dd className="budget-balance">{balance.toFixed(2)}</dd></>) : null}
+      {balanceText !== null ? (<><dt>Budget Balance</dt><dd className="budget-balance">{balanceText}</dd></>) : null}
       <dt>Group</dt><dd>{ctx.groupName}</dd>
       <dt>Statement</dt>
       <dd>
@@ -229,15 +250,58 @@ function TransactionRows({ transactions, ctx, getBalance }: {
   return <>{nodes}</>;
 }
 
+// A React error boundary so a SYNCHRONOUS render-throw inside TransactionTable
+// (resolveBudgetNameStrict's unknown-budget-id, or the duplicate-budget-name
+// guard) surfaces a #transactions-error data-error region instead of crashing the
+// whole tree. The legacy router (LegacyRoute/formatRouteError) mapped these
+// DataIntegrityError throws to the same user-facing support message; the budget
+// app had no React boundary, so Unit 3 crashed here — this closes that gap.
+class TableErrorBoundary extends Component<{ children: ReactNode }, { error: unknown }> {
+  state: { error: unknown } = { error: null };
+  static getDerivedStateFromError(error: unknown) { return { error }; }
+  componentDidCatch(error: unknown) {
+    if (!deferProgrammerError(error)) logError(error, { operation: "transactions-table-render" });
+  }
+  render() {
+    if (this.state.error !== null) {
+      return <p id="transactions-error">{loadErrorMessage(this.state.error)}</p>;
+    }
+    return this.props.children;
+  }
+}
+
 // renderTransactionTable (home.ts:228-282) → JSX. Builds the #transactions-table
-// container with the data-* attributes Unit 4's hydrateTransactionTable reads.
-function TransactionTable({ transactions, authorized, groupName, budgets, budgetPeriods, sinceMs }: {
+// container with the data-* attributes the table-interactivity effects read.
+// `initialTransactions` feeds the container data attributes (the options/periods
+// parsed once at mount); `transactions` is the combined (initial + scroll-appended)
+// set rendered as rows. The container/sentinel refs and scroll UI drive the
+// IntersectionObserver wired by the caller.
+function TransactionTable({
+  transactions,
+  initialTransactions,
+  authorized,
+  groupName,
+  budgets,
+  budgetPeriods,
+  sinceMs,
+  containerRef,
+  sentinelRef,
+  scrollLoading,
+  scrollError,
+  clearedBalances,
+}: {
   transactions: Transaction[];
+  initialTransactions: Transaction[];
   authorized: boolean;
   groupName: string;
   budgets: Budget[];
   budgetPeriods: BudgetPeriod[];
   sinceMs: number | null;
+  containerRef: React.RefObject<HTMLDivElement>;
+  sentinelRef: React.RefObject<HTMLDivElement>;
+  scrollLoading: boolean;
+  scrollError: ScrollErrorKind | null;
+  clearedBalances: Set<string>;
 }) {
   if (transactions.length === 0 && sinceMs === null) {
     return <p>No transactions found.</p>;
@@ -246,7 +310,7 @@ function TransactionTable({ transactions, authorized, groupName, budgets, budget
   const budgetIdToName = new Map(budgets.map(b => [b.id, b.name]));
   const balances = computeAllBudgetBalances(transactions, budgets, budgetPeriods);
   const getBalance = (id: string) => balances.get(id as TransactionId) ?? null;
-  const ctx: RowContext = { editable: authorized, budgetIdToName, groupName };
+  const ctx: RowContext = { editable: authorized, budgetIdToName, groupName, clearedBalances };
 
   // Budget map is always needed for scroll hydration (rendering budget names on
   // appended rows). Throws on a duplicate budget name (home.ts:255-259).
@@ -259,7 +323,8 @@ function TransactionTable({ transactions, authorized, groupName, budgets, budget
   }
 
   // Authorized-only data attributes — JSON-encoded; React escapes the attribute
-  // value, matching the legacy escapeHtml(JSON.stringify(...)) output.
+  // value, matching the legacy escapeHtml(JSON.stringify(...)) output. Computed
+  // from the initial load (the effect parses them once at mount).
   const editableAttrs: Record<string, string> = {};
   if (authorized) {
     const budgetNames = budgets.map(b => b.name).sort();
@@ -273,13 +338,18 @@ function TransactionTable({ transactions, authorized, groupName, budgets, budget
       categoryBreakdown: p.categoryBreakdown,
     }));
     editableAttrs["data-budget-options"] = JSON.stringify(budgetNames);
-    editableAttrs["data-category-options"] = JSON.stringify(uniqueSorted(transactions.map(t => t.category)));
+    editableAttrs["data-category-options"] = JSON.stringify(uniqueSorted(initialTransactions.map(t => t.category)));
     editableAttrs["data-budget-periods"] = JSON.stringify(periodsData);
   }
+
+  const scrollErrorText = scrollError === "transient"
+    ? "Failed to load older transactions. Scroll down to retry."
+    : "Data error — please re-upload your file.";
 
   return (
     <div
       id="transactions-table"
+      ref={containerRef}
       data-group-name={groupName}
       data-editable={String(authorized)}
       data-budget-map={JSON.stringify(budgetNameToId)}
@@ -292,8 +362,115 @@ function TransactionTable({ transactions, authorized, groupName, budgets, budget
         <span className="amount">Amount</span>
       </div>
       <TransactionRows transactions={transactions} ctx={ctx} getBalance={getBalance} />
-      {sinceMs !== null ? <div id="scroll-sentinel" data-next-before={String(sinceMs)} aria-hidden="true"></div> : null}
+      {scrollLoading ? <div className="scroll-loading">Loading older transactions...</div> : null}
+      {scrollError !== null ? <div className="scroll-error">{scrollErrorText}</div> : null}
+      {sinceMs !== null ? <div id="scroll-sentinel" ref={sentinelRef} data-next-before={String(sinceMs)} aria-hidden="true"></div> : null}
     </div>
+  );
+}
+
+// Stateful orchestrator for the loaded /transactions surface: owns the scroll
+// cursor, the scroll-appended batches, and the scroll loading/error UI, wires the
+// blur-save + infinite-scroll effects, and feeds the combined transactions to the
+// chart island. Lives under TableErrorBoundary so a synchronous render-throw
+// (unknown budget id / duplicate name) surfaces a data-error region.
+function LoadedTransactions({ data, options }: { data: LoadedData; options: RenderPageOptions }) {
+  const { authorized, groupName } = options;
+  const containerRef = useRef<HTMLDivElement>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  // The scroll cursor (data-next-before). null once retired (final batch loaded,
+  // or a data-integrity error stopped scrolling) — which also hides the sentinel.
+  const [nextBefore, setNextBefore] = useState<number | null>(data.sinceMs);
+  const [appended, setAppended] = useState<Transaction[]>([]);
+  const [scrollLoading, setScrollLoading] = useState(false);
+  const [scrollError, setScrollError] = useState<ScrollErrorKind | null>(null);
+  // txnIds whose Budget Balance was cleared to "--" by an in-place edit — the
+  // React-state clearBalanceDisplay. The imperative blur handler calls
+  // onClearBalance(txnId), which adds the id here and re-renders the row as "--".
+  const [clearedBalances, setClearedBalances] = useState<Set<string>>(() => new Set());
+  const onClearBalance = (txnId: string): void => {
+    setClearedBalances((prev) => {
+      if (prev.has(txnId)) return prev;
+      const next = new Set(prev);
+      next.add(txnId);
+      return next;
+    });
+  };
+
+  const onAppend = (append: ScrollAppend): void => {
+    setScrollError(null);
+    if (append.transactions.length > 0) {
+      setAppended((prev) => [...prev, ...append.transactions]);
+    }
+    setNextBefore(append.nextBefore);
+  };
+  const onScrollError = (kind: ScrollErrorKind): void => {
+    setScrollError(kind);
+    // A data-integrity error stops scrolling (sentinel retired); transient keeps it.
+    if (kind === "data-integrity") setNextBefore(null);
+  };
+
+  useTableInteractivity(containerRef, authorized, onClearBalance);
+  useInfiniteScroll(sentinelRef, nextBefore, {
+    onAppend,
+    onScrollError,
+    onScrollLoading: setScrollLoading,
+  });
+
+  // Combined initial + scroll-appended transactions, re-sorted descending so the
+  // grouping/orphan-suppression sees the same ordering the legacy table did.
+  const allTransactions = useMemo(() => {
+    const merged = [...data.transactions, ...appended];
+    merged.sort(compareByTimestampDesc);
+    return merged;
+  }, [data.transactions, appended]);
+
+  // #578: feed the chart the combined transactions and re-key on append so the
+  // island remounts and buildCategorySankey re-runs with the larger data set
+  // (replacing the legacy TRANSACTIONS_APPENDED_EVENT dispatch from scroll).
+  const budgetIdToName = useMemo(() => new Map(data.budgets.map(b => [b.id, b.name])), [data.budgets]);
+  const chartData = useMemo<SerializedChartTransaction[] | null>(() => {
+    if (data.chartData === null) return null;
+    try {
+      return serializeChartTransactions(allTransactions, budgetIdToName);
+    } catch (chartError) {
+      // resolveBudgetName degrades unknown ids, so serialization should not throw
+      // for appended rows (#578); fall back to the originally-loaded chart data.
+      logError(chartError, { operation: "chart-serialization-append" });
+      return data.chartData;
+    }
+  }, [allTransactions, budgetIdToName, data.chartData]);
+
+  return (
+    <>
+      {chartData === null ? (
+        <p className="chart-error">Chart unavailable.</p>
+      ) : (
+        <CategorySankey
+          key={appended.length}
+          chartData={chartData}
+          categoryOptions={data.chartCategoryOptions}
+          budgetOptions={data.chartBudgetOptions}
+        />
+      )}
+      <TableErrorBoundary>
+        <TransactionTable
+          transactions={allTransactions}
+          initialTransactions={data.transactions}
+          authorized={authorized}
+          groupName={groupName}
+          budgets={data.budgets}
+          budgetPeriods={data.budgetPeriods}
+          sinceMs={nextBefore}
+          containerRef={containerRef}
+          sentinelRef={sentinelRef}
+          scrollLoading={scrollLoading}
+          scrollError={scrollError}
+          clearedBalances={clearedBalances}
+        />
+      </TableErrorBoundary>
+    </>
   );
 }
 
@@ -398,7 +575,6 @@ function useTransactionsData(options: RenderPageOptions): LoadState {
     })();
 
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return state;
@@ -416,25 +592,7 @@ export function Transactions({ options }: { options: RenderPageOptions }) {
       {load.status === "error" ? (
         <p id="transactions-error">{load.message}</p>
       ) : load.status === "loaded" ? (
-        <>
-          {load.data.chartData === null ? (
-            <p className="chart-error">Chart unavailable.</p>
-          ) : (
-            <CategorySankey
-              chartData={load.data.chartData}
-              categoryOptions={load.data.chartCategoryOptions}
-              budgetOptions={load.data.chartBudgetOptions}
-            />
-          )}
-          <TransactionTable
-            transactions={load.data.transactions}
-            authorized={options.authorized}
-            groupName={options.groupName}
-            budgets={load.data.budgets}
-            budgetPeriods={load.data.budgetPeriods}
-            sinceMs={load.data.sinceMs}
-          />
-        </>
+        <LoadedTransactions data={load.data} options={options} />
       ) : null}
     </>
   );

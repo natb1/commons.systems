@@ -51,7 +51,6 @@ export function LegacyRoute({ render, specs }: LegacyRouteProps) {
     };
     // Each route gets a fresh instance (App passes key={path}); render is bound
     // to the current renderOptions() at mount. Intentionally mount-once.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // After the HTML is injected, hydrate once. Runs only when `html` transitions
@@ -61,7 +60,6 @@ export function LegacyRoute({ render, specs }: LegacyRouteProps) {
     const root = containerRef.current;
     if (!root) return;
     runHydrationSpecs(root, specs);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [html]);
 
   return (

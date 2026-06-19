@@ -29,7 +29,6 @@ export function CategorySankey({ chartData, categoryOptions, budgetOptions }: Ca
     return buildCategorySankey(container, chartData, categoryOptions, budgetOptions);
     // chartData/options are captured at mount; the page is re-keyed per navEpoch,
     // so a data transition re-mounts this island with fresh props.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
