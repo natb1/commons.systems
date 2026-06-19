@@ -525,6 +525,39 @@ playwright_install_with_deps() {
   return 1
 }
 
+# Ensure Playwright browsers are resolvable. When PLAYWRIGHT_BROWSERS_PATH is
+# unset and nix is available (NixOS), re-exec the calling script under
+# `nix develop --command` so the devShell shellHook exports the nix-provisioned
+# browsers path. When nix is unavailable (e.g. CI on ubuntu), return so the
+# caller's `npx playwright install --with-deps chromium` fallback runs.
+#
+# Call as: ensure_playwright_browsers "$0" "$@"
+ensure_playwright_browsers() {
+  if [ -n "${PLAYWRIGHT_BROWSERS_PATH:-}" ]; then
+    return 0
+  fi
+  if command -v nix >/dev/null 2>&1; then
+    if [ -n "${_DISPATCH_NIX_REEXEC:-}" ]; then
+      echo "ERROR: re-exec'd under 'nix develop' but PLAYWRIGHT_BROWSERS_PATH is still unset." >&2
+      echo "       Enter the dev shell ('direnv allow', or 'nix develop') and retry." >&2
+      return 1
+    fi
+    local flake_dir
+    flake_dir="$(git rev-parse --show-toplevel 2>/dev/null)" || {
+      echo "ERROR: could not determine repo root; ensure you are inside a git repository" >&2
+      return 1
+    }
+    [ -n "$flake_dir" ] || {
+      echo "ERROR: git rev-parse --show-toplevel returned empty string" >&2
+      return 1
+    }
+    export _DISPATCH_NIX_REEXEC=1
+    exec nix develop "$flake_dir" --command "$@"
+  fi
+  # nix unavailable (CI ubuntu): caller's npx fallback handles install
+  return 0
+}
+
 # Extract the app name from the app directory path.
 # Args: $1 = app directory (e.g. "hello" or "/path/to/hello")
 get_app_name() {
@@ -719,6 +752,25 @@ kill_tree() {
   done <<< "$pids"
 }
 
+# Resolve the workspace key that owns a changed file via longest-prefix match.
+# Echoes the LONGEST key `ws` from the `all_apps` associative array such that
+# `file == ws` OR `file` begins with "$ws/" (the trailing "/" is load-bearing:
+# without it "print" would match "printer/x" and "packages/ds" would match
+# "packages/ds-utils/x"). Reads `all_apps` via bash dynamic scoping from the
+# caller. Echoes nothing if no workspace matches.
+# Args: $1 = changed file path
+_resolve_workspace_for_file() {
+  local file="$1" ws best=""
+  for ws in "${!all_apps[@]}"; do
+    if [ "$file" = "$ws" ] || [ "${file#"$ws"/}" != "$file" ]; then
+      if (( ${#ws} > ${#best} )); then
+        best="$ws"
+      fi
+    fi
+  done
+  echo "$best"
+}
+
 # Resolve which apps are affected by a set of changed files.
 # Reads changed file paths from stdin, one per line.
 # Outputs dirty app names to stdout, one per line (unsorted).
@@ -728,7 +780,7 @@ resolve_dirty_apps() {
 
   # Discover all workspaces from root package.json
   declare -A all_apps
-  local workspace_list
+  local workspace_list ws
   if ! workspace_list=$(jq -r '.workspaces[]' "$repo_root/package.json"); then
     echo "ERROR: failed to read workspaces from $repo_root/package.json" >&2
     return 1
@@ -760,11 +812,10 @@ resolve_dirty_apps() {
   done
 
   declare -A dirty_apps
-  local file top_dir
+  local file
 
   while IFS= read -r file; do
     [ -z "$file" ] && continue
-    top_dir="${file%%/*}"
     case "$file" in
       firebase.json|firestore.rules|storage.rules|package.json|package-lock.json)
         # Root-level config changes affect all workspaces
@@ -773,15 +824,27 @@ resolve_dirty_apps() {
         done
         ;;
       *)
-        # Check if this is a shared package change
-        if [ -n "${shared_pkgs[$top_dir]+x}" ]; then
-          for app in ${shared_pkgs[$top_dir]}; do
+        # Longest-prefix match the file to its owning workspace key.
+        local short
+        ws=$(_resolve_workspace_for_file "$file")
+        [ -z "$ws" ] && continue
+        # Shared-package lookup keys on the workspace's leaf dir, which is
+        # bridged to the @commons-systems/<name> dependency short name in the
+        # shared_pkgs build above. This assumes the leaf dir equals the short
+        # name; if a future nested workspace's leaf dir ever differs (e.g.
+        # packages/foo providing @commons-systems/bar), its shared-package
+        # retrigger silently breaks — revisit if that convention is relaxed.
+        # A literal glob workspace entry (e.g. packages/*) is out of scope: it
+        # already hard-errors today at the jq on $repo_root/$app/package.json.
+        short="${ws##*/}"
+        if [ -n "${shared_pkgs[$short]+x}" ]; then
+          for app in ${shared_pkgs[$short]}; do
             dirty_apps["$app"]=1
           done
         fi
-        # Check if this is a direct app change
-        if [ -n "${all_apps[$top_dir]+x}" ]; then
-          dirty_apps["$top_dir"]=1
+        # Check if this is a direct app change (full matched path).
+        if [ -n "${all_apps[$ws]+x}" ]; then
+          dirty_apps["$ws"]=1
         fi
         ;;
     esac
