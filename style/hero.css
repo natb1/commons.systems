@@ -1,39 +1,39 @@
 .hero {
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 1.5rem;
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
 }
 
 .hero-content {
-  max-width: 48rem;
+  max-width: var(--max-width-prose);
   margin-inline: auto;
 }
 
 .hero h2 {
-  font-size: 2rem;
-  margin-bottom: 0.5rem;
+  font-size: var(--text-2xl);
+  margin-bottom: var(--space-2);
 }
 
 .hero-subtext {
   color: var(--muted);
-  font-size: 1.1rem;
-  margin: 0 0 0.75rem;
+  font-size: var(--text-lg);
+  margin: 0 0 var(--space-3);
 }
 
 .hero-body {
-  margin: 0 0 1.5rem;
+  margin: 0 0 var(--space-6);
 }
 
 /* --- Action chips --- */
 
 .hero-chips {
-  margin-bottom: 1.5rem;
+  margin-bottom: var(--space-6);
 }
 
 .hero-chip-row {
   display: flex;
-  gap: 0.5rem;
+  gap: var(--space-2);
   margin-bottom: 0;
 }
 
@@ -42,16 +42,16 @@
   position: relative;
   display: inline-flex;
   align-items: center;
-  padding: 0.75rem 0.75rem 0.5rem;
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  padding: var(--space-3) var(--space-3) var(--space-2);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--fg);
   cursor: pointer;
   font-family: inherit;
-  font-size: 0.875rem;
+  font-size: var(--text-sm);
   text-align: left;
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color var(--duration-fast) var(--ease), background var(--duration-fast) var(--ease);
 }
 
 .hero-chip:hover {
@@ -68,17 +68,17 @@
   top: 0;
   left: 0.75rem;
   transform: translateY(-50%);
-  font-size: 0.65rem;
-  font-weight: 700;
+  font-size: var(--text-micro);
+  font-weight: var(--weight-bold);
   padding: 0.1rem 0.4rem;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--tracking-heading);
 }
 
 .chip-badge--easy {
-  background: color-mix(in srgb, #4caf50 20%, transparent);
-  color: #4caf50;
+  background: color-mix(in srgb, var(--success) 20%, transparent);
+  color: var(--success);
 }
 
 .chip-badge--medium {
@@ -87,29 +87,29 @@
 }
 
 .chip-badge--hard {
-  background: color-mix(in srgb, var(--error, #c00) 20%, transparent);
-  color: var(--error, #c00);
+  background: color-mix(in srgb, var(--error) 20%, transparent);
+  color: var(--error);
 }
 
 .hero-chip-panel {
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 1rem;
-  margin-top: 0.75rem;
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  margin-top: var(--space-3);
 }
 
 .hero-chip-panel h3 {
-  margin: 0 0 0.75rem;
-  font-size: 1rem;
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-base);
 }
 
 .hero-chip-panel ol {
   margin: 0;
-  padding-left: 1.5rem;
+  padding-left: var(--space-6);
 }
 
 .hero-chip-panel li {
-  margin-bottom: 0.5rem;
+  margin-bottom: var(--space-2);
 }
 
 .hero-chip-panel li:last-child {
@@ -117,15 +117,15 @@
 }
 
 .hero-chip-panel p {
-  margin: 0 0 0.75rem;
+  margin: 0 0 var(--space-3);
 }
 
 .inline-chip {
   background: color-mix(in srgb, var(--accent) 20%, transparent);
   color: var(--accent);
-  border: 1px solid var(--accent);
-  border-radius: 3px;
-  padding: 0.1rem 0.5rem;
+  border: var(--border-width) solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 0.1rem var(--space-2);
   cursor: pointer;
   font-family: inherit;
   font-size: inherit;
@@ -138,15 +138,15 @@
 /* --- FAQ --- */
 
 .hero-faq {
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-md);
 }
 
 .hero-faq > summary {
   cursor: pointer;
-  padding: 0.75rem 1rem;
+  padding: var(--space-3) var(--space-4);
   list-style: none;
-  font-weight: 700;
+  font-weight: var(--weight-bold);
 }
 
 .hero-faq > summary::-webkit-details-marker {
@@ -157,8 +157,8 @@
   content: "\25B6";
   font-size: 0.6em;
   display: inline-block;
-  margin-right: 0.75rem;
-  transition: transform 0.15s;
+  margin-right: var(--space-3);
+  transition: transform var(--duration-fast) var(--ease);
   opacity: 0.5;
 }
 
@@ -167,7 +167,7 @@
 }
 
 .hero-faq-body {
-  padding: 0 1rem 1rem;
+  padding: 0 var(--space-4) var(--space-4);
 }
 
 .hero-faq-body dl {
@@ -175,8 +175,8 @@
 }
 
 .hero-faq-body dt {
-  font-weight: 700;
-  margin-top: 1rem;
+  font-weight: var(--weight-bold);
+  margin-top: var(--space-4);
 }
 
 .hero-faq-body dt:first-child {
@@ -184,12 +184,12 @@
 }
 
 .hero-faq-body dd {
-  margin: 0.25rem 0 0;
+  margin: var(--space-1) 0 0;
 }
 
 #hero-container {
-  margin-top: 1rem;
-  margin-bottom: 1rem;
+  margin-top: var(--space-4);
+  margin-bottom: var(--space-4);
 }
 
 /* --- Responsive --- */
