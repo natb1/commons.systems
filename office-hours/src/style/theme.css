@@ -197,6 +197,7 @@ svg [aria-label="tip"] text { fill: #222; }
 .panel-grid > .capacity-history,
 .panel-grid > .capacity-pace {
   margin-top: 0;
+  min-width: 0;
 }
 .panel-grid-full {
   grid-column: 1 / -1;
