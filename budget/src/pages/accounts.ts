@@ -1,99 +1,34 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
-import type { Transaction, Statement } from "../firestore.js";
 import { formatCurrency } from "../format.js";
-import { accountKey, splitAccountKey, computeAggregateTrend, computeNetWorth, computeCashFlow, computeDerivedBalances, type AggregatePoint, type NetWorthPoint, type CashFlowPoint, type DerivedAccountBalance } from "../balance.js";
+import { computeAggregateTrend, computeNetWorth, computeCashFlow, computeDerivedBalances, type AggregatePoint, type NetWorthPoint, type CashFlowPoint, type DerivedAccountBalance } from "../balance.js";
 import { computeIncomeStatementReport, type IncomeStatementReport, type PeriodVariance, type VarianceRow, type CashFlowSummary } from "../income-statement.js";
 import { classifyError } from "@commons-systems/errorutil/classify";
 import { logError } from "@commons-systems/errorutil/log";
+import {
+  buildAccountRows,
+  formatDate,
+  formatSignedCurrency,
+  formatSignedPercent,
+  formatPercent,
+  varianceClass,
+  type AccountRow,
+  type VarianceSide,
+} from "./account-view-model.js";
 
-interface AccountRow {
-  institution: string;
-  account: string;
-  mostRecentTimestamp: number | null;
-  balance: number | null;
-  derivedBalance: number | null;
-  hasDiscrepancy: boolean;
-  virtual: boolean;
-  latestPeriod: string | null;
-}
-
-function buildAccountRows(
-  transactions: Transaction[],
-  statements: Statement[],
-  derivedBalances: DerivedAccountBalance[],
-): AccountRow[] {
-  // Compute max transaction timestamp per account from transactions
-  const txnMaxTs = new Map<string, number>();
-  for (const txn of transactions) {
-    const k = accountKey(txn.institution, txn.account);
-    const ts = txn.timestamp?.toMillis() ?? 0;
-    const existing = txnMaxTs.get(k);
-    if (existing === undefined || ts > existing) {
-      txnMaxTs.set(k, ts);
-    }
-  }
-
-  // Find latest statement per (institution, account) by comparing period strings (YYYY-MM format, zero-padded, so lexicographic order equals chronological order)
-  const latestStatements = new Map<string, Statement>();
-  for (const stmt of statements) {
-    const k = accountKey(stmt.institution, stmt.account);
-    const existing = latestStatements.get(k);
-    if (!existing || stmt.period > existing.period) {
-      latestStatements.set(k, stmt);
-    }
-  }
-
-  // Index derived balances by account key
-  const derivedByAccount = new Map<string, DerivedAccountBalance>();
-  for (const db of derivedBalances) {
-    derivedByAccount.set(accountKey(db.institution, db.account), db);
-  }
-
-  // Detect virtual accounts: all statements for the account are virtual
-  const virtualAccounts = new Set<string>();
-  const accountStmtCounts = new Map<string, { total: number; virtual: number }>();
-  for (const stmt of statements) {
-    const k = accountKey(stmt.institution, stmt.account);
-    const counts = accountStmtCounts.get(k) ?? { total: 0, virtual: 0 };
-    counts.total++;
-    if (stmt.virtual) counts.virtual++;
-    accountStmtCounts.set(k, counts);
-  }
-  for (const [k, counts] of accountStmtCounts) {
-    if (counts.total > 0 && counts.total === counts.virtual) virtualAccounts.add(k);
-  }
-
-  // Collect all account keys from both transactions and statements
-  const allKeys = new Set<string>([...txnMaxTs.keys(), ...latestStatements.keys()]);
-
-  const rows: AccountRow[] = [];
-  for (const k of allKeys) {
-    const stmt = latestStatements.get(k);
-    const derived = derivedByAccount.get(k);
-    const [institution, account] = splitAccountKey(k);
-    // Use transaction max timestamp if available, otherwise fall back to statement lastTransactionDate
-    const maxTs = txnMaxTs.get(k) ?? stmt?.lastTransactionDate?.toMillis() ?? null;
-    rows.push({
-      institution,
-      account,
-      mostRecentTimestamp: maxTs,
-      balance: stmt ? stmt.balance : null,
-      derivedBalance: derived ? derived.derivedBalance : null,
-      hasDiscrepancy: derived ? Math.abs(derived.discrepancy) > 0.01 : false,
-      virtual: virtualAccounts.has(k),
-      latestPeriod: stmt ? stmt.period : null,
-    });
-  }
-
-  rows.sort((a, b) => (a.mostRecentTimestamp ?? 0) - (b.mostRecentTimestamp ?? 0));
-  return rows;
-}
-
-function formatDate(ms: number | null): string {
-  if (ms === null) return "";
-  return new Date(ms).toLocaleDateString();
-}
+// Re-export the extracted view-model helpers so existing importers (and the
+// legacy accounts.test.ts) keep resolving them from this module. The data logic
+// now lives in account-view-model.ts; this file keeps only HTML emission.
+export {
+  buildAccountRows,
+  formatDate,
+  formatSignedCurrency,
+  formatSignedPercent,
+  formatPercent,
+  varianceClass,
+  type AccountRow,
+  type VarianceSide,
+};
 
 function renderAccountsTable(rows: AccountRow[]): string {
   if (rows.length === 0) {
@@ -139,36 +74,10 @@ function serializeData(data: readonly AggregatePoint[] | readonly NetWorthPoint[
   return escapeHtml(JSON.stringify(data));
 }
 
-function formatSignedCurrency(n: number): string {
-  if (n === 0) return formatCurrency(0);
-  if (n > 0) return `+${formatCurrency(n)}`;
-  return `\u2212${formatCurrency(-n)}`;
-}
-
-function formatSignedPercent(p: number): string {
-  const rounded = Math.round(p * 10) / 10;
-  if (rounded === 0) return "0.0%";
-  if (rounded > 0) return `+${rounded.toFixed(1)}%`;
-  return `\u2212${Math.abs(rounded).toFixed(1)}%`;
-}
-
-function formatPercent(ratio: number | null): string {
-  if (ratio === null) return "—";
-  return `${(ratio * 100).toFixed(1)}%`;
-}
-
-type VarianceSide = "income" | "expense";
-
 interface PeriodLabels {
   readonly currentLabel: string;
   readonly priorLabel: string;
   readonly yoYLabel: string;
-}
-
-function varianceClass(value: number | null, side: VarianceSide = "income"): string {
-  if (value === null || value === 0) return "variance-neutral";
-  const isPositive = side === "expense" ? value < 0 : value > 0;
-  return isPositive ? "variance-positive" : "variance-negative";
 }
 
 function renderAmountCell(n: number | null): string {
