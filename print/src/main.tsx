@@ -115,7 +115,12 @@ const router = createHistoryRouter(
         // flushSync so the viewer-shell DOM (dangerouslySetInnerHTML) is committed
         // synchronously BEFORE afterRenderView → initViewer queries `.viewer`.
         flushSync(() => currentPageRoot!.render(<ViewPage frame={getViewFrame()} />));
-        afterRenderView(outlet, currentUser);
+        // Re-render the live root from the current frame. Read currentPageRoot
+        // through the closure (not captured) so a navigation that nulled it
+        // before this async error fires is a safe no-op via `?.`.
+        afterRenderView(outlet, currentUser, () =>
+          currentPageRoot?.render(<ViewPage frame={getViewFrame()} />),
+        );
       },
     },
     {
