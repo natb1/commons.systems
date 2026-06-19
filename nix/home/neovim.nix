@@ -28,5 +28,9 @@
     viAlias = true;
     vimAlias = true;
     vimdiffAlias = true;
+
+    # Disable unused host providers to silence evaluation warnings
+    withRuby = false;
+    withPython3 = false;
   };
 }
