@@ -54,11 +54,14 @@ export function Select(props: SelectProps) {
     );
   });
 
+  const descId = `${id}-desc`;
+
   const control = (
     <select
       {...rest}
       id={id}
       aria-invalid={!!error || undefined}
+      aria-describedby={error || helper ? descId : undefined}
       className={["cs-select", className].filter(Boolean).join(" ")}
       style={{ ...fieldResting, ...style }}
     >
@@ -94,6 +97,7 @@ export function Select(props: SelectProps) {
       {control}
       {error || helper ? (
         <span
+          id={descId}
           style={{
             fontSize: "var(--text-xs)",
             color: error ? "var(--error)" : "var(--muted)",

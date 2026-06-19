@@ -22,6 +22,8 @@ export function Input(props: InputProps) {
 
   const generated = useId();
   const id = idProp ?? generated;
+  const descId = `${id}-desc`;
+  const hasDescription = !!(helper || error);
 
   const fieldResting: CSSProperties = {
     width: "100%",
@@ -41,6 +43,7 @@ export function Input(props: InputProps) {
       {...rest}
       id={id}
       aria-invalid={!!error || undefined}
+      aria-describedby={hasDescription ? descId : undefined}
       className={["cs-input", className].filter(Boolean).join(" ")}
       style={{ ...fieldResting, ...style }}
     />
@@ -73,6 +76,7 @@ export function Input(props: InputProps) {
       {input}
       {error || helper ? (
         <span
+          id={descId}
           style={{
             fontSize: "var(--text-xs)",
             color: error ? "var(--error)" : "var(--muted)",

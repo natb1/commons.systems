@@ -47,6 +47,21 @@ describe("cs-* class names", () => {
     expect(html).toContain("cs-card--interactive");
   });
 
+  it("polymorphic Card with as='a' renders an <a> and is interactive", () => {
+    const html = renderToStaticMarkup(
+      <Card as="a" href="/">
+        Content
+      </Card>,
+    );
+    expect(html).toMatch(/<a[^>]*>/);
+    expect(html).toContain("cs-card--interactive");
+  });
+
+  it("Card with onClick is auto-detected as interactive", () => {
+    const html = renderToStaticMarkup(<Card onClick={() => {}}>Content</Card>);
+    expect(html).toContain("cs-card--interactive");
+  });
+
   it("Metric renders cs-metric", () => {
     const html = renderToStaticMarkup(<Metric label="Revenue" value="$1k" />);
     expect(html).toContain("cs-metric");
@@ -66,6 +81,22 @@ describe("cs-* class names", () => {
     expect(html).toContain("cs-field");
   });
 
+  it("Input in error state sets aria-invalid, error token, and message", () => {
+    const html = renderToStaticMarkup(<Input error="Required" />);
+    expect(html).toContain('aria-invalid="true"');
+    expect(html).toContain("var(--error)");
+    expect(html).toContain("Required");
+  });
+
+  it("Select in error state sets aria-invalid, error token, and message", () => {
+    const html = renderToStaticMarkup(
+      <Select error="Required" options={[]} />,
+    );
+    expect(html).toContain('aria-invalid="true"');
+    expect(html).toContain("var(--error)");
+    expect(html).toContain("Required");
+  });
+
   it("Checkbox renders cs-checkbox", () => {
     const html = renderToStaticMarkup(<Checkbox label="Agree" />);
     expect(html).toContain("cs-checkbox");
@@ -77,6 +108,13 @@ describe("cs-* class names", () => {
     );
     expect(html).toContain("cs-nav");
     expect(html).toContain("cs-nav__link");
+  });
+
+  it("Nav marks the current link with aria-current='page'", () => {
+    const html = renderToStaticMarkup(
+      <Nav links={[{ href: "/a", label: "A" }]} current="/a" />,
+    );
+    expect(html).toContain('aria-current="page"');
   });
 });
 
