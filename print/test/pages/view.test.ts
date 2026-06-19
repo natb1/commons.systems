@@ -18,11 +18,6 @@ vi.mock("../../src/auth.js", () => ({
   onAuthStateChanged: vi.fn(),
 }));
 
-vi.mock("../../src/viewer/shell.js", () => ({
-  renderViewerShell: vi.fn().mockReturnValue('<div class="viewer">mock viewer</div>'),
-  initViewer: vi.fn().mockReturnValue(() => {}),
-}));
-
 vi.mock("../../src/viewer/pdf.js", () => ({
   createPdfRenderer: vi.fn().mockReturnValue({}),
 }));
@@ -66,15 +61,14 @@ vi.mock("../../src/reading-position.js", () => ({
 
 import {
   renderView,
-  afterRenderView,
-  cleanupView,
+  resolveViewerProps,
   pickPositionStore,
   makeLocalStoragePositionStore,
   getViewFrame,
 } from "../../src/pages/view";
+import type { ViewFrame } from "../../src/pages/view";
 import type { MediaItem } from "../../src/types";
 import { getMediaDownloadUrl } from "../../src/storage";
-import { renderViewerShell, initViewer } from "../../src/viewer/shell";
 import { createImageArchiveRenderer } from "../../src/viewer/image-archive";
 import { createEpubRenderer } from "../../src/viewer/epub";
 
@@ -87,6 +81,7 @@ function makeMediaItem(overrides: Partial<MediaItem> = {}): MediaItem {
     publicDomain: true,
     sourceNotes: "Sourced from archive.org",
     storagePath: "media/test-book.pdf",
+    markdownPath: null,
     groupId: null,
     memberEmails: ["user@example.com"],
     addedAt: "2026-01-15T00:00:00Z",
@@ -98,6 +93,12 @@ const mockUser = { uid: "user-123", displayName: "Test" } as {
   uid: string;
   displayName: string;
 };
+
+/** Narrow getViewFrame() to the "ready" frame's props, failing loudly otherwise. */
+function readyProps(frame: ViewFrame) {
+  if (frame.kind !== "ready") throw new Error(`expected ready frame, got ${frame.kind}`);
+  return frame.props;
+}
 
 describe("pickPositionStore", () => {
   beforeEach(() => {
@@ -160,11 +161,80 @@ describe("makeLocalStoragePositionStore", () => {
   });
 });
 
+describe("resolveViewerProps", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    if (typeof globalThis.reportError !== "function") {
+      globalThis.reportError = () => {};
+    }
+    vi.spyOn(globalThis, "reportError").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.mocked(globalThis.reportError).mockRestore();
+  });
+
+  it("local item, signed-in user: routes to the sidecar store with uid null (never Firestore)", () => {
+    const item = makeMediaItem({ id: "local:book.pdf", storagePath: "book.pdf", origin: "local" });
+
+    const props = resolveViewerProps(item, true, null, mockUser as never);
+
+    expect(props.store).toBe(sidecarStore);
+    expect(props.uid).toBeNull();
+    expect(mockMakeSidecarPositionStore).toHaveBeenCalledWith("book.pdf");
+    expect(mockMakeFirestorePositionStore).not.toHaveBeenCalled();
+    expect(props.item).toBe(item);
+  });
+
+  it("cloud epub, signed in: Firestore store + uid + epub renderer factory", () => {
+    const item = makeMediaItem({ mediaType: "epub", storagePath: "media/book.epub" });
+
+    const props = resolveViewerProps(item, false, "https://example.com/book.epub", mockUser as never);
+
+    expect(props.store).toBe(firestoreStore);
+    expect(props.uid).toBe("user-123");
+    expect(mockMakeFirestorePositionStore).toHaveBeenCalledWith("user-123", "item-1");
+
+    props.createRenderer(() => {});
+    expect(createEpubRenderer).toHaveBeenCalled();
+  });
+
+  it("cloud image-archive: image-archive renderer factory built with the storagePath", () => {
+    const item = makeMediaItem({ mediaType: "image-archive", storagePath: "media/archive.cbz" });
+
+    const props = resolveViewerProps(item, false, "https://example.com/archive", null);
+
+    props.createRenderer(() => {});
+    expect(createImageArchiveRenderer).toHaveBeenCalledWith(expect.any(Function), "media/archive.cbz");
+    // image-archive resolves to the bare URL.
+    return expect(props.resolveSource()).resolves.toBe("https://example.com/archive");
+  });
+
+  it("local resolveSource: rejects and reports once when the file is gone", async () => {
+    const item = makeMediaItem({ id: "local:book.pdf", origin: "local" });
+    mockResolveLocalBlob.mockResolvedValue(null);
+
+    const props = resolveViewerProps(item, true, null, null);
+
+    await expect(props.resolveSource()).rejects.toThrow("Local file no longer present");
+    expect(globalThis.reportError).toHaveBeenCalledTimes(1);
+  });
+
+  it("local resolveSource: resolves to the blob buffer when present", async () => {
+    const item = makeMediaItem({ id: "local:book.pdf", origin: "local" });
+    const buf = new ArrayBuffer(8);
+    mockResolveLocalBlob.mockResolvedValue(buf);
+
+    const props = resolveViewerProps(item, true, null, null);
+
+    await expect(props.resolveSource()).resolves.toBe(buf);
+  });
+});
+
 describe("local-folder view path", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockWhenLocalFolderReady.mockResolvedValue(undefined);
-    cleanupView();
     if (typeof globalThis.reportError !== "function") {
       globalThis.reportError = () => {};
     }
@@ -183,9 +253,10 @@ describe("local-folder view path", () => {
     expect(mockGetLocalItem).toHaveBeenCalledWith("local:gone.pdf");
     expect(mockGetMediaItem).not.toHaveBeenCalled();
     expect(html).toContain('id="view-not-found"');
+    expect(getViewFrame()).toEqual({ kind: "notFound" });
   });
 
-  it("renders the viewer shell and uses the sidecar store for a found local item", async () => {
+  it("builds a ready frame with the sidecar store for a found local item (signed-in)", async () => {
     const item = makeMediaItem({
       id: "local:book.pdf",
       storagePath: "book.pdf",
@@ -194,25 +265,18 @@ describe("local-folder view path", () => {
     });
     mockGetLocalItem.mockResolvedValue(item);
 
-    await renderView("local:book.pdf", mockUser);
-    expect(renderViewerShell).toHaveBeenCalledWith(item);
+    await renderView("local:book.pdf", mockUser as never);
+
     // The cloud download path is never touched for a local item.
     expect(getMediaDownloadUrl).not.toHaveBeenCalled();
 
-    const outlet = document.createElement("div");
-    afterRenderView(outlet, mockUser, () => {});
-
+    const props = readyProps(getViewFrame());
     // Signed-in user viewing a LOCAL item still routes to the sidecar — never Firestore.
     expect(mockMakeSidecarPositionStore).toHaveBeenCalledWith("book.pdf");
     expect(mockMakeFirestorePositionStore).not.toHaveBeenCalled();
-    expect(initViewer).toHaveBeenCalledWith(
-      outlet,
-      expect.any(Function),
-      expect.any(Function),
-      "local:book.pdf",
-      sidecarStore,
-      null,
-    );
+    expect(props.item).toBe(item);
+    expect(props.store).toBe(sidecarStore);
+    expect(props.uid).toBeNull();
   });
 
   it("awaits local-folder readiness, then resolves once binding completes", async () => {
@@ -231,57 +295,9 @@ describe("local-folder view path", () => {
     const pending = renderView("local:book.pdf", null);
     bound = true;
     resolveReady();
-    const html = await pending;
+    await pending;
 
-    expect(html).toContain('class="viewer"');
-    expect(renderViewerShell).toHaveBeenCalledWith(item);
-  });
-
-  it("resolve closure surfaces the #view-error UI when the file is gone", async () => {
-    const item = makeMediaItem({ id: "local:book.pdf", origin: "local" });
-    mockGetLocalItem.mockResolvedValue(item);
-    mockResolveLocalBlob.mockResolvedValue(null);
-
-    await renderView("local:book.pdf", null);
-    const outlet = document.createElement("div");
-    const renderError = vi.fn();
-    afterRenderView(outlet, null, renderError);
-
-    const resolveSource = vi.mocked(initViewer).mock.calls[0][2];
-    // The closure fully handles the failure (reportError + error frame via
-    // renderError) and returns a never-settling promise so initViewer does not
-    // re-enter its own catch for the same error — so assert the side effects,
-    // not a rejection. renderError() re-renders the React root from the now
-    // "error" frame, keeping React in control of the outlet subtree.
-    resolveSource();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(getViewFrame()).toEqual({ kind: "error" });
-    expect(renderError).toHaveBeenCalledTimes(1);
-    expect(globalThis.reportError).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe("afterRenderView", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    cleanupView();
-  });
-
-  it("initializes image archive renderer when mediaType is image-archive", async () => {
-    const item = makeMediaItem({ mediaType: "image-archive", storagePath: "media/archive.cbz" });
-    mockGetMediaItem.mockResolvedValue(item);
-
-    const outlet = document.createElement("div");
-    outlet.innerHTML = '<div class="viewer"></div>';
-
-    await renderView("item-1", null);
-    afterRenderView(outlet, null, () => {});
-
-    expect(initViewer).toHaveBeenCalled();
-    // Verify the factory passed to initViewer creates an image archive renderer
-    const factory = vi.mocked(initViewer).mock.calls[0][1];
-    factory(vi.fn());
-    expect(createImageArchiveRenderer).toHaveBeenCalled();
+    expect(readyProps(getViewFrame()).item).toBe(item);
   });
 });
 
@@ -324,7 +340,7 @@ describe("renderView", () => {
     it("shows not-found message", async () => {
       mockGetMediaItem.mockResolvedValue(null);
 
-      const html = await renderView("missing-id", mockUser);
+      const html = await renderView("missing-id", mockUser as never);
 
       expect(html).toContain('id="view-not-found"');
       expect(html).toContain("Media item not found.");
@@ -333,7 +349,7 @@ describe("renderView", () => {
     it("calls getMediaItem with the provided id", async () => {
       mockGetMediaItem.mockResolvedValue(null);
 
-      await renderView("missing-id", mockUser);
+      await renderView("missing-id", mockUser as never);
 
       expect(mockGetMediaItem).toHaveBeenCalledWith("missing-id");
     });
@@ -379,19 +395,18 @@ describe("renderView", () => {
   });
 
   describe("when item is found", () => {
-    it("renders viewer shell", async () => {
+    it("builds a ready frame and fetches the download URL", async () => {
       const item = makeMediaItem();
       mockGetMediaItem.mockResolvedValue(item);
 
-      const html = await renderView("item-1", null);
+      await renderView("item-1", null);
 
-      expect(renderViewerShell).toHaveBeenCalledWith(item);
-      expect(html).toContain('class="viewer"');
+      expect(readyProps(getViewFrame()).item).toBe(item);
     });
 
     it("calls getMediaDownloadUrl with item storage path", async () => {
       mockGetMediaItem.mockResolvedValue(
-        makeMediaItem({ storagePath: "media/archive.zip" }),
+        makeMediaItem({ storagePath: "media/archive.zip", mediaType: "image-archive" }),
       );
 
       await renderView("item-1", null);
@@ -399,44 +414,30 @@ describe("renderView", () => {
       expect(getMediaDownloadUrl).toHaveBeenCalledWith("media/archive.zip");
     });
 
-    it("escapes HTML in title via renderViewerShell", async () => {
-      const item = makeMediaItem({ title: "<script>alert(1)</script>" });
+    it("dispatches epub media type to createEpubRenderer via the ready props", async () => {
+      const item = makeMediaItem({ mediaType: "epub", storagePath: "media/book.epub" });
+      mockGetMediaItem.mockResolvedValue(item);
+
+      await renderView("item-1", mockUser as never);
+
+      const props = readyProps(getViewFrame());
+      expect(mockMakeFirestorePositionStore).toHaveBeenCalledWith("user-123", "item-1");
+      expect(props.uid).toBe("user-123");
+      expect(props.store).toBe(firestoreStore);
+
+      props.createRenderer(() => {});
+      expect(createEpubRenderer).toHaveBeenCalled();
+    });
+
+    it("dispatches image-archive media type to createImageArchiveRenderer via the ready props", async () => {
+      const item = makeMediaItem({ mediaType: "image-archive", storagePath: "media/archive.cbz" });
       mockGetMediaItem.mockResolvedValue(item);
 
       await renderView("item-1", null);
 
-      expect(renderViewerShell).toHaveBeenCalledWith(item);
-    });
-  });
-
-  describe("afterRenderView", () => {
-    beforeEach(() => {
-      cleanupView();
-    });
-
-    it("dispatches epub media type to createEpubRenderer", async () => {
-      const item = makeMediaItem({ mediaType: "epub", storagePath: "media/book.epub" });
-      mockGetMediaItem.mockResolvedValue(item);
-
-      await renderView("item-1", mockUser);
-
-      const outlet = document.createElement("div");
-      afterRenderView(outlet, mockUser, () => {});
-
-      expect(mockMakeFirestorePositionStore).toHaveBeenCalledWith("user-123", "item-1");
-      expect(initViewer).toHaveBeenCalledWith(
-        outlet,
-        expect.any(Function),
-        expect.any(Function),
-        "item-1",
-        firestoreStore,
-        "user-123",
-      );
-
-      const factory = (initViewer as ReturnType<typeof vi.fn>).mock.calls[0][1] as (onError: (err: unknown) => void) => unknown;
-      factory(() => {});
-
-      expect(createEpubRenderer).toHaveBeenCalled();
+      const props = readyProps(getViewFrame());
+      props.createRenderer(() => {});
+      expect(createImageArchiveRenderer).toHaveBeenCalledWith(expect.any(Function), "media/archive.cbz");
     });
   });
 });
