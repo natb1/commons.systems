@@ -340,8 +340,12 @@ returns — must contain:
   - **Dependencies** — prior units that must complete first, so build order is
     explicit.
 - **Reuse** notes — existing functions/utilities to reuse, with their file paths.
-- A **Verification** section — how to test the change end-to-end (run the code,
-  use MCP tools, run tests).
+- A **Verification** section — how to test the change end-to-end. Put
+  deterministic, CI-safe, auto-runnable checks (test-suite invocations,
+  typechecks, builds) in fenced ` ```verify ` blocks so `/implement`
+  auto-executes them before opening the PR. Keep manual steps, observe-in-
+  production checks, live-systemd verification, and judgment calls as **prose** —
+  `/implement` skips those, leaving them for QA and humans.
 - A clean-context **plan preface** (below), so the `implement` worker executes
   from the comment alone.
 
@@ -368,7 +372,12 @@ in the worktree `<worktree-path>` (branch `<N>-…`). Build each unit below in
 order via `/implement-unit` (one commit per unit), then run the terminal
 procedure verbatim:
 
-1. **Open the draft PR** (`dangerouslyDisableSandbox: true` — calls `gh`). Write
+1. **Execute the plan's Verification section** (auto-runnable ` ```verify `
+   blocks): `.claude/skills/dispatch-propagate/scripts/dispatch-read-plan <N> | .claude/skills/dispatch-propagate/scripts/dispatch-run-verification` — exit 3 →
+   proceed unchanged; exit 0 → proceed; exit 1 → fix via `/implement-unit`
+   (cap 2) and re-run, else `dispatch-mark-deviation` and stop.
+
+2. **Open the draft PR** (`dangerouslyDisableSandbox: true` — calls `gh`). Write
    the PR body prose to `tmp/pr-body.md` first, then:
 
    ```bash
@@ -379,7 +388,7 @@ procedure verbatim:
      --body-file tmp/pr-body.md)
    ```
 
-2. **Check for deviation, then write the marker (or skip it), then stop.**
+3. **Check for deviation, then write the marker (or skip it), then stop.**
    - **No deviation** (built as planned):
      ```bash
      .claude/skills/dispatch-propagate/scripts/dispatch-mark-complete \
@@ -456,7 +465,7 @@ with these substitutions:
 > - Ensure that the plan file is concise enough to scan quickly, but detailed enough to execute effectively
 > - Name the critical files to be modified. For changes that repeat a pattern across many files, describe the pattern once and list a few representative paths — do not enumerate every file or line number
 > - Reference existing functions and utilities you found that should be reused, with their file paths
-> - Include a verification section describing how to test the changes end-to-end (run the code, use MCP tools, run tests)
+> - Include a verification section describing how to test the changes end-to-end. Put deterministic, CI-safe, auto-runnable checks (test-suite invocations, typechecks, builds) in fenced ` ```verify ` blocks so `/implement` auto-executes them before opening the PR. Keep manual steps, observe-in-production checks, live-systemd verification, and judgment calls as **prose** — `/implement` skips those, leaving them for QA and humans.
 
 ### Intentionally NOT adopted
 
