@@ -30,16 +30,37 @@ describe("renderAdmin", () => {
     expect(html).toContain("Nat B");
   });
 
-  it("escapes displayName containing HTML", () => {
+  it("escapes displayName containing HTML (React single-escaping)", () => {
     const user = makeUser({ displayName: '<script>alert("xss")</script>' });
     const html = renderAdmin(user, true);
     expect(html).not.toContain("<script>");
     expect(html).toContain("&lt;script&gt;");
   });
 
+  it("single-escapes displayName containing & (no double-escaping)", () => {
+    const user = makeUser({ displayName: "Alice & Bob" });
+    const html = renderAdmin(user, true);
+    // React escapes & to &amp; exactly once; double-escaping would produce &amp;amp;
+    expect(html).toContain("&amp;");
+    expect(html).not.toContain("&amp;amp;");
+  });
+
   it("falls back to email when displayName is null", () => {
     const user = makeUser({ displayName: null });
     const html = renderAdmin(user, true);
     expect(html).toContain("test@example.com");
+  });
+
+  it("shows warning when skippedCount > 0", () => {
+    const user = makeUser({ displayName: "Admin User" });
+    const html = renderAdmin(user, true, 3);
+    expect(html).toContain('class="warning"');
+    expect(html).toContain("Warning: 3 post(s) have missing required fields.");
+  });
+
+  it("omits warning when skippedCount is 0", () => {
+    const user = makeUser({ displayName: "Admin User" });
+    const html = renderAdmin(user, true, 0);
+    expect(html).not.toContain("warning");
   });
 });
