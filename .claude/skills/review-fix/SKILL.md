@@ -27,7 +27,7 @@ skill never readies the PR itself. Resulting chain: `qa -> review -> done`.
 disposition summary; this skill never sees raw findings.
 
 Run `gh` commands (directly or via `post-pr-comment.sh` / `dispatch-complete-phase`)
-and `npx`-backed scans (CodeQL, the dependency audit) with
+and `npx`-backed scans (CodeQL, the dependency audit, the erosion scan) with
 `dangerouslyDisableSandbox: true` — see `.claude/rules/sandbox.md`.
 
 ## Idempotency preamble
@@ -219,8 +219,26 @@ skip the fetch and record the CodeQL scan as "could not run (no PR
 ref)" with no findings. An empty alert array is normal — no open CodeQL alerts —
 and is not an error.
 
-Collect normalized CodeQL and npm findings into `prescanned_findings` to pass to
-the Workflow.
+#### Erosion metrics (inline, when `surface=code`)
+
+Run inline in this parent thread — not a subagent — whenever `surface=code`.
+Pipe the changed-file list into `dispatch-review-erosion`, passing `MERGE_BASE`
+as the positional argument (**`dangerouslyDisableSandbox: true` is mandatory** —
+the script shells out to `npx jscpd@3.5.10`, which downloads from the npm
+registry, and it hard-fails on a missing jscpd report):
+
+```bash
+# MERGE_BASE is already set above — reuse it here.
+# Pass as positional arg (not an inline VAR=val prefix — breaks allowlist matching).
+EROSION_JSON=$(.claude/skills/dispatch-propagate/scripts/dispatch-changed-files < "tmp/pack-$N.txt" \
+  | .claude/skills/dispatch-propagate/scripts/dispatch-review-erosion "$MERGE_BASE")
+```
+
+The script emits `{"findings":[...]}` with `Source="erosion"` already in the
+per-finding schema. Extract the `findings` array for `prescanned_findings`.
+
+Collect normalized CodeQL, npm, and erosion findings into `prescanned_findings`
+to pass to the Workflow.
 
 ### 2. Build `args` and invoke the Workflow
 
@@ -235,7 +253,7 @@ args = {
   surface:             "empty" | "docs" | "tests" | "code",
   deps:                <true|false>,
   app_or_rules:        <true|false>,
-  prescanned_findings: [ ...normalized CodeQL + npm findings in Per-finding schema... ],
+  prescanned_findings: [ ...normalized CodeQL + npm + erosion findings in Per-finding schema... ],
   implementing_issues: [ <N>, ... ],    // parsed from Closes #N lines; [] if none
   security_note:       <string or omit> // set for empty/docs/tests; omit for code
 }
