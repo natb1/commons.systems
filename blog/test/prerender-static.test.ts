@@ -190,7 +190,7 @@ describe("prerenderStaticPage", () => {
   });
 
   it("injects nav links into <app-nav>", () => {
-    prerenderStaticPage(makeStaticConfig());
+    prerenderStaticPage(makeStaticConfig({ showHomeLink: true }));
     const html = getWrittenHtml("/dist/about/index.html");
     // The <app-nav> wrapper survives; inside it the ds Nav renders both links
     // (the /about link is align:undefined here, so it stays in the start group)
@@ -201,8 +201,22 @@ describe("prerenderStaticPage", () => {
     expect(html).toContain("Home");
     expect(html).toContain('href="/about"');
     expect(html).toContain("About");
-    expect(html).toContain("commons.systems");
+    expect(html).toContain('href="https://commons.systems/"');
     expect(html).not.toContain("Login");
+  });
+
+  it("omits home link from nav when showHomeLink is false (default)", () => {
+    prerenderStaticPage(makeStaticConfig());
+    const html = getWrittenHtml("/dist/about/index.html");
+    // Nav still renders with cs-nav and the configured nav links.
+    expect(html).toContain('<app-nav id="nav">');
+    expect(html).toContain("cs-nav");
+    expect(html).toContain('href="/"');
+    expect(html).toContain("Home");
+    expect(html).toContain('href="/about"');
+    expect(html).toContain("About");
+    // Home link to commons.systems root must be absent.
+    expect(html).not.toContain('href="https://commons.systems/"');
   });
 
   it("writes output to ${distDir}${path}/index.html and creates the directory", () => {
