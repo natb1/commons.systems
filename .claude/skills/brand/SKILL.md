@@ -76,24 +76,13 @@ One terminology note for this page: `artifact` is the project's internal term, a
 
 ## Visual Tone
 
-The visual language is the same voice in another medium. Where the writing is "the neighbor showing you what they built in their garage," the interface should look built, not branded — functional, legible, and honestly DIY. It expresses the charter's principles through a **cassette-futurism** aesthetic: monospace type, a warm paper palette, a single accent, square corners, and structure drawn with borders rather than shadows. The reference is the original promise of the computer era, before platforms — the computer as a personal tool, not a storefront.
+The visual language is the same voice in another medium. Where the writing is "the neighbor showing you what they built in their garage," the interface should look built, not branded — functional, legible, honestly DIY. The aesthetic is **cassette-futurism**: the personal computer before platforms, a tool not a storefront.
 
-Ground truth for the actual tokens (type, palette, spacing) is [`style/default.css`](../../../style/default.css), not this file — values live there so they change in one place.
+The concrete visual spec — tokens, the eight `cs-*` components, the square-corner reset, and the full list of what the system rejects — lives in [`packages/ds/README.md`](../../../packages/ds/README.md), the design system's own source of truth. This section holds only the cross-surface judgment that applies everywhere, including artifacts outside the design system (blog imagery, OG cards, diagrams).
 
-### Visual Attributes
-
-- **Functional, not decorative.** Every element earns its place by doing something. This is functional minimalism that happens to read retro — not a retro costume. CRT scanlines, fake vintage skeuomorphism, and blinking-cursor nostalgia are tell, not show: they manufacture a vibe instead of being one.
-- **Legible first.** Legibility is the honest form of polish — "looks like it works" has to actually work for real eyes. This is also where the charter's privilege-gradient risk bites: an aesthetic that gatekeeps by taste narrows the audience. A user-facing app may soften toward approachability (apps override the scheme on `:root`) without leaving the family.
+- **Functional minimalism, not retro costume.** Cassette-futurism is the restraint of early computing, not a theme-park version of it. CRT scanlines, fake vintage skeuomorphism, and blinking-cursor nostalgia are tell, not show — they manufacture a vibe instead of being one. The moment it looks like a costume, it has crossed from show into tell.
+- **Legibility is the honest form of polish.** "Looks like it works" has to actually work for real eyes. This is where the charter's privilege-gradient risk bites: an aesthetic that gatekeeps by taste narrows the audience. A user-facing surface may soften toward approachability without leaving the family.
 - **No platform chrome.** The absence is the statement: no signup walls, no cookie banners, no attention-grabbing modals, no account gate on the first screen. Flow carries the anti-platform message as much as the pixels do.
-- **Respects the reader's environment.** Honor system light/dark rather than imposing a brand-mandated scheme. Respecting the reader's settings is the autonomy ethic expressed in CSS.
-
-### What This Project Never Looks Like
-
-**SaaS gloss.** No gradient heroes, soft drop-shadows, rounded-corner cards, spring micro-interactions, or skeleton-loader theater. That polish signals a brand team and capital — the platform sheen the project rejects.
-
-**Stock illustration.** No mascot, no hero illustration, no icon sets that look purchased. Text-first; simple line or Unicode glyphs over decorative imagery.
-
-**Retro cosplay.** Cassette futurism is the restraint of early computing, not a theme-park version of it. If it looks like a costume, it has crossed from show into tell.
 
 ## Terminology
 
