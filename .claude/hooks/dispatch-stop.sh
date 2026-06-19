@@ -386,6 +386,28 @@ if [ -z "$MARKER_PHASE" ]; then
       # schedule failed → fall through to the normal office-hours park below.
     fi
   fi
+  # Side-effect recovery (#2025). The marker is absent, but the dispatched phase
+  # may have completed its real work (PR opened / label applied / commits pushed)
+  # and only leaked the terminal dispatch-mark-complete call (#824 trailing-step
+  # leak). Recover the phase the session was dispatched to run from its transcript
+  # and compare against the phase derived from durable state: if dispatch-phase has
+  # advanced PAST the dispatched phase, the structural side-effects landed —
+  # advance the chain instead of parking a human. (Advancing only spawns a tick,
+  # which re-derives the phase, so the completion labels still gate forward
+  # progress — this can never skip qa/review. Note: a dispatched=qa whose CI broke
+  # mid-phase advances to fix-checks here rather than parking; that routes to the
+  # autonomous handler and qa re-runs once CI is green — intentional, see #2025.)
+  DISPATCHED_PHASE=$("$SCRIPTS/dispatch-recover-dispatched-phase" "$TRANSCRIPT_PATH" 2>/dev/null) || DISPATCHED_PHASE=""
+  if [ -n "$DISPATCHED_PHASE" ] && [ -n "$CURRENT_PHASE" ] && [ "$DISPATCHED_PHASE" != "$CURRENT_PHASE" ]; then
+    clear_rate_limit_retry_labels
+    strip_office_hours_label
+    spawn_tick
+    spawn_sweep
+    self_close
+    exit 0
+  fi
+  # Recovery failed, or the chain has not advanced past the dispatched phase →
+  # genuine mid-phase exit → fall through to the office-hours park below.
   "$SCRIPTS/dispatch-apply-office-hours" "$ISSUE_NUM" \
     "$(resolve_office_hours_reason "phase exited before completion (mid-phase exit or context compaction)")" \
     || echo "[dispatch-stop] WARNING: dispatch-apply-office-hours failed" >&2
