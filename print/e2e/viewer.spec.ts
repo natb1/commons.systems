@@ -750,7 +750,12 @@ test.describe("viewer", () => {
     // Clear the query — highlights should be removed.
     await input.fill("");
     await input.press("Enter");
-    await expect(page.locator(".textLayer .search-highlight")).toHaveCount(0, { timeout: 15000 });
+    await expect
+      .poll(
+        async () => page.locator(".textLayer .search-highlight").count(),
+        { timeout: 15000 },
+      )
+      .toBe(0);
   });
 
   test("EPUB outline is visible with TOC entries", async ({ page }) => {
