@@ -6985,6 +6985,7 @@ cat > "$TMPDIR_TEST/bin/npx" <<'FAKE'
 #!/usr/bin/env bash
 cf="$NPX_COUNT_FILE"
 c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
+[[ -n "${NPX_ARGS_FILE:-}" ]] && echo "$@" >> "$NPX_ARGS_FILE"
 exit "${NPX_EXIT:-0}"
 FAKE
 chmod +x "$TMPDIR_TEST/bin/npx"
@@ -7003,16 +7004,20 @@ exit 0
 FAKE
 chmod +x "$TMPDIR_TEST/bin/sleep"
 NPX_COUNT_FILE="$TMPDIR_TEST/npx-5"
+TIMEOUT_LOG_FILE="$TMPDIR_TEST/timeout-calls-5.log"
 rc=0
 (
   source "$TMPDIR_TEST/lib.sh"
   unset PLAYWRIGHT_BROWSERS_PATH
   export PLAYWRIGHT_INSTALL_ATTEMPTS=2
   export NPX_COUNT_FILE="$TMPDIR_TEST/npx-5"
+  export TIMEOUT_LOG_FILE="$TMPDIR_TEST/timeout-calls-5.log"
   playwright_install_with_deps 2>/dev/null
 ) || rc=$?
 [[ "$rc" -ne 0 ]] && rc_state="nonzero" || rc_state="zero"
+timeout_calls=$( [[ -s "$TIMEOUT_LOG_FILE" ]] && echo nonempty || echo empty )
 assert_eq "timeout-stall → 2 npx calls" "2" "$(cat "$NPX_COUNT_FILE")"
+assert_eq "timeout-stall → timeout invoked" "nonempty" "$timeout_calls"
 assert_eq "timeout-stall → rc non-zero" "nonzero" "$rc_state"
 teardown
 
