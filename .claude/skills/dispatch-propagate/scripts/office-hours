@@ -29,8 +29,14 @@
 #                                   dispatch-spawn-office-hours; then attach the
 #                                   human to it. Born in the worktree, the session's
 #                                   branch is <N>-..., so the strip hook clears
-#                                   the dispatch:office-hours label and the
-#                                   session holds the per-worktree concurrency
+#                                   the dispatch:office-hours label. EXCEPTION:
+#                                   for main-qa items, cwd is the main worktree
+#                                   (branch `main`), which does not match the
+#                                   strip hook `^[0-9]+` discriminator — the
+#                                   label is NOT auto-cleared; closing the issue
+#                                   is what removes it from the queue (see
+#                                   SKILL.md Step 5). The session also holds the
+#                                   per-worktree concurrency
 #                                   lock via the occupancy guard's
 #                                   office-hours-name check in
 #                                   worktree_has_live_session, which recognizes
@@ -102,8 +108,11 @@ case "$verb" in
     # a b c d = <N> <phase> <pr-or-dash> <worktree-path>. Launch a fresh
     # /office-hours session worker-style — a --bg job named office-hours-<N>,
     # rooted in the <N>-* worktree — then attach the human via attach. Rooting
-    # it in the worktree clears the dispatch:office-hours label (the strip hook
-    # resolves <N> from the cwd branch). The per-worktree concurrency lock is
+    # it in the worktree clears the dispatch:office-hours label for non-main-qa
+    # items (the strip hook resolves <N> from the cwd branch); for main-qa items
+    # the cwd is the main worktree (branch main), which the strip hook's ^[0-9]+
+    # discriminator does not match, so the label is NOT auto-cleared — see the
+    # header EXCEPTION note. The per-worktree concurrency lock is
     # held via the occupancy guard's office-hours-name check (see
     # worktree_has_live_session), which recognizes the office-hours-<N> session
     # as occupying the <N>-slug worktree.
