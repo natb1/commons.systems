@@ -4,8 +4,7 @@
 // in use-app-state.ts. This unit wraps legacy string-rendered route bodies in a
 // React shell — Unit 3 later swaps only the /transactions arm for a real React
 // page.
-import { Nav } from "@commons-systems/ds";
-import { NAV_LINKS } from "./nav-links.js";
+import { AppShell } from "./AppShell.js";
 import { AuthControls } from "./AuthControls.js";
 import { Hero } from "./Hero.js";
 import { LegacyRoute } from "./LegacyRoute.js";
@@ -85,45 +84,33 @@ export function App() {
   const currentPath = isTransactions ? TRANSACTIONS_PATH : route.path;
 
   return (
-    <div className="page">
-      <header>
-        <h1>Budget</h1>
-        {/* ds Nav renders its own <nav>, so it goes directly under <header>
-            rather than nested in another <nav> (which would double-nest). */}
-        <Nav
-          links={[...NAV_LINKS]}
-          current={currentPath}
-          end={<AuthControls {...app} />}
-        />
-      </header>
-      <Hero hidden={app.state.source === "local"} />
-      <div className="content-grid">
-        {/* Keyed by path AND navEpoch: a fresh instance per link navigation
-            (path change) AND per data transition (navEpoch bump), so the body
-            re-resolves against the current data source — exactly what legacy's
-            trailing router.navigate() did. Each instance still renders once, so
-            the render-once invariant holds.
+    <AppShell
+      current={currentPath}
+      navEnd={<AuthControls {...app} />}
+      hero={<Hero hidden={app.state.source === "local"} />}
+    >
+      {/* Keyed by path AND navEpoch: a fresh instance per link navigation
+          (path change) AND per data transition (navEpoch bump), so the body
+          re-resolves against the current data source — exactly what legacy's
+          trailing router.navigate() did. Each instance still renders once, so
+          the render-once invariant holds.
 
-            /transactions is a real React page (Unit 3) — same keying so a
-            same-path data transition re-mounts it and re-resolves; renderOptions()
-            is read at mount and also calls setActiveDataSource for the route,
-            matching how LegacyRoute is fed. The other four routes stay legacy. */}
-        {isTransactions ? (
-          <Transactions
-            key={`${TRANSACTIONS_PATH}:${app.navEpoch}`}
-            options={app.renderOptions()}
-          />
-        ) : (
-          <LegacyRoute
-            key={`${route.path}:${app.navEpoch}`}
-            render={() => route.render(app.renderOptions())}
-            specs={route.specs}
-          />
-        )}
-      </div>
-      <footer>
-        <p>Created with <a href="https://github.com/natb1/commons.systems" target="_blank" rel="noopener">commons.systems</a> | &copy; 2026 RUMOR.ML <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener"><img src="https://mirrors.creativecommons.org/presskit/buttons/88x31/png/by-sa.png" alt="CC-BY-SA" className="cc-badge" /></a></p>
-      </footer>
-    </div>
+          /transactions is a real React page (Unit 3) — same keying so a
+          same-path data transition re-mounts it and re-resolves; renderOptions()
+          is read at mount and also calls setActiveDataSource for the route,
+          matching how LegacyRoute is fed. The other four routes stay legacy. */}
+      {isTransactions ? (
+        <Transactions
+          key={`${TRANSACTIONS_PATH}:${app.navEpoch}`}
+          options={app.renderOptions()}
+        />
+      ) : (
+        <LegacyRoute
+          key={`${route.path}:${app.navEpoch}`}
+          render={() => route.render(app.renderOptions())}
+          specs={route.specs}
+        />
+      )}
+    </AppShell>
   );
 }
