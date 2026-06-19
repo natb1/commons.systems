@@ -55,6 +55,9 @@ export interface PrerenderConfig {
    *  When set, per-post pages also strip the `landing-hero` section.
    *  Throws if the marker is absent from the template. */
   homeExtraHtml?: string;
+  /** Whether to include the `commons.systems` home link in the prerendered nav.
+   *  Defaults to `false`. */
+  showHomeLink?: boolean;
 }
 
 export interface StaticPageConfig {
@@ -73,6 +76,9 @@ export interface StaticPageConfig {
   relMe?: string[];
   /** Defaults to true. Set false to keep the landing-hero block in this static page. */
   stripHero?: boolean;
+  /** Whether to include the `commons.systems` home link in the prerendered nav.
+   *  Defaults to `false`. */
+  showHomeLink?: boolean;
 }
 
 export interface PostsArtifacts {
@@ -89,12 +95,13 @@ function ogTagsToHtml(entries: OgTagEntry[]): string {
 }
 
 // Render the nav anonymously (showAuth=false, user=null) so no stray "Login"
-// control leaks into the static HTML; show the home link so crawlers see it.
-function renderNavHtml(links: NavLink[]): string {
+// control leaks into the static HTML. showHomeLink comes from the caller's
+// config and defaults to false.
+function renderNavHtml(links: NavLink[], showHomeLink: boolean = false): string {
   return renderToStaticMarkup(
     createElement(BlogNav, {
       links,
-      showHomeLink: true,
+      showHomeLink,
       showAuth: false,
       user: null,
       onSignIn: () => {},
@@ -212,6 +219,7 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
     relMe,
     softwareApplications,
     homeExtraHtml,
+    showHomeLink,
   } = config;
 
   const template = fs.readFileSync(join(distDir, "index.html"), "utf-8");
@@ -222,7 +230,7 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
     infoPanel,
   });
 
-  const navHtml = renderNavHtml(navLinks);
+  const navHtml = renderNavHtml(navLinks, showHomeLink);
 
   const relMeHtml = relMe ? relMeLinkTags(relMe) : "";
 
@@ -298,6 +306,7 @@ export function prerenderStaticPage(config: StaticPageConfig): void {
     jsonLdBlocks,
     relMe,
     stripHero,
+    showHomeLink,
   } = config;
 
   const template = fs.readFileSync(join(distDir, "index.html"), "utf-8");
@@ -328,7 +337,7 @@ export function prerenderStaticPage(config: StaticPageConfig): void {
 
   html = injectMain(html, bodyHtml);
   html = injectInfoPanel(html, panelHtml);
-  html = injectNav(html, renderNavHtml(navLinks));
+  html = injectNav(html, renderNavHtml(navLinks, showHomeLink));
 
   if (stripHero !== false) {
     html = stripHomeExtra(html);
