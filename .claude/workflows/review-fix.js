@@ -891,9 +891,11 @@ const dispositions = deduped.map((f) => {
 // --- outcome-envelope counts (Unit 3, issue #1860) ---------------------------
 // Computed per .claude/docs/outcome-envelope.md. Unit 4 passes these straight
 // into dispatch-emit-outcome; Unit 5 aggregates them. Additive only.
+// Exception: followups_deferred is the deferred-filing QUEUE depth, NOT
+// passed straight through — the SKILL body emits its OWN actual filed count.
 const findings_surfaced = dispositions.length; // every deduped finding, any bucket
 const fixes_applied = fixed.length; // = the count of Fixed-bucket dispositions
-const followups_filed = deferred_filings.length; // this Workflow's OWN deferred filings
+const followups_deferred = deferred_filings.length; // deferred-filing QUEUE depth (Step-5a entries the SKILL body must still file); NOT a filed count
 // findings_actionable: dispositions whose FINAL bucket ∈ {Fixed, Required, Deferred}.
 // Compute from `dispositions` (the post-remap array) NOT `deduped`: dispositions
 // remaps refuted/unverified Required findings to Refuted/Unverified, so Required
@@ -925,7 +927,7 @@ return {
   findings_surfaced,
   findings_actionable,
   fixes_applied,
-  followups_filed,
+  followups_deferred,
   subagents_launched: subagentsLaunched,
   disposition,
 };

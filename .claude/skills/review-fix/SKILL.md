@@ -352,6 +352,8 @@ prepared filing structures in `result.deferred_filings` and
 `result.security_followup_input`; this skill executes the actual `gh` calls.
 Skip a path when its bucket is empty.
 
+`result.followups_deferred` is the count of Step-5a filing subagents the Workflow queued (not yet filed); it drives the Step-5a fan-out and is NOT the value emitted to `--followups-filed`. Track instead how many Step-5a and Step-5b follow-ups were ACTUALLY filed this run — count only NEW `<disposition>` records (EXISTING records returned by `/file-issue` were not filed this phase). Use the already-captured `<N>` records from the "Capture each `<N>`" lines in 5a and 5b for this count; introduce no new tracking mechanism. Pass that count, not `result.followups_deferred`, as the `--followups-filed` total.
+
 #### 5a. Deferred code-review/review findings → `/file-issue` with a blocked-by link
 
 The Workflow prepares `result.deferred_filings`, each entry carrying `title`,
@@ -597,7 +599,7 @@ REPO=$(git remote get-url origin | sed -E 's#.*github.com[:/]##; s#\.git$##')
   --findings-surfaced <result.findings_surfaced> \
   --findings-actionable <result.findings_actionable> \
   --fixes-applied <result.fixes_applied> \
-  --followups-filed <result.followups_filed + count of Step-5b security follow-ups actually filed> \
+  --followups-filed <count of NEW Step-5a follow-ups filed this run + count of NEW Step-5b security follow-ups filed this run> \
   --subagents-launched <result.subagents_launched + count of Step-5a and Step-5b filing subagents this SKILL spawned> \
   --disposition escalated \
   --terminated-reason "/review-fix: high-confidence required security finding(s) left unresolved after fixes"
@@ -635,7 +637,7 @@ REPO=$(git remote get-url origin | sed -E 's#.*github.com[:/]##; s#\.git$##')
   --findings-surfaced <result.findings_surfaced> \
   --findings-actionable <result.findings_actionable> \
   --fixes-applied <result.fixes_applied> \
-  --followups-filed <result.followups_filed + count of Step-5b security follow-ups actually filed> \
+  --followups-filed <count of NEW Step-5a follow-ups filed this run + count of NEW Step-5b security follow-ups filed this run> \
   --subagents-launched <result.subagents_launched + count of Step-5a and Step-5b filing subagents this SKILL spawned> \
   --disposition <result.disposition>
 ```
