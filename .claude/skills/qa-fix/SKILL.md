@@ -260,6 +260,7 @@ fork site below (same discipline as the `fixes_applied_count` tally in Step 3.7)
         - Expected outcome: <what success looks like to the user>
         - Classification: script-verifiable | needs-browser | needs-human-judgment
         - Command: <exact command/assertion>   # required iff script-verifiable
+        - Flag: planned-deferral — <reason>   # optional; emit ONLY for a planned deferral
         ```
       - **The classification axis (three-way):**
         - `script-verifiable` — outcome decided by a shell command / file check, a
@@ -271,6 +272,14 @@ fork site below (same discipline as the `fixes_applied_count` tally in Step 3.7)
           or a "does this look right" call. **Not** walked here; recorded as
           deferred-to-office-hours and is a user-input blocker (see terminal
           disposition). Carries no `Command`.
+      - **Planned-deferral flag.** A planned deferral is an acceptance criterion the
+        issue/PR documents as non-assertable at merge time — verified downstream by
+        monitoring or audit tooling rather than at this PR's merge. Example: "no
+        regression in caught-finding rate, measured downstream by
+        `dispatch-token-audit`." Classify such an item `needs-human-judgment` (it is
+        not script- or browser-verifiable) **and** add the `Flag: planned-deferral —
+        <reason>` line with a one-line reason. The flag annotates; it does not replace
+        the classification axis — both lines must appear.
 
    After the triage subagent returns, increment `SKILL_SUBAGENTS` by 1 (the one
    bounded Opus triage fork always runs).
@@ -330,12 +339,18 @@ fork site below (same discipline as the `fixes_applied_count` tally in Step 3.7)
    the Workflow `args`. Each residue entry is an object:
 
    ```
-   { id, title, kind, url_path, expected_outcome, finding, page_text, screenshot_path }
+   { id, title, kind, url_path, expected_outcome, finding, page_text, screenshot_path,
+     planned_deferral }
    ```
 
    - `id` — a stable identifier for the item (the plan item's number/title).
    - `kind` — one of exactly **three** values (below). SKIP results are **not**
      residue; only these three kinds are recorded in the list.
+   - `planned_deferral` — **optional boolean**. Absent or `false` means a normal item.
+     Set to `true` when the plan item carried `Flag: planned-deferral — <reason>`.
+     The flag is orthogonal to `kind` — it normally rides a `needs-human-judgment`
+     item but may in principle ride any kind. When set, put the `<reason>` into the
+     item's `finding` so the office-hours human sees why it was deferred.
 
    The three residue kinds:
 
@@ -347,7 +362,9 @@ fork site below (same discipline as the `fixes_applied_count` tally in Step 3.7)
    - **`needs-human-judgment`** — every plan-triage deferred item (the
      `needs-human-judgment` classification from Step 2; the
      deferred-to-office-hours items noted above). `page_text=''` — it is classified
-     by its nature, not by a browser observation.
+     by its nature, not by a browser observation. When the plan item carried `Flag:
+     planned-deferral`, also set `planned_deferral: true` on this residue entry and
+     put the flag's `<reason>` in `finding`.
    - **`main-gated-fail`** — a permission-denied smoke FAIL when the
      `firestore_caveat` derived in Step 1 applies (see below). Tag the residue item
      `kind:"main-gated-fail"` instead of `"fail"`.
@@ -494,7 +511,8 @@ fork site below (same discipline as the `fixes_applied_count` tally in Step 3.7)
                                               // each entry: {id, title, kind,
                                               //   url_path, expected_outcome,
                                               //   finding, page_text,
-                                              //   screenshot_path}
+                                              //   screenshot_path,
+                                              //   planned_deferral}  // optional bool
      plan_fix:           <bool>,              // (ATTEMPT_N < CAP) from the
                                               //   idempotency preamble — a
                                               //   read-only pre-gate: false at
@@ -545,9 +563,9 @@ fork site below (same discipline as the `fixes_applied_count` tally in Step 3.7)
      excluded from `result.dispositions`, never reaching fix-plan, never entering
      the escalation set, and surfaced separately in `result.already_satisfied`
      carrying `{id, title, kind, rationale}`.
-   - `verify_report` has one entry per non-aesthetic `needs-human` candidate that
-     went through the skeptic fan-out (`verdict`: `upheld` | `refuted` |
-     `unverified`).
+   - `verify_report` has one entry per non-aesthetic, non-planned-deferral
+     `needs-human` candidate that went through the skeptic fan-out (`verdict`:
+     `upheld` | `refuted` | `unverified`).
    - `result.fix_plan` is the ordered Opus fix plan when the gated `fix-plan`
      phase ran — `{ units, deviation, deviation_reason }`, where each unit is
      `{ id, scope, model, dependencies, commit_intent, context, resolves_ids }`.
@@ -891,12 +909,23 @@ fork site below (same discipline as the `fixes_applied_count` tally in Step 3.7)
    - When the walkthrough lane ran: the GIF filename (`tmp/qa-fix-walkthrough-<n>.gif`).
    - **Disposition triage** — include this section only when the residue list was
      non-empty (i.e. Step 3.5 ran). For each **disposition item**, list its `class`
-     from `result.dispositions`. For non-aesthetic `needs-human` items (where
-     `dispositions[item].aesthetic === false`), include the verify verdict and
-     rationale from the matching entry in `result.verify_report` (matched by `id`).
-     For aesthetic `needs-human` items, use `dispositions[item].verify` (which will
-     be `n/a`) directly — no `verify_report` entry exists for them. If the residue
-     list was empty (Step 3.5 was skipped), omit this section entirely. If
+     from `result.dispositions`. For `needs-human` items, choose the verify source
+     by joining the disposition back to the in-memory residue list by `id` and
+     reading `residue[item].planned_deferral`:
+     - **Aesthetic items** (`dispositions[item].aesthetic === true`): use
+       `dispositions[item].verify` (which will be `n/a`) directly — no
+       `verify_report` entry exists for them.
+     - **Planned-deferral items** (`residue[item].planned_deferral === true`): use
+       `dispositions[item].verify` (which will be `n/a`) directly — these items are
+       excluded from the skeptic candidate set and have no `verify_report` entry.
+       Note them in the deferred-to-office-hours list as deferred ACs (measured
+       downstream), distinct from aesthetic judgment calls, so the office-hours human
+       understands the deferral reason from `residue[item].finding`.
+     - **All other non-aesthetic, non-planned-deferral `needs-human` items**: include
+       the verify verdict and rationale from the matching entry in
+       `result.verify_report` (matched by `id`).
+
+     If the residue list was empty (Step 3.5 was skipped), omit this section entirely. If
      `result.dispositions` is empty (every residue item was `already-satisfied`),
      skip the per-item enumeration and the `needs-main` handling prose below — there
      are no disposition items and no `needs-main` items to describe; only the

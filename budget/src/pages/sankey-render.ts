@@ -1,10 +1,12 @@
 import { hierarchy, tree, type HierarchyNode } from "d3-hierarchy";
 import { interpolateRgb } from "d3-interpolate";
-import { schemeTableau10 } from "d3-scale-chromatic";
 import { formatCurrency } from "../format.js";
+import { chartSeriesColor } from "./chart-util.js";
 import type { CategoryNode } from "./category-node.js";
 
 export interface SankeyRenderInput {
+  /** Element used to resolve `--chart-*` series tokens at render time. */
+  container: HTMLElement;
   rootData: CategoryNode;
   collapsedPaths: ReadonlySet<string>;
   containerWidth: number;
@@ -20,8 +22,8 @@ const NODE_SCALE = 0.6;
 
 const LIGHTEN_TARGET = "#fff";
 
-function categoryColor(topLevelIndex: number, depth: number): string {
-  const base = schemeTableau10[topLevelIndex % schemeTableau10.length];
+function categoryColor(container: HTMLElement, topLevelIndex: number, depth: number): string {
+  const base = chartSeriesColor(container, topLevelIndex);
   if (depth <= 1) return base;
   const factor = Math.min(0.3 * (depth - 1), 0.6);
   return interpolateRgb(base, LIGHTEN_TARGET)(factor);
@@ -90,7 +92,7 @@ function pruneCollapsed(n: CategoryNode, collapsedPaths: ReadonlySet<string>): C
 }
 
 export function renderSankeySvg(input: SankeyRenderInput): SVGSVGElement {
-  const { rootData, collapsedPaths, containerWidth, fg, onToggleCollapse, onSelectCategory } = input;
+  const { container, rootData, collapsedPaths, containerWidth, fg, onToggleCollapse, onSelectCategory } = input;
 
   const prunedRoot = pruneCollapsed(rootData, collapsedPaths);
 
@@ -168,7 +170,7 @@ export function renderSankeySvg(input: SankeyRenderInput): SVGSVGElement {
     const topIdx = getTopLevelIndex(target);
     const path = document.createElementNS(SVG_NS, "path");
     path.setAttribute("d", d);
-    path.setAttribute("fill", categoryColor(topIdx, target.depth));
+    path.setAttribute("fill", categoryColor(container, topIdx, target.depth));
     path.setAttribute("class", "sankey-link");
     path.style.pointerEvents = "none";
 
@@ -193,7 +195,7 @@ export function renderSankeySvg(input: SankeyRenderInput): SVGSVGElement {
     const rect = document.createElementNS(SVG_NS, "rect");
     rect.setAttribute("width", String(w));
     rect.setAttribute("height", String(h));
-    rect.setAttribute("fill", categoryColor(topIdx, node.depth));
+    rect.setAttribute("fill", categoryColor(container, topIdx, node.depth));
     rect.setAttribute("rx", "2");
     if (hasChildren) {
       rect.style.cursor = "pointer";

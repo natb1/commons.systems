@@ -1,7 +1,23 @@
+/*
+ * Token dependency: this stylesheet uses var(--sidebar-width) for the two-column
+ * grid column width (at ≥768px) and the absolute-positioned sidebar width (at <768px).
+ * That token is defined in @commons-systems/ds/tokens/spacing.css and is provided
+ * transitively by @commons-systems/style/default.css. Each usage carries an explicit
+ * `16rem` fallback, so layout.css renders correctly regardless of import order; loading
+ * default.css (or the ds spacing tokens) lets the token override that fallback.
+ *
+ * Without --sidebar-width, var(--sidebar-width) resolves to a guaranteed-invalid value
+ * and the grid-template-columns declaration falls back to its initial value (none), so
+ * the grid loses its grid context and children lay out as blocks. The `16rem` fallback
+ * prevents this.
+ *
+ * The scaffolding/firebase/templates/app template imports default.css, so if a developer
+ * adds layout.css to it they should place it after the existing default.css import.
+ */
 .content-grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 1.5rem;
+  gap: var(--space-6);
   contain: layout style;
 }
 
@@ -31,7 +47,7 @@
   .page > header {
     display: grid;
     grid-template-columns: 1fr var(--sidebar-width, 16rem);
-    column-gap: 1.5rem;
+    column-gap: var(--space-6);
   }
 
   .page > header > * {
@@ -50,7 +66,7 @@
     overflow-y: auto;
     margin-block: 0;
     border-block: none;
-    padding-bottom: 1rem;
+    padding-bottom: var(--space-4);
   }
 
   .panel-toggle {
@@ -60,12 +76,12 @@
 
 .panel-toggle {
   background: none;
-  border: 1px solid var(--border);
+  border: var(--border-width) solid var(--border);
   color: var(--fg);
   cursor: pointer;
   font-size: 1rem;
-  padding: 0.2rem 0.5rem;
-  transition: transform 0.2s;
+  padding: 0.2rem var(--space-2);
+  transition: transform var(--duration-base) var(--ease);
 }
 
 .panel-toggle[aria-expanded="true"] {
@@ -84,8 +100,8 @@
     right: 0;
     z-index: 5;
     background: var(--bg);
-    border: 1px solid var(--border);
-    padding: 1rem;
+    border: var(--border-width) solid var(--border);
+    padding: var(--space-4);
     width: var(--sidebar-width, 16rem);
     max-height: 80vh;
     overflow-y: auto;
@@ -97,19 +113,17 @@
 }
 
 .sidebar-overflow-bottom {
-  border-bottom: 1px solid var(--border);
-  box-shadow: inset 0 -12px 12px -12px rgba(0, 0, 0, 0.2);
+  border-bottom: var(--border-width) solid var(--border);
+  box-shadow: var(--shadow-overflow-bottom);
 }
 
 .sidebar-overflow-top {
-  border-top: 1px solid var(--border);
-  box-shadow: inset 0 12px 12px -12px rgba(0, 0, 0, 0.2);
+  border-top: var(--border-width) solid var(--border);
+  box-shadow: var(--shadow-overflow-top);
 }
 
 .sidebar-overflow-top.sidebar-overflow-bottom {
-  box-shadow:
-    inset 0 12px 12px -12px rgba(0, 0, 0, 0.2),
-    inset 0 -12px 12px -12px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--shadow-overflow-top), var(--shadow-overflow-bottom);
 }
 
 .sidebar-scroll-track {

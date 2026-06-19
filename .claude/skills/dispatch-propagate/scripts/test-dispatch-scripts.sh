@@ -89,6 +89,10 @@ setup() {
   # SCRIPT_DIR (= TMPDIR_TEST for this copy) — both already copied below/above,
   # so both resolve.
   cp "$SCRIPT_DIR/dispatch-auto-merge" "$TMPDIR_TEST/dispatch-auto-merge"
+  # dispatch-retriage-orphaned-followups (#1812) sources lib.sh (gh_issue_list_rest,
+  # gh_retry) and calls dispatch-apply-office-hours via its SCRIPT_DIR (= TMPDIR_TEST
+  # for this copy) — both already copied here, so both resolve.
+  cp "$SCRIPT_DIR/dispatch-retriage-orphaned-followups" "$TMPDIR_TEST/dispatch-retriage-orphaned-followups"
   # dispatch-select-target's JIT scan calls dispatch-config-load and
   # dispatch-project-status-read as "$SCRIPT_DIR/<name>". SCRIPT_DIR resolves to
   # TMPDIR_TEST for the copied dispatch-select-target, so the two helpers must
@@ -130,7 +134,8 @@ setup() {
            "$TMPDIR_TEST/dispatch-config-load" \
            "$TMPDIR_TEST/dispatch-project-status-read" \
            "$TMPDIR_TEST/dispatch-sync-merge-queue" \
-           "$TMPDIR_TEST/dispatch-auto-merge"
+           "$TMPDIR_TEST/dispatch-auto-merge" \
+           "$TMPDIR_TEST/dispatch-retriage-orphaned-followups"
 
   # Default no-op stub for dispatch-provision-worktree. dispatch-route now invokes
   # it (after the worktree cross-check, before phase derivation). The real script
@@ -334,6 +339,14 @@ case "$args" in
     if [[ "$rest_repo" == "{owner}/{repo}" ]]; then
       # Current-repo scans: open-ISSUE_LIST (no label) and the main-broken latch.
       if [[ -z "$rest_label" ]]; then
+        # #1812: persistent-failure injection for the open-issue scan
+        # (gh_issue_list_rest --state open). A marker makes gh fail on every
+        # attempt so gh_retry exhausts and forwards the failure — driving
+        # dispatch-retriage-orphaned-followups' early-exit-on-scan-failure branch.
+        if [[ -f "$STUB_DIR/gh-fail-issue-list-open" ]]; then
+          echo "stub forced gh api failure (open issue-list)" >&2
+          exit 1
+        fi
         if [[ -f "$STUB_DIR/issue-list.json" ]]; then cat "$STUB_DIR/issue-list.json"; else echo "[]"; fi
       elif [[ "$rest_label" == "dispatch:main-broken" ]]; then
         # #1085 per-episode latch read. Default [] (gate fires); a fixture models
@@ -544,6 +557,17 @@ case "$args" in
       cat "$STUB_DIR/pr-headref-${num}.json"
     else
       echo '{"headRefName":""}'
+    fi
+    ;;
+  pr\ view\ *\ --json\ state,mergedAt,labels)
+    # dispatch-retriage-orphaned-followups (#1812): gh pr view <N> --json
+    # state,mergedAt,labels. $STUB_DIR/retriage-pr-<N>.json supplies the per-PR
+    # state object; absence defaults to an OPEN PR (no action taken).
+    num=$(echo "$args" | awk '{print $3}')
+    if [[ -f "$STUB_DIR/retriage-pr-${num}.json" ]]; then
+      cat "$STUB_DIR/retriage-pr-${num}.json"
+    else
+      echo '{"state":"OPEN","mergedAt":null,"labels":[]}'
     fi
     ;;
   label\ create\ *)
@@ -2812,6 +2836,67 @@ FAKE
   export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/bin/claude"
 }
 
+# office_hours_state_fake_claude — fake `claude` for the state-gated office-hours
+# selector + entry path (#2011). Each argument is a `name:state` pair; each pair
+# `<name>:<state>` produces one session row:
+#   sessionId = "s-<name>", id = "j-<name>"  (DISTINCT, so an entry test proves
+#                                              attach uses the job `id`, not the
+#                                              sessionId),
+#   state     = <state>,
+#   status    = "busy" when state == "working", else JSON null (the derived
+#               coarse status — status:"busy" ⟺ state:"working"),
+#   name      = <name>, pid = 1, cwd = "".
+#
+# --all FAITHFULNESS — the load-bearing property. Production hides `done`
+# sessions from the default `claude agents --json` and surfaces them ONLY under
+# `--all`. This fake mirrors that exactly: on `agents`, it scans argv for
+# `--all`; if present it returns the FULL payload (including any `done` rows),
+# and if absent it returns the payload with `done` rows stripped. That faithful
+# behaviour is why a green suite cannot lie: if a future regression drops `--all`
+# from the selector's `claude_sessions_with_name_all` or the entry's
+# attach_session, the `done` row vanishes from that path and the done-attach
+# cases (OHST3f / OH5b) turn red — exactly the regression this unit guards
+# against. (A naive fake that returned `done` regardless of `--all` would let a
+# `--all`-forgetting path still pass.)
+#
+# The fake branches on its first arg: `agents` returns the (possibly
+# done-filtered) JSON payload; any other invocation — `attach <id>` or
+# `/office-hours` — prints `LAUNCH: $*`. Wires both OFFICE_HOURS_CLAUDE_CMD (the
+# entry script's launch + sessionId→job-id resolution) and CLAUDE_AGENTS_CMD
+# (the selector subprocess's state query), mirroring office_hours_fake_claude.
+office_hours_state_fake_claude() {
+  local payload="[" pair name state status_json first=1
+  for pair in "$@"; do
+    name="${pair%%:*}"; state="${pair#*:}"
+    if [[ "$state" == "working" ]]; then status_json='"busy"'; else status_json='null'; fi
+    if (( first )); then first=0; else payload+=","; fi
+    payload+="{\"sessionId\":\"s-$name\",\"id\":\"j-$name\",\"pid\":1,\"state\":\"$state\",\"status\":$status_json,\"name\":\"$name\",\"cwd\":\"\"}"
+  done
+  payload+="]"
+  printf '%s' "$payload" > "$TMPDIR_TEST/claude-payload.json"
+  cat > "$TMPDIR_TEST/bin/claude" <<'FAKE'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "agents" ]]; then
+  PAYLOAD="$(cd "$(dirname "$0")/.." && pwd)/claude-payload.json"
+  # --all faithfulness: a `done` row is visible ONLY when --all is in argv.
+  # Production calls `agents --json --all`, so scan ALL args (not a fixed
+  # position) for --all.
+  for arg in "$@"; do
+    [[ "$arg" == "--all" ]] && { cat "$PAYLOAD"; exit 0; }
+  done
+  # No --all → hide `done` rows, exactly as the real daemon's default query does.
+  jq -c 'map(select(.state != "done"))' "$PAYLOAD"
+  exit 0
+fi
+# A launch (`attach <id>` or `/office-hours`): record which one fired.
+echo "LAUNCH: $*"
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/bin/claude"
+  export OFFICE_HOURS_CLAUDE_CMD="$TMPDIR_TEST/bin/claude"
+  export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/bin/claude"
+}
+
 # 1. A non-QA PR is chosen over a QA PR and a help-wanted issue.
 echo "Test: non-QA PR beats QA PR and issue"
 setup
@@ -4298,6 +4383,59 @@ result=$("$TMPDIR_TEST/dispatch-select-target" --exclude 20)
 assert_eq "excluded PR 20 filtered → empty" "empty" "$result"
 teardown
 
+# 39e. A transient gh API error on root 55's blocker lookup (exit 3 from trace-
+#      leaf) does NOT abort the entire propagation tick (#2005). Covers:
+#        AC #1 — the queue scan continues past the transiently-failing root.
+#        AC #2 — the failed root 55 is NOT dispatched.
+#        AC #4 — select-target exits 0 (tick does not enter the failed state).
+#      Two help-wanted roots: 55 (older, blocker lookup fails transiently) and 66
+#      (newer, fully startable). The selector must skip 55 and select 66.
+echo "Test: transient gh API error on root 55 -> select-target skips it, selects 66"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+: > "$STUB_DIR/gh-fail-blocked_by-55"
+if result=$("$TMPDIR_TEST/dispatch-select-target" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "transient trace fail on root 55 -> select-target still exits 0" "0" "$rc"
+assert_eq "transient trace fail on root 55 -> next startable root 66 selected" "issue 66" "$result"
+teardown
+
+# 39f. The mirror-image of 39e, guarding the exit-1 abort path against a future
+#      refactor that extends the exit-3 skip to exit-1 (the invariant documented
+#      at dispatch-select-target's trace-status block: exit 1 is a usage/program
+#      error — a hard failure affecting every root, never swallowed as a skip).
+#      Same two-root 55/66 fixture as 39e, but dispatch-trace-leaf exits 1
+#      UNCONDITIONALLY. Unlike the exit-3 skip (which continues to root 66), the
+#      exit-1 path must ABORT: select-target exits non-zero and must NOT reach,
+#      let alone select, the otherwise-startable root 66. Test 39 already proves
+#      the single-root exit-1 hard-fail; this adds the two-root case so the
+#      "abort vs skip-and-continue" distinction (the precise opposite of 39e) is
+#      regression-tested — an exit-1-treated-as-exit-3 refactor would surface
+#      "issue 66" here and trip the assertion below.
+echo "Test: trace-leaf exit 1 on root 55 -> select-target aborts, does NOT select 66"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+# Replace the copied leaf-trace script with a stub that always exits 1 (a
+# usage/programming error, NOT a transient gh failure). setup re-copies a fresh
+# real trace-leaf for the next test, so this override does not leak.
+cat > "$TMPDIR_TEST/dispatch-trace-leaf" <<'STUB'
+#!/usr/bin/env bash
+echo "error: usage" >&2
+exit 1
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-trace-leaf"
+if result=$("$TMPDIR_TEST/dispatch-select-target" 2>/dev/null); then rc=0; else rc=$?; fi
+[[ "$rc" -ne 0 ]] && rc_nonzero=yes || rc_nonzero=no
+assert_eq "trace-leaf exit 1 on root 55 -> select-target exits non-zero" "yes" "$rc_nonzero"
+[[ "$result" != "issue 66" ]] && not_66=yes || not_66=no
+assert_eq "trace-leaf exit 1 on root 55 -> 66 NOT selected (abort, not skip)" "yes" "$not_66"
+teardown
+
 # --- --top N: single-pass multi-target selection (#1317) ---------------------
 # `--top N` emits up to N DISTINCT ranked decision lines in ONE queue scan,
 # preserving the existing priority order (priority axis 1→0, then topic category,
@@ -5778,47 +5916,136 @@ result=$("$TMPDIR_TEST/office-hours-select-target")
 assert_eq "qa item selected with its PR number" "office-hours 50 qa 7 -" "$result"
 teardown
 
-# OHST3. The oldest labeled item whose <N>-* worktree has a live session is
-# ATTACHED — live wins over a sessionless newer sibling.
-echo "Test: oldest live-session item is attached (live wins over fresh sibling)"
+# OHST3. The oldest labeled item whose <N>-* worktree has an idle (attachable)
+# session is ATTACHED — idle wins over a sessionless newer sibling.
+echo "Test: oldest idle-session item is attached (idle wins over fresh sibling)"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/oh-issue-list.json"
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
   > "$STUB_DIR/worktree-list.txt"
-select_target_fake_claude "42-x"   # 42's worktree has a live session; 99 sessionless
+office_hours_state_fake_claude "42-x:waiting"   # 42's session is idle; 99 sessionless
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "live item attached over sessionless sibling 99" "live s-42-x" "$result"
+assert_eq "idle item attached over sessionless sibling 99" "idle s-42-x" "$result"
 teardown
 
-# OHST3b. Two labeled items both live → attach the oldest one's session
+# OHST3b. Two labeled items both idle → attach the oldest one's session
 # (mirrors OH2 on the entry-point side).
-echo "Test: two live items → oldest attached"
+echo "Test: two idle items → oldest attached"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/oh-issue-list.json"
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\nworktree /worktrees/99-y\nHEAD aaa111\nbranch refs/heads/99-y\n\n' \
   > "$STUB_DIR/worktree-list.txt"
-select_target_fake_claude "42-x" "99-y"   # both worktrees live
+office_hours_state_fake_claude "42-x:waiting" "99-y:waiting"   # both idle
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "oldest of two live items attached" "live s-42-x" "$result"
+assert_eq "oldest of two idle items attached" "idle s-42-x" "$result"
 teardown
 
-# OHST3c. Older sessionless item + newer live item → attach the live one
-# (mirrors OH5: live wins regardless of age order).
-echo "Test: older sessionless + newer live → attach the live one"
+# OHST3c. Older sessionless item + newer idle item → attach the idle one
+# (mirrors OH5: idle wins regardless of age order).
+echo "Test: older sessionless + newer idle → attach the idle one"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/oh-issue-list.json"
 echo '[]' > "$STUB_DIR/pr-list-full.json"
-# 42 (older) has no worktree at all → sessionless; 99 (newer) has a live worktree.
+# 42 (older) has no worktree at all → sessionless; 99 (newer) has an idle worktree.
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/99-y\nHEAD aaa111\nbranch refs/heads/99-y\n\n' \
   > "$STUB_DIR/worktree-list.txt"
-select_target_fake_claude "99-y"   # only 99's worktree is live
+office_hours_state_fake_claude "99-y:idle"   # only 99's worktree is idle (attachable)
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "live item attached regardless of age order" "live s-99-y" "$result"
+assert_eq "idle item attached regardless of age order" "idle s-99-y" "$result"
+teardown
+
+# OHST3d. Working-skip, sibling chosen: 42 (older) has a `working` session in its
+# worktree → SKIPPED (rc 3, not fresh-launched); 99 (newer) is sessionless → it
+# wins fresh. Proves a working session is neither attached nor mistaken for fresh.
+echo "Test: working-session item skipped → sessionless sibling chosen fresh"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+# 42 has a worktree (its session is working → skipped); 99 has none → sessionless.
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+office_hours_state_fake_claude "42-x:working"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "working item skipped; sessionless sibling 99 chosen fresh" "office-hours 99 plan - -" "$result"
+teardown
+
+# OHST3e. Working-skip, lone → empty: the only labeled item (42) has a `working`
+# session → skipped (rc 3), so it is neither attached nor fresh-launched. With no
+# other item and no parked `dispatch-*` router under main, the selector emits
+# `empty`. (The fall-through reaches the parked-router block, so point it at a
+# controlled main-worktree path where the fake daemon reports no router; the
+# working row's name is `42-x`, not `dispatch-*`, so it cannot false-match.)
+echo "Test: lone working item → neither attached nor fresh → empty"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+office_hours_state_fake_claude "42-x:working"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "lone working item → empty" "empty" "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
+# OHST3f. Done-attach (selector, --all-faithful): the only labeled item (42) has
+# a `done` session in its worktree → ATTACH. The selector sees the `done` row
+# ONLY because claude_sessions_with_name_all passes `--all`; the faithful fake
+# strips `done` rows when `--all` is absent, so a regression that dropped `--all`
+# would hide the row and turn this case red. This is the selector-side proof that
+# the selector queries with `--all`.
+echo "Test: done-session item attached (proves selector passes --all)"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+office_hours_state_fake_claude "42-x:done"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "done session is attachable (visible only under --all)" "idle s-42-x" "$result"
+teardown
+
+# OHST3g. Stopped-exclude: the only labeled item (42) has a `stopped` session →
+# EXCLUDED from attach (skip, like working) and not fresh-launched. With no other
+# item and no parked `dispatch-*` router under main → `empty`.
+echo "Test: lone stopped item → excluded from attach, not fresh → empty"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+office_hours_state_fake_claude "42-x:stopped"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "lone stopped item → empty" "empty" "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
+# OHST3h. Two-name skip-then-attach: the only labeled item (42) has TWO sessions
+# in its one worktree — the basename name (`42-x`) is `working` (queried first,
+# not attachable, skip) and the `office-hours-42` name is `waiting` (attachable).
+# The inner two-name loop must keep looking PAST the basename skip and return the
+# attachable `office-hours-42` session. A regression that turned `saw_skip=1` into
+# an immediate `return 3` would skip the issue and emit `empty` instead — every
+# other OHST3* case pairs exactly one name:state per issue, so only this case
+# exercises the continue-past-skip branch.
+echo "Test: basename working + office-hours-N waiting → attach the waiting one (continue past skip)"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+office_hours_state_fake_claude "42-x:working" "office-hours-42:waiting"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "skip basename working, attach office-hours-42 waiting" "idle s-office-hours-42" "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
 # OHST4. An empty office-hours queue with no parked router prints `empty`. The
@@ -6006,27 +6233,28 @@ echo "=== office-hours (entry point) ==="
 # case asserts which launch fired (or that none did). The fake's sessionId
 # convention is `s-<worktree-basename>`.
 
-# OH1. One labeled item whose <N>-* worktree has a live session → attach it.
-echo "Test: live-session labeled item → attach its session"
+# OH1. One labeled item whose <N>-* worktree has an idle (attachable) session →
+# attach it. The entry handles the renamed `idle` verb (was `live`).
+echo "Test: idle-session labeled item → attach its session"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
   > "$STUB_DIR/worktree-list.txt"
-office_hours_fake_claude "42-x"   # 42's worktree has a live session
+office_hours_state_fake_claude "42-x:waiting"   # 42's worktree has an idle session
 result=$("$TMPDIR_TEST/office-hours")
-assert_eq "attaches the live session by its job id" "LAUNCH: attach j-42-x" "$result"
+assert_eq "attaches the idle session by its job id" "LAUNCH: attach j-42-x" "$result"
 teardown
 
-# OH2. Two labeled items both live → attach the oldest one's session.
-echo "Test: two live items → attach the oldest"
+# OH2. Two labeled items both idle → attach the oldest one's session.
+echo "Test: two idle items → attach the oldest"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/oh-issue-list.json"
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\nworktree /worktrees/99-y\nHEAD aaa111\nbranch refs/heads/99-y\n\n' \
   > "$STUB_DIR/worktree-list.txt"
-office_hours_fake_claude "42-x" "99-y"   # both worktrees live
+office_hours_state_fake_claude "42-x:waiting" "99-y:waiting"   # both worktrees idle
 result=$("$TMPDIR_TEST/office-hours")
-assert_eq "attaches the oldest live item's session by its job id" "LAUNCH: attach j-42-x" "$result"
+assert_eq "attaches the oldest idle item's session by its job id" "LAUNCH: attach j-42-x" "$result"
 teardown
 
 # OH3. Labeled items but none with a live session → launch the fresh /office-hours
@@ -6057,17 +6285,17 @@ oh_pwd=$(head -1 "$TMPDIR_TEST/oh-pwd-log" 2>/dev/null || true)
 assert_eq "fresh: spawn cwd is the worktree" "$(realpath "$TMPDIR_TEST/worktrees/42-x")" "$(realpath "$oh_pwd" 2>/dev/null)"
 teardown
 
-# OH3c. A labeled item whose worktree has a live session named office-hours-<N>
+# OH3c. A labeled item whose worktree has an idle session named office-hours-<N>
 # (the renamed office-hours session, #1311) → attach it directly. Before the
 # two-name fix the selector keyed only on the basename and missed it.
-echo "Test: live office-hours-<N> session → selector attaches it directly"
+echo "Test: idle office-hours-<N> session → selector attaches it directly"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
   > "$STUB_DIR/worktree-list.txt"
-office_hours_fake_claude "office-hours-42"   # the live session is the office-hours-<N> one
+office_hours_state_fake_claude "office-hours-42:waiting"   # idle office-hours-<N> session
 result=$("$TMPDIR_TEST/office-hours")
-assert_eq "attaches the live office-hours-<N> session by its job id" "LAUNCH: attach j-office-hours-42" "$result"
+assert_eq "attaches the idle office-hours-<N> session by its job id" "LAUNCH: attach j-office-hours-42" "$result"
 teardown
 
 # OH3b. Sessionless item with NO <N>-* worktree on disk (the worktree was swept) →
@@ -6097,18 +6325,50 @@ assert_eq "empty queue → queue-empty message, no launch" "office-hours: queue 
 unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
-# OH5. Mixed: an older sessionless item + a newer live-session item → attach the
-# live one (live wins over fresh whenever any labeled item is live).
-echo "Test: older sessionless + newer live → attach the live one"
+# OH5. Mixed: an older sessionless item + a newer idle-session item → attach the
+# idle one (idle wins over fresh whenever any labeled item is attachable).
+echo "Test: older sessionless + newer idle → attach the idle one"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/oh-issue-list.json"
-# 42 (older) has no worktree at all → sessionless; 99 (newer) has a live worktree.
+# 42 (older) has no worktree at all → sessionless; 99 (newer) has an idle worktree.
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/99-y\nHEAD aaa111\nbranch refs/heads/99-y\n\n' \
   > "$STUB_DIR/worktree-list.txt"
-office_hours_fake_claude "99-y"   # only 99's worktree is live
+office_hours_state_fake_claude "99-y:idle"   # only 99's worktree is idle
 result=$("$TMPDIR_TEST/office-hours")
-assert_eq "live wins over fresh whenever any labeled item is live" "LAUNCH: attach j-99-y" "$result"
+assert_eq "idle wins over fresh whenever any labeled item is attachable" "LAUNCH: attach j-99-y" "$result"
+teardown
+
+# OH5b. Done-attach (entry, end-to-end, --all-faithful): one labeled item (42)
+# with a `done` session in its worktree. The selector emits `idle s-42-x` (it
+# passed `--all`, so it saw the `done` row), and the entry's attach_session
+# resolves s-42-x → j-42-x via `agents --json --all`. With the faithful fake the
+# entry can ONLY resolve the `done` row because Unit 3's attach_session passes
+# `--all`; a regression dropping it would hide the row and turn this red. This is
+# the end-to-end (selector + entry) proof that both ends query with `--all`.
+echo "Test: done-session item → end-to-end attach (proves both ends pass --all)"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+office_hours_state_fake_claude "42-x:done"
+result=$("$TMPDIR_TEST/office-hours")
+assert_eq "done session attached end-to-end by its job id" "LAUNCH: attach j-42-x" "$result"
+teardown
+
+# OH5c. Working-skip (entry): a lone labeled item (42) whose session is `working`
+# → the selector skips it (neither attach nor fresh) and, with no parked router,
+# emits `empty`; the entry prints the queue-empty message and launches nothing.
+echo "Test: lone working item → queue-empty message, no launch"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+office_hours_state_fake_claude "42-x:working"
+result=$("$TMPDIR_TEST/office-hours")
+assert_eq "lone working item → queue-empty message, no launch" "office-hours: queue is empty — nothing to resume or start." "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
 # OH6. UNKNOWN daemon (claude unqueryable). Under the single fail-safe convention
@@ -6458,34 +6718,34 @@ result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue")
 assert_eq "queue: child with one live worktree among many skipped → sibling 702" "702" "$result"
 teardown
 
-# 13. issue-blocking failure → hard error (exit 1), never emits N as a leaf.
-echo "Test: issue-blocking failure → exit 1, no leaf emitted"
+# 13. issue-blocking failure → hard error (exit 3), never emits N as a leaf.
+echo "Test: issue-blocking failure → exit 3, no leaf emitted"
 setup
 # No stub files: 800 would otherwise resolve as a childless leaf. The injected
 # blocked_by failure must abort instead of mis-classifying 800 as startable.
 : > "$STUB_DIR/gh-fail-blocked_by-800"
 stdout=$("$TMPDIR_TEST/dispatch-trace-leaf" "800" "queue" 2>/dev/null) && rc=0 || rc=$?
-assert_eq "issue-blocking failure → exit 1" "1" "$rc"
+assert_eq "issue-blocking failure → exit 3" "3" "$rc"
 assert_eq "issue-blocking failure → no leaf on stdout" "" "$stdout"
 teardown
 
 # 14. issue-sub-issues failure → same hard error. issue-blocking succeeds
 #     (empty = no blockers), then the sub_issues lookup fails.
-echo "Test: issue-sub-issues failure → exit 1, no leaf emitted"
+echo "Test: issue-sub-issues failure → exit 3, no leaf emitted"
 setup
 : > "$STUB_DIR/gh-fail-sub_issues-800"
 stdout=$("$TMPDIR_TEST/dispatch-trace-leaf" "800" "queue" 2>/dev/null) && rc=0 || rc=$?
-assert_eq "issue-sub-issues failure → exit 1" "1" "$rc"
+assert_eq "issue-sub-issues failure → exit 3" "3" "$rc"
 assert_eq "issue-sub-issues failure → no leaf on stdout" "" "$stdout"
 teardown
 
-# 15. issue-blocking failure in explicit mode → exit 1, NOT the cycle-fallback
+# 15. issue-blocking failure in explicit mode → exit 3, NOT the cycle-fallback
 #     "print N".
-echo "Test: issue-blocking failure (explicit) → exit 1, not cycle-fallback"
+echo "Test: issue-blocking failure (explicit) → exit 3, not cycle-fallback"
 setup
 : > "$STUB_DIR/gh-fail-blocked_by-800"
 stdout=$("$TMPDIR_TEST/dispatch-trace-leaf" "800" "explicit" 2>/dev/null) && rc=0 || rc=$?
-assert_eq "issue-blocking failure (explicit) → exit 1" "1" "$rc"
+assert_eq "issue-blocking failure (explicit) → exit 3" "3" "$rc"
 assert_eq "issue-blocking failure (explicit) → no N printed" "" "$stdout"
 teardown
 
@@ -6495,12 +6755,12 @@ teardown
 #     it is 801's blocker lookup that fails — exercising the `rc -eq 3` branch
 #     in find_leaf's descent loop, which must carry the hard error up rather
 #     than mask it as "no leaf in this subtree".
-echo "Test: gh failure one level deep → re-propagated, exit 1"
+echo "Test: gh failure one level deep → re-propagated, exit 3"
 setup
 printf '[{"number":801}]\n' > "$STUB_DIR/subissues-800.json"
 : > "$STUB_DIR/gh-fail-blocked_by-801"
 stdout=$("$TMPDIR_TEST/dispatch-trace-leaf" "800" "queue" 2>/dev/null) && rc=0 || rc=$?
-assert_eq "deep gh failure → exit 1" "1" "$rc"
+assert_eq "deep gh failure → exit 3" "3" "$rc"
 assert_eq "deep gh failure → no leaf on stdout" "" "$stdout"
 teardown
 
@@ -15060,13 +15320,24 @@ STUB
   # isolation would write to the real ~/.config/systemd/user/ and run a real
   # `systemctl --user daemon-reload`. Redirect the unit dir into the tmp tree
   # and point its systemctl at a no-op stub so daemon-reload is harmless.
-  cat > "$TMPDIR_TEST/bin/systemctl" <<'STUB'
+  cat > "$TMPDIR_TEST/bin/systemctl" <<STUB
 #!/usr/bin/env bash
-exit 0
+# subcommand-aware systemctl stub (#2013). Find the first non-flag arg.
+sub=""
+for a in "\$@"; do
+  case "\$a" in --*) ;; *) sub="\$a"; break ;; esac
+done
+echo "\$*" >> "$TMPDIR_TEST/systemctl-log"
+case "\$sub" in
+  is-failed)    exit "\${ST_IS_FAILED_RC:-1}" ;;
+  reset-failed) exit 0 ;;
+  *)            exit 0 ;;
+esac
 STUB
   chmod +x "$TMPDIR_TEST/bin/systemctl"
   export DISPATCH_RECOVER_UNIT_DIR="$TMPDIR_TEST/systemd-user"
   export DISPATCH_RECOVER_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/systemctl"
+  export DISPATCH_SPAWN_TICK_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/systemctl"
 }
 
 st_teardown() {
@@ -15075,6 +15346,7 @@ st_teardown() {
   unset DISPATCH_SPAWN_TICK_SYSTEMD_RUN_CMD
   unset DISPATCH_SPAWN_TICK_MAIN_WORKTREE
   unset DISPATCH_RECOVER_UNIT_DIR DISPATCH_RECOVER_SYSTEMCTL_CMD
+  unset DISPATCH_SPAWN_TICK_SYSTEMCTL_CMD ST_IS_FAILED_RC
 }
 
 # --- Test 1: no-arg launch → spawned, exit 0, correct argv -------------------
@@ -15137,6 +15409,16 @@ st_setup 'echo "Unit dispatch-tick.service already exists" >&2; exit 1'
 if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-tick" 2>/dev/null); then rc=0; else rc=$?; fi
 assert_eq "deduped: dispatch-spawn-tick exits 0" "0" "$rc"
 assert_eq "deduped: stdout is 'deduped'" "deduped" "$out"
+# Negative assertion: is-failed returns non-zero (ST_IS_FAILED_RC unset → default
+# exit 1), so the gate must not invoke reset-failed on a running tick (#2013).
+sclog=$(cat "$TMPDIR_TEST/systemctl-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$sclog" != *"reset-failed"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: deduped: reset-failed was NOT called (is-failed gate held)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: deduped: reset-failed was NOT called (is-failed gate held)"
+  echo "    systemctl-log: $sclog"
+fi
 st_teardown
 
 # --- Test 4: a generic systemd-run failure passes the exit code through -------
@@ -15184,6 +15466,33 @@ if [[ ! -e "$TMPDIR_TEST/systemd-log" ]]; then
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: bad-target-nonnum: no systemd-run invocation recorded"
   echo "    log: $(cat "$TMPDIR_TEST/systemd-log")"
+fi
+st_teardown
+
+# --- Test 7: a stale failed unit is reset-failed, then the tick spawns --------
+
+echo "Test: a pre-existing failed dispatch-tick unit yields a spawned tick (not a silent deduped), and reset-failed was called (#2013)"
+st_setup
+export ST_IS_FAILED_RC=0
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-tick" 2>/dev/null); then rc=0; else rc=$?; fi
+unset ST_IS_FAILED_RC
+assert_eq "failed-unit: dispatch-spawn-tick exits 0" "0" "$rc"
+assert_eq "failed-unit: stdout is 'spawned' (not deduped)" "spawned" "$out"
+sclog=$(cat "$TMPDIR_TEST/systemctl-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$sclog" == *"reset-failed dispatch-tick.service"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: failed-unit: reset-failed dispatch-tick.service was called"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: failed-unit: reset-failed dispatch-tick.service was called"
+  echo "    systemctl-log: $sclog"
+fi
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ -e "$TMPDIR_TEST/systemd-log" && "$log" == *"--unit=dispatch-tick"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: failed-unit: the launch happened (--unit=dispatch-tick recorded)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: failed-unit: the launch happened (--unit=dispatch-tick recorded)"
+  echo "    log: $log"
 fi
 st_teardown
 
@@ -19215,6 +19524,37 @@ else
 fi
 stop_teardown
 
+# --- Test 1a: dispatch-stop surfaces spawn-tick result on stderr (#2013) ------
+
+echo "Test: stop hook surfaces the dispatch-spawn-tick result (deduped) on stderr (#2013)"
+stop_setup
+# Override the spawn-tick fake to emit "deduped" (models a tick already running).
+cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-spawn-tick" <<'FAKE'
+#!/usr/bin/env bash
+echo "spawn" >> "$STUB_DIR/spawn-calls.log"
+echo "deduped"
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-spawn-tick"
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "456" > "$STUB_DIR/find-pr-output"
+echo "fix-checks" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+echo "phase=implement" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>"$STUB_DIR/hook-stderr.log"
+rc=$?
+assert_eq "stop stderr-surface: hook exits 0" "0" "$rc"
+hook_stderr=$(cat "$STUB_DIR/hook-stderr.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$hook_stderr" == *"dispatch-spawn-tick: deduped"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop stderr-surface: spawn-tick result surfaced on stderr"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop stderr-surface: spawn-tick result surfaced on stderr"
+  echo "    hook-stderr: $hook_stderr"
+fi
+stop_teardown
+
 # --- Test 1a2: dispatch-stop clears the worker's reservation marker (#1454) ---
 # Unit 3: the hook releases the worktree's reservation marker (named by JOB_NAME
 # = state.json .name) on session end, BEFORE any tick spawn, so a normally-
@@ -22637,6 +22977,20 @@ echo called >> "$STUB_DIR/auto-merge-calls.log"
 exit 0
 FAKE
   chmod +x "$TMPDIR_TEST/dispatch-auto-merge"
+  # #1812: fake dispatch-retriage-orphaned-followups invoked unconditionally by
+  # Step 2e. Logs its invocation and emits a configurable line so a wiring test
+  # can assert the tick prefixes it with `retriage: `. SILENT by default (emits
+  # nothing unless SEL_RETRIAGE_OUT is set, exit 0) so RETRIAGE_OUT stays empty
+  # and every existing tick test is byte-identical to the pre-#1812 no-op. The
+  # real re-triage logic has its own unit tests below; here we only verify wiring.
+  cat > "$TMPDIR_TEST/dispatch-retriage-orphaned-followups" <<'FAKE'
+#!/usr/bin/env bash
+STUB_DIR="$(cd "$(dirname "$0")/stub" && pwd)"
+echo called >> "$STUB_DIR/retriage-calls.log"
+[[ -n "${SEL_RETRIAGE_OUT:-}" ]] && printf '%s\n' "$SEL_RETRIAGE_OUT"
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/dispatch-retriage-orphaned-followups"
   # Sourced helper: provides claude_agents_count_busy_workers (driven by
   # SEL_LIVE_COUNT*) and claude_agents_list_all (driven by SEL_AGENTS_*, used by
   # the reservation-ledger sweep the gate runs before counting). The heredoc is
@@ -22766,7 +23120,7 @@ sel_tick_teardown() {
     DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE SEL_GIT_MERGE_LOG \
     SEL_SESSIONS_UNDER_RC SEL_SESSIONS_UNDER_TSV \
     DISPATCH_LOCK_PROBE_TIMEOUT DISPATCH_LOCK_FLOCK_TIMEOUT \
-    SEL_AUTO_MERGE_OUT
+    SEL_AUTO_MERGE_OUT SEL_RETRIAGE_OUT
 }
 
 # Run the orchestrator, capturing full stdout; the decision is the last line.
@@ -22926,6 +23280,24 @@ else
 fi
 assert_eq "auto-merge suppressed: dispatch-auto-merge NOT invoked" "absent" \
   "$([[ -f "$STUB_DIR/auto-merge-calls.log" ]] && echo present || echo absent)"
+sel_tick_teardown
+
+# --- Step 2e: re-triage orphaned follow-ups wiring (#1812) -------------------
+# Step 2e runs dispatch-retriage-orphaned-followups unconditionally and prefixes
+# each of its stdout lines with `retriage: `. The fake emits SEL_RETRIAGE_OUT.
+echo "Test: select-tick re-triage wiring → retriage: line, retriage script invoked"
+sel_tick_setup
+export SEL_RETRIAGE_OUT="retriaged #101 (source PR #1704 closed unmerged)"
+out=$(run_sel_tick)
+TOTAL=$((TOTAL + 1))
+if grep -q '^retriage: retriaged #101 (source PR #1704 closed unmerged)$' <<<"$out"; then
+  PASS=$((PASS + 1)); echo "  PASS: tick emits 'retriage: retriaged #101 ...'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: tick emits 'retriage: retriaged #101 ...'"
+  echo "    actual stdout: '$out'"
+fi
+assert_eq "re-triage wiring: dispatch-retriage-orphaned-followups invoked" "present" \
+  "$([[ -f "$STUB_DIR/retriage-calls.log" ]] && echo present || echo absent)"
 sel_tick_teardown
 
 # --- #1495: dirty main → sync-failed, reseed armed, counter bumped -----------
@@ -24264,7 +24636,7 @@ assert_eq "explicit PR: launcher keyed on original 839" \
 mat_teardown
 
 # --- explicit trace-leaf hard failure → exit 2, lock released, no spawn -------
-# dispatch-trace-leaf's exit 1 is a hard sibling-gh failure the caller must NOT
+# dispatch-trace-leaf's exit 3 is a hard sibling-gh failure the caller must NOT
 # swallow as "no work" (its documented contract). A swallowed failure would
 # dispatch the un-traced N; instead the script releases the lock and exits 2.
 echo "Test: materialize-spawn explicit trace-leaf hard failure → exit 2 + lock released"
@@ -24272,7 +24644,7 @@ mat_setup
 cat > "$TMPDIR_TEST/dispatch-trace-leaf" <<'STUB'
 #!/usr/bin/env bash
 echo "trace-leaf gh failure" >&2
-exit 1
+exit 3
 STUB
 chmod +x "$TMPDIR_TEST/dispatch-trace-leaf"
 out=$(run_mat 839 explicit) && rc=0 || rc=$?
@@ -26699,6 +27071,32 @@ assert_eq "qa-fix partition: already_satisfied element keys" '["id","kind","rati
 # `function partitionDispositions(allDispositions)` definition — both contain the
 # call substring, so the `= ` prefix isolates the invocation to exactly one line.
 assert_eq "qa-fix partition: call site present in qa-fix.js" "1" "$(grep -c '= partitionDispositions(allDispositions)' "$REPO_ROOT/.claude/workflows/qa-fix.js" || true)"
+
+# planned-deferral branch (issue #1891) — three separate input objects to avoid
+# disturbing the f1..f7 order assertion above.
+#
+# (a) opus-fixable + planned_deferral:true → authoritatively needs-human / n/a
+#     (the literal original failure mode: an opus-fixable item routed to the
+#     auto-fix loop because the planned-deferral branch was absent)
+IN_PD_A='{"items":[{"id":"pd1","class":"opus-fixable","aesthetic":false,"planned_deferral":true}],"votes":{}}'
+out_pd_a=$(printf '%s' "$IN_PD_A" | "$SCRIPT_DIR/dispatch-qa-disposition")
+assert_eq "qa-disposition: planned_deferral opus-fixable → final_class=needs-human" "needs-human" "$(printf '%s' "$out_pd_a" | jq -r '.dispositions[0].final_class')"
+assert_eq "qa-disposition: planned_deferral opus-fixable → verify=n/a" "n/a" "$(printf '%s' "$out_pd_a" | jq -r '.dispositions[0].verify')"
+
+# (b) needs-human + planned_deferral:true WITH a refuting vote → stays needs-human/n/a
+#     (NOT downgraded to opus-fixable — the fan-out is bypassed by the first branch)
+IN_PD_B='{"items":[{"id":"pd2","class":"needs-human","aesthetic":false,"planned_deferral":true}],"votes":{"pd2":["refuted"]}}'
+out_pd_b=$(printf '%s' "$IN_PD_B" | "$SCRIPT_DIR/dispatch-qa-disposition")
+assert_eq "qa-disposition: planned_deferral needs-human with refuted vote → final_class=needs-human (not downgraded)" "needs-human" "$(printf '%s' "$out_pd_b" | jq -r '.dispositions[0].final_class')"
+assert_eq "qa-disposition: planned_deferral needs-human with refuted vote → verify=n/a (not Refuted)" "n/a" "$(printf '%s' "$out_pd_b" | jq -r '.dispositions[0].verify')"
+
+# (c) regression guard — non-flagged needs-human with refuting vote still downgrades
+#     (genuine opus-fixable behavior unchanged; f3 above already proves this but
+#     we repeat it inline as a named regression guard for clarity)
+IN_PD_C='{"items":[{"id":"pd3","class":"needs-human","aesthetic":false}],"votes":{"pd3":["refuted"]}}'
+out_pd_c=$(printf '%s' "$IN_PD_C" | "$SCRIPT_DIR/dispatch-qa-disposition")
+assert_eq "qa-disposition: regression guard non-flagged needs-human + refuted → final_class=opus-fixable" "opus-fixable" "$(printf '%s' "$out_pd_c" | jq -r '.dispositions[0].final_class')"
+assert_eq "qa-disposition: regression guard non-flagged needs-human + refuted → verify=Refuted" "Refuted" "$(printf '%s' "$out_pd_c" | jq -r '.dispositions[0].verify')"
 
 # dispatch-jit-skill tests
 # ============================================================================
@@ -31381,7 +31779,7 @@ teardown
 
 # E. Hard error survives caching (criterion 2). With DISPATCH_TRACE_CACHE_DIR set,
 #    inject a gh blocked_by failure on child 830 reachable from root 810. The
-#    trace must hard-fail (exit 1) — the gh failure is NOT swallowed or cached as
+#    trace must hard-fail (exit 3) — the gh failure is NOT swallowed or cached as
 #    an empty result — and no `blocking-830` cache file is written. Invoked via
 #    dispatch-trace-leaf directly, mirroring the existing failure tests (~4815).
 echo "Test: #1452 E — sibling gh failure hard-fails and is never cached"
@@ -31395,7 +31793,7 @@ printf '{"title":"Issue 830","body":"","comments":[],"number":830,"state":"OPEN"
   > "$STUB_DIR/issue-830.json"
 : > "$STUB_DIR/gh-fail-blocked_by-830"
 stdout=$("$TMPDIR_TEST/dispatch-trace-leaf" "810" "queue" 2>/dev/null) && rc=0 || rc=$?
-assert_eq "#1452 E — sibling gh failure → exit 1" "1" "$rc"
+assert_eq "#1452 E — sibling gh failure → exit 3" "3" "$rc"
 assert_eq "#1452 E — sibling gh failure → no leaf on stdout" "" "$stdout"
 [[ -f "$cache/blocking-830" ]] && cached=present || cached=absent
 assert_eq "#1452 E — failed blocked_by lookup is never cached" "absent" "$cached"
@@ -31779,6 +32177,105 @@ else
 fi
 assert_eq "dup-close: no spurious create" "absent" "$(log_state gh-merge-issue-create.log)"
 assert_eq "dup-close: no edit (.[0] title matches)" "absent" "$(log_state gh-merge-issue-edit.log)"
+teardown
+
+# ============================================================================
+# dispatch-retriage-orphaned-followups (#1812)
+# ============================================================================
+echo "=== dispatch-retriage-orphaned-followups (#1812) ==="
+
+# The open-issue scan is served from issue-list.json (REST shape: {number,labels})
+# via the shared `api *repos/*/issues?*` branch; gh_issue_list_rest remaps it.
+# Per-PR state comes from retriage-pr-<N>.json (gh pr view --json state,mergedAt,labels).
+# The office-hours park flows through the REAL copied dispatch-apply-office-hours,
+# which logs to gh-issue-edit.log / gh-issue-comment.log; the per-PR processed
+# marker hits the generic `pr edit *` branch, logged to gh-pr-edit.log.
+
+# (a) closed-unmerged source PR + open source-pr:-marked follow-up → park + mark
+echo "Test: closed-unmerged source PR → park follow-up on office-hours + mark PR"
+setup
+printf '[{"number":101,"labels":[{"name":"source-pr:1704"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '{"state":"CLOSED","mergedAt":null,"labels":[]}\n' > "$STUB_DIR/retriage-pr-1704.json"
+out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null)
+assert_eq "a: office-hours applied to the follow-up issue" \
+  "issue edit 101 --add-label dispatch:office-hours" "$(cat "$STUB_DIR/gh-issue-edit.log")"
+assert_eq "a: why-comment posted to the follow-up issue" "present" "$(log_state gh-issue-comment.log)"
+TOTAL=$((TOTAL + 1))
+if grep -q 'issue comment 101 ' "$STUB_DIR/gh-issue-comment.log" \
+   && grep -q 'closed unmerged' "$STUB_DIR/gh-issue-comment.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: a: why-comment names issue 101 and the closed-unmerged reason"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: a: why-comment names issue 101 and the closed-unmerged reason"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q 'pr edit 1704 --add-label dispatch:orphans-retriaged' "$STUB_DIR/gh-pr-edit.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: a: source PR #1704 marked dispatch:orphans-retriaged"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: a: source PR #1704 marked dispatch:orphans-retriaged"
+fi
+assert_eq "a: one retriaged stdout line" \
+  "retriaged #101 (source PR #1704 closed unmerged)" "$out"
+teardown
+
+# (b) MERGED source PR (mergedAt non-null) → no action (AC3)
+echo "Test: merged source PR → no action"
+setup
+printf '[{"number":102,"labels":[{"name":"source-pr:1688"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '{"state":"MERGED","mergedAt":"2026-01-01T00:00:00Z","labels":[]}\n' > "$STUB_DIR/retriage-pr-1688.json"
+out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null)
+assert_eq "b: no office-hours edit on a merged source PR" "absent" "$(log_state gh-issue-edit.log)"
+assert_eq "b: no PR marker on a merged source PR" "absent" "$(log_state gh-pr-edit.log)"
+assert_eq "b: no stdout on a merged source PR" "" "$out"
+teardown
+
+# (c) OPEN source PR → no action
+echo "Test: still-open source PR → no action"
+setup
+printf '[{"number":103,"labels":[{"name":"source-pr:1900"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '{"state":"OPEN","mergedAt":null,"labels":[]}\n' > "$STUB_DIR/retriage-pr-1900.json"
+out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null)
+assert_eq "c: no office-hours edit on an open source PR" "absent" "$(log_state gh-issue-edit.log)"
+assert_eq "c: no PR marker on an open source PR" "absent" "$(log_state gh-pr-edit.log)"
+assert_eq "c: no stdout on an open source PR" "" "$out"
+teardown
+
+# (d) closed-unmerged PR ALREADY carrying dispatch:orphans-retriaged → idempotent no-op
+echo "Test: source PR already marked dispatch:orphans-retriaged → no action"
+setup
+printf '[{"number":104,"labels":[{"name":"source-pr:1704"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '{"state":"CLOSED","mergedAt":null,"labels":[{"name":"dispatch:orphans-retriaged"}]}\n' > "$STUB_DIR/retriage-pr-1704.json"
+out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null)
+assert_eq "d: no re-park when PR already marked" "absent" "$(log_state gh-issue-edit.log)"
+assert_eq "d: no re-mark when PR already marked" "absent" "$(log_state gh-pr-edit.log)"
+assert_eq "d: no stdout when PR already marked" "" "$out"
+teardown
+
+# (e) no open issue carries a source-pr: label → clean no-op, exit 0
+echo "Test: no source-pr:-marked open issues → clean no-op, exit 0"
+setup
+printf '[{"number":105,"labels":[{"name":"bug"}]}]\n' > "$STUB_DIR/issue-list.json"
+if out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "e: exits 0 with no labeled issues" "0" "$rc"
+assert_eq "e: no office-hours edit" "absent" "$(log_state gh-issue-edit.log)"
+assert_eq "e: no PR marker" "absent" "$(log_state gh-pr-edit.log)"
+assert_eq "e: no stdout" "" "$out"
+teardown
+
+# (f) gh_issue_list_rest --state open fails → warn, exit 0, no work (lines 51-55)
+echo "Test: open-issue scan failure → warning, exit 0, no office-hours or PR marker"
+setup
+: > "$STUB_DIR/gh-fail-issue-list-open"
+err=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>&1 >/dev/null); rc=$?
+assert_eq "f: exits 0 when the open-issue scan fails" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if grep -q 'gh_issue_list_rest --state open failed; skipping scan' <<<"$err"; then
+  PASS=$((PASS + 1)); echo "  PASS: f: warns about the skipped scan on stderr"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: f: warns about the skipped scan on stderr"
+  echo "    actual stderr: '$err'"
+fi
+assert_eq "f: no office-hours edit when the scan fails" "absent" "$(log_state gh-issue-edit.log)"
+assert_eq "f: no PR marker when the scan fails" "absent" "$(log_state gh-pr-edit.log)"
 teardown
 
 # ============================================================================

@@ -1,11 +1,35 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+// @vitest-environment happy-dom
+//
+// Smoke test for the React <AccountsReconcile> page. Ported from the legacy
+// renderAccountsReconcile string-render smoke (deleted in Unit 4): the reconcile
+// route is React now, so we render <AccountsReconcile options=…> with a deep-link
+// URL query and assert the observable DOM. Mirrors AccountsReconcile.test.tsx.
+//
+// Note on header labels: the DS Metric splits label/value into separate nodes
+// and drops the legacy trailing colon, so the legacy `Cleared balance:` /
+// `Statement-ending balance:` substrings no longer apply. We assert the stable
+// .reconcile-cleared-balance / .reconcile-statement-balance value spans the
+// React page preserves (and the colon-less label text).
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { render, cleanup, waitFor } from "@testing-library/react";
+import { createElement } from "react";
 import { timestampMockFactory, ts, createMockDataSource } from "../helpers";
 import type { DataSource } from "../../src/data-source";
 import type { Account, JournalEntry, JournalLeg, ReconciliationEvent, Statement } from "../../src/firestore";
 
 vi.mock("firebase/firestore", () => timestampMockFactory());
 
-import { renderAccountsReconcile } from "../../src/pages/accounts-reconcile";
+const activeDataSource = {
+  updateJournalLegCleared: vi.fn(),
+  createJournalEntry: vi.fn(),
+  createReconciliationEvent: vi.fn(),
+};
+vi.mock("../../src/active-data-source.js", () => ({
+  getActiveDataSource: () => activeDataSource,
+  setActiveDataSource: vi.fn(),
+}));
+
+import { AccountsReconcile } from "../../src/pages/AccountsReconcile";
 
 // Seed-shaped data for Example Bank / Checking, period 2025-02.
 function account(overrides: Partial<Account> = {}): Account {
@@ -53,7 +77,7 @@ function leg(overrides: Partial<JournalLeg> = {}): JournalLeg {
 function stmt(overrides: Partial<Statement> = {}): Statement {
   return {
     id: "stmt-checking-2025-02",
-    statementId: "stmt-checking-2025-02" as any,
+    statementId: "stmt-checking-2025-02" as never,
     institution: "Example Bank",
     account: "Checking",
     balance: 2315.5,
@@ -84,14 +108,43 @@ function event(overrides: Partial<ReconciliationEvent> = {}): ReconciliationEven
   };
 }
 
-function seedOptions(dsOverrides: Partial<DataSource> = {}) {
+interface LoadData {
+  accounts?: Account[];
+  journalEntries?: JournalEntry[];
+  journalLegs?: JournalLeg[];
+  reconciliationEvents?: ReconciliationEvent[];
+  statements?: Statement[];
+}
+
+function seedOptions(data: LoadData = {}) {
+  const dsOverrides: Partial<DataSource> = {
+    getAccounts: vi.fn().mockResolvedValue(data.accounts ?? [account()]),
+    getJournalEntries: vi.fn().mockResolvedValue(data.journalEntries ?? [entry()]),
+    getJournalLegs: vi.fn().mockResolvedValue(data.journalLegs ?? [leg()]),
+    getReconciliationEvents: vi.fn().mockResolvedValue(data.reconciliationEvents ?? []),
+    getStatements: vi.fn().mockResolvedValue(data.statements ?? [stmt()]),
+    getStatementItems: vi.fn().mockResolvedValue([]),
+  };
   return { authorized: false, groupName: "", dataSource: createMockDataSource(dsOverrides) };
+}
+
+// Render <AccountsReconcile> and resolve once the loaded container appears.
+async function renderReconcile(data: LoadData = {}): Promise<HTMLElement> {
+  const { container } = render(createElement(AccountsReconcile, { options: seedOptions(data) }));
+  await waitFor(() => {
+    const settled =
+      container.querySelector("#reconcile-container") ||
+      container.querySelector("#reconcile-error");
+    if (!settled) throw new Error("not settled");
+  });
+  return container;
 }
 
 describe("accounts-reconcile page smoke", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // location.search drives parseReconcileQuery
+    activeDataSource.updateJournalLegCleared.mockResolvedValue(undefined);
+    // location.search drives the deep-link query the page reads at mount.
     window.history.replaceState(
       null,
       "",
@@ -99,79 +152,59 @@ describe("accounts-reconcile page smoke", () => {
     );
   });
 
+  afterEach(() => {
+    cleanup();
+    window.history.replaceState(null, "", "/accounts/reconcile");
+  });
+
   it("renders heading, controls, and the journal-leg list", async () => {
-    const html = await renderAccountsReconcile(seedOptions({
-      getAccounts: vi.fn().mockResolvedValue([account()]),
-      getJournalEntries: vi.fn().mockResolvedValue([entry()]),
-      getJournalLegs: vi.fn().mockResolvedValue([leg()]),
-      getReconciliationEvents: vi.fn().mockResolvedValue([]),
-      getStatements: vi.fn().mockResolvedValue([stmt()]),
-    }));
-    expect(html).toContain("<h2>Reconcile account</h2>");
-    expect(html).toContain('id="reconcile-container"');
-    expect(html).toContain('id="reconcile-controls"');
-    expect(html).toContain('id="reconcile-leg-list"');
-    expect(html).toContain("Grocery Store");
+    const container = await renderReconcile();
+    expect(container.textContent).toContain("Reconcile account");
+    expect(container.querySelector("#reconcile-container")).not.toBeNull();
+    expect(container.querySelector("#reconcile-controls")).not.toBeNull();
+    expect(container.querySelector("#reconcile-leg-list")).not.toBeNull();
+    expect(container.textContent).toContain("Grocery Store");
   });
 
   it("renders header totals and the reconcile dialog", async () => {
-    const html = await renderAccountsReconcile(seedOptions({
-      getAccounts: vi.fn().mockResolvedValue([account()]),
-      getJournalEntries: vi.fn().mockResolvedValue([entry()]),
-      getJournalLegs: vi.fn().mockResolvedValue([leg()]),
-      getReconciliationEvents: vi.fn().mockResolvedValue([]),
-      getStatements: vi.fn().mockResolvedValue([stmt()]),
-    }));
-    expect(html).toContain("Cleared balance:");
-    expect(html).toContain("Statement-ending balance:");
-    expect(html).toContain('id="reconcile-dialog"');
-    expect(html).toContain('id="reconcile-open-dialog"');
+    const container = await renderReconcile();
+    // DS Metric labels (colon-less) + the preserved value spans.
+    expect(container.textContent).toContain("Cleared balance");
+    expect(container.querySelector(".reconcile-cleared-balance")).not.toBeNull();
+    expect(container.textContent).toContain("Statement-ending balance");
+    expect(container.querySelector(".reconcile-statement-balance")).not.toBeNull();
+    expect(container.querySelector("#reconcile-dialog")).not.toBeNull();
+    expect(container.querySelector("#reconcile-open-dialog")).not.toBeNull();
   });
 
   it("renders the account selector from accounts", async () => {
-    const html = await renderAccountsReconcile(seedOptions({
-      getAccounts: vi.fn().mockResolvedValue([
+    const container = await renderReconcile({
+      accounts: [
         account(),
         account({ id: "Example Credit Union_Savings", institution: "Example Credit Union", account: "Savings" }),
-      ]),
-      getJournalEntries: vi.fn().mockResolvedValue([entry()]),
-      getJournalLegs: vi.fn().mockResolvedValue([leg()]),
-      getReconciliationEvents: vi.fn().mockResolvedValue([]),
-      getStatements: vi.fn().mockResolvedValue([stmt()]),
-    }));
-    expect(html).toContain('id="reconcile-account-select"');
-    expect(html).toContain('id="reconcile-period-select"');
-    expect(html).toContain("Example Bank — Checking");
-    expect(html).toContain("Example Credit Union — Savings");
+      ],
+    });
+    expect(container.querySelector("#reconcile-account-select")).not.toBeNull();
+    expect(container.querySelector("#reconcile-period-select")).not.toBeNull();
+    expect(container.textContent).toContain("Example Bank — Checking");
+    expect(container.textContent).toContain("Example Credit Union — Savings");
   });
 
   it("lists a past reconciliation when one exists", async () => {
-    const html = await renderAccountsReconcile(seedOptions({
-      getAccounts: vi.fn().mockResolvedValue([account()]),
-      getJournalEntries: vi.fn().mockResolvedValue([entry()]),
-      getJournalLegs: vi.fn().mockResolvedValue([leg()]),
-      getReconciliationEvents: vi.fn().mockResolvedValue([event()]),
-      getStatements: vi.fn().mockResolvedValue([stmt()]),
-    }));
-    expect(html).toContain("Past reconciliations");
-    expect(html).toContain('data-event-id="Example Bank_Checking_2025-02-28"');
+    const container = await renderReconcile({ reconciliationEvents: [event()] });
+    expect(container.textContent).toContain("Past reconciliations");
+    expect(container.querySelector('[data-event-id="Example Bank_Checking_2025-02-28"]')).not.toBeNull();
   });
 
   it("renders the mismatch actions and the account type attribute", async () => {
-    const html = await renderAccountsReconcile(seedOptions({
-      getAccounts: vi.fn().mockResolvedValue([account()]),
-      getJournalEntries: vi.fn().mockResolvedValue([entry()]),
-      getJournalLegs: vi.fn().mockResolvedValue([leg()]),
-      getReconciliationEvents: vi.fn().mockResolvedValue([]),
-      getStatements: vi.fn().mockResolvedValue([stmt()]),
-    }));
-    expect(html).toContain('id="reconcile-mismatch-actions"');
-    expect(html).toContain('data-account-type="asset"');
+    const container = await renderReconcile();
+    expect(container.querySelector("#reconcile-mismatch-actions")).not.toBeNull();
+    expect(container.querySelector('[data-account-type="asset"]')).not.toBeNull();
   });
 
   it("carries the suspense account id when a suspense account is present", async () => {
-    const html = await renderAccountsReconcile(seedOptions({
-      getAccounts: vi.fn().mockResolvedValue([
+    const container = await renderReconcile({
+      accounts: [
         account(),
         account({
           id: "Budget_Adjustment Suspense",
@@ -179,23 +212,13 @@ describe("accounts-reconcile page smoke", () => {
           account: "Adjustment Suspense",
           accountType: "equity",
         }),
-      ]),
-      getJournalEntries: vi.fn().mockResolvedValue([entry()]),
-      getJournalLegs: vi.fn().mockResolvedValue([leg()]),
-      getReconciliationEvents: vi.fn().mockResolvedValue([]),
-      getStatements: vi.fn().mockResolvedValue([stmt()]),
-    }));
-    expect(html).toContain('data-suspense-account-id="Budget_Adjustment Suspense"');
+      ],
+    });
+    expect(container.querySelector('[data-suspense-account-id="Budget_Adjustment Suspense"]')).not.toBeNull();
   });
 
   it("renders seed-data notice when not authorized", async () => {
-    const html = await renderAccountsReconcile(seedOptions({
-      getAccounts: vi.fn().mockResolvedValue([account()]),
-      getJournalEntries: vi.fn().mockResolvedValue([entry()]),
-      getJournalLegs: vi.fn().mockResolvedValue([leg()]),
-      getReconciliationEvents: vi.fn().mockResolvedValue([]),
-      getStatements: vi.fn().mockResolvedValue([stmt()]),
-    }));
-    expect(html).toContain("seed-data-notice");
+    const container = await renderReconcile();
+    expect(container.querySelector("#seed-data-notice")).not.toBeNull();
   });
 });

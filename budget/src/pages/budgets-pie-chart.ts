@@ -1,12 +1,10 @@
 import { pie, arc, type PieArcDatum } from "d3-shape";
-import { scaleOrdinal } from "d3-scale";
-import { schemeTableau10 } from "d3-scale-chromatic";
 import type { Budget } from "../firestore.js";
 import { weeklyEquivalent } from "../balance.js";
 import { formatCurrency } from "../format.js";
+import { chartSeriesColor, readThemeVar } from "./chart-util.js";
 
 const NOT_BUDGETED_LABEL = "Not Budgeted";
-const NOT_BUDGETED_COLOR = "#ccc";
 
 interface Slice {
   readonly name: string;
@@ -57,9 +55,16 @@ export function renderBudgetPieChart(
   const { slices, overage } = buildAllocationSlices(options.budgets, options.averageWeeklyCredits);
 
   const chartTotal = slices.reduce((s, d) => s + d.total, 0);
-  const color = scaleOrdinal<string>().domain(slices.map(s => s.name)).range(schemeTableau10);
+  // Budget slices cycle the --chart-* tokens by slice order; the not-budgeted remainder is pinned to --chart-6.
+  const notBudgetedColor = readThemeVar(container, "--chart-6");
+  const colorByName = new Map<string, string>();
+  let seriesIdx = 0;
+  for (const s of slices) {
+    if (s.name === NOT_BUDGETED_LABEL) continue;
+    colorByName.set(s.name, chartSeriesColor(container, seriesIdx++));
+  }
   const sliceColor = (name: string): string =>
-    name === NOT_BUDGETED_LABEL ? NOT_BUDGETED_COLOR : color(name);
+    name === NOT_BUDGETED_LABEL ? notBudgetedColor : colorByName.get(name)!;
 
   const size = Math.min(300, container.clientWidth || 300);
   const outerRadius = size / 2;

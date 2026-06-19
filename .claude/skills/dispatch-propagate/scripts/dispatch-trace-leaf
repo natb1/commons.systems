@@ -55,10 +55,13 @@
 #
 # Exit codes:
 #   0 — a leaf was found and printed to stdout
-#   1 — usage error, or a sibling gh script (issue-blocking / issue-sub-issues)
-#       failed — a hard failure the caller must not treat as "no work"
+#   1 — usage error — a hard failure the caller must not treat as "no work"
 #   2 — queue mode only: every reachable open leaf is owned by a live session,
 #       parked on dispatch:office-hours, or in the --exclude set
+#   3 — a sibling gh lookup (issue-blocking / issue-sub-issues) or the queue-mode
+#       office-hours-list call failed after gh_retry exhausted its retries; a
+#       hard, per-root failure the queue caller must skip (not dispatch) and the
+#       explicit caller must abort on
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -144,7 +147,7 @@ num_is_claimed() { [[ -n "${CLAIMED_NUMS[$1]:-}" ]]; }
 declare -A OFFICE_HOURS_PARKED=()
 if [[ "$MODE" == "queue" ]]; then
   parked_json=$(gh issue list --state open --label "dispatch:office-hours" --limit 300 --json number) \
-    || { echo "error: dispatch-trace-leaf $ISSUE_NUM: gh issue list for the dispatch:office-hours parked set failed; aborting rather than risk returning a parked leaf" >&2; exit 1; }
+    || { echo "error: dispatch-trace-leaf $ISSUE_NUM: gh issue list for the dispatch:office-hours parked set failed; aborting rather than risk returning a parked leaf" >&2; exit 3; }
   while IFS= read -r parked_num; do
     [[ -n "$parked_num" ]] && OFFICE_HOURS_PARKED["$parked_num"]=1
   done < <(printf '%s' "$parked_json" | jq -r '.[].number')
@@ -322,7 +325,7 @@ fi
 # stops explicit mode from falling through to the print-N cycle fallback below.
 if [[ "$trace_rc" -eq 3 ]]; then
   echo "error: dispatch-trace-leaf $ISSUE_NUM: a blocker/sub-issue lookup failed (gh API error); aborting rather than treating $ISSUE_NUM as startable" >&2
-  exit 1
+  exit 3
 fi
 
 # In queue mode, no valid leaf is reachable — every reachable open leaf is owned

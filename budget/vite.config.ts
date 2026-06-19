@@ -9,5 +9,7 @@ import { budgetSeedDataPlugin } from "./src/vite-plugin-seed-data";
 // shared appBase — so esbuild leaves the modern syntax untouched.
 export default createAppConfig({
   plugins: [budgetSeedDataPlugin()],
-  optimizeDeps: { esbuildOptions: { target: "es2022" } },
+  esbuild: { jsx: "automatic", jsxImportSource: "react" },
+  optimizeDeps: { exclude: ["@commons-systems/ds"], esbuildOptions: { target: "es2022" } },
+  test: { include: ["test/**/*.test.{ts,tsx}"] },
 });

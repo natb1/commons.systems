@@ -4,13 +4,13 @@ const MINUTE = 60_000;
 const HOUR = 3_600_000;
 const DAY = 86_400_000;
 
-function workerState(active: number, target: number): string {
+export function workerState(active: number, target: number): string {
   if (target === 0) return "paused";
   if (active < target) return "spawning";
   return "steady";
 }
 
-function formatCountdown(resetAt: Date, now: Date): string {
+export function formatCountdown(resetAt: Date, now: Date): string {
   const delta = resetAt.getTime() - now.getTime();
   if (delta < MINUTE) return "now";
   if (delta >= DAY) {
@@ -27,7 +27,7 @@ function formatCountdown(resetAt: Date, now: Date): string {
   return `in ${m}m`;
 }
 
-function formatResetClock(resetAt: Date, now: Date): string {
+export function formatResetClock(resetAt: Date, now: Date): string {
   const timeStr = resetAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   if (
     resetAt.getFullYear() === now.getFullYear() &&
