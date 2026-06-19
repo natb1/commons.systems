@@ -713,7 +713,7 @@ resolve_dirty_apps() {
 
   # Discover all workspaces from root package.json
   declare -A all_apps
-  local workspace_list
+  local workspace_list ws
   if ! workspace_list=$(jq -r '.workspaces[]' "$repo_root/package.json"); then
     echo "ERROR: failed to read workspaces from $repo_root/package.json" >&2
     return 1
@@ -758,7 +758,7 @@ resolve_dirty_apps() {
         ;;
       *)
         # Longest-prefix match the file to its owning workspace key.
-        local ws short
+        local short
         ws=$(_resolve_workspace_for_file "$file")
         [ -z "$ws" ] && continue
         # Shared-package lookup keys on the workspace's leaf dir, which is
