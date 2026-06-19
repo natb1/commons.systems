@@ -282,6 +282,10 @@ case "$args" in
     # branch (case is first-wins). Log the full $args so tests can assert whether
     # --paginate was passed and what per_page= value was used.
     echo "$args" >> "$STUB_DIR/gh-issue-list-rest-calls.log"
+    if [[ -f "$STUB_DIR/gh-fail-rest" ]]; then
+      echo "stub forced gh api failure" >&2
+      exit 1
+    fi
     rest_path_dt=$(printf '%s' "$args" | grep -oE 'repos/[^ ]+')
     rest_query_dt="${rest_path_dt#*\?}"
     rest_label_dt=""
@@ -1219,6 +1223,20 @@ if grep -q -- '--paginate' "$STUB_DIR/gh-issue-list-rest-calls.log"; then
 else
   assert_eq "limit: log does not contain --paginate" "no" "no"
 fi
+teardown
+
+echo "Test: gh-failure -- both branches return non-zero with diagnostic stderr"
+setup
+: > "$STUB_DIR/gh-issue-list-rest-calls.log"
+: > "$STUB_DIR/gh-fail-rest"
+rc_fail=0
+err_fail=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --label dispatch-test-empty 2>&1 >/dev/null) || rc_fail=$?
+assert_eq "gh-failure: --paginate branch returns non-zero" "1" "$rc_fail"
+case "$err_fail" in *"gh_issue_list_rest: gh api failed"*) m=yes ;; *) m=no ;; esac
+assert_eq "gh-failure: stderr names the helper failure" "yes" "$m"
+rc_fail_lim=0
+err_fail_lim=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --limit 50 --label dispatch-test-empty 2>&1 >/dev/null) || rc_fail_lim=$?
+assert_eq "gh-failure: single-page branch returns non-zero" "1" "$rc_fail_lim"
 teardown
 
 # ============================================================================
