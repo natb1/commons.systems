@@ -14,8 +14,8 @@
 #folder-controls {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  margin-block: 0.75rem 1rem;
+  gap: var(--space-3);
+  margin-block: var(--space-3) var(--space-4);
 }
 
 #folder-connected,
@@ -44,12 +44,12 @@
 }
 
 #playlist-queue {
-  padding-left: 1.5rem;
+  padding-left: var(--space-6);
   margin: 0;
 }
 
 #playlist-queue li {
-  padding: 0.25rem 0;
+  padding: var(--space-1) 0;
 }
 
 .playlist-active {
