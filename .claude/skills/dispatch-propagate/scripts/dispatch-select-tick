@@ -562,7 +562,7 @@ if [[ -n "$STMT_OUT" ]]; then
   done <<< "$STMT_OUT"
 fi
 
-# --- Step 2d: re-triage orphaned review follow-ups (best-effort) -------------
+# --- Step 2e: re-triage orphaned review follow-ups (best-effort) -------------
 # Parks open source-pr:<N>-labeled review follow-up issues on office-hours when
 # their source PR is found closed-unmerged (abandoned/superseded) — their
 # findings point at code that never landed on main. Pass its stdout lines
