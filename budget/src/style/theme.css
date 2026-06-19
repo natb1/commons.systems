@@ -4,15 +4,12 @@
 
 :root {
   color-scheme: dark;
-  --favorable: #4caf50;
-  --unfavorable: #e45858;
-  --variance-positive: #2ca02c;
 }
 
 .content-grid {
   max-width: 64rem;
   margin-inline: auto;
-  padding-inline: 1rem;
+  padding-inline: var(--space-4);
 }
 
 @media (min-width: 768px) {
@@ -28,12 +25,12 @@
 .txn-header {
   display: grid;
   grid-template-columns: 2fr 1fr 1fr auto;
-  gap: 0.5rem;
-  padding: 0.5rem;
+  gap: var(--space-2);
+  padding: var(--space-2);
   align-items: center;
   font-weight: bold;
-  border-bottom: 2px solid var(--border);
-  padding-left: 1.5rem;
+  border-bottom: var(--border-width-strong) solid var(--border);
+  padding-left: var(--space-6);
 }
 
 .txn-summary-content {
@@ -222,13 +219,13 @@
 
 /* --- Category sankey tree --- */
 
-#sankey-controls { max-width: 1200px; margin: 0 auto 0.5rem; display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+#sankey-controls { max-width: 1200px; margin: 0 auto var(--space-2); display: flex; gap: var(--space-4); align-items: center; flex-wrap: wrap; }
 #sankey-controls input[type="number"] { width: 4rem; }
 #sankey-controls input[type="range"] { flex: 1; max-width: 200px; }
-#sankey-mode { border: none; padding: 0; margin: 0; display: flex; gap: 0.5rem; }
+#sankey-mode { border: none; padding: 0; margin: 0; display: flex; gap: var(--space-2); }
 #sankey-mode label { cursor: pointer; white-space: nowrap; }
 #unbudgeted-toggle, #card-payment-toggle { white-space: nowrap; cursor: pointer; }
-#category-sankey { width: 100%; max-width: 1200px; margin: 0 auto 1rem; }
+#category-sankey { width: 100%; max-width: 1200px; margin: 0 auto var(--space-4); }
 #category-sankey svg { display: block; }
 .sankey-node rect { cursor: default; }
 .sankey-node text { font-size: 11px; }
@@ -580,13 +577,13 @@ svg [aria-label="tip"] text { fill: #222; }
 
 .scroll-loading {
   text-align: center;
-  padding: 1rem;
+  padding: var(--space-4);
   opacity: 0.7;
 }
 
 .scroll-error {
   text-align: center;
-  padding: 1rem;
+  padding: var(--space-4);
   color: var(--error, #e15759);
 }
 
@@ -595,7 +592,7 @@ svg [aria-label="tip"] text { fill: #222; }
 .virtual-badge {
   font-size: 0.7em;
   padding: 1px 5px;
-  border-radius: 3px;
+  border-radius: var(--radius-none);
   background: color-mix(in srgb, var(--fg) 10%, transparent);
   color: var(--fg);
   opacity: 0.6;
@@ -674,7 +671,7 @@ svg [aria-label="tip"] text { fill: #222; }
 }
 
 .variance-positive {
-  color: var(--variance-positive);
+  color: var(--positive);
 }
 
 .variance-negative {
@@ -709,9 +706,9 @@ svg [aria-label="tip"] text { fill: #222; }
 .statement-source-link {
   background: var(--surface);
   color: var(--fg);
-  border: 1px solid var(--border);
+  border: var(--border-width) solid var(--border);
   padding: 0.15rem 0.5rem;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font: inherit;
 }
@@ -719,9 +716,9 @@ svg [aria-label="tip"] text { fill: #222; }
 .statement-source-dialog {
   background: var(--surface);
   color: var(--fg);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 1rem;
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
   max-width: min(90vw, 800px);
   width: 90vw;
 }
@@ -733,11 +730,11 @@ svg [aria-label="tip"] text { fill: #222; }
 .statement-source-close {
   background: var(--surface);
   color: var(--fg);
-  border: 1px solid var(--border);
-  padding: 0.25rem 0.75rem;
-  border-radius: 4px;
+  border: var(--border-width) solid var(--border);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  margin-bottom: 0.75rem;
+  margin-bottom: var(--space-3);
 }
 
 .statement-source-message {
@@ -751,14 +748,14 @@ svg [aria-label="tip"] text { fill: #222; }
   max-height: 70vh;
   overflow: auto;
   margin: 0;
-  padding: 0.5rem;
-  border: 1px solid var(--border);
-  border-radius: 4px;
+  padding: var(--space-2);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-sm);
 }
 
 .statement-source-frame {
   width: 100%;
   height: 70vh;
-  border: 1px solid var(--border);
-  border-radius: 4px;
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-sm);
 }
