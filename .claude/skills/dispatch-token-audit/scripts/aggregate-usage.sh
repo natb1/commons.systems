@@ -260,9 +260,16 @@ def cmd_prefix(c):
 # The capture anchors on the full literal marker `<!-- dispatch:outcome:v1 -->`
 # per the reader contract in .claude/docs/outcome-envelope.md. The body is
 # non-greedy (`.*?`) so it stops at the FIRST closing fence — robust to `}`/`{`
-# inside string values and to multiple envelopes in one result. The "m" flag
-# makes "." cross newlines so a pretty-printed multi-line JSON object is
-# captured whole.
+# inside string values and to multiple envelopes in one result. The "m" flag is
+# LOAD-BEARING and must not be removed: jq uses the Oniguruma engine, where "m"
+# means DOTALL — "." matches newlines — which is NOT the same as PCRE's "m"
+# (multiline anchors, where "m" only makes ^/$ match at line boundaries). Without
+# "m", "." stops at the first newline and a pretty-printed body is silently
+# truncated. This matters because dispatch-emit-outcome runs `jq -n` WITHOUT
+# `-c`, so it emits a pretty-printed MULTI-LINE JSON object; the "m" flag is what
+# lets this single regex capture it whole. (Verify the DOTALL semantics directly:
+# `printf 'A\nB' | jq -Rsr '[match("A(?<x>.)B"; "m")]'` -> ["\n"]; drop the "m"
+# and it is []. test-aggregate-usage.sh guards this with a multi-line fixture.)
 #
 # LAST-WINS (reader contract): collect every envelope match across all
 # tool_results in document order and take the last. fromjson is wrapped in

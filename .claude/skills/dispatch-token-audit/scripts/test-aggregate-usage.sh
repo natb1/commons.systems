@@ -44,13 +44,33 @@ report_results() {
 # marker `<!-- dispatch:outcome:v1 -->` is byte-exact — the reader anchors on it.
 # envelope_block builds the marker + fenced JSON with real newlines; the line is
 # embedded into .jsonl via jq so .content is correctly escaped.
+#
+# Two body shapes are exercised on purpose (#1904 regression guard). The reader's
+# match/2 uses the "m" flag, which in jq/Oniguruma means DOTALL ("." matches
+# newlines) — NOT PCRE's multiline-anchor meaning. dispatch-emit-outcome runs
+# `jq -n` WITHOUT `-c`, so it emits a pretty-printed MULTI-LINE object; the "m"
+# flag is what lets the reader capture that whole. So the WORKER envelope is
+# authored MULTI-LINE (pretty-printed via envelope_block_pretty) — its rich
+# non-zero field assertions below would all fail if the "m"/DOTALL capture
+# regressed — while the ROUTER envelope stays compact single-line, keeping both
+# shapes covered.
 WORKER_ENV_JSON='{"schema":"dispatch.outcome.v1","phase":"review","repo":"natb1/commons.systems","issue":999,"pr":1234,"base_sha":"abc123","findings_surfaced":8,"findings_actionable":5,"fixes_applied":3,"followups_filed":2,"subagents_launched":12,"disposition":"completed_with_fixes","terminated_reason":null}'
 ROUTER_ENV_JSON='{"schema":"dispatch.outcome.v1","phase":"qa","repo":"natb1/commons.systems","issue":999,"pr":1234,"base_sha":null,"findings_surfaced":0,"findings_actionable":0,"fixes_applied":0,"followups_filed":0,"subagents_launched":0,"disposition":"completed","terminated_reason":null}'
 SUBAGENT_ENV_JSON='{"schema":"dispatch.outcome.v1","phase":"review","repo":"natb1/commons.systems","issue":999,"pr":1234,"base_sha":"def456","findings_surfaced":1000,"findings_actionable":1000,"fixes_applied":1000,"followups_filed":1000,"subagents_launched":1000,"disposition":"escalated","terminated_reason":"subagent excluded"}'
+# Compact single-line body. envelope_block_pretty emits the same JSON re-rendered
+# multi-line by `jq .` — the shape dispatch-emit-outcome actually produces.
 envelope_block() { printf '<!-- dispatch:outcome:v1 -->\n```json\n%s\n```' "$1"; }
-WORKER_BLOCK="$(envelope_block "$WORKER_ENV_JSON")"
+envelope_block_pretty() { printf '<!-- dispatch:outcome:v1 -->\n```json\n%s\n```' "$(jq . <<<"$1")"; }
+WORKER_BLOCK="$(envelope_block_pretty "$WORKER_ENV_JSON")"
 ROUTER_BLOCK="$(envelope_block "$ROUTER_ENV_JSON")"
 SUBAGENT_BLOCK="$(envelope_block "$SUBAGENT_ENV_JSON")"
+# Fixture self-check: the WORKER body must be genuinely multi-line (more lines
+# than the compact ROUTER block), else the DOTALL guard below is silently
+# testing nothing (#1904).
+if [[ "$(grep -c '' <<<"$WORKER_BLOCK")" -le "$(grep -c '' <<<"$ROUTER_BLOCK")" ]]; then
+  echo "FATAL: WORKER_BLOCK is not multi-line; #1904 DOTALL guard is vacuous" >&2
+  exit 1
+fi
 
 ROOT=""
 
