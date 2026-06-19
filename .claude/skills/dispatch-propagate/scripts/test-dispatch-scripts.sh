@@ -6706,6 +6706,155 @@ assert_eq "403 auth → 1 attempt (fail fast)" "1" "$(cat "$TMPDIR_TEST/c-e")"
 teardown
 
 # ============================================================================
+# playwright_install_with_deps tests
+# ============================================================================
+echo ""
+echo "=== playwright_install_with_deps ==="
+
+# 1. Skip-guard: PLAYWRIGHT_BROWSERS_PATH set → return 0, 0 npx calls.
+echo "Test: playwright_install_with_deps skip-guard → rc 0, 0 npx calls"
+setup
+cat > "$TMPDIR_TEST/bin/npx" <<'FAKE'
+#!/usr/bin/env bash
+cf="$NPX_COUNT_FILE"
+c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
+exit "${NPX_EXIT:-0}"
+FAKE
+chmod +x "$TMPDIR_TEST/bin/npx"
+cat > "$TMPDIR_TEST/bin/timeout" <<'FAKE'
+#!/usr/bin/env bash
+while [[ "$1" == -* ]]; do shift; done
+shift
+exec "$@"
+FAKE
+chmod +x "$TMPDIR_TEST/bin/timeout"
+cat > "$TMPDIR_TEST/bin/sleep" <<'FAKE'
+#!/usr/bin/env bash
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/bin/sleep"
+NPX_COUNT_FILE="$TMPDIR_TEST/npx-1"
+(
+  source "$TMPDIR_TEST/lib.sh"
+  export PLAYWRIGHT_BROWSERS_PATH=/nix/some/path
+  export NPX_COUNT_FILE="$TMPDIR_TEST/npx-1"
+  playwright_install_with_deps
+)
+rc=$?
+count=$( [[ -f "$NPX_COUNT_FILE" ]] && cat "$NPX_COUNT_FILE" || echo 0 )
+assert_eq "skip-guard → rc 0" "0" "$rc"
+assert_eq "skip-guard → 0 npx calls" "0" "$count"
+teardown
+
+# 2. First-attempt success: npx exits 0 → rc 0, exactly 1 npx call.
+echo "Test: playwright_install_with_deps first-attempt success → rc 0, 1 npx call"
+setup
+cat > "$TMPDIR_TEST/bin/npx" <<'FAKE'
+#!/usr/bin/env bash
+cf="$NPX_COUNT_FILE"
+c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
+exit "${NPX_EXIT:-0}"
+FAKE
+chmod +x "$TMPDIR_TEST/bin/npx"
+cat > "$TMPDIR_TEST/bin/timeout" <<'FAKE'
+#!/usr/bin/env bash
+while [[ "$1" == -* ]]; do shift; done
+shift
+exec "$@"
+FAKE
+chmod +x "$TMPDIR_TEST/bin/timeout"
+cat > "$TMPDIR_TEST/bin/sleep" <<'FAKE'
+#!/usr/bin/env bash
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/bin/sleep"
+NPX_COUNT_FILE="$TMPDIR_TEST/npx-2"
+rc=0
+(
+  source "$TMPDIR_TEST/lib.sh"
+  unset PLAYWRIGHT_BROWSERS_PATH
+  export NPX_EXIT=0
+  export NPX_COUNT_FILE="$TMPDIR_TEST/npx-2"
+  playwright_install_with_deps
+) || rc=$?
+assert_eq "first-attempt success → rc 0" "0" "$rc"
+assert_eq "first-attempt success → 1 npx call" "1" "$(cat "$NPX_COUNT_FILE")"
+teardown
+
+# 3. Both attempts fail: npx exits 1 twice → rc non-zero, exactly 2 npx calls.
+echo "Test: playwright_install_with_deps both-attempts fail → rc non-zero, 2 npx calls"
+setup
+cat > "$TMPDIR_TEST/bin/npx" <<'FAKE'
+#!/usr/bin/env bash
+cf="$NPX_COUNT_FILE"
+c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
+exit "${NPX_EXIT:-0}"
+FAKE
+chmod +x "$TMPDIR_TEST/bin/npx"
+cat > "$TMPDIR_TEST/bin/timeout" <<'FAKE'
+#!/usr/bin/env bash
+while [[ "$1" == -* ]]; do shift; done
+shift
+exec "$@"
+FAKE
+chmod +x "$TMPDIR_TEST/bin/timeout"
+cat > "$TMPDIR_TEST/bin/sleep" <<'FAKE'
+#!/usr/bin/env bash
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/bin/sleep"
+NPX_COUNT_FILE="$TMPDIR_TEST/npx-3"
+rc=0
+(
+  source "$TMPDIR_TEST/lib.sh"
+  unset PLAYWRIGHT_BROWSERS_PATH
+  export NPX_EXIT=1
+  export PLAYWRIGHT_INSTALL_ATTEMPTS=2
+  export NPX_COUNT_FILE="$TMPDIR_TEST/npx-3"
+  playwright_install_with_deps 2>/dev/null
+) || rc=$?
+[[ "$rc" -ne 0 ]] && rc_state="nonzero" || rc_state="zero"
+assert_eq "both-attempts fail → rc non-zero" "nonzero" "$rc_state"
+assert_eq "both-attempts fail → 2 npx calls" "2" "$(cat "$NPX_COUNT_FILE")"
+teardown
+
+# 4. First attempt fails, second succeeds: npx exits 1 then 0 → rc 0, 2 npx calls.
+#    Exercises the retry loop's core recovery behavior (the #1899 motivation).
+echo "Test: playwright_install_with_deps first fails then succeeds → rc 0, 2 npx calls"
+setup
+cat > "$TMPDIR_TEST/bin/npx" <<'FAKE'
+#!/usr/bin/env bash
+cf="$NPX_COUNT_FILE"
+c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
+if [[ "$c" -le 1 ]]; then exit 1; else exit 0; fi
+FAKE
+chmod +x "$TMPDIR_TEST/bin/npx"
+cat > "$TMPDIR_TEST/bin/timeout" <<'FAKE'
+#!/usr/bin/env bash
+while [[ "$1" == -* ]]; do shift; done
+shift
+exec "$@"
+FAKE
+chmod +x "$TMPDIR_TEST/bin/timeout"
+cat > "$TMPDIR_TEST/bin/sleep" <<'FAKE'
+#!/usr/bin/env bash
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/bin/sleep"
+NPX_COUNT_FILE="$TMPDIR_TEST/npx-4"
+rc=0
+(
+  source "$TMPDIR_TEST/lib.sh"
+  unset PLAYWRIGHT_BROWSERS_PATH
+  export PLAYWRIGHT_INSTALL_ATTEMPTS=2
+  export NPX_COUNT_FILE="$TMPDIR_TEST/npx-4"
+  playwright_install_with_deps 2>/dev/null
+) || rc=$?
+assert_eq "first-fails-then-succeeds → rc 0" "0" "$rc"
+assert_eq "first-fails-then-succeeds → 2 npx calls" "2" "$(cat "$NPX_COUNT_FILE")"
+teardown
+
+# ============================================================================
 # dispatch-complete-phase tests
 # ============================================================================
 echo ""
