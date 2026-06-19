@@ -1,7 +1,6 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
-import { logError } from "@commons-systems/errorutil/log";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
-import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
+import { renderPageNotices } from "./render-options.js";
 import { type Budget, type BudgetOverride, type BudgetPeriod, type Rollover, type AllowancePeriod, type SerializedBudgetPeriod, type WeeklyAggregate } from "../firestore.js";
 import { computeAverageWeeklyCredits, computeAverageWeeklySpending, computeBudgetStatsAndVariances, computePerBudgetTrend, isFavorableDiff, weeklyEquivalent, periodEquivalent, type CategoryActualRow, type PerBudgetCategoryVariance, type PerBudgetPoint, type PerBudgetStats } from "../balance.js";
 import { formatCurrency } from "../format.js";
@@ -274,25 +273,4 @@ export function renderBudgetsContent(
     ${tableHtml}
     ${overridesHtml}
   `;
-}
-
-export async function renderBudgets(options: RenderPageOptions): Promise<string> {
-  const { authorized, dataSource } = options;
-  try {
-    const [budgets, periods, weeklyAggregates] = await Promise.all([
-      dataSource.getBudgets()
-        .catch((e) => { logError(e, { operation: "load-budgets" }); throw e; }),
-      dataSource.getBudgetPeriods()
-        .catch((e) => { logError(e, { operation: "load-budget-periods" }); throw e; }),
-      dataSource.getWeeklyAggregates()
-        .catch((e) => { logError(e, { operation: "load-aggregates" }); throw e; }),
-    ]);
-    return renderBudgetsContent(budgets, periods, weeklyAggregates, authorized);
-  } catch (error) {
-    return `
-    <h2>Budgets</h2>
-    ${renderPageNotices(options, "budgets")}
-    ${renderLoadError(error, "budgets-error")}
-  `;
-  }
 }
