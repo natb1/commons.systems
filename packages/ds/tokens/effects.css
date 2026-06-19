@@ -1,0 +1,15 @@
+:root {
+  --glow-accent:0 0 0.4em var(--accent);
+  --grid-line:rgba(224,216,200,0.04);
+  --grid-texture:
+    repeating-linear-gradient(to right, var(--grid-line) 0 1px, transparent 1px var(--texture-pitch,24px)),
+    repeating-linear-gradient(to bottom, var(--grid-line) 0 1px, transparent 1px var(--texture-pitch,24px));
+  --shadow-overflow-top:inset 0 12px 12px -12px rgba(0,0,0,.2);
+  --shadow-overflow-bottom:inset 0 -12px 12px -12px rgba(0,0,0,.2);
+  --focus-outline:2px solid var(--focus-ring); --focus-offset:2px;
+  --duration-fast:.15s; --duration-base:.2s; --ease:ease;
+  --transition-color: color var(--duration-fast) var(--ease),
+    border-color var(--duration-fast) var(--ease),
+    background var(--duration-fast) var(--ease),
+    outline-color var(--duration-fast) var(--ease);
+}

@@ -1,0 +1,84 @@
+:root {
+  color-scheme: light dark;
+}
+
+/* Production chrome — global element defaults */
+
+body {
+  font-family: var(--font-body);
+  color: var(--text-primary);
+  background: var(--grid-texture), var(--bg);
+}
+
+.page {
+  max-width: var(--max-width-wide);
+  margin: 0 auto;
+  padding-inline: var(--space-4);
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-heading);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-heading);
+  text-shadow: var(--glow-accent);
+}
+
+a {
+  color: var(--link);
+}
+
+a:hover {
+  text-decoration-thickness: var(--border-width-strong);
+}
+
+header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--surface-card);
+  border: var(--border-width) solid var(--border-default);
+  border-bottom-width: var(--border-width-strong);
+  padding-block: var(--space-4);
+  padding-inline: var(--space-6);
+  margin-bottom: var(--space-8);
+}
+
+footer {
+  border-top: var(--border-width-strong) solid var(--border-default);
+  padding-top: var(--space-4);
+  padding-bottom: var(--space-4);
+  margin-top: var(--space-8);
+  color: var(--text-muted);
+}
+
+*,
+*::before,
+*::after {
+  border-radius: var(--radius-none);
+}
+
+main {
+  background: var(--surface-card);
+  padding: var(--space-6);
+  border: var(--border-width) solid var(--border-default);
+}
+
+/* cs-* component interaction states (resting styles are inline in the components) */
+
+.cs-btn:active            { transform: translateY(1px); }
+.cs-btn:focus-visible     { outline: var(--focus-outline); outline-offset: var(--focus-offset); }
+.cs-btn--primary:hover    { background: color-mix(in srgb, var(--accent) 85%, black); }
+.cs-btn--secondary:hover  { border-color: var(--accent);
+                            background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.cs-btn--ghost:hover      { text-decoration: underline; text-decoration-thickness: 2px; }
+
+.cs-card--interactive:hover,
+.cs-card--interactive:focus { border-color: var(--accent);
+                              outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.cs-input:focus,
+.cs-select:focus          { border-color: var(--accent); outline: none; }
+
+.cs-nav__link:hover       { text-decoration: underline; text-decoration-thickness: 2px; }

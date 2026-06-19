@@ -3,6 +3,7 @@ import { renderApp, type AppView, type ViewState } from "../src/app-view.js";
 import type { UsageSample } from "../src/usage-samples.js";
 import type { Reminder } from "../src/reminders.js";
 import type { IssueSample } from "../src/issue-samples.js";
+import type { AuditAggregate } from "../src/audit-aggregates.js";
 
 const now = new Date("2026-06-11T12:00:00Z");
 
@@ -126,14 +127,14 @@ describe("renderApp — owner tier with data", () => {
 
   it("does not render a .demo-banner", () => {
     const container = document.createElement("div");
-    withThemeFg(() => renderApp(container, { tier: "owner", samples, reminders, queueMetrics: queueMetricsFixture, issueSamples: [] }, now));
+    withThemeFg(() => renderApp(container, { tier: "owner", samples, reminders, queueMetrics: queueMetricsFixture, issueSamples: [], auditAggregates: [] }, now));
 
     expect(container.querySelector(".demo-banner")).toBeNull();
   });
 
   it("renders a reminder list item for each reminder", () => {
     const container = document.createElement("div");
-    withThemeFg(() => renderApp(container, { tier: "owner", samples, reminders, queueMetrics: queueMetricsFixture, issueSamples: [] }, now));
+    withThemeFg(() => renderApp(container, { tier: "owner", samples, reminders, queueMetrics: queueMetricsFixture, issueSamples: [], auditAggregates: [] }, now));
 
     const items = container.querySelectorAll("li.reminder");
     expect(items.length).toBe(2);
@@ -141,14 +142,14 @@ describe("renderApp — owner tier with data", () => {
 
   it("does not render an .error element", () => {
     const container = document.createElement("div");
-    withThemeFg(() => renderApp(container, { tier: "owner", samples, reminders, queueMetrics: queueMetricsFixture, issueSamples: [] }, now));
+    withThemeFg(() => renderApp(container, { tier: "owner", samples, reminders, queueMetrics: queueMetricsFixture, issueSamples: [], auditAggregates: [] }, now));
 
     expect(container.querySelector(".error")).toBeNull();
   });
 
   it("renders 3 queue cards when queueMetrics is provided", () => {
     const container = document.createElement("div");
-    withThemeFg(() => renderApp(container, { tier: "owner", samples, reminders, queueMetrics: queueMetricsFixture, issueSamples: [] }, now));
+    withThemeFg(() => renderApp(container, { tier: "owner", samples, reminders, queueMetrics: queueMetricsFixture, issueSamples: [], auditAggregates: [] }, now));
 
     // The capacity panel also emits .capacity-card, so scope the count to the
     // queue panel's unique value cells (depth, drain, runway).
@@ -163,7 +164,7 @@ describe("renderApp — owner tier empty", () => {
   it("does not render a .demo-banner", () => {
     const container = document.createElement("div");
     withThemeFg(() =>
-      renderApp(container, { tier: "owner", samples: [], reminders: [], queueMetrics: null, issueSamples: [] }, now),
+      renderApp(container, { tier: "owner", samples: [], reminders: [], queueMetrics: null, issueSamples: [], auditAggregates: [] }, now),
     );
 
     expect(container.querySelector(".demo-banner")).toBeNull();
@@ -172,7 +173,7 @@ describe("renderApp — owner tier empty", () => {
   it('renders the reminder-list empty state "No reminders."', () => {
     const container = document.createElement("div");
     withThemeFg(() =>
-      renderApp(container, { tier: "owner", samples: [], reminders: [], queueMetrics: null, issueSamples: [] }, now),
+      renderApp(container, { tier: "owner", samples: [], reminders: [], queueMetrics: null, issueSamples: [], auditAggregates: [] }, now),
     );
 
     const list = container.querySelector("#reminder-list");
@@ -188,7 +189,7 @@ describe("renderApp — owner tier empty", () => {
   it('renders the capacity empty state "No capacity data."', () => {
     const container = document.createElement("div");
     withThemeFg(() =>
-      renderApp(container, { tier: "owner", samples: [], reminders: [], queueMetrics: null, issueSamples: [] }, now),
+      renderApp(container, { tier: "owner", samples: [], reminders: [], queueMetrics: null, issueSamples: [], auditAggregates: [] }, now),
     );
 
     const empties = Array.from(container.querySelectorAll(".empty"));
@@ -199,7 +200,7 @@ describe("renderApp — owner tier empty", () => {
   it("renders the history-band empty states", () => {
     const container = document.createElement("div");
     withThemeFg(() =>
-      renderApp(container, { tier: "owner", samples: [], reminders: [], queueMetrics: null, issueSamples: [] }, now),
+      renderApp(container, { tier: "owner", samples: [], reminders: [], queueMetrics: null, issueSamples: [], auditAggregates: [] }, now),
     );
 
     const empties = Array.from(container.querySelectorAll(".empty"));
@@ -217,7 +218,7 @@ describe("renderApp — owner tier empty", () => {
   it('renders the queue band empty state "No queue metrics yet." when queueMetrics is null', () => {
     const container = document.createElement("div");
     withThemeFg(() =>
-      renderApp(container, { tier: "owner", samples: [], reminders: [], queueMetrics: null, issueSamples: [] }, now),
+      renderApp(container, { tier: "owner", samples: [], reminders: [], queueMetrics: null, issueSamples: [], auditAggregates: [] }, now),
     );
 
     const empties = Array.from(container.querySelectorAll(".empty"));
@@ -228,7 +229,7 @@ describe("renderApp — owner tier empty", () => {
   it("does not render an .error element", () => {
     const container = document.createElement("div");
     withThemeFg(() =>
-      renderApp(container, { tier: "owner", samples: [], reminders: [], queueMetrics: null, issueSamples: [] }, now),
+      renderApp(container, { tier: "owner", samples: [], reminders: [], queueMetrics: null, issueSamples: [], auditAggregates: [] }, now),
     );
 
     expect(container.querySelector(".error")).toBeNull();
@@ -311,7 +312,7 @@ describe("renderApp — panel-registry: grid container", () => {
   it("owner-with-data render: .panel-grid is present", () => {
     const container = document.createElement("div");
     withThemeFg(() =>
-      renderApp(container, { tier: "owner", samples, reminders, queueMetrics: queueMetricsFixture, issueSamples: [] }, now),
+      renderApp(container, { tier: "owner", samples, reminders, queueMetrics: queueMetricsFixture, issueSamples: [], auditAggregates: [] }, now),
     );
     expect(container.querySelector(".panel-grid")).not.toBeNull();
   });
@@ -338,7 +339,7 @@ describe("renderApp — panel-registry: all panels present per tier", () => {
     { sampledAt: new Date("2026-06-09T00:00:00Z"), openHelpWanted: 6, openOther: 3, groupId: "g" },
   ];
 
-  it("demo: all six panels are present", () => {
+  it("demo: all seven panels are present", () => {
     const container = document.createElement("div");
     withThemeFg(() => renderApp(container, { tier: "demo" }, now));
     expect(container.querySelector(".capacity-heading")).not.toBeNull();
@@ -347,12 +348,13 @@ describe("renderApp — panel-registry: all panels present per tier", () => {
     expect(container.querySelector("#reminder-list")).not.toBeNull();
     expect(container.querySelector(".queue-metrics-heading")).not.toBeNull();
     expect(container.querySelector(".backlog-history")).not.toBeNull();
+    expect(container.querySelector(".audit-aggregate-chart")).not.toBeNull();
   });
 
-  it("owner-with-data: all six panels are present", () => {
+  it("owner-with-data: all seven panels are present", () => {
     const container = document.createElement("div");
     withThemeFg(() =>
-      renderApp(container, { tier: "owner", samples, reminders, queueMetrics: queueMetricsFixture, issueSamples }, now),
+      renderApp(container, { tier: "owner", samples, reminders, queueMetrics: queueMetricsFixture, issueSamples, auditAggregates: [] }, now),
     );
     expect(container.querySelector(".capacity-heading")).not.toBeNull();
     expect(container.querySelector(".capacity-pace")).not.toBeNull();
@@ -360,6 +362,7 @@ describe("renderApp — panel-registry: all panels present per tier", () => {
     expect(container.querySelector("#reminder-list")).not.toBeNull();
     expect(container.querySelector(".queue-metrics-heading")).not.toBeNull();
     expect(container.querySelector(".backlog-history")).not.toBeNull();
+    expect(container.querySelector(".audit-aggregate-chart")).not.toBeNull();
   });
 });
 
@@ -388,7 +391,7 @@ describe("renderApp — panel-registry: title-doubling guard", () => {
   it("owner-with-data: each panel heading appears exactly once", () => {
     const container = document.createElement("div");
     withThemeFg(() =>
-      renderApp(container, { tier: "owner", samples, reminders, queueMetrics: queueMetricsFixture, issueSamples: [] }, now),
+      renderApp(container, { tier: "owner", samples, reminders, queueMetrics: queueMetricsFixture, issueSamples: [], auditAggregates: [] }, now),
     );
     expect(container.querySelectorAll(".capacity-heading").length).toBe(1);
     expect(container.querySelectorAll(".capacity-pace-heading").length).toBe(1);
@@ -419,6 +422,59 @@ describe("renderApp — panel-registry: backlog-history panel is full-width", ()
   });
 });
 
+describe("renderApp — panel-registry: audit panel", () => {
+  const samples = [
+    makeSample({ sampledAt: new Date("2026-06-07T10:00:00Z") }),
+    makeSample({ sampledAt: new Date("2026-06-08T10:00:00Z"), activeWorkers: 2, targetWorkers: 3 }),
+  ];
+  const reminders = [
+    makeReminder("weekly-review", 30 * MINUTE),
+    makeReminder("overdue-task", -4 * HOUR),
+  ];
+  const auditAggregates: AuditAggregate[] = [
+    {
+      computedAt: new Date("2026-06-07T00:00:00Z"),
+      windowDays: 14,
+      groupId: "g",
+      phaseSpend: { plan: 0.5, implement: 1.2 },
+      cacheRead: 800,
+      cacheCreation: 200,
+    },
+  ];
+
+  it("demo: .audit-aggregate-chart is present and carries panel-grid-full", () => {
+    const container = document.createElement("div");
+    withThemeFg(() => renderApp(container, { tier: "demo" }, now));
+    const audit = container.querySelector(".audit-aggregate-chart");
+    expect(audit).not.toBeNull();
+    expect(audit!.classList.contains("panel-grid-full")).toBe(true);
+  });
+
+  it("demo: .audit-aggregate-chart appears exactly once", () => {
+    const container = document.createElement("div");
+    withThemeFg(() => renderApp(container, { tier: "demo" }, now));
+    expect(container.querySelectorAll(".audit-aggregate-chart").length).toBe(1);
+  });
+
+  it("owner: .audit-aggregate-chart is present and carries panel-grid-full", () => {
+    const container = document.createElement("div");
+    withThemeFg(() =>
+      renderApp(container, { tier: "owner", samples, reminders, queueMetrics: queueMetricsFixture, issueSamples: [], auditAggregates }, now),
+    );
+    const audit = container.querySelector(".audit-aggregate-chart");
+    expect(audit).not.toBeNull();
+    expect(audit!.classList.contains("panel-grid-full")).toBe(true);
+  });
+
+  it("owner: .audit-aggregate-chart appears exactly once", () => {
+    const container = document.createElement("div");
+    withThemeFg(() =>
+      renderApp(container, { tier: "owner", samples, reminders, queueMetrics: queueMetricsFixture, issueSamples: [], auditAggregates }, now),
+    );
+    expect(container.querySelectorAll(".audit-aggregate-chart").length).toBe(1);
+  });
+});
+
 describe("renderApp — panel-registry: queue-metrics in both tiers", () => {
   const samples = [
     makeSample({ sampledAt: new Date("2026-06-07T10:00:00Z") }),
@@ -442,7 +498,7 @@ describe("renderApp — panel-registry: queue-metrics in both tiers", () => {
   it("owner with queueMetrics: queue-metrics heading and populated value element present", () => {
     const container = document.createElement("div");
     withThemeFg(() =>
-      renderApp(container, { tier: "owner", samples, reminders, queueMetrics: queueMetricsFixture, issueSamples: [] }, now),
+      renderApp(container, { tier: "owner", samples, reminders, queueMetrics: queueMetricsFixture, issueSamples: [], auditAggregates: [] }, now),
     );
     const heading = container.querySelector(".queue-metrics-heading");
     expect(heading).not.toBeNull();
@@ -453,7 +509,7 @@ describe("renderApp — panel-registry: queue-metrics in both tiers", () => {
   it("owner with queueMetrics: null — heading present, empty placeholder with exact text", () => {
     const container = document.createElement("div");
     withThemeFg(() =>
-      renderApp(container, { tier: "owner", samples, reminders, queueMetrics: null, issueSamples: [] }, now),
+      renderApp(container, { tier: "owner", samples, reminders, queueMetrics: null, issueSamples: [], auditAggregates: [] }, now),
     );
     const heading = container.querySelector(".queue-metrics-heading");
     expect(heading).not.toBeNull();
@@ -486,6 +542,7 @@ describe("renderApp — AppView.tick refreshes time-sensitive panels", () => {
     reminders,
     queueMetrics: queueMetricsFixture,
     issueSamples: [],
+    auditAggregates: [],
   };
 
   it("owner: weekly countdown text changes after tick(laterNow)", () => {
@@ -542,14 +599,17 @@ describe("renderApp — AppView.tick refreshes time-sensitive panels", () => {
 
     const historyBefore = container.querySelector(".capacity-history");
     const backlogBefore = container.querySelector(".backlog-history");
+    const auditBefore = container.querySelector(".audit-aggregate-chart");
     expect(historyBefore).not.toBeNull();
     expect(backlogBefore).not.toBeNull();
+    expect(auditBefore).not.toBeNull();
 
     withThemeFg(() => view.tick(new Date("2026-06-15T12:00:00Z")));
 
     // Charts are NOT re-rendered: the same DOM nodes remain in place.
     expect(container.querySelector(".capacity-history")).toBe(historyBefore);
     expect(container.querySelector(".backlog-history")).toBe(backlogBefore);
+    expect(container.querySelector(".audit-aggregate-chart")).toBe(auditBefore);
   });
 
   it("error-tier AppView.tick is a harmless no-op", () => {
