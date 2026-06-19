@@ -417,6 +417,13 @@ ensure_daemon_service || true
 # Install+enable the durable periodic sweep timer so idle/drained chains still GC worktrees (#2023).
 ensure_sweep_timer "$MAIN_WORKTREE" || true
 
+# Install the durable heartbeat timer (#2022) — a 15-min drumbeat that fires
+# dispatch-tick independently of Stop-hooks and reseed timers, so abnormal
+# worker death and post-cap stalls self-recover. Best-effort: a failure here
+# is non-fatal; the existing OnFailure + reseed chain still covers the
+# common-case recovery path.
+ensure_heartbeat_units "$MAIN_WORKTREE" || true
+
 # ---- Step 6: schedule the transient timer -----------------------------------
 #
 # The unit name embeds the epoch resets_at — a repeated call with the same
