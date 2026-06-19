@@ -85,6 +85,26 @@ describe("renderAuditAggregateChart", () => {
     expect(labels).toContain("review");
   });
 
+  it("shows the not-enough-history message for a single aggregate", () => {
+    const el = renderAuditAggregateChart([make()]);
+    const empty = el.querySelector(".empty");
+    expect(empty).not.toBeNull();
+    expect(empty!.textContent).toBe(
+      "Not enough audit history to chart — waiting for a second window.",
+    );
+    expect(el.querySelector("svg")).toBeNull();
+  });
+
+  it("shows the not-enough-history message for duplicate timestamps", () => {
+    const ts = new Date("2026-06-07T00:00:00Z");
+    const el = renderAuditAggregateChart([make({ computedAt: ts }), make({ computedAt: ts })]);
+    const empty = el.querySelector(".empty");
+    expect(empty).not.toBeNull();
+    expect(empty!.textContent).toBe(
+      "Not enough audit history to chart — waiting for a second window.",
+    );
+  });
+
   it("does not mutate the input array order", () => {
     withFg();
     // Deliberately unsorted input.

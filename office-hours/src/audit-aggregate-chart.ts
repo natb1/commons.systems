@@ -67,6 +67,16 @@ export function renderAuditAggregateChart(aggregates: AuditAggregate[]): HTMLEle
   // Sort a copy ascending by computedAt — input order is not guaranteed.
   const sorted = [...aggregates].sort((a, b) => a.computedAt.getTime() - b.computedAt.getTime());
 
+  // A single aggregate, or multiple aggregates sharing one timestamp, yields a
+  // zero-width time domain that Plot renders as a degenerate single-x chart.
+  if (sorted.length < 2 || sorted[0].computedAt.getTime() === sorted[sorted.length - 1].computedAt.getTime()) {
+    const empty = document.createElement("p");
+    empty.className = "empty";
+    empty.textContent = "Not enough audit history to chart — waiting for a second window.";
+    container.appendChild(empty);
+    return container;
+  }
+
   // Union of phase keys across all windows, sorted for stable line/legend order.
   const phaseSet = new Set<string>();
   for (const a of sorted) {
