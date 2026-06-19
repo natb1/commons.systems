@@ -369,7 +369,7 @@ describe("prerenderPosts", () => {
   });
 
   it("injects nav links into app-nav element", async () => {
-    await prerenderPosts(makeConfig());
+    await prerenderPosts(makeConfig({ showHomeLink: true }));
 
     const rootCall = vi.mocked(fs.writeFileSync).mock.calls.find(
       (c) => String(c[0]) === "/dist/index.html",
@@ -382,9 +382,25 @@ describe("prerenderPosts", () => {
     expect(html).toContain('href="/"');
     expect(html).toContain("Home");
     // Anonymous prerender: home link present, no auth "Login" control.
-    expect(html).toContain("commons.systems");
+    expect(html).toContain('href="https://commons.systems/"');
     expect(html).not.toContain("Login");
     expect(html).not.toContain('<app-nav id="nav"></app-nav>');
+  });
+
+  it("omits home link from nav when showHomeLink is false (default)", async () => {
+    await prerenderPosts(makeConfig());
+
+    const rootCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+      (c) => String(c[0]) === "/dist/index.html",
+    );
+    const html = rootCall![1] as string;
+    // Nav still renders with cs-nav and the configured nav links.
+    expect(html).toContain('<app-nav id="nav">');
+    expect(html).toContain("cs-nav");
+    expect(html).toContain('href="/"');
+    expect(html).toContain("Home");
+    // Home link to commons.systems root must be absent.
+    expect(html).not.toContain('href="https://commons.systems/"');
   });
 
   it("writes root index.html with content", async () => {

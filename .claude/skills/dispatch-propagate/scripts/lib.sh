@@ -1511,6 +1511,205 @@ EOF
   fi
 }
 
+
+# Install and activate the durable `dispatch-sweep-periodic.timer` (+ its paired
+# `dispatch-sweep-periodic.service`) so the worktree garbage-collector fires on a
+# wall-clock cadence instead of only from a finishing worker's Stop hook (#2023).
+# The sweep launcher currently runs only when a worker stops, so an idle or
+# drained chain never GCs its stale worktrees. A `systemd --user` timer ticks
+# regardless of chain activity, keeping the sweep durable across idle periods.
+#
+# The .service is Type=oneshot and carries NO [Install] section — the .timer
+# pulls it in via Unit=, and a oneshot with an [Install] would be pointlessly
+# enable-able on its own. ExecStart points at `dispatch-spawn-sweep` (the
+# launcher), NOT `dispatch-sweep` directly, so each fire still gets the
+# launcher's fixed-unit dedup + 300s throttle rather than racing the Stop-hook
+# spawns.
+#
+# Best-effort: a failure here must not abort the caller (a tick/reseed/worker
+# launcher), so we warn to stderr and return non-zero — never `exit`. A missing
+# timer just means the sweep falls back to the prior Stop-hook-only behavior.
+# Args: $1 = main worktree path
+ensure_sweep_timer() {
+  local main_worktree="$1"
+
+  # A systemd unit file is line-structured: each line is an independent
+  # directive. An embedded newline in any value we interpolate below would land
+  # as an attacker-controlled extra directive in the [Service] section. The
+  # main worktree path comes from git output or a test override and never
+  # legitimately contains a newline; reject it rather than emit a malformed
+  # unit (best-effort: warn + return per this helper's contract — never exit).
+  if [[ "$main_worktree" == *$'\n'* ]]; then
+    echo "WARNING: ensure_sweep_timer: main worktree path contains a newline; refusing to write unit; periodic sweep unavailable" >&2
+    return 1
+  fi
+  # WorkingDirectory= does not unescape quotes, so a space in the bare path would
+  # split the value at the first space; reject it (same contract: warn + return 1).
+  if [[ "$main_worktree" == *' '* ]]; then
+    echo "WARNING: ensure_sweep_timer: main worktree path contains a space; refusing to write unit; periodic sweep unavailable" >&2
+    return 1
+  fi
+  # ExecStart= is double-quoted ("$SWEEP_SCRIPT"); SWEEP_SCRIPT is derived from
+  # main_worktree below. An embedded double-quote in the path would prematurely
+  # close that quoted token, making systemd parse the executable and arguments
+  # wrong (bad-setting) and permanently break the unit. The path never
+  # legitimately contains a double-quote; reject it rather than emit a malformed
+  # unit (same contract: warn + return 1).
+  if [[ "$main_worktree" == *'"'* ]]; then
+    echo "WARNING: ensure_sweep_timer: main worktree path contains a double-quote; refusing to write unit; periodic sweep unavailable" >&2
+    return 1
+  fi
+  # ExecStart= is double-quoted and systemd C-unescapes it, so a backslash in
+  # the path would be misread as an escape sequence and corrupt the executable
+  # token. The path never legitimately contains a backslash; reject it (#1212).
+  if [[ "$main_worktree" == *'\'* ]]; then
+    echo "WARNING: ensure_sweep_timer: main worktree path contains a backslash; refusing to write unit; periodic sweep unavailable" >&2
+    return 1
+  fi
+
+  local SWEEP_SCRIPT="$main_worktree/.claude/skills/dispatch-propagate/scripts/dispatch-spawn-sweep"
+  local UNIT_DIR="${DISPATCH_SWEEP_TIMER_UNIT_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user}"
+  local SERVICE_PATH="$UNIT_DIR/dispatch-sweep-periodic.service"
+  local TIMER_PATH="$UNIT_DIR/dispatch-sweep-periodic.timer"
+  local SYSTEMCTL_CMD="${DISPATCH_SWEEP_TIMER_SYSTEMCTL_CMD:-systemctl}"
+
+  # Sanitize PATH for the Environment= line (see strip_unit_env_path).
+  local safe_path
+  safe_path=$(strip_unit_env_path "$PATH")
+
+  # Desired .service content. Environment=PATH= captures the launching caller's
+  # full nix-store PATH at write time, for the same reason the recover and daemon
+  # units do — the systemd user manager's minimal default PATH omits the nix
+  # store, so dispatch-spawn-sweep (and the dispatch-sweep it launches) could not
+  # otherwise resolve git/jq/claude.
+  #
+  # ExecStart= and Environment= are double-quoted: systemd unescapes C-style
+  # quotes for these two directives, so a path containing spaces is parsed as a
+  # single token rather than split into an executable + spurious arguments.
+  # WorkingDirectory= is the exception — it does NOT unescape quotes; a leading
+  # `"` makes the path non-absolute and systemd rejects the unit (bad-setting),
+  # so it takes the bare path (the no-spaces invariant is enforced by the guard
+  # above, so the bare value is a single token).
+  #
+  # Deliberately NO [Install] section — the .timer pulls this oneshot in via
+  # Unit=, so the service is never enabled on its own.
+  local desired_service
+  desired_service=$(cat <<EOF
+[Unit]
+Description=Dispatch periodic worktree sweep (timer-triggered)
+
+[Service]
+Type=oneshot
+Environment="PATH=$safe_path"
+ExecStart="$SWEEP_SCRIPT"
+WorkingDirectory=$main_worktree
+EOF
+)
+
+  # Desired .timer content. OnBootSec delays the first fire past session start so
+  # the boot-time launcher storm settles; OnUnitActiveSec re-arms 15min after
+  # each activation for the steady cadence. Unit= names the paired oneshot above.
+  #
+  # Deliberately NO Persistent= — it only affects OnCalendar= timers (catching up
+  # missed wall-clock fires across downtime) and is a no-op for the monotonic
+  # OnBootSec=/OnUnitActiveSec= triggers used here.
+  local desired_timer
+  desired_timer=$(cat <<EOF
+[Unit]
+Description=Dispatch periodic worktree sweep timer
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=15min
+Unit=dispatch-sweep-periodic.service
+
+[Install]
+WantedBy=timers.target
+EOF
+)
+
+  # Steady-state hot path: if BOTH installed units already match byte-for-byte
+  # AND the timer is active (armed), skip the write/reload/enable entirely.
+  # (Like the durable daemon and unlike the OnFailure-only recover unit, the
+  # timer must actually be RUNNING — an "active" timer is one that is armed and
+  # will fire — so we add an is-active check to the content compare.)
+  if [ -f "$SERVICE_PATH" ] && [ "$(cat "$SERVICE_PATH")" = "$desired_service" ] \
+     && [ -f "$TIMER_PATH" ] && [ "$(cat "$TIMER_PATH")" = "$desired_timer" ] \
+     && "$SYSTEMCTL_CMD" --user is-active --quiet dispatch-sweep-periodic.timer; then
+    return 0
+  fi
+
+  if ! mkdir -p "$UNIT_DIR"; then
+    echo "WARNING: ensure_sweep_timer: mkdir -p $UNIT_DIR failed; periodic sweep unavailable" >&2
+    return 1
+  fi
+
+  # Write the .service atomically only when its content differs: temp file in the
+  # same dir, then mv into place.
+  if [ ! -f "$SERVICE_PATH" ] || [ "$(cat "$SERVICE_PATH")" != "$desired_service" ]; then
+    local tmp_service
+    tmp_service=$(mktemp "$UNIT_DIR/.dispatch-sweep-periodic.service.XXXXXX") || {
+      echo "WARNING: ensure_sweep_timer: could not create temp file in $UNIT_DIR; periodic sweep unavailable" >&2
+      return 1
+    }
+    if ! printf '%s\n' "$desired_service" > "$tmp_service"; then
+      echo "WARNING: ensure_sweep_timer: failed to write $tmp_service; periodic sweep unavailable" >&2
+      rm -f "$tmp_service"
+      return 1
+    fi
+    if ! mv "$tmp_service" "$SERVICE_PATH"; then
+      echo "WARNING: ensure_sweep_timer: failed to install $SERVICE_PATH; periodic sweep unavailable" >&2
+      rm -f "$tmp_service"
+      return 1
+    fi
+  fi
+
+  # Write the .timer atomically only when its content differs: temp file in the
+  # same dir, then mv into place.
+  if [ ! -f "$TIMER_PATH" ] || [ "$(cat "$TIMER_PATH")" != "$desired_timer" ]; then
+    local tmp_timer
+    tmp_timer=$(mktemp "$UNIT_DIR/.dispatch-sweep-periodic.timer.XXXXXX") || {
+      echo "WARNING: ensure_sweep_timer: could not create temp file in $UNIT_DIR; periodic sweep unavailable" >&2
+      return 1
+    }
+    if ! printf '%s\n' "$desired_timer" > "$tmp_timer"; then
+      echo "WARNING: ensure_sweep_timer: failed to write $tmp_timer; periodic sweep unavailable" >&2
+      rm -f "$tmp_timer"
+      return 1
+    fi
+    if ! mv "$tmp_timer" "$TIMER_PATH"; then
+      echo "WARNING: ensure_sweep_timer: failed to install $TIMER_PATH; periodic sweep unavailable" >&2
+      rm -f "$tmp_timer"
+      return 1
+    fi
+  fi
+
+  # daemon-reload unconditionally on this slow path, outside both write blocks.
+  # The hot path above already returned early when both units matched
+  # byte-for-byte AND the timer was active; reaching here means at least one unit
+  # was just written OR both exist on disk but the timer is not active. A
+  # daemon-reload that failed on a prior call (after the mv succeeded) leaves the
+  # units on disk but unknown to systemd, so the content compare skips the write
+  # blocks on every later call — running the reload outside those blocks ensures
+  # it is retried until systemd has loaded the units, instead of falling straight
+  # through to a doomed `enable --now`. Both files are on disk before the reload
+  # since the timer's Unit= references the service.
+  if ! "$SYSTEMCTL_CMD" --user daemon-reload; then
+    echo "WARNING: ensure_sweep_timer: systemctl --user daemon-reload failed; periodic sweep unavailable" >&2
+    return 1
+  fi
+
+  # Install + activate the TIMER (not the oneshot service): enable symlinks it
+  # under WantedBy=timers.target (so it re-arms on every user-session start) and
+  # --now arms it immediately. A .timer does nothing until this enable --now;
+  # the paired service stays inert until the timer triggers it.
+  if ! "$SYSTEMCTL_CMD" --user enable --now dispatch-sweep-periodic.timer; then
+    echo "WARNING: ensure_sweep_timer: systemctl --user enable --now dispatch-sweep-periodic.timer failed; periodic sweep unavailable" >&2
+    return 1
+  fi
+}
+
+
 # Install and activate the durable always-on heartbeat: a `systemd --user`
 # `dispatch-heartbeat.timer` firing `dispatch-heartbeat.service` (a no-arg
 # `dispatch-tick`) on a flat drumbeat — `OnBootSec=2min`,
