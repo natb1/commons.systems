@@ -73,6 +73,21 @@ export function pickPositionStore(
   return makeLocalStoragePositionStore(item.id);
 }
 
+export type ViewFrame =
+  | { kind: "shell"; shellHtml: string }
+  | { kind: "noId" } // "No media item specified."
+  | { kind: "notFound" } // "Media item not found."
+  | { kind: "error" }; // "Could not load this media item. Try refreshing the page."
+
+let viewFrame: ViewFrame = { kind: "noId" };
+export function getViewFrame(): ViewFrame {
+  return viewFrame;
+}
+// Used by the route's malformed-percent-encoding branch (which does NOT call renderView).
+export function markViewNotFound(): void {
+  viewFrame = { kind: "notFound" };
+}
+
 let pendingItem: MediaItem | null = null;
 let pendingUrl: string | null = null;
 let pendingLocal = false;
@@ -90,6 +105,7 @@ export function cleanupView(): void {
 
 export async function renderView(id: string, _user: User | null): Promise<string> {
   if (!id) {
+    viewFrame = { kind: "noId" };
     return `
       <h2>Not Found</h2>
       <p id="view-not-found">No media item specified.</p>
@@ -103,16 +119,22 @@ export async function renderView(id: string, _user: User | null): Promise<string
     // has bound `localSource`, which would otherwise read as a false miss.
     await whenLocalFolderReady();
     const item = await getLocalItem(id);
-    if (!item) return NOT_FOUND_HTML;
+    if (!item) {
+      viewFrame = { kind: "notFound" };
+      return NOT_FOUND_HTML;
+    }
+    const shellHtml = renderViewerShell(item);
     pendingItem = item;
     pendingUrl = null;
     pendingLocal = true;
-    return renderViewerShell(item);
+    viewFrame = { kind: "shell", shellHtml };
+    return shellHtml;
   }
 
   try {
     const item = await getMediaItem(id);
     if (!item) {
+      viewFrame = { kind: "notFound" };
       return `
         <h2>Not Found</h2>
         <p id="view-not-found">Media item not found.</p>
@@ -121,12 +143,15 @@ export async function renderView(id: string, _user: User | null): Promise<string
     }
 
     const url = await getMediaDownloadUrl(item.storagePath);
+    const shellHtml = renderViewerShell(item);
     pendingItem = item;
     pendingUrl = url;
-    return renderViewerShell(item);
+    viewFrame = { kind: "shell", shellHtml };
+    return shellHtml;
   } catch (error) {
     if (classifyError(error) === "data-integrity") throw error;
     reportError(new Error("Failed to load media item", { cause: error }));
+    viewFrame = { kind: "error" };
     return ERROR_HTML;
   }
 }

@@ -6,13 +6,14 @@ import { logError } from "@commons-systems/errorutil/log";
 import { loadMediaHtml, afterRenderHome, wireDownloadActions } from "./pages/home.js";
 import { wireMarkdownActions } from "./markdown-actions.js";
 import { initLocalFolder } from "./local-folder-ui.js";
-import { renderView, afterRenderView, cleanupView, NOT_FOUND_HTML } from "./pages/view.js";
+import { renderView, afterRenderView, cleanupView, getViewFrame, markViewNotFound } from "./pages/view.js";
 import { createRoot, type Root } from "react-dom/client";
 import { flushSync } from "react-dom";
 import { AppNav } from "./components/AppNav.js";
 import { Hero } from "./pages/Hero.js";
 import { About } from "./pages/About.js";
 import { Home } from "./pages/Home.js";
+import { ViewPage } from "./pages/View.js";
 import { signIn, signOut, onAuthStateChanged } from "./auth.js";
 import type { User } from "./auth.js";
 import { setViewerEmail, markLocalFolderReady } from "./library.js";
@@ -92,18 +93,30 @@ const router = createHistoryRouter(
     },
     {
       path: /^\/view\/([^/]+)$/,
-      render: (path) => {
+      render: async (path) => {
         let id: string;
         try {
           id = decodeURIComponent(path.slice("/view/".length));
         } catch {
           // Malformed percent-encoding (e.g. /view/%ZZ) is normal user input,
-          // not an error to report — treat it as a missing item.
-          return NOT_FOUND_HTML;
+          // not an error to report — treat it as a missing item (verbatim with
+          // the old NOT_FOUND_HTML behavior). renderView is intentionally NOT
+          // called, so pendingItem stays null and afterRenderView is a no-op.
+          markViewNotFound();
+          return '<div id="page-root"></div>';
         }
-        return renderView(id, currentUser);
+        await renderView(id, currentUser);
+        return '<div id="page-root"></div>';
       },
-      afterRender: (outlet) => afterRenderView(outlet, currentUser),
+      afterRender: (outlet) => {
+        const mount = outlet.querySelector("#page-root");
+        if (!mount) return;
+        currentPageRoot = createRoot(mount as HTMLElement);
+        // flushSync so the viewer-shell DOM (dangerouslySetInnerHTML) is committed
+        // synchronously BEFORE afterRenderView → initViewer queries `.viewer`.
+        flushSync(() => currentPageRoot!.render(<ViewPage frame={getViewFrame()} />));
+        afterRenderView(outlet, currentUser);
+      },
     },
     {
       path: "/about",
