@@ -30,9 +30,7 @@ cd "$REPO_ROOT/$APP_DIR"
 # (require the production build / prerendered output, absent from the dev server)
 # — everything else runs.
 if [ -n "$EXTERNAL_BASE_URL" ]; then
-  if [ -z "${PLAYWRIGHT_BROWSERS_PATH:-}" ]; then
-    npx playwright install --with-deps chromium
-  fi
+  playwright_install_with_deps
   BASE_URL="$EXTERNAL_BASE_URL" npx playwright test --config e2e/playwright.config.ts --grep-invert "@hosting|@testonly|@build"
   exit 0
 fi
@@ -98,12 +96,10 @@ env "${BUILD_ARGS[@]}" npm run build
 
 cd "$REPO_ROOT"
 
-# Install Playwright browsers (skip if nix provides them via PLAYWRIGHT_BROWSERS_PATH)
-if [ -z "${PLAYWRIGHT_BROWSERS_PATH:-}" ]; then
-  cd "$REPO_ROOT/$APP_DIR"
-  npx playwright install --with-deps chromium
-  cd "$REPO_ROOT"
-fi
+# Install Playwright browsers (bounded timeout+retry; skips when nix provides them).
+# Subshell keeps the surrounding code running from $REPO_ROOT; under set -e a
+# non-zero subshell aborts the parent.
+(cd "$REPO_ROOT/$APP_DIR" && playwright_install_with_deps)
 
 # Generate temporary firebase.json in repo root with relative path to dist.
 # Firebase emulator resolves public dir relative to the config file location.

@@ -1,45 +1,66 @@
 #!/usr/bin/env bash
-# Self-contained unit test for dispatch-emit-outcome's validator logic (#1902).
+# Tests for dispatch-emit-outcome. Two suites share the sourced helpers from
+# test-helpers.sh (assert_eq, assert_contains, report_results, PASS/FAIL/TOTAL):
+#   1. the terminated_reason cross-validation contract (#1907)
+#   2. the integer validators _require_pos_int / _require_nonneg_int (#1902)
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
+source "$SCRIPT_DIR/test-helpers.sh"
+SUT="$SCRIPT_DIR/dispatch-emit-outcome"
+
+# ============================================================================
+# Suite 1: terminated_reason cross-validation contract (#1907)
+# ============================================================================
+
+COMMON=(--phase review --repo natb1/commons.systems --issue 1907
+  --findings-surfaced 0 --findings-actionable 0 --fixes-applied 0
+  --followups-filed 0 --subagents-launched 0)
+
+# Run the SUT, capturing stdout+stderr in OUT and exit code in RC.
+RC=0
+OUT=""
+run_sut() {
+  set +e
+  OUT=$("$SUT" "${COMMON[@]}" "$@" 2>&1)
+  RC=$?
+  set -e
+}
+
+# --- Case 1: the fix — completed + empty reason → exit 2 ---
+echo "Case 1: completed + empty reason -> exit 2"
+run_sut --disposition completed --terminated-reason ''
+assert_eq "AC1: exit code is 2" "2" "$RC"
+assert_contains "AC1: message mentions must not be provided" "must not be provided" "$OUT"
+
+# --- Case 2: preserved — escalated + empty reason → exit 2 ---
+echo "Case 2: escalated + empty reason -> exit 2"
+run_sut --disposition escalated --terminated-reason ''
+assert_eq "AC2: exit code is 2" "2" "$RC"
+assert_contains "AC2: message mentions is required when" "is required when" "$OUT"
+
+# --- Case 3: no regression — escalated + non-empty reason → exit 0, reason serialized ---
+echo "Case 3: escalated + non-empty reason -> exit 0, reason in JSON"
+run_sut --disposition escalated --terminated-reason 'some reason'
+assert_eq "AC3: exit code is 0" "0" "$RC"
+REASON=$(printf '%s\n' "$OUT" | sed -n '/^```json$/,/^```$/p' | sed '1d;$d' | jq -r '.terminated_reason')
+assert_eq "AC3: terminated_reason serialized" "some reason" "$REASON"
+
+# --- Case 4: regression — completed, no --terminated-reason → exit 0, null in JSON ---
+echo "Case 4: completed + reason omitted -> exit 0, terminated_reason null"
+run_sut --disposition completed
+assert_eq "REGRESSION: exit code is 0" "0" "$RC"
+NULLVAL=$(printf '%s\n' "$OUT" | sed -n '/^```json$/,/^```$/p' | sed '1d;$d' | jq -r '.terminated_reason')
+assert_eq "REGRESSION: terminated_reason null" "null" "$NULLVAL"
+
+# ============================================================================
+# Suite 2: integer validators _require_pos_int / _require_nonneg_int (#1902)
 #
 # Verifies that _require_pos_int (regex ^[1-9][0-9]*$) rejects 0 and
 # leading-zero forms for --issue and --pr, while _require_nonneg_int still
 # accepts 0 for the five count fields (findings-surfaced, findings-actionable,
 # fixes-applied, followups-filed, subagents-launched).
-#
-# Usage: bash test-emit-outcome.sh
-# Exit 0 = all passed; non-zero = one or more failures.
-set -euo pipefail
-
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-
-# --- test helpers -----------------------------------------------------------
-
-PASS=0
-FAIL=0
-TOTAL=0
-
-assert_eq() {
-  local label="$1" expected="$2" actual="$3"
-  TOTAL=$((TOTAL + 1))
-  if [[ "$expected" == "$actual" ]]; then
-    PASS=$((PASS + 1))
-    echo "  PASS: $label"
-  else
-    FAIL=$((FAIL + 1))
-    echo "  FAIL: $label"
-    echo "    expected: '$expected'"
-    echo "    actual:   '$actual'"
-  fi
-}
-
-report_results() {
-  echo ""
-  echo "================================"
-  echo "Results: $PASS/$TOTAL passed, $FAIL failed"
-  echo "================================"
-}
-
-# --- helper -----------------------------------------------------------------
+# ============================================================================
 
 # run_emit: runs dispatch-emit-outcome with a baseline valid argument set and
 # any extra flags appended via "$@". Echoes only the exit code; discards
@@ -58,8 +79,7 @@ run_emit() {  # echoes the exit code; discards stdout/stderr
     "$@" >/dev/null 2>&1; echo $?
 }
 
-# --- assertions -------------------------------------------------------------
-
+echo ""
 echo "Testing dispatch-emit-outcome validator (#1902)..."
 echo ""
 echo "--- _require_pos_int on --issue and --pr ---"
@@ -80,4 +100,3 @@ echo "--- _require_nonneg_int count fields still accept 0 ---"
 assert_eq "count field 0 accepted"        0 "$(run_emit --issue 1 --findings-surfaced 0)"
 
 report_results
-exit $FAIL
