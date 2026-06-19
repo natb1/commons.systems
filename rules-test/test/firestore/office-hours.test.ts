@@ -427,7 +427,9 @@ describe("office-hours issue-samples", () => {
   const issueSampleDoc = {
     memberEmails: ["owner@test.com"],
     sampledAt: new Date("2026-06-07T12:00:00Z"),
-    openHelpWanted: 12,
+    openSecurity: 3,
+    openBug: 8,
+    openEnhancement: 21,
     openOther: 30,
     groupId: "owner-group",
   };
@@ -435,7 +437,9 @@ describe("office-hours issue-samples", () => {
   const demoIssueSampleDoc = {
     memberEmails: ["demo@example.com"],
     sampledAt: new Date("2026-06-07T11:00:00Z"),
-    openHelpWanted: 6,
+    openSecurity: 1,
+    openBug: 4,
+    openEnhancement: 9,
     openOther: 13,
     groupId: "demo-group",
   };
@@ -500,7 +504,7 @@ describe("office-hours issue-samples", () => {
     const db = ctx.firestore();
     await assertFails(
       updateDoc(doc(db, `office-hours/${ENV}/issue-samples/sample-owner`), {
-        openHelpWanted: 11,
+        openBug: 11,
       }),
     );
   });
@@ -622,7 +626,7 @@ describe("office-hours issue-samples", () => {
     const db = ctx.firestore();
     await assertFails(
       updateDoc(doc(db, `office-hours/demo/issue-samples/sample-demo`), {
-        openHelpWanted: 5,
+        openSecurity: 5,
       }),
     );
   });
