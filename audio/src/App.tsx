@@ -84,7 +84,7 @@ export function App() {
     const anchor = (e.target as HTMLElement).closest("a");
     if (!anchor) return;
     const href = anchor.getAttribute("href");
-    if (!href || !href.startsWith("/")) return;
+    if (!href || !href.startsWith("/") || href.startsWith("//")) return;
     if (anchor.target && anchor.target !== "_self") return;
     e.preventDefault();
     navigate(href);
@@ -122,7 +122,7 @@ export function App() {
       </header>
       <div className="content-grid">
         <main id="app">
-          <RouteErrorBoundary>
+          <RouteErrorBoundary key={activePath}>
             {activePath === "/about" ? (
               <About />
             ) : (

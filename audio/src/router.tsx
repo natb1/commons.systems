@@ -26,7 +26,10 @@ export function useRouter(): Router {
 
   // Back/forward.
   useEffect(() => {
-    const onPop = () => setPath(window.location.pathname);
+    const onPop = () => {
+      setPath(window.location.pathname);
+      trackPageView(window.location.pathname);
+    };
     const controller = new AbortController();
     window.addEventListener("popstate", onPop, { signal: controller.signal });
     return () => controller.abort();

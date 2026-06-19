@@ -11,22 +11,6 @@
   font-style: italic;
 }
 
-#folder-controls {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  margin-block: var(--space-3) var(--space-4);
-}
-
-#folder-connected,
-#folder-note {
-  margin: 0;
-}
-
-#folder-note {
-  color: var(--muted);
-}
-
 #media-list {
   list-style: none;
   padding: 0;
