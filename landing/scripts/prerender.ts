@@ -49,6 +49,7 @@ prerenderStaticPage({
   panelHtml: renderAboutPanelHtml(),
   jsonLdBlocks: [personJsonLd(PERSON)],
   relMe: REL_ME,
+  showHomeLink: false,
 });
 
 await prerenderPosts({
@@ -65,6 +66,7 @@ await prerenderPosts({
   relMe: REL_ME,
   softwareApplications: APPS,
   homeExtraHtml: renderShowcase(APPS),
+  showHomeLink: false,
 });
 
 generateFeedXml({
