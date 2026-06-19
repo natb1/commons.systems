@@ -554,6 +554,53 @@ describe("search()", () => {
       spy.mockRestore();
     }
   });
+
+  it("getOutline() resolves cleanly with no reportError when destroy() races getDestination()", async () => {
+    // Load-bearing: getDestination returns a NON-EMPTY array so the pre-fix code
+    // would reach pdfDoc!.getPageIndex() — which throws TypeError because destroy()
+    // nulled pdfDoc between the getOutline() guard and the getPageIndex await.
+    // With an empty or null getDestination the page-index branch is skipped and
+    // the test would pass even against unfixed code (not discriminating).
+    const pdfjs = await import("pdfjs-dist");
+    let renderer: ReturnType<typeof createPdfRenderer>;
+    const racingDoc = {
+      numPages: 3,
+      destroy() {},
+      getPage: (i: number) =>
+        Promise.resolve({
+          getTextContent: () => Promise.resolve({ items: [{ str: "text" }] }),
+          getViewport: () => ({ width: 100, height: 100 }),
+          render: () => ({ promise: Promise.resolve(), cancel() {} }),
+        }),
+      getOutline: () =>
+        Promise.resolve([{ title: "Ch 1", dest: "ch1", items: [] }]),
+      getDestination: (_dest: string) => {
+        // destroy() races between the getOutline() guard and getPageIndex.
+        renderer.destroy();
+        // Non-empty array: on unfixed code getPageIndex is reached next and throws
+        // TypeError because pdfDoc is now null.
+        return Promise.resolve([{ num: 1, gen: 0 }]);
+      },
+      getPageIndex: () => Promise.resolve(0),
+    };
+    const spy = vi
+      .spyOn(pdfjs, "getDocument")
+      .mockReturnValue({ promise: Promise.resolve(racingDoc) } as never);
+    try {
+      renderer = createPdfRenderer();
+      await renderer.init(container, "fake://source.pdf");
+      const outline = await renderer.getOutline!();
+      // Must resolve to an array (clean return), never call reportError.
+      expect(outline).toBeInstanceOf(Array);
+      expect(globalThis.reportError).not.toHaveBeenCalled();
+      // The entry resolves with no page (page stayed null) so goToOutlineEntry
+      // is a no-op — the outline entry exists but maps to no page.
+      expect(outline.length).toBe(1);
+      expect(outline[0].title).toBe("Ch 1");
+    } finally {
+      spy.mockRestore();
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------

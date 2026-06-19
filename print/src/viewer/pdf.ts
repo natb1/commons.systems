@@ -218,27 +218,29 @@ export function createPdfRenderer(onError?: (err: unknown) => void): SearchableR
     items: PdfOutlineItem[];
   };
 
-  async function resolveOutlineItems(items: PdfOutlineItem[]): Promise<OutlineEntry[]> {
+  async function resolveOutlineItems(items: PdfOutlineItem[], doc: PDFDocumentProxy): Promise<OutlineEntry[]> {
     const entries: OutlineEntry[] = [];
     for (const item of items) {
       let page: number | null = null;
-      if (item.dest) {
+      if (item.dest && !destroyed) {
         try {
           let destArray: Array<unknown> | null = null;
           if (typeof item.dest === "string") {
-            destArray = await pdfDoc!.getDestination(item.dest);
+            destArray = await doc.getDestination(item.dest);
           } else {
             destArray = item.dest;
           }
-          if (destArray && destArray.length > 0) {
-            const pageIndex = await pdfDoc!.getPageIndex(destArray[0] as { num: number; gen: number });
+          if (!destroyed && destArray && destArray.length > 0) {
+            const pageIndex = await doc.getPageIndex(destArray[0] as { num: number; gen: number });
             page = pageIndex + 1; // 1-based
           }
         } catch (err) {
-          reportError(new Error(`Failed to resolve outline destination for "${item.title}"`, { cause: err }));
+          if (!destroyed && (err as { name?: string })?.name !== "UnknownErrorException") {
+            reportError(new Error(`Failed to resolve outline destination for "${item.title}"`, { cause: err }));
+          }
         }
       }
-      const children = item.items.length > 0 ? await resolveOutlineItems(item.items) : [];
+      const children = item.items.length > 0 ? await resolveOutlineItems(item.items, doc) : [];
       const entry: OutlineEntry = { title: item.title, children };
       if (page !== null) {
         outlinePageMap.set(entry, page);
@@ -693,10 +695,11 @@ export function createPdfRenderer(onError?: (err: unknown) => void): SearchableR
     },
 
     async getOutline(): Promise<OutlineEntry[]> {
-      if (!pdfDoc) return [];
-      const outline = await pdfDoc.getOutline();
+      const doc = pdfDoc;
+      if (!doc) return [];
+      const outline = await doc.getOutline();
       if (!outline || outline.length === 0) return [];
-      return resolveOutlineItems(outline as PdfOutlineItem[]);
+      return resolveOutlineItems(outline as PdfOutlineItem[], doc);
     },
 
     async goToOutlineEntry(entry: OutlineEntry): Promise<void> {
