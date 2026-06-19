@@ -28762,6 +28762,64 @@ fi
 git --git-dir="$mf_gl_root/.bare" worktree prune 2>/dev/null || true
 rm -rf "$mf_gl_root"
 
+# 5d. malformed-URL format guard: SSH-with-port → write-plan rejects it.
+# Symmetric counterpart to 5b: same ssh://git@github.com:22/owner/repo.git fixture,
+# exercised against dispatch-write-plan instead of dispatch-read-plan.
+mf_ssh_w_root=$(mktemp -d)
+git init --bare "$mf_ssh_w_root/.bare" >/dev/null 2>&1
+git --git-dir="$mf_ssh_w_root/.bare" config user.email "t@t" 2>/dev/null
+git --git-dir="$mf_ssh_w_root/.bare" config user.name "t" 2>/dev/null
+git --git-dir="$mf_ssh_w_root/.bare" remote add origin ssh://git@github.com:22/owner/repo.git
+mf_ssh_w_seed=$(mktemp -d)
+git -C "$mf_ssh_w_seed" init -q
+git -C "$mf_ssh_w_seed" config user.email "t@t"; git -C "$mf_ssh_w_seed" config user.name "t"
+git -C "$mf_ssh_w_seed" commit -q --allow-empty -m seed
+git -C "$mf_ssh_w_seed" remote add bare "$mf_ssh_w_root/.bare"
+git -C "$mf_ssh_w_seed" push -q bare HEAD:refs/heads/main
+rm -rf "$mf_ssh_w_seed"
+mkdir -p "$mf_ssh_w_root/worktrees"
+git --git-dir="$mf_ssh_w_root/.bare" worktree add -q "$mf_ssh_w_root/worktrees/42-foo" main 2>/dev/null
+if err=$( cd "$mf_ssh_w_root/worktrees/42-foo" && env -u GH_REPO "$WP_WRITE" 42 <<<"PLAN" 2>&1 1>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "write-plan: SSH-with-port malformed URL exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"unexpected owner/repo format"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: write-plan rejects SSH-with-port malformed URL with format-guard diagnostic"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: write-plan rejects SSH-with-port malformed URL with format-guard diagnostic"
+  echo "    actual: '$err'"
+fi
+git --git-dir="$mf_ssh_w_root/.bare" worktree prune 2>/dev/null || true
+rm -rf "$mf_ssh_w_root"
+
+# 5e. malformed-URL format guard: non-GitHub remote → read-plan rejects it.
+# Symmetric counterpart to 5c: same https://gitlab.com/owner/repo.git fixture,
+# exercised against dispatch-read-plan instead of dispatch-write-plan.
+mf_gl_r_root=$(mktemp -d)
+git init --bare "$mf_gl_r_root/.bare" >/dev/null 2>&1
+git --git-dir="$mf_gl_r_root/.bare" config user.email "t@t" 2>/dev/null
+git --git-dir="$mf_gl_r_root/.bare" config user.name "t" 2>/dev/null
+git --git-dir="$mf_gl_r_root/.bare" remote add origin https://gitlab.com/owner/repo.git
+mf_gl_r_seed=$(mktemp -d)
+git -C "$mf_gl_r_seed" init -q
+git -C "$mf_gl_r_seed" config user.email "t@t"; git -C "$mf_gl_r_seed" config user.name "t"
+git -C "$mf_gl_r_seed" commit -q --allow-empty -m seed
+git -C "$mf_gl_r_seed" remote add bare "$mf_gl_r_root/.bare"
+git -C "$mf_gl_r_seed" push -q bare HEAD:refs/heads/main
+rm -rf "$mf_gl_r_seed"
+mkdir -p "$mf_gl_r_root/worktrees"
+git --git-dir="$mf_gl_r_root/.bare" worktree add -q "$mf_gl_r_root/worktrees/42-foo" main 2>/dev/null
+if err=$( cd "$mf_gl_r_root/worktrees/42-foo" && env -u GH_REPO "$WP_READ" 42 2>&1 1>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "read-plan: non-GitHub remote malformed URL exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"remote is not a GitHub repository"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: read-plan rejects non-GitHub remote URL with not-GitHub diagnostic"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: read-plan rejects non-GitHub remote URL with not-GitHub diagnostic"
+  echo "    actual: '$err'"
+fi
+git --git-dir="$mf_gl_r_root/.bare" worktree prune 2>/dev/null || true
+rm -rf "$mf_gl_r_root"
+
 # 7. two-matching-plan-comments: when the store contains two comments both
 #    authored by plan-bot and both carrying the marker, read-plan must return
 #    the FIRST one without a SIGPIPE-induced exit-141 failure, and write-plan
