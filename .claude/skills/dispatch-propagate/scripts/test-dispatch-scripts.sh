@@ -29091,27 +29091,40 @@ else
 fi
 rm -rf "$wp_forge"
 
+# Build a bare-repo + worktree fixture whose origin remote is <url>. Creates a
+# temp root with .bare/, seeds one commit on main via a throwaway seed repo,
+# adds a worktree at worktrees/42-foo, and echoes the root path for the caller
+# to capture. Serves both the real-github.com 5a case and the malformed-URL
+# 5b-5e cases:
+#   root=$(make_bare_worktree_fixture <url>)
+make_bare_worktree_fixture() {
+  set -e
+  local url="$1"
+  local root seed
+  root=$(mktemp -d)
+  git init --bare "$root/.bare" >/dev/null 2>&1
+  git --git-dir="$root/.bare" config user.email "t@t" 2>/dev/null
+  git --git-dir="$root/.bare" config user.name "t" 2>/dev/null
+  git --git-dir="$root/.bare" remote add origin "$url"
+  seed=$(mktemp -d)
+  git -C "$seed" init -q
+  git -C "$seed" config user.email "t@t"; git -C "$seed" config user.name "t"
+  git -C "$seed" commit -q --allow-empty -m seed
+  git -C "$seed" remote add bare "$root/.bare"
+  git -C "$seed" push -q bare HEAD:refs/heads/main
+  rm -rf "$seed"
+  mkdir -p "$root/worktrees"
+  git --git-dir="$root/.bare" worktree add -q "$root/worktrees/42-foo" main 2>/dev/null
+  printf '%s' "$root"
+}
+
 # 5. bare+worktree repo resolution: from a worktree whose dirname(common_dir) is
 # NOT a git repo (the real bare-repo + worktrees layout), with GH_REPO unset, both
 # scripts must still resolve the repo for gh. This would FAIL against the pre-fix
 # `cd "$(dirname "$common_dir")"` version, which lands in the non-repo container and
 # leaves gh's {owner}/{repo} unresolvable (and GH_REPO unset). The fake gh below
 # requires GH_REPO and never reads cwd, so it stands in for that failure.
-bw_root=$(mktemp -d)
-git init --bare "$bw_root/.bare" >/dev/null 2>&1
-git --git-dir="$bw_root/.bare" config user.email "t@t" 2>/dev/null
-git --git-dir="$bw_root/.bare" config user.name "t" 2>/dev/null
-git --git-dir="$bw_root/.bare" remote add origin https://github.com/natb1/commons.systems.git
-# Seed one commit on the bare repo so `worktree add` works, then add the worktree.
-bw_seed=$(mktemp -d)
-git -C "$bw_seed" init -q
-git -C "$bw_seed" config user.email "t@t"; git -C "$bw_seed" config user.name "t"
-git -C "$bw_seed" commit -q --allow-empty -m seed
-git -C "$bw_seed" remote add bare "$bw_root/.bare"
-git -C "$bw_seed" push -q bare HEAD:refs/heads/main
-mkdir -p "$bw_root/worktrees"
-git --git-dir="$bw_root/.bare" worktree add -q "$bw_root/worktrees/42-foo" main 2>/dev/null
-rm -rf "$bw_seed"
+bw_root=$(make_bare_worktree_fixture https://github.com/natb1/commons.systems.git)
 
 # Fake gh that requires GH_REPO (never reads cwd) over a fresh JSON store.
 mkdir -p "$bw_root/bin"
@@ -29147,36 +29160,10 @@ fi
 git --git-dir="$bw_root/.bare" worktree prune 2>/dev/null || true
 rm -rf "$bw_root"
 
-# Build a bare-repo + worktree fixture whose origin remote is <url>, for the
-# malformed-URL format-guard tests (5b-5e). Creates a temp root with .bare/,
-# seeds one commit on main via a throwaway seed repo, adds a worktree at
-# worktrees/42-foo, and echoes the root path for the caller to capture:
-#   root=$(make_malformed_remote_fixture <url>)
-make_malformed_remote_fixture() {
-  set -e
-  local url="$1"
-  local root seed
-  root=$(mktemp -d)
-  git init --bare "$root/.bare" >/dev/null 2>&1
-  git --git-dir="$root/.bare" config user.email "t@t" 2>/dev/null
-  git --git-dir="$root/.bare" config user.name "t" 2>/dev/null
-  git --git-dir="$root/.bare" remote add origin "$url"
-  seed=$(mktemp -d)
-  git -C "$seed" init -q
-  git -C "$seed" config user.email "t@t"; git -C "$seed" config user.name "t"
-  git -C "$seed" commit -q --allow-empty -m seed
-  git -C "$seed" remote add bare "$root/.bare"
-  git -C "$seed" push -q bare HEAD:refs/heads/main
-  rm -rf "$seed"
-  mkdir -p "$root/worktrees"
-  git --git-dir="$root/.bare" worktree add -q "$root/worktrees/42-foo" main 2>/dev/null
-  printf '%s' "$root"
-}
-
 # 5b. malformed-URL format guard: SSH-with-port → read-plan rejects it.
 # ssh://git@github.com:22/owner/repo.git strips to "22/owner/repo" — two slashes,
 # would pass the old */* check but fails the strict ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ regex.
-mf_ssh_root=$(make_malformed_remote_fixture ssh://git@github.com:22/owner/repo.git)
+mf_ssh_root=$(make_bare_worktree_fixture ssh://git@github.com:22/owner/repo.git)
 if err=$( cd "$mf_ssh_root/worktrees/42-foo" && env -u GH_REPO "$WP_READ" 42 2>&1 1>/dev/null ); then rc=0; else rc=$?; fi
 assert_eq "read-plan: SSH-with-port malformed URL exits 1" "1" "$rc"
 TOTAL=$((TOTAL + 1))
@@ -29192,7 +29179,7 @@ rm -rf "$mf_ssh_root"
 # 5c. malformed-URL format guard: non-GitHub remote → write-plan rejects it.
 # https://gitlab.com/owner/repo.git has no "github.com" to strip, so repo stays the
 # full URL (contains ":") — has slashes, would pass the old */* check but fails the regex.
-mf_gl_root=$(make_malformed_remote_fixture https://gitlab.com/owner/repo.git)
+mf_gl_root=$(make_bare_worktree_fixture https://gitlab.com/owner/repo.git)
 if err=$( cd "$mf_gl_root/worktrees/42-foo" && env -u GH_REPO "$WP_WRITE" 42 <<<"PLAN" 2>&1 1>/dev/null ); then rc=0; else rc=$?; fi
 assert_eq "write-plan: non-GitHub remote malformed URL exits 1" "1" "$rc"
 TOTAL=$((TOTAL + 1))
@@ -29208,7 +29195,7 @@ rm -rf "$mf_gl_root"
 # 5d. malformed-URL format guard: SSH-with-port → write-plan rejects it.
 # Symmetric counterpart to 5b: same ssh://git@github.com:22/owner/repo.git fixture,
 # exercised against dispatch-write-plan instead of dispatch-read-plan.
-mf_ssh_w_root=$(make_malformed_remote_fixture ssh://git@github.com:22/owner/repo.git)
+mf_ssh_w_root=$(make_bare_worktree_fixture ssh://git@github.com:22/owner/repo.git)
 if err=$( cd "$mf_ssh_w_root/worktrees/42-foo" && env -u GH_REPO "$WP_WRITE" 42 <<<"PLAN" 2>&1 1>/dev/null ); then rc=0; else rc=$?; fi
 assert_eq "write-plan: SSH-with-port malformed URL exits 1" "1" "$rc"
 TOTAL=$((TOTAL + 1))
@@ -29224,7 +29211,7 @@ rm -rf "$mf_ssh_w_root"
 # 5e. malformed-URL format guard: non-GitHub remote → read-plan rejects it.
 # Symmetric counterpart to 5c: same https://gitlab.com/owner/repo.git fixture,
 # exercised against dispatch-read-plan instead of dispatch-write-plan.
-mf_gl_r_root=$(make_malformed_remote_fixture https://gitlab.com/owner/repo.git)
+mf_gl_r_root=$(make_bare_worktree_fixture https://gitlab.com/owner/repo.git)
 if err=$( cd "$mf_gl_r_root/worktrees/42-foo" && env -u GH_REPO "$WP_READ" 42 2>&1 1>/dev/null ); then rc=0; else rc=$?; fi
 assert_eq "read-plan: non-GitHub remote malformed URL exits 1" "1" "$rc"
 TOTAL=$((TOTAL + 1))
