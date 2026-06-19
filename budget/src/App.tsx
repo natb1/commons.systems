@@ -1,9 +1,9 @@
 // The React shell. Composes the ds Nav (with AuthControls in its `end` slot),
 // the hero island, the per-route body, and the footer. The client router lives
 // in use-router.ts; the data/crypto/file-sync orchestration lives in
-// use-app-state.ts. /transactions, /accounts, and /accounts/reconcile are real
-// React pages; the remaining routes (/, /rules) are still legacy string-rendered
-// bodies wrapped in <LegacyRoute>.
+// use-app-state.ts. /transactions, /accounts, /accounts/reconcile, and /rules
+// are real React pages; only / (budgets) remains a legacy string-rendered body
+// wrapped in <LegacyRoute>.
 import { AppShell } from "./AppShell.js";
 import { AuthControls } from "./AuthControls.js";
 import { Hero } from "./Hero.js";
@@ -15,10 +15,9 @@ import type { RenderPageOptions } from "./pages/render-options.js";
 import { Transactions } from "./pages/Transactions.js";
 import { Accounts } from "./pages/Accounts.js";
 import { AccountsReconcile } from "./pages/AccountsReconcile.js";
+import { Rules } from "./pages/Rules.js";
 import { renderBudgets } from "./pages/budgets.js";
-import { renderRules } from "./pages/rules.js";
 import { hydrateBudgetTable, hydrateBudgetChart, hydrateOverridesTable } from "./pages/budgets-hydrate.js";
-import { hydrateRulesTable } from "./pages/rules-hydrate.js";
 
 interface RouteDef {
   path: string;
@@ -26,17 +25,16 @@ interface RouteDef {
   specs: HydrationSpec[];
 }
 
-// /transactions is a real React page (Unit 3), not a <LegacyRoute>; it lives
-// outside ROUTES but is still a known path for routing + Nav `current`.
-// /accounts and /accounts/reconcile are real React pages too (Unit 4), so they
-// also live outside ROUTES and are matched by exact-equality isX selection.
+// /transactions, /accounts, /accounts/reconcile, and /rules are real React
+// pages, not <LegacyRoute>s; they live outside ROUTES but are still known paths
+// for routing + Nav `current`, matched by exact-equality isX selection.
 const TRANSACTIONS_PATH = "/transactions";
 const ACCOUNTS_PATH = "/accounts";
 const ACCOUNTS_RECONCILE_PATH = "/accounts/reconcile";
+const RULES_PATH = "/rules";
 
-// LegacyRoute-backed routes mirror main.ts:132-136 (minus /transactions), with
-// per-route hydration specs from main.ts:182-191. The first route is the
-// fallback for an unknown path.
+// The only LegacyRoute-backed route is / (budgets), with per-route hydration
+// specs from main.ts:182-191. It is also the fallback for an unknown path.
 const ROUTES: RouteDef[] = [
   {
     path: "/",
@@ -47,26 +45,13 @@ const ROUTES: RouteDef[] = [
       { selector: "#overrides-table", hydrate: hydrateOverridesTable },
     ],
   },
-  {
-    path: "/rules",
-    render: renderRules,
-    specs: [
-      { selector: "#rules-table", hydrate: hydrateRulesTable },
-    ],
-  },
 ];
 
-// Known paths preserve the legacy ordering for nav: "/", then the React pages
-// /transactions, /accounts, /accounts/reconcile (their original slots in
-// main.ts:132-136), then the remaining LegacyRoute paths (/rules). ROUTES now
-// holds only "/" and the LegacyRoute paths.
-const KNOWN_PATHS = [
-  ROUTES[0].path,
-  TRANSACTIONS_PATH,
-  ACCOUNTS_PATH,
-  ACCOUNTS_RECONCILE_PATH,
-  ...ROUTES.slice(1).map((r) => r.path),
-];
+// Known paths preserve the legacy ordering for nav (main.ts:132-136): "/" first,
+// then the React pages /transactions, /accounts, /accounts/reconcile in their
+// original slots, and /rules appended last. ROUTES now holds only "/", so the
+// React-page paths are listed explicitly.
+const KNOWN_PATHS = [ROUTES[0].path, TRANSACTIONS_PATH, ACCOUNTS_PATH, ACCOUNTS_RECONCILE_PATH, RULES_PATH];
 
 export function App() {
   const app = useAppState();
@@ -79,10 +64,11 @@ export function App() {
   const isAccountsReconcile = path === ACCOUNTS_RECONCILE_PATH;
   const isAccounts = path === ACCOUNTS_PATH;
   const isTransactions = path === TRANSACTIONS_PATH;
+  const isRules = path === RULES_PATH;
   // matchRoute … ?? routes[0] (the legacy router fell back to the first route).
-  // For the React pages (/transactions, /accounts, /accounts/reconcile) there is
-  // no LegacyRoute entry; `route` is only used for the LegacyRoute branch and the
-  // Nav `current` (overridden below for the React-page paths).
+  // For the React pages (/transactions, /accounts, /accounts/reconcile, /rules)
+  // there is no LegacyRoute entry; `route` is only used for the LegacyRoute branch
+  // and the Nav `current` (overridden below for the React-page paths).
   const route = ROUTES.find((r) => r.path === path) ?? ROUTES[0];
   const currentPath = isTransactions
     ? TRANSACTIONS_PATH
@@ -90,7 +76,9 @@ export function App() {
       ? ACCOUNTS_RECONCILE_PATH
       : isAccounts
         ? ACCOUNTS_PATH
-        : route.path;
+        : isRules
+          ? RULES_PATH
+          : route.path;
 
   return (
     <AppShell
@@ -104,11 +92,11 @@ export function App() {
           trailing router.navigate() did. Each instance still renders once, so
           the render-once invariant holds.
 
-          /transactions, /accounts, and /accounts/reconcile are real React pages
-          — same keying so a same-path data transition re-mounts them and
-          re-resolves; renderOptions() is read at mount and also calls
-          setActiveDataSource for the route, matching how LegacyRoute is fed. The
-          remaining routes (/, /rules) stay legacy.
+          /transactions, /accounts, /accounts/reconcile, and /rules are real
+          React pages — same keying so a same-path data transition re-mounts them
+          and re-resolves; renderOptions() is read at mount and also calls
+          setActiveDataSource for the route, matching how LegacyRoute is fed. Only
+          / (budgets) stays legacy.
 
           Gated on app.initialized: initialize() always ends with a transition()
           that bumps navEpoch 0→1, which would unmount-then-remount a body
@@ -129,6 +117,11 @@ export function App() {
       ) : isAccounts ? (
         <Accounts
           key={`${ACCOUNTS_PATH}:${app.navEpoch}`}
+          options={app.renderOptions()}
+        />
+      ) : isRules ? (
+        <Rules
+          key={`${RULES_PATH}:${app.navEpoch}`}
           options={app.renderOptions()}
         />
       ) : (
