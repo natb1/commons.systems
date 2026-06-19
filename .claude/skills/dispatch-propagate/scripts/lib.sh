@@ -516,8 +516,10 @@ playwright_install_with_deps() {
       return 0
     fi
     echo "playwright_install_with_deps: attempt $attempt/$attempts failed or timed out after ${timeout_s}s" >&2
-    sleep 5
     attempt=$((attempt + 1))
+    if [ "$attempt" -le "$attempts" ]; then
+      sleep 5
+    fi
   done
   echo "playwright_install_with_deps: failed after $attempts attempts" >&2
   return 1
