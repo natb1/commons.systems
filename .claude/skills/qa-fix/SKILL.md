@@ -736,7 +736,38 @@ Otherwise run all steps in order.
       .claude/skills/dispatch-propagate/scripts/dispatch-mark-complete \
         --phase qa --pr "$PR_NUM"
       ```
-   5. **STOP.**
+   5. **Emit the outcome envelope** (contract: `.claude/docs/outcome-envelope.md`).
+      This call runs **sandboxed** — `dispatch-emit-outcome` is pure (no
+      gh/git/network), so do **not** pass `dangerouslyDisableSandbox`. The fix
+      finalize path always runs after Step 3.5, so `result` is in scope. **Override**
+      `--disposition` to `completed_with_fixes` and **recompute** the counts the
+      Workflow could not — do **NOT** forward `result.fixes_applied` /
+      `result.followups_filed` (both literal `0` from the Workflow):
+      - `--fixes-applied` = `result.fix_plan.units.length` — the units the
+        `/implement-unit` loop actually ran this pass (the Workflow plans but never
+        executes; see its header).
+      - `--followups-filed` = the count of `needs-main` follow-ups Step 3.6 actually
+        filed this pass (newly-filed only, not already-tracked); `0` if Step 3.6 did
+        not run.
+      - `--subagents-launched` = `result.subagents_launched` (Workflow fan-out)
+        **plus** the Step-2b Opus triage subagent (always +1) **plus** the Step-3.6
+        filing subagents spawned **plus** the Step-3.7 `/implement-unit` invocations.
+
+      qa-fix keeps **no** merge base (Step 1 runs only a name-only
+      `git diff origin/main...HEAD`), so **omit** `--base-sha` (it serializes as
+      null). Derive `repo` from the local remote (read-only git, sandbox-safe):
+      ```bash
+      REPO=$(git remote get-url origin | sed -E 's#.*github.com[:/]##; s#\.git$##')
+      .claude/skills/dispatch-propagate/scripts/dispatch-emit-outcome \
+        --phase qa --repo "$REPO" --issue "$N" --pr "$PR_NUM" \
+        --findings-surfaced <result.findings_surfaced> \
+        --findings-actionable <result.findings_actionable> \
+        --fixes-applied <result.fix_plan.units.length> \
+        --followups-filed <count of needs-main follow-ups Step 3.6 newly filed> \
+        --subagents-launched <result.subagents_launched + 1 (Step-2b triage) + Step-3.6 filing subagents + Step-3.7 /implement-unit invocations> \
+        --disposition completed_with_fixes
+      ```
+   6. **STOP.**
 
    **Escalate finalize path** (cap reached, scope-deviation, planning-failed, or
    the gate printed `escalate`):
@@ -958,6 +989,38 @@ Otherwise run all steps in order.
      --phase qa --pr "$PR_NUM"
    ```
 
+   **Then emit the outcome envelope** (contract:
+   `.claude/docs/outcome-envelope.md`). This call runs **sandboxed** —
+   `dispatch-emit-outcome` is pure, so do **not** pass
+   `dangerouslyDisableSandbox`. Pass `--disposition completed`, `--fixes-applied 0`,
+   and **omit** `--terminated-reason` (forbidden on a non-escalated disposition).
+   Source the counts by whether Step 3.5 ran this pass:
+
+   - **Step 3.5 ran** (clean pass via only-`needs-main` or only-`already-satisfied`
+     residue): use `result.findings_surfaced` / `result.findings_actionable`;
+     `--followups-filed` = the Step-3.6 newly-filed count (`0` if Step 3.6 did not
+     run); `--subagents-launched` = `result.subagents_launched` + 1 (Step-2b triage)
+     + any Step-3.6 filing subagents.
+   - **Step 3.5 was skipped** (the common clean pass — residue list was empty, so
+     `result` is absent): pass `--findings-surfaced 0 --findings-actionable 0
+     --followups-filed 0` and `--subagents-launched 1` (only the Step-2b Opus triage
+     subagent ran).
+
+   qa-fix keeps **no** merge base, so **omit** `--base-sha`. Derive `repo` from the
+   local remote (read-only git, sandbox-safe):
+
+   ```bash
+   REPO=$(git remote get-url origin | sed -E 's#.*github.com[:/]##; s#\.git$##')
+   .claude/skills/dispatch-propagate/scripts/dispatch-emit-outcome \
+     --phase qa --repo "$REPO" --issue "$N" --pr "$PR_NUM" \
+     --findings-surfaced <result.findings_surfaced, or 0 if Step 3.5 was skipped> \
+     --findings-actionable <result.findings_actionable, or 0 if Step 3.5 was skipped> \
+     --fixes-applied 0 \
+     --followups-filed <Step-3.6 newly-filed count, or 0> \
+     --subagents-launched <result.subagents_launched + 1 + Step-3.6 subagents when Step 3.5 ran; else 1> \
+     --disposition completed
+   ```
+
    Then **stop**. The Stop hook reads the marker and advances the chain.
 
    **User-input blocker** — the escalation set (defined above) is **non-empty**.
@@ -1002,7 +1065,50 @@ plan, `needs-human-judgment` item, `script-verifiable`/`needs-browser` FAIL, fai
 pre-QA check, Chrome extension unavailable, multi-app choice, merge conflict, **the
 qa-fix attempt cap reached on opus-fixable residue**, or **a planner scope-deviation
 on the opus-fixable residue** — pass `result.fix_plan.deviation_reason` for the
-latter). Then **stop**.
+latter).
+
+**Then emit the outcome envelope** (contract:
+`.claude/docs/outcome-envelope.md`). This call runs **sandboxed** —
+`dispatch-emit-outcome` is pure, so do **not** pass `dangerouslyDisableSandbox`.
+It must fire **before** the session stops; order relative to
+`dispatch-mark-deviation` does not matter. Pass `--disposition escalated` and
+`--terminated-reason` set to the **same tailored reason string** passed to
+`dispatch-mark-deviation` above.
+
+This Escalation section is the funnel for **two kinds** of escalate route, which
+differ in whether the Step-3.5 Workflow ran — source the counts accordingly:
+
+- **Step-3.5 ran** (the Step-3.7 escalate-finalize path: cap reached,
+  scope-deviation, or planning-failed) — `result` is in scope. Use
+  `result.findings_surfaced` / `result.findings_actionable`; `fixes-applied 0` and
+  `followups-filed` = the Step-3.6 newly-filed count (the escalate path applied no
+  fixes); `subagents-launched` = `result.subagents_launched` + 1 (Step-2b triage)
+  + any Step-3.6 filing subagents.
+- **An early blocker before Step 3.5** (Step 0.5 merge conflict, Step 1 multi-app,
+  Step 3 malformed/empty plan, Step 3b acceptance fail, Step 3c Chrome
+  unavailable) — `result` is **absent**. Pass `--findings-surfaced 0
+  --findings-actionable 0 --fixes-applied 0 --followups-filed 0` and
+  `--subagents-launched <1 if the Step-2b triage subagent had already been spawned
+  before the blocker fired, else 0>` (Step 0.5 / Step 1 blockers fire before Step
+  2, so 0; a Step 3/3b/3c blocker fires after, so 1).
+
+qa-fix keeps **no** merge base, so **omit** `--base-sha`. Derive `repo` from the
+local remote (read-only git, sandbox-safe):
+
+```bash
+REPO=$(git remote get-url origin | sed -E 's#.*github.com[:/]##; s#\.git$##')
+.claude/skills/dispatch-propagate/scripts/dispatch-emit-outcome \
+  --phase qa --repo "$REPO" --issue "$N" --pr "$PR_NUM" \
+  --findings-surfaced <result.findings_surfaced, or 0 if Step 3.5 did not run> \
+  --findings-actionable <result.findings_actionable, or 0 if Step 3.5 did not run> \
+  --fixes-applied 0 \
+  --followups-filed <Step-3.6 newly-filed count, or 0> \
+  --subagents-launched <result.subagents_launched + 1 + Step-3.6 filing subagents when Step 3.5 ran; else 0 or 1 per the early-blocker rule above> \
+  --disposition escalated \
+  --terminated-reason "<the same tailored reason string passed to dispatch-mark-deviation>"
+```
+
+Then **stop**.
 Marking a deviation is **terminal** for the walkthrough — do not restart the QA
 server or re-run the walkthrough after escalating.
 

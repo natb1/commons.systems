@@ -44,6 +44,17 @@
 #     defensive fallbacks).
 #   - Output schema is a documented contract later units depend on; keys are
 #     stable. See the stage-2 jq program below for the full shape.
+#   - Outcome envelope (#1860): each session's last `<!-- dispatch:outcome:v1 -->`
+#     envelope (last-wins; malformed -> null, never aborts the file) is surfaced
+#     on the per-session summary as `outcome` (the parsed object or null) plus
+#     `outcome_rates` ({hit_rate, actionability, fix_rate}, each null when its
+#     denominator is 0). The pooled `by_phase_outcome` aggregate is keyed by the
+#     envelope's `phase` enum (e.g. "review", "qa"), folds only non-subagent rows
+#     that carry an envelope (subagent emitters are excluded), and per phase sums
+#     the counts (findings_surfaced, findings_actionable, fixes_applied,
+#     followups_filed, subagents_launched, sessions), reports a
+#     disposition_distribution map, and the three pooled rates on the summed
+#     counts. See .claude/docs/outcome-envelope.md for field/enum/formula truth.
 #   - Prices are an Opus list-price-equivalent USD PROXY applied to every session
 #     regardless of its actual model — a relative-magnitude figure for ranking,
 #     NOT the actual bill.
@@ -240,6 +251,34 @@ def cmd_prefix(c):
       | err_signature(.content)
     ] ) as $errors
 
+# Outcome envelope (#1860). The phase emits a `<!-- dispatch:outcome:v1 -->`
+# marker followed by a fenced ```json block as a Bash tool_result. Scan every
+# user tool_result (NOT just is_error ones — envelopes are not errors), coerce
+# .content to a string, and capture the JSON between the json-fence and its
+# closing fence.
+#
+# The capture anchors on the full literal marker `<!-- dispatch:outcome:v1 -->`
+# per the reader contract in .claude/docs/outcome-envelope.md. The body is
+# non-greedy (`.*?`) so it stops at the FIRST closing fence — robust to `}`/`{`
+# inside string values and to multiple envelopes in one result. The "m" flag
+# makes "." cross newlines so a pretty-printed multi-line JSON object is
+# captured whole.
+#
+# LAST-WINS (reader contract): collect every envelope match across all
+# tool_results in document order and take the last. fromjson is wrapped in
+# try/catch so a malformed envelope binds null and NEVER aborts the file —
+# mirroring the clear-error/files_failed philosophy.
+| ( [ $msgs[]
+      | select(.type=="user")
+      | .message.content
+      | if type=="array" then .[]? else empty end
+      | select(type=="object" and .type=="tool_result")
+      | content_to_string(.content)
+      | match("<!-- dispatch:outcome:v1 -->\\s*```json\\s*(?<j>.*?)\\s*```"; "gm")
+      | .captures[0].string
+    ] | last // null ) as $outcome_raw
+| ( ($outcome_raw // "") | try fromjson catch null ) as $outcome
+
 # Ordered per-session token list of tool calls, in document order. Bash calls
 # become "Bash:<cmd_prefix>"; other tools become their name.
 | ( [ $msgs[] | select(.type=="assistant")
@@ -285,7 +324,8 @@ def cmd_prefix(c):
     by_skill_model: $by_skill_model,
     errors: $errors,
     tool_calls: $tool_calls,
-    payload: $payload
+    payload: $payload,
+    outcome: $outcome
   }
 STAGE1
 
@@ -329,6 +369,19 @@ def add_to_bucket(bucket; u; turns):
 # for lists shorter than n, yielding nothing — no explicit length guard needed.
 def ngrams($L; $n):
   [ range(0; ($L | length) - $n + 1) as $i | $L[$i:$i+$n] ];
+
+# Outcome-envelope rates (#1860). Each is null when its denominator is 0 — never
+# a divide-by-zero or a fabricated 0. Definitions are the single source of truth
+# in .claude/docs/outcome-envelope.md. The `num`/`den` are the already-summed
+# counts (per-run: one envelope's counts; pooled: sums across a phase's rows).
+def rate($num; $den): if ($den // 0) == 0 then null else ($num // 0) / $den end;
+# Build the three rates {hit_rate, actionability, fix_rate} from a counts object.
+def outcome_rates($o):
+  {
+    hit_rate:      rate($o.fixes_applied;       $o.findings_surfaced),
+    actionability: rate($o.findings_actionable; $o.findings_surfaced),
+    fix_rate:      rate($o.fixes_applied;       $o.findings_actionable)
+  };
 
 . as $rows
 
@@ -445,7 +498,42 @@ def ngrams($L; $n):
           | sort_by(-.bytes) | .[0:10] )
     } ) as $payload_bytes
 
+# ---- by_phase_outcome (pooled hit-rate per envelope phase, #1860) ----
+# Keyed by the envelope's own `.phase` enum value (e.g. "review", "qa") — NOT by
+# skill name like $by_phase. DOUBLE-COUNT GUARD: fold ONLY non-subagent rows that
+# carry an envelope. Per the doc, only top-level worker sessions emit; a subagent
+# transcript that happens to print the marker is excluded so it cannot inflate
+# the pool. Counts are SUMMED across a phase's rows, then the same null-guarded
+# formulas are applied to the pooled sums (pooled rate, not a mean of per-run
+# rates). disposition_distribution counts rows per disposition enum value.
+| ( reduce ( $rows[]
+             | select(.type != "subagent" and .outcome != null) ) as $r ({};
+      ($r.outcome.phase // "<unknown>") as $ph
+      | ($r.outcome) as $o
+      | .[$ph] as $cur
+      | .[$ph] = {
+          sessions:            ((($cur.sessions // 0)) + 1),
+          findings_surfaced:   (($cur.findings_surfaced   // 0) + ($o.findings_surfaced   // 0)),
+          findings_actionable: (($cur.findings_actionable // 0) + ($o.findings_actionable // 0)),
+          fixes_applied:       (($cur.fixes_applied       // 0) + ($o.fixes_applied       // 0)),
+          followups_filed:     (($cur.followups_filed     // 0) + ($o.followups_filed     // 0)),
+          subagents_launched:  (($cur.subagents_launched  // 0) + ($o.subagents_launched  // 0)),
+          disposition_distribution:
+            ( ($cur.disposition_distribution // {}) as $dd
+              | ($o.disposition // "<unknown>") as $d
+              | $dd | .[$d] = ((.[$d] // 0) + 1) )
+        }
+    )
+    # Attach the pooled null-guarded rates computed from the summed counts.
+    | reduce (to_entries[]) as $e (.;
+        .[$e.key] = ($e.value + outcome_rates($e.value))
+      )
+  ) as $by_phase_outcome
+
 # ---- per-session summaries ----
+# Per-run outcome (#1860): surface the parsed envelope and its three null-guarded
+# rates on each session. Sessions with no envelope carry outcome:null and null
+# rates — they never crash the formula (rate() guards a null/zero denominator).
 | ( [ $rows[] | {
         id: .id, file: .file, type: .type,
         model: .primary_model, models: .models,
@@ -453,7 +541,9 @@ def ngrams($L; $n):
         input: .usage.input, cache_creation: .usage.cache_creation,
         cache_read: .usage.cache_read, output: .usage.output,
         price_proxy_usd: price(.usage),
-        phases: ( reduce (.by_skill | to_entries[]) as $e ({}; .[$e.key] = price($e.value.usage)) )
+        phases: ( reduce (.by_skill | to_entries[]) as $e ({}; .[$e.key] = price($e.value.usage)) ),
+        outcome: .outcome,
+        outcome_rates: ( if .outcome == null then null else outcome_rates(.outcome) end )
       } ] ) as $sessions
 
 # ---- lenses ----
@@ -510,6 +600,7 @@ def ngrams($L; $n):
     totals: $totals,
     by_session_type: $by_session_type,
     by_phase: $by_phase,
+    by_phase_outcome: $by_phase_outcome,
     by_model: $by_model,
     by_phase_model: $by_phase_model,
     tool_errors: $tool_errors,
