@@ -1,5 +1,6 @@
 import { Button, Input } from "@commons-systems/ds";
 import type { UseViewerControllerResult } from "./useViewerController.js";
+import type { UseBookmarksResult } from "./useBookmarks.js";
 
 /**
  * The `.viewer-nav` row: presentational chrome wired to the controller hook.
@@ -10,7 +11,13 @@ import type { UseViewerControllerResult } from "./useViewerController.js";
  * checks `.closest(".viewer-goto-input")`) and the Unit-7 e2e selectors depend
  * on them.
  */
-export function ViewerToolbar({ controller }: { controller: UseViewerControllerResult }) {
+export function ViewerToolbar({
+  controller,
+  bookmarks,
+}: {
+  controller: UseViewerControllerResult;
+  bookmarks: UseBookmarksResult;
+}) {
   const {
     gotoInputRef,
     spreadToggleRef,
@@ -100,7 +107,15 @@ export function ViewerToolbar({ controller }: { controller: UseViewerControllerR
       >
         &#9783;
       </Button>
-      {/* Bookmark toggle lives here (Unit 5). */}
+      <Button
+        className="viewer-bookmark-toggle"
+        aria-label="Bookmark this page"
+        aria-pressed={bookmarks.currentBookmarked}
+        disabled={bookmarks.toggleDisabled}
+        onClick={bookmarks.toggleBookmark}
+      >
+        {"\u{1F516}"}
+      </Button>
     </div>
   );
 }
