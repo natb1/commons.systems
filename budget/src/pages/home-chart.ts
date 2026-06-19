@@ -10,12 +10,13 @@ export type ChartMode = "spending" | "credits";
 /** Custom event name dispatched by home-hydrate.ts after scroll-loading older transactions. The chart listens for this to incorporate the new data and re-apply filters. */
 export const TRANSACTIONS_APPENDED_EVENT = "transactions-appended";
 
-/** The currently-registered TRANSACTIONS_APPENDED_EVENT handler.
+/** Teardown for the legacy DOM-blob hydration path's current run.
  * hydrateCategorySankey re-runs on every navigation back to /transactions
- * (MutationObserver re-hydrate), so each run removes the prior run's handler
- * before registering its own — otherwise listeners accumulate, keep dead
- * containers alive, and re-run filterTable with stale closure state (#1267). */
-let appendedListener: EventListener | null = null;
+ * (MutationObserver re-hydrate), so each run tears down the prior run before
+ * registering its own — otherwise listeners accumulate, keep dead containers
+ * alive, and re-run filterTable with stale closure state (#1267). The React
+ * island uses the effect-returned teardown instead of this module-level handle. */
+let hydrateTeardown: ChartTeardown | null = null;
 
 export interface SerializedChartTransaction {
   category: string;
@@ -209,32 +210,47 @@ function assertChartTransactions(data: unknown): asserts data is SerializedChart
   }
 }
 
-export function hydrateCategorySankey(container: HTMLElement): void {
-  const scriptEl = container.querySelector('script[type="application/json"]');
-  if (!scriptEl?.textContent) {
-    throw new Error("category-sankey container is missing transaction data");
-  }
-  const parsed: unknown = JSON.parse(scriptEl.textContent);
-  assertChartTransactions(parsed);
+/**
+ * Tear down the listeners and observers a single chart-core run registered.
+ * The arg-based React island returns this from its effect (React runs it before
+ * the effect re-runs / on unmount), which is the #1267 stale-listener fix without
+ * the module-level `appendedListener` bookkeeping. `hydrateCategorySankey` stores
+ * its run's teardown in a module-level `let` and calls it before re-running.
+ */
+export type ChartTeardown = () => void;
 
-  // Remove any prior run's document listener before this run can early-return,
-  // so an empty-data re-hydration cannot leave a stale listener firing with the
-  // previous run's closed-over state (#1267).
-  if (appendedListener) {
-    document.removeEventListener(TRANSACTIONS_APPENDED_EVENT, appendedListener);
-    appendedListener = null;
-  }
+const NOOP_TEARDOWN: ChartTeardown = () => {};
 
-  const allTxns = parsed;
+/**
+ * Build the category Sankey chart imperatively into `container` from chart data
+ * passed in as an argument (NOT read from a DOM JSON blob). Wires the
+ * #sankey-controls inputs (rendered as siblings of the container), the
+ * TRANSACTIONS_APPENDED_EVENT scroll-append listener, and a ResizeObserver.
+ * Returns a teardown that removes the document listener and disconnects the
+ * observer; callers MUST invoke it before re-running against the same document
+ * (or on unmount) to avoid stale listeners firing with prior closure state (#1267).
+ *
+ * `categoryOptions`/`budgetOptions` arrive as args (previously read from
+ * `#sankey-controls` data attributes).
+ */
+export function buildCategorySankey(
+  container: HTMLElement,
+  chartData: SerializedChartTransaction[],
+  categoryOptions: string[],
+  budgetOptions: string[],
+): ChartTeardown {
+  assertChartTransactions(chartData);
+
+  const allTxns = chartData;
   if (allTxns.length === 0) {
     container.textContent = "No transaction data to chart.";
-    return;
+    return NOOP_TEARDOWN;
   }
 
   let weeks = distinctWeeks(allTxns);
   if (weeks.length === 0) {
     container.textContent = "No dated transactions to chart.";
-    return;
+    return NOOP_TEARDOWN;
   }
 
   const collapsedPaths = new Set<string>();
@@ -263,8 +279,6 @@ export function hydrateCategorySankey(container: HTMLElement): void {
   }
   const categoryFilterInput = categoryFilterInputEl;
   const budgetFilterInput = budgetFilterInputEl;
-  const categoryOptions = parseJsonArray(controlsDiv.dataset.categoryOptions);
-  const budgetOptions = parseJsonArray(controlsDiv.dataset.budgetOptions);
 
   endSlider.min = "0";
   endSlider.max = String(weeks.length - 1);
@@ -342,9 +356,9 @@ export function hydrateCategorySankey(container: HTMLElement): void {
   // serialization or render must not skip the table re-filter, which is the only
   // thing that re-applies the active filter to scroll-loaded rows (#578).
   //
-  // The prior run's listener was already removed near the top of this function
-  // (before the early-return checks); this run just registers its own (#1267).
-  appendedListener = ((e: CustomEvent<SerializedChartTransaction[]>) => {
+  // This run registers its own listener and hands ownership to the returned
+  // teardown; the caller removes it before re-running (#1267).
+  const localAppendedListener = ((e: CustomEvent<SerializedChartTransaction[]>) => {
     const newTxns = e.detail;
 
     // Chart-update block — skipped when the container is gone. Calls render()
@@ -374,7 +388,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
       setTimeout(() => { throw error; }, 0);
     }
   }) as EventListener;
-  document.addEventListener(TRANSACTIONS_APPENDED_EVENT, appendedListener);
+  document.addEventListener(TRANSACTIONS_APPENDED_EVENT, localAppendedListener);
 
   const debounced = makeDebounced();
 
@@ -445,4 +459,42 @@ export function hydrateCategorySankey(container: HTMLElement): void {
     resizeTimer = setTimeout(update, 150);
   });
   observer.observe(container);
+
+  return () => {
+    document.removeEventListener(TRANSACTIONS_APPENDED_EVENT, localAppendedListener);
+    observer.disconnect();
+    clearTimeout(resizeTimer);
+  };
+}
+
+/**
+ * DOM-blob entry point preserved for the legacy hydration path and existing
+ * tests. Reads the serialized chart data from the `<script type="application/json">`
+ * blob and the option lists from `#sankey-controls` data attributes, then
+ * delegates to `buildCategorySankey`. Stores the prior run's teardown in a
+ * module-level `let` and invokes it before re-running so listeners do not
+ * accumulate across re-hydrations (#1267).
+ */
+export function hydrateCategorySankey(container: HTMLElement): void {
+  const scriptEl = container.querySelector('script[type="application/json"]');
+  if (!scriptEl?.textContent) {
+    throw new Error("category-sankey container is missing transaction data");
+  }
+  const parsed: unknown = JSON.parse(scriptEl.textContent);
+  assertChartTransactions(parsed);
+
+  // Tear down the prior run before this run can early-return, so an empty-data
+  // re-hydration cannot leave a stale listener firing with the previous run's
+  // closed-over state (#1267).
+  if (hydrateTeardown) {
+    hydrateTeardown();
+    hydrateTeardown = null;
+  }
+
+  const controlsDiv = document.getElementById("sankey-controls");
+  if (!controlsDiv) throw new Error("sankey-controls element not found");
+  const categoryOptions = parseJsonArray(controlsDiv.dataset.categoryOptions);
+  const budgetOptions = parseJsonArray(controlsDiv.dataset.budgetOptions);
+
+  hydrateTeardown = buildCategorySankey(container, parsed, categoryOptions, budgetOptions);
 }

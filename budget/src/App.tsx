@@ -13,13 +13,11 @@ import { useAppState } from "./use-app-state.js";
 import { useRouter } from "./use-router.js";
 import type { HydrationSpec } from "./legacy-hydrate.js";
 import type { RenderPageOptions } from "./pages/render-options.js";
-import { renderHome } from "./pages/home.js";
+import { Transactions } from "./pages/Transactions.js";
 import { renderBudgets } from "./pages/budgets.js";
 import { renderAccounts } from "./pages/accounts.js";
 import { renderAccountsReconcile } from "./pages/accounts-reconcile.js";
 import { renderRules } from "./pages/rules.js";
-import { hydrateTransactionTable } from "./pages/home-hydrate.js";
-import { hydrateCategorySankey } from "./pages/home-chart.js";
 import { hydrateBudgetTable, hydrateBudgetChart, hydrateOverridesTable } from "./pages/budgets-hydrate.js";
 import { hydrateRulesTable } from "./pages/rules-hydrate.js";
 import { hydrateAccountsCharts } from "./pages/accounts-hydrate.js";
@@ -31,8 +29,13 @@ interface RouteDef {
   specs: HydrationSpec[];
 }
 
-// Routes mirror main.ts:132-136, with per-route hydration specs from
-// main.ts:182-191. The first route is the fallback for an unknown path.
+// /transactions is a real React page (Unit 3), not a <LegacyRoute>; it lives
+// outside ROUTES but is still a known path for routing + Nav `current`.
+const TRANSACTIONS_PATH = "/transactions";
+
+// LegacyRoute-backed routes mirror main.ts:132-136 (minus /transactions), with
+// per-route hydration specs from main.ts:182-191. The first route is the
+// fallback for an unknown path.
 const ROUTES: RouteDef[] = [
   {
     path: "/",
@@ -41,14 +44,6 @@ const ROUTES: RouteDef[] = [
       { selector: "#budgets-chart", hydrate: hydrateBudgetChart },
       { selector: "#budgets-table", hydrate: hydrateBudgetTable },
       { selector: "#overrides-table", hydrate: hydrateOverridesTable },
-    ],
-  },
-  {
-    path: "/transactions",
-    render: renderHome,
-    specs: [
-      { selector: "#category-sankey", hydrate: hydrateCategorySankey, errorLabel: "Chart rendering" },
-      { selector: "#transactions-table", hydrate: hydrateTransactionTable },
     ],
   },
   {
@@ -74,14 +69,20 @@ const ROUTES: RouteDef[] = [
   },
 ];
 
-const KNOWN_PATHS = ROUTES.map((r) => r.path);
+// Known paths preserve the legacy ordering for nav, with /transactions inserted
+// after "/" (its original slot in main.ts:132-136).
+const KNOWN_PATHS = [ROUTES[0].path, TRANSACTIONS_PATH, ...ROUTES.slice(1).map((r) => r.path)];
 
 export function App() {
   const app = useAppState();
   const path = useRouter(KNOWN_PATHS);
 
+  const isTransactions = path === TRANSACTIONS_PATH;
   // matchRoute … ?? routes[0] (the legacy router fell back to the first route).
+  // For /transactions there is no LegacyRoute entry; `route` is only used for the
+  // LegacyRoute branch and the Nav `current` (overridden below for /transactions).
   const route = ROUTES.find((r) => r.path === path) ?? ROUTES[0];
+  const currentPath = isTransactions ? TRANSACTIONS_PATH : route.path;
 
   return (
     <div className="page">
@@ -91,7 +92,7 @@ export function App() {
             rather than nested in another <nav> (which would double-nest). */}
         <Nav
           links={[...NAV_LINKS]}
-          current={route.path}
+          current={currentPath}
           end={<AuthControls {...app} />}
         />
       </header>
@@ -101,12 +102,24 @@ export function App() {
             (path change) AND per data transition (navEpoch bump), so the body
             re-resolves against the current data source — exactly what legacy's
             trailing router.navigate() did. Each instance still renders once, so
-            the render-once invariant holds. */}
-        <LegacyRoute
-          key={`${route.path}:${app.navEpoch}`}
-          render={() => route.render(app.renderOptions())}
-          specs={route.specs}
-        />
+            the render-once invariant holds.
+
+            /transactions is a real React page (Unit 3) — same keying so a
+            same-path data transition re-mounts it and re-resolves; renderOptions()
+            is read at mount and also calls setActiveDataSource for the route,
+            matching how LegacyRoute is fed. The other four routes stay legacy. */}
+        {isTransactions ? (
+          <Transactions
+            key={`${TRANSACTIONS_PATH}:${app.navEpoch}`}
+            options={app.renderOptions()}
+          />
+        ) : (
+          <LegacyRoute
+            key={`${route.path}:${app.navEpoch}`}
+            render={() => route.render(app.renderOptions())}
+            specs={route.specs}
+          />
+        )}
       </div>
       <footer>
         <p>Created with <a href="https://github.com/natb1/commons.systems" target="_blank" rel="noopener">commons.systems</a> | &copy; 2026 RUMOR.ML <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener"><img src="https://mirrors.creativecommons.org/presskit/buttons/88x31/png/by-sa.png" alt="CC-BY-SA" className="cc-badge" /></a></p>
