@@ -26,7 +26,7 @@
   justify-content: space-between;
   align-items: center;
   padding: var(--space-2) 0;
-  border-bottom: 1px solid var(--muted);
+  border-bottom: var(--border-width) solid var(--border);
 }
 
 .media-info {
@@ -44,8 +44,8 @@
   display: inline-block;
   padding: 0.1rem 0.4rem;
   font-size: var(--text-xs);
-  border: 1px solid var(--muted);
-  border-radius: 3px;
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-sm);
 }
 
 .media-actions {
@@ -94,8 +94,8 @@
   cursor: pointer;
   padding: 0.4rem 0.8rem;
   font-size: var(--text-sm);
-  border: 1px solid var(--muted);
-  border-radius: 3px;
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-sm);
   background: none;
   color: inherit;
 }
