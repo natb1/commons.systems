@@ -8384,6 +8384,13 @@ sweep_setup() {
   # dispatch-sweep sources lib-worktree-reap.sh (marker ledger + quarantine) from
   # its SCRIPT_DIR — required for the not-in-sync reap path.
   cp "$SCRIPT_DIR/lib-worktree-reap.sh" "$TMPDIR_TEST/scripts/lib-worktree-reap.sh"
+  # dispatch-sweep resolves the grace window by shelling out to dispatch-config-load
+  # ("$SCRIPT_DIR/dispatch-config-load" sweep). Without this copy the binary is
+  # absent, the call exits non-zero, and the whole config branch (config-file
+  # present / field present / field absent) is never exercised — the env-override
+  # path silently masks it. Copy it so tests can exercise the config precedence.
+  cp "$SCRIPT_DIR/dispatch-config-load" "$TMPDIR_TEST/scripts/dispatch-config-load"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-config-load"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-sweep"
 
   # Default empty worktree list (each test should overwrite with its records).
@@ -8561,6 +8568,14 @@ FAKE
   # marker files, so reservation_exists is false for every row and the
   # reserved-skip is inert. A reserved-skip test opts in by creating a marker here.
   export DISPATCH_RESERVATION_DIR="$STUB_DIR/reservations"
+  # dispatch-sweep's grace-resolution shells out to dispatch-config-load, which
+  # reads DISPATCH_CONFIG_DIR. Point it at an EMPTY dir by default: with no
+  # sweep.json present the loader prints "no-config", so dispatch-sweep falls
+  # through to the env override (DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S) / baked
+  # default — exactly the behavior every existing env-override test relies on. A
+  # config-path test opts in by writing sweep.json into this dir.
+  mkdir -p "$STUB_DIR/config"
+  export DISPATCH_CONFIG_DIR="$STUB_DIR/config"
 }
 
 sweep_teardown() {
@@ -8569,6 +8584,8 @@ sweep_teardown() {
   STUB_DIR=""
   export PATH="$SAVED_PATH"
   unset CLAUDE_AGENTS_CMD DISPATCH_SWEEP_LOG_FILE DISPATCH_SWEEP_NOW DISPATCH_RESERVATION_DIR GH_RETRY_BASE_DELAY SWEEP_GH_PR_FAIL SWEEP_GH_ISSUE_FAIL
+  # DISPATCH_CONFIG_DIR is sweep-local — never leak it into later non-sweep tests.
+  unset DISPATCH_CONFIG_DIR
   # Not-in-sync reap seams — never leak the epoch/grace/fail toggles across tests.
   unset DISPATCH_SWEEP_NOW_EPOCH DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S SWEEP_FORMAT_PATCH_FAIL
 }
@@ -9745,6 +9762,142 @@ if [[ -e "$KEPT_MARKER" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: N5b registered worktree's marker left intact"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: N5b registered worktree's marker left intact"
+fi
+sweep_teardown
+
+# --- Config-precedence path (Finding 1): sweep.json grace flows through -------
+# The grace window resolves with precedence: sweep config notInSyncGraceSeconds →
+# env override → baked default. The sweep harness now copies dispatch-config-load
+# and points DISPATCH_CONFIG_DIR at an empty dir, so these tests exercise the
+# config-file branch end-to-end (it was previously masked: with the loader binary
+# absent the call failed and the env-override path silently handled everything).
+
+# --- Test N6a: sweep.json notInSyncGraceSeconds drives the reap decision ------
+# Config grace=100; marker stamped 1000; a sweep at 1300 (age 300 >= config 100)
+# REAPs. The baked default is 86400 and no env override is set — so a reap here
+# proves the CONFIG value (not the default) governed the decision, and the logged
+# grace_seconds=100 must echo the config value.
+echo "Test: N6a sweep.json notInSyncGraceSeconds governs the reap (config precedence)"
+sweep_setup
+printf '{"notInSyncGraceSeconds":100}\n' > "$DISPATCH_CONFIG_DIR/sweep.json"
+WT_PATH="$TMPDIR_TEST/project/worktrees/2700-config-grace"
+WT_BASE="2700-config-grace"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+echo '[{"state":"MERGED","number":2700}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+key=$(sweep_path_key "$WT_PATH")
+echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
+MARKER="$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
+# Sweep #1 at 1000 records the marker (below config grace).
+export DISPATCH_SWEEP_NOW_EPOCH=1000
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N6a sweep#1 exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$(cat "$MARKER" 2>/dev/null)" == "1000" ]] && ! echo "$calls" | grep -q "worktree-remove"; then
+  PASS=$((PASS + 1)); echo "  PASS: N6a sweep#1 recorded marker, no removal"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N6a sweep#1 recorded marker, no removal"; echo "    calls: $calls"
+fi
+# Sweep #2 at 1300 — age 300 >= config grace 100 → REAP. With the baked default
+# (86400) the worktree would still be kept; a reap proves config grace governed.
+export DISPATCH_SWEEP_NOW_EPOCH=1300
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N6a sweep#2 exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -qx "worktree-remove-force:$WT_PATH" \
+   && grep -q "REAP_MERGED_NOT_IN_SYNC: '$WT_PATH' branch=$WT_BASE pr=#2700 age_seconds=300 grace_seconds=100 quarantine=" \
+      "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N6a config grace=100 reaped at age 300 (grace_seconds=100 logged)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N6a config grace=100 reaped at age 300 (grace_seconds=100 logged)"
+  echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N6b: sweep.json present but field absent → env override wins --------
+# (Finding 1 regression.) A sweep.json that omits notInSyncGraceSeconds must NOT
+# pin the grace to the baked default — the lowest-precedence env override must
+# still fire. Config present-but-empty + env grace=100 + age 300 → REAP, logged
+# grace_seconds=100. PRE-FIX dispatch-sweep took the "!= no-config" branch,
+# found the field empty, and skipped the elif env branch entirely (grace stayed
+# 86400) → no reap → this test FAILS, proving it reproduces Finding 1.
+echo "Test: N6b sweep.json without the field falls through to the env override (Finding 1)"
+sweep_setup
+printf '{}\n' > "$DISPATCH_CONFIG_DIR/sweep.json"
+export DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S=100
+WT_PATH="$TMPDIR_TEST/project/worktrees/2710-empty-config"
+WT_BASE="2710-empty-config"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+echo '[{"state":"MERGED","number":2710}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+key=$(sweep_path_key "$WT_PATH")
+echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
+MARKER="$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
+export DISPATCH_SWEEP_NOW_EPOCH=1000
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N6b sweep#1 exits 0" "0" "$rc"
+export DISPATCH_SWEEP_NOW_EPOCH=1300
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N6b sweep#2 exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -qx "worktree-remove-force:$WT_PATH" \
+   && grep -q "REAP_MERGED_NOT_IN_SYNC: '$WT_PATH' branch=$WT_BASE pr=#2710 age_seconds=300 grace_seconds=100 quarantine=" \
+      "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N6b empty config + env grace=100 reaped at age 300 (env override fired)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N6b empty config + env grace=100 reaped at age 300 (env override fired)"
+  echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N6c: sweep.json fractional grace is rejected, fallback used ---------
+# (Finding 2 regression, end-to-end through dispatch-sweep.) A fractional
+# notInSyncGraceSeconds (0.5) must NOT reach the bash `[[ "$age" -lt "$grace" ]]`
+# integer comparison (which would error and reap every not-in-sync worktree).
+# dispatch-config-load rejects the fractional value and exits non-zero; dispatch-sweep
+# folds the stderr, logs SWEEP_CONFIG_ERROR, and falls back to the env override
+# (grace=100 here) — so the worktree at age 300 still reaps via the env value, and
+# the run never crashes. PRE-FIX the loader accepted 0.5 (1.5|type=="number", >0),
+# dispatch-sweep set grace=0.5, and the integer compare errored → this test FAILS,
+# proving it reproduces Finding 2.
+echo "Test: N6c sweep.json fractional grace rejected by loader, env fallback governs (Finding 2)"
+sweep_setup
+printf '{"notInSyncGraceSeconds":0.5}\n' > "$DISPATCH_CONFIG_DIR/sweep.json"
+export DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S=100
+WT_PATH="$TMPDIR_TEST/project/worktrees/2720-frac-config"
+WT_BASE="2720-frac-config"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+echo '[{"state":"MERGED","number":2720}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+key=$(sweep_path_key "$WT_PATH")
+echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
+MARKER="$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
+export DISPATCH_SWEEP_NOW_EPOCH=1000
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N6c sweep#1 exits 0 (no arithmetic crash on fractional config)" "0" "$rc"
+export DISPATCH_SWEEP_NOW_EPOCH=1300
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N6c sweep#2 exits 0 (no arithmetic crash on fractional config)" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -qx "worktree-remove-force:$WT_PATH" \
+   && grep -q "REAP_MERGED_NOT_IN_SYNC: '$WT_PATH' branch=$WT_BASE pr=#2720 age_seconds=300 grace_seconds=100 quarantine=" \
+      "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N6c fractional config rejected, env grace=100 governed the reap"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N6c fractional config rejected, env grace=100 governed the reap"
+  echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+# The loader's diagnostic must be surfaced, not swallowed.
+TOTAL=$((TOTAL + 1))
+if grep -q "SWEEP_CONFIG_ERROR" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N6c SWEEP_CONFIG_ERROR logged for the rejected fractional config"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N6c SWEEP_CONFIG_ERROR logged for the rejected fractional config"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
 fi
 sweep_teardown
 
@@ -12741,6 +12894,111 @@ if [[ "$err" == *"enabled"* ]]; then
   assert_eq "force-opus string enabled: stderr mentions enabled" "yes" "yes"
 else
   assert_eq "force-opus string enabled: stderr mentions enabled" "yes" "no: $err"
+fi
+config_teardown
+
+# --- sweep config type validation (#2026) -----------------------------------
+# The sweep config gates the not-in-sync reap grace window. Its validator is the
+# only code path that catches a malformed grace BEFORE it reaches dispatch-sweep's
+# bash arithmetic `[[ "$age" -lt "$grace" ]]` — where a non-integer would error
+# and force-reap every not-in-sync worktree. These tests cover the validator
+# directly: absent → no-config; empty object → valid; valid integer → printed;
+# fractional/<=0/wrong-type/non-object → rejected.
+
+# --- Test 7u: absent sweep.json → no-config, exit 0 --------------------------
+echo "Test: absent sweep.json prints no-config and exits 0"
+config_setup
+# no file written — config dir is empty
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" sweep 2>/dev/null); rc=$?
+assert_eq "7u absent sweep.json exits 0" "0" "$rc"
+assert_eq "7u absent sweep.json prints no-config" "no-config" "$out"
+config_teardown
+
+# --- Test 7v: empty-object sweep.json → valid, prints {} ---------------------
+# All sweep tunables are optional, so an empty object is valid and round-trips.
+echo "Test: empty-object sweep.json is valid and prints the normalized object"
+config_setup
+printf '{}\n' > "$DISPATCH_CONFIG_DIR/sweep.json"
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" sweep 2>/dev/null); rc=$?
+assert_eq "7v empty-object sweep.json exits 0" "0" "$rc"
+norm=$(printf '%s' "$out" | jq -c '.')
+assert_eq "7v empty-object sweep.json normalizes to {}" "{}" "$norm"
+config_teardown
+
+# --- Test 7w: notInSyncGraceSeconds integer → valid, value round-trips -------
+echo "Test: sweep.json with a valid integer notInSyncGraceSeconds round-trips"
+config_setup
+printf '{"notInSyncGraceSeconds":3600}\n' > "$DISPATCH_CONFIG_DIR/sweep.json"
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" sweep 2>/dev/null); rc=$?
+assert_eq "7w integer grace exits 0" "0" "$rc"
+grace=$(printf '%s' "$out" | jq -r '.notInSyncGraceSeconds')
+assert_eq "7w integer grace round-trips" "3600" "$grace"
+config_teardown
+
+# --- Test 7x: notInSyncGraceSeconds fractional → exit 1 ----------------------
+# The integer-vs-float bug: 1.5|type=="number" and 1.5>0, so the field passes the
+# type and positivity checks. The whole-number guard is the ONLY thing that rejects
+# a fractional grace before it reaches dispatch-sweep's integer arithmetic.
+echo "Test: sweep.json with a fractional notInSyncGraceSeconds exits 1 and names the field"
+config_setup
+printf '{"notInSyncGraceSeconds":0.5}\n' > "$DISPATCH_CONFIG_DIR/sweep.json"
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" sweep 2>&1 1>/dev/null) || rc=$?
+assert_eq "7x fractional grace exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"notInSyncGraceSeconds"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: 7x fractional grace error names notInSyncGraceSeconds"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 7x fractional grace error names notInSyncGraceSeconds"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 7y: notInSyncGraceSeconds <= 0 → exit 1 ----------------------------
+echo "Test: sweep.json with notInSyncGraceSeconds <= 0 exits 1 and names the field"
+config_setup
+printf '{"notInSyncGraceSeconds":0}\n' > "$DISPATCH_CONFIG_DIR/sweep.json"
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" sweep 2>&1 1>/dev/null) || rc=$?
+assert_eq "7y non-positive grace exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"notInSyncGraceSeconds"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: 7y non-positive grace error names notInSyncGraceSeconds"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 7y non-positive grace error names notInSyncGraceSeconds"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 7z: notInSyncGraceSeconds wrong type (string) → exit 1 -------------
+echo "Test: sweep.json with a string notInSyncGraceSeconds exits 1 and names the field"
+config_setup
+printf '{"notInSyncGraceSeconds":"3600"}\n' > "$DISPATCH_CONFIG_DIR/sweep.json"
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" sweep 2>&1 1>/dev/null) || rc=$?
+assert_eq "7z string grace exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"notInSyncGraceSeconds"* && "$err" == *"number"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: 7z string grace error names the field and 'number'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 7z string grace error names the field and 'number'"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 7za: non-object top-level sweep.json → exit 1 ----------------------
+echo "Test: non-object top-level sweep.json exits 1 and stderr mentions object"
+config_setup
+printf '[]\n' > "$DISPATCH_CONFIG_DIR/sweep.json"
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" sweep 2>&1 1>/dev/null) || rc=$?
+assert_eq "7za non-object sweep.json exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"object"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: 7za non-object sweep.json error mentions 'object'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 7za non-object sweep.json error mentions 'object'"
+  echo "    stderr: $err"
 fi
 config_teardown
 

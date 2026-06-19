@@ -72,15 +72,32 @@ fi
 # `no-config` (file absent) means "use defaults", following the load-with-default
 # pattern in dispatch-target-workers.
 NOT_IN_SYNC_GRACE_S=86400
-if CONFIG_OUT=$("$SCRIPT_DIR/dispatch-config-load" sweep 2>/dev/null); then
+# Fold dispatch-config-load's stderr into CONFIG_OUT (2>&1, mirroring the loader's
+# own idiom): a malformed sweep.json exits non-zero with a diagnostic on stderr,
+# and discarding it would silently fall back to the default — over-/under-retaining
+# worktrees with no operator signal. On failure the else-branch logs that diagnostic.
+# The env override is the lowest-precedence fallback: it must fire whenever the
+# config does not supply a usable value — both when the file is absent (no-config)
+# AND when the file is present but omits/malforms notInSyncGraceSeconds — so val is
+# resolved first, then a single integer-guarded fallback chain handles env/default.
+# The config path is integer-guarded (^[0-9]+$) to match the env path: jq -r emits
+# floats/scientific-notation verbatim, and a non-integer in an arithmetic [[ -lt ]]
+# would error and reap every not-in-sync worktree immediately.
+if CONFIG_OUT=$("$SCRIPT_DIR/dispatch-config-load" sweep 2>&1); then
+  val=""
   if [[ "$CONFIG_OUT" != "no-config" ]]; then
     val=$(jq -r '.notInSyncGraceSeconds // empty' <<<"$CONFIG_OUT")
-    [[ -n "$val" ]] && NOT_IN_SYNC_GRACE_S="$val"
+  fi
+  if [[ "$val" =~ ^[0-9]+$ ]]; then
+    NOT_IN_SYNC_GRACE_S="$val"
   elif [[ "${DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S:-}" =~ ^[0-9]+$ ]]; then
     NOT_IN_SYNC_GRACE_S="$DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S"
   fi
-elif [[ "${DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S:-}" =~ ^[0-9]+$ ]]; then
-  NOT_IN_SYNC_GRACE_S="$DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S"
+else
+  log "SWEEP_CONFIG_ERROR: $CONFIG_OUT"
+  if [[ "${DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S:-}" =~ ^[0-9]+$ ]]; then
+    NOT_IN_SYNC_GRACE_S="$DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S"
+  fi
 fi
 
 # "now" in epoch seconds for marker age math. Distinct from DISPATCH_SWEEP_NOW

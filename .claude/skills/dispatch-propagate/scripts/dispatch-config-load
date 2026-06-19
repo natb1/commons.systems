@@ -645,6 +645,14 @@ case "$CONFIG_TYPE" in
           "notInSyncGraceSeconds must be a number if present, got \($cfg.notInSyncGraceSeconds | type)"
         elif $cfg.notInSyncGraceSeconds <= 0 then
           "notInSyncGraceSeconds must be > 0 if present, got \($cfg.notInSyncGraceSeconds)"
+        elif ($cfg.notInSyncGraceSeconds | tostring | test("^[0-9]+$") | not) then
+          # Mirror the env-override contract (^[0-9]+$): reject any value whose
+          # rendered form is not a plain integer. This catches fractions (0.5)
+          # and scientific notation (1e6 -> jq renders "1E+6"); both would reach
+          # the dispatch-sweep bash `[[ "$age" -lt "$NOT_IN_SYNC_GRACE_S" ]]`
+          # integer comparison, raise an arithmetic error, and fall through to
+          # the reap branch — immediately force-reaping every not-in-sync worktree.
+          "notInSyncGraceSeconds must be a whole number (integer), got \($cfg.notInSyncGraceSeconds)"
         else
           empty
         end)

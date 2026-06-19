@@ -159,8 +159,19 @@ if [[ -z "${_LIB_WORKTREE_REAP_LOADED:-}" ]]; then
     # Owner-only, matching the reservation ledger's posture.
     mkdir -p -m 0700 "$dir" || return 1
     local marker="$dir/$name"
-    # Already present → leave it untouched (write-once: never refresh).
-    [[ -e "$marker" ]] && return 0
+    # Already present AND readable → leave it untouched (write-once: never
+    # refresh). A present-but-corrupt marker (empty/non-numeric from a partial
+    # write, disk error, or external tool) must NOT short-circuit: that would
+    # wedge the grace clock forever (reap_marker_read keeps returning absent, the
+    # caller keeps re-recording, and the worktree never ages past grace). Heal it
+    # by deleting the corrupt file so the noclobber write below re-creates it.
+    if [[ -e "$marker" ]]; then
+      if reap_marker_read "$root" "$name" >/dev/null 2>&1; then
+        return 0
+      fi
+      printf 'lib-worktree-reap: REAP_MARKER_CORRUPT clearing unreadable marker %q\n' "$marker" >&2
+      rm -f "$marker" 2>/dev/null || true
+    fi
     local now
     now=$(_reap_now_epoch)
     # Genuinely atomic create-if-absent: `set -C` (noclobber) makes the `>`
@@ -225,23 +236,32 @@ if [[ -z "${_LIB_WORKTREE_REAP_LOADED:-}" ]]; then
       return 1
     fi
 
+    # On ANY capture failure below, remove the partially-written dest before
+    # returning 1. Otherwise each retried-then-failed sweep (e.g. the symlink
+    # case) leaves an orphan partial quarantine dir — a fresh epoch-suffixed one
+    # per run — that nothing ever GCs, growing disk without bound.
+    _reap_quarantine_fail() {
+      rm -rf "$dest" 2>/dev/null || true
+      return 1
+    }
+
     # 1. Committed divergence → patches. Zero patches (no divergence) is success.
     if ! git -C "$wt_path" format-patch origin/main..HEAD -o "$dest" >/dev/null 2>&1; then
       printf 'lib-worktree-reap: reap_quarantine format-patch failed for %q\n' "$wt_path" >&2
-      return 1
+      _reap_quarantine_fail; return 1
     fi
 
     # 2. Uncommitted tracked changes → working-tree.patch.
     if ! git -C "$wt_path" diff HEAD >"$dest/working-tree.patch" 2>/dev/null; then
       printf 'lib-worktree-reap: reap_quarantine git diff HEAD failed for %q\n' "$wt_path" >&2
-      return 1
+      _reap_quarantine_fail; return 1
     fi
 
     # 3. Untracked files → copied under untracked/ preserving relative paths.
     local untracked_list
     if ! untracked_list=$(git -C "$wt_path" ls-files --others --exclude-standard 2>/dev/null); then
       printf 'lib-worktree-reap: reap_quarantine ls-files --others failed for %q\n' "$wt_path" >&2
-      return 1
+      _reap_quarantine_fail; return 1
     fi
     local untracked_count=0 rel
     if [[ -n "$untracked_list" ]]; then
@@ -250,11 +270,16 @@ if [[ -z "${_LIB_WORKTREE_REAP_LOADED:-}" ]]; then
         local src="$wt_path/$rel" dst="$dest/untracked/$rel"
         if ! mkdir -p "$(dirname "$dst")"; then
           printf 'lib-worktree-reap: reap_quarantine mkdir for untracked %q failed\n' "$rel" >&2
-          return 1
+          _reap_quarantine_fail; return 1
         fi
-        if ! cp -p "$src" "$dst"; then
+        # -P/--no-dereference: copy a symlink AS a symlink. A plain `cp -p` on an
+        # untracked dangling symlink (or symlink-to-directory) dereferences and
+        # fails, which would abort the reap forever (the marker stays, age stays
+        # past grace, every sweep retries and re-fails) — a permanent per-worktree
+        # stall. Copying the link verbatim preserves the residue and never fails.
+        if ! cp -Pp "$src" "$dst"; then
           printf 'lib-worktree-reap: reap_quarantine cp of untracked %q failed\n' "$rel" >&2
-          return 1
+          _reap_quarantine_fail; return 1
         fi
         untracked_count=$((untracked_count + 1))
       done <<<"$untracked_list"
@@ -274,11 +299,11 @@ if [[ -z "${_LIB_WORKTREE_REAP_LOADED:-}" ]]; then
       printf 'untracked_files=%s\n' "$untracked_count"
     } >"$dest/manifest" 2>/dev/null; then
       printf 'lib-worktree-reap: reap_quarantine manifest write failed for %q\n' "$dest" >&2
-      return 1
+      _reap_quarantine_fail; return 1
     fi
 
     # Verify the dest exists before declaring success.
-    [[ -d "$dest" ]] || return 1
+    [[ -d "$dest" ]] || { _reap_quarantine_fail; return 1; }
     printf '%s\n' "$dest"
     return 0
   }
