@@ -558,7 +558,7 @@ describe("createBlogApp routing and panel behavior", () => {
     handle.destroy();
     handle = undefined; // prevent afterEach double-destroy
 
-    expect(disconnectSpy).toHaveBeenCalled();
+    expect(disconnectSpy).toHaveBeenCalledTimes(1);
     disconnectSpy.mockRestore();
   });
 
