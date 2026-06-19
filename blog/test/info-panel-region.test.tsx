@@ -96,6 +96,81 @@ describe("InfoPanelRegion", () => {
     expect(dateSpan?.textContent?.length).toBeGreaterThan(0);
   });
 
+  it("re-sorts entries by publishedAt descending after hydration", async () => {
+    const data: InfoPanelData = {
+      ...baseData,
+      blogRoll: [
+        { id: "old-blog", name: "Old Blog", url: "https://old.com" },
+        { id: "new-blog", name: "New Blog", url: "https://new.com" },
+      ],
+    };
+    const strategies = new Map<string, BlogRollStrategy>([
+      [
+        "old-blog",
+        strategyResolving({
+          title: "Old Post",
+          url: "https://old.com/post",
+          publishedAt: "2025-01-01",
+        }),
+      ],
+      [
+        "new-blog",
+        strategyResolving({
+          title: "New Post",
+          url: "https://new.com/post",
+          publishedAt: "2025-11-19",
+        }),
+      ],
+    ]);
+
+    const { container } = renderInPanel(
+      <InfoPanelRegion data={data} strategies={strategies} />,
+    );
+
+    await waitFor(() => {
+      const items = container.querySelectorAll("li[data-blogroll-id]");
+      expect(items[0].getAttribute("data-blogroll-id")).toBe("new-blog");
+      expect(items[1].getAttribute("data-blogroll-id")).toBe("old-blog");
+    });
+  });
+
+  it("leaves the placeholder empty when a strategy resolves null", async () => {
+    const data: InfoPanelData = {
+      ...baseData,
+      blogRoll: [{ id: "test-blog", name: "Test Blog", url: "https://example.com" }],
+    };
+    const strategy = strategyResolving(null);
+    const fetchSpy = vi.spyOn(strategy, "fetchLatestPost");
+    const strategies = new Map<string, BlogRollStrategy>([["test-blog", strategy]]);
+
+    const { container } = renderInPanel(
+      <InfoPanelRegion data={data} strategies={strategies} />,
+    );
+
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+    expect(container.querySelector("#blogroll-latest-test-blog")?.textContent).toBe("");
+  });
+
+  it("degrades silently, leaving the placeholder empty, when a strategy rejects", async () => {
+    const data: InfoPanelData = {
+      ...baseData,
+      blogRoll: [{ id: "test-blog", name: "Test Blog", url: "https://example.com" }],
+    };
+    const strategy: BlogRollStrategy = {
+      fetchLatestPost: vi.fn<() => Promise<LatestPost | null>>().mockRejectedValue(
+        new Error("Network error"),
+      ),
+    };
+    const strategies = new Map<string, BlogRollStrategy>([["test-blog", strategy]]);
+
+    const { container } = renderInPanel(
+      <InfoPanelRegion data={data} strategies={strategies} />,
+    );
+
+    await waitFor(() => expect(strategy.fetchLatestPost).toHaveBeenCalled());
+    expect(container.querySelector("#blogroll-latest-test-blog")?.textContent).toBe("");
+  });
+
   it("renders aboutContent and runs no fetch when provided", async () => {
     const fetchLatestPost = vi.fn<() => Promise<LatestPost | null>>();
     const strategies = new Map<string, BlogRollStrategy>([

@@ -135,6 +135,11 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
   // override; initialized from the entry path so a deep entry like /about reflects
   // its panel content from the first render.
   let currentPath = parsePath().path;
+  // The slug for a deep /post/x entry, derived from the same entry path as
+  // currentPath. Used to hydrate #app with the slug-aware home element so the
+  // hydrated tree already carries the right scrollSlug (HomeRegion's scroll
+  // effect then fires on a deep /post/x entry without needing a re-render).
+  const initialSlug = currentPath.startsWith("/post/") ? currentPath.slice(6) : undefined;
   let cachedPosts: PostMeta[] = config.buildTimeMetadata;
   let lastSkippedCount = 0;
   let postsErrorMsg: string | undefined;
@@ -195,13 +200,19 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
 
   // Hydrate the three roots over the prerendered DOM (before creating the
   // router, which dispatches synchronously on construction). #app is hydrated
-  // with the home element: per prerender.ts every page embeds the full posts
-  // feed, so the home element is the right hydration target for / and /post/*;
-  // a deep /admin or /about entry reconciles on the router's immediate dispatch.
-  // panelElement() reads its aboutContent from infoPanelContentForPath(currentPath),
-  // so a deep /about entry hydrates the panel with the About content directly.
+  // with the SLUG-AWARE home element homeElement(initialSlug): per prerender.ts
+  // every page embeds the full posts feed, so the home element is the right
+  // hydration target for / and /post/*; passing initialSlug means HomeRegion's
+  // scroll effect fires on a deep /post/x entry directly from the hydrated tree.
+  // Because the first dispatch then sees slug === initialSlug, it SKIPS the
+  // redundant appRoot.render (see dispatch's isHome branch) — a root.render()
+  // right after hydrateRoot can make React abandon hydration and client-render,
+  // causing CLS on the SEO surface. A deep /admin or /about entry still
+  // reconciles on the router's immediate dispatch (not gated). panelElement()
+  // reads its aboutContent from infoPanelContentForPath(currentPath), so a deep
+  // /about entry hydrates the panel with the About content directly.
   const navRoot = hydrateRoot(navMount, navElement(parsePath().path));
-  const appRoot = hydrateRoot(app, homeElement());
+  const appRoot = hydrateRoot(app, homeElement(initialSlug));
   const panelRoot = hydrateRoot(infoPanel, panelElement());
   teardowns.push(() => navRoot.unmount());
   teardowns.push(() => appRoot.unmount());
@@ -257,9 +268,12 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
   // all React rendering and nav side-effects here, with a driver-level
   // staleness guard for async branches.
   let navSeq = 0;
+  let firstDispatch = true;
   async function dispatch(path: string): Promise<void> {
     currentPath = path;
     const seq = ++navSeq;
+    const isFirstDispatch = firstDispatch;
+    firstDispatch = false;
 
     // Per-nav side-effects (every navigation), matching the old updateNav +
     // router-onNavigate behavior.
@@ -275,7 +289,12 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
     const isHome = path === "/" || path.startsWith("/post/");
     if (isHome) {
       const slug = path.startsWith("/post/") ? path.slice(6) : undefined;
-      appRoot.render(homeElement(slug));
+      // On the very first navigation the #app body is already hydrated with
+      // homeElement(initialSlug) and slug === initialSlug, so re-rendering it would
+      // be a redundant root.render() that can make React abandon hydration and
+      // client-render (CLS on the SEO surface). Skip it; hydrateRoot already
+      // rendered this exact element. Side-effects below still run.
+      if (!isFirstDispatch) appRoot.render(homeElement(slug));
       // SEO + home hooks (old homeRoute.afterRender).
       config.onHomeAfterRender?.(slug);
       updateOgMeta(

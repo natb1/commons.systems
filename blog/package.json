@@ -18,7 +18,6 @@
     "./marked-config": "./src/marked-config.ts",
     "./vite-plugin-blog-posts": "./src/vite-plugin-blog-posts.ts",
     "./pages/home": "./src/pages/home.ts",
-    "./pages/admin": "./src/pages/admin.ts",
     "./create-blog-app": "./src/create-blog-app.ts",
     "./og-meta": "./src/og-meta.ts",
     "./prerender": "./src/prerender.ts",

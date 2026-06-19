@@ -12,12 +12,16 @@
 // scroll-indicator. Everything React renders is real.
 //
 // To avoid React hydration mismatches, scaffoldDom server-renders the SAME
-// elements the driver hydrates with (renderToStaticMarkup over BlogNav /
-// HomeRegion / InfoPanelRegion with the build-time props), mirroring prerender.ts.
+// elements the driver hydrates with (renderToString over BlogNav / HomeRegion /
+// InfoPanelRegion with the build-time props), mirroring prerender.ts (Unit 5).
+// renderToString (NOT renderToStaticMarkup) emits the hydration markers React's
+// hydrateRoot expects, giving it the best chance to REUSE the prerendered nodes
+// rather than client-render — which is what the node-identity (CLS) assertions
+// in Cases 2 and 7 verify.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act } from "@testing-library/react";
 import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToString } from "react-dom/server";
 
 import { createBlogApp } from "../src/create-blog-app.ts";
 import type { CreateBlogAppConfig } from "../src/create-blog-app.ts";
@@ -121,13 +125,18 @@ function makeConfig(overrides: Partial<CreateBlogAppConfig> = {}): CreateBlogApp
 
 /**
  * Server-render the three roots with the SAME build-time props the driver
- * hydrates with (mirroring prerender.ts) and inject them into the scaffold.
- * Byte-exact hydration targets avoid React mismatches and preserve node identity
- * so Case 2's CLS assertion holds. The signed-out nav uses the current path so
- * `showAuth` matches the driver's `navElement(parsePath().path)`.
+ * hydrates with (mirroring prerender.ts, Unit 5) and inject them into the
+ * scaffold. renderToString emits hydration markers so hydrateRoot can REUSE the
+ * prerendered nodes — preserving node identity so the CLS / no-teardown
+ * assertions in Cases 2 and 7 hold. The #app body is rendered with the same
+ * scrollSlug the driver hydrates with (initialSlug, derived from the entry
+ * path), so a deep /post/x scaffold matches homeElement(initialSlug). The
+ * signed-out nav uses the current path so `showAuth` matches the driver's
+ * `navElement(parsePath().path)`.
  */
 function scaffoldDom(config: CreateBlogAppConfig, path = window.location.pathname): void {
-  const navHtml = renderToStaticMarkup(
+  const initialSlug = path.startsWith("/post/") ? path.slice(6) : undefined;
+  const navHtml = renderToString(
     createElement(BlogNav, {
       links: config.navLinks,
       showHomeLink: config.showHomeLink,
@@ -137,15 +146,16 @@ function scaffoldDom(config: CreateBlogAppConfig, path = window.location.pathnam
       onSignOut: () => {},
     }),
   );
-  const appHtml = renderToStaticMarkup(
+  const appHtml = renderToString(
     createElement(HomeRegion, {
       posts: config.buildTimeMetadata,
       contentMap: config.buildTimeContent,
       postLinkPrefix: "/post/",
       fetchPost: () => Promise.resolve(""),
+      scrollSlug: initialSlug,
     }),
   );
-  const panelHtml = renderToStaticMarkup(
+  const panelHtml = renderToString(
     createElement(InfoPanelRegion, {
       data: {
         linkSections: config.infoPanelLinkSections,
@@ -233,20 +243,19 @@ describe("createBlogApp routing and panel behavior", () => {
     });
   });
 
-  // Case 2 — Direct / signed-out preserves the prerendered home feed and does
-  // NOT fetch firestore. NOTE: node-identity (CLS) is NOT asserted: the driver
-  // re-renders all three roots synchronously right after hydrateRoot (the
-  // router's construction-time dispatch), so React "switched the entire root to
-  // client rendering" and replaces the prerendered nodes — compounded by
-  // happy-dom re-serializing the injected ds Card `style` attribute (spaces),
-  // which defeats byte-exact hydration. Both are Unit 6 parity items; here we
-  // assert the surviving behavior.
-  it("preserves the prerendered home feed on direct / entry; getPosts not called", async () => {
+  // Case 2 — Direct / signed-out preserves the prerendered home feed WITHOUT
+  // tearing down the #posts node (no CLS on the SEO surface) and does NOT fetch
+  // firestore. Node identity: hydrateRoot(app, homeElement(initialSlug)) reuses
+  // the renderToString scaffold, and the first-dispatch skip (TASK 1) avoids the
+  // redundant root.render that would abandon hydration and client-render. We
+  // capture #posts BEFORE createBlogApp and assert the SAME reference survives.
+  it("reuses the prerendered #posts node on direct / entry (no CLS); getPosts not called", async () => {
     history.pushState({}, "", "/");
     const config = makeConfig({ buildTimeMetadata: [PUBLISHED_POST], buildTimeContent: PUBLISHED_CONTENT });
     scaffoldDom(config, "/");
 
-    expect(document.querySelector("#posts")).not.toBeNull();
+    const postsNode = document.querySelector("#posts");
+    expect(postsNode).not.toBeNull();
 
     handle = createBlogApp(config);
     const app = document.getElementById("app")!;
@@ -256,7 +265,9 @@ describe("createBlogApp routing and panel behavior", () => {
     });
     await settle();
 
-    expect(app.querySelector("#posts")).not.toBeNull();
+    // The prerendered node was REUSED, not torn down and replaced — hydrateRoot
+    // + the first-dispatch skip preserved the DOM (no CLS).
+    expect(document.querySelector("#posts")).toBe(postsNode);
     expect(app.querySelector("#post-first-post")).not.toBeNull();
     // Signed out: no firestore fetch.
     expect(getPosts).not.toHaveBeenCalled();
@@ -454,12 +465,14 @@ describe("createBlogApp routing and panel behavior", () => {
     });
   });
 
-  // Case 7 — #1409: across / → /post/x → / the home feed stays rendered. In the
-  // React model, reconciliation keeps the feed body correct after each nav (the
-  // old "renderHomeHtml called exactly once" assertion is obsolete). Node
-  // identity is NOT asserted (see Case 2 — synchronous re-render after hydrate +
-  // happy-dom style normalization); the behavioral invariant is feed-present.
-  it("keeps the home feed rendered across Post and repeat-Home navigations (#1409)", async () => {
+  // Case 7 — #1409: across / → /post/x → / the home feed stays rendered AND the
+  // #posts node is never torn down. In the React model, reconciliation keeps the
+  // same HomeRegion mounted (#posts always rendered) across these navigations, so
+  // the node reference is stable — proving the repeat-home navigation does not
+  // rebuild/replace the feed (the regression #1409 guarded against). We capture
+  // #posts after settle() (the current, hydrated node) and assert the SAME
+  // reference survives both navigations.
+  it("keeps the same #posts node across Post and repeat-Home navigations (#1409)", async () => {
     history.pushState({}, "", "/");
     const config = makeConfig({ buildTimeMetadata: [PUBLISHED_POST], buildTimeContent: PUBLISHED_CONTENT });
     scaffoldDom(config, "/");
@@ -468,14 +481,16 @@ describe("createBlogApp routing and panel behavior", () => {
     const app = document.getElementById("app")!;
     await settle();
 
-    expect(app.querySelector("#posts")).not.toBeNull();
+    const postsNode = app.querySelector("#posts");
+    expect(postsNode).not.toBeNull();
 
     await navigate("/post/first-post");
-    expect(app.querySelector("#posts")).not.toBeNull();
+    expect(app.querySelector("#posts")).toBe(postsNode);
     expect(app.querySelector("#post-first-post")).not.toBeNull();
 
     await navigate("/");
-    expect(app.querySelector("#posts")).not.toBeNull();
+    // Repeat-home navigation reconciles the same node — no teardown (#1409).
+    expect(app.querySelector("#posts")).toBe(postsNode);
     expect(app.querySelector("#post-first-post")).not.toBeNull();
   });
 

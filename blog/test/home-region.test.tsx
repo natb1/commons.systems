@@ -132,4 +132,98 @@ describe("HomeRegion", () => {
       );
     });
   });
+
+  it("scrolls to the target article when scrollSlug is provided", async () => {
+    const header = document.createElement("header");
+    Object.defineProperty(header, "offsetHeight", { value: 60, configurable: true });
+    document.body.appendChild(header);
+
+    const fetchPost = vi
+      .fn<(filename: string) => Promise<string>>()
+      .mockResolvedValue("# Hello");
+    const scrollSpy = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+
+    try {
+      render(
+        <HomeRegion
+          posts={[fetched]}
+          postLinkPrefix="/post/"
+          fetchPost={fetchPost}
+          scrollSlug="hello-world"
+        />,
+      );
+
+      await waitFor(() => {
+        expect(scrollSpy).toHaveBeenCalled();
+      });
+
+      // getBoundingClientRect().top is 0 in happy-dom, so
+      // Math.max(0, 0 + 0 - 60 - 16) = 0.
+      const call = scrollSpy.mock.calls[0][0] as ScrollToOptions;
+      expect(call.top).toBe(0);
+      expect(call.behavior).toBe("instant");
+    } finally {
+      scrollSpy.mockRestore();
+      document.body.removeChild(header);
+    }
+  });
+
+  it("does not scroll or write from a stale run after props change mid-flight", async () => {
+    const header = document.createElement("header");
+    Object.defineProperty(header, "offsetHeight", { value: 60, configurable: true });
+    document.body.appendChild(header);
+
+    const scrollSpy = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+
+    try {
+      // First mount with a deferred fetch that never resolves before the rerender.
+      let resolveFirst!: (value: string) => void;
+      const firstFetch = vi
+        .fn<(filename: string) => Promise<string>>()
+        .mockReturnValue(new Promise<string>((resolve) => { resolveFirst = resolve; }));
+
+      const { rerender, container } = render(
+        <HomeRegion
+          posts={[fetched]}
+          postLinkPrefix="/post/"
+          fetchPost={firstFetch}
+          scrollSlug="hello-world"
+        />,
+      );
+
+      // Rerender with a NEW fetchPost — the effect's dep change runs the first
+      // run's cleanup (cancelling its writes/scroll) and starts a fresh run.
+      let resolveSecond!: (value: string) => void;
+      const secondFetch = vi
+        .fn<(filename: string) => Promise<string>>()
+        .mockReturnValue(new Promise<string>((resolve) => { resolveSecond = resolve; }));
+
+      rerender(
+        <HomeRegion
+          posts={[fetched]}
+          postLinkPrefix="/post/"
+          fetchPost={secondFetch}
+          scrollSlug="hello-world"
+        />,
+      );
+
+      // Resolve the stale (first) run; its container/cancel guard must drop the
+      // write and skip the scroll.
+      resolveFirst("# Stale should not appear");
+      resolveSecond("# Fresh");
+
+      await waitFor(() => {
+        expect(scrollSpy).toHaveBeenCalledTimes(1);
+      });
+
+      // The single scroll came from the live (second) run, and the content
+      // reflects the live fetch — the stale fetch's markdown never landed.
+      const content = container.querySelector("#post-content-hello-world");
+      expect(content?.innerHTML).not.toContain("Stale should not appear");
+      expect(content?.innerHTML).not.toContain("Loading...");
+    } finally {
+      scrollSpy.mockRestore();
+      document.body.removeChild(header);
+    }
+  });
 });
