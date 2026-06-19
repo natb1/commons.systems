@@ -24,7 +24,7 @@ test.describe("navigation", () => {
   test("HTML shell structure @smoke", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator("header h1")).toHaveText("Print");
-    await expect(page.locator("nav")).toBeVisible();
+    await expect(page.locator("nav#nav")).toBeVisible();
     await expect(page.locator("main")).toBeVisible();
     await expect(page.locator("footer")).toBeVisible();
   });
