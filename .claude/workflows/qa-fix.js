@@ -158,7 +158,7 @@ const hasRefuted = (votes) => votes.includes('refuted');
 // PLANNED-DEFERRAL BYPASS (issue #1891) — the FIRST branch, before everything:
 //   When planned_deferral is true the item's acceptance criterion is documented
 //   as non-assertable at merge time (measured downstream), so it is ALWAYS
-//   needs-human and never auto-fixable — regardless of the class the classify
+//   needs-main and never auto-fixable — regardless of the class the classify
 //   agent assigned. This branch fires FIRST, symmetric with the aesthetic
 //   bypass: it must precede the `!== 'needs-human'` pass-through, or an
 //   opus-fixable planned-deferral item (the literal original failure) would slip
@@ -345,7 +345,7 @@ const classifications = residue.map((r) => {
     throw new Error(`classify: agent returned no classification for residue id "${r.id}"`);
   }
   // planned_deferral is INPUT (sourced from residue r), not classify-agent
-  // output — it authoritatively forces needs-human in applyQaDisposition.
+  // output — it authoritatively forces needs-main in applyQaDisposition.
   return {
     id: r.id,
     class: c.class,
@@ -362,7 +362,7 @@ phase('verify');
 // Candidate set = non-aesthetic, non-planned-deferral needs-human items.
 // Aesthetic needs-human items BYPASS the fan-out and stay needs-human (enforced
 // by applyQaDisposition's aesthetic branch); planned-deferral items are
-// authoritatively needs-human (applyQaDisposition's first branch, issue #1891) —
+// authoritatively needs-main (applyQaDisposition's first branch, issue #1891) —
 // both are excluded here so no skeptic can downgrade them back to opus-fixable.
 const candidates = classifications.filter(
   (c) => c.class === 'needs-human' && c.aesthetic === false && c.planned_deferral !== true
