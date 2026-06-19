@@ -273,6 +273,38 @@ describe("createBlogApp routing and panel behavior", () => {
     expect(getPosts).not.toHaveBeenCalled();
   });
 
+  // Case 2b — Direct / signed-out preserves the prerendered nav and info-panel
+  // nodes WITHOUT tearing them down (no CLS, no hydration error #424). Mirrors
+  // Case 2's #posts guard but for the nav and info-panel roots: hydrateRoot already
+  // rendered both for the entry path, so the first-dispatch skip avoids the
+  // redundant root.render() that would abandon hydration and client-render. We
+  // capture the nav <nav.cs-nav> and info-panel firstElementChild BEFORE
+  // createBlogApp and assert the SAME references survive after settle().
+  it("reuses the prerendered nav and info-panel nodes on direct / entry (no CLS, no hydration error #424)", async () => {
+    history.pushState({}, "", "/");
+    const config = makeConfig({ buildTimeMetadata: [PUBLISHED_POST], buildTimeContent: PUBLISHED_CONTENT });
+    scaffoldDom(config, "/");
+
+    // Capture stable server-rendered wrapper elements from both roots before
+    // createBlogApp runs. nav.cs-nav is BlogNav's top-level <nav>; info-panel's
+    // firstElementChild is InfoPanel's first rendered <section class="panel-section">.
+    const navNode = document.getElementById("nav")!.firstElementChild;
+    expect(navNode).not.toBeNull();
+    const panelNode = document.getElementById("info-panel")!.firstElementChild;
+    expect(panelNode).not.toBeNull();
+
+    handle = createBlogApp(config);
+
+    await settle();
+
+    // The prerendered nodes were REUSED, not torn down and replaced — hydrateRoot
+    // + the first-dispatch skip (guards on renderNav/renderPanel) preserved the DOM.
+    // If the guards are absent, React abandons hydration and client-renders, breaking
+    // these references.
+    expect(document.getElementById("nav")!.firstElementChild).toBe(navNode);
+    expect(document.getElementById("info-panel")!.firstElementChild).toBe(panelNode);
+  });
+
   // Case 3 + TASK 1 — info-panel blogroll hydration runs, and
   // forceInfoPanelRefresh() REMOUNTS the panel so the blogroll RE-fetches.
   it("hydrates the blogroll, and forceInfoPanelRefresh re-fetches it via key remount", async () => {

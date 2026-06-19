@@ -277,23 +277,31 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
 
     // Per-nav side-effects (every navigation), matching the old updateNav +
     // router-onNavigate behavior.
-    renderNav(path);
+    //
+    // On the very first dispatch, the three hydrateRoot calls above already
+    // rendered nav (navElement(parsePath().path)), app (homeElement(initialSlug)),
+    // and panel (panelElement() reading the entry path) for the entry path — the
+    // same output the first dispatch would re-render. Calling root.render() here
+    // would be redundant AND harmful: a root.render() mid-hydration can make React
+    // abandon the prerendered server DOM and client-render the whole root, producing
+    // a recoverable hydration error (#424) and CLS on the SEO surface. Skip all
+    // three root.render() calls on the first dispatch; hydrateRoot already committed
+    // the correct initial tree. Analytics and body-dataset side-effects still run
+    // unconditionally (see onNavigate / trackPageView below).
+    if (!isFirstDispatch) renderNav(path); // first dispatch: nav already hydrated for entry path
     config.onNavigate?.(path); // landing sets document.body.dataset.route; fellspiral omits
     config.firebase.trackPageView(path);
     // Centralized panel render: one per navigation, so entering/leaving a route
     // with an infoPanelContentForPath override (landing's /about) toggles
     // aboutContent. The blogroll effect's stable deps mean a same-path home→home
     // nav does NOT re-fetch; only an aboutContent toggle re-runs it.
-    renderPanel();
+    if (!isFirstDispatch) renderPanel(); // first dispatch: panel already hydrated for entry path
 
     const isHome = path === "/" || path.startsWith("/post/");
     if (isHome) {
       const slug = path.startsWith("/post/") ? path.slice(6) : undefined;
-      // On the very first navigation the #app body is already hydrated with
-      // homeElement(initialSlug) and slug === initialSlug, so re-rendering it would
-      // be a redundant root.render() that can make React abandon hydration and
-      // client-render (CLS on the SEO surface). Skip it; hydrateRoot already
-      // rendered this exact element. Side-effects below still run.
+      // First dispatch: #app is already hydrated with homeElement(initialSlug) —
+      // same as all three roots above, skip to avoid redundant root.render().
       if (!isFirstDispatch) appRoot.render(homeElement(slug));
       // SEO + home hooks (old homeRoute.afterRender).
       config.onHomeAfterRender?.(slug);
