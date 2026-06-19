@@ -1,0 +1,21 @@
+:root {
+  --fg:      light-dark(#1a1a1a, #e0d8c8);   /* ink / oat */
+  --bg:      light-dark(#f5f0e8, #1a1714);   /* paper / espresso */
+  --surface: light-dark(#ece5d8, #252017);   /* panels, cards, header */
+  --accent:  light-dark(#b8600a, #e8943a);   /* amber — the one hue */
+  --muted:   light-dark(#6b5e4f, #8a7d6e);
+  --border:  light-dark(#c4b8a4, #3d3529);
+
+  --text-primary: var(--fg);  --text-muted: var(--muted);
+  --text-on-accent: var(--bg);
+  --link: var(--accent);
+  --surface-page: var(--bg);  --surface-card: var(--surface);  --surface-raised: var(--surface);
+  --border-default: var(--border);  --focus-ring: var(--accent);
+
+  --success:#4caf50; --favorable:#4caf50; --warning:var(--accent);
+  --error:#e45858;   --unfavorable:#e45858; --positive:#2ca02c;
+
+  /* warm, desaturated categorical palette (budget Sankey order) */
+  --chart-1:#4d6f8f; --chart-2:#c98a3c; --chart-3:#a35d5d;
+  --chart-4:#7a8c5a; --chart-5:#b08a4f; --chart-6:#5f8a8a;
+}
