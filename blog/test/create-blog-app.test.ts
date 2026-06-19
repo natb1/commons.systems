@@ -513,6 +513,100 @@ describe("createBlogApp routing and panel behavior", () => {
     expect(unsubscribeSpy).toHaveBeenCalledTimes(1);
   });
 
+  // Case A — AC#1: router.destroy() teardown: popstate no longer handled after destroy().
+  // Discrimination: if teardowns.push(() => router.destroy()) is dropped, the popstate
+  // listener survives and renderHomeHtml is called after handle.destroy() — test fails.
+  it("router popstate listener removed by destroy()", async () => {
+    history.pushState({}, "", "/admin");
+    document.body.innerHTML = `
+      <div id="nav"></div>
+      <div class="page">
+        <header></header>
+        <div id="app"><div id="posts" data-prerendered="true">PRERENDERED HOME</div></div>
+        <aside id="info-panel"></aside>
+        <button id="panel-toggle"></button>
+      </div>
+    `;
+
+    handle = createBlogApp(makeConfig());
+    const app = document.getElementById("app")!;
+
+    // Admin route replaces #posts with admin markup.
+    await vi.waitFor(() => expect(app.querySelector("#posts")).toBeNull());
+
+    handle.destroy();
+    handle = undefined; // prevent afterEach double-destroy
+
+    renderHomeHtml.mockClear();
+
+    // Fire a popstate toward "/" — the router's listener must no longer be active.
+    history.pushState({}, "", "/");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await new Promise((r) => setTimeout(r, 0)); // macrotask tick
+
+    expect(renderHomeHtml).not.toHaveBeenCalled();
+  });
+
+  // Case B — AC#2: headerObserver.disconnect() called by destroy().
+  // Discrimination: if headerObserver.disconnect() is removed from destroy(),
+  // the spy is never called and the test fails.
+  it("headerObserver.disconnect() called by destroy()", () => {
+    const disconnectSpy = vi.spyOn(ResizeObserverStub.prototype, "disconnect");
+    scaffoldDom();
+
+    handle = createBlogApp(makeConfig());
+    handle.destroy();
+    handle = undefined; // prevent afterEach double-destroy
+
+    expect(disconnectSpy).toHaveBeenCalledTimes(1);
+    disconnectSpy.mockRestore();
+  });
+
+  // Case C — AC#3: same-UID guard in onAuthStateChanged fires early return on repeat call.
+  // Discrimination: if the `if (user?.uid === currentUser?.uid) return` guard is dropped,
+  // getPosts is called twice and the assertion fails.
+  it("same-UID guard: onAuthStateChanged twice with same UID calls getPosts once", async () => {
+    history.pushState({}, "", "/");
+    scaffoldDom();
+
+    let authCallback: ((user: { uid: string } | null) => void) | undefined;
+    const config = makeConfig({
+      firebase: {
+        db: { type: "mock-firestore" } as never,
+        namespace: "test/env" as never,
+        trackPageView: vi.fn(),
+        initAppCheck: vi.fn(() => Promise.resolve()),
+        signIn: vi.fn(() => Promise.resolve()),
+        signOut: vi.fn(() => Promise.resolve()),
+        onAuthStateChanged: vi.fn((cb) => {
+          authCallback = cb;
+          return Promise.resolve();
+        }),
+      },
+    });
+
+    handle = createBlogApp(config);
+    const app = document.getElementById("app")!;
+
+    // Settle the initial nav (signed out, prerendered #posts preserved).
+    await vi.waitFor(() => {
+      expect(app.querySelector("#posts")).not.toBeNull();
+    });
+    await new Promise((r) => setTimeout(r, 0));
+
+    (getPosts as ReturnType<typeof vi.fn>).mockClear();
+
+    // First fire — new uid, refreshAfterAuthChange runs, getPosts is called once.
+    authCallback!({ uid: "u1" } as never);
+    await vi.waitFor(() => expect(getPosts).toHaveBeenCalledTimes(1));
+
+    // Second fire — same uid, same-UID guard hits early return, getPosts not called again.
+    authCallback!({ uid: "u1" } as never);
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(getPosts).toHaveBeenCalledTimes(1);
+  });
+
   // Case 7 — #1409: the live-DOM skip fires whenever #posts is live, not only
   // on the initial prerender. After a loadPosts() run renders a fresh #posts,
   // repeat navigations to "/" and "/post/..." both return null from render and
