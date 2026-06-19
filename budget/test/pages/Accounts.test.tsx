@@ -235,6 +235,28 @@ describe("Accounts (renderAccounts markup parity)", () => {
     expect(html).toContain("Net change");
   });
 
+  it("keeps the three period labels word-bounded in the income-table header text", async () => {
+    // Regression guard for the React port: the legacy string renderer separated
+    // header <th> cells with whitespace, so accounts-income-statement.spec.ts can
+    // count three "Mon YYYY" labels in thead.textContent via /\b[A-Z][a-z]{2} \d{4}\b/g.
+    // Adjacent JSX <th> emit no separating whitespace, collapsing the labels into
+    // one bounded token; the {" "} text nodes restore the boundaries.
+    const { container } = render(<Accounts options={localOptions({
+      getTransactions: vi.fn().mockResolvedValue([
+        txn({ id: "i1" as never, category: "Salary", amount: -3000, timestamp: ts("2025-02-10") }),
+        txn({ id: "e1" as never, category: "Food", amount: 500, timestamp: ts("2025-02-12") }),
+        txn({ id: "i0" as never, category: "Salary", amount: -2800, timestamp: ts("2025-01-10") }),
+      ]),
+      getStatements: vi.fn().mockResolvedValue([stmt({ period: "2025-02", lastTransactionDate: ts("2025-02-12") })]),
+    })} />);
+    await waitFor(() => {
+      if (!container.querySelector("#accounts-income-table thead")) throw new Error("not settled");
+    });
+    const headerText = container.querySelector("#accounts-income-table thead")?.textContent ?? "";
+    const matches = headerText.match(/\b[A-Z][a-z]{2} \d{4}\b/g) ?? [];
+    expect(matches.length).toBeGreaterThanOrEqual(3);
+  });
+
   it("renders the chart island containers and date picker when chart data computes", async () => {
     const html = await renderAccounts(localOptions({
       getTransactions: vi.fn().mockResolvedValue([txn({ budget: "food" as never })]),

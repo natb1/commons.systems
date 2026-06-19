@@ -749,7 +749,6 @@ function useReconcileData(options: RenderPageOptions, query: ReconcileQuery, rel
     })();
 
     return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query.institution, query.account, query.period, reloadNonce]);
 
   return state;

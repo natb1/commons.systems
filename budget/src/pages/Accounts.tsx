@@ -151,14 +151,17 @@ function IncomeStatementTable({ title, tableId, rows, totalLabel, totalVariance,
     <table id={tableId} className="income-statement-table">
       <caption>{title}</caption>
       <thead>
+        {/* {" "} between cells keeps a whitespace text node in thead.textContent
+            so the period labels stay word-bounded — parity with the legacy
+            string renderer, asserted by accounts-income-statement.spec.ts. */}
         <tr>
-          <th>Category</th>
-          <th className="num">{labels.currentLabel}</th>
-          <th className="num">{labels.priorLabel}</th>
-          <th className="num">Δ$</th>
-          <th className="num">Δ%</th>
-          <th className="num">{labels.yoYLabel}</th>
-          <th className="num">Δ$</th>
+          <th>Category</th>{" "}
+          <th className="num">{labels.currentLabel}</th>{" "}
+          <th className="num">{labels.priorLabel}</th>{" "}
+          <th className="num">Δ$</th>{" "}
+          <th className="num">Δ%</th>{" "}
+          <th className="num">{labels.yoYLabel}</th>{" "}
+          <th className="num">Δ$</th>{" "}
           <th className="num">Δ%</th>
         </tr>
       </thead>
