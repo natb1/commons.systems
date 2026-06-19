@@ -353,6 +353,13 @@ assert_eq "sessions[agent-aaa].outcome is null" "null" \
   "$(jq '[.sessions[]|select(.id=="agent-aaa")][0].outcome' <<<"$OUT")"
 assert_eq "sessions[agent-aaa].outcome_rates is null" "null" \
   "$(jq '[.sessions[]|select(.id=="agent-aaa")][0].outcome_rates' <<<"$OUT")"
+# A session whose envelope has all-zero counts carries null rates (zero-denominator guard).
+assert_eq 'sessions[sess-router].outcome_rates.hit_rate is null' 'null' \
+  "$(jq '[.sessions[]|select(.id=="sess-router")][0].outcome_rates.hit_rate' <<<"$OUT")"
+assert_eq 'sessions[sess-router].outcome_rates.actionability is null' 'null' \
+  "$(jq '[.sessions[]|select(.id=="sess-router")][0].outcome_rates.actionability' <<<"$OUT")"
+assert_eq 'sessions[sess-router].outcome_rates.fix_rate is null' 'null' \
+  "$(jq '[.sessions[]|select(.id=="sess-router")][0].outcome_rates.fix_rate' <<<"$OUT")"
 
 # ---------------------------------------------------------------------------
 # Persist-wiring tests (Unit 2).  These use a fake writer stub controlled via
