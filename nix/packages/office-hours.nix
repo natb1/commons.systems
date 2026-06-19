@@ -11,6 +11,10 @@
 pkgs.writeShellScriptBin "office-hours" ''
   set -euo pipefail
 
+  # Strip the unbounded direnv blob before the first execve (git) so a bloated
+  # interactive-shell environment can't trigger E2BIG (#1879). Exec-free builtin.
+  unset -v "''${!DIRENV_@}" 2>/dev/null || true
+
   TOPLEVEL="$(git rev-parse --show-toplevel)"
   SCRIPT="$TOPLEVEL/.claude/skills/dispatch-propagate/scripts/office-hours"
 
@@ -18,6 +22,14 @@ pkgs.writeShellScriptBin "office-hours" ''
     echo "office-hours: script not found or not executable: $SCRIPT" >&2
     exit 1
   fi
+
+  SANITIZE="$TOPLEVEL/.claude/skills/dispatch-propagate/scripts/lib-sanitize-launch-env.sh"
+  if [ ! -r "$SANITIZE" ]; then
+    echo "office-hours: sanitize lib not found: $SANITIZE" >&2
+    exit 1
+  fi
+  . "$SANITIZE"
+  sanitize_launch_env || exit 1
 
   exec "$SCRIPT" "$@"
 ''
