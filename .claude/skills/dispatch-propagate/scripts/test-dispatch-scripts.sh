@@ -273,6 +273,37 @@ case "$args" in
       echo "[]"
     fi
     ;;
+  api\ *repos/*/issues\?*labels=dispatch-test-*)
+    # gh_issue_list_rest edge-case tests (#1652): sentinel label prefix
+    # `dispatch-test-` routes to in-test fixtures without polluting the shared
+    # issue-list fixture paths. MUST precede the generic api *repos/*/issues?*
+    # branch (case is first-wins). Log the full $args so tests can assert whether
+    # --paginate was passed and what per_page= value was used.
+    echo "$args" >> "$STUB_DIR/gh-issue-list-rest-calls.log"
+    rest_path_dt=$(printf '%s' "$args" | grep -oE 'repos/[^ ]+')
+    rest_query_dt="${rest_path_dt#*\?}"
+    rest_label_dt=""
+    for kv in ${rest_query_dt//&/ }; do
+      case "$kv" in
+        labels=*) rest_label_dt="${kv#labels=}" ;;
+      esac
+    done
+    case "$rest_label_dt" in
+      dispatch-test-empty)
+        echo '[]'
+        ;;
+      dispatch-test-paginate)
+        cat "$STUB_DIR/rest-page-1.json"
+        cat "$STUB_DIR/rest-page-2.json"
+        ;;
+      dispatch-test-limit)
+        cat "$STUB_DIR/rest-limit.json"
+        ;;
+      *)
+        echo '[]'
+        ;;
+    esac
+    ;;
   api\ *repos/*/issues\?*)
     # gh_issue_list_rest (#1601): the four converted dispatch issue scans now hit
     # the REST issues endpoint instead of `gh issue list`. The fake-gh receives
@@ -1055,6 +1086,75 @@ printf '%s' '{"check_runs":[{"status":"completed","conclusion":"failure"}]}' \
 cached=$(source "$TMPDIR_TEST/lib.sh"; dispatch_ci_verdict_rest "sha-cache")
 assert_eq "verdict cache: second call → cached passing despite changed fixture" "passing" "$cached"
 unset DISPATCH_CI_VERDICT_CACHE
+teardown
+
+# ============================================================================
+# gh_issue_list_rest edge-case tests (#1652)
+# ============================================================================
+# These three tests drive the REAL gh_issue_list_rest helper (sourced from the
+# copied lib.sh) via the `dispatch-test-*` sentinel stub branch above. They cover
+# the three behaviors that were previously unexercised:
+#   (a) empty result (`[]` from the endpoint)
+#   (b) pagination boundary (two concatenated arrays merged by jq -s 'add')
+#   (c) --limit single-page branch (per_page=<limit>, no --paginate)
+echo "=== gh_issue_list_rest (edge cases) ==="
+
+echo "Test: empty result -- helper returns [] with length 0"
+setup
+actual_empty=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --label dispatch-test-empty)
+assert_eq "empty result: length == 0" "0" "$(jq 'length' <<<"$actual_empty")"
+assert_eq "empty result: .[0].number is absent" "" "$(jq -r '.[0].number // empty' <<<"$actual_empty")"
+teardown
+
+echo "Test: pagination boundary -- two pages merged, all numbers present, PR objects filtered"
+setup
+# Page 1: two real issues + one object with pull_request key (must be filtered out).
+printf '%s\n' '[
+  {"number":101,"created_at":"2024-01-01T00:00:00Z","closed_at":null,"labels":[]},
+  {"number":102,"created_at":"2024-01-02T00:00:00Z","closed_at":null,"labels":[],"pull_request":{"merged_at":null}},
+  {"number":103,"created_at":"2024-01-03T00:00:00Z","closed_at":null,"labels":[]}
+]' > "$STUB_DIR/rest-page-1.json"
+# Page 2: two more real issues on a distinct page.
+printf '%s\n' '[
+  {"number":201,"created_at":"2024-01-04T00:00:00Z","closed_at":null,"labels":[]},
+  {"number":202,"created_at":"2024-01-05T00:00:00Z","closed_at":null,"labels":[]}
+]' > "$STUB_DIR/rest-page-2.json"
+actual_pag=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --label dispatch-test-paginate)
+# Page-1 issue numbers 101 and 103 must appear (PR object 102 must NOT).
+assert_eq "paginate: issue 101 present" "true" "$(jq 'any(.[]; .number == 101)' <<<"$actual_pag")"
+assert_eq "paginate: issue 103 present" "true" "$(jq 'any(.[]; .number == 103)' <<<"$actual_pag")"
+# Page-2 numbers must also appear -- proves jq -s 'add' merged both pages.
+assert_eq "paginate: issue 201 present" "true" "$(jq 'any(.[]; .number == 201)' <<<"$actual_pag")"
+assert_eq "paginate: issue 202 present" "true" "$(jq 'any(.[]; .number == 202)' <<<"$actual_pag")"
+# PR object 102 must be absent (helper filters .pull_request != null).
+assert_eq "paginate: PR object 102 filtered out" "false" "$(jq 'any(.[]; .number == 102)' <<<"$actual_pag")"
+teardown
+
+echo "Test: --limit flag -- single-page branch (per_page=limit, no --paginate)"
+setup
+printf '%s\n' '[
+  {"number":301,"created_at":"2024-01-06T00:00:00Z","closed_at":null,"labels":[]},
+  {"number":302,"created_at":"2024-01-07T00:00:00Z","closed_at":null,"labels":[]},
+  {"number":303,"created_at":"2024-01-08T00:00:00Z","closed_at":null,"labels":[]}
+]' > "$STUB_DIR/rest-limit.json"
+# Clear the call-log before this specific invocation so earlier --paginate calls
+# (from the empty and paginate tests above, which ran their own setup/teardown)
+# don't pollute the absence assertion.
+: > "$STUB_DIR/gh-issue-list-rest-calls.log"
+actual_lim=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --limit 50 --label dispatch-test-limit)
+assert_eq "limit: result length matches fixture (3 items)" "3" "$(jq 'length' <<<"$actual_lim")"
+# The call log must contain per_page=50 (limit was passed through) ...
+if grep -q 'per_page=50' "$STUB_DIR/gh-issue-list-rest-calls.log"; then
+  assert_eq "limit: log contains per_page=50" "yes" "yes"
+else
+  assert_eq "limit: log contains per_page=50" "yes" "no"
+fi
+# ... and must NOT contain --paginate (single-page branch was taken).
+if grep -q -- '--paginate' "$STUB_DIR/gh-issue-list-rest-calls.log"; then
+  assert_eq "limit: log does not contain --paginate" "no" "yes"
+else
+  assert_eq "limit: log does not contain --paginate" "no" "no"
+fi
 teardown
 
 # ============================================================================
