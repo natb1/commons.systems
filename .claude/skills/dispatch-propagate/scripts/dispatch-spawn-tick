@@ -162,6 +162,13 @@ ensure_recover_unit "$MAIN_WORKTREE" || true
 # on-demand daemon then falls back to surviving via KillMode=process (#1196).
 ensure_daemon_service || true
 
+# Install the durable heartbeat timer (#2022) — a 15-min drumbeat that fires
+# dispatch-tick independently of Stop-hooks and reseed timers, so abnormal
+# worker death and post-cap stalls self-recover. Best-effort: a failure here
+# is non-fatal; the existing OnFailure + reseed chain still covers the
+# common-case recovery path.
+ensure_heartbeat_units "$MAIN_WORKTREE" || true
+
 SYSTEMD_RUN_CMD="${DISPATCH_SPAWN_TICK_SYSTEMD_RUN_CMD:-systemd-run}"
 TICK_PATH="$MAIN_WORKTREE/.claude/skills/dispatch-propagate/scripts/dispatch-tick"
 
