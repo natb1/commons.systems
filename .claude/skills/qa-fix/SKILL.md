@@ -350,7 +350,8 @@ fork site below (same discipline as the `fixes_applied_count` tally in Step 3.7)
      Set to `true` when the plan item carried `Flag: planned-deferral — <reason>`.
      The flag is orthogonal to `kind` — it normally rides a `needs-human-judgment`
      item but may in principle ride any kind. When set, put the `<reason>` into the
-     item's `finding` so the office-hours human sees why it was deferred.
+     item's `finding` so the reason rides into the `needs-main` follow-up body filed
+     in Step 3.6, recording why it was deferred.
 
    The three residue kinds:
 
@@ -909,18 +910,20 @@ fork site below (same discipline as the `fixes_applied_count` tally in Step 3.7)
    - When the walkthrough lane ran: the GIF filename (`tmp/qa-fix-walkthrough-<n>.gif`).
    - **Disposition triage** — include this section only when the residue list was
      non-empty (i.e. Step 3.5 ran). For each **disposition item**, list its `class`
-     from `result.dispositions`. For `needs-human` items, choose the verify source
-     by joining the disposition back to the in-memory residue list by `id` and
-     reading `residue[item].planned_deferral`:
+     from `result.dispositions`. For `needs-human` items — plus planned-deferral
+     items, now `needs-main` — choose the verify source by joining the disposition
+     back to the in-memory residue list by `id` and reading
+     `residue[item].planned_deferral`:
      - **Aesthetic items** (`dispositions[item].aesthetic === true`): use
        `dispositions[item].verify` (which will be `n/a`) directly — no
        `verify_report` entry exists for them.
-     - **Planned-deferral items** (`residue[item].planned_deferral === true`): use
-       `dispositions[item].verify` (which will be `n/a`) directly — these items are
-       excluded from the skeptic candidate set and have no `verify_report` entry.
-       Note them in the deferred-to-office-hours list as deferred ACs (measured
-       downstream), distinct from aesthetic judgment calls, so the office-hours human
-       understands the deferral reason from `residue[item].finding`.
+     - **Planned-deferral items** (`residue[item].planned_deferral === true`): these
+       classify `needs-main` (not `needs-human`) and are filed as a `blocked_by`
+       follow-up in Step 3.6. Use `dispositions[item].verify` (which will be `n/a`)
+       directly — they are excluded from the skeptic candidate set and have no
+       `verify_report` entry. The deferral reason rides `residue[item].finding`, which
+       flows into the `needs-main` follow-up body (measured downstream), rather than
+       awaiting an office-hours walkthrough.
      - **All other non-aesthetic, non-planned-deferral `needs-human` items**: include
        the verify verdict and rationale from the matching entry in
        `result.verify_report` (matched by `id`).
