@@ -25206,6 +25206,55 @@ assert_eq "surface: non-.claude sh → code no app_or_rules" "surface=code
 deps=false
 app_or_rules=false" "$out"
 
+# src/foo.test.ts → tests
+out=$(printf '%s\n' "src/foo.test.ts" | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: tests .test.ts" "surface=tests
+deps=false
+app_or_rules=false" "$out"
+
+# landing/src/app.spec.tsx → tests
+out=$(printf '%s\n' "landing/src/app.spec.tsx" | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: tests .spec.tsx" "surface=tests
+deps=false
+app_or_rules=false" "$out"
+
+# budget-etl/main_test.go → tests
+out=$(printf '%s\n' "budget-etl/main_test.go" | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: tests _test.go" "surface=tests
+deps=false
+app_or_rules=false" "$out"
+
+# src/__tests__/foo.ts → tests
+out=$(printf '%s\n' "src/__tests__/foo.ts" | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: tests __tests__ dir" "surface=tests
+deps=false
+app_or_rules=false" "$out"
+
+# test/fixtures/x.json → tests
+out=$(printf '%s\n' "test/fixtures/x.json" | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: tests test/ dir prefix" "surface=tests
+deps=false
+app_or_rules=false" "$out"
+
+# .claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh → tests
+out=$(printf '%s\n' ".claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh" | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: tests test-*.sh script" "surface=tests
+deps=false
+app_or_rules=false" "$out"
+
+# mixed README.md + src/foo.test.ts → code (not all-docs, not all-tests);
+# .test.ts still carries the .ts extension so app_or_rules=true
+out=$(printf '%s\n' "README.md" "src/foo.test.ts" | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: mixed doc+test → code" "surface=code
+deps=false
+app_or_rules=true" "$out"
+
+# mixed src/foo.test.ts + src/bar.ts → code (a real source file present)
+out=$(printf '%s\n' "src/foo.test.ts" "src/bar.ts" | "$SCRIPT_DIR/dispatch-security-surface")
+assert_eq "surface: mixed test+source → code" "surface=code
+deps=false
+app_or_rules=true" "$out"
+
 # ============================================================================
 # === dispatch-changed-files ===
 # ============================================================================
@@ -25613,6 +25662,11 @@ assert_eq "finders: code surface → codeql present" "1" "$n"
 # codeql gating: absent on docs surface
 n=$(printf 'surface=docs\ndeps=false\napp_or_rules=false\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -c '^codeql$' || true)
 assert_eq "finders: docs surface → codeql absent" "0" "$n"
+
+# tests surface → exactly code-review and review (no security finders)
+out=$(printf 'surface=tests\ndeps=false\napp_or_rules=false\n' | "$SCRIPT_DIR/dispatch-review-finders")
+assert_eq "finders: tests → code-review,review only" "code-review
+review" "$out"
 
 # ============================================================================
 # === dispatch-review-dedup ===
