@@ -7,7 +7,7 @@
  * A self-contained, sandboxed Workflow-tool script structurally modeled on
  * .claude/workflows/review-fix.js. It ALWAYS classifies each QA residue item
  * (opus-fixable / needs-main / needs-human / already-satisfied), adversarially
- * verifies the non-aesthetic `needs-human` calls with Sonnet skeptics, and
+ * verifies the non-aesthetic, non-planned-deferral `needs-human` calls with Sonnet skeptics, and
  * returns the resulting dispositions. `already-satisfied` items — whose
  * criterion is already provably met by readable evidence — are dropped from the
  * residue as PASS, partitioned out into the `already_satisfied` return array.
@@ -48,8 +48,8 @@
  *   - already_satisfied: items whose criterion is already provably met by
  *     readable evidence (passing tests, page text, code) — dropped from the
  *     residue as PASS, so no fix-plan and no office-hours escalation.
- *   - verify_report: one entry per NON-AESTHETIC needs-human candidate that went
- *     through the skeptic fan-out. `verdict` is "refuted"|"upheld"|"unverified".
+ *   - verify_report: one entry per NON-AESTHETIC, NON-PLANNED-DEFERRAL needs-human
+ *     candidate that went through the skeptic fan-out. `verdict` is "refuted"|"upheld"|"unverified".
  *   - fix_plan: the ordered Opus fix plan ({ units, deviation, deviation_reason })
  *     when the fix-plan phase ran; `null` when it did not (plan_fix false/absent,
  *     no opus-fixable items, or the planning agent died).
@@ -370,7 +370,7 @@ const votesById = {};
 const rationalesById = {};
 
 if (candidates.length) {
-  log(`verify: ${candidates.length} non-aesthetic needs-human candidate(s), 2 skeptics each`);
+  log(`verify: ${candidates.length} non-aesthetic, non-planned-deferral needs-human candidate(s), 2 skeptics each`);
   // Flat (candidate × skeptic) thunk list so the barrier covers every vote.
   const verifyJobs = [];
   for (const c of candidates) {
@@ -424,7 +424,7 @@ if (candidates.length) {
     }
   });
 } else {
-  log('verify: no non-aesthetic needs-human candidates — skipping fan-out');
+  log('verify: no non-aesthetic, non-planned-deferral needs-human candidates — skipping fan-out');
 }
 
 // --- 3. AGGREGATE + return ---------------------------------------------------
@@ -457,7 +457,7 @@ const allDispositions = residue.map((r) => {
 // consumer that filters/iterates `dispositions` naturally excludes them.
 const { dispositions, already_satisfied } = partitionDispositions(allDispositions);
 
-// verify_report: one entry per non-aesthetic needs-human candidate. verdict is
+// verify_report: one entry per non-aesthetic, non-planned-deferral needs-human candidate. verdict is
 // computed from votes exactly like review-fix.js's verify_report (lowercase):
 // no votes → "unverified", includes "refuted" → "refuted", else "upheld".
 const verify_report = candidates.map((c) => {
