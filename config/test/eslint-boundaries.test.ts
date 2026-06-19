@@ -37,6 +37,14 @@ describe("eslint layering boundary rules", () => {
     expect(violations[0].message).toContain("landing");
   });
 
+  it("flags a type-only import from an app package", () => {
+    const messages = lint('import type { X } from "landing";');
+    const violations = restrictedImportMessages(messages);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toMatch(/top-level app package/);
+    expect(violations[0].message).toContain("landing");
+  });
+
   it("does not flag a scoped leaf-lib import", () => {
     const messages = lint('import { x } from "@commons-systems/errorutil";');
     const violations = restrictedImportMessages(messages);

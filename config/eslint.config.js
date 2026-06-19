@@ -26,7 +26,7 @@ const appPackages = workspaces
   .filter((name) => name && !name.startsWith("@commons-systems/"));
 
 const appImportPatterns = appPackages.map((app) => ({
-  group: [app, `${app}/*`, `${app}/**`],
+  group: [app, `${app}/**`],
   message:
     `Layering violation: '${app}' is a top-level app package and must not be ` +
     "imported by libraries, utils, or @commons-systems/ds. Apps are " +
