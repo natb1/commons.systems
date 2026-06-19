@@ -214,6 +214,13 @@ log(`args type: ${typeof args}; residue count=${(_a.residue || []).length}; brow
 
 const residue = _a.residue || [];
 
+// subagents_launched (source 1, this Workflow's own fan-out): a single
+// accumulator incremented at each spawn site, inside the guard that actually
+// launches the agents. A launched-but-dead agent still counts — increment at
+// the spawn, not on the result. Unit 4's SKILL body adds any source-2 subagents
+// (e.g. the /implement-unit fix loop) before emitting the envelope.
+let subagentsLaunched = 0;
+
 // --- 1. CLASSIFY (one Opus agent, barrier) -----------------------------------
 phase('classify');
 
@@ -272,6 +279,7 @@ const classifyPrompt = [
   '</untrusted>',
 ].join('\n');
 
+subagentsLaunched += 1;
 const classifyRes = await agent(classifyPrompt, {
   model: 'opus',
   agentType: 'general-purpose',
@@ -319,6 +327,7 @@ if (candidates.length) {
       verifyJobs.push({ id: c.id, k });
     }
   }
+  subagentsLaunched += verifyJobs.length;
   const verifyResults = await parallel(
     verifyJobs.map((job) => () => {
       const r = residueById.get(job.id);
@@ -494,6 +503,7 @@ if (_a.plan_fix === true && opusFixable.length > 0) {
     '</untrusted>',
   ].join('\n');
 
+  subagentsLaunched += 1;
   const planRes = await agent(fixPlanPrompt, {
     model: 'opus',
     agentType: 'general-purpose',
@@ -513,10 +523,46 @@ if (_a.plan_fix === true && opusFixable.length > 0) {
   log(`fix-plan: skipped (plan_fix=${_a.plan_fix}, opusFixable=${opusFixable.length})`);
 }
 
+// --- outcome-envelope counts (Unit 3, issue #1860) ---------------------------
+// Computed per .claude/docs/outcome-envelope.md. Unit 4 passes these into
+// dispatch-emit-outcome (recomputing fixes_applied/followups_filed/disposition
+// after its /implement-unit fix loop runs). Additive only.
+const _deviation = fix_plan ? fix_plan.deviation : false;
+const findings_surfaced = dispositions.length; // triaged residue (excludes already_satisfied)
+// findings_actionable === findings_surfaced here: every disposition (opus-fixable,
+// needs-main, needs-human) is actionable. The non-actionable already_satisfied
+// items are partitioned out into their own array and are NOT in `dispositions`
+// (see the line-403 filter above), so all surfaced findings are actionable.
+const findings_actionable = dispositions.length;
+// fixes_applied: this Workflow PLANS but never executes fix units — the mutating
+// /implement-unit loop runs in the qa-fix SKILL caller thread, not here (see the
+// header comment, lines 20-24). So from the Workflow's own knowledge no fix has
+// run: 0. Unit 4's SKILL body supplies the real count after its fix loop.
+const fixes_applied = 0;
+// followups_filed: this Workflow only CLASSIFIES items as needs-main — it files
+// no follow-up issues itself. So 0 here; Unit 4's SKILL body supplies the count
+// when it files the needs-main follow-ups.
+const followups_filed = 0;
+// disposition: escalated on deviation; else completed_with_fixes when fixes ran;
+// else completed. Matches outcome-envelope.md's path→value table. Since
+// fixes_applied is a literal 0 here, completed_with_fixes is unreachable from the
+// Workflow alone — Unit 4 recomputes this after the fix loop runs.
+const disposition = _deviation
+  ? 'escalated'
+  : fixes_applied > 0
+    ? 'completed_with_fixes'
+    : 'completed';
+
 return {
   dispositions,
   already_satisfied,
   verify_report,
   fix_plan,
-  deviation: fix_plan ? fix_plan.deviation : false,
+  deviation: _deviation,
+  findings_surfaced,
+  findings_actionable,
+  fixes_applied,
+  followups_filed,
+  subagents_launched: subagentsLaunched,
+  disposition,
 };

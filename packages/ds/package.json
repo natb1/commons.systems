@@ -1,0 +1,18 @@
+{
+  "name": "@commons-systems/ds",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "lint": "echo 'CSS-only package, nothing to lint'"
+  },
+  "exports": {
+    "./styles.css": "./styles.css",
+    "./fonts.css": "./fonts.css",
+    "./base.css": "./base.css",
+    "./tokens/colors.css": "./tokens/colors.css",
+    "./tokens/typography.css": "./tokens/typography.css",
+    "./tokens/spacing.css": "./tokens/spacing.css",
+    "./tokens/effects.css": "./tokens/effects.css"
+  }
+}
