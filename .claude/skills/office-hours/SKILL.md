@@ -73,8 +73,8 @@ and office-hours sessions are named `office-hours-<N>` (which does not match its
      phase, and its PR number (or `-`). Carry `<N>`, `<phase>`, and `<pr>`
      through the rest of the skill (same as the args-first path above). Proceed
      to "Enter the item's worktree" below.
-   - `live <sessionId>` — a labeled item whose `<N>-*` worktree has a live
-     session. This skill cannot attach to a session from within an
+   - `idle <sessionId>` — a labeled item whose `<N>-*` worktree has an
+     idle/complete (waiting/done/idle) session. This skill cannot attach to a session from within an
      already-running session. Report the session ID and tell the user to run
      `claude attach <sessionId>` to re-engage it. **Stop.**
    - `parked-router <sessionId> <name>` — the dispatch chain has a target-less
