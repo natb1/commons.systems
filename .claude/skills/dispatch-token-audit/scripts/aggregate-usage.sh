@@ -373,6 +373,32 @@ def price(u):
   + (u.cache_read     // 0) * RATE_CACHE_READ
   + (u.output         // 0) * RATE_OUTPUT ) / 1e6;
 
+# --- Truthful per-model cost (#2027) -------------------------------------
+# Actual list rates per Mtok, keyed by model family. Unlike the proxy above,
+# this prices each session by its REAL model so cost_usd is the actual bill.
+def ACTUAL_RATES:
+  { opus:   {input:5, cache_creation:6.25, cache_read:0.50, output:25},
+    sonnet: {input:3, cache_creation:3.75, cache_read:0.30, output:15},
+    haiku:  {input:1, cache_creation:1.25, cache_read:0.10, output:5} };
+def family($m):
+  if   ($m | startswith("claude-opus"))   then "opus"
+  elif ($m | startswith("claude-sonnet")) then "sonnet"
+  elif ($m | startswith("claude-haiku"))  then "haiku"
+  else null end;
+def cost(u; $model):
+  family($model) as $fam
+  | ((u.input//0)+(u.cache_creation//0)+(u.cache_read//0)+(u.output//0)) as $tok
+  | if $fam == null then
+      (if $tok == 0 then 0
+       else error("dispatch-token-audit: unpriceable model '\($model)' carries \($tok) tokens; add it to the price table") end)
+    else (ACTUAL_RATES[$fam]) as $r
+      | ( (u.input//0)*$r.input + (u.cache_creation//0)*$r.cache_creation
+        + (u.cache_read//0)*$r.cache_read + (u.output//0)*$r.output ) / 1e6
+    end;
+def session_cost($r):
+  reduce ($r.by_skill_model | to_entries[]) as $e (0;
+    . + cost($e.value.usage; ($e.key | split("\t")[1])));
+
 def zero_usage: {input:0, cache_creation:0, cache_read:0, output:0};
 def add_usage(a; b):
   {
@@ -382,13 +408,14 @@ def add_usage(a; b):
     output:         ((a.output         // 0) + (b.output         // 0))
   };
 
-# A flat bucket record {input,cache_creation,cache_read,output,turns,price_proxy_usd}
-def zero_bucket: {input:0, cache_creation:0, cache_read:0, output:0, turns:0, price_proxy_usd:0};
+# A flat bucket record {input,cache_creation,cache_read,output,turns,price_proxy_usd,cost_usd}
+def zero_bucket: {input:0, cache_creation:0, cache_read:0, output:0, turns:0, price_proxy_usd:0, cost_usd:0};
 def add_to_bucket(bucket; u; turns):
   ( add_usage(bucket; u) ) as $nu
   | $nu + {
       turns: ((bucket.turns // 0) + turns),
-      price_proxy_usd: price($nu)
+      price_proxy_usd: price($nu),
+      cost_usd: (bucket.cost_usd // 0)
     };
 
 # Consecutive n-grams of a token list as arrays. range upper bound goes negative
@@ -419,7 +446,8 @@ def outcome_rates($o):
 | ( $tot_usage + {
       sessions: ($rows | length),
       turns: ([ $rows[].turns ] | add // 0),
-      price_proxy_usd: price($tot_usage)
+      price_proxy_usd: price($tot_usage),
+      cost_usd: ([ $rows[] | session_cost(.) ] | add // 0)
     } ) as $totals
 
 # ---- by_session_type (all five buckets always present) ----
@@ -431,6 +459,7 @@ def outcome_rates($o):
     # add sessions count per type
     | reduce $rows[] as $r (.; .[$r.type].sessions = ((.[$r.type].sessions // 0) + 1))
     | reduce (to_entries[] | select(.value.sessions == null)) as $e (.; .[$e.key].sessions = 0)
+    | reduce $rows[] as $r (.; .[$r.type].cost_usd = ((.[$r.type].cost_usd // 0) + session_cost($r)))
   ) as $by_session_type
 
 # ---- by_phase (seven named phases always present) + by_phase_model ----
@@ -445,9 +474,16 @@ def outcome_rates($o):
         .[$e.key] = add_to_bucket((.[$e.key] // zero_bucket); $e.value.usage; $e.value.turns)
       )
     ) ) as $by_phase
+| ( reduce $rows[] as $r ($by_phase;
+      reduce ($r.by_skill_model | to_entries[]) as $e (.;
+        ($e.key | split("\t")) as $k
+        | .[$k[0]] = ((.[$k[0]] // zero_bucket) | .cost_usd += cost($e.value.usage; $k[1]))
+      )
+    ) ) as $by_phase
 | ( reduce $rows[] as $r ({};
       reduce ($r.by_skill_model | to_entries[]) as $e (.;
-        .[$e.key] = add_to_bucket((.[$e.key] // zero_bucket); $e.value.usage; $e.value.turns)
+        .[$e.key] = ( add_to_bucket((.[$e.key] // zero_bucket); $e.value.usage; $e.value.turns)
+                      | .cost_usd += cost($e.value.usage; ($e.key | split("\t")[1])) )
       )
     ) ) as $by_phase_model
 
@@ -455,7 +491,8 @@ def outcome_rates($o):
 | ( reduce $rows[] as $r ({};
       reduce ($r.by_skill_model | to_entries[]) as $e (.;
         ($e.key | split("\t")[1]) as $model
-        | .[$model] = add_to_bucket((.[$model] // zero_bucket); $e.value.usage; $e.value.turns)
+        | .[$model] = ( add_to_bucket((.[$model] // zero_bucket); $e.value.usage; $e.value.turns)
+                        | .cost_usd += cost($e.value.usage; $model) )
       )
     ) ) as $by_model
 
@@ -569,6 +606,7 @@ def outcome_rates($o):
         input: .usage.input, cache_creation: .usage.cache_creation,
         cache_read: .usage.cache_read, output: .usage.output,
         price_proxy_usd: price(.usage),
+        cost_usd: session_cost(.),
         phases: ( reduce (.by_skill | to_entries[]) as $e ({}; .[$e.key] = price($e.value.usage)) ),
         outcome: .outcome,
         outcome_rates: ( if .outcome == null then null else outcome_rates(.outcome) end )
@@ -619,11 +657,12 @@ def outcome_rates($o):
 | {
     window: $win,
     price_model: {
-      note: "Opus list-price-equivalent USD proxy; relative magnitude, not the bill",
+      note: "price_proxy_usd is an Opus-list-price-equivalent USD proxy for RANKING (uniform rate, not the bill); cost_usd is the truthful per-model bill from actual_rates_per_mtok",
       input_per_mtok: RATE_INPUT,
       cache_creation_per_mtok: RATE_CACHE_CREATION,
       cache_read_per_mtok: RATE_CACHE_READ,
-      output_per_mtok: RATE_OUTPUT
+      output_per_mtok: RATE_OUTPUT,
+      actual_rates_per_mtok: ACTUAL_RATES
     },
     totals: $totals,
     by_session_type: $by_session_type,

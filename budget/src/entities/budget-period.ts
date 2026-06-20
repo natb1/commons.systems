@@ -98,6 +98,11 @@ function requireCategoryBreakdown(value: unknown): Record<string, number> {
 
 // ── Firestore → BudgetPeriod ──────────────────────────────────────────────────
 
+/**
+ * @public knip baseline (#2066): residual unused export, not deleted per the
+ * no-bulk-delete line — part of the symmetric per-entity parseFirestore* set.
+ * Deletion candidate; see PR notes.
+ */
 export function parseFirestoreBudgetPeriod(docSnap: QueryDocumentSnapshot<DocumentData, DocumentData>): BudgetPeriod {
   const data = docSnap.data();
   const periodStart = requireTimestamp(data.periodStart, "periodStart");
