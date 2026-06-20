@@ -166,6 +166,11 @@ export function validateBudgetOverrideOrdering(
 
 // ── Firestore → Budget ────────────────────────────────────────────────────────
 
+/**
+ * @public knip baseline (#2066): residual unused export, not deleted per the
+ * no-bulk-delete line — part of the symmetric per-entity parseFirestore* set.
+ * Deletion candidate; see PR notes.
+ */
 export function parseFirestoreBudget(docSnap: QueryDocumentSnapshot<DocumentData, DocumentData>): Budget {
   const data = docSnap.data();
   const name = requireString(data.name, "name");

@@ -1,0 +1,71 @@
+{
+  "$schema": "./node_modules/knip/schema-jsonc.json",
+
+  // Report an export only when nothing else references it. Exports that are
+  // exported AND used inside their own defining file (e.g. crypto constants
+  // re-used in the same module) are not dead — they have an in-file consumer.
+  // A brand-new export used nowhere still fires, so this stays orphan-safe.
+  "ignoreExportsUsedInFile": true,
+
+  // Each name suppresses exactly ONE package, so a brand-new unused/unlisted
+  // dependency still fires. Two groups, both documented:
+  "ignoreDependencies": [
+    // --- CSS-imported workspace deps: used via `@import "<pkg>/..."` in plain
+    //     .css theme files, which knip 6 does not trace into node_modules. ---
+    "@commons-systems/style", // theme.css @import in fellspiral/landing/office-hours/audio/print/budget
+    "@commons-systems/ds", // style/default.css @imports its design-token CSS
+    // --- Genuinely-unused residuals: grep found ZERO references (no TS, CSS, or
+    //     runtime string import). Baselined, not removed, per no-bulk-delete;
+    //     deletion candidates — see PR notes. ---
+    "@commons-systems/htmlutil", // office-hours: declared, never imported
+    "@commons-systems/components", // audio + print: declared, never imported
+    "@commons-systems/router", // audio: declared, never imported
+    "d3-scale", // budget: declared; code uses d3-hierarchy/interpolate/shape, not d3-scale
+    "d3-scale-chromatic", // budget: declared, never imported
+    "@types/d3-scale", // budget devDep: types for the unused d3-scale
+    "@types/d3-scale-chromatic", // budget devDep: types for the unused d3-scale-chromatic
+    "@google-cloud/secret-manager", // functions: declared, no SecretManager reference anywhere
+    "@eslint/js", // audio devDep: eslint config is re-exported from @commons-systems/config, not consumed here
+    "typescript-eslint", // audio devDep: same — flat config lives in the shared @commons-systems/config preset
+    // --- Unlisted: imported but resolved transitively, not declared. Pre-existing;
+    //     baselined here rather than adding a new direct dependency. ---
+    "playwright", // landing/scripts/capture-screenshots.ts imports `playwright` (root declares @playwright/test)
+    "express" // functions/src/feed-proxy.ts: `import type { Response } from "express"` (transitive via firebase-functions)
+  ],
+
+  // Internal imports inside the COPIED scaffolding templates resolve only after
+  // the template is scaffolded into a new app; `ignoreFiles` excludes the files
+  // as dead-code candidates but not their internal import resolution.
+  "ignoreUnresolved": [
+    "./firebase.js" // scaffolding/firebase/templates/app/src/{firestore,auth}.ts — created at scaffold time
+  ],
+
+  // Trees that are NOT statically imported by any source file and must never be
+  // treated as dead code. Copied/harness-invoked, not part of the module graph.
+  "ignoreFiles": [
+    // Harness-invoked Workflow scripts and skill scripts. The dispatch harness
+    // runs these by path (e.g. .claude/workflows/review-fix.js); no static
+    // importer exists, and deleting one would break the harness.
+    ".claude/**",
+    // Firebase scaffolding templates are COPIED into new app scaffolds, not
+    // imported. Their internal exports/types/imports resolve only post-copy.
+    "scaffolding/firebase/templates/**"
+  ],
+
+  "workspaces": {
+    // Per-workspace entry overrides for tooling files that real code imports or
+    // that a runner/CI invokes directly. `entry` preserves the import trace, so
+    // utils these files consume stay "used" — unlike `ignore`, which would blind
+    // them. Globs cover seeds, e2e specs+helpers, build scripts, and bin CLIs.
+    "fellspiral": { "entry": ["seeds/**", "e2e/**", "scripts/**"] },
+    "audio": { "entry": ["seeds/**", "e2e/**", "scripts/**"] },
+    "landing": { "entry": ["seeds/**", "e2e/**", "scripts/**"] },
+    "office-hours": { "entry": ["seeds/**", "e2e/**"] },
+    "print": { "entry": ["seeds/**", "e2e/**", "scripts/**"] },
+    "budget": { "entry": ["seeds/**", "e2e/**", "scripts/**"] },
+    "authutil": { "entry": ["bin/**"] },
+    "firebaseutil": { "entry": ["bin/**"] },
+    "firestoreutil": { "entry": ["bin/**"] },
+    "functions": { "entry": ["scripts/**"] }
+  }
+}

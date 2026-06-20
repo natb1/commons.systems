@@ -50,4 +50,22 @@ describe("eslint layering boundary rules", () => {
     const violations = restrictedImportMessages(messages);
     expect(violations).toHaveLength(0);
   });
+
+  // Regression: a relative import whose final path segment coincides with an
+  // app-package name (here `budget`) must NOT be flagged. The rule targets bare
+  // package specifiers, not intra-package relative paths. Canonical case:
+  // budget/src/budget-seed-data.d.ts does `from "./entities/budget"`.
+  it("does not flag a relative import ending in an app-package name", () => {
+    const messages = lint(
+      'import type { SeedBudget } from "./entities/budget";',
+    );
+    const violations = restrictedImportMessages(messages);
+    expect(violations).toHaveLength(0);
+  });
+
+  it("does not flag a parent-relative import ending in an app-package name", () => {
+    const messages = lint('import x from "../print";');
+    const violations = restrictedImportMessages(messages);
+    expect(violations).toHaveLength(0);
+  });
 });
