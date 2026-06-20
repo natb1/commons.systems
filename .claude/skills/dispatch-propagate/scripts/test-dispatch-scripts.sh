@@ -35843,9 +35843,11 @@ sidecar_out=$(cd "$TMPDIR_TEST" && node "$SCRIPT_DIR/dispatch-review-erosion-dif
   --baseline-dir baseline)
 sidecar_count=$(jq '.findings | length' <<<"$sidecar_out")
 sidecar_source=$(jq -r '.findings[0].Source // "none"' <<<"$sidecar_out")
+sidecar_location=$(jq -r '.findings[0].Location // "none"' <<<"$sidecar_out")
 sidecar_confidence=$(jq -r '.findings[0].Confidence // "none"' <<<"$sidecar_out")
 assert_eq "sidecar dupLines-only duplication count=1" "1" "$sidecar_count"
 assert_eq "sidecar dupLines-only duplication Source=erosion" "erosion" "$sidecar_source"
+assert_eq "sidecar dupLines-only duplication Location=dup.ts:10" "dup.ts:10" "$sidecar_location"
 assert_eq "sidecar dupLines-only duplication Confidence=medium (dupLines rose, clones flat)" "medium" "$sidecar_confidence"
 rm -rf "$TMPDIR_TEST"
 TMPDIR_TEST=""
