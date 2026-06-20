@@ -108,6 +108,7 @@ scan_diff() {
     END { if (violations > 0) exit 1 }
 
     function emit(path, line, hatch) {
+      gsub(/,/, "%2C", path)
       printf "::error file=%s,line=%d::Net-new type-safety escape hatch (%s). Suppress with `// type-safety-ok: <reason>` if intentional.\n", path, line, hatch
       violations++
     }

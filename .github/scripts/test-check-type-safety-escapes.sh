@@ -436,6 +436,25 @@ EOF
   fi
 )
 
+echo ""
+echo "=== Comma-in-path: file= comma is percent-encoded to %2C ==="
+(
+  F="${TEST_TMPDIR}/f"; cat > "$F" <<'EOF'
+--- a/src/weird,file.ts
++++ b/src/weird,file.ts
+@@ -1,0 +1,1 @@
++const x = y as Foo;
+EOF
+  scan_fixture "$F"
+  n=$(err_count)
+  if [ "$RC" -eq 1 ] && [ "$n" -eq 1 ] && \
+     grep -q '^::error file=src/weird%2Cfile.ts,line=1::' "$OUT_FILE"; then
+    pass "comma-in-path -> file=src/weird%2Cfile.ts (comma percent-encoded)"
+  else
+    fail "comma-in-path (rc=$RC count=$n): $(cat "$OUT_FILE")"
+  fi
+)
+
 # ---------------------------------------------------------------------------
 # RESULTS + expected-total guard (catches a crashed/early-exiting subshell).
 # ---------------------------------------------------------------------------
