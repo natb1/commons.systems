@@ -88,10 +88,10 @@ flush. Routing re-entry through Step 7 means its flush guard also carries any
 commits an interrupted prior run left stranded — the flush that lets the router
 resolve `mergeable == MERGEABLE` and promote the PR to ready.
 
-On this re-entry path the Workflow has not run — Step 7 treats the deviation
-criterion as not met (`result.deviation` is absent) and writes the phase-completed
-marker. Step 7 also skips the phase-log write on this path, so the prior entry is
-preserved. Otherwise run all steps in order.
+On this re-entry path the Workflow has not run — so Step 7 **skips the phase-log
+write entirely** (the prior accurate entry stays durable), treats the deviation
+criterion as not met (`result.deviation` is absent), skips the outcome-envelope
+emit, and writes the phase-completed marker. Otherwise run all steps in order.
 
 ## Steps
 
@@ -635,7 +635,8 @@ path the phase-log write must PRECEDE the `dispatch:reviewed` apply so that labe
 stays the terminal durable action. Compose a terse "what the review found / fixed"
 digest of this pass to `tmp/phase-log-entry-$N.md` — a one-line summary of the
 fixes applied; a clean review writes a line like `failed: none`. Compose it
-**unconditionally** (no "only on failure" branch). Then upsert it (use
+**unconditionally** across pass and fail (no "only on failure" branch — the only
+narrowing is normal-vs-re-entry). Then upsert it (use
 `dangerouslyDisableSandbox: true` — the script calls `gh`):
 
 ```bash
@@ -648,10 +649,15 @@ already present, so the write is skipped — there is no ordering concern relati
 to the label on the re-entry path.
 
 No attempt counter — review is single-pass, so the default `--attempt 1` applies.
-Re-entry is a separate transcript where the Workflow did not run, so `result` is
-absent and there is no fresh outcome data: recomposing the digest would overwrite
-the prior `(review, 1)` entry with a thinner restatement. So the write is SKIPPED
-on re-entry — the prior entry is authoritative.
+The upsert is idempotent on the `(review, 1)` key. Why re-entry must skip rather
+than re-write: the phase-log write PRECEDES the `dispatch:reviewed` apply (above),
+and re-entry is GATED on `dispatch:reviewed` already being present (see preamble:
+"If the labels line already includes `dispatch:reviewed`"). So whenever re-entry
+fires, the accurate `(review, 1)` entry the original run wrote is guaranteed
+already durable on the comment. Skipping the write preserves it. A re-write on
+re-entry has no prior-pass data to restate (`result` is absent), so it would only
+overwrite the good entry with a content-free/degraded one — it can never fill a
+gap, only destroy one.
 
 Then apply the `dispatch:reviewed` label via `dispatch-complete-phase` (use
 `dangerouslyDisableSandbox: true` — the script calls `gh`):
@@ -813,10 +819,11 @@ goes ready — the single PR-comment summary is the audit trail. This is an
 intentional trade-off for an autonomous background-job run.
 
 The skill is idempotent: a re-invocation with `dispatch:reviewed` already on the
-PR skips Steps 1–6 and runs Step 7, which flushes any unpushed commits and writes
-the phase-completed marker (the Workflow is not re-run on re-entry, so the
-deviation criterion is treated as not met). Readiness is the router's projection,
-reconciled on later ticks — not something re-entry asserts.
+PR skips Steps 1–6 and runs Step 7, which flushes any unpushed commits, skips the
+phase-log write and outcome-envelope emit, and writes the phase-completed marker
+(the Workflow is not re-run on re-entry, so the deviation criterion is treated as
+not met). Readiness is the router's projection, reconciled on later ticks — not
+something re-entry asserts.
 
 **Model split (#1172).** The dispatch chain runs this `review` phase orchestrator
 on **Sonnet** (via `dispatch-phase-model`, which maps `review →
