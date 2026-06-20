@@ -154,6 +154,16 @@ release_lock() {
   "$SCRIPT_DIR/dispatch-acquire-lock" --release >/dev/null 2>&1 || true
 }
 
+# refresh_lock — bump the lock-file mtime (the heartbeat) so a legitimately-long
+# hold never goes stale and is never falsely reclaimed by the staleness cap
+# (#2104). INVARIANT #2: call ONLY on a sub-step's completion, never inside a
+# retry/poll/wait loop — a refresh inside a loop would keep mtime fresh while a
+# holder spins there, defeating the cap. Best-effort: a noop (we no longer hold
+# the lock) or any error is swallowed.
+refresh_lock() {
+  "$SCRIPT_DIR/dispatch-acquire-lock" --heartbeat >/dev/null 2>&1 || true
+}
+
 # Write the static identity stub to <worktree>/CLAUDE.local.md. Static identity
 # only (issue number, title, branch, pointer to dispatch-context-pack) — no
 # issue body/comments/related-issue bodies, so it stays tiny and never goes
@@ -238,6 +248,11 @@ process_one_target() {
   local n="$1" mode="$2"
   local PR LEAF ISSUE_STATE BLOCKERS WT_DECISION WT_ACTION WT_REST
   local WORKTREE_PATH BRANCH PROJECT_ROOT rc wt_basename PHASE PROJECT_ROOT_FOR_LOG
+
+  # Heartbeat: refresh on entry to each per-target spawn (#2104). The spawn
+  # fan-out is the #1068-load-bearing region — keep the lock-file mtime fresh so
+  # the staleness cap never reclaims a holder that is legitimately mid-spawn.
+  refresh_lock
 
   # --- Step 4: explicit-path guards (skipped entirely in queue mode) ---------
   # Queue rows were already vetted by dispatch-select-target (leaf, blockers,
@@ -609,6 +624,9 @@ if (( spawned < GAP )); then
     process_one_target "$cur_n" "$cur_mode" || { release_lock; exit 2; }
     SEEN["$cur_n"]=1
     record_outcome "$cur_n"
+    # Heartbeat: refresh after each fan-out target completes — on completion, not
+    # inside an inner retry (#2104, invariant #2).
+    refresh_lock
     (( spawned >= GAP )) && { stop_reason="gap filled"; break; }
   done <<< "$SELECTED"
   # Ran off the end of a short list without filling the gap or hitting a
