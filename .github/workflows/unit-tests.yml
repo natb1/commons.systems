@@ -130,10 +130,23 @@ jobs:
         run: .claude/hooks/test-approve-workflow-commands.sh
       - name: Run dispatch script tests
         run: .claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh
+      - name: Run prose-rule lint tests
+        run: .claude/skills/dispatch-propagate/scripts/test-lint-prose-rules.sh
       - name: Run worktree-remove hook tests
         run: .claude/hooks/test-worktree-remove.sh
       - name: Run statusline hook tests
         run: .claude/hooks/test-statusline.sh
+      - name: Run test-integrity script tests
+        run: .github/scripts/test-check-test-integrity.sh
+
+  test-integrity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          fetch-depth: 0
+      - name: Check for test deletions / disabling skips
+        run: .github/scripts/check-test-integrity.sh
 
   playwright-version-sync:
     runs-on: ubuntu-latest
