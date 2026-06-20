@@ -35659,6 +35659,68 @@ assert_eq "sidecar no net-increase → zero findings" "0" "$sidecar_count"
 rm -rf "$TMPDIR_TEST"
 TMPDIR_TEST=""
 
+# E4. Sidecar duplication net-delta: HEAD jscpd clones rose from 0 → finding
+#     with Source="erosion" and a path:line Location derived from the largest
+#     clone (exercises worstCloneLocation).
+#
+#     Empty eslint reports ([]) for both HEAD and BASE suppress the complexity
+#     path (complexityScalars yields no per-file entries), so the ONLY finding is
+#     the duplication one. The HEAD jscpd report carries clones rising from a
+#     zero-clone baseline, so clonesRose fires (Confidence=high). worstCloneLocation
+#     iterates every entry in `duplicates` and keeps the one with the largest
+#     (firstFile.end - firstFile.start) span; we seed TWO clones so the
+#     "largest clone wins" comparison branch is actually exercised rather than
+#     trivially true on a single-item loop. The first entry is a 9-line span at
+#     dup.ts:5 (end 14 - start 5); the second is a smaller 3-line span at
+#     dup.ts:1 (end 4 - start 1). The larger span must win, and firstFile.name is
+#     the bare relative "dup.ts" (no cwd prefix to strip), so the Location is
+#     "dup.ts:5" — the smaller clone's "dup.ts:1" must NOT be selected.
+echo "Test: dispatch-review-erosion-diff.mjs — duplication net-increase yields Source=erosion finding"
+TMPDIR_TEST=$(mktemp -d)
+# Empty eslint reports suppress the complexity path entirely.
+cat > "$TMPDIR_TEST/head-eslint.json" <<'EOF'
+[]
+EOF
+mkdir -p "$TMPDIR_TEST/baseline"
+cat > "$TMPDIR_TEST/base-eslint.json" <<'EOF'
+[]
+EOF
+# jscpd HEAD report: two clone blocks. The first is a 9-line span at dup.ts:5
+# (end 14 - start 5); the second is a smaller 3-line span at dup.ts:1 (end 4 -
+# start 1). worstCloneLocation must pick the larger span (dup.ts:5), so the
+# second, smaller entry makes the "largest clone wins" comparison meaningful.
+cat > "$TMPDIR_TEST/head-jscpd.json" <<'EOF'
+{
+  "statistics": { "total": { "clones": 2, "duplicatedLines": 13, "percentage": 7 } },
+  "duplicates": [
+    { "firstFile": { "name": "dup.ts", "start": 5, "end": 14 },
+      "secondFile": { "name": "dup.ts", "start": 30, "end": 39 } },
+    { "firstFile": { "name": "dup.ts", "start": 1, "end": 4 },
+      "secondFile": { "name": "dup.ts", "start": 50, "end": 53 } }
+  ]
+}
+EOF
+# jscpd BASE report: zero clones (no duplication pre-PR).
+cat > "$TMPDIR_TEST/base-jscpd.json" <<'EOF'
+{ "statistics": { "total": { "clones": 0, "duplicatedLines": 0, "percentage": 0 } } }
+EOF
+sidecar_out=$(cd "$TMPDIR_TEST" && node "$SCRIPT_DIR/dispatch-review-erosion-diff.mjs" \
+  --eslint-head head-eslint.json \
+  --eslint-base base-eslint.json \
+  --jscpd-head head-jscpd.json \
+  --jscpd-base base-jscpd.json \
+  --baseline-dir baseline)
+sidecar_count=$(jq '.findings | length' <<<"$sidecar_out")
+sidecar_source=$(jq -r '.findings[0].Source // "none"' <<<"$sidecar_out")
+sidecar_location=$(jq -r '.findings[0].Location // "none"' <<<"$sidecar_out")
+sidecar_confidence=$(jq -r '.findings[0].Confidence // "none"' <<<"$sidecar_out")
+assert_eq "sidecar duplication finding count=1" "1" "$sidecar_count"
+assert_eq "sidecar duplication finding Source=erosion" "erosion" "$sidecar_source"
+assert_eq "sidecar duplication finding Location=dup.ts:5" "dup.ts:5" "$sidecar_location"
+assert_eq "sidecar duplication finding Confidence=high (clones rose)" "high" "$sidecar_confidence"
+rm -rf "$TMPDIR_TEST"
+TMPDIR_TEST=""
+
 # E5. Sidecar no-baseline duplication: all-new-files PR has empty baseline_paths,
 #     so the driver passes NO --jscpd-base. The sidecar then defaults baseDup to
 #     zeros, so any HEAD clone (headDup.clones > 0) fires an aggregate duplication
