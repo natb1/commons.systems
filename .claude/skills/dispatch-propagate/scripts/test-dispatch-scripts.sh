@@ -2415,6 +2415,20 @@ if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 70 >/dev/null 2>&1; then rc=0
 assert_eq "gate: label fetch hard failure → exit 3" "3" "$rc"
 teardown
 
+# GATE-4. Malformed epic.json → dispatch-config-load exits 1 → candidate must
+# surface the loader failure as exit 3 (guard added in #2239).
+echo "Test: gate — malformed epic.json → exit 3 with candidate diagnostic"
+setup
+printf 'not json{\n' > "$DISPATCH_CONFIG_DIR/epic.json"
+if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 71 >/dev/null 2>"$TMPDIR_TEST/err.txt"; then rc=0; else rc=$?; fi
+assert_eq "gate: malformed epic.json → exit 3" "3" "$rc"
+if grep -q 'dispatch-epic-resolved-candidate:' "$TMPDIR_TEST/err.txt"; then
+  assert_eq "gate: malformed epic.json → candidate diagnostic on stderr" "pass" "pass"
+else
+  assert_eq "gate: malformed epic.json → candidate diagnostic on stderr" "pass" "fail"
+fi
+teardown
+
 # ============================================================================
 # issue-sub-issues field-forwarding tests (#1593)
 # ============================================================================
