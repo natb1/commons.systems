@@ -666,6 +666,12 @@ describe("createEpubRenderer", () => {
       return renderer;
     }
 
+    function driveRelocated() {
+      // goToResult awaits waitForRelocated(), which resolves on the captured
+      // "relocated" once-callback. Mirror the next()/prev() pattern.
+      mockRendition.once.mockImplementation((_event: string, cb: () => void) => cb());
+    }
+
     it("returns matches from every spine section", async () => {
       const s0 = makeSection("ch0.xhtml", [{ cfi: "cfi-0", excerpt: "alpha fox beta" }]);
       const s1 = makeSection("ch1.xhtml", [{ cfi: "cfi-1", excerpt: "gamma fox delta" }]);
@@ -849,12 +855,6 @@ describe("createEpubRenderer", () => {
     });
 
     describe("goToResult", () => {
-      function driveRelocated() {
-        // goToResult awaits waitForRelocated(), which resolves on the captured
-        // "relocated" once-callback. Mirror the next()/prev() pattern.
-        mockRendition.once.mockImplementation((_event: string, cb: () => void) => cb());
-      }
-
       it("displays the result location and adds an active highlight", async () => {
         const renderer = await initRenderer();
         driveRelocated();
@@ -971,8 +971,8 @@ describe("createEpubRenderer", () => {
 
         // Arm _activeCfi by driving a goToResult(). goToResult() awaits
         // waitForRelocated(), which resolves on the rendition.once "relocated"
-        // callback — fire it synchronously by inlining the mock.
-        mockRendition.once.mockImplementation((_event: string, cb: () => void) => cb());
+        // callback — fire it synchronously via driveRelocated().
+        driveRelocated();
         await renderer.goToResult({
           location: "cfi-0", label: "L", snippet: "fox", matchStart: 0, matchLength: 3,
         });
