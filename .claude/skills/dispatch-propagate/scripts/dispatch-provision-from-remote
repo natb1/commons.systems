@@ -15,8 +15,7 @@
 #   2. git fetch --quiet origin <branch>  — pull the ref from origin.
 #   3. git worktree add --track -b <branch> <path> origin/<branch>  — add the
 #      local worktree tracking the remote branch.
-#   4. Print the created worktree path on stdout (so the caller knows the cwd).
-#   5. exec dispatch-provision-worktree <path>  — direnv allow/exec + merge
+#   4. exec dispatch-provision-worktree <path>  — direnv allow/exec + merge
 #      origin/main; `exec` propagates its exit code directly.
 #
 # Exit-code contract:
@@ -28,7 +27,7 @@
 #   3 — merge conflict; the merge has been aborted, tree is left clean — mirrors
 #       dispatch-provision-worktree's exit 3.
 #
-# `dangerouslyDisableSandbox: true` REQUIREMENT: step 5 runs
+# `dangerouslyDisableSandbox: true` REQUIREMENT: step 4 runs
 # dispatch-provision-worktree, which in turn runs `git merge origin/main`
 # (a tree-updating op over the read-only `.claude/skills/**` sandbox carve-out)
 # and `direnv`/npm (which write the dependency cache). This is the canonical
@@ -86,9 +85,6 @@ if ! git worktree add --track -b "$BRANCH" "$WORKTREE_PATH" "origin/$BRANCH" 1>&
   echo "dispatch-provision-from-remote: git worktree add (remote-only) failed for $BRANCH" >&2
   exit 2
 fi
-
-# Announce the path so the caller can learn the cwd before exec replaces us.
-echo "$WORKTREE_PATH"
 
 # --- Provision (direnv + dispatch-merge-main) ---------------------------------
 # `exec` so this script's exit code IS dispatch-provision-worktree's:

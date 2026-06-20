@@ -202,23 +202,29 @@ issue_live_session_id() {
       # rc 0 with non-empty output → a matching session row; rc 0 with empty
       # output → no session of that name (nothing to do). Guard before cutting.
       if [[ -n "$sessions" ]]; then
-        IFS=$'\t' read -r sid state cwd _ <<< "$(printf '%s\n' "$sessions" | head -n 1)"
-        case "$state" in
-          waiting|done|idle)
-            # Attachable — emit sessionId<TAB>cwd (#2241) and signal the caller
-            # to return 0 immediately.
-            printf '%s\t%s\n' "$sid" "$cwd"
-            return 0
-            ;;
-          *)
-            # working/stopped/paused/unrecognized (or empty/malformed) → not
-            # attachable; keep looking — an attachable session under another
-            # name still wins. A `working` session with no registered worktree
-            # lands here (the #2241 double-claim fix): it is now found and skips
-            # rather than being mistaken for sessionless and fresh-launched.
-            saw_skip=1
-            ;;
-        esac
+        # Iterate ALL rows: prefix matching (claude_sessions_with_name_prefix_all)
+        # can return multiple matching sessions, and a non-attachable first row
+        # must not mask an attachable later row. First-attachable-wins; keep
+        # scanning past non-attachable rows before settling on saw_skip
+        # (code-review #2241).
+        while IFS=$'\t' read -r sid state cwd _; do
+          case "$state" in
+            waiting|done|idle)
+              # Attachable — emit sessionId<TAB>cwd (#2241) and signal the caller
+              # to return 0 immediately.
+              printf '%s\t%s\n' "$sid" "$cwd"
+              return 0
+              ;;
+            *)
+              # working/stopped/paused/unrecognized (or empty/malformed) → not
+              # attachable; keep looking — an attachable session under another
+              # name still wins. A `working` session with no registered worktree
+              # lands here (the #2241 double-claim fix): it is now found and skips
+              # rather than being mistaken for sessionless and fresh-launched.
+              saw_skip=1
+              ;;
+          esac
+        done <<< "$sessions"
       fi
     else
       saw_unknown=1
@@ -299,9 +305,11 @@ if [[ -n "$IDLE_ID" ]]; then
     fi
   fi
   # Bucket 3: swept with no recoverable remote branch, or no cwd. Route into the
-  # fresh path for the chosen issue.
+  # fresh path for the chosen issue. Guard the overwrite so an older sessionless
+  # item already recorded during the loop is not dropped for a swept-unrecoverable
+  # attachable item (code-review #2241).
   IDLE_ID=""
-  FRESH_NUM="$IDLE_NUM"
+  [[ -z "$FRESH_NUM" ]] && FRESH_NUM="$IDLE_NUM"
 fi
 
 # Priority 2: pick up the oldest sessionless item fresh. The open-PR list is
