@@ -394,26 +394,26 @@ PARENT ONLY. A leaf issue receives no epic label, and the sub-issues themselves 
 whose own sub-issue fetch is empty when the loop finalizes them — receive no epic
 label either.
 
-The label is sourced from config (single source of truth). Read the `epic` config
-type: `no-config` → apply NO epic label (the feature stays inert); otherwise apply
-each label in the `.labels[]` array to the parent `<N>`:
+The label set comes from the shared `dispatch-epic-labels` helper (the single
+source of the default). With no config present the helper emits the default
+`epic` label, so it is applied — the feature is active out of the box. Apply
+each emitted label to the parent `<N>`:
 
 ```bash
-EPIC_CONFIG=$(.claude/skills/dispatch-propagate/scripts/dispatch-config-load epic)
-if [[ "$EPIC_CONFIG" != "no-config" ]]; then
-  while IFS= read -r epic_label; do
-    [[ -n "$epic_label" ]] && gh issue edit <N> --add-label "$epic_label"
-  done < <(jq -r '.labels[]' <<<"$EPIC_CONFIG")
-fi
+while IFS= read -r epic_label; do
+  [[ -n "$epic_label" ]] && gh issue edit <N> --add-label "$epic_label"
+done < <(.claude/skills/dispatch-propagate/scripts/dispatch-epic-labels)
 ```
 
-End-to-end auto-resolution ADDITIONALLY requires the user's machine-local
 `dispatch.config/epic.json` (e.g. `{"labels": ["epic"]}` — see
-`.claude/skills/dispatch-propagate/scripts/epic.example.json`). The `/file-issue`
-change alone is INERT without it: `dispatch-config-load epic` returns `no-config`,
-so no label is applied. Each label listed in `.labels[]` must be pre-created in
-the repo before `/file-issue` runs (e.g. `gh label create <name>`) — `gh issue
-edit --add-label` fails non-zero for labels that do not exist.
+`.claude/skills/dispatch-propagate/scripts/epic.example.json`) is an OPTIONAL
+override of the default label set. An empty `labels` array (`{"labels": []}`) is
+an intentional override that disables epic labeling — the helper emits nothing
+and no label is applied. Each label the helper emits must already exist in the
+repo before `/file-issue` runs (e.g. `gh label create <name>`) — `gh issue edit
+--add-label` fails non-zero for labels that do not exist. The default `epic`
+label already exists in the repo (created by #2057 / PR #2226), so the default
+path works end-to-end with no setup.
 
 ### Type classification
 
