@@ -70,11 +70,25 @@ describe("location-store", () => {
     expect(after.path).toBe("/new-path");
   });
 
-  it("getServerSnapshot returns a stable default snapshot", () => {
+  it("getServerSnapshot returns a default snapshot with correct content", () => {
     const server = getServerSnapshot();
     expect(server.path).toBe("/");
     expect([...server.params]).toEqual([]);
-    expect(Object.is(getServerSnapshot(), getServerSnapshot())).toBe(true);
+  });
+
+  it("getServerSnapshot returns a distinct object on each call", () => {
+    expect(Object.is(getServerSnapshot(), getServerSnapshot())).toBe(false);
+  });
+
+  it("getServerSnapshot isolates callers: mutating one call's params does not affect the next", () => {
+    const first = getServerSnapshot();
+    first.params.set("a", "1");
+    const second = getServerSnapshot();
+    expect([...second.params]).toEqual([]);
+  });
+
+  it("getServerSnapshot returns a frozen object", () => {
+    expect(Object.isFrozen(getServerSnapshot())).toBe(true);
   });
 
   it("subscribed callback fires on navigate and stops after unsubscribe", () => {
