@@ -40,8 +40,12 @@ PHASE=""
 ATTEMPT="1"
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --phase)   PHASE="${2:-}"; shift 2 ;;
-    --attempt) ATTEMPT="${2:-}"; shift 2 ;;
+    --phase)
+      [[ $# -ge 2 ]] || { echo 'dispatch-write-phase-log: --phase requires a value' >&2; exit 2; }
+      PHASE="$2"; shift 2 ;;
+    --attempt)
+      [[ $# -ge 2 ]] || { echo 'dispatch-write-phase-log: --attempt requires a value' >&2; exit 2; }
+      ATTEMPT="$2"; shift 2 ;;
     *)
       echo "dispatch-write-phase-log: unknown argument '$1'" >&2
       echo "usage: dispatch-write-phase-log <issue-num> --phase <p> [--attempt <n>]" >&2
