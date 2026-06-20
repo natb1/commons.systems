@@ -24,10 +24,11 @@ fan out the built-in `Explore` and `Plan` subagents directly (no orchestrator
 skill, no nesting). The exploration and design subagents are direct children of
 this session.
 
-Run `gh` commands and the scripts that invoke `gh` (`dispatch-context-pack`,
-`dispatch-drift-scan`, `dispatch-read-plan`, `dispatch-write-plan`,
-`dispatch-apply-planned`, `dispatch-mark-complete`, `dispatch-plan-finalize`)
-with `dangerouslyDisableSandbox: true` — see `.claude/rules/sandbox.md`.
+Run `gh` commands and the scripts that invoke `gh` (`dispatch-check-blockers`,
+`dispatch-context-pack`, `dispatch-drift-scan`, `dispatch-read-plan`,
+`dispatch-write-plan`, `dispatch-apply-planned`, `dispatch-mark-complete`,
+`dispatch-plan-finalize`) with `dangerouslyDisableSandbox: true` — see
+`.claude/rules/sandbox.md`.
 
 ## The running session has no plan mode
 
@@ -130,7 +131,9 @@ Route on `rc`:
 - **`rc == 0`** — no open blocker. Proceed unchanged.
 - **`rc == 2`** — `$out` is `blocked:<nums>`. Real open blocker found. Call
   `dispatch-mark-deviation`, then stop. Marker absence triggers Stop hook Branch A
-  (`dispatch:office-hours`):
+  (`dispatch:office-hours`). `dispatch-mark-deviation` is already the established
+  terminal action for `/plan-issue` (Step 6), so stopping after it preserves the
+  single-named-exit invariant — do not add a completion-marker call:
 
   ```bash
   .claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \
@@ -139,7 +142,10 @@ Route on `rc`:
 
 - **`rc == 1`** (or any other non-zero) — environment error; blockers unverified.
   Not "no blockers." Call `dispatch-mark-deviation` with a distinct reason
-  including `$rc`, then stop. Never proceed on `rc == 1`:
+  including `$rc`, then stop. Never proceed on `rc == 1`. As with `rc == 2`,
+  `dispatch-mark-deviation` is the established `/plan-issue` terminal action (Step
+  6), so stopping after it preserves the single-named-exit invariant — do not add a
+  completion-marker call:
 
   ```bash
   .claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \
