@@ -525,7 +525,13 @@ gh_issue_view_rest() {
     case "$1" in
       --repo) repo="$2"; shift 2 ;;
       --*) echo "error: gh_issue_view_rest: unknown flag '$1'" >&2; return 1 ;;
-      *) num="$1"; shift 1 ;;
+      *)
+        if [[ -z "$num" ]]; then
+          num="$1"; shift 1
+        else
+          echo "error: gh_issue_view_rest: unexpected argument '$1'" >&2; return 1
+        fi
+        ;;
     esac
   done
   if [[ -z "$num" ]]; then
@@ -582,7 +588,13 @@ gh_pr_view_rest() {
     case "$1" in
       --repo) repo="$2"; shift 2 ;;
       --*) echo "error: gh_pr_view_rest: unknown flag '$1'" >&2; return 1 ;;
-      *) num="$1"; shift 1 ;;
+      *)
+        if [[ -z "$num" ]]; then
+          num="$1"; shift 1
+        else
+          echo "error: gh_pr_view_rest: unexpected argument '$1'" >&2; return 1
+        fi
+        ;;
     esac
   done
   if [[ -z "$num" ]]; then
@@ -725,7 +737,13 @@ gh_issue_close_rest() {
     case "$1" in
       --repo) repo="$2"; shift 2 ;;
       --*) echo "error: gh_issue_close_rest: unknown flag '$1'" >&2; return 1 ;;
-      *) num="$1"; shift 1 ;;
+      *)
+        if [[ -z "$num" ]]; then
+          num="$1"; shift 1
+        else
+          echo "error: gh_issue_close_rest: unexpected argument '$1'" >&2; return 1
+        fi
+        ;;
     esac
   done
   if [[ -z "$num" ]]; then
@@ -805,7 +823,13 @@ gh_issue_comment_rest() {
       --body-file) body_file="$2"; shift 2 ;;
       --repo)      repo="$2";      shift 2 ;;
       --*) echo "error: gh_issue_comment_rest: unknown flag '$1'" >&2; return 1 ;;
-      *) num="$1"; shift 1 ;;
+      *)
+        if [[ -z "$num" ]]; then
+          num="$1"; shift 1
+        else
+          echo "error: gh_issue_comment_rest: unexpected argument '$1'" >&2; return 1
+        fi
+        ;;
     esac
   done
   if [[ -z "$num" ]]; then
@@ -856,7 +880,13 @@ gh_pr_merge_rest() {
       --rebase) method="rebase"; shift 1 ;;
       --repo)   repo="$2";       shift 2 ;;
       --*) echo "error: gh_pr_merge_rest: unknown flag '$1'" >&2; return 1 ;;
-      *) num="$1"; shift 1 ;;
+      *)
+        if [[ -z "$num" ]]; then
+          num="$1"; shift 1
+        else
+          echo "error: gh_pr_merge_rest: unexpected argument '$1'" >&2; return 1
+        fi
+        ;;
     esac
   done
   if [[ -z "$num" ]]; then

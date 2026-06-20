@@ -1620,6 +1620,15 @@ case "$err_sl" in *"gh_issue_set_labels_rest: issue number is required"*) m=yes 
 assert_eq "set-labels: missing-number stderr names helper" "yes" "$m"
 teardown
 
+echo "Test: gh_issue_set_labels_rest -- number with zero labels returns non-zero"
+setup
+rc_sl_nl=0
+err_sl_nl=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_set_labels_rest 42 2>&1 >/dev/null) || rc_sl_nl=$?
+assert_eq "set-labels: no labels → non-zero" "1" "$rc_sl_nl"
+case "$err_sl_nl" in *"at least one label is required"*) m=yes ;; *) m=no ;; esac
+assert_eq "set-labels: no-labels stderr names requirement" "yes" "$m"
+teardown
+
 echo "Test: gh_issue_set_labels_rest -- gh failure returns non-zero with diagnostic stderr"
 setup
 : > "$STUB_DIR/gh-fail-rest"
@@ -1779,6 +1788,8 @@ printf '%s' "body from file" > "$STUB_DIR/comment-body.txt"
 source "$TMPDIR_TEST/lib.sh"; gh_issue_comment_rest 42 --body-file "$STUB_DIR/comment-body.txt"
 if grep -q 'issues/42/comments' "$STUB_DIR/gh-issue-comment-rest-calls.log"; then p=yes; else p=no; fi
 assert_eq "comment: --body-file path appears in log" "yes" "$p"
+if grep -q -- '-F body=@' "$STUB_DIR/gh-issue-comment-rest-calls.log"; then f=yes; else f=no; fi
+assert_eq "comment: --body-file uses -F body=@ flag" "yes" "$f"
 teardown
 
 echo "Test: gh_issue_comment_rest -- --repo flag emits cross-repo segment"
@@ -1801,6 +1812,15 @@ err_cmb=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_comment_rest 42 2>&1 >/dev/null
 assert_eq "comment: missing --body/--body-file → non-zero" "1" "$rc_cmb"
 case "$err_cmb" in *"gh_issue_comment_rest: --body or --body-file is required"*) m=yes ;; *) m=no ;; esac
 assert_eq "comment: missing-body stderr names helper" "yes" "$m"
+teardown
+
+echo "Test: gh_issue_comment_rest -- --body and --body-file together return non-zero"
+setup
+rc_cmx=0
+err_cmx=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_comment_rest 42 --body "b" --body-file /dev/null 2>&1 >/dev/null) || rc_cmx=$?
+assert_eq "comment: --body+--body-file → non-zero" "1" "$rc_cmx"
+case "$err_cmx" in *"mutually exclusive"*) m=yes ;; *) m=no ;; esac
+assert_eq "comment: --body+--body-file stderr names conflict" "yes" "$m"
 teardown
 
 echo "Test: gh_issue_comment_rest -- gh failure returns non-zero with diagnostic stderr"
