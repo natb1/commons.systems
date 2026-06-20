@@ -354,11 +354,15 @@ Skip a path when its bucket is empty.
 
 `result.followups_deferred` is the count of Step-5a filing subagents the Workflow queued (not yet filed); it drives the Step-5a fan-out and is NOT the value emitted to `--followups-filed`. Track instead how many Step-5a and Step-5b follow-ups were ACTUALLY filed this run — count only NEW `<disposition>` records (EXISTING records returned by `/file-issue` were not filed this phase). Use the already-captured `<N>` records from the "Capture each `<N>`" lines in 5a and 5b for this count; introduce no new tracking mechanism. Pass that count, not `result.followups_deferred`, as the `--followups-filed` total.
 
-Every follow-up filed in this step receives the label `source-pr:<PR_NUM>`,
-recording which PR's review surfaced the finding. This label is the machine key
-used by the `dispatch-retriage-orphaned-followups` scan to park orphaned
-follow-ups when PR #<PR_NUM> is later closed without merging — without it, such
-follow-ups silently point at code that never landed on main.
+Every follow-up filed in this step receives (a) a
+`<!-- dispatch:source-pr <PR_NUM> -->` body marker recording which PR's review
+surfaced the finding, and (b) the static `dispatch:review-followup` label. The
+marker is the machine key read by the `dispatch-retriage-orphaned-followups`
+scan (gated by the static label as a cheap server-side pre-filter) to park
+orphaned follow-ups when PR #<PR_NUM> is later closed without merging — without
+the marker, such follow-ups silently point at code that never landed on main.
+The static label is pre-created once (during the PR's QA) so filing just adds it
+idempotently — no create-on-not-found dance.
 
 #### 5a. Deferred code-review/review findings → `/file-issue` with a blocked-by link
 
@@ -391,30 +395,22 @@ summary. The subagent:
    dependencies API — see `ref-github-issues`) and skip the POST for any blocker
    already present, so a duplicate does not error. An `independent` finding records
    no dependency.
-3. Applies the `source-pr:<PR_NUM>` label to each `<N>` (use
-   `dangerouslyDisableSandbox: true` — `gh` needs network, see
-   `.claude/rules/sandbox.md`):
+3. Appends the source-PR body marker via read-modify-write, then adds the static
+   `dispatch:review-followup` label, to each `<N>` (use `dangerouslyDisableSandbox:
+   true` — `gh` needs network, see `.claude/rules/sandbox.md`):
 
    ```bash
-   gh issue edit <N> --add-label "source-pr:<PR_NUM>"
+   # (a) Read-modify-write: `gh issue edit --body` REPLACES the whole body, so
+   # fetch the current body and append the marker as the last line — never pass
+   # the marker alone, which would clobber the finding content /file-issue wrote.
+   BODY=$(gh issue view <N> --json body -q .body)
+   gh issue edit <N> --body "$BODY
+
+   <!-- dispatch:source-pr <PR_NUM> -->"
+   # (b) Add the static label (pre-created once during QA; adding an existing
+   # label is idempotent and race-free, so NO create-on-not-found dance).
+   gh issue edit <N> --add-label "dispatch:review-followup"
    ```
-
-   If this fails with a `*"not found"*` message, the label does not exist yet —
-   create it, then retry the add once, following the create-on-not-found idiom
-   in `dispatch-apply-office-hours` (lines 67–83):
-
-   ```bash
-   gh label create "source-pr:<PR_NUM>" --color 1d76db \
-     --description "review follow-up: surfaced reviewing this PR" || true
-   gh issue edit <N> --add-label "source-pr:<PR_NUM>"
-   ```
-
-   The `|| true` is load-bearing: when multiple 5a/5b subagents fan out in
-   parallel, two may hit `not found` for the same `source-pr:<PR_NUM>` label at
-   once and both attempt the create — only one wins, the other fails with
-   `already exists`. Treat create as best-effort; the unconditional retry of the
-   add is what matters, and it succeeds once the label exists regardless of which
-   subagent created it.
 4. Returns every `<N>` to this thread.
 
 Capture each `<N>` against its source finding for the Step 7 comment.
@@ -478,23 +474,21 @@ summary. Each subagent:
    `===FILE-ISSUE-RESULTS-END===` block. Read the `<disposition> <N>` record(s)
    between the sentinels — a single machine-keyed follow-up normally yields one
    record; iterate step 3 over each if more.
-3. Applies the topic, type, and source-PR labels to each `<N>` (use
+3. Applies the topic, type, and static review-followup labels to each `<N>`,
+   then appends the source-PR body marker via read-modify-write (use
    `dangerouslyDisableSandbox: true` — `gh` needs network):
 
    ```bash
-   gh issue edit <N> --add-label security --add-label bug --add-label "source-pr:$PR_NUM"
+   gh issue edit <N> --add-label security --add-label bug --add-label "dispatch:review-followup"
    ```
 
-   Since `/file-issue` (step 2) now classifies and applies a type label at creation via `ref-issue-labels`, and a `dispatch-security-followup` body describes an identified failure mode — a CodeQL alert at a specific location, or named npm advisories with severities — the classifier already applies `bug`; this `--add-label bug` is therefore idempotent reinforcement, `--add-label security` adds the topic, and exactly one type label results with no atomic type-swap needed. If the
-   `source-pr:$PR_NUM` label does not exist yet the edit fails with a
-   `*"not found"*` message — apply the same create-on-not-found idiom as 5a,
-   with the same parallel-race rationale (create is best-effort via `|| true`,
-   the add retry is what matters):
+   Since `/file-issue` (step 2) now classifies and applies a type label at creation via `ref-issue-labels`, and a `dispatch-security-followup` body describes an identified failure mode — a CodeQL alert at a specific location, or named npm advisories with severities — the classifier already applies `bug`; this `--add-label bug` is therefore idempotent reinforcement, `--add-label security` adds the topic, and exactly one type label results with no atomic type-swap needed. The `dispatch:review-followup` label is pre-created once during QA, so adding it is idempotent and race-free — no create-on-not-found dance. Then append the source-PR marker (read-modify-write, same recipe as 5a — `gh issue edit --body` REPLACES the whole body, so never pass the marker alone):
 
    ```bash
-   gh label create "source-pr:$PR_NUM" --color 1d76db \
-     --description "review follow-up: surfaced reviewing this PR" || true
-   gh issue edit <N> --add-label "source-pr:$PR_NUM"
+   BODY=$(gh issue view <N> --json body -q .body)
+   gh issue edit <N> --body "$BODY
+
+   <!-- dispatch:source-pr $PR_NUM -->"
    ```
 
 4. Returns `<N>` mapped to the follow-up's `identifier`.
