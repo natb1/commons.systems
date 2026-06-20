@@ -14055,6 +14055,118 @@ else
 fi
 tw_teardown
 
+# --- #2043: reference.md Table A / Table B literal ports ---------------------
+#
+# reference.md's "Concurrency budgeting" section documents the controller's
+# input→output contract as two literal tables. These ports assert the exact
+# target_N each table row claims, so a regression in dispatch-target-workers
+# that diverges from the documented tables fails CI — the tables and the
+# implementation are kept in lockstep (issue #2043 AC). The numbers below are
+# transcribed from reference.md; if the script changes, these assertions catch
+# the divergence. (A reviewer changing the table without the script — a
+# doc-only edit — is caught in review, not here; coupling the test to the
+# markdown file's prose formatting was rejected as brittle.)
+#
+# Both tables use the script's baked-in defaults (max_workers=8, floor5=50,
+# ceil5=80, weekly defaults), which tw_setup's empty synthetic DISPATCH_CONFIG_DIR
+# selects.
+
+# Table A — weekly curve vs. elapsed (used_weekly=0, used_5h=0). With
+# used_weekly=0 the weekly gate is open at every x (hw = W - 0 > 0), and
+# used_5h=0 <= floor5 puts the 5h ramp at max, so target_N=8 across the whole
+# week. This is the whole-week "all gates open, full headroom → max" smoke.
+echo "Test: #2043 reference.md Table A — used_weekly=0,used_5h=0 → target_N=8 at every x"
+tw_setup
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+# reference.md Table A rows: elapsed x → target_N (all 8). The ~1.0 row uses
+# tw_resets_for_x 1.0 (remaining=1s) so Stage 1 does not take the remaining<=0
+# early-exit.
+for x in 0.00 0.25 0.50 0.75 0.90 1.0; do
+  r=$(tw_resets_for_x "$x")
+  write_rl "tableA.json" 0 "$r" 0 99999999
+  out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+  assert_eq "Table A x=$x (used_weekly=0,used_5h=0) → target_N=8" "8" "$out"
+done
+tw_teardown
+
+# Table B — binary gate + 5h ramp at mid-week (x=0.5, W=65.95). The open-gate
+# rows hold used_weekly=20 (hw=45.95>0) and sweep used_5h; the closed-gate rows
+# hold used_5h=0 and push used_weekly at/over W.
+echo "Test: #2043 reference.md Table B — mid-week gate + 5h ramp rows"
+tw_setup
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+r=$(tw_resets_for_x 0.5)
+# reference.md Table B open-gate rows: used_5h → target_N (used_weekly=20).
+declare -A tableB=([50]=8 [55]=7 [60]=5 [65]=4 [70]=3 [75]=1 [80]=0)
+for u5 in 50 55 60 65 70 75 80; do
+  write_rl "tableB.json" 20 "$r" "$u5" 99999999
+  out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+  assert_eq "Table B open gate used_weekly=20 used_5h=$u5 → target_N=${tableB[$u5]}" \
+    "${tableB[$u5]}" "$out"
+done
+unset tableB
+# reference.md Table B closed-gate rows: used_weekly at/over W=65.95 → 0.
+write_rl "tableB.json" 66 "$r" 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "Table B closed gate used_weekly=66 (at/over pace) → target_N=0" "0" "$out"
+write_rl "tableB.json" 70 "$r" 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "Table B closed gate used_weekly=70 (over pace) → target_N=0" "0" "$out"
+tw_teardown
+
+# --- #2043: non-numeric used_5h is sanitized → fail-OPEN (not fail-closed) ---
+#
+# Closes the gap left by Test 17 (which covers non-numeric used_weekly →
+# fail-CLOSED to 1). The two used_* fields have OPPOSITE fallback semantics by
+# design: used_weekly is the budget gate (missing → drop the weekly anchor →
+# fallback 1), but used_5h is only the anti-burst ramp WITHIN the weekly budget
+# (missing → treated as 0 → full 5h headroom → the WEEKLY-allowed count). So a
+# non-numeric used_5h must NOT back off to zero; under an open weekly gate it
+# yields max workers. (reference.md's "non-numeric used_* → fail-closed" wording
+# is imprecise — only used_weekly fails closed; this test pins the actual,
+# intended fail-open behavior for used_5h.)
+echo "Test: #2043 non-numeric used_5h sanitized → fail-open (weekly-bounded), not 0"
+tw_setup
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+r=$(tw_resets_for_x 0.5)
+# used_weekly=20 → gate open at x=0.5 (hw=45.95>0). used_5h="abc" → sanitized to
+# missing → treated as 0 → ramp gives max workers = 8.
+write_rl "rl.json" 20 "$r" 0 99999999  # JSON used_5h=0 is overridden below by DISPATCH_TARGET_WORKERS_USED_5H=abc (per-field env override) — the env var is what exercises this path
+export DISPATCH_TARGET_WORKERS_USED_5H=abc
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>"$TMPDIR_TEST/stderr")
+assert_eq "non-numeric used_5h → fail-open max workers N=8 (not 0)" "8" "$out"
+err=$(cat "$TMPDIR_TEST/stderr")
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"non-numeric value"* && "$err" == *"FIVEH_USED"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-numeric used_5h stderr names FIVEH_USED"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-numeric used_5h stderr names FIVEH_USED"
+  echo "    stderr: $err"
+fi
+tw_teardown
+
+# --- #2043: --reopen-at none from a transient 5h fill (pace not the blocker) -
+#
+# The AC enumerates the reopen `none` no-op cases as "(target already >= 1,
+# transient 5h fill, missing weekly anchor)". The under-pace and missing-anchor
+# cases are covered above; this covers the transient-5h-fill case: the weekly
+# gate is OPEN (used_weekly under pace) but count mode returns 0 because used_5h
+# is at/over ceil5. Since hw>0 the pace curve is NOT the blocker, so reopen must
+# report `none` (the 0 comes from the 5h fill, which drains on its own and is
+# handled elsewhere — not a pace-curve pause with a curve crossing).
+echo "Test: #2043 --reopen-at transient 5h fill (gate open, count 0) → none"
+tw_setup
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+r=$(tw_resets_for_x 0.5)
+# used_weekly=20 → under pace at x=0.5 (W=65.95, hw=45.95>0 → gate open).
+# used_5h=85 >= ceil5=80 → count mode N=0. reopen: hw>0 → none.
+write_rl "reopen5h.json" 20 "$r" 85 99999999
+cnt=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "transient 5h fill: count mode N=0 (gate open, used_5h>=ceil5)" "0" "$cnt"
+rop=$("$TMPDIR_TEST/scripts/dispatch-target-workers" --reopen-at 2>/dev/null)
+assert_eq "transient 5h fill: --reopen-at → none (pace not the blocker)" "none" "$rop"
+tw_teardown
+
 # ============================================================================
 # dispatch-schedule-reseed tests
 # ============================================================================
@@ -34594,6 +34706,134 @@ out=$(printf '%s\n' "package.json" | (source "$SCRIPT_DIR/lib.sh"; resolve_dirty
 assert_eq "resolve_dirty_apps: root-config fan-out marks all workspaces" \
   $'blog\nlanding\npackages/ds' "$out"
 
+rm -rf "$TMPDIR_TEST"
+TMPDIR_TEST=""
+
+# dispatch-review-erosion tests
+# ============================================================================
+#
+# Tests for the net-erosion structural-decay finder (#2064). These are the
+# DETERMINISTIC, NETWORK-FREE portions:
+#
+# E1. Language-scope filter: docs-only and bash-only stdin yield {"findings":[]}
+#     (exit 0). Drives the real dispatch-review-erosion entrypoint end-to-end.
+#     Requires a no-op eslint stub at node_modules/.bin/eslint in cwd — eslint is
+#     never invoked (filter exits before the metric runs), but the guard check
+#     [[ ! -x "$ESLINT_BIN" ]] would fail before reaching the filter otherwise.
+#
+# E2. Complexity net-delta via sidecar: drives dispatch-review-erosion-diff.mjs
+#     directly with synthetic eslint and jscpd JSON, sidestepping the real
+#     eslint, jscpd (network), and git. The sidecar is the clean unit boundary
+#     for asserting Source="erosion" + path:line Location when complexity rises.
+
+echo ""
+echo "=== dispatch-review-erosion ==="
+
+# E1a. docs-only stdin → {"findings":[]} (language-scope filter exits early).
+#
+#     Files are created on disk so the HEAD-existence filter (which also exits
+#     early) cannot silently backstop the language-scope filter test. With the
+#     files present, only the language filter can explain the early exit: if it
+#     were removed, head_paths would be non-empty → the script would reach
+#     run_jscpd → fail loudly (no report produced). Creating them on disk is
+#     the cheapest way to give the assertion real teeth.
+echo "Test: dispatch-review-erosion — docs-only stdin yields empty findings"
+TMPDIR_TEST=$(mktemp -d)
+mkdir -p "$TMPDIR_TEST/node_modules/.bin" "$TMPDIR_TEST/docs"
+cat > "$TMPDIR_TEST/node_modules/.bin/eslint" <<'ESTUB'
+#!/usr/bin/env bash
+# No-op stub: never invoked on a docs-only file list (language filter exits first).
+exit 0
+ESTUB
+chmod +x "$TMPDIR_TEST/node_modules/.bin/eslint"
+# Create the files on disk so HEAD-existence can't backstop the language filter.
+touch "$TMPDIR_TEST/README.md" "$TMPDIR_TEST/docs/guide.md"
+result=$(cd "$TMPDIR_TEST" && printf '%s\n' 'README.md' 'docs/guide.md' \
+  | "$SCRIPT_DIR/dispatch-review-erosion" dummybase)
+assert_eq "docs-only stdin → empty findings" '{"findings":[]}' "$result"
+rm -rf "$TMPDIR_TEST"
+TMPDIR_TEST=""
+
+# E1b. bash-only stdin → {"findings":[]} (same filter path, different extension set).
+#     Same disk-creation convention as E1a.
+echo "Test: dispatch-review-erosion — bash-only stdin yields empty findings"
+TMPDIR_TEST=$(mktemp -d)
+mkdir -p "$TMPDIR_TEST/node_modules/.bin" "$TMPDIR_TEST/.claude/scripts"
+cat > "$TMPDIR_TEST/node_modules/.bin/eslint" <<'ESTUB'
+#!/usr/bin/env bash
+exit 0
+ESTUB
+chmod +x "$TMPDIR_TEST/node_modules/.bin/eslint"
+# Create the files on disk so HEAD-existence can't backstop the language filter.
+touch "$TMPDIR_TEST/.claude/scripts/dispatch-review-erosion" \
+      "$TMPDIR_TEST/.claude/scripts/lib.sh"
+result=$(cd "$TMPDIR_TEST" && printf '%s\n' \
+  '.claude/scripts/dispatch-review-erosion' \
+  '.claude/scripts/lib.sh' \
+  | "$SCRIPT_DIR/dispatch-review-erosion" dummybase)
+assert_eq "bash-only stdin → empty findings" '{"findings":[]}' "$result"
+rm -rf "$TMPDIR_TEST"
+TMPDIR_TEST=""
+
+# E2. Sidecar complexity net-delta: HEAD max rose → finding with Source="erosion"
+#     and a valid path:line Location.
+#
+#     The sidecar reads all four artifact paths passed on the CLI; it does NOT
+#     invoke eslint, jscpd, or git. Synthetic JSON is enough to drive the full
+#     net-delta logic. Key alignment constraint (relpath normalization):
+#       HEAD   filePath = <cwd>/foo.ts          → strips cwd prefix → "foo.ts"
+#       BASE   filePath = <cwd>/baseline/foo.ts → strips cwd/baseline/ → "foo.ts"
+#     Both keys become "foo.ts" so baseCx.get(rel) hits and the diff fires.
+echo "Test: dispatch-review-erosion-diff.mjs — complexity net-increase yields Source=erosion finding"
+TMPDIR_TEST=$(mktemp -d)
+# eslint HEAD report: foo.ts, one function at complexity 5, worst-function line 3.
+cat > "$TMPDIR_TEST/head-eslint.json" <<EOF
+[{"filePath":"$TMPDIR_TEST/foo.ts","messages":[{"ruleId":"complexity","message":"Function 'doThing' has a complexity of 5. Maximum allowed is 0.","line":3}]}]
+EOF
+# eslint BASE report: same file but lower complexity (2) pre-PR.
+mkdir -p "$TMPDIR_TEST/baseline"
+cat > "$TMPDIR_TEST/base-eslint.json" <<EOF
+[{"filePath":"$TMPDIR_TEST/baseline/foo.ts","messages":[{"ruleId":"complexity","message":"Function 'doThing' has a complexity of 2. Maximum allowed is 0.","line":1}]}]
+EOF
+# jscpd HEAD report: zero clones (no duplication finding expected here).
+cat > "$TMPDIR_TEST/head-jscpd.json" <<'EOF'
+{"statistics":{"total":{"clones":0,"duplicatedLines":0,"percentage":0}}}
+EOF
+sidecar_out=$(cd "$TMPDIR_TEST" && node "$SCRIPT_DIR/dispatch-review-erosion-diff.mjs" \
+  --eslint-head head-eslint.json \
+  --eslint-base base-eslint.json \
+  --jscpd-head head-jscpd.json \
+  --baseline-dir baseline)
+sidecar_source=$(jq -r '.findings[0].Source // "none"' <<<"$sidecar_out")
+sidecar_location=$(jq -r '.findings[0].Location // "none"' <<<"$sidecar_out")
+sidecar_confidence=$(jq -r '.findings[0].Confidence // "none"' <<<"$sidecar_out")
+assert_eq "sidecar complexity finding Source=erosion" "erosion" "$sidecar_source"
+assert_eq "sidecar complexity finding Location=foo.ts:3" "foo.ts:3" "$sidecar_location"
+assert_eq "sidecar complexity finding Confidence=high (max rose)" "high" "$sidecar_confidence"
+rm -rf "$TMPDIR_TEST"
+TMPDIR_TEST=""
+
+# E3. Sidecar no net-increase → {"findings":[]}.
+#     HEAD and BASE have identical complexity; the diff should produce no finding.
+echo "Test: dispatch-review-erosion-diff.mjs — no net-increase yields empty findings"
+TMPDIR_TEST=$(mktemp -d)
+cat > "$TMPDIR_TEST/head-eslint.json" <<EOF
+[{"filePath":"$TMPDIR_TEST/bar.ts","messages":[{"ruleId":"complexity","message":"Function 'x' has a complexity of 3. Maximum allowed is 0.","line":2}]}]
+EOF
+mkdir -p "$TMPDIR_TEST/baseline"
+cat > "$TMPDIR_TEST/base-eslint.json" <<EOF
+[{"filePath":"$TMPDIR_TEST/baseline/bar.ts","messages":[{"ruleId":"complexity","message":"Function 'x' has a complexity of 3. Maximum allowed is 0.","line":2}]}]
+EOF
+cat > "$TMPDIR_TEST/head-jscpd.json" <<'EOF'
+{"statistics":{"total":{"clones":0,"duplicatedLines":0,"percentage":0}}}
+EOF
+sidecar_out=$(cd "$TMPDIR_TEST" && node "$SCRIPT_DIR/dispatch-review-erosion-diff.mjs" \
+  --eslint-head head-eslint.json \
+  --eslint-base base-eslint.json \
+  --jscpd-head head-jscpd.json \
+  --baseline-dir baseline)
+sidecar_count=$(jq '.findings | length' <<<"$sidecar_out")
+assert_eq "sidecar no net-increase → zero findings" "0" "$sidecar_count"
 rm -rf "$TMPDIR_TEST"
 TMPDIR_TEST=""
 
