@@ -30,6 +30,18 @@ export const BLOG_ROLL_CONFIG: BlogRollConfig[] = [
       publishedAt: "2026-03-09",
     }),
   },
+  {
+    entry: {
+      id: "martinfowler-genai",
+      name: "Martin Fowler — Generative AI",
+      url: "https://martinfowler.com/tags/generative%20AI.html",
+    },
+    strategy: new StaticStrategy({
+      title: "Harness engineering for coding agent users",
+      url: "https://martinfowler.com/articles/harness-engineering.html",
+      publishedAt: "2026-04-02",
+    }),
+  },
 ];
 
 export const BLOG_ROLL_ENTRIES = BLOG_ROLL_CONFIG.map((c) => c.entry);
