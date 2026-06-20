@@ -364,12 +364,100 @@ describe("Home", () => {
       const input = container.querySelector<HTMLInputElement>(
         "input[data-queue-toggle]",
       )!;
-      // defaultChecked=true; click toggles unchecked
+      // controlled checked=true; click toggles unchecked
       await act(async () => {
         input.click();
       });
 
       expect(player.remove).toHaveBeenCalledWith("x1");
+
+      await cleanup(container, root);
+    });
+
+    it("keeps the checkbox checked after a successful add (controlled, no revert)", async () => {
+      mockListLibrary.mockResolvedValue([makeLibraryItem({ id: "x1" })]);
+      const player = makeMockPlayer();
+      // Starts unqueued; add flips isQueued to true so the controlled checkbox
+      // re-renders checked instead of reverting.
+      player.isQueued.mockReturnValue(false);
+      player.add.mockImplementation(() => player.isQueued.mockReturnValue(true));
+      const { container, root } = await render(
+        <Home user={null} player={player} refreshKey={0} />,
+      );
+
+      const input = container.querySelector<HTMLInputElement>(
+        "input[data-queue-toggle]",
+      )!; // type-safety-ok: querySelector in test, element guaranteed by rendered component
+      expect(input.checked).toBe(false);
+
+      await act(async () => {
+        input.click();
+      });
+
+      expect(player.add).toHaveBeenCalled();
+      const after = container.querySelector<HTMLInputElement>(
+        "input[data-queue-toggle]",
+      )!; // type-safety-ok: querySelector in test, element guaranteed by rendered component
+      expect(after.checked).toBe(true);
+
+      await cleanup(container, root);
+    });
+
+    it("unchecks the checkbox after a successful remove (controlled)", async () => {
+      mockListLibrary.mockResolvedValue([makeLibraryItem({ id: "x1" })]);
+      const player = makeMockPlayer();
+      player.isQueued.mockReturnValue(true);
+      player.remove.mockImplementation(() =>
+        player.isQueued.mockReturnValue(false),
+      );
+      const { container, root } = await render(
+        <Home user={null} player={player} refreshKey={0} />,
+      );
+
+      const input = container.querySelector<HTMLInputElement>(
+        "input[data-queue-toggle]",
+      )!; // type-safety-ok: querySelector in test, element guaranteed by rendered component
+      expect(input.checked).toBe(true);
+
+      await act(async () => {
+        input.click();
+      });
+
+      expect(player.remove).toHaveBeenCalledWith("x1");
+      const after = container.querySelector<HTMLInputElement>(
+        "input[data-queue-toggle]",
+      )!; // type-safety-ok: querySelector in test, element guaranteed by rendered component
+      expect(after.checked).toBe(false);
+
+      await cleanup(container, root);
+    });
+
+    it("resyncs the checkbox on a focus rescan when the queue changed externally", async () => {
+      mockListLibrary.mockResolvedValue([makeLibraryItem({ id: "x1" })]);
+      const player = makeMockPlayer();
+      player.isQueued.mockReturnValue(true);
+      const { container, root } = await render(
+        <Home user={null} player={player} refreshKey={0} />,
+      );
+
+      const input = container.querySelector<HTMLInputElement>(
+        "input[data-queue-toggle]",
+      )!; // type-safety-ok: querySelector in test, element guaranteed by rendered component
+      expect(input.checked).toBe(true);
+
+      // External mutation: the queue is emptied behind the component's back.
+      player.isQueued.mockReturnValue(false);
+
+      // A focus-driven rescan re-renders Home (same items), reasserting the
+      // controlled `checked` from the now-false isQueued.
+      await act(async () => {
+        window.dispatchEvent(new Event("focus"));
+      });
+
+      const after = container.querySelector<HTMLInputElement>(
+        "input[data-queue-toggle]",
+      )!; // type-safety-ok: querySelector in test, element guaranteed by rendered component
+      expect(after.checked).toBe(false);
 
       await cleanup(container, root);
     });
@@ -392,7 +480,7 @@ describe("Home", () => {
       await cleanup(container, root);
     });
 
-    it("renders checkbox checked when player.isQueued returns true", async () => {
+    it("renders the controlled checked state from player.isQueued", async () => {
       mockListLibrary.mockResolvedValue([makeLibraryItem({ id: "x1" })]);
       const player = makeMockPlayer();
       player.isQueued.mockReturnValue(true);
@@ -402,9 +490,25 @@ describe("Home", () => {
 
       const input = container.querySelector<HTMLInputElement>(
         "input[data-queue-toggle]",
-      )!;
+      )!; // type-safety-ok: querySelector in test, element guaranteed by rendered component
       expect(input.checked).toBe(true);
       expect(player.isQueued).toHaveBeenCalledWith("x1");
+
+      await cleanup(container, root);
+    });
+
+    it("renders the controlled unchecked state when player.isQueued is false", async () => {
+      mockListLibrary.mockResolvedValue([makeLibraryItem({ id: "x1" })]);
+      const player = makeMockPlayer();
+      player.isQueued.mockReturnValue(false);
+      const { container, root } = await render(
+        <Home user={null} player={player} refreshKey={0} />,
+      );
+
+      const input = container.querySelector<HTMLInputElement>(
+        "input[data-queue-toggle]",
+      )!; // type-safety-ok: querySelector in test, element guaranteed by rendered component
+      expect(input.checked).toBe(false);
 
       await cleanup(container, root);
     });
