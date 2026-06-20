@@ -729,13 +729,18 @@ gh_issue_remove_label_rest() {
 
 # REST-backed mutation: close an issue (#2255).
 # Uses PATCH repos/{owner}/{repo}/issues/<N> with state=closed.
-# Args: $1 = <N> (issue number, required); --repo owner/repo (optional).
+# Args: $1 = <N> (issue number, required); --reason <completed|not_planned>
+#   (optional; maps to state_reason, matching `gh issue close --reason`); --comment
+#   <body> (optional; posts the comment BEFORE the close, matching the porcelain's
+#   comment-then-close ordering); --repo owner/repo (optional).
 # On gh failure: errors to stderr and returns 1.
 gh_issue_close_rest() {
-  local num="" repo=""
+  local num="" reason="" comment="" has_comment="" repo=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --repo) repo="$2"; shift 2 ;;
+      --reason)  reason="$2";  shift 2 ;;
+      --comment) comment="$2"; has_comment=1; shift 2 ;;
+      --repo)    repo="$2";    shift 2 ;;
       --*) echo "error: gh_issue_close_rest: unknown flag '$1'" >&2; return 1 ;;
       *)
         if [[ -z "$num" ]]; then
@@ -758,8 +763,83 @@ gh_issue_close_rest() {
     path="repos/{owner}/{repo}/issues/$num"
   fi
 
-  gh_retry gh api -X PATCH "$path" -f state=closed >/dev/null || {
+  # --comment: post the comment BEFORE the close (matches the porcelain ordering),
+  # reusing the exact POST issues/<N>/comments shape from gh_issue_comment_rest.
+  if [[ -n "$has_comment" ]]; then
+    local comments_path="$path/comments"
+    gh_retry gh api -X POST "$comments_path" -f "body=$comment" >/dev/null || {
+      echo "error: gh_issue_close_rest: gh api failed for $comments_path" >&2
+      return 1
+    }
+  fi
+
+  # --reason: send state_reason only when passed (preserves prior behavior for
+  # callers that omit it). The flag value maps directly to GitHub's state_reason.
+  local -a reason_flag=()
+  [[ -n "$reason" ]] && reason_flag=(-f "state_reason=$reason")
+
+  gh_retry gh api -X PATCH "$path" -f state=closed "${reason_flag[@]}" >/dev/null || {
     echo "error: gh_issue_close_rest: gh api failed for $path" >&2
+    return 1
+  }
+}
+
+# REST-backed mutation: edit an issue's title and/or body (#2255).
+# Uses PATCH repos/{owner}/{repo}/issues/<N>. PRs are issues in REST, so this same
+# helper later serves `gh pr edit --body`.
+# Args: $1 = <N> (issue number, required); --title <t> and/or --body <b> OR
+#   --body-file <f> (at least one of title/body required; --body/--body-file
+#   mutually exclusive); --repo owner/repo (optional).
+# On gh failure: errors to stderr and returns 1.
+gh_issue_edit_rest() {
+  local num="" title="" has_title="" body="" body_file="" repo=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --title)     title="$2"; has_title=1; shift 2 ;;
+      --body)      body="$2";      shift 2 ;;
+      --body-file) body_file="$2"; shift 2 ;;
+      --repo)      repo="$2";      shift 2 ;;
+      --*) echo "error: gh_issue_edit_rest: unknown flag '$1'" >&2; return 1 ;;
+      *)
+        if [[ -z "$num" ]]; then
+          num="$1"; shift 1
+        else
+          echo "error: gh_issue_edit_rest: unexpected argument '$1'" >&2; return 1
+        fi
+        ;;
+    esac
+  done
+  if [[ -z "$num" ]]; then
+    echo "error: gh_issue_edit_rest: issue number is required" >&2
+    return 1
+  fi
+  if [[ -n "$body" && -n "$body_file" ]]; then
+    echo "error: gh_issue_edit_rest: --body and --body-file are mutually exclusive" >&2
+    return 1
+  fi
+  if [[ -z "$has_title" && -z "$body" && -z "$body_file" ]]; then
+    echo "error: gh_issue_edit_rest: at least one of --title/--body/--body-file is required" >&2
+    return 1
+  fi
+
+  local path
+  if [[ -n "$repo" ]]; then
+    path="repos/$repo/issues/$num"
+  else
+    path="repos/{owner}/{repo}/issues/$num"
+  fi
+
+  local -a edit_flags=()
+  [[ -n "$has_title" ]] && edit_flags+=(-f "title=$title")
+  if [[ -n "$body_file" ]]; then
+    # -F body=@file re-reads the file on each retry attempt — safe for gh_retry.
+    edit_flags+=(-F "body=@$body_file")
+  elif [[ -n "$body" ]]; then
+    edit_flags+=(-f "body=$body")
+  fi
+
+  gh_retry gh api -X PATCH "$path" "${edit_flags[@]}" >/dev/null || {
+    echo "error: gh_issue_edit_rest: gh api failed for $path" >&2
     return 1
   }
 }
@@ -767,16 +847,17 @@ gh_issue_close_rest() {
 # REST-backed mutation: create a new issue (#2255).
 # Uses POST repos/{owner}/{repo}/issues.
 # Echoes the new issue URL (.html_url) to stdout, matching `gh issue create` output.
-# Args: --title <t> (required); --body <b> (required); --label <l> (repeatable);
-#   --repo owner/repo (optional).
+# Args: --title <t> (required); --body <b> OR --body-file <f> (exactly one
+#   required); --label <l> (repeatable); --repo owner/repo (optional).
 # On gh failure: errors to stderr and returns 1.
 gh_issue_create_rest() {
-  local title="" body="" repo=""
+  local title="" body="" body_file="" repo=""
   local -a label_flags=()
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --title) title="$2"; shift 2 ;;
-      --body)  body="$2";  shift 2 ;;
+      --title)     title="$2"; shift 2 ;;
+      --body)      body="$2";      shift 2 ;;
+      --body-file) body_file="$2"; shift 2 ;;
       --label) label_flags+=(-f "labels[]=$2"); shift 2 ;;
       --repo)  repo="$2";  shift 2 ;;
       *) echo "error: gh_issue_create_rest: unknown flag '$1'" >&2; return 1 ;;
@@ -786,8 +867,12 @@ gh_issue_create_rest() {
     echo "error: gh_issue_create_rest: --title is required" >&2
     return 1
   fi
-  if [[ -z "$body" ]]; then
-    echo "error: gh_issue_create_rest: --body is required" >&2
+  if [[ -n "$body" && -n "$body_file" ]]; then
+    echo "error: gh_issue_create_rest: --body and --body-file are mutually exclusive" >&2
+    return 1
+  fi
+  if [[ -z "$body" && -z "$body_file" ]]; then
+    echo "error: gh_issue_create_rest: exactly one of --body/--body-file is required" >&2
     return 1
   fi
 
@@ -798,10 +883,18 @@ gh_issue_create_rest() {
     path="repos/{owner}/{repo}/issues"
   fi
 
+  local -a body_flag=()
+  if [[ -n "$body_file" ]]; then
+    # -F body=@file re-reads the file on each retry attempt — safe for gh_retry.
+    body_flag=(-F "body=@$body_file")
+  else
+    body_flag=(-f "body=$body")
+  fi
+
   local raw
   raw=$(gh_retry gh api -X POST "$path" \
     -f "title=$title" \
-    -f "body=$body" \
+    "${body_flag[@]}" \
     "${label_flags[@]}") || {
     echo "error: gh_issue_create_rest: gh api failed for $path" >&2
     return 1
@@ -869,16 +962,19 @@ gh_issue_comment_rest() {
 # REST-backed mutation: merge a pull request (#2255).
 # Uses PUT repos/{owner}/{repo}/pulls/<N>/merge with merge_method.
 # Args: $1 = <N> (PR number, required); [--squash|--merge|--rebase] (default:
-#   merge); --repo owner/repo (optional).
+#   merge); --subject <s> (optional; commit_title); --body <b> (optional;
+#   commit_message); --repo owner/repo (optional).
 # On gh failure: errors to stderr and returns 1.
 gh_pr_merge_rest() {
-  local num="" method="merge" repo=""
+  local num="" method="merge" subject="" has_subject="" body="" has_body="" repo=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --squash) method="squash"; shift 1 ;;
-      --merge)  method="merge";  shift 1 ;;
-      --rebase) method="rebase"; shift 1 ;;
-      --repo)   repo="$2";       shift 2 ;;
+      --squash)  method="squash"; shift 1 ;;
+      --merge)   method="merge";  shift 1 ;;
+      --rebase)  method="rebase"; shift 1 ;;
+      --subject) subject="$2"; has_subject=1; shift 2 ;;
+      --body)    body="$2";    has_body=1;    shift 2 ;;
+      --repo)    repo="$2";       shift 2 ;;
       --*) echo "error: gh_pr_merge_rest: unknown flag '$1'" >&2; return 1 ;;
       *)
         if [[ -z "$num" ]]; then
@@ -901,7 +997,15 @@ gh_pr_merge_rest() {
     path="repos/{owner}/{repo}/pulls/$num/merge"
   fi
 
-  gh_retry gh api -X PUT "$path" -f "merge_method=$method" >/dev/null || {
+  # commit_title only when --subject is passed. commit_message is OMITTED when the
+  # --body value is empty: `gh pr merge --body ""` yields an empty commit-message
+  # body (no extra body lines), which the REST API replicates by sending no
+  # commit_message at all.
+  local -a commit_flags=()
+  [[ -n "$has_subject" ]] && commit_flags+=(-f "commit_title=$subject")
+  [[ -n "$has_body" && -n "$body" ]] && commit_flags+=(-f "commit_message=$body")
+
+  gh_retry gh api -X PUT "$path" -f "merge_method=$method" "${commit_flags[@]}" >/dev/null || {
     echo "error: gh_pr_merge_rest: gh api failed for $path" >&2
     return 1
   }

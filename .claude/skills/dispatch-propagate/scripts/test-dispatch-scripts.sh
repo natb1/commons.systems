@@ -536,9 +536,11 @@ case "$args" in
     echo '[]'
     ;;
   "api -X PATCH "*/issues/[0-9]*)
-    # gh_issue_close_rest sentinel (#2255): PATCH .../issues/<N> with state=closed.
+    # gh_issue_close_rest AND gh_issue_edit_rest sentinel (#2255, #2256): both are
+    # PATCH .../issues/<N> calls, so they share this branch and log to the same file.
     # MUST precede the generic `api repos/*/issues/*` branch.
-    # $args form: "api -X PATCH repos/.../issues/<N> -f state=closed"
+    # $args forms: "api -X PATCH repos/.../issues/<N> -f state=closed [...]" (close)
+    #              "api -X PATCH repos/.../issues/<N> -f title=... [...]"   (edit)
     echo "$args" >> "$STUB_DIR/gh-issue-close-rest-calls.log"
     if [[ -f "$STUB_DIR/gh-fail-rest" ]]; then
       echo "stub forced gh api failure" >&2
@@ -1722,6 +1724,100 @@ case "$err_clf" in *"gh_issue_close_rest: gh api failed"*) m=yes ;; *) m=no ;; e
 assert_eq "close: gh-failure stderr names helper" "yes" "$m"
 teardown
 
+echo "Test: gh_issue_close_rest -- --reason sends state_reason"
+setup
+: > "$STUB_DIR/gh-issue-close-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_close_rest 42 --reason completed
+if grep -q 'state_reason=completed' "$STUB_DIR/gh-issue-close-rest-calls.log"; then r=yes; else r=no; fi
+assert_eq "close: --reason sends state_reason=completed" "yes" "$r"
+teardown
+
+echo "Test: gh_issue_close_rest -- --comment posts a comment then closes"
+setup
+: > "$STUB_DIR/gh-issue-close-rest-calls.log"
+: > "$STUB_DIR/gh-issue-comment-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_close_rest 42 --comment "closing note"
+if grep -q 'issues/42/comments' "$STUB_DIR/gh-issue-comment-rest-calls.log"; then c=yes; else c=no; fi
+assert_eq "close: --comment fires POST issues/42/comments" "yes" "$c"
+if grep -q 'issues/42' "$STUB_DIR/gh-issue-close-rest-calls.log"; then p=yes; else p=no; fi
+assert_eq "close: --comment still fires PATCH issues/42" "yes" "$p"
+teardown
+
+# --- gh_issue_edit_rest ---
+echo "Test: gh_issue_edit_rest -- --title only sends title="
+setup
+: > "$STUB_DIR/gh-issue-close-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_edit_rest 42 --title "new title"
+if grep -q 'PATCH' "$STUB_DIR/gh-issue-close-rest-calls.log"; then m=yes; else m=no; fi
+assert_eq "edit: log contains PATCH" "yes" "$m"
+if grep -q 'issues/42' "$STUB_DIR/gh-issue-close-rest-calls.log"; then p=yes; else p=no; fi
+assert_eq "edit: log contains issues/42 path" "yes" "$p"
+if grep -q 'title=new title' "$STUB_DIR/gh-issue-close-rest-calls.log"; then t=yes; else t=no; fi
+assert_eq "edit: --title sends title=" "yes" "$t"
+teardown
+
+echo "Test: gh_issue_edit_rest -- --body only sends body="
+setup
+: > "$STUB_DIR/gh-issue-close-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_edit_rest 42 --body "new body"
+if grep -q 'body=new body' "$STUB_DIR/gh-issue-close-rest-calls.log"; then b=yes; else b=no; fi
+assert_eq "edit: --body sends body=" "yes" "$b"
+teardown
+
+echo "Test: gh_issue_edit_rest -- --body-file uses -F body=@"
+setup
+: > "$STUB_DIR/gh-issue-close-rest-calls.log"
+printf '%s' "edit body from file" > "$STUB_DIR/edit-body.txt"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_edit_rest 42 --body-file "$STUB_DIR/edit-body.txt"
+if grep -q -- '-F body=@' "$STUB_DIR/gh-issue-close-rest-calls.log"; then f=yes; else f=no; fi
+assert_eq "edit: --body-file uses -F body=@ flag" "yes" "$f"
+teardown
+
+echo "Test: gh_issue_edit_rest -- --repo flag emits cross-repo segment"
+setup
+: > "$STUB_DIR/gh-issue-close-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_edit_rest 42 --title "t" --repo owner/other-repo
+if grep -q 'repos/owner/other-repo/issues/42' "$STUB_DIR/gh-issue-close-rest-calls.log"; then seg=yes; else seg=no; fi
+assert_eq "edit: --repo uses cross-repo segment" "yes" "$seg"
+teardown
+
+echo "Test: gh_issue_edit_rest -- --body and --body-file together return non-zero"
+setup
+rc_edx=0
+err_edx=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_edit_rest 42 --body "b" --body-file /dev/null 2>&1 >/dev/null) || rc_edx=$?
+assert_eq "edit: --body+--body-file → non-zero" "1" "$rc_edx"
+case "$err_edx" in *"mutually exclusive"*) m=yes ;; *) m=no ;; esac
+assert_eq "edit: --body+--body-file stderr names conflict" "yes" "$m"
+teardown
+
+echo "Test: gh_issue_edit_rest -- no title/body returns non-zero"
+setup
+rc_ede=0
+err_ede=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_edit_rest 42 2>&1 >/dev/null) || rc_ede=$?
+assert_eq "edit: no title/body → non-zero" "1" "$rc_ede"
+case "$err_ede" in *"at least one of --title/--body/--body-file is required"*) m=yes ;; *) m=no ;; esac
+assert_eq "edit: no-fields stderr names requirement" "yes" "$m"
+teardown
+
+echo "Test: gh_issue_edit_rest -- missing number returns non-zero"
+setup
+rc_edn=0
+err_edn=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_edit_rest --title "t" 2>&1 >/dev/null) || rc_edn=$?
+assert_eq "edit: missing number → non-zero" "1" "$rc_edn"
+case "$err_edn" in *"gh_issue_edit_rest: issue number is required"*) m=yes ;; *) m=no ;; esac
+assert_eq "edit: missing-number stderr names helper" "yes" "$m"
+teardown
+
+echo "Test: gh_issue_edit_rest -- gh failure returns non-zero with diagnostic stderr"
+setup
+: > "$STUB_DIR/gh-fail-rest"
+rc_edf=0
+err_edf=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_edit_rest 42 --title "t" 2>&1 >/dev/null) || rc_edf=$?
+assert_eq "edit: gh failure → non-zero" "1" "$rc_edf"
+case "$err_edf" in *"gh_issue_edit_rest: gh api failed"*) m=yes ;; *) m=no ;; esac
+assert_eq "edit: gh-failure stderr names helper" "yes" "$m"
+teardown
+
 # --- gh_issue_create_rest ---
 echo "Test: gh_issue_create_rest -- POST to correct path, echoes html_url, forwards title/body/labels"
 setup
@@ -1754,8 +1850,26 @@ assert_eq "create: missing-title stderr names helper" "yes" "$m"
 rc_icb=0
 err_icb=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_create_rest --title "t" 2>&1 >/dev/null) || rc_icb=$?
 assert_eq "create: missing --body → non-zero" "1" "$rc_icb"
-case "$err_icb" in *"gh_issue_create_rest: --body is required"*) m=yes ;; *) m=no ;; esac
-assert_eq "create: missing-body stderr names helper" "yes" "$m"
+case "$err_icb" in *"exactly one of --body/--body-file is required"*) m=yes ;; *) m=no ;; esac
+assert_eq "create: missing-body stderr names requirement" "yes" "$m"
+teardown
+
+echo "Test: gh_issue_create_rest -- --body-file reads body from file, uses -F body=@"
+setup
+: > "$STUB_DIR/gh-issue-create-rest-calls.log"
+printf '%s' "body from file" > "$STUB_DIR/create-body.txt"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_create_rest --title "t" --body-file "$STUB_DIR/create-body.txt" >/dev/null
+if grep -q -- '-F body=@' "$STUB_DIR/gh-issue-create-rest-calls.log"; then f=yes; else f=no; fi
+assert_eq "create: --body-file uses -F body=@ flag" "yes" "$f"
+teardown
+
+echo "Test: gh_issue_create_rest -- --body and --body-file together return non-zero"
+setup
+rc_icx=0
+err_icx=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_create_rest --title "t" --body "b" --body-file /dev/null 2>&1 >/dev/null) || rc_icx=$?
+assert_eq "create: --body+--body-file → non-zero" "1" "$rc_icx"
+case "$err_icx" in *"mutually exclusive"*) m=yes ;; *) m=no ;; esac
+assert_eq "create: --body+--body-file stderr names conflict" "yes" "$m"
 teardown
 
 echo "Test: gh_issue_create_rest -- gh failure returns non-zero with diagnostic stderr"
@@ -1870,6 +1984,26 @@ if grep -q 'repos/owner/other-repo/pulls/42/merge' "$STUB_DIR/gh-pr-merge-rest-c
 assert_eq "pr-merge: --repo uses cross-repo segment" "yes" "$seg"
 teardown
 
+echo "Test: gh_pr_merge_rest -- --subject/--body send commit_title/commit_message"
+setup
+: > "$STUB_DIR/gh-pr-merge-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_pr_merge_rest 42 --squash --subject "S" --body "B"
+if grep -q 'commit_title=S' "$STUB_DIR/gh-pr-merge-rest-calls.log"; then s=yes; else s=no; fi
+assert_eq "pr-merge: --subject sends commit_title=S" "yes" "$s"
+if grep -q 'commit_message=B' "$STUB_DIR/gh-pr-merge-rest-calls.log"; then b=yes; else b=no; fi
+assert_eq "pr-merge: --body sends commit_message=B" "yes" "$b"
+teardown
+
+echo "Test: gh_pr_merge_rest -- empty --body omits commit_message"
+setup
+: > "$STUB_DIR/gh-pr-merge-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_pr_merge_rest 42 --squash --subject "S" --body ""
+if grep -q 'commit_message=' "$STUB_DIR/gh-pr-merge-rest-calls.log"; then cm=yes; else cm=no; fi
+assert_eq "pr-merge: empty --body omits commit_message" "no" "$cm"
+if grep -q 'commit_title=S' "$STUB_DIR/gh-pr-merge-rest-calls.log"; then s=yes; else s=no; fi
+assert_eq "pr-merge: --subject still sent with empty body" "yes" "$s"
+teardown
+
 echo "Test: gh_pr_merge_rest -- missing number returns non-zero"
 setup
 rc_pm=0
@@ -1974,6 +2108,14 @@ setup
 : > "$STUB_DIR/gh-issue-close-rest-calls.log"
 source "$TMPDIR_TEST/lib.sh"; gh_issue_close_rest 42
 assert_rest_only "close" "$STUB_DIR/gh-issue-close-rest-calls.log"
+teardown
+
+# --- gh_issue_edit_rest ---
+echo "Test: gh_issue_edit_rest -- consumes REST bucket, not GraphQL"
+setup
+: > "$STUB_DIR/gh-issue-close-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_edit_rest 42 --title "t"
+assert_rest_only "edit" "$STUB_DIR/gh-issue-close-rest-calls.log"
 teardown
 
 # --- gh_issue_create_rest ---
