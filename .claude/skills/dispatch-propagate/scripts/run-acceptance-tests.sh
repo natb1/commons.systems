@@ -207,7 +207,7 @@ TIMEOUT="${EMULATOR_READY_TIMEOUT:-300}"
 # the just-forked emulator has any chance to respond. Fail fast with a clear
 # message instead.
 case "$TIMEOUT" in
-  '' | *[!0-9]*)
+  '' | *[^0-9]*)
     echo "ERROR: EMULATOR_READY_TIMEOUT must be a positive integer (got '${EMULATOR_READY_TIMEOUT}')" >&2
     exit 1
     ;;
@@ -229,8 +229,8 @@ done
 echo "Firebase hosting emulator ready on port ${HOSTING_PORT}"
 
 # Poll until Firestore emulator is ready (if used). Reuses the TIMEOUT set
-# above, so EMULATOR_READY_TIMEOUT governs the Firestore readiness ceiling too —
-# the hosting and Firestore waits are coupled to the same env override.
+# above, so EMULATOR_READY_TIMEOUT governs every emulator's readiness ceiling —
+# hosting, Firestore, Auth, and Storage waits all share the same TIMEOUT.
 if [ "$USES_FIRESTORE" = true ]; then
   ELAPSED=0
   until curl -s -o /dev/null -w '%{http_code}' "http://localhost:${FIRESTORE_PORT}/" 2>/dev/null | grep -q '^200$'; do
