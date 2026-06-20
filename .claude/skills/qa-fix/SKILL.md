@@ -76,6 +76,15 @@ If the output shows `PR: none`, stop with a clear error — qa-fix requires an
 open PR and should not have been dispatched here. If it shows `PR #<num>`, that
 is `PR_NUM`.
 
+Once `PR_NUM` is confirmed, stamp it into this session's dispatch sidecar so the
+token audit can join the session to its PR (#1861). Its failure is non-fatal —
+the script exits 0 on any miss. Use `dangerouslyDisableSandbox: true` (the
+sidecar lives under `~/.claude/projects`, outside the sandbox write-allowlist):
+
+```bash
+.claude/skills/dispatch-propagate/scripts/dispatch-stamp-session --backfill-pr "$PR_NUM"
+```
+
 From the **same** labels line, read the current qa-fix attempt count
 `ATTEMPT_N` — the highest `dispatch:qa-fix-attempt-<n>` label, defaulting to `0`
 when none is present (the same `max // 0` capture idiom as
