@@ -88,9 +88,11 @@ flush. Routing re-entry through Step 7 means its flush guard also carries any
 commits an interrupted prior run left stranded — the flush that lets the router
 resolve `mergeable == MERGEABLE` and promote the PR to ready.
 
-On this re-entry path the Workflow has not run — Step 7 treats the deviation
-criterion as not met (`result.deviation` is absent) and writes the phase-completed
-marker. Otherwise run all steps in order.
+On this re-entry path the Workflow has not run — so Step 7 **skips the phase-log
+write entirely** (the accurate `(review, 1)` entry the original run wrote is
+already durable; a dataless re-write would overwrite it), treats the deviation
+criterion as not met (`result.deviation` is absent), skips the outcome-envelope
+emit, and writes the phase-completed marker. Otherwise run all steps in order.
 
 ## Steps
 
@@ -611,13 +613,21 @@ if [[ "$AHEAD" -ne 0 ]]; then
 fi
 ```
 
-**Then write the handoff note, before the terminal `dispatch:reviewed` apply.**
-The phase-log write must PRECEDE the `dispatch:reviewed` apply so that label stays
-the terminal durable action. Compose a terse "what the review found / fixed"
-digest of this pass to `tmp/phase-log-entry-$N.md` — a one-line summary of the
-fixes applied; a clean review writes a line like `failed: none`. Compose it
-**unconditionally** (no "only on failure" branch). Then upsert it (use
-`dangerouslyDisableSandbox: true` — the script calls `gh`):
+**Then write the handoff note, before the terminal `dispatch:reviewed` apply —
+but only when the Workflow ran this session.** The phase-log write must PRECEDE
+the `dispatch:reviewed` apply so that label stays the terminal durable action.
+This compose-and-write happens **only when the Workflow ran this session** (the
+normal path) — the same "only when the Workflow ran this session" guard the
+outcome-envelope emit uses below (it skips on re-entry for the same reason). On
+the re-entry path (Steps 1–6 skipped, `result` absent) **SKIP the phase-log
+write entirely**; do not compose or upsert anything.
+
+On the normal path, compose a terse "what the review found / fixed" digest of
+this pass to `tmp/phase-log-entry-$N.md` — a one-line summary of the fixes
+applied. This write is **unconditional across pass and fail**: a clean review
+still writes a line like `failed: none` — never gate it on "only on failure."
+The only narrowing is normal-vs-re-entry; pass-vs-fail stays unconditional. Then
+upsert it (use `dangerouslyDisableSandbox: true` — the script calls `gh`):
 
 ```bash
 .claude/skills/dispatch-propagate/scripts/dispatch-write-phase-log \
@@ -625,10 +635,14 @@ fixes applied; a clean review writes a line like `failed: none`. Compose it
 ```
 
 No attempt counter — review is single-pass, so the default `--attempt 1` applies.
-The upsert is idempotent on the `(review, 1)` key: on the re-entry path where
-`dispatch:reviewed` is already present (Steps 1–6 skipped, the Workflow did not
-run), the digest restates the prior pass; the upsert REPLACES the `(review, 1)`
-entry in place rather than stacking a duplicate, so the repeat is safe.
+The upsert is idempotent on the `(review, 1)` key. Why re-entry must skip rather
+than re-write: the phase-log write PRECEDES the `dispatch:reviewed` apply (above),
+and re-entry is GATED on `dispatch:reviewed` already being present (preamble,
+line ~83). So whenever re-entry fires, the accurate `(review, 1)` entry the
+original run wrote is guaranteed already durable on the comment. Skipping the
+write preserves it. A re-write on re-entry has no prior-pass data to restate
+(`result` is absent), so it would only overwrite the good entry with a
+content-free/degraded one — it can never fill a gap, only destroy one.
 
 Then apply the `dispatch:reviewed` label via `dispatch-complete-phase` (use
 `dangerouslyDisableSandbox: true` — the script calls `gh`):
