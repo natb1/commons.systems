@@ -90,7 +90,8 @@ resolve `mergeable == MERGEABLE` and promote the PR to ready.
 
 On this re-entry path the Workflow has not run — Step 7 treats the deviation
 criterion as not met (`result.deviation` is absent) and writes the phase-completed
-marker. Otherwise run all steps in order.
+marker. Step 7 also skips the phase-log write on this path, so the prior entry is
+preserved. Otherwise run all steps in order.
 
 ## Steps
 
@@ -381,11 +382,36 @@ Skip a path when its bucket is empty.
 
 `result.followups_deferred` is the count of Step-5a filing subagents the Workflow queued (not yet filed); it drives the Step-5a fan-out and is NOT the value emitted to `--followups-filed`. Track instead how many Step-5a and Step-5b follow-ups were ACTUALLY filed this run — count only NEW `<disposition>` records (EXISTING records returned by `/file-issue` were not filed this phase). Use the already-captured `<N>` records from the "Capture each `<N>`" lines in 5a and 5b for this count; introduce no new tracking mechanism. Pass that count, not `result.followups_deferred`, as the `--followups-filed` total.
 
-Every follow-up filed in this step receives the label `source-pr:<PR_NUM>`,
-recording which PR's review surfaced the finding. This label is the machine key
-used by the `dispatch-retriage-orphaned-followups` scan to park orphaned
-follow-ups when PR #<PR_NUM> is later closed without merging — without it, such
-follow-ups silently point at code that never landed on main.
+Every follow-up filed in this step receives (a) a
+`<!-- dispatch:source-pr <PR_NUM> -->` body marker recording which PR's review
+surfaced the finding, and (b) the static `dispatch:review-followup` label. The
+marker is the machine key read by the `dispatch-retriage-orphaned-followups`
+scan (gated by the static label as a cheap server-side pre-filter) to park
+orphaned follow-ups when PR #<PR_NUM> is later closed without merging — without
+the marker, such follow-ups silently point at code that never landed on main.
+
+The static label must exist before the 5a/5b subagents add it: a missing label
+makes every `--add-label dispatch:review-followup` a silent no-op AND makes the
+`dispatch-retriage-orphaned-followups` scan's server-side `--label` pre-filter
+match nothing, so orphaned follow-ups become permanently invisible to re-triage.
+Guarantee its presence with a single create-on-not-found in THIS main thread,
+**before** the 5a/5b fan-out — run it once when either bucket is non-empty (it is
+race-free here because the fan-out has not started, so the parallel subagent adds
+in 5a/5b stay plain idempotent `--add-label` calls with no per-subagent create
+dance). Use `dangerouslyDisableSandbox: true` — `gh` needs network, see
+`.claude/rules/sandbox.md`:
+
+```bash
+# Ensure the static label exists once, in the single-threaded parent. `gh label
+# create` is idempotent in effect: it exits non-zero with an "already exists"
+# message when the label is already present (the common case), which is benign.
+# Any OTHER failure is a real error worth surfacing.
+create_out=$(gh label create "dispatch:review-followup" \
+  --color "5319e7" \
+  --description "dispatch: review-fix out-of-scope follow-up (source PR in body marker)" \
+  2>&1) || [[ "$create_out" == *"already exists"* ]] \
+  || echo "review-fix: warning: could not ensure dispatch:review-followup label: $create_out" >&2
+```
 
 #### 5a. Deferred code-review/review findings → `/file-issue` with a blocked-by link
 
@@ -418,30 +444,23 @@ summary. The subagent:
    dependencies API — see `ref-github-issues`) and skip the POST for any blocker
    already present, so a duplicate does not error. An `independent` finding records
    no dependency.
-3. Applies the `source-pr:<PR_NUM>` label to each `<N>` (use
-   `dangerouslyDisableSandbox: true` — `gh` needs network, see
-   `.claude/rules/sandbox.md`):
+3. Appends the source-PR body marker via read-modify-write, then adds the static
+   `dispatch:review-followup` label, to each `<N>` (use `dangerouslyDisableSandbox:
+   true` — `gh` needs network, see `.claude/rules/sandbox.md`):
 
    ```bash
-   gh issue edit <N> --add-label "source-pr:<PR_NUM>"
+   # (a) Read-modify-write: `gh issue edit --body` REPLACES the whole body, so
+   # fetch the current body and append the marker as the last line — never pass
+   # the marker alone, which would clobber the finding content /file-issue wrote.
+   BODY=$(gh issue view <N> --json body -q .body)
+   gh issue edit <N> --body "$BODY
+
+   <!-- dispatch:source-pr <PR_NUM> -->"
+   # (b) Add the static label. The main thread ensured it exists once at the top
+   # of Step 5 (create-on-not-found, before this fan-out), so adding it here is a
+   # plain idempotent, race-free `--add-label` — NO per-subagent create dance.
+   gh issue edit <N> --add-label "dispatch:review-followup"
    ```
-
-   If this fails with a `*"not found"*` message, the label does not exist yet —
-   create it, then retry the add once, following the create-on-not-found idiom
-   in `dispatch-apply-office-hours` (lines 67–83):
-
-   ```bash
-   gh label create "source-pr:<PR_NUM>" --color 1d76db \
-     --description "review follow-up: surfaced reviewing this PR" || true
-   gh issue edit <N> --add-label "source-pr:<PR_NUM>"
-   ```
-
-   The `|| true` is load-bearing: when multiple 5a/5b subagents fan out in
-   parallel, two may hit `not found` for the same `source-pr:<PR_NUM>` label at
-   once and both attempt the create — only one wins, the other fails with
-   `already exists`. Treat create as best-effort; the unconditional retry of the
-   add is what matters, and it succeeds once the label exists regardless of which
-   subagent created it.
 4. Returns every `<N>` to this thread.
 
 Capture each `<N>` against its source finding for the Step 7 comment.
@@ -505,23 +524,21 @@ summary. Each subagent:
    `===FILE-ISSUE-RESULTS-END===` block. Read the `<disposition> <N>` record(s)
    between the sentinels — a single machine-keyed follow-up normally yields one
    record; iterate step 3 over each if more.
-3. Applies the topic, type, and source-PR labels to each `<N>` (use
+3. Applies the topic, type, and static review-followup labels to each `<N>`,
+   then appends the source-PR body marker via read-modify-write (use
    `dangerouslyDisableSandbox: true` — `gh` needs network):
 
    ```bash
-   gh issue edit <N> --add-label security --add-label bug --add-label "source-pr:$PR_NUM"
+   gh issue edit <N> --add-label security --add-label bug --add-label "dispatch:review-followup"
    ```
 
-   Since `/file-issue` (step 2) now classifies and applies a type label at creation via `ref-issue-labels`, and a `dispatch-security-followup` body describes an identified failure mode — a CodeQL alert at a specific location, or named npm advisories with severities — the classifier already applies `bug`; this `--add-label bug` is therefore idempotent reinforcement, `--add-label security` adds the topic, and exactly one type label results with no atomic type-swap needed. If the
-   `source-pr:$PR_NUM` label does not exist yet the edit fails with a
-   `*"not found"*` message — apply the same create-on-not-found idiom as 5a,
-   with the same parallel-race rationale (create is best-effort via `|| true`,
-   the add retry is what matters):
+   Since `/file-issue` (step 2) now classifies and applies a type label at creation via `ref-issue-labels`, and a `dispatch-security-followup` body describes an identified failure mode — a CodeQL alert at a specific location, or named npm advisories with severities — the classifier already applies `bug`; this `--add-label bug` is therefore idempotent reinforcement, `--add-label security` adds the topic, and exactly one type label results with no atomic type-swap needed. The `dispatch:review-followup` label was ensured present once by the main thread at the top of Step 5 (create-on-not-found, before this fan-out), so adding it here is idempotent and race-free — no per-subagent create-on-not-found dance. Then append the source-PR marker (read-modify-write, same recipe as 5a — `gh issue edit --body` REPLACES the whole body, so never pass the marker alone):
 
    ```bash
-   gh label create "source-pr:$PR_NUM" --color 1d76db \
-     --description "review follow-up: surfaced reviewing this PR" || true
-   gh issue edit <N> --add-label "source-pr:$PR_NUM"
+   BODY=$(gh issue view <N> --json body -q .body)
+   gh issue edit <N> --body "$BODY
+
+   <!-- dispatch:source-pr $PR_NUM -->"
    ```
 
 4. Returns `<N>` mapped to the follow-up's `identifier`.
@@ -611,9 +628,11 @@ if [[ "$AHEAD" -ne 0 ]]; then
 fi
 ```
 
-**Then write the handoff note, before the terminal `dispatch:reviewed` apply.**
-The phase-log write must PRECEDE the `dispatch:reviewed` apply so that label stays
-the terminal durable action. Compose a terse "what the review found / fixed"
+**Then write the handoff note, before the terminal `dispatch:reviewed` apply —
+only when the Workflow ran this session** (i.e. **not** the idempotent re-entry
+path, where Steps 1–6 were skipped and `result` is absent). On the non-re-entry
+path the phase-log write must PRECEDE the `dispatch:reviewed` apply so that label
+stays the terminal durable action. Compose a terse "what the review found / fixed"
 digest of this pass to `tmp/phase-log-entry-$N.md` — a one-line summary of the
 fixes applied; a clean review writes a line like `failed: none`. Compose it
 **unconditionally** (no "only on failure" branch). Then upsert it (use
@@ -624,11 +643,15 @@ fixes applied; a clean review writes a line like `failed: none`. Compose it
   "$N" --phase review < tmp/phase-log-entry-$N.md
 ```
 
+Skip the phase-log write entirely on re-entry. On re-entry `dispatch:reviewed` is
+already present, so the write is skipped — there is no ordering concern relative
+to the label on the re-entry path.
+
 No attempt counter — review is single-pass, so the default `--attempt 1` applies.
-The upsert is idempotent on the `(review, 1)` key: on the re-entry path where
-`dispatch:reviewed` is already present (Steps 1–6 skipped, the Workflow did not
-run), the digest restates the prior pass; the upsert REPLACES the `(review, 1)`
-entry in place rather than stacking a duplicate, so the repeat is safe.
+Re-entry is a separate transcript where the Workflow did not run, so `result` is
+absent and there is no fresh outcome data: recomposing the digest would overwrite
+the prior `(review, 1)` entry with a thinner restatement. So the write is SKIPPED
+on re-entry — the prior entry is authoritative.
 
 Then apply the `dispatch:reviewed` label via `dispatch-complete-phase` (use
 `dangerouslyDisableSandbox: true` — the script calls `gh`):
