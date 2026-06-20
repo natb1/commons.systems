@@ -963,12 +963,12 @@ describe("clearSearch()", () => {
     const renderer = createPdfRenderer();
     await renderer.init(container, "fake://source.pdf");
 
-    const results = await renderer.search!("the");
+    const results = await renderer.search!("the"); // type-safety-ok: optional renderer API method, present in this test harness
     const page1Result = results.find((r) => r.label === "Page 1");
     expect(page1Result).toBeDefined();
 
     // Arm pendingHighlight for page 1 (goToResult is arm-only — no render yet).
-    await renderer.goToResult!(page1Result!);
+    await renderer.goToResult!(page1Result!); // type-safety-ok: optional method; page1Result is non-null per the toBeDefined assertion above
 
     // A fresh spread target with a non-zero rect so renderPageInto proceeds past
     // the 0×0 guard.
@@ -976,8 +976,8 @@ describe("clearSearch()", () => {
     target.getBoundingClientRect = makeTargetRect;
 
     // Call #1: renders page 1 into target, applying the highlight.
-    await renderer.renderPageInto!(1, target);
-    const firstWrapper = target.querySelector(".pdf-page-wrapper") as HTMLElement;
+    await renderer.renderPageInto!(1, target); // type-safety-ok: optional renderer API method, present in this test harness
+    const firstWrapper = target.querySelector(".pdf-page-wrapper") as HTMLElement; // type-safety-ok: querySelector result narrowed to the page wrapper element
     expect(firstWrapper).not.toBeNull();
     expect(firstWrapper.querySelector(".search-highlight")).not.toBeNull();
 
@@ -985,7 +985,7 @@ describe("clearSearch()", () => {
     // applyHighlight's leading unwrapHighlights() must restore the now-detached
     // firstWrapper's stale highlight span. On unfixed code the firstWrapper
     // retains its .search-highlight span and the assertion below fails.
-    await renderer.renderPageInto!(1, target);
+    await renderer.renderPageInto!(1, target); // type-safety-ok: optional renderer API method, present in this test harness
 
     // THE discriminating assertion: firstWrapper's highlight is gone because
     // unwrapHighlights() ran before the second applyHighlight wrote the new one.
