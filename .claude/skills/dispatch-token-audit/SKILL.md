@@ -5,7 +5,12 @@ description: Audit recent dispatch session transcripts and emit a ranked report 
 
 # Dispatch Token Audit
 
-This skill parses recent Claude session transcripts and emits a ranked report of token-reduction opportunities. It is report-only: it does not create issues or modify the dispatch workflow — the user decides what to act on from the report. All magnitude figures are an **Opus-list-price-equivalent USD proxy** applied uniformly across every session regardless of its actual model. The proxy ranks opportunities by relative magnitude; it is not the actual bill.
+This skill parses recent Claude session transcripts and emits a ranked report of token-reduction opportunities. It is report-only: it does not create issues or modify the dispatch workflow — the user decides what to act on from the report. Two cost figures appear in the output:
+
+- **`price_proxy_usd`** — a uniform Opus-list-price rate applied to every token regardless of the actual model. Holding price constant isolates token count, so this figure ranks opportunities by relative magnitude. It is **not** the actual bill.
+- **`cost_usd`** — the truthful per-model bill. Each model is priced at its real rate (Sonnet, Haiku, or Opus), so this figure measures real dollars and shows the actual savings from model-routing decisions.
+
+Ranking (step 5) stays on `price_proxy_usd`. `cost_usd` is reported alongside it to show the real bill.
 
 1. **Parse the window argument.** The skill accepts an optional argument of the form `Nd` (e.g. `2d`, `14d`). Parse it as follows:
    - If `ARGUMENTS` matches `^[0-9]+d$`, strip the trailing `d` and use that integer as `N`.
@@ -62,6 +67,15 @@ This skill parses recent Claude session transcripts and emits a ranked report of
    # Tool-result payload byte totals — worst offenders by tool and session
    jq '.payload_bytes | {total, by_tool:(.by_tool[0:15]), worst_sessions}' tmp/usage-audit.json
 
+   # Real per-model actual cost vs proxy
+   jq '.by_model | to_entries | map({model:.key, cost_usd:.value.cost_usd, proxy:.value.price_proxy_usd})' tmp/usage-audit.json
+
+   # Per-phase actual cost vs proxy
+   jq '.by_phase | to_entries | map({phase:.key, cost_usd:.value.cost_usd, proxy:.value.price_proxy_usd})' tmp/usage-audit.json
+
+   # Actual rate table
+   jq '.price_model.actual_rates_per_mtok' tmp/usage-audit.json
+
    # Context and small-session lenses
    jq '.lenses' tmp/usage-audit.json
 
@@ -96,7 +110,8 @@ This skill parses recent Claude session transcripts and emits a ranked report of
 
 6. **Emit the ranked markdown report.** Structure it as follows:
 
-   - **Header**: window (e.g. "Last 7 days"), date range (`since`/`until`), total sessions, total turns, total proxy spend in USD. Include the proxy caveat: "Magnitudes are an Opus-list-price-equivalent USD proxy — a relative-magnitude figure for ranking, not the actual bill." Note `files_failed` if nonzero.
+   - **Header**: window (e.g. "Last 7 days"), date range (`since`/`until`), total sessions, total turns, total proxy spend in USD, and total actual cost in USD. Include the proxy caveat: "Magnitudes are an Opus-list-price-equivalent USD proxy — a relative-magnitude figure for ranking, not the actual bill; see `cost_usd` for the real bill."
+   - **Real cost breakdown**: a subsection showing per-model and per-phase `cost_usd` alongside `price_proxy_usd`. Include the AC#3 comparison explicitly: a Sonnet or Haiku phase costs materially less in `cost_usd` than an equivalent-token Opus phase — this gap is the model-routing savings that the uniform proxy erases. Label clearly: proxy = relative-magnitude ranking lens; cost_usd = truthful bill. Note `files_failed` if nonzero.
    - **Ranked opportunities**: a numbered list, highest proxy magnitude first. Each entry includes:
      - The lens name and number.
      - The measured price-proxy magnitude (USD proxy) as the lead figure.
