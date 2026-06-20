@@ -18,8 +18,9 @@
 #
 # Behavior, in order:
 #   1. Validate args: <N> a positive integer; <sessionId>, <cwd>, <name> non-
-#      empty. <model> is optional/possibly-empty and is passed through verbatim
-#      (never rejected, even when empty). Bad args → stderr diagnostic + exit 2.
+#      empty. <model> and <effort> are optional/possibly-empty and are passed
+#      through verbatim (never rejected, even when empty). Bad args → stderr
+#      diagnostic + exit 2.
 #   2. Read the highest extant dispatch:rate-limit-retry-<n> label on the ISSUE →
 #      CUR (max // 0), via the same jq capture idiom as the ci-wait counter. A
 #      non-integer (label-read flake / tampered labels) fails closed → exit 2.
@@ -33,7 +34,7 @@
 #      (BASE 60, MAX 900) the per-CUR sequence is 60 → 120 → 240 → 480 → 900
 #      (the CUR=4 step, 60*16=960, is clamped by MAX). FIRE = NOW + DELAY.
 #   6. Schedule a transient systemd.user timer at FIRE whose ExecStart is
-#      `dispatch-resume-worker <name> <cwd> <sessionId> <model>`. The unit name
+#      `dispatch-resume-worker <name> <cwd> <sessionId> <model> <effort>`. The unit name
 #      embeds N and the fire epoch — a repeated call with the same (N, FIRE)
 #      collides on the unit name and systemd refuses to recreate, giving
 #      idempotency.
@@ -101,23 +102,25 @@ SYSTEMD_RUN_CMD="${DISPATCH_RATE_LIMIT_RESUME_SYSTEMD_RUN_CMD:-systemd-run}"
 
 # ---- Step 1: parse & validate arguments -------------------------------------
 #
-# Usage: dispatch-schedule-rate-limit-resume <N> <sessionId> <cwd> <name> [<model>]
+# Usage: dispatch-schedule-rate-limit-resume <N> <sessionId> <cwd> <name> [<model>] [<effort>]
 #
 # N is interpolated into the unit name, the gh issue calls, and reaches
 # `(( CUR >= CAP ))` indirectly via the label read below; reject anything that is
 # not a bare positive integer. sessionId/cwd/name need only be non-empty — they
 # are forwarded verbatim into the ExecStart, and dispatch-resume-worker
 # re-validates their shape (and re-checks that <cwd> exists) at fire time. model
-# is optional and possibly-empty — pass it through, never reject empty.
+# and effort are optional and possibly-empty — pass them through, never reject
+# empty.
 
 N="${1:-}"
 SESSION_ID="${2:-}"
 CWD="${3:-}"
 NAME="${4:-}"
 MODEL="${5:-}"
+EFFORT="${6:-}"
 
 if [[ -z "$N" || ! "$N" =~ ^[1-9][0-9]*$ ]]; then
-  echo "error: usage: dispatch-schedule-rate-limit-resume <N> <sessionId> <cwd> <name> [<model>] (N must be a positive integer)" >&2
+  echo "error: usage: dispatch-schedule-rate-limit-resume <N> <sessionId> <cwd> <name> [<model>] [<effort>] (N must be a positive integer)" >&2
   exit 2
 fi
 if [[ -z "$SESSION_ID" ]]; then
@@ -270,11 +273,12 @@ ensure_heartbeat_units "$MAIN_WORKTREE" || true
 # missed while WSL was down runs on the next start.
 #
 # ExecStart is dispatch-resume-worker with its CLI in its OWN positional order:
-# `<name> <cwd> <sessionId> [<model>]`. Note that order differs from this
-# script's CLI (`<N> <sessionId> <cwd> <name> [<model>]`) — the four positionals
-# are emitted as name, cwd, sessionId, model. The possibly-empty <model> is
-# passed UNCONDITIONALLY as the final positional; dispatch-resume-worker treats an
-# empty value as "omit --model".
+# `<name> <cwd> <sessionId> [<model>] [<effort>]`. Note that order differs from
+# this script's CLI (`<N> <sessionId> <cwd> <name> [<model>] [<effort>]`) — the
+# five positionals are emitted as name, cwd, sessionId, model, effort. The
+# possibly-empty <model> and <effort> are each passed UNCONDITIONALLY as
+# trailing positionals; dispatch-resume-worker treats an empty value as "omit
+# --model" / "omit --effort" respectively.
 #
 # --setenv=PATH="$PATH" propagates the scheduling caller's PATH into the
 # transient unit. Without it the unit inherits the systemd user manager's minimal
@@ -311,7 +315,7 @@ RC=0
      --property=KillMode=process \
      --setenv=PATH="$PATH" \
      "$MAIN_WORKTREE/.claude/skills/dispatch-propagate/scripts/dispatch-resume-worker" \
-       "$NAME" "$CWD" "$SESSION_ID" "$MODEL" \
+       "$NAME" "$CWD" "$SESSION_ID" "$MODEL" "$EFFORT" \
      2>"$RUN_STDERR" || RC=$?
 if (( RC == 0 )); then
   echo "reseeded $UNIT_NAME at $FIRE"

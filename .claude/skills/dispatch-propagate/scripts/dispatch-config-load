@@ -7,7 +7,7 @@
 # the normalized result to stdout.
 #
 # Usage:
-#   dispatch-config-load <projects|jit|statements|target-workers|budget-etl|epic|auto-merge|force-opus|sweep>
+#   dispatch-config-load <projects|jit|statements|target-workers|budget-etl|epic|auto-merge|force-opus|sweep|phase-model-policy|selection-lock>
 #
 # Config files live in <project-root>/dispatch.config/. The project root is
 # resolved via resolve_project_root (lib.sh).
@@ -247,6 +247,24 @@
 #     "enabled": true
 #   }
 #
+# ---- Schema: strict-preflight.json -----------------------------------------
+#
+# Top-level object gating the dispatch pre-spawn preflight gate.
+# This config type follows the GENERIC absent→inert convention (see "Stdout
+# protocol" above): when the file is absent, no-config is emitted and the
+# feature is OFF (inert) — the preflight gate is disabled. Do NOT confuse this
+# with auto-merge, which INVERTS that convention (absent → ON). strict-preflight
+# does NOT invert; absent means OFF, the preflight gate is disabled.
+#
+#   enabled       boolean (required when the file is present) — opt-in toggle.
+#                 true arms the pre-spawn preflight gate; false (or file absent)
+#                 leaves it off.
+#
+# Example (see strict-preflight.example.json) — the opt-in form:
+#   {
+#     "enabled": true
+#   }
+#
 # ---- Schema: sweep.json -----------------------------------------------------
 #
 # Top-level object with optional tunables for `dispatch-sweep`. Each field must
@@ -266,6 +284,63 @@
 #     "notInSyncGraceSeconds": 86400
 #   }
 #
+# ---- Schema: phase-model-policy.json ----------------------------------------
+#
+# Top-level object holding a generated phase → model routing policy, produced by
+# /dispatch-token-audit at audit time and consulted by `dispatch-phase-model` at
+# tick time as a cheap lookup. This config type follows the GENERIC absent→inert
+# convention (see "Stdout protocol" above): when the file is absent, no-config is
+# emitted and `dispatch-phase-model` uses its hardcoded default case-map. The
+# tick performs NO learning — it only reads `.routes[phase]`.
+#
+# Only `.routes` is load-bearing and validated; the remaining fields
+# (schema_version, generated_at, window, rationale) are optional provenance/audit
+# metadata, carried through normalization but NOT strictly validated here.
+#
+#   routes   object (optional) — phase-name → model-id map. Each VALUE must be a
+#            non-empty string (a claude model id). Consumed as `.routes[phase]`.
+#            `dispatch-phase-model` honors a route only for phases on its own
+#            demotable allowlist {qa, review}; a route for any other phase is
+#            ignored by the consumer (defense-in-depth against demoting a
+#            code-authoring phase). An absent or empty `.routes` → the consumer
+#            falls back to its hardcoded defaults for every phase.
+#
+# Example (the producer in Unit 2 emits this shape):
+#   {
+#     "schema_version": 1,
+#     "generated_at": "<derived from window.until>",
+#     "window": { "days": 7, "since": "...", "until": "..." },
+#     "routes": { "qa": "claude-sonnet-4-6", "review": "claude-opus-4-8" },
+#     "rationale": {
+#       "qa":     { "decision": "keep-cheap", "sessions": 24, "hit_rate": 0.62,
+#                   "cost_usd": 1.23, "price_proxy_usd": 4.56 },
+#       "review": { "decision": "promote",    "sessions": 30, "hit_rate": 0.18,
+#                   "cost_usd": 2.10, "price_proxy_usd": 5.40 }
+#     }
+#   }
+#
+# ---- Schema: selection-lock.json -------------------------------------------
+#
+# Top-level object with optional tunables for the dispatch selection lock
+# (`dispatch-acquire-lock`). Each field must be a number when present; absent
+# fields fall back to the defaults baked into `dispatch-acquire-lock`. This
+# config type follows the GENERIC absent→inert convention (see "Stdout protocol"
+# above): when the file is absent, no-config is emitted and the consumer uses its
+# built-in defaults.
+#
+#   max_hold_seconds        number (optional, must be a positive integer) — the
+#                           max-hold / heartbeat staleness cap, in seconds. A lock
+#                           holder whose heartbeat (lock-file mtime) is older than
+#                           this is reclaimable by the next acquire even though its
+#                           session is still live. The default value (300) is baked
+#                           into dispatch-acquire-lock, not here. Absent →
+#                           dispatch-acquire-lock uses its default.
+#
+# Example (see selection-lock.example.json):
+#   {
+#     "max_hold_seconds": 300
+#   }
+#
 set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
@@ -274,9 +349,9 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
 CONFIG_TYPE="${1:-}"
 case "$CONFIG_TYPE" in
-  projects|jit|statements|target-workers|budget-etl|epic|auto-merge|force-opus|sweep) ;;
+  projects|jit|statements|target-workers|budget-etl|epic|auto-merge|force-opus|strict-preflight|sweep|phase-model-policy|selection-lock) ;;
   *)
-    echo "error: usage: dispatch-config-load <projects|jit|statements|target-workers|budget-etl|epic|auto-merge|force-opus|sweep>" >&2
+    echo "error: usage: dispatch-config-load <projects|jit|statements|target-workers|budget-etl|epic|auto-merge|force-opus|strict-preflight|sweep|phase-model-policy|selection-lock>" >&2
     exit 2
     ;;
 esac
@@ -505,6 +580,21 @@ case "$CONFIG_TYPE" in
       end
     ' "$CONFIG_FILE")
     ;;
+  strict-preflight)
+    ERRORS=$(jq -r '
+      if type != "object" then
+        "top-level value must be a JSON object, got \(type)"
+      else
+        . as $cfg |
+        # enabled: required boolean
+        (if ($cfg | has("enabled")) | not then
+          "missing required field enabled"
+        elif ($cfg.enabled | type) != "boolean" then
+          "enabled must be a boolean, got \($cfg.enabled | type)"
+        else empty end)
+      end
+    ' "$CONFIG_FILE")
+    ;;
   target-workers)
     # top-level value must be an object; all tunables are optional numbers.
     # `dispatch-target-workers` substitutes a baked-in default for any field
@@ -653,6 +743,56 @@ case "$CONFIG_TYPE" in
           # integer comparison, raise an arithmetic error, and fall through to
           # the reap branch — immediately force-reaping every not-in-sync worktree.
           "notInSyncGraceSeconds must be a whole number (integer), got \($cfg.notInSyncGraceSeconds)"
+        else
+          empty
+        end)
+      end
+    ' "$CONFIG_FILE")
+    ;;
+  phase-model-policy)
+    # top-level value must be an object. Only `.routes` is load-bearing: when
+    # present it must be an object whose every value is a non-empty string (a
+    # model id the consumer feeds to `claude --model`). The provenance fields
+    # (schema_version, generated_at, window, rationale) are not validated.
+    ERRORS=$(jq -r '
+      if type != "object" then
+        "top-level value must be a JSON object, got \(type)"
+      elif (.routes != null) and ((.routes | type) != "object") then
+        "top-level .routes must be an object, got \(.routes | type)"
+      else
+        (.routes // {}) | to_entries[] |
+        .key as $k | .value as $v |
+        if ($v | type) != "string" then
+          "routes.\($k) must be a string, got \($v | type)"
+        elif ($v | length) == 0 then
+          "routes.\($k) must be a non-empty string"
+        else empty end
+      end
+    ' "$CONFIG_FILE")
+    ;;
+  selection-lock)
+    # top-level value must be an object; the single tunable is optional.
+    # `dispatch-acquire-lock` substitutes a baked-in default (300) when the field
+    # is absent, so absence is silent — only the type of a present field is checked.
+    ERRORS=$(jq -r '
+      if type != "object" then
+        "top-level value must be a JSON object, got \(type)"
+      else
+        . as $cfg |
+        # max_hold_seconds: optional positive integer
+        (if ($cfg | has("max_hold_seconds")) | not then
+          empty
+        elif ($cfg.max_hold_seconds | type) != "number" then
+          "max_hold_seconds must be a number if present, got \($cfg.max_hold_seconds | type)"
+        elif $cfg.max_hold_seconds <= 0 then
+          "max_hold_seconds must be > 0 if present, got \($cfg.max_hold_seconds)"
+        elif ($cfg.max_hold_seconds | tostring | test("^[0-9]+$") | not) then
+          # Mirror the env-override contract (^[0-9]+$): reject any value whose
+          # rendered form is not a plain integer. This catches fractions (0.5)
+          # and scientific notation (1e6 -> jq renders "1E+6"); both would reach
+          # the dispatch-acquire-lock bash `(( age > MAX_HOLD_SECONDS ))` integer
+          # comparison, raise an arithmetic error, and break the staleness check.
+          "max_hold_seconds must be a whole number (integer), got \($cfg.max_hold_seconds)"
         else
           empty
         end)

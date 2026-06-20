@@ -160,13 +160,47 @@ gh_api_array() {
   fi
 }
 
+# dispatch_marker_comment_id <N> <marker> — echo the id of the issue comment
+# whose body starts with <marker> (first line), authored by the trusted dispatch
+# identity, or empty when none. Uses startswith (not contains) so prose mentions
+# of the marker string in other comments are never matched. Consolidates the author-id-filtered find jq currently duplicated inline
+# in dispatch-read-plan and dispatch-write-plan (those two are deliberately NOT
+# migrated in this PR — see issue #2039 plan; the greenfield migration is a
+# deferred follow-up). Resolves the trusted author id from `gh api user --jq '.id'`
+# (validated ^[0-9]+$, overridable via DISPATCH_PLAN_AUTHOR_ID for parity with the
+# plan scripts), fetches comments via gh_retry, and applies the same
+# author-id-filtered first(...) selector. Returns non-zero with a stderr message
+# on an unresolvable author id (clear error, not a fallback). Echoes nothing
+# (empty) when no matching comment exists. A gh_retry or jq pipeline failure
+# returns non-zero (a clear error), distinct from the empty-output absent case —
+# mirroring gh_api_array's error propagation rather than silently swallowing it.
+dispatch_marker_comment_id() {
+  local n="$1" marker="$2"
+  local author_id="${DISPATCH_PLAN_AUTHOR_ID:-$(gh api user --jq '.id')}"
+  if [[ ! "$author_id" =~ ^[0-9]+$ ]]; then
+    echo "dispatch_marker_comment_id: could not resolve a numeric comment author id (got: '$author_id')" >&2
+    return 1
+  fi
+  local raw
+  raw=$(gh_retry gh api --paginate "repos/{owner}/{repo}/issues/$n/comments") \
+    || return 1
+  local cid
+  cid=$(printf '%s\n' "$raw" | jq -r --arg m "$marker" --argjson author_id "$author_id" \
+      'first(.[] | select((.body | startswith($m)) and (.user.id == $author_id)) | .id)') \
+    || return 1
+  if [[ -z "$cid" || "$cid" == "null" ]]; then
+    return 0
+  fi
+  printf '%s\n' "$cid"
+}
+
 # List issues (NOT pull requests) via the GitHub REST API rather than
 # `gh issue list` (which GraphQL-backs). Keeping the per-tick dispatch issue
 # scans on REST keeps them off the shared GraphQL rate-limit bucket, which the
 # per-tick scan was self-exhausting (#1601).
 #
 # Contract:
-#   gh_issue_list_rest --state <open|closed> [--repo <owner/repo>] [--label <name>] [--limit <n>]
+#   gh_issue_list_rest --state <open|closed> [--repo <owner/repo>] [--label <name>] [--limit <n>] [--include-body]
 #
 # Flags:
 #   --state  (required) open|closed.
@@ -179,6 +213,9 @@ gh_api_array() {
 #            (REST --paginate has no silent-truncation hazard, unlike gh pr/issue
 #            list's --limit default). When PRESENT we fetch a SINGLE page of that
 #            size (no --paginate).
+#   --include-body (optional) when present, the projected objects additionally
+#            carry a `body` field. Omitted by default so the repo-wide per-tick
+#            callers stay byte-identical and payload-lean.
 #
 # Output: one merged JSON array on stdout. REST /issues returns issues AND PRs;
 # only PR objects carry a `pull_request` key, so we filter those out to match
@@ -186,18 +223,20 @@ gh_api_array() {
 # camelCase shape downstream jq expects ({number, createdAt, closedAt, labels}).
 # `labels` is already [{name,...}] in REST, so it passes through unchanged; a null
 # closedAt on open issues is harmless. Results are sorted created-descending so a
-# downstream `.[0]` is the most-recently-created issue.
+# downstream `.[0]` is the most-recently-created issue. When --include-body is
+# passed, each projected object also carries a `body` field.
 #
 # On gh failure: errors to stderr and returns 1 (clear-errors convention, no
 # fallback).
 gh_issue_list_rest() {
-  local state="" repo="" label="" limit=""
+  local state="" repo="" label="" limit="" include_body=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --state) state="$2"; shift 2 ;;
       --repo)  repo="$2";  shift 2 ;;
       --label) label="$2"; shift 2 ;;
       --limit) limit="$2"; shift 2 ;;
+      --include-body) include_body=1; shift 1 ;;
       *) echo "error: gh_issue_list_rest: unknown flag '$1'" >&2; return 1 ;;
     esac
   done
@@ -237,7 +276,11 @@ gh_issue_list_rest() {
     }
   fi
 
-  printf '%s' "$raw" | jq -s 'add // [] | map(select(.pull_request == null)) | map({number, createdAt: .created_at, closedAt: .closed_at, labels})'
+  local projection='add // [] | map(select(.pull_request == null)) | map({number, createdAt: .created_at, closedAt: .closed_at, labels})'
+  if [[ -n "$include_body" ]]; then
+    projection='add // [] | map(select(.pull_request == null)) | map({number, createdAt: .created_at, closedAt: .closed_at, labels, body})'
+  fi
+  printf '%s' "$raw" | jq -s "$projection"
 }
 
 # The explicit open-PR fetch cap. gh pr list defaults to 30, which silently
@@ -1740,6 +1783,42 @@ EOF
 # `OnFailure=dispatch-tick-recover.service` chains a crashing tick to the same
 # systemd-owned recovery handler the tick/reseed launchers use.
 #
+# Disable a stale heartbeat timer/service whose installed unit points at a
+# different main-worktree path than the current one (#2056). Between a dispatch
+# checkout path change and the first ensure_heartbeat_units call from the new
+# path, the timer's Persistent=true can fire dispatch-heartbeat.service at the
+# old/missing path. Detect the mismatch from the installed WorkingDirectory= and
+# disable the stale units before the caller rewrites them.
+#
+# Best-effort: the heartbeat service has no [Install] section, so `disable` exits
+# non-zero by design. Suppress that and never abort the caller (a tick/reseed
+# launcher) — the subsequent unit rewrite is what actually repairs the state.
+# Args: $1 = installed service-unit path, $2 = current main worktree path,
+#       $3 = systemctl command
+cleanup_stale_heartbeat_units() {
+  local service_path="$1"
+  local current_main_worktree="$2"
+  local systemctl_cmd="$3"
+
+  # No prior units → nothing to clean up.
+  [ -f "$service_path" ] || return 0
+
+  local installed_workdir
+  installed_workdir=$(sed -n 's/^WorkingDirectory=//p' "$service_path" | head -1)
+
+  # No WorkingDirectory= to compare → nothing to do.
+  [ -n "$installed_workdir" ] || return 0
+
+  # Path unchanged → the timer points at the right place; leave it running.
+  [ "$installed_workdir" = "$current_main_worktree" ] && return 0
+
+  # Path changed: stop the stale timer/service before the caller rewrites the
+  # unit content. Best-effort — disable exits non-zero (no [Install] section), so
+  # suppress the failure and warn; never abort the caller.
+  echo "WARNING: cleanup_stale_heartbeat_units: installed heartbeat unit points at '$installed_workdir' but current main worktree is '$current_main_worktree'; disabling stale timer/service before rewrite" >&2
+  "$systemctl_cmd" --user disable --now dispatch-heartbeat.timer dispatch-heartbeat.service || true
+}
+
 # Best-effort: a failure here must not abort the caller (a tick/reseed
 # launcher), so we warn to stderr and return non-zero — never `exit`. A missing
 # heartbeat just means the chain falls back to the prior Stop-hook/reseed-only
@@ -1846,6 +1925,13 @@ EOF
      && "$SYSTEMCTL_CMD" --user is-active --quiet dispatch-heartbeat.timer; then
     return 0
   fi
+
+  # Path-change cleanup (#2056): if the installed unit names a different main
+  # worktree, the path changed — disable the stale timer/service before
+  # rewriting the unit content below. Reaching here means the hot path did not
+  # short-circuit, so either the content differs (path change included) or the
+  # timer is inactive. Best-effort; never aborts.
+  cleanup_stale_heartbeat_units "$SERVICE_PATH" "$main_worktree" "$SYSTEMCTL_CMD"
 
   if ! mkdir -p "$UNIT_DIR"; then
     echo "WARNING: ensure_heartbeat_units: mkdir -p $UNIT_DIR failed; periodic heartbeat unavailable" >&2

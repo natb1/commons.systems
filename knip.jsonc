@@ -30,7 +30,11 @@
     // --- Unlisted: imported but resolved transitively, not declared. Pre-existing;
     //     baselined here rather than adding a new direct dependency. ---
     "playwright", // landing/scripts/capture-screenshots.ts imports `playwright` (root declares @playwright/test)
-    "express" // functions/src/feed-proxy.ts: `import type { Response } from "express"` (transitive via firebase-functions)
+    "express", // functions/src/feed-proxy.ts: `import type { Response } from "express"` (transitive via firebase-functions)
+    // --- Harness-invoked binaries: declared and used, but only via
+    //     node_modules/.bin from a .claude/** shell script, which knip's
+    //     ignoreFiles excludes from the module graph. ---
+    "jscpd" // dispatch-review-erosion runs node_modules/.bin/jscpd; .claude/** is in ignoreFiles so knip can't trace it
   ],
 
   // Internal imports inside the COPIED scaffolding templates resolve only after

@@ -14,13 +14,19 @@
 # dispatch-write-plan's stdin design: the caller pipes the plan in, so this
 # script needs no gh mock to test.
 #
-# Tri-state exit, so the implement phase can branch on the result:
+# Exit codes, so the implement phase can branch on the result (five states):
 #   exit 3 — no Verification section, OR a Verification section with no `verify`
 #            blocks. The "proceed unchanged" signal; a one-line diagnostic goes
 #            to stderr. This is NOT a failure — there is simply nothing to run.
 #   exit 0 — every verify block exited 0.
 #   exit 1 — the first verify block to exit non-zero. The failing block index is
 #            reported and no further blocks run.
+#   exit 4 — empty/absent input on stdin. The upstream plan producer
+#            (dispatch-read-plan) likely failed; refusing to emit the exit-3
+#            "proceed unchanged" signal. NOT a proceed-unchanged.
+#   exit 5 — an unclosed verify fence (opened with ```verify inside the
+#            Verification section but reaching EOF before its closing ```).
+#            A malformed/authoring error, NOT a failed verify block.
 #
 # A `## ` heading inside a fenced code block does not terminate the Verification
 # section, and fences outside the section are ignored — fence state is tracked so
@@ -42,6 +48,8 @@ Exit codes:
   1  a verify block failed (the failing block index is reported)
   2  bad usage (unexpected argument)
   3  no Verification section, or no verify blocks in it (proceed unchanged)
+  4  empty stdin (upstream producer failed; NOT a proceed-unchanged)
+  5  unclosed verify fence (malformed plan; NOT a failed block)
 EOF
 }
 
@@ -60,6 +68,11 @@ case "${1:-}" in
 esac
 
 PLAN="$(cat)"
+
+if [[ -z "${PLAN//[[:space:]]/}" ]]; then
+  echo "dispatch-run-verification: empty plan input on stdin — upstream plan producer (dispatch-read-plan) likely failed; refusing to emit the exit-3 'proceed unchanged' signal" >&2
+  exit 4
+fi
 
 # --- Extract the verify block bodies from the Verification section ----------
 # Walk the plan line by line. `in_section` is true once we pass the first
@@ -124,8 +137,8 @@ done <<<"$PLAN"
 # closing ```) leaves capturing=1 with the partial block never appended. Surface
 # it as a malformed plan rather than silently treating it as "no verify blocks".
 if [[ "$capturing" -eq 1 ]]; then
-  echo "dispatch-run-verification: unclosed verify block at end of input" >&2
-  exit 1
+  echo "dispatch-run-verification: unclosed verify block at end of input (malformed plan)" >&2
+  exit 5
 fi
 
 if [[ "${#BLOCKS[@]}" -eq 0 ]]; then

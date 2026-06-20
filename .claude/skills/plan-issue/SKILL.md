@@ -374,15 +374,47 @@ procedure verbatim:
 
 1. **Execute the plan's Verification section** (`dangerouslyDisableSandbox: true`
    — `dispatch-read-plan` calls `gh`). Run the auto-runnable ` ```verify `
-   blocks: `.claude/skills/dispatch-propagate/scripts/dispatch-read-plan <N> | .claude/skills/dispatch-propagate/scripts/dispatch-run-verification` — exit 3 →
-   proceed unchanged; exit 0 → proceed; exit 1 → fix via `/implement-unit`
-   (cap 2) and re-run, else run the deviation marker below and stop (skip the
-   Step 3 completion marker):
+   blocks under `set -o pipefail` so an upstream `dispatch-read-plan` failure
+   cannot be masked:
 
    ```bash
-   .claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \
-     "/implement: plan verification failed after 2 fix attempts (check <index>)"
+   set -o pipefail
+   .claude/skills/dispatch-propagate/scripts/dispatch-read-plan <N> \
+     | .claude/skills/dispatch-propagate/scripts/dispatch-run-verification
    ```
+
+   Route on the exit code: exit 3 → proceed unchanged; exit 0 → proceed.
+
+   - **exit 1** → a ```verify block failed; fix via `/implement-unit` (cap 2)
+     and re-run. If the runner still exits 1 after the cap, run this deviation
+     marker and stop (skip the Step 3 completion marker):
+
+     ```bash
+     .claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \
+       "/implement: plan verification failed after 2 fix attempts (check <index>)"
+     ```
+
+   - **exit 5** → the plan has an unclosed/malformed ```verify fence (opened in
+     the Verification section but never closed before EOF). This is a
+     plan-authoring error the worker cannot repair, **not** a fixable verify
+     failure — do **not** enter the fix lane; run this deviation marker and stop
+     (skip the Step 3 completion marker):
+
+     ```bash
+     .claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \
+       "/implement: plan verification could not run — malformed plan (unclosed verify fence)"
+     ```
+
+   - **any other non-zero exit** (exit 4 = empty/absent plan input, or an
+     upstream `dispatch-read-plan` failure surfaced via `pipefail`) is an
+     environment/upstream error, **not** a fixable verify failure — do **not**
+     enter the fix lane; run this deviation marker and stop (skip the Step 3
+     completion marker):
+
+     ```bash
+     .claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \
+       "/implement: plan verification could not run — upstream dispatch-read-plan failed or plan input was empty"
+     ```
 
 2. **Open the draft PR** (`dangerouslyDisableSandbox: true` — calls `gh`). Write
    the PR body prose to `tmp/pr-body.md` first, then:

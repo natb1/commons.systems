@@ -84,14 +84,74 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# --- Decision-log instrumentation (write-only, non-fatal; #2038) -------------
+# Append EXACTLY ONE structured routing-decision record per run, via an EXIT
+# trap. This is set up FIRST — before the arg-parse usage exits and before the
+# `busy` early exit at Step 0 — so the trap fires on EVERY exit path, giving one
+# record per run. It MUST NOT change the script's exit code, so it never calls
+# `exit`. decision_log_append is write-only and ALWAYS returns 0 (see
+# lib-decision-log.sh) — the log is a best-effort observability sink, so a
+# failed source / missing tool degrades to a no-op rather than a hard error.
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/lib-decision-log.sh" 2>/dev/null || true
+
+# Accumulators, initialized to safe defaults before the trap is registered so an
+# early exit (under `set -u`) never references an unset var. Each terminal site
+# sets DLOG_DISPOSITION (and target/phase/skip_reason where meaningful) just
+# before its echo/exit. The budget vars GAP / TARGET_N / LIVE_COUNT are declared
+# later (Step 1b); the emitter reads them defensively as ${VAR:-}.
+DLOG_DISPOSITION=""
+DLOG_TARGET="none"
+DLOG_PHASE=""
+DLOG_SKIP_REASON=""
+
+# _dlog_select_emit — build the JSON record and hand it to decision_log_append.
+# Stdout-silent: the stdout tokens are load-bearing for dispatch-tick's `case`,
+# so nothing here may leak to fd 1 (jq output is captured into a var; jq stderr
+# is swallowed). Numeric budget fields may be empty on an early exit, so they are
+# passed as strings and coerced in-filter (empty → JSON null) so jq never fails.
+_dlog_select_emit() {
+  local json
+  json=$(jq -c -n \
+    --arg ts          "$(date -u +%FT%TZ)" \
+    --arg site        "select-tick" \
+    --arg target      "$DLOG_TARGET" \
+    --arg phase       "$DLOG_PHASE" \
+    --arg disposition "$DLOG_DISPOSITION" \
+    --arg skip_reason "$DLOG_SKIP_REASON" \
+    --arg target_n    "${TARGET_N:-}" \
+    --arg eff_live    "${LIVE_COUNT:-}" \
+    --arg gap         "${GAP:-}" \
+    '
+    def num: if . == "" then null else (tonumber? // null) end;
+    {
+      ts:            $ts,
+      site:          $site,
+      target:        $target,
+      phase:         $phase,
+      disposition:   $disposition,
+      skip_reason:   $skip_reason,
+      target_n:      ($target_n | num),
+      effective_live: ($eff_live | num),
+      gap:           ($gap | num)
+    }' 2>/dev/null) || return 0
+  command -v decision_log_append >/dev/null 2>&1 && decision_log_append "$json" || true
+}
+
+# Register the emit trap NOW, before the first terminal exit. The later
+# DISPATCH_CI_VERDICT_CACHE cleanup trap (Step 0) re-registers a COMBINED
+# handler rather than clobbering this one (`trap ... EXIT` replaces, not stacks).
+trap '_dlog_select_emit' EXIT
+
 ARG=""
 MANUAL=""
 for a in "$@"; do
   case "$a" in
     --manual) MANUAL=1 ;;
-    --*) echo "dispatch-select-tick: unknown flag '$a'" >&2; exit 2 ;;
+    --*) DLOG_DISPOSITION="usage-error"; DLOG_SKIP_REASON="unknown-flag"; echo "dispatch-select-tick: unknown flag '$a'" >&2; exit 2 ;;
     *)
       if [[ -n "$ARG" ]]; then
+        DLOG_DISPOSITION="usage-error"; DLOG_SKIP_REASON="extra-args"
         echo "dispatch-select-tick: unexpected extra arguments after <number>" >&2
         exit 2
       fi
@@ -100,6 +160,7 @@ for a in "$@"; do
   esac
 done
 if [[ -n "$MANUAL" && -n "$ARG" ]]; then
+  DLOG_DISPOSITION="usage-error"; DLOG_SKIP_REASON="manual-with-arg"
   echo "dispatch-select-tick: --manual cannot be combined with an explicit <number>" >&2
   exit 2
 fi
@@ -108,14 +169,26 @@ release_lock() {
   "$SCRIPT_DIR/dispatch-acquire-lock" --release >/dev/null 2>&1 || true
 }
 
+# refresh_lock — bump the lock-file mtime (the heartbeat) so a legitimately-long
+# hold never goes stale and is never falsely reclaimed by the staleness cap
+# (#2104). INVARIANT #2: call ONLY on a sub-step's completion, never inside a
+# retry/poll/wait loop — a refresh inside a loop would keep mtime fresh while a
+# holder spins there, defeating the cap. Best-effort: a noop (we no longer hold
+# the lock) or any error is swallowed.
+refresh_lock() {
+  "$SCRIPT_DIR/dispatch-acquire-lock" --heartbeat >/dev/null 2>&1 || true
+}
+
 # --- Step 0: acquire the dispatch lock ---------------------------------------
 # Let acquire-lock's stderr holder-diagnostic flow through on `busy`.
 LOCK=$("$SCRIPT_DIR/dispatch-acquire-lock" --wait) || true
 if [[ "$LOCK" == busy ]]; then
+  DLOG_DISPOSITION="busy"
   echo "busy"
   exit 0
 fi
 if [[ "$LOCK" != acquired ]]; then
+  DLOG_DISPOSITION="lock-error"
   echo "dispatch-select-tick: dispatch-acquire-lock returned unexpected '$LOCK'" >&2
   exit 2
 fi
@@ -132,7 +205,10 @@ else
   DISPATCH_CI_VERDICT_CACHE=$(mktemp -d)
 fi
 export DISPATCH_CI_VERDICT_CACHE
-trap 'rm -rf "$DISPATCH_CI_VERDICT_CACHE"' EXIT
+# Re-register a COMBINED handler: the decision-log emit (registered early, above)
+# plus this tick's cache cleanup. `trap ... EXIT` REPLACES, so this must chain
+# _dlog_select_emit explicitly or the real routing paths would emit no record.
+trap '_dlog_select_emit; rm -rf "$DISPATCH_CI_VERDICT_CACHE"' EXIT
 
 # --- Step 1: sync local main with origin/main (only on the main branch) -------
 # The `--ff-only` merge is the precondition for all selection AND the recovery
@@ -157,7 +233,7 @@ if [[ "$BRANCH" == "main" ]]; then
     MAIN_WORKTREE="$DISPATCH_TICK_MAIN_WORKTREE"
   else
     PROJECT_ROOT=$(resolve_project_root) \
-      || { echo "dispatch-select-tick: not in a git repo and DISPATCH_TICK_MAIN_WORKTREE is unset" >&2; exit 2; }
+      || { DLOG_DISPOSITION="internal-error"; DLOG_SKIP_REASON="resolve-project-root-failed"; echo "dispatch-select-tick: not in a git repo and DISPATCH_TICK_MAIN_WORKTREE is unset" >&2; exit 2; }
     MAIN_WORKTREE="$PROJECT_ROOT/worktrees/main"
   fi
 
@@ -174,6 +250,7 @@ if [[ "$BRANCH" == "main" ]]; then
     if awk -F'\t' '$4=="sync-repair" && $3!="stopped"{f=1} END{exit !f}' <<<"$sessions"; then
       release_lock
       "$SCRIPT_DIR/dispatch-schedule-reseed" 1>&2 || true
+      DLOG_DISPOSITION="sync-repair-pending"
       echo "sync-repair-pending"
       exit 0
     fi
@@ -222,6 +299,8 @@ if [[ "$BRANCH" == "main" ]]; then
       # a. Already latched — a human owns the tree. Spawn nothing.
       release_lock
       "$SCRIPT_DIR/dispatch-schedule-reseed" 1>&2 || true
+      DLOG_DISPOSITION="sync-broken"
+      DLOG_SKIP_REASON="latched"
       echo "sync-broken"
       exit 0
     fi
@@ -237,6 +316,8 @@ if [[ "$BRANCH" == "main" ]]; then
       fi
       release_lock
       "$SCRIPT_DIR/dispatch-schedule-reseed" 1>&2 || true
+      DLOG_DISPOSITION="sync-broken"
+      DLOG_SKIP_REASON="attempt-cap"
       echo "sync-broken"
       exit 0
     fi
@@ -244,10 +325,16 @@ if [[ "$BRANCH" == "main" ]]; then
     sync_repair_bump_attempts
     release_lock
     "$SCRIPT_DIR/dispatch-schedule-reseed" 1>&2 || true
+    DLOG_DISPOSITION="sync-failed"
     echo "sync-failed"
     exit 0
   fi
 fi
+
+# Heartbeat: the origin/main sync (Step 1) is the first held best-effort sub-step.
+# Refresh on its completion — unconditionally, outside the main-only block, so a
+# non-main worktree or manual /dispatch tick refreshes too (#2104, invariant #2).
+refresh_lock
 
 # --- Step 1c: re-arm the main-broken latch when main has recovered -----------
 # A diagnosed red episode leaves an open dispatch:main-broken issue — the gate's
@@ -303,6 +390,8 @@ if [[ -z "$OPEN_MB" ]]; then
     done <<< "$MERGE_OUT"
   fi
 fi
+# Heartbeat: refresh after the auto-merge sub-step completes (#2104).
+refresh_lock
 
 # --- Step 1b: run-scoped concurrency gate (autonomous no-arg queue path only) -
 # Runs ONLY on the autonomous no-arg queue path. The explicit-target run (a
@@ -367,6 +456,8 @@ if [[ -z "$MANUAL" && -z "$ARG" ]]; then
   TARGET_N=$("$SCRIPT_DIR/dispatch-target-workers")
   if [[ ! "$TARGET_N" =~ ^[0-9]+$ ]]; then
     release_lock
+    DLOG_DISPOSITION="internal-error"
+    DLOG_SKIP_REASON="non-numeric-target"
     echo "dispatch-select-tick: dispatch-target-workers returned non-numeric target '$TARGET_N'" >&2
     exit 2
   fi
@@ -397,6 +488,8 @@ if [[ -z "$MANUAL" && -z "$ARG" ]]; then
       if [[ "$EXHAUSTED" == exhausted ]]; then
         release_lock
         "$SCRIPT_DIR/dispatch-schedule-reseed" 1>&2 || true
+        DLOG_DISPOSITION="concurrency-cap"
+        DLOG_SKIP_REASON="rate-limit-exhausted"
         echo "router: rate-limit window exhausted; no priority bypass"
         echo "concurrency-cap"
         exit 0
@@ -410,6 +503,9 @@ if [[ -z "$MANUAL" && -z "$ARG" ]]; then
         main-broken\ *)
           # Spawned as its own lock-free bg job — release the lock here.
           release_lock
+          DLOG_DISPOSITION="main-broken"
+          DLOG_TARGET="${PRIO#main-broken }"
+          DLOG_SKIP_REASON="priority-bypass-at-cap"
           echo "$PRIO"
           exit 0
           ;;
@@ -418,6 +514,12 @@ if [[ -z "$MANUAL" && -z "$ARG" ]]; then
           # hold the lock, append GAP=1. Counted by
           # claude_agents_count_busy_workers on later ticks, so it suppresses
           # non-priority fan-out — it bypasses the GATE, not the COUNT.
+          DLOG_DISPOSITION="${PRIO%% *}"
+          DLOG_TARGET=$(awk '{print $2}' <<<"$PRIO")
+          [[ "$PRIO" == pr\ * ]] && DLOG_PHASE=$(awk '{print $4}' <<<"$PRIO")
+          DLOG_SKIP_REASON="priority-bypass-at-cap"
+          # Heartbeat: fresh mtime for the cross-process handoff to dispatch-materialize-spawn (#2104).
+          refresh_lock
           echo "$PRIO 1"
           exit 0
           ;;
@@ -425,6 +527,8 @@ if [[ -z "$MANUAL" && -z "$ARG" ]]; then
           # No priority/main-broken item waiting → hard cap as before.
           release_lock
           "$SCRIPT_DIR/dispatch-schedule-reseed" 1>&2 || true
+          DLOG_DISPOSITION="concurrency-cap"
+          DLOG_SKIP_REASON="at-cap-no-priority"
           echo "concurrency-cap"
           exit 0
           ;;
@@ -444,11 +548,16 @@ if [[ -z "$MANUAL" && -z "$ARG" ]]; then
           else
             "$SCRIPT_DIR/dispatch-schedule-reseed" 1>&2 || true
           fi
+          DLOG_DISPOSITION="concurrency-cap"
+          DLOG_SKIP_REASON="priority-ci-pending"
+          DLOG_TARGET="$WAIT_NUM"
           echo "concurrency-cap"
           exit 0
           ;;
         *)
           release_lock
+          DLOG_DISPOSITION="internal-error"
+          DLOG_SKIP_REASON="unexpected-priority-only"
           echo "dispatch-select-tick: dispatch-select-target --priority-only emitted unexpected '$PRIO'" >&2
           exit 2
           ;;
@@ -485,6 +594,8 @@ elif [[ -n "$MANUAL" ]]; then
     MAX_WORKERS=$("$SCRIPT_DIR/dispatch-target-workers" --max)
     if [[ ! "$TARGET_N" =~ ^[0-9]+$ ]] || [[ ! "$MAX_WORKERS" =~ ^[0-9]+$ ]]; then
       release_lock
+      DLOG_DISPOSITION="internal-error"
+      DLOG_SKIP_REASON="non-numeric-target"
       echo "dispatch-select-tick: dispatch-target-workers returned non-numeric value (target '$TARGET_N', max '$MAX_WORKERS')" >&2
       exit 2
     fi
@@ -497,9 +608,12 @@ elif [[ -n "$MANUAL" ]]; then
       # at-cap disposition: release the lock and emit concurrency-cap. No reseed
       # — a manual run is a one-shot; the autonomous chain owns reseeds.
       release_lock
+      DLOG_DISPOSITION="concurrency-cap"
       if [[ "$EXHAUSTED" == exhausted ]]; then
+        DLOG_SKIP_REASON="manual-rate-limit-exhausted"
         echo "router: manual fan-out: rate-limit window exhausted; nothing spawned"
       else
+        DLOG_SKIP_REASON="manual-no-headroom"
         echo "router: manual fan-out: $LIVE_COUNT live >= MAX_WORKERS $MAX_WORKERS; nothing spawned"
       fi
       echo "concurrency-cap"
@@ -538,6 +652,8 @@ if [[ -n "$JIT_OUT" ]]; then
     [[ -n "$jit_line" ]] && echo "jit: $jit_line"
   done <<< "$JIT_OUT"
 fi
+# Heartbeat: refresh after the JIT engine sub-step completes (#2104).
+refresh_lock
 
 # --- Step 2b: run the Calendar JIT importer (best-effort) --------------------
 # Files one reminder issue per pressing Google Calendar event and closes
@@ -549,6 +665,8 @@ if [[ -n "$CAL_OUT" ]]; then
     [[ -n "$cal_line" ]] && echo "$cal_line"
   done <<< "$CAL_OUT"
 fi
+# Heartbeat: refresh after the calendar-import sub-step completes (#2104).
+refresh_lock
 
 # --- Step 2c: run the statements scan (best-effort) --------------------------
 # Scans each configured statements folder and files one parse-job issue per new
@@ -561,10 +679,13 @@ if [[ -n "$STMT_OUT" ]]; then
     [[ -n "$stmt_line" ]] && echo "statements: $stmt_line"
   done <<< "$STMT_OUT"
 fi
+# Heartbeat: refresh after the statements-scan sub-step completes (#2104).
+refresh_lock
 
 # --- Step 2e: re-triage orphaned review follow-ups (best-effort) -------------
-# Parks open source-pr:<N>-labeled review follow-up issues on office-hours when
-# their source PR is found closed-unmerged (abandoned/superseded) — their
+# Parks open dispatch:review-followup-labeled review follow-up issues (source PR
+# read from the <!-- dispatch:source-pr <N> --> body marker) on office-hours
+# when their source PR is found closed-unmerged (abandoned/superseded) — their
 # findings point at code that never landed on main. Pass its stdout lines
 # through, prefixed.
 RETRIAGE_OUT=$("$SCRIPT_DIR/dispatch-retriage-orphaned-followups") || true
@@ -573,12 +694,18 @@ if [[ -n "$RETRIAGE_OUT" ]]; then
     [[ -n "$retriage_line" ]] && echo "retriage: $retriage_line"
   done <<< "$RETRIAGE_OUT"
 fi
+# Heartbeat: refresh after the retriage sub-step completes (#2104).
+refresh_lock
 
 # --- Step 3: select the target -----------------------------------------------
 if [[ -n "$ARG" ]]; then
   TARGET=$("$SCRIPT_DIR/dispatch-resolve-arg" "$ARG")
   RESOLVE_RC=$?
   if (( RESOLVE_RC == 0 )); then
+    DLOG_DISPOSITION="explicit"
+    DLOG_TARGET="$TARGET"
+    # Heartbeat: fresh mtime for the cross-process handoff to dispatch-materialize-spawn (#2104).
+    refresh_lock
     echo "explicit $TARGET $GAP"
     exit 0
   fi
@@ -592,6 +719,8 @@ if [[ -n "$ARG" ]]; then
       # the OnFailure recovery net would loop the chain indefinitely. The
       # OnFailure safety net is intentionally reserved for transient (exit 1)
       # failures, where the target is known to be valid. (#1570)
+      DLOG_DISPOSITION="resolver-failed"
+      DLOG_SKIP_REASON="resolve-rc-$RESOLVE_RC"
       echo "resolver-failed"
       exit 0
       ;;
@@ -603,6 +732,8 @@ if [[ -n "$ARG" ]]; then
       # infrastructure failure, not a genuine non-resolution. Propagate non-zero
       # so dispatch-tick exits non-zero and the reseed unit's OnFailure handler
       # arms a chain continuation rather than silently dead-ending. (#1570)
+      DLOG_DISPOSITION="transient"
+      DLOG_SKIP_REASON="resolve-rc-$RESOLVE_RC"
       echo "dispatch-select-tick: dispatch-resolve-arg transient/unexpected failure (exit $RESOLVE_RC) on arg '$ARG'; propagating non-zero" >&2
       exit 2
       ;;
@@ -613,6 +744,11 @@ SELECTED=$("$SCRIPT_DIR/dispatch-select-target") || true
 case "$SELECTED" in
   pr\ *|issue\ *)
     # Hold the lock; append the run-scoped gap the fan-out loop consumes.
+    DLOG_DISPOSITION="${SELECTED%% *}"
+    DLOG_TARGET=$(awk '{print $2}' <<<"$SELECTED")
+    [[ "$SELECTED" == pr\ * ]] && DLOG_PHASE=$(awk '{print $4}' <<<"$SELECTED")
+    # Heartbeat: fresh mtime for the cross-process handoff to dispatch-materialize-spawn (#2104).
+    refresh_lock
     echo "$SELECTED $GAP"
     ;;
   main-broken\ *|jit-reminder\ *)
@@ -620,14 +756,19 @@ case "$SELECTED" in
     # fresh bg session could not release this session's lock anyway (strict
     # self-release). No gap appended.
     release_lock
+    DLOG_DISPOSITION="${SELECTED%% *}"
+    DLOG_TARGET=$(awk '{print $2}' <<<"$SELECTED")
     echo "$SELECTED"
     ;;
   empty)
     release_lock
+    DLOG_DISPOSITION="empty"
     echo "empty"
     ;;
   *)
     release_lock
+    DLOG_DISPOSITION="internal-error"
+    DLOG_SKIP_REASON="unexpected-select-target"
     echo "dispatch-select-tick: dispatch-select-target emitted unexpected '$SELECTED'" >&2
     exit 2
     ;;
