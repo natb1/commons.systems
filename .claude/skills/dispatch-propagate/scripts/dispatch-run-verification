@@ -120,6 +120,14 @@ while IFS= read -r line || [[ -n "$line" ]]; do
   fi
 done <<<"$PLAN"
 
+# An unclosed verify fence (opened with ```verify but reaching EOF before its
+# closing ```) leaves capturing=1 with the partial block never appended. Surface
+# it as a malformed plan rather than silently treating it as "no verify blocks".
+if [[ "$capturing" -eq 1 ]]; then
+  echo "dispatch-run-verification: unclosed verify block at end of input" >&2
+  exit 1
+fi
+
 if [[ "${#BLOCKS[@]}" -eq 0 ]]; then
   echo "dispatch-run-verification: no auto-runnable verify blocks" >&2
   exit 3

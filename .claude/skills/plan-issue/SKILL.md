@@ -376,7 +376,13 @@ procedure verbatim:
    — `dispatch-read-plan` calls `gh`). Run the auto-runnable ` ```verify `
    blocks: `.claude/skills/dispatch-propagate/scripts/dispatch-read-plan <N> | .claude/skills/dispatch-propagate/scripts/dispatch-run-verification` — exit 3 →
    proceed unchanged; exit 0 → proceed; exit 1 → fix via `/implement-unit`
-   (cap 2) and re-run, else `dispatch-mark-deviation` and stop.
+   (cap 2) and re-run, else run the deviation marker below and stop (skip the
+   Step 3 completion marker):
+
+   ```bash
+   .claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \
+     "/implement: plan verification failed after 2 fix attempts (check <index>)"
+   ```
 
 2. **Open the draft PR** (`dangerouslyDisableSandbox: true` — calls `gh`). Write
    the PR body prose to `tmp/pr-body.md` first, then:
