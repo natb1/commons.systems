@@ -36249,6 +36249,18 @@ STAMP="$SCRIPT_DIR/dispatch-stamp-session"
   rm -rf "$root"
 )
 
+# 5b. Backfill no-ops + exits 0 when CLAUDE_CODE_SESSION_ID is unset — a backfill
+# failure must NEVER fail its caller, so the unset-session case is a clean exit 0
+# (not exit 2), with nothing to locate.
+(
+  root=$(mktemp -d)
+  rc=0
+  ( unset CLAUDE_CODE_SESSION_ID
+    DISPATCH_STAMP_PROJECTS_ROOT="$root" "$STAMP" --backfill-pr 7 ) 2>/dev/null || rc=$?
+  assert_eq "stamp: backfill unset session-id exits 0" "0" "$rc"
+  rm -rf "$root"
+)
+
 # 6. Idempotent re-write preserves a set .pr (does not clobber to null).
 (
   d=$(mktemp -d)
