@@ -317,6 +317,139 @@ gh_issue_list_rest() {
   printf '%s' "$raw" | jq -s "$projection"
 }
 
+# List pull requests via the GitHub REST API rather than `gh pr list` (which
+# GraphQL-backs). Keeping per-tick dispatch PR scans on REST keeps them off the
+# shared GraphQL rate-limit bucket the per-tick scan was self-exhausting (#1601,
+# #2258). Mirrors gh_issue_list_rest's --limit discipline.
+#
+# Contract:
+#   gh_pr_list_rest --state <open|closed|all> [--repo <owner/repo>] [--head <branch>] [--limit <n>]
+#
+# Flags:
+#   --state  (required) open|closed|all. REST's pulls?state=all is native.
+#   --repo   (optional) owner/repo for a cross-repo scan; when absent the path
+#            uses the {owner}/{repo} placeholder gh auto-resolves for the
+#            current repo.
+#   --head   (optional) filter to PRs from a single head branch. REST wants
+#            head=<owner>:<branch>. The owner is the FIRST path segment of --repo
+#            when given (cut on /); otherwise it is resolved from the current
+#            repo via `gh repo view --json owner -q .owner.login` (wrapped in
+#            gh_retry). Resolution is lazy — only performed when --head is set and
+#            --repo is absent — so the common no-head call path makes no extra
+#            API call.
+#   --limit  (optional) cap on PRs returned. SAME three-way discipline as
+#            gh_issue_list_rest: ABSENT ⇒ --paginate the full set (REST --paginate
+#            has no silent-truncation hazard); PRESENT and <= 100 ⇒ a SINGLE page
+#            of per_page=<limit> (no --paginate); PRESENT and > 100 ⇒ --paginate
+#            at the REST-clamped per_page=100 and slice the merged result to the
+#            first <limit> objects in the final jq projection. The slice preserves
+#            the `len == limit ⇒ truncated` guard semantics.
+#
+# Endpoint: repos/{owner}/{repo}/pulls (or repos/$repo/pulls with --repo). The
+# query string carries state, per_page, and head (when set). No sort/direction
+# param is emitted (this unit migrates no call sites — see #2258).
+#
+# Projection: a FIXED {number, state, title, mergedAt, createdAt} shape, remapped
+# from REST snake_case (merged_at → mergedAt, created_at → createdAt). REST
+# /pulls returns ONLY pull requests, so — unlike /issues — no pull_request filter
+# is needed; every element is a PR.
+#
+# State normalization (CRITICAL): REST PR `state` is only open|closed and does
+# not distinguish merged from closed-unmerged, but consuming scripts compare
+# against the GraphQL state enum (OPEN/CLOSED/MERGED). We normalize IN the jq
+# projection to that vocabulary:
+#   REST open                          → OPEN
+#   REST closed with merged_at != null → MERGED
+#   REST closed with merged_at == null → CLOSED
+#
+# Output: one merged JSON array on stdout.
+#
+# On gh failure: errors to stderr and returns 1 (clear-errors convention, no
+# fallback).
+gh_pr_list_rest() {
+  local state="" repo="" head="" limit=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --state) state="$2"; shift 2 ;;
+      --repo)  repo="$2";  shift 2 ;;
+      --head)  head="$2";  shift 2 ;;
+      --limit) limit="$2"; shift 2 ;;
+      *) echo "error: gh_pr_list_rest: unknown flag '$1'" >&2; return 1 ;;
+    esac
+  done
+  if [[ -z "$state" ]]; then
+    echo "error: gh_pr_list_rest: --state is required" >&2
+    return 1
+  fi
+
+  local path
+  if [[ -n "$repo" ]]; then
+    path="repos/$repo/pulls"
+  else
+    path="repos/{owner}/{repo}/pulls"
+  fi
+
+  # When --limit > 100, REST clamps a single page's per_page to 100, so we must
+  # --paginate at per_page=100 and slice the merged result down to <limit> in the
+  # projection. A limit <= 100 fits one page (per_page=<limit>, no --paginate).
+  local paginate="" per_page="100" slice=""
+  if [[ -n "$limit" ]]; then
+    if [[ ! "$limit" =~ ^[0-9]+$ ]]; then
+      echo "error: gh_pr_list_rest: --limit must be a non-negative integer (got '$limit')" >&2
+      return 1
+    fi
+    if (( limit > 100 )); then
+      paginate=1
+      per_page="100"
+      slice="$limit"
+    else
+      per_page="$limit"
+    fi
+  else
+    paginate=1
+  fi
+
+  local query="state=$state&per_page=$per_page"
+  if [[ -n "$head" ]]; then
+    # Resolve the head owner: first segment of --repo when given, else the
+    # current repo's owner login. Lazy — only when --head is set.
+    local head_owner
+    if [[ -n "$repo" ]]; then
+      head_owner="${repo%%/*}"
+    else
+      head_owner=$(gh_retry gh repo view --json owner -q .owner.login) || {
+        echo "error: gh_pr_list_rest: could not resolve current repo owner for --head" >&2
+        return 1
+      }
+    fi
+    query="$query&head=$head_owner:$head"
+  fi
+
+  local raw
+  if [[ -n "$paginate" ]]; then
+    # Full set (--limit absent) or --limit > 100: REST --paginate has no
+    # silent-truncation hazard; a >100 limit is enforced by the projection slice.
+    raw=$(gh_retry gh api --paginate "$path?$query") || {
+      echo "error: gh_pr_list_rest: gh api failed for $path?$query" >&2
+      return 1
+    }
+  else
+    # Single page (no --paginate) — caller wants at most one page of per_page.
+    raw=$(gh_retry gh api "$path?$query") || {
+      echo "error: gh_pr_list_rest: gh api failed for $path?$query" >&2
+      return 1
+    }
+  fi
+
+  # Build the projection: fixed field set, remap snake_case to camelCase, and
+  # normalize REST open|closed to the GraphQL OPEN|MERGED|CLOSED vocabulary; then
+  # conditionally slice to <limit> (only when --limit > 100).
+  local projection
+  projection='add // [] | map({number, state: (if .state == "open" then "OPEN" elif .merged_at != null then "MERGED" else "CLOSED" end), title, mergedAt: .merged_at, createdAt: .created_at})'
+  [[ -n "$slice" ]] && projection="$projection | .[:$slice]"
+  printf '%s' "$raw" | jq -s "$projection"
+}
+
 # The explicit open-PR fetch cap. gh pr list defaults to 30, which silently
 # truncates the open-PR snapshot once a fan-out crosses 30 open PRs. 300 mirrors
 # dispatch-select-target's open-issue cap. Overridable for tests.

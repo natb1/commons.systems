@@ -271,6 +271,29 @@ case "$args" in
         ;;
     esac
     ;;
+  api\ *repos/*/pulls\?*)
+    # gh_pr_list_rest LIST endpoint (#2258): repos/{owner}/{repo}/pulls?state=...
+    # The leading `*` glob absorbs an optional `--paginate` before the path. This
+    # MUST precede the single-PR `api repos/*/pulls/*` arm (case is first-wins) —
+    # though that arm needs a literal `/` after `pulls` and would not match `?`
+    # anyway. Log the full $args so tests can assert --paginate / per_page= / the
+    # head= query param. Routes by fixture-file presence (no shared consumer to
+    # collide with, so no sentinel label needed): serve page-1 then page-2 if it
+    # exists, else `[]`. A gh-fail-pulls marker forces a gh failure.
+    echo "$args" >> "$STUB_DIR/gh-pr-list-rest-calls.log"
+    if [[ -f "$STUB_DIR/gh-fail-pulls" ]]; then
+      echo "stub forced gh api failure (pulls list)" >&2
+      exit 1
+    fi
+    if [[ -f "$STUB_DIR/rest-pulls-page-1.json" ]]; then
+      cat "$STUB_DIR/rest-pulls-page-1.json"
+      if [[ -f "$STUB_DIR/rest-pulls-page-2.json" ]]; then
+        cat "$STUB_DIR/rest-pulls-page-2.json"
+      fi
+    else
+      echo '[]'
+    fi
+    ;;
   api\ *repos/*/issues\?*)
     # gh_issue_list_rest (#1601): the four converted dispatch issue scans now hit
     # the REST issues endpoint instead of `gh issue list`. The fake-gh receives
@@ -439,6 +462,11 @@ case "$args" in
       fi
     fi
     echo "natb1/commons.systems"
+    ;;
+  "repo view --json owner -q .owner.login")
+    # gh_pr_list_rest --head owner resolution (#2258): when --head is set and
+    # --repo is absent, the helper resolves the current repo's owner login.
+    echo "natb1"
     ;;
   api\ */dependencies/blocked_by)
     path=$(echo "$args" | awk '{print $2}')
@@ -1319,6 +1347,114 @@ assert_eq "--limit 120 over exactly 120 items: result length == 120" "120" "$exa
 # Simulate a caller's truncation guard: len == limit ⇒ truncated.
 if [[ "$exact_len" -eq 120 ]]; then guard=fired; else guard=clear; fi
 assert_eq "--limit 120: len==limit guard fires on exactly-limit fixture" "fired" "$guard"
+teardown
+
+# ============================================================================
+# gh_pr_list_rest edge-case tests (#2258)
+# ============================================================================
+# These tests drive the REAL gh_pr_list_rest helper (sourced from the copied
+# lib.sh) via the `api *repos/*/pulls?*` stub arm above, which routes by fixture
+# presence and logs each call to gh-pr-list-rest-calls.log. They mirror the
+# gh_issue_list_rest edge-case block.
+echo "=== gh_pr_list_rest (edge cases) ==="
+
+echo "Test: gh_pr_list_rest empty result -- helper returns [] with length 0"
+setup
+: > "$STUB_DIR/gh-pr-list-rest-calls.log"
+actual_pr_empty=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_list_rest --state open)
+assert_eq "pr empty result: length == 0" "0" "$(jq 'length' <<<"$actual_pr_empty")"
+# No --limit was passed, so the helper must take the full-paginate path.
+if grep -q -- '--paginate' "$STUB_DIR/gh-pr-list-rest-calls.log"; then bp=yes; else bp=no; fi
+assert_eq "pr empty result: log contains --paginate" "yes" "$bp"
+teardown
+
+echo "Test: gh_pr_list_rest --limit > 100 -- paginate path, sliced to limit"
+setup
+# 150 PRs split across two pages (80 + 70). Numbers 1000..1149.
+jq -nc '[range(1000;1080) | {number: ., state:"open", title:"t", merged_at:null, created_at:"2024-03-01T00:00:00Z"}]' \
+  > "$STUB_DIR/rest-pulls-page-1.json"
+jq -nc '[range(1080;1150) | {number: ., state:"open", title:"t", merged_at:null, created_at:"2024-03-01T00:00:00Z"}]' \
+  > "$STUB_DIR/rest-pulls-page-2.json"
+: > "$STUB_DIR/gh-pr-list-rest-calls.log"
+actual_pr_big=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_list_rest --state open --limit 120)
+assert_eq "pr --limit 120 over 150: result length == 120" "120" "$(jq 'length' <<<"$actual_pr_big")"
+# The >100-limit path must --paginate (not single-page) ...
+if grep -q -- '--paginate' "$STUB_DIR/gh-pr-list-rest-calls.log"; then bp=yes; else bp=no; fi
+assert_eq "pr --limit 120: log contains --paginate" "yes" "$bp"
+# ... at the clamped per_page=100 (not per_page=120).
+if grep -qE 'per_page=100([^0-9]|$)' "$STUB_DIR/gh-pr-list-rest-calls.log"; then pp=yes; else pp=no; fi
+assert_eq "pr --limit 120: per_page clamped to 100" "yes" "$pp"
+if grep -q 'per_page=120' "$STUB_DIR/gh-pr-list-rest-calls.log"; then pp120=yes; else pp120=no; fi
+assert_eq "pr --limit 120: per_page is NOT 120" "no" "$pp120"
+teardown
+
+echo "Test: gh_pr_list_rest --limit single page (<=100, per_page=limit, no --paginate)"
+setup
+jq -nc '[range(300;303) | {number: ., state:"open", title:"t", merged_at:null, created_at:"2024-01-06T00:00:00Z"}]' \
+  > "$STUB_DIR/rest-pulls-page-1.json"
+: > "$STUB_DIR/gh-pr-list-rest-calls.log"
+actual_pr_lim=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_list_rest --state open --limit 50)
+assert_eq "pr limit: result length matches fixture (3 items)" "3" "$(jq 'length' <<<"$actual_pr_lim")"
+# The call log must contain per_page=50 (anchor trailing non-digit) ...
+if grep -qE 'per_page=50([^0-9]|$)' "$STUB_DIR/gh-pr-list-rest-calls.log"; then pp=yes; else pp=no; fi
+assert_eq "pr limit: log contains per_page=50" "yes" "$pp"
+# ... and must NOT contain --paginate (single-page branch).
+if grep -q -- '--paginate' "$STUB_DIR/gh-pr-list-rest-calls.log"; then bp=yes; else bp=no; fi
+assert_eq "pr limit: log does not contain --paginate" "no" "$bp"
+teardown
+
+echo "Test: gh_pr_list_rest gh-failure -- returns non-zero with diagnostic stderr"
+setup
+: > "$STUB_DIR/gh-pr-list-rest-calls.log"
+: > "$STUB_DIR/gh-fail-pulls"
+rc_pr_fail=0
+err_pr_fail=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_list_rest --state open 2>&1 >/dev/null) || rc_pr_fail=$?
+assert_eq "pr gh-failure: returns non-zero" "1" "$rc_pr_fail"
+case "$err_pr_fail" in *"gh_pr_list_rest: gh api failed"*) m=yes ;; *) m=no ;; esac
+assert_eq "pr gh-failure: stderr names the helper failure" "yes" "$m"
+teardown
+
+echo "Test: gh_pr_list_rest --head -- query carries head=<owner>:<branch> (repo-view owner)"
+setup
+echo '[]' > "$STUB_DIR/rest-pulls-page-1.json"
+: > "$STUB_DIR/gh-pr-list-rest-calls.log"
+# No --repo: owner resolves via the stubbed `gh repo view ... .owner.login` => natb1.
+actual_pr_head=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_list_rest --state open --head my-branch)
+assert_eq "pr --head: returns the stub's empty array" "[]" "$actual_pr_head"
+if grep -q 'head=natb1:my-branch' "$STUB_DIR/gh-pr-list-rest-calls.log"; then hb=yes; else hb=no; fi
+assert_eq "pr --head: query carries head=natb1:my-branch" "yes" "$hb"
+teardown
+
+echo "Test: gh_pr_list_rest --head + --repo -- owner from repo segment, not repo-view"
+setup
+echo '[]' > "$STUB_DIR/rest-pulls-page-1.json"
+: > "$STUB_DIR/gh-pr-list-rest-calls.log"
+# With --repo owner/other-repo, the head owner is the first segment (owner).
+actual_pr_head_repo=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_list_rest --state open --repo owner/other-repo --head feat-x)
+assert_eq "pr --head+--repo: returns the stub's empty array" "[]" "$actual_pr_head_repo"
+if grep -q 'head=owner:feat-x' "$STUB_DIR/gh-pr-list-rest-calls.log"; then hb=yes; else hb=no; fi
+assert_eq "pr --head+--repo: query carries head=owner:feat-x" "yes" "$hb"
+if grep -q 'repos/owner/other-repo/pulls' "$STUB_DIR/gh-pr-list-rest-calls.log"; then seg=yes; else seg=no; fi
+assert_eq "pr --head+--repo: API path uses cross-repo segment" "yes" "$seg"
+teardown
+
+echo "Test: gh_pr_list_rest state normalization -- OPEN / MERGED / CLOSED"
+setup
+# One open PR, one closed+merged (merged_at set), one closed+unmerged (null).
+printf '%s\n' '[
+  {"number":501,"state":"open","title":"open pr","merged_at":null,"created_at":"2024-05-01T00:00:00Z"},
+  {"number":502,"state":"closed","title":"merged pr","merged_at":"2024-05-02T00:00:00Z","created_at":"2024-05-01T00:00:00Z"},
+  {"number":503,"state":"closed","title":"closed pr","merged_at":null,"created_at":"2024-05-01T00:00:00Z"}
+]' > "$STUB_DIR/rest-pulls-page-1.json"
+: > "$STUB_DIR/gh-pr-list-rest-calls.log"
+actual_pr_norm=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_list_rest --state all)
+assert_eq "pr normalize: 501 (open) -> OPEN" "OPEN" "$(jq -r '.[] | select(.number==501) | .state' <<<"$actual_pr_norm")"
+assert_eq "pr normalize: 502 (closed+merged_at) -> MERGED" "MERGED" "$(jq -r '.[] | select(.number==502) | .state' <<<"$actual_pr_norm")"
+assert_eq "pr normalize: 503 (closed+null merged_at) -> CLOSED" "CLOSED" "$(jq -r '.[] | select(.number==503) | .state' <<<"$actual_pr_norm")"
+# Projection remaps snake_case to camelCase mergedAt/createdAt; title present.
+assert_eq "pr normalize: 502 mergedAt remapped" "2024-05-02T00:00:00Z" "$(jq -r '.[] | select(.number==502) | .mergedAt' <<<"$actual_pr_norm")"
+assert_eq "pr normalize: 501 createdAt remapped" "2024-05-01T00:00:00Z" "$(jq -r '.[] | select(.number==501) | .createdAt' <<<"$actual_pr_norm")"
+assert_eq "pr normalize: 501 title projected" "open pr" "$(jq -r '.[] | select(.number==501) | .title' <<<"$actual_pr_norm")"
 teardown
 
 # ============================================================================
