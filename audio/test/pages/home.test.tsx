@@ -387,7 +387,7 @@ describe("Home", () => {
 
       const input = container.querySelector<HTMLInputElement>(
         "input[data-queue-toggle]",
-      )!;
+      )!; // type-safety-ok: querySelector in test, element guaranteed by rendered component
       expect(input.checked).toBe(false);
 
       await act(async () => {
@@ -397,7 +397,7 @@ describe("Home", () => {
       expect(player.add).toHaveBeenCalled();
       const after = container.querySelector<HTMLInputElement>(
         "input[data-queue-toggle]",
-      )!;
+      )!; // type-safety-ok: querySelector in test, element guaranteed by rendered component
       expect(after.checked).toBe(true);
 
       await cleanup(container, root);
@@ -416,7 +416,7 @@ describe("Home", () => {
 
       const input = container.querySelector<HTMLInputElement>(
         "input[data-queue-toggle]",
-      )!;
+      )!; // type-safety-ok: querySelector in test, element guaranteed by rendered component
       expect(input.checked).toBe(true);
 
       await act(async () => {
@@ -426,7 +426,7 @@ describe("Home", () => {
       expect(player.remove).toHaveBeenCalledWith("x1");
       const after = container.querySelector<HTMLInputElement>(
         "input[data-queue-toggle]",
-      )!;
+      )!; // type-safety-ok: querySelector in test, element guaranteed by rendered component
       expect(after.checked).toBe(false);
 
       await cleanup(container, root);
@@ -442,7 +442,7 @@ describe("Home", () => {
 
       const input = container.querySelector<HTMLInputElement>(
         "input[data-queue-toggle]",
-      )!;
+      )!; // type-safety-ok: querySelector in test, element guaranteed by rendered component
       expect(input.checked).toBe(true);
 
       // External mutation: the queue is emptied behind the component's back.
@@ -456,7 +456,7 @@ describe("Home", () => {
 
       const after = container.querySelector<HTMLInputElement>(
         "input[data-queue-toggle]",
-      )!;
+      )!; // type-safety-ok: querySelector in test, element guaranteed by rendered component
       expect(after.checked).toBe(false);
 
       await cleanup(container, root);
@@ -490,7 +490,7 @@ describe("Home", () => {
 
       const input = container.querySelector<HTMLInputElement>(
         "input[data-queue-toggle]",
-      )!;
+      )!; // type-safety-ok: querySelector in test, element guaranteed by rendered component
       expect(input.checked).toBe(true);
       expect(player.isQueued).toHaveBeenCalledWith("x1");
 
@@ -507,7 +507,7 @@ describe("Home", () => {
 
       const input = container.querySelector<HTMLInputElement>(
         "input[data-queue-toggle]",
-      )!;
+      )!; // type-safety-ok: querySelector in test, element guaranteed by rendered component
       expect(input.checked).toBe(false);
 
       await cleanup(container, root);
