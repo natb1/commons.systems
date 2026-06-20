@@ -2,8 +2,8 @@ import * as pdfjsLib from "pdfjs-dist";
 import { TextLayer } from "pdfjs-dist";
 import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from "pdfjs-dist";
 import type { PageViewport } from "pdfjs-dist/types/src/display/display_utils.js";
-import type { OutlineEntry, SearchableRenderer, SearchResult } from "./types.js";
-import { parsePositionPage } from "./types.js";
+import type { OutlineEntry, SearchableRenderer, SearchResult, SearchResponse } from "./types.js";
+import { parsePositionPage, MAX_SEARCH_RESULTS } from "./types.js";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
@@ -633,23 +633,20 @@ export function createPdfRenderer(onError?: (err: unknown) => void): SearchableR
 
     // No per-call generation/cancellation guard needed here: search.ts already
     // discards stale results via `trimmed !== currentQuery` after each await.
-    async search(query: string): Promise<SearchResult[]> {
+    async search(query: string): Promise<SearchResponse> {
       const trimmed = query.trim();
-      if (!trimmed) return [];
-      if (!pdfDoc) return [];
+      if (!trimmed) return { results: [], truncated: false };
+      if (!pdfDoc) return { results: [], truncated: false };
 
       const results: SearchResult[] = [];
-
-      // Cap total results at 200 to avoid an unbounded list when the query is
-      // very short and matches thousands of positions across a long document.
-      const MAX_RESULTS = 200;
+      let truncated = false;
 
       // Capture pdfDoc into a local so a concurrent destroy() — which nulls
       // pdfDoc — cannot turn a non-null assertion into a TypeError. Matches the
       // guard pattern in getOutline()/renderPage(). The destroyed flag still
       // short-circuits after each await below.
       const doc = pdfDoc;
-      if (!doc || destroyed) return results;
+      if (!doc || destroyed) return { results, truncated };
 
       for (let i = 1; i <= _pageCount; i++) {
         // Lazily populate the page-layout cache. Re-fetching text for every
@@ -659,7 +656,7 @@ export function createPdfRenderer(onError?: (err: unknown) => void): SearchableR
           let tc;
           try {
             const page = await doc.getPage(i);
-            if (destroyed) return results;
+            if (destroyed) return { results, truncated };
             // DETERMINISM: this getTextContent() call must use the same
             // (default, no-arg) options as the render-side call in
             // renderTextLayer, so the items — and the layout reconstructed from
@@ -671,27 +668,27 @@ export function createPdfRenderer(onError?: (err: unknown) => void): SearchableR
             // UnknownErrorException. Degrade silently — same intent as the
             // `destroyed` short-circuits — instead of surfacing "Search failed".
             if (destroyed || (err as { name?: string })?.name === "UnknownErrorException") {
-              return results;
+              return { results, truncated };
             }
             throw err;
           }
-          if (destroyed) return results;
+          if (destroyed) return { results, truncated };
           layout = reconstructPage(tc.items as TextContentItem[]);
           pageLayoutCache.set(i, layout);
         }
 
         const matches = findMatches(layout.text, trimmed);
         for (const { offset, length } of matches) {
+          if (results.length >= MAX_SEARCH_RESULTS) { truncated = true; break; }
           const location = encodeLocation(i, offset, length);
           const label = "Page " + i;
           const { snippet, matchStart, matchLength } = buildSnippet(layout.text, offset, length);
           results.push({ location, label, snippet, matchStart, matchLength });
-          if (results.length >= MAX_RESULTS) break;
         }
-        if (results.length >= MAX_RESULTS) break;
+        if (truncated) break;
       }
 
-      return results;
+      return { results, truncated };
     },
 
     async getOutline(): Promise<OutlineEntry[]> {
