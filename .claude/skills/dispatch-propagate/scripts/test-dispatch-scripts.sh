@@ -21365,8 +21365,9 @@ jit_teardown
 # own SCRIPT_DIR — which becomes $TMPDIR_TEST/scripts for the copy — so all
 # three scripts are co-located. The gh stub logs EVERY matched invocation to
 # gh-calls.log so a test can assert "zero gh calls" (the debounce case). The
-# `issue list` arm reads a stub/issue-list.json fixture if present (lets a
-# test seed the batched dedup map with pre-existing issues), else "[]".
+# REST issues arm (`api ... repos/.../issues`, the gh_issue_list_rest call after
+# #2258) reads a stub/issue-list.json fixture if present (lets a test seed the
+# batched dedup map with pre-existing issues), else "[]", remapped to snake_case.
 # Transient-failure injection is via stub/issue-list-fail-once. "now" is pinned
 # via DISPATCH_STATEMENTS_NOW so the debounce math is deterministic.
 
@@ -21397,9 +21398,10 @@ statements_setup() {
   export DISPATCH_STATEMENTS_NOW="$STMT_NOW_EPOCH"
 
   # gh PATH stub. Every matched subcommand is appended to gh-calls.log so the
-  # debounce test can assert the log is absent (zero gh calls). `issue list`
-  # reads issue-list.json if present, else "[]"; supports transient-failure
-  # injection via issue-list-fail-once. `issue create` logs its full args
+  # debounce test can assert the log is absent (zero gh calls). The REST issues
+  # arm (`api ... repos/.../issues`, #2258) reads issue-list.json if present,
+  # else "[]", remapped to snake_case; supports transient-failure injection via
+  # issue-list-fail-once. `issue create` logs its full args
   # (including --body) to gh-issue-create.log so the body can be asserted,
   # and echoes a deterministic issue URL. `project item-add` matches the gh
   # subcommand that dispatch-project-item-add invokes internally.
@@ -21412,14 +21414,20 @@ case "$args" in
   "label create "*)
     # Idempotent label create — default success.
     ;;
-  *"issue list "*)
+  *"api "*"repos/"*"/issues"*)
+    # (#2258) dispatch-statements-scan now batches via gh_issue_list_rest, which
+    # issues `gh api [--paginate] repos/<repo>/issues?state=all&...&labels=...`.
+    # The glob spans both the >100 (--paginate) and <=100 forms. Serve the SAME
+    # issue-list.json fixture, jq-remapped from camelCase to REST snake_case and
+    # INCLUDING body (the scan passes --include-body). Transient-failure injection
+    # via issue-list-fail-once still applies — the helper retries internally.
     if [[ -f "$STUB_DIR/issue-list-fail-once" ]]; then
       rm -f "$STUB_DIR/issue-list-fail-once"
       echo "HTTP 503: Service Unavailable" >&2
       exit 1
     fi
     if [[ -f "$STUB_DIR/issue-list.json" ]]; then
-      cat "$STUB_DIR/issue-list.json"
+      jq 'map({number, pull_request: null, created_at: (.createdAt//null), closed_at: (.closedAt//null), labels: (.labels//[])} + (if has("body") then {body} else {} end) + (if has("title") then {title} else {} end))' "$STUB_DIR/issue-list.json"
     else
       echo '[]'
     fi
@@ -21542,13 +21550,13 @@ else
 fi
 calls=$(cat "$STUB_DIR/gh-calls.log")
 TOTAL=$((TOTAL + 1))
-if [[ "$calls" == *"issue list "* && "$calls" == *"issue create"* \
+if [[ "$calls" == *"repos/test-owner/test-repo/issues"* && "$calls" == *"issue create"* \
    && "$calls" == *"project item-add"* ]]; then
   PASS=$((PASS + 1))
-  echo "  PASS: new-file invoked issue list / issue create / project item-add"
+  echo "  PASS: new-file invoked issue list (REST) / issue create / project item-add"
 else
   FAIL=$((FAIL + 1))
-  echo "  FAIL: new-file invoked issue list / issue create / project item-add"
+  echo "  FAIL: new-file invoked issue list (REST) / issue create / project item-add"
   echo "    gh-calls.log: $calls"
 fi
 # Assert both labels are present in the issue create call.
@@ -21756,20 +21764,30 @@ fi
 statements_teardown
 
 # --- Test 9: malformed gh issue list output → hard error, no issue create ----
+# (#2258) The batched lookup now flows through gh_issue_list_rest, which pipes the
+# gh api output through its OWN internal `jq -s` projection. A non-JSON result
+# makes that internal jq fail → the helper returns nonzero with empty stdout, so
+# the malformed case surfaces through the script's rc!=0 hard-error branch ("gh
+# issue list failed") rather than the (now unreachable-via-helper) non-JSON
+# branch. Intent is preserved: malformed output → hard error → files nothing.
+# The non-JSON injection reaches the helper through the stub's REST arm, where
+# the stub's own remap-jq fails on the TLS string and exits nonzero, driving the
+# helper's "gh api failed" path.
 
 echo "Test: dispatch-statements-scan surfaces hard error on malformed gh issue list output, does not file"
 statements_setup
 statements_write_projects
 statements_write_config
 printf 'STATEMENT-CONTENTS\n' > "$TMPDIR_TEST/statements-dir/acct.qfx"
-# Inject a TLS-error-like non-JSON message as the issue list result (gh exits 0).
+# Inject a TLS-error-like non-JSON message as the issue list result. The stub's
+# REST-arm remap jq fails on it → stub exits nonzero → helper rc!=0.
 printf 'tls: failed to verify certificate: x509: certificate signed by unknown authority\n' \
   > "$STUB_DIR/issue-list.json"
 rc=0
 err=$("$TMPDIR_TEST/scripts/dispatch-statements-scan" 2>&1 >/dev/null) || rc=$?
 assert_eq "malformed-list exits 1" "1" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ "$err" == *"bank: error"* && "$err" == *"non-JSON"* ]]; then
+if [[ "$err" == *"bank: error"* && "$err" == *"failed"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: malformed-list emits hard error to stderr"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: malformed-list emits hard error to stderr"
@@ -21853,8 +21871,9 @@ statements_teardown
 
 # --- Test 12: one list call regardless of file count -------------------------
 # Proves that the per-file Search-API fan-out is gone: with N=5 distinct new
-# files there is exactly ONE `gh issue list` invocation (per entry, not per
-# file) and exactly 5 `gh issue create` invocations.
+# files there is exactly ONE batched issue-list REST call (per entry, not per
+# file) and exactly 5 `gh issue create` invocations. (#2258) The list call is now
+# `gh api ... repos/.../issues?...`; count it by the REST path.
 
 echo "Test: dispatch-statements-scan makes exactly one gh issue list call for N files"
 statements_setup
@@ -21872,8 +21891,8 @@ out=$("$TMPDIR_TEST/scripts/dispatch-statements-scan" 2>/dev/null) || rc=$?
 assert_eq "one-list-call exits 0" "0" "$rc"
 list_count=0
 [[ -f "$STUB_DIR/gh-calls.log" ]] \
-  && list_count=$(grep -c '^issue list ' "$STUB_DIR/gh-calls.log" || true)
-assert_eq "one-list-call made exactly one issue list call" "1" "$list_count"
+  && list_count=$(grep -c 'repos/.*/issues' "$STUB_DIR/gh-calls.log" || true)
+assert_eq "one-list-call made exactly one issue list (REST) call" "1" "$list_count"
 create_count=0
 [[ -f "$STUB_DIR/gh-calls.log" ]] \
   && create_count=$(grep -c '^issue create ' "$STUB_DIR/gh-calls.log" || true)
@@ -21894,15 +21913,16 @@ printf 'STATEMENT-CONTENTS\n' > "$TMPDIR_TEST/statements-dir/retry.qfx"
 h=$(sha256sum "$TMPDIR_TEST/statements-dir/retry.qfx" | awk '{print $1}')
 jq -n --arg h "$h" '[{number:99, body:("- sha256: `" + $h + "`")}]' \
   > "$STUB_DIR/issue-list.json"
-# First gh issue list attempt fails transiently; retry returns the fixture.
+# (#2258) gh_issue_list_rest wraps gh_retry internally; the first REST issues
+# attempt fails transiently (issue-list-fail-once), the retry returns the fixture.
 touch "$STUB_DIR/issue-list-fail-once"
 rc=0
 out=$("$TMPDIR_TEST/scripts/dispatch-statements-scan" 2>/dev/null) || rc=$?
 assert_eq "retry-list exits 0" "0" "$rc"
 list_count=0
 [[ -f "$STUB_DIR/gh-calls.log" ]] \
-  && list_count=$(grep -c '^issue list ' "$STUB_DIR/gh-calls.log" || true)
-assert_eq "retry-list made exactly 2 issue list calls (fail attempt + retry)" "2" "$list_count"
+  && list_count=$(grep -c 'repos/.*/issues' "$STUB_DIR/gh-calls.log" || true)
+assert_eq "retry-list made exactly 2 issue list (REST) calls (fail attempt + retry)" "2" "$list_count"
 TOTAL=$((TOTAL + 1))
 if [[ "$out" == *"bank: skipped (#99 for retry.qfx)"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: retry-list skipped (#99 for retry.qfx) — retry parsed correctly"
@@ -31526,20 +31546,25 @@ followup_exists_setup() {
   mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/bin"
 
   cp "$SCRIPT_DIR/dispatch-followup-exists" "$TMPDIR_TEST/scripts/dispatch-followup-exists"
+  # (#2258) dispatch-followup-exists now sources lib.sh (for gh_issue_list_rest),
+  # so lib.sh must sit alongside it. Sourced, not executed — no chmod +x.
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-followup-exists"
 
-  # gh stub: matches ONLY the exact invocation the script makes:
-  #   gh issue list --search "\"<id>\" in:title" --state all --json number,title --limit 100
-  # On match, cat the fixture $TREE/issues.json if present, else echo [].
-  # The stub does NOT filter — it returns the whole array; the script's jq filters.
+  # gh stub: (#2258) the script now fetches via gh_issue_list_rest, which issues
+  #   gh api [--paginate] repos/{owner}/{repo}/issues?state=all&...
+  # On match, serve the fixture $TREE/issues.json (else []), jq-remapped from the
+  # fixture's {number,title} to REST snake_case WITH title (the script passes
+  # --include-title). The stub does NOT filter on the identifier — it returns the
+  # whole array; the script's boundary-aware jq post-filter does the matching.
   cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 args="$*"
 TREE="$(cd "$(dirname "$0")/.." && pwd)"
 case "$args" in
-  issue\ list\ *--state\ all\ --json\ number,title\ --limit\ 100)
+  *"api "*"repos/"*"/issues"*)
     if [[ -f "$TREE/issues.json" ]]; then
-      cat "$TREE/issues.json"
+      jq 'map({number, pull_request: null, created_at: null, closed_at: null, labels: []} + (if has("title") then {title} else {} end))' "$TREE/issues.json"
     else
       echo '[]'
     fi
