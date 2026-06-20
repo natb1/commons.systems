@@ -3,16 +3,16 @@ import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 
 const mockListCloud = vi.fn();
 
-// renderHome routes its cloud fetch through library.ts's listCloud(); the
+// loadMediaHtml routes its cloud fetch through library.ts's listCloud(); the
 // per-viewer dispatch (public vs. accessible) now lives in library.ts and is
-// covered by library.test.ts. Mock the library seam here so renderHome's
-// rendering is tested without real firebase init.
+// covered by library.test.ts. Mock the library seam here so loadMediaHtml's
+// media rendering is tested without real firebase init.
 vi.mock("../../src/library.js", () => ({
   listCloud: (...args: unknown[]) => mockListCloud(...args),
 }));
 
 // local-folder-ui.ts transitively imports firebase via library.ts; stub it
-// so renderHome and afterRenderHome tests don't need real firebase init.
+// so loadMediaHtml and afterRenderHome tests don't need real firebase init.
 vi.mock("../../src/local-folder-ui.js", () => ({
   renderLocalIntoList: vi.fn().mockResolvedValue(undefined),
 }));
@@ -28,10 +28,14 @@ vi.mock("../../src/auth.js", () => ({
   onAuthStateChanged: vi.fn(),
 }));
 
-import { renderHome, afterRenderHome, wireDownloadActions } from "../../src/pages/home";
+import { loadMediaHtml, afterRenderHome, wireDownloadActions } from "../../src/pages/home";
+import { Home } from "../../src/pages/Home.js";
 import { wireMarkdownActions } from "../../src/markdown-actions";
 import { getMediaDownloadUrl } from "../../src/storage.js";
 import { createHistoryRouter, type Router } from "@commons-systems/router";
+import { createRoot, type Root } from "react-dom/client";
+import { flushSync } from "react-dom";
+import type { User } from "../../src/auth.js";
 import type { MediaItem } from "../../src/types";
 
 function makeMediaItem(overrides: Partial<MediaItem> = {}): MediaItem {
@@ -51,66 +55,23 @@ function makeMediaItem(overrides: Partial<MediaItem> = {}): MediaItem {
   };
 }
 
-describe("renderHome", () => {
+describe("loadMediaHtml", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  describe("when user is null (signed out)", () => {
-    it("fetches the cloud library via listCloud", async () => {
-      mockListCloud.mockResolvedValue([]);
-
-      await renderHome(null);
-
-      expect(mockListCloud).toHaveBeenCalled();
-    });
-
-    it("shows the public notice", async () => {
-      mockListCloud.mockResolvedValue([]);
-
-      const html = await renderHome(null);
-
-      expect(html).toContain('id="public-notice"');
-      expect(html).toContain("Sign in to see your full library");
-    });
-  });
-
-  describe("when user is signed in", () => {
-    const mockUser = { uid: "user-123", email: "user@example.com", displayName: "Test" } as {
-      uid: string;
-      email: string;
-      displayName: string;
-    };
-
-    it("fetches the cloud library via listCloud", async () => {
-      mockListCloud.mockResolvedValue([]);
-
-      await renderHome(mockUser);
-
-      expect(mockListCloud).toHaveBeenCalled();
-    });
-
-    it("does not show the public notice", async () => {
-      mockListCloud.mockResolvedValue([]);
-
-      const html = await renderHome(mockUser);
-
-      expect(html).not.toContain('id="public-notice"');
-    });
-  });
-
-  it("renders the Library heading", async () => {
+  it("fetches the cloud library via listCloud", async () => {
     mockListCloud.mockResolvedValue([]);
 
-    const html = await renderHome(null);
+    await loadMediaHtml();
 
-    expect(html).toContain("<h2>Library</h2>");
+    expect(mockListCloud).toHaveBeenCalled();
   });
 
   it("renders empty state when no items are returned", async () => {
     mockListCloud.mockResolvedValue([]);
 
-    const html = await renderHome(null);
+    const html = await loadMediaHtml();
 
     expect(html).toContain('id="media-empty"');
     expect(html).toContain("No media items available.");
@@ -122,7 +83,7 @@ describe("renderHome", () => {
       makeMediaItem({ id: "book-2", title: "Second Book", mediaType: "epub" }),
     ]);
 
-    const html = await renderHome(null);
+    const html = await loadMediaHtml();
 
     expect(html).toContain('id="media-list"');
     expect(html).toContain("First Book");
@@ -134,7 +95,7 @@ describe("renderHome", () => {
       makeMediaItem({ id: "book-1" }),
     ]);
 
-    const html = await renderHome(null);
+    const html = await loadMediaHtml();
 
     expect(html).toContain('class="media-item"');
     expect(html).toContain('data-id="book-1"');
@@ -145,7 +106,7 @@ describe("renderHome", () => {
       makeMediaItem({ id: "book-1" }),
     ]);
 
-    const html = await renderHome(null);
+    const html = await loadMediaHtml();
 
     expect(html).toContain('href="/view/book-1"');
     expect(html).toContain('class="media-view"');
@@ -156,7 +117,7 @@ describe("renderHome", () => {
       makeMediaItem({ storagePath: "media/test.pdf" }),
     ]);
 
-    const html = await renderHome(null);
+    const html = await loadMediaHtml();
 
     expect(html).toContain('class="media-download"');
     expect(html).toContain('data-path="media/test.pdf"');
@@ -167,7 +128,7 @@ describe("renderHome", () => {
       makeMediaItem({ mediaType: "epub" }),
     ]);
 
-    const html = await renderHome(null);
+    const html = await loadMediaHtml();
 
     expect(html).toContain('class="media-badge"');
     expect(html).toContain("epub");
@@ -176,7 +137,7 @@ describe("renderHome", () => {
   it("renders error fallback when Firestore fails", async () => {
     mockListCloud.mockRejectedValue(new Error("connection failed"));
 
-    const html = await renderHome(null);
+    const html = await loadMediaHtml();
 
     expect(html).toContain('id="media-error"');
     expect(html).toContain("Could not load media library.");
@@ -187,7 +148,7 @@ describe("renderHome", () => {
       makeMediaItem({ markdownPath: "media/test.md" }),
     ]);
 
-    const html = await renderHome(null);
+    const html = await loadMediaHtml();
 
     expect(html).toContain('class="media-md-download"');
     expect(html).toContain('class="media-md-copy"');
@@ -199,7 +160,7 @@ describe("renderHome", () => {
       makeMediaItem(),
     ]);
 
-    const html = await renderHome(null);
+    const html = await loadMediaHtml();
 
     expect(html).not.toContain("media-md-download");
     expect(html).not.toContain("media-md-copy");
@@ -210,15 +171,24 @@ describe("renderHome", () => {
       new DataIntegrityError("corrupt data"),
     );
 
-    await expect(renderHome(null)).rejects.toThrow(DataIntegrityError);
+    await expect(loadMediaHtml()).rejects.toThrow(DataIntegrityError);
   });
 });
 
 describe("download wiring (regression #1280)", () => {
   let router: Router | undefined;
   let outlet: HTMLElement | undefined;
+  // Mirror main.tsx's router→React page lifecycle: render() stashes the home
+  // state and returns an empty #page-root placeholder; afterRender mounts the
+  // <Home> React root into it. The prior page root is unmounted in onNavigate
+  // (before the router wipes the outlet) and again in teardown.
+  let currentPageRoot: Root | null = null;
+  let homeState: { mediaHtml: string; user: User | null } | null = null;
 
   afterEach(() => {
+    currentPageRoot?.unmount();
+    currentPageRoot = null;
+    homeState = null;
     router?.destroy();
     router = undefined;
     if (outlet) {
@@ -232,16 +202,45 @@ describe("download wiring (regression #1280)", () => {
     vi.mocked(getMediaDownloadUrl).mockResolvedValue("https://example.com/x.pdf");
     mockListCloud.mockResolvedValue([makeMediaItem({ storagePath: "media/x.pdf" })]);
 
-    // Mirror main.ts: wire the persistent outlet's click delegation ONCE,
+    // Mirror main.tsx: wire the persistent outlet's click delegation ONCE,
     // before the router's first navigation.
     outlet = document.createElement("div");
     document.body.appendChild(outlet);
     wireDownloadActions(outlet);
     wireMarkdownActions(outlet);
 
-    router = createHistoryRouter(outlet, [
-      { path: "/", render: () => renderHome(null), afterRender: afterRenderHome },
-    ]);
+    router = createHistoryRouter(
+      outlet,
+      [
+        {
+          path: "/",
+          render: async () => {
+            homeState = { mediaHtml: await loadMediaHtml(), user: null };
+            return '<div id="page-root"></div>';
+          },
+          afterRender: (out) => {
+            const mount = out.querySelector("#page-root");
+            if (!mount || !homeState) return;
+            const state = homeState;
+            currentPageRoot = createRoot(mount as HTMLElement);
+            flushSync(() =>
+              currentPageRoot!.render(
+                <Home mediaHtml={state.mediaHtml} user={state.user} />,
+              ),
+            );
+            afterRenderHome(out);
+          },
+        },
+      ],
+      {
+        onNavigate: () => {
+          // Tear down the prior page root before the router wipes the outlet,
+          // so each navigation leaves exactly one live React root.
+          currentPageRoot?.unmount();
+          currentPageRoot = null;
+        },
+      },
+    );
 
     // Navigate home N times; the router reuses the one persistent outlet and
     // runs afterRender on every navigation. Pre-fix this rebound the listener
@@ -250,7 +249,7 @@ describe("download wiring (regression #1280)", () => {
     for (let i = 0; i < N; i++) {
       router.navigate();
       await vi.waitFor(() => {
-        expect(outlet.querySelector(".media-download")).not.toBeNull();
+        expect(outlet!.querySelector(".media-download")).not.toBeNull();
       });
     }
 
