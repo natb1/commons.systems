@@ -23121,6 +23121,259 @@ else
 fi
 stop_teardown
 
+# --- Test #2243-D1.1: in-flight Workflow → hand back (no park, no spawn) -----
+# Branch A new gate: when the transcript shows a Workflow launched in background
+# that has NOT yet received a <task-notification>, the session yielded to await
+# the running fan-out. Do NOT park on office-hours and do NOT spawn a tick.
+
+echo "Test: #2243 D1.1 in-flight Workflow → hand-back (no park, no spawn)"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "implement" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+# No phase-completed marker.
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+# Fixture: one Workflow launch line, no <task-notification>.
+cat > "$TMPDIR_TEST/transcript.jsonl" <<'EOF'
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: w4stq5fyf"}]}}
+EOF
+FIXTURE="$TMPDIR_TEST/transcript.jsonl"
+printf '%s\n' '{"transcript_path":"'"$FIXTURE"'"}' | "$TMPDIR_TEST/hooks/dispatch-stop.sh" >/dev/null 2>&1
+rc=$?
+assert_eq "#2243 D1.1 in-flight Workflow: hook exits 0 (hand-back)" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2243 D1.1 in-flight Workflow: NOT parked on office-hours"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2243 D1.1 in-flight Workflow: NOT parked on office-hours"
+  echo "    apply-log: $(cat "$STUB_DIR/apply-office-hours.log")"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/spawn-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2243 D1.1 in-flight Workflow: NOT spawned (redundant tick suppressed)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2243 D1.1 in-flight Workflow: NOT spawned (redundant tick suppressed)"
+  echo "    spawn-calls: $(cat "$STUB_DIR/spawn-calls.log")"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2243 D1.1 in-flight Workflow: NOT self-closed"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2243 D1.1 in-flight Workflow: NOT self-closed"
+fi
+stop_teardown
+
+# --- Test #2243-D1.2: completed Workflow → normal Branch A park ---------------
+# When the Workflow launch line IS matched by a <task-notification> with the same
+# task ID, the task completed while the session was alive. The in-flight gate must
+# NOT fire; execution falls through to the normal Branch A office-hours park.
+
+echo "Test: #2243 D1.2 completed Workflow → normal Branch A park (office-hours applied, spawn invoked)"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "implement" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+# No phase-completed marker.
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+# Fixture: launch line + matching task-notification (backslash-escaped quote form).
+cat > "$TMPDIR_TEST/transcript.jsonl" <<'EOF'
+{"type":"user","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: w4stq5fyf"}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","content":"{\"taskId\":\"w4stq5fyf\",\"status\":\"completed\"}"}]}}
+EOF
+FIXTURE="$TMPDIR_TEST/transcript.jsonl"
+printf '%s\n' '{"transcript_path":"'"$FIXTURE"'"}' | "$TMPDIR_TEST/hooks/dispatch-stop.sh" >/dev/null 2>&1
+rc=$?
+assert_eq "#2243 D1.2 completed Workflow: hook exits 0" "0" "$rc"
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
+apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
+TOTAL=$((TOTAL + 1))
+if [[ "$apply_issue" == "123" && -n "$apply_reason" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2243 D1.2 completed Workflow: dispatch-apply-office-hours invoked with issue 123 + non-empty reason"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2243 D1.2 completed Workflow: dispatch-apply-office-hours invoked with issue 123 + non-empty reason"
+  echo "    apply-log: $apply_log"
+fi
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "#2243 D1.2 completed Workflow: spawn invoked exactly once" "1" "$spawn_calls"
+stop_teardown
+
+# --- Test #2243-D1.3: multiple tasks, one outstanding → hand back ------------
+# Two Workflow launches with distinct IDs, only one notified. The un-notified task
+# is still in-flight: the in-flight gate must fire (hand-back, no park, no spawn).
+
+echo "Test: #2243 D1.3 multiple tasks, one outstanding → hand-back"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "implement" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+# No phase-completed marker.
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+# Fixture: two launch lines, only the first notified.
+cat > "$TMPDIR_TEST/transcript.jsonl" <<'EOF'
+{"type":"user","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: aaa111bbb"}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: ccc222ddd"}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","content":"{\"taskId\":\"aaa111bbb\",\"status\":\"completed\"}"}]}}
+EOF
+FIXTURE="$TMPDIR_TEST/transcript.jsonl"
+printf '%s\n' '{"transcript_path":"'"$FIXTURE"'"}' | "$TMPDIR_TEST/hooks/dispatch-stop.sh" >/dev/null 2>&1
+rc=$?
+assert_eq "#2243 D1.3 one outstanding task: hook exits 0 (hand-back)" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2243 D1.3 one outstanding task: NOT parked on office-hours"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2243 D1.3 one outstanding task: NOT parked on office-hours"
+  echo "    apply-log: $(cat "$STUB_DIR/apply-office-hours.log")"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/spawn-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2243 D1.3 one outstanding task: NOT spawned"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2243 D1.3 one outstanding task: NOT spawned"
+  echo "    spawn-calls: $(cat "$STUB_DIR/spawn-calls.log")"
+fi
+stop_teardown
+
+# ============================================================================
+# dispatch-finalize-phase tests (#2243)
+# ============================================================================
+echo ""
+echo "=== dispatch-finalize-phase ==="
+
+# --- Test #2243-D2: finalize-phase spawns once + strips office-hours + self-closes last ---
+# dispatch-finalize-phase calls siblings via its own $SCRIPT_DIR. To stub them,
+# copy the real script into a fresh tmpdir alongside stub siblings in that same
+# dir (the same pattern as dispatch-plan-finalize above). gh is on PATH from a
+# dedicated bin/ subdir inside the tmpdir.
+
+echo "Test: #2243 D2 dispatch-finalize-phase: spawn-once + office-hours removed from issue and PR + self-close last"
+FINALIZE_TMPDIR=$(mktemp -d)
+FINALIZE_STUB_DIR="$FINALIZE_TMPDIR/stub"
+FINALIZE_BIN="$FINALIZE_TMPDIR/bin"
+FINALIZE_SCRIPTS="$FINALIZE_TMPDIR/scripts"
+mkdir -p "$FINALIZE_STUB_DIR" "$FINALIZE_BIN" "$FINALIZE_SCRIPTS"
+
+# Copy the real finalize script into the scripts dir so $SCRIPT_DIR resolves there.
+cp "$SCRIPT_DIR/dispatch-finalize-phase" "$FINALIZE_SCRIPTS/dispatch-finalize-phase"
+chmod +x "$FINALIZE_SCRIPTS/dispatch-finalize-phase"
+
+# Stub dispatch-spawn-tick: log to order.log and spawn-calls.log.
+cat > "$FINALIZE_SCRIPTS/dispatch-spawn-tick" <<'STUB'
+#!/usr/bin/env bash
+echo "spawn" >> "$FINALIZE_STUB_DIR/order.log"
+echo "spawn" >> "$FINALIZE_STUB_DIR/spawn-calls.log"
+exit 0
+STUB
+chmod +x "$FINALIZE_SCRIPTS/dispatch-spawn-tick"
+
+# Stub dispatch-spawn-sweep: log to sweep-calls.log (no order entry — mirrors stop harness).
+cat > "$FINALIZE_SCRIPTS/dispatch-spawn-sweep" <<'STUB'
+#!/usr/bin/env bash
+echo "sweep" >> "$FINALIZE_STUB_DIR/sweep-calls.log"
+exit 0
+STUB
+chmod +x "$FINALIZE_SCRIPTS/dispatch-spawn-sweep"
+
+# Stub dispatch-self-close: log to order.log and self-close-calls.log.
+cat > "$FINALIZE_SCRIPTS/dispatch-self-close" <<'STUB'
+#!/usr/bin/env bash
+echo "self-close" >> "$FINALIZE_STUB_DIR/order.log"
+echo "self-close" >> "$FINALIZE_STUB_DIR/self-close-calls.log"
+exit 0
+STUB
+chmod +x "$FINALIZE_SCRIPTS/dispatch-self-close"
+
+# Stub gh: handle issue view (rate-limit labels — return empty), pr edit --remove-label,
+# issue edit --remove-label. Log remove calls for assertion.
+cat > "$FINALIZE_BIN/gh" <<'STUB'
+#!/usr/bin/env bash
+FINALIZE_STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
+args="$*"
+case "$args" in
+  issue\ view\ *--json\ labels*)
+    # No rate-limit-retry labels to clear.
+    printf '{"labels":[]}\n'
+    ;;
+  pr\ edit\ *--remove-label*)
+    echo "$args" >> "$FINALIZE_STUB_DIR/gh-pr-remove.log"
+    ;;
+  issue\ edit\ *--remove-label*)
+    echo "$args" >> "$FINALIZE_STUB_DIR/gh-issue-remove.log"
+    ;;
+  *)
+    echo "gh stub: unknown invocation: $args" >&2
+    exit 1
+    ;;
+esac
+STUB
+chmod +x "$FINALIZE_BIN/gh"
+
+export PATH="$FINALIZE_BIN:$SAVED_PATH"
+export FINALIZE_STUB_DIR
+export CLAUDE_JOB_DIR="$FINALIZE_TMPDIR/job"
+mkdir -p "$CLAUDE_JOB_DIR"
+
+"$FINALIZE_SCRIPTS/dispatch-finalize-phase" 123 --pr 456
+rc=$?
+assert_eq "#2243 D2 dispatch-finalize-phase: exits 0" "0" "$rc"
+
+# Assert office-hours removed from the PR.
+pr_remove_log=$(cat "$FINALIZE_STUB_DIR/gh-pr-remove.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$pr_remove_log" == *"pr edit 456 --remove-label dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2243 D2: --remove-label dispatch:office-hours issued for PR 456"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2243 D2: --remove-label dispatch:office-hours issued for PR 456"
+  echo "    gh-pr-remove.log: $pr_remove_log"
+fi
+
+# Assert office-hours removed from the issue.
+issue_remove_log=$(cat "$FINALIZE_STUB_DIR/gh-issue-remove.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$issue_remove_log" == *"issue edit 123 --remove-label dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2243 D2: --remove-label dispatch:office-hours issued for issue 123"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2243 D2: --remove-label dispatch:office-hours issued for issue 123"
+  echo "    gh-issue-remove.log: $issue_remove_log"
+fi
+
+# Assert spawn invoked exactly once.
+spawn_calls=$(wc -l < "$FINALIZE_STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "#2243 D2 dispatch-finalize-phase: spawn invoked exactly once" "1" "$spawn_calls"
+
+# Assert sweep invoked.
+TOTAL=$((TOTAL + 1))
+if [[ -e "$FINALIZE_STUB_DIR/sweep-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2243 D2: sweep invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2243 D2: sweep invoked"
+fi
+
+# Assert self-close invoked.
+TOTAL=$((TOTAL + 1))
+if [[ -e "$FINALIZE_STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2243 D2: self-close invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2243 D2: self-close invoked"
+fi
+
+# Assert self-close is LAST in order.log (spawn precedes self-close).
+order_log=$(cat "$FINALIZE_STUB_DIR/order.log" 2>/dev/null || true)
+last_entry=$(printf '%s' "$order_log" | tail -1)
+TOTAL=$((TOTAL + 1))
+if [[ "$last_entry" == "self-close" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2243 D2: self-close is last in order.log"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2243 D2: self-close is last in order.log"
+  echo "    order.log: $order_log"
+fi
+
+unset CLAUDE_JOB_DIR FINALIZE_STUB_DIR
+export PATH="$SAVED_PATH"
+rm -rf "$FINALIZE_TMPDIR"
+
 # ============================================================================
 # ensure_deps (lib.sh) retry tests
 # ============================================================================
@@ -36227,6 +36480,18 @@ STAMP="$SCRIPT_DIR/dispatch-stamp-session"
   rc=0
   CLAUDE_CODE_SESSION_ID=nope DISPATCH_STAMP_PROJECTS_ROOT="$root" "$STAMP" --backfill-pr 7 2>/dev/null || rc=$?
   assert_eq "stamp: backfill missing sidecar exits 0" "0" "$rc"
+  rm -rf "$root"
+)
+
+# 5b. Backfill no-ops + exits 0 when CLAUDE_CODE_SESSION_ID is unset — a backfill
+# failure must NEVER fail its caller, so the unset-session case is a clean exit 0
+# (not exit 2), with nothing to locate.
+(
+  root=$(mktemp -d)
+  rc=0
+  ( unset CLAUDE_CODE_SESSION_ID
+    DISPATCH_STAMP_PROJECTS_ROOT="$root" "$STAMP" --backfill-pr 7 ) 2>/dev/null || rc=$?
+  assert_eq "stamp: backfill unset session-id exits 0" "0" "$rc"
   rm -rf "$root"
 )
 
