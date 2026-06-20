@@ -16146,6 +16146,341 @@ fi
 qfa_teardown
 
 # ============================================================================
+# dispatch-attempt-count tests
+# ============================================================================
+#
+# AC1 (selection exclusion): covered by the existing office-hours-skip selection
+# tests (~line 2922 "PR whose issue carries dispatch:office-hours is skipped"
+# and ~line 5723 help-wanted/office-hours skip). The ceiling park reuses
+# dispatch-apply-office-hours, the same mechanism those tests exercise, so no
+# new selection-exclusion test is added here.
+#
+# Key inversion vs dispatch-qa-fix-attempt: this script BUMPS FIRST then reports.
+# At the ceiling, the label write still lands (NEXT is applied) and THEN
+# `escalate` is emitted. This is the opposite of dispatch-qa-fix-attempt, which
+# at cap applies NO label before escalating.
+#
+# Each test gets a fresh tmp tree:
+#   $TMPDIR_TEST/scripts/   copy of dispatch-attempt-count
+#   $TMPDIR_TEST/bin/       fake-gh stub
+#   $TMPDIR_TEST/gh-edit-log   recorded fake-gh issue edit / label create argv
+
+echo ""
+echo "=== dispatch-attempt-count ==="
+
+aca_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/bin"
+
+  cp "$SCRIPT_DIR/dispatch-attempt-count" \
+    "$TMPDIR_TEST/scripts/dispatch-attempt-count"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-attempt-count"
+
+  # fake gh: `issue view` echoes the test-controlled current count
+  # (${FAKE_CUR_ATTEMPT:-0}). `issue edit` / `label create` record their
+  # argv to a log and exit 0.
+  cat > "$TMPDIR_TEST/bin/fake-gh" <<STUB
+#!/usr/bin/env bash
+if [[ "\$1" == "issue" && "\$2" == "view" ]]; then
+  echo "\${FAKE_CUR_ATTEMPT:-0}"
+  exit 0
+fi
+echo "\$*" >> "$TMPDIR_TEST/gh-edit-log"
+exit 0
+STUB
+  chmod +x "$TMPDIR_TEST/bin/fake-gh"
+  export DISPATCH_ATTEMPT_COUNT_GH_CMD="$TMPDIR_TEST/bin/fake-gh"
+}
+
+aca_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  unset DISPATCH_ATTEMPT_COUNT_GH_CMD
+  unset DISPATCH_TOTAL_ATTEMPT_CEILING
+  unset FAKE_CUR_ATTEMPT
+}
+
+# --- Test 1: no prior label (CUR=0), default ceiling 13 → proceed, applies attempts-1, no remove ---
+
+echo "Test: no prior label (CUR=0), default ceiling → proceed, applies attempts-1, no remove"
+aca_setup
+export FAKE_CUR_ATTEMPT=0
+if out=$("$TMPDIR_TEST/scripts/dispatch-attempt-count" 2040 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "aca CUR=0 exits 0" "0" "$rc"
+assert_eq "aca CUR=0 stdout is proceed" "proceed" "$out"
+edits=$(cat "$TMPDIR_TEST/gh-edit-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$edits" == *"--add-label dispatch:attempts-1"* \
+   && "$edits" != *"--remove-label"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: CUR=0 applies attempts-1 with no remove"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: CUR=0 applies attempts-1 with no remove"
+  echo "    edits: $edits"
+fi
+aca_teardown
+
+# --- Test 2: CUR=5, default ceiling 13 → proceed, removes attempts-5, applies attempts-6 ---
+
+echo "Test: CUR=5, default ceiling 13 → proceed, removes attempts-5 and applies attempts-6"
+aca_setup
+export FAKE_CUR_ATTEMPT=5
+if out=$("$TMPDIR_TEST/scripts/dispatch-attempt-count" 2040 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "aca CUR=5 exits 0" "0" "$rc"
+assert_eq "aca CUR=5 stdout is proceed" "proceed" "$out"
+edits=$(cat "$TMPDIR_TEST/gh-edit-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$edits" == *"--remove-label dispatch:attempts-5"* \
+   && "$edits" == *"--add-label dispatch:attempts-6"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: CUR=5 removes attempts-5 and adds attempts-6"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: CUR=5 removes attempts-5 and adds attempts-6"
+  echo "    edits: $edits"
+fi
+aca_teardown
+
+# --- Test 3: ceiling fires AND bump still lands (key inversion vs qfa at-cap) ---
+# CUR=12, CEILING=13 → NEXT=13 >= 13 → escalate, BUT attempts-13 IS still written.
+# This is the deliberate inversion: dispatch-qa-fix-attempt writes NO label at cap;
+# dispatch-attempt-count writes the label (bump-first) THEN emits the verdict.
+
+echo "Test: CUR=12, CEILING=13 (ceiling fires) → escalate AND attempts-13 is applied (bump-first inversion)"
+aca_setup
+export DISPATCH_TOTAL_ATTEMPT_CEILING=13
+export FAKE_CUR_ATTEMPT=12
+if out=$("$TMPDIR_TEST/scripts/dispatch-attempt-count" 2040 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "aca ceiling fires exits 0" "0" "$rc"
+assert_eq "aca ceiling fires stdout is escalate" "escalate" "$out"
+edits=$(cat "$TMPDIR_TEST/gh-edit-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$edits" == *"--remove-label dispatch:attempts-12"* \
+   && "$edits" == *"--add-label dispatch:attempts-13"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: ceiling fires but bump still landed (attempts-13 applied, attempts-12 removed)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: ceiling fires but bump still landed (attempts-13 applied, attempts-12 removed)"
+  echo "    edits: $edits"
+fi
+aca_teardown
+
+# --- Test 4: env ceiling override fires early: CEILING=3, CUR=2 → escalate, bump lands ---
+
+echo "Test: CEILING=3, CUR=2 → escalate (NEXT=3 >= 3), bump landed (attempts-3 applied)"
+aca_setup
+export DISPATCH_TOTAL_ATTEMPT_CEILING=3
+export FAKE_CUR_ATTEMPT=2
+if out=$("$TMPDIR_TEST/scripts/dispatch-attempt-count" 2040 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "aca ceiling=3 CUR=2 exits 0" "0" "$rc"
+assert_eq "aca ceiling=3 CUR=2 stdout is escalate" "escalate" "$out"
+edits=$(cat "$TMPDIR_TEST/gh-edit-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$edits" == *"--add-label dispatch:attempts-3"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: CEILING=3 CUR=2 escalates and applies attempts-3"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: CEILING=3 CUR=2 escalates and applies attempts-3"
+  echo "    edits: $edits"
+fi
+aca_teardown
+
+# --- Test 5: below the overridden ceiling: CEILING=3, CUR=1 → proceed ---
+
+echo "Test: CEILING=3, CUR=1 (below override ceiling) → proceed"
+aca_setup
+export DISPATCH_TOTAL_ATTEMPT_CEILING=3
+export FAKE_CUR_ATTEMPT=1
+if out=$("$TMPDIR_TEST/scripts/dispatch-attempt-count" 2040 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "aca ceiling=3 CUR=1 exits 0" "0" "$rc"
+assert_eq "aca ceiling=3 CUR=1 stdout is proceed" "proceed" "$out"
+aca_teardown
+
+# --- Test 6a: non-integer CUR → exit 2, no label edits, stderr mentions integer guard ---
+
+echo "Test: non-integer CUR → exit 2, gh-edit-log empty, stderr mentions integer guard"
+aca_setup
+export FAKE_CUR_ATTEMPT=abc
+if out=$("$TMPDIR_TEST/scripts/dispatch-attempt-count" 2040 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "aca non-integer CUR exits 2" "2" "$rc"
+err=$(cat "$TMPDIR_TEST/stderr")
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"not an integer"* && ! -s "$TMPDIR_TEST/gh-edit-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-integer CUR; stderr integer-guard message + no label edit"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-integer CUR; stderr integer-guard message + no label edit"
+  echo "    stderr: $err"
+  echo "    gh-edit-log exists: $(test -s "$TMPDIR_TEST/gh-edit-log" && echo yes || echo no)"
+fi
+aca_teardown
+
+# --- Test 6b: malformed DISPATCH_TOTAL_ATTEMPT_CEILING → exit 2, stderr mentions CEILING ---
+
+echo "Test: CEILING=abc → exit 2, gh-edit-log empty, stderr mentions CEILING must be a positive integer"
+aca_setup
+export DISPATCH_TOTAL_ATTEMPT_CEILING=abc
+export FAKE_CUR_ATTEMPT=0
+if out=$("$TMPDIR_TEST/scripts/dispatch-attempt-count" 2040 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "aca bad CEILING exits 2" "2" "$rc"
+err=$(cat "$TMPDIR_TEST/stderr")
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"CEILING must be a positive integer"* && ! -s "$TMPDIR_TEST/gh-edit-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: bad CEILING; stderr CEILING-guard message + no label edit"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: bad CEILING; stderr CEILING-guard message + no label edit"
+  echo "    stderr: $err"
+fi
+aca_teardown
+
+# --- Test 6c: flag-like arg → exit 2, no label edits ---
+
+echo "Test: flag-like arg --repo → exit 2, no label edits"
+aca_setup
+if out=$("$TMPDIR_TEST/scripts/dispatch-attempt-count" --repo 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "aca flag-like arg exits 2" "2" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -s "$TMPDIR_TEST/gh-edit-log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: flag-like arg; no label edits"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: flag-like arg; no label edits"
+  echo "    edits: $(cat "$TMPDIR_TEST/gh-edit-log")"
+fi
+aca_teardown
+
+# ============================================================================
+# dispatch-qa-noprogress tests
+# ============================================================================
+#
+# Exercises the qa-noprogress content-aware no-progress detector. Tests 1-3
+# share a single setup (state accumulates in $TMPDIR_TEST/comment-body across
+# calls). Tests 4 and 5 each get a fresh setup.
+#
+# Fake-gh design: stateful single-comment store at $TMPDIR_TEST/comment-body.
+#   GET (api --paginate):  returns [{id:1, body:<store>, user:{id:4242}}] or []
+#   WRITE (api --method PATCH|POST): copies the body file to the store
+#   api user: returns 4242 (not reached when AUTHOR_ID env is set, but safe)
+#
+# DISPATCH_QA_NOPROGRESS_AUTHOR_ID=4242 avoids the live `gh api user` lookup.
+
+echo ""
+echo "=== dispatch-qa-noprogress ==="
+
+qanp_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/bin"
+
+  cp "$SCRIPT_DIR/dispatch-qa-noprogress" \
+    "$TMPDIR_TEST/scripts/dispatch-qa-noprogress"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-qa-noprogress"
+
+  # Stateful fake-gh: single comment body stored at $TMPDIR_TEST/comment-body.
+  # Absent = no comment yet (first call returns []). WRITE copies the body
+  # verbatim; the script emits a compact single-line ids array so no
+  # normalization is needed here.
+  cat > "$TMPDIR_TEST/bin/fake-gh" <<STUB
+#!/usr/bin/env bash
+STORE="$TMPDIR_TEST/comment-body"
+# GET the comments list: api --paginate repos/.../issues/<pr>/comments
+if [[ "\$1" == "api" && "\$2" == "--paginate" ]]; then
+  if [[ -f "\$STORE" ]]; then
+    jq -n --arg b "\$(cat "\$STORE")" '[{id:1, body:\$b, user:{id:4242}}]'
+  else
+    echo '[]'
+  fi
+  exit 0
+fi
+# WRITE: api --method PATCH|POST repos/... --field body=@<path>
+if [[ "\$1" == "api" && "\$2" == "--method" ]]; then
+  bodyfile=""
+  for a in "\$@"; do
+    case "\$a" in body=@*) bodyfile="\${a#body=@}" ;; esac
+  done
+  [[ -n "\$bodyfile" ]] && cp "\$bodyfile" "\$STORE"
+  exit 0
+fi
+# api user --jq .id  (not reached when AUTHOR_ID env is set, but be safe)
+if [[ "\$1" == "api" && "\$2" == "user" ]]; then
+  echo "4242"; exit 0
+fi
+exit 0
+STUB
+  chmod +x "$TMPDIR_TEST/bin/fake-gh"
+  export DISPATCH_QA_NOPROGRESS_GH_CMD="$TMPDIR_TEST/bin/fake-gh"
+  export DISPATCH_QA_NOPROGRESS_AUTHOR_ID=4242
+}
+
+qanp_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  unset DISPATCH_QA_NOPROGRESS_GH_CMD
+  unset DISPATCH_QA_NOPROGRESS_AUTHOR_ID
+}
+
+# --- Tests 1-3: shared setup (state accumulates across calls) -----------------
+
+echo "Test: qanp 1-3 (shared state)"
+qanp_setup
+
+# Test 1: first attempt (no prior comment) → progress, marker comment written
+echo "  Test 1: first attempt (no prior comment) → progress, comment written"
+printf 'a\nb\nc\n' > "$TMPDIR_TEST/cur.txt"
+if out=$("$TMPDIR_TEST/scripts/dispatch-qa-noprogress" 555 "$TMPDIR_TEST/cur.txt" 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "qanp test-1 exits 0" "0" "$rc"
+assert_eq "qanp test-1 stdout is progress" "progress" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ -f "$TMPDIR_TEST/comment-body" ]] \
+   && grep -q 'dispatch:qa-residue' "$TMPDIR_TEST/comment-body"; then
+  PASS=$((PASS + 1)); echo "    PASS: first attempt writes marker comment containing dispatch:qa-residue"
+else
+  FAIL=$((FAIL + 1)); echo "    FAIL: first attempt writes marker comment containing dispatch:qa-residue"
+  echo "      comment-body exists: $(test -f "$TMPDIR_TEST/comment-body" && echo yes || echo no)"
+fi
+
+# Test 2: identical id set (nothing resolved) → no-progress
+echo "  Test 2: same ids (a,b,c) → no-progress"
+printf 'a\nb\nc\n' > "$TMPDIR_TEST/cur.txt"
+if out=$("$TMPDIR_TEST/scripts/dispatch-qa-noprogress" 555 "$TMPDIR_TEST/cur.txt" 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "qanp test-2 exits 0" "0" "$rc"
+assert_eq "qanp test-2 stdout is no-progress" "no-progress" "$out"
+
+# Test 3: strictly smaller set (one id resolved) → progress
+echo "  Test 3: smaller ids (a,b) → progress (c resolved)"
+printf 'a\nb\n' > "$TMPDIR_TEST/cur.txt"
+if out=$("$TMPDIR_TEST/scripts/dispatch-qa-noprogress" 555 "$TMPDIR_TEST/cur.txt" 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "qanp test-3 exits 0" "0" "$rc"
+assert_eq "qanp test-3 stdout is progress" "progress" "$out"
+
+qanp_teardown
+
+# --- Test 4: JSON-array input form round-trip ---------------------------------
+
+echo "Test: qanp test-4 JSON-array input round-trip"
+qanp_setup
+# First call with JSON array ["x","y"] → progress (first attempt)
+printf '["x","y"]\n' > "$TMPDIR_TEST/cur.txt"
+if out=$("$TMPDIR_TEST/scripts/dispatch-qa-noprogress" 555 "$TMPDIR_TEST/cur.txt" 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "qanp test-4a exits 0" "0" "$rc"
+assert_eq "qanp test-4a JSON-first stdout is progress" "progress" "$out"
+# Second call with identical JSON array → no-progress (nothing resolved)
+printf '["x","y"]\n' > "$TMPDIR_TEST/cur.txt"
+if out=$("$TMPDIR_TEST/scripts/dispatch-qa-noprogress" 555 "$TMPDIR_TEST/cur.txt" 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "qanp test-4b exits 0" "0" "$rc"
+assert_eq "qanp test-4b JSON-same stdout is no-progress" "no-progress" "$out"
+qanp_teardown
+
+# --- Test 5a: missing current-ids-file → exit 2 ------------------------------
+
+echo "Test: qanp missing current-ids-file → exit 2"
+qanp_setup
+if out=$("$TMPDIR_TEST/scripts/dispatch-qa-noprogress" 555 /nonexistent/path 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "qanp missing cur-file exits 2" "2" "$rc"
+qanp_teardown
+
+# --- Test 5b: flag-like / non-numeric pr-num → exit 2 ------------------------
+
+echo "Test: qanp flag-like pr-num → exit 2"
+qanp_setup
+printf 'a\n' > "$TMPDIR_TEST/cur.txt"
+if out=$("$TMPDIR_TEST/scripts/dispatch-qa-noprogress" --repo "$TMPDIR_TEST/cur.txt" 2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "qanp flag-like pr-num exits 2" "2" "$rc"
+qanp_teardown
+
+# ============================================================================
 # dispatch project-helper tests (item-add / status-read / status-write)
 # ============================================================================
 #
@@ -31392,6 +31727,79 @@ else
   echo "  FAIL: ensure_heartbeat_units (hot path) returned non-zero"
 fi
 
+# --- 3. cleanup_stale_heartbeat_units: path-change disable (#2056) ------------
+# Called DIRECTLY (not via ensure_heartbeat_units): the "paths match" case would
+# otherwise hit the hot-path early-return before reaching the cleanup call.
+mkdir -p "$ehu_unit_dir"
+
+# 3a. AC1 — installed WorkingDirectory differs from current → disable fires.
+: > "$ehu_log"
+printf '%s\n' '[Service]' 'WorkingDirectory=/old/path' > "$ehu_svc"
+(
+  export STUB_LOG="$ehu_log"
+  source "$SCRIPT_DIR/lib.sh"
+  cleanup_stale_heartbeat_units "$ehu_svc" "$ehu_tmp/main-worktree" "$ehu_tmp/bin/systemctl"
+)
+TOTAL=$((TOTAL + 1))
+if grep -q 'disable --now dispatch-heartbeat.timer dispatch-heartbeat.service' "$ehu_log"; then
+  PASS=$((PASS + 1)); echo "  PASS: cleanup_stale_heartbeat_units disabled stale units on path change"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: cleanup_stale_heartbeat_units did not disable on path change"
+fi
+
+# 3b. AC2 — installed WorkingDirectory matches current → no disable.
+: > "$ehu_log"
+printf '%s\n' '[Service]' "WorkingDirectory=$ehu_tmp/main-worktree" > "$ehu_svc"
+(
+  export STUB_LOG="$ehu_log"
+  source "$SCRIPT_DIR/lib.sh"
+  cleanup_stale_heartbeat_units "$ehu_svc" "$ehu_tmp/main-worktree" "$ehu_tmp/bin/systemctl"
+)
+TOTAL=$((TOTAL + 1))
+if ! grep -q 'disable' "$ehu_log"; then
+  PASS=$((PASS + 1)); echo "  PASS: cleanup_stale_heartbeat_units did not disable when path matches"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: cleanup_stale_heartbeat_units disabled despite matching path"
+fi
+
+# 3c. AC3 — no prior service unit → no-op (returns 0, no disable).
+: > "$ehu_log"
+ehu_missing_svc="$ehu_unit_dir/does-not-exist.service"
+ehu_cleanup_rc=0
+(
+  export STUB_LOG="$ehu_log"
+  source "$SCRIPT_DIR/lib.sh"
+  cleanup_stale_heartbeat_units "$ehu_missing_svc" "$ehu_tmp/main-worktree" "$ehu_tmp/bin/systemctl"
+) || ehu_cleanup_rc=$?
+assert_eq "cleanup_stale_heartbeat_units: missing unit → returns 0" "0" "$ehu_cleanup_rc"
+# Counts the inline grep check below; the assert_eq above counts itself.
+TOTAL=$((TOTAL + 1))
+if ! grep -q 'disable' "$ehu_log"; then
+  PASS=$((PASS + 1)); echo "  PASS: cleanup_stale_heartbeat_units no-op when no prior units"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: cleanup_stale_heartbeat_units ran disable with no prior units"
+fi
+
+# 3d. AC4 (#2191) — [Service] section present but no WorkingDirectory= line →
+# early return at lib.sh:1810 ([ -n "$installed_workdir" ] || return 0): no
+# disable, returns 0.
+: > "$ehu_log"
+printf '%s\n' '[Service]' > "$ehu_svc"
+ehu_cleanup_rc=0
+(
+  export STUB_LOG="$ehu_log"
+  source "$SCRIPT_DIR/lib.sh"
+  cleanup_stale_heartbeat_units "$ehu_svc" "$ehu_tmp/main-worktree" "$ehu_tmp/bin/systemctl"
+) || ehu_cleanup_rc=$?
+assert_eq "cleanup_stale_heartbeat_units: no WorkingDirectory= → returns 0" "0" "$ehu_cleanup_rc"
+# Counts the inline grep check below; the assert_eq above counts itself.
+TOTAL=$((TOTAL + 1))
+if ! grep -q 'disable' "$ehu_log"; then
+  PASS=$((PASS + 1)); echo "  PASS: cleanup_stale_heartbeat_units no-op when WorkingDirectory= absent"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: cleanup_stale_heartbeat_units ran disable with no WorkingDirectory="
+fi
+
 rm -rf "$ehu_tmp"
 
 # ============================================================================
@@ -35659,6 +36067,147 @@ assert_eq "sidecar no net-increase → zero findings" "0" "$sidecar_count"
 rm -rf "$TMPDIR_TEST"
 TMPDIR_TEST=""
 
+# E4. Sidecar duplication net-delta: HEAD jscpd clones rose from 0 → finding
+#     with Source="erosion" and a path:line Location derived from the largest
+#     clone (exercises worstCloneLocation).
+#
+#     Empty eslint reports ([]) for both HEAD and BASE suppress the complexity
+#     path (complexityScalars yields no per-file entries), so the ONLY finding is
+#     the duplication one. The HEAD jscpd report carries clones rising from a
+#     zero-clone baseline, so clonesRose fires (Confidence=high). worstCloneLocation
+#     iterates every entry in `duplicates` and keeps the one with the largest
+#     (firstFile.end - firstFile.start) span; we seed TWO clones so the
+#     "largest clone wins" comparison branch is actually exercised rather than
+#     trivially true on a single-item loop. The first entry is a 9-line span at
+#     dup.ts:5 (end 14 - start 5); the second is a smaller 3-line span at
+#     dup.ts:1 (end 4 - start 1). The larger span must win, and firstFile.name is
+#     the bare relative "dup.ts" (no cwd prefix to strip), so the Location is
+#     "dup.ts:5" — the smaller clone's "dup.ts:1" must NOT be selected.
+echo "Test: dispatch-review-erosion-diff.mjs — duplication net-increase yields Source=erosion finding"
+TMPDIR_TEST=$(mktemp -d)
+# Empty eslint reports suppress the complexity path entirely.
+cat > "$TMPDIR_TEST/head-eslint.json" <<'EOF'
+[]
+EOF
+mkdir -p "$TMPDIR_TEST/baseline"
+cat > "$TMPDIR_TEST/base-eslint.json" <<'EOF'
+[]
+EOF
+# jscpd HEAD report: two clone blocks. The first is a 9-line span at dup.ts:5
+# (end 14 - start 5); the second is a smaller 3-line span at dup.ts:1 (end 4 -
+# start 1). worstCloneLocation must pick the larger span (dup.ts:5), so the
+# second, smaller entry makes the "largest clone wins" comparison meaningful.
+cat > "$TMPDIR_TEST/head-jscpd.json" <<'EOF'
+{
+  "statistics": { "total": { "clones": 2, "duplicatedLines": 13, "percentage": 7 } },
+  "duplicates": [
+    { "firstFile": { "name": "dup.ts", "start": 5, "end": 14 },
+      "secondFile": { "name": "dup.ts", "start": 30, "end": 39 } },
+    { "firstFile": { "name": "dup.ts", "start": 1, "end": 4 },
+      "secondFile": { "name": "dup.ts", "start": 50, "end": 53 } }
+  ]
+}
+EOF
+# jscpd BASE report: zero clones (no duplication pre-PR).
+cat > "$TMPDIR_TEST/base-jscpd.json" <<'EOF'
+{ "statistics": { "total": { "clones": 0, "duplicatedLines": 0, "percentage": 0 } } }
+EOF
+sidecar_out=$(cd "$TMPDIR_TEST" && node "$SCRIPT_DIR/dispatch-review-erosion-diff.mjs" \
+  --eslint-head head-eslint.json \
+  --eslint-base base-eslint.json \
+  --jscpd-head head-jscpd.json \
+  --jscpd-base base-jscpd.json \
+  --baseline-dir baseline)
+sidecar_count=$(jq '.findings | length' <<<"$sidecar_out")
+sidecar_source=$(jq -r '.findings[0].Source // "none"' <<<"$sidecar_out")
+sidecar_location=$(jq -r '.findings[0].Location // "none"' <<<"$sidecar_out")
+sidecar_confidence=$(jq -r '.findings[0].Confidence // "none"' <<<"$sidecar_out")
+assert_eq "sidecar duplication finding count=1" "1" "$sidecar_count"
+assert_eq "sidecar duplication finding Source=erosion" "erosion" "$sidecar_source"
+assert_eq "sidecar duplication finding Location=dup.ts:5" "dup.ts:5" "$sidecar_location"
+assert_eq "sidecar duplication finding Confidence=high (clones rose)" "high" "$sidecar_confidence"
+rm -rf "$TMPDIR_TEST"
+TMPDIR_TEST=""
+
+# E5. Sidecar no-baseline duplication: all-new-files PR has empty baseline_paths,
+#     so the driver passes NO --jscpd-base. The sidecar then defaults baseDup to
+#     zeros, so any HEAD clone (headDup.clones > 0) fires an aggregate duplication
+#     finding with a path:line Location from the largest HEAD clone. E2/E3 pass a
+#     zero-clone HEAD report, so this duplication path is otherwise uncovered.
+#     Empty eslint reports isolate the duplication path (no complexity finding).
+echo "Test: dispatch-review-erosion-diff.mjs — no-baseline HEAD clone yields Source=erosion duplication finding"
+TMPDIR_TEST=$(mktemp -d)
+mkdir -p "$TMPDIR_TEST/baseline"
+# Empty eslint reports → no complexity finding; isolates the duplication path.
+echo '[]' > "$TMPDIR_TEST/head-eslint.json"
+echo '[]' > "$TMPDIR_TEST/base-eslint.json"
+# HEAD jscpd report: one clone with concrete per-clone detail so the Location is
+# a real path:line (newfile.ts:10), not the changed-files fallback.
+cat > "$TMPDIR_TEST/head-jscpd.json" <<'EOF'
+{"statistics":{"total":{"clones":1,"duplicatedLines":12,"percentage":8}},
+ "duplicates":[{"firstFile":{"name":"newfile.ts","start":10,"end":22},
+                "secondFile":{"name":"newfile.ts","start":40,"end":52}}]}
+EOF
+# Invoke WITHOUT --jscpd-base (the all-new-files / no-baseline case).
+sidecar_out=$(cd "$TMPDIR_TEST" && node "$SCRIPT_DIR/dispatch-review-erosion-diff.mjs" \
+  --eslint-head head-eslint.json \
+  --eslint-base base-eslint.json \
+  --jscpd-head head-jscpd.json \
+  --baseline-dir baseline)
+sidecar_source=$(jq -r '.findings[0].Source // "none"' <<<"$sidecar_out")
+sidecar_location=$(jq -r '.findings[0].Location // "none"' <<<"$sidecar_out")
+sidecar_confidence=$(jq -r '.findings[0].Confidence // "none"' <<<"$sidecar_out")
+sidecar_count=$(jq '.findings | length' <<<"$sidecar_out")
+assert_eq "sidecar no-baseline duplication Source=erosion" "erosion" "$sidecar_source"
+assert_eq "sidecar no-baseline duplication Location=newfile.ts:10" "newfile.ts:10" "$sidecar_location"
+assert_eq "sidecar no-baseline duplication Confidence=high (clones rose 0→1)" "high" "$sidecar_confidence"
+assert_eq "sidecar no-baseline duplication → exactly one finding" "1" "$sidecar_count"
+rm -rf "$TMPDIR_TEST"
+TMPDIR_TEST=""
+
+# E6. Sidecar dupLines-only duplication (medium confidence): HEAD and BASE have
+#     EQUAL clone counts (clones=1 both), so clonesRose=false, but HEAD has MORE
+#     duplicated lines (15 > 5), so dupLinesRose=true. The aggregate duplication
+#     finding still fires (clonesRose || dupLinesRose), but takes the
+#     Confidence='medium' sub-path (clonesRose ? 'high' : 'medium'). E4/E5 both
+#     drive clonesRose=true (high), so this medium sub-path is otherwise uncovered.
+#     Empty eslint reports isolate the duplication path (no complexity finding).
+echo "Test: dispatch-review-erosion-diff.mjs — dupLines-only rise yields Confidence=medium duplication finding"
+TMPDIR_TEST=$(mktemp -d)
+mkdir -p "$TMPDIR_TEST/baseline"
+# Empty eslint reports → no complexity finding; isolates the duplication path.
+echo '[]' > "$TMPDIR_TEST/head-eslint.json"
+echo '[]' > "$TMPDIR_TEST/base-eslint.json"
+# HEAD jscpd report: one clone, 15 duplicated lines. The single duplicates entry
+# keeps the fixture realistic (worstCloneLocation has a real span to read).
+cat > "$TMPDIR_TEST/head-jscpd.json" <<'EOF'
+{"statistics":{"total":{"clones":1,"duplicatedLines":15,"percentage":9}},
+ "duplicates":[{"firstFile":{"name":"dup.ts","start":10,"end":22},
+                "secondFile":{"name":"dup.ts","start":40,"end":52}}]}
+EOF
+# BASE jscpd report: SAME clone count (1) so clonesRose=false, but FEWER
+# duplicated lines (5 < 15) so dupLinesRose=true. Statistics-only is fine — the
+# BASE report only feeds jscpdTotals (baseDup).
+cat > "$TMPDIR_TEST/base-jscpd.json" <<'EOF'
+{"statistics":{"total":{"clones":1,"duplicatedLines":5,"percentage":3}}}
+EOF
+sidecar_out=$(cd "$TMPDIR_TEST" && node "$SCRIPT_DIR/dispatch-review-erosion-diff.mjs" \
+  --eslint-head head-eslint.json \
+  --eslint-base base-eslint.json \
+  --jscpd-head head-jscpd.json \
+  --jscpd-base base-jscpd.json \
+  --baseline-dir baseline)
+sidecar_count=$(jq '.findings | length' <<<"$sidecar_out")
+sidecar_source=$(jq -r '.findings[0].Source // "none"' <<<"$sidecar_out")
+sidecar_location=$(jq -r '.findings[0].Location // "none"' <<<"$sidecar_out")
+sidecar_confidence=$(jq -r '.findings[0].Confidence // "none"' <<<"$sidecar_out")
+assert_eq "sidecar dupLines-only duplication count=1" "1" "$sidecar_count"
+assert_eq "sidecar dupLines-only duplication Source=erosion" "erosion" "$sidecar_source"
+assert_eq "sidecar dupLines-only duplication Location=dup.ts:10" "dup.ts:10" "$sidecar_location"
+assert_eq "sidecar dupLines-only duplication Confidence=medium (dupLines rose, clones flat)" "medium" "$sidecar_confidence"
+rm -rf "$TMPDIR_TEST"
+TMPDIR_TEST=""
+
 # ============================================================================
 # dispatch-run-verification tests (#2024)
 # ============================================================================
@@ -36028,6 +36577,90 @@ assert_eq "preflight-abort fanout: summary spawned 0 of gap 2" "1" \
 assert_eq "preflight-abort fanout: terminal token (zero spawns → drain)" "drain" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 mat_teardown
+
+# ============================================================================
+# dispatch_marker_comment_id: error propagation (#2138)
+# ============================================================================
+echo ""
+echo "=== dispatch_marker_comment_id: error propagation (#2138) ==="
+
+# Criterion 1: gh_retry failure propagates as non-zero (bug regression).
+# The old single-pipeline code returned 0 on gh_retry failure; the fix must not.
+# The gh_retry override and DISPATCH_PLAN_AUTHOR_ID are scoped to a subshell so
+# they do not leak. lib.sh defines gh_retry, so the override must come AFTER the
+# source. The exit status is captured in the parent scope where the counters live.
+dmci_rc1=0
+dmci_out1=$(
+  export DISPATCH_PLAN_AUTHOR_ID=12345
+  source "$SCRIPT_DIR/lib.sh"
+  gh_retry() { return 1; }
+  dispatch_marker_comment_id 7 '<!-- dispatch:phase-log -->' 2>/dev/null
+) || dmci_rc1=$?
+TOTAL=$((TOTAL + 1))
+if [[ "$dmci_rc1" -ne 0 ]]; then
+  PASS=$((PASS + 1))
+  echo "  PASS: dispatch_marker_comment_id returns non-zero when gh_retry fails"
+else
+  FAIL=$((FAIL + 1))
+  echo "  FAIL: dispatch_marker_comment_id returned 0 on gh_retry failure (output='$dmci_out1') — bug not fixed"
+fi
+
+# Criterion 2a: success/match-found path — gh_retry returns a single-element JSON
+# array whose entry's body starts with the marker and whose user.id equals
+# DISPATCH_PLAN_AUTHOR_ID. dispatch_marker_comment_id must return 0 and print the
+# comment id. This exercises the jq selector + final printf that all callers
+# depend on, which Criteria 1 and 3 never reach.
+dmci_rc2a=0
+dmci_out2a=$(
+  export DISPATCH_PLAN_AUTHOR_ID=12345
+  source "$SCRIPT_DIR/lib.sh"
+  gh_retry() { printf '[{"id":555,"body":"<!-- dispatch:phase-log --> log","user":{"id":12345}}]'; }
+  dispatch_marker_comment_id 7 '<!-- dispatch:phase-log -->'
+) || dmci_rc2a=$?
+TOTAL=$((TOTAL + 1))
+if [[ "$dmci_rc2a" -eq 0 && "$dmci_out2a" == "555" ]]; then
+  PASS=$((PASS + 1))
+  echo "  PASS: dispatch_marker_comment_id returns 0 and prints the matching comment id"
+else
+  FAIL=$((FAIL + 1))
+  echo "  FAIL: dispatch_marker_comment_id match case: rc=$dmci_rc2a, output='$dmci_out2a' (expected rc=0, output='555')"
+fi
+
+# Criterion 2b: jq pipeline failure propagates as non-zero. gh_retry returns 0 but
+# emits invalid JSON, so the jq cid= assignment fails and the `|| return 1` guard
+# must propagate non-zero. Guards against a future edit dropping that `|| return 1`.
+dmci_rc2b=0
+dmci_out2b=$(
+  export DISPATCH_PLAN_AUTHOR_ID=12345
+  source "$SCRIPT_DIR/lib.sh"
+  gh_retry() { printf 'not json'; }
+  dispatch_marker_comment_id 7 '<!-- dispatch:phase-log -->' 2>/dev/null
+) || dmci_rc2b=$?
+TOTAL=$((TOTAL + 1))
+if [[ "$dmci_rc2b" -ne 0 ]]; then
+  PASS=$((PASS + 1))
+  echo "  PASS: dispatch_marker_comment_id returns non-zero when jq fails on invalid JSON"
+else
+  FAIL=$((FAIL + 1))
+  echo "  FAIL: dispatch_marker_comment_id returned 0 on jq failure (output='$dmci_out2b') — jq || return 1 guard missing"
+fi
+
+# Criterion 3: genuine absent case (valid JSON, no match) returns 0 with empty output.
+dmci_rc3=0
+dmci_out3=$(
+  export DISPATCH_PLAN_AUTHOR_ID=12345
+  source "$SCRIPT_DIR/lib.sh"
+  gh_retry() { printf '[]'; }
+  dispatch_marker_comment_id 7 '<!-- dispatch:phase-log -->'
+) || dmci_rc3=$?
+TOTAL=$((TOTAL + 1))
+if [[ "$dmci_rc3" -eq 0 && -z "$dmci_out3" ]]; then
+  PASS=$((PASS + 1))
+  echo "  PASS: dispatch_marker_comment_id returns 0 with empty output when no comment matches"
+else
+  FAIL=$((FAIL + 1))
+  echo "  FAIL: dispatch_marker_comment_id absent case: rc=$dmci_rc3, output='$dmci_out3' (expected rc=0, empty output)"
+fi
 
 # ============================================================================
 # summary

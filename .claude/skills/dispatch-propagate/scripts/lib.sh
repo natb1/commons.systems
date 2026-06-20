@@ -171,7 +171,9 @@ gh_api_array() {
 # plan scripts), fetches comments via gh_retry, and applies the same
 # author-id-filtered first(...) selector. Returns non-zero with a stderr message
 # on an unresolvable author id (clear error, not a fallback). Echoes nothing
-# (empty) when no matching comment exists.
+# (empty) when no matching comment exists. A gh_retry or jq pipeline failure
+# returns non-zero (a clear error), distinct from the empty-output absent case —
+# mirroring gh_api_array's error propagation rather than silently swallowing it.
 dispatch_marker_comment_id() {
   local n="$1" marker="$2"
   local author_id="${DISPATCH_PLAN_AUTHOR_ID:-$(gh api user --jq '.id')}"
@@ -179,10 +181,13 @@ dispatch_marker_comment_id() {
     echo "dispatch_marker_comment_id: could not resolve a numeric comment author id (got: '$author_id')" >&2
     return 1
   fi
+  local raw
+  raw=$(gh_retry gh api --paginate "repos/{owner}/{repo}/issues/$n/comments") \
+    || return 1
   local cid
-  cid=$(gh_retry gh api --paginate "repos/{owner}/{repo}/issues/$n/comments" \
-    | jq -r --arg m "$marker" --argjson author_id "$author_id" \
-        'first(.[] | select((.body | startswith($m)) and (.user.id == $author_id)) | .id)')
+  cid=$(printf '%s\n' "$raw" | jq -r --arg m "$marker" --argjson author_id "$author_id" \
+      'first(.[] | select((.body | startswith($m)) and (.user.id == $author_id)) | .id)') \
+    || return 1
   if [[ -z "$cid" || "$cid" == "null" ]]; then
     return 0
   fi
@@ -1778,6 +1783,42 @@ EOF
 # `OnFailure=dispatch-tick-recover.service` chains a crashing tick to the same
 # systemd-owned recovery handler the tick/reseed launchers use.
 #
+# Disable a stale heartbeat timer/service whose installed unit points at a
+# different main-worktree path than the current one (#2056). Between a dispatch
+# checkout path change and the first ensure_heartbeat_units call from the new
+# path, the timer's Persistent=true can fire dispatch-heartbeat.service at the
+# old/missing path. Detect the mismatch from the installed WorkingDirectory= and
+# disable the stale units before the caller rewrites them.
+#
+# Best-effort: the heartbeat service has no [Install] section, so `disable` exits
+# non-zero by design. Suppress that and never abort the caller (a tick/reseed
+# launcher) — the subsequent unit rewrite is what actually repairs the state.
+# Args: $1 = installed service-unit path, $2 = current main worktree path,
+#       $3 = systemctl command
+cleanup_stale_heartbeat_units() {
+  local service_path="$1"
+  local current_main_worktree="$2"
+  local systemctl_cmd="$3"
+
+  # No prior units → nothing to clean up.
+  [ -f "$service_path" ] || return 0
+
+  local installed_workdir
+  installed_workdir=$(sed -n 's/^WorkingDirectory=//p' "$service_path" | head -1)
+
+  # No WorkingDirectory= to compare → nothing to do.
+  [ -n "$installed_workdir" ] || return 0
+
+  # Path unchanged → the timer points at the right place; leave it running.
+  [ "$installed_workdir" = "$current_main_worktree" ] && return 0
+
+  # Path changed: stop the stale timer/service before the caller rewrites the
+  # unit content. Best-effort — disable exits non-zero (no [Install] section), so
+  # suppress the failure and warn; never abort the caller.
+  echo "WARNING: cleanup_stale_heartbeat_units: installed heartbeat unit points at '$installed_workdir' but current main worktree is '$current_main_worktree'; disabling stale timer/service before rewrite" >&2
+  "$systemctl_cmd" --user disable --now dispatch-heartbeat.timer dispatch-heartbeat.service || true
+}
+
 # Best-effort: a failure here must not abort the caller (a tick/reseed
 # launcher), so we warn to stderr and return non-zero — never `exit`. A missing
 # heartbeat just means the chain falls back to the prior Stop-hook/reseed-only
@@ -1884,6 +1925,13 @@ EOF
      && "$SYSTEMCTL_CMD" --user is-active --quiet dispatch-heartbeat.timer; then
     return 0
   fi
+
+  # Path-change cleanup (#2056): if the installed unit names a different main
+  # worktree, the path changed — disable the stale timer/service before
+  # rewriting the unit content below. Reaching here means the hot path did not
+  # short-circuit, so either the content differs (path change included) or the
+  # timer is inactive. Best-effort; never aborts.
+  cleanup_stale_heartbeat_units "$SERVICE_PATH" "$main_worktree" "$SYSTEMCTL_CMD"
 
   if ! mkdir -p "$UNIT_DIR"; then
     echo "WARNING: ensure_heartbeat_units: mkdir -p $UNIT_DIR failed; periodic heartbeat unavailable" >&2

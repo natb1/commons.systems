@@ -343,7 +343,11 @@ returns — must contain:
 - A **Verification** section — how to test the change end-to-end. Put
   deterministic, CI-safe, auto-runnable checks (test-suite invocations,
   typechecks, builds) in fenced ` ```verify ` blocks so `/implement`
-  auto-executes them before opening the PR. Keep manual steps, observe-in-
+  auto-executes them before opening the PR. Invoke an app's unit-test suite as
+  `npx vitest run --project <app> --root <repo_root>` (the CI-equivalent form),
+  never `npx vitest run --root <app>` — rooting at the app directory scopes
+  vite's `server.fs.allow` to it and denies root-hoisted `?url` asset imports
+  (e.g. `pdfjs-dist`'s worker). Keep manual steps, observe-in-
   production checks, live-systemd verification, and judgment calls as **prose** —
   `/implement` skips those, leaving them for QA and humans.
 - A clean-context **plan preface** (below), so the `implement` worker executes
@@ -504,7 +508,7 @@ with these substitutions:
 > - Ensure that the plan file is concise enough to scan quickly, but detailed enough to execute effectively
 > - Name the critical files to be modified. For changes that repeat a pattern across many files, describe the pattern once and list a few representative paths — do not enumerate every file or line number
 > - Reference existing functions and utilities you found that should be reused, with their file paths
-> - Include a verification section describing how to test the changes end-to-end. Put deterministic, CI-safe, auto-runnable checks (test-suite invocations, typechecks, builds) in fenced ` ```verify ` blocks so `/implement` auto-executes them before opening the PR. Keep manual steps, observe-in-production checks, live-systemd verification, and judgment calls as **prose** — `/implement` skips those, leaving them for QA and humans.
+> - Include a verification section describing how to test the changes end-to-end. Put deterministic, CI-safe, auto-runnable checks (test-suite invocations, typechecks, builds) in fenced ` ```verify ` blocks so `/implement` auto-executes them before opening the PR. Invoke an app's unit-test suite as `npx vitest run --project <app> --root <repo_root>` (the CI-equivalent form), never `npx vitest run --root <app>` — rooting at the app directory scopes vite's `server.fs.allow` to it and denies root-hoisted `?url` asset imports (e.g. `pdfjs-dist`'s worker). Keep manual steps, observe-in-production checks, live-systemd verification, and judgment calls as **prose** — `/implement` skips those, leaving them for QA and humans.
 
 ### Intentionally NOT adopted
 
