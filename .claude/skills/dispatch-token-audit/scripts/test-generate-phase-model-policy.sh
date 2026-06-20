@@ -16,30 +16,7 @@ CONFIG_LOAD="$SCRIPT_DIR/../../dispatch-propagate/scripts/dispatch-config-load"
 
 # --- test helpers -----------------------------------------------------------
 
-PASS=0
-FAIL=0
-TOTAL=0
-
-assert_eq() {
-  local label="$1" expected="$2" actual="$3"
-  TOTAL=$((TOTAL + 1))
-  if [[ "$expected" == "$actual" ]]; then
-    PASS=$((PASS + 1))
-    echo "  PASS: $label"
-  else
-    FAIL=$((FAIL + 1))
-    echo "  FAIL: $label"
-    echo "    expected: '$expected'"
-    echo "    actual:   '$actual'"
-  fi
-}
-
-report_results() {
-  echo ""
-  echo "================================"
-  echo "Results: $PASS/$TOTAL passed, $FAIL failed"
-  echo "================================"
-}
+source "$SCRIPT_DIR/../../dispatch-propagate/scripts/test-helpers.sh"
 
 # --- fixtures ---------------------------------------------------------------
 
