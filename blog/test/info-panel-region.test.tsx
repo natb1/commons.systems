@@ -3,10 +3,12 @@
 // InfoPanelRegion is the React replacement for the imperative renderInfoPanel +
 // hydrateInfoPanel pair (AdminRegion is a thin pass-through over <Admin>). These
 // checks mount via RTL and assert both the initial delegated markup and the
-// post-mount blog-roll hydration. Because the hydrate effect reaches its DOM via
-// document.getElementById("info-panel") — the host <aside> the driver mounts into
-// — InfoPanelRegion is rendered into a container carrying that id, mirroring the
-// real host element.
+// post-mount blog-roll hydration (which now flows through setItems, not imperative
+// DOM mutation). The host <aside> carries id="info-panel" because the scroll
+// indicator effect reaches its DOM via document.getElementById("info-panel") (see
+// InfoPanelRegion's initScrollIndicator effect); the blogroll fetch effect no
+// longer does getElementById. InfoPanelRegion is rendered into a container carrying
+// that id, mirroring the real host element.
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
@@ -52,8 +54,8 @@ function orderedBlogrollSignature(root: HTMLElement): string[] {
   );
 }
 
-// Render into a host carrying id="info-panel" so the hydrate effect's
-// getElementById finds it (the effect mutates that host's subtree).
+// Render into a host carrying id="info-panel" so the scroll indicator effect's
+// getElementById (in InfoPanelRegion) finds it.
 function renderInPanel(ui: React.ReactElement) {
   const host = document.createElement("aside");
   host.id = "info-panel";
@@ -225,6 +227,48 @@ describe("InfoPanelRegion", () => {
 
     await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
     expect(container.querySelector("#blogroll-latest-test-blog")?.textContent).toBe("");
+  });
+
+  it("retains build-time content when a runtime fetch resolves null", async () => {
+    // Build-time data IS present for the entry, so the first render shows it. The
+    // runtime fetch then resolves null. The render-time degradation fallback in
+    // InfoPanelRegion (post ?? data.buildTimeFeeds?.[id]) deliberately keeps the
+    // build-time content rather than blanking the entry — preserving the "user sees
+    // build-time content" behavior. This pins that intended behavior against the
+    // silent-regression case where a null runtime result erases build-time content.
+    const data: InfoPanelData = {
+      ...baseData,
+      blogRoll: [{ id: "test-blog", name: "Test Blog", url: "https://example.com" }],
+      buildTimeFeeds: {
+        "test-blog": {
+          title: "Build-Time Article",
+          url: "https://example.com/build-time",
+          publishedAt: "2025-06-01T00:00:00Z",
+        },
+      },
+    };
+    const strategy = strategyResolving(null);
+    const fetchSpy = vi.spyOn(strategy, "fetchLatestPost");
+    const strategies = new Map<string, BlogRollStrategy>([["test-blog", strategy]]);
+
+    const { container } = renderInPanel(
+      <InfoPanelRegion data={data} strategies={strategies} />,
+    );
+
+    // First render shows the build-time content, before the effect's fetch resolves.
+    expect(container.querySelector("#blogroll-latest-test-blog")?.textContent).toBe(
+      "Build-Time Article",
+    );
+
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+
+    // The null runtime result does NOT erase the build-time content: it is retained.
+    await Promise.resolve();
+    await waitFor(() =>
+      expect(container.querySelector("#blogroll-latest-test-blog")?.textContent).toBe(
+        "Build-Time Article",
+      ),
+    );
   });
 
   it("degrades silently, leaving the placeholder empty, when a strategy rejects", async () => {

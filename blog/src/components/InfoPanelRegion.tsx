@@ -7,7 +7,10 @@ import type {
   BlogRollStrategy,
   LatestPost,
 } from "../blog-roll/types.ts";
-import { sortBlogrollByPublishedDesc } from "../blog-roll/sort-by-date.ts";
+import {
+  sortBlogrollByPublishedDesc,
+  type BlogRollItem,
+} from "../blog-roll/sort-by-date.ts";
 import type { InfoPanelData } from "./info-panel.ts";
 import { InfoPanel } from "./InfoPanel.tsx";
 
@@ -43,11 +46,6 @@ export interface InfoPanelRegionProps {
   aboutContent?: string;
 }
 
-interface FetchResult {
-  entry: BlogRollEntry;
-  post: LatestPost | null;
-}
-
 /**
  * Reproduces info-panel.ts's fetchAllLatestPosts: one fetch per entry, resolving
  * to { entry, post } and degrading to a null post (with a logged error) when the
@@ -56,7 +54,7 @@ interface FetchResult {
 function fetchAllLatestPosts(
   blogRoll: BlogRollEntry[],
   strategies: Map<string, BlogRollStrategy>,
-): Promise<FetchResult>[] {
+): Promise<BlogRollItem>[] {
   return blogRoll.map((entry) => {
     const strategy = strategies.get(entry.id);
     if (!strategy) {
@@ -109,7 +107,7 @@ export function InfoPanelRegion({
 
   // Ordered, enriched blogroll. Lazy initializer is a pure function of `data`, so
   // server and client first renders produce identical (date-sorted) markup.
-  const [items, setItems] = useState<FetchResult[]>(() =>
+  const [items, setItems] = useState<BlogRollItem[]>(() =>
     sortBlogrollByPublishedDesc(
       blogRoll.map((entry) => ({
         entry,
@@ -172,7 +170,10 @@ export function InfoPanelRegion({
   // topPosts). Only blogRoll order and the feed map come from state.
   const feedsFromState: Record<string, LatestPost | null> = {};
   for (const { entry, post } of items) {
-    feedsFromState[entry.id] = post;
+    // Degradation fallback: a null post (unavailable feed / failed fetch) keeps the
+    // build-time content rather than blanking the entry — preserving the "user sees
+    // build-time content" behavior the hydration effect's catch claims.
+    feedsFromState[entry.id] = post ?? data.buildTimeFeeds?.[entry.id] ?? null;
   }
   const derivedData: InfoPanelData = {
     ...data,
