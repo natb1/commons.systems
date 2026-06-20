@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+# dispatch-provision-from-remote <branch> — fetch a remote branch and add its
+# worktree locally, then provision it (direnv + dispatch-merge-main).
+#
+# Used by the office-hours skill to re-create a swept worktree before attaching
+# the originating session to it (#2241).
+#
+# Argument:
+#   <branch>  A branch name of the form <N>-<slug> that exists on origin but
+#             has no local worktree yet.
+#
+# Steps, in order:
+#   1. Derive WORKTREE_PATH from PROJECT_ROOT (via resolve_project_root) +
+#      the branch name.
+#   2. git fetch --quiet origin <branch>  — pull the ref from origin.
+#   3. git worktree add --track -b <branch> <path> origin/<branch>  — add the
+#      local worktree tracking the remote branch.
+#   4. exec dispatch-provision-worktree <path>  — direnv allow/exec + merge
+#      origin/main; `exec` propagates its exit code directly.
+#
+# Exit-code contract:
+#   0 — clean provision (dispatch-provision-worktree / dispatch-merge-main says
+#       clean merge or already-up-to-date).
+#   1 — non-conflict failure (direnv failure, fetch failure, or merge failure
+#       other than a conflict) — mirrors dispatch-provision-worktree's exit 1.
+#   2 — usage error, missing remote branch, or git worktree-add failure.
+#   3 — merge conflict; the merge has been aborted, tree is left clean — mirrors
+#       dispatch-provision-worktree's exit 3.
+#
+# `dangerouslyDisableSandbox: true` REQUIREMENT: step 4 runs
+# dispatch-provision-worktree, which in turn runs `git merge origin/main`
+# (a tree-updating op over the read-only `.claude/skills/**` sandbox carve-out)
+# and `direnv`/npm (which write the dependency cache). This is the canonical
+# hazard documented in `.claude/rules/sandbox.md` ("Tree-updating git ops
+# touching read-only paths"). All callers must run this script with
+# `dangerouslyDisableSandbox: true`.
+#
+# Brownfield note: `dispatch-materialize-spawn` lines ~473-482 contain an
+# identical remote-only worktree-creation sequence (git fetch + git worktree add
+# --track). That path runs on the router hot path under a held lock, so a shared
+# refactor risks that critical section. Consolidating it onto this helper is a
+# candidate for a separate PR.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib.sh
+source "$SCRIPT_DIR/lib.sh"
+
+# --- Argument validation ------------------------------------------------------
+
+if [[ $# -lt 1 ]]; then
+  echo "dispatch-provision-from-remote: missing required <branch> argument" >&2
+  exit 2
+fi
+if [[ $# -gt 1 ]]; then
+  echo "dispatch-provision-from-remote: unexpected extra arguments after <branch>" >&2
+  exit 2
+fi
+if [[ "$1" == -* ]]; then
+  echo "dispatch-provision-from-remote: flag-shaped argument '$1' is not a branch name" >&2
+  exit 2
+fi
+
+BRANCH="$1"
+
+# --- Resolve paths ------------------------------------------------------------
+
+PROJECT_ROOT=$(resolve_project_root) || {
+  echo "dispatch-provision-from-remote: resolve_project_root failed — not in a git repo?" >&2
+  exit 2
+}
+
+WORKTREE_PATH="$PROJECT_ROOT/worktrees/$BRANCH"
+
+# --- Fetch the remote branch --------------------------------------------------
+
+if ! git fetch --quiet origin "$BRANCH" 1>&2; then
+  echo "dispatch-provision-from-remote: git fetch origin $BRANCH failed (branch missing on origin or network error)" >&2
+  exit 2
+fi
+
+# --- Add the local worktree ---------------------------------------------------
+
+if ! git worktree add --track -b "$BRANCH" "$WORKTREE_PATH" "origin/$BRANCH" 1>&2; then
+  echo "dispatch-provision-from-remote: git worktree add (remote-only) failed for $BRANCH" >&2
+  exit 2
+fi
+
+# --- Provision (direnv + dispatch-merge-main) ---------------------------------
+# `exec` so this script's exit code IS dispatch-provision-worktree's:
+#   0 — clean / already-up-to-date
+#   1 — direnv failure or non-conflict merge failure
+#   3 — merge conflict (aborted, tree left clean)
+exec "$SCRIPT_DIR/dispatch-provision-worktree" "$WORKTREE_PATH"

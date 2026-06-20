@@ -200,10 +200,10 @@ dispatch_marker_comment_id() {
 # per-tick scan was self-exhausting (#1601).
 #
 # Contract:
-#   gh_issue_list_rest --state <open|closed> [--repo <owner/repo>] [--label <name>] [--limit <n>] [--include-body]
+#   gh_issue_list_rest --state <open|closed|all> [--repo <owner/repo>] [--label <name>] [--limit <n>] [--include-body]
 #
 # Flags:
-#   --state  (required) open|closed.
+#   --state  (required) open|closed|all.
 #   --repo   (optional) owner/repo for a cross-repo scan; when absent the path
 #            uses the {owner}/{repo} placeholder gh auto-resolves for the
 #            current repo.
@@ -214,7 +214,7 @@ dispatch_marker_comment_id() {
 #            list's --limit default). When PRESENT we fetch a SINGLE page of that
 #            size (no --paginate).
 #   --include-body (optional) when present, the projected objects additionally
-#            carry a `body` field. Omitted by default so the repo-wide per-tick
+#            carry `title` and `body` fields. Omitted by default so the repo-wide per-tick
 #            callers stay byte-identical and payload-lean.
 #
 # Output: one merged JSON array on stdout. REST /issues returns issues AND PRs;
@@ -224,7 +224,7 @@ dispatch_marker_comment_id() {
 # `labels` is already [{name,...}] in REST, so it passes through unchanged; a null
 # closedAt on open issues is harmless. Results are sorted created-descending so a
 # downstream `.[0]` is the most-recently-created issue. When --include-body is
-# passed, each projected object also carries a `body` field.
+# passed, each projected object also carries `title` and `body` fields.
 #
 # On gh failure: errors to stderr and returns 1 (clear-errors convention, no
 # fallback).
@@ -278,7 +278,7 @@ gh_issue_list_rest() {
 
   local projection='add // [] | map(select(.pull_request == null)) | map({number, createdAt: .created_at, closedAt: .closed_at, labels})'
   if [[ -n "$include_body" ]]; then
-    projection='add // [] | map(select(.pull_request == null)) | map({number, createdAt: .created_at, closedAt: .closed_at, labels, body})'
+    projection='add // [] | map(select(.pull_request == null)) | map({number, title, createdAt: .created_at, closedAt: .closed_at, labels, body})'
   fi
   printf '%s' "$raw" | jq -s "$projection"
 }
