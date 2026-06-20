@@ -33,3 +33,18 @@ export function formatDueLabel(dueAt: Date, now: Date): string {
   if (delta < 0) return `overdue ${humanize(-delta)}`;
   return `due in ${humanize(delta)}`;
 }
+
+/**
+ * Content signature for the reminders panel's now-derived output.
+ *
+ * The sort order depends only on `dueAt` (fixed per array), so it is covered by
+ * the caller's `reminders`-reference dep; this key captures the now-derived
+ * per-row output — the due label plus the overdue flag — in sorted order. A
+ * memo keyed on this signature reuses its element (and skips the re-render)
+ * across a tick that changes none of those rows. Empty array → "".
+ */
+export function remindersPanelKey(reminders: Reminder[], now: Date): string {
+  return sortByDueAscending(reminders)
+    .map((r) => `${formatDueLabel(r.dueAt, now)}|${r.dueAt.getTime() < now.getTime() ? "overdue" : ""}`)
+    .join("~");
+}
