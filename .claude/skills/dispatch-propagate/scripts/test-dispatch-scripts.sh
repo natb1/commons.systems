@@ -34853,6 +34853,28 @@ assert_eq "dispatch-run-verification: --help exits 0" "0" "$rc"
 if "$RUN_VERIFY" bogus </dev/null >/dev/null 2>&1; then rc=0; else rc=$?; fi
 assert_eq "dispatch-run-verification: unexpected argument exits 2" "2" "$rc"
 
+# Empty stdin guard (exit 4): truly empty input must be rejected as a hard
+# error rather than silently emitting the exit-3 "proceed unchanged" signal,
+# which would mask an upstream dispatch-read-plan failure.
+echo "Test: dispatch-run-verification -- empty stdin exits 4 with diagnostic"
+if out=$("$RUN_VERIFY" </dev/null 2>&1); then rc=0; else rc=$?; fi
+assert_eq "dispatch-run-verification: empty stdin exits 4" "4" "$rc"
+case "$out" in
+  *"empty plan input"*) found=yes ;;
+  *) found=no ;;
+esac
+assert_eq "dispatch-run-verification: empty stdin diagnostic contains 'empty plan input'" "yes" "$found"
+
+# Whitespace-only stdin is also empty: same exit 4.
+echo "Test: dispatch-run-verification -- whitespace-only stdin exits 4"
+ws=$'  \n\t\n'
+if out=$(printf '%s' "$ws" | "$RUN_VERIFY" 2>&1); then rc=0; else rc=$?; fi
+assert_eq "dispatch-run-verification: whitespace-only stdin exits 4" "4" "$rc"
+
+# Preservation guard (criterion 2): the exit-3 cases above confirm a
+# no-verify-block plan (prose/bash-only Verification section, or no section)
+# still exits 3. No duplication needed here.
+
 # ============================================================================
 # summary
 # ============================================================================
