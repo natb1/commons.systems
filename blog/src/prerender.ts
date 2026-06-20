@@ -30,12 +30,9 @@ import {
   type Author,
   type SoftwareApplication,
 } from "./seo.ts";
+import type { NavLink } from "@commons-systems/ds";
 
-export interface NavLink {
-  readonly href: string;
-  readonly label: string;
-  readonly align?: "end";
-}
+export type { NavLink };
 
 export interface PrerenderConfig {
   siteUrl: string;
