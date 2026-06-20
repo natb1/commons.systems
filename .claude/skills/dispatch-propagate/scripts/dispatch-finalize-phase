@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# dispatch-finalize-phase — deterministic self-close terminus for /review-fix and
+# /qa-fix success paths.
+#
+# Usage: dispatch-finalize-phase <issue-num> [--pr <pr-num>]
+#
+# Invoke this script as the ABSOLUTE LAST skill action, AFTER dispatch-mark-complete
+# and the outcome-envelope emit. Self-close is the final step so all prior steps
+# complete before the job is deleted. Every step is idempotent: dispatch-spawn-tick
+# uses a fixed systemd unit name (a colliding second spawn is a harmless 'deduped'
+# no-op), gh --remove-label is idempotent, and dispatch-self-close is a no-op when
+# CLAUDE_JOB_DIR is unset (interactive-safe). A stray second Stop hook firing after
+# this script runs is therefore harmless.
+#
+# Requires dangerouslyDisableSandbox at the call site (gh uses macOS TLS framework).
+#
+# Ordered steps — each is best-effort (guarded with || true) so none aborts
+# before self-close:
+#   1. Clear dispatch:rate-limit-retry-<n> labels from the issue (parity with hook).
+#   2. Strip dispatch:office-hours from the PR (if --pr given) and the issue.
+#   3. dispatch-spawn-tick — spawn the next dispatch tick (fixed-unit dedup).
+#   4. dispatch-spawn-sweep — sweep stale worktrees.
+#   5. dispatch-self-close — exec `claude rm`; no-ops when CLAUDE_JOB_DIR unset.
+#
+# Out of scope: does NOT call dispatch-mark-deviation, does NOT apply any label,
+# does NOT replicate clear_attempt_counter (gated on the parked→unparked
+# transition that the hook detects; omitting it here is safe).
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# --- Argument parsing ---
+N="${1:-}"
+if [[ $# -lt 1 || -z "$N" ]]; then
+  echo "dispatch-finalize-phase: issue-num argument is required" >&2
+  echo "usage: dispatch-finalize-phase <issue-num> [--pr <pr-num>]" >&2
+  exit 2
+fi
+if [[ ! "$N" =~ ^[0-9]+$ ]]; then
+  echo "dispatch-finalize-phase: issue-num must be a positive integer, got: $N" >&2
+  echo "usage: dispatch-finalize-phase <issue-num> [--pr <pr-num>]" >&2
+  exit 2
+fi
+
+PR_NUM=""
+shift
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --pr)
+      if [[ $# -lt 2 || -z "${2:-}" ]]; then
+        echo "dispatch-finalize-phase: --pr requires a pr-num argument" >&2
+        exit 2
+      fi
+      if [[ ! "$2" =~ ^[0-9]+$ ]]; then
+        echo "dispatch-finalize-phase: --pr value must be a positive integer, got: $2" >&2
+        exit 2
+      fi
+      PR_NUM="$2"
+      shift 2
+      ;;
+    *)
+      echo "dispatch-finalize-phase: unexpected argument: $1" >&2
+      echo "usage: dispatch-finalize-phase <issue-num> [--pr <pr-num>]" >&2
+      exit 2
+      ;;
+  esac
+done
+
+# Step 1: clear any dispatch:rate-limit-retry-<n> counter labels from the issue.
+# Best-effort: a gh flake must not abort before self-close.
+{
+  local_lbl=""
+  gh issue view "$N" --json labels --jq \
+    '.labels[].name | select(test("^dispatch:rate-limit-retry-[0-9]+$"))' 2>/dev/null \
+    | while IFS= read -r local_lbl; do
+        [ -n "$local_lbl" ] && gh issue edit "$N" --remove-label "$local_lbl" >/dev/null 2>&1 \
+          || echo "[dispatch-finalize-phase] WARNING: could not clear $local_lbl (non-fatal)" >&2
+      done || true
+} || true
+
+# Step 2: strip dispatch:office-hours from the PR (if given) and the issue.
+if [[ -n "$PR_NUM" ]]; then
+  gh pr edit "$PR_NUM" --remove-label dispatch:office-hours >/dev/null 2>&1 \
+    || echo "[dispatch-finalize-phase] WARNING: gh pr edit --remove-label dispatch:office-hours failed (non-fatal)" >&2
+fi
+gh issue edit "$N" --remove-label dispatch:office-hours >/dev/null 2>&1 \
+  || echo "[dispatch-finalize-phase] WARNING: gh issue edit --remove-label dispatch:office-hours failed (non-fatal)" >&2
+
+# Step 3: spawn the next dispatch tick (idempotent via fixed-unit dedup).
+"$SCRIPT_DIR/dispatch-spawn-tick" || true
+
+# Step 4: spawn the sweep reaper.
+"$SCRIPT_DIR/dispatch-spawn-sweep" || true
+
+# Step 5: self-close — MUST be last; exec's, no return.
+"$SCRIPT_DIR/dispatch-self-close"
