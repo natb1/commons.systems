@@ -250,24 +250,30 @@ re-entry gate below. Then upsert it into the issue's phase-log comment (use
 
 ```bash
 .claude/skills/dispatch-propagate/scripts/dispatch-write-phase-log \
-  "$N" --phase implement < tmp/phase-log-entry-$N.md
+  "$N" --phase implement --reentry false < tmp/phase-log-entry-$N.md
 ```
 
-On the crash-recovery re-entry path (a PR already existed at entry → Steps 1–4
-skipped), **skip the phase-log write** entirely, so the prior `(implement, 1)`
-entry is preserved verbatim. **Gate on the re-entry flag, not on PR presence:**
-`PR_NUM` is set on both paths at Step 5 (the normal path created it in Step 4;
-re-entry captured it in the preamble), so a `[ -n "$PR_NUM" ]` gate would skip
-the write ALWAYS and break the normal path. Key the gate on whether Steps 1–4 ran
-this turn (the preamble did NOT take the re-entry branch).
+On the crash-recovery re-entry path (Steps 1–4 skipped this turn), call the
+writer with `--reentry true </dev/null` — the script enforces the skip and
+preserves the prior `(implement, 1)` entry verbatim (no body needed, exit 0).
+**Gate on whether Steps 1–4 ran this turn, not on PR presence:** `PR_NUM` is set
+on both paths at Step 5 (the normal path created it in Step 4; re-entry captured
+it in the preamble), so a `[ -n "$PR_NUM" ]` gate would skip the write ALWAYS and
+break the normal path.
+
+```bash
+.claude/skills/dispatch-propagate/scripts/dispatch-write-phase-log \
+  "$N" --phase implement --reentry true </dev/null
+```
 
 No attempt counter — implement is single-pass, so the default `--attempt 1`
 applies. On re-entry there is no fresh outcome data: recomposing the digest from
 this turn's limited context would OVERWRITE the prior attempt's accurate entry
-with a thinner restatement. So the write is SKIPPED on re-entry, not repeated —
+with a thinner restatement. The script enforces the skip via `--reentry true` —
 the prior entry, if any, is already correct and durable; if the original pass
 crashed before writing one, skipping still yields an honest absence — never
-fabricate content now.
+fabricate content now. This skip-preserves-verbatim behavior is covered by the
+behavioral test `.claude/skills/dispatch-propagate/scripts/test-phase-log-reentry.sh`.
 
 Judge whether the implementation deviated from the
 persisted plan — scope shifted mid-implementation, or the plan could not be
