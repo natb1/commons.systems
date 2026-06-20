@@ -9508,10 +9508,13 @@ echo "=== dispatch-sweep ==="
 #   stub/                         per-test JSON + record files (calls, gh out)
 #
 # Shims:
-#   gh   — per-worktree PR query is `pr list --head <branch> --state all`, driven
-#          by pr-state-<branch>.json (each entry {state, number}); returns '[]'
-#          when no fixture exists. SWEEP_GH_PR_FAIL=<branch> forces that branch's
-#          --head query to fail. Issue-view is driven by issue-state-<N>.txt.
+#   gh   — per-worktree PR query (gh_pr_list_rest --head) issues two calls:
+#          "repo view --json owner -q .owner.login" (returns "natb1") and
+#          "api --paginate repos/.../pulls?state=all&...&head=natb1:<branch>",
+#          driven by pr-state-<branch>.json (REST format: {state:"open"|"closed",
+#          merged_at:<ts>|null, number, created_at, title}); returns '[]' by
+#          default. SWEEP_GH_PR_FAIL=<branch> forces the api call to fail.
+#          Issue-view is driven by issue-state-<N>.txt.
 #   git  — knows worktree list/remove/prune, branch -D, -C <p> status,
 #          -C <p> rev-list --count, -C <p> log -1 --format=%ct, and
 #          rev-parse --path-format=absolute --git-common-dir.
@@ -9548,20 +9551,30 @@ sweep_setup() {
 
   # gh shim — handles dispatch-sweep's calls.
   # Shims:
-  #   gh   — per-worktree PR query uses pr-state-<branch>.json (holding
-  #          [{"state":"MERGED"|"OPEN","number":<N>}]); returns '[]' by default
-  #          when no fixture exists. SWEEP_GH_PR_FAIL=<branch> makes the
-  #          --head query fail for that branch. Issue-view uses issue-state-<N>.txt.
+  #   gh   — per-worktree PR query (gh_pr_list_rest --head) issues two gh calls:
+  #          1. "repo view --json owner -q .owner.login" → returns "natb1"
+  #          2. "api --paginate repos/{owner}/{repo}/pulls?state=all&...&head=natb1:<branch>"
+  #             → serves pr-state-<branch>.json (REST format: each entry has
+  #             {state:"open"|"closed", merged_at:<ts>|null, number, created_at, title}).
+  #             Returns '[]' by default when no fixture exists.
+  #             SWEEP_GH_PR_FAIL=<branch> makes the api call fail for that branch.
+  #          Issue-view uses issue-state-<N>.txt.
   cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
 args="$*"
 case "$args" in
-  "pr list --head "*" --state all --json state,number")
-    # dispatch-sweep per-worktree PR query: gh pr list --head <branch> --state all --json state,number
-    br=$(echo "$args" | awk '{print $4}')
+  "repo view --json owner -q .owner.login")
+    # gh_pr_list_rest --head owner resolution: resolve the current repo owner.
+    echo "natb1"
+    ;;
+  api\ --paginate\ */pulls\?*)
+    # dispatch-sweep per-worktree PR query via gh_pr_list_rest (#2258):
+    # gh api --paginate repos/{owner}/{repo}/pulls?state=all&per_page=100&head=natb1:<branch>
+    # Extract branch from the head=natb1:<branch> query parameter.
+    br=$(printf '%s' "$args" | grep -oE 'head=natb1:[^ ]+' | sed 's/head=natb1://')
     if [[ "${SWEEP_GH_PR_FAIL:-}" == "$br" ]]; then
-      echo "gh sweep stub: simulated gh pr list --head failure for $br" >&2
+      echo "gh sweep stub: simulated gh api pulls failure for $br" >&2
       exit 1
     fi
     f="$STUB_DIR/pr-state-${br}.json"
@@ -9792,7 +9805,7 @@ echo "Test: merged worktree (in-sync) is removed + branch deleted"
 sweep_setup
 WT_PATH="$TMPDIR_TEST/project/worktrees/42-feature"
 sweep_register_wt "$WT_PATH" "42-feature"
-echo '[{"state":"MERGED","number":100}]' \
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":100,"created_at":"2024-01-01T00:00:00Z","title":"PR 100"}]' \
   > "$STUB_DIR/pr-state-42-feature.json"
 # Clean tree + zero unpushed (defaults already match this — explicit for clarity).
 key=$(sweep_path_key "$WT_PATH")
@@ -9843,7 +9856,7 @@ echo "Test: squash-merged worktree retired despite non-zero rev-list (#1845)"
 sweep_setup
 WT_PATH="$TMPDIR_TEST/project/worktrees/80-squash-merged"
 sweep_register_wt "$WT_PATH" "80-squash-merged"
-echo '[{"state":"MERGED","number":800}]' \
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":800,"created_at":"2024-01-01T00:00:00Z","title":"PR 800"}]' \
   > "$STUB_DIR/pr-state-80-squash-merged.json"
 key=$(sweep_path_key "$WT_PATH")
 : > "$STUB_DIR/status${key}.txt"          # clean working tree
@@ -9989,7 +10002,7 @@ export SWEEP_GH_ISSUE_FAIL="60"
 # Sibling in-sync MERGED worktree to prove the sweep continues.
 WT_PATH_60B="$TMPDIR_TEST/project/worktrees/60b-sibling-merged"
 sweep_register_wt "$WT_PATH_60B" "60b-sibling-merged"
-echo '[{"state":"MERGED","number":600}]' > "$STUB_DIR/pr-state-60b-sibling-merged.json"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":600,"created_at":"2024-01-01T00:00:00Z","title":"PR 600"}]' > "$STUB_DIR/pr-state-60b-sibling-merged.json"
 key_60b=$(sweep_path_key "$WT_PATH_60B")
 : > "$STUB_DIR/status${key_60b}.txt"
 echo "0" > "$STUB_DIR/revlist${key_60b}.txt"
@@ -10022,7 +10035,7 @@ echo "Test: open-PR worktree with closed issue is kept (OPEN_BY_BRANCH guard)"
 sweep_setup
 WT_PATH="$TMPDIR_TEST/project/worktrees/61-active-pr"
 sweep_register_wt "$WT_PATH" "61-active-pr"
-echo '[{"state":"OPEN","number":888}]' \
+echo '[{"state":"open","merged_at":null,"number":888,"created_at":"2024-01-01T00:00:00Z","title":"PR 888"}]' \
   > "$STUB_DIR/pr-state-61-active-pr.json"
 # Issue is CLOSED, but the OPEN PR precedence guard must short-circuit before gh issue view.
 echo "CLOSED" > "$STUB_DIR/issue-state-61.txt"
@@ -10056,7 +10069,7 @@ sweep_register_wt "$WT_PATH" "70-live-merged"
 key=$(sweep_path_key "$WT_PATH")
 : > "$STUB_DIR/status${key}.txt"
 echo "0" > "$STUB_DIR/revlist${key}.txt"
-echo '[{"state":"MERGED","number":300}]' \
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":300,"created_at":"2024-01-01T00:00:00Z","title":"PR 300"}]' \
   > "$STUB_DIR/pr-state-70-live-merged.json"
 # Register a live session whose name matches the worktree's basename.
 sweep_fake_claude_sessions_by_name "70-live-merged=sess-live-70"
@@ -10094,7 +10107,7 @@ sweep_register_wt "$WT_PATH" "71-no-live-merged"
 key=$(sweep_path_key "$WT_PATH")
 : > "$STUB_DIR/status${key}.txt"
 echo "0" > "$STUB_DIR/revlist${key}.txt"
-echo '[{"state":"MERGED","number":301}]' \
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":301,"created_at":"2024-01-01T00:00:00Z","title":"PR 301"}]' \
   > "$STUB_DIR/pr-state-71-no-live-merged.json"
 # Default fake (no live sessions) — the worktree is free to remove.
 
@@ -10166,7 +10179,7 @@ echo "Test: non-issue branch (hotfix-login) in merged map is reaped"
 sweep_setup
 WT_PATH="$TMPDIR_TEST/project/worktrees/hotfix-login"
 sweep_register_wt "$WT_PATH" "hotfix-login"
-echo '[{"state":"MERGED","number":400}]' \
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":400,"created_at":"2024-01-01T00:00:00Z","title":"PR 400"}]' \
   > "$STUB_DIR/pr-state-hotfix-login.json"
 # Clean tree + zero unpushed.
 key=$(sweep_path_key "$WT_PATH")
@@ -10206,7 +10219,7 @@ echo "Test: merged worktree with a reservation marker is skipped (SKIP_RESERVED)
 sweep_setup
 WT_PATH="$TMPDIR_TEST/project/worktrees/90-reserved-merged"
 sweep_register_wt "$WT_PATH" "90-reserved-merged"
-echo '[{"state":"MERGED","number":500}]' \
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":500,"created_at":"2024-01-01T00:00:00Z","title":"PR 500"}]' \
   > "$STUB_DIR/pr-state-90-reserved-merged.json"
 key=$(sweep_path_key "$WT_PATH")
 : > "$STUB_DIR/status${key}.txt"
@@ -10319,7 +10332,7 @@ echo "GARBAGE" > "$STUB_DIR/issue-state-62.txt"
 # Sibling in-sync MERGED worktree to prove the sweep continues.
 WT_PATH_62B="$TMPDIR_TEST/project/worktrees/62b-sibling-merged"
 sweep_register_wt "$WT_PATH_62B" "62b-sibling-merged"
-echo '[{"state":"MERGED","number":620}]' > "$STUB_DIR/pr-state-62b-sibling-merged.json"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":620,"created_at":"2024-01-01T00:00:00Z","title":"PR 620"}]' > "$STUB_DIR/pr-state-62b-sibling-merged.json"
 key_62b=$(sweep_path_key "$WT_PATH_62B")
 : > "$STUB_DIR/status${key_62b}.txt"
 echo "0" > "$STUB_DIR/revlist${key_62b}.txt"
@@ -10361,7 +10374,7 @@ export SWEEP_GH_PR_FAIL="63-pr-fail"
 # Sibling in-sync MERGED worktree to prove the sweep continues.
 WT_PATH_63B="$TMPDIR_TEST/project/worktrees/63b-pr-ok"
 sweep_register_wt "$WT_PATH_63B" "63b-pr-ok"
-echo '[{"state":"MERGED","number":630}]' > "$STUB_DIR/pr-state-63b-pr-ok.json"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":630,"created_at":"2024-01-01T00:00:00Z","title":"PR 630"}]' > "$STUB_DIR/pr-state-63b-pr-ok.json"
 key_63b=$(sweep_path_key "$WT_PATH_63B")
 : > "$STUB_DIR/status${key_63b}.txt"
 echo "0" > "$STUB_DIR/revlist${key_63b}.txt"
@@ -10417,7 +10430,7 @@ export DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S=100
 WT_PATH="$TMPDIR_TEST/project/worktrees/2100-merged-dirty"
 WT_BASE="2100-merged-dirty"
 sweep_register_wt "$WT_PATH" "$WT_BASE"
-echo '[{"state":"MERGED","number":2100}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":2100,"created_at":"2024-01-01T00:00:00Z","title":"PR 2100"}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
 key=$(sweep_path_key "$WT_PATH")
 # Not-in-sync: dirty tree (drives worktree_merged_in_sync to non-zero).
 echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
@@ -10557,7 +10570,7 @@ export DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S=100
 WT_PATH="$TMPDIR_TEST/project/worktrees/2200-merged-young"
 WT_BASE="2200-merged-young"
 sweep_register_wt "$WT_PATH" "$WT_BASE"
-echo '[{"state":"MERGED","number":2200}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":2200,"created_at":"2024-01-01T00:00:00Z","title":"PR 2200"}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
 key=$(sweep_path_key "$WT_PATH")
 echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
 # Pre-seed the marker (write-once already happened on a prior sweep).
@@ -10623,7 +10636,7 @@ export DISPATCH_SWEEP_NOW_EPOCH=99999
 WT_PATH="$TMPDIR_TEST/project/worktrees/2300-merged-live"
 WT_BASE="2300-merged-live"
 sweep_register_wt "$WT_PATH" "$WT_BASE"
-echo '[{"state":"MERGED","number":2300}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":2300,"created_at":"2024-01-01T00:00:00Z","title":"PR 2300"}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
 key=$(sweep_path_key "$WT_PATH")
 echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
 # Pre-seed an aged-out marker so ONLY the live-session guard prevents the reap.
@@ -10692,7 +10705,7 @@ export DISPATCH_SWEEP_NOW_EPOCH=5000
 WT_PATH="$TMPDIR_TEST/project/worktrees/2400-merged-quarantine"
 WT_BASE="2400-merged-quarantine"
 sweep_register_wt "$WT_PATH" "$WT_BASE"
-echo '[{"state":"MERGED","number":2400}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":2400,"created_at":"2024-01-01T00:00:00Z","title":"PR 2400"}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
 key=$(sweep_path_key "$WT_PATH")
 echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
 # Aged-out marker (age 5000-1000=4000 >= 100).
@@ -10747,7 +10760,7 @@ export DISPATCH_SWEEP_NOW_EPOCH=5000
 WT_PATH="$TMPDIR_TEST/project/worktrees/2401-merged-qfail"
 WT_BASE="2401-merged-qfail"
 sweep_register_wt "$WT_PATH" "$WT_BASE"
-echo '[{"state":"MERGED","number":2401}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":2401,"created_at":"2024-01-01T00:00:00Z","title":"PR 2401"}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
 key=$(sweep_path_key "$WT_PATH")
 echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
 mkdir -p "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync"
@@ -10822,7 +10835,7 @@ sweep_setup
 WT_PATH="$TMPDIR_TEST/project/worktrees/2500-merged-clean"
 WT_BASE="2500-merged-clean"
 sweep_register_wt "$WT_PATH" "$WT_BASE"
-echo '[{"state":"MERGED","number":2500}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":2500,"created_at":"2024-01-01T00:00:00Z","title":"PR 2500"}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
 key=$(sweep_path_key "$WT_PATH")
 : > "$STUB_DIR/status${key}.txt"          # clean
 echo "0" > "$STUB_DIR/revlist${key}.txt"
@@ -10885,7 +10898,7 @@ export DISPATCH_SWEEP_NOW_EPOCH=1050
 WT_PATH="$TMPDIR_TEST/project/worktrees/2600-live-marked"
 WT_BASE="2600-live-marked"
 sweep_register_wt "$WT_PATH" "$WT_BASE"
-echo '[{"state":"MERGED","number":2600}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":2600,"created_at":"2024-01-01T00:00:00Z","title":"PR 2600"}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
 key=$(sweep_path_key "$WT_PATH")
 echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
 mkdir -p "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync"
@@ -10933,7 +10946,7 @@ printf '{"notInSyncGraceSeconds":100}\n' > "$DISPATCH_CONFIG_DIR/sweep.json"
 WT_PATH="$TMPDIR_TEST/project/worktrees/2700-config-grace"
 WT_BASE="2700-config-grace"
 sweep_register_wt "$WT_PATH" "$WT_BASE"
-echo '[{"state":"MERGED","number":2700}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":2700,"created_at":"2024-01-01T00:00:00Z","title":"PR 2700"}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
 key=$(sweep_path_key "$WT_PATH")
 echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
 MARKER="$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
@@ -10980,7 +10993,7 @@ export DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S=100
 WT_PATH="$TMPDIR_TEST/project/worktrees/2710-empty-config"
 WT_BASE="2710-empty-config"
 sweep_register_wt "$WT_PATH" "$WT_BASE"
-echo '[{"state":"MERGED","number":2710}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":2710,"created_at":"2024-01-01T00:00:00Z","title":"PR 2710"}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
 key=$(sweep_path_key "$WT_PATH")
 echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
 MARKER="$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
@@ -11020,7 +11033,7 @@ export DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S=100
 WT_PATH="$TMPDIR_TEST/project/worktrees/2720-frac-config"
 WT_BASE="2720-frac-config"
 sweep_register_wt "$WT_PATH" "$WT_BASE"
-echo '[{"state":"MERGED","number":2720}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":2720,"created_at":"2024-01-01T00:00:00Z","title":"PR 2720"}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
 key=$(sweep_path_key "$WT_PATH")
 echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
 MARKER="$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
