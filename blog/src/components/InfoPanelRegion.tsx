@@ -37,7 +37,7 @@ export interface InfoPanelRegionProps {
    * Widening trigger: if this prop is ever widened to carry dynamic or
    * user-influenced content, add a `DOMPurify.sanitize(...)` pass at the
    * injection site before it reaches `dangerouslySetInnerHTML`. `dompurify` is
-   * already a dependency — see `blog/src/pages/HomeRegion.tsx:83` for the
+   * already a dependency — see `blog/src/pages/HomeRegion.tsx` for the
    * existing `DOMPurify.sanitize(html, { ADD_ATTR: [...] })` usage to reuse.
    */
   aboutContent?: string;

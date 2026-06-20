@@ -85,7 +85,7 @@ export interface CreateBlogAppConfig {
    * user-influenced content, add a `DOMPurify.sanitize(...)` pass in
    * InfoPanelRegion before the value reaches `dangerouslySetInnerHTML`.
    * `dompurify` is already a dependency — see
-   * `blog/src/pages/HomeRegion.tsx:83` for the existing
+   * `blog/src/pages/HomeRegion.tsx` for the existing
    * `DOMPurify.sanitize(html, { ADD_ATTR: [...] })` usage to reuse.
    */
   infoPanelContentForPath?: (path: string) => string | undefined;
@@ -99,7 +99,7 @@ export interface CreateBlogAppConfig {
    * user-influenced content, add a `DOMPurify.sanitize(...)` pass at the
    * injection sites (entry-hydration and SPA-navigation `dangerouslySetInnerHTML`
    * sinks below) before the value reaches React. `dompurify` is already a
-   * dependency — see `blog/src/pages/HomeRegion.tsx:83` for the existing
+   * dependency — see `blog/src/pages/HomeRegion.tsx` for the existing
    * `DOMPurify.sanitize(html, { ADD_ATTR: [...] })` usage to reuse.
    */
   extraRoutes?: Route[];
