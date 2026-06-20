@@ -186,7 +186,7 @@ run_write() {
   local issue="$1" phase="$2" attempt="$3" body="$4"
   # Write the stub with the current STORED_BODY_FILE path baked in.
   write_gh_stub "$STORED_BODY_FILE" "1"
-  export PATH="$BIN:$PATH"
+  [[ ":$PATH:" != *":$BIN:"* ]] && export PATH="$BIN:$PATH"
   export DISPATCH_PLAN_AUTHOR_ID=1
   printf '%s\n' "$body" \
     | "$SCRIPT_DIR/dispatch-write-phase-log" "$issue" --phase "$phase" --attempt "$attempt"
