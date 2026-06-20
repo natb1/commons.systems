@@ -23,6 +23,8 @@ Birgitta Böckeler's framing splits an agent into Model + Harness — the harnes
 - [CI/CD](#cicd)
 - [Pre-requisites](#pre-requisites)
 - [Where to go next](#where-to-go-next)
+  - [Differentiation](#differentiation)
+- [Related work / prior art](#related-work--prior-art)
 - [Usage and Contributing](#usage-and-contributing)
 
 ## Design Principles
@@ -265,6 +267,102 @@ run-all-cleanup-preview.sh <pr-number>
 - **Landing page** — [commons.systems](https://commons.systems): the deployed apps and project overview.
 - **Design system** — [packages/ds](packages/ds/README.md): tokens, components, and the visual language.
 - **License** — CC-BY-SA; forking is encouraged.
+
+### Differentiation
+
+This workflow is owned and self-managed, and it is built to be left. The measure
+of success is the practitioner's eventual independence from it — the inverse of a
+platform's retention metric. The human stays in planning and design, so intent
+is never captured: the parts worth keeping are decided by the person, not
+accumulated by the system. Everything below is support for that thesis, not a
+claim to have invented any single mechanism.
+
+The individual mechanisms have prior art. Worktree isolation, "the system
+controls the agent," the self-perpetuating tick (the "Ralph loop"),
+self-hosting, and SCM-as-state-machine are all established practice. What is
+distinctive here is the combination and the framing, not any one pattern:
+
+- **The specific combination as a Claude Code harness.** Forkable and
+  self-hosted on the practitioner's own GitHub, Firebase, and Anthropic
+  accounts, with its state machine being the user's own GitHub issues and labels
+  — a multi-phase FSM (plan → implement → fix → qa → review → resolve), not a
+  coarse status flag — that self-perpetuates and has a dedicated
+  human-escalation queue. We have not seen these assembled together elsewhere.
+- **Office-hours as a symmetric peer escalation queue.** Autonomous work parks
+  into a human queue, and a human prompt is the de-escalation event that hands
+  the item back. This is a framing and design contribution, not an invented
+  capability. It differs from "open a PR and hope someone looks" and from
+  approval *gates*: a gate blocks forward progress pending sign-off, whereas
+  office-hours is a peer queue the work moves into and out of.
+- **Marker-absence-as-escalation.** Success requires a positive
+  phase-completed marker; the Stop hook fires unconditionally on every exit, so
+  any abnormal exit — crash, error, silent stall — fails safe to a human park
+  rather than to a false "done." This inverts the usual "the agent decides to
+  escalate," and it is grounded in the `dispatch-stop.sh` Stop-hook mechanics
+  above.
+- **SCM as the only control plane.** The control loop spends zero model tokens:
+  the tick is bash plus `systemd-run --user` transient units, not an LLM
+  re-prompt. We know of no other harness whose control loop runs without a model
+  in it.
+
+The two nearest artifacts differ on the same axes:
+
+- **Code Conductor** coordinates with labels and
+  worktrees, like this workflow, but runs a fully autonomous loop with no
+  in-loop human-escalation path: its `conductor:blocked` label is defined and
+  monitored but is never set by any agent, and `./conductor recover` is
+  self-remediation, not a human handoff. Its labels are coarse
+  execution-status and health markers, not a multi-phase workflow FSM.
+- **Claude Plan Orchestrator** uses human approval
+  gates and an approvals queue. Its authoritative state lives in a local SQLite
+  store; the status it commits into the git repo is a derived mirror of that
+  store. Here there is no authoritative store behind the SCM — the PR, CI, and
+  label ground truth *is* the state, re-derived every tick.
+
+### Related work / prior art
+
+The "harness" vocabulary this README uses comes from a body of recent writing on
+building reliable systems around coding agents.
+
+- Birgitta Böckeler, ["Harness engineering for coding agent
+  users"](https://martinfowler.com/articles/harness-engineering.html) (02 April
+  2026, hosted on martinfowler.com) — the Model + Harness split and the
+  guides/sensors framing this README borrows.
+- Anthropic, ["Effective harnesses for long-running
+  agents"](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents)
+  (26 November 2025) and ["Harness design for long-running application
+  development"](https://www.anthropic.com/engineering/harness-design-long-running-apps)
+  (24 March 2026) — the generator/evaluator harness pattern, which maps onto
+  this workflow's QA and review sensor phases.
+- OpenAI, ["Harness engineering: leveraging Codex in an agent-first
+  world"](https://openai.com/index/harness-engineering/) (11 February 2026) — an
+  agent-first repository where the harness, not the human, writes the code.
+- LangChain (Vivek Trivedy), ["The Anatomy of an Agent
+  Harness"](https://www.langchain.com/blog/the-anatomy-of-an-agent-harness) (10
+  March 2026) — its articulation of *Agent = Model + Harness*.
+- Mitchell Hashimoto, ["My AI Adoption
+  Journey"](https://mitchellh.com/writing/my-ai-adoption-journey) (05 February
+  2026) — the Ghostty `AGENTS.md` practice of adding one line per past bad agent
+  behavior. We call that accumulation a *ratchet*; Hashimoto does not use the
+  word.
+- METR (Kwa et al.), ["Measuring AI Ability to Complete Long Software
+  Tasks"](https://arxiv.org/abs/2503.14499) (arXiv:2503.14499, 18 March 2025) —
+  the long-horizon capability trend that makes a leave-it-alone workflow worth
+  building. (METR's companion blog post drops "Software" from the title.)
+- Addy Osmani, ["Agent Harness
+  Engineering"](https://www.oreilly.com/radar/agent-harness-engineering/) (O'Reilly
+  Radar, 15 May 2026) — the "skill issue" reframe: most agent failures are
+  harness configuration, not model limits.
+- [`awesome-harness-engineering`](https://github.com/walkinglabs/awesome-harness-engineering)
+  (walkinglabs) — the most-referenced curated index of the field.
+
+The failure modes this workflow's sensors guard against also have names. Khanal
+et al., ["Beyond pass@1: A Reliability Science Framework for Long-Horizon LLM
+Agents"](https://arxiv.org/abs/2603.29231) (arXiv:2603.29231, 31 March 2026),
+describes super-linear reliability decay as tasks lengthen. Orlanski et al.,
+["SlopCodeBench: Benchmarking How Coding Agents Degrade Over Long-Horizon
+Iterative Tasks"](https://arxiv.org/abs/2603.24755) (arXiv:2603.24755, 25 March
+2026), measures verbosity growth and structural erosion across iterative edits.
 
 ## Usage and Contributing
 <a href="https://creativecommons.org/licenses/by-sa/4.0/"><img src="https://mirrors.creativecommons.org/presskit/buttons/88x31/png/by-sa.png" alt="CC-BY-SA" width="117" height="41"></a>
