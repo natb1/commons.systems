@@ -337,12 +337,16 @@ case "$args" in
     # The helper encodes a space as %20; decode for fixture-key comparison.
     rest_label="${rest_label//%20/ }"
     if [[ "$rest_repo" == "{owner}/{repo}" ]]; then
-      # Current-repo scans: open-ISSUE_LIST (no label) and the main-broken latch.
-      if [[ -z "$rest_label" ]]; then
+      # Current-repo scans: the no-label open-issue list (dispatch-select-target),
+      # the dispatch:review-followup retriage scan (#2032), and the main-broken latch.
+      if [[ -z "$rest_label" || "$rest_label" == "dispatch:review-followup" ]]; then
         # #1812: persistent-failure injection for the open-issue scan
         # (gh_issue_list_rest --state open). A marker makes gh fail on every
         # attempt so gh_retry exhausts and forwards the failure — driving
         # dispatch-retriage-orphaned-followups' early-exit-on-scan-failure branch.
+        # The retriage scan now passes --label dispatch:review-followup (#2032);
+        # both the no-label and that-label fetches serve issue-list.json here
+        # (the stub bypasses the server-side label filter).
         if [[ -f "$STUB_DIR/gh-fail-issue-list-open" ]]; then
           echo "stub forced gh api failure (open issue-list)" >&2
           exit 1
