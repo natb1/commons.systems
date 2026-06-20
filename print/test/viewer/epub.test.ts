@@ -806,6 +806,11 @@ describe("createEpubRenderer", () => {
       const renderer = await initRenderer();
 
       const p1 = renderer.search!("first");
+      // Let call-1 pass `await book.loaded.navigation` and park on the gated
+      // load() *inside* its loop, consuming the gate while _searchEpoch is still
+      // 1 — before call-2 bumps it. So call-1 is superseded mid-load and the
+      // post-loop epoch guard (not the new top-of-loop break) discards its burst.
+      await Promise.resolve();
       const p2 = renderer.search!("second");
 
       // call-2 runs to completion (its load resolves immediately).
@@ -942,6 +947,42 @@ describe("createEpubRenderer", () => {
         await p;
 
         // The aborted search must not have painted any highlights.
+        const highlightCfis = mockRendition.annotations.highlight.mock.calls.map((c) => c[0]);
+        expect(highlightCfis).not.toContain("cfi-A");
+      });
+
+      it("stops loading not-yet-visited spine sections once clearSearch advances the epoch mid-loop", async () => {
+        // s0's load parks on a gate so the search is mid-loop (inside iteration 0)
+        // when clearSearch() fires; s1/s2 are plain sections that must never load.
+        const s0: FakeSection = {
+          href: "ch0.xhtml",
+          unload: vi.fn(),
+          find: vi.fn().mockReturnValue([{ cfi: "cfi-A", excerpt: "fox" }]),
+          load: vi.fn() as ReturnType<typeof vi.fn>,
+        };
+        let releaseFirst!: () => void;
+        const gate = new Promise<void>((resolve) => { releaseFirst = resolve; });
+        s0.load.mockImplementationOnce(() => gate);
+        const s1 = makeSection("ch1.xhtml", [{ cfi: "cfi-1", excerpt: "fox" }]);
+        const s2 = makeSection("ch2.xhtml", [{ cfi: "cfi-2", excerpt: "fox" }]);
+        mockSpine.spineItems = [s0, s1, s2];
+        mockBook.navigation.get.mockReturnValue({ label: "X" });
+
+        const renderer = await initRenderer();
+
+        const p = renderer.search!("fox");
+        // Let search pass `await book.loaded.navigation` and park on s0.load()'s
+        // gate *inside* iteration 0 — so the epoch advances mid-loop, not pre-loop.
+        await Promise.resolve();
+        renderer.clearSearch!(); // bumps _searchEpoch; iteration 1's guard will break
+        releaseFirst();
+        await p;
+
+        // The in-flight section completed; the not-yet-visited ones never loaded.
+        expect(s0.load).toHaveBeenCalledTimes(1);
+        expect(s1.load).not.toHaveBeenCalled();
+        expect(s2.load).not.toHaveBeenCalled();
+        // And the superseded search painted no highlight (post-loop guard holds).
         const highlightCfis = mockRendition.annotations.highlight.mock.calls.map((c) => c[0]);
         expect(highlightCfis).not.toContain("cfi-A");
       });
