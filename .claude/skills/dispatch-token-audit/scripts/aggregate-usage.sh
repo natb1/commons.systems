@@ -373,25 +373,43 @@ def price(u):
   + (u.cache_read     // 0) * RATE_CACHE_READ
   + (u.output         // 0) * RATE_OUTPUT ) / 1e6;
 
-# --- Truthful per-model cost (#2027) -------------------------------------
-# Actual list rates per Mtok, keyed by model family. Unlike the proxy above,
-# this prices each session by its REAL model so cost_usd is the actual bill.
+# --- Truthful per-model cost (#2027, generation-aware #2102) --------------
+# Actual list rates per Mtok, keyed by a generation-aware rate class (see
+# rate_class below). Unlike the proxy above, this prices each session by its
+# REAL model so cost_usd is the actual bill. Convention: a bare family key
+# (opus/sonnet/haiku) = the current generation; a *_3 / *_3_5 key = that
+# retired Claude 3.x generation. Claude 3 cache rates are formula-derived
+# (1.25x write / 0.1x read of input), not exact historical cents.
 def ACTUAL_RATES:
-  { opus:   {input:5, cache_creation:6.25, cache_read:0.50, output:25},
-    sonnet: {input:3, cache_creation:3.75, cache_read:0.30, output:15},
-    haiku:  {input:1, cache_creation:1.25, cache_read:0.10, output:5} };
+  { opus:      {input:5,    cache_creation:6.25,    cache_read:0.50,  output:25},
+    sonnet:    {input:3,    cache_creation:3.75,    cache_read:0.30,  output:15},
+    haiku:     {input:1,    cache_creation:1.25,    cache_read:0.10,  output:5},
+    opus_3:    {input:15,   cache_creation:18.75,   cache_read:1.50,  output:75},
+    haiku_3:   {input:0.25, cache_creation:0.3125,  cache_read:0.025, output:1.25},
+    haiku_3_5: {input:0.80, cache_creation:1.00,    cache_read:0.08,  output:4.00} };
 def family($m):
-  if   ($m | startswith("claude-opus"))   then "opus"
-  elif ($m | startswith("claude-sonnet")) then "sonnet"
-  elif ($m | startswith("claude-haiku"))  then "haiku"
+  if   ($m | startswith("claude-opus") or startswith("claude-3-opus")) then "opus"
+  elif ($m | startswith("claude-sonnet")
+         or startswith("claude-3-sonnet")
+         or startswith("claude-3-5-sonnet")
+         or startswith("claude-3-7-sonnet")) then "sonnet"
+  elif ($m | startswith("claude-haiku")
+         or startswith("claude-3-haiku")
+         or startswith("claude-3-5-haiku")) then "haiku"
   else null end;
+def rate_class($m):
+  if   ($m | startswith("claude-3-opus"))    then "opus_3"
+  elif ($m | startswith("claude-3-5-haiku")) then "haiku_3_5"
+  elif ($m | startswith("claude-3-haiku"))   then "haiku_3"
+  else family($m) end;
 def cost(u; $model):
   family($model) as $fam
+  | rate_class($model) as $rc
   | ((u.input//0)+(u.cache_creation//0)+(u.cache_read//0)+(u.output//0)) as $tok
   | if $fam == null then
       (if $tok == 0 then 0
        else error("dispatch-token-audit: unpriceable model '\($model)' carries \($tok) tokens; add it to the price table") end)
-    else (ACTUAL_RATES[$fam]) as $r
+    else (ACTUAL_RATES[$rc]) as $r
       | ( (u.input//0)*$r.input + (u.cache_creation//0)*$r.cache_creation
         + (u.cache_read//0)*$r.cache_read + (u.output//0)*$r.output ) / 1e6
     end;
