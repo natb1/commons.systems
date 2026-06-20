@@ -16,7 +16,7 @@ import buildTimeMetadata from "virtual:blog-post-metadata";
 import { createRoot, type Root } from "react-dom/client";
 import { ABOUT_PAGE_META, APPS, INFO_PANEL_LINK_SECTIONS, NAV_LINKS, SITE_DEFAULTS, SITE_URL } from "./site-config.js";
 import { ShowcaseContent } from "./components/Showcase.js";
-import { renderAboutHtml, renderAboutPanelHtml } from "./pages/about.js";
+import { About, AboutPanel } from "./pages/About.js";
 import { BLOG_ROLL_ENTRIES, createStrategies } from "./blog-roll/config.js";
 import { db, NAMESPACE, trackPageView, initAppCheck, signIn, signOut, onAuthStateChanged } from "./firebase.js";
 
@@ -77,11 +77,11 @@ createBlogApp({
   // Route the /about info-panel content through React: when on /about,
   // InfoPanelRegion renders the profile card via aboutContent; any other path
   // yields the standard blogroll panel (and re-runs the blogroll fetch).
-  infoPanelContentForPath: (path) => (path === "/about" ? renderAboutPanelHtml() : undefined),
+  infoPanelContentForPath: (path) => (path === "/about" ? <AboutPanel /> : undefined),
   extraRoutes: [
     {
       path: "/about",
-      render: () => renderAboutHtml(),
+      render: () => <About />,
       afterRender: () => {
         updateStaticPageMeta(SITE_URL, ABOUT_PAGE_META, "commons.systems");
         updateCanonical(SITE_URL, undefined, "/about");
