@@ -34944,6 +34944,29 @@ ws=$'  \n\t\n'
 if out=$(printf '%s' "$ws" | "$RUN_VERIFY" 2>&1); then rc=0; else rc=$?; fi
 assert_eq "dispatch-run-verification: whitespace-only stdin exits 4" "4" "$rc"
 
+# Unclosed verify fence in-section (exit 5): a ```verify fence opened inside the
+# Verification section but never closed before EOF is a malformed/authoring
+# error, distinct from a failed verify block (exit 1) — so the routing logic can
+# tell an unfixable plan from a fixable block (#2118).
+echo "Test: dispatch-run-verification -- unclosed verify fence in section exits 5"
+plan=$'## Verification\n```verify\ntrue\n'
+if out=$(printf '%s' "$plan" | "$RUN_VERIFY" 2>&1); then rc=0; else rc=$?; fi
+assert_eq "dispatch-run-verification: unclosed verify fence exits 5" "5" "$rc"
+case "$out" in
+  *"unclosed verify block"*) found=yes ;;
+  *) found=no ;;
+esac
+assert_eq "dispatch-run-verification: unclosed-fence diagnostic reported" "yes" "$found"
+
+# Converse boundary (exit 3, NOT 5): an unclosed ```verify fence OUTSIDE any
+# Verification section leaves capturing=0, so it is ignored like any out-of-
+# section fence and stays the "proceed unchanged" exit 3 — pinning that exit 5
+# fires only for an in-section unclosed fence.
+echo "Test: dispatch-run-verification -- unclosed verify fence outside any section stays exit 3"
+plan=$'## Plan\n```verify\ntrue\n'
+if out=$(printf '%s' "$plan" | "$RUN_VERIFY" 2>&1); then rc=0; else rc=$?; fi
+assert_eq "dispatch-run-verification: unclosed fence outside section exits 3" "3" "$rc"
+
 # Preservation guard (criterion 2): the exit-3 cases above confirm a
 # no-verify-block plan (prose/bash-only Verification section, or no section)
 # still exits 3. No duplication needed here.
