@@ -102,9 +102,13 @@ if printf '%s' "$BODY" | grep -qxF "$INNER_MARKER"; then
   # REPLACE the existing section in place. The awk state machine drops the lines
   # from the target inner-marker line up to (but not including) the next line
   # beginning '<!-- phase-log:' (the next section's delimiter, which is KEPT) or
-  # EOF, substituting the new section. The outer marker '<!-- dispatch:phase-log -->'
-  # begins '<!-- dispatch:' and is deliberately disjoint from the '<!-- phase-log:'
-  # terminator, so it is never treated as a section boundary.
+  # EOF, substituting the new section. When a next section header is found, a
+  # single blank separator line is re-emitted before it so the output is
+  # byte-for-byte identical to the original (one blank between sections). For the
+  # last section (no next header), the machine reaches EOF and emits no trailing
+  # blank — matching the APPEND output. The outer marker '<!-- dispatch:phase-log
+  # -->' begins '<!-- dispatch:' and is deliberately disjoint from the
+  # '<!-- phase-log:' terminator, so it is never treated as a section boundary.
   REPLACEMENT="$NEW_SECTION" TARGET="$INNER_MARKER" \
     awk '
       BEGIN { repl = ENVIRON["REPLACEMENT"]; target = ENVIRON["TARGET"]; skip = 0 }
@@ -112,6 +116,7 @@ if printf '%s' "$BODY" | grep -qxF "$INNER_MARKER"; then
         if (skip) {
           # Inside the target section being dropped: a new inner marker ends the skip.
           if (index($0, "<!-- phase-log:") == 1) {
+            print ""          # restore the single blank separator before the next section
             skip = 0
             print
           }
