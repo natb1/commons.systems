@@ -148,6 +148,8 @@ jobs:
         run: .claude/hooks/test-approve-workflow-commands.sh
       - name: Run dispatch script tests
         run: .claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh
+      - name: Run prose-rule lint tests
+        run: .claude/skills/dispatch-propagate/scripts/test-lint-prose-rules.sh
       - name: Run worktree-remove hook tests
         run: .claude/hooks/test-worktree-remove.sh
       - name: Run statusline hook tests
