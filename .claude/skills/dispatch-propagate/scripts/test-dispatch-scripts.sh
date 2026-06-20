@@ -469,6 +469,41 @@ case "$args" in
       echo "[]"
     fi
     ;;
+  api\ repos/*/issues/9[0-9][0-9][0-9])
+    # gh_issue_view_rest sentinel branch (#2255): single-issue GET has no label to
+    # carry a sentinel, so reserve the 9xxx number range. MUST precede the generic
+    # `api repos/*/issues/*` branch (case is first-wins). A $STUB_DIR/gh-fail-rest
+    # marker forces a non-zero gh failure (drives the clear-errors path); otherwise
+    # $STUB_DIR/view-issue-<N>.json supplies the raw REST issue object.
+    echo "$args" >> "$STUB_DIR/gh-issue-view-rest-calls.log"
+    if [[ -f "$STUB_DIR/gh-fail-rest" ]]; then
+      echo "stub forced gh api failure" >&2
+      exit 1
+    fi
+    num="${args##*/}"
+    if [[ -f "$STUB_DIR/view-issue-${num}.json" ]]; then
+      cat "$STUB_DIR/view-issue-${num}.json"
+    else
+      echo '{}'
+    fi
+    ;;
+  api\ repos/*/pulls/9[0-9][0-9][0-9])
+    # gh_pr_view_rest sentinel branch (#2255): reserve the 9xxx PR number range.
+    # MUST precede the generic `api repos/*/pulls/*` branch (case is first-wins).
+    # A $STUB_DIR/gh-fail-rest marker forces a non-zero gh failure; otherwise
+    # $STUB_DIR/view-pr-<N>.json supplies the raw REST pull object.
+    echo "$args" >> "$STUB_DIR/gh-pr-view-rest-calls.log"
+    if [[ -f "$STUB_DIR/gh-fail-rest" ]]; then
+      echo "stub forced gh api failure" >&2
+      exit 1
+    fi
+    num="${args##*/}"
+    if [[ -f "$STUB_DIR/view-pr-${num}.json" ]]; then
+      cat "$STUB_DIR/view-pr-${num}.json"
+    else
+      echo '{}'
+    fi
+    ;;
   api\ repos/*/issues/*)
     # dispatch-resolve-arg discriminator: gh api repos/{owner}/{repo}/issues/<N>.
     # The REST issues endpoint returns PRs too; a PR's JSON carries a
@@ -1238,6 +1273,184 @@ if grep -q -- '--paginate' "$STUB_DIR/gh-issue-list-rest-calls.log"; then
 else
   assert_eq "--repo+--limit: log does not contain --paginate" "no" "no"
 fi
+teardown
+
+# ============================================================================
+# gh_issue_view_rest / gh_pr_view_rest byte-compatibility tests (#2255)
+# ============================================================================
+# These drive the REAL helpers (sourced from the copied lib.sh) via the 9xxx
+# sentinel stub branches. The oracle for the expected shape is the porcelain the
+# helpers replace: `gh issue view <N> --json number,title,body,state,labels,
+# assignees` (UPPERCASE state, labels:[{name}], assignees:[{login}]) and
+# `gh pr view <N> --json number,title,body,state,mergeable,mergeStateStatus`
+# (UPPERCASE state, mergeable as the GraphQL enum string, mergeStateStatus
+# UPPERCASE). The fixtures are the RAW REST shape (lowercase state, label/
+# assignee objects with extra keys, mergeable as a boolean, snake_case
+# mergeable_state), so the projection + casing/enum bridges are genuinely
+# exercised: delete a bridge and the assertions below flip RED.
+echo "=== gh_issue_view_rest / gh_pr_view_rest (byte-compat) ==="
+
+echo "Test: gh_issue_view_rest -- projection + state upcase + labels/assignees narrowing"
+setup
+# Raw REST issue: lowercase state, label objects carrying extra keys (id/color/
+# description), assignee objects carrying extra keys (id/type). The projection
+# must upcase state and narrow labels→[{name}] / assignees→[{login}].
+printf '%s\n' '{
+  "number": 9001,
+  "title": "a sample issue",
+  "body": "the issue body",
+  "state": "open",
+  "labels": [
+    {"id": 1, "name": "bug", "color": "ff0000", "description": "a bug"},
+    {"id": 2, "name": "dispatch:planned", "color": "00ff00", "description": null}
+  ],
+  "assignees": [
+    {"login": "alice", "id": 10, "type": "User"},
+    {"login": "bob", "id": 11, "type": "User"}
+  ],
+  "extra_rest_field": "must not appear in projection"
+}' > "$STUB_DIR/view-issue-9001.json"
+iv=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_view_rest 9001)
+assert_eq "issue: number" "9001" "$(jq -r '.number' <<<"$iv")"
+assert_eq "issue: title" "a sample issue" "$(jq -r '.title' <<<"$iv")"
+assert_eq "issue: body" "the issue body" "$(jq -r '.body' <<<"$iv")"
+assert_eq "issue: state upcased OPEN" "OPEN" "$(jq -r '.state' <<<"$iv")"
+assert_eq "issue: labels narrowed to [{name}] (2 labels)" "2" "$(jq '.labels | length' <<<"$iv")"
+assert_eq "issue: first label name" "bug" "$(jq -r '.labels[0].name' <<<"$iv")"
+assert_eq "issue: label objects carry ONLY name (no color key)" "1" "$(jq '.labels[0] | keys | length' <<<"$iv")"
+assert_eq "issue: assignees narrowed to [{login}]" "alice" "$(jq -r '.assignees[0].login' <<<"$iv")"
+assert_eq "issue: assignee objects carry ONLY login" "1" "$(jq '.assignees[0] | keys | length' <<<"$iv")"
+assert_eq "issue: raw REST extra field dropped" "" "$(jq -r '.extra_rest_field // empty' <<<"$iv")"
+# Top-level keys are exactly the porcelain set.
+assert_eq "issue: top-level key set" "assignees body labels number state title" \
+  "$(jq -r 'keys | join(" ")' <<<"$iv")"
+teardown
+
+echo "Test: gh_issue_view_rest -- closed state upcases to CLOSED; empty labels/assignees"
+setup
+printf '%s\n' '{
+  "number": 9002,
+  "title": "closed one",
+  "body": "",
+  "state": "closed",
+  "labels": [],
+  "assignees": []
+}' > "$STUB_DIR/view-issue-9002.json"
+iv2=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_view_rest 9002)
+assert_eq "issue: closed → CLOSED" "CLOSED" "$(jq -r '.state' <<<"$iv2")"
+# Byte-compat: a REST null body must surface as porcelain's empty string.
+printf '%s\n' '{"number":9004,"title":"t","state":"open","body":null,"labels":[],"assignees":[]}' \
+  > "$STUB_DIR/view-issue-9004.json"
+iv_nb=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_view_rest 9004)
+assert_eq "issue: null body coerced to empty string" "true" "$(jq '.body == ""' <<<"$iv_nb")"
+assert_eq "issue: empty labels length 0" "0" "$(jq '.labels | length' <<<"$iv2")"
+assert_eq "issue: empty assignees length 0" "0" "$(jq '.assignees | length' <<<"$iv2")"
+teardown
+
+echo "Test: gh_issue_view_rest -- --repo flag emits cross-repo segment"
+setup
+: > "$STUB_DIR/gh-issue-view-rest-calls.log"
+printf '%s\n' '{"number":9003,"title":"t","body":"b","state":"open","labels":[],"assignees":[]}' \
+  > "$STUB_DIR/view-issue-9003.json"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_view_rest 9003 --repo owner/other-repo >/dev/null
+if grep -q 'repos/owner/other-repo/issues/9003' "$STUB_DIR/gh-issue-view-rest-calls.log"; then seg=yes; else seg=no; fi
+assert_eq "issue: --repo uses cross-repo segment" "yes" "$seg"
+if grep -q 'repos/{owner}/{repo}/issues' "$STUB_DIR/gh-issue-view-rest-calls.log"; then ph=yes; else ph=no; fi
+assert_eq "issue: placeholder absent on cross-repo call" "no" "$ph"
+teardown
+
+echo "Test: gh_issue_view_rest -- missing number returns non-zero with diagnostic stderr"
+setup
+rc_iv=0
+err_iv=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_view_rest 2>&1 >/dev/null) || rc_iv=$?
+assert_eq "issue: missing number → non-zero" "1" "$rc_iv"
+case "$err_iv" in *"gh_issue_view_rest: issue number is required"*) m=yes ;; *) m=no ;; esac
+assert_eq "issue: missing-number stderr names the helper" "yes" "$m"
+teardown
+
+echo "Test: gh_issue_view_rest -- gh failure returns non-zero with diagnostic stderr"
+setup
+: > "$STUB_DIR/gh-fail-rest"
+rc_ivf=0
+err_ivf=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_view_rest 9001 2>&1 >/dev/null) || rc_ivf=$?
+assert_eq "issue: gh failure → non-zero" "1" "$rc_ivf"
+case "$err_ivf" in *"gh_issue_view_rest: gh api failed"*) mf=yes ;; *) mf=no ;; esac
+assert_eq "issue: gh-failure stderr names the helper" "yes" "$mf"
+teardown
+
+echo "Test: gh_pr_view_rest -- mergeable=true → MERGEABLE, clean→CLEAN, state upcase"
+setup
+# Raw REST pull: lowercase state, mergeable BOOLEAN true, snake_case
+# mergeable_state lowercase. Projection must map mergeable→enum string and
+# remap+upcase mergeable_state→mergeStateStatus.
+printf '%s\n' '{
+  "number": 9001,
+  "title": "a sample pr",
+  "body": "the pr body",
+  "state": "open",
+  "mergeable": true,
+  "mergeable_state": "clean",
+  "extra_rest_field": "drop me"
+}' > "$STUB_DIR/view-pr-9001.json"
+pv=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_view_rest 9001)
+assert_eq "pr: number" "9001" "$(jq -r '.number' <<<"$pv")"
+assert_eq "pr: title" "a sample pr" "$(jq -r '.title' <<<"$pv")"
+assert_eq "pr: body" "the pr body" "$(jq -r '.body' <<<"$pv")"
+assert_eq "pr: state upcased OPEN" "OPEN" "$(jq -r '.state' <<<"$pv")"
+assert_eq "pr: mergeable boolean true → enum MERGEABLE" "MERGEABLE" "$(jq -r '.mergeable' <<<"$pv")"
+assert_eq "pr: mergeStateStatus key present + upcased" "CLEAN" "$(jq -r '.mergeStateStatus' <<<"$pv")"
+assert_eq "pr: raw REST extra field dropped" "" "$(jq -r '.extra_rest_field // empty' <<<"$pv")"
+assert_eq "pr: top-level key set" "body mergeStateStatus mergeable number state title" \
+  "$(jq -r 'keys | join(" ")' <<<"$pv")"
+teardown
+
+echo "Test: gh_pr_view_rest -- mergeable=false → CONFLICTING, dirty→DIRTY, closed→CLOSED"
+setup
+printf '%s\n' '{
+  "number": 9002,
+  "title": "conflicting pr",
+  "body": "",
+  "state": "closed",
+  "mergeable": false,
+  "mergeable_state": "dirty"
+}' > "$STUB_DIR/view-pr-9002.json"
+pv2=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_view_rest 9002)
+assert_eq "pr: mergeable boolean false → CONFLICTING" "CONFLICTING" "$(jq -r '.mergeable' <<<"$pv2")"
+assert_eq "pr: mergeStateStatus dirty → DIRTY" "DIRTY" "$(jq -r '.mergeStateStatus' <<<"$pv2")"
+assert_eq "pr: closed → CLOSED" "CLOSED" "$(jq -r '.state' <<<"$pv2")"
+teardown
+
+echo "Test: gh_pr_view_rest -- mergeable=null → UNKNOWN; absent mergeable_state → empty"
+setup
+printf '%s\n' '{
+  "number": 9003,
+  "title": "computing pr",
+  "body": "",
+  "state": "open",
+  "mergeable": null
+}' > "$STUB_DIR/view-pr-9003.json"
+pv3=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_view_rest 9003)
+assert_eq "pr: mergeable null → UNKNOWN" "UNKNOWN" "$(jq -r '.mergeable' <<<"$pv3")"
+assert_eq "pr: absent mergeable_state → empty string" "" "$(jq -r '.mergeStateStatus' <<<"$pv3")"
+teardown
+
+echo "Test: gh_pr_view_rest -- missing number returns non-zero with diagnostic stderr"
+setup
+rc_pv=0
+err_pv=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_view_rest 2>&1 >/dev/null) || rc_pv=$?
+assert_eq "pr: missing number → non-zero" "1" "$rc_pv"
+case "$err_pv" in *"gh_pr_view_rest: PR number is required"*) mp=yes ;; *) mp=no ;; esac
+assert_eq "pr: missing-number stderr names the helper" "yes" "$mp"
+teardown
+
+echo "Test: gh_pr_view_rest -- gh failure returns non-zero with diagnostic stderr"
+setup
+: > "$STUB_DIR/gh-fail-rest"
+rc_pvf=0
+err_pvf=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_view_rest 9001 2>&1 >/dev/null) || rc_pvf=$?
+assert_eq "pr: gh failure → non-zero" "1" "$rc_pvf"
+case "$err_pvf" in *"gh_pr_view_rest: gh api failed"*) mpf=yes ;; *) mpf=no ;; esac
+assert_eq "pr: gh-failure stderr names the helper" "yes" "$mpf"
 teardown
 
 # ============================================================================
