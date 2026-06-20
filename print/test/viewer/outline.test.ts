@@ -33,6 +33,7 @@ function makeMockController(overrides: Partial<UseViewerControllerResult> = {}):
     // --- unused fields required by the type ---
     canvasWrapRef: { current: null } as React.RefObject<HTMLDivElement>,
     gotoInputRef: { current: null } as React.RefObject<HTMLInputElement>,
+    gotoStatusRef: { current: null } as React.RefObject<HTMLSpanElement>,
     spreadToggleRef: { current: null } as React.RefObject<HTMLButtonElement>,
     viewerRef: { current: null } as React.RefObject<HTMLElement>,
     positionLabel: "Page 1 / 10",

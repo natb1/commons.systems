@@ -20,6 +20,7 @@ export function ViewerToolbar({
 }) {
   const {
     gotoInputRef,
+    gotoStatusRef,
     spreadToggleRef,
     positionLabel,
     canGoPrev,
@@ -70,6 +71,16 @@ export function ViewerToolbar({
         onKeyDown={(e) => {
           if (e.key === "Enter") submitGoto();
         }}
+      />
+      {/* aria-live status the hook populates with "Calculating location…"
+          during a percent goto; visually hidden since the input placeholder
+          already shows the visual cue. Static in the DOM so assistive tech
+          announces reliably when its text changes. */}
+      <span
+        className="viewer-goto-status visually-hidden"
+        ref={gotoStatusRef}
+        role="status"
+        aria-live="polite"
       />
       <Button
         className={hasZoom ? "viewer-zoom-in" : "viewer-zoom-in zoom-hidden"}
