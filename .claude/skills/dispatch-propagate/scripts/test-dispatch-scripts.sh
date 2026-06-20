@@ -6206,6 +6206,118 @@ assert_eq "main-qa override: phase main-qa, main worktree 5th field" \
 unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
+# OHST13. Worktree-present attach (#2241 bucket 1, asserted with a cwd-bearing
+# fake): a registered <N>-* worktree whose originating session's cwd EXISTS on
+# disk → attach in place. This is the unchanged pre-#2241 behavior, now proved
+# through the cwd-bearing state fake: the session reports an on-disk cwd, the
+# selector's `-d "$IDLE_CWD"` gate passes, and it emits plain `idle`.
+echo "Test: registered worktree + on-disk session cwd → idle (attach in place)"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+mkdir -p "$TMPDIR_TEST/wt/42-x"
+# Registered worktree basename is 42-x; the session is the renamed office-hours-42
+# carrying an on-disk cwd. issue_live_session_id queries 42-x (miss) then
+# office-hours-42 (hit) → attachable with a present cwd → bucket 1.
+office_hours_state_fake_claude "office-hours-42:idle:$TMPDIR_TEST/wt/42-x"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "registered worktree + on-disk cwd → idle (attach in place)" "idle s-office-hours-42" "$result"
+teardown
+
+# OHST14. Worktree-swept attach-after-provision (#2241 bucket 2): an attachable
+# session whose cwd is NOT on disk (the worktree was swept), the <N>-* worktree is
+# NOT registered, but `origin/<branch>` still exists → emit `idle-provision`. The
+# session is named 42-x (a phase-worker `<N>-slug`), matched via the prefix path
+# since no worktree is registered; its swept cwd's basename is the branch to
+# re-provision.
+echo "Test: swept worktree + remote branch exists → idle-provision"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+# 42-x NOT registered (only main listed) → prefix-match path, swept-cwd bucket.
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n' > "$STUB_DIR/worktree-list.txt"
+printf '%s\n' '42-x' > "$STUB_DIR/remote-branches.txt"   # origin/42-x exists
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+# cwd /worktrees/42-x is non-empty but does NOT exist on disk → swept.
+office_hours_state_fake_claude "42-x:waiting:/worktrees/42-x"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "swept worktree, remote branch present → idle-provision" "idle-provision s-42-x 42-x" "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
+# OHST15. Remote-branch-missing fallback (#2241 bucket 3): same swept setup as
+# OHST14 but `origin/<branch>` is ABSENT (no remote-branches.txt) → the selector
+# cannot re-provision, so it falls back to the fresh path for this issue. With no
+# registered worktree the wt_path lookup is empty → 5th field `-`; no PR → phase
+# plan. The consumer's `-` guard later prints the swept diagnostic (see OH10).
+echo "Test: swept worktree + remote branch missing → fresh fallback (5th field -)"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n' > "$STUB_DIR/worktree-list.txt"
+# Omit remote-branches.txt → ls-remote stub exits 2 → branch not on origin.
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+office_hours_state_fake_claude "42-x:waiting:/worktrees/42-x"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "swept worktree, remote branch missing → fresh fallback with - 5th field" "office-hours 42 plan - -" "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
+# OHST16. Not-local fresh-launch under a WORKING daemon (#2241 criterion-4,
+# relocated from OHST5): a worktree-free item under a daemon that genuinely
+# reports no session for it → fresh-launch. office_hours_state_fake_claude with
+# NO args installs a fake reporting `[]` (rc 0): the daemon is WORKING and the
+# item is genuinely sessionless, so it is picked fresh — distinct from OHST5's
+# UNKNOWN daemon, where the item conservatively folds to skip.
+echo "Test: worktree-free item under WORKING daemon → fresh-launch"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n' > "$STUB_DIR/worktree-list.txt"   # no 42-* worktree
+office_hours_state_fake_claude   # WORKING daemon reporting no sessions ([], rc 0)
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "worktree-free item under WORKING daemon → fresh-launch" "office-hours 42 plan - -" "$result"
+teardown
+
+# OHST17. Working-session-no-worktree skip (#2241 criterion-5, latent double-claim
+# guard): a `working` session whose cwd is swept and whose <N>-* worktree is NOT
+# registered → the prefix probe FINDS the working session (rc 3) and SKIPS it,
+# rather than mistaking the item for sessionless and fresh-launching it. The lone
+# item is neither attachable nor fresh → parked-router fallback → no router →
+# empty. (Pre-#2241 the unregistered working session returned rc 1 and would have
+# been double-claimed by a fresh launch.)
+echo "Test: working session, no registered worktree → skip (no double-claim), empty"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n' > "$STUB_DIR/worktree-list.txt"   # no 42-* worktree
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+office_hours_state_fake_claude "42-x:working:/worktrees/42-x"   # working session, prefix-matched
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "working session with no registered worktree → skipped, not fresh-launched; empty" "empty" "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
+# OHST18. Null-cwd degrade (#2241): an attachable session reporting an EMPTY cwd
+# (no 3rd field) with no registered <N>-* worktree → the selector finds it
+# attachable but cannot derive a branch (empty cwd fails both the `-d` and the
+# non-empty `[[ -n "$IDLE_CWD" ]]` checks) → bucket 3 → fall through to the fresh
+# path. No PR → plan; no worktree → 5th field `-`.
+echo "Test: attachable session with empty cwd, no worktree → fresh fallback"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n' > "$STUB_DIR/worktree-list.txt"   # no 42-* worktree
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+# office-hours-42 (exact-match name) with NO cwd field → empty cwd → null-cwd degrade.
+office_hours_state_fake_claude "office-hours-42:waiting"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "attachable session, empty cwd, no worktree → fresh fallback with - 5th field" "office-hours 42 plan - -" "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
 # ============================================================================
 # office-hours (entry point) tests
 # ============================================================================
@@ -6440,6 +6552,79 @@ FAKE
 chmod +x "$TMPDIR_TEST/bin/claude"
 result=$("$TMPDIR_TEST/office-hours")
 assert_eq "parked-router directive attaches the router session by its job id" "LAUNCH: attach j-dispatch-abc123" "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
+# OH8. idle-provision end-to-end success (#2241): a swept attachable session whose
+# `origin/<branch>` exists → the selector emits `idle-provision s-42-x 42-x`; the
+# entry's idle-provision arm calls dispatch-provision-from-remote (stubbed here to
+# succeed) and then attaches the originating session by its resolved job id. The
+# fake claude must still report 42-x so attach_session resolves s-42-x → j-42-x.
+echo "Test: idle-provision verb → provision then attach (end-to-end success)"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n' > "$STUB_DIR/worktree-list.txt"   # 42-x NOT registered → swept path
+printf '%s\n' '42-x' > "$STUB_DIR/remote-branches.txt"   # origin/42-x exists
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+office_hours_state_fake_claude "42-x:waiting:/worktrees/42-x"   # swept cwd; reports 42-x for attach resolution
+# Stub the provisioning helper to succeed (print a worktree path, exit 0).
+cat > "$TMPDIR_TEST/dispatch-provision-from-remote" <<'STUB'
+#!/usr/bin/env bash
+echo "/worktrees/$1"
+exit 0
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-provision-from-remote"
+result=$("$TMPDIR_TEST/office-hours")
+assert_eq "idle-provision → provision succeeds, then attach by job id" "LAUNCH: attach j-42-x" "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
+# OH9. idle-provision provision-failure (#2241): same setup as OH8 but the
+# provisioning helper FAILS (exit 1) → the entry prints a diagnostic to stderr and
+# exits non-zero WITHOUT attaching (no LAUNCH). clear-errors-over-fallbacks: a
+# provisioning failure surfaces, it does not silently fall back to a fresh launch.
+echo "Test: idle-provision provision failure → exit non-zero, no attach"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n' > "$STUB_DIR/worktree-list.txt"
+printf '%s\n' '42-x' > "$STUB_DIR/remote-branches.txt"
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+office_hours_state_fake_claude "42-x:waiting:/worktrees/42-x"
+# Stub the provisioning helper to FAIL.
+cat > "$TMPDIR_TEST/dispatch-provision-from-remote" <<'STUB'
+#!/usr/bin/env bash
+echo "provision failed" >&2
+exit 1
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-provision-from-remote"
+rc=0; result=$("$TMPDIR_TEST/office-hours") || rc=$?
+assert_eq "provision failure → non-zero exit" "yes" "$([[ "$rc" -ne 0 ]] && echo yes || echo no)"
+assert_eq "provision failure → no LAUNCH (no attach)" "no" \
+  "$([[ "$result" == *LAUNCH:* ]] && echo yes || echo no)"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
+# OH10. Swept-and-unprovisionable diagnostic (#2241 criterion-3, end-to-end): a
+# swept attachable session whose `origin/<branch>` is ABSENT → the selector falls
+# back to the fresh path with a `-` 5th field (`office-hours 42 plan - -`); the
+# entry's `[[ -z "$d" || "$d" == "-" ]]` guard prints the swept-worktree
+# diagnostic and exits non-zero without launching anything.
+echo "Test: swept + unprovisionable → swept diagnostic, exit non-zero, no launch"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n' > "$STUB_DIR/worktree-list.txt"
+# Omit remote-branches.txt → origin/42-x missing → bucket 3 → fresh `-` path.
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+office_hours_state_fake_claude "42-x:waiting:/worktrees/42-x"
+rc=0; out=$("$TMPDIR_TEST/office-hours" 2>&1) || rc=$?
+assert_eq "swept + unprovisionable → non-zero exit" "yes" "$([[ "$rc" -ne 0 ]] && echo yes || echo no)"
+assert_eq "swept + unprovisionable → swept-worktree diagnostic on stderr" "yes" \
+  "$([[ "$out" == *'no <N>-* worktree resolved for #42 — cannot launch a fresh session'* ]] && echo yes || echo no)"
+assert_eq "swept + unprovisionable → no LAUNCH (no spawn)" "no" \
+  "$([[ "$out" == *LAUNCH:* ]] && echo yes || echo no)"
 unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
