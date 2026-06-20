@@ -140,6 +140,88 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || exit 0
 SCRIPTS="$SCRIPT_DIR/../skills/dispatch-propagate/scripts"
 source "$SCRIPTS/lib.sh"
 
+# --- Decision-log instrumentation (write-only, non-fatal; #2038) -------------
+# Append EXACTLY ONE structured per-tick decision record per WORKER invocation,
+# via an EXIT trap. Unlike the select-tick / materialize-spawn sites (which arm
+# at the top), this trap is armed LATE — only AFTER Discriminator 2 (line :98)
+# has confirmed this is a worker session (JOB_NAME matches ^[0-9]+-). A
+# router-named (non-worker) job that takes the early `exit 0` at :99 arms NO
+# trap and so produces NO record, by design. The trap MUST NOT change the exit
+# code, so the handler never calls `exit`. decision_log_append is write-only and
+# ALWAYS returns 0 (see lib-decision-log.sh) — a failed source / missing tool
+# degrades to a no-op rather than a hard error.
+#
+# Prior trap: the only existing trap is the ERR trap at the top of this file
+# (`trap '...; exit 0' ERR`). EXIT and ERR are independent trap slots, so this
+# `trap ... EXIT` does NOT clobber it; when the ERR trap fires it calls
+# `exit 0`, which then runs this EXIT handler → still exactly one record. No
+# chaining is needed.
+#
+# The `|| true` is load-bearing: this file runs a `trap '...; exit 0' ERR`
+# (top of file), and a bare failing `source` at top level (unreadable/missing
+# lib) would fire that ERR trap and `exit 0` the WHOLE hook BEFORE any branch —
+# leaking the worker. `|| true` exempts the source from the ERR trap, so a
+# missing lib degrades to a no-op: the trap still registers, but at exit
+# `_dlog_stop_emit`'s call to the (now-undefined) decision_log_append fails
+# inside a function, where the ERR trap is inactive, leaving $? untouched.
+# shellcheck source=/dev/null
+source "$SCRIPTS/lib-decision-log.sh" 2>/dev/null || true
+
+# Accumulators, initialized to safe defaults before the trap is registered so an
+# early exit never references an unset var. Each terminal site sets DLOG_BRANCH
+# and DLOG_DISPOSITION just before its `exit`. The emitter reads the existing
+# vars (JOB_NAME/ISSUE_NUM/PR_NUM/MARKER_PHASE/CURRENT_PHASE/MARKER_FILE)
+# defensively as ${VAR:-} — Branches P and R exit before PR_NUM/MARKER_* are even
+# defined, so the guards are load-bearing.
+DLOG_BRANCH=""
+DLOG_DISPOSITION=""
+
+# _dlog_stop_emit — build the JSON record and hand it to decision_log_append.
+# Stdout-silent: the Stop hook's stdout/stderr matters to the harness, so nothing
+# here may leak to fd 1 (jq output is captured into a var; jq stderr is
+# swallowed). Numeric fields (issue/pr) are passed as strings and coerced
+# in-filter (tonumber? // null) so jq never fails on an empty value. Never calls
+# `exit` (preserves $?). Uses an `if` block for the marker_present re-test — a
+# bare `[[ -f x ]] && ...` would return non-zero when absent and could fire the
+# ERR trap.
+_dlog_stop_emit() {
+  local marker_present=false
+  if [[ -n "${MARKER_FILE:-}" && -f "${MARKER_FILE:-}" ]]; then
+    marker_present=true
+  fi
+  local json
+  json=$(jq -c -n \
+    --arg ts            "$(date -u +%FT%TZ)" \
+    --arg site          "stop" \
+    --arg worker        "${JOB_NAME:-}" \
+    --arg marker_phase  "${MARKER_PHASE:-}" \
+    --arg current_phase "${CURRENT_PHASE:-}" \
+    --arg branch        "$DLOG_BRANCH" \
+    --arg disposition   "$DLOG_DISPOSITION" \
+    --arg issue         "${ISSUE_NUM:-}" \
+    --arg pr            "${PR_NUM:-}" \
+    --argjson marker_present "$marker_present" \
+    '
+    def num: if . == "" then null else (tonumber? // null) end;
+    {
+      ts:             $ts,
+      site:           $site,
+      worker:         $worker,
+      marker_present: $marker_present,
+      marker_phase:   $marker_phase,
+      current_phase:  $current_phase,
+      branch:         $branch,
+      disposition:    $disposition,
+      issue:          ($issue | num),
+      pr:             ($pr | num)
+    }' 2>/dev/null) || return 0
+  decision_log_append "$json"
+}
+
+# Arm the trap NOW — past Discriminator 2, so only worker sessions emit. (A
+# router exited at :99 above, before this point.)
+trap '_dlog_stop_emit' EXIT
+
 # Release this worker's reservation marker (#1454). The marker is named by the
 # worktree basename, which equals JOB_NAME (the session --name). Clearing it the
 # instant the worker session ends means a normally-completed worker no longer
@@ -288,6 +370,7 @@ session_scheduled_wakeup() {
 # falls through to Branch A, which parks it on office-hours — no branch needed
 # here.) Checked BEFORE the PR-centric branches.
 if [ -f "$CLAUDE_JOB_DIR/parse-job-done" ]; then
+  DLOG_BRANCH="P"; DLOG_DISPOSITION="self-close"
   spawn_tick
   spawn_sweep
   self_close
@@ -308,6 +391,7 @@ fi
 # office-hours — today's behavior, no branch needed here.) Checked BEFORE the
 # PR-centric branches, beside Branch P.
 if [ -f "$CLAUDE_JOB_DIR/resolved-closed" ]; then
+  DLOG_BRANCH="R"; DLOG_DISPOSITION="self-close"
   spawn_tick
   spawn_sweep
   self_close
@@ -361,16 +445,20 @@ fi
 # the work still continues (the next tick re-gates once CI concludes); only the
 # session-context preservation is lost in this narrow window.
 if ! "$SCRIPTS/dispatch-ci-ready" "$ISSUE_NUM" >/dev/null 2>&1; then
+  DLOG_BRANCH="early-gate"
   spawn_tick
   if [ -n "$MARKER_PHASE" ]; then
     # Marker present (see the block above): the phase completed and only CI
     # is still running — self-close so the session does not leak idle.
+    DLOG_DISPOSITION="self-close"
     clear_rate_limit_retry_labels
     spawn_sweep
     self_close
+  else
+    # No marker: a genuine mid-phase exit during a CI restart — hand back to
+    # the router without parking or self-closing (TOCTOU protection).
+    DLOG_DISPOSITION="hand-back"
   fi
-  # No marker: a genuine mid-phase exit during a CI restart — hand back to
-  # the router without parking or self-closing (TOCTOU protection).
   exit 0
 fi
 
@@ -380,12 +468,14 @@ CURRENT_PHASE=$("$SCRIPTS/dispatch-phase" "$ISSUE_NUM" 2>/dev/null) || CURRENT_P
 
 if [ -z "$MARKER_PHASE" ]; then
   # Branch A — marker absent.
+  DLOG_BRANCH="A"
   if session_scheduled_wakeup; then
     # Live idle-polling worker — its final turn scheduled a ScheduleWakeup,
     # so it will resume on its own poll cadence. Do NOT park on office-hours
     # and do NOT spawn a redundant tick (the live worker drives the chain
     # itself). Without this gate Branch A re-parks the issue once per poll
     # cycle, oscillating dispatch:office-hours (#1590).
+    DLOG_DISPOSITION="hand-back"
     exit 0
   fi
   # Rate-limit self-heal (#1733). A worker that died on a TRANSIENT Anthropic
@@ -407,11 +497,13 @@ if [ -z "$MARKER_PHASE" ]; then
             # cap hit — the schedule script already parked office-hours.
             # Spawn a tick like the normal park (safe: the issue now carries
             # dispatch:office-hours, so the tick skips it — no race).
+            DLOG_DISPOSITION="park"
             spawn_tick ;;
           *)
             # reseeded — timer armed. Do NOT spawn a tick: the resume timer
             # owns this issue's continuation; a competing tick could launch a
             # fresh from-scratch worker and race the resume.
+            DLOG_DISPOSITION="hand-back"
             : ;;
         esac
         exit 0
@@ -432,6 +524,7 @@ if [ -z "$MARKER_PHASE" ]; then
   # autonomous handler and qa re-runs once CI is green — intentional, see #2025.)
   DISPATCHED_PHASE=$("$SCRIPTS/dispatch-recover-dispatched-phase" "$TRANSCRIPT_PATH" 2>/dev/null) || DISPATCHED_PHASE=""
   if [ -n "$DISPATCHED_PHASE" ] && [ -n "$CURRENT_PHASE" ] && phase_advanced_past "$DISPATCHED_PHASE" "$CURRENT_PHASE"; then
+    DLOG_DISPOSITION="self-close"
     clear_rate_limit_retry_labels
     strip_office_hours_label
     spawn_tick
@@ -441,6 +534,7 @@ if [ -z "$MARKER_PHASE" ]; then
   fi
   # Recovery failed, or the chain has not advanced past the dispatched phase →
   # genuine mid-phase exit → fall through to the office-hours park below.
+  DLOG_DISPOSITION="park"
   "$SCRIPTS/dispatch-apply-office-hours" "$ISSUE_NUM" \
     "$(resolve_office_hours_reason "phase exited before completion (mid-phase exit or context compaction)")" \
     || echo "[dispatch-stop] WARNING: dispatch-apply-office-hours failed" >&2
@@ -450,6 +544,7 @@ fi
 
 if [ -n "$CURRENT_PHASE" ] && [ "$MARKER_PHASE" != "$CURRENT_PHASE" ]; then
   # Branch B — phase advanced.
+  DLOG_BRANCH="B"; DLOG_DISPOSITION="self-close"
   clear_rate_limit_retry_labels
   strip_office_hours_label
   spawn_tick
@@ -470,6 +565,7 @@ case "$CURRENT_PHASE" in
         # Branch C — transient no-push fix-* outcome; CI concluded, nothing
         # pending. Self-close so the session does not leak idle holding its
         # worktree; the next tick re-runs the fix-* phase or escalates at the cap.
+        DLOG_BRANCH="C"; DLOG_DISPOSITION="self-close"
         clear_rate_limit_retry_labels
         spawn_tick
         spawn_sweep
@@ -485,6 +581,7 @@ case "$CURRENT_PHASE" in
       # present means fix-conflicts completed successfully. Any OTHER fix-* phase
       # with an empty PR_NUM matches neither branch and deliberately falls
       # through to Branch D (office-hours park).
+      DLOG_BRANCH="C"; DLOG_DISPOSITION="self-close"
       clear_rate_limit_retry_labels
       spawn_tick
       spawn_sweep
@@ -495,6 +592,7 @@ case "$CURRENT_PHASE" in
 esac
 
 # Branch D — true non-advancement.
+DLOG_BRANCH="D"; DLOG_DISPOSITION="park"
 "$SCRIPTS/dispatch-apply-office-hours" "$ISSUE_NUM" \
   "$(resolve_office_hours_reason "phase ran but did not advance")" \
   || echo "[dispatch-stop] WARNING: dispatch-apply-office-hours failed" >&2
