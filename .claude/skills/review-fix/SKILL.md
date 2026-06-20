@@ -90,7 +90,8 @@ resolve `mergeable == MERGEABLE` and promote the PR to ready.
 
 On this re-entry path the Workflow has not run — Step 7 treats the deviation
 criterion as not met (`result.deviation` is absent) and writes the phase-completed
-marker. Otherwise run all steps in order.
+marker. Step 7 also skips the phase-log write on this path, so the prior entry is
+preserved. Otherwise run all steps in order.
 
 ## Steps
 
@@ -611,9 +612,11 @@ if [[ "$AHEAD" -ne 0 ]]; then
 fi
 ```
 
-**Then write the handoff note, before the terminal `dispatch:reviewed` apply.**
-The phase-log write must PRECEDE the `dispatch:reviewed` apply so that label stays
-the terminal durable action. Compose a terse "what the review found / fixed"
+**Then write the handoff note, before the terminal `dispatch:reviewed` apply —
+only when the Workflow ran this session** (i.e. **not** the idempotent re-entry
+path, where Steps 1–6 were skipped and `result` is absent). On the non-re-entry
+path the phase-log write must PRECEDE the `dispatch:reviewed` apply so that label
+stays the terminal durable action. Compose a terse "what the review found / fixed"
 digest of this pass to `tmp/phase-log-entry-$N.md` — a one-line summary of the
 fixes applied; a clean review writes a line like `failed: none`. Compose it
 **unconditionally** (no "only on failure" branch). Then upsert it (use
@@ -624,11 +627,15 @@ fixes applied; a clean review writes a line like `failed: none`. Compose it
   "$N" --phase review < tmp/phase-log-entry-$N.md
 ```
 
+Skip the phase-log write entirely on re-entry. On re-entry `dispatch:reviewed` is
+already present, so the write is skipped — there is no ordering concern relative
+to the label on the re-entry path.
+
 No attempt counter — review is single-pass, so the default `--attempt 1` applies.
-The upsert is idempotent on the `(review, 1)` key: on the re-entry path where
-`dispatch:reviewed` is already present (Steps 1–6 skipped, the Workflow did not
-run), the digest restates the prior pass; the upsert REPLACES the `(review, 1)`
-entry in place rather than stacking a duplicate, so the repeat is safe.
+Re-entry is a separate transcript where the Workflow did not run, so `result` is
+absent and there is no fresh outcome data: recomposing the digest would overwrite
+the prior `(review, 1)` entry with a thinner restatement. So the write is SKIPPED
+on re-entry — the prior entry is authoritative.
 
 Then apply the `dispatch:reviewed` label via `dispatch-complete-phase` (use
 `dangerouslyDisableSandbox: true` — the script calls `gh`):
