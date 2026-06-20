@@ -334,6 +334,18 @@ case "$args" in
         # #1085 per-episode latch read. Default [] (gate fires); a fixture models
         # an already-open latch issue (gate falls through).
         if [[ -f "$STUB_DIR/main-broken-issue-list.json" ]]; then cat "$STUB_DIR/main-broken-issue-list.json"; else echo "[]"; fi
+      elif [[ "$rest_label" == "dispatch:office-hours" ]]; then
+        # dispatch-trace-leaf parked set (#1011) and office-hours-select-target queue
+        # (#2258): both migrated from `gh issue list` to gh_issue_list_rest, so the
+        # office-hours scan now lands on the REST issues endpoint. Serve whichever
+        # fixture the active test seeds; absence → [] (nothing parked / empty queue).
+        if [[ -f "$STUB_DIR/trace-parked.json" ]]; then
+          cat "$STUB_DIR/trace-parked.json"
+        elif [[ -f "$STUB_DIR/oh-issue-list.json" ]]; then
+          cat "$STUB_DIR/oh-issue-list.json"
+        else
+          echo "[]"
+        fi
       else
         echo "[]"
       fi
@@ -343,26 +355,6 @@ case "$args" in
       jit_key=$(printf '%s' "$rest_label" | tr '/:' '__')
       jit_fixture="$STUB_DIR/jit-issues-${rest_state}-${jit_key}.json"
       if [[ -f "$jit_fixture" ]]; then cat "$jit_fixture"; else echo "[]"; fi
-    fi
-    ;;
-  "issue list --label dispatch:office-hours --state open --json number,createdAt,labels")
-    # office-hours-select-target: the office-hours queue (labeled open issues).
-    # The fetch now also carries `labels` (#1648) — the main-qa override reads it.
-    if [[ -f "$STUB_DIR/oh-issue-list.json" ]]; then
-      cat "$STUB_DIR/oh-issue-list.json"
-    else
-      echo "[]"
-    fi
-    ;;
-  "issue list --state open --label dispatch:office-hours --limit 300 --json number")
-    # dispatch-trace-leaf queue-mode parked set (#1011): open issues carrying
-    # dispatch:office-hours. $STUB_DIR/trace-parked.json supplies the parked
-    # numbers; absence means nothing is parked (default empty), so every
-    # pre-existing trace-leaf test stays green.
-    if [[ -f "$STUB_DIR/trace-parked.json" ]]; then
-      cat "$STUB_DIR/trace-parked.json"
-    else
-      echo "[]"
     fi
     ;;
   issue\ view\ *\ --json\ state)
@@ -19472,16 +19464,19 @@ case "$args" in
   "label create "*)
     # Idempotent label create — default success.
     ;;
-  *"issue list "*"--state open"*)
-    if [[ -f "$STUB_DIR/open-issues.json" ]]; then
-      cat "$STUB_DIR/open-issues.json"
+  *"api "*"repos/"*"/issues"*)
+    # gh_issue_list_rest (#2258): the engine's open/closed scans now hit REST
+    # (gh api [--paginate] repos/<repo>/issues?state=<s>&...). Serve the SAME
+    # open-issues.json / closed-issues.json fixtures, jq-remapped to REST
+    # snake_case so the helper remaps them back to identical camelCase data.
+    # state=open vs state=closed in the query string selects the fixture.
+    if [[ "$args" == *state=open* ]]; then
+      fixture="$STUB_DIR/open-issues.json"
     else
-      echo '[]'
+      fixture="$STUB_DIR/closed-issues.json"
     fi
-    ;;
-  *"issue list "*"--state closed"*)
-    if [[ -f "$STUB_DIR/closed-issues.json" ]]; then
-      cat "$STUB_DIR/closed-issues.json"
+    if [[ -f "$fixture" ]]; then
+      jq 'map({number, pull_request: null, created_at: (.createdAt // null), closed_at: (.closedAt // null), labels: (.labels // [])} + (if has("body") then {body} else {} end) + (if has("title") then {title} else {} end))' "$fixture"
     else
       echo '[]'
     fi
@@ -19580,8 +19575,8 @@ else
 fi
 calls=$(cat "$STUB_DIR/gh-calls.log")
 TOTAL=$((TOTAL + 1))
-if [[ "$calls" == *"label create"* && "$calls" == *"issue list "*"--state open"* \
-   && "$calls" == *"issue list "*"--state closed"* \
+if [[ "$calls" == *"label create"* && "$calls" == *"issues?"*"state=open"* \
+   && "$calls" == *"issues?"*"state=closed"* \
    && "$calls" == *"issue create"* && "$calls" == *"project item-add"* ]]; then
   PASS=$((PASS + 1))
   echo "  PASS: cold start invoked label create / list / create / item-add"
@@ -24614,9 +24609,14 @@ echo "$args" >> "$STUB_DIR/gh-calls.log"
 case "$args" in
   "label create "*)
     ;;
-  *"issue list "*"--state open"*)
+  *"api "*"repos/"*"/issues"*)
+    # gh_issue_list_rest (#2258): the calendar import's open-issue dedup scan now
+    # hits REST (gh api [--paginate] repos/<repo>/issues?state=open&...) WITH
+    # --include-body, so the helper's projection carries `body`. Serve the SAME
+    # open-issues.json fixture jq-remapped to REST snake_case, preserving `body`
+    # so the helper remaps back to identical camelCase data.
     if [[ -f "$STUB_DIR/open-issues.json" ]]; then
-      cat "$STUB_DIR/open-issues.json"
+      jq 'map({number, pull_request: null, created_at: (.createdAt // null), closed_at: (.closedAt // null), labels: (.labels // [])} + (if has("body") then {body} else {} end) + (if has("title") then {title} else {} end))' "$STUB_DIR/open-issues.json"
     else
       echo '[]'
     fi
@@ -25790,10 +25790,16 @@ STUB
 STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
 args="$*"
 case "$args" in
-  issue\ list\ *dispatch:main-broken*)
-    # Step-1c main-broken latch: still on `gh issue list` (not converted, #1601 A5).
+  api\ *repos/*/issues\?*dispatch:main-broken*)
+    # Step-1c main-broken latch: converted to gh_issue_list_rest (REST) by #2258.
+    # main-broken-open.txt holds one issue number per line; wrap them into a
+    # REST-shape snake_case array so the helper remaps to camelCase and the
+    # script's `jq -r '.[].number'` recovers the same numbers. Absent file → [],
+    # so the open-latch query returns empty and the re-arm short-circuits.
     if [[ -f "$STUB_DIR/main-broken-open.txt" ]]; then
-      cat "$STUB_DIR/main-broken-open.txt"
+      jq -R -s 'split("\n") | map(select(length > 0) | {number: (. | tonumber), pull_request: null, created_at: null, closed_at: null, labels: []})' "$STUB_DIR/main-broken-open.txt"
+    else
+      echo "[]"
     fi
     ;;
   api\ *repos/*/issues\?*dispatch:sync-broken*)
@@ -26871,11 +26877,16 @@ for a in "$@"; do
   prev="$a"
 done
 case "$sub" in
-  "issue list")
-    # Return the open-latch number if seeded; an absent file means no open
-    # latch (CREATE path). Must exit 0 either way — the script reads this under
-    # `set -e`, so a falsy `[[ -f ]]` test (no file) must not propagate rc 1.
-    [[ -f "$CAP/existing.txt" ]] && cat "$CAP/existing.txt"
+  "api --paginate")
+    # gh_issue_list_rest uses REST: gh api --paginate repos/{owner}/{repo}/issues?...
+    # Return the open-latch number if seeded; absent file means no open latch.
+    # gh_issue_list_rest remaps from snake_case REST to camelCase; serve snake_case.
+    if [[ -f "$CAP/existing.txt" ]]; then
+      num=$(cat "$CAP/existing.txt")
+      printf '[{"number":%s,"pull_request":null,"created_at":"2026-01-01T00:00:00Z","closed_at":null,"labels":[]}]' "$num"
+    else
+      echo '[]'
+    fi
     exit 0
     ;;
   "issue create")
@@ -30134,6 +30145,7 @@ digest_window_setup() {
   mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/bin"
 
   cp "$SCRIPT_DIR/dispatch-digest-window" "$TMPDIR_TEST/scripts/dispatch-digest-window"
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-digest-window"
 
   cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
@@ -30148,9 +30160,11 @@ case "$args" in
       echo '{"createdAt":"2026-01-01T00:00:00Z","labels":[{"name":"jit:digest"}]}'
     fi
     ;;
-  issue\ list\ --repo\ *\ --label\ *\ --state\ closed\ --limit\ *\ --json\ number,closedAt)
+  api\ repos/*/issues*)
+    # gh_issue_list_rest uses REST: gh api repos/<repo>/issues?state=...
+    # Return each item in REST snake_case format; gh_issue_list_rest remaps to camelCase.
     if [[ -f "$TREE/closed.json" ]]; then
-      cat "$TREE/closed.json"
+      jq 'map({number, pull_request: null, created_at: .createdAt, closed_at: .closedAt, labels})' "$TREE/closed.json"
     else
       echo '[]'
     fi

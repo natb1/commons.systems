@@ -183,8 +183,8 @@ fi
 # dedup misses surface instead of silently creating duplicates.
 LIST_LIMIT=1000
 LIST_RC=0
-OPEN_JSON=$(gh issue list --repo "$CALENDAR_REPO" --label "$CALENDAR_LABEL" \
-  --state open --json number,body --limit "$LIST_LIMIT" 2>&1) || LIST_RC=$?
+OPEN_JSON=$(gh_issue_list_rest --repo "$CALENDAR_REPO" --label "$CALENDAR_LABEL" \
+  --state open --include-body --limit "$LIST_LIMIT" 2>&1) || LIST_RC=$?
 if [[ "$LIST_RC" -ne 0 ]]; then
   echo "calendar: error (gh issue list failed: $OPEN_JSON)" >&2
   exit 1
