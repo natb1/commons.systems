@@ -60,7 +60,7 @@ describe("MockTimestamp contract", () => {
   describe("ts() helper", () => {
     it("ts(dateStr).toMillis() equals new Date(dateStr).getTime()", () => {
       const dateStr = "2025-01-13";
-      expect((ts(dateStr) as any).toMillis()).toBe(new Date(dateStr).getTime());
+      expect(ts(dateStr).toMillis()).toBe(new Date(dateStr).getTime());
     });
   });
 });
