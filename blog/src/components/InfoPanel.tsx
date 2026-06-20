@@ -115,7 +115,7 @@ function Archive({
   const grouped = groupByYearMonth(published);
   const sortedYears = [...grouped.keys()].sort((a, b) => b - a);
   const openYear = sortedYears[0];
-  const openMonth = Math.max(...grouped.get(openYear)!.keys());
+  const openMonth = Math.max(...grouped.get(openYear)!.keys()); // type-safety-ok: openYear is derived from grouped.keys() so the entry always exists
 
   return (
     <section className="panel-section">
