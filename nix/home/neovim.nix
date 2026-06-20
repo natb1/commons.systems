@@ -10,12 +10,7 @@
 #   1. Launch with: nvim
 #   2. Configure via ~/.config/nvim/ (user responsibility)
 
-{
-  config,
-  pkgs,
-  lib,
-  ...
-}:
+{ ... }:
 
 {
   programs.neovim = {
@@ -28,5 +23,9 @@
     viAlias = true;
     vimAlias = true;
     vimdiffAlias = true;
+
+    # Disable unused host providers to silence evaluation warnings
+    withRuby = false;
+    withPython3 = false;
   };
 }

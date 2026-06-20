@@ -146,6 +146,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
 source "$SCRIPT_DIR/lib-reservation-ledger.sh"
 
+# Pre-spawn preflight gate (#2041), config-keyed and OFF by default. Resolved
+# ONCE here so the fan-out loop pays the dispatch-config-load cost a single time.
+# Absent / no-config / {"enabled":false} → inert (byte-identical to pre-gate
+# behavior). Only {"enabled":true} arms the gate.
+PREFLIGHT_ENABLED=false
+_pf_cfg=$("$SCRIPT_DIR/dispatch-config-load" strict-preflight 2>/dev/null) || _pf_cfg=no-config
+[[ "$_pf_cfg" != no-config ]] && [[ "$(jq -r '.enabled // false' <<<"$_pf_cfg")" == true ]] && PREFLIGHT_ENABLED=true
+
 # Defined before argument parsing so the usage-error exits below release the lock
 # too. The lock is acquired by dispatch-select-tick in the same router session,
 # so a malformed materialize-spawn call would otherwise leave it held until
@@ -411,6 +419,36 @@ process_one_target() {
       ;;
   esac
 
+  # --- Pre-spawn preflight gate (#2041) -------------------------------------
+  # The worktree now exists; run the cheap preflight checks BEFORE finalizing
+  # selection or reserving a slot. On abort, return immediately: no recovery
+  # marker (dispatch-finalize-selection) and no reservation are written, so a
+  # false abort costs at most one tick (the target is re-evaluated next tick),
+  # never a worker slot. $PHASE is the value already computed at the #1109 done
+  # re-check above (reused — no second dispatch-phase call). The lock is released
+  # by the driver after process_one_target returns, matching the other
+  # pre-finalize soft-return paths (e.g. ci-waiting).
+  if [[ "$PREFLIGHT_ENABLED" == true ]]; then
+    # dispatch-preflight.sh distinguishes its exit codes (see its header):
+    #   exit 1     — a gate check blocked the spawn (deliberate abort).
+    #   exit >= 2  — usage / un-cd-able path / merge-tree infrastructure error;
+    #                an internal dispatch error, NOT a gate decision. Treating it
+    #                as a soft preflight-abort would silently drain the slot and
+    #                re-evaluate the same broken target next tick. Route it to the
+    #                hard-error path (return 2 → caller does release_lock; exit 2),
+    #                matching every other internal failure in this function. The
+    #                specific reason line was already printed to >&2 by the script.
+    pf_rc=0
+    "$SCRIPT_DIR/dispatch-preflight.sh" "$WORKTREE_PATH" "$PHASE" 1>&2 || pf_rc=$?
+    if [[ "$pf_rc" -eq 1 ]]; then
+      OUTCOME=preflight-abort
+      return 0
+    elif [[ "$pf_rc" -ge 2 ]]; then
+      echo "dispatch-materialize-spawn: dispatch-preflight.sh returned internal error (exit $pf_rc) for $WORKTREE_PATH — not a gate abort" >&2
+      return 2
+    fi
+  fi
+
   # Write the recovery marker into the target worktree. The lock is STILL HELD
   # from here through the spawn-kick (#1048) — the caller releases it after the
   # loop; registration is no longer awaited.
@@ -500,6 +538,16 @@ if [[ "$MODE" == "explicit" ]] || (( GAP <= 1 )); then
       fi
       ;;
     worktree-conflict) echo "drain worktree-conflict" ;;
+    preflight-abort)
+      # Pre-spawn preflight (#2041) aborted this spawn before any slot was
+      # reserved. drain (autonomous) re-selects the target next tick; notify
+      # surfaces it for explicit dispatch. Neither parks nor drops the target.
+      if [[ "$MODE" == "explicit" ]]; then
+        echo "notify preflight-abort"
+      else
+        echo "drain preflight-abort"
+      fi
+      ;;
     ci-waiting)
       # Single-target path (#979): instead of draining as a no-op, schedule a
       # target-keyed reseed so the chain returns to #$WAITING_N when its CI
@@ -555,6 +603,13 @@ record_outcome() {
       # spawn — no phase to run. Record a skip and continue filling the gap from the
       # next distinct target. A normal terminal state, not a failure.
       echo "propagate: skipped #$cur_n (target-done)"
+      ;;
+    preflight-abort)
+      # Pre-spawn preflight (#2041) aborted this spawn before any slot was
+      # reserved; do NOT bump `spawned` (the gap is not consumed) so the loop
+      # fills from the next target. The target is re-evaluated next tick.
+      echo "propagate: skipped #$cur_n (preflight-abort)"
+      echo "dispatch-materialize-spawn: #$cur_n preflight-abort during fan-out (re-evaluated next tick)" >&2
       ;;
     *)
       echo "propagate: skipped #$cur_n ($OUTCOME)"
