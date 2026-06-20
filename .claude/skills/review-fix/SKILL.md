@@ -378,8 +378,29 @@ marker is the machine key read by the `dispatch-retriage-orphaned-followups`
 scan (gated by the static label as a cheap server-side pre-filter) to park
 orphaned follow-ups when PR #<PR_NUM> is later closed without merging — without
 the marker, such follow-ups silently point at code that never landed on main.
-The static label is pre-created once (during the PR's QA) so filing just adds it
-idempotently — no create-on-not-found dance.
+
+The static label must exist before the 5a/5b subagents add it: a missing label
+makes every `--add-label dispatch:review-followup` a silent no-op AND makes the
+`dispatch-retriage-orphaned-followups` scan's server-side `--label` pre-filter
+match nothing, so orphaned follow-ups become permanently invisible to re-triage.
+Guarantee its presence with a single create-on-not-found in THIS main thread,
+**before** the 5a/5b fan-out — run it once when either bucket is non-empty (it is
+race-free here because the fan-out has not started, so the parallel subagent adds
+in 5a/5b stay plain idempotent `--add-label` calls with no per-subagent create
+dance). Use `dangerouslyDisableSandbox: true` — `gh` needs network, see
+`.claude/rules/sandbox.md`:
+
+```bash
+# Ensure the static label exists once, in the single-threaded parent. `gh label
+# create` is idempotent in effect: it exits non-zero with an "already exists"
+# message when the label is already present (the common case), which is benign.
+# Any OTHER failure is a real error worth surfacing.
+create_out=$(gh label create "dispatch:review-followup" \
+  --color "5319e7" \
+  --description "dispatch: review-fix out-of-scope follow-up (source PR in body marker)" \
+  2>&1) || [[ "$create_out" == *"already exists"* ]] \
+  || echo "review-fix: warning: could not ensure dispatch:review-followup label: $create_out" >&2
+```
 
 #### 5a. Deferred code-review/review findings → `/file-issue` with a blocked-by link
 
@@ -424,8 +445,9 @@ summary. The subagent:
    gh issue edit <N> --body "$BODY
 
    <!-- dispatch:source-pr <PR_NUM> -->"
-   # (b) Add the static label (pre-created once during QA; adding an existing
-   # label is idempotent and race-free, so NO create-on-not-found dance).
+   # (b) Add the static label. The main thread ensured it exists once at the top
+   # of Step 5 (create-on-not-found, before this fan-out), so adding it here is a
+   # plain idempotent, race-free `--add-label` — NO per-subagent create dance.
    gh issue edit <N> --add-label "dispatch:review-followup"
    ```
 4. Returns every `<N>` to this thread.
@@ -499,7 +521,7 @@ summary. Each subagent:
    gh issue edit <N> --add-label security --add-label bug --add-label "dispatch:review-followup"
    ```
 
-   Since `/file-issue` (step 2) now classifies and applies a type label at creation via `ref-issue-labels`, and a `dispatch-security-followup` body describes an identified failure mode — a CodeQL alert at a specific location, or named npm advisories with severities — the classifier already applies `bug`; this `--add-label bug` is therefore idempotent reinforcement, `--add-label security` adds the topic, and exactly one type label results with no atomic type-swap needed. The `dispatch:review-followup` label is pre-created once during QA, so adding it is idempotent and race-free — no create-on-not-found dance. Then append the source-PR marker (read-modify-write, same recipe as 5a — `gh issue edit --body` REPLACES the whole body, so never pass the marker alone):
+   Since `/file-issue` (step 2) now classifies and applies a type label at creation via `ref-issue-labels`, and a `dispatch-security-followup` body describes an identified failure mode — a CodeQL alert at a specific location, or named npm advisories with severities — the classifier already applies `bug`; this `--add-label bug` is therefore idempotent reinforcement, `--add-label security` adds the topic, and exactly one type label results with no atomic type-swap needed. The `dispatch:review-followup` label was ensured present once by the main thread at the top of Step 5 (create-on-not-found, before this fan-out), so adding it here is idempotent and race-free — no per-subagent create-on-not-found dance. Then append the source-PR marker (read-modify-write, same recipe as 5a — `gh issue edit --body` REPLACES the whole body, so never pass the marker alone):
 
    ```bash
    BODY=$(gh issue view <N> --json body -q .body)

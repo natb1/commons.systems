@@ -57,7 +57,7 @@ RETRIAGED_DESC="dispatch: orphaned review follow-ups re-triaged after source PR 
 # REST keeps this scan off the shared GraphQL rate-limit bucket (#1601).
 if ! OPEN_JSON=$(gh_issue_list_rest --state open --label dispatch:review-followup --include-body); then
   # Cannot scan without the open-issue set — best-effort, exit 0.
-  echo "dispatch-retriage-orphaned-followups: warning: gh_issue_list_rest --state open failed; skipping scan" >&2
+  echo "dispatch-retriage-orphaned-followups: warning: gh_issue_list_rest --state open --label dispatch:review-followup failed; skipping scan" >&2
   exit 0
 fi
 

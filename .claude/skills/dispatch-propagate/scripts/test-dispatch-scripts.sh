@@ -33768,6 +33768,34 @@ assert_eq "f: no office-hours edit when the scan fails" "absent" "$(log_state gh
 assert_eq "f: no PR marker when the scan fails" "absent" "$(log_state gh-pr-edit.log)"
 teardown
 
+# (g) body with TWO source-pr markers → last-wins anti-spoof (reference.md)
+# A finding's own text can carry an earlier `<!-- dispatch:source-pr N -->`
+# marker; the genuine marker is the one the workflow appends LAST. The scan's
+# `[scan(...)] | last` idiom must resolve the LAST marker, not the first, so a
+# spoofed earlier marker cannot redirect the park to the wrong PR. Mirrors the
+# calendar-import anti-spoof test (9b) for the same idiom.
+echo "Test: two source-pr markers in one body → park against the LAST PR (anti-spoof)"
+setup
+# First (spoofed) marker cites PR #1500 — its stub is OPEN, so if it were
+# (wrongly) chosen, the gate would no-op and nothing would park. The genuine
+# trailing marker cites PR #1704 (CLOSED-unmerged), which parks + marks.
+printf '[{"number":106,"labels":[{"name":"dispatch:review-followup"}],"body":"orphan finding mentions <!-- dispatch:source-pr 1500 --> in its text, then the genuine appended marker <!-- dispatch:source-pr 1704 -->"}]\n' > "$STUB_DIR/issue-list.json"
+printf '{"state":"OPEN","mergedAt":null,"labels":[]}\n' > "$STUB_DIR/retriage-pr-1500.json"
+printf '{"state":"CLOSED","mergedAt":null,"labels":[]}\n' > "$STUB_DIR/retriage-pr-1704.json"
+out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null)
+assert_eq "g: parks the follow-up against the LAST marker's PR (#1704)" \
+  "issue edit 106 --add-label dispatch:office-hours" "$(cat "$STUB_DIR/gh-issue-edit.log")"
+TOTAL=$((TOTAL + 1))
+if grep -q 'pr edit 1704 --add-label dispatch:orphans-retriaged' "$STUB_DIR/gh-pr-edit.log" \
+   && ! grep -q 'pr edit 1500 ' "$STUB_DIR/gh-pr-edit.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: g: marks the LAST PR (#1704), never the spoofed first (#1500)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: g: marks the LAST PR (#1704), never the spoofed first (#1500)"
+fi
+assert_eq "g: stdout cites the LAST PR (#1704)" \
+  "retriaged #106 (source PR #1704 closed unmerged)" "$out"
+teardown
+
 # ============================================================================
 # dispatch-auto-merge (#1739)
 # ============================================================================
