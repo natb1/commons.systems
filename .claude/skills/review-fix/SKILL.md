@@ -27,7 +27,7 @@ skill never readies the PR itself. Resulting chain: `qa -> review -> done`.
 disposition summary; this skill never sees raw findings.
 
 Run `gh` commands (directly or via `post-pr-comment.sh` / `dispatch-complete-phase`)
-and `npx`-backed scans (CodeQL, the dependency audit, the erosion scan) with
+and `npx`-backed scans (CodeQL, the dependency audit) with
 `dangerouslyDisableSandbox: true` — see `.claude/rules/sandbox.md`.
 
 ## Idempotency preamble
@@ -223,9 +223,8 @@ and is not an error.
 
 Run inline in this parent thread — not a subagent — whenever `surface=code`.
 Pipe the changed-file list into `dispatch-review-erosion`, passing `MERGE_BASE`
-as the positional argument (**`dangerouslyDisableSandbox: true` is mandatory** —
-the script shells out to `npx jscpd@3.5.10`, which downloads from the npm
-registry, and it hard-fails on a missing jscpd report):
+as the positional argument (no `dangerouslyDisableSandbox` needed — jscpd is now
+a local devDependency invoked via `node_modules/.bin/jscpd`, not an `npx` fetch):
 
 ```bash
 # MERGE_BASE is already set above — reuse it here.

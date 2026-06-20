@@ -598,11 +598,18 @@ if (deduped.length) {
   ]);
   deduped = deduped.map((f) => {
     const c = classById.get(f.id);
-    // Fallback when the classify agent gave no verdict for this finding: security
-    // sources → Out-of-scope; code-review/review → Deferred (NOT Informational) so
-    // an unclassified-but-real finding is filed as a follow-up rather than silently
-    // dropped from both the fix set and the follow-up filings.
-    const bucket = c ? c.bucket : SEC_SOURCES.has(f.Source) ? 'Out-of-scope' : 'Deferred';
+    // Fallback when the classify agent gave no verdict for this finding: erosion
+    // sources → Informational (advisory, not filed) per the Informational-erosion
+    // design intent; security sources → Out-of-scope; code-review/review → Deferred
+    // (NOT Informational) so an unclassified-but-real finding is filed as a follow-up
+    // rather than silently dropped from both the fix set and the follow-up filings.
+    const bucket = c
+      ? c.bucket
+      : f.Source === 'erosion'
+        ? 'Informational'
+        : SEC_SOURCES.has(f.Source)
+          ? 'Out-of-scope'
+          : 'Deferred';
     // For prescanned codeql/npm findings, prefer their own carried classification if present.
     let security_class = c ? c.security_class : 'none';
     if ((f.Source === 'codeql' || f.Source === 'npm') && f.classification) {

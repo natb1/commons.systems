@@ -18,13 +18,9 @@
 # no erosion findings — the repo's ~100 bash scripts under .claude/ are out of
 # scope for v1. The language-scope filter below drops every non-TS/JS path.
 #
-# SANDBOX: the duplication metric runs `npx jscpd` (pinned to the pure-JS 3.x
-# line — see the VERSION PIN note at the jscpd section), which downloads from
-# the npm registry on first use. Per .claude/rules/sandbox.md that needs
-# `dangerouslyDisableSandbox: true` on the CALLER's Bash invocation (the
-# review-fix SKILL.md Step 1 wiring, Unit 2) — the override lives on the caller,
-# not in this script. The complexity metric uses the repo's installed eslint at
-# node_modules/.bin/eslint (NOT npx) and needs no override.
+# SANDBOX: both metrics use the repo's installed bins (node_modules/.bin/eslint
+# and node_modules/.bin/jscpd — see the jscpd section below). No `npx` fetch;
+# no dangerouslyDisableSandbox needed on the caller.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -52,6 +48,10 @@ LANG_RE='\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$'
 paths=()
 while IFS= read -r line; do
   [[ -z "${line//[[:space:]]/}" ]] && continue
+  # Reject any path beginning with '-': it would be interpreted as a flag by
+  # eslint/jscpd even with the '--' terminator in eslint_run/run_jscpd (defense
+  # in depth; red-team-0 #2082).
+  [[ "$line" == -* ]] && continue
   [[ "$line" =~ $LANG_RE ]] || continue
   paths+=("$line")
 done
@@ -118,7 +118,7 @@ eslint_run() {
   fi
   local out
   out="$("$ESLINT_BIN" --config "$ESLINT_CONFIG" --no-config-lookup --no-ignore \
-    --format json "$@" 2>/dev/null || true)"
+    --format json -- "$@" 2>/dev/null || true)"
   [[ -n "$out" ]] && printf '%s\n' "$out" || echo '[]'
 }
 
@@ -132,15 +132,19 @@ eslint_run "${baseline_paths[@]}" > "$ESLINT_BASE_JSON"
 # paths to the sidecar. jscpd may exit non-zero when it finds clones; tolerate
 # the EXIT CODE but require the report FILE to appear.
 #
-# VERSION PIN — `jscpd@3.5.10`: the spec named a bare `npx jscpd`, but jscpd v4+
-# ships a native Rust `cpd` binary that a NixOS host (this repo's dev/dispatch
-# environment) cannot run ("NixOS cannot run dynamically linked executables").
-# /review-fix runs inline in dispatch Claude sessions on that same host, so a
-# bare `npx jscpd` would silently never produce a duplication finding here. The
-# 3.x line is pure JS, runs on NixOS, and writes the identical
-# statistics.total.{clones,duplicatedLines,percentage} the sidecar reads. Unit
-# 3's "bash spec sync" should reconcile this pin with the spec text.
-JSCPD="jscpd@3.5.10"
+# jscpd@3.5.10 is pinned in package.json devDependencies (and locked in
+# package-lock.json) so transitive deps are fully pinned — use the installed bin
+# directly (matching the eslint pattern). npx was removed to close the
+# supply-chain risk from per-run registry fetches with unpinned transitive deps
+# (red-team-1, #2082). v4+ ships a native Rust `cpd` binary that a NixOS host
+# cannot run; the 3.x line is pure JS and writes the identical
+# statistics.total.{clones,duplicatedLines,percentage} the sidecar reads.
+JSCPD_BIN="node_modules/.bin/jscpd"
+
+if [[ ! -x "$JSCPD_BIN" ]]; then
+  echo "dispatch-review-erosion: jscpd not found at $JSCPD_BIN — run 'npm install' from repo root" >&2
+  exit 1
+fi
 
 # Fail LOUDLY if the report file never materializes (per
 # .claude/rules/code-style.md): a missing jscpd report is a misconfigured
@@ -149,10 +153,10 @@ JSCPD="jscpd@3.5.10"
 run_jscpd() {
   # $1 = output dir; $2.. = files
   local outdir="$1"; shift
-  npx --yes "$JSCPD" --reporters json --output "$outdir" --silent "$@" \
+  "$JSCPD_BIN" --reporters json --output "$outdir" --silent -- "$@" \
     >/dev/null 2>&1 || true
   if [[ ! -f "$outdir/jscpd-report.json" ]]; then
-    echo "dispatch-review-erosion: jscpd produced no report in $outdir — is $JSCPD runnable on this host? (NixOS needs the pure-JS 3.x line)" >&2
+    echo "dispatch-review-erosion: jscpd produced no report in $outdir — is $JSCPD_BIN runnable on this host? (NixOS needs the pure-JS 3.x line)" >&2
     exit 1
   fi
 }

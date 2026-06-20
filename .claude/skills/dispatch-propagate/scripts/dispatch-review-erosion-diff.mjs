@@ -26,6 +26,9 @@ import { readFileSync, existsSync } from 'node:fs';
 
 function parseArgs(argv) {
   const args = {};
+  if (argv.length % 2 !== 0) {
+    throw new Error('odd number of CLI tokens — every --flag must have a value');
+  }
   for (let i = 0; i < argv.length; i += 2) {
     const key = argv[i];
     if (!key.startsWith('--')) {
@@ -113,7 +116,7 @@ function worstCloneLocation(report) {
   let worst = dupes[0];
   let worstLines = -1;
   for (const d of dupes) {
-    const lines = (d?.lines ?? d?.fragment?.split('\n').length ?? 0);
+    const lines = (d.firstFile?.end ?? 0) - (d.firstFile?.start ?? 0);
     if (lines > worstLines) {
       worstLines = lines;
       worst = d;

@@ -41,3 +41,8 @@ result
 /.claude/scheduled_tasks.lock
 /.idea
 /.vscode
+
+# dispatch-review-erosion temp dirs (cleaned up by trap, but excluded if SIGKILL)
+.erosion-baseline.*
+.erosion-jscpd-head.*
+.erosion-jscpd-base.*
