@@ -31444,8 +31444,8 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: cleanup_stale_heartbeat_units ran disable with no prior units"
 fi
 
-# 3d. AC2 (#2191) — [Service] section present but no WorkingDirectory= line →
-# early return at lib.sh:1805 ([ -n "$installed_workdir" ] || return 0): no
+# 3d. AC4 (#2191) — [Service] section present but no WorkingDirectory= line →
+# early return at lib.sh:1810 ([ -n "$installed_workdir" ] || return 0): no
 # disable, returns 0.
 : > "$ehu_log"
 printf '%s\n' '[Service]' > "$ehu_svc"
