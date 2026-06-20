@@ -6258,6 +6258,27 @@ assert_eq "no worktree → no spawn recorded" "no" \
   "$([[ -e "$TMPDIR_TEST/oh-bg-argv" ]] && echo yes || echo no)"
 teardown
 
+# OH3d. main-qa fresh-spawn negative path (OHST12): a main-qa-labelled, no-PR item
+# whose DISPATCH_OFFICE_HOURS_MAIN_WORKTREE directory does NOT exist → the entry
+# script exits 1 and records no spawn (dispatch-spawn-office-hours directory guard).
+echo "Test: main-qa item with missing main worktree dir → exit 1, no spawn"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"main-qa"}]}]\n' \
+  > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+# Do NOT mkdir the main worktree dir — this is the negative path being tested.
+office_hours_fresh_fake_claude
+rc=0; out=$("$TMPDIR_TEST/office-hours" 2>&1) || rc=$?
+assert_eq "main-qa missing main worktree → exit 1" "1" "$rc"
+assert_eq "main-qa missing main worktree → no spawn recorded" "no" \
+  "$([[ -e "$TMPDIR_TEST/oh-bg-argv" ]] && echo yes || echo no)"
+assert_eq "main-qa missing main worktree → spawn-fail diagnostic (not worktree-swept diagnostic)" "yes" \
+  "$([[ "$out" == *'failed to launch'* ]] && echo yes || echo no)"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
 # OH4. Empty office-hours queue → selector emits `empty` → the entry script prints
 # the queue-empty message and exits WITHOUT launching Claude.
 echo "Test: empty queue → queue-empty message, no launch"
