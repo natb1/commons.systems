@@ -150,9 +150,9 @@ case "$verb" in
   idle-provision)
     # a = originating sessionId; b = remote branch whose worktree was swept.
     # Provision the worktree from origin/<branch> first, then attach as idle.
-    # Run without command substitution so the provisioning script's stdout
-    # (git fetch/worktree/merge status) flows straight to the user's terminal.
-    if ! "$SCRIPT_DIR/dispatch-provision-from-remote" "$b"; then
+    # Redirect stdout to stderr so progress/status lines don't pollute office-hours'
+    # stdout (which callers capture to read the LAUNCH directive).
+    if ! "$SCRIPT_DIR/dispatch-provision-from-remote" "$b" >&2; then
       echo "office-hours: provisioning worktree for branch '$b' from the remote failed — cannot attach session $a. Check the output above: origin/$b may be missing or unfetchable (network/fetch error), the worktree-add may have failed, or origin/main may have a merge conflict with the branch." >&2
       exit 1
     fi
