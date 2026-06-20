@@ -699,7 +699,7 @@ export function createPdfRenderer(onError?: (err: unknown) => void): SearchableR
       if (!doc) return [];
       const outline = await doc.getOutline();
       if (!outline || outline.length === 0) return [];
-      return resolveOutlineItems(outline as PdfOutlineItem[], doc);
+      return resolveOutlineItems(outline as PdfOutlineItem[], doc); // type-safety-ok: pdfjs-dist getOutline() returns a loosely-typed array; cast is pre-existing
     },
 
     async goToOutlineEntry(entry: OutlineEntry): Promise<void> {

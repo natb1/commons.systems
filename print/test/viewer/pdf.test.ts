@@ -585,11 +585,11 @@ describe("search()", () => {
     };
     const spy = vi
       .spyOn(pdfjs, "getDocument")
-      .mockReturnValue({ promise: Promise.resolve(racingDoc) } as never);
+      .mockReturnValue({ promise: Promise.resolve(racingDoc) } as never); // type-safety-ok: vitest mock for pdfjs-dist getDocument complex return type
     try {
       renderer = createPdfRenderer();
       await renderer.init(container, "fake://source.pdf");
-      const outline = await renderer.getOutline!();
+      const outline = await renderer.getOutline!(); // type-safety-ok: createPdfRenderer always defines getOutline
       // Must resolve to an array (clean return), never call reportError.
       expect(outline).toBeInstanceOf(Array);
       expect(globalThis.reportError).not.toHaveBeenCalled();
