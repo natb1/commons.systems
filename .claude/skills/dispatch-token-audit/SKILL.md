@@ -1,11 +1,11 @@
 ---
 name: dispatch-token-audit
-description: Audit recent dispatch session transcripts and emit a ranked report of token-reduction opportunities across nine lenses, ranked by measured price-proxy magnitude. Report-only. Accepts an optional window, e.g. /dispatch-token-audit 2d.
+description: Audit recent dispatch session transcripts and emit a ranked report of token-reduction opportunities across nine lenses, ranked by measured price-proxy magnitude. Primarily report-only; also writes the phase-model routing policy artifact. Accepts an optional window, e.g. /dispatch-token-audit 2d.
 ---
 
 # Dispatch Token Audit
 
-This skill parses recent Claude session transcripts and emits a ranked report of token-reduction opportunities. It is report-only: it does not create issues or modify the dispatch workflow — the user decides what to act on from the report. Two cost figures appear in the output:
+This skill parses recent Claude session transcripts and emits a ranked report of token-reduction opportunities. It creates no GitHub issues and edits no workflow files — the user decides what to act on from the report. It does, however, write one control artifact: `dispatch.config/phase-model-policy.json`, the phase→model routing policy consumed by `dispatch-phase-model` at tick time (step 7 below). That write is the audit closing the routing loop on its own measurements; `force-opus.json` overrides the policy downstream, and deleting the file reverts routing to the hardcoded defaults. Two cost figures appear in the output:
 
 - **`price_proxy_usd`** — a uniform Opus-list-price rate applied to every token regardless of the actual model. Holding price constant isolates token count, so this figure ranks opportunities by relative magnitude. It is **not** the actual bill.
 - **`cost_usd`** — the truthful per-model bill. Each model is priced at its real rate (Sonnet, Haiku, or Opus), so this figure measures real dollars and shows the actual savings from model-routing decisions.
@@ -119,7 +119,21 @@ Ranking (step 5) stays on `price_proxy_usd`. `cost_usd` is reported alongside it
      - A concrete, specific suggestion (not a vague "consider X" — name the phase, the model, the script, the error signature).
    - **All nine lenses represented**: lenses with negligible measured impact appear at the bottom with their measured magnitude and a note that the data shows near-zero impact.
 
-7. **Report-only.** The skill does NOT create GitHub issues and does NOT modify the dispatch workflow. The user reads the report and decides what to file. This prevents the skill from racing or duplicating the optimization issues it surfaces (e.g. #1171, #1172).
+7. **Write the phase-model routing policy.** Run the producer over the same aggregate doc and write its stdout to the resolved project-root `dispatch.config/phase-model-policy.json`. This write happens **unconditionally** — it is the audit closing the routing loop on its own measurements, not an opt-in. The safety net is structural: the producer only ever emits routes for `{qa, review}` (it iterates that allowlist and nothing else), and `dispatch-phase-model` re-applies the same fail-closed allowlist plus the `force-opus` override downstream, so a code-authoring phase can never be demoted.
+
+   ```bash
+   source .claude/skills/dispatch-propagate/scripts/lib.sh
+   POLICY_DIR="$(resolve_project_root)/dispatch.config"
+   mkdir -p "$POLICY_DIR"
+   .claude/skills/dispatch-token-audit/scripts/generate-phase-model-policy.sh tmp/usage-audit.json \
+     > "$POLICY_DIR/phase-model-policy.json"
+   ```
+
+   Run this Bash call with `dangerouslyDisableSandbox: true`. `dispatch.config/` lives at the **project root**, which is NOT in `settings.json`'s `allowWrite` list (see `.claude/rules/sandbox.md`), so a sandboxed write fails read-only. Resolve the path exactly as `dispatch-config-load` does — `resolve_project_root` from `lib.sh`, then `/dispatch.config`. Because that directory is OUTSIDE the worktree, the write does not dirty git.
+
+   What the policy does: `dispatch-phase-model` reads it at tick time and routes `qa`/`review` either to Sonnet (`claude-sonnet-4-6`, keep cheap) when the pooled hit-rate is at/above the floor with enough samples, or promotes to Opus (`claude-opus-4-8`) when the hit-rate falls below the floor. Phases outside `{qa, review}` are never routed. The producer is a pure function of `tmp/usage-audit.json` (no clock call). With healthy data both phases route to Sonnet — identical to the current defaults — so writing by default changes nothing until evidence accumulates and flips a phase to `promote`. `force-opus.json` overrides this policy downstream, and deleting `phase-model-policy.json` reverts every phase to the hardcoded defaults.
+
+8. **Otherwise report-only.** Apart from the one `phase-model-policy.json` control-artifact write in step 7, the skill creates NO GitHub issues and modifies NO dispatch workflow files. The user reads the report and decides what else to file. This keeps the skill from racing or duplicating the optimization issues it surfaces (e.g. #1171, #1172).
 
 ## Per-run outcome hit-rates
 
