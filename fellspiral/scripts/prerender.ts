@@ -16,25 +16,34 @@ import {
 
 const distDir = join(dirname(new URL(import.meta.url).pathname), "..", "dist");
 
-await prerenderPosts({
-  siteUrl: SITE_URL,
-  titleSuffix: "Fellspiral",
-  distDir,
-  seed: appSeed,
-  postDir: join(distDir, "..", "post"),
-  navLinks: NAV_LINKS,
-  infoPanel: {
-    linkSections: INFO_PANEL_LINK_SECTIONS,
-    blogRoll: FEED_REGISTRY.map((f) => ({ id: f.id, name: f.name, url: f.homeUrl })),
-    rssFeedUrl: "/feed.xml",
-    opmlUrl: "/blogroll.opml",
-  },
-  siteDefaults: SITE_DEFAULTS,
-  organization: ORGANIZATION,
-  author: AUTHOR,
-  relMe: REL_ME,
-  showHomeLink: true,
-});
+try {
+  await prerenderPosts({
+    siteUrl: SITE_URL,
+    titleSuffix: "Fellspiral",
+    distDir,
+    seed: appSeed,
+    postDir: join(distDir, "..", "post"),
+    navLinks: NAV_LINKS,
+    infoPanel: {
+      linkSections: INFO_PANEL_LINK_SECTIONS,
+      blogRoll: FEED_REGISTRY.map((f) => ({ id: f.id, name: f.name, url: f.homeUrl })),
+      rssFeedUrl: "/feed.xml",
+      opmlUrl: "/blogroll.opml",
+    },
+    siteDefaults: SITE_DEFAULTS,
+    organization: ORGANIZATION,
+    author: AUTHOR,
+    relMe: REL_ME,
+    showHomeLink: true,
+  });
+} catch (err) {
+  throw new Error(
+    `Prerender failed in fellspiral/scripts/prerender.ts (prerenderPosts): ${
+      err instanceof Error ? err.message : String(err)
+    }`,
+    { cause: err },
+  );
+}
 
 generateFeedXml({
   title: "fellspiral",

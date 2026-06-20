@@ -39,39 +39,57 @@ const infoPanel = {
 // reads dist/index.html as its template and injectBeforeHead only *prepends*
 // its <head> tags — it never strips pre-existing ones — so running it second
 // would leave /about with the home page's SEO tags duplicated alongside its own.
-prerenderStaticPage({
-  siteUrl: SITE_URL,
-  titleSuffix,
-  distDir,
-  page: ABOUT_PAGE_META,
-  // Wrap in a <div> to byte-match how createBlogApp hydrates/renders the /about
-  // extraRoute body — createElement("div", { dangerouslySetInnerHTML }). Without
-  // the wrapper, a deep entry to /about would hydrate this body against a bare
-  // <div> and abandon hydration (React #424), shifting layout on the SEO surface.
-  bodyHtml: `<div>${renderAboutHtml()}</div>`,
-  navLinks: NAV_LINKS,
-  aboutContent: renderAboutPanelHtml(),
-  jsonLdBlocks: [personJsonLd(PERSON)],
-  relMe: REL_ME,
-  showHomeLink: false,
-});
+try {
+  prerenderStaticPage({
+    siteUrl: SITE_URL,
+    titleSuffix,
+    distDir,
+    page: ABOUT_PAGE_META,
+    // Wrap in a <div> to byte-match how createBlogApp hydrates/renders the /about
+    // extraRoute body — createElement("div", { dangerouslySetInnerHTML }). Without
+    // the wrapper, a deep entry to /about would hydrate this body against a bare
+    // <div> and abandon hydration (React #424), shifting layout on the SEO surface.
+    bodyHtml: `<div>${renderAboutHtml()}</div>`,
+    navLinks: NAV_LINKS,
+    aboutContent: renderAboutPanelHtml(),
+    jsonLdBlocks: [personJsonLd(PERSON)],
+    relMe: REL_ME,
+    showHomeLink: false,
+  });
+} catch (err) {
+  throw new Error(
+    `Prerender failed in landing/scripts/prerender.ts (prerenderStaticPage): ${
+      err instanceof Error ? err.message : String(err)
+    }`,
+    { cause: err },
+  );
+}
 
-await prerenderPosts({
-  siteUrl: SITE_URL,
-  titleSuffix,
-  distDir,
-  seed: appSeed,
-  postDir,
-  navLinks: NAV_LINKS,
-  infoPanel,
-  siteDefaults: SITE_DEFAULTS,
-  organization: ORGANIZATION,
-  author: AUTHOR,
-  relMe: REL_ME,
-  softwareApplications: APPS,
-  homeExtraHtml: renderShowcase(APPS),
-  showHomeLink: false,
-});
+try {
+  await prerenderPosts({
+    siteUrl: SITE_URL,
+    titleSuffix,
+    distDir,
+    seed: appSeed,
+    postDir,
+    navLinks: NAV_LINKS,
+    infoPanel,
+    siteDefaults: SITE_DEFAULTS,
+    organization: ORGANIZATION,
+    author: AUTHOR,
+    relMe: REL_ME,
+    softwareApplications: APPS,
+    homeExtraHtml: renderShowcase(APPS),
+    showHomeLink: false,
+  });
+} catch (err) {
+  throw new Error(
+    `Prerender failed in landing/scripts/prerender.ts (prerenderPosts): ${
+      err instanceof Error ? err.message : String(err)
+    }`,
+    { cause: err },
+  );
+}
 
 generateFeedXml({
   title: "commons.systems",
