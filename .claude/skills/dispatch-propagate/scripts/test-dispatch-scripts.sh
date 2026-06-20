@@ -31275,6 +31275,58 @@ else
   echo "  FAIL: ensure_heartbeat_units (hot path) returned non-zero"
 fi
 
+# --- 3. cleanup_stale_heartbeat_units: path-change disable (#2056) ------------
+# Called DIRECTLY (not via ensure_heartbeat_units): the "paths match" case would
+# otherwise hit the hot-path early-return before reaching the cleanup call.
+mkdir -p "$ehu_unit_dir"
+
+# 3a. AC1 — installed WorkingDirectory differs from current → disable fires.
+: > "$ehu_log"
+printf '%s\n' '[Service]' 'WorkingDirectory=/old/path' > "$ehu_svc"
+(
+  export STUB_LOG="$ehu_log"
+  source "$SCRIPT_DIR/lib.sh"
+  cleanup_stale_heartbeat_units "$ehu_svc" "$ehu_tmp/main-worktree" "$ehu_tmp/bin/systemctl"
+)
+TOTAL=$((TOTAL + 1))
+if grep -q 'disable --now dispatch-heartbeat.timer dispatch-heartbeat.service' "$ehu_log"; then
+  PASS=$((PASS + 1)); echo "  PASS: cleanup_stale_heartbeat_units disabled stale units on path change"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: cleanup_stale_heartbeat_units did not disable on path change"
+fi
+
+# 3b. AC2 — installed WorkingDirectory matches current → no disable.
+: > "$ehu_log"
+printf '%s\n' '[Service]' "WorkingDirectory=$ehu_tmp/main-worktree" > "$ehu_svc"
+(
+  export STUB_LOG="$ehu_log"
+  source "$SCRIPT_DIR/lib.sh"
+  cleanup_stale_heartbeat_units "$ehu_svc" "$ehu_tmp/main-worktree" "$ehu_tmp/bin/systemctl"
+)
+TOTAL=$((TOTAL + 1))
+if ! grep -q 'disable' "$ehu_log"; then
+  PASS=$((PASS + 1)); echo "  PASS: cleanup_stale_heartbeat_units did not disable when path matches"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: cleanup_stale_heartbeat_units disabled despite matching path"
+fi
+
+# 3c. AC3 — no prior service unit → no-op (returns 0, no disable).
+: > "$ehu_log"
+ehu_missing_svc="$ehu_unit_dir/does-not-exist.service"
+ehu_cleanup_rc=0
+(
+  export STUB_LOG="$ehu_log"
+  source "$SCRIPT_DIR/lib.sh"
+  cleanup_stale_heartbeat_units "$ehu_missing_svc" "$ehu_tmp/main-worktree" "$ehu_tmp/bin/systemctl"
+) || ehu_cleanup_rc=$?
+assert_eq "cleanup_stale_heartbeat_units: missing unit → returns 0" "0" "$ehu_cleanup_rc"
+TOTAL=$((TOTAL + 1))
+if ! grep -q 'disable' "$ehu_log"; then
+  PASS=$((PASS + 1)); echo "  PASS: cleanup_stale_heartbeat_units no-op when no prior units"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: cleanup_stale_heartbeat_units ran disable with no prior units"
+fi
+
 rm -rf "$ehu_tmp"
 
 # ============================================================================
