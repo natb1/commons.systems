@@ -13,9 +13,9 @@ export const BLOG_ROLL_CONFIG: BlogRollConfig[] = [
       url: "https://www.anthropic.com/engineering",
     },
     strategy: new StaticStrategy({
-      title: "Eval awareness in Claude Opus 4.6's BrowseComp performance",
-      url: "https://www.anthropic.com/engineering/eval-awareness-browsecomp",
-      publishedAt: "2026-03-06",
+      title: "How we contain Claude across products",
+      url: "https://www.anthropic.com/engineering/how-we-contain-claude",
+      publishedAt: "2026-05-25",
     }),
   },
   {
@@ -25,9 +25,9 @@ export const BLOG_ROLL_CONFIG: BlogRollConfig[] = [
       url: "https://claude.com/blog/category/claude-code",
     },
     strategy: new StaticStrategy({
-      title: "Bringing Code Review to Claude Code",
-      url: "https://claude.com/blog/code-review",
-      publishedAt: "2026-03-09",
+      title: "Steering Claude Code: CLAUDE.md files, skills, hooks, rules, subagents and more",
+      url: "https://claude.com/blog/steering-claude-code-skills-hooks-rules-subagents-and-more",
+      publishedAt: "2026-06-18",
     }),
   },
   {
