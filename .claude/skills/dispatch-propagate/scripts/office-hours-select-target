@@ -65,6 +65,22 @@
 #     is the invariant the lib-claude-agents.sh tests guard (Test 8b / occupancy
 #     tests added in #2240). Unrecognized/empty/malformed states remain a fail-safe
 #     skip (criterion 3: never attach into an unknown state).
+#   resume <issue> <sessionId> <cwd>
+#     The oldest sessionless labeled item whose originating session has been
+#     REMOVED from the daemon registry but whose on-disk transcript is still
+#     recoverable (#2240). dispatch-recover-session-id resolves the resumable
+#     sessionId + branch from the session's stamp sidecar, conditioned on the
+#     <sessionId>.jsonl transcript still existing; the item's <N>-* worktree is
+#     present on disk, so the consumer resumes the session in place via
+#     `--bg --resume <sessionId>` rather than fresh-launching and discarding the
+#     session's accumulated context. resume ranks BELOW a live idle session (a
+#     live idle session is strictly safer than resurrecting a removed one) and
+#     ABOVE the fresh path, oldest-first within the class.
+#   resume-provision <issue> <sessionId> <branch>
+#     As `resume`, but the item's worktree has been SWEPT while `origin/<branch>`
+#     still exists. The consumer re-provisions the worktree from the remote
+#     branch, then resumes the originating session — symmetric with
+#     `idle-provision` for the removed-but-recoverable case.
 #   office-hours <issue> <phase> <pr-or-dash> <worktree-path>
 #     The oldest labeled item with NO live session — a sessionless item that
 #     /office-hours picks up fresh.
@@ -277,6 +293,7 @@ FRESH_NUM=""
 IDLE_ID=""
 IDLE_CWD=""
 IDLE_NUM=""
+SESSIONLESS_NUMS=()
 while IFS= read -r issue_num; do
   [[ -z "$issue_num" ]] && continue
   if pair=$(issue_live_session_id "$issue_num"); then
@@ -289,7 +306,9 @@ while IFS= read -r issue_num; do
     rc=$?
     case "$rc" in
       2|3) continue ;;                               # UNKNOWN or skip → don't fresh-launch
-      *) [[ -z "$FRESH_NUM" ]] && FRESH_NUM="$issue_num" ;;  # rc 1 → sessionless
+      *)                                                     # rc 1 → sessionless
+        SESSIONLESS_NUMS+=("$issue_num")                     # capture oldest-first for the resume pass
+        [[ -z "$FRESH_NUM" ]] && FRESH_NUM="$issue_num" ;;
     esac
   fi
 done <<< "$SORTED"
@@ -328,7 +347,42 @@ if [[ -n "$IDLE_ID" ]]; then
   [[ -z "$FRESH_NUM" ]] && FRESH_NUM="$IDLE_NUM"
 fi
 
-# Priority 2: pick up the oldest sessionless item fresh. The open-PR list is
+# Priority 2: a REMOVED-but-recoverable originating session (#2240). Reached only
+# when no attachable idle session was emitted above — a live idle session always
+# wins. Walk the sessionless issues oldest-first; the FIRST whose originating
+# session is recoverable (dispatch-recover-session-id resolves its sessionId +
+# branch from the stamp sidecar, conditioned on the <sessionId>.jsonl transcript
+# still existing) settles the class, classified symmetric with the idle classifier:
+#   1. <N>-* worktree present on disk → resume in place: emit `resume <N> <sid> <cwd>`.
+#   2. Worktree swept but `origin/<branch>` still exists → emit
+#      `resume-provision <N> <sid> <branch>`; the consumer provisions then resumes.
+#   3. Worktree swept AND no remote → fall through to the fresh path (below).
+# resume > fresh: a recoverable session is preferred over fresh-launching a
+# sessionless sibling, but never over a live idle session. First recoverable issue
+# settles the class (mirrors the idle classifier's first-attachable-wins).
+for rec_num in "${SESSIONLESS_NUMS[@]:-}"; do
+  [[ -z "$rec_num" ]] && continue
+  rec_pair=$("$SCRIPT_DIR/dispatch-recover-session-id" --issue "$rec_num") || continue
+  IFS=$'\t' read -r rec_sid rec_branch <<< "$rec_pair"
+  [[ -z "$rec_sid" ]] && continue
+  rec_cwd=$(printf '%s' "${WORKTREE_PATHS_BY_NUM[$rec_num]:-}" | head -n 1)
+  if [[ -n "$rec_cwd" && -d "$rec_cwd" ]]; then
+    printf 'resume %s %s %s\n' "$rec_num" "$rec_sid" "$rec_cwd"
+    exit 0
+  fi
+  # Worktree swept — provision from the remote branch if it still exists. Probe
+  # via `git -C <main>` (the selector's cwd is not guaranteed to carry origin),
+  # mirroring the idle-provision swept check.
+  if git -C "$(resolve_main_worktree)" ls-remote --exit-code --heads origin "$rec_branch" >/dev/null 2>&1; then
+    printf 'resume-provision %s %s %s\n' "$rec_num" "$rec_sid" "$rec_branch"
+    exit 0
+  fi
+  # Swept + no remote: the first recoverable issue settles the class and falls
+  # through to the fresh path (FRESH_NUM already holds the oldest sessionless item).
+  break
+done
+
+# Priority 3: pick up the oldest sessionless item fresh. The open-PR list is
 # fetched lazily here — only the fresh path needs it, so the resume path makes
 # no `gh pr list` call. The field set is dispatch-phase's superset;
 # dispatch-find-pr accepts it too (mirrors dispatch-select-target's

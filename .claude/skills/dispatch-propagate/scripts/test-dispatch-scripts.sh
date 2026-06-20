@@ -60,6 +60,12 @@ setup() {
   cp "$SCRIPT_DIR/dispatch-close-resolved" "$TMPDIR_TEST/dispatch-close-resolved"
   cp "$SCRIPT_DIR/dispatch-select-target" "$TMPDIR_TEST/dispatch-select-target"
   cp "$SCRIPT_DIR/office-hours-select-target" "$TMPDIR_TEST/office-hours-select-target"
+  # office-hours-select-target's resume pass (#2240) resolves
+  # dispatch-recover-session-id via its SCRIPT_DIR (= TMPDIR_TEST for this copy),
+  # so the reader must sit alongside it. Pure-filesystem; selector resume tests set
+  # DISPATCH_STAMP_PROJECTS_ROOT to a temp projects root carrying stamp sidecars.
+  cp "$SCRIPT_DIR/dispatch-recover-session-id" "$TMPDIR_TEST/dispatch-recover-session-id"
+  chmod +x "$TMPDIR_TEST/dispatch-recover-session-id"
   cp "$SCRIPT_DIR/office-hours" "$TMPDIR_TEST/office-hours"
   # office-hours' idle-provision arm resolves dispatch-provision-from-remote via
   # its SCRIPT_DIR (= TMPDIR_TEST for this copy), so the helper must sit alongside
@@ -7035,6 +7041,98 @@ office_hours_state_fake_claude "42-x:waiting:/worktrees/42-x"
 result=$("$TMPDIR_TEST/office-hours-select-target")
 assert_eq "swept worktree, remote branch missing → fresh fallback with - 5th field" "office-hours 42 plan - -" "$result"
 unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
+# OHST15a. Removed-but-recoverable, worktree on disk → `resume` (#2240). Issue 42's
+# originating session is ABSENT from the daemon registry (removed), but its <N>-*
+# worktree is still on disk and its stamp sidecar + <sessionId>.jsonl transcript
+# are recoverable. dispatch-recover-session-id resolves the resumable sessionId +
+# branch; the on-disk worktree → resume in place. resume beats the fresh path.
+echo "Test: removed session + on-disk worktree + recoverable transcript → resume"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+mkdir -p "$TMPDIR_TEST/wt/42-x"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree %s\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  "$TMPDIR_TEST/wt/42-x" > "$STUB_DIR/worktree-list.txt"
+# Empty daemon registry → 42's session is removed (sessionless).
+office_hours_state_fake_claude
+# Recoverable: stamp sidecar for issue 42 + its .jsonl transcript present.
+export DISPATCH_STAMP_PROJECTS_ROOT="$TMPDIR_TEST/projects"
+mkdir -p "$DISPATCH_STAMP_PROJECTS_ROOT/proj-42"
+printf '%s\n' '{"schema":1,"session_id":"rec-sess-42","repo":"natb1/commons.systems","issue":42,"pr":null,"branch":"42-x","base_sha":"deadbeef","stamped_at":"2026-06-01T10:00:00Z"}' \
+  > "$DISPATCH_STAMP_PROJECTS_ROOT/proj-42/rec-sess-42.dispatch-stamp.json"
+touch "$DISPATCH_STAMP_PROJECTS_ROOT/proj-42/rec-sess-42.jsonl"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "removed + on-disk worktree + transcript → resume in place" "resume 42 rec-sess-42 $TMPDIR_TEST/wt/42-x" "$result"
+unset DISPATCH_STAMP_PROJECTS_ROOT
+teardown
+
+# OHST15b. Removed-but-NOT-recoverable (transcript purged) → fresh (#2240). Same
+# removed session, but the <sessionId>.jsonl is absent, so dispatch-recover-session-id
+# exits 1 (nothing recoverable) and the selector falls through to the fresh path.
+echo "Test: removed session + transcript purged → fresh-launch fallback"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+# No <N>-* worktree registered (only main) → swept/sessionless.
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n' > "$STUB_DIR/worktree-list.txt"
+office_hours_state_fake_claude
+# Sidecar present but transcript PURGED (.jsonl absent) → not recoverable.
+export DISPATCH_STAMP_PROJECTS_ROOT="$TMPDIR_TEST/projects"
+mkdir -p "$DISPATCH_STAMP_PROJECTS_ROOT/proj-42"
+printf '%s\n' '{"schema":1,"session_id":"rec-sess-42","repo":"natb1/commons.systems","issue":42,"pr":null,"branch":"42-x","base_sha":"deadbeef","stamped_at":"2026-06-01T10:00:00Z"}' \
+  > "$DISPATCH_STAMP_PROJECTS_ROOT/proj-42/rec-sess-42.dispatch-stamp.json"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "removed, transcript purged → fresh-launch fallback" "office-hours 42 plan - -" "$result"
+unset DISPATCH_STAMP_PROJECTS_ROOT
+teardown
+
+# OHST15c. Idle beats a removed-but-recoverable sibling (#2240 priority). 42 (older)
+# is removed-but-recoverable; 99 (newer) has a live idle session. A live idle
+# session is strictly safer than resurrecting a removed one, so idle wins and the
+# resume pass never runs.
+echo "Test: live idle item beats a removed-but-recoverable sibling (priority)"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+mkdir -p "$TMPDIR_TEST/wt/42-x" "$TMPDIR_TEST/wt/99-y"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree %s\nHEAD def456\nbranch refs/heads/42-x\n\nworktree %s\nHEAD aaa111\nbranch refs/heads/99-y\n\n' \
+  "$TMPDIR_TEST/wt/42-x" "$TMPDIR_TEST/wt/99-y" > "$STUB_DIR/worktree-list.txt"
+# Only 99 has a live (idle) session; 42 is removed.
+office_hours_state_fake_claude "99-y:idle:$TMPDIR_TEST/wt/99-y"
+# 42 IS recoverable (sidecar + transcript) — but idle 99 must still win.
+export DISPATCH_STAMP_PROJECTS_ROOT="$TMPDIR_TEST/projects"
+mkdir -p "$DISPATCH_STAMP_PROJECTS_ROOT/proj-42"
+printf '%s\n' '{"schema":1,"session_id":"rec-sess-42","repo":"natb1/commons.systems","issue":42,"pr":null,"branch":"42-x","base_sha":"deadbeef","stamped_at":"2026-06-01T10:00:00Z"}' \
+  > "$DISPATCH_STAMP_PROJECTS_ROOT/proj-42/rec-sess-42.dispatch-stamp.json"
+touch "$DISPATCH_STAMP_PROJECTS_ROOT/proj-42/rec-sess-42.jsonl"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "live idle sibling beats removed-recoverable item" "idle s-99-y" "$result"
+unset DISPATCH_STAMP_PROJECTS_ROOT
+teardown
+
+# OHST15d. Removed-but-recoverable, worktree SWEPT, origin/<branch> exists →
+# `resume-provision` (#2240). Symmetric with idle-provision: the consumer
+# re-provisions the worktree from the remote branch, then resumes the session.
+echo "Test: removed session, swept worktree, origin/<branch> exists → resume-provision"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+# 42 NOT registered (only main) → swept.
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n' > "$STUB_DIR/worktree-list.txt"
+printf '%s\n' '42-x' > "$STUB_DIR/remote-branches.txt"   # origin/42-x exists
+office_hours_state_fake_claude                            # empty registry → removed
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+export DISPATCH_STAMP_PROJECTS_ROOT="$TMPDIR_TEST/projects"
+mkdir -p "$DISPATCH_STAMP_PROJECTS_ROOT/proj-42"
+printf '%s\n' '{"schema":1,"session_id":"rec-sess-42","repo":"natb1/commons.systems","issue":42,"pr":null,"branch":"42-x","base_sha":"deadbeef","stamped_at":"2026-06-01T10:00:00Z"}' \
+  > "$DISPATCH_STAMP_PROJECTS_ROOT/proj-42/rec-sess-42.dispatch-stamp.json"
+touch "$DISPATCH_STAMP_PROJECTS_ROOT/proj-42/rec-sess-42.jsonl"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "removed swept + remote branch present → resume-provision" "resume-provision 42 rec-sess-42 42-x" "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE DISPATCH_STAMP_PROJECTS_ROOT
 teardown
 
 # OHST16. Not-local fresh-launch under a WORKING daemon (#2241 criterion-4,
