@@ -17288,6 +17288,36 @@ echo "Test: dispatch-phase-model with an empty-string arg exits 2"
 if "$SCRIPT_DIR/dispatch-phase-model" "" 2>/dev/null; then pm_rc=0; else pm_rc=$?; fi
 assert_eq "phase-model: empty-string-arg → exit 2" "2" "$pm_rc"
 
+# ============================================================================
+# dispatch-phase-effort tests
+# ============================================================================
+echo "=== dispatch-phase-effort ==="
+
+echo "Test: dispatch-phase-effort maps implement → medium"
+if pe_out=$("$SCRIPT_DIR/dispatch-phase-effort" implement 2>/dev/null); then pe_rc=0; else pe_rc=$?; fi
+assert_eq "phase-effort: implement exits 0" "0" "$pe_rc"
+assert_eq "phase-effort: implement → medium" "medium" "$pe_out"
+
+echo "Test: dispatch-phase-effort maps plan → high"
+if pe_out=$("$SCRIPT_DIR/dispatch-phase-effort" plan 2>/dev/null); then pe_rc=0; else pe_rc=$?; fi
+assert_eq "phase-effort: plan exits 0" "0" "$pe_rc"
+assert_eq "phase-effort: plan → high" "high" "$pe_out"
+
+echo "Test: dispatch-phase-effort maps unmapped phases → empty (default, no override)"
+for ph in fix-checks qa review done; do
+  if pe_out=$("$SCRIPT_DIR/dispatch-phase-effort" "$ph" 2>/dev/null); then pe_rc=0; else pe_rc=$?; fi
+  assert_eq "phase-effort: $ph exits 0" "0" "$pe_rc"
+  assert_eq "phase-effort: $ph → empty (no --effort, inherit session default)" "" "$pe_out"
+done
+
+echo "Test: dispatch-phase-effort with no phase arg exits 2"
+if "$SCRIPT_DIR/dispatch-phase-effort" 2>/dev/null; then pe_rc=0; else pe_rc=$?; fi
+assert_eq "phase-effort: no-arg → exit 2" "2" "$pe_rc"
+
+echo "Test: dispatch-phase-effort with an empty-string arg exits 2"
+if "$SCRIPT_DIR/dispatch-phase-effort" "" 2>/dev/null; then pe_rc=0; else pe_rc=$?; fi
+assert_eq "phase-effort: empty-string-arg → exit 2" "2" "$pe_rc"
+
 # --- review-fix/SKILL.md model-tiering content guards (#1172) -----------------
 # The review-fix orchestrator runs on Sonnet; fix-authoring is delegated to an
 # Opus subagent and its /code-review pass is detection-only. Guard both facts so
