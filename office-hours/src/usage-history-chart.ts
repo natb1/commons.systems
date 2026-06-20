@@ -9,10 +9,10 @@ import {
   buildLegend,
   computeChartWidth,
   renderAxisSvg,
+  mountResponsiveChart,
   MARGIN_RIGHT,
   MARGIN_BOTTOM,
   POINT_WIDTH,
-  CONTAINER_WIDTH,
   CHART_HEIGHT,
 } from "./chart-util.js";
 
@@ -74,7 +74,6 @@ export function renderUsageHistoryChart(samples: UsageSample[]): HTMLElement {
   const weeklyResetTimes = distinctTimes(sorted, (s) => s.weeklyResetsAt);
   const fiveHourResetTimes = distinctTimes(sorted, (s) => s.fiveHourResetsAt);
 
-  const chartWidth = computeChartWidth(points.length, POINT_WIDTH, CONTAINER_WIDTH);
   const yDomain: [number, number] = [0, 100];
 
   const fg = getThemeFg(container);
@@ -88,70 +87,79 @@ export function renderUsageHistoryChart(samples: UsageSample[]): HTMLElement {
   const COLOR_RESET = readThemeVar(container, "--danger") || "#ff6b6b";
   const sharedStyle = { background: "transparent", color: fg };
 
-  const axisSvg = renderAxisSvg({ height: CHART_HEIGHT, style: sharedStyle, yDomain, label: "%" });
-
-  const chartSvg = Plot.plot({
-    width: chartWidth,
-    height: CHART_HEIGHT,
-    marginBottom: MARGIN_BOTTOM,
-    marginLeft: 0,
-    marginRight: MARGIN_RIGHT,
-    style: sharedStyle,
-    x: { type: "time", label: null },
-    y: { label: null, axis: null, grid: true, domain: yDomain },
-    marks: [
-      // Over-pace shading: actual weekly% above the pace curve. Clamp y2 at the
-      // pace level so each area renders only where its sign holds (mirrors the
-      // cash-flow chart's positive/negative split via min/max).
-      Plot.areaY(points, {
-        x: "x",
-        y1: "paceW",
-        y2: (d: UsagePoint) => Math.max(d.paceW, d.weeklyUsedPct),
-        fill: COLOR_RESET,
-        fillOpacity: 0.15,
-        curve: "monotone-x",
-      }),
-      // Under-pace shading: actual weekly% below the pace curve.
-      Plot.areaY(points, {
-        x: "x",
-        y1: "paceW",
-        y2: (d: UsagePoint) => Math.min(d.paceW, d.weeklyUsedPct),
-        fill: COLOR_WEEKLY,
-        fillOpacity: 0.15,
-        curve: "monotone-x",
-      }),
-      // Reset boundaries — weekly resets (the dominant sawtooth) and 5-hour
-      // resets (the finer sawtooth). Distinct dash patterns keep them legible.
-      Plot.ruleX(weeklyResetTimes, { stroke: COLOR_RESET, strokeDasharray: "4,3", strokeOpacity: 0.7 }),
-      Plot.ruleX(fiveHourResetTimes, { stroke: fg, strokeDasharray: "2,4", strokeOpacity: 0.4 }),
-      // Series lines.
-      Plot.lineY(points, { x: "x", y: "fiveHourUsedPct", stroke: COLOR_FIVE_HOUR, strokeWidth: 2, curve: "monotone-x" }),
-      Plot.lineY(points, { x: "x", y: "weeklyUsedPct", stroke: COLOR_WEEKLY, strokeWidth: 2, curve: "monotone-x" }),
-      // Pace overlay — dashed so it reads as the target.
-      Plot.lineY(points, { x: "x", y: "paceW", stroke: COLOR_PACE, strokeWidth: 2, strokeDasharray: "8,4", curve: "monotone-x" }),
-    ],
-  });
-
-  chartSvg.style.width = `${chartWidth}px`;
-  chartSvg.style.minWidth = `${chartWidth}px`;
-
-  const { layout, wrapper } = assembleChartLayout(axisSvg, chartSvg);
-
   const legend = buildLegend([
     { label: SERIES_FIVE_HOUR, color: COLOR_FIVE_HOUR },
     { label: SERIES_WEEKLY, color: COLOR_WEEKLY },
     { label: SERIES_PACE, color: COLOR_PACE, dashed: true },
   ]);
 
-  container.replaceChildren(layout, legend);
+  // Block-level slot the ResizeObserver measures; .chart-scroll-wrapper inside
+  // clips horizontally so the slot stays at the panel content-box width.
+  const slot = document.createElement("div");
 
-  // Scroll to the newest data (rightmost) on first paint. scrollWidth is 0 for a
-  // detached element, and this container is still detached here (main.ts attaches
-  // the section after this returns), so defer the assignment to the next frame —
-  // by then a layout pass has run and scrollWidth is meaningful.
-  requestAnimationFrame(() => {
-    wrapper.scrollLeft = wrapper.scrollWidth;
+  mountResponsiveChart(slot, (width) => {
+    const chartWidth = computeChartWidth(points.length, POINT_WIDTH, width);
+
+    const axisSvg = renderAxisSvg({ height: CHART_HEIGHT, style: sharedStyle, yDomain, label: "%" });
+
+    const chartSvg = Plot.plot({
+      width: chartWidth,
+      height: CHART_HEIGHT,
+      marginBottom: MARGIN_BOTTOM,
+      marginLeft: 0,
+      marginRight: MARGIN_RIGHT,
+      style: sharedStyle,
+      x: { type: "time", label: null },
+      y: { label: null, axis: null, grid: true, domain: yDomain },
+      marks: [
+        // Over-pace shading: actual weekly% above the pace curve. Clamp y2 at the
+        // pace level so each area renders only where its sign holds (mirrors the
+        // cash-flow chart's positive/negative split via min/max).
+        Plot.areaY(points, {
+          x: "x",
+          y1: "paceW",
+          y2: (d: UsagePoint) => Math.max(d.paceW, d.weeklyUsedPct),
+          fill: COLOR_RESET,
+          fillOpacity: 0.15,
+          curve: "monotone-x",
+        }),
+        // Under-pace shading: actual weekly% below the pace curve.
+        Plot.areaY(points, {
+          x: "x",
+          y1: "paceW",
+          y2: (d: UsagePoint) => Math.min(d.paceW, d.weeklyUsedPct),
+          fill: COLOR_WEEKLY,
+          fillOpacity: 0.15,
+          curve: "monotone-x",
+        }),
+        // Reset boundaries — weekly resets (the dominant sawtooth) and 5-hour
+        // resets (the finer sawtooth). Distinct dash patterns keep them legible.
+        Plot.ruleX(weeklyResetTimes, { stroke: COLOR_RESET, strokeDasharray: "4,3", strokeOpacity: 0.7 }),
+        Plot.ruleX(fiveHourResetTimes, { stroke: fg, strokeDasharray: "2,4", strokeOpacity: 0.4 }),
+        // Series lines.
+        Plot.lineY(points, { x: "x", y: "fiveHourUsedPct", stroke: COLOR_FIVE_HOUR, strokeWidth: 2, curve: "monotone-x" }),
+        Plot.lineY(points, { x: "x", y: "weeklyUsedPct", stroke: COLOR_WEEKLY, strokeWidth: 2, curve: "monotone-x" }),
+        // Pace overlay — dashed so it reads as the target.
+        Plot.lineY(points, { x: "x", y: "paceW", stroke: COLOR_PACE, strokeWidth: 2, strokeDasharray: "8,4", curve: "monotone-x" }),
+      ],
+    });
+
+    chartSvg.style.width = `${chartWidth}px`;
+    chartSvg.style.minWidth = `${chartWidth}px`;
+
+    const { layout, wrapper } = assembleChartLayout(axisSvg, chartSvg);
+
+    // Scroll to the newest data (rightmost). scrollWidth is 0 for a detached
+    // element, and the slot is detached on the first paint, so defer to the next
+    // frame — by then a layout pass has run and scrollWidth is meaningful.
+    requestAnimationFrame(() => {
+      wrapper.scrollLeft = wrapper.scrollWidth;
+    });
+
+    return layout;
   });
+
+  container.replaceChildren(slot, legend);
 
   return container;
 }
