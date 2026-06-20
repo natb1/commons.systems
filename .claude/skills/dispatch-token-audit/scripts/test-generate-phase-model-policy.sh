@@ -145,4 +145,3 @@ fi
 rm -rf "$RT_DIR"
 
 report_results
-exit "$FAIL"
