@@ -10,12 +10,7 @@
 #   1. Launch with: nvim
 #   2. Configure via ~/.config/nvim/ (user responsibility)
 
-{
-  config,
-  pkgs,
-  lib,
-  ...
-}:
+{ ... }:
 
 {
   programs.neovim = {
