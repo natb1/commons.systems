@@ -1816,6 +1816,117 @@ assert_eq "pr-merge: gh-failure stderr names helper" "yes" "$m"
 teardown
 
 # ============================================================================
+# REST-bucket consumption assertions (#2255)
+# ============================================================================
+# Each new helper must consume the REST bucket (gh api repos/...) and NEVER the
+# GraphQL bucket (gh api graphql). This is the founding invariant of the #2254
+# epic: the fleet was exhausting the 5000/hr GraphQL bucket while the REST
+# bucket sat idle.
+#
+# Technique: drive each helper against the stub gh and assert from the per-helper
+# call-log file that the invocation used "api ... repos/" (REST) rather than
+# "api graphql" (GraphQL). The stub writes STUB_DIR/gh-<helper>-calls.log for
+# each sentinel branch (lines 472-576 of this file), so the log is the oracle.
+#
+# Manual / QA note (not runnable — networked and non-deterministic):
+#   Before: `gh api rate_limit | jq .resources.graphql.used`
+#   Run the helper.
+#   After:  `gh api rate_limit | jq .resources.graphql.used` — must NOT increase.
+#           `gh api rate_limit | jq .resources.core.used`    — must increase by 1.
+#
+# The in-suite form below is deterministic and offline.
+
+echo "=== REST-bucket consumption assertions ==="
+
+# Shared helper: assert a call-log line uses `api … repos/` (REST) and NOT
+# `api graphql` (GraphQL). Calling convention:
+#   assert_rest_only <label> <logfile>
+assert_rest_only() {
+  local label="$1" logfile="$2"
+  # Primary: path contains repos/ (REST endpoint)
+  if grep -q 'repos/' "$logfile"; then rp=yes; else rp=no; fi
+  assert_eq "${label}: REST path (repos/) present" "yes" "$rp"
+  # Secondary: graphql is absent (would spend the GraphQL bucket)
+  if grep -q 'graphql' "$logfile"; then gq=yes; else gq=no; fi
+  assert_eq "${label}: graphql absent from log" "no" "$gq"
+  # Belt-and-suspenders: porcelain subcommands absent (would also spend GraphQL)
+  if grep -qE '^(issue|pr) ' "$logfile"; then pc=yes; else pc=no; fi
+  assert_eq "${label}: porcelain (issue|pr) absent from log" "no" "$pc"
+}
+
+# --- gh_issue_view_rest ---
+# Use a 9xxx number — only the 9xxx sentinel branch (line 472) writes to
+# gh-issue-view-rest-calls.log; the generic issues/* branch does NOT.
+echo "Test: gh_issue_view_rest -- consumes REST bucket, not GraphQL"
+setup
+printf '%s\n' '{"number":9001,"title":"t","body":"b","state":"open","labels":[],"assignees":[]}' \
+  > "$STUB_DIR/view-issue-9001.json"
+: > "$STUB_DIR/gh-issue-view-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_view_rest 9001 >/dev/null
+assert_rest_only "issue-view" "$STUB_DIR/gh-issue-view-rest-calls.log"
+teardown
+
+# --- gh_pr_view_rest ---
+# Use a 9xxx number — only the 9xxx sentinel branch (line 490) writes to
+# gh-pr-view-rest-calls.log; the generic pulls/* branch does NOT.
+echo "Test: gh_pr_view_rest -- consumes REST bucket, not GraphQL"
+setup
+printf '%s\n' '{"number":9001,"title":"t","body":"b","state":"open","mergeable":true,"mergeable_state":"clean"}' \
+  > "$STUB_DIR/view-pr-9001.json"
+: > "$STUB_DIR/gh-pr-view-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_pr_view_rest 9001 >/dev/null
+assert_rest_only "pr-view" "$STUB_DIR/gh-pr-view-rest-calls.log"
+teardown
+
+# --- gh_issue_set_labels_rest ---
+echo "Test: gh_issue_set_labels_rest -- consumes REST bucket, not GraphQL"
+setup
+: > "$STUB_DIR/gh-issue-set-labels-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_set_labels_rest 42 dispatch:planned
+assert_rest_only "set-labels" "$STUB_DIR/gh-issue-set-labels-rest-calls.log"
+teardown
+
+# --- gh_issue_remove_label_rest ---
+echo "Test: gh_issue_remove_label_rest -- consumes REST bucket, not GraphQL"
+setup
+: > "$STUB_DIR/gh-issue-remove-label-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_remove_label_rest 42 dispatch:planned
+assert_rest_only "remove-label" "$STUB_DIR/gh-issue-remove-label-rest-calls.log"
+teardown
+
+# --- gh_issue_close_rest ---
+echo "Test: gh_issue_close_rest -- consumes REST bucket, not GraphQL"
+setup
+: > "$STUB_DIR/gh-issue-close-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_close_rest 42
+assert_rest_only "close" "$STUB_DIR/gh-issue-close-rest-calls.log"
+teardown
+
+# --- gh_issue_create_rest ---
+echo "Test: gh_issue_create_rest -- consumes REST bucket, not GraphQL"
+setup
+: > "$STUB_DIR/gh-issue-create-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_create_rest --title "t" --body "b" >/dev/null
+assert_rest_only "create" "$STUB_DIR/gh-issue-create-rest-calls.log"
+teardown
+
+# --- gh_issue_comment_rest ---
+echo "Test: gh_issue_comment_rest -- consumes REST bucket, not GraphQL"
+setup
+: > "$STUB_DIR/gh-issue-comment-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_comment_rest 42 --body "a comment"
+assert_rest_only "comment" "$STUB_DIR/gh-issue-comment-rest-calls.log"
+teardown
+
+# --- gh_pr_merge_rest ---
+echo "Test: gh_pr_merge_rest -- consumes REST bucket, not GraphQL"
+setup
+: > "$STUB_DIR/gh-pr-merge-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_pr_merge_rest 42
+assert_rest_only "pr-merge" "$STUB_DIR/gh-pr-merge-rest-calls.log"
+teardown
+
+# ============================================================================
 # dispatch-phase tests
 # ============================================================================
 echo "=== dispatch-phase ==="
