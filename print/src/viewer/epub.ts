@@ -300,6 +300,7 @@ export function createEpubRenderer(
 
       const results: SearchResult[] = [];
       for (let i = 0; i < spineItems.length; i++) {
+        if (epoch !== _searchEpoch) break;
         const section = spineItems[i]!;
         if (epoch !== _searchEpoch) break; // superseded: load no further sections
         try {

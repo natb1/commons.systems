@@ -666,6 +666,12 @@ describe("createEpubRenderer", () => {
       return renderer;
     }
 
+    function driveRelocated() {
+      // goToResult awaits waitForRelocated(), which resolves on the captured
+      // "relocated" once-callback. Mirror the next()/prev() pattern.
+      mockRendition.once.mockImplementation((_event: string, cb: () => void) => cb());
+    }
+
     it("returns matches from every spine section", async () => {
       const s0 = makeSection("ch0.xhtml", [{ cfi: "cfi-0", excerpt: "alpha fox beta" }]);
       const s1 = makeSection("ch1.xhtml", [{ cfi: "cfi-1", excerpt: "gamma fox delta" }]);
@@ -806,7 +812,11 @@ describe("createEpubRenderer", () => {
       const renderer = await initRenderer();
 
       const p1 = renderer.search!("first");
-      await new Promise((r) => setTimeout(r)); // flush a macrotask so call-1 parks INSIDE the loop on the gated section.load(); without this the fix breaks call-1 at i=0 before loading and call-2 would consume the gate
+      // Let call-1 pass `await book.loaded.navigation` and park on the gated
+      // load() *inside* its loop, consuming the gate while _searchEpoch is still
+      // 1 — before call-2 bumps it. So call-1 is superseded mid-load and the
+      // post-loop epoch guard (not the new top-of-loop break) discards its burst.
+      await Promise.resolve();
       const p2 = renderer.search!("second");
 
       // call-2 runs to completion (its load resolves immediately).
@@ -886,12 +896,6 @@ describe("createEpubRenderer", () => {
     });
 
     describe("goToResult", () => {
-      function driveRelocated() {
-        // goToResult awaits waitForRelocated(), which resolves on the captured
-        // "relocated" once-callback. Mirror the next()/prev() pattern.
-        mockRendition.once.mockImplementation((_event: string, cb: () => void) => cb());
-      }
-
       it("displays the result location and adds an active highlight", async () => {
         const renderer = await initRenderer();
         driveRelocated();
@@ -982,6 +986,42 @@ describe("createEpubRenderer", () => {
         const highlightCfis = mockRendition.annotations.highlight.mock.calls.map((c) => c[0]);
         expect(highlightCfis).not.toContain("cfi-A");
       });
+
+      it("stops loading not-yet-visited spine sections once clearSearch advances the epoch mid-loop", async () => {
+        // s0's load parks on a gate so the search is mid-loop (inside iteration 0)
+        // when clearSearch() fires; s1/s2 are plain sections that must never load.
+        const s0: FakeSection = {
+          href: "ch0.xhtml",
+          unload: vi.fn(),
+          find: vi.fn().mockReturnValue([{ cfi: "cfi-A", excerpt: "fox" }]),
+          load: vi.fn() as ReturnType<typeof vi.fn>, // type-safety-ok: same pattern as existing load mocks; cast exposes Vitest mock API alongside FakeSection type
+        };
+        let releaseFirst!: () => void; // type-safety-ok: Promise constructor assigns synchronously, so releaseFirst is set before any use
+        const gate = new Promise<void>((resolve) => { releaseFirst = resolve; });
+        s0.load.mockImplementationOnce(() => gate);
+        const s1 = makeSection("ch1.xhtml", [{ cfi: "cfi-1", excerpt: "fox" }]);
+        const s2 = makeSection("ch2.xhtml", [{ cfi: "cfi-2", excerpt: "fox" }]);
+        mockSpine.spineItems = [s0, s1, s2];
+        mockBook.navigation.get.mockReturnValue({ label: "X" });
+
+        const renderer = await initRenderer();
+
+        const p = renderer.search!("fox"); // type-safety-ok: search always set after initRenderer; same pattern as other tests in this suite
+        // Let search pass `await book.loaded.navigation` and park on s0.load()'s
+        // gate *inside* iteration 0 — so the epoch advances mid-loop, not pre-loop.
+        await Promise.resolve();
+        renderer.clearSearch!(); // type-safety-ok: clearSearch always set after initRenderer — bumps _searchEpoch so iteration 1's guard breaks
+        releaseFirst();
+        await p;
+
+        // The in-flight section completed; the not-yet-visited ones never loaded.
+        expect(s0.load).toHaveBeenCalledTimes(1);
+        expect(s1.load).not.toHaveBeenCalled();
+        expect(s2.load).not.toHaveBeenCalled();
+        // And the superseded search painted no highlight (post-loop guard holds).
+        const highlightCfis = mockRendition.annotations.highlight.mock.calls.map((c) => c[0]);
+        expect(highlightCfis).not.toContain("cfi-A");
+      });
     });
 
     describe("renderResult", () => {
@@ -1000,6 +1040,26 @@ describe("createEpubRenderer", () => {
         await expect(renderer.renderResult()).resolves.toBeUndefined();
 
         // renderResult must not trigger an additional rendition.display call.
+        expect(mockRendition.display.mock.calls.length).toBe(displayCallsBefore);
+      });
+
+      it("is still a no-op when _activeCfi is armed: does not call rendition.display beyond goToResult", async () => {
+        const renderer = await initRenderer();
+
+        // Arm _activeCfi by driving a goToResult(). goToResult() awaits
+        // waitForRelocated(), which resolves on the rendition.once "relocated"
+        // callback — fire it synchronously via driveRelocated().
+        driveRelocated();
+        await renderer.goToResult({
+          location: "cfi-0", label: "L", snippet: "fox", matchStart: 0, matchLength: 3,
+        });
+
+        // Baseline includes the display("cfi-0") call made by goToResult().
+        const displayCallsBefore = mockRendition.display.mock.calls.length;
+
+        await expect(renderer.renderResult()).resolves.toBeUndefined();
+
+        // renderResult must not trigger any additional rendition.display call.
         expect(mockRendition.display.mock.calls.length).toBe(displayCallsBefore);
       });
     });
