@@ -128,20 +128,38 @@ fi
 # ---- Step 4: act on the directive -------------------------------------------
 case "$DIRECTIVE" in
   "INVOKE "*)
-    # A real phase. Derive the model from the skill (the policy lives in
-    # dispatch-phase-model: qa/review → Sonnet, everything else → inherit Opus),
-    # then EXEC the phase-skill spawn. Do NOT clear the reservation — the
-    # existing sweep reclaims the marker once the phase session registers under
-    # the worktree basename (#1045/#1048). Do NOT tick — the phase skill's own
-    # Stop hook owns the chain heartbeat.
+    # A real phase. Derive the per-phase compute (model + reasoning effort) from
+    # the skill, then EXEC the phase-skill spawn. The policy lives in two emitters
+    # keyed on a phase token: map the skill → the same phase token dispatch-phase
+    # would return, then feed that token to BOTH dispatch-phase-model and
+    # dispatch-phase-effort (#2042). Net routing:
+    #   /fix-checks /fix-conflicts /qa-fix /review-fix → Sonnet, no effort
+    #   /implement                                     → Opus + effort medium
+    #   /plan-issue /budget-parse-job /resolve-epic    → Opus + effort high
+    # Both emitters print empty for an unmapped value (Sonnet phases get no
+    # effort; Opus phases get no model), so each flag is forwarded only when
+    # non-empty. Do NOT clear the reservation — the existing sweep reclaims the
+    # marker once the phase session registers under the worktree basename
+    # (#1045/#1048). Do NOT tick — the phase skill's own Stop hook owns the chain
+    # heartbeat.
     SKILL="${DIRECTIVE#INVOKE }"            # e.g. /qa-fix
     case "$SKILL" in
-      /qa-fix)     MODEL=$("$SCRIPT_DIR/dispatch-phase-model" qa) ;;
-      /review-fix) MODEL=$("$SCRIPT_DIR/dispatch-phase-model" review) ;;
-      *)           MODEL="" ;;
+      /qa-fix)            PHASE=qa ;;
+      /review-fix)        PHASE=review ;;
+      /fix-checks)        PHASE=fix-checks ;;
+      /fix-conflicts)     PHASE=fix-conflicts ;;
+      /implement)         PHASE=implement ;;
+      /plan-issue|/budget-parse-job|/resolve-epic) PHASE=plan ;;
+      *)                  PHASE="" ;;
     esac
+    MODEL=""; EFFORT=""
+    if [[ -n "$PHASE" ]]; then
+      MODEL=$("$SCRIPT_DIR/dispatch-phase-model" "$PHASE")
+      EFFORT=$("$SCRIPT_DIR/dispatch-phase-effort" "$PHASE")
+    fi
     args=(--no-verify --park-issue "$N" --name "$wt_basename" --cwd "$WORKTREE_PATH")
     [[ -n "$MODEL" ]] && args+=(--model "$MODEL")
+    [[ -n "$EFFORT" ]] && args+=(--effort "$EFFORT")
     exec "$SCRIPT_DIR/dispatch-spawn-job" "${args[@]}" "$SKILL $N $WORKTREE_PATH"
     ;;
   "PUSH-STRANDED")
