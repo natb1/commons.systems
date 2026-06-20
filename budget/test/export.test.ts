@@ -1,20 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { timestampMockFactory } from "./helpers";
 
-vi.mock("firebase/firestore", () => {
-  class MockTimestamp {
-    constructor(
-      public readonly seconds: number,
-      public readonly nanoseconds: number,
-    ) {}
-    toMillis() {
-      return this.seconds * 1000 + this.nanoseconds / 1e6;
-    }
-    static fromMillis(ms: number) {
-      return new MockTimestamp(Math.floor(ms / 1000), (ms % 1000) * 1e6);
-    }
-  }
-  return { Timestamp: MockTimestamp };
-});
+vi.mock("firebase/firestore", () => timestampMockFactory());
 
 vi.mock("../src/idb", () => ({
   getAll: vi.fn(),
@@ -186,6 +173,14 @@ describe("exportToJson", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
+  });
+
+  it("serializes keys in envelope-then-registry order", async () => {
+    const json = await exportToJson();
+    expect(Object.keys(JSON.parse(json))).toEqual([
+      "version", "exportedAt", "groupId", "groupName",
+      ...Object.keys(collectionRegistry),
+    ]);
   });
 
   it("exports all 6 collections with correct field mappings", async () => {
