@@ -94,7 +94,7 @@ fi
 # Comment exists — fetch its body and upsert the (phase, attempt) section.
 BODY=$(gh api "repos/{owner}/{repo}/issues/comments/$CID" --jq '.body')
 
-if printf '%s' "$BODY" | grep -qF "$INNER_MARKER"; then
+if printf '%s' "$BODY" | grep -qxF "$INNER_MARKER"; then
   # REPLACE the existing section in place. The awk state machine drops the lines
   # from the target inner-marker line up to (but not including) the next line
   # beginning '<!-- phase-log:' (the next section's delimiter, which is KEPT) or

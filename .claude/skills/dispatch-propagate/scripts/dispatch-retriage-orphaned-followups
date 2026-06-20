@@ -5,7 +5,9 @@
 # merging (issue #1812).
 #
 # When a review pass files an out-of-scope finding as a follow-up issue, that
-# issue is labeled `source-pr:<N>` recording which PR's review surfaced it.
+# issue carries the static `dispatch:review-followup` label and a
+# `<!-- dispatch:source-pr <N> -->` body marker recording which PR's review
+# surfaced it.
 # When PR #<N> later lands on main, the follow-up points at real, shipped code.
 # But when PR #<N> is CLOSED WITHOUT MERGING (abandoned or superseded), the
 # follow-up is orphaned: it points at a design that never landed. Such an orphan
@@ -14,8 +16,9 @@
 #
 # This scan finds those orphans and parks them on office-hours for human
 # re-triage. It is an INVERSION scan: it inspects only the PRs actually cited by
-# the `source-pr:<N>` labels on currently-open issues — never a window
-# enumeration of all recently-closed PRs.
+# the `<!-- dispatch:source-pr <N> -->` body markers on currently-open
+# `dispatch:review-followup`-labeled issues — never a window enumeration of all
+# recently-closed PRs.
 #
 # Three-way PR-state gate (load-bearing): a cited PR's follow-ups are flagged
 # ONLY IF the PR is `state == "CLOSED"` AND `mergedAt == null` AND the PR does
@@ -46,11 +49,15 @@ RETRIAGED_LABEL="dispatch:orphans-retriaged"
 RETRIAGED_COLOR="5319e7"
 RETRIAGED_DESC="dispatch: orphaned review follow-ups re-triaged after source PR closed unmerged"
 
-# ---- Step 1: gather the open `source-pr:<N>`-labeled follow-up issues --------
+# ---- Step 1: gather the open dispatch:review-followup-labeled follow-up issues
+# The static `dispatch:review-followup` label is a cheap server-side pre-filter
+# narrowing the fetch to candidate follow-ups; the per-PR source identity is then
+# read from each issue's `<!-- dispatch:source-pr <N> -->` body marker, so the
+# fetch must include bodies (--include-body).
 # REST keeps this scan off the shared GraphQL rate-limit bucket (#1601).
-if ! OPEN_JSON=$(gh_issue_list_rest --state open); then
+if ! OPEN_JSON=$(gh_issue_list_rest --state open --label dispatch:review-followup --include-body); then
   # Cannot scan without the open-issue set — best-effort, exit 0.
-  echo "dispatch-retriage-orphaned-followups: warning: gh_issue_list_rest --state open failed; skipping scan" >&2
+  echo "dispatch-retriage-orphaned-followups: warning: gh_issue_list_rest --state open --label dispatch:review-followup failed; skipping scan" >&2
   exit 0
 fi
 
@@ -64,9 +71,8 @@ while read -r issue pr; do
   PR_FOLLOWUPS["$pr"]+="$issue "
 done < <(printf '%s' "$OPEN_JSON" | jq -r '
   .[]
-  | (.labels | map(.name) | map(select(startswith("source-pr:")))) as $slabels
-  | select(($slabels | length) > 0)
-  | ($slabels[0] | sub("^source-pr:"; "")) as $pr
+  | select((.body // "") | test("<!-- dispatch:source-pr [0-9]+ -->"))
+  | ((.body // "") | [scan("<!-- dispatch:source-pr ([0-9]+) -->")] | last | .[0]) as $pr
   | "\(.number) \($pr)"
 ')
 
