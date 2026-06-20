@@ -973,7 +973,7 @@ describe("createEpubRenderer", () => {
         // waitForRelocated(), which resolves on the rendition.once "relocated"
         // callback — fire it synchronously by inlining the mock.
         mockRendition.once.mockImplementation((_event: string, cb: () => void) => cb());
-        await renderer.goToResult!({
+        await renderer.goToResult({
           location: "cfi-0", label: "L", snippet: "fox", matchStart: 0, matchLength: 3,
         });
 
