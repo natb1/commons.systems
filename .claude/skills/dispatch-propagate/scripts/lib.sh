@@ -613,11 +613,13 @@ gh_issue_view_rest() {
 }
 
 # REST-backed drop-in for `gh pr view <N> --json
-# number,title,body,state,mergeable,mergeStateStatus` (#2255). Spends the REST
-# rate-limit bucket instead of GraphQL, like gh_issue_view_rest.
+# number,title,body,state,mergeable,mergeStateStatus,headRefName,headRefOid,labels`
+# (#2255). Spends the REST rate-limit bucket instead of GraphQL, like
+# gh_issue_view_rest.
 # Args: $1 = <N> (PR number, required); --repo owner/repo (optional).
 # Output: one JSON object on stdout matching the porcelain shape — an EXPLICIT
-#   named projection: {number, title, body, state, mergeable, mergeStateStatus}.
+#   named projection: {number, title, body, state, mergeable, mergeStateStatus,
+#   headRefName, headRefOid, labels:[{name}]}.
 # Byte-compat bridges over the raw REST shape:
 #   - state: lowercase `open`/`closed` → UPPERCASE via `ascii_upcase`. (REST has
 #     no distinct MERGED state — a merged PR is state `closed` — so a consumer
@@ -630,6 +632,12 @@ gh_issue_view_rest() {
 #   - mergeStateStatus: remapped from REST's snake_case `mergeable_state` and
 #     `ascii_upcase`d to match the porcelain GraphQL enum casing (REST is
 #     lowercase `clean`/`dirty`/`blocked`).
+#   - headRefName: the PR's head branch name, remapped from REST's `head.ref`
+#     (same value the porcelain `headRefName` carries).
+#   - headRefOid: the PR's head commit oid, remapped from REST's `head.sha`
+#     (same value the porcelain `headRefOid` carries).
+#   - labels: narrowed to the porcelain-visible key (`name`) rather than passing
+#     the full REST label objects through (same as gh_issue_view_rest's labels).
 # On gh failure: errors to stderr and returns 1 (clear-errors convention, no
 # fallback).
 gh_pr_view_rest() {
@@ -675,7 +683,10 @@ gh_pr_view_rest() {
       elif .mergeable == false then "CONFLICTING"
       else "UNKNOWN" end
     ),
-    mergeStateStatus: ((.mergeable_state // "") | ascii_upcase)
+    mergeStateStatus: ((.mergeable_state // "") | ascii_upcase),
+    headRefName: .head.ref,
+    headRefOid: .head.sha,
+    labels: ((.labels // []) | map({name}))
   }'
 }
 

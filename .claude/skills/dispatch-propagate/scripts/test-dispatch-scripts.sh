@@ -1573,6 +1573,8 @@ printf '%s\n' '{
   "state": "open",
   "mergeable": true,
   "mergeable_state": "clean",
+  "head": {"ref": "feature-branch", "sha": "abc123def456"},
+  "labels": [{"name": "enhancement", "color": "84b6eb"}, {"name": "dispatch:reviewed", "color": "000000"}],
   "extra_rest_field": "drop me"
 }' > "$STUB_DIR/view-pr-9001.json"
 pv=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_view_rest 9001)
@@ -1582,8 +1584,13 @@ assert_eq "pr: body" "the pr body" "$(jq -r '.body' <<<"$pv")"
 assert_eq "pr: state upcased OPEN" "OPEN" "$(jq -r '.state' <<<"$pv")"
 assert_eq "pr: mergeable boolean true → enum MERGEABLE" "MERGEABLE" "$(jq -r '.mergeable' <<<"$pv")"
 assert_eq "pr: mergeStateStatus key present + upcased" "CLEAN" "$(jq -r '.mergeStateStatus' <<<"$pv")"
+assert_eq "pr: headRefName passthrough from head.ref" "feature-branch" "$(jq -r '.headRefName' <<<"$pv")"
+assert_eq "pr: headRefOid passthrough from head.sha" "abc123def456" "$(jq -r '.headRefOid' <<<"$pv")"
+assert_eq "pr: labels narrowed to [{name}] (2 labels)" "2" "$(jq '.labels | length' <<<"$pv")"
+assert_eq "pr: first label name" "enhancement" "$(jq -r '.labels[0].name' <<<"$pv")"
+assert_eq "pr: label objects carry ONLY name (no color key)" "1" "$(jq '.labels[0] | keys | length' <<<"$pv")"
 assert_eq "pr: raw REST extra field dropped" "" "$(jq -r '.extra_rest_field // empty' <<<"$pv")"
-assert_eq "pr: top-level key set" "body mergeStateStatus mergeable number state title" \
+assert_eq "pr: top-level key set" "body headRefName headRefOid labels mergeStateStatus mergeable number state title" \
   "$(jq -r 'keys | join(" ")' <<<"$pv")"
 teardown
 
@@ -1595,12 +1602,16 @@ printf '%s\n' '{
   "body": "",
   "state": "closed",
   "mergeable": false,
-  "mergeable_state": "dirty"
+  "mergeable_state": "dirty",
+  "head": {"ref": "conflicting-branch", "sha": "deadbeef0001"},
+  "labels": [{"name": "bug", "color": "d73a4a"}]
 }' > "$STUB_DIR/view-pr-9002.json"
 pv2=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_view_rest 9002)
 assert_eq "pr: mergeable boolean false → CONFLICTING" "CONFLICTING" "$(jq -r '.mergeable' <<<"$pv2")"
 assert_eq "pr: mergeStateStatus dirty → DIRTY" "DIRTY" "$(jq -r '.mergeStateStatus' <<<"$pv2")"
 assert_eq "pr: closed → CLOSED" "CLOSED" "$(jq -r '.state' <<<"$pv2")"
+assert_eq "pr: headRefName from head.ref (9002)" "conflicting-branch" "$(jq -r '.headRefName' <<<"$pv2")"
+assert_eq "pr: single label narrowed" "bug" "$(jq -r '.labels[0].name' <<<"$pv2")"
 teardown
 
 echo "Test: gh_pr_view_rest -- mergeable=null → UNKNOWN; absent mergeable_state → empty"
@@ -1610,11 +1621,15 @@ printf '%s\n' '{
   "title": "computing pr",
   "body": "",
   "state": "open",
-  "mergeable": null
+  "mergeable": null,
+  "head": {"ref": "computing-branch", "sha": "cafef00d0003"}
 }' > "$STUB_DIR/view-pr-9003.json"
 pv3=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_view_rest 9003)
 assert_eq "pr: mergeable null → UNKNOWN" "UNKNOWN" "$(jq -r '.mergeable' <<<"$pv3")"
 assert_eq "pr: absent mergeable_state → empty string" "" "$(jq -r '.mergeStateStatus' <<<"$pv3")"
+assert_eq "pr: headRefName from head.ref (9003)" "computing-branch" "$(jq -r '.headRefName' <<<"$pv3")"
+# Absent labels in raw REST → empty array (// [] path), not null.
+assert_eq "pr: absent labels → empty array" "0" "$(jq '.labels | length' <<<"$pv3")"
 teardown
 
 echo "Test: gh_pr_view_rest -- missing number returns non-zero with diagnostic stderr"
