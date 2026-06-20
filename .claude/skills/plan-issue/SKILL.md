@@ -394,6 +394,17 @@ procedure verbatim:
        "/implement: plan verification failed after 2 fix attempts (check <index>)"
      ```
 
+   - **exit 5** → the plan has an unclosed/malformed ```verify fence (opened in
+     the Verification section but never closed before EOF). This is a
+     plan-authoring error the worker cannot repair, **not** a fixable verify
+     failure — do **not** enter the fix lane; run this deviation marker and stop
+     (skip the Step 3 completion marker):
+
+     ```bash
+     .claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \
+       "/implement: plan verification could not run — malformed plan (unclosed verify fence)"
+     ```
+
    - **any other non-zero exit** (exit 4 = empty/absent plan input, or an
      upstream `dispatch-read-plan` failure surfaced via `pipefail`) is an
      environment/upstream error, **not** a fixable verify failure — do **not**
