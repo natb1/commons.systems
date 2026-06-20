@@ -922,6 +922,28 @@ describe("createEpubRenderer", () => {
       expect(mockRendition.annotations.highlight).toHaveBeenCalledTimes(MAX_SEARCH_RESULTS);
     });
 
+    it("stops scanning further sections once the cap fires in an earlier section (AC2)", async () => {
+      // Section 0 alone overflows the cap; section 1 must never be loaded once
+      // truncation fires, exercising the outer-loop guard (`if (truncated) break;`).
+      const overMatches = Array.from({ length: MAX_SEARCH_RESULTS + 1 }, (_, i) => ({
+        cfi: `cfi-over-${i}`,
+        excerpt: `fox excerpt ${i}`,
+      }));
+      const s0 = makeSection("ch0.xhtml", overMatches);
+      const s1 = makeSection("ch1.xhtml", [{ cfi: "cfi-1", excerpt: "fox tail" }]);
+      mockSpine.spineItems = [s0, s1];
+      mockBook.navigation.get.mockReturnValue({ label: "Ch. 1" });
+
+      const renderer = await initRenderer();
+      const result = await renderer.search!("fox"); // type-safety-ok: optional renderer API method, present in this test harness
+
+      expect(result.truncated).toBe(true);
+      expect(result.results.length).toBe(MAX_SEARCH_RESULTS);
+      // s0 is loaded, but the cap fires before s1 is ever reached.
+      expect(s0.load).toHaveBeenCalledTimes(1);
+      expect(s1.load).not.toHaveBeenCalled();
+    });
+
     it("does not truncate when total matches are within the cap", async () => {
       const fewMatches = Array.from({ length: MAX_SEARCH_RESULTS }, (_, i) => ({
         cfi: `cfi-few-${i}`,
