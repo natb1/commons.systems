@@ -46,16 +46,22 @@ esac
 `<N>` is the issue number used by the remaining steps for their `tmp/` filenames.
 
 Then resolve whether a draft PR already exists by running the context pack (use
-`dangerouslyDisableSandbox: true` — it calls `gh`):
+`dangerouslyDisableSandbox: true` — it calls `gh`). Add `--phase-log` so the same
+call also returns any prior cross-phase handoff note:
 
 ```bash
-.claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$N" --pr
+.claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$N" --pr --phase-log
 ```
 
 Read the `=== PR ===` section of the output. **CRITICAL: detect no-PR by the
 `PR: none` line, NOT by exit code — the pack exits 0 in both cases.** If the
 output contains `PR: none`, no PR exists yet — run all steps. If it contains
 `PR #<num>`, capture that number as `PR_NUM`.
+
+Read the `=== PHASE-LOG #N ===` section into `PRIOR_PHASE_LOG` — the handoff note
+a prior attempt or earlier phase left. Treat the sentinel `phase-log: none` as
+empty. When non-empty, feed it into the Step 2 unit-build context so a rebuild or
+re-plan sees why a prior attempt diverged. An absent note leaves Step 2 unchanged.
 
 If a PR already exists, the build + PR already happened: capture its number as
 `PR_NUM`, **skip Steps 1–4**, and go straight to the Step 5 marker write (this
@@ -112,7 +118,9 @@ For each unit in the plan read in Step 1, in dependency order, invoke
 
 - `model` — the unit's planned model.
 - `scope` — the unit's scope.
-- `context` — the plan and issue context the unit needs.
+- `context` — the plan and issue context the unit needs. When `PRIOR_PHASE_LOG`
+  (from the preamble) is non-empty, include it here so a rebuild or re-plan sees
+  why a prior attempt diverged.
 - `commit_intent` — the "why" of this unit's change.
 
 `/implement-unit` launches the implementation subagent, forks `/commit-merge-push`,
@@ -207,9 +215,32 @@ diagnostic naming the offending number. If it exits non-zero, read the
 diagnostic and fix the body or `--closes` set rather than opening the PR by
 hand.
 
-### 5. Check for deviation, then write the marker (or skip it), then stop
+### 5. Write the handoff note, check for deviation, then write the marker (or skip it), then stop
 
-Before writing the marker, judge whether the implementation deviated from the
+**Ordering invariant.** The phase-log write must PRECEDE the terminal action so
+the terminal action stays last: `dispatch-mark-complete` (no deviation) or
+`dispatch-mark-deviation` (deviation) remains the single named exit. Write the
+phase-log entry once here, before the deviation branch, so both branches share it.
+
+First write the handoff note. Compose a terse "what-changed" digest of the
+implementation to `tmp/phase-log-entry-$N.md` — a one-line summary of what
+shipped; on a clean as-planned build the body is a line like `failed: none`.
+Compose it **unconditionally** (no "only on failure" branch). Then upsert it into
+the issue's phase-log comment (use `dangerouslyDisableSandbox: true` — the script
+calls `gh`):
+
+```bash
+.claude/skills/dispatch-propagate/scripts/dispatch-write-phase-log \
+  "$N" --phase implement < tmp/phase-log-entry-$N.md
+```
+
+No attempt counter — implement is single-pass, so the default `--attempt 1`
+applies. The upsert is idempotent on the `(implement, 1)` key: on the
+crash-recovery re-entry path (a PR already exists → Steps 1–4 skipped → straight
+to this marker write) the repeated write REPLACES the prior entry in place rather
+than stacking a duplicate, so the repeat is safe.
+
+Then judge whether the implementation deviated from the
 persisted plan — scope shifted mid-implementation, or the plan could not be
 fully implemented as written. Base this on the `/implement-unit` outcomes
 observed in Step 2.
