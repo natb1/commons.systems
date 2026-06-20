@@ -62,6 +62,11 @@ export interface SeedWeeklyAggregate {
 
 // ── Firestore → WeeklyAggregate ───────────────────────────────────────────────
 
+/**
+ * @public knip baseline (#2066): residual unused export, not deleted per the
+ * no-bulk-delete line — part of the symmetric per-entity parseFirestore* set.
+ * Deletion candidate; see PR notes.
+ */
 export function parseFirestoreWeeklyAggregate(docSnap: QueryDocumentSnapshot<DocumentData, DocumentData>): WeeklyAggregate {
   const data = docSnap.data();
   return {

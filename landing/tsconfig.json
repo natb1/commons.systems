@@ -1,4 +1,5 @@
 {
   "extends": "@commons-systems/config/tsconfig.app.json",
+  "compilerOptions": { "jsx": "react-jsx" },
   "include": ["src"]
 }

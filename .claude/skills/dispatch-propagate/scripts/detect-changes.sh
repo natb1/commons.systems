@@ -32,6 +32,11 @@ fi
 if echo "$CHANGED" | grep -qE '^(firestore\.rules$|storage\.rules$|rules-test/|\.claude/skills/dispatch-propagate/scripts/|firebase\.json$|package\.json$|package-lock\.json$)'; then
   echo "rules=true" >> "$GITHUB_OUTPUT"
 fi
+# dead-code check runs knip at repo root — any TS/JS/knip-config change can
+# orphan code elsewhere, so trigger on any such change across the repo.
+if echo "$CHANGED" | grep -qE '\.(ts|tsx|js|jsx|mjs|cjs)$|^knip\.(json|jsonc|ts)$'; then
+  echo "deadcode=true" >> "$GITHUB_OUTPUT"
+fi
 # go-tests needs the Go toolchain. Set go=true when a changed file is under a
 # discovered Go module. list-go-modules.sh discovers module roots from go.mod
 # locations, so a new Go module needs no edit here.

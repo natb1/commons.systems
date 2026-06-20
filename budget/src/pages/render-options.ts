@@ -16,6 +16,9 @@ export function renderPageNotices(options: { authorized: boolean }, entityLabel:
  * Convert a page-level data loading error to user-facing HTML.
  * Rethrows programmer, range, and data integrity errors so they propagate
  * to the router's top-level handler.
+ *
+ * @public knip baseline (#2066): residual unused export, not deleted per the
+ * no-bulk-delete line. Deletion candidate; see PR notes.
  */
 export function renderLoadError(error: unknown, errorId: string): string {
   const kind = classifyError(error);

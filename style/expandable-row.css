@@ -1,12 +1,12 @@
 .expand-row {
-  border-bottom: 1px solid var(--border);
+  border-bottom: var(--border-width) solid var(--border);
 }
 
 .expand-row > summary {
   cursor: pointer;
   list-style: none;
   position: relative;
-  padding-left: 1.5rem;
+  padding-left: var(--space-6);
 }
 
 .expand-row > summary::-webkit-details-marker {
@@ -16,9 +16,9 @@
 .expand-row > summary::before {
   content: "\25B6";
   font-size: 0.7em;
-  transition: transform 0.15s;
+  transition: transform var(--duration-fast) var(--ease);
   position: absolute;
-  left: 0.5rem;
+  left: var(--space-2);
 }
 
 .expand-row[open] > summary::before {
@@ -28,22 +28,22 @@
 /* Grid base for summary content. Consumers must provide grid-template-columns. */
 .expand-summary {
   display: grid;
-  gap: 0.5rem;
-  padding: 0.5rem;
+  gap: var(--space-2);
+  padding: var(--space-2);
   align-items: center;
 }
 
 .expand-row .expand-details {
-  padding: 0.5rem 1rem 1rem;
+  padding: var(--space-2) var(--space-4) var(--space-4);
 }
 
 .expand-row .expand-details dl {
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: 0.25rem 1rem;
+  gap: var(--space-1) var(--space-4);
   margin: 0;
 }
 
 .expand-row .expand-details dt {
-  font-weight: bold;
+  font-weight: var(--weight-bold);
 }

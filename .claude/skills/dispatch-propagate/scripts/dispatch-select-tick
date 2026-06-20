@@ -6,11 +6,13 @@
 #
 # Runs the lock acquisition, origin/main sync (only on `main`), the run-scoped
 # concurrency gate, the JIT engine, the Calendar JIT importer, the statements
-# scan, and target selection as one deterministic sequence and prints exactly ONE
+# scan, the orphaned-follow-up re-triage scan,
+# and target selection as one deterministic sequence and prints exactly ONE
 # decision line as its LAST stdout line. Any JIT
 # `created`/`skipped`/`debounced` lines are passed through first, each prefixed
 # `jit: `, followed by any `calendar: ...` lines, followed by any
-# `statements: ...` lines. The router (SKILL.md)
+# `statements: ...` lines, and any
+# `retriage: ...` lines. The router (SKILL.md)
 # routes on the final decision line; a model-decision seam (`main-broken` /
 # `jit-reminder`) and the worktree materialization (`dispatch-materialize-spawn`)
 # live on the other side of the seam, not here.
@@ -286,7 +288,7 @@ fi
 
 # --- Step 1d (cont.): auto-merge every ready PR (#1739) ----------------------
 # Runs after dispatch-reconcile-ready (a PR demoted this tick is seen as draft
-# and skipped) and before Step 2d's sync-merge-queue. Auto-merge runs ONLY when
+# and skipped). Auto-merge runs ONLY when
 # OPEN_MB is definitively empty — i.e. main health is known-good. It is suppressed
 # both while main is broken (OPEN_MB lists open main-broken issues, from Step 1c)
 # and when main health is UNKNOWN (the Step 1c gh issue list failed): a transient
@@ -560,15 +562,16 @@ if [[ -n "$STMT_OUT" ]]; then
   done <<< "$STMT_OUT"
 fi
 
-# --- Step 2d: reconcile the mergeable-PR queue (best-effort) -----------------
-# Find-or-creates one natb1/office-hours-nate tracking issue per mergeable PR
-# and closes tracking issues for PRs no longer mergeable. Pass its stdout lines
+# --- Step 2e: re-triage orphaned review follow-ups (best-effort) -------------
+# Parks open source-pr:<N>-labeled review follow-up issues on office-hours when
+# their source PR is found closed-unmerged (abandoned/superseded) — their
+# findings point at code that never landed on main. Pass its stdout lines
 # through, prefixed.
-MERGE_OUT=$("$SCRIPT_DIR/dispatch-sync-merge-queue") || true
-if [[ -n "$MERGE_OUT" ]]; then
-  while IFS= read -r merge_line; do
-    [[ -n "$merge_line" ]] && echo "merge-queue: $merge_line"
-  done <<< "$MERGE_OUT"
+RETRIAGE_OUT=$("$SCRIPT_DIR/dispatch-retriage-orphaned-followups") || true
+if [[ -n "$RETRIAGE_OUT" ]]; then
+  while IFS= read -r retriage_line; do
+    [[ -n "$retriage_line" ]] && echo "retriage: $retriage_line"
+  done <<< "$RETRIAGE_OUT"
 fi
 
 # --- Step 3: select the target -----------------------------------------------

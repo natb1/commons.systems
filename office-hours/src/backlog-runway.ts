@@ -1,4 +1,4 @@
-import type { IssueSample } from "./issue-samples.js";
+import { sampleTotal, type IssueSample } from "./issue-samples.js";
 
 export type BacklogRunwayFit =
   | { state: "draining"; daysUntilEmpty: number; slope: number; intercept: number; crossingAt: Date }
@@ -8,8 +8,9 @@ export type BacklogRunwayFit =
   | { state: "insufficient" };
 
 /**
- * Fits a linear regression of openHelpWanted vs time to estimate how many days
- * until the backlog empties. Returns a tagged-union describing the trend.
+ * Fits a linear regression of total open issues (the sum of the four work-type
+ * buckets: security + bug + enhancement + other) vs time to estimate how many
+ * days until the backlog empties. Returns a tagged-union describing the trend.
  */
 export function fitBacklogRunway(samples: IssueSample[]): BacklogRunwayFit {
   if (samples.length === 0) return { state: "insufficient" };
@@ -17,13 +18,13 @@ export function fitBacklogRunway(samples: IssueSample[]): BacklogRunwayFit {
   const sorted = [...samples].sort((a, b) => a.sampledAt.getTime() - b.sampledAt.getTime());
 
   const latest = sorted[sorted.length - 1];
-  if (latest.openHelpWanted === 0) return { state: "empty" };
+  if (sampleTotal(latest) === 0) return { state: "empty" };
 
   if (sorted.length < 2) return { state: "insufficient" };
 
   const first = sorted[0].sampledAt;
   const xs = sorted.map((s) => (s.sampledAt.getTime() - first.getTime()) / 86_400_000);
-  const ys = sorted.map((s) => s.openHelpWanted);
+  const ys = sorted.map((s) => sampleTotal(s));
 
   const dataDays = xs[xs.length - 1];
   if (dataDays === 0) return { state: "insufficient" };

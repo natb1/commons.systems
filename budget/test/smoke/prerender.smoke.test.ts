@@ -13,8 +13,12 @@ describe.skipIf(!hasDistBuild)("prerender build output", () => {
     expect(html.length).toBeGreaterThan(0);
   });
 
-  it("nav links were pre-rendered", () => {
-    expect(html).toContain('<span class="nav-links">');
+  it("nav links were pre-rendered as real anchor elements inside #root", () => {
+    // The React ds <Nav> renders plain <a> links — no <span class="nav-links">
+    // web-component wrapper. Assert the baked #root shell is present and the
+    // nav links are real anchors (evidence from dist/index.html inspection).
+    expect(html).toContain('id="root"');
+    expect(html).toMatch(/<a[^>]+href="\/"[^>]*>budgets<\/a>/);
   });
 
   it("budgets table was pre-rendered", () => {
