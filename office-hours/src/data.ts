@@ -65,6 +65,7 @@ export async function getOwnerQueueMetrics(
     throw err;
   }
   if (!snap.exists()) return null;
+  // parseQueueMetrics returns null and logs on bad data; null propagates to renderQueueBand which shows the empty placeholder
   return parseQueueMetrics(snap.data());
 }
 
