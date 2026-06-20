@@ -111,6 +111,45 @@ counterpart of the creation-time relevance check; the two are deliberately
 separate — the creation-time check is `$BASELINE_BRANCH`-anchored, this step is
 pre-planning and `createdAt`-anchored.
 
+**Open-blocker re-check.** Before spending any planning work, verify that the
+target issue has no open blockers. This catches the race window between the
+queue-gate check (in `/dispatch-propagate`) and now. Run with
+`dangerouslyDisableSandbox: true` — `dispatch-check-blockers` calls `gh`
+(see `.claude/rules/sandbox.md`). Tolerant capture:
+
+```bash
+if out=$(.claude/skills/dispatch-propagate/scripts/dispatch-check-blockers "$N"); then
+  rc=0
+else
+  rc=$?
+fi
+```
+
+Route on `rc`:
+
+- **`rc == 0`** — no open blocker. Proceed unchanged.
+- **`rc == 2`** — `$out` is `blocked:<nums>`. Real open blocker found. Call
+  `dispatch-mark-deviation`, then stop. Marker absence triggers Stop hook Branch A
+  (`dispatch:office-hours`):
+
+  ```bash
+  .claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \
+    "/plan-issue: target #$N has an open blocker ($out) - raced past the queue gate; parking"
+  ```
+
+- **`rc == 1`** (or any other non-zero) — environment error; blockers unverified.
+  Not "no blockers." Call `dispatch-mark-deviation` with a distinct reason
+  including `$rc`, then stop. Never proceed on `rc == 1`:
+
+  ```bash
+  .claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \
+    "/plan-issue: could not verify open blockers for #$N (dispatch-check-blockers exit $rc)"
+  ```
+
+This runs only on the fresh-run path. The `HAVE_PLAN=1` branch re-finalizes and
+stops before Step 1, so an already-planned issue is not re-parked. Placing it
+before the context-pack and drift work fails fast on a raced blocked target.
+
 Run the opening live-context call (`dangerouslyDisableSandbox: true` — it calls
 `gh`):
 
