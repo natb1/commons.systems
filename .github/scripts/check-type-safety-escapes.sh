@@ -54,15 +54,22 @@ scan_diff() {
   awk '
     BEGIN { violations = 0 }
 
-    # File header for the new side: "+++ b/<path>" (note the trailing space,
-    # which distinguishes it from an added source line beginning "+++").
-    /^\+\+\+ / {
+    # Old-side header "--- a/<path>" arms the new-side header rule. A line
+    # beginning "+++ " is only a file header when it immediately follows a
+    # "--- " line; otherwise it is an added source line (e.g. "++ x; const y =
+    # z as any;") that must be scanned, not consumed as a header.
+    /^--- / { in_diff_header = 1; next }
+
+    # File header for the new side: "+++ b/<path>", only when armed by a
+    # preceding "--- " line.
+    in_diff_header && /^\+\+\+ / {
       path = substr($0, 5)            # strip "+++ "
       sub(/^b\//, "", path)           # strip the "b/" prefix
       if (path == "/dev/null") path = ""
+      in_diff_header = 0
       next
     }
-    /^--- / { next }                  # old-side header; ignore
+    { in_diff_header = 0 }            # any other line disarms the header rule
 
     # Hunk header: "@@ -a,b +c,d @@" or "@@ -a +c @@". The new-file start line
     # is the number after the "+".
@@ -84,8 +91,12 @@ scan_diff() {
     # Removed line: does NOT advance the new-file counter.
     /^-/ { next }
 
-    # Anything else (context line " ", "\ No newline...", etc.) advances the
-    # counter. With -U0 there are no context lines, but handle them anyway.
+    # "\ No newline at end of file" marker: not a real source line, so it must
+    # NOT advance the new-file counter.
+    /^\\/  { next }
+
+    # Anything else (context line " ", etc.) advances the counter. With -U0
+    # there are no context lines, but handle them anyway.
     { line++ }
 
     END { if (violations > 0) exit 1 }
@@ -95,12 +106,12 @@ scan_diff() {
       violations++
     }
 
-    function process(content, path, line,    s, code) {
+    function process(content, path, line,    rest, code) {
       # 1. SUPPRESSION (first). A non-empty reason after the marker suppresses
       #    the whole line. An empty reason does not.
       if (match(content, /\/\/[ \t]*type-safety-ok:/)) {
         rest = substr(content, RSTART + RLENGTH)
-        if (rest ~ /[^ \t]/) return    # non-empty reason -> suppressed
+        if (rest ~ /[^ \t\r\n]/) return    # non-empty reason -> suppressed
         # empty reason -> fall through and keep checking
       }
 
@@ -125,10 +136,9 @@ scan_diff() {
       # `as <Type>` cast. Excludes import/export alias lines and `as const`.
       # `as any` is owned by the any rule above, so exclude lowercase `any`
       # from this alternation.
-      if (!(code ~ /^[ \t]*(import|export)([^A-Za-z0-9_$]|$)/) &&
-          !(code ~ /[ \t]from[ \t]*['"'"'"]/) &&
-          !(code ~ /^[ \t]*[A-Za-z0-9_$]+[ \t]+as[ \t]+[A-Za-z0-9_$]+,?[ \t]*$/)) {
-        if (code ~ /(^|[^A-Za-z0-9_$])as[ \t]+(unknown|string|number|boolean|object|symbol|bigint|[A-Z_$])/) {
+      if (!(code ~ /^[ \t]*(import|export)[^{]*\{/) &&
+          !(code ~ /[ \t]from[ \t]*['"'"'"]/)) {
+        if (code ~ /(^|[^A-Za-z0-9_$])as[ \t]+(unknown|string|number|boolean|object|symbol|bigint|never|null|undefined|void|[A-Z_$])/) {
           emit(path, line, "as <Type> cast")
         }
       }
@@ -147,6 +157,11 @@ scan_diff() {
 if [ "${1:-}" = "--scan-stdin" ]; then
   scan_diff
   exit $?
+fi
+
+if [ -n "${1:-}" ]; then
+  echo "Unknown argument: $1" >&2
+  exit 1
 fi
 
 # Default path: thin git wrapper.

@@ -176,6 +176,40 @@ EOF
 )
 
 echo ""
+echo "=== Positive: 'export const x = y as Foo' cast is flagged ==="
+(
+  F="${TEST_TMPDIR}/f"; cat > "$F" <<'EOF'
++++ b/a.ts
+@@ -1,0 +1,1 @@
++export const x = y as Foo;
+EOF
+  scan_fixture "$F"
+  n=$(err_count)
+  if [ "$RC" -eq 1 ] && [ "$n" -eq 1 ] && grep -q 'hatch (as <Type> cast)' "$OUT_FILE"; then
+    pass "export const x = y as Foo -> 1 finding (as <Type> cast)"
+  else
+    fail "export const as Foo (rc=$RC count=$n): $(cat "$OUT_FILE")"
+  fi
+)
+
+echo ""
+echo "=== Negative: 'export { X as Y };' rename is NOT flagged ==="
+(
+  F="${TEST_TMPDIR}/f"; cat > "$F" <<'EOF'
++++ b/a.ts
+@@ -1,0 +1,1 @@
++export { X as Y };
+EOF
+  scan_fixture "$F"
+  n=$(err_count)
+  if [ "$RC" -eq 0 ] && [ "$n" -eq 0 ]; then
+    pass "export { X as Y } -> 0 findings (brace rename excluded)"
+  else
+    fail "export brace rename (rc=$RC count=$n): $(cat "$OUT_FILE")"
+  fi
+)
+
+echo ""
 echo "=== Positive: 'foo!.bar' non-null assertion is flagged ==="
 (
   F="${TEST_TMPDIR}/f"; cat > "$F" <<'EOF'
@@ -221,7 +255,7 @@ echo "=== Negative: clean exclusions produce no findings ==="
 @@ -1,0 +1,13 @@
 +const x = [1, 2] as const;
 +import { X as Y } from './x';
-+  Foo as RenamedFoo,
++  Foo as RenamedFoo, // type-safety-ok: bare re-export alias body line
 +export { foo as Bar } from './re-export';
 +const eq = a !== b;
 +const notnot = !!x;
@@ -335,6 +369,7 @@ echo ""
 echo "=== Line-number: hatch on 3rd added line of '@@ +10' reports line=12 ==="
 (
   F="${TEST_TMPDIR}/f"; cat > "$F" <<'EOF'
+--- a/src/deep/a.ts
 +++ b/src/deep/a.ts
 @@ -1,0 +10,3 @@
 +const a = 1;
@@ -351,6 +386,32 @@ EOF
   fi
 )
 
+echo ""
+echo "=== Line-number: '\ No newline' marker does NOT skew the counter ==="
+(
+  # The old file lacked a trailing newline, so git emits a "\ No newline at end
+  # of file" marker after the removed line. That marker is not a real source
+  # line and must not advance the new-file counter. The added hatch is the 2nd
+  # added line of a hunk starting at +1, so it must report line=2.
+  F="${TEST_TMPDIR}/f"; cat > "$F" <<'EOF'
+--- a/a.ts
++++ b/a.ts
+@@ -1 +1,2 @@
+-const old = 1;
+\ No newline at end of file
++const a = 1;
++const c = obj as Foo;
+EOF
+  scan_fixture "$F"
+  n=$(err_count)
+  if [ "$RC" -eq 1 ] && [ "$n" -eq 1 ] && \
+     grep -q '^::error file=a.ts,line=2::' "$OUT_FILE"; then
+    pass "no-newline marker ignored: as Foo reports line=2"
+  else
+    fail "no-newline marker (rc=$RC count=$n): $(cat "$OUT_FILE")"
+  fi
+)
+
 # ---------------------------------------------------------------------------
 # RESULTS + expected-total guard (catches a crashed/early-exiting subshell).
 # ---------------------------------------------------------------------------
@@ -363,7 +424,7 @@ echo "========================================"
 echo "  Results: $FINAL_PASS passed, $FINAL_FAIL failed"
 echo "========================================"
 
-EXPECTED=15
+EXPECTED=18
 ACTUAL=$(( FINAL_PASS + FINAL_FAIL ))
 if [ "$ACTUAL" -ne "$EXPECTED" ]; then
   echo "ERROR: expected $EXPECTED test results but got $ACTUAL (a test subshell may have crashed)" >&2
