@@ -108,6 +108,16 @@ release_lock() {
   "$SCRIPT_DIR/dispatch-acquire-lock" --release >/dev/null 2>&1 || true
 }
 
+# refresh_lock — bump the lock-file mtime (the heartbeat) so a legitimately-long
+# hold never goes stale and is never falsely reclaimed by the staleness cap
+# (#2104). INVARIANT #2: call ONLY on a sub-step's completion, never inside a
+# retry/poll/wait loop — a refresh inside a loop would keep mtime fresh while a
+# holder spins there, defeating the cap. Best-effort: a noop (we no longer hold
+# the lock) or any error is swallowed.
+refresh_lock() {
+  "$SCRIPT_DIR/dispatch-acquire-lock" --heartbeat >/dev/null 2>&1 || true
+}
+
 # --- Step 0: acquire the dispatch lock ---------------------------------------
 # Let acquire-lock's stderr holder-diagnostic flow through on `busy`.
 LOCK=$("$SCRIPT_DIR/dispatch-acquire-lock" --wait) || true
@@ -249,6 +259,11 @@ if [[ "$BRANCH" == "main" ]]; then
   fi
 fi
 
+# Heartbeat: the origin/main sync (Step 1) is the first held best-effort sub-step.
+# Refresh on its completion — unconditionally, outside the main-only block, so a
+# non-main worktree or manual /dispatch tick refreshes too (#2104, invariant #2).
+refresh_lock
+
 # --- Step 1c: re-arm the main-broken latch when main has recovered -----------
 # A diagnosed red episode leaves an open dispatch:main-broken issue — the gate's
 # per-episode latch (#1085). Once origin/main goes green again, close it so the
@@ -303,6 +318,8 @@ if [[ -z "$OPEN_MB" ]]; then
     done <<< "$MERGE_OUT"
   fi
 fi
+# Heartbeat: refresh after the auto-merge sub-step completes (#2104).
+refresh_lock
 
 # --- Step 1b: run-scoped concurrency gate (autonomous no-arg queue path only) -
 # Runs ONLY on the autonomous no-arg queue path. The explicit-target run (a
@@ -418,6 +435,8 @@ if [[ -z "$MANUAL" && -z "$ARG" ]]; then
           # hold the lock, append GAP=1. Counted by
           # claude_agents_count_busy_workers on later ticks, so it suppresses
           # non-priority fan-out — it bypasses the GATE, not the COUNT.
+          # Heartbeat: fresh mtime for the cross-process handoff to dispatch-materialize-spawn (#2104).
+          refresh_lock
           echo "$PRIO 1"
           exit 0
           ;;
@@ -538,6 +557,8 @@ if [[ -n "$JIT_OUT" ]]; then
     [[ -n "$jit_line" ]] && echo "jit: $jit_line"
   done <<< "$JIT_OUT"
 fi
+# Heartbeat: refresh after the JIT engine sub-step completes (#2104).
+refresh_lock
 
 # --- Step 2b: run the Calendar JIT importer (best-effort) --------------------
 # Files one reminder issue per pressing Google Calendar event and closes
@@ -549,6 +570,8 @@ if [[ -n "$CAL_OUT" ]]; then
     [[ -n "$cal_line" ]] && echo "$cal_line"
   done <<< "$CAL_OUT"
 fi
+# Heartbeat: refresh after the calendar-import sub-step completes (#2104).
+refresh_lock
 
 # --- Step 2c: run the statements scan (best-effort) --------------------------
 # Scans each configured statements folder and files one parse-job issue per new
@@ -561,6 +584,8 @@ if [[ -n "$STMT_OUT" ]]; then
     [[ -n "$stmt_line" ]] && echo "statements: $stmt_line"
   done <<< "$STMT_OUT"
 fi
+# Heartbeat: refresh after the statements-scan sub-step completes (#2104).
+refresh_lock
 
 # --- Step 2e: re-triage orphaned review follow-ups (best-effort) -------------
 # Parks open dispatch:review-followup-labeled review follow-up issues (source PR
@@ -574,12 +599,16 @@ if [[ -n "$RETRIAGE_OUT" ]]; then
     [[ -n "$retriage_line" ]] && echo "retriage: $retriage_line"
   done <<< "$RETRIAGE_OUT"
 fi
+# Heartbeat: refresh after the retriage sub-step completes (#2104).
+refresh_lock
 
 # --- Step 3: select the target -----------------------------------------------
 if [[ -n "$ARG" ]]; then
   TARGET=$("$SCRIPT_DIR/dispatch-resolve-arg" "$ARG")
   RESOLVE_RC=$?
   if (( RESOLVE_RC == 0 )); then
+    # Heartbeat: fresh mtime for the cross-process handoff to dispatch-materialize-spawn (#2104).
+    refresh_lock
     echo "explicit $TARGET $GAP"
     exit 0
   fi
@@ -614,6 +643,8 @@ SELECTED=$("$SCRIPT_DIR/dispatch-select-target") || true
 case "$SELECTED" in
   pr\ *|issue\ *)
     # Hold the lock; append the run-scoped gap the fan-out loop consumes.
+    # Heartbeat: fresh mtime for the cross-process handoff to dispatch-materialize-spawn (#2104).
+    refresh_lock
     echo "$SELECTED $GAP"
     ;;
   main-broken\ *|jit-reminder\ *)
