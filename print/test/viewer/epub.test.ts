@@ -799,7 +799,7 @@ describe("createEpubRenderer", () => {
                          : [{ cfi: "cfi-B", excerpt: "second fox" }],
         ),
         // Gate ONLY the first call's load so call-1 parks while call-2 finishes.
-        load: vi.fn() as ReturnType<typeof vi.fn>,
+        load: vi.fn(),
       };
       let releaseFirst!: () => void;
       const gate = new Promise<void>((resolve) => { releaseFirst = resolve; });
@@ -833,6 +833,42 @@ describe("createEpubRenderer", () => {
       expect(highlightCfis).not.toContain("cfi-A");
       const removeCfis = mockRendition.annotations.remove.mock.calls.map((c) => c[0]);
       expect(removeCfis).not.toContain("cfi-A");
+    });
+
+    it("a superseded search loads no further sections past the supersede point", async () => {
+      const s0: FakeSection = {
+        href: "ch0.xhtml",
+        unload: vi.fn(),
+        find: vi.fn().mockReturnValue([{ cfi: "cfi-0", excerpt: "alpha fox" }]),
+        load: vi.fn(),
+      };
+      // Gate ONLY call-1's load (the first load); call-2's load resolves immediately.
+      let release!: () => void; // type-safety-ok: definite assignment assertion — Promise constructor assigns release before it is used
+      const gate = new Promise<void>((resolve) => { release = resolve; });
+      s0.load
+        .mockImplementationOnce(() => gate)
+        .mockImplementation(() => Promise.resolve());
+      const s1 = makeSection("ch1.xhtml", [{ cfi: "cfi-1", excerpt: "beta fox" }]);
+      mockSpine.spineItems = [s0, s1];
+      mockBook.navigation.get.mockReturnValue({ label: "X" });
+
+      const renderer = await initRenderer();
+
+      const p1 = renderer.search!("first"); // type-safety-ok: search is optional on ContentRenderer but always present after initRenderer()
+      // Flush a macrotask so call-1 parks INSIDE the loop on the gated s0.load().
+      await new Promise((r) => setTimeout(r));
+      const p2 = renderer.search!("second"); // type-safety-ok: search is optional on ContentRenderer but always present after initRenderer()
+      // call-2's s0.load is the second call → resolves immediately; call-2 runs to
+      // completion, loading both s0 and s1.
+      await p2;
+
+      release();
+      await p1;
+
+      // s1.load is a shared mock over the single spine, so 1 call = only call-2
+      // reached it (call-1 broke at the top of i = 1); 2 calls would mean the
+      // superseded call-1 also loaded s1 (the unfixed behavior).
+      expect(s1.load).toHaveBeenCalledTimes(1);
     });
 
     it("skips a section whose load() rejects, surfaces via reportError, and returns matches from remaining sections", async () => {
