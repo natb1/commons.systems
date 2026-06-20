@@ -342,6 +342,34 @@ assert_eq "issue-num 0: exit code is 2" "2" "$ZERO_RC"
 assert_contains "issue-num 0: stderr mentions positive integer" "positive integer" "$ZERO_STDERR"
 
 # ============================================================================
+# issue-num 00 (leading zero) -> exit 2, stderr mentions 'positive integer' (#2183)
+# ============================================================================
+
+echo ""
+echo "issue-num 00: exit 2, stderr mentions positive integer"
+
+set +e
+LZ_STDERR=$(printf 'body\n' | "$SUT" 00 --phase plan 2>&1)
+LZ_RC=$?
+set -e
+assert_eq "issue-num 00: exit code is 2" "2" "$LZ_RC"
+assert_contains "issue-num 00: stderr mentions positive integer" "positive integer" "$LZ_STDERR"
+
+# ============================================================================
+# issue-num abc (non-numeric) -> exit 2, stderr mentions 'positive integer' (#2183)
+# ============================================================================
+
+echo ""
+echo "issue-num abc: exit 2, stderr mentions positive integer"
+
+set +e
+NN_STDERR=$(printf 'body\n' | "$SUT" abc --phase plan 2>&1)
+NN_RC=$?
+set -e
+assert_eq "issue-num abc: exit code is 2" "2" "$NN_RC"
+assert_contains "issue-num abc: stderr mentions positive integer" "positive integer" "$NN_STDERR"
+
+# ============================================================================
 # AC3: valid invocation → exit 0, gh stub records a POST to issues/2132/comments
 # ============================================================================
 
