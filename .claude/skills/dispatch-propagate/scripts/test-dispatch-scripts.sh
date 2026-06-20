@@ -35411,6 +35411,21 @@ case "$out" in
 esac
 assert_eq "dispatch-run-verification: unclosed-fence diagnostic reported" "yes" "$found"
 
+# Unclosed fence AFTER a completed block (exit 5): the loop accumulates one or
+# more closed ```verify blocks, then sets capturing=1 on the trailing unclosed
+# fence. exit 5 must still fire at EOF even though blocks were successfully
+# accumulated before — pinning the capturing-reset boundary on fence close so a
+# future refactor cannot silently downgrade this to exit 0/1 (#2118).
+echo "Test: dispatch-run-verification -- unclosed verify fence after a completed block exits 5"
+plan=$'## Verification\n```verify\ntrue\n```\n```verify\nfalse\n'
+if out=$(printf '%s' "$plan" | "$RUN_VERIFY" 2>&1); then rc=0; else rc=$?; fi
+assert_eq "dispatch-run-verification: unclosed fence after completed block exits 5" "5" "$rc"
+case "$out" in
+  *"unclosed verify block"*) found=yes ;;
+  *) found=no ;;
+esac
+assert_eq "dispatch-run-verification: post-block unclosed-fence diagnostic reported" "yes" "$found"
+
 # Converse boundary (exit 3, NOT 5): an unclosed ```verify fence OUTSIDE any
 # Verification section leaves capturing=0, so it is ignored like any out-of-
 # section fence and stays the "proceed unchanged" exit 3 — pinning that exit 5

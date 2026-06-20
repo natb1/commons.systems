@@ -14,7 +14,7 @@
 # dispatch-write-plan's stdin design: the caller pipes the plan in, so this
 # script needs no gh mock to test.
 #
-# Exit codes, so the implement phase can branch on the result (four states):
+# Exit codes, so the implement phase can branch on the result (five states):
 #   exit 3 — no Verification section, OR a Verification section with no `verify`
 #            blocks. The "proceed unchanged" signal; a one-line diagnostic goes
 #            to stderr. This is NOT a failure — there is simply nothing to run.
