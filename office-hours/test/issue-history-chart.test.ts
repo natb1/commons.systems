@@ -11,29 +11,29 @@ function withFg(): HTMLElement {
   return container;
 }
 
-/** Draining fixture: openHelpWanted descending over consecutive days. */
+/** Draining fixture: total descending over consecutive days. */
 const drainingFixture: IssueSample[] = [
-  { sampledAt: new Date("2026-06-07T00:00:00Z"), openHelpWanted: 18, openOther: 5, groupId: "g" },
-  { sampledAt: new Date("2026-06-08T00:00:00Z"), openHelpWanted: 15, openOther: 4, groupId: "g" },
-  { sampledAt: new Date("2026-06-09T00:00:00Z"), openHelpWanted: 12, openOther: 3, groupId: "g" },
-  { sampledAt: new Date("2026-06-10T00:00:00Z"), openHelpWanted: 9, openOther: 2, groupId: "g" },
-  { sampledAt: new Date("2026-06-11T00:00:00Z"), openHelpWanted: 6, openOther: 1, groupId: "g" },
+  { sampledAt: new Date("2026-06-07T00:00:00Z"), openSecurity: 2, openBug: 8, openEnhancement: 8, openOther: 5, groupId: "g" },
+  { sampledAt: new Date("2026-06-08T00:00:00Z"), openSecurity: 2, openBug: 7, openEnhancement: 6, openOther: 4, groupId: "g" },
+  { sampledAt: new Date("2026-06-09T00:00:00Z"), openSecurity: 1, openBug: 6, openEnhancement: 5, openOther: 3, groupId: "g" },
+  { sampledAt: new Date("2026-06-10T00:00:00Z"), openSecurity: 1, openBug: 4, openEnhancement: 4, openOther: 2, groupId: "g" },
+  { sampledAt: new Date("2026-06-11T00:00:00Z"), openSecurity: 1, openBug: 3, openEnhancement: 2, openOther: 1, groupId: "g" },
 ];
 
-/** Flat fixture: constant openHelpWanted → stable. */
+/** Flat fixture: constant total → stable. */
 const flatFixture: IssueSample[] = [
-  { sampledAt: new Date("2026-06-07T00:00:00Z"), openHelpWanted: 10, openOther: 2, groupId: "g" },
-  { sampledAt: new Date("2026-06-08T00:00:00Z"), openHelpWanted: 10, openOther: 2, groupId: "g" },
-  { sampledAt: new Date("2026-06-09T00:00:00Z"), openHelpWanted: 10, openOther: 2, groupId: "g" },
-  { sampledAt: new Date("2026-06-10T00:00:00Z"), openHelpWanted: 10, openOther: 2, groupId: "g" },
+  { sampledAt: new Date("2026-06-07T00:00:00Z"), openSecurity: 1, openBug: 5, openEnhancement: 4, openOther: 2, groupId: "g" },
+  { sampledAt: new Date("2026-06-08T00:00:00Z"), openSecurity: 1, openBug: 5, openEnhancement: 4, openOther: 2, groupId: "g" },
+  { sampledAt: new Date("2026-06-09T00:00:00Z"), openSecurity: 1, openBug: 5, openEnhancement: 4, openOther: 2, groupId: "g" },
+  { sampledAt: new Date("2026-06-10T00:00:00Z"), openSecurity: 1, openBug: 5, openEnhancement: 4, openOther: 2, groupId: "g" },
 ];
 
-/** Growing fixture: openHelpWanted ascending → growing. */
+/** Growing fixture: total ascending → growing. */
 const growingFixture: IssueSample[] = [
-  { sampledAt: new Date("2026-06-07T00:00:00Z"), openHelpWanted: 5, openOther: 2, groupId: "g" },
-  { sampledAt: new Date("2026-06-08T00:00:00Z"), openHelpWanted: 8, openOther: 2, groupId: "g" },
-  { sampledAt: new Date("2026-06-09T00:00:00Z"), openHelpWanted: 11, openOther: 3, groupId: "g" },
-  { sampledAt: new Date("2026-06-10T00:00:00Z"), openHelpWanted: 15, openOther: 3, groupId: "g" },
+  { sampledAt: new Date("2026-06-07T00:00:00Z"), openSecurity: 1, openBug: 2, openEnhancement: 2, openOther: 2, groupId: "g" },
+  { sampledAt: new Date("2026-06-08T00:00:00Z"), openSecurity: 1, openBug: 4, openEnhancement: 3, openOther: 2, groupId: "g" },
+  { sampledAt: new Date("2026-06-09T00:00:00Z"), openSecurity: 1, openBug: 5, openEnhancement: 5, openOther: 3, groupId: "g" },
+  { sampledAt: new Date("2026-06-10T00:00:00Z"), openSecurity: 2, openBug: 7, openEnhancement: 6, openOther: 3, groupId: "g" },
 ];
 
 describe("renderIssueHistoryChart", () => {
@@ -57,13 +57,13 @@ describe("renderIssueHistoryChart", () => {
     expect(el.classList.contains("backlog-history")).toBe(true);
   });
 
-  it("single sample (openHelpWanted > 0): empty-state, no degenerate chart", () => {
+  it("single sample (total > 0): empty-state, no degenerate chart", () => {
     // A lone sample yields a zero-width time domain — the degenerate xDomain
     // edge case. The guard must short-circuit to the empty state rather than
     // constructing a [d, d] domain through the stacked-area path.
     const host = withFg();
     const single: IssueSample[] = [
-      { sampledAt: new Date("2026-06-07T00:00:00Z"), openHelpWanted: 7, openOther: 2, groupId: "g" },
+      { sampledAt: new Date("2026-06-07T00:00:00Z"), openSecurity: 1, openBug: 3, openEnhancement: 3, openOther: 2, groupId: "g" },
     ];
     const el = renderIssueHistoryChart(single);
     host.appendChild(el);
@@ -76,13 +76,26 @@ describe("renderIssueHistoryChart", () => {
     expect(el.classList.contains("backlog-history")).toBe(true);
   });
 
-  it("stacked areas: chart-body svg contains at least 2 path elements", () => {
+  it("stacked areas: chart-body svg contains at least 4 path elements (one per bucket)", () => {
     const host = withFg();
     const el = renderIssueHistoryChart(drainingFixture);
     host.appendChild(el);
 
     const paths = el.querySelectorAll(".chart-scroll-wrapper svg path");
-    expect(paths.length).toBeGreaterThanOrEqual(2);
+    expect(paths.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("legend has five entries: security, bug, enhancement, other, projection", () => {
+    const host = withFg();
+    const el = renderIssueHistoryChart(drainingFixture);
+    host.appendChild(el);
+
+    const legend = el.querySelector(".trend-legend");
+    expect(legend).not.toBeNull();
+    const labels = Array.from(legend!.querySelectorAll(".trend-legend-item")).map(
+      (i) => i.textContent ?? "",
+    );
+    expect(labels).toEqual(["security", "bug", "enhancement", "other", "projection"]);
   });
 
   it("draining: caption state is draining with correct text; legend projection entry is dashed", () => {

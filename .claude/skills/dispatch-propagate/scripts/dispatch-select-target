@@ -1100,7 +1100,11 @@ while IFS=$'\t' read -r issue_num issue_pri issue_enh issue_catrank issue_cat; d
   #   exit 2 — every reachable open leaf is owned by a live session or excluded;
   #            stop descending this root. A later issue in the same bucket may
   #            still fill the slot.
-  #   exit 1 — usage error; propagate as a hard failure, never swallow as a skip.
+  #   exit 3 — transient gh API failure tracing this root; skip it and continue to
+  #            the next root (#2005). The root is not dispatched and the tick does
+  #            not fail; the next tick retries the root.
+  #   exit 1 — usage-only error (no longer includes gh failure, which is exit 3);
+  #            propagate as a hard failure, never swallow as a skip.
   declare -A root_excl=()
   for _ge in "${!EXCLUDED[@]}"; do root_excl["$_ge"]=1; done
   if (( TOP > 1 )); then
@@ -1183,6 +1187,16 @@ while IFS=$'\t' read -r issue_num issue_pri issue_enh issue_catrank issue_cat; d
     else
       trace_status=$?
       [[ "$trace_status" -eq 2 ]] && break
+      if [[ "$trace_status" -eq 3 ]]; then
+        # A transient gh API error tracing THIS root (post-gh_retry exhaustion).
+        # Skip the root this pass and continue scanning the rest of the queue —
+        # do NOT dispatch it (trace-leaf already refused to treat it as startable)
+        # and do NOT fail the whole tick (#2005). The next tick retries the root.
+        echo "warning: dispatch-trace-leaf $issue_num queue: transient gh API error tracing this root; skipping it this pass and continuing" >&2
+        break
+      fi
+      # Any other nonzero status is a usage/programming error (trace-leaf exit 1) —
+      # a hard failure affecting every root; never swallow it as a skip.
       echo "error: dispatch-trace-leaf $issue_num queue failed (exit $trace_status)" >&2
       exit 1
     fi

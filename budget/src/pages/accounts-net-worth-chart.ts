@@ -1,7 +1,7 @@
 import * as Plot from "@observablehq/plot";
 import type { NetWorthPoint } from "../balance.js";
 import type { ChartResult, WeekEntry } from "./budgets-chart.js";
-import { getThemeFg, assembleChartLayout, MARGIN_RIGHT, MARGIN_BOTTOM, computeChartWidth, renderAxisSvg } from "./chart-util.js";
+import { getThemeFg, readThemeVar, assembleChartLayout, MARGIN_RIGHT, MARGIN_BOTTOM, computeChartWidth, renderAxisSvg } from "./chart-util.js";
 
 interface NetWorthChartOptions {
   readonly data: NetWorthPoint[];
@@ -41,6 +41,7 @@ export function renderNetWorthChart(container: HTMLElement, options: NetWorthCha
   const height = 200;
 
   const fg = getThemeFg(container);
+  const color = readThemeVar(container, "--chart-1");
   const sharedStyle = { background: "transparent", color: fg };
 
   let yMax = 0;
@@ -53,8 +54,6 @@ export function renderNetWorthChart(container: HTMLElement, options: NetWorthCha
   const yDomain: [number, number] = [yMin - margin, yMax + margin];
 
   const axisSvg = renderAxisSvg({ height, style: sharedStyle, yDomain });
-
-  const color = "#26a69a";
 
   const chartSvg = Plot.plot({
     width: chartWidth,

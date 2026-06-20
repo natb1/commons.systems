@@ -44,6 +44,28 @@
 #               missing, non-zero exit, non-array output, or zero exit with
 #               empty output. Stdout is empty.
 #
+# claude_sessions_with_name_all <name>
+#   The office-hours selector's name-based state lookup. Like
+#   `claude_sessions_with_name`, but (a) runs `claude agents --json --all` so
+#   completed sessions (`state: "done"`, hidden from the active-only default) are
+#   visible, and (b) projects `sessionId<TAB>state` (the granular `state`, the
+#   discriminator the selector gates on) instead of the pid/status TSV. It queries
+#   `claude agents --json --all` DIRECTLY — NOT via `_claude_agents_raw` — because
+#   the tick snapshot (DISPATCH_AGENTS_SNAPSHOT) is captured without `--all` and so
+#   lacks the `done` rows this helper exists to surface; reading the snapshot would
+#   silently hide them.
+#   SCOPED TO THE OFFICE-HOURS SELECTOR ONLY. The shared helpers
+#   (`claude_sessions_with_name`, `claude_agents_list_all`,
+#   `worktree_has_live_session`, `_claude_agents_raw`) stay untouched: they gate the
+#   dispatch router's worktree-occupancy decisions on the hot path, and making
+#   `done` sessions newly visible there would change those decisions.
+#     return 0 — daemon queried successfully. Stdout carries one tab-separated
+#               line per matching session: sessionId<TAB>state. Zero matches →
+#               return 0 with empty stdout: definite "no sessions".
+#     return 1 — UNKNOWN. Same contract as `claude_sessions_with_name`: `claude`
+#               missing, non-zero exit, non-array output, or zero exit with
+#               empty output. Stdout is empty.
+#
 # claude_agents_list_all
 #   The unfiltered machine-wide primitive. Runs `claude agents --json` (NO --cwd
 #   flag, NO name filter) and projects every live session to a three-column TSV.
@@ -259,6 +281,49 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
     if ! lines=$(jq -r --arg name "$name" '
       if type == "array"
       then .[] | select(.name == $name) | [.sessionId, .pid, .status, .name] | @tsv
+      else error("claude agents --json output is not a JSON array")
+      end' <<<"$out" 2>/dev/null); then
+      return 1
+    fi
+    # `[]` or no name matches → empty $lines → emit nothing, still return 0.
+    if [[ -n "$lines" ]]; then
+      printf '%s\n' "$lines"
+    fi
+    return 0
+  }
+
+  # claude_sessions_with_name_all <name> — emit live+done sessions matching <name>
+  # as sessionId<TAB>state TSV. See the header comment for the return-code contract
+  # and why it bypasses the snapshot.
+  claude_sessions_with_name_all() {
+    local name="${1:-}"
+    if [[ -z "$name" ]]; then
+      printf 'lib-claude-agents: claude_sessions_with_name_all requires a <name> argument\n' >&2
+      return 1
+    fi
+
+    # --all so completed (`done`) sessions are visible; queried DIRECTLY (not via
+    # _claude_agents_raw) to bypass the snapshot, which is captured without --all
+    # and lacks `done` rows. 2>/dev/null drops daemon noise; only the exit code
+    # and a well-formed JSON array on stdout are trusted. A non-zero exit means
+    # the session state cannot be determined: unknown.
+    local out
+    if ! out=$("${CLAUDE_AGENTS_CMD:-claude}" agents --json --all 2>/dev/null); then
+      return 1
+    fi
+
+    # A zero exit with empty (or whitespace-only) output is unknown too.
+    if [[ -z "${out//[[:space:]]/}" ]]; then
+      return 1
+    fi
+
+    # One jq pass validates the JSON is an array and filters by exact name match,
+    # projecting sessionId and the granular state. Non-array input errors out and
+    # the result is UNKNOWN.
+    local lines
+    if ! lines=$(jq -r --arg name "$name" '
+      if type == "array"
+      then .[] | select(.name == $name) | [.sessionId, .state] | @tsv
       else error("claude agents --json output is not a JSON array")
       end' <<<"$out" 2>/dev/null); then
       return 1

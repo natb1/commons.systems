@@ -1,16 +1,10 @@
+@import "@commons-systems/ds/tokens/colors.css";
+@import "@commons-systems/ds/tokens/typography.css";
+@import "@commons-systems/ds/tokens/spacing.css";
+@import "@commons-systems/ds/tokens/effects.css";
+
 :root {
-  --font-body: "IBM Plex Mono", ui-monospace, "Cascadia Code", "Source Code Pro",
-    Menlo, Consolas, "DejaVu Sans Mono", monospace;
-  --font-heading: var(--font-body);
-
-  --fg: light-dark(#1a1a1a, #e0d8c8);
-  --bg: light-dark(#f5f0e8, #1a1714);
-  --accent: light-dark(#b8600a, #e8943a);
-  --muted: light-dark(#6b5e4f, #8a7d6e);
-  --border: light-dark(#c4b8a4, #3d3529);
-  --surface: light-dark(#ece5d8, #252017);
-
-  --main-max-width: 48rem;
+  --main-max-width: var(--max-width-prose);
   --line-length: var(--main-max-width);
 
   /* Apps override on :root to lock a specific scheme (e.g., color-scheme: dark) */
@@ -20,28 +14,13 @@
 body {
   font-family: var(--font-body);
   color: var(--fg);
-  background:
-    repeating-linear-gradient(
-      to right,
-      rgba(224, 216, 200, 0.04) 0px,
-      rgba(224, 216, 200, 0.04) 1px,
-      transparent 1px,
-      transparent 24px
-    ),
-    repeating-linear-gradient(
-      to bottom,
-      rgba(224, 216, 200, 0.04) 0px,
-      rgba(224, 216, 200, 0.04) 1px,
-      transparent 1px,
-      transparent 24px
-    ),
-    var(--bg);
+  background: var(--grid-texture), var(--bg);
 }
 
 .page {
   max-width: var(--main-max-width);
   margin: 0 auto;
-  padding-inline: 1rem;
+  padding-inline: var(--space-4);
 }
 
 h1,
@@ -49,8 +28,8 @@ h2,
 h3 {
   font-family: var(--font-heading);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  text-shadow: 0 0 0.4em var(--accent);
+  letter-spacing: var(--tracking-heading);
+  text-shadow: var(--glow-accent);
 }
 
 a {
@@ -77,7 +56,7 @@ app-nav .nav-auth {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 1rem;
+  gap: var(--space-4);
 }
 
 app-nav .nav-home:empty {
@@ -107,41 +86,41 @@ header {
   top: 0;
   background: var(--surface);
   z-index: 10;
-  border: 1px solid var(--border);
-  border-bottom-width: 2px;
-  padding-block: 1rem;
-  padding-inline: 1.5rem;
-  margin-bottom: 2rem;
+  border: var(--border-width) solid var(--border);
+  border-bottom-width: var(--border-width-strong);
+  padding-block: var(--space-4);
+  padding-inline: var(--space-6);
+  margin-bottom: var(--space-8);
 }
 
 footer {
-  border-top: 2px solid var(--border);
-  padding-top: 1rem;
-  padding-bottom: 1rem;
-  margin-top: 2rem;
+  border-top: var(--border-width-strong) solid var(--border);
+  padding-top: var(--space-4);
+  padding-bottom: var(--space-4);
+  margin-top: var(--space-8);
   color: var(--muted);
 }
 
 *,
 *::before,
 *::after {
-  border-radius: 0;
+  border-radius: var(--radius-none);
 }
 
 main {
   background: var(--surface);
-  padding: 1.5rem;
-  border: 1px solid var(--border);
+  padding: var(--space-6);
+  border: var(--border-width) solid var(--border);
 }
 
 .auth-toast {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
-  background: var(--error, #c00);
+  gap: var(--space-2);
+  background: var(--error);
   color: white;
-  padding: 0.5rem 1rem;
+  padding: var(--space-2) var(--space-4);
   text-align: center;
 }
 
@@ -151,21 +130,21 @@ main {
   color: inherit;
   font-size: 1.2em;
   cursor: pointer;
-  padding: 0 0.25rem;
+  padding: 0 var(--space-1);
 }
 
 .autocomplete-dropdown {
   position: absolute;
   z-index: 10;
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: var(--border-width) solid var(--border);
   color: var(--fg);
   max-height: 12rem;
   overflow-y: auto;
 }
 
 .autocomplete-item {
-  padding: 0.25rem 0.5rem;
+  padding: var(--space-1) var(--space-2);
   cursor: pointer;
 }
 

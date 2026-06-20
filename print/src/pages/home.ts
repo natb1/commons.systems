@@ -67,16 +67,19 @@ async function handleDownload(button: HTMLButtonElement): Promise<void> {
   }
 }
 
-export async function renderHome(user: User | null): Promise<string> {
-  let mediaHtml: string;
+export async function loadMediaHtml(): Promise<string> {
   try {
     const items = await listCloud();
-    mediaHtml = renderMediaList(items);
+    return renderMediaList(items);
   } catch (error) {
     if (error instanceof DataIntegrityError) throw error;
     logError(error, { operation: "load-media" });
-    mediaHtml = '<p id="media-error">Could not load media library.</p>';
+    return '<p id="media-error">Could not load media library.</p>';
   }
+}
+
+export async function renderHome(user: User | null): Promise<string> {
+  const mediaHtml = await loadMediaHtml();
 
   const publicNotice = !user
     ? '<p id="public-notice">Showing public domain items. Sign in to see your full library.</p>'
