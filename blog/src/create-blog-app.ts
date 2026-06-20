@@ -70,9 +70,38 @@ export interface CreateBlogAppConfig {
     ) => (() => void) | PromiseLike<(() => void) | void>;
   };
   adminGroupId: GroupId;
-  /** Per-route info-panel content override (raw, pre-sanitized HTML). When it returns a string for the current path, InfoPanelRegion renders it as the panel (via aboutContent) instead of the standard blogroll panel; returning undefined yields the standard panel. Landing uses this for /about. */
+  /**
+   * Per-route info-panel content override. When it returns a string for the
+   * current path, InfoPanelRegion renders it as the panel (via `aboutContent`)
+   * instead of the standard blogroll panel; returning `undefined` yields the
+   * standard panel. Landing uses this for /about.
+   *
+   * Sanitization contract: the returned string is passed as `aboutContent` to
+   * InfoPanelRegion and injected verbatim via `dangerouslySetInnerHTML` — the
+   * driver does NOT sanitize. The caller guarantees the HTML is already safe;
+   * current callers return hard-coded template literals.
+   *
+   * Widening trigger: if callers are ever extended to return dynamic or
+   * user-influenced content, add a `DOMPurify.sanitize(...)` pass in
+   * InfoPanelRegion before the value reaches `dangerouslySetInnerHTML`.
+   * `dompurify` is already a dependency — see
+   * `blog/src/pages/HomeRegion.tsx:83` for the existing
+   * `DOMPurify.sanitize(html, { ADD_ATTR: [...] })` usage to reuse.
+   */
   infoPanelContentForPath?: (path: string) => string | undefined;
-  // optional hooks (consumed in units 2/3)
+  /**
+   * Extra SPA routes beyond home / admin. Each route's `render(path)` return
+   * value is injected verbatim into `#app` via `dangerouslySetInnerHTML` — the
+   * driver does NOT sanitize. Callers guarantee the HTML is already safe;
+   * current callers return hard-coded template literals.
+   *
+   * Widening trigger: if `Route.render` is ever extended to return dynamic or
+   * user-influenced content, add a `DOMPurify.sanitize(...)` pass at the
+   * injection sites (entry-hydration and SPA-navigation `dangerouslySetInnerHTML`
+   * sinks below) before the value reaches React. `dompurify` is already a
+   * dependency — see `blog/src/pages/HomeRegion.tsx:83` for the existing
+   * `DOMPurify.sanitize(html, { ADD_ATTR: [...] })` usage to reuse.
+   */
   extraRoutes?: Route[];
   onHomeAfterRender?: (slug: string | undefined) => void;
   onNavigate?: (path: string) => void;
@@ -227,6 +256,7 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
   const appRoot = hydrateRoot(
     app,
     typeof entryExtraHtml === "string"
+      // entryExtraHtml is unsanitized Route.render output — see extraRoutes contract + widening trigger above.
       ? createElement("div", { dangerouslySetInnerHTML: { __html: entryExtraHtml } })
       : homeElement(initialSlug),
   );
@@ -380,6 +410,7 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
       try {
         const html = await extra.render(path);
         if (seq === navSeq) {
+          // html is unsanitized Route.render output — see extraRoutes contract + widening trigger above.
           appRoot.render(createElement("div", { dangerouslySetInnerHTML: { __html: html ?? "" } }));
           // Run afterRender after React commits the body.
           queueMicrotask(() => {

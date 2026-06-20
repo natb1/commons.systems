@@ -28,6 +28,17 @@ export interface InfoPanelRegionProps {
    * wired by a later unit). When present, the About content replaces the standard
    * panel and the blog-roll hydration is skipped entirely. When absent (the common
    * case), the standard info panel renders.
+   *
+   * Sanitization contract: InfoPanelRegion does NOT sanitize this value — it is
+   * injected verbatim via `dangerouslySetInnerHTML` (see render branch below).
+   * The caller guarantees the HTML is already safe; current callers pass
+   * hard-coded template literals such as `renderAboutPanelHtml`.
+   *
+   * Widening trigger: if this prop is ever widened to carry dynamic or
+   * user-influenced content, add a `DOMPurify.sanitize(...)` pass at the
+   * injection site before it reaches `dangerouslySetInnerHTML`. `dompurify` is
+   * already a dependency — see `blog/src/pages/HomeRegion.tsx:83` for the
+   * existing `DOMPurify.sanitize(html, { ADD_ATTR: [...] })` usage to reuse.
    */
   aboutContent?: string;
 }
@@ -183,6 +194,7 @@ export function InfoPanelRegion({
   }, [useScrollIndicator, aboutContent]);
 
   if (aboutContent !== undefined) {
+    // aboutContent is injected verbatim — see the prop contract + widening trigger above.
     return <div dangerouslySetInnerHTML={{ __html: aboutContent }} />;
   }
 
