@@ -61,6 +61,11 @@ setup() {
   cp "$SCRIPT_DIR/dispatch-select-target" "$TMPDIR_TEST/dispatch-select-target"
   cp "$SCRIPT_DIR/office-hours-select-target" "$TMPDIR_TEST/office-hours-select-target"
   cp "$SCRIPT_DIR/office-hours" "$TMPDIR_TEST/office-hours"
+  # office-hours' idle-provision arm resolves dispatch-provision-from-remote via
+  # its SCRIPT_DIR (= TMPDIR_TEST for this copy), so the helper must sit alongside
+  # it. Selector-only tests never run provisioning (the selector only checks
+  # ls-remote); entry tests that exercise provisioning stub the helper directly.
+  cp "$SCRIPT_DIR/dispatch-provision-from-remote" "$TMPDIR_TEST/dispatch-provision-from-remote"
   cp "$SCRIPT_DIR/dispatch-spawn-office-hours" "$TMPDIR_TEST/dispatch-spawn-office-hours"
   cp "$SCRIPT_DIR/dispatch-spawn-job" "$TMPDIR_TEST/dispatch-spawn-job"
   cp "$SCRIPT_DIR/dispatch-trace-leaf" "$TMPDIR_TEST/dispatch-trace-leaf"
@@ -117,6 +122,7 @@ setup() {
            "$TMPDIR_TEST/dispatch-select-target" \
            "$TMPDIR_TEST/office-hours-select-target" \
            "$TMPDIR_TEST/office-hours" \
+           "$TMPDIR_TEST/dispatch-provision-from-remote" \
            "$TMPDIR_TEST/dispatch-spawn-office-hours" \
            "$TMPDIR_TEST/dispatch-spawn-job" \
            "$TMPDIR_TEST/dispatch-trace-leaf" \
@@ -265,6 +271,9 @@ case "$args" in
         # Exactly-<limit> fixture: serve a single array of exactly limit items so
         # a caller's `len == limit ⇒ truncated` guard fires.
         cat "$STUB_DIR/rest-exact.json"
+        ;;
+      dispatch-test-includebody)
+        cat "$STUB_DIR/rest-includebody.json"
         ;;
       *)
         echo '[]'
@@ -501,6 +510,111 @@ case "$args" in
     else
       echo "[]"
     fi
+    ;;
+  api\ repos/*/issues/9[0-9][0-9][0-9])
+    # gh_issue_view_rest sentinel branch (#2255): single-issue GET has no label to
+    # carry a sentinel, so reserve the 9xxx number range. MUST precede the generic
+    # `api repos/*/issues/*` branch (case is first-wins). A $STUB_DIR/gh-fail-rest
+    # marker forces a non-zero gh failure (drives the clear-errors path); otherwise
+    # $STUB_DIR/view-issue-<N>.json supplies the raw REST issue object.
+    echo "$args" >> "$STUB_DIR/gh-issue-view-rest-calls.log"
+    if [[ -f "$STUB_DIR/gh-fail-rest" ]]; then
+      echo "stub forced gh api failure" >&2
+      exit 1
+    fi
+    num="${args##*/}"
+    if [[ -f "$STUB_DIR/view-issue-${num}.json" ]]; then
+      cat "$STUB_DIR/view-issue-${num}.json"
+    else
+      echo '{}'
+    fi
+    ;;
+  api\ repos/*/pulls/9[0-9][0-9][0-9])
+    # gh_pr_view_rest sentinel branch (#2255): reserve the 9xxx PR number range.
+    # MUST precede the generic `api repos/*/pulls/*` branch (case is first-wins).
+    # A $STUB_DIR/gh-fail-rest marker forces a non-zero gh failure; otherwise
+    # $STUB_DIR/view-pr-<N>.json supplies the raw REST pull object.
+    echo "$args" >> "$STUB_DIR/gh-pr-view-rest-calls.log"
+    if [[ -f "$STUB_DIR/gh-fail-rest" ]]; then
+      echo "stub forced gh api failure" >&2
+      exit 1
+    fi
+    num="${args##*/}"
+    if [[ -f "$STUB_DIR/view-pr-${num}.json" ]]; then
+      cat "$STUB_DIR/view-pr-${num}.json"
+    else
+      echo '{}'
+    fi
+    ;;
+  "api -X POST "*/issues/*/labels*)
+    # gh_issue_set_labels_rest sentinel (#2255): POST .../issues/<N>/labels.
+    # MUST precede the generic `api repos/*/issues/*` branch (case is first-wins).
+    # $args form: "api -X POST repos/.../issues/<N>/labels -f labels[]=<label>..."
+    echo "$args" >> "$STUB_DIR/gh-issue-set-labels-rest-calls.log"
+    if [[ -f "$STUB_DIR/gh-fail-rest" ]]; then
+      echo "stub forced gh api failure" >&2
+      exit 1
+    fi
+    echo '[]'
+    ;;
+  "api -X DELETE "*/issues/*/labels/*)
+    # gh_issue_remove_label_rest sentinel (#2255): DELETE .../issues/<N>/labels/<name>.
+    # MUST precede the generic `api repos/*/issues/*` branch.
+    # $args form: "api -X DELETE repos/.../issues/<N>/labels/<url-encoded-name>"
+    echo "$args" >> "$STUB_DIR/gh-issue-remove-label-rest-calls.log"
+    if [[ -f "$STUB_DIR/gh-fail-rest" ]]; then
+      echo "stub forced gh api failure" >&2
+      exit 1
+    fi
+    echo '[]'
+    ;;
+  "api -X PATCH "*/issues/[0-9]*)
+    # gh_issue_close_rest sentinel (#2255): PATCH .../issues/<N> with state=closed.
+    # MUST precede the generic `api repos/*/issues/*` branch.
+    # $args form: "api -X PATCH repos/.../issues/<N> -f state=closed"
+    echo "$args" >> "$STUB_DIR/gh-issue-close-rest-calls.log"
+    if [[ -f "$STUB_DIR/gh-fail-rest" ]]; then
+      echo "stub forced gh api failure" >&2
+      exit 1
+    fi
+    echo '{}'
+    ;;
+  "api -X POST "*/issues/*/comments*)
+    # gh_issue_comment_rest sentinel (#2255): POST .../issues/<N>/comments.
+    # MUST precede the generic `api repos/*/issues/*` branch.
+    # $args form: "api -X POST repos/.../issues/<N>/comments -f body=..."
+    echo "$args" >> "$STUB_DIR/gh-issue-comment-rest-calls.log"
+    if [[ -f "$STUB_DIR/gh-fail-rest" ]]; then
+      echo "stub forced gh api failure" >&2
+      exit 1
+    fi
+    echo '{}'
+    ;;
+  "api -X POST "*/issues\ *)
+    # gh_issue_create_rest sentinel (#2255): POST .../issues (new issue creation).
+    # MUST precede the generic `api repos/*/issues/*` branch. The backslash-space
+    # anchors to the create endpoint (.../issues<SPACE>) rather than subpaths like
+    # .../issues/<N>/labels which the labels/comments branches above already handle.
+    # The labels/comments branches come first in the case so they take priority for
+    # those paths; this branch then catches only the bare create path.
+    # $args form: "api -X POST repos/.../issues -f title=... -f body=..."
+    echo "$args" >> "$STUB_DIR/gh-issue-create-rest-calls.log"
+    if [[ -f "$STUB_DIR/gh-fail-rest" ]]; then
+      echo "stub forced gh api failure" >&2
+      exit 1
+    fi
+    echo '{"number":9999,"html_url":"https://github.com/test/repo/issues/9999"}'
+    ;;
+  "api -X PUT "*/pulls/*/merge*)
+    # gh_pr_merge_rest sentinel (#2255): PUT .../pulls/<N>/merge.
+    # MUST precede the generic `api repos/*/pulls/*` branch.
+    # $args form: "api -X PUT repos/.../pulls/<N>/merge -f merge_method=..."
+    echo "$args" >> "$STUB_DIR/gh-pr-merge-rest-calls.log"
+    if [[ -f "$STUB_DIR/gh-fail-rest" ]]; then
+      echo "stub forced gh api failure" >&2
+      exit 1
+    fi
+    echo '{}'
     ;;
   api\ repos/*/issues/*)
     # dispatch-resolve-arg discriminator: gh api repos/{owner}/{repo}/issues/<N>.
@@ -862,6 +976,20 @@ case "$args" in
     else
       echo "0"
     fi
+    ;;
+  *ls-remote\ --exit-code\ --heads\ origin\ *)
+    # office-hours-select-target's swept-worktree arm probes whether the branch
+    # still exists on origin via `git -C <main> ls-remote --exit-code --heads
+    # origin <branch>`. The -C <main> args precede ls-remote in "$@", so match on
+    # the substring. Consult $STUB_DIR/remote-branches.txt (one branch per line):
+    # exit 0 if listed, else exit 2 — mirroring real ls-remote --exit-code's exit
+    # 2 for no match. A missing fixture means "branch not listed" → exit 2.
+    branch="${args##* }"
+    if [[ -f "$STUB_DIR/remote-branches.txt" ]] && \
+       grep -Fxq "$branch" "$STUB_DIR/remote-branches.txt"; then
+      exit 0
+    fi
+    exit 2
     ;;
   *)
     echo "git stub: unknown invocation: $args" >&2
@@ -1447,6 +1575,638 @@ assert_eq "pr normalize: 503 (closed+null merged_at) -> CLOSED" "CLOSED" "$(jq -
 assert_eq "pr normalize: 502 mergedAt remapped" "2024-05-02T00:00:00Z" "$(jq -r '.[] | select(.number==502) | .mergedAt' <<<"$actual_pr_norm")"
 assert_eq "pr normalize: 501 createdAt remapped" "2024-05-01T00:00:00Z" "$(jq -r '.[] | select(.number==501) | .createdAt' <<<"$actual_pr_norm")"
 assert_eq "pr normalize: 501 title projected" "open pr" "$(jq -r '.[] | select(.number==501) | .title' <<<"$actual_pr_norm")"
+teardown
+
+echo "Test: --include-body -- projection includes title and body; default omits title"
+setup
+printf '%s\n' '[
+  {"number":401,"title":"Fixture title for 401","created_at":"2024-01-09T00:00:00Z","closed_at":null,"labels":[],"body":"Fixture body for 401"}
+]' > "$STUB_DIR/rest-includebody.json"
+: > "$STUB_DIR/gh-issue-list-rest-calls.log"
+# --include-body: projection must carry a non-null title (Unit 1 #2259) and body.
+actual_ib=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state all --include-body --label dispatch-test-includebody)
+assert_eq "--include-body: .[0].title is the fixture title" "Fixture title for 401" "$(jq -r '.[0].title // empty' <<<"$actual_ib")"
+assert_eq "--include-body: .[0].body is the fixture body" "Fixture body for 401" "$(jq -r '.[0].body // empty' <<<"$actual_ib")"
+# No --limit was passed, so the helper must take the full-paginate path. Pin the
+# code path: a regression to single-page would still emit the fixture content
+# from the stub but would not pass --paginate.
+if grep -q -- '--paginate' "$STUB_DIR/gh-issue-list-rest-calls.log"; then
+  assert_eq "--include-body: log contains --paginate" "yes" "yes"
+else
+  assert_eq "--include-body: log contains --paginate" "yes" "no"
+fi
+# Default projection (no --include-body) must still OMIT title (zero blast radius).
+: > "$STUB_DIR/gh-issue-list-rest-calls.log"
+actual_default=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state all --label dispatch-test-includebody)
+assert_eq "default projection: .[0].title is absent" "" "$(jq -r '.[0].title // empty' <<<"$actual_default")"
+assert_eq "default projection: .[0].number is present" "401" "$(jq -r '.[0].number // empty' <<<"$actual_default")"
+# Default projection also takes the no-limit full-paginate path.
+if grep -q -- '--paginate' "$STUB_DIR/gh-issue-list-rest-calls.log"; then
+  assert_eq "default projection: log contains --paginate" "yes" "yes"
+else
+  assert_eq "default projection: log contains --paginate" "yes" "no"
+fi
+teardown
+
+# ============================================================================
+# gh_issue_view_rest / gh_pr_view_rest byte-compatibility tests (#2255)
+# ============================================================================
+# These drive the REAL helpers (sourced from the copied lib.sh) via the 9xxx
+# sentinel stub branches. The oracle for the expected shape is the porcelain the
+# helpers replace: `gh issue view <N> --json number,title,body,state,labels,
+# assignees` (UPPERCASE state, labels:[{name}], assignees:[{login}]) and
+# `gh pr view <N> --json number,title,body,state,mergeable,mergeStateStatus`
+# (UPPERCASE state, mergeable as the GraphQL enum string, mergeStateStatus
+# UPPERCASE). The fixtures are the RAW REST shape (lowercase state, label/
+# assignee objects with extra keys, mergeable as a boolean, snake_case
+# mergeable_state), so the projection + casing/enum bridges are genuinely
+# exercised: delete a bridge and the assertions below flip RED.
+echo "=== gh_issue_view_rest / gh_pr_view_rest (byte-compat) ==="
+
+echo "Test: gh_issue_view_rest -- projection + state upcase + labels/assignees narrowing"
+setup
+# Raw REST issue: lowercase state, label objects carrying extra keys (id/color/
+# description), assignee objects carrying extra keys (id/type). The projection
+# must upcase state and narrow labels→[{name}] / assignees→[{login}].
+printf '%s\n' '{
+  "number": 9001,
+  "title": "a sample issue",
+  "body": "the issue body",
+  "state": "open",
+  "labels": [
+    {"id": 1, "name": "bug", "color": "ff0000", "description": "a bug"},
+    {"id": 2, "name": "dispatch:planned", "color": "00ff00", "description": null}
+  ],
+  "assignees": [
+    {"login": "alice", "id": 10, "type": "User"},
+    {"login": "bob", "id": 11, "type": "User"}
+  ],
+  "extra_rest_field": "must not appear in projection"
+}' > "$STUB_DIR/view-issue-9001.json"
+iv=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_view_rest 9001)
+assert_eq "issue: number" "9001" "$(jq -r '.number' <<<"$iv")"
+assert_eq "issue: title" "a sample issue" "$(jq -r '.title' <<<"$iv")"
+assert_eq "issue: body" "the issue body" "$(jq -r '.body' <<<"$iv")"
+assert_eq "issue: state upcased OPEN" "OPEN" "$(jq -r '.state' <<<"$iv")"
+assert_eq "issue: labels narrowed to [{name}] (2 labels)" "2" "$(jq '.labels | length' <<<"$iv")"
+assert_eq "issue: first label name" "bug" "$(jq -r '.labels[0].name' <<<"$iv")"
+assert_eq "issue: label objects carry ONLY name (no color key)" "1" "$(jq '.labels[0] | keys | length' <<<"$iv")"
+assert_eq "issue: assignees narrowed to [{login}]" "alice" "$(jq -r '.assignees[0].login' <<<"$iv")"
+assert_eq "issue: assignee objects carry ONLY login" "1" "$(jq '.assignees[0] | keys | length' <<<"$iv")"
+assert_eq "issue: raw REST extra field dropped" "" "$(jq -r '.extra_rest_field // empty' <<<"$iv")"
+# Top-level keys are exactly the porcelain set.
+assert_eq "issue: top-level key set" "assignees body labels number state title" \
+  "$(jq -r 'keys | join(" ")' <<<"$iv")"
+teardown
+
+echo "Test: gh_issue_view_rest -- closed state upcases to CLOSED; empty labels/assignees"
+setup
+printf '%s\n' '{
+  "number": 9002,
+  "title": "closed one",
+  "body": "",
+  "state": "closed",
+  "labels": [],
+  "assignees": []
+}' > "$STUB_DIR/view-issue-9002.json"
+iv2=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_view_rest 9002)
+assert_eq "issue: closed → CLOSED" "CLOSED" "$(jq -r '.state' <<<"$iv2")"
+# Byte-compat: a REST null body must surface as porcelain's empty string.
+printf '%s\n' '{"number":9004,"title":"t","state":"open","body":null,"labels":[],"assignees":[]}' \
+  > "$STUB_DIR/view-issue-9004.json"
+iv_nb=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_view_rest 9004)
+assert_eq "issue: null body coerced to empty string" "true" "$(jq '.body == ""' <<<"$iv_nb")"
+assert_eq "issue: empty labels length 0" "0" "$(jq '.labels | length' <<<"$iv2")"
+assert_eq "issue: empty assignees length 0" "0" "$(jq '.assignees | length' <<<"$iv2")"
+teardown
+
+echo "Test: gh_issue_view_rest -- --repo flag emits cross-repo segment"
+setup
+: > "$STUB_DIR/gh-issue-view-rest-calls.log"
+printf '%s\n' '{"number":9003,"title":"t","body":"b","state":"open","labels":[],"assignees":[]}' \
+  > "$STUB_DIR/view-issue-9003.json"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_view_rest 9003 --repo owner/other-repo >/dev/null
+if grep -q 'repos/owner/other-repo/issues/9003' "$STUB_DIR/gh-issue-view-rest-calls.log"; then seg=yes; else seg=no; fi
+assert_eq "issue: --repo uses cross-repo segment" "yes" "$seg"
+if grep -q 'repos/{owner}/{repo}/issues' "$STUB_DIR/gh-issue-view-rest-calls.log"; then ph=yes; else ph=no; fi
+assert_eq "issue: placeholder absent on cross-repo call" "no" "$ph"
+teardown
+
+echo "Test: gh_issue_view_rest -- missing number returns non-zero with diagnostic stderr"
+setup
+rc_iv=0
+err_iv=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_view_rest 2>&1 >/dev/null) || rc_iv=$?
+assert_eq "issue: missing number → non-zero" "1" "$rc_iv"
+case "$err_iv" in *"gh_issue_view_rest: issue number is required"*) m=yes ;; *) m=no ;; esac
+assert_eq "issue: missing-number stderr names the helper" "yes" "$m"
+teardown
+
+echo "Test: gh_issue_view_rest -- gh failure returns non-zero with diagnostic stderr"
+setup
+: > "$STUB_DIR/gh-fail-rest"
+rc_ivf=0
+err_ivf=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_view_rest 9001 2>&1 >/dev/null) || rc_ivf=$?
+assert_eq "issue: gh failure → non-zero" "1" "$rc_ivf"
+case "$err_ivf" in *"gh_issue_view_rest: gh api failed"*) mf=yes ;; *) mf=no ;; esac
+assert_eq "issue: gh-failure stderr names the helper" "yes" "$mf"
+teardown
+
+echo "Test: gh_pr_view_rest -- mergeable=true → MERGEABLE, clean→CLEAN, state upcase"
+setup
+# Raw REST pull: lowercase state, mergeable BOOLEAN true, snake_case
+# mergeable_state lowercase. Projection must map mergeable→enum string and
+# remap+upcase mergeable_state→mergeStateStatus.
+printf '%s\n' '{
+  "number": 9001,
+  "title": "a sample pr",
+  "body": "the pr body",
+  "state": "open",
+  "mergeable": true,
+  "mergeable_state": "clean",
+  "extra_rest_field": "drop me"
+}' > "$STUB_DIR/view-pr-9001.json"
+pv=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_view_rest 9001)
+assert_eq "pr: number" "9001" "$(jq -r '.number' <<<"$pv")"
+assert_eq "pr: title" "a sample pr" "$(jq -r '.title' <<<"$pv")"
+assert_eq "pr: body" "the pr body" "$(jq -r '.body' <<<"$pv")"
+assert_eq "pr: state upcased OPEN" "OPEN" "$(jq -r '.state' <<<"$pv")"
+assert_eq "pr: mergeable boolean true → enum MERGEABLE" "MERGEABLE" "$(jq -r '.mergeable' <<<"$pv")"
+assert_eq "pr: mergeStateStatus key present + upcased" "CLEAN" "$(jq -r '.mergeStateStatus' <<<"$pv")"
+assert_eq "pr: raw REST extra field dropped" "" "$(jq -r '.extra_rest_field // empty' <<<"$pv")"
+assert_eq "pr: top-level key set" "body mergeStateStatus mergeable number state title" \
+  "$(jq -r 'keys | join(" ")' <<<"$pv")"
+teardown
+
+echo "Test: gh_pr_view_rest -- mergeable=false → CONFLICTING, dirty→DIRTY, closed→CLOSED"
+setup
+printf '%s\n' '{
+  "number": 9002,
+  "title": "conflicting pr",
+  "body": "",
+  "state": "closed",
+  "mergeable": false,
+  "mergeable_state": "dirty"
+}' > "$STUB_DIR/view-pr-9002.json"
+pv2=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_view_rest 9002)
+assert_eq "pr: mergeable boolean false → CONFLICTING" "CONFLICTING" "$(jq -r '.mergeable' <<<"$pv2")"
+assert_eq "pr: mergeStateStatus dirty → DIRTY" "DIRTY" "$(jq -r '.mergeStateStatus' <<<"$pv2")"
+assert_eq "pr: closed → CLOSED" "CLOSED" "$(jq -r '.state' <<<"$pv2")"
+teardown
+
+echo "Test: gh_pr_view_rest -- mergeable=null → UNKNOWN; absent mergeable_state → empty"
+setup
+printf '%s\n' '{
+  "number": 9003,
+  "title": "computing pr",
+  "body": "",
+  "state": "open",
+  "mergeable": null
+}' > "$STUB_DIR/view-pr-9003.json"
+pv3=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_view_rest 9003)
+assert_eq "pr: mergeable null → UNKNOWN" "UNKNOWN" "$(jq -r '.mergeable' <<<"$pv3")"
+assert_eq "pr: absent mergeable_state → empty string" "" "$(jq -r '.mergeStateStatus' <<<"$pv3")"
+teardown
+
+echo "Test: gh_pr_view_rest -- missing number returns non-zero with diagnostic stderr"
+setup
+rc_pv=0
+err_pv=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_view_rest 2>&1 >/dev/null) || rc_pv=$?
+assert_eq "pr: missing number → non-zero" "1" "$rc_pv"
+case "$err_pv" in *"gh_pr_view_rest: PR number is required"*) mp=yes ;; *) mp=no ;; esac
+assert_eq "pr: missing-number stderr names the helper" "yes" "$mp"
+teardown
+
+echo "Test: gh_pr_view_rest -- gh failure returns non-zero with diagnostic stderr"
+setup
+: > "$STUB_DIR/gh-fail-rest"
+rc_pvf=0
+err_pvf=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_view_rest 9001 2>&1 >/dev/null) || rc_pvf=$?
+assert_eq "pr: gh failure → non-zero" "1" "$rc_pvf"
+case "$err_pvf" in *"gh_pr_view_rest: gh api failed"*) mpf=yes ;; *) mpf=no ;; esac
+assert_eq "pr: gh-failure stderr names the helper" "yes" "$mpf"
+teardown
+
+# ============================================================================
+# Mutation REST helpers (#2255)
+# ============================================================================
+# These drive the REAL mutation helpers (sourced from the copied lib.sh) via the
+# sentinel stub branches added for gh_issue_set_labels_rest, gh_issue_remove_label_rest,
+# gh_issue_close_rest, gh_issue_create_rest, gh_issue_comment_rest, and
+# gh_pr_merge_rest. Each test:
+#   (a) asserts the helper hits the correct REST method and path, and
+#   (b) asserts the helper returns non-zero with descriptive stderr on gh failure.
+echo "=== mutation REST helpers ==="
+
+# --- gh_issue_set_labels_rest ---
+echo "Test: gh_issue_set_labels_rest -- POST to correct path, forwards labels"
+setup
+: > "$STUB_DIR/gh-issue-set-labels-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_set_labels_rest 42 dispatch:planned dispatch:qa-done
+if grep -q 'POST' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then m=yes; else m=no; fi
+assert_eq "set-labels: log contains POST" "yes" "$m"
+if grep -q 'issues/42/labels' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then p=yes; else p=no; fi
+assert_eq "set-labels: log contains issues/42/labels path" "yes" "$p"
+if grep -q 'dispatch:planned' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then l=yes; else l=no; fi
+assert_eq "set-labels: log contains label name" "yes" "$l"
+teardown
+
+echo "Test: gh_issue_set_labels_rest -- --repo flag emits cross-repo segment"
+setup
+: > "$STUB_DIR/gh-issue-set-labels-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_set_labels_rest 42 dispatch:planned --repo owner/other-repo
+if grep -q 'repos/owner/other-repo/issues/42/labels' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then seg=yes; else seg=no; fi
+assert_eq "set-labels: --repo uses cross-repo segment" "yes" "$seg"
+if grep -q 'repos/{owner}/{repo}' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then ph=yes; else ph=no; fi
+assert_eq "set-labels: --repo placeholder absent" "no" "$ph"
+teardown
+
+echo "Test: gh_issue_set_labels_rest -- missing number returns non-zero"
+setup
+rc_sl=0
+err_sl=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_set_labels_rest 2>&1 >/dev/null) || rc_sl=$?
+assert_eq "set-labels: missing number → non-zero" "1" "$rc_sl"
+case "$err_sl" in *"gh_issue_set_labels_rest: issue number is required"*) m=yes ;; *) m=no ;; esac
+assert_eq "set-labels: missing-number stderr names helper" "yes" "$m"
+teardown
+
+echo "Test: gh_issue_set_labels_rest -- number with zero labels returns non-zero"
+setup
+rc_sl_nl=0
+err_sl_nl=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_set_labels_rest 42 2>&1 >/dev/null) || rc_sl_nl=$?
+assert_eq "set-labels: no labels → non-zero" "1" "$rc_sl_nl"
+case "$err_sl_nl" in *"at least one label is required"*) m=yes ;; *) m=no ;; esac
+assert_eq "set-labels: no-labels stderr names requirement" "yes" "$m"
+teardown
+
+echo "Test: gh_issue_set_labels_rest -- gh failure returns non-zero with diagnostic stderr"
+setup
+: > "$STUB_DIR/gh-fail-rest"
+rc_slf=0
+err_slf=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_set_labels_rest 42 dispatch:planned 2>&1 >/dev/null) || rc_slf=$?
+assert_eq "set-labels: gh failure → non-zero" "1" "$rc_slf"
+case "$err_slf" in *"gh_issue_set_labels_rest: gh api failed"*) m=yes ;; *) m=no ;; esac
+assert_eq "set-labels: gh-failure stderr names helper" "yes" "$m"
+teardown
+
+# --- gh_issue_remove_label_rest ---
+echo "Test: gh_issue_remove_label_rest -- DELETE to correct path, URL-encodes space"
+setup
+: > "$STUB_DIR/gh-issue-remove-label-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_remove_label_rest 42 "help wanted"
+if grep -q 'DELETE' "$STUB_DIR/gh-issue-remove-label-rest-calls.log"; then m=yes; else m=no; fi
+assert_eq "remove-label: log contains DELETE" "yes" "$m"
+if grep -q 'issues/42/labels/help%20wanted' "$STUB_DIR/gh-issue-remove-label-rest-calls.log"; then p=yes; else p=no; fi
+assert_eq "remove-label: path contains URL-encoded label" "yes" "$p"
+teardown
+
+echo "Test: gh_issue_remove_label_rest -- --repo flag emits cross-repo segment"
+setup
+: > "$STUB_DIR/gh-issue-remove-label-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_remove_label_rest 42 "dispatch:planned" --repo owner/other-repo
+if grep -q 'repos/owner/other-repo/issues/42/labels' "$STUB_DIR/gh-issue-remove-label-rest-calls.log"; then seg=yes; else seg=no; fi
+assert_eq "remove-label: --repo uses cross-repo segment" "yes" "$seg"
+teardown
+
+echo "Test: gh_issue_remove_label_rest -- missing args return non-zero"
+setup
+rc_rl=0
+err_rl=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_remove_label_rest 2>&1 >/dev/null) || rc_rl=$?
+assert_eq "remove-label: missing number → non-zero" "1" "$rc_rl"
+case "$err_rl" in *"gh_issue_remove_label_rest: issue number is required"*) m=yes ;; *) m=no ;; esac
+assert_eq "remove-label: missing-number stderr names helper" "yes" "$m"
+rc_rll=0
+err_rll=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_remove_label_rest 42 2>&1 >/dev/null) || rc_rll=$?
+assert_eq "remove-label: missing label → non-zero" "1" "$rc_rll"
+case "$err_rll" in *"gh_issue_remove_label_rest: label name is required"*) m=yes ;; *) m=no ;; esac
+assert_eq "remove-label: missing-label stderr names helper" "yes" "$m"
+teardown
+
+echo "Test: gh_issue_remove_label_rest -- gh failure returns non-zero with diagnostic stderr"
+setup
+: > "$STUB_DIR/gh-fail-rest"
+rc_rlf=0
+err_rlf=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_remove_label_rest 42 dispatch:planned 2>&1 >/dev/null) || rc_rlf=$?
+assert_eq "remove-label: gh failure → non-zero" "1" "$rc_rlf"
+case "$err_rlf" in *"gh_issue_remove_label_rest: gh api failed"*) m=yes ;; *) m=no ;; esac
+assert_eq "remove-label: gh-failure stderr names helper" "yes" "$m"
+teardown
+
+# --- gh_issue_close_rest ---
+echo "Test: gh_issue_close_rest -- PATCH to correct path with state=closed"
+setup
+: > "$STUB_DIR/gh-issue-close-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_close_rest 42
+if grep -q 'PATCH' "$STUB_DIR/gh-issue-close-rest-calls.log"; then m=yes; else m=no; fi
+assert_eq "close: log contains PATCH" "yes" "$m"
+if grep -q 'issues/42' "$STUB_DIR/gh-issue-close-rest-calls.log"; then p=yes; else p=no; fi
+assert_eq "close: log contains issues/42 path" "yes" "$p"
+if grep -q 'state=closed' "$STUB_DIR/gh-issue-close-rest-calls.log"; then s=yes; else s=no; fi
+assert_eq "close: log contains state=closed" "yes" "$s"
+teardown
+
+echo "Test: gh_issue_close_rest -- --repo flag emits cross-repo segment"
+setup
+: > "$STUB_DIR/gh-issue-close-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_close_rest 42 --repo owner/other-repo
+if grep -q 'repos/owner/other-repo/issues/42' "$STUB_DIR/gh-issue-close-rest-calls.log"; then seg=yes; else seg=no; fi
+assert_eq "close: --repo uses cross-repo segment" "yes" "$seg"
+teardown
+
+echo "Test: gh_issue_close_rest -- missing number returns non-zero"
+setup
+rc_cl=0
+err_cl=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_close_rest 2>&1 >/dev/null) || rc_cl=$?
+assert_eq "close: missing number → non-zero" "1" "$rc_cl"
+case "$err_cl" in *"gh_issue_close_rest: issue number is required"*) m=yes ;; *) m=no ;; esac
+assert_eq "close: missing-number stderr names helper" "yes" "$m"
+teardown
+
+echo "Test: gh_issue_close_rest -- gh failure returns non-zero with diagnostic stderr"
+setup
+: > "$STUB_DIR/gh-fail-rest"
+rc_clf=0
+err_clf=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_close_rest 42 2>&1 >/dev/null) || rc_clf=$?
+assert_eq "close: gh failure → non-zero" "1" "$rc_clf"
+case "$err_clf" in *"gh_issue_close_rest: gh api failed"*) m=yes ;; *) m=no ;; esac
+assert_eq "close: gh-failure stderr names helper" "yes" "$m"
+teardown
+
+# --- gh_issue_create_rest ---
+echo "Test: gh_issue_create_rest -- POST to correct path, echoes html_url, forwards title/body/labels"
+setup
+: > "$STUB_DIR/gh-issue-create-rest-calls.log"
+url=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_create_rest --title "Test issue" --body "body text" --label dispatch:planned)
+if grep -q 'POST' "$STUB_DIR/gh-issue-create-rest-calls.log"; then m=yes; else m=no; fi
+assert_eq "create: log contains POST" "yes" "$m"
+if grep -q 'title=Test issue' "$STUB_DIR/gh-issue-create-rest-calls.log"; then t=yes; else t=no; fi
+assert_eq "create: log contains title" "yes" "$t"
+if grep -q 'dispatch:planned' "$STUB_DIR/gh-issue-create-rest-calls.log"; then l=yes; else l=no; fi
+assert_eq "create: log contains label" "yes" "$l"
+assert_eq "create: stdout is the issue URL" "https://github.com/test/repo/issues/9999" "$url"
+teardown
+
+echo "Test: gh_issue_create_rest -- --repo flag emits cross-repo segment"
+setup
+: > "$STUB_DIR/gh-issue-create-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_create_rest --title "t" --body "b" --repo owner/other-repo >/dev/null
+if grep -q 'repos/owner/other-repo/issues' "$STUB_DIR/gh-issue-create-rest-calls.log"; then seg=yes; else seg=no; fi
+assert_eq "create: --repo uses cross-repo segment" "yes" "$seg"
+teardown
+
+echo "Test: gh_issue_create_rest -- missing required args return non-zero"
+setup
+rc_ic=0
+err_ic=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_create_rest --body "b" 2>&1 >/dev/null) || rc_ic=$?
+assert_eq "create: missing --title → non-zero" "1" "$rc_ic"
+case "$err_ic" in *"gh_issue_create_rest: --title is required"*) m=yes ;; *) m=no ;; esac
+assert_eq "create: missing-title stderr names helper" "yes" "$m"
+rc_icb=0
+err_icb=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_create_rest --title "t" 2>&1 >/dev/null) || rc_icb=$?
+assert_eq "create: missing --body → non-zero" "1" "$rc_icb"
+case "$err_icb" in *"gh_issue_create_rest: --body is required"*) m=yes ;; *) m=no ;; esac
+assert_eq "create: missing-body stderr names helper" "yes" "$m"
+teardown
+
+echo "Test: gh_issue_create_rest -- gh failure returns non-zero with diagnostic stderr"
+setup
+: > "$STUB_DIR/gh-fail-rest"
+rc_icf=0
+err_icf=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_create_rest --title "t" --body "b" 2>&1 >/dev/null) || rc_icf=$?
+assert_eq "create: gh failure → non-zero" "1" "$rc_icf"
+case "$err_icf" in *"gh_issue_create_rest: gh api failed"*) m=yes ;; *) m=no ;; esac
+assert_eq "create: gh-failure stderr names helper" "yes" "$m"
+teardown
+
+# --- gh_issue_comment_rest ---
+echo "Test: gh_issue_comment_rest -- POST to correct path, forwards body"
+setup
+: > "$STUB_DIR/gh-issue-comment-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_comment_rest 42 --body "a comment"
+if grep -q 'POST' "$STUB_DIR/gh-issue-comment-rest-calls.log"; then m=yes; else m=no; fi
+assert_eq "comment: log contains POST" "yes" "$m"
+if grep -q 'issues/42/comments' "$STUB_DIR/gh-issue-comment-rest-calls.log"; then p=yes; else p=no; fi
+assert_eq "comment: log contains issues/42/comments path" "yes" "$p"
+if grep -q 'a comment' "$STUB_DIR/gh-issue-comment-rest-calls.log"; then b=yes; else b=no; fi
+assert_eq "comment: log contains body text" "yes" "$b"
+teardown
+
+echo "Test: gh_issue_comment_rest -- --body-file reads body from file"
+setup
+: > "$STUB_DIR/gh-issue-comment-rest-calls.log"
+printf '%s' "body from file" > "$STUB_DIR/comment-body.txt"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_comment_rest 42 --body-file "$STUB_DIR/comment-body.txt"
+if grep -q 'issues/42/comments' "$STUB_DIR/gh-issue-comment-rest-calls.log"; then p=yes; else p=no; fi
+assert_eq "comment: --body-file path appears in log" "yes" "$p"
+if grep -q -- '-F body=@' "$STUB_DIR/gh-issue-comment-rest-calls.log"; then f=yes; else f=no; fi
+assert_eq "comment: --body-file uses -F body=@ flag" "yes" "$f"
+teardown
+
+echo "Test: gh_issue_comment_rest -- --repo flag emits cross-repo segment"
+setup
+: > "$STUB_DIR/gh-issue-comment-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_comment_rest 42 --body "b" --repo owner/other-repo
+if grep -q 'repos/owner/other-repo/issues/42/comments' "$STUB_DIR/gh-issue-comment-rest-calls.log"; then seg=yes; else seg=no; fi
+assert_eq "comment: --repo uses cross-repo segment" "yes" "$seg"
+teardown
+
+echo "Test: gh_issue_comment_rest -- missing required args return non-zero"
+setup
+rc_cm=0
+err_cm=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_comment_rest 2>&1 >/dev/null) || rc_cm=$?
+assert_eq "comment: missing number → non-zero" "1" "$rc_cm"
+case "$err_cm" in *"gh_issue_comment_rest: issue number is required"*) m=yes ;; *) m=no ;; esac
+assert_eq "comment: missing-number stderr names helper" "yes" "$m"
+rc_cmb=0
+err_cmb=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_comment_rest 42 2>&1 >/dev/null) || rc_cmb=$?
+assert_eq "comment: missing --body/--body-file → non-zero" "1" "$rc_cmb"
+case "$err_cmb" in *"gh_issue_comment_rest: --body or --body-file is required"*) m=yes ;; *) m=no ;; esac
+assert_eq "comment: missing-body stderr names helper" "yes" "$m"
+teardown
+
+echo "Test: gh_issue_comment_rest -- --body and --body-file together return non-zero"
+setup
+rc_cmx=0
+err_cmx=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_comment_rest 42 --body "b" --body-file /dev/null 2>&1 >/dev/null) || rc_cmx=$?
+assert_eq "comment: --body+--body-file → non-zero" "1" "$rc_cmx"
+case "$err_cmx" in *"mutually exclusive"*) m=yes ;; *) m=no ;; esac
+assert_eq "comment: --body+--body-file stderr names conflict" "yes" "$m"
+teardown
+
+echo "Test: gh_issue_comment_rest -- gh failure returns non-zero with diagnostic stderr"
+setup
+: > "$STUB_DIR/gh-fail-rest"
+rc_cmf=0
+err_cmf=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_comment_rest 42 --body "b" 2>&1 >/dev/null) || rc_cmf=$?
+assert_eq "comment: gh failure → non-zero" "1" "$rc_cmf"
+case "$err_cmf" in *"gh_issue_comment_rest: gh api failed"*) m=yes ;; *) m=no ;; esac
+assert_eq "comment: gh-failure stderr names helper" "yes" "$m"
+teardown
+
+# --- gh_pr_merge_rest ---
+echo "Test: gh_pr_merge_rest -- PUT to correct path, default merge_method=merge"
+setup
+: > "$STUB_DIR/gh-pr-merge-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_pr_merge_rest 42
+if grep -q 'PUT' "$STUB_DIR/gh-pr-merge-rest-calls.log"; then m=yes; else m=no; fi
+assert_eq "pr-merge: log contains PUT" "yes" "$m"
+if grep -q 'pulls/42/merge' "$STUB_DIR/gh-pr-merge-rest-calls.log"; then p=yes; else p=no; fi
+assert_eq "pr-merge: log contains pulls/42/merge path" "yes" "$p"
+if grep -q 'merge_method=merge' "$STUB_DIR/gh-pr-merge-rest-calls.log"; then mm=yes; else mm=no; fi
+assert_eq "pr-merge: default merge_method=merge" "yes" "$mm"
+teardown
+
+echo "Test: gh_pr_merge_rest -- --squash sets merge_method=squash"
+setup
+: > "$STUB_DIR/gh-pr-merge-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_pr_merge_rest 42 --squash
+if grep -q 'merge_method=squash' "$STUB_DIR/gh-pr-merge-rest-calls.log"; then m=yes; else m=no; fi
+assert_eq "pr-merge: --squash → merge_method=squash" "yes" "$m"
+teardown
+
+echo "Test: gh_pr_merge_rest -- --rebase sets merge_method=rebase"
+setup
+: > "$STUB_DIR/gh-pr-merge-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_pr_merge_rest 42 --rebase
+if grep -q 'merge_method=rebase' "$STUB_DIR/gh-pr-merge-rest-calls.log"; then m=yes; else m=no; fi
+assert_eq "pr-merge: --rebase → merge_method=rebase" "yes" "$m"
+teardown
+
+echo "Test: gh_pr_merge_rest -- --repo flag emits cross-repo segment"
+setup
+: > "$STUB_DIR/gh-pr-merge-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_pr_merge_rest 42 --repo owner/other-repo
+if grep -q 'repos/owner/other-repo/pulls/42/merge' "$STUB_DIR/gh-pr-merge-rest-calls.log"; then seg=yes; else seg=no; fi
+assert_eq "pr-merge: --repo uses cross-repo segment" "yes" "$seg"
+teardown
+
+echo "Test: gh_pr_merge_rest -- missing number returns non-zero"
+setup
+rc_pm=0
+err_pm=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_merge_rest 2>&1 >/dev/null) || rc_pm=$?
+assert_eq "pr-merge: missing number → non-zero" "1" "$rc_pm"
+case "$err_pm" in *"gh_pr_merge_rest: PR number is required"*) m=yes ;; *) m=no ;; esac
+assert_eq "pr-merge: missing-number stderr names helper" "yes" "$m"
+teardown
+
+echo "Test: gh_pr_merge_rest -- gh failure returns non-zero with diagnostic stderr"
+setup
+: > "$STUB_DIR/gh-fail-rest"
+rc_pmf=0
+err_pmf=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_merge_rest 42 2>&1 >/dev/null) || rc_pmf=$?
+assert_eq "pr-merge: gh failure → non-zero" "1" "$rc_pmf"
+case "$err_pmf" in *"gh_pr_merge_rest: gh api failed"*) m=yes ;; *) m=no ;; esac
+assert_eq "pr-merge: gh-failure stderr names helper" "yes" "$m"
+teardown
+
+# ============================================================================
+# REST-bucket consumption assertions (#2255)
+# ============================================================================
+# Each new helper must consume the REST bucket (gh api repos/...) and NEVER the
+# GraphQL bucket (gh api graphql). This is the founding invariant of the #2254
+# epic: the fleet was exhausting the 5000/hr GraphQL bucket while the REST
+# bucket sat idle.
+#
+# Technique: drive each helper against the stub gh and assert from the per-helper
+# call-log file that the invocation used "api ... repos/" (REST) rather than
+# "api graphql" (GraphQL). The stub writes STUB_DIR/gh-<helper>-calls.log for
+# each sentinel branch (lines 472-576 of this file), so the log is the oracle.
+#
+# Manual / QA note (not runnable — networked and non-deterministic):
+#   Before: `gh api rate_limit | jq .resources.graphql.used`
+#   Run the helper.
+#   After:  `gh api rate_limit | jq .resources.graphql.used` — must NOT increase.
+#           `gh api rate_limit | jq .resources.core.used`    — must increase by 1.
+#
+# The in-suite form below is deterministic and offline.
+
+echo "=== REST-bucket consumption assertions ==="
+
+# Shared helper: assert a call-log line uses `api … repos/` (REST) and NOT
+# `api graphql` (GraphQL). Calling convention:
+#   assert_rest_only <label> <logfile>
+assert_rest_only() {
+  local label="$1" logfile="$2"
+  # Primary: path contains repos/ (REST endpoint)
+  if grep -q 'repos/' "$logfile"; then rp=yes; else rp=no; fi
+  assert_eq "${label}: REST path (repos/) present" "yes" "$rp"
+  # Secondary: graphql is absent (would spend the GraphQL bucket)
+  if grep -q 'graphql' "$logfile"; then gq=yes; else gq=no; fi
+  assert_eq "${label}: graphql absent from log" "no" "$gq"
+  # Belt-and-suspenders: porcelain subcommands absent (would also spend GraphQL)
+  if grep -qE '^(issue|pr) ' "$logfile"; then pc=yes; else pc=no; fi
+  assert_eq "${label}: porcelain (issue|pr) absent from log" "no" "$pc"
+}
+
+# --- gh_issue_view_rest ---
+# Use a 9xxx number — only the 9xxx sentinel branch (line 472) writes to
+# gh-issue-view-rest-calls.log; the generic issues/* branch does NOT.
+echo "Test: gh_issue_view_rest -- consumes REST bucket, not GraphQL"
+setup
+printf '%s\n' '{"number":9001,"title":"t","body":"b","state":"open","labels":[],"assignees":[]}' \
+  > "$STUB_DIR/view-issue-9001.json"
+: > "$STUB_DIR/gh-issue-view-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_view_rest 9001 >/dev/null
+assert_rest_only "issue-view" "$STUB_DIR/gh-issue-view-rest-calls.log"
+teardown
+
+# --- gh_pr_view_rest ---
+# Use a 9xxx number — only the 9xxx sentinel branch (line 490) writes to
+# gh-pr-view-rest-calls.log; the generic pulls/* branch does NOT.
+echo "Test: gh_pr_view_rest -- consumes REST bucket, not GraphQL"
+setup
+printf '%s\n' '{"number":9001,"title":"t","body":"b","state":"open","mergeable":true,"mergeable_state":"clean"}' \
+  > "$STUB_DIR/view-pr-9001.json"
+: > "$STUB_DIR/gh-pr-view-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_pr_view_rest 9001 >/dev/null
+assert_rest_only "pr-view" "$STUB_DIR/gh-pr-view-rest-calls.log"
+teardown
+
+# --- gh_issue_set_labels_rest ---
+echo "Test: gh_issue_set_labels_rest -- consumes REST bucket, not GraphQL"
+setup
+: > "$STUB_DIR/gh-issue-set-labels-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_set_labels_rest 42 dispatch:planned
+assert_rest_only "set-labels" "$STUB_DIR/gh-issue-set-labels-rest-calls.log"
+teardown
+
+# --- gh_issue_remove_label_rest ---
+echo "Test: gh_issue_remove_label_rest -- consumes REST bucket, not GraphQL"
+setup
+: > "$STUB_DIR/gh-issue-remove-label-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_remove_label_rest 42 dispatch:planned
+assert_rest_only "remove-label" "$STUB_DIR/gh-issue-remove-label-rest-calls.log"
+teardown
+
+# --- gh_issue_close_rest ---
+echo "Test: gh_issue_close_rest -- consumes REST bucket, not GraphQL"
+setup
+: > "$STUB_DIR/gh-issue-close-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_close_rest 42
+assert_rest_only "close" "$STUB_DIR/gh-issue-close-rest-calls.log"
+teardown
+
+# --- gh_issue_create_rest ---
+echo "Test: gh_issue_create_rest -- consumes REST bucket, not GraphQL"
+setup
+: > "$STUB_DIR/gh-issue-create-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_create_rest --title "t" --body "b" >/dev/null
+assert_rest_only "create" "$STUB_DIR/gh-issue-create-rest-calls.log"
+teardown
+
+# --- gh_issue_comment_rest ---
+echo "Test: gh_issue_comment_rest -- consumes REST bucket, not GraphQL"
+setup
+: > "$STUB_DIR/gh-issue-comment-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_comment_rest 42 --body "a comment"
+assert_rest_only "comment" "$STUB_DIR/gh-issue-comment-rest-calls.log"
+teardown
+
+# --- gh_pr_merge_rest ---
+echo "Test: gh_pr_merge_rest -- consumes REST bucket, not GraphQL"
+setup
+: > "$STUB_DIR/gh-pr-merge-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_pr_merge_rest 42
+assert_rest_only "pr-merge" "$STUB_DIR/gh-pr-merge-rest-calls.log"
 teardown
 
 # ============================================================================
@@ -3020,12 +3780,20 @@ FAKE
 # entry script's launch + sessionId→job-id resolution) and CLAUDE_AGENTS_CMD
 # (the selector subprocess's state query), mirroring office_hours_fake_claude.
 office_hours_state_fake_claude() {
-  local payload="[" pair name state status_json first=1
+  local payload="[" pair name rest state cwd status_json first=1
   for pair in "$@"; do
-    name="${pair%%:*}"; state="${pair#*:}"
+    # Pair syntax: name:state[:cwd]. The optional third field carries a cwd path
+    # (paths contain no ':'), so split into at most 3 fields. A 2-field input
+    # leaves cwd empty — preserving the legacy name:state call sites.
+    name="${pair%%:*}"; rest="${pair#*:}"
+    if [[ "$rest" == *:* ]]; then
+      state="${rest%%:*}"; cwd="${rest#*:}"
+    else
+      state="$rest"; cwd=""
+    fi
     if [[ "$state" == "working" ]]; then status_json='"busy"'; else status_json='null'; fi
     if (( first )); then first=0; else payload+=","; fi
-    payload+="{\"sessionId\":\"s-$name\",\"id\":\"j-$name\",\"pid\":1,\"state\":\"$state\",\"status\":$status_json,\"name\":\"$name\",\"cwd\":\"\"}"
+    payload+="{\"sessionId\":\"s-$name\",\"id\":\"j-$name\",\"pid\":1,\"state\":\"$state\",\"status\":$status_json,\"name\":\"$name\",\"cwd\":\"$cwd\"}"
   done
   payload+="]"
   printf '%s' "$payload" > "$TMPDIR_TEST/claude-payload.json"
@@ -6080,7 +6848,11 @@ printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdA
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
   > "$STUB_DIR/worktree-list.txt"
-office_hours_state_fake_claude "42-x:waiting"   # 42's session is idle; 99 sessionless
+# The selector emits `idle` only when the session's cwd is a worktree present on
+# disk (#2241). Carry a real, on-disk cwd in the fake-session pair so the
+# present-worktree (bucket 1) branch fires.
+mkdir -p "$TMPDIR_TEST/wt/42-x"
+office_hours_state_fake_claude "42-x:waiting:$TMPDIR_TEST/wt/42-x"   # 42's session is idle; 99 sessionless
 result=$("$TMPDIR_TEST/office-hours-select-target")
 assert_eq "idle item attached over sessionless sibling 99" "idle s-42-x" "$result"
 teardown
@@ -6094,7 +6866,8 @@ printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdA
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\nworktree /worktrees/99-y\nHEAD aaa111\nbranch refs/heads/99-y\n\n' \
   > "$STUB_DIR/worktree-list.txt"
-office_hours_state_fake_claude "42-x:waiting" "99-y:waiting"   # both idle
+mkdir -p "$TMPDIR_TEST/wt/42-x" "$TMPDIR_TEST/wt/99-y"
+office_hours_state_fake_claude "42-x:waiting:$TMPDIR_TEST/wt/42-x" "99-y:waiting:$TMPDIR_TEST/wt/99-y"   # both idle
 result=$("$TMPDIR_TEST/office-hours-select-target")
 assert_eq "oldest of two idle items attached" "idle s-42-x" "$result"
 teardown
@@ -6109,7 +6882,8 @@ echo '[]' > "$STUB_DIR/pr-list-full.json"
 # 42 (older) has no worktree at all → sessionless; 99 (newer) has an idle worktree.
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/99-y\nHEAD aaa111\nbranch refs/heads/99-y\n\n' \
   > "$STUB_DIR/worktree-list.txt"
-office_hours_state_fake_claude "99-y:idle"   # only 99's worktree is idle (attachable)
+mkdir -p "$TMPDIR_TEST/wt/99-y"
+office_hours_state_fake_claude "99-y:idle:$TMPDIR_TEST/wt/99-y"   # only 99's worktree is idle (attachable)
 result=$("$TMPDIR_TEST/office-hours-select-target")
 assert_eq "idle item attached regardless of age order" "idle s-99-y" "$result"
 teardown
@@ -6161,7 +6935,8 @@ printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-is
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
   > "$STUB_DIR/worktree-list.txt"
-office_hours_state_fake_claude "42-x:done"
+mkdir -p "$TMPDIR_TEST/wt/42-x"
+office_hours_state_fake_claude "42-x:done:$TMPDIR_TEST/wt/42-x"
 result=$("$TMPDIR_TEST/office-hours-select-target")
 assert_eq "done session is attachable (visible only under --all)" "idle s-42-x" "$result"
 teardown
@@ -6197,7 +6972,8 @@ echo '[]' > "$STUB_DIR/pr-list-full.json"
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
   > "$STUB_DIR/worktree-list.txt"
 export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
-office_hours_state_fake_claude "42-x:working" "office-hours-42:waiting"
+mkdir -p "$TMPDIR_TEST/wt/42-x"
+office_hours_state_fake_claude "42-x:working" "office-hours-42:waiting:$TMPDIR_TEST/wt/42-x"
 result=$("$TMPDIR_TEST/office-hours-select-target")
 assert_eq "skip basename working, attach office-hours-42 waiting" "idle s-office-hours-42" "$result"
 unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
@@ -6219,19 +6995,27 @@ assert_eq "empty queue, no parked router prints empty" "empty" "$result"
 unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
-# OHST5. Unknown daemon (UNKNOWN liveness) folds to occupied → the item with a
-# worktree is skipped; an item with no worktree (fast-path miss) still wins.
-echo "Test: UNKNOWN daemon skips worktree-bearing item, picks worktree-free one"
+# OHST5. UNKNOWN daemon → both items (worktree-bearing #42 and worktree-free #99)
+# fold to rc2 (UNKNOWN); neither is fresh-launched. This is the broadened
+# fail-safe from #2241: removing the [[ -z "$paths" ]] worktree gate means every
+# item is now probed against the daemon, so a failed query conservatively blocks
+# launch for ALL items (the item may have a live session the broken daemon could
+# not report). Criterion-4 (worktree-free → fresh) is now covered by OHST16
+# under a WORKING daemon instead. The script falls through to the parked-router
+# fallback → resolve_main_worktree → requires DISPATCH_OFFICE_HOURS_MAIN_WORKTREE.
+echo "Test: UNKNOWN daemon → neither worktree-bearing nor worktree-free item fresh-launched (#2241 fail-safe); empty"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/oh-issue-list.json"
 echo '[]' > "$STUB_DIR/pr-list-full.json"
-# 42 has a worktree (liveness UNKNOWN → occupied → skipped); 99 has none.
+# 42 has a worktree; 99 has none. Under an UNKNOWN daemon both fold to rc2.
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
   > "$STUB_DIR/worktree-list.txt"
 # setup's default CLAUDE_AGENTS_CMD points at a non-existent binary (UNKNOWN).
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "UNKNOWN-liveness worktree item skipped; worktree-free item selected" "office-hours 99 plan - -" "$result"
+assert_eq "UNKNOWN daemon: neither item fresh-launched (no double-claim); empty" "empty" "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
 # Install a fake `claude` whose `agents --json` returns a controllable session
@@ -6371,6 +7155,118 @@ assert_eq "main-qa override: phase main-qa, main worktree 5th field" \
 unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
+# OHST13. Worktree-present attach (#2241 bucket 1, asserted with a cwd-bearing
+# fake): a registered <N>-* worktree whose originating session's cwd EXISTS on
+# disk → attach in place. This is the unchanged pre-#2241 behavior, now proved
+# through the cwd-bearing state fake: the session reports an on-disk cwd, the
+# selector's `-d "$IDLE_CWD"` gate passes, and it emits plain `idle`.
+echo "Test: registered worktree + on-disk session cwd → idle (attach in place)"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+mkdir -p "$TMPDIR_TEST/wt/42-x"
+# Registered worktree basename is 42-x; the session is the renamed office-hours-42
+# carrying an on-disk cwd. issue_live_session_id queries 42-x (miss) then
+# office-hours-42 (hit) → attachable with a present cwd → bucket 1.
+office_hours_state_fake_claude "office-hours-42:idle:$TMPDIR_TEST/wt/42-x"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "registered worktree + on-disk cwd → idle (attach in place)" "idle s-office-hours-42" "$result"
+teardown
+
+# OHST14. Worktree-swept attach-after-provision (#2241 bucket 2): an attachable
+# session whose cwd is NOT on disk (the worktree was swept), the <N>-* worktree is
+# NOT registered, but `origin/<branch>` still exists → emit `idle-provision`. The
+# session is named 42-x (a phase-worker `<N>-slug`), matched via the prefix path
+# since no worktree is registered; its swept cwd's basename is the branch to
+# re-provision.
+echo "Test: swept worktree + remote branch exists → idle-provision"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+# 42-x NOT registered (only main listed) → prefix-match path, swept-cwd bucket.
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n' > "$STUB_DIR/worktree-list.txt"
+printf '%s\n' '42-x' > "$STUB_DIR/remote-branches.txt"   # origin/42-x exists
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+# cwd /worktrees/42-x is non-empty but does NOT exist on disk → swept.
+office_hours_state_fake_claude "42-x:waiting:/worktrees/42-x"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "swept worktree, remote branch present → idle-provision" "idle-provision s-42-x 42-x" "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
+# OHST15. Remote-branch-missing fallback (#2241 bucket 3): same swept setup as
+# OHST14 but `origin/<branch>` is ABSENT (no remote-branches.txt) → the selector
+# cannot re-provision, so it falls back to the fresh path for this issue. With no
+# registered worktree the wt_path lookup is empty → 5th field `-`; no PR → phase
+# plan. The consumer's `-` guard later prints the swept diagnostic (see OH10).
+echo "Test: swept worktree + remote branch missing → fresh fallback (5th field -)"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n' > "$STUB_DIR/worktree-list.txt"
+# Omit remote-branches.txt → ls-remote stub exits 2 → branch not on origin.
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+office_hours_state_fake_claude "42-x:waiting:/worktrees/42-x"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "swept worktree, remote branch missing → fresh fallback with - 5th field" "office-hours 42 plan - -" "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
+# OHST16. Not-local fresh-launch under a WORKING daemon (#2241 criterion-4,
+# relocated from OHST5): a worktree-free item under a daemon that genuinely
+# reports no session for it → fresh-launch. office_hours_state_fake_claude with
+# NO args installs a fake reporting `[]` (rc 0): the daemon is WORKING and the
+# item is genuinely sessionless, so it is picked fresh — distinct from OHST5's
+# UNKNOWN daemon, where the item conservatively folds to skip.
+echo "Test: worktree-free item under WORKING daemon → fresh-launch"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n' > "$STUB_DIR/worktree-list.txt"   # no 42-* worktree
+office_hours_state_fake_claude   # WORKING daemon reporting no sessions ([], rc 0)
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "worktree-free item under WORKING daemon → fresh-launch" "office-hours 42 plan - -" "$result"
+teardown
+
+# OHST17. Working-session-no-worktree skip (#2241 criterion-5, latent double-claim
+# guard): a `working` session whose cwd is swept and whose <N>-* worktree is NOT
+# registered → the prefix probe FINDS the working session (rc 3) and SKIPS it,
+# rather than mistaking the item for sessionless and fresh-launching it. The lone
+# item is neither attachable nor fresh → parked-router fallback → no router →
+# empty. (Pre-#2241 the unregistered working session returned rc 1 and would have
+# been double-claimed by a fresh launch.)
+echo "Test: working session, no registered worktree → skip (no double-claim), empty"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n' > "$STUB_DIR/worktree-list.txt"   # no 42-* worktree
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+office_hours_state_fake_claude "42-x:working:/worktrees/42-x"   # working session, prefix-matched
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "working session with no registered worktree → skipped, not fresh-launched; empty" "empty" "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
+# OHST18. Null-cwd degrade (#2241): an attachable session reporting an EMPTY cwd
+# (no 3rd field) with no registered <N>-* worktree → the selector finds it
+# attachable but cannot derive a branch (empty cwd fails both the `-d` and the
+# non-empty `[[ -n "$IDLE_CWD" ]]` checks) → bucket 3 → fall through to the fresh
+# path. No PR → plan; no worktree → 5th field `-`.
+echo "Test: attachable session with empty cwd, no worktree → fresh fallback"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n' > "$STUB_DIR/worktree-list.txt"   # no 42-* worktree
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+# office-hours-42 (exact-match name) with NO cwd field → empty cwd → null-cwd degrade.
+office_hours_state_fake_claude "office-hours-42:waiting"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "attachable session, empty cwd, no worktree → fresh fallback with - 5th field" "office-hours 42 plan - -" "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
 # ============================================================================
 # office-hours (entry point) tests
 # ============================================================================
@@ -6395,7 +7291,8 @@ setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
   > "$STUB_DIR/worktree-list.txt"
-office_hours_state_fake_claude "42-x:waiting"   # 42's worktree has an idle session
+mkdir -p "$TMPDIR_TEST/wt/42-x"
+office_hours_state_fake_claude "42-x:waiting:$TMPDIR_TEST/wt/42-x"   # 42's worktree has an idle session
 result=$("$TMPDIR_TEST/office-hours")
 assert_eq "attaches the idle session by its job id" "LAUNCH: attach j-42-x" "$result"
 teardown
@@ -6407,7 +7304,8 @@ printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdA
   > "$STUB_DIR/oh-issue-list.json"
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\nworktree /worktrees/99-y\nHEAD aaa111\nbranch refs/heads/99-y\n\n' \
   > "$STUB_DIR/worktree-list.txt"
-office_hours_state_fake_claude "42-x:waiting" "99-y:waiting"   # both worktrees idle
+mkdir -p "$TMPDIR_TEST/wt/42-x" "$TMPDIR_TEST/wt/99-y"
+office_hours_state_fake_claude "42-x:waiting:$TMPDIR_TEST/wt/42-x" "99-y:waiting:$TMPDIR_TEST/wt/99-y"   # both worktrees idle
 result=$("$TMPDIR_TEST/office-hours")
 assert_eq "attaches the oldest idle item's session by its job id" "LAUNCH: attach j-42-x" "$result"
 teardown
@@ -6448,7 +7346,8 @@ setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
   > "$STUB_DIR/worktree-list.txt"
-office_hours_state_fake_claude "office-hours-42:waiting"   # idle office-hours-<N> session
+mkdir -p "$TMPDIR_TEST/wt/42-x"
+office_hours_state_fake_claude "office-hours-42:waiting:$TMPDIR_TEST/wt/42-x"   # idle office-hours-<N> session
 result=$("$TMPDIR_TEST/office-hours")
 assert_eq "attaches the idle office-hours-<N> session by its job id" "LAUNCH: attach j-office-hours-42" "$result"
 teardown
@@ -6510,7 +7409,8 @@ printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdA
 # 42 (older) has no worktree at all → sessionless; 99 (newer) has an idle worktree.
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/99-y\nHEAD aaa111\nbranch refs/heads/99-y\n\n' \
   > "$STUB_DIR/worktree-list.txt"
-office_hours_state_fake_claude "99-y:idle"   # only 99's worktree is idle
+mkdir -p "$TMPDIR_TEST/wt/99-y"
+office_hours_state_fake_claude "99-y:idle:$TMPDIR_TEST/wt/99-y"   # only 99's worktree is idle
 result=$("$TMPDIR_TEST/office-hours")
 assert_eq "idle wins over fresh whenever any labeled item is attachable" "LAUNCH: attach j-99-y" "$result"
 teardown
@@ -6527,7 +7427,8 @@ setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
   > "$STUB_DIR/worktree-list.txt"
-office_hours_state_fake_claude "42-x:done"
+mkdir -p "$TMPDIR_TEST/wt/42-x"
+office_hours_state_fake_claude "42-x:done:$TMPDIR_TEST/wt/42-x"
 result=$("$TMPDIR_TEST/office-hours")
 assert_eq "done session attached end-to-end by its job id" "LAUNCH: attach j-42-x" "$result"
 teardown
@@ -6600,6 +7501,79 @@ FAKE
 chmod +x "$TMPDIR_TEST/bin/claude"
 result=$("$TMPDIR_TEST/office-hours")
 assert_eq "parked-router directive attaches the router session by its job id" "LAUNCH: attach j-dispatch-abc123" "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
+# OH8. idle-provision end-to-end success (#2241): a swept attachable session whose
+# `origin/<branch>` exists → the selector emits `idle-provision s-42-x 42-x`; the
+# entry's idle-provision arm calls dispatch-provision-from-remote (stubbed here to
+# succeed) and then attaches the originating session by its resolved job id. The
+# fake claude must still report 42-x so attach_session resolves s-42-x → j-42-x.
+echo "Test: idle-provision verb → provision then attach (end-to-end success)"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n' > "$STUB_DIR/worktree-list.txt"   # 42-x NOT registered → swept path
+printf '%s\n' '42-x' > "$STUB_DIR/remote-branches.txt"   # origin/42-x exists
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+office_hours_state_fake_claude "42-x:waiting:/worktrees/42-x"   # swept cwd; reports 42-x for attach resolution
+# Stub the provisioning helper to succeed (print a worktree path, exit 0).
+cat > "$TMPDIR_TEST/dispatch-provision-from-remote" <<'STUB'
+#!/usr/bin/env bash
+echo "/worktrees/$1"
+exit 0
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-provision-from-remote"
+result=$("$TMPDIR_TEST/office-hours")
+assert_eq "idle-provision → provision succeeds, then attach by job id" "LAUNCH: attach j-42-x" "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
+# OH9. idle-provision provision-failure (#2241): same setup as OH8 but the
+# provisioning helper FAILS (exit 1) → the entry prints a diagnostic to stderr and
+# exits non-zero WITHOUT attaching (no LAUNCH). clear-errors-over-fallbacks: a
+# provisioning failure surfaces, it does not silently fall back to a fresh launch.
+echo "Test: idle-provision provision failure → exit non-zero, no attach"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n' > "$STUB_DIR/worktree-list.txt"
+printf '%s\n' '42-x' > "$STUB_DIR/remote-branches.txt"
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+office_hours_state_fake_claude "42-x:waiting:/worktrees/42-x"
+# Stub the provisioning helper to FAIL.
+cat > "$TMPDIR_TEST/dispatch-provision-from-remote" <<'STUB'
+#!/usr/bin/env bash
+echo "provision failed" >&2
+exit 1
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-provision-from-remote"
+rc=0; result=$("$TMPDIR_TEST/office-hours") || rc=$?
+assert_eq "provision failure → non-zero exit" "yes" "$([[ "$rc" -ne 0 ]] && echo yes || echo no)"
+assert_eq "provision failure → no LAUNCH (no attach)" "no" \
+  "$([[ "$result" == *LAUNCH:* ]] && echo yes || echo no)"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
+# OH10. Swept-and-unprovisionable diagnostic (#2241 criterion-3, end-to-end): a
+# swept attachable session whose `origin/<branch>` is ABSENT → the selector falls
+# back to the fresh path with a `-` 5th field (`office-hours 42 plan - -`); the
+# entry's `[[ -z "$d" || "$d" == "-" ]]` guard prints the swept-worktree
+# diagnostic and exits non-zero without launching anything.
+echo "Test: swept + unprovisionable → swept diagnostic, exit non-zero, no launch"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n' > "$STUB_DIR/worktree-list.txt"
+# Omit remote-branches.txt → origin/42-x missing → bucket 3 → fresh `-` path.
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+office_hours_state_fake_claude "42-x:waiting:/worktrees/42-x"
+rc=0; out=$("$TMPDIR_TEST/office-hours" 2>&1) || rc=$?
+assert_eq "swept + unprovisionable → non-zero exit" "yes" "$([[ "$rc" -ne 0 ]] && echo yes || echo no)"
+assert_eq "swept + unprovisionable → swept-worktree diagnostic on stderr" "yes" \
+  "$([[ "$out" == *'no <N>-* worktree resolved for #42 — cannot launch a fresh session'* ]] && echo yes || echo no)"
+assert_eq "swept + unprovisionable → no LAUNCH (no spawn)" "no" \
+  "$([[ "$out" == *LAUNCH:* ]] && echo yes || echo no)"
 unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
