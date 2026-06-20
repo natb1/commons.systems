@@ -6,7 +6,7 @@
  * We use a fake FileSystemDirectoryHandle (same infrastructure as sidecar.test.ts)
  * to avoid any real FSA I/O.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Mock firebase-touching transitive deps (must come before importing source)
@@ -71,7 +71,7 @@ vi.mock("@commons-systems/errorutil/log", () => ({
 // ---------------------------------------------------------------------------
 // Import real modules AFTER mocks are declared
 // ---------------------------------------------------------------------------
-import { renderLocalIntoList } from "../src/local-folder-ui.js";
+import { renderLocalIntoList, settleEnrichment } from "../src/local-folder-ui.js";
 import {
   setLocalDirectory,
   flushWrites,
@@ -197,6 +197,7 @@ function makeContainer(): HTMLElement {
   const ul = document.createElement("ul");
   ul.id = "media-list";
   container.appendChild(ul);
+  document.body.appendChild(container);
   return container;
 }
 
@@ -207,6 +208,9 @@ function makeContainer(): HTMLElement {
 describe("enrichment — cached item (zero IO, no write)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+  afterEach(() => {
+    document.body.innerHTML = '';
   });
 
   it("applies cached metadata without calling extractMetadata or resolveLocalBlob", async () => {
@@ -239,6 +243,9 @@ describe("enrichment — uncached item (extracts and caches)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
 
   it("calls resolveLocalBlob and extractMetadata for uncached items", async () => {
     const buf = new ArrayBuffer(8);
@@ -252,6 +259,7 @@ describe("enrichment — uncached item (extracts and caches)", () => {
 
     const container = makeContainer();
     await renderLocalIntoList(container);
+    await settleEnrichment();
     await flushWrites();
 
     expect(mockResolveLocalBlob).toHaveBeenCalledWith(item);
@@ -277,6 +285,7 @@ describe("enrichment — uncached item (extracts and caches)", () => {
 
     const container = makeContainer();
     await renderLocalIntoList(container);
+    await settleEnrichment();
     await flushWrites();
 
     const readBack = await readSidecar(dir);
@@ -287,6 +296,9 @@ describe("enrichment — uncached item (extracts and caches)", () => {
 describe("enrichment — write suppression on focus-rescan", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+  afterEach(() => {
+    document.body.innerHTML = '';
   });
 
   it("does NOT write to sidecar when all items are already cached (rescan case)", async () => {
@@ -332,11 +344,13 @@ describe("enrichment — write suppression on focus-rescan", () => {
     const container = makeContainer();
     // First render: extracts and caches {}
     await renderLocalIntoList(container);
+    await settleEnrichment();
     await flushWrites();
     expect(mockExtractMetadata).toHaveBeenCalledTimes(1);
 
     // Second render (simulates focus rescan): {} is a defined entry → no re-extract
     await renderLocalIntoList(container);
+    await settleEnrichment();
     await flushWrites();
     expect(mockExtractMetadata).toHaveBeenCalledTimes(1); // still only once
   });
@@ -345,6 +359,9 @@ describe("enrichment — write suppression on focus-rescan", () => {
 describe("enrichment — resolveLocalBlob returns null (file gone)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+  afterEach(() => {
+    document.body.innerHTML = '';
   });
 
   it("does not cache {} when resolveLocalBlob returns null (so next render retries)", async () => {
@@ -357,6 +374,7 @@ describe("enrichment — resolveLocalBlob returns null (file gone)", () => {
 
     const container = makeContainer();
     await renderLocalIntoList(container);
+    await settleEnrichment();
     await flushWrites();
 
     // extractMetadata should NOT be called (no buf)
@@ -371,6 +389,9 @@ describe("enrichment — resolveLocalBlob returns null (file gone)", () => {
 describe("enrichment — early return when no media list present", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+  afterEach(() => {
+    document.body.innerHTML = '';
   });
 
   it("no-ops when container has neither #media-list nor #media-empty", async () => {

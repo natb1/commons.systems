@@ -31444,6 +31444,25 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: cleanup_stale_heartbeat_units ran disable with no prior units"
 fi
 
+# 3d. AC4 (#2191) — [Service] section present but no WorkingDirectory= line →
+# early return at lib.sh:1810 ([ -n "$installed_workdir" ] || return 0): no
+# disable, returns 0.
+: > "$ehu_log"
+printf '%s\n' '[Service]' > "$ehu_svc"
+ehu_cleanup_rc=0
+(
+  export STUB_LOG="$ehu_log"
+  source "$SCRIPT_DIR/lib.sh"
+  cleanup_stale_heartbeat_units "$ehu_svc" "$ehu_tmp/main-worktree" "$ehu_tmp/bin/systemctl"
+) || ehu_cleanup_rc=$?
+assert_eq "cleanup_stale_heartbeat_units: no WorkingDirectory= → returns 0" "0" "$ehu_cleanup_rc"
+TOTAL=$((TOTAL + 1))
+if ! grep -q 'disable' "$ehu_log"; then
+  PASS=$((PASS + 1)); echo "  PASS: cleanup_stale_heartbeat_units no-op when WorkingDirectory= absent"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: cleanup_stale_heartbeat_units ran disable with no WorkingDirectory="
+fi
+
 rm -rf "$ehu_tmp"
 
 # ============================================================================
@@ -35806,6 +35825,49 @@ assert_eq "sidecar no-baseline duplication Source=erosion" "erosion" "$sidecar_s
 assert_eq "sidecar no-baseline duplication Location=newfile.ts:10" "newfile.ts:10" "$sidecar_location"
 assert_eq "sidecar no-baseline duplication Confidence=high (clones rose 0→1)" "high" "$sidecar_confidence"
 assert_eq "sidecar no-baseline duplication → exactly one finding" "1" "$sidecar_count"
+rm -rf "$TMPDIR_TEST"
+TMPDIR_TEST=""
+
+# E6. Sidecar dupLines-only duplication (medium confidence): HEAD and BASE have
+#     EQUAL clone counts (clones=1 both), so clonesRose=false, but HEAD has MORE
+#     duplicated lines (15 > 5), so dupLinesRose=true. The aggregate duplication
+#     finding still fires (clonesRose || dupLinesRose), but takes the
+#     Confidence='medium' sub-path (clonesRose ? 'high' : 'medium'). E4/E5 both
+#     drive clonesRose=true (high), so this medium sub-path is otherwise uncovered.
+#     Empty eslint reports isolate the duplication path (no complexity finding).
+echo "Test: dispatch-review-erosion-diff.mjs — dupLines-only rise yields Confidence=medium duplication finding"
+TMPDIR_TEST=$(mktemp -d)
+mkdir -p "$TMPDIR_TEST/baseline"
+# Empty eslint reports → no complexity finding; isolates the duplication path.
+echo '[]' > "$TMPDIR_TEST/head-eslint.json"
+echo '[]' > "$TMPDIR_TEST/base-eslint.json"
+# HEAD jscpd report: one clone, 15 duplicated lines. The single duplicates entry
+# keeps the fixture realistic (worstCloneLocation has a real span to read).
+cat > "$TMPDIR_TEST/head-jscpd.json" <<'EOF'
+{"statistics":{"total":{"clones":1,"duplicatedLines":15,"percentage":9}},
+ "duplicates":[{"firstFile":{"name":"dup.ts","start":10,"end":22},
+                "secondFile":{"name":"dup.ts","start":40,"end":52}}]}
+EOF
+# BASE jscpd report: SAME clone count (1) so clonesRose=false, but FEWER
+# duplicated lines (5 < 15) so dupLinesRose=true. Statistics-only is fine — the
+# BASE report only feeds jscpdTotals (baseDup).
+cat > "$TMPDIR_TEST/base-jscpd.json" <<'EOF'
+{"statistics":{"total":{"clones":1,"duplicatedLines":5,"percentage":3}}}
+EOF
+sidecar_out=$(cd "$TMPDIR_TEST" && node "$SCRIPT_DIR/dispatch-review-erosion-diff.mjs" \
+  --eslint-head head-eslint.json \
+  --eslint-base base-eslint.json \
+  --jscpd-head head-jscpd.json \
+  --jscpd-base base-jscpd.json \
+  --baseline-dir baseline)
+sidecar_count=$(jq '.findings | length' <<<"$sidecar_out")
+sidecar_source=$(jq -r '.findings[0].Source // "none"' <<<"$sidecar_out")
+sidecar_location=$(jq -r '.findings[0].Location // "none"' <<<"$sidecar_out")
+sidecar_confidence=$(jq -r '.findings[0].Confidence // "none"' <<<"$sidecar_out")
+assert_eq "sidecar dupLines-only duplication count=1" "1" "$sidecar_count"
+assert_eq "sidecar dupLines-only duplication Source=erosion" "erosion" "$sidecar_source"
+assert_eq "sidecar dupLines-only duplication Location=dup.ts:10" "dup.ts:10" "$sidecar_location"
+assert_eq "sidecar dupLines-only duplication Confidence=medium (dupLines rose, clones flat)" "medium" "$sidecar_confidence"
 rm -rf "$TMPDIR_TEST"
 TMPDIR_TEST=""
 

@@ -315,6 +315,10 @@ export function useViewerController(
     async function goPrev() {
       if (controller.enabled) {
         if (!controller.canGoPrev) return;
+        // Optional chain is intentional: `renderer` is an un-narrowed ContentRenderer,
+        // where clearSearch is optional (types.ts). Only a SearchableRenderer — reached
+        // via isSearchable() — requires it. Do not drop the `?.`: a non-searchable
+        // renderer (e.g. image-archive) has no clearSearch.
         renderer.clearSearch?.();
         await controller.goPrev();
       } else {
@@ -326,6 +330,7 @@ export function useViewerController(
     async function goNext() {
       if (controller.enabled) {
         if (!controller.canGoNext) return;
+        // Intentional optional chain — see goPrev (un-narrowed ContentRenderer).
         renderer.clearSearch?.();
         await controller.goNext();
       } else {
@@ -336,6 +341,7 @@ export function useViewerController(
 
     async function goToPageNum(page: number): Promise<void> {
       if (controller.enabled) {
+        // Intentional optional chain — see goPrev (un-narrowed ContentRenderer).
         renderer.clearSearch?.();
         await controller.goToPage(page);
       } else {
