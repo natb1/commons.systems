@@ -82,6 +82,50 @@ describe("renderShowcase", () => {
     expect(html).toContain("&quot;");
   });
 
+  describe("overflow tier", () => {
+    const OVERFLOW: AppCard[] = [
+      {
+        name: "Gamma",
+        url: "https://gamma.example.com",
+        applicationCategory: "MultimediaApplication",
+        operatingSystem: "Web",
+        description: "Gamma description.",
+        problem: "Gamma problem statement.",
+        screenshot: "/screenshots/gamma.png",
+        screenshotAlt: "Gamma screenshot alt text.",
+      },
+    ];
+
+    it("includes the overflow card href in the SSR string (crawlable)", () => {
+      const html = renderShowcase(APPS, OVERFLOW);
+      expect(html).toContain('href="https://gamma.example.com"');
+    });
+
+    it("renders a <details> that is collapsed by default", () => {
+      const html = renderShowcase(APPS, OVERFLOW);
+      expect(html).toContain("<details");
+      expect(html).not.toContain("<details open");
+      expect(html).not.toMatch(/<details[^>]*\sopen/);
+    });
+
+    it("renders a <summary>", () => {
+      const html = renderShowcase(APPS, OVERFLOW);
+      expect(html).toContain("<summary");
+    });
+
+    it("renders one <a class=\"app-card\" per primary and overflow app", () => {
+      const html = renderShowcase(APPS, OVERFLOW);
+      const matches = html.match(/<a class="app-card"/g);
+      expect(matches).not.toBeNull();
+      expect(matches!.length).toBe(APPS.length + OVERFLOW.length);
+    });
+
+    it("renders no <details> when overflow is empty", () => {
+      const html = renderShowcase(APPS);
+      expect(html).not.toContain("<details");
+    });
+  });
+
   describe("band CTAs", () => {
     it("renders Learn More link to /about", () => {
       const html = renderShowcase(APPS);
