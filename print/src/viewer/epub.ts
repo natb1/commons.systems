@@ -302,6 +302,7 @@ export function createEpubRenderer(
       const results: SearchResult[] = [];
       let truncated = false;
       for (let i = 0; i < spineItems.length; i++) {
+        if (epoch !== _searchEpoch) break;
         const section = spineItems[i]!;
         try {
           try {
