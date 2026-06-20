@@ -1,20 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
+import { timestampMockFactory } from "./helpers";
 
-vi.mock("firebase/firestore", () => {
-  class MockTimestamp {
-    constructor(
-      public readonly seconds: number,
-      public readonly nanoseconds: number,
-    ) {}
-    toMillis() {
-      return this.seconds * 1000 + this.nanoseconds / 1e6;
-    }
-    static fromMillis(ms: number) {
-      return new MockTimestamp(Math.floor(ms / 1000), (ms % 1000) * 1e6);
-    }
-  }
-  return { Timestamp: MockTimestamp };
-});
+vi.mock("firebase/firestore", () => timestampMockFactory());
 
 import {
   validateBudgetOverrideOrdering,
