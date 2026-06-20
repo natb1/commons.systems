@@ -716,5 +716,49 @@ assert_eq "synth: sessions[sess-synth].cost_usd == 0" "0" \
 
 rm -rf "$SYNTH_ROOT"
 
+# ---------------------------------------------------------------------------
+# Haiku per-model cost (#2027). ISOLATED fixture: a worker session whose
+# assistant message carries a real `claude-haiku-*` model with distinct nonzero
+# usage in ALL FOUR components. This is the ONLY coverage of family()'s
+# `startswith("claude-haiku")` branch and the ACTUAL_RATES.haiku row — without
+# it a haiku rate transposition or a startswith match error would pass CI
+# silently. Distinct counts (1000/2000/4000/500) make a rate swap between any
+# two haiku components visible; the expected value uses the full four-term
+# formula at haiku rates (1 / 1.25 / 0.10 / 5 per Mtok). Its own root so the
+# shared setup() totals/price/session-count assertions stay untouched.
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "--- haiku per-model cost (#2027) ---"
+
+HAIKU_ROOT=$(mktemp -d)
+trap 'rm -rf "$HAIKU_ROOT" "$FAKE_WRITER_DIR"; teardown' EXIT INT TERM
+haiku_worktree="$HAIKU_ROOT/-home-x-worktrees-2027-haiku"
+mkdir -p "$haiku_worktree"
+haiku_jsonl="$haiku_worktree/sess-haiku.jsonl"
+
+# line 1: first user line — classifies as worker
+printf '%s\n' '{"type":"user","message":{"content":"<command-name>/dispatch-worker</command-name>"}}' \
+  >> "$haiku_jsonl"
+# line 2: assistant — claude-haiku-4-5, distinct nonzero usage in all four components
+printf '%s\n' '{"type":"assistant","attributionSkill":"plan-implement","isSidechain":false,"gitBranch":"2027-haiku","message":{"model":"claude-haiku-4-5","usage":{"input_tokens":1000,"cache_creation_input_tokens":2000,"cache_read_input_tokens":4000,"output_tokens":500}}}' \
+  >> "$haiku_jsonl"
+jq . "$haiku_jsonl" >/dev/null
+touch "$haiku_jsonl"
+
+OUT_HAIKU=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$HAIKU_ROOT"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
+)
+
+# Haiku rates: input 1 / cache_creation 1.25 / cache_read 0.10 / output 5 per Mtok.
+EXPECTED_HAIKU_COST=$(jq -n '(1000*1 + 2000*1.25 + 4000*0.10 + 500*5)/1e6')
+assert_eq "sessions[sess-haiku].cost_usd (haiku)" "$EXPECTED_HAIKU_COST" \
+  "$(jq '[.sessions[]|select(.id=="sess-haiku")][0].cost_usd' <<<"$OUT_HAIKU")"
+assert_eq 'by_model["claude-haiku-4-5"].cost_usd (haiku)' "$EXPECTED_HAIKU_COST" \
+  "$(jq '.by_model["claude-haiku-4-5"].cost_usd' <<<"$OUT_HAIKU")"
+
+rm -rf "$HAIKU_ROOT"
+
 report_results
 exit $FAIL
