@@ -5,6 +5,7 @@ import {
   getServerSnapshot,
   navigate,
 } from "../src/location-store";
+import { ReadonlyURLSearchParams } from "../src/readonly-url-search-params";
 
 describe("location-store", () => {
   // The store is a module singleton, so a leaked subscriber leaves a leaked
@@ -75,6 +76,57 @@ describe("location-store", () => {
     expect(server.path).toBe("/");
     expect([...server.params]).toEqual([]);
     expect(Object.is(getServerSnapshot(), getServerSnapshot())).toBe(true);
+  });
+
+  it("getSnapshot params are read-only and survive mutation attempts", () => {
+    history.pushState({}, "", "/page?a=1&b=2");
+    const snap = getSnapshot();
+    const baseline = [...snap.params];
+    expect(baseline).toEqual([
+      ["a", "1"],
+      ["b", "2"],
+    ]);
+
+    // Every mutator throws rather than corrupting the shared cached snapshot.
+    expect(() => snap.params.set("a", "9")).toThrow(TypeError);
+    expect(() => snap.params.append("c", "3")).toThrow(TypeError);
+    expect(() => snap.params.delete("a")).toThrow(TypeError);
+    expect(() => snap.params.sort()).toThrow(TypeError);
+
+    // The same URL still yields the same, unmodified, referentially-stable snapshot.
+    const snap2 = getSnapshot();
+    expect(Object.is(snap, snap2)).toBe(true);
+    expect([...snap2.params]).toEqual(baseline);
+  });
+
+  it("getServerSnapshot params are read-only and survive mutation attempts", () => {
+    const server = getServerSnapshot();
+    expect(() => server.params.set("k", "v")).toThrow(TypeError);
+    expect(() => server.params.append("k", "v")).toThrow(TypeError);
+    expect(() => server.params.delete("k")).toThrow(TypeError);
+    expect(() => server.params.sort()).toThrow(TypeError);
+
+    const server2 = getServerSnapshot();
+    expect(Object.is(server, server2)).toBe(true);
+    expect([...server2.params]).toEqual([]);
+  });
+
+  it("ReadonlyURLSearchParams reads work while mutators throw", () => {
+    const params = new ReadonlyURLSearchParams("x=1&x=2&y=3");
+    expect(params.get("x")).toBe("1");
+    expect(params.getAll("x")).toEqual(["1", "2"]);
+    expect(params.has("y")).toBe(true);
+    expect([...params]).toEqual([
+      ["x", "1"],
+      ["x", "2"],
+      ["y", "3"],
+    ]);
+    expect(params.toString()).toBe("x=1&x=2&y=3");
+
+    expect(() => params.set("x", "9")).toThrow(TypeError);
+    expect(() => params.append("z", "4")).toThrow(TypeError);
+    expect(() => params.delete("y")).toThrow(TypeError);
+    expect(() => params.sort()).toThrow(TypeError);
   });
 
   it("subscribed callback fires on navigate and stops after unsubscribe", () => {
