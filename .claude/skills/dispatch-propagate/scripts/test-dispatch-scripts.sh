@@ -9900,7 +9900,8 @@ lock_teardown() {
   STUB_DIR=""
   unset DISPATCH_LOCK_FILE CLAUDE_CODE_SESSION_ID CLAUDE_AGENTS_CMD \
     DISPATCH_LOCK_WAIT_INTERVAL DISPATCH_LOCK_WAIT_TIMEOUT \
-    DISPATCH_LOCK_PROBE_TIMEOUT DISPATCH_LOCK_FLOCK_TIMEOUT
+    DISPATCH_LOCK_PROBE_TIMEOUT DISPATCH_LOCK_FLOCK_TIMEOUT \
+    DISPATCH_LOCK_MAX_HOLD_SECONDS DISPATCH_CONFIG_DIR
 }
 
 # Helper: install a fake `claude` whose `agents --json` invocation prints a
@@ -10721,6 +10722,117 @@ assert_eq "mid-spawn-died reclaim prints acquired (not busy)" "acquired" "$out"
 lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
 assert_eq "mid-spawn-died reclaim rewrites lock to caller's sessionId" \
   "sess-2727-self" "$lock_contents"
+lock_teardown
+
+# --- Test 28: live-but-stale holder (heartbeat older than max_hold) → reclaim (#2104)
+#
+# Criterion 2: the max-hold/heartbeat staleness cap. The recorded foreign holder
+# IS live in the registry, but its heartbeat — the lock-file mtime — is far older
+# than DISPATCH_LOCK_MAX_HOLD_SECONDS, so it is wedged and must be reclaimed even
+# though its session is still live. No clock injection is needed: age = real_now
+# - old_mtime dominates.
+echo "Test: a live foreign holder whose heartbeat is stale (mtime > max_hold) is reclaimed (#2104)"
+lock_setup
+export CLAUDE_CODE_SESSION_ID="sess-stale-self"
+printf '%s\n' "sess-stale-live" > "$DISPATCH_LOCK_FILE"
+# The foreign holder IS live in the registry (alongside our own session)...
+lock_fake_claude_sessions "sess-stale-live" "sess-stale-self"
+# ...but its heartbeat (lock-file mtime) is far in the past.
+touch -d "@$(( $(date +%s) - 10000 ))" "$DISPATCH_LOCK_FILE"
+export DISPATCH_LOCK_MAX_HOLD_SECONDS=1
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "28 stale-reclaim exits 0" "0" "$rc"
+assert_eq "28 stale-reclaim prints acquired (live but wedged holder)" "acquired" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "28 stale-reclaim rewrites lock to caller's sessionId" "sess-stale-self" "$lock_contents"
+lock_teardown
+
+# --- Test 29: live holder with a FRESH heartbeat → busy (#1068 regression guard, #2104)
+#
+# Criterion 3: no-reclaim-when-fresh. The same live foreign holder, but its
+# heartbeat is fresh (within the cap), so the staleness path must NOT fire — the
+# acquirer stays busy and the lock is left untouched. This is the #1068
+# duplicate-spawn regression guard: a holder refreshing within budget is never
+# reclaimed.
+echo "Test: a live foreign holder with a fresh heartbeat is NOT reclaimed → busy (#1068 guard, #2104)"
+lock_setup
+export CLAUDE_CODE_SESSION_ID="sess-fresh-self"
+printf '%s\n' "sess-fresh-live" > "$DISPATCH_LOCK_FILE"
+lock_fake_claude_sessions "sess-fresh-live" "sess-fresh-self"
+# Fresh mtime (the printf above already wrote it now; touch makes it explicit).
+touch "$DISPATCH_LOCK_FILE"
+export DISPATCH_LOCK_MAX_HOLD_SECONDS=300
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "29 no-reclaim-when-fresh exits 0" "0" "$rc"
+assert_eq "29 no-reclaim-when-fresh prints busy" "busy" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "29 no-reclaim-when-fresh leaves the foreign holder in place" "sess-fresh-live" "$lock_contents"
+lock_teardown
+
+# --- Test 30: --heartbeat bumps the owner's mtime, noops for a non-owner (#2104)
+#
+# The strict-owner heartbeat. As the recorded holder, --heartbeat bumps the
+# lock-file mtime (the heartbeat carrier) and prints "refreshed", preserving the
+# recorded sessionId. As a non-owner it is a noop: mtime unchanged, content
+# unchanged. --heartbeat issues NO `claude agents --json` probe, so no fake
+# registry is needed.
+echo "Test: --heartbeat bumps the owner's mtime and is a noop for a non-owner (#2104)"
+lock_setup
+export CLAUDE_CODE_SESSION_ID="sess-hb-owner"
+printf '%s\n' "sess-hb-owner" > "$DISPATCH_LOCK_FILE"
+old_epoch=$(( $(date +%s) - 5000 ))
+touch -d "@$old_epoch" "$DISPATCH_LOCK_FILE"
+before=$(stat -c %Y "$DISPATCH_LOCK_FILE")
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" --heartbeat 2>/dev/null); rc=$?
+after=$(stat -c %Y "$DISPATCH_LOCK_FILE")
+assert_eq "30 heartbeat owner exits 0" "0" "$rc"
+assert_eq "30 heartbeat owner prints refreshed" "refreshed" "$out"
+TOTAL=$((TOTAL + 1))
+if (( after > before )); then
+  PASS=$((PASS + 1)); echo "  PASS: 30 heartbeat owner bumped the mtime"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 30 heartbeat owner bumped the mtime (before=$before after=$after)"
+fi
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "30 heartbeat owner preserves the recorded sessionId" "sess-hb-owner" "$lock_contents"
+# Non-owner: re-age the file and run as a different session.
+touch -d "@$old_epoch" "$DISPATCH_LOCK_FILE"
+before=$(stat -c %Y "$DISPATCH_LOCK_FILE")
+export CLAUDE_CODE_SESSION_ID="sess-hb-other"
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" --heartbeat 2>/dev/null); rc=$?
+after=$(stat -c %Y "$DISPATCH_LOCK_FILE")
+assert_eq "30 heartbeat non-owner exits 0" "0" "$rc"
+assert_eq "30 heartbeat non-owner prints noop" "noop" "$out"
+assert_eq "30 heartbeat non-owner leaves the mtime unchanged" "$before" "$after"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "30 heartbeat non-owner preserves the recorded sessionId" "sess-hb-owner" "$lock_contents"
+lock_teardown
+
+# --- Test 31: selection-lock.json max_hold_seconds drives the reclaim, not env (#2104)
+#
+# Criterion 5, end-to-end: the config value (not the env var) drives the stale
+# reclaim, and config takes precedence over the env override. lock_setup copies
+# only dispatch-acquire-lock + lib.sh, so copy dispatch-config-load alongside and
+# point DISPATCH_CONFIG_DIR at a synthetic selection-lock.json. The env var is set
+# HIGH (would NOT reclaim a 10000s-old holder); the config is set LOW (max_hold=1,
+# WOULD reclaim). A reclaim proves the config value wins.
+echo "Test: selection-lock.json max_hold_seconds drives the stale reclaim, overriding env (#2104)"
+lock_setup
+cp "$SCRIPT_DIR/dispatch-config-load" "$TMPDIR_TEST/scripts/dispatch-config-load"
+chmod +x "$TMPDIR_TEST/scripts/dispatch-config-load"
+export DISPATCH_CONFIG_DIR="$TMPDIR_TEST/config"
+mkdir -p "$DISPATCH_CONFIG_DIR"
+printf '{"max_hold_seconds":1}\n' > "$DISPATCH_CONFIG_DIR/selection-lock.json"
+export DISPATCH_LOCK_MAX_HOLD_SECONDS=99999   # env alone would keep it busy
+export CLAUDE_CODE_SESSION_ID="sess-cfg-self"
+printf '%s\n' "sess-cfg-live" > "$DISPATCH_LOCK_FILE"
+lock_fake_claude_sessions "sess-cfg-live" "sess-cfg-self"
+touch -d "@$(( $(date +%s) - 10000 ))" "$DISPATCH_LOCK_FILE"
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "31 config-driven reclaim exits 0" "0" "$rc"
+assert_eq "31 config-driven reclaim prints acquired (config max_hold=1 wins over env 99999)" "acquired" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "31 config-driven reclaim rewrites lock to caller's sessionId" "sess-cfg-self" "$lock_contents"
 lock_teardown
 
 # ============================================================================
@@ -13045,6 +13157,106 @@ if [[ "$err" == *"object"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: 7za non-object sweep.json error mentions 'object'"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: 7za non-object sweep.json error mentions 'object'"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- selection-lock config type validation (#2104) --------------------------
+# The selection-lock config gates the max-hold/heartbeat staleness cap. Its
+# validator is the only path that catches a malformed max_hold_seconds BEFORE it
+# reaches dispatch-acquire-lock's bash arithmetic `(( age > MAX_HOLD_SECONDS ))`,
+# where a non-integer would error and break the staleness check. Mirrors the
+# sweep validator tests: absent → no-config; empty object → valid; valid integer
+# → printed; fractional/<=0/wrong-type/non-object → rejected naming the field.
+
+# --- Test 7sl-a: absent selection-lock.json → no-config, exit 0 --------------
+echo "Test: absent selection-lock.json prints no-config and exits 0"
+config_setup
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" selection-lock 2>/dev/null); rc=$?
+assert_eq "7sl-a absent selection-lock.json exits 0" "0" "$rc"
+assert_eq "7sl-a absent selection-lock.json prints no-config" "no-config" "$out"
+config_teardown
+
+# --- Test 7sl-b: empty-object selection-lock.json → valid, prints {} ---------
+echo "Test: empty-object selection-lock.json is valid and prints the normalized object"
+config_setup
+printf '{}\n' > "$DISPATCH_CONFIG_DIR/selection-lock.json"
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" selection-lock 2>/dev/null); rc=$?
+assert_eq "7sl-b empty-object selection-lock.json exits 0" "0" "$rc"
+norm=$(printf '%s' "$out" | jq -c '.')
+assert_eq "7sl-b empty-object selection-lock.json normalizes to {}" "{}" "$norm"
+config_teardown
+
+# --- Test 7sl-c: max_hold_seconds integer → valid, value round-trips ---------
+echo "Test: selection-lock.json with a valid integer max_hold_seconds round-trips"
+config_setup
+printf '{"max_hold_seconds":300}\n' > "$DISPATCH_CONFIG_DIR/selection-lock.json"
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" selection-lock 2>/dev/null); rc=$?
+assert_eq "7sl-c integer max_hold exits 0" "0" "$rc"
+mh=$(printf '%s' "$out" | jq -r '.max_hold_seconds')
+assert_eq "7sl-c integer max_hold round-trips" "300" "$mh"
+config_teardown
+
+# --- Test 7sl-d: max_hold_seconds fractional → exit 1 -----------------------
+echo "Test: selection-lock.json with a fractional max_hold_seconds exits 1 and names the field"
+config_setup
+printf '{"max_hold_seconds":0.5}\n' > "$DISPATCH_CONFIG_DIR/selection-lock.json"
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" selection-lock 2>&1 1>/dev/null) || rc=$?
+assert_eq "7sl-d fractional max_hold exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"max_hold_seconds"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: 7sl-d fractional max_hold error names max_hold_seconds"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 7sl-d fractional max_hold error names max_hold_seconds"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 7sl-e: max_hold_seconds <= 0 → exit 1 -----------------------------
+echo "Test: selection-lock.json with max_hold_seconds <= 0 exits 1 and names the field"
+config_setup
+printf '{"max_hold_seconds":0}\n' > "$DISPATCH_CONFIG_DIR/selection-lock.json"
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" selection-lock 2>&1 1>/dev/null) || rc=$?
+assert_eq "7sl-e non-positive max_hold exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"max_hold_seconds"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: 7sl-e non-positive max_hold error names max_hold_seconds"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 7sl-e non-positive max_hold error names max_hold_seconds"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 7sl-f: max_hold_seconds wrong type (string) → exit 1 --------------
+echo "Test: selection-lock.json with a string max_hold_seconds exits 1 and names the field"
+config_setup
+printf '{"max_hold_seconds":"300"}\n' > "$DISPATCH_CONFIG_DIR/selection-lock.json"
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" selection-lock 2>&1 1>/dev/null) || rc=$?
+assert_eq "7sl-f string max_hold exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"max_hold_seconds"* && "$err" == *"number"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: 7sl-f string max_hold error names the field and 'number'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 7sl-f string max_hold error names the field and 'number'"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 7sl-g: non-object top-level selection-lock.json → exit 1 ----------
+echo "Test: non-object top-level selection-lock.json exits 1 and stderr mentions object"
+config_setup
+printf '[]\n' > "$DISPATCH_CONFIG_DIR/selection-lock.json"
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" selection-lock 2>&1 1>/dev/null) || rc=$?
+assert_eq "7sl-g non-object selection-lock.json exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"object"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: 7sl-g non-object selection-lock.json error mentions 'object'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 7sl-g non-object selection-lock.json error mentions 'object'"
   echo "    stderr: $err"
 fi
 config_teardown
