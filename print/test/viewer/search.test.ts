@@ -320,8 +320,8 @@ describe("SearchPanel", () => {
     const controller = makeMockController({ getRenderer: () => renderer });
     render(controller);
 
-    const input = container.querySelector(".viewer-search-input") as HTMLInputElement;
-    const countEl = container.querySelector(".viewer-search-count") as HTMLElement;
+    const input = container.querySelector(".viewer-search-input") as HTMLInputElement; // type-safety-ok: querySelector result narrowed by test setup guarantee
+    const countEl = container.querySelector(".viewer-search-count") as HTMLElement; // type-safety-ok: querySelector result narrowed by test setup guarantee
 
     setInputValue(input, "fox");
     await act(async () => {
@@ -343,8 +343,8 @@ describe("SearchPanel", () => {
     const controller = makeMockController({ getRenderer: () => renderer });
     render(controller);
 
-    const input = container.querySelector(".viewer-search-input") as HTMLInputElement;
-    const countEl = container.querySelector(".viewer-search-count") as HTMLElement;
+    const input = container.querySelector(".viewer-search-input") as HTMLInputElement; // type-safety-ok: querySelector result narrowed by test setup guarantee
+    const countEl = container.querySelector(".viewer-search-count") as HTMLElement; // type-safety-ok: querySelector result narrowed by test setup guarantee
 
     setInputValue(input, "fox");
     await act(async () => {
@@ -446,7 +446,7 @@ describe("SearchPanel", () => {
   // -------------------------------------------------------------------------
 
   it("discards stale search results when query changes during await", async () => {
-    let resolveFirst!: (value: SearchResponse) => void;
+    let resolveFirst!: (value: SearchResponse) => void; // type-safety-ok: definite assignment — assigned in Promise constructor callback before first read
     const staleResults = { results: [makeSearchResult({ label: "Stale" })], truncated: false };
     const freshResults = { results: [makeSearchResult({ label: "Fresh" })], truncated: false };
     const searchFn = vi.fn()

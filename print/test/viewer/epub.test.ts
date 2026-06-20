@@ -675,7 +675,7 @@ describe("createEpubRenderer", () => {
       mockBook.navigation.get.mockImplementation((href: string) => ({ label: `Label ${href}` }));
 
       const renderer = await initRenderer();
-      const { results } = await renderer.search!("fox");
+      const { results } = await renderer.search!("fox"); // type-safety-ok: optional renderer API method, present in this test harness
 
       // load + find called on every section (matches across chapter boundaries).
       for (const s of [s0, s1, s2]) {
@@ -698,7 +698,7 @@ describe("createEpubRenderer", () => {
       mockBook.navigation.get.mockReturnValue({ label: "Chapter One" });
 
       const renderer = await initRenderer();
-      const { results } = await renderer.search!("brown");
+      const { results } = await renderer.search!("brown"); // type-safety-ok: optional renderer API method, present in this test harness
       const [result] = results;
 
       // Whitespace collapsed to single spaces and trimmed.
@@ -718,7 +718,7 @@ describe("createEpubRenderer", () => {
       mockBook.navigation.get.mockReturnValue({ label: "Padded" });
 
       const renderer = await initRenderer();
-      const { results } = await renderer.search!("fox");
+      const { results } = await renderer.search!("fox"); // type-safety-ok: optional renderer API method, present in this test harness
       const [result] = results;
 
       expect(result!.snippet).toBe("...lots of text fox more text...");
@@ -734,7 +734,7 @@ describe("createEpubRenderer", () => {
       mockBook.navigation.get.mockReturnValue({ label: "Caps" });
 
       const renderer = await initRenderer();
-      const { results } = await renderer.search!("fox");
+      const { results } = await renderer.search!("fox"); // type-safety-ok: optional renderer API method, present in this test harness
       const [result] = results;
 
       expect(result!.snippet).toBe("A FOX in the henhouse");
@@ -749,7 +749,7 @@ describe("createEpubRenderer", () => {
       mockBook.navigation.get.mockReturnValue(undefined);
 
       const renderer = await initRenderer();
-      const { results } = await renderer.search!("fox");
+      const { results } = await renderer.search!("fox"); // type-safety-ok: optional renderer API method, present in this test harness
 
       expect(results.map((r) => r.label)).toEqual(["Ch. 1", "Ch. 2"]);
     });
@@ -779,7 +779,7 @@ describe("createEpubRenderer", () => {
       mockSpine.spineItems = [s0];
 
       const renderer = await initRenderer();
-      const response = await renderer.search!("   ");
+      const response = await renderer.search!("   "); // type-safety-ok: optional renderer API method, present in this test harness
 
       expect(response).toEqual({ results: [], truncated: false });
       expect(s0.load).not.toHaveBeenCalled();
@@ -837,7 +837,7 @@ describe("createEpubRenderer", () => {
       mockBook.navigation.get.mockImplementation((href: string) => ({ label: `Label ${href}` }));
 
       const renderer = await initRenderer();
-      const { results } = await renderer.search!("fox");
+      const { results } = await renderer.search!("fox"); // type-safety-ok: optional renderer API method, present in this test harness
 
       // Every section's unload() must still be called (finally block runs
       // for each section regardless of whether a sibling fails).
@@ -863,7 +863,7 @@ describe("createEpubRenderer", () => {
       mockBook.navigation.get.mockReturnValue({ label: "Ch. 1" });
 
       const renderer = await initRenderer();
-      const result = await renderer.search!("fox");
+      const result = await renderer.search!("fox"); // type-safety-ok: optional renderer API method, present in this test harness
 
       // Result count is capped at the constant.
       expect(result.results.length).toBe(MAX_SEARCH_RESULTS);
@@ -884,7 +884,7 @@ describe("createEpubRenderer", () => {
       mockBook.navigation.get.mockReturnValue({ label: "Ch. 1" });
 
       const renderer = await initRenderer();
-      const result = await renderer.search!("fox");
+      const result = await renderer.search!("fox"); // type-safety-ok: optional renderer API method, present in this test harness
 
       expect(result.results.length).toBe(MAX_SEARCH_RESULTS);
       expect(result.truncated).toBe(false);
