@@ -15,6 +15,7 @@ import {
   INFO_PANEL_LINK_SECTIONS,
   NAV_LINKS,
   ORGANIZATION,
+  OVERFLOW_APPS,
   PERSON,
   REL_ME,
   SITE_DEFAULTS,
@@ -78,8 +79,8 @@ try {
     organization: ORGANIZATION,
     author: AUTHOR,
     relMe: REL_ME,
-    softwareApplications: APPS,
-    homeExtraHtml: renderShowcase(APPS),
+    softwareApplications: [...APPS, ...OVERFLOW_APPS],
+    homeExtraHtml: renderShowcase(APPS, OVERFLOW_APPS),
     showHomeLink: false,
   });
 } catch (err) {
