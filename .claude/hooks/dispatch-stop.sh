@@ -271,6 +271,16 @@ strip_office_hours_label() {
   fi
   gh issue edit "$ISSUE_NUM" --remove-label dispatch:office-hours >/dev/null 2>&1 \
     || echo "[dispatch-stop] WARNING: gh issue edit --remove-label failed" >&2
+  # #2040: on the parked→unparked transition ONLY (office-hours was present at
+  # session start, captured once in ISSUE_OFFICE_HOURS_PRESENT below), reset the
+  # issue-anchored total-attempt counter so the resumed autonomous work gets a
+  # fresh budget. Gated on the SAME single read the bump-skip guard uses so the
+  # two cannot disagree. Deliberately NOT called from the unconditional
+  # advance/self-close sites — resetting on every advance would defeat the
+  # cross-phase accumulation that is the whole point of the ceiling.
+  if [ "${ISSUE_OFFICE_HOURS_PRESENT:-no}" = yes ]; then
+    clear_attempt_counter
+  fi
 }
 
 # Best-effort: strip any dispatch:rate-limit-retry-<n> counter labels from the
@@ -286,6 +296,26 @@ clear_rate_limit_retry_labels() {
   local lbl
   gh issue view "$ISSUE_NUM" --json labels --jq \
     '.labels[].name | select(test("^dispatch:rate-limit-retry-[0-9]+$"))' 2>/dev/null \
+    | while IFS= read -r lbl; do
+        [ -n "$lbl" ] && gh issue edit "$ISSUE_NUM" --remove-label "$lbl" >/dev/null 2>&1 \
+          || echo "[dispatch-stop] WARNING: could not clear $lbl (non-fatal)" >&2
+      done || true
+  return 0
+}
+
+# Best-effort: clear the issue-anchored dispatch:attempts-<n> total-attempt
+# counter (#2040). Called ONLY on the parked→unparked transition from inside
+# strip_office_hours_label: when an office-hours-assisted session advances a
+# previously-parked issue, the resumed autonomous work gets a fresh budget so it
+# does not instantly re-hit the ceiling and re-park. Mirrors
+# clear_rate_limit_retry_labels' totality: MUST return 0 even on a `gh` flake —
+# under `set -uo pipefail` + `trap ... exit 0 ERR`, an unguarded non-zero return
+# at a pre-advance call site would fire the ERR trap and skip the advance work
+# this hook owns. The trailing `return 0` makes the function total.
+clear_attempt_counter() {
+  local lbl
+  gh issue view "$ISSUE_NUM" --json labels --jq \
+    '.labels[].name | select(test("^dispatch:attempts-[0-9]+$"))' 2>/dev/null \
     | while IFS= read -r lbl; do
         [ -n "$lbl" ] && gh issue edit "$ISSUE_NUM" --remove-label "$lbl" >/dev/null 2>&1 \
           || echo "[dispatch-stop] WARNING: could not clear $lbl (non-fatal)" >&2
@@ -465,6 +495,56 @@ fi
 # Resolve current phase (used to compare against MARKER_PHASE). Called after the
 # readiness gate so CI is confirmed ready and dispatch-phase will not exit 3.
 CURRENT_PHASE=$("$SCRIPTS/dispatch-phase" "$ISSUE_NUM" 2>/dev/null) || CURRENT_PHASE=""
+
+# Issue-anchored total-attempt ceiling (#2040). Read the issue's office-hours
+# state ONCE here and share it with both the bump-skip guard below and the
+# un-park reset in strip_office_hours_label, so the two cannot disagree (a
+# reset-too-eager bug would silently neuter the ceiling). This read reflects the
+# session-start state: the only sites that strip office-hours (Branch A
+# recovery-advance, Branch B) run AFTER this point.
+ISSUE_OFFICE_HOURS_PRESENT=no
+if gh issue view "$ISSUE_NUM" --json labels --jq '.labels[].name' 2>/dev/null \
+     | grep -qx 'dispatch:office-hours'; then
+  ISSUE_OFFICE_HOURS_PRESENT=yes
+fi
+
+# Bump the issue-anchored total-attempt counter and park on the ceiling, UNLESS
+# this session is a non-concluding continuation that must not count:
+#   - the issue is already parked on office-hours (an office-hours-assisted run,
+#     or an already-parked issue): nothing to count, nothing to escalate; and an
+#     office-hours session must not inflate the autonomous counter.
+#   - marker absent AND this is one of Branch A's two continuation gates that
+#     RESUME the same session rather than concluding an attempt: a live
+#     idle-poller (session_scheduled_wakeup) or a transient rate-limit death
+#     (dispatch-detect-rate-limit-death). Counting an idle-poller would bump once
+#     per poll cycle and blow the ceiling on a single healthy review phase
+#     (#1590). These mirror the gates at ~lines 383 and 397 below — keep the two
+#     in sync. (The rate-limit gate can fall through to an office-hours park when
+#     rescheduling fails; that park is then uncounted, which is harmless — it
+#     parks office-hours so the ceiling is moot and the counter resets on un-park.)
+# Everything else — Branch A genuine park, the #2025 recovery-advance, Branch
+# B/C/D — is a concluded autonomous attempt and counts exactly once.
+#
+# Fail-open: a `gh` flake in dispatch-attempt-count defaults to `proceed`, never
+# parks and never fires the ERR trap — the chain-advancing Branch A–D work below
+# must run even if the bookkeeping bump flaked.
+if [ "$ISSUE_OFFICE_HOURS_PRESENT" = no ] \
+   && { [ -n "$MARKER_PHASE" ] \
+        || { ! session_scheduled_wakeup \
+             && ! "$SCRIPTS/dispatch-detect-rate-limit-death" "$TRANSCRIPT_PATH" 2>/dev/null; }; }; then
+  attempt_verdict=$("$SCRIPTS/dispatch-attempt-count" "$ISSUE_NUM" 2>/dev/null) || attempt_verdict=proceed
+  if [ "$attempt_verdict" = escalate ]; then
+    # Re-read the just-bumped total to name it in the office-hours reason (AC4).
+    attempt_total=$(gh issue view "$ISSUE_NUM" --json labels \
+      --jq '[.labels[].name | capture("^dispatch:attempts-(?<n>[0-9]+)$").n | tonumber] | max // 0' \
+      2>/dev/null) || attempt_total=""
+    "$SCRIPTS/dispatch-apply-office-hours" "$ISSUE_NUM" \
+      "total attempts across all phases reached the ceiling (N=${attempt_total:-unknown})" \
+      || echo "[dispatch-stop] WARNING: dispatch-apply-office-hours failed" >&2
+    spawn_tick
+    exit 0
+  fi
+fi
 
 if [ -z "$MARKER_PHASE" ]; then
   # Branch A — marker absent.
