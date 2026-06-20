@@ -502,28 +502,47 @@ dispatch_ci_verdict_rest() {
 }
 
 # REST-backed drop-in for `gh issue view <N> --json
-# number,title,body,state,labels,assignees` (#2255). The dispatch fleet exhausts
-# GitHub's shared GraphQL rate-limit bucket while the REST bucket sits idle; the
-# `gh issue view` porcelain spends GraphQL, this helper spends REST.
+# number,title,body,state,stateReason,createdAt,labels,assignees` (#2255). The
+# dispatch fleet exhausts GitHub's shared GraphQL rate-limit bucket while the
+# REST bucket sits idle; the `gh issue view` porcelain spends GraphQL, this
+# helper spends REST.
 # Args: $1 = <N> (issue number, required); --repo owner/repo (optional, defaults
-#   to the current repo via the {owner}/{repo} placeholder).
+#   to the current repo via the {owner}/{repo} placeholder); --comments (optional
+#   boolean) opts into a SECOND REST call that fetches the issue's comments.
 # Output: one JSON object on stdout matching the porcelain shape — an EXPLICIT
 #   named projection (not a passthrough of the raw REST object) so the shape is
 #   pinned and tested:
-#     {number, title, body, state, labels:[{name}], assignees:[{login}]}
+#     {number, title, body, state, stateReason, createdAt,
+#      labels:[{name}], assignees:[{login}]}
+#   With --comments, also: comments:[{author:{login}, createdAt, body}].
 # Byte-compat bridges over the raw REST shape:
 #   - state: REST returns lowercase `open`/`closed`; the porcelain emits the
 #     UPPERCASE GraphQL enum `OPEN`/`CLOSED`. `ascii_upcase` bridges it (same as
 #     dispatch_ci_verdict_rest's enum bridge).
+#   - stateReason: REST's snake_case `state_reason` is lowercase
+#     (`completed`/`not_planned`/`reopened`/null); the porcelain emits the
+#     UPPERCASE GraphQL enum (`COMPLETED`/`NOT_PLANNED`/`REOPENED`/null).
+#     `ascii_upcase` bridges it; null is preserved exactly (no upcase of null).
+#   - createdAt: remapped from REST's snake_case `created_at` (ISO 8601 string,
+#     same value the porcelain `createdAt` carries).
 #   - labels / assignees: narrowed to the porcelain-visible keys (`name` /
 #     `login`) rather than passing the full REST objects through.
+# Comments (--comments): a SECOND REST call against the issue's comments endpoint
+#   (built with the SAME --repo logic as the main path). It uses the slurp idiom
+#   (`gh api --paginate ... | jq -s 'map(.[]) | ...'`) rather than gh_api_array:
+#   gh_api_array fetches WITHOUT --paginate (it would truncate at 30 comments),
+#   and --paginate can't be bolted onto it (--paginate emits one JSON doc per
+#   page, breaking gh_api_array's single-array `type=="array"` validator). Each
+#   comment is remapped to {author:{login}, createdAt, body}. Without the flag
+#   there is no second call and no `comments` key.
 # On gh failure: errors to stderr and returns 1 (clear-errors convention, no
 # fallback).
 gh_issue_view_rest() {
-  local num="" repo=""
+  local num="" repo="" want_comments=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --repo) repo="$2"; shift 2 ;;
+      --comments) want_comments=1; shift 1 ;;
       --*) echo "error: gh_issue_view_rest: unknown flag '$1'" >&2; return 1 ;;
       *)
         if [[ -z "$num" ]]; then
@@ -552,14 +571,45 @@ gh_issue_view_rest() {
     return 1
   }
 
-  printf '%s' "$raw" | jq '{
+  local projected
+  projected=$(printf '%s' "$raw" | jq '{
     number,
     title,
     body: (.body // ""),
     state: (.state | ascii_upcase),
+    stateReason: ((.state_reason // null) | (if . == null then null else ascii_upcase end)),
+    createdAt: .created_at,
     labels: ((.labels // []) | map({name})),
     assignees: ((.assignees // []) | map({login}))
-  }'
+  }') || return 1
+
+  if [[ "$want_comments" -eq 0 ]]; then
+    printf '%s\n' "$projected"
+    return 0
+  fi
+
+  # --comments: a second REST call against the issue's comments endpoint, built
+  # with the same --repo logic as the main path. Slurp the per-page arrays
+  # (--paginate emits one array doc per page), flatten, and remap to the
+  # porcelain comment shape. See dispatch_ci_verdict_rest / the header comment for
+  # why gh_api_array can't be used here.
+  local comments_path
+  if [[ -n "$repo" ]]; then
+    comments_path="repos/$repo/issues/$num/comments"
+  else
+    comments_path="repos/{owner}/{repo}/issues/$num/comments"
+  fi
+
+  local comments
+  comments=$(gh_retry gh api --paginate "$comments_path" \
+    | jq -s 'map(.[]) | map({author: {login: .user.login},
+                            createdAt: .created_at,
+                            body: (.body // "")})') || {
+    echo "error: gh_issue_view_rest: gh api failed for $comments_path" >&2
+    return 1
+  }
+
+  jq --argjson comments "$comments" '. + {comments: $comments}' <<<"$projected"
 }
 
 # REST-backed drop-in for `gh pr view <N> --json

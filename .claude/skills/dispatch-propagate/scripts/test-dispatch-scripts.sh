@@ -478,6 +478,24 @@ case "$args" in
       echo "[]"
     fi
     ;;
+  api\ --paginate\ repos/*/issues/9[0-9][0-9][0-9]/comments)
+    # gh_issue_view_rest --comments sentinel branch (#2257): the helper's second
+    # REST call. The pattern REQUIRES the literal `--paginate` token, so a
+    # regression that drops --paginate no longer matches here — it falls through
+    # to the generic `*)` default (the issues/9xxx sentinel ends at the digits, so
+    # /comments does not match it), serving the wrong/empty body and turning the
+    # count assertion RED. The fixtures are MULTI-PAGE (cat'd in sequence, one
+    # array doc per page, like the check-runs --paginate stub), spanning >30
+    # comments total so the count assertion catches a non-paginating fetch.
+    num=$(printf '%s' "$args" | sed -E 's#.*issues/([0-9]+)/comments.*#\1#')
+    if [[ -f "$STUB_DIR/view-issue-comments-${num}-page1.json" ]]; then
+      cat "$STUB_DIR/view-issue-comments-${num}-page1.json"
+      [[ -f "$STUB_DIR/view-issue-comments-${num}-page2.json" ]] && \
+        cat "$STUB_DIR/view-issue-comments-${num}-page2.json"
+    else
+      echo '[]'
+    fi
+    ;;
   api\ repos/*/issues/9[0-9][0-9][0-9])
     # gh_issue_view_rest sentinel branch (#2255): single-issue GET has no label to
     # carry a sentinel, so reserve the 9xxx number range. MUST precede the generic
@@ -1424,6 +1442,8 @@ printf '%s\n' '{
   "title": "a sample issue",
   "body": "the issue body",
   "state": "open",
+  "state_reason": null,
+  "created_at": "2026-01-02T03:04:05Z",
   "labels": [
     {"id": 1, "name": "bug", "color": "ff0000", "description": "a bug"},
     {"id": 2, "name": "dispatch:planned", "color": "00ff00", "description": null}
@@ -1439,6 +1459,9 @@ assert_eq "issue: number" "9001" "$(jq -r '.number' <<<"$iv")"
 assert_eq "issue: title" "a sample issue" "$(jq -r '.title' <<<"$iv")"
 assert_eq "issue: body" "the issue body" "$(jq -r '.body' <<<"$iv")"
 assert_eq "issue: state upcased OPEN" "OPEN" "$(jq -r '.state' <<<"$iv")"
+assert_eq "issue: createdAt passthrough from created_at" "2026-01-02T03:04:05Z" "$(jq -r '.createdAt' <<<"$iv")"
+# state_reason null must be PRESERVED as null (not upcased, not coerced).
+assert_eq "issue: stateReason null preserved" "true" "$(jq '.stateReason == null' <<<"$iv")"
 assert_eq "issue: labels narrowed to [{name}] (2 labels)" "2" "$(jq '.labels | length' <<<"$iv")"
 assert_eq "issue: first label name" "bug" "$(jq -r '.labels[0].name' <<<"$iv")"
 assert_eq "issue: label objects carry ONLY name (no color key)" "1" "$(jq '.labels[0] | keys | length' <<<"$iv")"
@@ -1446,7 +1469,7 @@ assert_eq "issue: assignees narrowed to [{login}]" "alice" "$(jq -r '.assignees[
 assert_eq "issue: assignee objects carry ONLY login" "1" "$(jq '.assignees[0] | keys | length' <<<"$iv")"
 assert_eq "issue: raw REST extra field dropped" "" "$(jq -r '.extra_rest_field // empty' <<<"$iv")"
 # Top-level keys are exactly the porcelain set.
-assert_eq "issue: top-level key set" "assignees body labels number state title" \
+assert_eq "issue: top-level key set" "assignees body createdAt labels number state stateReason title" \
   "$(jq -r 'keys | join(" ")' <<<"$iv")"
 teardown
 
@@ -1457,11 +1480,20 @@ printf '%s\n' '{
   "title": "closed one",
   "body": "",
   "state": "closed",
+  "state_reason": "completed",
+  "created_at": "2026-02-03T04:05:06Z",
   "labels": [],
   "assignees": []
 }' > "$STUB_DIR/view-issue-9002.json"
 iv2=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_view_rest 9002)
 assert_eq "issue: closed → CLOSED" "CLOSED" "$(jq -r '.state' <<<"$iv2")"
+# REST lowercase state_reason `completed` → porcelain UPPERCASE enum COMPLETED.
+assert_eq "issue: stateReason completed upcased to COMPLETED" "COMPLETED" "$(jq -r '.stateReason' <<<"$iv2")"
+# A second non-null case: not_planned → NOT_PLANNED.
+printf '%s\n' '{"number":9005,"title":"np","body":"","state":"closed","state_reason":"not_planned","created_at":"2026-03-01T00:00:00Z","labels":[],"assignees":[]}' \
+  > "$STUB_DIR/view-issue-9005.json"
+iv_np=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_view_rest 9005)
+assert_eq "issue: stateReason not_planned upcased to NOT_PLANNED" "NOT_PLANNED" "$(jq -r '.stateReason' <<<"$iv_np")"
 # Byte-compat: a REST null body must surface as porcelain's empty string.
 printf '%s\n' '{"number":9004,"title":"t","state":"open","body":null,"labels":[],"assignees":[]}' \
   > "$STUB_DIR/view-issue-9004.json"
@@ -1500,6 +1532,33 @@ err_ivf=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_view_rest 9001 2>&1 >/dev/null)
 assert_eq "issue: gh failure → non-zero" "1" "$rc_ivf"
 case "$err_ivf" in *"gh_issue_view_rest: gh api failed"*) mf=yes ;; *) mf=no ;; esac
 assert_eq "issue: gh-failure stderr names the helper" "yes" "$mf"
+teardown
+
+echo "Test: gh_issue_view_rest --comments -- paginated multi-page fetch, remapped shape"
+setup
+# No --comments flag → no second call, no comments key. (Reuse the 9001 fixture.)
+printf '%s\n' '{"number":9001,"title":"t","body":"b","state":"open","state_reason":null,"created_at":"2026-01-01T00:00:00Z","labels":[],"assignees":[]}' \
+  > "$STUB_DIR/view-issue-9001.json"
+iv_nc=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_view_rest 9001)
+assert_eq "issue: no --comments → comments key absent" "false" "$(jq 'has("comments")' <<<"$iv_nc")"
+# Multi-page comments fixture: page 1 = 30 comments, page 2 = 5 comments (35 > 30,
+# so a non-paginating single-page fetch would miss page 2). Each comment is the
+# RAW REST shape (nested .user.login, snake_case .created_at) so the remap to
+# {author:{login}, createdAt, body} is genuinely exercised.
+jq -n '[range(30) | {user:{login:("u"+(.|tostring)), id:.}, created_at:("2026-01-01T00:00:0"+( . % 10 |tostring)+"Z"), body:("comment "+(.|tostring)), extra:"drop"}]' \
+  > "$STUB_DIR/view-issue-comments-9001-page1.json"
+jq -n '[range(30;35) | {user:{login:("u"+(.|tostring)), id:.}, created_at:"2026-02-01T00:00:00Z", body:("comment "+(.|tostring)), extra:"drop"}]' \
+  > "$STUB_DIR/view-issue-comments-9001-page2.json"
+ivc=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_view_rest 9001 --comments)
+assert_eq "comments: full count across both pages (>30 proves pagination)" "35" "$(jq '.comments | length' <<<"$ivc")"
+assert_eq "comments: remapped author.login (nested from .user.login)" "u0" "$(jq -r '.comments[0].author.login' <<<"$ivc")"
+assert_eq "comments: remapped createdAt from .created_at" "2026-01-01T00:00:00Z" "$(jq -r '.comments[0].createdAt' <<<"$ivc")"
+assert_eq "comments: remapped body" "comment 0" "$(jq -r '.comments[0].body' <<<"$ivc")"
+assert_eq "comments: page-2 comment present (login)" "u34" "$(jq -r '.comments[34].author.login' <<<"$ivc")"
+assert_eq "comments: remapped object carries ONLY author/createdAt/body" "author body createdAt" \
+  "$(jq -r '.comments[0] | keys | join(" ")' <<<"$ivc")"
+assert_eq "comments: base projection keys still present alongside comments" "true" \
+  "$(jq '(has("number")) and (has("createdAt")) and (has("stateReason"))' <<<"$ivc")"
 teardown
 
 echo "Test: gh_pr_view_rest -- mergeable=true → MERGEABLE, clean→CLEAN, state upcase"
