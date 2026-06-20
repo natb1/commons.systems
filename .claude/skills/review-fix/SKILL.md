@@ -617,10 +617,9 @@ fi
 but only when the Workflow ran this session.** The phase-log write must PRECEDE
 the `dispatch:reviewed` apply so that label stays the terminal durable action.
 This compose-and-write happens **only when the Workflow ran this session** (the
-normal path) — the same "only when the Workflow ran this session" guard the
-outcome-envelope emit uses below (it skips on re-entry for the same reason). On
-the re-entry path (Steps 1–6 skipped, `result` absent) **SKIP the phase-log
-write entirely**; do not compose or upsert anything.
+normal path) — the same guard the outcome-envelope emit uses below (it skips on
+re-entry for the same reason). On the re-entry path (Steps 1–6 skipped, `result`
+absent) **SKIP the phase-log write entirely**; do not compose or upsert anything.
 
 On the normal path, compose a terse "what the review found / fixed" digest of
 this pass to `tmp/phase-log-entry-$N.md` — a one-line summary of the fixes
@@ -637,8 +636,8 @@ upsert it (use `dangerouslyDisableSandbox: true` — the script calls `gh`):
 No attempt counter — review is single-pass, so the default `--attempt 1` applies.
 The upsert is idempotent on the `(review, 1)` key. Why re-entry must skip rather
 than re-write: the phase-log write PRECEDES the `dispatch:reviewed` apply (above),
-and re-entry is GATED on `dispatch:reviewed` already being present (preamble,
-line ~83). So whenever re-entry fires, the accurate `(review, 1)` entry the
+and re-entry is GATED on `dispatch:reviewed` already being present (see preamble:
+"If the labels line already includes `dispatch:reviewed`"). So whenever re-entry fires, the accurate `(review, 1)` entry the
 original run wrote is guaranteed already durable on the comment. Skipping the
 write preserves it. A re-write on re-entry has no prior-pass data to restate
 (`result` is absent), so it would only overwrite the good entry with a
@@ -804,10 +803,11 @@ goes ready — the single PR-comment summary is the audit trail. This is an
 intentional trade-off for an autonomous background-job run.
 
 The skill is idempotent: a re-invocation with `dispatch:reviewed` already on the
-PR skips Steps 1–6 and runs Step 7, which flushes any unpushed commits and writes
-the phase-completed marker (the Workflow is not re-run on re-entry, so the
-deviation criterion is treated as not met). Readiness is the router's projection,
-reconciled on later ticks — not something re-entry asserts.
+PR skips Steps 1–6 and runs Step 7, which flushes any unpushed commits, skips the
+phase-log write and outcome-envelope emit, and writes the phase-completed marker
+(the Workflow is not re-run on re-entry, so the deviation criterion is treated as
+not met). Readiness is the router's projection, reconciled on later ticks — not
+something re-entry asserts.
 
 **Model split (#1172).** The dispatch chain runs this `review` phase orchestrator
 on **Sonnet** (via `dispatch-phase-model`, which maps `review →
