@@ -40,6 +40,25 @@ export function formatResetClock(resetAt: Date, now: Date): string {
   return `${dayStr} ${timeStr}`;
 }
 
+/**
+ * Content signature for the capacity band's now-derived output.
+ *
+ * The non-time fields (percentages, worker counts/state) do not depend on
+ * `now`, so the caller's `sample`-reference dep already covers them; this key
+ * captures only the now-derived output — the two resets' clock + countdown
+ * strings. A memo keyed on this signature reuses its element (and skips the
+ * re-render) across a tick that does not change any of those strings.
+ */
+export function capacityBandKey(sample: UsageSample | null, now: Date): string {
+  if (sample === null) return "";
+  return [
+    formatResetClock(sample.fiveHourResetsAt, now),
+    formatCountdown(sample.fiveHourResetsAt, now),
+    formatResetClock(sample.weeklyResetsAt, now),
+    formatCountdown(sample.weeklyResetsAt, now),
+  ].join("|");
+}
+
 function buildResetItem(label: string, resetAt: Date, now: Date): HTMLElement {
   const li = document.createElement("li");
 
