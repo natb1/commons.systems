@@ -53,7 +53,7 @@ function mountHero(hero: HTMLElement): void {
   }
   hero.classList.add("app-showcase");
   hero.setAttribute("aria-label", "Featured apps");
-  heroRoot!.render(<ShowcaseContent apps={APPS} />);
+  heroRoot!.render(<ShowcaseContent apps={APPS} />); // type-safety-ok: heroRoot is always set above — either by the if block or from a prior call
 }
 
 createBlogApp({
