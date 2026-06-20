@@ -86,10 +86,13 @@ if [[ -z "${_LIB_DECISION_LOG_LOADED:-}" ]]; then
 
       if command -v flock >/dev/null 2>&1; then
         # Serialize rotate+append across concurrent per-worker writers. A failed
-        # flock (fd 9) exits the subshell 0 — the append is dropped rather than
-        # racing, consistent with the best-effort contract.
+        # or timed-out flock (fd 9) exits the subshell 0 — the append is dropped
+        # rather than racing or blocking, consistent with the best-effort
+        # contract. The 2-second wait (-w 2) bounds the worst-case hang when
+        # another live process holds the lock, so this EXIT-trap handler can
+        # never stall dispatch-stop.sh / dispatch-select-tick indefinitely.
         (
-          flock 9 || exit 0
+          flock -w 2 9 || exit 0
           _decision_log_rotate
           printf '%s\n' "$json" >> "$DECISION_LOG_FILE"
         ) 9>"$lockfile"

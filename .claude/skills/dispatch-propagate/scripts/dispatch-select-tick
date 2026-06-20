@@ -93,7 +93,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # lib-decision-log.sh) — the log is a best-effort observability sink, so a
 # failed source / missing tool degrades to a no-op rather than a hard error.
 # shellcheck source=/dev/null
-source "$SCRIPT_DIR/lib-decision-log.sh"
+source "$SCRIPT_DIR/lib-decision-log.sh" 2>/dev/null || true
 
 # Accumulators, initialized to safe defaults before the trap is registered so an
 # early exit (under `set -u`) never references an unset var. Each terminal site
@@ -135,7 +135,7 @@ _dlog_select_emit() {
       effective_live: ($eff_live | num),
       gap:           ($gap | num)
     }' 2>/dev/null) || return 0
-  decision_log_append "$json"
+  command -v decision_log_append >/dev/null 2>&1 && decision_log_append "$json" || true
 }
 
 # Register the emit trap NOW, before the first terminal exit. The later
@@ -223,7 +223,7 @@ if [[ "$BRANCH" == "main" ]]; then
     MAIN_WORKTREE="$DISPATCH_TICK_MAIN_WORKTREE"
   else
     PROJECT_ROOT=$(resolve_project_root) \
-      || { echo "dispatch-select-tick: not in a git repo and DISPATCH_TICK_MAIN_WORKTREE is unset" >&2; exit 2; }
+      || { DLOG_DISPOSITION="internal-error"; DLOG_SKIP_REASON="resolve-project-root-failed"; echo "dispatch-select-tick: not in a git repo and DISPATCH_TICK_MAIN_WORKTREE is unset" >&2; exit 2; }
     MAIN_WORKTREE="$PROJECT_ROOT/worktrees/main"
   fi
 

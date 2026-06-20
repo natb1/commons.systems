@@ -215,7 +215,7 @@ _dlog_stop_emit() {
       issue:          ($issue | num),
       pr:             ($pr | num)
     }' 2>/dev/null) || return 0
-  decision_log_append "$json"
+  command -v decision_log_append >/dev/null 2>&1 && decision_log_append "$json" || true
 }
 
 # Arm the trap NOW — past Discriminator 2, so only worker sessions emit. (A

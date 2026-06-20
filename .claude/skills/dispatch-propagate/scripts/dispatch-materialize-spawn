@@ -195,7 +195,7 @@ _dlog_mspawn_emit() {
       gap:         ($gap | num),
       spawned:     ($spawned | num)
     }' 2>/dev/null) || return 0
-  decision_log_append "$json"
+  command -v decision_log_append >/dev/null 2>&1 && decision_log_append "$json" || true
 }
 
 # Register the emit trap NOW, before the first terminal exit. No prior EXIT trap
