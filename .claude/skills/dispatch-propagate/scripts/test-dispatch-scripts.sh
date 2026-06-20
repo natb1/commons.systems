@@ -80,10 +80,6 @@ setup() {
   # SCRIPT_DIR, which resolves to TMPDIR_TEST for this copy — lib.sh is copied
   # below alongside the other scripts, so the source resolves.
   cp "$SCRIPT_DIR/dispatch-reconcile-ready" "$TMPDIR_TEST/dispatch-reconcile-ready"
-  # dispatch-sync-merge-queue sources lib.sh (for pr_list_open and
-  # dispatch_classify_rollup) via its SCRIPT_DIR, which resolves to TMPDIR_TEST
-  # for this copy — lib.sh is already copied below, so the source resolves.
-  cp "$SCRIPT_DIR/dispatch-sync-merge-queue" "$TMPDIR_TEST/dispatch-sync-merge-queue"
   # dispatch-auto-merge sources lib.sh (pr_list_open, dispatch_ci_verdict_rest,
   # gh_retry, gh_issue_list_rest) and calls dispatch-config-load via its
   # SCRIPT_DIR (= TMPDIR_TEST for this copy) — both already copied below/above,
@@ -133,7 +129,6 @@ setup() {
            "$TMPDIR_TEST/dispatch-reconcile-ready" \
            "$TMPDIR_TEST/dispatch-config-load" \
            "$TMPDIR_TEST/dispatch-project-status-read" \
-           "$TMPDIR_TEST/dispatch-sync-merge-queue" \
            "$TMPDIR_TEST/dispatch-auto-merge" \
            "$TMPDIR_TEST/dispatch-retriage-orphaned-followups"
 
@@ -190,59 +185,6 @@ STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
 # Reconstruct full args string for matching.
 args="$*"
 case "$args" in
-  # ---- #1480 dispatch-sync-merge-queue branches (FIRST — most specific) ------
-  # The mergeable-PR fetch. Field set pinned byte-for-byte to the script's
-  # pr_list_open call; --limit glob absorbs DISPATCH_PR_LIST_LIMIT (default 300).
-  "pr list --state open --limit "*" --json number,title,url,isDraft,statusCheckRollup,mergeable")
-    echo "pr list" >> "$STUB_DIR/gh-merge-pr-list.log"
-    if [[ -f "$STUB_DIR/merge-pr-list.json" ]]; then
-      cat "$STUB_DIR/merge-pr-list.json"
-    else
-      echo "[]"
-    fi
-    ;;
-  label\ create\ merge-pr:*)
-    # Idempotent per-PR label create. Log and succeed.
-    echo "$args" >> "$STUB_DIR/gh-merge-label-create.log"
-    ;;
-  issue\ list\ --repo\ natb1/office-hours-nate\ --label\ merge-pr:*\ --state\ open\ --json\ number,title)
-    # Per-PR open-issue guard. MUST precede the bare enumerate branch below.
-    # Recover the PR number from the --label to key the fixture.
-    set -- $args
-    oh_lbl=""
-    while [[ $# -gt 0 ]]; do
-      case "$1" in --label) oh_lbl="$2"; shift 2 ;; *) shift ;; esac
-    done
-    oh_n="${oh_lbl#merge-pr:}"
-    if [[ -f "$STUB_DIR/oh-issue-merge-pr-${oh_n}.json" ]]; then
-      cat "$STUB_DIR/oh-issue-merge-pr-${oh_n}.json"
-    else
-      echo "[]"
-    fi
-    ;;
-  "issue list --repo natb1/office-hours-nate --state open --limit "*" --json number,labels")
-    # Close-path enumerate (no --label). Serves the open-tracking-issue set.
-    if [[ -f "$STUB_DIR/oh-issue-enum.json" ]]; then
-      cat "$STUB_DIR/oh-issue-enum.json"
-    else
-      echo "[]"
-    fi
-    ;;
-  issue\ create\ --repo\ natb1/office-hours-nate\ *)
-    # Create a tracking issue. MUST echo a URL so the script's ${URL##*/} yields
-    # the number. Log the full args (carries --title, the merge-pr:<n> label, and
-    # the oh-merge-pr marker) for the create assertion.
-    echo "$args" >> "$STUB_DIR/gh-merge-issue-create.log"
-    echo "https://github.com/natb1/office-hours-nate/issues/77"
-    ;;
-  issue\ edit\ *--repo\ natb1/office-hours-nate*)
-    # Title/marker refresh on drift. MUST precede the generic `issue edit *`.
-    echo "$args" >> "$STUB_DIR/gh-merge-issue-edit.log"
-    ;;
-  issue\ close\ *--repo\ natb1/office-hours-nate*)
-    # Close a tracking issue. MUST precede the generic `issue close *`.
-    echo "$args" >> "$STUB_DIR/gh-merge-issue-close.log"
-    ;;
   "pr list --state open --limit 300 --json number,headRefName,isDraft,headRefOid,labels,mergeable")
     echo "pr list" >> "$STUB_DIR/gh-pr-list-calls.log"
     if [[ -f "$STUB_DIR/pr-list-full.json" ]]; then
@@ -14115,6 +14057,118 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: #1136 --exhausted 5h resets far-future stderr should name FIVEH_RESETS"
   echo "    stderr: $(cat "$TMPDIR_TEST/stderr")"
 fi
+tw_teardown
+
+# --- #2043: reference.md Table A / Table B literal ports ---------------------
+#
+# reference.md's "Concurrency budgeting" section documents the controller's
+# input→output contract as two literal tables. These ports assert the exact
+# target_N each table row claims, so a regression in dispatch-target-workers
+# that diverges from the documented tables fails CI — the tables and the
+# implementation are kept in lockstep (issue #2043 AC). The numbers below are
+# transcribed from reference.md; if the script changes, these assertions catch
+# the divergence. (A reviewer changing the table without the script — a
+# doc-only edit — is caught in review, not here; coupling the test to the
+# markdown file's prose formatting was rejected as brittle.)
+#
+# Both tables use the script's baked-in defaults (max_workers=8, floor5=50,
+# ceil5=80, weekly defaults), which tw_setup's empty synthetic DISPATCH_CONFIG_DIR
+# selects.
+
+# Table A — weekly curve vs. elapsed (used_weekly=0, used_5h=0). With
+# used_weekly=0 the weekly gate is open at every x (hw = W - 0 > 0), and
+# used_5h=0 <= floor5 puts the 5h ramp at max, so target_N=8 across the whole
+# week. This is the whole-week "all gates open, full headroom → max" smoke.
+echo "Test: #2043 reference.md Table A — used_weekly=0,used_5h=0 → target_N=8 at every x"
+tw_setup
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+# reference.md Table A rows: elapsed x → target_N (all 8). The ~1.0 row uses
+# tw_resets_for_x 1.0 (remaining=1s) so Stage 1 does not take the remaining<=0
+# early-exit.
+for x in 0.00 0.25 0.50 0.75 0.90 1.0; do
+  r=$(tw_resets_for_x "$x")
+  write_rl "tableA.json" 0 "$r" 0 99999999
+  out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+  assert_eq "Table A x=$x (used_weekly=0,used_5h=0) → target_N=8" "8" "$out"
+done
+tw_teardown
+
+# Table B — binary gate + 5h ramp at mid-week (x=0.5, W=65.95). The open-gate
+# rows hold used_weekly=20 (hw=45.95>0) and sweep used_5h; the closed-gate rows
+# hold used_5h=0 and push used_weekly at/over W.
+echo "Test: #2043 reference.md Table B — mid-week gate + 5h ramp rows"
+tw_setup
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+r=$(tw_resets_for_x 0.5)
+# reference.md Table B open-gate rows: used_5h → target_N (used_weekly=20).
+declare -A tableB=([50]=8 [55]=7 [60]=5 [65]=4 [70]=3 [75]=1 [80]=0)
+for u5 in 50 55 60 65 70 75 80; do
+  write_rl "tableB.json" 20 "$r" "$u5" 99999999
+  out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+  assert_eq "Table B open gate used_weekly=20 used_5h=$u5 → target_N=${tableB[$u5]}" \
+    "${tableB[$u5]}" "$out"
+done
+unset tableB
+# reference.md Table B closed-gate rows: used_weekly at/over W=65.95 → 0.
+write_rl "tableB.json" 66 "$r" 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "Table B closed gate used_weekly=66 (at/over pace) → target_N=0" "0" "$out"
+write_rl "tableB.json" 70 "$r" 0 99999999
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "Table B closed gate used_weekly=70 (over pace) → target_N=0" "0" "$out"
+tw_teardown
+
+# --- #2043: non-numeric used_5h is sanitized → fail-OPEN (not fail-closed) ---
+#
+# Closes the gap left by Test 17 (which covers non-numeric used_weekly →
+# fail-CLOSED to 1). The two used_* fields have OPPOSITE fallback semantics by
+# design: used_weekly is the budget gate (missing → drop the weekly anchor →
+# fallback 1), but used_5h is only the anti-burst ramp WITHIN the weekly budget
+# (missing → treated as 0 → full 5h headroom → the WEEKLY-allowed count). So a
+# non-numeric used_5h must NOT back off to zero; under an open weekly gate it
+# yields max workers. (reference.md's "non-numeric used_* → fail-closed" wording
+# is imprecise — only used_weekly fails closed; this test pins the actual,
+# intended fail-open behavior for used_5h.)
+echo "Test: #2043 non-numeric used_5h sanitized → fail-open (weekly-bounded), not 0"
+tw_setup
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+r=$(tw_resets_for_x 0.5)
+# used_weekly=20 → gate open at x=0.5 (hw=45.95>0). used_5h="abc" → sanitized to
+# missing → treated as 0 → ramp gives max workers = 8.
+write_rl "rl.json" 20 "$r" 0 99999999  # JSON used_5h=0 is overridden below by DISPATCH_TARGET_WORKERS_USED_5H=abc (per-field env override) — the env var is what exercises this path
+export DISPATCH_TARGET_WORKERS_USED_5H=abc
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>"$TMPDIR_TEST/stderr")
+assert_eq "non-numeric used_5h → fail-open max workers N=8 (not 0)" "8" "$out"
+err=$(cat "$TMPDIR_TEST/stderr")
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"non-numeric value"* && "$err" == *"FIVEH_USED"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-numeric used_5h stderr names FIVEH_USED"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-numeric used_5h stderr names FIVEH_USED"
+  echo "    stderr: $err"
+fi
+tw_teardown
+
+# --- #2043: --reopen-at none from a transient 5h fill (pace not the blocker) -
+#
+# The AC enumerates the reopen `none` no-op cases as "(target already >= 1,
+# transient 5h fill, missing weekly anchor)". The under-pace and missing-anchor
+# cases are covered above; this covers the transient-5h-fill case: the weekly
+# gate is OPEN (used_weekly under pace) but count mode returns 0 because used_5h
+# is at/over ceil5. Since hw>0 the pace curve is NOT the blocker, so reopen must
+# report `none` (the 0 comes from the 5h fill, which drains on its own and is
+# handled elsewhere — not a pace-curve pause with a curve crossing).
+echo "Test: #2043 --reopen-at transient 5h fill (gate open, count 0) → none"
+tw_setup
+export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
+r=$(tw_resets_for_x 0.5)
+# used_weekly=20 → under pace at x=0.5 (W=65.95, hw=45.95>0 → gate open).
+# used_5h=85 >= ceil5=80 → count mode N=0. reopen: hw>0 → none.
+write_rl "reopen5h.json" 20 "$r" 85 99999999
+cnt=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "transient 5h fill: count mode N=0 (gate open, used_5h>=ceil5)" "0" "$cnt"
+rop=$("$TMPDIR_TEST/scripts/dispatch-target-workers" --reopen-at 2>/dev/null)
+assert_eq "transient 5h fill: --reopen-at → none (pace not the blocker)" "none" "$rop"
 tw_teardown
 
 # ============================================================================
@@ -33614,115 +33668,6 @@ assert_eq "#1490 classify: testing issue (103) helper_cat is 'testing infrastruc
 teardown
 
 # ============================================================================
-# dispatch-sync-merge-queue (#1480)
-# ============================================================================
-echo "=== dispatch-sync-merge-queue ==="
-
-# A check-run rollup entry classifies `passing` only when status==COMPLETED AND
-# conclusion in {SUCCESS,NEUTRAL,SKIPPED}; a bare {"conclusion":"SUCCESS"} (no
-# status) is `pending` and would be skipped. So the mergeable fixtures pin both.
-MERGE_PR_ONE='[{"number":42,"title":"Add widget","url":"https://github.com/natb1/commons.systems/pull/42","isDraft":false,"mergeable":"MERGEABLE","statusCheckRollup":[{"status":"COMPLETED","conclusion":"SUCCESS"}]}]'
-
-# (a) mergeable PR with no tracking issue → create
-echo "Test: mergeable PR, no tracking issue → create"
-setup
-printf '%s\n' "$MERGE_PR_ONE" > "$STUB_DIR/merge-pr-list.json"
-"$TMPDIR_TEST/dispatch-sync-merge-queue" >/dev/null 2>&1
-assert_eq "create: issue-create log present" "present" "$(log_state gh-merge-issue-create.log)"
-TOTAL=$((TOTAL + 1))
-if grep -q -- '--title' "$STUB_DIR/gh-merge-issue-create.log" \
-   && grep -q 'merge-pr:42' "$STUB_DIR/gh-merge-issue-create.log" \
-   && grep -q 'oh-merge-pr' "$STUB_DIR/gh-merge-issue-create.log"; then
-  PASS=$((PASS + 1)); echo "  PASS: create args carry --title, merge-pr:42 label, and oh-merge-pr marker"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: create args carry --title, merge-pr:42 label, and oh-merge-pr marker"
-fi
-teardown
-
-# (b) existing tracking issue with matching title → idempotent (no create, no edit)
-echo "Test: existing tracking issue, matching title → no create, no edit"
-setup
-printf '%s\n' "$MERGE_PR_ONE" > "$STUB_DIR/merge-pr-list.json"
-printf '[{"number":77,"title":"Add widget"}]\n' > "$STUB_DIR/oh-issue-merge-pr-42.json"
-"$TMPDIR_TEST/dispatch-sync-merge-queue" >/dev/null 2>&1
-assert_eq "idempotent: no create" "absent" "$(log_state gh-merge-issue-create.log)"
-assert_eq "idempotent: no edit" "absent" "$(log_state gh-merge-issue-edit.log)"
-teardown
-
-# (c) existing tracking issue with stale title → update (title + refreshed marker)
-echo "Test: existing tracking issue, stale title → update"
-setup
-printf '%s\n' "$MERGE_PR_ONE" > "$STUB_DIR/merge-pr-list.json"
-printf '[{"number":77,"title":"Old stale title"}]\n' > "$STUB_DIR/oh-issue-merge-pr-42.json"
-"$TMPDIR_TEST/dispatch-sync-merge-queue" >/dev/null 2>&1
-assert_eq "update: issue-edit log present" "present" "$(log_state gh-merge-issue-edit.log)"
-TOTAL=$((TOTAL + 1))
-if grep -q 'Add widget' "$STUB_DIR/gh-merge-issue-edit.log" \
-   && grep -q 'oh-merge-pr' "$STUB_DIR/gh-merge-issue-edit.log"; then
-  PASS=$((PASS + 1)); echo "  PASS: edit args carry the new title and the refreshed oh-merge-pr marker"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: edit args carry the new title and the refreshed oh-merge-pr marker"
-fi
-assert_eq "update: no spurious create" "absent" "$(log_state gh-merge-issue-create.log)"
-teardown
-
-# (d) PR no longer mergeable but tracking issue still open → close
-echo "Test: PR no longer mergeable, tracking issue open → close"
-setup
-printf '[]\n' > "$STUB_DIR/merge-pr-list.json"
-printf '[{"number":88,"labels":[{"name":"merge-pr:42"}]}]\n' > "$STUB_DIR/oh-issue-enum.json"
-"$TMPDIR_TEST/dispatch-sync-merge-queue" >/dev/null 2>&1
-assert_eq "close: issue-close log present" "present" "$(log_state gh-merge-issue-close.log)"
-TOTAL=$((TOTAL + 1))
-if grep -q 'issue close 88' "$STUB_DIR/gh-merge-issue-close.log"; then
-  PASS=$((PASS + 1)); echo "  PASS: closed the tracking issue (#88) for the no-longer-mergeable PR"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: closed the tracking issue (#88) for the no-longer-mergeable PR"
-fi
-teardown
-
-# (e) pr_list_open fails (truncation guard) → bail before the close pass
-# Safety-critical: if the mergeable set cannot be computed, the script must exit
-# non-zero immediately and run NO close pass — otherwise a stale tracking issue
-# would be wrongly closed against an empty/unknown mergeable set. Force the
-# failure by pinning DISPATCH_PR_LIST_LIMIT to the fixture length (1): pr_list_open
-# sees len == limit, fires its loud truncation guard, and returns non-zero.
-echo "Test: pr_list_open fails (truncation) → bail, no close pass"
-setup
-printf '%s\n' "$MERGE_PR_ONE" > "$STUB_DIR/merge-pr-list.json"
-# A stale tracking issue that WOULD be closed if the close pass ran against an
-# empty mergeable set — so its survival proves the bail short-circuited it.
-printf '[{"number":88,"labels":[{"name":"merge-pr:42"}]}]\n' > "$STUB_DIR/oh-issue-enum.json"
-# `set -e` is in effect and this invocation exits non-zero by design, so capture
-# the code with an if/else rather than letting it abort the suite.
-if DISPATCH_PR_LIST_LIMIT=1 "$TMPDIR_TEST/dispatch-sync-merge-queue" >/dev/null 2>&1; then
-  rc=0
-else
-  rc=$?
-fi
-assert_eq "bail: script exits non-zero when the mergeable set cannot be computed" "1" "$rc"
-assert_eq "bail: close pass did not run (no gh issue close)" "absent" "$(log_state gh-merge-issue-close.log)"
-teardown
-
-# (f) OPEN_COUNT>1 (concurrent-tick duplicate) → close every issue beyond .[0]
-echo "Test: OPEN_COUNT>1 → close duplicates, keep .[0]"
-setup
-printf '%s\n' "$MERGE_PR_ONE" > "$STUB_DIR/merge-pr-list.json"
-printf '[{"number":77,"title":"Add widget"},{"number":78,"title":"Add widget"}]\n' > "$STUB_DIR/oh-issue-merge-pr-42.json"
-"$TMPDIR_TEST/dispatch-sync-merge-queue" >/dev/null 2>&1
-assert_eq "dup-close: issue-close log present" "present" "$(log_state gh-merge-issue-close.log)"
-TOTAL=$((TOTAL + 1))
-if grep -q 'issue close 78' "$STUB_DIR/gh-merge-issue-close.log" \
-   && ! grep -q 'issue close 77' "$STUB_DIR/gh-merge-issue-close.log"; then
-  PASS=$((PASS + 1)); echo "  PASS: closed duplicate #78, kept canonical #77"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: closed duplicate #78, kept canonical #77"
-fi
-assert_eq "dup-close: no spurious create" "absent" "$(log_state gh-merge-issue-create.log)"
-assert_eq "dup-close: no edit (.[0] title matches)" "absent" "$(log_state gh-merge-issue-edit.log)"
-teardown
-
-# ============================================================================
 # dispatch-retriage-orphaned-followups (#1812)
 # ============================================================================
 echo "=== dispatch-retriage-orphaned-followups (#1812) ==="
@@ -34770,6 +34715,134 @@ assert_eq "resolve_dirty_apps: root-config fan-out marks all workspaces" \
 rm -rf "$TMPDIR_TEST"
 TMPDIR_TEST=""
 
+# dispatch-review-erosion tests
+# ============================================================================
+#
+# Tests for the net-erosion structural-decay finder (#2064). These are the
+# DETERMINISTIC, NETWORK-FREE portions:
+#
+# E1. Language-scope filter: docs-only and bash-only stdin yield {"findings":[]}
+#     (exit 0). Drives the real dispatch-review-erosion entrypoint end-to-end.
+#     Requires a no-op eslint stub at node_modules/.bin/eslint in cwd — eslint is
+#     never invoked (filter exits before the metric runs), but the guard check
+#     [[ ! -x "$ESLINT_BIN" ]] would fail before reaching the filter otherwise.
+#
+# E2. Complexity net-delta via sidecar: drives dispatch-review-erosion-diff.mjs
+#     directly with synthetic eslint and jscpd JSON, sidestepping the real
+#     eslint, jscpd (network), and git. The sidecar is the clean unit boundary
+#     for asserting Source="erosion" + path:line Location when complexity rises.
+
+echo ""
+echo "=== dispatch-review-erosion ==="
+
+# E1a. docs-only stdin → {"findings":[]} (language-scope filter exits early).
+#
+#     Files are created on disk so the HEAD-existence filter (which also exits
+#     early) cannot silently backstop the language-scope filter test. With the
+#     files present, only the language filter can explain the early exit: if it
+#     were removed, head_paths would be non-empty → the script would reach
+#     run_jscpd → fail loudly (no report produced). Creating them on disk is
+#     the cheapest way to give the assertion real teeth.
+echo "Test: dispatch-review-erosion — docs-only stdin yields empty findings"
+TMPDIR_TEST=$(mktemp -d)
+mkdir -p "$TMPDIR_TEST/node_modules/.bin" "$TMPDIR_TEST/docs"
+cat > "$TMPDIR_TEST/node_modules/.bin/eslint" <<'ESTUB'
+#!/usr/bin/env bash
+# No-op stub: never invoked on a docs-only file list (language filter exits first).
+exit 0
+ESTUB
+chmod +x "$TMPDIR_TEST/node_modules/.bin/eslint"
+# Create the files on disk so HEAD-existence can't backstop the language filter.
+touch "$TMPDIR_TEST/README.md" "$TMPDIR_TEST/docs/guide.md"
+result=$(cd "$TMPDIR_TEST" && printf '%s\n' 'README.md' 'docs/guide.md' \
+  | "$SCRIPT_DIR/dispatch-review-erosion" dummybase)
+assert_eq "docs-only stdin → empty findings" '{"findings":[]}' "$result"
+rm -rf "$TMPDIR_TEST"
+TMPDIR_TEST=""
+
+# E1b. bash-only stdin → {"findings":[]} (same filter path, different extension set).
+#     Same disk-creation convention as E1a.
+echo "Test: dispatch-review-erosion — bash-only stdin yields empty findings"
+TMPDIR_TEST=$(mktemp -d)
+mkdir -p "$TMPDIR_TEST/node_modules/.bin" "$TMPDIR_TEST/.claude/scripts"
+cat > "$TMPDIR_TEST/node_modules/.bin/eslint" <<'ESTUB'
+#!/usr/bin/env bash
+exit 0
+ESTUB
+chmod +x "$TMPDIR_TEST/node_modules/.bin/eslint"
+# Create the files on disk so HEAD-existence can't backstop the language filter.
+touch "$TMPDIR_TEST/.claude/scripts/dispatch-review-erosion" \
+      "$TMPDIR_TEST/.claude/scripts/lib.sh"
+result=$(cd "$TMPDIR_TEST" && printf '%s\n' \
+  '.claude/scripts/dispatch-review-erosion' \
+  '.claude/scripts/lib.sh' \
+  | "$SCRIPT_DIR/dispatch-review-erosion" dummybase)
+assert_eq "bash-only stdin → empty findings" '{"findings":[]}' "$result"
+rm -rf "$TMPDIR_TEST"
+TMPDIR_TEST=""
+
+# E2. Sidecar complexity net-delta: HEAD max rose → finding with Source="erosion"
+#     and a valid path:line Location.
+#
+#     The sidecar reads all four artifact paths passed on the CLI; it does NOT
+#     invoke eslint, jscpd, or git. Synthetic JSON is enough to drive the full
+#     net-delta logic. Key alignment constraint (relpath normalization):
+#       HEAD   filePath = <cwd>/foo.ts          → strips cwd prefix → "foo.ts"
+#       BASE   filePath = <cwd>/baseline/foo.ts → strips cwd/baseline/ → "foo.ts"
+#     Both keys become "foo.ts" so baseCx.get(rel) hits and the diff fires.
+echo "Test: dispatch-review-erosion-diff.mjs — complexity net-increase yields Source=erosion finding"
+TMPDIR_TEST=$(mktemp -d)
+# eslint HEAD report: foo.ts, one function at complexity 5, worst-function line 3.
+cat > "$TMPDIR_TEST/head-eslint.json" <<EOF
+[{"filePath":"$TMPDIR_TEST/foo.ts","messages":[{"ruleId":"complexity","message":"Function 'doThing' has a complexity of 5. Maximum allowed is 0.","line":3}]}]
+EOF
+# eslint BASE report: same file but lower complexity (2) pre-PR.
+mkdir -p "$TMPDIR_TEST/baseline"
+cat > "$TMPDIR_TEST/base-eslint.json" <<EOF
+[{"filePath":"$TMPDIR_TEST/baseline/foo.ts","messages":[{"ruleId":"complexity","message":"Function 'doThing' has a complexity of 2. Maximum allowed is 0.","line":1}]}]
+EOF
+# jscpd HEAD report: zero clones (no duplication finding expected here).
+cat > "$TMPDIR_TEST/head-jscpd.json" <<'EOF'
+{"statistics":{"total":{"clones":0,"duplicatedLines":0,"percentage":0}}}
+EOF
+sidecar_out=$(cd "$TMPDIR_TEST" && node "$SCRIPT_DIR/dispatch-review-erosion-diff.mjs" \
+  --eslint-head head-eslint.json \
+  --eslint-base base-eslint.json \
+  --jscpd-head head-jscpd.json \
+  --baseline-dir baseline)
+sidecar_source=$(jq -r '.findings[0].Source // "none"' <<<"$sidecar_out")
+sidecar_location=$(jq -r '.findings[0].Location // "none"' <<<"$sidecar_out")
+sidecar_confidence=$(jq -r '.findings[0].Confidence // "none"' <<<"$sidecar_out")
+assert_eq "sidecar complexity finding Source=erosion" "erosion" "$sidecar_source"
+assert_eq "sidecar complexity finding Location=foo.ts:3" "foo.ts:3" "$sidecar_location"
+assert_eq "sidecar complexity finding Confidence=high (max rose)" "high" "$sidecar_confidence"
+rm -rf "$TMPDIR_TEST"
+TMPDIR_TEST=""
+
+# E3. Sidecar no net-increase → {"findings":[]}.
+#     HEAD and BASE have identical complexity; the diff should produce no finding.
+echo "Test: dispatch-review-erosion-diff.mjs — no net-increase yields empty findings"
+TMPDIR_TEST=$(mktemp -d)
+cat > "$TMPDIR_TEST/head-eslint.json" <<EOF
+[{"filePath":"$TMPDIR_TEST/bar.ts","messages":[{"ruleId":"complexity","message":"Function 'x' has a complexity of 3. Maximum allowed is 0.","line":2}]}]
+EOF
+mkdir -p "$TMPDIR_TEST/baseline"
+cat > "$TMPDIR_TEST/base-eslint.json" <<EOF
+[{"filePath":"$TMPDIR_TEST/baseline/bar.ts","messages":[{"ruleId":"complexity","message":"Function 'x' has a complexity of 3. Maximum allowed is 0.","line":2}]}]
+EOF
+cat > "$TMPDIR_TEST/head-jscpd.json" <<'EOF'
+{"statistics":{"total":{"clones":0,"duplicatedLines":0,"percentage":0}}}
+EOF
+sidecar_out=$(cd "$TMPDIR_TEST" && node "$SCRIPT_DIR/dispatch-review-erosion-diff.mjs" \
+  --eslint-head head-eslint.json \
+  --eslint-base base-eslint.json \
+  --jscpd-head head-jscpd.json \
+  --baseline-dir baseline)
+sidecar_count=$(jq '.findings | length' <<<"$sidecar_out")
+assert_eq "sidecar no net-increase → zero findings" "0" "$sidecar_count"
+rm -rf "$TMPDIR_TEST"
+TMPDIR_TEST=""
+
 # ============================================================================
 # dispatch-run-verification tests (#2024)
 # ============================================================================
@@ -34858,6 +34931,28 @@ if "$RUN_VERIFY" --help >/dev/null 2>&1; then rc=0; else rc=$?; fi
 assert_eq "dispatch-run-verification: --help exits 0" "0" "$rc"
 if "$RUN_VERIFY" bogus </dev/null >/dev/null 2>&1; then rc=0; else rc=$?; fi
 assert_eq "dispatch-run-verification: unexpected argument exits 2" "2" "$rc"
+
+# Empty stdin guard (exit 4): truly empty input must be rejected as a hard
+# error rather than silently emitting the exit-3 "proceed unchanged" signal,
+# which would mask an upstream dispatch-read-plan failure.
+echo "Test: dispatch-run-verification -- empty stdin exits 4 with diagnostic"
+if out=$("$RUN_VERIFY" </dev/null 2>&1); then rc=0; else rc=$?; fi
+assert_eq "dispatch-run-verification: empty stdin exits 4" "4" "$rc"
+case "$out" in
+  *"empty plan input"*) found=yes ;;
+  *) found=no ;;
+esac
+assert_eq "dispatch-run-verification: empty stdin diagnostic contains 'empty plan input'" "yes" "$found"
+
+# Whitespace-only stdin is also empty: same exit 4.
+echo "Test: dispatch-run-verification -- whitespace-only stdin exits 4"
+ws=$'  \n\t\n'
+if out=$(printf '%s' "$ws" | "$RUN_VERIFY" 2>&1); then rc=0; else rc=$?; fi
+assert_eq "dispatch-run-verification: whitespace-only stdin exits 4" "4" "$rc"
+
+# Preservation guard (criterion 2): the exit-3 cases above confirm a
+# no-verify-block plan (prose/bash-only Verification section, or no section)
+# still exits 3. No duplication needed here.
 
 # ============================================================================
 # summary

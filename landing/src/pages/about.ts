@@ -28,8 +28,3 @@ export function renderAboutPanelHtml(): string {
     </section>
   `;
 }
-
-export function mountAboutPanel(panel: HTMLElement): void {
-  const fragment = document.createRange().createContextualFragment(renderAboutPanelHtml());
-  panel.replaceChildren(fragment);
-}

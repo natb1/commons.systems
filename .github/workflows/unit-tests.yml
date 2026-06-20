@@ -111,6 +111,8 @@ jobs:
 
   dead-code:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
@@ -154,6 +156,8 @@ jobs:
         run: .claude/hooks/test-worktree-remove.sh
       - name: Run statusline hook tests
         run: .claude/hooks/test-statusline.sh
+      - name: Run type-safety escape-hatch sensor tests
+        run: .github/scripts/test-check-type-safety-escapes.sh
       - name: Run test-integrity script tests
         run: .github/scripts/test-check-test-integrity.sh
 
@@ -189,6 +193,15 @@ jobs:
       - name: Verify nix playwright-driver chromium matches npm @playwright/test
         if: steps.changes.outputs.nix == 'true' || steps.changes.outputs.playwright == 'true'
         run: nix develop --command .github/scripts/check-playwright-version-sync.sh
+
+  type-safety-sensor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          fetch-depth: 0
+      - name: Flag net-new type-safety escape hatches
+        run: .github/scripts/check-type-safety-escapes.sh
 
   go-tests:
     runs-on: ubuntu-latest
