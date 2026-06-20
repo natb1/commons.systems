@@ -78,3 +78,12 @@ jobs:
       - name: Cleanup credentials
         if: always()
         run: .github/scripts/firebase-auth-cleanup.sh
+
+  type-safety-sensor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          fetch-depth: 0
+      - name: Flag net-new type-safety escape hatches
+        run: .github/scripts/check-type-safety-escapes.sh
