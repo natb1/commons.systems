@@ -5,11 +5,19 @@
 // supplies its differences (build-time content, site config, firebase context)
 // via CreateBlogAppConfig and never imports a `virtual:*` module here — that
 // data arrives only through config.
+//
+// Rendering is React-owned. Three hydrateRoot roots drive pure components over
+// the prerendered DOM: the nav (BlogNav), the body (#app — HomeRegion /
+// AdminRegion / extra-route HTML), and the info panel (InfoPanelRegion). The
+// history router stays as the navigation ENGINE — its global click handler
+// intercepts the plain <a> tags the frozen components emit — but every route's
+// render returns null so the router never writes to #app; React does, through
+// the appRoot. All rendering and per-navigation side-effects live in dispatch().
 import type { User } from "firebase/auth";
 import type { Firestore } from "firebase/firestore";
 
-import { createElement } from "react";
-import { createRoot } from "react-dom/client";
+import { createElement, Fragment } from "react";
+import { hydrateRoot } from "react-dom/client";
 
 import type { Namespace } from "@commons-systems/firestoreutil/namespace";
 import { isInGroup, type GroupId } from "@commons-systems/authutil/groups";
@@ -19,18 +27,19 @@ import { classifyError } from "@commons-systems/errorutil/classify";
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
 import { logError } from "@commons-systems/errorutil/log";
 import { deferAppCheckInit } from "@commons-systems/firebaseutil/defer-appcheck";
-import { initScrollIndicator } from "@commons-systems/components/scroll-indicator";
 
 import { initPanelToggle } from "@commons-systems/components/panel-toggle";
 
 import { BlogNav } from "./components/BlogNav.tsx";
+import { HomeRegion } from "./pages/HomeRegion.tsx";
+import { AdminRegion } from "./pages/AdminRegion.tsx";
+import { InfoPanelRegion } from "./components/InfoPanelRegion.tsx";
 import { updateOgMeta, type SiteDefaults } from "./og-meta.ts";
 import { updateCanonical } from "./canonical.ts";
 import { createFetchPost } from "./github.ts";
 import { getPosts, type PostMeta } from "./firestore.ts";
-import { renderHomeHtml, hydrateHome, type PostContent } from "./pages/home.ts";
-import { renderAdmin } from "./pages/admin.ts";
-import { renderInfoPanel, hydrateInfoPanel, type LinkSection } from "./components/info-panel.ts";
+import type { PostContent } from "./marked-config.ts";
+import type { LinkSection } from "./components/info-panel.ts";
 import type { BlogRollEntry, BlogRollStrategy, LatestPost } from "./blog-roll/types.ts";
 
 export interface CreateBlogAppConfig {
@@ -61,6 +70,8 @@ export interface CreateBlogAppConfig {
     ) => (() => void) | PromiseLike<(() => void) | void>;
   };
   adminGroupId: GroupId;
+  /** Per-route info-panel content override (raw, pre-sanitized HTML). When it returns a string for the current path, InfoPanelRegion renders it as the panel (via aboutContent) instead of the standard blogroll panel; returning undefined yields the standard panel. Landing uses this for /about. */
+  infoPanelContentForPath?: (path: string) => string | undefined;
   // optional hooks (consumed in units 2/3)
   extraRoutes?: Route[];
   onHomeAfterRender?: (slug: string | undefined) => void;
@@ -72,12 +83,14 @@ export interface CreateBlogAppConfig {
 export interface BlogAppHandle {
   destroy(): void;
   /**
-   * Defeat updateInfoPanel's `cachedPosts === lastRenderedPosts` early-return by
-   * clearing lastRenderedPosts, so the next Home render rebuilds the panel from
-   * scratch. A route that clobbers the info panel directly — e.g. landing's
-   * /about via mountAboutPanel — must call this in its afterRender; otherwise,
-   * with cachedPosts unchanged, the returning Home render would skip the rebuild
-   * and leave the about-panel content stale.
+   * Force the React info-panel root to REMOUNT and re-fetch the blogroll. A
+   * route that clobbers the info panel directly — e.g. landing's /about via an
+   * aboutContent panel — may call this in its afterRender so the returning Home
+   * navigation restores the standard panel AND re-runs the blogroll fetch.
+   * InfoPanelRegion's blogroll-hydration effect is gated on referentially stable
+   * deps (blogRoll / strategies / aboutContent), so a bare re-render would
+   * reconcile without re-fetching; this bumps the React `key` to force a remount,
+   * which re-runs the fetch effect from scratch.
    */
   forceInfoPanelRefresh(): void;
 }
@@ -85,9 +98,9 @@ export interface BlogAppHandle {
 export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
   const navMount = document.getElementById("nav");
   if (!navMount) throw new Error("#nav element not found");
-  const navRoot = createRoot(navMount);
-  const app = document.getElementById("app");
-  if (!app) throw new Error("#app element not found");
+  const appEl = document.getElementById("app");
+  if (!appEl) throw new Error("#app element not found");
+  const app: HTMLElement = appEl;
   const infoPanel = document.getElementById("info-panel");
   if (!infoPanel) throw new Error("#info-panel element not found");
 
@@ -111,59 +124,66 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
   // Teardown list: destroy() unwinds everything in one place. Declared before
   // the router/auth wiring below so those can register their teardowns.
   const teardowns: Array<() => void> = [];
-  teardowns.push(() => navRoot.unmount());
 
+  // Driver-owned state. NO useState anywhere — the Region components are pure
+  // and prop-driven; the driver holds the shared state and re-renders the roots
+  // when it changes. cachedPosts starts as the build-time metadata so the
+  // initial hydrateRoot matches the prerendered (published-only) markup.
   let currentUser: User | null = null;
-  let cachedPosts: PostMeta[] = [];
+  // Tracks the path of the current navigation so panelElement() (used by both the
+  // initial hydrateRoot and renderPanel()) can compute the per-route info-panel
+  // override; initialized from the entry path so a deep entry like /about reflects
+  // its panel content from the first render.
+  let currentPath = parsePath().path;
+  // The slug for a deep /post/x entry, derived from the same entry path as
+  // currentPath. Used to hydrate #app with the slug-aware home element so the
+  // hydrated tree already carries the right scrollSlug (HomeRegion's scroll
+  // effect then fires on a deep /post/x entry without needing a re-render).
+  const initialSlug = currentPath.startsWith("/post/") ? currentPath.slice(6) : undefined;
+  let cachedPosts: PostMeta[] = config.buildTimeMetadata;
   let lastSkippedCount = 0;
-  let lastRenderedPosts: PostMeta[] | undefined;
+  let postsErrorMsg: string | undefined;
+  // Bumped by forceInfoPanelRefresh() / the app-check rehydrate callback to force
+  // a remount of InfoPanelRegion (re-running its blogroll-fetch effect). Normal
+  // renderPanel() calls keep the same key so they reconcile cheaply.
+  let panelKey = 0;
   const boundFetchPost = createFetchPost(config.fetchPostSource);
 
-  async function loadPosts(): Promise<string> {
-    if (currentUser === null) {
-      cachedPosts = config.buildTimeMetadata;
-      lastSkippedCount = 0;
-      return renderHomeHtml(cachedPosts, "/post/", config.buildTimeContent);
+  // The home/post body. Renders the posts-error message when loadPosts() failed
+  // (preserving the legacy `#posts-error` UX), otherwise the HomeRegion feed.
+  function homeElement(slug?: string) {
+    if (postsErrorMsg !== undefined) {
+      return createElement(
+        Fragment,
+        null,
+        createElement("h2", null, "Home"),
+        createElement("p", { id: "posts-error" }, postsErrorMsg),
+      );
     }
-
-    try {
-      const result = await getPosts(config.firebase.db, config.firebase.namespace, currentUser);
-      cachedPosts = result.posts;
-      lastSkippedCount = result.skippedCount;
-      return renderHomeHtml(cachedPosts, "/post/", config.buildTimeContent);
-    } catch (error) {
-      const kind = classifyError(error);
-      const fallbackMsg = "Could not load posts. Try refreshing the page.";
-      let msg: string;
-      if (kind === "programmer") {
-        deferProgrammerError(error);
-        msg = fallbackMsg;
-      } else {
-        logError(error, { operation: "load-posts" });
-        msg = kind === "permission-denied" ? "Permission denied loading posts." : fallbackMsg;
-      }
-      return `
-    <h2>Home</h2>
-    <p id="posts-error">${msg}</p>
-  `;
-    }
+    return createElement(HomeRegion, {
+      posts: cachedPosts,
+      contentMap: config.buildTimeContent,
+      postLinkPrefix: "/post/",
+      fetchPost: boundFetchPost,
+      scrollSlug: slug,
+    });
   }
 
-  // Consumable DOM marker for once-only prerendered-panel preservation. The
-  // pre-render script (prerender.ts) injects identical panel markup with
-  // populated children but no data-prerendered attribute, so set the marker
-  // here from the live DOM. Consuming it exactly once in updateInfoPanel
-  // reproduces fellspiral's isFirstPanelRender semantics as a render-time DOM
-  // check, and fixes landing's latent CLS for free.
-  if (infoPanel.children.length > 0) infoPanel.dataset.prerendered = "true";
+  function navElement(path: string) {
+    return createElement(BlogNav, {
+      links: config.navLinks,
+      showHomeLink: config.showHomeLink,
+      showAuth: path === "/admin",
+      user: currentUser,
+      onSignIn: () => void config.firebase.signIn(),
+      onSignOut: () => void config.firebase.signOut(),
+    });
+  }
 
-  let teardownScroll: (() => void) | undefined;
-  const updateInfoPanel = (): void => {
-    if (cachedPosts === lastRenderedPosts) return;
-    if (infoPanel.dataset.prerendered) {
-      delete infoPanel.dataset.prerendered; // consume exactly once
-    } else {
-      infoPanel.innerHTML = renderInfoPanel({
+  function panelElement() {
+    return createElement(InfoPanelRegion, {
+      key: panelKey,
+      data: {
         linkSections: config.infoPanelLinkSections,
         topPosts: cachedPosts,
         blogRoll: config.blogRollEntries,
@@ -171,103 +191,245 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
         opmlUrl: "/blogroll.opml",
         postLinkPrefix: "/post/",
         buildTimeFeeds: config.buildTimeFeeds, // undefined for landing — harmless optional
-      });
-    }
-    hydrateInfoPanel(infoPanel, config.blogRollEntries, config.strategies);
-    if (config.useScrollIndicator) {
-      teardownScroll?.();
-      teardownScroll = initScrollIndicator(infoPanel);
-    }
-    lastRenderedPosts = cachedPosts;
-  };
-  teardowns.push(() => teardownScroll?.());
+      },
+      strategies: config.strategies,
+      useScrollIndicator: config.useScrollIndicator,
+      aboutContent: config.infoPanelContentForPath?.(currentPath),
+    });
+  }
 
-  const homeRoute: Route = {
-    path: /^\/(?:post\/.*)?$/,
-    render: () => {
-      // Preserve the live prerendered home DOM only while signed out: the
-      // prerendered #posts shows the published (build-time) posts, matching what
-      // loadPosts() produces for an anonymous viewer, so skipping the rebuild
-      // avoids needless teardown/CLS. It is a render-time live-DOM check, not a
-      // one-shot flag, so a non-home entry route (e.g. /admin) that already
-      // replaced #posts does not leave stale markup on a later Home navigation
-      // (#1285). After sign-in we MUST run loadPosts() even though #posts is
-      // live, so the admin's draft posts replace the published-only prerendered
-      // markup (landing/e2e/admin.spec.ts draft tests).
-      if (currentUser === null && app.querySelector("#posts")) {
-        cachedPosts = config.buildTimeMetadata;
-        lastSkippedCount = 0;
-        return null;
+  // Hydrate the three roots over the prerendered DOM (before creating the
+  // router, which dispatches synchronously on construction). #app is hydrated
+  // with the SLUG-AWARE home element homeElement(initialSlug): per prerender.ts
+  // every page embeds the full posts feed, so the home element is the right
+  // hydration target for / and /post/*; passing initialSlug means HomeRegion's
+  // scroll effect fires on a deep /post/x entry directly from the hydrated tree.
+  // Because the first dispatch then sees slug === initialSlug, it SKIPS the
+  // redundant appRoot.render (see dispatch's isHome branch) — a root.render()
+  // right after hydrateRoot can make React abandon hydration and client-render,
+  // causing CLS on the SEO surface.
+  //
+  // A deep entry to a SYNC extraRoute (e.g. landing's /about) hydrates #app with
+  // that route's prerendered body, wrapped in a <div> to byte-match both
+  // prerenderStaticPage's injected body and the dispatch extraRoute render below.
+  // Without this, #app would hydrate the home feed over the prerendered About
+  // body and the first dispatch's appRoot.render would fire mid-hydration,
+  // abandoning the prerendered DOM (#424) and shifting layout on the SEO surface.
+  // An ASYNC extraRoute render cannot feed a synchronous hydrate, so it falls
+  // back to homeElement (the prior behavior; that path keeps the immediate
+  // dispatch reconcile). panelElement() reads its aboutContent from
+  // infoPanelContentForPath(currentPath), so a deep /about entry hydrates the
+  // panel with the About content directly.
+  const entryExtraRoute = matchExtraRoute(currentPath);
+  const entryExtraHtml = entryExtraRoute?.render(currentPath);
+  const hydratedExtraRoute = typeof entryExtraHtml === "string";
+  const navRoot = hydrateRoot(navMount, navElement(parsePath().path));
+  const appRoot = hydrateRoot(
+    app,
+    typeof entryExtraHtml === "string"
+      ? createElement("div", { dangerouslySetInnerHTML: { __html: entryExtraHtml } })
+      : homeElement(initialSlug),
+  );
+  const panelRoot = hydrateRoot(infoPanel, panelElement());
+  teardowns.push(() => navRoot.unmount());
+  teardowns.push(() => appRoot.unmount());
+  teardowns.push(() => panelRoot.unmount());
+
+  const renderNav = (path: string): void => {
+    navRoot.render(navElement(path));
+  };
+  const renderPanel = (): void => {
+    panelRoot.render(panelElement());
+  };
+
+  // Load posts into the driver state (no longer returns HTML — React renders).
+  // Signed out: the build-time metadata. Signed in: firestore (draft-inclusive).
+  async function loadPosts(): Promise<void> {
+    if (currentUser === null) {
+      cachedPosts = config.buildTimeMetadata;
+      lastSkippedCount = 0;
+      postsErrorMsg = undefined;
+      return;
+    }
+
+    try {
+      const result = await getPosts(config.firebase.db, config.firebase.namespace, currentUser);
+      cachedPosts = result.posts;
+      lastSkippedCount = result.skippedCount;
+      postsErrorMsg = undefined;
+    } catch (error) {
+      const kind = classifyError(error);
+      const fallbackMsg = "Could not load posts. Try refreshing the page.";
+      if (kind === "programmer") {
+        deferProgrammerError(error);
+        postsErrorMsg = fallbackMsg;
+      } else {
+        logError(error, { operation: "load-posts" });
+        postsErrorMsg = kind === "permission-denied" ? "Permission denied loading posts." : fallbackMsg;
       }
-      return loadPosts();
-    },
-    afterRender: (outlet, path) => {
-      const slug = path.startsWith("/post/") ? path.slice(6) : undefined;
-      hydrateHome(outlet, cachedPosts, boundFetchPost, slug);
-      config.onHomeAfterRender?.(slug);
-      updateOgMeta(config.siteUrl, slug ? cachedPosts.find((p) => p.id === slug) : undefined, config.ogTitle, config.siteDefaults);
-      updateCanonical(config.siteUrl, slug);
-      updateInfoPanel();
-    },
-  };
+    }
+  }
 
-  const adminRoute: Route = {
-    path: "/admin",
-    render: async () => {
+  // Match the extra-route predicate createHistoryRouter's matchRoute uses: a
+  // string path matches by exact equality, a RegExp by `.test`.
+  function matchExtraRoute(path: string): Route | undefined {
+    return (config.extraRoutes ?? []).find((r) => {
+      if (typeof r.path === "string") return r.path === path;
+      r.path.lastIndex = 0;
+      return r.path.test(path);
+    });
+  }
+
+  // Single body-rendering + side-effect function. createHistoryRouter calls its
+  // onNavigate synchronously, before route matching, on every navigation; we do
+  // all React rendering and nav side-effects here, with a driver-level
+  // staleness guard for async branches.
+  let navSeq = 0;
+  let firstDispatch = true;
+  async function dispatch(path: string): Promise<void> {
+    currentPath = path;
+    const seq = ++navSeq;
+    const isFirstDispatch = firstDispatch;
+    firstDispatch = false;
+
+    // Per-nav side-effects (every navigation), matching the old updateNav +
+    // router-onNavigate behavior.
+    //
+    // On the very first dispatch, the three hydrateRoot calls above already
+    // rendered nav (navElement(parsePath().path)), app (homeElement(initialSlug)),
+    // and panel (panelElement() reading the entry path) for the entry path — the
+    // same output the first dispatch would re-render. Calling root.render() here
+    // would be redundant AND harmful: a root.render() mid-hydration can make React
+    // abandon the prerendered server DOM and client-render the whole root, producing
+    // a recoverable hydration error (#424) and CLS on the SEO surface. Skip all
+    // three root.render() calls on the first dispatch; hydrateRoot already committed
+    // the correct initial tree. Analytics and body-dataset side-effects still run
+    // unconditionally (see onNavigate / trackPageView below).
+    if (!isFirstDispatch) renderNav(path); // first dispatch: nav already hydrated for entry path
+    config.onNavigate?.(path); // landing sets document.body.dataset.route; fellspiral omits
+    config.firebase.trackPageView(path);
+    // Centralized panel render: one per navigation, so entering/leaving a route
+    // with an infoPanelContentForPath override (landing's /about) toggles
+    // aboutContent. The blogroll effect's stable deps mean a same-path home→home
+    // nav does NOT re-fetch; only an aboutContent toggle re-runs it.
+    if (!isFirstDispatch) renderPanel(); // first dispatch: panel already hydrated for entry path
+
+    const isHome = path === "/" || path.startsWith("/post/");
+    if (isHome) {
+      const slug = path.startsWith("/post/") ? path.slice(6) : undefined;
+      // First dispatch: #app is already hydrated with homeElement(initialSlug) —
+      // same as all three roots above, skip to avoid redundant root.render().
+      if (!isFirstDispatch) appRoot.render(homeElement(slug));
+      // SEO + home hooks (old homeRoute.afterRender).
+      config.onHomeAfterRender?.(slug);
+      updateOgMeta(
+        config.siteUrl,
+        slug ? cachedPosts.find((p) => p.id === slug) : undefined,
+        config.ogTitle,
+        config.siteDefaults,
+      );
+      updateCanonical(config.siteUrl, slug);
+      return;
+    }
+
+    if (path === "/admin") {
       try {
-        const admin = await isInGroup(config.firebase.db, config.firebase.namespace, currentUser, config.adminGroupId);
-        return renderAdmin(currentUser, admin, lastSkippedCount);
+        const admin = await isInGroup(
+          config.firebase.db,
+          config.firebase.namespace,
+          currentUser,
+          config.adminGroupId,
+        );
+        if (seq === navSeq) {
+          appRoot.render(
+            createElement(AdminRegion, {
+              user: currentUser,
+              isAdmin: admin,
+              skippedCount: lastSkippedCount,
+            }),
+          );
+        }
       } catch (error) {
         if (!deferProgrammerError(error)) logError(error, { operation: "admin-group-check" });
-        return `<h2>Admin</h2><p>Could not verify admin access. Try refreshing the page.</p>`;
+        if (seq === navSeq) {
+          appRoot.render(
+            createElement(
+              Fragment,
+              null,
+              createElement("h2", null, "Admin"),
+              createElement("p", null, "Could not verify admin access. Try refreshing the page."),
+            ),
+          );
+        }
       }
-    },
-  };
+      return;
+    }
 
-  function renderNav(path: string): void {
-    navRoot.render(
-      createElement(BlogNav, {
-        links: config.navLinks,
-        showHomeLink: config.showHomeLink,
-        showAuth: path === "/admin",
-        user: currentUser,
-        onSignIn: () => void config.firebase.signIn(),
-        onSignOut: () => void config.firebase.signOut(),
-      }),
-    );
+    const extra = matchExtraRoute(path);
+    if (extra) {
+      // First dispatch after #app was hydrated with this sync extraRoute's body:
+      // the prerendered DOM already matches, so skip the appRoot.render that would
+      // fire mid-hydration and abandon it (#424). Still run afterRender for its
+      // SEO/meta side-effects. SPA navigations (not first dispatch) render normally.
+      if (isFirstDispatch && hydratedExtraRoute) {
+        queueMicrotask(() => {
+          if (seq === navSeq) extra.afterRender?.(app, path);
+        });
+        return;
+      }
+      try {
+        const html = await extra.render(path);
+        if (seq === navSeq) {
+          appRoot.render(createElement("div", { dangerouslySetInnerHTML: { __html: html ?? "" } }));
+          // Run afterRender after React commits the body.
+          queueMicrotask(() => {
+            if (seq === navSeq) extra.afterRender?.(app, path);
+          });
+        }
+      } catch (error) {
+        if (!deferProgrammerError(error)) logError(error, { operation: "router-render" });
+      }
+      return;
+    }
+
+    // No match — createHistoryRouter falls back to route[0] (the home regex),
+    // so treat an unmatched path as home for parity.
+    appRoot.render(homeElement());
   }
 
-  function updateNav(path: string): void {
-    renderNav(path);
-    config.onNavigate?.(path); // landing sets document.body.dataset.route; fellspiral omits
-  }
-
-  updateNav(parsePath().path);
   const router = createHistoryRouter(
     app,
-    [homeRoute, ...(config.extraRoutes ?? []), adminRoute],
+    [
+      { path: /^\/(?:post\/.*)?$/, render: () => null },
+      ...(config.extraRoutes ?? []).map((r) => ({ path: r.path, render: () => null })),
+      { path: "/admin", render: () => null },
+    ],
     {
       onNavigate: ({ path }) => {
-        updateNav(path);
-        config.firebase.trackPageView(path);
+        void dispatch(path);
       },
     },
   );
   teardowns.push(() => router.destroy());
 
-  // router.navigate() is fire-and-forget — updateInfoPanel() below may see stale
-  // cachedPosts until the router's async render cycle completes and afterRender
-  // calls updateInfoPanel() again with fresh data.
   async function refreshAfterAuthChange(): Promise<void> {
     const { path } = parsePath();
-    updateNav(path);
-    router.navigate();
+    currentPath = path;
+    renderNav(path);
+    if (currentUser !== null) {
+      await loadPosts(); // sign-in: fetch firestore posts (incl. drafts)
+    } else {
+      cachedPosts = config.buildTimeMetadata;
+      lastSkippedCount = 0;
+      postsErrorMsg = undefined;
+    }
+    router.navigate(); // re-dispatch → re-renders body (home shows new posts; admin re-checks)
     // router.navigate() only loads posts on the home route; re-fetch on /admin
     // so the info panel populates even when not on home.
     if (path === "/admin") {
       await loadPosts();
     }
-    updateInfoPanel();
+    renderPanel(); // re-render panel with new cachedPosts
   }
 
   // Capture the auth-state unsubscribe so destroy() can tear it down; without
@@ -310,10 +472,19 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
     });
   }
 
+  // Re-fetch the blogroll once app-check is ready. InfoPanelRegion's
+  // blogroll-hydration effect is gated on referentially stable deps (blogRoll /
+  // strategies / aboutContent), so a bare renderPanel() would NOT re-fetch. We
+  // bump panelKey before re-rendering to force a REMOUNT, re-running the fetch
+  // effect from scratch — restoring the old hydrateInfoPanel(...)-on-appcheck
+  // behavior so an app whose initial fetch was app-check-blocked recovers.
   deferAppCheckInit(
     config.firebase.initAppCheck,
     config.rehydrateOnAppCheck
-      ? () => hydrateInfoPanel(infoPanel, config.blogRollEntries, config.strategies)
+      ? () => {
+          panelKey++;
+          renderPanel();
+        }
       : undefined,
   );
 
@@ -330,10 +501,14 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
     destroy(): void {
       headerObserver.disconnect();
       document.removeEventListener("click", onDocumentClick);
+      // Teardowns: router.destroy(), the three root unmounts (InfoPanelRegion's
+      // scroll-indicator/blogroll effect cleanups run on panelRoot.unmount), and
+      // the auth unsubscribe (guarded by authDestroyed).
       for (const teardown of teardowns) teardown();
     },
     forceInfoPanelRefresh(): void {
-      lastRenderedPosts = undefined;
+      panelKey++;
+      renderPanel();
     },
   };
 }
