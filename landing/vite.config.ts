@@ -6,6 +6,7 @@ import { buildFeedXml } from "@commons-systems/blog/feed";
 import appSeed from "./seeds/firestore.js";
 
 export default createAppConfig({
+  esbuild: { jsx: "automatic", jsxImportSource: "react" },
   plugins: [
     blogPostsPlugin({ seed: appSeed, postDir: resolve(__dirname, "post") }),
     feedXmlPlugin(() =>
