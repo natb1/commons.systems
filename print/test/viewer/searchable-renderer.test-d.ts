@@ -34,7 +34,7 @@ const _base = {
   positionLabel: "",
   destroy: () => {},
 } satisfies ContentRenderer;
-const _search: SearchableRenderer["search"] = async () => [];
+const _search: SearchableRenderer["search"] = async () => ({ results: [], truncated: false });
 const _goToResult: SearchableRenderer["goToResult"] = async () => {};
 const _clearSearch: SearchableRenderer["clearSearch"] = () => {};
 

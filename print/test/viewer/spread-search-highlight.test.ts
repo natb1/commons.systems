@@ -153,7 +153,7 @@ describe("spread search highlight (real SpreadController + pdf renderer)", () =>
     await controller.render();
 
     // Search "dog" → single result on page 2.
-    const results = await renderer.search!("dog");
+    const { results } = await renderer.search!("dog"); // type-safety-ok: optional renderer API method, present in this test harness
     const page2Result = results.find((r) => r.label === "Page 2");
     expect(page2Result).toBeDefined();
 
@@ -180,9 +180,9 @@ describe("spread search highlight (real SpreadController + pdf renderer)", () =>
     controller.enter(renderer.currentPage);
     await controller.render();
 
-    const results = await renderer.search!("dog");
+    const { results } = await renderer.search!("dog"); // type-safety-ok: optional renderer API method, present in this test harness
     const page2Result = results.find((r) => r.label === "Page 2");
-    await renderer.goToResult!(page2Result!);
+    await renderer.goToResult!(page2Result!); // type-safety-ok: optional renderer API method, present in this test harness
     await controller.goToPage(renderer.currentPage);
 
     // Highlight is present on the spread.

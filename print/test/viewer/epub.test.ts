@@ -83,6 +83,7 @@ vi.mock("epubjs", () => ({
 }));
 
 import { createEpubRenderer } from "../../src/viewer/epub";
+import { MAX_SEARCH_RESULTS } from "../../src/viewer/types";
 
 describe("createEpubRenderer", () => {
   let container: HTMLElement;
@@ -680,7 +681,7 @@ describe("createEpubRenderer", () => {
       mockBook.navigation.get.mockImplementation((href: string) => ({ label: `Label ${href}` }));
 
       const renderer = await initRenderer();
-      const results = await renderer.search!("fox");
+      const { results } = await renderer.search!("fox"); // type-safety-ok: optional renderer API method, present in this test harness
 
       // load + find called on every section (matches across chapter boundaries).
       for (const s of [s0, s1, s2]) {
@@ -703,7 +704,8 @@ describe("createEpubRenderer", () => {
       mockBook.navigation.get.mockReturnValue({ label: "Chapter One" });
 
       const renderer = await initRenderer();
-      const [result] = await renderer.search!("brown");
+      const { results } = await renderer.search!("brown"); // type-safety-ok: optional renderer API method, present in this test harness
+      const [result] = results;
 
       // Whitespace collapsed to single spaces and trimmed.
       expect(result!.snippet).toBe("the quick brown fox jumps");
@@ -722,7 +724,8 @@ describe("createEpubRenderer", () => {
       mockBook.navigation.get.mockReturnValue({ label: "Padded" });
 
       const renderer = await initRenderer();
-      const [result] = await renderer.search!("fox");
+      const { results } = await renderer.search!("fox"); // type-safety-ok: optional renderer API method, present in this test harness
+      const [result] = results;
 
       expect(result!.snippet).toBe("...lots of text fox more text...");
       expect(result!.matchStart).toBe(result!.snippet.indexOf("fox"));
@@ -737,7 +740,8 @@ describe("createEpubRenderer", () => {
       mockBook.navigation.get.mockReturnValue({ label: "Caps" });
 
       const renderer = await initRenderer();
-      const [result] = await renderer.search!("fox");
+      const { results } = await renderer.search!("fox"); // type-safety-ok: optional renderer API method, present in this test harness
+      const [result] = results;
 
       expect(result!.snippet).toBe("A FOX in the henhouse");
       expect(result!.matchStart).toBe(2); // index of "FOX"
@@ -751,7 +755,7 @@ describe("createEpubRenderer", () => {
       mockBook.navigation.get.mockReturnValue(undefined);
 
       const renderer = await initRenderer();
-      const results = await renderer.search!("fox");
+      const { results } = await renderer.search!("fox"); // type-safety-ok: optional renderer API method, present in this test harness
 
       expect(results.map((r) => r.label)).toEqual(["Ch. 1", "Ch. 2"]);
     });
@@ -781,9 +785,9 @@ describe("createEpubRenderer", () => {
       mockSpine.spineItems = [s0];
 
       const renderer = await initRenderer();
-      const results = await renderer.search!("   ");
+      const response = await renderer.search!("   "); // type-safety-ok: optional renderer API method, present in this test harness
 
-      expect(results).toEqual([]);
+      expect(response).toEqual({ results: [], truncated: false });
       expect(s0.load).not.toHaveBeenCalled();
       expect(s0.find).not.toHaveBeenCalled();
       expect(mockRendition.annotations.highlight).not.toHaveBeenCalled();
@@ -799,7 +803,7 @@ describe("createEpubRenderer", () => {
                          : [{ cfi: "cfi-B", excerpt: "second fox" }],
         ),
         // Gate ONLY the first call's load so call-1 parks while call-2 finishes.
-        load: vi.fn() as ReturnType<typeof vi.fn>,
+        load: vi.fn(),
       };
       let releaseFirst!: () => void;
       const gate = new Promise<void>((resolve) => { releaseFirst = resolve; });
@@ -835,6 +839,42 @@ describe("createEpubRenderer", () => {
       expect(removeCfis).not.toContain("cfi-A");
     });
 
+    it("a superseded search loads no further sections past the supersede point", async () => {
+      const s0: FakeSection = {
+        href: "ch0.xhtml",
+        unload: vi.fn(),
+        find: vi.fn().mockReturnValue([{ cfi: "cfi-0", excerpt: "alpha fox" }]),
+        load: vi.fn(),
+      };
+      // Gate ONLY call-1's load (the first load); call-2's load resolves immediately.
+      let release!: () => void; // type-safety-ok: definite assignment assertion — Promise constructor assigns release before it is used
+      const gate = new Promise<void>((resolve) => { release = resolve; });
+      s0.load
+        .mockImplementationOnce(() => gate)
+        .mockImplementation(() => Promise.resolve());
+      const s1 = makeSection("ch1.xhtml", [{ cfi: "cfi-1", excerpt: "beta fox" }]);
+      mockSpine.spineItems = [s0, s1];
+      mockBook.navigation.get.mockReturnValue({ label: "X" });
+
+      const renderer = await initRenderer();
+
+      const p1 = renderer.search!("first"); // type-safety-ok: search is optional on ContentRenderer but always present after initRenderer()
+      // Flush a macrotask so call-1 parks INSIDE the loop on the gated s0.load().
+      await new Promise((r) => setTimeout(r));
+      const p2 = renderer.search!("second"); // type-safety-ok: search is optional on ContentRenderer but always present after initRenderer()
+      // call-2's s0.load is the second call → resolves immediately; call-2 runs to
+      // completion, loading both s0 and s1.
+      await p2;
+
+      release();
+      await p1;
+
+      // s1.load is a shared mock over the single spine, so 1 call = only call-2
+      // reached it (call-1 broke at the top of i = 1); 2 calls would mean the
+      // superseded call-1 also loaded s1 (the unfixed behavior).
+      expect(s1.load).toHaveBeenCalledTimes(1);
+    });
+
     it("skips a section whose load() rejects, surfaces via reportError, and returns matches from remaining sections", async () => {
       const s0 = makeSection("ch0.xhtml", [{ cfi: "cfi-0", excerpt: "alpha fox beta" }]);
       const s1 = makeSection("ch1.xhtml", [{ cfi: "cfi-1", excerpt: "gamma fox delta" }]);
@@ -844,7 +884,7 @@ describe("createEpubRenderer", () => {
       mockBook.navigation.get.mockImplementation((href: string) => ({ label: `Label ${href}` }));
 
       const renderer = await initRenderer();
-      const results = await renderer.search!("fox");
+      const { results } = await renderer.search!("fox"); // type-safety-ok: optional renderer API method, present in this test harness
 
       // Every section's unload() must still be called (finally block runs
       // for each section regardless of whether a sibling fails).
@@ -857,6 +897,66 @@ describe("createEpubRenderer", () => {
       expect(globalThis.reportError).toHaveBeenCalledWith(
         expect.objectContaining({ message: "boom" }),
       );
+    });
+
+    it("caps results at MAX_SEARCH_RESULTS, sets truncated=true, and still calls unload (AC2)", async () => {
+      // Build MAX_SEARCH_RESULTS + 1 matches so the cap fires mid-loop.
+      const overMatches = Array.from({ length: MAX_SEARCH_RESULTS + 1 }, (_, i) => ({
+        cfi: `cfi-over-${i}`,
+        excerpt: `fox excerpt ${i}`,
+      }));
+      const section = makeSection("ch0.xhtml", overMatches);
+      mockSpine.spineItems = [section];
+      mockBook.navigation.get.mockReturnValue({ label: "Ch. 1" });
+
+      const renderer = await initRenderer();
+      const result = await renderer.search!("fox"); // type-safety-ok: optional renderer API method, present in this test harness
+
+      // Result count is capped at the constant.
+      expect(result.results.length).toBe(MAX_SEARCH_RESULTS);
+      // Truncation flag is set.
+      expect(result.truncated).toBe(true);
+      // unload must have been called once regardless of early cap (finally block).
+      expect(section.unload).toHaveBeenCalledTimes(1);
+      // The highlight burst is bounded — exactly MAX_SEARCH_RESULTS annotations painted.
+      expect(mockRendition.annotations.highlight).toHaveBeenCalledTimes(MAX_SEARCH_RESULTS);
+    });
+
+    it("stops scanning further sections once the cap fires in an earlier section (AC2)", async () => {
+      // Section 0 alone overflows the cap; section 1 must never be loaded once
+      // truncation fires, exercising the outer-loop guard (`if (truncated) break;`).
+      const overMatches = Array.from({ length: MAX_SEARCH_RESULTS + 1 }, (_, i) => ({
+        cfi: `cfi-over-${i}`,
+        excerpt: `fox excerpt ${i}`,
+      }));
+      const s0 = makeSection("ch0.xhtml", overMatches);
+      const s1 = makeSection("ch1.xhtml", [{ cfi: "cfi-1", excerpt: "fox tail" }]);
+      mockSpine.spineItems = [s0, s1];
+      mockBook.navigation.get.mockReturnValue({ label: "Ch. 1" });
+
+      const renderer = await initRenderer();
+      const result = await renderer.search!("fox"); // type-safety-ok: optional renderer API method, present in this test harness
+
+      expect(result.truncated).toBe(true);
+      expect(result.results.length).toBe(MAX_SEARCH_RESULTS);
+      // s0 is loaded, but the cap fires before s1 is ever reached.
+      expect(s0.load).toHaveBeenCalledTimes(1);
+      expect(s1.load).not.toHaveBeenCalled();
+    });
+
+    it("does not truncate when total matches are within the cap", async () => {
+      const fewMatches = Array.from({ length: MAX_SEARCH_RESULTS }, (_, i) => ({
+        cfi: `cfi-few-${i}`,
+        excerpt: `fox few ${i}`,
+      }));
+      mockSpine.spineItems = [makeSection("ch0.xhtml", fewMatches)];
+      mockBook.navigation.get.mockReturnValue({ label: "Ch. 1" });
+
+      const renderer = await initRenderer();
+      const result = await renderer.search!("fox"); // type-safety-ok: optional renderer API method, present in this test harness
+
+      expect(result.results.length).toBe(MAX_SEARCH_RESULTS);
+      expect(result.truncated).toBe(false);
     });
 
     describe("goToResult", () => {
