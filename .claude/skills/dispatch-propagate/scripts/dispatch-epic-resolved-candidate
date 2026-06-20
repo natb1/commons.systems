@@ -5,22 +5,26 @@ source "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 N=$(resolve_issue_number "${1:-}")
 
-# Epic-label gate (#1594). Treat an issue as an epic-resolved candidate ONLY if
-# it carries a configured epic label (loaded from the `epic` config type). The
-# all-children-closed shape alone is not enough — an ordinary tracking issue or a
-# manually-filed parent with all children closed must NOT route to /resolve-epic
-# (which can auto-close), with no author intent. An unconfigured `epic` config →
-# nothing is ever a candidate (safe default; no false positives → no spurious
-# auto-close). This gate runs BEFORE the sub-issues fetch so a non-epic issue
+# Epic-label gate (#1594, #2235). Treat an issue as an epic-resolved candidate
+# ONLY if it carries a recognized epic label. The all-children-closed shape alone
+# is not enough — an ordinary tracking issue or a manually-filed parent with all
+# children closed must NOT route to /resolve-epic (which can auto-close) without
+# author intent. Author intent is signaled by an explicit epic label; that label
+# plus /resolve-epic's own acceptance-criteria judgment are the two remaining
+# safety gates, so dropping a mandatory config file is still safe (no spurious
+# auto-close).
+#
+# Labels come from dispatch-epic-labels, which defaults to "epic" when no
+# dispatch.config/epic.json is present. A present epic.json overrides the default
+# label set. An empty labels array in the config is an intentional override that
+# disables epic recognition entirely (emits nothing → CONFIGURED_LABELS empty →
+# exit 1 below). A dispatch-config-load hard failure (invalid JSON, schema error)
+# propagates non-zero through the helper under set -e — clear error, not silent
+# fallback. This gate runs BEFORE the sub-issues fetch so a non-epic issue
 # short-circuits cheaply (exit 1) without the extra gh round-trip.
-EPIC_CONFIG=$("$SCRIPT_DIR/dispatch-config-load" epic)
-if [[ "$EPIC_CONFIG" == "no-config" ]]; then
-  # No epic config — nothing is an epic. Not a candidate.
-  exit 1
-fi
-CONFIGURED_LABELS=$(printf '%s' "$EPIC_CONFIG" | jq -r '.labels[]')
+CONFIGURED_LABELS=$("$SCRIPT_DIR/dispatch-epic-labels")
 if [[ -z "$CONFIGURED_LABELS" ]]; then
-  # Config present but no labels — nothing is an epic. Not a candidate.
+  # No epic labels (empty config override) — nothing is an epic. Not a candidate.
   exit 1
 fi
 
