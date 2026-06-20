@@ -504,6 +504,76 @@ case "$args" in
       echo '{}'
     fi
     ;;
+  "api -X POST "*/issues/*/labels*)
+    # gh_issue_set_labels_rest sentinel (#2255): POST .../issues/<N>/labels.
+    # MUST precede the generic `api repos/*/issues/*` branch (case is first-wins).
+    # $args form: "api -X POST repos/.../issues/<N>/labels -f labels[]=<label>..."
+    echo "$args" >> "$STUB_DIR/gh-issue-set-labels-rest-calls.log"
+    if [[ -f "$STUB_DIR/gh-fail-rest" ]]; then
+      echo "stub forced gh api failure" >&2
+      exit 1
+    fi
+    echo '[]'
+    ;;
+  "api -X DELETE "*/issues/*/labels/*)
+    # gh_issue_remove_label_rest sentinel (#2255): DELETE .../issues/<N>/labels/<name>.
+    # MUST precede the generic `api repos/*/issues/*` branch.
+    # $args form: "api -X DELETE repos/.../issues/<N>/labels/<url-encoded-name>"
+    echo "$args" >> "$STUB_DIR/gh-issue-remove-label-rest-calls.log"
+    if [[ -f "$STUB_DIR/gh-fail-rest" ]]; then
+      echo "stub forced gh api failure" >&2
+      exit 1
+    fi
+    echo '[]'
+    ;;
+  "api -X PATCH "*/issues/[0-9]*)
+    # gh_issue_close_rest sentinel (#2255): PATCH .../issues/<N> with state=closed.
+    # MUST precede the generic `api repos/*/issues/*` branch.
+    # $args form: "api -X PATCH repos/.../issues/<N> -f state=closed"
+    echo "$args" >> "$STUB_DIR/gh-issue-close-rest-calls.log"
+    if [[ -f "$STUB_DIR/gh-fail-rest" ]]; then
+      echo "stub forced gh api failure" >&2
+      exit 1
+    fi
+    echo '{}'
+    ;;
+  "api -X POST "*/issues/*/comments*)
+    # gh_issue_comment_rest sentinel (#2255): POST .../issues/<N>/comments.
+    # MUST precede the generic `api repos/*/issues/*` branch.
+    # $args form: "api -X POST repos/.../issues/<N>/comments -f body=..."
+    echo "$args" >> "$STUB_DIR/gh-issue-comment-rest-calls.log"
+    if [[ -f "$STUB_DIR/gh-fail-rest" ]]; then
+      echo "stub forced gh api failure" >&2
+      exit 1
+    fi
+    echo '{}'
+    ;;
+  "api -X POST "*/issues\ *)
+    # gh_issue_create_rest sentinel (#2255): POST .../issues (new issue creation).
+    # MUST precede the generic `api repos/*/issues/*` branch. The backslash-space
+    # anchors to the create endpoint (.../issues<SPACE>) rather than subpaths like
+    # .../issues/<N>/labels which the labels/comments branches above already handle.
+    # The labels/comments branches come first in the case so they take priority for
+    # those paths; this branch then catches only the bare create path.
+    # $args form: "api -X POST repos/.../issues -f title=... -f body=..."
+    echo "$args" >> "$STUB_DIR/gh-issue-create-rest-calls.log"
+    if [[ -f "$STUB_DIR/gh-fail-rest" ]]; then
+      echo "stub forced gh api failure" >&2
+      exit 1
+    fi
+    echo '{"number":9999,"html_url":"https://github.com/test/repo/issues/9999"}'
+    ;;
+  "api -X PUT "*/pulls/*/merge*)
+    # gh_pr_merge_rest sentinel (#2255): PUT .../pulls/<N>/merge.
+    # MUST precede the generic `api repos/*/pulls/*` branch.
+    # $args form: "api -X PUT repos/.../pulls/<N>/merge -f merge_method=..."
+    echo "$args" >> "$STUB_DIR/gh-pr-merge-rest-calls.log"
+    if [[ -f "$STUB_DIR/gh-fail-rest" ]]; then
+      echo "stub forced gh api failure" >&2
+      exit 1
+    fi
+    echo '{}'
+    ;;
   api\ repos/*/issues/*)
     # dispatch-resolve-arg discriminator: gh api repos/{owner}/{repo}/issues/<N>.
     # The REST issues endpoint returns PRs too; a PR's JSON carries a
@@ -1451,6 +1521,298 @@ err_pvf=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_view_rest 9001 2>&1 >/dev/null) ||
 assert_eq "pr: gh failure → non-zero" "1" "$rc_pvf"
 case "$err_pvf" in *"gh_pr_view_rest: gh api failed"*) mpf=yes ;; *) mpf=no ;; esac
 assert_eq "pr: gh-failure stderr names the helper" "yes" "$mpf"
+teardown
+
+# ============================================================================
+# Mutation REST helpers (#2255)
+# ============================================================================
+# These drive the REAL mutation helpers (sourced from the copied lib.sh) via the
+# sentinel stub branches added for gh_issue_set_labels_rest, gh_issue_remove_label_rest,
+# gh_issue_close_rest, gh_issue_create_rest, gh_issue_comment_rest, and
+# gh_pr_merge_rest. Each test:
+#   (a) asserts the helper hits the correct REST method and path, and
+#   (b) asserts the helper returns non-zero with descriptive stderr on gh failure.
+echo "=== mutation REST helpers ==="
+
+# --- gh_issue_set_labels_rest ---
+echo "Test: gh_issue_set_labels_rest -- POST to correct path, forwards labels"
+setup
+: > "$STUB_DIR/gh-issue-set-labels-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_set_labels_rest 42 dispatch:planned dispatch:qa-done
+if grep -q 'POST' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then m=yes; else m=no; fi
+assert_eq "set-labels: log contains POST" "yes" "$m"
+if grep -q 'issues/42/labels' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then p=yes; else p=no; fi
+assert_eq "set-labels: log contains issues/42/labels path" "yes" "$p"
+if grep -q 'dispatch:planned' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then l=yes; else l=no; fi
+assert_eq "set-labels: log contains label name" "yes" "$l"
+teardown
+
+echo "Test: gh_issue_set_labels_rest -- --repo flag emits cross-repo segment"
+setup
+: > "$STUB_DIR/gh-issue-set-labels-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_set_labels_rest 42 dispatch:planned --repo owner/other-repo
+if grep -q 'repos/owner/other-repo/issues/42/labels' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then seg=yes; else seg=no; fi
+assert_eq "set-labels: --repo uses cross-repo segment" "yes" "$seg"
+if grep -q 'repos/{owner}/{repo}' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then ph=yes; else ph=no; fi
+assert_eq "set-labels: --repo placeholder absent" "no" "$ph"
+teardown
+
+echo "Test: gh_issue_set_labels_rest -- missing number returns non-zero"
+setup
+rc_sl=0
+err_sl=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_set_labels_rest 2>&1 >/dev/null) || rc_sl=$?
+assert_eq "set-labels: missing number → non-zero" "1" "$rc_sl"
+case "$err_sl" in *"gh_issue_set_labels_rest: issue number is required"*) m=yes ;; *) m=no ;; esac
+assert_eq "set-labels: missing-number stderr names helper" "yes" "$m"
+teardown
+
+echo "Test: gh_issue_set_labels_rest -- gh failure returns non-zero with diagnostic stderr"
+setup
+: > "$STUB_DIR/gh-fail-rest"
+rc_slf=0
+err_slf=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_set_labels_rest 42 dispatch:planned 2>&1 >/dev/null) || rc_slf=$?
+assert_eq "set-labels: gh failure → non-zero" "1" "$rc_slf"
+case "$err_slf" in *"gh_issue_set_labels_rest: gh api failed"*) m=yes ;; *) m=no ;; esac
+assert_eq "set-labels: gh-failure stderr names helper" "yes" "$m"
+teardown
+
+# --- gh_issue_remove_label_rest ---
+echo "Test: gh_issue_remove_label_rest -- DELETE to correct path, URL-encodes space"
+setup
+: > "$STUB_DIR/gh-issue-remove-label-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_remove_label_rest 42 "help wanted"
+if grep -q 'DELETE' "$STUB_DIR/gh-issue-remove-label-rest-calls.log"; then m=yes; else m=no; fi
+assert_eq "remove-label: log contains DELETE" "yes" "$m"
+if grep -q 'issues/42/labels/help%20wanted' "$STUB_DIR/gh-issue-remove-label-rest-calls.log"; then p=yes; else p=no; fi
+assert_eq "remove-label: path contains URL-encoded label" "yes" "$p"
+teardown
+
+echo "Test: gh_issue_remove_label_rest -- --repo flag emits cross-repo segment"
+setup
+: > "$STUB_DIR/gh-issue-remove-label-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_remove_label_rest 42 "dispatch:planned" --repo owner/other-repo
+if grep -q 'repos/owner/other-repo/issues/42/labels' "$STUB_DIR/gh-issue-remove-label-rest-calls.log"; then seg=yes; else seg=no; fi
+assert_eq "remove-label: --repo uses cross-repo segment" "yes" "$seg"
+teardown
+
+echo "Test: gh_issue_remove_label_rest -- missing args return non-zero"
+setup
+rc_rl=0
+err_rl=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_remove_label_rest 2>&1 >/dev/null) || rc_rl=$?
+assert_eq "remove-label: missing number → non-zero" "1" "$rc_rl"
+case "$err_rl" in *"gh_issue_remove_label_rest: issue number is required"*) m=yes ;; *) m=no ;; esac
+assert_eq "remove-label: missing-number stderr names helper" "yes" "$m"
+rc_rll=0
+err_rll=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_remove_label_rest 42 2>&1 >/dev/null) || rc_rll=$?
+assert_eq "remove-label: missing label → non-zero" "1" "$rc_rll"
+case "$err_rll" in *"gh_issue_remove_label_rest: label name is required"*) m=yes ;; *) m=no ;; esac
+assert_eq "remove-label: missing-label stderr names helper" "yes" "$m"
+teardown
+
+echo "Test: gh_issue_remove_label_rest -- gh failure returns non-zero with diagnostic stderr"
+setup
+: > "$STUB_DIR/gh-fail-rest"
+rc_rlf=0
+err_rlf=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_remove_label_rest 42 dispatch:planned 2>&1 >/dev/null) || rc_rlf=$?
+assert_eq "remove-label: gh failure → non-zero" "1" "$rc_rlf"
+case "$err_rlf" in *"gh_issue_remove_label_rest: gh api failed"*) m=yes ;; *) m=no ;; esac
+assert_eq "remove-label: gh-failure stderr names helper" "yes" "$m"
+teardown
+
+# --- gh_issue_close_rest ---
+echo "Test: gh_issue_close_rest -- PATCH to correct path with state=closed"
+setup
+: > "$STUB_DIR/gh-issue-close-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_close_rest 42
+if grep -q 'PATCH' "$STUB_DIR/gh-issue-close-rest-calls.log"; then m=yes; else m=no; fi
+assert_eq "close: log contains PATCH" "yes" "$m"
+if grep -q 'issues/42' "$STUB_DIR/gh-issue-close-rest-calls.log"; then p=yes; else p=no; fi
+assert_eq "close: log contains issues/42 path" "yes" "$p"
+if grep -q 'state=closed' "$STUB_DIR/gh-issue-close-rest-calls.log"; then s=yes; else s=no; fi
+assert_eq "close: log contains state=closed" "yes" "$s"
+teardown
+
+echo "Test: gh_issue_close_rest -- --repo flag emits cross-repo segment"
+setup
+: > "$STUB_DIR/gh-issue-close-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_close_rest 42 --repo owner/other-repo
+if grep -q 'repos/owner/other-repo/issues/42' "$STUB_DIR/gh-issue-close-rest-calls.log"; then seg=yes; else seg=no; fi
+assert_eq "close: --repo uses cross-repo segment" "yes" "$seg"
+teardown
+
+echo "Test: gh_issue_close_rest -- missing number returns non-zero"
+setup
+rc_cl=0
+err_cl=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_close_rest 2>&1 >/dev/null) || rc_cl=$?
+assert_eq "close: missing number → non-zero" "1" "$rc_cl"
+case "$err_cl" in *"gh_issue_close_rest: issue number is required"*) m=yes ;; *) m=no ;; esac
+assert_eq "close: missing-number stderr names helper" "yes" "$m"
+teardown
+
+echo "Test: gh_issue_close_rest -- gh failure returns non-zero with diagnostic stderr"
+setup
+: > "$STUB_DIR/gh-fail-rest"
+rc_clf=0
+err_clf=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_close_rest 42 2>&1 >/dev/null) || rc_clf=$?
+assert_eq "close: gh failure → non-zero" "1" "$rc_clf"
+case "$err_clf" in *"gh_issue_close_rest: gh api failed"*) m=yes ;; *) m=no ;; esac
+assert_eq "close: gh-failure stderr names helper" "yes" "$m"
+teardown
+
+# --- gh_issue_create_rest ---
+echo "Test: gh_issue_create_rest -- POST to correct path, echoes html_url, forwards title/body/labels"
+setup
+: > "$STUB_DIR/gh-issue-create-rest-calls.log"
+url=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_create_rest --title "Test issue" --body "body text" --label dispatch:planned)
+if grep -q 'POST' "$STUB_DIR/gh-issue-create-rest-calls.log"; then m=yes; else m=no; fi
+assert_eq "create: log contains POST" "yes" "$m"
+if grep -q 'title=Test issue' "$STUB_DIR/gh-issue-create-rest-calls.log"; then t=yes; else t=no; fi
+assert_eq "create: log contains title" "yes" "$t"
+if grep -q 'dispatch:planned' "$STUB_DIR/gh-issue-create-rest-calls.log"; then l=yes; else l=no; fi
+assert_eq "create: log contains label" "yes" "$l"
+assert_eq "create: stdout is the issue URL" "https://github.com/test/repo/issues/9999" "$url"
+teardown
+
+echo "Test: gh_issue_create_rest -- --repo flag emits cross-repo segment"
+setup
+: > "$STUB_DIR/gh-issue-create-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_create_rest --title "t" --body "b" --repo owner/other-repo >/dev/null
+if grep -q 'repos/owner/other-repo/issues' "$STUB_DIR/gh-issue-create-rest-calls.log"; then seg=yes; else seg=no; fi
+assert_eq "create: --repo uses cross-repo segment" "yes" "$seg"
+teardown
+
+echo "Test: gh_issue_create_rest -- missing required args return non-zero"
+setup
+rc_ic=0
+err_ic=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_create_rest --body "b" 2>&1 >/dev/null) || rc_ic=$?
+assert_eq "create: missing --title → non-zero" "1" "$rc_ic"
+case "$err_ic" in *"gh_issue_create_rest: --title is required"*) m=yes ;; *) m=no ;; esac
+assert_eq "create: missing-title stderr names helper" "yes" "$m"
+rc_icb=0
+err_icb=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_create_rest --title "t" 2>&1 >/dev/null) || rc_icb=$?
+assert_eq "create: missing --body → non-zero" "1" "$rc_icb"
+case "$err_icb" in *"gh_issue_create_rest: --body is required"*) m=yes ;; *) m=no ;; esac
+assert_eq "create: missing-body stderr names helper" "yes" "$m"
+teardown
+
+echo "Test: gh_issue_create_rest -- gh failure returns non-zero with diagnostic stderr"
+setup
+: > "$STUB_DIR/gh-fail-rest"
+rc_icf=0
+err_icf=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_create_rest --title "t" --body "b" 2>&1 >/dev/null) || rc_icf=$?
+assert_eq "create: gh failure → non-zero" "1" "$rc_icf"
+case "$err_icf" in *"gh_issue_create_rest: gh api failed"*) m=yes ;; *) m=no ;; esac
+assert_eq "create: gh-failure stderr names helper" "yes" "$m"
+teardown
+
+# --- gh_issue_comment_rest ---
+echo "Test: gh_issue_comment_rest -- POST to correct path, forwards body"
+setup
+: > "$STUB_DIR/gh-issue-comment-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_comment_rest 42 --body "a comment"
+if grep -q 'POST' "$STUB_DIR/gh-issue-comment-rest-calls.log"; then m=yes; else m=no; fi
+assert_eq "comment: log contains POST" "yes" "$m"
+if grep -q 'issues/42/comments' "$STUB_DIR/gh-issue-comment-rest-calls.log"; then p=yes; else p=no; fi
+assert_eq "comment: log contains issues/42/comments path" "yes" "$p"
+if grep -q 'a comment' "$STUB_DIR/gh-issue-comment-rest-calls.log"; then b=yes; else b=no; fi
+assert_eq "comment: log contains body text" "yes" "$b"
+teardown
+
+echo "Test: gh_issue_comment_rest -- --body-file reads body from file"
+setup
+: > "$STUB_DIR/gh-issue-comment-rest-calls.log"
+printf '%s' "body from file" > "$STUB_DIR/comment-body.txt"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_comment_rest 42 --body-file "$STUB_DIR/comment-body.txt"
+if grep -q 'issues/42/comments' "$STUB_DIR/gh-issue-comment-rest-calls.log"; then p=yes; else p=no; fi
+assert_eq "comment: --body-file path appears in log" "yes" "$p"
+teardown
+
+echo "Test: gh_issue_comment_rest -- --repo flag emits cross-repo segment"
+setup
+: > "$STUB_DIR/gh-issue-comment-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_comment_rest 42 --body "b" --repo owner/other-repo
+if grep -q 'repos/owner/other-repo/issues/42/comments' "$STUB_DIR/gh-issue-comment-rest-calls.log"; then seg=yes; else seg=no; fi
+assert_eq "comment: --repo uses cross-repo segment" "yes" "$seg"
+teardown
+
+echo "Test: gh_issue_comment_rest -- missing required args return non-zero"
+setup
+rc_cm=0
+err_cm=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_comment_rest 2>&1 >/dev/null) || rc_cm=$?
+assert_eq "comment: missing number → non-zero" "1" "$rc_cm"
+case "$err_cm" in *"gh_issue_comment_rest: issue number is required"*) m=yes ;; *) m=no ;; esac
+assert_eq "comment: missing-number stderr names helper" "yes" "$m"
+rc_cmb=0
+err_cmb=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_comment_rest 42 2>&1 >/dev/null) || rc_cmb=$?
+assert_eq "comment: missing --body/--body-file → non-zero" "1" "$rc_cmb"
+case "$err_cmb" in *"gh_issue_comment_rest: --body or --body-file is required"*) m=yes ;; *) m=no ;; esac
+assert_eq "comment: missing-body stderr names helper" "yes" "$m"
+teardown
+
+echo "Test: gh_issue_comment_rest -- gh failure returns non-zero with diagnostic stderr"
+setup
+: > "$STUB_DIR/gh-fail-rest"
+rc_cmf=0
+err_cmf=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_comment_rest 42 --body "b" 2>&1 >/dev/null) || rc_cmf=$?
+assert_eq "comment: gh failure → non-zero" "1" "$rc_cmf"
+case "$err_cmf" in *"gh_issue_comment_rest: gh api failed"*) m=yes ;; *) m=no ;; esac
+assert_eq "comment: gh-failure stderr names helper" "yes" "$m"
+teardown
+
+# --- gh_pr_merge_rest ---
+echo "Test: gh_pr_merge_rest -- PUT to correct path, default merge_method=merge"
+setup
+: > "$STUB_DIR/gh-pr-merge-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_pr_merge_rest 42
+if grep -q 'PUT' "$STUB_DIR/gh-pr-merge-rest-calls.log"; then m=yes; else m=no; fi
+assert_eq "pr-merge: log contains PUT" "yes" "$m"
+if grep -q 'pulls/42/merge' "$STUB_DIR/gh-pr-merge-rest-calls.log"; then p=yes; else p=no; fi
+assert_eq "pr-merge: log contains pulls/42/merge path" "yes" "$p"
+if grep -q 'merge_method=merge' "$STUB_DIR/gh-pr-merge-rest-calls.log"; then mm=yes; else mm=no; fi
+assert_eq "pr-merge: default merge_method=merge" "yes" "$mm"
+teardown
+
+echo "Test: gh_pr_merge_rest -- --squash sets merge_method=squash"
+setup
+: > "$STUB_DIR/gh-pr-merge-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_pr_merge_rest 42 --squash
+if grep -q 'merge_method=squash' "$STUB_DIR/gh-pr-merge-rest-calls.log"; then m=yes; else m=no; fi
+assert_eq "pr-merge: --squash → merge_method=squash" "yes" "$m"
+teardown
+
+echo "Test: gh_pr_merge_rest -- --rebase sets merge_method=rebase"
+setup
+: > "$STUB_DIR/gh-pr-merge-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_pr_merge_rest 42 --rebase
+if grep -q 'merge_method=rebase' "$STUB_DIR/gh-pr-merge-rest-calls.log"; then m=yes; else m=no; fi
+assert_eq "pr-merge: --rebase → merge_method=rebase" "yes" "$m"
+teardown
+
+echo "Test: gh_pr_merge_rest -- --repo flag emits cross-repo segment"
+setup
+: > "$STUB_DIR/gh-pr-merge-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_pr_merge_rest 42 --repo owner/other-repo
+if grep -q 'repos/owner/other-repo/pulls/42/merge' "$STUB_DIR/gh-pr-merge-rest-calls.log"; then seg=yes; else seg=no; fi
+assert_eq "pr-merge: --repo uses cross-repo segment" "yes" "$seg"
+teardown
+
+echo "Test: gh_pr_merge_rest -- missing number returns non-zero"
+setup
+rc_pm=0
+err_pm=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_merge_rest 2>&1 >/dev/null) || rc_pm=$?
+assert_eq "pr-merge: missing number → non-zero" "1" "$rc_pm"
+case "$err_pm" in *"gh_pr_merge_rest: PR number is required"*) m=yes ;; *) m=no ;; esac
+assert_eq "pr-merge: missing-number stderr names helper" "yes" "$m"
+teardown
+
+echo "Test: gh_pr_merge_rest -- gh failure returns non-zero with diagnostic stderr"
+setup
+: > "$STUB_DIR/gh-fail-rest"
+rc_pmf=0
+err_pmf=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_merge_rest 42 2>&1 >/dev/null) || rc_pmf=$?
+assert_eq "pr-merge: gh failure → non-zero" "1" "$rc_pmf"
+case "$err_pmf" in *"gh_pr_merge_rest: gh api failed"*) m=yes ;; *) m=no ;; esac
+assert_eq "pr-merge: gh-failure stderr names helper" "yes" "$m"
 teardown
 
 # ============================================================================
