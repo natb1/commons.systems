@@ -319,7 +319,7 @@ The two nearest artifacts differ on the same axes:
   store. Here there is no authoritative store behind the SCM — the PR, CI, and
   label ground truth *is* the state, re-derived every tick.
 
-### Related work / prior art
+## Related work / prior art
 
 The "harness" vocabulary this README uses comes from a body of recent writing on
 building reliable systems around coding agents.
