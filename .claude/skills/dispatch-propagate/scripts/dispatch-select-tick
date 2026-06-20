@@ -6,12 +6,12 @@
 #
 # Runs the lock acquisition, origin/main sync (only on `main`), the run-scoped
 # concurrency gate, the JIT engine, the Calendar JIT importer, the statements
-# scan, the mergeable-PR queue reconcile, the orphaned-follow-up re-triage scan,
+# scan, the orphaned-follow-up re-triage scan,
 # and target selection as one deterministic sequence and prints exactly ONE
 # decision line as its LAST stdout line. Any JIT
 # `created`/`skipped`/`debounced` lines are passed through first, each prefixed
 # `jit: `, followed by any `calendar: ...` lines, followed by any
-# `statements: ...` lines, any `merge-queue: ...` lines, and any
+# `statements: ...` lines, and any
 # `retriage: ...` lines. The router (SKILL.md)
 # routes on the final decision line; a model-decision seam (`main-broken` /
 # `jit-reminder`) and the worktree materialization (`dispatch-materialize-spawn`)
@@ -360,7 +360,7 @@ fi
 
 # --- Step 1d (cont.): auto-merge every ready PR (#1739) ----------------------
 # Runs after dispatch-reconcile-ready (a PR demoted this tick is seen as draft
-# and skipped) and before Step 2d's sync-merge-queue. Auto-merge runs ONLY when
+# and skipped). Auto-merge runs ONLY when
 # OPEN_MB is definitively empty — i.e. main health is known-good. It is suppressed
 # both while main is broken (OPEN_MB lists open main-broken issues, from Step 1c)
 # and when main health is UNKNOWN (the Step 1c gh issue list failed): a transient
@@ -655,17 +655,6 @@ if [[ -n "$STMT_OUT" ]]; then
   while IFS= read -r stmt_line; do
     [[ -n "$stmt_line" ]] && echo "statements: $stmt_line"
   done <<< "$STMT_OUT"
-fi
-
-# --- Step 2d: reconcile the mergeable-PR queue (best-effort) -----------------
-# Find-or-creates one natb1/office-hours-nate tracking issue per mergeable PR
-# and closes tracking issues for PRs no longer mergeable. Pass its stdout lines
-# through, prefixed.
-MERGE_OUT=$("$SCRIPT_DIR/dispatch-sync-merge-queue") || true
-if [[ -n "$MERGE_OUT" ]]; then
-  while IFS= read -r merge_line; do
-    [[ -n "$merge_line" ]] && echo "merge-queue: $merge_line"
-  done <<< "$MERGE_OUT"
 fi
 
 # --- Step 2e: re-triage orphaned review follow-ups (best-effort) -------------
