@@ -1121,7 +1121,7 @@ describe("clearSearch()", () => {
     const renderer = createPdfRenderer();
     await renderer.init(container, "fake://source.pdf");
 
-    const results = await renderer.search!("the"); // type-safety-ok: optional renderer API method, present in this test harness
+    const { results } = await renderer.search!("the"); // type-safety-ok: optional renderer API method, present in this test harness
     const page1Result = results.find((r) => r.label === "Page 1");
     expect(page1Result).toBeDefined();
 
