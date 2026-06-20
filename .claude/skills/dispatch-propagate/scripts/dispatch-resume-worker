@@ -9,7 +9,7 @@
 # Stop hook schedules a systemd timer that, after a backoff, fires this script to
 # resume the dead session in place.
 #
-# Usage: dispatch-resume-worker <name> <cwd> <sessionId> [<model>]
+# Usage: dispatch-resume-worker <name> <cwd> <sessionId> [<model>] [<effort>]
 #   <name>       The dead worker's `<N>-slug` (e.g. 1733-dispatch-self-heal-phase-wo).
 #                Must match ^[0-9]+- (the real phase-worker shape).
 #   <cwd>        The worktree directory the worker ran in (must exist).
@@ -17,6 +17,10 @@
 #   <model>      Optional model override; possibly empty. When non-empty it is
 #                forwarded as `--model <model>`; when empty/absent the flag is
 #                omitted and the resumed session inherits the default model.
+#   <effort>     Optional reasoning-effort override; possibly empty. When non-empty
+#                it must match the closed set low|medium|high|xhigh|max and is
+#                forwarded as `--effort <effort>`; when empty/absent the flag is
+#                omitted and the resumed session inherits the default effort.
 #
 # Behavior, in order:
 #   1. Validate args (see the regexes above). Bad args → stderr diagnostic +
@@ -28,7 +32,7 @@
 #      as occupied → print `deduped`, exit 0 (a dispatch agent may be live).
 #   3. Primary resume: from a subshell `cd`'d into <cwd>,
 #        claude --bg --name <name> --permission-mode auto [--model <model>] \
-#               --resume <sessionId> "continue"
+#               [--effort <effort>] --resume <sessionId> "continue"
 #      then verify via verify_agent_registered_under <name> <cwd>. On a clean
 #      kick + verify, print `resumed`, exit 0.
 #   4. Graceful degradation — KICK-TIME failures only:
@@ -100,10 +104,11 @@ NAME="${1:-}"
 CWD="${2:-}"
 SESSION_ID="${3:-}"
 MODEL="${4:-}"
+EFFORT="${5:-}"
 
 if [[ -z "$NAME" || ! "$NAME" =~ ^[0-9]+- ]]; then
   echo "dispatch-resume-worker: <name> must be a '<N>-slug' (match ^[0-9]+-), got '${NAME}'" >&2
-  echo "usage: dispatch-resume-worker <name> <cwd> <sessionId> [<model>]" >&2
+  echo "usage: dispatch-resume-worker <name> <cwd> <sessionId> [<model>] [<effort>]" >&2
   exit 2
 fi
 if [[ -z "$CWD" || ! -d "$CWD" ]]; then
@@ -116,6 +121,10 @@ if [[ -z "$SESSION_ID" || ! "$SESSION_ID" =~ ^[A-Za-z0-9._-]+$ ]]; then
 fi
 if [[ -n "$MODEL" && ! "$MODEL" =~ ^[A-Za-z0-9._-]+$ ]]; then
   echo "dispatch-resume-worker: <model> value '${MODEL}' contains unexpected characters" >&2
+  exit 2
+fi
+if [[ -n "$EFFORT" && ! "$EFFORT" =~ ^(low|medium|high|xhigh|max)$ ]]; then
+  echo "dispatch-resume-worker: <effort> value '${EFFORT}' is not one of low|medium|high|xhigh|max" >&2
   exit 2
 fi
 
@@ -166,6 +175,7 @@ done <<<"$sessions"
 # positional prompt "continue" stays last.
 resume_args=(--bg --name "$NAME" --permission-mode auto)
 [[ -n "$MODEL" ]] && resume_args+=(--model "$MODEL")
+[[ -n "$EFFORT" ]] && resume_args+=(--effort "$EFFORT")
 resume_args+=(--resume "$SESSION_ID" "continue")
 
 resume_rc=0
@@ -185,6 +195,7 @@ fi
 # same transcript. Retry ONCE with that flag.
 fork_args=(--bg --name "$NAME" --permission-mode auto)
 [[ -n "$MODEL" ]] && fork_args+=(--model "$MODEL")
+[[ -n "$EFFORT" ]] && fork_args+=(--effort "$EFFORT")
 fork_args+=(--resume "$SESSION_ID" --fork-session "continue")
 
 fork_rc=0

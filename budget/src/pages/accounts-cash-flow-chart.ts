@@ -1,7 +1,7 @@
 import * as Plot from "@observablehq/plot";
 import { computeRollingAverage, type CashFlowPoint } from "../balance.js";
 import type { ChartResult, WeekEntry } from "./budgets-chart.js";
-import { getThemeFg, assembleChartLayout, MARGIN_RIGHT, MARGIN_BOTTOM, computeChartWidth, renderAxisSvg } from "./chart-util.js";
+import { getThemeFg, readThemeVar, assembleChartLayout, MARGIN_RIGHT, MARGIN_BOTTOM, computeChartWidth, renderAxisSvg } from "./chart-util.js";
 
 interface CashFlowChartOptions {
   readonly data: CashFlowPoint[];
@@ -56,6 +56,10 @@ export function renderCashFlowChart(container: HTMLElement, options: CashFlowCha
   const height = 200;
 
   const fg = getThemeFg(container);
+  const colorPositive = readThemeVar(container, "--chart-4");
+  const colorNegative = readThemeVar(container, "--chart-3");
+  const color12w = readThemeVar(container, "--chart-6");
+  const color52w = readThemeVar(container, "--chart-2");
   const sharedStyle = { background: "transparent", color: fg };
 
   let yMax = 0;
@@ -68,11 +72,6 @@ export function renderCashFlowChart(container: HTMLElement, options: CashFlowCha
   const yDomain: [number, number] = [yMin - margin, yMax + margin];
 
   const axisSvg = renderAxisSvg({ height, style: sharedStyle, yDomain });
-
-  const colorPositive = "#26a69a";
-  const colorNegative = "#ef5350";
-  const color12w = "#42a5f5";
-  const color52w = "#ab47bc";
 
   const chartSvg = Plot.plot({
     width: chartWidth,

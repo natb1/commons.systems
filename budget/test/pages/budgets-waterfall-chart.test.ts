@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { timestampMockFactory, makeContainer } from "../helpers";
+import { timestampMockFactory, makeContainer, CHART_TOKENS } from "../helpers";
 import type { CategoryActualRow } from "../../src/balance";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 
@@ -157,6 +157,9 @@ describe("renderVarianceWaterfall", () => {
     container.style.setProperty("--fg", "#e0e0e0");
     container.style.setProperty("--favorable", FAVORABLE);
     container.style.setProperty("--unfavorable", UNFAVORABLE);
+    for (const [name, value] of Object.entries(CHART_TOKENS)) {
+      container.style.setProperty(name, value);
+    }
     document.body.appendChild(container);
     Object.defineProperty(container, "clientWidth", { value: 0, configurable: true });
     expect(() =>

@@ -17,7 +17,7 @@
  * node:* — the skill does all of that around the call.
  *
  * args IN:
- *   { pr_num, merge_base, changed_files:[...], surface:"empty"|"docs"|"code",
+ *   { pr_num, merge_base, changed_files:[...], surface:"empty"|"docs"|"tests"|"code",
  *     deps:bool, app_or_rules:bool,
  *     prescanned_findings:[...Per-finding items, Source "codeql"|"npm",
  *       carrying their source-specific fields...],
@@ -30,7 +30,7 @@
  *     deferred_filings:[{title, body, blocker_issue_nums:[N,...]|"independent"}],
  *     security_followup_input:[...codeql/npm out-of-scope subset...],
  *     verify_report:[{id, location, verdict, skeptic_votes, rationale}],
- *     deviation:bool, security_note? }
+ *     deviation:bool, security_note?, coverage_incomplete:bool, coverage_note?:string }
  *
  * NORMATIVE SPECS for the three inline kernel helpers below are the pure bash/jq
  * scripts (unit-tested by test-dispatch-scripts.sh). The JS helpers are kept
@@ -88,6 +88,7 @@ const FINDING_ITEM_SCHEMA = {
         'firebase',
         'codeql',
         'npm',
+        'erosion',
       ],
     },
     OWASP: { type: 'string' },
@@ -179,6 +180,9 @@ const FIX_SCHEMA = {
 // Returns the AGENT finder-source set (the codeql/npm finders are NOT agents —
 // they arrive via args.prescanned_findings — so they are excluded here).
 function agentFinderSet(surface, app_or_rules) {
+  // Any non-`code` surface (`empty`/`docs`/`tests`) yields only the two quality
+  // finders — the `surface === 'code'` gate below covers `tests` with no code
+  // change, since a test-only diff has no production attack surface.
   const set = ['code-review', 'review'];
   if (surface === 'code') {
     set.push('input-validation', 'secrets', 'red-team', 'security-review');
@@ -235,7 +239,9 @@ function dedupMerge(groupFindings) {
 }
 
 // normative spec: .claude/skills/dispatch-propagate/scripts/dispatch-review-verify-drop
-// For each Required finding:
+// For each VERIFY-ELIGIBLE finding — a security `Required` finding OR (erosion-
+// scoped, issue #2064) an erosion/`Fixed` finding (`Source==='erosion' &&
+// bucket==='Fixed'`):
 //   - no skeptic vote at all (both verify agents failed) → drop (Unverified):
 //     verification could not run, so for a terminal auto-ready phase we do NOT
 //     auto-spend an Opus fix on it — it is dropped from the fix set and filed as
@@ -243,13 +249,16 @@ function dedupMerge(groupFindings) {
 //     uncertainty" bias (a crashed skeptic is the most uncertain case of all).
 //   - ≥1 skeptic voted "refuted" → drop (Refuted).
 //   - otherwise → keep (Upheld).
-// Non-Required findings are never affected. Annotates each Required finding with
-// `verify`. Returns {kept, dropped}.
+// An erosion/Fixed finding is treated identically to a Required one here, EXCEPT
+// it can never reach the `deviation` gate (that gate keys on bucket==='Required';
+// erosion stays bucket==='Fixed') — preserving the non-escalation invariant.
+// All other (non-eligible) findings are never affected. Annotates each eligible
+// finding with `verify`. Returns {kept, dropped}.
 function applyVerifyDrop(findings, votesById) {
   const kept = [];
   const dropped = [];
   for (const f of findings) {
-    if (f.bucket === 'Required') {
+    if (f.bucket === 'Required' || (f.Source === 'erosion' && f.bucket === 'Fixed')) {
       const votes = votesById[f.id] || [];
       const refutedCount = votes.filter((v) => v === 'refuted').length;
       if (!votes.length) {
@@ -362,22 +371,61 @@ function finderPrompt(name, args) {
 const _a = typeof args === 'string' ? JSON.parse(args) : (args || {});
 log(`args type: ${typeof args}; surface=${_a.surface}; changed_files count=${(_a.changed_files || []).length}`);
 
-// --- 1. FINDERS (parallel, barrier) ------------------------------------------
+// subagents_launched (source 1, this Workflow's own fan-out): a single
+// accumulator incremented at each spawn site, inside the guard that actually
+// launches the agents. A launched-but-dead agent still counts — increment at
+// the spawn, not on the result. The SKILL body (Unit 4) adds its own source-2
+// subagents (Step-5a/5b /file-issue) before emitting the envelope.
+let subagentsLaunched = 0;
+
+// --- 1. FINDERS (two waves, probe-gated) -------------------------------------
 phase('finders');
 const finderNames = agentFinderSet(_a.surface, _a.app_or_rules);
-log(`finders: launching ${finderNames.length} agent finder(s) for surface=${_a.surface}`);
-
-const finderResults = await parallel(
-  finderNames.map((name) => () =>
-    agent(finderPrompt(name, _a), {
-      model: 'sonnet',
-      agentType: 'general-purpose',
-      schema: FINDINGS_SCHEMA,
-      label: `find:${name}`,
-      phase: 'finders',
-    })
-  )
+// Probe-wave throttle short-circuit: the two always-on quality finders are real
+// review work that runs on every surface, so launch them FIRST as wave 1 and
+// double them as a throttle probe. If BOTH return null (a strong outage signal —
+// far more robust than one flake), skip the security finder wave entirely rather
+// than waste those launches on a throttled model. On empty/docs/tests surfaces
+// there are no security finders, so this degenerates to a single wave (no change).
+const qualityFinders = finderNames.filter((n) => n === 'code-review' || n === 'review');
+const securityFinders = finderNames.filter((n) => n !== 'code-review' && n !== 'review');
+log(
+  `finders: wave 1 = ${qualityFinders.length} quality finder(s); ` +
+    `${securityFinders.length} security finder(s) pending for surface=${_a.surface}`
 );
+
+const launchFinder = (name) => () =>
+  agent(finderPrompt(name, _a), {
+    model: 'sonnet',
+    agentType: 'general-purpose',
+    schema: FINDINGS_SCHEMA,
+    label: `find:${name}`,
+    phase: 'finders',
+  });
+
+// Wave 1 — the quality finders (also the throttle probe).
+subagentsLaunched += qualityFinders.length;
+const qualityResults = await parallel(qualityFinders.map(launchFinder));
+
+// Gate: both quality finders dead → model likely throttled; skip the security
+// wave. coverage_incomplete records the degraded review for the Step 6 comment.
+let securityResults = [];
+let coverage_incomplete = false;
+let coverage_note = '';
+const bothQualityDead = qualityResults.filter(Boolean).length === 0;
+if (securityFinders.length && bothQualityDead) {
+  coverage_incomplete = true;
+  coverage_note =
+    'Security finders skipped: both quality finders failed (model likely throttled).';
+  log(`finders: ${coverage_note} Backing off the security wave.`);
+} else if (securityFinders.length) {
+  // Wave 2 — the surface-gated security finders.
+  log(`finders: wave 2 = launching ${securityFinders.length} security finder(s)`);
+  subagentsLaunched += securityFinders.length;
+  securityResults = await parallel(securityFinders.map(launchFinder));
+}
+
+const finderResults = qualityResults.concat(securityResults);
 
 // Gather: surviving finder findings + the prescanned codeql/npm findings.
 let allFindings = [];
@@ -435,6 +483,7 @@ for (const [loc, group] of locationGroups) {
       `exactly one subgroup. The ids are: ${ids.join(', ')}.`,
       `Findings:\n${JSON.stringify(compact, null, 2)}`,
     ].join('\n');
+    subagentsLaunched += 1;
     const res = await agent(prompt, {
       model: 'sonnet',
       agentType: 'general-purpose',
@@ -504,6 +553,11 @@ if (deduped.length) {
     '- False-positive (security): not an actual vulnerability — a misread / non-issue.',
     '- Deferred (code-review/review): valid but out of scope for this PR (filed as a follow-up).',
     '- Out-of-scope (security): a genuine concern in pre-existing code the diff did not touch.',
+    '- Fixed (erosion): an actionable net-erosion finding (Source "erosion") with a concrete refactor',
+    '  that reverses the structural decay this diff introduced → Fixed (it runs the same adversarial',
+    '  verify→fix machinery as a code-review Fixed finding; it is a QUALITY concern, never a vulnerability).',
+    '- Informational (erosion): an advisory complexity/duplication increase with no clear single refactor',
+    '  → Informational (an FYI; no change required and nothing is filed).',
     'RULES: A finding is NEVER Dismissed merely because the change is small — if it is a real',
     'improvement within scope, classify it Fixed. When a code-review/review finding is ambiguous,',
     'default to Informational rather than inventing a code change.',
@@ -513,6 +567,7 @@ if (deduped.length) {
     `Findings:\n${JSON.stringify(compact, null, 2)}`,
   ].join('\n');
 
+  subagentsLaunched += 1;
   const classifyRes = await agent(classifyPrompt, {
     model: 'sonnet',
     agentType: 'general-purpose',
@@ -543,11 +598,18 @@ if (deduped.length) {
   ]);
   deduped = deduped.map((f) => {
     const c = classById.get(f.id);
-    // Fallback when the classify agent gave no verdict for this finding: security
-    // sources → Out-of-scope; code-review/review → Deferred (NOT Informational) so
-    // an unclassified-but-real finding is filed as a follow-up rather than silently
-    // dropped from both the fix set and the follow-up filings.
-    const bucket = c ? c.bucket : SEC_SOURCES.has(f.Source) ? 'Out-of-scope' : 'Deferred';
+    // Fallback when the classify agent gave no verdict for this finding: erosion
+    // sources → Informational (advisory, not filed) per the Informational-erosion
+    // design intent; security sources → Out-of-scope; code-review/review → Deferred
+    // (NOT Informational) so an unclassified-but-real finding is filed as a follow-up
+    // rather than silently dropped from both the fix set and the follow-up filings.
+    const bucket = c
+      ? c.bucket
+      : f.Source === 'erosion'
+        ? 'Informational'
+        : SEC_SOURCES.has(f.Source)
+          ? 'Out-of-scope'
+          : 'Deferred';
     // For prescanned codeql/npm findings, prefer their own carried classification if present.
     let security_class = c ? c.security_class : 'none';
     if ((f.Source === 'codeql' || f.Source === 'npm') && f.classification) {
@@ -559,34 +621,77 @@ if (deduped.length) {
 
 // --- 4. VERIFY (parallel) ----------------------------------------------------
 phase('verify');
-const requiredFindings = deduped.filter((f) => f.bucket === 'Required');
+// Verify-eligible set: security `Required` findings AND (erosion-scoped, per
+// issue #2064) erosion/`Fixed` findings — an actionable net-erosion finding runs
+// the SAME adversarial verify→drop→fix machinery as a Required vulnerability, but
+// it is a QUALITY concern: it is `bucket==='Fixed'`, never `Required`, so it can
+// never reach the `deviation` gate (non-escalation invariant). The literal
+// `Source === 'erosion'` check keeps this erosion-scoped — do NOT generalize it.
+const requiredFindings = deduped.filter(
+  (f) => f.bucket === 'Required' || (f.Source === 'erosion' && f.bucket === 'Fixed')
+);
 const votesById = {};
 const rationalesById = {};
 if (requiredFindings.length) {
-  log(`verify: ${requiredFindings.length} Required finding(s), 2 skeptics each`);
+  log(
+    `verify: ${requiredFindings.length} Required finding(s), severity-scaled ` +
+      `skeptics (2 for high-confidence, 1 for medium/low) at high effort`
+  );
   // Flat thunk list across (finding × skeptic) so the barrier covers all votes.
+  // Skeptic count scales with finding confidence: a high-confidence Required
+  // finding (the only tier that can trigger the deviation gate) gets 2 skeptics;
+  // medium/low get 1. The floor is 1, NEVER 0 — a Required finding given 0 votes
+  // is treated as "Unverified" by applyVerifyDrop (dropped + filed, not fixed),
+  // so 1 vote is the minimum that preserves the existing verify-drop semantics.
   const verifyJobs = [];
   for (const f of requiredFindings) {
-    for (let k = 0; k < 2; k++) {
+    const skepticCount = f.Confidence === 'high' ? 2 : 1;
+    for (let k = 0; k < skepticCount; k++) {
       verifyJobs.push({ id: f.id, k, finding: f });
     }
   }
+  subagentsLaunched += verifyJobs.length;
   const verifyResults = await parallel(
     verifyJobs.map((job) => () => {
       const f = job.finding;
-      const prompt = [
-        'You are an adversarial skeptic. Build the STRONGEST possible case that the finding below',
-        'is a FALSE POSITIVE / not-exploitable. Default to verdict="refuted" under uncertainty —',
-        'this gate guards spending an expensive Opus fix and a false "required" deviation that marks',
-        'the PR ready without review.',
-        `Finding location: ${f.Location}`,
-        `Description: ${f.Description}`,
-        `OWASP: ${f.OWASP}  STRIDE: ${f.STRIDE}  Confidence: ${f.Confidence}`,
-        `Recommended fix: ${f['Recommended fix']}`,
-        'Return { "verdict": "refuted" | "upheld", "rationale": "..." }.',
-      ].join('\n');
+      // Erosion findings (Source "erosion", issue #2064) are a QUALITY concern, not
+      // a vulnerability — the "false positive / not-exploitable" framing below is
+      // wrong for them (erosion is NEVER "exploitable", so an exploitability skeptic
+      // would systematically refute→drop every erosion finding). Give the skeptic an
+      // erosion-aware brief instead: argue the structural METRIC MISFIRED rather than
+      // that the finding is non-exploitable. Keep the security framing for all other
+      // sources. This branch is erosion-scoped on a literal `Source === 'erosion'`.
+      const prompt =
+        f.Source === 'erosion'
+          ? [
+              'You are an adversarial skeptic reviewing a code-quality net-erosion finding (a structural',
+              'metric — complexity and/or duplication — increased on this diff). Build the STRONGEST possible',
+              'case that the METRIC MISFIRED and there is no genuine net erosion here:',
+              '- the complexity delta is spurious (a measurement artifact, not a real branching/nesting increase);',
+              '- the "new duplication" is coincidental, boilerplate, or generated code, not extractable shared logic;',
+              '- the increase is a rename / move / file-boundary artifact (code relocated, not added) rather than net growth.',
+              'Default to verdict="refuted" under uncertainty — this gate guards spending an expensive Opus refactor',
+              'on a metric false positive. (Do NOT argue exploitability — this is a quality finding, never a vulnerability.)',
+              `Finding location: ${f.Location}`,
+              `Description: ${f.Description}`,
+              `Confidence: ${f.Confidence}`,
+              `Recommended fix: ${f['Recommended fix']}`,
+              'Return { "verdict": "refuted" | "upheld", "rationale": "..." }.',
+            ].join('\n')
+          : [
+              'You are an adversarial skeptic. Build the STRONGEST possible case that the finding below',
+              'is a FALSE POSITIVE / not-exploitable. Default to verdict="refuted" under uncertainty —',
+              'this gate guards spending an expensive Opus fix and a false "required" deviation that marks',
+              'the PR ready without review.',
+              `Finding location: ${f.Location}`,
+              `Description: ${f.Description}`,
+              `OWASP: ${f.OWASP}  STRIDE: ${f.STRIDE}  Confidence: ${f.Confidence}`,
+              `Recommended fix: ${f['Recommended fix']}`,
+              'Return { "verdict": "refuted" | "upheld", "rationale": "..." }.',
+            ].join('\n');
       return agent(prompt, {
         model: 'sonnet',
+        effort: 'high',
         agentType: 'general-purpose',
         schema: VERDICT_SCHEMA,
         label: `verify:${job.id}#${job.k}`,
@@ -595,7 +700,7 @@ if (requiredFindings.length) {
     })
   );
   // Collect votes per id. A dead skeptic (null) contributes no vote, so a
-  // finding whose both skeptics died gets [] → handled by applyVerifyDrop as
+  // finding whose every skeptic died gets [] → handled by applyVerifyDrop as
   // "Unverified": dropped (not auto-fixed) and surfaced as verdict "unverified"
   // in verify_report, matching the skeptic prompt's "refute under uncertainty"
   // bias. (A finding is only Upheld when at least one skeptic ran and voted.)
@@ -613,7 +718,7 @@ if (requiredFindings.length) {
 const { kept: keptFindings, dropped: refutedFindings } = applyVerifyDrop(deduped, votesById);
 
 // verify_report — one entry per Required finding (upheld / refuted / unverified).
-// "unverified" = both skeptics failed to vote: distinct from a clean upheld pass
+// "unverified" = every skeptic failed to vote: distinct from a clean upheld pass
 // so the PR comment shows the verification could not run rather than masking it
 // as verdict "upheld" with empty evidence.
 const verify_report = requiredFindings.map((f) => {
@@ -668,6 +773,7 @@ const fixed = [];
 if (fileGroups.size) {
   log(`fix: ${fixSet.length} finding(s) across ${fileGroups.size} file-group(s) on Opus`);
   const fixFileList = Array.from(fileGroups.entries()); // [ [file, findings], ... ]
+  subagentsLaunched += fixFileList.length;
   const fixResults = await parallel(
     fixFileList.map(([file, group]) => () => {
       const findingList = group
@@ -715,6 +821,19 @@ if (fileGroups.size) {
 }
 const fixedIds = new Set(fixed.map((e) => e.id));
 
+// Upheld erosion findings (issue #2064): an erosion/`Fixed` finding that survived
+// adversarial verify (verify==='Upheld'). The `verify` annotation lives ONLY on
+// applyVerifyDrop's OUTPUT copies (keptFindings), NOT on the `deduped` entries the
+// deferred_filings filter iterates — so derive an id membership set here, mirroring
+// the existing unverifiedIds pattern. The `verify === 'Upheld'` clause is
+// LOAD-BEARING: an Informational-bucket erosion finding also lands in keptFindings
+// (via applyVerifyDrop's else branch) but carries NO verify field, so filtering on
+// Source alone would wrongly scoop it up. Informational erosion is a pure FYI — it
+// must be filed nowhere.
+const upheldErosionIds = new Set(
+  keptFindings.filter((f) => f.Source === 'erosion' && f.verify === 'Upheld').map((f) => f.id)
+);
+
 // --- 6. FILE-PREP (pure JS, no gh) -------------------------------------------
 phase('file');
 
@@ -731,16 +850,30 @@ const blockerNums =
     : 'independent';
 
 const deferred_filings = deduped
-  // Deferred code-review/review findings, plus Unverified Required findings
-  // (both skeptics failed): not auto-fixed in this terminal phase, so file a
-  // follow-up rather than silently dropping them.
-  .filter((f) => f.bucket === 'Deferred' || unverifiedIds.has(f.id))
+  // Deferred code-review/review findings, Unverified Required findings (every
+  // skeptic failed), plus (issue #2064) upheld erosion findings Opus did NOT fix:
+  // none are resolved in this terminal phase, so file a follow-up rather than
+  // silently dropping them. A REFUTED erosion finding falls through all three
+  // clauses (it is not in upheldErosionIds and not Deferred/Unverified) → not
+  // filed, which is correct. Upheld erosion NEVER escalates the PR — it is a
+  // non-blocking follow-up only (the non-escalation invariant).
+  .filter(
+    (f) =>
+      f.bucket === 'Deferred' ||
+      unverifiedIds.has(f.id) ||
+      (upheldErosionIds.has(f.id) && !fixedIds.has(f.id))
+  )
   .map((f) => {
     const files = filePath(f.Location);
+    const isUpheldErosionUnfixed = upheldErosionIds.has(f.id) && !fixedIds.has(f.id);
     const isUnverified = unverifiedIds.has(f.id);
-    const tail = isUnverified
-      ? 'Required finding whose adversarial-verify skeptics both failed to vote: deferred to a follow-up rather than auto-applied in the terminal review phase.'
-      : 'Out of scope for this PR: surfaced by the review pass but not a change this PR delivers.';
+    // Order: upheld-erosion check FIRST (it is bucket==='Fixed', never Deferred,
+    // and never in unverifiedIds, so the three predicates are disjoint here).
+    const tail = isUpheldErosionUnfixed
+      ? 'Net structural erosion verified but not auto-fixed: filed as a non-blocking follow-up rather than escalating the PR (this is a quality finding, never a release blocker).'
+      : isUnverified
+        ? 'Finding whose adversarial-verify skeptics both failed to vote: deferred to a follow-up rather than auto-applied in the terminal review phase.'
+        : 'Out of scope for this PR: surfaced by the review pass but not a change this PR delivers.';
     const body = [
       f.Description,
       '',
@@ -833,6 +966,29 @@ const dispositions = deduped.map((f) => {
   return entry;
 });
 
+// --- outcome-envelope counts (Unit 3, issue #1860) ---------------------------
+// Computed per .claude/docs/outcome-envelope.md. Unit 4 passes these straight
+// into dispatch-emit-outcome; Unit 5 aggregates them. Additive only.
+// Exception: followups_deferred is the deferred-filing QUEUE depth, NOT
+// passed straight through — the SKILL body emits its OWN actual filed count.
+const findings_surfaced = dispositions.length; // every deduped finding, any bucket
+const fixes_applied = fixed.length; // = the count of Fixed-bucket dispositions
+const followups_deferred = deferred_filings.length; // deferred-filing QUEUE depth (Step-5a entries the SKILL body must still file); NOT a filed count
+// findings_actionable: dispositions whose FINAL bucket ∈ {Fixed, Required, Deferred}.
+// Compute from `dispositions` (the post-remap array) NOT `deduped`: dispositions
+// remaps refuted/unverified Required findings to Refuted/Unverified, so Required
+// here means upheld-only. Computing from `deduped` would wrongly count those
+// dropped findings (they still carry bucket==='Required' there) as actionable.
+const ACTIONABLE_BUCKETS = new Set(['Fixed', 'Required', 'Deferred']);
+const findings_actionable = dispositions.filter((d) => ACTIONABLE_BUCKETS.has(d.bucket)).length;
+// disposition: escalated on deviation; else completed_with_fixes when any fix
+// landed; else completed. Matches the path→value table in outcome-envelope.md.
+const disposition = deviation
+  ? 'escalated'
+  : fixed.length > 0
+    ? 'completed_with_fixes'
+    : 'completed';
+
 return {
   dispositions,
   fixed,
@@ -841,4 +997,15 @@ return {
   verify_report,
   deviation,
   security_note: _a.security_note,
+  // coverage_incomplete is independent of `deviation`: it flags a launch-efficiency
+  // back-off (security wave skipped because both quality finders died — model
+  // likely throttled), surfaced in the Step 6 partial-coverage comment line.
+  coverage_incomplete,
+  coverage_note,
+  findings_surfaced,
+  findings_actionable,
+  fixes_applied,
+  followups_deferred,
+  subagents_launched: subagentsLaunched,
+  disposition,
 };

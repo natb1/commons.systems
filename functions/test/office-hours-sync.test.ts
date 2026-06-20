@@ -35,7 +35,7 @@ import {
   parseJitDueMarker,
   buildAppJwt,
   mintInstallationToken,
-  type JitIssue,
+  type ReminderItem,
 } from "../src/office-hours-sync";
 import { truncateForLog } from "../src/log-utils";
 
@@ -144,8 +144,9 @@ function createInMemoryFirestore(
   return { doc, collection, batch, bulkWriter, _docs: docs };
 }
 
-function makeIssue(overrides: Partial<JitIssue> = {}): JitIssue {
+function makeIssue(overrides: Partial<ReminderItem> = {}): ReminderItem {
   return {
+    kind: "reminder",
     number: 1,
     title: "Daily chore",
     body: "Recurring daily chore. Close when done.",
@@ -176,12 +177,17 @@ describe("syncOfficeHoursCore", () => {
       memberEmails: ["owner@example.com"],
     });
 
-    expect(result).toEqual({ written: 1, deleted: 0, skippedNoDate: 0 });
+    expect(result).toEqual({
+      written: 1,
+      deleted: 0,
+      skippedNoDate: 0,
+    });
 
     const written = store._docs.get("office-hours/prod/items/daily-chore") as Record<
       string,
       unknown
     > & { dueAt: { toDate: () => Date } };
+    expect(written.kind).toBe("reminder");
     expect(written.title).toBe("Daily chore");
     expect(written.repo).toBe("natb1/office-hours-nate");
     expect(written.issueNumber).toBe(42);
@@ -203,7 +209,11 @@ describe("syncOfficeHoursCore", () => {
       memberEmails: ["owner@example.com"],
     });
 
-    expect(result).toEqual({ written: 1, deleted: 0, skippedNoDate: 1 });
+    expect(result).toEqual({
+      written: 1,
+      deleted: 0,
+      skippedNoDate: 1,
+    });
     expect(store._docs.has("office-hours/prod/items/daily-chore")).toBe(true);
     expect(store._docs.has("office-hours/prod/items/budget-review")).toBe(false);
   });
@@ -222,7 +232,11 @@ describe("syncOfficeHoursCore", () => {
       memberEmails: ["owner@example.com"],
     });
 
-    expect(result).toEqual({ written: 0, deleted: 1, skippedNoDate: 0 });
+    expect(result).toEqual({
+      written: 0,
+      deleted: 1,
+      skippedNoDate: 0,
+    });
     expect(store._docs.has("office-hours/prod/items/stale-key")).toBe(false);
   });
 
@@ -240,8 +254,16 @@ describe("syncOfficeHoursCore", () => {
     const first = await syncOfficeHoursCore(deps);
     const second = await syncOfficeHoursCore(deps);
 
-    expect(first).toEqual({ written: 1, deleted: 0, skippedNoDate: 0 });
-    expect(second).toEqual({ written: 1, deleted: 0, skippedNoDate: 0 });
+    expect(first).toEqual({
+      written: 1,
+      deleted: 0,
+      skippedNoDate: 0,
+    });
+    expect(second).toEqual({
+      written: 1,
+      deleted: 0,
+      skippedNoDate: 0,
+    });
     expect(store._docs.size).toBe(1);
     expect(store._docs.has("office-hours/prod/items/daily-chore")).toBe(true);
   });
@@ -262,7 +284,7 @@ describe("syncOfficeHoursCore", () => {
 
     // Only the valid key is written; the path-escaping / invalid keys are
     // skipped before any Firestore write, so no nested doc is created.
-    expect(result.written).toBe(1);
+    expect(result).toEqual({ written: 1, deleted: 0, skippedNoDate: 0 });
     expect(store._docs.has("office-hours/prod/items/daily-chore")).toBe(true);
     expect(store._docs.has("office-hours/prod/items/a/b/c")).toBe(false);
     expect([...store._docs.keys()]).toEqual(["office-hours/prod/items/daily-chore"]);
@@ -479,14 +501,20 @@ describe("fetchOpenJitIssuesLive", () => {
     });
 
     expect(issues).toHaveLength(2);
-    expect(issues[0]).toMatchObject({
+
+    const reminder0 = issues[0] as ReminderItem;
+    expect(reminder0).toMatchObject({
+      kind: "reminder",
       number: 42,
       title: "Daily chore",
       jitKey: "daily-chore",
       repo: "natb1/office-hours-nate",
     });
-    expect(issues[0].dueAt?.toISOString()).toBe("2026-01-15T12:00:00.000Z");
-    expect(issues[1]).toMatchObject({
+    expect(reminder0.dueAt?.toISOString()).toBe("2026-01-15T12:00:00.000Z");
+
+    const reminder1 = issues[1] as ReminderItem;
+    expect(reminder1).toMatchObject({
+      kind: "reminder",
       number: 50,
       jitKey: "legacy",
       dueAt: null,
@@ -591,8 +619,8 @@ describe("fetchOpenJitIssuesLive", () => {
     expect(secondBody.variables.cursor).toBe("cursor-abc");
 
     expect(issues).toHaveLength(2);
-    expect(issues[0].jitKey).toBe("page1-key");
-    expect(issues[1].jitKey).toBe("page2-key");
+    expect((issues[0] as ReminderItem).jitKey).toBe("page1-key");
+    expect((issues[1] as ReminderItem).jitKey).toBe("page2-key");
   });
 
   it("stops pagination when hasNextPage is true but endCursor is null", async () => {
@@ -628,7 +656,7 @@ describe("fetchOpenJitIssuesLive", () => {
     // Must not loop — one fetch only.
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(issues).toHaveLength(1);
-    expect(issues[0].jitKey).toBe("solo-key");
+    expect((issues[0] as ReminderItem).jitKey).toBe("solo-key");
   });
 });
 

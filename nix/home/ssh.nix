@@ -8,7 +8,7 @@
 # - Security-focused defaults (modern ciphers, key algorithms)
 # - Host-specific configurations
 #
-# To add a new host, add an entry to programs.ssh.matchBlocks
+# To add a new host, add an entry to programs.ssh.settings
 
 { ... }:
 
@@ -24,29 +24,27 @@
       HostKeyAlgorithms ssh-ed25519,rsa-sha2-512,rsa-sha2-256
     '';
 
-    matchBlocks = {
+    settings = {
       "*" = {
-        forwardAgent = false;
-        compression = false;
-        userKnownHostsFile = "~/.ssh/known_hosts";
-        controlMaster = "auto";
-        controlPath = "~/.ssh/sockets/%r@%h:%p";
-        controlPersist = "10m";
-        serverAliveInterval = 60;
-        serverAliveCountMax = 3;
-        hashKnownHosts = true;
-        addKeysToAgent = "no";
-        extraOptions = {
-          StrictHostKeyChecking = "ask";
-          VerifyHostKeyDNS = "yes";
-        };
+        ForwardAgent = false;
+        Compression = false;
+        UserKnownHostsFile = "~/.ssh/known_hosts";
+        ControlMaster = "auto";
+        ControlPath = "~/.ssh/sockets/%r@%h:%p";
+        ControlPersist = "10m";
+        ServerAliveInterval = 60;
+        ServerAliveCountMax = 3;
+        HashKnownHosts = true;
+        AddKeysToAgent = "no";
+        StrictHostKeyChecking = "ask";
+        VerifyHostKeyDNS = "yes";
       };
 
       "github.com" = {
-        hostname = "github.com";
-        user = "git";
-        identityFile = "~/.ssh/id_ed25519";
-        identitiesOnly = true;
+        HostName = "github.com";
+        User = "git";
+        IdentityFile = "~/.ssh/id_ed25519";
+        IdentitiesOnly = true;
       };
     };
   };

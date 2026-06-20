@@ -1,0 +1,29 @@
+{
+  "name": "@commons-systems/ds",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "lint": "eslint src/",
+    "test": "vitest run"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./styles.css": "./styles.css",
+    "./fonts.css": "./fonts.css",
+    "./base.css": "./base.css",
+    "./tokens/colors.css": "./tokens/colors.css",
+    "./tokens/typography.css": "./tokens/typography.css",
+    "./tokens/spacing.css": "./tokens/spacing.css",
+    "./tokens/effects.css": "./tokens/effects.css"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "devDependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0"
+  }
+}

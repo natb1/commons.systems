@@ -9,10 +9,36 @@
 # issues oldest-first, makes ONE per-item liveness call against each item's
 # <N>-* worktree, and emits exactly one of four dispositions, in this priority:
 #
-#   live <sessionId>
-#     The oldest labeled item whose <N>-* worktree has a live Claude session.
-#     Live wins over fresh: if any labeled item is live, its session is
-#     attached in preference to picking up a sessionless sibling fresh.
+#   idle <sessionId>
+#     The oldest labeled item whose <N>-* worktree has an idle/complete Claude
+#     session (state waiting/done/idle). Idle wins over fresh: if any labeled
+#     item has an attachable idle session, that session is attached in preference
+#     to picking up a sessionless sibling fresh.
+#
+#     The disposition gates on the granular session `state`, not mere liveness —
+#     it must only surface an IDLE session, never an actively-WORKING one. The
+#     state→action contract:
+#
+#       state                                       action
+#       ------------------------------------------- -----------------------------
+#       working (busy)                              SKIP the issue — being worked
+#                                                   autonomously; don't attach,
+#                                                   don't fresh-launch
+#       waiting / done / idle                       ATTACH (done requires --all
+#                                                   to see)
+#       stopped / paused / any unrecognized state   EXCLUDE from attach — skip
+#                                                   the issue (fail-safe)
+#       not in registry                             sessionless → fresh-launch
+#
+#     Stopped/paused (and any unrecognized state) are excluded from attach —
+#     treated like working (skip the issue). Known consequence: such a session
+#     still name-matches in `worktree_has_live_session`, so its issue won't
+#     fresh-launch either and can wedge until the session is cleaned up.
+#     Handling that wedge is out of scope here — it would require changing the
+#     shared `worktree_has_live_session` / `claude_agents_list_all` helpers,
+#     which gate the dispatch router's worktree-occupancy decisions on the hot
+#     path; making `done` sessions newly 'occupy' a worktree there would block
+#     phase-worker launches.
 #   office-hours <issue> <phase> <pr-or-dash> <worktree-path>
 #     The oldest labeled item with NO live session — a sessionless item that
 #     /office-hours picks up fresh.
@@ -93,7 +119,7 @@ resolve_main_worktree() {
 
 # Open issues carrying dispatch:office-hours, with their creation times and
 # labels (labels ride this existing fetch — no extra gh call; the main-qa
-# override below re-queries ISSUE_LIST by number to detect the `main-qa` label).
+# override below filters ISSUE_LIST in memory (no re-query) to detect the `main-qa` label).
 ISSUE_LIST=$(gh issue list --label dispatch:office-hours --state open --json number,createdAt,labels)
 
 # Map each registered <N>-* worktree to its on-disk path(s), keyed by issue
@@ -108,60 +134,90 @@ while IFS= read -r wt_record; do
   fi
 done < <(list_worktree_records)
 
-# Returns the sessionId of a live <num>-* worktree on stdout (rc 0), rc 1 if the
-# item is sessionless (no worktree, or every worktree queried clean), or rc 2 if
-# liveness is UNKNOWN for some worktree (daemon unqueryable) and none was live.
+# Returns the sessionId of an ATTACHABLE idle/complete session occupying a
+# <num>-* worktree on stdout (rc 0), or one of three non-attachable verdicts:
+#   rc 0 — attachable: an idle session (state waiting/done/idle) was found;
+#          its sessionId is on stdout.
+#   rc 1 — sessionless: no worktree, or every worktree queried clean.
+#   rc 2 — UNKNOWN: the daemon could not be queried for some worktree, and no
+#          attachable session was seen.
+#   rc 3 — present-but-not-attachable: a session was seen but its state is
+#          working/stopped/paused/unrecognized — skip the issue (don't attach,
+#          don't fresh-launch into its occupied worktree).
+# Gates on the granular session `state` (via claude_sessions_with_name_all,
+# which passes --all so `done` sessions are visible), not on mere liveness.
+# Within an issue, an attachable idle session under ANY name/path wins, so the
+# loops keep looking past a skip/unknown row; the resolution priority once both
+# loops finish with no attachable match is attachable > skip (3) > unknown (2)
+# > sessionless (1).
 # Two-name check per worktree (#1311): queries both the worktree basename (phase
 # worker) and office-hours-<N> (the renamed office-hours session). Mirrors
 # worktree_has_live_session's basename-then-office-hours ordering so a
 # basename-named session still resolves first.
 issue_live_session_id() {
-  local num="$1" p base nm sessions sid saw_unknown=0
+  local num="$1" p base nm sessions sid state saw_unknown=0 saw_skip=0
   local paths="${WORKTREE_PATHS_BY_NUM[$num]:-}"
   [[ -z "$paths" ]] && return 1
   while IFS= read -r p; do
     [[ -z "$p" ]] && continue
     base=$(basename "$p")
-    # Two-name liveness (#1311): a live session named after the worktree basename
+    # Two-name liveness (#1311): a session named after the worktree basename
     # (phase worker) OR office-hours-<N> (the renamed office-hours session) occupies
     # this worktree. Mirrors worktree_has_live_session's basename-then-office-hours
     # ordering, so a basename-named session still resolves first.
     for nm in "$base" "office-hours-$num"; do
-      if sessions=$(claude_sessions_with_name "$nm"); then
+      if sessions=$(claude_sessions_with_name_all "$nm"); then
+        # rc 0 with non-empty output → a matching session row; rc 0 with empty
+        # output → no session of that name (continue). Guard before cutting.
         if [[ -n "$sessions" ]]; then
-          sid=$(printf '%s\n' "$sessions" | head -n 1 | cut -f1)
-          printf '%s' "$sid"
-          return 0
+          IFS=$'\t' read -r sid state _ <<< "$(printf '%s\n' "$sessions" | head -n 1)"
+          case "$state" in
+            waiting|done|idle)
+              # Attachable — return immediately.
+              printf '%s' "$sid"
+              return 0
+              ;;
+            *)
+              # working/stopped/paused/unrecognized (or empty/malformed) →
+              # not attachable; keep looking — an attachable session under
+              # another name/path still wins.
+              saw_skip=1
+              ;;
+          esac
         fi
       else
         saw_unknown=1
       fi
     done
   done <<< "$paths"
+  (( saw_skip )) && return 3
   (( saw_unknown )) && return 2
   return 1
 }
 
-# Single oldest-first enumeration with one per-item liveness call. LIVE wins
-# over FRESH: a live item is attached in preference to any sessionless sibling.
+# Single oldest-first enumeration with one per-item liveness call. IDLE wins
+# over FRESH: an item with an attachable idle session is attached in preference
+# to any sessionless sibling.
 SORTED=$(printf '%s' "$ISSUE_LIST" | jq -r 'sort_by(.createdAt) | .[].number')
 FRESH_NUM=""
-LIVE_ID=""
+IDLE_ID=""
 while IFS= read -r issue_num; do
   [[ -z "$issue_num" ]] && continue
   if sid=$(issue_live_session_id "$issue_num"); then
-    LIVE_ID="$sid"
+    IDLE_ID="$sid"
     break
   else
     rc=$?
-    [[ "$rc" -eq 2 ]] && continue            # UNKNOWN → skip
-    [[ -z "$FRESH_NUM" ]] && FRESH_NUM="$issue_num"   # rc 1 → sessionless
+    case "$rc" in
+      2|3) continue ;;                               # UNKNOWN or skip → don't fresh-launch
+      *) [[ -z "$FRESH_NUM" ]] && FRESH_NUM="$issue_num" ;;  # rc 1 → sessionless
+    esac
   fi
 done <<< "$SORTED"
 
-# Priority 1: emit the oldest live item.
-if [[ -n "$LIVE_ID" ]]; then
-  printf 'live %s\n' "$LIVE_ID"
+# Priority 1: emit the oldest idle item.
+if [[ -n "$IDLE_ID" ]]; then
+  printf 'idle %s\n' "$IDLE_ID"
   exit 0
 fi
 

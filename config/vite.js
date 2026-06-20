@@ -16,7 +16,7 @@ const firebaseDedupe = [
 const appBase = defineConfig({
   envDir: path.resolve(import.meta.dirname, ".."),
   resolve: {
-    dedupe: firebaseDedupe,
+    dedupe: [...firebaseDedupe, "react", "react-dom", "react/jsx-runtime"],
   },
   build: {
     // Higher target than Vite default ('modules') — fewer syntax transforms

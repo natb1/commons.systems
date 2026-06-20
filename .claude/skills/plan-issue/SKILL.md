@@ -35,7 +35,7 @@ The built-in plan-mode workflow normally injects its instructions as tool
 guidance when `EnterPlanMode` is active. This session does **not** enter plan
 mode, so it never receives them. The adopted plan-mode instructions are therefore
 reproduced **verbatim in the appendix** below — follow them as the authority for
-how to explore, design, review, and shape the plan artifact, with the two
+how to explore, design, review, and shape the plan artifact, with the
 substitutions the appendix documents.
 
 ## Idempotency preamble and target resolution
@@ -203,9 +203,7 @@ searches for existing implementations to reuse, another explores related
 components, a third investigates testing patterns). Follow the appendix's
 *Exploration* block.
 
-Collect from the agents: the relevant filenames, the code-path traces, and the
-reuse candidates with their file paths. This is the exploration context Step 4
-hands to the design agents.
+**Return contract (output format only — does not change how the agent explores).** Instruct each `Explore` agent to RETURN a compact structured findings block, and to NOT dump whole files into its reply. Each agent returns: a **summary** of what it found relevant to the issue scope; **relevant excerpts** as small `path:line`-anchored spans (the few lines that matter), not whole-file contents or large verbatim blocks; and **reuse candidates** — existing functions/utilities/patterns to reuse, each with its `path:line`. The parent context then carries these findings, not the files. Mirror the disposition-struct discipline from `review-fix`/`qa-fix`: the orchestrator "never holds raw findings — only this compact summary." This is the exploration context Step 4 hands to the design agents.
 
 ### 4. Design — built-in `Plan` subagent, direct fan-out
 
@@ -219,9 +217,9 @@ warranted).
 
 In each `Plan` agent's prompt, provide:
 
-1. The **Step-3 exploration context** — the filenames and code-path traces the
-   `Explore` agents surfaced. The `Plan` agents skip `CLAUDE.md`/git too, so this
-   context must be inline.
+1. The **Step-3 exploration context** — the compact findings the `Explore`
+   agents returned (summary, path:line-anchored excerpts, and reuse candidates).
+   The `Plan` agents skip `CLAUDE.md`/git too, so this context must be inline.
 2. The **issue scope and acceptance criteria**.
 3. The **`/implement-unit` model-selection heuristic, inline** (the `Plan` agent
    will not read `implement-unit/SKILL.md`, so reproduce it):
@@ -244,10 +242,18 @@ recommended approach only, not all alternatives.
 
 ### 5. Self-review — main thread
 
-Read the **critical files** the `Explore`/`Plan` subagents flagged before
-finalizing, to deepen your own understanding and confirm the plan is executable
-and aligned with the issue's acceptance criteria (the appendix's *Review* block).
-Resolve any disagreement between multiple `Plan` proposals here.
+Finalize from the **compact findings** the `Explore`/`Plan` subagents returned
+(Step 3's return contract) — not by re-reading critical files whole. Confirm the
+plan is executable and aligned with the issue's acceptance criteria, and resolve
+any disagreement between multiple `Plan` proposals here.
+
+**Bounded confirmatory read (escape hatch).** If a single specific decision
+turns on a detail the findings did not capture, you may `Read` **one specific
+span** (a named `path:line` range, not a whole file) to confirm it — a narrow,
+targeted check, never a re-hydration of the critical files. If you find yourself
+wanting to re-read files wholesale, the findings were insufficient: re-run a
+focused `Explore` agent (Step 3) with a tighter ask rather than pulling whole
+files into the parent.
 
 ### 6. Clarification / deviation gate — main thread
 
@@ -334,8 +340,16 @@ returns — must contain:
   - **Dependencies** — prior units that must complete first, so build order is
     explicit.
 - **Reuse** notes — existing functions/utilities to reuse, with their file paths.
-- A **Verification** section — how to test the change end-to-end (run the code,
-  use MCP tools, run tests).
+- A **Verification** section — how to test the change end-to-end. Put
+  deterministic, CI-safe, auto-runnable checks (test-suite invocations,
+  typechecks, builds) in fenced ` ```verify ` blocks so `/implement`
+  auto-executes them before opening the PR. Invoke an app's unit-test suite as
+  `npx vitest run --project <app> --root <repo_root>` (the CI-equivalent form),
+  never `npx vitest run --root <app>` — rooting at the app directory scopes
+  vite's `server.fs.allow` to it and denies root-hoisted `?url` asset imports
+  (e.g. `pdfjs-dist`'s worker). Keep manual steps, observe-in-
+  production checks, live-systemd verification, and judgment calls as **prose** —
+  `/implement` skips those, leaving them for QA and humans.
 - A clean-context **plan preface** (below), so the `implement` worker executes
   from the comment alone.
 
@@ -362,7 +376,51 @@ in the worktree `<worktree-path>` (branch `<N>-…`). Build each unit below in
 order via `/implement-unit` (one commit per unit), then run the terminal
 procedure verbatim:
 
-1. **Open the draft PR** (`dangerouslyDisableSandbox: true` — calls `gh`). Write
+1. **Execute the plan's Verification section** (`dangerouslyDisableSandbox: true`
+   — `dispatch-read-plan` calls `gh`). Run the auto-runnable ` ```verify `
+   blocks under `set -o pipefail` so an upstream `dispatch-read-plan` failure
+   cannot be masked:
+
+   ```bash
+   set -o pipefail
+   .claude/skills/dispatch-propagate/scripts/dispatch-read-plan <N> \
+     | .claude/skills/dispatch-propagate/scripts/dispatch-run-verification
+   ```
+
+   Route on the exit code: exit 3 → proceed unchanged; exit 0 → proceed.
+
+   - **exit 1** → a ```verify block failed; fix via `/implement-unit` (cap 2)
+     and re-run. If the runner still exits 1 after the cap, run this deviation
+     marker and stop (skip the Step 3 completion marker):
+
+     ```bash
+     .claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \
+       "/implement: plan verification failed after 2 fix attempts (check <index>)"
+     ```
+
+   - **exit 5** → the plan has an unclosed/malformed ```verify fence (opened in
+     the Verification section but never closed before EOF). This is a
+     plan-authoring error the worker cannot repair, **not** a fixable verify
+     failure — do **not** enter the fix lane; run this deviation marker and stop
+     (skip the Step 3 completion marker):
+
+     ```bash
+     .claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \
+       "/implement: plan verification could not run — malformed plan (unclosed verify fence)"
+     ```
+
+   - **any other non-zero exit** (exit 4 = empty/absent plan input, or an
+     upstream `dispatch-read-plan` failure surfaced via `pipefail`) is an
+     environment/upstream error, **not** a fixable verify failure — do **not**
+     enter the fix lane; run this deviation marker and stop (skip the Step 3
+     completion marker):
+
+     ```bash
+     .claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \
+       "/implement: plan verification could not run — upstream dispatch-read-plan failed or plan input was empty"
+     ```
+
+2. **Open the draft PR** (`dangerouslyDisableSandbox: true` — calls `gh`). Write
    the PR body prose to `tmp/pr-body.md` first, then:
 
    ```bash
@@ -373,7 +431,7 @@ procedure verbatim:
      --body-file tmp/pr-body.md)
    ```
 
-2. **Check for deviation, then write the marker (or skip it), then stop.**
+3. **Check for deviation, then write the marker (or skip it), then stop.**
    - **No deviation** (built as planned):
      ```bash
      .claude/skills/dispatch-propagate/scripts/dispatch-mark-complete \
@@ -397,13 +455,17 @@ assemble the plan.
 
 This session does **not** have plan mode active, so it cannot receive these as
 injected tool instructions. They are reproduced verbatim and govern Steps 3–7,
-with two substitutions:
+with these substitutions:
 
 - (i) "the user's request" / "the user provided specific file paths" → the
   **issue scope / acceptance criteria** (there is no live user supplying paths).
 - (ii) "Use `AskUserQuestion` to clarify any remaining questions" is the
   **escalation trigger** (Step 6: ambiguity or major scope deviation →
   office-hours), **not** a routine default.
+- (iii) the *Review* block's "Read the critical files identified by agents" →
+  Step 5's **findings-first** discipline: finalize from the compact findings, and
+  only `Read` one named `path:line` span as a bounded confirmatory check — never
+  re-hydrate the critical files whole.
 
 ### Exploration (built-in `Explore`)
 
@@ -446,7 +508,7 @@ with two substitutions:
 > - Ensure that the plan file is concise enough to scan quickly, but detailed enough to execute effectively
 > - Name the critical files to be modified. For changes that repeat a pattern across many files, describe the pattern once and list a few representative paths — do not enumerate every file or line number
 > - Reference existing functions and utilities you found that should be reused, with their file paths
-> - Include a verification section describing how to test the changes end-to-end (run the code, use MCP tools, run tests)
+> - Include a verification section describing how to test the changes end-to-end. Put deterministic, CI-safe, auto-runnable checks (test-suite invocations, typechecks, builds) in fenced ` ```verify ` blocks so `/implement` auto-executes them before opening the PR. Invoke an app's unit-test suite as `npx vitest run --project <app> --root <repo_root>` (the CI-equivalent form), never `npx vitest run --root <app>` — rooting at the app directory scopes vite's `server.fs.allow` to it and denies root-hoisted `?url` asset imports (e.g. `pdfjs-dist`'s worker). Keep manual steps, observe-in-production checks, live-systemd verification, and judgment calls as **prose** — `/implement` skips those, leaving them for QA and humans.
 
 ### Intentionally NOT adopted
 

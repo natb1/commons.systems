@@ -7,7 +7,7 @@
  * A self-contained, sandboxed Workflow-tool script structurally modeled on
  * .claude/workflows/review-fix.js. It ALWAYS classifies each QA residue item
  * (opus-fixable / needs-main / needs-human / already-satisfied), adversarially
- * verifies the non-aesthetic `needs-human` calls with Sonnet skeptics, and
+ * verifies the non-aesthetic, non-planned-deferral `needs-human` calls with Sonnet skeptics, and
  * returns the resulting dispositions. `already-satisfied` items — whose
  * criterion is already provably met by readable evidence — are dropped from the
  * residue as PASS, partitioned out into the `already_satisfied` return array.
@@ -25,7 +25,12 @@
  * args IN:
  *   { pr_num, issue_num, app_dir, browser_available:bool, firestore_caveat:bool,
  *     residue:[ { id, title, kind:"fail"|"needs-human-judgment"|"main-gated-fail",
- *       url_path, expected_outcome, finding, page_text, screenshot_path } ],
+ *       url_path, expected_outcome, finding, page_text, screenshot_path,
+ *       planned_deferral?:bool } ],   // planned_deferral true ⇒ a planned-deferral
+ *                                     // residue item: its acceptance criterion is
+ *                                     // documented as non-assertable at merge time
+ *                                     // (measured downstream), with the deferral
+ *                                     // reason in `finding`. Absent/false ⇒ normal.
  *     plan_fix:bool,             // when true (+ opus-fixable items exist), run fix-plan
  *     acceptance_criteria:string, // issue acceptance criteria the plan must satisfy
  *     changed_files:string }      // the --diff file list + hunks scoping the plan
@@ -43,8 +48,8 @@
  *   - already_satisfied: items whose criterion is already provably met by
  *     readable evidence (passing tests, page text, code) — dropped from the
  *     residue as PASS, so no fix-plan and no office-hours escalation.
- *   - verify_report: one entry per NON-AESTHETIC needs-human candidate that went
- *     through the skeptic fan-out. `verdict` is "refuted"|"upheld"|"unverified".
+ *   - verify_report: one entry per NON-AESTHETIC, NON-PLANNED-DEFERRAL needs-human
+ *     candidate that went through the skeptic fan-out. `verdict` is "refuted"|"upheld"|"unverified".
  *   - fix_plan: the ordered Opus fix plan ({ units, deviation, deviation_reason })
  *     when the fix-plan phase ran; `null` when it did not (plan_fix false/absent,
  *     no opus-fixable items, or the planning agent died).
@@ -146,9 +151,20 @@ const hasRefuted = (votes) => votes.includes('refuted');
 
 // normative spec: .claude/skills/dispatch-propagate/scripts/dispatch-qa-disposition
 // Apply the QA downgrade rule per classification item, preserving input order.
-// Each input item carries { id, class, aesthetic }; votesById[id] is the array
-// of skeptic verdicts ("refuted"|"upheld"), missing/[] when both skeptics died.
-// Returns one entry per item: { id, final_class, verify }.
+// Each input item carries { id, class, aesthetic, planned_deferral }; votesById[id]
+// is the array of skeptic verdicts ("refuted"|"upheld"), missing/[] when both
+// skeptics died. Returns one entry per item: { id, final_class, verify }.
+//
+// PLANNED-DEFERRAL BYPASS (issue #1891) — the FIRST branch, before everything:
+//   When planned_deferral is true the item's acceptance criterion is documented
+//   as non-assertable at merge time (measured downstream), so it is ALWAYS
+//   needs-main and never auto-fixable — regardless of the class the classify
+//   agent assigned. This branch fires FIRST, symmetric with the aesthetic
+//   bypass: it must precede the `!== 'needs-human'` pass-through, or an
+//   opus-fixable planned-deferral item (the literal original failure) would slip
+//   through and re-enter the auto-fix loop. The item also never reaches the
+//   skeptic fan-out (excluded by the candidate filter), so no Sonnet skeptic can
+//   downgrade it back to opus-fixable.
 //
 // INVERTED-POLARITY WARNING — DO NOT "HARMONIZE" WITH applyVerifyDrop in
 // review-fix.js (dispatch-review-verify-drop):
@@ -160,6 +176,17 @@ const hasRefuted = (votes) => votes.includes('refuted');
 //   the two contexts. Do not align them.
 function applyQaDisposition(classifications, votesById) {
   return classifications.map((c) => {
+    if (c.planned_deferral === true) {
+      // Planned-deferral residue item (issue #1891): its acceptance criterion is
+      // documented as non-assertable at merge time, so it is authoritatively
+      // needs-main and never auto-fixable. FIRST branch — fires regardless of
+      // the class the classify agent assigned, symmetric with the aesthetic
+      // bypass below; placing it after the `!== 'needs-human'` pass-through would
+      // let an opus-fixable planned-deferral item reintroduce the auto-fix loop.
+      // needs-main items are filed as blocked_by follow-ups in Step 3.6 — never
+      // auto-fixed, never skeptic-downgraded.
+      return { id: c.id, final_class: 'needs-main', verify: 'n/a' };
+    }
     if (c.class === 'already-satisfied') {
       // No-skeptic-fan-out pass-through, symmetric with the aesthetic bypass:
       // the criterion is already provably met, so there is nothing to verify
@@ -192,6 +219,16 @@ function applyQaDisposition(classifications, votesById) {
   });
 }
 
+// >>> partitionDispositions: sliced + eval'd by test-dispatch-scripts.sh (#1844) >>>
+function partitionDispositions(allDispositions) {
+  const already_satisfied = allDispositions
+    .filter((d) => d.class === 'already-satisfied')
+    .map((d) => ({ id: d.id, title: d.title, kind: d.kind, rationale: d.rationale }));
+  const dispositions = allDispositions.filter((d) => d.class !== 'already-satisfied');
+  return { dispositions, already_satisfied };
+}
+// <<< partitionDispositions <<<
+
 // --- shared prompt fragments -------------------------------------------------
 
 const UNTRUSTED_GUARD = [
@@ -214,6 +251,13 @@ log(`args type: ${typeof args}; residue count=${(_a.residue || []).length}; brow
 
 const residue = _a.residue || [];
 
+// subagents_launched (source 1, this Workflow's own fan-out): a single
+// accumulator incremented at each spawn site, inside the guard that actually
+// launches the agents. A launched-but-dead agent still counts — increment at
+// the spawn, not on the result. Unit 4's SKILL body adds any source-2 subagents
+// (e.g. the /implement-unit fix loop) before emitting the envelope.
+let subagentsLaunched = 0;
+
 // --- 1. CLASSIFY (one Opus agent, barrier) -----------------------------------
 phase('classify');
 
@@ -226,6 +270,7 @@ const classifyItems = residue.map((r) => ({
   finding: r.finding,
   page_text: r.page_text,
   screenshot_path: r.screenshot_path,
+  planned_deferral: r.planned_deferral === true,
 }));
 
 const classifyPrompt = [
@@ -252,6 +297,11 @@ const classifyPrompt = [
   'already-satisfied items too — its value is immaterial (they never enter the',
   'candidate filter), so `false` is fine.',
   '',
+  'PLANNED-DEFERRAL ITEMS:',
+  '- When an item\'s `planned_deferral` is true, its acceptance criterion is',
+  '  documented as non-assertable at merge time (measured downstream), so classify',
+  '  it "needs-main", NOT "opus-fixable" — there is no defect Opus can fix now.',
+  '',
   'VISUAL-EVIDENCE HANDLING:',
   '- page_text is the always-reliable text-primary baseline.',
   '- IF browser_available is true AND an item\'s screenshot_path is non-empty,',
@@ -272,6 +322,7 @@ const classifyPrompt = [
   '</untrusted>',
 ].join('\n');
 
+subagentsLaunched += 1;
 const classifyRes = await agent(classifyPrompt, {
   model: 'opus',
   agentType: 'general-purpose',
@@ -282,36 +333,46 @@ const classifyRes = await agent(classifyPrompt, {
 
 const classById = new Map();
 if (classifyRes && classifyRes.classifications) {
-  for (const c of classifyRes.classifications) classById.set(c.id, c);
+  for (const c of classifyRes.classifications) classById.set(String(c.id), c);
 }
 
 // Build the classification list in residue (input) order. Prefer a clear error
 // over a silent fallback (code-style.md): if the classify agent omitted an id,
 // name it — do not invent a class.
 const classifications = residue.map((r) => {
-  const c = classById.get(r.id);
+  const c = classById.get(String(r.id));
   if (!c) {
     throw new Error(`classify: agent returned no classification for residue id "${r.id}"`);
   }
-  return { id: r.id, class: c.class, aesthetic: c.aesthetic, rationale: c.rationale };
+  // planned_deferral is INPUT (sourced from residue r), not classify-agent
+  // output — it authoritatively forces needs-main in applyQaDisposition.
+  return {
+    id: r.id,
+    class: c.class,
+    aesthetic: c.aesthetic,
+    rationale: c.rationale,
+    planned_deferral: r.planned_deferral === true,
+  };
 });
 log(`classify: ${classifications.length} item(s) classified`);
 
 // --- 2. VERIFY (parallel, Sonnet skeptics, INVERTED polarity) ----------------
 phase('verify');
 
-// Candidate set = non-aesthetic needs-human items. Aesthetic needs-human items
-// BYPASS the fan-out and stay needs-human (enforced by applyQaDisposition's
-// aesthetic branch), so they are excluded here.
+// Candidate set = non-aesthetic, non-planned-deferral needs-human items.
+// Aesthetic needs-human items BYPASS the fan-out and stay needs-human (enforced
+// by applyQaDisposition's aesthetic branch); planned-deferral items are
+// authoritatively needs-main (applyQaDisposition's first branch, issue #1891) —
+// both are excluded here so no skeptic can downgrade them back to opus-fixable.
 const candidates = classifications.filter(
-  (c) => c.class === 'needs-human' && c.aesthetic === false
+  (c) => c.class === 'needs-human' && c.aesthetic === false && c.planned_deferral !== true
 );
 const residueById = new Map(residue.map((r) => [r.id, r]));
 const votesById = {};
 const rationalesById = {};
 
 if (candidates.length) {
-  log(`verify: ${candidates.length} non-aesthetic needs-human candidate(s), 2 skeptics each`);
+  log(`verify: ${candidates.length} non-aesthetic, non-planned-deferral needs-human candidate(s), 2 skeptics each`);
   // Flat (candidate × skeptic) thunk list so the barrier covers every vote.
   const verifyJobs = [];
   for (const c of candidates) {
@@ -319,6 +380,7 @@ if (candidates.length) {
       verifyJobs.push({ id: c.id, k });
     }
   }
+  subagentsLaunched += verifyJobs.length;
   const verifyResults = await parallel(
     verifyJobs.map((job) => () => {
       const r = residueById.get(job.id);
@@ -364,7 +426,7 @@ if (candidates.length) {
     }
   });
 } else {
-  log('verify: no non-aesthetic needs-human candidates — skipping fan-out');
+  log('verify: no non-aesthetic, non-planned-deferral needs-human candidates — skipping fan-out');
 }
 
 // --- 3. AGGREGATE + return ---------------------------------------------------
@@ -395,14 +457,9 @@ const allDispositions = residue.map((r) => {
 // already_satisfied: items whose criterion is already provably met. They are
 // DROPPED from the residue as PASS — partitioned out so every downstream
 // consumer that filters/iterates `dispositions` naturally excludes them.
-const already_satisfied = allDispositions
-  .filter((d) => d.class === 'already-satisfied')
-  .map((d) => ({ id: d.id, title: d.title, kind: d.kind, rationale: d.rationale }));
+const { dispositions, already_satisfied } = partitionDispositions(allDispositions);
 
-// dispositions: opus-fixable / needs-main / needs-human only, in input order.
-const dispositions = allDispositions.filter((d) => d.class !== 'already-satisfied');
-
-// verify_report: one entry per non-aesthetic needs-human candidate. verdict is
+// verify_report: one entry per non-aesthetic, non-planned-deferral needs-human candidate. verdict is
 // computed from votes exactly like review-fix.js's verify_report (lowercase):
 // no votes → "unverified", includes "refuted" → "refuted", else "upheld".
 const verify_report = candidates.map((c) => {
@@ -494,6 +551,7 @@ if (_a.plan_fix === true && opusFixable.length > 0) {
     '</untrusted>',
   ].join('\n');
 
+  subagentsLaunched += 1;
   const planRes = await agent(fixPlanPrompt, {
     model: 'opus',
     agentType: 'general-purpose',
@@ -513,10 +571,46 @@ if (_a.plan_fix === true && opusFixable.length > 0) {
   log(`fix-plan: skipped (plan_fix=${_a.plan_fix}, opusFixable=${opusFixable.length})`);
 }
 
+// --- outcome-envelope counts (Unit 3, issue #1860) ---------------------------
+// Computed per .claude/docs/outcome-envelope.md. Unit 4 passes these into
+// dispatch-emit-outcome (recomputing fixes_applied/followups_filed/disposition
+// after its /implement-unit fix loop runs). Additive only.
+const _deviation = fix_plan ? fix_plan.deviation : false;
+const findings_surfaced = dispositions.length; // triaged residue (excludes already_satisfied)
+// findings_actionable === findings_surfaced here: every disposition (opus-fixable,
+// needs-main, needs-human) is actionable. The non-actionable already_satisfied
+// items are partitioned out into their own array and are NOT in `dispositions`
+// (see the line-403 filter above), so all surfaced findings are actionable.
+const findings_actionable = dispositions.length;
+// fixes_applied: this Workflow PLANS but never executes fix units — the mutating
+// /implement-unit loop runs in the qa-fix SKILL caller thread, not here (see the
+// header comment, lines 20-24). So from the Workflow's own knowledge no fix has
+// run: 0. Unit 4's SKILL body supplies the real count after its fix loop.
+const fixes_applied = 0;
+// followups_filed: this Workflow only CLASSIFIES items as needs-main — it files
+// no follow-up issues itself. So 0 here; Unit 4's SKILL body supplies the count
+// when it files the needs-main follow-ups.
+const followups_filed = 0;
+// disposition: escalated on deviation; else completed_with_fixes when fixes ran;
+// else completed. Matches outcome-envelope.md's path→value table. Since
+// fixes_applied is a literal 0 here, completed_with_fixes is unreachable from the
+// Workflow alone — Unit 4 recomputes this after the fix loop runs.
+const disposition = _deviation
+  ? 'escalated'
+  : fixes_applied > 0
+    ? 'completed_with_fixes'
+    : 'completed';
+
 return {
   dispositions,
   already_satisfied,
   verify_report,
   fix_plan,
-  deviation: fix_plan ? fix_plan.deviation : false,
+  deviation: _deviation,
+  findings_surfaced,
+  findings_actionable,
+  fixes_applied,
+  followups_filed,
+  subagents_launched: subagentsLaunched,
+  disposition,
 };

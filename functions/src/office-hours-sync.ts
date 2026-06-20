@@ -46,7 +46,8 @@ const NAMESPACE = defineString("OFFICE_HOURS_FIRESTORE_NAMESPACE", { default: "o
 
 const adminApp = getApps().length > 0 ? getApps()[0] : initializeApp();
 
-export interface JitIssue {
+export interface ReminderItem {
+  kind: "reminder";
   number: number;
   title: string;
   body: string;
@@ -54,6 +55,8 @@ export interface JitIssue {
   repo: string;
   dueAt: Date | null;
 }
+
+export type OfficeHoursItem = ReminderItem;
 
 export interface SyncResult {
   written: number;
@@ -86,7 +89,7 @@ export function isValidJitKey(key: string): boolean {
 }
 
 export async function syncOfficeHoursCore(deps: {
-  fetchOpenJitIssues: () => Promise<JitIssue[]>;
+  fetchOpenJitIssues: () => Promise<OfficeHoursItem[]>;
   firestore: Firestore;
   namespace: string;
   memberEmails: string[];
@@ -122,6 +125,7 @@ export async function syncOfficeHoursCore(deps: {
     const docRef = itemsCollection.doc(issue.jitKey);
     writes.push(
       writer.set(docRef, {
+        kind: "reminder",
         title: issue.title,
         dueAt,
         repo: issue.repo,
@@ -265,7 +269,7 @@ async function githubGraphQL<T>(
 export async function fetchOpenJitIssuesLive(
   repo: string,
   token: string,
-): Promise<JitIssue[]> {
+): Promise<OfficeHoursItem[]> {
   const slash = repo.indexOf("/");
   if (slash <= 0 || slash === repo.length - 1) {
     throw new Error(`Invalid repo "${repo}"; expected "owner/name"`);
@@ -289,7 +293,7 @@ export async function fetchOpenJitIssuesLive(
     }
   `;
 
-  const results: JitIssue[] = [];
+  const results: OfficeHoursItem[] = [];
   let cursor: string | null = null;
 
   while (true) {
@@ -301,15 +305,18 @@ export async function fetchOpenJitIssuesLive(
 
     for (const node of data.repository.issues.nodes) {
       const jitLabel = node.labels.nodes.find((l) => l.name.startsWith("jit:"));
-      if (!jitLabel) continue;
-      results.push({
-        number: node.number,
-        title: node.title,
-        body: node.body,
-        jitKey: jitLabel.name.slice("jit:".length),
-        repo,
-        dueAt: parseJitDueMarker(node.body),
-      });
+      if (jitLabel) {
+        results.push({
+          kind: "reminder",
+          number: node.number,
+          title: node.title,
+          body: node.body,
+          jitKey: jitLabel.name.slice("jit:".length),
+          repo,
+          dueAt: parseJitDueMarker(node.body),
+        });
+        continue;
+      }
     }
 
     const { hasNextPage, endCursor } = data.repository.issues.pageInfo;

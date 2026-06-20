@@ -1,6 +1,6 @@
 ---
 name: review-fix
-description: Review phase — the workflow's single terminal review pass. Runs the combined /review-fix fan-out through the Workflow tool: surface-conditional finders (code-review, review, security domain reviewers) in parallel → code dedup → classify → adversarial-verify (Required findings refuted by 2 skeptics before any Opus fix runs) → Opus fix fan-out → deferred/follow-up filing prep. Returns a compact disposition summary; applies fixes via one /commit-merge-push, files blocked_by follow-ups, posts one PR comment, and applies the dispatch:reviewed label
+description: Review phase — the workflow's single terminal review pass. Runs the combined /review-fix fan-out through the Workflow tool: surface-conditional finders (code-review, review, security domain reviewers) in parallel → code dedup → classify → adversarial-verify (Required findings refuted by severity-scaled skeptics — 2 for high-confidence, 1 below — before any Opus fix runs) → Opus fix fan-out → deferred/follow-up filing prep. Returns a compact disposition summary; applies fixes via one /commit-merge-push, files blocked_by follow-ups, posts one PR comment, and applies the dispatch:reviewed label
 ---
 
 # Review and Fix
@@ -43,7 +43,7 @@ not the branch). Use `dangerouslyDisableSandbox: true` — the pack calls `gh`:
 ```bash
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 N="${BRANCH%%-*}"
-.claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$N" --pr --diff \
+.claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$N" --pr --phase-log --diff \
   | tee "tmp/pack-$N.txt"
 ```
 
@@ -74,6 +74,11 @@ output — do not re-resolve any of them later:
   (#1522).
 - The **changed-file list** — extracted by `dispatch-changed-files` from the
   `=== DIFF ===` section (same list Step 1 reads via the script).
+- **`PRIOR_PHASE_LOG`** — the `=== PHASE-LOG #N ===` section body: the
+  cross-phase handoff note an earlier phase (e.g. qa-fix) left. Treat the
+  sentinel `phase-log: none` as empty. When non-empty, feed it into the
+  Workflow `args` / Step 1 review context so the review pass sees what qa-fix
+  already tried. An absent note leaves the review unchanged.
 
 If the labels line already includes `dispatch:reviewed` — an interrupted prior
 run — **skip Steps 1–6** and go straight to Step 7, which flushes any unpushed
@@ -83,9 +88,10 @@ flush. Routing re-entry through Step 7 means its flush guard also carries any
 commits an interrupted prior run left stranded — the flush that lets the router
 resolve `mergeable == MERGEABLE` and promote the PR to ready.
 
-On this re-entry path the Workflow has not run — Step 7 treats the deviation
-criterion as not met (`result.deviation` is absent) and writes the phase-completed
-marker. Otherwise run all steps in order.
+On this re-entry path the Workflow has not run — so Step 7 **skips the phase-log
+write entirely** (the prior accurate entry stays durable), treats the deviation
+criterion as not met (`result.deviation` is absent), skips the outcome-envelope
+emit, and writes the phase-completed marker. Otherwise run all steps in order.
 
 ## Steps
 
@@ -138,7 +144,8 @@ of diff size.
 
 - `surface` is `empty` (no changed files), `docs` (every changed path is
   documentation — markdown/text/license, no executable, config, dependency, or
-  rules surface), or `code` (anything else).
+  rules surface), `tests` (every changed path is a test file — no production
+  source, config, dependency, or rules surface), or `code` (anything else).
 - `deps` is `true` when the diff touches `package.json` / `package-lock.json`.
 - `app_or_rules` is `true` when the diff touches application source
   (`.ts`/`.tsx`/`.js`/`.jsx`/`.mjs`/`.cjs`/`.go` outside `.claude/`) or a
@@ -146,6 +153,7 @@ of diff size.
 
 Set `security_note` for the Workflow `args`:
 - `surface=docs`: `Security review: no attack surface — docs-only diff (no executable, config, dependency, or Firestore-rules changes).`
+- `surface=tests`: `Security review: no attack surface — test-only diff (every changed path is a test file).`
 - `surface=empty`: `Security review: no attack surface — diff is empty (no changed files detected).`
 - `surface=code`: omit `security_note` (leave it unset).
 
@@ -217,8 +225,25 @@ skip the fetch and record the CodeQL scan as "could not run (no PR
 ref)" with no findings. An empty alert array is normal — no open CodeQL alerts —
 and is not an error.
 
-Collect normalized CodeQL and npm findings into `prescanned_findings` to pass to
-the Workflow.
+#### Erosion metrics (inline, when `surface=code`)
+
+Run inline in this parent thread — not a subagent — whenever `surface=code`.
+Pipe the changed-file list into `dispatch-review-erosion`, passing `MERGE_BASE`
+as the positional argument (no `dangerouslyDisableSandbox` needed — jscpd is now
+a local devDependency invoked via `node_modules/.bin/jscpd`, not an `npx` fetch):
+
+```bash
+# MERGE_BASE is already set above — reuse it here.
+# Pass as positional arg (not an inline VAR=val prefix — breaks allowlist matching).
+EROSION_JSON=$(.claude/skills/dispatch-propagate/scripts/dispatch-changed-files < "tmp/pack-$N.txt" \
+  | .claude/skills/dispatch-propagate/scripts/dispatch-review-erosion "$MERGE_BASE")
+```
+
+The script emits `{"findings":[...]}` with `Source="erosion"` already in the
+per-finding schema. Extract the `findings` array for `prescanned_findings`.
+
+Collect normalized CodeQL, npm, and erosion findings into `prescanned_findings`
+to pass to the Workflow.
 
 ### 2. Build `args` and invoke the Workflow
 
@@ -230,14 +255,19 @@ args = {
   pr_num:              <PR_NUM>,
   merge_base:          <MERGE_BASE>,
   changed_files:       [ ...the changed-file list from the pack's === DIFF section (same list dispatch-changed-files extracts)... ],
-  surface:             "empty" | "docs" | "code",
+  surface:             "empty" | "docs" | "tests" | "code",
   deps:                <true|false>,
   app_or_rules:        <true|false>,
-  prescanned_findings: [ ...normalized CodeQL + npm findings in Per-finding schema... ],
+  prescanned_findings: [ ...normalized CodeQL + npm + erosion findings in Per-finding schema... ],
   implementing_issues: [ <N>, ... ],    // parsed from Closes #N lines; [] if none
-  security_note:       <string or omit> // set for empty/docs; omit for code
+  security_note:       <string or omit>, // set for empty/docs/tests; omit for code
+  prior_phase_log:     <string or omit> // PRIOR_PHASE_LOG from the preamble; omit when phase-log: none
 }
 ```
+
+When `PRIOR_PHASE_LOG` is non-empty, pass it as `prior_phase_log` so the review
+finders see what an earlier phase (e.g. qa-fix) already tried; omit the field
+when the preamble read the `phase-log: none` sentinel.
 
 **Invoke the Workflow tool on `.claude/workflows/review-fix.js`**, passing `args`.
 The Workflow is a sanctioned call from this skill — no `ultracode` keyword needed.
@@ -252,6 +282,8 @@ result = {
   security_followup_input: [ ...codeql/npm out-of-scope subset... ],
   verify_report:        [ {id, location, verdict, skeptic_votes, rationale} ],
   deviation:            <bool>,
+  coverage_incomplete:  <bool>,
+  coverage_note?:       <string>,
   security_note?:       <string>
 }
 ```
@@ -348,13 +380,49 @@ prepared filing structures in `result.deferred_filings` and
 `result.security_followup_input`; this skill executes the actual `gh` calls.
 Skip a path when its bucket is empty.
 
+`result.followups_deferred` is the count of Step-5a filing subagents the Workflow queued (not yet filed); it drives the Step-5a fan-out and is NOT the value emitted to `--followups-filed`. Track instead how many Step-5a and Step-5b follow-ups were ACTUALLY filed this run — count only NEW `<disposition>` records (EXISTING records returned by `/file-issue` were not filed this phase). Use the already-captured `<N>` records from the "Capture each `<N>`" lines in 5a and 5b for this count; introduce no new tracking mechanism. Pass that count, not `result.followups_deferred`, as the `--followups-filed` total.
+
+Every follow-up filed in this step receives (a) a
+`<!-- dispatch:source-pr <PR_NUM> -->` body marker recording which PR's review
+surfaced the finding, and (b) the static `dispatch:review-followup` label. The
+marker is the machine key read by the `dispatch-retriage-orphaned-followups`
+scan (gated by the static label as a cheap server-side pre-filter) to park
+orphaned follow-ups when PR #<PR_NUM> is later closed without merging — without
+the marker, such follow-ups silently point at code that never landed on main.
+
+The static label must exist before the 5a/5b subagents add it: a missing label
+makes every `--add-label dispatch:review-followup` a silent no-op AND makes the
+`dispatch-retriage-orphaned-followups` scan's server-side `--label` pre-filter
+match nothing, so orphaned follow-ups become permanently invisible to re-triage.
+Guarantee its presence with a single create-on-not-found in THIS main thread,
+**before** the 5a/5b fan-out — run it once when either bucket is non-empty (it is
+race-free here because the fan-out has not started, so the parallel subagent adds
+in 5a/5b stay plain idempotent `--add-label` calls with no per-subagent create
+dance). Use `dangerouslyDisableSandbox: true` — `gh` needs network, see
+`.claude/rules/sandbox.md`:
+
+```bash
+# Ensure the static label exists once, in the single-threaded parent. `gh label
+# create` is idempotent in effect: it exits non-zero with an "already exists"
+# message when the label is already present (the common case), which is benign.
+# Any OTHER failure is a real error worth surfacing.
+create_out=$(gh label create "dispatch:review-followup" \
+  --color "5319e7" \
+  --description "dispatch: review-fix out-of-scope follow-up (source PR in body marker)" \
+  2>&1) || [[ "$create_out" == *"already exists"* ]] \
+  || echo "review-fix: warning: could not ensure dispatch:review-followup label: $create_out" >&2
+```
+
 #### 5a. Deferred code-review/review findings → `/file-issue` with a blocked-by link
 
 The Workflow prepares `result.deferred_filings`, each entry carrying `title`,
 `body`, and `blocker_issue_nums` (the implementing issue numbers from
-`Closes #N`, or `"independent"`). For each entry, fork a subagent (`subagent_type:
-general-purpose`, `model: sonnet`). When these subagents return, this is mid-tail
-— continue to Step 6 without a closing summary. The subagent:
+`Closes #N`, or `"independent"`). The main thread also passes the run-level
+`PR_NUM` (the PR under review, captured in the preamble) into each fork prompt
+alongside `title`, `body`, and `blocker_issue_nums`. For each entry, fork a
+subagent (`subagent_type: general-purpose`, `model: sonnet`). When these
+subagents return, this is mid-tail — continue to Step 6 without a closing
+summary. The subagent:
 
 1. Invokes `/file-issue` with a leading `--follow-up` token prepended to the
    `$INPUT` it builds from the finding's `title` and `body` (the token must come
@@ -363,7 +431,7 @@ general-purpose`, `model: sonnet`). When these subagents return, this is mid-tai
    detection, 8-category evaluation, decomposition gate, type/topic classification,
    issue creation, `@me` assignment, and the `help wanted` label. `/file-issue` ends
    with a `===FILE-ISSUE-RESULTS===` … `===FILE-ISSUE-RESULTS-END===` block; read
-   every `<disposition> <N>` record line between the sentinels and iterate steps 2–3
+   every `<disposition> <N>` record line between the sentinels and iterate steps 2–4
    over each. A single finding normally yields one record; a finding that legitimately
    separates into multiple issues yields several — link them all.
 2. For each record, for a non-independent finding, record a `blocked_by` dependency
@@ -376,7 +444,24 @@ general-purpose`, `model: sonnet`). When these subagents return, this is mid-tai
    dependencies API — see `ref-github-issues`) and skip the POST for any blocker
    already present, so a duplicate does not error. An `independent` finding records
    no dependency.
-3. Returns every `<N>` to this thread.
+3. Appends the source-PR body marker via read-modify-write, then adds the static
+   `dispatch:review-followup` label, to each `<N>` (use `dangerouslyDisableSandbox:
+   true` — `gh` needs network, see `.claude/rules/sandbox.md`):
+
+   ```bash
+   # (a) Read-modify-write: `gh issue edit --body` REPLACES the whole body, so
+   # fetch the current body and append the marker as the last line — never pass
+   # the marker alone, which would clobber the finding content /file-issue wrote.
+   BODY=$(gh issue view <N> --json body -q .body)
+   gh issue edit <N> --body "$BODY
+
+   <!-- dispatch:source-pr <PR_NUM> -->"
+   # (b) Add the static label. The main thread ensured it exists once at the top
+   # of Step 5 (create-on-not-found, before this fan-out), so adding it here is a
+   # plain idempotent, race-free `--add-label` — NO per-subagent create dance.
+   gh issue edit <N> --add-label "dispatch:review-followup"
+   ```
+4. Returns every `<N>` to this thread.
 
 Capture each `<N>` against its source finding for the Step 7 comment.
 
@@ -439,14 +524,22 @@ summary. Each subagent:
    `===FILE-ISSUE-RESULTS-END===` block. Read the `<disposition> <N>` record(s)
    between the sentinels — a single machine-keyed follow-up normally yields one
    record; iterate step 3 over each if more.
-3. Applies the topic and type labels to each `<N>` (use
+3. Applies the topic, type, and static review-followup labels to each `<N>`,
+   then appends the source-PR body marker via read-modify-write (use
    `dangerouslyDisableSandbox: true` — `gh` needs network):
 
    ```bash
-   gh issue edit <N> --add-label security --add-label bug
+   gh issue edit <N> --add-label security --add-label bug --add-label "dispatch:review-followup"
    ```
 
-   Since `/file-issue` (step 2) now classifies and applies a type label at creation via `ref-issue-labels`, and a `dispatch-security-followup` body describes an identified failure mode — a CodeQL alert at a specific location, or named npm advisories with severities — the classifier already applies `bug`; this `--add-label bug` is therefore idempotent reinforcement, `--add-label security` adds the topic, and exactly one type label results with no atomic type-swap needed.
+   Since `/file-issue` (step 2) now classifies and applies a type label at creation via `ref-issue-labels`, and a `dispatch-security-followup` body describes an identified failure mode — a CodeQL alert at a specific location, or named npm advisories with severities — the classifier already applies `bug`; this `--add-label bug` is therefore idempotent reinforcement, `--add-label security` adds the topic, and exactly one type label results with no atomic type-swap needed. The `dispatch:review-followup` label was ensured present once by the main thread at the top of Step 5 (create-on-not-found, before this fan-out), so adding it here is idempotent and race-free — no per-subagent create-on-not-found dance. Then append the source-PR marker (read-modify-write, same recipe as 5a — `gh issue edit --body` REPLACES the whole body, so never pass the marker alone):
+
+   ```bash
+   BODY=$(gh issue view <N> --json body -q .body)
+   gh issue edit <N> --body "$BODY
+
+   <!-- dispatch:source-pr $PR_NUM -->"
+   ```
 
 4. Returns `<N>` mapped to the follow-up's `identifier`.
 
@@ -488,8 +581,11 @@ stands in for the security buckets):
 
 If a security reviewer or inline scan could not run (re-launch / retry exhausted),
 note partial coverage here — name the reviewer or scan whose domain could not be
-reviewed. If every bucket is empty and there was no security note, the comment is
-still well-formed (render empty buckets as `_None._`).
+reviewed. When `result.coverage_incomplete` is true, include `result.coverage_note`
+in this partial-coverage line (the probe-wave skipped the security finders because
+both quality finders died — the model was likely throttled). If every bucket is
+empty and there was no security note, the comment is still well-formed (render
+empty buckets as `_None._`).
 
 Then post it (use `dangerouslyDisableSandbox: true` — the script invokes `gh`):
 
@@ -532,6 +628,47 @@ if [[ "$AHEAD" -ne 0 ]]; then
 fi
 ```
 
+**Then write the handoff note, before the terminal `dispatch:reviewed` apply —
+only when the Workflow ran this session** (i.e. **not** the idempotent re-entry
+path, where Steps 1–6 were skipped and `result` is absent). On the non-re-entry
+path the phase-log write must PRECEDE the `dispatch:reviewed` apply so that label
+stays the terminal durable action. Compose a terse "what the review found / fixed"
+digest of this pass to `tmp/phase-log-entry-$N.md` — a one-line summary of the
+fixes applied; a clean review writes a line like `failed: none`. Compose it
+**unconditionally** across pass and fail (no "only on failure" branch — the only
+narrowing is normal-vs-re-entry). Then upsert it (use
+`dangerouslyDisableSandbox: true` — the script calls `gh`):
+
+```bash
+.claude/skills/dispatch-propagate/scripts/dispatch-write-phase-log \
+  "$N" --phase review --reentry false < tmp/phase-log-entry-$N.md
+```
+
+On re-entry (Steps 1–6 were skipped and `result` is absent), call the writer with
+`--reentry true </dev/null` — the script enforces the skip and preserves the prior
+`(review, 1)` entry verbatim. On re-entry `dispatch:reviewed` is already present,
+so there is no ordering concern relative to the label. Gate on whether Steps 1–6
+ran this session (the `result` is absent on re-entry), NOT on label or PR presence
+as the implementation gate.
+
+```bash
+.claude/skills/dispatch-propagate/scripts/dispatch-write-phase-log \
+  "$N" --phase review --reentry true </dev/null
+```
+
+No attempt counter — review is single-pass, so the default `--attempt 1` applies.
+The upsert is idempotent on the `(review, 1)` key. Why re-entry must not re-write:
+the phase-log write PRECEDES the `dispatch:reviewed` apply (above), and re-entry
+is GATED on `dispatch:reviewed` already being present (see preamble: "If the
+labels line already includes `dispatch:reviewed`"). So whenever re-entry fires, the
+accurate `(review, 1)` entry the original run wrote is guaranteed already durable
+on the comment. The script enforces the skip via `--reentry true`, preserving it.
+A re-write on re-entry has no prior-pass data to restate (`result` is absent), so
+it would only overwrite the good entry with a content-free/degraded one — it can
+never fill a gap, only destroy one. This skip-preserves-verbatim behavior is
+covered by the behavioral test
+`.claude/skills/dispatch-propagate/scripts/test-phase-log-reentry.sh`.
+
 Then apply the `dispatch:reviewed` label via `dispatch-complete-phase` (use
 `dangerouslyDisableSandbox: true` — the script calls `gh`):
 
@@ -573,6 +710,29 @@ marker. Call `dispatch-mark-deviation` instead:
   "/review-fix: high-confidence required security finding(s) left unresolved after fixes"
 ```
 
+**Then emit the outcome envelope** (the contract is
+`.claude/docs/outcome-envelope.md`). This call runs **sandboxed** —
+`dispatch-emit-outcome` is pure (no gh/git/network), so do **not** pass
+`dangerouslyDisableSandbox`. It must fire **before** the session stops below;
+order relative to `dispatch-mark-deviation` does not matter. The deviation path
+only runs when the Workflow ran this session, so `result` is in scope. Pass
+`--disposition escalated` and `--terminated-reason` set to the **same string**
+passed to `dispatch-mark-deviation` above. Derive `repo` from the local remote
+(read-only git, sandbox-safe — no network):
+
+```bash
+REPO=$(git remote get-url origin | sed -E 's#.*github.com[:/]##; s#\.git$##')
+.claude/skills/dispatch-propagate/scripts/dispatch-emit-outcome \
+  --phase review --repo "$REPO" --issue <N> --pr "$PR_NUM" --base-sha "$MERGE_BASE" \
+  --findings-surfaced <result.findings_surfaced> \
+  --findings-actionable <result.findings_actionable> \
+  --fixes-applied <result.fixes_applied> \
+  --followups-filed <count of NEW Step-5a follow-ups filed this run + count of NEW Step-5b security follow-ups filed this run> \
+  --subagents-launched <result.subagents_launched + count of Step-5a and Step-5b filing subagents this SKILL spawned> \
+  --disposition escalated \
+  --terminated-reason "/review-fix: high-confidence required security finding(s) left unresolved after fixes"
+```
+
 The Stop hook reads marker-absence as Branch A and applies `dispatch:office-hours`
 to the issue, surfacing the reason in the why-comment, so the parked item explains
 which criterion fired. Do not apply the `dispatch:office-hours` label inline — the
@@ -585,6 +745,29 @@ run; the script no-ops with a clear diagnostic.
 ```bash
 .claude/skills/dispatch-propagate/scripts/dispatch-mark-complete \
   --phase review --pr "$PR_NUM"
+```
+
+**Then, only when the Workflow ran this session** (i.e. **not** the idempotent
+re-entry path, where Steps 1–6 were skipped and `result` is absent), **emit the
+outcome envelope** (contract: `.claude/docs/outcome-envelope.md`). Skip the emit
+entirely on re-entry — re-entry is a separate transcript and emitting zeros would
+inject a phantom run into the aggregate. This call runs **sandboxed** —
+`dispatch-emit-outcome` is pure, so do **not** pass `dangerouslyDisableSandbox`.
+Use `result.disposition` directly (the Workflow already computes `completed` vs
+`completed_with_fixes` from `fixed.length`); **omit** `--terminated-reason` (it
+must be absent on a non-escalated disposition). Derive `repo` from the local
+remote (read-only git, sandbox-safe):
+
+```bash
+REPO=$(git remote get-url origin | sed -E 's#.*github.com[:/]##; s#\.git$##')
+.claude/skills/dispatch-propagate/scripts/dispatch-emit-outcome \
+  --phase review --repo "$REPO" --issue <N> --pr "$PR_NUM" --base-sha "$MERGE_BASE" \
+  --findings-surfaced <result.findings_surfaced> \
+  --findings-actionable <result.findings_actionable> \
+  --fixes-applied <result.fixes_applied> \
+  --followups-filed <count of NEW Step-5a follow-ups filed this run + count of NEW Step-5b security follow-ups filed this run> \
+  --subagents-launched <result.subagents_launched + count of Step-5a and Step-5b filing subagents this SKILL spawned> \
+  --disposition <result.disposition>
 ```
 
 Then **stop**. The Stop hook reads the marker and advances the chain. Applying
@@ -616,10 +799,10 @@ through to the unified set — has these fields:
 
 ## Edge cases
 
-- **Empty or docs-only diff** — `surface` is `empty` or `docs`; the Workflow
-  launches no security finders and no security agents. The code-review and review
-  agents still run. The skill still applies `dispatch:reviewed` and writes the
-  marker.
+- **Empty, docs-only, or test-only diff** — `surface` is `empty`, `docs`, or
+  `tests`; the Workflow launches no security finders and no security agents. The
+  code-review and review agents still run. The skill still applies
+  `dispatch:reviewed` and writes the marker.
 - **A finder finds nothing** — record that source as clean; it contributes no
   findings to the Workflow.
 - **A finder agent fails** — the Workflow retries once. If it fails again, partial
@@ -646,10 +829,11 @@ goes ready — the single PR-comment summary is the audit trail. This is an
 intentional trade-off for an autonomous background-job run.
 
 The skill is idempotent: a re-invocation with `dispatch:reviewed` already on the
-PR skips Steps 1–6 and runs Step 7, which flushes any unpushed commits and writes
-the phase-completed marker (the Workflow is not re-run on re-entry, so the
-deviation criterion is treated as not met). Readiness is the router's projection,
-reconciled on later ticks — not something re-entry asserts.
+PR skips Steps 1–6 and runs Step 7, which flushes any unpushed commits, skips the
+phase-log write and outcome-envelope emit, and writes the phase-completed marker
+(the Workflow is not re-run on re-entry, so the deviation criterion is treated as
+not met). Readiness is the router's projection, reconciled on later ticks — not
+something re-entry asserts.
 
 **Model split (#1172).** The dispatch chain runs this `review` phase orchestrator
 on **Sonnet** (via `dispatch-phase-model`, which maps `review →
@@ -659,3 +843,21 @@ claude-sonnet-4-6`). The model tiering is now owned by the Workflow's per-`agent
 Opus fix agents** (`model: opus`) write all working-tree changes. Fix-authoring is
 pinned to Opus **exactly once** in the Workflow's fix phase — there is no
 double-tiering. The orchestrator (this skill) authors no product code.
+
+**Probe-wave throttle short-circuit (#1857).** On a `code` surface the Workflow
+splits the finder fan-out into two waves instead of one barrier. Wave 1 launches
+only the two always-on quality finders (`code-review`, `review`) — real review
+work that runs on every surface — and doubles them as a throttle probe. If **both**
+return `null` (a strong outage signal — far more robust than a single flake), the
+Workflow skips the security finder wave entirely rather than waste those launches
+on a throttled model, and sets `result.coverage_incomplete = true` with a human
+`result.coverage_note` (surfaced in the Step 6 partial-coverage line). Otherwise
+wave 2 launches the surface-gated security finders. On `empty`/`docs`/`tests`
+surfaces there are no security finders, so this degenerates to a single wave (no
+change). **Marker/label behavior is intentionally unchanged:** a throttled run
+still applies `dispatch:reviewed` and writes the marker — this matches today's
+behavior when all finders return `null`, producing a degraded quality-only review.
+This is a launch-efficiency change only; genuine worker *death* on a transient
+rate-limit (and its backed-off resume) remains #1733's responsibility via the Stop
+hook, not this gate. `coverage_incomplete` is independent of the `deviation`
+criterion.

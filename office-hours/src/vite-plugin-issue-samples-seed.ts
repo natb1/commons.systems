@@ -21,9 +21,11 @@ export function issueSamplesSeedDataPlugin(): Plugin {
       moduleCode =
         `const seeds = ${JSON.stringify(publicSeeds)};\n` +
         `const now = Date.now();\n` +
-        `export default seeds.map(({ sampledAtOffsetMin, openHelpWanted, openOther, groupId }) => ({\n` +
+        `export default seeds.map(({ sampledAtOffsetMin, openSecurity, openBug, openEnhancement, openOther, groupId }) => ({\n` +
         `  sampledAt: new Date(now + sampledAtOffsetMin * 60000),\n` +
-        `  openHelpWanted,\n` +
+        `  openSecurity,\n` +
+        `  openBug,\n` +
+        `  openEnhancement,\n` +
         `  openOther,\n` +
         `  groupId,\n` +
         `}));\n`;
