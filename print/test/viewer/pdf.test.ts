@@ -952,6 +952,52 @@ describe("clearSearch()", () => {
     expect(restored).toBeDefined();
   });
 
+  // SEQUENTIAL (two awaited renderPageInto calls, not concurrent). Exercises a
+  // DIFFERENT invariant than the adjacent "concurrent renderPageInto" test above:
+  // that test uses Promise.all to verify the spreadGen cancellation guard (one
+  // wrapper survives); this test verifies that applyHighlight's leading
+  // unwrapHighlights() restores the first wrapper's stale highlight span on the
+  // spread path — the regression that #1726 fixed for the single-page path but
+  // did not cover on the spread path.
+  it("sequential double renderPageInto() on the same page leaves no stale highlight in the first wrapper", async () => {
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf");
+
+    const results = await renderer.search!("the"); // type-safety-ok: optional renderer API method, present in this test harness
+    const page1Result = results.find((r) => r.label === "Page 1");
+    expect(page1Result).toBeDefined();
+
+    // Arm pendingHighlight for page 1 (goToResult is arm-only — no render yet).
+    await renderer.goToResult!(page1Result!); // type-safety-ok: optional method; page1Result is non-null per the toBeDefined assertion above
+
+    // A fresh spread target with a non-zero rect so renderPageInto proceeds past
+    // the 0×0 guard.
+    const target = document.createElement("div");
+    target.getBoundingClientRect = makeTargetRect;
+
+    // Call #1: renders page 1 into target, applying the highlight.
+    await renderer.renderPageInto!(1, target); // type-safety-ok: optional renderer API method, present in this test harness
+    const firstWrapper = target.querySelector(".pdf-page-wrapper") as HTMLElement; // type-safety-ok: querySelector result narrowed to the page wrapper element
+    expect(firstWrapper).not.toBeNull();
+    expect(firstWrapper.querySelector(".search-highlight")).not.toBeNull();
+
+    // Call #2 (same page, same target): renderPageInto appends a second wrapper
+    // alongside the first (no innerHTML="" here — that step lives in
+    // SpreadController.render()). applyHighlight's leading unwrapHighlights()
+    // must restore firstWrapper's stale highlight span even though firstWrapper
+    // is still attached. On unfixed code the firstWrapper retains its
+    // .search-highlight span and the assertion below fails.
+    await renderer.renderPageInto!(1, target); // type-safety-ok: optional renderer API method, present in this test harness
+
+    // THE discriminating assertion: firstWrapper's highlight is gone because
+    // unwrapHighlights() ran before the second applyHighlight wrote the new one.
+    expect(firstWrapper.querySelector(".search-highlight")).toBeNull();
+
+    // Only the live (second) wrapper carries a highlight.
+    expect(target.querySelectorAll(".search-highlight").length).toBe(1);
+    expect(target.querySelectorAll(".search-highlight")[0].textContent).toBe("the");
+  });
+
   it("goToPosition() drains the active highlight and disarms pendingHighlight", async () => {
     const renderer = createPdfRenderer();
     await renderer.init(container, "fake://source.pdf");
