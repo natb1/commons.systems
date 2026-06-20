@@ -1,5 +1,5 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
-import { APPS, type AppCard } from "./site-config.ts";
+import { APPS, OVERFLOW_APPS, type AppCard } from "./site-config.ts";
 
 function renderCard(app: AppCard): string {
   return `<a class="app-card" href="${escapeHtml(app.url)}">
@@ -9,9 +9,19 @@ function renderCard(app: AppCard): string {
         </a>`;
 }
 
-function renderShowcaseInner(apps: AppCard[]): string {
-  const cards = apps.map(renderCard).join("\n        ");
-  return `<div class="landing-hero-band">
+function renderShowcaseInner(primary: AppCard[], overflow: AppCard[] = []): string {
+  const cards = primary.map(renderCard).join("\n        ");
+  const overflowSection =
+    overflow.length > 0
+      ? `<details class="app-showcase-overflow">
+        <summary>More apps</summary>
+        <div class="app-showcase-overflow-cards">
+          ${overflow.map(renderCard).join("\n          ")}
+        </div>
+      </details>
+      `
+      : "";
+  return `${overflowSection}<div class="landing-hero-band">
         <p class="landing-hero-band-headline">Build with commons.systems. Learn to run without.</p>
         <p class="landing-hero-band-subline">Code you understand. Data you control. A roadmap you set.</p>
         <p class="landing-hero-band-cta">
@@ -25,14 +35,14 @@ function renderShowcaseInner(apps: AppCard[]): string {
       </div>`;
 }
 
-export function renderShowcase(apps: AppCard[]): string {
+export function renderShowcase(primary: AppCard[], overflow: AppCard[] = []): string {
   return `<section class="landing-hero app-showcase" aria-label="Featured apps">
-      ${renderShowcaseInner(apps)}
+      ${renderShowcaseInner(primary, overflow)}
     </section>`;
 }
 
 export function mountHero(hero: HTMLElement): void {
-  const fragment = document.createRange().createContextualFragment(renderShowcaseInner(APPS));
+  const fragment = document.createRange().createContextualFragment(renderShowcaseInner(APPS, OVERFLOW_APPS));
   hero.replaceChildren(fragment);
   hero.classList.add("app-showcase");
   hero.setAttribute("aria-label", "Featured apps");
