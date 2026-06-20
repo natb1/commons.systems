@@ -43,7 +43,7 @@ not the branch). Use `dangerouslyDisableSandbox: true` — the pack calls `gh`:
 ```bash
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 N="${BRANCH%%-*}"
-.claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$N" --pr --diff \
+.claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$N" --pr --phase-log --diff \
   | tee "tmp/pack-$N.txt"
 ```
 
@@ -74,6 +74,11 @@ output — do not re-resolve any of them later:
   (#1522).
 - The **changed-file list** — extracted by `dispatch-changed-files` from the
   `=== DIFF ===` section (same list Step 1 reads via the script).
+- **`PRIOR_PHASE_LOG`** — the `=== PHASE-LOG #N ===` section body: the
+  cross-phase handoff note an earlier phase (e.g. qa-fix) left. Treat the
+  sentinel `phase-log: none` as empty. When non-empty, feed it into the
+  Workflow `args` / Step 1 review context so the review pass sees what qa-fix
+  already tried. An absent note leaves the review unchanged.
 
 If the labels line already includes `dispatch:reviewed` — an interrupted prior
 run — **skip Steps 1–6** and go straight to Step 7, which flushes any unpushed
@@ -254,9 +259,14 @@ args = {
   app_or_rules:        <true|false>,
   prescanned_findings: [ ...normalized CodeQL + npm + erosion findings in Per-finding schema... ],
   implementing_issues: [ <N>, ... ],    // parsed from Closes #N lines; [] if none
-  security_note:       <string or omit> // set for empty/docs/tests; omit for code
+  security_note:       <string or omit>, // set for empty/docs/tests; omit for code
+  prior_phase_log:     <string or omit> // PRIOR_PHASE_LOG from the preamble; omit when phase-log: none
 }
 ```
+
+When `PRIOR_PHASE_LOG` is non-empty, pass it as `prior_phase_log` so the review
+finders see what an earlier phase (e.g. qa-fix) already tried; omit the field
+when the preamble read the `phase-log: none` sentinel.
 
 **Invoke the Workflow tool on `.claude/workflows/review-fix.js`**, passing `args`.
 The Workflow is a sanctioned call from this skill — no `ultracode` keyword needed.
@@ -616,6 +626,25 @@ if [[ "$AHEAD" -ne 0 ]]; then
   git push origin HEAD
 fi
 ```
+
+**Then write the handoff note, before the terminal `dispatch:reviewed` apply.**
+The phase-log write must PRECEDE the `dispatch:reviewed` apply so that label stays
+the terminal durable action. Compose a terse "what the review found / fixed"
+digest of this pass to `tmp/phase-log-entry-$N.md` — a one-line summary of the
+fixes applied; a clean review writes a line like `failed: none`. Compose it
+**unconditionally** (no "only on failure" branch). Then upsert it (use
+`dangerouslyDisableSandbox: true` — the script calls `gh`):
+
+```bash
+.claude/skills/dispatch-propagate/scripts/dispatch-write-phase-log \
+  "$N" --phase review < tmp/phase-log-entry-$N.md
+```
+
+No attempt counter — review is single-pass, so the default `--attempt 1` applies.
+The upsert is idempotent on the `(review, 1)` key: on the re-entry path where
+`dispatch:reviewed` is already present (Steps 1–6 skipped, the Workflow did not
+run), the digest restates the prior pass; the upsert REPLACES the `(review, 1)`
+entry in place rather than stacking a duplicate, so the repeat is safe.
 
 Then apply the `dispatch:reviewed` label via `dispatch-complete-phase` (use
 `dangerouslyDisableSandbox: true` — the script calls `gh`):

@@ -160,6 +160,35 @@ gh_api_array() {
   fi
 }
 
+# dispatch_marker_comment_id <N> <marker> — echo the id of the issue comment
+# whose body starts with <marker> (first line), authored by the trusted dispatch
+# identity, or empty when none. Uses startswith (not contains) so prose mentions
+# of the marker string in other comments are never matched. Consolidates the author-id-filtered find jq currently duplicated inline
+# in dispatch-read-plan and dispatch-write-plan (those two are deliberately NOT
+# migrated in this PR — see issue #2039 plan; the greenfield migration is a
+# deferred follow-up). Resolves the trusted author id from `gh api user --jq '.id'`
+# (validated ^[0-9]+$, overridable via DISPATCH_PLAN_AUTHOR_ID for parity with the
+# plan scripts), fetches comments via gh_retry, and applies the same
+# author-id-filtered first(...) selector. Returns non-zero with a stderr message
+# on an unresolvable author id (clear error, not a fallback). Echoes nothing
+# (empty) when no matching comment exists.
+dispatch_marker_comment_id() {
+  local n="$1" marker="$2"
+  local author_id="${DISPATCH_PLAN_AUTHOR_ID:-$(gh api user --jq '.id')}"
+  if [[ ! "$author_id" =~ ^[0-9]+$ ]]; then
+    echo "dispatch_marker_comment_id: could not resolve a numeric comment author id (got: '$author_id')" >&2
+    return 1
+  fi
+  local cid
+  cid=$(gh_retry gh api --paginate "repos/{owner}/{repo}/issues/$n/comments" \
+    | jq -r --arg m "$marker" --argjson author_id "$author_id" \
+        'first(.[] | select((.body | startswith($m)) and (.user.id == $author_id)) | .id)')
+  if [[ -z "$cid" || "$cid" == "null" ]]; then
+    return 0
+  fi
+  printf '%s\n' "$cid"
+}
+
 # List issues (NOT pull requests) via the GitHub REST API rather than
 # `gh issue list` (which GraphQL-backs). Keeping the per-tick dispatch issue
 # scans on REST keeps them off the shared GraphQL rate-limit bucket, which the
