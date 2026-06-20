@@ -207,12 +207,29 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
   // Because the first dispatch then sees slug === initialSlug, it SKIPS the
   // redundant appRoot.render (see dispatch's isHome branch) — a root.render()
   // right after hydrateRoot can make React abandon hydration and client-render,
-  // causing CLS on the SEO surface. A deep /admin or /about entry still
-  // reconciles on the router's immediate dispatch (not gated). panelElement()
-  // reads its aboutContent from infoPanelContentForPath(currentPath), so a deep
-  // /about entry hydrates the panel with the About content directly.
+  // causing CLS on the SEO surface.
+  //
+  // A deep entry to a SYNC extraRoute (e.g. landing's /about) hydrates #app with
+  // that route's prerendered body, wrapped in a <div> to byte-match both
+  // prerenderStaticPage's injected body and the dispatch extraRoute render below.
+  // Without this, #app would hydrate the home feed over the prerendered About
+  // body and the first dispatch's appRoot.render would fire mid-hydration,
+  // abandoning the prerendered DOM (#424) and shifting layout on the SEO surface.
+  // An ASYNC extraRoute render cannot feed a synchronous hydrate, so it falls
+  // back to homeElement (the prior behavior; that path keeps the immediate
+  // dispatch reconcile). panelElement() reads its aboutContent from
+  // infoPanelContentForPath(currentPath), so a deep /about entry hydrates the
+  // panel with the About content directly.
+  const entryExtraRoute = matchExtraRoute(currentPath);
+  const entryExtraHtml = entryExtraRoute?.render(currentPath);
+  const hydratedExtraRoute = typeof entryExtraHtml === "string";
   const navRoot = hydrateRoot(navMount, navElement(parsePath().path));
-  const appRoot = hydrateRoot(app, homeElement(initialSlug));
+  const appRoot = hydrateRoot(
+    app,
+    typeof entryExtraHtml === "string"
+      ? createElement("div", { dangerouslySetInnerHTML: { __html: entryExtraHtml } })
+      : homeElement(initialSlug),
+  );
   const panelRoot = hydrateRoot(infoPanel, panelElement());
   teardowns.push(() => navRoot.unmount());
   teardowns.push(() => appRoot.unmount());
@@ -350,6 +367,16 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
 
     const extra = matchExtraRoute(path);
     if (extra) {
+      // First dispatch after #app was hydrated with this sync extraRoute's body:
+      // the prerendered DOM already matches, so skip the appRoot.render that would
+      // fire mid-hydration and abandon it (#424). Still run afterRender for its
+      // SEO/meta side-effects. SPA navigations (not first dispatch) render normally.
+      if (isFirstDispatch && hydratedExtraRoute) {
+        queueMicrotask(() => {
+          if (seq === navSeq) extra.afterRender?.(app, path);
+        });
+        return;
+      }
       try {
         const html = await extra.render(path);
         if (seq === navSeq) {

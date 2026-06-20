@@ -371,6 +371,83 @@ describe("createBlogApp routing and panel behavior", () => {
     expect(app.innerHTML).not.toContain('data-test="about"');
   });
 
+  // Case 4c (#2003) — DEEP /about entry hydrates #app over the prerendered About
+  // body WITHOUT abandoning hydration (React #424 / CLS on the SEO surface). The
+  // driver hydrates #app with the sync extraRoute body wrapped in <div>
+  // (byte-matching prerenderStaticPage) and skips the first-dispatch
+  // appRoot.render. Mirrors Case 2b's node-identity guard, but for an extraRoute
+  // deep entry — the gap that shipped #424 on /about (e2e never loads /about, and
+  // Case 4 only exercises SPA nav, not a deep entry). Without the fix, #app
+  // hydrates the home feed over the About body and the first dispatch's
+  // appRoot.render tears the node down (client render), failing the toBe below.
+  it("reuses the prerendered #app node on direct /about entry (no CLS, no hydration error #424)", async () => {
+    history.pushState({}, "", "/about");
+    const aboutBody = '<h2>About</h2><p data-test="about-body">About content</p>';
+    const aboutPanel = '<section class="profile-card">ABOUT PANEL</section>';
+    const config = makeConfig({
+      buildTimeMetadata: [PUBLISHED_POST],
+      buildTimeContent: PUBLISHED_CONTENT,
+      infoPanelContentForPath: (p) => (p === "/about" ? aboutPanel : undefined),
+      extraRoutes: [{ path: "/about", render: () => aboutBody }],
+    });
+
+    // Scaffold the prerendered DOM exactly as a deep /about entry is served: #app
+    // is the extraRoute body wrapped in <div> (the element the driver hydrates
+    // with — createElement("div", { dangerouslySetInnerHTML })), #info-panel is
+    // InfoPanelRegion(aboutContent), and nav is BlogNav for the entry path.
+    const navHtml = renderToString(
+      createElement(BlogNav, {
+        links: config.navLinks,
+        showHomeLink: config.showHomeLink,
+        showAuth: false,
+        user: null,
+        onSignIn: () => {},
+        onSignOut: () => {},
+      }),
+    );
+    const appHtml = renderToString(
+      createElement("div", { dangerouslySetInnerHTML: { __html: aboutBody } }),
+    );
+    const panelHtml = renderToString(
+      createElement(InfoPanelRegion, {
+        data: {
+          linkSections: config.infoPanelLinkSections,
+          topPosts: config.buildTimeMetadata,
+          blogRoll: config.blogRollEntries,
+          rssFeedUrl: "/feed.xml",
+          opmlUrl: "/blogroll.opml",
+          postLinkPrefix: "/post/",
+          buildTimeFeeds: config.buildTimeFeeds,
+        },
+        strategies: config.strategies,
+        useScrollIndicator: config.useScrollIndicator,
+        aboutContent: aboutPanel,
+      }),
+    );
+    document.body.innerHTML = `
+      <div id="nav">${navHtml}</div>
+      <div class="page">
+        <header></header>
+        <div id="app">${appHtml}</div>
+        <aside id="info-panel" class="sidebar">${panelHtml}</aside>
+        <button id="panel-toggle"></button>
+      </div>
+    `;
+
+    // Capture the prerendered #app wrapper before createBlogApp runs.
+    const appNode = document.getElementById("app")!.firstElementChild;
+    expect(appNode).not.toBeNull();
+    expect(appNode!.tagName).toBe("DIV");
+
+    handle = createBlogApp(config);
+    await settle();
+
+    // REUSED, not torn down — the deep /about entry hydrated the prerendered body
+    // in place (no abandoned hydration, no CLS). The About content survives.
+    expect(document.getElementById("app")!.firstElementChild).toBe(appNode);
+    expect(document.querySelector('[data-test="about-body"]')).not.toBeNull();
+  });
+
   // Case 4b — infoPanelContentForPath: navigating to /about routes the override
   // panel HTML through InfoPanelRegion (aboutContent); navigating back to / shows
   // the standard blogroll panel again. Starts at / so the scaffold's standard

@@ -44,7 +44,11 @@ prerenderStaticPage({
   titleSuffix,
   distDir,
   page: ABOUT_PAGE_META,
-  bodyHtml: renderAboutHtml(),
+  // Wrap in a <div> to byte-match how createBlogApp hydrates/renders the /about
+  // extraRoute body — createElement("div", { dangerouslySetInnerHTML }). Without
+  // the wrapper, a deep entry to /about would hydrate this body against a bare
+  // <div> and abandon hydration (React #424), shifting layout on the SEO surface.
+  bodyHtml: `<div>${renderAboutHtml()}</div>`,
   navLinks: NAV_LINKS,
   aboutContent: renderAboutPanelHtml(),
   jsonLdBlocks: [personJsonLd(PERSON)],
