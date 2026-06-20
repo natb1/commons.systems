@@ -8,13 +8,12 @@ import {
   assembleChartLayout,
   buildLegend,
   renderAxisSvg,
+  mountResponsiveChart,
   AXIS_WIDTH,
   MARGIN_RIGHT,
   MARGIN_BOTTOM,
 } from "./chart-util.js";
 
-/** Approximate visible width; the x domain is bounded [0, 1] so no scrolling. */
-const CONTAINER_WIDTH = 640;
 const CHART_HEIGHT = 220;
 
 /**
@@ -58,55 +57,7 @@ export function renderPacePositionPanel(samples: UsageSample[]): HTMLElement {
   const COLOR_BACKDROP = palette[4]; // --chart-5 tan (dashed W(x) backdrop)
   const sharedStyle = { background: "transparent", color: fg };
 
-  const chartWidth = CONTAINER_WIDTH - AXIS_WIDTH;
   const yDomain: [number, number] = [0, 100];
-
-  const axisSvg = renderAxisSvg({ height: CHART_HEIGHT, style: sharedStyle, yDomain, label: "%" });
-
-  const chartSvg = Plot.plot({
-    width: chartWidth,
-    height: CHART_HEIGHT,
-    marginBottom: MARGIN_BOTTOM,
-    marginLeft: 0,
-    marginRight: MARGIN_RIGHT,
-    style: sharedStyle,
-    x: { domain: [0, 1], label: null },
-    y: { domain: yDomain, label: null, axis: null, grid: true },
-    marks: [
-      // 1. Backdrop — the fixed W(x) ramp drawn once across x∈[0,1], muted.
-      Plot.lineY(backdrop, {
-        x: "x",
-        y: "w",
-        stroke: COLOR_BACKDROP,
-        strokeWidth: 1.5,
-        strokeDasharray: "3,3",
-        curve: "monotone-x",
-      }),
-      // 2. Per-week trails — one mark per segment so no line crosses a reset boundary.
-      ...segments.map((seg) =>
-        Plot.lineY(seg.points, {
-          x: "x",
-          y: "weeklyUsedPct",
-          stroke: COLOR_WEEKLY,
-          strokeWidth: seg.isCurrent ? 2 : 1.5,
-          strokeOpacity: seg.isCurrent ? 1 : 0.35,
-          curve: "monotone-x",
-        }),
-      ),
-      // 3. Now marker — the latest sample's position on the curve.
-      Plot.dot([{ x: nowX, weeklyUsedPct: latest.weeklyUsedPct }], {
-        x: "x",
-        y: "weeklyUsedPct",
-        fill: COLOR_WEEKLY,
-        r: 4,
-      }),
-    ],
-  });
-
-  chartSvg.style.width = `${chartWidth}px`;
-  chartSvg.style.minWidth = `${chartWidth}px`;
-
-  const { layout } = assembleChartLayout(axisSvg, chartSvg);
 
   const delta = aheadBehindDelta(latest);
   const n = Math.round(Math.abs(delta));
@@ -119,7 +70,64 @@ export function renderPacePositionPanel(samples: UsageSample[]): HTMLElement {
     { label: "pace W(x)", color: COLOR_BACKDROP, dashed: true },
   ]);
 
-  section.append(deltaEl, layout, legend);
+  // Block-level slot occupying the panel content-box width; the ResizeObserver
+  // reads its clientWidth. Keep it block (no inline-block/flex) so it spans the
+  // panel and the .chart-scroll-wrapper inside clips rather than widening it.
+  const slot = document.createElement("div");
+
+  mountResponsiveChart(slot, (width) => {
+    const chartWidth = width - AXIS_WIDTH;
+
+    const axisSvg = renderAxisSvg({ height: CHART_HEIGHT, style: sharedStyle, yDomain, label: "%" });
+
+    const chartSvg = Plot.plot({
+      width: chartWidth,
+      height: CHART_HEIGHT,
+      marginBottom: MARGIN_BOTTOM,
+      marginLeft: 0,
+      marginRight: MARGIN_RIGHT,
+      style: sharedStyle,
+      x: { domain: [0, 1], label: null },
+      y: { domain: yDomain, label: null, axis: null, grid: true },
+      marks: [
+        // 1. Backdrop — the fixed W(x) ramp drawn once across x∈[0,1], muted.
+        Plot.lineY(backdrop, {
+          x: "x",
+          y: "w",
+          stroke: COLOR_BACKDROP,
+          strokeWidth: 1.5,
+          strokeDasharray: "3,3",
+          curve: "monotone-x",
+        }),
+        // 2. Per-week trails — one mark per segment so no line crosses a reset boundary.
+        ...segments.map((seg) =>
+          Plot.lineY(seg.points, {
+            x: "x",
+            y: "weeklyUsedPct",
+            stroke: COLOR_WEEKLY,
+            strokeWidth: seg.isCurrent ? 2 : 1.5,
+            strokeOpacity: seg.isCurrent ? 1 : 0.35,
+            curve: "monotone-x",
+          }),
+        ),
+        // 3. Now marker — the latest sample's position on the curve.
+        Plot.dot([{ x: nowX, weeklyUsedPct: latest.weeklyUsedPct }], {
+          x: "x",
+          y: "weeklyUsedPct",
+          fill: COLOR_WEEKLY,
+          r: 4,
+        }),
+      ],
+    });
+
+    chartSvg.style.width = `${chartWidth}px`;
+    chartSvg.style.minWidth = `${chartWidth}px`;
+
+    const { layout } = assembleChartLayout(axisSvg, chartSvg);
+    return layout;
+  });
+
+  section.append(deltaEl, slot, legend);
 
   return section;
 }
