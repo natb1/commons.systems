@@ -301,6 +301,7 @@ export function createEpubRenderer(
       const results: SearchResult[] = [];
       for (let i = 0; i < spineItems.length; i++) {
         const section = spineItems[i]!;
+        if (epoch !== _searchEpoch) break; // superseded: load no further sections
         try {
           try {
             await section.load(loader);
