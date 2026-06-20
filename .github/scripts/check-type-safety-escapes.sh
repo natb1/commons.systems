@@ -29,7 +29,7 @@
 # out of scope. Only a trailing `//` line-comment is stripped before the code
 # rules run. Residual false positives are covered by the suppression marker.
 #
-# Symmetric false-negative path: a `type-safety-ok:` marker *inside a string
+# Symmetric false-negative path: a `// type-safety-ok:` marker *inside a string
 # literal* on the same line as a real hatch will suppress that hatch
 # (`process()` matches the marker against the full raw line before any string
 # stripping). The marker prefix is project-specific and unlikely to appear in
