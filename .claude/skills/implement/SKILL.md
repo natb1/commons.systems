@@ -73,6 +73,49 @@ preamble did NOT take the re-entry branch). (`dispatch-route` normally routes a
 PR-bearing issue to fix-checks/qa/review, not implement, so this is a same-tick
 crash-recovery edge.)
 
+**Open-blocker re-check (non-re-entry path only).** When the preamble finds
+`PR: none` — i.e. this is a fresh run, not a crash recovery — verify that the
+target issue has no open blockers before beginning any build work. This catches
+the race window between the queue-gate check (in `/dispatch-propagate`) and now.
+Skip this check on the re-entry branch (`PR #<num>` already exists): the build
+already happened and passed this gate on first run; re-checking would needlessly
+re-park a same-tick crash recovery.
+
+Run with `dangerouslyDisableSandbox: true` — `dispatch-check-blockers` calls
+`gh` (see `.claude/rules/sandbox.md`). Tolerant capture:
+
+```bash
+if out=$(.claude/skills/dispatch-propagate/scripts/dispatch-check-blockers "$N"); then
+  rc=0
+else
+  rc=$?
+fi
+```
+
+Route on `rc`:
+
+- **`rc == 0`** — no open blocker. Proceed unchanged.
+- **`rc == 2`** — `$out` is `blocked:<nums>`. Real open blocker found. Call
+  `dispatch-mark-deviation`, then stop (skip the Step 5 completion marker).
+  Marker absence triggers Stop hook Branch A (`dispatch:office-hours`).
+  `dispatch-mark-deviation` is already one of `/implement`'s two single-named-exit
+  terminal actions, so the single-named-exit invariant in `## Steps` still holds:
+
+  ```bash
+  .claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \
+    "/implement: target #$N has an open blocker ($out) - raced past the queue gate; parking"
+  ```
+
+- **`rc == 1`** (or any other non-zero) — environment error; blockers unverified.
+  Not "no blockers." Call `dispatch-mark-deviation` with a distinct reason
+  including `$rc`, then stop (skip the Step 5 completion marker). Never proceed
+  on `rc == 1`:
+
+  ```bash
+  .claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \
+    "/implement: could not verify open blockers for #$N (dispatch-check-blockers exit $rc)"
+  ```
+
 ## Steps
 
 **Single named exit.** Take exactly one terminal action to end the turn: the
