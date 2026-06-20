@@ -389,24 +389,30 @@ describe("web-vitals reporting", () => {
     expect(sink).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({ operation: "analytics-web-vitals" }));
   });
 
-  it("re-throws TypeError from logEvent inside web-vital callback", () => {
-    vi.mocked(initializeAnalytics).mockReturnValue({ app: {} } as never);
-    vi.mocked(logEvent).mockImplementation(() => {
-      throw new TypeError("invalid argument");
-    });
+  it.each([
+    ["TypeError", TypeError],
+    ["ReferenceError", ReferenceError],
+  ])(
+    "re-throws %s from logEvent inside web-vital callback",
+    (_name: string, ErrorCtor: new (msg: string) => Error) => {
+      vi.mocked(initializeAnalytics).mockReturnValue({ app: {} } as never);
+      vi.mocked(logEvent).mockImplementation(() => {
+        throw new ErrorCtor("invalid argument");
+      });
 
-    initAnalytics(validApp);
+      initAnalytics(validApp);
 
-    const capturedCallback = vi.mocked(onLCP).mock.calls[0][0];
-    const fakeMetric = {
-      name: "LCP",
-      value: 1800,
-      rating: "good",
-      id: "v4-abc",
-    } as unknown as Parameters<typeof capturedCallback>[0];
+      const capturedCallback = vi.mocked(onLCP).mock.calls[0][0];
+      const fakeMetric = {
+        name: "LCP",
+        value: 1800,
+        rating: "good",
+        id: "v4-abc",
+      } as unknown as Parameters<typeof capturedCallback>[0];
 
-    expect(() => capturedCallback(fakeMetric)).toThrow(TypeError);
-  });
+      expect(() => capturedCallback(fakeMetric)).toThrow(ErrorCtor);
+    },
+  );
 });
 
 describe("initAnalyticsSafe", () => {
