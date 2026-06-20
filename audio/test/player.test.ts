@@ -321,6 +321,8 @@ describe("initPlayer", () => {
       player.add(track2);
 
       await vi.waitFor(() => expect(audioEl.play).toHaveBeenCalledTimes(1));
+      expect(mockResolveLocalAudioSource).toHaveBeenCalledWith("song.mp3");
+      expect(mockResolveAudioSource).not.toHaveBeenCalledWith("song.mp3");
 
       audioEl.dispatchEvent(new Event("error"));
 
