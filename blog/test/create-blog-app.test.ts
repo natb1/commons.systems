@@ -750,7 +750,7 @@ describe("createBlogApp routing and panel behavior", () => {
 
     handle = createBlogApp(config);
     await settle();
-    (getPosts as ReturnType<typeof vi.fn>).mockClear();
+    (getPosts as ReturnType<typeof vi.fn>).mockClear(); // type-safety-ok: vitest mock cast
 
     // Fire sign-in with a new uid → refreshAfterAuthChange → loadPosts once.
     await act(async () => {
