@@ -7498,6 +7498,143 @@ assert_eq "swept + unprovisionable → no LAUNCH (no spawn)" "no" \
 unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
+# OH11. resume arm end-to-end (#2240): the selector emits `resume <N> <sid> <cwd>`
+# for a removed-but-recoverable session whose worktree is on disk. The entry
+# resumes it as a --bg job named office-hours-<N> rooted at <cwd>, then attaches BY
+# NAME. Stub the selector to emit the directive; a fake claude logs the --bg argv,
+# serves the post-resume registry (office-hours-42 under a FORKED sessionId, so
+# attach must resolve by NAME not by the verb's sess-abc), and echoes attach.
+echo "Test: resume directive → --bg --resume kick named office-hours-N, attach by name"
+setup
+mkdir -p "$TMPDIR_TEST/wt/42-x"
+cat > "$TMPDIR_TEST/office-hours-select-target" <<EOF
+#!/usr/bin/env bash
+echo "resume 42 sess-abc $TMPDIR_TEST/wt/42-x"
+EOF
+chmod +x "$TMPDIR_TEST/office-hours-select-target"
+cat > "$TMPDIR_TEST/bin/claude" <<'FAKE'
+#!/usr/bin/env bash
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+case "$1" in
+  agents)
+    echo '[{"sessionId":"forked-xyz","id":"j-office-hours-42","pid":1,"state":"idle","status":"idle","name":"office-hours-42","cwd":""}]'
+    ;;
+  attach)
+    echo "LAUNCH: attach $2"
+    ;;
+  *)
+    echo "$*" >> "$ROOT/bg-argv-log"
+    ;;
+esac
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/bin/claude"
+export OFFICE_HOURS_CLAUDE_CMD="$TMPDIR_TEST/bin/claude"
+export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/bin/claude"   # verify_agent_registered_under queries this
+export LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=0          # don't sleep between verify polls
+result=$("$TMPDIR_TEST/office-hours")
+bg=$(cat "$TMPDIR_TEST/bg-argv-log" 2>/dev/null || true)
+assert_eq "resume kick argv (single, no fork)" "--bg --name office-hours-42 --permission-mode auto --resume sess-abc continue" "$bg"
+assert_eq "resume attaches by name → j-office-hours-42 (not the verb sessionId)" "LAUNCH: attach j-office-hours-42" "$result"
+unset OFFICE_HOURS_CLAUDE_CMD CLAUDE_AGENTS_CMD LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
+teardown
+
+# OH12. resume fork-retry (#2240): the primary --bg --resume kick fails (a dead
+# sessionId can collide in the registry), so the entry retries ONCE with
+# --fork-session, then attaches BY NAME (the forked id is reachable via the stable
+# office-hours-<N> name). The fake fails any --bg kick lacking --fork-session.
+echo "Test: resume primary kick fails → fork-session retry, then attach by name"
+setup
+mkdir -p "$TMPDIR_TEST/wt/42-x"
+cat > "$TMPDIR_TEST/office-hours-select-target" <<EOF
+#!/usr/bin/env bash
+echo "resume 42 sess-abc $TMPDIR_TEST/wt/42-x"
+EOF
+chmod +x "$TMPDIR_TEST/office-hours-select-target"
+cat > "$TMPDIR_TEST/bin/claude" <<'FAKE'
+#!/usr/bin/env bash
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+case "$1" in
+  agents)
+    echo '[{"sessionId":"forked-xyz","id":"j-office-hours-42","pid":1,"state":"idle","status":"idle","name":"office-hours-42","cwd":""}]'
+    exit 0
+    ;;
+  attach)
+    echo "LAUNCH: attach $2"
+    exit 0
+    ;;
+  *)
+    echo "$*" >> "$ROOT/bg-argv-log"
+    # Fail the primary kick (no --fork-session); succeed the fork retry.
+    [[ "$*" == *"--fork-session"* ]] || exit 1
+    exit 0
+    ;;
+esac
+FAKE
+chmod +x "$TMPDIR_TEST/bin/claude"
+export OFFICE_HOURS_CLAUDE_CMD="$TMPDIR_TEST/bin/claude"
+export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/bin/claude"   # verify_agent_registered_under queries this
+export LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=0          # don't sleep between verify polls
+result=$("$TMPDIR_TEST/office-hours")
+mapfile -t oh_resume_argv < "$TMPDIR_TEST/bg-argv-log"
+assert_eq "primary kick carries no --fork-session" "--bg --name office-hours-42 --permission-mode auto --resume sess-abc continue" "${oh_resume_argv[0]:-}"
+assert_eq "fork retry appends --fork-session before continue" "--bg --name office-hours-42 --permission-mode auto --resume sess-abc --fork-session continue" "${oh_resume_argv[1]:-}"
+assert_eq "after fork, attach by name → j-office-hours-42" "LAUNCH: attach j-office-hours-42" "$result"
+unset OFFICE_HOURS_CLAUDE_CMD CLAUDE_AGENTS_CMD LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
+teardown
+
+# OH13. resume verify-fails-then-fork (#2240): the primary --bg --resume kick
+# returns 0 but NO session registers — the real async-reject mode for a
+# dead/colliding sessionId (claude --bg returns before registration; a rejected
+# id never registers). The verify gate must catch this (rc 0 is not enough) and
+# retry with --fork-session, after which the session registers and attach
+# resolves by name. The fake registers office-hours-42 ONLY after a --fork-session
+# kick.
+echo "Test: resume primary kick returns 0 but never registers → verify fails → fork"
+setup
+mkdir -p "$TMPDIR_TEST/wt/42-x"
+cat > "$TMPDIR_TEST/office-hours-select-target" <<EOF
+#!/usr/bin/env bash
+echo "resume 42 sess-abc $TMPDIR_TEST/wt/42-x"
+EOF
+chmod +x "$TMPDIR_TEST/office-hours-select-target"
+cat > "$TMPDIR_TEST/bin/claude" <<'FAKE'
+#!/usr/bin/env bash
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+case "$1" in
+  agents)
+    # Registered ONLY after a --fork-session kick created the marker.
+    if [[ -f "$ROOT/forked" ]]; then
+      echo '[{"sessionId":"forked-xyz","id":"j-office-hours-42","pid":1,"state":"idle","status":"idle","name":"office-hours-42","cwd":""}]'
+    else
+      echo '[]'
+    fi
+    exit 0
+    ;;
+  attach)
+    echo "LAUNCH: attach $2"
+    exit 0
+    ;;
+  *)
+    echo "$*" >> "$ROOT/bg-argv-log"
+    # Primary kick returns 0 but does NOT register; the fork kick registers.
+    [[ "$*" == *"--fork-session"* ]] && touch "$ROOT/forked"
+    exit 0
+    ;;
+esac
+FAKE
+chmod +x "$TMPDIR_TEST/bin/claude"
+export OFFICE_HOURS_CLAUDE_CMD="$TMPDIR_TEST/bin/claude"
+export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/bin/claude"
+export LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=0
+result=$("$TMPDIR_TEST/office-hours")
+mapfile -t oh_resume_argv < "$TMPDIR_TEST/bg-argv-log"
+assert_eq "primary kick (rc 0, unregistered) carries no --fork-session" "--bg --name office-hours-42 --permission-mode auto --resume sess-abc continue" "${oh_resume_argv[0]:-}"
+assert_eq "verify-fail triggers fork retry (rc 0 alone is not enough)" "--bg --name office-hours-42 --permission-mode auto --resume sess-abc --fork-session continue" "${oh_resume_argv[1]:-}"
+assert_eq "after fork registers, attach by name → j-office-hours-42" "LAUNCH: attach j-office-hours-42" "$result"
+unset OFFICE_HOURS_CLAUDE_CMD CLAUDE_AGENTS_CMD LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
+teardown
+
 # ============================================================================
 # dispatch-trace-leaf tests
 # ============================================================================
