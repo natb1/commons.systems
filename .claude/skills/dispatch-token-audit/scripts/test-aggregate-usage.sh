@@ -763,9 +763,9 @@ rm -rf "$HAIKU_ROOT"
 # ---------------------------------------------------------------------------
 # Claude 3 classification + generation-aware pricing + no-abort completeness
 # (#2102). Three ISOLATED fixtures:
-#   1. claude-3-opus-20240229  — family()==opus_3, ACTUAL_RATES.opus_3 prices it;
+#   1. claude-3-opus-20240229  — rate_class()==opus_3, ACTUAL_RATES.opus_3 prices it;
 #      verifies the classification fix and audit does not abort.
-#   2. claude-3-haiku-20240307 — family()==haiku_3, ACTUAL_RATES.haiku_3 prices it;
+#   2. claude-3-haiku-20240307 — rate_class()==haiku_3, ACTUAL_RATES.haiku_3 prices it;
 #      verifies the haiku_3 rate row is correct.
 #   3. claude-3-5-haiku-20241022 + claude-3-7-sonnet-20250219 — the two IDs the
 #      issue's recommended-fix snippet omitted; without the completeness fix the
@@ -863,10 +863,14 @@ if (
   bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7 >"$ENUM_ROOT/out.json" 2>/dev/null
 ); then rc_enum=0; else rc_enum=$?; fi
 assert_eq "enum: claude-3-5-haiku + claude-3-7-sonnet session does not abort (rc==0)" "0" "$rc_enum"
-assert_eq "enum: by_model[claude-3-5-haiku-20241022].cost_usd > 0" "true" \
-  "$(jq '.by_model["claude-3-5-haiku-20241022"].cost_usd > 0' <"$ENUM_ROOT/out.json")"
-assert_eq "enum: by_model[claude-3-7-sonnet-20250219].cost_usd > 0" "true" \
-  "$(jq '.by_model["claude-3-7-sonnet-20250219"].cost_usd > 0' <"$ENUM_ROOT/out.json")"
+# Haiku 3.5 rates: input 0.80 / cache_creation 1.00 / cache_read 0.08 / output 4.00 per Mtok.
+EXPECTED_ENUM_HAIKU3_5=$(jq -n '(1000*0.80 + 2000*1.00 + 4000*0.08 + 500*4.00)/1e6')
+assert_eq 'enum: by_model[claude-3-5-haiku-20241022].cost_usd (haiku_3_5)' "$EXPECTED_ENUM_HAIKU3_5" \
+  "$(jq '.by_model["claude-3-5-haiku-20241022"].cost_usd' <"$ENUM_ROOT/out.json")"
+# Sonnet rates: input 3 / cache_creation 3.75 / cache_read 0.30 / output 15 per Mtok.
+EXPECTED_ENUM_SONNET=$(jq -n '(1000*3 + 2000*3.75 + 4000*0.30 + 500*15)/1e6')
+assert_eq 'enum: by_model[claude-3-7-sonnet-20250219].cost_usd (sonnet)' "$EXPECTED_ENUM_SONNET" \
+  "$(jq '.by_model["claude-3-7-sonnet-20250219"].cost_usd' <"$ENUM_ROOT/out.json")"
 
 rm -rf "$ENUM_ROOT"
 
