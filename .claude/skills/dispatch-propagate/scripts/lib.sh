@@ -224,7 +224,7 @@ dispatch_marker_comment_id() {
 # `labels` is already [{name,...}] in REST, so it passes through unchanged; a null
 # closedAt on open issues is harmless. Results are sorted created-descending so a
 # downstream `.[0]` is the most-recently-created issue. When --include-body is
-# passed, each projected object also carries a `body` field.
+# passed, each projected object also carries `title` and `body` fields.
 #
 # On gh failure: errors to stderr and returns 1 (clear-errors convention, no
 # fallback).
@@ -278,7 +278,7 @@ gh_issue_list_rest() {
 
   local projection='add // [] | map(select(.pull_request == null)) | map({number, createdAt: .created_at, closedAt: .closed_at, labels})'
   if [[ -n "$include_body" ]]; then
-    projection='add // [] | map(select(.pull_request == null)) | map({number, createdAt: .created_at, closedAt: .closed_at, labels, body})'
+    projection='add // [] | map(select(.pull_request == null)) | map({number, title, createdAt: .created_at, closedAt: .closed_at, labels, body})'
   fi
   printf '%s' "$raw" | jq -s "$projection"
 }

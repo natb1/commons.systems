@@ -253,6 +253,9 @@ case "$args" in
       dispatch-test-limit)
         cat "$STUB_DIR/rest-limit.json"
         ;;
+      dispatch-test-includebody)
+        cat "$STUB_DIR/rest-includebody.json"
+        ;;
       *)
         echo '[]'
         ;;
@@ -1238,6 +1241,23 @@ if grep -q -- '--paginate' "$STUB_DIR/gh-issue-list-rest-calls.log"; then
 else
   assert_eq "--repo+--limit: log does not contain --paginate" "no" "no"
 fi
+teardown
+
+echo "Test: --include-body -- projection includes title and body; default omits title"
+setup
+printf '%s\n' '[
+  {"number":401,"title":"Fixture title for 401","created_at":"2024-01-09T00:00:00Z","closed_at":null,"labels":[],"body":"Fixture body for 401"}
+]' > "$STUB_DIR/rest-includebody.json"
+: > "$STUB_DIR/gh-issue-list-rest-calls.log"
+# --include-body: projection must carry a non-null title (Unit 1 #2259) and body.
+actual_ib=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state all --include-body --label dispatch-test-includebody)
+assert_eq "--include-body: .[0].title is the fixture title" "Fixture title for 401" "$(jq -r '.[0].title // empty' <<<"$actual_ib")"
+assert_eq "--include-body: .[0].body is the fixture body" "Fixture body for 401" "$(jq -r '.[0].body // empty' <<<"$actual_ib")"
+# Default projection (no --include-body) must still OMIT title (zero blast radius).
+: > "$STUB_DIR/gh-issue-list-rest-calls.log"
+actual_default=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state all --label dispatch-test-includebody)
+assert_eq "default projection: .[0].title is absent" "" "$(jq -r '.[0].title // empty' <<<"$actual_default")"
+assert_eq "default projection: .[0].number is present" "401" "$(jq -r '.[0].number // empty' <<<"$actual_default")"
 teardown
 
 # ============================================================================
