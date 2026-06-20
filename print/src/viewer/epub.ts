@@ -302,6 +302,7 @@ export function createEpubRenderer(
       for (let i = 0; i < spineItems.length; i++) {
         if (epoch !== _searchEpoch) break;
         const section = spineItems[i]!;
+        if (epoch !== _searchEpoch) break; // superseded: load no further sections
         try {
           try {
             await section.load(loader);
@@ -376,8 +377,10 @@ export function createEpubRenderer(
     async renderResult(): Promise<void> {},
 
     clearSearch(): void {
-      // Stand down any in-flight search(): bumping the epoch trips its post-loop
-      // guard (search ~line 318) so it applies no highlights for the cleared query.
+      // Stand down any in-flight search(): bumping the epoch trips both of its
+      // guards — the top-of-loop check stops it loading any further spine
+      // sections, and the post-loop check suppresses the highlight burst — so it
+      // applies no highlights for the cleared query.
       _searchEpoch++;
       clearSearchHighlights();
     },
