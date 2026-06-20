@@ -12,15 +12,22 @@ import {
 } from "../src/index.ts";
 
 describe("all eight components importable from the barrel", () => {
-  it("each export is a function", () => {
-    expect(typeof Button).toBe("function");
-    expect(typeof Badge).toBe("function");
-    expect(typeof Card).toBe("function");
-    expect(typeof Metric).toBe("function");
-    expect(typeof Input).toBe("function");
-    expect(typeof Select).toBe("function");
-    expect(typeof Checkbox).toBe("function");
-    expect(typeof Nav).toBe("function");
+  // A renderable React component is either a function component or a
+  // forwardRef/memo exotic object (those carry a `$$typeof` symbol). Button and
+  // Input forward refs, so they are objects rather than bare functions.
+  const isRenderable = (c: unknown): boolean =>
+    typeof c === "function" ||
+    (typeof c === "object" && c !== null && "$$typeof" in c);
+
+  it("each export is a renderable component", () => {
+    expect(isRenderable(Button)).toBe(true);
+    expect(isRenderable(Badge)).toBe(true);
+    expect(isRenderable(Card)).toBe(true);
+    expect(isRenderable(Metric)).toBe(true);
+    expect(isRenderable(Input)).toBe(true);
+    expect(isRenderable(Select)).toBe(true);
+    expect(isRenderable(Checkbox)).toBe(true);
+    expect(isRenderable(Nav)).toBe(true);
   });
 });
 

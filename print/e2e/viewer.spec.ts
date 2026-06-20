@@ -709,7 +709,7 @@ test.describe("viewer", () => {
   test("search section is hidden for image archive viewer @testonly", async ({ page }) => {
     await page.goto("/view/test-image-archive");
     await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
-    await expect(page.locator(".viewer-search")).toHaveClass(/search-hidden/);
+    await expect(page.locator(".viewer-search")).toHaveCount(0);
   });
 
   test("PDF full-document search finds, navigates, highlights, and clears", async ({ page }) => {
@@ -718,7 +718,7 @@ test.describe("viewer", () => {
     await expect(page.locator(".textLayer span").first()).toBeAttached({ timeout: 15000 });
 
     // Search UI un-hides for PDFs (positive counterpart to the image-archive test above).
-    await expect(page.locator(".viewer-search")).not.toHaveClass(/search-hidden/, { timeout: 15000 });
+    await expect(page.locator(".viewer-search")).toBeVisible({ timeout: 15000 });
 
     // Fill the query and press Enter to skip the 300ms debounce.
     const input = page.locator(".viewer-search-input");
@@ -766,7 +766,7 @@ test.describe("viewer", () => {
     });
 
     const outline = page.locator(".viewer-outline");
-    await expect(outline).not.toHaveClass(/outline-hidden/, { timeout: 15000 });
+    await expect(outline).toBeVisible({ timeout: 15000 });
     const entries = page.locator(".viewer-outline-entry");
     await expect(entries.first()).toBeVisible();
     expect(await entries.count()).toBeGreaterThanOrEqual(3);
@@ -792,7 +792,7 @@ test.describe("viewer", () => {
 
     // Wait for outline to populate
     const outline = page.locator(".viewer-outline");
-    await expect(outline).not.toHaveClass(/outline-hidden/, { timeout: 15000 });
+    await expect(outline).toBeVisible({ timeout: 15000 });
 
     // First entry has nested children -- toggle button should be present
     const toggle = page.locator(".viewer-outline-toggle").first();
@@ -816,7 +816,7 @@ test.describe("viewer", () => {
   test("image archive outline is hidden @testonly", async ({ page }) => {
     await page.goto("/view/test-image-archive");
     await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
-    await expect(page.locator(".viewer-outline")).toHaveClass(/outline-hidden/);
+    await expect(page.locator(".viewer-outline")).toHaveCount(0);
   });
 
   test("PDF outline is hidden when PDF has no bookmarks", async ({ page }) => {
@@ -826,7 +826,7 @@ test.describe("viewer", () => {
     await expect(page.locator(".viewer-position")).toContainText("1 / 3", {
       timeout: 15000,
     });
-    await expect(page.locator(".viewer-outline")).toHaveClass(/outline-hidden/);
+    await expect(page.locator(".viewer-outline")).toHaveCount(0);
   });
 
   test("viewer does not show markdown buttons for document without markdownPath", async ({ page }) => {
