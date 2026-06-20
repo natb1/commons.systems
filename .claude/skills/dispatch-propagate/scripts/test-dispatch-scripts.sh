@@ -17273,8 +17273,18 @@ if pm_out=$("$SCRIPT_DIR/dispatch-phase-model" review 2>/dev/null); then pm_rc=0
 assert_eq "phase-model: review exits 0" "0" "$pm_rc"
 assert_eq "phase-model: review → claude-sonnet-4-6" "claude-sonnet-4-6" "$pm_out"
 
+echo "Test: dispatch-phase-model maps fix-checks → claude-sonnet-4-6 (#2042)"
+if pm_out=$("$SCRIPT_DIR/dispatch-phase-model" fix-checks 2>/dev/null); then pm_rc=0; else pm_rc=$?; fi
+assert_eq "phase-model: fix-checks exits 0" "0" "$pm_rc"
+assert_eq "phase-model: fix-checks → claude-sonnet-4-6" "claude-sonnet-4-6" "$pm_out"
+
+echo "Test: dispatch-phase-model maps fix-conflicts → claude-sonnet-4-6 (#2042)"
+if pm_out=$("$SCRIPT_DIR/dispatch-phase-model" fix-conflicts 2>/dev/null); then pm_rc=0; else pm_rc=$?; fi
+assert_eq "phase-model: fix-conflicts exits 0" "0" "$pm_rc"
+assert_eq "phase-model: fix-conflicts → claude-sonnet-4-6" "claude-sonnet-4-6" "$pm_out"
+
 echo "Test: dispatch-phase-model maps unmapped phases → empty (default → Opus, no override)"
-for ph in implement fix-checks done; do
+for ph in implement done; do
   if pm_out=$("$SCRIPT_DIR/dispatch-phase-model" "$ph" 2>/dev/null); then pm_rc=0; else pm_rc=$?; fi
   assert_eq "phase-model: $ph exits 0" "0" "$pm_rc"
   assert_eq "phase-model: $ph → empty (no --model, inherit Opus)" "" "$pm_out"
