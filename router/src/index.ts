@@ -1,5 +1,6 @@
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
 import { logError } from "@commons-systems/errorutil/log";
+import { isModifiedEvent, resolveInternalHref } from "./navigation";
 
 export interface Route {
   /**
@@ -124,17 +125,14 @@ export function createHistoryRouter(
 
   const onClick = (e: MouseEvent) => {
     if (nav.isDestroyed()) return;
-    if (e.button !== 0) return;
+    if (isModifiedEvent(e)) return;
     const anchor = (e.target as Element).closest("a");
     if (!anchor) return;
     if (anchor.hasAttribute("download")) return;
     if (anchor.getAttribute("target")) return;
-    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     const href = anchor.getAttribute("href");
-    if (!href || !href.startsWith("/") || href.startsWith("//")) return;
-    const url = new URL(href, location.origin);
-    if (url.origin !== location.origin) return;
-    const path = url.pathname.replace(/\/$/, "") || "/";
+    const path = resolveInternalHref(href);
+    if (path === null) return;
     if (!matchRoute(routes, path)) return;
     e.preventDefault();
     history.pushState({}, "", href);

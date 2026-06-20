@@ -1,7 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { renderOutlineSection, initOutline } from "../../src/viewer/outline";
+import { createRoot, type Root } from "react-dom/client";
+import { flushSync } from "react-dom";
+import { act } from "react";
+import { createElement } from "react";
+import { OutlinePanel } from "../../src/viewer/OutlinePanel";
+import type { UseViewerControllerResult } from "../../src/viewer/useViewerController";
 import type { ContentRenderer, OutlineEntry } from "../../src/viewer/types";
 import { makeMockRenderer } from "./mock-renderer";
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 function makeEntry(title: string, children: OutlineEntry[] = []): OutlineEntry {
   return { title, children };
@@ -15,157 +24,227 @@ function makeOutlineRenderer(overrides: Partial<ContentRenderer> = {}): ContentR
   });
 }
 
-function createContainer(): HTMLElement {
-  const el = document.createElement("div");
-  el.innerHTML = renderOutlineSection();
-  return el;
+function makeMockController(overrides: Partial<UseViewerControllerResult> = {}): UseViewerControllerResult {
+  const renderer = makeOutlineRenderer();
+  return {
+    getRenderer: () => renderer,
+    onPanelNavigate: vi.fn(),
+    navSignal: 1,
+    // --- unused fields required by the type ---
+    canvasWrapRef: { current: null } as React.RefObject<HTMLDivElement>,
+    gotoInputRef: { current: null } as React.RefObject<HTMLInputElement>,
+    spreadToggleRef: { current: null } as React.RefObject<HTMLButtonElement>,
+    viewerRef: { current: null } as React.RefObject<HTMLElement>,
+    positionLabel: "Page 1 / 10",
+    canGoPrev: false,
+    canGoNext: true,
+    zoomOutDisabled: true,
+    zoomResetDisabled: true,
+    spreadEnabled: false,
+    gotoMode: null,
+    searchable: false,
+    hasZoom: false,
+    hasSpread: false,
+    panelCollapsed: false,
+    orientation: "landscape",
+    loadError: null,
+    goPrev: vi.fn(),
+    goNext: vi.fn(),
+    goToPage: vi.fn(),
+    submitGoto: vi.fn(),
+    zoomIn: vi.fn(),
+    zoomOut: vi.fn(),
+    zoomReset: vi.fn(),
+    toggleSpread: vi.fn(),
+    togglePanel: vi.fn(),
+    onSearchNavigate: vi.fn(),
+    readFailed: false,
+    mediaId: "item-1",
+    uid: null,
+    ...overrides,
+  } as unknown as UseViewerControllerResult;
 }
 
 async function flushInit(): Promise<void> {
-  for (let i = 0; i < 20; i++) {
-    await Promise.resolve();
-  }
+  await act(async () => {
+    for (let i = 0; i < 20; i++) {
+      await Promise.resolve();
+    }
+  });
 }
 
-describe("renderOutlineSection", () => {
-  it("contains .viewer-outline with outline-hidden class", () => {
-    const html = renderOutlineSection();
-    expect(html).toContain('class="viewer-outline outline-hidden"');
-  });
+// ---------------------------------------------------------------------------
+// Suite
+// ---------------------------------------------------------------------------
 
-  it("contains .viewer-outline-list with role='tree'", () => {
-    const html = renderOutlineSection();
-    expect(html).toContain('class="viewer-outline-list"');
-    expect(html).toContain('role="tree"');
-  });
-});
-
-describe("initOutline", () => {
+describe("OutlinePanel", () => {
   let container: HTMLElement;
+  let root: Root;
 
   beforeEach(() => {
-    container = createContainer();
+    container = document.createElement("div");
+    document.body.appendChild(container);
     if (typeof globalThis.reportError !== "function") {
       globalThis.reportError = () => {};
     }
     vi.spyOn(globalThis, "reportError").mockImplementation(() => {});
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    document.body.removeChild(container);
     vi.mocked(globalThis.reportError).mockRestore();
   });
 
-  it("returns null when renderer lacks getOutline", () => {
+  function render(controller: UseViewerControllerResult): void {
+    root = createRoot(container);
+    flushSync(() => {
+      root.render(createElement(OutlinePanel, { controller }));
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Capability gating
+  // -------------------------------------------------------------------------
+
+  it("renders nothing when renderer lacks getOutline", async () => {
     const renderer = makeMockRenderer();
-    const result = initOutline(container, renderer, vi.fn());
-    expect(result).toBeNull();
+    const controller = makeMockController({ getRenderer: () => renderer });
+    render(controller);
+    await flushInit();
+    expect(container.querySelector(".viewer-outline")).toBeNull();
   });
 
-  it("returns null when renderer has getOutline but lacks goToOutlineEntry", () => {
+  it("renders nothing when renderer has getOutline but lacks goToOutlineEntry", async () => {
     const renderer = makeMockRenderer({
-      getOutline: vi.fn().mockResolvedValue([]),
+      getOutline: vi.fn().mockResolvedValue([makeEntry("Chapter 1")]),
     });
-    const result = initOutline(container, renderer, vi.fn());
-    expect(result).toBeNull();
+    const controller = makeMockController({ getRenderer: () => renderer });
+    render(controller);
+    await flushInit();
+    expect(container.querySelector(".viewer-outline")).toBeNull();
   });
 
-  it("stays hidden when outline is empty", async () => {
+  // -------------------------------------------------------------------------
+  // Empty / non-empty outline
+  // -------------------------------------------------------------------------
+
+  it("renders nothing when entries empty", async () => {
     const renderer = makeOutlineRenderer({
       getOutline: vi.fn().mockResolvedValue([]),
     });
-    initOutline(container, renderer, vi.fn());
+    const controller = makeMockController({ getRenderer: () => renderer });
+    render(controller);
     await flushInit();
-
-    const section = container.querySelector(".viewer-outline") as HTMLElement;
-    expect(section.classList.contains("outline-hidden")).toBe(true);
+    expect(container.querySelector(".viewer-outline")).toBeNull();
   });
 
-  it("removes outline-hidden when outline has entries", async () => {
-    const entries = [makeEntry("Chapter 1"), makeEntry("Chapter 2")];
+  it("renders .viewer-outline when entries present", async () => {
     const renderer = makeOutlineRenderer({
-      getOutline: vi.fn().mockResolvedValue(entries),
+      getOutline: vi.fn().mockResolvedValue([makeEntry("Chapter 1")]),
     });
-    initOutline(container, renderer, vi.fn());
+    const controller = makeMockController({ getRenderer: () => renderer });
+    render(controller);
     await flushInit();
-
-    const section = container.querySelector(".viewer-outline") as HTMLElement;
-    expect(section.classList.contains("outline-hidden")).toBe(false);
+    const outline = container.querySelector(".viewer-outline");
+    expect(outline).not.toBeNull();
+    expect(outline!.classList.contains("outline-hidden")).toBe(false);
   });
+
+  // -------------------------------------------------------------------------
+  // Flat entries
+  // -------------------------------------------------------------------------
 
   it("renders flat TOC entries as list items with correct titles", async () => {
-    const entries = [makeEntry("Introduction"), makeEntry("Conclusion")];
     const renderer = makeOutlineRenderer({
-      getOutline: vi.fn().mockResolvedValue(entries),
+      getOutline: vi.fn().mockResolvedValue([makeEntry("Introduction"), makeEntry("Conclusion")]),
     });
-    initOutline(container, renderer, vi.fn());
+    const controller = makeMockController({ getRenderer: () => renderer });
+    render(controller);
     await flushInit();
 
-    const list = container.querySelector(".viewer-outline-list") as HTMLUListElement;
-    const items = list.querySelectorAll(":scope > .viewer-outline-item");
+    const items = container.querySelectorAll(".viewer-outline-item");
     expect(items.length).toBe(2);
 
-    const firstAnchor = items[0]!.querySelector(".viewer-outline-entry") as HTMLElement;
-    const secondAnchor = items[1]!.querySelector(".viewer-outline-entry") as HTMLElement;
-    expect(firstAnchor.textContent).toBe("Introduction");
-    expect(secondAnchor.textContent).toBe("Conclusion");
+    const anchors = container.querySelectorAll(".viewer-outline-entry");
+    expect((anchors[0] as HTMLElement).textContent).toBe("Introduction");
+    expect((anchors[1] as HTMLElement).textContent).toBe("Conclusion");
   });
 
-  it("renders nested TOC entries with toggle buttons", async () => {
-    const entries = [
-      makeEntry("Part 1", [makeEntry("Chapter 1"), makeEntry("Chapter 2")]),
-    ];
+  // -------------------------------------------------------------------------
+  // Nested entries with toggle
+  // -------------------------------------------------------------------------
+
+  it("renders nested TOC entries with toggle button (collapsed by default, correct child count)", async () => {
     const renderer = makeOutlineRenderer({
-      getOutline: vi.fn().mockResolvedValue(entries),
+      getOutline: vi.fn().mockResolvedValue([
+        makeEntry("Part 1", [makeEntry("Chapter 1"), makeEntry("Chapter 2")]),
+      ]),
     });
-    initOutline(container, renderer, vi.fn());
+    const controller = makeMockController({ getRenderer: () => renderer });
+    render(controller);
     await flushInit();
 
-    const list = container.querySelector(".viewer-outline-list") as HTMLUListElement;
-    const topItem = list.querySelector(".viewer-outline-item") as HTMLElement;
+    const topItem = container.querySelector(".viewer-outline-item") as HTMLElement;
     const toggle = topItem.querySelector(".viewer-outline-toggle") as HTMLButtonElement;
     expect(toggle).not.toBeNull();
-    expect(toggle.textContent).toBe("\u25b6");
+    // Default: collapsed (▶)
+    expect(toggle.textContent).toBe("▶");
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
 
     const children = topItem.querySelector(".viewer-outline-children") as HTMLElement;
     expect(children).not.toBeNull();
+    expect(children.classList.contains("outline-collapsed")).toBe(true);
     const childItems = children.querySelectorAll(":scope > .viewer-outline-item");
     expect(childItems.length).toBe(2);
   });
 
-  it("click on entry calls goToOutlineEntry with correct entry and then onNavigate", async () => {
+  // -------------------------------------------------------------------------
+  // Entry click
+  // -------------------------------------------------------------------------
+
+  it("click on entry calls goToOutlineEntry with the correct entry and then onPanelNavigate", async () => {
     const entry1 = makeEntry("Chapter 1");
     const entry2 = makeEntry("Chapter 2");
     const goToOutlineEntry = vi.fn().mockResolvedValue(undefined);
-    const onNavigate = vi.fn();
+    const onPanelNavigate = vi.fn();
     const renderer = makeOutlineRenderer({
       getOutline: vi.fn().mockResolvedValue([entry1, entry2]),
       goToOutlineEntry,
     });
-    initOutline(container, renderer, onNavigate);
+    const controller = makeMockController({
+      getRenderer: () => renderer,
+      onPanelNavigate,
+    });
+    render(controller);
     await flushInit();
 
-    const list = container.querySelector(".viewer-outline-list") as HTMLUListElement;
-    const secondEntry = list.querySelectorAll(".viewer-outline-entry")[1] as HTMLElement;
-    secondEntry.click();
+    const anchors = container.querySelectorAll(".viewer-outline-entry");
+    await act(async () => {
+      (anchors[1] as HTMLElement).click();
+      for (let i = 0; i < 20; i++) await Promise.resolve();
+    });
 
-    // goToOutlineEntry called with the matching entry
     expect(goToOutlineEntry).toHaveBeenCalledWith(
       expect.objectContaining({ title: "Chapter 2" }),
     );
-
-    // onNavigate called in the .then() -- flush microtasks
-    await flushInit();
-    expect(onNavigate).toHaveBeenCalled();
+    expect(onPanelNavigate).toHaveBeenCalled();
   });
 
-  it("click on toggle expands nested list", async () => {
-    const entries = [
-      makeEntry("Part 1", [makeEntry("Chapter 1")]),
-    ];
+  // -------------------------------------------------------------------------
+  // Toggle expand / collapse
+  // -------------------------------------------------------------------------
+
+  it("click toggle expands children (loses outline-collapsed, button shows ▼)", async () => {
     const renderer = makeOutlineRenderer({
-      getOutline: vi.fn().mockResolvedValue(entries),
+      getOutline: vi.fn().mockResolvedValue([
+        makeEntry("Part 1", [makeEntry("Chapter 1")]),
+      ]),
     });
-    initOutline(container, renderer, vi.fn());
+    const controller = makeMockController({ getRenderer: () => renderer });
+    render(controller);
     await flushInit();
 
     const toggle = container.querySelector(".viewer-outline-toggle") as HTMLButtonElement;
@@ -173,56 +252,83 @@ describe("initOutline", () => {
 
     // Initially collapsed
     expect(children.classList.contains("outline-collapsed")).toBe(true);
-    expect(toggle.textContent).toBe("\u25b6");
+    expect(toggle.textContent).toBe("▶");
 
-    // Click to expand
-    toggle.click();
+    await act(async () => {
+      toggle.click();
+    });
 
     expect(children.classList.contains("outline-collapsed")).toBe(false);
-    expect(toggle.textContent).toBe("\u25bc");
+    expect(toggle.textContent).toBe("▼");
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(toggle.getAttribute("aria-label")).toBe("Collapse");
   });
 
-  it("click toggle again collapses nested list", async () => {
-    const entries = [
-      makeEntry("Part 1", [makeEntry("Chapter 1")]),
-    ];
+  it("click toggle again collapses children (regains outline-collapsed, button shows ▶)", async () => {
     const renderer = makeOutlineRenderer({
-      getOutline: vi.fn().mockResolvedValue(entries),
+      getOutline: vi.fn().mockResolvedValue([
+        makeEntry("Part 1", [makeEntry("Chapter 1")]),
+      ]),
     });
-    initOutline(container, renderer, vi.fn());
+    const controller = makeMockController({ getRenderer: () => renderer });
+    render(controller);
     await flushInit();
 
     const toggle = container.querySelector(".viewer-outline-toggle") as HTMLButtonElement;
     const children = container.querySelector(".viewer-outline-children") as HTMLElement;
 
     // Expand
-    toggle.click();
+    await act(async () => { toggle.click(); });
     expect(children.classList.contains("outline-collapsed")).toBe(false);
-    expect(toggle.textContent).toBe("\u25bc");
+    expect(toggle.textContent).toBe("▼");
 
     // Collapse again
-    toggle.click();
+    await act(async () => { toggle.click(); });
     expect(children.classList.contains("outline-collapsed")).toBe(true);
-    expect(toggle.textContent).toBe("\u25b6");
+    expect(toggle.textContent).toBe("▶");
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(toggle.getAttribute("aria-label")).toBe("Expand");
   });
 
-  it("cleanup function removes event listeners", async () => {
-    const goToOutlineEntry = vi.fn().mockResolvedValue(undefined);
-    const entries = [makeEntry("Chapter 1")];
+  // -------------------------------------------------------------------------
+  // Unmount safety + destroyed guard
+  // -------------------------------------------------------------------------
+
+  it("unmount does not throw", async () => {
     const renderer = makeOutlineRenderer({
-      getOutline: vi.fn().mockResolvedValue(entries),
-      goToOutlineEntry,
+      getOutline: vi.fn().mockResolvedValue([makeEntry("Chapter 1")]),
     });
-    const cleanup = initOutline(container, renderer, vi.fn())!;
+    const controller = makeMockController({ getRenderer: () => renderer });
+    render(controller);
     await flushInit();
 
-    cleanup();
+    await expect(
+      act(async () => { root.unmount(); }),
+    ).resolves.not.toThrow();
+  });
 
-    // Click after cleanup should not call goToOutlineEntry
-    const entry = container.querySelector(".viewer-outline-entry") as HTMLElement;
-    entry.click();
-    await flushInit();
+  it("late getOutline resolve after unmount does not trigger setState warning (destroyed guard)", async () => {
+    let resolveOutline!: (entries: OutlineEntry[]) => void;
+    const pendingPromise = new Promise<OutlineEntry[]>((resolve) => {
+      resolveOutline = resolve;
+    });
+    const renderer = makeOutlineRenderer({
+      getOutline: vi.fn().mockReturnValue(pendingPromise),
+    });
+    const controller = makeMockController({ getRenderer: () => renderer });
+    render(controller);
 
-    expect(goToOutlineEntry).not.toHaveBeenCalled();
+    // Unmount before the outline promise resolves
+    await act(async () => { root.unmount(); });
+
+    // Now resolve — should not warn about setState on unmounted component
+    await act(async () => {
+      resolveOutline([makeEntry("Chapter 1")]);
+      for (let i = 0; i < 20; i++) await Promise.resolve();
+    });
+
+    // No assertion needed — if destroyedRef guard works, vitest logs no
+    // "Warning: Can't perform a React state update on an unmounted component"
+    expect(globalThis.reportError).not.toHaveBeenCalled();
   });
 });

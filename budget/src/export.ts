@@ -1,34 +1,24 @@
 /** Serializes IndexedDB stores back to the upload JSON format. Inverse of the upload pipeline (parseUploadedJson + toParsedData in upload.ts). */
 import { getAll, getMeta } from "./idb.js";
 import { collectionRegistry } from "./collection-registry.js";
-import type { CollectionRawData, DataStoreName } from "./collection-registry.js";
+import type { CollectionRawData, IdbOf, RawOf, DataStoreName } from "./collection-registry.js";
+
+async function rawCollection<K extends DataStoreName>(name: K): Promise<RawOf<K>[]> {
+  const records = await getAll<IdbOf<K>>(name);
+  const toRawJson = collectionRegistry[name].toRawJson as unknown as (idb: IdbOf<K>) => RawOf<K>;
+  return records.map(toRawJson);
+}
 
 export async function exportToJson(): Promise<string> {
-  const storeNames = Object.keys(collectionRegistry) as DataStoreName[];
-
-  // Fetch all stores in parallel alongside meta. Promise.all over an array
-  // preserves input order regardless of resolution timing, so rawArrays[i]
-  // corresponds to storeNames[i] — the registry-definition order.
-  const [rawArrays, meta] = await Promise.all([
-    Promise.all(storeNames.map((name) => getAll<unknown>(name))),
-    getMeta(),
-  ]);
-
+  const meta = await getMeta();
   if (!meta) throw new Error("No local data to export. Upload a file first.");
 
-  // Assemble synchronously in registry order so JSON key order is deterministic.
-  const collections = {} as Record<DataStoreName, unknown[]>;
-  storeNames.forEach((name, i) => {
-    // toRawJson adaptors have heterogeneous signatures (several still return the
-    // wide `object` type mid-migration), so the union-of-functions call cannot
-    // be invoked directly. Localized cast, mirroring idb.ts storeParsedData.
-    const toRawJson = collectionRegistry[name].toRawJson as (idb: unknown) => unknown;
-    collections[name] = rawArrays[i].map(toRawJson);
-  });
+  const names = Object.keys(collectionRegistry) as DataStoreName[];
+  const pairs = await Promise.all(
+    names.map(async (name) => [name, await rawCollection(name)] as const),
+  );
+  const collections = Object.fromEntries(pairs) as CollectionRawData;
 
-  // Envelope fields stay literal so the compile-time presence check on
-  // {version, exportedAt, groupId, groupName} is preserved. Only the
-  // registry-derived collections come from the spread.
   const output: CollectionRawData & {
     version: number;
     exportedAt: string;
@@ -40,7 +30,7 @@ export async function exportToJson(): Promise<string> {
     // groupId is not stored locally; empty string for format compatibility
     groupId: "",
     groupName: meta.groupName,
-    ...(collections as CollectionRawData),
+    ...collections,
   };
 
   return JSON.stringify(output, null, 2) + "\n";
