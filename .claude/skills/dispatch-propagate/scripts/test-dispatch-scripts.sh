@@ -36008,6 +36008,50 @@ assert_eq "preflight-abort fanout: terminal token (zero spawns → drain)" "drai
 mat_teardown
 
 # ============================================================================
+# dispatch_marker_comment_id: error propagation (#2138)
+# ============================================================================
+echo ""
+echo "=== dispatch_marker_comment_id: error propagation (#2138) ==="
+
+# Criterion 1: gh_retry failure propagates as non-zero (bug regression).
+# The old single-pipeline code returned 0 on gh_retry failure; the fix must not.
+# The gh_retry override and DISPATCH_PLAN_AUTHOR_ID are scoped to a subshell so
+# they do not leak. lib.sh defines gh_retry, so the override must come AFTER the
+# source. The exit status is captured in the parent scope where the counters live.
+dmci_rc1=0
+dmci_out1=$(
+  export DISPATCH_PLAN_AUTHOR_ID=12345
+  source "$SCRIPT_DIR/lib.sh"
+  gh_retry() { return 1; }
+  dispatch_marker_comment_id 7 '<!-- dispatch:phase-log -->' 2>/dev/null
+) || dmci_rc1=$?
+TOTAL=$((TOTAL + 1))
+if [[ "$dmci_rc1" -ne 0 ]]; then
+  PASS=$((PASS + 1))
+  echo "  PASS: dispatch_marker_comment_id returns non-zero when gh_retry fails"
+else
+  FAIL=$((FAIL + 1))
+  echo "  FAIL: dispatch_marker_comment_id returned 0 on gh_retry failure (output='$dmci_out1') — bug not fixed"
+fi
+
+# Criterion 3: genuine absent case (valid JSON, no match) returns 0 with empty output.
+dmci_rc3=0
+dmci_out3=$(
+  export DISPATCH_PLAN_AUTHOR_ID=12345
+  source "$SCRIPT_DIR/lib.sh"
+  gh_retry() { printf '[]'; }
+  dispatch_marker_comment_id 7 '<!-- dispatch:phase-log -->'
+) || dmci_rc3=$?
+TOTAL=$((TOTAL + 1))
+if [[ "$dmci_rc3" -eq 0 && -z "$dmci_out3" ]]; then
+  PASS=$((PASS + 1))
+  echo "  PASS: dispatch_marker_comment_id returns 0 with empty output when no comment matches"
+else
+  FAIL=$((FAIL + 1))
+  echo "  FAIL: dispatch_marker_comment_id absent case: rc=$dmci_rc3, output='$dmci_out3' (expected rc=0, empty output)"
+fi
+
+# ============================================================================
 # summary
 # ============================================================================
 report_results
