@@ -34854,6 +34854,232 @@ if "$RUN_VERIFY" bogus </dev/null >/dev/null 2>&1; then rc=0; else rc=$?; fi
 assert_eq "dispatch-run-verification: unexpected argument exits 2" "2" "$rc"
 
 # ============================================================================
+# dispatch-preflight.sh + materialize-spawn preflight gate (#2041)
+# ============================================================================
+
+PF="$SCRIPT_DIR/dispatch-preflight.sh"
+
+# --- a1: clean tree + gated phase (qa) → exit 0 (pass) ---------------------
+echo "Test: preflight: clean tree + qa phase → exit 0"
+merge_main_setup
+printf '[]' > "$MERGE_MAIN_TMPDIR/agents-empty.json"
+export DISPATCH_AGENTS_SNAPSHOT="$MERGE_MAIN_TMPDIR/agents-empty.json"
+rc=0; "$PF" "$WORKTREE_REPO" qa >/dev/null 2>&1 || rc=$?
+assert_eq "preflight: clean tree + qa phase → exit 0" "0" "$rc"
+unset DISPATCH_AGENTS_SNAPSHOT
+merge_main_teardown
+
+# --- a2: conflicting tree + gated phase → abort, tree stays clean -----------
+echo "Test: preflight: merge conflict + qa phase → non-zero exit + tree clean"
+merge_main_setup
+printf '[]' > "$MERGE_MAIN_TMPDIR/agents-empty.json"
+export DISPATCH_AGENTS_SNAPSHOT="$MERGE_MAIN_TMPDIR/agents-empty.json"
+printf 'origin line\n' > "$ORIGIN_REPO/conflict.txt"
+git -C "$ORIGIN_REPO" add conflict.txt
+git -C "$ORIGIN_REPO" commit -q -m "origin conflict"
+git -C "$WORKTREE_REPO" fetch -q origin
+printf 'worktree line\n' > "$WORKTREE_REPO/conflict.txt"
+git -C "$WORKTREE_REPO" add conflict.txt
+git -C "$WORKTREE_REPO" commit -q -m "worktree conflict"
+rc=0; "$PF" "$WORKTREE_REPO" qa >/dev/null 2>&1 || rc=$?
+assert_eq "preflight: merge conflict + qa phase → non-zero exit" "1" "$rc"
+assert_eq "preflight: conflict dry-run did not mutate the worktree" "" \
+  "$(git -C "$WORKTREE_REPO" status --porcelain)"
+unset DISPATCH_AGENTS_SNAPSHOT
+merge_main_teardown
+
+# --- a3: phase-exempt: fix-conflicts + conflicting tree → exit 0 -----------
+echo "Test: preflight: conflicting tree + fix-conflicts phase is exempt → exit 0"
+merge_main_setup
+printf '[]' > "$MERGE_MAIN_TMPDIR/agents-empty.json"
+export DISPATCH_AGENTS_SNAPSHOT="$MERGE_MAIN_TMPDIR/agents-empty.json"
+printf 'origin line\n' > "$ORIGIN_REPO/conflict.txt"
+git -C "$ORIGIN_REPO" add conflict.txt
+git -C "$ORIGIN_REPO" commit -q -m "origin conflict"
+git -C "$WORKTREE_REPO" fetch -q origin
+printf 'worktree line\n' > "$WORKTREE_REPO/conflict.txt"
+git -C "$WORKTREE_REPO" add conflict.txt
+git -C "$WORKTREE_REPO" commit -q -m "worktree conflict"
+rc=0; "$PF" "$WORKTREE_REPO" fix-conflicts >/dev/null 2>&1 || rc=$?
+assert_eq "preflight: conflicting tree + fix-conflicts phase is exempt → exit 0" "0" "$rc"
+unset DISPATCH_AGENTS_SNAPSHOT
+merge_main_teardown
+
+# --- a4: phase-exempt: empty phase + conflicting tree → exit 0 -------------
+echo "Test: preflight: conflicting tree + empty phase is exempt → exit 0"
+merge_main_setup
+printf '[]' > "$MERGE_MAIN_TMPDIR/agents-empty.json"
+export DISPATCH_AGENTS_SNAPSHOT="$MERGE_MAIN_TMPDIR/agents-empty.json"
+printf 'origin line\n' > "$ORIGIN_REPO/conflict.txt"
+git -C "$ORIGIN_REPO" add conflict.txt
+git -C "$ORIGIN_REPO" commit -q -m "origin conflict"
+git -C "$WORKTREE_REPO" fetch -q origin
+printf 'worktree line\n' > "$WORKTREE_REPO/conflict.txt"
+git -C "$WORKTREE_REPO" add conflict.txt
+git -C "$WORKTREE_REPO" commit -q -m "worktree conflict"
+rc=0; "$PF" "$WORKTREE_REPO" "" >/dev/null 2>&1 || rc=$?
+assert_eq "preflight: conflicting tree + empty phase is exempt → exit 0" "0" "$rc"
+unset DISPATCH_AGENTS_SNAPSHOT
+merge_main_teardown
+
+# --- a5: corrupt package-lock.json → abort (exit 1) -------------------------
+echo "Test: preflight: corrupt package-lock.json → exit 1"
+merge_main_setup
+printf '[]' > "$MERGE_MAIN_TMPDIR/agents-empty.json"
+export DISPATCH_AGENTS_SNAPSHOT="$MERGE_MAIN_TMPDIR/agents-empty.json"
+printf 'this is not json{{' > "$WORKTREE_REPO/package-lock.json"
+rc=0; "$PF" "$WORKTREE_REPO" qa >/dev/null 2>&1 || rc=$?
+assert_eq "preflight: corrupt package-lock.json → exit 1" "1" "$rc"
+unset DISPATCH_AGENTS_SNAPSHOT
+merge_main_teardown
+
+# --- a6: missing worktree arg → exit 2 (usage error) -----------------------
+echo "Test: preflight: missing worktree arg → exit 2"
+merge_main_setup
+printf '[]' > "$MERGE_MAIN_TMPDIR/agents-empty.json"
+export DISPATCH_AGENTS_SNAPSHOT="$MERGE_MAIN_TMPDIR/agents-empty.json"
+rc=0; "$PF" >/dev/null 2>&1 || rc=$?
+assert_eq "preflight: missing worktree arg → exit 2" "2" "$rc"
+unset DISPATCH_AGENTS_SNAPSHOT
+merge_main_teardown
+
+# --- b1: gate armed, preflight fails (queue) → drain preflight-abort, no slot burned
+echo "Test: preflight-abort: gate armed, preflight fails (queue) → drain preflight-abort"
+mat_setup
+cp "$SCRIPT_DIR/dispatch-config-load" "$TMPDIR_TEST/dispatch-config-load"
+chmod +x "$TMPDIR_TEST/dispatch-config-load"
+export DISPATCH_CONFIG_DIR="$TMPDIR_TEST/config"
+mkdir -p "$DISPATCH_CONFIG_DIR"
+printf '{"enabled":true}\n' > "$DISPATCH_CONFIG_DIR/strict-preflight.json"
+cat > "$TMPDIR_TEST/dispatch-preflight.sh" <<STUB
+#!/usr/bin/env bash
+if [[ -f "$STUB_DIR/preflight-exit" ]]; then exit "\$(cat "$STUB_DIR/preflight-exit")"; fi
+exit 0
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-preflight.sh"
+printf '1\n' > "$STUB_DIR/preflight-exit"
+out=$(run_mat 839 queue) ; rc=$?
+assert_eq "preflight-abort: exit 0" "0" "$rc"
+assert_eq "preflight-abort: terminal token (queue → drain preflight-abort)" "drain preflight-abort" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "preflight-abort: no reservation marker for the target" "0" \
+  "$([ -f "$DISPATCH_RESERVATION_DIR/839-test" ] && echo 1 || echo 0)"
+assert_eq "preflight-abort: no launcher spawned" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/launch-worker.log" ] && echo 1 || echo 0)"
+assert_eq "preflight-abort: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+mat_teardown
+unset DISPATCH_CONFIG_DIR
+
+# --- b2: gate armed, preflight fails (explicit) → notify preflight-abort ----
+echo "Test: preflight-abort: gate armed, preflight fails (explicit) → notify preflight-abort"
+mat_setup
+cp "$SCRIPT_DIR/dispatch-config-load" "$TMPDIR_TEST/dispatch-config-load"
+chmod +x "$TMPDIR_TEST/dispatch-config-load"
+export DISPATCH_CONFIG_DIR="$TMPDIR_TEST/config"
+mkdir -p "$DISPATCH_CONFIG_DIR"
+printf '{"enabled":true}\n' > "$DISPATCH_CONFIG_DIR/strict-preflight.json"
+cat > "$TMPDIR_TEST/dispatch-preflight.sh" <<STUB
+#!/usr/bin/env bash
+if [[ -f "$STUB_DIR/preflight-exit" ]]; then exit "\$(cat "$STUB_DIR/preflight-exit")"; fi
+exit 0
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-preflight.sh"
+printf '1\n' > "$STUB_DIR/preflight-exit"
+out=$(run_mat 839 explicit) ; rc=$?
+assert_eq "preflight-abort explicit: exit 0" "0" "$rc"
+assert_eq "preflight-abort explicit: terminal token (explicit → notify preflight-abort)" "notify preflight-abort" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "preflight-abort explicit: no reservation marker" "0" \
+  "$([ -f "$DISPATCH_RESERVATION_DIR/839-test" ] && echo 1 || echo 0)"
+assert_eq "preflight-abort explicit: no launcher spawned" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/launch-worker.log" ] && echo 1 || echo 0)"
+mat_teardown
+unset DISPATCH_CONFIG_DIR
+
+# --- b3: gate armed, preflight passes (queue) → propagate as normal ---------
+echo "Test: preflight-abort: gate armed, preflight passes (queue) → propagate"
+mat_setup
+cp "$SCRIPT_DIR/dispatch-config-load" "$TMPDIR_TEST/dispatch-config-load"
+chmod +x "$TMPDIR_TEST/dispatch-config-load"
+export DISPATCH_CONFIG_DIR="$TMPDIR_TEST/config"
+mkdir -p "$DISPATCH_CONFIG_DIR"
+printf '{"enabled":true}\n' > "$DISPATCH_CONFIG_DIR/strict-preflight.json"
+cat > "$TMPDIR_TEST/dispatch-preflight.sh" <<STUB
+#!/usr/bin/env bash
+if [[ -f "$STUB_DIR/preflight-exit" ]]; then exit "\$(cat "$STUB_DIR/preflight-exit")"; fi
+exit 0
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-preflight.sh"
+printf '0\n' > "$STUB_DIR/preflight-exit"
+out=$(run_mat 839 queue) ; rc=$?
+assert_eq "preflight-pass: exit 0" "0" "$rc"
+assert_eq "preflight-pass: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+wait_launch_log 1
+assert_eq "preflight-pass: launcher detached with issue + worktree" \
+  "839 $TMPDIR_TEST/project/worktrees/839-test" \
+  "$(cat "$TMPDIR_TEST/logs/launch-worker.log")"
+assert_eq "preflight-pass: reservation marker present" "1" \
+  "$([ -f "$DISPATCH_RESERVATION_DIR/839-test" ] && echo 1 || echo 0)"
+mat_teardown
+unset DISPATCH_CONFIG_DIR
+
+# --- b4: gate OFF by default (no config) → failing preflight stub never consulted → propagate
+echo "Test: preflight-abort: gate OFF (no config) → failing preflight stub ignored → propagate"
+mat_setup
+cp "$SCRIPT_DIR/dispatch-config-load" "$TMPDIR_TEST/dispatch-config-load"
+chmod +x "$TMPDIR_TEST/dispatch-config-load"
+export DISPATCH_CONFIG_DIR="$TMPDIR_TEST/config"
+mkdir -p "$DISPATCH_CONFIG_DIR"
+# Deliberately NOT writing strict-preflight.json so the gate stays disabled
+cat > "$TMPDIR_TEST/dispatch-preflight.sh" <<STUB
+#!/usr/bin/env bash
+if [[ -f "$STUB_DIR/preflight-exit" ]]; then exit "\$(cat "$STUB_DIR/preflight-exit")"; fi
+exit 0
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-preflight.sh"
+printf '1\n' > "$STUB_DIR/preflight-exit"
+out=$(run_mat 839 queue) ; rc=$?
+assert_eq "preflight-off: exit 0" "0" "$rc"
+assert_eq "preflight-off: terminal token (gate off → propagate)" "propagate" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+wait_launch_log 1
+assert_eq "preflight-off: launcher detached (preflight never blocked it)" \
+  "839 $TMPDIR_TEST/project/worktrees/839-test" \
+  "$(cat "$TMPDIR_TEST/logs/launch-worker.log")"
+mat_teardown
+unset DISPATCH_CONFIG_DIR
+
+# --- b5: fan-out, gate armed, preflight fails all targets → zero spawns, drain
+echo "Test: preflight-abort fanout: gate armed, all targets preflight-abort → zero spawns, drain"
+mat_setup
+cp "$SCRIPT_DIR/dispatch-config-load" "$TMPDIR_TEST/dispatch-config-load"
+chmod +x "$TMPDIR_TEST/dispatch-config-load"
+export DISPATCH_CONFIG_DIR="$TMPDIR_TEST/config"
+mkdir -p "$DISPATCH_CONFIG_DIR"
+printf '{"enabled":true}\n' > "$DISPATCH_CONFIG_DIR/strict-preflight.json"
+cat > "$TMPDIR_TEST/dispatch-preflight.sh" <<STUB
+#!/usr/bin/env bash
+if [[ -f "$STUB_DIR/preflight-exit" ]]; then exit "\$(cat "$STUB_DIR/preflight-exit")"; fi
+exit 0
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-preflight.sh"
+printf '1\n' > "$STUB_DIR/preflight-exit"
+export MAT_QUEUE="840"
+out=$(run_mat 839 queue --gap 2)
+assert_eq "preflight-abort fanout: seed #839 skipped (preflight-abort)" "1" \
+  "$(printf '%s\n' "$out" | grep -c 'propagate: skipped #839 (preflight-abort)')"
+assert_eq "preflight-abort fanout: #840 skipped (preflight-abort)" "1" \
+  "$(printf '%s\n' "$out" | grep -c 'propagate: skipped #840 (preflight-abort)')"
+assert_eq "preflight-abort fanout: zero spawn lines" "0" \
+  "$(printf '%s\n' "$out" | grep -c 'propagate: spawned #')"
+assert_eq "preflight-abort fanout: summary spawned 0 of gap 2" "1" \
+  "$(printf '%s\n' "$out" | grep -c 'spawned 0 of gap 2')"
+assert_eq "preflight-abort fanout: terminal token (zero spawns → drain)" "drain" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+mat_teardown
+unset DISPATCH_CONFIG_DIR
+
+# ============================================================================
 # summary
 # ============================================================================
 report_results
