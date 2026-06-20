@@ -2,10 +2,6 @@
 set -euo pipefail
 
 REPO_ROOT=$(git rev-parse --show-toplevel)
-SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
-
-# shellcheck source=lib.sh
-source "$SCRIPTS/lib.sh"
 
 # Detect: echo "$VAR" | jq  (quoted variable form only — see .claude/rules/shell-json.md)
 # Covers optional echo flags (echo -e / echo -n) and the braced ${VAR} form, both
