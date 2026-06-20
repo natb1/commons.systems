@@ -279,12 +279,16 @@ case "$args" in
     # The helper encodes a space as %20; decode for fixture-key comparison.
     rest_label="${rest_label//%20/ }"
     if [[ "$rest_repo" == "{owner}/{repo}" ]]; then
-      # Current-repo scans: open-ISSUE_LIST (no label) and the main-broken latch.
-      if [[ -z "$rest_label" ]]; then
+      # Current-repo scans: the no-label open-issue list (dispatch-select-target),
+      # the dispatch:review-followup retriage scan (#2032), and the main-broken latch.
+      if [[ -z "$rest_label" || "$rest_label" == "dispatch:review-followup" ]]; then
         # #1812: persistent-failure injection for the open-issue scan
         # (gh_issue_list_rest --state open). A marker makes gh fail on every
         # attempt so gh_retry exhausts and forwards the failure — driving
         # dispatch-retriage-orphaned-followups' early-exit-on-scan-failure branch.
+        # The retriage scan now passes --label dispatch:review-followup (#2032);
+        # both the no-label and that-label fetches serve issue-list.json here
+        # (the stub bypasses the server-side label filter).
         if [[ -f "$STUB_DIR/gh-fail-issue-list-open" ]]; then
           echo "stub forced gh api failure (open issue-list)" >&2
           exit 1
@@ -34000,17 +34004,19 @@ teardown
 # ============================================================================
 echo "=== dispatch-retriage-orphaned-followups (#1812) ==="
 
-# The open-issue scan is served from issue-list.json (REST shape: {number,labels})
+# The open-issue scan is served from issue-list.json (REST shape: {number,labels,body})
 # via the shared `api *repos/*/issues?*` branch; gh_issue_list_rest remaps it.
+# The scan reads the <!-- dispatch:source-pr <N> --> marker from the body field,
+# gated by the static dispatch:review-followup label (server-side filter bypassed in stub).
 # Per-PR state comes from retriage-pr-<N>.json (gh pr view --json state,mergedAt,labels).
 # The office-hours park flows through the REAL copied dispatch-apply-office-hours,
 # which logs to gh-issue-edit.log / gh-issue-comment.log; the per-PR processed
 # marker hits the generic `pr edit *` branch, logged to gh-pr-edit.log.
 
-# (a) closed-unmerged source PR + open source-pr:-marked follow-up → park + mark
+# (a) closed-unmerged source PR + open marker-bearing follow-up → park + mark
 echo "Test: closed-unmerged source PR → park follow-up on office-hours + mark PR"
 setup
-printf '[{"number":101,"labels":[{"name":"source-pr:1704"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":101,"labels":[{"name":"dispatch:review-followup"}],"body":"orphan finding <!-- dispatch:source-pr 1704 -->"}]\n' > "$STUB_DIR/issue-list.json"
 printf '{"state":"CLOSED","mergedAt":null,"labels":[]}\n' > "$STUB_DIR/retriage-pr-1704.json"
 out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null)
 assert_eq "a: office-hours applied to the follow-up issue" \
@@ -34036,7 +34042,7 @@ teardown
 # (b) MERGED source PR (mergedAt non-null) → no action (AC3)
 echo "Test: merged source PR → no action"
 setup
-printf '[{"number":102,"labels":[{"name":"source-pr:1688"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":102,"labels":[{"name":"dispatch:review-followup"}],"body":"orphan finding <!-- dispatch:source-pr 1688 -->"}]\n' > "$STUB_DIR/issue-list.json"
 printf '{"state":"MERGED","mergedAt":"2026-01-01T00:00:00Z","labels":[]}\n' > "$STUB_DIR/retriage-pr-1688.json"
 out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null)
 assert_eq "b: no office-hours edit on a merged source PR" "absent" "$(log_state gh-issue-edit.log)"
@@ -34047,7 +34053,7 @@ teardown
 # (c) OPEN source PR → no action
 echo "Test: still-open source PR → no action"
 setup
-printf '[{"number":103,"labels":[{"name":"source-pr:1900"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":103,"labels":[{"name":"dispatch:review-followup"}],"body":"orphan finding <!-- dispatch:source-pr 1900 -->"}]\n' > "$STUB_DIR/issue-list.json"
 printf '{"state":"OPEN","mergedAt":null,"labels":[]}\n' > "$STUB_DIR/retriage-pr-1900.json"
 out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null)
 assert_eq "c: no office-hours edit on an open source PR" "absent" "$(log_state gh-issue-edit.log)"
@@ -34058,7 +34064,7 @@ teardown
 # (d) closed-unmerged PR ALREADY carrying dispatch:orphans-retriaged → idempotent no-op
 echo "Test: source PR already marked dispatch:orphans-retriaged → no action"
 setup
-printf '[{"number":104,"labels":[{"name":"source-pr:1704"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":104,"labels":[{"name":"dispatch:review-followup"}],"body":"orphan finding <!-- dispatch:source-pr 1704 -->"}]\n' > "$STUB_DIR/issue-list.json"
 printf '{"state":"CLOSED","mergedAt":null,"labels":[{"name":"dispatch:orphans-retriaged"}]}\n' > "$STUB_DIR/retriage-pr-1704.json"
 out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null)
 assert_eq "d: no re-park when PR already marked" "absent" "$(log_state gh-issue-edit.log)"
@@ -34066,10 +34072,10 @@ assert_eq "d: no re-mark when PR already marked" "absent" "$(log_state gh-pr-edi
 assert_eq "d: no stdout when PR already marked" "" "$out"
 teardown
 
-# (e) no open issue carries a source-pr: label → clean no-op, exit 0
-echo "Test: no source-pr:-marked open issues → clean no-op, exit 0"
+# (e) no open issue carries the source-pr body marker → clean no-op, exit 0
+echo "Test: no marker-bearing open issues → clean no-op, exit 0"
 setup
-printf '[{"number":105,"labels":[{"name":"bug"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":105,"labels":[{"name":"bug"}],"body":"a normal issue with no marker"}]\n' > "$STUB_DIR/issue-list.json"
 if out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null); then rc=0; else rc=$?; fi
 assert_eq "e: exits 0 with no labeled issues" "0" "$rc"
 assert_eq "e: no office-hours edit" "absent" "$(log_state gh-issue-edit.log)"
@@ -34084,7 +34090,7 @@ setup
 err=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>&1 >/dev/null); rc=$?
 assert_eq "f: exits 0 when the open-issue scan fails" "0" "$rc"
 TOTAL=$((TOTAL + 1))
-if grep -q 'gh_issue_list_rest --state open failed; skipping scan' <<<"$err"; then
+if grep -q 'gh_issue_list_rest --state open --label dispatch:review-followup failed; skipping scan' <<<"$err"; then
   PASS=$((PASS + 1)); echo "  PASS: f: warns about the skipped scan on stderr"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: f: warns about the skipped scan on stderr"
@@ -34092,6 +34098,34 @@ else
 fi
 assert_eq "f: no office-hours edit when the scan fails" "absent" "$(log_state gh-issue-edit.log)"
 assert_eq "f: no PR marker when the scan fails" "absent" "$(log_state gh-pr-edit.log)"
+teardown
+
+# (g) body with TWO source-pr markers → last-wins anti-spoof (reference.md)
+# A finding's own text can carry an earlier `<!-- dispatch:source-pr N -->`
+# marker; the genuine marker is the one the workflow appends LAST. The scan's
+# `[scan(...)] | last` idiom must resolve the LAST marker, not the first, so a
+# spoofed earlier marker cannot redirect the park to the wrong PR. Mirrors the
+# calendar-import anti-spoof test (9b) for the same idiom.
+echo "Test: two source-pr markers in one body → park against the LAST PR (anti-spoof)"
+setup
+# First (spoofed) marker cites PR #1500 — its stub is OPEN, so if it were
+# (wrongly) chosen, the gate would no-op and nothing would park. The genuine
+# trailing marker cites PR #1704 (CLOSED-unmerged), which parks + marks.
+printf '[{"number":106,"labels":[{"name":"dispatch:review-followup"}],"body":"orphan finding mentions <!-- dispatch:source-pr 1500 --> in its text, then the genuine appended marker <!-- dispatch:source-pr 1704 -->"}]\n' > "$STUB_DIR/issue-list.json"
+printf '{"state":"OPEN","mergedAt":null,"labels":[]}\n' > "$STUB_DIR/retriage-pr-1500.json"
+printf '{"state":"CLOSED","mergedAt":null,"labels":[]}\n' > "$STUB_DIR/retriage-pr-1704.json"
+out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null)
+assert_eq "g: parks the follow-up against the LAST marker's PR (#1704)" \
+  "issue edit 106 --add-label dispatch:office-hours" "$(cat "$STUB_DIR/gh-issue-edit.log")"
+TOTAL=$((TOTAL + 1))
+if grep -q 'pr edit 1704 --add-label dispatch:orphans-retriaged' "$STUB_DIR/gh-pr-edit.log" \
+   && ! grep -q 'pr edit 1500 ' "$STUB_DIR/gh-pr-edit.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: g: marks the LAST PR (#1704), never the spoofed first (#1500)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: g: marks the LAST PR (#1704), never the spoofed first (#1500)"
+fi
+assert_eq "g: stdout cites the LAST PR (#1704)" \
+  "retriaged #106 (source PR #1704 closed unmerged)" "$out"
 teardown
 
 # ============================================================================
