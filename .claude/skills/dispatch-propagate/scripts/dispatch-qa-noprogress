@@ -1,0 +1,157 @@
+#!/usr/bin/env bash
+# dispatch-qa-noprogress — detect a qa-fix attempt that resolves nothing.
+#
+# The qa-fix phase runs a bounded Opus auto-fix lane on the opus-fixable QA
+# residue. dispatch-qa-fix-attempt bounds that lane by a per-PR attempt count,
+# but that counter is blind to CONTENT: it cannot tell that a fresh attempt
+# resolved none of the items the prior attempt was failing on and is just
+# spinning. This script adds the content-aware check.
+#
+# It persists each attempt's opus-fixable failing-item id set in a sentinel
+# `<!-- dispatch:qa-residue -->` PR comment (find-or-update, never stacked — the
+# same marker-comment upsert pattern as dispatch-write-plan / dispatch-read-plan,
+# author-id-filtered by the trusted dispatch identity's immutable .user.id). On
+# each call it compares the CURRENT opus-fixable failing-id set against the PRIOR
+# attempt's persisted set:
+#
+#   resolved = prior \ current   (ids the prior attempt was failing on that are
+#                                 no longer failing this attempt)
+#
+# and prints `no-progress` when a NON-EMPTY prior set exists and `resolved` is
+# empty (the attempt resolved nothing it was meant to), else `progress`. A first
+# attempt (no prior marker) is always `progress`. The caller (qa-fix Step 3.7)
+# owns the escalation, exactly as it owns the dispatch-qa-fix-attempt escalation.
+#
+# It then (re)writes the CURRENT set to the marker comment so the NEXT attempt
+# has a baseline — every call refreshes the baseline.
+#
+# Fail-open: ANY gh/jq error on the read, or an unresolvable author id, defaults
+# to `progress`. Never wrongly escalate on a transient flake; a missed
+# no-progress just lets the existing attempt-cap gate bound the lane instead.
+#
+# CLI contract:
+#   dispatch-qa-noprogress <pr-num> <current-ids-file>
+#
+#   <pr-num>           the PR number (the residue comment lives on the PR).
+#   <current-ids-file> a file holding the current attempt's opus-fixable failing
+#                      id set — either one id per line, or a JSON array.
+#
+# Stdout protocol (exactly one line):
+#   progress      first attempt, or at least one prior-failing id was resolved.
+#   no-progress   prior set non-empty and nothing it was failing on got resolved.
+#
+# Exit codes:
+#   0  on a progress / no-progress verdict.
+#   2  on a bad <pr-num> or a missing/unreadable/invalid <current-ids-file>.
+#
+# Environment overrides for testability:
+#   DISPATCH_QA_NOPROGRESS_GH_CMD     gh binary (default: gh).
+#   DISPATCH_QA_NOPROGRESS_AUTHOR_ID  trusted marker-comment author id (default:
+#                                     `gh api user --jq .id`). Set in tests to
+#                                     avoid the live user lookup.
+#
+# Sandbox: comment reads/writes use `gh` (macOS Security-framework TLS); callers
+# MUST invoke with `dangerouslyDisableSandbox: true`. Relies on caller cwd to
+# resolve {owner}/{repo} (qa-fix runs in the target worktree) — like
+# dispatch-qa-fix-attempt, it does NOT set GH_REPO.
+
+set -uo pipefail
+
+GH_CMD="${DISPATCH_QA_NOPROGRESS_GH_CMD:-gh}"
+MARKER='<!-- dispatch:qa-residue -->'
+# The id set is embedded on its own line in the marker comment body:
+#   <!-- dispatch:qa-residue-ids:["id1","id2"] -->
+# The MARKER above (note the space before `-->`) is a distinct substring from
+# this `-ids:` line, so the find `contains($MARKER)` matches only the first line.
+IDS_PREFIX='<!-- dispatch:qa-residue-ids:'
+IDS_SUFFIX=' -->'
+
+# ---- args -------------------------------------------------------------------
+PR_NUM="${1:-}"
+CUR_FILE="${2:-}"
+if [[ -z "$PR_NUM" || ! "$PR_NUM" =~ ^[1-9][0-9]*$ ]]; then
+  echo "error: usage: dispatch-qa-noprogress <pr-num> <current-ids-file> (pr-num must be a positive integer)" >&2
+  exit 2
+fi
+if [[ -z "$CUR_FILE" || ! -r "$CUR_FILE" ]]; then
+  echo "error: dispatch-qa-noprogress: current-ids-file '$CUR_FILE' is missing or unreadable" >&2
+  exit 2
+fi
+
+# ---- normalize current ids to a compact, sorted, unique JSON array ----------
+raw_cur="$(cat "$CUR_FILE")"
+if printf '%s' "$raw_cur" | grep -q '^[[:space:]]*\['; then
+  # JSON-array input.
+  if ! cur_ids_json=$(jq -c 'map(tostring) | unique' <<<"$raw_cur" 2>/dev/null); then
+    echo "error: dispatch-qa-noprogress: current-ids-file is not a valid JSON array" >&2
+    exit 2
+  fi
+else
+  # One id per line; blank lines ignored.
+  cur_ids_json=$(jq -c -R -s 'split("\n") | map(select(length>0)) | unique' <<<"$raw_cur")
+fi
+
+# ---- resolve the trusted marker-comment author id ---------------------------
+AUTHOR_ID="${DISPATCH_QA_NOPROGRESS_AUTHOR_ID:-$("$GH_CMD" api user --jq '.id' 2>/dev/null)}"
+if [[ ! "$AUTHOR_ID" =~ ^[0-9]+$ ]]; then
+  # Cannot identify the trusted author → cannot safely read or write the marker.
+  # Fail open: emit progress, do not attempt a write.
+  echo "dispatch-qa-noprogress: warning: could not resolve a numeric author id (got '$AUTHOR_ID'); failing open to progress" >&2
+  echo "progress"
+  exit 0
+fi
+
+# ---- read the prior residue marker comment (fail-open on any gh/jq error) ----
+read_ok=yes
+prior_body=$("$GH_CMD" api --paginate "repos/{owner}/{repo}/issues/$PR_NUM/comments" 2>/dev/null \
+  | jq -r --arg m "$MARKER" --argjson aid "$AUTHOR_ID" \
+      'first(.[] | select((.body | contains($m)) and (.user.id == $aid)) | .body) // ""') \
+  || read_ok=no
+
+verdict=progress
+if [[ "$read_ok" == no ]]; then
+  echo "dispatch-qa-noprogress: warning: could not read prior residue comment for PR #$PR_NUM; failing open to progress" >&2
+elif [[ -n "$prior_body" ]]; then
+  # Extract the prior id set from the `-ids:` line.
+  prior_ids_json=$(printf '%s\n' "$prior_body" \
+    | sed -n "s/^${IDS_PREFIX}\(.*\)${IDS_SUFFIX}\$/\1/p" | head -n1)
+  if [[ -z "$prior_ids_json" ]] || ! jq -e 'type == "array"' <<<"$prior_ids_json" >/dev/null 2>&1; then
+    prior_ids_json='[]'
+  fi
+  prior_len=$(jq 'length' <<<"$prior_ids_json")
+  resolved_len=$(jq -n --argjson p "$prior_ids_json" --argjson c "$cur_ids_json" '($p - $c) | length')
+  # no-progress: the prior attempt had a non-empty failing set, and NONE of those
+  # ids dropped out this attempt (resolved = prior \ current is empty).
+  if (( prior_len > 0 )) && (( resolved_len == 0 )); then
+    verdict=no-progress
+  fi
+fi
+# (read_ok=yes and empty prior_body → no prior marker → first attempt → progress.)
+
+# ---- refresh the marker comment with the CURRENT set (best-effort) -----------
+# The verdict is already computed; a write failure warns but never changes it or
+# aborts. Find-or-update keeps a single comment (never stacked).
+tmp="$(mktemp)"
+trap 'rm -f "$tmp"' EXIT
+printf '%s\n%s\n\n%s%s%s\n' \
+  "$MARKER" \
+  "qa-fix opus-fixable residue tracker (machine-managed, #2040). Do not edit." \
+  "$IDS_PREFIX" "$cur_ids_json" "$IDS_SUFFIX" > "$tmp"
+
+CID=$("$GH_CMD" api --paginate "repos/{owner}/{repo}/issues/$PR_NUM/comments" 2>/dev/null \
+  | jq -r --arg m "$MARKER" --argjson aid "$AUTHOR_ID" \
+      'first(.[] | select((.body | contains($m)) and (.user.id == $aid)) | .id) // ""') \
+  || CID=""
+
+if [[ -n "$CID" ]]; then
+  "$GH_CMD" api --method PATCH "repos/{owner}/{repo}/issues/comments/$CID" \
+    --field body=@"$tmp" >/dev/null 2>&1 \
+    || echo "dispatch-qa-noprogress: warning: could not update residue comment $CID for PR #$PR_NUM (non-fatal)" >&2
+else
+  "$GH_CMD" api --method POST "repos/{owner}/{repo}/issues/$PR_NUM/comments" \
+    --field body=@"$tmp" >/dev/null 2>&1 \
+    || echo "dispatch-qa-noprogress: warning: could not create residue comment for PR #$PR_NUM (non-fatal)" >&2
+fi
+
+echo "$verdict"
+exit 0

@@ -766,7 +766,36 @@ fork site below (same discipline as the `fixes_applied_count` tally in Step 3.7)
         produced nothing usable) → escalate with a planning-failed reason. Take the
         **escalate finalize path** below; apply **no** attempt label.
 
-      - **Otherwise (have units):** run the attempt gate (use
+      - **Otherwise (have units):**
+
+        **No-progress short-circuit (#2040).** Before spending another fix lane,
+        verify this attempt would resolve at least one item the prior attempt was
+        still failing on. Write the current opus-fixable failing-id set —
+        `opusFixable.map(d => d.id)`, one id per line — to
+        `tmp/qa-residue-current.txt`, then (use `dangerouslyDisableSandbox: true`
+        — it calls `gh`):
+        ```bash
+        .claude/skills/dispatch-propagate/scripts/dispatch-qa-noprogress \
+          "$PR_NUM" tmp/qa-residue-current.txt
+        ```
+        Branch on its **STDOUT only**:
+        - Prints **`no-progress`** → the prior attempt's failing set was non-empty
+          and this attempt resolves none of it; re-spending the lane would just
+          spin. Take the **escalate finalize path** below (apply **NO** attempt
+          label), with a reason naming the per-issue total read from the issue's
+          `dispatch:attempts-<n>` label (the cross-phase counter):
+          ```bash
+          TOTAL=$(gh issue view "$N" --json labels \
+            --jq '[.labels[].name | capture("^dispatch:attempts-(?<n>[0-9]+)$").n | tonumber] | max // 0')
+          ```
+          (use `dangerouslyDisableSandbox: true` — `gh` needs network)
+          Reason: `qa-fix made no progress vs the prior attempt; total attempts across all phases = <TOTAL>`.
+        - Prints **`progress`** (first attempt, or at least one prior-failing item
+          resolved) → fall through to the attempt-cap gate below. The script has
+          already refreshed the `<!-- dispatch:qa-residue -->` PR comment with the
+          current set, so the next attempt has a fresh baseline.
+
+        Then run the attempt gate (use
         `dangerouslyDisableSandbox: true` — it calls `gh`):
         ```bash
         .claude/skills/dispatch-propagate/scripts/dispatch-qa-fix-attempt "$PR_NUM"
@@ -879,13 +908,14 @@ fork site below (same discipline as the `fixes_applied_count` tally in Step 3.7)
    6. **STOP.**
 
    **Escalate finalize path** (cap reached, scope-deviation, planning-failed,
-   fix-pass-landed-nothing, or the gate printed `escalate`):
+   fix-pass-landed-nothing, no-progress vs the prior attempt, or the gate printed
+   `escalate`):
    1. Run **Step 4** (post the PR-comment summary; non-fixing-pass / escalation
       prose).
    2. Run **Step 5** (cleanup — self-guards).
    3. Escalate per the **Escalation** section (`dispatch-mark-deviation`), tailored
       to the reason that fired (cap reached / scope-deviation with
-      `deviation_reason` / planning-failed / fix-pass-landed-nothing — no
+      `deviation_reason` / planning-failed / qa-fix-no-progress / fix-pass-landed-nothing — no
       opus-fixable finding was resolved this pass — either no unit landed a commit,
       or the landed units collectively resolved zero findings, so
       `fixes_applied_count` stayed `0`).

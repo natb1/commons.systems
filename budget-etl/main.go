@@ -223,13 +223,21 @@ func virtualStmtPrefix(targetInstitution, targetAccount string) string {
 
 // seedLegacyVirtualTransactionRules seeds the legacy Synchrony->pet rule when
 // vrules is nil (absent in JSON from a pre-refactor snapshot). An explicit empty
-// slice is left alone. MIGRATION: deletable once all snapshots carry
-// virtualTransactionRules.
+// slice is left alone.
+//
+// MIGRATION (#1709): delete this helper and its two call sites (runInputJSON,
+// runMerge) once the real snapshot on the network share carries
+// virtualTransactionRules — observable as the `virtualTransactionRules` key
+// being present in the decrypted .benc snapshot. budget-etl writes vrules back
+// into every output snapshot, so the first successful run over the real
+// snapshot satisfies this; after that this nil branch is dead code. Backstop
+// date: 2026-12-15 (six months after #1277/#1690 merged 2026-06-15), by which
+// the real snapshot is guaranteed updated.
 func seedLegacyVirtualTransactionRules(vrules []export.VirtualTransactionRule) []export.VirtualTransactionRule {
 	if vrules != nil {
 		return vrules
 	}
-	log.Printf("MIGRATION: snapshot has no virtualTransactionRules; seeding legacy Synchrony->pet rule")
+	log.Printf("MIGRATION (#1709): snapshot has no virtualTransactionRules; seeding legacy Synchrony->pet rule")
 	return []export.VirtualTransactionRule{{
 		Institution:         "pnc",
 		Account:             "5111",
