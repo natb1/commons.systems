@@ -35809,6 +35809,47 @@ assert_eq "sidecar no-baseline duplication → exactly one finding" "1" "$sideca
 rm -rf "$TMPDIR_TEST"
 TMPDIR_TEST=""
 
+# E6. Sidecar dupLines-only duplication (medium confidence): HEAD and BASE have
+#     EQUAL clone counts (clones=1 both), so clonesRose=false, but HEAD has MORE
+#     duplicated lines (15 > 5), so dupLinesRose=true. The aggregate duplication
+#     finding still fires (clonesRose || dupLinesRose), but takes the
+#     Confidence='medium' sub-path (clonesRose ? 'high' : 'medium'). E4/E5 both
+#     drive clonesRose=true (high), so this medium sub-path is otherwise uncovered.
+#     Empty eslint reports isolate the duplication path (no complexity finding).
+echo "Test: dispatch-review-erosion-diff.mjs — dupLines-only rise yields Confidence=medium duplication finding"
+TMPDIR_TEST=$(mktemp -d)
+mkdir -p "$TMPDIR_TEST/baseline"
+# Empty eslint reports → no complexity finding; isolates the duplication path.
+echo '[]' > "$TMPDIR_TEST/head-eslint.json"
+echo '[]' > "$TMPDIR_TEST/base-eslint.json"
+# HEAD jscpd report: one clone, 15 duplicated lines. The single duplicates entry
+# keeps the fixture realistic (worstCloneLocation has a real span to read).
+cat > "$TMPDIR_TEST/head-jscpd.json" <<'EOF'
+{"statistics":{"total":{"clones":1,"duplicatedLines":15,"percentage":9}},
+ "duplicates":[{"firstFile":{"name":"dup.ts","start":10,"end":22},
+                "secondFile":{"name":"dup.ts","start":40,"end":52}}]}
+EOF
+# BASE jscpd report: SAME clone count (1) so clonesRose=false, but FEWER
+# duplicated lines (5 < 15) so dupLinesRose=true. Statistics-only is fine — the
+# BASE report only feeds jscpdTotals (baseDup).
+cat > "$TMPDIR_TEST/base-jscpd.json" <<'EOF'
+{"statistics":{"total":{"clones":1,"duplicatedLines":5,"percentage":3}}}
+EOF
+sidecar_out=$(cd "$TMPDIR_TEST" && node "$SCRIPT_DIR/dispatch-review-erosion-diff.mjs" \
+  --eslint-head head-eslint.json \
+  --eslint-base base-eslint.json \
+  --jscpd-head head-jscpd.json \
+  --jscpd-base base-jscpd.json \
+  --baseline-dir baseline)
+sidecar_count=$(jq '.findings | length' <<<"$sidecar_out")
+sidecar_source=$(jq -r '.findings[0].Source // "none"' <<<"$sidecar_out")
+sidecar_confidence=$(jq -r '.findings[0].Confidence // "none"' <<<"$sidecar_out")
+assert_eq "sidecar dupLines-only duplication count=1" "1" "$sidecar_count"
+assert_eq "sidecar dupLines-only duplication Source=erosion" "erosion" "$sidecar_source"
+assert_eq "sidecar dupLines-only duplication Confidence=medium (dupLines rose, clones flat)" "medium" "$sidecar_confidence"
+rm -rf "$TMPDIR_TEST"
+TMPDIR_TEST=""
+
 # ============================================================================
 # dispatch-run-verification tests (#2024)
 # ============================================================================
