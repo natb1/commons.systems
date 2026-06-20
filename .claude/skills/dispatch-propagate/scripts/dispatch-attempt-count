@@ -1,0 +1,189 @@
+#!/usr/bin/env bash
+# dispatch-attempt-count — issue-anchored monotonic total-attempt counter that
+# bounds cross-tick / cross-phase oscillation for a single dispatch issue.
+#
+# The dispatch workflow can loop a single target across ticks and phases: a PR
+# regresses to plan, a fresh PR is opened, it regresses again, and so on. Each
+# individual phase has its own bounded counter (e.g. dispatch:qa-fix-attempt-<n>
+# on the PR), but those PR-side counters do not survive the loop — so nothing
+# bounds the *total* work spent on one issue across the whole oscillation. This
+# script is that total ceiling: it reads the current total, bumps it, and emits
+# a verdict telling the caller whether to proceed or escalate to office-hours.
+#
+# WHY issue-anchored (load-bearing for AC1):
+#   PR-side dispatch:*-attempt-* labels are NOT durable across the loop this
+#   script caps. They are deleted when the PR is closed on a regress-to-plan,
+#   and they are cleared by dispatch-reconcile-ready on every ready-promotion.
+#   A counter living on the PR therefore resets exactly when the oscillation
+#   recreates the PR — summing PR labels cannot bound a loop that destroys the
+#   labels it would sum. A counter on the ISSUE survives PR recreation and
+#   phase regression, which is precisely the loop this issue caps.
+#
+# WHY the label name omits the `-attempt-` infix:
+#   dispatch-reconcile-ready clears PR attempt labels with the regex
+#   `^dispatch:.*-attempt-[0-9]+$`. Our label is `dispatch:attempts-<n>` — the
+#   only hyphen sits directly before the digits, so the string contains no
+#   `-attempt-` substring and that clear regex cannot match it. This is verified
+#   by inspection, not merely asserted: there is no rendering of
+#   `dispatch:attempts-N` that yields the `-attempt-` infix the regex requires.
+#   Survival-through-regress is what makes the issue-anchored counter monotonic.
+#
+# Key inversion vs the dispatch-qa-fix-attempt template (BUMP-FIRST-THEN-REPORT):
+#   The template checks the cap BEFORE bumping and, at the cap, applies NO label
+#   and returns `escalate`. THIS script inverts that: it bumps the label FIRST
+#   (so the write always lands) and THEN decides escalate-vs-proceed. The bump
+#   must land even at the ceiling, because the counter is meant to reflect
+#   reality — the total attempt that just occurred is real whether or not it is
+#   the one that trips the ceiling. The verdict is computed from NEXT (the value
+#   just written), not from CUR.
+#
+# CLI contract:
+#   dispatch-attempt-count <issue-num>
+#
+#   <issue-num> is the GitHub issue number (NOT a PR number). The counter lives
+#   on the issue so it survives PR recreation and phase regression.
+#
+# Behavior, in order:
+#   1. Validate <issue-num> is a positive integer → exit 2 on bad input.
+#   2. Read the highest extant dispatch:attempts-<n> issue label → CUR
+#      (max // 0), via the jq capture idiom. gh read failure → exit 2.
+#      Fail-closed integer guard on CUR → exit 2 on malformed output.
+#   3. Resolve and validate CEILING (env override, positive integer) → exit 2
+#      on a bad override, BEFORE any label is mutated.
+#   4. BUMP FIRST: NEXT=CUR+1. Remove the prior counter label (if CUR>0) and
+#      apply dispatch:attempts-<NEXT> via apply-first / create-on-"not found".
+#      Label failures warn on stderr but do NOT abort — the stdout verdict is
+#      the load-bearing side effect.
+#   5. THEN report: print `escalate` iff NEXT >= CEILING, else `proceed`.
+#
+# Stdout protocol (exactly one line on every action path):
+#   proceed    counter bumped, under the ceiling; the caller continues.
+#   escalate   counter bumped, ceiling reached; the CALLER owns the office-hours
+#              park (this script just emits the verdict, exactly as the template
+#              leaves escalation to its caller).
+#
+# Exit codes:
+#   0  on a proceed or escalate path (the bump landed on both).
+#   2  on a bad <issue-num>, a gh read failure, a non-integer CUR, or a bad
+#      CEILING env override.
+#
+# Environment overrides for testability:
+#
+#   DISPATCH_ATTEMPT_COUNT_GH_CMD
+#     Override the `gh` binary used for label reads/edits. Default: `gh`.
+#
+#   DISPATCH_TOTAL_ATTEMPT_CEILING
+#     Override the total-attempt ceiling (positive integer). Default: 13.
+#
+# Sandbox: label reads/edits use `gh` (macOS Security-framework TLS); this
+# script is not sandbox-safe and callers MUST invoke it with
+# `dangerouslyDisableSandbox: true`.
+
+set -uo pipefail
+
+# ---- Step 0: defaults & config ----------------------------------------------
+
+GH_CMD="${DISPATCH_ATTEMPT_COUNT_GH_CMD:-gh}"
+
+# ---- Step 1: validate <issue-num> -------------------------------------------
+#
+# ISSUE_NUM is interpolated into `gh issue view/edit "$ISSUE_NUM"` calls below.
+# A non-numeric, flag-like value (e.g. --repo other/repo) would be parsed by gh
+# as an option rather than an issue number. Reject anything that is not a bare
+# positive integer.
+
+ISSUE_NUM="${1:-}"
+if [[ -z "$ISSUE_NUM" || ! "$ISSUE_NUM" =~ ^[1-9][0-9]*$ ]]; then
+  echo "error: usage: dispatch-attempt-count <issue-num> (issue-num must be a positive integer)" >&2
+  exit 2
+fi
+
+# ---- Step 2: read the highest total-attempt counter -------------------------
+#
+# Same label-capture idiom as the dispatch-qa-fix-attempt template, adapted to
+# the dispatch:attempts- prefix and read from the ISSUE rather than the PR.
+# `max // 0` yields 0 when no counter label is present yet.
+#
+# Capture gh's exit status separately: a gh failure (issue not found, network
+# error) must surface as a clear "could not read issue labels" error rather than
+# leaving CUR empty and tripping the integer guard with a confusing message.
+CUR=$("$GH_CMD" issue view "$ISSUE_NUM" --json labels \
+  --jq '[.labels[].name | capture("^dispatch:attempts-(?<n>[0-9]+)$").n | tonumber] | max // 0' \
+  2>/dev/null)
+gh_rc=$?
+if (( gh_rc != 0 )); then
+  echo "error: dispatch-attempt-count: could not read issue labels for issue #$ISSUE_NUM (gh exited $gh_rc); aborting" >&2
+  exit 2
+fi
+
+# CUR feeds `(( CUR + 1 ))` and `(( CUR > 0 ))` — bash arithmetic context
+# evaluates array-index command substitution, so any value entering `(( ))`
+# must be a literal integer. A label-read flake or tampered label set could
+# yield a non-integer; fail closed.
+if [[ ! "$CUR" =~ ^[0-9]+$ ]]; then
+  echo "error: dispatch-attempt-count: attempt counter is not an integer, got '$CUR'; aborting" >&2
+  exit 2
+fi
+
+# ---- Step 3: resolve & validate CEILING -------------------------------------
+#
+# Baked default 13, env-overridable. Rationale for 13: a legitimately complex
+# single target rarely exceeds plan + implement + review + qa plus a handful of
+# fix passes; 13 leaves headroom for roughly one full re-plan cycle before
+# firing (satisfies AC2). Like the DISPATCH_QA_FIX_ATTEMPT_CAP precedent this is
+# an env+default pair — no dispatch-config-load schema is added.
+#
+# Validate BEFORE any label is mutated: a bad override must never bump the
+# counter.
+CEILING="${DISPATCH_TOTAL_ATTEMPT_CEILING:-13}"
+if [[ ! "$CEILING" =~ ^[0-9]+$ ]] || (( CEILING < 1 )); then
+  echo "error: dispatch-attempt-count: CEILING must be a positive integer, got '$CEILING'; aborting" >&2
+  exit 2
+fi
+
+# ---- Step 4: BUMP FIRST -----------------------------------------------------
+#
+# The bump is unconditional and runs BEFORE the verdict branch — including on
+# the escalate path. The counter must reflect the attempt that just occurred
+# whether or not it is the one that trips the ceiling.
+#
+# Apply-first / create-on-"not found" — the label may not exist yet on a fresh
+# repo. A gh label failure warns on stderr but does NOT abort: the stdout
+# verdict is the load-bearing side effect; the bookkeeping label is best-effort.
+
+NEXT=$(( CUR + 1 ))
+
+if (( CUR > 0 )); then
+  if ! rm_out=$("$GH_CMD" issue edit "$ISSUE_NUM" --remove-label "dispatch:attempts-$CUR" 2>&1); then
+    echo "dispatch-attempt-count: warning: could not remove dispatch:attempts-$CUR from issue #$ISSUE_NUM: $rm_out" >&2
+  fi
+fi
+
+if ! add_out=$("$GH_CMD" issue edit "$ISSUE_NUM" --add-label "dispatch:attempts-$NEXT" 2>&1); then
+  if [[ "$add_out" != *"not found"* ]]; then
+    echo "dispatch-attempt-count: warning: could not apply dispatch:attempts-$NEXT to issue #$ISSUE_NUM: $add_out" >&2
+  else
+    if ! create_out=$("$GH_CMD" label create "dispatch:attempts-$NEXT" \
+        --color F9D0C4 \
+        --description "dispatch workflow: total attempts $NEXT" 2>&1); then
+      echo "dispatch-attempt-count: warning: could not create label dispatch:attempts-$NEXT: $create_out" >&2
+    elif ! retry_out=$("$GH_CMD" issue edit "$ISSUE_NUM" --add-label "dispatch:attempts-$NEXT" 2>&1); then
+      echo "dispatch-attempt-count: warning: could not apply dispatch:attempts-$NEXT to issue #$ISSUE_NUM after create: $retry_out" >&2
+    fi
+  fi
+fi
+
+# ---- Step 5: THEN report ----------------------------------------------------
+#
+# Echo the resolved total to stderr so the caller can name it in the
+# office-hours reason (AC4), then emit the single-word verdict on stdout. The
+# verdict keys off NEXT (the value just written), not CUR.
+
+echo "dispatch-attempt-count: total attempts now $NEXT (ceiling $CEILING)" >&2
+
+if (( NEXT >= CEILING )); then
+  echo "escalate"
+else
+  echo "proceed"
+fi
+exit 0
