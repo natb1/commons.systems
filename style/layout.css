@@ -37,6 +37,7 @@
 .content-grid > main {
   max-inline-size: none;
   margin-inline: 0;
+  min-width: 0;
 }
 
 @media (min-width: 768px) {

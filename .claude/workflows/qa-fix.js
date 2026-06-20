@@ -158,7 +158,7 @@ const hasRefuted = (votes) => votes.includes('refuted');
 // PLANNED-DEFERRAL BYPASS (issue #1891) — the FIRST branch, before everything:
 //   When planned_deferral is true the item's acceptance criterion is documented
 //   as non-assertable at merge time (measured downstream), so it is ALWAYS
-//   needs-human and never auto-fixable — regardless of the class the classify
+//   needs-main and never auto-fixable — regardless of the class the classify
 //   agent assigned. This branch fires FIRST, symmetric with the aesthetic
 //   bypass: it must precede the `!== 'needs-human'` pass-through, or an
 //   opus-fixable planned-deferral item (the literal original failure) would slip
@@ -179,11 +179,13 @@ function applyQaDisposition(classifications, votesById) {
     if (c.planned_deferral === true) {
       // Planned-deferral residue item (issue #1891): its acceptance criterion is
       // documented as non-assertable at merge time, so it is authoritatively
-      // needs-human and never auto-fixable. FIRST branch — fires regardless of
+      // needs-main and never auto-fixable. FIRST branch — fires regardless of
       // the class the classify agent assigned, symmetric with the aesthetic
       // bypass below; placing it after the `!== 'needs-human'` pass-through would
       // let an opus-fixable planned-deferral item reintroduce the auto-fix loop.
-      return { id: c.id, final_class: 'needs-human', verify: 'n/a' };
+      // needs-main items are filed as blocked_by follow-ups in Step 3.6 — never
+      // auto-fixed, never skeptic-downgraded.
+      return { id: c.id, final_class: 'needs-main', verify: 'n/a' };
     }
     if (c.class === 'already-satisfied') {
       // No-skeptic-fan-out pass-through, symmetric with the aesthetic bypass:
@@ -298,7 +300,7 @@ const classifyPrompt = [
   'PLANNED-DEFERRAL ITEMS:',
   '- When an item\'s `planned_deferral` is true, its acceptance criterion is',
   '  documented as non-assertable at merge time (measured downstream), so classify',
-  '  it "needs-human", NOT "opus-fixable" — there is no defect Opus can fix now.',
+  '  it "needs-main", NOT "opus-fixable" — there is no defect Opus can fix now.',
   '',
   'VISUAL-EVIDENCE HANDLING:',
   '- page_text is the always-reliable text-primary baseline.',
@@ -343,7 +345,7 @@ const classifications = residue.map((r) => {
     throw new Error(`classify: agent returned no classification for residue id "${r.id}"`);
   }
   // planned_deferral is INPUT (sourced from residue r), not classify-agent
-  // output — it authoritatively forces needs-human in applyQaDisposition.
+  // output — it authoritatively forces needs-main in applyQaDisposition.
   return {
     id: r.id,
     class: c.class,
@@ -360,7 +362,7 @@ phase('verify');
 // Candidate set = non-aesthetic, non-planned-deferral needs-human items.
 // Aesthetic needs-human items BYPASS the fan-out and stay needs-human (enforced
 // by applyQaDisposition's aesthetic branch); planned-deferral items are
-// authoritatively needs-human (applyQaDisposition's first branch, issue #1891) —
+// authoritatively needs-main (applyQaDisposition's first branch, issue #1891) —
 // both are excluded here so no skeptic can downgrade them back to opus-fixable.
 const candidates = classifications.filter(
   (c) => c.class === 'needs-human' && c.aesthetic === false && c.planned_deferral !== true
