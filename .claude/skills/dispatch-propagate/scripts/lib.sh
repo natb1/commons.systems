@@ -200,19 +200,29 @@ dispatch_marker_comment_id() {
 # per-tick scan was self-exhausting (#1601).
 #
 # Contract:
-#   gh_issue_list_rest --state <open|closed> [--repo <owner/repo>] [--label <name>] [--limit <n>] [--include-body]
+#   gh_issue_list_rest --state <open|closed|all> [--repo <owner/repo>] [--label <name>] [--limit <n>] [--include-title] [--include-body]
 #
 # Flags:
-#   --state  (required) open|closed.
+#   --state  (required) open|closed|all. `all` is accepted — REST's
+#            issues?state=all is native and needs no special-casing.
 #   --repo   (optional) owner/repo for a cross-repo scan; when absent the path
 #            uses the {owner}/{repo} placeholder gh auto-resolves for the
 #            current repo.
 #   --label  (optional) a single label name; URL-encoded minimally (space→%20;
 #            the colon in values like dispatch:main-broken is query-safe).
-#   --limit  (optional) per_page cap. When ABSENT we --paginate the full set
-#            (REST --paginate has no silent-truncation hazard, unlike gh pr/issue
-#            list's --limit default). When PRESENT we fetch a SINGLE page of that
-#            size (no --paginate).
+#   --limit  (optional) cap on the number of issues returned. When ABSENT we
+#            --paginate the full set (REST --paginate has no silent-truncation
+#            hazard, unlike gh pr/issue list's --limit default). When PRESENT and
+#            <= 100 we fetch a SINGLE page of that size (no --paginate). When
+#            PRESENT and > 100 we --paginate at per_page=100 and slice the merged
+#            result to the first <limit> objects in the final jq projection —
+#            REST clamps per_page to 100, so a single-page per_page=<limit> would
+#            silently truncate to <= 100. The slice preserves the
+#            `len == limit ⇒ truncated` guard semantics: paginate-all-then-slice
+#            yields len == limit iff at least <limit> issues exist.
+#   --include-title (optional) when present, the projected objects additionally
+#            carry a `title` field. Omitted by default so the repo-wide per-tick
+#            callers stay byte-identical and payload-lean.
 #   --include-body (optional) when present, the projected objects additionally
 #            carry a `body` field. Omitted by default so the repo-wide per-tick
 #            callers stay byte-identical and payload-lean.
@@ -223,19 +233,21 @@ dispatch_marker_comment_id() {
 # camelCase shape downstream jq expects ({number, createdAt, closedAt, labels}).
 # `labels` is already [{name,...}] in REST, so it passes through unchanged; a null
 # closedAt on open issues is harmless. Results are sorted created-descending so a
-# downstream `.[0]` is the most-recently-created issue. When --include-body is
-# passed, each projected object also carries a `body` field.
+# downstream `.[0]` is the most-recently-created issue. When --include-title is
+# passed, each projected object also carries a `title` field; when --include-body
+# is passed, each also carries a `body` field; both may be passed together.
 #
 # On gh failure: errors to stderr and returns 1 (clear-errors convention, no
 # fallback).
 gh_issue_list_rest() {
-  local state="" repo="" label="" limit="" include_body=""
+  local state="" repo="" label="" limit="" include_title="" include_body=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --state) state="$2"; shift 2 ;;
       --repo)  repo="$2";  shift 2 ;;
       --label) label="$2"; shift 2 ;;
       --limit) limit="$2"; shift 2 ;;
+      --include-title) include_title=1; shift 1 ;;
       --include-body) include_body=1; shift 1 ;;
       *) echo "error: gh_issue_list_rest: unknown flag '$1'" >&2; return 1 ;;
     esac
@@ -252,8 +264,26 @@ gh_issue_list_rest() {
     path="repos/{owner}/{repo}/issues"
   fi
 
-  local per_page="100"
-  [[ -n "$limit" ]] && per_page="$limit"
+  # When --limit > 100, REST clamps a single page's per_page to 100, so we must
+  # --paginate at per_page=100 and slice the merged result down to <limit> in the
+  # projection. A limit <= 100 fits one page (per_page=<limit>, no --paginate).
+  local paginate="" per_page="100" slice=""
+  if [[ -n "$limit" ]]; then
+    if [[ ! "$limit" =~ ^[0-9]+$ ]]; then
+      echo "error: gh_issue_list_rest: --limit must be a non-negative integer (got '$limit')" >&2
+      return 1
+    fi
+    if (( limit > 100 )); then
+      paginate=1
+      per_page="100"
+      slice="$limit"
+    else
+      per_page="$limit"
+    fi
+  else
+    paginate=1
+  fi
+
   local query="state=$state&per_page=$per_page&sort=created&direction=desc"
   if [[ -n "$label" ]]; then
     # Minimal URL-encode: space → %20 (colon is query-safe).
@@ -262,24 +292,28 @@ gh_issue_list_rest() {
   fi
 
   local raw
-  if [[ -n "$limit" ]]; then
+  if [[ -n "$paginate" ]]; then
+    # Full set (--limit absent) or --limit > 100: REST --paginate has no
+    # silent-truncation hazard; a >100 limit is enforced by the projection slice.
+    raw=$(gh_retry gh api --paginate "$path?$query") || {
+      echo "error: gh_issue_list_rest: gh api failed for $path?$query" >&2
+      return 1
+    }
+  else
     # Single page (no --paginate) — caller wants at most one page of per_page.
     raw=$(gh_retry gh api "$path?$query") || {
       echo "error: gh_issue_list_rest: gh api failed for $path?$query" >&2
       return 1
     }
-  else
-    # Full set — REST --paginate has no silent-truncation hazard.
-    raw=$(gh_retry gh api --paginate "$path?$query") || {
-      echo "error: gh_issue_list_rest: gh api failed for $path?$query" >&2
-      return 1
-    }
   fi
 
-  local projection='add // [] | map(select(.pull_request == null)) | map({number, createdAt: .created_at, closedAt: .closed_at, labels})'
-  if [[ -n "$include_body" ]]; then
-    projection='add // [] | map(select(.pull_request == null)) | map({number, createdAt: .created_at, closedAt: .closed_at, labels, body})'
-  fi
+  # Build the projection: filter PRs, remap to camelCase, conditionally add
+  # title/body, then conditionally slice to <limit> (only when --limit > 100).
+  local fields="number, createdAt: .created_at, closedAt: .closed_at, labels"
+  [[ -n "$include_title" ]] && fields="$fields, title"
+  [[ -n "$include_body" ]] && fields="$fields, body"
+  local projection="add // [] | map(select(.pull_request == null)) | map({$fields})"
+  [[ -n "$slice" ]] && projection="$projection | .[:$slice]"
   printf '%s' "$raw" | jq -s "$projection"
 }
 

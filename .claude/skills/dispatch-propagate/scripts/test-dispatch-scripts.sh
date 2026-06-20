@@ -253,6 +253,19 @@ case "$args" in
       dispatch-test-limit)
         cat "$STUB_DIR/rest-limit.json"
         ;;
+      dispatch-test-title)
+        cat "$STUB_DIR/rest-title.json"
+        ;;
+      dispatch-test-limit-paginate)
+        # >100-limit paginate fixture: two pages concatenated (>= limit items).
+        cat "$STUB_DIR/rest-bigpage-1.json"
+        cat "$STUB_DIR/rest-bigpage-2.json"
+        ;;
+      dispatch-test-limit-exact)
+        # Exactly-<limit> fixture: serve a single array of exactly limit items so
+        # a caller's `len == limit ⇒ truncated` guard fires.
+        cat "$STUB_DIR/rest-exact.json"
+        ;;
       *)
         echo '[]'
         ;;
@@ -1238,6 +1251,74 @@ if grep -q -- '--paginate' "$STUB_DIR/gh-issue-list-rest-calls.log"; then
 else
   assert_eq "--repo+--limit: log does not contain --paginate" "no" "no"
 fi
+teardown
+
+echo "Test: --state all -- issued query carries state=all (#2258)"
+setup
+: > "$STUB_DIR/gh-issue-list-rest-calls.log"
+actual_all=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state all --label dispatch-test-empty)
+assert_eq "--state all: returns the stub's empty array" "[]" "$actual_all"
+# The query must carry state=all (anchor with a non-word char so this cannot
+# match state=allowed or similar).
+if grep -qE 'state=all([&?]|$| )' "$STUB_DIR/gh-issue-list-rest-calls.log"; then sa=yes; else sa=no; fi
+assert_eq "--state all: query carries state=all" "yes" "$sa"
+teardown
+
+echo "Test: --include-title -- present projects title, absent omits it (#2258)"
+setup
+printf '%s\n' '[
+  {"number":401,"title":"first issue","body":"b1","created_at":"2024-02-01T00:00:00Z","closed_at":null,"labels":[]},
+  {"number":402,"title":"second issue","body":"b2","created_at":"2024-02-02T00:00:00Z","closed_at":null,"labels":[]}
+]' > "$STUB_DIR/rest-title.json"
+: > "$STUB_DIR/gh-issue-list-rest-calls.log"
+# Absent: projected objects must NOT carry a title key.
+without_title=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --label dispatch-test-title)
+assert_eq "--include-title absent: .[0] has no title key" "false" "$(jq '.[0] | has("title")' <<<"$without_title")"
+assert_eq "--include-title absent: .[0] has no body key" "false" "$(jq '.[0] | has("body")' <<<"$without_title")"
+assert_eq "--include-title absent: number still projected" "401" "$(jq '.[0].number' <<<"$without_title")"
+# Present: projected objects carry title but still not body.
+with_title=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --include-title --label dispatch-test-title)
+assert_eq "--include-title present: .[0] carries title" "first issue" "$(jq -r '.[0].title' <<<"$with_title")"
+assert_eq "--include-title present: body still omitted" "false" "$(jq '.[0] | has("body")' <<<"$with_title")"
+# Both flags combine: title AND body present.
+with_both=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --include-title --include-body --label dispatch-test-title)
+assert_eq "--include-title+--include-body: .[0] carries title" "first issue" "$(jq -r '.[0].title' <<<"$with_both")"
+assert_eq "--include-title+--include-body: .[0] carries body" "b1" "$(jq -r '.[0].body' <<<"$with_both")"
+teardown
+
+echo "Test: --limit > 100 -- paginate path, sliced to limit (#2258)"
+setup
+# 150 items split across two pages (80 + 70). Numbers 1000..1149.
+jq -nc '[range(1000;1080) | {number: ., created_at:"2024-03-01T00:00:00Z", closed_at:null, labels:[]}]' \
+  > "$STUB_DIR/rest-bigpage-1.json"
+jq -nc '[range(1080;1150) | {number: ., created_at:"2024-03-01T00:00:00Z", closed_at:null, labels:[]}]' \
+  > "$STUB_DIR/rest-bigpage-2.json"
+: > "$STUB_DIR/gh-issue-list-rest-calls.log"
+actual_big=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --limit 120 --label dispatch-test-limit-paginate)
+assert_eq "--limit 120 over 150 items: result length == 120" "120" "$(jq 'length' <<<"$actual_big")"
+# The >100-limit path must --paginate (not single-page) ...
+if grep -q -- '--paginate' "$STUB_DIR/gh-issue-list-rest-calls.log"; then bp=yes; else bp=no; fi
+assert_eq "--limit 120: log contains --paginate" "yes" "$bp"
+# ... at the clamped per_page=100 (not per_page=120).
+if grep -q 'per_page=100[^0-9]' "$STUB_DIR/gh-issue-list-rest-calls.log"; then pp=yes; else pp=no; fi
+assert_eq "--limit 120: per_page clamped to 100" "yes" "$pp"
+if grep -q 'per_page=120' "$STUB_DIR/gh-issue-list-rest-calls.log"; then pp120=yes; else pp120=no; fi
+assert_eq "--limit 120: per_page is NOT 120" "no" "$pp120"
+teardown
+
+echo "Test: --limit > 100 -- exactly-limit items still trips a caller's len==limit guard (#2258)"
+setup
+# Exactly 120 items. With --limit 120 the result length is 120, so a caller's
+# `len == limit` truncation guard fires (just as it would on a single >100 page).
+jq -nc '[range(2000;2120) | {number: ., created_at:"2024-04-01T00:00:00Z", closed_at:null, labels:[]}]' \
+  > "$STUB_DIR/rest-exact.json"
+: > "$STUB_DIR/gh-issue-list-rest-calls.log"
+actual_exact=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --limit 120 --label dispatch-test-limit-exact)
+exact_len=$(jq 'length' <<<"$actual_exact")
+assert_eq "--limit 120 over exactly 120 items: result length == 120" "120" "$exact_len"
+# Simulate a caller's truncation guard: len == limit ⇒ truncated.
+if [[ "$exact_len" -eq 120 ]]; then guard=fired; else guard=clear; fi
+assert_eq "--limit 120: len==limit guard fires on exactly-limit fixture" "fired" "$guard"
 teardown
 
 # ============================================================================
