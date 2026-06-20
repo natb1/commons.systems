@@ -957,8 +957,8 @@ describe("clearSearch()", () => {
   // that test uses Promise.all to verify the spreadGen cancellation guard (one
   // wrapper survives); this test verifies that applyHighlight's leading
   // unwrapHighlights() restores the first wrapper's stale highlight span on the
-  // spread path — the regression introduced by #1726 and covered for the
-  // single-page path but not the spread path.
+  // spread path — the regression that #1726 fixed for the single-page path but
+  // did not cover on the spread path.
   it("sequential double renderPageInto() on the same page leaves no stale highlight in the first wrapper", async () => {
     const renderer = createPdfRenderer();
     await renderer.init(container, "fake://source.pdf");
@@ -981,10 +981,12 @@ describe("clearSearch()", () => {
     expect(firstWrapper).not.toBeNull();
     expect(firstWrapper.querySelector(".search-highlight")).not.toBeNull();
 
-    // Call #2 (same page, same target): a new wrapper replaces the first.
-    // applyHighlight's leading unwrapHighlights() must restore the now-detached
-    // firstWrapper's stale highlight span. On unfixed code the firstWrapper
-    // retains its .search-highlight span and the assertion below fails.
+    // Call #2 (same page, same target): renderPageInto appends a second wrapper
+    // alongside the first (no innerHTML="" here — that step lives in
+    // SpreadController.render()). applyHighlight's leading unwrapHighlights()
+    // must restore firstWrapper's stale highlight span even though firstWrapper
+    // is still attached. On unfixed code the firstWrapper retains its
+    // .search-highlight span and the assertion below fails.
     await renderer.renderPageInto!(1, target); // type-safety-ok: optional renderer API method, present in this test harness
 
     // THE discriminating assertion: firstWrapper's highlight is gone because
