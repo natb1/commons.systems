@@ -171,7 +171,9 @@ gh_api_array() {
 # plan scripts), fetches comments via gh_retry, and applies the same
 # author-id-filtered first(...) selector. Returns non-zero with a stderr message
 # on an unresolvable author id (clear error, not a fallback). Echoes nothing
-# (empty) when no matching comment exists.
+# (empty) when no matching comment exists. A gh_retry or jq pipeline failure
+# returns non-zero (a clear error), distinct from the empty-output absent case —
+# mirroring gh_api_array's error propagation rather than silently swallowing it.
 dispatch_marker_comment_id() {
   local n="$1" marker="$2"
   local author_id="${DISPATCH_PLAN_AUTHOR_ID:-$(gh api user --jq '.id')}"
@@ -179,10 +181,13 @@ dispatch_marker_comment_id() {
     echo "dispatch_marker_comment_id: could not resolve a numeric comment author id (got: '$author_id')" >&2
     return 1
   fi
+  local raw
+  raw=$(gh_retry gh api --paginate "repos/{owner}/{repo}/issues/$n/comments") \
+    || return 1
   local cid
-  cid=$(gh_retry gh api --paginate "repos/{owner}/{repo}/issues/$n/comments" \
-    | jq -r --arg m "$marker" --argjson author_id "$author_id" \
-        'first(.[] | select((.body | startswith($m)) and (.user.id == $author_id)) | .id)')
+  cid=$(printf '%s\n' "$raw" | jq -r --arg m "$marker" --argjson author_id "$author_id" \
+      'first(.[] | select((.body | startswith($m)) and (.user.id == $author_id)) | .id)') \
+    || return 1
   if [[ -z "$cid" || "$cid" == "null" ]]; then
     return 0
   fi
