@@ -195,9 +195,12 @@ fi
 
 npx firebase-tools emulators:start --only "$EMULATORS" --config "$TEMP_FIREBASE_JSON" --project "$EMULATOR_PROJECT_ID" &
 
-# Poll until hosting emulator serves content.
-# Timeout allows headroom for slow CI (npx download + emulator startup can take 30-60s).
-TIMEOUT=120
+# Poll until hosting emulator serves content. The loop exits the instant
+# curl gets a 200, so a larger ceiling never slows a healthy start — it only
+# adds headroom for slow CI (JVM cold start + scheduling jitter under
+# contention can push the hosting listener past a tight deadline; see #2192).
+# Override with EMULATOR_READY_TIMEOUT (seconds).
+TIMEOUT="${EMULATOR_READY_TIMEOUT:-300}"
 ELAPSED=0
 until curl -s -o /dev/null -w '%{http_code}' "http://localhost:${HOSTING_PORT}/" 2>/dev/null | grep -q '^200$'; do
   if [ $ELAPSED -ge $TIMEOUT ]; then
