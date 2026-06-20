@@ -793,7 +793,7 @@ describe("createEpubRenderer", () => {
                          : [{ cfi: "cfi-B", excerpt: "second fox" }],
         ),
         // Gate ONLY the first call's load so call-1 parks while call-2 finishes.
-        load: vi.fn() as ReturnType<typeof vi.fn>,
+        load: vi.fn(),
       };
       let releaseFirst!: () => void;
       const gate = new Promise<void>((resolve) => { releaseFirst = resolve; });
@@ -830,7 +830,7 @@ describe("createEpubRenderer", () => {
         href: "ch0.xhtml",
         unload: vi.fn(),
         find: vi.fn().mockReturnValue([{ cfi: "cfi-0", excerpt: "alpha fox" }]),
-        load: vi.fn() as ReturnType<typeof vi.fn>, // type-safety-ok: vi.fn() cast needed to type load as MockInstance for mockImplementationOnce chaining
+        load: vi.fn(),
       };
       // Gate ONLY call-1's load (the first load); call-2's load resolves immediately.
       let release!: () => void; // type-safety-ok: definite assignment assertion — Promise constructor assigns release before it is used
