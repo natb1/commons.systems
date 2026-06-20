@@ -359,6 +359,20 @@ assert_eq "AC2: exit code is 2" "2" "$AC2_RC"
 assert_contains "AC2: stderr mentions --attempt" "--attempt" "$AC2_STDERR"
 
 # ============================================================================
+# issue-num 0 → exit 2, stderr mentions 'positive integer' (#2134)
+# ============================================================================
+
+echo ""
+echo "issue-num 0: exit 2, stderr mentions positive integer"
+
+set +e
+ZERO_STDERR=$(printf 'body\n' | "$SUT" 0 --phase plan 2>&1)
+ZERO_RC=$?
+set -e
+assert_eq "issue-num 0: exit code is 2" "2" "$ZERO_RC"
+assert_contains "issue-num 0: stderr mentions positive integer" "positive integer" "$ZERO_STDERR"
+
+# ============================================================================
 # AC3: valid invocation → exit 0, gh stub records a POST to issues/2132/comments
 # ============================================================================
 
