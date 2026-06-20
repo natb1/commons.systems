@@ -288,9 +288,9 @@ describe("createBlogApp routing and panel behavior", () => {
     // Capture stable server-rendered wrapper elements from both roots before
     // createBlogApp runs. nav.cs-nav is BlogNav's top-level <nav>; info-panel's
     // firstElementChild is InfoPanel's first rendered <section class="panel-section">.
-    const navNode = document.getElementById("nav")!.firstElementChild;
+    const navNode = document.getElementById("nav")!.firstElementChild; // type-safety-ok: test DOM node mounted in beforeEach
     expect(navNode).not.toBeNull();
-    const panelNode = document.getElementById("info-panel")!.firstElementChild;
+    const panelNode = document.getElementById("info-panel")!.firstElementChild; // type-safety-ok: test DOM node mounted in beforeEach
     expect(panelNode).not.toBeNull();
 
     handle = createBlogApp(config);
@@ -301,8 +301,8 @@ describe("createBlogApp routing and panel behavior", () => {
     // + the first-dispatch skip (guards on renderNav/renderPanel) preserved the DOM.
     // If the guards are absent, React abandons hydration and client-renders, breaking
     // these references.
-    expect(document.getElementById("nav")!.firstElementChild).toBe(navNode);
-    expect(document.getElementById("info-panel")!.firstElementChild).toBe(panelNode);
+    expect(document.getElementById("nav")!.firstElementChild).toBe(navNode); // type-safety-ok: test DOM node mounted in beforeEach
+    expect(document.getElementById("info-panel")!.firstElementChild).toBe(panelNode); // type-safety-ok: test DOM node mounted in beforeEach
   });
 
   // Case 3 + TASK 1 — info-panel blogroll hydration runs, and
@@ -315,7 +315,7 @@ describe("createBlogApp routing and panel behavior", () => {
     scaffoldDom(config, "/");
 
     handle = createBlogApp(config);
-    const panel = document.getElementById("info-panel")!;
+    const panel = document.getElementById("info-panel")!; // type-safety-ok: test DOM node mounted in beforeEach
 
     // Blogroll effect ran: the stubbed latest post is written into the DOM.
     await vi.waitFor(() => {
@@ -325,7 +325,7 @@ describe("createBlogApp routing and panel behavior", () => {
 
     // forceInfoPanelRefresh bumps the React key → remount → effect re-runs → re-fetch.
     await act(async () => {
-      handle!.forceInfoPanelRefresh();
+      handle!.forceInfoPanelRefresh(); // type-safety-ok: handle assigned by createBlogApp in setup
       await Promise.resolve();
       await new Promise((r) => setTimeout(r, 0));
     });
@@ -435,16 +435,16 @@ describe("createBlogApp routing and panel behavior", () => {
     `;
 
     // Capture the prerendered #app wrapper before createBlogApp runs.
-    const appNode = document.getElementById("app")!.firstElementChild;
+    const appNode = document.getElementById("app")!.firstElementChild; // type-safety-ok: test DOM node mounted in beforeEach
     expect(appNode).not.toBeNull();
-    expect(appNode!.tagName).toBe("DIV");
+    expect(appNode!.tagName).toBe("DIV"); // type-safety-ok: appNode asserted non-null above
 
     handle = createBlogApp(config);
     await settle();
 
     // REUSED, not torn down — the deep /about entry hydrated the prerendered body
     // in place (no abandoned hydration, no CLS). The About content survives.
-    expect(document.getElementById("app")!.firstElementChild).toBe(appNode);
+    expect(document.getElementById("app")!.firstElementChild).toBe(appNode); // type-safety-ok: test DOM node mounted in beforeEach
     expect(document.querySelector('[data-test="about-body"]')).not.toBeNull();
   });
 
@@ -469,7 +469,7 @@ describe("createBlogApp routing and panel behavior", () => {
 
     handle = createBlogApp(config);
     const app = document.getElementById("app")!;
-    const panel = document.getElementById("info-panel")!;
+    const panel = document.getElementById("info-panel")!; // type-safety-ok: test DOM node mounted in beforeEach
     await settle();
 
     // Standard panel is present on / (blogroll markup), no about override.
@@ -504,7 +504,7 @@ describe("createBlogApp routing and panel behavior", () => {
     scaffoldDom(config, "/");
 
     handle = createBlogApp(config);
-    const panel = document.getElementById("info-panel")!;
+    const panel = document.getElementById("info-panel")!; // type-safety-ok: test DOM node mounted in beforeEach
 
     await vi.waitFor(() => {
       expect(panel.querySelector("#blogroll-latest-test-blog")?.textContent).toBe("Latest Article");
@@ -547,7 +547,7 @@ describe("createBlogApp routing and panel behavior", () => {
       publishedAt: null,
       filename: "draft-post.md",
     };
-    (getPosts as ReturnType<typeof vi.fn>).mockResolvedValue({ posts: [draftPost], skippedCount: 0 });
+    (getPosts as ReturnType<typeof vi.fn>).mockResolvedValue({ posts: [draftPost], skippedCount: 0 }); // type-safety-ok: vitest mock cast
 
     scaffoldDom(config, "/");
     handle = createBlogApp(config);
@@ -562,7 +562,7 @@ describe("createBlogApp routing and panel behavior", () => {
     // Sign in — fire the captured auth callback with a user.
     const signedInUser = { uid: "admin-uid" };
     await act(async () => {
-      authCallback!(signedInUser as never);
+      authCallback!(signedInUser as never); // type-safety-ok: captured auth callback + test user fixture
       await Promise.resolve();
       await new Promise((r) => setTimeout(r, 0));
     });
@@ -587,7 +587,7 @@ describe("createBlogApp routing and panel behavior", () => {
     scaffoldDom(config, "/");
 
     handle = createBlogApp(config);
-    const app = document.getElementById("app")!;
+    const app = document.getElementById("app")!; // type-safety-ok: test DOM node mounted in beforeEach
     await settle();
 
     const postsNode = app.querySelector("#posts");
@@ -677,7 +677,7 @@ describe("createBlogApp routing and panel behavior", () => {
     handle.destroy();
     handle = undefined;
 
-    const trackPageView = config.firebase.trackPageView as ReturnType<typeof vi.fn>;
+    const trackPageView = config.firebase.trackPageView as ReturnType<typeof vi.fn>; // type-safety-ok: vitest mock cast
     trackPageView.mockClear();
 
     history.pushState({}, "", "/post/first-post");
@@ -721,7 +721,7 @@ describe("createBlogApp routing and panel behavior", () => {
 
     // First fire — new uid → refreshAfterAuthChange → getPosts once.
     await act(async () => {
-      authCallback!({ uid: "u1" } as never);
+      authCallback!({ uid: "u1" } as never); // type-safety-ok: captured auth callback + test user fixture
       await Promise.resolve();
       await new Promise((r) => setTimeout(r, 0));
     });
@@ -729,7 +729,7 @@ describe("createBlogApp routing and panel behavior", () => {
 
     // Second fire — same uid → guard early-returns → no second getPosts.
     await act(async () => {
-      authCallback!({ uid: "u1" } as never);
+      authCallback!({ uid: "u1" } as never); // type-safety-ok: captured auth callback + test user fixture
       await Promise.resolve();
       await new Promise((r) => setTimeout(r, 0));
     });
@@ -780,7 +780,7 @@ describe("createBlogApp routing and panel behavior", () => {
 
     // Sign in — nav re-renders with the user (#sign-out replaces #sign-in).
     await act(async () => {
-      authCallback!({ uid: "admin-uid" } as never);
+      authCallback!({ uid: "admin-uid" } as never); // type-safety-ok: captured auth callback + test user fixture
       await Promise.resolve();
       await new Promise((r) => setTimeout(r, 0));
     });

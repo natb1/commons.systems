@@ -159,7 +159,7 @@ describe("HomeRegion", () => {
 
       // getBoundingClientRect().top is 0 in happy-dom, so
       // Math.max(0, 0 + 0 - 60 - 16) = 0.
-      const call = scrollSpy.mock.calls[0][0] as ScrollToOptions;
+      const call = scrollSpy.mock.calls[0][0] as ScrollToOptions; // type-safety-ok: mock call argument inspection
       expect(call.top).toBe(0);
       expect(call.behavior).toBe("instant");
     } finally {
@@ -177,7 +177,7 @@ describe("HomeRegion", () => {
 
     try {
       // First mount with a deferred fetch that never resolves before the rerender.
-      let resolveFirst!: (value: string) => void;
+      let resolveFirst!: (value: string) => void; // type-safety-ok: deferred promise resolver definite assignment
       const firstFetch = vi
         .fn<(filename: string) => Promise<string>>()
         .mockReturnValue(new Promise<string>((resolve) => { resolveFirst = resolve; }));
@@ -193,7 +193,7 @@ describe("HomeRegion", () => {
 
       // Rerender with a NEW fetchPost — the effect's dep change runs the first
       // run's cleanup (cancelling its writes/scroll) and starts a fresh run.
-      let resolveSecond!: (value: string) => void;
+      let resolveSecond!: (value: string) => void; // type-safety-ok: deferred promise resolver definite assignment
       const secondFetch = vi
         .fn<(filename: string) => Promise<string>>()
         .mockReturnValue(new Promise<string>((resolve) => { resolveSecond = resolve; }));

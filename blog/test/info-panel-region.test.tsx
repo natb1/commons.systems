@@ -204,13 +204,13 @@ describe("AdminRegion", () => {
   });
 
   it("shows the not-authorized marker for a signed-in non-admin", () => {
-    const user = { displayName: "Jane", email: "jane@example.com" } as User;
+    const user = { displayName: "Jane", email: "jane@example.com" } as User; // type-safety-ok: partial User test fixture
     const { container } = render(<AdminRegion user={user} isAdmin={false} />);
     expect(container.querySelector("#not-authorized")).not.toBeNull();
   });
 
   it("greets the admin and shows the skipped-count warning", () => {
-    const user = { displayName: "Admin", email: "admin@example.com" } as User;
+    const user = { displayName: "Admin", email: "admin@example.com" } as User; // type-safety-ok: partial User test fixture
     const { container } = render(
       <AdminRegion user={user} isAdmin={true} skippedCount={2} />,
     );
