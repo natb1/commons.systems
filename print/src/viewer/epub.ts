@@ -1,5 +1,6 @@
 import ePub, { type Book, type Rendition, type Location, type NavItem } from "epubjs";
-import type { OutlineEntry, SearchableRenderer, SearchResult } from "./types.js";
+import type { OutlineEntry, SearchableRenderer, SearchResult, SearchResponse } from "./types.js";
+import { MAX_SEARCH_RESULTS } from "./types.js";
 
 // epubjs ships incomplete type declarations. These narrow shapes describe the
 // runtime members we use that are missing from the .d.ts, following the
@@ -285,11 +286,11 @@ export function createEpubRenderer(
       await relocated;
     },
 
-    async search(query: string): Promise<SearchResult[]> {
+    async search(query: string): Promise<SearchResponse> {
       const trimmed = query.trim();
       if (!book || !trimmed) {
         clearSearchHighlights();
-        return [];
+        return { results: [], truncated: false };
       }
 
       const epoch = ++_searchEpoch;
@@ -299,6 +300,7 @@ export function createEpubRenderer(
       const loader = (book.load as (this: Book, req: unknown) => Promise<unknown>).bind(book);
 
       const results: SearchResult[] = [];
+      let truncated = false;
       for (let i = 0; i < spineItems.length; i++) {
         if (epoch !== _searchEpoch) break;
         const section = spineItems[i]!;
@@ -320,6 +322,7 @@ export function createEpubRenderer(
           try {
             const label = labelForSection(section, i);
             for (const match of section.find(trimmed)) {
+              if (results.length >= MAX_SEARCH_RESULTS) { truncated = true; break; }
               const result = buildResult(match, trimmed, label);
               if (result) results.push(result);
             }
@@ -336,11 +339,13 @@ export function createEpubRenderer(
         } finally {
           section.unload();
         }
+        // Cap tripped mid-section: stop scanning further sections.
+        if (truncated) break;
       }
 
       // A newer search started while we awaited; touch no highlight state and
       // let the UI's stale-result guard discard these.
-      if (epoch !== _searchEpoch) return results;
+      if (epoch !== _searchEpoch) return { results, truncated };
 
       // Single synchronous highlight burst after iteration.
       clearSearchHighlights();
@@ -349,7 +354,7 @@ export function createEpubRenderer(
         annotations.highlight(result.location, {}, undefined, "viewer-search-hl", BASE_STYLES);
         _searchCfis.push(result.location);
       }
-      return results;
+      return { results, truncated };
     },
 
     async goToResult(result: SearchResult): Promise<void> {
