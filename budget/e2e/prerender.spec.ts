@@ -16,7 +16,7 @@ test.describe("prerender", () => {
     });
 
     test("nav links pre-rendered into app-nav", () => {
-      expect(html).toContain('<span class="nav-links">');
+      expect(html).toContain('class="cs-nav"');
       expect(html).toContain('href="/"');
       expect(html).toContain("budgets</a>");
       expect(html).toContain('href="/transactions"');
@@ -54,12 +54,12 @@ test.describe("prerender", () => {
 
     test("hydrated nav links are functional", async ({ page }) => {
       await page.goto("/");
-      await expect(page.locator("app-nav .nav-links")).toBeVisible();
+      await expect(page.locator("nav.cs-nav")).toBeVisible();
 
-      await page.click('app-nav a[href="/transactions"]');
+      await page.click('nav.cs-nav a[href="/transactions"]');
       await expect(page.locator("main h2")).toHaveText("Transactions");
 
-      await page.click('app-nav a[href="/"]');
+      await page.click('nav.cs-nav a[href="/"]');
       await expect(page.locator("main h2")).toHaveText("Budgets");
       await expect(page.locator("#budgets-table")).toBeVisible();
     });
@@ -72,7 +72,7 @@ test.describe("prerender", () => {
       await expect(page.locator("#transactions-table")).toBeVisible({ timeout: 10000 });
       await expect(page.locator("#seed-data-notice")).toHaveCount(0);
 
-      await page.click('app-nav a[href="/"]');
+      await page.click('nav.cs-nav a[href="/"]');
       await expect(page.locator("main h2")).toHaveText("Budgets");
       await expect(page.locator("#budgets-table")).toBeVisible();
       await expect(page.locator("#seed-data-notice")).toHaveCount(0);

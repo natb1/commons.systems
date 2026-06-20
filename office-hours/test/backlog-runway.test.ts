@@ -8,11 +8,13 @@ import type { IssueSample } from "../src/issue-samples.js";
 
 const GROUP = "group-test";
 
-function makeSample(sampledAt: Date, openHelpWanted: number): IssueSample {
-  return { sampledAt, openHelpWanted, openOther: 5, groupId: GROUP };
+// total is the param; route it entirely into one bucket and zero the rest so
+// sampleTotal === the param (empty semantics: total 0 → state "empty").
+function makeSample(sampledAt: Date, total: number): IssueSample {
+  return { sampledAt, openSecurity: 0, openBug: total, openEnhancement: 0, openOther: 0, groupId: GROUP };
 }
 
-// --- draining fixture: help-wanted 18 → 6 over ~7 days ---
+// --- draining fixture: total 18 → 6 over ~7 days ---
 const drainingFixture: IssueSample[] = [
   makeSample(new Date("2026-01-01T00:00:00Z"), 18),
   makeSample(new Date("2026-01-03T00:00:00Z"), 14),
@@ -20,7 +22,7 @@ const drainingFixture: IssueSample[] = [
   makeSample(new Date("2026-01-07T00:00:00Z"), 6),
 ];
 
-// --- flat fixture: constant openHelpWanted ---
+// --- flat fixture: constant total ---
 const flatFixture: IssueSample[] = [
   makeSample(new Date("2026-01-01T00:00:00Z"), 10),
   makeSample(new Date("2026-01-03T00:00:00Z"), 10),
@@ -34,7 +36,7 @@ const growingFixture: IssueSample[] = [
   makeSample(new Date("2026-01-07T00:00:00Z"), 15),
 ];
 
-// --- empty fixture: latest sample has openHelpWanted === 0 ---
+// --- empty fixture: latest sample has total === 0 ---
 const emptyFixture: IssueSample[] = [
   makeSample(new Date("2026-01-01T00:00:00Z"), 5),
   makeSample(new Date("2026-01-07T00:00:00Z"), 0),
@@ -71,7 +73,7 @@ describe("fitBacklogRunway", () => {
     expect(runwayVerdict(fit)).toEqual({ text: "queue growing", state: "growing" });
   });
 
-  it("returns 'empty' when latest sample has openHelpWanted === 0", () => {
+  it("returns 'empty' when latest sample has total === 0", () => {
     const fit = fitBacklogRunway(emptyFixture);
     expect(fit.state).toBe("empty");
     expect(runwayVerdict(fit)).toEqual({ text: "queue empty", state: "empty" });

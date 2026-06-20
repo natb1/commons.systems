@@ -1,28 +1,48 @@
 #!/usr/bin/env bash
 # dispatch-phase-model — emit the claude model override for a given dispatch phase.
 #
-# Phase → model map:
-#   qa     → claude-sonnet-4-6   (#1171: no product-code authoring; machine-verifiable
-#                                 checks + browser automation + summary writing)
-#   review → claude-sonnet-4-6   (#1172: the review-fix orchestrator authors no fixes —
-#                                 findings detection is on Sonnet review subagents and
-#                                 fix-authoring is delegated to an Opus subagent, so the
-#                                 orchestrator main chain runs on Sonnet)
-#   *      → (empty)             unmapped phases inherit the session default (Opus)
+# Default phase → model map (hardcoded fallback):
+#   qa           → claude-sonnet-4-6   (#1171: no product-code authoring; machine-verifiable
+#                                       checks + browser automation + summary writing)
+#   review       → claude-sonnet-4-6   (#1172: the review-fix orchestrator authors no fixes —
+#                                       findings detection is on Sonnet review subagents and
+#                                       fix-authoring is delegated to an Opus subagent, so the
+#                                       orchestrator main chain runs on Sonnet)
+#   fix-checks   → claude-sonnet-4-6   (#2042: mechanical patch work; no product-code authoring
+#                                       that needs Opus)
+#   fix-conflicts → claude-sonnet-4-6  (#2042: mechanical patch work; no product-code authoring
+#                                       that needs Opus)
+#   *            → (empty)             unmapped phases inherit the session default (Opus)
+#
+# Generated policy override (#2028):
+#   /dispatch-token-audit derives a phase → model routing policy from aggregated
+#   cost + hit-rate and writes it to dispatch.config/phase-model-policy.json. This
+#   script consults that artifact (via `dispatch-config-load phase-model-policy`)
+#   as a cheap lookup — it performs NO learning. When the policy supplies a
+#   non-empty route for the requested phase, that route OVERRIDES the default
+#   case-map above; otherwise the default applies. An absent policy file → the
+#   defaults apply unchanged.
+#
+#   Demotable allowlist: a policy route is honored ONLY when PHASE is in {qa,
+#   review}. Any other phase ignores the policy and uses its default — fail-closed
+#   defense-in-depth against a hand-edited policy that tries to demote a
+#   code-authoring phase (implement/fix) off Opus.
+#
+#   A malformed/invalid policy fails LOUDLY: dispatch-config-load exits non-zero
+#   and this script surfaces the error and exits non-zero rather than silently
+#   falling back (per .claude/rules/code-style.md; mirrors the force-opus consumer
+#   at dispatch-spawn-job:228).
 #
 # Contract:
 #   EMPTY stdout means "omit the --model flag, inherit the session default (Opus)".
 #   Callers MUST honor this contract: only pass --model <value> to `claude --bg`
 #   when this script emits a non-empty value.
 #
-#   This `case` map is the single opt-in point for adding other phase → model
-#   overrides later. To route another phase to a specific model, add a case arm
-#   here; every caller already forwards the value opaquely.
-#
 # Usage: dispatch-phase-model <phase>
 #
 # Exit codes:
-#   0  always (an unmapped phase is NOT an error — it means "default").
+#   0  resolved (an unmapped phase is NOT an error — it means "default").
+#   1  the policy file is present but malformed/invalid (dispatch-config-load failed).
 #   2  missing, empty, or extra <phase> argument (usage error).
 #
 # NOT set -e: exits are handled explicitly.
@@ -37,13 +57,45 @@ if [[ $# -gt 1 ]]; then
   exit 2
 fi
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 PHASE="$1"
 
+# Hardcoded default for this phase (empty → inherit the session default, Opus).
 case "$PHASE" in
-  qa|review)
-    echo "claude-sonnet-4-6"
+  qa|review|fix-checks|fix-conflicts)
+    DEFAULT_MODEL="claude-sonnet-4-6"
     ;;
   *)
-    # Unmapped phase: emit nothing. Caller omits --model and inherits Opus.
+    DEFAULT_MODEL=""
     ;;
 esac
+
+# Consult the generated policy. dispatch-config-load prints either normalized
+# JSON, the literal "no-config" (file absent), or exits non-zero on a present-
+# but-invalid policy. Surface that failure rather than silently falling back.
+POLICY=$("$SCRIPT_DIR/dispatch-config-load" phase-model-policy) || {
+  echo "dispatch-phase-model: error: dispatch-config-load phase-model-policy failed (malformed/invalid policy)" >&2
+  exit 1
+}
+
+# Resolution order. A policy route is honored only for an allowlisted phase;
+# everything else uses DEFAULT_MODEL.
+if [[ "$POLICY" == "no-config" ]]; then
+  printf '%s\n' "$DEFAULT_MODEL"
+else
+  case "$PHASE" in
+    qa|review)
+      ROUTE=$(jq -r --arg p "$PHASE" '.routes[$p] // empty' <<<"$POLICY")
+      if [[ -n "$ROUTE" ]]; then
+        printf '%s\n' "$ROUTE"
+      else
+        printf '%s\n' "$DEFAULT_MODEL"
+      fi
+      ;;
+    *)
+      # Phase not on the demotable allowlist: ignore the policy entirely.
+      printf '%s\n' "$DEFAULT_MODEL"
+      ;;
+  esac
+fi

@@ -1,7 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { renderSearchSection, initSearch } from "../../src/viewer/search";
-import type { ContentRenderer, SearchResult } from "../../src/viewer/types";
+import { createRoot, type Root } from "react-dom/client";
+import { flushSync } from "react-dom";
+import { act } from "react";
+import { createElement } from "react";
+import { SearchPanel } from "../../src/viewer/SearchPanel";
+import type { UseViewerControllerResult } from "../../src/viewer/useViewerController";
+import type { SearchResult, SearchResponse } from "../../src/viewer/types";
 import { makeMockRenderer } from "./mock-renderer";
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 function makeSearchResult(overrides: Partial<SearchResult> = {}): SearchResult {
   return {
@@ -14,360 +23,494 @@ function makeSearchResult(overrides: Partial<SearchResult> = {}): SearchResult {
   };
 }
 
-/** Renderer with all four SearchableRenderer methods. Pass overrides to control results. */
-function makeSearchableRenderer(overrides: Partial<ContentRenderer> = {}) {
-  return makeMockRenderer({
-    search: vi.fn().mockResolvedValue([]),
+/** Build a mock controller stub with all search-related methods wired up. */
+function makeMockController(overrides: Partial<UseViewerControllerResult> = {}): UseViewerControllerResult {
+  const renderer = makeMockRenderer({
+    search: vi.fn().mockResolvedValue({ results: [], truncated: false }),
     goToResult: vi.fn().mockResolvedValue(undefined),
     renderResult: vi.fn().mockResolvedValue(undefined),
     clearSearch: vi.fn(),
+  });
+  return {
+    searchable: true,
+    getRenderer: () => renderer,
+    onSearchNavigate: vi.fn(),
+    // --- unused fields required by the type ---
+    canvasWrapRef: { current: null } as React.RefObject<HTMLDivElement>,
+    gotoInputRef: { current: null } as React.RefObject<HTMLInputElement>,
+    spreadToggleRef: { current: null } as React.RefObject<HTMLButtonElement>,
+    viewerRef: { current: null } as React.RefObject<HTMLElement>,
+    positionLabel: "Page 1 / 10",
+    canGoPrev: false,
+    canGoNext: true,
+    zoomOutDisabled: true,
+    zoomResetDisabled: true,
+    spreadEnabled: false,
+    gotoMode: null,
+    hasZoom: false,
+    hasSpread: false,
+    panelCollapsed: false,
+    orientation: "landscape",
+    loadError: null,
+    goPrev: vi.fn(),
+    goNext: vi.fn(),
+    goToPage: vi.fn(),
+    submitGoto: vi.fn(),
+    zoomIn: vi.fn(),
+    zoomOut: vi.fn(),
+    zoomReset: vi.fn(),
+    toggleSpread: vi.fn(),
+    togglePanel: vi.fn(),
+    onPanelNavigate: vi.fn(),
+    readFailed: false,
+    mediaId: "item-1",
+    uid: null,
+    navSignal: 0,
     ...overrides,
-  });
+  } as unknown as UseViewerControllerResult;
 }
 
-function createContainer(): HTMLElement {
-  const el = document.createElement("div");
-  el.innerHTML = renderSearchSection();
-  return el;
+/**
+ * Set an input's value via the native prototype setter so React's value-tracker
+ * sees the change, then dispatch a bubbling "input" event so React's onChange
+ * synthetic handler fires.
+ */
+function setInputValue(input: HTMLInputElement, value: string) {
+  const nativeSet = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+  nativeSet.call(input, value);
+  input.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
-describe("renderSearchSection", () => {
-  it("returns HTML with .viewer-search element", () => {
-    const html = renderSearchSection();
-    expect(html).toContain('class="viewer-search');
-  });
+// ---------------------------------------------------------------------------
+// Suite
+// ---------------------------------------------------------------------------
 
-  it("includes search-hidden class by default", () => {
-    const html = renderSearchSection();
-    expect(html).toContain("search-hidden");
-  });
-
-  it("contains a search input", () => {
-    const html = renderSearchSection();
-    expect(html).toContain('type="search"');
-    expect(html).toContain('class="viewer-search-input"');
-  });
-
-  it("contains a results list", () => {
-    const html = renderSearchSection();
-    expect(html).toContain('class="viewer-search-results"');
-  });
-});
-
-describe("initSearch", () => {
+describe("SearchPanel", () => {
   let container: HTMLElement;
+  let root: Root;
 
   beforeEach(() => {
     vi.useFakeTimers();
-    container = createContainer();
+    container = document.createElement("div");
+    document.body.appendChild(container);
     if (typeof globalThis.reportError !== "function") {
       globalThis.reportError = () => {};
     }
     vi.spyOn(globalThis, "reportError").mockImplementation(() => {});
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    document.body.removeChild(container);
     vi.useRealTimers();
     vi.mocked(globalThis.reportError).mockRestore();
   });
 
-  it("returns a cleanup function", () => {
-    const renderer = makeSearchableRenderer();
-    const result = initSearch(container, renderer, vi.fn());
-    expect(typeof result).toBe("function");
+  function render(controller: UseViewerControllerResult) {
+    root = createRoot(container);
+    flushSync(() => {
+      root.render(createElement(SearchPanel, { controller }));
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Presence / absence
+  // -------------------------------------------------------------------------
+
+  it("renders nothing when !searchable", () => {
+    const controller = makeMockController({ searchable: false });
+    render(controller);
+    expect(container.firstChild).toBeNull();
   });
 
-  it("removes search-hidden class", () => {
-    const renderer = makeSearchableRenderer();
-    initSearch(container, renderer, vi.fn());
-
-    const section = container.querySelector(".viewer-search") as HTMLElement;
-    expect(section.classList.contains("search-hidden")).toBe(false);
+  it("renders the .viewer-search section when searchable", () => {
+    const controller = makeMockController();
+    render(controller);
+    expect(container.querySelector(".viewer-search")).not.toBeNull();
   });
+
+  // -------------------------------------------------------------------------
+  // Debounce
+  // -------------------------------------------------------------------------
 
   it("calls renderer.search after 300ms debounce on input", async () => {
-    const searchFn = vi.fn().mockResolvedValue([]);
-    const renderer = makeSearchableRenderer({ search: searchFn });
-    initSearch(container, renderer, vi.fn());
+    const searchFn = vi.fn().mockResolvedValue({ results: [], truncated: false });
+    const renderer = makeMockRenderer({ search: searchFn, goToResult: vi.fn(), renderResult: vi.fn(), clearSearch: vi.fn() });
+    const controller = makeMockController({ getRenderer: () => renderer });
+    render(controller);
 
     const input = container.querySelector(".viewer-search-input") as HTMLInputElement;
-    input.value = "fox";
-    input.dispatchEvent(new Event("input"));
+    setInputValue(input, "fox");
 
     // Not called immediately
     expect(searchFn).not.toHaveBeenCalled();
 
     // Called after 300ms
-    await vi.advanceTimersByTimeAsync(300);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
 
     expect(searchFn).toHaveBeenCalledWith("fox");
   });
 
-  it("empty input calls renderer.clearSearch and clears results", async () => {
-    const clearSearch = vi.fn();
-    const renderer = makeSearchableRenderer({
-      search: vi.fn().mockResolvedValue([makeSearchResult()]),
-      clearSearch,
-    });
-    initSearch(container, renderer, vi.fn());
+  // -------------------------------------------------------------------------
+  // Immediate "search" event (Enter key)
+  // -------------------------------------------------------------------------
+
+  it("search event (Enter key) triggers search immediately without debounce", async () => {
+    const searchFn = vi.fn().mockResolvedValue({ results: [], truncated: false });
+    const renderer = makeMockRenderer({ search: searchFn, goToResult: vi.fn(), renderResult: vi.fn(), clearSearch: vi.fn() });
+    const controller = makeMockController({ getRenderer: () => renderer });
+    render(controller);
 
     const input = container.querySelector(".viewer-search-input") as HTMLInputElement;
-    const resultsList = container.querySelector(".viewer-search-results") as HTMLUListElement;
-    const countEl = container.querySelector(".viewer-search-count") as HTMLElement;
+    // For native "search" listener, direct .value assignment is fine (no tracker involved)
+    input.value = "immediate";
+    input.dispatchEvent(new Event("search"));
+
+    // Should be called immediately (after microtasks), not after 300ms
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(searchFn).toHaveBeenCalledWith("immediate");
+  });
+
+  it("search event cancels pending debounce and deduplicates", async () => {
+    const searchFn = vi.fn().mockResolvedValue({ results: [], truncated: false });
+    const renderer = makeMockRenderer({ search: searchFn, goToResult: vi.fn(), renderResult: vi.fn(), clearSearch: vi.fn() });
+    const controller = makeMockController({ getRenderer: () => renderer });
+    render(controller);
+
+    const input = container.querySelector(".viewer-search-input") as HTMLInputElement;
+
+    // Start debounce via input event
+    setInputValue(input, "debounced");
+
+    // Before 300ms elapses, fire the native search event (Enter)
+    input.value = "debounced";
+    input.dispatchEvent(new Event("search"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(searchFn).toHaveBeenCalledTimes(1);
+    expect(searchFn).toHaveBeenCalledWith("debounced");
+
+    // Advance past debounce — should not fire again (same query dedup)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    expect(searchFn).toHaveBeenCalledTimes(1);
+  });
+
+  // -------------------------------------------------------------------------
+  // Empty input → clearSearch
+  // -------------------------------------------------------------------------
+
+  it("empty input calls renderer.clearSearch and clears results", async () => {
+    const clearSearch = vi.fn();
+    const searchFn = vi.fn().mockResolvedValue({ results: [makeSearchResult()], truncated: false });
+    const renderer = makeMockRenderer({ search: searchFn, goToResult: vi.fn(), renderResult: vi.fn(), clearSearch });
+    const controller = makeMockController({ getRenderer: () => renderer });
+    render(controller);
+
+    const input = container.querySelector(".viewer-search-input") as HTMLInputElement;
 
     // First, perform a search to populate results
-    input.value = "fox";
-    input.dispatchEvent(new Event("input"));
-    await vi.advanceTimersByTimeAsync(300);
+    setInputValue(input, "fox");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
 
-    expect(resultsList.children.length).toBe(1);
+    expect(container.querySelectorAll(".viewer-search-result").length).toBe(1);
 
     // Now clear
-    input.value = "";
-    input.dispatchEvent(new Event("input"));
+    setInputValue(input, "");
 
     expect(clearSearch).toHaveBeenCalled();
-    expect(resultsList.children.length).toBe(0);
-    expect(countEl.textContent).toBe("");
+    expect(container.querySelectorAll(".viewer-search-result").length).toBe(0);
+    expect(container.querySelector(".viewer-search-count")!.textContent).toBe("");
   });
+
+  // -------------------------------------------------------------------------
+  // Result click → goToResult + onSearchNavigate
+  // -------------------------------------------------------------------------
 
   it("clicking a result calls renderer.goToResult with correct SearchResult", async () => {
     const result1 = makeSearchResult({ location: "3", label: "Page 3" });
     const result2 = makeSearchResult({ location: "7", label: "Page 7" });
     const goToResult = vi.fn().mockResolvedValue(undefined);
-    const renderer = makeSearchableRenderer({
-      search: vi.fn().mockResolvedValue([result1, result2]),
-      goToResult,
-    });
-    initSearch(container, renderer, vi.fn());
+    const renderer = makeMockRenderer({ search: vi.fn().mockResolvedValue({ results: [result1, result2], truncated: false }), goToResult, renderResult: vi.fn(), clearSearch: vi.fn() });
+    const controller = makeMockController({ getRenderer: () => renderer });
+    render(controller);
 
     const input = container.querySelector(".viewer-search-input") as HTMLInputElement;
-    input.value = "fox";
-    input.dispatchEvent(new Event("input"));
-    await vi.advanceTimersByTimeAsync(300);
+    setInputValue(input, "fox");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
 
-    const resultsList = container.querySelector(".viewer-search-results") as HTMLUListElement;
-    const secondItem = resultsList.children[1] as HTMLElement;
-    secondItem.click();
+    const items = container.querySelectorAll(".viewer-search-result");
+    await act(async () => {
+      (items[1] as HTMLElement).click();
+      for (let i = 0; i < 20; i++) await Promise.resolve();
+    });
 
     expect(goToResult).toHaveBeenCalledWith(result2);
   });
 
-  it("clicking a result calls the onNavigate callback", async () => {
-    const onNavigate = vi.fn();
-    const renderer = makeSearchableRenderer({
-      search: vi.fn().mockResolvedValue([makeSearchResult()]),
-    });
-    initSearch(container, renderer, onNavigate);
+  it("clicking a result calls the onSearchNavigate callback", async () => {
+    const onSearchNavigate = vi.fn();
+    const renderer = makeMockRenderer({ search: vi.fn().mockResolvedValue({ results: [makeSearchResult()], truncated: false }), goToResult: vi.fn().mockResolvedValue(undefined), renderResult: vi.fn(), clearSearch: vi.fn() });
+    const controller = makeMockController({ getRenderer: () => renderer, onSearchNavigate });
+    render(controller);
 
     const input = container.querySelector(".viewer-search-input") as HTMLInputElement;
-    input.value = "fox";
-    input.dispatchEvent(new Event("input"));
-    await vi.advanceTimersByTimeAsync(300);
+    setInputValue(input, "fox");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
 
-    const resultsList = container.querySelector(".viewer-search-results") as HTMLUListElement;
-    (resultsList.children[0] as HTMLElement).click();
+    const item = container.querySelector(".viewer-search-result") as HTMLElement;
+    await act(async () => {
+      item.click();
+      // flush microtasks so .then() runs
+      for (let i = 0; i < 20; i++) await Promise.resolve();
+    });
 
-    // onNavigate is called in the .then() of goToResult, so flush microtasks
-    await vi.advanceTimersByTimeAsync(0);
-
-    expect(onNavigate).toHaveBeenCalled();
+    expect(onSearchNavigate).toHaveBeenCalled();
   });
 
+  // -------------------------------------------------------------------------
+  // Count text singular / plural / zero
+  // -------------------------------------------------------------------------
+
   it("count text shows correct singular and plural forms", async () => {
-    const renderer = makeSearchableRenderer({
-      search: vi.fn()
-        .mockResolvedValueOnce([makeSearchResult()])
-        .mockResolvedValueOnce([makeSearchResult(), makeSearchResult(), makeSearchResult()]),
-    });
-    initSearch(container, renderer, vi.fn());
+    const searchFn = vi.fn()
+      .mockResolvedValueOnce({ results: [makeSearchResult()], truncated: false })
+      .mockResolvedValueOnce({ results: [makeSearchResult(), makeSearchResult(), makeSearchResult()], truncated: false });
+    const renderer = makeMockRenderer({ search: searchFn, goToResult: vi.fn(), renderResult: vi.fn(), clearSearch: vi.fn() });
+    const controller = makeMockController({ getRenderer: () => renderer });
+    render(controller);
 
     const input = container.querySelector(".viewer-search-input") as HTMLInputElement;
     const countEl = container.querySelector(".viewer-search-count") as HTMLElement;
 
     // Single result
-    input.value = "one";
-    input.dispatchEvent(new Event("input"));
-    await vi.advanceTimersByTimeAsync(300);
+    setInputValue(input, "one");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
     expect(countEl.textContent).toBe("1 result");
 
-    // Multiple results -- need a different query to bypass the currentQuery dedup
-    input.value = "three";
-    input.dispatchEvent(new Event("input"));
-    await vi.advanceTimersByTimeAsync(300);
+    // Multiple results — different query to bypass dedup
+    setInputValue(input, "three");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
     expect(countEl.textContent).toBe("3 results");
   });
 
-  it("HTML-escapes snippets to prevent XSS", async () => {
+  it("truncated=true shows 'First N results shown — refine your search' in count (AC3)", async () => {
+    const results = [makeSearchResult(), makeSearchResult(), makeSearchResult()];
+    const renderer = makeMockRenderer({ search: vi.fn().mockResolvedValue({ results, truncated: true }), goToResult: vi.fn(), renderResult: vi.fn(), clearSearch: vi.fn() });
+    const controller = makeMockController({ getRenderer: () => renderer });
+    render(controller);
+
+    const input = container.querySelector(".viewer-search-input") as HTMLInputElement; // type-safety-ok: querySelector result narrowed by test setup guarantee
+    const countEl = container.querySelector(".viewer-search-count") as HTMLElement; // type-safety-ok: querySelector result narrowed by test setup guarantee
+
+    setInputValue(input, "fox");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    // Must differ from the plain "N results" text — includes a truncation hint.
+    const countText = countEl.textContent ?? "";
+    expect(countText).not.toBe("3 results");
+    expect(countText.length).toBeGreaterThan(0);
+    // The count and a truncation hint are both present.
+    expect(countText).toContain("3");
+    expect(countText.toLowerCase()).toMatch(/refine|first/);
+  });
+
+  it("truncated=false shows plain 'N results' count", async () => {
+    const results = [makeSearchResult(), makeSearchResult(), makeSearchResult()];
+    const renderer = makeMockRenderer({ search: vi.fn().mockResolvedValue({ results, truncated: false }), goToResult: vi.fn(), renderResult: vi.fn(), clearSearch: vi.fn() });
+    const controller = makeMockController({ getRenderer: () => renderer });
+    render(controller);
+
+    const input = container.querySelector(".viewer-search-input") as HTMLInputElement; // type-safety-ok: querySelector result narrowed by test setup guarantee
+    const countEl = container.querySelector(".viewer-search-count") as HTMLElement; // type-safety-ok: querySelector result narrowed by test setup guarantee
+
+    setInputValue(input, "fox");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    expect(countEl.textContent).toBe("3 results");
+  });
+
+  it("zero results shows '0 results' count", async () => {
+    const renderer = makeMockRenderer({ search: vi.fn().mockResolvedValue({ results: [], truncated: false }), goToResult: vi.fn(), renderResult: vi.fn(), clearSearch: vi.fn() });
+    const controller = makeMockController({ getRenderer: () => renderer });
+    render(controller);
+
+    const input = container.querySelector(".viewer-search-input") as HTMLInputElement;
+    const countEl = container.querySelector(".viewer-search-count") as HTMLElement;
+
+    setInputValue(input, "nonexistent");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    expect(countEl.textContent).toBe("0 results");
+  });
+
+  // -------------------------------------------------------------------------
+  // XSS: React renders text nodes, no dangerouslySetInnerHTML
+  // -------------------------------------------------------------------------
+
+  it("XSS: snippet with <script> rendered safely — no real script element, match inside <mark>", async () => {
     const xssResult = makeSearchResult({
       snippet: '<script>alert("xss")</script>',
       matchStart: 0,
       matchLength: 8,
     });
-    const renderer = makeSearchableRenderer({
-      search: vi.fn().mockResolvedValue([xssResult]),
-    });
-    initSearch(container, renderer, vi.fn());
+    const renderer = makeMockRenderer({ search: vi.fn().mockResolvedValue({ results: [xssResult], truncated: false }), goToResult: vi.fn(), renderResult: vi.fn(), clearSearch: vi.fn() });
+    const controller = makeMockController({ getRenderer: () => renderer });
+    render(controller);
 
     const input = container.querySelector(".viewer-search-input") as HTMLInputElement;
-    input.value = "script";
-    input.dispatchEvent(new Event("input"));
-    await vi.advanceTimersByTimeAsync(300);
+    setInputValue(input, "script");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
 
-    const resultsList = container.querySelector(".viewer-search-results") as HTMLUListElement;
-    const snippetEl = resultsList.querySelector(".viewer-search-result-snippet") as HTMLElement;
-
-    // The raw snippet text should be escaped -- no actual script element created
+    const snippetEl = container.querySelector(".viewer-search-result-snippet") as HTMLElement;
     expect(snippetEl.querySelector("script")).toBeNull();
-    // The match portion should be inside a <mark> tag
     expect(snippetEl.querySelector("mark")).not.toBeNull();
   });
 
-  it("HTML-escapes labels to prevent XSS", async () => {
+  it("XSS: label with <img onerror=...> rendered safely — no real img element", async () => {
     const xssResult = makeSearchResult({
       label: '<img onerror="alert(1)">',
     });
-    const renderer = makeSearchableRenderer({
-      search: vi.fn().mockResolvedValue([xssResult]),
-    });
-    initSearch(container, renderer, vi.fn());
+    const renderer = makeMockRenderer({ search: vi.fn().mockResolvedValue({ results: [xssResult], truncated: false }), goToResult: vi.fn(), renderResult: vi.fn(), clearSearch: vi.fn() });
+    const controller = makeMockController({ getRenderer: () => renderer });
+    render(controller);
 
     const input = container.querySelector(".viewer-search-input") as HTMLInputElement;
-    input.value = "test";
-    input.dispatchEvent(new Event("input"));
-    await vi.advanceTimersByTimeAsync(300);
+    setInputValue(input, "test");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
 
     const labelEl = container.querySelector(".viewer-search-result-label") as HTMLElement;
     expect(labelEl.querySelector("img")).toBeNull();
   });
 
-  it("cleanup function removes event listeners and clears timers", async () => {
-    const searchFn = vi.fn().mockResolvedValue([]);
-    const renderer = makeSearchableRenderer({ search: searchFn });
-    const cleanup = initSearch(container, renderer, vi.fn())!;
+  // -------------------------------------------------------------------------
+  // Cleanup cancels timer
+  // -------------------------------------------------------------------------
+
+  it("cleanup cancels timer (unmount before 300ms → search not called)", async () => {
+    const searchFn = vi.fn().mockResolvedValue({ results: [], truncated: false });
+    const renderer = makeMockRenderer({ search: searchFn, goToResult: vi.fn(), renderResult: vi.fn(), clearSearch: vi.fn() });
+    const controller = makeMockController({ getRenderer: () => renderer });
+    render(controller);
 
     const input = container.querySelector(".viewer-search-input") as HTMLInputElement;
 
     // Start a debounce timer
-    input.value = "fox";
-    input.dispatchEvent(new Event("input"));
+    setInputValue(input, "fox");
 
-    // Cleanup before timer fires
-    cleanup();
+    // Unmount before timer fires
+    await act(async () => {
+      root.unmount();
+    });
 
-    await vi.advanceTimersByTimeAsync(300);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
 
-    // The search should not have been called because cleanup cancelled the timer
-    // and set destroyed = true
+    // Search should not have been called — cleanup cancelled the timer
     expect(searchFn).not.toHaveBeenCalled();
   });
 
+  // -------------------------------------------------------------------------
+  // Stale-result discard
+  // -------------------------------------------------------------------------
+
   it("discards stale search results when query changes during await", async () => {
-    let resolveFirst!: (value: SearchResult[]) => void;
-    const staleResults = [makeSearchResult({ label: "Stale" })];
-    const freshResults = [makeSearchResult({ label: "Fresh" })];
+    let resolveFirst!: (value: SearchResponse) => void; // type-safety-ok: definite assignment — assigned in Promise constructor callback before first read
+    const staleResults = { results: [makeSearchResult({ label: "Stale" })], truncated: false };
+    const freshResults = { results: [makeSearchResult({ label: "Fresh" })], truncated: false };
     const searchFn = vi.fn()
-      .mockImplementationOnce(() => new Promise<SearchResult[]>((r) => { resolveFirst = r; }))
+      .mockImplementationOnce(() => new Promise<SearchResponse>((r) => { resolveFirst = r; }))
       .mockImplementationOnce(() => Promise.resolve(freshResults));
-    const renderer = makeSearchableRenderer({ search: searchFn });
-    initSearch(container, renderer, vi.fn());
+    const renderer = makeMockRenderer({ search: searchFn, goToResult: vi.fn(), renderResult: vi.fn(), clearSearch: vi.fn() });
+    const controller = makeMockController({ getRenderer: () => renderer });
+    render(controller);
 
     const input = container.querySelector(".viewer-search-input") as HTMLInputElement;
-    const countEl = container.querySelector(".viewer-search-count") as HTMLElement;
 
-    // Type first query and trigger debounce
-    input.value = "first";
-    input.dispatchEvent(new Event("input"));
-    await vi.advanceTimersByTimeAsync(300);
+    // First query
+    setInputValue(input, "first");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
     expect(searchFn).toHaveBeenCalledWith("first");
 
-    // Type second query before first resolves
-    input.value = "second";
-    input.dispatchEvent(new Event("input"));
-    await vi.advanceTimersByTimeAsync(300);
+    // Second query before first resolves
+    setInputValue(input, "second");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
     expect(searchFn).toHaveBeenCalledWith("second");
 
     // Resolve the first (stale) search — results should be discarded
-    resolveFirst(staleResults);
-    await vi.advanceTimersByTimeAsync(0);
+    await act(async () => {
+      resolveFirst(staleResults);
+      await vi.advanceTimersByTimeAsync(0);
+    });
 
     // Only fresh results should be displayed
+    const countEl = container.querySelector(".viewer-search-count") as HTMLElement;
     expect(countEl.textContent).toBe("1 result");
     const labelEl = container.querySelector(".viewer-search-result-label") as HTMLElement;
     expect(labelEl.textContent).toBe("Fresh");
   });
 
-  it("search event (Enter key) triggers search immediately without debounce", async () => {
-    const searchFn = vi.fn().mockResolvedValue([]);
-    const renderer = makeSearchableRenderer({ search: searchFn });
-    initSearch(container, renderer, vi.fn());
+  // -------------------------------------------------------------------------
+  // aria-selected on clicked item
+  // -------------------------------------------------------------------------
 
-    const input = container.querySelector(".viewer-search-input") as HTMLInputElement;
-    input.value = "immediate";
-    input.dispatchEvent(new Event("search"));
-
-    // Should be called immediately (after microtask), not after 300ms
-    await vi.advanceTimersByTimeAsync(0);
-
-    expect(searchFn).toHaveBeenCalledWith("immediate");
-  });
-
-  it("search event cancels pending debounce timer", async () => {
-    const searchFn = vi.fn().mockResolvedValue([]);
-    const renderer = makeSearchableRenderer({ search: searchFn });
-    initSearch(container, renderer, vi.fn());
-
-    const input = container.querySelector(".viewer-search-input") as HTMLInputElement;
-
-    // Start debounce via input event
-    input.value = "debounced";
-    input.dispatchEvent(new Event("input"));
-
-    // Before 300ms elapses, fire search event (Enter)
-    input.dispatchEvent(new Event("search"));
-    await vi.advanceTimersByTimeAsync(0);
-
-    expect(searchFn).toHaveBeenCalledTimes(1);
-    expect(searchFn).toHaveBeenCalledWith("debounced");
-
-    // Advance past debounce -- should not fire again (same query dedup)
-    await vi.advanceTimersByTimeAsync(300);
-    expect(searchFn).toHaveBeenCalledTimes(1);
-  });
-
-  it("clicking a result sets aria-selected on the clicked item", async () => {
+  it("clicking a result sets aria-selected on the clicked item, not on others", async () => {
     const results = [
       makeSearchResult({ location: "1", label: "Page 1" }),
       makeSearchResult({ location: "2", label: "Page 2" }),
     ];
-    const renderer = makeSearchableRenderer({
-      search: vi.fn().mockResolvedValue(results),
+    const renderer = makeMockRenderer({ search: vi.fn().mockResolvedValue({ results, truncated: false }), goToResult: vi.fn().mockResolvedValue(undefined), renderResult: vi.fn(), clearSearch: vi.fn() });
+    const controller = makeMockController({ getRenderer: () => renderer });
+    render(controller);
+
+    const input = container.querySelector(".viewer-search-input") as HTMLInputElement;
+    setInputValue(input, "fox");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
     });
-    initSearch(container, renderer, vi.fn());
 
-    const input = container.querySelector(".viewer-search-input") as HTMLInputElement;
-    input.value = "fox";
-    input.dispatchEvent(new Event("input"));
-    await vi.advanceTimersByTimeAsync(300);
+    const items = container.querySelectorAll(".viewer-search-result");
+    await act(async () => {
+      (items[1] as HTMLElement).click();
+      for (let i = 0; i < 20; i++) await Promise.resolve();
+    });
 
-    const resultsList = container.querySelector(".viewer-search-results") as HTMLUListElement;
-    (resultsList.children[1] as HTMLElement).click();
-
-    expect(resultsList.children[1]!.getAttribute("aria-selected")).toBe("true");
-    expect(resultsList.children[0]!.hasAttribute("aria-selected")).toBe(false);
-  });
-
-  it("zero results shows '0 results' count", async () => {
-    const renderer = makeSearchableRenderer();
-    initSearch(container, renderer, vi.fn());
-
-    const input = container.querySelector(".viewer-search-input") as HTMLInputElement;
-    const countEl = container.querySelector(".viewer-search-count") as HTMLElement;
-
-    input.value = "nonexistent";
-    input.dispatchEvent(new Event("input"));
-    await vi.advanceTimersByTimeAsync(300);
-
-    expect(countEl.textContent).toBe("0 results");
+    expect(items[1]!.getAttribute("aria-selected")).toBe("true");
+    expect(items[0]!.hasAttribute("aria-selected")).toBe(false);
   });
 });

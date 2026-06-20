@@ -282,8 +282,8 @@ describe("prerenderPosts", () => {
       (c) => String(c[0]).includes("post/hello-world"),
     );
     const html = perPostCall![1] as string;
-    expect(html).toContain('<article id="post-hello-world">');
-    expect(html).toContain('<article id="post-second-post">');
+    expect(html).toContain('id="post-hello-world"');
+    expect(html).toContain('id="post-second-post"');
     expect(html).toContain('data-hydrated');
     expect(html).toContain('<main id="app"><div id="posts">');
     expect(html).toContain("hello world");
@@ -302,13 +302,13 @@ describe("prerenderPosts", () => {
     );
     const perPostHtml = perPostCall![1] as string;
 
-    expect(perPostHtml).toContain('<article id="post-hello-world">');
-    expect(perPostHtml).toContain('<article id="post-second-post">');
-    expect(perPostHtml).toContain("<hr>");
+    expect(perPostHtml).toContain('id="post-hello-world"');
+    expect(perPostHtml).toContain('id="post-second-post"');
+    expect(perPostHtml).toContain("<hr/>");
 
-    expect(rootHtml).toContain('<article id="post-hello-world">');
-    expect(rootHtml).toContain('<article id="post-second-post">');
-    expect(rootHtml).toContain("<hr>");
+    expect(rootHtml).toContain('id="post-hello-world"');
+    expect(rootHtml).toContain('id="post-second-post"');
+    expect(rootHtml).toContain("<hr/>");
   });
 
   it("injects all published posts into root index.html", async () => {
@@ -319,9 +319,9 @@ describe("prerenderPosts", () => {
     );
     expect(rootCall).toBeDefined();
     const html = rootCall![1] as string;
-    expect(html).toContain('<article id="post-hello-world">');
-    expect(html).toContain('<article id="post-second-post">');
-    expect(html).toContain("<hr>");
+    expect(html).toContain('id="post-hello-world"');
+    expect(html).toContain('id="post-second-post"');
+    expect(html).toContain("<hr/>");
     // Second post is newer, should appear first
     const firstIdx = html.indexOf("post-second-post");
     const secondIdx = html.indexOf("post-hello-world");
@@ -369,15 +369,38 @@ describe("prerenderPosts", () => {
   });
 
   it("injects nav links into app-nav element", async () => {
+    await prerenderPosts(makeConfig({ showHomeLink: true }));
+
+    const rootCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+      (c) => String(c[0]) === "/dist/index.html",
+    );
+    const html = rootCall![1] as string;
+    // The <app-nav> wrapper survives as an inert tag; inside it the ds Nav
+    // renders the nav links (crawlers still see them) plus the home link.
+    expect(html).toContain('<app-nav id="nav">');
+    expect(html).toContain("cs-nav");
+    expect(html).toContain('href="/"');
+    expect(html).toContain("Home");
+    // Anonymous prerender: home link present, no auth "Login" control.
+    expect(html).toContain('href="https://commons.systems/"');
+    expect(html).not.toContain("Login");
+    expect(html).not.toContain('<app-nav id="nav"></app-nav>');
+  });
+
+  it("omits home link from nav when showHomeLink is false (default)", async () => {
     await prerenderPosts(makeConfig());
 
     const rootCall = vi.mocked(fs.writeFileSync).mock.calls.find(
       (c) => String(c[0]) === "/dist/index.html",
     );
     const html = rootCall![1] as string;
-    expect(html).toContain('<app-nav id="nav"><span class="nav-links">');
-    expect(html).toContain('<a href="/">Home</a>');
-    expect(html).not.toContain('<app-nav id="nav"></app-nav>');
+    // Nav still renders with cs-nav and the configured nav links.
+    expect(html).toContain('<app-nav id="nav">');
+    expect(html).toContain("cs-nav");
+    expect(html).toContain('href="/"');
+    expect(html).toContain("Home");
+    // Home link to commons.systems root must be absent.
+    expect(html).not.toContain('href="https://commons.systems/"');
   });
 
   it("writes root index.html with content", async () => {

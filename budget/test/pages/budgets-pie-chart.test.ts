@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { timestampMockFactory, makeBudget, makeContainer } from "../helpers";
+import { timestampMockFactory, makeBudget, makeContainer, CHART_TOKENS } from "../helpers";
 
 vi.mock("firebase/firestore", () => timestampMockFactory());
 
@@ -168,7 +168,7 @@ describe("renderBudgetPieChart", () => {
     expect(paths).toHaveLength(2);
 
     const notBudgetedPath = Array.from(paths).find(
-      p => p.getAttribute("fill") === "#ccc",
+      p => p.getAttribute("fill") === CHART_TOKENS["--chart-6"],
     );
     expect(notBudgetedPath).not.toBeUndefined();
   });

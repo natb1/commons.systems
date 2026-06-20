@@ -1,7 +1,7 @@
 import * as Plot from "@observablehq/plot";
 import type { Budget, BudgetId, BudgetPeriod } from "../firestore.js";
 import { applyRollover, periodAllowance, weeklyEquivalent, computePeriodBalances, toSundayEntry, type PeriodBalance } from "../balance.js";
-import { getThemeFg, computePanelWidth, assembleChartLayout, MARGIN_RIGHT, MARGIN_BOTTOM, computeChartWidth, renderAxisSvg } from "./chart-util.js";
+import { getThemeFg, readThemeVar, computePanelWidth, assembleChartLayout, MARGIN_RIGHT, MARGIN_BOTTOM, computeChartWidth, renderAxisSvg } from "./chart-util.js";
 
 interface ChartOptions {
   budgets: Budget[];
@@ -96,6 +96,9 @@ export function renderBudgetChart(container: HTMLElement, options: ChartOptions)
   const height = 300;
 
   const fg = getThemeFg(container);
+  const favorable = readThemeVar(container, "--favorable");
+  const unfavorable = readThemeVar(container, "--unfavorable");
+  const accent = readThemeVar(container, "--accent");
 
   // Compute shared Y domain so the fixed Y-axis and scrollable chart body use the same scale
   let yMax = -Infinity;
@@ -136,13 +139,13 @@ export function renderBudgetChart(container: HTMLElement, options: ChartOptions)
         x: "budget",
         y: "spent",
         fx: "week",
-        fill: (d: BarDatum) => d.balance < 0 ? "#e45858" : "#4caf50",
+        fill: (d: BarDatum) => d.balance < 0 ? unfavorable : favorable,
       }),
       Plot.dot(data, {
         x: "budget",
         y: "balance",
         fx: "week",
-        fill: "#f0a030",
+        fill: accent,
         r: 4,
       }),
       Plot.ruleY([0]),

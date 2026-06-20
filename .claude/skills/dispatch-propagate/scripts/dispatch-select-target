@@ -113,8 +113,9 @@
 # it closes (closingIssuesReferences); a PR that closes no issue, or whose
 # closing issues carry no topic label, is "other". An issue's category is the
 # highest-priority topic among its own labels, else "other". A PR's priority
-# bit is 1 if the union of its closing issues' labels carries `priority`, else
-# 0; an issue's priority bit is 1 if its own labels carry `priority`, else 0.
+# bit is 1 if any closing issue, or any open ancestor of a closing issue (up to
+# 6 levels), carries the `priority` label, else 0; an issue's priority bit is 1
+# if its own labels carry `priority`, else 0.
 #
 # Within each (priority, topic) bucket, default-mode priority (oldest PR wins
 # within a tier):
@@ -183,6 +184,7 @@ DEBUG_CLASSIFY=false
 TOP=1
 TOP_EXPLICIT=false
 declare -A EXCLUDED=()
+declare -A RECORDED_LEAVES=()  # leaves successfully recorded into any bucket this scan; used at TOP>1 to dedup the same leaf reached from sibling roots (#1915)
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -522,6 +524,7 @@ CLOSING_NUMS=$(printf '%s' "$PR_LIST" \
   | jq -r '[.[].closingIssuesReferences[]?.number] | unique | .[]')
 if [[ -z "$CLOSING_NUMS" ]]; then
   BLOCKER_COUNTS='{}'
+  ANCESTOR_NUMS='{}'
 else
   # owner/repo for the GraphQL variables (same pattern as post-pr-comment.sh).
   REPO_NWO=$(gh_retry gh repo view --json nameWithOwner -q .nameWithOwner) || {
@@ -542,24 +545,66 @@ else
       echo "error: dispatch-select-target: non-integer closing issue number: $cnum" >&2
       exit 1
     }
-    GQL_FIELDS+="    _${cnum}: issue(number: ${cnum}) { number blockedBy(first: 50) { nodes { state } } }"$'\n'
+    # Each alias also requests a fixed-depth nested parent chain (7 levels): depth
+    # 1..6 are collected as ancestors (ANCESTOR_NUMS), the 7th is a sentinel used
+    # only to detect (and warn about) chains deeper than the supported depth. The
+    # parent walk rides this single batched call rather than adding per-PR REST
+    # round-trips, keeping the GraphQL bucket usage to one query (#1601).
+    GQL_FIELDS+="    _${cnum}: issue(number: ${cnum}) { number blockedBy(first: 50) { nodes { state } } parent { number parent { number parent { number parent { number parent { number parent { number parent { number } } } } } } } }"$'\n'
   done <<< "$CLOSING_NUMS"
   GQL_QUERY="query(\$owner: String!, \$name: String!) {
   repository(owner: \$owner, name: \$name) {
 ${GQL_FIELDS}  }
 }"
-  BLOCKER_COUNTS=$(gh_retry gh api graphql -F owner="$REPO_OWNER" -F name="$REPO_NAME" -f query="$GQL_QUERY" \
-    | jq -c '.data.repository
+  # Capture the batched response ONCE, then project it twice (blocker counts and
+  # ancestor chains). A second gh api graphql call would defeat the single-call
+  # design (#1601) — both maps must derive from this one response.
+  GQL_RESP=$(gh_retry gh api graphql -F owner="$REPO_OWNER" -F name="$REPO_NAME" -f query="$GQL_QUERY") || {
+    echo "error: dispatch-select-target: batched blockedBy GraphQL query failed" >&2
+    exit 1
+  }
+  # number → open-blocker count. Open blockers are counted client-side by
+  # filtering state==OPEN over each issue's blockedBy connection.
+  BLOCKER_COUNTS=$(jq -c '.data.repository
              | to_entries
              | map(select(.value != null)
                    | {key: (.value.number|tostring),
                       value: ([.value.blockedBy.nodes[]
                                | select(.state=="OPEN" or .state=="open")]
                               | length)})
-             | from_entries') || {
-    echo "error: dispatch-select-target: batched blockedBy GraphQL query failed" >&2
+             | from_entries' <<<"$GQL_RESP") || {
+    echo "error: dispatch-select-target: blocker-count projection failed" >&2
     exit 1
   }
+  # number → flat JSON array of ancestor numbers (parent-chain levels 1..6).
+  # recurse(.parent?) starting at .value yields the issue itself first, then its
+  # parent, grandparent, … so .[1:7] drops the issue's own number and keeps only
+  # the six collected ancestor levels (the 7th sentinel level is never included).
+  # Issues with no parent map to []. The downstream open-vs-closed decision is
+  # made later against ISSUE_LABELS_JSON (open-issues only), so closed ancestors
+  # are simply absent there and contribute nothing — this query collects ALL
+  # ancestor numbers regardless of state.
+  ANCESTOR_NUMS=$(jq -c '.data.repository
+             | to_entries
+             | map(select(.value != null)
+                   | {key: (.value.number|tostring),
+                      value: ([.value | recurse(.parent?; . != null) | .number]
+                              | .[1:7])})
+             | from_entries' <<<"$GQL_RESP") || {
+    echo "error: dispatch-select-target: ancestor-chain projection failed" >&2
+    exit 1
+  }
+  # Truncation detection: if the deepest (7th, sentinel) parent level is non-null
+  # for any alias, the real chain is deeper than the supported depth (6). Warn
+  # per offending issue but proceed.
+  while IFS= read -r trunc_num; do
+    [[ -z "$trunc_num" ]] && continue
+    echo "warning: dispatch-select-target: ancestor chain deeper than supported depth (6) for issue $trunc_num; truncating" >&2
+  done < <(jq -r '.data.repository
+             | to_entries[]
+             | select(.value != null)
+             | select(.value.parent.parent.parent.parent.parent.parent.parent != null)
+             | .value.number' <<<"$GQL_RESP")
 fi
 
 # Topic categories in priority order; "other" is the implicit fallback for any
@@ -621,6 +666,21 @@ pr_combined_labels() {
 # 1 if the label set contains an exact "priority" label, else 0.
 has_priority_in_labels() {
   printf '%s' "$1" | jq -r "$JQ_LABEL_DEFS"' has_priority'
+}
+
+# 1 if any closing issue — or any of its open ancestors — carries the `priority`
+# label; else 0. Inherits priority from the epic subtree by including each
+# closing issue's ancestor numbers (from ANCESTOR_NUMS) in the label union.
+# Closed ancestors are absent from ISSUE_LABELS_JSON (which holds open issues
+# only), so they contribute nothing — "open ancestor" semantics are automatic.
+# A PR with no closing issues, or whose closing issues and ancestors are absent
+# from the map, returns 0.
+pr_priority_bit() {
+  printf '%s' "$1" | jq -r --argjson map "$ISSUE_LABELS_JSON" --argjson anc "$ANCESTOR_NUMS" \
+    "$JQ_LABEL_DEFS"'
+      [ .[].number | tostring as $n
+        | ( ($map[$n] // [])[], ( ($anc[$n] // [])[] | tostring as $a | ($map[$a] // [])[] ) ) ]
+      | has_priority'
 }
 
 # Top-N ranked PRs per (category, priority-bit, phase): key =
@@ -749,7 +809,7 @@ while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
   # per-PR dispatch-ci-ready / dispatch-phase gh calls — a non-priority PR is
   # never selectable in this mode, so it pays nothing.
   if [[ "$PRIORITY_ONLY" == "true" ]] \
-     && [[ "$(has_priority_in_labels "$(pr_combined_labels "$pr_closing")")" != "1" ]]; then
+     && [[ "$(pr_priority_bit "$pr_closing")" != "1" ]]; then
     continue
   fi
 
@@ -792,17 +852,21 @@ while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
       # number (e.g. `100-fix` closing priority issue `200`), and a branch with
       # no `<N>-` prefix yields a non-numeric value the reseed sink rejects —
       # silently stranding the very priority item this path exists to rescue.
-      # Resolve the priority-labeled closing issue from `pr_closing` (already in
-      # scope), reusing ISSUE_LABELS_JSON exactly as pr_combined_labels does. The
-      # line-712 gate guarantees at least one closing issue carries `priority` in
-      # --priority-only mode, and dispatch-find-pr resolves issue→PR via the
-      # issue's closedByPullRequestsReferences fallback, so the priority issue
-      # number is the resolvable, correct target.
+      # Resolve the reseed target from `pr_closing` (already in scope), reusing
+      # ISSUE_LABELS_JSON exactly as pr_combined_labels does. The --priority-only
+      # early skip now admits PRs that are priority via an open ANCESTOR (see
+      # pr_priority_bit), so a PR reaching here may have NO closing issue that
+      # carries `priority` on its own labels. Prefer the priority-direct closing
+      # issue as the target, but fall back to the first closing-issue number when
+      # none is directly priority-labeled. Either way the target is a resolvable
+      # closing-issue number (not the branch prefix #1444) — dispatch-find-pr
+      # resolves issue→PR via the issue's closedByPullRequestsReferences fallback.
       local_issue=$(printf '%s' "$pr_closing" \
         | jq -r --argjson map "$ISSUE_LABELS_JSON" \
-          'map(.number | tostring
-               | select((($map[.] // []) | any(.name == "priority"))))
-           | .[0] // empty')
+          '( map(.number | tostring
+                 | select((($map[.] // []) | any(.name == "priority")))) | .[0] )
+           // ( [.[].number | tostring] | .[0] )
+           // empty')
       if [[ "$local_issue" =~ ^[0-9]+$ && -z "${EXCLUDED[$local_issue]:-}" ]] \
          && ! pr_issue_office_hours_parked "$local_issue" \
          && ! pr_blocked_by_open "$pr_closing"; then
@@ -858,7 +922,7 @@ while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
   # first-seen guard.
   pr_combined=$(pr_combined_labels "$pr_closing")
   pr_cat=$(category_of_labels "$pr_combined")
-  pr_pri=$(has_priority_in_labels "$pr_combined")
+  pr_pri=$(pr_priority_bit "$pr_closing")
   pr_key="$pr_cat|$pr_pri|$phase"
   bucket_append FIRST_PR "$pr_key" "$pr_num $pr_branch" || true
 done <<< "$PR_SORTED"
@@ -1036,9 +1100,16 @@ while IFS=$'\t' read -r issue_num issue_pri issue_enh issue_catrank issue_cat; d
   #   exit 2 — every reachable open leaf is owned by a live session or excluded;
   #            stop descending this root. A later issue in the same bucket may
   #            still fill the slot.
-  #   exit 1 — usage error; propagate as a hard failure, never swallow as a skip.
+  #   exit 3 — transient gh API failure tracing this root; skip it and continue to
+  #            the next root (#2005). The root is not dispatched and the tick does
+  #            not fail; the next tick retries the root.
+  #   exit 1 — usage-only error (no longer includes gh failure, which is exit 3);
+  #            propagate as a hard failure, never swallow as a skip.
   declare -A root_excl=()
   for _ge in "${!EXCLUDED[@]}"; do root_excl["$_ge"]=1; done
+  if (( TOP > 1 )); then
+    for _rl in "${!RECORDED_LEAVES[@]}"; do root_excl["$_rl"]=1; done
+  fi
   root_recorded=0
   while :; do
     # Stop once this root has supplied TOP leaves, or both phase buckets are at
@@ -1105,6 +1176,7 @@ while IFS=$'\t' read -r issue_num issue_pri issue_enh issue_catrank issue_cat; d
       root_excl["$leaf"]=1
       if bucket_append FIRST_ISSUE "$leaf_bucket" "$leaf"; then
         root_recorded=$(( root_recorded + 1 ))
+        RECORDED_LEAVES["$leaf"]=1
       else
         # Bucket already at TOP — this leaf was dropped. Criterion #3 freezes
         # TOP=1: a root that hits a full bucket on an append attempt stops
@@ -1115,6 +1187,16 @@ while IFS=$'\t' read -r issue_num issue_pri issue_enh issue_catrank issue_cat; d
     else
       trace_status=$?
       [[ "$trace_status" -eq 2 ]] && break
+      if [[ "$trace_status" -eq 3 ]]; then
+        # A transient gh API error tracing THIS root (post-gh_retry exhaustion).
+        # Skip the root this pass and continue scanning the rest of the queue —
+        # do NOT dispatch it (trace-leaf already refused to treat it as startable)
+        # and do NOT fail the whole tick (#2005). The next tick retries the root.
+        echo "warning: dispatch-trace-leaf $issue_num queue: transient gh API error tracing this root; skipping it this pass and continuing" >&2
+        break
+      fi
+      # Any other nonzero status is a usage/programming error (trace-leaf exit 1) —
+      # a hard failure affecting every root; never swallow it as a skip.
       echo "error: dispatch-trace-leaf $issue_num queue failed (exit $trace_status)" >&2
       exit 1
     fi

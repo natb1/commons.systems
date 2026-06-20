@@ -1,47 +1,56 @@
+// @vitest-environment happy-dom
+//
+// createBlogApp(config) is called directly as a function — no module-import
+// side effects to manage. The REAL @commons-systems/router drives navigation
+// (its render→null routes leave #app to React) and the REAL Region components
+// (HomeRegion / InfoPanelRegion / AdminRegion / BlogNav) render into the three
+// hydrateRoot roots, so the DOM under test is the real component output.
+//
+// Only the DATA layer the driver still imports is mocked: firestore.getPosts,
+// github.createFetchPost, authutil/groups.isInGroup, the panel-toggle, the
+// app-check defer hook, the og-meta/canonical SEO writers, and the
+// scroll-indicator. Everything React renders is real.
+//
+// To avoid React hydration mismatches, scaffoldDom server-renders the SAME
+// elements the driver hydrates with (renderToString over BlogNav / HomeRegion /
+// InfoPanelRegion with the build-time props), mirroring prerender.ts (Unit 5).
+// renderToString (NOT renderToStaticMarkup) emits the hydration markers React's
+// hydrateRoot expects, giving it the best chance to REUSE the prerendered nodes
+// rather than client-render — which is what the node-identity (CLS) assertions
+// in Cases 2 and 7 verify.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { act } from "@testing-library/react";
+import { createElement } from "react";
+import { renderToString } from "react-dom/server";
+
 import { createBlogApp } from "../src/create-blog-app.ts";
 import type { CreateBlogAppConfig } from "../src/create-blog-app.ts";
 import { getPosts } from "../src/firestore.ts";
+import { initScrollIndicator } from "@commons-systems/components/scroll-indicator";
 
-// Issue #1285 — shared SPA bootstrap routing regression and info-panel AC tests.
-//
-// createBlogApp(config) is called directly as a function — no module-import
-// side effects to manage. The REAL @commons-systems/router is under test
-// (render→null preservation is the behavior we verify). All heavy blog deps
-// are mocked by relative path to match create-blog-app.ts's own imports.
+import { BlogNav } from "../src/components/BlogNav.tsx";
+import { HomeRegion } from "../src/pages/HomeRegion.tsx";
+import { InfoPanelRegion } from "../src/components/InfoPanelRegion.tsx";
+import type { PostMeta } from "../src/post-types.ts";
+import type { PostContent } from "../src/marked-config.ts";
+import type { BlogRollEntry, BlogRollStrategy, LatestPost } from "../src/blog-roll/types.ts";
 
-// vi.hoisted so these spies exist before the hoisted vi.mock factories run.
-const { renderHomeHtml, renderInfoPanel, hydrateInfoPanel, initScrollIndicator } = vi.hoisted(
-  () => ({
-    renderHomeHtml: vi.fn(() => '<div id="posts" data-test="home">HOME</div>'),
-    renderInfoPanel: vi.fn(() => "<div>INFO PANEL</div>"),
-    hydrateInfoPanel: vi.fn(),
-    initScrollIndicator: vi.fn(() => vi.fn()),
-  }),
-);
+// React calls globalThis.reportError on render errors under happy-dom.
+if (typeof globalThis.reportError !== "function") {
+  globalThis.reportError = () => {};
+}
 
-// Relative mocks matching create-blog-app.ts's relative imports.
-vi.mock("../src/pages/home.ts", () => ({
-  renderHomeHtml,
-  hydrateHome: vi.fn(),
-}));
-vi.mock("../src/pages/admin.ts", () => ({
-  renderAdmin: vi.fn(() => '<div data-test="admin">ADMIN</div>'),
-}));
-vi.mock("../src/components/info-panel.ts", () => ({
-  renderInfoPanel,
-  hydrateInfoPanel,
-}));
+// ── Data-layer mocks (everything the driver imports that touches I/O) ────────
 vi.mock("../src/og-meta.ts", () => ({ updateOgMeta: vi.fn() }));
 vi.mock("../src/canonical.ts", () => ({ updateCanonical: vi.fn() }));
 vi.mock("../src/github.ts", () => ({
-  createFetchPost: vi.fn(() => vi.fn()),
+  // Return a stub fetchPost resolving a tiny markdown doc; HomeRegion only hits
+  // it for posts lacking a contentMap (data-hydrated) entry.
+  createFetchPost: vi.fn(() => vi.fn(() => Promise.resolve("# Title\nBody text."))),
 }));
 vi.mock("../src/firestore.ts", () => ({
   getPosts: vi.fn(() => Promise.resolve({ posts: [], skippedCount: 0 })),
 }));
-
-// Alias mocks for third-party packages.
 vi.mock("@commons-systems/authutil/groups", () => ({
   isInGroup: vi.fn(() => Promise.resolve(false)),
 }));
@@ -49,10 +58,8 @@ vi.mock("@commons-systems/components/panel-toggle", () => ({
   initPanelToggle: vi.fn(),
 }));
 vi.mock("@commons-systems/components/scroll-indicator", () => ({
-  initScrollIndicator,
+  initScrollIndicator: vi.fn(() => vi.fn()),
 }));
-// Side-effect import — no runtime exports needed.
-vi.mock("@commons-systems/components/nav", () => ({}));
 vi.mock("@commons-systems/firebaseutil/defer-appcheck", () => ({
   deferAppCheckInit: vi.fn(),
 }));
@@ -64,8 +71,30 @@ class ResizeObserverStub {
   disconnect(): void {}
 }
 
-/** Build a minimal valid config. `onAuthStateChanged` returns a resolved
- *  Promise WITHOUT invoking its callback, so currentUser stays null. */
+// A published post with a contentMap entry: HomeRegion marks its content div
+// data-hydrated, so the post-mount effect skips fetchPost (clean hydration).
+const PUBLISHED_POST: PostMeta = {
+  id: "first-post",
+  title: "First Post",
+  published: true,
+  publishedAt: "2026-01-01T00:00:00Z",
+  filename: "first-post.md",
+};
+const PUBLISHED_CONTENT: Record<string, PostContent> = {
+  "first-post": { html: "<p>First body</p>", title: "First Post" },
+};
+
+const BLOGROLL: BlogRollEntry[] = [
+  { id: "test-blog", name: "Test Blog", url: "https://example.com" },
+];
+const LATEST: LatestPost = {
+  title: "Latest Article",
+  url: "https://example.com/latest",
+  publishedAt: "2026-03-01T00:00:00Z",
+};
+
+/** Build a minimal valid config. `onAuthStateChanged` returns a resolved Promise
+ *  WITHOUT invoking its callback, so currentUser stays null. */
 function makeConfig(overrides: Partial<CreateBlogAppConfig> = {}): CreateBlogAppConfig {
   return {
     buildTimeContent: {},
@@ -94,20 +123,82 @@ function makeConfig(overrides: Partial<CreateBlogAppConfig> = {}): CreateBlogApp
   };
 }
 
-/** Scaffold a DOM with a prerendered #posts in #app. */
-function scaffoldDom({ populatedInfoPanel = false }: { populatedInfoPanel?: boolean } = {}): void {
-  const infoPanelContent = populatedInfoPanel
-    ? '<nav aria-label="Info panel links"><ul><li>Link</li></ul></nav>'
-    : "";
+/**
+ * Server-render the three roots with the SAME build-time props the driver
+ * hydrates with (mirroring prerender.ts, Unit 5) and inject them into the
+ * scaffold. renderToString emits hydration markers so hydrateRoot can REUSE the
+ * prerendered nodes — preserving node identity so the CLS / no-teardown
+ * assertions in Cases 2 and 7 hold. The #app body is rendered with the same
+ * scrollSlug the driver hydrates with (initialSlug, derived from the entry
+ * path), so a deep /post/x scaffold matches homeElement(initialSlug). The
+ * signed-out nav uses the current path so `showAuth` matches the driver's
+ * `navElement(parsePath().path)`.
+ */
+function scaffoldDom(config: CreateBlogAppConfig, path = window.location.pathname): void {
+  const initialSlug = path.startsWith("/post/") ? path.slice(6) : undefined;
+  const navHtml = renderToString(
+    createElement(BlogNav, {
+      links: config.navLinks,
+      showHomeLink: config.showHomeLink,
+      showAuth: path === "/admin",
+      user: null,
+      onSignIn: () => {},
+      onSignOut: () => {},
+    }),
+  );
+  const appHtml = renderToString(
+    createElement(HomeRegion, {
+      posts: config.buildTimeMetadata,
+      contentMap: config.buildTimeContent,
+      postLinkPrefix: "/post/",
+      fetchPost: () => Promise.resolve(""),
+      scrollSlug: initialSlug,
+    }),
+  );
+  const panelHtml = renderToString(
+    createElement(InfoPanelRegion, {
+      data: {
+        linkSections: config.infoPanelLinkSections,
+        topPosts: config.buildTimeMetadata,
+        blogRoll: config.blogRollEntries,
+        rssFeedUrl: "/feed.xml",
+        opmlUrl: "/blogroll.opml",
+        postLinkPrefix: "/post/",
+        buildTimeFeeds: config.buildTimeFeeds,
+      },
+      strategies: config.strategies,
+      useScrollIndicator: config.useScrollIndicator,
+    }),
+  );
+
   document.body.innerHTML = `
-    <div id="nav"></div>
+    <div id="nav">${navHtml}</div>
     <div class="page">
       <header></header>
-      <div id="app"><div id="posts" data-prerendered="true">PRERENDERED HOME</div></div>
-      <aside id="info-panel">${infoPanelContent}</aside>
+      <div id="app">${appHtml}</div>
+      <aside id="info-panel" class="sidebar">${panelHtml}</aside>
       <button id="panel-toggle"></button>
     </div>
   `;
+}
+
+/** Navigate via the real router's popstate listener (same mechanism the app uses). */
+async function navigate(path: string): Promise<void> {
+  await act(async () => {
+    history.pushState({}, "", path);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    // Let the synchronous dispatch + React commit + any awaited branch settle.
+    await Promise.resolve();
+    await new Promise((r) => setTimeout(r, 0));
+  });
+}
+
+/** Settle the initial hydration + router construction dispatch. */
+async function settle(): Promise<void> {
+  await act(async () => {
+    await Promise.resolve();
+    await new Promise((r) => setTimeout(r, 0));
+  });
 }
 
 let handle: ReturnType<typeof createBlogApp> | undefined;
@@ -115,10 +206,6 @@ let handle: ReturnType<typeof createBlogApp> | undefined;
 describe("createBlogApp routing and panel behavior", () => {
   beforeEach(() => {
     handle = undefined;
-    renderHomeHtml.mockClear();
-    renderInfoPanel.mockClear();
-    hydrateInfoPanel.mockClear();
-    initScrollIndicator.mockClear();
     globalThis.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserver;
   });
 
@@ -129,325 +216,409 @@ describe("createBlogApp routing and panel behavior", () => {
     vi.clearAllMocks();
   });
 
-  // Case 1 — #1285 regression: direct /admin entry, then Home rebuilds #posts.
+  // Case 1 — #1285 regression: direct /admin entry shows admin body; navigating
+  // home rebuilds the home feed. Through the React model: on /admin the app shows
+  // AdminRegion markup and no #posts; after popstate to /, #posts is present.
   it("rebuilds home content after a direct /admin entry (#1285)", async () => {
     history.pushState({}, "", "/admin");
-    // Scaffold without prerendered #posts — simulate an /admin direct entry
-    // where the admin route will replace the initial DOM.
-    document.body.innerHTML = `
-      <div id="nav"></div>
-      <div class="page">
-        <header></header>
-        <div id="app"><div id="posts" data-prerendered="true">PRERENDERED HOME</div></div>
-        <aside id="info-panel"></aside>
-        <button id="panel-toggle"></button>
-      </div>
-    `;
+    const config = makeConfig({ buildTimeMetadata: [PUBLISHED_POST], buildTimeContent: PUBLISHED_CONTENT });
+    scaffoldDom(config, "/admin");
 
-    handle = createBlogApp(makeConfig());
+    handle = createBlogApp(config);
     const app = document.getElementById("app")!;
 
-    // Admin route renders — prerendered #posts is replaced by admin markup.
+    // Admin route renders (signed-out non-admin) — no #posts feed.
     await vi.waitFor(() => {
-      expect(app.innerHTML).toContain('data-test="admin"');
       expect(app.querySelector("#posts")).toBeNull();
+      expect(app.textContent).toContain("Admin");
     });
 
-    // Navigate home via the real router's popstate listener.
-    history.pushState({}, "", "/");
-    window.dispatchEvent(new PopStateEvent("popstate"));
+    await navigate("/");
 
-    // Home content must rebuild — the live-DOM check sees no #posts, so
-    // loadPosts() is called and renderHomeHtml returns the home markup.
-    // Pre-fix: the one-shot flag returned null, leaving stale admin DOM.
+    // Home content rebuilds — the feed is present again.
     await vi.waitFor(() => {
       expect(app.querySelector("#posts")).not.toBeNull();
-      expect(app.innerHTML).toContain('data-test="home"');
-      expect(app.innerHTML).not.toContain('data-test="admin"');
+      expect(app.querySelector("#post-first-post")).not.toBeNull();
+      expect(app.textContent).not.toContain("Could not verify admin");
     });
   });
 
-  // Case 2 — Direct / preserves prerendered home #posts (render returns null).
-  it("preserves prerendered home DOM on direct / entry — renderHomeHtml not called", async () => {
+  // Case 2 — Direct / signed-out preserves the prerendered home feed WITHOUT
+  // tearing down the #posts node (no CLS on the SEO surface) and does NOT fetch
+  // firestore. Node identity: hydrateRoot(app, homeElement(initialSlug)) reuses
+  // the renderToString scaffold, and the first-dispatch skip (TASK 1) avoids the
+  // redundant root.render that would abandon hydration and client-render. We
+  // capture #posts BEFORE createBlogApp and assert the SAME reference survives.
+  it("reuses the prerendered #posts node on direct / entry (no CLS); getPosts not called", async () => {
     history.pushState({}, "", "/");
-    scaffoldDom();
+    const config = makeConfig({ buildTimeMetadata: [PUBLISHED_POST], buildTimeContent: PUBLISHED_CONTENT });
+    scaffoldDom(config, "/");
 
-    handle = createBlogApp(makeConfig());
+    const postsNode = document.querySelector("#posts");
+    expect(postsNode).not.toBeNull();
+
+    handle = createBlogApp(config);
     const app = document.getElementById("app")!;
 
-    // Wait for the router's initial navigation to settle.
     await vi.waitFor(() => {
       expect(app.querySelector("#posts")).not.toBeNull();
     });
-    // Let any remaining microtasks drain.
-    await new Promise((r) => setTimeout(r, 0));
+    await settle();
 
-    // The home render returns null (prerendered #posts is live in the DOM),
-    // so renderHomeHtml was never called and the prerendered markup is intact.
-    expect(renderHomeHtml).not.toHaveBeenCalled();
-    expect(app.querySelector("[data-prerendered]")).not.toBeNull();
+    // The prerendered node was REUSED, not torn down and replaced — hydrateRoot
+    // + the first-dispatch skip preserved the DOM (no CLS).
+    expect(document.querySelector("#posts")).toBe(postsNode);
+    expect(app.querySelector("#post-first-post")).not.toBeNull();
+    // Signed out: no firestore fetch.
+    expect(getPosts).not.toHaveBeenCalled();
   });
 
-  // Case 3 — AC#2 panel preservation + self-limiting (consumable marker).
-  it("preserves prerendered info-panel once, then re-renders on second data change", async () => {
+  // Case 2b — Direct / signed-out preserves the prerendered nav and info-panel
+  // nodes WITHOUT tearing them down (no CLS, no hydration error #424). Mirrors
+  // Case 2's #posts guard but for the nav and info-panel roots: hydrateRoot already
+  // rendered both for the entry path, so the first-dispatch skip avoids the
+  // redundant root.render() that would abandon hydration and client-render. We
+  // capture the nav <nav.cs-nav> and info-panel firstElementChild BEFORE
+  // createBlogApp and assert the SAME references survive after settle().
+  it("reuses the prerendered nav and info-panel nodes on direct / entry (no CLS, no hydration error #424)", async () => {
     history.pushState({}, "", "/");
-    // Populate #info-panel so createBlogApp sets the consumable marker.
-    scaffoldDom({ populatedInfoPanel: true });
+    const config = makeConfig({ buildTimeMetadata: [PUBLISHED_POST], buildTimeContent: PUBLISHED_CONTENT });
+    scaffoldDom(config, "/");
 
-    // Navigate to /admin first so the home route render() sees no #posts,
-    // which forces loadPosts() to run and reach afterRender→updateInfoPanel.
-    history.pushState({}, "", "/admin");
-    window.dispatchEvent(new PopStateEvent("popstate"));
+    // Capture stable server-rendered wrapper elements from both roots before
+    // createBlogApp runs. nav.cs-nav is BlogNav's top-level <nav>; info-panel's
+    // firstElementChild is InfoPanel's first rendered <section class="panel-section">.
+    const navNode = document.getElementById("nav")!.firstElementChild; // type-safety-ok: test DOM node mounted in beforeEach
+    expect(navNode).not.toBeNull();
+    const panelNode = document.getElementById("info-panel")!.firstElementChild; // type-safety-ok: test DOM node mounted in beforeEach
+    expect(panelNode).not.toBeNull();
 
-    handle = createBlogApp(makeConfig());
+    handle = createBlogApp(config);
 
-    // Go back to home so afterRender→updateInfoPanel runs for the first time.
-    history.pushState({}, "", "/");
-    window.dispatchEvent(new PopStateEvent("popstate"));
+    await settle();
 
-    const app = document.getElementById("app")!;
-
-    // First home render: guard passes (buildTimeMetadata [] ≠ undefined), but
-    // the consumable marker is present → renderInfoPanel NOT called; marker consumed.
-    await vi.waitFor(() => {
-      expect(app.querySelector("#posts")).not.toBeNull();
-    });
-    await new Promise((r) => setTimeout(r, 0));
-
-    const callsAfterFirst = renderInfoPanel.mock.calls.length;
-    expect(callsAfterFirst).toBe(0);
-    // hydrateInfoPanel still runs (always called in updateInfoPanel).
-    expect(hydrateInfoPanel).toHaveBeenCalled();
-
-    // Force a second data change: clear lastRenderedPosts so the guard passes again.
-    handle!.forceInfoPanelRefresh();
-
-    // Navigate away and back to trigger a second afterRender→updateInfoPanel.
-    history.pushState({}, "", "/admin");
-    window.dispatchEvent(new PopStateEvent("popstate"));
-    await vi.waitFor(() => {
-      expect(app.innerHTML).toContain('data-test="admin"');
-    });
-
-    history.pushState({}, "", "/");
-    window.dispatchEvent(new PopStateEvent("popstate"));
-
-    await vi.waitFor(() => {
-      expect(app.querySelector("#posts")).not.toBeNull();
-    });
-    await new Promise((r) => setTimeout(r, 0));
-
-    // Second data change: marker already consumed → renderInfoPanel IS called.
-    expect(renderInfoPanel.mock.calls.length).toBeGreaterThan(callsAfterFirst);
+    // The prerendered nodes were REUSED, not torn down and replaced — hydrateRoot
+    // + the first-dispatch skip (guards on renderNav/renderPanel) preserved the DOM.
+    // If the guards are absent, React abandons hydration and client-renders, breaking
+    // these references.
+    expect(document.getElementById("nav")!.firstElementChild).toBe(navNode); // type-safety-ok: test DOM node mounted in beforeEach
+    expect(document.getElementById("info-panel")!.firstElementChild).toBe(panelNode); // type-safety-ok: test DOM node mounted in beforeEach
   });
 
-  // Case 4 — extraRoutes composition.
+  // Case 3 + TASK 1 — info-panel blogroll hydration runs, and
+  // forceInfoPanelRefresh() REMOUNTS the panel so the blogroll RE-fetches.
+  it("hydrates the blogroll, and forceInfoPanelRefresh re-fetches it via key remount", async () => {
+    history.pushState({}, "", "/");
+    const fetchLatestPost = vi.fn(() => Promise.resolve(LATEST));
+    const strategies = new Map<string, BlogRollStrategy>([["test-blog", { fetchLatestPost }]]);
+    const config = makeConfig({ blogRollEntries: BLOGROLL, strategies });
+    scaffoldDom(config, "/");
+
+    handle = createBlogApp(config);
+    const panel = document.getElementById("info-panel")!; // type-safety-ok: test DOM node mounted in beforeEach
+
+    // Blogroll effect ran: the stubbed latest post is written into the DOM.
+    await vi.waitFor(() => {
+      expect(panel.querySelector("#blogroll-latest-test-blog")?.textContent).toBe("Latest Article");
+    });
+    expect(fetchLatestPost).toHaveBeenCalledTimes(1);
+
+    // forceInfoPanelRefresh bumps the React key → remount → effect re-runs → re-fetch.
+    await act(async () => {
+      handle!.forceInfoPanelRefresh(); // type-safety-ok: handle assigned by createBlogApp in setup
+      await Promise.resolve();
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    await vi.waitFor(() => {
+      expect(fetchLatestPost).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  // Case 4 — extraRoutes composition: /about renders via dangerouslySetInnerHTML
+  // + deferred afterRender, then home navigation restores the feed.
   it("renders extraRoutes and navigates back to home", async () => {
     history.pushState({}, "", "/");
-    document.body.innerHTML = `
-      <div id="nav"></div>
-      <div class="page">
-        <header></header>
-        <div id="app"></div>
-        <aside id="info-panel"></aside>
-        <button id="panel-toggle"></button>
-      </div>
-    `;
+    const config = makeConfig({
+      buildTimeMetadata: [PUBLISHED_POST],
+      buildTimeContent: PUBLISHED_CONTENT,
+    });
+    scaffoldDom(config, "/");
 
     const aboutAfterRender = vi.fn();
-    handle = createBlogApp(
-      makeConfig({
-        extraRoutes: [
-          {
-            path: "/about",
-            render: () => '<div data-test="about">ABOUT</div>',
-            afterRender: aboutAfterRender,
-          },
-        ],
-      }),
-    );
+    config.extraRoutes = [
+      {
+        path: "/about",
+        render: () => '<div data-test="about">ABOUT</div>',
+        afterRender: aboutAfterRender,
+      },
+    ];
 
+    handle = createBlogApp(config);
     const app = document.getElementById("app")!;
+    await settle();
 
-    // Navigate to /about via the real router.
-    history.pushState({}, "", "/about");
-    window.dispatchEvent(new PopStateEvent("popstate"));
-
+    await navigate("/about");
     await vi.waitFor(() => {
       expect(app.innerHTML).toContain('data-test="about"');
+      expect(app.querySelector("#posts")).toBeNull();
     });
     expect(aboutAfterRender).toHaveBeenCalled();
-    expect(app.innerHTML).not.toContain('data-test="home"');
 
-    // Navigate back to home.
-    history.pushState({}, "", "/");
-    window.dispatchEvent(new PopStateEvent("popstate"));
-
+    await navigate("/");
     await vi.waitFor(() => {
       expect(app.querySelector("#posts")).not.toBeNull();
-      expect(app.innerHTML).toContain('data-test="home"');
     });
     expect(app.innerHTML).not.toContain('data-test="about"');
   });
 
-  // Case 5a — useScrollIndicator: false → initScrollIndicator NOT called.
-  it("does not call initScrollIndicator when useScrollIndicator is false", async () => {
-    // Navigate to /admin first so home route renders from loadPosts (not prerendered).
-    history.pushState({}, "", "/admin");
+  // Case 4c (#2003) — DEEP /about entry hydrates #app over the prerendered About
+  // body WITHOUT abandoning hydration (React #424 / CLS on the SEO surface). The
+  // driver hydrates #app with the sync extraRoute body wrapped in <div>
+  // (byte-matching prerenderStaticPage) and skips the first-dispatch
+  // appRoot.render. Mirrors Case 2b's node-identity guard, but for an extraRoute
+  // deep entry — the gap that shipped #424 on /about (e2e never loads /about, and
+  // Case 4 only exercises SPA nav, not a deep entry). Without the fix, #app
+  // hydrates the home feed over the About body and the first dispatch's
+  // appRoot.render tears the node down (client render), failing the toBe below.
+  it("reuses the prerendered #app node on direct /about entry (no CLS, no hydration error #424)", async () => {
+    history.pushState({}, "", "/about");
+    const aboutBody = '<h2>About</h2><p data-test="about-body">About content</p>';
+    const aboutPanel = '<section class="profile-card">ABOUT PANEL</section>';
+    const config = makeConfig({
+      buildTimeMetadata: [PUBLISHED_POST],
+      buildTimeContent: PUBLISHED_CONTENT,
+      infoPanelContentForPath: (p) => (p === "/about" ? aboutPanel : undefined),
+      extraRoutes: [{ path: "/about", render: () => aboutBody }],
+    });
+
+    // Scaffold the prerendered DOM exactly as a deep /about entry is served: #app
+    // is the extraRoute body wrapped in <div> (the element the driver hydrates
+    // with — createElement("div", { dangerouslySetInnerHTML })), #info-panel is
+    // InfoPanelRegion(aboutContent), and nav is BlogNav for the entry path.
+    const navHtml = renderToString(
+      createElement(BlogNav, {
+        links: config.navLinks,
+        showHomeLink: config.showHomeLink,
+        showAuth: false,
+        user: null,
+        onSignIn: () => {},
+        onSignOut: () => {},
+      }),
+    );
+    const appHtml = renderToString(
+      createElement("div", { dangerouslySetInnerHTML: { __html: aboutBody } }),
+    );
+    const panelHtml = renderToString(
+      createElement(InfoPanelRegion, {
+        data: {
+          linkSections: config.infoPanelLinkSections,
+          topPosts: config.buildTimeMetadata,
+          blogRoll: config.blogRollEntries,
+          rssFeedUrl: "/feed.xml",
+          opmlUrl: "/blogroll.opml",
+          postLinkPrefix: "/post/",
+          buildTimeFeeds: config.buildTimeFeeds,
+        },
+        strategies: config.strategies,
+        useScrollIndicator: config.useScrollIndicator,
+        aboutContent: aboutPanel,
+      }),
+    );
     document.body.innerHTML = `
-      <div id="nav"></div>
+      <div id="nav">${navHtml}</div>
       <div class="page">
         <header></header>
-        <div id="app"></div>
-        <aside id="info-panel"></aside>
+        <div id="app">${appHtml}</div>
+        <aside id="info-panel" class="sidebar">${panelHtml}</aside>
         <button id="panel-toggle"></button>
       </div>
     `;
 
-    handle = createBlogApp(makeConfig({ useScrollIndicator: false }));
+    // Capture the prerendered #app wrapper before createBlogApp runs.
+    const appNode = document.getElementById("app")!.firstElementChild; // type-safety-ok: test DOM node mounted in beforeEach
+    expect(appNode).not.toBeNull();
+    expect(appNode!.tagName).toBe("DIV"); // type-safety-ok: appNode asserted non-null above
 
-    // Navigate home so afterRender→updateInfoPanel runs.
+    handle = createBlogApp(config);
+    await settle();
+
+    // REUSED, not torn down — the deep /about entry hydrated the prerendered body
+    // in place (no abandoned hydration, no CLS). The About content survives.
+    expect(document.getElementById("app")!.firstElementChild).toBe(appNode); // type-safety-ok: test DOM node mounted in beforeEach
+    expect(document.querySelector('[data-test="about-body"]')).not.toBeNull();
+  });
+
+  // Case 4b — infoPanelContentForPath: navigating to /about routes the override
+  // panel HTML through InfoPanelRegion (aboutContent); navigating back to / shows
+  // the standard blogroll panel again. Starts at / so the scaffold's standard
+  // panel matches the initial hydrate (scaffoldDom has no aboutContent path).
+  it("routes infoPanelContentForPath through the info panel on /about and restores the standard panel on /", async () => {
     history.pushState({}, "", "/");
-    window.dispatchEvent(new PopStateEvent("popstate"));
+    const config = makeConfig({
+      buildTimeMetadata: [PUBLISHED_POST],
+      buildTimeContent: PUBLISHED_CONTENT,
+      blogRollEntries: BLOGROLL,
+      strategies: new Map([["test-blog", { fetchLatestPost: () => Promise.resolve(LATEST) }]]),
+      infoPanelContentForPath: (p) =>
+        p === "/about" ? '<section class="profile-card">ABOUT PANEL</section>' : undefined,
+    });
+    config.extraRoutes = [
+      { path: "/about", render: () => '<div data-test="about">ABOUT</div>' },
+    ];
+    scaffoldDom(config, "/");
 
+    handle = createBlogApp(config);
     const app = document.getElementById("app")!;
+    const panel = document.getElementById("info-panel")!; // type-safety-ok: test DOM node mounted in beforeEach
+    await settle();
+
+    // Standard panel is present on / (blogroll markup), no about override.
+    expect(panel.querySelector("li[data-blogroll-id]")).not.toBeNull();
+    expect(panel.innerHTML).not.toContain("ABOUT PANEL");
+
+    await navigate("/about");
+    await vi.waitFor(() => {
+      expect(app.innerHTML).toContain('data-test="about"');
+      expect(panel.innerHTML).toContain("ABOUT PANEL");
+      // The about override replaces the standard blogroll panel.
+      expect(panel.querySelector("li[data-blogroll-id]")).toBeNull();
+    });
+
+    await navigate("/");
     await vi.waitFor(() => {
       expect(app.querySelector("#posts")).not.toBeNull();
+      // Standard blogroll panel restored; the about override is gone.
+      expect(panel.querySelector("li[data-blogroll-id]")).not.toBeNull();
+      expect(panel.innerHTML).not.toContain("ABOUT PANEL");
     });
-    await new Promise((r) => setTimeout(r, 0));
+  });
 
-    // hydrateInfoPanel ran (updateInfoPanel ran), but scroll indicator was not set up.
-    expect(hydrateInfoPanel).toHaveBeenCalled();
+  // Case 5a — useScrollIndicator: false → initScrollIndicator NOT called.
+  it("does not call initScrollIndicator when useScrollIndicator is false", async () => {
+    history.pushState({}, "", "/");
+    const config = makeConfig({
+      blogRollEntries: BLOGROLL,
+      strategies: new Map([["test-blog", { fetchLatestPost: () => Promise.resolve(LATEST) }]]),
+      useScrollIndicator: false,
+    });
+    scaffoldDom(config, "/");
+
+    handle = createBlogApp(config);
+    const panel = document.getElementById("info-panel")!; // type-safety-ok: test DOM node mounted in beforeEach
+
+    await vi.waitFor(() => {
+      expect(panel.querySelector("#blogroll-latest-test-blog")?.textContent).toBe("Latest Article");
+    });
     expect(initScrollIndicator).not.toHaveBeenCalled();
   });
 
   // Case 5b — useScrollIndicator: true → initScrollIndicator IS called.
-  it("calls initScrollIndicator when useScrollIndicator is true and panel updates", async () => {
-    // Navigate to /admin first so home route renders from loadPosts (not prerendered).
-    history.pushState({}, "", "/admin");
-    document.body.innerHTML = `
-      <div id="nav"></div>
-      <div class="page">
-        <header></header>
-        <div id="app"></div>
-        <aside id="info-panel"></aside>
-        <button id="panel-toggle"></button>
-      </div>
-    `;
-
-    handle = createBlogApp(makeConfig({ useScrollIndicator: true }));
-
-    // Navigate home so afterRender→updateInfoPanel runs.
+  it("calls initScrollIndicator when useScrollIndicator is true", async () => {
     history.pushState({}, "", "/");
-    window.dispatchEvent(new PopStateEvent("popstate"));
-
-    const app = document.getElementById("app")!;
-    await vi.waitFor(() => {
-      expect(app.querySelector("#posts")).not.toBeNull();
+    const config = makeConfig({
+      blogRollEntries: BLOGROLL,
+      strategies: new Map([["test-blog", { fetchLatestPost: () => Promise.resolve(LATEST) }]]),
+      useScrollIndicator: true,
     });
-    await new Promise((r) => setTimeout(r, 0));
+    scaffoldDom(config, "/");
 
-    // updateInfoPanel ran AND useScrollIndicator is true → initScrollIndicator called.
-    expect(hydrateInfoPanel).toHaveBeenCalled();
+    handle = createBlogApp(config);
+    await settle();
+
     expect(initScrollIndicator).toHaveBeenCalled();
   });
 
-  // Case 6 — sign-in on home bypasses prerendered-DOM guard so admin drafts load.
+  // Case 6 — sign-in on home: getPosts IS called with the signed-in user, and
+  // the firestore (draft-inclusive) posts replace the prerendered markup.
   it("reloads posts on home after sign-in so admin drafts replace prerendered published markup", async () => {
     history.pushState({}, "", "/");
-    scaffoldDom();
+    const config = makeConfig({ buildTimeMetadata: [PUBLISHED_POST], buildTimeContent: PUBLISHED_CONTENT });
 
-    // Configure getPosts to return a recognizable draft post for the signed-in user.
-    const draftPost = { id: "draft-post", title: "Draft Post Title", published: false };
-    (getPosts as ReturnType<typeof vi.fn>).mockResolvedValue({
-      posts: [draftPost],
-      skippedCount: 0,
-    });
-    // renderHomeHtml spy already returns '<div id="posts" data-test="home">HOME</div>';
-    // use a distinguishable value to confirm it ran after sign-in.
-    renderHomeHtml.mockReturnValue('<div id="posts" data-test="home">DRAFT HOME</div>');
-
-    // Capture the auth callback instead of dropping it.
     let authCallback: ((user: { uid: string } | null) => void) | undefined;
-    const config = makeConfig({
-      firebase: {
-        db: { type: "mock-firestore" } as never,
-        namespace: "test/env" as never,
-        trackPageView: vi.fn(),
-        initAppCheck: vi.fn(() => Promise.resolve()),
-        signIn: vi.fn(() => Promise.resolve()),
-        signOut: vi.fn(() => Promise.resolve()),
-        onAuthStateChanged: vi.fn((cb) => {
-          authCallback = cb;
-          return Promise.resolve();
-        }),
-      },
+    config.firebase.onAuthStateChanged = vi.fn((cb) => {
+      authCallback = cb;
+      return Promise.resolve();
     });
 
+    const draftPost: PostMeta = {
+      id: "draft-post",
+      title: "Draft Post Title",
+      published: false,
+      publishedAt: null,
+      filename: "draft-post.md",
+    };
+    (getPosts as ReturnType<typeof vi.fn>).mockResolvedValue({ posts: [draftPost], skippedCount: 0 }); // type-safety-ok: vitest mock cast
+
+    scaffoldDom(config, "/");
     handle = createBlogApp(config);
     const app = document.getElementById("app")!;
 
-    // Wait for initial route to settle with prerendered #posts intact (signed out).
     await vi.waitFor(() => {
-      expect(app.querySelector("#posts")).not.toBeNull();
+      expect(app.querySelector("#post-first-post")).not.toBeNull();
     });
-    await new Promise((r) => setTimeout(r, 0));
+    await settle();
+    expect(getPosts).not.toHaveBeenCalled(); // signed out
 
-    // Signed out: prerendered DOM preserved, loadPosts/renderHomeHtml not called.
-    const callsBeforeSignIn = renderHomeHtml.mock.calls.length;
-    expect(callsBeforeSignIn).toBe(0);
-
-    // Sign in — fire the captured auth callback with a user object.
+    // Sign in — fire the captured auth callback with a user.
     const signedInUser = { uid: "admin-uid" };
-    authCallback!(signedInUser as never);
-
-    // After sign-in, refreshAfterAuthChange calls router.navigate(), which must
-    // call loadPosts() even though #posts is still live, because currentUser !== null.
-    await vi.waitFor(() => {
-      expect(renderHomeHtml.mock.calls.length).toBeGreaterThan(callsBeforeSignIn);
+    await act(async () => {
+      authCallback!(signedInUser as never); // type-safety-ok: captured auth callback + test user fixture
+      await Promise.resolve();
+      await new Promise((r) => setTimeout(r, 0));
     });
 
-    // getPosts was called with the signed-in user — draft posts were fetched.
-    expect(getPosts).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.anything(),
-      signedInUser,
-    );
-
-    // The home DOM was rebuilt (not the prerendered markup, but the post-sign-in render).
+    // getPosts called with the signed-in user; draft post now in the feed.
+    expect(getPosts).toHaveBeenCalledWith(expect.anything(), expect.anything(), signedInUser);
     await vi.waitFor(() => {
-      expect(app.querySelector("#posts")).not.toBeNull();
+      expect(app.querySelector("#post-draft-post")).not.toBeNull();
     });
   });
 
-  // Case 8 — #1715: onAuthStateChanged unsubscribe is called on destroy().
-  // Production-representative: createAppContext returns Promise<() => void>.
+  // Case 7 — #1409: across / → /post/x → / the home feed stays rendered AND the
+  // #posts node is never torn down. In the React model, reconciliation keeps the
+  // same HomeRegion mounted (#posts always rendered) across these navigations, so
+  // the node reference is stable — proving the repeat-home navigation does not
+  // rebuild/replace the feed (the regression #1409 guarded against). We capture
+  // #posts after settle() (the current, hydrated node) and assert the SAME
+  // reference survives both navigations.
+  it("keeps the same #posts node across Post and repeat-Home navigations (#1409)", async () => {
+    history.pushState({}, "", "/");
+    const config = makeConfig({ buildTimeMetadata: [PUBLISHED_POST], buildTimeContent: PUBLISHED_CONTENT });
+    scaffoldDom(config, "/");
+
+    handle = createBlogApp(config);
+    const app = document.getElementById("app")!; // type-safety-ok: test DOM node mounted in beforeEach
+    await settle();
+
+    const postsNode = app.querySelector("#posts");
+    expect(postsNode).not.toBeNull();
+
+    await navigate("/post/first-post");
+    expect(app.querySelector("#posts")).toBe(postsNode);
+    expect(app.querySelector("#post-first-post")).not.toBeNull();
+
+    await navigate("/");
+    // Repeat-home navigation reconciles the same node — no teardown (#1409).
+    expect(app.querySelector("#posts")).toBe(postsNode);
+    expect(app.querySelector("#post-first-post")).not.toBeNull();
+  });
+
+  // Case 8 — #1715: onAuthStateChanged unsubscribe (returned as Promise<() => void>)
+  // is called on destroy().
   it("calls the onAuthStateChanged unsubscribe returned as Promise<() => void> on destroy() (#1715)", async () => {
     history.pushState({}, "", "/");
-    scaffoldDom();
-
+    const config = makeConfig();
     const unsubscribeSpy = vi.fn();
-    const config = makeConfig({
-      firebase: {
-        db: { type: "mock-firestore" } as never,
-        namespace: "test/env" as never,
-        trackPageView: vi.fn(),
-        initAppCheck: vi.fn(() => Promise.resolve()),
-        signIn: vi.fn(() => Promise.resolve()),
-        signOut: vi.fn(() => Promise.resolve()),
-        // Production-representative: createAppContext wraps Firebase's
-        // onAuthStateChanged and returns Promise<() => void>.
-        onAuthStateChanged: vi.fn(() => Promise.resolve(unsubscribeSpy)),
-      },
-    });
+    config.firebase.onAuthStateChanged = vi.fn(() => Promise.resolve(unsubscribeSpy));
+    scaffoldDom(config, "/");
 
     handle = createBlogApp(config);
 
-    // setTimeout(r, 0) is a macrotask; all pending Promise .then() callbacks
-    // (including .then(captureUnsub)) run before it, so authUnsub is stored.
+    // Macrotask: all pending .then(captureUnsub) callbacks run first → authUnsub stored.
     await new Promise((r) => setTimeout(r, 0));
 
     handle.destroy();
+    handle = undefined;
 
     expect(unsubscribeSpy).toHaveBeenCalledTimes(1);
   });
@@ -456,115 +627,169 @@ describe("createBlogApp routing and panel behavior", () => {
   // Promise resolves; captureUnsub must call unsub() immediately on late resolution.
   it("calls the onAuthStateChanged unsubscribe even when destroy() runs before the Promise resolves (#1715)", async () => {
     history.pushState({}, "", "/");
-    scaffoldDom();
-
+    const config = makeConfig();
     const unsubscribeSpy = vi.fn();
     let resolveUnsub!: (unsub: () => void) => void;
-    const controlledPromise = new Promise<() => void>((resolve) => {
-      resolveUnsub = resolve;
-    });
-
-    const config = makeConfig({
-      firebase: {
-        db: { type: "mock-firestore" } as never,
-        namespace: "test/env" as never,
-        trackPageView: vi.fn(),
-        initAppCheck: vi.fn(() => Promise.resolve()),
-        signIn: vi.fn(() => Promise.resolve()),
-        signOut: vi.fn(() => Promise.resolve()),
-        onAuthStateChanged: vi.fn(() => controlledPromise),
-      },
-    });
+    config.firebase.onAuthStateChanged = vi.fn(
+      () => new Promise<() => void>((resolve) => (resolveUnsub = resolve)),
+    );
+    scaffoldDom(config, "/");
 
     handle = createBlogApp(config);
 
-    // destroy() before the promise resolves — sets authDestroyed, authUnsub is still undefined.
-    handle.destroy();
+    handle.destroy(); // sets authDestroyed; authUnsub still undefined
+    handle = undefined;
 
-    // Now resolve with the spy — captureUnsub sees authDestroyed and calls unsub() immediately.
-    resolveUnsub(unsubscribeSpy);
+    resolveUnsub(unsubscribeSpy); // late resolution → captureUnsub calls it immediately
     await new Promise((r) => setTimeout(r, 0));
 
     expect(unsubscribeSpy).toHaveBeenCalledTimes(1);
   });
 
-  // Case 10 — #1715: synchronous-function case: onAuthStateChanged returns
-  // the unsubscribe directly (not a promise).
+  // Case 10 — #1715: synchronous-function case: onAuthStateChanged returns the
+  // unsubscribe directly (not a promise).
   it("calls the onAuthStateChanged unsubscribe returned synchronously on destroy() (#1715)", () => {
     history.pushState({}, "", "/");
-    scaffoldDom();
-
+    const config = makeConfig();
     const unsubscribeSpy = vi.fn();
-    const config = makeConfig({
-      firebase: {
-        db: { type: "mock-firestore" } as never,
-        namespace: "test/env" as never,
-        trackPageView: vi.fn(),
-        initAppCheck: vi.fn(() => Promise.resolve()),
-        signIn: vi.fn(() => Promise.resolve()),
-        signOut: vi.fn(() => Promise.resolve()),
-        onAuthStateChanged: vi.fn(() => unsubscribeSpy),
-      },
-    });
+    config.firebase.onAuthStateChanged = vi.fn(() => unsubscribeSpy);
+    scaffoldDom(config, "/");
 
     handle = createBlogApp(config);
     handle.destroy();
+    handle = undefined;
 
     expect(unsubscribeSpy).toHaveBeenCalledTimes(1);
   });
 
-  // Case 7 — #1409: the live-DOM skip fires whenever #posts is live, not only
-  // on the initial prerender. After a loadPosts() run renders a fresh #posts,
-  // repeat navigations to "/" and "/post/..." both return null from render and
-  // leave #posts untouched. Ported from the retired fellspiral per-app test
-  // (#1667) — the behavior now lives in createBlogApp's home route.
-  it("keeps skipping while #posts is live from loadPosts across Post and repeat-Home navigations (#1409)", async () => {
-    // 1. Enter via /admin so the first Home nav finds no live #posts and runs
-    //    loadPosts → renderHomeHtml. Mirror the #1285 /admin setup (no prerender).
+  // Case A — router.destroy() via handle.destroy() removes the popstate listener.
+  // After destroy, a popstate fires no dispatch — trackPageView (which runs
+  // unconditionally at the top of every dispatch) is not called. Drop
+  // teardowns.push(() => router.destroy()) and this fails.
+  it("router popstate listener removed by destroy() (no dispatch after teardown)", async () => {
+    history.pushState({}, "", "/");
+    const config = makeConfig({ buildTimeMetadata: [PUBLISHED_POST], buildTimeContent: PUBLISHED_CONTENT });
+    scaffoldDom(config, "/");
+
+    handle = createBlogApp(config);
+    await settle();
+
+    handle.destroy();
+    handle = undefined;
+
+    const trackPageView = config.firebase.trackPageView as ReturnType<typeof vi.fn>; // type-safety-ok: vitest mock cast
+    trackPageView.mockClear();
+
+    history.pushState({}, "", "/post/first-post");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await new Promise((r) => setTimeout(r, 0));
+
+    // No dispatch ran — the router's popstate listener was torn down.
+    expect(trackPageView).not.toHaveBeenCalled();
+  });
+
+  // Case B — headerObserver.disconnect() called by destroy().
+  it("headerObserver.disconnect() called by destroy()", () => {
+    const disconnectSpy = vi.spyOn(ResizeObserverStub.prototype, "disconnect");
+    const config = makeConfig();
+    scaffoldDom(config, "/");
+
+    handle = createBlogApp(config);
+    handle.destroy();
+    handle = undefined;
+
+    expect(disconnectSpy).toHaveBeenCalledTimes(1);
+    disconnectSpy.mockRestore();
+  });
+
+  // Case C — same-uid guard: firing the auth callback twice with the same uid
+  // calls getPosts once (sign-in triggers refreshAfterAuthChange → loadPosts).
+  it("same-UID guard: onAuthStateChanged twice with same UID calls getPosts once", async () => {
+    history.pushState({}, "", "/");
+    const config = makeConfig({ buildTimeMetadata: [PUBLISHED_POST], buildTimeContent: PUBLISHED_CONTENT });
+
+    let authCallback: ((user: { uid: string } | null) => void) | undefined;
+    config.firebase.onAuthStateChanged = vi.fn((cb) => {
+      authCallback = cb;
+      return Promise.resolve();
+    });
+    scaffoldDom(config, "/");
+
+    handle = createBlogApp(config);
+    await settle();
+    (getPosts as ReturnType<typeof vi.fn>).mockClear();
+
+    // First fire — new uid → refreshAfterAuthChange → getPosts once.
+    await act(async () => {
+      authCallback!({ uid: "u1" } as never); // type-safety-ok: captured auth callback + test user fixture
+      await Promise.resolve();
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    await vi.waitFor(() => expect(getPosts).toHaveBeenCalledTimes(1));
+
+    // Second fire — same uid → guard early-returns → no second getPosts.
+    await act(async () => {
+      authCallback!({ uid: "u1" } as never); // type-safety-ok: captured auth callback + test user fixture
+      await Promise.resolve();
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(getPosts).toHaveBeenCalledTimes(1);
+  });
+
+  // Nav island — #sign-in click invokes firebase.signIn (signed-out /admin).
+  it("renders the React nav and wires #sign-in to firebase.signIn on /admin", async () => {
     history.pushState({}, "", "/admin");
-    document.body.innerHTML = `
-      <div id="nav"></div>
-      <div class="page">
-        <header></header>
-        <div id="app"><div id="posts" data-prerendered="true">PRERENDERED HOME</div></div>
-        <aside id="info-panel"></aside>
-        <button id="panel-toggle"></button>
-      </div>
-    `;
+    const signIn = vi.fn(() => Promise.resolve());
+    const config = makeConfig({ navLinks: [{ href: "/", label: "Home" }] });
+    config.firebase.signIn = signIn;
+    scaffoldDom(config, "/admin");
 
-    handle = createBlogApp(makeConfig());
-    const app = document.getElementById("app")!;
+    handle = createBlogApp(config);
+    const nav = document.getElementById("nav")!;
 
-    // Admin route renders — the prerendered #posts is replaced by admin markup.
+    // settle() flushes the async client-render so the live #sign-in carries
+    // React's delegated click handler (the prerendered markup alone does not).
+    await settle();
     await vi.waitFor(() => {
-      expect(app.querySelector("#posts")).toBeNull();
+      expect(nav.querySelector(".cs-nav")).not.toBeNull();
+      expect(nav.querySelector('a[href="/"]')).not.toBeNull();
+      expect(nav.querySelector("#sign-in")).not.toBeNull();
     });
 
-    // 2. Navigate Home via the real router's popstate listener. With no live
-    //    #posts, the home render runs loadPosts → renderHomeHtml exactly once.
-    history.pushState({}, "", "/");
-    window.dispatchEvent(new PopStateEvent("popstate"));
-    await vi.waitFor(() => {
-      expect(app.querySelector("#posts")).not.toBeNull();
-      expect(app.innerHTML).toContain('data-test="home"');
+    nav.querySelector<HTMLElement>("#sign-in")!.click();
+    expect(signIn).toHaveBeenCalledTimes(1);
+  });
+
+  // Nav island — #sign-out click invokes firebase.signOut for a signed-in admin.
+  it("wires #sign-out to firebase.signOut once a user is signed in on /admin", async () => {
+    history.pushState({}, "", "/admin");
+    const signOut = vi.fn(() => Promise.resolve());
+    let authCallback: ((user: { uid: string } | null) => void) | undefined;
+    const config = makeConfig();
+    config.firebase.signOut = signOut;
+    config.firebase.onAuthStateChanged = vi.fn((cb) => {
+      authCallback = cb;
+      return Promise.resolve();
     });
-    expect(renderHomeHtml).toHaveBeenCalledTimes(1);
+    scaffoldDom(config, "/admin");
 
-    // 3. Navigate to a post. The post route shares the home regex
-    //    (/^\/(?:post\/.*)?$/); render returns null because #posts is live
-    //    (the loadPosts-origin live-DOM skip — the new coverage).
-    history.pushState({}, "", "/post/example");
-    window.dispatchEvent(new PopStateEvent("popstate"));
-    await new Promise((r) => setTimeout(r, 0));
-    expect(app.querySelector("#posts")).not.toBeNull();
-    expect(renderHomeHtml).toHaveBeenCalledTimes(1);
+    handle = createBlogApp(config);
+    const nav = document.getElementById("nav")!;
+    await settle();
+    await vi.waitFor(() => expect(nav.querySelector("#sign-in")).not.toBeNull());
 
-    // 4. Navigate Home again — also skips because #posts is still live. The
-    //    skip is keyed on the live DOM, not a one-shot flag.
-    history.pushState({}, "", "/");
-    window.dispatchEvent(new PopStateEvent("popstate"));
-    await new Promise((r) => setTimeout(r, 0));
-    expect(app.querySelector("#posts")).not.toBeNull();
-    expect(renderHomeHtml).toHaveBeenCalledTimes(1);
+    // Sign in — nav re-renders with the user (#sign-out replaces #sign-in).
+    await act(async () => {
+      authCallback!({ uid: "admin-uid" } as never); // type-safety-ok: captured auth callback + test user fixture
+      await Promise.resolve();
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    await vi.waitFor(() => {
+      expect(nav.querySelector("#sign-out")).not.toBeNull();
+      expect(nav.querySelector("#sign-in")).toBeNull();
+    });
+
+    nav.querySelector<HTMLElement>("#sign-out")!.click();
+    expect(signOut).toHaveBeenCalledTimes(1);
   });
 });
