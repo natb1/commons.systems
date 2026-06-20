@@ -136,6 +136,20 @@ function sortBlogrollByDate(panel: HTMLElement): void {
  *
  * PURE and fully prop-driven: no app state and no router hooks. Refs are used
  * solely for hydration mechanics (mount/cancel guards), never for shared state.
+ *
+ * panelKey REMOUNT INVARIANT (load-bearing): the blogroll effect below re-sorts
+ * the React-rendered <li> nodes imperatively (sortBlogrollByDate's appendChild),
+ * mutating DOM this component's React root owns. That is only safe because
+ * callers bump `panelKey` whenever the blogroll data (blogRoll / strategies)
+ * changes, mounting a FRESH React root that side-steps stale-child
+ * reconciliation. A same-key re-render with updated strategies instead skips
+ * root teardown and RECONCILES the existing tree, letting a later reconcile pass
+ * disagree with — and fight — the imperative reorder. `forceInfoPanelRefresh`
+ * (create-blog-app.ts) is the required mechanism: it bumps `panelKey` before
+ * re-rendering. Any call site that changes blogroll data via a bare same-key
+ * re-render, bypassing forceInfoPanelRefresh, is incorrect. The long-term fix
+ * that removes this invariant by driving order through React state is tracked in
+ * #2173.
  */
 export function InfoPanelRegion({
   data,
