@@ -22,10 +22,11 @@
 #   data-exposure        (surface==code AND app_or_rules==true)
 #   firebase             (surface==code AND app_or_rules==true)
 #   codeql               (surface==code)
+#   erosion              (surface==code)
 #   npm                  (deps==true)
 #
 # surface empty/docs => exactly code-review and review (zero security finders).
-# surface==code       => 4 always-on security finders + codeql.
+# surface==code       => 4 always-on security finders + codeql + erosion.
 # app_or_rules==true  => additionally auth, data-exposure, firebase (7 total).
 # deps==true          => additionally npm (independent of surface).
 #
@@ -72,6 +73,11 @@ if [[ "$surface" == "code" ]]; then
   fi
 
   echo "codeql"
+
+  # Net-erosion structural metric (prescanned, issue #2064): like codeql/npm it
+  # is NOT a JS agent (it arrives via prescanned_findings), but it belongs in this
+  # normative finder-set spec, listed alongside codeql under the code surface.
+  echo "erosion"
 fi
 
 # Dependency audit finder: gated on deps flag, independent of surface.

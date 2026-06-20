@@ -42,10 +42,11 @@ export function PostArticle({ post, postLinkPrefix, content }: PostArticleProps)
         <div
           id={`post-content-${post.id}`}
           data-hydrated=""
+          suppressHydrationWarning
           dangerouslySetInnerHTML={{ __html: content.html }}
         />
       ) : (
-        <div id={`post-content-${post.id}`}>
+        <div id={`post-content-${post.id}`} suppressHydrationWarning>
           <p>Loading...</p>
         </div>
       )}
