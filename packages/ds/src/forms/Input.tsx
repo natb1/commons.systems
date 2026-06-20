@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { forwardRef, useId } from "react";
 import type { CSSProperties, InputHTMLAttributes, ReactNode } from "react";
 
 export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
@@ -8,7 +8,10 @@ export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   wrapStyle?: CSSProperties;
 }
 
-export function Input(props: InputProps) {
+export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
+  props,
+  ref,
+) {
   const {
     label,
     helper,
@@ -41,6 +44,7 @@ export function Input(props: InputProps) {
   const input = (
     <input
       {...rest}
+      ref={ref}
       id={id}
       aria-invalid={!!error || undefined}
       aria-describedby={hasDescription ? descId : undefined}
@@ -87,4 +91,4 @@ export function Input(props: InputProps) {
       ) : null}
     </div>
   );
-}
+});

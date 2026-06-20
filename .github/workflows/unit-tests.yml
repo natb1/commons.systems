@@ -11,6 +11,8 @@ permissions:
 jobs:
   unit-tests:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
@@ -36,6 +38,8 @@ jobs:
 
   rules-test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
@@ -86,6 +90,8 @@ jobs:
 
   lint:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
@@ -109,8 +115,30 @@ jobs:
       - name: Run lint
         run: .claude/skills/dispatch-propagate/scripts/run-lint.sh
 
+  dead-code:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          fetch-depth: 0
+      - name: Detect changed file categories
+        id: changes
+        run: .claude/skills/dispatch-propagate/scripts/detect-changes.sh
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: steps.changes.outputs.deadcode == 'true'
+        with:
+          node-version-file: .node-version
+          cache: 'npm'
+      - name: Run dead-code check
+        if: steps.changes.outputs.deadcode == 'true'
+        run: .claude/skills/dispatch-propagate/scripts/run-dead-code.sh
+
   typecheck:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
@@ -124,19 +152,42 @@ jobs:
 
   hook-tests:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
       - name: Run approve-workflow-commands hook tests
         run: .claude/hooks/test-approve-workflow-commands.sh
       - name: Run dispatch script tests
         run: .claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh
+      - name: Run write-phase-log tests
+        run: .claude/skills/dispatch-propagate/scripts/test-write-phase-log.sh
+      - name: Run prose-rule lint tests
+        run: .claude/skills/dispatch-propagate/scripts/test-lint-prose-rules.sh
       - name: Run worktree-remove hook tests
         run: .claude/hooks/test-worktree-remove.sh
       - name: Run statusline hook tests
         run: .claude/hooks/test-statusline.sh
+      - name: Run type-safety escape-hatch sensor tests
+        run: .github/scripts/test-check-type-safety-escapes.sh
+      - name: Run test-integrity script tests
+        run: .github/scripts/test-check-test-integrity.sh
+
+  test-integrity:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          fetch-depth: 0
+      - name: Check for test deletions / disabling skips
+        run: .github/scripts/check-test-integrity.sh
 
   playwright-version-sync:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
@@ -159,8 +210,21 @@ jobs:
         if: steps.changes.outputs.nix == 'true' || steps.changes.outputs.playwright == 'true'
         run: nix develop --command .github/scripts/check-playwright-version-sync.sh
 
+  type-safety-sensor:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          fetch-depth: 0
+      - name: Flag net-new type-safety escape hatches
+        run: .github/scripts/check-type-safety-escapes.sh
+
   go-tests:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
@@ -194,6 +258,13 @@ jobs:
 
   darwin-build:
     runs-on: macos-14
+    permissions:
+      contents: read
+    # No CI runtime baseline yet: the Build step has executed 0 times (it is
+    # gated on nix-file changes and every run so far has skipped it). 30 min is
+    # a conservative runaway guard vs GitHub's 6h default; tighten to ~2x the
+    # observed p95 once 3-5 real warm-cache runs accumulate. (#1932, 2026-06-19)
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:

@@ -62,6 +62,9 @@ function makeContainer(txns?: SerializedChartTransaction[]): HTMLElement {
 
   const container = document.createElement("div");
   container.style.setProperty("--fg", "#e0e0e0");
+  // Sankey series colors resolve --chart-1..6 at render time (packages/ds/tokens/colors.css).
+  const chartTokens = ["#4d6f8f", "#c98a3c", "#a35d5d", "#7a8c5a", "#b08a4f", "#5f8a8a"];
+  chartTokens.forEach((v, i) => container.style.setProperty(`--chart-${i + 1}`, v));
   if (txns !== undefined) {
     const script = document.createElement("script");
     script.type = "application/json";

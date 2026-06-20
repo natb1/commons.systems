@@ -1,21 +1,8 @@
 import "fake-indexeddb/auto";
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { timestampMockFactory, makeParsedData } from "./helpers";
 
-vi.mock("firebase/firestore", () => {
-  class MockTimestamp {
-    constructor(
-      public readonly seconds: number,
-      public readonly nanoseconds: number,
-    ) {}
-    toMillis() {
-      return this.seconds * 1000 + this.nanoseconds / 1e6;
-    }
-    static fromMillis(ms: number) {
-      return new MockTimestamp(Math.floor(ms / 1000), (ms % 1000) * 1e6);
-    }
-  }
-  return { Timestamp: MockTimestamp };
-});
+vi.mock("firebase/firestore", () => timestampMockFactory());
 
 vi.mock("../src/firestore.js", () => ({
   getTransactions: vi.fn(),
@@ -39,7 +26,7 @@ import { IdbDataSource, SeedDataSource, FileSyncingDataSource } from "../src/dat
 import type { DataSource } from "../src/data-source";
 import type { TransactionId, BudgetId, BudgetPeriodId, RuleId } from "../src/firestore";
 import type { BudgetOverride } from "../src/entities/budget";
-import { makeParsedData } from "./helpers";
+import { DataIntegrityError } from "../src/entities/_helpers";
 
 beforeEach(async () => {
   await closeDb();
@@ -144,6 +131,17 @@ describe("IdbDataSource", () => {
     await storeParsedData(data);
     const ds = new IdbDataSource();
     await expect(ds.getTransactions()).rejects.toThrow(RangeError);
+  });
+
+  it("getBudgets throws for a pre-existing out-of-order overrides record", async () => {
+    const data = makeParsedData();
+    data.budgets[0].overrides = [
+      { dateMs: 2000, balance: 100 },
+      { dateMs: 1000, balance: 200 }, // earlier date — simulates a row written before PR #1686
+    ];
+    await storeParsedData(data);
+    const ds = new IdbDataSource();
+    await expect(ds.getBudgets()).rejects.toThrow(DataIntegrityError);
   });
 
   it("adjustBudgetPeriodTotal does read-modify-write correctly", async () => {
