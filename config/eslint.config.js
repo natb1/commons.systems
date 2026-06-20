@@ -25,8 +25,14 @@ const appPackages = workspaces
   })
   .filter((name) => name && !name.startsWith("@commons-systems/"));
 
+// Match the bare package specifier `<app>` and its subpaths `<app>/...`, but
+// never a relative import (`./x/<app>`, `../<app>`). A `group` glob uses
+// gitignore-style matching, where a bare segment matches at any depth — so
+// `budget` would wrongly flag `./entities/budget`. An anchored `regex` matches
+// only specifiers that *start* with the app name, which a relative path never
+// does (it starts with `.`). RegExp-escape the name so a `-` etc. stays literal.
 const appImportPatterns = appPackages.map((app) => ({
-  group: [app, `${app}/**`],
+  regex: `^${app.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(/|$)`,
   message:
     `Layering violation: '${app}' is a top-level app package and must not be ` +
     "imported by libraries, utils, or @commons-systems/ds. Apps are " +
