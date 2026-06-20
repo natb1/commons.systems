@@ -32085,8 +32085,10 @@ echo "=== dispatch-launch-worker ==="
 #   dispatch-apply-office-hours — logs argv to apply-oh-argv, exits 0.
 #   git                     — logs argv to git-argv (PUSH-STRANDED `git -C … push`)
 #                             and exits 0.
-# dispatch-phase-model is the REAL script (copied in), so the model-derivation
-# assertions exercise the actual qa/review → claude-sonnet-4-6 policy.
+# dispatch-phase-model and dispatch-phase-effort are the REAL scripts (copied
+# in), so the compute-derivation assertions exercise the actual per-phase
+# policy: qa/review/fix-checks/fix-conflicts → claude-sonnet-4-6 (no effort);
+# implement → effort medium; plan → effort high (#2042).
 #
 # The reservation ledger points at $LW_DIR/reservations via DISPATCH_RESERVATION_DIR
 # (so reservation_clear/_dir never need a git repo). Each mechanical-path test
@@ -32108,10 +32110,12 @@ lw_setup() {
   # and lib-claude-agents.sh from the same dir.
   cp "$SCRIPT_DIR/dispatch-launch-worker" "$LW_DIR/dispatch-launch-worker"
   cp "$SCRIPT_DIR/dispatch-phase-model" "$LW_DIR/dispatch-phase-model"
+  cp "$SCRIPT_DIR/dispatch-phase-effort" "$LW_DIR/dispatch-phase-effort"
   cp "$SCRIPT_DIR/lib-reservation-ledger.sh" "$LW_DIR/lib-reservation-ledger.sh"
   cp "$SCRIPT_DIR/lib.sh" "$LW_DIR/lib.sh"
   cp "$SCRIPT_DIR/lib-claude-agents.sh" "$LW_DIR/lib-claude-agents.sh"
-  chmod +x "$LW_DIR/dispatch-launch-worker" "$LW_DIR/dispatch-phase-model"
+  chmod +x "$LW_DIR/dispatch-launch-worker" "$LW_DIR/dispatch-phase-model" \
+    "$LW_DIR/dispatch-phase-effort"
 
   # The target worktree (arg 2): an existing dir with a safe-charset basename.
   LW_WT="$LW_DIR/839-test-launch"
@@ -32208,10 +32212,11 @@ lw_run() {
   set -e
 }
 
-# 1. INVOKE /implement → exec dispatch-spawn-job with the unmapped-phase flags
-# (no --model), reservation RETAINED, no park, no tick (the exec path hands the
-# heartbeat to the phase skill's Stop hook).
-echo "Test: INVOKE /implement → spawn-job exec, reservation retained, no tick"
+# 1. INVOKE /implement → exec dispatch-spawn-job with --effort medium and NO
+# --model (implement inherits Opus but routes to medium reasoning effort, #2042),
+# reservation RETAINED, no park, no tick (the exec path hands the heartbeat to
+# the phase skill's Stop hook).
+echo "Test: INVOKE /implement → spawn-job exec with --effort medium, reservation retained, no tick"
 lw_setup
 lw_write_marker
 lw_run "INVOKE /implement"
@@ -32226,8 +32231,8 @@ assert_eq "launch INVOKE /implement: route invoked from worktree cwd" \
 sj=$(cat "$LW_DIR/spawn-job-argv" 2>/dev/null || echo "")
 assert_eq "launch INVOKE /implement: spawn-job logged once" "1" \
   "$([[ -f "$LW_DIR/spawn-job-argv" ]] && wc -l < "$LW_DIR/spawn-job-argv" | tr -d ' ' || echo 0)"
-assert_eq "launch INVOKE /implement: spawn-job argv" \
-  "--no-verify --park-issue 839 --name $LW_WT_BASENAME --cwd $LW_WT /implement 839 $LW_WT" "$sj"
+assert_eq "launch INVOKE /implement: spawn-job argv (with --effort medium)" \
+  "--no-verify --park-issue 839 --name $LW_WT_BASENAME --cwd $LW_WT --effort medium /implement 839 $LW_WT" "$sj"
 assert_eq "launch INVOKE /implement: no --model in argv" "no" \
   "$([[ "$sj" == *"--model"* ]] && echo yes || echo no)"
 assert_eq "launch INVOKE /implement: reservation RETAINED" "yes" "$(lw_marker_exists)"
@@ -32237,10 +32242,10 @@ assert_eq "launch INVOKE /implement: no spawn-tick (exec path)" "no" \
   "$([[ -f "$LW_DIR/spawn-tick.log" ]] && echo yes || echo no)"
 lw_teardown
 
-# 1b. INVOKE /fix-conflicts → exec dispatch-spawn-job with the unmapped-phase
-# flags (no --model — conflict resolution inherits Opus), reservation RETAINED,
-# no tick. Guards against an inadvertent future model-mapping for this directive.
-echo "Test: INVOKE /fix-conflicts → spawn-job exec, no --model, reservation retained, no tick"
+# 1b. INVOKE /fix-conflicts → exec dispatch-spawn-job with --model
+# claude-sonnet-4-6 and NO --effort (mechanical patch work routes to Sonnet,
+# #2042), reservation RETAINED, no tick.
+echo "Test: INVOKE /fix-conflicts → spawn-job exec with --model claude-sonnet-4-6, no --effort, reservation retained, no tick"
 lw_setup
 lw_write_marker
 lw_run "INVOKE /fix-conflicts"
@@ -32248,14 +32253,36 @@ assert_eq "launch INVOKE /fix-conflicts: exit 0" "0" "$LW_RC"
 sj=$(cat "$LW_DIR/spawn-job-argv" 2>/dev/null || echo "")
 assert_eq "launch INVOKE /fix-conflicts: spawn-job logged once" "1" \
   "$([[ -f "$LW_DIR/spawn-job-argv" ]] && wc -l < "$LW_DIR/spawn-job-argv" | tr -d ' ' || echo 0)"
-assert_eq "launch INVOKE /fix-conflicts: spawn-job argv" \
-  "--no-verify --park-issue 839 --name $LW_WT_BASENAME --cwd $LW_WT /fix-conflicts 839 $LW_WT" "$sj"
-assert_eq "launch INVOKE /fix-conflicts: no --model in argv" "no" \
-  "$([[ "$sj" == *"--model"* ]] && echo yes || echo no)"
+assert_eq "launch INVOKE /fix-conflicts: spawn-job argv (with model)" \
+  "--no-verify --park-issue 839 --name $LW_WT_BASENAME --cwd $LW_WT --model claude-sonnet-4-6 /fix-conflicts 839 $LW_WT" "$sj"
+assert_eq "launch INVOKE /fix-conflicts: no --effort in argv" "no" \
+  "$([[ "$sj" == *"--effort"* ]] && echo yes || echo no)"
 assert_eq "launch INVOKE /fix-conflicts: reservation RETAINED" "yes" "$(lw_marker_exists)"
 assert_eq "launch INVOKE /fix-conflicts: no apply-office-hours" "no" \
   "$([[ -f "$LW_DIR/apply-oh-argv" ]] && echo yes || echo no)"
 assert_eq "launch INVOKE /fix-conflicts: no spawn-tick (exec path)" "no" \
+  "$([[ -f "$LW_DIR/spawn-tick.log" ]] && echo yes || echo no)"
+lw_teardown
+
+# 1c. INVOKE /fix-checks → exec dispatch-spawn-job with --model claude-sonnet-4-6
+# and NO --effort (mechanical patch work routes to Sonnet, #2042), reservation
+# RETAINED, no tick.
+echo "Test: INVOKE /fix-checks → spawn-job exec with --model claude-sonnet-4-6, no --effort, reservation retained, no tick"
+lw_setup
+lw_write_marker
+lw_run "INVOKE /fix-checks"
+assert_eq "launch INVOKE /fix-checks: exit 0" "0" "$LW_RC"
+sj=$(cat "$LW_DIR/spawn-job-argv" 2>/dev/null || echo "")
+assert_eq "launch INVOKE /fix-checks: spawn-job logged once" "1" \
+  "$([[ -f "$LW_DIR/spawn-job-argv" ]] && wc -l < "$LW_DIR/spawn-job-argv" | tr -d ' ' || echo 0)"
+assert_eq "launch INVOKE /fix-checks: spawn-job argv (with model)" \
+  "--no-verify --park-issue 839 --name $LW_WT_BASENAME --cwd $LW_WT --model claude-sonnet-4-6 /fix-checks 839 $LW_WT" "$sj"
+assert_eq "launch INVOKE /fix-checks: no --effort in argv" "no" \
+  "$([[ "$sj" == *"--effort"* ]] && echo yes || echo no)"
+assert_eq "launch INVOKE /fix-checks: reservation RETAINED" "yes" "$(lw_marker_exists)"
+assert_eq "launch INVOKE /fix-checks: no apply-office-hours" "no" \
+  "$([[ -f "$LW_DIR/apply-oh-argv" ]] && echo yes || echo no)"
+assert_eq "launch INVOKE /fix-checks: no spawn-tick (exec path)" "no" \
   "$([[ -f "$LW_DIR/spawn-tick.log" ]] && echo yes || echo no)"
 lw_teardown
 
@@ -32283,6 +32310,22 @@ sj=$(cat "$LW_DIR/spawn-job-argv" 2>/dev/null || echo "")
 assert_eq "launch INVOKE /review-fix: spawn-job argv (with model)" \
   "--no-verify --park-issue 839 --name $LW_WT_BASENAME --cwd $LW_WT --model claude-sonnet-4-6 /review-fix 839 $LW_WT" \
   "$sj"
+lw_teardown
+
+# 3b. INVOKE /plan-issue → spawn-job carries --effort high and NO --model (plan
+# inherits Opus but routes to the highest reasoning effort, #2042).
+echo "Test: INVOKE /plan-issue → spawn-job with --effort high, no --model"
+lw_setup
+lw_write_marker
+lw_run "INVOKE /plan-issue"
+assert_eq "launch INVOKE /plan-issue: exit 0" "0" "$LW_RC"
+sj=$(cat "$LW_DIR/spawn-job-argv" 2>/dev/null || echo "")
+assert_eq "launch INVOKE /plan-issue: spawn-job argv (with --effort high)" \
+  "--no-verify --park-issue 839 --name $LW_WT_BASENAME --cwd $LW_WT --effort high /plan-issue 839 $LW_WT" \
+  "$sj"
+assert_eq "launch INVOKE /plan-issue: no --model in argv" "no" \
+  "$([[ "$sj" == *"--model"* ]] && echo yes || echo no)"
+assert_eq "launch INVOKE /plan-issue: reservation RETAINED" "yes" "$(lw_marker_exists)"
 lw_teardown
 
 # 4. STOP done → reservation cleared + spawn-tick called; no spawn-job, no park.
