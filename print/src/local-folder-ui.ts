@@ -231,8 +231,9 @@ export async function renderLocalIntoList(container: HTMLElement): Promise<void>
   // Capture each uncached row's node by id, BY REFERENCE. item.id is
   // `local:<folderId>/<name>` (contains `:` and `/`) so the data-id selector
   // needs CSS.escape, not escapeHtml. Patching the captured node (never a
-  // re-query at patch time) keeps a stale patch from a prior pass a harmless
-  // no-op against a now-detached node.
+  // re-query at patch time) means that patching a now-detached node (removed by
+  // a later render pass) succeeds silently but has no visible effect — the
+  // mutation reaches a node no longer in the document, not a live row.
   const targets: { item: MediaItem; node: Element | null }[] = uncached.map(
     (item) => ({
       item,
@@ -284,14 +285,14 @@ function overlay(
 
 /**
  * Patch a captured local row in place with extracted metadata, building DOM via
- * textContent so no manual escaping is needed. A null node (row detached by a
- * later focus-rescan reinsert) is a harmless no-op.
+ * textContent so no manual escaping is needed. A null or detached node is a
+ * no-op.
  */
 function patchLocalRow(
   node: Element | null,
   meta: { title?: string; pageCount?: number },
 ): void {
-  if (node === null) return;
+  if (node === null || !node.isConnected) return;
   if (meta.title !== undefined) {
     const titleLink = node.querySelector(".media-title a");
     if (titleLink) titleLink.textContent = meta.title;

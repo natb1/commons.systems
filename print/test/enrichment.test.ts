@@ -361,6 +361,7 @@ describe("enrichment — resolveLocalBlob returns null (file gone)", () => {
 
     const container = makeContainer();
     await renderLocalIntoList(container);
+    await settleEnrichment();
     await flushWrites();
 
     // extractMetadata should NOT be called (no buf)
