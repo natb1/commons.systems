@@ -176,6 +176,150 @@ assert_stderr_contains "Test-integrity violation" "(b) it.skip conversion: remed
 assert_stderr_contains "RESTORE" "(b) it.skip conversion: steers toward restore"
 
 # ---------------------------------------------------------------------------
+# Case (b2): describe.skip( ADDED (Signal 1, Pattern A) → flag.
+#
+# A brand-new disabling skip line is added on the feature branch. SKIP_NET = +1
+# (Pattern A: describe.skip( with a string-literal first arg) → Signal 1 fires.
+# The added line is also a fresh DECL add, so Signal 2 stays clean — this case
+# isolates the Pattern A `describe.skip` variant.
+# ---------------------------------------------------------------------------
+echo "--- case (b2): describe.skip( added → flag (Signal 1) ---"
+REPO=$(make_temp_repo)
+
+cat > "$REPO/group.test.ts" <<'EOF'
+import { describe, it, expect } from 'vitest';
+describe('group', () => {
+  it('works', () => { expect(1).toBe(1); });
+});
+EOF
+git -C "$REPO" add group.test.ts
+git -C "$REPO" commit -q -m "add test"
+git -C "$REPO" update-ref refs/remotes/origin/main HEAD
+
+git -C "$REPO" checkout -q -b feature2
+
+cat > "$REPO/group.test.ts" <<'EOF'
+import { describe, it, expect } from 'vitest';
+describe('group', () => {
+  it('works', () => { expect(1).toBe(1); });
+});
+describe.skip('disabled group', () => {
+  it('does nothing', () => { expect(1).toBe(1); });
+});
+EOF
+git -C "$REPO" add group.test.ts
+git -C "$REPO" commit -q -m "add describe.skip"
+
+run_check "$REPO"
+assert_exit 1 "(b2) describe.skip added: exit 1"
+assert_stderr_contains "Test-integrity violation" "(b2) describe.skip added: remediation text present"
+assert_stderr_contains "Signal 1" "(b2) describe.skip added: Signal 1 fires"
+
+# ---------------------------------------------------------------------------
+# Case (b3): test.skip( with a string literal ADDED (Signal 1, Pattern A) → flag.
+#
+# A brand-new test.skip("title", …) line is added. The char after '(' is a
+# quote, so Pattern A matches (distinct from the Playwright conditional skip in
+# case (a)). SKIP_NET = +1 → Signal 1 fires.
+# ---------------------------------------------------------------------------
+echo "--- case (b3): test.skip( string-literal added → flag (Signal 1) ---"
+REPO=$(make_temp_repo)
+
+cat > "$REPO/feature.spec.ts" <<'EOF'
+import { test, expect } from '@playwright/test';
+test('works', async ({ page }) => { await page.goto('/'); });
+EOF
+git -C "$REPO" add feature.spec.ts
+git -C "$REPO" commit -q -m "add test"
+git -C "$REPO" update-ref refs/remotes/origin/main HEAD
+
+git -C "$REPO" checkout -q -b feature2
+
+cat > "$REPO/feature.spec.ts" <<'EOF'
+import { test, expect } from '@playwright/test';
+test('works', async ({ page }) => { await page.goto('/'); });
+test.skip('disabled case', async ({ page }) => { await page.goto('/x'); });
+EOF
+git -C "$REPO" add feature.spec.ts
+git -C "$REPO" commit -q -m "add test.skip"
+
+run_check "$REPO"
+assert_exit 1 "(b3) test.skip added: exit 1"
+assert_stderr_contains "Test-integrity violation" "(b3) test.skip added: remediation text present"
+assert_stderr_contains "Signal 1" "(b3) test.skip added: Signal 1 fires"
+
+# ---------------------------------------------------------------------------
+# Case (b4): xit( ADDED (Signal 1, Pattern B) → flag.
+#
+# A brand-new xit(…) line is added. Pattern B matches (xit|xdescribe)( without
+# needing a quote. xit( is NOT matched by the Signal 2 DECL pattern (the word
+# boundary precedes the leading 'x'), so only Signal 1 fires.
+# ---------------------------------------------------------------------------
+echo "--- case (b4): xit( added → flag (Signal 1) ---"
+REPO=$(make_temp_repo)
+
+cat > "$REPO/alpha.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+it('works', () => { expect(1).toBe(1); });
+EOF
+git -C "$REPO" add alpha.test.ts
+git -C "$REPO" commit -q -m "add test"
+git -C "$REPO" update-ref refs/remotes/origin/main HEAD
+
+git -C "$REPO" checkout -q -b feature2
+
+cat > "$REPO/alpha.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+it('works', () => { expect(1).toBe(1); });
+xit('disabled', () => { expect(1).toBe(1); });
+EOF
+git -C "$REPO" add alpha.test.ts
+git -C "$REPO" commit -q -m "add xit"
+
+run_check "$REPO"
+assert_exit 1 "(b4) xit added: exit 1"
+assert_stderr_contains "Test-integrity violation" "(b4) xit added: remediation text present"
+assert_stderr_contains "Signal 1" "(b4) xit added: Signal 1 fires"
+
+# ---------------------------------------------------------------------------
+# Case (b5): xdescribe( ADDED (Signal 1, Pattern B) → flag.
+#
+# A brand-new xdescribe(…) block is added. Pattern B matches without a quote.
+# xdescribe( is NOT matched by the Signal 2 DECL pattern, so only Signal 1 fires.
+# ---------------------------------------------------------------------------
+echo "--- case (b5): xdescribe( added → flag (Signal 1) ---"
+REPO=$(make_temp_repo)
+
+cat > "$REPO/beta.test.ts" <<'EOF'
+import { describe, it, expect } from 'vitest';
+describe('beta', () => {
+  it('works', () => { expect(1).toBe(1); });
+});
+EOF
+git -C "$REPO" add beta.test.ts
+git -C "$REPO" commit -q -m "add test"
+git -C "$REPO" update-ref refs/remotes/origin/main HEAD
+
+git -C "$REPO" checkout -q -b feature2
+
+cat > "$REPO/beta.test.ts" <<'EOF'
+import { describe, it, expect } from 'vitest';
+describe('beta', () => {
+  it('works', () => { expect(1).toBe(1); });
+});
+xdescribe('disabled beta', () => {
+  it('does nothing', () => { expect(1).toBe(1); });
+});
+EOF
+git -C "$REPO" add beta.test.ts
+git -C "$REPO" commit -q -m "add xdescribe"
+
+run_check "$REPO"
+assert_exit 1 "(b5) xdescribe added: exit 1"
+assert_stderr_contains "Test-integrity violation" "(b5) xdescribe added: remediation text present"
+assert_stderr_contains "Signal 1" "(b5) xdescribe added: Signal 1 fires"
+
+# ---------------------------------------------------------------------------
 # Case (c): Removed it(/test( declaration (test deleted from a file) → flag.
 # ---------------------------------------------------------------------------
 echo "--- case (c): removed test declaration → flag ---"

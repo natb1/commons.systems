@@ -64,9 +64,18 @@ fi
 # ---------------------------------------------------------------------------
 # Extract added/removed lines (excluding diff header lines +++ / ---).
 # The || true guards protect set -e when grep finds no matches.
+#
+# Single-line comment lines (`+ // it(...)` / `- // it(...)`) are excluded so
+# that commenting-out a test is NOT scored as a live declaration. Without this,
+# replacing `it('x', fn)` with `// it('x', fn)` would net DECL_REMOVED=1 /
+# DECL_ADDED=1 → zero → a complete evasion of Signal 2. The `\b` word boundary
+# in DECL_PAT is satisfied by the space after `//`, so the comment line would
+# otherwise match. Dropping commented lines from the ADDED set means a
+# comment-out shows as a net declaration removal (Signal 2 fires); dropping them
+# from the REMOVED set means un-commenting a test is not penalized.
 # ---------------------------------------------------------------------------
-ADDED_LINES=$(printf '%s\n' "$DIFF" | grep '^+' | grep -v '^+++' || true)
-REMOVED_LINES=$(printf '%s\n' "$DIFF" | grep '^-' | grep -v '^---' || true)
+ADDED_LINES=$(printf '%s\n' "$DIFF" | grep '^+' | grep -v '^+++' | grep -vE '^\+[[:space:]]*//' || true)
+REMOVED_LINES=$(printf '%s\n' "$DIFF" | grep '^-' | grep -v '^---' | grep -vE '^-[[:space:]]*//' || true)
 
 # ---------------------------------------------------------------------------
 # Signal 1: Disabling-skip additions
@@ -78,7 +87,7 @@ REMOVED_LINES=$(printf '%s\n' "$DIFF" | grep '^-' | grep -v '^---' || true)
 # test.skip(testInfo.project.name !== "desktop", "desktop only") — there,
 # the character after '(' is 't', not a quote.
 # ---------------------------------------------------------------------------
-SKIP_PAT_A='(it|test|describe)\.skip[[:space:]]*\([[:space:]]*["'"'"'`]'
+SKIP_PAT_A='\b(it|test|describe)\.skip[[:space:]]*\([[:space:]]*["'"'"'`]'
 SKIP_PAT_B='\b(xit|xdescribe)[[:space:]]*\('
 
 SKIP_ADDED=0
@@ -95,11 +104,21 @@ SKIP_NET=$((SKIP_ADDED - SKIP_REMOVED))
 
 # ---------------------------------------------------------------------------
 # Signal 2: Test-declaration removals
-#   Matches: it( / test( / describe( / it.each(...)( / test.each(...)(
+#   Matches: it( / test( / describe( / it.each(...)( / test.each`...`( / etc.
 #   Does NOT match: it.skip( (no '.skip' in the pattern) — so a
 #   skip-conversion (it → it.skip) is caught here as a net removal.
+#
+# Two OR-ed alternatives so every declaration form is counted independently:
+#   - `\b(it|test|describe)[[:space:]]*\(` — plain calls AND the closing `(` of
+#     any `.each(...)` / `.each` ... form (the function call's own open paren).
+#   - `\b(it|test|describe)\.each\b` — `.each` declarations whose argument is a
+#     nested call (`it.each(getCases())('t', fn)`) or a template literal
+#     (`` test.each`${a}`('t', fn) ``), where the earlier alternative's `[^)]*`
+#     /paren-balancing would otherwise miss the line.
+# A single line is counted once by grep -cE regardless of how many alternatives
+# match, so plain calls are not double-counted.
 # ---------------------------------------------------------------------------
-DECL_PAT='\b(it|test|describe)(\.each\([^)]*\))?[[:space:]]*\('
+DECL_PAT='\b(it|test|describe)[[:space:]]*\(|\b(it|test|describe)\.each\b'
 
 DECL_ADDED=0
 DECL_REMOVED=0
@@ -165,8 +184,8 @@ DO NOT skip or delete tests to make CI pass. The correct responses are:
   1. RESTORE the removed or disabled test, then fix the underlying code so
      the test passes — this is the preferred path.
 
-  2. ESCALATE to office-hours if the test is genuinely obsolete or the fix
-     requires scope beyond this PR. Document why in the PR body.
+  2. ESCALATE to office-hours if the fix requires scope beyond this PR.
+     Document why in the PR body.
 
 Re-deleting or re-disabling the test will re-trigger this check and re-block
 auto-merge. fix-checks will route you here again.
