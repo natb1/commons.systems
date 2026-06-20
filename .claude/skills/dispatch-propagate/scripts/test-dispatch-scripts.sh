@@ -6026,19 +6026,51 @@ result=$("$TMPDIR_TEST/office-hours-select-target")
 assert_eq "done session is attachable (visible only under --all)" "idle s-42-x" "$result"
 teardown
 
-# OHST3g. Stopped-exclude: the only labeled item (42) has a `stopped` session →
-# EXCLUDED from attach (skip, like working) and not fresh-launched. With no other
-# item and no parked `dispatch-*` router under main → `empty`.
-echo "Test: lone stopped item → excluded from attach, not fresh → empty"
+# OHST3g. Stopped-attach (#2240 behavior change BY DESIGN): the only labeled item
+# (42) has a `stopped` session → ATTACH. stopped is now attachable so a human
+# resuming the queue re-engages the originating session in place rather than
+# wedging. Uses the OHST3f (done-attach) shape: on-disk cwd, no
+# DISPATCH_OFFICE_HOURS_MAIN_WORKTREE export (exits before parked-router fallback).
+echo "Test: lone stopped item → attached (stopped is now attachable, #2240)"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+mkdir -p "$TMPDIR_TEST/wt/42-x"
+office_hours_state_fake_claude "42-x:stopped:$TMPDIR_TEST/wt/42-x"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "lone stopped item → attached" "idle s-42-x" "$result"
+teardown
+
+# OHST3g2. Paused-attach (#2240): the only labeled item (42) has a `paused`
+# session → ATTACH. Mirrors OHST3g (stopped-attach) for the paused state.
+echo "Test: lone paused item → attached (paused is now attachable, #2240)"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+mkdir -p "$TMPDIR_TEST/wt/42-x"
+office_hours_state_fake_claude "42-x:paused:$TMPDIR_TEST/wt/42-x"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "lone paused item → attached" "idle s-42-x" "$result"
+teardown
+
+# OHST3g3. Unrecognized-state-exclude (#2240 fail-safe): the only labeled item
+# (42) has a session in state `zombie` (unrecognized/malformed) → EXCLUDED from
+# attach (fail-safe skip, criterion 3: never attach into an unknown state) and
+# not fresh-launched. With no other item and no parked router under main → `empty`.
+echo "Test: lone unrecognized-state (zombie) item → excluded from attach, not fresh → empty"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
   > "$STUB_DIR/worktree-list.txt"
 export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
-office_hours_state_fake_claude "42-x:stopped"
+office_hours_state_fake_claude "42-x:zombie"
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "lone stopped item → empty" "empty" "$result"
+assert_eq "lone unrecognized-state item → empty (fail-safe skip)" "empty" "$result"
 unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
@@ -11249,6 +11281,31 @@ mkdir -p "$wt"
 write_fake_claude '[{"sessionId":"oh-1","pid":99,"status":"busy","name":"office-hours-1311"}]' 0
 if worktree_has_live_session "$wt"; then live=occupied; else live=free; fi
 assert_eq "office-hours occupancy: worktree_has_live_session reports occupied" "occupied" "$live"
+ca_teardown
+
+# --- Test 8c: stopped session still occupies its worktree (#2240 byte-identical router) ---
+#
+# The selector now attaches stopped/paused sessions (#2240), but the shared
+# worktree_has_live_session helper is deliberately NOT changed — it must still
+# report a stopped session as OCCUPIED so the dispatch router hot path is
+# byte-identical. This test proves that invariant.
+
+echo "Test: stopped session still marks worktree occupied (byte-identical router, #2240)"
+ca_setup
+ca_basename=$(basename "$CA_DIR")
+write_fake_claude "[{\"sessionId\":\"s-stop\",\"pid\":5,\"status\":\"stopped\",\"name\":\"$ca_basename\"}]" 0
+if worktree_has_live_session "$CA_DIR"; then live=occupied; else live=free; fi
+assert_eq "stopped occupancy: worktree_has_live_session reports occupied" "occupied" "$live"
+ca_teardown
+
+# --- Test 8d: paused session still occupies its worktree (#2240 byte-identical router) ---
+
+echo "Test: paused session still marks worktree occupied (byte-identical router, #2240)"
+ca_setup
+ca_basename=$(basename "$CA_DIR")
+write_fake_claude "[{\"sessionId\":\"s-pause\",\"pid\":6,\"status\":\"paused\",\"name\":\"$ca_basename\"}]" 0
+if worktree_has_live_session "$CA_DIR"; then live=occupied; else live=free; fi
+assert_eq "paused occupancy: worktree_has_live_session reports occupied" "occupied" "$live"
 ca_teardown
 
 # --- Test 9: claude_sessions_under invokes `claude` with --cwd <path> -------

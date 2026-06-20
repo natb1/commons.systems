@@ -10,10 +10,12 @@
 # <N>-* worktree, and emits exactly one of five dispositions, in this priority:
 #
 #   idle <sessionId>
-#     The oldest labeled item whose originating Claude session is idle/complete
-#     (state waiting/done/idle) AND whose worktree is still present on disk. Idle
-#     wins over fresh: if any labeled item has an attachable idle session, that
-#     session is attached in preference to picking up a sessionless sibling fresh.
+#     The oldest labeled item whose originating Claude session is attachable
+#     (state waiting/done/idle/stopped/paused) AND whose worktree is still present
+#     on disk. Idle wins over fresh: if any labeled item has an attachable session,
+#     that session is attached in preference to picking up a sessionless sibling
+#     fresh. stopped/paused are now attachable (#2240): a human resuming the queue
+#     re-engages the originating session in place rather than wedging.
 #
 #     The chosen attachable item is classified by the state of its session's
 #     worktree (the cwd `issue_live_session_id` now returns alongside the
@@ -28,7 +30,7 @@
 #          exits. Fresh fallback with a diagnostic, never a silent failure.
 #
 #   idle-provision <sessionId> <branch>
-#     The oldest labeled item whose originating session is idle/complete but whose
+#     The oldest labeled item whose originating session is attachable but whose
 #     worktree has been SWEPT, while its remote branch `origin/<branch>` still
 #     exists (#2241). <branch> is the swept worktree's basename. The consumer
 #     re-provisions the worktree from the remote branch, then attaches the
@@ -36,29 +38,33 @@
 #     lose the session's context.
 #
 #     The disposition gates on the granular session `state`, not mere liveness —
-#     it must only surface an IDLE session, never an actively-WORKING one. The
-#     state→action contract:
+#     it must only surface an ATTACHABLE session, never an actively-WORKING one.
+#     The state→action contract:
 #
 #       state                                       action
 #       ------------------------------------------- -----------------------------
-#       working (busy)                              SKIP the issue — being worked
+#       working / busy                              SKIP the issue — being worked
 #                                                   autonomously; don't attach,
 #                                                   don't fresh-launch
-#       waiting / done / idle                       ATTACH (done requires --all
-#                                                   to see)
-#       stopped / paused / any unrecognized state   EXCLUDE from attach — skip
-#                                                   the issue (fail-safe)
+#       waiting / done / idle / stopped / paused    ATTACH (done requires --all
+#                                                   to see; stopped/paused attach
+#                                                   so a human resuming the queue
+#                                                   re-engages the originating
+#                                                   session in place, #2240)
+#       unrecognized / empty / malformed state      SKIP fail-safe — unknown
+#                                                   state, never attach into it
 #       not in registry                             sessionless → fresh-launch
 #
-#     Stopped/paused (and any unrecognized state) are excluded from attach —
-#     treated like working (skip the issue). Known consequence: such a session
-#     still name-matches in `worktree_has_live_session`, so its issue won't
-#     fresh-launch either and can wedge until the session is cleaned up.
-#     Handling that wedge is out of scope here — it would require changing the
-#     shared `worktree_has_live_session` / `claude_agents_list_all` helpers,
-#     which gate the dispatch router's worktree-occupancy decisions on the hot
-#     path; making `done` sessions newly 'occupy' a worktree there would block
-#     phase-worker launches.
+#     Stopped/paused are now ATTACHABLE (#2240): the wedge they previously caused
+#     (name-matching in worktree_has_live_session but excluded from attach →
+#     issue stuck until session cleaned up) is resolved because attach now fires
+#     instead of skip. The shared worktree_has_live_session / claude_agents_list_all
+#     helpers are deliberately NOT changed: a stopped/paused session still reports
+#     the worktree OCCUPIED on the router hot path, which is correct — fresh-launch
+#     is now harmless because attach fires first; the byte-identical router path
+#     is the invariant the lib-claude-agents.sh tests guard (Test 8b / occupancy
+#     tests added in #2240). Unrecognized/empty/malformed states remain a fail-safe
+#     skip (criterion 3: never attach into an unknown state).
 #   office-hours <issue> <phase> <pr-or-dash> <worktree-path>
 #     The oldest labeled item with NO live session — a sessionless item that
 #     /office-hours picks up fresh.
@@ -164,8 +170,9 @@ done < <(list_worktree_records)
 #   rc 2 — UNKNOWN: the daemon could not be queried, and no attachable session
 #          was seen.
 #   rc 3 — present-but-not-attachable: a session was seen but its state is
-#          working/stopped/paused/unrecognized — skip the issue (don't attach,
-#          don't fresh-launch on top of its live work).
+#          working/busy or unrecognized/empty/malformed — skip the issue (don't
+#          attach, don't fresh-launch on top of its live work). stopped/paused
+#          no longer land here — they are now attachable (rc 0, #2240).
 # Gates on the granular session `state` (via claude_sessions_with_name_all /
 # claude_sessions_with_name_prefix_all, which pass --all so `done` sessions are
 # visible), not on mere liveness. An attachable idle session under ANY name wins,
@@ -178,7 +185,7 @@ done < <(list_worktree_records)
 # This is what lets office-hours re-attach to an originating session whose <N>-*
 # worktree has been swept. It also fixes a latent double-claim bug: a `working`
 # session with an unregistered worktree previously returned rc1 (sessionless) and
-# got fresh-launched on top of live work; it is now FOUND, hits the `*) saw_skip`
+# got fresh-launched on top of live work; it is now FOUND, hits the `working|busy)`
 # arm, and returns rc3 so the caller does NOT fresh-launch it (criterion 5).
 #
 # Name set:
@@ -209,18 +216,27 @@ issue_live_session_id() {
         # (code-review #2241).
         while IFS=$'\t' read -r sid state cwd _; do
           case "$state" in
-            waiting|done|idle)
+            waiting|done|idle|stopped|paused)
               # Attachable — emit sessionId<TAB>cwd (#2241) and signal the caller
-              # to return 0 immediately.
+              # to return 0 immediately. stopped/paused now attach so a human
+              # resuming the queue re-engages the originating session in place
+              # (#2240); the wedge they used to cause is gone.
               printf '%s\t%s\n' "$sid" "$cwd"
               return 0
               ;;
+            working|busy)
+              # Genuinely-working (busy) session — being worked autonomously; never
+              # attach or fresh-launch (double-claim). Keep scanning: an attachable
+              # session under another name still wins. A `working` session with no
+              # registered worktree lands here (the #2241 double-claim fix): it is
+              # now found and skips rather than being mistaken for sessionless and
+              # fresh-launched.
+              saw_skip=1
+              ;;
             *)
-              # working/stopped/paused/unrecognized (or empty/malformed) → not
-              # attachable; keep looking — an attachable session under another
-              # name still wins. A `working` session with no registered worktree
-              # lands here (the #2241 double-claim fix): it is now found and skips
-              # rather than being mistaken for sessionless and fresh-launched.
+              # Unrecognized / empty / malformed state → fail-safe skip (#2240
+              # criterion 3: keep the conservative skip rather than attaching into
+              # an unknown state).
               saw_skip=1
               ;;
           esac
