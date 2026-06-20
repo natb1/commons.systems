@@ -64,6 +64,14 @@ Complete detachment is impossible and not the goal. The goal is progressive — 
 
 An important distinction underwrites this: the coding agent is a *construction tool*, not a *runtime dependency*. The outputs of agentic coding — local-first tools built on standard web technologies — do not depend on continued access to the agent that built them. If the agent became unavailable tomorrow, every tool already built would keep working. Iteration slows; nothing breaks. The agent builds capability; it does not become infrastructure.
 
+### Owned Orchestration, Not a Platform Runtime
+
+The orchestration layer — the agentic workflow itself — is owned and self-managed, run locally rather than rented. As Progressive Detachment establishes, the agent is a construction tool, not a runtime dependency. The orchestration layer extends this property to ownership: the workflow code is forkable and locally run, not rented from a platform vendor. Unlike built outputs, the workflow does depend on continued agent access — but as a tool, not as a platform runtime, and local inference and open-source alternatives exist as fallback paths (see "Agentic Coding as Temporary Window"). This inverts the platform's success metric. A platform measures success by retention *on* it; here success is the practitioner's eventual independence *from* the workflow. The orchestration layer is built to be left. That claim is validated only by the tier signals in Success and Failure — forks, derivative projects — consistent with the "Funding and the Validation Signal" risk, never by revenue and never by assertion.
+
+### Alignment with Intent
+
+Who sets the problem stays with the practitioner, and this is carried structurally, by absence: there is no server, account, or data to mine, and the human is retained in planning and design. A platform inserts itself as the runtime and, over time, redefines the problem to fit its model — a ratchet that converts a required institution into a parasitic one. An owned workflow has no such surface; intent stays where it was set. The advantage is in what is missing, not in any charge against incumbents, and it is held to the same tier-signal discipline as the orchestration layer above — never validated by assertion.
+
 ### Open Source as Gift, Not Offering
 
 Open source got captured because it optimized for *code* portability while leaving *user* portability unaddressed. Artifacts moved freely between institutions; users did not gain mobility. The license guaranteed that the code could be forked, but said nothing about whether the people running the code on your behalf had any interest aligned with yours. The lesson: optimize for human freedom, not code freedom.
