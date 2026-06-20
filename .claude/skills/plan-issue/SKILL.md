@@ -374,14 +374,26 @@ procedure verbatim:
 
 1. **Execute the plan's Verification section** (`dangerouslyDisableSandbox: true`
    — `dispatch-read-plan` calls `gh`). Run the auto-runnable ` ```verify `
-   blocks: `.claude/skills/dispatch-propagate/scripts/dispatch-read-plan <N> | .claude/skills/dispatch-propagate/scripts/dispatch-run-verification` — exit 3 →
-   proceed unchanged; exit 0 → proceed; exit 1 → fix via `/implement-unit`
-   (cap 2) and re-run, else run the deviation marker below and stop (skip the
-   Step 3 completion marker):
+   blocks under `set -o pipefail` so an upstream `dispatch-read-plan` failure
+   cannot be masked:
+
+   ```bash
+   set -o pipefail
+   .claude/skills/dispatch-propagate/scripts/dispatch-read-plan <N> \
+     | .claude/skills/dispatch-propagate/scripts/dispatch-run-verification
+   ```
+
+   Route on the exit code: exit 3 → proceed unchanged; exit 0 → proceed; exit 1
+   → fix via `/implement-unit` (cap 2) and re-run, else run the deviation marker
+   below and stop (skip the Step 3 completion marker); **any other non-zero exit
+   (exit 4 = empty/absent plan input, or an upstream `dispatch-read-plan`
+   failure surfaced via `pipefail`)** is an environment/upstream error, **not** a
+   fixable verify failure — do **not** enter the fix lane; run the deviation
+   marker below with the upstream/empty-input reason and stop:
 
    ```bash
    .claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \
-     "/implement: plan verification failed after 2 fix attempts (check <index>)"
+     "/implement: plan verification failed after 2 fix attempts (check <index>), or could not run (empty/absent plan input or upstream dispatch-read-plan failure)"
    ```
 
 2. **Open the draft PR** (`dangerouslyDisableSandbox: true` — calls `gh`). Write
