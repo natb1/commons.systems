@@ -486,6 +486,17 @@ case "$args" in
       exit 1
     fi
     ;;
+  api\ repos/*/pulls/*)
+    # dispatch-retriage-orphaned-followups (#1812, #2007): gh api
+    # repos/{owner}/{repo}/pulls/<N>. $STUB_DIR/retriage-pr-<N>.json supplies
+    # the per-PR REST state object; absence defaults to an OPEN PR (no action).
+    num="${args##*/}"
+    if [[ -f "$STUB_DIR/retriage-pr-${num}.json" ]]; then
+      cat "$STUB_DIR/retriage-pr-${num}.json"
+    else
+      echo '{"state":"open","merged_at":null,"labels":[]}'
+    fi
+    ;;
   pr\ view\ *\ --json\ closingIssuesReferences)
     # dispatch-resolve-arg PR branch: gh pr view <N> --json closingIssuesReferences.
     num=$(echo "$args" | awk '{print $3}')
@@ -503,17 +514,6 @@ case "$args" in
       cat "$STUB_DIR/pr-headref-${num}.json"
     else
       echo '{"headRefName":""}'
-    fi
-    ;;
-  pr\ view\ *\ --json\ state,mergedAt,labels)
-    # dispatch-retriage-orphaned-followups (#1812): gh pr view <N> --json
-    # state,mergedAt,labels. $STUB_DIR/retriage-pr-<N>.json supplies the per-PR
-    # state object; absence defaults to an OPEN PR (no action taken).
-    num=$(echo "$args" | awk '{print $3}')
-    if [[ -f "$STUB_DIR/retriage-pr-${num}.json" ]]; then
-      cat "$STUB_DIR/retriage-pr-${num}.json"
-    else
-      echo '{"state":"OPEN","mergedAt":null,"labels":[]}'
     fi
     ;;
   label\ create\ *)
@@ -20943,6 +20943,17 @@ stop_setup() {
   cp "$SCRIPT_DIR/lib.sh" \
     "$TMPDIR_TEST/skills/dispatch-propagate/scripts/lib.sh"
 
+  # dispatch-stop.sh sources lib-decision-log.sh via $SCRIPTS (= TMPDIR_TEST/
+  # hooks/../skills/dispatch-propagate/scripts) to emit a per-invocation record
+  # (#2038). Stage the real lib so decision_log_append is defined and the EXIT
+  # trap actually writes the log.
+  cp "$SCRIPT_DIR/lib-decision-log.sh" \
+    "$TMPDIR_TEST/skills/dispatch-propagate/scripts/lib-decision-log.sh"
+
+  # Decision-log isolation (#2038): point the log at a scratch dir so tests
+  # never write to the real $HOME path.
+  export DISPATCH_DECISION_LOG_DIR="$TMPDIR_TEST/decisionlog"
+
   # Fake dispatch-find-pr: prints contents of $STUB_DIR/find-pr-output if
   # present, else nothing.
   cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-find-pr" <<'FAKE'
@@ -21129,7 +21140,7 @@ stop_teardown() {
   TMPDIR_TEST=""
   STUB_DIR=""
   export PATH="$SAVED_PATH"
-  unset CLAUDE_JOB_DIR
+  unset CLAUDE_JOB_DIR DISPATCH_DECISION_LOG_DIR
 }
 
 # --- Test 1: marker present, phase advanced → strip both, spawn, self-close --
@@ -21282,6 +21293,18 @@ else
   echo "    gh-pr-edit.log: $(cat "$STUB_DIR/gh-pr-edit.log" 2>/dev/null || true)"
   echo "    gh-issue-edit.log: $(cat "$STUB_DIR/gh-issue-edit.log" 2>/dev/null || true)"
 fi
+# AC5 decision-log (stop site): verify a self-close record was appended with
+# site=stop, disposition=self-close, and branch=B (Branch B path).
+DLOG_FILE="$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl"
+assert_eq "stop clean-review: decision log exists" "1" "$([ -f "$DLOG_FILE" ] && echo 1 || echo 0)"
+assert_eq "stop clean-review: decision log has at least 1 line" "1" \
+  "$([ -f "$DLOG_FILE" ] && [ "$(wc -l < "$DLOG_FILE")" -ge 1 ] && echo 1 || echo 0)"
+assert_eq "stop clean-review: decision log last record .site" "stop" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.site')"
+assert_eq "stop clean-review: decision log last record .disposition" "self-close" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.disposition')"
+assert_eq "stop clean-review: decision log last record .branch" "B" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.branch')"
 stop_teardown
 
 # --- Test 2: marker present, same phase, fix-checks, counter < 3 → transient no-push fix-checks outcome → spawn + self-close ----
@@ -24772,6 +24795,10 @@ sel_tick_setup() {
   # FAKE copy written below — so the sweep's liveness query is driven by the
   # SEL_AGENTS_* env vars rather than a real daemon. Sourced, not executed.
   cp "$SCRIPT_DIR/lib-reservation-ledger.sh" "$TMPDIR_TEST/lib-reservation-ledger.sh"
+  # dispatch-select-tick sources lib-decision-log.sh via its SCRIPT_DIR (=
+  # TMPDIR_TEST) to emit a structured per-tick record (#2038). Stage the real lib
+  # so decision_log_append is defined and the EXIT trap actually writes the log.
+  cp "$SCRIPT_DIR/lib-decision-log.sh" "$TMPDIR_TEST/lib-decision-log.sh"
   # dispatch-select-tick Step 1d calls dispatch-reconcile-ready from its own
   # SCRIPT_DIR (= TMPDIR_TEST). Copy the real script so the wiring test can
   # assert reconcile-produced `ready:` lines appear in the tick output.
@@ -24923,6 +24950,11 @@ FAKE
   # and the gap is unchanged from the pre-ledger gate (behavior-preserving).
   export DISPATCH_RESERVATION_DIR="$TMPDIR_TEST/reservations"
   mkdir -p "$TMPDIR_TEST/reservations"
+  # Decision-log isolation (#2038): point the log at a scratch dir so tests never
+  # write to the real $HOME path. mkdir is intentionally NOT called here — the lib
+  # creates the directory on its first append, so the dir's presence proves the lib
+  # ran and wrote rather than silently no-oping.
+  export DISPATCH_DECISION_LOG_DIR="$TMPDIR_TEST/decisionlog"
   chmod +x "$TMPDIR_TEST/dispatch-jit-engine" \
            "$TMPDIR_TEST/dispatch-resolve-arg" \
            "$TMPDIR_TEST/dispatch-select-target" \
@@ -25023,7 +25055,8 @@ sel_tick_teardown() {
     DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE SEL_GIT_MERGE_LOG \
     SEL_SESSIONS_UNDER_RC SEL_SESSIONS_UNDER_TSV \
     DISPATCH_LOCK_PROBE_TIMEOUT DISPATCH_LOCK_FLOCK_TIMEOUT \
-    SEL_AUTO_MERGE_OUT SEL_RETRIAGE_OUT
+    SEL_AUTO_MERGE_OUT SEL_RETRIAGE_OUT \
+    DISPATCH_DECISION_LOG_DIR
 }
 
 # Run the orchestrator, capturing full stdout; the decision is the last line.
@@ -25038,6 +25071,15 @@ out=$(run_sel_tick) ; rc=$?
 assert_eq "empty: exit 0" "0" "$rc"
 assert_eq "empty: decision line" "empty" "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "empty: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+# AC5 decision-log: verify a record was appended with the correct disposition+site
+DLOG_FILE="$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl"
+assert_eq "empty: decision log exists" "1" "$([ -f "$DLOG_FILE" ] && echo 1 || echo 0)"
+assert_eq "empty: decision log has at least 1 line" "1" \
+  "$([ -f "$DLOG_FILE" ] && [ "$(wc -l < "$DLOG_FILE")" -ge 1 ] && echo 1 || echo 0)"
+assert_eq "empty: decision log last record .disposition" "empty" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.disposition')"
+assert_eq "empty: decision log last record .site" "select-tick" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.site')"
 sel_tick_teardown
 
 # --- pr selection → passthrough + lock HELD ----------------------------------
@@ -25540,6 +25582,15 @@ assert_eq "cap: priority-only probe ran (returned empty)" "1" \
   "$([ -f "$TMPDIR_TEST/logs/select-target-priority.log" ] && echo 1 || echo 0)"
 assert_eq "cap: normal no-arg selection did NOT run" "0" \
   "$([ -f "$TMPDIR_TEST/logs/select-target.log" ] && echo 1 || echo 0)"
+# AC5 decision-log: verify a record was appended with the correct disposition+site
+DLOG_FILE="$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl"
+assert_eq "cap: decision log exists" "1" "$([ -f "$DLOG_FILE" ] && echo 1 || echo 0)"
+assert_eq "cap: decision log has at least 1 line" "1" \
+  "$([ -f "$DLOG_FILE" ] && [ "$(wc -l < "$DLOG_FILE")" -ge 1 ] && echo 1 || echo 0)"
+assert_eq "cap: decision log last record .disposition" "concurrency-cap" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.disposition')"
+assert_eq "cap: decision log last record .site" "select-tick" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.site')"
 sel_tick_teardown
 
 # --- AC4: target=0, waiting <N> → CI-cadence reseed, not pace reseed (#1444) --
@@ -25944,6 +25995,26 @@ esac
 assert_eq "--manual + number → usage error, exit 2" "ok" "$status"
 sel_tick_teardown
 
+# --- AC3 non-fatal guarantee: unwritable log dir does NOT kill the tick -------
+# Point DISPATCH_DECISION_LOG_DIR at a path that cannot be created (a sub-path of
+# an existing regular file). The lib's mkdir -p will fail with ENOTDIR. The
+# entire write body is wrapped in `{ ... } 2>/dev/null || true` so the failure is
+# silently swallowed. Assert the tick still emits its normal terminal token and
+# exits 0 — proving the non-fatal contract under set -uo pipefail.
+echo "Test: select-tick decision-log write to unwritable dir is non-fatal (AC3)"
+sel_tick_setup
+# Use a blocker-file trick: touch a regular file, then point the log dir at a
+# sub-path of it. mkdir -p /blocker/sub fails with ENOTDIR → write silently
+# swallowed by the lib. The lib is STAGED (present in TMPDIR_TEST) so the only
+# failure is the directory creation, not a missing decision_log_append function.
+touch "$TMPDIR_TEST/decisionlog-blocker"
+export DISPATCH_DECISION_LOG_DIR="$TMPDIR_TEST/decisionlog-blocker/sub"
+out=$(run_sel_tick) ; rc=$?
+assert_eq "AC3 nonfatal: tick exit 0 despite unwritable log dir" "0" "$rc"
+assert_eq "AC3 nonfatal: terminal token is still empty" "empty" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+sel_tick_teardown
+
 # ============================================================================
 # === #1546: direct dispatch-escalate-sync-broken body-content tests ===
 # ============================================================================
@@ -26130,6 +26201,10 @@ mat_setup() {
   # executed — no chmod +x.
   cp "$SCRIPT_DIR/lib-reservation-ledger.sh" "$TMPDIR_TEST/lib-reservation-ledger.sh"
   cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/lib-claude-agents.sh"
+  # dispatch-materialize-spawn sources lib-decision-log.sh via its SCRIPT_DIR (=
+  # TMPDIR_TEST) to emit a structured per-spawn record (#2038). Stage the real lib
+  # so decision_log_append is defined and the EXIT trap actually writes the log.
+  cp "$SCRIPT_DIR/lib-decision-log.sh" "$TMPDIR_TEST/lib-decision-log.sh"
 
   # Real lock under our control; we hold it so finalize-selection / release do a
   # strict self-release.
@@ -26139,6 +26214,9 @@ mat_setup() {
   # under our control.
   export DISPATCH_RESERVATION_DIR="$TMPDIR_TEST/reservations"
   mkdir -p "$TMPDIR_TEST/reservations"
+  # Decision-log isolation (#2038): point the log at a scratch dir so tests never
+  # write to the real $HOME path.
+  export DISPATCH_DECISION_LOG_DIR="$TMPDIR_TEST/decisionlog"
   printf '%s\n' "mat-session" > "$DISPATCH_LOCK_FILE"
   cat > "$TMPDIR_TEST/fake-claude" <<'FAKE'
 #!/usr/bin/env bash
@@ -26292,7 +26370,7 @@ mat_teardown() {
   rm -rf "$TMPDIR_TEST"
   TMPDIR_TEST="" ; STUB_DIR=""
   unset DISPATCH_LOCK_FILE CLAUDE_CODE_SESSION_ID CLAUDE_AGENTS_CMD \
-    DISPATCH_RESERVATION_DIR DISPATCH_CONFIG_DIR \
+    DISPATCH_RESERVATION_DIR DISPATCH_DECISION_LOG_DIR DISPATCH_CONFIG_DIR \
     MAT_PR MAT_LEAF MAT_BLOCKED MAT_WT_DECISION MAT_PHASE \
     MAT_CI_READY MAT_LAUNCH_SLEEP MAT_ISSUE_STATE MAT_ISSUE_TITLE MAT_QUEUE \
     MAT_RESEED_OUT MAT_RESEED_RC
@@ -26336,6 +26414,15 @@ assert_eq "queue happy: launch-worker detached with issue + worktree (no --model
 assert_eq "queue happy: lock released after detach" "" "$(cat "$DISPATCH_LOCK_FILE")"
 assert_eq "queue happy: marker written into target worktree" "1" \
   "$([ -f "$TMPDIR_TEST/project/worktrees/839-test/tmp/dispatch-worktree" ] && echo 1 || echo 0)"
+# AC5 decision-log: verify a propagate record was appended with correct site
+DLOG_FILE="$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl"
+assert_eq "queue happy: decision log exists" "1" "$([ -f "$DLOG_FILE" ] && echo 1 || echo 0)"
+assert_eq "queue happy: decision log has at least 1 line" "1" \
+  "$([ -f "$DLOG_FILE" ] && [ "$(wc -l < "$DLOG_FILE")" -ge 1 ] && echo 1 || echo 0)"
+assert_eq "queue happy: decision log last record .disposition" "propagate" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.disposition')"
+assert_eq "queue happy: decision log last record .site" "materialize-spawn" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.site')"
 mat_teardown
 
 # --- #1391 detach is non-blocking + reservation is pre-detach ----------------
@@ -27296,6 +27383,15 @@ assert_eq "deferred-drain: spawn count" "0" \
 assert_eq "deferred-drain: summary 0 of gap 5 (selection deferred (jit-reminder))" "1" \
   "$(printf '%s\n' "$out" | grep -c 'spawned 0 of gap 5 (selection deferred (jit-reminder))')"
 assert_eq "deferred-drain: terminal token" "drain" "$(printf '%s\n' "$out" | tail -n 1)"
+# AC5 decision-log: verify a drain record was appended with correct site
+DLOG_FILE="$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl"
+assert_eq "deferred-drain: decision log exists" "1" "$([ -f "$DLOG_FILE" ] && echo 1 || echo 0)"
+assert_eq "deferred-drain: decision log has at least 1 line" "1" \
+  "$([ -f "$DLOG_FILE" ] && [ "$(wc -l < "$DLOG_FILE")" -ge 1 ] && echo 1 || echo 0)"
+assert_eq "deferred-drain: decision log last record .disposition" "drain" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.disposition')"
+assert_eq "deferred-drain: decision log last record .site" "materialize-spawn" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.site')"
 mat_teardown
 
 # (unexpected line) an unrecognized selector line is a hard error: release the
@@ -32541,6 +32637,11 @@ lw_setup() {
   # and lib-claude-agents.sh from the same dir.
   cp "$SCRIPT_DIR/dispatch-launch-worker" "$LW_DIR/dispatch-launch-worker"
   cp "$SCRIPT_DIR/dispatch-phase-model" "$LW_DIR/dispatch-phase-model"
+  # dispatch-phase-model consults dispatch-config-load (a sibling, resolved via
+  # $SCRIPT_DIR) for the generated phase-model-policy (#2028), so it must travel
+  # with the copy. With no policy file at the resolved config dir it returns
+  # no-config and the default qa/review → sonnet map applies.
+  cp "$SCRIPT_DIR/dispatch-config-load" "$LW_DIR/dispatch-config-load"
   cp "$SCRIPT_DIR/dispatch-phase-effort" "$LW_DIR/dispatch-phase-effort"
   cp "$SCRIPT_DIR/lib-reservation-ledger.sh" "$LW_DIR/lib-reservation-ledger.sh"
   cp "$SCRIPT_DIR/lib.sh" "$LW_DIR/lib.sh"
@@ -34145,7 +34246,8 @@ echo "=== dispatch-retriage-orphaned-followups (#1812) ==="
 # via the shared `api *repos/*/issues?*` branch; gh_issue_list_rest remaps it.
 # The scan reads the <!-- dispatch:source-pr <N> --> marker from the body field,
 # gated by the static dispatch:review-followup label (server-side filter bypassed in stub).
-# Per-PR state comes from retriage-pr-<N>.json (gh pr view --json state,mergedAt,labels).
+# Per-PR state comes from retriage-pr-<N>.json (gh api repos/{owner}/{repo}/pulls/<N>,
+# REST shape: lowercase state, snake_case merged_at).
 # The office-hours park flows through the REAL copied dispatch-apply-office-hours,
 # which logs to gh-issue-edit.log / gh-issue-comment.log; the per-PR processed
 # marker hits the generic `pr edit *` branch, logged to gh-pr-edit.log.
@@ -34154,7 +34256,7 @@ echo "=== dispatch-retriage-orphaned-followups (#1812) ==="
 echo "Test: closed-unmerged source PR → park follow-up on office-hours + mark PR"
 setup
 printf '[{"number":101,"labels":[{"name":"dispatch:review-followup"}],"body":"orphan finding <!-- dispatch:source-pr 1704 -->"}]\n' > "$STUB_DIR/issue-list.json"
-printf '{"state":"CLOSED","mergedAt":null,"labels":[]}\n' > "$STUB_DIR/retriage-pr-1704.json"
+printf '{"state":"closed","merged_at":null,"labels":[]}\n' > "$STUB_DIR/retriage-pr-1704.json"
 out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null)
 assert_eq "a: office-hours applied to the follow-up issue" \
   "issue edit 101 --add-label dispatch:office-hours" "$(cat "$STUB_DIR/gh-issue-edit.log")"
@@ -34180,7 +34282,7 @@ teardown
 echo "Test: merged source PR → no action"
 setup
 printf '[{"number":102,"labels":[{"name":"dispatch:review-followup"}],"body":"orphan finding <!-- dispatch:source-pr 1688 -->"}]\n' > "$STUB_DIR/issue-list.json"
-printf '{"state":"MERGED","mergedAt":"2026-01-01T00:00:00Z","labels":[]}\n' > "$STUB_DIR/retriage-pr-1688.json"
+printf '{"state":"closed","merged_at":"2026-01-01T00:00:00Z","labels":[]}\n' > "$STUB_DIR/retriage-pr-1688.json"
 out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null)
 assert_eq "b: no office-hours edit on a merged source PR" "absent" "$(log_state gh-issue-edit.log)"
 assert_eq "b: no PR marker on a merged source PR" "absent" "$(log_state gh-pr-edit.log)"
@@ -34191,7 +34293,7 @@ teardown
 echo "Test: still-open source PR → no action"
 setup
 printf '[{"number":103,"labels":[{"name":"dispatch:review-followup"}],"body":"orphan finding <!-- dispatch:source-pr 1900 -->"}]\n' > "$STUB_DIR/issue-list.json"
-printf '{"state":"OPEN","mergedAt":null,"labels":[]}\n' > "$STUB_DIR/retriage-pr-1900.json"
+printf '{"state":"open","merged_at":null,"labels":[]}\n' > "$STUB_DIR/retriage-pr-1900.json"
 out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null)
 assert_eq "c: no office-hours edit on an open source PR" "absent" "$(log_state gh-issue-edit.log)"
 assert_eq "c: no PR marker on an open source PR" "absent" "$(log_state gh-pr-edit.log)"
@@ -34202,7 +34304,7 @@ teardown
 echo "Test: source PR already marked dispatch:orphans-retriaged → no action"
 setup
 printf '[{"number":104,"labels":[{"name":"dispatch:review-followup"}],"body":"orphan finding <!-- dispatch:source-pr 1704 -->"}]\n' > "$STUB_DIR/issue-list.json"
-printf '{"state":"CLOSED","mergedAt":null,"labels":[{"name":"dispatch:orphans-retriaged"}]}\n' > "$STUB_DIR/retriage-pr-1704.json"
+printf '{"state":"closed","merged_at":null,"labels":[{"name":"dispatch:orphans-retriaged"}]}\n' > "$STUB_DIR/retriage-pr-1704.json"
 out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null)
 assert_eq "d: no re-park when PR already marked" "absent" "$(log_state gh-issue-edit.log)"
 assert_eq "d: no re-mark when PR already marked" "absent" "$(log_state gh-pr-edit.log)"
@@ -34249,8 +34351,8 @@ setup
 # (wrongly) chosen, the gate would no-op and nothing would park. The genuine
 # trailing marker cites PR #1704 (CLOSED-unmerged), which parks + marks.
 printf '[{"number":106,"labels":[{"name":"dispatch:review-followup"}],"body":"orphan finding mentions <!-- dispatch:source-pr 1500 --> in its text, then the genuine appended marker <!-- dispatch:source-pr 1704 -->"}]\n' > "$STUB_DIR/issue-list.json"
-printf '{"state":"OPEN","mergedAt":null,"labels":[]}\n' > "$STUB_DIR/retriage-pr-1500.json"
-printf '{"state":"CLOSED","mergedAt":null,"labels":[]}\n' > "$STUB_DIR/retriage-pr-1704.json"
+printf '{"state":"open","merged_at":null,"labels":[]}\n' > "$STUB_DIR/retriage-pr-1500.json"
+printf '{"state":"closed","merged_at":null,"labels":[]}\n' > "$STUB_DIR/retriage-pr-1704.json"
 out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null)
 assert_eq "g: parks the follow-up against the LAST marker's PR (#1704)" \
   "issue edit 106 --add-label dispatch:office-hours" "$(cat "$STUB_DIR/gh-issue-edit.log")"
