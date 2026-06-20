@@ -144,6 +144,62 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
 source "$SCRIPT_DIR/lib-reservation-ledger.sh"
 
+# --- Decision-log instrumentation (write-only, non-fatal; #2038) -------------
+# Append EXACTLY ONE structured materialize-spawn record per run, via an EXIT
+# trap. This is set up FIRST — before the arg-parse usage-error exits at lines
+# ~204/208/214 — so the trap fires on EVERY exit path, giving one record per
+# run. It MUST NOT change the script's exit code, so it never calls `exit`.
+# decision_log_append is write-only and ALWAYS returns 0 (see
+# lib-decision-log.sh) — the log is a best-effort observability sink, so a
+# failed source / missing tool degrades to a no-op rather than a hard error.
+# No prior EXIT trap exists in this script, so this registers once (no chaining).
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/lib-decision-log.sh"
+
+# Accumulators, initialized to safe defaults before the trap is registered so an
+# early exit (under `set -u`) never references an unset var. Each terminal site
+# sets DLOG_DISPOSITION (and DLOG_DETAIL / DLOG_STOP_REASON where meaningful)
+# just before its echo/exit. MODE / GAP / spawned / stop_reason are declared
+# later; the emitter reads them defensively as ${VAR:-}.
+DLOG_DISPOSITION=""
+DLOG_DETAIL=""
+DLOG_STOP_REASON=""
+
+# _dlog_mspawn_emit — build the JSON record and hand it to decision_log_append.
+# Stdout-silent: the terminal stdout token is load-bearing for dispatch-tick's
+# `case`, so nothing here may leak to fd 1 (jq output is captured into a var; jq
+# stderr is swallowed). Numeric fields may be empty on an early exit, so they are
+# passed as strings and coerced in-filter (empty → JSON null) so jq never fails.
+_dlog_mspawn_emit() {
+  local json
+  json=$(jq -c -n \
+    --arg ts          "$(date -u +%FT%TZ)" \
+    --arg site        "materialize-spawn" \
+    --arg disposition "$DLOG_DISPOSITION" \
+    --arg detail      "$DLOG_DETAIL" \
+    --arg mode        "${MODE:-}" \
+    --arg stop_reason "${DLOG_STOP_REASON:-${stop_reason:-}}" \
+    --arg gap         "${GAP:-}" \
+    --arg spawned     "${spawned:-}" \
+    '
+    def num: if . == "" then null else (tonumber? // null) end;
+    {
+      ts:          $ts,
+      site:        $site,
+      disposition: $disposition,
+      detail:      $detail,
+      mode:        $mode,
+      stop_reason: $stop_reason,
+      gap:         ($gap | num),
+      spawned:     ($spawned | num)
+    }' 2>/dev/null) || return 0
+  decision_log_append "$json"
+}
+
+# Register the emit trap NOW, before the first terminal exit. No prior EXIT trap
+# exists in this script, so this is a single registration — nothing to chain.
+trap '_dlog_mspawn_emit' EXIT
+
 # Defined before argument parsing so the usage-error exits below release the lock
 # too. The lock is acquired by dispatch-select-tick in the same router session,
 # so a malformed materialize-spawn call would otherwise leave it held until
@@ -199,17 +255,20 @@ GAP=1
 if [[ "${3:-}" == "--gap" ]]; then
   GAP="${4:-}"
   if [[ ! "$GAP" =~ ^[1-9][0-9]*$ ]]; then
+    DLOG_DISPOSITION="error"; DLOG_DETAIL="bad-gap-arg"
     release_lock
     echo "dispatch-materialize-spawn: --gap requires a positive integer, got '${4:-}'" >&2
     exit 2
   fi
 elif [[ -n "${3:-}" ]]; then
+  DLOG_DISPOSITION="error"; DLOG_DETAIL="unexpected-arg"
   release_lock
   echo "dispatch-materialize-spawn: unexpected argument '$3'" >&2
   exit 2
 fi
 
 if [[ ! "$N" =~ ^[1-9][0-9]*$ ]] || { [[ "$MODE" != "explicit" && "$MODE" != "queue" ]]; }; then
+  DLOG_DISPOSITION="error"; DLOG_DETAIL="usage"
   release_lock
   echo "dispatch-materialize-spawn: usage: dispatch-materialize-spawn <issue-N> <explicit|queue> [--gap <N>]" >&2
   exit 2
@@ -480,11 +539,11 @@ process_one_target() {
 # Single-target path: explicit targets and gap<=1 process exactly one target and
 # emit the per-target terminal token, byte-identical to the pre-fan-out script.
 if [[ "$MODE" == "explicit" ]] || (( GAP <= 1 )); then
-  process_one_target "$N" "$MODE" || { release_lock; exit 2; }
+  process_one_target "$N" "$MODE" || { DLOG_DISPOSITION="error"; DLOG_DETAIL="process-one-target-failed"; release_lock; exit 2; }
   release_lock
   case "$OUTCOME" in
-    spawned)           echo "propagate" ;;
-    target-blocked)    echo "notify target-blocked" ;;
+    spawned)           DLOG_DISPOSITION="propagate"; echo "propagate" ;;
+    target-blocked)    DLOG_DISPOSITION="notify"; DLOG_DETAIL="target-blocked"; echo "notify target-blocked" ;;
     target-done)
       # Spawn-boundary done re-check (#1109): the resolved target's PR went ready
       # before the worker booted — no phase to run. Explicit dispatch emits a
@@ -492,12 +551,12 @@ if [[ "$MODE" == "explicit" ]] || (( GAP <= 1 )); then
       # next tick proceeds to the next priority. Both tokens pass through
       # dispatch-tick's `notify *` / `drain *` routing unchanged.
       if [[ "$MODE" == "explicit" ]]; then
-        echo "notify target-done"
+        DLOG_DISPOSITION="notify"; DLOG_DETAIL="target-done"; echo "notify target-done"
       else
-        echo "drain target-done"
+        DLOG_DISPOSITION="drain"; DLOG_DETAIL="target-done"; echo "drain target-done"
       fi
       ;;
-    worktree-conflict) echo "drain worktree-conflict" ;;
+    worktree-conflict) DLOG_DISPOSITION="drain"; DLOG_DETAIL="worktree-conflict"; echo "drain worktree-conflict" ;;
     ci-waiting)
       # Single-target path (#979): instead of draining as a no-op, schedule a
       # target-keyed reseed so the chain returns to #$WAITING_N when its CI
@@ -509,10 +568,11 @@ if [[ "$MODE" == "explicit" ]] || (( GAP <= 1 )); then
       reseed_rc=0
       reseed_out=$("$SCRIPT_DIR/dispatch-schedule-target-reseed" "$WAITING_N") || reseed_rc=$?
       if (( reseed_rc == 0 )) && [[ "$reseed_out" == "escalated" ]]; then
-        echo "notify ci-wait-exhausted"
+        DLOG_DISPOSITION="notify"; DLOG_DETAIL="ci-wait-exhausted"; echo "notify ci-wait-exhausted"
       elif (( reseed_rc == 0 )) && [[ "$reseed_out" == reseeded\ * ]]; then
-        echo "drain ci-reseeded"
+        DLOG_DISPOSITION="drain"; DLOG_DETAIL="ci-reseeded"; echo "drain ci-reseeded"
       else
+        DLOG_DISPOSITION="drain"; DLOG_DETAIL="ci-waiting"
         echo "dispatch-materialize-spawn: dispatch-schedule-target-reseed failed for #$WAITING_N (rc=$reseed_rc): $reseed_out" >&2
         echo "drain ci-waiting"
       fi
@@ -578,7 +638,7 @@ spawned=0
 stop_reason="gap filled"
 
 # --- seed: process the passed-in N first (unchanged semantics) ---
-process_one_target "$N" "$MODE" || { release_lock; exit 2; }
+process_one_target "$N" "$MODE" || { DLOG_DISPOSITION="error"; DLOG_DETAIL="process-one-target-failed"; release_lock; exit 2; }
 SEEN["$N"]=1
 record_outcome "$N"
 
@@ -598,7 +658,8 @@ if (( spawned < GAP )); then
       issue\ *) cur_n="${line#issue }"; cur_mode=queue ;;
       empty) stop_reason="queue exhausted"; break ;;
       main-broken\ *|jit-reminder\ *) stop_reason="selection deferred (${line%% *})"; break ;;
-      *) release_lock
+      *) DLOG_DISPOSITION="error"; DLOG_DETAIL="unexpected-select-target"
+         release_lock
          echo "dispatch-materialize-spawn: dispatch-select-target emitted unexpected '$line' in fan-out" >&2
          exit 2 ;;
     esac
@@ -606,7 +667,7 @@ if (( spawned < GAP )); then
     # is --exclude'd, so a SEEN target should never appear; if it does, skip it
     # quietly rather than re-dispatching.
     if [[ -n "${SEEN[$cur_n]:-}" ]]; then continue; fi
-    process_one_target "$cur_n" "$cur_mode" || { release_lock; exit 2; }
+    process_one_target "$cur_n" "$cur_mode" || { DLOG_DISPOSITION="error"; DLOG_DETAIL="process-one-target-failed"; release_lock; exit 2; }
     SEEN["$cur_n"]=1
     record_outcome "$cur_n"
     (( spawned >= GAP )) && { stop_reason="gap filled"; break; }
@@ -620,10 +681,11 @@ if (( spawned < GAP )); then
 fi
 
 release_lock
+DLOG_STOP_REASON="$stop_reason"
 if [[ "$stop_reason" == "gap filled" ]]; then
   echo "propagate: spawned $spawned of gap $GAP"
 else
   echo "propagate: spawned $spawned of gap $GAP ($stop_reason)"
 fi
-if (( spawned >= 1 )); then echo "propagate"; else echo "drain"; fi
+if (( spawned >= 1 )); then DLOG_DISPOSITION="propagate"; echo "propagate"; else DLOG_DISPOSITION="drain"; echo "drain"; fi
 exit 0
