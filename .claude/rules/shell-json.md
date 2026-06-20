@@ -38,3 +38,5 @@ PR_NUM=$(printf '%s' "$PR_JSON" | jq -r .number)
 A direct pipe (`gh … --json … | jq`) is also safe — gh's stdout reaches `jq`
 without an `echo` in between. For non-JSON raw text fed to `jq`, use
 `jq --raw-input`.
+
+This rule is mechanically enforced for net-new added lines in committed `.sh` files by `.claude/skills/dispatch-propagate/scripts/lint-prose-rules.sh`, run via `run-lint.sh` in CI; on a match the linter fails with the remediation inline. Enforcement is a project convention for committed scripts (uniformity aids review) — it does not retroactively rewrite pre-existing sites, and it is not a claim that the rule fixes a zsh-only bug in those files. (The original recurrence #1170 was interactive zsh Bash-tool usage, which is not a committed file at all.)
