@@ -17,15 +17,15 @@ export class ReadonlyURLSearchParams extends URLSearchParams {
   private static readonly MESSAGE =
     "ReadonlyURLSearchParams: location params are read-only; do not mutate the URLSearchParams returned by useLocation()/getSnapshot()";
 
-  set(_name: string, _value: string): void {
+  set(): void {
     throw new TypeError(ReadonlyURLSearchParams.MESSAGE);
   }
 
-  append(_name: string, _value: string): void {
+  append(): void {
     throw new TypeError(ReadonlyURLSearchParams.MESSAGE);
   }
 
-  delete(_name: string, _value?: string): void {
+  delete(): void {
     throw new TypeError(ReadonlyURLSearchParams.MESSAGE);
   }
 
