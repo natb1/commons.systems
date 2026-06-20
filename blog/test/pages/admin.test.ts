@@ -1,6 +1,16 @@
 import { describe, it, expect } from "vitest";
-import { renderAdmin } from "../../src/pages/admin";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import type { User } from "firebase/auth";
+import { Admin } from "../../src/pages/Admin.tsx";
+
+// Local static-markup helper reproducing the former renderAdmin bridge
+// (deleted with src/pages/admin.ts). It renders the frozen Admin component to a
+// string so every assertion body below stays identical and its coverage of
+// Admin's rendered output is preserved.
+function renderAdmin(user: User | null, isAdmin: boolean, skippedCount = 0): string {
+  return renderToStaticMarkup(createElement(Admin, { user, isAdmin, skippedCount }));
+}
 
 function makeUser(overrides?: { displayName?: string | null; email?: string | null }): User {
   return {
