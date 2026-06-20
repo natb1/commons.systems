@@ -71,7 +71,7 @@ vi.mock("@commons-systems/errorutil/log", () => ({
 // ---------------------------------------------------------------------------
 // Import real modules AFTER mocks are declared
 // ---------------------------------------------------------------------------
-import { renderLocalIntoList } from "../src/local-folder-ui.js";
+import { renderLocalIntoList, settleEnrichment } from "../src/local-folder-ui.js";
 import {
   setLocalDirectory,
   flushWrites,
@@ -252,6 +252,7 @@ describe("enrichment — uncached item (extracts and caches)", () => {
 
     const container = makeContainer();
     await renderLocalIntoList(container);
+    await settleEnrichment();
     await flushWrites();
 
     expect(mockResolveLocalBlob).toHaveBeenCalledWith(item);
@@ -277,6 +278,7 @@ describe("enrichment — uncached item (extracts and caches)", () => {
 
     const container = makeContainer();
     await renderLocalIntoList(container);
+    await settleEnrichment();
     await flushWrites();
 
     const readBack = await readSidecar(dir);
@@ -332,11 +334,13 @@ describe("enrichment — write suppression on focus-rescan", () => {
     const container = makeContainer();
     // First render: extracts and caches {}
     await renderLocalIntoList(container);
+    await settleEnrichment();
     await flushWrites();
     expect(mockExtractMetadata).toHaveBeenCalledTimes(1);
 
     // Second render (simulates focus rescan): {} is a defined entry → no re-extract
     await renderLocalIntoList(container);
+    await settleEnrichment();
     await flushWrites();
     expect(mockExtractMetadata).toHaveBeenCalledTimes(1); // still only once
   });
