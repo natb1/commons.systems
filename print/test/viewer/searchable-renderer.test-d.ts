@@ -7,13 +7,13 @@
  * REQUIRED ContentRenderer members (annotated `satisfies ContentRenderer`, which
  * keeps its narrow inferred type rather than re-widening to ContentRenderer's
  * optional surface). Because `_base` carries no `renderResult` key, the spread
- * provably cannot supply renderResult — so the @ts-expect-error below can only be
+ * provably cannot supply renderResult — so the suppress-error directive below can only be
  * satisfied by the intended missing-member mismatch, never vacuously.
  *
  * Vacuity (one-time / manual check, not CI-enforced): temporarily add
  * `renderResult: async () => {}` to the literal below and run
  * `tsc --noEmit -p print/tsconfig.json`; tsc should then report the
- * @ts-expect-error directive as UNUSED (TS2578) — confirming the sole cause of
+ * that directive as unused (TS2578) — confirming the sole cause of
  * the error is the missing method.
  */
 import type { ContentRenderer, SearchableRenderer } from "../../src/viewer/types";
