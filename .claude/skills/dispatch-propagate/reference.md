@@ -126,6 +126,56 @@ lock is reclaimed automatically. Same-session re-entry (e.g. after a context cle
 cleanly because the recorded sessionId matches the re-entering session's own
 `CLAUDE_CODE_SESSION_ID`.
 
+## Max-hold / heartbeat staleness cap
+
+Before #2104, the dead-holder reclaim covered the case where a router crashes mid-selection
+and its sessionId disappears from `claude agents --json`. It did not cover a holder that is
+still live but wedged — a session that resumed after a crash without releasing, or one that
+stalled indefinitely inside a retry or wait loop. A wedged live holder blocked the chain
+permanently because no acquisition could proceed against a foreign sessionId that remained
+visible in the agents list.
+
+The staleness cap adds a second reclaim condition: if the recorded foreign holder is live but
+the lock-file mtime is older than `max_hold_seconds`, the acquirer reclaims it regardless,
+logging a `reclaimed stale lock from … (held …s > max_hold …s)` diagnostic. This reclaim
+runs AFTER the existing liveness resolve, so a daemon probe failure that returns UNKNOWN still
+folds to LIVE→BUSY — the acquirer does not steal on uncertainty. `max_hold_seconds` is
+configured in `dispatch.config/selection-lock.json` (`{ "max_hold_seconds": 300 }`), with
+`DISPATCH_LOCK_MAX_HOLD_SECONDS` as an env override; config takes precedence. The default is
+300 seconds.
+
+The **lock-file mtime is the heartbeat**. Only a claim/reclaim write or a `--heartbeat`
+touch bumps it; the low-level append-open and flock do not. `dispatch-acquire-lock
+--heartbeat` is a strict-owner mode: if the caller's sessionId matches the recorded holder it
+bumps the mtime and prints `refreshed`; otherwise it noops. It issues no daemon probe and
+completes in under 100ms. The held region (`dispatch-select-tick`, `dispatch-materialize-spawn`)
+calls `--heartbeat` after each best-effort sub-step completes and before each cross-process
+HOLD handoff.
+
+Three invariants govern correctness of this mechanism:
+
+1. **`max_hold_seconds` bounds the worst-case gap between two consecutive heartbeat *refreshes*,
+   not the worst-case total hold duration.** A dispossessed holder is never signaled it lost the
+   lock: after a stale-reclaim, its next `--heartbeat` sees a foreign sessionId and silently
+   noops. The guarantee against a false reclaim is therefore "heartbeats keep arriving faster
+   than `max_hold_seconds`," not "the hold is short." Legitimate multi-step sequences
+   that take longer than 300 seconds are safe as long as each sub-step finishes and fires a
+   heartbeat within the window.
+
+2. **Heartbeats fire on sub-step *completion*, never inside a retry / poll / wait loop.** The
+   failure mode being fixed is a holder wedged inside a loop — one that is live (visible to
+   `claude agents --json`) but making no selection progress. Placing a refresh inside such a
+   loop would keep the mtime fresh while the holder spins and the wedge would recur. Refreshes
+   are placed only after a sub-step returns, ensuring that a genuinely stalled holder stops
+   refreshing and becomes reclaimable.
+
+3. **The per-worktree spawn dedup — not the heartbeat — is the real #1068 safety net.** When a
+   stale-reclaim races a still-live holder, both may proceed to the selection scan. The existing
+   per-worktree dedup in `dispatch-spawn-job` is what prevents two selectors from spawning the
+   same target. Live-stale reclaim exercises that backstop more often than the existing dead-holder
+   reclaim does. The no-reclaim-when-fresh behavior keeps the race rare; the per-worktree marker
+   keeps it safe when it happens.
+
 ## Per-worktree invariant
 
 The selection lock is **per-repo** and serializes the router's selection
@@ -151,6 +201,8 @@ The two mechanisms have orthogonal scopes:
 
 - **Selection lock** — per-repo, held by the router for the
   duration of Steps 1–5. Prevents two routers from selecting the same target.
+  A live-but-wedged holder is reclaimed once its heartbeat (lock-file mtime) exceeds
+  `max_hold_seconds` (default 300; see *Max-hold / heartbeat staleness cap*).
 - **Per-worktree dedup** (`dispatch-launch-worker`, via `dispatch-spawn-job`) —
   per-worktree-path, enforced at every router-to-worker spawn. Prevents two
   workers from racing on the same issue.
