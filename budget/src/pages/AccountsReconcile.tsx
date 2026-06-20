@@ -9,7 +9,8 @@
 // The imperative DOM mutations of the legacy hydrate become React state:
 //   - the URL query (institution/account/period) is React state, initialized
 //     from parseReconcileQuery(location.search) — the deep-link read — and written
-//     back with history.replaceState on a Select change. We do NOT dispatch
+//     back via the shared navigate(…, { replace: true }) abstraction on a Select
+//     change. We do NOT dispatch
 //     popstate: useRouter strips the query, so a query-only popstate is inert, and
 //     App re-keys only on a data transition. The component owns its query.
 //   - per-leg checked state is React state (the optimistic toggle); on a persist
