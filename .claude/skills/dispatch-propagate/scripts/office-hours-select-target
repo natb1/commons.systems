@@ -134,62 +134,94 @@ while IFS= read -r wt_record; do
   fi
 done < <(list_worktree_records)
 
-# Returns the sessionId of an ATTACHABLE idle/complete session occupying a
-# <num>-* worktree on stdout (rc 0), or one of three non-attachable verdicts:
+# Returns an ATTACHABLE idle/complete session for the issue as a TAB-separated
+# `sessionId<TAB>cwd` on stdout (rc 0), or one of three non-attachable verdicts:
 #   rc 0 — attachable: an idle session (state waiting/done/idle) was found;
-#          its sessionId is on stdout.
-#   rc 1 — sessionless: no worktree, or every worktree queried clean.
-#   rc 2 — UNKNOWN: the daemon could not be queried for some worktree, and no
-#          attachable session was seen.
+#          `sessionId<TAB>cwd` is on stdout. The cwd (added #2241) lets the next
+#          unit stat the session's working directory and derive its branch — e.g.
+#          to provision a swept worktree from the remote branch.
+#   rc 1 — sessionless: no matching session was found anywhere.
+#   rc 2 — UNKNOWN: the daemon could not be queried, and no attachable session
+#          was seen.
 #   rc 3 — present-but-not-attachable: a session was seen but its state is
 #          working/stopped/paused/unrecognized — skip the issue (don't attach,
-#          don't fresh-launch into its occupied worktree).
-# Gates on the granular session `state` (via claude_sessions_with_name_all,
-# which passes --all so `done` sessions are visible), not on mere liveness.
-# Within an issue, an attachable idle session under ANY name/path wins, so the
-# loops keep looking past a skip/unknown row; the resolution priority once both
-# loops finish with no attachable match is attachable > skip (3) > unknown (2)
-# > sessionless (1).
-# Two-name check per worktree (#1311): queries both the worktree basename (phase
-# worker) and office-hours-<N> (the renamed office-hours session). Mirrors
-# worktree_has_live_session's basename-then-office-hours ordering so a
-# basename-named session still resolves first.
+#          don't fresh-launch on top of its live work).
+# Gates on the granular session `state` (via claude_sessions_with_name_all /
+# claude_sessions_with_name_prefix_all, which pass --all so `done` sessions are
+# visible), not on mere liveness. An attachable idle session under ANY name wins,
+# so the probe keeps looking past a skip/unknown row; the resolution priority once
+# every name is checked with no attachable match is attachable > skip (3) >
+# unknown (2) > sessionless (1).
+#
+# #2241: probes the local registry INDEPENDENT of worktree registration — there
+# is no longer a `[[ -z "$paths" ]] && return 1` gate short-circuiting the probe.
+# This is what lets office-hours re-attach to an originating session whose <N>-*
+# worktree has been swept. It also fixes a latent double-claim bug: a `working`
+# session with an unregistered worktree previously returned rc1 (sessionless) and
+# got fresh-launched on top of live work; it is now FOUND, hits the `*) saw_skip`
+# arm, and returns rc3 so the caller does NOT fresh-launch it (criterion 5).
+#
+# Name set:
+#   - When a <N>-* worktree IS registered, query the worktree basename (phase
+#     worker, exact) then office-hours-<N> (the renamed office-hours session,
+#     exact). The basename-first ordering (#1311) lets a basename-named session
+#     resolve first — mirrors worktree_has_live_session.
+#   - When NO worktree is registered there is no basename: match office-hours-<N>
+#     (exact) AND `^<N>-` (prefix, catching phase workers named `<N>-slug`).
 issue_live_session_id() {
-  local num="$1" p base nm sessions sid state saw_unknown=0 saw_skip=0
+  local num="$1" p base sid state cwd saw_unknown=0 saw_skip=0
   local paths="${WORKTREE_PATHS_BY_NUM[$num]:-}"
-  [[ -z "$paths" ]] && return 1
-  while IFS= read -r p; do
-    [[ -z "$p" ]] && continue
-    base=$(basename "$p")
-    # Two-name liveness (#1311): a session named after the worktree basename
-    # (phase worker) OR office-hours-<N> (the renamed office-hours session) occupies
-    # this worktree. Mirrors worktree_has_live_session's basename-then-office-hours
-    # ordering, so a basename-named session still resolves first.
-    for nm in "$base" "office-hours-$num"; do
-      if sessions=$(claude_sessions_with_name_all "$nm"); then
-        # rc 0 with non-empty output → a matching session row; rc 0 with empty
-        # output → no session of that name (continue). Guard before cutting.
-        if [[ -n "$sessions" ]]; then
-          IFS=$'\t' read -r sid state _ <<< "$(printf '%s\n' "$sessions" | head -n 1)"
-          case "$state" in
-            waiting|done|idle)
-              # Attachable — return immediately.
-              printf '%s' "$sid"
-              return 0
-              ;;
-            *)
-              # working/stopped/paused/unrecognized (or empty/malformed) →
-              # not attachable; keep looking — an attachable session under
-              # another name/path still wins.
-              saw_skip=1
-              ;;
-          esac
-        fi
-      else
-        saw_unknown=1
+
+  # Inspect one session-query result (sessionId<TAB>state<TAB>cwd TSV on stdout,
+  # rc reflecting the daemon-query contract). On the first attachable row it emits
+  # `sessionId<TAB>cwd` and returns 0 (the outer function then returns 0); a
+  # non-attachable row sets saw_skip; a query failure sets saw_unknown.
+  _inspect() {
+    local sessions
+    if sessions=$("$@"); then
+      # rc 0 with non-empty output → a matching session row; rc 0 with empty
+      # output → no session of that name (nothing to do). Guard before cutting.
+      if [[ -n "$sessions" ]]; then
+        IFS=$'\t' read -r sid state cwd _ <<< "$(printf '%s\n' "$sessions" | head -n 1)"
+        case "$state" in
+          waiting|done|idle)
+            # Attachable — emit sessionId<TAB>cwd (#2241) and signal the caller
+            # to return 0 immediately.
+            printf '%s\t%s\n' "$sid" "$cwd"
+            return 0
+            ;;
+          *)
+            # working/stopped/paused/unrecognized (or empty/malformed) → not
+            # attachable; keep looking — an attachable session under another
+            # name still wins. A `working` session with no registered worktree
+            # lands here (the #2241 double-claim fix): it is now found and skips
+            # rather than being mistaken for sessionless and fresh-launched.
+            saw_skip=1
+            ;;
+        esac
       fi
-    done
-  done <<< "$paths"
+    else
+      saw_unknown=1
+    fi
+    return 1
+  }
+
+  if [[ -n "$paths" ]]; then
+    # Worktree(s) registered: two-name exact check per worktree (#1311), basename
+    # first so a phase-worker session resolves before the renamed office-hours one.
+    while IFS= read -r p; do
+      [[ -z "$p" ]] && continue
+      base=$(basename "$p")
+      _inspect claude_sessions_with_name_all "$base" && return 0
+      _inspect claude_sessions_with_name_all "office-hours-$num" && return 0
+    done <<< "$paths"
+  else
+    # No worktree registered (#2241): no basename to key on. Match the renamed
+    # office-hours session (exact) AND any phase worker named `<N>-slug` (prefix).
+    _inspect claude_sessions_with_name_all "office-hours-$num" && return 0
+    _inspect claude_sessions_with_name_prefix_all "$num-" && return 0
+  fi
+
   (( saw_skip )) && return 3
   (( saw_unknown )) && return 2
   return 1
