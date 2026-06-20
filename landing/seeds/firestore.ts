@@ -33,6 +33,16 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
           } satisfies PostSeedData,
         },
         {
+          id: "harness-engineering-in-practice",
+          data: {
+            title: "A Harness I Own and Can Walk Away From",
+            published: true,
+            publishedAt: "2026-06-19T00:00:00Z",
+            filename: "harness-engineering-in-practice.md",
+            previewDescription: "A field report on harness engineering: how a forkable, self-hosted agent harness contains the long-horizon failure modes that degrade autonomous coding agents.",
+          } satisfies PostSeedData,
+        },
+        {
           id: "draft-ideas",
           data: {
             title: "Draft Ideas",
