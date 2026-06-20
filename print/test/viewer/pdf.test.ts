@@ -554,6 +554,24 @@ describe("search()", () => {
       spy.mockRestore();
     }
   });
+});
+
+describe("getOutline()", () => {
+  let container: HTMLElement;
+
+  beforeEach(() => {
+    resizeObserverCallbacks = [];
+    vi.clearAllMocks();
+    container = document.createElement("div");
+    if (typeof globalThis.reportError !== "function") {
+      globalThis.reportError = () => {};
+    }
+    vi.spyOn(globalThis, "reportError").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.mocked(globalThis.reportError).mockRestore();
+  });
 
   it("getOutline() resolves cleanly with no reportError when destroy() races getDestination()", async () => {
     // Load-bearing: getDestination returns a NON-EMPTY array so the pre-fix code
@@ -566,7 +584,7 @@ describe("search()", () => {
     const racingDoc = {
       numPages: 3,
       destroy() {},
-      getPage: (i: number) =>
+      getPage: (_i: number) =>
         Promise.resolve({
           getTextContent: () => Promise.resolve({ items: [{ str: "text" }] }),
           getViewport: () => ({ width: 100, height: 100 }),
