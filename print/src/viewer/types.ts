@@ -16,6 +16,28 @@ export interface SearchResult {
   readonly matchLength: number;
 }
 
+/**
+ * Maximum number of search results a renderer returns from a single search().
+ *
+ * Common short queries ("the", "a") match thousands of positions across a long
+ * document; collecting and highlighting every one freezes the viewer. Capping
+ * the result count bounds both the returned list and the synchronous highlight
+ * burst. A single shared constant backs both the EPUB and PDF renderers for
+ * uniformity; 200 is the value the PDF renderer already shipped.
+ */
+export const MAX_SEARCH_RESULTS = 200;
+
+/**
+ * Envelope returned by a renderer's search method. Carries the capped result
+ * list plus whether the cap truncated the matches, so the truncation fact
+ * travels with the results rather than living in renderer state (where
+ * overlapping searches would race over it).
+ */
+export interface SearchResponse {
+  readonly results: SearchResult[];
+  readonly truncated: boolean;
+}
+
 /** A node in a document's table of contents tree. */
 export interface OutlineEntry {
   readonly title: string;
@@ -51,7 +73,7 @@ export interface ContentRenderer {
    * `clearSearch?.()` call sites compile unchanged. Use isSearchable() to narrow
    * a ContentRenderer to SearchableRenderer at call sites that need all four.
    */
-  search?(query: string): Promise<SearchResult[]>;
+  search?(query: string): Promise<SearchResponse>;
   goToResult?(result: SearchResult): Promise<void>;
   renderResult?(): Promise<void>;
   clearSearch?(): void;
@@ -68,7 +90,7 @@ export interface ContentRenderer {
  * is a compile error rather than a silent `renderResult?.()` no-op.
  */
 export interface SearchableRenderer extends ContentRenderer {
-  search(query: string): Promise<SearchResult[]>;
+  search(query: string): Promise<SearchResponse>;
   goToResult(result: SearchResult): Promise<void>;
   /**
    * Render the armed result in single-page mode. A renderer whose goToResult

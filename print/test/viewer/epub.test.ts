@@ -674,7 +674,7 @@ describe("createEpubRenderer", () => {
       mockBook.navigation.get.mockImplementation((href: string) => ({ label: `Label ${href}` }));
 
       const renderer = await initRenderer();
-      const results = await renderer.search!("fox");
+      const { results } = await renderer.search!("fox");
 
       // load + find called on every section (matches across chapter boundaries).
       for (const s of [s0, s1, s2]) {
@@ -697,7 +697,8 @@ describe("createEpubRenderer", () => {
       mockBook.navigation.get.mockReturnValue({ label: "Chapter One" });
 
       const renderer = await initRenderer();
-      const [result] = await renderer.search!("brown");
+      const { results } = await renderer.search!("brown");
+      const [result] = results;
 
       // Whitespace collapsed to single spaces and trimmed.
       expect(result!.snippet).toBe("the quick brown fox jumps");
@@ -716,7 +717,8 @@ describe("createEpubRenderer", () => {
       mockBook.navigation.get.mockReturnValue({ label: "Padded" });
 
       const renderer = await initRenderer();
-      const [result] = await renderer.search!("fox");
+      const { results } = await renderer.search!("fox");
+      const [result] = results;
 
       expect(result!.snippet).toBe("...lots of text fox more text...");
       expect(result!.matchStart).toBe(result!.snippet.indexOf("fox"));
@@ -731,7 +733,8 @@ describe("createEpubRenderer", () => {
       mockBook.navigation.get.mockReturnValue({ label: "Caps" });
 
       const renderer = await initRenderer();
-      const [result] = await renderer.search!("fox");
+      const { results } = await renderer.search!("fox");
+      const [result] = results;
 
       expect(result!.snippet).toBe("A FOX in the henhouse");
       expect(result!.matchStart).toBe(2); // index of "FOX"
@@ -745,7 +748,7 @@ describe("createEpubRenderer", () => {
       mockBook.navigation.get.mockReturnValue(undefined);
 
       const renderer = await initRenderer();
-      const results = await renderer.search!("fox");
+      const { results } = await renderer.search!("fox");
 
       expect(results.map((r) => r.label)).toEqual(["Ch. 1", "Ch. 2"]);
     });
@@ -775,9 +778,9 @@ describe("createEpubRenderer", () => {
       mockSpine.spineItems = [s0];
 
       const renderer = await initRenderer();
-      const results = await renderer.search!("   ");
+      const response = await renderer.search!("   ");
 
-      expect(results).toEqual([]);
+      expect(response).toEqual({ results: [], truncated: false });
       expect(s0.load).not.toHaveBeenCalled();
       expect(s0.find).not.toHaveBeenCalled();
       expect(mockRendition.annotations.highlight).not.toHaveBeenCalled();
@@ -833,7 +836,7 @@ describe("createEpubRenderer", () => {
       mockBook.navigation.get.mockImplementation((href: string) => ({ label: `Label ${href}` }));
 
       const renderer = await initRenderer();
-      const results = await renderer.search!("fox");
+      const { results } = await renderer.search!("fox");
 
       // Every section's unload() must still be called (finally block runs
       // for each section regardless of whether a sibling fails).

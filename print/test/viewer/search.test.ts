@@ -5,7 +5,7 @@ import { act } from "react";
 import { createElement } from "react";
 import { SearchPanel } from "../../src/viewer/SearchPanel";
 import type { UseViewerControllerResult } from "../../src/viewer/useViewerController";
-import type { SearchResult } from "../../src/viewer/types";
+import type { SearchResult, SearchResponse } from "../../src/viewer/types";
 import { makeMockRenderer } from "./mock-renderer";
 
 // ---------------------------------------------------------------------------
@@ -26,7 +26,7 @@ function makeSearchResult(overrides: Partial<SearchResult> = {}): SearchResult {
 /** Build a mock controller stub with all search-related methods wired up. */
 function makeMockController(overrides: Partial<UseViewerControllerResult> = {}): UseViewerControllerResult {
   const renderer = makeMockRenderer({
-    search: vi.fn().mockResolvedValue([]),
+    search: vi.fn().mockResolvedValue({ results: [], truncated: false }),
     goToResult: vi.fn().mockResolvedValue(undefined),
     renderResult: vi.fn().mockResolvedValue(undefined),
     clearSearch: vi.fn(),
@@ -136,7 +136,7 @@ describe("SearchPanel", () => {
   // -------------------------------------------------------------------------
 
   it("calls renderer.search after 300ms debounce on input", async () => {
-    const searchFn = vi.fn().mockResolvedValue([]);
+    const searchFn = vi.fn().mockResolvedValue({ results: [], truncated: false });
     const renderer = makeMockRenderer({ search: searchFn, goToResult: vi.fn(), renderResult: vi.fn(), clearSearch: vi.fn() });
     const controller = makeMockController({ getRenderer: () => renderer });
     render(controller);
@@ -160,7 +160,7 @@ describe("SearchPanel", () => {
   // -------------------------------------------------------------------------
 
   it("search event (Enter key) triggers search immediately without debounce", async () => {
-    const searchFn = vi.fn().mockResolvedValue([]);
+    const searchFn = vi.fn().mockResolvedValue({ results: [], truncated: false });
     const renderer = makeMockRenderer({ search: searchFn, goToResult: vi.fn(), renderResult: vi.fn(), clearSearch: vi.fn() });
     const controller = makeMockController({ getRenderer: () => renderer });
     render(controller);
@@ -179,7 +179,7 @@ describe("SearchPanel", () => {
   });
 
   it("search event cancels pending debounce and deduplicates", async () => {
-    const searchFn = vi.fn().mockResolvedValue([]);
+    const searchFn = vi.fn().mockResolvedValue({ results: [], truncated: false });
     const renderer = makeMockRenderer({ search: searchFn, goToResult: vi.fn(), renderResult: vi.fn(), clearSearch: vi.fn() });
     const controller = makeMockController({ getRenderer: () => renderer });
     render(controller);
@@ -212,7 +212,7 @@ describe("SearchPanel", () => {
 
   it("empty input calls renderer.clearSearch and clears results", async () => {
     const clearSearch = vi.fn();
-    const searchFn = vi.fn().mockResolvedValue([makeSearchResult()]);
+    const searchFn = vi.fn().mockResolvedValue({ results: [makeSearchResult()], truncated: false });
     const renderer = makeMockRenderer({ search: searchFn, goToResult: vi.fn(), renderResult: vi.fn(), clearSearch });
     const controller = makeMockController({ getRenderer: () => renderer });
     render(controller);
@@ -243,7 +243,7 @@ describe("SearchPanel", () => {
     const result1 = makeSearchResult({ location: "3", label: "Page 3" });
     const result2 = makeSearchResult({ location: "7", label: "Page 7" });
     const goToResult = vi.fn().mockResolvedValue(undefined);
-    const renderer = makeMockRenderer({ search: vi.fn().mockResolvedValue([result1, result2]), goToResult, renderResult: vi.fn(), clearSearch: vi.fn() });
+    const renderer = makeMockRenderer({ search: vi.fn().mockResolvedValue({ results: [result1, result2], truncated: false }), goToResult, renderResult: vi.fn(), clearSearch: vi.fn() });
     const controller = makeMockController({ getRenderer: () => renderer });
     render(controller);
 
@@ -264,7 +264,7 @@ describe("SearchPanel", () => {
 
   it("clicking a result calls the onSearchNavigate callback", async () => {
     const onSearchNavigate = vi.fn();
-    const renderer = makeMockRenderer({ search: vi.fn().mockResolvedValue([makeSearchResult()]), goToResult: vi.fn().mockResolvedValue(undefined), renderResult: vi.fn(), clearSearch: vi.fn() });
+    const renderer = makeMockRenderer({ search: vi.fn().mockResolvedValue({ results: [makeSearchResult()], truncated: false }), goToResult: vi.fn().mockResolvedValue(undefined), renderResult: vi.fn(), clearSearch: vi.fn() });
     const controller = makeMockController({ getRenderer: () => renderer, onSearchNavigate });
     render(controller);
 
@@ -290,8 +290,8 @@ describe("SearchPanel", () => {
 
   it("count text shows correct singular and plural forms", async () => {
     const searchFn = vi.fn()
-      .mockResolvedValueOnce([makeSearchResult()])
-      .mockResolvedValueOnce([makeSearchResult(), makeSearchResult(), makeSearchResult()]);
+      .mockResolvedValueOnce({ results: [makeSearchResult()], truncated: false })
+      .mockResolvedValueOnce({ results: [makeSearchResult(), makeSearchResult(), makeSearchResult()], truncated: false });
     const renderer = makeMockRenderer({ search: searchFn, goToResult: vi.fn(), renderResult: vi.fn(), clearSearch: vi.fn() });
     const controller = makeMockController({ getRenderer: () => renderer });
     render(controller);
@@ -315,7 +315,7 @@ describe("SearchPanel", () => {
   });
 
   it("zero results shows '0 results' count", async () => {
-    const renderer = makeMockRenderer({ search: vi.fn().mockResolvedValue([]), goToResult: vi.fn(), renderResult: vi.fn(), clearSearch: vi.fn() });
+    const renderer = makeMockRenderer({ search: vi.fn().mockResolvedValue({ results: [], truncated: false }), goToResult: vi.fn(), renderResult: vi.fn(), clearSearch: vi.fn() });
     const controller = makeMockController({ getRenderer: () => renderer });
     render(controller);
 
@@ -340,7 +340,7 @@ describe("SearchPanel", () => {
       matchStart: 0,
       matchLength: 8,
     });
-    const renderer = makeMockRenderer({ search: vi.fn().mockResolvedValue([xssResult]), goToResult: vi.fn(), renderResult: vi.fn(), clearSearch: vi.fn() });
+    const renderer = makeMockRenderer({ search: vi.fn().mockResolvedValue({ results: [xssResult], truncated: false }), goToResult: vi.fn(), renderResult: vi.fn(), clearSearch: vi.fn() });
     const controller = makeMockController({ getRenderer: () => renderer });
     render(controller);
 
@@ -359,7 +359,7 @@ describe("SearchPanel", () => {
     const xssResult = makeSearchResult({
       label: '<img onerror="alert(1)">',
     });
-    const renderer = makeMockRenderer({ search: vi.fn().mockResolvedValue([xssResult]), goToResult: vi.fn(), renderResult: vi.fn(), clearSearch: vi.fn() });
+    const renderer = makeMockRenderer({ search: vi.fn().mockResolvedValue({ results: [xssResult], truncated: false }), goToResult: vi.fn(), renderResult: vi.fn(), clearSearch: vi.fn() });
     const controller = makeMockController({ getRenderer: () => renderer });
     render(controller);
 
@@ -378,7 +378,7 @@ describe("SearchPanel", () => {
   // -------------------------------------------------------------------------
 
   it("cleanup cancels timer (unmount before 300ms → search not called)", async () => {
-    const searchFn = vi.fn().mockResolvedValue([]);
+    const searchFn = vi.fn().mockResolvedValue({ results: [], truncated: false });
     const renderer = makeMockRenderer({ search: searchFn, goToResult: vi.fn(), renderResult: vi.fn(), clearSearch: vi.fn() });
     const controller = makeMockController({ getRenderer: () => renderer });
     render(controller);
@@ -406,11 +406,11 @@ describe("SearchPanel", () => {
   // -------------------------------------------------------------------------
 
   it("discards stale search results when query changes during await", async () => {
-    let resolveFirst!: (value: SearchResult[]) => void;
-    const staleResults = [makeSearchResult({ label: "Stale" })];
-    const freshResults = [makeSearchResult({ label: "Fresh" })];
+    let resolveFirst!: (value: SearchResponse) => void;
+    const staleResults = { results: [makeSearchResult({ label: "Stale" })], truncated: false };
+    const freshResults = { results: [makeSearchResult({ label: "Fresh" })], truncated: false };
     const searchFn = vi.fn()
-      .mockImplementationOnce(() => new Promise<SearchResult[]>((r) => { resolveFirst = r; }))
+      .mockImplementationOnce(() => new Promise<SearchResponse>((r) => { resolveFirst = r; }))
       .mockImplementationOnce(() => Promise.resolve(freshResults));
     const renderer = makeMockRenderer({ search: searchFn, goToResult: vi.fn(), renderResult: vi.fn(), clearSearch: vi.fn() });
     const controller = makeMockController({ getRenderer: () => renderer });
@@ -454,7 +454,7 @@ describe("SearchPanel", () => {
       makeSearchResult({ location: "1", label: "Page 1" }),
       makeSearchResult({ location: "2", label: "Page 2" }),
     ];
-    const renderer = makeMockRenderer({ search: vi.fn().mockResolvedValue(results), goToResult: vi.fn().mockResolvedValue(undefined), renderResult: vi.fn(), clearSearch: vi.fn() });
+    const renderer = makeMockRenderer({ search: vi.fn().mockResolvedValue({ results, truncated: false }), goToResult: vi.fn().mockResolvedValue(undefined), renderResult: vi.fn(), clearSearch: vi.fn() });
     const controller = makeMockController({ getRenderer: () => renderer });
     render(controller);
 

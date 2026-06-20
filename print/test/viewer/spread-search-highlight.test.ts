@@ -153,7 +153,7 @@ describe("spread search highlight (real SpreadController + pdf renderer)", () =>
     await controller.render();
 
     // Search "dog" → single result on page 2.
-    const results = await renderer.search!("dog");
+    const { results } = await renderer.search!("dog");
     const page2Result = results.find((r) => r.label === "Page 2");
     expect(page2Result).toBeDefined();
 
@@ -180,7 +180,7 @@ describe("spread search highlight (real SpreadController + pdf renderer)", () =>
     controller.enter(renderer.currentPage);
     await controller.render();
 
-    const results = await renderer.search!("dog");
+    const { results } = await renderer.search!("dog");
     const page2Result = results.find((r) => r.label === "Page 2");
     await renderer.goToResult!(page2Result!);
     await controller.goToPage(renderer.currentPage);

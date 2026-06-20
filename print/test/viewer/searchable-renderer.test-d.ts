@@ -12,7 +12,7 @@ import type { ContentRenderer, SearchableRenderer } from "../../src/viewer/types
 // Pin the exact SearchableRenderer signatures so no other type mismatch can
 // satisfy the @ts-expect-error vacuously.
 declare const _base: ContentRenderer;
-const _search: SearchableRenderer["search"] = async () => [];
+const _search: SearchableRenderer["search"] = async () => ({ results: [], truncated: false });
 const _goToResult: SearchableRenderer["goToResult"] = async () => {};
 const _clearSearch: SearchableRenderer["clearSearch"] = () => {};
 
