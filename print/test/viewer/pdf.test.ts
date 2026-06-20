@@ -1111,6 +1111,57 @@ describe("clearSearch()", () => {
     expect(target.querySelector(".search-highlight")).toBeNull();
   });
 
+  // DETACHED-NODE companion to the sequential test above. This test replicates
+  // SpreadController.render()'s innerHTML='' clear (print/src/viewer/spread-controller.ts:147-148)
+  // so firstWrapper is detached when call #2's unwrapHighlights() runs, providing
+  // the production-DOM regression coverage the attached-wrapper test does not.
+  // Note that unwrapHighlights() restores via the held {div, originalText} reference
+  // (print/src/viewer/pdf.ts:420-425), so a detached wrapper's highlight is still restored.
+  it("sequential renderPageInto() with target cleared between calls (detached firstWrapper) leaves no stale highlight", async () => {
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf");
+
+    const { results } = await renderer.search!("the"); // type-safety-ok: optional renderer API method, present in this test harness
+    const page1Result = results.find((r) => r.label === "Page 1");
+    expect(page1Result).toBeDefined();
+
+    // Arm pendingHighlight for page 1 (goToResult is arm-only — no render yet).
+    await renderer.goToResult!(page1Result!); // type-safety-ok: optional method; page1Result is non-null per the toBeDefined assertion above
+
+    // A fresh spread target with a non-zero rect so renderPageInto proceeds past
+    // the 0×0 guard.
+    const target = document.createElement("div");
+    target.getBoundingClientRect = makeTargetRect;
+
+    // Call #1: renders page 1 into target, applying the highlight.
+    await renderer.renderPageInto!(1, target); // type-safety-ok: optional renderer API method, present in this test harness
+    const firstWrapper = target.querySelector(".pdf-page-wrapper") as HTMLElement; // type-safety-ok: querySelector result narrowed to the page wrapper element
+    expect(firstWrapper).not.toBeNull();
+    expect(firstWrapper.querySelector(".search-highlight")).not.toBeNull();
+
+    // Clear target between the two calls, mirroring SpreadController.render()'s
+    // leftEl.innerHTML = "" / rightEl.innerHTML = "" — this detaches firstWrapper
+    // from the live DOM before call #2 runs.
+    target.innerHTML = "";
+    expect(target.contains(firstWrapper)).toBe(false);
+    expect(target.querySelector(".pdf-page-wrapper")).toBeNull();
+
+    // Call #2 (same page, fresh-but-cleared target): applyHighlight's leading
+    // unwrapHighlights() must restore firstWrapper's stale highlight span even
+    // though firstWrapper is now detached. On unfixed code the detached
+    // firstWrapper retains its .search-highlight span and the assertion below fails.
+    await renderer.renderPageInto!(1, target); // type-safety-ok: optional renderer API method, present in this test harness
+
+    // THE discriminating assertion: even though firstWrapper is detached,
+    // unwrapHighlights() restored its text via the held div reference, so its
+    // highlight span is gone.
+    expect(firstWrapper.querySelector(".search-highlight")).toBeNull();
+
+    // Only the live (second) wrapper carries a highlight.
+    expect(target.querySelectorAll(".search-highlight").length).toBe(1);
+    expect(target.querySelectorAll(".search-highlight")[0].textContent).toBe("the");
+  });
+
   it("goToPosition() drains the active highlight and disarms pendingHighlight", async () => {
     const renderer = createPdfRenderer();
     await renderer.init(container, "fake://source.pdf");
