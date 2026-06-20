@@ -188,6 +188,14 @@ describe("exportToJson", () => {
     vi.restoreAllMocks();
   });
 
+  it("serializes keys in envelope-then-registry order", async () => {
+    const json = await exportToJson();
+    expect(Object.keys(JSON.parse(json))).toEqual([
+      "version", "exportedAt", "groupId", "groupName",
+      ...Object.keys(collectionRegistry),
+    ]);
+  });
+
   it("exports all 6 collections with correct field mappings", async () => {
     const json = await exportToJson();
     const output = JSON.parse(json);
