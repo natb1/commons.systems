@@ -6,6 +6,22 @@
 # Bound to SessionStart:startup (fresh claude --bg worker sessions) and
 # SessionStart:resume (resumed sessions). Always exits 0 — never blocks session
 # start.
+#
+# LIVE END-TO-END TESTING — two items to verify that cannot be confirmed here:
+# (a) Whether SessionStart:startup fires for detached `claude --bg` worker
+#     sessions (the primary dispatch worker launch path). The hook is wired to
+#     the startup|resume matcher, but only live dispatch observation can confirm
+#     the event actually fires in --bg mode.
+# (b) Whether the hook command has working local `git` access in the worktree
+#     context where it runs — dispatch-stamp-session calls `git rev-parse`
+#     and `git log`; if git is unavailable or CWD is wrong the stamp silently
+#     no-ops (never blocks).
+#
+# FALLBACK: if this hook proves unreliable for detached --bg sessions, add a
+# scripted dispatch-stamp-session call at the start of each phase SKILL.md
+# (plan-issue, implement, qa-fix, review-fix, etc.) as a belt-and-suspenders
+# write. NOT implemented here — implement only if live testing shows the hook
+# is insufficient.
 set -uo pipefail
 trap 'echo "[stamp-dispatch-session] WARNING: unexpected error on line $LINENO" >&2; exit 0' ERR
 

@@ -169,6 +169,23 @@ if [[ -z "$TRANSCRIPT_PATH" ]]; then
   exit 2
 fi
 
+# Reject path-traversal / control chars. The session id is a bare stem (no path
+# component), so a slash, `..`, or control char is malformed → exit 2. The
+# transcript path is a legitimate absolute path (slashes expected), so reject
+# only `..` and control chars there.
+case "$SESSION_ID" in
+  *..*|*/*|*[[:cntrl:]]*)
+    echo "dispatch-stamp-session: --session-id contains illegal characters: $SESSION_ID" >&2
+    exit 2
+    ;;
+esac
+case "$TRANSCRIPT_PATH" in
+  *..*|*[[:cntrl:]]*)
+    echo "dispatch-stamp-session: --transcript-path contains illegal characters: $TRANSCRIPT_PATH" >&2
+    exit 2
+    ;;
+esac
+
 # Derive the branch. A failure here is not fatal to session start — no-op.
 branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null) || {
   echo "dispatch-stamp-session: could not resolve current branch (not a git checkout?); skipping stamp" >&2
@@ -221,30 +238,19 @@ fi
 # Locate the sidecar path: transcript with .jsonl → .dispatch-stamp.json.
 sidecar="${TRANSCRIPT_PATH%.jsonl}.dispatch-stamp.json"
 
-# Idempotency: Mode A runs on both `startup` and `resume`. The audit joins a
-# session to its *starting* ground truth, so an existing sidecar's anchor fields
-# are authoritative — a resume after committed work must not advance them to a
-# post-resume HEAD/clock. Preserve a non-null .pr (e.g. a prior backfill) and the
-# original base_sha/stamped_at when the sidecar already exists; only re-derive
-# them on the first (startup) write.
+# Idempotency: a re-run re-derives every git-sourced field (repo/issue/branch/
+# base_sha) and the timestamp, but must PRESERVE a non-null `.pr` written by a
+# prior --backfill-pr — a re-stamp must never clobber a known PR number back to
+# null. Only `.pr` is carried forward; nothing else is preserved.
 pr=null
 if [[ -f "$sidecar" ]]; then
   existing_pr=$(jq '.pr' "$sidecar" 2>/dev/null || echo null)
   if [[ -n "$existing_pr" && "$existing_pr" != "null" ]]; then
     pr="$existing_pr"
   fi
-  existing_base_sha=$(jq -r '.base_sha // empty' "$sidecar" 2>/dev/null || echo "")
-  if [[ -n "$existing_base_sha" ]]; then
-    base_sha="$existing_base_sha"
-  fi
-  existing_stamped_at=$(jq -r '.stamped_at // empty' "$sidecar" 2>/dev/null || echo "")
 fi
 
-if [[ -n "${existing_stamped_at:-}" ]]; then
-  stamped_at="$existing_stamped_at"
-else
-  stamped_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-fi
+stamped_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
 # Build atomically with jq -n so the JSON is always valid. Numerics
 # (schema/issue/pr) use --argjson; strings use --arg.
