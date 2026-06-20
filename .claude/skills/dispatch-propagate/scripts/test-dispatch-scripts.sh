@@ -6274,6 +6274,8 @@ rc=0; out=$("$TMPDIR_TEST/office-hours" 2>&1) || rc=$?
 assert_eq "main-qa missing main worktree → exit 1" "1" "$rc"
 assert_eq "main-qa missing main worktree → no spawn recorded" "no" \
   "$([[ -e "$TMPDIR_TEST/oh-bg-argv" ]] && echo yes || echo no)"
+assert_eq "main-qa missing main worktree → spawn-fail diagnostic (not worktree-swept diagnostic)" "yes" \
+  "$([[ "$out" == *'failed to launch'* ]] && echo yes || echo no)"
 unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
