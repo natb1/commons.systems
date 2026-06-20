@@ -63,11 +63,15 @@ a prior attempt or earlier phase left. Treat the sentinel `phase-log: none` as
 empty. When non-empty, feed it into the Step 2 unit-build context so a rebuild or
 re-plan sees why a prior attempt diverged. An absent note leaves Step 2 unchanged.
 
-If a PR already exists, the build + PR already happened: capture its number as
-`PR_NUM`, **skip Steps 1–4**, and go straight to the Step 5 marker write (this
-covers a same-tick crash between PR-open and marker-write). If no PR exists, run
-all steps. (`dispatch-route` normally routes a PR-bearing issue to fix-checks/qa/review,
-not implement, so this is a same-tick crash-recovery edge.)
+If a PR already exists, the build + PR already happened: this is the **re-entry
+branch**. Capture its number as `PR_NUM`, **skip Steps 1–4**, and go straight to
+Step 5 — on re-entry only the **marker** write runs; the Step 5 **phase-log write
+is skipped** (this covers a same-tick crash between PR-open and marker-write).
+Note that the preamble took the re-entry branch (a PR already existed at entry) —
+Step 5 keys its phase-log gate on this. If no PR exists, run all steps (the
+preamble did NOT take the re-entry branch). (`dispatch-route` normally routes a
+PR-bearing issue to fix-checks/qa/review, not implement, so this is a same-tick
+crash-recovery edge.)
 
 ## Steps
 
@@ -234,23 +238,33 @@ the terminal action stays last: `dispatch-mark-complete` (no deviation) or
 `dispatch-mark-deviation` (deviation) remains the single named exit. Write the
 phase-log entry once here, before the deviation branch, so both branches share it.
 
-First write the handoff note. Compose a terse "what-changed" digest of the
-implementation to `tmp/phase-log-entry-$N.md` — a one-line summary of what
+First write the handoff note — **only when Steps 1–4 ran this turn** (i.e. the
+preamble did NOT take the re-entry branch). Compose a terse "what-changed" digest
+of the implementation to `tmp/phase-log-entry-$N.md` — a one-line summary of what
 shipped; on a clean as-planned build the body is a line like `failed: none`.
-Compose it **unconditionally** (no "only on failure" branch). Then upsert it into
-the issue's phase-log comment (use `dangerouslyDisableSandbox: true` — the script
-calls `gh`):
+Compose it **unconditionally** (no "only on failure" branch) — that is the
+failure-vs-success axis (always log, even a clean pass), orthogonal to the
+re-entry gate below. Then upsert it into the issue's phase-log comment (use
+`dangerouslyDisableSandbox: true` — the script calls `gh`):
 
 ```bash
 .claude/skills/dispatch-propagate/scripts/dispatch-write-phase-log \
   "$N" --phase implement < tmp/phase-log-entry-$N.md
 ```
 
+On the crash-recovery re-entry path (a PR already existed at entry → Steps 1–4
+skipped), **skip the phase-log write** entirely, so the prior `(implement, 1)`
+entry is preserved verbatim. **Gate on the re-entry flag, not on PR presence:**
+`PR_NUM` is set on both paths at Step 5 (the normal path created it in Step 4;
+re-entry captured it in the preamble), so a `[ -n "$PR_NUM" ]` gate would skip
+the write ALWAYS and break the normal path. Key the gate on whether Steps 1–4 ran
+this turn (the preamble did NOT take the re-entry branch).
+
 No attempt counter — implement is single-pass, so the default `--attempt 1`
-applies. The upsert is idempotent on the `(implement, 1)` key: on the
-crash-recovery re-entry path (a PR already exists → Steps 1–4 skipped → straight
-to this marker write) the repeated write REPLACES the prior entry in place rather
-than stacking a duplicate, so the repeat is safe.
+applies. On re-entry there is no fresh outcome data: recomposing the digest from
+this turn's limited context would OVERWRITE the prior attempt's accurate entry
+with a thinner restatement. So the write is SKIPPED on re-entry, not repeated —
+the prior entry is authoritative.
 
 Then judge whether the implementation deviated from the
 persisted plan — scope shifted mid-implementation, or the plan could not be
