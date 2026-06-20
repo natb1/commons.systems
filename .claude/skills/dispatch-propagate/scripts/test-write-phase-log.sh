@@ -320,6 +320,33 @@ assert_files_eq "tc5: non-last section with embedded blank re-upsert is byte-for
 echo ""
 
 # ============================================================================
+# Test case 5b: Section body with an embedded blank line as the SOLE (last)
+# section — re-upsert is byte-for-byte identical (#2164)
+#
+# Mirrors TC3 (last-section REPLACE) but with an embedded-blank body, completing
+# the coverage matrix. If a future change to the awk skip-state machine added a
+# blank-line terminator condition, the last-section REPLACE would stop skipping
+# at the embedded blank and corrupt the re-upsert.
+# ============================================================================
+echo "-- Test 5b: last (sole) section with embedded blank body re-upsert --"
+STORED_BODY_FILE="$WORK/body-tc5b.txt"
+
+# Write implement:1 whose BODY contains an embedded blank line, as the sole
+# (and therefore last) section. No following section, so the REPLACE skip-state
+# machine must skip to end-of-input, not stop at the embedded blank.
+run_write 42 implement 1 $'line1\n\nline2'
+
+REF5B="$WORK/ref-tc5b.txt"
+cp "$STORED_BODY_FILE" "$REF5B"
+
+# Re-upsert implement:1 (REPLACE of the last/sole section).
+run_write 42 implement 1 $'line1\n\nline2'
+
+assert_files_eq "tc5b: last (sole) section with embedded blank re-upsert is byte-for-byte identical" "$REF5B" "$STORED_BODY_FILE"
+
+echo ""
+
+# ============================================================================
 # Flag-value guard tests (#2132)
 # ============================================================================
 
