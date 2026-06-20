@@ -6,7 +6,7 @@
  * We use a fake FileSystemDirectoryHandle (same infrastructure as sidecar.test.ts)
  * to avoid any real FSA I/O.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Mock firebase-touching transitive deps (must come before importing source)
@@ -197,6 +197,7 @@ function makeContainer(): HTMLElement {
   const ul = document.createElement("ul");
   ul.id = "media-list";
   container.appendChild(ul);
+  document.body.appendChild(container);
   return container;
 }
 
@@ -207,6 +208,9 @@ function makeContainer(): HTMLElement {
 describe("enrichment — cached item (zero IO, no write)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+  afterEach(() => {
+    document.body.innerHTML = '';
   });
 
   it("applies cached metadata without calling extractMetadata or resolveLocalBlob", async () => {
@@ -238,6 +242,9 @@ describe("enrichment — cached item (zero IO, no write)", () => {
 describe("enrichment — uncached item (extracts and caches)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+  afterEach(() => {
+    document.body.innerHTML = '';
   });
 
   it("calls resolveLocalBlob and extractMetadata for uncached items", async () => {
@@ -289,6 +296,9 @@ describe("enrichment — uncached item (extracts and caches)", () => {
 describe("enrichment — write suppression on focus-rescan", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+  afterEach(() => {
+    document.body.innerHTML = '';
   });
 
   it("does NOT write to sidecar when all items are already cached (rescan case)", async () => {
@@ -350,6 +360,9 @@ describe("enrichment — resolveLocalBlob returns null (file gone)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
 
   it("does not cache {} when resolveLocalBlob returns null (so next render retries)", async () => {
     const item = makeLocalItem({ storagePath: "gone.pdf" });
@@ -376,6 +389,9 @@ describe("enrichment — resolveLocalBlob returns null (file gone)", () => {
 describe("enrichment — early return when no media list present", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+  afterEach(() => {
+    document.body.innerHTML = '';
   });
 
   it("no-ops when container has neither #media-list nor #media-empty", async () => {
