@@ -958,9 +958,9 @@ describe("createEpubRenderer", () => {
           href: "ch0.xhtml",
           unload: vi.fn(),
           find: vi.fn().mockReturnValue([{ cfi: "cfi-A", excerpt: "fox" }]),
-          load: vi.fn() as ReturnType<typeof vi.fn>,
+          load: vi.fn() as ReturnType<typeof vi.fn>, // type-safety-ok: same pattern as existing load mocks; cast exposes Vitest mock API alongside FakeSection type
         };
-        let releaseFirst!: () => void;
+        let releaseFirst!: () => void; // type-safety-ok: Promise constructor assigns synchronously, so releaseFirst is set before any use
         const gate = new Promise<void>((resolve) => { releaseFirst = resolve; });
         s0.load.mockImplementationOnce(() => gate);
         const s1 = makeSection("ch1.xhtml", [{ cfi: "cfi-1", excerpt: "fox" }]);
@@ -970,11 +970,11 @@ describe("createEpubRenderer", () => {
 
         const renderer = await initRenderer();
 
-        const p = renderer.search!("fox");
+        const p = renderer.search!("fox"); // type-safety-ok: search always set after initRenderer; same pattern as other tests in this suite
         // Let search pass `await book.loaded.navigation` and park on s0.load()'s
         // gate *inside* iteration 0 — so the epoch advances mid-loop, not pre-loop.
         await Promise.resolve();
-        renderer.clearSearch!(); // bumps _searchEpoch; iteration 1's guard will break
+        renderer.clearSearch!(); // type-safety-ok: clearSearch always set after initRenderer — bumps _searchEpoch so iteration 1's guard breaks
         releaseFirst();
         await p;
 
