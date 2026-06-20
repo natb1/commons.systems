@@ -1,9 +1,18 @@
 # commons.systems: Nate's Agentic Coding Workflow
 
-A reference workflow for individuals who want to fork and adapt an agentic coding setup for their own projects. Built to Nate's own specification — not a platform, not a library. The dispatch queue runs autonomously; the office hours queue handles human-driven work.
+A long-horizon coding workflow you own and run yourself — local-first, self-managed, built to be left alone for stretches and to stay aligned with your own intent. Not a platform, not a library: a reference setup for individuals who want to fork and adapt it for their own projects, built to Nate's own specification. Under the hood it is an agent harness wrapping an agent loop, with a multi-agent fan-out at the review and fix phases. The dispatch queue runs autonomously; the office hours queue handles human-driven work.
+
+## As a harness
+
+Birgitta Böckeler's framing splits an agent into Model + Harness — the harness is everything around the model that turns a single call into reliable work. This repo is the *outer harness* (also the *user harness*): the half you write and own, sitting on top of the *built-in harness* (the *builder harness*) that Claude Code ships. The pieces map onto real files here:
+
+- **Guides (feedforward)** — what the agent is told before it acts: `.claude/rules/*.md` and the per-skill `SKILL.md` files. There is no `AGENTS.md`; the guidance lives in the rules and skills.
+- **Sensors (feedback)** — what checks the work after it acts. **Computational** sensors are CI: lint, type-check, test. **Inferential** sensors are the `/review-fix` reviewer fan-out and the QA pass — LLM-as-judge over the diff.
+- **Steering loop** — the cycle that adjusts the harness itself: lessons feed back into edits to `.claude/rules/*.md` and the `SKILL.md` files, and the two queues route each item between autonomous and human-driven work.
 
 ## Table of Contents
 
+- [As a harness](#as-a-harness)
 - [Design Principles](#design-principles)
 - [Agentic Coding Workflow](#agentic-coding-workflow)
   - [PR Control Flow](#pr-control-flow)
@@ -21,7 +30,7 @@ A reference workflow for individuals who want to fork and adapt an agentic codin
 - Work flows through two queues: the **dispatch queue** (autonomous, runs unattended) and the **office hours queue** (human-driven, for requirement changes and judgment calls).
 - Delegated workflows have well-defined break points for human quality control (QC).
 - Prefer [skills](https://code.claude.com/docs/en/skills) over other agentic artifacts (system instructions, hooks, sub-agents, agent teams, etc.) due to portability and ease of maintenance.
-- Workflow state is derived from PR/CI ground truth — no external state machine required.
+- The system controls the agent, not the agent the workflow — a dispatch design principle, shared with harness-engineering practice broadly (not Fowler's or Böckeler's). Workflow state is derived from PR/CI ground truth — no external state machine required.
 
 ## Agentic Coding Workflow
 
@@ -36,6 +45,8 @@ A reference workflow for individuals who want to fork and adapt an agentic codin
 | waiting | Draft PR, CI in progress | (nothing — wait) |
 | qa | Draft PR, CI green, review labels absent | [qa-fix](.claude/skills/qa-fix/SKILL.md) (autonomous) or [office-hours](.claude/skills/office-hours/SKILL.md) (human-driven; see #758) |
 | review | Draft PR, QA passed — the single terminal pass: code + security review, applies in-scope fixes, flips draft→ready | [review-fix](.claude/skills/review-fix/SKILL.md) |
+
+These phases are the harness's sensor layer: `fix-checks` consumes the computational CI sensors (lint, type, test), while `qa` and `review` add the inferential LLM-as-judge sensors. The two queues plus the self-perpetuating tick — each worker's Stop-hook re-launching the next — close the steering loop around them.
 
 The `review` phase is the workflow's single terminal review pass. It consolidates
 what were three separate phases — code-review, review, and security — into one
