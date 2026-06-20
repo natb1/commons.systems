@@ -11,7 +11,7 @@ import buildTimeMetadata from "virtual:blog-post-metadata";
 
 import { ABOUT_PAGE_META, INFO_PANEL_LINK_SECTIONS, NAV_LINKS, SITE_DEFAULTS, SITE_URL } from "./site-config.js";
 import { mountHero } from "./showcase-render.js";
-import { renderAboutHtml, mountAboutPanel } from "./pages/about.js";
+import { renderAboutHtml, renderAboutPanelHtml } from "./pages/about.js";
 import { BLOG_ROLL_ENTRIES, createStrategies } from "./blog-roll/config.js";
 import { db, NAMESPACE, trackPageView, initAppCheck, signIn, signOut, onAuthStateChanged } from "./firebase.js";
 
@@ -30,10 +30,7 @@ function ensureHero(): HTMLElement {
   return section;
 }
 
-const infoPanel = document.getElementById("info-panel");
-if (!infoPanel) throw new Error("#info-panel element not found");
-
-const handle = createBlogApp({
+createBlogApp({
   buildTimeContent,
   buildTimeMetadata,
   fetchPostSource: "landing/post",
@@ -51,6 +48,10 @@ const handle = createBlogApp({
     document.body.dataset.route = path === "/" ? "home" : path === "/about" ? "about" : "other";
   },
   onHomeAfterRender: (slug) => { if (!slug) mountHero(ensureHero()); },
+  // Route the /about info-panel content through React: when on /about,
+  // InfoPanelRegion renders the profile card via aboutContent; any other path
+  // yields the standard blogroll panel (and re-runs the blogroll fetch).
+  infoPanelContentForPath: (path) => (path === "/about" ? renderAboutPanelHtml() : undefined),
   extraRoutes: [
     {
       path: "/about",
@@ -58,8 +59,6 @@ const handle = createBlogApp({
       afterRender: () => {
         updateStaticPageMeta(SITE_URL, ABOUT_PAGE_META, "commons.systems");
         updateCanonical(SITE_URL, undefined, "/about");
-        mountAboutPanel(infoPanel);
-        handle.forceInfoPanelRefresh();
       },
     },
   ],
