@@ -80,6 +80,16 @@ output — do not re-resolve any of them later:
   Workflow `args` / Step 1 review context so the review pass sees what qa-fix
   already tried. An absent note leaves the review unchanged.
 
+Once `PR_NUM` is confirmed present, stamp it into this session's dispatch
+sidecar so the token audit can join the session to its PR (#1861). Its failure
+is non-fatal — the script exits 0 on any miss. Use `dangerouslyDisableSandbox:
+true` (the sidecar lives under `~/.claude/projects`, outside the sandbox
+write-allowlist):
+
+```bash
+.claude/skills/dispatch-propagate/scripts/dispatch-stamp-session --backfill-pr "$PR_NUM"
+```
+
 If the labels line already includes `dispatch:reviewed` — an interrupted prior
 run — **skip Steps 1–6** and go straight to Step 7, which flushes any unpushed
 commits and writes the marker. `dispatch:reviewed` is this skill's terminal
