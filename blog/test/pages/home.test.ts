@@ -56,7 +56,11 @@ describe("renderHomeHtml", () => {
 
   it("renders publishedAt in a time element", () => {
     const html = renderHomeHtml([publishedPost]);
-    expect(html).toContain('datetime="2026-01-01T00:00:00Z"');
+    // React's static renderer emits the datetime attribute as `dateTime`
+    // (camelCase). HTML attribute names are case-insensitive, so the browser
+    // parses `<time dateTime="...">` as `datetime`; the hydrator never queries
+    // this attribute, so the casing is cosmetic.
+    expect(html).toMatch(/<time [^>]*=["']2026-01-01T00:00:00Z["']/i);
   });
 
   it("shows [draft] badge for unpublished posts", () => {

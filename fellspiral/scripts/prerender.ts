@@ -33,6 +33,7 @@ await prerenderPosts({
   organization: ORGANIZATION,
   author: AUTHOR,
   relMe: REL_ME,
+  showHomeLink: true,
 });
 
 generateFeedXml({

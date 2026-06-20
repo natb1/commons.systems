@@ -47,7 +47,9 @@ describe("issueSamplesSeedDataPlugin", () => {
   describe("generated issue samples", () => {
     let samples: Array<{
       sampledAt: Date;
-      openHelpWanted: number;
+      openSecurity: number;
+      openBug: number;
+      openEnhancement: number;
       openOther: number;
       groupId: string;
     }>;
@@ -67,7 +69,9 @@ describe("issueSamplesSeedDataPlugin", () => {
     it("every sample has the correct fields with correct types", () => {
       for (const s of samples) {
         expect(s.sampledAt).toBeInstanceOf(Date);
-        expect(typeof s.openHelpWanted).toBe("number");
+        expect(typeof s.openSecurity).toBe("number");
+        expect(typeof s.openBug).toBe("number");
+        expect(typeof s.openEnhancement).toBe("number");
         expect(typeof s.openOther).toBe("number");
         expect(typeof s.groupId).toBe("string");
         // memberEmails is an auth field that must never reach the public bundle.
@@ -98,8 +102,10 @@ describe("issueSamplesSeedDataPlugin", () => {
       const mostRecent = samples.reduce((a, b) =>
         a.sampledAt.getTime() > b.sampledAt.getTime() ? a : b
       );
-      const oldestTotal = oldest.openHelpWanted + oldest.openOther;
-      const recentTotal = mostRecent.openHelpWanted + mostRecent.openOther;
+      const oldestTotal =
+        oldest.openSecurity + oldest.openBug + oldest.openEnhancement + oldest.openOther;
+      const recentTotal =
+        mostRecent.openSecurity + mostRecent.openBug + mostRecent.openEnhancement + mostRecent.openOther;
       expect(recentTotal).toBeLessThan(oldestTotal);
     });
 

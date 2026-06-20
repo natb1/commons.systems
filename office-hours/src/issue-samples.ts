@@ -3,9 +3,16 @@ import { logError } from "@commons-systems/errorutil/log";
 
 export interface IssueSample {
   sampledAt: Date;
-  openHelpWanted: number;
+  openSecurity: number;
+  openBug: number;
+  openEnhancement: number;
   openOther: number;
   groupId: string;
+}
+
+/** Total open issues across all four work-type buckets — the stacked-area total. */
+export function sampleTotal(s: IssueSample): number {
+  return s.openSecurity + s.openBug + s.openEnhancement + s.openOther;
 }
 
 export function toIssueSample(id: string, data: Record<string, unknown>): IssueSample | null {
@@ -15,9 +22,6 @@ export function toIssueSample(id: string, data: Record<string, unknown>): IssueS
       ? (sampledAtRaw as { toDate: () => Date }).toDate()
       : null;
 
-  const openHelpWanted =
-    typeof data.openHelpWanted === "number" ? data.openHelpWanted : null;
-  const openOther = typeof data.openOther === "number" ? data.openOther : null;
   const groupId = typeof data.groupId === "string" ? data.groupId : null;
   const memberEmails =
     Array.isArray(data.memberEmails) &&
@@ -25,9 +29,33 @@ export function toIssueSample(id: string, data: Record<string, unknown>): IssueS
       ? (data.memberEmails as string[])
       : null;
 
+  // Tolerant, append-only migration. Pre-#1828 docs carry openHelpWanted +
+  // openOther and none of the four work-type fields; fold their total into the
+  // new openOther bucket (none of the three typed buckets is known for old
+  // docs). New-format docs use their four fields directly.
+  let openSecurity: number | null;
+  let openBug: number | null;
+  let openEnhancement: number | null;
+  let openOther: number | null;
+
+  if (typeof data.openHelpWanted === "number") {
+    openSecurity = 0;
+    openBug = 0;
+    openEnhancement = 0;
+    openOther =
+      data.openHelpWanted + (typeof data.openOther === "number" ? data.openOther : 0);
+  } else {
+    openSecurity = typeof data.openSecurity === "number" ? data.openSecurity : null;
+    openBug = typeof data.openBug === "number" ? data.openBug : null;
+    openEnhancement = typeof data.openEnhancement === "number" ? data.openEnhancement : null;
+    openOther = typeof data.openOther === "number" ? data.openOther : null;
+  }
+
   if (
     sampledAt === null ||
-    openHelpWanted === null ||
+    openSecurity === null ||
+    openBug === null ||
+    openEnhancement === null ||
     openOther === null ||
     groupId === null ||
     memberEmails === null
@@ -41,7 +69,9 @@ export function toIssueSample(id: string, data: Record<string, unknown>): IssueS
 
   return {
     sampledAt,
-    openHelpWanted,
+    openSecurity,
+    openBug,
+    openEnhancement,
     openOther,
     groupId,
   };
@@ -53,7 +83,9 @@ export function issueSampleToDoc(
 ): Record<string, unknown> {
   return {
     sampledAt: Timestamp.fromDate(s.sampledAt),
-    openHelpWanted: s.openHelpWanted,
+    openSecurity: s.openSecurity,
+    openBug: s.openBug,
+    openEnhancement: s.openEnhancement,
     openOther: s.openOther,
     groupId: s.groupId,
     memberEmails,

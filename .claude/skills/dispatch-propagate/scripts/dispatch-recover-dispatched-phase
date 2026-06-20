@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# Recovers the dispatch phase that a transcript was running when a session died.
+#
+# Usage: dispatch-recover-dispatched-phase <transcript-path>
+#
+# Exit codes (fail-safe, positive-evidence-only):
+#   0 — recovered a recognized dispatch phase; phase name printed to stdout
+#   1 — any doubt: file unreadable, no command-name tag, skill not a dispatch
+#       skill, or skill maps to no phase (e.g. /office-hours, /budget-parse-job,
+#       /new-requirement)
+#
+# Canonical skill→phase mapping (mirrors dispatch-route lines ~175-260):
+#   /plan-issue    → plan
+#   /implement     → implement
+#   /fix-checks    → fix-checks
+#   /fix-conflicts → fix-conflicts
+#   /qa-fix        → qa
+#   /review-fix    → review
+#   anything else  → exit 1 (no output)
+#
+# WHY /budget-parse-job is excluded: it maps to "plan" in dispatch-route only as
+# a routing directive, but it is a self-contained one-phase handler that closes
+# its own issue — it does not benefit from phase recovery and must not be
+# restarted as a generic plan phase.
+#
+# Command extraction strategy (positive-evidence-only, first-match wins):
+#   Primary:  grep -m1 for <command-name>/skill</command-name> — the structured
+#             form the Skill tool writes into the transcript.  -m1 stops at the
+#             FIRST match so a sub-skill the session later invoked cannot shadow
+#             the top-level dispatched command.
+#   Fallback: grep -m1 for .claude/skills/<skill> path string embedded in the
+#             FIRST transcript record only (JSONL line 1) — used only when the
+#             primary key yields nothing.  Scoping to line 1 distrusts paths in
+#             later records (tool output, Read results, sub-skill SKILL.md docs
+#             that reference a different phase skill's path), which would
+#             otherwise let a whole-file grep return the wrong skill name.
+#
+# WHY grep the file directly (not via echo): zsh's builtin echo interprets
+# backslash escapes (\t, \n, \uXXXX), corrupting JSONL content.  Grepping the
+# file directly is safe — we match literal substrings, not parsed JSON.
+# See .claude/rules/shell-json.md.
+set -euo pipefail
+
+[ -n "${1:-}" ] && [ -r "${1:-}" ] || exit 1
+
+TRANSCRIPT="${1}"
+
+# Primary key: first <command-name>/skill</command-name> tag in the file.
+# grep -oE emits the full match; sed strips the surrounding tag wrapper to leave
+# only the skill name.  A second grep -oE '/[a-z-]+' would also match the closing
+# </command-name> segment, producing a multi-line value that breaks case — use sed.
+SKILL=$(grep -m1 -oE 'command-name>/[a-z-]+</command-name' "$TRANSCRIPT" \
+  | sed 's|command-name>/||; s|</command-name||' \
+  || true)
+
+# Fallback: .claude/skills/<skill> path embedded in the FIRST transcript record
+# only (JSONL line 1).  Restricting to line 1 (vs the whole file) prevents a
+# later record — tool output, a Read result, or a sub-skill SKILL.md that
+# documents a different phase skill's path — from shadowing the dispatched
+# command and returning the wrong skill name.
+if [ -z "$SKILL" ]; then
+  SKILL=$(head -n1 "$TRANSCRIPT" \
+    | grep -m1 -oE '\.claude/skills/[a-z-]+' \
+    | sed 's|.*\.claude/skills/||' \
+    || true)
+fi
+
+[ -n "$SKILL" ] || exit 1
+
+# Map the recovered skill to its dispatch phase.
+case "$SKILL" in
+  plan-issue)    echo "plan"          ;;
+  implement)     echo "implement"     ;;
+  fix-checks)    echo "fix-checks"    ;;
+  fix-conflicts) echo "fix-conflicts" ;;
+  qa-fix)        echo "qa"            ;;
+  review-fix)    echo "review"        ;;
+  *)             exit 1               ;;
+esac

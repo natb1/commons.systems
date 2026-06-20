@@ -1,7 +1,10 @@
 import * as fs from "node:fs";
 import { join } from "node:path";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { escapeHtml } from "@commons-systems/htmlutil";
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
+import { BlogNav } from "./components/BlogNav.tsx";
 import type { InfoPanelData } from "./components/info-panel.ts";
 import {
   siteDefaultOgEntries,
@@ -52,6 +55,9 @@ export interface PrerenderConfig {
    *  When set, per-post pages also strip the `landing-hero` section.
    *  Throws if the marker is absent from the template. */
   homeExtraHtml?: string;
+  /** Whether to include the `commons.systems` home link in the prerendered nav.
+   *  Defaults to `false`. */
+  showHomeLink?: boolean;
 }
 
 export interface StaticPageConfig {
@@ -70,6 +76,9 @@ export interface StaticPageConfig {
   relMe?: string[];
   /** Defaults to true. Set false to keep the landing-hero block in this static page. */
   stripHero?: boolean;
+  /** Whether to include the `commons.systems` home link in the prerendered nav.
+   *  Defaults to `false`. */
+  showHomeLink?: boolean;
 }
 
 export interface PostsArtifacts {
@@ -85,14 +94,20 @@ function ogTagsToHtml(entries: OgTagEntry[]): string {
     .join("\n    ");
 }
 
-function renderNavHtml(links: NavLink[]): string {
-  const anchors = links
-    .map((l) => {
-      const alignAttr = l.align === "end" ? ` data-align="end"` : "";
-      return `<a href="${escapeHtml(l.href)}"${alignAttr}>${escapeHtml(l.label)}</a>`;
-    })
-    .join("");
-  return `<span class="nav-links">${anchors}</span>`;
+// Render the nav anonymously (showAuth=false, user=null) so no stray "Login"
+// control leaks into the static HTML. showHomeLink comes from the caller's
+// config and defaults to false.
+function renderNavHtml(links: NavLink[], showHomeLink: boolean = false): string {
+  return renderToStaticMarkup(
+    createElement(BlogNav, {
+      links,
+      showHomeLink,
+      showAuth: false,
+      user: null,
+      onSignIn: () => {},
+      onSignOut: () => {},
+    }),
+  );
 }
 
 interface RenderedPost {
@@ -204,6 +219,7 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
     relMe,
     softwareApplications,
     homeExtraHtml,
+    showHomeLink,
   } = config;
 
   const template = fs.readFileSync(join(distDir, "index.html"), "utf-8");
@@ -214,7 +230,7 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
     infoPanel,
   });
 
-  const navHtml = renderNavHtml(navLinks);
+  const navHtml = renderNavHtml(navLinks, showHomeLink);
 
   const relMeHtml = relMe ? relMeLinkTags(relMe) : "";
 
@@ -290,6 +306,7 @@ export function prerenderStaticPage(config: StaticPageConfig): void {
     jsonLdBlocks,
     relMe,
     stripHero,
+    showHomeLink,
   } = config;
 
   const template = fs.readFileSync(join(distDir, "index.html"), "utf-8");
@@ -320,7 +337,7 @@ export function prerenderStaticPage(config: StaticPageConfig): void {
 
   html = injectMain(html, bodyHtml);
   html = injectInfoPanel(html, panelHtml);
-  html = injectNav(html, renderNavHtml(navLinks));
+  html = injectNav(html, renderNavHtml(navLinks, showHomeLink));
 
   if (stripHero !== false) {
     html = stripHomeExtra(html);
