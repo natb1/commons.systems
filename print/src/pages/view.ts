@@ -3,7 +3,7 @@ import { classifyError } from "@commons-systems/errorutil/classify";
 import { getMediaItem } from "../firestore.js";
 import { getMediaDownloadUrl } from "../storage.js";
 import type { MediaItem } from "../types.js";
-import { renderViewerShell, initViewer } from "../viewer/shell.js";
+import type { ViewerProps } from "../viewer/Viewer.js";
 import { createPdfRenderer } from "../viewer/pdf.js";
 import { createEpubRenderer } from "../viewer/epub.js";
 import { createImageArchiveRenderer } from "../viewer/image-archive.js";
@@ -15,7 +15,7 @@ import { makeFirestorePositionStore } from "../reading-position.js";
 
 const BACK_LINK = '<a href="/" class="viewer-back">&larr; Back to Library</a>';
 
-export const NOT_FOUND_HTML = `
+const NOT_FOUND_HTML = `
       <h2>Not Found</h2>
       <p id="view-not-found">Media item not found.</p>
       ${BACK_LINK}
@@ -73,23 +73,24 @@ export function pickPositionStore(
   return makeLocalStoragePositionStore(item.id);
 }
 
-let pendingItem: MediaItem | null = null;
-let pendingUrl: string | null = null;
-let pendingLocal = false;
-let cleanupFn: (() => void) | null = null;
+export type ViewFrame =
+  | { kind: "ready"; props: ViewerProps } // mount the <Viewer>
+  | { kind: "noId" } // "No media item specified."
+  | { kind: "notFound" } // "Media item not found."
+  | { kind: "error" }; // "Could not load this media item. Try refreshing the page."
 
-export function cleanupView(): void {
-  if (cleanupFn) {
-    cleanupFn();
-    cleanupFn = null;
-  }
-  pendingItem = null;
-  pendingUrl = null;
-  pendingLocal = false;
+let viewFrame: ViewFrame = { kind: "noId" };
+export function getViewFrame(): ViewFrame {
+  return viewFrame;
+}
+// Used by the route's malformed-percent-encoding branch (which does NOT call renderView).
+export function markViewNotFound(): void {
+  viewFrame = { kind: "notFound" };
 }
 
-export async function renderView(id: string, _user: User | null): Promise<string> {
+export async function renderView(id: string, user: User | null): Promise<string> {
   if (!id) {
+    viewFrame = { kind: "noId" };
     return `
       <h2>Not Found</h2>
       <p id="view-not-found">No media item specified.</p>
@@ -103,16 +104,18 @@ export async function renderView(id: string, _user: User | null): Promise<string
     // has bound `localSource`, which would otherwise read as a false miss.
     await whenLocalFolderReady();
     const item = await getLocalItem(id);
-    if (!item) return NOT_FOUND_HTML;
-    pendingItem = item;
-    pendingUrl = null;
-    pendingLocal = true;
-    return renderViewerShell(item);
+    if (!item) {
+      viewFrame = { kind: "notFound" };
+      return NOT_FOUND_HTML;
+    }
+    viewFrame = { kind: "ready", props: resolveViewerProps(item, true, null, user) };
+    return '<div id="page-root"></div>';
   }
 
   try {
     const item = await getMediaItem(id);
     if (!item) {
+      viewFrame = { kind: "notFound" };
       return `
         <h2>Not Found</h2>
         <p id="view-not-found">Media item not found.</p>
@@ -121,12 +124,12 @@ export async function renderView(id: string, _user: User | null): Promise<string
     }
 
     const url = await getMediaDownloadUrl(item.storagePath);
-    pendingItem = item;
-    pendingUrl = url;
-    return renderViewerShell(item);
+    viewFrame = { kind: "ready", props: resolveViewerProps(item, false, url, user) };
+    return '<div id="page-root"></div>';
   } catch (error) {
     if (classifyError(error) === "data-integrity") throw error;
     reportError(new Error("Failed to load media item", { cause: error }));
+    viewFrame = { kind: "error" };
     return ERROR_HTML;
   }
 }
@@ -152,68 +155,65 @@ export async function resolveFileSource(url: string, storagePath: string): Promi
   return buf;
 }
 
-export function afterRenderView(outlet: HTMLElement, user: User | null): void {
-  if (!pendingItem) return;
-
-  const item = pendingItem;
-  const local = pendingLocal;
-  const url = pendingUrl;
+/**
+ * Build the `<Viewer>` props for a resolved media item: pick the position
+ * store, dispatch the mediaType to a renderer factory, and build the
+ * `resolveSource` closure. Pure — no DOM, no module globals. The viewer's
+ * own teardown is owned by {@link useViewerController}'s effect-cleanup when
+ * React unmounts the page root, so there is nothing to clean up here.
+ *
+ * Routing keys on `local`, NOT on auth: a local item ALWAYS uses the sidecar
+ * (uid forced to null), even for a signed-in user, so a `local:` item never
+ * touches Firestore.
+ */
+export function resolveViewerProps(
+  item: MediaItem,
+  local: boolean,
+  url: string | null,
+  user: User | null,
+): ViewerProps {
   const spath = item.storagePath;
-  pendingItem = null;
-  pendingUrl = null;
-  pendingLocal = false;
-
-  const store = pickPositionStore(item, local, user?.uid ?? null);
+  const uid = local ? null : user?.uid ?? null;
+  const store = pickPositionStore(item, local, uid);
 
   if (local) {
-    const resolveLocal = (): Promise<ArrayBuffer> => {
-      return resolveLocalBlob(item)
-        .then((buf) => {
-          if (!buf) throw new Error("Local file no longer present");
-          return buf;
-        })
-        .catch((error) => {
-          // Graceful: surface the existing #view-error UI instead of crashing.
-          // The error is fully handled here (reportError + ERROR_HTML), so do
-          // NOT re-throw: re-throwing would propagate into initViewer's own
-          // .catch(), which would call reportError a second time for the same
-          // failure. Returning a never-settling promise stops initViewer from
-          // proceeding to render and from entering its catch block.
-          reportError(new Error("Failed to resolve local media file", { cause: error }));
-          outlet.innerHTML = ERROR_HTML;
-          return new Promise<ArrayBuffer>(() => {});
-        });
-    };
+    // The resolveSource closure rejects when the file is gone. It reports the
+    // failure once; the hook's init-catch then surfaces the error state in the
+    // viewer chrome (loadError) without crashing the app. (The hook also
+    // reports its own "init failed" wrapper, so a returned reject would double-
+    // report — instead we report here and reject with a sentinel the hook's
+    // catch wraps; one extra report is acceptable and keeps the user-facing
+    // outcome correct.)
+    const resolveLocal = (): Promise<ArrayBuffer> =>
+      resolveLocalBlob(item).then((buf) => {
+        if (!buf) {
+          reportError(new Error("Failed to resolve local media file: file no longer present"));
+          throw new Error("Local file no longer present");
+        }
+        return buf;
+      });
     switch (item.mediaType) {
       case "pdf":
-        cleanupFn = initViewer(outlet, (onError) => createPdfRenderer(onError), resolveLocal, item.id, store, null);
-        break;
+        return { item, createRenderer: (onError) => createPdfRenderer(onError), resolveSource: resolveLocal, store, uid };
       case "epub":
-        cleanupFn = initViewer(outlet, (onError) => createEpubRenderer(onError), resolveLocal, item.id, store, null);
-        break;
+        return { item, createRenderer: (onError) => createEpubRenderer(onError), resolveSource: resolveLocal, store, uid };
       default:
-        reportError(new Error(`Unsupported local mediaType in viewer: ${item.mediaType}`));
+        throw new Error(`Unsupported local mediaType in viewer: ${item.mediaType}`);
     }
-    return;
   }
 
-  if (!url) return;
+  if (!url) throw new Error("Cloud media item resolved without a download URL");
 
   switch (item.mediaType) {
     case "pdf":
-      cleanupFn = initViewer(outlet, (onError) => createPdfRenderer(onError), () => resolveFileSource(url, spath), item.id, store, user?.uid ?? null);
-      break;
+      return { item, createRenderer: (onError) => createPdfRenderer(onError), resolveSource: () => resolveFileSource(url, spath), store, uid };
     case "epub":
-      cleanupFn = initViewer(outlet, (onError) => createEpubRenderer(onError), () => resolveFileSource(url, spath), item.id, store, user?.uid ?? null);
-      break;
+      return { item, createRenderer: (onError) => createEpubRenderer(onError), resolveSource: () => resolveFileSource(url, spath), store, uid };
     case "image-archive":
-      cleanupFn = initViewer(outlet, (onError) => createImageArchiveRenderer(onError, spath), () => Promise.resolve(url), item.id, store, user?.uid ?? null);
-      break;
+      return { item, createRenderer: (onError) => createImageArchiveRenderer(onError, spath), resolveSource: () => Promise.resolve(url), store, uid };
     default: {
       const _exhaustive: never = item.mediaType;
-      reportError(new Error(`Unsupported mediaType in viewer: ${_exhaustive}`));
-      const pos = outlet.querySelector(".viewer-position");
-      if (pos) pos.textContent = `Unsupported media type: ${_exhaustive}`;
+      throw new Error(`Unsupported mediaType in viewer: ${_exhaustive}`);
     }
   }
 }

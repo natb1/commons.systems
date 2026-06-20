@@ -254,11 +254,12 @@ process_one_target() {
       if LEAF=$("$SCRIPT_DIR/dispatch-trace-leaf" "$n" explicit); then
         n="$LEAF"
       else
-        # explicit-mode dispatch-trace-leaf exits non-zero only on a hard
-        # sibling-gh failure (its exit 1) — never "no work". Per its contract
-        # the caller must not swallow it and dispatch the un-traced n; surface
-        # the error (mirrors dispatch-select-target's exit-1 propagation in
-        # queue mode).
+        # explicit-mode dispatch-trace-leaf exits non-zero on a usage error
+        # (exit 1) or a sibling-gh failure (exit 3) — never "no work" (exit 2
+        # is queue-only). Per its contract the caller must not swallow it and
+        # dispatch the un-traced n; surface the error (per trace-leaf's
+        # documented contract: explicit callers must abort on exit 3, queue
+        # callers skip — the modes differ).
         echo "dispatch-materialize-spawn: dispatch-trace-leaf failed for #$n (explicit)" >&2
         return 2
       fi

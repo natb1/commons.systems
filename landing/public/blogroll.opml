@@ -10,5 +10,8 @@
     <outline text="Claude Code Blog"
              htmlUrl="https://claude.com/blog/category/claude-code"
              type="rss" />
+    <outline text="Martin Fowler — Generative AI"
+             htmlUrl="https://martinfowler.com/tags/generative%20AI.html"
+             type="rss" />
   </body>
 </opml>
