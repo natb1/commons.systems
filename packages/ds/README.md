@@ -68,6 +68,18 @@ What the system rejects: emoji, gradients, soft drop-shadows, rounded corners,
 and SaaS gloss. That polish signals a brand team and capital — the platform
 sheen the project rejects.
 
+Functional minimalism, not retro costume. The look reads retro because the
+constraints are real — one font, one accent, square corners — not because it is
+dressed up to. There are no CRT scanlines, no fake vintage skeuomorphism, no
+blinking-cursor nostalgia. Those are tell, not show: they manufacture a vibe
+instead of being one. The moment it looks like a costume, it has crossed from
+show into tell.
+
+Legibility comes first. Legibility is the honest form of polish — "looks like it
+works" has to actually work for real eyes. An aesthetic that gatekeeps by taste
+narrows the audience, so a consuming app may soften toward approachability — it
+overrides the scheme on `:root` (see Color) — without leaving the family.
+
 ## Visual foundations
 
 ### Color (`tokens/colors.css`)

@@ -2,34 +2,20 @@ import * as Plot from "@observablehq/plot";
 import { type AuditAggregate } from "./audit-aggregates.js";
 import {
   getThemeFg,
+  readChartPalette,
   assembleChartLayout,
   buildLegend,
   computeChartWidth,
   renderAxisSvg,
+  mountResponsiveChart,
   type LegendEntry,
   MARGIN_RIGHT,
   MARGIN_BOTTOM,
   POINT_WIDTH,
-  CONTAINER_WIDTH,
   CHART_HEIGHT,
 } from "./chart-util.js";
 
 const SERIES_HIT_RATE = "cache hit %";
-const COLOR_HIT_RATE = "#26a69a";
-
-// Fixed palette cycled by phase index, so each phase line's color is known and
-// can be reused verbatim in the legend (vs. Plot's auto categorical scale,
-// whose assignment we'd have to reverse-engineer).
-const PHASE_PALETTE = [
-  "#42a5f5",
-  "#ab47bc",
-  "#ffa726",
-  "#66bb6a",
-  "#ec407a",
-  "#29b6f6",
-  "#d4e157",
-  "#8d6e63",
-];
 
 interface SpendPoint {
   x: Date;
@@ -77,6 +63,13 @@ export function renderAuditAggregateChart(aggregates: AuditAggregate[]): HTMLEle
     return container;
   }
 
+  // DS categorical palette, read from the container at runtime. There are up to
+  // 8 audit phases but only 6 DS tokens, so the per-phase color cycles the 6
+  // tokens by index (i % 6). The hit-rate line takes a distinct DS hue.
+  const palette = readChartPalette(container);
+  const phaseColor = (i: number): string => palette[i % palette.length];
+  const COLOR_HIT_RATE = palette[2]; // --chart-3 terracotta
+
   // Union of phase keys across all windows, sorted for stable line/legend order.
   const phaseSet = new Set<string>();
   for (const a of sorted) {
@@ -86,7 +79,7 @@ export function renderAuditAggregateChart(aggregates: AuditAggregate[]): HTMLEle
 
   const phaseEntries: LegendEntry[] = phases.map((phase, i) => ({
     label: phase,
-    color: PHASE_PALETTE[i % PHASE_PALETTE.length],
+    color: phaseColor(i),
   }));
 
   // Per-phase point series. A phase missing from a given window yields an
@@ -116,8 +109,6 @@ export function renderAuditAggregateChart(aggregates: AuditAggregate[]): HTMLEle
     sorted[sorted.length - 1].computedAt,
   ];
 
-  const chartWidth = computeChartWidth(sorted.length, POINT_WIDTH, CONTAINER_WIDTH);
-
   const fg = getThemeFg(container);
   const sharedStyle = { background: "transparent", color: fg };
 
@@ -133,87 +124,100 @@ export function renderAuditAggregateChart(aggregates: AuditAggregate[]): HTMLEle
   }
   const spendDomain: [number, number] = [0, maxSpend > 0 ? maxSpend : 1];
 
-  const spendAxisSvg = renderAxisSvg({
-    height: CHART_HEIGHT,
-    style: sharedStyle,
-    yDomain: spendDomain,
-    label: "$",
-  });
-
-  const spendChartSvg = Plot.plot({
-    width: chartWidth,
-    height: CHART_HEIGHT,
-    marginBottom: MARGIN_BOTTOM,
-    marginLeft: 0,
-    marginRight: MARGIN_RIGHT,
-    style: sharedStyle,
-    x: { type: "time", label: null, domain: xDomain },
-    y: { label: null, axis: null, grid: true, domain: spendDomain },
-    marks: phases.map((phase, i) =>
-      Plot.lineY(phaseSeries[phase], {
-        x: "x",
-        y: "spend",
-        stroke: PHASE_PALETTE[i % PHASE_PALETTE.length],
-        strokeWidth: 2,
-        curve: "monotone-x",
-      }),
-    ),
-  });
-
-  spendChartSvg.style.width = `${chartWidth}px`;
-  spendChartSvg.style.minWidth = `${chartWidth}px`;
-
-  const { layout: spendLayout, wrapper: spendWrapper } = assembleChartLayout(
-    spendAxisSvg,
-    spendChartSvg,
-  );
-
   // --- Bottom sub-chart: derived hit-rate trend (%). ---
   const hitDomain: [number, number] = [0, 100];
 
-  const hitAxisSvg = renderAxisSvg({
-    height: CHART_HEIGHT,
-    style: sharedStyle,
-    yDomain: hitDomain,
-    label: "%",
-  });
-
-  const hitChartSvg = Plot.plot({
-    width: chartWidth,
-    height: CHART_HEIGHT,
-    marginBottom: MARGIN_BOTTOM,
-    marginLeft: 0,
-    marginRight: MARGIN_RIGHT,
-    style: sharedStyle,
-    x: { type: "time", label: null, domain: xDomain },
-    y: { label: null, axis: null, grid: true, domain: hitDomain },
-    marks: [
-      Plot.lineY(hitRatePoints, {
-        x: "x",
-        y: "hitPct",
-        stroke: COLOR_HIT_RATE,
-        strokeWidth: 2,
-        curve: "monotone-x",
-      }),
-    ],
-  });
-
-  hitChartSvg.style.width = `${chartWidth}px`;
-  hitChartSvg.style.minWidth = `${chartWidth}px`;
-
-  const { layout: hitLayout, wrapper: hitWrapper } = assembleChartLayout(hitAxisSvg, hitChartSvg);
-
   const legend = buildLegend([...phaseEntries, { label: SERIES_HIT_RATE, color: COLOR_HIT_RATE }]);
 
-  container.replaceChildren(spendLayout, hitLayout, legend);
+  // Block-level slot the ResizeObserver measures; the .chart-scroll-wrapper
+  // inside each sub-layout clips horizontally so the slot stays at the panel
+  // content-box width.
+  const slot = document.createElement("div");
 
-  // Scroll both bodies to the newest data (rightmost) on first paint. The
-  // container is still detached here (the view appends it after this returns),
-  // so scrollWidth is 0 until a layout pass — defer to the next frame.
-  requestAnimationFrame(() => {
-    spendWrapper.scrollLeft = spendWrapper.scrollWidth;
-    hitWrapper.scrollLeft = hitWrapper.scrollWidth;
+  mountResponsiveChart(slot, (width) => {
+    const chartWidth = computeChartWidth(sorted.length, POINT_WIDTH, width);
+
+    const spendAxisSvg = renderAxisSvg({
+      height: CHART_HEIGHT,
+      style: sharedStyle,
+      yDomain: spendDomain,
+      label: "$",
+    });
+
+    const spendChartSvg = Plot.plot({
+      width: chartWidth,
+      height: CHART_HEIGHT,
+      marginBottom: MARGIN_BOTTOM,
+      marginLeft: 0,
+      marginRight: MARGIN_RIGHT,
+      style: sharedStyle,
+      x: { type: "time", label: null, domain: xDomain },
+      y: { label: null, axis: null, grid: true, domain: spendDomain },
+      marks: phases.map((phase, i) =>
+        Plot.lineY(phaseSeries[phase], {
+          x: "x",
+          y: "spend",
+          stroke: phaseColor(i),
+          strokeWidth: 2,
+          curve: "monotone-x",
+        }),
+      ),
+    });
+
+    spendChartSvg.style.width = `${chartWidth}px`;
+    spendChartSvg.style.minWidth = `${chartWidth}px`;
+
+    const { layout: spendLayout, wrapper: spendWrapper } = assembleChartLayout(
+      spendAxisSvg,
+      spendChartSvg,
+    );
+
+    const hitAxisSvg = renderAxisSvg({
+      height: CHART_HEIGHT,
+      style: sharedStyle,
+      yDomain: hitDomain,
+      label: "%",
+    });
+
+    const hitChartSvg = Plot.plot({
+      width: chartWidth,
+      height: CHART_HEIGHT,
+      marginBottom: MARGIN_BOTTOM,
+      marginLeft: 0,
+      marginRight: MARGIN_RIGHT,
+      style: sharedStyle,
+      x: { type: "time", label: null, domain: xDomain },
+      y: { label: null, axis: null, grid: true, domain: hitDomain },
+      marks: [
+        Plot.lineY(hitRatePoints, {
+          x: "x",
+          y: "hitPct",
+          stroke: COLOR_HIT_RATE,
+          strokeWidth: 2,
+          curve: "monotone-x",
+        }),
+      ],
+    });
+
+    hitChartSvg.style.width = `${chartWidth}px`;
+    hitChartSvg.style.minWidth = `${chartWidth}px`;
+
+    const { layout: hitLayout, wrapper: hitWrapper } = assembleChartLayout(hitAxisSvg, hitChartSvg);
+
+    // Scroll both bodies to the newest data (rightmost). The slot is detached on
+    // the first paint, so scrollWidth is 0 until a layout pass — defer to the
+    // next frame.
+    requestAnimationFrame(() => {
+      spendWrapper.scrollLeft = spendWrapper.scrollWidth;
+      hitWrapper.scrollLeft = hitWrapper.scrollWidth;
+    });
+
+    const fragment = document.createDocumentFragment();
+    fragment.append(spendLayout, hitLayout);
+    return fragment;
   });
+
+  container.replaceChildren(slot, legend);
 
   return container;
 }

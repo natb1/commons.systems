@@ -8,9 +8,12 @@
 import type { User } from "firebase/auth";
 import type { Firestore } from "firebase/firestore";
 
+import { createElement } from "react";
+import { createRoot } from "react-dom/client";
+
 import type { Namespace } from "@commons-systems/firestoreutil/namespace";
 import { isInGroup, type GroupId } from "@commons-systems/authutil/groups";
-import type { NavLink } from "@commons-systems/components/nav";
+import type { NavLink } from "@commons-systems/ds";
 import { createHistoryRouter, parsePath, type Route } from "@commons-systems/router";
 import { classifyError } from "@commons-systems/errorutil/classify";
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
@@ -19,12 +22,8 @@ import { deferAppCheckInit } from "@commons-systems/firebaseutil/defer-appcheck"
 import { initScrollIndicator } from "@commons-systems/components/scroll-indicator";
 
 import { initPanelToggle } from "@commons-systems/components/panel-toggle";
-// blog/ owns the AppNavElement custom-element registration: importing the
-// module for its side effect defines <app-nav>, and the type import gives the
-// #nav cast its element type.
-import "@commons-systems/components/nav";
-import type { AppNavElement } from "@commons-systems/components/nav";
 
+import { BlogNav } from "./components/BlogNav.tsx";
 import { updateOgMeta, type SiteDefaults } from "./og-meta.ts";
 import { updateCanonical } from "./canonical.ts";
 import { createFetchPost } from "./github.ts";
@@ -84,8 +83,9 @@ export interface BlogAppHandle {
 }
 
 export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
-  const navEl = document.getElementById("nav") as AppNavElement;
-  if (!navEl) throw new Error("#nav element not found");
+  const navMount = document.getElementById("nav");
+  if (!navMount) throw new Error("#nav element not found");
+  const navRoot = createRoot(navMount);
   const app = document.getElementById("app");
   if (!app) throw new Error("#app element not found");
   const infoPanel = document.getElementById("info-panel");
@@ -104,9 +104,6 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
   });
   headerObserver.observe(header);
 
-  navEl.links = config.navLinks;
-  navEl.showHomeLink = config.showHomeLink;
-
   const toggle = document.getElementById("panel-toggle");
   if (!toggle) throw new Error("#panel-toggle element not found");
   initPanelToggle(infoPanel, toggle);
@@ -114,15 +111,7 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
   // Teardown list: destroy() unwinds everything in one place. Declared before
   // the router/auth wiring below so those can register their teardowns.
   const teardowns: Array<() => void> = [];
-
-  // Named nav handlers so destroy() can remove them; otherwise, reusing the same
-  // #nav element across createBlogApp calls (e.g. in tests) accumulates listeners.
-  const onSignIn = (): void => void config.firebase.signIn();
-  const onSignOut = (): void => void config.firebase.signOut();
-  navEl.addEventListener("sign-in", onSignIn);
-  navEl.addEventListener("sign-out", onSignOut);
-  teardowns.push(() => navEl.removeEventListener("sign-in", onSignIn));
-  teardowns.push(() => navEl.removeEventListener("sign-out", onSignOut));
+  teardowns.push(() => navRoot.unmount());
 
   let currentUser: User | null = null;
   let cachedPosts: PostMeta[] = [];
@@ -235,9 +224,21 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
     },
   };
 
+  function renderNav(path: string): void {
+    navRoot.render(
+      createElement(BlogNav, {
+        links: config.navLinks,
+        showHomeLink: config.showHomeLink,
+        showAuth: path === "/admin",
+        user: currentUser,
+        onSignIn: () => void config.firebase.signIn(),
+        onSignOut: () => void config.firebase.signOut(),
+      }),
+    );
+  }
+
   function updateNav(path: string): void {
-    navEl.showAuth = path === "/admin";
-    navEl.user = currentUser;
+    renderNav(path);
     config.onNavigate?.(path); // landing sets document.body.dataset.route; fellspiral omits
   }
 

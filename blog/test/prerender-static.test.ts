@@ -190,11 +190,33 @@ describe("prerenderStaticPage", () => {
   });
 
   it("injects nav links into <app-nav>", () => {
+    prerenderStaticPage(makeStaticConfig({ showHomeLink: true }));
+    const html = getWrittenHtml("/dist/about/index.html");
+    // The <app-nav> wrapper survives; inside it the ds Nav renders both links
+    // (the /about link is align:undefined here, so it stays in the start group)
+    // plus the home link, anonymously (no "Login").
+    expect(html).toContain('<app-nav id="nav">');
+    expect(html).toContain("cs-nav");
+    expect(html).toContain('href="/"');
+    expect(html).toContain("Home");
+    expect(html).toContain('href="/about"');
+    expect(html).toContain("About");
+    expect(html).toContain('href="https://commons.systems/"');
+    expect(html).not.toContain("Login");
+  });
+
+  it("omits home link from nav when showHomeLink is false (default)", () => {
     prerenderStaticPage(makeStaticConfig());
     const html = getWrittenHtml("/dist/about/index.html");
-    expect(html).toContain('<app-nav id="nav"><span class="nav-links">');
-    expect(html).toContain('<a href="/">Home</a>');
-    expect(html).toContain('<a href="/about">About</a>');
+    // Nav still renders with cs-nav and the configured nav links.
+    expect(html).toContain('<app-nav id="nav">');
+    expect(html).toContain("cs-nav");
+    expect(html).toContain('href="/"');
+    expect(html).toContain("Home");
+    expect(html).toContain('href="/about"');
+    expect(html).toContain("About");
+    // Home link to commons.systems root must be absent.
+    expect(html).not.toContain('href="https://commons.systems/"');
   });
 
   it("writes output to ${distDir}${path}/index.html and creates the directory", () => {
@@ -326,8 +348,8 @@ describe("loadPostsForPrerender", () => {
     expect(result.topPosts).toHaveLength(1);
     expect(result.topPosts[0].id).toBe("hello-world");
     expect(result.rendered).toHaveLength(1);
-    expect(result.rendered[0].articleHtml).toContain('<article id="post-hello-world">');
-    expect(result.allArticlesHtml).toContain('<article id="post-hello-world">');
+    expect(result.rendered[0].articleHtml).toContain('id="post-hello-world"');
+    expect(result.allArticlesHtml).toContain('id="post-hello-world"');
     expect(result.panelHtml).toContain("Top Posts");
     expect(result.panelHtml).toContain("Hello World");
   });
