@@ -33994,7 +33994,7 @@ setup
 err=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>&1 >/dev/null); rc=$?
 assert_eq "f: exits 0 when the open-issue scan fails" "0" "$rc"
 TOTAL=$((TOTAL + 1))
-if grep -q 'gh_issue_list_rest --state open failed; skipping scan' <<<"$err"; then
+if grep -q 'gh_issue_list_rest --state open --label dispatch:review-followup failed; skipping scan' <<<"$err"; then
   PASS=$((PASS + 1)); echo "  PASS: f: warns about the skipped scan on stderr"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: f: warns about the skipped scan on stderr"
