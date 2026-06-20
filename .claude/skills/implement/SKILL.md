@@ -124,10 +124,16 @@ model-selection heuristic in `/implement-unit` — see that skill for the heuris
 ### 3. Execute the plan's Verification section
 
 After every unit is built, run the plan's auto-runnable checks. The runner reads
-the full plan markdown on stdin and routes on a tri-state exit (use
-`dangerouslyDisableSandbox: true` — `dispatch-read-plan` calls `gh`):
+the full plan markdown on stdin and routes on its exit code (use
+`dangerouslyDisableSandbox: true` — `dispatch-read-plan` calls `gh`). The
+runner's own exit-4 check (empty/absent stdin) is the PRIMARY guard against an
+upstream `dispatch-read-plan` failure being masked; the `set -o pipefail` prefix
+is belt-and-suspenders for the residual case where `dispatch-read-plan` fails
+but `dispatch-run-verification` still exits 0 (a bare `pipefail` cannot rescue
+the exit-3 mask, since the runner's exit 3 is itself non-zero):
 
 ```bash
+set -o pipefail
 .claude/skills/dispatch-propagate/scripts/dispatch-read-plan <N> \
   | .claude/skills/dispatch-propagate/scripts/dispatch-run-verification
 ```
@@ -158,6 +164,18 @@ Route on the exit code:
   (no deviation) and `dispatch-mark-deviation` (deviation) — so the single-named-exit
   invariant still holds. The Stop hook reads marker-absence as Branch A and parks
   the issue for human review.
+- **any other non-zero exit** — exit **4** (empty/absent plan input: the upstream
+  `dispatch-read-plan` failed and the runner refused to emit the exit-3
+  "proceed unchanged" signal), or any upstream failure surfaced via `set -o
+  pipefail`. This is an environment/upstream error, **not** a verify-block
+  failure — do **not** enter the `/implement-unit` fix lane. Route straight to
+  `dispatch-mark-deviation` with an accurate reason and **stop** (skip the Step 5
+  completion marker):
+
+  ```bash
+  .claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \
+    "/implement: plan verification could not run — upstream dispatch-read-plan failed or plan input was empty"
+  ```
 
 ### 4. Open the draft PR
 
