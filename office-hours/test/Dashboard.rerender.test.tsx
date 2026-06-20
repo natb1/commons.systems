@@ -75,7 +75,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-const fakeUser = { uid: "owner-1", email: "owner@example.com" } as User;
+const fakeUser = { uid: "owner-1", email: "owner@example.com" } as User; // type-safety-ok: test fixture; all getOwner* calls are vi-mocked so the full User shape is never accessed
 
 const DAY = 86_400_000;
 const HOUR = 3_600_000;
