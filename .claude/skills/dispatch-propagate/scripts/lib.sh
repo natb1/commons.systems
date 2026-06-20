@@ -501,6 +501,412 @@ dispatch_ci_verdict_rest() {
   printf '%s\n' "$verdict"
 }
 
+# REST-backed drop-in for `gh issue view <N> --json
+# number,title,body,state,labels,assignees` (#2255). The dispatch fleet exhausts
+# GitHub's shared GraphQL rate-limit bucket while the REST bucket sits idle; the
+# `gh issue view` porcelain spends GraphQL, this helper spends REST.
+# Args: $1 = <N> (issue number, required); --repo owner/repo (optional, defaults
+#   to the current repo via the {owner}/{repo} placeholder).
+# Output: one JSON object on stdout matching the porcelain shape — an EXPLICIT
+#   named projection (not a passthrough of the raw REST object) so the shape is
+#   pinned and tested:
+#     {number, title, body, state, labels:[{name}], assignees:[{login}]}
+# Byte-compat bridges over the raw REST shape:
+#   - state: REST returns lowercase `open`/`closed`; the porcelain emits the
+#     UPPERCASE GraphQL enum `OPEN`/`CLOSED`. `ascii_upcase` bridges it (same as
+#     dispatch_ci_verdict_rest's enum bridge).
+#   - labels / assignees: narrowed to the porcelain-visible keys (`name` /
+#     `login`) rather than passing the full REST objects through.
+# On gh failure: errors to stderr and returns 1 (clear-errors convention, no
+# fallback).
+gh_issue_view_rest() {
+  local num="" repo=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --repo) repo="$2"; shift 2 ;;
+      --*) echo "error: gh_issue_view_rest: unknown flag '$1'" >&2; return 1 ;;
+      *)
+        if [[ -z "$num" ]]; then
+          num="$1"; shift 1
+        else
+          echo "error: gh_issue_view_rest: unexpected argument '$1'" >&2; return 1
+        fi
+        ;;
+    esac
+  done
+  if [[ -z "$num" ]]; then
+    echo "error: gh_issue_view_rest: issue number is required" >&2
+    return 1
+  fi
+
+  local path
+  if [[ -n "$repo" ]]; then
+    path="repos/$repo/issues/$num"
+  else
+    path="repos/{owner}/{repo}/issues/$num"
+  fi
+
+  local raw
+  raw=$(gh_retry gh api "$path") || {
+    echo "error: gh_issue_view_rest: gh api failed for $path" >&2
+    return 1
+  }
+
+  printf '%s' "$raw" | jq '{
+    number,
+    title,
+    body: (.body // ""),
+    state: (.state | ascii_upcase),
+    labels: ((.labels // []) | map({name})),
+    assignees: ((.assignees // []) | map({login}))
+  }'
+}
+
+# REST-backed drop-in for `gh pr view <N> --json
+# number,title,body,state,mergeable,mergeStateStatus` (#2255). Spends the REST
+# rate-limit bucket instead of GraphQL, like gh_issue_view_rest.
+# Args: $1 = <N> (PR number, required); --repo owner/repo (optional).
+# Output: one JSON object on stdout matching the porcelain shape — an EXPLICIT
+#   named projection: {number, title, body, state, mergeable, mergeStateStatus}.
+# Byte-compat bridges over the raw REST shape:
+#   - state: lowercase `open`/`closed` → UPPERCASE via `ascii_upcase`. (REST has
+#     no distinct MERGED state — a merged PR is state `closed` — so a consumer
+#     that distinguishes the porcelain `MERGED` state must not migrate to this
+#     helper without handling that.)
+#   - mergeable: REST returns a BOOLEAN (true/false/null); the porcelain emits
+#     the GraphQL enum string `MERGEABLE`/`CONFLICTING`/`UNKNOWN` that dispatch
+#     call sites string-compare. Mapped explicitly: true→MERGEABLE,
+#     false→CONFLICTING, null (or absent)→UNKNOWN.
+#   - mergeStateStatus: remapped from REST's snake_case `mergeable_state` and
+#     `ascii_upcase`d to match the porcelain GraphQL enum casing (REST is
+#     lowercase `clean`/`dirty`/`blocked`).
+# On gh failure: errors to stderr and returns 1 (clear-errors convention, no
+# fallback).
+gh_pr_view_rest() {
+  local num="" repo=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --repo) repo="$2"; shift 2 ;;
+      --*) echo "error: gh_pr_view_rest: unknown flag '$1'" >&2; return 1 ;;
+      *)
+        if [[ -z "$num" ]]; then
+          num="$1"; shift 1
+        else
+          echo "error: gh_pr_view_rest: unexpected argument '$1'" >&2; return 1
+        fi
+        ;;
+    esac
+  done
+  if [[ -z "$num" ]]; then
+    echo "error: gh_pr_view_rest: PR number is required" >&2
+    return 1
+  fi
+
+  local path
+  if [[ -n "$repo" ]]; then
+    path="repos/$repo/pulls/$num"
+  else
+    path="repos/{owner}/{repo}/pulls/$num"
+  fi
+
+  local raw
+  raw=$(gh_retry gh api "$path") || {
+    echo "error: gh_pr_view_rest: gh api failed for $path" >&2
+    return 1
+  }
+
+  printf '%s' "$raw" | jq '{
+    number,
+    title,
+    body: (.body // ""),
+    state: (.state | ascii_upcase),
+    mergeable: (
+      if .mergeable == true then "MERGEABLE"
+      elif .mergeable == false then "CONFLICTING"
+      else "UNKNOWN" end
+    ),
+    mergeStateStatus: ((.mergeable_state // "") | ascii_upcase)
+  }'
+}
+
+# REST-backed mutation: add one or more labels to an issue (#2255).
+# Uses POST repos/{owner}/{repo}/issues/<N>/labels which is ADDITIVE (matching
+# `gh issue edit --add-label`). Each label is a separate -f flag so gh_retry
+# can re-invoke safely without draining a stdin pipe.
+# Args: $1 = <N> (issue number, required); then one or more label names;
+#   --repo owner/repo (optional).
+# On gh failure: errors to stderr and returns 1.
+gh_issue_set_labels_rest() {
+  local num="" repo=""
+  local -a labels=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --repo) repo="$2"; shift 2 ;;
+      --*) echo "error: gh_issue_set_labels_rest: unknown flag '$1'" >&2; return 1 ;;
+      *)
+        if [[ -z "$num" ]]; then
+          num="$1"; shift 1
+        else
+          labels+=("$1"); shift 1
+        fi
+        ;;
+    esac
+  done
+  if [[ -z "$num" ]]; then
+    echo "error: gh_issue_set_labels_rest: issue number is required" >&2
+    return 1
+  fi
+  if [[ "${#labels[@]}" -eq 0 ]]; then
+    echo "error: gh_issue_set_labels_rest: at least one label is required" >&2
+    return 1
+  fi
+
+  local path
+  if [[ -n "$repo" ]]; then
+    path="repos/$repo/issues/$num/labels"
+  else
+    path="repos/{owner}/{repo}/issues/$num/labels"
+  fi
+
+  local -a label_flags=()
+  for lbl in "${labels[@]}"; do
+    label_flags+=(-f "labels[]=$lbl")
+  done
+
+  gh_retry gh api -X POST "$path" "${label_flags[@]}" >/dev/null || {
+    echo "error: gh_issue_set_labels_rest: gh api failed for $path" >&2
+    return 1
+  }
+}
+
+# REST-backed mutation: remove a single label from an issue (#2255).
+# Uses DELETE repos/{owner}/{repo}/issues/<N>/labels/<name>.
+# URL-encodes minimally (space→%20) mirroring gh_issue_list_rest.
+# Args: $1 = <N> (issue number, required); $2 = <label> (required);
+#   --repo owner/repo (optional).
+# On gh failure: errors to stderr and returns 1.
+gh_issue_remove_label_rest() {
+  local num="" label="" repo=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --repo) repo="$2"; shift 2 ;;
+      --*) echo "error: gh_issue_remove_label_rest: unknown flag '$1'" >&2; return 1 ;;
+      *)
+        if [[ -z "$num" ]]; then
+          num="$1"; shift 1
+        elif [[ -z "$label" ]]; then
+          label="$1"; shift 1
+        else
+          echo "error: gh_issue_remove_label_rest: unexpected argument '$1'" >&2; return 1
+        fi
+        ;;
+    esac
+  done
+  if [[ -z "$num" ]]; then
+    echo "error: gh_issue_remove_label_rest: issue number is required" >&2
+    return 1
+  fi
+  if [[ -z "$label" ]]; then
+    echo "error: gh_issue_remove_label_rest: label name is required" >&2
+    return 1
+  fi
+
+  # Minimal URL-encode: space → %20 (mirrors gh_issue_list_rest).
+  local enc_label="${label// /%20}"
+
+  local path
+  if [[ -n "$repo" ]]; then
+    path="repos/$repo/issues/$num/labels/$enc_label"
+  else
+    path="repos/{owner}/{repo}/issues/$num/labels/$enc_label"
+  fi
+
+  gh_retry gh api -X DELETE "$path" >/dev/null || {
+    echo "error: gh_issue_remove_label_rest: gh api failed for $path" >&2
+    return 1
+  }
+}
+
+# REST-backed mutation: close an issue (#2255).
+# Uses PATCH repos/{owner}/{repo}/issues/<N> with state=closed.
+# Args: $1 = <N> (issue number, required); --repo owner/repo (optional).
+# On gh failure: errors to stderr and returns 1.
+gh_issue_close_rest() {
+  local num="" repo=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --repo) repo="$2"; shift 2 ;;
+      --*) echo "error: gh_issue_close_rest: unknown flag '$1'" >&2; return 1 ;;
+      *)
+        if [[ -z "$num" ]]; then
+          num="$1"; shift 1
+        else
+          echo "error: gh_issue_close_rest: unexpected argument '$1'" >&2; return 1
+        fi
+        ;;
+    esac
+  done
+  if [[ -z "$num" ]]; then
+    echo "error: gh_issue_close_rest: issue number is required" >&2
+    return 1
+  fi
+
+  local path
+  if [[ -n "$repo" ]]; then
+    path="repos/$repo/issues/$num"
+  else
+    path="repos/{owner}/{repo}/issues/$num"
+  fi
+
+  gh_retry gh api -X PATCH "$path" -f state=closed >/dev/null || {
+    echo "error: gh_issue_close_rest: gh api failed for $path" >&2
+    return 1
+  }
+}
+
+# REST-backed mutation: create a new issue (#2255).
+# Uses POST repos/{owner}/{repo}/issues.
+# Echoes the new issue URL (.html_url) to stdout, matching `gh issue create` output.
+# Args: --title <t> (required); --body <b> (required); --label <l> (repeatable);
+#   --repo owner/repo (optional).
+# On gh failure: errors to stderr and returns 1.
+gh_issue_create_rest() {
+  local title="" body="" repo=""
+  local -a label_flags=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --title) title="$2"; shift 2 ;;
+      --body)  body="$2";  shift 2 ;;
+      --label) label_flags+=(-f "labels[]=$2"); shift 2 ;;
+      --repo)  repo="$2";  shift 2 ;;
+      *) echo "error: gh_issue_create_rest: unknown flag '$1'" >&2; return 1 ;;
+    esac
+  done
+  if [[ -z "$title" ]]; then
+    echo "error: gh_issue_create_rest: --title is required" >&2
+    return 1
+  fi
+  if [[ -z "$body" ]]; then
+    echo "error: gh_issue_create_rest: --body is required" >&2
+    return 1
+  fi
+
+  local path
+  if [[ -n "$repo" ]]; then
+    path="repos/$repo/issues"
+  else
+    path="repos/{owner}/{repo}/issues"
+  fi
+
+  local raw
+  raw=$(gh_retry gh api -X POST "$path" \
+    -f "title=$title" \
+    -f "body=$body" \
+    "${label_flags[@]}") || {
+    echo "error: gh_issue_create_rest: gh api failed for $path" >&2
+    return 1
+  }
+
+  printf '%s' "$raw" | jq -r '.html_url'
+}
+
+# REST-backed mutation: add a comment to an issue (#2255).
+# Uses POST repos/{owner}/{repo}/issues/<N>/comments.
+# Args: $1 = <N> (issue number, required); --body <b> OR --body-file <f>
+#   (exactly one required); --repo owner/repo (optional).
+# On gh failure: errors to stderr and returns 1.
+gh_issue_comment_rest() {
+  local num="" body="" body_file="" repo=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --body)      body="$2";      shift 2 ;;
+      --body-file) body_file="$2"; shift 2 ;;
+      --repo)      repo="$2";      shift 2 ;;
+      --*) echo "error: gh_issue_comment_rest: unknown flag '$1'" >&2; return 1 ;;
+      *)
+        if [[ -z "$num" ]]; then
+          num="$1"; shift 1
+        else
+          echo "error: gh_issue_comment_rest: unexpected argument '$1'" >&2; return 1
+        fi
+        ;;
+    esac
+  done
+  if [[ -z "$num" ]]; then
+    echo "error: gh_issue_comment_rest: issue number is required" >&2
+    return 1
+  fi
+  if [[ -z "$body" && -z "$body_file" ]]; then
+    echo "error: gh_issue_comment_rest: --body or --body-file is required" >&2
+    return 1
+  fi
+  if [[ -n "$body" && -n "$body_file" ]]; then
+    echo "error: gh_issue_comment_rest: --body and --body-file are mutually exclusive" >&2
+    return 1
+  fi
+
+  local path
+  if [[ -n "$repo" ]]; then
+    path="repos/$repo/issues/$num/comments"
+  else
+    path="repos/{owner}/{repo}/issues/$num/comments"
+  fi
+
+  local -a body_flag=()
+  if [[ -n "$body_file" ]]; then
+    # -F body=@file re-reads the file on each retry attempt — safe for gh_retry.
+    body_flag=(-F "body=@$body_file")
+  else
+    body_flag=(-f "body=$body")
+  fi
+
+  gh_retry gh api -X POST "$path" "${body_flag[@]}" >/dev/null || {
+    echo "error: gh_issue_comment_rest: gh api failed for $path" >&2
+    return 1
+  }
+}
+
+# REST-backed mutation: merge a pull request (#2255).
+# Uses PUT repos/{owner}/{repo}/pulls/<N>/merge with merge_method.
+# Args: $1 = <N> (PR number, required); [--squash|--merge|--rebase] (default:
+#   merge); --repo owner/repo (optional).
+# On gh failure: errors to stderr and returns 1.
+gh_pr_merge_rest() {
+  local num="" method="merge" repo=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --squash) method="squash"; shift 1 ;;
+      --merge)  method="merge";  shift 1 ;;
+      --rebase) method="rebase"; shift 1 ;;
+      --repo)   repo="$2";       shift 2 ;;
+      --*) echo "error: gh_pr_merge_rest: unknown flag '$1'" >&2; return 1 ;;
+      *)
+        if [[ -z "$num" ]]; then
+          num="$1"; shift 1
+        else
+          echo "error: gh_pr_merge_rest: unexpected argument '$1'" >&2; return 1
+        fi
+        ;;
+    esac
+  done
+  if [[ -z "$num" ]]; then
+    echo "error: gh_pr_merge_rest: PR number is required" >&2
+    return 1
+  fi
+
+  local path
+  if [[ -n "$repo" ]]; then
+    path="repos/$repo/pulls/$num/merge"
+  else
+    path="repos/{owner}/{repo}/pulls/$num/merge"
+  fi
+
+  gh_retry gh api -X PUT "$path" -f "merge_method=$method" >/dev/null || {
+    echo "error: gh_pr_merge_rest: gh api failed for $path" >&2
+    return 1
+  }
+}
+
 # Detect what Firebase features the app uses.
 # Sets global variables: USES_FIRESTORE, USES_AUTH, USES_STORAGE, USES_FUNCTIONS
 # Args: $1 = path to app src/ directory, $2 = repo root, $3 = app name
