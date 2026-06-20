@@ -7,7 +7,7 @@
 # the normalized result to stdout.
 #
 # Usage:
-#   dispatch-config-load <projects|jit|statements|target-workers|budget-etl|epic|auto-merge|force-opus|sweep|selection-lock>
+#   dispatch-config-load <projects|jit|statements|target-workers|budget-etl|epic|auto-merge|force-opus|sweep|phase-model-policy|selection-lock>
 #
 # Config files live in <project-root>/dispatch.config/. The project root is
 # resolved via resolve_project_root (lib.sh).
@@ -284,6 +284,41 @@
 #     "notInSyncGraceSeconds": 86400
 #   }
 #
+# ---- Schema: phase-model-policy.json ----------------------------------------
+#
+# Top-level object holding a generated phase → model routing policy, produced by
+# /dispatch-token-audit at audit time and consulted by `dispatch-phase-model` at
+# tick time as a cheap lookup. This config type follows the GENERIC absent→inert
+# convention (see "Stdout protocol" above): when the file is absent, no-config is
+# emitted and `dispatch-phase-model` uses its hardcoded default case-map. The
+# tick performs NO learning — it only reads `.routes[phase]`.
+#
+# Only `.routes` is load-bearing and validated; the remaining fields
+# (schema_version, generated_at, window, rationale) are optional provenance/audit
+# metadata, carried through normalization but NOT strictly validated here.
+#
+#   routes   object (optional) — phase-name → model-id map. Each VALUE must be a
+#            non-empty string (a claude model id). Consumed as `.routes[phase]`.
+#            `dispatch-phase-model` honors a route only for phases on its own
+#            demotable allowlist {qa, review}; a route for any other phase is
+#            ignored by the consumer (defense-in-depth against demoting a
+#            code-authoring phase). An absent or empty `.routes` → the consumer
+#            falls back to its hardcoded defaults for every phase.
+#
+# Example (the producer in Unit 2 emits this shape):
+#   {
+#     "schema_version": 1,
+#     "generated_at": "<derived from window.until>",
+#     "window": { "days": 7, "since": "...", "until": "..." },
+#     "routes": { "qa": "claude-sonnet-4-6", "review": "claude-opus-4-8" },
+#     "rationale": {
+#       "qa":     { "decision": "keep-cheap", "sessions": 24, "hit_rate": 0.62,
+#                   "cost_usd": 1.23, "price_proxy_usd": 4.56 },
+#       "review": { "decision": "promote",    "sessions": 30, "hit_rate": 0.18,
+#                   "cost_usd": 2.10, "price_proxy_usd": 5.40 }
+#     }
+#   }
+#
 # ---- Schema: selection-lock.json -------------------------------------------
 #
 # Top-level object with optional tunables for the dispatch selection lock
@@ -314,9 +349,9 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
 CONFIG_TYPE="${1:-}"
 case "$CONFIG_TYPE" in
-  projects|jit|statements|target-workers|budget-etl|epic|auto-merge|force-opus|strict-preflight|sweep|selection-lock) ;;
+  projects|jit|statements|target-workers|budget-etl|epic|auto-merge|force-opus|strict-preflight|sweep|phase-model-policy|selection-lock) ;;
   *)
-    echo "error: usage: dispatch-config-load <projects|jit|statements|target-workers|budget-etl|epic|auto-merge|force-opus|strict-preflight|sweep|selection-lock>" >&2
+    echo "error: usage: dispatch-config-load <projects|jit|statements|target-workers|budget-etl|epic|auto-merge|force-opus|strict-preflight|sweep|phase-model-policy|selection-lock>" >&2
     exit 2
     ;;
 esac
@@ -711,6 +746,27 @@ case "$CONFIG_TYPE" in
         else
           empty
         end)
+      end
+    ' "$CONFIG_FILE")
+    ;;
+  phase-model-policy)
+    # top-level value must be an object. Only `.routes` is load-bearing: when
+    # present it must be an object whose every value is a non-empty string (a
+    # model id the consumer feeds to `claude --model`). The provenance fields
+    # (schema_version, generated_at, window, rationale) are not validated.
+    ERRORS=$(jq -r '
+      if type != "object" then
+        "top-level value must be a JSON object, got \(type)"
+      elif (.routes != null) and ((.routes | type) != "object") then
+        "top-level .routes must be an object, got \(.routes | type)"
+      else
+        (.routes // {}) | to_entries[] |
+        .key as $k | .value as $v |
+        if ($v | type) != "string" then
+          "routes.\($k) must be a string, got \($v | type)"
+        elif ($v | length) == 0 then
+          "routes.\($k) must be a non-empty string"
+        else empty end
       end
     ' "$CONFIG_FILE")
     ;;
