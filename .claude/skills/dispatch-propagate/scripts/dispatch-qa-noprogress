@@ -88,7 +88,7 @@ if printf '%s' "$raw_cur" | grep -q '^[[:space:]]*\['; then
   fi
 else
   # One id per line; blank lines ignored.
-  cur_ids_json=$(jq -R -s 'split("\n") | map(select(length>0)) | unique' <<<"$raw_cur")
+  cur_ids_json=$(jq -c -R -s 'split("\n") | map(select(length>0)) | unique' <<<"$raw_cur")
 fi
 
 # ---- resolve the trusted marker-comment author id ---------------------------
