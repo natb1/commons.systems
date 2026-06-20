@@ -684,7 +684,9 @@ gh_issue_set_labels_rest() {
 # URL-encodes minimally (space→%20) mirroring gh_issue_list_rest.
 # Args: $1 = <N> (issue number, required); $2 = <label> (required);
 #   --repo owner/repo (optional).
-# On gh failure: errors to stderr and returns 1.
+# A label-absent 404 is treated as success (no-op), mirroring the porcelain
+# `gh ... --remove-label` contract. On any other gh failure: errors to stderr
+# and returns 1.
 gh_issue_remove_label_rest() {
   local num="" label="" repo=""
   while [[ $# -gt 0 ]]; do
@@ -721,10 +723,17 @@ gh_issue_remove_label_rest() {
     path="repos/{owner}/{repo}/issues/$num/labels/$enc_label"
   fi
 
-  gh_retry gh api -X DELETE "$path" >/dev/null || {
-    echo "error: gh_issue_remove_label_rest: gh api failed for $path" >&2
-    return 1
-  }
+  local err
+  if ! err=$(gh_retry gh api -X DELETE "$path" 2>&1 >/dev/null); then
+    # Porcelain `gh ... --remove-label` is a no-op when the label is absent; REST
+    # DELETE returns 404 in that case. The issue/PR is known to exist, so a 404
+    # here means the label was not present — treat it as success (faithful to the
+    # porcelain contract, not a fallback).
+    case "$err" in
+      *"HTTP 404"*|*"Not Found"*) return 0 ;;
+      *) echo "error: gh_issue_remove_label_rest: gh api failed for $path" >&2; return 1 ;;
+    esac
+  fi
 }
 
 # REST-backed mutation: close an issue (#2255).

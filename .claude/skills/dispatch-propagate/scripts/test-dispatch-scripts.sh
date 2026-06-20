@@ -529,6 +529,10 @@ case "$args" in
     # MUST precede the generic `api repos/*/issues/*` branch.
     # $args form: "api -X DELETE repos/.../issues/<N>/labels/<url-encoded-name>"
     echo "$args" >> "$STUB_DIR/gh-issue-remove-label-rest-calls.log"
+    if [[ -f "$STUB_DIR/gh-404-remove-label" ]]; then
+      echo "gh: Not Found (HTTP 404)" >&2
+      exit 1
+    fi
     if [[ -f "$STUB_DIR/gh-fail-rest" ]]; then
       echo "stub forced gh api failure" >&2
       exit 1
@@ -1682,6 +1686,17 @@ err_rlf=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_remove_label_rest 42 dispatch:p
 assert_eq "remove-label: gh failure → non-zero" "1" "$rc_rlf"
 case "$err_rlf" in *"gh_issue_remove_label_rest: gh api failed"*) m=yes ;; *) m=no ;; esac
 assert_eq "remove-label: gh-failure stderr names helper" "yes" "$m"
+teardown
+
+echo "Test: gh_issue_remove_label_rest -- label-absent 404 is a no-op (returns 0, silent)"
+setup
+: > "$STUB_DIR/gh-404-remove-label"
+rc_rl404=0
+err_rl404=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_remove_label_rest 42 dispatch:office-hours 2>&1 >/dev/null) || rc_rl404=$?
+assert_eq "remove-label: 404 absent label → success" "0" "$rc_rl404"
+# Preserves the porcelain no-op-when-absent contract: no error/WARNING on stderr.
+case "$err_rl404" in *error:*|*WARNING*) m=no ;; *) m=yes ;; esac
+assert_eq "remove-label: 404 absent label → silent stderr" "yes" "$m"
 teardown
 
 # --- gh_issue_close_rest ---
@@ -33934,7 +33949,7 @@ out=$("$TMPDIR_TEST/dispatch-reconcile-ready" 2>/dev/null)
 assert_eq "scope gate: no stdout" "" "$out"
 assert_eq "scope gate: no promote call" "absent" "$(reconcile_log_state gh-pr-ready.log)"
 assert_eq "scope gate: no demote call" "absent" "$(reconcile_log_state gh-pr-ready-undo.log)"
-assert_eq "scope gate: no edit/remove-label call" "absent" "$(reconcile_log_state gh-pr-edit.log)"
+assert_eq "scope gate: no remove-label call" "absent" "$(reconcile_log_state gh-issue-remove-label-rest-calls.log)"
 teardown
 
 # Scope gate, ready side: a non-reviewed ready PR that is failing+CONFLICTING
@@ -33950,7 +33965,8 @@ teardown
 
 # --- Attempt-clear: promote removes ALL dispatch:*-attempt-* labels ---------
 # A promotable PR also carries two attempt counters; both are removed via
-# gh pr edit --remove-label, and dispatch:reviewed is NOT among the removed.
+# gh_issue_remove_label_rest (REST DELETE .../issues/<N>/labels/<name>; PRs are
+# issues in REST), and dispatch:reviewed is NOT among the removed.
 echo "Test: promote clears all dispatch:*-attempt-* labels, keeps dispatch:reviewed (#18)"
 setup
 ATTEMPT_LABELS='[{"name":"dispatch:reviewed"},{"name":"dispatch:verify-attempt-2"},{"name":"dispatch:ci-wait-attempt-1"}]'
@@ -33959,19 +33975,19 @@ make_reconcile_pr 18 true MERGEABLE "$GREEN_ROLLUP" "$ATTEMPT_LABELS" \
 out=$("$TMPDIR_TEST/dispatch-reconcile-ready" 2>/dev/null)
 assert_eq "attempt-clear: still promoted" "promoted #18" "$out"
 assert_eq "attempt-clear: gh pr ready #18 logged" "18" "$(cat "$STUB_DIR/gh-pr-ready.log")"
-edit_log=$(cat "$STUB_DIR/gh-pr-edit.log")
+rm_log=$(cat "$STUB_DIR/gh-issue-remove-label-rest-calls.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if grep -q 'pr edit 18 --remove-label dispatch:verify-attempt-2' <<<"$edit_log" \
-   && grep -q 'pr edit 18 --remove-label dispatch:ci-wait-attempt-1' <<<"$edit_log"; then
-  PASS=$((PASS + 1)); echo "  PASS: attempt-clear: both attempt labels removed"
+if grep -q 'DELETE repos/{owner}/{repo}/issues/18/labels/dispatch:verify-attempt-2' <<<"$rm_log" \
+   && grep -q 'DELETE repos/{owner}/{repo}/issues/18/labels/dispatch:ci-wait-attempt-1' <<<"$rm_log"; then
+  PASS=$((PASS + 1)); echo "  PASS: attempt-clear: both attempt labels removed via REST DELETE"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: attempt-clear: both attempt labels removed"
-  echo "    actual gh-pr-edit.log: '$edit_log'"
+  FAIL=$((FAIL + 1)); echo "  FAIL: attempt-clear: both attempt labels removed via REST DELETE"
+  echo "    actual gh-issue-remove-label-rest-calls.log: '$rm_log'"
 fi
 TOTAL=$((TOTAL + 1))
-if grep -q 'remove-label dispatch:reviewed' <<<"$edit_log"; then
+if grep -q 'labels/dispatch:reviewed' <<<"$rm_log"; then
   FAIL=$((FAIL + 1)); echo "  FAIL: attempt-clear: dispatch:reviewed must NOT be removed"
-  echo "    actual gh-pr-edit.log: '$edit_log'"
+  echo "    actual gh-issue-remove-label-rest-calls.log: '$rm_log'"
 else
   PASS=$((PASS + 1)); echo "  PASS: attempt-clear: dispatch:reviewed not removed"
 fi
