@@ -1,0 +1,132 @@
+#!/usr/bin/env bash
+# dispatch-write-phase-log — upsert a per-(phase,attempt) handoff entry into the
+# issue's sentinel phase-log comment.
+#
+# Usage: dispatch-write-phase-log <issue-num> --phase <p> [--attempt <n>]
+#        (free-text entry body on STDIN)
+#
+# Each dispatch phase (implement / qa / review) writes a short
+# "what-failed / what-changed" note to a single <!-- dispatch:phase-log -->
+# comment on the issue (GitHub-state-keyed, mirroring <!-- dispatch:plan -->).
+# Every entry is wrapped in an inner marker <!-- phase-log:<phase>:<attempt> -->.
+#
+# Idempotent upsert keyed on (phase, attempt): on write, if the inner marker is
+# already present in the comment body, that section is REPLACED in place;
+# otherwise a new section is APPENDED. A genuine new attempt appends (the
+# cross-attempt handoff); a crash-rerun of the same logical pass replaces (no
+# duplicate). This mirrors dispatch-write-plan's "re-running replaces, never
+# stacks a second comment" idempotency at the per-section granularity.
+#
+# The repo is resolved explicitly (GH_REPO from the common dir's remote.origin.url)
+# so gh addresses the right repository from any caller cwd. A missing/non-numeric
+# issue-num, a malformed --phase, a non-numeric --attempt, or empty STDIN is a
+# clear error, not a fallback (exit 2).
+set -euo pipefail
+source "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+
+N="${1:-}"
+if [[ $# -lt 1 || -z "$N" ]]; then
+  echo "dispatch-write-phase-log: an issue-num argument is required" >&2
+  echo "usage: dispatch-write-phase-log <issue-num> --phase <p> [--attempt <n>]   (entry body on STDIN)" >&2
+  exit 2
+fi
+if [[ ! "$N" =~ ^[0-9]+$ ]]; then
+  echo "dispatch-write-phase-log: issue-num must be a positive integer, got: $N" >&2
+  exit 2
+fi
+shift
+
+PHASE=""
+ATTEMPT="1"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --phase)   PHASE="${2:-}"; shift 2 ;;
+    --attempt) ATTEMPT="${2:-}"; shift 2 ;;
+    *)
+      echo "dispatch-write-phase-log: unknown argument '$1'" >&2
+      echo "usage: dispatch-write-phase-log <issue-num> --phase <p> [--attempt <n>]" >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [[ ! "$PHASE" =~ ^[a-z][a-z-]*$ ]]; then
+  echo "dispatch-write-phase-log: --phase is required and must match ^[a-z][a-z-]*$, got: '$PHASE'" >&2
+  exit 2
+fi
+if [[ ! "$ATTEMPT" =~ ^[0-9]+$ ]]; then
+  echo "dispatch-write-phase-log: --attempt must be a non-negative integer, got: '$ATTEMPT'" >&2
+  exit 2
+fi
+
+common_dir="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || {
+  echo "dispatch-write-phase-log: not inside a git repository" >&2; exit 1; }
+url="$(git --git-dir="$common_dir" config --get remote.origin.url 2>/dev/null)" || {
+  echo "dispatch-write-phase-log: no remote.origin.url in git config at $common_dir" >&2; exit 1; }
+GH_REPO="$(gh_repo_from_remote "$url" dispatch-write-phase-log)" || exit 1
+export GH_REPO
+
+CONTENT="$(cat)"
+if [[ -z "${CONTENT//[[:space:]]/}" ]]; then
+  echo "dispatch-write-phase-log: entry body on STDIN is empty" >&2
+  exit 2
+fi
+
+OUTER_MARKER='<!-- dispatch:phase-log -->'
+INNER_MARKER="<!-- phase-log:${PHASE}:${ATTEMPT} -->"
+
+# The new section: inner marker, a header, then the STDIN body.
+NEW_SECTION="$(printf '%s\n## %s · attempt %s\n%s' "$INNER_MARKER" "$PHASE" "$ATTEMPT" "$CONTENT")"
+
+tmp="$(mktemp)"
+trap 'rm -f "$tmp"' EXIT
+
+CID=$(dispatch_marker_comment_id "$N" "$OUTER_MARKER")
+
+if [[ -z "$CID" ]]; then
+  # No phase-log comment yet — POST a fresh one: outer marker, blank line, section.
+  printf '%s\n\n%s\n' "$OUTER_MARKER" "$NEW_SECTION" > "$tmp"
+  gh api --method POST "repos/{owner}/{repo}/issues/$N/comments" \
+    --field body=@"$tmp" >/dev/null
+  exit 0
+fi
+
+# Comment exists — fetch its body and upsert the (phase, attempt) section.
+BODY=$(gh api "repos/{owner}/{repo}/issues/comments/$CID" --jq '.body')
+
+if printf '%s' "$BODY" | grep -qF "$INNER_MARKER"; then
+  # REPLACE the existing section in place. The awk state machine drops the lines
+  # from the target inner-marker line up to (but not including) the next line
+  # beginning '<!-- phase-log:' (the next section's delimiter, which is KEPT) or
+  # EOF, substituting the new section. The outer marker '<!-- dispatch:phase-log -->'
+  # begins '<!-- dispatch:' and is deliberately disjoint from the '<!-- phase-log:'
+  # terminator, so it is never treated as a section boundary.
+  REPLACEMENT="$NEW_SECTION" TARGET="$INNER_MARKER" \
+    awk '
+      BEGIN { repl = ENVIRON["REPLACEMENT"]; target = ENVIRON["TARGET"]; skip = 0 }
+      {
+        if (skip) {
+          # Inside the target section being dropped: a new inner marker ends the skip.
+          if (index($0, "<!-- phase-log:") == 1) {
+            skip = 0
+            print
+          }
+          # else: drop this line (part of the old target section)
+          next
+        }
+        if ($0 == target) {
+          # Hit the target section header — emit the replacement and start skipping.
+          print repl
+          skip = 1
+          next
+        }
+        print
+      }
+    ' <<<"$BODY" > "$tmp"
+else
+  # APPEND a new section: existing body, blank line, new section.
+  printf '%s\n\n%s\n' "$BODY" "$NEW_SECTION" > "$tmp"
+fi
+
+gh api --method PATCH "repos/{owner}/{repo}/issues/comments/$CID" \
+  --field body=@"$tmp" >/dev/null

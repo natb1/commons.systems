@@ -760,5 +760,119 @@ assert_eq 'by_model["claude-haiku-4-5"].cost_usd (haiku)' "$EXPECTED_HAIKU_COST"
 
 rm -rf "$HAIKU_ROOT"
 
+# ---------------------------------------------------------------------------
+# Claude 3 classification + generation-aware pricing + no-abort completeness
+# (#2102). Three ISOLATED fixtures:
+#   1. claude-3-opus-20240229  — rate_class()==opus_3, ACTUAL_RATES.opus_3 prices it;
+#      verifies the classification fix and audit does not abort.
+#   2. claude-3-haiku-20240307 — rate_class()==haiku_3, ACTUAL_RATES.haiku_3 prices it;
+#      verifies the haiku_3 rate row is correct.
+#   3. claude-3-5-haiku-20241022 + claude-3-7-sonnet-20250219 — the two IDs the
+#      issue's recommended-fix snippet omitted; without the completeness fix the
+#      run aborts on nonzero usage from an unrecognised family; verifies rc==0.
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "--- Claude 3 Opus cost (#2102) ---"
+
+OPUS3_ROOT=$(mktemp -d)
+trap 'rm -rf "$OPUS3_ROOT" "$FAKE_WRITER_DIR"; teardown' EXIT INT TERM
+opus3_worktree="$OPUS3_ROOT/-home-x-worktrees-2102-opus3"
+mkdir -p "$opus3_worktree"
+opus3_jsonl="$opus3_worktree/sess-opus3.jsonl"
+
+# line 1: first user line — classifies as worker
+printf '%s\n' '{"type":"user","message":{"content":"<command-name>/dispatch-worker</command-name>"}}' \
+  >> "$opus3_jsonl"
+# line 2: assistant — claude-3-opus-20240229, distinct nonzero usage in all four components
+printf '%s\n' '{"type":"assistant","attributionSkill":"plan-implement","isSidechain":false,"gitBranch":"2102-opus3","message":{"model":"claude-3-opus-20240229","usage":{"input_tokens":1000,"cache_creation_input_tokens":2000,"cache_read_input_tokens":4000,"output_tokens":500}}}' \
+  >> "$opus3_jsonl"
+jq . "$opus3_jsonl" >/dev/null
+touch "$opus3_jsonl"
+
+if (
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$OPUS3_ROOT"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7 >"$OPUS3_ROOT/out.json" 2>/dev/null
+); then rc_opus3=0; else rc_opus3=$?; fi
+
+# Opus 3 rates: input 15 / cache_creation 18.75 / cache_read 1.50 / output 75 per Mtok.
+EXPECTED_OPUS3=$(jq -n '(1000*15 + 2000*18.75 + 4000*1.50 + 500*75)/1e6')
+assert_eq "opus3: Claude 3 Opus session does not abort (rc==0)" "0" "$rc_opus3"
+assert_eq "sessions[sess-opus3].cost_usd (claude-3-opus)" "$EXPECTED_OPUS3" \
+  "$(jq '[.sessions[]|select(.id=="sess-opus3")][0].cost_usd' <"$OPUS3_ROOT/out.json")"
+assert_eq 'by_model["claude-3-opus-20240229"].cost_usd' "$EXPECTED_OPUS3" \
+  "$(jq '.by_model["claude-3-opus-20240229"].cost_usd' <"$OPUS3_ROOT/out.json")"
+
+rm -rf "$OPUS3_ROOT"
+
+echo ""
+echo "--- Claude 3 Haiku cost (#2102) ---"
+
+HAIKU3_ROOT=$(mktemp -d)
+trap 'rm -rf "$HAIKU3_ROOT" "$FAKE_WRITER_DIR"; teardown' EXIT INT TERM
+haiku3_worktree="$HAIKU3_ROOT/-home-x-worktrees-2102-haiku3"
+mkdir -p "$haiku3_worktree"
+haiku3_jsonl="$haiku3_worktree/sess-haiku3.jsonl"
+
+# line 1: first user line — classifies as worker
+printf '%s\n' '{"type":"user","message":{"content":"<command-name>/dispatch-worker</command-name>"}}' \
+  >> "$haiku3_jsonl"
+# line 2: assistant — claude-3-haiku-20240307, distinct nonzero usage in all four components
+printf '%s\n' '{"type":"assistant","attributionSkill":"plan-implement","isSidechain":false,"gitBranch":"2102-haiku3","message":{"model":"claude-3-haiku-20240307","usage":{"input_tokens":1000,"cache_creation_input_tokens":2000,"cache_read_input_tokens":4000,"output_tokens":500}}}' \
+  >> "$haiku3_jsonl"
+jq . "$haiku3_jsonl" >/dev/null
+touch "$haiku3_jsonl"
+
+OUT_HAIKU3=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$HAIKU3_ROOT"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
+)
+
+# Haiku 3 rates: input 0.25 / cache_creation 0.3125 / cache_read 0.025 / output 1.25 per Mtok.
+EXPECTED_HAIKU3=$(jq -n '(1000*0.25 + 2000*0.3125 + 4000*0.025 + 500*1.25)/1e6')
+assert_eq "sessions[sess-haiku3].cost_usd (claude-3-haiku)" "$EXPECTED_HAIKU3" \
+  "$(jq '[.sessions[]|select(.id=="sess-haiku3")][0].cost_usd' <<<"$OUT_HAIKU3")"
+assert_eq 'by_model["claude-3-haiku-20240307"].cost_usd' "$EXPECTED_HAIKU3" \
+  "$(jq '.by_model["claude-3-haiku-20240307"].cost_usd' <<<"$OUT_HAIKU3")"
+
+rm -rf "$HAIKU3_ROOT"
+
+echo ""
+echo "--- enumeration-completeness no-abort (#2102) ---"
+
+ENUM_ROOT=$(mktemp -d)
+trap 'rm -rf "$ENUM_ROOT" "$FAKE_WRITER_DIR"; teardown' EXIT INT TERM
+enum_worktree="$ENUM_ROOT/-home-x-worktrees-2102-enum"
+mkdir -p "$enum_worktree"
+enum_jsonl="$enum_worktree/sess-enum.jsonl"
+
+# line 1: first user line — classifies as worker
+printf '%s\n' '{"type":"user","message":{"content":"<command-name>/dispatch-worker</command-name>"}}' \
+  >> "$enum_jsonl"
+# line 2: assistant — claude-3-5-haiku-20241022 (omitted in issue's fix snippet)
+printf '%s\n' '{"type":"assistant","attributionSkill":"plan-implement","isSidechain":false,"gitBranch":"2102-enum","message":{"model":"claude-3-5-haiku-20241022","usage":{"input_tokens":1000,"cache_creation_input_tokens":2000,"cache_read_input_tokens":4000,"output_tokens":500}}}' \
+  >> "$enum_jsonl"
+# line 3: assistant — claude-3-7-sonnet-20250219 (omitted in issue's fix snippet)
+printf '%s\n' '{"type":"assistant","attributionSkill":"plan-implement","isSidechain":false,"gitBranch":"2102-enum","message":{"model":"claude-3-7-sonnet-20250219","usage":{"input_tokens":1000,"cache_creation_input_tokens":2000,"cache_read_input_tokens":4000,"output_tokens":500}}}' \
+  >> "$enum_jsonl"
+jq . "$enum_jsonl" >/dev/null
+touch "$enum_jsonl"
+
+if (
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$ENUM_ROOT"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7 >"$ENUM_ROOT/out.json" 2>/dev/null
+); then rc_enum=0; else rc_enum=$?; fi
+assert_eq "enum: claude-3-5-haiku + claude-3-7-sonnet session does not abort (rc==0)" "0" "$rc_enum"
+# Haiku 3.5 rates: input 0.80 / cache_creation 1.00 / cache_read 0.08 / output 4.00 per Mtok.
+EXPECTED_ENUM_HAIKU3_5=$(jq -n '(1000*0.80 + 2000*1.00 + 4000*0.08 + 500*4.00)/1e6')
+assert_eq 'enum: by_model[claude-3-5-haiku-20241022].cost_usd (haiku_3_5)' "$EXPECTED_ENUM_HAIKU3_5" \
+  "$(jq '.by_model["claude-3-5-haiku-20241022"].cost_usd' <"$ENUM_ROOT/out.json")"
+# Sonnet rates: input 3 / cache_creation 3.75 / cache_read 0.30 / output 15 per Mtok.
+EXPECTED_ENUM_SONNET=$(jq -n '(1000*3 + 2000*3.75 + 4000*0.30 + 500*15)/1e6')
+assert_eq 'enum: by_model[claude-3-7-sonnet-20250219].cost_usd (sonnet)' "$EXPECTED_ENUM_SONNET" \
+  "$(jq '.by_model["claude-3-7-sonnet-20250219"].cost_usd' <"$ENUM_ROOT/out.json")"
+
+rm -rf "$ENUM_ROOT"
+
 report_results
 exit $FAIL
