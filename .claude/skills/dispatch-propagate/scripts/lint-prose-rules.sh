@@ -8,9 +8,10 @@ SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPTS/lib.sh"
 
 # Detect: echo "$VAR" | jq  (quoted variable form only — see .claude/rules/shell-json.md)
-# Single-quoted to prevent the shell from interpreting \$ as $ (which would make
-# \$ an ERE end-anchor, breaking the match).
-PATTERN='echo[[:space:]]+"\$[A-Za-z_][A-Za-z0-9_]*"[[:space:]]*\|[[:space:]]*jq'
+# Covers optional echo flags (echo -e / echo -n) and the braced ${VAR} form, both
+# of which are the same anti-pattern. Single-quoted to prevent the shell from
+# interpreting \$ as $ (which would make \$ an ERE end-anchor, breaking the match).
+PATTERN='echo([[:space:]]+-[a-zA-Z]+)?[[:space:]]+"\$\{?[A-Za-z_][A-Za-z0-9_]*\}?"[[:space:]]*\|[[:space:]]*jq'
 
 # Compute the unified-0 diff of added lines in .sh files against origin/main.
 # Run from REPO_ROOT so that relative paths in diff output are consistent.
@@ -58,8 +59,7 @@ while IFS= read -r line; do
     content="${line:1}"
 
     # Skip comment lines (first non-whitespace character is #)
-    trimmed="${content#"${content%%[! ]*}"}"
-    if [[ "$trimmed" == '#'* ]]; then
+    if [[ "$content" =~ ^[[:space:]]*# ]]; then
       LINE_NUM=$(( LINE_NUM + 1 ))
       continue
     fi

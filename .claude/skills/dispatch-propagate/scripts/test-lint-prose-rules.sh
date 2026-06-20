@@ -17,6 +17,10 @@ trap cleanup EXIT INT TERM
 _PIPE='|'
 # Produces the string: X=$(echo "$J" | jq -r .a)
 VIOL_CONTENT="X=\$(echo \"\$J\" $_PIPE jq -r .a)"
+# Produces the string: X=$(echo -e "$J" | jq -r .a)  (escape-interpreting flag form)
+VIOL_CONTENT_FLAG="X=\$(echo -e \"\$J\" $_PIPE jq -r .a)"
+# Produces the string: X=$(echo "${MY_VAR}" | jq -r .a)  (braced form)
+VIOL_CONTENT_BRACED="X=\$(echo \"\${MY_VAR}\" $_PIPE jq -r .a)"
 
 # Build a fresh ephemeral repo. Sets globals: REPO, BARE.
 # $1 (optional): "with_violation" — include VIOL_CONTENT in the origin/main baseline.
@@ -99,14 +103,19 @@ assert_contains "pre-existing: PASS printed" "PASS" "$OUT"
 
 # ---------------------------------------------------------------------------
 # Test 3: added comment mentioning the pattern is NOT flagged.
-# The linter skips comment lines (first non-whitespace char is #).
+# The linter skips comment lines (first non-whitespace char is #), including
+# indented comments (leading spaces/tabs before the #).
 # ---------------------------------------------------------------------------
 echo "Test 3: added comment is not flagged"
 make_repo
-# Write a comment referencing the pattern; assembled in parts here to avoid
-# the contiguous banned sequence appearing on this non-comment source line.
+# Write both an un-indented and an indented comment referencing the pattern;
+# assembled in parts here to avoid the contiguous banned sequence appearing on
+# this non-comment source line. The indented case guards the regression where a
+# space-/tab-indented comment was wrongly flagged.
 COMMENT_LINE="# do not use: echo \"\$X\" $_PIPE jq"
+COMMENT_LINE_INDENTED="  # do not use: echo \"\$Y\" $_PIPE jq"
 printf '%s\n' "$COMMENT_LINE" >> "$REPO/script.sh"
+printf '%s\n' "$COMMENT_LINE_INDENTED" >> "$REPO/script.sh"
 git -C "$REPO" add -A
 git -C "$REPO" commit --quiet -m "add comment"
 run_sut
@@ -125,5 +134,34 @@ git -C "$REPO" commit --quiet -m "add clean line"
 run_sut
 assert_eq "clean-line: exit 0" "0" "$RC"
 assert_contains "clean-line: PASS printed" "PASS" "$OUT"
+
+# ---------------------------------------------------------------------------
+# Test 5: net-new flag form (echo -e "$VAR" | jq) IS flagged.
+# The -e flag is the explicit opt-in to escape interpretation — the most
+# dangerous form of the anti-pattern.
+# ---------------------------------------------------------------------------
+echo "Test 5: echo -e flag form is flagged"
+make_repo
+printf '%s\n' "$VIOL_CONTENT_FLAG" >> "$REPO/script.sh"
+git -C "$REPO" add -A
+git -C "$REPO" commit --quiet -m "add flag-form violation"
+run_sut
+[ "$RC" -ne 0 ] && _t5_rc=nonzero || _t5_rc=zero
+assert_eq "flag-form: exit non-zero" "nonzero" "$_t5_rc"
+assert_contains "flag-form: output names the file" "script.sh" "$OUT"
+
+# ---------------------------------------------------------------------------
+# Test 6: net-new braced form (echo "${VAR}" | jq) IS flagged.
+# Semantically identical to the unbraced form; must not be a lint bypass.
+# ---------------------------------------------------------------------------
+echo "Test 6: braced variable form is flagged"
+make_repo
+printf '%s\n' "$VIOL_CONTENT_BRACED" >> "$REPO/script.sh"
+git -C "$REPO" add -A
+git -C "$REPO" commit --quiet -m "add braced-form violation"
+run_sut
+[ "$RC" -ne 0 ] && _t6_rc=nonzero || _t6_rc=zero
+assert_eq "braced-form: exit non-zero" "nonzero" "$_t6_rc"
+assert_contains "braced-form: output names the file" "script.sh" "$OUT"
 
 report_results
