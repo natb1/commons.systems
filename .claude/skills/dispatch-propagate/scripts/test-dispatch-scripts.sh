@@ -18144,6 +18144,77 @@ else
 fi
 spawn_worker_teardown
 
+# --- Test 2f: --effort forwarded into bg argv (with --model, pins ordering) --
+# Passes both --model and --effort to exercise the full argv order:
+#   --bg --name N --model M --effort E --permission-mode auto PROMPT
+# (effort sits after model and before --permission-mode).
+
+echo "Test: dispatch-spawn-job forwards --effort into the 'claude --bg' argv (after --model)"
+spawn_worker_setup
+write_fake_spawn_worker_claude
+export DISPATCH_SPAWN_JOB_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
+export DISPATCH_SPAWN_JOB_SESSION_ID="sess-self"
+SPAWN_JOB_CWD="$TMPDIR_TEST/worktrees/839-test-worker"
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-job" \
+    --name diagnose-main --cwd "$SPAWN_JOB_CWD" \
+    --model claude-sonnet-4-6 --effort high \
+    "/dispatch-diagnose-main abc123" 2>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "spawn-job-effort: dispatch-spawn-job exits 0" "0" "$rc"
+assert_eq "spawn-job-effort: stdout is 'spawned'" "spawned" "$out"
+mapfile -t sj_effort_argv < "$SPAWN_WORKER_BG_ARGV"
+assert_eq "spawn-job-effort: argv[0] is --bg" "--bg" "${sj_effort_argv[0]:-}"
+assert_eq "spawn-job-effort: argv[1] is --name" "--name" "${sj_effort_argv[1]:-}"
+assert_eq "spawn-job-effort: argv[2] is the passed name" "diagnose-main" "${sj_effort_argv[2]:-}"
+assert_eq "spawn-job-effort: argv[3] is --model" "--model" "${sj_effort_argv[3]:-}"
+assert_eq "spawn-job-effort: argv[4] is claude-sonnet-4-6" "claude-sonnet-4-6" "${sj_effort_argv[4]:-}"
+assert_eq "spawn-job-effort: argv[5] is --effort" "--effort" "${sj_effort_argv[5]:-}"
+assert_eq "spawn-job-effort: argv[6] is high" "high" "${sj_effort_argv[6]:-}"
+assert_eq "spawn-job-effort: argv[7] is --permission-mode" "--permission-mode" "${sj_effort_argv[7]:-}"
+assert_eq "spawn-job-effort: argv[8] is auto" "auto" "${sj_effort_argv[8]:-}"
+assert_eq "spawn-job-effort: argv[9] is the prompt" "/dispatch-diagnose-main abc123" "${sj_effort_argv[9]:-}"
+spawn_worker_teardown
+
+# --- Test 2g: --effort omitted — no --effort token in bg argv ----------------
+# When --effort is absent, the bg argv must contain no --effort token.
+# The spawn succeeds, so the argv file exists — we check token absence.
+
+echo "Test: dispatch-spawn-job omits --effort from bg argv when not passed"
+spawn_worker_setup
+write_fake_spawn_worker_claude
+export DISPATCH_SPAWN_JOB_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
+export DISPATCH_SPAWN_JOB_SESSION_ID="sess-self"
+SPAWN_JOB_CWD="$TMPDIR_TEST/worktrees/839-test-worker"
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-job" \
+    --name diagnose-main --cwd "$SPAWN_JOB_CWD" \
+    "/dispatch-diagnose-main abc123" 2>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "spawn-job-no-effort: dispatch-spawn-job exits 0" "0" "$rc"
+assert_eq "spawn-job-no-effort: stdout is 'spawned'" "spawned" "$out"
+TOTAL=$((TOTAL + 1))
+if ! grep -qx -- '--effort' "$SPAWN_WORKER_BG_ARGV" 2>/dev/null; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-job-no-effort: no '--effort' token in bg argv"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-job-no-effort: no '--effort' token in bg argv"
+  echo "    bg-argv: $(cat "$SPAWN_WORKER_BG_ARGV")"
+fi
+spawn_worker_teardown
+
+# --- Test 2h: --effort bogus exits 2 (closed-set validation) -----------------
+# An invalid effort value must exit 2 with a clear diagnostic (not a spawn).
+
+echo "Test: dispatch-spawn-job exits 2 on an invalid --effort value"
+spawn_worker_setup
+write_fake_spawn_worker_claude
+export DISPATCH_SPAWN_JOB_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
+SPAWN_JOB_CWD="$TMPDIR_TEST/worktrees/839-test-worker"
+if "$TMPDIR_TEST/scripts/dispatch-spawn-job" --effort bogus \
+    --name diagnose-main --cwd "$SPAWN_JOB_CWD" "/dispatch-diagnose-main abc" 2>/dev/null; then
+  sj_rc_effort=0
+else
+  sj_rc_effort=$?
+fi
+assert_eq "spawn-job-effort-bad: invalid --effort value → exit 2" "2" "$sj_rc_effort"
+spawn_worker_teardown
+
 # ============================================================================
 # dispatch-self-close tests
 # ============================================================================
