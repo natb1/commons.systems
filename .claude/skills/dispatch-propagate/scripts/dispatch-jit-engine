@@ -237,8 +237,8 @@ for (( i = 0; i < JIT_COUNT; i++ )); do
   # At most one open issue per jit. If one is already open, skip and stamp the
   # last-check time so debounce holds off the next tick.
   OPEN_RC=0
-  OPEN_JSON=$(gh issue list --repo "$REPO" --label "$LABEL" --state open \
-    --json number 2>&1) || OPEN_RC=$?
+  OPEN_JSON=$(gh_issue_list_rest --repo "$REPO" --label "$LABEL" --state open \
+    2>&1) || OPEN_RC=$?
   if [[ "$OPEN_RC" -ne 0 ]]; then
     echo "$KEY: error (gh issue list --state open failed: $OPEN_JSON)" >&2
     HARD_ERROR=1
@@ -269,8 +269,8 @@ for (( i = 0; i < JIT_COUNT; i++ )); do
       continue
     fi
     CLOSED_RC=0
-    CLOSED_JSON=$(gh issue list --repo "$REPO" --label "$LABEL" --state closed \
-      --json number,closedAt 2>&1) || CLOSED_RC=$?
+    CLOSED_JSON=$(gh_issue_list_rest --repo "$REPO" --label "$LABEL" --state closed \
+      2>&1) || CLOSED_RC=$?
     if [[ "$CLOSED_RC" -ne 0 ]]; then
       echo "$KEY: error (gh issue list --state closed failed: $CLOSED_JSON)" >&2
       HARD_ERROR=1

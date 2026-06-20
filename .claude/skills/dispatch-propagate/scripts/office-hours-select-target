@@ -120,7 +120,7 @@ resolve_main_worktree() {
 # Open issues carrying dispatch:office-hours, with their creation times and
 # labels (labels ride this existing fetch — no extra gh call; the main-qa
 # override below filters ISSUE_LIST in memory (no re-query) to detect the `main-qa` label).
-ISSUE_LIST=$(gh issue list --label dispatch:office-hours --state open --json number,createdAt,labels)
+ISSUE_LIST=$(gh_issue_list_rest --label dispatch:office-hours --state open)
 
 # Map each registered <N>-* worktree to its on-disk path(s), keyed by issue
 # number — the same construction dispatch-select-target uses for its liveness
