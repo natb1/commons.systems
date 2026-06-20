@@ -1062,7 +1062,7 @@ describe("clearSearch()", () => {
     expect(target.querySelectorAll(".search-highlight").length).toBe(1);
     expect(target.querySelectorAll(".search-highlight")[0].textContent).toBe("the");
 
-    renderer.clearSearch!();
+    renderer.clearSearch!(); // type-safety-ok: optional renderer API method, present in this test harness
     expect(target.querySelector(".search-highlight")).toBeNull();
   });
 
