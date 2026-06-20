@@ -314,6 +314,46 @@ describe("SearchPanel", () => {
     expect(countEl.textContent).toBe("3 results");
   });
 
+  it("truncated=true shows 'First N results shown — refine your search' in count (AC3)", async () => {
+    const results = [makeSearchResult(), makeSearchResult(), makeSearchResult()];
+    const renderer = makeMockRenderer({ search: vi.fn().mockResolvedValue({ results, truncated: true }), goToResult: vi.fn(), renderResult: vi.fn(), clearSearch: vi.fn() });
+    const controller = makeMockController({ getRenderer: () => renderer });
+    render(controller);
+
+    const input = container.querySelector(".viewer-search-input") as HTMLInputElement;
+    const countEl = container.querySelector(".viewer-search-count") as HTMLElement;
+
+    setInputValue(input, "fox");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    // Must differ from the plain "N results" text — includes a truncation hint.
+    const countText = countEl.textContent ?? "";
+    expect(countText).not.toBe("3 results");
+    expect(countText.length).toBeGreaterThan(0);
+    // The count and a truncation hint are both present.
+    expect(countText).toContain("3");
+    expect(countText.toLowerCase()).toMatch(/refine|first/);
+  });
+
+  it("truncated=false shows plain 'N results' count", async () => {
+    const results = [makeSearchResult(), makeSearchResult(), makeSearchResult()];
+    const renderer = makeMockRenderer({ search: vi.fn().mockResolvedValue({ results, truncated: false }), goToResult: vi.fn(), renderResult: vi.fn(), clearSearch: vi.fn() });
+    const controller = makeMockController({ getRenderer: () => renderer });
+    render(controller);
+
+    const input = container.querySelector(".viewer-search-input") as HTMLInputElement;
+    const countEl = container.querySelector(".viewer-search-count") as HTMLElement;
+
+    setInputValue(input, "fox");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    expect(countEl.textContent).toBe("3 results");
+  });
+
   it("zero results shows '0 results' count", async () => {
     const renderer = makeMockRenderer({ search: vi.fn().mockResolvedValue({ results: [], truncated: false }), goToResult: vi.fn(), renderResult: vi.fn(), clearSearch: vi.fn() });
     const controller = makeMockController({ getRenderer: () => renderer });

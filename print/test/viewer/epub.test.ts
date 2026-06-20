@@ -83,6 +83,7 @@ vi.mock("epubjs", () => ({
 }));
 
 import { createEpubRenderer } from "../../src/viewer/epub";
+import { MAX_SEARCH_RESULTS } from "../../src/viewer/types";
 
 describe("createEpubRenderer", () => {
   let container: HTMLElement;
@@ -849,6 +850,44 @@ describe("createEpubRenderer", () => {
       expect(globalThis.reportError).toHaveBeenCalledWith(
         expect.objectContaining({ message: "boom" }),
       );
+    });
+
+    it("caps results at MAX_SEARCH_RESULTS, sets truncated=true, and still calls unload (AC2)", async () => {
+      // Build MAX_SEARCH_RESULTS + 1 matches so the cap fires mid-loop.
+      const overMatches = Array.from({ length: MAX_SEARCH_RESULTS + 1 }, (_, i) => ({
+        cfi: `cfi-over-${i}`,
+        excerpt: `fox excerpt ${i}`,
+      }));
+      const section = makeSection("ch0.xhtml", overMatches);
+      mockSpine.spineItems = [section];
+      mockBook.navigation.get.mockReturnValue({ label: "Ch. 1" });
+
+      const renderer = await initRenderer();
+      const result = await renderer.search!("fox");
+
+      // Result count is capped at the constant.
+      expect(result.results.length).toBe(MAX_SEARCH_RESULTS);
+      // Truncation flag is set.
+      expect(result.truncated).toBe(true);
+      // unload must have been called once regardless of early cap (finally block).
+      expect(section.unload).toHaveBeenCalledTimes(1);
+      // The highlight burst is bounded — exactly MAX_SEARCH_RESULTS annotations painted.
+      expect(mockRendition.annotations.highlight).toHaveBeenCalledTimes(MAX_SEARCH_RESULTS);
+    });
+
+    it("does not truncate when total matches are within the cap", async () => {
+      const fewMatches = Array.from({ length: MAX_SEARCH_RESULTS }, (_, i) => ({
+        cfi: `cfi-few-${i}`,
+        excerpt: `fox few ${i}`,
+      }));
+      mockSpine.spineItems = [makeSection("ch0.xhtml", fewMatches)];
+      mockBook.navigation.get.mockReturnValue({ label: "Ch. 1" });
+
+      const renderer = await initRenderer();
+      const result = await renderer.search!("fox");
+
+      expect(result.results.length).toBe(MAX_SEARCH_RESULTS);
+      expect(result.truncated).toBe(false);
     });
 
     describe("goToResult", () => {

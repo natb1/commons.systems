@@ -103,6 +103,7 @@ import {
   offsetToItemRanges,
   createPdfRenderer,
 } from "../../src/viewer/pdf";
+import { MAX_SEARCH_RESULTS } from "../../src/viewer/types";
 
 // ---------------------------------------------------------------------------
 // A. Pure helper tests — no mock dependencies needed.
@@ -522,6 +523,48 @@ describe("search()", () => {
     expect(decoded).not.toBeNull();
     expect(decoded!.offset).toBe(0);
     expect(decoded!.length).toBe(5);
+  });
+
+  it("caps results at MAX_SEARCH_RESULTS and sets truncated=true when matches exceed the limit", async () => {
+    // Build a fake doc with MAX_SEARCH_RESULTS + 1 pages, each with one match,
+    // so the total across pages exceeds the cap.
+    const pdfjs = await import("pdfjs-dist");
+    const overPageCount = MAX_SEARCH_RESULTS + 1;
+    const overDoc = {
+      numPages: overPageCount,
+      destroy() {},
+      getPage: (_i: number) =>
+        Promise.resolve({
+          getTextContent: () => Promise.resolve({ items: [{ str: "fox jumps" }] }),
+          getViewport: () => ({ width: 100, height: 100 }),
+          render: () => ({ promise: Promise.resolve(), cancel() {} }),
+        }),
+      getOutline: () => Promise.resolve(null),
+      getDestination: () => Promise.resolve(null),
+      getPageIndex: () => Promise.resolve(0),
+    };
+    const spy = vi
+      .spyOn(pdfjs, "getDocument")
+      .mockReturnValue({ promise: Promise.resolve(overDoc) } as never);
+    try {
+      const renderer = createPdfRenderer();
+      await renderer.init(container, "fake://over.pdf");
+      const result = await renderer.search!("fox");
+      expect(result.results.length).toBe(MAX_SEARCH_RESULTS);
+      expect(result.truncated).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("does not truncate and sets truncated=false when matches are within the limit", async () => {
+    // The default mock doc has 5 pages; search("the") yields 2 matches (pages 1 and 2).
+    // That is well below MAX_SEARCH_RESULTS, so truncated must be false.
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf");
+    const result = await renderer.search!("the");
+    expect(result.results.length).toBeLessThanOrEqual(MAX_SEARCH_RESULTS);
+    expect(result.truncated).toBe(false);
   });
 
   it("resolves (does not reject) when destroy() fires during the page loop", async () => {
