@@ -7,7 +7,7 @@
 # the normalized result to stdout.
 #
 # Usage:
-#   dispatch-config-load <projects|jit|statements|target-workers|budget-etl|epic|auto-merge|force-opus|sweep>
+#   dispatch-config-load <projects|jit|statements|target-workers|budget-etl|epic|auto-merge|force-opus|sweep|selection-lock>
 #
 # Config files live in <project-root>/dispatch.config/. The project root is
 # resolved via resolve_project_root (lib.sh).
@@ -266,6 +266,28 @@
 #     "notInSyncGraceSeconds": 86400
 #   }
 #
+# ---- Schema: selection-lock.json -------------------------------------------
+#
+# Top-level object with optional tunables for the dispatch selection lock
+# (`dispatch-acquire-lock`). Each field must be a number when present; absent
+# fields fall back to the defaults baked into `dispatch-acquire-lock`. This
+# config type follows the GENERIC absent→inert convention (see "Stdout protocol"
+# above): when the file is absent, no-config is emitted and the consumer uses its
+# built-in defaults.
+#
+#   max_hold_seconds        number (optional, must be a positive integer) — the
+#                           max-hold / heartbeat staleness cap, in seconds. A lock
+#                           holder whose heartbeat (lock-file mtime) is older than
+#                           this is reclaimable by the next acquire even though its
+#                           session is still live. The default value (300) is baked
+#                           into dispatch-acquire-lock, not here. Absent →
+#                           dispatch-acquire-lock uses its default.
+#
+# Example (see selection-lock.example.json):
+#   {
+#     "max_hold_seconds": 300
+#   }
+#
 set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
@@ -274,9 +296,9 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
 CONFIG_TYPE="${1:-}"
 case "$CONFIG_TYPE" in
-  projects|jit|statements|target-workers|budget-etl|epic|auto-merge|force-opus|sweep) ;;
+  projects|jit|statements|target-workers|budget-etl|epic|auto-merge|force-opus|sweep|selection-lock) ;;
   *)
-    echo "error: usage: dispatch-config-load <projects|jit|statements|target-workers|budget-etl|epic|auto-merge|force-opus|sweep>" >&2
+    echo "error: usage: dispatch-config-load <projects|jit|statements|target-workers|budget-etl|epic|auto-merge|force-opus|sweep|selection-lock>" >&2
     exit 2
     ;;
 esac
@@ -653,6 +675,35 @@ case "$CONFIG_TYPE" in
           # integer comparison, raise an arithmetic error, and fall through to
           # the reap branch — immediately force-reaping every not-in-sync worktree.
           "notInSyncGraceSeconds must be a whole number (integer), got \($cfg.notInSyncGraceSeconds)"
+        else
+          empty
+        end)
+      end
+    ' "$CONFIG_FILE")
+    ;;
+  selection-lock)
+    # top-level value must be an object; the single tunable is optional.
+    # `dispatch-acquire-lock` substitutes a baked-in default (300) when the field
+    # is absent, so absence is silent — only the type of a present field is checked.
+    ERRORS=$(jq -r '
+      if type != "object" then
+        "top-level value must be a JSON object, got \(type)"
+      else
+        . as $cfg |
+        # max_hold_seconds: optional positive integer
+        (if ($cfg | has("max_hold_seconds")) | not then
+          empty
+        elif ($cfg.max_hold_seconds | type) != "number" then
+          "max_hold_seconds must be a number if present, got \($cfg.max_hold_seconds | type)"
+        elif $cfg.max_hold_seconds <= 0 then
+          "max_hold_seconds must be > 0 if present, got \($cfg.max_hold_seconds)"
+        elif ($cfg.max_hold_seconds | tostring | test("^[0-9]+$") | not) then
+          # Mirror the env-override contract (^[0-9]+$): reject any value whose
+          # rendered form is not a plain integer. This catches fractions (0.5)
+          # and scientific notation (1e6 -> jq renders "1E+6"); both would reach
+          # the dispatch-acquire-lock bash `(( age > MAX_HOLD_SECONDS ))` integer
+          # comparison, raise an arithmetic error, and break the staleness check.
+          "max_hold_seconds must be a whole number (integer), got \($cfg.max_hold_seconds)"
         else
           empty
         end)
