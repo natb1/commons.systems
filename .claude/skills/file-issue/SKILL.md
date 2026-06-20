@@ -377,6 +377,41 @@ it is split — finalize each sub-issue instead.
 gh issue edit <N> --add-assignee @me --add-label "help wanted"
 ```
 
+### Epic label
+
+Apply the configured epic label only when `<N>` IS a parent epic. Leaf-vs-epic is
+determined solely by whether the Step 1 sub-issue fetch returned a non-empty list
+— never by body self-description. Concretely, `<N>` is a parent epic when:
+
+- **issue number mode** — its own Step 1 sub-issue fetch (`:74-77`) returned a
+  non-empty list.
+- **description mode** — Step 3f decomposition fired and created sub-issues for
+  `<N>`, so `<N>` is the parent epic (see Step 7, `CREATED <N>` = parent epic).
+
+Step 6 runs for the parent AND each sub-issue, so this sub-step fires for the
+PARENT ONLY. A leaf issue receives no epic label, and the sub-issues themselves —
+whose own sub-issue fetch is empty when the loop finalizes them — receive no epic
+label either.
+
+The label is sourced from config (single source of truth). Read the `epic` config
+type: `no-config` → apply NO epic label (the feature stays inert); otherwise apply
+each label in the `.labels[]` array to the parent `<N>`:
+
+```bash
+EPIC_CONFIG=$(.claude/skills/dispatch-propagate/scripts/dispatch-config-load epic)
+if [[ "$EPIC_CONFIG" != "no-config" ]]; then
+  while IFS= read -r epic_label; do
+    [[ -n "$epic_label" ]] && gh issue edit <N> --add-label "$epic_label"
+  done < <(jq -r '.labels[]' <<<"$EPIC_CONFIG")
+fi
+```
+
+End-to-end auto-resolution ADDITIONALLY requires the user's machine-local
+`dispatch.config/epic.json` (e.g. `{"labels": ["epic"]}` — see
+`.claude/skills/dispatch-propagate/scripts/epic.example.json`). The `/file-issue`
+change alone is INERT without it: `dispatch-config-load epic` returns `no-config`,
+so no label is applied.
+
 ### Type classification
 
 Classify from title and body. Type and topic are orthogonal axes.
