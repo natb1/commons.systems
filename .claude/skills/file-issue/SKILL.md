@@ -166,11 +166,19 @@ Analyze all eight categories. Compile findings under each heading.
 
 ### a. Duplicates
 
-Extract 3–5 representative keywords from the title and body and run one search:
+Extract 3–5 representative keywords from the title and body. Then fetch all issues once via the REST core bucket (which covers both open and closed issues — an improvement over the old open-only search) and narrow locally on title+body with no additional network calls:
 
 ```bash
-gh search issues --repo {owner}/{repo} --state open --json number,title,body "<keywords>"
+source .claude/skills/dispatch-propagate/scripts/lib.sh
+# One REST fetch of all open+closed issues (REST core bucket, not the Search/GraphQL
+# API), then narrow LOCALLY to a small candidate set on title/body keywords.
+ALL_ISSUES=$(gh_issue_list_rest --state all --include-body)
+printf '%s' "$ALL_ISSUES" | jq -r --arg kw "<keyword>" '
+  .[] | select(((.title // "") + " " + (.body // "")) | ascii_downcase | contains($kw | ascii_downcase))
+      | {number, title, body}'
 ```
+
+Run the local filter for each extracted keyword and union the results to produce the candidate set.
 
 In description mode: if any candidate describes the same actionable change as
 the new title + body, treat it as an EXISTING match — skip creation for this spec
@@ -342,7 +350,8 @@ Then proceed to Step 6 (finalize).
 
 ### Description mode
 
-Check once more for duplicates against the improved title + body (defense-in-depth
+Check once more for duplicates against the improved title + body using the same
+`gh_issue_list_rest` retrieval and local keyword filter from Step 3a (defense-in-depth
 recheck — `/file-issue` may be called from a non-interactive caller that did not
 pre-screen). If a match is found, skip creation for this spec and record
 `EXISTING <N>` as its Step 7 return line.
