@@ -219,8 +219,9 @@ hand.
 
 **Ordering invariant.** The phase-log write must PRECEDE the terminal action so
 the terminal action stays last: `dispatch-mark-complete` (no deviation) or
-`dispatch-mark-deviation` (deviation) remains the single named exit. Write the
-phase-log entry once here, before the deviation branch, so both branches share it.
+`dispatch-mark-deviation` (deviation) remains the single named exit. On the normal
+path, write the phase-log entry once here, before the deviation branch, so both
+terminal branches (deviation and no-deviation) share it.
 
 **On the normal path (Steps 1–4 ran this pass):** compose a terse
 "what-changed" digest of the implementation to `tmp/phase-log-entry-$N.md` — a
@@ -242,13 +243,16 @@ skipped this pass):** skip the phase-log compose and the
 units this pass and holds no fresh implementation data; composing a digest now
 would overwrite the accurate `(implement, 1)` entry the original pass wrote with
 uninformed or fabricated content — or fabricate an entry where none should exist.
-The prior entry is already correct and durable. Go straight to the
-deviation/marker logic below.
+The prior entry, if any, is already correct and durable; if the original pass
+crashed before writing one, skipping still yields an honest absence — never
+fabricate content now. Go straight to the deviation/marker logic below.
 
 Judge whether the implementation deviated from the
 persisted plan — scope shifted mid-implementation, or the plan could not be
 fully implemented as written. Base this on the `/implement-unit` outcomes
-observed in Step 2.
+observed in Step 2. On the re-entry path (Steps 1–4 were skipped this pass),
+no `/implement-unit` outcomes were observed — treat deviation as false and
+proceed to `dispatch-mark-complete`.
 
 **Deviation fires** — skip the `phase-completed` marker. Instead call
 `dispatch-mark-deviation` to write the office-hours-reason atomically. If Step 4
