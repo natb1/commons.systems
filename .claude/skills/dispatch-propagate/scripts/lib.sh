@@ -161,8 +161,9 @@ gh_api_array() {
 }
 
 # dispatch_marker_comment_id <N> <marker> — echo the id of the issue comment
-# containing <marker> authored by the trusted dispatch identity, or empty when
-# none. Consolidates the author-id-filtered find jq currently duplicated inline
+# whose body starts with <marker> (first line), authored by the trusted dispatch
+# identity, or empty when none. Uses startswith (not contains) so prose mentions
+# of the marker string in other comments are never matched. Consolidates the author-id-filtered find jq currently duplicated inline
 # in dispatch-read-plan and dispatch-write-plan (those two are deliberately NOT
 # migrated in this PR — see issue #2039 plan; the greenfield migration is a
 # deferred follow-up). Resolves the trusted author id from `gh api user --jq '.id'`
@@ -181,7 +182,7 @@ dispatch_marker_comment_id() {
   local cid
   cid=$(gh_retry gh api --paginate "repos/{owner}/{repo}/issues/$n/comments" \
     | jq -r --arg m "$marker" --argjson author_id "$author_id" \
-        'first(.[] | select((.body | contains($m)) and (.user.id == $author_id)) | .id)')
+        'first(.[] | select((.body | startswith($m)) and (.user.id == $author_id)) | .id)')
   if [[ -z "$cid" || "$cid" == "null" ]]; then
     return 0
   fi
