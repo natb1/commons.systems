@@ -126,8 +126,18 @@ Ranking (step 5) stays on `price_proxy_usd`. `cost_usd` is reported alongside it
    POLICY_DIR="$(resolve_project_root)/dispatch.config"
    mkdir -p "$POLICY_DIR"
    .claude/skills/dispatch-token-audit/scripts/generate-phase-model-policy.sh tmp/usage-audit.json \
-     > "$POLICY_DIR/phase-model-policy.json"
+     > "$POLICY_DIR/phase-model-policy.json.tmp" \
+     && mv "$POLICY_DIR/phase-model-policy.json.tmp" "$POLICY_DIR/phase-model-policy.json"
    ```
+
+   Write to a temp file in the same directory, then atomically `mv` it into
+   place. The shell redirect truncates its target **before** the producer runs,
+   so redirecting straight onto `phase-model-policy.json` would leave an empty
+   file if the producer exits non-zero (bad `tmp/usage-audit.json`, a failed
+   `MIN_SAMPLE`/`HIT_RATE_FLOOR` override, or any jq error). An empty policy
+   makes `dispatch-config-load` exit 1, cascading to `dispatch-phase-model` and
+   `dispatch-launch-worker` so no phase spawns at all. Staging to `.tmp` and
+   renaming only on success preserves the previous valid policy on failure.
 
    Run this Bash call with `dangerouslyDisableSandbox: true`. `dispatch.config/` lives at the **project root**, which is NOT in `settings.json`'s `allowWrite` list (see `.claude/rules/sandbox.md`), so a sandboxed write fails read-only. Resolve the path exactly as `dispatch-config-load` does — `resolve_project_root` from `lib.sh`, then `/dispatch.config`. Because that directory is OUTSIDE the worktree, the write does not dirty git.
 
