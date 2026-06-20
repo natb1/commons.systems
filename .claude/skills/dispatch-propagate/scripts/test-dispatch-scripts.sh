@@ -31772,6 +31772,7 @@ ehu_cleanup_rc=0
   cleanup_stale_heartbeat_units "$ehu_missing_svc" "$ehu_tmp/main-worktree" "$ehu_tmp/bin/systemctl"
 ) || ehu_cleanup_rc=$?
 assert_eq "cleanup_stale_heartbeat_units: missing unit → returns 0" "0" "$ehu_cleanup_rc"
+# Counts the inline grep check below; the assert_eq above counts itself.
 TOTAL=$((TOTAL + 1))
 if ! grep -q 'disable' "$ehu_log"; then
   PASS=$((PASS + 1)); echo "  PASS: cleanup_stale_heartbeat_units no-op when no prior units"
@@ -31791,6 +31792,7 @@ ehu_cleanup_rc=0
   cleanup_stale_heartbeat_units "$ehu_svc" "$ehu_tmp/main-worktree" "$ehu_tmp/bin/systemctl"
 ) || ehu_cleanup_rc=$?
 assert_eq "cleanup_stale_heartbeat_units: no WorkingDirectory= → returns 0" "0" "$ehu_cleanup_rc"
+# Counts the inline grep check below; the assert_eq above counts itself.
 TOTAL=$((TOTAL + 1))
 if ! grep -q 'disable' "$ehu_log"; then
   PASS=$((PASS + 1)); echo "  PASS: cleanup_stale_heartbeat_units no-op when WorkingDirectory= absent"
