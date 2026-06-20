@@ -231,6 +231,34 @@ self_close() {
     || echo "[dispatch-stop] WARNING: dispatch-self-close failed" >&2
 }
 
+# Side-effect recovery comparison (#2025). Returns 0 ("advance") when CURRENT is
+# genuinely downstream of the DISPATCHED phase, else non-zero ("park"). The two
+# fix-* phases (fix-conflicts, fix-checks) are off-chain remediation, not linear
+# stages of the canonical plan→implement→qa→review→done chain (the main chain is
+# that canonical order with the two fix-* phases removed). Entering a fix-* phase
+# (a conflict / CI failure was injected mid-phase) OR leaving one (the fix landed
+# and the chain re-derived downstream) is genuine forward motion, so any CHANGE
+# touching a fix-* phase advances — this preserves the #2025 "CI broke mid-qa →
+# route to fix-checks, don't park a human" behavior. Two equal phases are no
+# progress → park. A move BETWEEN main-chain phases must be strictly forward; a
+# backwards main-chain move (e.g. qa→implement, a regressed PR whose qa-done
+# never landed) is not a completion → park. A bare `!=` would wrongly treat that
+# regression as an advance.
+phase_advanced_past() {
+  local from="$1" to="$2"
+  [ "$from" = "$to" ] && return 1
+  case "$from" in fix-conflicts|fix-checks) return 0 ;; esac
+  case "$to"   in fix-conflicts|fix-checks) return 0 ;; esac
+  # Both main-chain: rank within plan<implement<qa<review<done; advance iff to>from.
+  local p rank=0 rfrom="" rto=""
+  for p in plan implement qa review done; do
+    [ "$p" = "$from" ] && rfrom=$rank
+    [ "$p" = "$to" ]   && rto=$rank
+    rank=$((rank + 1))
+  done
+  [ -n "$rfrom" ] && [ -n "$rto" ] && [ "$rto" -gt "$rfrom" ]
+}
+
 # Branch A idle-poll discriminator (#1590). Returns 0 ("will resume on its own")
 # ONLY when the stopping session's transcript shows its FINAL assistant turn
 # contained a `ScheduleWakeup` tool_use; returns 1 in EVERY other case —
@@ -391,6 +419,28 @@ if [ -z "$MARKER_PHASE" ]; then
       # schedule failed → fall through to the normal office-hours park below.
     fi
   fi
+  # Side-effect recovery (#2025). The marker is absent, but the dispatched phase
+  # may have completed its real work (PR opened / label applied / commits pushed)
+  # and only leaked the terminal dispatch-mark-complete call (#824 trailing-step
+  # leak). Recover the phase the session was dispatched to run from its transcript
+  # and compare against the phase derived from durable state: if dispatch-phase has
+  # advanced PAST the dispatched phase, the structural side-effects landed —
+  # advance the chain instead of parking a human. (Advancing only spawns a tick,
+  # which re-derives the phase, so the completion labels still gate forward
+  # progress — this can never skip qa/review. Note: a dispatched=qa whose CI broke
+  # mid-phase advances to fix-checks here rather than parking; that routes to the
+  # autonomous handler and qa re-runs once CI is green — intentional, see #2025.)
+  DISPATCHED_PHASE=$("$SCRIPTS/dispatch-recover-dispatched-phase" "$TRANSCRIPT_PATH" 2>/dev/null) || DISPATCHED_PHASE=""
+  if [ -n "$DISPATCHED_PHASE" ] && [ -n "$CURRENT_PHASE" ] && phase_advanced_past "$DISPATCHED_PHASE" "$CURRENT_PHASE"; then
+    clear_rate_limit_retry_labels
+    strip_office_hours_label
+    spawn_tick
+    spawn_sweep
+    self_close
+    exit 0
+  fi
+  # Recovery failed, or the chain has not advanced past the dispatched phase →
+  # genuine mid-phase exit → fall through to the office-hours park below.
   "$SCRIPTS/dispatch-apply-office-hours" "$ISSUE_NUM" \
     "$(resolve_office_hours_reason "phase exited before completion (mid-phase exit or context compaction)")" \
     || echo "[dispatch-stop] WARNING: dispatch-apply-office-hours failed" >&2
