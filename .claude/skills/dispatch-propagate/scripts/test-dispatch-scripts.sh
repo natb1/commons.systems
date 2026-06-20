@@ -14189,7 +14189,7 @@ export DISPATCH_TARGET_WORKERS_NOW="$TW_NOW"
 r=$(tw_resets_for_x 0.5)
 # used_weekly=20 → gate open at x=0.5 (hw=45.95>0). used_5h="abc" → sanitized to
 # missing → treated as 0 → ramp gives max workers = 8.
-write_rl "rl.json" 20 "$r" 0 99999999
+write_rl "rl.json" 20 "$r" 0 99999999  # JSON used_5h=0 is overridden below by DISPATCH_TARGET_WORKERS_USED_5H=abc (per-field env override) — the env var is what exercises this path
 export DISPATCH_TARGET_WORKERS_USED_5H=abc
 out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>"$TMPDIR_TEST/stderr")
 assert_eq "non-numeric used_5h → fail-open max workers N=8 (not 0)" "8" "$out"
