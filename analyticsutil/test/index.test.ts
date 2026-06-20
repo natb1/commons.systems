@@ -395,7 +395,7 @@ describe("web-vitals reporting", () => {
   ])(
     "re-throws %s from logEvent inside web-vital callback",
     (_name: string, ErrorCtor: new (msg: string) => Error) => {
-      vi.mocked(initializeAnalytics).mockReturnValue({ app: {} } as never);
+      vi.mocked(initializeAnalytics).mockReturnValue({ app: {} } as never); // type-safety-ok: test mock cast, matches established pattern in file
       vi.mocked(logEvent).mockImplementation(() => {
         throw new ErrorCtor("invalid argument");
       });
@@ -408,7 +408,7 @@ describe("web-vitals reporting", () => {
         value: 1800,
         rating: "good",
         id: "v4-abc",
-      } as unknown as Parameters<typeof capturedCallback>[0];
+      } as unknown as Parameters<typeof capturedCallback>[0]; // type-safety-ok: cast for synthetic metric fixture, matches established pattern in file
 
       expect(() => capturedCallback(fakeMetric)).toThrow(ErrorCtor);
     },
