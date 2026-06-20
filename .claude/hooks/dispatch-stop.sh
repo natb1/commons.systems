@@ -488,9 +488,10 @@ if [ -z "$MARKER_PHASE" ]; then
     _sid=$(jq -r '.sessionId // empty' "$STATE_FILE" 2>/dev/null)
     _cwd=$(jq -r '.cwd // empty' "$STATE_FILE" 2>/dev/null)
     _model=$("$SCRIPTS/dispatch-phase-model" "$CURRENT_PHASE" 2>/dev/null || true)
+    _effort=$("$SCRIPTS/dispatch-phase-effort" "$CURRENT_PHASE" 2>/dev/null || true)
     if [ -n "$_sid" ] && [ -n "$_cwd" ]; then
       sched_out=$("$SCRIPTS/dispatch-schedule-rate-limit-resume" \
-        "$ISSUE_NUM" "$_sid" "$_cwd" "$JOB_NAME" "$_model" 2>&1) && sched_rc=0 || sched_rc=$?
+        "$ISSUE_NUM" "$_sid" "$_cwd" "$JOB_NAME" "$_model" "$_effort" 2>&1) && sched_rc=0 || sched_rc=$?
       if [ "$sched_rc" -eq 0 ]; then
         case "$sched_out" in
           *escalated*)

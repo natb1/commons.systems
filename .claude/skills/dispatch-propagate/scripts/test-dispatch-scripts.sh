@@ -12839,6 +12839,88 @@ else
 fi
 config_teardown
 
+# --- strict-preflight config type validation (#2041) ------------------------
+# strict-preflight gates the dispatch pre-spawn preflight gate. Its validator is
+# the only code path that catches a malformed gate config BEFORE the bad value
+# reaches dispatch-materialize-spawn's arm/disarm decision. These tests cover the
+# validator directly, mirroring the force-opus tests above: valid {enabled:true}
+# is printed; missing/wrong-typed enabled and non-object top-level values are
+# rejected; an absent file is the inert no-config path.
+
+# --- Test 7u: strict-preflight.json enabled:true → normalized JSON, exit 0 ---
+
+echo "Test: valid strict-preflight.json with enabled:true prints normalized JSON"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/strict-preflight.json" <<'EOF'
+{"enabled":true}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" strict-preflight 2>/dev/null); rc=$?
+assert_eq "strict-preflight enabled: exits 0" "0" "$rc"
+sp_enabled=$(printf '%s' "$out" | jq -r '.enabled')
+assert_eq "strict-preflight enabled: .enabled is true" "true" "$sp_enabled"
+config_teardown
+
+# --- Test 7v: absent strict-preflight.json → no-config, exit 0 --------------
+
+echo "Test: absent strict-preflight.json prints no-config and exits 0"
+config_setup
+# no file written — config dir is empty
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" strict-preflight 2>/dev/null); rc=$?
+assert_eq "strict-preflight absent: exits 0" "0" "$rc"
+assert_eq "strict-preflight absent: prints no-config" "no-config" "$out"
+config_teardown
+
+# --- Test 7w: strict-preflight.json missing enabled field → exit 1 ----------
+
+echo "Test: strict-preflight.json missing required enabled field exits 1 and stderr mentions enabled"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/strict-preflight.json" <<'EOF'
+{}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" strict-preflight 2>&1 1>/dev/null) || rc=$?
+assert_eq "strict-preflight missing enabled: exits 1" "1" "$rc"
+if [[ "$err" == *"enabled"* ]]; then
+  assert_eq "strict-preflight missing enabled: stderr mentions enabled" "yes" "yes"
+else
+  assert_eq "strict-preflight missing enabled: stderr mentions enabled" "yes" "no: $err"
+fi
+config_teardown
+
+# --- Test 7x: strict-preflight.json enabled is a string → exit 1 ------------
+
+echo "Test: strict-preflight.json with enabled as a string exits 1 and stderr mentions enabled"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/strict-preflight.json" <<'EOF'
+{"enabled":"true"}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" strict-preflight 2>&1 1>/dev/null) || rc=$?
+assert_eq "strict-preflight string enabled: exits 1" "1" "$rc"
+if [[ "$err" == *"enabled"* ]]; then
+  assert_eq "strict-preflight string enabled: stderr mentions enabled" "yes" "yes"
+else
+  assert_eq "strict-preflight string enabled: stderr mentions enabled" "yes" "no: $err"
+fi
+config_teardown
+
+# --- Test 7y: strict-preflight.json top-level array → exit 1 ----------------
+
+echo "Test: strict-preflight.json with a top-level array exits 1 and stderr mentions object"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/strict-preflight.json" <<'EOF'
+[{"enabled":true}]
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" strict-preflight 2>&1 1>/dev/null) || rc=$?
+assert_eq "strict-preflight top-level array: exits 1" "1" "$rc"
+if [[ "$err" == *"object"* ]]; then
+  assert_eq "strict-preflight top-level array: stderr mentions object" "yes" "yes"
+else
+  assert_eq "strict-preflight top-level array: stderr mentions object" "yes" "no: $err"
+fi
+config_teardown
+
 # --- sweep config type validation (#2026) -----------------------------------
 # The sweep config gates the not-in-sync reap grace window. Its validator is the
 # only code path that catches a malformed grace BEFORE it reaches dispatch-sweep's
@@ -17327,8 +17409,18 @@ if pm_out=$("$SCRIPT_DIR/dispatch-phase-model" review 2>/dev/null); then pm_rc=0
 assert_eq "phase-model: review exits 0" "0" "$pm_rc"
 assert_eq "phase-model: review → claude-sonnet-4-6" "claude-sonnet-4-6" "$pm_out"
 
+echo "Test: dispatch-phase-model maps fix-checks → claude-sonnet-4-6 (#2042)"
+if pm_out=$("$SCRIPT_DIR/dispatch-phase-model" fix-checks 2>/dev/null); then pm_rc=0; else pm_rc=$?; fi
+assert_eq "phase-model: fix-checks exits 0" "0" "$pm_rc"
+assert_eq "phase-model: fix-checks → claude-sonnet-4-6" "claude-sonnet-4-6" "$pm_out"
+
+echo "Test: dispatch-phase-model maps fix-conflicts → claude-sonnet-4-6 (#2042)"
+if pm_out=$("$SCRIPT_DIR/dispatch-phase-model" fix-conflicts 2>/dev/null); then pm_rc=0; else pm_rc=$?; fi
+assert_eq "phase-model: fix-conflicts exits 0" "0" "$pm_rc"
+assert_eq "phase-model: fix-conflicts → claude-sonnet-4-6" "claude-sonnet-4-6" "$pm_out"
+
 echo "Test: dispatch-phase-model maps unmapped phases → empty (default → Opus, no override)"
-for ph in implement fix-checks done; do
+for ph in implement done; do
   if pm_out=$("$SCRIPT_DIR/dispatch-phase-model" "$ph" 2>/dev/null); then pm_rc=0; else pm_rc=$?; fi
   assert_eq "phase-model: $ph exits 0" "0" "$pm_rc"
   assert_eq "phase-model: $ph → empty (no --model, inherit Opus)" "" "$pm_out"
@@ -17341,6 +17433,36 @@ assert_eq "phase-model: no-arg → exit 2" "2" "$pm_rc"
 echo "Test: dispatch-phase-model with an empty-string arg exits 2"
 if "$SCRIPT_DIR/dispatch-phase-model" "" 2>/dev/null; then pm_rc=0; else pm_rc=$?; fi
 assert_eq "phase-model: empty-string-arg → exit 2" "2" "$pm_rc"
+
+# ============================================================================
+# dispatch-phase-effort tests
+# ============================================================================
+echo "=== dispatch-phase-effort ==="
+
+echo "Test: dispatch-phase-effort maps implement → medium"
+if pe_out=$("$SCRIPT_DIR/dispatch-phase-effort" implement 2>/dev/null); then pe_rc=0; else pe_rc=$?; fi
+assert_eq "phase-effort: implement exits 0" "0" "$pe_rc"
+assert_eq "phase-effort: implement → medium" "medium" "$pe_out"
+
+echo "Test: dispatch-phase-effort maps plan → high"
+if pe_out=$("$SCRIPT_DIR/dispatch-phase-effort" plan 2>/dev/null); then pe_rc=0; else pe_rc=$?; fi
+assert_eq "phase-effort: plan exits 0" "0" "$pe_rc"
+assert_eq "phase-effort: plan → high" "high" "$pe_out"
+
+echo "Test: dispatch-phase-effort maps unmapped phases → empty (default, no override)"
+for ph in fix-checks qa review done; do
+  if pe_out=$("$SCRIPT_DIR/dispatch-phase-effort" "$ph" 2>/dev/null); then pe_rc=0; else pe_rc=$?; fi
+  assert_eq "phase-effort: $ph exits 0" "0" "$pe_rc"
+  assert_eq "phase-effort: $ph → empty (no --effort, inherit session default)" "" "$pe_out"
+done
+
+echo "Test: dispatch-phase-effort with no phase arg exits 2"
+if "$SCRIPT_DIR/dispatch-phase-effort" 2>/dev/null; then pe_rc=0; else pe_rc=$?; fi
+assert_eq "phase-effort: no-arg → exit 2" "2" "$pe_rc"
+
+echo "Test: dispatch-phase-effort with an empty-string arg exits 2"
+if "$SCRIPT_DIR/dispatch-phase-effort" "" 2>/dev/null; then pe_rc=0; else pe_rc=$?; fi
+assert_eq "phase-effort: empty-string-arg → exit 2" "2" "$pe_rc"
 
 # --- review-fix/SKILL.md model-tiering content guards (#1172) -----------------
 # The review-fix orchestrator runs on Sonnet; fix-authoring is delegated to an
@@ -18156,6 +18278,77 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: spawn-job-last-attempt: no diagnostic on stderr"
   echo "    stderr: $err"
 fi
+spawn_worker_teardown
+
+# --- Test 2f: --effort forwarded into bg argv (with --model, pins ordering) --
+# Passes both --model and --effort to exercise the full argv order:
+#   --bg --name N --model M --effort E --permission-mode auto PROMPT
+# (effort sits after model and before --permission-mode).
+
+echo "Test: dispatch-spawn-job forwards --effort into the 'claude --bg' argv (after --model)"
+spawn_worker_setup
+write_fake_spawn_worker_claude
+export DISPATCH_SPAWN_JOB_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
+export DISPATCH_SPAWN_JOB_SESSION_ID="sess-self"
+SPAWN_JOB_CWD="$TMPDIR_TEST/worktrees/839-test-worker"
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-job" \
+    --name diagnose-main --cwd "$SPAWN_JOB_CWD" \
+    --model claude-sonnet-4-6 --effort high \
+    "/dispatch-diagnose-main abc123" 2>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "spawn-job-effort: dispatch-spawn-job exits 0" "0" "$rc"
+assert_eq "spawn-job-effort: stdout is 'spawned'" "spawned" "$out"
+mapfile -t sj_effort_argv < "$SPAWN_WORKER_BG_ARGV"
+assert_eq "spawn-job-effort: argv[0] is --bg" "--bg" "${sj_effort_argv[0]:-}"
+assert_eq "spawn-job-effort: argv[1] is --name" "--name" "${sj_effort_argv[1]:-}"
+assert_eq "spawn-job-effort: argv[2] is the passed name" "diagnose-main" "${sj_effort_argv[2]:-}"
+assert_eq "spawn-job-effort: argv[3] is --model" "--model" "${sj_effort_argv[3]:-}"
+assert_eq "spawn-job-effort: argv[4] is claude-sonnet-4-6" "claude-sonnet-4-6" "${sj_effort_argv[4]:-}"
+assert_eq "spawn-job-effort: argv[5] is --effort" "--effort" "${sj_effort_argv[5]:-}"
+assert_eq "spawn-job-effort: argv[6] is high" "high" "${sj_effort_argv[6]:-}"
+assert_eq "spawn-job-effort: argv[7] is --permission-mode" "--permission-mode" "${sj_effort_argv[7]:-}"
+assert_eq "spawn-job-effort: argv[8] is auto" "auto" "${sj_effort_argv[8]:-}"
+assert_eq "spawn-job-effort: argv[9] is the prompt" "/dispatch-diagnose-main abc123" "${sj_effort_argv[9]:-}"
+spawn_worker_teardown
+
+# --- Test 2g: --effort omitted — no --effort token in bg argv ----------------
+# When --effort is absent, the bg argv must contain no --effort token.
+# The spawn succeeds, so the argv file exists — we check token absence.
+
+echo "Test: dispatch-spawn-job omits --effort from bg argv when not passed"
+spawn_worker_setup
+write_fake_spawn_worker_claude
+export DISPATCH_SPAWN_JOB_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
+export DISPATCH_SPAWN_JOB_SESSION_ID="sess-self"
+SPAWN_JOB_CWD="$TMPDIR_TEST/worktrees/839-test-worker"
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-job" \
+    --name diagnose-main --cwd "$SPAWN_JOB_CWD" \
+    "/dispatch-diagnose-main abc123" 2>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "spawn-job-no-effort: dispatch-spawn-job exits 0" "0" "$rc"
+assert_eq "spawn-job-no-effort: stdout is 'spawned'" "spawned" "$out"
+TOTAL=$((TOTAL + 1))
+if ! grep -qx -- '--effort' "$SPAWN_WORKER_BG_ARGV" 2>/dev/null; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-job-no-effort: no '--effort' token in bg argv"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-job-no-effort: no '--effort' token in bg argv"
+  echo "    bg-argv: $(cat "$SPAWN_WORKER_BG_ARGV")"
+fi
+spawn_worker_teardown
+
+# --- Test 2h: --effort bogus exits 2 (closed-set validation) -----------------
+# An invalid effort value must exit 2 with a clear diagnostic (not a spawn).
+
+echo "Test: dispatch-spawn-job exits 2 on an invalid --effort value"
+spawn_worker_setup
+write_fake_spawn_worker_claude
+export DISPATCH_SPAWN_JOB_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
+SPAWN_JOB_CWD="$TMPDIR_TEST/worktrees/839-test-worker"
+if "$TMPDIR_TEST/scripts/dispatch-spawn-job" --effort bogus \
+    --name diagnose-main --cwd "$SPAWN_JOB_CWD" "/dispatch-diagnose-main abc" 2>/dev/null; then
+  sj_rc_effort=0
+else
+  sj_rc_effort=$?
+fi
+assert_eq "spawn-job-effort-bad: invalid --effort value → exit 2" "2" "$sj_rc_effort"
 spawn_worker_teardown
 
 # ============================================================================
@@ -25940,7 +26133,7 @@ mat_teardown() {
   rm -rf "$TMPDIR_TEST"
   TMPDIR_TEST="" ; STUB_DIR=""
   unset DISPATCH_LOCK_FILE CLAUDE_CODE_SESSION_ID CLAUDE_AGENTS_CMD \
-    DISPATCH_RESERVATION_DIR DISPATCH_DECISION_LOG_DIR \
+    DISPATCH_RESERVATION_DIR DISPATCH_DECISION_LOG_DIR DISPATCH_CONFIG_DIR \
     MAT_PR MAT_LEAF MAT_BLOCKED MAT_WT_DECISION MAT_PHASE \
     MAT_CI_READY MAT_LAUNCH_SLEEP MAT_ISSUE_STATE MAT_ISSUE_TITLE MAT_QUEUE \
     MAT_RESEED_OUT MAT_RESEED_RC
@@ -32182,8 +32375,10 @@ echo "=== dispatch-launch-worker ==="
 #   dispatch-apply-office-hours — logs argv to apply-oh-argv, exits 0.
 #   git                     — logs argv to git-argv (PUSH-STRANDED `git -C … push`)
 #                             and exits 0.
-# dispatch-phase-model is the REAL script (copied in), so the model-derivation
-# assertions exercise the actual qa/review → claude-sonnet-4-6 policy.
+# dispatch-phase-model and dispatch-phase-effort are the REAL scripts (copied
+# in), so the compute-derivation assertions exercise the actual per-phase
+# policy: qa/review/fix-checks/fix-conflicts → claude-sonnet-4-6 (no effort);
+# implement → effort medium; plan → effort high (#2042).
 #
 # The reservation ledger points at $LW_DIR/reservations via DISPATCH_RESERVATION_DIR
 # (so reservation_clear/_dir never need a git repo). Each mechanical-path test
@@ -32205,10 +32400,12 @@ lw_setup() {
   # and lib-claude-agents.sh from the same dir.
   cp "$SCRIPT_DIR/dispatch-launch-worker" "$LW_DIR/dispatch-launch-worker"
   cp "$SCRIPT_DIR/dispatch-phase-model" "$LW_DIR/dispatch-phase-model"
+  cp "$SCRIPT_DIR/dispatch-phase-effort" "$LW_DIR/dispatch-phase-effort"
   cp "$SCRIPT_DIR/lib-reservation-ledger.sh" "$LW_DIR/lib-reservation-ledger.sh"
   cp "$SCRIPT_DIR/lib.sh" "$LW_DIR/lib.sh"
   cp "$SCRIPT_DIR/lib-claude-agents.sh" "$LW_DIR/lib-claude-agents.sh"
-  chmod +x "$LW_DIR/dispatch-launch-worker" "$LW_DIR/dispatch-phase-model"
+  chmod +x "$LW_DIR/dispatch-launch-worker" "$LW_DIR/dispatch-phase-model" \
+    "$LW_DIR/dispatch-phase-effort"
 
   # The target worktree (arg 2): an existing dir with a safe-charset basename.
   LW_WT="$LW_DIR/839-test-launch"
@@ -32305,10 +32502,11 @@ lw_run() {
   set -e
 }
 
-# 1. INVOKE /implement → exec dispatch-spawn-job with the unmapped-phase flags
-# (no --model), reservation RETAINED, no park, no tick (the exec path hands the
-# heartbeat to the phase skill's Stop hook).
-echo "Test: INVOKE /implement → spawn-job exec, reservation retained, no tick"
+# 1. INVOKE /implement → exec dispatch-spawn-job with --effort medium and NO
+# --model (implement inherits Opus but routes to medium reasoning effort, #2042),
+# reservation RETAINED, no park, no tick (the exec path hands the heartbeat to
+# the phase skill's Stop hook).
+echo "Test: INVOKE /implement → spawn-job exec with --effort medium, reservation retained, no tick"
 lw_setup
 lw_write_marker
 lw_run "INVOKE /implement"
@@ -32323,8 +32521,8 @@ assert_eq "launch INVOKE /implement: route invoked from worktree cwd" \
 sj=$(cat "$LW_DIR/spawn-job-argv" 2>/dev/null || echo "")
 assert_eq "launch INVOKE /implement: spawn-job logged once" "1" \
   "$([[ -f "$LW_DIR/spawn-job-argv" ]] && wc -l < "$LW_DIR/spawn-job-argv" | tr -d ' ' || echo 0)"
-assert_eq "launch INVOKE /implement: spawn-job argv" \
-  "--no-verify --park-issue 839 --name $LW_WT_BASENAME --cwd $LW_WT /implement 839 $LW_WT" "$sj"
+assert_eq "launch INVOKE /implement: spawn-job argv (with --effort medium)" \
+  "--no-verify --park-issue 839 --name $LW_WT_BASENAME --cwd $LW_WT --effort medium /implement 839 $LW_WT" "$sj"
 assert_eq "launch INVOKE /implement: no --model in argv" "no" \
   "$([[ "$sj" == *"--model"* ]] && echo yes || echo no)"
 assert_eq "launch INVOKE /implement: reservation RETAINED" "yes" "$(lw_marker_exists)"
@@ -32334,10 +32532,10 @@ assert_eq "launch INVOKE /implement: no spawn-tick (exec path)" "no" \
   "$([[ -f "$LW_DIR/spawn-tick.log" ]] && echo yes || echo no)"
 lw_teardown
 
-# 1b. INVOKE /fix-conflicts → exec dispatch-spawn-job with the unmapped-phase
-# flags (no --model — conflict resolution inherits Opus), reservation RETAINED,
-# no tick. Guards against an inadvertent future model-mapping for this directive.
-echo "Test: INVOKE /fix-conflicts → spawn-job exec, no --model, reservation retained, no tick"
+# 1b. INVOKE /fix-conflicts → exec dispatch-spawn-job with --model
+# claude-sonnet-4-6 and NO --effort (mechanical patch work routes to Sonnet,
+# #2042), reservation RETAINED, no tick.
+echo "Test: INVOKE /fix-conflicts → spawn-job exec with --model claude-sonnet-4-6, no --effort, reservation retained, no tick"
 lw_setup
 lw_write_marker
 lw_run "INVOKE /fix-conflicts"
@@ -32345,14 +32543,36 @@ assert_eq "launch INVOKE /fix-conflicts: exit 0" "0" "$LW_RC"
 sj=$(cat "$LW_DIR/spawn-job-argv" 2>/dev/null || echo "")
 assert_eq "launch INVOKE /fix-conflicts: spawn-job logged once" "1" \
   "$([[ -f "$LW_DIR/spawn-job-argv" ]] && wc -l < "$LW_DIR/spawn-job-argv" | tr -d ' ' || echo 0)"
-assert_eq "launch INVOKE /fix-conflicts: spawn-job argv" \
-  "--no-verify --park-issue 839 --name $LW_WT_BASENAME --cwd $LW_WT /fix-conflicts 839 $LW_WT" "$sj"
-assert_eq "launch INVOKE /fix-conflicts: no --model in argv" "no" \
-  "$([[ "$sj" == *"--model"* ]] && echo yes || echo no)"
+assert_eq "launch INVOKE /fix-conflicts: spawn-job argv (with model)" \
+  "--no-verify --park-issue 839 --name $LW_WT_BASENAME --cwd $LW_WT --model claude-sonnet-4-6 /fix-conflicts 839 $LW_WT" "$sj"
+assert_eq "launch INVOKE /fix-conflicts: no --effort in argv" "no" \
+  "$([[ "$sj" == *"--effort"* ]] && echo yes || echo no)"
 assert_eq "launch INVOKE /fix-conflicts: reservation RETAINED" "yes" "$(lw_marker_exists)"
 assert_eq "launch INVOKE /fix-conflicts: no apply-office-hours" "no" \
   "$([[ -f "$LW_DIR/apply-oh-argv" ]] && echo yes || echo no)"
 assert_eq "launch INVOKE /fix-conflicts: no spawn-tick (exec path)" "no" \
+  "$([[ -f "$LW_DIR/spawn-tick.log" ]] && echo yes || echo no)"
+lw_teardown
+
+# 1c. INVOKE /fix-checks → exec dispatch-spawn-job with --model claude-sonnet-4-6
+# and NO --effort (mechanical patch work routes to Sonnet, #2042), reservation
+# RETAINED, no tick.
+echo "Test: INVOKE /fix-checks → spawn-job exec with --model claude-sonnet-4-6, no --effort, reservation retained, no tick"
+lw_setup
+lw_write_marker
+lw_run "INVOKE /fix-checks"
+assert_eq "launch INVOKE /fix-checks: exit 0" "0" "$LW_RC"
+sj=$(cat "$LW_DIR/spawn-job-argv" 2>/dev/null || echo "")
+assert_eq "launch INVOKE /fix-checks: spawn-job logged once" "1" \
+  "$([[ -f "$LW_DIR/spawn-job-argv" ]] && wc -l < "$LW_DIR/spawn-job-argv" | tr -d ' ' || echo 0)"
+assert_eq "launch INVOKE /fix-checks: spawn-job argv (with model)" \
+  "--no-verify --park-issue 839 --name $LW_WT_BASENAME --cwd $LW_WT --model claude-sonnet-4-6 /fix-checks 839 $LW_WT" "$sj"
+assert_eq "launch INVOKE /fix-checks: no --effort in argv" "no" \
+  "$([[ "$sj" == *"--effort"* ]] && echo yes || echo no)"
+assert_eq "launch INVOKE /fix-checks: reservation RETAINED" "yes" "$(lw_marker_exists)"
+assert_eq "launch INVOKE /fix-checks: no apply-office-hours" "no" \
+  "$([[ -f "$LW_DIR/apply-oh-argv" ]] && echo yes || echo no)"
+assert_eq "launch INVOKE /fix-checks: no spawn-tick (exec path)" "no" \
   "$([[ -f "$LW_DIR/spawn-tick.log" ]] && echo yes || echo no)"
 lw_teardown
 
@@ -32380,6 +32600,22 @@ sj=$(cat "$LW_DIR/spawn-job-argv" 2>/dev/null || echo "")
 assert_eq "launch INVOKE /review-fix: spawn-job argv (with model)" \
   "--no-verify --park-issue 839 --name $LW_WT_BASENAME --cwd $LW_WT --model claude-sonnet-4-6 /review-fix 839 $LW_WT" \
   "$sj"
+lw_teardown
+
+# 3b. INVOKE /plan-issue → spawn-job carries --effort high and NO --model (plan
+# inherits Opus but routes to the highest reasoning effort, #2042).
+echo "Test: INVOKE /plan-issue → spawn-job with --effort high, no --model"
+lw_setup
+lw_write_marker
+lw_run "INVOKE /plan-issue"
+assert_eq "launch INVOKE /plan-issue: exit 0" "0" "$LW_RC"
+sj=$(cat "$LW_DIR/spawn-job-argv" 2>/dev/null || echo "")
+assert_eq "launch INVOKE /plan-issue: spawn-job argv (with --effort high)" \
+  "--no-verify --park-issue 839 --name $LW_WT_BASENAME --cwd $LW_WT --effort high /plan-issue 839 $LW_WT" \
+  "$sj"
+assert_eq "launch INVOKE /plan-issue: no --model in argv" "no" \
+  "$([[ "$sj" == *"--model"* ]] && echo yes || echo no)"
+assert_eq "launch INVOKE /plan-issue: reservation RETAINED" "yes" "$(lw_marker_exists)"
 lw_teardown
 
 # 4. STOP done → reservation cleared + spawn-tick called; no spawn-job, no park.
@@ -34401,6 +34637,146 @@ fi
 drdp_teardown
 
 # ============================================================================
+# dispatch-resume-worker argv-forwarding tests (#2042)
+# ============================================================================
+#
+# Exercises that the resumed `claude --bg` argv carries the per-phase compute
+# overrides: a non-empty <model> as `--model <model>` and a non-empty <effort>
+# as `--effort <effort>` (after --model when both are present), plus the omit-
+# and bad-value contracts for <effort>.
+#
+# Harness: run the real script in-place (so its `source lib-claude-agents.sh`
+# resolves) with all three external effects overridden —
+#   DISPATCH_RESUME_WORKER_CLAUDE_CMD        → a fake `claude`
+#   DISPATCH_RESUME_WORKER_TICK_CMD          → a no-op `exit 0` stub
+#   DISPATCH_RESUME_WORKER_OFFICE_HOURS_CMD  → a no-op stub
+# The fake `claude` branches on `$1`: `agents` → print `[]` (a well-formed empty
+# array: lib-claude-agents treats `[]` as a definite "no sessions", so dedup
+# proceeds to the --bg call; EMPTY stdout would instead read as UNKNOWN and abort
+# before any --bg). Any other invocation (the `--bg` resume/fork calls) appends
+# its argv to a capture log and exits 0. With `[]` from every `agents` query the
+# verify always fails, so the script runs BOTH the primary --bg and the
+# --fork-session --bg, captures both argvs, then re-ticks (stub) and exits 0 —
+# every captured line carries the same --model/--effort flags, so the adjacency
+# assertions hold regardless of which kick "wins".
+# LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=0 skips the verify retry sleeps.
+echo ""
+echo "=== dispatch-resume-worker (argv forwarding) ==="
+
+drw_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/bin" "$TMPDIR_TEST/cwd"
+
+  # fake claude: `agents ...` → `[]`; anything else (the --bg calls) → log argv.
+  cat > "$TMPDIR_TEST/bin/fake-claude" <<STUB
+#!/usr/bin/env bash
+if [[ "\$1" == "agents" ]]; then
+  echo '[]'
+  exit 0
+fi
+echo "\$*" >> "$TMPDIR_TEST/bg-argv-log"
+exit 0
+STUB
+  chmod +x "$TMPDIR_TEST/bin/fake-claude"
+
+  # no-op tick + office-hours stubs (the degradation fallbacks). Both exit 0.
+  cat > "$TMPDIR_TEST/bin/noop" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+  chmod +x "$TMPDIR_TEST/bin/noop"
+
+  export DISPATCH_RESUME_WORKER_CLAUDE_CMD="$TMPDIR_TEST/bin/fake-claude"
+  export DISPATCH_RESUME_WORKER_TICK_CMD="$TMPDIR_TEST/bin/noop"
+  export DISPATCH_RESUME_WORKER_OFFICE_HOURS_CMD="$TMPDIR_TEST/bin/noop"
+  export LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=0
+}
+
+drw_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  unset DISPATCH_RESUME_WORKER_CLAUDE_CMD
+  unset DISPATCH_RESUME_WORKER_TICK_CMD
+  unset DISPATCH_RESUME_WORKER_OFFICE_HOURS_CMD
+  unset LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
+}
+
+# --- Test A: <model> + <effort> both present → --model M --effort E adjacency --
+# Positionals: <name> <cwd> <sessionId> <model> <effort>. The resumed --bg argv
+# is `--bg --name N --permission-mode auto --model M --effort E --resume sid
+# continue`; --effort directly follows --model (--permission-mode sits BEFORE
+# --model, so assert adjacency, not a fixed index).
+echo "Test: dispatch-resume-worker forwards --effort high after --model into the --bg argv"
+drw_setup
+"$SCRIPT_DIR/dispatch-resume-worker" \
+  1733-rl-worker "$TMPDIR_TEST/cwd" sess-abc claude-opus high >/dev/null 2>&1 || true
+bg=$(cat "$TMPDIR_TEST/bg-argv-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$bg" == *"--model claude-opus --effort high"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: resume-worker --bg argv carries '--model claude-opus --effort high' (adjacent)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: resume-worker --bg argv carries '--model claude-opus --effort high' (adjacent)"
+  echo "    bg-argv: $bg"
+fi
+drw_teardown
+
+# --- Test B: <effort> omitted → no --effort token in the --bg argv ------------
+# 4 positionals (model, no effort). The --bg argv must carry --model but contain
+# no --effort token at all.
+echo "Test: dispatch-resume-worker omits --effort from the --bg argv when absent"
+drw_setup
+"$SCRIPT_DIR/dispatch-resume-worker" \
+  1733-rl-worker "$TMPDIR_TEST/cwd" sess-abc claude-opus >/dev/null 2>&1 || true
+bg=$(cat "$TMPDIR_TEST/bg-argv-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$bg" == *"--model claude-opus"* && "$bg" != *"--effort"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: resume-worker --bg argv carries --model, no --effort token"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: resume-worker --bg argv carries --model, no --effort token"
+  echo "    bg-argv: $bg"
+fi
+drw_teardown
+
+# --- Test C: bad <effort> value → exit 2, no --bg call ------------------------
+# The effort closed-set validation runs before lib is sourced and before any
+# --bg kick, so a bogus 5th positional exits 2 with an empty argv log. <cwd>
+# must be a real directory (line 109 checks -d) — drw_setup makes one.
+echo "Test: dispatch-resume-worker exits 2 on an invalid <effort> value"
+drw_setup
+if "$SCRIPT_DIR/dispatch-resume-worker" \
+     1733-rl-worker "$TMPDIR_TEST/cwd" sess-abc claude-opus bogus >/dev/null 2>&1; then
+  drw_rc=0
+else
+  drw_rc=$?
+fi
+assert_eq "resume-worker bad <effort> → exit 2" "2" "$drw_rc"
+bg=$(cat "$TMPDIR_TEST/bg-argv-log" 2>/dev/null || true)
+assert_eq "resume-worker bad <effort> → no --bg call (empty argv log)" "" "$bg"
+drw_teardown
+
+# --- Test D: empty <model> + present <effort> → --effort, no --model (#2042) --
+# THE HEADLINE PATH. dispatch-phase-model returns EMPTY for plan/implement (they
+# inherit the Opus default), while dispatch-phase-effort returns high/medium — so
+# the real plan/implement resume passes <model>="" and <effort> non-empty. With
+# model empty and effort sitting AFTER it, the empty model slot must NOT swallow
+# effort: the --model conditional drops out, the --effort conditional fires, so
+# the argv carries `--effort high` and NO `--model`. (The two insertions are
+# independent conditionals, so this is correct by construction; this pins it.)
+echo "Test: dispatch-resume-worker with empty <model> + <effort> high → --effort, no --model"
+drw_setup
+"$SCRIPT_DIR/dispatch-resume-worker" \
+  1733-rl-worker "$TMPDIR_TEST/cwd" sess-abc "" high >/dev/null 2>&1 || true
+bg=$(cat "$TMPDIR_TEST/bg-argv-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$bg" == *"--effort high"* && "$bg" != *"--model"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: empty-model+effort --bg argv carries --effort high, no --model"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: empty-model+effort --bg argv carries --effort high, no --model"
+  echo "    bg-argv: $bg"
+fi
+drw_teardown
+
+# ============================================================================
 # dispatch-schedule-rate-limit-resume tests (#1733)
 # ============================================================================
 #
@@ -34408,7 +34784,7 @@ drdp_teardown
 # dispatch:rate-limit-retry-<n> label on the ISSUE → CUR; under cap, bumps the
 # counter, computes DELAY=min(BASE*2^CUR, MAX), FIRE=NOW+DELAY, and arms a
 # transient systemd.user timer whose ExecStart is
-# `dispatch-resume-worker <name> <cwd> <sessionId> <model>`; at cap (CUR>=CAP)
+# `dispatch-resume-worker <name> <cwd> <sessionId> <model> <effort>`; at cap (CUR>=CAP)
 # parks office-hours, prints `escalated`, and arms NO timer.
 #
 # Mirrors the dispatch-schedule-target-reseed harness exactly:
@@ -34532,8 +34908,9 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: CUR=0 systemd-run argv (unit + calendar@FIRE + OnFailure + Persistent + KillMode + cwd + setenv)"
   echo "    log: $log"
 fi
-# ExecStart: dispatch-resume-worker with the 4 positionals in OWN order
-# <name> <cwd> <sessionId> <model>.
+# ExecStart: dispatch-resume-worker with the positionals in OWN order
+# <name> <cwd> <sessionId> <model> <effort>. srl_run passes no effort, so the
+# trailing effort positional is empty here — substring-match the non-empty head.
 TOTAL=$((TOTAL + 1))
 if [[ "$log" == *"/dispatch-resume-worker worker-name /work/cwd sess-abc claude-opus"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: CUR=0 ExecStart names dispatch-resume-worker with <name> <cwd> <sessionId> <model>"
@@ -34634,6 +35011,82 @@ if [[ "$log" == *"/dispatch-resume-worker worker-name /work/cwd sess-abc"* ]]; t
   PASS=$((PASS + 1)); echo "  PASS: empty-model ExecStart carries <name> <cwd> <sessionId>"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: empty-model ExecStart carries <name> <cwd> <sessionId>"
+  echo "    log: $log"
+fi
+srl_teardown
+
+# --- Test 7b: <effort> forwarded as trailing positional after <model> (#2042) -
+# The possibly-empty <effort> is forwarded UNCONDITIONALLY after <model>, so the
+# resume-worker receives `<name> <cwd> <sessionId> <model> <effort>` in that
+# order. Pass a 6th positional `high` and assert the ExecStart ends with it,
+# right after the model positional.
+echo "Test: <effort> forwarded into ExecStart as trailing positional after <model>"
+srl_setup
+export FAKE_CUR=0
+if out=$("$TMPDIR_TEST/scripts/dispatch-schedule-rate-limit-resume" \
+           1733 sess-abc /work/cwd worker-name claude-opus high \
+           2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "effort-fwd exits 0" "0" "$rc"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"/dispatch-resume-worker worker-name /work/cwd sess-abc claude-opus high"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: effort-fwd ExecStart ends with <model> <effort> = claude-opus high"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: effort-fwd ExecStart ends with <model> <effort> = claude-opus high"
+  echo "    log: $log"
+fi
+srl_teardown
+
+# --- Test 7c: omitted <effort> (5 args) → empty trailing effort positional ----
+# With only 5 positionals, the script's EFFORT="${6:-}" is empty and is forwarded
+# unconditionally as the trailing (empty) positional. The ExecStart still carries
+# the model positional; the trailing effort is empty. Mirrors Test 7 (empty model).
+echo "Test: omitted <effort> (5 args) → ExecStart carries <model>, empty trailing effort"
+srl_setup
+export FAKE_CUR=0
+if out=$("$TMPDIR_TEST/scripts/dispatch-schedule-rate-limit-resume" \
+           1733 sess-abc /work/cwd worker-name claude-opus \
+           2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "effort-omit exits 0" "0" "$rc"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+# ExecStart head carries the model positional; with effort empty there is no
+# trailing effort token, so `claude-opus` is the final non-empty positional and
+# `claude-opus high` must NOT appear.
+if [[ "$log" == *"/dispatch-resume-worker worker-name /work/cwd sess-abc claude-opus"* \
+   && "$log" != *"/dispatch-resume-worker worker-name /work/cwd sess-abc claude-opus high"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: effort-omit ExecStart carries <model>, no non-empty trailing effort"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: effort-omit ExecStart carries <model>, no non-empty trailing effort"
+  echo "    log: $log"
+fi
+srl_teardown
+
+# --- Test 7d: empty <model> + present <effort> → empty MIDDLE positional ------
+# THE HEADLINE PATH. plan/implement resume passes <model>="" (Opus default) and
+# <effort> non-empty, so the script forwards `... <sessionId> "" <effort>` — an
+# EMPTY positional in the MIDDLE, not trailing. The script DOES emit both as
+# separate quoted args (model="" then effort=high); the systemd-run stub's
+# `echo "$*"` collapses the empty arg to a double space between <sessionId> and
+# <effort>, which is the visible signature that the empty model slot did not
+# swallow the effort value. (Whether the real systemd-run preserves the empty
+# element as a distinct argv slot is a systemd property, not testable through the
+# `$*` stub; resume-worker's own two independent conditionals make the consuming
+# side correct by construction — see its Test D.)
+echo "Test: empty <model> + <effort> high → ExecStart keeps effort after an empty model slot"
+srl_setup
+export FAKE_CUR=0
+if out=$("$TMPDIR_TEST/scripts/dispatch-schedule-rate-limit-resume" \
+           1733 sess-abc /work/cwd worker-name "" high \
+           2>"$TMPDIR_TEST/stderr"); then rc=0; else rc=$?; fi
+assert_eq "empty-model+effort exits 0" "0" "$rc"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+# Double space = the empty model positional; `high` follows as the effort slot.
+if [[ "$log" == *"/dispatch-resume-worker worker-name /work/cwd sess-abc  high"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: empty-model+effort ExecStart carries effort after the empty model slot"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: empty-model+effort ExecStart carries effort after the empty model slot"
   echo "    log: $log"
 fi
 srl_teardown
@@ -34805,6 +35258,134 @@ assert_eq "resolve_dirty_apps: root-config fan-out marks all workspaces" \
 rm -rf "$TMPDIR_TEST"
 TMPDIR_TEST=""
 
+# dispatch-review-erosion tests
+# ============================================================================
+#
+# Tests for the net-erosion structural-decay finder (#2064). These are the
+# DETERMINISTIC, NETWORK-FREE portions:
+#
+# E1. Language-scope filter: docs-only and bash-only stdin yield {"findings":[]}
+#     (exit 0). Drives the real dispatch-review-erosion entrypoint end-to-end.
+#     Requires a no-op eslint stub at node_modules/.bin/eslint in cwd — eslint is
+#     never invoked (filter exits before the metric runs), but the guard check
+#     [[ ! -x "$ESLINT_BIN" ]] would fail before reaching the filter otherwise.
+#
+# E2. Complexity net-delta via sidecar: drives dispatch-review-erosion-diff.mjs
+#     directly with synthetic eslint and jscpd JSON, sidestepping the real
+#     eslint, jscpd (network), and git. The sidecar is the clean unit boundary
+#     for asserting Source="erosion" + path:line Location when complexity rises.
+
+echo ""
+echo "=== dispatch-review-erosion ==="
+
+# E1a. docs-only stdin → {"findings":[]} (language-scope filter exits early).
+#
+#     Files are created on disk so the HEAD-existence filter (which also exits
+#     early) cannot silently backstop the language-scope filter test. With the
+#     files present, only the language filter can explain the early exit: if it
+#     were removed, head_paths would be non-empty → the script would reach
+#     run_jscpd → fail loudly (no report produced). Creating them on disk is
+#     the cheapest way to give the assertion real teeth.
+echo "Test: dispatch-review-erosion — docs-only stdin yields empty findings"
+TMPDIR_TEST=$(mktemp -d)
+mkdir -p "$TMPDIR_TEST/node_modules/.bin" "$TMPDIR_TEST/docs"
+cat > "$TMPDIR_TEST/node_modules/.bin/eslint" <<'ESTUB'
+#!/usr/bin/env bash
+# No-op stub: never invoked on a docs-only file list (language filter exits first).
+exit 0
+ESTUB
+chmod +x "$TMPDIR_TEST/node_modules/.bin/eslint"
+# Create the files on disk so HEAD-existence can't backstop the language filter.
+touch "$TMPDIR_TEST/README.md" "$TMPDIR_TEST/docs/guide.md"
+result=$(cd "$TMPDIR_TEST" && printf '%s\n' 'README.md' 'docs/guide.md' \
+  | "$SCRIPT_DIR/dispatch-review-erosion" dummybase)
+assert_eq "docs-only stdin → empty findings" '{"findings":[]}' "$result"
+rm -rf "$TMPDIR_TEST"
+TMPDIR_TEST=""
+
+# E1b. bash-only stdin → {"findings":[]} (same filter path, different extension set).
+#     Same disk-creation convention as E1a.
+echo "Test: dispatch-review-erosion — bash-only stdin yields empty findings"
+TMPDIR_TEST=$(mktemp -d)
+mkdir -p "$TMPDIR_TEST/node_modules/.bin" "$TMPDIR_TEST/.claude/scripts"
+cat > "$TMPDIR_TEST/node_modules/.bin/eslint" <<'ESTUB'
+#!/usr/bin/env bash
+exit 0
+ESTUB
+chmod +x "$TMPDIR_TEST/node_modules/.bin/eslint"
+# Create the files on disk so HEAD-existence can't backstop the language filter.
+touch "$TMPDIR_TEST/.claude/scripts/dispatch-review-erosion" \
+      "$TMPDIR_TEST/.claude/scripts/lib.sh"
+result=$(cd "$TMPDIR_TEST" && printf '%s\n' \
+  '.claude/scripts/dispatch-review-erosion' \
+  '.claude/scripts/lib.sh' \
+  | "$SCRIPT_DIR/dispatch-review-erosion" dummybase)
+assert_eq "bash-only stdin → empty findings" '{"findings":[]}' "$result"
+rm -rf "$TMPDIR_TEST"
+TMPDIR_TEST=""
+
+# E2. Sidecar complexity net-delta: HEAD max rose → finding with Source="erosion"
+#     and a valid path:line Location.
+#
+#     The sidecar reads all four artifact paths passed on the CLI; it does NOT
+#     invoke eslint, jscpd, or git. Synthetic JSON is enough to drive the full
+#     net-delta logic. Key alignment constraint (relpath normalization):
+#       HEAD   filePath = <cwd>/foo.ts          → strips cwd prefix → "foo.ts"
+#       BASE   filePath = <cwd>/baseline/foo.ts → strips cwd/baseline/ → "foo.ts"
+#     Both keys become "foo.ts" so baseCx.get(rel) hits and the diff fires.
+echo "Test: dispatch-review-erosion-diff.mjs — complexity net-increase yields Source=erosion finding"
+TMPDIR_TEST=$(mktemp -d)
+# eslint HEAD report: foo.ts, one function at complexity 5, worst-function line 3.
+cat > "$TMPDIR_TEST/head-eslint.json" <<EOF
+[{"filePath":"$TMPDIR_TEST/foo.ts","messages":[{"ruleId":"complexity","message":"Function 'doThing' has a complexity of 5. Maximum allowed is 0.","line":3}]}]
+EOF
+# eslint BASE report: same file but lower complexity (2) pre-PR.
+mkdir -p "$TMPDIR_TEST/baseline"
+cat > "$TMPDIR_TEST/base-eslint.json" <<EOF
+[{"filePath":"$TMPDIR_TEST/baseline/foo.ts","messages":[{"ruleId":"complexity","message":"Function 'doThing' has a complexity of 2. Maximum allowed is 0.","line":1}]}]
+EOF
+# jscpd HEAD report: zero clones (no duplication finding expected here).
+cat > "$TMPDIR_TEST/head-jscpd.json" <<'EOF'
+{"statistics":{"total":{"clones":0,"duplicatedLines":0,"percentage":0}}}
+EOF
+sidecar_out=$(cd "$TMPDIR_TEST" && node "$SCRIPT_DIR/dispatch-review-erosion-diff.mjs" \
+  --eslint-head head-eslint.json \
+  --eslint-base base-eslint.json \
+  --jscpd-head head-jscpd.json \
+  --baseline-dir baseline)
+sidecar_source=$(jq -r '.findings[0].Source // "none"' <<<"$sidecar_out")
+sidecar_location=$(jq -r '.findings[0].Location // "none"' <<<"$sidecar_out")
+sidecar_confidence=$(jq -r '.findings[0].Confidence // "none"' <<<"$sidecar_out")
+assert_eq "sidecar complexity finding Source=erosion" "erosion" "$sidecar_source"
+assert_eq "sidecar complexity finding Location=foo.ts:3" "foo.ts:3" "$sidecar_location"
+assert_eq "sidecar complexity finding Confidence=high (max rose)" "high" "$sidecar_confidence"
+rm -rf "$TMPDIR_TEST"
+TMPDIR_TEST=""
+
+# E3. Sidecar no net-increase → {"findings":[]}.
+#     HEAD and BASE have identical complexity; the diff should produce no finding.
+echo "Test: dispatch-review-erosion-diff.mjs — no net-increase yields empty findings"
+TMPDIR_TEST=$(mktemp -d)
+cat > "$TMPDIR_TEST/head-eslint.json" <<EOF
+[{"filePath":"$TMPDIR_TEST/bar.ts","messages":[{"ruleId":"complexity","message":"Function 'x' has a complexity of 3. Maximum allowed is 0.","line":2}]}]
+EOF
+mkdir -p "$TMPDIR_TEST/baseline"
+cat > "$TMPDIR_TEST/base-eslint.json" <<EOF
+[{"filePath":"$TMPDIR_TEST/baseline/bar.ts","messages":[{"ruleId":"complexity","message":"Function 'x' has a complexity of 3. Maximum allowed is 0.","line":2}]}]
+EOF
+cat > "$TMPDIR_TEST/head-jscpd.json" <<'EOF'
+{"statistics":{"total":{"clones":0,"duplicatedLines":0,"percentage":0}}}
+EOF
+sidecar_out=$(cd "$TMPDIR_TEST" && node "$SCRIPT_DIR/dispatch-review-erosion-diff.mjs" \
+  --eslint-head head-eslint.json \
+  --eslint-base base-eslint.json \
+  --jscpd-head head-jscpd.json \
+  --baseline-dir baseline)
+sidecar_count=$(jq '.findings | length' <<<"$sidecar_out")
+assert_eq "sidecar no net-increase → zero findings" "0" "$sidecar_count"
+rm -rf "$TMPDIR_TEST"
+TMPDIR_TEST=""
+
 # ============================================================================
 # dispatch-run-verification tests (#2024)
 # ============================================================================
@@ -34893,6 +35474,249 @@ if "$RUN_VERIFY" --help >/dev/null 2>&1; then rc=0; else rc=$?; fi
 assert_eq "dispatch-run-verification: --help exits 0" "0" "$rc"
 if "$RUN_VERIFY" bogus </dev/null >/dev/null 2>&1; then rc=0; else rc=$?; fi
 assert_eq "dispatch-run-verification: unexpected argument exits 2" "2" "$rc"
+
+# Empty stdin guard (exit 4): truly empty input must be rejected as a hard
+# error rather than silently emitting the exit-3 "proceed unchanged" signal,
+# which would mask an upstream dispatch-read-plan failure.
+echo "Test: dispatch-run-verification -- empty stdin exits 4 with diagnostic"
+if out=$("$RUN_VERIFY" </dev/null 2>&1); then rc=0; else rc=$?; fi
+assert_eq "dispatch-run-verification: empty stdin exits 4" "4" "$rc"
+case "$out" in
+  *"empty plan input"*) found=yes ;;
+  *) found=no ;;
+esac
+assert_eq "dispatch-run-verification: empty stdin diagnostic contains 'empty plan input'" "yes" "$found"
+
+# Whitespace-only stdin is also empty: same exit 4.
+echo "Test: dispatch-run-verification -- whitespace-only stdin exits 4"
+ws=$'  \n\t\n'
+if out=$(printf '%s' "$ws" | "$RUN_VERIFY" 2>&1); then rc=0; else rc=$?; fi
+assert_eq "dispatch-run-verification: whitespace-only stdin exits 4" "4" "$rc"
+
+# Preservation guard (criterion 2): the exit-3 cases above confirm a
+# no-verify-block plan (prose/bash-only Verification section, or no section)
+# still exits 3. No duplication needed here.
+
+# ============================================================================
+# dispatch-preflight.sh + materialize-spawn preflight gate (#2041)
+# ============================================================================
+
+PF="$SCRIPT_DIR/dispatch-preflight.sh"
+
+# --- a1: clean tree + gated phase (qa) → exit 0 (pass) ---------------------
+echo "Test: preflight: clean tree + qa phase → exit 0"
+merge_main_setup
+printf '[]' > "$MERGE_MAIN_TMPDIR/agents-empty.json"
+export DISPATCH_AGENTS_SNAPSHOT="$MERGE_MAIN_TMPDIR/agents-empty.json"
+rc=0; "$PF" "$WORKTREE_REPO" qa >/dev/null 2>&1 || rc=$?
+assert_eq "preflight: clean tree + qa phase → exit 0" "0" "$rc"
+unset DISPATCH_AGENTS_SNAPSHOT
+merge_main_teardown
+
+# --- a2: conflicting tree + gated phase → abort, tree stays clean -----------
+echo "Test: preflight: merge conflict + qa phase → non-zero exit + tree clean"
+merge_main_setup
+printf '[]' > "$MERGE_MAIN_TMPDIR/agents-empty.json"
+export DISPATCH_AGENTS_SNAPSHOT="$MERGE_MAIN_TMPDIR/agents-empty.json"
+printf 'origin line\n' > "$ORIGIN_REPO/conflict.txt"
+git -C "$ORIGIN_REPO" add conflict.txt
+git -C "$ORIGIN_REPO" commit -q -m "origin conflict"
+git -C "$WORKTREE_REPO" fetch -q origin
+printf 'worktree line\n' > "$WORKTREE_REPO/conflict.txt"
+git -C "$WORKTREE_REPO" add conflict.txt
+git -C "$WORKTREE_REPO" commit -q -m "worktree conflict"
+rc=0; "$PF" "$WORKTREE_REPO" qa >/dev/null 2>&1 || rc=$?
+assert_eq "preflight: merge conflict + qa phase → non-zero exit" "1" "$rc"
+assert_eq "preflight: conflict dry-run did not mutate the worktree" "" \
+  "$(git -C "$WORKTREE_REPO" status --porcelain)"
+unset DISPATCH_AGENTS_SNAPSHOT
+merge_main_teardown
+
+# --- a3: phase-exempt: fix-conflicts + conflicting tree → exit 0 -----------
+echo "Test: preflight: conflicting tree + fix-conflicts phase is exempt → exit 0"
+merge_main_setup
+printf '[]' > "$MERGE_MAIN_TMPDIR/agents-empty.json"
+export DISPATCH_AGENTS_SNAPSHOT="$MERGE_MAIN_TMPDIR/agents-empty.json"
+printf 'origin line\n' > "$ORIGIN_REPO/conflict.txt"
+git -C "$ORIGIN_REPO" add conflict.txt
+git -C "$ORIGIN_REPO" commit -q -m "origin conflict"
+git -C "$WORKTREE_REPO" fetch -q origin
+printf 'worktree line\n' > "$WORKTREE_REPO/conflict.txt"
+git -C "$WORKTREE_REPO" add conflict.txt
+git -C "$WORKTREE_REPO" commit -q -m "worktree conflict"
+rc=0; "$PF" "$WORKTREE_REPO" fix-conflicts >/dev/null 2>&1 || rc=$?
+assert_eq "preflight: conflicting tree + fix-conflicts phase is exempt → exit 0" "0" "$rc"
+unset DISPATCH_AGENTS_SNAPSHOT
+merge_main_teardown
+
+# --- a4: phase-exempt: empty phase + conflicting tree → exit 0 -------------
+echo "Test: preflight: conflicting tree + empty phase is exempt → exit 0"
+merge_main_setup
+printf '[]' > "$MERGE_MAIN_TMPDIR/agents-empty.json"
+export DISPATCH_AGENTS_SNAPSHOT="$MERGE_MAIN_TMPDIR/agents-empty.json"
+printf 'origin line\n' > "$ORIGIN_REPO/conflict.txt"
+git -C "$ORIGIN_REPO" add conflict.txt
+git -C "$ORIGIN_REPO" commit -q -m "origin conflict"
+git -C "$WORKTREE_REPO" fetch -q origin
+printf 'worktree line\n' > "$WORKTREE_REPO/conflict.txt"
+git -C "$WORKTREE_REPO" add conflict.txt
+git -C "$WORKTREE_REPO" commit -q -m "worktree conflict"
+rc=0; "$PF" "$WORKTREE_REPO" "" >/dev/null 2>&1 || rc=$?
+assert_eq "preflight: conflicting tree + empty phase is exempt → exit 0" "0" "$rc"
+unset DISPATCH_AGENTS_SNAPSHOT
+merge_main_teardown
+
+# --- a5: corrupt package-lock.json → abort (exit 1) -------------------------
+echo "Test: preflight: corrupt package-lock.json → exit 1"
+merge_main_setup
+printf '[]' > "$MERGE_MAIN_TMPDIR/agents-empty.json"
+export DISPATCH_AGENTS_SNAPSHOT="$MERGE_MAIN_TMPDIR/agents-empty.json"
+printf 'this is not json{{' > "$WORKTREE_REPO/package-lock.json"
+rc=0; "$PF" "$WORKTREE_REPO" qa >/dev/null 2>&1 || rc=$?
+assert_eq "preflight: corrupt package-lock.json → exit 1" "1" "$rc"
+unset DISPATCH_AGENTS_SNAPSHOT
+merge_main_teardown
+
+# --- a6: missing worktree arg → exit 2 (usage error) -----------------------
+echo "Test: preflight: missing worktree arg → exit 2"
+merge_main_setup
+printf '[]' > "$MERGE_MAIN_TMPDIR/agents-empty.json"
+export DISPATCH_AGENTS_SNAPSHOT="$MERGE_MAIN_TMPDIR/agents-empty.json"
+rc=0; "$PF" >/dev/null 2>&1 || rc=$?
+assert_eq "preflight: missing worktree arg → exit 2" "2" "$rc"
+unset DISPATCH_AGENTS_SNAPSHOT
+merge_main_teardown
+
+# --- b1: gate armed, preflight fails (queue) → drain preflight-abort, no slot burned
+echo "Test: preflight-abort: gate armed, preflight fails (queue) → drain preflight-abort"
+mat_setup
+cp "$SCRIPT_DIR/dispatch-config-load" "$TMPDIR_TEST/dispatch-config-load"
+chmod +x "$TMPDIR_TEST/dispatch-config-load"
+export DISPATCH_CONFIG_DIR="$TMPDIR_TEST/config"
+mkdir -p "$DISPATCH_CONFIG_DIR"
+printf '{"enabled":true}\n' > "$DISPATCH_CONFIG_DIR/strict-preflight.json"
+cat > "$TMPDIR_TEST/dispatch-preflight.sh" <<STUB
+#!/usr/bin/env bash
+if [[ -f "$STUB_DIR/preflight-exit" ]]; then exit "\$(cat "$STUB_DIR/preflight-exit")"; fi
+exit 0
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-preflight.sh"
+printf '1\n' > "$STUB_DIR/preflight-exit"
+out=$(run_mat 839 queue) ; rc=$?
+assert_eq "preflight-abort: exit 0" "0" "$rc"
+assert_eq "preflight-abort: terminal token (queue → drain preflight-abort)" "drain preflight-abort" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "preflight-abort: no reservation marker for the target" "0" \
+  "$([ -f "$DISPATCH_RESERVATION_DIR/839-test" ] && echo 1 || echo 0)"
+assert_eq "preflight-abort: no launcher spawned" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/launch-worker.log" ] && echo 1 || echo 0)"
+assert_eq "preflight-abort: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+mat_teardown
+
+# --- b2: gate armed, preflight fails (explicit) → notify preflight-abort ----
+echo "Test: preflight-abort: gate armed, preflight fails (explicit) → notify preflight-abort"
+mat_setup
+cp "$SCRIPT_DIR/dispatch-config-load" "$TMPDIR_TEST/dispatch-config-load"
+chmod +x "$TMPDIR_TEST/dispatch-config-load"
+export DISPATCH_CONFIG_DIR="$TMPDIR_TEST/config"
+mkdir -p "$DISPATCH_CONFIG_DIR"
+printf '{"enabled":true}\n' > "$DISPATCH_CONFIG_DIR/strict-preflight.json"
+cat > "$TMPDIR_TEST/dispatch-preflight.sh" <<STUB
+#!/usr/bin/env bash
+if [[ -f "$STUB_DIR/preflight-exit" ]]; then exit "\$(cat "$STUB_DIR/preflight-exit")"; fi
+exit 0
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-preflight.sh"
+printf '1\n' > "$STUB_DIR/preflight-exit"
+out=$(run_mat 839 explicit) ; rc=$?
+assert_eq "preflight-abort explicit: exit 0" "0" "$rc"
+assert_eq "preflight-abort explicit: terminal token (explicit → notify preflight-abort)" "notify preflight-abort" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "preflight-abort explicit: no reservation marker" "0" \
+  "$([ -f "$DISPATCH_RESERVATION_DIR/839-test" ] && echo 1 || echo 0)"
+assert_eq "preflight-abort explicit: no launcher spawned" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/launch-worker.log" ] && echo 1 || echo 0)"
+mat_teardown
+
+# --- b3: gate armed, preflight passes (queue) → propagate as normal ---------
+echo "Test: preflight-abort: gate armed, preflight passes (queue) → propagate"
+mat_setup
+cp "$SCRIPT_DIR/dispatch-config-load" "$TMPDIR_TEST/dispatch-config-load"
+chmod +x "$TMPDIR_TEST/dispatch-config-load"
+export DISPATCH_CONFIG_DIR="$TMPDIR_TEST/config"
+mkdir -p "$DISPATCH_CONFIG_DIR"
+printf '{"enabled":true}\n' > "$DISPATCH_CONFIG_DIR/strict-preflight.json"
+cat > "$TMPDIR_TEST/dispatch-preflight.sh" <<STUB
+#!/usr/bin/env bash
+if [[ -f "$STUB_DIR/preflight-exit" ]]; then exit "\$(cat "$STUB_DIR/preflight-exit")"; fi
+exit 0
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-preflight.sh"
+printf '0\n' > "$STUB_DIR/preflight-exit"
+out=$(run_mat 839 queue) ; rc=$?
+assert_eq "preflight-pass: exit 0" "0" "$rc"
+assert_eq "preflight-pass: terminal token" "propagate" "$(printf '%s\n' "$out" | tail -n 1)"
+wait_launch_log 1
+assert_eq "preflight-pass: launcher detached with issue + worktree" \
+  "839 $TMPDIR_TEST/project/worktrees/839-test" \
+  "$(cat "$TMPDIR_TEST/logs/launch-worker.log")"
+assert_eq "preflight-pass: reservation marker present" "1" \
+  "$([ -f "$DISPATCH_RESERVATION_DIR/839-test" ] && echo 1 || echo 0)"
+mat_teardown
+
+# --- b4: gate OFF by default (no config) → failing preflight stub never consulted → propagate
+echo "Test: preflight-abort: gate OFF (no config) → failing preflight stub ignored → propagate"
+mat_setup
+cp "$SCRIPT_DIR/dispatch-config-load" "$TMPDIR_TEST/dispatch-config-load"
+chmod +x "$TMPDIR_TEST/dispatch-config-load"
+export DISPATCH_CONFIG_DIR="$TMPDIR_TEST/config"
+mkdir -p "$DISPATCH_CONFIG_DIR"
+# Deliberately NOT writing strict-preflight.json so the gate stays disabled
+cat > "$TMPDIR_TEST/dispatch-preflight.sh" <<STUB
+#!/usr/bin/env bash
+if [[ -f "$STUB_DIR/preflight-exit" ]]; then exit "\$(cat "$STUB_DIR/preflight-exit")"; fi
+exit 0
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-preflight.sh"
+printf '1\n' > "$STUB_DIR/preflight-exit"
+out=$(run_mat 839 queue) ; rc=$?
+assert_eq "preflight-off: exit 0" "0" "$rc"
+assert_eq "preflight-off: terminal token (gate off → propagate)" "propagate" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+wait_launch_log 1
+assert_eq "preflight-off: launcher detached (preflight never blocked it)" \
+  "839 $TMPDIR_TEST/project/worktrees/839-test" \
+  "$(cat "$TMPDIR_TEST/logs/launch-worker.log")"
+mat_teardown
+
+# --- b5: fan-out, gate armed, preflight fails all targets → zero spawns, drain
+echo "Test: preflight-abort fanout: gate armed, all targets preflight-abort → zero spawns, drain"
+mat_setup
+cp "$SCRIPT_DIR/dispatch-config-load" "$TMPDIR_TEST/dispatch-config-load"
+chmod +x "$TMPDIR_TEST/dispatch-config-load"
+export DISPATCH_CONFIG_DIR="$TMPDIR_TEST/config"
+mkdir -p "$DISPATCH_CONFIG_DIR"
+printf '{"enabled":true}\n' > "$DISPATCH_CONFIG_DIR/strict-preflight.json"
+cat > "$TMPDIR_TEST/dispatch-preflight.sh" <<STUB
+#!/usr/bin/env bash
+if [[ -f "$STUB_DIR/preflight-exit" ]]; then exit "\$(cat "$STUB_DIR/preflight-exit")"; fi
+exit 0
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-preflight.sh"
+printf '1\n' > "$STUB_DIR/preflight-exit"
+export MAT_QUEUE="840"
+out=$(run_mat 839 queue --gap 2)
+assert_eq "preflight-abort fanout: seed #839 skipped (preflight-abort)" "1" \
+  "$(printf '%s\n' "$out" | grep -c 'propagate: skipped #839 (preflight-abort)')"
+assert_eq "preflight-abort fanout: #840 skipped (preflight-abort)" "1" \
+  "$(printf '%s\n' "$out" | grep -c 'propagate: skipped #840 (preflight-abort)')"
+assert_eq "preflight-abort fanout: zero spawn lines" "0" \
+  "$(printf '%s\n' "$out" | grep -c 'propagate: spawned #')"
+assert_eq "preflight-abort fanout: summary spawned 0 of gap 2" "1" \
+  "$(printf '%s\n' "$out" | grep -c 'spawned 0 of gap 2')"
+assert_eq "preflight-abort fanout: terminal token (zero spawns → drain)" "drain" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+mat_teardown
 
 # ============================================================================
 # summary

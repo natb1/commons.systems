@@ -16,9 +16,9 @@
 #     /dispatch-jit-reminder bg-job spawns, which run those sub-skills in their
 #     own session rather than in the router's.
 #
-# Usage: dispatch-spawn-job [--no-verify] [--model <model>] [--park-issue <N>] --name <name> --cwd <cwd> <prompt>
+# Usage: dispatch-spawn-job [--no-verify] [--model <model>] [--effort <level>] [--park-issue <N>] --name <name> --cwd <cwd> <prompt>
 #
-# Arguments (--name, --cwd, <prompt> required; --no-verify, --model, --park-issue optional):
+# Arguments (--name, --cwd, <prompt> required; --no-verify, --model, --effort, --park-issue optional):
 #   --name <name>   The spawned session's --name. Dedup keys on it directly:
 #                   another live session with the same name under <cwd> means
 #                   nothing is spawned.
@@ -42,6 +42,13 @@
 #                   the phase → model policy (#1171). An enabled force-opus.json
 #                   (Step 1b) overrides the requested model with Opus regardless
 #                   of what is passed here.
+#   --effort <level> Optional reasoning-effort level forwarded directly to
+#                   `claude --bg --effort <level>`. When absent or empty, the
+#                   --effort flag is omitted entirely and the session inherits the
+#                   launcher's default effort. Must be one of: low medium high
+#                   xhigh max. Orthogonal to the Step 1b force-opus gate: when
+#                   force-opus is enabled it rewrites the model only; effort
+#                   passes through unchanged.
 #   --park-issue <N> Optional positive integer. Best-effort, and requires
 #                   --no-verify — passing it without --no-verify is rejected with
 #                   exit 2 (parking only applies to the --no-verify kick-failure
@@ -61,7 +68,7 @@
 #   1. Dedup    — if another live session with name == <name> is already running
 #                 under <cwd>, spawn nothing. Fail-safe: if the registry cannot
 #                 be queried, also spawn nothing (a dispatch agent may be live).
-#   2. Spawn    — `claude --bg --name <name> [--model <model>] --permission-mode auto "<prompt>"`,
+#   2. Spawn    — `claude --bg --name <name> [--model <model>] [--effort <level>] --permission-mode auto "<prompt>"`,
 #                 from a subshell that `cd`s into <cwd> first; capture its exit
 #                 code. --model is inserted only when non-empty.
 #   3. Verify   — only when --no-verify is absent: re-query the registry under
@@ -108,6 +115,7 @@ set -uo pipefail
 NAME=""
 CWD=""
 MODEL=""
+EFFORT=""
 NO_VERIFY=""
 PARK_ISSUE=""
 positionals=()
@@ -141,6 +149,14 @@ while [[ $# -gt 0 ]]; do
       MODEL="$2"
       shift 2
       ;;
+    --effort)
+      if [[ $# -lt 2 ]]; then
+        echo "dispatch-spawn-job: --effort requires a value" >&2
+        exit 2
+      fi
+      EFFORT="$2"
+      shift 2
+      ;;
     --park-issue)
       if [[ $# -lt 2 ]]; then
         echo "dispatch-spawn-job: --park-issue requires a value" >&2
@@ -168,6 +184,11 @@ PROMPT="${positionals[0]}"
 
 if [[ -n "$MODEL" && ! "$MODEL" =~ ^[A-Za-z0-9._-]+$ ]]; then
   echo "dispatch-spawn-job: --model value '$MODEL' contains unexpected characters" >&2
+  exit 2
+fi
+
+if [[ -n "$EFFORT" && ! "$EFFORT" =~ ^(low|medium|high|xhigh|max)$ ]]; then
+  echo "dispatch-spawn-job: invalid --effort '$EFFORT' (expected one of: low medium high xhigh max)" >&2
   exit 2
 fi
 
@@ -270,6 +291,7 @@ done <<<"$sessions"
 spawn_rc=0
 bg_args=(--bg --name "$NAME")
 [[ -n "$MODEL" ]] && bg_args+=(--model "$MODEL")
+[[ -n "$EFFORT" ]] && bg_args+=(--effort "$EFFORT")
 bg_args+=(--permission-mode auto "$PROMPT")
 spawn_output=$(
   cd "$CWD" && "$CLAUDE_CMD" "${bg_args[@]}" 2>&1
