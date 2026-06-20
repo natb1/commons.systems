@@ -109,6 +109,24 @@ jobs:
       - name: Run lint
         run: .claude/skills/dispatch-propagate/scripts/run-lint.sh
 
+  dead-code:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          fetch-depth: 0
+      - name: Detect changed file categories
+        id: changes
+        run: .claude/skills/dispatch-propagate/scripts/detect-changes.sh
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: steps.changes.outputs.deadcode == 'true'
+        with:
+          node-version-file: .node-version
+          cache: 'npm'
+      - name: Run dead-code check
+        if: steps.changes.outputs.deadcode == 'true'
+        run: .claude/skills/dispatch-propagate/scripts/run-dead-code.sh
+
   typecheck:
     runs-on: ubuntu-latest
     steps:
@@ -130,12 +148,25 @@ jobs:
         run: .claude/hooks/test-approve-workflow-commands.sh
       - name: Run dispatch script tests
         run: .claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh
+      - name: Run prose-rule lint tests
+        run: .claude/skills/dispatch-propagate/scripts/test-lint-prose-rules.sh
       - name: Run worktree-remove hook tests
         run: .claude/hooks/test-worktree-remove.sh
       - name: Run statusline hook tests
         run: .claude/hooks/test-statusline.sh
       - name: Run type-safety escape-hatch sensor tests
         run: .github/scripts/test-check-type-safety-escapes.sh
+      - name: Run test-integrity script tests
+        run: .github/scripts/test-check-test-integrity.sh
+
+  test-integrity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          fetch-depth: 0
+      - name: Check for test deletions / disabling skips
+        run: .github/scripts/check-test-integrity.sh
 
   playwright-version-sync:
     runs-on: ubuntu-latest
