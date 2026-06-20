@@ -35536,6 +35536,57 @@ assert_eq "sidecar no net-increase → zero findings" "0" "$sidecar_count"
 rm -rf "$TMPDIR_TEST"
 TMPDIR_TEST=""
 
+# E4. Sidecar duplication net-delta: HEAD jscpd clones rose from 0 → finding
+#     with Source="erosion" and a path:line Location derived from the largest
+#     clone (exercises worstCloneLocation).
+#
+#     Empty eslint reports ([]) for both HEAD and BASE suppress the complexity
+#     path (complexityScalars yields no per-file entries), so the ONLY finding is
+#     the duplication one. The HEAD jscpd report carries clones=1 against a
+#     zero-clone baseline, so clonesRose fires (Confidence=high). worstCloneLocation
+#     reads duplicates[0].firstFile.{name,start}; firstFile.name is the bare
+#     relative "dup.ts" (no cwd prefix to strip), so the Location is "dup.ts:5".
+echo "Test: dispatch-review-erosion-diff.mjs — duplication net-increase yields Source=erosion finding"
+TMPDIR_TEST=$(mktemp -d)
+# Empty eslint reports suppress the complexity path entirely.
+cat > "$TMPDIR_TEST/head-eslint.json" <<'EOF'
+[]
+EOF
+mkdir -p "$TMPDIR_TEST/baseline"
+cat > "$TMPDIR_TEST/base-eslint.json" <<'EOF'
+[]
+EOF
+# jscpd HEAD report: one clone block, 10 duplicated lines, largest clone at dup.ts:5.
+cat > "$TMPDIR_TEST/head-jscpd.json" <<'EOF'
+{
+  "statistics": { "total": { "clones": 1, "duplicatedLines": 10, "percentage": 5 } },
+  "duplicates": [
+    { "firstFile": { "name": "dup.ts", "start": 5, "end": 14 },
+      "secondFile": { "name": "dup.ts", "start": 30, "end": 39 } }
+  ]
+}
+EOF
+# jscpd BASE report: zero clones (no duplication pre-PR).
+cat > "$TMPDIR_TEST/base-jscpd.json" <<'EOF'
+{ "statistics": { "total": { "clones": 0, "duplicatedLines": 0, "percentage": 0 } } }
+EOF
+sidecar_out=$(cd "$TMPDIR_TEST" && node "$SCRIPT_DIR/dispatch-review-erosion-diff.mjs" \
+  --eslint-head head-eslint.json \
+  --eslint-base base-eslint.json \
+  --jscpd-head head-jscpd.json \
+  --jscpd-base base-jscpd.json \
+  --baseline-dir baseline)
+sidecar_count=$(jq '.findings | length' <<<"$sidecar_out")
+sidecar_source=$(jq -r '.findings[0].Source // "none"' <<<"$sidecar_out")
+sidecar_location=$(jq -r '.findings[0].Location // "none"' <<<"$sidecar_out")
+sidecar_confidence=$(jq -r '.findings[0].Confidence // "none"' <<<"$sidecar_out")
+assert_eq "sidecar duplication finding count=1" "1" "$sidecar_count"
+assert_eq "sidecar duplication finding Source=erosion" "erosion" "$sidecar_source"
+assert_eq "sidecar duplication finding Location=dup.ts:5" "dup.ts:5" "$sidecar_location"
+assert_eq "sidecar duplication finding Confidence=high (clones rose)" "high" "$sidecar_confidence"
+rm -rf "$TMPDIR_TEST"
+TMPDIR_TEST=""
+
 # ============================================================================
 # dispatch-run-verification tests (#2024)
 # ============================================================================
