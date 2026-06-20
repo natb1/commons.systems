@@ -46,6 +46,17 @@
 #                                   <N>-slug worktree. When no <N>-* worktree
 #                                   resolves (5th field `-`), exit non-zero with
 #                                   a diagnostic and launch nothing.
+#   idle-provision <sessionId> <branch>
+#                                 → the originating session's worktree was swept
+#                                   but its remote branch still exists. Provision
+#                                   the worktree from origin/<branch> via
+#                                   dispatch-provision-from-remote, then attach
+#                                   the originating session (exactly as `idle`
+#                                   does). On any provisioning failure, exit
+#                                   non-zero with a diagnostic naming the branch
+#                                   — the selector already confirmed the remote
+#                                   exists, so a failure here is a genuine error
+#                                   and a silent fresh-spawn would mask it.
 #   empty                         → print a queue-empty message and exit WITHOUT
 #                                   launching Claude. The empty queue is handled
 #                                   entirely in bash; no session is booted.
@@ -135,6 +146,17 @@ case "$verb" in
     # sid is the spawned (or deduped) session's sessionId; attach_session
     # translates it to the daemon job id `claude attach` requires.
     attach_session "$sid"
+    ;;
+  idle-provision)
+    # a = originating sessionId; b = remote branch whose worktree was swept.
+    # Provision the worktree from origin/<branch> first, then attach as idle.
+    # Redirect stdout to stderr so progress/status lines don't pollute office-hours'
+    # stdout (which callers capture to read the LAUNCH directive).
+    if ! "$SCRIPT_DIR/dispatch-provision-from-remote" "$b" >&2; then
+      echo "office-hours: provisioning worktree for branch '$b' from the remote failed — cannot attach session $a. Check the output above: origin/$b may be missing or unfetchable (network/fetch error), the worktree-add may have failed, or origin/main may have a merge conflict with the branch." >&2
+      exit 1
+    fi
+    attach_session "$a"
     ;;
   empty)
     echo "office-hours: queue is empty — nothing to resume or start."
