@@ -601,6 +601,59 @@ dependency-free. In dry-run mode the member-email payload is injected via the
 the secret would return). This seam is for testing only — it is never consulted
 in real mode, which always reads Secret Manager.
 
+## The source-pr:<N> follow-up label
+
+Every follow-up issue filed by the `review-fix` skill's 5a and 5b subagents
+receives the per-issue label `source-pr:<N>`, where `<N>` is the PR under
+review at the time the follow-up was filed. The label records the provenance:
+"this follow-up's out-of-scope findings were surfaced while reviewing PR #<N>."
+
+The label is the machine key consumed by the `dispatch-retriage-orphaned-followups`
+scan. When PR #<N> is later closed without merging, that scan locates all open
+follow-up issues carrying `source-pr:<N>` and parks each one on
+`dispatch:office-hours` for human re-triage — without the label the scan has no
+way to identify orphaned follow-ups that point at code that never landed on main.
+
+The label is applied immediately after `/file-issue` returns the new issue
+number, using the create-on-not-found idiom (try `gh issue edit <N>
+--add-label "source-pr:<N>"`; if the label is absent, run `gh label create
+"source-pr:<N>" --color 1d76db --description "review follow-up: surfaced reviewing this PR"`
+then retry — the same pattern as `dispatch-apply-office-hours` lines 67–83). In 5a the value substituted is the literal `<PR_NUM>` the main
+thread passes into the fork prompt; in 5b it is the shell variable `$PR_NUM`
+already in scope (used at the `dispatch-security-followup` invocation).
+
+## Step 2e — orphaned follow-up re-triage scan
+
+`dispatch-retriage-orphaned-followups` is a best-effort Step-2e tick scan that
+runs on every tick immediately after the Step-2d merge-queue reconcile. It
+exists to clean up review follow-up issues that became orphaned when their source
+PR was abandoned or superseded rather than merged.
+
+**What it does.** For each distinct `source-pr:<N>` label present on any open
+issue, the scan calls `gh pr view <N>` and checks the PR's merge state. If PR
+#<N> is closed without merging (state `closed`, `merged` false), every open
+issue carrying `source-pr:<N>` is parked on `dispatch:office-hours` with a
+why-comment explaining that the source PR was closed unmerged and human
+re-triage is needed. The parked issues surface in the office-hours queue the
+same way any other `dispatch:office-hours`-labeled issue does.
+
+**Idempotency key.** Once a source PR's follow-ups have been processed, the scan
+applies the per-PR label `dispatch:orphans-retriaged` to the PR itself. On
+subsequent ticks the scan checks for this label before re-processing a
+closed-unmerged PR, skipping PRs already marked — so each closed-unmerged PR is
+processed exactly once. This avoids re-parking already-parked issues or
+duplicating why-comments.
+
+**Relation to the `source-pr:<N>` label.** The scan reads the
+`source-pr:<N>` label described in the preceding section as its input — without
+that label it has no way to identify which issues belong to which source PR.
+
+**Pass-through prefix.** The scan's stdout lines are passed through the
+orchestrator with the `retriage:` prefix (see the `dispatch-select-tick` header
+comment for the full pass-through-lines ordering). A silent no-op when no open
+issue carries any `source-pr:<N>` label, or when all source PRs that are
+closed-unmerged have already been retriaged.
+
 ## Target-keyed CI-wait reseed (#979)
 
 CI-wait handling splits on available queue size, not invocation mode. In a

@@ -1,0 +1,247 @@
+@import "@commons-systems/style/default.css";
+@import "@commons-systems/style/layout.css";
+
+/* All @font-face blocks use font-display: optional — no FOIT, no late swap.
+   Smoke/acceptance tests assert the declared family string, not that the
+   woff2 rendered (uncached first visit may paint in fallback). */
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: optional;
+  src: url("/fonts/ibm-plex-mono-latin-400-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+    U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+    U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 700;
+  font-display: optional;
+  src: url("/fonts/ibm-plex-mono-latin-700-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+    U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+    U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+#reminder-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.reminder {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.reminder-due {
+  color: var(--muted);
+  white-space: nowrap;
+}
+.reminder-due.overdue {
+  color: var(--danger, #ff6b6b);
+  font-weight: 700;
+}
+.capacity-heading {
+  font-size: 1rem;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: 0.75rem;
+}
+.capacity-cards {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.capacity-card {
+  border: 1px solid var(--border);
+  padding: 0.75rem 1rem;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.capacity-card-label {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.capacity-card-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+}
+.capacity-resets {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem 0;
+}
+.capacity-resets li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.capacity-reset-label {
+  flex: 0 0 7rem;
+  min-width: 7rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.capacity-reset-clock {
+  font-weight: 400;
+  white-space: nowrap;
+}
+.capacity-reset-countdown {
+  color: var(--muted);
+  white-space: nowrap;
+}
+.capacity-workers {
+  margin: 0;
+}
+.capacity-worker-state {
+  color: var(--muted);
+}
+.capacity-worker-state.spawning {
+  color: var(--warning, #f9c74f);
+}
+.capacity-worker-state.paused {
+  color: var(--danger, #ff6b6b);
+}
+.queue-heading {
+  font-size: 1rem;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: 0.75rem;
+}
+.queue-cards {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.queue-card {
+  border: 1px solid var(--border);
+  padding: 0.75rem 1rem;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.queue-card-label {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.queue-card-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+}
+.queue-runway {
+  margin: 0;
+}
+.queue-runway-state {
+  color: var(--muted);
+}
+.queue-runway-state.growing {
+  color: var(--danger, #ff6b6b);
+}
+/* Plot tip text: force dark so it remains readable on every chart. */
+svg [aria-label="tip"] text { fill: #222; }
+.chart-layout {
+  display: flex;
+  align-items: stretch;
+}
+.chart-y-axis {
+  flex-shrink: 0;
+}
+.chart-y-axis svg { display: block; height: auto; }
+.chart-scroll-wrapper {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.chart-scroll-wrapper svg { height: auto; display: block; }
+.trend-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 0.25rem 0 0.5rem;
+  font-size: 0.875rem;
+}
+.trend-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+.legend-line {
+  display: inline-block;
+  width: 20px;
+  height: 3px;
+  border-radius: 1px;
+  flex-shrink: 0;
+}
+.panel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  gap: 1.5rem;
+}
+/* gap replaces the per-panel margin-top spacing that double-spaces under a grid */
+.panel-grid > *,
+.panel-grid > .capacity-history,
+.panel-grid > .capacity-pace {
+  margin-top: 0;
+  min-width: 0;
+}
+.panel-grid-full {
+  grid-column: 1 / -1;
+}
+.capacity-history {
+  display: block;
+  margin-top: 1.5rem;
+}
+.capacity-history-heading {
+  font-size: 1rem;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: 0.75rem;
+}
+.capacity-pace {
+  display: block;
+  margin-top: 1.5rem;
+}
+.capacity-pace-heading {
+  font-size: 1rem;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: 0.75rem;
+}
+.queue-metrics-heading {
+  font-size: 1rem;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: 0.75rem;
+}
+.capacity-pace-delta {
+  font-weight: 700;
+  font-size: 1.1rem;
+  margin: 0 0 0.75rem 0;
+}
+.demo-banner {
+  background: var(--border);
+  color: var(--muted);
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  margin-bottom: 1rem;
+}
+.error {
+  color: var(--danger, #ff6b6b);
+  padding: 0.5rem 0.75rem;
+}

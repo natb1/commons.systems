@@ -67,6 +67,7 @@ setup() {
   cp "$SCRIPT_DIR/dispatch-check-blockers" "$TMPDIR_TEST/dispatch-check-blockers"
   cp "$SCRIPT_DIR/dispatch-complete-phase" "$TMPDIR_TEST/dispatch-complete-phase"
   cp "$SCRIPT_DIR/dispatch-apply-office-hours" "$TMPDIR_TEST/dispatch-apply-office-hours"
+  cp "$SCRIPT_DIR/dispatch-qa-apply-main-qa-labels" "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels"
   cp "$SCRIPT_DIR/dispatch-apply-planned" "$TMPDIR_TEST/dispatch-apply-planned"
   # dispatch-plan-finalize resolves its three siblings (dispatch-write-plan,
   # dispatch-mark-complete, dispatch-apply-planned) via SCRIPT_DIR, which
@@ -88,6 +89,10 @@ setup() {
   # SCRIPT_DIR (= TMPDIR_TEST for this copy) — both already copied below/above,
   # so both resolve.
   cp "$SCRIPT_DIR/dispatch-auto-merge" "$TMPDIR_TEST/dispatch-auto-merge"
+  # dispatch-retriage-orphaned-followups (#1812) sources lib.sh (gh_issue_list_rest,
+  # gh_retry) and calls dispatch-apply-office-hours via its SCRIPT_DIR (= TMPDIR_TEST
+  # for this copy) — both already copied here, so both resolve.
+  cp "$SCRIPT_DIR/dispatch-retriage-orphaned-followups" "$TMPDIR_TEST/dispatch-retriage-orphaned-followups"
   # dispatch-select-target's JIT scan calls dispatch-config-load and
   # dispatch-project-status-read as "$SCRIPT_DIR/<name>". SCRIPT_DIR resolves to
   # TMPDIR_TEST for the copied dispatch-select-target, so the two helpers must
@@ -122,13 +127,15 @@ setup() {
            "$TMPDIR_TEST/dispatch-check-blockers" \
            "$TMPDIR_TEST/dispatch-complete-phase" \
            "$TMPDIR_TEST/dispatch-apply-office-hours" \
+           "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" \
            "$TMPDIR_TEST/dispatch-apply-planned" \
            "$TMPDIR_TEST/dispatch-resolve-worktree" \
            "$TMPDIR_TEST/dispatch-reconcile-ready" \
            "$TMPDIR_TEST/dispatch-config-load" \
            "$TMPDIR_TEST/dispatch-project-status-read" \
            "$TMPDIR_TEST/dispatch-sync-merge-queue" \
-           "$TMPDIR_TEST/dispatch-auto-merge"
+           "$TMPDIR_TEST/dispatch-auto-merge" \
+           "$TMPDIR_TEST/dispatch-retriage-orphaned-followups"
 
   # Default no-op stub for dispatch-provision-worktree. dispatch-route now invokes
   # it (after the worktree cross-check, before phase derivation). The real script
@@ -273,6 +280,42 @@ case "$args" in
       echo "[]"
     fi
     ;;
+  api\ *repos/*/issues\?*labels=dispatch-test-*)
+    # gh_issue_list_rest edge-case tests (#1652): sentinel label prefix
+    # `dispatch-test-` routes to in-test fixtures without polluting the shared
+    # issue-list fixture paths. MUST precede the generic api *repos/*/issues?*
+    # branch (case is first-wins). Log the full $args so tests can assert whether
+    # --paginate was passed and what per_page= value was used.
+    echo "$args" >> "$STUB_DIR/gh-issue-list-rest-calls.log"
+    if [[ -f "$STUB_DIR/gh-fail-rest" ]]; then
+      echo "stub forced gh api failure" >&2
+      exit 1
+    fi
+    rest_path_dt=$(printf '%s' "$args" | grep -oE 'repos/[^ ]+')
+    rest_query_dt="${rest_path_dt#*\?}"
+    rest_label_dt=""
+    for kv in ${rest_query_dt//&/ }; do
+      case "$kv" in
+        labels=*) rest_label_dt="${kv#labels=}" ;;
+      esac
+    done
+    rest_label_dt="${rest_label_dt//%20/ }"
+    case "$rest_label_dt" in
+      dispatch-test-empty)
+        echo '[]'
+        ;;
+      dispatch-test-paginate)
+        cat "$STUB_DIR/rest-page-1.json"
+        cat "$STUB_DIR/rest-page-2.json"
+        ;;
+      dispatch-test-limit)
+        cat "$STUB_DIR/rest-limit.json"
+        ;;
+      *)
+        echo '[]'
+        ;;
+    esac
+    ;;
   api\ *repos/*/issues\?*)
     # gh_issue_list_rest (#1601): the four converted dispatch issue scans now hit
     # the REST issues endpoint instead of `gh issue list`. The fake-gh receives
@@ -296,6 +339,14 @@ case "$args" in
     if [[ "$rest_repo" == "{owner}/{repo}" ]]; then
       # Current-repo scans: open-ISSUE_LIST (no label) and the main-broken latch.
       if [[ -z "$rest_label" ]]; then
+        # #1812: persistent-failure injection for the open-issue scan
+        # (gh_issue_list_rest --state open). A marker makes gh fail on every
+        # attempt so gh_retry exhausts and forwards the failure — driving
+        # dispatch-retriage-orphaned-followups' early-exit-on-scan-failure branch.
+        if [[ -f "$STUB_DIR/gh-fail-issue-list-open" ]]; then
+          echo "stub forced gh api failure (open issue-list)" >&2
+          exit 1
+        fi
         if [[ -f "$STUB_DIR/issue-list.json" ]]; then cat "$STUB_DIR/issue-list.json"; else echo "[]"; fi
       elif [[ "$rest_label" == "dispatch:main-broken" ]]; then
         # #1085 per-episode latch read. Default [] (gate fires); a fixture models
@@ -372,9 +423,28 @@ case "$args" in
     # Batched blockedBy lookup for dispatch-select-target (#794). The query text
     # arrives in $args as the -f query= value; extract each issue number and
     # project the existing blockers-<num>.json fixture (default []) into the
-    # GraphQL alias shape _<num>: { number, blockedBy { nodes { state } } }. This
-    # reuses the same fixtures the REST blocked_by case serves, so the
+    # GraphQL alias shape _<num>: { number, blockedBy { nodes { state } }, parent }.
+    # This reuses the same fixtures the REST blocked_by case serves, so the
     # select-target blocked-skip tests pass via either delivery mechanism.
+    #
+    # parent fixture: parent-<num>.json holds a single parent number (e.g. "100"),
+    # or is absent. When absent, parent is null. When present, the parent chain is
+    # built recursively (following parent-<k>.json for each ancestor) up to 7
+    # levels deep, producing {number, parent:{number, parent:...null}}.
+    build_parent_json() {
+      local n="$1" depth="${2:-0}"
+      # Cap at 7 levels to prevent infinite loops on cyclic fixtures.
+      if [[ "$depth" -ge 7 ]] || [[ ! -f "$STUB_DIR/parent-${n}.json" ]]; then
+        echo "null"
+        return
+      fi
+      local p
+      p=$(cat "$STUB_DIR/parent-${n}.json")
+      [[ -z "$p" ]] && { echo "null"; return; }
+      local grandparent_json
+      grandparent_json=$(build_parent_json "$p" $(( depth + 1 )))
+      printf '{"number":%s,"parent":%s}' "$p" "$grandparent_json"
+    }
     echo "api graphql" >> "$STUB_DIR/gh-graphql-calls.log"
     nums=$(printf '%s' "$args" | grep -oE 'issue\(number: [0-9]+' | grep -oE '[0-9]+')
     aliases="{}"
@@ -386,8 +456,9 @@ case "$args" in
         fixture="[]"
       fi
       node=$(printf '%s' "$fixture" | jq -c '{nodes: [.[] | {state: .state}]}')
-      aliases=$(printf '%s' "$aliases" | jq -c --arg k "_${n}" --argjson num "$n" --argjson bb "$node" \
-        '.[$k] = {number: $num, blockedBy: $bb}')
+      parent_json=$(build_parent_json "$n" 0)
+      aliases=$(printf '%s' "$aliases" | jq -c --arg k "_${n}" --argjson num "$n" --argjson bb "$node" --argjson par "$parent_json" \
+        '.[$k] = {number: $num, blockedBy: $bb, parent: $par}')
     done <<< "$nums"
     printf '{"data":{"repository":%s}}\n' "$aliases"
     ;;
@@ -488,6 +559,17 @@ case "$args" in
       echo '{"headRefName":""}'
     fi
     ;;
+  pr\ view\ *\ --json\ state,mergedAt,labels)
+    # dispatch-retriage-orphaned-followups (#1812): gh pr view <N> --json
+    # state,mergedAt,labels. $STUB_DIR/retriage-pr-<N>.json supplies the per-PR
+    # state object; absence defaults to an OPEN PR (no action taken).
+    num=$(echo "$args" | awk '{print $3}')
+    if [[ -f "$STUB_DIR/retriage-pr-${num}.json" ]]; then
+      cat "$STUB_DIR/retriage-pr-${num}.json"
+    else
+      echo '{"state":"OPEN","mergedAt":null,"labels":[]}'
+    fi
+    ;;
   label\ create\ *)
     # dispatch-complete-phase / dispatch-apply-office-hours create the label only
     # when the apply reported it missing.
@@ -525,7 +607,8 @@ case "$args" in
     fi
     ;;
   issue\ edit\ *)
-    # dispatch-apply-office-hours applies the label to the ISSUE.
+    # Multiple scripts (dispatch-apply-office-hours, dispatch-qa-apply-main-qa-labels, ...)
+    # route their `gh issue edit` calls through this block.
     # $STUB_DIR/issue-edit-mode selects behavior (default: succeed and log args).
     mode="ok"
     [[ -f "$STUB_DIR/issue-edit-mode" ]] && mode=$(cat "$STUB_DIR/issue-edit-mode")
@@ -540,6 +623,26 @@ case "$args" in
           echo "failed to update: '$label' not found" >&2
           exit 1
         fi
+        ;;
+      remove-label-missing)
+        # Model step 1's tolerated "not found" on the help-wanted removal ONLY.
+        # The main-qa add and office-hours add must still succeed.
+        if [[ "$args" == *"--remove-label"* ]]; then
+          echo "failed to update: 'help wanted' not found" >&2
+          exit 1
+        fi
+        echo "$args" >> "$STUB_DIR/gh-issue-edit.log"
+        ;;
+      main-qa-missing)
+        # Model step 2's add-then-create-on-not-found for main-qa ONLY: the first
+        # --add-label main-qa fails "not found" until gh label create main-qa runs;
+        # the retry then succeeds. remove-label and the office-hours
+        # --add-label dispatch:office-hours fall through to log+succeed.
+        if [[ "$args" == *"--add-label main-qa"* && ! -f "$STUB_DIR/gh-label-create.log" ]]; then
+          echo "failed to update: 'main-qa' not found" >&2
+          exit 1
+        fi
+        echo "$args" >> "$STUB_DIR/gh-issue-edit.log"
         ;;
       *)
         echo "$args" >> "$STUB_DIR/gh-issue-edit.log"
@@ -1055,6 +1158,140 @@ printf '%s' '{"check_runs":[{"status":"completed","conclusion":"failure"}]}' \
 cached=$(source "$TMPDIR_TEST/lib.sh"; dispatch_ci_verdict_rest "sha-cache")
 assert_eq "verdict cache: second call → cached passing despite changed fixture" "passing" "$cached"
 unset DISPATCH_CI_VERDICT_CACHE
+teardown
+
+# ============================================================================
+# gh_issue_list_rest edge-case tests (#1652)
+# ============================================================================
+# These three tests drive the REAL gh_issue_list_rest helper (sourced from the
+# copied lib.sh) via the `dispatch-test-*` sentinel stub branch above. They cover
+# the three behaviors that were previously unexercised:
+#   (a) empty result (`[]` from the endpoint)
+#   (b) pagination boundary (two concatenated arrays merged by jq -s 'add')
+#   (c) --limit single-page branch (per_page=<limit>, no --paginate)
+echo "=== gh_issue_list_rest (edge cases) ==="
+
+echo "Test: empty result -- helper returns [] with length 0"
+setup
+# Create the call-log file before invocation so the grep assertion below has a
+# valid target even if gh is never called.
+: > "$STUB_DIR/gh-issue-list-rest-calls.log"
+actual_empty=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --label dispatch-test-empty)
+assert_eq "empty result: length == 0" "0" "$(jq 'length' <<<"$actual_empty")"
+assert_eq "empty result: .[0].number is absent" "" "$(jq -r '.[0].number // empty' <<<"$actual_empty")"
+# No --limit was passed, so the helper must take the full-paginate path.
+if grep -q -- '--paginate' "$STUB_DIR/gh-issue-list-rest-calls.log"; then
+  assert_eq "empty result: log contains --paginate" "yes" "yes"
+else
+  assert_eq "empty result: log contains --paginate" "yes" "no"
+fi
+teardown
+
+echo "Test: pagination boundary -- two pages merged, all numbers present, PR objects filtered"
+setup
+# Page 1: two real issues + one object with pull_request key (must be filtered out).
+printf '%s\n' '[
+  {"number":101,"created_at":"2024-01-01T00:00:00Z","closed_at":null,"labels":[]},
+  {"number":102,"created_at":"2024-01-02T00:00:00Z","closed_at":null,"labels":[],"pull_request":{"merged_at":null}},
+  {"number":103,"created_at":"2024-01-03T00:00:00Z","closed_at":null,"labels":[]}
+]' > "$STUB_DIR/rest-page-1.json"
+# Page 2: two more real issues on a distinct page.
+printf '%s\n' '[
+  {"number":201,"created_at":"2024-01-04T00:00:00Z","closed_at":null,"labels":[]},
+  {"number":202,"created_at":"2024-01-05T00:00:00Z","closed_at":null,"labels":[]}
+]' > "$STUB_DIR/rest-page-2.json"
+# Create the call-log file before invocation so the grep assertion below has a
+# valid target even if gh is never called.
+: > "$STUB_DIR/gh-issue-list-rest-calls.log"
+actual_pag=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --label dispatch-test-paginate)
+# Page-1 issue numbers 101 and 103 must appear (PR object 102 must NOT).
+assert_eq "paginate: issue 101 present" "true" "$(jq 'any(.[]; .number == 101)' <<<"$actual_pag")"
+assert_eq "paginate: issue 103 present" "true" "$(jq 'any(.[]; .number == 103)' <<<"$actual_pag")"
+# Page-2 numbers must also appear -- proves jq -s 'add' merged both pages.
+assert_eq "paginate: issue 201 present" "true" "$(jq 'any(.[]; .number == 201)' <<<"$actual_pag")"
+assert_eq "paginate: issue 202 present" "true" "$(jq 'any(.[]; .number == 202)' <<<"$actual_pag")"
+# PR object 102 must be absent (helper filters .pull_request != null).
+assert_eq "paginate: PR object 102 filtered out" "false" "$(jq 'any(.[]; .number == 102)' <<<"$actual_pag")"
+# No --limit was passed, so the helper must take the --paginate path. This pins
+# the code path: a regression to single-page would still merge the two fixture
+# pages here but would not pass --paginate.
+if grep -q -- '--paginate' "$STUB_DIR/gh-issue-list-rest-calls.log"; then
+  assert_eq "paginate: log contains --paginate" "yes" "yes"
+else
+  assert_eq "paginate: log contains --paginate" "yes" "no"
+fi
+teardown
+
+echo "Test: --limit flag -- single-page branch (per_page=limit, no --paginate)"
+setup
+printf '%s\n' '[
+  {"number":301,"created_at":"2024-01-06T00:00:00Z","closed_at":null,"labels":[]},
+  {"number":302,"created_at":"2024-01-07T00:00:00Z","closed_at":null,"labels":[]},
+  {"number":303,"created_at":"2024-01-08T00:00:00Z","closed_at":null,"labels":[]}
+]' > "$STUB_DIR/rest-limit.json"
+# Create the call-log file before invocation so the grep assertions below have a
+# valid target even if gh is never called.
+: > "$STUB_DIR/gh-issue-list-rest-calls.log"
+actual_lim=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --limit 50 --label dispatch-test-limit)
+assert_eq "limit: result length matches fixture (3 items)" "3" "$(jq 'length' <<<"$actual_lim")"
+# The call log must contain per_page=50 (limit was passed through) ...
+# Anchor with a trailing non-digit so this cannot spuriously match per_page=500.
+if grep -q 'per_page=50[^0-9]' "$STUB_DIR/gh-issue-list-rest-calls.log"; then
+  assert_eq "limit: log contains per_page=50" "yes" "yes"
+else
+  assert_eq "limit: log contains per_page=50" "yes" "no"
+fi
+# ... and must NOT contain --paginate (single-page branch was taken).
+if grep -q -- '--paginate' "$STUB_DIR/gh-issue-list-rest-calls.log"; then
+  assert_eq "limit: log does not contain --paginate" "no" "yes"
+else
+  assert_eq "limit: log does not contain --paginate" "no" "no"
+fi
+teardown
+
+echo "Test: gh-failure -- both branches return non-zero with diagnostic stderr"
+setup
+: > "$STUB_DIR/gh-issue-list-rest-calls.log"
+: > "$STUB_DIR/gh-fail-rest"
+rc_fail=0
+err_fail=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --label dispatch-test-empty 2>&1 >/dev/null) || rc_fail=$?
+assert_eq "gh-failure: --paginate branch returns non-zero" "1" "$rc_fail"
+case "$err_fail" in *"gh_issue_list_rest: gh api failed"*) m=yes ;; *) m=no ;; esac
+assert_eq "gh-failure: stderr names the helper failure" "yes" "$m"
+rc_fail_lim=0
+err_fail_lim=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --limit 50 --label dispatch-test-empty 2>&1 >/dev/null) || rc_fail_lim=$?
+assert_eq "gh-failure: single-page branch returns non-zero" "1" "$rc_fail_lim"
+case "$err_fail_lim" in *"gh_issue_list_rest: gh api failed"*) m_lim=yes ;; *) m_lim=no ;; esac
+assert_eq "gh-failure: single-page stderr names the helper failure" "yes" "$m_lim"
+teardown
+
+echo "Test: --repo flag -- cross-repo path uses owner/other-repo segment, not placeholder"
+setup
+: > "$STUB_DIR/gh-issue-list-rest-calls.log"
+actual_repo=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --repo owner/other-repo --label dispatch-test-empty)
+if grep -q 'repos/owner/other-repo/issues' "$STUB_DIR/gh-issue-list-rest-calls.log"; then seg=yes; else seg=no; fi
+assert_eq "--repo: API path uses cross-repo segment" "yes" "$seg"
+if grep -q 'repos/{owner}/{repo}/issues' "$STUB_DIR/gh-issue-list-rest-calls.log"; then ph=yes; else ph=no; fi
+assert_eq "--repo: placeholder absent from cross-repo call" "no" "$ph"
+assert_eq "--repo: returns the stub's empty array" "[]" "$actual_repo"
+# Single-page (--limit) branch with --repo: pin that the cross-repo segment is
+# emitted under the per_page= (no --paginate) path too, not just --paginate.
+: > "$STUB_DIR/gh-issue-list-rest-calls.log"
+actual_repo_lim=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --limit 50 --repo owner/other-repo --label dispatch-test-empty)
+assert_eq "--repo+--limit: returns the stub's empty array" "[]" "$actual_repo_lim"
+if grep -q 'repos/owner/other-repo/issues' "$STUB_DIR/gh-issue-list-rest-calls.log"; then seg_lim=yes; else seg_lim=no; fi
+assert_eq "--repo+--limit: single-page API path uses cross-repo segment" "yes" "$seg_lim"
+# Prove it was the single-page branch (not --paginate) that emitted the segment.
+if grep -q 'per_page=50[^0-9]' "$STUB_DIR/gh-issue-list-rest-calls.log"; then
+  assert_eq "--repo+--limit: log contains per_page=50" "yes" "yes"
+else
+  assert_eq "--repo+--limit: log contains per_page=50" "yes" "no"
+fi
+if grep -q -- '--paginate' "$STUB_DIR/gh-issue-list-rest-calls.log"; then
+  assert_eq "--repo+--limit: log does not contain --paginate" "no" "yes"
+else
+  assert_eq "--repo+--limit: log does not contain --paginate" "no" "no"
+fi
 teardown
 
 # ============================================================================
@@ -2599,6 +2836,67 @@ FAKE
   export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/bin/claude"
 }
 
+# office_hours_state_fake_claude — fake `claude` for the state-gated office-hours
+# selector + entry path (#2011). Each argument is a `name:state` pair; each pair
+# `<name>:<state>` produces one session row:
+#   sessionId = "s-<name>", id = "j-<name>"  (DISTINCT, so an entry test proves
+#                                              attach uses the job `id`, not the
+#                                              sessionId),
+#   state     = <state>,
+#   status    = "busy" when state == "working", else JSON null (the derived
+#               coarse status — status:"busy" ⟺ state:"working"),
+#   name      = <name>, pid = 1, cwd = "".
+#
+# --all FAITHFULNESS — the load-bearing property. Production hides `done`
+# sessions from the default `claude agents --json` and surfaces them ONLY under
+# `--all`. This fake mirrors that exactly: on `agents`, it scans argv for
+# `--all`; if present it returns the FULL payload (including any `done` rows),
+# and if absent it returns the payload with `done` rows stripped. That faithful
+# behaviour is why a green suite cannot lie: if a future regression drops `--all`
+# from the selector's `claude_sessions_with_name_all` or the entry's
+# attach_session, the `done` row vanishes from that path and the done-attach
+# cases (OHST3f / OH5b) turn red — exactly the regression this unit guards
+# against. (A naive fake that returned `done` regardless of `--all` would let a
+# `--all`-forgetting path still pass.)
+#
+# The fake branches on its first arg: `agents` returns the (possibly
+# done-filtered) JSON payload; any other invocation — `attach <id>` or
+# `/office-hours` — prints `LAUNCH: $*`. Wires both OFFICE_HOURS_CLAUDE_CMD (the
+# entry script's launch + sessionId→job-id resolution) and CLAUDE_AGENTS_CMD
+# (the selector subprocess's state query), mirroring office_hours_fake_claude.
+office_hours_state_fake_claude() {
+  local payload="[" pair name state status_json first=1
+  for pair in "$@"; do
+    name="${pair%%:*}"; state="${pair#*:}"
+    if [[ "$state" == "working" ]]; then status_json='"busy"'; else status_json='null'; fi
+    if (( first )); then first=0; else payload+=","; fi
+    payload+="{\"sessionId\":\"s-$name\",\"id\":\"j-$name\",\"pid\":1,\"state\":\"$state\",\"status\":$status_json,\"name\":\"$name\",\"cwd\":\"\"}"
+  done
+  payload+="]"
+  printf '%s' "$payload" > "$TMPDIR_TEST/claude-payload.json"
+  cat > "$TMPDIR_TEST/bin/claude" <<'FAKE'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "agents" ]]; then
+  PAYLOAD="$(cd "$(dirname "$0")/.." && pwd)/claude-payload.json"
+  # --all faithfulness: a `done` row is visible ONLY when --all is in argv.
+  # Production calls `agents --json --all`, so scan ALL args (not a fixed
+  # position) for --all.
+  for arg in "$@"; do
+    [[ "$arg" == "--all" ]] && { cat "$PAYLOAD"; exit 0; }
+  done
+  # No --all → hide `done` rows, exactly as the real daemon's default query does.
+  jq -c 'map(select(.state != "done"))' "$PAYLOAD"
+  exit 0
+fi
+# A launch (`attach <id>` or `/office-hours`): record which one fired.
+echo "LAUNCH: $*"
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/bin/claude"
+  export OFFICE_HOURS_CLAUDE_CMD="$TMPDIR_TEST/bin/claude"
+  export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/bin/claude"
+}
+
 # 1. A non-QA PR is chosen over a QA PR and a help-wanted issue.
 echo "Test: non-QA PR beats QA PR and issue"
 setup
@@ -4085,6 +4383,59 @@ result=$("$TMPDIR_TEST/dispatch-select-target" --exclude 20)
 assert_eq "excluded PR 20 filtered → empty" "empty" "$result"
 teardown
 
+# 39e. A transient gh API error on root 55's blocker lookup (exit 3 from trace-
+#      leaf) does NOT abort the entire propagation tick (#2005). Covers:
+#        AC #1 — the queue scan continues past the transiently-failing root.
+#        AC #2 — the failed root 55 is NOT dispatched.
+#        AC #4 — select-target exits 0 (tick does not enter the failed state).
+#      Two help-wanted roots: 55 (older, blocker lookup fails transiently) and 66
+#      (newer, fully startable). The selector must skip 55 and select 66.
+echo "Test: transient gh API error on root 55 -> select-target skips it, selects 66"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+: > "$STUB_DIR/gh-fail-blocked_by-55"
+if result=$("$TMPDIR_TEST/dispatch-select-target" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "transient trace fail on root 55 -> select-target still exits 0" "0" "$rc"
+assert_eq "transient trace fail on root 55 -> next startable root 66 selected" "issue 66" "$result"
+teardown
+
+# 39f. The mirror-image of 39e, guarding the exit-1 abort path against a future
+#      refactor that extends the exit-3 skip to exit-1 (the invariant documented
+#      at dispatch-select-target's trace-status block: exit 1 is a usage/program
+#      error — a hard failure affecting every root, never swallowed as a skip).
+#      Same two-root 55/66 fixture as 39e, but dispatch-trace-leaf exits 1
+#      UNCONDITIONALLY. Unlike the exit-3 skip (which continues to root 66), the
+#      exit-1 path must ABORT: select-target exits non-zero and must NOT reach,
+#      let alone select, the otherwise-startable root 66. Test 39 already proves
+#      the single-root exit-1 hard-fail; this adds the two-root case so the
+#      "abort vs skip-and-continue" distinction (the precise opposite of 39e) is
+#      regression-tested — an exit-1-treated-as-exit-3 refactor would surface
+#      "issue 66" here and trip the assertion below.
+echo "Test: trace-leaf exit 1 on root 55 -> select-target aborts, does NOT select 66"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":55,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":66,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+# Replace the copied leaf-trace script with a stub that always exits 1 (a
+# usage/programming error, NOT a transient gh failure). setup re-copies a fresh
+# real trace-leaf for the next test, so this override does not leak.
+cat > "$TMPDIR_TEST/dispatch-trace-leaf" <<'STUB'
+#!/usr/bin/env bash
+echo "error: usage" >&2
+exit 1
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-trace-leaf"
+if result=$("$TMPDIR_TEST/dispatch-select-target" 2>/dev/null); then rc=0; else rc=$?; fi
+[[ "$rc" -ne 0 ]] && rc_nonzero=yes || rc_nonzero=no
+assert_eq "trace-leaf exit 1 on root 55 -> select-target exits non-zero" "yes" "$rc_nonzero"
+[[ "$result" != "issue 66" ]] && not_66=yes || not_66=no
+assert_eq "trace-leaf exit 1 on root 55 -> 66 NOT selected (abort, not skip)" "yes" "$not_66"
+teardown
+
 # --- --top N: single-pass multi-target selection (#1317) ---------------------
 # `--top N` emits up to N DISTINCT ranked decision lines in ONE queue scan,
 # preserving the existing priority order (priority axis 1→0, then topic category,
@@ -4557,6 +4908,238 @@ result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
 assert_eq "--priority-only returns priority issue" "issue 400" "$result"
 teardown
 
+# Build the shared ancestor-priority fixture for the PO-ANC* tests.
+#
+# Args:
+#   $1 depth         — 1 (issues 100/101/200, parent 101->100) or
+#                      2 (issues 100/102/101/200, parent 101->102->100, the
+#                        `priority` label sits on grandparent 100 via neutral 102)
+#   $2 pr20_rollup   — the rollup JSON for PR 20 ($FAILING_ROLLUP for the
+#                      selection tests, $PENDING_ROLLUP for the CI-pending
+#                      waiting-fallback test)
+#
+# Writes pr-list-union.json (PR 10 closes 200 / always $FAILING_ROLLUP;
+# PR 20 closes 101 / $2), issue-list.json, worktree-list.txt, and the parent
+# stub(s) into $STUB_DIR. Caller runs setup first and teardown after.
+#
+# INVARIANT (do NOT change): issue 101 carries ONLY [help wanted] and NEVER an
+# own `priority` label — priority reaches it solely through the ancestor chain.
+# Several callers (esp. PO-ANC5) depend on 101 being non-priority to exercise the
+# correct branch; adding `priority` to 101 here would silently break that
+# coverage for ALL five tests at once. See the PO-ANC5 block comment.
+setup_ancestor_priority_fixture() {
+  local depth="$1" pr20_rollup="$2"
+  local union
+  union='['
+  union+="$(make_pr_union 10 "10-bug-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
+  union+="$(make_pr_union 20 "20-leaf-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$pr20_rollup" '[{"number":101}]')"
+  union+=']'
+  setup_union_pr_list "$union"
+  printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+  if [[ "$depth" == 2 ]]; then
+    printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]},{"number":102,"created_at":"2024-01-01T00:00:00Z","labels":[]},{"number":101,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
+      > "$STUB_DIR/issue-list.json"
+    printf '102' > "$STUB_DIR/parent-101.json"   # 101 -> 102
+    printf '100' > "$STUB_DIR/parent-102.json"   # 102 -> 100 (priority grandparent)
+  else
+    printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]},{"number":101,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
+      > "$STUB_DIR/issue-list.json"
+    printf '100' > "$STUB_DIR/parent-101.json"   # 101 -> 100 (priority epic)
+  fi
+}
+
+# PO-ANC1. A PR whose closing issue carries NO own `priority` label, but whose
+#           ancestor epic IS open and carries `priority`, is lifted into the
+#           priority tier via ancestor inheritance (#1914). In DEFAULT mode this
+#           PR (priority-via-ancestor) outranks an older PR whose closing issue
+#           carries `bug` but no priority. The priority axis is the outermost
+#           sort key, so the inherited-priority PR wins regardless of topic
+#           category or creation order.
+#
+#           Fixture:
+#             issue 100  labels: [priority]        (the open ancestor epic)
+#             issue 101  labels: [help wanted]      (leaf; child of 100 via parent-101.json)
+#             issue 200  labels: [bug]              (unrelated, non-priority issue)
+#             PR 10 (older, 2024-01-01) closes issue 200 (bug, no priority)
+#             PR 20 (newer, 2024-01-02) closes issue 101 (help wanted, no own
+#                     priority — priority only via ancestor 100)
+#           parent-101.json → 100; no parent-100.json; no parent-200.json
+#           issue-list.json: 100, 101, 200 — all open; issue 101 is help-wanted
+#             but has no own `priority` so it stays OUT of the issue priority
+#             tier (ISSUE_SORTED uses own labels only). Issues 100 and 200 lack
+#             `help wanted` and are never startable. The issue queue produces
+#             no priority-1 selection — only the PR path selects here.
+#
+#           This is the ONLY assertion that proves ancestor-priority lifts PR 20
+#           above PR 10. Without ancestor inheritance, both PRs have pri=0 and
+#           PR 10 (older) wins. With it, PR 20 gets pri=1 and wins outright.
+echo "Test: default mode — ancestor priority lifts PR over non-priority PR"
+setup
+setup_ancestor_priority_fixture 1 "$FAILING_ROLLUP"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "ancestor priority lifts PR 20 over older PR 10 (default mode)" "pr 20 20-leaf-pr fix-checks" "$result"
+teardown
+
+# PO-ANC-TRUNC. The depth-7 truncation warning must fire WITHOUT disabling
+#           ancestor-priority evaluation across the supported window. This is a
+#           two-PR contest, not an uncontested selection: without ancestor
+#           inheritance PR 10 wins on the higher `bug` topic category (and is
+#           also older); with it, issue 95's depth-6 priority lifts PR 20 on the
+#           outermost priority axis. So a correct result REQUIRES ancestor
+#           priority to be evaluated correctly across the supported window WHILE
+#           the depth-7 chain trips the truncation warning. Placing `priority`
+#           on the depth-6 (deepest in-window) ancestor proves both happen at
+#           once.
+#
+#           Fixture:
+#             issue 101  labels: [help wanted]   (leaf; closed by PR 20; no own priority)
+#             issue 95   labels: [priority]       (depth-6 ancestor of 101; priority-only)
+#             issue 200  labels: [bug]            (closed by PR 10; no priority)
+#             PR 10 (older, 2024-01-01) closes issue 200 (bug, no priority)
+#             PR 20 (newer, 2024-01-02) closes issue 101 (help wanted, no own
+#                     priority — priority only via depth-6 ancestor 95)
+#           Issue 95 is `priority`-only (NOT `help wanted`), so it never enters
+#           the startable issue queue and acts solely as an inherited-priority
+#           ancestor.
+#           Deep parent chain: 7 parent links (101->100->...->94). The closing
+#           issue 101 MUST itself have parent-101.json or the 7th-hop sentinel
+#           never fires. Issue 95 is the depth-6 (deepest in-window) ancestor;
+#           94 (the 7th-level ancestor) has no parent file. build_parent_json
+#           caps at depth>=7.
+echo "Test: default mode — ancestor chain deeper than supported depth emits truncation warning"
+setup
+UNION='['
+UNION+="$(make_pr_union 10 "10-bug-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
+UNION+="$(make_pr_union 20 "20-deep-chain-leaf" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":101}]')"
+UNION+=']'
+setup_union_pr_list "$UNION"
+printf '[{"number":101,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":95,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+for i in 101 100 99 98 97 96 95; do
+  printf '%d' $((i - 1)) > "$STUB_DIR/parent-$i.json"
+done
+result=$("$TMPDIR_TEST/dispatch-select-target" 2>"$TMPDIR_TEST/stderr") && rc=0 || rc=$?
+stderr=$(cat "$TMPDIR_TEST/stderr")
+assert_eq "deep-chain selection still exits 0" "0" "$rc"
+assert_eq "ancestor priority lifts PR 20 over older PR 10 despite truncation" "pr 20 20-deep-chain-leaf fix-checks" "$result"
+assert_eq "truncation warning on stderr" "1" "$(grep -c 'ancestor chain deeper than supported depth (6) for issue 101' <<<"$stderr")"
+teardown
+
+echo "Test: default mode — ancestor chain at supported depth (6) emits no truncation warning"
+setup
+UNION='['"$(make_pr_union 10 "10-deep-chain-leaf" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":101}]')"']'
+setup_union_pr_list "$UNION"
+printf '[{"number":101,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+# Chain exactly 6 levels deep (101->100->...->95), parent-95.json ABSENT so the
+# 7th .parent hop resolves to null and the sentinel stays silent.
+for i in 101 100 99 98 97 96; do
+  printf '%d' $((i - 1)) > "$STUB_DIR/parent-$i.json"
+done
+result=$("$TMPDIR_TEST/dispatch-select-target" 2>"$TMPDIR_TEST/stderr") && rc=0 || rc=$?
+stderr=$(cat "$TMPDIR_TEST/stderr")
+assert_eq "depth-6 selection exits 0" "0" "$rc"
+assert_eq "uncontested PR selected at depth 6" "pr 10 10-deep-chain-leaf fix-checks" "$result"
+# Harness has no assert_not_contains; assert absence by counting matches.
+assert_eq "no truncation warning at depth 6" "0" "$(grep -c 'ancestor chain deeper' <<<"$stderr")"
+teardown
+
+# PO-ANC2. Same fixture, --priority-only mode. PR 10 (closes issue 200, no priority)
+#           is filtered by the early-skip guard. PR 20 (closes issue 101, no own
+#           priority but ancestor 100 is priority) passes the guard via inherited
+#           priority. The discriminator: without ancestor inheritance --priority-only
+#           returns empty (both bits 0); with it, returns pr 20.
+echo "Test: --priority-only — ancestor priority qualifies PR (PO-ANC2)"
+setup
+setup_ancestor_priority_fixture 1 "$FAILING_ROLLUP"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
+assert_eq "--priority-only ancestor priority qualifies PR 20" "pr 20 20-leaf-pr fix-checks" "$result"
+teardown
+
+# PO-ANC3. Depth-2 ancestor priority. Same shape as PO-ANC1, but the `priority`
+#           label sits on the GRANDPARENT (issue 100), reached through a
+#           NON-priority intermediate parent (issue 102). The assertion passes
+#           only if ancestor detection recurses to depth 2: a 1-level recursion
+#           bug would see only the intermediate 102 (no priority), fail to lift
+#           PR 20, and let the older PR 10 win. So this assertion proves the
+#           depth-2 `recurse`/`.[1:7]` ancestor path detects inherited priority
+#           through a multi-hop chain.
+#
+#           Fixture:
+#             issue 100  labels: [priority]        (open grandparent epic)
+#             issue 102  labels: []                (intermediate parent; NO priority)
+#             issue 101  labels: [help wanted]     (leaf; child of 102 via parent-101.json)
+#             issue 200  labels: [bug]             (unrelated, non-priority issue)
+#             PR 10 (older, 2024-01-01) closes issue 200 (bug, no priority)
+#             PR 20 (newer, 2024-01-02) closes issue 101 (help wanted, no own
+#                     priority — priority only via grandparent 100)
+#           parent-101.json → 102; parent-102.json → 100; no parent-100.json.
+#           Issue 102's neutral labels keep it out of the startable issue queue so
+#           it does not perturb selection. Without depth-2 recursion both PRs have
+#           pri=0 and PR 10 (older) wins; with it PR 20 gets pri=1 and wins.
+echo "Test: default mode — depth-2 ancestor priority lifts PR over non-priority PR"
+setup
+# Fixture written by setup_ancestor_priority_fixture 2: grandparent 100 carries
+# `priority`; neutral intermediate 102 connects 101→102→100 (see helper comment).
+setup_ancestor_priority_fixture 2 "$FAILING_ROLLUP"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "depth-2 ancestor priority lifts PR 20 over older PR 10 (PO-ANC3)" "pr 20 20-leaf-pr fix-checks" "$result"
+teardown
+
+# PO-ANC4. Depth-2 ancestor priority, --priority-only mode. Same fixture as
+#           PO-ANC3, but exercises the `--priority-only` early-skip guard, which
+#           also calls pr_priority_bit (dispatch-select-target line 811-812) and
+#           its depth-2 ANCESTOR_NUMS traversal. PR 10 (closes issue 200, no
+#           priority) is filtered by the guard; PR 20 (closes issue 101, priority
+#           only via grandparent 100 through intermediate 102) passes the guard via
+#           inherited priority. The discriminator: a 1-level recursion bug would see
+#           only the neutral intermediate 102, leave PR 20 with pri=0, and
+#           --priority-only would return empty (both bits 0); with depth-2 recursion
+#           it returns pr 20. Mirrors the PO-ANC1/PO-ANC2 (depth-1) pattern at depth 2.
+echo "Test: --priority-only — depth-2 ancestor priority qualifies PR (PO-ANC4)"
+setup
+setup_ancestor_priority_fixture 2 "$FAILING_ROLLUP"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
+assert_eq "--priority-only depth-2 ancestor priority qualifies PR 20 (PO-ANC4)" "pr 20 20-leaf-pr fix-checks" "$result"
+teardown
+
+# PO-ANC5. Same fixture as PO-ANC2 but PR 20's rollup is PENDING, not FAILING.
+#           This exercises the CI-pending ancestor-priority WAITING_NUM FALLBACK
+#           path — the orthogonal case to PO-ANC1/PO-ANC2's *selection* assertions.
+#
+#           PR 20 qualifies for the priority tier (ci_rc path at line 849 checks
+#           --priority-only + inherited ancestor priority to enter WAITING_NUM arm).
+#           Its CI is pending (ci_rc==1), so it is NOT selectable. The selector
+#           emits `waiting <first-closing-issue-num>` from the fallback arm of the
+#           jq at dispatch-select-target:864-869:
+#
+#             ( map(.number|tostring|select(own-priority-label?)) | .[0] )
+#             // ( [.[].number|tostring] | .[0] )
+#             // empty
+#
+#           CRITICAL INVARIANT — do NOT change this: issue 101 carries ONLY
+#           [help wanted] and has NO own `priority` label. Priority comes solely
+#           from ancestor 100 (via parent-101.json). This is exactly what forces
+#           the jq FALLBACK arm: the first arm (select own priority-labeled issues)
+#           returns null because 101 is not directly priority-labeled, so the
+#           fallback `[.[].number|tostring]|.[0]` resolves to "101". If anyone
+#           adds `priority` to issue 101, the FIRST arm would fire and also return
+#           101 — the assertion would still pass while silently testing the WRONG
+#           branch. So 101 MUST stay non-priority. A broken fallback arm yields
+#           `empty` (no `waiting` line; the PR falls through), not `waiting 101`.
+#
+#           PR 10 (older, closes issue 200, $FAILING_ROLLUP) is dropped by the
+#           --priority-only early-skip guard (issue 200 has `bug` only, no priority,
+#           no ancestor with priority), proving the ancestor-priority PR is the only
+#           candidate and does not interfere with the waiting result.
+echo "Test: --priority-only — CI-pending ancestor priority → waiting fallback (PO-ANC5)"
+setup
+setup_ancestor_priority_fixture 1 "$PENDING_ROLLUP"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
+assert_eq "--priority-only CI-pending ancestor priority → waiting (fallback target) (PO-ANC5)" \
+  "waiting 101" "$result"
+teardown
+
 # PO3. main is red and no latch issue open → main-broken fires first, before the
 #      priority scan (the gate runs ahead of the ladder, same as default mode).
 echo "Test: --priority-only — main red, no latch → main-broken (gate first)"
@@ -4822,6 +5405,34 @@ printf '[{"number":30,"created_at":"2024-01-03T00:00:00Z","labels":[{"name":"hel
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 "$TMPDIR_TEST/dispatch-select-target" --priority-only --top 3 >/dev/null 2>&1 && rc=0 || rc=$?
 assert_eq "--priority-only --top 3 → exit 0 (no rejection)" "0" "$rc"
+teardown
+
+# PT6. Shared startable leaf across sibling roots is emitted EXACTLY ONCE (#1915).
+#      Two distinct help-wanted+priority roots 1858 and 1861 carry the SAME topic
+#      category (dispatch), so they fall in ONE (category, priority, enh, phase)
+#      bucket. Both roots descend (via their sub-issues) to the SAME startable
+#      leaf 1863. Before the fix, each root re-seeded `root_excl` only from the
+#      frozen global EXCLUDED and `bucket_append` did no value-level dedup, so the
+#      leaf recorded while descending root 1858 was not excluded when sibling root
+#      1861 descended to it — emitting `issue 1863` twice and inflating N_PRIO.
+#      The fix records every successfully-appended leaf in a global
+#      RECORDED_LEAVES set and, at TOP>1, seeds each root's `root_excl` from it,
+#      so a leaf reached from a sibling root is skipped. Run at --top 3 (NOT
+#      --top 1): the TOP=1 byte-identity guard means the cross-root dedup is a
+#      TOP>1 concern. Assert the shared leaf appears exactly once.
+echo "Test: --priority-only --top 3 shared leaf across sibling roots emitted once (#1915)"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":1858,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"dispatch"}]},{"number":1861,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"dispatch"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+# Both sibling roots descend to the SAME shared leaf 1863 via their sub-issues.
+printf '[{"number":1863}]\n' > "$STUB_DIR/subissues-1858.json"
+printf '[{"number":1863}]\n' > "$STUB_DIR/subissues-1861.json"
+printf '{"title":"Issue 1863","body":"","comments":[],"number":1863,"state":"OPEN"}\n' > "$STUB_DIR/issue-1863.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only --top 3)
+assert_eq "--priority-only --top 3 shared leaf 1863 emitted exactly once" "1" "$(printf '%s\n' "$result" | grep -c '^issue 1863$')"
+assert_eq "--priority-only --top 3 shared leaf → single issue line" "issue 1863" "$result"
 teardown
 
 # ============================================================================
@@ -5305,47 +5916,136 @@ result=$("$TMPDIR_TEST/office-hours-select-target")
 assert_eq "qa item selected with its PR number" "office-hours 50 qa 7 -" "$result"
 teardown
 
-# OHST3. The oldest labeled item whose <N>-* worktree has a live session is
-# ATTACHED — live wins over a sessionless newer sibling.
-echo "Test: oldest live-session item is attached (live wins over fresh sibling)"
+# OHST3. The oldest labeled item whose <N>-* worktree has an idle (attachable)
+# session is ATTACHED — idle wins over a sessionless newer sibling.
+echo "Test: oldest idle-session item is attached (idle wins over fresh sibling)"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/oh-issue-list.json"
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
   > "$STUB_DIR/worktree-list.txt"
-select_target_fake_claude "42-x"   # 42's worktree has a live session; 99 sessionless
+office_hours_state_fake_claude "42-x:waiting"   # 42's session is idle; 99 sessionless
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "live item attached over sessionless sibling 99" "live s-42-x" "$result"
+assert_eq "idle item attached over sessionless sibling 99" "idle s-42-x" "$result"
 teardown
 
-# OHST3b. Two labeled items both live → attach the oldest one's session
+# OHST3b. Two labeled items both idle → attach the oldest one's session
 # (mirrors OH2 on the entry-point side).
-echo "Test: two live items → oldest attached"
+echo "Test: two idle items → oldest attached"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/oh-issue-list.json"
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\nworktree /worktrees/99-y\nHEAD aaa111\nbranch refs/heads/99-y\n\n' \
   > "$STUB_DIR/worktree-list.txt"
-select_target_fake_claude "42-x" "99-y"   # both worktrees live
+office_hours_state_fake_claude "42-x:waiting" "99-y:waiting"   # both idle
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "oldest of two live items attached" "live s-42-x" "$result"
+assert_eq "oldest of two idle items attached" "idle s-42-x" "$result"
 teardown
 
-# OHST3c. Older sessionless item + newer live item → attach the live one
-# (mirrors OH5: live wins regardless of age order).
-echo "Test: older sessionless + newer live → attach the live one"
+# OHST3c. Older sessionless item + newer idle item → attach the idle one
+# (mirrors OH5: idle wins regardless of age order).
+echo "Test: older sessionless + newer idle → attach the idle one"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/oh-issue-list.json"
 echo '[]' > "$STUB_DIR/pr-list-full.json"
-# 42 (older) has no worktree at all → sessionless; 99 (newer) has a live worktree.
+# 42 (older) has no worktree at all → sessionless; 99 (newer) has an idle worktree.
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/99-y\nHEAD aaa111\nbranch refs/heads/99-y\n\n' \
   > "$STUB_DIR/worktree-list.txt"
-select_target_fake_claude "99-y"   # only 99's worktree is live
+office_hours_state_fake_claude "99-y:idle"   # only 99's worktree is idle (attachable)
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "live item attached regardless of age order" "live s-99-y" "$result"
+assert_eq "idle item attached regardless of age order" "idle s-99-y" "$result"
+teardown
+
+# OHST3d. Working-skip, sibling chosen: 42 (older) has a `working` session in its
+# worktree → SKIPPED (rc 3, not fresh-launched); 99 (newer) is sessionless → it
+# wins fresh. Proves a working session is neither attached nor mistaken for fresh.
+echo "Test: working-session item skipped → sessionless sibling chosen fresh"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+# 42 has a worktree (its session is working → skipped); 99 has none → sessionless.
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+office_hours_state_fake_claude "42-x:working"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "working item skipped; sessionless sibling 99 chosen fresh" "office-hours 99 plan - -" "$result"
+teardown
+
+# OHST3e. Working-skip, lone → empty: the only labeled item (42) has a `working`
+# session → skipped (rc 3), so it is neither attached nor fresh-launched. With no
+# other item and no parked `dispatch-*` router under main, the selector emits
+# `empty`. (The fall-through reaches the parked-router block, so point it at a
+# controlled main-worktree path where the fake daemon reports no router; the
+# working row's name is `42-x`, not `dispatch-*`, so it cannot false-match.)
+echo "Test: lone working item → neither attached nor fresh → empty"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+office_hours_state_fake_claude "42-x:working"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "lone working item → empty" "empty" "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
+# OHST3f. Done-attach (selector, --all-faithful): the only labeled item (42) has
+# a `done` session in its worktree → ATTACH. The selector sees the `done` row
+# ONLY because claude_sessions_with_name_all passes `--all`; the faithful fake
+# strips `done` rows when `--all` is absent, so a regression that dropped `--all`
+# would hide the row and turn this case red. This is the selector-side proof that
+# the selector queries with `--all`.
+echo "Test: done-session item attached (proves selector passes --all)"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+office_hours_state_fake_claude "42-x:done"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "done session is attachable (visible only under --all)" "idle s-42-x" "$result"
+teardown
+
+# OHST3g. Stopped-exclude: the only labeled item (42) has a `stopped` session →
+# EXCLUDED from attach (skip, like working) and not fresh-launched. With no other
+# item and no parked `dispatch-*` router under main → `empty`.
+echo "Test: lone stopped item → excluded from attach, not fresh → empty"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+office_hours_state_fake_claude "42-x:stopped"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "lone stopped item → empty" "empty" "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
+# OHST3h. Two-name skip-then-attach: the only labeled item (42) has TWO sessions
+# in its one worktree — the basename name (`42-x`) is `working` (queried first,
+# not attachable, skip) and the `office-hours-42` name is `waiting` (attachable).
+# The inner two-name loop must keep looking PAST the basename skip and return the
+# attachable `office-hours-42` session. A regression that turned `saw_skip=1` into
+# an immediate `return 3` would skip the issue and emit `empty` instead — every
+# other OHST3* case pairs exactly one name:state per issue, so only this case
+# exercises the continue-past-skip branch.
+echo "Test: basename working + office-hours-N waiting → attach the waiting one (continue past skip)"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+office_hours_state_fake_claude "42-x:working" "office-hours-42:waiting"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "skip basename working, attach office-hours-42 waiting" "idle s-office-hours-42" "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
 # OHST4. An empty office-hours queue with no parked router prints `empty`. The
@@ -5533,27 +6233,28 @@ echo "=== office-hours (entry point) ==="
 # case asserts which launch fired (or that none did). The fake's sessionId
 # convention is `s-<worktree-basename>`.
 
-# OH1. One labeled item whose <N>-* worktree has a live session → attach it.
-echo "Test: live-session labeled item → attach its session"
+# OH1. One labeled item whose <N>-* worktree has an idle (attachable) session →
+# attach it. The entry handles the renamed `idle` verb (was `live`).
+echo "Test: idle-session labeled item → attach its session"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
   > "$STUB_DIR/worktree-list.txt"
-office_hours_fake_claude "42-x"   # 42's worktree has a live session
+office_hours_state_fake_claude "42-x:waiting"   # 42's worktree has an idle session
 result=$("$TMPDIR_TEST/office-hours")
-assert_eq "attaches the live session by its job id" "LAUNCH: attach j-42-x" "$result"
+assert_eq "attaches the idle session by its job id" "LAUNCH: attach j-42-x" "$result"
 teardown
 
-# OH2. Two labeled items both live → attach the oldest one's session.
-echo "Test: two live items → attach the oldest"
+# OH2. Two labeled items both idle → attach the oldest one's session.
+echo "Test: two idle items → attach the oldest"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/oh-issue-list.json"
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\nworktree /worktrees/99-y\nHEAD aaa111\nbranch refs/heads/99-y\n\n' \
   > "$STUB_DIR/worktree-list.txt"
-office_hours_fake_claude "42-x" "99-y"   # both worktrees live
+office_hours_state_fake_claude "42-x:waiting" "99-y:waiting"   # both worktrees idle
 result=$("$TMPDIR_TEST/office-hours")
-assert_eq "attaches the oldest live item's session by its job id" "LAUNCH: attach j-42-x" "$result"
+assert_eq "attaches the oldest idle item's session by its job id" "LAUNCH: attach j-42-x" "$result"
 teardown
 
 # OH3. Labeled items but none with a live session → launch the fresh /office-hours
@@ -5584,17 +6285,17 @@ oh_pwd=$(head -1 "$TMPDIR_TEST/oh-pwd-log" 2>/dev/null || true)
 assert_eq "fresh: spawn cwd is the worktree" "$(realpath "$TMPDIR_TEST/worktrees/42-x")" "$(realpath "$oh_pwd" 2>/dev/null)"
 teardown
 
-# OH3c. A labeled item whose worktree has a live session named office-hours-<N>
+# OH3c. A labeled item whose worktree has an idle session named office-hours-<N>
 # (the renamed office-hours session, #1311) → attach it directly. Before the
 # two-name fix the selector keyed only on the basename and missed it.
-echo "Test: live office-hours-<N> session → selector attaches it directly"
+echo "Test: idle office-hours-<N> session → selector attaches it directly"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
   > "$STUB_DIR/worktree-list.txt"
-office_hours_fake_claude "office-hours-42"   # the live session is the office-hours-<N> one
+office_hours_state_fake_claude "office-hours-42:waiting"   # idle office-hours-<N> session
 result=$("$TMPDIR_TEST/office-hours")
-assert_eq "attaches the live office-hours-<N> session by its job id" "LAUNCH: attach j-office-hours-42" "$result"
+assert_eq "attaches the idle office-hours-<N> session by its job id" "LAUNCH: attach j-office-hours-42" "$result"
 teardown
 
 # OH3b. Sessionless item with NO <N>-* worktree on disk (the worktree was swept) →
@@ -5624,18 +6325,50 @@ assert_eq "empty queue → queue-empty message, no launch" "office-hours: queue 
 unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
-# OH5. Mixed: an older sessionless item + a newer live-session item → attach the
-# live one (live wins over fresh whenever any labeled item is live).
-echo "Test: older sessionless + newer live → attach the live one"
+# OH5. Mixed: an older sessionless item + a newer idle-session item → attach the
+# idle one (idle wins over fresh whenever any labeled item is attachable).
+echo "Test: older sessionless + newer idle → attach the idle one"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
   > "$STUB_DIR/oh-issue-list.json"
-# 42 (older) has no worktree at all → sessionless; 99 (newer) has a live worktree.
+# 42 (older) has no worktree at all → sessionless; 99 (newer) has an idle worktree.
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/99-y\nHEAD aaa111\nbranch refs/heads/99-y\n\n' \
   > "$STUB_DIR/worktree-list.txt"
-office_hours_fake_claude "99-y"   # only 99's worktree is live
+office_hours_state_fake_claude "99-y:idle"   # only 99's worktree is idle
 result=$("$TMPDIR_TEST/office-hours")
-assert_eq "live wins over fresh whenever any labeled item is live" "LAUNCH: attach j-99-y" "$result"
+assert_eq "idle wins over fresh whenever any labeled item is attachable" "LAUNCH: attach j-99-y" "$result"
+teardown
+
+# OH5b. Done-attach (entry, end-to-end, --all-faithful): one labeled item (42)
+# with a `done` session in its worktree. The selector emits `idle s-42-x` (it
+# passed `--all`, so it saw the `done` row), and the entry's attach_session
+# resolves s-42-x → j-42-x via `agents --json --all`. With the faithful fake the
+# entry can ONLY resolve the `done` row because Unit 3's attach_session passes
+# `--all`; a regression dropping it would hide the row and turn this red. This is
+# the end-to-end (selector + entry) proof that both ends query with `--all`.
+echo "Test: done-session item → end-to-end attach (proves both ends pass --all)"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+office_hours_state_fake_claude "42-x:done"
+result=$("$TMPDIR_TEST/office-hours")
+assert_eq "done session attached end-to-end by its job id" "LAUNCH: attach j-42-x" "$result"
+teardown
+
+# OH5c. Working-skip (entry): a lone labeled item (42) whose session is `working`
+# → the selector skips it (neither attach nor fresh) and, with no parked router,
+# emits `empty`; the entry prints the queue-empty message and launches nothing.
+echo "Test: lone working item → queue-empty message, no launch"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+office_hours_state_fake_claude "42-x:working"
+result=$("$TMPDIR_TEST/office-hours")
+assert_eq "lone working item → queue-empty message, no launch" "office-hours: queue is empty — nothing to resume or start." "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
 # OH6. UNKNOWN daemon (claude unqueryable). Under the single fail-safe convention
@@ -5985,34 +6718,34 @@ result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue")
 assert_eq "queue: child with one live worktree among many skipped → sibling 702" "702" "$result"
 teardown
 
-# 13. issue-blocking failure → hard error (exit 1), never emits N as a leaf.
-echo "Test: issue-blocking failure → exit 1, no leaf emitted"
+# 13. issue-blocking failure → hard error (exit 3), never emits N as a leaf.
+echo "Test: issue-blocking failure → exit 3, no leaf emitted"
 setup
 # No stub files: 800 would otherwise resolve as a childless leaf. The injected
 # blocked_by failure must abort instead of mis-classifying 800 as startable.
 : > "$STUB_DIR/gh-fail-blocked_by-800"
 stdout=$("$TMPDIR_TEST/dispatch-trace-leaf" "800" "queue" 2>/dev/null) && rc=0 || rc=$?
-assert_eq "issue-blocking failure → exit 1" "1" "$rc"
+assert_eq "issue-blocking failure → exit 3" "3" "$rc"
 assert_eq "issue-blocking failure → no leaf on stdout" "" "$stdout"
 teardown
 
 # 14. issue-sub-issues failure → same hard error. issue-blocking succeeds
 #     (empty = no blockers), then the sub_issues lookup fails.
-echo "Test: issue-sub-issues failure → exit 1, no leaf emitted"
+echo "Test: issue-sub-issues failure → exit 3, no leaf emitted"
 setup
 : > "$STUB_DIR/gh-fail-sub_issues-800"
 stdout=$("$TMPDIR_TEST/dispatch-trace-leaf" "800" "queue" 2>/dev/null) && rc=0 || rc=$?
-assert_eq "issue-sub-issues failure → exit 1" "1" "$rc"
+assert_eq "issue-sub-issues failure → exit 3" "3" "$rc"
 assert_eq "issue-sub-issues failure → no leaf on stdout" "" "$stdout"
 teardown
 
-# 15. issue-blocking failure in explicit mode → exit 1, NOT the cycle-fallback
+# 15. issue-blocking failure in explicit mode → exit 3, NOT the cycle-fallback
 #     "print N".
-echo "Test: issue-blocking failure (explicit) → exit 1, not cycle-fallback"
+echo "Test: issue-blocking failure (explicit) → exit 3, not cycle-fallback"
 setup
 : > "$STUB_DIR/gh-fail-blocked_by-800"
 stdout=$("$TMPDIR_TEST/dispatch-trace-leaf" "800" "explicit" 2>/dev/null) && rc=0 || rc=$?
-assert_eq "issue-blocking failure (explicit) → exit 1" "1" "$rc"
+assert_eq "issue-blocking failure (explicit) → exit 3" "3" "$rc"
 assert_eq "issue-blocking failure (explicit) → no N printed" "" "$stdout"
 teardown
 
@@ -6022,12 +6755,12 @@ teardown
 #     it is 801's blocker lookup that fails — exercising the `rc -eq 3` branch
 #     in find_leaf's descent loop, which must carry the hard error up rather
 #     than mask it as "no leaf in this subtree".
-echo "Test: gh failure one level deep → re-propagated, exit 1"
+echo "Test: gh failure one level deep → re-propagated, exit 3"
 setup
 printf '[{"number":801}]\n' > "$STUB_DIR/subissues-800.json"
 : > "$STUB_DIR/gh-fail-blocked_by-801"
 stdout=$("$TMPDIR_TEST/dispatch-trace-leaf" "800" "queue" 2>/dev/null) && rc=0 || rc=$?
-assert_eq "deep gh failure → exit 1" "1" "$rc"
+assert_eq "deep gh failure → exit 3" "3" "$rc"
 assert_eq "deep gh failure → no leaf on stdout" "" "$stdout"
 teardown
 
@@ -6347,6 +7080,248 @@ assert_eq "403 auth → 1 attempt (fail fast)" "1" "$(cat "$TMPDIR_TEST/c-e")"
 teardown
 
 # ============================================================================
+# playwright_install_with_deps tests
+# ============================================================================
+echo ""
+echo "=== playwright_install_with_deps ==="
+
+# Group-local stub writers (not hoisted into setup() — other groups rely on
+# real timeout/sleep for hang protection). Each writes to $TMPDIR_TEST/bin,
+# already first on PATH.
+write_playwright_npx_stub() {
+  cat > "$TMPDIR_TEST/bin/npx" <<'FAKE'
+#!/usr/bin/env bash
+cf="$NPX_COUNT_FILE"
+c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
+exit "${NPX_EXIT:-0}"
+FAKE
+  chmod +x "$TMPDIR_TEST/bin/npx"
+}
+write_playwright_hang_stubs() {
+  cat > "$TMPDIR_TEST/bin/timeout" <<'FAKE'
+#!/usr/bin/env bash
+while [[ "$1" == -* ]]; do shift; done
+shift
+exec "$@"
+FAKE
+  chmod +x "$TMPDIR_TEST/bin/timeout"
+  cat > "$TMPDIR_TEST/bin/sleep" <<'FAKE'
+#!/usr/bin/env bash
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/bin/sleep"
+}
+
+# 1. Skip-guard: PLAYWRIGHT_BROWSERS_PATH set → return 0, 0 npx calls.
+echo "Test: playwright_install_with_deps skip-guard → rc 0, 0 npx calls"
+setup
+write_playwright_npx_stub
+NPX_COUNT_FILE="$TMPDIR_TEST/npx-1"
+(
+  source "$TMPDIR_TEST/lib.sh"
+  export PLAYWRIGHT_BROWSERS_PATH=/nix/some/path
+  export NPX_COUNT_FILE="$TMPDIR_TEST/npx-1"
+  playwright_install_with_deps
+)
+rc=$?
+count=$( [[ -f "$NPX_COUNT_FILE" ]] && cat "$NPX_COUNT_FILE" || echo 0 )
+assert_eq "skip-guard → rc 0" "0" "$rc"
+assert_eq "skip-guard → 0 npx calls" "0" "$count"
+teardown
+
+# 2. First-attempt success: npx exits 0 → rc 0, exactly 1 npx call.
+echo "Test: playwright_install_with_deps first-attempt success → rc 0, 1 npx call"
+setup
+cat > "$TMPDIR_TEST/bin/npx" <<'FAKE'
+#!/usr/bin/env bash
+cf="$NPX_COUNT_FILE"
+c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
+[[ -n "${NPX_ARGS_FILE:-}" ]] && echo "$@" >> "$NPX_ARGS_FILE"
+exit "${NPX_EXIT:-0}"
+FAKE
+chmod +x "$TMPDIR_TEST/bin/npx"
+cat > "$TMPDIR_TEST/bin/timeout" <<'FAKE'
+#!/usr/bin/env bash
+[[ -n "${TIMEOUT_LOG_FILE:-}" ]] && echo "$@" >> "$TIMEOUT_LOG_FILE"
+while [[ "$1" == -* ]]; do shift; done
+shift
+exec "$@"
+FAKE
+chmod +x "$TMPDIR_TEST/bin/timeout"
+cat > "$TMPDIR_TEST/bin/sleep" <<'FAKE'
+#!/usr/bin/env bash
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/bin/sleep"
+NPX_COUNT_FILE="$TMPDIR_TEST/npx-2"
+TIMEOUT_LOG_FILE="$TMPDIR_TEST/timeout-calls-2.log"
+NPX_ARGS_FILE="$TMPDIR_TEST/npx-args-2"
+rc=0
+(
+  source "$TMPDIR_TEST/lib.sh"
+  unset PLAYWRIGHT_BROWSERS_PATH
+  export NPX_EXIT=0
+  export NPX_COUNT_FILE="$TMPDIR_TEST/npx-2"
+  export TIMEOUT_LOG_FILE="$TMPDIR_TEST/timeout-calls-2.log"
+  export NPX_ARGS_FILE="$TMPDIR_TEST/npx-args-2"
+  playwright_install_with_deps
+) || rc=$?
+assert_eq "first-attempt success → rc 0" "0" "$rc"
+assert_eq "first-attempt success → 1 npx call" "1" "$(cat "$NPX_COUNT_FILE")"
+timeout_calls=$( [[ -s "$TIMEOUT_LOG_FILE" ]] && echo nonempty || echo empty )
+assert_eq "first-attempt success → timeout invoked" "nonempty" "$timeout_calls"
+assert_eq "first-attempt success → npx args" \
+  "playwright install --with-deps chromium" \
+  "$( [[ -f "$NPX_ARGS_FILE" ]] && cat "$NPX_ARGS_FILE" || echo '<file missing>' )"
+teardown
+
+# 3. Both attempts fail: npx exits 1 twice → rc non-zero, exactly 2 npx calls.
+echo "Test: playwright_install_with_deps both-attempts fail → rc non-zero, 2 npx calls"
+setup
+cat > "$TMPDIR_TEST/bin/npx" <<'FAKE'
+#!/usr/bin/env bash
+cf="$NPX_COUNT_FILE"
+c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
+[[ -n "${NPX_ARGS_FILE:-}" ]] && echo "$@" >> "$NPX_ARGS_FILE"
+exit "${NPX_EXIT:-0}"
+FAKE
+chmod +x "$TMPDIR_TEST/bin/npx"
+cat > "$TMPDIR_TEST/bin/timeout" <<'FAKE'
+#!/usr/bin/env bash
+[[ -n "${TIMEOUT_LOG_FILE:-}" ]] && echo "$@" >> "$TIMEOUT_LOG_FILE"
+while [[ "$1" == -* ]]; do shift; done
+shift
+exec "$@"
+FAKE
+chmod +x "$TMPDIR_TEST/bin/timeout"
+cat > "$TMPDIR_TEST/bin/sleep" <<'FAKE'
+#!/usr/bin/env bash
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/bin/sleep"
+NPX_COUNT_FILE="$TMPDIR_TEST/npx-3"
+TIMEOUT_LOG_FILE="$TMPDIR_TEST/timeout-calls-3.log"
+NPX_ARGS_FILE="$TMPDIR_TEST/npx-args-3"
+rc=0
+(
+  source "$TMPDIR_TEST/lib.sh"
+  unset PLAYWRIGHT_BROWSERS_PATH
+  export NPX_EXIT=1
+  export PLAYWRIGHT_INSTALL_ATTEMPTS=2
+  export NPX_COUNT_FILE="$TMPDIR_TEST/npx-3"
+  export TIMEOUT_LOG_FILE="$TMPDIR_TEST/timeout-calls-3.log"
+  export NPX_ARGS_FILE="$TMPDIR_TEST/npx-args-3"
+  playwright_install_with_deps 2>/dev/null
+) || rc=$?
+[[ "$rc" -ne 0 ]] && rc_state="nonzero" || rc_state="zero"
+assert_eq "both-attempts fail → rc non-zero" "nonzero" "$rc_state"
+assert_eq "both-attempts fail → 2 npx calls" "2" "$(cat "$NPX_COUNT_FILE")"
+timeout_calls=$( [[ -s "$TIMEOUT_LOG_FILE" ]] && echo nonempty || echo empty )
+assert_eq "both attempts fail → timeout invoked" "nonempty" "$timeout_calls"
+assert_eq "both-attempts fail → npx args (retry path)" \
+  $'playwright install --with-deps chromium\nplaywright install --with-deps chromium' \
+  "$( [[ -f "$NPX_ARGS_FILE" ]] && cat "$NPX_ARGS_FILE" || echo '<file missing>' )"
+teardown
+
+# 4. First attempt fails, second succeeds: npx exits 1 then 0 → rc 0, 2 npx calls.
+#    Exercises the retry loop's core recovery behavior (the #1899 motivation).
+echo "Test: playwright_install_with_deps first fails then succeeds → rc 0, 2 npx calls"
+setup
+cat > "$TMPDIR_TEST/bin/npx" <<'FAKE'
+#!/usr/bin/env bash
+cf="$NPX_COUNT_FILE"
+c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
+[[ -n "${NPX_ARGS_FILE:-}" ]] && echo "$@" >> "$NPX_ARGS_FILE"
+if [[ "$c" -le 1 ]]; then exit 1; else exit 0; fi
+FAKE
+chmod +x "$TMPDIR_TEST/bin/npx"
+cat > "$TMPDIR_TEST/bin/timeout" <<'FAKE'
+#!/usr/bin/env bash
+[[ -n "${TIMEOUT_LOG_FILE:-}" ]] && echo "$@" >> "$TIMEOUT_LOG_FILE"
+while [[ "$1" == -* ]]; do shift; done
+shift
+exec "$@"
+FAKE
+chmod +x "$TMPDIR_TEST/bin/timeout"
+cat > "$TMPDIR_TEST/bin/sleep" <<'FAKE'
+#!/usr/bin/env bash
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/bin/sleep"
+NPX_COUNT_FILE="$TMPDIR_TEST/npx-4"
+TIMEOUT_LOG_FILE="$TMPDIR_TEST/timeout-calls-4.log"
+NPX_ARGS_FILE="$TMPDIR_TEST/npx-args-4"
+rc=0
+(
+  source "$TMPDIR_TEST/lib.sh"
+  unset PLAYWRIGHT_BROWSERS_PATH
+  export PLAYWRIGHT_INSTALL_ATTEMPTS=2
+  export NPX_COUNT_FILE="$TMPDIR_TEST/npx-4"
+  export TIMEOUT_LOG_FILE="$TMPDIR_TEST/timeout-calls-4.log"
+  export NPX_ARGS_FILE="$TMPDIR_TEST/npx-args-4"
+  playwright_install_with_deps 2>/dev/null
+) || rc=$?
+assert_eq "first-fails-then-succeeds → rc 0" "0" "$rc"
+assert_eq "first-fails-then-succeeds → 2 npx calls" "2" "$(cat "$NPX_COUNT_FILE")"
+timeout_calls=$( [[ -s "$TIMEOUT_LOG_FILE" ]] && echo nonempty || echo empty )
+assert_eq "first fails then succeeds → timeout invoked" "nonempty" "$timeout_calls"
+assert_eq "first-fails-then-succeeds → npx args (retry path)" \
+  $'playwright install --with-deps chromium\nplaywright install --with-deps chromium' \
+  "$( [[ -f "$NPX_ARGS_FILE" ]] && cat "$NPX_ARGS_FILE" || echo '<file missing>' )"
+teardown
+
+# 5. Timeout expiry (exit 124, stall) → retry exhausted → rc non-zero, 2 npx calls.
+#    Proves the timeout-expiry path works: timeout starts npx (counter increments)
+#    then returns 124 (simulating the child stalling past the deadline).  With
+#    PLAYWRIGHT_INSTALL_ATTEMPTS=2 both attempts time out and the wrapper fails.
+echo "Test: playwright_install_with_deps timeout-stall → rc non-zero, 2 npx calls"
+setup
+cat > "$TMPDIR_TEST/bin/npx" <<'FAKE'
+#!/usr/bin/env bash
+cf="$NPX_COUNT_FILE"
+c=0; [[ -f "$cf" ]] && c=$(cat "$cf"); c=$((c+1)); echo "$c" > "$cf"
+[[ -n "${NPX_ARGS_FILE:-}" ]] && echo "$@" >> "$NPX_ARGS_FILE"
+exit "${NPX_EXIT:-0}"
+FAKE
+chmod +x "$TMPDIR_TEST/bin/npx"
+cat > "$TMPDIR_TEST/bin/timeout" <<'FAKE'
+#!/usr/bin/env bash
+[[ -n "${TIMEOUT_LOG_FILE:-}" ]] && echo "$@" >> "$TIMEOUT_LOG_FILE"
+while [[ "$1" == -* ]]; do shift; done
+shift                     # drop the <timeout_s> duration arg
+"$@"                      # run npx (increments NPX_COUNT_FILE); not exec
+exit 124                  # simulate timeout killing the stalled child
+FAKE
+chmod +x "$TMPDIR_TEST/bin/timeout"
+cat > "$TMPDIR_TEST/bin/sleep" <<'FAKE'
+#!/usr/bin/env bash
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/bin/sleep"
+NPX_COUNT_FILE="$TMPDIR_TEST/npx-5"
+TIMEOUT_LOG_FILE="$TMPDIR_TEST/timeout-calls-5.log"
+NPX_ARGS_FILE="$TMPDIR_TEST/npx-args-5"
+rc=0
+(
+  source "$TMPDIR_TEST/lib.sh"
+  unset PLAYWRIGHT_BROWSERS_PATH
+  export PLAYWRIGHT_INSTALL_ATTEMPTS=2
+  export NPX_COUNT_FILE="$TMPDIR_TEST/npx-5"
+  export TIMEOUT_LOG_FILE="$TMPDIR_TEST/timeout-calls-5.log"
+  export NPX_ARGS_FILE="$TMPDIR_TEST/npx-args-5"
+  playwright_install_with_deps 2>/dev/null
+) || rc=$?
+[[ "$rc" -ne 0 ]] && rc_state="nonzero" || rc_state="zero"
+timeout_calls=$( [[ -s "$TIMEOUT_LOG_FILE" ]] && echo nonempty || echo empty )
+assert_eq "timeout-stall → 2 npx calls" "2" "$(cat "$NPX_COUNT_FILE")"
+assert_eq "timeout-stall → timeout invoked" "nonempty" "$timeout_calls"
+assert_eq "timeout-stall → rc non-zero" "nonzero" "$rc_state"
+assert_eq "timeout-stall → npx args (timeout path)" \
+  $'playwright install --with-deps chromium\nplaywright install --with-deps chromium' \
+  "$( [[ -f "$NPX_ARGS_FILE" ]] && cat "$NPX_ARGS_FILE" || echo '<file missing>' )"
+teardown
+
+# ============================================================================
 # dispatch-complete-phase tests
 # ============================================================================
 echo ""
@@ -6584,6 +7559,116 @@ echo "Test: missing issue number → non-zero exit"
 setup
 if "$TMPDIR_TEST/dispatch-apply-planned" 2>/dev/null; then rc=0; else rc=$?; fi
 assert_eq "missing issue number exits non-zero" "1" "$rc"
+teardown
+
+# ============================================================================
+# dispatch-qa-apply-main-qa-labels tests (#1758)
+# ============================================================================
+echo ""
+echo "=== dispatch-qa-apply-main-qa-labels (#1758) ==="
+
+# Happy path: both main-qa and dispatch:office-hours labels exist in the repo
+# (default stub mode), so remove-label succeeds, both adds succeed, and the
+# script exits 0. No label create needed.
+echo "Test: happy path → remove help-wanted, add main-qa, route to office-hours; exit 0"
+setup
+if "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" 42; then rc=0; else rc=$?; fi
+assert_eq "happy path: exit 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if grep -q -- "--remove-label help wanted" "$STUB_DIR/gh-issue-edit.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: removed help wanted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: removed help wanted"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q -- "--add-label main-qa" "$STUB_DIR/gh-issue-edit.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: added main-qa"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: added main-qa"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q -- "--add-label dispatch:office-hours" "$STUB_DIR/gh-issue-edit.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: routed to office-hours"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: routed to office-hours"
+fi
+assert_eq "no gh label create" "absent" "$(log_state gh-label-create.log)"
+teardown
+
+# Idempotent re-run: the "help wanted" label is no longer on the issue so the
+# remove-label call returns "not found". The script must tolerate this and still
+# apply main-qa and dispatch:office-hours, exiting 0.
+echo "Test: remove-label-missing → tolerated, main-qa and office-hours still applied; exit 0"
+setup
+echo "remove-label-missing" > "$STUB_DIR/issue-edit-mode"
+if "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" 42; then rc=0; else rc=$?; fi
+assert_eq "not-found removal tolerated, exit 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if grep -q -- "--add-label main-qa" "$STUB_DIR/gh-issue-edit.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: main-qa applied after tolerated removal"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: main-qa applied after tolerated removal"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q -- "--add-label dispatch:office-hours" "$STUB_DIR/gh-issue-edit.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: office-hours routing still runs"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: office-hours routing still runs"
+fi
+TOTAL=$((TOTAL + 1))
+if ! grep -q -- "--remove-label" "$STUB_DIR/gh-issue-edit.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: remove-label not logged (not-found path fired)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: remove-label unexpectedly logged"
+fi
+teardown
+
+# Lazy label-create: the main-qa label does not yet exist in the repo. The
+# first add attempt fails "not found"; the script creates the label with
+# canonical metadata (5319E7) and retries the add. The office-hours step runs
+# unaffected.
+echo "Test: main-qa-missing → create with canonical metadata, retry add, office-hours unaffected; exit 0"
+setup
+echo "main-qa-missing" > "$STUB_DIR/issue-edit-mode"
+if "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" 42; then rc=0; else rc=$?; fi
+assert_eq "lazy create: exit 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if grep -q "^label create main-qa --color 5319E7 --description QA verification that can only run against deployed main/production" "$STUB_DIR/gh-label-create.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: created with canonical metadata"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: created with canonical metadata"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q -- "--add-label main-qa" "$STUB_DIR/gh-issue-edit.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: main-qa applied on retry"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: main-qa applied on retry"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q -- "--add-label dispatch:office-hours" "$STUB_DIR/gh-issue-edit.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: office-hours unaffected by lazy create"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: office-hours unaffected by lazy create"
+fi
+teardown
+
+# Non-numeric, flag-like issue number → hard error (exit 1), no gh calls. The
+# guard exists so a flag-like value can never be parsed by gh as an option that
+# redirects the label writes.
+echo "Test: non-numeric issue number → non-zero exit, no edit/label-create"
+setup
+if "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" "--repo other/repo" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "non-numeric issue number exits non-zero" "1" "$rc"
+assert_eq "non-numeric: no label edit" "absent" "$(log_state gh-issue-edit.log)"
+assert_eq "non-numeric: no label create" "absent" "$(log_state gh-label-create.log)"
+teardown
+
+# Missing arg → hard error (exit 1).
+echo "Test: missing issue number → non-zero exit"
+setup
+if "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "missing issue number exits non-zero" "1" "$rc"
+assert_eq "missing arg: no label edit" "absent" "$(log_state gh-issue-edit.log)"
 teardown
 
 # ============================================================================
@@ -7296,6 +8381,16 @@ sweep_setup() {
   cp "$SCRIPT_DIR/lib-worktree-in-sync.sh" "$TMPDIR_TEST/scripts/lib-worktree-in-sync.sh"
   cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/scripts/lib-claude-agents.sh"
   cp "$SCRIPT_DIR/lib-reservation-ledger.sh" "$TMPDIR_TEST/scripts/lib-reservation-ledger.sh"
+  # dispatch-sweep sources lib-worktree-reap.sh (marker ledger + quarantine) from
+  # its SCRIPT_DIR — required for the not-in-sync reap path.
+  cp "$SCRIPT_DIR/lib-worktree-reap.sh" "$TMPDIR_TEST/scripts/lib-worktree-reap.sh"
+  # dispatch-sweep resolves the grace window by shelling out to dispatch-config-load
+  # ("$SCRIPT_DIR/dispatch-config-load" sweep). Without this copy the binary is
+  # absent, the call exits non-zero, and the whole config branch (config-file
+  # present / field present / field absent) is never exercised — the env-override
+  # path silently masks it. Copy it so tests can exercise the config precedence.
+  cp "$SCRIPT_DIR/dispatch-config-load" "$TMPDIR_TEST/scripts/dispatch-config-load"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-config-load"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-sweep"
 
   # Default empty worktree list (each test should overwrite with its records).
@@ -7387,6 +8482,32 @@ if [[ "${1:-}" == "-C" ]]; then
       if [[ -f "$f" ]]; then cat "$f"; else exit 1; fi
       exit 0
       ;;
+    "format-patch origin/main..HEAD -o "*)
+      # reap_quarantine committed-divergence capture. SWEEP_FORMAT_PATCH_FAIL
+      # forces a failure (quarantine-abort test). Zero patches written is fine
+      # (the lib treats 0 patches as success); the -o dest already exists.
+      if [[ -n "${SWEEP_FORMAT_PATCH_FAIL:-}" ]]; then
+        echo "git -C stub: simulated format-patch failure" >&2
+        exit 1
+      fi
+      exit 0
+      ;;
+    "diff HEAD")
+      # reap_quarantine uncommitted-tracked capture → working-tree.patch. Emit a
+      # real diff body so the captured patch is non-empty when a fixture exists.
+      key=$(echo "$ctx_path" | tr '/' '_')
+      f="$STUB_DIR/wtdiff${key}.txt"
+      [[ -f "$f" ]] && cat "$f"
+      exit 0
+      ;;
+    "ls-files --others --exclude-standard")
+      # reap_quarantine untracked-files capture. The fixture lists relative paths;
+      # the lib cp -p's each REAL file from the worktree into untracked/.
+      key=$(echo "$ctx_path" | tr '/' '_')
+      f="$STUB_DIR/untracked${key}.txt"
+      [[ -f "$f" ]] && cat "$f"
+      exit 0
+      ;;
     *)
       echo "git -C stub: unknown invocation: -C $ctx_path $sub $rest" >&2
       exit 1
@@ -7447,6 +8568,14 @@ FAKE
   # marker files, so reservation_exists is false for every row and the
   # reserved-skip is inert. A reserved-skip test opts in by creating a marker here.
   export DISPATCH_RESERVATION_DIR="$STUB_DIR/reservations"
+  # dispatch-sweep's grace-resolution shells out to dispatch-config-load, which
+  # reads DISPATCH_CONFIG_DIR. Point it at an EMPTY dir by default: with no
+  # sweep.json present the loader prints "no-config", so dispatch-sweep falls
+  # through to the env override (DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S) / baked
+  # default — exactly the behavior every existing env-override test relies on. A
+  # config-path test opts in by writing sweep.json into this dir.
+  mkdir -p "$STUB_DIR/config"
+  export DISPATCH_CONFIG_DIR="$STUB_DIR/config"
 }
 
 sweep_teardown() {
@@ -7455,6 +8584,10 @@ sweep_teardown() {
   STUB_DIR=""
   export PATH="$SAVED_PATH"
   unset CLAUDE_AGENTS_CMD DISPATCH_SWEEP_LOG_FILE DISPATCH_SWEEP_NOW DISPATCH_RESERVATION_DIR GH_RETRY_BASE_DELAY SWEEP_GH_PR_FAIL SWEEP_GH_ISSUE_FAIL
+  # DISPATCH_CONFIG_DIR is sweep-local — never leak it into later non-sweep tests.
+  unset DISPATCH_CONFIG_DIR
+  # Not-in-sync reap seams — never leak the epoch/grace/fail toggles across tests.
+  unset DISPATCH_SWEEP_NOW_EPOCH DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S SWEEP_FORMAT_PATCH_FAIL
 }
 
 # Helper: register a worktree in the porcelain list AND create its directory.
@@ -8103,6 +9236,669 @@ else
   echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
 fi
 unset SWEEP_GH_PR_FAIL
+sweep_teardown
+
+# ============================================================================
+# Age-gated not-in-sync reap tests (#2026)
+# ============================================================================
+#
+# A merged/closed worktree that is NOT in sync is skipped on first observation
+# (a write-once marker starts the grace clock), kept while age < grace, then
+# QUARANTINED + force-reaped once age >= grace. AC3: a live session or a
+# reservation short-circuits before the reap path is ever reached. AC2: the
+# divergence is captured under the RUNNER root and survives the worktree removal;
+# a quarantine failure ABORTS the reap (worktree left intact).
+#
+# Determinism: AGE is driven purely by DISPATCH_SWEEP_NOW_EPOCH (epoch seconds,
+# distinct from the ISO DISPATCH_SWEEP_NOW used for log timestamps) and GRACE by
+# DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S — never wall-clock. Marker stamp = NOW_EPOCH
+# of the sweep that first records it; reap requires NOW_EPOCH - stamp >= grace.
+
+# --- Test N1 (merged): TWO-SWEEP marker-then-reap ----------------------------
+# THE load-bearing case (guards the inert-feature trap): sweep #1 only records the
+# marker + SKIPs; a LATER sweep past grace REAPs. Two real sweep invocations share
+# the same marker dir — a refresh-every-sweep bug would reset the clock and never
+# reap. Marker stamp=1000, grace=100; an intermediate sweep at 1050 (age 50 < 100)
+# must still SKIP and must NOT have refreshed the stamp; the final sweep at 1300
+# (age 300 >= 100) REAPs.
+echo "Test: N1 merged not-in-sync — sweep records marker, later sweep past grace reaps"
+sweep_setup
+export DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S=100
+WT_PATH="$TMPDIR_TEST/project/worktrees/2100-merged-dirty"
+WT_BASE="2100-merged-dirty"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+echo '[{"state":"MERGED","number":2100}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+key=$(sweep_path_key "$WT_PATH")
+# Not-in-sync: dirty tree (drives worktree_merged_in_sync to non-zero).
+echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
+MARKER="$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
+
+# Sweep #1 at epoch 1000 — first observation: record marker + SKIP, no removal.
+export DISPATCH_SWEEP_NOW_EPOCH=1000
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N1 sweep#1 exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ -f "$MARKER" ]] && [[ "$(cat "$MARKER")" == "1000" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: N1 sweep#1 wrote marker stamped 1000"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N1 sweep#1 wrote marker stamped 1000 (got: $(cat "$MARKER" 2>/dev/null))"
+fi
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove"; then
+  PASS=$((PASS + 1)); echo "  PASS: N1 sweep#1 no removal"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N1 sweep#1 no removal"; echo "    calls: $calls"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "SKIP_MERGED_NOT_IN_SYNC: '$WT_PATH' branch=$WT_BASE pr=#2100 (grace clock started)" \
+   "$DISPATCH_SWEEP_LOG_FILE" && ! grep -q "REAP_MERGED_NOT_IN_SYNC" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N1 sweep#1 logged SKIP (grace clock started), no REAP"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N1 sweep#1 logged SKIP (grace clock started), no REAP"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+
+# Intermediate sweep #1b at epoch 1050 — age 50 < 100: still SKIP, marker UNCHANGED
+# (write-once: a refresh would reset the stamp to 1050 and the reap never fires).
+export DISPATCH_SWEEP_NOW_EPOCH=1050
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N1 sweep#1b exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$(cat "$MARKER")" == "1000" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: N1 sweep#1b marker NOT refreshed (still 1000)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N1 sweep#1b marker NOT refreshed (got: $(cat "$MARKER" 2>/dev/null))"
+fi
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove" && ! grep -q "REAP_MERGED_NOT_IN_SYNC" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N1 sweep#1b within-grace, no removal, no REAP"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N1 sweep#1b within-grace, no removal, no REAP"; echo "    calls: $calls"
+fi
+
+# Sweep #2 at epoch 1300 — age 300 >= 100: quarantine + force-reap.
+export DISPATCH_SWEEP_NOW_EPOCH=1300
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N1 sweep#2 exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -qx "worktree-remove-force:$WT_PATH"; then
+  PASS=$((PASS + 1)); echo "  PASS: N1 sweep#2 force-removed the aged-out worktree"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N1 sweep#2 force-removed the aged-out worktree"; echo "    calls: $calls"
+fi
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -qx "branch-D:$WT_BASE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N1 sweep#2 deleted the branch"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N1 sweep#2 deleted the branch"; echo "    calls: $calls"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "REAP_MERGED_NOT_IN_SYNC: '$WT_PATH' branch=$WT_BASE pr=#2100 age_seconds=300 grace_seconds=100 quarantine=" \
+   "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N1 sweep#2 logged REAP_MERGED_NOT_IN_SYNC with age/grace/quarantine"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N1 sweep#2 logged REAP_MERGED_NOT_IN_SYNC with age/grace/quarantine"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+# Marker cleared after a successful reap.
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$MARKER" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: N1 sweep#2 cleared the marker after reap"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N1 sweep#2 cleared the marker after reap"
+fi
+sweep_teardown
+
+# --- Test N1c (closed): TWO-SWEEP marker-then-reap ---------------------------
+echo "Test: N1c closed not-in-sync — sweep records marker, later sweep past grace reaps"
+sweep_setup
+export DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S=100
+WT_PATH="$TMPDIR_TEST/project/worktrees/2101-closed-dirty"
+WT_BASE="2101-closed-dirty"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+# No pr-state fixture → issue path; issue CLOSED.
+echo "CLOSED" > "$STUB_DIR/issue-state-2101.txt"
+key=$(sweep_path_key "$WT_PATH")
+echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
+MARKER="$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
+
+# Sweep #1 at epoch 1000.
+export DISPATCH_SWEEP_NOW_EPOCH=1000
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N1c sweep#1 exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$(cat "$MARKER" 2>/dev/null)" == "1000" ]] && ! echo "$calls" | grep -q "worktree-remove" \
+   && grep -q "SKIP_CLOSED_NOT_IN_SYNC: '$WT_PATH' branch=$WT_BASE issue=#2101 (grace clock started)" \
+   "$DISPATCH_SWEEP_LOG_FILE" && ! grep -q "REAP_CLOSED_NOT_IN_SYNC" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N1c sweep#1 recorded marker + SKIP (grace clock started), no reap"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N1c sweep#1 recorded marker + SKIP (grace clock started), no reap"
+  echo "    marker: $(cat "$MARKER" 2>/dev/null)  calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+
+# Sweep #2 at epoch 1300 — reap.
+export DISPATCH_SWEEP_NOW_EPOCH=1300
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N1c sweep#2 exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -qx "worktree-remove-force:$WT_PATH" \
+   && grep -q "REAP_CLOSED_NOT_IN_SYNC: '$WT_PATH' branch=$WT_BASE issue=#2101 age_seconds=300 grace_seconds=100 quarantine=" \
+   "$DISPATCH_SWEEP_LOG_FILE" && [[ ! -e "$MARKER" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: N1c sweep#2 force-reaped, logged REAP_CLOSED_NOT_IN_SYNC, marker cleared"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N1c sweep#2 force-reaped, logged REAP_CLOSED_NOT_IN_SYNC, marker cleared"
+  echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N2 (merged): WITHIN GRACE with marker already present → kept --------
+# Marker pre-exists (stamp 1000); sweep at 1050 → age 50 < grace 100 → SKIP with
+# age_seconds/grace_seconds fields, no removal, no REAP.
+echo "Test: N2 merged not-in-sync within grace (marker present) → kept"
+sweep_setup
+export DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S=100
+WT_PATH="$TMPDIR_TEST/project/worktrees/2200-merged-young"
+WT_BASE="2200-merged-young"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+echo '[{"state":"MERGED","number":2200}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+key=$(sweep_path_key "$WT_PATH")
+echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
+# Pre-seed the marker (write-once already happened on a prior sweep).
+mkdir -p "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync"
+echo "1000" > "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
+export DISPATCH_SWEEP_NOW_EPOCH=1050
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N2 sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove" && ! grep -q "REAP_MERGED_NOT_IN_SYNC" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N2 within grace — no removal, no REAP"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N2 within grace — no removal, no REAP"; echo "    calls: $calls"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "SKIP_MERGED_NOT_IN_SYNC: '$WT_PATH' branch=$WT_BASE pr=#2200 age_seconds=50 grace_seconds=100" \
+   "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N2 logged SKIP with age_seconds=50 grace_seconds=100"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N2 logged SKIP with age_seconds=50 grace_seconds=100"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N2c (closed): WITHIN GRACE with marker present → kept --------------
+echo "Test: N2c closed not-in-sync within grace (marker present) → kept"
+sweep_setup
+export DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S=100
+WT_PATH="$TMPDIR_TEST/project/worktrees/2201-closed-young"
+WT_BASE="2201-closed-young"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+echo "CLOSED" > "$STUB_DIR/issue-state-2201.txt"
+key=$(sweep_path_key "$WT_PATH")
+echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
+mkdir -p "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync"
+echo "1000" > "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
+export DISPATCH_SWEEP_NOW_EPOCH=1050
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N2c sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove" \
+   && grep -q "SKIP_CLOSED_NOT_IN_SYNC: '$WT_PATH' branch=$WT_BASE issue=#2201 age_seconds=50 grace_seconds=100" \
+   "$DISPATCH_SWEEP_LOG_FILE" && ! grep -q "REAP_CLOSED_NOT_IN_SYNC" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N2c within grace — SKIP with age/grace fields, no reap"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N2c within grace — SKIP with age/grace fields, no reap"; echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N3a (merged): past grace + LIVE SESSION → reap never reached --------
+# AC3 by construction: the live-session guard precedes the not-in-sync decision,
+# so a past-grace worktree with a live session logs the live-session skip and
+# NEVER reaches reap_or_skip_not_in_sync (no marker recorded, no REAP).
+echo "Test: N3a merged past-grace with a live session → live-session skip, no reap"
+sweep_setup
+export DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S=100
+export DISPATCH_SWEEP_NOW_EPOCH=99999
+WT_PATH="$TMPDIR_TEST/project/worktrees/2300-merged-live"
+WT_BASE="2300-merged-live"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+echo '[{"state":"MERGED","number":2300}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+key=$(sweep_path_key "$WT_PATH")
+echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
+# Pre-seed an aged-out marker so ONLY the live-session guard prevents the reap.
+mkdir -p "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync"
+echo "1000" > "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
+sweep_fake_claude_sessions_by_name "$WT_BASE=sess-live-2300"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N3a sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove" \
+   && grep -q "SKIP_MERGED_LIVE_SESSION: '$WT_PATH' branch=$WT_BASE pr=#2300" "$DISPATCH_SWEEP_LOG_FILE" \
+   && ! grep -q "REAP_MERGED_NOT_IN_SYNC" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N3a live-session skip logged, no removal, no REAP"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N3a live-session skip logged, no removal, no REAP"; echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N3b (closed): past grace + RESERVATION → reap never reached ---------
+# The loop-top reservation guard precedes everything, so a reserved past-grace
+# worktree logs SKIP_RESERVED and never reaches the not-in-sync decision.
+echo "Test: N3b closed past-grace with a reservation → SKIP_RESERVED, no reap"
+sweep_setup
+export DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S=100
+export DISPATCH_SWEEP_NOW_EPOCH=99999
+WT_PATH="$TMPDIR_TEST/project/worktrees/2301-closed-reserved"
+WT_BASE="2301-closed-reserved"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+echo "CLOSED" > "$STUB_DIR/issue-state-2301.txt"
+key=$(sweep_path_key "$WT_PATH")
+echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
+mkdir -p "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync"
+echo "1000" > "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
+mkdir -p "$DISPATCH_RESERVATION_DIR"
+printf 'session=resv\nissue=2301\ntimestamp=2026-01-01T00:00:00Z\n' \
+  > "$DISPATCH_RESERVATION_DIR/$WT_BASE"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N3b sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove" \
+   && grep -q "SKIP_RESERVED: '$WT_PATH' branch=$WT_BASE" "$DISPATCH_SWEEP_LOG_FILE" \
+   && ! grep -q "REAP_CLOSED_NOT_IN_SYNC" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N3b SKIP_RESERVED logged, no removal, no REAP"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N3b SKIP_RESERVED logged, no removal, no REAP"; echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N4a (merged): quarantine captures the real divergence + survives removal
+# AC2: on a successful reap the quarantine holds the REAL divergence (untracked
+# file body + non-empty working-tree.patch), under the RUNNER root, and SURVIVES
+# the worktree removal. The dest path is deterministic (suffixed with NOW_EPOCH),
+# so derive it directly. The git stub's worktree-remove is a no-op, so simulate
+# the real force-remove with rm -rf BEFORE the survives-removal assertion: if the
+# quarantine had been co-located inside the worktree, that rm would take it too.
+echo "Test: N4a merged reap quarantine captures real divergence + survives worktree removal"
+sweep_setup
+export DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S=100
+export DISPATCH_SWEEP_NOW_EPOCH=5000
+WT_PATH="$TMPDIR_TEST/project/worktrees/2400-merged-quarantine"
+WT_BASE="2400-merged-quarantine"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+echo '[{"state":"MERGED","number":2400}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+key=$(sweep_path_key "$WT_PATH")
+echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
+# Aged-out marker (age 5000-1000=4000 >= 100).
+mkdir -p "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync"
+echo "1000" > "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
+# Real untracked file in the worktree + a fixture listing it (lib cp -p's it).
+echo "UNTRACKED-BODY-2400" > "$WT_PATH/residue.txt"
+echo "residue.txt" > "$STUB_DIR/untracked${key}.txt"
+# Non-empty working-tree diff fixture.
+printf 'diff --git a/tracked.txt b/tracked.txt\n+dirty-edit-2400\n' > "$STUB_DIR/wtdiff${key}.txt"
+# Deterministic dest: <root>/tmp/dispatch-sweep-quarantine/<base>-<NOW_EPOCH>.
+DEST="$TMPDIR_TEST/project/tmp/dispatch-sweep-quarantine/$WT_BASE-5000"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N4a sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -qx "worktree-remove-force:$WT_PATH" \
+   && grep -q "REAP_MERGED_NOT_IN_SYNC: '$WT_PATH' branch=$WT_BASE pr=#2400 .*quarantine='$DEST'" \
+   "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N4a reaped + logged quarantine='$DEST'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N4a reaped + logged quarantine='$DEST'"; echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+# Simulate the real force-remove the stub elided.
+rm -rf "$WT_PATH"
+# Survives-removal + real content: untracked body captured, working-tree.patch non-empty.
+TOTAL=$((TOTAL + 1))
+if [[ -f "$DEST/untracked/residue.txt" ]] && grep -q "UNTRACKED-BODY-2400" "$DEST/untracked/residue.txt"; then
+  PASS=$((PASS + 1)); echo "  PASS: N4a untracked file body survives in quarantine after removal"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N4a untracked file body survives in quarantine after removal"
+  echo "    dest contents:"; ls -R "$DEST" 2>/dev/null | sed 's/^/      /'
+fi
+TOTAL=$((TOTAL + 1))
+if [[ -s "$DEST/working-tree.patch" ]] && grep -q "dirty-edit-2400" "$DEST/working-tree.patch"; then
+  PASS=$((PASS + 1)); echo "  PASS: N4a working-tree.patch is non-empty with the dirty edit"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N4a working-tree.patch is non-empty with the dirty edit"
+fi
+sweep_teardown
+
+# --- Test N4a-fail (merged): quarantine failure ABORTS the reap --------------
+# Pre-create the quarantine root as a regular FILE so the lib's `mkdir -p "$dest"`
+# fails with ENOTDIR → quarantine error → reap aborts: worktree LEFT INTACT,
+# SKIP_*_QUARANTINE_FAILED logged, NO REAP, marker still present.
+echo "Test: N4a-fail merged quarantine failure aborts reap (worktree left intact)"
+sweep_setup
+export DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S=100
+export DISPATCH_SWEEP_NOW_EPOCH=5000
+WT_PATH="$TMPDIR_TEST/project/worktrees/2401-merged-qfail"
+WT_BASE="2401-merged-qfail"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+echo '[{"state":"MERGED","number":2401}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+key=$(sweep_path_key "$WT_PATH")
+echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
+mkdir -p "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync"
+echo "1000" > "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
+MARKER="$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
+# Quarantine root is a regular file → mkdir -p of the dest under it fails (ENOTDIR).
+: > "$TMPDIR_TEST/project/tmp/dispatch-sweep-quarantine"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N4a-fail sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove" \
+   && grep -q "SKIP_MERGED_NOT_IN_SYNC_QUARANTINE_FAILED: '$WT_PATH' branch=$WT_BASE pr=#2401" \
+   "$DISPATCH_SWEEP_LOG_FILE" && ! grep -q "REAP_MERGED_NOT_IN_SYNC" "$DISPATCH_SWEEP_LOG_FILE" \
+   && [[ -e "$MARKER" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: N4a-fail aborted — no removal, QUARANTINE_FAILED logged, marker intact"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N4a-fail aborted — no removal, QUARANTINE_FAILED logged, marker intact"
+  echo "    calls: $calls  marker-exists: $([[ -e "$MARKER" ]] && echo yes || echo no)"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N4c (closed): quarantine captures real divergence + survives removal -
+echo "Test: N4c closed reap quarantine captures real divergence + survives worktree removal"
+sweep_setup
+export DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S=100
+export DISPATCH_SWEEP_NOW_EPOCH=5000
+WT_PATH="$TMPDIR_TEST/project/worktrees/2402-closed-quarantine"
+WT_BASE="2402-closed-quarantine"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+echo "CLOSED" > "$STUB_DIR/issue-state-2402.txt"
+key=$(sweep_path_key "$WT_PATH")
+echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
+mkdir -p "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync"
+echo "1000" > "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
+echo "UNTRACKED-BODY-2402" > "$WT_PATH/residue.txt"
+echo "residue.txt" > "$STUB_DIR/untracked${key}.txt"
+printf 'diff --git a/tracked.txt b/tracked.txt\n+dirty-edit-2402\n' > "$STUB_DIR/wtdiff${key}.txt"
+DEST="$TMPDIR_TEST/project/tmp/dispatch-sweep-quarantine/$WT_BASE-5000"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N4c sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -qx "worktree-remove-force:$WT_PATH" \
+   && grep -q "REAP_CLOSED_NOT_IN_SYNC: '$WT_PATH' branch=$WT_BASE issue=#2402 .*quarantine='$DEST'" \
+   "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N4c reaped + logged quarantine='$DEST'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N4c reaped + logged quarantine='$DEST'"; echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+rm -rf "$WT_PATH"
+TOTAL=$((TOTAL + 1))
+if [[ -f "$DEST/untracked/residue.txt" ]] && grep -q "UNTRACKED-BODY-2402" "$DEST/untracked/residue.txt" \
+   && [[ -s "$DEST/working-tree.patch" ]] && grep -q "dirty-edit-2402" "$DEST/working-tree.patch"; then
+  PASS=$((PASS + 1)); echo "  PASS: N4c quarantine holds real divergence and survives removal"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N4c quarantine holds real divergence and survives removal"
+  echo "    dest contents:"; ls -R "$DEST" 2>/dev/null | sed 's/^/      /'
+fi
+sweep_teardown
+
+# --- Test N5a: marker cleared on a normal in-sync removal ---------------------
+# After REMOVE_MERGED / REMOVE_CLOSED_ISSUE (in-sync removal), any stale marker for
+# that basename is cleared so a future same-named worktree never inherits the
+# grace timestamp.
+echo "Test: N5a in-sync REMOVE_MERGED clears any stale not-in-sync marker"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/2500-merged-clean"
+WT_BASE="2500-merged-clean"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+echo '[{"state":"MERGED","number":2500}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+key=$(sweep_path_key "$WT_PATH")
+: > "$STUB_DIR/status${key}.txt"          # clean
+echo "0" > "$STUB_DIR/revlist${key}.txt"
+echo "0" > "$STUB_DIR/diffrc${key}.txt"   # tree identical → in-sync
+# A stale marker (e.g. from an earlier dirty observation before the tree was synced).
+mkdir -p "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync"
+echo "1000" > "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
+MARKER="$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N5a sweep exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if grep -q "REMOVE_MERGED: '$WT_PATH' branch=$WT_BASE pr=#2500" "$DISPATCH_SWEEP_LOG_FILE" \
+   && [[ ! -e "$MARKER" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: N5a in-sync removal cleared the stale marker"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N5a in-sync removal cleared the stale marker"
+  echo "    marker-exists: $([[ -e "$MARKER" ]] && echo yes || echo no)"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N5a-closed: marker cleared on a normal in-sync REMOVE_CLOSED_ISSUE ---
+echo "Test: N5a-closed in-sync REMOVE_CLOSED_ISSUE clears any stale not-in-sync marker"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/2501-closed-clean"
+WT_BASE="2501-closed-clean"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+echo "CLOSED" > "$STUB_DIR/issue-state-2501.txt"
+key=$(sweep_path_key "$WT_PATH")
+: > "$STUB_DIR/status${key}.txt"
+echo "0" > "$STUB_DIR/revlist${key}.txt"
+mkdir -p "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync"
+echo "1000" > "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
+MARKER="$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N5a-closed sweep exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if grep -q "REMOVE_CLOSED_ISSUE: '$WT_PATH' branch=$WT_BASE issue=#2501" "$DISPATCH_SWEEP_LOG_FILE" \
+   && [[ ! -e "$MARKER" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: N5a-closed in-sync removal cleared the stale marker"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N5a-closed in-sync removal cleared the stale marker"
+  echo "    marker-exists: $([[ -e "$MARKER" ]] && echo yes || echo no)"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N5b: vanished-worktree marker is GC'd ------------------------------
+# A marker whose basename is NOT in the registered WT_PATHS set is deleted by the
+# post-loop GC, with GC_NOT_IN_SYNC_MARKER logged — so a future same-named
+# worktree never inherits a stale grace timestamp. A registered worktree's own
+# marker (within grace) must be left untouched to prove GC targets only vanished ones.
+echo "Test: N5b vanished-worktree marker is GC'd (registered marker untouched)"
+sweep_setup
+export DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S=100
+export DISPATCH_SWEEP_NOW_EPOCH=1050
+# A registered, within-grace not-in-sync worktree keeps its marker.
+WT_PATH="$TMPDIR_TEST/project/worktrees/2600-live-marked"
+WT_BASE="2600-live-marked"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+echo '[{"state":"MERGED","number":2600}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+key=$(sweep_path_key "$WT_PATH")
+echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
+mkdir -p "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync"
+echo "1000" > "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
+KEPT_MARKER="$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
+# A marker for a basename that is NOT registered → must be GC'd.
+VANISHED="2699-vanished"
+echo "1000" > "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$VANISHED"
+VANISHED_MARKER="$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$VANISHED"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N5b sweep exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$VANISHED_MARKER" ]] \
+   && grep -q "GC_NOT_IN_SYNC_MARKER: vanished worktree basename=$VANISHED" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N5b vanished marker deleted + GC_NOT_IN_SYNC_MARKER logged"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N5b vanished marker deleted + GC_NOT_IN_SYNC_MARKER logged"
+  echo "    vanished-exists: $([[ -e "$VANISHED_MARKER" ]] && echo yes || echo no)"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+TOTAL=$((TOTAL + 1))
+if [[ -e "$KEPT_MARKER" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: N5b registered worktree's marker left intact"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N5b registered worktree's marker left intact"
+fi
+sweep_teardown
+
+# --- Config-precedence path (Finding 1): sweep.json grace flows through -------
+# The grace window resolves with precedence: sweep config notInSyncGraceSeconds →
+# env override → baked default. The sweep harness now copies dispatch-config-load
+# and points DISPATCH_CONFIG_DIR at an empty dir, so these tests exercise the
+# config-file branch end-to-end (it was previously masked: with the loader binary
+# absent the call failed and the env-override path silently handled everything).
+
+# --- Test N6a: sweep.json notInSyncGraceSeconds drives the reap decision ------
+# Config grace=100; marker stamped 1000; a sweep at 1300 (age 300 >= config 100)
+# REAPs. The baked default is 86400 and no env override is set — so a reap here
+# proves the CONFIG value (not the default) governed the decision, and the logged
+# grace_seconds=100 must echo the config value.
+echo "Test: N6a sweep.json notInSyncGraceSeconds governs the reap (config precedence)"
+sweep_setup
+printf '{"notInSyncGraceSeconds":100}\n' > "$DISPATCH_CONFIG_DIR/sweep.json"
+WT_PATH="$TMPDIR_TEST/project/worktrees/2700-config-grace"
+WT_BASE="2700-config-grace"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+echo '[{"state":"MERGED","number":2700}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+key=$(sweep_path_key "$WT_PATH")
+echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
+MARKER="$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
+# Sweep #1 at 1000 records the marker (below config grace).
+export DISPATCH_SWEEP_NOW_EPOCH=1000
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N6a sweep#1 exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$(cat "$MARKER" 2>/dev/null)" == "1000" ]] && ! echo "$calls" | grep -q "worktree-remove"; then
+  PASS=$((PASS + 1)); echo "  PASS: N6a sweep#1 recorded marker, no removal"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N6a sweep#1 recorded marker, no removal"; echo "    calls: $calls"
+fi
+# Sweep #2 at 1300 — age 300 >= config grace 100 → REAP. With the baked default
+# (86400) the worktree would still be kept; a reap proves config grace governed.
+export DISPATCH_SWEEP_NOW_EPOCH=1300
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N6a sweep#2 exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -qx "worktree-remove-force:$WT_PATH" \
+   && grep -q "REAP_MERGED_NOT_IN_SYNC: '$WT_PATH' branch=$WT_BASE pr=#2700 age_seconds=300 grace_seconds=100 quarantine=" \
+      "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N6a config grace=100 reaped at age 300 (grace_seconds=100 logged)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N6a config grace=100 reaped at age 300 (grace_seconds=100 logged)"
+  echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N6b: sweep.json present but field absent → env override wins --------
+# (Finding 1 regression.) A sweep.json that omits notInSyncGraceSeconds must NOT
+# pin the grace to the baked default — the lowest-precedence env override must
+# still fire. Config present-but-empty + env grace=100 + age 300 → REAP, logged
+# grace_seconds=100. PRE-FIX dispatch-sweep took the "!= no-config" branch,
+# found the field empty, and skipped the elif env branch entirely (grace stayed
+# 86400) → no reap → this test FAILS, proving it reproduces Finding 1.
+echo "Test: N6b sweep.json without the field falls through to the env override (Finding 1)"
+sweep_setup
+printf '{}\n' > "$DISPATCH_CONFIG_DIR/sweep.json"
+export DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S=100
+WT_PATH="$TMPDIR_TEST/project/worktrees/2710-empty-config"
+WT_BASE="2710-empty-config"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+echo '[{"state":"MERGED","number":2710}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+key=$(sweep_path_key "$WT_PATH")
+echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
+MARKER="$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
+export DISPATCH_SWEEP_NOW_EPOCH=1000
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N6b sweep#1 exits 0" "0" "$rc"
+export DISPATCH_SWEEP_NOW_EPOCH=1300
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N6b sweep#2 exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -qx "worktree-remove-force:$WT_PATH" \
+   && grep -q "REAP_MERGED_NOT_IN_SYNC: '$WT_PATH' branch=$WT_BASE pr=#2710 age_seconds=300 grace_seconds=100 quarantine=" \
+      "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N6b empty config + env grace=100 reaped at age 300 (env override fired)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N6b empty config + env grace=100 reaped at age 300 (env override fired)"
+  echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N6c: sweep.json fractional grace is rejected, fallback used ---------
+# (Finding 2 regression, end-to-end through dispatch-sweep.) A fractional
+# notInSyncGraceSeconds (0.5) must NOT reach the bash `[[ "$age" -lt "$grace" ]]`
+# integer comparison (which would error and reap every not-in-sync worktree).
+# dispatch-config-load rejects the fractional value and exits non-zero; dispatch-sweep
+# folds the stderr, logs SWEEP_CONFIG_ERROR, and falls back to the env override
+# (grace=100 here) — so the worktree at age 300 still reaps via the env value, and
+# the run never crashes. PRE-FIX the loader accepted 0.5 (1.5|type=="number", >0),
+# dispatch-sweep set grace=0.5, and the integer compare errored → this test FAILS,
+# proving it reproduces Finding 2.
+echo "Test: N6c sweep.json fractional grace rejected by loader, env fallback governs (Finding 2)"
+sweep_setup
+printf '{"notInSyncGraceSeconds":0.5}\n' > "$DISPATCH_CONFIG_DIR/sweep.json"
+export DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S=100
+WT_PATH="$TMPDIR_TEST/project/worktrees/2720-frac-config"
+WT_BASE="2720-frac-config"
+sweep_register_wt "$WT_PATH" "$WT_BASE"
+echo '[{"state":"MERGED","number":2720}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+key=$(sweep_path_key "$WT_PATH")
+echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
+MARKER="$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
+export DISPATCH_SWEEP_NOW_EPOCH=1000
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N6c sweep#1 exits 0 (no arithmetic crash on fractional config)" "0" "$rc"
+export DISPATCH_SWEEP_NOW_EPOCH=1300
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N6c sweep#2 exits 0 (no arithmetic crash on fractional config)" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -qx "worktree-remove-force:$WT_PATH" \
+   && grep -q "REAP_MERGED_NOT_IN_SYNC: '$WT_PATH' branch=$WT_BASE pr=#2720 age_seconds=300 grace_seconds=100 quarantine=" \
+      "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N6c fractional config rejected, env grace=100 governed the reap"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N6c fractional config rejected, env grace=100 governed the reap"
+  echo "    calls: $calls"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+# The loader's diagnostic must be surfaced, not swallowed.
+TOTAL=$((TOTAL + 1))
+if grep -q "SWEEP_CONFIG_ERROR" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N6c SWEEP_CONFIG_ERROR logged for the rejected fractional config"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N6c SWEEP_CONFIG_ERROR logged for the rejected fractional config"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
 sweep_teardown
 
 # ============================================================================
@@ -11098,6 +12894,111 @@ if [[ "$err" == *"enabled"* ]]; then
   assert_eq "force-opus string enabled: stderr mentions enabled" "yes" "yes"
 else
   assert_eq "force-opus string enabled: stderr mentions enabled" "yes" "no: $err"
+fi
+config_teardown
+
+# --- sweep config type validation (#2026) -----------------------------------
+# The sweep config gates the not-in-sync reap grace window. Its validator is the
+# only code path that catches a malformed grace BEFORE it reaches dispatch-sweep's
+# bash arithmetic `[[ "$age" -lt "$grace" ]]` — where a non-integer would error
+# and force-reap every not-in-sync worktree. These tests cover the validator
+# directly: absent → no-config; empty object → valid; valid integer → printed;
+# fractional/<=0/wrong-type/non-object → rejected.
+
+# --- Test 7u: absent sweep.json → no-config, exit 0 --------------------------
+echo "Test: absent sweep.json prints no-config and exits 0"
+config_setup
+# no file written — config dir is empty
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" sweep 2>/dev/null); rc=$?
+assert_eq "7u absent sweep.json exits 0" "0" "$rc"
+assert_eq "7u absent sweep.json prints no-config" "no-config" "$out"
+config_teardown
+
+# --- Test 7v: empty-object sweep.json → valid, prints {} ---------------------
+# All sweep tunables are optional, so an empty object is valid and round-trips.
+echo "Test: empty-object sweep.json is valid and prints the normalized object"
+config_setup
+printf '{}\n' > "$DISPATCH_CONFIG_DIR/sweep.json"
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" sweep 2>/dev/null); rc=$?
+assert_eq "7v empty-object sweep.json exits 0" "0" "$rc"
+norm=$(printf '%s' "$out" | jq -c '.')
+assert_eq "7v empty-object sweep.json normalizes to {}" "{}" "$norm"
+config_teardown
+
+# --- Test 7w: notInSyncGraceSeconds integer → valid, value round-trips -------
+echo "Test: sweep.json with a valid integer notInSyncGraceSeconds round-trips"
+config_setup
+printf '{"notInSyncGraceSeconds":3600}\n' > "$DISPATCH_CONFIG_DIR/sweep.json"
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" sweep 2>/dev/null); rc=$?
+assert_eq "7w integer grace exits 0" "0" "$rc"
+grace=$(printf '%s' "$out" | jq -r '.notInSyncGraceSeconds')
+assert_eq "7w integer grace round-trips" "3600" "$grace"
+config_teardown
+
+# --- Test 7x: notInSyncGraceSeconds fractional → exit 1 ----------------------
+# The integer-vs-float bug: 1.5|type=="number" and 1.5>0, so the field passes the
+# type and positivity checks. The whole-number guard is the ONLY thing that rejects
+# a fractional grace before it reaches dispatch-sweep's integer arithmetic.
+echo "Test: sweep.json with a fractional notInSyncGraceSeconds exits 1 and names the field"
+config_setup
+printf '{"notInSyncGraceSeconds":0.5}\n' > "$DISPATCH_CONFIG_DIR/sweep.json"
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" sweep 2>&1 1>/dev/null) || rc=$?
+assert_eq "7x fractional grace exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"notInSyncGraceSeconds"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: 7x fractional grace error names notInSyncGraceSeconds"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 7x fractional grace error names notInSyncGraceSeconds"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 7y: notInSyncGraceSeconds <= 0 → exit 1 ----------------------------
+echo "Test: sweep.json with notInSyncGraceSeconds <= 0 exits 1 and names the field"
+config_setup
+printf '{"notInSyncGraceSeconds":0}\n' > "$DISPATCH_CONFIG_DIR/sweep.json"
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" sweep 2>&1 1>/dev/null) || rc=$?
+assert_eq "7y non-positive grace exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"notInSyncGraceSeconds"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: 7y non-positive grace error names notInSyncGraceSeconds"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 7y non-positive grace error names notInSyncGraceSeconds"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 7z: notInSyncGraceSeconds wrong type (string) → exit 1 -------------
+echo "Test: sweep.json with a string notInSyncGraceSeconds exits 1 and names the field"
+config_setup
+printf '{"notInSyncGraceSeconds":"3600"}\n' > "$DISPATCH_CONFIG_DIR/sweep.json"
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" sweep 2>&1 1>/dev/null) || rc=$?
+assert_eq "7z string grace exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"notInSyncGraceSeconds"* && "$err" == *"number"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: 7z string grace error names the field and 'number'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 7z string grace error names the field and 'number'"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 7za: non-object top-level sweep.json → exit 1 ----------------------
+echo "Test: non-object top-level sweep.json exits 1 and stderr mentions object"
+config_setup
+printf '[]\n' > "$DISPATCH_CONFIG_DIR/sweep.json"
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" sweep 2>&1 1>/dev/null) || rc=$?
+assert_eq "7za non-object sweep.json exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"object"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: 7za non-object sweep.json error mentions 'object'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 7za non-object sweep.json error mentions 'object'"
+  echo "    stderr: $err"
 fi
 config_teardown
 
@@ -14235,13 +16136,24 @@ STUB
   # isolation would write to the real ~/.config/systemd/user/ and run a real
   # `systemctl --user daemon-reload`. Redirect the unit dir into the tmp tree
   # and point its systemctl at a no-op stub so daemon-reload is harmless.
-  cat > "$TMPDIR_TEST/bin/systemctl" <<'STUB'
+  cat > "$TMPDIR_TEST/bin/systemctl" <<STUB
 #!/usr/bin/env bash
-exit 0
+# subcommand-aware systemctl stub (#2013). Find the first non-flag arg.
+sub=""
+for a in "\$@"; do
+  case "\$a" in --*) ;; *) sub="\$a"; break ;; esac
+done
+echo "\$*" >> "$TMPDIR_TEST/systemctl-log"
+case "\$sub" in
+  is-failed)    exit "\${ST_IS_FAILED_RC:-1}" ;;
+  reset-failed) exit 0 ;;
+  *)            exit 0 ;;
+esac
 STUB
   chmod +x "$TMPDIR_TEST/bin/systemctl"
   export DISPATCH_RECOVER_UNIT_DIR="$TMPDIR_TEST/systemd-user"
   export DISPATCH_RECOVER_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/systemctl"
+  export DISPATCH_SPAWN_TICK_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/systemctl"
 }
 
 st_teardown() {
@@ -14250,6 +16162,7 @@ st_teardown() {
   unset DISPATCH_SPAWN_TICK_SYSTEMD_RUN_CMD
   unset DISPATCH_SPAWN_TICK_MAIN_WORKTREE
   unset DISPATCH_RECOVER_UNIT_DIR DISPATCH_RECOVER_SYSTEMCTL_CMD
+  unset DISPATCH_SPAWN_TICK_SYSTEMCTL_CMD ST_IS_FAILED_RC
 }
 
 # --- Test 1: no-arg launch → spawned, exit 0, correct argv -------------------
@@ -14312,6 +16225,16 @@ st_setup 'echo "Unit dispatch-tick.service already exists" >&2; exit 1'
 if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-tick" 2>/dev/null); then rc=0; else rc=$?; fi
 assert_eq "deduped: dispatch-spawn-tick exits 0" "0" "$rc"
 assert_eq "deduped: stdout is 'deduped'" "deduped" "$out"
+# Negative assertion: is-failed returns non-zero (ST_IS_FAILED_RC unset → default
+# exit 1), so the gate must not invoke reset-failed on a running tick (#2013).
+sclog=$(cat "$TMPDIR_TEST/systemctl-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$sclog" != *"reset-failed"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: deduped: reset-failed was NOT called (is-failed gate held)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: deduped: reset-failed was NOT called (is-failed gate held)"
+  echo "    systemctl-log: $sclog"
+fi
 st_teardown
 
 # --- Test 4: a generic systemd-run failure passes the exit code through -------
@@ -14359,6 +16282,33 @@ if [[ ! -e "$TMPDIR_TEST/systemd-log" ]]; then
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: bad-target-nonnum: no systemd-run invocation recorded"
   echo "    log: $(cat "$TMPDIR_TEST/systemd-log")"
+fi
+st_teardown
+
+# --- Test 7: a stale failed unit is reset-failed, then the tick spawns --------
+
+echo "Test: a pre-existing failed dispatch-tick unit yields a spawned tick (not a silent deduped), and reset-failed was called (#2013)"
+st_setup
+export ST_IS_FAILED_RC=0
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-tick" 2>/dev/null); then rc=0; else rc=$?; fi
+unset ST_IS_FAILED_RC
+assert_eq "failed-unit: dispatch-spawn-tick exits 0" "0" "$rc"
+assert_eq "failed-unit: stdout is 'spawned' (not deduped)" "spawned" "$out"
+sclog=$(cat "$TMPDIR_TEST/systemctl-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$sclog" == *"reset-failed dispatch-tick.service"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: failed-unit: reset-failed dispatch-tick.service was called"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: failed-unit: reset-failed dispatch-tick.service was called"
+  echo "    systemctl-log: $sclog"
+fi
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ -e "$TMPDIR_TEST/systemd-log" && "$log" == *"--unit=dispatch-tick"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: failed-unit: the launch happened (--unit=dispatch-tick recorded)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: failed-unit: the launch happened (--unit=dispatch-tick recorded)"
+  echo "    log: $log"
 fi
 st_teardown
 
@@ -14521,6 +16471,341 @@ if [[ ! -e "$TMPDIR_TEST/systemd-log" ]]; then
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: bad-arg: no systemd-run invocation recorded"
   echo "    log: $(cat "$TMPDIR_TEST/systemd-log")"
+fi
+sw_teardown
+
+# ============================================================================
+# ensure_sweep_timer: periodic worktree-sweep timer install (#2023)
+# ============================================================================
+echo ""
+echo "=== ensure_sweep_timer periodic sweep timer ==="
+# Issue #2023: the worktree sweep must also run on a durable periodic
+# systemd --user timer so idle/drained chains still GC worktrees. These two
+# halves cover (a) the install/enable idempotency of ensure_sweep_timer and
+# (b) AC#4 — the timer-fired service path reaches dispatch-sweep with no live
+# worker. The stubbing idiom mirrors the ensure_daemon_service block: a
+# recording systemctl stub whose `is-active` exit code is env-driven so the
+# steady-state hot path can be exercised.
+est_tmp=$(mktemp -d)
+mkdir -p "$est_tmp/bin"
+cat > "$est_tmp/bin/systemctl" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$STUB_LOG"
+for a in "$@"; do
+  case "$a" in
+    is-active) exit "${STUB_IS_ACTIVE_RC:-0}" ;;
+    enable) exit "${STUB_ENABLE_RC:-0}" ;;
+    daemon-reload) exit "${STUB_RELOAD_RC:-0}" ;;
+  esac
+done
+exit 0
+STUB
+chmod +x "$est_tmp/bin/systemctl"
+est_unit_dir="$est_tmp/systemd-user"
+est_service="$est_unit_dir/dispatch-sweep-periodic.service"
+est_timer="$est_unit_dir/dispatch-sweep-periodic.timer"
+est_log="$est_tmp/systemctl.log"
+# A synthetic main worktree path. ensure_sweep_timer does not require it to
+# exist on disk — it only interpolates it into ExecStart=/WorkingDirectory=.
+est_main="$est_tmp/main-worktree"
+
+# --- (a) 1. Cold install path -----------------------------------------------
+# First call: neither unit exists, so the hot-path short-circuit fails on the
+# `-f "$SERVICE_PATH"` test before reaching is-active. Both units are written,
+# daemon-reload runs, and enable --now arms the timer.
+: > "$est_log"
+if (
+  export DISPATCH_SWEEP_TIMER_UNIT_DIR="$est_unit_dir"
+  export DISPATCH_SWEEP_TIMER_SYSTEMCTL_CMD="$est_tmp/bin/systemctl"
+  export STUB_LOG="$est_log"
+  export STUB_IS_ACTIVE_RC=0 STUB_ENABLE_RC=0 STUB_RELOAD_RC=0
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_sweep_timer "$est_main"
+); then
+  TOTAL=$((TOTAL + 1))
+  if [ -f "$est_timer" ] && [ -f "$est_service" ]; then
+    PASS=$((PASS + 1)); echo "  PASS: cold path wrote both .timer and .service"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: cold path did not write both unit files"
+  fi
+  grep -q '^OnUnitActiveSec=' "$est_timer" 2>/dev/null \
+    && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: .timer has OnUnitActiveSec="; } \
+    || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: .timer missing OnUnitActiveSec="; }
+  TOTAL=$((TOTAL + 1))
+  if grep -q 'Persistent=' "$est_timer" 2>/dev/null; then
+    FAIL=$((FAIL + 1)); echo "  FAIL: .timer contains Persistent= (monotonic timer should not)"
+  else
+    PASS=$((PASS + 1)); echo "  PASS: .timer has no Persistent="
+  fi
+  TOTAL=$((TOTAL + 1))
+  if grep '^ExecStart=' "$est_service" 2>/dev/null | grep -q 'dispatch-spawn-sweep'; then
+    PASS=$((PASS + 1)); echo "  PASS: .service ExecStart points at dispatch-spawn-sweep"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: .service ExecStart does not point at dispatch-spawn-sweep"
+  fi
+  grep -q 'daemon-reload' "$est_log" \
+    && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: cold path ran daemon-reload"; } \
+    || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: cold path did not run daemon-reload"; }
+  grep -q 'enable --now dispatch-sweep-periodic.timer' "$est_log" \
+    && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: cold path ran enable --now dispatch-sweep-periodic.timer"; } \
+    || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: cold path did not run enable --now dispatch-sweep-periodic.timer"; }
+else
+  TOTAL=$((TOTAL + 6)); FAIL=$((FAIL + 6))
+  echo "  FAIL: ensure_sweep_timer (cold path) returned non-zero"
+fi
+
+# --- (a) 2. Idempotent steady-state path ------------------------------------
+# Second call with byte-for-byte identical content (same PATH → identical
+# desired_service/desired_timer, same absolute stub) and is-active reporting
+# active. The hot-path short-circuit fires: no rewrite (no daemon-reload) and
+# no enable. Truncating the log isolates this call's invocations.
+: > "$est_log"
+est_service_inode_before=$(stat -c '%i' "$est_service" 2>/dev/null || echo missing)
+if (
+  export DISPATCH_SWEEP_TIMER_UNIT_DIR="$est_unit_dir"
+  export DISPATCH_SWEEP_TIMER_SYSTEMCTL_CMD="$est_tmp/bin/systemctl"
+  export STUB_LOG="$est_log"
+  export STUB_IS_ACTIVE_RC=0 STUB_ENABLE_RC=0 STUB_RELOAD_RC=0
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_sweep_timer "$est_main"
+); then
+  TOTAL=$((TOTAL + 1))
+  if ! grep -qF 'enable --now dispatch-sweep-periodic.timer' "$est_log"; then
+    PASS=$((PASS + 1)); echo "  PASS: idempotent path did not re-run enable"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: idempotent path re-ran enable (hot-path skip did not fire)"
+  fi
+  # Positive assertion that the hot-path check was actually exercised: an empty
+  # log would silently pass the negative enable assertion above, so confirm the
+  # is-active short-circuit probe ran.
+  TOTAL=$((TOTAL + 1))
+  if grep -q 'is-active' "$est_log"; then
+    PASS=$((PASS + 1)); echo "  PASS: idempotent path ran the is-active hot-path probe"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: idempotent path did not run the is-active hot-path probe"
+  fi
+  TOTAL=$((TOTAL + 1))
+  if ! grep -q 'daemon-reload' "$est_log"; then
+    PASS=$((PASS + 1)); echo "  PASS: idempotent path did not rewrite the units (no daemon-reload)"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: idempotent path rewrote the units (daemon-reload ran)"
+  fi
+  TOTAL=$((TOTAL + 1))
+  if [ "$(stat -c '%i' "$est_service" 2>/dev/null || echo missing)" = "$est_service_inode_before" ]; then
+    PASS=$((PASS + 1)); echo "  PASS: idempotent path did not rewrite the .service (inode stable)"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: idempotent path rewrote the .service (inode changed)"
+  fi
+else
+  TOTAL=$((TOTAL + 4)); FAIL=$((FAIL + 4))
+  echo "  FAIL: ensure_sweep_timer (idempotent path) returned non-zero"
+fi
+
+# --- (a) 3. Inactive self-heal ----------------------------------------------
+# Both units on disk match byte-for-byte, but is-active reports inactive (RC=3)
+# — the lingering-disabled state after a user-session restart. The hot-path
+# short-circuit requires content match AND is-active=0, so it must NOT fire:
+# the call proceeds to daemon-reload + enable --now WITHOUT rewriting either
+# unit (inode stable). Mirrors the ensure_daemon_service inactive self-heal.
+: > "$est_log"
+est_service_inode_heal=$(stat -c '%i' "$est_service" 2>/dev/null || echo missing)
+est_timer_inode_heal=$(stat -c '%i' "$est_timer" 2>/dev/null || echo missing)
+if (
+  export DISPATCH_SWEEP_TIMER_UNIT_DIR="$est_unit_dir"
+  export DISPATCH_SWEEP_TIMER_SYSTEMCTL_CMD="$est_tmp/bin/systemctl"
+  export STUB_LOG="$est_log"
+  export STUB_IS_ACTIVE_RC=3 STUB_ENABLE_RC=0 STUB_RELOAD_RC=0
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_sweep_timer "$est_main"
+); then
+  TOTAL=$((TOTAL + 1))
+  if grep -qF 'enable --now dispatch-sweep-periodic.timer' "$est_log"; then
+    PASS=$((PASS + 1)); echo "  PASS: inactive self-heal ran enable --now"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: inactive self-heal did not run enable --now"
+  fi
+  TOTAL=$((TOTAL + 1))
+  if grep -q 'daemon-reload' "$est_log"; then
+    PASS=$((PASS + 1)); echo "  PASS: inactive self-heal ran daemon-reload"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: inactive self-heal skipped daemon-reload"
+  fi
+  TOTAL=$((TOTAL + 1))
+  if [ "$(stat -c '%i' "$est_service" 2>/dev/null || echo missing)" = "$est_service_inode_heal" ] \
+     && [ "$(stat -c '%i' "$est_timer" 2>/dev/null || echo missing)" = "$est_timer_inode_heal" ]; then
+    PASS=$((PASS + 1)); echo "  PASS: inactive self-heal did not rewrite the unchanged units (inodes stable)"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: inactive self-heal rewrote the unchanged units (inode changed)"
+  fi
+else
+  TOTAL=$((TOTAL + 3)); FAIL=$((FAIL + 3))
+  echo "  FAIL: ensure_sweep_timer (inactive self-heal) returned non-zero"
+fi
+
+rm -rf "$est_tmp"
+
+# ============================================================================
+# ensure_sweep_timer: input-validation rejection guards (#2023)
+# ============================================================================
+# Each malformed main_worktree path (newline, space, double-quote, backslash)
+# must be rejected: ensure_sweep_timer returns non-zero, emits a WARNING, and
+# writes no unit file. Mirrors the ensure_recover_unit double-quote/backslash
+# rejection tests. A shared recording systemctl stub stands in so a missing
+# guard that fell through to the install path would still be detectable.
+est_rej_tmp=$(mktemp -d)
+mkdir -p "$est_rej_tmp/bin"
+cat > "$est_rej_tmp/bin/systemctl" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+chmod +x "$est_rej_tmp/bin/systemctl"
+est_rej_service="$est_rej_tmp/systemd-user/dispatch-sweep-periodic.service"
+est_rej_timer="$est_rej_tmp/systemd-user/dispatch-sweep-periodic.timer"
+
+# Each entry: a label and a path fragment carrying the forbidden character.
+# The newline case uses an ANSI-C $'...' literal.
+est_run_reject() {
+  local label="$1" badpath="$2"
+  local rc=0 err
+  err=$( (
+    export DISPATCH_SWEEP_TIMER_UNIT_DIR="$est_rej_tmp/systemd-user"
+    export DISPATCH_SWEEP_TIMER_SYSTEMCTL_CMD="$est_rej_tmp/bin/systemctl"
+    source "$SCRIPT_DIR/lib.sh"
+    ensure_sweep_timer "$badpath"
+  ) 2>&1 1>/dev/null ) || rc=$?
+  TOTAL=$((TOTAL + 1))
+  if [[ "$rc" -ne 0 ]]; then
+    PASS=$((PASS + 1)); echo "  PASS: reject-$label: ensure_sweep_timer returned non-zero"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: reject-$label: ensure_sweep_timer returned zero"
+  fi
+  TOTAL=$((TOTAL + 1))
+  if [[ "$err" == *WARNING* ]]; then
+    PASS=$((PASS + 1)); echo "  PASS: reject-$label: emitted a WARNING to stderr"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: reject-$label: no WARNING on stderr"
+  fi
+  TOTAL=$((TOTAL + 1))
+  if [[ ! -e "$est_rej_service" && ! -e "$est_rej_timer" ]]; then
+    PASS=$((PASS + 1)); echo "  PASS: reject-$label: no unit file was written"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: reject-$label: a unit file was written"
+  fi
+}
+echo ""
+echo "=== ensure_sweep_timer rejects malformed main worktree paths ==="
+est_run_reject "newline" "$est_rej_tmp/has"$'\n'"newline"
+est_run_reject "space" "$est_rej_tmp/has a space"
+est_run_reject "double-quote" "$est_rej_tmp/has\"a\"quote"
+est_run_reject "backslash" "$est_rej_tmp/has\\a\\slash"
+unset -f est_run_reject
+rm -rf "$est_rej_tmp"
+
+# ============================================================================
+# ensure_sweep_timer: systemctl failure paths warn + return non-zero (#2023)
+# ============================================================================
+# daemon-reload failure and enable --now failure must each cause a non-zero
+# return with a WARNING to stderr (warn + return per the helper's contract —
+# never a hard exit). Mirrors the ensure_daemon_service degrade tests.
+est_fail_tmp=$(mktemp -d)
+mkdir -p "$est_fail_tmp/bin"
+cat > "$est_fail_tmp/bin/systemctl" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$STUB_LOG"
+for a in "$@"; do
+  case "$a" in
+    is-active) exit "${STUB_IS_ACTIVE_RC:-0}" ;;
+    enable) exit "${STUB_ENABLE_RC:-0}" ;;
+    daemon-reload) exit "${STUB_RELOAD_RC:-0}" ;;
+  esac
+done
+exit 0
+STUB
+chmod +x "$est_fail_tmp/bin/systemctl"
+est_fail_log="$est_fail_tmp/systemctl.log"
+est_fail_main="$est_fail_tmp/main-worktree"
+
+echo ""
+echo "=== ensure_sweep_timer degrades on systemctl failures ==="
+# --- daemon-reload failure ---------------------------------------------------
+: > "$est_fail_log"
+est_reload_rc=0
+est_reload_err=$( (
+  export DISPATCH_SWEEP_TIMER_UNIT_DIR="$est_fail_tmp/reload-fail"
+  export DISPATCH_SWEEP_TIMER_SYSTEMCTL_CMD="$est_fail_tmp/bin/systemctl"
+  export STUB_LOG="$est_fail_log"
+  export STUB_IS_ACTIVE_RC=0 STUB_ENABLE_RC=0 STUB_RELOAD_RC=1
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_sweep_timer "$est_fail_main"
+) 2>&1 1>/dev/null ) || est_reload_rc=$?
+TOTAL=$((TOTAL + 1))
+if [[ "$est_reload_rc" -ne 0 ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: daemon-reload failure → non-zero return"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: daemon-reload failure returned zero"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$est_reload_err" == *WARNING* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: daemon-reload failure emitted a WARNING"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: daemon-reload failure did not emit a WARNING"
+fi
+TOTAL=$((TOTAL + 1))
+if ! grep -q 'enable' "$est_fail_log"; then
+  PASS=$((PASS + 1)); echo "  PASS: daemon-reload failure did not reach enable"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: daemon-reload failure reached enable despite reload failure"
+fi
+
+# --- enable --now failure ----------------------------------------------------
+: > "$est_fail_log"
+est_enable_rc=0
+est_enable_err=$( (
+  export DISPATCH_SWEEP_TIMER_UNIT_DIR="$est_fail_tmp/enable-fail"
+  export DISPATCH_SWEEP_TIMER_SYSTEMCTL_CMD="$est_fail_tmp/bin/systemctl"
+  export STUB_LOG="$est_fail_log"
+  export STUB_IS_ACTIVE_RC=0 STUB_ENABLE_RC=1 STUB_RELOAD_RC=0
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_sweep_timer "$est_fail_main"
+) 2>&1 1>/dev/null ) || est_enable_rc=$?
+TOTAL=$((TOTAL + 1))
+if [[ "$est_enable_rc" -ne 0 ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: enable --now failure → non-zero return"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: enable --now failure returned zero"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$est_enable_err" == *WARNING* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: enable --now failure emitted a WARNING"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: enable --now failure did not emit a WARNING"
+fi
+echo "  (test shell survived the degrade paths)"
+rm -rf "$est_fail_tmp"
+
+# --- (b) AC#4: the timer path invokes the sweep with no live worker ----------
+# Model the timer firing by running the .service's ExecStart command directly
+# (dispatch-spawn-sweep) under the sw_setup harness, in the default no-live-
+# worker environment. dispatch-spawn-sweep itself does not consult
+# `claude agents --json` — "no live worker" here is the ambient default with no
+# Stop hook driving the launch — so reaching the recorded `--unit=dispatch-sweep`
+# systemd-run argv proves the timer path reaches the sweep unconditionally,
+# exactly as the periodic timer fires it. Clones the SW1 argv assertion.
+echo "Test: AC#4 #2023 — the timer-fired service path launches dispatch-sweep with no live worker"
+sw_setup
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-sweep" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "ac4-timer: dispatch-spawn-sweep exits 0" "0" "$rc"
+assert_eq "ac4-timer: stdout is 'spawned'" "spawned" "$out"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"--unit=dispatch-sweep"* \
+   && "$log" == *"--working-directory=$TMPDIR_TEST/main"* \
+   && "$log" == *"$TMPDIR_TEST/main/.claude/skills/dispatch-propagate/scripts/dispatch-sweep"* \
+   && "$log" != *"OnFailure"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: ac4-timer: timer path reached dispatch-sweep (unit + cwd + exec, no OnFailure)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: ac4-timer: timer path reached dispatch-sweep (unit + cwd + exec, no OnFailure)"
+  echo "    log: $log"
 fi
 sw_teardown
 
@@ -18257,6 +20542,20 @@ exit 0
 FAKE
   chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-self-close"
 
+  # Fake dispatch-recover-dispatched-phase: prints $STUB_DIR/dispatched-phase.txt
+  # when that file is present and non-empty, exits 0; otherwise exits 1 (no output).
+  # The default non-zero exit keeps every existing marker-absent park test unaffected:
+  # DISPATCHED_PHASE="" → condition false → fall through to park.
+  cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-recover-dispatched-phase" <<'FAKE'
+#!/usr/bin/env bash
+if [[ -s "$STUB_DIR/dispatched-phase.txt" ]]; then
+  cat "$STUB_DIR/dispatched-phase.txt"
+  exit 0
+fi
+exit 1
+FAKE
+  chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-recover-dispatched-phase"
+
   # gh PATH stub. issue-edit-mode "label-missing" models the apply-first /
   # create-on-"not found" idiom — first add-label fails with "not found" stderr,
   # exits 1; once gh-label-create.log exists, the retry succeeds.
@@ -18387,6 +20686,37 @@ if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" ]]; 
   PASS=$((PASS + 1)); echo "  PASS: stop advance: no add-label calls were made"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: stop advance: no add-label calls were made"
+fi
+stop_teardown
+
+# --- Test 1a: dispatch-stop surfaces spawn-tick result on stderr (#2013) ------
+
+echo "Test: stop hook surfaces the dispatch-spawn-tick result (deduped) on stderr (#2013)"
+stop_setup
+# Override the spawn-tick fake to emit "deduped" (models a tick already running).
+cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-spawn-tick" <<'FAKE'
+#!/usr/bin/env bash
+echo "spawn" >> "$STUB_DIR/spawn-calls.log"
+echo "deduped"
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-spawn-tick"
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "456" > "$STUB_DIR/find-pr-output"
+echo "fix-checks" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+echo "phase=implement" > "$TMPDIR_TEST/jobs/abcd1234/phase-completed"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>"$STUB_DIR/hook-stderr.log"
+rc=$?
+assert_eq "stop stderr-surface: hook exits 0" "0" "$rc"
+hook_stderr=$(cat "$STUB_DIR/hook-stderr.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$hook_stderr" == *"dispatch-spawn-tick: deduped"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop stderr-surface: spawn-tick result surfaced on stderr"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop stderr-surface: spawn-tick result surfaced on stderr"
+  echo "    hook-stderr: $hook_stderr"
 fi
 stop_teardown
 
@@ -19459,6 +21789,260 @@ fi
 # NOT that the payload was parsed (it never is in this hook).
 spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
 assert_eq "stop open-stdin: spawn invoked exactly once (disposition unaffected)" "1" "$spawn_calls"
+stop_teardown
+
+# ============================================================================
+# dispatch-stop: side-effect recovery wiring tests (#2025)
+# ============================================================================
+#
+# These tests exercise the recovery block inserted after the #1590 wakeup gate
+# and the #1733 rate-limit block in Branch A (marker absent). They reach it by
+# supplying < /dev/null (no payload, no trailing ScheduleWakeup, no rate-limit
+# death transcript) and staging dispatched-phase.txt / current-phase.txt stubs
+# so the fake dispatch-recover-dispatched-phase and dispatch-phase return
+# controlled values.
+
+# --- Test #2025-1: false-park recovered (plan→implement) → advance (no park) --
+echo "Test: #2025 stop recovery: dispatched=plan, current=implement → advance (spawn+self-close+sweep, no park)"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "plan"      > "$STUB_DIR/dispatched-phase.txt"
+echo "implement" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+# No phase-completed marker, no office-hours-reason → Branch A.
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "#2025 plan→implement advance: hook exits 0" "0" "$rc"
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "#2025 plan→implement advance: spawn invoked exactly once" "1" "$spawn_calls"
+self_close_calls=$(wc -l < "$STUB_DIR/self-close-calls.log" 2>/dev/null || echo 0)
+assert_eq "#2025 plan→implement advance: self-close invoked exactly once" "1" "$self_close_calls"
+sweep_calls=$(wc -l < "$STUB_DIR/sweep-calls.log" 2>/dev/null || echo 0)
+assert_eq "#2025 plan→implement advance: sweep invoked (sweep log present)" "1" "$sweep_calls"
+issue_remove_log=$(cat "$STUB_DIR/gh-issue-remove.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$issue_remove_log" == *"issue edit 123 --remove-label dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2025 plan→implement advance: strip_office_hours_label ran (issue remove-label)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2025 plan→implement advance: strip_office_hours_label ran (issue remove-label)"
+  echo "    issue-remove-log: $issue_remove_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2025 plan→implement advance: NOT parked on office-hours"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2025 plan→implement advance: NOT parked on office-hours"
+  echo "    apply-log: $(cat "$STUB_DIR/apply-office-hours.log")"
+fi
+stop_teardown
+
+# --- Test #2025-2: per-phase advance pairs → advance for each -----------------
+# (implement→qa), (qa→review), (review→done): main-chain forward moves advance.
+# (fix-checks→qa), (fix-conflicts→implement): fix-* phases also advance once
+# their structural side-effect (green CI / resolved conflict) lands and the
+# chain re-derives the downstream phase. These two guard fix-phase recovery,
+# which the main-chain-only pairs never exercise.
+for _pair in "implement:qa" "qa:review" "review:done" \
+             "fix-checks:qa" "fix-conflicts:implement"; do
+  _dispatched="${_pair%%:*}"
+  _current="${_pair##*:}"
+  echo "Test: #2025 stop recovery: dispatched=$_dispatched, current=$_current → advance (spawn+self-close+sweep, no park)"
+  stop_setup
+  echo "123-foo-bar"  > "$STUB_DIR/current-branch.txt"
+  echo "$_dispatched" > "$STUB_DIR/dispatched-phase.txt"
+  echo "$_current"    > "$STUB_DIR/current-phase.txt"
+  echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+  export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+  "$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+  rc=$?
+  assert_eq "#2025 $_dispatched→$_current advance: hook exits 0" "0" "$rc"
+  spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+  assert_eq "#2025 $_dispatched→$_current advance: spawn invoked exactly once" "1" "$spawn_calls"
+  self_close_calls=$(wc -l < "$STUB_DIR/self-close-calls.log" 2>/dev/null || echo 0)
+  assert_eq "#2025 $_dispatched→$_current advance: self-close invoked exactly once" "1" "$self_close_calls"
+  TOTAL=$((TOTAL + 1))
+  if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
+    PASS=$((PASS + 1)); echo "  PASS: #2025 $_dispatched→$_current advance: NOT parked on office-hours"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: #2025 $_dispatched→$_current advance: NOT parked on office-hours"
+  fi
+  stop_teardown
+done
+
+# --- Test #2025-3: genuine park (implement→implement, equal phases) -----------
+echo "Test: #2025 stop recovery: dispatched=implement, current=implement (equal) → genuine park, no advance"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "implement"  > "$STUB_DIR/dispatched-phase.txt"
+echo "implement"  > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "#2025 implement=implement genuine-park: hook exits 0" "0" "$rc"
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
+apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
+TOTAL=$((TOTAL + 1))
+if [[ "$apply_issue" == "123" && -n "$apply_reason" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2025 implement=implement genuine-park: office-hours applied to issue 123 + non-empty reason"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2025 implement=implement genuine-park: office-hours applied to issue 123 + non-empty reason"
+  echo "    apply-log: $apply_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2025 implement=implement genuine-park: self-close NOT invoked (no false advance)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2025 implement=implement genuine-park: self-close NOT invoked (no false advance)"
+fi
+stop_teardown
+
+# --- Test #2025-4: recovery fails (no dispatched-phase.txt) → park -----------
+echo "Test: #2025 stop recovery: recovery fails (no dispatched-phase.txt stub) → genuine park preserved"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+# Intentionally do NOT write dispatched-phase.txt → fake exits 1 → DISPATCHED_PHASE=""
+echo "implement"  > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "#2025 recovery-fails park: hook exits 0" "0" "$rc"
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
+apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
+TOTAL=$((TOTAL + 1))
+if [[ "$apply_issue" == "123" && -n "$apply_reason" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2025 recovery-fails park: office-hours applied to issue 123 + non-empty reason"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2025 recovery-fails park: office-hours applied to issue 123 + non-empty reason"
+  echo "    apply-log: $apply_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2025 recovery-fails park: self-close NOT invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2025 recovery-fails park: self-close NOT invoked"
+fi
+stop_teardown
+
+# --- Test #2025-5: fix-checks no-progress (equal phases) → park ---------------
+echo "Test: #2025 stop recovery: dispatched=fix-checks, current=fix-checks (equal) → genuine park, no advance"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "fix-checks" > "$STUB_DIR/dispatched-phase.txt"
+echo "fix-checks" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "#2025 fix-checks=fix-checks genuine-park: hook exits 0" "0" "$rc"
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
+apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
+TOTAL=$((TOTAL + 1))
+if [[ "$apply_issue" == "123" && -n "$apply_reason" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2025 fix-checks=fix-checks genuine-park: office-hours applied to issue 123 + non-empty reason"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2025 fix-checks=fix-checks genuine-park: office-hours applied to issue 123 + non-empty reason"
+  echo "    apply-log: $apply_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2025 fix-checks=fix-checks genuine-park: self-close NOT invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2025 fix-checks=fix-checks genuine-park: self-close NOT invoked"
+fi
+stop_teardown
+
+# --- Test #2025-6: idle-poll precedence preserved (#1590 gate fires first) ----
+# Supply a trailing-ScheduleWakeup transcript AND set dispatched-phase.txt=plan
+# with current-phase.txt=implement (values that WOULD advance if the recovery
+# block were reached). The wakeup gate MUST fire first so the hook exits 0 early
+# without ever reaching the recovery block.
+echo "Test: #2025 stop recovery: #1590 wakeup gate fires before recovery (idle-poll precedence preserved)"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "plan"      > "$STUB_DIR/dispatched-phase.txt"
+echo "implement" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+# Trailing-ScheduleWakeup transcript: matches the #1590 idle-poll discriminator.
+cat > "$TMPDIR_TEST/transcript.jsonl" <<'EOF'
+{"type":"user","message":{"content":[{"type":"text","text":"poll"}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","content":"ok"}]}}
+{"type":"assistant","message":{"content":[{"type":"text","text":"waiting"},{"type":"tool_use","name":"ScheduleWakeup","input":{}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","content":"scheduled"}]}}
+EOF
+FIXTURE="$TMPDIR_TEST/transcript.jsonl"
+printf '%s\n' '{"transcript_path":"'"$FIXTURE"'"}' | "$TMPDIR_TEST/hooks/dispatch-stop.sh" >/dev/null 2>&1
+rc=$?
+assert_eq "#2025 idle-poll precedence: hook exits 0 (wakeup gate fired)" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2025 idle-poll precedence: NOT parked (wakeup gate fired before recovery)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2025 idle-poll precedence: NOT parked (wakeup gate fired before recovery)"
+  echo "    apply-log: $(cat "$STUB_DIR/apply-office-hours.log")"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/spawn-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2025 idle-poll precedence: NOT spawned (wakeup gate fired, no tick)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2025 idle-poll precedence: NOT spawned (wakeup gate fired, no tick)"
+  echo "    spawn-calls: $(cat "$STUB_DIR/spawn-calls.log")"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2025 idle-poll precedence: NOT self-closed (wakeup gate fired, no advance)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2025 idle-poll precedence: NOT self-closed (wakeup gate fired, no advance)"
+  echo "    self-close-calls: $(cat "$STUB_DIR/self-close-calls.log")"
+fi
+stop_teardown
+
+# --- Test #2025-7: backwards phase (dispatched=qa, current=implement) → park --
+# The recovery block must advance ONLY when the chain moved FORWARD past the
+# dispatched phase. A dispatched=qa session whose PR was closed mid-phase
+# re-derives to implement — a BACKWARDS move. The chain did not progress past
+# the dispatched phase, so the structural side-effects of qa never landed: this
+# must park on office-hours, NOT self-close-and-advance.
+#
+# NOTE: this asserts forward-only recovery. It passes only once the recovery
+# block's `[ "$DISPATCHED_PHASE" != "$CURRENT_PHASE" ]` comparison is replaced
+# with a forward-only (phase-rank) check. Under the current `!=` comparison the
+# hook treats any inequality — including this backwards move — as an advance, so
+# this test is RED until that sibling hook fix lands in the same commit. Its
+# redness is the point: it is the regression guard the finding asks for.
+echo "Test: #2025 stop recovery: dispatched=qa, current=implement (backwards) → genuine park, no advance"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "qa"        > "$STUB_DIR/dispatched-phase.txt"
+echo "implement" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "#2025 qa→implement backwards-park: hook exits 0" "0" "$rc"
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
+apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
+TOTAL=$((TOTAL + 1))
+if [[ "$apply_issue" == "123" && -n "$apply_reason" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2025 qa→implement backwards-park: office-hours applied to issue 123 + non-empty reason"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2025 qa→implement backwards-park: office-hours applied to issue 123 + non-empty reason"
+  echo "    apply-log: $apply_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2025 qa→implement backwards-park: self-close NOT invoked (no false advance)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2025 qa→implement backwards-park: self-close NOT invoked (no false advance)"
+fi
 stop_teardown
 
 # ============================================================================
@@ -21812,6 +24396,20 @@ echo called >> "$STUB_DIR/auto-merge-calls.log"
 exit 0
 FAKE
   chmod +x "$TMPDIR_TEST/dispatch-auto-merge"
+  # #1812: fake dispatch-retriage-orphaned-followups invoked unconditionally by
+  # Step 2e. Logs its invocation and emits a configurable line so a wiring test
+  # can assert the tick prefixes it with `retriage: `. SILENT by default (emits
+  # nothing unless SEL_RETRIAGE_OUT is set, exit 0) so RETRIAGE_OUT stays empty
+  # and every existing tick test is byte-identical to the pre-#1812 no-op. The
+  # real re-triage logic has its own unit tests below; here we only verify wiring.
+  cat > "$TMPDIR_TEST/dispatch-retriage-orphaned-followups" <<'FAKE'
+#!/usr/bin/env bash
+STUB_DIR="$(cd "$(dirname "$0")/stub" && pwd)"
+echo called >> "$STUB_DIR/retriage-calls.log"
+[[ -n "${SEL_RETRIAGE_OUT:-}" ]] && printf '%s\n' "$SEL_RETRIAGE_OUT"
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/dispatch-retriage-orphaned-followups"
   # Sourced helper: provides claude_agents_count_busy_workers (driven by
   # SEL_LIVE_COUNT*) and claude_agents_list_all (driven by SEL_AGENTS_*, used by
   # the reservation-ledger sweep the gate runs before counting). The heredoc is
@@ -21941,7 +24539,7 @@ sel_tick_teardown() {
     DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE SEL_GIT_MERGE_LOG \
     SEL_SESSIONS_UNDER_RC SEL_SESSIONS_UNDER_TSV \
     DISPATCH_LOCK_PROBE_TIMEOUT DISPATCH_LOCK_FLOCK_TIMEOUT \
-    SEL_AUTO_MERGE_OUT
+    SEL_AUTO_MERGE_OUT SEL_RETRIAGE_OUT
 }
 
 # Run the orchestrator, capturing full stdout; the decision is the last line.
@@ -22101,6 +24699,24 @@ else
 fi
 assert_eq "auto-merge suppressed: dispatch-auto-merge NOT invoked" "absent" \
   "$([[ -f "$STUB_DIR/auto-merge-calls.log" ]] && echo present || echo absent)"
+sel_tick_teardown
+
+# --- Step 2e: re-triage orphaned follow-ups wiring (#1812) -------------------
+# Step 2e runs dispatch-retriage-orphaned-followups unconditionally and prefixes
+# each of its stdout lines with `retriage: `. The fake emits SEL_RETRIAGE_OUT.
+echo "Test: select-tick re-triage wiring → retriage: line, retriage script invoked"
+sel_tick_setup
+export SEL_RETRIAGE_OUT="retriaged #101 (source PR #1704 closed unmerged)"
+out=$(run_sel_tick)
+TOTAL=$((TOTAL + 1))
+if grep -q '^retriage: retriaged #101 (source PR #1704 closed unmerged)$' <<<"$out"; then
+  PASS=$((PASS + 1)); echo "  PASS: tick emits 'retriage: retriaged #101 ...'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: tick emits 'retriage: retriaged #101 ...'"
+  echo "    actual stdout: '$out'"
+fi
+assert_eq "re-triage wiring: dispatch-retriage-orphaned-followups invoked" "present" \
+  "$([[ -f "$STUB_DIR/retriage-calls.log" ]] && echo present || echo absent)"
 sel_tick_teardown
 
 # --- #1495: dirty main → sync-failed, reseed armed, counter bumped -----------
@@ -23439,7 +26055,7 @@ assert_eq "explicit PR: launcher keyed on original 839" \
 mat_teardown
 
 # --- explicit trace-leaf hard failure → exit 2, lock released, no spawn -------
-# dispatch-trace-leaf's exit 1 is a hard sibling-gh failure the caller must NOT
+# dispatch-trace-leaf's exit 3 is a hard sibling-gh failure the caller must NOT
 # swallow as "no work" (its documented contract). A swallowed failure would
 # dispatch the un-traced N; instead the script releases the lock and exits 2.
 echo "Test: materialize-spawn explicit trace-leaf hard failure → exit 2 + lock released"
@@ -23447,7 +26063,7 @@ mat_setup
 cat > "$TMPDIR_TEST/dispatch-trace-leaf" <<'STUB'
 #!/usr/bin/env bash
 echo "trace-leaf gh failure" >&2
-exit 1
+exit 3
 STUB
 chmod +x "$TMPDIR_TEST/dispatch-trace-leaf"
 out=$(run_mat 839 explicit) && rc=0 || rc=$?
@@ -25033,6 +27649,12 @@ assert_eq "auto-cap: no materialize call" "0" \
   "$([ -f "$TMPDIR_TEST/logs/materialize.log" ] && echo 1 || echo 0)"
 assert_eq "auto-cap: no manual flag sent to select-tick" "0" \
   "$(grep -cF -- '--manual' "$TMPDIR_TEST/logs/select-tick.log" 2>/dev/null)"
+# #2022 AC5: a no-op heartbeat tick (autonomous concurrency-cap) must never
+# call dispatch-spawn-job — that would launch a worker session and consume
+# model tokens. The tick_setup fake logs spawn-job invocations to spawn-job.log;
+# its absence proves no worker was spawned.
+assert_eq "auto-cap: no spawn-job call (#2022 AC5 heartbeat no-op)" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/spawn-job.log" ] && echo 1 || echo 0)"
 tick_teardown
 
 # --- #1127: refresh runs before select (budget read sees fresh telemetry) ----
@@ -25773,7 +28395,7 @@ assert_eq "verify-drop: i1 non-Required kept without verify key" "false" "$(prin
 
 echo "Test: dispatch-qa-disposition"
 
-# All branches in one object (order: f1..f6) plus a separate passthrough check.
+# All branches in one object (order: f1..f8) plus a separate passthrough check.
 # f1: opus-fixable  → final_class=opus-fixable, verify=n/a
 # f2: needs-main    → final_class=needs-main,   verify=n/a
 # f3: needs-human, aesthetic:false, votes=[refuted,upheld] → opus-fixable, Refuted
@@ -25781,7 +28403,8 @@ echo "Test: dispatch-qa-disposition"
 # f5: needs-human, aesthetic:false, NO entry in votes map  → needs-human,  Unverified (INVERTED EDGE)
 # f6: needs-human, aesthetic:true,  votes=[refuted,refuted]→ needs-human,  n/a (aesthetic bypasses)
 # f7: already-satisfied (no votes entry) → final_class=already-satisfied, verify=n/a (first-branch pass-through)
-IN='{"items":[{"id":"f1","class":"opus-fixable","aesthetic":false},{"id":"f2","class":"needs-main","aesthetic":false},{"id":"f3","class":"needs-human","aesthetic":false},{"id":"f4","class":"needs-human","aesthetic":false},{"id":"f5","class":"needs-human","aesthetic":false},{"id":"f6","class":"needs-human","aesthetic":true},{"id":"f7","class":"already-satisfied","aesthetic":false}],"votes":{"f3":["refuted","upheld"],"f4":["upheld","upheld"],"f6":["refuted","refuted"]}}'
+# f8: already-satisfied, votes=[refuted,refuted] present → final_class=already-satisfied, verify=n/a (votes ignored; vote-bypass invariant)
+IN='{"items":[{"id":"f1","class":"opus-fixable","aesthetic":false},{"id":"f2","class":"needs-main","aesthetic":false},{"id":"f3","class":"needs-human","aesthetic":false},{"id":"f4","class":"needs-human","aesthetic":false},{"id":"f5","class":"needs-human","aesthetic":false},{"id":"f6","class":"needs-human","aesthetic":true},{"id":"f7","class":"already-satisfied","aesthetic":false},{"id":"f8","class":"already-satisfied","aesthetic":false}],"votes":{"f3":["refuted","upheld"],"f4":["upheld","upheld"],"f6":["refuted","refuted"],"f8":["refuted","refuted"]}}'
 out=$(printf '%s' "$IN" | "$SCRIPT_DIR/dispatch-qa-disposition")
 
 # Branch: opus-fixable passes through
@@ -25813,6 +28436,10 @@ assert_eq "qa-disposition: aesthetic needs-human with refuted votes → verify=n
 assert_eq "qa-disposition: already-satisfied → final_class=already-satisfied" "already-satisfied" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f7") | .final_class')"
 assert_eq "qa-disposition: already-satisfied → verify=n/a" "n/a" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f7") | .verify')"
 
+# Branch: already-satisfied with refuting votes present → still first-branch pass-through (votes ignored; the vote-bypass invariant f7 cannot catch)
+assert_eq "qa-disposition: already-satisfied with refuted votes → final_class=already-satisfied" "already-satisfied" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f8") | .final_class')"
+assert_eq "qa-disposition: already-satisfied with refuted votes → verify=n/a" "n/a" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f8") | .verify')"
+
 # Passthrough: original class and aesthetic fields survive on output items
 assert_eq "qa-disposition: passthrough class field preserved" "needs-human" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f3") | .class')"
 assert_eq "qa-disposition: passthrough aesthetic field preserved" "false" "$(printf '%s' "$out" | jq -r '.dispositions[] | select(.id=="f3") | .aesthetic')"
@@ -25822,14 +28449,79 @@ IN_TITLE='{"items":[{"id":"t1","class":"needs-human","aesthetic":false,"title":"
 out_title=$(printf '%s' "$IN_TITLE" | "$SCRIPT_DIR/dispatch-qa-disposition")
 assert_eq "qa-disposition: passthrough title field preserved" "Check me" "$(printf '%s' "$out_title" | jq -r '.dispositions[0].title')"
 
-# Output order: items must appear in input order (f1..f7)
+# Output order: items must appear in input order (f1..f8)
 assert_eq "qa-disposition: output order preserved" "f1
 f2
 f3
 f4
 f5
 f6
-f7" "$(printf '%s' "$out" | jq -r '.dispositions[].id')"
+f7
+f8" "$(printf '%s' "$out" | jq -r '.dispositions[].id')"
+
+# ============================================================================
+# === qa-fix partition (#1844) ===
+# ============================================================================
+# CI vector: run-unit-tests.sh has no mapping for .claude/workflows/*, so a PR
+# touching only qa-fix.js triggers no vitest suite. The hook-tests job (this
+# script) is the only test that runs on every PR, so coverage for
+# partitionDispositions must live here. The probe slices the pure function out
+# of qa-fix.js between sentinel comments and evals just that slice.
+
+echo "Test: qa-fix partition (#1844)"
+
+out=$(node "$SCRIPT_DIR/qa-fix-partition-probe.mjs")
+
+# already-satisfied id (p4) is partitioned OUT of dispositions
+assert_eq "qa-fix partition: already-satisfied id absent from dispositions" "false" "$(printf '%s' "$out" | jq -r '.dispositions | any(. == "p4")')"
+# already-satisfied id (p4) is partitioned INTO already_satisfied
+assert_eq "qa-fix partition: already-satisfied id present in already_satisfied" "true" "$(printf '%s' "$out" | jq -r '.already_satisfied | any(. == "p4")')"
+# inverse guard: a non-already-satisfied id (p1, opus-fixable) stays in dispositions
+assert_eq "qa-fix partition: non-already-satisfied id present in dispositions" "true" "$(printf '%s' "$out" | jq -r '.dispositions | any(. == "p1")')"
+# anti-over-filtering: needs-main (p2) and needs-human (p3) must ALSO survive in
+# dispositions. Without these, a regression like `class !== 'needs-main'` in the
+# dispositions filter would pass (p1 still present, p4 still absent).
+assert_eq "qa-fix partition: needs-main id present in dispositions" "true" "$(printf '%s' "$out" | jq -r '.dispositions | any(. == "p2")')"
+assert_eq "qa-fix partition: needs-human id present in dispositions" "true" "$(printf '%s' "$out" | jq -r '.dispositions | any(. == "p3")')"
+# count guard: exactly the 3 non-already-satisfied items land in dispositions.
+assert_eq "qa-fix partition: dispositions count is 3" "3" "$(printf '%s' "$out" | jq -r '.dispositions | length')"
+# shape guard: the already_satisfied projection keeps exactly {id, title, kind,
+# rationale} — class/aesthetic/verify are stripped. A regression that omits a
+# key or leaks a stripped field changes this sorted key set.
+assert_eq "qa-fix partition: already_satisfied element keys" '["id","kind","rationale","title"]' "$(printf '%s' "$out" | jq -c '.already_satisfied_keys')"
+# call-site coverage: qa-fix.js still invokes the function the probe slices.
+# This file defines its own assert_eq (it does not source test-helpers.sh), so
+# use the grep -c | assert_eq convention the rest of the suite uses.
+# Match `= partitionDispositions(allDispositions)` (the call site), not the bare
+# `function partitionDispositions(allDispositions)` definition — both contain the
+# call substring, so the `= ` prefix isolates the invocation to exactly one line.
+assert_eq "qa-fix partition: call site present in qa-fix.js" "1" "$(grep -c '= partitionDispositions(allDispositions)' "$REPO_ROOT/.claude/workflows/qa-fix.js" || true)"
+
+# planned-deferral branch (issue #1891) — three separate input objects to avoid
+# disturbing the f1..f7 order assertion above.
+#
+# (a) opus-fixable + planned_deferral:true → authoritatively needs-main / n/a
+#     (the literal original failure mode: an opus-fixable item routed to the
+#     auto-fix loop because the planned-deferral branch was absent)
+IN_PD_A='{"items":[{"id":"pd1","class":"opus-fixable","aesthetic":false,"planned_deferral":true}],"votes":{}}'
+out_pd_a=$(printf '%s' "$IN_PD_A" | "$SCRIPT_DIR/dispatch-qa-disposition")
+assert_eq "qa-disposition: planned_deferral opus-fixable → final_class=needs-main" "needs-main" "$(printf '%s' "$out_pd_a" | jq -r '.dispositions[0].final_class')"
+assert_eq "qa-disposition: planned_deferral opus-fixable → verify=n/a" "n/a" "$(printf '%s' "$out_pd_a" | jq -r '.dispositions[0].verify')"
+
+# (b) needs-human + planned_deferral:true WITH a refuting vote → stays needs-main/n/a
+#     (NOT downgraded to opus-fixable — the fan-out is bypassed by the first branch)
+IN_PD_B='{"items":[{"id":"pd2","class":"needs-human","aesthetic":false,"planned_deferral":true}],"votes":{"pd2":["refuted"]}}'
+out_pd_b=$(printf '%s' "$IN_PD_B" | "$SCRIPT_DIR/dispatch-qa-disposition")
+assert_eq "qa-disposition: planned_deferral needs-human with refuted vote → final_class=needs-main (not downgraded to opus-fixable)" "needs-main" "$(printf '%s' "$out_pd_b" | jq -r '.dispositions[0].final_class')"
+assert_eq "qa-disposition: planned_deferral needs-human with refuted vote → verify=n/a (not Refuted)" "n/a" "$(printf '%s' "$out_pd_b" | jq -r '.dispositions[0].verify')"
+
+# (c) regression guard — non-flagged needs-human with refuting vote still downgrades
+#     (genuine opus-fixable behavior unchanged; f3 above already proves this but
+#     we repeat it inline as a named regression guard for clarity)
+IN_PD_C='{"items":[{"id":"pd3","class":"needs-human","aesthetic":false}],"votes":{"pd3":["refuted"]}}'
+out_pd_c=$(printf '%s' "$IN_PD_C" | "$SCRIPT_DIR/dispatch-qa-disposition")
+assert_eq "qa-disposition: regression guard non-flagged needs-human + refuted → final_class=opus-fixable" "opus-fixable" "$(printf '%s' "$out_pd_c" | jq -r '.dispositions[0].final_class')"
+assert_eq "qa-disposition: regression guard non-flagged needs-human + refuted → verify=Refuted" "Refuted" "$(printf '%s' "$out_pd_c" | jq -r '.dispositions[0].verify')"
 
 # dispatch-jit-skill tests
 # ============================================================================
@@ -28009,6 +30701,120 @@ fi
 rm -rf "$eds_tmp"
 
 # ============================================================================
+# ensure_heartbeat_units: correct unit content + idempotency (#2022)
+# ============================================================================
+#
+# Mirrors the ensure_daemon_service recording-stub block above. A recording
+# systemctl stub appends its argv to $ehu_log and returns exit codes driven by
+# STUB_IS_ACTIVE_RC / STUB_ENABLE_RC / STUB_RELOAD_RC env flags.  Cold path
+# (unit files absent): writes both unit files, runs daemon-reload and enable
+# --now.  Hot path (both units byte-identical AND timer active): returns early
+# without daemon-reload or enable --now.
+echo ""
+echo "=== ensure_heartbeat_units: unit content + idempotency (#2022) ==="
+ehu_tmp=$(mktemp -d)
+mkdir -p "$ehu_tmp/bin" "$ehu_tmp/main-worktree"
+cat > "$ehu_tmp/bin/systemctl" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$STUB_LOG"
+for a in "$@"; do
+  case "$a" in
+    is-active) exit "${STUB_IS_ACTIVE_RC:-0}" ;;
+    enable)    exit "${STUB_ENABLE_RC:-0}" ;;
+    daemon-reload) exit "${STUB_RELOAD_RC:-0}" ;;
+  esac
+done
+exit 0
+STUB
+chmod +x "$ehu_tmp/bin/systemctl"
+ehu_unit_dir="$ehu_tmp/systemd-user"
+ehu_svc="$ehu_unit_dir/dispatch-heartbeat.service"
+ehu_tmr="$ehu_unit_dir/dispatch-heartbeat.timer"
+ehu_log="$ehu_tmp/systemctl.log"
+
+# --- 1. Cold path: writes both unit files, runs daemon-reload + enable --now -
+: > "$ehu_log"
+if (
+  export DISPATCH_HEARTBEAT_UNIT_DIR="$ehu_unit_dir"
+  export DISPATCH_HEARTBEAT_SYSTEMCTL_CMD="$ehu_tmp/bin/systemctl"
+  export STUB_LOG="$ehu_log"
+  export STUB_IS_ACTIVE_RC=3 STUB_ENABLE_RC=0 STUB_RELOAD_RC=0
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_heartbeat_units "$ehu_tmp/main-worktree"
+); then
+  if [ -f "$ehu_svc" ]; then
+    TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: cold path wrote dispatch-heartbeat.service"
+    grep -qF '/dispatch-tick' "$ehu_svc" \
+      && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: service ExecStart= references dispatch-tick"; } \
+      || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: service ExecStart= missing dispatch-tick"; }
+    grep -q '^KillMode=process$' "$ehu_svc" \
+      && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: service has KillMode=process"; } \
+      || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: service missing KillMode=process"; }
+    grep -q '^OnFailure=dispatch-tick-recover.service$' "$ehu_svc" \
+      && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: service has OnFailure=dispatch-tick-recover.service"; } \
+      || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: service missing OnFailure=dispatch-tick-recover.service"; }
+  else
+    TOTAL=$((TOTAL + 4)); FAIL=$((FAIL + 4))
+    echo "  FAIL: cold path did not write dispatch-heartbeat.service"
+  fi
+  if [ -f "$ehu_tmr" ]; then
+    TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: cold path wrote dispatch-heartbeat.timer"
+    grep -q '^OnUnitActiveSec=15min$' "$ehu_tmr" \
+      && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: timer has OnUnitActiveSec=15min"; } \
+      || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: timer missing OnUnitActiveSec=15min"; }
+    grep -q '^OnBootSec=2min$' "$ehu_tmr" \
+      && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: timer has OnBootSec=2min"; } \
+      || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: timer missing OnBootSec=2min"; }
+    grep -q '^Persistent=true$' "$ehu_tmr" \
+      && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: timer has Persistent=true"; } \
+      || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: timer missing Persistent=true"; }
+  else
+    TOTAL=$((TOTAL + 4)); FAIL=$((FAIL + 4))
+    echo "  FAIL: cold path did not write dispatch-heartbeat.timer"
+  fi
+  grep -q 'daemon-reload' "$ehu_log" \
+    && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: cold path ran daemon-reload"; } \
+    || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: cold path did not run daemon-reload"; }
+  grep -q 'enable --now dispatch-heartbeat.timer' "$ehu_log" \
+    && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: cold path ran enable --now dispatch-heartbeat.timer"; } \
+    || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: cold path did not run enable --now dispatch-heartbeat.timer"; }
+else
+  TOTAL=$((TOTAL + 10)); FAIL=$((FAIL + 10))
+  echo "  FAIL: ensure_heartbeat_units (cold path) returned non-zero"
+fi
+
+# --- 2. Hot path: both units byte-identical + timer active → no-op ------------
+# The hot-path short-circuit checks is-active (STUB_IS_ACTIVE_RC=0 → active);
+# it returns early and must not run daemon-reload or enable --now.
+: > "$ehu_log"
+if (
+  export DISPATCH_HEARTBEAT_UNIT_DIR="$ehu_unit_dir"
+  export DISPATCH_HEARTBEAT_SYSTEMCTL_CMD="$ehu_tmp/bin/systemctl"
+  export STUB_LOG="$ehu_log"
+  export STUB_IS_ACTIVE_RC=0 STUB_ENABLE_RC=0 STUB_RELOAD_RC=0
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_heartbeat_units "$ehu_tmp/main-worktree"
+); then
+  TOTAL=$((TOTAL + 1))
+  if ! grep -q 'daemon-reload' "$ehu_log"; then
+    PASS=$((PASS + 1)); echo "  PASS: hot path did not rewrite units (no daemon-reload)"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: hot path ran daemon-reload (spurious rewrite)"
+  fi
+  TOTAL=$((TOTAL + 1))
+  if ! grep -q 'enable' "$ehu_log"; then
+    PASS=$((PASS + 1)); echo "  PASS: hot path did not re-run enable --now"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: hot path re-ran enable --now"
+  fi
+else
+  TOTAL=$((TOTAL + 2)); FAIL=$((FAIL + 2))
+  echo "  FAIL: ensure_heartbeat_units (hot path) returned non-zero"
+fi
+
+rm -rf "$ehu_tmp"
+
+# ============================================================================
 # dispatch-write-plan / dispatch-read-plan tests
 # ============================================================================
 echo ""
@@ -28248,27 +31054,40 @@ else
 fi
 rm -rf "$wp_forge"
 
+# Build a bare-repo + worktree fixture whose origin remote is <url>. Creates a
+# temp root with .bare/, seeds one commit on main via a throwaway seed repo,
+# adds a worktree at worktrees/42-foo, and echoes the root path for the caller
+# to capture. Serves both the real-github.com 5a case and the malformed-URL
+# 5b-5e cases:
+#   root=$(make_bare_worktree_fixture <url>)
+make_bare_worktree_fixture() {
+  set -e
+  local url="$1"
+  local root seed
+  root=$(mktemp -d)
+  git init --bare "$root/.bare" >/dev/null 2>&1
+  git --git-dir="$root/.bare" config user.email "t@t" 2>/dev/null
+  git --git-dir="$root/.bare" config user.name "t" 2>/dev/null
+  git --git-dir="$root/.bare" remote add origin "$url"
+  seed=$(mktemp -d)
+  git -C "$seed" init -q
+  git -C "$seed" config user.email "t@t"; git -C "$seed" config user.name "t"
+  git -C "$seed" commit -q --allow-empty -m seed
+  git -C "$seed" remote add bare "$root/.bare"
+  git -C "$seed" push -q bare HEAD:refs/heads/main
+  rm -rf "$seed"
+  mkdir -p "$root/worktrees"
+  git --git-dir="$root/.bare" worktree add -q "$root/worktrees/42-foo" main 2>/dev/null
+  printf '%s' "$root"
+}
+
 # 5. bare+worktree repo resolution: from a worktree whose dirname(common_dir) is
 # NOT a git repo (the real bare-repo + worktrees layout), with GH_REPO unset, both
 # scripts must still resolve the repo for gh. This would FAIL against the pre-fix
 # `cd "$(dirname "$common_dir")"` version, which lands in the non-repo container and
 # leaves gh's {owner}/{repo} unresolvable (and GH_REPO unset). The fake gh below
 # requires GH_REPO and never reads cwd, so it stands in for that failure.
-bw_root=$(mktemp -d)
-git init --bare "$bw_root/.bare" >/dev/null 2>&1
-git --git-dir="$bw_root/.bare" config user.email "t@t" 2>/dev/null
-git --git-dir="$bw_root/.bare" config user.name "t" 2>/dev/null
-git --git-dir="$bw_root/.bare" remote add origin https://github.com/natb1/commons.systems.git
-# Seed one commit on the bare repo so `worktree add` works, then add the worktree.
-bw_seed=$(mktemp -d)
-git -C "$bw_seed" init -q
-git -C "$bw_seed" config user.email "t@t"; git -C "$bw_seed" config user.name "t"
-git -C "$bw_seed" commit -q --allow-empty -m seed
-git -C "$bw_seed" remote add bare "$bw_root/.bare"
-git -C "$bw_seed" push -q bare HEAD:refs/heads/main
-mkdir -p "$bw_root/worktrees"
-git --git-dir="$bw_root/.bare" worktree add -q "$bw_root/worktrees/42-foo" main 2>/dev/null
-rm -rf "$bw_seed"
+bw_root=$(make_bare_worktree_fixture https://github.com/natb1/commons.systems.git)
 
 # Fake gh that requires GH_REPO (never reads cwd) over a fresh JSON store.
 mkdir -p "$bw_root/bin"
@@ -28307,20 +31126,7 @@ rm -rf "$bw_root"
 # 5b. malformed-URL format guard: SSH-with-port → read-plan rejects it.
 # ssh://git@github.com:22/owner/repo.git strips to "22/owner/repo" — two slashes,
 # would pass the old */* check but fails the strict ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ regex.
-mf_ssh_root=$(mktemp -d)
-git init --bare "$mf_ssh_root/.bare" >/dev/null 2>&1
-git --git-dir="$mf_ssh_root/.bare" config user.email "t@t" 2>/dev/null
-git --git-dir="$mf_ssh_root/.bare" config user.name "t" 2>/dev/null
-git --git-dir="$mf_ssh_root/.bare" remote add origin ssh://git@github.com:22/owner/repo.git
-mf_ssh_seed=$(mktemp -d)
-git -C "$mf_ssh_seed" init -q
-git -C "$mf_ssh_seed" config user.email "t@t"; git -C "$mf_ssh_seed" config user.name "t"
-git -C "$mf_ssh_seed" commit -q --allow-empty -m seed
-git -C "$mf_ssh_seed" remote add bare "$mf_ssh_root/.bare"
-git -C "$mf_ssh_seed" push -q bare HEAD:refs/heads/main
-rm -rf "$mf_ssh_seed"
-mkdir -p "$mf_ssh_root/worktrees"
-git --git-dir="$mf_ssh_root/.bare" worktree add -q "$mf_ssh_root/worktrees/42-foo" main 2>/dev/null
+mf_ssh_root=$(make_bare_worktree_fixture ssh://git@github.com:22/owner/repo.git)
 if err=$( cd "$mf_ssh_root/worktrees/42-foo" && env -u GH_REPO "$WP_READ" 42 2>&1 1>/dev/null ); then rc=0; else rc=$?; fi
 assert_eq "read-plan: SSH-with-port malformed URL exits 1" "1" "$rc"
 TOTAL=$((TOTAL + 1))
@@ -28336,31 +31142,50 @@ rm -rf "$mf_ssh_root"
 # 5c. malformed-URL format guard: non-GitHub remote → write-plan rejects it.
 # https://gitlab.com/owner/repo.git has no "github.com" to strip, so repo stays the
 # full URL (contains ":") — has slashes, would pass the old */* check but fails the regex.
-mf_gl_root=$(mktemp -d)
-git init --bare "$mf_gl_root/.bare" >/dev/null 2>&1
-git --git-dir="$mf_gl_root/.bare" config user.email "t@t" 2>/dev/null
-git --git-dir="$mf_gl_root/.bare" config user.name "t" 2>/dev/null
-git --git-dir="$mf_gl_root/.bare" remote add origin https://gitlab.com/owner/repo.git
-mf_gl_seed=$(mktemp -d)
-git -C "$mf_gl_seed" init -q
-git -C "$mf_gl_seed" config user.email "t@t"; git -C "$mf_gl_seed" config user.name "t"
-git -C "$mf_gl_seed" commit -q --allow-empty -m seed
-git -C "$mf_gl_seed" remote add bare "$mf_gl_root/.bare"
-git -C "$mf_gl_seed" push -q bare HEAD:refs/heads/main
-rm -rf "$mf_gl_seed"
-mkdir -p "$mf_gl_root/worktrees"
-git --git-dir="$mf_gl_root/.bare" worktree add -q "$mf_gl_root/worktrees/42-foo" main 2>/dev/null
+mf_gl_root=$(make_bare_worktree_fixture https://gitlab.com/owner/repo.git)
 if err=$( cd "$mf_gl_root/worktrees/42-foo" && env -u GH_REPO "$WP_WRITE" 42 <<<"PLAN" 2>&1 1>/dev/null ); then rc=0; else rc=$?; fi
 assert_eq "write-plan: non-GitHub remote malformed URL exits 1" "1" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ "$err" == *"unexpected owner/repo format"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: write-plan rejects non-GitHub remote URL with format-guard diagnostic"
+if [[ "$err" == *"remote is not a GitHub repository"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: write-plan rejects non-GitHub remote URL with not-GitHub diagnostic"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: write-plan rejects non-GitHub remote URL with format-guard diagnostic"
+  FAIL=$((FAIL + 1)); echo "  FAIL: write-plan rejects non-GitHub remote URL with not-GitHub diagnostic"
   echo "    actual: '$err'"
 fi
 git --git-dir="$mf_gl_root/.bare" worktree prune 2>/dev/null || true
 rm -rf "$mf_gl_root"
+
+# 5d. malformed-URL format guard: SSH-with-port → write-plan rejects it.
+# Symmetric counterpart to 5b: same ssh://git@github.com:22/owner/repo.git fixture,
+# exercised against dispatch-write-plan instead of dispatch-read-plan.
+mf_ssh_w_root=$(make_bare_worktree_fixture ssh://git@github.com:22/owner/repo.git)
+if err=$( cd "$mf_ssh_w_root/worktrees/42-foo" && env -u GH_REPO "$WP_WRITE" 42 <<<"PLAN" 2>&1 1>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "write-plan: SSH-with-port malformed URL exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"unexpected owner/repo format"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: write-plan rejects SSH-with-port malformed URL with format-guard diagnostic"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: write-plan rejects SSH-with-port malformed URL with format-guard diagnostic"
+  echo "    actual: '$err'"
+fi
+git --git-dir="$mf_ssh_w_root/.bare" worktree prune 2>/dev/null || true
+rm -rf "$mf_ssh_w_root"
+
+# 5e. malformed-URL format guard: non-GitHub remote → read-plan rejects it.
+# Symmetric counterpart to 5c: same https://gitlab.com/owner/repo.git fixture,
+# exercised against dispatch-read-plan instead of dispatch-write-plan.
+mf_gl_r_root=$(make_bare_worktree_fixture https://gitlab.com/owner/repo.git)
+if err=$( cd "$mf_gl_r_root/worktrees/42-foo" && env -u GH_REPO "$WP_READ" 42 2>&1 1>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "read-plan: non-GitHub remote malformed URL exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"remote is not a GitHub repository"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: read-plan rejects non-GitHub remote URL with not-GitHub diagnostic"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: read-plan rejects non-GitHub remote URL with not-GitHub diagnostic"
+  echo "    actual: '$err'"
+fi
+git --git-dir="$mf_gl_r_root/.bare" worktree prune 2>/dev/null || true
+rm -rf "$mf_gl_r_root"
 
 # 7. two-matching-plan-comments: when the store contains two comments both
 #    authored by plan-bot and both carrying the marker, read-plan must return
@@ -28413,6 +31238,61 @@ rm -rf "$wp_two"
 
 rm -rf "$wp_root"
 unset DISPATCH_PLAN_AUTHOR_ID
+
+echo ""
+echo "=== gh_repo_from_remote ==="
+
+# gh_repo_from_remote is pure string logic (no git, no gh), so each case sources
+# the real lib.sh in a subshell and calls the helper directly. Success cases
+# assert the derived owner/repo; failure cases assert a non-zero return and that
+# the caller-name prefix appears in the stderr diagnostic (AC: error messages
+# include the caller name).
+
+# Success — HTTPS with .git suffix.
+if out=$( source "$SCRIPT_DIR/lib.sh"; gh_repo_from_remote "https://github.com/natb1/commons.systems.git" probe 2>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "gh_repo_from_remote: https .git → owner/repo" "natb1/commons.systems" "$out"
+assert_eq "gh_repo_from_remote: https .git → exit 0" "0" "$rc"
+
+# Success — HTTPS without .git suffix.
+out=$( source "$SCRIPT_DIR/lib.sh"; gh_repo_from_remote "https://github.com/natb1/commons.systems" probe 2>/dev/null )
+assert_eq "gh_repo_from_remote: https no-.git → owner/repo" "natb1/commons.systems" "$out"
+
+# Success — SSH scp-style.
+out=$( source "$SCRIPT_DIR/lib.sh"; gh_repo_from_remote "git@github.com:natb1/commons.systems.git" probe 2>/dev/null )
+assert_eq "gh_repo_from_remote: ssh → owner/repo" "natb1/commons.systems" "$out"
+
+# Failure — empty URL: non-zero return, caller-prefixed "could not resolve" diagnostic.
+if err=$( source "$SCRIPT_DIR/lib.sh"; gh_repo_from_remote "" probe 2>&1 1>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "gh_repo_from_remote: empty URL exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"probe: could not resolve owner/repo"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: gh_repo_from_remote empty URL emits caller-prefixed diagnostic"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: gh_repo_from_remote empty URL emits caller-prefixed diagnostic"
+  echo "    actual: '$err'"
+fi
+
+# Failure — non-GitHub remote: non-zero return, caller-prefixed not-GitHub diagnostic.
+if err=$( source "$SCRIPT_DIR/lib.sh"; gh_repo_from_remote "https://gitlab.com/a/b" probe 2>&1 1>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "gh_repo_from_remote: non-GitHub remote exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"probe: remote is not a GitHub repository"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: gh_repo_from_remote non-GitHub remote emits caller-prefixed diagnostic"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: gh_repo_from_remote non-GitHub remote emits caller-prefixed diagnostic"
+  echo "    actual: '$err'"
+fi
+
+# Failure — malformed owner/repo (no slash): non-zero return, format diagnostic.
+if err=$( source "$SCRIPT_DIR/lib.sh"; gh_repo_from_remote "https://github.com/onlyowner" probe 2>&1 1>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "gh_repo_from_remote: malformed owner/repo exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"probe: unexpected owner/repo format"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: gh_repo_from_remote malformed owner/repo emits caller-prefixed diagnostic"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: gh_repo_from_remote malformed owner/repo emits caller-prefixed diagnostic"
+  echo "    actual: '$err'"
+fi
 
 # ============================================================================
 # claim_fixed_vite_port (fixed Vite-port pool) tests
@@ -30438,7 +33318,7 @@ teardown
 
 # E. Hard error survives caching (criterion 2). With DISPATCH_TRACE_CACHE_DIR set,
 #    inject a gh blocked_by failure on child 830 reachable from root 810. The
-#    trace must hard-fail (exit 1) — the gh failure is NOT swallowed or cached as
+#    trace must hard-fail (exit 3) — the gh failure is NOT swallowed or cached as
 #    an empty result — and no `blocking-830` cache file is written. Invoked via
 #    dispatch-trace-leaf directly, mirroring the existing failure tests (~4815).
 echo "Test: #1452 E — sibling gh failure hard-fails and is never cached"
@@ -30452,7 +33332,7 @@ printf '{"title":"Issue 830","body":"","comments":[],"number":830,"state":"OPEN"
   > "$STUB_DIR/issue-830.json"
 : > "$STUB_DIR/gh-fail-blocked_by-830"
 stdout=$("$TMPDIR_TEST/dispatch-trace-leaf" "810" "queue" 2>/dev/null) && rc=0 || rc=$?
-assert_eq "#1452 E — sibling gh failure → exit 1" "1" "$rc"
+assert_eq "#1452 E — sibling gh failure → exit 3" "3" "$rc"
 assert_eq "#1452 E — sibling gh failure → no leaf on stdout" "" "$stdout"
 [[ -f "$cache/blocking-830" ]] && cached=present || cached=absent
 assert_eq "#1452 E — failed blocked_by lookup is never cached" "absent" "$cached"
@@ -30839,6 +33719,105 @@ assert_eq "dup-close: no edit (.[0] title matches)" "absent" "$(log_state gh-mer
 teardown
 
 # ============================================================================
+# dispatch-retriage-orphaned-followups (#1812)
+# ============================================================================
+echo "=== dispatch-retriage-orphaned-followups (#1812) ==="
+
+# The open-issue scan is served from issue-list.json (REST shape: {number,labels})
+# via the shared `api *repos/*/issues?*` branch; gh_issue_list_rest remaps it.
+# Per-PR state comes from retriage-pr-<N>.json (gh pr view --json state,mergedAt,labels).
+# The office-hours park flows through the REAL copied dispatch-apply-office-hours,
+# which logs to gh-issue-edit.log / gh-issue-comment.log; the per-PR processed
+# marker hits the generic `pr edit *` branch, logged to gh-pr-edit.log.
+
+# (a) closed-unmerged source PR + open source-pr:-marked follow-up → park + mark
+echo "Test: closed-unmerged source PR → park follow-up on office-hours + mark PR"
+setup
+printf '[{"number":101,"labels":[{"name":"source-pr:1704"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '{"state":"CLOSED","mergedAt":null,"labels":[]}\n' > "$STUB_DIR/retriage-pr-1704.json"
+out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null)
+assert_eq "a: office-hours applied to the follow-up issue" \
+  "issue edit 101 --add-label dispatch:office-hours" "$(cat "$STUB_DIR/gh-issue-edit.log")"
+assert_eq "a: why-comment posted to the follow-up issue" "present" "$(log_state gh-issue-comment.log)"
+TOTAL=$((TOTAL + 1))
+if grep -q 'issue comment 101 ' "$STUB_DIR/gh-issue-comment.log" \
+   && grep -q 'closed unmerged' "$STUB_DIR/gh-issue-comment.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: a: why-comment names issue 101 and the closed-unmerged reason"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: a: why-comment names issue 101 and the closed-unmerged reason"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q 'pr edit 1704 --add-label dispatch:orphans-retriaged' "$STUB_DIR/gh-pr-edit.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: a: source PR #1704 marked dispatch:orphans-retriaged"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: a: source PR #1704 marked dispatch:orphans-retriaged"
+fi
+assert_eq "a: one retriaged stdout line" \
+  "retriaged #101 (source PR #1704 closed unmerged)" "$out"
+teardown
+
+# (b) MERGED source PR (mergedAt non-null) → no action (AC3)
+echo "Test: merged source PR → no action"
+setup
+printf '[{"number":102,"labels":[{"name":"source-pr:1688"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '{"state":"MERGED","mergedAt":"2026-01-01T00:00:00Z","labels":[]}\n' > "$STUB_DIR/retriage-pr-1688.json"
+out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null)
+assert_eq "b: no office-hours edit on a merged source PR" "absent" "$(log_state gh-issue-edit.log)"
+assert_eq "b: no PR marker on a merged source PR" "absent" "$(log_state gh-pr-edit.log)"
+assert_eq "b: no stdout on a merged source PR" "" "$out"
+teardown
+
+# (c) OPEN source PR → no action
+echo "Test: still-open source PR → no action"
+setup
+printf '[{"number":103,"labels":[{"name":"source-pr:1900"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '{"state":"OPEN","mergedAt":null,"labels":[]}\n' > "$STUB_DIR/retriage-pr-1900.json"
+out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null)
+assert_eq "c: no office-hours edit on an open source PR" "absent" "$(log_state gh-issue-edit.log)"
+assert_eq "c: no PR marker on an open source PR" "absent" "$(log_state gh-pr-edit.log)"
+assert_eq "c: no stdout on an open source PR" "" "$out"
+teardown
+
+# (d) closed-unmerged PR ALREADY carrying dispatch:orphans-retriaged → idempotent no-op
+echo "Test: source PR already marked dispatch:orphans-retriaged → no action"
+setup
+printf '[{"number":104,"labels":[{"name":"source-pr:1704"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf '{"state":"CLOSED","mergedAt":null,"labels":[{"name":"dispatch:orphans-retriaged"}]}\n' > "$STUB_DIR/retriage-pr-1704.json"
+out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null)
+assert_eq "d: no re-park when PR already marked" "absent" "$(log_state gh-issue-edit.log)"
+assert_eq "d: no re-mark when PR already marked" "absent" "$(log_state gh-pr-edit.log)"
+assert_eq "d: no stdout when PR already marked" "" "$out"
+teardown
+
+# (e) no open issue carries a source-pr: label → clean no-op, exit 0
+echo "Test: no source-pr:-marked open issues → clean no-op, exit 0"
+setup
+printf '[{"number":105,"labels":[{"name":"bug"}]}]\n' > "$STUB_DIR/issue-list.json"
+if out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "e: exits 0 with no labeled issues" "0" "$rc"
+assert_eq "e: no office-hours edit" "absent" "$(log_state gh-issue-edit.log)"
+assert_eq "e: no PR marker" "absent" "$(log_state gh-pr-edit.log)"
+assert_eq "e: no stdout" "" "$out"
+teardown
+
+# (f) gh_issue_list_rest --state open fails → warn, exit 0, no work (lines 51-55)
+echo "Test: open-issue scan failure → warning, exit 0, no office-hours or PR marker"
+setup
+: > "$STUB_DIR/gh-fail-issue-list-open"
+err=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>&1 >/dev/null); rc=$?
+assert_eq "f: exits 0 when the open-issue scan fails" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if grep -q 'gh_issue_list_rest --state open failed; skipping scan' <<<"$err"; then
+  PASS=$((PASS + 1)); echo "  PASS: f: warns about the skipped scan on stderr"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: f: warns about the skipped scan on stderr"
+  echo "    actual stderr: '$err'"
+fi
+assert_eq "f: no office-hours edit when the scan fails" "absent" "$(log_state gh-issue-edit.log)"
+assert_eq "f: no PR marker when the scan fails" "absent" "$(log_state gh-pr-edit.log)"
+teardown
+
+# ============================================================================
 # dispatch-auto-merge (#1739)
 # ============================================================================
 echo "=== dispatch-auto-merge (#1739) ==="
@@ -31201,6 +34180,184 @@ drd_teardown
 echo "Test: no transcript argument → exit 1"
 if "$DRD"; then rc=0; else rc=$?; fi
 assert_eq "no-arg detector exits 1" "1" "$rc"
+
+# ============================================================================
+# dispatch-recover-dispatched-phase tests (#2025)
+# ============================================================================
+#
+# Exercises the phase-recovery tool: greps the transcript's first
+# <command-name>/skill</command-name> tag and maps it to a dispatch phase.
+# Exits 0 + prints the phase on a recognised dispatch skill; exits 1 + no
+# output for unrecognised skills, missing/empty files, and no-arg invocations.
+# Fixtures are JSONL files written with printf '%s\n' (NOT echo) to avoid
+# zsh backslash-escape corruption.
+echo ""
+echo "=== dispatch-recover-dispatched-phase ==="
+
+DRDP="$SCRIPT_DIR/dispatch-recover-dispatched-phase"
+
+drdp_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+}
+drdp_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+}
+
+# Helper: write a one-line JSONL fixture whose content embeds a command-name tag
+# for the given skill name. Single quotes + concatenation avoids any shell
+# escaping of the tag's forward slash.
+_drdp_fixture() {
+  local path="$1" skill="$2"
+  printf '%s\n' \
+    '{"type":"user","message":{"content":[{"type":"text","text":"<command-name>/'"${skill}"'</command-name>"}]}}' \
+    > "$path"
+}
+
+# --- Test 1: /plan-issue → "plan", exit 0 ------------------------------------
+echo "Test: /plan-issue tag → stdout 'plan', exit 0"
+drdp_setup
+_drdp_fixture "$TMPDIR_TEST/plan.jsonl" "plan-issue"
+if out=$("$DRDP" "$TMPDIR_TEST/plan.jsonl" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "recover plan-issue: stdout is 'plan'" "plan" "$out"
+assert_eq "recover plan-issue: exit 0" "0" "$rc"
+drdp_teardown
+
+# --- Test 2: /implement → "implement", exit 0 --------------------------------
+echo "Test: /implement tag → stdout 'implement', exit 0"
+drdp_setup
+_drdp_fixture "$TMPDIR_TEST/impl.jsonl" "implement"
+if out=$("$DRDP" "$TMPDIR_TEST/impl.jsonl" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "recover implement: stdout is 'implement'" "implement" "$out"
+assert_eq "recover implement: exit 0" "0" "$rc"
+drdp_teardown
+
+# --- Test 3: /qa-fix → "qa", exit 0 -----------------------------------------
+echo "Test: /qa-fix tag → stdout 'qa', exit 0"
+drdp_setup
+_drdp_fixture "$TMPDIR_TEST/qa.jsonl" "qa-fix"
+if out=$("$DRDP" "$TMPDIR_TEST/qa.jsonl" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "recover qa-fix: stdout is 'qa'" "qa" "$out"
+assert_eq "recover qa-fix: exit 0" "0" "$rc"
+drdp_teardown
+
+# --- Test 4: /review-fix → "review", exit 0 ----------------------------------
+echo "Test: /review-fix tag → stdout 'review', exit 0"
+drdp_setup
+_drdp_fixture "$TMPDIR_TEST/review.jsonl" "review-fix"
+if out=$("$DRDP" "$TMPDIR_TEST/review.jsonl" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "recover review-fix: stdout is 'review'" "review" "$out"
+assert_eq "recover review-fix: exit 0" "0" "$rc"
+drdp_teardown
+
+# --- Test 5: /fix-checks → "fix-checks", exit 0 ------------------------------
+echo "Test: /fix-checks tag → stdout 'fix-checks', exit 0"
+drdp_setup
+_drdp_fixture "$TMPDIR_TEST/fc.jsonl" "fix-checks"
+if out=$("$DRDP" "$TMPDIR_TEST/fc.jsonl" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "recover fix-checks: stdout is 'fix-checks'" "fix-checks" "$out"
+assert_eq "recover fix-checks: exit 0" "0" "$rc"
+drdp_teardown
+
+# --- Test 6: /fix-conflicts → "fix-conflicts", exit 0 ------------------------
+echo "Test: /fix-conflicts tag → stdout 'fix-conflicts', exit 0"
+drdp_setup
+_drdp_fixture "$TMPDIR_TEST/fcon.jsonl" "fix-conflicts"
+if out=$("$DRDP" "$TMPDIR_TEST/fcon.jsonl" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "recover fix-conflicts: stdout is 'fix-conflicts'" "fix-conflicts" "$out"
+assert_eq "recover fix-conflicts: exit 0" "0" "$rc"
+drdp_teardown
+
+# --- Test 7: /office-hours → empty stdout, non-zero exit ---------------------
+echo "Test: /office-hours tag → empty stdout, non-zero exit"
+drdp_setup
+_drdp_fixture "$TMPDIR_TEST/oh.jsonl" "office-hours"
+if out=$("$DRDP" "$TMPDIR_TEST/oh.jsonl" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "recover office-hours: stdout is empty" "" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ "$rc" -ne 0 ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: recover office-hours: exit non-zero"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: recover office-hours: exit non-zero (got 0)"
+fi
+drdp_teardown
+
+# --- Test 8: /budget-parse-job → empty stdout, non-zero exit -----------------
+echo "Test: /budget-parse-job tag → empty stdout, non-zero exit"
+drdp_setup
+_drdp_fixture "$TMPDIR_TEST/bpj.jsonl" "budget-parse-job"
+if out=$("$DRDP" "$TMPDIR_TEST/bpj.jsonl" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "recover budget-parse-job: stdout is empty" "" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ "$rc" -ne 0 ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: recover budget-parse-job: exit non-zero"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: recover budget-parse-job: exit non-zero (got 0)"
+fi
+drdp_teardown
+
+# --- Test 9: missing path → empty stdout, non-zero exit ----------------------
+echo "Test: missing transcript path → empty stdout, non-zero exit"
+drdp_setup
+if out=$("$DRDP" "$TMPDIR_TEST/nope.jsonl" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "recover missing-path: stdout is empty" "" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ "$rc" -ne 0 ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: recover missing-path: exit non-zero"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: recover missing-path: exit non-zero (got 0)"
+fi
+drdp_teardown
+
+# --- Test 10: grep -m1 first-match wins (first line wins, later line ignored) --
+# First line embeds /implement; a later line embeds /commit-merge-push.
+# The script must return "implement" (first match) and NOT silently yield
+# nothing (commit-merge-push is not a dispatch phase, but it must not shadow).
+echo "Test: first-match semantics (implement first, commit-merge-push later) → 'implement', exit 0"
+drdp_setup
+printf '%s\n' \
+  '{"type":"user","message":{"content":[{"type":"text","text":"<command-name>/implement</command-name>"}]}}' \
+  '{"type":"assistant","message":{"content":[{"type":"text","text":"<command-name>/commit-merge-push</command-name>"}]}}' \
+  > "$TMPDIR_TEST/firstmatch.jsonl"
+if out=$("$DRDP" "$TMPDIR_TEST/firstmatch.jsonl" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "recover first-match: stdout is 'implement' (not shadowed by commit-merge-push)" "implement" "$out"
+assert_eq "recover first-match: exit 0" "0" "$rc"
+drdp_teardown
+
+# --- Test 11: fallback path (no command-name tag) → recognized skill, exit 0 --
+# Transcript has NO <command-name> tag; line 1 embeds a .claude/skills/<skill>
+# path. The fallback grep must recover the skill and map it to its phase.
+echo "Test: fallback path (no tag, .claude/skills/qa-fix on line 1) → 'qa', exit 0"
+drdp_setup
+printf '%s\n' \
+  '{"type":"user","message":{"content":[{"type":"text","text":"see .claude/skills/qa-fix/SKILL.md"}]}}' \
+  > "$TMPDIR_TEST/fallback.jsonl"
+if out=$("$DRDP" "$TMPDIR_TEST/fallback.jsonl" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "recover fallback: stdout is 'qa'" "qa" "$out"
+assert_eq "recover fallback: exit 0" "0" "$rc"
+drdp_teardown
+
+# --- Test 12: fallback ignores skills paths in later records → exit 1 --------
+# No tag anywhere; line 1 carries NO skills path, but line 2 references
+# .claude/skills/implement (e.g. tool output / Read result). The fallback is
+# scoped to line 1, so it must NOT recover "implement" from the later record —
+# any doubt → empty stdout, non-zero exit. A whole-file grep would wrongly
+# return "implement"; this test proves the line-1 restriction.
+echo "Test: fallback ignores skills path in later record → empty stdout, exit 1"
+drdp_setup
+printf '%s\n' \
+  '{"type":"user","message":{"content":[{"type":"text","text":"recover this dead session"}]}}' \
+  '{"type":"assistant","message":{"content":[{"type":"text","text":"reading .claude/skills/implement/SKILL.md"}]}}' \
+  > "$TMPDIR_TEST/fallback-later.jsonl"
+if out=$("$DRDP" "$TMPDIR_TEST/fallback-later.jsonl" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "recover fallback-later: stdout is empty" "" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ "$rc" -ne 0 ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: recover fallback-later: exit non-zero"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: recover fallback-later: exit non-zero (got 0)"
+fi
+drdp_teardown
 
 # ============================================================================
 # dispatch-schedule-rate-limit-resume tests (#1733)
@@ -31606,6 +34763,95 @@ assert_eq "resolve_dirty_apps: root-config fan-out marks all workspaces" \
 
 rm -rf "$TMPDIR_TEST"
 TMPDIR_TEST=""
+
+# ============================================================================
+# dispatch-run-verification tests (#2024)
+# ============================================================================
+# dispatch-run-verification reads the full plan markdown on STDIN, finds the
+# "## Verification" section, runs every ```verify fenced block in order via bash
+# in the current directory, and exits tri-state: 0 (all passed), 1 (a block
+# failed), or 3 (no section / no verify blocks — proceed unchanged). It calls no
+# gh and no network, so these cases pipe fabricated plans straight in and assert
+# the exit code and output — no setup/teardown or PATH shims needed.
+echo ""
+echo "=== dispatch-run-verification (#2024) ==="
+
+RUN_VERIFY="$SCRIPT_DIR/dispatch-run-verification"
+
+# Pass path: a verify block running `true` exits 0.
+echo "Test: dispatch-run-verification -- verify block passes (exit 0)"
+plan=$'## Plan\nbuild it\n\n## Verification (end-to-end)\nrun this:\n```verify\ntrue\n```\n'
+if out=$(printf '%s' "$plan" | "$RUN_VERIFY" 2>&1); then rc=0; else rc=$?; fi
+assert_eq "dispatch-run-verification: passing verify block exits 0" "0" "$rc"
+
+# Escalate path: a verify block running `false` exits 1 and names the block.
+echo "Test: dispatch-run-verification -- verify block fails (exit 1, index reported)"
+plan=$'## Verification\n```verify\nfalse\n```\n'
+if out=$(printf '%s' "$plan" | "$RUN_VERIFY" 2>&1); then rc=0; else rc=$?; fi
+assert_eq "dispatch-run-verification: failing verify block exits 1" "1" "$rc"
+case "$out" in
+  *"verify block 1 failed"*) found=yes ;;
+  *) found=no ;;
+esac
+assert_eq "dispatch-run-verification: failing block index is reported" "yes" "$found"
+
+# No-runnable path (a): a Verification section with only prose + a plain ```bash
+# block (NOT a verify block) exits 3.
+echo "Test: dispatch-run-verification -- section without verify blocks exits 3"
+plan=$'## Verification\nrun things manually\n```bash\ntrue\n```\n'
+if out=$(printf '%s' "$plan" | "$RUN_VERIFY" 2>&1); then rc=0; else rc=$?; fi
+assert_eq "dispatch-run-verification: prose/bash-only section exits 3" "3" "$rc"
+
+# No-runnable path (b): a plan with no Verification heading at all exits 3 — and
+# a ```verify block OUTSIDE the section is ignored (not run).
+echo "Test: dispatch-run-verification -- no Verification section exits 3"
+plan=$'## Plan\nno verification here\n```verify\ntrue\n```\n'
+if out=$(printf '%s' "$plan" | "$RUN_VERIFY" 2>&1); then rc=0; else rc=$?; fi
+assert_eq "dispatch-run-verification: no section exits 3" "3" "$rc"
+
+# Ordering: two verify blocks, first passes, second fails -> exit 1 with the
+# SECOND block identified as the failing one.
+echo "Test: dispatch-run-verification -- first passes, second fails (exit 1, block 2)"
+plan=$'## Verification\n```verify\ntrue\n```\n```verify\nexit 1\n```\n'
+if out=$(printf '%s' "$plan" | "$RUN_VERIFY" 2>&1); then rc=0; else rc=$?; fi
+assert_eq "dispatch-run-verification: first-pass/second-fail exits 1" "1" "$rc"
+case "$out" in
+  *"verify block 2 failed"*) found=yes ;;
+  *) found=no ;;
+esac
+assert_eq "dispatch-run-verification: second block identified as failing" "yes" "$found"
+
+# Converse ordering: first block FAILS, so the second block must NOT run. The
+# second block's only effect is creating a sentinel file; its absence after the
+# run proves the second block never executed.
+echo "Test: dispatch-run-verification -- first fails, second block not run (sentinel absent)"
+RV_TMP=$(mktemp -d)
+sentinel="$RV_TMP/second-ran"
+plan=$'## Verification\n```verify\nfalse\n```\n```verify\ntouch '"$sentinel"$'\n```\n'
+if out=$(printf '%s' "$plan" | "$RUN_VERIFY" 2>&1); then rc=0; else rc=$?; fi
+assert_eq "dispatch-run-verification: first-fail exits 1" "1" "$rc"
+if [[ -e "$sentinel" ]]; then second_ran=yes; else second_ran=no; fi
+assert_eq "dispatch-run-verification: second block did not run after first failed" "no" "$second_ran"
+case "$out" in
+  *"verify block 1 failed"*) found=yes ;;
+  *) found=no ;;
+esac
+assert_eq "dispatch-run-verification: first block identified as failing" "yes" "$found"
+rm -rf "$RV_TMP"
+
+# Boundary robustness: a "## " line INSIDE a verify block body does not end the
+# Verification section, so the block still runs and exits 0.
+echo "Test: dispatch-run-verification -- '## ' inside a verify block is not a section terminator"
+plan=$'## Verification\n```verify\necho "## not a heading"\ntrue\n```\n'
+if out=$(printf '%s' "$plan" | "$RUN_VERIFY" 2>&1); then rc=0; else rc=$?; fi
+assert_eq "dispatch-run-verification: '## ' inside fence does not terminate section" "0" "$rc"
+
+# Usage: --help exits 0; an unexpected argument is a clear error (exit 2).
+echo "Test: dispatch-run-verification -- --help exits 0, bad arg exits 2"
+if "$RUN_VERIFY" --help >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "dispatch-run-verification: --help exits 0" "0" "$rc"
+if "$RUN_VERIFY" bogus </dev/null >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "dispatch-run-verification: unexpected argument exits 2" "2" "$rc"
 
 # ============================================================================
 # summary

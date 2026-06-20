@@ -1,7 +1,7 @@
 import * as Plot from "@observablehq/plot";
 import type { AggregatePoint } from "../balance.js";
 import type { ChartResult, WeekEntry } from "./budgets-chart.js";
-import { getThemeFg, assembleChartLayout, MARGIN_RIGHT, MARGIN_BOTTOM, computeChartWidth, renderAxisSvg } from "./chart-util.js";
+import { getThemeFg, chartSeriesColor, assembleChartLayout, MARGIN_RIGHT, MARGIN_BOTTOM, computeChartWidth, renderAxisSvg } from "./chart-util.js";
 
 interface TrendChartOptions {
   readonly data: AggregatePoint[];
@@ -23,12 +23,15 @@ interface LineDatum {
   value: number;
 }
 
-const seriesColors: Record<SeriesName, string> = {
-  [SERIES_CREDITS]: "#66bb6a",
-  [SERIES_12W_SPENDING]: "#42a5f5",
-  [SERIES_3W_SPENDING]: "#ef5350",
-  [SERIES_NET_CREDITS]: "#ab47bc",
-};
+// Fixed 4-series order; index into the categorical --chart-1..4 tokens.
+const SERIES_ORDER: readonly SeriesName[] = [SERIES_CREDITS, SERIES_12W_SPENDING, SERIES_3W_SPENDING, SERIES_NET_CREDITS];
+
+/** Resolve the four trend-series colors from the --chart-1..4 tokens at render time. */
+function resolveSeriesColors(container: HTMLElement): Record<SeriesName, string> {
+  return Object.fromEntries(
+    SERIES_ORDER.map((series, i) => [series, chartSeriesColor(container, i)]),
+  ) as Record<SeriesName, string>;
+}
 
 const seriesDash: Record<SeriesName, string | undefined> = {
   [SERIES_CREDITS]: "4,3",
@@ -66,6 +69,7 @@ export function renderAggregateTrendChart(container: HTMLElement, options: Trend
   const height = 200;
 
   const fg = getThemeFg(container);
+  const seriesColors = resolveSeriesColors(container);
   const sharedStyle = { background: "transparent", color: fg };
 
   let yMin = 0;
@@ -80,7 +84,7 @@ export function renderAggregateTrendChart(container: HTMLElement, options: Trend
   const axisSvg = renderAxisSvg({ height, style: sharedStyle, yDomain });
 
   // Chart body with faceted dots; line paths drawn by overlaySvg
-  const seriesOrder: SeriesName[] = [SERIES_CREDITS, SERIES_12W_SPENDING, SERIES_3W_SPENDING, SERIES_NET_CREDITS];
+  const seriesOrder = SERIES_ORDER;
   const chartSvg = Plot.plot({
     width: chartWidth,
     height,

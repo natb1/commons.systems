@@ -51,8 +51,8 @@ vi.mock("@commons-systems/components/panel-toggle", () => ({
 vi.mock("@commons-systems/components/scroll-indicator", () => ({
   initScrollIndicator,
 }));
-// Side-effect import — no runtime exports needed.
-vi.mock("@commons-systems/components/nav", () => ({}));
+// The nav is no longer a custom element — createBlogApp mounts the real ds Nav
+// (via BlogNav) into #nav, so the suite exercises it live (.cs-nav assertions).
 vi.mock("@commons-systems/firebaseutil/defer-appcheck", () => ({
   deferAppCheckInit: vi.fn(),
 }));
@@ -511,6 +511,188 @@ describe("createBlogApp routing and panel behavior", () => {
     handle.destroy();
 
     expect(unsubscribeSpy).toHaveBeenCalledTimes(1);
+  });
+
+  // Case A — AC#1: router.destroy() teardown: popstate no longer handled after destroy().
+  // Discrimination: if teardowns.push(() => router.destroy()) is dropped, the popstate
+  // listener survives and renderHomeHtml is called after handle.destroy() — test fails.
+  it("router popstate listener removed by destroy()", async () => {
+    history.pushState({}, "", "/admin");
+    document.body.innerHTML = `
+      <div id="nav"></div>
+      <div class="page">
+        <header></header>
+        <div id="app"><div id="posts" data-prerendered="true">PRERENDERED HOME</div></div>
+        <aside id="info-panel"></aside>
+        <button id="panel-toggle"></button>
+      </div>
+    `;
+
+    handle = createBlogApp(makeConfig());
+    const app = document.getElementById("app")!;
+
+    // Admin route replaces #posts with admin markup.
+    await vi.waitFor(() => expect(app.querySelector("#posts")).toBeNull());
+
+    handle.destroy();
+    handle = undefined; // prevent afterEach double-destroy
+
+    renderHomeHtml.mockClear();
+
+    // Fire a popstate toward "/" — the router's listener must no longer be active.
+    history.pushState({}, "", "/");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await new Promise((r) => setTimeout(r, 0)); // macrotask tick
+
+    expect(renderHomeHtml).not.toHaveBeenCalled();
+  });
+
+  // Case B — AC#2: headerObserver.disconnect() called by destroy().
+  // Discrimination: if headerObserver.disconnect() is removed from destroy(),
+  // the spy is never called and the test fails.
+  it("headerObserver.disconnect() called by destroy()", () => {
+    const disconnectSpy = vi.spyOn(ResizeObserverStub.prototype, "disconnect");
+    scaffoldDom();
+
+    handle = createBlogApp(makeConfig());
+    handle.destroy();
+    handle = undefined; // prevent afterEach double-destroy
+
+    expect(disconnectSpy).toHaveBeenCalledTimes(1);
+    disconnectSpy.mockRestore();
+  });
+
+  // Case C — AC#3: same-UID guard in onAuthStateChanged fires early return on repeat call.
+  // Discrimination: if the `if (user?.uid === currentUser?.uid) return` guard is dropped,
+  // getPosts is called twice and the assertion fails.
+  it("same-UID guard: onAuthStateChanged twice with same UID calls getPosts once", async () => {
+    history.pushState({}, "", "/");
+    scaffoldDom();
+
+    let authCallback: ((user: { uid: string } | null) => void) | undefined;
+    const config = makeConfig({
+      firebase: {
+        db: { type: "mock-firestore" } as never,
+        namespace: "test/env" as never,
+        trackPageView: vi.fn(),
+        initAppCheck: vi.fn(() => Promise.resolve()),
+        signIn: vi.fn(() => Promise.resolve()),
+        signOut: vi.fn(() => Promise.resolve()),
+        onAuthStateChanged: vi.fn((cb) => {
+          authCallback = cb;
+          return Promise.resolve();
+        }),
+      },
+    });
+
+    handle = createBlogApp(config);
+    const app = document.getElementById("app")!;
+
+    // Settle the initial nav (signed out, prerendered #posts preserved).
+    await vi.waitFor(() => {
+      expect(app.querySelector("#posts")).not.toBeNull();
+    });
+    await new Promise((r) => setTimeout(r, 0));
+
+    (getPosts as ReturnType<typeof vi.fn>).mockClear();
+
+    // First fire — new uid, refreshAfterAuthChange runs, getPosts is called once.
+    authCallback!({ uid: "u1" } as never);
+    await vi.waitFor(() => expect(getPosts).toHaveBeenCalledTimes(1));
+
+    // Second fire — same uid, same-UID guard hits early return, getPosts not called again.
+    authCallback!({ uid: "u1" } as never);
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(getPosts).toHaveBeenCalledTimes(1);
+  });
+
+  // Nav island — #sign-in click invokes firebase.signIn (anonymous /admin).
+  it("renders the React nav and wires #sign-in to firebase.signIn on /admin", async () => {
+    history.pushState({}, "", "/admin");
+    document.body.innerHTML = `
+      <div id="nav"></div>
+      <div class="page">
+        <header></header>
+        <div id="app"></div>
+        <aside id="info-panel"></aside>
+        <button id="panel-toggle"></button>
+      </div>
+    `;
+
+    const signIn = vi.fn(() => Promise.resolve());
+    handle = createBlogApp(
+      makeConfig({
+        navLinks: [{ href: "/", label: "Home" }],
+        firebase: {
+          db: { type: "mock-firestore" } as never,
+          namespace: "test/env" as never,
+          trackPageView: vi.fn(),
+          initAppCheck: vi.fn(() => Promise.resolve()),
+          signIn,
+          signOut: vi.fn(() => Promise.resolve()),
+          onAuthStateChanged: vi.fn(() => Promise.resolve()),
+        },
+      }),
+    );
+
+    // createRoot.render is async — wait for the nav DOM to commit.
+    const nav = document.getElementById("nav")!;
+    await vi.waitFor(() => {
+      expect(nav.querySelector(".cs-nav")).not.toBeNull();
+      expect(nav.querySelector('a[href="/"]')).not.toBeNull();
+      expect(nav.querySelector("#sign-in")).not.toBeNull();
+    });
+
+    // Signed out → Login control; clicking it calls firebase.signIn.
+    nav.querySelector<HTMLElement>("#sign-in")!.click();
+    expect(signIn).toHaveBeenCalledTimes(1);
+  });
+
+  // Nav island — #sign-out click invokes firebase.signOut for a signed-in admin.
+  it("wires #sign-out to firebase.signOut once a user is signed in on /admin", async () => {
+    history.pushState({}, "", "/admin");
+    document.body.innerHTML = `
+      <div id="nav"></div>
+      <div class="page">
+        <header></header>
+        <div id="app"></div>
+        <aside id="info-panel"></aside>
+        <button id="panel-toggle"></button>
+      </div>
+    `;
+
+    const signOut = vi.fn(() => Promise.resolve());
+    let authCallback: ((user: { uid: string } | null) => void) | undefined;
+    handle = createBlogApp(
+      makeConfig({
+        firebase: {
+          db: { type: "mock-firestore" } as never,
+          namespace: "test/env" as never,
+          trackPageView: vi.fn(),
+          initAppCheck: vi.fn(() => Promise.resolve()),
+          signIn: vi.fn(() => Promise.resolve()),
+          signOut,
+          onAuthStateChanged: vi.fn((cb) => {
+            authCallback = cb;
+            return Promise.resolve();
+          }),
+        },
+      }),
+    );
+
+    const nav = document.getElementById("nav")!;
+    await vi.waitFor(() => expect(nav.querySelector("#sign-in")).not.toBeNull());
+
+    // Sign in — re-renders the nav with the user (#sign-out replaces #sign-in).
+    authCallback!({ uid: "admin-uid" } as never);
+    await vi.waitFor(() => {
+      expect(nav.querySelector("#sign-out")).not.toBeNull();
+      expect(nav.querySelector("#sign-in")).toBeNull();
+    });
+
+    nav.querySelector<HTMLElement>("#sign-out")!.click();
+    expect(signOut).toHaveBeenCalledTimes(1);
   });
 
   // Case 7 — #1409: the live-DOM skip fires whenever #posts is live, not only

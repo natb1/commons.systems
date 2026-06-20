@@ -7,7 +7,7 @@
 # the normalized result to stdout.
 #
 # Usage:
-#   dispatch-config-load <projects|jit|statements|target-workers|budget-etl|epic|auto-merge|force-opus>
+#   dispatch-config-load <projects|jit|statements|target-workers|budget-etl|epic|auto-merge|force-opus|sweep>
 #
 # Config files live in <project-root>/dispatch.config/. The project root is
 # resolved via resolve_project_root (lib.sh).
@@ -247,6 +247,25 @@
 #     "enabled": true
 #   }
 #
+# ---- Schema: sweep.json -----------------------------------------------------
+#
+# Top-level object with optional tunables for `dispatch-sweep`. Each field must
+# be a number when present; absent fields fall back to the defaults baked into
+# `dispatch-sweep`. This config type follows the GENERIC absent→inert convention
+# (see "Stdout protocol" above): when the file is absent, no-config is emitted
+# and the feature uses the consumer's built-in defaults.
+#
+#   notInSyncGraceSeconds   number (optional, must be > 0) — how long, in
+#                           seconds, a not-in-sync worktree must remain in that
+#                           state before dispatch-sweep reaps it. The default
+#                           value (86400 = 24 h) is baked into dispatch-sweep,
+#                           not here. Absent → dispatch-sweep uses its default.
+#
+# Example (see sweep.example.json):
+#   {
+#     "notInSyncGraceSeconds": 86400
+#   }
+#
 set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
@@ -255,9 +274,9 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
 CONFIG_TYPE="${1:-}"
 case "$CONFIG_TYPE" in
-  projects|jit|statements|target-workers|budget-etl|epic|auto-merge|force-opus) ;;
+  projects|jit|statements|target-workers|budget-etl|epic|auto-merge|force-opus|sweep) ;;
   *)
-    echo "error: usage: dispatch-config-load <projects|jit|statements|target-workers|budget-etl|epic|auto-merge|force-opus>" >&2
+    echo "error: usage: dispatch-config-load <projects|jit|statements|target-workers|budget-etl|epic|auto-merge|force-opus|sweep>" >&2
     exit 2
     ;;
 esac
@@ -607,6 +626,36 @@ case "$CONFIG_TYPE" in
          else
            empty
          end)
+      end
+    ' "$CONFIG_FILE")
+    ;;
+  sweep)
+    # top-level value must be an object; all tunables are optional.
+    # `dispatch-sweep` substitutes a baked-in default for any absent field, so
+    # absence is silent — only the type of present fields is checked.
+    ERRORS=$(jq -r '
+      if type != "object" then
+        "top-level value must be a JSON object, got \(type)"
+      else
+        . as $cfg |
+        # notInSyncGraceSeconds: optional positive number
+        (if ($cfg | has("notInSyncGraceSeconds")) | not then
+          empty
+        elif ($cfg.notInSyncGraceSeconds | type) != "number" then
+          "notInSyncGraceSeconds must be a number if present, got \($cfg.notInSyncGraceSeconds | type)"
+        elif $cfg.notInSyncGraceSeconds <= 0 then
+          "notInSyncGraceSeconds must be > 0 if present, got \($cfg.notInSyncGraceSeconds)"
+        elif ($cfg.notInSyncGraceSeconds | tostring | test("^[0-9]+$") | not) then
+          # Mirror the env-override contract (^[0-9]+$): reject any value whose
+          # rendered form is not a plain integer. This catches fractions (0.5)
+          # and scientific notation (1e6 -> jq renders "1E+6"); both would reach
+          # the dispatch-sweep bash `[[ "$age" -lt "$NOT_IN_SYNC_GRACE_S" ]]`
+          # integer comparison, raise an arithmetic error, and fall through to
+          # the reap branch — immediately force-reaping every not-in-sync worktree.
+          "notInSyncGraceSeconds must be a whole number (integer), got \($cfg.notInSyncGraceSeconds)"
+        else
+          empty
+        end)
       end
     ' "$CONFIG_FILE")
     ;;

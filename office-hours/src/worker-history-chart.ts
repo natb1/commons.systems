@@ -2,22 +2,20 @@ import * as Plot from "@observablehq/plot";
 import { type UsageSample } from "./usage-samples.js";
 import {
   getThemeFg,
+  readChartPalette,
   assembleChartLayout,
   buildLegend,
   computeChartWidth,
   renderAxisSvg,
+  mountResponsiveChart,
   MARGIN_RIGHT,
   MARGIN_BOTTOM,
   POINT_WIDTH,
-  CONTAINER_WIDTH,
   CHART_HEIGHT,
 } from "./chart-util.js";
 
 const SERIES_ACTIVE = "active workers";
 const SERIES_TARGET = "target (step)";
-
-const COLOR_ACTIVE = "#42a5f5";
-const COLOR_TARGET = "#ab47bc";
 
 interface WorkerPoint {
   x: Date;
@@ -58,42 +56,60 @@ export function renderWorkerHistoryChart(samples: UsageSample[]): HTMLElement {
   const yMax = Math.max(maxActive, maxTarget) + 1;
   const yDomain: [number, number] = [0, yMax];
 
-  const chartWidth = computeChartWidth(points.length, POINT_WIDTH, CONTAINER_WIDTH);
-
   const fg = getThemeFg(container);
+  // DS categorical palette, read from the container at runtime.
+  const palette = readChartPalette(container);
+  const COLOR_ACTIVE = palette[1]; // --chart-2 amber
+  const COLOR_TARGET = palette[4]; // --chart-5 tan (dashed target overlay)
   const sharedStyle = { background: "transparent", color: fg };
-
-  const axisSvg = renderAxisSvg({ height: CHART_HEIGHT, style: sharedStyle, yDomain, label: "workers" });
-
-  const chartSvg = Plot.plot({
-    width: chartWidth,
-    height: CHART_HEIGHT,
-    marginBottom: MARGIN_BOTTOM,
-    marginLeft: 0,
-    marginRight: MARGIN_RIGHT,
-    style: sharedStyle,
-    x: { type: "time", label: null },
-    y: { label: null, axis: null, grid: true, domain: yDomain },
-    marks: [
-      // Active workers — solid line.
-      Plot.lineY(points, { x: "x", y: "activeWorkers", stroke: COLOR_ACTIVE, strokeWidth: 2, curve: "monotone-x" }),
-      // Target workers — dashed step line.
-      Plot.lineY(points, { x: "x", y: "targetWorkers", stroke: COLOR_TARGET, strokeWidth: 2, strokeDasharray: "8,4", curve: "step-after" }),
-    ],
-  });
-
-  chartSvg.style.width = `${chartWidth}px`;
-  chartSvg.style.minWidth = `${chartWidth}px`;
-
-  const { layout, wrapper } = assembleChartLayout(axisSvg, chartSvg);
 
   const legend = buildLegend([
     { label: SERIES_ACTIVE, color: COLOR_ACTIVE },
     { label: SERIES_TARGET, color: COLOR_TARGET, dashed: true },
   ]);
 
-  container.replaceChildren(layout, legend);
-  wrapper.scrollLeft = wrapper.scrollWidth;
+  // Block-level slot the ResizeObserver measures; .chart-scroll-wrapper inside
+  // clips horizontally so the slot stays at the panel content-box width.
+  const slot = document.createElement("div");
+
+  mountResponsiveChart(slot, (width) => {
+    const chartWidth = computeChartWidth(points.length, POINT_WIDTH, width);
+
+    const axisSvg = renderAxisSvg({ height: CHART_HEIGHT, style: sharedStyle, yDomain, label: "workers" });
+
+    const chartSvg = Plot.plot({
+      width: chartWidth,
+      height: CHART_HEIGHT,
+      marginBottom: MARGIN_BOTTOM,
+      marginLeft: 0,
+      marginRight: MARGIN_RIGHT,
+      style: sharedStyle,
+      x: { type: "time", label: null },
+      y: { label: null, axis: null, grid: true, domain: yDomain },
+      marks: [
+        // Active workers — solid line.
+        Plot.lineY(points, { x: "x", y: "activeWorkers", stroke: COLOR_ACTIVE, strokeWidth: 2, curve: "monotone-x" }),
+        // Target workers — dashed step line.
+        Plot.lineY(points, { x: "x", y: "targetWorkers", stroke: COLOR_TARGET, strokeWidth: 2, strokeDasharray: "8,4", curve: "step-after" }),
+      ],
+    });
+
+    chartSvg.style.width = `${chartWidth}px`;
+    chartSvg.style.minWidth = `${chartWidth}px`;
+
+    const { layout, wrapper } = assembleChartLayout(axisSvg, chartSvg);
+
+    // Scroll to the newest data (rightmost). The slot is detached on the first
+    // paint, so a synchronous scroll there is a no-op (scrollWidth is 0); defer
+    // to the next frame, by which a layout pass has run.
+    requestAnimationFrame(() => {
+      wrapper.scrollLeft = wrapper.scrollWidth;
+    });
+
+    return layout;
+  });
+
+  container.replaceChildren(slot, legend);
 
   return container;
 }

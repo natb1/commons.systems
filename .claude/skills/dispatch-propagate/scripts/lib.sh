@@ -28,6 +28,32 @@ resolve_issue_number() {
   echo "$num"
 }
 
+# Derive and validate owner/repo from a git remote URL.
+# Args: $1 = remote.origin.url value; $2 = caller name (error-message prefix).
+# Resolve owner/repo from the remote so gh addresses the repo independent of cwd
+# (dirname(common_dir) is not a working tree in the bare-repo + worktrees layout).
+# Handles https://github.com/<owner>/<repo>(.git) and git@github.com:<owner>/<repo>(.git).
+# Prints owner/repo to stdout on success; on an empty/non-GitHub/malformed result,
+# prints a caller-prefixed message to stderr and returns 1.
+gh_repo_from_remote() {
+  local url="$1" caller="$2" stripped repo
+  stripped="${url%.git}"
+  repo="${stripped#*github.com[:/]}"
+  if [[ -z "$stripped" ]]; then
+    echo "$caller: could not resolve owner/repo from remote.origin.url ('$url')" >&2
+    return 1
+  fi
+  if [[ "$repo" == "$stripped" ]]; then
+    echo "$caller: remote is not a GitHub repository ('$url')" >&2
+    return 1
+  fi
+  if [[ ! "$repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+    echo "$caller: unexpected owner/repo format from remote.origin.url ('$url'): $repo" >&2
+    return 1
+  fi
+  printf '%s\n' "$repo"
+}
+
 # ---- parse_duration <str> — duration string to whole seconds ----------------
 # Accepts <int><unit> where unit is one of s|m|h|d|w (second/minute/hour/day/
 # week). Prints the duration in seconds on stdout and returns 0. On unparseable
@@ -489,6 +515,40 @@ ensure_deps() {
       "$(dirname "${BASH_SOURCE[0]}")/npm-ci-with-retry.sh"
     )
   fi
+}
+
+# ---- playwright_install_with_deps — bounded, timed Playwright browser install -
+# Wraps `npx playwright install --with-deps chromium` (which shells out to apt-get
+# and can stall indefinitely on a flaky archive mirror — #1899) in a per-attempt
+# `timeout` plus a small retry loop, so a transient network stall fails fast and
+# retries instead of hanging until GitHub's 6-hour job cap. Skips entirely when
+# PLAYWRIGHT_BROWSERS_PATH is set (nix provides browsers). Must run from the app
+# directory (npx resolves the project's playwright). Tunables (env):
+# PLAYWRIGHT_INSTALL_TIMEOUT (default 300 seconds, per attempt),
+# PLAYWRIGHT_INSTALL_ATTEMPTS (default 2 = 1 try + 1 retry). Returns non-zero (so
+# the caller's `set -e` aborts) once attempts are exhausted.
+playwright_install_with_deps() {
+  if [ -n "${PLAYWRIGHT_BROWSERS_PATH:-}" ]; then
+    return 0
+  fi
+  local timeout_s="${PLAYWRIGHT_INSTALL_TIMEOUT:-300}"
+  local attempts="${PLAYWRIGHT_INSTALL_ATTEMPTS:-2}"
+  local attempt=1
+  while [ "$attempt" -le "$attempts" ]; do
+    if [ "$attempt" -gt 1 ]; then
+      echo "playwright_install_with_deps: attempt $attempt/$attempts" >&2
+    fi
+    if timeout --kill-after=30 "$timeout_s" npx playwright install --with-deps chromium; then
+      return 0
+    fi
+    echo "playwright_install_with_deps: attempt $attempt/$attempts failed or timed out after ${timeout_s}s" >&2
+    attempt=$((attempt + 1))
+    if [ "$attempt" -le "$attempts" ]; then
+      sleep 5
+    fi
+  done
+  echo "playwright_install_with_deps: failed after $attempts attempts" >&2
+  return 1
 }
 
 # Ensure Playwright browsers are resolvable. When PLAYWRIGHT_BROWSERS_PATH is
@@ -1447,6 +1507,419 @@ EOF
   # --now starts it without restarting an already-running instance.
   if ! "$SYSTEMCTL_CMD" --user enable --now dispatch-claude-daemon.service; then
     echo "WARNING: ensure_daemon_service: systemctl --user enable --now dispatch-claude-daemon.service failed; durable daemon service unavailable" >&2
+    return 1
+  fi
+}
+
+
+# Install and activate the durable `dispatch-sweep-periodic.timer` (+ its paired
+# `dispatch-sweep-periodic.service`) so the worktree garbage-collector fires on a
+# wall-clock cadence instead of only from a finishing worker's Stop hook (#2023).
+# The sweep launcher currently runs only when a worker stops, so an idle or
+# drained chain never GCs its stale worktrees. A `systemd --user` timer ticks
+# regardless of chain activity, keeping the sweep durable across idle periods.
+#
+# The .service is Type=oneshot and carries NO [Install] section — the .timer
+# pulls it in via Unit=, and a oneshot with an [Install] would be pointlessly
+# enable-able on its own. ExecStart points at `dispatch-spawn-sweep` (the
+# launcher), NOT `dispatch-sweep` directly, so each fire still gets the
+# launcher's fixed-unit dedup + 300s throttle rather than racing the Stop-hook
+# spawns.
+#
+# Best-effort: a failure here must not abort the caller (a tick/reseed/worker
+# launcher), so we warn to stderr and return non-zero — never `exit`. A missing
+# timer just means the sweep falls back to the prior Stop-hook-only behavior.
+# Args: $1 = main worktree path
+ensure_sweep_timer() {
+  local main_worktree="$1"
+
+  # A systemd unit file is line-structured: each line is an independent
+  # directive. An embedded newline in any value we interpolate below would land
+  # as an attacker-controlled extra directive in the [Service] section. The
+  # main worktree path comes from git output or a test override and never
+  # legitimately contains a newline; reject it rather than emit a malformed
+  # unit (best-effort: warn + return per this helper's contract — never exit).
+  if [[ "$main_worktree" == *$'\n'* ]]; then
+    echo "WARNING: ensure_sweep_timer: main worktree path contains a newline; refusing to write unit; periodic sweep unavailable" >&2
+    return 1
+  fi
+  # WorkingDirectory= does not unescape quotes, so a space in the bare path would
+  # split the value at the first space; reject it (same contract: warn + return 1).
+  if [[ "$main_worktree" == *' '* ]]; then
+    echo "WARNING: ensure_sweep_timer: main worktree path contains a space; refusing to write unit; periodic sweep unavailable" >&2
+    return 1
+  fi
+  # ExecStart= is double-quoted ("$SWEEP_SCRIPT"); SWEEP_SCRIPT is derived from
+  # main_worktree below. An embedded double-quote in the path would prematurely
+  # close that quoted token, making systemd parse the executable and arguments
+  # wrong (bad-setting) and permanently break the unit. The path never
+  # legitimately contains a double-quote; reject it rather than emit a malformed
+  # unit (same contract: warn + return 1).
+  if [[ "$main_worktree" == *'"'* ]]; then
+    echo "WARNING: ensure_sweep_timer: main worktree path contains a double-quote; refusing to write unit; periodic sweep unavailable" >&2
+    return 1
+  fi
+  # ExecStart= is double-quoted and systemd C-unescapes it, so a backslash in
+  # the path would be misread as an escape sequence and corrupt the executable
+  # token. The path never legitimately contains a backslash; reject it (#1212).
+  if [[ "$main_worktree" == *'\'* ]]; then
+    echo "WARNING: ensure_sweep_timer: main worktree path contains a backslash; refusing to write unit; periodic sweep unavailable" >&2
+    return 1
+  fi
+
+  local SWEEP_SCRIPT="$main_worktree/.claude/skills/dispatch-propagate/scripts/dispatch-spawn-sweep"
+  local UNIT_DIR="${DISPATCH_SWEEP_TIMER_UNIT_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user}"
+  local SERVICE_PATH="$UNIT_DIR/dispatch-sweep-periodic.service"
+  local TIMER_PATH="$UNIT_DIR/dispatch-sweep-periodic.timer"
+  local SYSTEMCTL_CMD="${DISPATCH_SWEEP_TIMER_SYSTEMCTL_CMD:-systemctl}"
+
+  # Sanitize PATH for the Environment= line (see strip_unit_env_path).
+  local safe_path
+  safe_path=$(strip_unit_env_path "$PATH")
+
+  # Desired .service content. Environment=PATH= captures the launching caller's
+  # full nix-store PATH at write time, for the same reason the recover and daemon
+  # units do — the systemd user manager's minimal default PATH omits the nix
+  # store, so dispatch-spawn-sweep (and the dispatch-sweep it launches) could not
+  # otherwise resolve git/jq/claude.
+  #
+  # ExecStart= and Environment= are double-quoted: systemd unescapes C-style
+  # quotes for these two directives, so a path containing spaces is parsed as a
+  # single token rather than split into an executable + spurious arguments.
+  # WorkingDirectory= is the exception — it does NOT unescape quotes; a leading
+  # `"` makes the path non-absolute and systemd rejects the unit (bad-setting),
+  # so it takes the bare path (the no-spaces invariant is enforced by the guard
+  # above, so the bare value is a single token).
+  #
+  # Deliberately NO [Install] section — the .timer pulls this oneshot in via
+  # Unit=, so the service is never enabled on its own.
+  local desired_service
+  desired_service=$(cat <<EOF
+[Unit]
+Description=Dispatch periodic worktree sweep (timer-triggered)
+
+[Service]
+Type=oneshot
+Environment="PATH=$safe_path"
+ExecStart="$SWEEP_SCRIPT"
+WorkingDirectory=$main_worktree
+EOF
+)
+
+  # Desired .timer content. OnBootSec delays the first fire past session start so
+  # the boot-time launcher storm settles; OnUnitActiveSec re-arms 15min after
+  # each activation for the steady cadence. Unit= names the paired oneshot above.
+  #
+  # Deliberately NO Persistent= — it only affects OnCalendar= timers (catching up
+  # missed wall-clock fires across downtime) and is a no-op for the monotonic
+  # OnBootSec=/OnUnitActiveSec= triggers used here.
+  local desired_timer
+  desired_timer=$(cat <<EOF
+[Unit]
+Description=Dispatch periodic worktree sweep timer
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=15min
+Unit=dispatch-sweep-periodic.service
+
+[Install]
+WantedBy=timers.target
+EOF
+)
+
+  # Steady-state hot path: if BOTH installed units already match byte-for-byte
+  # AND the timer is active (armed), skip the write/reload/enable entirely.
+  # (Like the durable daemon and unlike the OnFailure-only recover unit, the
+  # timer must actually be RUNNING — an "active" timer is one that is armed and
+  # will fire — so we add an is-active check to the content compare.)
+  if [ -f "$SERVICE_PATH" ] && [ "$(cat "$SERVICE_PATH")" = "$desired_service" ] \
+     && [ -f "$TIMER_PATH" ] && [ "$(cat "$TIMER_PATH")" = "$desired_timer" ] \
+     && "$SYSTEMCTL_CMD" --user is-active --quiet dispatch-sweep-periodic.timer; then
+    return 0
+  fi
+
+  if ! mkdir -p "$UNIT_DIR"; then
+    echo "WARNING: ensure_sweep_timer: mkdir -p $UNIT_DIR failed; periodic sweep unavailable" >&2
+    return 1
+  fi
+
+  # Write the .service atomically only when its content differs: temp file in the
+  # same dir, then mv into place.
+  if [ ! -f "$SERVICE_PATH" ] || [ "$(cat "$SERVICE_PATH")" != "$desired_service" ]; then
+    local tmp_service
+    tmp_service=$(mktemp "$UNIT_DIR/.dispatch-sweep-periodic.service.XXXXXX") || {
+      echo "WARNING: ensure_sweep_timer: could not create temp file in $UNIT_DIR; periodic sweep unavailable" >&2
+      return 1
+    }
+    if ! printf '%s\n' "$desired_service" > "$tmp_service"; then
+      echo "WARNING: ensure_sweep_timer: failed to write $tmp_service; periodic sweep unavailable" >&2
+      rm -f "$tmp_service"
+      return 1
+    fi
+    if ! mv "$tmp_service" "$SERVICE_PATH"; then
+      echo "WARNING: ensure_sweep_timer: failed to install $SERVICE_PATH; periodic sweep unavailable" >&2
+      rm -f "$tmp_service"
+      return 1
+    fi
+  fi
+
+  # Write the .timer atomically only when its content differs: temp file in the
+  # same dir, then mv into place.
+  if [ ! -f "$TIMER_PATH" ] || [ "$(cat "$TIMER_PATH")" != "$desired_timer" ]; then
+    local tmp_timer
+    tmp_timer=$(mktemp "$UNIT_DIR/.dispatch-sweep-periodic.timer.XXXXXX") || {
+      echo "WARNING: ensure_sweep_timer: could not create temp file in $UNIT_DIR; periodic sweep unavailable" >&2
+      return 1
+    }
+    if ! printf '%s\n' "$desired_timer" > "$tmp_timer"; then
+      echo "WARNING: ensure_sweep_timer: failed to write $tmp_timer; periodic sweep unavailable" >&2
+      rm -f "$tmp_timer"
+      return 1
+    fi
+    if ! mv "$tmp_timer" "$TIMER_PATH"; then
+      echo "WARNING: ensure_sweep_timer: failed to install $TIMER_PATH; periodic sweep unavailable" >&2
+      rm -f "$tmp_timer"
+      return 1
+    fi
+  fi
+
+  # daemon-reload unconditionally on this slow path, outside both write blocks.
+  # The hot path above already returned early when both units matched
+  # byte-for-byte AND the timer was active; reaching here means at least one unit
+  # was just written OR both exist on disk but the timer is not active. A
+  # daemon-reload that failed on a prior call (after the mv succeeded) leaves the
+  # units on disk but unknown to systemd, so the content compare skips the write
+  # blocks on every later call — running the reload outside those blocks ensures
+  # it is retried until systemd has loaded the units, instead of falling straight
+  # through to a doomed `enable --now`. Both files are on disk before the reload
+  # since the timer's Unit= references the service.
+  if ! "$SYSTEMCTL_CMD" --user daemon-reload; then
+    echo "WARNING: ensure_sweep_timer: systemctl --user daemon-reload failed; periodic sweep unavailable" >&2
+    return 1
+  fi
+
+  # Install + activate the TIMER (not the oneshot service): enable symlinks it
+  # under WantedBy=timers.target (so it re-arms on every user-session start) and
+  # --now arms it immediately. A .timer does nothing until this enable --now;
+  # the paired service stays inert until the timer triggers it.
+  if ! "$SYSTEMCTL_CMD" --user enable --now dispatch-sweep-periodic.timer; then
+    echo "WARNING: ensure_sweep_timer: systemctl --user enable --now dispatch-sweep-periodic.timer failed; periodic sweep unavailable" >&2
+    return 1
+  fi
+}
+
+
+# Install and activate the durable always-on heartbeat: a `systemd --user`
+# `dispatch-heartbeat.timer` firing `dispatch-heartbeat.service` (a no-arg
+# `dispatch-tick`) on a flat drumbeat — `OnBootSec=2min`,
+# `OnUnitActiveSec=15min`, `Persistent=true`. This gives the autonomous chain a
+# liveness floor that is independent of Stop hooks and reseed timers, so the
+# chain self-recovers from abnormal worker death and post-cap stalls where no
+# Stop hook fires and no reseed is armed (#2022). A flat drumbeat is safe and
+# costs zero model tokens when idle: `dispatch-tick` is a pure-bash sequencer
+# with no model session, and it is self-suppressing — busy / concurrency-cap /
+# empty-disposition ticks spawn no worker.
+#
+# #1010 coexistence rationale: the heartbeat provides automatic liveness, while
+# the `dispatch:chain-stalled` escalation (#1010) is kept for human visibility.
+# The two are NOT mutually exclusive — the heartbeat is the machine that keeps
+# the chain alive, and the escalation latch is the human-facing signal that the
+# chain went quiet; neither replaces the other, and this helper does not touch
+# (let alone auto-close) the escalation latch.
+#
+# ExecStart=dispatch-tick-direct + KillMode=process worker-survival rationale:
+# ExecStart runs `dispatch-tick` DIRECTLY (not `dispatch-spawn-tick`), mirroring
+# the proven reseed timer→tick path (see dispatch-schedule-reseed:460-475). The
+# heartbeat-spawned worker's first `claude` call attaches to the durable
+# `dispatch-claude-daemon.service` cgroup, not this oneshot service's cgroup, so
+# when the heartbeat `Type=oneshot` service exits, the worker survives.
+# `KillMode=process` is the degraded-path fallback for hosts where the durable
+# daemon service is unavailable: it confines the kill to the dispatch-tick
+# process itself, so a detached worker survives the oneshot service finishing.
+# `OnFailure=dispatch-tick-recover.service` chains a crashing tick to the same
+# systemd-owned recovery handler the tick/reseed launchers use.
+#
+# Best-effort: a failure here must not abort the caller (a tick/reseed
+# launcher), so we warn to stderr and return non-zero — never `exit`. A missing
+# heartbeat just means the chain falls back to the prior Stop-hook/reseed-only
+# liveness behavior.
+# Args: $1 = main worktree path
+ensure_heartbeat_units() {
+  local main_worktree="$1"
+
+  # A systemd unit file is line-structured: each line is an independent
+  # directive. An embedded newline in the interpolated worktree path would land
+  # as an attacker-controlled extra directive in the [Service] section. The main
+  # worktree path comes from git output or a test override and never
+  # legitimately contains a newline; reject it rather than emit a malformed unit
+  # (best-effort: warn + return per this helper's contract — never exit).
+  if [[ "$main_worktree" == *$'\n'* ]]; then
+    echo "WARNING: ensure_heartbeat_units: main worktree path contains a newline; refusing to write unit; periodic heartbeat unavailable" >&2
+    return 1
+  fi
+  # WorkingDirectory= does not unescape quotes, so a space in the bare path would
+  # split the value at the first space; reject it (same contract: warn + return 1).
+  if [[ "$main_worktree" == *' '* ]]; then
+    echo "WARNING: ensure_heartbeat_units: main worktree path contains a space; refusing to write unit; periodic heartbeat unavailable" >&2
+    return 1
+  fi
+  # ExecStart= is double-quoted ("$TICK_SCRIPT"); an embedded double-quote in the
+  # path would prematurely close that quoted token, making systemd parse the
+  # executable and arguments wrong (bad-setting) and permanently break the unit.
+  # The path never legitimately contains a double-quote; reject it.
+  if [[ "$main_worktree" == *'"'* ]]; then
+    echo "WARNING: ensure_heartbeat_units: main worktree path contains a double-quote; refusing to write unit; periodic heartbeat unavailable" >&2
+    return 1
+  fi
+  # ExecStart= is double-quoted and systemd C-unescapes it, so a backslash in the
+  # path would be misread as an escape sequence and corrupt the executable token.
+  # The path never legitimately contains a backslash; reject it (#1212).
+  if [[ "$main_worktree" == *'\'* ]]; then
+    echo "WARNING: ensure_heartbeat_units: main worktree path contains a backslash; refusing to write unit; periodic heartbeat unavailable" >&2
+    return 1
+  fi
+
+  local TICK_SCRIPT="$main_worktree/.claude/skills/dispatch-propagate/scripts/dispatch-tick"
+  local UNIT_DIR="${DISPATCH_HEARTBEAT_UNIT_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user}"
+  local SERVICE_PATH="$UNIT_DIR/dispatch-heartbeat.service"
+  local TIMER_PATH="$UNIT_DIR/dispatch-heartbeat.timer"
+  local SYSTEMCTL_CMD="${DISPATCH_HEARTBEAT_SYSTEMCTL_CMD:-systemctl}"
+
+  # Sanitize PATH for the Environment= line (see strip_unit_env_path).
+  local safe_path
+  safe_path=$(strip_unit_env_path "$PATH")
+
+  # Desired service unit. ExecStart runs `dispatch-tick` directly with no args
+  # (see the dispatch-tick-direct + KillMode=process rationale above); the
+  # heartbeat-spawned worker attaches to the durable daemon cgroup and survives
+  # this oneshot service exiting. Environment=PATH= captures the launching
+  # caller's full nix-store PATH at write time, for the same reason the recover
+  # and daemon units do — so the tick (and any worker it spawns) can resolve
+  # git/jq/claude.
+  #
+  # ExecStart= and Environment= are double-quoted: systemd unescapes C-style
+  # quotes for these two directives, so a path containing spaces is parsed as a
+  # single token rather than split into an executable + spurious arguments.
+  # WorkingDirectory= is the exception — it does NOT unescape quotes and takes
+  # the bare path (the no-spaces invariant is enforced by the guard above).
+  local desired_service
+  desired_service=$(cat <<EOF
+[Unit]
+Description=Dispatch chain periodic heartbeat tick (#2022)
+OnFailure=dispatch-tick-recover.service
+
+[Service]
+Type=oneshot
+Environment="PATH=$safe_path"
+ExecStart="$TICK_SCRIPT"
+KillMode=process
+WorkingDirectory=$main_worktree
+EOF
+)
+
+  # Desired timer unit: a flat drumbeat. OnBootSec=2min gives a fast post-boot
+  # tick; OnUnitActiveSec=15min sets the steady-state cadence; Persistent=true
+  # makes a missed firing (host asleep/off at the scheduled time) run on the
+  # next wake instead of being skipped.
+  local desired_timer
+  desired_timer=$(cat <<EOF
+[Unit]
+Description=Dispatch chain periodic heartbeat timer (#2022)
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+)
+
+  # Steady-state hot path: if both installed units already match byte-for-byte
+  # AND the timer is active, do nothing — skip the writes, daemon-reload, and
+  # enable entirely. (Like the daemon service, the timer must actually be
+  # RUNNING, so the content compare carries an is-active check.)
+  if [ -f "$SERVICE_PATH" ] && [ "$(cat "$SERVICE_PATH")" = "$desired_service" ] \
+     && [ -f "$TIMER_PATH" ] && [ "$(cat "$TIMER_PATH")" = "$desired_timer" ] \
+     && "$SYSTEMCTL_CMD" --user is-active --quiet dispatch-heartbeat.timer; then
+    return 0
+  fi
+
+  if ! mkdir -p "$UNIT_DIR"; then
+    echo "WARNING: ensure_heartbeat_units: mkdir -p $UNIT_DIR failed; periodic heartbeat unavailable" >&2
+    return 1
+  fi
+
+  # Write each unit atomically only when its content differs: temp file in the
+  # same dir (umask 077 so the temp file is 0600 during write), chmod 0644 before
+  # mv so systemd can read the installed unit.
+  local old_umask
+  old_umask=$(umask)
+
+  if [ ! -f "$SERVICE_PATH" ] || [ "$(cat "$SERVICE_PATH")" != "$desired_service" ]; then
+    local tmp_service
+    umask 077
+    tmp_service=$(mktemp "$UNIT_DIR/.dispatch-heartbeat.service.XXXXXX") || {
+      umask "$old_umask"
+      echo "WARNING: ensure_heartbeat_units: could not create temp file in $UNIT_DIR; periodic heartbeat unavailable" >&2
+      return 1
+    }
+    umask "$old_umask"
+    if ! printf '%s\n' "$desired_service" > "$tmp_service"; then
+      echo "WARNING: ensure_heartbeat_units: failed to write $tmp_service; periodic heartbeat unavailable" >&2
+      rm -f "$tmp_service"
+      return 1
+    fi
+    chmod 0644 "$tmp_service"
+    if ! mv "$tmp_service" "$SERVICE_PATH"; then
+      echo "WARNING: ensure_heartbeat_units: failed to install $SERVICE_PATH; periodic heartbeat unavailable" >&2
+      rm -f "$tmp_service"
+      return 1
+    fi
+  fi
+
+  if [ ! -f "$TIMER_PATH" ] || [ "$(cat "$TIMER_PATH")" != "$desired_timer" ]; then
+    local tmp_timer
+    umask 077
+    tmp_timer=$(mktemp "$UNIT_DIR/.dispatch-heartbeat.timer.XXXXXX") || {
+      umask "$old_umask"
+      echo "WARNING: ensure_heartbeat_units: could not create temp file in $UNIT_DIR; periodic heartbeat unavailable" >&2
+      return 1
+    }
+    umask "$old_umask"
+    if ! printf '%s\n' "$desired_timer" > "$tmp_timer"; then
+      echo "WARNING: ensure_heartbeat_units: failed to write $tmp_timer; periodic heartbeat unavailable" >&2
+      rm -f "$tmp_timer"
+      return 1
+    fi
+    chmod 0644 "$tmp_timer"
+    if ! mv "$tmp_timer" "$TIMER_PATH"; then
+      echo "WARNING: ensure_heartbeat_units: failed to install $TIMER_PATH; periodic heartbeat unavailable" >&2
+      rm -f "$tmp_timer"
+      return 1
+    fi
+  fi
+
+  # daemon-reload unconditionally on this slow path. The hot path above already
+  # returned early when both units matched byte-for-byte AND the timer was
+  # active; reaching here means a unit was just written OR the timer is not
+  # active. A daemon-reload that failed on a prior call (after the mv succeeded)
+  # leaves a unit on disk but unknown to systemd, so the content compare skips
+  # the write block on every later call — running the reload outside that block
+  # ensures it is retried until systemd has loaded the units, instead of falling
+  # straight through to a doomed `enable --now`.
+  if ! "$SYSTEMCTL_CMD" --user daemon-reload; then
+    echo "WARNING: ensure_heartbeat_units: systemctl --user daemon-reload failed; periodic heartbeat may be stale" >&2
+    return 1
+  fi
+
+  # Install + activate idempotently: enable symlinks the timer under
+  # WantedBy=timers.target (so it auto-starts on every user-session start) and
+  # --now starts it without restarting an already-running instance.
+  if ! "$SYSTEMCTL_CMD" --user enable --now dispatch-heartbeat.timer; then
+    echo "WARNING: ensure_heartbeat_units: systemctl --user enable --now dispatch-heartbeat.timer failed; periodic heartbeat unavailable" >&2
     return 1
   fi
 }

@@ -1,10 +1,11 @@
+import { createElement } from "react";
 import DOMPurify from "dompurify";
-import { escapeHtml } from "@commons-systems/htmlutil";
+import { renderToStaticMarkup } from "react-dom/server";
 import { logError } from "@commons-systems/errorutil/log";
-import { formatUtcDate } from "../date.ts";
 import { createMarked, extractH1, type PostContent } from "../marked-config.ts";
 import { isOutletCurrent } from "@commons-systems/router/hydrate";
 import type { PostMeta } from "../post-types.ts";
+import { EmptyFeed, PostArticle, PostFeed } from "./Home.tsx";
 
 export type { PostContent };
 
@@ -12,26 +13,16 @@ const SCROLL_PADDING_PX = 16;
 
 const marked = createMarked();
 
+// String-returning bridges over the React components in Home.tsx. The driver
+// (create-blog-app.ts) and prerender.ts consume these signatures unchanged; the
+// imperative hydrator below (hydrateHome) operates on the same ids/classes the
+// components emit. This file stays a .ts module (its importers reference
+// `./pages/home.ts`), so the components are instantiated via createElement
+// rather than JSX, which TypeScript only parses in .tsx files.
 export function renderArticle(p: PostMeta, postLinkPrefix: string, content?: PostContent): string {
-  const safeId = escapeHtml(p.id);
-  const displayTitle = content?.title ?? p.title;
-  const dateHtml = p.publishedAt
-    ? `<time datetime="${escapeHtml(p.publishedAt)}">${escapeHtml(formatUtcDate(p.publishedAt))}</time>`
-    : "";
-  const draftBadge = p.published
-    ? ""
-    : ` <span class="draft-badge">[draft]</span>`;
-  const linkHtml =
-    `<a href="${postLinkPrefix}${safeId}" class="post-link">` +
-    `<span class="post-title">${escapeHtml(displayTitle)}</span></a>`;
-  const contentHtml = content
-    ? `<div id="post-content-${safeId}" data-hydrated>${content.html}</div>`
-    : `<div id="post-content-${safeId}"><p>Loading...</p></div>`;
-  return `<article id="post-${safeId}">
-        <h2>${linkHtml}${draftBadge}</h2>
-        ${dateHtml}
-        ${contentHtml}
-      </article>`;
+  return renderToStaticMarkup(
+    createElement(PostArticle, { post: p, postLinkPrefix, content }),
+  );
 }
 
 export function renderHomeHtml(
@@ -40,21 +31,12 @@ export function renderHomeHtml(
   contentMap?: Record<string, PostContent>,
 ): string {
   if (posts.length === 0) {
-    return `
-    <h2>Home</h2>
-    <p>No posts yet.</p>
-  `;
+    return renderToStaticMarkup(createElement(EmptyFeed));
   }
 
-  const articles = posts
-    .map((p) => renderArticle(p, postLinkPrefix, contentMap?.[p.id]))
-    .join("\n      <hr>\n      ");
-
-  return `
-    <div id="posts">
-      ${articles}
-    </div>
-  `;
+  return renderToStaticMarkup(
+    createElement(PostFeed, { posts, postLinkPrefix, contentMap }),
+  );
 }
 
 export function hydrateHome(

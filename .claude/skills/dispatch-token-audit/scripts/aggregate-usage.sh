@@ -260,14 +260,35 @@ def cmd_prefix(c):
 # The capture anchors on the full literal marker `<!-- dispatch:outcome:v1 -->`
 # per the reader contract in .claude/docs/outcome-envelope.md. The body is
 # non-greedy (`.*?`) so it stops at the FIRST closing fence — robust to `}`/`{`
-# inside string values and to multiple envelopes in one result. The "m" flag
-# makes "." cross newlines so a pretty-printed multi-line JSON object is
-# captured whole.
+# inside string values and to multiple envelopes in one result. The "m" flag is
+# LOAD-BEARING and must not be removed: jq uses the Oniguruma engine, where "m"
+# means DOTALL — "." matches newlines — which is NOT the same as PCRE's "m"
+# (multiline anchors, where "m" only makes ^/$ match at line boundaries). Without
+# "m", "." stops at the first newline and a pretty-printed body is silently
+# truncated. This matters because dispatch-emit-outcome runs `jq -n` WITHOUT
+# `-c`, so it emits a pretty-printed MULTI-LINE JSON object; the "m" flag is what
+# lets this single regex capture it whole. (Verify the DOTALL semantics directly:
+# `printf 'A\nB' | jq -Rs '[match("A(?<x>.)B"; "m")][0].captures[0].string'` ->
+# "\n" (the "." captured the newline); drop the "m" and `[match(...)]` is [].
+# test-aggregate-usage.sh guards this with a multi-line fixture.)
 #
 # LAST-WINS (reader contract): collect every envelope match across all
 # tool_results in document order and take the last. fromjson is wrapped in
 # try/catch so a malformed envelope binds null and NEVER aborts the file —
 # mirroring the clear-error/files_failed philosophy.
+#
+# STRICT VALIDATION (#1909): after a successful fromjson, a PARTIAL envelope
+# (valid JSON missing a required rate-feeding count key) binds null and is
+# treated as ABSENT — never coerced to a zero-count object. The doc marks the
+# three rate-feeding counts (findings_surfaced, findings_actionable,
+# fixes_applied) non-nullable, so we validate each is a `number` (a type check
+# catches both a missing key AND an explicit null). Without this, rate()'s
+# `($num // 0)` would silently fabricate a 0 rate from a partial envelope. Per
+# .claude/rules/code-style.md (clear errors over defensive fallbacks), surface
+# the gap as outcome:null instead. This single stage-1 chokepoint propagates to
+# per-session outcome/outcome_rates and pooled by_phase_outcome downstream.
+# followups_filed/subagents_launched are intentionally NOT validated here —
+# they do not feed rate(), so they keep their `// 0` coercion downstream.
 | ( [ $msgs[]
       | select(.type=="user")
       | .message.content
@@ -277,7 +298,12 @@ def cmd_prefix(c):
       | match("<!-- dispatch:outcome:v1 -->\\s*```json\\s*(?<j>.*?)\\s*```"; "gm")
       | .captures[0].string
     ] | last // null ) as $outcome_raw
-| ( ($outcome_raw // "") | try fromjson catch null ) as $outcome
+| ( ($outcome_raw // "") | try fromjson catch null ) as $parsed
+| ( if ($parsed | type) == "object"
+      and ($parsed.findings_surfaced   | type) == "number"
+      and ($parsed.findings_actionable | type) == "number"
+      and ($parsed.fixes_applied       | type) == "number"
+    then $parsed else null end ) as $outcome
 
 # Ordered per-session token list of tool calls, in document order. Bash calls
 # become "Bash:<cmd_prefix>"; other tools become their name.
@@ -500,14 +526,16 @@ def outcome_rates($o):
 
 # ---- by_phase_outcome (pooled hit-rate per envelope phase, #1860) ----
 # Keyed by the envelope's own `.phase` enum value (e.g. "review", "qa") — NOT by
-# skill name like $by_phase. DOUBLE-COUNT GUARD: fold ONLY non-subagent rows that
-# carry an envelope. Per the doc, only top-level worker sessions emit; a subagent
-# transcript that happens to print the marker is excluded so it cannot inflate
-# the pool. Counts are SUMMED across a phase's rows, then the same null-guarded
-# formulas are applied to the pooled sums (pooled rate, not a mean of per-run
-# rates). disposition_distribution counts rows per disposition enum value.
+# skill name like $by_phase. DOUBLE-COUNT GUARD: admit ONLY the allowlisted emitter
+# types — `worker` and `router-tick` — that carry an envelope. The `subagent`,
+# `recovery`, and `other` session types are excluded: subagents are nested
+# transcripts that cannot be top-level emitters, and recovery/other are not
+# proven envelope emitters. Counts are SUMMED across a phase's rows, then the
+# same null-guarded formulas are applied to the pooled sums (pooled rate, not a
+# mean of per-run rates). disposition_distribution counts rows per disposition
+# enum value.
 | ( reduce ( $rows[]
-             | select(.type != "subagent" and .outcome != null) ) as $r ({};
+             | select((.type == "worker" or .type == "router-tick") and .outcome != null) ) as $r ({};
       ($r.outcome.phase // "<unknown>") as $ph
       | ($r.outcome) as $o
       | .[$ph] as $cur
