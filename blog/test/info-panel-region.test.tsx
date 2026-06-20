@@ -181,7 +181,11 @@ describe("InfoPanelRegion", () => {
       <InfoPanelRegion
         data={baseData}
         strategies={strategies}
-        aboutContent='<section class="about-panel"><h2>About</h2></section>'
+        aboutContent={
+          <section className="about-panel">
+            <h2>About</h2>
+          </section>
+        }
       />,
     );
 
