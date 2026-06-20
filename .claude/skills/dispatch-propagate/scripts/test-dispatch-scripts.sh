@@ -34764,7 +34764,6 @@ assert_eq "resolve_dirty_apps: root-config fan-out marks all workspaces" \
 rm -rf "$TMPDIR_TEST"
 TMPDIR_TEST=""
 
-# ============================================================================
 # dispatch-review-erosion tests
 # ============================================================================
 #
@@ -34892,6 +34891,95 @@ sidecar_count=$(jq '.findings | length' <<<"$sidecar_out")
 assert_eq "sidecar no net-increase → zero findings" "0" "$sidecar_count"
 rm -rf "$TMPDIR_TEST"
 TMPDIR_TEST=""
+
+# ============================================================================
+# dispatch-run-verification tests (#2024)
+# ============================================================================
+# dispatch-run-verification reads the full plan markdown on STDIN, finds the
+# "## Verification" section, runs every ```verify fenced block in order via bash
+# in the current directory, and exits tri-state: 0 (all passed), 1 (a block
+# failed), or 3 (no section / no verify blocks — proceed unchanged). It calls no
+# gh and no network, so these cases pipe fabricated plans straight in and assert
+# the exit code and output — no setup/teardown or PATH shims needed.
+echo ""
+echo "=== dispatch-run-verification (#2024) ==="
+
+RUN_VERIFY="$SCRIPT_DIR/dispatch-run-verification"
+
+# Pass path: a verify block running `true` exits 0.
+echo "Test: dispatch-run-verification -- verify block passes (exit 0)"
+plan=$'## Plan\nbuild it\n\n## Verification (end-to-end)\nrun this:\n```verify\ntrue\n```\n'
+if out=$(printf '%s' "$plan" | "$RUN_VERIFY" 2>&1); then rc=0; else rc=$?; fi
+assert_eq "dispatch-run-verification: passing verify block exits 0" "0" "$rc"
+
+# Escalate path: a verify block running `false` exits 1 and names the block.
+echo "Test: dispatch-run-verification -- verify block fails (exit 1, index reported)"
+plan=$'## Verification\n```verify\nfalse\n```\n'
+if out=$(printf '%s' "$plan" | "$RUN_VERIFY" 2>&1); then rc=0; else rc=$?; fi
+assert_eq "dispatch-run-verification: failing verify block exits 1" "1" "$rc"
+case "$out" in
+  *"verify block 1 failed"*) found=yes ;;
+  *) found=no ;;
+esac
+assert_eq "dispatch-run-verification: failing block index is reported" "yes" "$found"
+
+# No-runnable path (a): a Verification section with only prose + a plain ```bash
+# block (NOT a verify block) exits 3.
+echo "Test: dispatch-run-verification -- section without verify blocks exits 3"
+plan=$'## Verification\nrun things manually\n```bash\ntrue\n```\n'
+if out=$(printf '%s' "$plan" | "$RUN_VERIFY" 2>&1); then rc=0; else rc=$?; fi
+assert_eq "dispatch-run-verification: prose/bash-only section exits 3" "3" "$rc"
+
+# No-runnable path (b): a plan with no Verification heading at all exits 3 — and
+# a ```verify block OUTSIDE the section is ignored (not run).
+echo "Test: dispatch-run-verification -- no Verification section exits 3"
+plan=$'## Plan\nno verification here\n```verify\ntrue\n```\n'
+if out=$(printf '%s' "$plan" | "$RUN_VERIFY" 2>&1); then rc=0; else rc=$?; fi
+assert_eq "dispatch-run-verification: no section exits 3" "3" "$rc"
+
+# Ordering: two verify blocks, first passes, second fails -> exit 1 with the
+# SECOND block identified as the failing one.
+echo "Test: dispatch-run-verification -- first passes, second fails (exit 1, block 2)"
+plan=$'## Verification\n```verify\ntrue\n```\n```verify\nexit 1\n```\n'
+if out=$(printf '%s' "$plan" | "$RUN_VERIFY" 2>&1); then rc=0; else rc=$?; fi
+assert_eq "dispatch-run-verification: first-pass/second-fail exits 1" "1" "$rc"
+case "$out" in
+  *"verify block 2 failed"*) found=yes ;;
+  *) found=no ;;
+esac
+assert_eq "dispatch-run-verification: second block identified as failing" "yes" "$found"
+
+# Converse ordering: first block FAILS, so the second block must NOT run. The
+# second block's only effect is creating a sentinel file; its absence after the
+# run proves the second block never executed.
+echo "Test: dispatch-run-verification -- first fails, second block not run (sentinel absent)"
+RV_TMP=$(mktemp -d)
+sentinel="$RV_TMP/second-ran"
+plan=$'## Verification\n```verify\nfalse\n```\n```verify\ntouch '"$sentinel"$'\n```\n'
+if out=$(printf '%s' "$plan" | "$RUN_VERIFY" 2>&1); then rc=0; else rc=$?; fi
+assert_eq "dispatch-run-verification: first-fail exits 1" "1" "$rc"
+if [[ -e "$sentinel" ]]; then second_ran=yes; else second_ran=no; fi
+assert_eq "dispatch-run-verification: second block did not run after first failed" "no" "$second_ran"
+case "$out" in
+  *"verify block 1 failed"*) found=yes ;;
+  *) found=no ;;
+esac
+assert_eq "dispatch-run-verification: first block identified as failing" "yes" "$found"
+rm -rf "$RV_TMP"
+
+# Boundary robustness: a "## " line INSIDE a verify block body does not end the
+# Verification section, so the block still runs and exits 0.
+echo "Test: dispatch-run-verification -- '## ' inside a verify block is not a section terminator"
+plan=$'## Verification\n```verify\necho "## not a heading"\ntrue\n```\n'
+if out=$(printf '%s' "$plan" | "$RUN_VERIFY" 2>&1); then rc=0; else rc=$?; fi
+assert_eq "dispatch-run-verification: '## ' inside fence does not terminate section" "0" "$rc"
+
+# Usage: --help exits 0; an unexpected argument is a clear error (exit 2).
+echo "Test: dispatch-run-verification -- --help exits 0, bad arg exits 2"
+if "$RUN_VERIFY" --help >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "dispatch-run-verification: --help exits 0" "0" "$rc"
+if "$RUN_VERIFY" bogus </dev/null >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "dispatch-run-verification: unexpected argument exits 2" "2" "$rc"
 
 # ============================================================================
 # summary

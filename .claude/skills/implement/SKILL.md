@@ -58,7 +58,7 @@ output contains `PR: none`, no PR exists yet — run all steps. If it contains
 `PR #<num>`, capture that number as `PR_NUM`.
 
 If a PR already exists, the build + PR already happened: capture its number as
-`PR_NUM`, **skip Steps 1–3**, and go straight to the Step 4 marker write (this
+`PR_NUM`, **skip Steps 1–4**, and go straight to the Step 5 marker write (this
 covers a same-tick crash between PR-open and marker-write). If no PR exists, run
 all steps. (`dispatch-route` normally routes a PR-bearing issue to fix-checks/qa/review,
 not implement, so this is a same-tick crash-recovery edge.)
@@ -69,8 +69,9 @@ not implement, so this is a same-tick crash-recovery edge.)
 final action is a call to `dispatch-mark-complete` (no deviation) or
 `dispatch-mark-deviation` (deviation). This is the single named exit.
 
-- Any OTHER most-recent tool call — a unit finishing in Step 2, the draft PR
-  opening in Step 3 — means the orchestrator is mid-loop, not done.
+- Any OTHER most-recent tool call — a unit finishing in Step 2, a verification
+  run in Step 3, the draft PR opening in Step 4 — means the orchestrator is
+  mid-loop, not done.
 - Mid-loop, the next message contains the next tool call, never a closing
   summary. Do not end the turn until the named exit fires.
 
@@ -97,8 +98,9 @@ Exit codes:
 Before building, create a tracked task list with the harness `TaskCreate` tool:
 
 - one task per planned unit from the Step 1 plan,
-- one task for "open the draft PR" (Step 3),
-- one task for "write the completion marker" (Step 4).
+- one task for "execute the plan's verification" (Step 3),
+- one task for "open the draft PR" (Step 4),
+- one task for "write the completion marker" (Step 5).
 
 Mark each task completed via the harness `TaskUpdate` tool as it lands. This
 keeps the remaining work durable and visible rather than held in the model's
@@ -119,7 +121,45 @@ and recovers from merge / pre-commit / push errors. This is a normal in-session 
 model-selection heuristic in `/implement-unit` — see that skill for the heuristic
 (it is the canonical home; do not restate it here).
 
-### 3. Open the draft PR
+### 3. Execute the plan's Verification section
+
+After every unit is built, run the plan's auto-runnable checks. The runner reads
+the full plan markdown on stdin and routes on a tri-state exit (use
+`dangerouslyDisableSandbox: true` — `dispatch-read-plan` calls `gh`):
+
+```bash
+.claude/skills/dispatch-propagate/scripts/dispatch-read-plan <N> \
+  | .claude/skills/dispatch-propagate/scripts/dispatch-run-verification
+```
+
+Route on the exit code:
+
+- **exit 3** — the plan names no ```verify checks. Proceed to Step 4 and open the
+  PR unchanged. This is a clean proceed, not a swallowed error (per
+  `.claude/rules/code-style.md`): the runner reports "no checks to run" by design,
+  and acceptance criterion 4 requires no false block when the plan defines no
+  checks.
+- **exit 0** — every ```verify block passed. Proceed to Step 4 and open the PR.
+- **exit 1** — a ```verify block failed; the runner reports the failing block
+  index on its output. Enter the bounded fix lane: using the failing output, fix
+  the defect with one corrective `/implement-unit` (via the Skill tool), then
+  re-run the runner above. Cap at **2** fix attempts (mirroring `qa-fix`'s
+  `CAP=2`). If the runner still exits 1 after the cap, do **not** open the PR:
+  call `dispatch-mark-deviation` naming the failing check, then **stop** — skip
+  the Step 5 completion marker.
+
+  ```bash
+  .claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \
+    "/implement: plan verification failed after 2 fix attempts (check <index>)"
+  ```
+
+  This `dispatch-mark-deviation` is one of the two existing single-named-exit
+  terminal actions — the only terminal actions remain `dispatch-mark-complete`
+  (no deviation) and `dispatch-mark-deviation` (deviation) — so the single-named-exit
+  invariant still holds. The Stop hook reads marker-absence as Branch A and parks
+  the issue for human review.
+
+### 4. Open the draft PR
 
 After every unit is committed and pushed, write the PR body prose to
 `tmp/pr-body.md`, then open the draft PR with `dispatch-open-pr` (use
@@ -149,7 +189,7 @@ diagnostic naming the offending number. If it exits non-zero, read the
 diagnostic and fix the body or `--closes` set rather than opening the PR by
 hand.
 
-### 4. Check for deviation, then write the marker (or skip it), then stop
+### 5. Check for deviation, then write the marker (or skip it), then stop
 
 Before writing the marker, judge whether the implementation deviated from the
 persisted plan — scope shifted mid-implementation, or the plan could not be
@@ -157,7 +197,7 @@ fully implemented as written. Base this on the `/implement-unit` outcomes
 observed in Step 2.
 
 **Deviation fires** — skip the `phase-completed` marker. Instead call
-`dispatch-mark-deviation` to write the office-hours-reason atomically. If Step 3
+`dispatch-mark-deviation` to write the office-hours-reason atomically. If Step 4
 already opened a draft PR, it stays open. The Stop hook reads marker-absence as Branch A,
 applies `dispatch:office-hours` to the issue (surfacing this reason in the
 why-comment), and parks the issue for human review.
