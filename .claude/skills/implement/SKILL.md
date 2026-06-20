@@ -176,6 +176,18 @@ Route on the exit code:
   (no deviation) and `dispatch-mark-deviation` (deviation) — so the single-named-exit
   invariant still holds. The Stop hook reads marker-absence as Branch A and parks
   the issue for human review.
+- **exit 5** — the plan has an unclosed/malformed ```verify fence (opened inside
+  the Verification section but never closed before EOF). This is a
+  **plan-authoring error**, not a failing verify block — the worker cannot repair
+  the plan comment, so do **not** enter the `/implement-unit` fix lane. Route
+  straight to `dispatch-mark-deviation` with an accurate reason and **stop** (skip
+  the Step 5 completion marker):
+
+  ```bash
+  .claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \
+    "/implement: plan verification could not run — malformed plan (unclosed verify fence)"
+  ```
+
 - **any other non-zero exit** — exit **4** (empty/absent plan input: the upstream
   `dispatch-read-plan` failed and the runner refused to emit the exit-3
   "proceed unchanged" signal), or any upstream failure surfaced via `set -o
