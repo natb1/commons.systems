@@ -224,8 +224,25 @@ skip the fetch and record the CodeQL scan as "could not run (no PR
 ref)" with no findings. An empty alert array is normal — no open CodeQL alerts —
 and is not an error.
 
-Collect normalized CodeQL and npm findings into `prescanned_findings` to pass to
-the Workflow.
+#### Erosion metrics (inline, when `surface=code`)
+
+Run inline in this parent thread — not a subagent — whenever `surface=code`.
+Pipe the changed-file list into `dispatch-review-erosion`, passing `MERGE_BASE`
+as the positional argument (no `dangerouslyDisableSandbox` needed — jscpd is now
+a local devDependency invoked via `node_modules/.bin/jscpd`, not an `npx` fetch):
+
+```bash
+# MERGE_BASE is already set above — reuse it here.
+# Pass as positional arg (not an inline VAR=val prefix — breaks allowlist matching).
+EROSION_JSON=$(.claude/skills/dispatch-propagate/scripts/dispatch-changed-files < "tmp/pack-$N.txt" \
+  | .claude/skills/dispatch-propagate/scripts/dispatch-review-erosion "$MERGE_BASE")
+```
+
+The script emits `{"findings":[...]}` with `Source="erosion"` already in the
+per-finding schema. Extract the `findings` array for `prescanned_findings`.
+
+Collect normalized CodeQL, npm, and erosion findings into `prescanned_findings`
+to pass to the Workflow.
 
 ### 2. Build `args` and invoke the Workflow
 
@@ -240,7 +257,7 @@ args = {
   surface:             "empty" | "docs" | "tests" | "code",
   deps:                <true|false>,
   app_or_rules:        <true|false>,
-  prescanned_findings: [ ...normalized CodeQL + npm findings in Per-finding schema... ],
+  prescanned_findings: [ ...normalized CodeQL + npm + erosion findings in Per-finding schema... ],
   implementing_issues: [ <N>, ... ],    // parsed from Closes #N lines; [] if none
   security_note:       <string or omit>, // set for empty/docs/tests; omit for code
   prior_phase_log:     <string or omit> // PRIOR_PHASE_LOG from the preamble; omit when phase-log: none
