@@ -315,6 +315,27 @@ describe("initPlayer", () => {
       expect(mockRemoveFile).toHaveBeenCalledWith("media/t1.mp3");
     });
 
+    it("skips storage-cache eviction for a local track's media error", async () => {
+      const player = initPlayer(audioEl, playlistEl);
+      player.add(localTrack);
+      player.add(track2);
+
+      await vi.waitFor(() => expect(audioEl.play).toHaveBeenCalledTimes(1));
+
+      audioEl.dispatchEvent(new Event("error"));
+
+      await vi.waitFor(() => expect(audioEl.play).toHaveBeenCalledTimes(2));
+      expect(mockResolveAudioSource).toHaveBeenCalledWith("media/t2.mp3");
+      expect(mockLogError).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          operation: "audio-element-error",
+          id: "local:song.mp3",
+        }),
+      );
+      expect(mockRemoveFile).not.toHaveBeenCalled();
+    });
+
     it("logs the MediaError and its code", async () => {
       const player = initPlayer(audioEl, playlistEl);
       player.add(track1);
