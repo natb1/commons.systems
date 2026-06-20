@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# dispatch-phase-effort — emit the reasoning-effort level for a given dispatch phase.
+#
+# Phase → effort map:
+#   implement → medium   (#2042: judgment-heavy build work benefits from medium
+#                         reasoning to balance quality against token cost; deep
+#                         reasoning is delegated to subagents rather than the
+#                         orchestrator)
+#   plan      → high     (#2042: the deepest judgment work in the dispatch chain —
+#                         architecture decisions and unit decomposition warrant the
+#                         highest reasoning effort)
+#   *         → (empty)  unmapped phases inherit the session default
+#
+# Contract:
+#   EMPTY stdout means "omit the --effort flag, inherit the session default".
+#   Callers MUST honor this contract: only pass --effort <value> to `claude --bg`
+#   when this script emits a non-empty value.
+#
+#   This `case` map is the single opt-in point for adding other phase → effort
+#   overrides later. To route another phase to a specific effort level, add a case
+#   arm here; every caller already forwards the value opaquely.
+#
+# Usage: dispatch-phase-effort <phase>
+#
+# Exit codes:
+#   0  always (an unmapped phase is NOT an error — it means "default").
+#   2  missing, empty, or extra <phase> argument (usage error).
+#
+# NOT set -e: exits are handled explicitly.
+set -uo pipefail
+
+if [[ $# -lt 1 || -z "${1:-}" ]]; then
+  echo "dispatch-phase-effort: expected a phase argument" >&2
+  exit 2
+fi
+if [[ $# -gt 1 ]]; then
+  echo "dispatch-phase-effort: unexpected argument '$2'" >&2
+  exit 2
+fi
+
+PHASE="$1"
+
+case "$PHASE" in
+  implement)
+    echo "medium"
+    ;;
+  plan)
+    echo "high"
+    ;;
+  *)
+    # Unmapped phase: emit nothing. Caller omits --effort and inherits the session default.
+    ;;
+esac

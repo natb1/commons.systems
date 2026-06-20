@@ -463,7 +463,9 @@ or a malformed `now`), `dispatch-target-workers` prints `1` and writes a
 one-line note to stderr — the chain degrades to "spawn one per tick". When only
 `five_hour` is absent while `seven_day` is present, Stages 1–3 run with
 `used_5h` treated as 0 — gate-open → max workers. Non-numeric `used_*` values
-are treated as missing (fail-closed). The stdout contract — a single integer —
+are handled asymmetrically: non-numeric `used_weekly` is treated as missing
+(fail-closed → N=1); non-numeric `used_5h` is treated as 0 (fail-open →
+weekly-bounded max workers). The stdout contract — a single integer —
 and the router gate `LIVE_COUNT >= TARGET_N` are unchanged.
 
 ## The #725 cap-keyed re-seed

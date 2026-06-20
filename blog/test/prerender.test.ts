@@ -304,11 +304,11 @@ describe("prerenderPosts", () => {
 
     expect(perPostHtml).toContain('id="post-hello-world"');
     expect(perPostHtml).toContain('id="post-second-post"');
-    expect(perPostHtml).toContain("<hr>");
+    expect(perPostHtml).toContain("<hr/>");
 
     expect(rootHtml).toContain('id="post-hello-world"');
     expect(rootHtml).toContain('id="post-second-post"');
-    expect(rootHtml).toContain("<hr>");
+    expect(rootHtml).toContain("<hr/>");
   });
 
   it("injects all published posts into root index.html", async () => {
@@ -321,7 +321,7 @@ describe("prerenderPosts", () => {
     const html = rootCall![1] as string;
     expect(html).toContain('id="post-hello-world"');
     expect(html).toContain('id="post-second-post"');
-    expect(html).toContain("<hr>");
+    expect(html).toContain("<hr/>");
     // Second post is newer, should appear first
     const firstIdx = html.indexOf("post-second-post");
     const secondIdx = html.indexOf("post-hello-world");
