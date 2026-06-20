@@ -3,6 +3,11 @@
 # Verifies that the awk state machine preserves blank separator lines between
 # phase-log sections on repeated upserts (issue #2139).
 #
+# Also covers section bodies that themselves contain embedded blank lines: a
+# non-last re-upsert must remain byte-for-byte identical even when the body
+# has an embedded blank line that would otherwise be mistaken for a section
+# terminator (issue #2164).
+#
 # Also covers the flag-value guard behavior (#2132):
 #   AC1: --phase with no value exits 2 with '--phase' in stderr
 #   AC2: --attempt with no value exits 2 with '--attempt' in stderr
@@ -285,6 +290,32 @@ BLANK_COUNT=$(awk '
 ' "$STORED_BODY_FILE")
 
 assert_eq "tc4: exactly one blank line between implement:1 and qa:1 after APPEND" "1" "$BLANK_COUNT"
+
+echo ""
+
+# ============================================================================
+# Test case 5: Section body with an embedded blank line — non-last re-upsert
+# is byte-for-byte identical (#2164)
+# ============================================================================
+echo ""
+echo "-- Test 5: non-last section with embedded blank body re-upsert --"
+STORED_BODY_FILE="$WORK/body-tc5.txt"
+
+# Write implement:1 whose BODY contains an embedded blank line.
+run_write 42 implement 1 $'line1\n\nline2'
+# Append qa:1 so implement:1 becomes NON-LAST: the REPLACE skip-state machine
+# must skip past the embedded blank in implement:1's body and terminate only
+# at qa:1's '<!-- phase-log:' header, not at the embedded blank.
+run_write 42 qa 1 "failed: none"
+
+REF5="$WORK/ref-tc5.txt"
+cp "$STORED_BODY_FILE" "$REF5"
+
+# Re-upsert implement:1 (REPLACE path). If a future change treated the embedded
+# blank as a terminator, the skip would stop early and the body would differ.
+run_write 42 implement 1 $'line1\n\nline2'
+
+assert_files_eq "tc5: non-last section with embedded blank re-upsert is byte-for-byte identical" "$REF5" "$STORED_BODY_FILE"
 
 echo ""
 
