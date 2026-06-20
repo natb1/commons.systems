@@ -364,9 +364,10 @@ the new issue's `<N>`.
 
 ## Step 6. Finalize — assign, label, classify
 
-Finalize `<N>` (and each sub-issue) by assigning `@me`, applying `help wanted`, and
-applying at most one type label and at most one topic label. The Type classification
-subsection below defines when the type label is zero.
+Finalize `<N>` (and each sub-issue) by assigning `@me`, applying `help wanted`,
+applying the epic label when `<N>` is a parent epic, and applying at most one type
+label and at most one topic label. The Type classification subsection below defines
+when the type label is zero.
 
 A leaf issue that hit the decomposition gate (3f) must not be finalized before
 it is split — finalize each sub-issue instead.
@@ -410,7 +411,9 @@ End-to-end auto-resolution ADDITIONALLY requires the user's machine-local
 `dispatch.config/epic.json` (e.g. `{"labels": ["epic"]}` — see
 `.claude/skills/dispatch-propagate/scripts/epic.example.json`). The `/file-issue`
 change alone is INERT without it: `dispatch-config-load epic` returns `no-config`,
-so no label is applied.
+so no label is applied. Each label listed in `.labels[]` must be pre-created in
+the repo before `/file-issue` runs (e.g. `gh label create <name>`) — `gh issue
+edit --add-label` fails non-zero for labels that do not exist.
 
 ### Type classification
 
