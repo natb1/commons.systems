@@ -350,11 +350,12 @@ Then proceed to Step 6 (finalize).
 
 ### Description mode
 
-Check once more for duplicates against the improved title + body using the same
-`gh_issue_list_rest` retrieval and local keyword filter from Step 3a (defense-in-depth
-recheck — `/file-issue` may be called from a non-interactive caller that did not
-pre-screen). If a match is found, skip creation for this spec and record
-`EXISTING <N>` as its Step 7 return line.
+Check once more for duplicates against the improved title + body. Reuse the
+`ALL_ISSUES` result captured in Step 3a and re-run the local keyword filter
+against the improved title + body — do not issue a second `gh_issue_list_rest`
+call (defense-in-depth recheck — `/file-issue` may be called from a
+non-interactive caller that did not pre-screen). If a match is found, skip
+creation for this spec and record `EXISTING <N>` as its Step 7 return line.
 
 If no duplicate, create the issue:
 ```bash

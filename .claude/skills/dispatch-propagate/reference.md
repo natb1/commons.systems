@@ -296,8 +296,8 @@ than one issue per file. The issue body carries only the filename and full
 sha256; the statement contents stay in the user's folder on disk.
 
 Idempotency is keyed on GitHub state, not a side file. For each file the scan
-computes its sha256 and runs `gh issue list --state all` (REST core API; covers
-open AND closed issues) to check whether an issue with that hash already exists
+computes its sha256 and runs `gh issue list --state all` (GraphQL-backed `gh
+issue list`; covers open AND closed issues) to check whether an issue with that hash already exists
 under the entry's label. A hit → skip; no hit → file. This is consistent with the #755
 no-drift-prone-side-file principle. The local `tmp/dispatch-statements-state.json`
 debounce timestamp is a per-machine rate-limiter only — it skips the network

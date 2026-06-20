@@ -200,10 +200,10 @@ dispatch_marker_comment_id() {
 # per-tick scan was self-exhausting (#1601).
 #
 # Contract:
-#   gh_issue_list_rest --state <open|closed> [--repo <owner/repo>] [--label <name>] [--limit <n>] [--include-body]
+#   gh_issue_list_rest --state <open|closed|all> [--repo <owner/repo>] [--label <name>] [--limit <n>] [--include-body]
 #
 # Flags:
-#   --state  (required) open|closed.
+#   --state  (required) open|closed|all.
 #   --repo   (optional) owner/repo for a cross-repo scan; when absent the path
 #            uses the {owner}/{repo} placeholder gh auto-resolves for the
 #            current repo.
@@ -214,7 +214,7 @@ dispatch_marker_comment_id() {
 #            list's --limit default). When PRESENT we fetch a SINGLE page of that
 #            size (no --paginate).
 #   --include-body (optional) when present, the projected objects additionally
-#            carry a `body` field. Omitted by default so the repo-wide per-tick
+#            carry `title` and `body` fields. Omitted by default so the repo-wide per-tick
 #            callers stay byte-identical and payload-lean.
 #
 # Output: one merged JSON array on stdout. REST /issues returns issues AND PRs;
