@@ -71,11 +71,25 @@ describe("location-store", () => {
     expect(after.path).toBe("/new-path");
   });
 
-  it("getServerSnapshot returns a stable default snapshot", () => {
+  it("getServerSnapshot returns a default snapshot with correct content", () => {
     const server = getServerSnapshot();
     expect(server.path).toBe("/");
     expect([...server.params]).toEqual([]);
-    expect(Object.is(getServerSnapshot(), getServerSnapshot())).toBe(true);
+  });
+
+  it("getServerSnapshot returns a distinct object on each call", () => {
+    expect(Object.is(getServerSnapshot(), getServerSnapshot())).toBe(false);
+  });
+
+  it("getServerSnapshot isolates callers: mutating one call's params does not affect the next", () => {
+    const first = getServerSnapshot();
+    first.params.set("a", "1");
+    const second = getServerSnapshot();
+    expect([...second.params]).toEqual([]);
+  });
+
+  it("getServerSnapshot returns a frozen object", () => {
+    expect(Object.isFrozen(getServerSnapshot())).toBe(true);
   });
 
   it("getSnapshot params are read-only and survive mutation attempts", () => {
@@ -97,18 +111,6 @@ describe("location-store", () => {
     const snap2 = getSnapshot();
     expect(Object.is(snap, snap2)).toBe(true);
     expect([...snap2.params]).toEqual(baseline);
-  });
-
-  it("getServerSnapshot params are read-only and survive mutation attempts", () => {
-    const server = getServerSnapshot();
-    expect(() => server.params.set("k", "v")).toThrow(TypeError);
-    expect(() => server.params.append("k", "v")).toThrow(TypeError);
-    expect(() => server.params.delete("k")).toThrow(TypeError);
-    expect(() => server.params.sort()).toThrow(TypeError);
-
-    const server2 = getServerSnapshot();
-    expect(Object.is(server, server2)).toBe(true);
-    expect([...server2.params]).toEqual([]);
   });
 
   it("ReadonlyURLSearchParams reads work while mutators throw", () => {

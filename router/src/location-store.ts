@@ -38,18 +38,6 @@ const listeners = new Set<() => void>();
 let cachedSnapshot: Snapshot | null = null;
 let cachedKey: string | null = null;
 
-/**
- * Stable default snapshot for `getServerSnapshot`. Returned by reference every
- * call so it is referentially stable, matching the client-side caching
- * contract. This is cheap insurance so a future `hydrateRoot`/prerender cannot
- * throw because `getSnapshot` touched the global `location` during SSR. Full
- * SSR location handling is out of scope.
- */
-const SERVER_SNAPSHOT: Snapshot = {
-  path: "/",
-  params: new ReadonlyURLSearchParams(),
-};
-
 function emit(): void {
   for (const listener of listeners) listener();
 }
@@ -86,8 +74,25 @@ export function getSnapshot(): Snapshot {
   return cachedSnapshot;
 }
 
-export function getServerSnapshot(): Snapshot {
-  return SERVER_SNAPSHOT;
+/**
+ * Returns a fresh frozen snapshot on every call. Two properties protect SSR
+ * callers from each other:
+ *
+ * (a) Fresh allocation (primary protection): each call gets its own object, so
+ *     one caller mutating `params` cannot affect any other call's snapshot.
+ * (b) `Object.freeze` (shallow secondary defense): blocks reassignment of
+ *     `path` and `params` on the returned object, but does NOT prevent
+ *     URLSearchParams methods (`.set`, `.delete`, etc.) from mutating the
+ *     instance — the primary protection above is what prevents cross-call
+ *     contamination.
+ *
+ * Referential stability is not required here: React's SSR/hydration path does
+ * not compare `getServerSnapshot` results across calls. Only the client-side
+ * `getSnapshot` path requires it (handled by the `cachedSnapshot`/`cachedKey`
+ * machinery above).
+ */
+export function getServerSnapshot(): Readonly<Snapshot> {
+  return Object.freeze({ path: "/", params: new URLSearchParams() });
 }
 
 export function navigate(href: string, opts?: { replace?: boolean }): void {
