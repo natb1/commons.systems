@@ -788,6 +788,7 @@ fork site below (same discipline as the `fixes_applied_count` tally in Step 3.7)
           TOTAL=$(gh issue view "$N" --json labels \
             --jq '[.labels[].name | capture("^dispatch:attempts-(?<n>[0-9]+)$").n | tonumber] | max // 0')
           ```
+          (use `dangerouslyDisableSandbox: true` — `gh` needs network)
           Reason: `qa-fix made no progress vs the prior attempt; total attempts across all phases = <TOTAL>`.
         - Prints **`progress`** (first attempt, or at least one prior-failing item
           resolved) → fall through to the attempt-cap gate below. The script has
