@@ -35659,6 +35659,42 @@ assert_eq "sidecar no net-increase → zero findings" "0" "$sidecar_count"
 rm -rf "$TMPDIR_TEST"
 TMPDIR_TEST=""
 
+# E5. Sidecar no-baseline duplication: all-new-files PR has empty baseline_paths,
+#     so the driver passes NO --jscpd-base. The sidecar then defaults baseDup to
+#     zeros, so any HEAD clone (headDup.clones > 0) fires an aggregate duplication
+#     finding with a path:line Location from the largest HEAD clone. E2/E3 pass a
+#     zero-clone HEAD report, so this duplication path is otherwise uncovered.
+#     Empty eslint reports isolate the duplication path (no complexity finding).
+echo "Test: dispatch-review-erosion-diff.mjs — no-baseline HEAD clone yields Source=erosion duplication finding"
+TMPDIR_TEST=$(mktemp -d)
+mkdir -p "$TMPDIR_TEST/baseline"
+# Empty eslint reports → no complexity finding; isolates the duplication path.
+echo '[]' > "$TMPDIR_TEST/head-eslint.json"
+echo '[]' > "$TMPDIR_TEST/base-eslint.json"
+# HEAD jscpd report: one clone with concrete per-clone detail so the Location is
+# a real path:line (newfile.ts:10), not the changed-files fallback.
+cat > "$TMPDIR_TEST/head-jscpd.json" <<'EOF'
+{"statistics":{"total":{"clones":1,"duplicatedLines":12,"percentage":8}},
+ "duplicates":[{"firstFile":{"name":"newfile.ts","start":10,"end":22},
+                "secondFile":{"name":"newfile.ts","start":40,"end":52}}]}
+EOF
+# Invoke WITHOUT --jscpd-base (the all-new-files / no-baseline case).
+sidecar_out=$(cd "$TMPDIR_TEST" && node "$SCRIPT_DIR/dispatch-review-erosion-diff.mjs" \
+  --eslint-head head-eslint.json \
+  --eslint-base base-eslint.json \
+  --jscpd-head head-jscpd.json \
+  --baseline-dir baseline)
+sidecar_source=$(jq -r '.findings[0].Source // "none"' <<<"$sidecar_out")
+sidecar_location=$(jq -r '.findings[0].Location // "none"' <<<"$sidecar_out")
+sidecar_confidence=$(jq -r '.findings[0].Confidence // "none"' <<<"$sidecar_out")
+sidecar_count=$(jq '.findings | length' <<<"$sidecar_out")
+assert_eq "sidecar no-baseline duplication Source=erosion" "erosion" "$sidecar_source"
+assert_eq "sidecar no-baseline duplication Location=newfile.ts:10" "newfile.ts:10" "$sidecar_location"
+assert_eq "sidecar no-baseline duplication Confidence=high (clones rose 0→1)" "high" "$sidecar_confidence"
+assert_eq "sidecar no-baseline duplication → exactly one finding" "1" "$sidecar_count"
+rm -rf "$TMPDIR_TEST"
+TMPDIR_TEST=""
+
 # ============================================================================
 # dispatch-run-verification tests (#2024)
 # ============================================================================
