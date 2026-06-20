@@ -34709,6 +34709,134 @@ assert_eq "resolve_dirty_apps: root-config fan-out marks all workspaces" \
 rm -rf "$TMPDIR_TEST"
 TMPDIR_TEST=""
 
+# dispatch-review-erosion tests
+# ============================================================================
+#
+# Tests for the net-erosion structural-decay finder (#2064). These are the
+# DETERMINISTIC, NETWORK-FREE portions:
+#
+# E1. Language-scope filter: docs-only and bash-only stdin yield {"findings":[]}
+#     (exit 0). Drives the real dispatch-review-erosion entrypoint end-to-end.
+#     Requires a no-op eslint stub at node_modules/.bin/eslint in cwd — eslint is
+#     never invoked (filter exits before the metric runs), but the guard check
+#     [[ ! -x "$ESLINT_BIN" ]] would fail before reaching the filter otherwise.
+#
+# E2. Complexity net-delta via sidecar: drives dispatch-review-erosion-diff.mjs
+#     directly with synthetic eslint and jscpd JSON, sidestepping the real
+#     eslint, jscpd (network), and git. The sidecar is the clean unit boundary
+#     for asserting Source="erosion" + path:line Location when complexity rises.
+
+echo ""
+echo "=== dispatch-review-erosion ==="
+
+# E1a. docs-only stdin → {"findings":[]} (language-scope filter exits early).
+#
+#     Files are created on disk so the HEAD-existence filter (which also exits
+#     early) cannot silently backstop the language-scope filter test. With the
+#     files present, only the language filter can explain the early exit: if it
+#     were removed, head_paths would be non-empty → the script would reach
+#     run_jscpd → fail loudly (no report produced). Creating them on disk is
+#     the cheapest way to give the assertion real teeth.
+echo "Test: dispatch-review-erosion — docs-only stdin yields empty findings"
+TMPDIR_TEST=$(mktemp -d)
+mkdir -p "$TMPDIR_TEST/node_modules/.bin" "$TMPDIR_TEST/docs"
+cat > "$TMPDIR_TEST/node_modules/.bin/eslint" <<'ESTUB'
+#!/usr/bin/env bash
+# No-op stub: never invoked on a docs-only file list (language filter exits first).
+exit 0
+ESTUB
+chmod +x "$TMPDIR_TEST/node_modules/.bin/eslint"
+# Create the files on disk so HEAD-existence can't backstop the language filter.
+touch "$TMPDIR_TEST/README.md" "$TMPDIR_TEST/docs/guide.md"
+result=$(cd "$TMPDIR_TEST" && printf '%s\n' 'README.md' 'docs/guide.md' \
+  | "$SCRIPT_DIR/dispatch-review-erosion" dummybase)
+assert_eq "docs-only stdin → empty findings" '{"findings":[]}' "$result"
+rm -rf "$TMPDIR_TEST"
+TMPDIR_TEST=""
+
+# E1b. bash-only stdin → {"findings":[]} (same filter path, different extension set).
+#     Same disk-creation convention as E1a.
+echo "Test: dispatch-review-erosion — bash-only stdin yields empty findings"
+TMPDIR_TEST=$(mktemp -d)
+mkdir -p "$TMPDIR_TEST/node_modules/.bin" "$TMPDIR_TEST/.claude/scripts"
+cat > "$TMPDIR_TEST/node_modules/.bin/eslint" <<'ESTUB'
+#!/usr/bin/env bash
+exit 0
+ESTUB
+chmod +x "$TMPDIR_TEST/node_modules/.bin/eslint"
+# Create the files on disk so HEAD-existence can't backstop the language filter.
+touch "$TMPDIR_TEST/.claude/scripts/dispatch-review-erosion" \
+      "$TMPDIR_TEST/.claude/scripts/lib.sh"
+result=$(cd "$TMPDIR_TEST" && printf '%s\n' \
+  '.claude/scripts/dispatch-review-erosion' \
+  '.claude/scripts/lib.sh' \
+  | "$SCRIPT_DIR/dispatch-review-erosion" dummybase)
+assert_eq "bash-only stdin → empty findings" '{"findings":[]}' "$result"
+rm -rf "$TMPDIR_TEST"
+TMPDIR_TEST=""
+
+# E2. Sidecar complexity net-delta: HEAD max rose → finding with Source="erosion"
+#     and a valid path:line Location.
+#
+#     The sidecar reads all four artifact paths passed on the CLI; it does NOT
+#     invoke eslint, jscpd, or git. Synthetic JSON is enough to drive the full
+#     net-delta logic. Key alignment constraint (relpath normalization):
+#       HEAD   filePath = <cwd>/foo.ts          → strips cwd prefix → "foo.ts"
+#       BASE   filePath = <cwd>/baseline/foo.ts → strips cwd/baseline/ → "foo.ts"
+#     Both keys become "foo.ts" so baseCx.get(rel) hits and the diff fires.
+echo "Test: dispatch-review-erosion-diff.mjs — complexity net-increase yields Source=erosion finding"
+TMPDIR_TEST=$(mktemp -d)
+# eslint HEAD report: foo.ts, one function at complexity 5, worst-function line 3.
+cat > "$TMPDIR_TEST/head-eslint.json" <<EOF
+[{"filePath":"$TMPDIR_TEST/foo.ts","messages":[{"ruleId":"complexity","message":"Function 'doThing' has a complexity of 5. Maximum allowed is 0.","line":3}]}]
+EOF
+# eslint BASE report: same file but lower complexity (2) pre-PR.
+mkdir -p "$TMPDIR_TEST/baseline"
+cat > "$TMPDIR_TEST/base-eslint.json" <<EOF
+[{"filePath":"$TMPDIR_TEST/baseline/foo.ts","messages":[{"ruleId":"complexity","message":"Function 'doThing' has a complexity of 2. Maximum allowed is 0.","line":1}]}]
+EOF
+# jscpd HEAD report: zero clones (no duplication finding expected here).
+cat > "$TMPDIR_TEST/head-jscpd.json" <<'EOF'
+{"statistics":{"total":{"clones":0,"duplicatedLines":0,"percentage":0}}}
+EOF
+sidecar_out=$(cd "$TMPDIR_TEST" && node "$SCRIPT_DIR/dispatch-review-erosion-diff.mjs" \
+  --eslint-head head-eslint.json \
+  --eslint-base base-eslint.json \
+  --jscpd-head head-jscpd.json \
+  --baseline-dir baseline)
+sidecar_source=$(jq -r '.findings[0].Source // "none"' <<<"$sidecar_out")
+sidecar_location=$(jq -r '.findings[0].Location // "none"' <<<"$sidecar_out")
+sidecar_confidence=$(jq -r '.findings[0].Confidence // "none"' <<<"$sidecar_out")
+assert_eq "sidecar complexity finding Source=erosion" "erosion" "$sidecar_source"
+assert_eq "sidecar complexity finding Location=foo.ts:3" "foo.ts:3" "$sidecar_location"
+assert_eq "sidecar complexity finding Confidence=high (max rose)" "high" "$sidecar_confidence"
+rm -rf "$TMPDIR_TEST"
+TMPDIR_TEST=""
+
+# E3. Sidecar no net-increase → {"findings":[]}.
+#     HEAD and BASE have identical complexity; the diff should produce no finding.
+echo "Test: dispatch-review-erosion-diff.mjs — no net-increase yields empty findings"
+TMPDIR_TEST=$(mktemp -d)
+cat > "$TMPDIR_TEST/head-eslint.json" <<EOF
+[{"filePath":"$TMPDIR_TEST/bar.ts","messages":[{"ruleId":"complexity","message":"Function 'x' has a complexity of 3. Maximum allowed is 0.","line":2}]}]
+EOF
+mkdir -p "$TMPDIR_TEST/baseline"
+cat > "$TMPDIR_TEST/base-eslint.json" <<EOF
+[{"filePath":"$TMPDIR_TEST/baseline/bar.ts","messages":[{"ruleId":"complexity","message":"Function 'x' has a complexity of 3. Maximum allowed is 0.","line":2}]}]
+EOF
+cat > "$TMPDIR_TEST/head-jscpd.json" <<'EOF'
+{"statistics":{"total":{"clones":0,"duplicatedLines":0,"percentage":0}}}
+EOF
+sidecar_out=$(cd "$TMPDIR_TEST" && node "$SCRIPT_DIR/dispatch-review-erosion-diff.mjs" \
+  --eslint-head head-eslint.json \
+  --eslint-base base-eslint.json \
+  --jscpd-head head-jscpd.json \
+  --baseline-dir baseline)
+sidecar_count=$(jq '.findings | length' <<<"$sidecar_out")
+assert_eq "sidecar no net-increase → zero findings" "0" "$sidecar_count"
+rm -rf "$TMPDIR_TEST"
+TMPDIR_TEST=""
+
 # ============================================================================
 # dispatch-run-verification tests (#2024)
 # ============================================================================
@@ -34797,6 +34925,28 @@ if "$RUN_VERIFY" --help >/dev/null 2>&1; then rc=0; else rc=$?; fi
 assert_eq "dispatch-run-verification: --help exits 0" "0" "$rc"
 if "$RUN_VERIFY" bogus </dev/null >/dev/null 2>&1; then rc=0; else rc=$?; fi
 assert_eq "dispatch-run-verification: unexpected argument exits 2" "2" "$rc"
+
+# Empty stdin guard (exit 4): truly empty input must be rejected as a hard
+# error rather than silently emitting the exit-3 "proceed unchanged" signal,
+# which would mask an upstream dispatch-read-plan failure.
+echo "Test: dispatch-run-verification -- empty stdin exits 4 with diagnostic"
+if out=$("$RUN_VERIFY" </dev/null 2>&1); then rc=0; else rc=$?; fi
+assert_eq "dispatch-run-verification: empty stdin exits 4" "4" "$rc"
+case "$out" in
+  *"empty plan input"*) found=yes ;;
+  *) found=no ;;
+esac
+assert_eq "dispatch-run-verification: empty stdin diagnostic contains 'empty plan input'" "yes" "$found"
+
+# Whitespace-only stdin is also empty: same exit 4.
+echo "Test: dispatch-run-verification -- whitespace-only stdin exits 4"
+ws=$'  \n\t\n'
+if out=$(printf '%s' "$ws" | "$RUN_VERIFY" 2>&1); then rc=0; else rc=$?; fi
+assert_eq "dispatch-run-verification: whitespace-only stdin exits 4" "4" "$rc"
+
+# Preservation guard (criterion 2): the exit-3 cases above confirm a
+# no-verify-block plan (prose/bash-only Verification section, or no section)
+# still exits 3. No duplication needed here.
 
 # ============================================================================
 # dispatch-preflight.sh + materialize-spawn preflight gate (#2041)

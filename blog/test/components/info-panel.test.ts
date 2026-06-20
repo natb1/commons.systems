@@ -1,11 +1,21 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { renderInfoPanel, hydrateInfoPanel } from "../../src/components/info-panel";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { InfoPanel } from "../../src/components/InfoPanel.tsx";
+import type { InfoPanelData } from "../../src/components/info-panel";
 import type { PostMeta } from "../../src/post-types";
-import type {
-  BlogRollEntry,
-  BlogRollStrategy,
-  LatestPost,
-} from "../../src/blog-roll/types";
+import type { BlogRollEntry } from "../../src/blog-roll/types";
+
+// Local static-markup helper reproducing the former renderInfoPanel bridge
+// (deleted with the imperative code in src/components/info-panel.ts). It renders
+// the frozen InfoPanel component directly so every assertion body below stays
+// identical — preserving the rendered-markup coverage. The hydrateInfoPanel
+// behavior (blogroll latest/href/date updates, re-sort, fetch-failure
+// degradation) now lives in InfoPanelRegion and is covered in
+// ../info-panel-region.test.tsx.
+function renderInfoPanel(data: InfoPanelData): string {
+  return renderToStaticMarkup(createElement(InfoPanel, { data }));
+}
 
 const mockPosts: PostMeta[] = [
   {
@@ -537,174 +547,5 @@ describe("renderInfoPanel", () => {
       });
       expect(html).not.toContain("Archive");
     });
-  });
-});
-
-describe("hydrateInfoPanel", () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  function createPanel(blogRoll: BlogRollEntry[]): HTMLElement {
-    const container = document.createElement("div");
-    container.innerHTML = renderInfoPanel({
-      linkSections: [],
-      topPosts: [],
-      blogRoll,
-    });
-    return container;
-  }
-
-  it("calls strategy.fetchLatestPost() for each blog roll entry", () => {
-    const entries: BlogRollEntry[] = [
-      { id: "blog-a", name: "Blog A", url: "https://a.com" },
-      { id: "blog-b", name: "Blog B", url: "https://b.com" },
-    ];
-    const panel = createPanel(entries);
-
-    const strategyA: BlogRollStrategy = {
-      fetchLatestPost: vi.fn().mockResolvedValue(null),
-    };
-    const strategyB: BlogRollStrategy = {
-      fetchLatestPost: vi.fn().mockResolvedValue(null),
-    };
-    const strategies = new Map<string, BlogRollStrategy>([
-      ["blog-a", strategyA],
-      ["blog-b", strategyB],
-    ]);
-
-    hydrateInfoPanel(panel, entries, strategies);
-
-    expect(strategyA.fetchLatestPost).toHaveBeenCalledOnce();
-    expect(strategyB.fetchLatestPost).toHaveBeenCalledOnce();
-  });
-
-  it("fills placeholder text and updates entry href when strategy succeeds", async () => {
-    const entries: BlogRollEntry[] = [
-      { id: "test-blog", name: "Test Blog", url: "https://example.com" },
-    ];
-    const panel = createPanel(entries);
-
-    const latest: LatestPost = {
-      title: "New Article",
-      url: "https://example.com/article",
-    };
-    const strategy: BlogRollStrategy = {
-      fetchLatestPost: vi.fn().mockResolvedValue(latest),
-    };
-    const strategies = new Map<string, BlogRollStrategy>([
-      ["test-blog", strategy],
-    ]);
-
-    hydrateInfoPanel(panel, entries, strategies);
-
-    await vi.waitFor(() => {
-      const placeholder = panel.querySelector("#blogroll-latest-test-blog");
-      expect(placeholder!.textContent).toBe("New Article");
-      const entryLink = panel.querySelector("#blogroll-entry-test-blog");
-      expect(entryLink!.getAttribute("href")).toBe("https://example.com/article");
-    });
-  });
-
-  it("fills date span and sets data-iso when strategy returns publishedAt", async () => {
-    const entries: BlogRollEntry[] = [
-      { id: "test-blog", name: "Test Blog", url: "https://example.com" },
-    ];
-    const panel = createPanel(entries);
-
-    const latest: LatestPost = {
-      title: "New Article",
-      url: "https://example.com/article",
-      publishedAt: "2026-02-01T00:00:00Z",
-    };
-    const strategy: BlogRollStrategy = {
-      fetchLatestPost: vi.fn().mockResolvedValue(latest),
-    };
-    const strategies = new Map<string, BlogRollStrategy>([
-      ["test-blog", strategy],
-    ]);
-
-    hydrateInfoPanel(panel, entries, strategies);
-
-    await vi.waitFor(() => {
-      const dateSpan = panel.querySelector("#blogroll-date-test-blog");
-      expect(dateSpan!.textContent).toBe("Feb 1, 2026");
-      expect(dateSpan!.getAttribute("data-iso")).toBe("2026-02-01T00:00:00Z");
-    });
-  });
-
-  it("sorts entries by publishedAt descending", async () => {
-    const entries: BlogRollEntry[] = [
-      { id: "old-blog", name: "Old Blog", url: "https://old.com" },
-      { id: "new-blog", name: "New Blog", url: "https://new.com" },
-    ];
-    const panel = createPanel(entries);
-
-    const strategyOld: BlogRollStrategy = {
-      fetchLatestPost: vi.fn().mockResolvedValue({
-        title: "Old Post",
-        url: "https://old.com/post",
-        publishedAt: "2025-01-01",
-      }),
-    };
-    const strategyNew: BlogRollStrategy = {
-      fetchLatestPost: vi.fn().mockResolvedValue({
-        title: "New Post",
-        url: "https://new.com/post",
-        publishedAt: "2025-11-19",
-      }),
-    };
-    const strategies = new Map<string, BlogRollStrategy>([
-      ["old-blog", strategyOld],
-      ["new-blog", strategyNew],
-    ]);
-
-    hydrateInfoPanel(panel, entries, strategies);
-
-    await vi.waitFor(() => {
-      const items = panel.querySelectorAll("li[data-blogroll-id]");
-      expect(items[0].getAttribute("data-blogroll-id")).toBe("new-blog");
-      expect(items[1].getAttribute("data-blogroll-id")).toBe("old-blog");
-    });
-  });
-
-  it("leaves placeholder empty when strategy returns null", async () => {
-    const entries: BlogRollEntry[] = [
-      { id: "test-blog", name: "Test Blog", url: "https://example.com" },
-    ];
-    const panel = createPanel(entries);
-
-    const strategy: BlogRollStrategy = {
-      fetchLatestPost: vi.fn().mockResolvedValue(null),
-    };
-    const strategies = new Map<string, BlogRollStrategy>([
-      ["test-blog", strategy],
-    ]);
-
-    hydrateInfoPanel(panel, entries, strategies);
-
-    await vi.waitFor(() => expect(strategy.fetchLatestPost).toHaveBeenCalled());
-    const placeholder = panel.querySelector("#blogroll-latest-test-blog");
-    expect(placeholder!.textContent).toBe("");
-  });
-
-  it("leaves placeholder empty when strategy rejects", async () => {
-    const entries: BlogRollEntry[] = [
-      { id: "test-blog", name: "Test Blog", url: "https://example.com" },
-    ];
-    const panel = createPanel(entries);
-
-    const strategy: BlogRollStrategy = {
-      fetchLatestPost: vi.fn().mockRejectedValue(new Error("Network error")),
-    };
-    const strategies = new Map<string, BlogRollStrategy>([
-      ["test-blog", strategy],
-    ]);
-
-    hydrateInfoPanel(panel, entries, strategies);
-
-    await vi.waitFor(() => expect(strategy.fetchLatestPost).toHaveBeenCalled());
-    const placeholder = panel.querySelector("#blogroll-latest-test-blog");
-    expect(placeholder!.textContent).toBe("");
   });
 });
