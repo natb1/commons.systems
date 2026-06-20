@@ -129,8 +129,22 @@ doesn't match rules like `Bash(npx vitest:*)`. Use flags that accept a directory
 instead:
 - `npm run build --prefix print` (npm `--prefix` flag)
 - `npm ci --prefix print`
-- `npx vitest run --root print` (vitest `--root` flag)
 - For tests, deploys, QA: use the wrapper scripts which handle directory context
+
+For app vitest suites, do **not** root at the app directory (`--root print`):
+that scopes vite's `server.fs.allow` to `print/`, so root-hoisted `?url` asset
+imports (e.g. `pdfjs-dist`'s worker, hoisted to the worktree-root `node_modules`
+by npm workspaces) are denied and correct changes false-fail. Instead root at the
+worktree/repo root and select the app with `--project`:
+
+- Generic form: `npx vitest run --project <app> --root <repo_root>`
+- From a worktree root: `npx vitest run --project print --root .`
+
+Rooting at the repo root keeps `server.fs.allow` covering the hoisted-to-root
+`node_modules`, so those `?url` asset imports resolve. This is also what CI's
+`run-unit-tests.sh` runs (`npx vitest run --project <app> --root "$REPO_ROOT"`),
+and it is the form plan-verification (```verify```) blocks for app test suites
+should use. The `Bash(npx vitest:*)` wildcard already matches it.
 
 ### `git -C /path` is auto-approved for worktrees
 
