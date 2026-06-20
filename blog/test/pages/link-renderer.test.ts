@@ -1,6 +1,21 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { renderHomeHtml, hydrateHome } from "../../src/pages/home";
+// @vitest-environment happy-dom
+//
+// The marked link/image renderer attributes (target/rel/external-link-icon,
+// href escaping, title) flow through the markdown render + DOMPurify sanitize
+// path that used to live in hydrateHome and now lives in HomeRegion's effect.
+// These cases mount HomeRegion with a fetchPost stub returning the markdown,
+// await the effect, and assert the same sanitized innerHTML — so the coverage
+// (including that DOMPurify's ADD_ATTR preserves target="_blank"/rel) is
+// preserved against the real Marked instance (no marked mock here).
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { createElement } from "react";
+import { render, cleanup, waitFor } from "@testing-library/react";
+import { HomeRegion } from "../../src/pages/HomeRegion";
 import type { PostMeta } from "../../src/post-types";
+
+if (typeof globalThis.reportError !== "function") {
+  globalThis.reportError = () => {};
+}
 
 const post: PostMeta = {
   id: "test-post",
@@ -11,19 +26,24 @@ const post: PostMeta = {
 };
 
 describe("link renderer (real Marked instance)", () => {
-  let outlet: HTMLDivElement;
-
-  beforeEach(() => {
-    outlet = document.createElement("div");
+  afterEach(() => {
+    cleanup();
+    document.body.innerHTML = "";
   });
 
-  /** Render and hydrate with the given markdown, returning the content element. */
+  /** Mount HomeRegion with the given markdown, await the hydrate effect, and
+   * return the sanitized content element. */
   async function renderAndHydrate(markdown: string): Promise<Element> {
-    outlet.innerHTML = renderHomeHtml([post]);
-    hydrateHome(outlet, [post], vi.fn().mockResolvedValue(markdown));
+    const { container } = render(
+      createElement(HomeRegion, {
+        posts: [post],
+        postLinkPrefix: "/post/",
+        fetchPost: vi.fn().mockResolvedValue(markdown),
+      }),
+    );
     let content: Element | null = null;
-    await vi.waitFor(() => {
-      content = outlet.querySelector("#post-content-test-post");
+    await waitFor(() => {
+      content = container.querySelector("#post-content-test-post");
       expect(content?.innerHTML).not.toContain("Loading...");
     });
     return content!;
