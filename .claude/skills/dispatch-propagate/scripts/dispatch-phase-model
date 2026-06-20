@@ -2,13 +2,17 @@
 # dispatch-phase-model — emit the claude model override for a given dispatch phase.
 #
 # Phase → model map:
-#   qa     → claude-sonnet-4-6   (#1171: no product-code authoring; machine-verifiable
-#                                 checks + browser automation + summary writing)
-#   review → claude-sonnet-4-6   (#1172: the review-fix orchestrator authors no fixes —
-#                                 findings detection is on Sonnet review subagents and
-#                                 fix-authoring is delegated to an Opus subagent, so the
-#                                 orchestrator main chain runs on Sonnet)
-#   *      → (empty)             unmapped phases inherit the session default (Opus)
+#   qa           → claude-sonnet-4-6   (#1171: no product-code authoring; machine-verifiable
+#                                       checks + browser automation + summary writing)
+#   review       → claude-sonnet-4-6   (#1172: the review-fix orchestrator authors no fixes —
+#                                       findings detection is on Sonnet review subagents and
+#                                       fix-authoring is delegated to an Opus subagent, so the
+#                                       orchestrator main chain runs on Sonnet)
+#   fix-checks   → claude-sonnet-4-6   (#2042: mechanical patch work; no product-code authoring
+#                                       that needs Opus)
+#   fix-conflicts → claude-sonnet-4-6  (#2042: mechanical patch work; no product-code authoring
+#                                       that needs Opus)
+#   *            → (empty)             unmapped phases inherit the session default (Opus)
 #
 # Contract:
 #   EMPTY stdout means "omit the --model flag, inherit the session default (Opus)".
@@ -40,7 +44,7 @@ fi
 PHASE="$1"
 
 case "$PHASE" in
-  qa|review)
+  qa|review|fix-checks|fix-conflicts)
     echo "claude-sonnet-4-6"
     ;;
   *)
