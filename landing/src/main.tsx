@@ -13,8 +13,9 @@ import { ADMIN_GROUP_ID } from "@commons-systems/authutil/groups";
 import buildTimeContent from "virtual:blog-post-content";
 import buildTimeMetadata from "virtual:blog-post-metadata";
 
-import { ABOUT_PAGE_META, INFO_PANEL_LINK_SECTIONS, NAV_LINKS, SITE_DEFAULTS, SITE_URL } from "./site-config.js";
-import { mountHero } from "./showcase-render.js";
+import { createRoot, type Root } from "react-dom/client";
+import { ABOUT_PAGE_META, APPS, INFO_PANEL_LINK_SECTIONS, NAV_LINKS, SITE_DEFAULTS, SITE_URL } from "./site-config.js";
+import { ShowcaseContent } from "./components/Showcase.js";
 import { renderAboutHtml, renderAboutPanelHtml } from "./pages/about.js";
 import { BLOG_ROLL_ENTRIES, createStrategies } from "./blog-roll/config.js";
 import { db, NAMESPACE, trackPageView, initAppCheck, signIn, signOut, onAuthStateChanged } from "./firebase.js";
@@ -32,6 +33,27 @@ function ensureHero(): HTMLElement {
   section.className = "landing-hero";
   contentGrid.before(section);
   return section;
+}
+
+// Cache the React root and the node it was created on. ensureHero may recreate
+// the `.landing-hero` node (post pages strip it), so when a fresh node arrives
+// we unmount the stale root and create a new one — never createRoot twice on
+// the same node. mountHero renders the showcase content (band + grid) directly
+// into the existing section and upgrades its attributes, mirroring the original
+// vanilla mountHero (which replaced the section's children); it does NOT render
+// the outer <section> wrapper, which would nest a second .landing-hero.
+let heroRoot: Root | null = null;
+let heroNode: HTMLElement | null = null;
+
+function mountHero(hero: HTMLElement): void {
+  if (heroNode !== hero) {
+    heroRoot?.unmount();
+    heroRoot = createRoot(hero);
+    heroNode = hero;
+  }
+  hero.classList.add("app-showcase");
+  hero.setAttribute("aria-label", "Featured apps");
+  heroRoot!.render(<ShowcaseContent apps={APPS} />);
 }
 
 createBlogApp({
