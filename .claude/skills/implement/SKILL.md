@@ -222,12 +222,11 @@ the terminal action stays last: `dispatch-mark-complete` (no deviation) or
 `dispatch-mark-deviation` (deviation) remains the single named exit. Write the
 phase-log entry once here, before the deviation branch, so both branches share it.
 
-First write the handoff note. Compose a terse "what-changed" digest of the
-implementation to `tmp/phase-log-entry-$N.md` — a one-line summary of what
-shipped; on a clean as-planned build the body is a line like `failed: none`.
-Compose it **unconditionally** (no "only on failure" branch). Then upsert it into
-the issue's phase-log comment (use `dangerouslyDisableSandbox: true` — the script
-calls `gh`):
+**On the normal path (Steps 1–4 ran this pass):** compose a terse
+"what-changed" digest of the implementation to `tmp/phase-log-entry-$N.md` — a
+one-line summary of what shipped; on a clean as-planned build the body is a line
+like `failed: none`. Then upsert it into the issue's phase-log comment (use
+`dangerouslyDisableSandbox: true` — the script calls `gh`):
 
 ```bash
 .claude/skills/dispatch-propagate/scripts/dispatch-write-phase-log \
@@ -235,12 +234,18 @@ calls `gh`):
 ```
 
 No attempt counter — implement is single-pass, so the default `--attempt 1`
-applies. The upsert is idempotent on the `(implement, 1)` key: on the
-crash-recovery re-entry path (a PR already exists → Steps 1–4 skipped → straight
-to this marker write) the repeated write REPLACES the prior entry in place rather
-than stacking a duplicate, so the repeat is safe.
+applies.
 
-Then judge whether the implementation deviated from the
+**On the re-entry path (a PR already existed at the preamble → Steps 1–4 were
+skipped this pass):** skip the phase-log compose and the
+`dispatch-write-phase-log` call entirely. The agent ran no `/implement-unit`
+units this pass and holds no fresh implementation data; composing a digest now
+would overwrite the accurate `(implement, 1)` entry the original pass wrote with
+uninformed or fabricated content — or fabricate an entry where none should exist.
+The prior entry is already correct and durable. Go straight to the
+deviation/marker logic below.
+
+Judge whether the implementation deviated from the
 persisted plan — scope shifted mid-implementation, or the plan could not be
 fully implemented as written. Base this on the `/implement-unit` outcomes
 observed in Step 2.
