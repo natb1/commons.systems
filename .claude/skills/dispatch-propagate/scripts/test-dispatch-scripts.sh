@@ -34825,7 +34825,7 @@ assert_eq "dispatch-run-verification: second block identified as failing" "yes" 
 # second block's only effect is creating a sentinel file; its absence after the
 # run proves the second block never executed.
 echo "Test: dispatch-run-verification -- first fails, second block not run (sentinel absent)"
-RV_TMP=$(mktemp -d "$TMPDIR_TEST/rv-sentinel.XXXXXX")
+RV_TMP=$(mktemp -d)
 sentinel="$RV_TMP/second-ran"
 plan=$'## Verification\n```verify\nfalse\n```\n```verify\ntouch '"$sentinel"$'\n```\n'
 if out=$(printf '%s' "$plan" | "$RUN_VERIFY" 2>&1); then rc=0; else rc=$?; fi
