@@ -35665,10 +35665,16 @@ TMPDIR_TEST=""
 #
 #     Empty eslint reports ([]) for both HEAD and BASE suppress the complexity
 #     path (complexityScalars yields no per-file entries), so the ONLY finding is
-#     the duplication one. The HEAD jscpd report carries clones=1 against a
+#     the duplication one. The HEAD jscpd report carries clones rising from a
 #     zero-clone baseline, so clonesRose fires (Confidence=high). worstCloneLocation
-#     reads duplicates[0].firstFile.{name,start}; firstFile.name is the bare
-#     relative "dup.ts" (no cwd prefix to strip), so the Location is "dup.ts:5".
+#     iterates every entry in `duplicates` and keeps the one with the largest
+#     (firstFile.end - firstFile.start) span; we seed TWO clones so the
+#     "largest clone wins" comparison branch is actually exercised rather than
+#     trivially true on a single-item loop. The first entry is a 9-line span at
+#     dup.ts:5 (end 14 - start 5); the second is a smaller 3-line span at
+#     dup.ts:1 (end 4 - start 1). The larger span must win, and firstFile.name is
+#     the bare relative "dup.ts" (no cwd prefix to strip), so the Location is
+#     "dup.ts:5" — the smaller clone's "dup.ts:1" must NOT be selected.
 echo "Test: dispatch-review-erosion-diff.mjs — duplication net-increase yields Source=erosion finding"
 TMPDIR_TEST=$(mktemp -d)
 # Empty eslint reports suppress the complexity path entirely.
@@ -35679,13 +35685,18 @@ mkdir -p "$TMPDIR_TEST/baseline"
 cat > "$TMPDIR_TEST/base-eslint.json" <<'EOF'
 []
 EOF
-# jscpd HEAD report: one clone block, 10 duplicated lines, largest clone at dup.ts:5.
+# jscpd HEAD report: two clone blocks. The first is a 9-line span at dup.ts:5
+# (end 14 - start 5); the second is a smaller 3-line span at dup.ts:1 (end 4 -
+# start 1). worstCloneLocation must pick the larger span (dup.ts:5), so the
+# second, smaller entry makes the "largest clone wins" comparison meaningful.
 cat > "$TMPDIR_TEST/head-jscpd.json" <<'EOF'
 {
-  "statistics": { "total": { "clones": 1, "duplicatedLines": 10, "percentage": 5 } },
+  "statistics": { "total": { "clones": 2, "duplicatedLines": 13, "percentage": 7 } },
   "duplicates": [
     { "firstFile": { "name": "dup.ts", "start": 5, "end": 14 },
-      "secondFile": { "name": "dup.ts", "start": 30, "end": 39 } }
+      "secondFile": { "name": "dup.ts", "start": 30, "end": 39 } },
+    { "firstFile": { "name": "dup.ts", "start": 1, "end": 4 },
+      "secondFile": { "name": "dup.ts", "start": 50, "end": 53 } }
   ]
 }
 EOF
