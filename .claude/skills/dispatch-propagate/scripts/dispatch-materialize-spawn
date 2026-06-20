@@ -427,9 +427,23 @@ process_one_target() {
   # by the driver after process_one_target returns, matching the other
   # pre-finalize soft-return paths (e.g. ci-waiting).
   if [[ "$PREFLIGHT_ENABLED" == true ]]; then
-    if ! "$SCRIPT_DIR/dispatch-preflight.sh" "$WORKTREE_PATH" "$PHASE" 1>&2; then
+    # dispatch-preflight.sh distinguishes its exit codes (see its header):
+    #   exit 1     — a gate check blocked the spawn (deliberate abort).
+    #   exit >= 2  — usage / un-cd-able path / merge-tree infrastructure error;
+    #                an internal dispatch error, NOT a gate decision. Treating it
+    #                as a soft preflight-abort would silently drain the slot and
+    #                re-evaluate the same broken target next tick. Route it to the
+    #                hard-error path (return 2 → caller does release_lock; exit 2),
+    #                matching every other internal failure in this function. The
+    #                specific reason line was already printed to >&2 by the script.
+    pf_rc=0
+    "$SCRIPT_DIR/dispatch-preflight.sh" "$WORKTREE_PATH" "$PHASE" 1>&2 || pf_rc=$?
+    if [[ "$pf_rc" -eq 1 ]]; then
       OUTCOME=preflight-abort
       return 0
+    elif [[ "$pf_rc" -ge 2 ]]; then
+      echo "dispatch-materialize-spawn: dispatch-preflight.sh returned internal error (exit $pf_rc) for $WORKTREE_PATH — not a gate abort" >&2
+      return 2
     fi
   fi
 

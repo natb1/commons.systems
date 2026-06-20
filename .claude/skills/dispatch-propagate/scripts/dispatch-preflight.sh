@@ -66,9 +66,12 @@ fi
 case "${2-}" in
   plan|implement|qa|review)
     rc=0; git merge-tree --write-tree HEAD origin/main >/dev/null 2>&1 || rc=$?
-    if [[ $rc -ne 0 ]]; then
+    if [[ $rc -eq 1 ]]; then
       echo "dispatch-preflight: merge conflict against origin/main in $1" >&2
       exit 1
+    elif [[ $rc -ge 2 ]]; then
+      echo "dispatch-preflight: git merge-tree infrastructure error (exit $rc) in $1 — origin/main may be missing or repo may be corrupted" >&2
+      exit 2
     fi
     ;;
   *)

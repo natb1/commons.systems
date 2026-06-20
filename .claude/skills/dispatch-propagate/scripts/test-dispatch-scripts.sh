@@ -12839,6 +12839,88 @@ else
 fi
 config_teardown
 
+# --- strict-preflight config type validation (#2041) ------------------------
+# strict-preflight gates the dispatch pre-spawn preflight gate. Its validator is
+# the only code path that catches a malformed gate config BEFORE the bad value
+# reaches dispatch-materialize-spawn's arm/disarm decision. These tests cover the
+# validator directly, mirroring the force-opus tests above: valid {enabled:true}
+# is printed; missing/wrong-typed enabled and non-object top-level values are
+# rejected; an absent file is the inert no-config path.
+
+# --- Test 7u: strict-preflight.json enabled:true → normalized JSON, exit 0 ---
+
+echo "Test: valid strict-preflight.json with enabled:true prints normalized JSON"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/strict-preflight.json" <<'EOF'
+{"enabled":true}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" strict-preflight 2>/dev/null); rc=$?
+assert_eq "strict-preflight enabled: exits 0" "0" "$rc"
+sp_enabled=$(printf '%s' "$out" | jq -r '.enabled')
+assert_eq "strict-preflight enabled: .enabled is true" "true" "$sp_enabled"
+config_teardown
+
+# --- Test 7v: absent strict-preflight.json → no-config, exit 0 --------------
+
+echo "Test: absent strict-preflight.json prints no-config and exits 0"
+config_setup
+# no file written — config dir is empty
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" strict-preflight 2>/dev/null); rc=$?
+assert_eq "strict-preflight absent: exits 0" "0" "$rc"
+assert_eq "strict-preflight absent: prints no-config" "no-config" "$out"
+config_teardown
+
+# --- Test 7w: strict-preflight.json missing enabled field → exit 1 ----------
+
+echo "Test: strict-preflight.json missing required enabled field exits 1 and stderr mentions enabled"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/strict-preflight.json" <<'EOF'
+{}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" strict-preflight 2>&1 1>/dev/null) || rc=$?
+assert_eq "strict-preflight missing enabled: exits 1" "1" "$rc"
+if [[ "$err" == *"enabled"* ]]; then
+  assert_eq "strict-preflight missing enabled: stderr mentions enabled" "yes" "yes"
+else
+  assert_eq "strict-preflight missing enabled: stderr mentions enabled" "yes" "no: $err"
+fi
+config_teardown
+
+# --- Test 7x: strict-preflight.json enabled is a string → exit 1 ------------
+
+echo "Test: strict-preflight.json with enabled as a string exits 1 and stderr mentions enabled"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/strict-preflight.json" <<'EOF'
+{"enabled":"true"}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" strict-preflight 2>&1 1>/dev/null) || rc=$?
+assert_eq "strict-preflight string enabled: exits 1" "1" "$rc"
+if [[ "$err" == *"enabled"* ]]; then
+  assert_eq "strict-preflight string enabled: stderr mentions enabled" "yes" "yes"
+else
+  assert_eq "strict-preflight string enabled: stderr mentions enabled" "yes" "no: $err"
+fi
+config_teardown
+
+# --- Test 7y: strict-preflight.json top-level array → exit 1 ----------------
+
+echo "Test: strict-preflight.json with a top-level array exits 1 and stderr mentions object"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/strict-preflight.json" <<'EOF'
+[{"enabled":true}]
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" strict-preflight 2>&1 1>/dev/null) || rc=$?
+assert_eq "strict-preflight top-level array: exits 1" "1" "$rc"
+if [[ "$err" == *"object"* ]]; then
+  assert_eq "strict-preflight top-level array: stderr mentions object" "yes" "yes"
+else
+  assert_eq "strict-preflight top-level array: stderr mentions object" "yes" "no: $err"
+fi
+config_teardown
+
 # --- sweep config type validation (#2026) -----------------------------------
 # The sweep config gates the not-in-sync reap grace window. Its validator is the
 # only code path that catches a malformed grace BEFORE it reaches dispatch-sweep's
@@ -25862,7 +25944,7 @@ mat_teardown() {
   rm -rf "$TMPDIR_TEST"
   TMPDIR_TEST="" ; STUB_DIR=""
   unset DISPATCH_LOCK_FILE CLAUDE_CODE_SESSION_ID CLAUDE_AGENTS_CMD \
-    DISPATCH_RESERVATION_DIR \
+    DISPATCH_RESERVATION_DIR DISPATCH_CONFIG_DIR \
     MAT_PR MAT_LEAF MAT_BLOCKED MAT_WT_DECISION MAT_PHASE \
     MAT_CI_READY MAT_LAUNCH_SLEEP MAT_ISSUE_STATE MAT_ISSUE_TITLE MAT_QUEUE \
     MAT_RESEED_OUT MAT_RESEED_RC
@@ -35063,7 +35145,6 @@ assert_eq "preflight-abort: no launcher spawned" "0" \
   "$([ -f "$TMPDIR_TEST/logs/launch-worker.log" ] && echo 1 || echo 0)"
 assert_eq "preflight-abort: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
 mat_teardown
-unset DISPATCH_CONFIG_DIR
 
 # --- b2: gate armed, preflight fails (explicit) → notify preflight-abort ----
 echo "Test: preflight-abort: gate armed, preflight fails (explicit) → notify preflight-abort"
@@ -35089,7 +35170,6 @@ assert_eq "preflight-abort explicit: no reservation marker" "0" \
 assert_eq "preflight-abort explicit: no launcher spawned" "0" \
   "$([ -f "$TMPDIR_TEST/logs/launch-worker.log" ] && echo 1 || echo 0)"
 mat_teardown
-unset DISPATCH_CONFIG_DIR
 
 # --- b3: gate armed, preflight passes (queue) → propagate as normal ---------
 echo "Test: preflight-abort: gate armed, preflight passes (queue) → propagate"
@@ -35116,7 +35196,6 @@ assert_eq "preflight-pass: launcher detached with issue + worktree" \
 assert_eq "preflight-pass: reservation marker present" "1" \
   "$([ -f "$DISPATCH_RESERVATION_DIR/839-test" ] && echo 1 || echo 0)"
 mat_teardown
-unset DISPATCH_CONFIG_DIR
 
 # --- b4: gate OFF by default (no config) → failing preflight stub never consulted → propagate
 echo "Test: preflight-abort: gate OFF (no config) → failing preflight stub ignored → propagate"
@@ -35142,7 +35221,6 @@ assert_eq "preflight-off: launcher detached (preflight never blocked it)" \
   "839 $TMPDIR_TEST/project/worktrees/839-test" \
   "$(cat "$TMPDIR_TEST/logs/launch-worker.log")"
 mat_teardown
-unset DISPATCH_CONFIG_DIR
 
 # --- b5: fan-out, gate armed, preflight fails all targets → zero spawns, drain
 echo "Test: preflight-abort fanout: gate armed, all targets preflight-abort → zero spawns, drain"
@@ -35172,7 +35250,6 @@ assert_eq "preflight-abort fanout: summary spawned 0 of gap 2" "1" \
 assert_eq "preflight-abort fanout: terminal token (zero spawns → drain)" "drain" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 mat_teardown
-unset DISPATCH_CONFIG_DIR
 
 # ============================================================================
 # summary
