@@ -35,6 +35,14 @@
         { "fieldPath": "memberEmails", "arrayConfig": "CONTAINS" },
         { "fieldPath": "timestamp", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "issue-samples",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "memberEmails", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "sampledAt", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []
