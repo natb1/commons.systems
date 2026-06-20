@@ -77,7 +77,7 @@ export function getSnapshot(): Snapshot {
  * `getSnapshot` path requires it (handled by the `cachedSnapshot`/`cachedKey`
  * machinery above).
  */
-export function getServerSnapshot(): Snapshot {
+export function getServerSnapshot(): Readonly<Snapshot> {
   return Object.freeze({ path: "/", params: new URLSearchParams() });
 }
 
