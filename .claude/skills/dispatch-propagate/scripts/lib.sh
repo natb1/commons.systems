@@ -166,7 +166,7 @@ gh_api_array() {
 # per-tick scan was self-exhausting (#1601).
 #
 # Contract:
-#   gh_issue_list_rest --state <open|closed> [--repo <owner/repo>] [--label <name>] [--limit <n>]
+#   gh_issue_list_rest --state <open|closed> [--repo <owner/repo>] [--label <name>] [--limit <n>] [--include-body]
 #
 # Flags:
 #   --state  (required) open|closed.
@@ -179,6 +179,9 @@ gh_api_array() {
 #            (REST --paginate has no silent-truncation hazard, unlike gh pr/issue
 #            list's --limit default). When PRESENT we fetch a SINGLE page of that
 #            size (no --paginate).
+#   --include-body (optional) when present, the projected objects additionally
+#            carry a `body` field. Omitted by default so the repo-wide per-tick
+#            callers stay byte-identical and payload-lean.
 #
 # Output: one merged JSON array on stdout. REST /issues returns issues AND PRs;
 # only PR objects carry a `pull_request` key, so we filter those out to match
@@ -186,18 +189,20 @@ gh_api_array() {
 # camelCase shape downstream jq expects ({number, createdAt, closedAt, labels}).
 # `labels` is already [{name,...}] in REST, so it passes through unchanged; a null
 # closedAt on open issues is harmless. Results are sorted created-descending so a
-# downstream `.[0]` is the most-recently-created issue.
+# downstream `.[0]` is the most-recently-created issue. When --include-body is
+# passed, each projected object also carries a `body` field.
 #
 # On gh failure: errors to stderr and returns 1 (clear-errors convention, no
 # fallback).
 gh_issue_list_rest() {
-  local state="" repo="" label="" limit=""
+  local state="" repo="" label="" limit="" include_body=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --state) state="$2"; shift 2 ;;
       --repo)  repo="$2";  shift 2 ;;
       --label) label="$2"; shift 2 ;;
       --limit) limit="$2"; shift 2 ;;
+      --include-body) include_body=1; shift 1 ;;
       *) echo "error: gh_issue_list_rest: unknown flag '$1'" >&2; return 1 ;;
     esac
   done
@@ -237,7 +242,11 @@ gh_issue_list_rest() {
     }
   fi
 
-  printf '%s' "$raw" | jq -s 'add // [] | map(select(.pull_request == null)) | map({number, createdAt: .created_at, closedAt: .closed_at, labels})'
+  local projection='add // [] | map(select(.pull_request == null)) | map({number, createdAt: .created_at, closedAt: .closed_at, labels})'
+  if [[ -n "$include_body" ]]; then
+    projection='add // [] | map(select(.pull_request == null)) | map({number, createdAt: .created_at, closedAt: .closed_at, labels, body})'
+  fi
+  printf '%s' "$raw" | jq -s "$projection"
 }
 
 # The explicit open-PR fetch cap. gh pr list defaults to 30, which silently
