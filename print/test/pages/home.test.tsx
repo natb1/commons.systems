@@ -204,10 +204,11 @@ describe("download wiring (regression #1280)", () => {
 
     // Mirror main.tsx: wire the persistent outlet's click delegation ONCE,
     // before the router's first navigation.
-    outlet = document.createElement("div");
-    document.body.appendChild(outlet);
-    wireDownloadActions(outlet);
-    wireMarkdownActions(outlet);
+    const el = document.createElement("div");
+    outlet = el;
+    document.body.appendChild(el);
+    wireDownloadActions(el);
+    wireMarkdownActions(el);
 
     router = createHistoryRouter(
       outlet,
@@ -220,14 +221,11 @@ describe("download wiring (regression #1280)", () => {
           },
           afterRender: (out) => {
             const mount = out.querySelector("#page-root");
-            if (!mount || !homeState) return;
+            if (!(mount instanceof HTMLElement) || !homeState) return;
             const state = homeState;
-            currentPageRoot = createRoot(mount as HTMLElement);
-            flushSync(() =>
-              currentPageRoot!.render(
-                <Home mediaHtml={state.mediaHtml} user={state.user} />,
-              ),
-            );
+            const root = createRoot(mount);
+            currentPageRoot = root;
+            flushSync(() => root.render(<Home mediaHtml={state.mediaHtml} user={state.user} />));
             afterRenderHome(out);
           },
         },
@@ -249,7 +247,7 @@ describe("download wiring (regression #1280)", () => {
     for (let i = 0; i < N; i++) {
       router.navigate();
       await vi.waitFor(() => {
-        expect(outlet!.querySelector(".media-download")).not.toBeNull();
+        expect(el.querySelector(".media-download")).not.toBeNull();
       });
     }
 
