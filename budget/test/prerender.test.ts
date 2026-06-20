@@ -1,28 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
+import { timestampMockFactory } from "./helpers";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-vi.mock("firebase/firestore", () => {
-  class MockTimestamp {
-    constructor(
-      public readonly seconds: number,
-      public readonly nanoseconds: number,
-    ) {}
-    toMillis() {
-      return this.seconds * 1000 + this.nanoseconds / 1e6;
-    }
-    toDate() {
-      return new Date(this.toMillis());
-    }
-    static fromMillis(ms: number) {
-      return new MockTimestamp(Math.floor(ms / 1000), (ms % 1000) * 1e6);
-    }
-    static fromDate(d: Date) {
-      return MockTimestamp.fromMillis(d.getTime());
-    }
-  }
-  return { Timestamp: MockTimestamp };
-});
+vi.mock("firebase/firestore", () => timestampMockFactory());
 
 import { renderBudgetsContent } from "../src/pages/budgets";
 import { AppShell } from "../src/AppShell";
