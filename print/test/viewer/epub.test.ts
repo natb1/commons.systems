@@ -830,10 +830,10 @@ describe("createEpubRenderer", () => {
         href: "ch0.xhtml",
         unload: vi.fn(),
         find: vi.fn().mockReturnValue([{ cfi: "cfi-0", excerpt: "alpha fox" }]),
-        load: vi.fn() as ReturnType<typeof vi.fn>,
+        load: vi.fn() as ReturnType<typeof vi.fn>, // type-safety-ok: vi.fn() cast needed to type load as MockInstance for mockImplementationOnce chaining
       };
       // Gate ONLY call-1's load (the first load); call-2's load resolves immediately.
-      let release!: () => void;
+      let release!: () => void; // type-safety-ok: definite assignment assertion — Promise constructor assigns release before it is used
       const gate = new Promise<void>((resolve) => { release = resolve; });
       s0.load
         .mockImplementationOnce(() => gate)
@@ -844,10 +844,10 @@ describe("createEpubRenderer", () => {
 
       const renderer = await initRenderer();
 
-      const p1 = renderer.search!("first");
+      const p1 = renderer.search!("first"); // type-safety-ok: search is optional on ContentRenderer but always present after initRenderer()
       // Flush a macrotask so call-1 parks INSIDE the loop on the gated s0.load().
       await new Promise((r) => setTimeout(r));
-      const p2 = renderer.search!("second");
+      const p2 = renderer.search!("second"); // type-safety-ok: search is optional on ContentRenderer but always present after initRenderer()
       // call-2's s0.load is the second call → resolves immediately; call-2 runs to
       // completion, loading both s0 and s1.
       await p2;
