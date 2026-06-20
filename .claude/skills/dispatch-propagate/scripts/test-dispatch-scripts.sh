@@ -31302,6 +31302,9 @@ drift_scan_setup() {
 
   cp "$SCRIPT_DIR/dispatch-drift-scan" "$TMPDIR_TEST/scripts/dispatch-drift-scan"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-drift-scan"
+  # dispatch-drift-scan now sources lib.sh (for gh_retry); $SCRIPT_DIR inside the
+  # copied script resolves to this temp scripts/ dir, so lib.sh must live there.
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
 
   cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
 #!/usr/bin/env bash
@@ -31315,7 +31318,13 @@ case "$args" in
       echo '{"createdAt":"2026-01-01T00:00:00Z","body":"no refs"}'
     fi
     ;;
-  "pr list --state merged --search merged:>="*" --limit 100 --json number,title,mergedAt")
+  api\ *repos/*/pulls\?state=closed*)
+    # dispatch-drift-scan's merged-PR window now hits an inline REST call (#2258):
+    # `gh api --paginate repos/{owner}/{repo}/pulls?state=closed&sort=updated&...`.
+    # The leading `*` absorbs the optional `--paginate`. Serve the SAME fixture
+    # data the old `gh pr list --state merged` arm served, but in REST snake_case
+    # (number,title,merged_at,created_at,updated_at) — the script filters and
+    # remaps to mergedAt locally.
     if [[ -f "$TREE/prs.json" ]]; then
       cat "$TREE/prs.json"
     else
@@ -31369,7 +31378,7 @@ cat > "$TMPDIR_TEST/issue.json" <<'EOF'
 {"createdAt":"2026-06-03T00:00:00Z","body":"Touches `present.sh` and `does/not/exist.ts`. Uses `presentName_token` and `absentName_token`."}
 EOF
 cat > "$TMPDIR_TEST/prs.json" <<'EOF'
-[{"number":42,"title":"some pr","mergedAt":"2026-06-02T00:00:00Z"}]
+[{"number":42,"title":"some pr","created_at":"2026-05-20T00:00:00Z","merged_at":"2026-06-04T00:00:00Z","updated_at":"2026-06-04T00:00:00Z"}]
 EOF
 cat > "$TMPDIR_TEST/commits.txt" <<'EOF'
 abc1234 reworked present.sh distinctively_committed
@@ -31396,7 +31405,10 @@ printf 'echo hi\n' > "$TMPDIR_TEST/tree/present.sh"
 cat > "$TMPDIR_TEST/issue.json" <<'EOF'
 {"createdAt":"2026-06-03T00:00:00Z","body":"Touches `present.sh`."}
 EOF
-jq -nc '[range(100) | {number: (.+1), title: ("pr " + (.+1|tostring)), mergedAt: "2026-06-01T00:00:00Z"}]' \
+# REST snake_case fixtures, all merged IN-WINDOW (merged_at >= the 2026-06-03
+# anchor) so the local merged_at filter keeps all 100 and the >=100 in-window
+# guard fires. updated_at >= merged_at as REST guarantees.
+jq -nc '[range(100) | {number: (.+1), title: ("pr " + (.+1|tostring)), created_at: "2026-05-25T00:00:00Z", merged_at: "2026-06-04T00:00:00Z", updated_at: "2026-06-04T00:00:00Z"}]' \
   > "$TMPDIR_TEST/prs.json"
 cd "$TMPDIR_TEST/tree"
 out=$("$TMPDIR_TEST/scripts/dispatch-drift-scan" 1080); rc=$?
