@@ -12,8 +12,8 @@
  *
  * Vacuity (one-time / manual check, not CI-enforced): temporarily add
  * `renderResult: async () => {}` to the literal below and run
- * `tsc --noEmit -p print/tsconfig.json`; tsc should then report the
- * that directive as unused (TS2578) — confirming the sole cause of
+ * `tsc --noEmit -p print/tsconfig.json`; tsc should then report that
+ * directive as unused (TS2578) — confirming the sole cause of
  * the error is the missing method.
  */
 import type { ContentRenderer, SearchableRenderer } from "../../src/viewer/types";
