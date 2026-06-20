@@ -31444,6 +31444,25 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: cleanup_stale_heartbeat_units ran disable with no prior units"
 fi
 
+# 3d. AC2 (#2191) — [Service] section present but no WorkingDirectory= line →
+# early return at lib.sh:1805 ([ -n "$installed_workdir" ] || return 0): no
+# disable, returns 0.
+: > "$ehu_log"
+printf '%s\n' '[Service]' > "$ehu_svc"
+ehu_cleanup_rc=0
+(
+  export STUB_LOG="$ehu_log"
+  source "$SCRIPT_DIR/lib.sh"
+  cleanup_stale_heartbeat_units "$ehu_svc" "$ehu_tmp/main-worktree" "$ehu_tmp/bin/systemctl"
+) || ehu_cleanup_rc=$?
+assert_eq "cleanup_stale_heartbeat_units: no WorkingDirectory= → returns 0" "0" "$ehu_cleanup_rc"
+TOTAL=$((TOTAL + 1))
+if ! grep -q 'disable' "$ehu_log"; then
+  PASS=$((PASS + 1)); echo "  PASS: cleanup_stale_heartbeat_units no-op when WorkingDirectory= absent"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: cleanup_stale_heartbeat_units ran disable with no WorkingDirectory="
+fi
+
 rm -rf "$ehu_tmp"
 
 # ============================================================================
