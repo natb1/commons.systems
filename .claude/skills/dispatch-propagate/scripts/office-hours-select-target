@@ -7,13 +7,33 @@
 # The office-hours queue is "open issues carrying the dispatch:office-hours
 # label" (the label is issue-anchored, #868/#909). The selector enumerates those
 # issues oldest-first, makes ONE per-item liveness call against each item's
-# <N>-* worktree, and emits exactly one of four dispositions, in this priority:
+# <N>-* worktree, and emits exactly one of five dispositions, in this priority:
 #
 #   idle <sessionId>
-#     The oldest labeled item whose <N>-* worktree has an idle/complete Claude
-#     session (state waiting/done/idle). Idle wins over fresh: if any labeled
-#     item has an attachable idle session, that session is attached in preference
-#     to picking up a sessionless sibling fresh.
+#     The oldest labeled item whose originating Claude session is idle/complete
+#     (state waiting/done/idle) AND whose worktree is still present on disk. Idle
+#     wins over fresh: if any labeled item has an attachable idle session, that
+#     session is attached in preference to picking up a sessionless sibling fresh.
+#
+#     The chosen attachable item is classified by the state of its session's
+#     worktree (the cwd `issue_live_session_id` now returns alongside the
+#     sessionId, #2241) into three buckets:
+#       1. Worktree present on disk → attach in place: emit `idle <sessionId>`.
+#       2. Worktree swept, but `origin/<branch>` still exists → emit
+#          `idle-provision <sessionId> <branch>` (below).
+#       3. Worktree swept AND `origin/<branch>` missing (or no cwd known) → fall
+#          back to the fresh path for this same issue, which — finding no
+#          registered worktree — emits `office-hours <N> <phase> <pr> -`; the
+#          consumer's `-` guard prints a clear swept-worktree diagnostic and
+#          exits. Fresh fallback with a diagnostic, never a silent failure.
+#
+#   idle-provision <sessionId> <branch>
+#     The oldest labeled item whose originating session is idle/complete but whose
+#     worktree has been SWEPT, while its remote branch `origin/<branch>` still
+#     exists (#2241). <branch> is the swept worktree's basename. The consumer
+#     re-provisions the worktree from the remote branch, then attaches the
+#     originating session — rather than spawning a fresh /office-hours that would
+#     lose the session's context.
 #
 #     The disposition gates on the granular session `state`, not mere liveness —
 #     it must only surface an IDLE session, never an actively-WORKING one. The
@@ -233,10 +253,15 @@ issue_live_session_id() {
 SORTED=$(printf '%s' "$ISSUE_LIST" | jq -r 'sort_by(.createdAt) | .[].number')
 FRESH_NUM=""
 IDLE_ID=""
+IDLE_CWD=""
+IDLE_NUM=""
 while IFS= read -r issue_num; do
   [[ -z "$issue_num" ]] && continue
-  if sid=$(issue_live_session_id "$issue_num"); then
-    IDLE_ID="$sid"
+  if pair=$(issue_live_session_id "$issue_num"); then
+    # rc 0 → attachable; pair is `sessionId<TAB>cwd` (#2241). Split both fields
+    # and remember the issue so the post-loop classifier can derive its branch.
+    IFS=$'\t' read -r IDLE_ID IDLE_CWD <<< "$pair"
+    IDLE_NUM="$issue_num"
     break
   else
     rc=$?
@@ -247,10 +272,36 @@ while IFS= read -r issue_num; do
   fi
 done <<< "$SORTED"
 
-# Priority 1: emit the oldest idle item.
+# Priority 1: emit the oldest idle item. Classify the chosen attachable issue by
+# the state of its originating session's worktree (#2241):
+#   1. Worktree present on disk → attach in place: emit `idle <sessionId>`.
+#   2. Worktree swept but `origin/<branch>` still exists → emit
+#      `idle-provision <sessionId> <branch>`; the consumer (Unit 4) re-provisions
+#      the worktree from the remote branch before attaching.
+#   3. Worktree swept AND `origin/<branch>` missing, OR no cwd known → fall back
+#      to the fresh path for this issue (clear IDLE_ID, set FRESH_NUM). With no
+#      registered worktree the fresh path's wt_path lookup comes back empty, so it
+#      emits `office-hours <N> <phase> <pr> -`, and the consumer's `-` guard
+#      prints a clear swept-worktree diagnostic and exits — fresh fallback with a
+#      diagnostic, never a silent failure.
 if [[ -n "$IDLE_ID" ]]; then
-  printf 'idle %s\n' "$IDLE_ID"
-  exit 0
+  if [[ -d "$IDLE_CWD" ]]; then
+    printf 'idle %s\n' "$IDLE_ID"
+    exit 0
+  elif [[ -n "$IDLE_CWD" ]]; then
+    # Worktree swept. Its branch is the swept worktree's basename. Check the
+    # remote via `git -C <main>` — the selector's own cwd is not guaranteed to be
+    # a repo carrying `origin`. Suppress output; branch on the exit code.
+    branch=$(basename "$IDLE_CWD")
+    if git -C "$(resolve_main_worktree)" ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+      printf 'idle-provision %s %s\n' "$IDLE_ID" "$branch"
+      exit 0
+    fi
+  fi
+  # Bucket 3: swept with no recoverable remote branch, or no cwd. Route into the
+  # fresh path for the chosen issue.
+  IDLE_ID=""
+  FRESH_NUM="$IDLE_NUM"
 fi
 
 # Priority 2: pick up the oldest sessionless item fresh. The open-PR list is
