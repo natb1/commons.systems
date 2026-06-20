@@ -61,27 +61,27 @@ function MonthBlock({
 function YearBlock({
   year,
   months,
-  currentYear,
-  currentMonth,
+  openYear,
+  openMonth,
   postLinkPrefix,
 }: {
   year: number;
   months: Map<number, PublishedPost[]>;
-  currentYear: number;
-  currentMonth: number;
+  openYear: number;
+  openMonth: number;
   postLinkPrefix: string;
 }) {
-  const isCurrentYear = year === currentYear;
+  const isOpenYear = year === openYear;
   const sortedMonths = [...months.keys()].sort((a, b) => b - a);
   return (
-    <details open={isCurrentYear}>
+    <details open={isOpenYear}>
       <summary>{year}</summary>
       {sortedMonths.map((month) => (
         <MonthBlock
           key={month}
           month={month}
           posts={months.get(month)!}
-          isOpen={isCurrentYear && month === currentMonth}
+          isOpen={isOpenYear && month === openMonth}
           postLinkPrefix={postLinkPrefix}
         />
       ))}
@@ -113,8 +113,9 @@ function Archive({
   if (published.length === 0) return null;
 
   const grouped = groupByYearMonth(published);
-  const now = new Date();
   const sortedYears = [...grouped.keys()].sort((a, b) => b - a);
+  const openYear = sortedYears[0];
+  const openMonth = Math.max(...grouped.get(openYear)!.keys());
 
   return (
     <section className="panel-section">
@@ -124,8 +125,8 @@ function Archive({
           key={year}
           year={year}
           months={grouped.get(year)!}
-          currentYear={now.getUTCFullYear()}
-          currentMonth={now.getUTCMonth()}
+          openYear={openYear}
+          openMonth={openMonth}
           postLinkPrefix={postLinkPrefix}
         />
       ))}
