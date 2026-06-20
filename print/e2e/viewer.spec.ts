@@ -1,13 +1,20 @@
 import { test, expect } from "@commons-systems/config/playwright-test";
 
 test.describe("viewer", () => {
-  // Public seed items (by addedAt desc):
+  // Seed source of truth: print/seeds/firestore.ts. Classification is derived
+  // from which `media` collection block a document sits in: items in a block
+  // WITHOUT a `testOnly` flag are public; items in a block with `testOnly: true`
+  // are seeded only when SEED_TEST_ONLY=true (so tests must not depend on them
+  // in the default emulator seed). Verify any item below against that file.
+  //
+  // Public seed items (by addedAt desc) — in the un-flagged `media` block:
   //   1. "Republic" (plato-republic, PDF, 3 pages)
   //   2. "Phaedrus" (plato-phaedrus, PDF, 1 page)
   //   3. "Confessions..." (gutenberg-3296, EPUB)
   //
-  // testOnly seed items (seeded only with SEED_TEST_ONLY=true):
+  // testOnly seed items (in the `testOnly: true` `media` block):
   //   - "Little Nemo..." (test-image-archive, image-archive, 5 images)
+  //   - "Test Private Item" (test-private-item, PDF, private/grouped)
   //
   // Navigate to Republic (3 pages) for navigation testing:
   //   page.goto("/view/plato-republic")
@@ -750,7 +757,12 @@ test.describe("viewer", () => {
     // Clear the query — highlights should be removed.
     await input.fill("");
     await input.press("Enter");
-    await expect(page.locator(".textLayer .search-highlight")).toHaveCount(0, { timeout: 15000 });
+    await expect
+      .poll(
+        async () => page.locator(".textLayer .search-highlight").count(),
+        { timeout: 15000 },
+      )
+      .toBe(0);
   });
 
   test("EPUB outline is visible with TOC entries", async ({ page }) => {

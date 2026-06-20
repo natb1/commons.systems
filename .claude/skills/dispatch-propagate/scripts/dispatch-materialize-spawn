@@ -41,10 +41,12 @@
 # `pr` row before calling). The two literal `[branch phase]` positionals the
 # queue selection carries are still dropped — no sub-script consumes them. The
 # router still recomputes PHASE (Step 5) for the #1109 done re-check, but it no
-# longer maps it to a worker model: the detached launcher (dispatch-launch-worker)
-# routes on the merged tree and derives the phase→model itself (qa/review →
-# Sonnet via dispatch-phase-model, #1171/#1172; every other phase inherits the
-# session default Opus), so the router forwards no --model.
+# longer maps it to worker compute: the detached launcher (dispatch-launch-worker)
+# routes on the merged tree and derives the phase→model AND phase→effort itself
+# (qa/review/fix-checks/fix-conflicts → Sonnet via dispatch-phase-model,
+# #1171/#1172/#2042; implement → effort medium, plan → effort high via
+# dispatch-phase-effort, #2042; every other phase inherits the session default
+# Opus and no effort), so the router forwards neither --model nor --effort.
 #
 # Terminal tokens (the last stdout line is always exactly one of):
 #   propagate              the launcher detached; the chain advances. Lock
