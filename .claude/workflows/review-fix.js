@@ -635,7 +635,7 @@ const rationalesById = {};
 if (requiredFindings.length) {
   log(
     `verify: ${requiredFindings.length} Required finding(s), severity-scaled ` +
-      `skeptics (2 for high-confidence, 1 for medium/low)`
+      `skeptics (2 for high-confidence, 1 for medium/low) at high effort`
   );
   // Flat thunk list across (finding × skeptic) so the barrier covers all votes.
   // Skeptic count scales with finding confidence: a high-confidence Required
@@ -691,6 +691,7 @@ if (requiredFindings.length) {
             ].join('\n');
       return agent(prompt, {
         model: 'sonnet',
+        effort: 'high',
         agentType: 'general-purpose',
         schema: VERDICT_SCHEMA,
         label: `verify:${job.id}#${job.k}`,
