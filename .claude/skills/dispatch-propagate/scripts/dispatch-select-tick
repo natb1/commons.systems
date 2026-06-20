@@ -574,8 +574,9 @@ if [[ -n "$MERGE_OUT" ]]; then
 fi
 
 # --- Step 2e: re-triage orphaned review follow-ups (best-effort) -------------
-# Parks open source-pr:<N>-labeled review follow-up issues on office-hours when
-# their source PR is found closed-unmerged (abandoned/superseded) — their
+# Parks open dispatch:review-followup-labeled review follow-up issues (source PR
+# read from the <!-- dispatch:source-pr <N> --> body marker) on office-hours
+# when their source PR is found closed-unmerged (abandoned/superseded) — their
 # findings point at code that never landed on main. Pass its stdout lines
 # through, prefixed.
 RETRIAGE_OUT=$("$SCRIPT_DIR/dispatch-retriage-orphaned-followups") || true
