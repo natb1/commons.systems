@@ -472,8 +472,8 @@ export function useViewerController(
     function onSearchNavigate() {
       if (controller.enabled) {
         controller.goToPage(renderer.currentPage).catch(handleRenderError);
-      } else {
-        renderer.renderResult?.().catch(handleRenderError);
+      } else if (isSearchable(renderer)) {
+        renderer.renderResult().catch(handleRenderError);
       }
       syncNav();
     }
