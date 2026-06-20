@@ -91,16 +91,34 @@ try {
   );
 }
 
-generateFeedXml({
-  title: "commons.systems",
-  siteUrl: SITE_URL,
-  distDir,
-  seed: appSeed,
-});
+try {
+  generateFeedXml({
+    title: "commons.systems",
+    siteUrl: SITE_URL,
+    distDir,
+    seed: appSeed,
+  });
+} catch (err) {
+  throw new Error(
+    `Prerender failed in landing/scripts/prerender.ts (generateFeedXml): ${
+      err instanceof Error ? err.message : String(err)
+    }`,
+    { cause: err },
+  );
+}
 
-generateSitemapXml({
-  siteUrl: SITE_URL,
-  distDir,
-  seed: appSeed,
-  staticPaths: ["/", "/about"],
-});
+try {
+  generateSitemapXml({
+    siteUrl: SITE_URL,
+    distDir,
+    seed: appSeed,
+    staticPaths: ["/", "/about"],
+  });
+} catch (err) {
+  throw new Error(
+    `Prerender failed in landing/scripts/prerender.ts (generateSitemapXml): ${
+      err instanceof Error ? err.message : String(err)
+    }`,
+    { cause: err },
+  );
+}
