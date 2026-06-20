@@ -1061,6 +1061,9 @@ describe("clearSearch()", () => {
     // Only the live (second) wrapper carries a highlight.
     expect(target.querySelectorAll(".search-highlight").length).toBe(1);
     expect(target.querySelectorAll(".search-highlight")[0].textContent).toBe("the");
+
+    renderer.clearSearch!(); // type-safety-ok: optional renderer API method, present in this test harness
+    expect(target.querySelector(".search-highlight")).toBeNull();
   });
 
   it("goToPosition() drains the active highlight and disarms pendingHighlight", async () => {
