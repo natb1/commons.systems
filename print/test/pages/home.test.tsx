@@ -173,6 +173,65 @@ describe("loadMediaHtml", () => {
 
     await expect(loadMediaHtml()).rejects.toThrow(DataIntegrityError);
   });
+
+  it("renders an aria-label on the view link", async () => {
+    mockListCloud.mockResolvedValue([makeMediaItem({ title: "My Book" })]);
+
+    const html = await loadMediaHtml();
+
+    expect(html).toContain('aria-label="View My Book"');
+  });
+
+  it("renders an aria-label on the download button", async () => {
+    mockListCloud.mockResolvedValue([makeMediaItem({ title: "My Book" })]);
+
+    const html = await loadMediaHtml();
+
+    expect(html).toContain('aria-label="Download My Book"');
+  });
+
+  it("escapes HTML special characters in item titles", async () => {
+    mockListCloud.mockResolvedValue([
+      makeMediaItem({ title: "<script>xss</script>" }),
+    ]);
+
+    const html = await loadMediaHtml();
+
+    expect(html).not.toContain("<script>");
+    expect(html).toContain("&lt;script&gt;");
+  });
+
+  it("escapes HTML special characters in item IDs", async () => {
+    mockListCloud.mockResolvedValue([makeMediaItem({ id: "a&b" })]);
+
+    const html = await loadMediaHtml();
+
+    expect(html).toContain('data-id="a&amp;b"');
+  });
+
+  it("renders items in the order returned by listCloud", async () => {
+    mockListCloud.mockResolvedValue([
+      makeMediaItem({ id: "first", title: "First" }),
+      makeMediaItem({ id: "second", title: "Second" }),
+      makeMediaItem({ id: "third", title: "Third" }),
+    ]);
+
+    const html = await loadMediaHtml();
+
+    expect(html.indexOf("First")).toBeLessThan(html.indexOf("Second"));
+    expect(html.indexOf("Second")).toBeLessThan(html.indexOf("Third"));
+  });
+
+  it("renders aria-labels on markdown buttons", async () => {
+    mockListCloud.mockResolvedValue([
+      makeMediaItem({ title: "My Book", markdownPath: "media/test.md" }),
+    ]);
+
+    const html = await loadMediaHtml();
+
+    expect(html).toContain('aria-label="Download Markdown for My Book"');
+    expect(html).toContain('aria-label="Copy Markdown for My Book"');
+  });
 });
 
 describe("download wiring (regression #1280)", () => {
