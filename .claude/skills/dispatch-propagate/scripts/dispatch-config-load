@@ -247,6 +247,24 @@
 #     "enabled": true
 #   }
 #
+# ---- Schema: strict-preflight.json -----------------------------------------
+#
+# Top-level object gating the dispatch pre-spawn preflight gate.
+# This config type follows the GENERIC absent→inert convention (see "Stdout
+# protocol" above): when the file is absent, no-config is emitted and the
+# feature is OFF (inert) — the preflight gate is disabled. Do NOT confuse this
+# with auto-merge, which INVERTS that convention (absent → ON). strict-preflight
+# does NOT invert; absent means OFF, the preflight gate is disabled.
+#
+#   enabled       boolean (required when the file is present) — opt-in toggle.
+#                 true arms the pre-spawn preflight gate; false (or file absent)
+#                 leaves it off.
+#
+# Example (see strict-preflight.example.json) — the opt-in form:
+#   {
+#     "enabled": true
+#   }
+#
 # ---- Schema: sweep.json -----------------------------------------------------
 #
 # Top-level object with optional tunables for `dispatch-sweep`. Each field must
@@ -296,9 +314,9 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
 CONFIG_TYPE="${1:-}"
 case "$CONFIG_TYPE" in
-  projects|jit|statements|target-workers|budget-etl|epic|auto-merge|force-opus|sweep|selection-lock) ;;
+  projects|jit|statements|target-workers|budget-etl|epic|auto-merge|force-opus|strict-preflight|sweep|selection-lock) ;;
   *)
-    echo "error: usage: dispatch-config-load <projects|jit|statements|target-workers|budget-etl|epic|auto-merge|force-opus|sweep|selection-lock>" >&2
+    echo "error: usage: dispatch-config-load <projects|jit|statements|target-workers|budget-etl|epic|auto-merge|force-opus|strict-preflight|sweep|selection-lock>" >&2
     exit 2
     ;;
 esac
@@ -513,6 +531,21 @@ case "$CONFIG_TYPE" in
     ' "$CONFIG_FILE")
     ;;
   force-opus)
+    ERRORS=$(jq -r '
+      if type != "object" then
+        "top-level value must be a JSON object, got \(type)"
+      else
+        . as $cfg |
+        # enabled: required boolean
+        (if ($cfg | has("enabled")) | not then
+          "missing required field enabled"
+        elif ($cfg.enabled | type) != "boolean" then
+          "enabled must be a boolean, got \($cfg.enabled | type)"
+        else empty end)
+      end
+    ' "$CONFIG_FILE")
+    ;;
+  strict-preflight)
     ERRORS=$(jq -r '
       if type != "object" then
         "top-level value must be a JSON object, got \(type)"
