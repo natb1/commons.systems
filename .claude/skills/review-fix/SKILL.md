@@ -641,23 +641,33 @@ narrowing is normal-vs-re-entry). Then upsert it (use
 
 ```bash
 .claude/skills/dispatch-propagate/scripts/dispatch-write-phase-log \
-  "$N" --phase review < tmp/phase-log-entry-$N.md
+  "$N" --phase review --reentry false < tmp/phase-log-entry-$N.md
 ```
 
-Skip the phase-log write entirely on re-entry. On re-entry `dispatch:reviewed` is
-already present, so the write is skipped — there is no ordering concern relative
-to the label on the re-entry path.
+On re-entry (Steps 1–6 were skipped and `result` is absent), call the writer with
+`--reentry true </dev/null` — the script enforces the skip and preserves the prior
+`(review, 1)` entry verbatim. On re-entry `dispatch:reviewed` is already present,
+so there is no ordering concern relative to the label. Gate on whether Steps 1–6
+ran this session (the `result` is absent on re-entry), NOT on label or PR presence
+as the implementation gate.
+
+```bash
+.claude/skills/dispatch-propagate/scripts/dispatch-write-phase-log \
+  "$N" --phase review --reentry true </dev/null
+```
 
 No attempt counter — review is single-pass, so the default `--attempt 1` applies.
-The upsert is idempotent on the `(review, 1)` key. Why re-entry must skip rather
-than re-write: the phase-log write PRECEDES the `dispatch:reviewed` apply (above),
-and re-entry is GATED on `dispatch:reviewed` already being present (see preamble:
-"If the labels line already includes `dispatch:reviewed`"). So whenever re-entry
-fires, the accurate `(review, 1)` entry the original run wrote is guaranteed
-already durable on the comment. Skipping the write preserves it. A re-write on
-re-entry has no prior-pass data to restate (`result` is absent), so it would only
-overwrite the good entry with a content-free/degraded one — it can never fill a
-gap, only destroy one.
+The upsert is idempotent on the `(review, 1)` key. Why re-entry must not re-write:
+the phase-log write PRECEDES the `dispatch:reviewed` apply (above), and re-entry
+is GATED on `dispatch:reviewed` already being present (see preamble: "If the
+labels line already includes `dispatch:reviewed`"). So whenever re-entry fires, the
+accurate `(review, 1)` entry the original run wrote is guaranteed already durable
+on the comment. The script enforces the skip via `--reentry true`, preserving it.
+A re-write on re-entry has no prior-pass data to restate (`result` is absent), so
+it would only overwrite the good entry with a content-free/degraded one — it can
+never fill a gap, only destroy one. This skip-preserves-verbatim behavior is
+covered by the behavioral test
+`.claude/skills/dispatch-propagate/scripts/test-phase-log-reentry.sh`.
 
 Then apply the `dispatch:reviewed` label via `dispatch-complete-phase` (use
 `dangerouslyDisableSandbox: true` — the script calls `gh`):
