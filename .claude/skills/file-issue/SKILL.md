@@ -409,7 +409,18 @@ type: `no-config` → apply NO epic label (the feature stays inert); otherwise a
 each label in the `.labels[]` array to the parent `<N>`:
 
 ```bash
-EPIC_CONFIG=$(.claude/skills/dispatch-propagate/scripts/dispatch-config-load epic)
+# Three outcomes from dispatch-config-load epic:
+#   exit 0 + "no-config" → feature inert; apply NO label.
+#   exit 0 + JSON        → apply each .labels[] to the parent <N>.
+#   exit 1 (nonzero)     → bad JSON/schema in dispatch.config/epic.json; error out.
+# A bare VAR=$(...) does NOT exit with a controlled code under all conditions —
+# without the || guard, the failure exits with dispatch-config-load's raw exit
+# code (1 for JSON error, 2 for env misconfiguration), not a canonical error with
+# a diagnostic. Guard with || to emit a diagnostic and normalize to exit 1.
+EPIC_CONFIG=$(.claude/skills/dispatch-propagate/scripts/dispatch-config-load epic) || {
+  echo "error: dispatch-config-load epic failed (bad JSON/schema in dispatch.config/epic.json)" >&2
+  exit 1
+}
 if [[ "$EPIC_CONFIG" != "no-config" ]]; then
   while IFS= read -r epic_label; do
     [[ -n "$epic_label" ]] && gh issue edit <N> --add-label "$epic_label"
