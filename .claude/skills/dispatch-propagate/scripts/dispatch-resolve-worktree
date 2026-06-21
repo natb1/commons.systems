@@ -172,7 +172,7 @@ if [[ -n "$pr" ]]; then
   exit 0
 fi
 
-if ! TITLE=$(gh issue view "$ISSUE" --json title | jq -er '.title'); then
+if ! TITLE=$(gh_issue_view_rest "$ISSUE" | jq -er '.title'); then
   echo "error: failed to fetch title for issue $ISSUE" >&2
   exit 1
 fi

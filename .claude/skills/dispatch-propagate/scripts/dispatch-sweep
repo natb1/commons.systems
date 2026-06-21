@@ -248,8 +248,8 @@ while [[ $i -lt ${#WT_PATHS[@]} ]]; do
     if [[ -n "$wt_num" ]]; then
       issue_num="$wt_num"
       # Per-worktree issue fetch; a failure is isolated (defect 2, #1313).
-      if ! issue_state=$(gh_retry gh issue view "$issue_num" --json state -q .state); then
-        log "ERROR_ISSUE_STATE_FETCH: branch=$wt_branch issue=$issue_num gh issue view failed"
+      if ! issue_state=$(gh_issue_view_rest "$issue_num" | jq -r '.state'); then
+        log "ERROR_ISSUE_STATE_FETCH: branch=$wt_branch issue=$issue_num gh_issue_view_rest failed"
         continue
       fi
       case "$issue_state" in

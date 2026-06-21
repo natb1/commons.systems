@@ -20,6 +20,6 @@ while IFS=$'\t' read -r sib state; do
   if [[ "$state" = "open" ]]; then
     gh issue view "$sib" --json title,body,comments,number,state
   else
-    gh issue view "$sib" --json title,number,state
+    gh_issue_view_rest "$sib"
   fi
 done <<< "$SIBLINGS_TSV"

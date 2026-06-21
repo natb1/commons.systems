@@ -356,15 +356,6 @@ case "$args" in
       echo "{\"title\":\"Issue $num\",\"body\":\"\",\"comments\":[],\"number\":$num,\"state\":\"OPEN\"}"
     fi
     ;;
-  issue\ view\ *\ --json\ title)
-    # dispatch-resolve-worktree create case: gh issue view <num> --json title
-    num=$(echo "$args" | awk '{print $3}')
-    if [[ -f "$STUB_DIR/issue-title-${num}.json" ]]; then
-      cat "$STUB_DIR/issue-title-${num}.json"
-    else
-      echo "{\"title\":\"Issue $num\"}"
-    fi
-    ;;
   issue\ view\ *\ --json\ closedByPullRequestsReferences)
     # dispatch-find-pr cross-check fallback: gh issue view <num> --json closedByPullRequestsReferences
     num=$(echo "$args" | awk '{print $3}')
@@ -602,20 +593,53 @@ case "$args" in
     echo '{}'
     ;;
   api\ repos/*/issues/*)
-    # dispatch-resolve-arg discriminator: gh api repos/{owner}/{repo}/issues/<N>.
-    # The REST issues endpoint returns PRs too; a PR's JSON carries a
-    # "pull_request" key. The fixture file decides issue-vs-PR; an arg-issue-<N>.err
-    # fixture models a non-404 gh failure; absence of either fixture models a 404
-    # (the number is neither an issue nor a PR).
+    # Generic single-issue GET: gh api repos/{owner}/{repo}/issues/<N>. Two
+    # consumers route here (case is first-wins; the 9xxx sentinel arm precedes it):
+    #   - dispatch-resolve-arg discriminator (issue-vs-PR; a PR's JSON carries a
+    #     "pull_request" key — the fixture decides).
+    #   - gh_issue_view_rest (#2257), after the Category-A read swaps off the
+    #     `gh issue view --json` porcelain. The helper consumes the RAW REST object
+    #     and projects/upcases internally, so arg-issue-<N>.json must be in RAW REST
+    #     shape (lowercase "state":"open", state_reason, created_at, labels:[{name}]).
+    # Failure injection (default-absent, so existing tests are unaffected):
+    #   - gh-fail-issue-labels-<N>: HARD (non-transient) failure, exit 1
+    #     UNCONDITIONALLY — gh_retry forwards it (does not retry).
+    #   - issue-view-fail-<N>: TRANSIENT (HTTP 503) failure with a decrementing
+    #     count — gh_retry retries until the count is exhausted, then serves the
+    #     fixture.
+    #   - arg-issue-<N>.err: a non-404 gh failure (used by dispatch-resolve-arg).
+    #   - absence of any fixture models a 404 (number is neither issue nor PR).
     num="${args##*/}"
-    if [[ -f "$STUB_DIR/arg-issue-${num}.json" ]]; then
+    if [[ -f "$STUB_DIR/gh-fail-issue-labels-${num}" ]]; then
+      echo "gh: API error on issues/${num}" >&2
+      exit 1
+    fi
+    if [[ -f "$STUB_DIR/issue-view-fail-${num}" ]]; then
+      remaining=$(cat "$STUB_DIR/issue-view-fail-${num}")
+      if [[ "$remaining" -gt 0 ]]; then
+        echo $((remaining - 1)) > "$STUB_DIR/issue-view-fail-${num}"
+        echo "HTTP 503: Service Unavailable" >&2
+        exit 1
+      fi
+    fi
+    if [[ -f "$STUB_DIR/arg-issue-${num}.notfound" ]]; then
+      # Positive 404 carve-out: dispatch-resolve-arg's existence probe asks "is
+      # this number an issue?" and must see a real 404 (it maps 404→exit 2,
+      # distinct from the arg-issue-<N>.err other-error→exit 1 path). Absent by
+      # default so the empty-labels default below serves the common case.
+      echo "gh: Not Found (HTTP 404)" >&2
+      exit 1
+    elif [[ -f "$STUB_DIR/arg-issue-${num}.json" ]]; then
       cat "$STUB_DIR/arg-issue-${num}.json"
     elif [[ -f "$STUB_DIR/arg-issue-${num}.err" ]]; then
       cat "$STUB_DIR/arg-issue-${num}.err" >&2
       exit 1
     else
-      echo "gh: Not Found (HTTP 404)" >&2
-      exit 1
+      # Default: an existing OPEN issue with no labels — the production-faithful
+      # state for a dispatch target whose specific labels a test does not assert
+      # (mirrors the retired `--json labels` arm's `{"labels":[]}` default).
+      # Raw REST shape; the helper projects/upcases it.
+      printf '{"number":%s,"title":"","body":"","state":"open","state_reason":null,"created_at":null,"labels":[],"assignees":[]}\n' "$num"
     fi
     ;;
   api\ repos/*/pulls/*)
@@ -652,37 +676,6 @@ case "$args" in
     # dispatch-complete-phase / dispatch-apply-office-hours create the label only
     # when the apply reported it missing.
     echo "$args" >> "$STUB_DIR/gh-label-create.log"
-    ;;
-  issue\ view\ *\ --json\ labels)
-    # dispatch-apply-office-hours idempotency read: gh issue view <num> --json labels.
-    # $STUB_DIR/issue-labels-<num>.json supplies the labels object; absence means
-    # the issue carries no labels.
-    num=$(echo "$args" | awk '{print $3}')
-    # #1594: a per-issue HARD-failure marker makes the stub emit a deterministic
-    # (non-transient) error and exit 1 UNCONDITIONALLY, so gh_retry does NOT
-    # retry — it forwards the real failure. Mirrors the gh-fail-sub_issues-<N> /
-    # gh-fail-blocked_by-<num> marker convention. Absent by default → every
-    # existing test is unaffected. Checked BEFORE the transient marker below.
-    if [[ -f "$STUB_DIR/gh-fail-issue-labels-${num}" ]]; then
-      echo "gh: API error on issues/${num} --json labels" >&2
-      exit 1
-    fi
-    # #1314: a per-issue fail-count sentinel makes the stub emit a transient
-    # (HTTP 503) error and decrement the count, so gh_retry retries. Absent by
-    # default → every existing test is unaffected; exhausted → serve labels.
-    if [[ -f "$STUB_DIR/issue-view-fail-${num}" ]]; then
-      remaining=$(cat "$STUB_DIR/issue-view-fail-${num}")
-      if [[ "$remaining" -gt 0 ]]; then
-        echo $((remaining - 1)) > "$STUB_DIR/issue-view-fail-${num}"
-        echo "HTTP 503: Service Unavailable" >&2
-        exit 1
-      fi
-    fi
-    if [[ -f "$STUB_DIR/issue-labels-${num}.json" ]]; then
-      cat "$STUB_DIR/issue-labels-${num}.json"
-    else
-      echo '{"labels":[]}'
-    fi
     ;;
   issue\ edit\ *)
     # Multiple scripts (dispatch-apply-office-hours, dispatch-qa-apply-main-qa-labels, ...)
@@ -856,39 +849,18 @@ case "$args" in
       echo '{"items":[],"totalCount":0}'
     fi
     ;;
-  issue\ view\ *\ --json\ state\ --jq\ .state)
-    # dispatch-close-resolved state read (#1456): gh issue view <num> --json state --jq .state.
-    # The real --jq flag projects .state to a bare string; the fixture file
-    # holds {"state":"..."}, so project it here. Absent fixture → OPEN.
-    num=$(printf '%s' "$args" | awk '{print $3}')
-    if [[ -f "$STUB_DIR/issue-state-${num}.json" ]]; then
-      jq -r .state "$STUB_DIR/issue-state-${num}.json"
-    else
-      echo "OPEN"
-    fi
-    ;;
   issue\ close\ *)
     # dispatch-close-resolved (#1456): gh issue close <num> --reason completed --comment ...
     echo "$args" >> "$STUB_DIR/gh-issue-close.log"
     ;;
-  issue\ view\ *\ --json\ state\ -q\ .state)
-    # Closed-issue router guard (#1845): gh issue view <num> --json state -q .state.
-    # The -q flag projects .state to a bare string; the fixture file holds
-    # {"state":"..."}, so project it here. Absent fixture → OPEN (every existing
-    # route test makes this call and must keep routing normally).
-    num=$(printf '%s' "$args" | awk '{print $3}')
-    if [[ -f "$STUB_DIR/issue-state-${num}.json" ]]; then
-      jq -r .state "$STUB_DIR/issue-state-${num}.json"
-    else
-      echo "OPEN"
-    fi
-    ;;
   issue\ view\ *\ --json\ *)
-    # Generic catch-all for `gh issue view <num> --json <FIELDS>` calls that do
-    # not match the specific arms above (e.g. issue-sub-issues default/explicit
-    # field sets). Logs the FIELDS token so tests can assert which fields were
-    # requested, then serves issue-<num>.json if present, else a minimal default
-    # carrying only number/state/stateReason (the hot-path lean set, #1593).
+    # Generic catch-all for `gh issue view <num> --json <FIELDS>` calls from
+    # call sites that still use the GraphQL porcelain (NOT migrated to
+    # gh_issue_view_rest in #2257): dispatch-digest-window, dispatch-drift-scan,
+    # dispatch-context-pack, issue-primary/parent/blocking, and the issue-siblings
+    # OPEN branch (which needs comments). Logs the FIELDS token so tests can assert
+    # which fields were requested, then serves issue-<num>.json if present, else a
+    # minimal default carrying only number/state/stateReason.
     num=$(printf '%s' "$args" | awk '{print $3}')
     fields="${args##* --json }"
     echo "$fields" >> "$STUB_DIR/gh-issue-view-fields.log"
@@ -2080,11 +2052,12 @@ teardown
 echo "=== dispatch-phase ==="
 
 # 1. No PR, no dispatch:planned label → plan (the issue has not been planned yet).
-# dispatch-phase fetches the issue's labels (gh issue view <num> --json labels);
-# absence of issue-labels-42.json means the issue carries no labels.
+# dispatch-phase fetches the issue via gh_issue_view_rest; an empty-labels issue
+# object (arg-issue-42.json) means the issue carries no labels.
 echo "Test: no PR, unplanned → plan"
 setup
 echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf '{"state":"open","labels":[]}\n' > "$STUB_DIR/arg-issue-42.json"
 result=$("$TMPDIR_TEST/dispatch-phase" "42")
 assert_eq "no PR, unplanned → plan" "plan" "$result"
 teardown
@@ -2093,7 +2066,7 @@ teardown
 echo "Test: no PR + dispatch:planned → implement"
 setup
 echo '[]' > "$STUB_DIR/pr-list-full.json"
-printf '{"labels":[{"name":"dispatch:planned"}]}\n' > "$STUB_DIR/issue-labels-42.json"
+printf '{"state":"open","labels":[{"name":"dispatch:planned"}]}\n' > "$STUB_DIR/arg-issue-42.json"
 result=$("$TMPDIR_TEST/dispatch-phase" "42")
 assert_eq "no PR + dispatch:planned → implement" "implement" "$result"
 teardown
@@ -2102,7 +2075,7 @@ teardown
 echo "Test: no PR + non-planned label → plan"
 setup
 echo '[]' > "$STUB_DIR/pr-list-full.json"
-printf '{"labels":[{"name":"help wanted"}]}\n' > "$STUB_DIR/issue-labels-42.json"
+printf '{"state":"open","labels":[{"name":"help wanted"}]}\n' > "$STUB_DIR/arg-issue-42.json"
 result=$("$TMPDIR_TEST/dispatch-phase" "42")
 assert_eq "no PR + non-planned label → plan" "plan" "$result"
 teardown
@@ -2129,7 +2102,7 @@ echo "Test: no PR + transient-then-succeed gh → retries, derives implement"
 setup
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 echo 2 > "$STUB_DIR/issue-view-fail-42"
-printf '{"labels":[{"name":"dispatch:planned"}]}\n' > "$STUB_DIR/issue-labels-42.json"
+printf '{"state":"open","labels":[{"name":"dispatch:planned"}]}\n' > "$STUB_DIR/arg-issue-42.json"
 result=$("$TMPDIR_TEST/dispatch-phase" "42")
 assert_eq "transient-then-succeed → implement" "implement" "$result"
 teardown
@@ -2264,6 +2237,7 @@ echo "Test: issue 6 does not match branch 60-foo"
 setup
 printf '[%s]\n' "$(make_pr 10 "60-foo" "true" "$NO_LABELS" "$GREEN_ROLLUP")" \
   > "$STUB_DIR/pr-list-full.json"
+printf '{"state":"open","labels":[]}\n' > "$STUB_DIR/arg-issue-6.json"
 result=$("$TMPDIR_TEST/dispatch-phase" "6")
 assert_eq "issue 6 does not match branch 60-foo → plan" "plan" "$result"
 teardown
@@ -2687,6 +2661,7 @@ echo "Test: no PR, unplanned → INVOKE /plan-issue"
 setup
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+echo '{"state":"open","labels":[]}' > "$STUB_DIR/arg-issue-42.json"
 route_run 42 /wt/42-my-feature
 assert_eq "no PR, unplanned → INVOKE /plan-issue (directive)" "INVOKE /plan-issue" "$ROUTE_OUT"
 assert_eq "no PR, unplanned → INVOKE /plan-issue (exit 0)" "0" "$ROUTE_RC"
@@ -2704,6 +2679,7 @@ echo "Test: provision stdout chatter does not leak into the directive"
 setup
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+echo '{"state":"open","labels":[]}' > "$STUB_DIR/arg-issue-42.json"
 cat > "$TMPDIR_TEST/dispatch-provision-worktree" <<'STUB'
 #!/usr/bin/env bash
 printf 'Updating 648157c..ea3a172\nFast-forward\n 2 files changed, 27 insertions(+)\n'
@@ -2723,7 +2699,7 @@ echo "Test: no PR + dispatch:planned → INVOKE /implement"
 setup
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
-printf '{"labels":[{"name":"dispatch:planned"}]}\n' > "$STUB_DIR/issue-labels-42.json"
+printf '{"state":"open","labels":[{"name":"dispatch:planned"}]}\n' > "$STUB_DIR/arg-issue-42.json"
 route_run 42 /wt/42-my-feature
 assert_eq "no PR + dispatch:planned → INVOKE /implement (directive)" \
   "INVOKE /implement" "$ROUTE_OUT"
@@ -2740,7 +2716,7 @@ echo "Test: closed issue → STOP closed"
 setup
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 echo "/wt/43-closed-feature" > "$STUB_DIR/worktree-toplevel.txt"
-echo '{"state":"CLOSED"}' > "$STUB_DIR/issue-state-43.json"
+echo '{"state":"closed"}' > "$STUB_DIR/arg-issue-43.json"
 route_run 43 /wt/43-closed-feature
 assert_eq "closed issue → STOP closed (directive)" "STOP closed" "$ROUTE_OUT"
 assert_eq "closed issue → STOP closed (exit 0)" "0" "$ROUTE_RC"
@@ -3015,7 +2991,7 @@ echo '[]' > "$STUB_DIR/pr-list-full.json"
 echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
 printf '{"statements":[{"key":"acme","dir":"/s","repo":"o/r","label":"statements:acme","project":"p"}]}\n' \
   > "$DISPATCH_CONFIG_DIR/statements.json"
-printf '{"labels":[{"name":"statements:acme"}]}\n' > "$STUB_DIR/issue-labels-42.json"
+printf '{"state":"open","labels":[{"name":"statements:acme"}]}\n' > "$STUB_DIR/arg-issue-42.json"
 route_run 42 /wt/42-my-feature
 assert_eq "no PR + statements label → INVOKE /budget-parse-job (directive)" \
   "INVOKE /budget-parse-job" "$ROUTE_OUT"
@@ -3030,7 +3006,7 @@ echo '[]' > "$STUB_DIR/pr-list-full.json"
 echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
 printf '{"statements":[{"key":"acme","dir":"/s","repo":"o/r","label":"statements:acme","project":"p"}]}\n' \
   > "$DISPATCH_CONFIG_DIR/statements.json"
-printf '{"labels":[{"name":"help wanted"}]}\n' > "$STUB_DIR/issue-labels-42.json"
+printf '{"state":"open","labels":[{"name":"help wanted"}]}\n' > "$STUB_DIR/arg-issue-42.json"
 route_run 42 /wt/42-my-feature
 assert_eq "no PR + non-statements label → INVOKE /plan-issue (directive)" \
   "INVOKE /plan-issue" "$ROUTE_OUT"
@@ -3044,6 +3020,7 @@ echo "Test: no PR + no statements config → INVOKE /plan-issue"
 setup
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+echo '{"state":"open","labels":[]}' > "$STUB_DIR/arg-issue-42.json"
 route_run 42 /wt/42-my-feature
 assert_eq "no PR + no statements config → INVOKE /plan-issue (directive)" \
   "INVOKE /plan-issue" "$ROUTE_OUT"
@@ -3063,7 +3040,7 @@ setup
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 echo "/wt/55-epic" > "$STUB_DIR/worktree-toplevel.txt"
 printf '{"labels":["epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
-printf '{"labels":[{"name":"epic"}]}\n' > "$STUB_DIR/issue-labels-55.json"
+printf '{"state":"open","labels":[{"name":"epic"}]}\n' > "$STUB_DIR/arg-issue-55.json"
 printf '[{"number":561},{"number":562}]\n' > "$STUB_DIR/subissues-55.json"
 printf '{"title":"c","body":"","comments":[],"number":561,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
   > "$STUB_DIR/issue-561.json"
@@ -3083,6 +3060,7 @@ echo "Test: no PR + not a spent epic → INVOKE /plan-issue"
 setup
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 echo "/wt/56-foo" > "$STUB_DIR/worktree-toplevel.txt"
+echo '{"state":"open","labels":[]}' > "$STUB_DIR/arg-issue-56.json"
 route_run 56 /wt/56-foo
 assert_eq "no PR + not a spent epic → INVOKE /plan-issue (directive)" \
   "INVOKE /plan-issue" "$ROUTE_OUT"
@@ -3099,7 +3077,7 @@ echo '[]' > "$STUB_DIR/pr-list-full.json"
 echo "/wt/57-stmt" > "$STUB_DIR/worktree-toplevel.txt"
 printf '{"statements":[{"key":"acme","dir":"/s","repo":"o/r","label":"statements:acme","project":"p"}]}\n' \
   > "$DISPATCH_CONFIG_DIR/statements.json"
-printf '{"labels":[{"name":"statements:acme"}]}\n' > "$STUB_DIR/issue-labels-57.json"
+printf '{"state":"open","labels":[{"name":"statements:acme"}]}\n' > "$STUB_DIR/arg-issue-57.json"
 printf '[{"number":571}]\n' > "$STUB_DIR/subissues-57.json"
 printf '{"title":"c","body":"","comments":[],"number":571,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
   > "$STUB_DIR/issue-571.json"
@@ -3128,7 +3106,7 @@ echo "=== dispatch-epic-resolved-candidate ==="
 echo "Test: candidate — 2 children all CLOSED/COMPLETED → exit 0"
 setup
 printf '{"labels":["epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
-printf '{"labels":[{"name":"epic"}]}\n' > "$STUB_DIR/issue-labels-61.json"
+printf '{"state":"open","labels":[{"name":"epic"}]}\n' > "$STUB_DIR/arg-issue-61.json"
 printf '[{"number":611},{"number":612}]\n' > "$STUB_DIR/subissues-61.json"
 printf '{"title":"c","body":"","comments":[],"number":611,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
   > "$STUB_DIR/issue-611.json"
@@ -3142,7 +3120,7 @@ teardown
 echo "Test: candidate — lowercase closed/completed → exit 0"
 setup
 printf '{"labels":["epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
-printf '{"labels":[{"name":"epic"}]}\n' > "$STUB_DIR/issue-labels-62.json"
+printf '{"state":"open","labels":[{"name":"epic"}]}\n' > "$STUB_DIR/arg-issue-62.json"
 printf '[{"number":621}]\n' > "$STUB_DIR/subissues-62.json"
 printf '{"title":"c","body":"","comments":[],"number":621,"state":"closed","stateReason":"completed"}\n' \
   > "$STUB_DIR/issue-621.json"
@@ -3154,7 +3132,7 @@ teardown
 echo "Test: not a candidate — zero sub-issues → exit 1"
 setup
 printf '{"labels":["epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
-printf '{"labels":[{"name":"epic"}]}\n' > "$STUB_DIR/issue-labels-63.json"
+printf '{"state":"open","labels":[{"name":"epic"}]}\n' > "$STUB_DIR/arg-issue-63.json"
 printf '[]\n' > "$STUB_DIR/subissues-63.json"
 if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 63 >/dev/null 2>&1; then rc=0; else rc=$?; fi
 assert_eq "not a candidate: zero sub-issues → exit 1" "1" "$rc"
@@ -3164,7 +3142,7 @@ teardown
 echo "Test: not a candidate — an OPEN child → exit 1"
 setup
 printf '{"labels":["epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
-printf '{"labels":[{"name":"epic"}]}\n' > "$STUB_DIR/issue-labels-64.json"
+printf '{"state":"open","labels":[{"name":"epic"}]}\n' > "$STUB_DIR/arg-issue-64.json"
 printf '[{"number":641},{"number":642}]\n' > "$STUB_DIR/subissues-64.json"
 printf '{"title":"c","body":"","comments":[],"number":641,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
   > "$STUB_DIR/issue-641.json"
@@ -3178,7 +3156,7 @@ teardown
 echo "Test: not a candidate — CLOSED/NOT_PLANNED child → exit 1"
 setup
 printf '{"labels":["epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
-printf '{"labels":[{"name":"epic"}]}\n' > "$STUB_DIR/issue-labels-65.json"
+printf '{"state":"open","labels":[{"name":"epic"}]}\n' > "$STUB_DIR/arg-issue-65.json"
 printf '[{"number":651}]\n' > "$STUB_DIR/subissues-65.json"
 printf '{"title":"c","body":"","comments":[],"number":651,"state":"CLOSED","stateReason":"NOT_PLANNED"}\n' \
   > "$STUB_DIR/issue-651.json"
@@ -3190,7 +3168,7 @@ teardown
 echo "Test: not a candidate — CLOSED child with null stateReason → exit 1"
 setup
 printf '{"labels":["epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
-printf '{"labels":[{"name":"epic"}]}\n' > "$STUB_DIR/issue-labels-66.json"
+printf '{"state":"open","labels":[{"name":"epic"}]}\n' > "$STUB_DIR/arg-issue-66.json"
 printf '[{"number":661}]\n' > "$STUB_DIR/subissues-66.json"
 printf '{"title":"c","body":"","comments":[],"number":661,"state":"CLOSED"}\n' \
   > "$STUB_DIR/issue-661.json"
@@ -3202,7 +3180,7 @@ teardown
 echo "Test: hard error — issue-sub-issues fails → exit 3"
 setup
 printf '{"labels":["epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
-printf '{"labels":[{"name":"epic"}]}\n' > "$STUB_DIR/issue-labels-67.json"
+printf '{"state":"open","labels":[{"name":"epic"}]}\n' > "$STUB_DIR/arg-issue-67.json"
 touch "$STUB_DIR/gh-fail-sub_issues-67"
 if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 67 >/dev/null 2>&1; then rc=0; else rc=$?; fi
 assert_eq "hard error: issue-sub-issues fails → exit 3" "3" "$rc"
@@ -3219,7 +3197,7 @@ teardown
 echo "Test: gate — epic configured but issue lacks the label → exit 1"
 setup
 printf '{"labels":["epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
-printf '{"labels":[{"name":"enhancement"}]}\n' > "$STUB_DIR/issue-labels-68.json"
+printf '{"state":"open","labels":[{"name":"enhancement"}]}\n' > "$STUB_DIR/arg-issue-68.json"
 printf '[{"number":681}]\n' > "$STUB_DIR/subissues-68.json"
 printf '{"title":"c","body":"","comments":[],"number":681,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
   > "$STUB_DIR/issue-681.json"
@@ -3231,7 +3209,7 @@ teardown
 # regardless of sub-issue state (all children CLOSED/COMPLETED here).
 echo "Test: gate — no epic config → exit 1 regardless of sub-issue state"
 setup
-printf '{"labels":[{"name":"epic"}]}\n' > "$STUB_DIR/issue-labels-69.json"
+printf '{"state":"open","labels":[{"name":"epic"}]}\n' > "$STUB_DIR/arg-issue-69.json"
 printf '[{"number":691}]\n' > "$STUB_DIR/subissues-69.json"
 printf '{"title":"c","body":"","comments":[],"number":691,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
   > "$STUB_DIR/issue-691.json"
@@ -3250,71 +3228,55 @@ assert_eq "gate: label fetch hard failure → exit 3" "3" "$rc"
 teardown
 
 # ============================================================================
-# issue-sub-issues field-forwarding tests (#1593)
+# issue-sub-issues output-shape tests (#2257)
 # ============================================================================
 echo ""
-echo "=== issue-sub-issues field forwarding ==="
+echo "=== issue-sub-issues output shape ==="
 
-# These tests run the REAL issue-sub-issues script (not the fake that setup()
-# installs for dispatch-trace-leaf). After setup, the fake is overwritten with
-# the real script so any --json field set it requests hits the stub and is
-# logged to gh-issue-view-fields.log. This is the only way to assert which
-# fields the real script actually requests.
+# issue-sub-issues now emits one gh_issue_view_rest object per sub-issue (#2257),
+# replacing the GraphQL `gh issue view --json <FIELDS>` porcelain. The former
+# FIELDS arg (#1593) is gone: the helper has a FIXED projection. So the old
+# field-forwarding tests (which asserted the requested --json field set) are
+# retired in favor of asserting the EMITTED object shape — a stronger check of
+# the actual consumer contract (number/state/stateReason). Children route to the
+# generic `api repos/*/issues/<N>` stub arm by number → arg-issue-<N>.json
+# supplies each child's raw REST object.
+#
+# These tests run the REAL issue-sub-issues script (setup() installs a fake for
+# dispatch-trace-leaf; we overwrite it with the real script here).
 
-# A. Default fields: one child → stub logs exactly "number,state,stateReason".
-echo "Test: issue-sub-issues — default fields → number,state,stateReason"
+# A. One child → exactly one emitted object carrying number/state/stateReason.
+# (Leanness via #1593's narrow --json field set is superseded by the helper's
+# fixed projection; this epic's goal is GraphQL rate-limit relief, not payload
+# size. The helper does project body/labels/etc., which the consumers ignore.)
+echo "Test: issue-sub-issues — one child → one object with number/state/stateReason"
 setup
 cp "$SCRIPT_DIR/issue-sub-issues" "$TMPDIR_TEST/issue-sub-issues"
 chmod +x "$TMPDIR_TEST/issue-sub-issues"
 printf '[{"number":801}]\n' > "$STUB_DIR/subissues-80.json"
-"$TMPDIR_TEST/issue-sub-issues" 80 >/dev/null
-logged=$(cat "$STUB_DIR/gh-issue-view-fields.log" 2>/dev/null || true)
-assert_eq "default fields: logged fields" "number,state,stateReason" "$logged"
+printf '{"number":801,"state":"closed","state_reason":"completed"}\n' > "$STUB_DIR/arg-issue-801.json"
+out=$("$TMPDIR_TEST/issue-sub-issues" 80)
+assert_eq "one child: object count" "1" "$(printf '%s' "$out" | jq -s 'length')"
+assert_eq "one child: number" "801" "$(printf '%s' "$out" | jq -s '.[0].number')"
+assert_eq "one child: state upcased" "CLOSED" "$(printf '%s' "$out" | jq -rs '.[0].state')"
+assert_eq "one child: stateReason upcased" "COMPLETED" "$(printf '%s' "$out" | jq -rs '.[0].stateReason')"
 teardown
 
-# B. Default fields: no body, no comments in the logged field set.
-echo "Test: issue-sub-issues — default fields contain no body or comments"
-setup
-cp "$SCRIPT_DIR/issue-sub-issues" "$TMPDIR_TEST/issue-sub-issues"
-chmod +x "$TMPDIR_TEST/issue-sub-issues"
-printf '[{"number":811}]\n' > "$STUB_DIR/subissues-81.json"
-"$TMPDIR_TEST/issue-sub-issues" 81 >/dev/null
-logged=$(cat "$STUB_DIR/gh-issue-view-fields.log" 2>/dev/null || true)
-assert_eq "default fields: no body in field set" "0" "$(printf '%s' "$logged" | grep -c 'body' || true)"
-assert_eq "default fields: no comments in field set" "0" "$(printf '%s' "$logged" | grep -c 'comments' || true)"
-teardown
-
-# C. Explicit fields arg: forwarded verbatim → stub logs exactly "number,state".
-echo "Test: issue-sub-issues — explicit fields arg forwarded verbatim"
-setup
-cp "$SCRIPT_DIR/issue-sub-issues" "$TMPDIR_TEST/issue-sub-issues"
-chmod +x "$TMPDIR_TEST/issue-sub-issues"
-printf '[{"number":821}]\n' > "$STUB_DIR/subissues-82.json"
-"$TMPDIR_TEST/issue-sub-issues" 82 "number,state" >/dev/null
-logged=$(cat "$STUB_DIR/gh-issue-view-fields.log" 2>/dev/null || true)
-assert_eq "explicit fields: logged fields" "number,state" "$logged"
-teardown
-
-# D. Two children: each child produces one log line → two lines total.
-echo "Test: issue-sub-issues — two children → two field log entries"
+# B. Two children → two emitted objects, each with the projected keys (the
+# per-child-emission invariant the old test D guarded, now asserted on output).
+echo "Test: issue-sub-issues — two children → two objects, both with number/state"
 setup
 cp "$SCRIPT_DIR/issue-sub-issues" "$TMPDIR_TEST/issue-sub-issues"
 chmod +x "$TMPDIR_TEST/issue-sub-issues"
 printf '[{"number":831},{"number":832}]\n' > "$STUB_DIR/subissues-83.json"
-"$TMPDIR_TEST/issue-sub-issues" 83 >/dev/null
-line_count=$(wc -l < "$STUB_DIR/gh-issue-view-fields.log" | tr -d ' ')
-assert_eq "two children: two log lines" "2" "$line_count"
-teardown
-
-# E. Empty FIELDS arg: guard fires → exit 2 with descriptive stderr (before any API call).
-echo "Test: issue-sub-issues — empty FIELDS arg → exit 2 with error"
-setup
-cp "$SCRIPT_DIR/issue-sub-issues" "$TMPDIR_TEST/issue-sub-issues"
-chmod +x "$TMPDIR_TEST/issue-sub-issues"
-err=$("$TMPDIR_TEST/issue-sub-issues" 84 "" 2>&1 1>/dev/null) && rc=0 || rc=$?
-assert_eq "empty FIELDS: exit code 2" "2" "$rc"
-assert_eq "empty FIELDS: descriptive stderr" "1" \
-  "$(printf '%s' "$err" | grep -c 'FIELDS arg must not be empty' || true)"
+printf '{"number":831,"state":"open","state_reason":null}\n' > "$STUB_DIR/arg-issue-831.json"
+printf '{"number":832,"state":"closed","state_reason":"completed"}\n' > "$STUB_DIR/arg-issue-832.json"
+out=$("$TMPDIR_TEST/issue-sub-issues" 83)
+assert_eq "two children: object count" "2" "$(printf '%s' "$out" | jq -s 'length')"
+assert_eq "two children: numbers" "831 832" \
+  "$(printf '%s' "$out" | jq -rs 'map(.number) | join(" ")')"
+assert_eq "two children: all carry state" "2" \
+  "$(printf '%s' "$out" | jq -s '[.[] | select(has("state"))] | length')"
 teardown
 
 # ============================================================================
@@ -3336,7 +3298,7 @@ echo "=== dispatch-close-resolved ==="
 # (a) OPEN issue + JOB_DIR set → closes the issue and writes the sentinel.
 echo "Test: close-resolved — OPEN issue + JOB_DIR → close + sentinel"
 setup
-echo '{"state":"OPEN"}' > "$STUB_DIR/issue-state-700.json"
+echo '{"state":"open"}' > "$STUB_DIR/arg-issue-700.json"
 export CLAUDE_JOB_DIR="$TMPDIR_TEST/job"
 mkdir -p "$CLAUDE_JOB_DIR"
 "$TMPDIR_TEST/dispatch-close-resolved" 700 --reason "epic done"
@@ -3360,7 +3322,7 @@ teardown
 # still writes the sentinel (re-entry idempotency).
 echo "Test: close-resolved — already-CLOSED issue + JOB_DIR → no re-close, sentinel still written"
 setup
-echo '{"state":"CLOSED"}' > "$STUB_DIR/issue-state-701.json"
+echo '{"state":"closed"}' > "$STUB_DIR/arg-issue-701.json"
 export CLAUDE_JOB_DIR="$TMPDIR_TEST/job"
 mkdir -p "$CLAUDE_JOB_DIR"
 "$TMPDIR_TEST/dispatch-close-resolved" 701 --reason "epic done"
@@ -3383,7 +3345,7 @@ teardown
 echo "Test: close-resolved — JOB_DIR unset + OPEN issue → no sentinel, exit 0"
 setup
 unset CLAUDE_JOB_DIR
-echo '{"state":"OPEN"}' > "$STUB_DIR/issue-state-702.json"
+echo '{"state":"open"}' > "$STUB_DIR/arg-issue-702.json"
 if "$TMPDIR_TEST/dispatch-close-resolved" 702 --reason "epic done" >/dev/null 2>&1; then rc=0; else rc=$?; fi
 assert_eq "close-resolved no-JOB_DIR: exit 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
@@ -3457,10 +3419,12 @@ if ( "$TMPDIR_TEST/dispatch-resolve-arg" "719" ) >/dev/null 2>&1; then rc=0; els
 assert_eq "PR closing multiple issues → exit 4" "4" "$rc"
 teardown
 
-# 6. Number is neither an issue nor a PR (no fixture → stub 404s) → exit 2.
+# 6. Number is neither an issue nor a PR (stub 404s) → exit 2.
 echo "Test: unknown number → exit 2"
 setup
-# No arg-issue-999.json: the stub returns 404.
+# arg-issue-999.notfound forces the issues GET to a real 404 (the number is
+# neither an issue nor a PR), overriding the stub's empty-labels default.
+touch "$STUB_DIR/arg-issue-999.notfound"
 if ( "$TMPDIR_TEST/dispatch-resolve-arg" "999" ) >/dev/null 2>&1; then rc=0; else rc=$?; fi
 assert_eq "neither issue nor PR → exit 2" "2" "$rc"
 teardown
@@ -8433,6 +8397,7 @@ log_state() {
 # to the ISSUE and posts a why-comment containing the reason text.
 echo "Test: label absent → apply to issue + post why-comment"
 setup
+echo '{"state":"open","labels":[]}' > "$STUB_DIR/arg-issue-42.json"
 "$TMPDIR_TEST/dispatch-apply-office-hours" 42 "phase exited before completion"
 assert_eq "applies dispatch:office-hours to the issue" \
   "issue edit 42 --add-label dispatch:office-hours" "$(cat "$STUB_DIR/gh-issue-edit.log")"
@@ -8456,7 +8421,7 @@ teardown
 # comment.
 echo "Test: label already present → no edit, no duplicate comment"
 setup
-echo '{"labels":[{"name":"dispatch:office-hours"}]}' > "$STUB_DIR/issue-labels-42.json"
+echo '{"state":"open","labels":[{"name":"dispatch:office-hours"}]}' > "$STUB_DIR/arg-issue-42.json"
 "$TMPDIR_TEST/dispatch-apply-office-hours" 42 "phase ran but did not advance"
 assert_eq "idempotent: no label edit" "absent" "$(log_state gh-issue-edit.log)"
 assert_eq "idempotent: no duplicate comment" "absent" "$(log_state gh-issue-comment.log)"
@@ -8502,6 +8467,7 @@ teardown
 # retries the edit, then posts the comment.
 echo "Test: label not found → create (FBCA04) then retry + comment"
 setup
+echo '{"state":"open","labels":[]}' > "$STUB_DIR/arg-issue-42.json"
 echo "label-missing" > "$STUB_DIR/issue-edit-mode"
 "$TMPDIR_TEST/dispatch-apply-office-hours" 42 "phase exited before completion"
 TOTAL=$((TOTAL + 1))
@@ -8587,6 +8553,7 @@ echo "=== dispatch-qa-apply-main-qa-labels (#1758) ==="
 # script exits 0. No label create needed.
 echo "Test: happy path → remove help-wanted, add main-qa, route to office-hours; exit 0"
 setup
+echo '{"state":"open","labels":[]}' > "$STUB_DIR/arg-issue-42.json"
 if "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" 42; then rc=0; else rc=$?; fi
 assert_eq "happy path: exit 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
@@ -8615,6 +8582,7 @@ teardown
 # apply main-qa and dispatch:office-hours, exiting 0.
 echo "Test: remove-label-missing → tolerated, main-qa and office-hours still applied; exit 0"
 setup
+echo '{"state":"open","labels":[]}' > "$STUB_DIR/arg-issue-42.json"
 echo "remove-label-missing" > "$STUB_DIR/issue-edit-mode"
 if "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" 42; then rc=0; else rc=$?; fi
 assert_eq "not-found removal tolerated, exit 0" "0" "$rc"
@@ -8644,6 +8612,7 @@ teardown
 # unaffected.
 echo "Test: main-qa-missing → create with canonical metadata, retry add, office-hours unaffected; exit 0"
 setup
+echo '{"state":"open","labels":[]}' > "$STUB_DIR/arg-issue-42.json"
 echo "main-qa-missing" > "$STUB_DIR/issue-edit-mode"
 if "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" 42; then rc=0; else rc=$?; fi
 assert_eq "lazy create: exit 0" "0" "$rc"
@@ -8866,7 +8835,7 @@ teardown
 # 4. No matching worktree → create <N>-<slug> from the issue title.
 echo "Test: no worktree → create <N>-<slug>"
 setup
-echo '{"title":"Add a feature"}' > "$STUB_DIR/issue-title-42.json"
+echo '{"state":"open","title":"Add a feature"}' > "$STUB_DIR/arg-issue-42.json"
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
 assert_eq "no worktree → create <N>-<slug>" "create 42-add-a-feature" "$result"
 teardown
@@ -8875,7 +8844,7 @@ teardown
 #    to a lowercase dash-joined slug.
 echo "Test: title sanitization → create"
 setup
-printf '{"title":"  Fix: The Foo/Bar Widget!  "}' > "$STUB_DIR/issue-title-7.json"
+printf '{"state":"open","title":"  Fix: The Foo/Bar Widget!  "}' > "$STUB_DIR/arg-issue-7.json"
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 7 explicit)
 assert_eq "messy title sanitized → create" "create 7-fix-the-foo-bar-widget" "$result"
 teardown
@@ -8884,8 +8853,8 @@ teardown
 #    WorktreeCreate hook form (acceptance criterion 2).
 echo "Test: long title truncated to <= 32-char branch → create"
 setup
-echo '{"title":"Extract the worktree resolution logic into a dedicated script"}' \
-  > "$STUB_DIR/issue-title-656.json"
+echo '{"state":"open","title":"Extract the worktree resolution logic into a dedicated script"}' \
+  > "$STUB_DIR/arg-issue-656.json"
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 656 explicit)
 assert_eq "long title truncated → exact create line" \
   "create 656-extract-the-worktree-resolut" "$result"
@@ -8934,7 +8903,7 @@ echo "Test: only a non-matching worktree → create"
 setup
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/99-other\nHEAD def456\nbranch refs/heads/99-other\n\n' \
   > "$STUB_DIR/worktree-list.txt"
-echo '{"title":"My Task"}' > "$STUB_DIR/issue-title-42.json"
+echo '{"state":"open","title":"My Task"}' > "$STUB_DIR/arg-issue-42.json"
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 queue)
 assert_eq "non-matching worktree → create" "create 42-my-task" "$result"
 teardown
@@ -8957,7 +8926,7 @@ teardown
 # 10. A title with no alphanumerics sanitizes to an empty slug → exit 1.
 echo "Test: title with no alphanumerics → empty-slug error"
 setup
-echo '{"title":"!!!"}' > "$STUB_DIR/issue-title-42.json"
+echo '{"state":"open","title":"!!!"}' > "$STUB_DIR/arg-issue-42.json"
 if "$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit 2>/dev/null; then rc=0; else rc=$?; fi
 assert_eq "empty-slug title exits non-zero" "1" "$rc"
 teardown
@@ -8981,7 +8950,7 @@ teardown
 #      create logic is preserved for the genuine implement phase.
 echo "Test: no worktree + no PR → create <N>-<slug> (find-pr fall-through, AC #5)"
 setup
-echo '{"title":"Add a feature"}' > "$STUB_DIR/issue-title-42.json"
+echo '{"state":"open","title":"Add a feature"}' > "$STUB_DIR/arg-issue-42.json"
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
 assert_eq "no worktree + no PR → create <N>-<slug>" "create 42-add-a-feature" "$result"
 teardown
@@ -8995,7 +8964,7 @@ teardown
 #      sleep under the lock.
 echo "Test: #1612 create path forces dispatch-find-pr retry delay 0 under the lock"
 setup
-echo '{"title":"Add a feature"}' > "$STUB_DIR/issue-title-42.json"
+echo '{"state":"open","title":"Add a feature"}' > "$STUB_DIR/arg-issue-42.json"
 # Probe find-pr: record the retry delay observed, then return empty (no PR →
 # fall through to fresh-slug create). Overwrites the real copy setup installed.
 cat > "$TMPDIR_TEST/dispatch-find-pr" <<'PROBE'
@@ -9151,14 +9120,13 @@ teardown
 # ----------------------------------------------------------------------------
 
 # 19a. PR number passed as the issue key → reject before the create-path slug.
-#      arg-issue-922.json carries "pull_request"; an issue-title-922.json is also
-#      seeded so the test proves the guard fires *before* the create path (no
-#      decision line despite a usable title fixture).
+#      arg-issue-922.json carries "pull_request" AND a usable title, so the test
+#      proves the guard fires *before* the create path (no decision line despite a
+#      usable title in the issue object).
 echo "Test: PR number as issue key → reject (no stray <pr-num>-* worktree)"
 setup
-echo '{"number":922,"pull_request":{"url":"https://api.github.com/repos/o/r/pulls/922"}}' \
+echo '{"number":922,"state":"open","title":"some pr title","pull_request":{"url":"https://api.github.com/repos/o/r/pulls/922"}}' \
   > "$STUB_DIR/arg-issue-922.json"
-echo '{"title":"some pr title"}' > "$STUB_DIR/issue-title-922.json"
 if result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 922 queue 2>/dev/null); then rc=0; else rc=$?; fi
 assert_eq "PR number as issue key → exit 1" "1" "$rc"
 assert_eq "PR number as issue key → no decision line" "" "$result"
@@ -9432,18 +9400,22 @@ case "$args" in
     f="$STUB_DIR/pr-state-${br}.json"
     if [[ -f "$f" ]]; then cat "$f"; else echo '[]'; fi
     ;;
-  issue\ view\ *\ --json\ state\ -q\ .state)
-    # dispatch-sweep closed-issue check: gh issue view <N> --json state -q .state
-    num=$(echo "$args" | awk '{print $3}')
+  api\ repos/*/issues/[0-9]*)
+    # dispatch-sweep closed-issue check via gh_issue_view_rest (#2257): the helper
+    # issues `gh api repos/{owner}/{repo}/issues/<N>` and projects+upcases .state.
+    num="${args##*/}"
     # Controllable failure: if SWEEP_GH_ISSUE_FAIL matches this issue number, fail.
     if [[ "${SWEEP_GH_ISSUE_FAIL:-}" == "$num" ]]; then
-      echo "gh sweep stub: simulated gh issue view failure for $num" >&2
+      echo "gh sweep stub: simulated gh api issues/$num failure for $num" >&2
       exit 1
     fi
-    # Per-issue state fixture: issue-state-<N>.txt holds the raw state string.
+    # Per-issue state fixture: issue-state-<N>.txt holds the raw state string
+    # (e.g. CLOSED/OPEN/GARBAGE). Emit it inside a raw-REST issue object with the
+    # state lowercased — the porcelain bridge in gh_issue_view_rest upcases it back.
     f="$STUB_DIR/issue-state-${num}.txt"
     if [[ -f "$f" ]]; then
-      cat "$f"
+      state_lc=$(tr '[:upper:]' '[:lower:]' < "$f")
+      printf '{"number":%s,"state":"%s"}\n' "$num" "$state_lc"
     else
       echo "gh sweep stub: no issue-state-${num}.txt for issue view $num" >&2
       exit 1
@@ -9871,7 +9843,7 @@ else
   echo "    calls: $calls"
 fi
 TOTAL=$((TOTAL + 1))
-if grep -q "ERROR_ISSUE_STATE_FETCH: branch=60-closed-feature issue=60 gh issue view failed" \
+if grep -q "ERROR_ISSUE_STATE_FETCH: branch=60-closed-feature issue=60 gh_issue_view_rest failed" \
    "$DISPATCH_SWEEP_LOG_FILE"; then
   PASS=$((PASS + 1)); echo "  PASS: ERROR_ISSUE_STATE_FETCH log line present"
 else
@@ -24072,6 +24044,8 @@ mkdir -p "$FINALIZE_STUB_DIR" "$FINALIZE_BIN" "$FINALIZE_SCRIPTS"
 # Copy the real finalize script into the scripts dir so $SCRIPT_DIR resolves there.
 cp "$SCRIPT_DIR/dispatch-finalize-phase" "$FINALIZE_SCRIPTS/dispatch-finalize-phase"
 chmod +x "$FINALIZE_SCRIPTS/dispatch-finalize-phase"
+# finalize-phase sources lib.sh (gh_issue_view_rest, #2257) via its $SCRIPT_DIR.
+cp "$SCRIPT_DIR/lib.sh" "$FINALIZE_SCRIPTS/lib.sh"
 
 # Stub dispatch-spawn-tick: log to order.log and spawn-calls.log.
 cat > "$FINALIZE_SCRIPTS/dispatch-spawn-tick" <<'STUB'
@@ -24106,9 +24080,11 @@ cat > "$FINALIZE_BIN/gh" <<'STUB'
 FINALIZE_STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
 args="$*"
 case "$args" in
-  issue\ view\ *--json\ labels*)
-    # No rate-limit-retry labels to clear.
-    printf '{"labels":[]}\n'
+  api\ repos/*/issues/*)
+    # finalize-phase reads the issue via gh_issue_view_rest (#2257). Emit a raw-REST
+    # object with no rate-limit-retry labels to clear (and a state so the helper's
+    # .state|ascii_upcase does not error).
+    printf '{"number":0,"state":"open","labels":[]}\n'
     ;;
   pr\ edit\ *--remove-label*)
     echo "$args" >> "$FINALIZE_STUB_DIR/gh-pr-remove.log"
@@ -27991,9 +27967,18 @@ esac
 STUB
   cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
 #!/usr/bin/env bash
-# Closed-check (--json state) and identity-stub title fetch (--json title).
+# dispatch-materialize-spawn reads the issue via gh_issue_view_rest (#2257):
+# `gh api repos/{owner}/{repo}/issues/<N>`. Emit a raw-REST issue object built
+# from MAT_ISSUE_TITLE / MAT_ISSUE_STATE; the helper projects+upcases .state, so
+# emit the state lowercased here (CLOSED → closed → helper upcases back).
 case "$*" in
-  *"--json title"*) echo "${MAT_ISSUE_TITLE:-Test issue title}" ;;
+  api\ repos/*/issues/*)
+    state_lc=$(printf '%s' "${MAT_ISSUE_STATE:-OPEN}" | tr '[:upper:]' '[:lower:]')
+    # Build with jq so a title carrying control chars (the #1443 crafted-title
+    # test) is JSON-escaped into a valid raw-REST object the helper can parse.
+    jq -n --arg title "${MAT_ISSUE_TITLE:-Test issue title}" --arg state "$state_lc" \
+      '{number:0, title:$title, body:"", state:$state, state_reason:null, labels:[], assignees:[]}'
+    ;;
   *) echo "${MAT_ISSUE_STATE:-OPEN}" ;;
 esac
 STUB
@@ -30761,19 +30746,21 @@ jit_skill_setup() {
   chmod +x "$TMPDIR_TEST/scripts/dispatch-jit-skill" \
            "$TMPDIR_TEST/scripts/dispatch-config-load"
 
-  # gh stub: handles `issue view <num> --repo <repo> --json labels`.
-  # Reads the labels fixture from $TMPDIR_TEST/labels.json; defaults to empty.
-  # Unknown invocations → stderr + exit 1.
+  # gh stub: handles dispatch-jit-skill's gh_issue_view_rest read (#2257):
+  # `gh api repos/<owner>/<repo>/issues/<N>`. Reads the labels fixture from
+  # $TMPDIR_TEST/labels.json (a raw-REST {"labels":[...]} object) and merges a
+  # state so the helper's .state|ascii_upcase does not error; defaults to empty
+  # labels. Unknown invocations → stderr + exit 1.
   cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 args="$*"
 TREE="$(cd "$(dirname "$0")/.." && pwd)"
 case "$args" in
-  issue\ view\ *\ --repo\ *\ --json\ labels)
+  api\ repos/*/issues/*)
     if [[ -f "$TREE/labels.json" ]]; then
-      cat "$TREE/labels.json"
+      jq '. + {state:"open"}' "$TREE/labels.json"
     else
-      echo '{"labels":[]}'
+      echo '{"state":"open","labels":[]}'
     fi
     ;;
   *)
@@ -35966,6 +35953,9 @@ echo "Test: closed-unmerged source PR → park follow-up on office-hours + mark 
 setup
 printf '[{"number":101,"labels":[{"name":"dispatch:review-followup"}],"body":"orphan finding <!-- dispatch:source-pr 1704 -->"}]\n' > "$STUB_DIR/issue-list.json"
 printf '{"state":"closed","merged_at":null,"labels":[]}\n' > "$STUB_DIR/retriage-pr-1704.json"
+# The park flows through the real dispatch-apply-office-hours, which reads the
+# issue's labels via gh_issue_view_rest (#2257) → arg-issue-101.json.
+echo '{"state":"open","labels":[]}' > "$STUB_DIR/arg-issue-101.json"
 out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null)
 assert_eq "a: office-hours applied to the follow-up issue" \
   "issue edit 101 --add-label dispatch:office-hours" "$(cat "$STUB_DIR/gh-issue-edit.log")"
@@ -36062,6 +36052,7 @@ setup
 printf '[{"number":106,"labels":[{"name":"dispatch:review-followup"}],"body":"orphan finding mentions <!-- dispatch:source-pr 1500 --> in its text, then the genuine appended marker <!-- dispatch:source-pr 1704 -->"}]\n' > "$STUB_DIR/issue-list.json"
 printf '{"state":"open","merged_at":null,"labels":[]}\n' > "$STUB_DIR/retriage-pr-1500.json"
 printf '{"state":"closed","merged_at":null,"labels":[]}\n' > "$STUB_DIR/retriage-pr-1704.json"
+echo '{"state":"open","labels":[]}' > "$STUB_DIR/arg-issue-106.json"
 out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null)
 assert_eq "g: parks the follow-up against the LAST marker's PR (#1704)" \
   "issue edit 106 --add-label dispatch:office-hours" "$(cat "$STUB_DIR/gh-issue-edit.log")"
