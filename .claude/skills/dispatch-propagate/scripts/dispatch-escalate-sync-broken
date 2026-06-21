@@ -206,44 +206,34 @@ existing=$(gh_issue_list_rest --label "$LABEL" --state open | jq -r '.[0].number
 if [[ -n "$existing" ]]; then
   # The edit touches the body only (no --label flag), so it cannot fail with a
   # "label not found" error — no create-on-not-found retry needed here.
-  gh issue edit "$existing" --title "$TITLE" --body-file "$BODY_FILE" >/dev/null
+  gh_issue_edit_rest "$existing" --title "$TITLE" --body-file "$BODY_FILE" >/dev/null
   echo "$existing"
   exit 0
 fi
 
-# Create path. `bug` + `priority` sort the fix to the top of the dispatch ladder;
-# `dispatch:sync-broken` is the latch label. The label may not exist yet —
-# apply-first / create-on-not-found: if the create fails because the label is
-# "not found", create it once and retry.
-create() {
-  gh issue create \
-    --title "$TITLE" \
-    --body-file "$BODY_FILE" \
-    --label "$LABEL" \
-    --label bug \
-    --label priority
-}
-
-if ! create_out=$(create 2>&1); then
-  if [[ "$create_out" != *"not found"* ]]; then
-    # A real failure (e.g. gh unreachable) — surface it, don't swallow it.
-    echo "$create_out" >&2
-    exit 1
-  fi
-  # The dispatch:sync-broken label does not exist yet. Create it once and retry.
-  # --color is intentionally omitted: the dispatch-label color hex is
-  # single-sourced in dispatch-complete-phase and must not be duplicated here
-  # (mirrors dispatch-diagnose-main/SKILL.md).
-  gh label create "$LABEL" \
-    --description "dispatch workflow: local main cannot ff-merge origin/main (sync latch)"
-  if ! create_out=$(create 2>&1); then
-    # The retry failed too (e.g. gh rate-limited the create right after the
-    # label was made) — surface it, don't swallow it.
-    echo "$create_out" >&2
-    exit 1
-  fi
+# Ensure the latch label exists BEFORE the REST create. REST POST /issues silently
+# drops an unknown label[] (no error), so unlike the old porcelain not-found dance we
+# must guarantee dispatch:sync-broken exists up front or the latch would be created
+# without its label. `gh label create` stays porcelain (REST POST /repos/.../labels —
+# not a migration target). Tolerate only an already-exists error; surface anything else.
+# (--color omitted intentionally: the dispatch-label color is single-sourced in
+# dispatch-complete-phase and must not be duplicated here.)
+# Mirrors the ensure-first pattern used for the Unit 2/3 label-create sites.
+if ! create_label_out=$(gh label create "$LABEL" \
+    --description "dispatch workflow: local main cannot ff-merge origin/main (sync latch)" 2>&1); then
+  case "$create_label_out" in
+    *already\ exists*|*already_exists*) : ;;   # latch label already present — fine
+    *) echo "dispatch-escalate-sync-broken: gh label create $LABEL failed: $create_label_out" >&2; exit 1 ;;
+  esac
 fi
 
-# `gh issue create` prints the new issue's URL on stdout, not a bare number —
-# the number is the trailing path segment.
+# bug/priority are assumed to pre-exist (as the original code assumed — it only ever
+# created dispatch:sync-broken). REST create echoes the new issue URL; the number is
+# the trailing path segment.
+create_out=$(gh_issue_create_rest \
+  --title "$TITLE" \
+  --body-file "$BODY_FILE" \
+  --label "$LABEL" \
+  --label bug \
+  --label priority) || exit 1
 echo "${create_out##*/}"

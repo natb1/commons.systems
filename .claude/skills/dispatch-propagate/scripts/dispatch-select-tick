@@ -288,7 +288,7 @@ if [[ "$BRANCH" == "main" ]]; then
     sync_repair_reset_attempts
     OPEN_SB=$(gh_issue_list_rest --state open --label "dispatch:sync-broken" | jq -r '.[].number')
     for n in $OPEN_SB; do
-      gh issue close "$n" \
+      gh_issue_close_rest "$n" \
         --comment "local main ff-merges clean again; closing the sync-broken latch" 1>&2 || true
     done
   else
@@ -359,7 +359,7 @@ if [[ -n "$OPEN_MB" && "$OPEN_MB" != "UNKNOWN" ]]; then
   fi
   if [[ -z "$MB_SHA" ]]; then
     for n in $OPEN_MB; do
-      gh issue close "$n" \
+      gh_issue_close_rest "$n" \
         --comment "origin/main is green again; closing the main-broken latch (re-arming the gate)." 1>&2 || true
     done
   fi

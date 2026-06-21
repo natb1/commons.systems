@@ -29,7 +29,7 @@
 #      - Exact match → the PR number is echoed and the script exits 0.
 #      - EXTRA closed numbers (a stray closing keyword in prose) → the offending
 #        keyword before `#E` is stripped from the body, the body is re-applied
-#        via `gh pr edit --body-file`, and the PR is re-verified. Bounded to two
+#        via `gh_issue_edit_rest --body-file`, and the PR is re-verified. Bounded to two
 #        correction passes; an extra surviving past that exits non-zero.
 #      - MISSING numbers (intended but not closed) → exit non-zero immediately
 #        with a diagnostic naming the missing number(s). Per
@@ -64,6 +64,7 @@ KEYWORD_RE='close[sd]?|fix(?:e[sd])?|resolve[sd]?'
 # Resolve this script's own directory so the sibling dispatch-stamp-session
 # (PR backfill) is found regardless of the caller's cwd.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
 
 # --- argument parsing ---------------------------------------------------------
 
@@ -269,6 +270,6 @@ while :; do
     perl -i -pe 's/\b(?:'"$KEYWORD_RE"')[ \t]*:?[ \t]*(?=#\Q'"$E"'\E\b)//gi' "$BODY_FILE"
   done <<< "$EXTRA"
 
-  gh pr edit "$PR_NUM" --body-file "$BODY_FILE" >/dev/null
+  gh_issue_edit_rest "$PR_NUM" --body-file "$BODY_FILE" >/dev/null
   pass=$((pass + 1))
 done

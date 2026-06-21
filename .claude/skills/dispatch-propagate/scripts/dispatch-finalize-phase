@@ -8,7 +8,8 @@
 # and the outcome-envelope emit. Self-close is the final step so all prior steps
 # complete before the job is deleted. Every step is idempotent: dispatch-spawn-tick
 # uses a fixed systemd unit name (a colliding second spawn is a harmless 'deduped'
-# no-op), gh --remove-label is idempotent, and dispatch-self-close is a no-op when
+# no-op), gh_issue_remove_label_rest is idempotent (404-on-absent is no-op
+# success), and dispatch-self-close is a no-op when
 # CLAUDE_JOB_DIR is unset (interactive-safe). A stray second Stop hook firing after
 # this script runs is therefore harmless.
 #
@@ -28,7 +29,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# Source lib.sh for gh_issue_view_rest (the REST-backed issue read, #2257).
+# Source lib.sh for the REST-backed gh helpers: gh_issue_view_rest (the issue
+# read, #2257) and the label-set/remove mutations (#2256).
 source "$SCRIPT_DIR/lib.sh"
 
 # --- Argument parsing ---
@@ -75,18 +77,18 @@ done
   gh_issue_view_rest "$N" 2>/dev/null \
     | jq -r '.labels[].name | select(test("^dispatch:rate-limit-retry-[0-9]+$"))' \
     | while IFS= read -r local_lbl; do
-        [ -n "$local_lbl" ] && gh issue edit "$N" --remove-label "$local_lbl" >/dev/null 2>&1 \
+        [ -n "$local_lbl" ] && gh_issue_remove_label_rest "$N" "$local_lbl" >/dev/null 2>&1 \
           || echo "[dispatch-finalize-phase] WARNING: could not clear $local_lbl (non-fatal)" >&2
       done || true
 } || true
 
 # Step 2: strip dispatch:office-hours from the PR (if given) and the issue.
 if [[ -n "$PR_NUM" ]]; then
-  gh pr edit "$PR_NUM" --remove-label dispatch:office-hours >/dev/null 2>&1 \
-    || echo "[dispatch-finalize-phase] WARNING: gh pr edit --remove-label dispatch:office-hours failed (non-fatal)" >&2
+  gh_issue_remove_label_rest "$PR_NUM" dispatch:office-hours >/dev/null 2>&1 \
+    || echo "[dispatch-finalize-phase] WARNING: remove-label dispatch:office-hours on PR #$PR_NUM failed (non-fatal)" >&2
 fi
-gh issue edit "$N" --remove-label dispatch:office-hours >/dev/null 2>&1 \
-  || echo "[dispatch-finalize-phase] WARNING: gh issue edit --remove-label dispatch:office-hours failed (non-fatal)" >&2
+gh_issue_remove_label_rest "$N" dispatch:office-hours >/dev/null 2>&1 \
+  || echo "[dispatch-finalize-phase] WARNING: remove-label dispatch:office-hours on issue #$N failed (non-fatal)" >&2
 
 # Step 3: spawn the next dispatch tick (idempotent via fixed-unit dedup).
 "$SCRIPT_DIR/dispatch-spawn-tick" || true
