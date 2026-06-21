@@ -392,7 +392,7 @@ for (( i = 0; i < STATEMENTS_COUNT; i++ )); do
     CREATE_RC=$?
     CREATE_ERR=$(cat "$tmpfile"); rm -f "$tmpfile"
     if [[ "$CREATE_RC" -ne 0 ]]; then
-      echo "$KEY: error (gh issue create failed for $base: $CREATE_ERR)" >&2
+      echo "$KEY: error (gh_issue_create_rest failed for $base: $CREATE_ERR)" >&2
       HARD_ERROR=1
       ENTRY_HARD_ERROR=1
       break

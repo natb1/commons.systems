@@ -116,7 +116,7 @@ while IFS= read -r pr; do
   rc=0
   out=$(gh_pr_merge_rest "$N" --squash --subject "$PR_TITLE" --body "$PR_BODY" 2>&1) || rc=$?
   if [[ "$rc" -ne 0 ]]; then
-    echo "dispatch-auto-merge: error: gh pr merge #$N failed: $out" >&2
+    echo "dispatch-auto-merge: error: gh_pr_merge_rest #$N failed: $out" >&2
     HARD_ERROR=1
     continue
   fi

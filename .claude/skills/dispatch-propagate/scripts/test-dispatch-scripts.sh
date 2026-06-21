@@ -28535,11 +28535,16 @@ sel_tick_teardown
 ESB_SCRIPT="$SCRIPT_DIR/dispatch-escalate-sync-broken"
 ESB_TMPDIR=""
 ESB_CAPTURE=""
+ESB_STUB_DIR=""
 
 esb_setup() {
   ESB_TMPDIR=$(mktemp -d)
   ESB_CAPTURE="$ESB_TMPDIR/capture"
-  mkdir -p "$ESB_TMPDIR/bin" "$ESB_CAPTURE"
+  # #2256: REST sentinel logs live alongside the capture dir. The gh stub records
+  # the full argv of each `gh api` mutation here so the migrated PATCH/POST calls
+  # can be asserted (mirrors the shared stub's gh-issue-*-rest-calls.log files).
+  ESB_STUB_DIR="$ESB_TMPDIR/stub"
+  mkdir -p "$ESB_TMPDIR/bin" "$ESB_CAPTURE" "$ESB_STUB_DIR"
 
   # git shim: fixed diagnostics for the three queries the script runs.
   cat > "$ESB_TMPDIR/bin/git" <<'STUB'
@@ -28553,28 +28558,33 @@ esac
 STUB
   chmod +x "$ESB_TMPDIR/bin/git"
 
-  # gh shim: parses --body-file/--title out of "$@" regardless of create/edit,
-  # copies the body to capture/body.txt and the title to capture/title.txt. For
-  # `issue list` it returns capture/existing.txt (empty/absent → no open latch →
-  # CREATE path; nonempty → EDIT path). `issue create` echoes a URL so the
-  # script's ${create_out##*/} yields a bare number; `issue edit` exits 0.
+  # gh shim: the script now drives the REST helpers gh_issue_edit_rest /
+  # gh_issue_create_rest (#2256), which call `gh api -X PATCH|POST ... -f title=...
+  # -F body=@<file>`. This stub (a) copies the body to capture/body.txt and the
+  # title to capture/title.txt for the #1546 content assertions — keying on the
+  # REST `-f title=` / `-F body=@` flags, NOT the old porcelain --title/--body-file
+  # — and (b) logs each mutation's full argv to the shared REST sentinel files
+  # (gh-issue-close-rest-calls.log for PATCH .../issues/<N>; gh-issue-create-rest-calls.log
+  # for POST .../issues). `gh label create` is logged and exits 0 (or models
+  # already-exists when $STUB_DIR/gh-label-exists is present). `gh api --paginate`
+  # serves the find-or-create latch query (capture/existing.txt seeds an open latch).
   cat > "$ESB_TMPDIR/bin/gh" <<STUB
 #!/usr/bin/env bash
 CAP="$ESB_CAPTURE"
+STUB_DIR="$ESB_STUB_DIR"
 STUB
   cat >> "$ESB_TMPDIR/bin/gh" <<'STUB'
-sub="$1 $2"
-# Pull --title <val> and --body-file <path> out of the argv.
-prev=""
+args="$*"
+# Pull title=<val> (from `-f title=...`) and body=@<path> (from `-F body=@...`)
+# out of the argv; capture their values for the body-content assertions.
 for a in "$@"; do
-  case "$prev" in
-    --title)     printf '%s' "$a" > "$CAP/title.txt" ;;
-    --body-file) cat "$a" > "$CAP/body.txt" ;;
+  case "$a" in
+    title=*)  printf '%s' "${a#title=}" > "$CAP/title.txt" ;;
+    body=@*)  bf="${a#body=@}"; [[ -f "$bf" ]] && cat "$bf" > "$CAP/body.txt" ;;
   esac
-  prev="$a"
 done
-case "$sub" in
-  "api --paginate")
+case "$args" in
+  "api --paginate"*)
     # gh_issue_list_rest uses REST: gh api --paginate repos/{owner}/{repo}/issues?...
     # Return the open-latch number if seeded; absent file means no open latch.
     # gh_issue_list_rest remaps from snake_case REST to camelCase; serve snake_case.
@@ -28586,14 +28596,30 @@ case "$sub" in
     fi
     exit 0
     ;;
-  "issue create")
-    echo "https://github.com/x/y/issues/123"
+  "api -X PATCH "*/issues/[0-9]*)
+    # gh_issue_edit_rest sentinel: PATCH .../issues/<N> (EDIT path).
+    echo "$args" >> "$STUB_DIR/gh-issue-close-rest-calls.log"
+    echo '{}'
     ;;
-  "issue edit")
-    : # title/body already captured above
+  "api -X POST "*/issues\ *)
+    # gh_issue_create_rest sentinel: POST .../issues (CREATE path). The helper pipes
+    # the response through `jq -r .html_url`, so emit JSON carrying html_url; the
+    # script's ${create_out##*/} then yields the bare trailing number (123).
+    echo "$args" >> "$STUB_DIR/gh-issue-create-rest-calls.log"
+    echo '{"html_url":"https://github.com/x/y/issues/123"}'
     ;;
-  "label create")
-    : # create-on-not-found path; not exercised here
+  "label create"*)
+    # Ensure-first latch-label create. Log the argv; model already-exists when the
+    # marker is present (the script must tolerate it and still create the issue).
+    echo "$args" >> "$STUB_DIR/gh-label-create.log"
+    if [[ -f "$STUB_DIR/gh-label-exists" ]]; then
+      echo "gh: Validation Failed (HTTP 422): already_exists" >&2
+      exit 1
+    fi
+    if [[ -f "$STUB_DIR/gh-fail-label-create" ]]; then
+      echo "gh: could not create label (HTTP 500): Internal Server Error" >&2
+      exit 1
+    fi
     ;;
   *)
     echo "gh stub (esb): unknown invocation: $*" >&2
@@ -28611,7 +28637,7 @@ STUB
 esb_teardown() {
   export PATH="$SAVED_PATH"
   rm -rf "$ESB_TMPDIR"
-  ESB_TMPDIR="" ; ESB_CAPTURE=""
+  ESB_TMPDIR="" ; ESB_CAPTURE="" ; ESB_STUB_DIR=""
 }
 
 # Reset just the capture dir between runs within one setup.
@@ -28673,6 +28699,91 @@ assert_eq "edit-path: existing issue number echoed" "99" "$EDIT_NUM"
 TITLE=$(cat "$ESB_CAPTURE/title.txt" 2>/dev/null || true)
 assert_eq "edit-path title: fetch-failed 'cannot reach origin/main'" "1" \
   "$(grep -cF 'cannot reach origin/main' <<<"$TITLE" || true)"
+esb_teardown
+
+# --- #2256: EDIT path fires a REST PATCH .../issues/<existing> carrying title+body
+# The migrated edit drives gh_issue_edit_rest → `gh api -X PATCH repos/.../issues/99`.
+# Assert the PATCH sentinel fired against the existing number, and that the title
+# and body (from the --body-file the script composed) were both captured.
+echo "Test: dispatch-escalate-sync-broken edit path → REST PATCH .../issues/<existing> (#2256)"
+esb_setup
+printf '99\n' > "$ESB_CAPTURE/existing.txt"   # an open latch → EDIT path
+EDIT_NUM=$(printf '%s' "fatal: unable to access origin" \
+  | "$ESB_SCRIPT" --reason fetch-failed) || EDIT_NUM="ERR"
+assert_eq "edit-rest: existing issue number echoed" "99" "$EDIT_NUM"
+EDIT_LOG="$ESB_STUB_DIR/gh-issue-close-rest-calls.log"
+assert_eq "edit-rest: PATCH fired" "1" \
+  "$([ -f "$EDIT_LOG" ] && grep -q 'PATCH' "$EDIT_LOG" && echo 1 || echo 0)"
+assert_eq "edit-rest: PATCH targets issues/99" "1" \
+  "$([ -f "$EDIT_LOG" ] && grep -q 'issues/99' "$EDIT_LOG" && echo 1 || echo 0)"
+TITLE=$(cat "$ESB_CAPTURE/title.txt" 2>/dev/null || true)
+BODY=$(cat "$ESB_CAPTURE/body.txt" 2>/dev/null || true)
+assert_eq "edit-rest: PATCH carried the title" "1" \
+  "$(grep -cF 'cannot reach origin/main' <<<"$TITLE" || true)"
+assert_eq "edit-rest: PATCH carried the body (fetch-stderr section)" "1" \
+  "$(grep -cF '## git fetch origin main (captured stderr)' <<<"$BODY" || true)"
+esb_teardown
+
+# --- #2256: CREATE path fires a REST POST .../issues with the latch labels -------
+# The migrated create drives gh_issue_create_rest → `gh api -X POST repos/.../issues
+# -f title=... -F body=@<file> -f labels[]=dispatch:sync-broken -f labels[]=bug
+# -f labels[]=priority`. Assert the POST sentinel fired carrying body=@ (the
+# --body-file flag) and all three labels, and that stdout is the parsed number.
+echo "Test: dispatch-escalate-sync-broken create path → REST POST .../issues with labels (#2256)"
+esb_setup
+# No existing.txt → list empty → CREATE path. No gh-label-exists marker → label
+# create succeeds.
+ISSUE_NUM=$(printf '%s' "CONFLICT (content): Merge conflict in foo" \
+  | "$ESB_SCRIPT" --reason merge-failed) || ISSUE_NUM="ERR"
+assert_eq "create-rest: stdout is the parsed issue number" "123" "$ISSUE_NUM"
+CREATE_LOG="$ESB_STUB_DIR/gh-issue-create-rest-calls.log"
+assert_eq "create-rest: POST fired" "1" \
+  "$([ -f "$CREATE_LOG" ] && grep -q 'POST' "$CREATE_LOG" && echo 1 || echo 0)"
+assert_eq "create-rest: POST carried body=@ (--body-file)" "1" \
+  "$([ -f "$CREATE_LOG" ] && grep -q -- '-F body=@' "$CREATE_LOG" && echo 1 || echo 0)"
+assert_eq "create-rest: POST carried labels[]=dispatch:sync-broken" "1" \
+  "$([ -f "$CREATE_LOG" ] && grep -q 'labels\[\]=dispatch:sync-broken' "$CREATE_LOG" && echo 1 || echo 0)"
+assert_eq "create-rest: POST carried labels[]=bug" "1" \
+  "$([ -f "$CREATE_LOG" ] && grep -q 'labels\[\]=bug' "$CREATE_LOG" && echo 1 || echo 0)"
+assert_eq "create-rest: POST carried labels[]=priority" "1" \
+  "$([ -f "$CREATE_LOG" ] && grep -q 'labels\[\]=priority' "$CREATE_LOG" && echo 1 || echo 0)"
+esb_teardown
+
+# --- #2256 REGRESSION GUARD: latch label initially ABSENT --------------------
+# This is the exact regression this unit must not introduce: REST POST /issues
+# silently drops an unknown label[], so the latch could be created WITHOUT its
+# dispatch:sync-broken label. The ensure-first restructure prevents that by
+# running `gh label create` BEFORE the create. With NO gh-label-exists marker the
+# stub's `label create` SUCCEEDS (models the label being absent and then created);
+# assert that (a) `gh label create dispatch:sync-broken` was invoked, and (b) the
+# created issue STILL carries labels[]=dispatch:sync-broken in the POST.
+echo "Test: dispatch-escalate-sync-broken create path with ABSENT latch label → label create + label retained (#2256)"
+esb_setup
+ISSUE_NUM=$(printf '%s' "CONFLICT (content): Merge conflict in foo" \
+  | "$ESB_SCRIPT" --reason merge-failed) || ISSUE_NUM="ERR"
+assert_eq "absent-label: create still succeeds (issue number)" "123" "$ISSUE_NUM"
+LABEL_LOG="$ESB_STUB_DIR/gh-label-create.log"
+assert_eq "absent-label: gh label create dispatch:sync-broken was invoked" "1" \
+  "$([ -f "$LABEL_LOG" ] && grep -q 'label create dispatch:sync-broken' "$LABEL_LOG" && echo 1 || echo 0)"
+CREATE_LOG="$ESB_STUB_DIR/gh-issue-create-rest-calls.log"
+assert_eq "absent-label: created issue STILL carries labels[]=dispatch:sync-broken" "1" \
+  "$([ -f "$CREATE_LOG" ] && grep -q 'labels\[\]=dispatch:sync-broken' "$CREATE_LOG" && echo 1 || echo 0)"
+esb_teardown
+
+# --- #2256: latch label ALREADY EXISTS → already-exists tolerated, no abort ----
+# The ensure-first idiom tolerates only an already-exists error from `gh label
+# create`. With the gh-label-exists marker the stub emits gh's already-exists
+# message and exits 1; the script must NOT abort and must still create the issue
+# with the latch label.
+echo "Test: dispatch-escalate-sync-broken create path with already-exists latch label → tolerated (#2256)"
+esb_setup
+: > "$ESB_STUB_DIR/gh-label-exists"   # `gh label create` returns already-exists (exit 1)
+ISSUE_NUM=$(printf '%s' "CONFLICT (content): Merge conflict in foo" \
+  | "$ESB_SCRIPT" --reason merge-failed) || ISSUE_NUM="ERR"
+assert_eq "already-exists: create still succeeds (issue number)" "123" "$ISSUE_NUM"
+CREATE_LOG="$ESB_STUB_DIR/gh-issue-create-rest-calls.log"
+assert_eq "already-exists: created issue carries labels[]=dispatch:sync-broken" "1" \
+  "$([ -f "$CREATE_LOG" ] && grep -q 'labels\[\]=dispatch:sync-broken' "$CREATE_LOG" && echo 1 || echo 0)"
 esb_teardown
 
 # --- Invalid --reason → clear nonzero error ----------------------------------
@@ -32587,19 +32698,27 @@ open_pr_setup() {
 
   cp "$SCRIPT_DIR/dispatch-open-pr" "$TMPDIR_TEST/scripts/dispatch-open-pr"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-open-pr"
+  # #2256: dispatch-open-pr now sources its sibling lib.sh (for gh_issue_edit_rest),
+  # so the copied script's SCRIPT_DIR must contain a real lib.sh.
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
 
   cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 # gh stub emulating GitHub's close parser for dispatch-open-pr tests.
 TREE="$(cd "$(dirname "$0")/.." && pwd)"
 
-# Locate the value following --body-file in the argument list.
+# Locate the body file: `pr create` passes it as `--body-file <path>`; the
+# migrated re-apply (#2256) drives gh_issue_edit_rest → `gh api -X PATCH
+# repos/.../issues/<N> -F body=@<path>`, so recognize that form too.
 body_file=""
 prev=""
 for a in "$@"; do
   if [[ "$prev" == "--body-file" ]]; then
     body_file="$a"
   fi
+  case "$a" in
+    body=@*) body_file="${a#body=@}" ;;
+  esac
   prev="$a"
 done
 
@@ -32633,11 +32752,16 @@ case "$1 $2" in
     write_close_set "$body_file"
     echo "https://github.com/natb1/commons.systems/pull/1500"
     ;;
-  "pr edit")
+  "api -X")
+    # #2256: the body re-apply after a stray-keyword strip now goes through
+    # gh_issue_edit_rest → `gh api -X PATCH repos/.../issues/<PR_NUM> -F body=@<file>`.
+    # Behave like the old `pr edit` branch: refresh last-body.txt and re-derive the
+    # close set from the corrected body (so the re-verify `pr view` sees it), and
+    # log the full argv to the shared REST PATCH sentinel.
+    echo "$*" >> "$TREE/gh-issue-close-rest-calls.log"
     cp "$body_file" "$TREE/last-body.txt"
     write_close_set "$body_file"
-    echo "edit" >> "$TREE/edit-calls.log"
-    echo "https://github.com/natb1/commons.systems/pull/1500"
+    echo '{}'
     ;;
   "pr view")
     if [[ -f "$TREE/close-set.txt" ]]; then
@@ -32689,7 +32813,10 @@ printf 'This change also fixes #999 in passing.\n' > "$TMPDIR_TEST/body.txt"
 out=$("$TMPDIR_TEST/scripts/dispatch-open-pr" 1119 --title "t" --body-file "$TMPDIR_TEST/body.txt" 2>/dev/null) && rc=0 || rc=$?
 assert_eq "open-pr: stray fixes #999 → stdout PR number" "1500" "$out"
 assert_eq "open-pr: stray fixes #999 → rc 0" "0" "$rc"
-assert_eq "open-pr: stray fixes #999 → an edit occurred" "1" "$([[ -s "$TMPDIR_TEST/edit-calls.log" ]] && echo 1 || echo 0)"
+# #2256: the re-apply now fires a REST PATCH .../issues/<PR_NUM> (PR #1500), not the
+# old porcelain `pr edit`. Assert the PATCH sentinel fired against the PR number.
+assert_eq "open-pr: stray fixes #999 → a REST PATCH re-apply occurred" "1" "$([[ -s "$TMPDIR_TEST/gh-issue-close-rest-calls.log" ]] && echo 1 || echo 0)"
+assert_eq "open-pr: stray fixes #999 → PATCH targets issues/1500" "1" "$([ -f "$TMPDIR_TEST/gh-issue-close-rest-calls.log" ] && grep -q 'issues/1500' "$TMPDIR_TEST/gh-issue-close-rest-calls.log" && echo 1 || echo 0)"
 assert_eq "open-pr: stray fixes #999 → final close set is just 1119" "1119" "$(cat "$TMPDIR_TEST/close-set.txt")"
 assert_eq "open-pr: stray fixes #999 → keyword stripped from corrected body" "0" "$(grep -cE '(close[sd]?|fix(e[sd])?|resolve[sd]?)[ \t]*:?[ \t]*#999' "$TMPDIR_TEST/last-body.txt" || true)"
 open_pr_teardown

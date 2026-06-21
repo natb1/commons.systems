@@ -389,7 +389,7 @@ for (( i = 0; i < JIT_COUNT; i++ )); do
     CREATE_OUT=$(gh_issue_create_rest --repo "$REPO" --title "$TITLE" --body "$ISSUE_BODY" \
       --label "$LABEL" 2>&1) || CREATE_RC=$?
     if [[ "$CREATE_RC" -ne 0 ]]; then
-      echo "$KEY: error (gh issue create failed: $CREATE_OUT)" >&2
+      echo "$KEY: error (gh_issue_create_rest failed: $CREATE_OUT)" >&2
       HARD_ERROR=1
       continue
     fi

@@ -261,7 +261,7 @@ while IFS= read -r line; do
   CLOSE_OUT=$(gh_issue_close_rest "$CLOSE_NUM" --repo "$CALENDAR_REPO" \
     --comment "Event ended; closing this calendar reminder." 2>&1) || CLOSE_RC=$?
   if [[ "$CLOSE_RC" -ne 0 ]]; then
-    echo "calendar: error (gh issue close #$CLOSE_NUM failed: $CLOSE_OUT)" >&2
+    echo "calendar: error (gh_issue_close_rest #$CLOSE_NUM failed: $CLOSE_OUT)" >&2
     HARD_ERROR=1
     continue
   fi
@@ -467,7 +467,7 @@ for evt in "${EVENTS[@]}"; do
   CREATE_OUT=$(gh_issue_create_rest --repo "$CALENDAR_REPO" --label "$CALENDAR_LABEL" \
     --title "$TITLE" --body "$BODY" 2>&1) || CREATE_RC=$?
   if [[ "$CREATE_RC" -ne 0 ]]; then
-    echo "calendar: error (gh issue create failed for event $EVENT_ID: $CREATE_OUT)" >&2
+    echo "calendar: error (gh_issue_create_rest failed for event $EVENT_ID: $CREATE_OUT)" >&2
     HARD_ERROR=1
     continue
   fi
