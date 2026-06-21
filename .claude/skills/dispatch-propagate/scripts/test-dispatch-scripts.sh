@@ -57,6 +57,9 @@ setup() {
   # to TMPDIR_TEST for the copied dispatch-route, so the candidate (and its own
   # close helper, exercised directly) must sit alongside it.
   cp "$SCRIPT_DIR/dispatch-epic-resolved-candidate" "$TMPDIR_TEST/dispatch-epic-resolved-candidate"
+  # dispatch-epic-resolved-candidate resolves the epic-labels helper via its
+  # SCRIPT_DIR (= TMPDIR_TEST for this copy), so the helper must sit alongside it.
+  cp "$SCRIPT_DIR/dispatch-epic-labels" "$TMPDIR_TEST/dispatch-epic-labels"
   cp "$SCRIPT_DIR/dispatch-close-resolved" "$TMPDIR_TEST/dispatch-close-resolved"
   cp "$SCRIPT_DIR/dispatch-select-target" "$TMPDIR_TEST/dispatch-select-target"
   cp "$SCRIPT_DIR/office-hours-select-target" "$TMPDIR_TEST/office-hours-select-target"
@@ -123,6 +126,7 @@ setup() {
            "$TMPDIR_TEST/dispatch-find-pr" \
            "$TMPDIR_TEST/dispatch-route" \
            "$TMPDIR_TEST/dispatch-epic-resolved-candidate" \
+           "$TMPDIR_TEST/dispatch-epic-labels" \
            "$TMPDIR_TEST/dispatch-close-resolved" \
            "$TMPDIR_TEST/dispatch-resolve-arg" \
            "$TMPDIR_TEST/dispatch-select-target" \
@@ -3620,7 +3624,9 @@ teardown
 
 # --- Epic-label gate (#1594) ------------------------------------------------
 # The gate runs BEFORE the sub-issues check: an issue is a candidate only if it
-# carries a configured epic label. Unconfigured → never a candidate. A real
+# carries a configured epic label — the configured set from epic.json, or the
+# built-in default ("epic") when no epic.json is present. A present config
+# replaces the default entirely (the configured set is used verbatim). A real
 # label-fetch failure → exit 3 (distinct from "not a candidate").
 
 # GATE-1. Epic configured, but the issue LACKS the configured label, even though
@@ -3637,16 +3643,57 @@ if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 68 >/dev/null 2>&1; then rc=0
 assert_eq "gate: configured but unlabeled would-be candidate → exit 1" "1" "$rc"
 teardown
 
-# GATE-2. NO epic config at all → never a candidate (no-config safe default),
-# regardless of sub-issue state (all children CLOSED/COMPLETED here).
-echo "Test: gate — no epic config → exit 1 regardless of sub-issue state"
+# GATE-2. NO epic config at all + issue carries the default "epic" label + all
+# children CLOSED/COMPLETED → candidate (exit 0). The helper emits the built-in
+# default "epic", the issue carries it, and all children are complete.
+echo "Test: gate — no config + default epic label + all children complete → exit 0"
 setup
 printf '{"state":"open","labels":[{"name":"epic"}]}\n' > "$STUB_DIR/arg-issue-69.json"
 printf '[{"number":691}]\n' > "$STUB_DIR/subissues-69.json"
 printf '{"title":"c","body":"","comments":[],"number":691,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
   > "$STUB_DIR/issue-691.json"
 if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 69 >/dev/null 2>&1; then rc=0; else rc=$?; fi
-assert_eq "gate: no epic config → exit 1 (no-config safe default)" "1" "$rc"
+assert_eq "gate: no config + default epic label + all children complete → exit 0" "0" "$rc"
+teardown
+
+# GATE-2b. NO epic config + issue carries a NON-epic label ("enhancement") + all
+# children CLOSED/COMPLETED → not a candidate (exit 1). The default set contains
+# only "epic"; "enhancement" is not in it, so the gate blocks it.
+echo "Test: gate — no config + non-epic label → exit 1"
+setup
+printf '{"state":"open","labels":[{"name":"enhancement"}]}\n' > "$STUB_DIR/arg-issue-71.json"
+printf '[{"number":711}]\n' > "$STUB_DIR/subissues-71.json"
+printf '{"title":"c","body":"","comments":[],"number":711,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
+  > "$STUB_DIR/issue-711.json"
+if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 71 >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "gate: no config + non-epic label → exit 1 (default set does not match)" "1" "$rc"
+teardown
+
+# GATE-2c. Override-precedence: epic.json present with {"labels":["big-epic"]} +
+# issue carries "big-epic" + all children CLOSED/COMPLETED → candidate (exit 0).
+echo "Test: gate — config override big-epic + issue carries big-epic → exit 0"
+setup
+printf '{"labels":["big-epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
+printf '{"state":"open","labels":[{"name":"big-epic"}]}\n' > "$STUB_DIR/arg-issue-72.json"
+printf '[{"number":721}]\n' > "$STUB_DIR/subissues-72.json"
+printf '{"title":"c","body":"","comments":[],"number":721,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
+  > "$STUB_DIR/issue-721.json"
+if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 72 >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "gate: override big-epic + issue carries big-epic → exit 0" "0" "$rc"
+teardown
+
+# GATE-2d. Override-precedence: epic.json present with {"labels":["big-epic"]} +
+# issue carries only "epic" (the former default) → not a candidate (exit 1). The
+# configured set REPLACES the default, so plain "epic" is no longer recognized.
+echo "Test: gate — config override big-epic + issue carries plain epic → exit 1"
+setup
+printf '{"labels":["big-epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
+printf '{"state":"open","labels":[{"name":"epic"}]}\n' > "$STUB_DIR/arg-issue-73.json"
+printf '[{"number":731}]\n' > "$STUB_DIR/subissues-73.json"
+printf '{"title":"c","body":"","comments":[],"number":731,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
+  > "$STUB_DIR/issue-731.json"
+if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 73 >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "gate: override big-epic + issue carries plain epic → exit 1 (config replaces default)" "1" "$rc"
 teardown
 
 # GATE-3. Epic configured, but the label fetch HARD-fails (deterministic, not
@@ -3668,6 +3715,31 @@ if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 71 >/dev/null 2>"$TMPDIR_TEST
 assert_eq "gate: malformed epic.json → exit 3" "3" "$rc"
 if grep -q 'dispatch-epic-resolved-candidate:' "$TMPDIR_TEST/err.txt"; then diag=yes; else diag=no; fi
 assert_eq "gate: malformed epic.json → candidate diagnostic on stderr" "yes" "$diag"
+teardown
+
+# ============================================================================
+# dispatch-epic-labels unit tests (#2235)
+# ============================================================================
+echo ""
+echo "=== dispatch-epic-labels ==="
+
+# The helper is copied into TMPDIR_TEST by setup() (task A wiring), and it calls
+# dispatch-config-load which setup() also copies. Run it directly and assert stdout.
+
+# E-1. No epic.json in $DISPATCH_CONFIG_DIR → stdout is exactly "epic" (the
+# built-in default).
+echo "Test: dispatch-epic-labels — no config → stdout is 'epic'"
+setup
+out=$("$TMPDIR_TEST/dispatch-epic-labels")
+assert_eq "no config → stdout is 'epic'" "epic" "$out"
+teardown
+
+# E-2. epic.json = {"labels":["a","b"]} → stdout is "a" then "b" (two lines).
+echo "Test: dispatch-epic-labels — config with two labels → stdout is 'a' then 'b'"
+setup
+printf '{"labels":["a","b"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
+out=$("$TMPDIR_TEST/dispatch-epic-labels")
+assert_eq "config two labels → stdout is 'a' then 'b'" "$(printf 'a\nb')" "$out"
 teardown
 
 # ============================================================================
