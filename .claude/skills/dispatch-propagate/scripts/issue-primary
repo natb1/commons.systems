@@ -2,4 +2,4 @@
 set -euo pipefail
 source "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 ISSUE_NUM=$(resolve_issue_number "${1:-}")
-gh issue view "$ISSUE_NUM" --json title,body,comments,number,state
+gh_issue_view_rest "$ISSUE_NUM" --comments

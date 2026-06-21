@@ -26,6 +26,10 @@
 # WITHOUT `set -e` so a guarded gh failure does not abort the script.
 set -uo pipefail
 
+# Source lib.sh for gh_issue_view_rest (the REST-backed issue read, #2257).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+
 ISSUE_NUM="${1:-}"
 REASON="${2:-}"
 
@@ -51,14 +55,18 @@ fi
 # Idempotency gate: if the issue already carries the label, do nothing. A gh
 # read failure here is non-fatal — warn and bail out without parking, since we
 # cannot tell whether a comment was already posted.
-if labels_json=$(gh issue view "$ISSUE_NUM" --json labels 2>&1); then
+# Do NOT capture stderr into labels_json: gh_issue_view_rest retries via gh_retry
+# and signals failure through its return code; merging retry stderr into the value
+# would corrupt the JSON the jq below parses. The helper's own diagnostics already
+# reach stderr.
+if labels_json=$(gh_issue_view_rest "$ISSUE_NUM"); then
   if printf '%s' "$labels_json" \
       | jq -e --arg l "$LABEL" '.labels[]? | select(.name == $l)' >/dev/null 2>&1; then
     # Label already present — no-op, no duplicate comment.
     exit 0
   fi
 else
-  echo "dispatch-apply-office-hours: warning: could not read labels for issue #$ISSUE_NUM: $labels_json" >&2
+  echo "dispatch-apply-office-hours: warning: could not read labels for issue #$ISSUE_NUM" >&2
   exit 0
 fi
 
