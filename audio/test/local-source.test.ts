@@ -439,4 +439,44 @@ describe("enrichment", () => {
     // good file is present
     expect(batchArg["tune.flac"]).toEqual({ artist: "Y" });
   });
+
+  it("bounded enrichment over many files: entry-set identical to unbounded (cached excluded, uncached extracted)", async () => {
+    // 40 files > ENRICH_READ_CONCURRENCY (16) so multiple windows run.
+    const entries = Array.from({ length: 40 }, (_, i) => fileEntry(`track${i}.mp3`, 1000 + i));
+    const handle = fakeDir(entries);
+    connectDir(handle);
+
+    // Even-indexed files are already cached; odd-indexed are uncached.
+    const preCached = new Set<string>();
+    const uncached = new Set<string>();
+    for (let i = 0; i < 40; i++) {
+      const name = `track${i}.mp3`;
+      if (i % 2 === 0) preCached.add(name);
+      else uncached.add(name);
+    }
+
+    mockGetMetadata.mockImplementation(async (name: string) =>
+      preCached.has(name) ? { artist: "cached" } : undefined,
+    );
+    mockExtract.mockResolvedValue({ artist: "fresh" });
+    mockCacheMetadataBatch.mockResolvedValue(undefined);
+
+    const mod = await loadModule();
+    await mod.connectLocalFolder();
+    await mod.enrichLocalTracks();
+
+    // Exactly one batched write.
+    expect(mockCacheMetadataBatch).toHaveBeenCalledTimes(1);
+    const batchArg = mockCacheMetadataBatch.mock.calls[0][0] as Record<string, unknown>; // type-safety-ok: mock-call introspection in test
+
+    // Batch key set equals the uncached set exactly (cached excluded).
+    expect(new Set(Object.keys(batchArg))).toEqual(uncached);
+    for (const name of preCached) {
+      expect(name in batchArg).toBe(false);
+    }
+    // Each uncached entry carries its extracted tag.
+    for (const name of uncached) {
+      expect(batchArg[name]).toEqual({ artist: "fresh" });
+    }
+  });
 });
