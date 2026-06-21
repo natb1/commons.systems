@@ -132,6 +132,14 @@ setup() {
   # Verify fixture line is valid JSON
   jq . "$worker_jsonl" >/dev/null
 
+  # 1b. Per-session sidecar (#1861) next to the worker transcript. Found by
+  #     deriving its path from the in-window .jsonl stem, so its own mtime is
+  #     irrelevant. The aggregator projects {repo,issue,pr,base_sha,branch}.
+  local worker_stamp="$worktree_dir/sess-worker.dispatch-stamp.json"
+  printf '%s\n' '{"schema":1,"session_id":"sess-worker","repo":"natb1/commons.systems","issue":999,"pr":1234,"branch":"999-fixture","base_sha":"deadbeef","stamped_at":"2026-01-01T00:00:00Z"}' \
+    >> "$worker_stamp"
+  jq . "$worker_stamp" >/dev/null
+
   # 2. Subagent transcript:
   #    $ROOT/-home-x-worktrees-999-fixture/sess-worker/subagents/agent-aaa.jsonl
   local subagent_dir="$worktree_dir/sess-worker/subagents"
@@ -318,6 +326,18 @@ assert_eq "by_session_type.recovery.sessions" "1" \
 
 assert_eq 'by_phase["plan-implement"].output' "550" \
   "$(jq '.by_phase["plan-implement"].output' <<<"$OUT")"
+
+# artifact join (#1861): the worker session's sidecar surfaces as
+# .sessions[].artifact = {repo,issue,pr,base_sha,branch}; sessions with no
+# sidecar (the router) carry artifact == null.
+assert_eq "sessions sess-worker artifact.pr" "1234" \
+  "$(jq '.sessions[] | select(.id=="sess-worker") | .artifact.pr' <<<"$OUT")"
+assert_eq "sessions sess-worker artifact.repo" "natb1/commons.systems" \
+  "$(jq -r '.sessions[] | select(.id=="sess-worker") | .artifact.repo' <<<"$OUT")"
+assert_eq "sessions sess-worker artifact.issue" "999" \
+  "$(jq '.sessions[] | select(.id=="sess-worker") | .artifact.issue' <<<"$OUT")"
+assert_eq "sessions sess-router artifact null" "null" \
+  "$(jq '.sessions[] | select(.id=="sess-router") | .artifact' <<<"$OUT")"
 
 assert_eq 'tool_errors: "Exit code N" count' "1" \
   "$(jq '[.tool_errors[] | select(.signature=="Exit code N")] | length' <<<"$OUT")"

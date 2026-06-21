@@ -1,28 +1,30 @@
 import { describe, it, expect } from "vitest";
-import { renderAboutHtml, renderAboutPanelHtml } from "../src/pages/about";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { About, AboutPanel } from "../src/pages/About";
 
-describe("renderAboutHtml", () => {
+describe("About", () => {
   it("contains the About heading", () => {
-    const html = renderAboutHtml();
+    const html = renderToStaticMarkup(createElement(About));
     expect(html).toContain("<h2");
     expect(html).toContain("About");
   });
 
   it("describes the independent-contractor model", () => {
-    expect(renderAboutHtml()).toContain("independent contractor");
+    expect(renderToStaticMarkup(createElement(About))).toContain("independent contractor");
   });
 
   it("lists what an engagement delivers", () => {
-    expect(renderAboutHtml()).toContain('class="about-deliverables"');
+    expect(renderToStaticMarkup(createElement(About))).toContain('class="about-deliverables"');
   });
 });
 
-describe("renderAboutPanelHtml", () => {
+describe("AboutPanel", () => {
   it("includes a mailto link to nathan@natb1.com", () => {
-    expect(renderAboutPanelHtml()).toContain("mailto:nathan@natb1.com");
+    expect(renderToStaticMarkup(createElement(AboutPanel))).toContain("mailto:nathan@natb1.com");
   });
 
   it("includes a call to action prompting contact", () => {
-    expect(renderAboutPanelHtml()).toContain('class="profile-cta"');
+    expect(renderToStaticMarkup(createElement(AboutPanel))).toContain('class="profile-cta"');
   });
 });
