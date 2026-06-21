@@ -121,7 +121,7 @@ describe("renderShowcase", () => {
       const html = renderShowcase(APPS, OVERFLOW);
       const matches = html.match(/<a [^>]*class="[^"]*\bapp-card"/g);
       expect(matches).not.toBeNull();
-      expect(matches!.length).toBe(APPS.length + OVERFLOW.length);
+      expect(matches).toHaveLength(APPS.length + OVERFLOW.length);
     });
 
     it("renders no <details> when overflow is empty", () => {

@@ -59,7 +59,7 @@ test.describe("app showcase", () => {
     // synchronous focus check below — mirrors the auto-waiting locators the
     // sibling tests use, and keeps the test honest against the non-prerendered
     // dev server (on a prerendered build the cards are already present at load).
-    await page.waitForSelector("a.app-card");
+    await page.waitForSelector(".landing-hero-grid a.app-card");
 
     for (let i = 0; i < 3; i++) {
       const isActive = await page.evaluate((idx) => {

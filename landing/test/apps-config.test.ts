@@ -41,7 +41,7 @@ describe("OVERFLOW_APPS", () => {
     expect(OVERFLOW_APPS[0].url).toBe("https://audio.commons.systems");
   });
 
-  it("entries satisfy the same invariants as APPS", () => {
+  it("OVERFLOW_APPS entries satisfy the same invariants", () => {
     for (const app of OVERFLOW_APPS) {
       expect(app.problem.length).toBeGreaterThan(0);
       expect(app.screenshotAlt.length).toBeGreaterThan(0);
