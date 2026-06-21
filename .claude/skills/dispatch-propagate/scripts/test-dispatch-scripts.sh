@@ -60,6 +60,12 @@ setup() {
   cp "$SCRIPT_DIR/dispatch-close-resolved" "$TMPDIR_TEST/dispatch-close-resolved"
   cp "$SCRIPT_DIR/dispatch-select-target" "$TMPDIR_TEST/dispatch-select-target"
   cp "$SCRIPT_DIR/office-hours-select-target" "$TMPDIR_TEST/office-hours-select-target"
+  # office-hours-select-target's resume pass (#2240) resolves
+  # dispatch-recover-session-id via its SCRIPT_DIR (= TMPDIR_TEST for this copy),
+  # so the reader must sit alongside it. Pure-filesystem; selector resume tests set
+  # DISPATCH_STAMP_PROJECTS_ROOT to a temp projects root carrying stamp sidecars.
+  cp "$SCRIPT_DIR/dispatch-recover-session-id" "$TMPDIR_TEST/dispatch-recover-session-id"
+  chmod +x "$TMPDIR_TEST/dispatch-recover-session-id"
   cp "$SCRIPT_DIR/office-hours" "$TMPDIR_TEST/office-hours"
   # office-hours' idle-provision arm resolves dispatch-provision-from-remote via
   # its SCRIPT_DIR (= TMPDIR_TEST for this copy), so the helper must sit alongside
@@ -6732,19 +6738,51 @@ result=$("$TMPDIR_TEST/office-hours-select-target")
 assert_eq "done session is attachable (visible only under --all)" "idle s-42-x" "$result"
 teardown
 
-# OHST3g. Stopped-exclude: the only labeled item (42) has a `stopped` session →
-# EXCLUDED from attach (skip, like working) and not fresh-launched. With no other
-# item and no parked `dispatch-*` router under main → `empty`.
-echo "Test: lone stopped item → excluded from attach, not fresh → empty"
+# OHST3g. Stopped-attach (#2240 behavior change BY DESIGN): the only labeled item
+# (42) has a `stopped` session → ATTACH. stopped is now attachable so a human
+# resuming the queue re-engages the originating session in place rather than
+# wedging. Uses the OHST3f (done-attach) shape: on-disk cwd, no
+# DISPATCH_OFFICE_HOURS_MAIN_WORKTREE export (exits before parked-router fallback).
+echo "Test: lone stopped item → attached (stopped is now attachable, #2240)"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+mkdir -p "$TMPDIR_TEST/wt/42-x"
+office_hours_state_fake_claude "42-x:stopped:$TMPDIR_TEST/wt/42-x"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "lone stopped item → attached" "idle s-42-x" "$result"
+teardown
+
+# OHST3g2. Paused-attach (#2240): the only labeled item (42) has a `paused`
+# session → ATTACH. Mirrors OHST3g (stopped-attach) for the paused state.
+echo "Test: lone paused item → attached (paused is now attachable, #2240)"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+mkdir -p "$TMPDIR_TEST/wt/42-x"
+office_hours_state_fake_claude "42-x:paused:$TMPDIR_TEST/wt/42-x"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "lone paused item → attached" "idle s-42-x" "$result"
+teardown
+
+# OHST3g3. Unrecognized-state-exclude (#2240 fail-safe): the only labeled item
+# (42) has a session in state `zombie` (unrecognized/malformed) → EXCLUDED from
+# attach (fail-safe skip, criterion 3: never attach into an unknown state) and
+# not fresh-launched. With no other item and no parked router under main → `empty`.
+echo "Test: lone unrecognized-state (zombie) item → excluded from attach, not fresh → empty"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
   > "$STUB_DIR/worktree-list.txt"
 export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
-office_hours_state_fake_claude "42-x:stopped"
+office_hours_state_fake_claude "42-x:zombie"
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "lone stopped item → empty" "empty" "$result"
+assert_eq "lone unrecognized-state item → empty (fail-safe skip)" "empty" "$result"
 unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
@@ -7003,6 +7041,98 @@ office_hours_state_fake_claude "42-x:waiting:/worktrees/42-x"
 result=$("$TMPDIR_TEST/office-hours-select-target")
 assert_eq "swept worktree, remote branch missing → fresh fallback with - 5th field" "office-hours 42 plan - -" "$result"
 unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
+# OHST15a. Removed-but-recoverable, worktree on disk → `resume` (#2240). Issue 42's
+# originating session is ABSENT from the daemon registry (removed), but its <N>-*
+# worktree is still on disk and its stamp sidecar + <sessionId>.jsonl transcript
+# are recoverable. dispatch-recover-session-id resolves the resumable sessionId +
+# branch; the on-disk worktree → resume in place. resume beats the fresh path.
+echo "Test: removed session + on-disk worktree + recoverable transcript → resume"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+mkdir -p "$TMPDIR_TEST/wt/42-x"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree %s\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  "$TMPDIR_TEST/wt/42-x" > "$STUB_DIR/worktree-list.txt"
+# Empty daemon registry → 42's session is removed (sessionless).
+office_hours_state_fake_claude
+# Recoverable: stamp sidecar for issue 42 + its .jsonl transcript present.
+export DISPATCH_STAMP_PROJECTS_ROOT="$TMPDIR_TEST/projects"
+mkdir -p "$DISPATCH_STAMP_PROJECTS_ROOT/proj-42"
+printf '%s\n' '{"schema":1,"session_id":"rec-sess-42","repo":"natb1/commons.systems","issue":42,"pr":null,"branch":"42-x","base_sha":"deadbeef","stamped_at":"2026-06-01T10:00:00Z"}' \
+  > "$DISPATCH_STAMP_PROJECTS_ROOT/proj-42/rec-sess-42.dispatch-stamp.json"
+touch "$DISPATCH_STAMP_PROJECTS_ROOT/proj-42/rec-sess-42.jsonl"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "removed + on-disk worktree + transcript → resume in place" "resume 42 rec-sess-42 $TMPDIR_TEST/wt/42-x" "$result"
+unset DISPATCH_STAMP_PROJECTS_ROOT
+teardown
+
+# OHST15b. Removed-but-NOT-recoverable (transcript purged) → fresh (#2240). Same
+# removed session, but the <sessionId>.jsonl is absent, so dispatch-recover-session-id
+# exits 1 (nothing recoverable) and the selector falls through to the fresh path.
+echo "Test: removed session + transcript purged → fresh-launch fallback"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+# No <N>-* worktree registered (only main) → swept/sessionless.
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n' > "$STUB_DIR/worktree-list.txt"
+office_hours_state_fake_claude
+# Sidecar present but transcript PURGED (.jsonl absent) → not recoverable.
+export DISPATCH_STAMP_PROJECTS_ROOT="$TMPDIR_TEST/projects"
+mkdir -p "$DISPATCH_STAMP_PROJECTS_ROOT/proj-42"
+printf '%s\n' '{"schema":1,"session_id":"rec-sess-42","repo":"natb1/commons.systems","issue":42,"pr":null,"branch":"42-x","base_sha":"deadbeef","stamped_at":"2026-06-01T10:00:00Z"}' \
+  > "$DISPATCH_STAMP_PROJECTS_ROOT/proj-42/rec-sess-42.dispatch-stamp.json"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "removed, transcript purged → fresh-launch fallback" "office-hours 42 plan - -" "$result"
+unset DISPATCH_STAMP_PROJECTS_ROOT
+teardown
+
+# OHST15c. Idle beats a removed-but-recoverable sibling (#2240 priority). 42 (older)
+# is removed-but-recoverable; 99 (newer) has a live idle session. A live idle
+# session is strictly safer than resurrecting a removed one, so idle wins and the
+# resume pass never runs.
+echo "Test: live idle item beats a removed-but-recoverable sibling (priority)"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+mkdir -p "$TMPDIR_TEST/wt/42-x" "$TMPDIR_TEST/wt/99-y"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree %s\nHEAD def456\nbranch refs/heads/42-x\n\nworktree %s\nHEAD aaa111\nbranch refs/heads/99-y\n\n' \
+  "$TMPDIR_TEST/wt/42-x" "$TMPDIR_TEST/wt/99-y" > "$STUB_DIR/worktree-list.txt"
+# Only 99 has a live (idle) session; 42 is removed.
+office_hours_state_fake_claude "99-y:idle:$TMPDIR_TEST/wt/99-y"
+# 42 IS recoverable (sidecar + transcript) — but idle 99 must still win.
+export DISPATCH_STAMP_PROJECTS_ROOT="$TMPDIR_TEST/projects"
+mkdir -p "$DISPATCH_STAMP_PROJECTS_ROOT/proj-42"
+printf '%s\n' '{"schema":1,"session_id":"rec-sess-42","repo":"natb1/commons.systems","issue":42,"pr":null,"branch":"42-x","base_sha":"deadbeef","stamped_at":"2026-06-01T10:00:00Z"}' \
+  > "$DISPATCH_STAMP_PROJECTS_ROOT/proj-42/rec-sess-42.dispatch-stamp.json"
+touch "$DISPATCH_STAMP_PROJECTS_ROOT/proj-42/rec-sess-42.jsonl"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "live idle sibling beats removed-recoverable item" "idle s-99-y" "$result"
+unset DISPATCH_STAMP_PROJECTS_ROOT
+teardown
+
+# OHST15d. Removed-but-recoverable, worktree SWEPT, origin/<branch> exists →
+# `resume-provision` (#2240). Symmetric with idle-provision: the consumer
+# re-provisions the worktree from the remote branch, then resumes the session.
+echo "Test: removed session, swept worktree, origin/<branch> exists → resume-provision"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+# 42 NOT registered (only main) → swept.
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n' > "$STUB_DIR/worktree-list.txt"
+printf '%s\n' '42-x' > "$STUB_DIR/remote-branches.txt"   # origin/42-x exists
+office_hours_state_fake_claude                            # empty registry → removed
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+export DISPATCH_STAMP_PROJECTS_ROOT="$TMPDIR_TEST/projects"
+mkdir -p "$DISPATCH_STAMP_PROJECTS_ROOT/proj-42"
+printf '%s\n' '{"schema":1,"session_id":"rec-sess-42","repo":"natb1/commons.systems","issue":42,"pr":null,"branch":"42-x","base_sha":"deadbeef","stamped_at":"2026-06-01T10:00:00Z"}' \
+  > "$DISPATCH_STAMP_PROJECTS_ROOT/proj-42/rec-sess-42.dispatch-stamp.json"
+touch "$DISPATCH_STAMP_PROJECTS_ROOT/proj-42/rec-sess-42.jsonl"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "removed swept + remote branch present → resume-provision" "resume-provision 42 rec-sess-42 42-x" "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE DISPATCH_STAMP_PROJECTS_ROOT
 teardown
 
 # OHST16. Not-local fresh-launch under a WORKING daemon (#2241 criterion-4,
@@ -7366,6 +7496,143 @@ assert_eq "swept + unprovisionable → swept-worktree diagnostic on stderr" "yes
 assert_eq "swept + unprovisionable → no LAUNCH (no spawn)" "no" \
   "$([[ "$out" == *LAUNCH:* ]] && echo yes || echo no)"
 unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
+# OH11. resume arm end-to-end (#2240): the selector emits `resume <N> <sid> <cwd>`
+# for a removed-but-recoverable session whose worktree is on disk. The entry
+# resumes it as a --bg job named office-hours-<N> rooted at <cwd>, then attaches BY
+# NAME. Stub the selector to emit the directive; a fake claude logs the --bg argv,
+# serves the post-resume registry (office-hours-42 under a FORKED sessionId, so
+# attach must resolve by NAME not by the verb's sess-abc), and echoes attach.
+echo "Test: resume directive → --bg --resume kick named office-hours-N, attach by name"
+setup
+mkdir -p "$TMPDIR_TEST/wt/42-x"
+cat > "$TMPDIR_TEST/office-hours-select-target" <<EOF
+#!/usr/bin/env bash
+echo "resume 42 sess-abc $TMPDIR_TEST/wt/42-x"
+EOF
+chmod +x "$TMPDIR_TEST/office-hours-select-target"
+cat > "$TMPDIR_TEST/bin/claude" <<'FAKE'
+#!/usr/bin/env bash
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+case "$1" in
+  agents)
+    echo '[{"sessionId":"forked-xyz","id":"j-office-hours-42","pid":1,"state":"idle","status":"idle","name":"office-hours-42","cwd":""}]'
+    ;;
+  attach)
+    echo "LAUNCH: attach $2"
+    ;;
+  *)
+    echo "$*" >> "$ROOT/bg-argv-log"
+    ;;
+esac
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/bin/claude"
+export OFFICE_HOURS_CLAUDE_CMD="$TMPDIR_TEST/bin/claude"
+export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/bin/claude"   # verify_agent_registered_under queries this
+export LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=0          # don't sleep between verify polls
+result=$("$TMPDIR_TEST/office-hours")
+bg=$(cat "$TMPDIR_TEST/bg-argv-log" 2>/dev/null || true)
+assert_eq "resume kick argv (single, no fork)" "--bg --name office-hours-42 --permission-mode auto --resume sess-abc continue" "$bg"
+assert_eq "resume attaches by name → j-office-hours-42 (not the verb sessionId)" "LAUNCH: attach j-office-hours-42" "$result"
+unset OFFICE_HOURS_CLAUDE_CMD CLAUDE_AGENTS_CMD LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
+teardown
+
+# OH12. resume fork-retry (#2240): the primary --bg --resume kick fails (a dead
+# sessionId can collide in the registry), so the entry retries ONCE with
+# --fork-session, then attaches BY NAME (the forked id is reachable via the stable
+# office-hours-<N> name). The fake fails any --bg kick lacking --fork-session.
+echo "Test: resume primary kick fails → fork-session retry, then attach by name"
+setup
+mkdir -p "$TMPDIR_TEST/wt/42-x"
+cat > "$TMPDIR_TEST/office-hours-select-target" <<EOF
+#!/usr/bin/env bash
+echo "resume 42 sess-abc $TMPDIR_TEST/wt/42-x"
+EOF
+chmod +x "$TMPDIR_TEST/office-hours-select-target"
+cat > "$TMPDIR_TEST/bin/claude" <<'FAKE'
+#!/usr/bin/env bash
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+case "$1" in
+  agents)
+    echo '[{"sessionId":"forked-xyz","id":"j-office-hours-42","pid":1,"state":"idle","status":"idle","name":"office-hours-42","cwd":""}]'
+    exit 0
+    ;;
+  attach)
+    echo "LAUNCH: attach $2"
+    exit 0
+    ;;
+  *)
+    echo "$*" >> "$ROOT/bg-argv-log"
+    # Fail the primary kick (no --fork-session); succeed the fork retry.
+    [[ "$*" == *"--fork-session"* ]] || exit 1
+    exit 0
+    ;;
+esac
+FAKE
+chmod +x "$TMPDIR_TEST/bin/claude"
+export OFFICE_HOURS_CLAUDE_CMD="$TMPDIR_TEST/bin/claude"
+export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/bin/claude"   # verify_agent_registered_under queries this
+export LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=0          # don't sleep between verify polls
+result=$("$TMPDIR_TEST/office-hours")
+mapfile -t oh_resume_argv < "$TMPDIR_TEST/bg-argv-log"
+assert_eq "primary kick carries no --fork-session" "--bg --name office-hours-42 --permission-mode auto --resume sess-abc continue" "${oh_resume_argv[0]:-}"
+assert_eq "fork retry appends --fork-session before continue" "--bg --name office-hours-42 --permission-mode auto --resume sess-abc --fork-session continue" "${oh_resume_argv[1]:-}"
+assert_eq "after fork, attach by name → j-office-hours-42" "LAUNCH: attach j-office-hours-42" "$result"
+unset OFFICE_HOURS_CLAUDE_CMD CLAUDE_AGENTS_CMD LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
+teardown
+
+# OH13. resume verify-fails-then-fork (#2240): the primary --bg --resume kick
+# returns 0 but NO session registers — the real async-reject mode for a
+# dead/colliding sessionId (claude --bg returns before registration; a rejected
+# id never registers). The verify gate must catch this (rc 0 is not enough) and
+# retry with --fork-session, after which the session registers and attach
+# resolves by name. The fake registers office-hours-42 ONLY after a --fork-session
+# kick.
+echo "Test: resume primary kick returns 0 but never registers → verify fails → fork"
+setup
+mkdir -p "$TMPDIR_TEST/wt/42-x"
+cat > "$TMPDIR_TEST/office-hours-select-target" <<EOF
+#!/usr/bin/env bash
+echo "resume 42 sess-abc $TMPDIR_TEST/wt/42-x"
+EOF
+chmod +x "$TMPDIR_TEST/office-hours-select-target"
+cat > "$TMPDIR_TEST/bin/claude" <<'FAKE'
+#!/usr/bin/env bash
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+case "$1" in
+  agents)
+    # Registered ONLY after a --fork-session kick created the marker.
+    if [[ -f "$ROOT/forked" ]]; then
+      echo '[{"sessionId":"forked-xyz","id":"j-office-hours-42","pid":1,"state":"idle","status":"idle","name":"office-hours-42","cwd":""}]'
+    else
+      echo '[]'
+    fi
+    exit 0
+    ;;
+  attach)
+    echo "LAUNCH: attach $2"
+    exit 0
+    ;;
+  *)
+    echo "$*" >> "$ROOT/bg-argv-log"
+    # Primary kick returns 0 but does NOT register; the fork kick registers.
+    [[ "$*" == *"--fork-session"* ]] && touch "$ROOT/forked"
+    exit 0
+    ;;
+esac
+FAKE
+chmod +x "$TMPDIR_TEST/bin/claude"
+export OFFICE_HOURS_CLAUDE_CMD="$TMPDIR_TEST/bin/claude"
+export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/bin/claude"
+export LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=0
+result=$("$TMPDIR_TEST/office-hours")
+mapfile -t oh_resume_argv < "$TMPDIR_TEST/bg-argv-log"
+assert_eq "primary kick (rc 0, unregistered) carries no --fork-session" "--bg --name office-hours-42 --permission-mode auto --resume sess-abc continue" "${oh_resume_argv[0]:-}"
+assert_eq "verify-fail triggers fork retry (rc 0 alone is not enough)" "--bg --name office-hours-42 --permission-mode auto --resume sess-abc --fork-session continue" "${oh_resume_argv[1]:-}"
+assert_eq "after fork registers, attach by name → j-office-hours-42" "LAUNCH: attach j-office-hours-42" "$result"
+unset OFFICE_HOURS_CLAUDE_CMD CLAUDE_AGENTS_CMD LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
 teardown
 
 # ============================================================================
@@ -11955,6 +12222,31 @@ mkdir -p "$wt"
 write_fake_claude '[{"sessionId":"oh-1","pid":99,"status":"busy","name":"office-hours-1311"}]' 0
 if worktree_has_live_session "$wt"; then live=occupied; else live=free; fi
 assert_eq "office-hours occupancy: worktree_has_live_session reports occupied" "occupied" "$live"
+ca_teardown
+
+# --- Test 8c: stopped session still occupies its worktree (#2240 byte-identical router) ---
+#
+# The selector now attaches stopped/paused sessions (#2240), but the shared
+# worktree_has_live_session helper is deliberately NOT changed — it must still
+# report a stopped session as OCCUPIED so the dispatch router hot path is
+# byte-identical. This test proves that invariant.
+
+echo "Test: stopped session still marks worktree occupied (byte-identical router, #2240)"
+ca_setup
+ca_basename=$(basename "$CA_DIR")
+write_fake_claude "[{\"sessionId\":\"s-stop\",\"pid\":5,\"status\":\"stopped\",\"name\":\"$ca_basename\"}]" 0
+if worktree_has_live_session "$CA_DIR"; then live=occupied; else live=free; fi
+assert_eq "stopped occupancy: worktree_has_live_session reports occupied" "occupied" "$live"
+ca_teardown
+
+# --- Test 8d: paused session still occupies its worktree (#2240 byte-identical router) ---
+
+echo "Test: paused session still marks worktree occupied (byte-identical router, #2240)"
+ca_setup
+ca_basename=$(basename "$CA_DIR")
+write_fake_claude "[{\"sessionId\":\"s-pause\",\"pid\":6,\"status\":\"paused\",\"name\":\"$ca_basename\"}]" 0
+if worktree_has_live_session "$CA_DIR"; then live=occupied; else live=free; fi
+assert_eq "paused occupancy: worktree_has_live_session reports occupied" "occupied" "$live"
 ca_teardown
 
 # --- Test 9: claude_sessions_under invokes `claude` with --cwd <path> -------
@@ -38099,6 +38391,108 @@ else
   FAIL=$((FAIL + 1))
   echo "  FAIL: dispatch_marker_comment_id absent case: rc=$dmci_rc3, output='$dmci_out3' (expected rc=0, empty output)"
 fi
+
+# ============================================================================
+# dispatch-recover-session-id (#2240)
+# ============================================================================
+#
+# Pure-filesystem reader: globs *.dispatch-stamp.json under
+# DISPATCH_STAMP_PROJECTS_ROOT, filters by .issue, sorts newest-first by
+# .stamped_at, and returns the first candidate whose .jsonl transcript exists.
+#
+# Each case runs in its own subshell over a mktemp -d fake projects root so
+# nothing leaks across tests and teardown() is untouched.
+
+echo ""
+echo "=== dispatch-recover-session-id ==="
+
+RECOVER="$SCRIPT_DIR/dispatch-recover-session-id"
+
+# T1. recoverable: sidecar (.issue==N) + its .jsonl present → emits sid<TAB>branch, rc 0.
+(
+  root=$(mktemp -d)
+  export DISPATCH_STAMP_PROJECTS_ROOT="$root"
+  proj="$root/some-project-slug"
+  mkdir -p "$proj"
+  sid="abc-session-1"
+  printf '%s\n' \
+    '{"schema":1,"session_id":"abc-session-1","repo":"natb1/commons.systems","issue":42,"pr":null,"branch":"42-feature","base_sha":"deadbeef","stamped_at":"2026-06-01T10:00:00Z"}' \
+    > "$proj/${sid}.dispatch-stamp.json"
+  touch "$proj/${sid}.jsonl"
+  rc=0
+  out=$("$RECOVER" --issue 42 2>/dev/null) || rc=$?
+  assert_eq "recover: recoverable → rc 0" "0" "$rc"
+  assert_eq "recover: recoverable → sid<TAB>branch" "abc-session-1	42-feature" "$out"
+  rm -rf "$root"
+) || true
+
+# T2. newest-purged, older-survives: two sidecars for issue N; newest .jsonl absent,
+#     older .jsonl present → emits the OLDER recoverable session (proves
+#     newest-EXISTING, not latest-then-verify).
+(
+  root=$(mktemp -d)
+  export DISPATCH_STAMP_PROJECTS_ROOT="$root"
+  proj="$root/some-project-slug"
+  mkdir -p "$proj"
+  # newer sidecar — stamped_at later, but no .jsonl
+  sid_new="newer-session"
+  printf '%s\n' \
+    '{"schema":1,"session_id":"newer-session","repo":"natb1/commons.systems","issue":99,"pr":null,"branch":"99-newer","base_sha":"aaa","stamped_at":"2026-06-02T12:00:00Z"}' \
+    > "$proj/${sid_new}.dispatch-stamp.json"
+  # Set mtime one second later too so secondary sort agrees with stamped_at.
+  touch -d "2026-06-02 12:00:01" "$proj/${sid_new}.dispatch-stamp.json" 2>/dev/null || true
+  # NO .jsonl for newer session
+
+  # older sidecar — stamped_at earlier, .jsonl present
+  sid_old="older-session"
+  printf '%s\n' \
+    '{"schema":1,"session_id":"older-session","repo":"natb1/commons.systems","issue":99,"pr":null,"branch":"99-older","base_sha":"bbb","stamped_at":"2026-06-01T08:00:00Z"}' \
+    > "$proj/${sid_old}.dispatch-stamp.json"
+  touch -d "2026-06-01 08:00:00" "$proj/${sid_old}.dispatch-stamp.json" 2>/dev/null || true
+  touch "$proj/${sid_old}.jsonl"
+
+  rc=0
+  out=$("$RECOVER" --issue 99 2>/dev/null) || rc=$?
+  assert_eq "recover: newest-purged, older-survives → rc 0" "0" "$rc"
+  assert_eq "recover: newest-purged, older-survives → emits older session" "older-session	99-older" "$out"
+  rm -rf "$root"
+) || true
+
+# T3. no-transcript: sidecar present but .jsonl absent → rc 1, no stdout.
+(
+  root=$(mktemp -d)
+  export DISPATCH_STAMP_PROJECTS_ROOT="$root"
+  proj="$root/some-project-slug"
+  mkdir -p "$proj"
+  sid="no-transcript-session"
+  printf '%s\n' \
+    '{"schema":1,"session_id":"no-transcript-session","repo":"natb1/commons.systems","issue":7,"pr":null,"branch":"7-thing","base_sha":"ccc","stamped_at":"2026-05-01T00:00:00Z"}' \
+    > "$proj/${sid}.dispatch-stamp.json"
+  # Deliberately do NOT touch .jsonl
+  rc=0
+  out=$("$RECOVER" --issue 7 2>/dev/null) || rc=$?
+  assert_eq "recover: no-transcript → rc 1" "1" "$rc"
+  assert_eq "recover: no-transcript → no stdout" "" "$out"
+  rm -rf "$root"
+) || true
+
+# T4. wrong-issue: only a DIFFERENT issue's sidecar present → rc 1 (no misattribution).
+(
+  root=$(mktemp -d)
+  export DISPATCH_STAMP_PROJECTS_ROOT="$root"
+  proj="$root/some-project-slug"
+  mkdir -p "$proj"
+  sid="wrong-issue-session"
+  printf '%s\n' \
+    '{"schema":1,"session_id":"wrong-issue-session","repo":"natb1/commons.systems","issue":100,"pr":null,"branch":"100-other","base_sha":"ddd","stamped_at":"2026-05-15T00:00:00Z"}' \
+    > "$proj/${sid}.dispatch-stamp.json"
+  touch "$proj/${sid}.jsonl"
+  rc=0
+  out=$("$RECOVER" --issue 5 2>/dev/null) || rc=$?
+  assert_eq "recover: wrong-issue → rc 1" "1" "$rc"
+  assert_eq "recover: wrong-issue → no stdout" "" "$out"
+  rm -rf "$root"
+) || true
 
 # ============================================================================
 # summary
