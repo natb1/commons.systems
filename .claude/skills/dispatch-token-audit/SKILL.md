@@ -192,7 +192,7 @@ These slices are yield metrics, not cost metrics — they do not sort into the r
 
 Each dispatch worker session writes a sidecar file next to its transcript before it starts work. `aggregate-usage.sh` reads the sidecar and surfaces its contents on every entry in `.sessions[]` as the `artifact` field. The join is by transcript stem: `<session-id>.jsonl` and `<session-id>.dispatch-stamp.json` share the same stem, so the script locates the sidecar from the transcript path directly — no separate index or lookup is needed.
 
-**`artifact`** — present on every `.sessions[]` entry. It is the sidecar record `{repo, issue, pr, base_sha, branch}`, or `null` for sessions with no sidecar (subagent transcripts, router ticks, pre-#1861 worker sessions, and any non-worker session that did not write one). The four primary join keys are `{repo, issue, pr, base_sha}`; `branch` is also present for human-readable context.
+**`artifact`** — present on every `.sessions[]` entry. It is the sidecar record `{repo, issue, pr, base_sha, branch}`, or `null` for sessions with no sidecar (subagent transcripts, router ticks, pre-#1861 worker sessions, and any non-worker session that did not write one). The four primary join keys are `{repo, issue, pr, base_sha}`; `branch` is also present for human-readable context. `base_sha` reflects the session-start HEAD and is preserved across re-stamps, so it stays a stable anchor for a resumed session even after an ff-merge of origin/main moves HEAD.
 
 **jq slices against `tmp/usage-audit.json`:**
 
