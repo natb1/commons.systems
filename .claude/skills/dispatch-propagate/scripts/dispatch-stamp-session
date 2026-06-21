@@ -240,12 +240,16 @@ fi
 # Locate the sidecar path: transcript with .jsonl → .dispatch-stamp.json.
 sidecar="${TRANSCRIPT_PATH%.jsonl}.dispatch-stamp.json"
 
-# Idempotency: a re-run re-derives the remaining git-sourced fields (repo/issue/
-# branch) and the timestamp, but must PRESERVE both a non-null `.pr` written by a
-# prior --backfill-pr (a re-stamp must never clobber a known PR number back to
-# null) and the `.base_sha` from the initial startup write (so it remains the
-# session-start anchor across resumes, even after an ff-merge moves HEAD). `.pr`
-# and `.base_sha` are carried forward; nothing else is preserved.
+# Idempotency: Mode A runs on both `startup` and `resume`. `base_sha` is one of
+# the audit join keys {repo, issue, pr, base_sha} and must anchor the session's
+# STARTING ground truth — a resume after committed work must NOT advance it to
+# the post-resume HEAD. When the sidecar already exists, preserve its `base_sha`
+# (and a non-null `.pr` from a prior `--backfill-pr`); only the first (startup)
+# write derives `base_sha` from HEAD. `repo`/`issue`/`branch` are stable within
+# a session and are harmlessly re-derived. `stamped_at` deliberately DOES
+# re-derive on every stamp: unlike `base_sha` it is not a join key (not carried
+# into the audit `artifact` record), so it records the most-recent stamp time,
+# not session start.
 pr=null
 if [[ -f "$sidecar" ]]; then
   existing_pr=$(jq '.pr' "$sidecar" 2>/dev/null || echo null)
