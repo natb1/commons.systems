@@ -3,6 +3,8 @@ set -euo pipefail
 
 REPO_ROOT=$(git rev-parse --show-toplevel)
 cd "$REPO_ROOT"
+# shellcheck source=../../dispatch-propagate/scripts/lib.sh
+source "$REPO_ROOT/.claude/skills/dispatch-propagate/scripts/lib.sh"
 
 OUTPUT="$REPO_ROOT/tmp/roadmap-context.txt"
 # Pre-create the file owner-only: it now holds analytics data (Search Console
@@ -29,11 +31,11 @@ cat README.md
 
 echo ""
 echo "=== Open Issues ==="
-gh issue list --state open --json number,title,labels --limit 200
+gh_issue_list_rest --state open --limit 200 --include-title
 
 echo ""
 echo "=== Closed Issues (recent 100) ==="
-gh issue list --state closed --json number,title,closedAt --limit 100
+gh_issue_list_rest --state closed --limit 100 --include-title
 
 echo ""
 echo "=== Repo Stats ==="

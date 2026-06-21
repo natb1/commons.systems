@@ -1,11 +1,11 @@
 ---
 name: dispatch-token-audit
-description: Audit recent dispatch session transcripts and emit a ranked report of token-reduction opportunities across nine lenses, ranked by measured price-proxy magnitude. Report-only. Accepts an optional window, e.g. /dispatch-token-audit 2d.
+description: Audit recent dispatch session transcripts and emit a ranked report of token-reduction opportunities across nine lenses, ranked by measured price-proxy magnitude. Primarily report-only; also writes the phase-model routing policy artifact. Accepts an optional window, e.g. /dispatch-token-audit 2d.
 ---
 
 # Dispatch Token Audit
 
-This skill parses recent Claude session transcripts and emits a ranked report of token-reduction opportunities. It is report-only: it does not create issues or modify the dispatch workflow — the user decides what to act on from the report. Two cost figures appear in the output:
+This skill parses recent Claude session transcripts and emits a ranked report of token-reduction opportunities. It creates no GitHub issues and edits no workflow files — the user decides what to act on from the report. It does, however, write one control artifact: `dispatch.config/phase-model-policy.json`, the phase→model routing policy consumed by `dispatch-phase-model` at tick time (step 7 below). That write is the audit closing the routing loop on its own measurements; `force-opus.json` overrides the policy downstream, and deleting the file reverts routing to the hardcoded defaults. Two cost figures appear in the output:
 
 - **`price_proxy_usd`** — a uniform Opus-list-price rate applied to every token regardless of the actual model. Holding price constant isolates token count, so this figure ranks opportunities by relative magnitude. It is **not** the actual bill.
 - **`cost_usd`** — the truthful per-model bill. Each model is priced at its real rate (Sonnet, Haiku, or Opus), so this figure measures real dollars and shows the actual savings from model-routing decisions.
@@ -84,7 +84,13 @@ Ranking (step 5) stays on `price_proxy_usd`. `cost_usd` is reported alongside it
 
    # Top 10 costliest individual sessions
    jq '.sessions | sort_by(-.price_proxy_usd) | .[0:10] | map({id,type,model,peak_context,price_proxy_usd})' tmp/usage-audit.json
+
+   # Per-session GitHub artifact join record — repo/issue/pr/base_sha/branch the session
+   # acted on. null for sessions without a sidecar (subagents, router ticks, pre-#1861 sessions).
+   jq '.sessions | map({id, artifact}) | map(select(.artifact != null))' tmp/usage-audit.json
    ```
+
+   The join key is the session id: the sidecar `<id>.dispatch-stamp.json` sits next to `<id>.jsonl` in the transcripts directory, so `.sessions[].id` is the join key between audit findings and GitHub artifacts. Each `artifact` record carries `{repo, issue, pr, base_sha, branch}`. The sidecar is the authoritative source of the overlapping join keys (`repo/issue/pr/base_sha`); the sibling outcome envelope (the #1860 internal-yield record) carries only its own non-overlapping outcome fields (findings, disposition) — so there is exactly one join-key source.
 
 4. **Interpret and rank against all nine lenses.** Evaluate every lens. Map each to the script output it draws from:
 
@@ -119,7 +125,31 @@ Ranking (step 5) stays on `price_proxy_usd`. `cost_usd` is reported alongside it
      - A concrete, specific suggestion (not a vague "consider X" — name the phase, the model, the script, the error signature).
    - **All nine lenses represented**: lenses with negligible measured impact appear at the bottom with their measured magnitude and a note that the data shows near-zero impact.
 
-7. **Report-only.** The skill does NOT create GitHub issues and does NOT modify the dispatch workflow. The user reads the report and decides what to file. This prevents the skill from racing or duplicating the optimization issues it surfaces (e.g. #1171, #1172).
+7. **Write the phase-model routing policy.** Run the producer over the same aggregate doc and write its stdout to the resolved project-root `dispatch.config/phase-model-policy.json`. This write happens **unconditionally** — it is the audit closing the routing loop on its own measurements, not an opt-in. The safety net is structural: the producer only ever emits routes for `{qa, review}` (it iterates that allowlist and nothing else), and `dispatch-phase-model` re-applies the same fail-closed allowlist plus the `force-opus` override downstream, so a code-authoring phase can never be demoted.
+
+   ```bash
+   source .claude/skills/dispatch-propagate/scripts/lib.sh
+   POLICY_DIR="$(resolve_project_root)/dispatch.config"
+   mkdir -p "$POLICY_DIR"
+   .claude/skills/dispatch-token-audit/scripts/generate-phase-model-policy.sh tmp/usage-audit.json \
+     > "$POLICY_DIR/phase-model-policy.json.tmp" \
+     && mv "$POLICY_DIR/phase-model-policy.json.tmp" "$POLICY_DIR/phase-model-policy.json"
+   ```
+
+   Write to a temp file in the same directory, then atomically `mv` it into
+   place. The shell redirect truncates its target **before** the producer runs,
+   so redirecting straight onto `phase-model-policy.json` would leave an empty
+   file if the producer exits non-zero (bad `tmp/usage-audit.json`, a failed
+   `MIN_SAMPLE`/`HIT_RATE_FLOOR` override, or any jq error). An empty policy
+   makes `dispatch-config-load` exit 1, cascading to `dispatch-phase-model` and
+   `dispatch-launch-worker` so no phase spawns at all. Staging to `.tmp` and
+   renaming only on success preserves the previous valid policy on failure.
+
+   Run this Bash call with `dangerouslyDisableSandbox: true`. `dispatch.config/` lives at the **project root**, which is NOT in `settings.json`'s `allowWrite` list (see `.claude/rules/sandbox.md`), so a sandboxed write fails read-only. Resolve the path exactly as `dispatch-config-load` does — `resolve_project_root` from `lib.sh`, then `/dispatch.config`. Because that directory is OUTSIDE the worktree, the write does not dirty git.
+
+   What the policy does: `dispatch-phase-model` reads it at tick time and routes `qa`/`review` either to Sonnet (`claude-sonnet-4-6`, keep cheap) when the pooled hit-rate is at/above the floor with enough samples, or promotes to Opus (`claude-opus-4-8`) when the hit-rate falls below the floor. Phases outside `{qa, review}` are never routed. The producer is a pure function of `tmp/usage-audit.json` (no clock call). With healthy data both phases route to Sonnet — identical to the current defaults — so writing by default changes nothing until evidence accumulates and flips a phase to `promote`. `force-opus.json` overrides this policy downstream, and deleting `phase-model-policy.json` reverts every phase to the hardcoded defaults.
+
+8. **Otherwise report-only.** Apart from the one `phase-model-policy.json` control-artifact write in step 7, the skill creates NO GitHub issues and modifies NO dispatch workflow files. The user reads the report and decides what else to file. This keeps the skill from racing or duplicating the optimization issues it surfaces (e.g. #1171, #1172).
 
 ## Per-run outcome hit-rates
 
@@ -157,3 +187,27 @@ jq '[.sessions[] | select(.outcome_rates.hit_rate != null)] | sort_by(-.outcome_
 ```
 
 These slices are yield metrics, not cost metrics — they do not sort into the ranked token-reduction report. Read them alongside the report to correlate phase spend with phase effectiveness.
+
+## Per-session artifact join
+
+Each dispatch worker session writes a sidecar file next to its transcript before it starts work. `aggregate-usage.sh` reads the sidecar and surfaces its contents on every entry in `.sessions[]` as the `artifact` field. The join is by transcript stem: `<session-id>.jsonl` and `<session-id>.dispatch-stamp.json` share the same stem, so the script locates the sidecar from the transcript path directly — no separate index or lookup is needed.
+
+**`artifact`** — present on every `.sessions[]` entry. It is the sidecar record `{repo, issue, pr, base_sha, branch}`, or `null` for sessions with no sidecar (subagent transcripts, router ticks, pre-#1861 worker sessions, and any non-worker session that did not write one). The four primary join keys are `{repo, issue, pr, base_sha}`; `branch` is also present for human-readable context.
+
+**jq slices against `tmp/usage-audit.json`:**
+
+```bash
+# All sessions that carry an artifact record (repo/issue/pr/base_sha/branch)
+jq '.sessions | map({id, artifact}) | map(select(.artifact != null))' tmp/usage-audit.json
+
+# Filter sessions by issue number — e.g. all sessions that worked issue 1861
+jq '.sessions | map(select(.artifact.issue == 1861)) | map({id, type, price_proxy_usd, artifact})' tmp/usage-audit.json
+
+# Filter sessions by PR number
+jq '.sessions | map(select(.artifact.pr == 1889)) | map({id, type, price_proxy_usd, artifact})' tmp/usage-audit.json
+
+# Token spend grouped by issue — which issues consumed the most proxy spend
+jq '[.sessions[] | select(.artifact != null)] | group_by(.artifact.issue) | map({issue: .[0].artifact.issue, sessions: length, price_proxy_usd: (map(.price_proxy_usd) | add)}) | sort_by(-.price_proxy_usd)' tmp/usage-audit.json
+```
+
+**Sidecar ownership.** The sidecar is the single authoritative source for the overlapping join keys (`repo/issue/pr/base_sha`). The #1860 outcome envelope carries only its own non-overlapping outcome fields (findings, disposition, fix counts) — it does not repeat the join keys. This keeps the two records non-redundant: join on session id to combine cost figures with artifact context and outcome yield in one query.

@@ -146,7 +146,7 @@ num_is_claimed() { [[ -n "${CLAIMED_NUMS[$1]:-}" ]]; }
 # and let a parked leaf past position 30 be returned as startable.
 declare -A OFFICE_HOURS_PARKED=()
 if [[ "$MODE" == "queue" ]]; then
-  parked_json=$(gh issue list --state open --label "dispatch:office-hours" --limit 300 --json number) \
+  parked_json=$(gh_issue_list_rest --state open --label "dispatch:office-hours" --limit 300) \
     || { echo "error: dispatch-trace-leaf $ISSUE_NUM: gh issue list for the dispatch:office-hours parked set failed; aborting rather than risk returning a parked leaf" >&2; exit 3; }
   while IFS= read -r parked_num; do
     [[ -n "$parked_num" ]] && OFFICE_HOURS_PARKED["$parked_num"]=1

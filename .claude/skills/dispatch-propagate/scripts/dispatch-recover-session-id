@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+# dispatch-recover-session-id — find the newest recoverable session for an issue.
+#
+# Usage: dispatch-recover-session-id --issue <N>
+#
+# Globs the dispatch-stamp sidecar files under
+# ${DISPATCH_STAMP_PROJECTS_ROOT:-${HOME}/.claude/projects}/*/*.dispatch-stamp.json,
+# filters to sidecars whose .issue field equals N, sorts by .stamped_at descending
+# (file mtime as a secondary tiebreak), then returns the FIRST candidate whose
+# sibling <sessionId>.jsonl transcript still exists.
+#
+# On success: prints "<sessionId>\t<branch>" to stdout and exits 0.
+# When no recoverable session exists: exits 1, no stdout.
+# On usage/environment errors: exits 2 with a diagnostic on stderr.
+#
+# Pure filesystem — never touches the Claude daemon (no `claude agents`), so it
+# is sandbox-safe and unit-testable without a running daemon.
+#
+# Test seam: $DISPATCH_STAMP_PROJECTS_ROOT overrides the projects root
+# (default ${HOME}/.claude/projects).
+set -euo pipefail
+
+ISSUE=""
+
+usage() {
+  echo "usage: dispatch-recover-session-id --issue <N>" >&2
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --issue)
+      if [[ $# -lt 2 ]]; then
+        echo "dispatch-recover-session-id: --issue requires a value" >&2
+        usage
+        exit 2
+      fi
+      ISSUE="$2"
+      shift 2
+      ;;
+    *)
+      echo "dispatch-recover-session-id: unexpected argument: $1" >&2
+      usage
+      exit 2
+      ;;
+  esac
+done
+
+if [[ -z "$ISSUE" ]]; then
+  echo "dispatch-recover-session-id: --issue is required" >&2
+  usage
+  exit 2
+fi
+
+if [[ ! "$ISSUE" =~ ^[0-9]+$ ]]; then
+  echo "dispatch-recover-session-id: --issue must be a non-negative integer, got: $ISSUE" >&2
+  usage
+  exit 2
+fi
+
+PROJECTS_ROOT="${DISPATCH_STAMP_PROJECTS_ROOT:-${HOME:-}/.claude/projects}"
+if [[ -z "$PROJECTS_ROOT" || ! -d "$PROJECTS_ROOT" ]]; then
+  echo "dispatch-recover-session-id: projects root '$PROJECTS_ROOT' is not a directory" >&2
+  exit 2
+fi
+
+# Collect all matching sidecars: emit "<stamped_at>\t<mtime_epoch>\t<sidecar_path>"
+# for each sidecar whose .issue == N (exact numeric match), then sort descending
+# by stamped_at (primary) and mtime (secondary).
+#
+# We use `jq -r` directly on the file (never echo "$VAR" | jq) to avoid
+# control-character corruption per shell-json.md.  Sidecars that fail to parse
+# or lack a matching .issue are skipped silently — a corrupt/alien sidecar
+# should not abort recovery.
+
+candidates=()
+while IFS= read -r sidecar; do
+  # Read .issue from the file; skip if jq fails or field is missing/wrong type.
+  sidecar_issue=$(jq -r '.issue // empty' "$sidecar" 2>/dev/null) || continue
+  # Exact integer match — do not allow cross-issue attribution.
+  [[ "$sidecar_issue" == "$ISSUE" ]] || continue
+
+  stamped_at=$(jq -r '.stamped_at // empty' "$sidecar" 2>/dev/null) || continue
+  [[ -n "$stamped_at" ]] || continue
+
+  mtime=$(stat -c '%Y' "$sidecar" 2>/dev/null) || continue
+  candidates+=("${stamped_at}	${mtime}	${sidecar}")
+done < <(find "$PROJECTS_ROOT" -maxdepth 2 -name "*.dispatch-stamp.json" 2>/dev/null)
+
+if [[ ${#candidates[@]} -eq 0 ]]; then
+  exit 1
+fi
+
+# Sort descending: primary key = stamped_at (ISO-8601 sorts lexicographically),
+# secondary key = mtime (numeric, descending).  Both fields are unique-enough
+# that a stable tiebreak matters only in adversarial fixtures; for real usage
+# stamped_at is the authoritative ordering.
+#
+# sort -t$'\t' -k1,1r -k2,2rn:
+#   -k1,1r  → column 1 (stamped_at) reverse lexicographic
+#   -k2,2rn → column 2 (mtime) reverse numeric
+sorted=$(printf '%s\n' "${candidates[@]}" | sort -t$'\t' -k1,1r -k2,2rn)
+
+# Iterate sorted candidates; return the first whose transcript (.jsonl) exists.
+while IFS=$'\t' read -r _stamped _mtime sidecar; do
+  sidecar_dir="$(dirname "$sidecar")"
+  session_id=$(jq -r '.session_id // empty' "$sidecar" 2>/dev/null) || continue
+  [[ -n "$session_id" ]] || continue
+
+  transcript="${sidecar_dir}/${session_id}.jsonl"
+  if [[ -f "$transcript" ]]; then
+    branch=$(jq -r '.branch // empty' "$sidecar" 2>/dev/null) || continue
+    [[ -n "$branch" ]] || continue
+    printf '%s\t%s\n' "$session_id" "$branch"
+    exit 0
+  fi
+done <<<"$sorted"
+
+# No candidate had a surviving transcript.
+exit 1

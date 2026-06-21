@@ -140,6 +140,88 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || exit 0
 SCRIPTS="$SCRIPT_DIR/../skills/dispatch-propagate/scripts"
 source "$SCRIPTS/lib.sh"
 
+# --- Decision-log instrumentation (write-only, non-fatal; #2038) -------------
+# Append EXACTLY ONE structured per-tick decision record per WORKER invocation,
+# via an EXIT trap. Unlike the select-tick / materialize-spawn sites (which arm
+# at the top), this trap is armed LATE — only AFTER Discriminator 2 (line :98)
+# has confirmed this is a worker session (JOB_NAME matches ^[0-9]+-). A
+# router-named (non-worker) job that takes the early `exit 0` at :99 arms NO
+# trap and so produces NO record, by design. The trap MUST NOT change the exit
+# code, so the handler never calls `exit`. decision_log_append is write-only and
+# ALWAYS returns 0 (see lib-decision-log.sh) — a failed source / missing tool
+# degrades to a no-op rather than a hard error.
+#
+# Prior trap: the only existing trap is the ERR trap at the top of this file
+# (`trap '...; exit 0' ERR`). EXIT and ERR are independent trap slots, so this
+# `trap ... EXIT` does NOT clobber it; when the ERR trap fires it calls
+# `exit 0`, which then runs this EXIT handler → still exactly one record. No
+# chaining is needed.
+#
+# The `|| true` is load-bearing: this file runs a `trap '...; exit 0' ERR`
+# (top of file), and a bare failing `source` at top level (unreadable/missing
+# lib) would fire that ERR trap and `exit 0` the WHOLE hook BEFORE any branch —
+# leaking the worker. `|| true` exempts the source from the ERR trap, so a
+# missing lib degrades to a no-op: the trap still registers, but at exit
+# `_dlog_stop_emit`'s call to the (now-undefined) decision_log_append fails
+# inside a function, where the ERR trap is inactive, leaving $? untouched.
+# shellcheck source=/dev/null
+source "$SCRIPTS/lib-decision-log.sh" 2>/dev/null || true
+
+# Accumulators, initialized to safe defaults before the trap is registered so an
+# early exit never references an unset var. Each terminal site sets DLOG_BRANCH
+# and DLOG_DISPOSITION just before its `exit`. The emitter reads the existing
+# vars (JOB_NAME/ISSUE_NUM/PR_NUM/MARKER_PHASE/CURRENT_PHASE/MARKER_FILE)
+# defensively as ${VAR:-} — Branches P and R exit before PR_NUM/MARKER_* are even
+# defined, so the guards are load-bearing.
+DLOG_BRANCH=""
+DLOG_DISPOSITION=""
+
+# _dlog_stop_emit — build the JSON record and hand it to decision_log_append.
+# Stdout-silent: the Stop hook's stdout/stderr matters to the harness, so nothing
+# here may leak to fd 1 (jq output is captured into a var; jq stderr is
+# swallowed). Numeric fields (issue/pr) are passed as strings and coerced
+# in-filter (tonumber? // null) so jq never fails on an empty value. Never calls
+# `exit` (preserves $?). Uses an `if` block for the marker_present re-test — a
+# bare `[[ -f x ]] && ...` would return non-zero when absent and could fire the
+# ERR trap.
+_dlog_stop_emit() {
+  local marker_present=false
+  if [[ -n "${MARKER_FILE:-}" && -f "${MARKER_FILE:-}" ]]; then
+    marker_present=true
+  fi
+  local json
+  json=$(jq -c -n \
+    --arg ts            "$(date -u +%FT%TZ)" \
+    --arg site          "stop" \
+    --arg worker        "${JOB_NAME:-}" \
+    --arg marker_phase  "${MARKER_PHASE:-}" \
+    --arg current_phase "${CURRENT_PHASE:-}" \
+    --arg branch        "$DLOG_BRANCH" \
+    --arg disposition   "$DLOG_DISPOSITION" \
+    --arg issue         "${ISSUE_NUM:-}" \
+    --arg pr            "${PR_NUM:-}" \
+    --argjson marker_present "$marker_present" \
+    '
+    def num: if . == "" then null else (tonumber? // null) end;
+    {
+      ts:             $ts,
+      site:           $site,
+      worker:         $worker,
+      marker_present: $marker_present,
+      marker_phase:   $marker_phase,
+      current_phase:  $current_phase,
+      branch:         $branch,
+      disposition:    $disposition,
+      issue:          ($issue | num),
+      pr:             ($pr | num)
+    }' 2>/dev/null) || return 0
+  command -v decision_log_append >/dev/null 2>&1 && decision_log_append "$json" || true
+}
+
+# Arm the trap NOW — past Discriminator 2, so only worker sessions emit. (A
+# router exited at :99 above, before this point.)
+trap '_dlog_stop_emit' EXIT
+
 # Release this worker's reservation marker (#1454). The marker is named by the
 # worktree basename, which equals JOB_NAME (the session --name). Clearing it the
 # instant the worker session ends means a normally-completed worker no longer
@@ -184,11 +266,21 @@ resolve_office_hours_reason() {
 # either side. (Apply is issue-only, via dispatch-apply-office-hours.)
 strip_office_hours_label() {
   if [ -n "$PR_NUM" ]; then
-    gh pr edit "$PR_NUM" --remove-label dispatch:office-hours >/dev/null 2>&1 \
-      || echo "[dispatch-stop] WARNING: gh pr edit --remove-label failed" >&2
+    gh_issue_remove_label_rest "$PR_NUM" dispatch:office-hours >/dev/null 2>&1 \
+      || echo "[dispatch-stop] WARNING: gh_issue_remove_label_rest (PR) failed" >&2
   fi
-  gh issue edit "$ISSUE_NUM" --remove-label dispatch:office-hours >/dev/null 2>&1 \
-    || echo "[dispatch-stop] WARNING: gh issue edit --remove-label failed" >&2
+  gh_issue_remove_label_rest "$ISSUE_NUM" dispatch:office-hours >/dev/null 2>&1 \
+    || echo "[dispatch-stop] WARNING: gh_issue_remove_label_rest (issue) failed" >&2
+  # #2040: on the parked→unparked transition ONLY (office-hours was present at
+  # session start, captured once in ISSUE_OFFICE_HOURS_PRESENT below), reset the
+  # issue-anchored total-attempt counter so the resumed autonomous work gets a
+  # fresh budget. Gated on the SAME single read the bump-skip guard uses so the
+  # two cannot disagree. Deliberately NOT called from the unconditional
+  # advance/self-close sites — resetting on every advance would defeat the
+  # cross-phase accumulation that is the whole point of the ceiling.
+  if [ "${ISSUE_OFFICE_HOURS_PRESENT:-no}" = yes ]; then
+    clear_attempt_counter
+  fi
 }
 
 # Best-effort: strip any dispatch:rate-limit-retry-<n> counter labels from the
@@ -205,7 +297,27 @@ clear_rate_limit_retry_labels() {
   gh issue view "$ISSUE_NUM" --json labels --jq \
     '.labels[].name | select(test("^dispatch:rate-limit-retry-[0-9]+$"))' 2>/dev/null \
     | while IFS= read -r lbl; do
-        [ -n "$lbl" ] && gh issue edit "$ISSUE_NUM" --remove-label "$lbl" >/dev/null 2>&1 \
+        [ -n "$lbl" ] && gh_issue_remove_label_rest "$ISSUE_NUM" "$lbl" >/dev/null 2>&1 \
+          || echo "[dispatch-stop] WARNING: could not clear $lbl (non-fatal)" >&2
+      done || true
+  return 0
+}
+
+# Best-effort: clear the issue-anchored dispatch:attempts-<n> total-attempt
+# counter (#2040). Called ONLY on the parked→unparked transition from inside
+# strip_office_hours_label: when an office-hours-assisted session advances a
+# previously-parked issue, the resumed autonomous work gets a fresh budget so it
+# does not instantly re-hit the ceiling and re-park. Mirrors
+# clear_rate_limit_retry_labels' totality: MUST return 0 even on a `gh` flake —
+# under `set -uo pipefail` + `trap ... exit 0 ERR`, an unguarded non-zero return
+# at a pre-advance call site would fire the ERR trap and skip the advance work
+# this hook owns. The trailing `return 0` makes the function total.
+clear_attempt_counter() {
+  local lbl
+  gh issue view "$ISSUE_NUM" --json labels --jq \
+    '.labels[].name | select(test("^dispatch:attempts-[0-9]+$"))' 2>/dev/null \
+    | while IFS= read -r lbl; do
+        [ -n "$lbl" ] && gh_issue_remove_label_rest "$ISSUE_NUM" "$lbl" >/dev/null 2>&1 \
           || echo "[dispatch-stop] WARNING: could not clear $lbl (non-fatal)" >&2
       done || true
   return 0
@@ -279,6 +391,52 @@ session_scheduled_wakeup() {
     | tail -1 | grep -q '"ScheduleWakeup"'
 }
 
+# Branch A background-task discriminator (#2243). Returns 0 ("still running in
+# the background, will resume on its own") ONLY when the transcript shows at
+# least one background task that was LAUNCHED but has not yet been NOTIFIED back
+# — i.e. an in-flight launched∖notified set difference is non-empty; returns 1
+# in EVERY other case — including all uncertainty: empty TRANSCRIPT_PATH,
+# missing/unreadable file, malformed transcript, or no launches at all. The
+# fail-safe direction (positive evidence only) is load-bearing: any doubt falls
+# through to today's office-hours park, so a genuine death still parks.
+#
+# A Workflow-based phase skill (/review-fix, /qa-fix) launches its review/QA
+# fan-out as a BACKGROUND Workflow and yields its turn to await a
+# <task-notification>. That mid-phase turn-end fires this Stop hook while the
+# phase is still running and has not yet written its phase-completed marker.
+# Without this gate Branch A sees marker-absence and prematurely parks the
+# issue on office-hours (#2243) — symmetric to session_scheduled_wakeup (#1590).
+#
+# Transcript shapes (whole-transcript grain, NOT last-turn-only — a background
+# launch is not a per-poll-cycle event):
+#   Launch — a tool_result text `... launched in background. Task ID: <ID>`
+#            (Workflow: `Workflow launched in background. Task ID: <ID>`; the
+#            Task tool uses analogous `... launched in background. Task ID: <ID>`).
+#   Notify — a <task-notification> payload carrying `"taskId":"<ID>"` for ANY
+#            status; any notification means the task resumed the session and is
+#            no longer in-flight.
+#
+# Grep the file directly for literal substrings (not echo-into-jq): the IDs are
+# plain substrings, so grep is robust and sidesteps the control-char trap
+# (.claude/rules/shell-json.md), mirroring dispatch-recover-dispatched-phase /
+# dispatch-detect-rate-limit-death.
+session_has_inflight_background_task() {
+  [ -n "$TRANSCRIPT_PATH" ] && [ -r "$TRANSCRIPT_PATH" ] || return 1
+  local launched notified
+  launched=$(grep -oE 'launched in background\. Task ID: [A-Za-z0-9_-]+' "$TRANSCRIPT_PATH" 2>/dev/null \
+    | grep -oE '[A-Za-z0-9_-]+$' | sort -u)
+  [ -n "$launched" ] || return 1
+  # Tolerate the JSONL backslash-escaped quote form (\"taskId\":\"<ID>\") as
+  # well as the bare "taskId":"<ID>" form — the <task-notification> payload is a
+  # string value, so its inner quotes are backslash-escaped in the record.
+  notified=$(grep -oE 'taskId\\?":\\?"[A-Za-z0-9_-]+' "$TRANSCRIPT_PATH" 2>/dev/null \
+    | grep -oE '[A-Za-z0-9_-]+$' | sort -u)
+  # In-flight iff at least one launched ID has no matching notification, i.e.
+  # the set difference (launched ∖ notified) is non-empty. comm -23 lists lines
+  # unique to the first (sorted) input.
+  [ -n "$(comm -23 <(printf '%s\n' "$launched") <(printf '%s\n' "$notified"))" ]
+}
+
 # Branch P — parse-job clean completion (#1024): a /budget-parse-job session is
 # named <N>-slug like a worker but, on a successful idempotent statement merge,
 # writes a `parse-job-done` sentinel instead of a phase-completed marker. A clean
@@ -288,6 +446,7 @@ session_scheduled_wakeup() {
 # falls through to Branch A, which parks it on office-hours — no branch needed
 # here.) Checked BEFORE the PR-centric branches.
 if [ -f "$CLAUDE_JOB_DIR/parse-job-done" ]; then
+  DLOG_BRANCH="P"; DLOG_DISPOSITION="self-close"
   spawn_tick
   spawn_sweep
   self_close
@@ -308,6 +467,7 @@ fi
 # office-hours — today's behavior, no branch needed here.) Checked BEFORE the
 # PR-centric branches, beside Branch P.
 if [ -f "$CLAUDE_JOB_DIR/resolved-closed" ]; then
+  DLOG_BRANCH="R"; DLOG_DISPOSITION="self-close"
   spawn_tick
   spawn_sweep
   self_close
@@ -321,6 +481,11 @@ PR_NUM=$("$SCRIPTS/dispatch-find-pr" "$ISSUE_NUM" 2>/dev/null) || PR_NUM=""
 # phase derivation below via DISPATCH_PR_LIST, avoiding a redundant `gh pr list`
 # per predicate. On fetch failure DISPATCH_PR_LIST stays empty and each script
 # falls back to its own self-fetch.
+# This batched per-tick call intentionally stays on GraphQL (gh pr list) because
+# both fields it requires — closingIssuesReferences (which issues a PR closes,
+# no REST-list equivalent) and statusCheckRollup (per-PR CI rollup, no
+# REST-list equivalent) — are GraphQL-only; there is no REST /pulls endpoint
+# that returns either field.
 DISPATCH_PR_LIST=$(pr_list_open "number,headRefName,isDraft,statusCheckRollup,labels,mergeable" 2>/dev/null) \
   || DISPATCH_PR_LIST=""
 export DISPATCH_PR_LIST
@@ -361,16 +526,20 @@ fi
 # the work still continues (the next tick re-gates once CI concludes); only the
 # session-context preservation is lost in this narrow window.
 if ! "$SCRIPTS/dispatch-ci-ready" "$ISSUE_NUM" >/dev/null 2>&1; then
+  DLOG_BRANCH="early-gate"
   spawn_tick
   if [ -n "$MARKER_PHASE" ]; then
     # Marker present (see the block above): the phase completed and only CI
     # is still running — self-close so the session does not leak idle.
+    DLOG_DISPOSITION="self-close"
     clear_rate_limit_retry_labels
     spawn_sweep
     self_close
+  else
+    # No marker: a genuine mid-phase exit during a CI restart — hand back to
+    # the router without parking or self-closing (TOCTOU protection).
+    DLOG_DISPOSITION="hand-back"
   fi
-  # No marker: a genuine mid-phase exit during a CI restart — hand back to
-  # the router without parking or self-closing (TOCTOU protection).
   exit 0
 fi
 
@@ -378,14 +547,77 @@ fi
 # readiness gate so CI is confirmed ready and dispatch-phase will not exit 3.
 CURRENT_PHASE=$("$SCRIPTS/dispatch-phase" "$ISSUE_NUM" 2>/dev/null) || CURRENT_PHASE=""
 
+# Issue-anchored total-attempt ceiling (#2040). Read the issue's office-hours
+# state ONCE here and share it with both the bump-skip guard below and the
+# un-park reset in strip_office_hours_label, so the two cannot disagree (a
+# reset-too-eager bug would silently neuter the ceiling). This read reflects the
+# session-start state: the only sites that strip office-hours (Branch A
+# recovery-advance, Branch B) run AFTER this point.
+ISSUE_OFFICE_HOURS_PRESENT=no
+if gh issue view "$ISSUE_NUM" --json labels --jq '.labels[].name' 2>/dev/null \
+     | grep -qx 'dispatch:office-hours'; then
+  ISSUE_OFFICE_HOURS_PRESENT=yes
+fi
+
+# Bump the issue-anchored total-attempt counter and park on the ceiling, UNLESS
+# this session is a non-concluding continuation that must not count:
+#   - the issue is already parked on office-hours (an office-hours-assisted run,
+#     or an already-parked issue): nothing to count, nothing to escalate; and an
+#     office-hours session must not inflate the autonomous counter.
+#   - marker absent AND this is one of Branch A's two continuation gates that
+#     RESUME the same session rather than concluding an attempt: a live
+#     idle-poller (session_scheduled_wakeup) or a transient rate-limit death
+#     (dispatch-detect-rate-limit-death). Counting an idle-poller would bump once
+#     per poll cycle and blow the ceiling on a single healthy review phase
+#     (#1590). These mirror the gates at ~lines 383 and 397 below — keep the two
+#     in sync. (The rate-limit gate can fall through to an office-hours park when
+#     rescheduling fails; that park is then uncounted, which is harmless — it
+#     parks office-hours so the ceiling is moot and the counter resets on un-park.)
+# Everything else — Branch A genuine park, the #2025 recovery-advance, Branch
+# B/C/D — is a concluded autonomous attempt and counts exactly once.
+#
+# Fail-open: a `gh` flake in dispatch-attempt-count defaults to `proceed`, never
+# parks and never fires the ERR trap — the chain-advancing Branch A–D work below
+# must run even if the bookkeeping bump flaked.
+if [ "$ISSUE_OFFICE_HOURS_PRESENT" = no ] \
+   && { [ -n "$MARKER_PHASE" ] \
+        || { ! session_scheduled_wakeup \
+             && ! "$SCRIPTS/dispatch-detect-rate-limit-death" "$TRANSCRIPT_PATH" 2>/dev/null; }; }; then
+  attempt_verdict=$("$SCRIPTS/dispatch-attempt-count" "$ISSUE_NUM" 2>/dev/null) || attempt_verdict=proceed
+  if [ "$attempt_verdict" = escalate ]; then
+    # Re-read the just-bumped total to name it in the office-hours reason (AC4).
+    attempt_total=$(gh issue view "$ISSUE_NUM" --json labels \
+      --jq '[.labels[].name | capture("^dispatch:attempts-(?<n>[0-9]+)$").n | tonumber] | max // 0' \
+      2>/dev/null) || attempt_total=""
+    "$SCRIPTS/dispatch-apply-office-hours" "$ISSUE_NUM" \
+      "total attempts across all phases reached the ceiling (N=${attempt_total:-unknown})" \
+      || echo "[dispatch-stop] WARNING: dispatch-apply-office-hours failed" >&2
+    spawn_tick
+    exit 0
+  fi
+fi
+
 if [ -z "$MARKER_PHASE" ]; then
   # Branch A — marker absent.
+  DLOG_BRANCH="A"
   if session_scheduled_wakeup; then
     # Live idle-polling worker — its final turn scheduled a ScheduleWakeup,
     # so it will resume on its own poll cadence. Do NOT park on office-hours
     # and do NOT spawn a redundant tick (the live worker drives the chain
     # itself). Without this gate Branch A re-parks the issue once per poll
     # cycle, oscillating dispatch:office-hours (#1590).
+    DLOG_DISPOSITION="hand-back"
+    exit 0
+  fi
+  if session_has_inflight_background_task; then
+    # Live phase running in the background — a Workflow/Task phase skill
+    # (/review-fix, /qa-fix) launched its fan-out as a background task and
+    # yielded its turn to await a <task-notification>. This mid-phase turn-end
+    # fired the Stop hook before the phase-completed marker was written. Hand
+    # back (the running task will resume the session and finish the phase); do
+    # NOT park on office-hours and do NOT spawn a redundant tick. Symmetric to
+    # the scheduled-wakeup gate above (#2243).
+    DLOG_DISPOSITION="hand-back-inflight-task"
     exit 0
   fi
   # Rate-limit self-heal (#1733). A worker that died on a TRANSIENT Anthropic
@@ -408,11 +640,13 @@ if [ -z "$MARKER_PHASE" ]; then
             # cap hit — the schedule script already parked office-hours.
             # Spawn a tick like the normal park (safe: the issue now carries
             # dispatch:office-hours, so the tick skips it — no race).
+            DLOG_DISPOSITION="park"
             spawn_tick ;;
           *)
             # reseeded — timer armed. Do NOT spawn a tick: the resume timer
             # owns this issue's continuation; a competing tick could launch a
             # fresh from-scratch worker and race the resume.
+            DLOG_DISPOSITION="hand-back"
             : ;;
         esac
         exit 0
@@ -433,6 +667,7 @@ if [ -z "$MARKER_PHASE" ]; then
   # autonomous handler and qa re-runs once CI is green — intentional, see #2025.)
   DISPATCHED_PHASE=$("$SCRIPTS/dispatch-recover-dispatched-phase" "$TRANSCRIPT_PATH" 2>/dev/null) || DISPATCHED_PHASE=""
   if [ -n "$DISPATCHED_PHASE" ] && [ -n "$CURRENT_PHASE" ] && phase_advanced_past "$DISPATCHED_PHASE" "$CURRENT_PHASE"; then
+    DLOG_DISPOSITION="self-close"
     clear_rate_limit_retry_labels
     strip_office_hours_label
     spawn_tick
@@ -442,6 +677,7 @@ if [ -z "$MARKER_PHASE" ]; then
   fi
   # Recovery failed, or the chain has not advanced past the dispatched phase →
   # genuine mid-phase exit → fall through to the office-hours park below.
+  DLOG_DISPOSITION="park"
   "$SCRIPTS/dispatch-apply-office-hours" "$ISSUE_NUM" \
     "$(resolve_office_hours_reason "phase exited before completion (mid-phase exit or context compaction)")" \
     || echo "[dispatch-stop] WARNING: dispatch-apply-office-hours failed" >&2
@@ -451,6 +687,7 @@ fi
 
 if [ -n "$CURRENT_PHASE" ] && [ "$MARKER_PHASE" != "$CURRENT_PHASE" ]; then
   # Branch B — phase advanced.
+  DLOG_BRANCH="B"; DLOG_DISPOSITION="self-close"
   clear_rate_limit_retry_labels
   strip_office_hours_label
   spawn_tick
@@ -471,6 +708,7 @@ case "$CURRENT_PHASE" in
         # Branch C — transient no-push fix-* outcome; CI concluded, nothing
         # pending. Self-close so the session does not leak idle holding its
         # worktree; the next tick re-runs the fix-* phase or escalates at the cap.
+        DLOG_BRANCH="C"; DLOG_DISPOSITION="self-close"
         clear_rate_limit_retry_labels
         spawn_tick
         spawn_sweep
@@ -486,6 +724,7 @@ case "$CURRENT_PHASE" in
       # present means fix-conflicts completed successfully. Any OTHER fix-* phase
       # with an empty PR_NUM matches neither branch and deliberately falls
       # through to Branch D (office-hours park).
+      DLOG_BRANCH="C"; DLOG_DISPOSITION="self-close"
       clear_rate_limit_retry_labels
       spawn_tick
       spawn_sweep
@@ -496,6 +735,7 @@ case "$CURRENT_PHASE" in
 esac
 
 # Branch D — true non-advancement.
+DLOG_BRANCH="D"; DLOG_DISPOSITION="park"
 "$SCRIPTS/dispatch-apply-office-hours" "$ISSUE_NUM" \
   "$(resolve_office_hours_reason "phase ran but did not advance")" \
   || echo "[dispatch-stop] WARNING: dispatch-apply-office-hours failed" >&2

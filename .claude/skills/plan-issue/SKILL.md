@@ -24,10 +24,11 @@ fan out the built-in `Explore` and `Plan` subagents directly (no orchestrator
 skill, no nesting). The exploration and design subagents are direct children of
 this session.
 
-Run `gh` commands and the scripts that invoke `gh` (`dispatch-context-pack`,
-`dispatch-drift-scan`, `dispatch-read-plan`, `dispatch-write-plan`,
-`dispatch-apply-planned`, `dispatch-mark-complete`, `dispatch-plan-finalize`)
-with `dangerouslyDisableSandbox: true` — see `.claude/rules/sandbox.md`.
+Run `gh` commands and the scripts that invoke `gh` (`dispatch-check-blockers`,
+`dispatch-context-pack`, `dispatch-drift-scan`, `dispatch-read-plan`,
+`dispatch-write-plan`, `dispatch-apply-planned`, `dispatch-mark-complete`,
+`dispatch-plan-finalize`) with `dangerouslyDisableSandbox: true` — see
+`.claude/rules/sandbox.md`.
 
 ## The running session has no plan mode
 
@@ -110,6 +111,50 @@ target, run a creation-date-anchored drift analysis. It is the planning-time
 counterpart of the creation-time relevance check; the two are deliberately
 separate — the creation-time check is `$BASELINE_BRANCH`-anchored, this step is
 pre-planning and `createdAt`-anchored.
+
+**Open-blocker re-check.** Before spending any planning work, verify that the
+target issue has no open blockers. This catches the race window between the
+queue-gate check (in `/dispatch-propagate`) and now. Run with
+`dangerouslyDisableSandbox: true` — `dispatch-check-blockers` calls `gh`
+(see `.claude/rules/sandbox.md`). Tolerant capture:
+
+```bash
+if out=$(.claude/skills/dispatch-propagate/scripts/dispatch-check-blockers "$N"); then
+  rc=0
+else
+  rc=$?
+fi
+```
+
+Route on `rc`:
+
+- **`rc == 0`** — no open blocker. Proceed unchanged.
+- **`rc == 2`** — `$out` is `blocked:<nums>`. Real open blocker found. Call
+  `dispatch-mark-deviation`, then stop. Marker absence triggers Stop hook Branch A
+  (`dispatch:office-hours`). `dispatch-mark-deviation` is already the established
+  terminal action for `/plan-issue` (Step 6), so stopping after it preserves the
+  single-named-exit invariant — do not add a completion-marker call:
+
+  ```bash
+  .claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \
+    "/plan-issue: target #$N has an open blocker ($out) - raced past the queue gate; parking"
+  ```
+
+- **`rc == 1`** (or any other non-zero) — environment error; blockers unverified.
+  Not "no blockers." Call `dispatch-mark-deviation` with a distinct reason
+  including `$rc`, then stop. Never proceed on `rc == 1`. As with `rc == 2`,
+  `dispatch-mark-deviation` is the established `/plan-issue` terminal action (Step
+  6), so stopping after it preserves the single-named-exit invariant — do not add a
+  completion-marker call:
+
+  ```bash
+  .claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \
+    "/plan-issue: could not verify open blockers for #$N (dispatch-check-blockers exit $rc)"
+  ```
+
+This runs only on the fresh-run path. The `HAVE_PLAN=1` branch re-finalizes and
+stops before Step 1, so an already-planned issue is not re-parked. Placing it
+before the context-pack and drift work fails fast on a raced blocked target.
 
 Run the opening live-context call (`dangerouslyDisableSandbox: true` — it calls
 `gh`):
@@ -343,7 +388,11 @@ returns — must contain:
 - A **Verification** section — how to test the change end-to-end. Put
   deterministic, CI-safe, auto-runnable checks (test-suite invocations,
   typechecks, builds) in fenced ` ```verify ` blocks so `/implement`
-  auto-executes them before opening the PR. Keep manual steps, observe-in-
+  auto-executes them before opening the PR. Invoke an app's unit-test suite as
+  `npx vitest run --project <app> --root <repo_root>` (the CI-equivalent form),
+  never `npx vitest run --root <app>` — rooting at the app directory scopes
+  vite's `server.fs.allow` to it and denies root-hoisted `?url` asset imports
+  (e.g. `pdfjs-dist`'s worker). Keep manual steps, observe-in-
   production checks, live-systemd verification, and judgment calls as **prose** —
   `/implement` skips those, leaving them for QA and humans.
 - A clean-context **plan preface** (below), so the `implement` worker executes
@@ -392,6 +441,17 @@ procedure verbatim:
      ```bash
      .claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \
        "/implement: plan verification failed after 2 fix attempts (check <index>)"
+     ```
+
+   - **exit 5** → the plan has an unclosed/malformed ```verify fence (opened in
+     the Verification section but never closed before EOF). This is a
+     plan-authoring error the worker cannot repair, **not** a fixable verify
+     failure — do **not** enter the fix lane; run this deviation marker and stop
+     (skip the Step 3 completion marker):
+
+     ```bash
+     .claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \
+       "/implement: plan verification could not run — malformed plan (unclosed verify fence)"
      ```
 
    - **any other non-zero exit** (exit 4 = empty/absent plan input, or an
@@ -493,7 +553,7 @@ with these substitutions:
 > - Ensure that the plan file is concise enough to scan quickly, but detailed enough to execute effectively
 > - Name the critical files to be modified. For changes that repeat a pattern across many files, describe the pattern once and list a few representative paths — do not enumerate every file or line number
 > - Reference existing functions and utilities you found that should be reused, with their file paths
-> - Include a verification section describing how to test the changes end-to-end. Put deterministic, CI-safe, auto-runnable checks (test-suite invocations, typechecks, builds) in fenced ` ```verify ` blocks so `/implement` auto-executes them before opening the PR. Keep manual steps, observe-in-production checks, live-systemd verification, and judgment calls as **prose** — `/implement` skips those, leaving them for QA and humans.
+> - Include a verification section describing how to test the changes end-to-end. Put deterministic, CI-safe, auto-runnable checks (test-suite invocations, typechecks, builds) in fenced ` ```verify ` blocks so `/implement` auto-executes them before opening the PR. Invoke an app's unit-test suite as `npx vitest run --project <app> --root <repo_root>` (the CI-equivalent form), never `npx vitest run --root <app>` — rooting at the app directory scopes vite's `server.fs.allow` to it and denies root-hoisted `?url` asset imports (e.g. `pdfjs-dist`'s worker). Keep manual steps, observe-in-production checks, live-systemd verification, and judgment calls as **prose** — `/implement` skips those, leaving them for QA and humans.
 
 ### Intentionally NOT adopted
 

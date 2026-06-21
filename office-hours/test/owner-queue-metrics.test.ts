@@ -91,4 +91,13 @@ describe("getOwnerQueueMetrics", () => {
     const result = await getOwnerQueueMetrics(mockDb, mockNamespace, mockUser);
     expect(result).toBeNull();
   });
+
+  it("(e) falsy email — returns null without a Firestore read (AC1)", async () => {
+    const noEmailUser = { email: null } as import("firebase/auth").User;
+
+    const result = await getOwnerQueueMetrics(mockDb, mockNamespace, noEmailUser);
+    expect(result).toBeNull();
+    expect(mockGetDoc).not.toHaveBeenCalled();
+    expect(mockDoc).not.toHaveBeenCalled();
+  });
 });

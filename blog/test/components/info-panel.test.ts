@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { InfoPanel } from "../../src/components/InfoPanel.tsx";
@@ -337,16 +337,22 @@ describe("renderInfoPanel", () => {
     });
   });
 
-  describe("archive (pinned date)", () => {
-    beforeEach(() => {
+  describe("archive (hydration determinism)", () => {
+    it("renders identical HTML regardless of wall clock (no SSR/hydration drift)", () => {
       vi.useFakeTimers();
-      vi.setSystemTime(new Date("2026-02-15"));
+      try {
+        vi.setSystemTime(new Date("2026-01-31T23:59:00Z"));
+        const before = renderInfoPanel(defaultData());
+        vi.setSystemTime(new Date("2026-02-01T00:01:00Z"));
+        const after = renderInfoPanel(defaultData());
+        expect(after).toBe(before);
+      } finally {
+        vi.useRealTimers();
+      }
     });
+  });
 
-    afterEach(() => {
-      vi.useRealTimers();
-    });
-
+  describe("archive", () => {
     it("groups posts by year and month correctly", () => {
       const html = renderInfoPanel(defaultData());
       expect(html).toContain("2026");
@@ -354,7 +360,7 @@ describe("renderInfoPanel", () => {
       expect(html).toContain("January");
     });
 
-    it("current year (2026) is open by default", () => {
+    it("newest year (2026) is open by default", () => {
       const html = renderInfoPanel(defaultData());
       const container = document.createElement("div");
       container.innerHTML = html;
@@ -405,7 +411,7 @@ describe("renderInfoPanel", () => {
       }
     });
 
-    it("current month (February 2026) is open by default", () => {
+    it("newest month (February 2026) is open by default", () => {
       const html = renderInfoPanel(defaultData());
       const container = document.createElement("div");
       container.innerHTML = html;
