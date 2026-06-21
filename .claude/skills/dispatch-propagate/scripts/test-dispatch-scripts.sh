@@ -60,6 +60,12 @@ setup() {
   cp "$SCRIPT_DIR/dispatch-close-resolved" "$TMPDIR_TEST/dispatch-close-resolved"
   cp "$SCRIPT_DIR/dispatch-select-target" "$TMPDIR_TEST/dispatch-select-target"
   cp "$SCRIPT_DIR/office-hours-select-target" "$TMPDIR_TEST/office-hours-select-target"
+  # office-hours-select-target's resume pass (#2240) resolves
+  # dispatch-recover-session-id via its SCRIPT_DIR (= TMPDIR_TEST for this copy),
+  # so the reader must sit alongside it. Pure-filesystem; selector resume tests set
+  # DISPATCH_STAMP_PROJECTS_ROOT to a temp projects root carrying stamp sidecars.
+  cp "$SCRIPT_DIR/dispatch-recover-session-id" "$TMPDIR_TEST/dispatch-recover-session-id"
+  chmod +x "$TMPDIR_TEST/dispatch-recover-session-id"
   cp "$SCRIPT_DIR/office-hours" "$TMPDIR_TEST/office-hours"
   # office-hours' idle-provision arm resolves dispatch-provision-from-remote via
   # its SCRIPT_DIR (= TMPDIR_TEST for this copy), so the helper must sit alongside
@@ -259,6 +265,19 @@ case "$args" in
       dispatch-test-limit)
         cat "$STUB_DIR/rest-limit.json"
         ;;
+      dispatch-test-title)
+        cat "$STUB_DIR/rest-title.json"
+        ;;
+      dispatch-test-limit-paginate)
+        # >100-limit paginate fixture: two pages concatenated (>= limit items).
+        cat "$STUB_DIR/rest-bigpage-1.json"
+        cat "$STUB_DIR/rest-bigpage-2.json"
+        ;;
+      dispatch-test-limit-exact)
+        # Exactly-<limit> fixture: serve a single array of exactly limit items so
+        # a caller's `len == limit ⇒ truncated` guard fires.
+        cat "$STUB_DIR/rest-exact.json"
+        ;;
       dispatch-test-includebody)
         cat "$STUB_DIR/rest-includebody.json"
         ;;
@@ -266,6 +285,29 @@ case "$args" in
         echo '[]'
         ;;
     esac
+    ;;
+  api\ *repos/*/pulls\?*)
+    # gh_pr_list_rest LIST endpoint (#2258): repos/{owner}/{repo}/pulls?state=...
+    # The leading `*` glob absorbs an optional `--paginate` before the path. This
+    # MUST precede the single-PR `api repos/*/pulls/*` arm (case is first-wins) —
+    # though that arm needs a literal `/` after `pulls` and would not match `?`
+    # anyway. Log the full $args so tests can assert --paginate / per_page= / the
+    # head= query param. Routes by fixture-file presence (no shared consumer to
+    # collide with, so no sentinel label needed): serve page-1 then page-2 if it
+    # exists, else `[]`. A gh-fail-pulls marker forces a gh failure.
+    echo "$args" >> "$STUB_DIR/gh-pr-list-rest-calls.log"
+    if [[ -f "$STUB_DIR/gh-fail-pulls" ]]; then
+      echo "stub forced gh api failure (pulls list)" >&2
+      exit 1
+    fi
+    if [[ -f "$STUB_DIR/rest-pulls-page-1.json" ]]; then
+      cat "$STUB_DIR/rest-pulls-page-1.json"
+      if [[ -f "$STUB_DIR/rest-pulls-page-2.json" ]]; then
+        cat "$STUB_DIR/rest-pulls-page-2.json"
+      fi
+    else
+      echo '[]'
+    fi
     ;;
   api\ *repos/*/issues\?*)
     # gh_issue_list_rest (#1601): the four converted dispatch issue scans now hit
@@ -307,6 +349,18 @@ case "$args" in
         # #1085 per-episode latch read. Default [] (gate fires); a fixture models
         # an already-open latch issue (gate falls through).
         if [[ -f "$STUB_DIR/main-broken-issue-list.json" ]]; then cat "$STUB_DIR/main-broken-issue-list.json"; else echo "[]"; fi
+      elif [[ "$rest_label" == "dispatch:office-hours" ]]; then
+        # dispatch-trace-leaf parked set (#1011) and office-hours-select-target queue
+        # (#2258): both migrated from `gh issue list` to gh_issue_list_rest, so the
+        # office-hours scan now lands on the REST issues endpoint. Serve whichever
+        # fixture the active test seeds; absence → [] (nothing parked / empty queue).
+        if [[ -f "$STUB_DIR/trace-parked.json" ]]; then
+          cat "$STUB_DIR/trace-parked.json"
+        elif [[ -f "$STUB_DIR/oh-issue-list.json" ]]; then
+          cat "$STUB_DIR/oh-issue-list.json"
+        else
+          echo "[]"
+        fi
       else
         echo "[]"
       fi
@@ -316,26 +370,6 @@ case "$args" in
       jit_key=$(printf '%s' "$rest_label" | tr '/:' '__')
       jit_fixture="$STUB_DIR/jit-issues-${rest_state}-${jit_key}.json"
       if [[ -f "$jit_fixture" ]]; then cat "$jit_fixture"; else echo "[]"; fi
-    fi
-    ;;
-  "issue list --label dispatch:office-hours --state open --json number,createdAt,labels")
-    # office-hours-select-target: the office-hours queue (labeled open issues).
-    # The fetch now also carries `labels` (#1648) — the main-qa override reads it.
-    if [[ -f "$STUB_DIR/oh-issue-list.json" ]]; then
-      cat "$STUB_DIR/oh-issue-list.json"
-    else
-      echo "[]"
-    fi
-    ;;
-  "issue list --state open --label dispatch:office-hours --limit 300 --json number")
-    # dispatch-trace-leaf queue-mode parked set (#1011): open issues carrying
-    # dispatch:office-hours. $STUB_DIR/trace-parked.json supplies the parked
-    # numbers; absence means nothing is parked (default empty), so every
-    # pre-existing trace-leaf test stays green.
-    if [[ -f "$STUB_DIR/trace-parked.json" ]]; then
-      cat "$STUB_DIR/trace-parked.json"
-    else
-      echo "[]"
     fi
     ;;
   issue\ view\ *\ --json\ state)
@@ -354,15 +388,6 @@ case "$args" in
       cat "$STUB_DIR/issue-${num}.json"
     else
       echo "{\"title\":\"Issue $num\",\"body\":\"\",\"comments\":[],\"number\":$num,\"state\":\"OPEN\"}"
-    fi
-    ;;
-  issue\ view\ *\ --json\ title)
-    # dispatch-resolve-worktree create case: gh issue view <num> --json title
-    num=$(echo "$args" | awk '{print $3}')
-    if [[ -f "$STUB_DIR/issue-title-${num}.json" ]]; then
-      cat "$STUB_DIR/issue-title-${num}.json"
-    else
-      echo "{\"title\":\"Issue $num\"}"
     fi
     ;;
   issue\ view\ *\ --json\ closedByPullRequestsReferences)
@@ -436,6 +461,11 @@ case "$args" in
     fi
     echo "natb1/commons.systems"
     ;;
+  "repo view --json owner -q .owner.login")
+    # gh_pr_list_rest --head owner resolution (#2258): when --head is set and
+    # --repo is absent, the helper resolves the current repo's owner login.
+    echo "natb1"
+    ;;
   api\ */dependencies/blocked_by)
     path=$(echo "$args" | awk '{print $2}')
     num=$(echo "$path" | grep -oE '[0-9]+' | tail -1)
@@ -476,6 +506,24 @@ case "$args" in
       cat "$STUB_DIR/subissues-${num}.json"
     else
       echo "[]"
+    fi
+    ;;
+  api\ --paginate\ repos/*/issues/9[0-9][0-9][0-9]/comments)
+    # gh_issue_view_rest --comments sentinel branch (#2257): the helper's second
+    # REST call. The pattern REQUIRES the literal `--paginate` token, so a
+    # regression that drops --paginate no longer matches here — it falls through
+    # to the generic `*)` default (the issues/9xxx sentinel ends at the digits, so
+    # /comments does not match it), serving the wrong/empty body and turning the
+    # count assertion RED. The fixtures are MULTI-PAGE (cat'd in sequence, one
+    # array doc per page, like the check-runs --paginate stub), spanning >30
+    # comments total so the count assertion catches a non-paginating fetch.
+    num=$(printf '%s' "$args" | sed -E 's#.*issues/([0-9]+)/comments.*#\1#')
+    if [[ -f "$STUB_DIR/view-issue-comments-${num}-page1.json" ]]; then
+      cat "$STUB_DIR/view-issue-comments-${num}-page1.json"
+      [[ -f "$STUB_DIR/view-issue-comments-${num}-page2.json" ]] && \
+        cat "$STUB_DIR/view-issue-comments-${num}-page2.json"
+    else
+      echo '[]'
     fi
     ;;
   api\ repos/*/issues/9[0-9][0-9][0-9])
@@ -590,28 +638,73 @@ case "$args" in
     echo '{}'
     ;;
   api\ repos/*/issues/*)
-    # dispatch-resolve-arg discriminator: gh api repos/{owner}/{repo}/issues/<N>.
-    # The REST issues endpoint returns PRs too; a PR's JSON carries a
-    # "pull_request" key. The fixture file decides issue-vs-PR; an arg-issue-<N>.err
-    # fixture models a non-404 gh failure; absence of either fixture models a 404
-    # (the number is neither an issue nor a PR).
+    # Generic single-issue GET: gh api repos/{owner}/{repo}/issues/<N>. Two
+    # consumers route here (case is first-wins; the 9xxx sentinel arm precedes it):
+    #   - dispatch-resolve-arg discriminator (issue-vs-PR; a PR's JSON carries a
+    #     "pull_request" key — the fixture decides).
+    #   - gh_issue_view_rest (#2257), after the Category-A read swaps off the
+    #     `gh issue view --json` porcelain. The helper consumes the RAW REST object
+    #     and projects/upcases internally, so arg-issue-<N>.json must be in RAW REST
+    #     shape (lowercase "state":"open", state_reason, created_at, labels:[{name}]).
+    # Failure injection (default-absent, so existing tests are unaffected):
+    #   - gh-fail-issue-labels-<N>: HARD (non-transient) failure, exit 1
+    #     UNCONDITIONALLY — gh_retry forwards it (does not retry).
+    #   - issue-view-fail-<N>: TRANSIENT (HTTP 503) failure with a decrementing
+    #     count — gh_retry retries until the count is exhausted, then serves the
+    #     fixture.
+    #   - arg-issue-<N>.err: a non-404 gh failure (used by dispatch-resolve-arg).
+    #   - absence of any fixture models a 404 (number is neither issue nor PR).
     num="${args##*/}"
-    if [[ -f "$STUB_DIR/arg-issue-${num}.json" ]]; then
+    if [[ -f "$STUB_DIR/gh-fail-issue-labels-${num}" ]]; then
+      echo "gh: API error on issues/${num}" >&2
+      exit 1
+    fi
+    if [[ -f "$STUB_DIR/issue-view-fail-${num}" ]]; then
+      remaining=$(cat "$STUB_DIR/issue-view-fail-${num}")
+      if [[ "$remaining" -gt 0 ]]; then
+        echo $((remaining - 1)) > "$STUB_DIR/issue-view-fail-${num}"
+        echo "HTTP 503: Service Unavailable" >&2
+        exit 1
+      fi
+    fi
+    if [[ -f "$STUB_DIR/arg-issue-${num}.notfound" ]]; then
+      # Positive 404 carve-out: dispatch-resolve-arg's existence probe asks "is
+      # this number an issue?" and must see a real 404 (it maps 404→exit 2,
+      # distinct from the arg-issue-<N>.err other-error→exit 1 path). Absent by
+      # default so the empty-labels default below serves the common case.
+      echo "gh: Not Found (HTTP 404)" >&2
+      exit 1
+    elif [[ -f "$STUB_DIR/arg-issue-${num}.json" ]]; then
       cat "$STUB_DIR/arg-issue-${num}.json"
     elif [[ -f "$STUB_DIR/arg-issue-${num}.err" ]]; then
       cat "$STUB_DIR/arg-issue-${num}.err" >&2
       exit 1
     else
-      echo "gh: Not Found (HTTP 404)" >&2
-      exit 1
+      # Default: an existing OPEN issue with no labels — the production-faithful
+      # state for a dispatch target whose specific labels a test does not assert
+      # (mirrors the retired `--json labels` arm's `{"labels":[]}` default).
+      # Raw REST shape; the helper projects/upcases it.
+      printf '{"number":%s,"title":"","body":"","state":"open","state_reason":null,"created_at":null,"labels":[],"assignees":[]}\n' "$num"
     fi
     ;;
   api\ repos/*/pulls/*)
-    # dispatch-retriage-orphaned-followups (#1812, #2007): gh api
-    # repos/{owner}/{repo}/pulls/<N>. $STUB_DIR/retriage-pr-<N>.json supplies
-    # the per-PR REST state object; absence defaults to an OPEN PR (no action).
+    # Two consumers route here, both issuing the byte-identical
+    # `gh api repos/{owner}/{repo}/pulls/<N>` GET (no flag to discriminate on):
+    #   - dispatch-resolve-worktree reconciliation (#2257): resolve_pr_head now
+    #     reads the PR head via gh_pr_view_rest (was `gh pr view --json
+    #     headRefName`). $STUB_DIR/pr-headref-<N>.json supplies the raw REST pull
+    #     object (carries head.ref); the gh-pr-view-headref.log write below keeps
+    #     the existing call-made assertions valid. Default-absent → empty head.ref
+    #     so the resolve_pr_head guard still fires its "unusable head" abort.
+    #   - dispatch-retriage-orphaned-followups (#1812, #2007):
+    #     $STUB_DIR/retriage-pr-<N>.json; absence defaults to an OPEN PR.
+    # pr-headref takes priority: resolve-worktree tests use PR numbers (100, 922)
+    # that retriage's tests never use, so the two fixture namespaces don't collide.
     num="${args##*/}"
-    if [[ -f "$STUB_DIR/retriage-pr-${num}.json" ]]; then
+    if [[ -f "$STUB_DIR/pr-headref-${num}.json" ]]; then
+      echo "pr view" >> "$STUB_DIR/gh-pr-view-headref.log"
+      cat "$STUB_DIR/pr-headref-${num}.json"
+    elif [[ -f "$STUB_DIR/retriage-pr-${num}.json" ]]; then
       cat "$STUB_DIR/retriage-pr-${num}.json"
     else
       echo '{"state":"open","merged_at":null,"labels":[]}'
@@ -624,16 +717,6 @@ case "$args" in
       cat "$STUB_DIR/arg-closing-${num}.json"
     else
       echo '{"closingIssuesReferences":[]}'
-    fi
-    ;;
-  pr\ view\ *\ --json\ headRefName)
-    # dispatch-resolve-worktree reconciliation: gh pr view <N> --json headRefName.
-    echo "pr view" >> "$STUB_DIR/gh-pr-view-headref.log"
-    num=$(echo "$args" | awk '{print $3}')
-    if [[ -f "$STUB_DIR/pr-headref-${num}.json" ]]; then
-      cat "$STUB_DIR/pr-headref-${num}.json"
-    else
-      echo '{"headRefName":""}'
     fi
     ;;
   label\ create\ *)
@@ -650,37 +733,6 @@ case "$args" in
     if [[ -f "$STUB_DIR/gh-fail-label-create" ]]; then
       echo "gh: could not create label (HTTP 500): Internal Server Error" >&2
       exit 1
-    fi
-    ;;
-  issue\ view\ *\ --json\ labels)
-    # dispatch-apply-office-hours idempotency read: gh issue view <num> --json labels.
-    # $STUB_DIR/issue-labels-<num>.json supplies the labels object; absence means
-    # the issue carries no labels.
-    num=$(echo "$args" | awk '{print $3}')
-    # #1594: a per-issue HARD-failure marker makes the stub emit a deterministic
-    # (non-transient) error and exit 1 UNCONDITIONALLY, so gh_retry does NOT
-    # retry — it forwards the real failure. Mirrors the gh-fail-sub_issues-<N> /
-    # gh-fail-blocked_by-<num> marker convention. Absent by default → every
-    # existing test is unaffected. Checked BEFORE the transient marker below.
-    if [[ -f "$STUB_DIR/gh-fail-issue-labels-${num}" ]]; then
-      echo "gh: API error on issues/${num} --json labels" >&2
-      exit 1
-    fi
-    # #1314: a per-issue fail-count sentinel makes the stub emit a transient
-    # (HTTP 503) error and decrement the count, so gh_retry retries. Absent by
-    # default → every existing test is unaffected; exhausted → serve labels.
-    if [[ -f "$STUB_DIR/issue-view-fail-${num}" ]]; then
-      remaining=$(cat "$STUB_DIR/issue-view-fail-${num}")
-      if [[ "$remaining" -gt 0 ]]; then
-        echo $((remaining - 1)) > "$STUB_DIR/issue-view-fail-${num}"
-        echo "HTTP 503: Service Unavailable" >&2
-        exit 1
-      fi
-    fi
-    if [[ -f "$STUB_DIR/issue-labels-${num}.json" ]]; then
-      cat "$STUB_DIR/issue-labels-${num}.json"
-    else
-      echo '{"labels":[]}'
     fi
     ;;
   issue\ edit\ *)
@@ -855,39 +907,17 @@ case "$args" in
       echo '{"items":[],"totalCount":0}'
     fi
     ;;
-  issue\ view\ *\ --json\ state\ --jq\ .state)
-    # dispatch-close-resolved state read (#1456): gh issue view <num> --json state --jq .state.
-    # The real --jq flag projects .state to a bare string; the fixture file
-    # holds {"state":"..."}, so project it here. Absent fixture → OPEN.
-    num=$(printf '%s' "$args" | awk '{print $3}')
-    if [[ -f "$STUB_DIR/issue-state-${num}.json" ]]; then
-      jq -r .state "$STUB_DIR/issue-state-${num}.json"
-    else
-      echo "OPEN"
-    fi
-    ;;
   issue\ close\ *)
     # dispatch-close-resolved (#1456): gh issue close <num> --reason completed --comment ...
     echo "$args" >> "$STUB_DIR/gh-issue-close.log"
     ;;
-  issue\ view\ *\ --json\ state\ -q\ .state)
-    # Closed-issue router guard (#1845): gh issue view <num> --json state -q .state.
-    # The -q flag projects .state to a bare string; the fixture file holds
-    # {"state":"..."}, so project it here. Absent fixture → OPEN (every existing
-    # route test makes this call and must keep routing normally).
-    num=$(printf '%s' "$args" | awk '{print $3}')
-    if [[ -f "$STUB_DIR/issue-state-${num}.json" ]]; then
-      jq -r .state "$STUB_DIR/issue-state-${num}.json"
-    else
-      echo "OPEN"
-    fi
-    ;;
   issue\ view\ *\ --json\ *)
-    # Generic catch-all for `gh issue view <num> --json <FIELDS>` calls that do
-    # not match the specific arms above (e.g. issue-sub-issues default/explicit
-    # field sets). Logs the FIELDS token so tests can assert which fields were
-    # requested, then serves issue-<num>.json if present, else a minimal default
-    # carrying only number/state/stateReason (the hot-path lean set, #1593).
+    # Generic catch-all for `gh issue view <num> --json <FIELDS>` calls from
+    # call sites that still use the GraphQL porcelain (GraphQL exemptions kept in
+    # #2257, e.g. dispatch-find-pr --json closedByPullRequestsReferences).
+    # Logs the FIELDS token so tests can assert which fields were requested,
+    # then serves issue-<num>.json if present, else a minimal default carrying
+    # only number/state/stateReason.
     num=$(printf '%s' "$args" | awk '{print $3}')
     fields="${args##* --json }"
     echo "$fields" >> "$STUB_DIR/gh-issue-view-fields.log"
@@ -1385,6 +1415,182 @@ else
 fi
 teardown
 
+echo "Test: --state all -- issued query carries state=all (#2258)"
+setup
+: > "$STUB_DIR/gh-issue-list-rest-calls.log"
+actual_all=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state all --label dispatch-test-empty)
+assert_eq "--state all: returns the stub's empty array" "[]" "$actual_all"
+# The query must carry state=all (anchor with a non-word char so this cannot
+# match state=allowed or similar).
+if grep -qE 'state=all([&?]|$| )' "$STUB_DIR/gh-issue-list-rest-calls.log"; then sa=yes; else sa=no; fi
+assert_eq "--state all: query carries state=all" "yes" "$sa"
+teardown
+
+echo "Test: --include-title -- present projects title, absent omits it (#2258)"
+setup
+printf '%s\n' '[
+  {"number":401,"title":"first issue","body":"b1","created_at":"2024-02-01T00:00:00Z","closed_at":null,"labels":[]},
+  {"number":402,"title":"second issue","body":"b2","created_at":"2024-02-02T00:00:00Z","closed_at":null,"labels":[]}
+]' > "$STUB_DIR/rest-title.json"
+: > "$STUB_DIR/gh-issue-list-rest-calls.log"
+# Absent: projected objects must NOT carry a title key.
+without_title=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --label dispatch-test-title)
+assert_eq "--include-title absent: .[0] has no title key" "false" "$(jq '.[0] | has("title")' <<<"$without_title")"
+assert_eq "--include-title absent: .[0] has no body key" "false" "$(jq '.[0] | has("body")' <<<"$without_title")"
+assert_eq "--include-title absent: number still projected" "401" "$(jq '.[0].number' <<<"$without_title")"
+# Present: projected objects carry title but still not body.
+with_title=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --include-title --label dispatch-test-title)
+assert_eq "--include-title present: .[0] carries title" "first issue" "$(jq -r '.[0].title' <<<"$with_title")"
+assert_eq "--include-title present: body still omitted" "false" "$(jq '.[0] | has("body")' <<<"$with_title")"
+# Both flags combine: title AND body present.
+with_both=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --include-title --include-body --label dispatch-test-title)
+assert_eq "--include-title+--include-body: .[0] carries title" "first issue" "$(jq -r '.[0].title' <<<"$with_both")"
+assert_eq "--include-title+--include-body: .[0] carries body" "b1" "$(jq -r '.[0].body' <<<"$with_both")"
+teardown
+
+echo "Test: --limit > 100 -- paginate path, sliced to limit (#2258)"
+setup
+# 150 items split across two pages (80 + 70). Numbers 1000..1149.
+jq -nc '[range(1000;1080) | {number: ., created_at:"2024-03-01T00:00:00Z", closed_at:null, labels:[]}]' \
+  > "$STUB_DIR/rest-bigpage-1.json"
+jq -nc '[range(1080;1150) | {number: ., created_at:"2024-03-01T00:00:00Z", closed_at:null, labels:[]}]' \
+  > "$STUB_DIR/rest-bigpage-2.json"
+: > "$STUB_DIR/gh-issue-list-rest-calls.log"
+actual_big=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --limit 120 --label dispatch-test-limit-paginate)
+assert_eq "--limit 120 over 150 items: result length == 120" "120" "$(jq 'length' <<<"$actual_big")"
+# The >100-limit path must --paginate (not single-page) ...
+if grep -q -- '--paginate' "$STUB_DIR/gh-issue-list-rest-calls.log"; then bp=yes; else bp=no; fi
+assert_eq "--limit 120: log contains --paginate" "yes" "$bp"
+# ... at the clamped per_page=100 (not per_page=120).
+if grep -q 'per_page=100[^0-9]' "$STUB_DIR/gh-issue-list-rest-calls.log"; then pp=yes; else pp=no; fi
+assert_eq "--limit 120: per_page clamped to 100" "yes" "$pp"
+if grep -q 'per_page=120' "$STUB_DIR/gh-issue-list-rest-calls.log"; then pp120=yes; else pp120=no; fi
+assert_eq "--limit 120: per_page is NOT 120" "no" "$pp120"
+teardown
+
+echo "Test: --limit > 100 -- exactly-limit items still trips a caller's len==limit guard (#2258)"
+setup
+# Exactly 120 items. With --limit 120 the result length is 120, so a caller's
+# `len == limit` truncation guard fires (just as it would on a single >100 page).
+jq -nc '[range(2000;2120) | {number: ., created_at:"2024-04-01T00:00:00Z", closed_at:null, labels:[]}]' \
+  > "$STUB_DIR/rest-exact.json"
+: > "$STUB_DIR/gh-issue-list-rest-calls.log"
+actual_exact=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --limit 120 --label dispatch-test-limit-exact)
+exact_len=$(jq 'length' <<<"$actual_exact")
+assert_eq "--limit 120 over exactly 120 items: result length == 120" "120" "$exact_len"
+# Simulate a caller's truncation guard: len == limit ⇒ truncated.
+if [[ "$exact_len" -eq 120 ]]; then guard=fired; else guard=clear; fi
+assert_eq "--limit 120: len==limit guard fires on exactly-limit fixture" "fired" "$guard"
+teardown
+
+# ============================================================================
+# gh_pr_list_rest edge-case tests (#2258)
+# ============================================================================
+# These tests drive the REAL gh_pr_list_rest helper (sourced from the copied
+# lib.sh) via the `api *repos/*/pulls?*` stub arm above, which routes by fixture
+# presence and logs each call to gh-pr-list-rest-calls.log. They mirror the
+# gh_issue_list_rest edge-case block.
+echo "=== gh_pr_list_rest (edge cases) ==="
+
+echo "Test: gh_pr_list_rest empty result -- helper returns [] with length 0"
+setup
+: > "$STUB_DIR/gh-pr-list-rest-calls.log"
+actual_pr_empty=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_list_rest --state open)
+assert_eq "pr empty result: length == 0" "0" "$(jq 'length' <<<"$actual_pr_empty")"
+# No --limit was passed, so the helper must take the full-paginate path.
+if grep -q -- '--paginate' "$STUB_DIR/gh-pr-list-rest-calls.log"; then bp=yes; else bp=no; fi
+assert_eq "pr empty result: log contains --paginate" "yes" "$bp"
+teardown
+
+echo "Test: gh_pr_list_rest --limit > 100 -- paginate path, sliced to limit"
+setup
+# 150 PRs split across two pages (80 + 70). Numbers 1000..1149.
+jq -nc '[range(1000;1080) | {number: ., state:"open", title:"t", merged_at:null, created_at:"2024-03-01T00:00:00Z"}]' \
+  > "$STUB_DIR/rest-pulls-page-1.json"
+jq -nc '[range(1080;1150) | {number: ., state:"open", title:"t", merged_at:null, created_at:"2024-03-01T00:00:00Z"}]' \
+  > "$STUB_DIR/rest-pulls-page-2.json"
+: > "$STUB_DIR/gh-pr-list-rest-calls.log"
+actual_pr_big=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_list_rest --state open --limit 120)
+assert_eq "pr --limit 120 over 150: result length == 120" "120" "$(jq 'length' <<<"$actual_pr_big")"
+# The >100-limit path must --paginate (not single-page) ...
+if grep -q -- '--paginate' "$STUB_DIR/gh-pr-list-rest-calls.log"; then bp=yes; else bp=no; fi
+assert_eq "pr --limit 120: log contains --paginate" "yes" "$bp"
+# ... at the clamped per_page=100 (not per_page=120).
+if grep -qE 'per_page=100([^0-9]|$)' "$STUB_DIR/gh-pr-list-rest-calls.log"; then pp=yes; else pp=no; fi
+assert_eq "pr --limit 120: per_page clamped to 100" "yes" "$pp"
+if grep -q 'per_page=120' "$STUB_DIR/gh-pr-list-rest-calls.log"; then pp120=yes; else pp120=no; fi
+assert_eq "pr --limit 120: per_page is NOT 120" "no" "$pp120"
+teardown
+
+echo "Test: gh_pr_list_rest --limit single page (<=100, per_page=limit, no --paginate)"
+setup
+jq -nc '[range(300;303) | {number: ., state:"open", title:"t", merged_at:null, created_at:"2024-01-06T00:00:00Z"}]' \
+  > "$STUB_DIR/rest-pulls-page-1.json"
+: > "$STUB_DIR/gh-pr-list-rest-calls.log"
+actual_pr_lim=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_list_rest --state open --limit 50)
+assert_eq "pr limit: result length matches fixture (3 items)" "3" "$(jq 'length' <<<"$actual_pr_lim")"
+# The call log must contain per_page=50 (anchor trailing non-digit) ...
+if grep -qE 'per_page=50([^0-9]|$)' "$STUB_DIR/gh-pr-list-rest-calls.log"; then pp=yes; else pp=no; fi
+assert_eq "pr limit: log contains per_page=50" "yes" "$pp"
+# ... and must NOT contain --paginate (single-page branch).
+if grep -q -- '--paginate' "$STUB_DIR/gh-pr-list-rest-calls.log"; then bp=yes; else bp=no; fi
+assert_eq "pr limit: log does not contain --paginate" "no" "$bp"
+teardown
+
+echo "Test: gh_pr_list_rest gh-failure -- returns non-zero with diagnostic stderr"
+setup
+: > "$STUB_DIR/gh-pr-list-rest-calls.log"
+: > "$STUB_DIR/gh-fail-pulls"
+rc_pr_fail=0
+err_pr_fail=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_list_rest --state open 2>&1 >/dev/null) || rc_pr_fail=$?
+assert_eq "pr gh-failure: returns non-zero" "1" "$rc_pr_fail"
+case "$err_pr_fail" in *"gh_pr_list_rest: gh api failed"*) m=yes ;; *) m=no ;; esac
+assert_eq "pr gh-failure: stderr names the helper failure" "yes" "$m"
+teardown
+
+echo "Test: gh_pr_list_rest --head -- query carries head=<owner>:<branch> (repo-view owner)"
+setup
+echo '[]' > "$STUB_DIR/rest-pulls-page-1.json"
+: > "$STUB_DIR/gh-pr-list-rest-calls.log"
+# No --repo: owner resolves via the stubbed `gh repo view ... .owner.login` => natb1.
+actual_pr_head=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_list_rest --state open --head my-branch)
+assert_eq "pr --head: returns the stub's empty array" "[]" "$actual_pr_head"
+if grep -q 'head=natb1:my-branch' "$STUB_DIR/gh-pr-list-rest-calls.log"; then hb=yes; else hb=no; fi
+assert_eq "pr --head: query carries head=natb1:my-branch" "yes" "$hb"
+teardown
+
+echo "Test: gh_pr_list_rest --head + --repo -- owner from repo segment, not repo-view"
+setup
+echo '[]' > "$STUB_DIR/rest-pulls-page-1.json"
+: > "$STUB_DIR/gh-pr-list-rest-calls.log"
+# With --repo owner/other-repo, the head owner is the first segment (owner).
+actual_pr_head_repo=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_list_rest --state open --repo owner/other-repo --head feat-x)
+assert_eq "pr --head+--repo: returns the stub's empty array" "[]" "$actual_pr_head_repo"
+if grep -q 'head=owner:feat-x' "$STUB_DIR/gh-pr-list-rest-calls.log"; then hb=yes; else hb=no; fi
+assert_eq "pr --head+--repo: query carries head=owner:feat-x" "yes" "$hb"
+if grep -q 'repos/owner/other-repo/pulls' "$STUB_DIR/gh-pr-list-rest-calls.log"; then seg=yes; else seg=no; fi
+assert_eq "pr --head+--repo: API path uses cross-repo segment" "yes" "$seg"
+teardown
+
+echo "Test: gh_pr_list_rest state normalization -- OPEN / MERGED / CLOSED"
+setup
+# One open PR, one closed+merged (merged_at set), one closed+unmerged (null).
+printf '%s\n' '[
+  {"number":501,"state":"open","title":"open pr","merged_at":null,"created_at":"2024-05-01T00:00:00Z"},
+  {"number":502,"state":"closed","title":"merged pr","merged_at":"2024-05-02T00:00:00Z","created_at":"2024-05-01T00:00:00Z"},
+  {"number":503,"state":"closed","title":"closed pr","merged_at":null,"created_at":"2024-05-01T00:00:00Z"}
+]' > "$STUB_DIR/rest-pulls-page-1.json"
+: > "$STUB_DIR/gh-pr-list-rest-calls.log"
+actual_pr_norm=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_list_rest --state all)
+assert_eq "pr normalize: 501 (open) -> OPEN" "OPEN" "$(jq -r '.[] | select(.number==501) | .state' <<<"$actual_pr_norm")"
+assert_eq "pr normalize: 502 (closed+merged_at) -> MERGED" "MERGED" "$(jq -r '.[] | select(.number==502) | .state' <<<"$actual_pr_norm")"
+assert_eq "pr normalize: 503 (closed+null merged_at) -> CLOSED" "CLOSED" "$(jq -r '.[] | select(.number==503) | .state' <<<"$actual_pr_norm")"
+# Projection remaps snake_case to camelCase mergedAt/createdAt; title present.
+assert_eq "pr normalize: 502 mergedAt remapped" "2024-05-02T00:00:00Z" "$(jq -r '.[] | select(.number==502) | .mergedAt' <<<"$actual_pr_norm")"
+assert_eq "pr normalize: 501 createdAt remapped" "2024-05-01T00:00:00Z" "$(jq -r '.[] | select(.number==501) | .createdAt' <<<"$actual_pr_norm")"
+assert_eq "pr normalize: 501 title projected" "open pr" "$(jq -r '.[] | select(.number==501) | .title' <<<"$actual_pr_norm")"
+teardown
+
 echo "Test: --include-body -- projection includes title and body; default omits title"
 setup
 printf '%s\n' '[
@@ -1441,6 +1647,8 @@ printf '%s\n' '{
   "title": "a sample issue",
   "body": "the issue body",
   "state": "open",
+  "state_reason": null,
+  "created_at": "2026-01-02T03:04:05Z",
   "labels": [
     {"id": 1, "name": "bug", "color": "ff0000", "description": "a bug"},
     {"id": 2, "name": "dispatch:planned", "color": "00ff00", "description": null}
@@ -1456,6 +1664,9 @@ assert_eq "issue: number" "9001" "$(jq -r '.number' <<<"$iv")"
 assert_eq "issue: title" "a sample issue" "$(jq -r '.title' <<<"$iv")"
 assert_eq "issue: body" "the issue body" "$(jq -r '.body' <<<"$iv")"
 assert_eq "issue: state upcased OPEN" "OPEN" "$(jq -r '.state' <<<"$iv")"
+assert_eq "issue: createdAt passthrough from created_at" "2026-01-02T03:04:05Z" "$(jq -r '.createdAt' <<<"$iv")"
+# state_reason null must be PRESERVED as null (not upcased, not coerced).
+assert_eq "issue: stateReason null preserved" "true" "$(jq '.stateReason == null' <<<"$iv")"
 assert_eq "issue: labels narrowed to [{name}] (2 labels)" "2" "$(jq '.labels | length' <<<"$iv")"
 assert_eq "issue: first label name" "bug" "$(jq -r '.labels[0].name' <<<"$iv")"
 assert_eq "issue: label objects carry ONLY name (no color key)" "1" "$(jq '.labels[0] | keys | length' <<<"$iv")"
@@ -1463,7 +1674,7 @@ assert_eq "issue: assignees narrowed to [{login}]" "alice" "$(jq -r '.assignees[
 assert_eq "issue: assignee objects carry ONLY login" "1" "$(jq '.assignees[0] | keys | length' <<<"$iv")"
 assert_eq "issue: raw REST extra field dropped" "" "$(jq -r '.extra_rest_field // empty' <<<"$iv")"
 # Top-level keys are exactly the porcelain set.
-assert_eq "issue: top-level key set" "assignees body labels number state title" \
+assert_eq "issue: top-level key set" "assignees body createdAt labels number state stateReason title" \
   "$(jq -r 'keys | join(" ")' <<<"$iv")"
 teardown
 
@@ -1474,11 +1685,20 @@ printf '%s\n' '{
   "title": "closed one",
   "body": "",
   "state": "closed",
+  "state_reason": "completed",
+  "created_at": "2026-02-03T04:05:06Z",
   "labels": [],
   "assignees": []
 }' > "$STUB_DIR/view-issue-9002.json"
 iv2=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_view_rest 9002)
 assert_eq "issue: closed → CLOSED" "CLOSED" "$(jq -r '.state' <<<"$iv2")"
+# REST lowercase state_reason `completed` → porcelain UPPERCASE enum COMPLETED.
+assert_eq "issue: stateReason completed upcased to COMPLETED" "COMPLETED" "$(jq -r '.stateReason' <<<"$iv2")"
+# A second non-null case: not_planned → NOT_PLANNED.
+printf '%s\n' '{"number":9005,"title":"np","body":"","state":"closed","state_reason":"not_planned","created_at":"2026-03-01T00:00:00Z","labels":[],"assignees":[]}' \
+  > "$STUB_DIR/view-issue-9005.json"
+iv_np=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_view_rest 9005)
+assert_eq "issue: stateReason not_planned upcased to NOT_PLANNED" "NOT_PLANNED" "$(jq -r '.stateReason' <<<"$iv_np")"
 # Byte-compat: a REST null body must surface as porcelain's empty string.
 printf '%s\n' '{"number":9004,"title":"t","state":"open","body":null,"labels":[],"assignees":[]}' \
   > "$STUB_DIR/view-issue-9004.json"
@@ -1519,6 +1739,33 @@ case "$err_ivf" in *"gh_issue_view_rest: gh api failed"*) mf=yes ;; *) mf=no ;; 
 assert_eq "issue: gh-failure stderr names the helper" "yes" "$mf"
 teardown
 
+echo "Test: gh_issue_view_rest --comments -- paginated multi-page fetch, remapped shape"
+setup
+# No --comments flag → no second call, no comments key. (Reuse the 9001 fixture.)
+printf '%s\n' '{"number":9001,"title":"t","body":"b","state":"open","state_reason":null,"created_at":"2026-01-01T00:00:00Z","labels":[],"assignees":[]}' \
+  > "$STUB_DIR/view-issue-9001.json"
+iv_nc=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_view_rest 9001)
+assert_eq "issue: no --comments → comments key absent" "false" "$(jq 'has("comments")' <<<"$iv_nc")"
+# Multi-page comments fixture: page 1 = 30 comments, page 2 = 5 comments (35 > 30,
+# so a non-paginating single-page fetch would miss page 2). Each comment is the
+# RAW REST shape (nested .user.login, snake_case .created_at) so the remap to
+# {author:{login}, createdAt, body} is genuinely exercised.
+jq -n '[range(30) | {user:{login:("u"+(.|tostring)), id:.}, created_at:("2026-01-01T00:00:0"+( . % 10 |tostring)+"Z"), body:("comment "+(.|tostring)), extra:"drop"}]' \
+  > "$STUB_DIR/view-issue-comments-9001-page1.json"
+jq -n '[range(30;35) | {user:{login:("u"+(.|tostring)), id:.}, created_at:"2026-02-01T00:00:00Z", body:("comment "+(.|tostring)), extra:"drop"}]' \
+  > "$STUB_DIR/view-issue-comments-9001-page2.json"
+ivc=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_view_rest 9001 --comments)
+assert_eq "comments: full count across both pages (>30 proves pagination)" "35" "$(jq '.comments | length' <<<"$ivc")"
+assert_eq "comments: remapped author.login (nested from .user.login)" "u0" "$(jq -r '.comments[0].author.login' <<<"$ivc")"
+assert_eq "comments: remapped createdAt from .created_at" "2026-01-01T00:00:00Z" "$(jq -r '.comments[0].createdAt' <<<"$ivc")"
+assert_eq "comments: remapped body" "comment 0" "$(jq -r '.comments[0].body' <<<"$ivc")"
+assert_eq "comments: page-2 comment present (login)" "u34" "$(jq -r '.comments[34].author.login' <<<"$ivc")"
+assert_eq "comments: remapped object carries ONLY author/createdAt/body" "author body createdAt" \
+  "$(jq -r '.comments[0] | keys | join(" ")' <<<"$ivc")"
+assert_eq "comments: base projection keys still present alongside comments" "true" \
+  "$(jq '(has("number")) and (has("createdAt")) and (has("stateReason"))' <<<"$ivc")"
+teardown
+
 echo "Test: gh_pr_view_rest -- mergeable=true → MERGEABLE, clean→CLEAN, state upcase"
 setup
 # Raw REST pull: lowercase state, mergeable BOOLEAN true, snake_case
@@ -1531,6 +1778,8 @@ printf '%s\n' '{
   "state": "open",
   "mergeable": true,
   "mergeable_state": "clean",
+  "head": {"ref": "feature-branch", "sha": "abc123def456"},
+  "labels": [{"name": "enhancement", "color": "84b6eb"}, {"name": "dispatch:reviewed", "color": "000000"}],
   "extra_rest_field": "drop me"
 }' > "$STUB_DIR/view-pr-9001.json"
 pv=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_view_rest 9001)
@@ -1540,8 +1789,13 @@ assert_eq "pr: body" "the pr body" "$(jq -r '.body' <<<"$pv")"
 assert_eq "pr: state upcased OPEN" "OPEN" "$(jq -r '.state' <<<"$pv")"
 assert_eq "pr: mergeable boolean true → enum MERGEABLE" "MERGEABLE" "$(jq -r '.mergeable' <<<"$pv")"
 assert_eq "pr: mergeStateStatus key present + upcased" "CLEAN" "$(jq -r '.mergeStateStatus' <<<"$pv")"
+assert_eq "pr: headRefName passthrough from head.ref" "feature-branch" "$(jq -r '.headRefName' <<<"$pv")"
+assert_eq "pr: headRefOid passthrough from head.sha" "abc123def456" "$(jq -r '.headRefOid' <<<"$pv")"
+assert_eq "pr: labels narrowed to [{name}] (2 labels)" "2" "$(jq '.labels | length' <<<"$pv")"
+assert_eq "pr: first label name" "enhancement" "$(jq -r '.labels[0].name' <<<"$pv")"
+assert_eq "pr: label objects carry ONLY name (no color key)" "1" "$(jq '.labels[0] | keys | length' <<<"$pv")"
 assert_eq "pr: raw REST extra field dropped" "" "$(jq -r '.extra_rest_field // empty' <<<"$pv")"
-assert_eq "pr: top-level key set" "body mergeStateStatus mergeable number state title" \
+assert_eq "pr: top-level key set" "body headRefName headRefOid labels mergeStateStatus mergeable number state title" \
   "$(jq -r 'keys | join(" ")' <<<"$pv")"
 teardown
 
@@ -1553,12 +1807,16 @@ printf '%s\n' '{
   "body": "",
   "state": "closed",
   "mergeable": false,
-  "mergeable_state": "dirty"
+  "mergeable_state": "dirty",
+  "head": {"ref": "conflicting-branch", "sha": "deadbeef0001"},
+  "labels": [{"name": "bug", "color": "d73a4a"}]
 }' > "$STUB_DIR/view-pr-9002.json"
 pv2=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_view_rest 9002)
 assert_eq "pr: mergeable boolean false → CONFLICTING" "CONFLICTING" "$(jq -r '.mergeable' <<<"$pv2")"
 assert_eq "pr: mergeStateStatus dirty → DIRTY" "DIRTY" "$(jq -r '.mergeStateStatus' <<<"$pv2")"
 assert_eq "pr: closed → CLOSED" "CLOSED" "$(jq -r '.state' <<<"$pv2")"
+assert_eq "pr: headRefName from head.ref (9002)" "conflicting-branch" "$(jq -r '.headRefName' <<<"$pv2")"
+assert_eq "pr: single label narrowed" "bug" "$(jq -r '.labels[0].name' <<<"$pv2")"
 teardown
 
 echo "Test: gh_pr_view_rest -- mergeable=null → UNKNOWN; absent mergeable_state → empty"
@@ -1568,11 +1826,15 @@ printf '%s\n' '{
   "title": "computing pr",
   "body": "",
   "state": "open",
-  "mergeable": null
+  "mergeable": null,
+  "head": {"ref": "computing-branch", "sha": "cafef00d0003"}
 }' > "$STUB_DIR/view-pr-9003.json"
 pv3=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_view_rest 9003)
 assert_eq "pr: mergeable null → UNKNOWN" "UNKNOWN" "$(jq -r '.mergeable' <<<"$pv3")"
 assert_eq "pr: absent mergeable_state → empty string" "" "$(jq -r '.mergeStateStatus' <<<"$pv3")"
+assert_eq "pr: headRefName from head.ref (9003)" "computing-branch" "$(jq -r '.headRefName' <<<"$pv3")"
+# Absent labels in raw REST → empty array (// [] path), not null.
+assert_eq "pr: absent labels → empty array" "0" "$(jq '.labels | length' <<<"$pv3")"
 teardown
 
 echo "Test: gh_pr_view_rest -- missing number returns non-zero with diagnostic stderr"
@@ -2174,11 +2436,12 @@ teardown
 echo "=== dispatch-phase ==="
 
 # 1. No PR, no dispatch:planned label → plan (the issue has not been planned yet).
-# dispatch-phase fetches the issue's labels (gh issue view <num> --json labels);
-# absence of issue-labels-42.json means the issue carries no labels.
+# dispatch-phase fetches the issue via gh_issue_view_rest; an empty-labels issue
+# object (arg-issue-42.json) means the issue carries no labels.
 echo "Test: no PR, unplanned → plan"
 setup
 echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf '{"state":"open","labels":[]}\n' > "$STUB_DIR/arg-issue-42.json"
 result=$("$TMPDIR_TEST/dispatch-phase" "42")
 assert_eq "no PR, unplanned → plan" "plan" "$result"
 teardown
@@ -2187,7 +2450,7 @@ teardown
 echo "Test: no PR + dispatch:planned → implement"
 setup
 echo '[]' > "$STUB_DIR/pr-list-full.json"
-printf '{"labels":[{"name":"dispatch:planned"}]}\n' > "$STUB_DIR/issue-labels-42.json"
+printf '{"state":"open","labels":[{"name":"dispatch:planned"}]}\n' > "$STUB_DIR/arg-issue-42.json"
 result=$("$TMPDIR_TEST/dispatch-phase" "42")
 assert_eq "no PR + dispatch:planned → implement" "implement" "$result"
 teardown
@@ -2196,7 +2459,7 @@ teardown
 echo "Test: no PR + non-planned label → plan"
 setup
 echo '[]' > "$STUB_DIR/pr-list-full.json"
-printf '{"labels":[{"name":"help wanted"}]}\n' > "$STUB_DIR/issue-labels-42.json"
+printf '{"state":"open","labels":[{"name":"help wanted"}]}\n' > "$STUB_DIR/arg-issue-42.json"
 result=$("$TMPDIR_TEST/dispatch-phase" "42")
 assert_eq "no PR + non-planned label → plan" "plan" "$result"
 teardown
@@ -2223,7 +2486,7 @@ echo "Test: no PR + transient-then-succeed gh → retries, derives implement"
 setup
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 echo 2 > "$STUB_DIR/issue-view-fail-42"
-printf '{"labels":[{"name":"dispatch:planned"}]}\n' > "$STUB_DIR/issue-labels-42.json"
+printf '{"state":"open","labels":[{"name":"dispatch:planned"}]}\n' > "$STUB_DIR/arg-issue-42.json"
 result=$("$TMPDIR_TEST/dispatch-phase" "42")
 assert_eq "transient-then-succeed → implement" "implement" "$result"
 teardown
@@ -2358,6 +2621,7 @@ echo "Test: issue 6 does not match branch 60-foo"
 setup
 printf '[%s]\n' "$(make_pr 10 "60-foo" "true" "$NO_LABELS" "$GREEN_ROLLUP")" \
   > "$STUB_DIR/pr-list-full.json"
+printf '{"state":"open","labels":[]}\n' > "$STUB_DIR/arg-issue-6.json"
 result=$("$TMPDIR_TEST/dispatch-phase" "6")
 assert_eq "issue 6 does not match branch 60-foo → plan" "plan" "$result"
 teardown
@@ -2781,6 +3045,7 @@ echo "Test: no PR, unplanned → INVOKE /plan-issue"
 setup
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+echo '{"state":"open","labels":[]}' > "$STUB_DIR/arg-issue-42.json"
 route_run 42 /wt/42-my-feature
 assert_eq "no PR, unplanned → INVOKE /plan-issue (directive)" "INVOKE /plan-issue" "$ROUTE_OUT"
 assert_eq "no PR, unplanned → INVOKE /plan-issue (exit 0)" "0" "$ROUTE_RC"
@@ -2798,6 +3063,7 @@ echo "Test: provision stdout chatter does not leak into the directive"
 setup
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+echo '{"state":"open","labels":[]}' > "$STUB_DIR/arg-issue-42.json"
 cat > "$TMPDIR_TEST/dispatch-provision-worktree" <<'STUB'
 #!/usr/bin/env bash
 printf 'Updating 648157c..ea3a172\nFast-forward\n 2 files changed, 27 insertions(+)\n'
@@ -2817,7 +3083,7 @@ echo "Test: no PR + dispatch:planned → INVOKE /implement"
 setup
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
-printf '{"labels":[{"name":"dispatch:planned"}]}\n' > "$STUB_DIR/issue-labels-42.json"
+printf '{"state":"open","labels":[{"name":"dispatch:planned"}]}\n' > "$STUB_DIR/arg-issue-42.json"
 route_run 42 /wt/42-my-feature
 assert_eq "no PR + dispatch:planned → INVOKE /implement (directive)" \
   "INVOKE /implement" "$ROUTE_OUT"
@@ -2834,7 +3100,7 @@ echo "Test: closed issue → STOP closed"
 setup
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 echo "/wt/43-closed-feature" > "$STUB_DIR/worktree-toplevel.txt"
-echo '{"state":"CLOSED"}' > "$STUB_DIR/issue-state-43.json"
+echo '{"state":"closed"}' > "$STUB_DIR/arg-issue-43.json"
 route_run 43 /wt/43-closed-feature
 assert_eq "closed issue → STOP closed (directive)" "STOP closed" "$ROUTE_OUT"
 assert_eq "closed issue → STOP closed (exit 0)" "0" "$ROUTE_RC"
@@ -3109,7 +3375,7 @@ echo '[]' > "$STUB_DIR/pr-list-full.json"
 echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
 printf '{"statements":[{"key":"acme","dir":"/s","repo":"o/r","label":"statements:acme","project":"p"}]}\n' \
   > "$DISPATCH_CONFIG_DIR/statements.json"
-printf '{"labels":[{"name":"statements:acme"}]}\n' > "$STUB_DIR/issue-labels-42.json"
+printf '{"state":"open","labels":[{"name":"statements:acme"}]}\n' > "$STUB_DIR/arg-issue-42.json"
 route_run 42 /wt/42-my-feature
 assert_eq "no PR + statements label → INVOKE /budget-parse-job (directive)" \
   "INVOKE /budget-parse-job" "$ROUTE_OUT"
@@ -3124,7 +3390,7 @@ echo '[]' > "$STUB_DIR/pr-list-full.json"
 echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
 printf '{"statements":[{"key":"acme","dir":"/s","repo":"o/r","label":"statements:acme","project":"p"}]}\n' \
   > "$DISPATCH_CONFIG_DIR/statements.json"
-printf '{"labels":[{"name":"help wanted"}]}\n' > "$STUB_DIR/issue-labels-42.json"
+printf '{"state":"open","labels":[{"name":"help wanted"}]}\n' > "$STUB_DIR/arg-issue-42.json"
 route_run 42 /wt/42-my-feature
 assert_eq "no PR + non-statements label → INVOKE /plan-issue (directive)" \
   "INVOKE /plan-issue" "$ROUTE_OUT"
@@ -3138,6 +3404,7 @@ echo "Test: no PR + no statements config → INVOKE /plan-issue"
 setup
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+echo '{"state":"open","labels":[]}' > "$STUB_DIR/arg-issue-42.json"
 route_run 42 /wt/42-my-feature
 assert_eq "no PR + no statements config → INVOKE /plan-issue (directive)" \
   "INVOKE /plan-issue" "$ROUTE_OUT"
@@ -3157,7 +3424,7 @@ setup
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 echo "/wt/55-epic" > "$STUB_DIR/worktree-toplevel.txt"
 printf '{"labels":["epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
-printf '{"labels":[{"name":"epic"}]}\n' > "$STUB_DIR/issue-labels-55.json"
+printf '{"state":"open","labels":[{"name":"epic"}]}\n' > "$STUB_DIR/arg-issue-55.json"
 printf '[{"number":561},{"number":562}]\n' > "$STUB_DIR/subissues-55.json"
 printf '{"title":"c","body":"","comments":[],"number":561,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
   > "$STUB_DIR/issue-561.json"
@@ -3177,6 +3444,7 @@ echo "Test: no PR + not a spent epic → INVOKE /plan-issue"
 setup
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 echo "/wt/56-foo" > "$STUB_DIR/worktree-toplevel.txt"
+echo '{"state":"open","labels":[]}' > "$STUB_DIR/arg-issue-56.json"
 route_run 56 /wt/56-foo
 assert_eq "no PR + not a spent epic → INVOKE /plan-issue (directive)" \
   "INVOKE /plan-issue" "$ROUTE_OUT"
@@ -3193,7 +3461,7 @@ echo '[]' > "$STUB_DIR/pr-list-full.json"
 echo "/wt/57-stmt" > "$STUB_DIR/worktree-toplevel.txt"
 printf '{"statements":[{"key":"acme","dir":"/s","repo":"o/r","label":"statements:acme","project":"p"}]}\n' \
   > "$DISPATCH_CONFIG_DIR/statements.json"
-printf '{"labels":[{"name":"statements:acme"}]}\n' > "$STUB_DIR/issue-labels-57.json"
+printf '{"state":"open","labels":[{"name":"statements:acme"}]}\n' > "$STUB_DIR/arg-issue-57.json"
 printf '[{"number":571}]\n' > "$STUB_DIR/subissues-57.json"
 printf '{"title":"c","body":"","comments":[],"number":571,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
   > "$STUB_DIR/issue-571.json"
@@ -3222,7 +3490,7 @@ echo "=== dispatch-epic-resolved-candidate ==="
 echo "Test: candidate — 2 children all CLOSED/COMPLETED → exit 0"
 setup
 printf '{"labels":["epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
-printf '{"labels":[{"name":"epic"}]}\n' > "$STUB_DIR/issue-labels-61.json"
+printf '{"state":"open","labels":[{"name":"epic"}]}\n' > "$STUB_DIR/arg-issue-61.json"
 printf '[{"number":611},{"number":612}]\n' > "$STUB_DIR/subissues-61.json"
 printf '{"title":"c","body":"","comments":[],"number":611,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
   > "$STUB_DIR/issue-611.json"
@@ -3236,7 +3504,7 @@ teardown
 echo "Test: candidate — lowercase closed/completed → exit 0"
 setup
 printf '{"labels":["epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
-printf '{"labels":[{"name":"epic"}]}\n' > "$STUB_DIR/issue-labels-62.json"
+printf '{"state":"open","labels":[{"name":"epic"}]}\n' > "$STUB_DIR/arg-issue-62.json"
 printf '[{"number":621}]\n' > "$STUB_DIR/subissues-62.json"
 printf '{"title":"c","body":"","comments":[],"number":621,"state":"closed","stateReason":"completed"}\n' \
   > "$STUB_DIR/issue-621.json"
@@ -3248,7 +3516,7 @@ teardown
 echo "Test: not a candidate — zero sub-issues → exit 1"
 setup
 printf '{"labels":["epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
-printf '{"labels":[{"name":"epic"}]}\n' > "$STUB_DIR/issue-labels-63.json"
+printf '{"state":"open","labels":[{"name":"epic"}]}\n' > "$STUB_DIR/arg-issue-63.json"
 printf '[]\n' > "$STUB_DIR/subissues-63.json"
 if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 63 >/dev/null 2>&1; then rc=0; else rc=$?; fi
 assert_eq "not a candidate: zero sub-issues → exit 1" "1" "$rc"
@@ -3258,7 +3526,7 @@ teardown
 echo "Test: not a candidate — an OPEN child → exit 1"
 setup
 printf '{"labels":["epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
-printf '{"labels":[{"name":"epic"}]}\n' > "$STUB_DIR/issue-labels-64.json"
+printf '{"state":"open","labels":[{"name":"epic"}]}\n' > "$STUB_DIR/arg-issue-64.json"
 printf '[{"number":641},{"number":642}]\n' > "$STUB_DIR/subissues-64.json"
 printf '{"title":"c","body":"","comments":[],"number":641,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
   > "$STUB_DIR/issue-641.json"
@@ -3272,7 +3540,7 @@ teardown
 echo "Test: not a candidate — CLOSED/NOT_PLANNED child → exit 1"
 setup
 printf '{"labels":["epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
-printf '{"labels":[{"name":"epic"}]}\n' > "$STUB_DIR/issue-labels-65.json"
+printf '{"state":"open","labels":[{"name":"epic"}]}\n' > "$STUB_DIR/arg-issue-65.json"
 printf '[{"number":651}]\n' > "$STUB_DIR/subissues-65.json"
 printf '{"title":"c","body":"","comments":[],"number":651,"state":"CLOSED","stateReason":"NOT_PLANNED"}\n' \
   > "$STUB_DIR/issue-651.json"
@@ -3284,7 +3552,7 @@ teardown
 echo "Test: not a candidate — CLOSED child with null stateReason → exit 1"
 setup
 printf '{"labels":["epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
-printf '{"labels":[{"name":"epic"}]}\n' > "$STUB_DIR/issue-labels-66.json"
+printf '{"state":"open","labels":[{"name":"epic"}]}\n' > "$STUB_DIR/arg-issue-66.json"
 printf '[{"number":661}]\n' > "$STUB_DIR/subissues-66.json"
 printf '{"title":"c","body":"","comments":[],"number":661,"state":"CLOSED"}\n' \
   > "$STUB_DIR/issue-661.json"
@@ -3296,7 +3564,7 @@ teardown
 echo "Test: hard error — issue-sub-issues fails → exit 3"
 setup
 printf '{"labels":["epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
-printf '{"labels":[{"name":"epic"}]}\n' > "$STUB_DIR/issue-labels-67.json"
+printf '{"state":"open","labels":[{"name":"epic"}]}\n' > "$STUB_DIR/arg-issue-67.json"
 touch "$STUB_DIR/gh-fail-sub_issues-67"
 if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 67 >/dev/null 2>&1; then rc=0; else rc=$?; fi
 assert_eq "hard error: issue-sub-issues fails → exit 3" "3" "$rc"
@@ -3313,7 +3581,7 @@ teardown
 echo "Test: gate — epic configured but issue lacks the label → exit 1"
 setup
 printf '{"labels":["epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
-printf '{"labels":[{"name":"enhancement"}]}\n' > "$STUB_DIR/issue-labels-68.json"
+printf '{"state":"open","labels":[{"name":"enhancement"}]}\n' > "$STUB_DIR/arg-issue-68.json"
 printf '[{"number":681}]\n' > "$STUB_DIR/subissues-68.json"
 printf '{"title":"c","body":"","comments":[],"number":681,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
   > "$STUB_DIR/issue-681.json"
@@ -3325,7 +3593,7 @@ teardown
 # regardless of sub-issue state (all children CLOSED/COMPLETED here).
 echo "Test: gate — no epic config → exit 1 regardless of sub-issue state"
 setup
-printf '{"labels":[{"name":"epic"}]}\n' > "$STUB_DIR/issue-labels-69.json"
+printf '{"state":"open","labels":[{"name":"epic"}]}\n' > "$STUB_DIR/arg-issue-69.json"
 printf '[{"number":691}]\n' > "$STUB_DIR/subissues-69.json"
 printf '{"title":"c","body":"","comments":[],"number":691,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
   > "$STUB_DIR/issue-691.json"
@@ -3344,71 +3612,55 @@ assert_eq "gate: label fetch hard failure → exit 3" "3" "$rc"
 teardown
 
 # ============================================================================
-# issue-sub-issues field-forwarding tests (#1593)
+# issue-sub-issues output-shape tests (#2257)
 # ============================================================================
 echo ""
-echo "=== issue-sub-issues field forwarding ==="
+echo "=== issue-sub-issues output shape ==="
 
-# These tests run the REAL issue-sub-issues script (not the fake that setup()
-# installs for dispatch-trace-leaf). After setup, the fake is overwritten with
-# the real script so any --json field set it requests hits the stub and is
-# logged to gh-issue-view-fields.log. This is the only way to assert which
-# fields the real script actually requests.
+# issue-sub-issues now emits one gh_issue_view_rest object per sub-issue (#2257),
+# replacing the GraphQL `gh issue view --json <FIELDS>` porcelain. The former
+# FIELDS arg (#1593) is gone: the helper has a FIXED projection. So the old
+# field-forwarding tests (which asserted the requested --json field set) are
+# retired in favor of asserting the EMITTED object shape — a stronger check of
+# the actual consumer contract (number/state/stateReason). Children route to the
+# generic `api repos/*/issues/<N>` stub arm by number → arg-issue-<N>.json
+# supplies each child's raw REST object.
+#
+# These tests run the REAL issue-sub-issues script (setup() installs a fake for
+# dispatch-trace-leaf; we overwrite it with the real script here).
 
-# A. Default fields: one child → stub logs exactly "number,state,stateReason".
-echo "Test: issue-sub-issues — default fields → number,state,stateReason"
+# A. One child → exactly one emitted object carrying number/state/stateReason.
+# (Leanness via #1593's narrow --json field set is superseded by the helper's
+# fixed projection; this epic's goal is GraphQL rate-limit relief, not payload
+# size. The helper does project body/labels/etc., which the consumers ignore.)
+echo "Test: issue-sub-issues — one child → one object with number/state/stateReason"
 setup
 cp "$SCRIPT_DIR/issue-sub-issues" "$TMPDIR_TEST/issue-sub-issues"
 chmod +x "$TMPDIR_TEST/issue-sub-issues"
 printf '[{"number":801}]\n' > "$STUB_DIR/subissues-80.json"
-"$TMPDIR_TEST/issue-sub-issues" 80 >/dev/null
-logged=$(cat "$STUB_DIR/gh-issue-view-fields.log" 2>/dev/null || true)
-assert_eq "default fields: logged fields" "number,state,stateReason" "$logged"
+printf '{"number":801,"state":"closed","state_reason":"completed"}\n' > "$STUB_DIR/arg-issue-801.json"
+out=$("$TMPDIR_TEST/issue-sub-issues" 80)
+assert_eq "one child: object count" "1" "$(printf '%s' "$out" | jq -s 'length')"
+assert_eq "one child: number" "801" "$(printf '%s' "$out" | jq -s '.[0].number')"
+assert_eq "one child: state upcased" "CLOSED" "$(printf '%s' "$out" | jq -rs '.[0].state')"
+assert_eq "one child: stateReason upcased" "COMPLETED" "$(printf '%s' "$out" | jq -rs '.[0].stateReason')"
 teardown
 
-# B. Default fields: no body, no comments in the logged field set.
-echo "Test: issue-sub-issues — default fields contain no body or comments"
-setup
-cp "$SCRIPT_DIR/issue-sub-issues" "$TMPDIR_TEST/issue-sub-issues"
-chmod +x "$TMPDIR_TEST/issue-sub-issues"
-printf '[{"number":811}]\n' > "$STUB_DIR/subissues-81.json"
-"$TMPDIR_TEST/issue-sub-issues" 81 >/dev/null
-logged=$(cat "$STUB_DIR/gh-issue-view-fields.log" 2>/dev/null || true)
-assert_eq "default fields: no body in field set" "0" "$(printf '%s' "$logged" | grep -c 'body' || true)"
-assert_eq "default fields: no comments in field set" "0" "$(printf '%s' "$logged" | grep -c 'comments' || true)"
-teardown
-
-# C. Explicit fields arg: forwarded verbatim → stub logs exactly "number,state".
-echo "Test: issue-sub-issues — explicit fields arg forwarded verbatim"
-setup
-cp "$SCRIPT_DIR/issue-sub-issues" "$TMPDIR_TEST/issue-sub-issues"
-chmod +x "$TMPDIR_TEST/issue-sub-issues"
-printf '[{"number":821}]\n' > "$STUB_DIR/subissues-82.json"
-"$TMPDIR_TEST/issue-sub-issues" 82 "number,state" >/dev/null
-logged=$(cat "$STUB_DIR/gh-issue-view-fields.log" 2>/dev/null || true)
-assert_eq "explicit fields: logged fields" "number,state" "$logged"
-teardown
-
-# D. Two children: each child produces one log line → two lines total.
-echo "Test: issue-sub-issues — two children → two field log entries"
+# B. Two children → two emitted objects, each with the projected keys (the
+# per-child-emission invariant the old test D guarded, now asserted on output).
+echo "Test: issue-sub-issues — two children → two objects, both with number/state"
 setup
 cp "$SCRIPT_DIR/issue-sub-issues" "$TMPDIR_TEST/issue-sub-issues"
 chmod +x "$TMPDIR_TEST/issue-sub-issues"
 printf '[{"number":831},{"number":832}]\n' > "$STUB_DIR/subissues-83.json"
-"$TMPDIR_TEST/issue-sub-issues" 83 >/dev/null
-line_count=$(wc -l < "$STUB_DIR/gh-issue-view-fields.log" | tr -d ' ')
-assert_eq "two children: two log lines" "2" "$line_count"
-teardown
-
-# E. Empty FIELDS arg: guard fires → exit 2 with descriptive stderr (before any API call).
-echo "Test: issue-sub-issues — empty FIELDS arg → exit 2 with error"
-setup
-cp "$SCRIPT_DIR/issue-sub-issues" "$TMPDIR_TEST/issue-sub-issues"
-chmod +x "$TMPDIR_TEST/issue-sub-issues"
-err=$("$TMPDIR_TEST/issue-sub-issues" 84 "" 2>&1 1>/dev/null) && rc=0 || rc=$?
-assert_eq "empty FIELDS: exit code 2" "2" "$rc"
-assert_eq "empty FIELDS: descriptive stderr" "1" \
-  "$(printf '%s' "$err" | grep -c 'FIELDS arg must not be empty' || true)"
+printf '{"number":831,"state":"open","state_reason":null}\n' > "$STUB_DIR/arg-issue-831.json"
+printf '{"number":832,"state":"closed","state_reason":"completed"}\n' > "$STUB_DIR/arg-issue-832.json"
+out=$("$TMPDIR_TEST/issue-sub-issues" 83)
+assert_eq "two children: object count" "2" "$(printf '%s' "$out" | jq -s 'length')"
+assert_eq "two children: numbers" "831 832" \
+  "$(printf '%s' "$out" | jq -rs 'map(.number) | join(" ")')"
+assert_eq "two children: all carry state" "2" \
+  "$(printf '%s' "$out" | jq -s '[.[] | select(has("state"))] | length')"
 teardown
 
 # ============================================================================
@@ -3430,7 +3682,7 @@ echo "=== dispatch-close-resolved ==="
 # (a) OPEN issue + JOB_DIR set → closes the issue and writes the sentinel.
 echo "Test: close-resolved — OPEN issue + JOB_DIR → close + sentinel"
 setup
-echo '{"state":"OPEN"}' > "$STUB_DIR/issue-state-700.json"
+echo '{"state":"open"}' > "$STUB_DIR/arg-issue-700.json"
 export CLAUDE_JOB_DIR="$TMPDIR_TEST/job"
 mkdir -p "$CLAUDE_JOB_DIR"
 "$TMPDIR_TEST/dispatch-close-resolved" 700 --reason "epic done"
@@ -3454,7 +3706,7 @@ teardown
 # still writes the sentinel (re-entry idempotency).
 echo "Test: close-resolved — already-CLOSED issue + JOB_DIR → no re-close, sentinel still written"
 setup
-echo '{"state":"CLOSED"}' > "$STUB_DIR/issue-state-701.json"
+echo '{"state":"closed"}' > "$STUB_DIR/arg-issue-701.json"
 export CLAUDE_JOB_DIR="$TMPDIR_TEST/job"
 mkdir -p "$CLAUDE_JOB_DIR"
 "$TMPDIR_TEST/dispatch-close-resolved" 701 --reason "epic done"
@@ -3477,7 +3729,7 @@ teardown
 echo "Test: close-resolved — JOB_DIR unset + OPEN issue → no sentinel, exit 0"
 setup
 unset CLAUDE_JOB_DIR
-echo '{"state":"OPEN"}' > "$STUB_DIR/issue-state-702.json"
+echo '{"state":"open"}' > "$STUB_DIR/arg-issue-702.json"
 if "$TMPDIR_TEST/dispatch-close-resolved" 702 --reason "epic done" >/dev/null 2>&1; then rc=0; else rc=$?; fi
 assert_eq "close-resolved no-JOB_DIR: exit 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
@@ -3551,10 +3803,12 @@ if ( "$TMPDIR_TEST/dispatch-resolve-arg" "719" ) >/dev/null 2>&1; then rc=0; els
 assert_eq "PR closing multiple issues → exit 4" "4" "$rc"
 teardown
 
-# 6. Number is neither an issue nor a PR (no fixture → stub 404s) → exit 2.
+# 6. Number is neither an issue nor a PR (stub 404s) → exit 2.
 echo "Test: unknown number → exit 2"
 setup
-# No arg-issue-999.json: the stub returns 404.
+# arg-issue-999.notfound forces the issues GET to a real 404 (the number is
+# neither an issue nor a PR), overriding the stub's empty-labels default.
+touch "$STUB_DIR/arg-issue-999.notfound"
 if ( "$TMPDIR_TEST/dispatch-resolve-arg" "999" ) >/dev/null 2>&1; then rc=0; else rc=$?; fi
 assert_eq "neither issue nor PR → exit 2" "2" "$rc"
 teardown
@@ -6900,19 +7154,51 @@ result=$("$TMPDIR_TEST/office-hours-select-target")
 assert_eq "done session is attachable (visible only under --all)" "idle s-42-x" "$result"
 teardown
 
-# OHST3g. Stopped-exclude: the only labeled item (42) has a `stopped` session →
-# EXCLUDED from attach (skip, like working) and not fresh-launched. With no other
-# item and no parked `dispatch-*` router under main → `empty`.
-echo "Test: lone stopped item → excluded from attach, not fresh → empty"
+# OHST3g. Stopped-attach (#2240 behavior change BY DESIGN): the only labeled item
+# (42) has a `stopped` session → ATTACH. stopped is now attachable so a human
+# resuming the queue re-engages the originating session in place rather than
+# wedging. Uses the OHST3f (done-attach) shape: on-disk cwd, no
+# DISPATCH_OFFICE_HOURS_MAIN_WORKTREE export (exits before parked-router fallback).
+echo "Test: lone stopped item → attached (stopped is now attachable, #2240)"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+mkdir -p "$TMPDIR_TEST/wt/42-x"
+office_hours_state_fake_claude "42-x:stopped:$TMPDIR_TEST/wt/42-x"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "lone stopped item → attached" "idle s-42-x" "$result"
+teardown
+
+# OHST3g2. Paused-attach (#2240): the only labeled item (42) has a `paused`
+# session → ATTACH. Mirrors OHST3g (stopped-attach) for the paused state.
+echo "Test: lone paused item → attached (paused is now attachable, #2240)"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+mkdir -p "$TMPDIR_TEST/wt/42-x"
+office_hours_state_fake_claude "42-x:paused:$TMPDIR_TEST/wt/42-x"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "lone paused item → attached" "idle s-42-x" "$result"
+teardown
+
+# OHST3g3. Unrecognized-state-exclude (#2240 fail-safe): the only labeled item
+# (42) has a session in state `zombie` (unrecognized/malformed) → EXCLUDED from
+# attach (fail-safe skip, criterion 3: never attach into an unknown state) and
+# not fresh-launched. With no other item and no parked router under main → `empty`.
+echo "Test: lone unrecognized-state (zombie) item → excluded from attach, not fresh → empty"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
   > "$STUB_DIR/worktree-list.txt"
 export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
-office_hours_state_fake_claude "42-x:stopped"
+office_hours_state_fake_claude "42-x:zombie"
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "lone stopped item → empty" "empty" "$result"
+assert_eq "lone unrecognized-state item → empty (fail-safe skip)" "empty" "$result"
 unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
@@ -7171,6 +7457,98 @@ office_hours_state_fake_claude "42-x:waiting:/worktrees/42-x"
 result=$("$TMPDIR_TEST/office-hours-select-target")
 assert_eq "swept worktree, remote branch missing → fresh fallback with - 5th field" "office-hours 42 plan - -" "$result"
 unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
+# OHST15a. Removed-but-recoverable, worktree on disk → `resume` (#2240). Issue 42's
+# originating session is ABSENT from the daemon registry (removed), but its <N>-*
+# worktree is still on disk and its stamp sidecar + <sessionId>.jsonl transcript
+# are recoverable. dispatch-recover-session-id resolves the resumable sessionId +
+# branch; the on-disk worktree → resume in place. resume beats the fresh path.
+echo "Test: removed session + on-disk worktree + recoverable transcript → resume"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+mkdir -p "$TMPDIR_TEST/wt/42-x"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree %s\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  "$TMPDIR_TEST/wt/42-x" > "$STUB_DIR/worktree-list.txt"
+# Empty daemon registry → 42's session is removed (sessionless).
+office_hours_state_fake_claude
+# Recoverable: stamp sidecar for issue 42 + its .jsonl transcript present.
+export DISPATCH_STAMP_PROJECTS_ROOT="$TMPDIR_TEST/projects"
+mkdir -p "$DISPATCH_STAMP_PROJECTS_ROOT/proj-42"
+printf '%s\n' '{"schema":1,"session_id":"rec-sess-42","repo":"natb1/commons.systems","issue":42,"pr":null,"branch":"42-x","base_sha":"deadbeef","stamped_at":"2026-06-01T10:00:00Z"}' \
+  > "$DISPATCH_STAMP_PROJECTS_ROOT/proj-42/rec-sess-42.dispatch-stamp.json"
+touch "$DISPATCH_STAMP_PROJECTS_ROOT/proj-42/rec-sess-42.jsonl"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "removed + on-disk worktree + transcript → resume in place" "resume 42 rec-sess-42 $TMPDIR_TEST/wt/42-x" "$result"
+unset DISPATCH_STAMP_PROJECTS_ROOT
+teardown
+
+# OHST15b. Removed-but-NOT-recoverable (transcript purged) → fresh (#2240). Same
+# removed session, but the <sessionId>.jsonl is absent, so dispatch-recover-session-id
+# exits 1 (nothing recoverable) and the selector falls through to the fresh path.
+echo "Test: removed session + transcript purged → fresh-launch fallback"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+# No <N>-* worktree registered (only main) → swept/sessionless.
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n' > "$STUB_DIR/worktree-list.txt"
+office_hours_state_fake_claude
+# Sidecar present but transcript PURGED (.jsonl absent) → not recoverable.
+export DISPATCH_STAMP_PROJECTS_ROOT="$TMPDIR_TEST/projects"
+mkdir -p "$DISPATCH_STAMP_PROJECTS_ROOT/proj-42"
+printf '%s\n' '{"schema":1,"session_id":"rec-sess-42","repo":"natb1/commons.systems","issue":42,"pr":null,"branch":"42-x","base_sha":"deadbeef","stamped_at":"2026-06-01T10:00:00Z"}' \
+  > "$DISPATCH_STAMP_PROJECTS_ROOT/proj-42/rec-sess-42.dispatch-stamp.json"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "removed, transcript purged → fresh-launch fallback" "office-hours 42 plan - -" "$result"
+unset DISPATCH_STAMP_PROJECTS_ROOT
+teardown
+
+# OHST15c. Idle beats a removed-but-recoverable sibling (#2240 priority). 42 (older)
+# is removed-but-recoverable; 99 (newer) has a live idle session. A live idle
+# session is strictly safer than resurrecting a removed one, so idle wins and the
+# resume pass never runs.
+echo "Test: live idle item beats a removed-but-recoverable sibling (priority)"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+mkdir -p "$TMPDIR_TEST/wt/42-x" "$TMPDIR_TEST/wt/99-y"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree %s\nHEAD def456\nbranch refs/heads/42-x\n\nworktree %s\nHEAD aaa111\nbranch refs/heads/99-y\n\n' \
+  "$TMPDIR_TEST/wt/42-x" "$TMPDIR_TEST/wt/99-y" > "$STUB_DIR/worktree-list.txt"
+# Only 99 has a live (idle) session; 42 is removed.
+office_hours_state_fake_claude "99-y:idle:$TMPDIR_TEST/wt/99-y"
+# 42 IS recoverable (sidecar + transcript) — but idle 99 must still win.
+export DISPATCH_STAMP_PROJECTS_ROOT="$TMPDIR_TEST/projects"
+mkdir -p "$DISPATCH_STAMP_PROJECTS_ROOT/proj-42"
+printf '%s\n' '{"schema":1,"session_id":"rec-sess-42","repo":"natb1/commons.systems","issue":42,"pr":null,"branch":"42-x","base_sha":"deadbeef","stamped_at":"2026-06-01T10:00:00Z"}' \
+  > "$DISPATCH_STAMP_PROJECTS_ROOT/proj-42/rec-sess-42.dispatch-stamp.json"
+touch "$DISPATCH_STAMP_PROJECTS_ROOT/proj-42/rec-sess-42.jsonl"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "live idle sibling beats removed-recoverable item" "idle s-99-y" "$result"
+unset DISPATCH_STAMP_PROJECTS_ROOT
+teardown
+
+# OHST15d. Removed-but-recoverable, worktree SWEPT, origin/<branch> exists →
+# `resume-provision` (#2240). Symmetric with idle-provision: the consumer
+# re-provisions the worktree from the remote branch, then resumes the session.
+echo "Test: removed session, swept worktree, origin/<branch> exists → resume-provision"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+# 42 NOT registered (only main) → swept.
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n' > "$STUB_DIR/worktree-list.txt"
+printf '%s\n' '42-x' > "$STUB_DIR/remote-branches.txt"   # origin/42-x exists
+office_hours_state_fake_claude                            # empty registry → removed
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+export DISPATCH_STAMP_PROJECTS_ROOT="$TMPDIR_TEST/projects"
+mkdir -p "$DISPATCH_STAMP_PROJECTS_ROOT/proj-42"
+printf '%s\n' '{"schema":1,"session_id":"rec-sess-42","repo":"natb1/commons.systems","issue":42,"pr":null,"branch":"42-x","base_sha":"deadbeef","stamped_at":"2026-06-01T10:00:00Z"}' \
+  > "$DISPATCH_STAMP_PROJECTS_ROOT/proj-42/rec-sess-42.dispatch-stamp.json"
+touch "$DISPATCH_STAMP_PROJECTS_ROOT/proj-42/rec-sess-42.jsonl"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "removed swept + remote branch present → resume-provision" "resume-provision 42 rec-sess-42 42-x" "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE DISPATCH_STAMP_PROJECTS_ROOT
 teardown
 
 # OHST16. Not-local fresh-launch under a WORKING daemon (#2241 criterion-4,
@@ -7534,6 +7912,143 @@ assert_eq "swept + unprovisionable → swept-worktree diagnostic on stderr" "yes
 assert_eq "swept + unprovisionable → no LAUNCH (no spawn)" "no" \
   "$([[ "$out" == *LAUNCH:* ]] && echo yes || echo no)"
 unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
+# OH11. resume arm end-to-end (#2240): the selector emits `resume <N> <sid> <cwd>`
+# for a removed-but-recoverable session whose worktree is on disk. The entry
+# resumes it as a --bg job named office-hours-<N> rooted at <cwd>, then attaches BY
+# NAME. Stub the selector to emit the directive; a fake claude logs the --bg argv,
+# serves the post-resume registry (office-hours-42 under a FORKED sessionId, so
+# attach must resolve by NAME not by the verb's sess-abc), and echoes attach.
+echo "Test: resume directive → --bg --resume kick named office-hours-N, attach by name"
+setup
+mkdir -p "$TMPDIR_TEST/wt/42-x"
+cat > "$TMPDIR_TEST/office-hours-select-target" <<EOF
+#!/usr/bin/env bash
+echo "resume 42 sess-abc $TMPDIR_TEST/wt/42-x"
+EOF
+chmod +x "$TMPDIR_TEST/office-hours-select-target"
+cat > "$TMPDIR_TEST/bin/claude" <<'FAKE'
+#!/usr/bin/env bash
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+case "$1" in
+  agents)
+    echo '[{"sessionId":"forked-xyz","id":"j-office-hours-42","pid":1,"state":"idle","status":"idle","name":"office-hours-42","cwd":""}]'
+    ;;
+  attach)
+    echo "LAUNCH: attach $2"
+    ;;
+  *)
+    echo "$*" >> "$ROOT/bg-argv-log"
+    ;;
+esac
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/bin/claude"
+export OFFICE_HOURS_CLAUDE_CMD="$TMPDIR_TEST/bin/claude"
+export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/bin/claude"   # verify_agent_registered_under queries this
+export LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=0          # don't sleep between verify polls
+result=$("$TMPDIR_TEST/office-hours")
+bg=$(cat "$TMPDIR_TEST/bg-argv-log" 2>/dev/null || true)
+assert_eq "resume kick argv (single, no fork)" "--bg --name office-hours-42 --permission-mode auto --resume sess-abc continue" "$bg"
+assert_eq "resume attaches by name → j-office-hours-42 (not the verb sessionId)" "LAUNCH: attach j-office-hours-42" "$result"
+unset OFFICE_HOURS_CLAUDE_CMD CLAUDE_AGENTS_CMD LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
+teardown
+
+# OH12. resume fork-retry (#2240): the primary --bg --resume kick fails (a dead
+# sessionId can collide in the registry), so the entry retries ONCE with
+# --fork-session, then attaches BY NAME (the forked id is reachable via the stable
+# office-hours-<N> name). The fake fails any --bg kick lacking --fork-session.
+echo "Test: resume primary kick fails → fork-session retry, then attach by name"
+setup
+mkdir -p "$TMPDIR_TEST/wt/42-x"
+cat > "$TMPDIR_TEST/office-hours-select-target" <<EOF
+#!/usr/bin/env bash
+echo "resume 42 sess-abc $TMPDIR_TEST/wt/42-x"
+EOF
+chmod +x "$TMPDIR_TEST/office-hours-select-target"
+cat > "$TMPDIR_TEST/bin/claude" <<'FAKE'
+#!/usr/bin/env bash
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+case "$1" in
+  agents)
+    echo '[{"sessionId":"forked-xyz","id":"j-office-hours-42","pid":1,"state":"idle","status":"idle","name":"office-hours-42","cwd":""}]'
+    exit 0
+    ;;
+  attach)
+    echo "LAUNCH: attach $2"
+    exit 0
+    ;;
+  *)
+    echo "$*" >> "$ROOT/bg-argv-log"
+    # Fail the primary kick (no --fork-session); succeed the fork retry.
+    [[ "$*" == *"--fork-session"* ]] || exit 1
+    exit 0
+    ;;
+esac
+FAKE
+chmod +x "$TMPDIR_TEST/bin/claude"
+export OFFICE_HOURS_CLAUDE_CMD="$TMPDIR_TEST/bin/claude"
+export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/bin/claude"   # verify_agent_registered_under queries this
+export LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=0          # don't sleep between verify polls
+result=$("$TMPDIR_TEST/office-hours")
+mapfile -t oh_resume_argv < "$TMPDIR_TEST/bg-argv-log"
+assert_eq "primary kick carries no --fork-session" "--bg --name office-hours-42 --permission-mode auto --resume sess-abc continue" "${oh_resume_argv[0]:-}"
+assert_eq "fork retry appends --fork-session before continue" "--bg --name office-hours-42 --permission-mode auto --resume sess-abc --fork-session continue" "${oh_resume_argv[1]:-}"
+assert_eq "after fork, attach by name → j-office-hours-42" "LAUNCH: attach j-office-hours-42" "$result"
+unset OFFICE_HOURS_CLAUDE_CMD CLAUDE_AGENTS_CMD LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
+teardown
+
+# OH13. resume verify-fails-then-fork (#2240): the primary --bg --resume kick
+# returns 0 but NO session registers — the real async-reject mode for a
+# dead/colliding sessionId (claude --bg returns before registration; a rejected
+# id never registers). The verify gate must catch this (rc 0 is not enough) and
+# retry with --fork-session, after which the session registers and attach
+# resolves by name. The fake registers office-hours-42 ONLY after a --fork-session
+# kick.
+echo "Test: resume primary kick returns 0 but never registers → verify fails → fork"
+setup
+mkdir -p "$TMPDIR_TEST/wt/42-x"
+cat > "$TMPDIR_TEST/office-hours-select-target" <<EOF
+#!/usr/bin/env bash
+echo "resume 42 sess-abc $TMPDIR_TEST/wt/42-x"
+EOF
+chmod +x "$TMPDIR_TEST/office-hours-select-target"
+cat > "$TMPDIR_TEST/bin/claude" <<'FAKE'
+#!/usr/bin/env bash
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+case "$1" in
+  agents)
+    # Registered ONLY after a --fork-session kick created the marker.
+    if [[ -f "$ROOT/forked" ]]; then
+      echo '[{"sessionId":"forked-xyz","id":"j-office-hours-42","pid":1,"state":"idle","status":"idle","name":"office-hours-42","cwd":""}]'
+    else
+      echo '[]'
+    fi
+    exit 0
+    ;;
+  attach)
+    echo "LAUNCH: attach $2"
+    exit 0
+    ;;
+  *)
+    echo "$*" >> "$ROOT/bg-argv-log"
+    # Primary kick returns 0 but does NOT register; the fork kick registers.
+    [[ "$*" == *"--fork-session"* ]] && touch "$ROOT/forked"
+    exit 0
+    ;;
+esac
+FAKE
+chmod +x "$TMPDIR_TEST/bin/claude"
+export OFFICE_HOURS_CLAUDE_CMD="$TMPDIR_TEST/bin/claude"
+export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/bin/claude"
+export LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=0
+result=$("$TMPDIR_TEST/office-hours")
+mapfile -t oh_resume_argv < "$TMPDIR_TEST/bg-argv-log"
+assert_eq "primary kick (rc 0, unregistered) carries no --fork-session" "--bg --name office-hours-42 --permission-mode auto --resume sess-abc continue" "${oh_resume_argv[0]:-}"
+assert_eq "verify-fail triggers fork retry (rc 0 alone is not enough)" "--bg --name office-hours-42 --permission-mode auto --resume sess-abc --fork-session continue" "${oh_resume_argv[1]:-}"
+assert_eq "after fork registers, attach by name → j-office-hours-42" "LAUNCH: attach j-office-hours-42" "$result"
+unset OFFICE_HOURS_CLAUDE_CMD CLAUDE_AGENTS_CMD LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
 teardown
 
 # ============================================================================
@@ -8557,6 +9072,7 @@ log_state() {
 # porcelain (`gh issue comment`).
 echo "Test: label absent → ensure label + REST add to issue + post why-comment"
 setup
+echo '{"state":"open","labels":[]}' > "$STUB_DIR/arg-issue-42.json"
 "$TMPDIR_TEST/dispatch-apply-office-hours" 42 "phase exited before completion"
 TOTAL=$((TOTAL + 1))
 if grep -q 'issues/42/labels' "$STUB_DIR/gh-issue-set-labels-rest-calls.log" \
@@ -8606,7 +9122,7 @@ teardown
 # comment.
 echo "Test: label already present → no edit, no duplicate comment"
 setup
-echo '{"labels":[{"name":"dispatch:office-hours"}]}' > "$STUB_DIR/issue-labels-42.json"
+echo '{"state":"open","labels":[{"name":"dispatch:office-hours"}]}' > "$STUB_DIR/arg-issue-42.json"
 "$TMPDIR_TEST/dispatch-apply-office-hours" 42 "phase ran but did not advance"
 assert_eq "idempotent: no label edit" "absent" "$(log_state gh-issue-edit.log)"
 assert_eq "idempotent: no duplicate comment" "absent" "$(log_state gh-issue-comment.log)"
@@ -8748,6 +9264,7 @@ echo "=== dispatch-qa-apply-main-qa-labels (#1758) ==="
 # gh-issue-set-labels-rest-calls.log; both creates land in gh-label-create.log.
 echo "Test: happy path → REST-remove help-wanted, REST-add main-qa, route to office-hours; exit 0"
 setup
+echo '{"state":"open","labels":[]}' > "$STUB_DIR/arg-issue-42.json"
 if "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" 42; then rc=0; else rc=$?; fi
 assert_eq "happy path: exit 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
@@ -8783,6 +9300,7 @@ teardown
 # script still REST-adds main-qa and routes to office-hours, exiting 0.
 echo "Test: help-wanted absent (404) → tolerated, main-qa and office-hours still applied; exit 0"
 setup
+echo '{"state":"open","labels":[]}' > "$STUB_DIR/arg-issue-42.json"
 : > "$STUB_DIR/gh-404-remove-label"
 if "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" 42; then rc=0; else rc=$?; fi
 assert_eq "404 removal tolerated, exit 0" "0" "$rc"
@@ -8811,6 +9329,7 @@ teardown
 # label. The office-hours step runs unaffected.
 echo "Test: main-qa already exists → tolerated, REST add, office-hours unaffected; exit 0"
 setup
+echo '{"state":"open","labels":[]}' > "$STUB_DIR/arg-issue-42.json"
 : > "$STUB_DIR/gh-label-exists"
 if "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" 42; then rc=0; else rc=$?; fi
 assert_eq "already-exists: exit 0" "0" "$rc"
@@ -9033,7 +9552,7 @@ teardown
 # 4. No matching worktree → create <N>-<slug> from the issue title.
 echo "Test: no worktree → create <N>-<slug>"
 setup
-echo '{"title":"Add a feature"}' > "$STUB_DIR/issue-title-42.json"
+echo '{"state":"open","title":"Add a feature"}' > "$STUB_DIR/arg-issue-42.json"
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
 assert_eq "no worktree → create <N>-<slug>" "create 42-add-a-feature" "$result"
 teardown
@@ -9042,7 +9561,7 @@ teardown
 #    to a lowercase dash-joined slug.
 echo "Test: title sanitization → create"
 setup
-printf '{"title":"  Fix: The Foo/Bar Widget!  "}' > "$STUB_DIR/issue-title-7.json"
+printf '{"state":"open","title":"  Fix: The Foo/Bar Widget!  "}' > "$STUB_DIR/arg-issue-7.json"
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 7 explicit)
 assert_eq "messy title sanitized → create" "create 7-fix-the-foo-bar-widget" "$result"
 teardown
@@ -9051,8 +9570,8 @@ teardown
 #    WorktreeCreate hook form (acceptance criterion 2).
 echo "Test: long title truncated to <= 32-char branch → create"
 setup
-echo '{"title":"Extract the worktree resolution logic into a dedicated script"}' \
-  > "$STUB_DIR/issue-title-656.json"
+echo '{"state":"open","title":"Extract the worktree resolution logic into a dedicated script"}' \
+  > "$STUB_DIR/arg-issue-656.json"
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 656 explicit)
 assert_eq "long title truncated → exact create line" \
   "create 656-extract-the-worktree-resolut" "$result"
@@ -9101,7 +9620,7 @@ echo "Test: only a non-matching worktree → create"
 setup
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/99-other\nHEAD def456\nbranch refs/heads/99-other\n\n' \
   > "$STUB_DIR/worktree-list.txt"
-echo '{"title":"My Task"}' > "$STUB_DIR/issue-title-42.json"
+echo '{"state":"open","title":"My Task"}' > "$STUB_DIR/arg-issue-42.json"
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 queue)
 assert_eq "non-matching worktree → create" "create 42-my-task" "$result"
 teardown
@@ -9124,7 +9643,7 @@ teardown
 # 10. A title with no alphanumerics sanitizes to an empty slug → exit 1.
 echo "Test: title with no alphanumerics → empty-slug error"
 setup
-echo '{"title":"!!!"}' > "$STUB_DIR/issue-title-42.json"
+echo '{"state":"open","title":"!!!"}' > "$STUB_DIR/arg-issue-42.json"
 if "$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit 2>/dev/null; then rc=0; else rc=$?; fi
 assert_eq "empty-slug title exits non-zero" "1" "$rc"
 teardown
@@ -9137,7 +9656,7 @@ teardown
 echo "Test: no worktree + open PR → create-existing <pr-head>"
 setup
 printf '[{"number":100,"headRefName":"42-existing-pr-branch"}]\n' > "$STUB_DIR/pr-list-full.json"
-echo '{"headRefName":"42-existing-pr-branch"}' > "$STUB_DIR/pr-headref-100.json"
+echo '{"number":100,"state":"open","head":{"ref":"42-existing-pr-branch"}}' > "$STUB_DIR/pr-headref-100.json"
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
 assert_eq "no worktree + open PR → create-existing <pr-head>" \
   "create-existing 42-existing-pr-branch" "$result"
@@ -9148,7 +9667,7 @@ teardown
 #      create logic is preserved for the genuine implement phase.
 echo "Test: no worktree + no PR → create <N>-<slug> (find-pr fall-through, AC #5)"
 setup
-echo '{"title":"Add a feature"}' > "$STUB_DIR/issue-title-42.json"
+echo '{"state":"open","title":"Add a feature"}' > "$STUB_DIR/arg-issue-42.json"
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
 assert_eq "no worktree + no PR → create <N>-<slug>" "create 42-add-a-feature" "$result"
 teardown
@@ -9162,7 +9681,7 @@ teardown
 #      sleep under the lock.
 echo "Test: #1612 create path forces dispatch-find-pr retry delay 0 under the lock"
 setup
-echo '{"title":"Add a feature"}' > "$STUB_DIR/issue-title-42.json"
+echo '{"state":"open","title":"Add a feature"}' > "$STUB_DIR/arg-issue-42.json"
 # Probe find-pr: record the retry delay observed, then return empty (no PR →
 # fall through to fresh-slug create). Overwrites the real copy setup installed.
 cat > "$TMPDIR_TEST/dispatch-find-pr" <<'PROBE'
@@ -9184,7 +9703,7 @@ teardown
 # ----------------------------------------------------------------------------
 # Branch reconciliation on the `enter` path (#913). PR existence is driven via
 # pr-list-full.json (dispatch-find-pr's prefix match on headRefName); the PR
-# head branch is driven via pr-headref-<num>.json (gh pr view headRefName).
+# head branch is driven via pr-headref-<num>.json (gh_pr_view_rest head.ref).
 # The git stub logs checkouts to git-checkout.log and reads the unique-commit
 # count from rev-list-count.txt (default 0).
 # ----------------------------------------------------------------------------
@@ -9195,7 +9714,7 @@ setup
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
 select_target_fake_claude   # sessionless: explicit liveness check (#837) proceeds to reconcile
 printf '[{"number":100,"headRefName":"42-pr-branch"}]\n' > "$STUB_DIR/pr-list-full.json"
-echo '{"headRefName":"42-pr-branch"}' > "$STUB_DIR/pr-headref-100.json"
+echo '{"number":100,"state":"open","head":{"ref":"42-pr-branch"}}' > "$STUB_DIR/pr-headref-100.json"
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
 assert_eq "wrong branch + no unique commits → enter" \
   "enter /worktrees/42-my-feature" "$result"
@@ -9209,7 +9728,7 @@ setup
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
 select_target_fake_claude   # sessionless: explicit liveness check (#837) proceeds to reconcile
 printf '[{"number":100,"headRefName":"42-my-feature"}]\n' > "$STUB_DIR/pr-list-full.json"
-echo '{"headRefName":"42-my-feature"}' > "$STUB_DIR/pr-headref-100.json"
+echo '{"number":100,"state":"open","head":{"ref":"42-my-feature"}}' > "$STUB_DIR/pr-headref-100.json"
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
 assert_eq "already on PR branch → enter" "enter /worktrees/42-my-feature" "$result"
 checkout_logged=$([[ -f "$STUB_DIR/git-checkout.log" ]] && echo yes || echo no)
@@ -9222,7 +9741,7 @@ setup
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
 select_target_fake_claude   # sessionless: conflict here is from unique commits, not liveness (#837)
 printf '[{"number":100,"headRefName":"42-pr-branch"}]\n' > "$STUB_DIR/pr-list-full.json"
-echo '{"headRefName":"42-pr-branch"}' > "$STUB_DIR/pr-headref-100.json"
+echo '{"number":100,"state":"open","head":{"ref":"42-pr-branch"}}' > "$STUB_DIR/pr-headref-100.json"
 echo "2" > "$STUB_DIR/rev-list-count.txt"
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
 assert_eq "wrong branch + unique commits → conflict" \
@@ -9252,7 +9771,7 @@ setup
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
 select_target_fake_claude   # orphan: no live session owns the worktree
 printf '[{"number":100,"headRefName":"42-pr-branch"}]\n' > "$STUB_DIR/pr-list-full.json"
-echo '{"headRefName":"42-pr-branch"}' > "$STUB_DIR/pr-headref-100.json"
+echo '{"number":100,"state":"open","head":{"ref":"42-pr-branch"}}' > "$STUB_DIR/pr-headref-100.json"
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 queue)
 assert_eq "queue orphan + wrong branch → enter" \
   "enter /worktrees/42-my-feature" "$result"
@@ -9268,7 +9787,7 @@ setup
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
 select_target_fake_claude "42-my-feature"   # live session owns the worktree
 printf '[{"number":100,"headRefName":"42-pr-branch"}]\n' > "$STUB_DIR/pr-list-full.json"
-echo '{"headRefName":"42-pr-branch"}' > "$STUB_DIR/pr-headref-100.json"
+echo '{"number":100,"state":"open","head":{"ref":"42-pr-branch"}}' > "$STUB_DIR/pr-headref-100.json"
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 queue)
 assert_eq "queue live-session + wrong branch → conflict" \
   "conflict /worktrees/42-my-feature" "$result"
@@ -9287,7 +9806,7 @@ setup
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
 select_target_fake_claude   # sessionless: explicit liveness check (#837) proceeds to reconcile
 printf '[{"number":100,"headRefName":"42-pr-branch"}]\n' > "$STUB_DIR/pr-list-full.json"
-echo '{"headRefName":""}' > "$STUB_DIR/pr-headref-100.json"
+echo '{"number":100,"state":"open","head":{"ref":""}}' > "$STUB_DIR/pr-headref-100.json"
 if result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit 2>/dev/null); then rc=0; else rc=$?; fi
 assert_eq "PR + empty headRefName → exit 1" "1" "$rc"
 checkout_logged=$([[ -f "$STUB_DIR/git-checkout.log" ]] && echo yes || echo no)
@@ -9301,7 +9820,7 @@ setup
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
 select_target_fake_claude   # sessionless: explicit liveness check (#837) proceeds to reconcile
 printf '[{"number":100,"headRefName":"42-pr-branch"}]\n' > "$STUB_DIR/pr-list-full.json"
-echo '{"headRefName":"--upload-pack=evil"}' > "$STUB_DIR/pr-headref-100.json"
+echo '{"number":100,"state":"open","head":{"ref":"--upload-pack=evil"}}' > "$STUB_DIR/pr-headref-100.json"
 if result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit 2>/dev/null); then rc=0; else rc=$?; fi
 assert_eq "PR + injection-shaped headRefName → exit 1" "1" "$rc"
 checkout_logged=$([[ -f "$STUB_DIR/git-checkout.log" ]] && echo yes || echo no)
@@ -9318,14 +9837,13 @@ teardown
 # ----------------------------------------------------------------------------
 
 # 19a. PR number passed as the issue key → reject before the create-path slug.
-#      arg-issue-922.json carries "pull_request"; an issue-title-922.json is also
-#      seeded so the test proves the guard fires *before* the create path (no
-#      decision line despite a usable title fixture).
+#      arg-issue-922.json carries "pull_request" AND a usable title, so the test
+#      proves the guard fires *before* the create path (no decision line despite a
+#      usable title in the issue object).
 echo "Test: PR number as issue key → reject (no stray <pr-num>-* worktree)"
 setup
-echo '{"number":922,"pull_request":{"url":"https://api.github.com/repos/o/r/pulls/922"}}' \
+echo '{"number":922,"state":"open","title":"some pr title","pull_request":{"url":"https://api.github.com/repos/o/r/pulls/922"}}' \
   > "$STUB_DIR/arg-issue-922.json"
-echo '{"title":"some pr title"}' > "$STUB_DIR/issue-title-922.json"
 if result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 922 queue 2>/dev/null); then rc=0; else rc=$?; fi
 assert_eq "PR number as issue key → exit 1" "1" "$rc"
 assert_eq "PR number as issue key → no decision line" "" "$result"
@@ -9342,7 +9860,7 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktre
 select_target_fake_claude   # orphan: no live session owns the worktree
 echo '{"number":918}' > "$STUB_DIR/arg-issue-918.json"
 printf '[{"number":922,"headRefName":"918-dispatch-move"}]\n' > "$STUB_DIR/pr-list-full.json"
-echo '{"headRefName":"918-dispatch-move"}' > "$STUB_DIR/pr-headref-922.json"
+echo '{"number":922,"state":"open","head":{"ref":"918-dispatch-move"}}' > "$STUB_DIR/pr-headref-922.json"
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 918 queue)
 assert_eq "PR closing-issue number → enter real worktree" \
   "enter /worktrees/918-dispatch-move" "$result"
@@ -9540,10 +10058,13 @@ echo "=== dispatch-sweep ==="
 #   stub/                         per-test JSON + record files (calls, gh out)
 #
 # Shims:
-#   gh   — per-worktree PR query is `pr list --head <branch> --state all`, driven
-#          by pr-state-<branch>.json (each entry {state, number}); returns '[]'
-#          when no fixture exists. SWEEP_GH_PR_FAIL=<branch> forces that branch's
-#          --head query to fail. Issue-view is driven by issue-state-<N>.txt.
+#   gh   — per-worktree PR query (gh_pr_list_rest --head) issues two calls:
+#          "repo view --json owner -q .owner.login" (returns "natb1") and
+#          "api --paginate repos/.../pulls?state=all&...&head=natb1:<branch>",
+#          driven by pr-state-<branch>.json (REST format: {state:"open"|"closed",
+#          merged_at:<ts>|null, number, created_at, title}); returns '[]' by
+#          default. SWEEP_GH_PR_FAIL=<branch> forces the api call to fail.
+#          Issue-view is driven by issue-state-<N>.txt.
 #   git  — knows worktree list/remove/prune, branch -D, -C <p> status,
 #          -C <p> rev-list --count, -C <p> log -1 --format=%ct, and
 #          rev-parse --path-format=absolute --git-common-dir.
@@ -9580,37 +10101,51 @@ sweep_setup() {
 
   # gh shim — handles dispatch-sweep's calls.
   # Shims:
-  #   gh   — per-worktree PR query uses pr-state-<branch>.json (holding
-  #          [{"state":"MERGED"|"OPEN","number":<N>}]); returns '[]' by default
-  #          when no fixture exists. SWEEP_GH_PR_FAIL=<branch> makes the
-  #          --head query fail for that branch. Issue-view uses issue-state-<N>.txt.
+  #   gh   — per-worktree PR query (gh_pr_list_rest --head) issues two gh calls:
+  #          1. "repo view --json owner -q .owner.login" → returns "natb1"
+  #          2. "api --paginate repos/{owner}/{repo}/pulls?state=all&...&head=natb1:<branch>"
+  #             → serves pr-state-<branch>.json (REST format: each entry has
+  #             {state:"open"|"closed", merged_at:<ts>|null, number, created_at, title}).
+  #             Returns '[]' by default when no fixture exists.
+  #             SWEEP_GH_PR_FAIL=<branch> makes the api call fail for that branch.
+  #          Issue-view uses issue-state-<N>.txt.
   cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
 args="$*"
 case "$args" in
-  "pr list --head "*" --state all --json state,number")
-    # dispatch-sweep per-worktree PR query: gh pr list --head <branch> --state all --json state,number
-    br=$(echo "$args" | awk '{print $4}')
+  "repo view --json owner -q .owner.login")
+    # gh_pr_list_rest --head owner resolution: resolve the current repo owner.
+    echo "natb1"
+    ;;
+  api\ --paginate\ */pulls\?*)
+    # dispatch-sweep per-worktree PR query via gh_pr_list_rest (#2258):
+    # gh api --paginate repos/{owner}/{repo}/pulls?state=all&per_page=100&head=natb1:<branch>
+    # Extract branch from the head=natb1:<branch> query parameter.
+    br=$(printf '%s' "$args" | grep -oE 'head=natb1:[^ ]+' | sed 's/head=natb1://')
     if [[ "${SWEEP_GH_PR_FAIL:-}" == "$br" ]]; then
-      echo "gh sweep stub: simulated gh pr list --head failure for $br" >&2
+      echo "gh sweep stub: simulated gh api pulls failure for $br" >&2
       exit 1
     fi
     f="$STUB_DIR/pr-state-${br}.json"
     if [[ -f "$f" ]]; then cat "$f"; else echo '[]'; fi
     ;;
-  issue\ view\ *\ --json\ state\ -q\ .state)
-    # dispatch-sweep closed-issue check: gh issue view <N> --json state -q .state
-    num=$(echo "$args" | awk '{print $3}')
+  api\ repos/*/issues/[0-9]*)
+    # dispatch-sweep closed-issue check via gh_issue_view_rest (#2257): the helper
+    # issues `gh api repos/{owner}/{repo}/issues/<N>` and projects+upcases .state.
+    num="${args##*/}"
     # Controllable failure: if SWEEP_GH_ISSUE_FAIL matches this issue number, fail.
     if [[ "${SWEEP_GH_ISSUE_FAIL:-}" == "$num" ]]; then
-      echo "gh sweep stub: simulated gh issue view failure for $num" >&2
+      echo "gh sweep stub: simulated gh api issues/$num failure for $num" >&2
       exit 1
     fi
-    # Per-issue state fixture: issue-state-<N>.txt holds the raw state string.
+    # Per-issue state fixture: issue-state-<N>.txt holds the raw state string
+    # (e.g. CLOSED/OPEN/GARBAGE). Emit it inside a raw-REST issue object with the
+    # state lowercased — the porcelain bridge in gh_issue_view_rest upcases it back.
     f="$STUB_DIR/issue-state-${num}.txt"
     if [[ -f "$f" ]]; then
-      cat "$f"
+      state_lc=$(tr '[:upper:]' '[:lower:]' < "$f")
+      printf '{"number":%s,"state":"%s"}\n' "$num" "$state_lc"
     else
       echo "gh sweep stub: no issue-state-${num}.txt for issue view $num" >&2
       exit 1
@@ -9824,7 +10359,7 @@ echo "Test: merged worktree (in-sync) is removed + branch deleted"
 sweep_setup
 WT_PATH="$TMPDIR_TEST/project/worktrees/42-feature"
 sweep_register_wt "$WT_PATH" "42-feature"
-echo '[{"state":"MERGED","number":100}]' \
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":100,"created_at":"2024-01-01T00:00:00Z","title":"PR 100"}]' \
   > "$STUB_DIR/pr-state-42-feature.json"
 # Clean tree + zero unpushed (defaults already match this — explicit for clarity).
 key=$(sweep_path_key "$WT_PATH")
@@ -9875,7 +10410,7 @@ echo "Test: squash-merged worktree retired despite non-zero rev-list (#1845)"
 sweep_setup
 WT_PATH="$TMPDIR_TEST/project/worktrees/80-squash-merged"
 sweep_register_wt "$WT_PATH" "80-squash-merged"
-echo '[{"state":"MERGED","number":800}]' \
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":800,"created_at":"2024-01-01T00:00:00Z","title":"PR 800"}]' \
   > "$STUB_DIR/pr-state-80-squash-merged.json"
 key=$(sweep_path_key "$WT_PATH")
 : > "$STUB_DIR/status${key}.txt"          # clean working tree
@@ -10021,7 +10556,7 @@ export SWEEP_GH_ISSUE_FAIL="60"
 # Sibling in-sync MERGED worktree to prove the sweep continues.
 WT_PATH_60B="$TMPDIR_TEST/project/worktrees/60b-sibling-merged"
 sweep_register_wt "$WT_PATH_60B" "60b-sibling-merged"
-echo '[{"state":"MERGED","number":600}]' > "$STUB_DIR/pr-state-60b-sibling-merged.json"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":600,"created_at":"2024-01-01T00:00:00Z","title":"PR 600"}]' > "$STUB_DIR/pr-state-60b-sibling-merged.json"
 key_60b=$(sweep_path_key "$WT_PATH_60B")
 : > "$STUB_DIR/status${key_60b}.txt"
 echo "0" > "$STUB_DIR/revlist${key_60b}.txt"
@@ -10038,7 +10573,7 @@ else
   echo "    calls: $calls"
 fi
 TOTAL=$((TOTAL + 1))
-if grep -q "ERROR_ISSUE_STATE_FETCH: branch=60-closed-feature issue=60 gh issue view failed" \
+if grep -q "ERROR_ISSUE_STATE_FETCH: branch=60-closed-feature issue=60 gh_issue_view_rest failed" \
    "$DISPATCH_SWEEP_LOG_FILE"; then
   PASS=$((PASS + 1)); echo "  PASS: ERROR_ISSUE_STATE_FETCH log line present"
 else
@@ -10054,7 +10589,7 @@ echo "Test: open-PR worktree with closed issue is kept (OPEN_BY_BRANCH guard)"
 sweep_setup
 WT_PATH="$TMPDIR_TEST/project/worktrees/61-active-pr"
 sweep_register_wt "$WT_PATH" "61-active-pr"
-echo '[{"state":"OPEN","number":888}]' \
+echo '[{"state":"open","merged_at":null,"number":888,"created_at":"2024-01-01T00:00:00Z","title":"PR 888"}]' \
   > "$STUB_DIR/pr-state-61-active-pr.json"
 # Issue is CLOSED, but the OPEN PR precedence guard must short-circuit before gh issue view.
 echo "CLOSED" > "$STUB_DIR/issue-state-61.txt"
@@ -10088,7 +10623,7 @@ sweep_register_wt "$WT_PATH" "70-live-merged"
 key=$(sweep_path_key "$WT_PATH")
 : > "$STUB_DIR/status${key}.txt"
 echo "0" > "$STUB_DIR/revlist${key}.txt"
-echo '[{"state":"MERGED","number":300}]' \
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":300,"created_at":"2024-01-01T00:00:00Z","title":"PR 300"}]' \
   > "$STUB_DIR/pr-state-70-live-merged.json"
 # Register a live session whose name matches the worktree's basename.
 sweep_fake_claude_sessions_by_name "70-live-merged=sess-live-70"
@@ -10126,7 +10661,7 @@ sweep_register_wt "$WT_PATH" "71-no-live-merged"
 key=$(sweep_path_key "$WT_PATH")
 : > "$STUB_DIR/status${key}.txt"
 echo "0" > "$STUB_DIR/revlist${key}.txt"
-echo '[{"state":"MERGED","number":301}]' \
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":301,"created_at":"2024-01-01T00:00:00Z","title":"PR 301"}]' \
   > "$STUB_DIR/pr-state-71-no-live-merged.json"
 # Default fake (no live sessions) — the worktree is free to remove.
 
@@ -10198,7 +10733,7 @@ echo "Test: non-issue branch (hotfix-login) in merged map is reaped"
 sweep_setup
 WT_PATH="$TMPDIR_TEST/project/worktrees/hotfix-login"
 sweep_register_wt "$WT_PATH" "hotfix-login"
-echo '[{"state":"MERGED","number":400}]' \
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":400,"created_at":"2024-01-01T00:00:00Z","title":"PR 400"}]' \
   > "$STUB_DIR/pr-state-hotfix-login.json"
 # Clean tree + zero unpushed.
 key=$(sweep_path_key "$WT_PATH")
@@ -10238,7 +10773,7 @@ echo "Test: merged worktree with a reservation marker is skipped (SKIP_RESERVED)
 sweep_setup
 WT_PATH="$TMPDIR_TEST/project/worktrees/90-reserved-merged"
 sweep_register_wt "$WT_PATH" "90-reserved-merged"
-echo '[{"state":"MERGED","number":500}]' \
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":500,"created_at":"2024-01-01T00:00:00Z","title":"PR 500"}]' \
   > "$STUB_DIR/pr-state-90-reserved-merged.json"
 key=$(sweep_path_key "$WT_PATH")
 : > "$STUB_DIR/status${key}.txt"
@@ -10351,7 +10886,7 @@ echo "GARBAGE" > "$STUB_DIR/issue-state-62.txt"
 # Sibling in-sync MERGED worktree to prove the sweep continues.
 WT_PATH_62B="$TMPDIR_TEST/project/worktrees/62b-sibling-merged"
 sweep_register_wt "$WT_PATH_62B" "62b-sibling-merged"
-echo '[{"state":"MERGED","number":620}]' > "$STUB_DIR/pr-state-62b-sibling-merged.json"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":620,"created_at":"2024-01-01T00:00:00Z","title":"PR 620"}]' > "$STUB_DIR/pr-state-62b-sibling-merged.json"
 key_62b=$(sweep_path_key "$WT_PATH_62B")
 : > "$STUB_DIR/status${key_62b}.txt"
 echo "0" > "$STUB_DIR/revlist${key_62b}.txt"
@@ -10379,11 +10914,11 @@ sweep_teardown
 
 # --- Test I2: pr-list --head failure is isolated (ERROR_PR_STATE_FETCH) -----
 #
-# A branch whose `gh pr list --head` call fails must be logged as
+# A branch whose `gh_pr_list_rest --head` call fails must be logged as
 # ERROR_PR_STATE_FETCH and skipped, not fatal. A sibling in-sync MERGED
 # worktree in the same run must still be removed.
 
-echo "Test: gh pr list --head failure is isolated (exit 0, sibling still removed)"
+echo "Test: gh_pr_list_rest --head failure is isolated (exit 0, sibling still removed)"
 sweep_setup
 # Failing worktree: SWEEP_GH_PR_FAIL makes the stub exit 1 for this branch.
 WT_PATH="$TMPDIR_TEST/project/worktrees/63-pr-fail"
@@ -10393,7 +10928,7 @@ export SWEEP_GH_PR_FAIL="63-pr-fail"
 # Sibling in-sync MERGED worktree to prove the sweep continues.
 WT_PATH_63B="$TMPDIR_TEST/project/worktrees/63b-pr-ok"
 sweep_register_wt "$WT_PATH_63B" "63b-pr-ok"
-echo '[{"state":"MERGED","number":630}]' > "$STUB_DIR/pr-state-63b-pr-ok.json"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":630,"created_at":"2024-01-01T00:00:00Z","title":"PR 630"}]' > "$STUB_DIR/pr-state-63b-pr-ok.json"
 key_63b=$(sweep_path_key "$WT_PATH_63B")
 : > "$STUB_DIR/status${key_63b}.txt"
 echo "0" > "$STUB_DIR/revlist${key_63b}.txt"
@@ -10410,7 +10945,7 @@ else
   echo "    calls: $calls"
 fi
 TOTAL=$((TOTAL + 1))
-if grep -q "ERROR_PR_STATE_FETCH: branch=63-pr-fail gh pr list --head failed" \
+if grep -q "ERROR_PR_STATE_FETCH: branch=63-pr-fail gh_pr_list_rest --head failed" \
    "$DISPATCH_SWEEP_LOG_FILE"; then
   PASS=$((PASS + 1)); echo "  PASS: ERROR_PR_STATE_FETCH log line present"
 else
@@ -10449,7 +10984,7 @@ export DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S=100
 WT_PATH="$TMPDIR_TEST/project/worktrees/2100-merged-dirty"
 WT_BASE="2100-merged-dirty"
 sweep_register_wt "$WT_PATH" "$WT_BASE"
-echo '[{"state":"MERGED","number":2100}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":2100,"created_at":"2024-01-01T00:00:00Z","title":"PR 2100"}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
 key=$(sweep_path_key "$WT_PATH")
 # Not-in-sync: dirty tree (drives worktree_merged_in_sync to non-zero).
 echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
@@ -10589,7 +11124,7 @@ export DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S=100
 WT_PATH="$TMPDIR_TEST/project/worktrees/2200-merged-young"
 WT_BASE="2200-merged-young"
 sweep_register_wt "$WT_PATH" "$WT_BASE"
-echo '[{"state":"MERGED","number":2200}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":2200,"created_at":"2024-01-01T00:00:00Z","title":"PR 2200"}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
 key=$(sweep_path_key "$WT_PATH")
 echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
 # Pre-seed the marker (write-once already happened on a prior sweep).
@@ -10655,7 +11190,7 @@ export DISPATCH_SWEEP_NOW_EPOCH=99999
 WT_PATH="$TMPDIR_TEST/project/worktrees/2300-merged-live"
 WT_BASE="2300-merged-live"
 sweep_register_wt "$WT_PATH" "$WT_BASE"
-echo '[{"state":"MERGED","number":2300}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":2300,"created_at":"2024-01-01T00:00:00Z","title":"PR 2300"}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
 key=$(sweep_path_key "$WT_PATH")
 echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
 # Pre-seed an aged-out marker so ONLY the live-session guard prevents the reap.
@@ -10724,7 +11259,7 @@ export DISPATCH_SWEEP_NOW_EPOCH=5000
 WT_PATH="$TMPDIR_TEST/project/worktrees/2400-merged-quarantine"
 WT_BASE="2400-merged-quarantine"
 sweep_register_wt "$WT_PATH" "$WT_BASE"
-echo '[{"state":"MERGED","number":2400}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":2400,"created_at":"2024-01-01T00:00:00Z","title":"PR 2400"}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
 key=$(sweep_path_key "$WT_PATH")
 echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
 # Aged-out marker (age 5000-1000=4000 >= 100).
@@ -10779,7 +11314,7 @@ export DISPATCH_SWEEP_NOW_EPOCH=5000
 WT_PATH="$TMPDIR_TEST/project/worktrees/2401-merged-qfail"
 WT_BASE="2401-merged-qfail"
 sweep_register_wt "$WT_PATH" "$WT_BASE"
-echo '[{"state":"MERGED","number":2401}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":2401,"created_at":"2024-01-01T00:00:00Z","title":"PR 2401"}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
 key=$(sweep_path_key "$WT_PATH")
 echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
 mkdir -p "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync"
@@ -10854,7 +11389,7 @@ sweep_setup
 WT_PATH="$TMPDIR_TEST/project/worktrees/2500-merged-clean"
 WT_BASE="2500-merged-clean"
 sweep_register_wt "$WT_PATH" "$WT_BASE"
-echo '[{"state":"MERGED","number":2500}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":2500,"created_at":"2024-01-01T00:00:00Z","title":"PR 2500"}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
 key=$(sweep_path_key "$WT_PATH")
 : > "$STUB_DIR/status${key}.txt"          # clean
 echo "0" > "$STUB_DIR/revlist${key}.txt"
@@ -10917,7 +11452,7 @@ export DISPATCH_SWEEP_NOW_EPOCH=1050
 WT_PATH="$TMPDIR_TEST/project/worktrees/2600-live-marked"
 WT_BASE="2600-live-marked"
 sweep_register_wt "$WT_PATH" "$WT_BASE"
-echo '[{"state":"MERGED","number":2600}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":2600,"created_at":"2024-01-01T00:00:00Z","title":"PR 2600"}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
 key=$(sweep_path_key "$WT_PATH")
 echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
 mkdir -p "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync"
@@ -10965,7 +11500,7 @@ printf '{"notInSyncGraceSeconds":100}\n' > "$DISPATCH_CONFIG_DIR/sweep.json"
 WT_PATH="$TMPDIR_TEST/project/worktrees/2700-config-grace"
 WT_BASE="2700-config-grace"
 sweep_register_wt "$WT_PATH" "$WT_BASE"
-echo '[{"state":"MERGED","number":2700}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":2700,"created_at":"2024-01-01T00:00:00Z","title":"PR 2700"}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
 key=$(sweep_path_key "$WT_PATH")
 echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
 MARKER="$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
@@ -11012,7 +11547,7 @@ export DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S=100
 WT_PATH="$TMPDIR_TEST/project/worktrees/2710-empty-config"
 WT_BASE="2710-empty-config"
 sweep_register_wt "$WT_PATH" "$WT_BASE"
-echo '[{"state":"MERGED","number":2710}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":2710,"created_at":"2024-01-01T00:00:00Z","title":"PR 2710"}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
 key=$(sweep_path_key "$WT_PATH")
 echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
 MARKER="$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
@@ -11052,7 +11587,7 @@ export DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S=100
 WT_PATH="$TMPDIR_TEST/project/worktrees/2720-frac-config"
 WT_BASE="2720-frac-config"
 sweep_register_wt "$WT_PATH" "$WT_BASE"
-echo '[{"state":"MERGED","number":2720}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":2720,"created_at":"2024-01-01T00:00:00Z","title":"PR 2720"}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
 key=$(sweep_path_key "$WT_PATH")
 echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
 MARKER="$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
@@ -12196,6 +12731,31 @@ mkdir -p "$wt"
 write_fake_claude '[{"sessionId":"oh-1","pid":99,"status":"busy","name":"office-hours-1311"}]' 0
 if worktree_has_live_session "$wt"; then live=occupied; else live=free; fi
 assert_eq "office-hours occupancy: worktree_has_live_session reports occupied" "occupied" "$live"
+ca_teardown
+
+# --- Test 8c: stopped session still occupies its worktree (#2240 byte-identical router) ---
+#
+# The selector now attaches stopped/paused sessions (#2240), but the shared
+# worktree_has_live_session helper is deliberately NOT changed — it must still
+# report a stopped session as OCCUPIED so the dispatch router hot path is
+# byte-identical. This test proves that invariant.
+
+echo "Test: stopped session still marks worktree occupied (byte-identical router, #2240)"
+ca_setup
+ca_basename=$(basename "$CA_DIR")
+write_fake_claude "[{\"sessionId\":\"s-stop\",\"pid\":5,\"status\":\"stopped\",\"name\":\"$ca_basename\"}]" 0
+if worktree_has_live_session "$CA_DIR"; then live=occupied; else live=free; fi
+assert_eq "stopped occupancy: worktree_has_live_session reports occupied" "occupied" "$live"
+ca_teardown
+
+# --- Test 8d: paused session still occupies its worktree (#2240 byte-identical router) ---
+
+echo "Test: paused session still marks worktree occupied (byte-identical router, #2240)"
+ca_setup
+ca_basename=$(basename "$CA_DIR")
+write_fake_claude "[{\"sessionId\":\"s-pause\",\"pid\":6,\"status\":\"paused\",\"name\":\"$ca_basename\"}]" 0
+if worktree_has_live_session "$CA_DIR"; then live=occupied; else live=free; fi
+assert_eq "paused occupancy: worktree_has_live_session reports occupied" "occupied" "$live"
 ca_teardown
 
 # --- Test 9: claude_sessions_under invokes `claude` with --cwd <path> -------
@@ -20470,16 +21030,19 @@ case "$args" in
   "label create "*)
     # Idempotent label create — default success.
     ;;
-  *"issue list "*"--state open"*)
-    if [[ -f "$STUB_DIR/open-issues.json" ]]; then
-      cat "$STUB_DIR/open-issues.json"
+  *"api "*"repos/"*"/issues"*)
+    # gh_issue_list_rest (#2258): the engine's open/closed scans now hit REST
+    # (gh api [--paginate] repos/<repo>/issues?state=<s>&...). Serve the SAME
+    # open-issues.json / closed-issues.json fixtures, jq-remapped to REST
+    # snake_case so the helper remaps them back to identical camelCase data.
+    # state=open vs state=closed in the query string selects the fixture.
+    if [[ "$args" == *state=open* ]]; then
+      fixture="$STUB_DIR/open-issues.json"
     else
-      echo '[]'
+      fixture="$STUB_DIR/closed-issues.json"
     fi
-    ;;
-  *"issue list "*"--state closed"*)
-    if [[ -f "$STUB_DIR/closed-issues.json" ]]; then
-      cat "$STUB_DIR/closed-issues.json"
+    if [[ -f "$fixture" ]]; then
+      jq 'map({number, pull_request: null, created_at: (.createdAt // null), closed_at: (.closedAt // null), labels: (.labels // [])} + (if has("body") then {body} else {} end) + (if has("title") then {title} else {} end))' "$fixture"
     else
       echo '[]'
     fi
@@ -20578,8 +21141,8 @@ else
 fi
 calls=$(cat "$STUB_DIR/gh-calls.log")
 TOTAL=$((TOTAL + 1))
-if [[ "$calls" == *"label create"* && "$calls" == *"issue list "*"--state open"* \
-   && "$calls" == *"issue list "*"--state closed"* \
+if [[ "$calls" == *"label create"* && "$calls" == *"issues?"*"state=open"* \
+   && "$calls" == *"issues?"*"state=closed"* \
    && "$calls" == *"issue create"* && "$calls" == *"project item-add"* ]]; then
   PASS=$((PASS + 1))
   echo "  PASS: cold start invoked label create / list / create / item-add"
@@ -21394,8 +21957,9 @@ jit_teardown
 # own SCRIPT_DIR — which becomes $TMPDIR_TEST/scripts for the copy — so all
 # three scripts are co-located. The gh stub logs EVERY matched invocation to
 # gh-calls.log so a test can assert "zero gh calls" (the debounce case). The
-# `issue list` arm reads a stub/issue-list.json fixture if present (lets a
-# test seed the batched dedup map with pre-existing issues), else "[]".
+# REST issues arm (`api ... repos/.../issues`, the gh_issue_list_rest call after
+# #2258) reads a stub/issue-list.json fixture if present (lets a test seed the
+# batched dedup map with pre-existing issues), else "[]", remapped to snake_case.
 # Transient-failure injection is via stub/issue-list-fail-once. "now" is pinned
 # via DISPATCH_STATEMENTS_NOW so the debounce math is deterministic.
 
@@ -21426,9 +21990,10 @@ statements_setup() {
   export DISPATCH_STATEMENTS_NOW="$STMT_NOW_EPOCH"
 
   # gh PATH stub. Every matched subcommand is appended to gh-calls.log so the
-  # debounce test can assert the log is absent (zero gh calls). `issue list`
-  # reads issue-list.json if present, else "[]"; supports transient-failure
-  # injection via issue-list-fail-once. `issue create` logs its full args
+  # debounce test can assert the log is absent (zero gh calls). The REST issues
+  # arm (`api ... repos/.../issues`, #2258) reads issue-list.json if present,
+  # else "[]", remapped to snake_case; supports transient-failure injection via
+  # issue-list-fail-once. `issue create` logs its full args
   # (including --body) to gh-issue-create.log so the body can be asserted,
   # and echoes a deterministic issue URL. `project item-add` matches the gh
   # subcommand that dispatch-project-item-add invokes internally.
@@ -21441,14 +22006,20 @@ case "$args" in
   "label create "*)
     # Idempotent label create — default success.
     ;;
-  *"issue list "*)
+  *"api "*"repos/"*"/issues"*)
+    # (#2258) dispatch-statements-scan now batches via gh_issue_list_rest, which
+    # issues `gh api [--paginate] repos/<repo>/issues?state=all&...&labels=...`.
+    # The glob spans both the >100 (--paginate) and <=100 forms. Serve the SAME
+    # issue-list.json fixture, jq-remapped from camelCase to REST snake_case and
+    # INCLUDING body (the scan passes --include-body). Transient-failure injection
+    # via issue-list-fail-once still applies — the helper retries internally.
     if [[ -f "$STUB_DIR/issue-list-fail-once" ]]; then
       rm -f "$STUB_DIR/issue-list-fail-once"
       echo "HTTP 503: Service Unavailable" >&2
       exit 1
     fi
     if [[ -f "$STUB_DIR/issue-list.json" ]]; then
-      cat "$STUB_DIR/issue-list.json"
+      jq 'map({number, pull_request: null, created_at: (.createdAt//null), closed_at: (.closedAt//null), labels: (.labels//[])} + (if has("body") then {body} else {} end) + (if has("title") then {title} else {} end))' "$STUB_DIR/issue-list.json"
     else
       echo '[]'
     fi
@@ -21571,13 +22142,13 @@ else
 fi
 calls=$(cat "$STUB_DIR/gh-calls.log")
 TOTAL=$((TOTAL + 1))
-if [[ "$calls" == *"issue list "* && "$calls" == *"issue create"* \
+if [[ "$calls" == *"repos/test-owner/test-repo/issues"* && "$calls" == *"issue create"* \
    && "$calls" == *"project item-add"* ]]; then
   PASS=$((PASS + 1))
-  echo "  PASS: new-file invoked issue list / issue create / project item-add"
+  echo "  PASS: new-file invoked issue list (REST) / issue create / project item-add"
 else
   FAIL=$((FAIL + 1))
-  echo "  FAIL: new-file invoked issue list / issue create / project item-add"
+  echo "  FAIL: new-file invoked issue list (REST) / issue create / project item-add"
   echo "    gh-calls.log: $calls"
 fi
 # Assert both labels are present in the issue create call.
@@ -21785,20 +22356,30 @@ fi
 statements_teardown
 
 # --- Test 9: malformed gh issue list output → hard error, no issue create ----
+# (#2258) The batched lookup now flows through gh_issue_list_rest, which pipes the
+# gh api output through its OWN internal `jq -s` projection. A non-JSON result
+# makes that internal jq fail → the helper returns nonzero with empty stdout, so
+# the malformed case surfaces through the script's rc!=0 hard-error branch ("gh
+# issue list failed") rather than the (now unreachable-via-helper) non-JSON
+# branch. Intent is preserved: malformed output → hard error → files nothing.
+# The non-JSON injection reaches the helper through the stub's REST arm, where
+# the stub's own remap-jq fails on the TLS string and exits nonzero, driving the
+# helper's "gh api failed" path.
 
 echo "Test: dispatch-statements-scan surfaces hard error on malformed gh issue list output, does not file"
 statements_setup
 statements_write_projects
 statements_write_config
 printf 'STATEMENT-CONTENTS\n' > "$TMPDIR_TEST/statements-dir/acct.qfx"
-# Inject a TLS-error-like non-JSON message as the issue list result (gh exits 0).
+# Inject a TLS-error-like non-JSON message as the issue list result. The stub's
+# REST-arm remap jq fails on it → stub exits nonzero → helper rc!=0.
 printf 'tls: failed to verify certificate: x509: certificate signed by unknown authority\n' \
   > "$STUB_DIR/issue-list.json"
 rc=0
 err=$("$TMPDIR_TEST/scripts/dispatch-statements-scan" 2>&1 >/dev/null) || rc=$?
 assert_eq "malformed-list exits 1" "1" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ "$err" == *"bank: error"* && "$err" == *"non-JSON"* ]]; then
+if [[ "$err" == *"bank: error"* && "$err" == *"failed"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: malformed-list emits hard error to stderr"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: malformed-list emits hard error to stderr"
@@ -21882,8 +22463,9 @@ statements_teardown
 
 # --- Test 12: one list call regardless of file count -------------------------
 # Proves that the per-file Search-API fan-out is gone: with N=5 distinct new
-# files there is exactly ONE `gh issue list` invocation (per entry, not per
-# file) and exactly 5 `gh issue create` invocations.
+# files there is exactly ONE batched issue-list REST call (per entry, not per
+# file) and exactly 5 `gh issue create` invocations. (#2258) The list call is now
+# `gh api ... repos/.../issues?...`; count it by the REST path.
 
 echo "Test: dispatch-statements-scan makes exactly one gh issue list call for N files"
 statements_setup
@@ -21901,8 +22483,8 @@ out=$("$TMPDIR_TEST/scripts/dispatch-statements-scan" 2>/dev/null) || rc=$?
 assert_eq "one-list-call exits 0" "0" "$rc"
 list_count=0
 [[ -f "$STUB_DIR/gh-calls.log" ]] \
-  && list_count=$(grep -c '^issue list ' "$STUB_DIR/gh-calls.log" || true)
-assert_eq "one-list-call made exactly one issue list call" "1" "$list_count"
+  && list_count=$(grep -c 'repos/.*/issues' "$STUB_DIR/gh-calls.log" || true)
+assert_eq "one-list-call made exactly one issue list (REST) call" "1" "$list_count"
 create_count=0
 [[ -f "$STUB_DIR/gh-calls.log" ]] \
   && create_count=$(grep -c '^issue create ' "$STUB_DIR/gh-calls.log" || true)
@@ -21923,15 +22505,16 @@ printf 'STATEMENT-CONTENTS\n' > "$TMPDIR_TEST/statements-dir/retry.qfx"
 h=$(sha256sum "$TMPDIR_TEST/statements-dir/retry.qfx" | awk '{print $1}')
 jq -n --arg h "$h" '[{number:99, body:("- sha256: `" + $h + "`")}]' \
   > "$STUB_DIR/issue-list.json"
-# First gh issue list attempt fails transiently; retry returns the fixture.
+# (#2258) gh_issue_list_rest wraps gh_retry internally; the first REST issues
+# attempt fails transiently (issue-list-fail-once), the retry returns the fixture.
 touch "$STUB_DIR/issue-list-fail-once"
 rc=0
 out=$("$TMPDIR_TEST/scripts/dispatch-statements-scan" 2>/dev/null) || rc=$?
 assert_eq "retry-list exits 0" "0" "$rc"
 list_count=0
 [[ -f "$STUB_DIR/gh-calls.log" ]] \
-  && list_count=$(grep -c '^issue list ' "$STUB_DIR/gh-calls.log" || true)
-assert_eq "retry-list made exactly 2 issue list calls (fail attempt + retry)" "2" "$list_count"
+  && list_count=$(grep -c 'repos/.*/issues' "$STUB_DIR/gh-calls.log" || true)
+assert_eq "retry-list made exactly 2 issue list (REST) calls (fail attempt + retry)" "2" "$list_count"
 TOTAL=$((TOTAL + 1))
 if [[ "$out" == *"bank: skipped (#99 for retry.qfx)"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: retry-list skipped (#99 for retry.qfx) — retry parsed correctly"
@@ -24239,9 +24822,11 @@ mkdir -p "$FINALIZE_STUB_DIR" "$FINALIZE_BIN" "$FINALIZE_SCRIPTS"
 # Copy the real finalize script into the scripts dir so $SCRIPT_DIR resolves there.
 cp "$SCRIPT_DIR/dispatch-finalize-phase" "$FINALIZE_SCRIPTS/dispatch-finalize-phase"
 chmod +x "$FINALIZE_SCRIPTS/dispatch-finalize-phase"
-# #2256: dispatch-finalize-phase now `source`s lib.sh via $SCRIPT_DIR (for
-# gh_issue_remove_label_rest). Copy lib.sh alongside it so the source resolves
-# (this private tmpdir does not use the shared `setup`, which copies lib.sh).
+# dispatch-finalize-phase now `source`s lib.sh via $SCRIPT_DIR for the REST-backed
+# gh helpers: gh_issue_remove_label_rest (the label mutation, #2256) and
+# gh_issue_view_rest (the issue read, #2257). Copy lib.sh alongside it so the
+# source resolves (this private tmpdir does not use the shared `setup`, which
+# copies lib.sh).
 cp "$SCRIPT_DIR/lib.sh" "$FINALIZE_SCRIPTS/lib.sh"
 
 # Stub dispatch-spawn-tick: log to order.log and spawn-calls.log.
@@ -24281,9 +24866,11 @@ cat > "$FINALIZE_BIN/gh" <<'STUB'
 FINALIZE_STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
 args="$*"
 case "$args" in
-  issue\ view\ *--json\ labels*)
-    # No rate-limit-retry labels to clear.
-    printf '{"labels":[]}\n'
+  api\ repos/*/issues/*)
+    # finalize-phase reads the issue via gh_issue_view_rest (#2257). Emit a raw-REST
+    # object with no rate-limit-retry labels to clear (and a state so the helper's
+    # .state|ascii_upcase does not error).
+    printf '{"number":0,"state":"open","labels":[]}\n'
     ;;
   api\ -X\ DELETE\ */issues/*/labels/*)
     echo "$args" >> "$FINALIZE_STUB_DIR/gh-label-remove.log"
@@ -25617,9 +26204,14 @@ echo "$args" >> "$STUB_DIR/gh-calls.log"
 case "$args" in
   "label create "*)
     ;;
-  *"issue list "*"--state open"*)
+  *"api "*"repos/"*"/issues"*)
+    # gh_issue_list_rest (#2258): the calendar import's open-issue dedup scan now
+    # hits REST (gh api [--paginate] repos/<repo>/issues?state=open&...) WITH
+    # --include-body, so the helper's projection carries `body`. Serve the SAME
+    # open-issues.json fixture jq-remapped to REST snake_case, preserving `body`
+    # so the helper remaps back to identical camelCase data.
     if [[ -f "$STUB_DIR/open-issues.json" ]]; then
-      cat "$STUB_DIR/open-issues.json"
+      jq 'map({number, pull_request: null, created_at: (.createdAt // null), closed_at: (.closedAt // null), labels: (.labels // [])} + (if has("body") then {body} else {} end) + (if has("title") then {title} else {} end))' "$STUB_DIR/open-issues.json"
     else
       echo '[]'
     fi
@@ -26793,10 +27385,16 @@ STUB
 STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
 args="$*"
 case "$args" in
-  issue\ list\ *dispatch:main-broken*)
-    # Step-1c main-broken latch: still on `gh issue list` (not converted, #1601 A5).
+  api\ *repos/*/issues\?*dispatch:main-broken*)
+    # Step-1c main-broken latch: converted to gh_issue_list_rest (REST) by #2258.
+    # main-broken-open.txt holds one issue number per line; wrap them into a
+    # REST-shape snake_case array so the helper remaps to camelCase and the
+    # script's `jq -r '.[].number'` recovers the same numbers. Absent file → [],
+    # so the open-latch query returns empty and the re-arm short-circuits.
     if [[ -f "$STUB_DIR/main-broken-open.txt" ]]; then
-      cat "$STUB_DIR/main-broken-open.txt"
+      jq -R -s 'split("\n") | map(select(length > 0) | {number: (. | tonumber), pull_request: null, created_at: null, closed_at: null, labels: []})' "$STUB_DIR/main-broken-open.txt"
+    else
+      echo "[]"
     fi
     ;;
   api\ *repos/*/issues\?*dispatch:sync-broken*)
@@ -27874,11 +28472,16 @@ for a in "$@"; do
   prev="$a"
 done
 case "$sub" in
-  "issue list")
-    # Return the open-latch number if seeded; an absent file means no open
-    # latch (CREATE path). Must exit 0 either way — the script reads this under
-    # `set -e`, so a falsy `[[ -f ]]` test (no file) must not propagate rc 1.
-    [[ -f "$CAP/existing.txt" ]] && cat "$CAP/existing.txt"
+  "api --paginate")
+    # gh_issue_list_rest uses REST: gh api --paginate repos/{owner}/{repo}/issues?...
+    # Return the open-latch number if seeded; absent file means no open latch.
+    # gh_issue_list_rest remaps from snake_case REST to camelCase; serve snake_case.
+    if [[ -f "$CAP/existing.txt" ]]; then
+      num=$(cat "$CAP/existing.txt")
+      printf '[{"number":%s,"pull_request":null,"created_at":"2026-01-01T00:00:00Z","closed_at":null,"labels":[]}]' "$num"
+    else
+      echo '[]'
+    fi
     exit 0
     ;;
   "issue create")
@@ -28163,9 +28766,18 @@ esac
 STUB
   cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
 #!/usr/bin/env bash
-# Closed-check (--json state) and identity-stub title fetch (--json title).
+# dispatch-materialize-spawn reads the issue via gh_issue_view_rest (#2257):
+# `gh api repos/{owner}/{repo}/issues/<N>`. Emit a raw-REST issue object built
+# from MAT_ISSUE_TITLE / MAT_ISSUE_STATE; the helper projects+upcases .state, so
+# emit the state lowercased here (CLOSED → closed → helper upcases back).
 case "$*" in
-  *"--json title"*) echo "${MAT_ISSUE_TITLE:-Test issue title}" ;;
+  api\ repos/*/issues/*)
+    state_lc=$(printf '%s' "${MAT_ISSUE_STATE:-OPEN}" | tr '[:upper:]' '[:lower:]')
+    # Build with jq so a title carrying control chars (the #1443 crafted-title
+    # test) is JSON-escaped into a valid raw-REST object the helper can parse.
+    jq -n --arg title "${MAT_ISSUE_TITLE:-Test issue title}" --arg state "$state_lc" \
+      '{number:0, title:$title, body:"", state:$state, state_reason:null, labels:[], assignees:[]}'
+    ;;
   *) echo "${MAT_ISSUE_STATE:-OPEN}" ;;
 esac
 STUB
@@ -30933,19 +31545,21 @@ jit_skill_setup() {
   chmod +x "$TMPDIR_TEST/scripts/dispatch-jit-skill" \
            "$TMPDIR_TEST/scripts/dispatch-config-load"
 
-  # gh stub: handles `issue view <num> --repo <repo> --json labels`.
-  # Reads the labels fixture from $TMPDIR_TEST/labels.json; defaults to empty.
-  # Unknown invocations → stderr + exit 1.
+  # gh stub: handles dispatch-jit-skill's gh_issue_view_rest read (#2257):
+  # `gh api repos/<owner>/<repo>/issues/<N>`. Reads the labels fixture from
+  # $TMPDIR_TEST/labels.json (a raw-REST {"labels":[...]} object) and merges a
+  # state so the helper's .state|ascii_upcase does not error; defaults to empty
+  # labels. Unknown invocations → stderr + exit 1.
   cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 args="$*"
 TREE="$(cd "$(dirname "$0")/.." && pwd)"
 case "$args" in
-  issue\ view\ *\ --repo\ *\ --json\ labels)
+  api\ repos/*/issues/*)
     if [[ -f "$TREE/labels.json" ]]; then
-      cat "$TREE/labels.json"
+      jq '. + {state:"open"}' "$TREE/labels.json"
     else
-      echo '{"labels":[]}'
+      echo '{"state":"open","labels":[]}'
     fi
     ;;
   *)
@@ -31137,6 +31751,7 @@ digest_window_setup() {
   mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/bin"
 
   cp "$SCRIPT_DIR/dispatch-digest-window" "$TMPDIR_TEST/scripts/dispatch-digest-window"
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-digest-window"
 
   cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
@@ -31144,16 +31759,21 @@ digest_window_setup() {
 args="$*"
 TREE="$(cd "$(dirname "$0")/.." && pwd)"
 case "$args" in
-  issue\ view\ *\ --repo\ *\ --json\ createdAt,labels)
+  api\ repos/*/issues/[0-9]*)
+    # gh_issue_view_rest single-issue GET: gh api repos/<repo>/issues/<N>.
+    # MUST precede the api repos/*/issues* list arm (first-match-wins).
+    # Serves issue.json in raw REST shape (created_at, not createdAt).
     if [[ -f "$TREE/issue.json" ]]; then
       cat "$TREE/issue.json"
     else
-      echo '{"createdAt":"2026-01-01T00:00:00Z","labels":[{"name":"jit:digest"}]}'
+      echo '{"number":30,"title":"","body":"","state":"open","state_reason":null,"created_at":"2026-01-01T00:00:00Z","labels":[{"name":"jit:digest"}],"assignees":[]}'
     fi
     ;;
-  issue\ list\ --repo\ *\ --label\ *\ --state\ closed\ --limit\ *\ --json\ number,closedAt)
+  api\ repos/*/issues*)
+    # gh_issue_list_rest uses REST: gh api repos/<repo>/issues?state=...
+    # Return each item in REST snake_case format; gh_issue_list_rest remaps to camelCase.
     if [[ -f "$TREE/closed.json" ]]; then
-      cat "$TREE/closed.json"
+      jq 'map({number, pull_request: null, created_at: .createdAt, closed_at: .closedAt, labels})' "$TREE/closed.json"
     else
       echo '[]'
     fi
@@ -31181,7 +31801,7 @@ digest_window_teardown() {
 echo "Test: dispatch-digest-window prints the prior closed digest closedAt (steady state)"
 digest_window_setup
 cat > "$TMPDIR_TEST/issue.json" <<'EOF'
-{"createdAt":"2026-05-01T00:00:00Z","labels":[{"name":"jit:digest"}]}
+{"number":30,"title":"","body":"","state":"open","state_reason":null,"created_at":"2026-05-01T00:00:00Z","labels":[{"name":"jit:digest"}],"assignees":[]}
 EOF
 cat > "$TMPDIR_TEST/closed.json" <<'EOF'
 [{"number":10,"closedAt":"2026-05-20T00:00:00Z"},{"number":11,"closedAt":"2026-05-25T12:00:00Z"}]
@@ -31196,7 +31816,7 @@ digest_window_teardown
 echo "Test: dispatch-digest-window falls back to createdAt on cold start (no prior closed)"
 digest_window_setup
 cat > "$TMPDIR_TEST/issue.json" <<'EOF'
-{"createdAt":"2026-06-01T09:00:00Z","labels":[{"name":"jit:digest"}]}
+{"number":40,"title":"","body":"","state":"open","state_reason":null,"created_at":"2026-06-01T09:00:00Z","labels":[{"name":"jit:digest"}],"assignees":[]}
 EOF
 # No closed.json — the stub's default empty list applies.
 out=$("$TMPDIR_TEST/scripts/dispatch-digest-window" some-owner/some-repo 40); rc=$?
@@ -31209,7 +31829,7 @@ digest_window_teardown
 echo "Test: dispatch-digest-window excludes the issue's own closedAt"
 digest_window_setup
 cat > "$TMPDIR_TEST/issue.json" <<'EOF'
-{"createdAt":"2026-05-01T00:00:00Z","labels":[{"name":"jit:digest"}]}
+{"number":30,"title":"","body":"","state":"open","state_reason":null,"created_at":"2026-05-01T00:00:00Z","labels":[{"name":"jit:digest"}],"assignees":[]}
 EOF
 # Issue 30 is itself closed with a later closedAt than the real prior (20).
 # The script must ignore its own entry and anchor on the prior digest's closedAt.
@@ -31226,7 +31846,7 @@ digest_window_teardown
 echo "Test: dispatch-digest-window exits 1 when the issue carries no jit:* label"
 digest_window_setup
 cat > "$TMPDIR_TEST/issue.json" <<'EOF'
-{"createdAt":"2026-05-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"}]}
+{"number":50,"title":"","body":"","state":"open","state_reason":null,"created_at":"2026-05-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"}],"assignees":[]}
 EOF
 # Capture with the set -e-safe pattern: a bare `cmd; rc=$?` would abort the
 # suite when the command exits nonzero.
@@ -31297,20 +31917,31 @@ drift_scan_setup() {
 
   cp "$SCRIPT_DIR/dispatch-drift-scan" "$TMPDIR_TEST/scripts/dispatch-drift-scan"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-drift-scan"
+  # dispatch-drift-scan now sources lib.sh (for gh_retry); $SCRIPT_DIR inside the
+  # copied script resolves to this temp scripts/ dir, so lib.sh must live there.
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
 
   cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 args="$*"
 TREE="$(cd "$(dirname "$0")/.." && pwd)"
 case "$args" in
-  issue\ view\ *\ --json\ createdAt,body)
+  api\ repos/*/issues/[0-9]*)
+    # gh_issue_view_rest single-issue GET: gh api repos/.../issues/<N>.
+    # Serves issue.json in raw REST shape (created_at, not createdAt).
     if [[ -f "$TREE/issue.json" ]]; then
       cat "$TREE/issue.json"
     else
-      echo '{"createdAt":"2026-01-01T00:00:00Z","body":"no refs"}'
+      echo '{"number":1080,"title":"","body":"no refs","state":"open","state_reason":null,"created_at":"2026-01-01T00:00:00Z","labels":[],"assignees":[]}'
     fi
     ;;
-  "pr list --state merged --search merged:>="*" --limit 100 --json number,title,mergedAt")
+  api\ *repos/*/pulls\?state=closed*)
+    # dispatch-drift-scan's merged-PR window now hits an inline REST call (#2258):
+    # `gh api --paginate repos/{owner}/{repo}/pulls?state=closed&sort=updated&...`.
+    # The leading `*` absorbs the optional `--paginate`. Serve the SAME fixture
+    # data the old `gh pr list --state merged` arm served, but in REST snake_case
+    # (number,title,merged_at,created_at,updated_at) — the script filters and
+    # remaps to mergedAt locally.
     if [[ -f "$TREE/prs.json" ]]; then
       cat "$TREE/prs.json"
     else
@@ -31361,10 +31992,10 @@ drift_scan_setup
 printf 'echo hi\n' > "$TMPDIR_TEST/tree/present.sh"
 printf 'presentName_token here\n' > "$TMPDIR_TEST/tree/lib.txt"
 cat > "$TMPDIR_TEST/issue.json" <<'EOF'
-{"createdAt":"2026-06-03T00:00:00Z","body":"Touches `present.sh` and `does/not/exist.ts`. Uses `presentName_token` and `absentName_token`."}
+{"number":1080,"title":"","body":"Touches `present.sh` and `does/not/exist.ts`. Uses `presentName_token` and `absentName_token`.","state":"open","state_reason":null,"created_at":"2026-06-03T00:00:00Z","labels":[],"assignees":[]}
 EOF
 cat > "$TMPDIR_TEST/prs.json" <<'EOF'
-[{"number":42,"title":"some pr","mergedAt":"2026-06-02T00:00:00Z"}]
+[{"number":42,"title":"some pr","created_at":"2026-05-20T00:00:00Z","merged_at":"2026-06-04T00:00:00Z","updated_at":"2026-06-04T00:00:00Z"}]
 EOF
 cat > "$TMPDIR_TEST/commits.txt" <<'EOF'
 abc1234 reworked present.sh distinctively_committed
@@ -31389,9 +32020,12 @@ echo "Test: dispatch-drift-scan trips the too-wide-window guard at the 100-PR li
 drift_scan_setup
 printf 'echo hi\n' > "$TMPDIR_TEST/tree/present.sh"
 cat > "$TMPDIR_TEST/issue.json" <<'EOF'
-{"createdAt":"2026-06-03T00:00:00Z","body":"Touches `present.sh`."}
+{"number":1080,"title":"","body":"Touches `present.sh`.","state":"open","state_reason":null,"created_at":"2026-06-03T00:00:00Z","labels":[],"assignees":[]}
 EOF
-jq -nc '[range(100) | {number: (.+1), title: ("pr " + (.+1|tostring)), mergedAt: "2026-06-01T00:00:00Z"}]' \
+# REST snake_case fixtures, all merged IN-WINDOW (merged_at >= the 2026-06-03
+# anchor) so the local merged_at filter keeps all 100 and the >=100 in-window
+# guard fires. updated_at >= merged_at as REST guarantees.
+jq -nc '[range(100) | {number: (.+1), title: ("pr " + (.+1|tostring)), created_at: "2026-05-25T00:00:00Z", merged_at: "2026-06-04T00:00:00Z", updated_at: "2026-06-04T00:00:00Z"}]' \
   > "$TMPDIR_TEST/prs.json"
 cd "$TMPDIR_TEST/tree"
 out=$("$TMPDIR_TEST/scripts/dispatch-drift-scan" 1080); rc=$?
@@ -31420,7 +32054,7 @@ drift_scan_teardown
 echo "Test: dispatch-drift-scan skips the commit scan when no path refs are named"
 drift_scan_setup
 cat > "$TMPDIR_TEST/issue.json" <<'EOF'
-{"createdAt":"2026-06-03T00:00:00Z","body":"Uses `somename_ref` only."}
+{"number":1080,"title":"","body":"Uses `somename_ref` only.","state":"open","state_reason":null,"created_at":"2026-06-03T00:00:00Z","labels":[],"assignees":[]}
 EOF
 cd "$TMPDIR_TEST/tree"
 out=$("$TMPDIR_TEST/scripts/dispatch-drift-scan" 1080); rc=$?
@@ -31444,7 +32078,7 @@ printf 'echo hi\n' > "$TMPDIR_TEST/tree/present.sh"
 awk 'BEGIN { for (i = 0; i < 20000; i++) print "scalename_tok appears here" }' \
   > "$TMPDIR_TEST/tree/big.txt"
 cat > "$TMPDIR_TEST/issue.json" <<'EOF'
-{"createdAt":"2026-06-03T00:00:00Z","body":"Uses `scalename_tok` across `present.sh`."}
+{"number":1080,"title":"","body":"Uses `scalename_tok` across `present.sh`.","state":"open","state_reason":null,"created_at":"2026-06-03T00:00:00Z","labels":[],"assignees":[]}
 EOF
 cat > "$TMPDIR_TEST/prs.json" <<'EOF'
 []
@@ -31467,7 +32101,7 @@ echo "Test: dispatch-drift-scan does not classify slash-commands as path refs"
 drift_scan_setup
 printf 'echo hi\n' > "$TMPDIR_TEST/tree/present.sh"
 cat > "$TMPDIR_TEST/issue.json" <<'EOF'
-{"createdAt":"2026-06-03T00:00:00Z","body":"Run `/qa-fix` and `/file-issue` then `present.sh`."}
+{"number":1080,"title":"","body":"Run `/qa-fix` and `/file-issue` then `present.sh`.","state":"open","state_reason":null,"created_at":"2026-06-03T00:00:00Z","labels":[],"assignees":[]}
 EOF
 cat > "$TMPDIR_TEST/prs.json" <<'EOF'
 []
@@ -31491,7 +32125,7 @@ echo "Test: dispatch-drift-scan does not glob-expand backtick spans against the 
 drift_scan_setup
 printf 'echo hi\n' > "$TMPDIR_TEST/tree/globbed_unique_xyz.sh"
 cat > "$TMPDIR_TEST/issue.json" <<'EOF'
-{"createdAt":"2026-06-03T00:00:00Z","body":"Touches `*` widely."}
+{"number":1080,"title":"","body":"Touches `*` widely.","state":"open","state_reason":null,"created_at":"2026-06-03T00:00:00Z","labels":[],"assignees":[]}
 EOF
 cat > "$TMPDIR_TEST/prs.json" <<'EOF'
 []
@@ -31513,7 +32147,7 @@ echo "Test: dispatch-drift-scan rejects path-traversal reference tokens"
 drift_scan_setup
 printf 'echo hi\n' > "$TMPDIR_TEST/tree/present.sh"
 cat > "$TMPDIR_TEST/issue.json" <<'EOF'
-{"createdAt":"2026-06-03T00:00:00Z","body":"Touches `present.sh` and `../../../etc/passwd`."}
+{"number":1080,"title":"","body":"Touches `present.sh` and `../../../etc/passwd`.","state":"open","state_reason":null,"created_at":"2026-06-03T00:00:00Z","labels":[],"assignees":[]}
 EOF
 cat > "$TMPDIR_TEST/prs.json" <<'EOF'
 []
@@ -31541,20 +32175,25 @@ followup_exists_setup() {
   mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/bin"
 
   cp "$SCRIPT_DIR/dispatch-followup-exists" "$TMPDIR_TEST/scripts/dispatch-followup-exists"
+  # (#2258) dispatch-followup-exists now sources lib.sh (for gh_issue_list_rest),
+  # so lib.sh must sit alongside it. Sourced, not executed — no chmod +x.
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-followup-exists"
 
-  # gh stub: matches ONLY the exact invocation the script makes:
-  #   gh issue list --search "\"<id>\" in:title" --state all --json number,title --limit 100
-  # On match, cat the fixture $TREE/issues.json if present, else echo [].
-  # The stub does NOT filter — it returns the whole array; the script's jq filters.
+  # gh stub: (#2258) the script now fetches via gh_issue_list_rest, which issues
+  #   gh api [--paginate] repos/{owner}/{repo}/issues?state=all&...
+  # On match, serve the fixture $TREE/issues.json (else []), jq-remapped from the
+  # fixture's {number,title} to REST snake_case WITH title (the script passes
+  # --include-title). The stub does NOT filter on the identifier — it returns the
+  # whole array; the script's boundary-aware jq post-filter does the matching.
   cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 args="$*"
 TREE="$(cd "$(dirname "$0")/.." && pwd)"
 case "$args" in
-  issue\ list\ *--state\ all\ --json\ number,title\ --limit\ 100)
+  *"api "*"repos/"*"/issues"*)
     if [[ -f "$TREE/issues.json" ]]; then
-      cat "$TREE/issues.json"
+      jq 'map({number, pull_request: null, created_at: null, closed_at: null, labels: []} + (if has("title") then {title} else {} end))' "$TREE/issues.json"
     else
       echo '[]'
     fi
@@ -35027,27 +35666,14 @@ ctxpack_setup() {
   # $CTXPACK_STUB/; see the per-test setup for which fixtures are written.
   #
   # Failure injection: if $CTXPACK_STUB/fail-issue-view exists, the
-  # "issue view <N> --json number,title,state,body,comments" arm exits 1 with a
-  # non-transient diagnostic (avoids gh_retry retrying).  Similarly
-  # $CTXPACK_STUB/fail-merge-base causes the git merge-base arm to exit 1.
+  # "api repos/.../issues/<N>" arm exits 1 with a non-transient diagnostic
+  # (avoids gh_retry retrying).  Similarly $CTXPACK_STUB/fail-merge-base causes
+  # the git merge-base arm to exit 1.
   cat > "$CTXPACK_DIR/bin/gh" <<'GHSTUB'
 #!/usr/bin/env bash
 STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
 args="$*"
 case "$args" in
-  # --issue slice: dispatch-context-pack calls gh_retry gh issue view <N> --json number,title,state,body,comments
-  issue\ view\ *\ --json\ number,title,state,body,comments)
-    if [[ -f "$STUB_DIR/fail-issue-view" ]]; then
-      echo "error: simulated failure fetching issue" >&2
-      exit 1
-    fi
-    num=$(echo "$args" | awk '{print $3}')
-    if [[ -f "$STUB_DIR/issue-full-${num}.json" ]]; then
-      cat "$STUB_DIR/issue-full-${num}.json"
-    else
-      echo "{\"number\":$num,\"title\":\"Issue $num\",\"state\":\"OPEN\",\"body\":\"body text\",\"comments\":[]}"
-    fi
-    ;;
   # --pr slice cross-check: dispatch-find-pr calls gh issue view <N> --json closedByPullRequestsReferences
   issue\ view\ *\ --json\ closedByPullRequestsReferences)
     num=$(echo "$args" | awk '{print $3}')
@@ -35065,13 +35691,27 @@ case "$args" in
       echo "[]"
     fi
     ;;
-  # --pr slice: gh pr view <prNum> --json number,labels,statusCheckRollup,body
-  pr\ view\ *\ --json\ number,labels,statusCheckRollup,body)
-    num=$(echo "$args" | awk '{print $3}')
+  # --pr slice: build_pr_section reads the PR object via gh_pr_view_rest (#2257),
+  # which GETs repos/{owner}/{repo}/pulls/<N>. The fixture is the RAW REST pull
+  # object (carries number, labels, body, and head.sha so headRefOid projects).
+  api\ */pulls/[0-9]*)
+    num=$(echo "$args" | grep -oE '[0-9]+' | tail -1)
     if [[ -f "$STUB_DIR/pr-view-${num}.json" ]]; then
       cat "$STUB_DIR/pr-view-${num}.json"
     else
-      echo "{\"number\":$num,\"labels\":[],\"statusCheckRollup\":[],\"body\":\"pr body\"}"
+      echo "{\"number\":$num,\"state\":\"open\",\"body\":\"pr body\",\"labels\":[],\"head\":{\"ref\":\"$num-branch\",\"sha\":\"sha-$num\"}}"
+    fi
+    ;;
+  # --pr slice CI verdict: dispatch_ci_verdict_rest fetches the head sha's
+  # check-runs via `gh api --paginate repos/{owner}/{repo}/commits/<sha>/check-runs`.
+  # $STUB_DIR/check-runs-<sha>.json supplies the raw REST (lowercase) check-runs
+  # object; the pr-view fixture's head.sha must match the <sha> here.
+  api\ --paginate\ */commits/*/check-runs)
+    sha=$(echo "$args" | sed -E 's#.*commits/([^/]+)/check-runs.*#\1#')
+    if [[ -f "$STUB_DIR/check-runs-${sha}.json" ]]; then
+      cat "$STUB_DIR/check-runs-${sha}.json"
+    else
+      echo '{"check_runs":[]}'
     fi
     ;;
   # --relations: blocked_by (array)
@@ -35105,6 +35745,31 @@ case "$args" in
       # Default: no parent — 404 exit
       echo "Not Found (HTTP 404)" >&2
       exit 1
+    fi
+    ;;
+  # --issue slice comments: gh_issue_view_rest --comments second call.
+  # MUST precede the single-issue GET arm (first-match-wins).
+  api\ --paginate\ */issues/*/comments)
+    num=$(echo "$args" | grep -oE '[0-9]+' | tail -1)
+    if [[ -f "$STUB_DIR/issue-comments-${num}.json" ]]; then
+      cat "$STUB_DIR/issue-comments-${num}.json"
+    else
+      echo "[]"
+    fi
+    ;;
+  # --issue slice: gh_issue_view_rest base GET.
+  # Serves raw REST shape (lowercase state, created_at, etc.).
+  # MUST follow all subpath arms (/dependencies, /sub_issues, /parent, /comments).
+  api\ */issues/[0-9]*)
+    if [[ -f "$STUB_DIR/fail-issue-view" ]]; then
+      echo "error: simulated failure fetching issue" >&2
+      exit 1
+    fi
+    num=$(echo "$args" | grep -oE '[0-9]+' | tail -1)
+    if [[ -f "$STUB_DIR/issue-full-${num}.json" ]]; then
+      cat "$STUB_DIR/issue-full-${num}.json"
+    else
+      echo "{\"number\":$num,\"title\":\"Issue $num\",\"state\":\"open\",\"state_reason\":null,\"body\":\"body text\",\"created_at\":null,\"labels\":[],\"assignees\":[]}"
     fi
     ;;
   *)
@@ -35184,23 +35849,29 @@ ctxpack_teardown() {
 echo "Test: ctxpack --issue renders title, body, and comment thread"
 ctxpack_setup
 
-# Fixture: issue 5 with one seeded comment. The body and the comment author +
-# body must both appear in output — this proves the --json render path (plain
-# `gh issue view` without --json would suppress comments).
+# Fixture: issue 5 with one seeded comment. The raw REST base object is served
+# by the api */issues/[0-9]* arm; the comments are fetched separately via the
+# api --paginate */issues/*/comments arm.
 cat > "$CTXPACK_STUB/issue-full-5.json" <<'EOF'
 {
   "number": 5,
   "title": "My test issue",
-  "state": "OPEN",
+  "state": "open",
+  "state_reason": null,
   "body": "Issue body content here.",
-  "comments": [
-    {
-      "author": {"login": "alice"},
-      "createdAt": "2026-01-15T10:00:00Z",
-      "body": "SEEDED_COMMENT_BODY"
-    }
-  ]
+  "created_at": "2026-01-10T00:00:00Z",
+  "labels": [],
+  "assignees": []
 }
+EOF
+cat > "$CTXPACK_STUB/issue-comments-5.json" <<'EOF'
+[
+  {
+    "user": {"login": "alice"},
+    "created_at": "2026-01-15T10:00:00Z",
+    "body": "SEEDED_COMMENT_BODY"
+  }
+]
 EOF
 
 rc=0; out=$("$CTXPACK_DIR/dispatch-context-pack" 5 --issue 2>/dev/null) || rc=$?
@@ -35220,7 +35891,10 @@ else
   echo "    actual: $out"
 fi
 TOTAL=$((TOTAL+1))
-if [[ "$out" == *"### Comments"* && "$out" == *"**@alice**"* && "$out" == *"SEEDED_COMMENT_BODY"* ]]; then
+# Assert the full rendered comment line byte-identical: "**@alice** (date): body"
+# This verifies that the REST comments shape (user.login, created_at, body) maps
+# correctly through gh_issue_view_rest --comments into the jq render.
+if [[ "$out" == *"### Comments"* && "$out" == *"**@alice** (2026-01-15T10:00:00Z): SEEDED_COMMENT_BODY"* ]]; then
   PASS=$((PASS+1)); echo "  PASS: ctxpack --issue: contains comment thread"
 else
   FAIL=$((FAIL+1)); echo "  FAIL: ctxpack --issue: contains comment thread"
@@ -35334,15 +36008,20 @@ ctxpack_setup
 cat > "$CTXPACK_STUB/pr-list.json" <<'EOF'
 [{"number":42,"headRefName":"5-my-feature"}]
 EOF
-# gh pr view fixture: labels + all-SUCCESS rollup → ci: passing.
-# Status-context shape: {"state":"SUCCESS"} classifies passing without needing status/conclusion.
+# gh_pr_view_rest fixture (raw REST pull): labels + body + head.sha. The CI
+# verdict is computed by dispatch_ci_verdict_rest over the head.sha's check-runs;
+# two SUCCESS check-runs → ci: passing.
 cat > "$CTXPACK_STUB/pr-view-42.json" <<'EOF'
 {
   "number": 42,
+  "state": "open",
   "labels": [{"name":"dispatch:planned"},{"name":"size:medium"}],
-  "statusCheckRollup": [{"state":"SUCCESS"},{"state":"SUCCESS"}],
-  "body": "PR body text here."
+  "body": "PR body text here.",
+  "head": {"ref": "5-my-feature", "sha": "sha-pass-42"}
 }
+EOF
+cat > "$CTXPACK_STUB/check-runs-sha-pass-42.json" <<'EOF'
+{"check_runs": [{"status":"completed","conclusion":"success"},{"status":"completed","conclusion":"success"}]}
 EOF
 
 rc=0; out=$("$CTXPACK_DIR/dispatch-context-pack" 5 --pr 2>/dev/null) || rc=$?
@@ -35377,6 +36056,38 @@ else
   FAIL=$((FAIL+1)); echo "  FAIL: ctxpack --pr: no other section headers"
   echo "    actual: $out"
 fi
+ctxpack_teardown
+
+# ---------------------------------------------------------------------------
+# Test 3b: --pr CI verdict equivalence across failing / pending / empty (#2257)
+# ---------------------------------------------------------------------------
+# build_pr_section now derives `ci:` from dispatch_ci_verdict_rest over the PR
+# head sha's REST check-runs (was dispatch_classify_rollup over the porcelain
+# statusCheckRollup). These cases assert the printed verdict matches the
+# pre-migration classifier across ALL terminal states, including the
+# empty-check-runs edge (empty → pending), which both the old and new paths map
+# identically. DISPATCH_CI_VERDICT_CACHE is unset here, so every call fetches.
+ctxpack_ci_case() {
+  local label="$1" check_runs="$2" expected="$3"
+  cat > "$CTXPACK_STUB/pr-list.json" <<'EOF'
+[{"number":42,"headRefName":"5-my-feature"}]
+EOF
+  cat > "$CTXPACK_STUB/pr-view-42.json" <<EOF
+{"number":42,"state":"open","labels":[{"name":"x"}],"body":"b","head":{"ref":"5-my-feature","sha":"sha-ci-case"}}
+EOF
+  printf '%s\n' "$check_runs" > "$CTXPACK_STUB/check-runs-sha-ci-case.json"
+  local rc out
+  rc=0; out=$("$CTXPACK_DIR/dispatch-context-pack" 5 --pr 2>/dev/null) || rc=$?
+  assert_eq "ctxpack --pr ci ($label): exit 0" "0" "$rc"
+  assert_eq "ctxpack --pr ci ($label): ci: $expected" "yes" \
+    "$([[ "$out" == *"ci: $expected"* ]] && echo yes || echo no)"
+}
+
+echo "Test: ctxpack --pr ci verdict equivalence (failing/pending/empty)"
+ctxpack_setup
+ctxpack_ci_case "failing" '{"check_runs":[{"status":"completed","conclusion":"failure"}]}' "failing"
+ctxpack_ci_case "pending" '{"check_runs":[{"status":"in_progress","conclusion":null}]}' "pending"
+ctxpack_ci_case "empty → pending" '{"check_runs":[]}' "pending"
 ctxpack_teardown
 
 # ---------------------------------------------------------------------------
@@ -35523,7 +36234,7 @@ ctxpack_setup
 
 # Provide minimal fixtures for all four slices.
 cat > "$CTXPACK_STUB/issue-full-5.json" <<'EOF'
-{"number":5,"title":"Combined test","state":"OPEN","body":"combo body","comments":[]}
+{"number":5,"title":"Combined test","state":"open","state_reason":null,"body":"combo body","created_at":null,"labels":[],"assignees":[]}
 EOF
 # No parent for relations (default → no-parent exit).
 touch "$CTXPACK_STUB/no-parent-5"
@@ -35531,7 +36242,11 @@ cat > "$CTXPACK_STUB/pr-list.json" <<'EOF'
 [{"number":20,"headRefName":"5-combo"}]
 EOF
 cat > "$CTXPACK_STUB/pr-view-20.json" <<'EOF'
-{"number":20,"labels":[],"statusCheckRollup":[],"body":"combo pr body"}
+{"number":20,"state":"open","labels":[],"body":"combo pr body","head":{"ref":"5-combo","sha":"sha-combo-20"}}
+EOF
+# Empty check-runs for the combo head sha → ci: pending (order test ignores it).
+cat > "$CTXPACK_STUB/check-runs-sha-combo-20.json" <<'EOF'
+{"check_runs":[]}
 EOF
 
 # Pass flags in REVERSE canonical order.
@@ -36143,6 +36858,9 @@ echo "Test: closed-unmerged source PR → park follow-up on office-hours + mark 
 setup
 printf '[{"number":101,"labels":[{"name":"dispatch:review-followup"}],"body":"orphan finding <!-- dispatch:source-pr 1704 -->"}]\n' > "$STUB_DIR/issue-list.json"
 printf '{"state":"closed","merged_at":null,"labels":[]}\n' > "$STUB_DIR/retriage-pr-1704.json"
+# The park flows through the real dispatch-apply-office-hours, which reads the
+# issue's labels via gh_issue_view_rest (#2257) → arg-issue-101.json.
+echo '{"state":"open","labels":[]}' > "$STUB_DIR/arg-issue-101.json"
 out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null)
 TOTAL=$((TOTAL + 1))
 if grep -q 'issues/101/labels' "$STUB_DIR/gh-issue-set-labels-rest-calls.log" \
@@ -36246,6 +36964,7 @@ setup
 printf '[{"number":106,"labels":[{"name":"dispatch:review-followup"}],"body":"orphan finding mentions <!-- dispatch:source-pr 1500 --> in its text, then the genuine appended marker <!-- dispatch:source-pr 1704 -->"}]\n' > "$STUB_DIR/issue-list.json"
 printf '{"state":"open","merged_at":null,"labels":[]}\n' > "$STUB_DIR/retriage-pr-1500.json"
 printf '{"state":"closed","merged_at":null,"labels":[]}\n' > "$STUB_DIR/retriage-pr-1704.json"
+echo '{"state":"open","labels":[]}' > "$STUB_DIR/arg-issue-106.json"
 out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null)
 TOTAL=$((TOTAL + 1))
 if grep -q 'issues/106/labels' "$STUB_DIR/gh-issue-set-labels-rest-calls.log" \
@@ -38363,6 +39082,108 @@ else
   FAIL=$((FAIL + 1))
   echo "  FAIL: dispatch_marker_comment_id absent case: rc=$dmci_rc3, output='$dmci_out3' (expected rc=0, empty output)"
 fi
+
+# ============================================================================
+# dispatch-recover-session-id (#2240)
+# ============================================================================
+#
+# Pure-filesystem reader: globs *.dispatch-stamp.json under
+# DISPATCH_STAMP_PROJECTS_ROOT, filters by .issue, sorts newest-first by
+# .stamped_at, and returns the first candidate whose .jsonl transcript exists.
+#
+# Each case runs in its own subshell over a mktemp -d fake projects root so
+# nothing leaks across tests and teardown() is untouched.
+
+echo ""
+echo "=== dispatch-recover-session-id ==="
+
+RECOVER="$SCRIPT_DIR/dispatch-recover-session-id"
+
+# T1. recoverable: sidecar (.issue==N) + its .jsonl present → emits sid<TAB>branch, rc 0.
+(
+  root=$(mktemp -d)
+  export DISPATCH_STAMP_PROJECTS_ROOT="$root"
+  proj="$root/some-project-slug"
+  mkdir -p "$proj"
+  sid="abc-session-1"
+  printf '%s\n' \
+    '{"schema":1,"session_id":"abc-session-1","repo":"natb1/commons.systems","issue":42,"pr":null,"branch":"42-feature","base_sha":"deadbeef","stamped_at":"2026-06-01T10:00:00Z"}' \
+    > "$proj/${sid}.dispatch-stamp.json"
+  touch "$proj/${sid}.jsonl"
+  rc=0
+  out=$("$RECOVER" --issue 42 2>/dev/null) || rc=$?
+  assert_eq "recover: recoverable → rc 0" "0" "$rc"
+  assert_eq "recover: recoverable → sid<TAB>branch" "abc-session-1	42-feature" "$out"
+  rm -rf "$root"
+) || true
+
+# T2. newest-purged, older-survives: two sidecars for issue N; newest .jsonl absent,
+#     older .jsonl present → emits the OLDER recoverable session (proves
+#     newest-EXISTING, not latest-then-verify).
+(
+  root=$(mktemp -d)
+  export DISPATCH_STAMP_PROJECTS_ROOT="$root"
+  proj="$root/some-project-slug"
+  mkdir -p "$proj"
+  # newer sidecar — stamped_at later, but no .jsonl
+  sid_new="newer-session"
+  printf '%s\n' \
+    '{"schema":1,"session_id":"newer-session","repo":"natb1/commons.systems","issue":99,"pr":null,"branch":"99-newer","base_sha":"aaa","stamped_at":"2026-06-02T12:00:00Z"}' \
+    > "$proj/${sid_new}.dispatch-stamp.json"
+  # Set mtime one second later too so secondary sort agrees with stamped_at.
+  touch -d "2026-06-02 12:00:01" "$proj/${sid_new}.dispatch-stamp.json" 2>/dev/null || true
+  # NO .jsonl for newer session
+
+  # older sidecar — stamped_at earlier, .jsonl present
+  sid_old="older-session"
+  printf '%s\n' \
+    '{"schema":1,"session_id":"older-session","repo":"natb1/commons.systems","issue":99,"pr":null,"branch":"99-older","base_sha":"bbb","stamped_at":"2026-06-01T08:00:00Z"}' \
+    > "$proj/${sid_old}.dispatch-stamp.json"
+  touch -d "2026-06-01 08:00:00" "$proj/${sid_old}.dispatch-stamp.json" 2>/dev/null || true
+  touch "$proj/${sid_old}.jsonl"
+
+  rc=0
+  out=$("$RECOVER" --issue 99 2>/dev/null) || rc=$?
+  assert_eq "recover: newest-purged, older-survives → rc 0" "0" "$rc"
+  assert_eq "recover: newest-purged, older-survives → emits older session" "older-session	99-older" "$out"
+  rm -rf "$root"
+) || true
+
+# T3. no-transcript: sidecar present but .jsonl absent → rc 1, no stdout.
+(
+  root=$(mktemp -d)
+  export DISPATCH_STAMP_PROJECTS_ROOT="$root"
+  proj="$root/some-project-slug"
+  mkdir -p "$proj"
+  sid="no-transcript-session"
+  printf '%s\n' \
+    '{"schema":1,"session_id":"no-transcript-session","repo":"natb1/commons.systems","issue":7,"pr":null,"branch":"7-thing","base_sha":"ccc","stamped_at":"2026-05-01T00:00:00Z"}' \
+    > "$proj/${sid}.dispatch-stamp.json"
+  # Deliberately do NOT touch .jsonl
+  rc=0
+  out=$("$RECOVER" --issue 7 2>/dev/null) || rc=$?
+  assert_eq "recover: no-transcript → rc 1" "1" "$rc"
+  assert_eq "recover: no-transcript → no stdout" "" "$out"
+  rm -rf "$root"
+) || true
+
+# T4. wrong-issue: only a DIFFERENT issue's sidecar present → rc 1 (no misattribution).
+(
+  root=$(mktemp -d)
+  export DISPATCH_STAMP_PROJECTS_ROOT="$root"
+  proj="$root/some-project-slug"
+  mkdir -p "$proj"
+  sid="wrong-issue-session"
+  printf '%s\n' \
+    '{"schema":1,"session_id":"wrong-issue-session","repo":"natb1/commons.systems","issue":100,"pr":null,"branch":"100-other","base_sha":"ddd","stamped_at":"2026-05-15T00:00:00Z"}' \
+    > "$proj/${sid}.dispatch-stamp.json"
+  touch "$proj/${sid}.jsonl"
+  rc=0
+  out=$("$RECOVER" --issue 5 2>/dev/null) || rc=$?
+  assert_eq "recover: wrong-issue → rc 1" "1" "$rc"
+  assert_eq "recover: wrong-issue → no stdout" "" "$out"
+  rm -rf "$root"
+) || true
 
 # ============================================================================
 # summary
