@@ -61,6 +61,10 @@ usage() {
 # Used both for stripping a stray keyword before an extra number.
 KEYWORD_RE='close[sd]?|fix(?:e[sd])?|resolve[sd]?'
 
+# Resolve this script's own directory so the sibling dispatch-stamp-session
+# (PR backfill) is found regardless of the caller's cwd.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # --- argument parsing ---------------------------------------------------------
 
 PRIMARY=""
@@ -215,6 +219,12 @@ while :; do
     -q '.closingIssuesReferences[].number' | sort -n -u)"
 
   if [[ "$PARSED" == "$INTENDED_SORTED" ]]; then
+    # Stamp the now-known PR number into this session's dispatch sidecar so the
+    # token audit can join the session to its PR (#1861). The backfill is
+    # non-fatal (it exits 0 on any miss) and all its output goes to stderr; the
+    # `|| true` defends the set -e shell against any non-zero. The stdout
+    # contract is preserved: the bare PR number remains the ONLY stdout line.
+    "$SCRIPT_DIR/dispatch-stamp-session" --backfill-pr "$PR_NUM" 1>&2 || true
     echo "$PR_NUM"
     exit 0
   fi

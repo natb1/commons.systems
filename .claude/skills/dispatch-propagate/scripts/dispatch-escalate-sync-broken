@@ -58,6 +58,9 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+
 LABEL="dispatch:sync-broken"
 
 # ---- Parse --reason ---------------------------------------------------------
@@ -198,7 +201,7 @@ fi
 #
 # One open dispatch:sync-broken issue at a time. A re-run edits the existing
 # issue's body (refreshing the diagnostics) rather than duplicating.
-existing=$(gh issue list --label "$LABEL" --state open --json number -q '.[0].number')
+existing=$(gh_issue_list_rest --label "$LABEL" --state open | jq -r '.[0].number // empty')
 
 if [[ -n "$existing" ]]; then
   # The edit touches the body only (no --label flag), so it cannot fail with a

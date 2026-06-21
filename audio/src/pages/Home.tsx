@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { Button, Checkbox } from "@commons-systems/ds";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { logError } from "@commons-systems/errorutil/log";
@@ -33,33 +33,40 @@ function formatBytes(bytes: number): string {
 function Row({
   item,
   player,
+  onQueueChange,
 }: {
   item: LibraryItem;
   player: PlayerHandle | null;
+  onQueueChange: () => void;
 }) {
   const onToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
     const checked = e.currentTarget.checked;
-    const { id, title, artist, album, origin, storagePath, localName } = item;
-    const locatorOk = origin === "local" ? !!localName : !!storagePath;
-    if (!id || !title || !artist || !album || !origin || !locatorOk) {
-      logError(new Error("Queue toggle: missing data attributes on audio row"), {
-        operation: "queue-toggle",
-      });
-      e.currentTarget.checked = !checked; // revert
-      return;
-    }
-    if (!player) return;
-    if (checked) {
-      player.add({
-        id,
-        title,
-        artist,
-        album,
-        origin,
-        ...(origin === "local" ? { localName } : { storagePath }),
-      });
-    } else {
-      player.remove(id);
+    try {
+      const { id, title, artist, album, origin, storagePath, localName } = item;
+      const locatorOk = origin === "local" ? !!localName : !!storagePath;
+      if (!id || !title || !artist || !album || !origin || !locatorOk) {
+        logError(new Error("Queue toggle: missing data attributes on audio row"), {
+          operation: "queue-toggle",
+        });
+        return;
+      }
+      if (!player) return;
+      if (checked) {
+        player.add({
+          id,
+          title,
+          artist,
+          album,
+          origin,
+          ...(origin === "local" ? { localName } : { storagePath }),
+        });
+      } else {
+        player.remove(id);
+      }
+    } finally {
+      // Re-render Home so the controlled `checked` reasserts from isQueued on
+      // every exit path (add, remove, validation-fail, or !player).
+      onQueueChange();
     }
   };
 
@@ -81,7 +88,7 @@ function Row({
             label={null}
             data-queue-toggle
             aria-label={`Add ${item.title} to queue`}
-            defaultChecked={player ? player.isQueued(item.id) : false}
+            checked={player ? player.isQueued(item.id) : false}
             onChange={onToggle}
           />
           <span className="title">{item.title}</span>
@@ -123,6 +130,10 @@ export function Home(props: HomeProps) {
   // A DataIntegrityError is stored, then thrown during render so the route-level
   // RouteErrorBoundary catches it (a component cannot catch its own throw).
   const [fatalError, setFatalError] = useState<unknown>(null);
+  // A force-render counter: bumped on every queue toggle so Home (and each
+  // non-memoized Row) re-renders and recomputes the controlled `checked` from
+  // player.isQueued. Its value is never read in render.
+  const [, bumpQueue] = useReducer((n: number) => n + 1, 0);
 
   // Guards async setState after unmount: a late getCacheStats() / listLibrary()
   // resolution must not touch state once Home is gone.
@@ -315,7 +326,12 @@ export function Home(props: HomeProps) {
       ) : (
         <div id="media-list">
           {state.items.map((item) => (
-            <Row key={item.id} item={item} player={player} />
+            <Row
+              key={item.id}
+              item={item}
+              player={player}
+              onQueueChange={bumpQueue}
+            />
           ))}
         </div>
       );
