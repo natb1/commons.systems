@@ -38466,7 +38466,9 @@ STAMP="$SCRIPT_DIR/dispatch-stamp-session"
   rm -rf "$root"
 )
 
-# 6. Idempotent re-write preserves a set .pr (does not clobber to null).
+# 6. Idempotent re-write preserves a set .pr (does not clobber to null),
+#    preserves session-start .base_sha (not advanced to post-resume HEAD),
+#    and advances .stamped_at (re-derived, not preserved).
 (
   d=$(mktemp -d)
   git -C "$d" init -q
@@ -38474,12 +38476,39 @@ STAMP="$SCRIPT_DIR/dispatch-stamp-session"
   git -C "$d" checkout -q -b 999-fixture
   git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
   sc="$d/sess6.dispatch-stamp.json"
-  # Seed a sidecar that already carries a backfilled pr.
+  # Seed a sidecar that already carries a backfilled pr and a session-start base_sha.
   printf '%s\n' '{"schema":1,"session_id":"sess6","repo":"old/repo","issue":1,"pr":4242,"branch":"old","base_sha":"old","stamped_at":"2026-01-01T00:00:00Z"}' > "$sc"
   ( cd "$d" && "$STAMP" --session-id sess6 --transcript-path "$d/sess6.jsonl" )
   assert_eq "stamp: re-write preserves set .pr" "4242" "$(jq -r .pr "$sc")"
   assert_eq "stamp: re-write re-derives .branch" "999-fixture" "$(jq -r .branch "$sc")"
-  assert_eq "stamp: re-write re-derives .base_sha" "$(git -C "$d" rev-parse HEAD)" "$(jq -r .base_sha "$sc")"
+  assert_eq "stamp: re-write PRESERVES session-start .base_sha" "old" "$(jq -r .base_sha "$sc")"
+  assert_eq "stamp: re-write advances .stamped_at (re-derived, not preserved)" "differs" \
+    "$([ "$(jq -r .stamped_at "$sc")" != "2026-01-01T00:00:00Z" ] && echo differs || echo same)"
+  rm -rf "$d"
+)
+
+# 7. Resume after HEAD moves (ff-merge) preserves the session-start .base_sha.
+#    This encodes #2270's failure mode: an initial stamp records HEAD=A; a later
+#    git merge --ff-only moves HEAD to B; the resume re-stamp must keep base_sha=A.
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b 999-fixture
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  A=$(git -C "$d" rev-parse HEAD)
+  # Initial stamp at HEAD=A.
+  ( cd "$d" && "$STAMP" --session-id sess7 --transcript-path "$d/sess7.jsonl" )
+  sc="$d/sess7.dispatch-stamp.json"
+  assert_eq "stamp: initial .base_sha is A" "$A" "$(jq -r .base_sha "$sc")"
+  # HEAD moves to B (simulating an ff-merge of origin/main).
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m advance
+  B=$(git -C "$d" rev-parse HEAD)
+  assert_eq "stamp: HEAD advanced (B != A)" "no" \
+    "$([ "$A" = "$B" ] && echo yes || echo no)"
+  # Resume re-stamp must preserve A, not adopt B.
+  ( cd "$d" && "$STAMP" --session-id sess7 --transcript-path "$d/sess7.jsonl" )
+  assert_eq "stamp: resume preserves session-start .base_sha (A, not B)" "$A" "$(jq -r .base_sha "$sc")"
   rm -rf "$d"
 )
 
