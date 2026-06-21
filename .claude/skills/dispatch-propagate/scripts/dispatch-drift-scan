@@ -50,6 +50,9 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+
 # ---- Step 0: parse arguments ------------------------------------------------
 
 N="${1:-}"
@@ -184,14 +187,41 @@ echo ""
 # ---- Step D: Input 2 — merged PRs in window ---------------------------------
 
 echo "=== Input 2: merged PRs in window ==="
-PRS=$(gh pr list --state merged --search "merged:>=$CREATED_AT" --limit 100 \
-  --json number,title,mergedAt)
+# Migrated off GraphQL-backed `gh pr list` to an inline REST `gh api` call
+# (#2258). This windowed merged-PR query stays inline — it is NOT a gh_pr_list_rest
+# drop-in — because the helper has no merged-in-window / early-stop semantics.
+#
+# Soundness of the scan/early-stop key — `updated_at`, NOT `merged_at`/`created_at`:
+#   We enumerate closed PRs sorted newest-UPDATED first
+#   (state=closed&sort=updated&direction=desc). A PR CREATED before the window can
+#   still MERGE inside it. Since updated_at >= merged_at always holds, every
+#   in-window merge has updated_at >= CREATED_AT — so newest-updated-first you
+#   could stop at the first PR with updated_at < CREATED_AT (all later ones are
+#   even older-updated and cannot be in-window merges). Stopping on merged_at or
+#   created_at would be UNSOUND: it would miss in-window merges of PRs created
+#   before the window. A future reader who "optimizes" the early-stop on those
+#   keys would silently drop real in-window merges.
+#
+# Chosen implementation: `gh api --paginate` fetches ALL closed PRs eagerly, then
+# jq filters merged_at != null and merged_at >= CREATED_AT locally. This is sound
+# (no early-stop bug) and acceptable here — the REST bucket is idle and the
+# closed-PR count is bounded. `--paginate` concatenates one JSON array PER PAGE,
+# so we `jq -s` (slurp) and `add` them into a single array before filtering. The
+# projection remaps merged_at -> mergedAt and keeps only number,title (key order
+# number,title,mergedAt) so the downstream consumer is byte-identical to the old
+# `--json number,title,mergedAt` array.
+PRS=$(gh_retry gh api --paginate \
+  "repos/{owner}/{repo}/pulls?state=closed&sort=updated&direction=desc&per_page=100" \
+  | jq -s --arg created "$CREATED_AT" \
+      'add // []
+       | map(select(.merged_at != null and .merged_at >= $created))
+       | map({number, title, mergedAt: .merged_at})')
 PR_COUNT=$(printf '%s' "$PRS" | jq 'length')
 
 if [[ "$PR_COUNT" -ge 100 ]]; then
-  echo "WINDOW-TOO-WIDE: the merged-PR query hit the 100-result limit, so this"
-  echo "window is too wide to scan reliably. Re-run /file-issue on this issue to"
-  echo "narrow its window rather than trusting a partial merged-PR scan."
+  echo "WINDOW-TOO-WIDE: the merged-PR scan found 100 or more PRs merged in this"
+  echo "window, so this window is too wide to scan reliably. Re-run /file-issue on"
+  echo "this issue to narrow its window rather than trusting this merged-PR scan."
   echo "(partial PR enumeration suppressed for this input)"
 elif [[ "$PR_COUNT" -eq 0 ]]; then
   echo "(none)"

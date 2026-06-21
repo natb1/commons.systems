@@ -300,13 +300,15 @@ for (( i = 0; i < STATEMENTS_COUNT; i++ )); do
   # core-API call, then seed SEEN_HASHES from their bodies. This replaces the
   # per-file Search-API query that exhausted the ~30 req/min Search budget on a
   # cold scan of a large folder. Only run when there is at least one file to
-  # dedup. gh_retry wraps the call for transient-failure backoff; its retry
-  # lines go to stderr, so capture stderr to a tmpfile (never 2>&1 into the
-  # stdout we parse).
+  # dedup. gh_issue_list_rest wraps gh_retry INTERNALLY for transient-failure
+  # backoff; its retry lines go to stderr, so capture stderr to a tmpfile (never
+  # 2>&1 into the stdout we parse). The helper paginates per_page=100 then slices
+  # to --limit, so the `len == ISSUE_LIST_LIMIT` truncation guard below now sees
+  # a list actually capped at the limit (rather than gh's old server-side cap).
   if [[ "${#MATCHED[@]}" -gt 0 ]]; then
     tmpfile=$(mktemp)
-    out=$(gh_retry gh issue list --repo "$REPO" --label "$LABEL" --state all \
-      --limit "$ISSUE_LIST_LIMIT" --json number,body 2>"$tmpfile")
+    out=$(gh_issue_list_rest --repo "$REPO" --label "$LABEL" --state all \
+      --limit "$ISSUE_LIST_LIMIT" --include-body 2>"$tmpfile")
     rc=$?
     err=$(cat "$tmpfile"); rm -f "$tmpfile"
     if [[ "$rc" -ne 0 ]]; then
