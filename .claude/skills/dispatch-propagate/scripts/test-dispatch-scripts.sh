@@ -22885,6 +22885,12 @@ ohs_setup() {
     "$TMPDIR_TEST/hooks/dispatch-office-hours-strip.sh"
   chmod +x "$TMPDIR_TEST/hooks/dispatch-office-hours-strip.sh"
 
+  # The hook now sources lib.sh via $SCRIPTS (= TMPDIR_TEST/hooks/../skills/
+  # dispatch-propagate/scripts) so gh_issue_remove_label_rest is defined. Stage
+  # the REAL lib so the strip actually issues `gh api -X DELETE .../labels/...`.
+  cp "$SCRIPT_DIR/lib.sh" \
+    "$TMPDIR_TEST/skills/dispatch-propagate/scripts/lib.sh"
+
   cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-find-pr" <<'FAKE'
 #!/usr/bin/env bash
 [[ -f "$STUB_DIR/find-pr-output" ]] && cat "$STUB_DIR/find-pr-output"
@@ -22897,6 +22903,10 @@ FAKE
 STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
 args="$*"
 case "$args" in
+  api\ -X\ DELETE\ *labels*)
+    # REST label-remove from the real lib.sh's gh_issue_remove_label_rest:
+    # `api -X DELETE repos/{owner}/{repo}/issues/<N>/labels/<name>`.
+    echo "$args" >> "$STUB_DIR/gh-api-delete.log" ;;
   pr\ edit\ *) echo "$args" >> "$STUB_DIR/gh-pr-edit.log" ;;
   issue\ edit\ *) echo "$args" >> "$STUB_DIR/gh-issue-edit.log" ;;
   *) echo "gh stub: unknown invocation: $args" >&2; exit 1 ;;
@@ -22934,7 +22944,12 @@ ohs_teardown() {
 
 # --- Test 1: branch <N>-* + PR exists → strip from both PR and issue ----------
 # The hook strips from both targets so a stale issue label (applied before the PR
-# was opened) is also cleared. gh --remove-label is a no-op when the label is absent.
+# was opened) is also cleared. The REST helper gh_issue_remove_label_rest is a
+# no-op when the label is absent (404 → success). After migration both the PR
+# and the issue strip go through `gh api -X DELETE .../issues/<N>/labels/<name>`,
+# distinguished only by <N> (456 = PR, 123 = issue). The helper URL-encodes only
+# space→%20, so the literal `dispatch:office-hours` (colon unescaped) appears in
+# the path.
 
 echo "Test: strip hook on <N>-* branch with PR → strips from both PR and issue"
 ohs_setup
@@ -22943,40 +22958,39 @@ echo "456" > "$STUB_DIR/find-pr-output"
 "$TMPDIR_TEST/hooks/dispatch-office-hours-strip.sh" < /dev/null >/dev/null 2>&1
 rc=$?
 assert_eq "strip: hook exits 0" "0" "$rc"
-pr_edit_log=$(cat "$STUB_DIR/gh-pr-edit.log" 2>/dev/null || true)
+api_delete_log=$(cat "$STUB_DIR/gh-api-delete.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ "$pr_edit_log" == *"pr edit 456 --remove-label dispatch:office-hours"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: strip: 'gh pr edit 456 --remove-label dispatch:office-hours' was invoked"
+if [[ "$api_delete_log" == *"api -X DELETE repos/{owner}/{repo}/issues/456/labels/dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: strip: REST DELETE issues/456/labels/dispatch:office-hours (PR) was invoked"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: strip: 'gh pr edit 456 --remove-label dispatch:office-hours' was invoked"
-  echo "    pr-edit-log: $pr_edit_log"
+  FAIL=$((FAIL + 1)); echo "  FAIL: strip: REST DELETE issues/456/labels/dispatch:office-hours (PR) was invoked"
+  echo "    api-delete-log: $api_delete_log"
 fi
-issue_edit_log=$(cat "$STUB_DIR/gh-issue-edit.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ "$issue_edit_log" == *"issue edit 123 --remove-label dispatch:office-hours"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: strip: 'gh issue edit 123 --remove-label dispatch:office-hours' also invoked (clears stale issue label)"
+if [[ "$api_delete_log" == *"api -X DELETE repos/{owner}/{repo}/issues/123/labels/dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: strip: REST DELETE issues/123/labels/dispatch:office-hours (issue) also invoked (clears stale issue label)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: strip: 'gh issue edit 123 --remove-label dispatch:office-hours' also invoked (clears stale issue label)"
-  echo "    issue-edit-log: $issue_edit_log"
+  FAIL=$((FAIL + 1)); echo "  FAIL: strip: REST DELETE issues/123/labels/dispatch:office-hours (issue) also invoked (clears stale issue label)"
+  echo "    api-delete-log: $api_delete_log"
 fi
 ohs_teardown
 
 # --- Test 2: branch <N>-* + no PR → strip from issue -------------------------
 
-echo "Test: strip hook on <N>-* branch with no PR → 'gh issue edit --remove-label dispatch:office-hours'"
+echo "Test: strip hook on <N>-* branch with no PR → REST DELETE issues/789/labels/dispatch:office-hours"
 ohs_setup
 echo "789-bare" > "$STUB_DIR/current-branch.txt"
 # No find-pr-output → fall back to issue.
 "$TMPDIR_TEST/hooks/dispatch-office-hours-strip.sh" < /dev/null >/dev/null 2>&1
 rc=$?
 assert_eq "strip (no PR): hook exits 0" "0" "$rc"
-issue_edit_log=$(cat "$STUB_DIR/gh-issue-edit.log" 2>/dev/null || true)
+api_delete_log=$(cat "$STUB_DIR/gh-api-delete.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ "$issue_edit_log" == *"issue edit 789 --remove-label dispatch:office-hours"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: strip (no PR): 'gh issue edit 789 --remove-label dispatch:office-hours' was invoked"
+if [[ "$api_delete_log" == *"api -X DELETE repos/{owner}/{repo}/issues/789/labels/dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: strip (no PR): REST DELETE issues/789/labels/dispatch:office-hours was invoked"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: strip (no PR): 'gh issue edit 789 --remove-label dispatch:office-hours' was invoked"
-  echo "    issue-edit-log: $issue_edit_log"
+  FAIL=$((FAIL + 1)); echo "  FAIL: strip (no PR): REST DELETE issues/789/labels/dispatch:office-hours was invoked"
+  echo "    api-delete-log: $api_delete_log"
 fi
 ohs_teardown
 
@@ -22989,7 +23003,8 @@ echo "main" > "$STUB_DIR/current-branch.txt"
 rc=$?
 assert_eq "strip (non-issue): hook exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" ]]; then
+if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" \
+   && ! -e "$STUB_DIR/gh-api-delete.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: strip (non-issue): no gh call was invoked"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: strip (non-issue): no gh call was invoked"
@@ -23012,21 +23027,20 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: strip open-stdin: hook killed at 0.5s — read is still stalling"
 fi
 # Correctness: the payload is drain-only, so assert the strip still fired.
-pr_edit_log=$(cat "$STUB_DIR/gh-pr-edit.log" 2>/dev/null || true)
+api_delete_log=$(cat "$STUB_DIR/gh-api-delete.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ "$pr_edit_log" == *"pr edit 456 --remove-label dispatch:office-hours"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: strip open-stdin: 'gh pr edit 456 --remove-label' still invoked (drain did not break strip)"
+if [[ "$api_delete_log" == *"api -X DELETE repos/{owner}/{repo}/issues/456/labels/dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: strip open-stdin: REST DELETE issues/456/labels (PR) still invoked (drain did not break strip)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: strip open-stdin: 'gh pr edit 456 --remove-label' NOT invoked (drain broke strip)"
-  echo "    pr-edit-log: $pr_edit_log"
+  FAIL=$((FAIL + 1)); echo "  FAIL: strip open-stdin: REST DELETE issues/456/labels (PR) NOT invoked (drain broke strip)"
+  echo "    api-delete-log: $api_delete_log"
 fi
-issue_edit_log=$(cat "$STUB_DIR/gh-issue-edit.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ "$issue_edit_log" == *"issue edit 123 --remove-label dispatch:office-hours"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: strip open-stdin: 'gh issue edit 123 --remove-label' still invoked (drain did not break strip)"
+if [[ "$api_delete_log" == *"api -X DELETE repos/{owner}/{repo}/issues/123/labels/dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: strip open-stdin: REST DELETE issues/123/labels (issue) still invoked (drain did not break strip)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: strip open-stdin: 'gh issue edit 123 --remove-label' NOT invoked (drain broke strip)"
-  echo "    issue-edit-log: $issue_edit_log"
+  FAIL=$((FAIL + 1)); echo "  FAIL: strip open-stdin: REST DELETE issues/123/labels (issue) NOT invoked (drain broke strip)"
+  echo "    api-delete-log: $api_delete_log"
 fi
 ohs_teardown
 
@@ -23236,6 +23250,12 @@ case "$args" in
   issue\ edit\ *--remove-label*)
     echo "$args" >> "$STUB_DIR/gh-issue-remove.log"
     ;;
+  api\ -X\ DELETE\ *labels*)
+    # REST label-remove (gh_issue_remove_label_rest from the real lib.sh):
+    # `api -X DELETE repos/{owner}/{repo}/issues/<N>/labels/<name>`. Record the
+    # full argv so tests can assert the path + method the helper truly emits.
+    echo "$args" >> "$STUB_DIR/gh-api-delete.log"
+    ;;
   label\ create\ *)
     echo "$args" >> "$STUB_DIR/gh-label-create.log"
     ;;
@@ -23289,21 +23309,20 @@ export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 "$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
 rc=$?
 assert_eq "stop advance: hook exits 0" "0" "$rc"
-pr_remove_log=$(cat "$STUB_DIR/gh-pr-remove.log" 2>/dev/null || true)
+api_delete_log=$(cat "$STUB_DIR/gh-api-delete.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ "$pr_remove_log" == *"pr edit 456 --remove-label dispatch:office-hours"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: stop advance: PR --remove-label invoked"
+if [[ "$api_delete_log" == *"api -X DELETE repos/{owner}/{repo}/issues/456/labels/dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop advance: PR REST DELETE labels/dispatch:office-hours invoked"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: stop advance: PR --remove-label invoked"
-  echo "    pr-remove-log: $pr_remove_log"
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop advance: PR REST DELETE labels/dispatch:office-hours invoked"
+  echo "    api-delete-log: $api_delete_log"
 fi
-issue_remove_log=$(cat "$STUB_DIR/gh-issue-remove.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ "$issue_remove_log" == *"issue edit 123 --remove-label dispatch:office-hours"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: stop advance: issue --remove-label invoked"
+if [[ "$api_delete_log" == *"api -X DELETE repos/{owner}/{repo}/issues/123/labels/dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop advance: issue REST DELETE labels/dispatch:office-hours invoked"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: stop advance: issue --remove-label invoked"
-  echo "    issue-remove-log: $issue_remove_log"
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop advance: issue REST DELETE labels/dispatch:office-hours invoked"
+  echo "    api-delete-log: $api_delete_log"
 fi
 spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
 assert_eq "stop advance: spawn invoked exactly once" "1" "$spawn_calls"
@@ -23402,21 +23421,20 @@ self_close_calls=$(wc -l < "$STUB_DIR/self-close-calls.log" 2>/dev/null || echo 
 assert_eq "stop clean-review: self-close invoked exactly once" "1" "$self_close_calls"
 spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
 assert_eq "stop clean-review: spawn invoked exactly once" "1" "$spawn_calls"
-pr_remove_log=$(cat "$STUB_DIR/gh-pr-remove.log" 2>/dev/null || true)
+api_delete_log=$(cat "$STUB_DIR/gh-api-delete.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ "$pr_remove_log" == *"pr edit 456 --remove-label dispatch:office-hours"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: stop clean-review: PR --remove-label invoked"
+if [[ "$api_delete_log" == *"api -X DELETE repos/{owner}/{repo}/issues/456/labels/dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop clean-review: PR REST DELETE labels/dispatch:office-hours invoked"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: stop clean-review: PR --remove-label invoked"
-  echo "    pr-remove-log: $pr_remove_log"
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop clean-review: PR REST DELETE labels/dispatch:office-hours invoked"
+  echo "    api-delete-log: $api_delete_log"
 fi
-issue_remove_log=$(cat "$STUB_DIR/gh-issue-remove.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ "$issue_remove_log" == *"issue edit 123 --remove-label dispatch:office-hours"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: stop clean-review: issue --remove-label invoked"
+if [[ "$api_delete_log" == *"api -X DELETE repos/{owner}/{repo}/issues/123/labels/dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop clean-review: issue REST DELETE labels/dispatch:office-hours invoked"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: stop clean-review: issue --remove-label invoked"
-  echo "    issue-remove-log: $issue_remove_log"
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop clean-review: issue REST DELETE labels/dispatch:office-hours invoked"
+  echo "    api-delete-log: $api_delete_log"
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" ]]; then
@@ -23456,7 +23474,8 @@ rc=$?
 assert_eq "stop fix-checks-retry: hook exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" \
-   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" \
+   && ! -e "$STUB_DIR/gh-api-delete.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: stop fix-checks-retry: no label add or remove invoked"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: stop fix-checks-retry: no label add or remove invoked"
@@ -23501,7 +23520,8 @@ else
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" \
-   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" \
+   && ! -e "$STUB_DIR/gh-api-delete.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: stop needs-human: no fix-checks-attempt label add or remove invoked (Branch A only parks via office-hours)"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: stop needs-human: no fix-checks-attempt label add or remove invoked (Branch A only parks via office-hours)"
@@ -23612,7 +23632,7 @@ else
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-pr-remove.log" \
-   && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+   && ! -e "$STUB_DIR/gh-issue-remove.log" && ! -e "$STUB_DIR/gh-api-delete.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: stop marker-absent: no PR calls and no remove calls"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: stop marker-absent: no PR calls and no remove calls"
@@ -23801,9 +23821,10 @@ fi
 # Did NOT self-close (Branch D is a non-advance, not an advance).
 assert_eq "stop #1230 crash-window: self-close NOT invoked" "absent" "$(log_state self-close-calls.log)"
 # Did NOT strip — Branch B's strip is the only remove path; its absence proves
-# we did NOT take Branch B (no false advance).
-assert_eq "stop #1230 crash-window: no PR remove-label (no strip)" "absent" "$(log_state gh-pr-remove.log)"
-assert_eq "stop #1230 crash-window: no issue remove-label (no strip)" "absent" "$(log_state gh-issue-remove.log)"
+# we did NOT take Branch B (no false advance). The strip now issues
+# `gh api -X DELETE .../labels/...` (gh_issue_remove_label_rest), logged to
+# gh-api-delete.log, so its absence is the no-strip witness for both targets.
+assert_eq "stop #1230 crash-window: no REST DELETE remove-label (no strip)" "absent" "$(log_state gh-api-delete.log)"
 # Branch D still re-seeds the chain.
 spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
 assert_eq "stop #1230 crash-window: spawn invoked exactly once" "1" "$spawn_calls"
@@ -23866,7 +23887,7 @@ rc=$?
 assert_eq "stop not-ready-marker: hook exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/apply-office-hours.log" && ! -e "$STUB_DIR/gh-pr-remove.log" \
-   && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+   && ! -e "$STUB_DIR/gh-issue-remove.log" && ! -e "$STUB_DIR/gh-api-delete.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: stop not-ready-marker: no office-hours apply, no strip"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: stop not-ready-marker: no office-hours apply, no strip"
@@ -23888,7 +23909,8 @@ rc=$?
 assert_eq "stop no-job-dir: hook exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" \
-   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" \
+   && ! -e "$STUB_DIR/gh-api-delete.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: stop no-job-dir: no gh calls invoked"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: stop no-job-dir: no gh calls invoked"
@@ -23921,7 +23943,8 @@ rc=$?
 assert_eq "stop router-name: hook exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" \
-   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" \
+   && ! -e "$STUB_DIR/gh-api-delete.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: stop router-name: no gh calls invoked"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: stop router-name: no gh calls invoked"
@@ -24028,7 +24051,8 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: stop empty-phase: self-close NOT invoked (no false advance)"
 fi
 TOTAL=$((TOTAL + 1))
-if [[ ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+if [[ ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" \
+   && ! -e "$STUB_DIR/gh-api-delete.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: stop empty-phase: no remove-label calls (no strip)"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: stop empty-phase: no remove-label calls (no strip)"
@@ -24068,7 +24092,8 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: stop unknown-phase: self-close NOT invoked (corrupt marker doesn't drive advance)"
 fi
 TOTAL=$((TOTAL + 1))
-if [[ ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+if [[ ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" \
+   && ! -e "$STUB_DIR/gh-api-delete.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: stop unknown-phase: no remove-label calls (no strip)"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: stop unknown-phase: no remove-label calls (no strip)"
@@ -24126,7 +24151,8 @@ rc=$?
 assert_eq "stop fix-conflicts-retry: hook exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" \
-   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" \
+   && ! -e "$STUB_DIR/gh-api-delete.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: stop fix-conflicts-retry: no label add or remove invoked"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: stop fix-conflicts-retry: no label add or remove invoked"
@@ -24166,7 +24192,8 @@ else
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" \
-   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" \
+   && ! -e "$STUB_DIR/gh-api-delete.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: stop fix-conflicts-no-pr-backstop: no label add or remove invoked"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: stop fix-conflicts-no-pr-backstop: no label add or remove invoked"
@@ -24288,7 +24315,8 @@ else
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" \
-   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" \
+   && ! -e "$STUB_DIR/gh-api-delete.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: stop fix-conflicts-ambiguous: no attempt label add or remove invoked (Branch A only parks via office-hours)"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: stop fix-conflicts-ambiguous: no attempt label add or remove invoked (Branch A only parks via office-hours)"
@@ -24311,21 +24339,20 @@ export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 "$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
 rc=$?
 assert_eq "stop fix-conflicts-advance: hook exits 0" "0" "$rc"
-pr_remove_log=$(cat "$STUB_DIR/gh-pr-remove.log" 2>/dev/null || true)
+api_delete_log=$(cat "$STUB_DIR/gh-api-delete.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ "$pr_remove_log" == *"pr edit 456 --remove-label dispatch:office-hours"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: stop fix-conflicts-advance: PR --remove-label invoked"
+if [[ "$api_delete_log" == *"api -X DELETE repos/{owner}/{repo}/issues/456/labels/dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop fix-conflicts-advance: PR REST DELETE labels/dispatch:office-hours invoked"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: stop fix-conflicts-advance: PR --remove-label invoked"
-  echo "    pr-remove-log: $pr_remove_log"
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop fix-conflicts-advance: PR REST DELETE labels/dispatch:office-hours invoked"
+  echo "    api-delete-log: $api_delete_log"
 fi
-issue_remove_log=$(cat "$STUB_DIR/gh-issue-remove.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ "$issue_remove_log" == *"issue edit 123 --remove-label dispatch:office-hours"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: stop fix-conflicts-advance: issue --remove-label invoked"
+if [[ "$api_delete_log" == *"api -X DELETE repos/{owner}/{repo}/issues/123/labels/dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop fix-conflicts-advance: issue REST DELETE labels/dispatch:office-hours invoked"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: stop fix-conflicts-advance: issue --remove-label invoked"
-  echo "    issue-remove-log: $issue_remove_log"
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop fix-conflicts-advance: issue REST DELETE labels/dispatch:office-hours invoked"
+  echo "    api-delete-log: $api_delete_log"
 fi
 spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
 assert_eq "stop fix-conflicts-advance: spawn invoked exactly once" "1" "$spawn_calls"
@@ -24362,7 +24389,8 @@ else
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" \
-   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" \
+   && ! -e "$STUB_DIR/gh-api-delete.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: parse-job-done: no label add or remove invoked"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: parse-job-done: no label add or remove invoked"
@@ -24398,7 +24426,8 @@ else
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" \
-   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" \
+   && ! -e "$STUB_DIR/gh-api-delete.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: resolved-closed: no label add or remove invoked"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: resolved-closed: no label add or remove invoked"
@@ -24460,13 +24489,13 @@ self_close_calls=$(wc -l < "$STUB_DIR/self-close-calls.log" 2>/dev/null || echo 
 assert_eq "#2025 plan→implement advance: self-close invoked exactly once" "1" "$self_close_calls"
 sweep_calls=$(wc -l < "$STUB_DIR/sweep-calls.log" 2>/dev/null || echo 0)
 assert_eq "#2025 plan→implement advance: sweep invoked (sweep log present)" "1" "$sweep_calls"
-issue_remove_log=$(cat "$STUB_DIR/gh-issue-remove.log" 2>/dev/null || true)
+api_delete_log=$(cat "$STUB_DIR/gh-api-delete.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ "$issue_remove_log" == *"issue edit 123 --remove-label dispatch:office-hours"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: #2025 plan→implement advance: strip_office_hours_label ran (issue remove-label)"
+if [[ "$api_delete_log" == *"api -X DELETE repos/{owner}/{repo}/issues/123/labels/dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2025 plan→implement advance: strip_office_hours_label ran (issue REST DELETE labels/dispatch:office-hours)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: #2025 plan→implement advance: strip_office_hours_label ran (issue remove-label)"
-  echo "    issue-remove-log: $issue_remove_log"
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2025 plan→implement advance: strip_office_hours_label ran (issue REST DELETE labels/dispatch:office-hours)"
+  echo "    api-delete-log: $api_delete_log"
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
@@ -38028,10 +38057,13 @@ srl_teardown
 # dispatch:rate-limit-retry-<n> label from the issue on a clean advance, so a
 # recovered session starts its next death from a fresh counter. The hook has no
 # test harness, so this covers the idiom at the label-pipeline level: the exact
-# `gh issue view ... --jq '<filter>' | while read lbl; gh issue edit
-# --remove-label "$lbl"` pipeline, with a gh stub that runs the REAL jq filter
-# against a labels fixture and records each --remove-label arg. Asserts the
-# remove fires for the matching retry labels and NOT for non-matching labels.
+# `gh issue view ... --jq '<filter>' | while read lbl;
+# gh_issue_remove_label_rest "$ISSUE_NUM" "$lbl"` pipeline (#2255 migrated the
+# per-label remove from porcelain `gh issue edit --remove-label` to the REST
+# helper, which issues `gh api -X DELETE .../labels/<name>`). The gh stub runs
+# the REAL jq filter against a labels fixture and records each DELETE path's
+# label segment. Asserts the remove fires for the matching retry labels and NOT
+# for non-matching labels.
 echo ""
 echo "=== dispatch-stop.sh rate-limit-retry counter-reset idiom ==="
 
@@ -38054,8 +38086,8 @@ JSON
 
 # fake gh: `issue view --json labels --jq <filter>` runs the REAL jq filter
 # against the labels fixture (so the test exercises the actual select(test(...))
-# regex, not a hand-rolled list). `issue edit --remove-label <lbl>` records the
-# label to remove-log.
+# regex, not a hand-rolled list). `api -X DELETE .../labels/<name>` (the REST
+# remove the migrated helper issues) records <name> to remove-log.
 cat > "$TMPDIR_TEST/bin/gh" <<STUB
 #!/usr/bin/env bash
 if [[ "\$1" == "issue" && "\$2" == "view" ]]; then
@@ -38069,26 +38101,27 @@ if [[ "\$1" == "issue" && "\$2" == "view" ]]; then
   jq -r "\$filter" "$TMPDIR_TEST/labels.json"
   exit 0
 fi
-if [[ "\$1" == "issue" && "\$2" == "edit" ]]; then
-  prev=""
-  for a in "\$@"; do
-    [[ "\$prev" == "--remove-label" ]] && echo "\$a" >> "$TMPDIR_TEST/remove-log"
-    prev="\$a"
-  done
+if [[ "\$1" == "api" && "\$2" == "-X" && "\$3" == "DELETE" ]]; then
+  # path is the last arg: repos/{owner}/{repo}/issues/<N>/labels/<name>.
+  path="\${@: -1}"
+  echo "\${path##*/labels/}" >> "$TMPDIR_TEST/remove-log"
   exit 0
 fi
 exit 0
 STUB
 chmod +x "$TMPDIR_TEST/bin/gh"
 
-# Reproduce the exact dispatch-stop.sh clear_rate_limit_retry_labels pipeline.
+# Reproduce the exact dispatch-stop.sh clear_rate_limit_retry_labels pipeline,
+# calling the REAL gh_issue_remove_label_rest (sourced from lib.sh) so the test
+# exercises the migrated mechanism (REST DELETE), not a hand-rolled porcelain.
 ISSUE_NUM=1733
 (
   PATH="$TMPDIR_TEST/bin:$PATH"
+  source "$SCRIPT_DIR/lib.sh"
   gh issue view "$ISSUE_NUM" --json labels --jq \
     '.labels[].name | select(test("^dispatch:rate-limit-retry-[0-9]+$"))' 2>/dev/null \
     | while IFS= read -r lbl; do
-        [ -n "$lbl" ] && gh issue edit "$ISSUE_NUM" --remove-label "$lbl" >/dev/null 2>&1 \
+        [ -n "$lbl" ] && gh_issue_remove_label_rest "$ISSUE_NUM" "$lbl" >/dev/null 2>&1 \
           || true
       done || true
 )
