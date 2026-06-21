@@ -84,7 +84,13 @@ Ranking (step 5) stays on `price_proxy_usd`. `cost_usd` is reported alongside it
 
    # Top 10 costliest individual sessions
    jq '.sessions | sort_by(-.price_proxy_usd) | .[0:10] | map({id,type,model,peak_context,price_proxy_usd})' tmp/usage-audit.json
+
+   # Per-session GitHub artifact join record — repo/issue/pr/base_sha/branch the session
+   # acted on. null for sessions without a sidecar (subagents, router ticks, pre-#1861 sessions).
+   jq '.sessions | map({id, artifact}) | map(select(.artifact != null))' tmp/usage-audit.json
    ```
+
+   The join key is the session id: the sidecar `<id>.dispatch-stamp.json` sits next to `<id>.jsonl` in the transcripts directory, so `.sessions[].id` is the join key between audit findings and GitHub artifacts. Each `artifact` record carries `{repo, issue, pr, base_sha, branch}`. The sidecar is the authoritative source of the overlapping join keys (`repo/issue/pr/base_sha`); the sibling outcome envelope (the #1860 internal-yield record) carries only its own non-overlapping outcome fields (findings, disposition) — so there is exactly one join-key source.
 
 4. **Interpret and rank against all nine lenses.** Evaluate every lens. Map each to the script output it draws from:
 
@@ -181,3 +187,27 @@ jq '[.sessions[] | select(.outcome_rates.hit_rate != null)] | sort_by(-.outcome_
 ```
 
 These slices are yield metrics, not cost metrics — they do not sort into the ranked token-reduction report. Read them alongside the report to correlate phase spend with phase effectiveness.
+
+## Per-session artifact join
+
+Each dispatch worker session writes a sidecar file next to its transcript before it starts work. `aggregate-usage.sh` reads the sidecar and surfaces its contents on every entry in `.sessions[]` as the `artifact` field. The join is by transcript stem: `<session-id>.jsonl` and `<session-id>.dispatch-stamp.json` share the same stem, so the script locates the sidecar from the transcript path directly — no separate index or lookup is needed.
+
+**`artifact`** — present on every `.sessions[]` entry. It is the sidecar record `{repo, issue, pr, base_sha, branch}`, or `null` for sessions with no sidecar (subagent transcripts, router ticks, pre-#1861 worker sessions, and any non-worker session that did not write one). The four primary join keys are `{repo, issue, pr, base_sha}`; `branch` is also present for human-readable context.
+
+**jq slices against `tmp/usage-audit.json`:**
+
+```bash
+# All sessions that carry an artifact record (repo/issue/pr/base_sha/branch)
+jq '.sessions | map({id, artifact}) | map(select(.artifact != null))' tmp/usage-audit.json
+
+# Filter sessions by issue number — e.g. all sessions that worked issue 1861
+jq '.sessions | map(select(.artifact.issue == 1861)) | map({id, type, price_proxy_usd, artifact})' tmp/usage-audit.json
+
+# Filter sessions by PR number
+jq '.sessions | map(select(.artifact.pr == 1889)) | map({id, type, price_proxy_usd, artifact})' tmp/usage-audit.json
+
+# Token spend grouped by issue — which issues consumed the most proxy spend
+jq '[.sessions[] | select(.artifact != null)] | group_by(.artifact.issue) | map({issue: .[0].artifact.issue, sessions: length, price_proxy_usd: (map(.price_proxy_usd) | add)}) | sort_by(-.price_proxy_usd)' tmp/usage-audit.json
+```
+
+**Sidecar ownership.** The sidecar is the single authoritative source for the overlapping join keys (`repo/issue/pr/base_sha`). The #1860 outcome envelope carries only its own non-overlapping outcome fields (findings, disposition, fix counts) — it does not repeat the join keys. This keeps the two records non-redundant: join on session id to combine cost figures with artifact context and outcome yield in one query.

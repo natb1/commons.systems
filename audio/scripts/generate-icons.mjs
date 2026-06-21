@@ -14,7 +14,9 @@ async function render(svgName, size, outName) {
   console.log(`wrote icons/${outName} (${size}x${size})`);
 }
 
-await render("icon.svg", 192, "icon-192.png");
-await render("icon.svg", 512, "icon-512.png");
-await render("icon.svg", 180, "apple-touch-icon-180.png");
-await render("icon-maskable.svg", 512, "icon-maskable-512.png");
+await Promise.all([
+  render("icon.svg", 192, "icon-192.png"),
+  render("icon.svg", 512, "icon-512.png"),
+  render("icon.svg", 180, "apple-touch-icon-180.png"),
+  render("icon-maskable.svg", 512, "icon-maskable-512.png"),
+]);

@@ -38,8 +38,10 @@ test.describe("app showcase", () => {
     await page.goto("/");
 
     const cards = page.locator("a.app-card");
+    // Auto-wait for the client-mounted (React createRoot, deferred) cards
+    // before the non-waiting .count() read — same reason as the focus test.
+    await expect(cards).toHaveCount(3);
     const count = await cards.count();
-    expect(count).toBe(3);
 
     for (let i = 0; i < count; i++) {
       const img = cards.nth(i).locator("img");
@@ -52,6 +54,12 @@ test.describe("app showcase", () => {
 
   test("each card is keyboard-focusable via .focus()", async ({ page }) => {
     await page.goto("/");
+    // The showcase mounts client-side via React createRoot (deferred), so the
+    // cards are not in the DOM synchronously at load. Wait for them before the
+    // synchronous focus check below — mirrors the auto-waiting locators the
+    // sibling tests use, and keeps the test honest against the non-prerendered
+    // dev server (on a prerendered build the cards are already present at load).
+    await page.waitForSelector("a.app-card");
 
     for (let i = 0; i < 3; i++) {
       const isActive = await page.evaluate((idx) => {
@@ -70,6 +78,10 @@ test.describe("app showcase", () => {
 
     test(".landing-hero-grid collapses to a single column", async ({ page }) => {
       await page.goto("/");
+      // Wait for the client-mounted (React createRoot, deferred) showcase cards
+      // before the synchronous geometry read below — same reason as the
+      // keyboard-focus test above.
+      await page.waitForSelector(".landing-hero-grid a.app-card");
 
       const xs = await page.evaluate(() => {
         const cards = Array.from(

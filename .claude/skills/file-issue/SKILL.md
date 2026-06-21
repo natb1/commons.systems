@@ -166,11 +166,19 @@ Analyze all eight categories. Compile findings under each heading.
 
 ### a. Duplicates
 
-Extract 3–5 representative keywords from the title and body and run one search:
+Extract 3–5 representative keywords from the title and body. Then fetch all issues once via the REST core bucket (which covers both open and closed issues — an improvement over the old open-only search) and narrow locally on title+body with no additional network calls:
 
 ```bash
-gh search issues --repo {owner}/{repo} --state open --json number,title,body "<keywords>"
+source .claude/skills/dispatch-propagate/scripts/lib.sh
+# One REST fetch of all open+closed issues (REST core bucket, not the Search/GraphQL
+# API), then narrow LOCALLY to a small candidate set on title/body keywords.
+ALL_ISSUES=$(gh_issue_list_rest --state all --include-body)
+printf '%s' "$ALL_ISSUES" | jq -r --arg kw "<keyword>" '
+  .[] | select(((.title // "") + " " + (.body // "")) | ascii_downcase | contains($kw | ascii_downcase))
+      | {number, title, body}'
 ```
+
+Run the local filter for each extracted keyword and union the results to produce the candidate set.
 
 In description mode: if any candidate describes the same actionable change as
 the new title + body, treat it as an EXISTING match — skip creation for this spec
@@ -342,10 +350,12 @@ Then proceed to Step 6 (finalize).
 
 ### Description mode
 
-Check once more for duplicates against the improved title + body (defense-in-depth
-recheck — `/file-issue` may be called from a non-interactive caller that did not
-pre-screen). If a match is found, skip creation for this spec and record
-`EXISTING <N>` as its Step 7 return line.
+Check once more for duplicates against the improved title + body. Reuse the
+`ALL_ISSUES` result captured in Step 3a and re-run the local keyword filter
+against the improved title + body — do not issue a second `gh_issue_list_rest`
+call (defense-in-depth recheck — `/file-issue` may be called from a
+non-interactive caller that did not pre-screen). If a match is found, skip
+creation for this spec and record `EXISTING <N>` as its Step 7 return line.
 
 If no duplicate, create the issue:
 ```bash
@@ -364,9 +374,10 @@ the new issue's `<N>`.
 
 ## Step 6. Finalize — assign, label, classify
 
-Finalize `<N>` (and each sub-issue) by assigning `@me`, applying `help wanted`, and
-applying at most one type label and at most one topic label. The Type classification
-subsection below defines when the type label is zero.
+Finalize `<N>` (and each sub-issue) by assigning `@me`, applying `help wanted`,
+applying the epic label when `<N>` is a parent epic, and applying at most one type
+label and at most one topic label. The Type classification subsection below defines
+when the type label is zero.
 
 A leaf issue that hit the decomposition gate (3f) must not be finalized before
 it is split — finalize each sub-issue instead.
@@ -376,6 +387,54 @@ it is split — finalize each sub-issue instead.
 ```bash
 gh issue edit <N> --add-assignee @me --add-label "help wanted"
 ```
+
+### Epic label
+
+Apply the configured epic label only when `<N>` IS a parent epic. Leaf-vs-epic is
+determined solely by whether the Step 1 sub-issue fetch returned a non-empty list
+— never by body self-description. Concretely, `<N>` is a parent epic when:
+
+- **issue number mode** — its own Step 1 sub-issue fetch (`:74-77`) returned a
+  non-empty list.
+- **description mode** — Step 3f decomposition fired and created sub-issues for
+  `<N>`, so `<N>` is the parent epic (see Step 7, `CREATED <N>` = parent epic).
+
+Step 6 runs for the parent AND each sub-issue, so this sub-step fires for the
+PARENT ONLY. A leaf issue receives no epic label, and the sub-issues themselves —
+whose own sub-issue fetch is empty when the loop finalizes them — receive no epic
+label either.
+
+The label is sourced from config (single source of truth). Read the `epic` config
+type: `no-config` → apply NO epic label (the feature stays inert); otherwise apply
+each label in the `.labels[]` array to the parent `<N>`:
+
+```bash
+# Three outcomes from dispatch-config-load epic:
+#   exit 0 + "no-config" → feature inert; apply NO label.
+#   exit 0 + JSON        → apply each .labels[] to the parent <N>.
+#   exit 1 (nonzero)     → bad JSON/schema in dispatch.config/epic.json; error out.
+# A bare VAR=$(...) does NOT exit with a controlled code under all conditions —
+# without the || guard, the failure exits with dispatch-config-load's raw exit
+# code (1 for JSON error, 2 for env misconfiguration), not a canonical error with
+# a diagnostic. Guard with || to emit a diagnostic and normalize to exit 1.
+EPIC_CONFIG=$(.claude/skills/dispatch-propagate/scripts/dispatch-config-load epic) || {
+  echo "error: dispatch-config-load epic failed (bad JSON/schema in dispatch.config/epic.json)" >&2
+  exit 1
+}
+if [[ "$EPIC_CONFIG" != "no-config" ]]; then
+  while IFS= read -r epic_label; do
+    [[ -n "$epic_label" ]] && gh issue edit <N> --add-label "$epic_label"
+  done < <(jq -r '.labels[]' <<<"$EPIC_CONFIG")
+fi
+```
+
+End-to-end auto-resolution ADDITIONALLY requires the user's machine-local
+`dispatch.config/epic.json` (e.g. `{"labels": ["epic"]}` — see
+`.claude/skills/dispatch-propagate/scripts/epic.example.json`). The `/file-issue`
+change alone is INERT without it: `dispatch-config-load epic` returns `no-config`,
+so no label is applied. Each label listed in `.labels[]` must be pre-created in
+the repo before `/file-issue` runs (e.g. `gh label create <name>`) — `gh issue
+edit --add-label` fails non-zero for labels that do not exist.
 
 ### Type classification
 

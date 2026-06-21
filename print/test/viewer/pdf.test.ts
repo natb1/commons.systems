@@ -103,6 +103,7 @@ import {
   offsetToItemRanges,
   createPdfRenderer,
 } from "../../src/viewer/pdf";
+import { MAX_SEARCH_RESULTS } from "../../src/viewer/types";
 
 // ---------------------------------------------------------------------------
 // A. Pure helper tests — no mock dependencies needed.
@@ -366,7 +367,7 @@ describe("search()", () => {
     const renderer = createPdfRenderer();
     await renderer.init(container, "fake://source.pdf");
 
-    const results = await renderer.search!("the");
+    const { results } = await renderer.search!("the"); // type-safety-ok: optional renderer API method, present in this test harness
 
     const labels = results.map((r) => r.label);
     expect(labels).toContain("Page 1");
@@ -379,7 +380,7 @@ describe("search()", () => {
     const renderer = createPdfRenderer();
     await renderer.init(container, "fake://source.pdf");
 
-    const results = await renderer.search!("the");
+    const { results } = await renderer.search!("the"); // type-safety-ok: optional renderer API method, present in this test harness
     expect(results.length).toBeGreaterThan(0);
 
     for (const result of results) {
@@ -410,21 +411,21 @@ describe("search()", () => {
     const renderer = createPdfRenderer();
     await renderer.init(container, "fake://source.pdf");
 
-    expect(await renderer.search!("")).toEqual([]);
+    expect(await renderer.search!("")).toEqual({ results: [], truncated: false }); // type-safety-ok: optional renderer API method, present in this test harness
   });
 
   it("returns [] for whitespace-only query", async () => {
     const renderer = createPdfRenderer();
     await renderer.init(container, "fake://source.pdf");
 
-    expect(await renderer.search!("   ")).toEqual([]);
+    expect(await renderer.search!("   ")).toEqual({ results: [], truncated: false }); // type-safety-ok: optional renderer API method, present in this test harness
   });
 
   it("returns [] when query matches no page", async () => {
     const renderer = createPdfRenderer();
     await renderer.init(container, "fake://source.pdf");
 
-    const results = await renderer.search!("xyzzy");
+    const { results } = await renderer.search!("xyzzy"); // type-safety-ok: optional renderer API method, present in this test harness
     expect(results).toEqual([]);
   });
 
@@ -432,7 +433,7 @@ describe("search()", () => {
     const renderer = createPdfRenderer();
     await renderer.init(container, "fake://source.pdf");
 
-    const results = await renderer.search!("the");
+    const { results } = await renderer.search!("the"); // type-safety-ok: optional renderer API method, present in this test harness
     const page1 = results.find((r) => r.label === "Page 1");
     expect(page1).toBeDefined();
 
@@ -444,7 +445,7 @@ describe("search()", () => {
     const renderer = createPdfRenderer();
     await renderer.init(container, "fake://source.pdf");
 
-    const results = await renderer.search!("the");
+    const { results } = await renderer.search!("the"); // type-safety-ok: optional renderer API method, present in this test harness
     const page2 = results.find((r) => r.label === "Page 2");
     expect(page2).toBeDefined();
 
@@ -455,7 +456,7 @@ describe("search()", () => {
   it("returns [] without throwing when called before init() resolves", async () => {
     const renderer = createPdfRenderer();
 
-    await expect(renderer.search!("the")).resolves.toEqual([]);
+    await expect(renderer.search!("the")).resolves.toEqual({ results: [], truncated: false }); // type-safety-ok: optional renderer API method, present in this test harness
   });
 
   it("returns [] without throwing when destroy() ran before search()", async () => {
@@ -463,7 +464,7 @@ describe("search()", () => {
     await renderer.init(container, "fake://source.pdf");
     renderer.destroy(); // sets destroyed = true and pdfDoc = null
     // Old code: `await pdfDoc!.getPage(1)` dereferences null → TypeError.
-    await expect(renderer.search!("the")).resolves.toEqual([]);
+    await expect(renderer.search!("the")).resolves.toEqual({ results: [], truncated: false }); // type-safety-ok: optional renderer API method, present in this test harness
   });
 
   // ---------------------------------------------------------------------------
@@ -479,7 +480,7 @@ describe("search()", () => {
     const renderer = createPdfRenderer();
     await renderer.init(container, "fake://source.pdf");
 
-    const results = await renderer.search!("the quick");
+    const { results } = await renderer.search!("the quick"); // type-safety-ok: optional renderer API method, present in this test harness
     const page4Results = results.filter((r) => r.label === "Page 4");
     expect(page4Results.length).toBe(1);
     expect(page4Results[0].label).toBe("Page 4");
@@ -495,7 +496,7 @@ describe("search()", () => {
     const renderer = createPdfRenderer();
     await renderer.init(container, "fake://source.pdf");
 
-    const results = await renderer.search!("the quick");
+    const { results } = await renderer.search!("the quick"); // type-safety-ok: optional renderer API method, present in this test harness
     expect(results.length).toBeGreaterThan(0);
 
     for (const result of results) {
@@ -514,7 +515,7 @@ describe("search()", () => {
     const renderer = createPdfRenderer();
     await renderer.init(container, "fake://source.pdf");
 
-    const results = await renderer.search!("world");
+    const { results } = await renderer.search!("world"); // type-safety-ok: optional renderer API method, present in this test harness
     const page5Results = results.filter((r) => r.label === "Page 5");
     expect(page5Results.length).toBe(1);
 
@@ -522,6 +523,48 @@ describe("search()", () => {
     expect(decoded).not.toBeNull();
     expect(decoded!.offset).toBe(0);
     expect(decoded!.length).toBe(5);
+  });
+
+  it("caps results at MAX_SEARCH_RESULTS and sets truncated=true when matches exceed the limit", async () => {
+    // Build a fake doc with MAX_SEARCH_RESULTS + 1 pages, each with one match,
+    // so the total across pages exceeds the cap.
+    const pdfjs = await import("pdfjs-dist");
+    const overPageCount = MAX_SEARCH_RESULTS + 1;
+    const overDoc = {
+      numPages: overPageCount,
+      destroy() {},
+      getPage: (_i: number) =>
+        Promise.resolve({
+          getTextContent: () => Promise.resolve({ items: [{ str: "fox jumps" }] }),
+          getViewport: () => ({ width: 100, height: 100 }),
+          render: () => ({ promise: Promise.resolve(), cancel() {} }),
+        }),
+      getOutline: () => Promise.resolve(null),
+      getDestination: () => Promise.resolve(null),
+      getPageIndex: () => Promise.resolve(0),
+    };
+    const spy = vi
+      .spyOn(pdfjs, "getDocument")
+      .mockReturnValue({ promise: Promise.resolve(overDoc) } as never); // type-safety-ok: vitest mock for pdfjs-dist getDocument complex return type
+    try {
+      const renderer = createPdfRenderer();
+      await renderer.init(container, "fake://over.pdf");
+      const result = await renderer.search!("fox"); // type-safety-ok: optional renderer API method, present in this test harness
+      expect(result.results.length).toBe(MAX_SEARCH_RESULTS);
+      expect(result.truncated).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("does not truncate and sets truncated=false when matches are within the limit", async () => {
+    // The default mock doc has 5 pages; search("the") yields 2 matches (pages 1 and 2).
+    // That is well below MAX_SEARCH_RESULTS, so truncated must be false.
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf");
+    const result = await renderer.search!("the"); // type-safety-ok: optional renderer API method, present in this test harness
+    expect(result.results.length).toBeLessThanOrEqual(MAX_SEARCH_RESULTS);
+    expect(result.truncated).toBe(false);
   });
 
   it("resolves (does not reject) when destroy() fires during the page loop", async () => {
@@ -548,8 +591,10 @@ describe("search()", () => {
     try {
       renderer = createPdfRenderer();
       await renderer.init(container, "fake://source.pdf");
-      // Must resolve to a partial/empty result, never reject.
-      await expect(renderer.search!("the")).resolves.toBeInstanceOf(Array);
+      // Must resolve to a partial/empty result envelope, never reject.
+      await expect(renderer.search!("the")).resolves.toEqual( // type-safety-ok: optional renderer API method, present in this test harness
+        expect.objectContaining({ results: expect.any(Array), truncated: expect.any(Boolean) }),
+      );
     } finally {
       spy.mockRestore();
     }
@@ -708,7 +753,7 @@ describe("clearSearch()", () => {
     await renderer.init(container, "fake://source.pdf");
 
     // Search for "the" and navigate to the first result (Page 1: "the cat sat")
-    const results = await renderer.search!("the");
+    const { results } = await renderer.search!("the"); // type-safety-ok: optional renderer API method, present in this test harness
     const page1Result = results.find((r) => r.label === "Page 1");
     expect(page1Result).toBeDefined();
 
@@ -740,7 +785,7 @@ describe("clearSearch()", () => {
     try {
       const renderer = createPdfRenderer();
       await renderer.init(container, "fake://source.pdf");
-      const results = await renderer.search!("the");
+      const { results } = await renderer.search!("the"); // type-safety-ok: optional renderer API method, present in this test harness
       const page1Result = results.find((r) => r.label === "Page 1");
       // Arm then render so the highlight is live before the resize re-render
       // (goToResult is arm-only).
@@ -769,7 +814,7 @@ describe("clearSearch()", () => {
     const renderer = createPdfRenderer();
     await renderer.init(container, "fake://source.pdf");
 
-    const results = await renderer.search!("the");
+    const { results } = await renderer.search!("the"); // type-safety-ok: optional renderer API method, present in this test harness
     const page1Result = results.find((r) => r.label === "Page 1");
     await renderer.goToResult!(page1Result!);
     // Apply the highlight so clearSearch has something real to clear.
@@ -787,7 +832,7 @@ describe("clearSearch()", () => {
     const renderer = createPdfRenderer();
     await renderer.init(container, "fake://source.pdf");
 
-    const results = await renderer.search!("the");
+    const { results } = await renderer.search!("the"); // type-safety-ok: optional renderer API method, present in this test harness
     const page1Result = results.find((r) => r.label === "Page 1");
     expect(page1Result).toBeDefined();
 
@@ -815,7 +860,7 @@ describe("clearSearch()", () => {
       const renderer = createPdfRenderer();
       await renderer.init(container, "fake://source.pdf");
 
-      const results = await renderer.search!("the");
+      const { results } = await renderer.search!("the"); // type-safety-ok: optional renderer API method, present in this test harness
       const page1Result = results.find((r) => r.label === "Page 1");
       await renderer.goToResult!(page1Result!);
       // goToResult is arm-only now (#1719); renderResult() applies the highlight.
@@ -850,7 +895,7 @@ describe("clearSearch()", () => {
     const renderer = createPdfRenderer();
     await renderer.init(container, "fake://source.pdf");
 
-    const results = await renderer.search!("the");
+    const { results } = await renderer.search!("the"); // type-safety-ok: optional renderer API method, present in this test harness
     const page1Result = results.find((r) => r.label === "Page 1");
     expect(page1Result).toBeDefined();
 
@@ -889,7 +934,7 @@ describe("clearSearch()", () => {
     const renderer = createPdfRenderer();
     await renderer.init(container, "fake://source.pdf");
 
-    const results = await renderer.search!("the");
+    const { results } = await renderer.search!("the"); // type-safety-ok: optional renderer API method, present in this test harness
     const page1Result = results.find((r) => r.label === "Page 1");
     expect(page1Result).toBeDefined();
 
@@ -923,7 +968,7 @@ describe("clearSearch()", () => {
     const renderer = createPdfRenderer();
     await renderer.init(container, "fake://source.pdf");
 
-    const results = await renderer.search!("the");
+    const { results } = await renderer.search!("the"); // type-safety-ok: optional renderer API method, present in this test harness
     const page1Result = results.find((r) => r.label === "Page 1");
     // Arm then render so clearSearch has a real highlight to clean up
     // (goToResult is arm-only).
@@ -944,7 +989,7 @@ describe("clearSearch()", () => {
     const renderer = createPdfRenderer();
     await renderer.init(container, "fake://source.pdf");
 
-    const results = await renderer.search!("the");
+    const { results } = await renderer.search!("the"); // type-safety-ok: optional renderer API method, present in this test harness
     const r1 = results.find((r) => r.label === "Page 1")!;
     const r2 = results.find((r) => r.label === "Page 2")!;
 
@@ -971,7 +1016,7 @@ describe("clearSearch()", () => {
     await renderer.init(container, "fake://source.pdf");
 
     // Arm then render pendingHighlight for page 1 so the highlight is live in the DOM.
-    const results = await renderer.search!("the");
+    const { results } = await renderer.search!("the"); // type-safety-ok: optional renderer API method, present in this test harness
     const page1Result = results.find((r) => r.label === "Page 1");
     expect(page1Result).toBeDefined();
     await renderer.goToResult!(page1Result!);
@@ -1028,7 +1073,7 @@ describe("clearSearch()", () => {
     const renderer = createPdfRenderer();
     await renderer.init(container, "fake://source.pdf");
 
-    const results = await renderer.search!("the"); // type-safety-ok: optional renderer API method, present in this test harness
+    const { results } = await renderer.search!("the"); // type-safety-ok: optional renderer API method, present in this test harness
     const page1Result = results.find((r) => r.label === "Page 1");
     expect(page1Result).toBeDefined();
 
@@ -1066,11 +1111,62 @@ describe("clearSearch()", () => {
     expect(target.querySelector(".search-highlight")).toBeNull();
   });
 
+  // DETACHED-NODE companion to the sequential test above. This test replicates
+  // SpreadController.render()'s innerHTML='' clear (print/src/viewer/spread-controller.ts:147-148)
+  // so firstWrapper is detached when call #2's unwrapHighlights() runs, providing
+  // the production-DOM regression coverage the attached-wrapper test does not.
+  // Note that unwrapHighlights() restores via the held {div, originalText} reference
+  // (print/src/viewer/pdf.ts:420-425), so a detached wrapper's highlight is still restored.
+  it("sequential renderPageInto() with target cleared between calls (detached firstWrapper) leaves no stale highlight", async () => {
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf");
+
+    const { results } = await renderer.search!("the"); // type-safety-ok: optional renderer API method, present in this test harness
+    const page1Result = results.find((r) => r.label === "Page 1");
+    expect(page1Result).toBeDefined();
+
+    // Arm pendingHighlight for page 1 (goToResult is arm-only — no render yet).
+    await renderer.goToResult!(page1Result!); // type-safety-ok: optional method; page1Result is non-null per the toBeDefined assertion above
+
+    // A fresh spread target with a non-zero rect so renderPageInto proceeds past
+    // the 0×0 guard.
+    const target = document.createElement("div");
+    target.getBoundingClientRect = makeTargetRect;
+
+    // Call #1: renders page 1 into target, applying the highlight.
+    await renderer.renderPageInto!(1, target); // type-safety-ok: optional renderer API method, present in this test harness
+    const firstWrapper = target.querySelector(".pdf-page-wrapper") as HTMLElement; // type-safety-ok: querySelector result narrowed to the page wrapper element
+    expect(firstWrapper).not.toBeNull();
+    expect(firstWrapper.querySelector(".search-highlight")).not.toBeNull();
+
+    // Clear target between the two calls, mirroring SpreadController.render()'s
+    // leftEl.innerHTML = "" / rightEl.innerHTML = "" — this detaches firstWrapper
+    // from the live DOM before call #2 runs.
+    target.innerHTML = "";
+    expect(target.contains(firstWrapper)).toBe(false);
+    expect(target.querySelector(".pdf-page-wrapper")).toBeNull();
+
+    // Call #2 (same page, fresh-but-cleared target): applyHighlight's leading
+    // unwrapHighlights() must restore firstWrapper's stale highlight span even
+    // though firstWrapper is now detached. On unfixed code the detached
+    // firstWrapper retains its .search-highlight span and the assertion below fails.
+    await renderer.renderPageInto!(1, target); // type-safety-ok: optional renderer API method, present in this test harness
+
+    // THE discriminating assertion: even though firstWrapper is detached,
+    // unwrapHighlights() restored its text via the held div reference, so its
+    // highlight span is gone.
+    expect(firstWrapper.querySelector(".search-highlight")).toBeNull();
+
+    // Only the live (second) wrapper carries a highlight.
+    expect(target.querySelectorAll(".search-highlight").length).toBe(1);
+    expect(target.querySelectorAll(".search-highlight")[0].textContent).toBe("the");
+  });
+
   it("goToPosition() drains the active highlight and disarms pendingHighlight", async () => {
     const renderer = createPdfRenderer();
     await renderer.init(container, "fake://source.pdf");
 
-    const results = await renderer.search!("the");
+    const { results } = await renderer.search!("the"); // type-safety-ok: optional renderer API method, present in this test harness
     const r1 = results.find((r) => r.label === "Page 1")!;
     // Arm then render so the highlight is live before navigating away.
     await renderer.goToResult!(r1);
@@ -1156,7 +1252,7 @@ describe("clearSearch()", () => {
     await renderer.init(container, "fake://source.pdf");
 
     // Search to populate the pageLayoutCache for page 4.
-    const results = await renderer.search!("the quick");
+    const { results } = await renderer.search!("the quick"); // type-safety-ok: optional renderer API method, present in this test harness
     const page4Result = results.find((r) => r.label === "Page 4");
     expect(page4Result).toBeDefined();
 
@@ -1193,7 +1289,7 @@ describe("clearSearch()", () => {
     const renderer = createPdfRenderer();
     await renderer.init(container, "fake://source.pdf");
 
-    const results = await renderer.search!("world");
+    const { results } = await renderer.search!("world"); // type-safety-ok: optional renderer API method, present in this test harness
     const page5Result = results.find((r) => r.label === "Page 5");
     expect(page5Result).toBeDefined();
 
