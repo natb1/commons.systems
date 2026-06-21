@@ -9228,9 +9228,12 @@ echo "Test: fresh park fires dispatch-spawn-recommend exactly once"
 setup
 echo '{"state":"open","labels":[]}' > "$STUB_DIR/arg-issue-42.json"
 ( cd "$TMPDIR_TEST" && "$TMPDIR_TEST/dispatch-apply-office-hours" 42 "phase exited before completion" )
-for _ in $(seq 1 40); do
+# The spawn is detached (setsid nohup … &), so its record arrives asynchronously.
+# Poll generously (up to ~20s) so the assertion is robust under heavy suite load;
+# the loop breaks the instant the record lands (~100ms in isolation).
+for _ in $(seq 1 200); do
   [[ -f "$STUB_DIR/spawn-recommend-calls.log" ]] && break
-  sleep 0.05
+  sleep 0.1
 done
 TOTAL=$((TOTAL + 1))
 if [[ -f "$STUB_DIR/spawn-recommend-calls.log" ]] \
