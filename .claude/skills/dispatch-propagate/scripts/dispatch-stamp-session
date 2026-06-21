@@ -32,10 +32,11 @@
 # detached `HEAD`, and any `office-hours-*` branch. A no-op emits at most one
 # short stderr diagnostic and exits 0 — it must NEVER block session start.
 #
-# Mode A is idempotent w.r.t. session-start state: if the sidecar already exists,
-# `base_sha` (session-start audit anchor) and a non-null `.pr` (from a prior
-# --backfill-pr) are preserved; `stamped_at` and other git-sourced fields
-# re-derive on every stamp.
+# Mode A is idempotent w.r.t. a backfilled pr and the session-start base_sha: if
+# the sidecar already exists, a non-null `.pr` and a non-empty `.base_sha` are
+# preserved (base_sha stays the session-start anchor across resumes); the
+# remaining git-sourced fields and the timestamp are re-derived. When no prior
+# sidecar exists, `pr` is written as null and base_sha is the current HEAD.
 #
 # Mode B — PR backfill (run once a PR number is known). Locates the sidecar by
 # the session id (a UUID) under the projects root via a maxdepth-2 find, then
@@ -255,7 +256,7 @@ if [[ -f "$sidecar" ]]; then
   if [[ -n "$existing_pr" && "$existing_pr" != "null" ]]; then
     pr="$existing_pr"
   fi
-  existing_base_sha=$(jq -r '.base_sha // empty' "$sidecar" 2>/dev/null || echo "")
+  existing_base_sha=$(jq -r '.base_sha // empty' "$sidecar" 2>/dev/null || true)
   if [[ -n "$existing_base_sha" ]]; then
     base_sha="$existing_base_sha"
   fi
