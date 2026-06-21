@@ -2470,6 +2470,29 @@ result=$("$TMPDIR_TEST/dispatch-phase" "42")
 assert_eq "no PR + dispatch:planned → implement" "implement" "$result"
 teardown
 
+# 1b-2. No PR + main-qa label → main-qa (#2274). dispatch-phase checks for the
+# main-qa label BEFORE the dispatch:planned check, so a main-qa issue routes to
+# the main-qa phase regardless of other labels.
+echo "Test: no PR + main-qa label → main-qa"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf '{"state":"open","labels":[{"name":"main-qa"}]}\n' > "$STUB_DIR/arg-issue-42.json"
+result=$("$TMPDIR_TEST/dispatch-phase" "42")
+assert_eq "no PR + main-qa → main-qa" "main-qa" "$result"
+teardown
+
+# 1b-3. No PR + main-qa AND dispatch:planned → main-qa (#2274). Directly exercises
+# the precedence claim from 1b-2: the main-qa check runs BEFORE the dispatch:planned
+# check, so an issue carrying both labels routes to main-qa, not implement. If the
+# two grep -qxF checks were swapped, this would regress to implement.
+echo "Test: no PR + main-qa + dispatch:planned → main-qa (precedence)"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf '{"state":"open","labels":[{"name":"main-qa"},{"name":"dispatch:planned"}]}\n' > "$STUB_DIR/arg-issue-42.json"
+result=$("$TMPDIR_TEST/dispatch-phase" "42")
+assert_eq "no PR + main-qa + dispatch:planned → main-qa" "main-qa" "$result"
+teardown
+
 # 1c. No PR + labels without dispatch:planned → plan (explicit non-empty labels).
 echo "Test: no PR + non-planned label → plan"
 setup
@@ -3103,6 +3126,20 @@ route_run 42 /wt/42-my-feature
 assert_eq "no PR + dispatch:planned → INVOKE /implement (directive)" \
   "INVOKE /implement" "$ROUTE_OUT"
 assert_eq "no PR + dispatch:planned → INVOKE /implement (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# 1b-2. No PR + main-qa label → INVOKE /qa-main (#2274). dispatch-route always
+# provisions the worktree first (the unconditional dispatch-provision-worktree
+# call), then dispatch-phase returns main-qa for the issue; the router maps
+# main-qa → INVOKE /qa-main.
+echo "Test: no PR + main-qa label → INVOKE /qa-main"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+printf '{"state":"open","labels":[{"name":"main-qa"}]}\n' > "$STUB_DIR/arg-issue-42.json"
+route_run 42 /wt/42-my-feature
+assert_eq "no PR + main-qa → INVOKE /qa-main (directive)" "INVOKE /qa-main" "$ROUTE_OUT"
+assert_eq "no PR + main-qa → INVOKE /qa-main (exit 0)" "0" "$ROUTE_RC"
 teardown
 
 # 1c. Closed issue → STOP closed (#1845). The router's closed-issue guard fires
@@ -4235,6 +4272,23 @@ printf '[{"number":10,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"dis
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "PR with parked issue skipped; unparked sibling returned" "pr 20 20-other fix-checks" "$result"
+teardown
+
+# 2c. An issue carrying BOTH main-qa AND dispatch:office-hours is SKIPPED by the
+# issue queue's office-hours filter (#2274 acceptance criterion #4). The issue
+# also carries "help wanted" so it enters the sort; the dispatch:office-hours
+# label is the operative skip (line 1003 of dispatch-select-target). Without
+# the skip, the OLDER parked issue would win; with it the sibling is selected.
+echo "Test: main-qa + dispatch:office-hours issue skipped; sibling chosen"
+setup
+echo '[]' > "$STUB_DIR/pr-list-union.json"
+# Issue 10 is older, carries main-qa + office-hours + help wanted → skipped.
+# Issue 20 is newer, carries only help wanted → selected.
+printf '[{"number":10,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"main-qa"},{"name":"dispatch:office-hours"}]},{"number":20,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "main-qa + office-hours issue skipped; unparked sibling chosen" "issue 20" "$result"
 teardown
 
 # 3. When no eligible PR exists, a help-wanted issue is chosen.
@@ -19870,6 +19924,11 @@ echo "Test: dispatch-phase-model maps fix-conflicts → claude-sonnet-4-6 (#2042
 if pm_out=$("$SCRIPT_DIR/dispatch-phase-model" fix-conflicts 2>/dev/null); then pm_rc=0; else pm_rc=$?; fi
 assert_eq "phase-model: fix-conflicts exits 0" "0" "$pm_rc"
 assert_eq "phase-model: fix-conflicts → claude-sonnet-4-6" "claude-sonnet-4-6" "$pm_out"
+
+echo "Test: dispatch-phase-model maps main-qa → claude-sonnet-4-6 (#2274)"
+if pm_out=$("$SCRIPT_DIR/dispatch-phase-model" main-qa 2>/dev/null); then pm_rc=0; else pm_rc=$?; fi
+assert_eq "phase-model: main-qa exits 0" "0" "$pm_rc"
+assert_eq "phase-model: main-qa → claude-sonnet-4-6" "claude-sonnet-4-6" "$pm_out"
 
 echo "Test: dispatch-phase-model maps unmapped phases → empty (default → Opus, no override)"
 for ph in implement done; do
@@ -38538,8 +38597,9 @@ STAMP="$SCRIPT_DIR/dispatch-stamp-session"
   rm -rf "$root"
 )
 
-# 6. Idempotent re-write preserves a set .pr (does not clobber to null) and the
-#    seeded .base_sha (the session-start anchor); .branch is still re-derived.
+# 6. Idempotent re-write preserves a set .pr (does not clobber to null),
+#    preserves session-start .base_sha (not advanced to post-resume HEAD),
+#    and advances .stamped_at (re-derived, not preserved).
 (
   d=$(mktemp -d)
   git -C "$d" init -q
@@ -38547,12 +38607,14 @@ STAMP="$SCRIPT_DIR/dispatch-stamp-session"
   git -C "$d" checkout -q -b 999-fixture
   git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
   sc="$d/sess6.dispatch-stamp.json"
-  # Seed a sidecar that already carries a backfilled pr.
+  # Seed a sidecar that already carries a backfilled pr and a session-start base_sha.
   printf '%s\n' '{"schema":1,"session_id":"sess6","repo":"old/repo","issue":1,"pr":4242,"branch":"old","base_sha":"old","stamped_at":"2026-01-01T00:00:00Z"}' > "$sc"
   ( cd "$d" && "$STAMP" --session-id sess6 --transcript-path "$d/sess6.jsonl" )
   assert_eq "stamp: re-write preserves set .pr" "4242" "$(jq -r .pr "$sc")"
   assert_eq "stamp: re-write re-derives .branch" "999-fixture" "$(jq -r .branch "$sc")"
-  assert_eq "stamp: re-write preserves seeded .base_sha" "old" "$(jq -r .base_sha "$sc")"
+  assert_eq "stamp: re-write PRESERVES session-start .base_sha" "old" "$(jq -r .base_sha "$sc")"
+  assert_eq "stamp: re-write advances .stamped_at (re-derived, not preserved)" "differs" \
+    "$([ "$(jq -r .stamped_at "$sc")" != "2026-01-01T00:00:00Z" ] && echo differs || echo same)"
   rm -rf "$d"
 )
 

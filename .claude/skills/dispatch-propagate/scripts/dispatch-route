@@ -11,6 +11,7 @@
 #   INVOKE /fix-checks              phase fix-checks   (draft PR, CI failed)
 #   INVOKE /qa-fix                  phase qa           (draft, CI green, no label)
 #   INVOKE /review-fix              phase review       (dispatch:qa-done / reviewed re-entry)
+#   INVOKE /qa-main                 phase main-qa      (no PR, main-qa label)
 #   INVOKE /budget-parse-job       phase plan         (no PR, unplanned, statements:<key> label) — parse-job issue
 #   INVOKE /implement              phase implement    (no PR + dispatch:planned)
 #   INVOKE /fix-conflicts              provisioning hit an origin/main merge conflict
@@ -245,6 +246,7 @@ case "$PHASE" in
   fix-checks)   echo "INVOKE /fix-checks" ;;
   qa)           echo "INVOKE /qa-fix" ;;
   review)       echo "INVOKE /review-fix" ;;
+  main-qa)      echo "INVOKE /qa-main" ;;
   done)
     # #1105: never park a `done` PR whose worktree is ahead of its remote branch —
     # those unpushed dispatch-merge-main / resolve-conflict merges leave the PR
