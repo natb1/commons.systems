@@ -31,7 +31,12 @@ export interface UseViewerControllerArgs {
  * - `canvasWrapRef` → the node the renderer draws into. The renderer/engine owns
  *   this element's subtree; React must NEVER render children into it.
  * - `gotoInputRef` → the go-to `<input>`. The hook reads `.value` and toggles
- *   `.disabled`/`.placeholder` imperatively for the "Calculating…" cycle.
+ *   `.readOnly`/`aria-busy`/`.placeholder` imperatively for the "Calculating…"
+ *   cycle (`readOnly`, not `disabled`, so the input stays in the tab order and
+ *   keyboard focus is preserved).
+ * - `gotoStatusRef` → an `aria-live="polite"` status `<span>` next to the input;
+ *   the hook writes "Calculating location…" into it during a percent goto and
+ *   clears it when navigation settles, so screen readers announce progress.
  * - `spreadToggleRef` → the spread toggle `<button>`; passed to SpreadController
  *   so its `setAttribute("aria-pressed", …)` keeps working unchanged.
  * - `viewerRef` → the `.viewer` element used for `requestFullscreen()`.
@@ -40,8 +45,11 @@ export interface UseViewerControllerResult {
   // --- Refs the component attaches to DOM ---
   /** The renderer draws into this node; do NOT render React children into it. */
   canvasWrapRef: React.RefObject<HTMLDivElement>;
-  /** The go-to input element (value/disabled/placeholder poked imperatively). */
+  /** The go-to input element (value/readOnly/aria-busy/placeholder poked imperatively). */
   gotoInputRef: React.RefObject<HTMLInputElement>;
+  /** The `aria-live` status span next to the go-to input; the hook writes the
+   *  "Calculating location…" announcement into it during a percent goto. */
+  gotoStatusRef: React.RefObject<HTMLSpanElement>;
   /** The spread toggle button; SpreadController drives its aria-pressed.
    *  MUST be attached to an always-mounted element — hide via CSS or the
    *  `hasSpread` flag, do NOT conditionally render it. SpreadController captures
@@ -140,6 +148,7 @@ export function useViewerController(
 ): UseViewerControllerResult {
   const canvasWrapRef = useRef<HTMLDivElement>(null);
   const gotoInputRef = useRef<HTMLInputElement>(null);
+  const gotoStatusRef = useRef<HTMLSpanElement>(null);
   const spreadToggleRef = useRef<HTMLButtonElement>(null);
   const viewerRef = useRef<HTMLElement>(null);
 
@@ -361,15 +370,25 @@ export function useViewerController(
           if (Number.isNaN(pct)) return;
           const frac = Math.max(0, Math.min(100, pct)) / 100;
           const savedValue = input.value;
+          const status = gotoStatusRef.current;
           input.value = "";
-          input.disabled = true;
+          // readOnly (not disabled) keeps the input in the tab order so keyboard
+          // focus stays put; aria-busy + the aria-live status announce progress.
+          input.readOnly = true;
+          input.setAttribute("aria-busy", "true");
           input.placeholder = "Calculating…";
+          if (status) status.textContent = "Calculating location…";
           try {
             await renderer.goToFraction!(frac);
           } finally {
             input.value = savedValue;
-            input.disabled = false;
+            input.readOnly = false;
+            input.removeAttribute("aria-busy");
             input.placeholder = "%";
+            if (status) status.textContent = "";
+            // Return focus to the input (e.g. after Enter submit); also fires on
+            // reject, which is intended.
+            input.focus();
           }
           syncNav();
         } else if (st.gotoMode === "page") {
@@ -607,6 +626,7 @@ export function useViewerController(
   return {
     canvasWrapRef,
     gotoInputRef,
+    gotoStatusRef,
     spreadToggleRef,
     viewerRef,
     positionLabel,

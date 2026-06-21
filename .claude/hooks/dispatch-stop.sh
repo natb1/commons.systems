@@ -266,11 +266,11 @@ resolve_office_hours_reason() {
 # either side. (Apply is issue-only, via dispatch-apply-office-hours.)
 strip_office_hours_label() {
   if [ -n "$PR_NUM" ]; then
-    gh pr edit "$PR_NUM" --remove-label dispatch:office-hours >/dev/null 2>&1 \
-      || echo "[dispatch-stop] WARNING: gh pr edit --remove-label failed" >&2
+    gh_issue_remove_label_rest "$PR_NUM" dispatch:office-hours >/dev/null 2>&1 \
+      || echo "[dispatch-stop] WARNING: gh_issue_remove_label_rest (PR) failed" >&2
   fi
-  gh issue edit "$ISSUE_NUM" --remove-label dispatch:office-hours >/dev/null 2>&1 \
-    || echo "[dispatch-stop] WARNING: gh issue edit --remove-label failed" >&2
+  gh_issue_remove_label_rest "$ISSUE_NUM" dispatch:office-hours >/dev/null 2>&1 \
+    || echo "[dispatch-stop] WARNING: gh_issue_remove_label_rest (issue) failed" >&2
   # #2040: on the parked→unparked transition ONLY (office-hours was present at
   # session start, captured once in ISSUE_OFFICE_HOURS_PRESENT below), reset the
   # issue-anchored total-attempt counter so the resumed autonomous work gets a
@@ -297,7 +297,7 @@ clear_rate_limit_retry_labels() {
   gh issue view "$ISSUE_NUM" --json labels --jq \
     '.labels[].name | select(test("^dispatch:rate-limit-retry-[0-9]+$"))' 2>/dev/null \
     | while IFS= read -r lbl; do
-        [ -n "$lbl" ] && gh issue edit "$ISSUE_NUM" --remove-label "$lbl" >/dev/null 2>&1 \
+        [ -n "$lbl" ] && gh_issue_remove_label_rest "$ISSUE_NUM" "$lbl" >/dev/null 2>&1 \
           || echo "[dispatch-stop] WARNING: could not clear $lbl (non-fatal)" >&2
       done || true
   return 0
@@ -317,7 +317,7 @@ clear_attempt_counter() {
   gh issue view "$ISSUE_NUM" --json labels --jq \
     '.labels[].name | select(test("^dispatch:attempts-[0-9]+$"))' 2>/dev/null \
     | while IFS= read -r lbl; do
-        [ -n "$lbl" ] && gh issue edit "$ISSUE_NUM" --remove-label "$lbl" >/dev/null 2>&1 \
+        [ -n "$lbl" ] && gh_issue_remove_label_rest "$ISSUE_NUM" "$lbl" >/dev/null 2>&1 \
           || echo "[dispatch-stop] WARNING: could not clear $lbl (non-fatal)" >&2
       done || true
   return 0
@@ -391,6 +391,52 @@ session_scheduled_wakeup() {
     | tail -1 | grep -q '"ScheduleWakeup"'
 }
 
+# Branch A background-task discriminator (#2243). Returns 0 ("still running in
+# the background, will resume on its own") ONLY when the transcript shows at
+# least one background task that was LAUNCHED but has not yet been NOTIFIED back
+# — i.e. an in-flight launched∖notified set difference is non-empty; returns 1
+# in EVERY other case — including all uncertainty: empty TRANSCRIPT_PATH,
+# missing/unreadable file, malformed transcript, or no launches at all. The
+# fail-safe direction (positive evidence only) is load-bearing: any doubt falls
+# through to today's office-hours park, so a genuine death still parks.
+#
+# A Workflow-based phase skill (/review-fix, /qa-fix) launches its review/QA
+# fan-out as a BACKGROUND Workflow and yields its turn to await a
+# <task-notification>. That mid-phase turn-end fires this Stop hook while the
+# phase is still running and has not yet written its phase-completed marker.
+# Without this gate Branch A sees marker-absence and prematurely parks the
+# issue on office-hours (#2243) — symmetric to session_scheduled_wakeup (#1590).
+#
+# Transcript shapes (whole-transcript grain, NOT last-turn-only — a background
+# launch is not a per-poll-cycle event):
+#   Launch — a tool_result text `... launched in background. Task ID: <ID>`
+#            (Workflow: `Workflow launched in background. Task ID: <ID>`; the
+#            Task tool uses analogous `... launched in background. Task ID: <ID>`).
+#   Notify — a <task-notification> payload carrying `"taskId":"<ID>"` for ANY
+#            status; any notification means the task resumed the session and is
+#            no longer in-flight.
+#
+# Grep the file directly for literal substrings (not echo-into-jq): the IDs are
+# plain substrings, so grep is robust and sidesteps the control-char trap
+# (.claude/rules/shell-json.md), mirroring dispatch-recover-dispatched-phase /
+# dispatch-detect-rate-limit-death.
+session_has_inflight_background_task() {
+  [ -n "$TRANSCRIPT_PATH" ] && [ -r "$TRANSCRIPT_PATH" ] || return 1
+  local launched notified
+  launched=$(grep -oE 'launched in background\. Task ID: [A-Za-z0-9_-]+' "$TRANSCRIPT_PATH" 2>/dev/null \
+    | grep -oE '[A-Za-z0-9_-]+$' | sort -u)
+  [ -n "$launched" ] || return 1
+  # Tolerate the JSONL backslash-escaped quote form (\"taskId\":\"<ID>\") as
+  # well as the bare "taskId":"<ID>" form — the <task-notification> payload is a
+  # string value, so its inner quotes are backslash-escaped in the record.
+  notified=$(grep -oE 'taskId\\?":\\?"[A-Za-z0-9_-]+' "$TRANSCRIPT_PATH" 2>/dev/null \
+    | grep -oE '[A-Za-z0-9_-]+$' | sort -u)
+  # In-flight iff at least one launched ID has no matching notification, i.e.
+  # the set difference (launched ∖ notified) is non-empty. comm -23 lists lines
+  # unique to the first (sorted) input.
+  [ -n "$(comm -23 <(printf '%s\n' "$launched") <(printf '%s\n' "$notified"))" ]
+}
+
 # Branch P — parse-job clean completion (#1024): a /budget-parse-job session is
 # named <N>-slug like a worker but, on a successful idempotent statement merge,
 # writes a `parse-job-done` sentinel instead of a phase-completed marker. A clean
@@ -435,6 +481,11 @@ PR_NUM=$("$SCRIPTS/dispatch-find-pr" "$ISSUE_NUM" 2>/dev/null) || PR_NUM=""
 # phase derivation below via DISPATCH_PR_LIST, avoiding a redundant `gh pr list`
 # per predicate. On fetch failure DISPATCH_PR_LIST stays empty and each script
 # falls back to its own self-fetch.
+# This batched per-tick call intentionally stays on GraphQL (gh pr list) because
+# both fields it requires — closingIssuesReferences (which issues a PR closes,
+# no REST-list equivalent) and statusCheckRollup (per-PR CI rollup, no
+# REST-list equivalent) — are GraphQL-only; there is no REST /pulls endpoint
+# that returns either field.
 DISPATCH_PR_LIST=$(pr_list_open "number,headRefName,isDraft,statusCheckRollup,labels,mergeable" 2>/dev/null) \
   || DISPATCH_PR_LIST=""
 export DISPATCH_PR_LIST
@@ -556,6 +607,17 @@ if [ -z "$MARKER_PHASE" ]; then
     # itself). Without this gate Branch A re-parks the issue once per poll
     # cycle, oscillating dispatch:office-hours (#1590).
     DLOG_DISPOSITION="hand-back"
+    exit 0
+  fi
+  if session_has_inflight_background_task; then
+    # Live phase running in the background — a Workflow/Task phase skill
+    # (/review-fix, /qa-fix) launched its fan-out as a background task and
+    # yielded its turn to await a <task-notification>. This mid-phase turn-end
+    # fired the Stop hook before the phase-completed marker was written. Hand
+    # back (the running task will resume the session and finish the phase); do
+    # NOT park on office-hours and do NOT spawn a redundant tick. Symmetric to
+    # the scheduled-wakeup gate above (#2243).
+    DLOG_DISPOSITION="hand-back-inflight-task"
     exit 0
   fi
   # Rate-limit self-heal (#1733). A worker that died on a TRANSIENT Anthropic

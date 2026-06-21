@@ -166,11 +166,19 @@ Analyze all eight categories. Compile findings under each heading.
 
 ### a. Duplicates
 
-Extract 3–5 representative keywords from the title and body and run one search:
+Extract 3–5 representative keywords from the title and body. Then fetch all issues once via the REST core bucket (which covers both open and closed issues — an improvement over the old open-only search) and narrow locally on title+body with no additional network calls:
 
 ```bash
-gh search issues --repo {owner}/{repo} --state open --json number,title,body "<keywords>"
+source .claude/skills/dispatch-propagate/scripts/lib.sh
+# One REST fetch of all open+closed issues (REST core bucket, not the Search/GraphQL
+# API), then narrow LOCALLY to a small candidate set on title/body keywords.
+ALL_ISSUES=$(gh_issue_list_rest --state all --include-body)
+printf '%s' "$ALL_ISSUES" | jq -r --arg kw "<keyword>" '
+  .[] | select(((.title // "") + " " + (.body // "")) | ascii_downcase | contains($kw | ascii_downcase))
+      | {number, title, body}'
 ```
+
+Run the local filter for each extracted keyword and union the results to produce the candidate set.
 
 In description mode: if any candidate describes the same actionable change as
 the new title + body, treat it as an EXISTING match — skip creation for this spec
@@ -342,10 +350,12 @@ Then proceed to Step 6 (finalize).
 
 ### Description mode
 
-Check once more for duplicates against the improved title + body (defense-in-depth
-recheck — `/file-issue` may be called from a non-interactive caller that did not
-pre-screen). If a match is found, skip creation for this spec and record
-`EXISTING <N>` as its Step 7 return line.
+Check once more for duplicates against the improved title + body. Reuse the
+`ALL_ISSUES` result captured in Step 3a and re-run the local keyword filter
+against the improved title + body — do not issue a second `gh_issue_list_rest`
+call (defense-in-depth recheck — `/file-issue` may be called from a
+non-interactive caller that did not pre-screen). If a match is found, skip
+creation for this spec and record `EXISTING <N>` as its Step 7 return line.
 
 If no duplicate, create the issue:
 ```bash
@@ -399,7 +409,18 @@ type: `no-config` → apply NO epic label (the feature stays inert); otherwise a
 each label in the `.labels[]` array to the parent `<N>`:
 
 ```bash
-EPIC_CONFIG=$(.claude/skills/dispatch-propagate/scripts/dispatch-config-load epic)
+# Three outcomes from dispatch-config-load epic:
+#   exit 0 + "no-config" → feature inert; apply NO label.
+#   exit 0 + JSON        → apply each .labels[] to the parent <N>.
+#   exit 1 (nonzero)     → bad JSON/schema in dispatch.config/epic.json; error out.
+# A bare VAR=$(...) does NOT exit with a controlled code under all conditions —
+# without the || guard, the failure exits with dispatch-config-load's raw exit
+# code (1 for JSON error, 2 for env misconfiguration), not a canonical error with
+# a diagnostic. Guard with || to emit a diagnostic and normalize to exit 1.
+EPIC_CONFIG=$(.claude/skills/dispatch-propagate/scripts/dispatch-config-load epic) || {
+  echo "error: dispatch-config-load epic failed (bad JSON/schema in dispatch.config/epic.json)" >&2
+  exit 1
+}
 if [[ "$EPIC_CONFIG" != "no-config" ]]; then
   while IFS= read -r epic_label; do
     [[ -n "$epic_label" ]] && gh issue edit <N> --add-label "$epic_label"

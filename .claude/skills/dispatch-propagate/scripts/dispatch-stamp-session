@@ -1,0 +1,284 @@
+#!/usr/bin/env bash
+# dispatch-stamp-session — write/backfill a per-session GitHub-artifact sidecar.
+#
+# Usage:
+#   dispatch-stamp-session --session-id <id> --transcript-path <path>   (Mode A)
+#   dispatch-stamp-session --backfill-pr <N>                            (Mode B)
+#
+# A dispatch worker session does not otherwise record the GitHub artifact it
+# acted on (repo/issue/pr/branch/base_sha), so the token audit cannot join a
+# session to its real-world outcome. This script writes a JSON sidecar next to
+# the session transcript — `<transcript>.dispatch-stamp.json`, i.e. the
+# transcript path with its `.jsonl` suffix replaced by `.dispatch-stamp.json` —
+# holding that artifact. The audit later globs the sidecar by session id.
+#
+# Sidecar JSON shape (always emitted via `jq -n`, so always valid JSON):
+#
+#   {"schema":1,"session_id":"<id>","repo":"<owner/name>","issue":<N>,
+#    "pr":null,"branch":"<branch>","base_sha":"<sha>","stamped_at":"<iso8601>"}
+#
+# Mode A — initial write (run at session start). Derives everything from git
+# only (NEVER gh, no network):
+#   repo      owner/name parsed from `git remote get-url origin` (SSH or HTTPS,
+#             trailing `.git` stripped).
+#   branch    `git rev-parse --abbrev-ref HEAD`.
+#   base_sha  `git rev-parse HEAD`.
+#   issue     the numeric prefix of the branch (leading digits before `-`), as
+#             a JSON number.
+#   stamped_at  current UTC time, ISO-8601.
+#
+# Mode A no-ops (exit 0, writes nothing) unless the branch matches `^[0-9]+-`.
+# That single positive gate already excludes the non-worker branches `main`,
+# detached `HEAD`, and any `office-hours-*` branch. A no-op emits at most one
+# short stderr diagnostic and exits 0 — it must NEVER block session start.
+#
+# Mode A is idempotent w.r.t. a backfilled pr and the session-start base_sha: if
+# the sidecar already exists, a non-null `.pr` and a non-empty `.base_sha` are
+# preserved (base_sha stays the session-start anchor across resumes); the
+# remaining git-sourced fields and the timestamp are re-derived. When no prior
+# sidecar exists, `pr` is written as null and base_sha is the current HEAD.
+#
+# Mode B — PR backfill (run once a PR number is known). Locates the sidecar by
+# the session id (a UUID) under the projects root via a maxdepth-2 find, then
+# applies an idempotent `.pr = N` update. A backfill failure must NEVER fail its
+# caller: an unset/empty $CLAUDE_CODE_SESSION_ID or a sidecar that isn't found
+# emits a short stderr diagnostic and exits 0. Only a malformed --backfill-pr
+# argument (non-numeric) is a clear caller bug → exit 2.
+#
+# All writes are atomic (build into a `.tmp` file, then `mv` into place).
+#
+# NOTE on no-op-via-exit-0: the `|| { echo ...; exit 0; }` guards below are not
+# the "defensive fallback" that code-style.md forbids — they implement the
+# documented never-block-session-start discipline, mirroring the worker-branch
+# guard in .claude/hooks/restore-dispatch-skill.sh.
+#
+# Test seams: $DISPATCH_STAMP_PROJECTS_ROOT overrides the projects root
+# (default $HOME/.claude/projects); $HOME is honored as the fallback base.
+#
+# A missing argument, missing flag value, unknown arg, or mixing modes
+# incoherently is a clear error, not a fallback (exit 2).
+set -euo pipefail
+
+SESSION_ID=""
+TRANSCRIPT_PATH=""
+BACKFILL_PR=""
+
+usage() {
+  echo "usage: dispatch-stamp-session --session-id <id> --transcript-path <path>" >&2
+  echo "       dispatch-stamp-session --backfill-pr <N>" >&2
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --session-id)
+      if [[ $# -lt 2 ]]; then
+        echo "dispatch-stamp-session: --session-id requires a value" >&2
+        usage
+        exit 2
+      fi
+      SESSION_ID="$2"
+      shift 2
+      ;;
+    --transcript-path)
+      if [[ $# -lt 2 ]]; then
+        echo "dispatch-stamp-session: --transcript-path requires a value" >&2
+        usage
+        exit 2
+      fi
+      TRANSCRIPT_PATH="$2"
+      shift 2
+      ;;
+    --backfill-pr)
+      if [[ $# -lt 2 ]]; then
+        echo "dispatch-stamp-session: --backfill-pr requires a value" >&2
+        usage
+        exit 2
+      fi
+      BACKFILL_PR="$2"
+      shift 2
+      ;;
+    *)
+      echo "dispatch-stamp-session: unexpected argument: $1" >&2
+      usage
+      exit 2
+      ;;
+  esac
+done
+
+# --- mode selection ---------------------------------------------------------
+# Exactly one mode per invocation. --backfill-pr selects Mode B; --session-id /
+# --transcript-path select Mode A. Mixing them is incoherent → exit 2.
+if [[ -n "$BACKFILL_PR" ]]; then
+  if [[ -n "$SESSION_ID" || -n "$TRANSCRIPT_PATH" ]]; then
+    echo "dispatch-stamp-session: --backfill-pr cannot be combined with --session-id/--transcript-path" >&2
+    usage
+    exit 2
+  fi
+
+  # --- Mode B: PR backfill --------------------------------------------------
+  # A non-numeric --backfill-pr value is the one genuine caller bug → exit 2.
+  if [[ ! "$BACKFILL_PR" =~ ^[1-9][0-9]*$ ]]; then
+    echo "dispatch-stamp-session: --backfill-pr must be a positive integer, got: $BACKFILL_PR" >&2
+    usage
+    exit 2
+  fi
+
+  # From here on, a failure must NEVER fail the caller — diagnose and exit 0.
+  if [[ -z "${CLAUDE_CODE_SESSION_ID:-}" ]]; then
+    echo "dispatch-stamp-session: CLAUDE_CODE_SESSION_ID unset/empty; cannot locate sidecar to backfill, skipping" >&2
+    exit 0
+  fi
+
+  # The session id is interpolated into a find -name glob; reject path-traversal
+  # and control chars before composing it.
+  case "$CLAUDE_CODE_SESSION_ID" in
+    *..*|*/*|*[[:cntrl:]]*)
+      echo "dispatch-stamp-session: CLAUDE_CODE_SESSION_ID contains illegal characters; skipping backfill" >&2
+      exit 0
+      ;;
+  esac
+
+  PROJECTS_ROOT="${DISPATCH_STAMP_PROJECTS_ROOT:-${HOME:-}/.claude/projects}"
+  if [[ -z "$PROJECTS_ROOT" || ! -d "$PROJECTS_ROOT" ]]; then
+    echo "dispatch-stamp-session: projects root '$PROJECTS_ROOT' is not a directory; skipping backfill" >&2
+    exit 0
+  fi
+
+  sidecar=$(find "$PROJECTS_ROOT" -maxdepth 2 -name "${CLAUDE_CODE_SESSION_ID}.dispatch-stamp.json" 2>/dev/null | head -n1)
+  if [[ -z "$sidecar" ]]; then
+    echo "dispatch-stamp-session: no sidecar found for session $CLAUDE_CODE_SESSION_ID under $PROJECTS_ROOT; skipping backfill" >&2
+    exit 0
+  fi
+
+  if ! jq --argjson pr "$BACKFILL_PR" '.pr = $pr' "$sidecar" > "$sidecar.tmp" 2>/dev/null; then
+    echo "dispatch-stamp-session: failed to update pr in '$sidecar'; skipping backfill" >&2
+    rm -f "$sidecar.tmp"
+    exit 0
+  fi
+  mv "$sidecar.tmp" "$sidecar"
+  exit 0
+fi
+
+# --- Mode A: initial write --------------------------------------------------
+if [[ -z "$SESSION_ID" ]]; then
+  echo "dispatch-stamp-session: --session-id is required for the initial write" >&2
+  usage
+  exit 2
+fi
+if [[ -z "$TRANSCRIPT_PATH" ]]; then
+  echo "dispatch-stamp-session: --transcript-path is required for the initial write" >&2
+  usage
+  exit 2
+fi
+
+# Reject path-traversal / control chars. The session id is a bare stem (no path
+# component), so a slash, `..`, or control char is malformed → exit 2. The
+# transcript path is a legitimate absolute path (slashes expected), so reject
+# only `..` and control chars there.
+case "$SESSION_ID" in
+  *..*|*/*|*[[:cntrl:]]*)
+    echo "dispatch-stamp-session: --session-id contains illegal characters: $SESSION_ID" >&2
+    exit 2
+    ;;
+esac
+case "$TRANSCRIPT_PATH" in
+  *..*|*[[:cntrl:]]*)
+    echo "dispatch-stamp-session: --transcript-path contains illegal characters: $TRANSCRIPT_PATH" >&2
+    exit 2
+    ;;
+esac
+
+# Derive the branch. A failure here is not fatal to session start — no-op.
+branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null) || {
+  echo "dispatch-stamp-session: could not resolve current branch (not a git checkout?); skipping stamp" >&2
+  exit 0
+}
+
+# Worker-branch gate: only phase-worker target branches (^[0-9]+-) are stamped.
+# This single positive gate already excludes main, detached HEAD, and
+# office-hours-* — mirroring restore-dispatch-skill.sh's guard shape.
+if ! printf '%s\n' "$branch" | grep -qE '^[0-9]+-'; then
+  echo "dispatch-stamp-session: branch '$branch' is not a worker branch (^[0-9]+-); skipping stamp" >&2
+  exit 0
+fi
+
+# Reject path-traversal / control chars in the branch before it is used to build
+# the issue number (and as a sidecar field). Git refnames already disallow these,
+# so a match indicates a malformed or hostile source.
+case "$branch" in
+  *..*|*/*|*[[:cntrl:]]*)
+    echo "dispatch-stamp-session: branch '$branch' contains illegal characters; skipping stamp" >&2
+    exit 0
+    ;;
+esac
+
+# issue = leading digits of the branch, as a JSON number.
+issue=$(printf '%s\n' "$branch" | grep -oE '^[0-9]+')
+
+# base_sha = current HEAD.
+base_sha=$(git rev-parse HEAD 2>/dev/null) || {
+  echo "dispatch-stamp-session: could not resolve HEAD sha; skipping stamp" >&2
+  exit 0
+}
+
+# repo = owner/name from origin. Handle SSH and HTTPS forms; strip trailing .git.
+# If origin can't be resolved we still write the sidecar with an empty repo
+# rather than block session start.
+repo=""
+if origin_url=$(git remote get-url origin 2>/dev/null); then
+  # Normalize both forms to owner/name:
+  #   git@github.com:owner/name.git    → owner/name
+  #   https://github.com/owner/name.git → owner/name
+  stripped="${origin_url%.git}"   # drop a trailing .git
+  path="${stripped#*://}"         # drop scheme:// if present (HTTPS)
+  path="${path#*@}"               # drop user@ if present (SSH)
+  path="${path#github.com:}"      # drop the SSH host + ':' separator
+  path="${path#github.com/}"      # drop the HTTPS host + '/' separator
+  repo="$path"
+fi
+
+# Locate the sidecar path: transcript with .jsonl → .dispatch-stamp.json.
+sidecar="${TRANSCRIPT_PATH%.jsonl}.dispatch-stamp.json"
+
+# Idempotency: Mode A runs on both `startup` and `resume`. `base_sha` is one of
+# the audit join keys {repo, issue, pr, base_sha} and must anchor the session's
+# STARTING ground truth — a resume after committed work must NOT advance it to
+# the post-resume HEAD. When the sidecar already exists, preserve its `base_sha`
+# (and a non-null `.pr` from a prior `--backfill-pr`); only the first (startup)
+# write derives `base_sha` from HEAD. `repo`/`issue`/`branch` are stable within
+# a session and are harmlessly re-derived. `stamped_at` deliberately DOES
+# re-derive on every stamp: unlike `base_sha` it is not a join key (not carried
+# into the audit `artifact` record), so it records the most-recent stamp time,
+# not session start.
+pr=null
+if [[ -f "$sidecar" ]]; then
+  existing_pr=$(jq '.pr' "$sidecar" 2>/dev/null || echo null)
+  if [[ -n "$existing_pr" && "$existing_pr" != "null" ]]; then
+    pr="$existing_pr"
+  fi
+  existing_base_sha=$(jq -r '.base_sha // empty' "$sidecar" 2>/dev/null || true)
+  if [[ -n "$existing_base_sha" ]]; then
+    base_sha="$existing_base_sha"
+  fi
+fi
+
+stamped_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+# Build atomically with jq -n so the JSON is always valid. Numerics
+# (schema/issue/pr) use --argjson; strings use --arg.
+if ! jq -n \
+  --argjson schema 1 \
+  --arg session_id "$SESSION_ID" \
+  --arg repo "$repo" \
+  --argjson issue "$issue" \
+  --argjson pr "$pr" \
+  --arg branch "$branch" \
+  --arg base_sha "$base_sha" \
+  --arg stamped_at "$stamped_at" \
+  '{schema:$schema, session_id:$session_id, repo:$repo, issue:$issue, pr:$pr, branch:$branch, base_sha:$base_sha, stamped_at:$stamped_at}' \
+  > "$sidecar.tmp" 2>/dev/null; then
+  echo "dispatch-stamp-session: failed to build sidecar JSON for '$sidecar'; skipping stamp" >&2
+  rm -f "$sidecar.tmp"
+  exit 0
+fi
+mv "$sidecar.tmp" "$sidecar" || { echo "dispatch-stamp-session: failed to move sidecar into place; skipping stamp" >&2; rm -f "$sidecar.tmp"; exit 0; }
