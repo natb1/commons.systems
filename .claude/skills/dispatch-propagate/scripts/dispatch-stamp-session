@@ -32,9 +32,11 @@
 # detached `HEAD`, and any `office-hours-*` branch. A no-op emits at most one
 # short stderr diagnostic and exits 0 — it must NEVER block session start.
 #
-# Mode A is idempotent w.r.t. a backfilled pr: if the sidecar already exists and
-# carries a non-null `.pr`, that value is preserved (everything else is
-# re-derived); otherwise `pr` is written as null.
+# Mode A is idempotent w.r.t. a backfilled pr and the session-start base_sha: if
+# the sidecar already exists, a non-null `.pr` and a non-empty `.base_sha` are
+# preserved (base_sha stays the session-start anchor across resumes); the
+# remaining git-sourced fields and the timestamp are re-derived. When no prior
+# sidecar exists, `pr` is written as null and base_sha is the current HEAD.
 #
 # Mode B — PR backfill (run once a PR number is known). Locates the sidecar by
 # the session id (a UUID) under the projects root via a maxdepth-2 find, then
@@ -238,15 +240,21 @@ fi
 # Locate the sidecar path: transcript with .jsonl → .dispatch-stamp.json.
 sidecar="${TRANSCRIPT_PATH%.jsonl}.dispatch-stamp.json"
 
-# Idempotency: a re-run re-derives every git-sourced field (repo/issue/branch/
-# base_sha) and the timestamp, but must PRESERVE a non-null `.pr` written by a
-# prior --backfill-pr — a re-stamp must never clobber a known PR number back to
-# null. Only `.pr` is carried forward; nothing else is preserved.
+# Idempotency: a re-run re-derives the remaining git-sourced fields (repo/issue/
+# branch) and the timestamp, but must PRESERVE both a non-null `.pr` written by a
+# prior --backfill-pr (a re-stamp must never clobber a known PR number back to
+# null) and the `.base_sha` from the initial startup write (so it remains the
+# session-start anchor across resumes, even after an ff-merge moves HEAD). `.pr`
+# and `.base_sha` are carried forward; nothing else is preserved.
 pr=null
 if [[ -f "$sidecar" ]]; then
   existing_pr=$(jq '.pr' "$sidecar" 2>/dev/null || echo null)
   if [[ -n "$existing_pr" && "$existing_pr" != "null" ]]; then
     pr="$existing_pr"
+  fi
+  existing_base_sha=$(jq -r '.base_sha // empty' "$sidecar" 2>/dev/null || true)
+  if [[ -n "$existing_base_sha" ]]; then
+    base_sha="$existing_base_sha"
   fi
 fi
 
