@@ -157,7 +157,7 @@ body.viewer-active {
 .viewer-canvas-wrap.spread-mode {
   display: flex;
   flex-direction: row;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .spread-page {
@@ -414,7 +414,7 @@ body.viewer-active {
 }
 
 .viewer-search-result-snippet mark {
-  background: #fde68a;
+  background: #fde68a; /* ds-lint-disable-line: search-result highlight swatch, no mark/highlight token */
   color: inherit;
   border-radius: var(--radius-none);
 }
