@@ -2,7 +2,7 @@
 # dispatch-write-phase-log — upsert a per-(phase,attempt) handoff entry into the
 # issue's sentinel phase-log comment.
 #
-# Usage: dispatch-write-phase-log <issue-num> --phase <p> [--attempt <n>]
+# Usage: dispatch-write-phase-log <issue-num> --phase <p> [--attempt <n>] [--reentry <true|false>]
 #        (free-text entry body on STDIN)
 #
 # Each dispatch phase (implement / qa / review) writes a short
@@ -17,6 +17,11 @@
 # duplicate). This mirrors dispatch-write-plan's "re-running replaces, never
 # stacks a second comment" idempotency at the per-section granularity.
 #
+# Re-entry no-op: with --reentry true the script skips the write entirely and
+# preserves the existing phase-log comment verbatim — no STDIN read, no gh call,
+# exit 0. The decision of whether a phase's Steps 1–4 actually ran this turn
+# (i.e. whether to pass --reentry true) lives in the calling skill, not here.
+#
 # The repo is resolved explicitly (GH_REPO from the common dir's remote.origin.url)
 # so gh addresses the right repository from any caller cwd. A missing/non-numeric
 # issue-num, a malformed --phase, a non-numeric --attempt, or empty STDIN is a
@@ -27,10 +32,10 @@ source "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 N="${1:-}"
 if [[ $# -lt 1 || -z "$N" ]]; then
   echo "dispatch-write-phase-log: an issue-num argument is required" >&2
-  echo "usage: dispatch-write-phase-log <issue-num> --phase <p> [--attempt <n>]   (entry body on STDIN)" >&2
+  echo "usage: dispatch-write-phase-log <issue-num> --phase <p> [--attempt <n>] [--reentry <true|false>]   (entry body on STDIN)" >&2
   exit 2
 fi
-if [[ ! "$N" =~ ^[0-9]+$ ]]; then
+if [[ ! "$N" =~ ^[1-9][0-9]*$ ]]; then
   echo "dispatch-write-phase-log: issue-num must be a positive integer, got: $N" >&2
   exit 2
 fi
@@ -38,13 +43,21 @@ shift
 
 PHASE=""
 ATTEMPT="1"
+REENTRY="false"
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --phase)   PHASE="${2:-}"; shift 2 ;;
-    --attempt) ATTEMPT="${2:-}"; shift 2 ;;
+    --phase)
+      [[ $# -ge 2 ]] || { echo 'dispatch-write-phase-log: --phase requires a value' >&2; exit 2; }
+      PHASE="$2"; shift 2 ;;
+    --attempt)
+      [[ $# -ge 2 ]] || { echo 'dispatch-write-phase-log: --attempt requires a value' >&2; exit 2; }
+      ATTEMPT="$2"; shift 2 ;;
+    --reentry)
+      [[ $# -ge 2 ]] || { echo 'dispatch-write-phase-log: --reentry requires a value' >&2; exit 2; }
+      REENTRY="$2"; shift 2 ;;
     *)
       echo "dispatch-write-phase-log: unknown argument '$1'" >&2
-      echo "usage: dispatch-write-phase-log <issue-num> --phase <p> [--attempt <n>]" >&2
+      echo "usage: dispatch-write-phase-log <issue-num> --phase <p> [--attempt <n>] [--reentry <true|false>]" >&2
       exit 2
       ;;
   esac
@@ -57,6 +70,15 @@ fi
 if [[ ! "$ATTEMPT" =~ ^[0-9]+$ ]]; then
   echo "dispatch-write-phase-log: --attempt must be a non-negative integer, got: '$ATTEMPT'" >&2
   exit 2
+fi
+if [[ ! "$REENTRY" =~ ^(true|false)$ ]]; then
+  echo "dispatch-write-phase-log: --reentry must be 'true' or 'false', got: '$REENTRY'" >&2
+  exit 2
+fi
+
+if [[ "$REENTRY" == "true" ]]; then
+  echo "dispatch-write-phase-log: --reentry true → skipping write, preserving existing phase-log verbatim" >&2
+  exit 0
 fi
 
 common_dir="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || {
@@ -98,9 +120,13 @@ if printf '%s' "$BODY" | grep -qxF "$INNER_MARKER"; then
   # REPLACE the existing section in place. The awk state machine drops the lines
   # from the target inner-marker line up to (but not including) the next line
   # beginning '<!-- phase-log:' (the next section's delimiter, which is KEPT) or
-  # EOF, substituting the new section. The outer marker '<!-- dispatch:phase-log -->'
-  # begins '<!-- dispatch:' and is deliberately disjoint from the '<!-- phase-log:'
-  # terminator, so it is never treated as a section boundary.
+  # EOF, substituting the new section. When a next section header is found, a
+  # single blank separator line is re-emitted before it so the output is
+  # byte-for-byte identical to the original (one blank between sections). For the
+  # last section (no next header), the machine reaches EOF and emits no trailing
+  # blank — matching the APPEND output. The outer marker '<!-- dispatch:phase-log
+  # -->' begins '<!-- dispatch:' and is deliberately disjoint from the
+  # '<!-- phase-log:' terminator, so it is never treated as a section boundary.
   REPLACEMENT="$NEW_SECTION" TARGET="$INNER_MARKER" \
     awk '
       BEGIN { repl = ENVIRON["REPLACEMENT"]; target = ENVIRON["TARGET"]; skip = 0 }
@@ -108,6 +134,7 @@ if printf '%s' "$BODY" | grep -qxF "$INNER_MARKER"; then
         if (skip) {
           # Inside the target section being dropped: a new inner marker ends the skip.
           if (index($0, "<!-- phase-log:") == 1) {
+            print ""          # restore the single blank separator before the next section
             skip = 0
             print
           }

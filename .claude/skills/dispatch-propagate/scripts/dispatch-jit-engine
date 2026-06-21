@@ -236,11 +236,16 @@ for (( i = 0; i < JIT_COUNT; i++ )); do
   # ---- 4d: open-issue guard -------------------------------------------------
   # At most one open issue per jit. If one is already open, skip and stamp the
   # last-check time so debounce holds off the next tick.
+  # gh_issue_list_rest wraps gh_retry INTERNALLY for transient-failure backoff;
+  # its retry lines go to stderr, so capture stderr to a tmpfile (never 2>&1 into
+  # the stdout we parse with jq below).
   OPEN_RC=0
-  OPEN_JSON=$(gh issue list --repo "$REPO" --label "$LABEL" --state open \
-    --json number 2>&1) || OPEN_RC=$?
+  open_tmpfile=$(mktemp)
+  OPEN_JSON=$(gh_issue_list_rest --repo "$REPO" --label "$LABEL" --state open \
+    2>"$open_tmpfile") || OPEN_RC=$?
+  OPEN_ERR=$(cat "$open_tmpfile"); rm -f "$open_tmpfile"
   if [[ "$OPEN_RC" -ne 0 ]]; then
-    echo "$KEY: error (gh issue list --state open failed: $OPEN_JSON)" >&2
+    echo "$KEY: error (gh issue list --state open failed: $OPEN_ERR)" >&2
     HARD_ERROR=1
     continue
   fi
@@ -268,11 +273,16 @@ for (( i = 0; i < JIT_COUNT; i++ )); do
       HARD_ERROR=1
       continue
     fi
+    # See the OPEN_JSON note above: gh_issue_list_rest's internal gh_retry emits
+    # retry lines to stderr, so capture stderr to a tmpfile (never 2>&1 into the
+    # stdout parsed by jq below).
     CLOSED_RC=0
-    CLOSED_JSON=$(gh issue list --repo "$REPO" --label "$LABEL" --state closed \
-      --json number,closedAt 2>&1) || CLOSED_RC=$?
+    closed_tmpfile=$(mktemp)
+    CLOSED_JSON=$(gh_issue_list_rest --repo "$REPO" --label "$LABEL" --state closed \
+      2>"$closed_tmpfile") || CLOSED_RC=$?
+    CLOSED_ERR=$(cat "$closed_tmpfile"); rm -f "$closed_tmpfile"
     if [[ "$CLOSED_RC" -ne 0 ]]; then
-      echo "$KEY: error (gh issue list --state closed failed: $CLOSED_JSON)" >&2
+      echo "$KEY: error (gh issue list --state closed failed: $CLOSED_ERR)" >&2
       HARD_ERROR=1
       continue
     fi
@@ -376,15 +386,15 @@ for (( i = 0; i < JIT_COUNT; i++ )); do
     fi
 
     CREATE_RC=0
-    CREATE_OUT=$(gh issue create --repo "$REPO" --title "$TITLE" --body "$ISSUE_BODY" \
+    CREATE_OUT=$(gh_issue_create_rest --repo "$REPO" --title "$TITLE" --body "$ISSUE_BODY" \
       --label "$LABEL" 2>&1) || CREATE_RC=$?
     if [[ "$CREATE_RC" -ne 0 ]]; then
-      echo "$KEY: error (gh issue create failed: $CREATE_OUT)" >&2
+      echo "$KEY: error (gh_issue_create_rest failed: $CREATE_OUT)" >&2
       HARD_ERROR=1
       continue
     fi
-    # gh issue create prints the new issue URL on stdout. The trailing path
-    # segment is the issue number.
+    # gh_issue_create_rest echoes the new issue URL on stdout. The trailing
+    # path segment is the issue number.
     ISSUE_URL=$(printf '%s' "$CREATE_OUT" | tail -n1)
     ISSUE_NUM="${ISSUE_URL##*/}"
     if [[ -z "$ISSUE_NUM" || ! "$ISSUE_NUM" =~ ^[0-9]+$ ]]; then

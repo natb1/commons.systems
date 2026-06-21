@@ -171,7 +171,9 @@ gh_api_array() {
 # plan scripts), fetches comments via gh_retry, and applies the same
 # author-id-filtered first(...) selector. Returns non-zero with a stderr message
 # on an unresolvable author id (clear error, not a fallback). Echoes nothing
-# (empty) when no matching comment exists.
+# (empty) when no matching comment exists. A gh_retry or jq pipeline failure
+# returns non-zero (a clear error), distinct from the empty-output absent case —
+# mirroring gh_api_array's error propagation rather than silently swallowing it.
 dispatch_marker_comment_id() {
   local n="$1" marker="$2"
   local author_id="${DISPATCH_PLAN_AUTHOR_ID:-$(gh api user --jq '.id')}"
@@ -179,10 +181,13 @@ dispatch_marker_comment_id() {
     echo "dispatch_marker_comment_id: could not resolve a numeric comment author id (got: '$author_id')" >&2
     return 1
   fi
+  local raw
+  raw=$(gh_retry gh api --paginate "repos/{owner}/{repo}/issues/$n/comments") \
+    || return 1
   local cid
-  cid=$(gh_retry gh api --paginate "repos/{owner}/{repo}/issues/$n/comments" \
-    | jq -r --arg m "$marker" --argjson author_id "$author_id" \
-        'first(.[] | select((.body | startswith($m)) and (.user.id == $author_id)) | .id)')
+  cid=$(printf '%s\n' "$raw" | jq -r --arg m "$marker" --argjson author_id "$author_id" \
+      'first(.[] | select((.body | startswith($m)) and (.user.id == $author_id)) | .id)') \
+    || return 1
   if [[ -z "$cid" || "$cid" == "null" ]]; then
     return 0
   fi
@@ -195,19 +200,32 @@ dispatch_marker_comment_id() {
 # per-tick scan was self-exhausting (#1601).
 #
 # Contract:
-#   gh_issue_list_rest --state <open|closed> [--repo <owner/repo>] [--label <name>] [--limit <n>]
+#   gh_issue_list_rest --state <open|closed|all> [--repo <owner/repo>] [--label <name>] [--limit <n>] [--include-title] [--include-body]
 #
 # Flags:
-#   --state  (required) open|closed.
+#   --state  (required) open|closed|all. `all` is accepted — REST's
+#            issues?state=all is native and needs no special-casing.
 #   --repo   (optional) owner/repo for a cross-repo scan; when absent the path
 #            uses the {owner}/{repo} placeholder gh auto-resolves for the
 #            current repo.
 #   --label  (optional) a single label name; URL-encoded minimally (space→%20;
 #            the colon in values like dispatch:main-broken is query-safe).
-#   --limit  (optional) per_page cap. When ABSENT we --paginate the full set
-#            (REST --paginate has no silent-truncation hazard, unlike gh pr/issue
-#            list's --limit default). When PRESENT we fetch a SINGLE page of that
-#            size (no --paginate).
+#   --limit  (optional) cap on the number of issues returned. When ABSENT we
+#            --paginate the full set (REST --paginate has no silent-truncation
+#            hazard, unlike gh pr/issue list's --limit default). When PRESENT and
+#            <= 100 we fetch a SINGLE page of that size (no --paginate). When
+#            PRESENT and > 100 we --paginate at per_page=100 and slice the merged
+#            result to the first <limit> objects in the final jq projection —
+#            REST clamps per_page to 100, so a single-page per_page=<limit> would
+#            silently truncate to <= 100. The slice preserves the
+#            `len == limit ⇒ truncated` guard semantics: paginate-all-then-slice
+#            yields len == limit iff at least <limit> issues exist.
+#   --include-title (optional) when present, the projected objects additionally
+#            carry a `title` field. Omitted by default so the repo-wide per-tick
+#            callers stay byte-identical and payload-lean.
+#   --include-body (optional) when present, the projected objects additionally
+#            carry `title` and `body` fields. Omitted by default so the repo-wide per-tick
+#            callers stay byte-identical and payload-lean.
 #
 # Output: one merged JSON array on stdout. REST /issues returns issues AND PRs;
 # only PR objects carry a `pull_request` key, so we filter those out to match
@@ -215,18 +233,23 @@ dispatch_marker_comment_id() {
 # camelCase shape downstream jq expects ({number, createdAt, closedAt, labels}).
 # `labels` is already [{name,...}] in REST, so it passes through unchanged; a null
 # closedAt on open issues is harmless. Results are sorted created-descending so a
-# downstream `.[0]` is the most-recently-created issue.
+# downstream `.[0]` is the most-recently-created issue. When --include-title is
+# passed, each projected object also carries a `title` field; when --include-body
+# is passed, each carries BOTH `title` and `body` fields; both flags may be
+# passed together (idempotent — title appears once).
 #
 # On gh failure: errors to stderr and returns 1 (clear-errors convention, no
 # fallback).
 gh_issue_list_rest() {
-  local state="" repo="" label="" limit=""
+  local state="" repo="" label="" limit="" include_title="" include_body=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --state) state="$2"; shift 2 ;;
       --repo)  repo="$2";  shift 2 ;;
       --label) label="$2"; shift 2 ;;
       --limit) limit="$2"; shift 2 ;;
+      --include-title) include_title=1; shift 1 ;;
+      --include-body) include_body=1; shift 1 ;;
       *) echo "error: gh_issue_list_rest: unknown flag '$1'" >&2; return 1 ;;
     esac
   done
@@ -242,8 +265,26 @@ gh_issue_list_rest() {
     path="repos/{owner}/{repo}/issues"
   fi
 
-  local per_page="100"
-  [[ -n "$limit" ]] && per_page="$limit"
+  # When --limit > 100, REST clamps a single page's per_page to 100, so we must
+  # --paginate at per_page=100 and slice the merged result down to <limit> in the
+  # projection. A limit <= 100 fits one page (per_page=<limit>, no --paginate).
+  local paginate="" per_page="100" slice=""
+  if [[ -n "$limit" ]]; then
+    if [[ ! "$limit" =~ ^[0-9]+$ ]]; then
+      echo "error: gh_issue_list_rest: --limit must be a non-negative integer (got '$limit')" >&2
+      return 1
+    fi
+    if (( limit > 100 )); then
+      paginate=1
+      per_page="100"
+      slice="$limit"
+    else
+      per_page="$limit"
+    fi
+  else
+    paginate=1
+  fi
+
   local query="state=$state&per_page=$per_page&sort=created&direction=desc"
   if [[ -n "$label" ]]; then
     # Minimal URL-encode: space → %20 (colon is query-safe).
@@ -252,21 +293,168 @@ gh_issue_list_rest() {
   fi
 
   local raw
-  if [[ -n "$limit" ]]; then
+  if [[ -n "$paginate" ]]; then
+    # Full set (--limit absent) or --limit > 100: REST --paginate has no
+    # silent-truncation hazard; a >100 limit is enforced by the projection slice.
+    raw=$(gh_retry gh api --paginate "$path?$query") || {
+      echo "error: gh_issue_list_rest: gh api failed for $path?$query" >&2
+      return 1
+    }
+  else
     # Single page (no --paginate) — caller wants at most one page of per_page.
     raw=$(gh_retry gh api "$path?$query") || {
       echo "error: gh_issue_list_rest: gh api failed for $path?$query" >&2
       return 1
     }
+  fi
+
+  # Build the projection: filter PRs, remap to camelCase, conditionally add
+  # title/body, then conditionally slice to <limit> (only when --limit > 100).
+  local fields="number, createdAt: .created_at, closedAt: .closed_at, labels"
+  # --include-title ⇒ add title. --include-body ⇒ add BOTH title and body
+  # (origin/main #2255's shipped semantics). Add title once when either flag is
+  # set (avoid a duplicate `title` key when both are passed), then body only for
+  # --include-body.
+  if [[ -n "$include_title" || -n "$include_body" ]]; then
+    fields="$fields, title"
+  fi
+  [[ -n "$include_body" ]] && fields="$fields, body"
+  local projection="add // [] | map(select(.pull_request == null)) | map({$fields})"
+  [[ -n "$slice" ]] && projection="$projection | .[:$slice]"
+  printf '%s' "$raw" | jq -s "$projection"
+}
+
+# List pull requests via the GitHub REST API rather than `gh pr list` (which
+# GraphQL-backs). Keeping per-tick dispatch PR scans on REST keeps them off the
+# shared GraphQL rate-limit bucket the per-tick scan was self-exhausting (#1601,
+# #2258). Mirrors gh_issue_list_rest's --limit discipline.
+#
+# Contract:
+#   gh_pr_list_rest --state <open|closed|all> [--repo <owner/repo>] [--head <branch>] [--limit <n>]
+#
+# Flags:
+#   --state  (required) open|closed|all. REST's pulls?state=all is native.
+#   --repo   (optional) owner/repo for a cross-repo scan; when absent the path
+#            uses the {owner}/{repo} placeholder gh auto-resolves for the
+#            current repo.
+#   --head   (optional) filter to PRs from a single head branch. REST wants
+#            head=<owner>:<branch>. The owner is the FIRST path segment of --repo
+#            when given (cut on /); otherwise it is resolved from the current
+#            repo via `gh repo view --json owner -q .owner.login` (wrapped in
+#            gh_retry). Resolution is lazy — only performed when --head is set and
+#            --repo is absent — so the common no-head call path makes no extra
+#            API call.
+#   --limit  (optional) cap on PRs returned. SAME three-way discipline as
+#            gh_issue_list_rest: ABSENT ⇒ --paginate the full set (REST --paginate
+#            has no silent-truncation hazard); PRESENT and <= 100 ⇒ a SINGLE page
+#            of per_page=<limit> (no --paginate); PRESENT and > 100 ⇒ --paginate
+#            at the REST-clamped per_page=100 and slice the merged result to the
+#            first <limit> objects in the final jq projection. The slice preserves
+#            the `len == limit ⇒ truncated` guard semantics.
+#
+# Endpoint: repos/{owner}/{repo}/pulls (or repos/$repo/pulls with --repo). The
+# query string carries state, per_page, and head (when set). No sort/direction
+# param is emitted (this unit migrates no call sites — see #2258).
+#
+# Projection: a FIXED {number, state, title, mergedAt, createdAt} shape, remapped
+# from REST snake_case (merged_at → mergedAt, created_at → createdAt). REST
+# /pulls returns ONLY pull requests, so — unlike /issues — no pull_request filter
+# is needed; every element is a PR.
+#
+# State normalization (CRITICAL): REST PR `state` is only open|closed and does
+# not distinguish merged from closed-unmerged, but consuming scripts compare
+# against the GraphQL state enum (OPEN/CLOSED/MERGED). We normalize IN the jq
+# projection to that vocabulary:
+#   REST open                          → OPEN
+#   REST closed with merged_at != null → MERGED
+#   REST closed with merged_at == null → CLOSED
+#
+# Output: one merged JSON array on stdout.
+#
+# On gh failure: errors to stderr and returns 1 (clear-errors convention, no
+# fallback).
+gh_pr_list_rest() {
+  local state="" repo="" head="" limit=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --state) state="$2"; shift 2 ;;
+      --repo)  repo="$2";  shift 2 ;;
+      --head)  head="$2";  shift 2 ;;
+      --limit) limit="$2"; shift 2 ;;
+      *) echo "error: gh_pr_list_rest: unknown flag '$1'" >&2; return 1 ;;
+    esac
+  done
+  if [[ -z "$state" ]]; then
+    echo "error: gh_pr_list_rest: --state is required" >&2
+    return 1
+  fi
+
+  local path
+  if [[ -n "$repo" ]]; then
+    path="repos/$repo/pulls"
   else
-    # Full set — REST --paginate has no silent-truncation hazard.
+    path="repos/{owner}/{repo}/pulls"
+  fi
+
+  # When --limit > 100, REST clamps a single page's per_page to 100, so we must
+  # --paginate at per_page=100 and slice the merged result down to <limit> in the
+  # projection. A limit <= 100 fits one page (per_page=<limit>, no --paginate).
+  local paginate="" per_page="100" slice=""
+  if [[ -n "$limit" ]]; then
+    if [[ ! "$limit" =~ ^[0-9]+$ ]]; then
+      echo "error: gh_pr_list_rest: --limit must be a non-negative integer (got '$limit')" >&2
+      return 1
+    fi
+    if (( limit > 100 )); then
+      paginate=1
+      per_page="100"
+      slice="$limit"
+    else
+      per_page="$limit"
+    fi
+  else
+    paginate=1
+  fi
+
+  local query="state=$state&per_page=$per_page"
+  if [[ -n "$head" ]]; then
+    # Resolve the head owner: first segment of --repo when given, else the
+    # current repo's owner login. Lazy — only when --head is set.
+    local head_owner
+    if [[ -n "$repo" ]]; then
+      head_owner="${repo%%/*}"
+    else
+      head_owner=$(gh_retry gh repo view --json owner -q .owner.login) || {
+        echo "error: gh_pr_list_rest: could not resolve current repo owner for --head" >&2
+        return 1
+      }
+    fi
+    query="$query&head=$head_owner:$head"
+  fi
+
+  local raw
+  if [[ -n "$paginate" ]]; then
+    # Full set (--limit absent) or --limit > 100: REST --paginate has no
+    # silent-truncation hazard; a >100 limit is enforced by the projection slice.
     raw=$(gh_retry gh api --paginate "$path?$query") || {
-      echo "error: gh_issue_list_rest: gh api failed for $path?$query" >&2
+      echo "error: gh_pr_list_rest: gh api failed for $path?$query" >&2
+      return 1
+    }
+  else
+    # Single page (no --paginate) — caller wants at most one page of per_page.
+    raw=$(gh_retry gh api "$path?$query") || {
+      echo "error: gh_pr_list_rest: gh api failed for $path?$query" >&2
       return 1
     }
   fi
 
-  printf '%s' "$raw" | jq -s 'add // [] | map(select(.pull_request == null)) | map({number, createdAt: .created_at, closedAt: .closed_at, labels})'
+  # Build the projection: fixed field set, remap snake_case to camelCase, and
+  # normalize REST open|closed to the GraphQL OPEN|MERGED|CLOSED vocabulary; then
+  # conditionally slice to <limit> (only when --limit > 100).
+  local projection
+  projection='add // [] | map({number, state: (if .state == "open" then "OPEN" elif .merged_at != null then "MERGED" else "CLOSED" end), title, mergedAt: .merged_at, createdAt: .created_at})'
+  [[ -n "$slice" ]] && projection="$projection | .[:$slice]"
+  printf '%s' "$raw" | jq -s "$projection"
 }
 
 # The explicit open-PR fetch cap. gh pr list defaults to 30, which silently
@@ -485,6 +673,586 @@ dispatch_ci_verdict_rest() {
   fi
 
   printf '%s\n' "$verdict"
+}
+
+# REST-backed drop-in for `gh issue view <N> --json
+# number,title,body,state,stateReason,createdAt,labels,assignees` (#2255). The
+# dispatch fleet exhausts GitHub's shared GraphQL rate-limit bucket while the
+# REST bucket sits idle; the `gh issue view` porcelain spends GraphQL, this
+# helper spends REST.
+# Args: $1 = <N> (issue number, required); --repo owner/repo (optional, defaults
+#   to the current repo via the {owner}/{repo} placeholder); --comments (optional
+#   boolean) opts into a SECOND REST call that fetches the issue's comments.
+# Output: one JSON object on stdout matching the porcelain shape — an EXPLICIT
+#   named projection (not a passthrough of the raw REST object) so the shape is
+#   pinned and tested:
+#     {number, title, body, state, stateReason, createdAt,
+#      labels:[{name}], assignees:[{login}]}
+#   With --comments, also: comments:[{author:{login}, createdAt, body}].
+# Byte-compat bridges over the raw REST shape:
+#   - state: REST returns lowercase `open`/`closed`; the porcelain emits the
+#     UPPERCASE GraphQL enum `OPEN`/`CLOSED`. `ascii_upcase` bridges it (same as
+#     dispatch_ci_verdict_rest's enum bridge).
+#   - stateReason: REST's snake_case `state_reason` is lowercase
+#     (`completed`/`not_planned`/`reopened`/null); the porcelain emits the
+#     UPPERCASE GraphQL enum (`COMPLETED`/`NOT_PLANNED`/`REOPENED`/null).
+#     `ascii_upcase` bridges it; null is preserved exactly (no upcase of null).
+#   - createdAt: remapped from REST's snake_case `created_at` (ISO 8601 string,
+#     same value the porcelain `createdAt` carries).
+#   - labels / assignees: narrowed to the porcelain-visible keys (`name` /
+#     `login`) rather than passing the full REST objects through.
+# Comments (--comments): a SECOND REST call against the issue's comments endpoint
+#   (built with the SAME --repo logic as the main path). It uses the slurp idiom
+#   (`gh api --paginate ... | jq -s 'map(.[]) | ...'`) rather than gh_api_array:
+#   gh_api_array fetches WITHOUT --paginate (it would truncate at 30 comments),
+#   and --paginate can't be bolted onto it (--paginate emits one JSON doc per
+#   page, breaking gh_api_array's single-array `type=="array"` validator). Each
+#   comment is remapped to {author:{login}, createdAt, body}. Without the flag
+#   there is no second call and no `comments` key.
+# On gh failure: errors to stderr and returns 1 (clear-errors convention, no
+# fallback).
+gh_issue_view_rest() {
+  local num="" repo="" want_comments=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --repo) repo="$2"; shift 2 ;;
+      --comments) want_comments=1; shift 1 ;;
+      --*) echo "error: gh_issue_view_rest: unknown flag '$1'" >&2; return 1 ;;
+      *)
+        if [[ -z "$num" ]]; then
+          num="$1"; shift 1
+        else
+          echo "error: gh_issue_view_rest: unexpected argument '$1'" >&2; return 1
+        fi
+        ;;
+    esac
+  done
+  if [[ -z "$num" ]]; then
+    echo "error: gh_issue_view_rest: issue number is required" >&2
+    return 1
+  fi
+
+  local path
+  if [[ -n "$repo" ]]; then
+    path="repos/$repo/issues/$num"
+  else
+    path="repos/{owner}/{repo}/issues/$num"
+  fi
+
+  local raw
+  raw=$(gh_retry gh api "$path") || {
+    echo "error: gh_issue_view_rest: gh api failed for $path" >&2
+    return 1
+  }
+
+  local projected
+  projected=$(printf '%s' "$raw" | jq '{
+    number,
+    title,
+    body: (.body // ""),
+    state: (.state | ascii_upcase),
+    stateReason: ((.state_reason // null) | (if . == null then null else ascii_upcase end)),
+    createdAt: .created_at,
+    labels: ((.labels // []) | map({name})),
+    assignees: ((.assignees // []) | map({login}))
+  }') || return 1
+
+  if [[ "$want_comments" -eq 0 ]]; then
+    printf '%s\n' "$projected"
+    return 0
+  fi
+
+  # --comments: a second REST call against the issue's comments endpoint, built
+  # with the same --repo logic as the main path. Slurp the per-page arrays
+  # (--paginate emits one array doc per page), flatten, and remap to the
+  # porcelain comment shape. See dispatch_ci_verdict_rest / the header comment for
+  # why gh_api_array can't be used here.
+  local comments_path
+  if [[ -n "$repo" ]]; then
+    comments_path="repos/$repo/issues/$num/comments"
+  else
+    comments_path="repos/{owner}/{repo}/issues/$num/comments"
+  fi
+
+  local comments
+  comments=$(gh_retry gh api --paginate "$comments_path" \
+    | jq -s 'map(.[]) | map({author: {login: .user.login},
+                            createdAt: .created_at,
+                            body: (.body // "")})') || {
+    echo "error: gh_issue_view_rest: gh api failed for $comments_path" >&2
+    return 1
+  }
+
+  jq --argjson comments "$comments" '. + {comments: $comments}' <<<"$projected"
+}
+
+# REST-backed drop-in for `gh pr view <N> --json
+# number,title,body,state,mergeable,mergeStateStatus,headRefName,headRefOid,labels`
+# (#2255). Spends the REST rate-limit bucket instead of GraphQL, like
+# gh_issue_view_rest.
+# Args: $1 = <N> (PR number, required); --repo owner/repo (optional).
+# Output: one JSON object on stdout matching the porcelain shape — an EXPLICIT
+#   named projection: {number, title, body, state, mergeable, mergeStateStatus,
+#   headRefName, headRefOid, labels:[{name}]}.
+# Byte-compat bridges over the raw REST shape:
+#   - state: lowercase `open`/`closed` → UPPERCASE via `ascii_upcase`. (REST has
+#     no distinct MERGED state — a merged PR is state `closed` — so a consumer
+#     that distinguishes the porcelain `MERGED` state must not migrate to this
+#     helper without handling that.)
+#   - mergeable: REST returns a BOOLEAN (true/false/null); the porcelain emits
+#     the GraphQL enum string `MERGEABLE`/`CONFLICTING`/`UNKNOWN` that dispatch
+#     call sites string-compare. Mapped explicitly: true→MERGEABLE,
+#     false→CONFLICTING, null (or absent)→UNKNOWN.
+#   - mergeStateStatus: remapped from REST's snake_case `mergeable_state` and
+#     `ascii_upcase`d to match the porcelain GraphQL enum casing (REST is
+#     lowercase `clean`/`dirty`/`blocked`).
+#   - headRefName: the PR's head branch name, remapped from REST's `head.ref`
+#     (same value the porcelain `headRefName` carries).
+#   - headRefOid: the PR's head commit oid, remapped from REST's `head.sha`
+#     (same value the porcelain `headRefOid` carries).
+#   - labels: narrowed to the porcelain-visible key (`name`) rather than passing
+#     the full REST label objects through (same as gh_issue_view_rest's labels).
+# On gh failure: errors to stderr and returns 1 (clear-errors convention, no
+# fallback).
+gh_pr_view_rest() {
+  local num="" repo=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --repo) repo="$2"; shift 2 ;;
+      --*) echo "error: gh_pr_view_rest: unknown flag '$1'" >&2; return 1 ;;
+      *)
+        if [[ -z "$num" ]]; then
+          num="$1"; shift 1
+        else
+          echo "error: gh_pr_view_rest: unexpected argument '$1'" >&2; return 1
+        fi
+        ;;
+    esac
+  done
+  if [[ -z "$num" ]]; then
+    echo "error: gh_pr_view_rest: PR number is required" >&2
+    return 1
+  fi
+
+  local path
+  if [[ -n "$repo" ]]; then
+    path="repos/$repo/pulls/$num"
+  else
+    path="repos/{owner}/{repo}/pulls/$num"
+  fi
+
+  local raw
+  raw=$(gh_retry gh api "$path") || {
+    echo "error: gh_pr_view_rest: gh api failed for $path" >&2
+    return 1
+  }
+
+  printf '%s' "$raw" | jq '{
+    number,
+    title,
+    body: (.body // ""),
+    state: (.state | ascii_upcase),
+    mergeable: (
+      if .mergeable == true then "MERGEABLE"
+      elif .mergeable == false then "CONFLICTING"
+      else "UNKNOWN" end
+    ),
+    mergeStateStatus: ((.mergeable_state // "") | ascii_upcase),
+    headRefName: .head.ref,
+    headRefOid: .head.sha,
+    labels: ((.labels // []) | map({name}))
+  }'
+}
+
+# REST-backed mutation: add one or more labels to an issue (#2255).
+# Uses POST repos/{owner}/{repo}/issues/<N>/labels which is ADDITIVE (matching
+# `gh issue edit --add-label`). Each label is a separate -f flag so gh_retry
+# can re-invoke safely without draining a stdin pipe.
+# Args: $1 = <N> (issue number, required); then one or more label names;
+#   --repo owner/repo (optional).
+# On gh failure: errors to stderr and returns 1.
+gh_issue_set_labels_rest() {
+  local num="" repo=""
+  local -a labels=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --repo) repo="$2"; shift 2 ;;
+      --*) echo "error: gh_issue_set_labels_rest: unknown flag '$1'" >&2; return 1 ;;
+      *)
+        if [[ -z "$num" ]]; then
+          num="$1"; shift 1
+        else
+          labels+=("$1"); shift 1
+        fi
+        ;;
+    esac
+  done
+  if [[ -z "$num" ]]; then
+    echo "error: gh_issue_set_labels_rest: issue number is required" >&2
+    return 1
+  fi
+  if [[ "${#labels[@]}" -eq 0 ]]; then
+    echo "error: gh_issue_set_labels_rest: at least one label is required" >&2
+    return 1
+  fi
+
+  local path
+  if [[ -n "$repo" ]]; then
+    path="repos/$repo/issues/$num/labels"
+  else
+    path="repos/{owner}/{repo}/issues/$num/labels"
+  fi
+
+  local -a label_flags=()
+  for lbl in "${labels[@]}"; do
+    label_flags+=(-f "labels[]=$lbl")
+  done
+
+  gh_retry gh api -X POST "$path" "${label_flags[@]}" >/dev/null || {
+    echo "error: gh_issue_set_labels_rest: gh api failed for $path" >&2
+    return 1
+  }
+}
+
+# REST-backed mutation: remove a single label from an issue (#2255).
+# Uses DELETE repos/{owner}/{repo}/issues/<N>/labels/<name>.
+# URL-encodes minimally (space→%20) mirroring gh_issue_list_rest.
+# Args: $1 = <N> (issue number, required); $2 = <label> (required);
+#   --repo owner/repo (optional).
+# A label-absent 404 is treated as success (no-op), mirroring the porcelain
+# `gh ... --remove-label` contract. On any other gh failure: errors to stderr
+# and returns 1.
+gh_issue_remove_label_rest() {
+  local num="" label="" repo=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --repo) repo="$2"; shift 2 ;;
+      --*) echo "error: gh_issue_remove_label_rest: unknown flag '$1'" >&2; return 1 ;;
+      *)
+        if [[ -z "$num" ]]; then
+          num="$1"; shift 1
+        elif [[ -z "$label" ]]; then
+          label="$1"; shift 1
+        else
+          echo "error: gh_issue_remove_label_rest: unexpected argument '$1'" >&2; return 1
+        fi
+        ;;
+    esac
+  done
+  if [[ -z "$num" ]]; then
+    echo "error: gh_issue_remove_label_rest: issue number is required" >&2
+    return 1
+  fi
+  if [[ -z "$label" ]]; then
+    echo "error: gh_issue_remove_label_rest: label name is required" >&2
+    return 1
+  fi
+
+  # Minimal URL-encode: space → %20 (mirrors gh_issue_list_rest).
+  local enc_label="${label// /%20}"
+
+  local path
+  if [[ -n "$repo" ]]; then
+    path="repos/$repo/issues/$num/labels/$enc_label"
+  else
+    path="repos/{owner}/{repo}/issues/$num/labels/$enc_label"
+  fi
+
+  local err
+  if ! err=$(gh_retry gh api -X DELETE "$path" 2>&1 >/dev/null); then
+    # Porcelain `gh ... --remove-label` is a no-op when the label is absent; REST
+    # DELETE returns 404 in that case. The issue/PR is known to exist, so a 404
+    # here means the label was not present — treat it as success (faithful to the
+    # porcelain contract, not a fallback).
+    case "$err" in
+      *"HTTP 404"*|*"Not Found"*) return 0 ;;
+      *) echo "error: gh_issue_remove_label_rest: gh api failed for $path" >&2; return 1 ;;
+    esac
+  fi
+}
+
+# REST-backed mutation: close an issue (#2255).
+# Uses PATCH repos/{owner}/{repo}/issues/<N> with state=closed.
+# Args: $1 = <N> (issue number, required); --reason <completed|not_planned>
+#   (optional; maps to state_reason, matching `gh issue close --reason`); --comment
+#   <body> (optional; posts the comment BEFORE the close, matching the porcelain's
+#   comment-then-close ordering); --repo owner/repo (optional).
+# On gh failure: errors to stderr and returns 1.
+gh_issue_close_rest() {
+  local num="" reason="" comment="" has_comment="" repo=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --reason)  reason="$2";  shift 2 ;;
+      --comment) comment="$2"; has_comment=1; shift 2 ;;
+      --repo)    repo="$2";    shift 2 ;;
+      --*) echo "error: gh_issue_close_rest: unknown flag '$1'" >&2; return 1 ;;
+      *)
+        if [[ -z "$num" ]]; then
+          num="$1"; shift 1
+        else
+          echo "error: gh_issue_close_rest: unexpected argument '$1'" >&2; return 1
+        fi
+        ;;
+    esac
+  done
+  if [[ -z "$num" ]]; then
+    echo "error: gh_issue_close_rest: issue number is required" >&2
+    return 1
+  fi
+
+  local path
+  if [[ -n "$repo" ]]; then
+    path="repos/$repo/issues/$num"
+  else
+    path="repos/{owner}/{repo}/issues/$num"
+  fi
+
+  # --comment: post the comment BEFORE the close (matches the porcelain ordering),
+  # reusing the exact POST issues/<N>/comments shape from gh_issue_comment_rest.
+  if [[ -n "$has_comment" ]]; then
+    local comments_path="$path/comments"
+    gh_retry gh api -X POST "$comments_path" -f "body=$comment" >/dev/null || {
+      echo "error: gh_issue_close_rest: gh api failed for $comments_path" >&2
+      return 1
+    }
+  fi
+
+  # --reason: send state_reason only when passed (preserves prior behavior for
+  # callers that omit it). The flag value maps directly to GitHub's state_reason.
+  local -a reason_flag=()
+  [[ -n "$reason" ]] && reason_flag=(-f "state_reason=$reason")
+
+  gh_retry gh api -X PATCH "$path" -f state=closed "${reason_flag[@]}" >/dev/null || {
+    echo "error: gh_issue_close_rest: gh api failed for $path" >&2
+    return 1
+  }
+}
+
+# REST-backed mutation: edit an issue's title and/or body (#2255).
+# Uses PATCH repos/{owner}/{repo}/issues/<N>. PRs are issues in REST, so this same
+# helper later serves `gh pr edit --body`.
+# Args: $1 = <N> (issue number, required); --title <t> and/or --body <b> OR
+#   --body-file <f> (at least one of title/body required; --body/--body-file
+#   mutually exclusive); --repo owner/repo (optional).
+# On gh failure: errors to stderr and returns 1.
+gh_issue_edit_rest() {
+  local num="" title="" has_title="" body="" body_file="" repo=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --title)     title="$2"; has_title=1; shift 2 ;;
+      --body)      body="$2";      shift 2 ;;
+      --body-file) body_file="$2"; shift 2 ;;
+      --repo)      repo="$2";      shift 2 ;;
+      --*) echo "error: gh_issue_edit_rest: unknown flag '$1'" >&2; return 1 ;;
+      *)
+        if [[ -z "$num" ]]; then
+          num="$1"; shift 1
+        else
+          echo "error: gh_issue_edit_rest: unexpected argument '$1'" >&2; return 1
+        fi
+        ;;
+    esac
+  done
+  if [[ -z "$num" ]]; then
+    echo "error: gh_issue_edit_rest: issue number is required" >&2
+    return 1
+  fi
+  if [[ -n "$body" && -n "$body_file" ]]; then
+    echo "error: gh_issue_edit_rest: --body and --body-file are mutually exclusive" >&2
+    return 1
+  fi
+  if [[ -z "$has_title" && -z "$body" && -z "$body_file" ]]; then
+    echo "error: gh_issue_edit_rest: at least one of --title/--body/--body-file is required" >&2
+    return 1
+  fi
+
+  local path
+  if [[ -n "$repo" ]]; then
+    path="repos/$repo/issues/$num"
+  else
+    path="repos/{owner}/{repo}/issues/$num"
+  fi
+
+  local -a edit_flags=()
+  [[ -n "$has_title" ]] && edit_flags+=(-f "title=$title")
+  if [[ -n "$body_file" ]]; then
+    # -F body=@file re-reads the file on each retry attempt — safe for gh_retry.
+    edit_flags+=(-F "body=@$body_file")
+  elif [[ -n "$body" ]]; then
+    edit_flags+=(-f "body=$body")
+  fi
+
+  gh_retry gh api -X PATCH "$path" "${edit_flags[@]}" >/dev/null || {
+    echo "error: gh_issue_edit_rest: gh api failed for $path" >&2
+    return 1
+  }
+}
+
+# REST-backed mutation: create a new issue (#2255).
+# Uses POST repos/{owner}/{repo}/issues.
+# Echoes the new issue URL (.html_url) to stdout, matching `gh issue create` output.
+# Args: --title <t> (required); --body <b> OR --body-file <f> (exactly one
+#   required); --label <l> (repeatable); --repo owner/repo (optional).
+# On gh failure: errors to stderr and returns 1.
+gh_issue_create_rest() {
+  local title="" body="" body_file="" repo=""
+  local -a label_flags=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --title)     title="$2"; shift 2 ;;
+      --body)      body="$2";      shift 2 ;;
+      --body-file) body_file="$2"; shift 2 ;;
+      --label) label_flags+=(-f "labels[]=$2"); shift 2 ;;
+      --repo)  repo="$2";  shift 2 ;;
+      *) echo "error: gh_issue_create_rest: unknown flag '$1'" >&2; return 1 ;;
+    esac
+  done
+  if [[ -z "$title" ]]; then
+    echo "error: gh_issue_create_rest: --title is required" >&2
+    return 1
+  fi
+  if [[ -n "$body" && -n "$body_file" ]]; then
+    echo "error: gh_issue_create_rest: --body and --body-file are mutually exclusive" >&2
+    return 1
+  fi
+  if [[ -z "$body" && -z "$body_file" ]]; then
+    echo "error: gh_issue_create_rest: exactly one of --body/--body-file is required" >&2
+    return 1
+  fi
+
+  local path
+  if [[ -n "$repo" ]]; then
+    path="repos/$repo/issues"
+  else
+    path="repos/{owner}/{repo}/issues"
+  fi
+
+  local -a body_flag=()
+  if [[ -n "$body_file" ]]; then
+    # -F body=@file re-reads the file on each retry attempt — safe for gh_retry.
+    body_flag=(-F "body=@$body_file")
+  else
+    body_flag=(-f "body=$body")
+  fi
+
+  local raw
+  raw=$(gh_retry gh api -X POST "$path" \
+    -f "title=$title" \
+    "${body_flag[@]}" \
+    "${label_flags[@]}") || {
+    echo "error: gh_issue_create_rest: gh api failed for $path" >&2
+    return 1
+  }
+
+  printf '%s' "$raw" | jq -r '.html_url'
+}
+
+# REST-backed mutation: add a comment to an issue (#2255).
+# Uses POST repos/{owner}/{repo}/issues/<N>/comments.
+# Args: $1 = <N> (issue number, required); --body <b> OR --body-file <f>
+#   (exactly one required); --repo owner/repo (optional).
+# On gh failure: errors to stderr and returns 1.
+gh_issue_comment_rest() {
+  local num="" body="" body_file="" repo=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --body)      body="$2";      shift 2 ;;
+      --body-file) body_file="$2"; shift 2 ;;
+      --repo)      repo="$2";      shift 2 ;;
+      --*) echo "error: gh_issue_comment_rest: unknown flag '$1'" >&2; return 1 ;;
+      *)
+        if [[ -z "$num" ]]; then
+          num="$1"; shift 1
+        else
+          echo "error: gh_issue_comment_rest: unexpected argument '$1'" >&2; return 1
+        fi
+        ;;
+    esac
+  done
+  if [[ -z "$num" ]]; then
+    echo "error: gh_issue_comment_rest: issue number is required" >&2
+    return 1
+  fi
+  if [[ -z "$body" && -z "$body_file" ]]; then
+    echo "error: gh_issue_comment_rest: --body or --body-file is required" >&2
+    return 1
+  fi
+  if [[ -n "$body" && -n "$body_file" ]]; then
+    echo "error: gh_issue_comment_rest: --body and --body-file are mutually exclusive" >&2
+    return 1
+  fi
+
+  local path
+  if [[ -n "$repo" ]]; then
+    path="repos/$repo/issues/$num/comments"
+  else
+    path="repos/{owner}/{repo}/issues/$num/comments"
+  fi
+
+  local -a body_flag=()
+  if [[ -n "$body_file" ]]; then
+    # -F body=@file re-reads the file on each retry attempt — safe for gh_retry.
+    body_flag=(-F "body=@$body_file")
+  else
+    body_flag=(-f "body=$body")
+  fi
+
+  gh_retry gh api -X POST "$path" "${body_flag[@]}" >/dev/null || {
+    echo "error: gh_issue_comment_rest: gh api failed for $path" >&2
+    return 1
+  }
+}
+
+# REST-backed mutation: merge a pull request (#2255).
+# Uses PUT repos/{owner}/{repo}/pulls/<N>/merge with merge_method.
+# Args: $1 = <N> (PR number, required); [--squash|--merge|--rebase] (default:
+#   merge); --subject <s> (optional; commit_title); --body <b> (optional;
+#   commit_message); --repo owner/repo (optional).
+# On gh failure: errors to stderr and returns 1.
+gh_pr_merge_rest() {
+  local num="" method="merge" subject="" has_subject="" body="" has_body="" repo=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --squash)  method="squash"; shift 1 ;;
+      --merge)   method="merge";  shift 1 ;;
+      --rebase)  method="rebase"; shift 1 ;;
+      --subject) subject="$2"; has_subject=1; shift 2 ;;
+      --body)    body="$2";    has_body=1;    shift 2 ;;
+      --repo)    repo="$2";       shift 2 ;;
+      --*) echo "error: gh_pr_merge_rest: unknown flag '$1'" >&2; return 1 ;;
+      *)
+        if [[ -z "$num" ]]; then
+          num="$1"; shift 1
+        else
+          echo "error: gh_pr_merge_rest: unexpected argument '$1'" >&2; return 1
+        fi
+        ;;
+    esac
+  done
+  if [[ -z "$num" ]]; then
+    echo "error: gh_pr_merge_rest: PR number is required" >&2
+    return 1
+  fi
+
+  local path
+  if [[ -n "$repo" ]]; then
+    path="repos/$repo/pulls/$num/merge"
+  else
+    path="repos/{owner}/{repo}/pulls/$num/merge"
+  fi
+
+  # commit_title only when --subject is passed. commit_message is OMITTED when the
+  # --body value is empty: `gh pr merge --body ""` yields an empty commit-message
+  # body (no extra body lines), which the REST API replicates by sending no
+  # commit_message at all.
+  local -a commit_flags=()
+  [[ -n "$has_subject" ]] && commit_flags+=(-f "commit_title=$subject")
+  [[ -n "$has_body" && -n "$body" ]] && commit_flags+=(-f "commit_message=$body")
+
+  gh_retry gh api -X PUT "$path" -f "merge_method=$method" "${commit_flags[@]}" >/dev/null || {
+    echo "error: gh_pr_merge_rest: gh api failed for $path" >&2
+    return 1
+  }
 }
 
 # Detect what Firebase features the app uses.
@@ -1769,6 +2537,42 @@ EOF
 # `OnFailure=dispatch-tick-recover.service` chains a crashing tick to the same
 # systemd-owned recovery handler the tick/reseed launchers use.
 #
+# Disable a stale heartbeat timer/service whose installed unit points at a
+# different main-worktree path than the current one (#2056). Between a dispatch
+# checkout path change and the first ensure_heartbeat_units call from the new
+# path, the timer's Persistent=true can fire dispatch-heartbeat.service at the
+# old/missing path. Detect the mismatch from the installed WorkingDirectory= and
+# disable the stale units before the caller rewrites them.
+#
+# Best-effort: the heartbeat service has no [Install] section, so `disable` exits
+# non-zero by design. Suppress that and never abort the caller (a tick/reseed
+# launcher) — the subsequent unit rewrite is what actually repairs the state.
+# Args: $1 = installed service-unit path, $2 = current main worktree path,
+#       $3 = systemctl command
+cleanup_stale_heartbeat_units() {
+  local service_path="$1"
+  local current_main_worktree="$2"
+  local systemctl_cmd="$3"
+
+  # No prior units → nothing to clean up.
+  [ -f "$service_path" ] || return 0
+
+  local installed_workdir
+  installed_workdir=$(sed -n 's/^WorkingDirectory=//p' "$service_path" | head -1)
+
+  # No WorkingDirectory= to compare → nothing to do.
+  [ -n "$installed_workdir" ] || return 0
+
+  # Path unchanged → the timer points at the right place; leave it running.
+  [ "$installed_workdir" = "$current_main_worktree" ] && return 0
+
+  # Path changed: stop the stale timer/service before the caller rewrites the
+  # unit content. Best-effort — disable exits non-zero (no [Install] section), so
+  # suppress the failure and warn; never abort the caller.
+  echo "WARNING: cleanup_stale_heartbeat_units: installed heartbeat unit points at '$installed_workdir' but current main worktree is '$current_main_worktree'; disabling stale timer/service before rewrite" >&2
+  "$systemctl_cmd" --user disable --now dispatch-heartbeat.timer dispatch-heartbeat.service || true
+}
+
 # Best-effort: a failure here must not abort the caller (a tick/reseed
 # launcher), so we warn to stderr and return non-zero — never `exit`. A missing
 # heartbeat just means the chain falls back to the prior Stop-hook/reseed-only
@@ -1875,6 +2679,13 @@ EOF
      && "$SYSTEMCTL_CMD" --user is-active --quiet dispatch-heartbeat.timer; then
     return 0
   fi
+
+  # Path-change cleanup (#2056): if the installed unit names a different main
+  # worktree, the path changed — disable the stale timer/service before
+  # rewriting the unit content below. Reaching here means the hot path did not
+  # short-circuit, so either the content differs (path change included) or the
+  # timer is inactive. Best-effort; never aborts.
+  cleanup_stale_heartbeat_units "$SERVICE_PATH" "$main_worktree" "$SYSTEMCTL_CMD"
 
   if ! mkdir -p "$UNIT_DIR"; then
     echo "WARNING: ensure_heartbeat_units: mkdir -p $UNIT_DIR failed; periodic heartbeat unavailable" >&2

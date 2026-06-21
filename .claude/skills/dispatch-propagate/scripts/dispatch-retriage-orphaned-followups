@@ -5,7 +5,9 @@
 # merging (issue #1812).
 #
 # When a review pass files an out-of-scope finding as a follow-up issue, that
-# issue is labeled `source-pr:<N>` recording which PR's review surfaced it.
+# issue carries the static `dispatch:review-followup` label and a
+# `<!-- dispatch:source-pr <N> -->` body marker recording which PR's review
+# surfaced it.
 # When PR #<N> later lands on main, the follow-up points at real, shipped code.
 # But when PR #<N> is CLOSED WITHOUT MERGING (abandoned or superseded), the
 # follow-up is orphaned: it points at a design that never landed. Such an orphan
@@ -14,14 +16,16 @@
 #
 # This scan finds those orphans and parks them on office-hours for human
 # re-triage. It is an INVERSION scan: it inspects only the PRs actually cited by
-# the `source-pr:<N>` labels on currently-open issues — never a window
-# enumeration of all recently-closed PRs.
+# the `<!-- dispatch:source-pr <N> -->` body markers on currently-open
+# `dispatch:review-followup`-labeled issues — never a window enumeration of all
+# recently-closed PRs.
 #
 # Three-way PR-state gate (load-bearing): a cited PR's follow-ups are flagged
-# ONLY IF the PR is `state == "CLOSED"` AND `mergedAt == null` AND the PR does
+# ONLY IF the PR is `state == "closed"` AND `merged_at == null` AND the PR does
 # not already carry the `dispatch:orphans-retriaged` marker. A merged PR
-# (state MERGED + non-null mergedAt) or a still-open PR (state OPEN) must NEVER
-# be touched.
+# (state "closed" + non-null merged_at) or a still-open PR (state "open") must
+# NEVER be touched. (REST shape: lowercase state, snake_case merged_at — REST has
+# no distinct MERGED state, so the merged-PR skip rides the merged_at arm.)
 #
 # Idempotency: the per-PR `dispatch:orphans-retriaged` label is the correct
 # idempotency key — NOT an issue-level "is office-hours already present?" check.
@@ -46,11 +50,17 @@ RETRIAGED_LABEL="dispatch:orphans-retriaged"
 RETRIAGED_COLOR="5319e7"
 RETRIAGED_DESC="dispatch: orphaned review follow-ups re-triaged after source PR closed unmerged"
 
-# ---- Step 1: gather the open `source-pr:<N>`-labeled follow-up issues --------
-# REST keeps this scan off the shared GraphQL rate-limit bucket (#1601).
-if ! OPEN_JSON=$(gh_issue_list_rest --state open); then
+# ---- Step 1: gather the open dispatch:review-followup-labeled follow-up issues
+# The static `dispatch:review-followup` label is a cheap server-side pre-filter
+# narrowing the fetch to candidate follow-ups; the per-PR source identity is then
+# read from each issue's `<!-- dispatch:source-pr <N> -->` body marker, so the
+# fetch must include bodies (--include-body).
+# REST keeps this scan off the shared GraphQL rate-limit bucket (#1601). The
+# per-PR state lookups in Step 2 are also REST (gh api .../pulls/$N, #2007), so
+# the entire scan is GraphQL-free.
+if ! OPEN_JSON=$(gh_issue_list_rest --state open --label dispatch:review-followup --include-body); then
   # Cannot scan without the open-issue set — best-effort, exit 0.
-  echo "dispatch-retriage-orphaned-followups: warning: gh_issue_list_rest --state open failed; skipping scan" >&2
+  echo "dispatch-retriage-orphaned-followups: warning: gh_issue_list_rest --state open --label dispatch:review-followup failed; skipping scan" >&2
   exit 0
 fi
 
@@ -64,31 +74,30 @@ while read -r issue pr; do
   PR_FOLLOWUPS["$pr"]+="$issue "
 done < <(printf '%s' "$OPEN_JSON" | jq -r '
   .[]
-  | (.labels | map(.name) | map(select(startswith("source-pr:")))) as $slabels
-  | select(($slabels | length) > 0)
-  | ($slabels[0] | sub("^source-pr:"; "")) as $pr
+  | select((.body // "") | test("<!-- dispatch:source-pr [0-9]+ -->"))
+  | ((.body // "") | [scan("<!-- dispatch:source-pr ([0-9]+) -->")] | last | .[0]) as $pr
   | "\(.number) \($pr)"
 ')
 
 # ---- Step 2: for each distinct cited source PR, apply the three-way gate -----
 for N in "${!PR_FOLLOWUPS[@]}"; do
   PR_RC=0
-  PR_JSON=$(gh_retry gh pr view "$N" --json state,mergedAt,labels) || PR_RC=$?
+  PR_JSON=$(gh_retry gh api "repos/{owner}/{repo}/pulls/$N") || PR_RC=$?
   if [[ "$PR_RC" -ne 0 ]]; then
-    echo "dispatch-retriage-orphaned-followups: warning: gh pr view #$N failed; skipping" >&2
+    echo "dispatch-retriage-orphaned-followups: warning: gh api repos/.../pulls/#$N failed; skipping" >&2
     continue
   fi
 
   STATE=$(printf '%s' "$PR_JSON" | jq -r '.state')
-  MERGED_AT=$(printf '%s' "$PR_JSON" | jq -r '.mergedAt')
+  MERGED_AT=$(printf '%s' "$PR_JSON" | jq -r '.merged_at')
   HAS_MARKER=$(printf '%s' "$PR_JSON" \
     | jq -r --arg l "$RETRIAGED_LABEL" 'any(.labels[]?; .name == $l)')
 
-  # The three-way gate. A merged PR has state MERGED + non-null mergedAt; an
-  # open PR has state OPEN; an already-processed PR carries the marker. Skip
-  # silently in every one of those cases — only a CLOSED, never-merged,
-  # unmarked PR's follow-ups get flagged.
-  if [[ "$STATE" != "CLOSED" || "$MERGED_AT" != "null" || "$HAS_MARKER" == "true" ]]; then
+  # The three-way gate. REST has no MERGED state: a merged PR is state "closed"
+  # with a non-null merged_at; an open PR is state "open"; an already-processed
+  # PR carries the marker. Skip silently in every one of those cases — only a
+  # "closed", never-merged (merged_at null), unmarked PR's follow-ups get flagged.
+  if [[ "$STATE" != "closed" || "$MERGED_AT" != "null" || "$HAS_MARKER" == "true" ]]; then
     continue
   fi
 
@@ -118,27 +127,24 @@ for N in "${!PR_FOLLOWUPS[@]}"; do
   # Apply after all parks succeeded. dispatch-apply-office-hours is itself
   # idempotent, so re-running a park is harmless; what must NOT happen is
   # re-parking a resolved orphan on a later tick, which the per-PR marker
-  # prevents. Create-on-not-found mirrors
-  # dispatch-apply-office-hours: capture the gh_retry call's COMBINED output
-  # (2>&1 on the gh_retry invocation, since gh_retry forwards stderr to fd2 and
-  # returns only stdout) so the `*"not found"*` match can fire.
-  MARK_RC=0
-  MARK_OUT=$(gh_retry gh pr edit "$N" --add-label "$RETRIAGED_LABEL" 2>&1) || MARK_RC=$?
-  if [[ "$MARK_RC" -ne 0 ]]; then
-    if [[ "$MARK_OUT" != *"not found"* ]]; then
-      echo "dispatch-retriage-orphaned-followups: warning: could not mark PR #$N with $RETRIAGED_LABEL: $MARK_OUT" >&2
-      continue
-    fi
-    # The label does not exist yet — create it with canonical metadata, retry once.
-    if ! create_out=$(gh_retry gh label create "$RETRIAGED_LABEL" \
-        --color "$RETRIAGED_COLOR" --description "$RETRIAGED_DESC" 2>&1); then
-      echo "dispatch-retriage-orphaned-followups: warning: could not create label $RETRIAGED_LABEL: $create_out" >&2
-      continue
-    fi
-    if ! retry_out=$(gh_retry gh pr edit "$N" --add-label "$RETRIAGED_LABEL" 2>&1); then
-      echo "dispatch-retriage-orphaned-followups: warning: could not mark PR #$N with $RETRIAGED_LABEL after create: $retry_out" >&2
-      continue
-    fi
+  # prevents. Ensure the label exists (idempotent), then add it via REST. A PR is
+  # an issue in REST, so the add targets issues/<PR>/labels. `gh label create`
+  # stays porcelain (REST POST /repos/.../labels — not a migration target);
+  # tolerate only an already-exists error and continue (non-aborting scan) on any
+  # other create/add failure.
+  if ! create_out=$(gh_retry gh label create "$RETRIAGED_LABEL" \
+      --color "$RETRIAGED_COLOR" --description "$RETRIAGED_DESC" 2>&1); then
+    case "$create_out" in
+      *already\ exists*|*already_exists*) : ;;   # label already present — fine
+      *)
+        echo "dispatch-retriage-orphaned-followups: warning: could not create label $RETRIAGED_LABEL: $create_out" >&2
+        continue
+        ;;
+    esac
+  fi
+  if ! mark_out=$(gh_issue_set_labels_rest "$N" "$RETRIAGED_LABEL" 2>&1); then
+    echo "dispatch-retriage-orphaned-followups: warning: could not mark PR #$N with $RETRIAGED_LABEL: $mark_out" >&2
+    continue
   fi
 done
 

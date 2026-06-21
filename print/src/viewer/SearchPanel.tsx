@@ -45,11 +45,15 @@ export function SearchPanel({ controller }: { controller: UseViewerControllerRes
     try {
       const renderer = getRenderer();
       if (!renderer || !isSearchable(renderer)) return;
-      const r = await renderer.search(trimmed);
+      const { results, truncated } = await renderer.search(trimmed);
       if (destroyed.current || trimmed !== currentQuery.current) return;
-      setResults(r);
+      setResults(results);
       setActiveIndex(-1);
-      setCountText(r.length === 1 ? "1 result" : `${r.length} results`);
+      if (truncated) {
+        setCountText(`First ${results.length} results shown — refine your search`);
+      } else {
+        setCountText(results.length === 1 ? "1 result" : `${results.length} results`);
+      }
     } catch (err) {
       setCountText("Search failed");
       setResults([]);

@@ -95,7 +95,7 @@ while IFS= read -r pr; do
       '.labels[].name | select(test("^dispatch:.*-attempt-[0-9]+$"))' <<<"$pr")
     for lbl in "${ATTEMPT_LABELS[@]}"; do
       [[ -n "$lbl" ]] || continue
-      if ! rm_out=$(gh pr edit "$N" --remove-label "$lbl" 2>&1); then
+      if ! rm_out=$(gh_issue_remove_label_rest "$N" "$lbl" 2>&1); then
         echo "dispatch-reconcile-ready: warning: could not remove $lbl from PR #$N: $rm_out" >&2
       fi
     done
