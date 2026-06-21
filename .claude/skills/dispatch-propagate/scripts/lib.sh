@@ -28,6 +28,28 @@ resolve_issue_number() {
   echo "$num"
 }
 
+# Determine whether a repo-relative path is a shell script.
+# Args: $1 = repo-relative path (as produced by git diff --name-only)
+# Returns 0 if the file is a shell script (either by .sh extension or by
+# bash/sh shebang on the first line); returns 1 otherwise.
+# Reads the file via $REPO_ROOT/$1 — REPO_ROOT must be set by the caller.
+# Safe under set -euo pipefail.
+is_shell_script() {
+  local path="$1"
+  # Cheap check: .sh extension — no file read needed.
+  if [[ "$path" == *.sh ]]; then
+    return 0
+  fi
+  local resolved="$REPO_ROOT/$path"
+  [[ -f "$resolved" ]] || return 1
+  local first
+  IFS= read -r first < "$resolved" || true
+  if [[ "$first" =~ ^#!.*/(env[[:space:]]+)?(ba)?sh\b ]]; then
+    return 0
+  fi
+  return 1
+}
+
 # Derive and validate owner/repo from a git remote URL.
 # Args: $1 = remote.origin.url value; $2 = caller name (error-message prefix).
 # Resolve owner/repo from the remote so gh addresses the repo independent of cwd
