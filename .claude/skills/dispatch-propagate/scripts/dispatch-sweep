@@ -230,8 +230,8 @@ while [[ $i -lt ${#WT_PATHS[@]} ]]; do
   # with `--head` instead of a creation-ordered `--limit N` window that never
   # sees the merged backlog tail. A failure here is isolated to this worktree
   # (defect 2, #1313): log and move on, never abort the sweep.
-  if ! pr_json=$(gh_retry gh pr list --head "$wt_branch" --state all --json state,number); then
-    log "ERROR_PR_STATE_FETCH: branch=$wt_branch gh pr list --head failed"
+  if ! pr_json=$(gh_pr_list_rest --head "$wt_branch" --state all); then
+    log "ERROR_PR_STATE_FETCH: branch=$wt_branch gh_pr_list_rest --head failed"
     continue
   fi
 

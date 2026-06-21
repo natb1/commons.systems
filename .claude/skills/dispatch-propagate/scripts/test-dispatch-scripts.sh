@@ -265,6 +265,19 @@ case "$args" in
       dispatch-test-limit)
         cat "$STUB_DIR/rest-limit.json"
         ;;
+      dispatch-test-title)
+        cat "$STUB_DIR/rest-title.json"
+        ;;
+      dispatch-test-limit-paginate)
+        # >100-limit paginate fixture: two pages concatenated (>= limit items).
+        cat "$STUB_DIR/rest-bigpage-1.json"
+        cat "$STUB_DIR/rest-bigpage-2.json"
+        ;;
+      dispatch-test-limit-exact)
+        # Exactly-<limit> fixture: serve a single array of exactly limit items so
+        # a caller's `len == limit ⇒ truncated` guard fires.
+        cat "$STUB_DIR/rest-exact.json"
+        ;;
       dispatch-test-includebody)
         cat "$STUB_DIR/rest-includebody.json"
         ;;
@@ -272,6 +285,29 @@ case "$args" in
         echo '[]'
         ;;
     esac
+    ;;
+  api\ *repos/*/pulls\?*)
+    # gh_pr_list_rest LIST endpoint (#2258): repos/{owner}/{repo}/pulls?state=...
+    # The leading `*` glob absorbs an optional `--paginate` before the path. This
+    # MUST precede the single-PR `api repos/*/pulls/*` arm (case is first-wins) —
+    # though that arm needs a literal `/` after `pulls` and would not match `?`
+    # anyway. Log the full $args so tests can assert --paginate / per_page= / the
+    # head= query param. Routes by fixture-file presence (no shared consumer to
+    # collide with, so no sentinel label needed): serve page-1 then page-2 if it
+    # exists, else `[]`. A gh-fail-pulls marker forces a gh failure.
+    echo "$args" >> "$STUB_DIR/gh-pr-list-rest-calls.log"
+    if [[ -f "$STUB_DIR/gh-fail-pulls" ]]; then
+      echo "stub forced gh api failure (pulls list)" >&2
+      exit 1
+    fi
+    if [[ -f "$STUB_DIR/rest-pulls-page-1.json" ]]; then
+      cat "$STUB_DIR/rest-pulls-page-1.json"
+      if [[ -f "$STUB_DIR/rest-pulls-page-2.json" ]]; then
+        cat "$STUB_DIR/rest-pulls-page-2.json"
+      fi
+    else
+      echo '[]'
+    fi
     ;;
   api\ *repos/*/issues\?*)
     # gh_issue_list_rest (#1601): the four converted dispatch issue scans now hit
@@ -313,6 +349,18 @@ case "$args" in
         # #1085 per-episode latch read. Default [] (gate fires); a fixture models
         # an already-open latch issue (gate falls through).
         if [[ -f "$STUB_DIR/main-broken-issue-list.json" ]]; then cat "$STUB_DIR/main-broken-issue-list.json"; else echo "[]"; fi
+      elif [[ "$rest_label" == "dispatch:office-hours" ]]; then
+        # dispatch-trace-leaf parked set (#1011) and office-hours-select-target queue
+        # (#2258): both migrated from `gh issue list` to gh_issue_list_rest, so the
+        # office-hours scan now lands on the REST issues endpoint. Serve whichever
+        # fixture the active test seeds; absence → [] (nothing parked / empty queue).
+        if [[ -f "$STUB_DIR/trace-parked.json" ]]; then
+          cat "$STUB_DIR/trace-parked.json"
+        elif [[ -f "$STUB_DIR/oh-issue-list.json" ]]; then
+          cat "$STUB_DIR/oh-issue-list.json"
+        else
+          echo "[]"
+        fi
       else
         echo "[]"
       fi
@@ -322,26 +370,6 @@ case "$args" in
       jit_key=$(printf '%s' "$rest_label" | tr '/:' '__')
       jit_fixture="$STUB_DIR/jit-issues-${rest_state}-${jit_key}.json"
       if [[ -f "$jit_fixture" ]]; then cat "$jit_fixture"; else echo "[]"; fi
-    fi
-    ;;
-  "issue list --label dispatch:office-hours --state open --json number,createdAt,labels")
-    # office-hours-select-target: the office-hours queue (labeled open issues).
-    # The fetch now also carries `labels` (#1648) — the main-qa override reads it.
-    if [[ -f "$STUB_DIR/oh-issue-list.json" ]]; then
-      cat "$STUB_DIR/oh-issue-list.json"
-    else
-      echo "[]"
-    fi
-    ;;
-  "issue list --state open --label dispatch:office-hours --limit 300 --json number")
-    # dispatch-trace-leaf queue-mode parked set (#1011): open issues carrying
-    # dispatch:office-hours. $STUB_DIR/trace-parked.json supplies the parked
-    # numbers; absence means nothing is parked (default empty), so every
-    # pre-existing trace-leaf test stays green.
-    if [[ -f "$STUB_DIR/trace-parked.json" ]]; then
-      cat "$STUB_DIR/trace-parked.json"
-    else
-      echo "[]"
     fi
     ;;
   issue\ view\ *\ --json\ state)
@@ -441,6 +469,11 @@ case "$args" in
       fi
     fi
     echo "natb1/commons.systems"
+    ;;
+  "repo view --json owner -q .owner.login")
+    # gh_pr_list_rest --head owner resolution (#2258): when --head is set and
+    # --repo is absent, the helper resolves the current repo's owner login.
+    echo "natb1"
     ;;
   api\ */dependencies/blocked_by)
     path=$(echo "$args" | awk '{print $2}')
@@ -1372,6 +1405,182 @@ if grep -q -- '--paginate' "$STUB_DIR/gh-issue-list-rest-calls.log"; then
 else
   assert_eq "--repo+--limit: log does not contain --paginate" "no" "no"
 fi
+teardown
+
+echo "Test: --state all -- issued query carries state=all (#2258)"
+setup
+: > "$STUB_DIR/gh-issue-list-rest-calls.log"
+actual_all=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state all --label dispatch-test-empty)
+assert_eq "--state all: returns the stub's empty array" "[]" "$actual_all"
+# The query must carry state=all (anchor with a non-word char so this cannot
+# match state=allowed or similar).
+if grep -qE 'state=all([&?]|$| )' "$STUB_DIR/gh-issue-list-rest-calls.log"; then sa=yes; else sa=no; fi
+assert_eq "--state all: query carries state=all" "yes" "$sa"
+teardown
+
+echo "Test: --include-title -- present projects title, absent omits it (#2258)"
+setup
+printf '%s\n' '[
+  {"number":401,"title":"first issue","body":"b1","created_at":"2024-02-01T00:00:00Z","closed_at":null,"labels":[]},
+  {"number":402,"title":"second issue","body":"b2","created_at":"2024-02-02T00:00:00Z","closed_at":null,"labels":[]}
+]' > "$STUB_DIR/rest-title.json"
+: > "$STUB_DIR/gh-issue-list-rest-calls.log"
+# Absent: projected objects must NOT carry a title key.
+without_title=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --label dispatch-test-title)
+assert_eq "--include-title absent: .[0] has no title key" "false" "$(jq '.[0] | has("title")' <<<"$without_title")"
+assert_eq "--include-title absent: .[0] has no body key" "false" "$(jq '.[0] | has("body")' <<<"$without_title")"
+assert_eq "--include-title absent: number still projected" "401" "$(jq '.[0].number' <<<"$without_title")"
+# Present: projected objects carry title but still not body.
+with_title=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --include-title --label dispatch-test-title)
+assert_eq "--include-title present: .[0] carries title" "first issue" "$(jq -r '.[0].title' <<<"$with_title")"
+assert_eq "--include-title present: body still omitted" "false" "$(jq '.[0] | has("body")' <<<"$with_title")"
+# Both flags combine: title AND body present.
+with_both=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --include-title --include-body --label dispatch-test-title)
+assert_eq "--include-title+--include-body: .[0] carries title" "first issue" "$(jq -r '.[0].title' <<<"$with_both")"
+assert_eq "--include-title+--include-body: .[0] carries body" "b1" "$(jq -r '.[0].body' <<<"$with_both")"
+teardown
+
+echo "Test: --limit > 100 -- paginate path, sliced to limit (#2258)"
+setup
+# 150 items split across two pages (80 + 70). Numbers 1000..1149.
+jq -nc '[range(1000;1080) | {number: ., created_at:"2024-03-01T00:00:00Z", closed_at:null, labels:[]}]' \
+  > "$STUB_DIR/rest-bigpage-1.json"
+jq -nc '[range(1080;1150) | {number: ., created_at:"2024-03-01T00:00:00Z", closed_at:null, labels:[]}]' \
+  > "$STUB_DIR/rest-bigpage-2.json"
+: > "$STUB_DIR/gh-issue-list-rest-calls.log"
+actual_big=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --limit 120 --label dispatch-test-limit-paginate)
+assert_eq "--limit 120 over 150 items: result length == 120" "120" "$(jq 'length' <<<"$actual_big")"
+# The >100-limit path must --paginate (not single-page) ...
+if grep -q -- '--paginate' "$STUB_DIR/gh-issue-list-rest-calls.log"; then bp=yes; else bp=no; fi
+assert_eq "--limit 120: log contains --paginate" "yes" "$bp"
+# ... at the clamped per_page=100 (not per_page=120).
+if grep -q 'per_page=100[^0-9]' "$STUB_DIR/gh-issue-list-rest-calls.log"; then pp=yes; else pp=no; fi
+assert_eq "--limit 120: per_page clamped to 100" "yes" "$pp"
+if grep -q 'per_page=120' "$STUB_DIR/gh-issue-list-rest-calls.log"; then pp120=yes; else pp120=no; fi
+assert_eq "--limit 120: per_page is NOT 120" "no" "$pp120"
+teardown
+
+echo "Test: --limit > 100 -- exactly-limit items still trips a caller's len==limit guard (#2258)"
+setup
+# Exactly 120 items. With --limit 120 the result length is 120, so a caller's
+# `len == limit` truncation guard fires (just as it would on a single >100 page).
+jq -nc '[range(2000;2120) | {number: ., created_at:"2024-04-01T00:00:00Z", closed_at:null, labels:[]}]' \
+  > "$STUB_DIR/rest-exact.json"
+: > "$STUB_DIR/gh-issue-list-rest-calls.log"
+actual_exact=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state open --limit 120 --label dispatch-test-limit-exact)
+exact_len=$(jq 'length' <<<"$actual_exact")
+assert_eq "--limit 120 over exactly 120 items: result length == 120" "120" "$exact_len"
+# Simulate a caller's truncation guard: len == limit ⇒ truncated.
+if [[ "$exact_len" -eq 120 ]]; then guard=fired; else guard=clear; fi
+assert_eq "--limit 120: len==limit guard fires on exactly-limit fixture" "fired" "$guard"
+teardown
+
+# ============================================================================
+# gh_pr_list_rest edge-case tests (#2258)
+# ============================================================================
+# These tests drive the REAL gh_pr_list_rest helper (sourced from the copied
+# lib.sh) via the `api *repos/*/pulls?*` stub arm above, which routes by fixture
+# presence and logs each call to gh-pr-list-rest-calls.log. They mirror the
+# gh_issue_list_rest edge-case block.
+echo "=== gh_pr_list_rest (edge cases) ==="
+
+echo "Test: gh_pr_list_rest empty result -- helper returns [] with length 0"
+setup
+: > "$STUB_DIR/gh-pr-list-rest-calls.log"
+actual_pr_empty=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_list_rest --state open)
+assert_eq "pr empty result: length == 0" "0" "$(jq 'length' <<<"$actual_pr_empty")"
+# No --limit was passed, so the helper must take the full-paginate path.
+if grep -q -- '--paginate' "$STUB_DIR/gh-pr-list-rest-calls.log"; then bp=yes; else bp=no; fi
+assert_eq "pr empty result: log contains --paginate" "yes" "$bp"
+teardown
+
+echo "Test: gh_pr_list_rest --limit > 100 -- paginate path, sliced to limit"
+setup
+# 150 PRs split across two pages (80 + 70). Numbers 1000..1149.
+jq -nc '[range(1000;1080) | {number: ., state:"open", title:"t", merged_at:null, created_at:"2024-03-01T00:00:00Z"}]' \
+  > "$STUB_DIR/rest-pulls-page-1.json"
+jq -nc '[range(1080;1150) | {number: ., state:"open", title:"t", merged_at:null, created_at:"2024-03-01T00:00:00Z"}]' \
+  > "$STUB_DIR/rest-pulls-page-2.json"
+: > "$STUB_DIR/gh-pr-list-rest-calls.log"
+actual_pr_big=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_list_rest --state open --limit 120)
+assert_eq "pr --limit 120 over 150: result length == 120" "120" "$(jq 'length' <<<"$actual_pr_big")"
+# The >100-limit path must --paginate (not single-page) ...
+if grep -q -- '--paginate' "$STUB_DIR/gh-pr-list-rest-calls.log"; then bp=yes; else bp=no; fi
+assert_eq "pr --limit 120: log contains --paginate" "yes" "$bp"
+# ... at the clamped per_page=100 (not per_page=120).
+if grep -qE 'per_page=100([^0-9]|$)' "$STUB_DIR/gh-pr-list-rest-calls.log"; then pp=yes; else pp=no; fi
+assert_eq "pr --limit 120: per_page clamped to 100" "yes" "$pp"
+if grep -q 'per_page=120' "$STUB_DIR/gh-pr-list-rest-calls.log"; then pp120=yes; else pp120=no; fi
+assert_eq "pr --limit 120: per_page is NOT 120" "no" "$pp120"
+teardown
+
+echo "Test: gh_pr_list_rest --limit single page (<=100, per_page=limit, no --paginate)"
+setup
+jq -nc '[range(300;303) | {number: ., state:"open", title:"t", merged_at:null, created_at:"2024-01-06T00:00:00Z"}]' \
+  > "$STUB_DIR/rest-pulls-page-1.json"
+: > "$STUB_DIR/gh-pr-list-rest-calls.log"
+actual_pr_lim=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_list_rest --state open --limit 50)
+assert_eq "pr limit: result length matches fixture (3 items)" "3" "$(jq 'length' <<<"$actual_pr_lim")"
+# The call log must contain per_page=50 (anchor trailing non-digit) ...
+if grep -qE 'per_page=50([^0-9]|$)' "$STUB_DIR/gh-pr-list-rest-calls.log"; then pp=yes; else pp=no; fi
+assert_eq "pr limit: log contains per_page=50" "yes" "$pp"
+# ... and must NOT contain --paginate (single-page branch).
+if grep -q -- '--paginate' "$STUB_DIR/gh-pr-list-rest-calls.log"; then bp=yes; else bp=no; fi
+assert_eq "pr limit: log does not contain --paginate" "no" "$bp"
+teardown
+
+echo "Test: gh_pr_list_rest gh-failure -- returns non-zero with diagnostic stderr"
+setup
+: > "$STUB_DIR/gh-pr-list-rest-calls.log"
+: > "$STUB_DIR/gh-fail-pulls"
+rc_pr_fail=0
+err_pr_fail=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_list_rest --state open 2>&1 >/dev/null) || rc_pr_fail=$?
+assert_eq "pr gh-failure: returns non-zero" "1" "$rc_pr_fail"
+case "$err_pr_fail" in *"gh_pr_list_rest: gh api failed"*) m=yes ;; *) m=no ;; esac
+assert_eq "pr gh-failure: stderr names the helper failure" "yes" "$m"
+teardown
+
+echo "Test: gh_pr_list_rest --head -- query carries head=<owner>:<branch> (repo-view owner)"
+setup
+echo '[]' > "$STUB_DIR/rest-pulls-page-1.json"
+: > "$STUB_DIR/gh-pr-list-rest-calls.log"
+# No --repo: owner resolves via the stubbed `gh repo view ... .owner.login` => natb1.
+actual_pr_head=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_list_rest --state open --head my-branch)
+assert_eq "pr --head: returns the stub's empty array" "[]" "$actual_pr_head"
+if grep -q 'head=natb1:my-branch' "$STUB_DIR/gh-pr-list-rest-calls.log"; then hb=yes; else hb=no; fi
+assert_eq "pr --head: query carries head=natb1:my-branch" "yes" "$hb"
+teardown
+
+echo "Test: gh_pr_list_rest --head + --repo -- owner from repo segment, not repo-view"
+setup
+echo '[]' > "$STUB_DIR/rest-pulls-page-1.json"
+: > "$STUB_DIR/gh-pr-list-rest-calls.log"
+# With --repo owner/other-repo, the head owner is the first segment (owner).
+actual_pr_head_repo=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_list_rest --state open --repo owner/other-repo --head feat-x)
+assert_eq "pr --head+--repo: returns the stub's empty array" "[]" "$actual_pr_head_repo"
+if grep -q 'head=owner:feat-x' "$STUB_DIR/gh-pr-list-rest-calls.log"; then hb=yes; else hb=no; fi
+assert_eq "pr --head+--repo: query carries head=owner:feat-x" "yes" "$hb"
+if grep -q 'repos/owner/other-repo/pulls' "$STUB_DIR/gh-pr-list-rest-calls.log"; then seg=yes; else seg=no; fi
+assert_eq "pr --head+--repo: API path uses cross-repo segment" "yes" "$seg"
+teardown
+
+echo "Test: gh_pr_list_rest state normalization -- OPEN / MERGED / CLOSED"
+setup
+# One open PR, one closed+merged (merged_at set), one closed+unmerged (null).
+printf '%s\n' '[
+  {"number":501,"state":"open","title":"open pr","merged_at":null,"created_at":"2024-05-01T00:00:00Z"},
+  {"number":502,"state":"closed","title":"merged pr","merged_at":"2024-05-02T00:00:00Z","created_at":"2024-05-01T00:00:00Z"},
+  {"number":503,"state":"closed","title":"closed pr","merged_at":null,"created_at":"2024-05-01T00:00:00Z"}
+]' > "$STUB_DIR/rest-pulls-page-1.json"
+: > "$STUB_DIR/gh-pr-list-rest-calls.log"
+actual_pr_norm=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_list_rest --state all)
+assert_eq "pr normalize: 501 (open) -> OPEN" "OPEN" "$(jq -r '.[] | select(.number==501) | .state' <<<"$actual_pr_norm")"
+assert_eq "pr normalize: 502 (closed+merged_at) -> MERGED" "MERGED" "$(jq -r '.[] | select(.number==502) | .state' <<<"$actual_pr_norm")"
+assert_eq "pr normalize: 503 (closed+null merged_at) -> CLOSED" "CLOSED" "$(jq -r '.[] | select(.number==503) | .state' <<<"$actual_pr_norm")"
+# Projection remaps snake_case to camelCase mergedAt/createdAt; title present.
+assert_eq "pr normalize: 502 mergedAt remapped" "2024-05-02T00:00:00Z" "$(jq -r '.[] | select(.number==502) | .mergedAt' <<<"$actual_pr_norm")"
+assert_eq "pr normalize: 501 createdAt remapped" "2024-05-01T00:00:00Z" "$(jq -r '.[] | select(.number==501) | .createdAt' <<<"$actual_pr_norm")"
+assert_eq "pr normalize: 501 title projected" "open pr" "$(jq -r '.[] | select(.number==501) | .title' <<<"$actual_pr_norm")"
 teardown
 
 echo "Test: --include-body -- projection includes title and body; default omits title"
@@ -9566,10 +9775,13 @@ echo "=== dispatch-sweep ==="
 #   stub/                         per-test JSON + record files (calls, gh out)
 #
 # Shims:
-#   gh   — per-worktree PR query is `pr list --head <branch> --state all`, driven
-#          by pr-state-<branch>.json (each entry {state, number}); returns '[]'
-#          when no fixture exists. SWEEP_GH_PR_FAIL=<branch> forces that branch's
-#          --head query to fail. Issue-view is driven by issue-state-<N>.txt.
+#   gh   — per-worktree PR query (gh_pr_list_rest --head) issues two calls:
+#          "repo view --json owner -q .owner.login" (returns "natb1") and
+#          "api --paginate repos/.../pulls?state=all&...&head=natb1:<branch>",
+#          driven by pr-state-<branch>.json (REST format: {state:"open"|"closed",
+#          merged_at:<ts>|null, number, created_at, title}); returns '[]' by
+#          default. SWEEP_GH_PR_FAIL=<branch> forces the api call to fail.
+#          Issue-view is driven by issue-state-<N>.txt.
 #   git  — knows worktree list/remove/prune, branch -D, -C <p> status,
 #          -C <p> rev-list --count, -C <p> log -1 --format=%ct, and
 #          rev-parse --path-format=absolute --git-common-dir.
@@ -9606,20 +9818,30 @@ sweep_setup() {
 
   # gh shim — handles dispatch-sweep's calls.
   # Shims:
-  #   gh   — per-worktree PR query uses pr-state-<branch>.json (holding
-  #          [{"state":"MERGED"|"OPEN","number":<N>}]); returns '[]' by default
-  #          when no fixture exists. SWEEP_GH_PR_FAIL=<branch> makes the
-  #          --head query fail for that branch. Issue-view uses issue-state-<N>.txt.
+  #   gh   — per-worktree PR query (gh_pr_list_rest --head) issues two gh calls:
+  #          1. "repo view --json owner -q .owner.login" → returns "natb1"
+  #          2. "api --paginate repos/{owner}/{repo}/pulls?state=all&...&head=natb1:<branch>"
+  #             → serves pr-state-<branch>.json (REST format: each entry has
+  #             {state:"open"|"closed", merged_at:<ts>|null, number, created_at, title}).
+  #             Returns '[]' by default when no fixture exists.
+  #             SWEEP_GH_PR_FAIL=<branch> makes the api call fail for that branch.
+  #          Issue-view uses issue-state-<N>.txt.
   cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
 args="$*"
 case "$args" in
-  "pr list --head "*" --state all --json state,number")
-    # dispatch-sweep per-worktree PR query: gh pr list --head <branch> --state all --json state,number
-    br=$(echo "$args" | awk '{print $4}')
+  "repo view --json owner -q .owner.login")
+    # gh_pr_list_rest --head owner resolution: resolve the current repo owner.
+    echo "natb1"
+    ;;
+  api\ --paginate\ */pulls\?*)
+    # dispatch-sweep per-worktree PR query via gh_pr_list_rest (#2258):
+    # gh api --paginate repos/{owner}/{repo}/pulls?state=all&per_page=100&head=natb1:<branch>
+    # Extract branch from the head=natb1:<branch> query parameter.
+    br=$(printf '%s' "$args" | grep -oE 'head=natb1:[^ ]+' | sed 's/head=natb1://')
     if [[ "${SWEEP_GH_PR_FAIL:-}" == "$br" ]]; then
-      echo "gh sweep stub: simulated gh pr list --head failure for $br" >&2
+      echo "gh sweep stub: simulated gh api pulls failure for $br" >&2
       exit 1
     fi
     f="$STUB_DIR/pr-state-${br}.json"
@@ -9850,7 +10072,7 @@ echo "Test: merged worktree (in-sync) is removed + branch deleted"
 sweep_setup
 WT_PATH="$TMPDIR_TEST/project/worktrees/42-feature"
 sweep_register_wt "$WT_PATH" "42-feature"
-echo '[{"state":"MERGED","number":100}]' \
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":100,"created_at":"2024-01-01T00:00:00Z","title":"PR 100"}]' \
   > "$STUB_DIR/pr-state-42-feature.json"
 # Clean tree + zero unpushed (defaults already match this — explicit for clarity).
 key=$(sweep_path_key "$WT_PATH")
@@ -9901,7 +10123,7 @@ echo "Test: squash-merged worktree retired despite non-zero rev-list (#1845)"
 sweep_setup
 WT_PATH="$TMPDIR_TEST/project/worktrees/80-squash-merged"
 sweep_register_wt "$WT_PATH" "80-squash-merged"
-echo '[{"state":"MERGED","number":800}]' \
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":800,"created_at":"2024-01-01T00:00:00Z","title":"PR 800"}]' \
   > "$STUB_DIR/pr-state-80-squash-merged.json"
 key=$(sweep_path_key "$WT_PATH")
 : > "$STUB_DIR/status${key}.txt"          # clean working tree
@@ -10047,7 +10269,7 @@ export SWEEP_GH_ISSUE_FAIL="60"
 # Sibling in-sync MERGED worktree to prove the sweep continues.
 WT_PATH_60B="$TMPDIR_TEST/project/worktrees/60b-sibling-merged"
 sweep_register_wt "$WT_PATH_60B" "60b-sibling-merged"
-echo '[{"state":"MERGED","number":600}]' > "$STUB_DIR/pr-state-60b-sibling-merged.json"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":600,"created_at":"2024-01-01T00:00:00Z","title":"PR 600"}]' > "$STUB_DIR/pr-state-60b-sibling-merged.json"
 key_60b=$(sweep_path_key "$WT_PATH_60B")
 : > "$STUB_DIR/status${key_60b}.txt"
 echo "0" > "$STUB_DIR/revlist${key_60b}.txt"
@@ -10080,7 +10302,7 @@ echo "Test: open-PR worktree with closed issue is kept (OPEN_BY_BRANCH guard)"
 sweep_setup
 WT_PATH="$TMPDIR_TEST/project/worktrees/61-active-pr"
 sweep_register_wt "$WT_PATH" "61-active-pr"
-echo '[{"state":"OPEN","number":888}]' \
+echo '[{"state":"open","merged_at":null,"number":888,"created_at":"2024-01-01T00:00:00Z","title":"PR 888"}]' \
   > "$STUB_DIR/pr-state-61-active-pr.json"
 # Issue is CLOSED, but the OPEN PR precedence guard must short-circuit before gh issue view.
 echo "CLOSED" > "$STUB_DIR/issue-state-61.txt"
@@ -10114,7 +10336,7 @@ sweep_register_wt "$WT_PATH" "70-live-merged"
 key=$(sweep_path_key "$WT_PATH")
 : > "$STUB_DIR/status${key}.txt"
 echo "0" > "$STUB_DIR/revlist${key}.txt"
-echo '[{"state":"MERGED","number":300}]' \
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":300,"created_at":"2024-01-01T00:00:00Z","title":"PR 300"}]' \
   > "$STUB_DIR/pr-state-70-live-merged.json"
 # Register a live session whose name matches the worktree's basename.
 sweep_fake_claude_sessions_by_name "70-live-merged=sess-live-70"
@@ -10152,7 +10374,7 @@ sweep_register_wt "$WT_PATH" "71-no-live-merged"
 key=$(sweep_path_key "$WT_PATH")
 : > "$STUB_DIR/status${key}.txt"
 echo "0" > "$STUB_DIR/revlist${key}.txt"
-echo '[{"state":"MERGED","number":301}]' \
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":301,"created_at":"2024-01-01T00:00:00Z","title":"PR 301"}]' \
   > "$STUB_DIR/pr-state-71-no-live-merged.json"
 # Default fake (no live sessions) — the worktree is free to remove.
 
@@ -10224,7 +10446,7 @@ echo "Test: non-issue branch (hotfix-login) in merged map is reaped"
 sweep_setup
 WT_PATH="$TMPDIR_TEST/project/worktrees/hotfix-login"
 sweep_register_wt "$WT_PATH" "hotfix-login"
-echo '[{"state":"MERGED","number":400}]' \
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":400,"created_at":"2024-01-01T00:00:00Z","title":"PR 400"}]' \
   > "$STUB_DIR/pr-state-hotfix-login.json"
 # Clean tree + zero unpushed.
 key=$(sweep_path_key "$WT_PATH")
@@ -10264,7 +10486,7 @@ echo "Test: merged worktree with a reservation marker is skipped (SKIP_RESERVED)
 sweep_setup
 WT_PATH="$TMPDIR_TEST/project/worktrees/90-reserved-merged"
 sweep_register_wt "$WT_PATH" "90-reserved-merged"
-echo '[{"state":"MERGED","number":500}]' \
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":500,"created_at":"2024-01-01T00:00:00Z","title":"PR 500"}]' \
   > "$STUB_DIR/pr-state-90-reserved-merged.json"
 key=$(sweep_path_key "$WT_PATH")
 : > "$STUB_DIR/status${key}.txt"
@@ -10377,7 +10599,7 @@ echo "GARBAGE" > "$STUB_DIR/issue-state-62.txt"
 # Sibling in-sync MERGED worktree to prove the sweep continues.
 WT_PATH_62B="$TMPDIR_TEST/project/worktrees/62b-sibling-merged"
 sweep_register_wt "$WT_PATH_62B" "62b-sibling-merged"
-echo '[{"state":"MERGED","number":620}]' > "$STUB_DIR/pr-state-62b-sibling-merged.json"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":620,"created_at":"2024-01-01T00:00:00Z","title":"PR 620"}]' > "$STUB_DIR/pr-state-62b-sibling-merged.json"
 key_62b=$(sweep_path_key "$WT_PATH_62B")
 : > "$STUB_DIR/status${key_62b}.txt"
 echo "0" > "$STUB_DIR/revlist${key_62b}.txt"
@@ -10405,11 +10627,11 @@ sweep_teardown
 
 # --- Test I2: pr-list --head failure is isolated (ERROR_PR_STATE_FETCH) -----
 #
-# A branch whose `gh pr list --head` call fails must be logged as
+# A branch whose `gh_pr_list_rest --head` call fails must be logged as
 # ERROR_PR_STATE_FETCH and skipped, not fatal. A sibling in-sync MERGED
 # worktree in the same run must still be removed.
 
-echo "Test: gh pr list --head failure is isolated (exit 0, sibling still removed)"
+echo "Test: gh_pr_list_rest --head failure is isolated (exit 0, sibling still removed)"
 sweep_setup
 # Failing worktree: SWEEP_GH_PR_FAIL makes the stub exit 1 for this branch.
 WT_PATH="$TMPDIR_TEST/project/worktrees/63-pr-fail"
@@ -10419,7 +10641,7 @@ export SWEEP_GH_PR_FAIL="63-pr-fail"
 # Sibling in-sync MERGED worktree to prove the sweep continues.
 WT_PATH_63B="$TMPDIR_TEST/project/worktrees/63b-pr-ok"
 sweep_register_wt "$WT_PATH_63B" "63b-pr-ok"
-echo '[{"state":"MERGED","number":630}]' > "$STUB_DIR/pr-state-63b-pr-ok.json"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":630,"created_at":"2024-01-01T00:00:00Z","title":"PR 630"}]' > "$STUB_DIR/pr-state-63b-pr-ok.json"
 key_63b=$(sweep_path_key "$WT_PATH_63B")
 : > "$STUB_DIR/status${key_63b}.txt"
 echo "0" > "$STUB_DIR/revlist${key_63b}.txt"
@@ -10436,7 +10658,7 @@ else
   echo "    calls: $calls"
 fi
 TOTAL=$((TOTAL + 1))
-if grep -q "ERROR_PR_STATE_FETCH: branch=63-pr-fail gh pr list --head failed" \
+if grep -q "ERROR_PR_STATE_FETCH: branch=63-pr-fail gh_pr_list_rest --head failed" \
    "$DISPATCH_SWEEP_LOG_FILE"; then
   PASS=$((PASS + 1)); echo "  PASS: ERROR_PR_STATE_FETCH log line present"
 else
@@ -10475,7 +10697,7 @@ export DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S=100
 WT_PATH="$TMPDIR_TEST/project/worktrees/2100-merged-dirty"
 WT_BASE="2100-merged-dirty"
 sweep_register_wt "$WT_PATH" "$WT_BASE"
-echo '[{"state":"MERGED","number":2100}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":2100,"created_at":"2024-01-01T00:00:00Z","title":"PR 2100"}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
 key=$(sweep_path_key "$WT_PATH")
 # Not-in-sync: dirty tree (drives worktree_merged_in_sync to non-zero).
 echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
@@ -10615,7 +10837,7 @@ export DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S=100
 WT_PATH="$TMPDIR_TEST/project/worktrees/2200-merged-young"
 WT_BASE="2200-merged-young"
 sweep_register_wt "$WT_PATH" "$WT_BASE"
-echo '[{"state":"MERGED","number":2200}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":2200,"created_at":"2024-01-01T00:00:00Z","title":"PR 2200"}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
 key=$(sweep_path_key "$WT_PATH")
 echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
 # Pre-seed the marker (write-once already happened on a prior sweep).
@@ -10681,7 +10903,7 @@ export DISPATCH_SWEEP_NOW_EPOCH=99999
 WT_PATH="$TMPDIR_TEST/project/worktrees/2300-merged-live"
 WT_BASE="2300-merged-live"
 sweep_register_wt "$WT_PATH" "$WT_BASE"
-echo '[{"state":"MERGED","number":2300}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":2300,"created_at":"2024-01-01T00:00:00Z","title":"PR 2300"}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
 key=$(sweep_path_key "$WT_PATH")
 echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
 # Pre-seed an aged-out marker so ONLY the live-session guard prevents the reap.
@@ -10750,7 +10972,7 @@ export DISPATCH_SWEEP_NOW_EPOCH=5000
 WT_PATH="$TMPDIR_TEST/project/worktrees/2400-merged-quarantine"
 WT_BASE="2400-merged-quarantine"
 sweep_register_wt "$WT_PATH" "$WT_BASE"
-echo '[{"state":"MERGED","number":2400}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":2400,"created_at":"2024-01-01T00:00:00Z","title":"PR 2400"}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
 key=$(sweep_path_key "$WT_PATH")
 echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
 # Aged-out marker (age 5000-1000=4000 >= 100).
@@ -10805,7 +11027,7 @@ export DISPATCH_SWEEP_NOW_EPOCH=5000
 WT_PATH="$TMPDIR_TEST/project/worktrees/2401-merged-qfail"
 WT_BASE="2401-merged-qfail"
 sweep_register_wt "$WT_PATH" "$WT_BASE"
-echo '[{"state":"MERGED","number":2401}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":2401,"created_at":"2024-01-01T00:00:00Z","title":"PR 2401"}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
 key=$(sweep_path_key "$WT_PATH")
 echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
 mkdir -p "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync"
@@ -10880,7 +11102,7 @@ sweep_setup
 WT_PATH="$TMPDIR_TEST/project/worktrees/2500-merged-clean"
 WT_BASE="2500-merged-clean"
 sweep_register_wt "$WT_PATH" "$WT_BASE"
-echo '[{"state":"MERGED","number":2500}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":2500,"created_at":"2024-01-01T00:00:00Z","title":"PR 2500"}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
 key=$(sweep_path_key "$WT_PATH")
 : > "$STUB_DIR/status${key}.txt"          # clean
 echo "0" > "$STUB_DIR/revlist${key}.txt"
@@ -10943,7 +11165,7 @@ export DISPATCH_SWEEP_NOW_EPOCH=1050
 WT_PATH="$TMPDIR_TEST/project/worktrees/2600-live-marked"
 WT_BASE="2600-live-marked"
 sweep_register_wt "$WT_PATH" "$WT_BASE"
-echo '[{"state":"MERGED","number":2600}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":2600,"created_at":"2024-01-01T00:00:00Z","title":"PR 2600"}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
 key=$(sweep_path_key "$WT_PATH")
 echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
 mkdir -p "$TMPDIR_TEST/project/tmp/dispatch-not-in-sync"
@@ -10991,7 +11213,7 @@ printf '{"notInSyncGraceSeconds":100}\n' > "$DISPATCH_CONFIG_DIR/sweep.json"
 WT_PATH="$TMPDIR_TEST/project/worktrees/2700-config-grace"
 WT_BASE="2700-config-grace"
 sweep_register_wt "$WT_PATH" "$WT_BASE"
-echo '[{"state":"MERGED","number":2700}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":2700,"created_at":"2024-01-01T00:00:00Z","title":"PR 2700"}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
 key=$(sweep_path_key "$WT_PATH")
 echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
 MARKER="$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
@@ -11038,7 +11260,7 @@ export DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S=100
 WT_PATH="$TMPDIR_TEST/project/worktrees/2710-empty-config"
 WT_BASE="2710-empty-config"
 sweep_register_wt "$WT_PATH" "$WT_BASE"
-echo '[{"state":"MERGED","number":2710}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":2710,"created_at":"2024-01-01T00:00:00Z","title":"PR 2710"}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
 key=$(sweep_path_key "$WT_PATH")
 echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
 MARKER="$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
@@ -11078,7 +11300,7 @@ export DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S=100
 WT_PATH="$TMPDIR_TEST/project/worktrees/2720-frac-config"
 WT_BASE="2720-frac-config"
 sweep_register_wt "$WT_PATH" "$WT_BASE"
-echo '[{"state":"MERGED","number":2720}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":2720,"created_at":"2024-01-01T00:00:00Z","title":"PR 2720"}]' > "$STUB_DIR/pr-state-${WT_BASE}.json"
 key=$(sweep_path_key "$WT_PATH")
 echo " M residue.txt" > "$STUB_DIR/status${key}.txt"
 MARKER="$TMPDIR_TEST/project/tmp/dispatch-not-in-sync/$WT_BASE"
@@ -20521,16 +20743,19 @@ case "$args" in
   "label create "*)
     # Idempotent label create — default success.
     ;;
-  *"issue list "*"--state open"*)
-    if [[ -f "$STUB_DIR/open-issues.json" ]]; then
-      cat "$STUB_DIR/open-issues.json"
+  *"api "*"repos/"*"/issues"*)
+    # gh_issue_list_rest (#2258): the engine's open/closed scans now hit REST
+    # (gh api [--paginate] repos/<repo>/issues?state=<s>&...). Serve the SAME
+    # open-issues.json / closed-issues.json fixtures, jq-remapped to REST
+    # snake_case so the helper remaps them back to identical camelCase data.
+    # state=open vs state=closed in the query string selects the fixture.
+    if [[ "$args" == *state=open* ]]; then
+      fixture="$STUB_DIR/open-issues.json"
     else
-      echo '[]'
+      fixture="$STUB_DIR/closed-issues.json"
     fi
-    ;;
-  *"issue list "*"--state closed"*)
-    if [[ -f "$STUB_DIR/closed-issues.json" ]]; then
-      cat "$STUB_DIR/closed-issues.json"
+    if [[ -f "$fixture" ]]; then
+      jq 'map({number, pull_request: null, created_at: (.createdAt // null), closed_at: (.closedAt // null), labels: (.labels // [])} + (if has("body") then {body} else {} end) + (if has("title") then {title} else {} end))' "$fixture"
     else
       echo '[]'
     fi
@@ -20629,8 +20854,8 @@ else
 fi
 calls=$(cat "$STUB_DIR/gh-calls.log")
 TOTAL=$((TOTAL + 1))
-if [[ "$calls" == *"label create"* && "$calls" == *"issue list "*"--state open"* \
-   && "$calls" == *"issue list "*"--state closed"* \
+if [[ "$calls" == *"label create"* && "$calls" == *"issues?"*"state=open"* \
+   && "$calls" == *"issues?"*"state=closed"* \
    && "$calls" == *"issue create"* && "$calls" == *"project item-add"* ]]; then
   PASS=$((PASS + 1))
   echo "  PASS: cold start invoked label create / list / create / item-add"
@@ -21445,8 +21670,9 @@ jit_teardown
 # own SCRIPT_DIR — which becomes $TMPDIR_TEST/scripts for the copy — so all
 # three scripts are co-located. The gh stub logs EVERY matched invocation to
 # gh-calls.log so a test can assert "zero gh calls" (the debounce case). The
-# `issue list` arm reads a stub/issue-list.json fixture if present (lets a
-# test seed the batched dedup map with pre-existing issues), else "[]".
+# REST issues arm (`api ... repos/.../issues`, the gh_issue_list_rest call after
+# #2258) reads a stub/issue-list.json fixture if present (lets a test seed the
+# batched dedup map with pre-existing issues), else "[]", remapped to snake_case.
 # Transient-failure injection is via stub/issue-list-fail-once. "now" is pinned
 # via DISPATCH_STATEMENTS_NOW so the debounce math is deterministic.
 
@@ -21477,9 +21703,10 @@ statements_setup() {
   export DISPATCH_STATEMENTS_NOW="$STMT_NOW_EPOCH"
 
   # gh PATH stub. Every matched subcommand is appended to gh-calls.log so the
-  # debounce test can assert the log is absent (zero gh calls). `issue list`
-  # reads issue-list.json if present, else "[]"; supports transient-failure
-  # injection via issue-list-fail-once. `issue create` logs its full args
+  # debounce test can assert the log is absent (zero gh calls). The REST issues
+  # arm (`api ... repos/.../issues`, #2258) reads issue-list.json if present,
+  # else "[]", remapped to snake_case; supports transient-failure injection via
+  # issue-list-fail-once. `issue create` logs its full args
   # (including --body) to gh-issue-create.log so the body can be asserted,
   # and echoes a deterministic issue URL. `project item-add` matches the gh
   # subcommand that dispatch-project-item-add invokes internally.
@@ -21492,14 +21719,20 @@ case "$args" in
   "label create "*)
     # Idempotent label create — default success.
     ;;
-  *"issue list "*)
+  *"api "*"repos/"*"/issues"*)
+    # (#2258) dispatch-statements-scan now batches via gh_issue_list_rest, which
+    # issues `gh api [--paginate] repos/<repo>/issues?state=all&...&labels=...`.
+    # The glob spans both the >100 (--paginate) and <=100 forms. Serve the SAME
+    # issue-list.json fixture, jq-remapped from camelCase to REST snake_case and
+    # INCLUDING body (the scan passes --include-body). Transient-failure injection
+    # via issue-list-fail-once still applies — the helper retries internally.
     if [[ -f "$STUB_DIR/issue-list-fail-once" ]]; then
       rm -f "$STUB_DIR/issue-list-fail-once"
       echo "HTTP 503: Service Unavailable" >&2
       exit 1
     fi
     if [[ -f "$STUB_DIR/issue-list.json" ]]; then
-      cat "$STUB_DIR/issue-list.json"
+      jq 'map({number, pull_request: null, created_at: (.createdAt//null), closed_at: (.closedAt//null), labels: (.labels//[])} + (if has("body") then {body} else {} end) + (if has("title") then {title} else {} end))' "$STUB_DIR/issue-list.json"
     else
       echo '[]'
     fi
@@ -21622,13 +21855,13 @@ else
 fi
 calls=$(cat "$STUB_DIR/gh-calls.log")
 TOTAL=$((TOTAL + 1))
-if [[ "$calls" == *"issue list "* && "$calls" == *"issue create"* \
+if [[ "$calls" == *"repos/test-owner/test-repo/issues"* && "$calls" == *"issue create"* \
    && "$calls" == *"project item-add"* ]]; then
   PASS=$((PASS + 1))
-  echo "  PASS: new-file invoked issue list / issue create / project item-add"
+  echo "  PASS: new-file invoked issue list (REST) / issue create / project item-add"
 else
   FAIL=$((FAIL + 1))
-  echo "  FAIL: new-file invoked issue list / issue create / project item-add"
+  echo "  FAIL: new-file invoked issue list (REST) / issue create / project item-add"
   echo "    gh-calls.log: $calls"
 fi
 # Assert both labels are present in the issue create call.
@@ -21836,20 +22069,30 @@ fi
 statements_teardown
 
 # --- Test 9: malformed gh issue list output → hard error, no issue create ----
+# (#2258) The batched lookup now flows through gh_issue_list_rest, which pipes the
+# gh api output through its OWN internal `jq -s` projection. A non-JSON result
+# makes that internal jq fail → the helper returns nonzero with empty stdout, so
+# the malformed case surfaces through the script's rc!=0 hard-error branch ("gh
+# issue list failed") rather than the (now unreachable-via-helper) non-JSON
+# branch. Intent is preserved: malformed output → hard error → files nothing.
+# The non-JSON injection reaches the helper through the stub's REST arm, where
+# the stub's own remap-jq fails on the TLS string and exits nonzero, driving the
+# helper's "gh api failed" path.
 
 echo "Test: dispatch-statements-scan surfaces hard error on malformed gh issue list output, does not file"
 statements_setup
 statements_write_projects
 statements_write_config
 printf 'STATEMENT-CONTENTS\n' > "$TMPDIR_TEST/statements-dir/acct.qfx"
-# Inject a TLS-error-like non-JSON message as the issue list result (gh exits 0).
+# Inject a TLS-error-like non-JSON message as the issue list result. The stub's
+# REST-arm remap jq fails on it → stub exits nonzero → helper rc!=0.
 printf 'tls: failed to verify certificate: x509: certificate signed by unknown authority\n' \
   > "$STUB_DIR/issue-list.json"
 rc=0
 err=$("$TMPDIR_TEST/scripts/dispatch-statements-scan" 2>&1 >/dev/null) || rc=$?
 assert_eq "malformed-list exits 1" "1" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ "$err" == *"bank: error"* && "$err" == *"non-JSON"* ]]; then
+if [[ "$err" == *"bank: error"* && "$err" == *"failed"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: malformed-list emits hard error to stderr"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: malformed-list emits hard error to stderr"
@@ -21933,8 +22176,9 @@ statements_teardown
 
 # --- Test 12: one list call regardless of file count -------------------------
 # Proves that the per-file Search-API fan-out is gone: with N=5 distinct new
-# files there is exactly ONE `gh issue list` invocation (per entry, not per
-# file) and exactly 5 `gh issue create` invocations.
+# files there is exactly ONE batched issue-list REST call (per entry, not per
+# file) and exactly 5 `gh issue create` invocations. (#2258) The list call is now
+# `gh api ... repos/.../issues?...`; count it by the REST path.
 
 echo "Test: dispatch-statements-scan makes exactly one gh issue list call for N files"
 statements_setup
@@ -21952,8 +22196,8 @@ out=$("$TMPDIR_TEST/scripts/dispatch-statements-scan" 2>/dev/null) || rc=$?
 assert_eq "one-list-call exits 0" "0" "$rc"
 list_count=0
 [[ -f "$STUB_DIR/gh-calls.log" ]] \
-  && list_count=$(grep -c '^issue list ' "$STUB_DIR/gh-calls.log" || true)
-assert_eq "one-list-call made exactly one issue list call" "1" "$list_count"
+  && list_count=$(grep -c 'repos/.*/issues' "$STUB_DIR/gh-calls.log" || true)
+assert_eq "one-list-call made exactly one issue list (REST) call" "1" "$list_count"
 create_count=0
 [[ -f "$STUB_DIR/gh-calls.log" ]] \
   && create_count=$(grep -c '^issue create ' "$STUB_DIR/gh-calls.log" || true)
@@ -21974,15 +22218,16 @@ printf 'STATEMENT-CONTENTS\n' > "$TMPDIR_TEST/statements-dir/retry.qfx"
 h=$(sha256sum "$TMPDIR_TEST/statements-dir/retry.qfx" | awk '{print $1}')
 jq -n --arg h "$h" '[{number:99, body:("- sha256: `" + $h + "`")}]' \
   > "$STUB_DIR/issue-list.json"
-# First gh issue list attempt fails transiently; retry returns the fixture.
+# (#2258) gh_issue_list_rest wraps gh_retry internally; the first REST issues
+# attempt fails transiently (issue-list-fail-once), the retry returns the fixture.
 touch "$STUB_DIR/issue-list-fail-once"
 rc=0
 out=$("$TMPDIR_TEST/scripts/dispatch-statements-scan" 2>/dev/null) || rc=$?
 assert_eq "retry-list exits 0" "0" "$rc"
 list_count=0
 [[ -f "$STUB_DIR/gh-calls.log" ]] \
-  && list_count=$(grep -c '^issue list ' "$STUB_DIR/gh-calls.log" || true)
-assert_eq "retry-list made exactly 2 issue list calls (fail attempt + retry)" "2" "$list_count"
+  && list_count=$(grep -c 'repos/.*/issues' "$STUB_DIR/gh-calls.log" || true)
+assert_eq "retry-list made exactly 2 issue list (REST) calls (fail attempt + retry)" "2" "$list_count"
 TOTAL=$((TOTAL + 1))
 if [[ "$out" == *"bank: skipped (#99 for retry.qfx)"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: retry-list skipped (#99 for retry.qfx) — retry parsed correctly"
@@ -25663,9 +25908,14 @@ echo "$args" >> "$STUB_DIR/gh-calls.log"
 case "$args" in
   "label create "*)
     ;;
-  *"issue list "*"--state open"*)
+  *"api "*"repos/"*"/issues"*)
+    # gh_issue_list_rest (#2258): the calendar import's open-issue dedup scan now
+    # hits REST (gh api [--paginate] repos/<repo>/issues?state=open&...) WITH
+    # --include-body, so the helper's projection carries `body`. Serve the SAME
+    # open-issues.json fixture jq-remapped to REST snake_case, preserving `body`
+    # so the helper remaps back to identical camelCase data.
     if [[ -f "$STUB_DIR/open-issues.json" ]]; then
-      cat "$STUB_DIR/open-issues.json"
+      jq 'map({number, pull_request: null, created_at: (.createdAt // null), closed_at: (.closedAt // null), labels: (.labels // [])} + (if has("body") then {body} else {} end) + (if has("title") then {title} else {} end))' "$STUB_DIR/open-issues.json"
     else
       echo '[]'
     fi
@@ -26839,10 +27089,16 @@ STUB
 STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
 args="$*"
 case "$args" in
-  issue\ list\ *dispatch:main-broken*)
-    # Step-1c main-broken latch: still on `gh issue list` (not converted, #1601 A5).
+  api\ *repos/*/issues\?*dispatch:main-broken*)
+    # Step-1c main-broken latch: converted to gh_issue_list_rest (REST) by #2258.
+    # main-broken-open.txt holds one issue number per line; wrap them into a
+    # REST-shape snake_case array so the helper remaps to camelCase and the
+    # script's `jq -r '.[].number'` recovers the same numbers. Absent file → [],
+    # so the open-latch query returns empty and the re-arm short-circuits.
     if [[ -f "$STUB_DIR/main-broken-open.txt" ]]; then
-      cat "$STUB_DIR/main-broken-open.txt"
+      jq -R -s 'split("\n") | map(select(length > 0) | {number: (. | tonumber), pull_request: null, created_at: null, closed_at: null, labels: []})' "$STUB_DIR/main-broken-open.txt"
+    else
+      echo "[]"
     fi
     ;;
   api\ *repos/*/issues\?*dispatch:sync-broken*)
@@ -27920,11 +28176,16 @@ for a in "$@"; do
   prev="$a"
 done
 case "$sub" in
-  "issue list")
-    # Return the open-latch number if seeded; an absent file means no open
-    # latch (CREATE path). Must exit 0 either way — the script reads this under
-    # `set -e`, so a falsy `[[ -f ]]` test (no file) must not propagate rc 1.
-    [[ -f "$CAP/existing.txt" ]] && cat "$CAP/existing.txt"
+  "api --paginate")
+    # gh_issue_list_rest uses REST: gh api --paginate repos/{owner}/{repo}/issues?...
+    # Return the open-latch number if seeded; absent file means no open latch.
+    # gh_issue_list_rest remaps from snake_case REST to camelCase; serve snake_case.
+    if [[ -f "$CAP/existing.txt" ]]; then
+      num=$(cat "$CAP/existing.txt")
+      printf '[{"number":%s,"pull_request":null,"created_at":"2026-01-01T00:00:00Z","closed_at":null,"labels":[]}]' "$num"
+    else
+      echo '[]'
+    fi
     exit 0
     ;;
   "issue create")
@@ -31183,6 +31444,7 @@ digest_window_setup() {
   mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/bin"
 
   cp "$SCRIPT_DIR/dispatch-digest-window" "$TMPDIR_TEST/scripts/dispatch-digest-window"
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-digest-window"
 
   cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
@@ -31197,9 +31459,11 @@ case "$args" in
       echo '{"createdAt":"2026-01-01T00:00:00Z","labels":[{"name":"jit:digest"}]}'
     fi
     ;;
-  issue\ list\ --repo\ *\ --label\ *\ --state\ closed\ --limit\ *\ --json\ number,closedAt)
+  api\ repos/*/issues*)
+    # gh_issue_list_rest uses REST: gh api repos/<repo>/issues?state=...
+    # Return each item in REST snake_case format; gh_issue_list_rest remaps to camelCase.
     if [[ -f "$TREE/closed.json" ]]; then
-      cat "$TREE/closed.json"
+      jq 'map({number, pull_request: null, created_at: .createdAt, closed_at: .closedAt, labels})' "$TREE/closed.json"
     else
       echo '[]'
     fi
@@ -31343,6 +31607,9 @@ drift_scan_setup() {
 
   cp "$SCRIPT_DIR/dispatch-drift-scan" "$TMPDIR_TEST/scripts/dispatch-drift-scan"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-drift-scan"
+  # dispatch-drift-scan now sources lib.sh (for gh_retry); $SCRIPT_DIR inside the
+  # copied script resolves to this temp scripts/ dir, so lib.sh must live there.
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
 
   cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
 #!/usr/bin/env bash
@@ -31356,7 +31623,13 @@ case "$args" in
       echo '{"createdAt":"2026-01-01T00:00:00Z","body":"no refs"}'
     fi
     ;;
-  "pr list --state merged --search merged:>="*" --limit 100 --json number,title,mergedAt")
+  api\ *repos/*/pulls\?state=closed*)
+    # dispatch-drift-scan's merged-PR window now hits an inline REST call (#2258):
+    # `gh api --paginate repos/{owner}/{repo}/pulls?state=closed&sort=updated&...`.
+    # The leading `*` absorbs the optional `--paginate`. Serve the SAME fixture
+    # data the old `gh pr list --state merged` arm served, but in REST snake_case
+    # (number,title,merged_at,created_at,updated_at) — the script filters and
+    # remaps to mergedAt locally.
     if [[ -f "$TREE/prs.json" ]]; then
       cat "$TREE/prs.json"
     else
@@ -31410,7 +31683,7 @@ cat > "$TMPDIR_TEST/issue.json" <<'EOF'
 {"createdAt":"2026-06-03T00:00:00Z","body":"Touches `present.sh` and `does/not/exist.ts`. Uses `presentName_token` and `absentName_token`."}
 EOF
 cat > "$TMPDIR_TEST/prs.json" <<'EOF'
-[{"number":42,"title":"some pr","mergedAt":"2026-06-02T00:00:00Z"}]
+[{"number":42,"title":"some pr","created_at":"2026-05-20T00:00:00Z","merged_at":"2026-06-04T00:00:00Z","updated_at":"2026-06-04T00:00:00Z"}]
 EOF
 cat > "$TMPDIR_TEST/commits.txt" <<'EOF'
 abc1234 reworked present.sh distinctively_committed
@@ -31437,7 +31710,10 @@ printf 'echo hi\n' > "$TMPDIR_TEST/tree/present.sh"
 cat > "$TMPDIR_TEST/issue.json" <<'EOF'
 {"createdAt":"2026-06-03T00:00:00Z","body":"Touches `present.sh`."}
 EOF
-jq -nc '[range(100) | {number: (.+1), title: ("pr " + (.+1|tostring)), mergedAt: "2026-06-01T00:00:00Z"}]' \
+# REST snake_case fixtures, all merged IN-WINDOW (merged_at >= the 2026-06-03
+# anchor) so the local merged_at filter keeps all 100 and the >=100 in-window
+# guard fires. updated_at >= merged_at as REST guarantees.
+jq -nc '[range(100) | {number: (.+1), title: ("pr " + (.+1|tostring)), created_at: "2026-05-25T00:00:00Z", merged_at: "2026-06-04T00:00:00Z", updated_at: "2026-06-04T00:00:00Z"}]' \
   > "$TMPDIR_TEST/prs.json"
 cd "$TMPDIR_TEST/tree"
 out=$("$TMPDIR_TEST/scripts/dispatch-drift-scan" 1080); rc=$?
@@ -31587,20 +31863,25 @@ followup_exists_setup() {
   mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/bin"
 
   cp "$SCRIPT_DIR/dispatch-followup-exists" "$TMPDIR_TEST/scripts/dispatch-followup-exists"
+  # (#2258) dispatch-followup-exists now sources lib.sh (for gh_issue_list_rest),
+  # so lib.sh must sit alongside it. Sourced, not executed — no chmod +x.
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-followup-exists"
 
-  # gh stub: matches ONLY the exact invocation the script makes:
-  #   gh issue list --search "\"<id>\" in:title" --state all --json number,title --limit 100
-  # On match, cat the fixture $TREE/issues.json if present, else echo [].
-  # The stub does NOT filter — it returns the whole array; the script's jq filters.
+  # gh stub: (#2258) the script now fetches via gh_issue_list_rest, which issues
+  #   gh api [--paginate] repos/{owner}/{repo}/issues?state=all&...
+  # On match, serve the fixture $TREE/issues.json (else []), jq-remapped from the
+  # fixture's {number,title} to REST snake_case WITH title (the script passes
+  # --include-title). The stub does NOT filter on the identifier — it returns the
+  # whole array; the script's boundary-aware jq post-filter does the matching.
   cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 args="$*"
 TREE="$(cd "$(dirname "$0")/.." && pwd)"
 case "$args" in
-  issue\ list\ *--state\ all\ --json\ number,title\ --limit\ 100)
+  *"api "*"repos/"*"/issues"*)
     if [[ -f "$TREE/issues.json" ]]; then
-      cat "$TREE/issues.json"
+      jq 'map({number, pull_request: null, created_at: null, closed_at: null, labels: []} + (if has("title") then {title} else {} end))' "$TREE/issues.json"
     else
       echo '[]'
     fi

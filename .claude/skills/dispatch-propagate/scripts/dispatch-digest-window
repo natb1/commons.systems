@@ -24,6 +24,9 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+
 # ---- Step 0: parse arguments ------------------------------------------------
 
 REPO="${1:-}"
@@ -70,8 +73,8 @@ CREATED_AT=$(printf '%s' "$ISSUE_JSON" | jq -r '.createdAt')
 # here: GitHub returns closedAt as zero-padded UTC ISO-8601 (e.g.
 # 2026-05-25T12:00:00Z), so string order is time order — no fromdate needed.
 
-CLOSED_JSON=$(gh issue list --repo "$REPO" --label "$JIT_LABEL" \
-  --state closed --limit 100 --json number,closedAt)
+CLOSED_JSON=$(gh_issue_list_rest --repo "$REPO" --label "$JIT_LABEL" \
+  --state closed --limit 100)
 
 PRIOR_CLOSED_AT=$(printf '%s' "$CLOSED_JSON" \
   | jq -r --arg num "$NUM" \
