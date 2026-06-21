@@ -604,7 +604,7 @@ describe("initPlayer", () => {
         expect(mockSavePlayerState).toHaveBeenCalled();
       });
 
-      const lastCall = mockSavePlayerState.mock.calls.at(-1)![0] as ReturnType<typeof mockSavePlayerState>;
+      const lastCall = mockSavePlayerState.mock.calls.at(-1)![0] as ReturnType<typeof mockSavePlayerState>; // type-safety-ok: mock-call introspection in test
       expect(lastCall.queue).toEqual(["song.mp3"]);
       expect(lastCall.currentLocalName).toBe("song.mp3");
       expect(lastCall.positionSeconds).toBe(0);
@@ -622,7 +622,7 @@ describe("initPlayer", () => {
       // Add a local track to the queue while cloud is current
       player.add(localTrack);
 
-      const lastCall = mockSavePlayerState.mock.calls.at(-1)![0] as ReturnType<typeof mockSavePlayerState>;
+      const lastCall = mockSavePlayerState.mock.calls.at(-1)![0] as ReturnType<typeof mockSavePlayerState>; // type-safety-ok: mock-call introspection in test
       // Local queue includes only local items
       expect(lastCall.queue).toEqual(["song.mp3"]);
       // Current track is cloud → currentLocalName is undefined

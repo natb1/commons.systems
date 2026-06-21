@@ -52,7 +52,7 @@ export interface SidecarData {
   playlists?: Record<string, string[]>;
 }
 
-/** The shape a patch may carry: any subset of fields, playerState partial. */
+/** The shape a patch may carry — an arbitrary subset of fields, playerState partial. */
 type SidecarPatch = Partial<{
   metadata: Record<string, AudioTags>;
   playerState: Partial<PlayerState>;

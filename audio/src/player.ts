@@ -50,9 +50,9 @@ export function initPlayer(
   // undefined. savePlayerState no-ops on disk when the folder is read-only and is
   // a cheap in-memory update otherwise — safe to call freely.
   function persistState(positionSeconds: number): void {
-    const localQueue = queue
-      .filter((q) => q.origin === "local" && q.localName)
-      .map((q) => q.localName as string);
+    const localQueue = queue.flatMap((q) =>
+      q.origin === "local" && q.localName ? [q.localName] : [],
+    );
     const current = queue[currentIndex];
     const currentLocalName =
       current && current.origin === "local" ? current.localName : undefined;
@@ -183,8 +183,10 @@ export function initPlayer(
     currentIndex = index;
     renderPlaylist();
     revokeCurrentObjectUrl();
-    // Local-only restore: every restored request has origin "local".
-    resolveLocalAudioSource(item.localName!)
+    // Local-only restore: loadPausedAt is reached only from restore(), which
+    // rebuilds the queue with exclusively origin "local" requests carrying a
+    // defined localName — so the non-null assertion is an invariant, not a guess.
+    resolveLocalAudioSource(item.localName!) // type-safety-ok: restore() guarantees every rebuilt PlayRequest carries a localName
       .then((url) => {
         if (generation !== playGeneration) {
           URL.revokeObjectURL(url);
@@ -264,9 +266,9 @@ export function initPlayer(
     },
 
     getLocalQueueNames(): string[] {
-      return queue
-        .filter((q) => q.origin === "local" && q.localName)
-        .map((q) => q.localName as string);
+      return queue.flatMap((q) =>
+        q.origin === "local" && q.localName ? [q.localName] : [],
+      );
     },
 
     loadPlaylist(localNames: string[], items: LibraryItem[]): void {

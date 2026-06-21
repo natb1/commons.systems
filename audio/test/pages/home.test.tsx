@@ -610,8 +610,8 @@ describe("Home", () => {
         <Home user={null} player={null} refreshKey={0} />,
       );
 
-      const row = container.querySelector('[data-id="local:song.mp3"]')!;
-      expect(row.querySelector(".artist")!.textContent).toBe("Real Artist");
+      const row = container.querySelector('[data-id="local:song.mp3"]')!; // type-safety-ok: DOM element asserted present after render in test
+      expect(row.querySelector(".artist")!.textContent).toBe("Real Artist"); // type-safety-ok: DOM element asserted present after render in test
 
       await cleanup(container, root);
     });
@@ -640,7 +640,7 @@ describe("Home", () => {
       );
 
       const select =
-        container.querySelector<HTMLSelectElement>("#load-playlist-select")!;
+        container.querySelector<HTMLSelectElement>("#load-playlist-select")!; // type-safety-ok: DOM element asserted present after render in test
       const optionValues = Array.from(select.options).map((o) => o.value);
       expect(optionValues).toEqual(["", "Chill", "Focus"]);
 
@@ -657,7 +657,7 @@ describe("Home", () => {
       );
 
       const btn =
-        container.querySelector<HTMLButtonElement>("#save-playlist-btn")!;
+        container.querySelector<HTMLButtonElement>("#save-playlist-btn")!; // type-safety-ok: DOM element asserted present after render in test
       await act(async () => {
         btn.click();
       });
@@ -683,7 +683,7 @@ describe("Home", () => {
       );
 
       const btn =
-        container.querySelector<HTMLButtonElement>("#save-playlist-btn")!;
+        container.querySelector<HTMLButtonElement>("#save-playlist-btn")!; // type-safety-ok: DOM element asserted present after render in test
       await act(async () => {
         btn.click();
       });
@@ -704,7 +704,7 @@ describe("Home", () => {
       );
 
       const btn =
-        container.querySelector<HTMLButtonElement>("#save-playlist-btn")!;
+        container.querySelector<HTMLButtonElement>("#save-playlist-btn")!; // type-safety-ok: DOM element asserted present after render in test
       await act(async () => {
         btn.click();
       });
@@ -728,7 +728,7 @@ describe("Home", () => {
       );
 
       const select =
-        container.querySelector<HTMLSelectElement>("#load-playlist-select")!;
+        container.querySelector<HTMLSelectElement>("#load-playlist-select")!; // type-safety-ok: DOM element asserted present after render in test
       await act(async () => {
         select.value = "Chill";
         select.dispatchEvent(new Event("change", { bubbles: true }));

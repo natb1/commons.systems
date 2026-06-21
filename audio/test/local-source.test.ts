@@ -197,7 +197,7 @@ describe("connect + list", () => {
     const mod = await loadModule();
     await mod.connectLocalFolder();
     expect(
-      (window as unknown as { showDirectoryPicker: ReturnType<typeof vi.fn> })
+      (window as unknown as { showDirectoryPicker: ReturnType<typeof vi.fn> }) // type-safety-ok: test stubs window.showDirectoryPicker global
         .showDirectoryPicker,
     ).toHaveBeenCalledWith({ mode: "readwrite" });
     expect(fakeStore.put).toHaveBeenCalledWith("library-folder", handle);
@@ -270,7 +270,7 @@ describe("resolveLocalAudioSource", () => {
 describe("resolveLocalBytes", () => {
   it("returns the bytes for a listed local item", async () => {
     const handle = fakeDir([fileEntry("tune.flac", 3000)]);
-    (window as unknown as { showDirectoryPicker: unknown }).showDirectoryPicker =
+    (window as unknown as { showDirectoryPicker: unknown }).showDirectoryPicker = // type-safety-ok: test stubs window.showDirectoryPicker global
       vi.fn().mockResolvedValue(handle);
     fakeStore.put.mockResolvedValue(undefined);
 
@@ -279,14 +279,14 @@ describe("resolveLocalBytes", () => {
 
     const buf = await mod.resolveLocalBytes({
       id: "local:tune.flac",
-    } as LibraryItem);
+    } as LibraryItem); // type-safety-ok: partial LibraryItem fixture for test
     expect(buf).not.toBeNull();
-    expect(new TextDecoder().decode(buf!)).toBe("tune.flac");
+    expect(new TextDecoder().decode(buf!)).toBe("tune.flac"); // type-safety-ok: buffer asserted non-null on the preceding line
   });
 
   it("returns null (not a throw) when the item is no longer present", async () => {
     const handle = fakeDir([fileEntry("tune.flac", 3000)]);
-    (window as unknown as { showDirectoryPicker: unknown }).showDirectoryPicker =
+    (window as unknown as { showDirectoryPicker: unknown }).showDirectoryPicker = // type-safety-ok: test stubs window.showDirectoryPicker global
       vi.fn().mockResolvedValue(handle);
     fakeStore.put.mockResolvedValue(undefined);
 
@@ -295,7 +295,7 @@ describe("resolveLocalBytes", () => {
 
     const buf = await mod.resolveLocalBytes({
       id: "local:missing.flac",
-    } as LibraryItem);
+    } as LibraryItem); // type-safety-ok: partial LibraryItem fixture for test
     expect(buf).toBeNull();
     expect(mockLogError).toHaveBeenCalledWith(expect.anything(), {
       operation: "resolve-local-bytes",
@@ -306,7 +306,7 @@ describe("resolveLocalBytes", () => {
     const mod = await loadModule();
     const buf = await mod.resolveLocalBytes({
       id: "local:tune.flac",
-    } as LibraryItem);
+    } as LibraryItem); // type-safety-ok: partial LibraryItem fixture for test
     expect(buf).toBeNull();
   });
 });
@@ -328,7 +328,7 @@ describe("scan errors", () => {
 
 describe("enrichment", () => {
   function connectDir(handle: FileSystemDirectoryHandle) {
-    (window as unknown as { showDirectoryPicker: unknown }).showDirectoryPicker = vi
+    (window as unknown as { showDirectoryPicker: unknown }).showDirectoryPicker = vi // type-safety-ok: test stubs window.showDirectoryPicker global
       .fn()
       .mockResolvedValue(handle);
     fakeStore.put.mockResolvedValue(undefined);
@@ -387,7 +387,7 @@ describe("enrichment", () => {
     expect(mockExtract).toHaveBeenCalledTimes(2);
     // Single batched write
     expect(mockCacheMetadataBatch).toHaveBeenCalledTimes(1);
-    const batchArg = mockCacheMetadataBatch.mock.calls[0][0] as Record<string, unknown>;
+    const batchArg = mockCacheMetadataBatch.mock.calls[0][0] as Record<string, unknown>; // type-safety-ok: mock-call introspection in test
     expect(batchArg["song.mp3"]).toEqual({ artist: "X" });
     expect(batchArg["tune.flac"]).toEqual({ artist: "X" });
   });
@@ -432,7 +432,7 @@ describe("enrichment", () => {
     await mod.enrichLocalTracks();
 
     // batch arg must not include the failing file
-    const batchArg = mockCacheMetadataBatch.mock.calls[0][0] as Record<string, unknown>;
+    const batchArg = mockCacheMetadataBatch.mock.calls[0][0] as Record<string, unknown>; // type-safety-ok: mock-call introspection in test
     expect("song.mp3" in batchArg).toBe(false);
     // good file is present
     expect(batchArg["tune.flac"]).toEqual({ artist: "Y" });

@@ -74,7 +74,7 @@ function makeFakeFileHandle(
       if (state.content === null) {
         return Promise.reject(new DOMException("File not found", "NotFoundError"));
       }
-      return Promise.resolve({ text: () => Promise.resolve(state.content as string) });
+      return Promise.resolve({ text: () => Promise.resolve(state.content as string) }); // type-safety-ok: in-memory FSA fake content is a string in test
     }),
     createWritable,
     _abortSpy: abortSpy,
@@ -116,7 +116,7 @@ function makeFakeDir(subdirs: FakeSubdirs): FileSystemDirectoryHandle {
       return Promise.resolve(newSubdir);
     }),
     _subdirs: subdirs,
-  } as unknown as FileSystemDirectoryHandle;
+  } as unknown as FileSystemDirectoryHandle; // type-safety-ok: in-memory FSA directory-handle fake for test
 }
 
 /** Build a fake directory that already has a `.commons-audio/index.json` with given content. */
@@ -543,7 +543,7 @@ describe("cacheMetadata / getMetadata — writable=false", () => {
     expect(await getMetadata("song.mp3")).toEqual({ title: "In-memory" });
 
     // .commons-audio dir was never created
-    const anySubdirs = (dir as unknown as { _subdirs: Record<string, unknown> })._subdirs;
+    const anySubdirs = (dir as unknown as { _subdirs: Record<string, unknown> })._subdirs; // type-safety-ok: test fake internals (_subdirs) access
     expect(anySubdirs[".commons-audio"]).toBeUndefined();
   });
 });
@@ -561,7 +561,7 @@ describe("cacheMetadataBatch", () => {
     await flushWrites();
 
     // .commons-audio dir was never created (no write happened)
-    const anySubdirs = (dir as unknown as { _subdirs: Record<string, unknown> })._subdirs;
+    const anySubdirs = (dir as unknown as { _subdirs: Record<string, unknown> })._subdirs; // type-safety-ok: test fake internals (_subdirs) access
     expect(anySubdirs[".commons-audio"]).toBeUndefined();
   });
 
@@ -632,7 +632,7 @@ describe("savePlayerState / getPlayerState", () => {
 
     expect(await getPlayerState()).toMatchObject({ queue: ["b.mp3"] });
 
-    const anySubdirs = (dir as unknown as { _subdirs: Record<string, unknown> })._subdirs;
+    const anySubdirs = (dir as unknown as { _subdirs: Record<string, unknown> })._subdirs; // type-safety-ok: test fake internals (_subdirs) access
     expect(anySubdirs[".commons-audio"]).toBeUndefined();
   });
 });
