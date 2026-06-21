@@ -12,6 +12,7 @@ declare -A DIRTY_APPS
 RUN_NIX=false
 RUN_RULES=false
 RUN_PROSE=false
+RUN_DS_DRIFT=false
 EXPLICIT=false
 
 while [[ $# -gt 0 ]]; do
@@ -37,8 +38,13 @@ while [[ $# -gt 0 ]]; do
       EXPLICIT=true
       shift
       ;;
+    --ds-drift)
+      RUN_DS_DRIFT=true
+      EXPLICIT=true
+      shift
+      ;;
     *)
-      echo "Usage: run-lint.sh [--app <dir>] [--nix] [--rules] [--prose]" >&2
+      echo "Usage: run-lint.sh [--app <dir>] [--nix] [--rules] [--prose] [--ds-drift]" >&2
       exit 1
       ;;
   esac
@@ -63,6 +69,7 @@ if [ "$EXPLICIT" = false ]; then
       nix/*|flake.nix|flake.lock) RUN_NIX=true ;;
       firestore.rules) RUN_RULES=true ;;
       *.sh) RUN_PROSE=true ;;
+      *.css|*.tsx) RUN_DS_DRIFT=true ;;
     esac
   done <<< "$CHANGED"
 fi
@@ -119,7 +126,18 @@ if [ "$RUN_PROSE" = true ]; then
   fi
 fi
 
-if [ ${#APP_DIRS[@]} -eq 0 ] && [ "$RUN_NIX" = false ] && [ "$RUN_RULES" = false ] && [ "$RUN_PROSE" = false ]; then
+# Run ds-drift lint
+if [ "$RUN_DS_DRIFT" = true ]; then
+  echo "=== ds-drift lint ==="
+  if "$SCRIPTS/lint-ds-drift.sh"; then
+    echo "PASS: ds-drift"
+  else
+    echo "FAIL: ds-drift" >&2
+    FAILURES+=(ds-drift)
+  fi
+fi
+
+if [ ${#APP_DIRS[@]} -eq 0 ] && [ "$RUN_NIX" = false ] && [ "$RUN_RULES" = false ] && [ "$RUN_PROSE" = false ] && [ "$RUN_DS_DRIFT" = false ]; then
   echo "No lint targets matched changed files. Nothing to check."
   exit 0
 fi
