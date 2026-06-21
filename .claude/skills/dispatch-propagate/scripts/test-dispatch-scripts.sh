@@ -3624,7 +3624,7 @@ teardown
 # only "epic"; "enhancement" is not in it, so the gate blocks it.
 echo "Test: gate — no config + non-epic label → exit 1"
 setup
-printf '{"labels":[{"name":"enhancement"}]}\n' > "$STUB_DIR/issue-labels-71.json"
+printf '{"state":"open","labels":[{"name":"enhancement"}]}\n' > "$STUB_DIR/arg-issue-71.json"
 printf '[{"number":711}]\n' > "$STUB_DIR/subissues-71.json"
 printf '{"title":"c","body":"","comments":[],"number":711,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
   > "$STUB_DIR/issue-711.json"
@@ -3637,7 +3637,7 @@ teardown
 echo "Test: gate — config override big-epic + issue carries big-epic → exit 0"
 setup
 printf '{"labels":["big-epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
-printf '{"labels":[{"name":"big-epic"}]}\n' > "$STUB_DIR/issue-labels-72.json"
+printf '{"state":"open","labels":[{"name":"big-epic"}]}\n' > "$STUB_DIR/arg-issue-72.json"
 printf '[{"number":721}]\n' > "$STUB_DIR/subissues-72.json"
 printf '{"title":"c","body":"","comments":[],"number":721,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
   > "$STUB_DIR/issue-721.json"
@@ -3651,7 +3651,7 @@ teardown
 echo "Test: gate — config override big-epic + issue carries plain epic → exit 1"
 setup
 printf '{"labels":["big-epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
-printf '{"labels":[{"name":"epic"}]}\n' > "$STUB_DIR/issue-labels-73.json"
+printf '{"state":"open","labels":[{"name":"epic"}]}\n' > "$STUB_DIR/arg-issue-73.json"
 printf '[{"number":731}]\n' > "$STUB_DIR/subissues-73.json"
 printf '{"title":"c","body":"","comments":[],"number":731,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
   > "$STUB_DIR/issue-731.json"
