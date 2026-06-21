@@ -9,7 +9,8 @@
 // The imperative DOM mutations of the legacy hydrate become React state:
 //   - the URL query (institution/account/period) is React state, initialized
 //     from parseReconcileQuery(location.search) — the deep-link read — and written
-//     back with history.replaceState on a Select change. We do NOT dispatch
+//     back via the shared navigate(…, { replace: true }) abstraction on a Select
+//     change. We do NOT dispatch
 //     popstate: useRouter strips the query, so a query-only popstate is inert, and
 //     App re-keys only on a data transition. The component owns its query.
 //   - per-leg checked state is React state (the optimistic toggle); on a persist
@@ -24,6 +25,7 @@
 // behaviorally identical and keeps one code path. The two legacy triggerReload()
 // sites map to: a Select change (query state change) and post-finalize (nonce bump).
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { navigate } from "@commons-systems/router/react";
 import { Button, Card, Input, Metric, Select } from "@commons-systems/ds";
 import { classifyError } from "@commons-systems/errorutil/classify";
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
@@ -62,13 +64,13 @@ interface ReconcileQuery {
 }
 
 // Faithful port of accounts-reconcile-hydrate.ts replaceQueryParam: write/clear a
-// single query param via history.replaceState (NOT pushState — matches legacy and
-// avoids back-button query cycling).
+// single query param via the shared `navigate(…, { replace: true })` abstraction
+// (NOT pushState — matches legacy and avoids back-button query cycling).
 function replaceQueryParam(name: string, value: string | null): void {
   const url = new URL(location.href);
   if (value === null || value === "") url.searchParams.delete(name);
   else url.searchParams.set(name, value);
-  history.replaceState(null, "", url);
+  navigate(url.pathname + url.search + url.hash, { replace: true });
 }
 
 /**
@@ -764,8 +766,9 @@ export function AccountsReconcile({ options }: { options: RenderPageOptions }): 
 
   const load = useReconcileData(options, query, reloadNonce);
 
-  // Select change → write the URL (replaceState) AND update query state. No
-  // popstate dispatch (useRouter strips the query, so it is inert).
+  // Select change → write the URL via the shared `navigate(…, { replace: true })`
+  // abstraction AND update query state. No popstate dispatch (useRouter strips the
+  // query, so it is inert).
   const onSelectAccount = (value: string): void => {
     if (!value) {
       replaceQueryParam("institution", null);

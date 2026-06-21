@@ -80,6 +80,16 @@ output — do not re-resolve any of them later:
   Workflow `args` / Step 1 review context so the review pass sees what qa-fix
   already tried. An absent note leaves the review unchanged.
 
+Once `PR_NUM` is confirmed present, stamp it into this session's dispatch
+sidecar so the token audit can join the session to its PR (#1861). Its failure
+is non-fatal — the script exits 0 on any miss. Use `dangerouslyDisableSandbox:
+true` (the sidecar lives under `~/.claude/projects`, outside the sandbox
+write-allowlist):
+
+```bash
+.claude/skills/dispatch-propagate/scripts/dispatch-stamp-session --backfill-pr "$PR_NUM"
+```
+
 If the labels line already includes `dispatch:reviewed` — an interrupted prior
 run — **skip Steps 1–6** and go straight to Step 7, which flushes any unpushed
 commits and writes the marker. `dispatch:reviewed` is this skill's terminal
@@ -641,23 +651,33 @@ narrowing is normal-vs-re-entry). Then upsert it (use
 
 ```bash
 .claude/skills/dispatch-propagate/scripts/dispatch-write-phase-log \
-  "$N" --phase review < tmp/phase-log-entry-$N.md
+  "$N" --phase review --reentry false < tmp/phase-log-entry-$N.md
 ```
 
-Skip the phase-log write entirely on re-entry. On re-entry `dispatch:reviewed` is
-already present, so the write is skipped — there is no ordering concern relative
-to the label on the re-entry path.
+On re-entry (Steps 1–6 were skipped and `result` is absent), call the writer with
+`--reentry true </dev/null` — the script enforces the skip and preserves the prior
+`(review, 1)` entry verbatim. On re-entry `dispatch:reviewed` is already present,
+so there is no ordering concern relative to the label. Gate on whether Steps 1–6
+ran this session (the `result` is absent on re-entry), NOT on label or PR presence
+as the implementation gate.
+
+```bash
+.claude/skills/dispatch-propagate/scripts/dispatch-write-phase-log \
+  "$N" --phase review --reentry true </dev/null
+```
 
 No attempt counter — review is single-pass, so the default `--attempt 1` applies.
-The upsert is idempotent on the `(review, 1)` key. Why re-entry must skip rather
-than re-write: the phase-log write PRECEDES the `dispatch:reviewed` apply (above),
-and re-entry is GATED on `dispatch:reviewed` already being present (see preamble:
-"If the labels line already includes `dispatch:reviewed`"). So whenever re-entry
-fires, the accurate `(review, 1)` entry the original run wrote is guaranteed
-already durable on the comment. Skipping the write preserves it. A re-write on
-re-entry has no prior-pass data to restate (`result` is absent), so it would only
-overwrite the good entry with a content-free/degraded one — it can never fill a
-gap, only destroy one.
+The upsert is idempotent on the `(review, 1)` key. Why re-entry must not re-write:
+the phase-log write PRECEDES the `dispatch:reviewed` apply (above), and re-entry
+is GATED on `dispatch:reviewed` already being present (see preamble: "If the
+labels line already includes `dispatch:reviewed`"). So whenever re-entry fires, the
+accurate `(review, 1)` entry the original run wrote is guaranteed already durable
+on the comment. The script enforces the skip via `--reentry true`, preserving it.
+A re-write on re-entry has no prior-pass data to restate (`result` is absent), so
+it would only overwrite the good entry with a content-free/degraded one — it can
+never fill a gap, only destroy one. This skip-preserves-verbatim behavior is
+covered by the behavioral test
+`.claude/skills/dispatch-propagate/scripts/test-phase-log-reentry.sh`.
 
 Then apply the `dispatch:reviewed` label via `dispatch-complete-phase` (use
 `dangerouslyDisableSandbox: true` — the script calls `gh`):
@@ -760,11 +780,31 @@ REPO=$(git remote get-url origin | sed -E 's#.*github.com[:/]##; s#\.git$##')
   --disposition <result.disposition>
 ```
 
-Then **stop**. The Stop hook reads the marker and advances the chain. Applying
-`dispatch:reviewed` is unconditional; only the marker is skipped when the
-deviation criterion fires. Promotion to ready is never this skill's job — the
-router's `dispatch-reconcile-ready` owns it, reconciling the draft↔ready bit on
-every tick once CI is passing and `mergeable == MERGEABLE`.
+**Then, as the ABSOLUTE LAST action**, run `dispatch-finalize-phase` — AFTER the
+envelope emit above (it self-closes the session, terminating telemetry, so all
+prior steps must complete first). It strips any premature `dispatch:office-hours`
+from the issue + PR, spawns the next tick + sweep, and self-closes (`exec claude
+rm`; a no-op interactively when `CLAUDE_JOB_DIR` is unset). Use
+`dangerouslyDisableSandbox: true` — it invokes `gh` (network) and `claude rm`
+(over a Unix socket):
+
+```bash
+.claude/skills/dispatch-propagate/scripts/dispatch-finalize-phase <N> --pr "$PR_NUM"
+```
+
+This is the no-deviation success path only. On the deviation path and the
+idempotent re-entry path, do **not** call `dispatch-finalize-phase` — those
+legitimately leave the session for the Stop hook's office-hours disposition.
+
+`dispatch-finalize-phase` now drives self-close, office-hours stripping, and
+chain propagation deterministically — the chain no longer depends on a second
+Stop hook firing (which the harness does not reliably emit after a
+background-task wait). A stray second Stop firing afterward is harmless: every
+finalize step is idempotent. Applying `dispatch:reviewed` is unconditional; only
+the marker is skipped when the deviation criterion fires. Promotion to ready is
+never this skill's job — the router's `dispatch-reconcile-ready` owns it,
+reconciling the draft↔ready bit on every tick once CI is passing and
+`mergeable == MERGEABLE`.
 
 ## Per-finding schema
 

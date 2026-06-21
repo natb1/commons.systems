@@ -20,7 +20,7 @@
 // in Cases 2 and 7 verify.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act } from "@testing-library/react";
-import { createElement } from "react";
+import { createElement, Fragment } from "react";
 import { renderToString } from "react-dom/server";
 
 import { createBlogApp } from "../src/create-blog-app.ts";
@@ -334,7 +334,7 @@ describe("createBlogApp routing and panel behavior", () => {
     });
   });
 
-  // Case 4 — extraRoutes composition: /about renders via dangerouslySetInnerHTML
+  // Case 4 — extraRoutes composition: /about renders a ReactNode body
   // + deferred afterRender, then home navigation restores the feed.
   it("renders extraRoutes and navigates back to home", async () => {
     history.pushState({}, "", "/");
@@ -348,7 +348,7 @@ describe("createBlogApp routing and panel behavior", () => {
     config.extraRoutes = [
       {
         path: "/about",
-        render: () => '<div data-test="about">ABOUT</div>',
+        render: () => createElement("div", { "data-test": "about" }, "ABOUT"),
         afterRender: aboutAfterRender,
       },
     ];
@@ -382,8 +382,16 @@ describe("createBlogApp routing and panel behavior", () => {
   // appRoot.render tears the node down (client render), failing the toBe below.
   it("reuses the prerendered #app node on direct /about entry (no CLS, no hydration error #424)", async () => {
     history.pushState({}, "", "/about");
-    const aboutBody = '<h2>About</h2><p data-test="about-body">About content</p>';
-    const aboutPanel = '<section class="profile-card">ABOUT PANEL</section>';
+    // The body and panel are ReactNodes. Both the route render / panel override
+    // and the scaffold below derive from these SAME nodes so the server-rendered
+    // markup byte-matches what the driver hydrates with (node-identity guard).
+    const aboutBody = createElement(
+      Fragment,
+      null,
+      createElement("h2", null, "About"),
+      createElement("p", { "data-test": "about-body" }, "About content"),
+    );
+    const aboutPanel = createElement("section", { className: "profile-card" }, "ABOUT PANEL");
     const config = makeConfig({
       buildTimeMetadata: [PUBLISHED_POST],
       buildTimeContent: PUBLISHED_CONTENT,
@@ -392,8 +400,8 @@ describe("createBlogApp routing and panel behavior", () => {
     });
 
     // Scaffold the prerendered DOM exactly as a deep /about entry is served: #app
-    // is the extraRoute body wrapped in <div> (the element the driver hydrates
-    // with — createElement("div", { dangerouslySetInnerHTML })), #info-panel is
+    // is the extraRoute body ReactNode wrapped in <div> (the element the driver
+    // hydrates with — createElement("div", null, node)), #info-panel is
     // InfoPanelRegion(aboutContent), and nav is BlogNav for the entry path.
     const navHtml = renderToString(
       createElement(BlogNav, {
@@ -405,9 +413,7 @@ describe("createBlogApp routing and panel behavior", () => {
         onSignOut: () => {},
       }),
     );
-    const appHtml = renderToString(
-      createElement("div", { dangerouslySetInnerHTML: { __html: aboutBody } }),
-    );
+    const appHtml = renderToString(createElement("div", null, aboutBody));
     const panelHtml = renderToString(
       createElement(InfoPanelRegion, {
         data: {
@@ -460,10 +466,12 @@ describe("createBlogApp routing and panel behavior", () => {
       blogRollEntries: BLOGROLL,
       strategies: new Map([["test-blog", { fetchLatestPost: () => Promise.resolve(LATEST) }]]),
       infoPanelContentForPath: (p) =>
-        p === "/about" ? '<section class="profile-card">ABOUT PANEL</section>' : undefined,
+        p === "/about"
+          ? createElement("section", { className: "profile-card" }, "ABOUT PANEL")
+          : undefined,
     });
     config.extraRoutes = [
-      { path: "/about", render: () => '<div data-test="about">ABOUT</div>' },
+      { path: "/about", render: () => createElement("div", { "data-test": "about" }, "ABOUT") },
     ];
     scaffoldDom(config, "/");
 

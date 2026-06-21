@@ -183,10 +183,19 @@ fi
 # dedup misses surface instead of silently creating duplicates.
 LIST_LIMIT=1000
 LIST_RC=0
-OPEN_JSON=$(gh issue list --repo "$CALENDAR_REPO" --label "$CALENDAR_LABEL" \
-  --state open --json number,body --limit "$LIST_LIMIT" 2>&1) || LIST_RC=$?
+# Capture stderr to a tmpfile rather than via 2>&1: gh_issue_list_rest runs
+# gh_retry internally, whose transient-retry diagnostics go to stderr. Folding
+# stderr into OPEN_JSON would contaminate the captured JSON on a
+# transient-then-success run (LIST_RC=0 but OPEN_JSON has a retry line prepended),
+# making the subsequent `jq` fail. The error-diagnostic intent is preserved by
+# reading the captured stderr only on failure.
+list_err=$(mktemp)
+OPEN_JSON=$(gh_issue_list_rest --repo "$CALENDAR_REPO" --label "$CALENDAR_LABEL" \
+  --state open --include-body --limit "$LIST_LIMIT" 2>"$list_err") || LIST_RC=$?
+err=$(cat "$list_err")
+rm -f "$list_err"
 if [[ "$LIST_RC" -ne 0 ]]; then
-  echo "calendar: error (gh issue list failed: $OPEN_JSON)" >&2
+  echo "calendar: error (gh issue list failed: $err)" >&2
   exit 1
 fi
 
@@ -249,10 +258,10 @@ while IFS= read -r line; do
   [[ -z "$line" ]] && continue
   read -r CLOSE_NUM CLOSE_EVT <<<"$line"
   CLOSE_RC=0
-  CLOSE_OUT=$(gh issue close "$CLOSE_NUM" --repo "$CALENDAR_REPO" \
+  CLOSE_OUT=$(gh_issue_close_rest "$CLOSE_NUM" --repo "$CALENDAR_REPO" \
     --comment "Event ended; closing this calendar reminder." 2>&1) || CLOSE_RC=$?
   if [[ "$CLOSE_RC" -ne 0 ]]; then
-    echo "calendar: error (gh issue close #$CLOSE_NUM failed: $CLOSE_OUT)" >&2
+    echo "calendar: error (gh_issue_close_rest #$CLOSE_NUM failed: $CLOSE_OUT)" >&2
     HARD_ERROR=1
     continue
   fi
@@ -455,10 +464,10 @@ for evt in "${EVENTS[@]}"; do
   BODY+=$'\n'"<!-- dispatch:calendar event=${EVENT_ID} start=${EVENT_START} end=${EVENT_END} -->"
 
   CREATE_RC=0
-  CREATE_OUT=$(gh issue create --repo "$CALENDAR_REPO" --label "$CALENDAR_LABEL" \
+  CREATE_OUT=$(gh_issue_create_rest --repo "$CALENDAR_REPO" --label "$CALENDAR_LABEL" \
     --title "$TITLE" --body "$BODY" 2>&1) || CREATE_RC=$?
   if [[ "$CREATE_RC" -ne 0 ]]; then
-    echo "calendar: error (gh issue create failed for event $EVENT_ID: $CREATE_OUT)" >&2
+    echo "calendar: error (gh_issue_create_rest failed for event $EVENT_ID: $CREATE_OUT)" >&2
     HARD_ERROR=1
     continue
   fi

@@ -16,13 +16,13 @@
 import type { User } from "firebase/auth";
 import type { Firestore } from "firebase/firestore";
 
-import { createElement, Fragment } from "react";
+import { createElement, Fragment, type ReactNode } from "react";
 import { hydrateRoot } from "react-dom/client";
 
 import type { Namespace } from "@commons-systems/firestoreutil/namespace";
 import { isInGroup, type GroupId } from "@commons-systems/authutil/groups";
 import type { NavLink } from "@commons-systems/ds";
-import { createHistoryRouter, parsePath, type Route } from "@commons-systems/router";
+import { createHistoryRouter, parsePath } from "@commons-systems/router";
 import { classifyError } from "@commons-systems/errorutil/classify";
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
 import { logError } from "@commons-systems/errorutil/log";
@@ -41,6 +41,21 @@ import { getPosts, type PostMeta } from "./firestore.ts";
 import type { PostContent } from "./marked-config.ts";
 import type { LinkSection } from "./components/info-panel.ts";
 import type { BlogRollEntry, BlogRollStrategy, LatestPost } from "./blog-roll/types.ts";
+
+/**
+ * A blog-local extra SPA route. Distinct from the shared router's `Route`: its
+ * `render` returns a ReactNode (React renders it into `#app`), whereas the
+ * router's `render` returns `string | null`. create-blog-app maps extraRoutes to
+ * `render: () => null` for the router (so the router never writes to `#app`) and
+ * invokes the real ReactNode render itself.
+ */
+export interface ExtraRoute {
+  // Matches the shared router's `Route.path` so the extraRoutes→router mapping
+  // below typechecks and the prior caller contract (landing) is preserved.
+  path: `/${string}` | RegExp;
+  render: (path: string) => ReactNode;
+  afterRender?: (outlet: HTMLElement, path: string) => void;
+}
 
 export interface CreateBlogAppConfig {
   // build-time data (passed in; NEVER imported in blog/)
@@ -71,38 +86,23 @@ export interface CreateBlogAppConfig {
   };
   adminGroupId: GroupId;
   /**
-   * Per-route info-panel content override. When it returns a string for the
+   * Per-route info-panel content override. When it returns a ReactNode for the
    * current path, InfoPanelRegion renders it as the panel (via `aboutContent`)
    * instead of the standard blogroll panel; returning `undefined` yields the
    * standard panel. Landing uses this for /about.
    *
-   * Sanitization contract: the returned string is passed as `aboutContent` to
-   * InfoPanelRegion and injected verbatim via `dangerouslySetInnerHTML` — the
-   * driver does NOT sanitize. The caller guarantees the HTML is already safe;
-   * current callers return hard-coded template literals.
-   *
-   * Widening trigger: if callers are ever extended to return dynamic or
-   * user-influenced content, add a `DOMPurify.sanitize(...)` pass in
-   * InfoPanelRegion before the value reaches `dangerouslySetInnerHTML`.
-   * `dompurify` is already a dependency — see
-   * `blog/src/pages/HomeRegion.tsx` for the existing
-   * `DOMPurify.sanitize(html, { ADD_ATTR: [...] })` usage to reuse.
+   * The returned node is rendered by React (server-side via `renderToString` at
+   * prerender time, client-side via the panel root), so React escapes text and
+   * no manual sanitization contract applies.
    */
-  infoPanelContentForPath?: (path: string) => string | undefined;
+  infoPanelContentForPath?: (path: string) => ReactNode;
   /**
    * Extra SPA routes beyond home / admin. Each route's `render(path)` return
-   * value is injected verbatim into `#app` via `dangerouslySetInnerHTML` — the
-   * driver does NOT sanitize. Callers guarantee the HTML is already safe;
-   * current callers return hard-coded template literals.
-   *
-   * Widening trigger: if `Route.render` is ever extended to return dynamic or
-   * user-influenced content, add a `DOMPurify.sanitize(...)` pass at the
-   * injection sites (entry-hydration and SPA-navigation `dangerouslySetInnerHTML`
-   * sinks below) before the value reaches React. `dompurify` is already a
-   * dependency — see `blog/src/pages/HomeRegion.tsx` for the existing
-   * `DOMPurify.sanitize(html, { ADD_ATTR: [...] })` usage to reuse.
+   * value is a ReactNode that React renders into `#app` (server-side via
+   * `renderToString` at prerender time, client-side via the app root), so React
+   * escapes text and no manual sanitization contract applies.
    */
-  extraRoutes?: Route[];
+  extraRoutes?: ExtraRoute[];
   onHomeAfterRender?: (slug: string | undefined) => void;
   onNavigate?: (path: string) => void;
   useScrollIndicator?: boolean;
@@ -250,14 +250,19 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
   // infoPanelContentForPath(currentPath), so a deep /about entry hydrates the
   // panel with the About content directly.
   const entryExtraRoute = matchExtraRoute(currentPath);
-  const entryExtraHtml = entryExtraRoute?.render(currentPath);
-  const hydratedExtraRoute = typeof entryExtraHtml === "string";
+  const entryExtraNode = entryExtraRoute?.render(currentPath);
+  // A synchronous render returns a usable ReactNode now; an async render returns
+  // a Promise (ReactNode includes Promise in React 19) which cannot feed a
+  // synchronous hydrate. Hydrate the extra-route body only when the node is
+  // defined AND not a Promise; otherwise fall back to homeElement (the prior
+  // async/no-match path, which keeps the immediate dispatch reconcile).
+  const hydratedExtraRoute =
+    entryExtraNode !== undefined && !(entryExtraNode instanceof Promise);
   const navRoot = hydrateRoot(navMount, navElement(parsePath().path));
   const appRoot = hydrateRoot(
     app,
-    typeof entryExtraHtml === "string"
-      // entryExtraHtml is unsanitized Route.render output — see extraRoutes contract + widening trigger above.
-      ? createElement("div", { dangerouslySetInnerHTML: { __html: entryExtraHtml } })
+    hydratedExtraRoute
+      ? createElement("div", null, entryExtraNode)
       : homeElement(initialSlug),
   );
   const panelRoot = hydrateRoot(infoPanel, panelElement());
@@ -302,7 +307,7 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
 
   // Match the extra-route predicate createHistoryRouter's matchRoute uses: a
   // string path matches by exact equality, a RegExp by `.test`.
-  function matchExtraRoute(path: string): Route | undefined {
+  function matchExtraRoute(path: string): ExtraRoute | undefined {
     return (config.extraRoutes ?? []).find((r) => {
       if (typeof r.path === "string") return r.path === path;
       r.path.lastIndex = 0;
@@ -408,10 +413,9 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
         return;
       }
       try {
-        const html = await extra.render(path);
+        const node = await extra.render(path);
         if (seq === navSeq) {
-          // html is unsanitized Route.render output — see extraRoutes contract + widening trigger above.
-          appRoot.render(createElement("div", { dangerouslySetInnerHTML: { __html: html ?? "" } }));
+          appRoot.render(createElement("div", null, node));
           // Run afterRender after React commits the body.
           queueMicrotask(() => {
             if (seq === navSeq) extra.afterRender?.(app, path);
