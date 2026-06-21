@@ -13,4 +13,4 @@ if [[ ! "$PARENT" =~ ^[0-9]+$ ]]; then
   echo "error: unexpected parent API response: $PARENT" >&2
   exit 1
 fi
-gh issue view "$PARENT" --json title,body,comments,number,state
+gh_issue_view_rest "$PARENT" --comments

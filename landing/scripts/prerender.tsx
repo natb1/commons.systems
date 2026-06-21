@@ -20,7 +20,7 @@ import {
   SITE_DEFAULTS,
   SITE_URL,
 } from "../src/site-config.js";
-import { renderAboutHtml, renderAboutPanelHtml } from "../src/pages/about.js";
+import { About, AboutPanel } from "../src/pages/About.js";
 import { renderShowcase } from "../src/showcase-render.js";
 
 const distDir = join(dirname(new URL(import.meta.url).pathname), "..", "dist");
@@ -45,20 +45,16 @@ try {
     titleSuffix,
     distDir,
     page: ABOUT_PAGE_META,
-    // Wrap in a <div> to byte-match how createBlogApp hydrates/renders the /about
-    // extraRoute body — createElement("div", { dangerouslySetInnerHTML }). Without
-    // the wrapper, a deep entry to /about would hydrate this body against a bare
-    // <div> and abandon hydration (React #424), shifting layout on the SEO surface.
-    bodyHtml: `<div>${renderAboutHtml()}</div>`,
+    body: <About />,
     navLinks: NAV_LINKS,
-    aboutContent: renderAboutPanelHtml(),
+    aboutContent: <AboutPanel />,
     jsonLdBlocks: [personJsonLd(PERSON)],
     relMe: REL_ME,
     showHomeLink: false,
   });
 } catch (err) {
   throw new Error(
-    `Prerender failed in landing/scripts/prerender.ts (prerenderStaticPage): ${
+    `Prerender failed in landing/scripts/prerender.tsx (prerenderStaticPage): ${
       err instanceof Error ? err.message : String(err)
     }`,
     { cause: err },
@@ -84,7 +80,7 @@ try {
   });
 } catch (err) {
   throw new Error(
-    `Prerender failed in landing/scripts/prerender.ts (prerenderPosts): ${
+    `Prerender failed in landing/scripts/prerender.tsx (prerenderPosts): ${
       err instanceof Error ? err.message : String(err)
     }`,
     { cause: err },
@@ -100,7 +96,7 @@ try {
   });
 } catch (err) {
   throw new Error(
-    `Prerender failed in landing/scripts/prerender.ts (generateFeedXml): ${
+    `Prerender failed in landing/scripts/prerender.tsx (generateFeedXml): ${
       err instanceof Error ? err.message : String(err)
     }`,
     { cause: err },
@@ -116,7 +112,7 @@ try {
   });
 } catch (err) {
   throw new Error(
-    `Prerender failed in landing/scripts/prerender.ts (generateSitemapXml): ${
+    `Prerender failed in landing/scripts/prerender.tsx (generateSitemapXml): ${
       err instanceof Error ? err.message : String(err)
     }`,
     { cause: err },
