@@ -582,6 +582,88 @@ describe("clearLocalDirectory", () => {
   });
 });
 
+describe("folder switch — stale-handle TOCTOU", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // Helper: read a dir's sidecar without disturbing the module's bound handle.
+  const subdirsOf = (dir: FileSystemDirectoryHandle) =>
+    (dir as unknown as { _subdirs: Record<string, unknown> })._subdirs; // type-safety-ok: test fake internals (_subdirs) access
+
+  it("drops an in-flight stale write after a synchronous folder switch", async () => {
+    const dirA = makeEmptyDir();
+    const dirB = makeEmptyDir();
+
+    setLocalDirectory(dirA, true);
+    // task_A snapshots A; its body is a pending microtask.
+    void cacheMetadata("a.mp3", { title: "A", duration: 100 });
+    // Switch to B synchronously, before task_A's body runs.
+    setLocalDirectory(dirB, true);
+    void cacheMetadata("b.mp3", { title: "B", duration: 200 });
+    await flushWrites();
+
+    // B got its write.
+    const readB = await readSidecar(dirB);
+    expect(readB.metadata["b.mp3"]).toEqual({ title: "B", duration: 200 });
+    // A's stale write was skipped — its sidecar dir was never created.
+    expect(subdirsOf(dirA)[".commons-audio"]).toBeUndefined();
+  });
+
+  it("in-memory model reflects the new folder, not the stale one", async () => {
+    const dirA = makeEmptyDir();
+    const dirB = makeEmptyDir();
+
+    setLocalDirectory(dirA, true);
+    void cacheMetadata("a.mp3", { title: "A" });
+    setLocalDirectory(dirB, true);
+    void cacheMetadata("b.mp3", { title: "B" });
+    await flushWrites();
+
+    // A's patch never merged into B's model.
+    expect(await getMetadata("a.mp3")).toBeUndefined();
+    expect(await getMetadata("b.mp3")).toEqual({ title: "B" });
+  });
+
+  it("a mid-session switch writes player-state to the correct folder", async () => {
+    const dirA = makeEmptyDir();
+    const dirB = makeEmptyDir();
+
+    setLocalDirectory(dirA, true);
+    void savePlayerState({ queue: ["a.mp3"], currentLocalName: "a.mp3", positionSeconds: 5 });
+    setLocalDirectory(dirB, true);
+    void savePlayerState({ queue: ["b.mp3"], currentLocalName: "b.mp3", positionSeconds: 7 });
+    await flushWrites();
+
+    const readB = await readSidecar(dirB);
+    expect(readB.playerState).toEqual({
+      queue: ["b.mp3"],
+      currentLocalName: "b.mp3",
+      positionSeconds: 7,
+    });
+    // A's stale player-state write was skipped.
+    expect(subdirsOf(dirA)[".commons-audio"]).toBeUndefined();
+  });
+
+  it("a stale-skip does not wedge the chain: subsequent writes still drain", async () => {
+    const dirA = makeEmptyDir();
+    const dirB = makeEmptyDir();
+
+    setLocalDirectory(dirA, true);
+    void cacheMetadata("a.mp3", { title: "A" });
+    setLocalDirectory(dirB, true);
+    void cacheMetadata("b.mp3", { title: "B" });
+    // A further write on the current folder after the stale-skip.
+    void cacheMetadata("c.mp3", { title: "C" });
+    await flushWrites();
+
+    const readB = await readSidecar(dirB);
+    expect(readB.metadata["b.mp3"]).toEqual({ title: "B" });
+    expect(readB.metadata["c.mp3"]).toEqual({ title: "C" });
+    expect(subdirsOf(dirA)[".commons-audio"]).toBeUndefined();
+  });
+});
+
 describe("cacheMetadataBatch", () => {
   beforeEach(() => {
     vi.clearAllMocks();
