@@ -9459,6 +9459,85 @@ assert_eq "missing issue number exits non-zero" "1" "$rc"
 assert_eq "missing arg: no label edit" "absent" "$(log_state gh-issue-edit.log)"
 teardown
 
+# --route autonomous: Step 1 (remove help-wanted) and Step 2 (add main-qa) run
+# unconditionally; Step 3 is skipped, so dispatch:office-hours is ABSENT from the
+# set-labels log. Exit 0.
+echo "Test: --route autonomous → help-wanted removed, main-qa added, office-hours withheld; exit 0"
+setup
+echo '{"state":"open","labels":[]}' > "$STUB_DIR/arg-issue-42.json"
+if "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" 42 --route autonomous 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "--route autonomous: exit 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if grep -q 'DELETE' "$STUB_DIR/gh-issue-remove-label-rest-calls.log" \
+   && grep -q 'issues/42/labels/help%20wanted' "$STUB_DIR/gh-issue-remove-label-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: autonomous route: REST-removed help wanted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: autonomous route: REST-removed help wanted"
+  echo "    actual: '$(cat "$STUB_DIR/gh-issue-remove-label-rest-calls.log" 2>/dev/null)'"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q 'labels\[\]=main-qa' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: autonomous route: REST-added main-qa"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: autonomous route: REST-added main-qa"
+fi
+TOTAL=$((TOTAL + 1))
+if ! grep -q 'labels\[\]=dispatch:office-hours' "$STUB_DIR/gh-issue-set-labels-rest-calls.log" 2>/dev/null; then
+  PASS=$((PASS + 1)); echo "  PASS: autonomous route: dispatch:office-hours withheld"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: autonomous route: dispatch:office-hours withheld (should be absent)"
+fi
+teardown
+
+# --route human (explicit): identical to the default no-flag path. Steps 1-3 all
+# run, including the dispatch-apply-office-hours call that REST-adds office-hours.
+echo "Test: --route human (explicit) → help-wanted removed, main-qa added, office-hours applied; exit 0"
+setup
+echo '{"state":"open","labels":[]}' > "$STUB_DIR/arg-issue-42.json"
+if "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" 42 --route human; then rc=0; else rc=$?; fi
+assert_eq "--route human explicit: exit 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if grep -q 'DELETE' "$STUB_DIR/gh-issue-remove-label-rest-calls.log" \
+   && grep -q 'issues/42/labels/help%20wanted' "$STUB_DIR/gh-issue-remove-label-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: explicit human route: REST-removed help wanted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: explicit human route: REST-removed help wanted"
+  echo "    actual: '$(cat "$STUB_DIR/gh-issue-remove-label-rest-calls.log" 2>/dev/null)'"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q 'labels\[\]=main-qa' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: explicit human route: REST-added main-qa"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: explicit human route: REST-added main-qa"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q 'labels\[\]=dispatch:office-hours' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: explicit human route: dispatch:office-hours applied"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: explicit human route: dispatch:office-hours applied"
+fi
+teardown
+
+# Invalid --route value: the script must exit 1 with an error to stderr and must
+# NOT write any label ops (no REST removes, no REST adds).
+echo "Test: --route bogus → non-zero exit, no label writes"
+setup
+if "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" 42 --route bogus 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "--route bogus: non-zero exit" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if ! grep -q '.' "$STUB_DIR/gh-issue-remove-label-rest-calls.log" 2>/dev/null; then
+  PASS=$((PASS + 1)); echo "  PASS: invalid route: no REST remove-label writes"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: invalid route: no REST remove-label writes (should be absent)"
+fi
+TOTAL=$((TOTAL + 1))
+if ! grep -q '.' "$STUB_DIR/gh-issue-set-labels-rest-calls.log" 2>/dev/null; then
+  PASS=$((PASS + 1)); echo "  PASS: invalid route: no REST set-labels writes"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: invalid route: no REST set-labels writes (should be absent)"
+fi
+teardown
+
 # ============================================================================
 # dispatch-plan-finalize tests (#1230)
 # ============================================================================
