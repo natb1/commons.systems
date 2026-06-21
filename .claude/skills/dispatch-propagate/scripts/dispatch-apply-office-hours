@@ -103,10 +103,17 @@ fi
 # This sits on the fresh-apply path, so the label idempotency gate above
 # guarantees it fires exactly once per park — a re-firing hook hits the early
 # exit 0 and never reaches here.
-recommend_log="$(git rev-parse --show-toplevel 2>/dev/null)/tmp/dispatch-recommend-${ISSUE_NUM}.log"
-case "$recommend_log" in
-  /tmp/dispatch-recommend-*) recommend_log="/dev/null" ;;  # toplevel unresolved → don't block on log routing
-esac
+# Route the detached job's stdout to <worktree-root>/tmp/ when that directory
+# exists, else /dev/null. The spawn must fire even when the log target is
+# unwritable, so log routing never blocks the recommendation: an unresolved
+# toplevel OR a resolved root without a tmp/ dir both fall back to /dev/null
+# (a failed redirect would otherwise prevent the detached job from running).
+recommend_root="$(git rev-parse --show-toplevel 2>/dev/null)"
+if [[ -n "$recommend_root" && -d "$recommend_root/tmp" ]]; then
+  recommend_log="$recommend_root/tmp/dispatch-recommend-${ISSUE_NUM}.log"
+else
+  recommend_log="/dev/null"
+fi
 if command -v setsid >/dev/null 2>&1; then
   setsid nohup "$SCRIPT_DIR/dispatch-spawn-recommend" "$ISSUE_NUM" \
     </dev/null >"$recommend_log" 2>&1 &
