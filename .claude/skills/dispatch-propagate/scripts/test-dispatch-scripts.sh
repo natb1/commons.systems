@@ -637,9 +637,20 @@ case "$args" in
     fi
     ;;
   label\ create\ *)
-    # dispatch-complete-phase / dispatch-apply-office-hours create the label only
-    # when the apply reported it missing.
+    # #2256: the label-op scripts now ensure-the-label-exists-first (a `gh label
+    # create` runs on EVERY add path, before the REST POST .../issues/<N>/labels).
+    # Default: log the argv + exit 0 (create succeeds). A $STUB_DIR/gh-label-exists
+    # marker models the already-exists case — emit gh's "already exists" message and
+    # exit 1 — so the ensure-first tolerance (proceed to the REST add) is testable.
     echo "$args" >> "$STUB_DIR/gh-label-create.log"
+    if [[ -f "$STUB_DIR/gh-label-exists" ]]; then
+      echo "gh: Validation Failed (HTTP 422): already_exists" >&2
+      exit 1
+    fi
+    if [[ -f "$STUB_DIR/gh-fail-label-create" ]]; then
+      echo "gh: could not create label (HTTP 500): Internal Server Error" >&2
+      exit 1
+    fi
     ;;
   issue\ view\ *\ --json\ labels)
     # dispatch-apply-office-hours idempotency read: gh issue view <num> --json labels.
@@ -8430,45 +8441,73 @@ label_create_state() {
   [[ -f "$STUB_DIR/gh-label-create.log" ]] && echo "present" || echo "absent"
 }
 
-# Phase → label mapping. The label already exists (default stub mode), so
-# the script applies it with a single `gh pr edit` and issues no `gh label create`.
-echo "Test: qa → dispatch:qa-done (apply only, no label create)"
+# #2256: migrated to ensure-label-exists-first + REST add. Every add path now runs
+# `gh label create` (canonical BFD4F2 metadata) and then a REST POST
+# .../issues/<PR>/labels (a PR is an issue in REST). The label-create create
+# succeeds in default stub mode; the REST POST args land in
+# gh-issue-set-labels-rest-calls.log as "api -X POST .../issues/<N>/labels -f labels[]=<label>".
+echo "Test: qa → dispatch:qa-done (ensure label + REST add)"
 setup
 "$TMPDIR_TEST/dispatch-complete-phase" 21 qa
-assert_eq "qa applies dispatch:qa-done" \
-  "pr edit 21 --add-label dispatch:qa-done" "$(cat "$STUB_DIR/gh-pr-edit.log")"
-assert_eq "qa: no gh label create when label exists" "absent" "$(label_create_state)"
-teardown
-
-echo "Test: review → dispatch:reviewed (apply only, no label create)"
-setup
-"$TMPDIR_TEST/dispatch-complete-phase" 30 review
-assert_eq "review applies dispatch:reviewed" \
-  "pr edit 30 --add-label dispatch:reviewed" "$(cat "$STUB_DIR/gh-pr-edit.log")"
-assert_eq "review: no gh label create when label exists" "absent" "$(label_create_state)"
-teardown
-
-# Label missing: the apply fails "not found", so the script creates the
-# label (BFD4F2, "dispatch workflow: <suffix> phase complete") and retries.
-echo "Test: label missing → create then retry"
-setup
-echo "label-missing" > "$STUB_DIR/pr-edit-mode"
-"$TMPDIR_TEST/dispatch-complete-phase" 30 qa
-assert_eq "label-missing: label created with workflow description" \
+TOTAL=$((TOTAL + 1))
+if grep -q 'issues/21/labels' "$STUB_DIR/gh-issue-set-labels-rest-calls.log" \
+   && grep -q 'labels\[\]=dispatch:qa-done' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: qa REST-adds dispatch:qa-done to issues/21/labels"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: qa REST-adds dispatch:qa-done to issues/21/labels"
+  echo "    actual: '$(cat "$STUB_DIR/gh-issue-set-labels-rest-calls.log" 2>/dev/null)'"
+fi
+assert_eq "qa: ensure-first runs gh label create" \
   "label create dispatch:qa-done --color BFD4F2 --description dispatch workflow: qa-done phase complete" \
   "$(cat "$STUB_DIR/gh-label-create.log")"
-assert_eq "label-missing: label applied on retry" \
-  "pr edit 30 --add-label dispatch:qa-done" "$(cat "$STUB_DIR/gh-pr-edit.log")"
 teardown
 
-# An apply failure unrelated to a missing label exits non-zero and creates
-# no label.
-echo "Test: other apply failure → non-zero exit, no label create"
+echo "Test: review → dispatch:reviewed (ensure label + REST add)"
 setup
-echo "other-failure" > "$STUB_DIR/pr-edit-mode"
+"$TMPDIR_TEST/dispatch-complete-phase" 30 review
+TOTAL=$((TOTAL + 1))
+if grep -q 'issues/30/labels' "$STUB_DIR/gh-issue-set-labels-rest-calls.log" \
+   && grep -q 'labels\[\]=dispatch:reviewed' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: review REST-adds dispatch:reviewed to issues/30/labels"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: review REST-adds dispatch:reviewed to issues/30/labels"
+  echo "    actual: '$(cat "$STUB_DIR/gh-issue-set-labels-rest-calls.log" 2>/dev/null)'"
+fi
+assert_eq "review: ensure-first runs gh label create" \
+  "label create dispatch:reviewed --color BFD4F2 --description dispatch workflow: reviewed phase complete" \
+  "$(cat "$STUB_DIR/gh-label-create.log")"
+teardown
+
+# Label already exists in the repo: `gh label create` returns the already-exists
+# error, which the ensure-first idiom tolerates and proceeds to the REST add.
+echo "Test: label already exists → tolerated, REST add still fires"
+setup
+: > "$STUB_DIR/gh-label-exists"
+if "$TMPDIR_TEST/dispatch-complete-phase" 30 qa; then rc=0; else rc=$?; fi
+assert_eq "already-exists tolerated: exit 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if grep -q 'issues/30/labels' "$STUB_DIR/gh-issue-set-labels-rest-calls.log" \
+   && grep -q 'labels\[\]=dispatch:qa-done' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: already-exists still REST-adds the label"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: already-exists still REST-adds the label"
+fi
+teardown
+
+# A label-create failure unrelated to already-exists exits non-zero and issues
+# no REST add (the label could not be guaranteed to exist). The gh-fail-label-create
+# marker makes the stub's `label create` branch emit a generic error and exit 1.
+echo "Test: non-already-exists label-create failure → non-zero exit, no REST add"
+setup
+: > "$STUB_DIR/gh-fail-label-create"
 if "$TMPDIR_TEST/dispatch-complete-phase" 40 qa 2>/dev/null; then rc=0; else rc=$?; fi
-assert_eq "other apply failure exits non-zero" "1" "$rc"
-assert_eq "other failure: no spurious label create" "absent" "$(label_create_state)"
+assert_eq "create failure exits non-zero" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -f "$STUB_DIR/gh-issue-set-labels-rest-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: create failure issues no REST add"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: create failure issues no REST add"
+fi
 teardown
 
 # Unknown phase → non-zero exit.
@@ -8512,15 +8551,27 @@ log_state() {
   [[ -f "$STUB_DIR/$1" ]] && echo "present" || echo "absent"
 }
 
-# Happy path: the issue carries no office-hours label, so the script applies it
-# to the ISSUE and posts a why-comment containing the reason text.
-echo "Test: label absent → apply to issue + post why-comment"
+# Happy path: the issue carries no office-hours label. #2256: the script now
+# ensure-label-exists-first (`gh label create` with canonical FBCA04 metadata) then
+# REST-adds the label to the ISSUE (POST .../issues/42/labels). The why-comment stays
+# porcelain (`gh issue comment`).
+echo "Test: label absent → ensure label + REST add to issue + post why-comment"
 setup
 "$TMPDIR_TEST/dispatch-apply-office-hours" 42 "phase exited before completion"
-assert_eq "applies dispatch:office-hours to the issue" \
-  "issue edit 42 --add-label dispatch:office-hours" "$(cat "$STUB_DIR/gh-issue-edit.log")"
-assert_eq "happy path: no gh label create when label exists" \
-  "absent" "$(log_state gh-label-create.log)"
+TOTAL=$((TOTAL + 1))
+if grep -q 'issues/42/labels' "$STUB_DIR/gh-issue-set-labels-rest-calls.log" \
+   && grep -q 'labels\[\]=dispatch:office-hours' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: REST-adds dispatch:office-hours to issues/42/labels"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: REST-adds dispatch:office-hours to issues/42/labels"
+  echo "    actual: '$(cat "$STUB_DIR/gh-issue-set-labels-rest-calls.log" 2>/dev/null)'"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "^label create dispatch:office-hours --color FBCA04 " "$STUB_DIR/gh-label-create.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: ensure-first creates with FBCA04 metadata"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: ensure-first creates with FBCA04 metadata"
+fi
 TOTAL=$((TOTAL + 1))
 if grep -q "Reason: phase exited before completion" "$STUB_DIR/gh-issue-comment.log"; then
   PASS=$((PASS + 1)); echo "  PASS: why-comment contains the reason"
@@ -8533,6 +8584,22 @@ if grep -q "^issue comment 42 " "$STUB_DIR/gh-issue-comment.log"; then
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: comment targets the issue"
 fi
+teardown
+
+# Already-exists tolerance: the office-hours label already exists in the repo, so
+# `gh label create` errors already-exists; the ensure-first idiom tolerates it and
+# still REST-adds the label + posts the comment.
+echo "Test: label already exists in repo → tolerated, REST add + comment still fire"
+setup
+: > "$STUB_DIR/gh-label-exists"
+"$TMPDIR_TEST/dispatch-apply-office-hours" 42 "phase exited before completion"
+TOTAL=$((TOTAL + 1))
+if grep -q 'labels\[\]=dispatch:office-hours' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: already-exists still REST-adds the label"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: already-exists still REST-adds the label"
+fi
+assert_eq "already-exists: why-comment still posted" "present" "$(log_state gh-issue-comment.log)"
 teardown
 
 # Idempotent: the issue already carries the label → no re-apply, no duplicate
@@ -8580,23 +8647,25 @@ assert_eq "non-numeric issue number: no label edit" "absent" "$(log_state gh-iss
 assert_eq "non-numeric issue number: no comment" "absent" "$(log_state gh-issue-comment.log)"
 teardown
 
-# Create-on-first-use: the apply fails "not found" (the *label* does not exist
-# in the repo yet), so the script creates it with the canonical FBCA04 color and
-# retries the edit, then posts the comment.
-echo "Test: label not found → create (FBCA04) then retry + comment"
+# Never-block-a-hook: a non-already-exists `gh label create` failure must warn on
+# stderr and exit 0 (a hook must never be torn down). No REST add, no comment.
+echo "Test: label-create failure (not already-exists) → warn, exit 0, no add/comment"
 setup
-echo "label-missing" > "$STUB_DIR/issue-edit-mode"
-"$TMPDIR_TEST/dispatch-apply-office-hours" 42 "phase exited before completion"
-TOTAL=$((TOTAL + 1))
-if grep -q "^label create dispatch:office-hours --color FBCA04 " "$STUB_DIR/gh-label-create.log"; then
-  PASS=$((PASS + 1)); echo "  PASS: label created with FBCA04 color"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: label created with FBCA04 color"
-fi
-assert_eq "create-on-first-use: label applied on retry" \
-  "issue edit 42 --add-label dispatch:office-hours" "$(cat "$STUB_DIR/gh-issue-edit.log")"
-assert_eq "create-on-first-use: why-comment posted" \
-  "present" "$(log_state gh-issue-comment.log)"
+: > "$STUB_DIR/gh-fail-label-create"
+if "$TMPDIR_TEST/dispatch-apply-office-hours" 42 "phase exited before completion" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "label-create failure: exit 0 (never block a hook)" "0" "$rc"
+assert_eq "label-create failure: no REST add" "absent" "$(log_state gh-issue-set-labels-rest-calls.log)"
+assert_eq "label-create failure: no comment" "absent" "$(log_state gh-issue-comment.log)"
+teardown
+
+# Never-block-a-hook: a REST add failure (label created, but POST .../labels fails)
+# must also warn + exit 0 and post no comment.
+echo "Test: REST add failure → warn, exit 0, no comment"
+setup
+: > "$STUB_DIR/gh-fail-rest"
+if "$TMPDIR_TEST/dispatch-apply-office-hours" 42 "phase exited before completion" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "REST add failure: exit 0 (never block a hook)" "0" "$rc"
+assert_eq "REST add failure: no comment" "absent" "$(log_state gh-issue-comment.log)"
 teardown
 
 # dispatch-apply-office-hours owns the FBCA04 hex. (A single-source-of-truth
@@ -8616,31 +8685,38 @@ fi
 echo ""
 echo "=== dispatch-apply-planned ==="
 
-# Happy path: the label already exists in the repo (default stub mode), so the
-# script applies it to the ISSUE with a single `gh issue edit` and no create.
-echo "Test: label exists → apply dispatch:planned to issue, no label create"
+# Happy path: #2256 ensure-label-exists-first (`gh label create`, canonical 0E8A16
+# metadata) then REST-add to the ISSUE (POST .../issues/55/labels). The create
+# succeeds in default stub mode.
+echo "Test: ensure label (0E8A16) + REST add dispatch:planned to issue"
 setup
-"$TMPDIR_TEST/dispatch-apply-planned" 55
-assert_eq "applies dispatch:planned to the issue" \
-  "issue edit 55 --add-label dispatch:planned" "$(cat "$STUB_DIR/gh-issue-edit.log")"
-assert_eq "label exists: no gh label create" "absent" "$(log_state gh-label-create.log)"
-teardown
-
-# Create-on-first-use: the apply fails "not found" (the label does not exist in
-# the repo yet), so the script creates it with the canonical 0E8A16 color and
-# retries the edit.
-echo "Test: label not found → create (0E8A16) then retry"
-setup
-echo "label-missing" > "$STUB_DIR/issue-edit-mode"
 "$TMPDIR_TEST/dispatch-apply-planned" 55
 TOTAL=$((TOTAL + 1))
-if grep -q "^label create dispatch:planned --color 0E8A16 " "$STUB_DIR/gh-label-create.log"; then
-  PASS=$((PASS + 1)); echo "  PASS: label created with 0E8A16 color"
+if grep -q 'issues/55/labels' "$STUB_DIR/gh-issue-set-labels-rest-calls.log" \
+   && grep -q 'labels\[\]=dispatch:planned' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: REST-adds dispatch:planned to issues/55/labels"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: label created with 0E8A16 color"
+  FAIL=$((FAIL + 1)); echo "  FAIL: REST-adds dispatch:planned to issues/55/labels"
+  echo "    actual: '$(cat "$STUB_DIR/gh-issue-set-labels-rest-calls.log" 2>/dev/null)'"
 fi
-assert_eq "create-on-first-use: label applied on retry" \
-  "issue edit 55 --add-label dispatch:planned" "$(cat "$STUB_DIR/gh-issue-edit.log")"
+assert_eq "ensure-first creates with 0E8A16 metadata" \
+  "label create dispatch:planned --color 0E8A16 --description dispatch workflow: an approved plan exists; implement phase is next" \
+  "$(cat "$STUB_DIR/gh-label-create.log")"
+teardown
+
+# Already-exists tolerance: `gh label create` errors already-exists; the idiom
+# tolerates it and still REST-adds the label.
+echo "Test: label already exists → tolerated, REST add still fires"
+setup
+: > "$STUB_DIR/gh-label-exists"
+if "$TMPDIR_TEST/dispatch-apply-planned" 55; then rc=0; else rc=$?; fi
+assert_eq "already-exists tolerated: exit 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if grep -q 'labels\[\]=dispatch:planned' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: already-exists still REST-adds dispatch:planned"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: already-exists still REST-adds dispatch:planned"
+fi
 teardown
 
 # Non-numeric, flag-like issue number → hard error (exit 1), no gh calls.
@@ -8665,88 +8741,96 @@ teardown
 echo ""
 echo "=== dispatch-qa-apply-main-qa-labels (#1758) ==="
 
-# Happy path: both main-qa and dispatch:office-hours labels exist in the repo
-# (default stub mode), so remove-label succeeds, both adds succeed, and the
-# script exits 0. No label create needed.
-echo "Test: happy path → remove help-wanted, add main-qa, route to office-hours; exit 0"
+# Happy path (#2256). Step 1 REST-DELETEs "help wanted" (issues/42/labels/help%20wanted).
+# Step 2 ensure-first-creates main-qa (canonical 5319E7) then REST-adds it. Step 3's
+# dispatch-apply-office-hours (the real migrated sibling) ensure-creates
+# dispatch:office-hours and REST-adds it too. Both REST adds land in
+# gh-issue-set-labels-rest-calls.log; both creates land in gh-label-create.log.
+echo "Test: happy path → REST-remove help-wanted, REST-add main-qa, route to office-hours; exit 0"
 setup
 if "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" 42; then rc=0; else rc=$?; fi
 assert_eq "happy path: exit 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
-if grep -q -- "--remove-label help wanted" "$STUB_DIR/gh-issue-edit.log"; then
-  PASS=$((PASS + 1)); echo "  PASS: removed help wanted"
+if grep -q 'DELETE' "$STUB_DIR/gh-issue-remove-label-rest-calls.log" \
+   && grep -q 'issues/42/labels/help%20wanted' "$STUB_DIR/gh-issue-remove-label-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: REST-removed help wanted"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: removed help wanted"
+  FAIL=$((FAIL + 1)); echo "  FAIL: REST-removed help wanted"
+  echo "    actual: '$(cat "$STUB_DIR/gh-issue-remove-label-rest-calls.log" 2>/dev/null)'"
 fi
 TOTAL=$((TOTAL + 1))
-if grep -q -- "--add-label main-qa" "$STUB_DIR/gh-issue-edit.log"; then
-  PASS=$((PASS + 1)); echo "  PASS: added main-qa"
+if grep -q 'labels\[\]=main-qa' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: REST-added main-qa"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: added main-qa"
+  FAIL=$((FAIL + 1)); echo "  FAIL: REST-added main-qa"
 fi
 TOTAL=$((TOTAL + 1))
-if grep -q -- "--add-label dispatch:office-hours" "$STUB_DIR/gh-issue-edit.log"; then
-  PASS=$((PASS + 1)); echo "  PASS: routed to office-hours"
+if grep -q 'labels\[\]=dispatch:office-hours' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: routed to office-hours (REST add)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: routed to office-hours"
+  FAIL=$((FAIL + 1)); echo "  FAIL: routed to office-hours (REST add)"
 fi
-assert_eq "no gh label create" "absent" "$(log_state gh-label-create.log)"
+TOTAL=$((TOTAL + 1))
+if grep -q "^label create main-qa --color 5319E7 " "$STUB_DIR/gh-label-create.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: ensure-first created main-qa with 5319E7"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: ensure-first created main-qa with 5319E7"
+fi
 teardown
 
-# Idempotent re-run: the "help wanted" label is no longer on the issue so the
-# remove-label call returns "not found". The script must tolerate this and still
-# apply main-qa and dispatch:office-hours, exiting 0.
-echo "Test: remove-label-missing → tolerated, main-qa and office-hours still applied; exit 0"
+# Idempotent re-run: the "help wanted" label is no longer on the issue, so the REST
+# DELETE returns 404. gh_issue_remove_label_rest treats that as no-op success; the
+# script still REST-adds main-qa and routes to office-hours, exiting 0.
+echo "Test: help-wanted absent (404) → tolerated, main-qa and office-hours still applied; exit 0"
 setup
-echo "remove-label-missing" > "$STUB_DIR/issue-edit-mode"
+: > "$STUB_DIR/gh-404-remove-label"
 if "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" 42; then rc=0; else rc=$?; fi
-assert_eq "not-found removal tolerated, exit 0" "0" "$rc"
+assert_eq "404 removal tolerated, exit 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
-if grep -q -- "--add-label main-qa" "$STUB_DIR/gh-issue-edit.log"; then
+if grep -q 'issues/42/labels/help%20wanted' "$STUB_DIR/gh-issue-remove-label-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: REST DELETE attempted (then 404-tolerated)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: REST DELETE attempted (then 404-tolerated)"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q 'labels\[\]=main-qa' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then
   PASS=$((PASS + 1)); echo "  PASS: main-qa applied after tolerated removal"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: main-qa applied after tolerated removal"
 fi
 TOTAL=$((TOTAL + 1))
-if grep -q -- "--add-label dispatch:office-hours" "$STUB_DIR/gh-issue-edit.log"; then
+if grep -q 'labels\[\]=dispatch:office-hours' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then
   PASS=$((PASS + 1)); echo "  PASS: office-hours routing still runs"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: office-hours routing still runs"
 fi
-TOTAL=$((TOTAL + 1))
-if ! grep -q -- "--remove-label" "$STUB_DIR/gh-issue-edit.log"; then
-  PASS=$((PASS + 1)); echo "  PASS: remove-label not logged (not-found path fired)"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: remove-label unexpectedly logged"
-fi
 teardown
 
-# Lazy label-create: the main-qa label does not yet exist in the repo. The
-# first add attempt fails "not found"; the script creates the label with
-# canonical metadata (5319E7) and retries the add. The office-hours step runs
-# unaffected.
-echo "Test: main-qa-missing → create with canonical metadata, retry add, office-hours unaffected; exit 0"
+# Already-exists label-create: main-qa already exists in the repo. `gh label create`
+# errors already-exists; the ensure-first idiom tolerates it and still REST-adds the
+# label. The office-hours step runs unaffected.
+echo "Test: main-qa already exists → tolerated, REST add, office-hours unaffected; exit 0"
 setup
-echo "main-qa-missing" > "$STUB_DIR/issue-edit-mode"
+: > "$STUB_DIR/gh-label-exists"
 if "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" 42; then rc=0; else rc=$?; fi
-assert_eq "lazy create: exit 0" "0" "$rc"
+assert_eq "already-exists: exit 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
 if grep -q "^label create main-qa --color 5319E7 --description QA verification that can only run against deployed main/production" "$STUB_DIR/gh-label-create.log"; then
-  PASS=$((PASS + 1)); echo "  PASS: created with canonical metadata"
+  PASS=$((PASS + 1)); echo "  PASS: ensure-first attempted with canonical metadata"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: created with canonical metadata"
+  FAIL=$((FAIL + 1)); echo "  FAIL: ensure-first attempted with canonical metadata"
 fi
 TOTAL=$((TOTAL + 1))
-if grep -q -- "--add-label main-qa" "$STUB_DIR/gh-issue-edit.log"; then
-  PASS=$((PASS + 1)); echo "  PASS: main-qa applied on retry"
+if grep -q 'labels\[\]=main-qa' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: main-qa REST-added despite already-exists create"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: main-qa applied on retry"
+  FAIL=$((FAIL + 1)); echo "  FAIL: main-qa REST-added despite already-exists create"
 fi
 TOTAL=$((TOTAL + 1))
-if grep -q -- "--add-label dispatch:office-hours" "$STUB_DIR/gh-issue-edit.log"; then
-  PASS=$((PASS + 1)); echo "  PASS: office-hours unaffected by lazy create"
+if grep -q 'labels\[\]=dispatch:office-hours' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: office-hours unaffected by already-exists create"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: office-hours unaffected by lazy create"
+  FAIL=$((FAIL + 1)); echo "  FAIL: office-hours unaffected by already-exists create"
 fi
 teardown
 
@@ -24155,6 +24239,10 @@ mkdir -p "$FINALIZE_STUB_DIR" "$FINALIZE_BIN" "$FINALIZE_SCRIPTS"
 # Copy the real finalize script into the scripts dir so $SCRIPT_DIR resolves there.
 cp "$SCRIPT_DIR/dispatch-finalize-phase" "$FINALIZE_SCRIPTS/dispatch-finalize-phase"
 chmod +x "$FINALIZE_SCRIPTS/dispatch-finalize-phase"
+# #2256: dispatch-finalize-phase now `source`s lib.sh via $SCRIPT_DIR (for
+# gh_issue_remove_label_rest). Copy lib.sh alongside it so the source resolves
+# (this private tmpdir does not use the shared `setup`, which copies lib.sh).
+cp "$SCRIPT_DIR/lib.sh" "$FINALIZE_SCRIPTS/lib.sh"
 
 # Stub dispatch-spawn-tick: log to order.log and spawn-calls.log.
 cat > "$FINALIZE_SCRIPTS/dispatch-spawn-tick" <<'STUB'
@@ -24182,8 +24270,12 @@ exit 0
 STUB
 chmod +x "$FINALIZE_SCRIPTS/dispatch-self-close"
 
-# Stub gh: handle issue view (rate-limit labels — return empty), pr edit --remove-label,
-# issue edit --remove-label. Log remove calls for assertion.
+# Stub gh: handle issue view (rate-limit labels — return empty) and the #2256
+# REST DELETE label removals (gh api -X DELETE .../issues/<N>/labels/<name>). A PR
+# is an issue in REST, so both the PR-456 and issue-123 office-hours removals hit
+# the same issues/<N>/labels/<name> path; log every DELETE to one file and assert
+# on the number. Return an empty body (success) so gh_issue_remove_label_rest's
+# 404-tolerance branch is not triggered.
 cat > "$FINALIZE_BIN/gh" <<'STUB'
 #!/usr/bin/env bash
 FINALIZE_STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
@@ -24193,11 +24285,9 @@ case "$args" in
     # No rate-limit-retry labels to clear.
     printf '{"labels":[]}\n'
     ;;
-  pr\ edit\ *--remove-label*)
-    echo "$args" >> "$FINALIZE_STUB_DIR/gh-pr-remove.log"
-    ;;
-  issue\ edit\ *--remove-label*)
-    echo "$args" >> "$FINALIZE_STUB_DIR/gh-issue-remove.log"
+  api\ -X\ DELETE\ */issues/*/labels/*)
+    echo "$args" >> "$FINALIZE_STUB_DIR/gh-label-remove.log"
+    echo '[]'
     ;;
   *)
     echo "gh stub: unknown invocation: $args" >&2
@@ -24216,24 +24306,23 @@ mkdir -p "$CLAUDE_JOB_DIR"
 rc=$?
 assert_eq "#2243 D2 dispatch-finalize-phase: exits 0" "0" "$rc"
 
-# Assert office-hours removed from the PR.
-pr_remove_log=$(cat "$FINALIZE_STUB_DIR/gh-pr-remove.log" 2>/dev/null || true)
+# Assert office-hours REST-removed from the PR (issues/456/labels/dispatch:office-hours).
+remove_log=$(cat "$FINALIZE_STUB_DIR/gh-label-remove.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ "$pr_remove_log" == *"pr edit 456 --remove-label dispatch:office-hours"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: #2243 D2: --remove-label dispatch:office-hours issued for PR 456"
+if [[ "$remove_log" == *"issues/456/labels/dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2243 D2: REST DELETE dispatch:office-hours issued for PR 456"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: #2243 D2: --remove-label dispatch:office-hours issued for PR 456"
-  echo "    gh-pr-remove.log: $pr_remove_log"
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2243 D2: REST DELETE dispatch:office-hours issued for PR 456"
+  echo "    gh-label-remove.log: $remove_log"
 fi
 
-# Assert office-hours removed from the issue.
-issue_remove_log=$(cat "$FINALIZE_STUB_DIR/gh-issue-remove.log" 2>/dev/null || true)
+# Assert office-hours REST-removed from the issue (issues/123/labels/dispatch:office-hours).
 TOTAL=$((TOTAL + 1))
-if [[ "$issue_remove_log" == *"issue edit 123 --remove-label dispatch:office-hours"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: #2243 D2: --remove-label dispatch:office-hours issued for issue 123"
+if [[ "$remove_log" == *"issues/123/labels/dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2243 D2: REST DELETE dispatch:office-hours issued for issue 123"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: #2243 D2: --remove-label dispatch:office-hours issued for issue 123"
-  echo "    gh-issue-remove.log: $issue_remove_log"
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2243 D2: REST DELETE dispatch:office-hours issued for issue 123"
+  echo "    gh-label-remove.log: $remove_log"
 fi
 
 # Assert spawn invoked exactly once.
@@ -36041,18 +36130,28 @@ echo "=== dispatch-retriage-orphaned-followups (#1812) ==="
 # gated by the static dispatch:review-followup label (server-side filter bypassed in stub).
 # Per-PR state comes from retriage-pr-<N>.json (gh api repos/{owner}/{repo}/pulls/<N>,
 # REST shape: lowercase state, snake_case merged_at).
-# The office-hours park flows through the REAL copied dispatch-apply-office-hours,
-# which logs to gh-issue-edit.log / gh-issue-comment.log; the per-PR processed
-# marker hits the generic `pr edit *` branch, logged to gh-pr-edit.log.
+# #2256: the office-hours park flows through the REAL copied dispatch-apply-office-hours,
+# which REST-adds dispatch:office-hours (gh-issue-set-labels-rest-calls.log) and posts
+# the why-comment porcelain (gh-issue-comment.log); the per-PR processed marker is a REST
+# add to issues/<PR>/labels, also in gh-issue-set-labels-rest-calls.log.
 
 # (a) closed-unmerged source PR + open marker-bearing follow-up → park + mark
+# #2256: the office-hours park flows through the real migrated dispatch-apply-office-hours
+# (REST-adds dispatch:office-hours to issues/101/labels, porcelain why-comment); the
+# per-PR processed marker is a REST add to issues/1704/labels (a PR is an issue in REST).
 echo "Test: closed-unmerged source PR → park follow-up on office-hours + mark PR"
 setup
 printf '[{"number":101,"labels":[{"name":"dispatch:review-followup"}],"body":"orphan finding <!-- dispatch:source-pr 1704 -->"}]\n' > "$STUB_DIR/issue-list.json"
 printf '{"state":"closed","merged_at":null,"labels":[]}\n' > "$STUB_DIR/retriage-pr-1704.json"
 out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null)
-assert_eq "a: office-hours applied to the follow-up issue" \
-  "issue edit 101 --add-label dispatch:office-hours" "$(cat "$STUB_DIR/gh-issue-edit.log")"
+TOTAL=$((TOTAL + 1))
+if grep -q 'issues/101/labels' "$STUB_DIR/gh-issue-set-labels-rest-calls.log" \
+   && grep -q 'labels\[\]=dispatch:office-hours' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: a: office-hours REST-added to the follow-up issue 101"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: a: office-hours REST-added to the follow-up issue 101"
+  echo "    actual: '$(cat "$STUB_DIR/gh-issue-set-labels-rest-calls.log" 2>/dev/null)'"
+fi
 assert_eq "a: why-comment posted to the follow-up issue" "present" "$(log_state gh-issue-comment.log)"
 TOTAL=$((TOTAL + 1))
 if grep -q 'issue comment 101 ' "$STUB_DIR/gh-issue-comment.log" \
@@ -36062,10 +36161,11 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: a: why-comment names issue 101 and the closed-unmerged reason"
 fi
 TOTAL=$((TOTAL + 1))
-if grep -q 'pr edit 1704 --add-label dispatch:orphans-retriaged' "$STUB_DIR/gh-pr-edit.log"; then
-  PASS=$((PASS + 1)); echo "  PASS: a: source PR #1704 marked dispatch:orphans-retriaged"
+if grep -q 'issues/1704/labels' "$STUB_DIR/gh-issue-set-labels-rest-calls.log" \
+   && grep -q 'labels\[\]=dispatch:orphans-retriaged' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: a: source PR #1704 REST-marked dispatch:orphans-retriaged"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: a: source PR #1704 marked dispatch:orphans-retriaged"
+  FAIL=$((FAIL + 1)); echo "  FAIL: a: source PR #1704 REST-marked dispatch:orphans-retriaged"
 fi
 assert_eq "a: one retriaged stdout line" \
   "retriaged #101 (source PR #1704 closed unmerged)" "$out"
@@ -36077,8 +36177,8 @@ setup
 printf '[{"number":102,"labels":[{"name":"dispatch:review-followup"}],"body":"orphan finding <!-- dispatch:source-pr 1688 -->"}]\n' > "$STUB_DIR/issue-list.json"
 printf '{"state":"closed","merged_at":"2026-01-01T00:00:00Z","labels":[]}\n' > "$STUB_DIR/retriage-pr-1688.json"
 out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null)
-assert_eq "b: no office-hours edit on a merged source PR" "absent" "$(log_state gh-issue-edit.log)"
-assert_eq "b: no PR marker on a merged source PR" "absent" "$(log_state gh-pr-edit.log)"
+assert_eq "b: no label add (park or marker) on a merged source PR" "absent" "$(log_state gh-issue-set-labels-rest-calls.log)"
+assert_eq "b: no why-comment on a merged source PR" "absent" "$(log_state gh-issue-comment.log)"
 assert_eq "b: no stdout on a merged source PR" "" "$out"
 teardown
 
@@ -36088,8 +36188,8 @@ setup
 printf '[{"number":103,"labels":[{"name":"dispatch:review-followup"}],"body":"orphan finding <!-- dispatch:source-pr 1900 -->"}]\n' > "$STUB_DIR/issue-list.json"
 printf '{"state":"open","merged_at":null,"labels":[]}\n' > "$STUB_DIR/retriage-pr-1900.json"
 out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null)
-assert_eq "c: no office-hours edit on an open source PR" "absent" "$(log_state gh-issue-edit.log)"
-assert_eq "c: no PR marker on an open source PR" "absent" "$(log_state gh-pr-edit.log)"
+assert_eq "c: no label add (park or marker) on an open source PR" "absent" "$(log_state gh-issue-set-labels-rest-calls.log)"
+assert_eq "c: no why-comment on an open source PR" "absent" "$(log_state gh-issue-comment.log)"
 assert_eq "c: no stdout on an open source PR" "" "$out"
 teardown
 
@@ -36099,8 +36199,8 @@ setup
 printf '[{"number":104,"labels":[{"name":"dispatch:review-followup"}],"body":"orphan finding <!-- dispatch:source-pr 1704 -->"}]\n' > "$STUB_DIR/issue-list.json"
 printf '{"state":"closed","merged_at":null,"labels":[{"name":"dispatch:orphans-retriaged"}]}\n' > "$STUB_DIR/retriage-pr-1704.json"
 out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null)
-assert_eq "d: no re-park when PR already marked" "absent" "$(log_state gh-issue-edit.log)"
-assert_eq "d: no re-mark when PR already marked" "absent" "$(log_state gh-pr-edit.log)"
+assert_eq "d: no re-park/re-mark label add when PR already marked" "absent" "$(log_state gh-issue-set-labels-rest-calls.log)"
+assert_eq "d: no why-comment when PR already marked" "absent" "$(log_state gh-issue-comment.log)"
 assert_eq "d: no stdout when PR already marked" "" "$out"
 teardown
 
@@ -36110,8 +36210,8 @@ setup
 printf '[{"number":105,"labels":[{"name":"bug"}],"body":"a normal issue with no marker"}]\n' > "$STUB_DIR/issue-list.json"
 if out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null); then rc=0; else rc=$?; fi
 assert_eq "e: exits 0 with no labeled issues" "0" "$rc"
-assert_eq "e: no office-hours edit" "absent" "$(log_state gh-issue-edit.log)"
-assert_eq "e: no PR marker" "absent" "$(log_state gh-pr-edit.log)"
+assert_eq "e: no label add (park or marker)" "absent" "$(log_state gh-issue-set-labels-rest-calls.log)"
+assert_eq "e: no why-comment" "absent" "$(log_state gh-issue-comment.log)"
 assert_eq "e: no stdout" "" "$out"
 teardown
 
@@ -36128,8 +36228,8 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: f: warns about the skipped scan on stderr"
   echo "    actual stderr: '$err'"
 fi
-assert_eq "f: no office-hours edit when the scan fails" "absent" "$(log_state gh-issue-edit.log)"
-assert_eq "f: no PR marker when the scan fails" "absent" "$(log_state gh-pr-edit.log)"
+assert_eq "f: no label add when the scan fails" "absent" "$(log_state gh-issue-set-labels-rest-calls.log)"
+assert_eq "f: no why-comment when the scan fails" "absent" "$(log_state gh-issue-comment.log)"
 teardown
 
 # (g) body with TWO source-pr markers → last-wins anti-spoof (reference.md)
@@ -36147,11 +36247,17 @@ printf '[{"number":106,"labels":[{"name":"dispatch:review-followup"}],"body":"or
 printf '{"state":"open","merged_at":null,"labels":[]}\n' > "$STUB_DIR/retriage-pr-1500.json"
 printf '{"state":"closed","merged_at":null,"labels":[]}\n' > "$STUB_DIR/retriage-pr-1704.json"
 out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null)
-assert_eq "g: parks the follow-up against the LAST marker's PR (#1704)" \
-  "issue edit 106 --add-label dispatch:office-hours" "$(cat "$STUB_DIR/gh-issue-edit.log")"
 TOTAL=$((TOTAL + 1))
-if grep -q 'pr edit 1704 --add-label dispatch:orphans-retriaged' "$STUB_DIR/gh-pr-edit.log" \
-   && ! grep -q 'pr edit 1500 ' "$STUB_DIR/gh-pr-edit.log"; then
+if grep -q 'issues/106/labels' "$STUB_DIR/gh-issue-set-labels-rest-calls.log" \
+   && grep -q 'labels\[\]=dispatch:office-hours' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: g: parks follow-up 106 against the LAST marker's PR (#1704)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: g: parks follow-up 106 against the LAST marker's PR (#1704)"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q 'issues/1704/labels' "$STUB_DIR/gh-issue-set-labels-rest-calls.log" \
+   && grep -q 'labels\[\]=dispatch:orphans-retriaged' "$STUB_DIR/gh-issue-set-labels-rest-calls.log" \
+   && ! grep -q 'issues/1500/labels' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then
   PASS=$((PASS + 1)); echo "  PASS: g: marks the LAST PR (#1704), never the spoofed first (#1500)"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: g: marks the LAST PR (#1704), never the spoofed first (#1500)"

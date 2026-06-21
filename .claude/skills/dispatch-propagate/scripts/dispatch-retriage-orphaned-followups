@@ -127,27 +127,24 @@ for N in "${!PR_FOLLOWUPS[@]}"; do
   # Apply after all parks succeeded. dispatch-apply-office-hours is itself
   # idempotent, so re-running a park is harmless; what must NOT happen is
   # re-parking a resolved orphan on a later tick, which the per-PR marker
-  # prevents. Create-on-not-found mirrors
-  # dispatch-apply-office-hours: capture the gh_retry call's COMBINED output
-  # (2>&1 on the gh_retry invocation, since gh_retry forwards stderr to fd2 and
-  # returns only stdout) so the `*"not found"*` match can fire.
-  MARK_RC=0
-  MARK_OUT=$(gh_retry gh pr edit "$N" --add-label "$RETRIAGED_LABEL" 2>&1) || MARK_RC=$?
-  if [[ "$MARK_RC" -ne 0 ]]; then
-    if [[ "$MARK_OUT" != *"not found"* ]]; then
-      echo "dispatch-retriage-orphaned-followups: warning: could not mark PR #$N with $RETRIAGED_LABEL: $MARK_OUT" >&2
-      continue
-    fi
-    # The label does not exist yet — create it with canonical metadata, retry once.
-    if ! create_out=$(gh_retry gh label create "$RETRIAGED_LABEL" \
-        --color "$RETRIAGED_COLOR" --description "$RETRIAGED_DESC" 2>&1); then
-      echo "dispatch-retriage-orphaned-followups: warning: could not create label $RETRIAGED_LABEL: $create_out" >&2
-      continue
-    fi
-    if ! retry_out=$(gh_retry gh pr edit "$N" --add-label "$RETRIAGED_LABEL" 2>&1); then
-      echo "dispatch-retriage-orphaned-followups: warning: could not mark PR #$N with $RETRIAGED_LABEL after create: $retry_out" >&2
-      continue
-    fi
+  # prevents. Ensure the label exists (idempotent), then add it via REST. A PR is
+  # an issue in REST, so the add targets issues/<PR>/labels. `gh label create`
+  # stays porcelain (REST POST /repos/.../labels — not a migration target);
+  # tolerate only an already-exists error and continue (non-aborting scan) on any
+  # other create/add failure.
+  if ! create_out=$(gh label create "$RETRIAGED_LABEL" \
+      --color "$RETRIAGED_COLOR" --description "$RETRIAGED_DESC" 2>&1); then
+    case "$create_out" in
+      *already\ exists*|*already_exists*) : ;;   # label already present — fine
+      *)
+        echo "dispatch-retriage-orphaned-followups: warning: could not create label $RETRIAGED_LABEL: $create_out" >&2
+        continue
+        ;;
+    esac
+  fi
+  if ! mark_out=$(gh_issue_set_labels_rest "$N" "$RETRIAGED_LABEL" 2>&1); then
+    echo "dispatch-retriage-orphaned-followups: warning: could not mark PR #$N with $RETRIAGED_LABEL: $mark_out" >&2
+    continue
   fi
 done
 

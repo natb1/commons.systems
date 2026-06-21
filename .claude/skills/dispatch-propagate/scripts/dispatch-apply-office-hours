@@ -26,6 +26,9 @@
 # WITHOUT `set -e` so a guarded gh failure does not abort the script.
 set -uo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+
 ISSUE_NUM="${1:-}"
 REASON="${2:-}"
 
@@ -62,25 +65,23 @@ else
   exit 0
 fi
 
-# Apply the label to the ISSUE first. Once the label exists in the repo — the
-# common case — this is the only edit call that runs.
-if ! apply_output=$(gh issue edit "$ISSUE_NUM" --add-label "$LABEL" 2>&1); then
-  # The edit failed. gh reports a missing *label* (not a missing issue) with a
-  # "not found" message; in that case the label simply does not exist yet —
-  # create it with the canonical metadata and retry once. Any other failure is
-  # real: warn and exit 0 (never block a hook), and post no comment.
-  if [[ "$apply_output" != *"not found"* ]]; then
-    echo "dispatch-apply-office-hours: warning: could not apply $LABEL to issue #$ISSUE_NUM: $apply_output" >&2
-    exit 0
-  fi
-  if ! create_output=$(gh label create "$LABEL" --color "$LABEL_COLOR" --description "$LABEL_DESC" 2>&1); then
-    echo "dispatch-apply-office-hours: warning: could not create label $LABEL: $create_output" >&2
-    exit 0
-  fi
-  if ! retry_output=$(gh issue edit "$ISSUE_NUM" --add-label "$LABEL" 2>&1); then
-    echo "dispatch-apply-office-hours: warning: could not apply $LABEL to issue #$ISSUE_NUM after create: $retry_output" >&2
-    exit 0
-  fi
+# Ensure the label exists in the repo, then add it to the ISSUE via REST.
+# `gh label create` stays porcelain (REST POST /repos/.../labels — not a migration
+# target). Tolerate only an already-exists error — the common case — and warn +
+# exit 0 (never block a hook) on any other create failure. A real REST add failure
+# likewise warns + exits 0, posting no comment.
+if ! create_output=$(gh label create "$LABEL" --color "$LABEL_COLOR" --description "$LABEL_DESC" 2>&1); then
+  case "$create_output" in
+    *already\ exists*|*already_exists*) : ;;   # label already present — fine
+    *)
+      echo "dispatch-apply-office-hours: warning: could not create label $LABEL: $create_output" >&2
+      exit 0
+      ;;
+  esac
+fi
+if ! add_output=$(gh_issue_set_labels_rest "$ISSUE_NUM" "$LABEL" 2>&1); then
+  echo "dispatch-apply-office-hours: warning: could not apply $LABEL to issue #$ISSUE_NUM: $add_output" >&2
+  exit 0
 fi
 
 # The label is now on the issue. Post the why-comment. A comment failure is
