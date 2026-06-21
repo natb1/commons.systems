@@ -25,8 +25,8 @@
 #   - file present, .enabled == false → exit 0 with no output (kill-switch).
 #   - file present, .enabled == true → armed (redundant with the default).
 #
-# Merge: gh pr merge <n> --squash with explicit --subject (the PR title) and
-# --body (the PR body), so the non-TTY squash is deterministic and the
+# Merge: gh_pr_merge_rest <n> --squash with explicit --subject (the PR title)
+# and --body (the PR body), so the non-TTY squash is deterministic and the
 # `Closes #N` lines in the PR body land in the squash commit message, driving
 # GitHub's issue auto-close. The repo's delete_branch_on_merge setting reaps the
 # remote ref, so --delete-branch is NOT passed.
@@ -104,14 +104,17 @@ while IFS= read -r pr; do
   [[ "$VERDICT" == "passing" ]] || continue
 
   # ---- Merge ----------------------------------------------------------------
+  # Merge via the REST-backed gh_pr_merge_rest helper (PUT .../pulls/<N>/merge).
   # --subject/--body are explicit so the non-TTY squash is deterministic and the
-  # PR body's Closes #N lines stay in the squash commit body. .body // "" so a
-  # null body is not passed as the literal string "null". No --delete-branch:
-  # the repo's delete_branch_on_merge reaps the remote ref.
+  # PR body's Closes #N lines stay in the squash commit body (the helper passes
+  # --body as commit_message). .body // "" so a null body is not passed as the
+  # literal string "null"; an empty body makes the helper omit commit_message,
+  # matching the porcelain. No --delete-branch: the repo's
+  # delete_branch_on_merge reaps the remote ref.
   PR_TITLE=$(jq -r '.title' <<<"$pr")
   PR_BODY=$(jq -r '.body // ""' <<<"$pr")
   rc=0
-  out=$(gh_retry gh pr merge "$N" --squash --subject "$PR_TITLE" --body "$PR_BODY" 2>&1) || rc=$?
+  out=$(gh_pr_merge_rest "$N" --squash --subject "$PR_TITLE" --body "$PR_BODY" 2>&1) || rc=$?
   if [[ "$rc" -ne 0 ]]; then
     echo "dispatch-auto-merge: error: gh pr merge #$N failed: $out" >&2
     HARD_ERROR=1
