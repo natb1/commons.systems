@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# dispatch-spawn-recommend — spawn a background /dispatch-recommend-next-steps
+# job for a parked issue so an Opus subagent recommends concrete next steps.
+#
+# Thin wrapper over dispatch-spawn-job, modeled on dispatch-spawn-office-hours
+# and dispatch-launch-worker: validates its own arguments and delegates the
+# dedup → spawn → verify mechanics to dispatch-spawn-job. Simpler than
+# dispatch-spawn-office-hours: it does NOT resolve or print a session id —
+# it just validates, spawns, and exits.
+#
+# Usage: dispatch-spawn-recommend <issue-num> [<cwd>]
+#
+# Arguments:
+#   <issue-num>  The parked issue number N. The spawned session is named
+#                recommend-<N> and its prompt is /dispatch-recommend-next-steps <N>.
+#   <cwd>        Optional. Absolute path to use as the spawn --cwd. When absent,
+#                resolved from `git rev-parse --show-toplevel` in the caller's
+#                working directory. Must be an existing directory.
+#
+# Never-fatal contract:
+#   Every runtime failure (bad daemon, spawn non-zero, dedup, unresolvable cwd)
+#   warns on stderr and exits 0, so the parking hook that calls this script is
+#   never torn down by a missing recommendation.
+#   Only usage/validation errors exit non-zero (exit 2).
+#
+# Exit codes:
+#   0  spawned / deduped / non-fatal runtime failure (see above)
+#   2  usage / validation error (wrong arg count, bad issue-num)
+#
+# The session name recommend-<N> does NOT match dispatch-stop.sh's ^[0-9]+-
+# discriminator, so the Stop hook ignores these sessions.
+#
+# Environment overrides for testability:
+#   DISPATCH_SPAWN_RECOMMEND_CLAUDE_CMD   The `claude` command. Translated into
+#                                         dispatch-spawn-job's
+#                                         DISPATCH_SPAWN_JOB_CLAUDE_CMD so every
+#                                         `claude` call in the spawn pipeline is
+#                                         faked consistently. Default: `claude`.
+#
+# Sandbox: every `claude` call (here and in dispatch-spawn-job) reaches the
+# local Claude daemon over a Unix socket; callers must run this script with
+# `dangerouslyDisableSandbox: true` — see `.claude/rules/sandbox.md`.
+#
+# NOT set -e: exits are handled explicitly (matching dispatch-spawn-job /
+# dispatch-spawn-office-hours).
+set -uo pipefail
+
+# ---- Step 0: parse and validate arguments ------------------------------------
+if [[ $# -lt 1 ]]; then
+  echo "dispatch-spawn-recommend: expected <issue-num> [<cwd>]; got no arguments" >&2
+  exit 2
+fi
+if [[ $# -gt 2 ]]; then
+  echo "dispatch-spawn-recommend: unexpected argument '$3'" >&2
+  exit 2
+fi
+
+ISSUE_NUM="$1"
+
+if [[ ! "$ISSUE_NUM" =~ ^[0-9]+$ ]]; then
+  echo "dispatch-spawn-recommend: issue-num must be a positive integer, got '${ISSUE_NUM}'" >&2
+  exit 2
+fi
+
+# ---- Step 1: resolve cwd -----------------------------------------------------
+if [[ $# -ge 2 ]]; then
+  CWD="$2"
+else
+  CWD="$(git rev-parse --show-toplevel 2>/dev/null)" || true
+fi
+
+if [[ ! -d "$CWD" ]]; then
+  echo "dispatch-spawn-recommend: cwd '${CWD}' does not exist or could not be resolved — skipping recommend spawn for #$ISSUE_NUM" >&2
+  exit 0
+fi
+
+# ---- Step 2: translate env overrides -----------------------------------------
+# Map DISPATCH_SPAWN_RECOMMEND_CLAUDE_CMD onto dispatch-spawn-job's override so
+# the delegated spawn uses the same faked `claude` command.
+CLAUDE_CMD="${DISPATCH_SPAWN_RECOMMEND_CLAUDE_CMD:-claude}"
+export DISPATCH_SPAWN_JOB_CLAUDE_CMD="$CLAUDE_CMD"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# ---- Step 3: spawn (DEFAULT verify, non-fatal on failure) --------------------
+NAME="recommend-$ISSUE_NUM"
+if ! "$SCRIPT_DIR/dispatch-spawn-job" \
+  --model opus \
+  --name "$NAME" \
+  --cwd "$CWD" \
+  "/dispatch-recommend-next-steps $ISSUE_NUM"; then
+  echo "dispatch-spawn-recommend: spawn of /dispatch-recommend-next-steps for #$ISSUE_NUM failed (non-fatal)" >&2
+  exit 0
+fi
+
+exit 0
