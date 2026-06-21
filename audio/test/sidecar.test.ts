@@ -158,33 +158,33 @@ describe("parseSidecar", () => {
     expect(result).toEqual(data);
   });
 
-  it("returns empty model for empty string", () => {
-    expect(parseSidecar("")).toEqual({ version: 1, metadata: {}, playlists: {} });
+  it("returns null for empty string", () => {
+    expect(parseSidecar("")).toBeNull();
   });
 
-  it("returns empty model for corrupt JSON", () => {
-    expect(parseSidecar("{not json")).toEqual({ version: 1, metadata: {}, playlists: {} });
+  it("returns null for corrupt JSON", () => {
+    expect(parseSidecar("{not json")).toBeNull();
   });
 
-  it("returns empty model for non-object top-level: number", () => {
-    expect(parseSidecar("42")).toEqual({ version: 1, metadata: {}, playlists: {} });
+  it("returns null for non-object top-level: number", () => {
+    expect(parseSidecar("42")).toBeNull();
   });
 
-  it("returns empty model for non-object top-level: null", () => {
-    expect(parseSidecar("null")).toEqual({ version: 1, metadata: {}, playlists: {} });
+  it("returns null for non-object top-level: null", () => {
+    expect(parseSidecar("null")).toBeNull();
   });
 
-  it("returns empty model for non-object top-level: string", () => {
-    expect(parseSidecar('"a string"')).toEqual({ version: 1, metadata: {}, playlists: {} });
+  it("returns null for non-object top-level: string", () => {
+    expect(parseSidecar('"a string"')).toBeNull();
   });
 
-  it("returns empty model for non-object top-level: array", () => {
-    expect(parseSidecar("[1,2,3]")).toEqual({ version: 1, metadata: {}, playlists: {} });
+  it("returns null for non-object top-level: array", () => {
+    expect(parseSidecar("[1,2,3]")).toBeNull();
   });
 
   it("forces version to 1 regardless of input", () => {
     const json = JSON.stringify({ version: 99, metadata: {}, playlists: {} });
-    expect(parseSidecar(json).version).toBe(1);
+    expect(parseSidecar(json)!.version).toBe(1);
   });
 
   it("coerces missing metadata to {} while preserving valid playerState", () => {
@@ -192,7 +192,7 @@ describe("parseSidecar", () => {
       version: 1,
       playerState: { queue: ["a.mp3"], currentLocalName: "a.mp3", positionSeconds: 10 },
     });
-    const result = parseSidecar(json);
+    const result = parseSidecar(json)!;
     expect(result.metadata).toEqual({});
     expect(result.playerState?.queue).toEqual(["a.mp3"]);
   });
@@ -203,7 +203,7 @@ describe("parseSidecar", () => {
       metadata: [1, 2],
       playerState: { queue: ["b.mp3"] },
     });
-    const result = parseSidecar(json);
+    const result = parseSidecar(json)!;
     expect(result.metadata).toEqual({});
     expect(result.playerState?.queue).toEqual(["b.mp3"]);
   });
@@ -214,7 +214,7 @@ describe("parseSidecar", () => {
       metadata: { "song.mp3": { title: "Keep", duration: "bad" } },
       playlists: {},
     });
-    const result = parseSidecar(json);
+    const result = parseSidecar(json)!;
     expect(result.metadata["song.mp3"]?.title).toBe("Keep");
     expect("duration" in (result.metadata["song.mp3"] ?? {})).toBe(false);
   });
@@ -226,7 +226,7 @@ describe("parseSidecar", () => {
         metadata: {},
         playlists: { Good: ["a.mp3", "b.mp3"], Bad: "not-an-array" },
       });
-      const result = parseSidecar(json);
+      const result = parseSidecar(json)!;
       expect(result.playlists?.["Good"]).toEqual(["a.mp3", "b.mp3"]);
       expect("Bad" in (result.playlists ?? {})).toBe(false);
     });
@@ -237,7 +237,7 @@ describe("parseSidecar", () => {
         metadata: {},
         playlists: { Mix: ["a.mp3", 42, null, "b.mp3"] },
       });
-      const result = parseSidecar(json);
+      const result = parseSidecar(json)!;
       expect(result.playlists?.["Mix"]).toEqual(["a.mp3", "b.mp3"]);
     });
   });
@@ -245,7 +245,7 @@ describe("parseSidecar", () => {
   describe("playerState coercion", () => {
     it("non-array queue defaults to []", () => {
       const json = JSON.stringify({ version: 1, metadata: {}, playerState: { queue: "bad" } });
-      const result = parseSidecar(json);
+      const result = parseSidecar(json)!;
       expect(result.playerState?.queue).toEqual([]);
     });
 
@@ -255,7 +255,7 @@ describe("parseSidecar", () => {
         metadata: {},
         playerState: { queue: [], currentLocalName: 42 },
       });
-      const result = parseSidecar(json);
+      const result = parseSidecar(json)!;
       expect("currentLocalName" in (result.playerState ?? {})).toBe(false);
     });
 
@@ -265,19 +265,19 @@ describe("parseSidecar", () => {
         metadata: {},
         playerState: { queue: [], positionSeconds: "bad" },
       });
-      const result = parseSidecar(json);
+      const result = parseSidecar(json)!;
       expect("positionSeconds" in (result.playerState ?? {})).toBe(false);
     });
 
     it("a plain-object playerState always yields at least { queue: [] }", () => {
       const json = JSON.stringify({ version: 1, metadata: {}, playerState: {} });
-      const result = parseSidecar(json);
+      const result = parseSidecar(json)!;
       expect(result.playerState).toEqual({ queue: [] });
     });
 
     it("a non-object playerState yields undefined", () => {
       const json = JSON.stringify({ version: 1, metadata: {}, playerState: "invalid" });
-      const result = parseSidecar(json);
+      const result = parseSidecar(json)!;
       expect(result.playerState).toBeUndefined();
     });
 
@@ -287,7 +287,7 @@ describe("parseSidecar", () => {
         metadata: { "song.mp3": { title: "Keep" } },
         playerState: 42,
       });
-      const result = parseSidecar(json);
+      const result = parseSidecar(json)!;
       expect(result.metadata["song.mp3"]?.title).toBe("Keep");
       expect(result.playerState).toBeUndefined();
     });
@@ -435,9 +435,9 @@ describe("readSidecar", () => {
     expect(result).toEqual({ version: 1, metadata: {}, playlists: {} });
   });
 
-  it("returns empty model when content is corrupt JSON", async () => {
+  it("returns null when content is corrupt JSON", async () => {
     const { dir } = makePreloadedDir("{not json");
-    await expect(readSidecar(dir)).resolves.toEqual({ version: 1, metadata: {}, playlists: {} });
+    await expect(readSidecar(dir)).resolves.toBeNull();
   });
 });
 
@@ -708,5 +708,42 @@ describe("sidecar — loads from pre-existing file", () => {
       positionSeconds: 25,
     });
     expect(await getPlaylists()).toEqual({ Old: ["existing.mp3"] });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F. Corrupt sidecar — fail-closed acceptance criteria
+// ---------------------------------------------------------------------------
+
+describe("corrupt sidecar — fail-closed", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("corrupt sidecar: savePlayerState does NOT overwrite the file (AC4)", async () => {
+    const { dir, fileHandle } = makePreloadedDir("{not json");
+    setLocalDirectory(dir, true);
+
+    await savePlayerState({ queue: ["a.mp3"], currentLocalName: "a.mp3", positionSeconds: 12 });
+    await flushWrites();
+
+    // File on disk is untouched — corrupt bytes preserved for recovery.
+    expect(fileHandle._state.content).toBe("{not json");
+    expect(fileHandle.createWritable).not.toHaveBeenCalled();
+
+    // In-memory session still works (the merge applied to an empty model).
+    expect(await getPlayerState()).toMatchObject({ queue: ["a.mp3"], positionSeconds: 12 });
+  });
+
+  it("missing sidecar (NotFoundError): savePlayerState DOES write (AC5)", async () => {
+    const dir = makeDirWithMissingFile();
+    setLocalDirectory(dir, true);
+
+    await savePlayerState({ queue: ["a.mp3"], positionSeconds: 5 });
+    await flushWrites();
+
+    const readBack = await readSidecar(dir);
+    expect(readBack).not.toBeNull();
+    expect(readBack?.playerState).toMatchObject({ queue: ["a.mp3"], positionSeconds: 5 });
   });
 });
