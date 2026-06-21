@@ -11,7 +11,8 @@
 # Behavior:
 #   1. Validate args (exit 2 on any violation, before any gh call).
 #   2. Fetch the issue's current state once. If NOT already closed, close it
-#      with `gh issue close --reason completed --comment "$REASON"`. If already
+#      via `gh_issue_close_rest "$N" --reason completed --comment "$REASON"`
+#      (REST-backed; posts the comment then PATCHes the issue closed). If already
 #      CLOSED, skip the close + comment and print a diagnostic to stderr so a
 #      re-entry is idempotent and never posts a duplicate comment.
 #   3. Write the resolved-closed sentinel atomically (tempfile + mv) under the
@@ -109,7 +110,7 @@ STATE=$(gh_issue_view_rest "$N" | jq -r '.state')
 if [ "$(printf '%s' "$STATE" | tr '[:upper:]' '[:lower:]')" = "closed" ]; then
   echo "dispatch-close-resolved: #$N already CLOSED; skipping re-close, writing sentinel only" >&2
 else
-  gh issue close "$N" --reason completed --comment "$REASON"
+  gh_issue_close_rest "$N" --reason completed --comment "$REASON"
 fi
 
 # ---------------------------------------------------------------------------

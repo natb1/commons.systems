@@ -266,11 +266,11 @@ resolve_office_hours_reason() {
 # either side. (Apply is issue-only, via dispatch-apply-office-hours.)
 strip_office_hours_label() {
   if [ -n "$PR_NUM" ]; then
-    gh pr edit "$PR_NUM" --remove-label dispatch:office-hours >/dev/null 2>&1 \
-      || echo "[dispatch-stop] WARNING: gh pr edit --remove-label failed" >&2
+    gh_issue_remove_label_rest "$PR_NUM" dispatch:office-hours >/dev/null 2>&1 \
+      || echo "[dispatch-stop] WARNING: gh_issue_remove_label_rest (PR) failed" >&2
   fi
-  gh issue edit "$ISSUE_NUM" --remove-label dispatch:office-hours >/dev/null 2>&1 \
-    || echo "[dispatch-stop] WARNING: gh issue edit --remove-label failed" >&2
+  gh_issue_remove_label_rest "$ISSUE_NUM" dispatch:office-hours >/dev/null 2>&1 \
+    || echo "[dispatch-stop] WARNING: gh_issue_remove_label_rest (issue) failed" >&2
   # #2040: on the parked→unparked transition ONLY (office-hours was present at
   # session start, captured once in ISSUE_OFFICE_HOURS_PRESENT below), reset the
   # issue-anchored total-attempt counter so the resumed autonomous work gets a
@@ -297,7 +297,7 @@ clear_rate_limit_retry_labels() {
   gh issue view "$ISSUE_NUM" --json labels --jq \
     '.labels[].name | select(test("^dispatch:rate-limit-retry-[0-9]+$"))' 2>/dev/null \
     | while IFS= read -r lbl; do
-        [ -n "$lbl" ] && gh issue edit "$ISSUE_NUM" --remove-label "$lbl" >/dev/null 2>&1 \
+        [ -n "$lbl" ] && gh_issue_remove_label_rest "$ISSUE_NUM" "$lbl" >/dev/null 2>&1 \
           || echo "[dispatch-stop] WARNING: could not clear $lbl (non-fatal)" >&2
       done || true
   return 0
@@ -317,7 +317,7 @@ clear_attempt_counter() {
   gh issue view "$ISSUE_NUM" --json labels --jq \
     '.labels[].name | select(test("^dispatch:attempts-[0-9]+$"))' 2>/dev/null \
     | while IFS= read -r lbl; do
-        [ -n "$lbl" ] && gh issue edit "$ISSUE_NUM" --remove-label "$lbl" >/dev/null 2>&1 \
+        [ -n "$lbl" ] && gh_issue_remove_label_rest "$ISSUE_NUM" "$lbl" >/dev/null 2>&1 \
           || echo "[dispatch-stop] WARNING: could not clear $lbl (non-fatal)" >&2
       done || true
   return 0
