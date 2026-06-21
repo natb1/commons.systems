@@ -13,7 +13,15 @@ N=$(resolve_issue_number "${1:-}")
 # nothing is ever a candidate (safe default; no false positives → no spurious
 # auto-close). This gate runs BEFORE the sub-issues fetch so a non-epic issue
 # short-circuits cheaply (exit 1) without the extra gh round-trip.
-EPIC_CONFIG=$("$SCRIPT_DIR/dispatch-config-load" epic)
+EPIC_CONFIG=$("$SCRIPT_DIR/dispatch-config-load" epic) || {
+  rc=$?
+  if [[ $rc -eq 2 ]]; then
+    echo "dispatch-epic-resolved-candidate: dispatch-config-load epic: environment/usage error (no git repo / unknown config type; see stderr above)" >&2
+  else
+    echo "dispatch-epic-resolved-candidate: dispatch-config-load epic failed (bad JSON/schema in dispatch.config/epic.json)" >&2
+  fi
+  exit 3
+}
 if [[ "$EPIC_CONFIG" == "no-config" ]]; then
   # No epic config — nothing is an epic. Not a candidate.
   exit 1
