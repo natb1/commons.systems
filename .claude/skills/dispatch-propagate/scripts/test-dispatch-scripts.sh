@@ -10627,11 +10627,11 @@ sweep_teardown
 
 # --- Test I2: pr-list --head failure is isolated (ERROR_PR_STATE_FETCH) -----
 #
-# A branch whose `gh pr list --head` call fails must be logged as
+# A branch whose `gh_pr_list_rest --head` call fails must be logged as
 # ERROR_PR_STATE_FETCH and skipped, not fatal. A sibling in-sync MERGED
 # worktree in the same run must still be removed.
 
-echo "Test: gh pr list --head failure is isolated (exit 0, sibling still removed)"
+echo "Test: gh_pr_list_rest --head failure is isolated (exit 0, sibling still removed)"
 sweep_setup
 # Failing worktree: SWEEP_GH_PR_FAIL makes the stub exit 1 for this branch.
 WT_PATH="$TMPDIR_TEST/project/worktrees/63-pr-fail"
@@ -10658,7 +10658,7 @@ else
   echo "    calls: $calls"
 fi
 TOTAL=$((TOTAL + 1))
-if grep -q "ERROR_PR_STATE_FETCH: branch=63-pr-fail gh pr list --head failed" \
+if grep -q "ERROR_PR_STATE_FETCH: branch=63-pr-fail gh_pr_list_rest --head failed" \
    "$DISPATCH_SWEEP_LOG_FILE"; then
   PASS=$((PASS + 1)); echo "  PASS: ERROR_PR_STATE_FETCH log line present"
 else
