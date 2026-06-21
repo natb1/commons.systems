@@ -170,7 +170,7 @@ The token-to-helper mapping (subcommand on the left, helper on the right):
     issue close    gh_issue_close_rest
     issue comment  gh_issue_comment_rest
     pr view        gh_pr_view_rest
-    pr edit        gh_issue_edit_rest   (PRs are issues in REST — serves the --body edit; lib.sh:1033)
+    pr edit        gh_issue_edit_rest   (PRs are issues in REST — serves the --body edit; lib.sh:1060)
     pr merge       gh_pr_merge_rest
 
 Exceptions:
