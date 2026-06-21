@@ -78,8 +78,8 @@ if [[ -z "$PR" || "$PR" == "null" ]]; then
       exit 1
     fi
   fi
-  ISSUE_JSON=$(gh_retry gh issue view "$ISSUE_NUM" --json labels) || {
-    echo "dispatch-phase: gh issue view #$ISSUE_NUM (labels) failed; cannot derive phase" >&2
+  ISSUE_JSON=$(gh_issue_view_rest "$ISSUE_NUM") || {
+    echo "dispatch-phase: gh_issue_view_rest #$ISSUE_NUM (labels) failed; cannot derive phase" >&2
     exit 1
   }
   ISSUE_LABELS=$(jq -r '.labels[].name' <<<"$ISSUE_JSON") || {

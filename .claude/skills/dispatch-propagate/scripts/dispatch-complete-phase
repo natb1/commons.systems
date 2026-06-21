@@ -3,7 +3,7 @@
 # Usage: dispatch-complete-phase <pr-num> <phase>
 #
 # Maps a completed phase to its accumulating dispatch:* progress label and
-# applies it to the PR. (Apply-first ordering and missing-label handling are
+# applies it to the PR. (Ensure-label-exists-first then add-via-REST ordering is
 # explained inline at the code below.)
 #
 # This script is the single source of truth for the dispatch:* label
@@ -15,6 +15,9 @@
 #
 # Missing args or an unknown phase is a clear error, not a fallback.
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
 
 PR_NUM="${1:-}"
 PHASE="${2:-}"
@@ -33,21 +36,16 @@ case "$PHASE" in
     ;;
 esac
 
-# Apply the label first. Once the label exists — the common case — this is the
-# only gh call that runs.
-if apply_output=$(gh pr edit "$PR_NUM" --add-label "$LABEL" 2>&1); then
-  exit 0
-fi
-
-# The apply failed. gh reports a missing label with a "not found" message; in
-# that case the label simply does not exist yet (e.g. on a fork) — create it
-# and retry once. Any other failure is real: surface it and exit non-zero.
-if [[ "$apply_output" != *"not found"* ]]; then
-  echo "$apply_output" >&2
-  exit 1
-fi
-
+# Ensure the label exists (idempotent), then add it via REST. `gh label create`
+# stays porcelain (REST POST /repos/.../labels — not a migration target). Tolerate
+# only an already-exists error; surface anything else rather than silently dropping
+# the label. A PR is an issue in REST, so the labels POST targets issues/<PR>/labels.
 SUFFIX="${LABEL#dispatch:}"
-gh label create "$LABEL" --color BFD4F2 \
-  --description "dispatch workflow: $SUFFIX phase complete"
-gh pr edit "$PR_NUM" --add-label "$LABEL"
+if ! create_out=$(gh label create "$LABEL" --color BFD4F2 \
+    --description "dispatch workflow: $SUFFIX phase complete" 2>&1); then
+  case "$create_out" in
+    *already\ exists*|*already_exists*) : ;;   # label already present — fine
+    *) echo "error: dispatch-complete-phase: gh label create failed: $create_out" >&2; exit 1 ;;
+  esac
+fi
+gh_issue_set_labels_rest "$PR_NUM" "$LABEL"

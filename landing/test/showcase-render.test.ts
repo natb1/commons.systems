@@ -31,9 +31,13 @@ describe("renderShowcase", () => {
     expect(html).toContain("Build with commons.systems. Learn to run without.");
   });
 
-  it("contains exactly one <a class=\"app-card\" per app", () => {
+  it("contains exactly one app-card anchor per app", () => {
     const html = renderShowcase(APPS);
-    const matches = html.match(/<a class="app-card"/g);
+    // The ds Card composes its own classes ahead of the consumer's, so each card
+    // anchor is `<a class="cs-card cs-card--interactive app-card" ...>`. Match the
+    // app-card token at the end of an anchor's class list (the closing quote
+    // excludes the `app-card-screenshot` img, which also starts with app-card).
+    const matches = html.match(/<a [^>]*class="[^"]*\bapp-card"/g);
     expect(matches).not.toBeNull();
     expect(matches!.length).toBe(APPS.length);
   });
@@ -115,7 +119,7 @@ describe("renderShowcase", () => {
 
     it("renders one <a class=\"app-card\" per primary and overflow app", () => {
       const html = renderShowcase(APPS, OVERFLOW);
-      const matches = html.match(/<a class="app-card"/g);
+      const matches = html.match(/<a [^>]*class="[^"]*\bapp-card"/g);
       expect(matches).not.toBeNull();
       expect(matches!.length).toBe(APPS.length + OVERFLOW.length);
     });

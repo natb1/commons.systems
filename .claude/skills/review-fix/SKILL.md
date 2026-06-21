@@ -780,11 +780,31 @@ REPO=$(git remote get-url origin | sed -E 's#.*github.com[:/]##; s#\.git$##')
   --disposition <result.disposition>
 ```
 
-Then **stop**. The Stop hook reads the marker and advances the chain. Applying
-`dispatch:reviewed` is unconditional; only the marker is skipped when the
-deviation criterion fires. Promotion to ready is never this skill's job — the
-router's `dispatch-reconcile-ready` owns it, reconciling the draft↔ready bit on
-every tick once CI is passing and `mergeable == MERGEABLE`.
+**Then, as the ABSOLUTE LAST action**, run `dispatch-finalize-phase` — AFTER the
+envelope emit above (it self-closes the session, terminating telemetry, so all
+prior steps must complete first). It strips any premature `dispatch:office-hours`
+from the issue + PR, spawns the next tick + sweep, and self-closes (`exec claude
+rm`; a no-op interactively when `CLAUDE_JOB_DIR` is unset). Use
+`dangerouslyDisableSandbox: true` — it invokes `gh` (network) and `claude rm`
+(over a Unix socket):
+
+```bash
+.claude/skills/dispatch-propagate/scripts/dispatch-finalize-phase <N> --pr "$PR_NUM"
+```
+
+This is the no-deviation success path only. On the deviation path and the
+idempotent re-entry path, do **not** call `dispatch-finalize-phase` — those
+legitimately leave the session for the Stop hook's office-hours disposition.
+
+`dispatch-finalize-phase` now drives self-close, office-hours stripping, and
+chain propagation deterministically — the chain no longer depends on a second
+Stop hook firing (which the harness does not reliably emit after a
+background-task wait). A stray second Stop firing afterward is harmless: every
+finalize step is idempotent. Applying `dispatch:reviewed` is unconditional; only
+the marker is skipped when the deviation criterion fires. Promotion to ready is
+never this skill's job — the router's `dispatch-reconcile-ready` owns it,
+reconciling the draft↔ready bit on every tick once CI is passing and
+`mergeable == MERGEABLE`.
 
 ## Per-finding schema
 
