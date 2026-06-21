@@ -97,4 +97,22 @@ if ! comment_output=$(gh_issue_comment_rest "$ISSUE_NUM" --body "Parked on \`$LA
   exit 0
 fi
 
+# Spawn an opus subagent to recommend next steps for this parked item. Fully
+# detached (setsid nohup, stdin from /dev/null) so the parking hook never waits
+# on it; every failure inside dispatch-spawn-recommend is already non-fatal.
+# This sits on the fresh-apply path, so the label idempotency gate above
+# guarantees it fires exactly once per park — a re-firing hook hits the early
+# exit 0 and never reaches here.
+recommend_log="$(git rev-parse --show-toplevel 2>/dev/null)/tmp/dispatch-recommend-${ISSUE_NUM}.log"
+case "$recommend_log" in
+  /tmp/dispatch-recommend-*) recommend_log="/dev/null" ;;  # toplevel unresolved → don't block on log routing
+esac
+if command -v setsid >/dev/null 2>&1; then
+  setsid nohup "$SCRIPT_DIR/dispatch-spawn-recommend" "$ISSUE_NUM" \
+    </dev/null >"$recommend_log" 2>&1 &
+else
+  nohup "$SCRIPT_DIR/dispatch-spawn-recommend" "$ISSUE_NUM" \
+    </dev/null >"$recommend_log" 2>&1 &
+fi
+
 exit 0
