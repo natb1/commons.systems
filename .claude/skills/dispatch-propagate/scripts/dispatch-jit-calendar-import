@@ -183,10 +183,19 @@ fi
 # dedup misses surface instead of silently creating duplicates.
 LIST_LIMIT=1000
 LIST_RC=0
+# Capture stderr to a tmpfile rather than via 2>&1: gh_issue_list_rest runs
+# gh_retry internally, whose transient-retry diagnostics go to stderr. Folding
+# stderr into OPEN_JSON would contaminate the captured JSON on a
+# transient-then-success run (LIST_RC=0 but OPEN_JSON has a retry line prepended),
+# making the subsequent `jq` fail. The error-diagnostic intent is preserved by
+# reading the captured stderr only on failure.
+list_err=$(mktemp)
 OPEN_JSON=$(gh_issue_list_rest --repo "$CALENDAR_REPO" --label "$CALENDAR_LABEL" \
-  --state open --include-body --limit "$LIST_LIMIT" 2>&1) || LIST_RC=$?
+  --state open --include-body --limit "$LIST_LIMIT" 2>"$list_err") || LIST_RC=$?
+err=$(cat "$list_err")
+rm -f "$list_err"
 if [[ "$LIST_RC" -ne 0 ]]; then
-  echo "calendar: error (gh issue list failed: $OPEN_JSON)" >&2
+  echo "calendar: error (gh issue list failed: $err)" >&2
   exit 1
 fi
 

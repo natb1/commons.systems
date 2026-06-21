@@ -213,15 +213,15 @@ echo "=== Input 2: merged PRs in window ==="
 PRS=$(gh_retry gh api --paginate \
   "repos/{owner}/{repo}/pulls?state=closed&sort=updated&direction=desc&per_page=100" \
   | jq -s --arg created "$CREATED_AT" \
-      'add
+      'add // []
        | map(select(.merged_at != null and .merged_at >= $created))
        | map({number, title, mergedAt: .merged_at})')
 PR_COUNT=$(printf '%s' "$PRS" | jq 'length')
 
 if [[ "$PR_COUNT" -ge 100 ]]; then
-  echo "WINDOW-TOO-WIDE: the merged-PR query hit the 100-result limit, so this"
-  echo "window is too wide to scan reliably. Re-run /file-issue on this issue to"
-  echo "narrow its window rather than trusting a partial merged-PR scan."
+  echo "WINDOW-TOO-WIDE: the merged-PR scan found 100 or more PRs merged in this"
+  echo "window, so this window is too wide to scan reliably. Re-run /file-issue on"
+  echo "this issue to narrow its window rather than trusting this merged-PR scan."
   echo "(partial PR enumeration suppressed for this input)"
 elif [[ "$PR_COUNT" -eq 0 ]]; then
   echo "(none)"
