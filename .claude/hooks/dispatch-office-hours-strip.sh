@@ -11,8 +11,10 @@
 # No discriminator on CLAUDE_JOB_DIR — a human submitting a prompt is the
 # engagement signal regardless of session type.
 #
-# Always exits 0 — must not block prompt submission. gh's --remove-label is
-# a no-op when the label is not present, so removing an absent label is fine.
+# Always exits 0 — must not block prompt submission. The REST-backed
+# gh_issue_remove_label_rest preserves the porcelain --remove-label contract: a
+# no-op when the label is not present (it treats the label-absent 404 as
+# success), so removing an absent label is fine.
 set -uo pipefail
 trap 'echo "[dispatch-office-hours-strip] WARNING: unexpected error on line $LINENO" >&2; exit 0' ERR
 
@@ -28,6 +30,7 @@ ISSUE_NUM=$(printf '%s\n' "$BRANCH" | grep -oE '^[0-9]+') || exit 0
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || exit 0
 SCRIPTS="$SCRIPT_DIR/../skills/dispatch-propagate/scripts"
+source "$SCRIPTS/lib.sh" || exit 0
 
 PR_NUM=$("$SCRIPTS/dispatch-find-pr" "$ISSUE_NUM" 2>/dev/null) || PR_NUM=""
 
@@ -35,12 +38,13 @@ PR_NUM=$("$SCRIPTS/dispatch-find-pr" "$ISSUE_NUM" 2>/dev/null) || PR_NUM=""
 # carries the label at a time, so the call to the unlabeled target is a no-op.
 # Stripping from both prevents a stale label when the PR was opened between the
 # input-block (which labeled the issue) and the user's engagement (which now
-# sees the PR). gh --remove-label is a no-op when the label is absent.
+# sees the PR). gh_issue_remove_label_rest preserves the porcelain no-op-when-
+# absent contract (it treats the label-absent 404 as success).
 if [ -n "$PR_NUM" ]; then
-  gh pr edit "$PR_NUM" --remove-label dispatch:office-hours >/dev/null 2>&1 \
-    || echo "[dispatch-office-hours-strip] WARNING: gh pr edit --remove-label failed for PR #$PR_NUM" >&2
+  gh_issue_remove_label_rest "$PR_NUM" dispatch:office-hours >/dev/null 2>&1 \
+    || echo "[dispatch-office-hours-strip] WARNING: gh_issue_remove_label_rest failed for PR #$PR_NUM" >&2
 fi
-gh issue edit "$ISSUE_NUM" --remove-label dispatch:office-hours >/dev/null 2>&1 \
-  || echo "[dispatch-office-hours-strip] WARNING: gh issue edit --remove-label failed for issue #$ISSUE_NUM" >&2
+gh_issue_remove_label_rest "$ISSUE_NUM" dispatch:office-hours >/dev/null 2>&1 \
+  || echo "[dispatch-office-hours-strip] WARNING: gh_issue_remove_label_rest failed for issue #$ISSUE_NUM" >&2
 
 exit 0

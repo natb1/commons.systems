@@ -24,6 +24,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Source lib.sh for gh_issue_view_rest (the REST-backed issue read, #2257).
+source "$SCRIPT_DIR/lib.sh"
 
 # ---- Step 0: parse arguments ------------------------------------------------
 
@@ -54,7 +56,7 @@ fi
 
 # ---- Step 2: fetch the issue's labels and find the jit: label ---------------
 
-LABELS_JSON=$(gh issue view "$NUM" --repo "$REPO" --json labels)
+LABELS_JSON=$(gh_issue_view_rest "$NUM" --repo "$REPO")
 JIT_LABEL=$(printf '%s' "$LABELS_JSON" \
   | jq -r '.labels[].name | select(startswith("jit:"))' \
   | head -n1)
