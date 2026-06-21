@@ -38466,8 +38466,9 @@ STAMP="$SCRIPT_DIR/dispatch-stamp-session"
   rm -rf "$root"
 )
 
-# 6. Idempotent re-write preserves a set .pr (does not clobber to null) and the
-#    seeded .base_sha (the session-start anchor); .branch is still re-derived.
+# 6. Idempotent re-write preserves a set .pr (does not clobber to null),
+#    preserves session-start .base_sha (not advanced to post-resume HEAD),
+#    and advances .stamped_at (re-derived, not preserved).
 (
   d=$(mktemp -d)
   git -C "$d" init -q
@@ -38475,12 +38476,14 @@ STAMP="$SCRIPT_DIR/dispatch-stamp-session"
   git -C "$d" checkout -q -b 999-fixture
   git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
   sc="$d/sess6.dispatch-stamp.json"
-  # Seed a sidecar that already carries a backfilled pr.
+  # Seed a sidecar that already carries a backfilled pr and a session-start base_sha.
   printf '%s\n' '{"schema":1,"session_id":"sess6","repo":"old/repo","issue":1,"pr":4242,"branch":"old","base_sha":"old","stamped_at":"2026-01-01T00:00:00Z"}' > "$sc"
   ( cd "$d" && "$STAMP" --session-id sess6 --transcript-path "$d/sess6.jsonl" )
   assert_eq "stamp: re-write preserves set .pr" "4242" "$(jq -r .pr "$sc")"
   assert_eq "stamp: re-write re-derives .branch" "999-fixture" "$(jq -r .branch "$sc")"
-  assert_eq "stamp: re-write preserves seeded .base_sha" "old" "$(jq -r .base_sha "$sc")"
+  assert_eq "stamp: re-write PRESERVES session-start .base_sha" "old" "$(jq -r .base_sha "$sc")"
+  assert_eq "stamp: re-write advances .stamped_at (re-derived, not preserved)" "differs" \
+    "$([ "$(jq -r .stamped_at "$sc")" != "2026-01-01T00:00:00Z" ] && echo differs || echo same)"
   rm -rf "$d"
 )
 
