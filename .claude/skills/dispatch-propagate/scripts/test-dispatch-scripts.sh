@@ -682,11 +682,23 @@ case "$args" in
     fi
     ;;
   api\ repos/*/pulls/*)
-    # dispatch-retriage-orphaned-followups (#1812, #2007): gh api
-    # repos/{owner}/{repo}/pulls/<N>. $STUB_DIR/retriage-pr-<N>.json supplies
-    # the per-PR REST state object; absence defaults to an OPEN PR (no action).
+    # Two consumers route here, both issuing the byte-identical
+    # `gh api repos/{owner}/{repo}/pulls/<N>` GET (no flag to discriminate on):
+    #   - dispatch-resolve-worktree reconciliation (#2257): resolve_pr_head now
+    #     reads the PR head via gh_pr_view_rest (was `gh pr view --json
+    #     headRefName`). $STUB_DIR/pr-headref-<N>.json supplies the raw REST pull
+    #     object (carries head.ref); the gh-pr-view-headref.log write below keeps
+    #     the existing call-made assertions valid. Default-absent → empty head.ref
+    #     so the resolve_pr_head guard still fires its "unusable head" abort.
+    #   - dispatch-retriage-orphaned-followups (#1812, #2007):
+    #     $STUB_DIR/retriage-pr-<N>.json; absence defaults to an OPEN PR.
+    # pr-headref takes priority: resolve-worktree tests use PR numbers (100, 922)
+    # that retriage's tests never use, so the two fixture namespaces don't collide.
     num="${args##*/}"
-    if [[ -f "$STUB_DIR/retriage-pr-${num}.json" ]]; then
+    if [[ -f "$STUB_DIR/pr-headref-${num}.json" ]]; then
+      echo "pr view" >> "$STUB_DIR/gh-pr-view-headref.log"
+      cat "$STUB_DIR/pr-headref-${num}.json"
+    elif [[ -f "$STUB_DIR/retriage-pr-${num}.json" ]]; then
       cat "$STUB_DIR/retriage-pr-${num}.json"
     else
       echo '{"state":"open","merged_at":null,"labels":[]}'
@@ -699,16 +711,6 @@ case "$args" in
       cat "$STUB_DIR/arg-closing-${num}.json"
     else
       echo '{"closingIssuesReferences":[]}'
-    fi
-    ;;
-  pr\ view\ *\ --json\ headRefName)
-    # dispatch-resolve-worktree reconciliation: gh pr view <N> --json headRefName.
-    echo "pr view" >> "$STUB_DIR/gh-pr-view-headref.log"
-    num=$(echo "$args" | awk '{print $3}')
-    if [[ -f "$STUB_DIR/pr-headref-${num}.json" ]]; then
-      cat "$STUB_DIR/pr-headref-${num}.json"
-    else
-      echo '{"headRefName":""}'
     fi
     ;;
   label\ create\ *)
@@ -9414,7 +9416,7 @@ teardown
 echo "Test: no worktree + open PR → create-existing <pr-head>"
 setup
 printf '[{"number":100,"headRefName":"42-existing-pr-branch"}]\n' > "$STUB_DIR/pr-list-full.json"
-echo '{"headRefName":"42-existing-pr-branch"}' > "$STUB_DIR/pr-headref-100.json"
+echo '{"number":100,"state":"open","head":{"ref":"42-existing-pr-branch"}}' > "$STUB_DIR/pr-headref-100.json"
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
 assert_eq "no worktree + open PR → create-existing <pr-head>" \
   "create-existing 42-existing-pr-branch" "$result"
@@ -9461,7 +9463,7 @@ teardown
 # ----------------------------------------------------------------------------
 # Branch reconciliation on the `enter` path (#913). PR existence is driven via
 # pr-list-full.json (dispatch-find-pr's prefix match on headRefName); the PR
-# head branch is driven via pr-headref-<num>.json (gh pr view headRefName).
+# head branch is driven via pr-headref-<num>.json (gh_pr_view_rest head.ref).
 # The git stub logs checkouts to git-checkout.log and reads the unique-commit
 # count from rev-list-count.txt (default 0).
 # ----------------------------------------------------------------------------
@@ -9472,7 +9474,7 @@ setup
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
 select_target_fake_claude   # sessionless: explicit liveness check (#837) proceeds to reconcile
 printf '[{"number":100,"headRefName":"42-pr-branch"}]\n' > "$STUB_DIR/pr-list-full.json"
-echo '{"headRefName":"42-pr-branch"}' > "$STUB_DIR/pr-headref-100.json"
+echo '{"number":100,"state":"open","head":{"ref":"42-pr-branch"}}' > "$STUB_DIR/pr-headref-100.json"
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
 assert_eq "wrong branch + no unique commits → enter" \
   "enter /worktrees/42-my-feature" "$result"
@@ -9486,7 +9488,7 @@ setup
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
 select_target_fake_claude   # sessionless: explicit liveness check (#837) proceeds to reconcile
 printf '[{"number":100,"headRefName":"42-my-feature"}]\n' > "$STUB_DIR/pr-list-full.json"
-echo '{"headRefName":"42-my-feature"}' > "$STUB_DIR/pr-headref-100.json"
+echo '{"number":100,"state":"open","head":{"ref":"42-my-feature"}}' > "$STUB_DIR/pr-headref-100.json"
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
 assert_eq "already on PR branch → enter" "enter /worktrees/42-my-feature" "$result"
 checkout_logged=$([[ -f "$STUB_DIR/git-checkout.log" ]] && echo yes || echo no)
@@ -9499,7 +9501,7 @@ setup
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
 select_target_fake_claude   # sessionless: conflict here is from unique commits, not liveness (#837)
 printf '[{"number":100,"headRefName":"42-pr-branch"}]\n' > "$STUB_DIR/pr-list-full.json"
-echo '{"headRefName":"42-pr-branch"}' > "$STUB_DIR/pr-headref-100.json"
+echo '{"number":100,"state":"open","head":{"ref":"42-pr-branch"}}' > "$STUB_DIR/pr-headref-100.json"
 echo "2" > "$STUB_DIR/rev-list-count.txt"
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
 assert_eq "wrong branch + unique commits → conflict" \
@@ -9529,7 +9531,7 @@ setup
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
 select_target_fake_claude   # orphan: no live session owns the worktree
 printf '[{"number":100,"headRefName":"42-pr-branch"}]\n' > "$STUB_DIR/pr-list-full.json"
-echo '{"headRefName":"42-pr-branch"}' > "$STUB_DIR/pr-headref-100.json"
+echo '{"number":100,"state":"open","head":{"ref":"42-pr-branch"}}' > "$STUB_DIR/pr-headref-100.json"
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 queue)
 assert_eq "queue orphan + wrong branch → enter" \
   "enter /worktrees/42-my-feature" "$result"
@@ -9545,7 +9547,7 @@ setup
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
 select_target_fake_claude "42-my-feature"   # live session owns the worktree
 printf '[{"number":100,"headRefName":"42-pr-branch"}]\n' > "$STUB_DIR/pr-list-full.json"
-echo '{"headRefName":"42-pr-branch"}' > "$STUB_DIR/pr-headref-100.json"
+echo '{"number":100,"state":"open","head":{"ref":"42-pr-branch"}}' > "$STUB_DIR/pr-headref-100.json"
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 queue)
 assert_eq "queue live-session + wrong branch → conflict" \
   "conflict /worktrees/42-my-feature" "$result"
@@ -9564,7 +9566,7 @@ setup
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
 select_target_fake_claude   # sessionless: explicit liveness check (#837) proceeds to reconcile
 printf '[{"number":100,"headRefName":"42-pr-branch"}]\n' > "$STUB_DIR/pr-list-full.json"
-echo '{"headRefName":""}' > "$STUB_DIR/pr-headref-100.json"
+echo '{"number":100,"state":"open","head":{"ref":""}}' > "$STUB_DIR/pr-headref-100.json"
 if result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit 2>/dev/null); then rc=0; else rc=$?; fi
 assert_eq "PR + empty headRefName → exit 1" "1" "$rc"
 checkout_logged=$([[ -f "$STUB_DIR/git-checkout.log" ]] && echo yes || echo no)
@@ -9578,7 +9580,7 @@ setup
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
 select_target_fake_claude   # sessionless: explicit liveness check (#837) proceeds to reconcile
 printf '[{"number":100,"headRefName":"42-pr-branch"}]\n' > "$STUB_DIR/pr-list-full.json"
-echo '{"headRefName":"--upload-pack=evil"}' > "$STUB_DIR/pr-headref-100.json"
+echo '{"number":100,"state":"open","head":{"ref":"--upload-pack=evil"}}' > "$STUB_DIR/pr-headref-100.json"
 if result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit 2>/dev/null); then rc=0; else rc=$?; fi
 assert_eq "PR + injection-shaped headRefName → exit 1" "1" "$rc"
 checkout_logged=$([[ -f "$STUB_DIR/git-checkout.log" ]] && echo yes || echo no)
@@ -9618,7 +9620,7 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktre
 select_target_fake_claude   # orphan: no live session owns the worktree
 echo '{"number":918}' > "$STUB_DIR/arg-issue-918.json"
 printf '[{"number":922,"headRefName":"918-dispatch-move"}]\n' > "$STUB_DIR/pr-list-full.json"
-echo '{"headRefName":"918-dispatch-move"}' > "$STUB_DIR/pr-headref-922.json"
+echo '{"number":922,"state":"open","head":{"ref":"918-dispatch-move"}}' > "$STUB_DIR/pr-headref-922.json"
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 918 queue)
 assert_eq "PR closing-issue number → enter real worktree" \
   "enter /worktrees/918-dispatch-move" "$result"
@@ -35443,13 +35445,27 @@ case "$args" in
       echo "[]"
     fi
     ;;
-  # --pr slice: gh pr view <prNum> --json number,labels,statusCheckRollup,body
-  pr\ view\ *\ --json\ number,labels,statusCheckRollup,body)
-    num=$(echo "$args" | awk '{print $3}')
+  # --pr slice: build_pr_section reads the PR object via gh_pr_view_rest (#2257),
+  # which GETs repos/{owner}/{repo}/pulls/<N>. The fixture is the RAW REST pull
+  # object (carries number, labels, body, and head.sha so headRefOid projects).
+  api\ */pulls/[0-9]*)
+    num=$(echo "$args" | grep -oE '[0-9]+' | tail -1)
     if [[ -f "$STUB_DIR/pr-view-${num}.json" ]]; then
       cat "$STUB_DIR/pr-view-${num}.json"
     else
-      echo "{\"number\":$num,\"labels\":[],\"statusCheckRollup\":[],\"body\":\"pr body\"}"
+      echo "{\"number\":$num,\"state\":\"open\",\"body\":\"pr body\",\"labels\":[],\"head\":{\"ref\":\"$num-branch\",\"sha\":\"sha-$num\"}}"
+    fi
+    ;;
+  # --pr slice CI verdict: dispatch_ci_verdict_rest fetches the head sha's
+  # check-runs via `gh api --paginate repos/{owner}/{repo}/commits/<sha>/check-runs`.
+  # $STUB_DIR/check-runs-<sha>.json supplies the raw REST (lowercase) check-runs
+  # object; the pr-view fixture's head.sha must match the <sha> here.
+  api\ --paginate\ */commits/*/check-runs)
+    sha=$(echo "$args" | sed -E 's#.*commits/([^/]+)/check-runs.*#\1#')
+    if [[ -f "$STUB_DIR/check-runs-${sha}.json" ]]; then
+      cat "$STUB_DIR/check-runs-${sha}.json"
+    else
+      echo '{"check_runs":[]}'
     fi
     ;;
   # --relations: blocked_by (array)
@@ -35746,15 +35762,20 @@ ctxpack_setup
 cat > "$CTXPACK_STUB/pr-list.json" <<'EOF'
 [{"number":42,"headRefName":"5-my-feature"}]
 EOF
-# gh pr view fixture: labels + all-SUCCESS rollup → ci: passing.
-# Status-context shape: {"state":"SUCCESS"} classifies passing without needing status/conclusion.
+# gh_pr_view_rest fixture (raw REST pull): labels + body + head.sha. The CI
+# verdict is computed by dispatch_ci_verdict_rest over the head.sha's check-runs;
+# two SUCCESS check-runs → ci: passing.
 cat > "$CTXPACK_STUB/pr-view-42.json" <<'EOF'
 {
   "number": 42,
+  "state": "open",
   "labels": [{"name":"dispatch:planned"},{"name":"size:medium"}],
-  "statusCheckRollup": [{"state":"SUCCESS"},{"state":"SUCCESS"}],
-  "body": "PR body text here."
+  "body": "PR body text here.",
+  "head": {"ref": "5-my-feature", "sha": "sha-pass-42"}
 }
+EOF
+cat > "$CTXPACK_STUB/check-runs-sha-pass-42.json" <<'EOF'
+{"check_runs": [{"status":"completed","conclusion":"success"},{"status":"completed","conclusion":"success"}]}
 EOF
 
 rc=0; out=$("$CTXPACK_DIR/dispatch-context-pack" 5 --pr 2>/dev/null) || rc=$?
@@ -35789,6 +35810,38 @@ else
   FAIL=$((FAIL+1)); echo "  FAIL: ctxpack --pr: no other section headers"
   echo "    actual: $out"
 fi
+ctxpack_teardown
+
+# ---------------------------------------------------------------------------
+# Test 3b: --pr CI verdict equivalence across failing / pending / empty (#2257)
+# ---------------------------------------------------------------------------
+# build_pr_section now derives `ci:` from dispatch_ci_verdict_rest over the PR
+# head sha's REST check-runs (was dispatch_classify_rollup over the porcelain
+# statusCheckRollup). These cases assert the printed verdict matches the
+# pre-migration classifier across ALL terminal states, including the
+# empty-check-runs edge (empty → pending), which both the old and new paths map
+# identically. DISPATCH_CI_VERDICT_CACHE is unset here, so every call fetches.
+ctxpack_ci_case() {
+  local label="$1" check_runs="$2" expected="$3"
+  cat > "$CTXPACK_STUB/pr-list.json" <<'EOF'
+[{"number":42,"headRefName":"5-my-feature"}]
+EOF
+  cat > "$CTXPACK_STUB/pr-view-42.json" <<EOF
+{"number":42,"state":"open","labels":[{"name":"x"}],"body":"b","head":{"ref":"5-my-feature","sha":"sha-ci-case"}}
+EOF
+  printf '%s\n' "$check_runs" > "$CTXPACK_STUB/check-runs-sha-ci-case.json"
+  local rc out
+  rc=0; out=$("$CTXPACK_DIR/dispatch-context-pack" 5 --pr 2>/dev/null) || rc=$?
+  assert_eq "ctxpack --pr ci ($label): exit 0" "0" "$rc"
+  assert_eq "ctxpack --pr ci ($label): ci: $expected" "yes" \
+    "$([[ "$out" == *"ci: $expected"* ]] && echo yes || echo no)"
+}
+
+echo "Test: ctxpack --pr ci verdict equivalence (failing/pending/empty)"
+ctxpack_setup
+ctxpack_ci_case "failing" '{"check_runs":[{"status":"completed","conclusion":"failure"}]}' "failing"
+ctxpack_ci_case "pending" '{"check_runs":[{"status":"in_progress","conclusion":null}]}' "pending"
+ctxpack_ci_case "empty → pending" '{"check_runs":[]}' "pending"
 ctxpack_teardown
 
 # ---------------------------------------------------------------------------
@@ -35943,7 +35996,11 @@ cat > "$CTXPACK_STUB/pr-list.json" <<'EOF'
 [{"number":20,"headRefName":"5-combo"}]
 EOF
 cat > "$CTXPACK_STUB/pr-view-20.json" <<'EOF'
-{"number":20,"labels":[],"statusCheckRollup":[],"body":"combo pr body"}
+{"number":20,"state":"open","labels":[],"body":"combo pr body","head":{"ref":"5-combo","sha":"sha-combo-20"}}
+EOF
+# Empty check-runs for the combo head sha → ci: pending (order test ignores it).
+cat > "$CTXPACK_STUB/check-runs-sha-combo-20.json" <<'EOF'
+{"check_runs":[]}
 EOF
 
 # Pass flags in REVERSE canonical order.

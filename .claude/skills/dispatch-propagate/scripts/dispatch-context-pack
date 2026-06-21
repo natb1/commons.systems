@@ -163,13 +163,14 @@ build_pr_section() {
   fi
 
   local pr_json
-  pr_json=$(gh_retry gh pr view "$pr_num" --json number,labels,statusCheckRollup,body) || return 1
+  pr_json=$(gh_pr_view_rest "$pr_num") || return 1
 
-  local pr_number labels_str ci_verdict pr_body
+  local pr_number labels_str ci_verdict pr_body head_oid
   pr_number=$(jq -r '.number' <<<"$pr_json") || return 1
   labels_str=$(jq -r '[ .labels[].name ] | if length == 0 then "(none)" else join(", ") end' <<<"$pr_json") || return 1
-  ci_verdict=$(dispatch_classify_rollup "$(jq -c '.statusCheckRollup' <<<"$pr_json")") || return 1
   pr_body=$(jq -r '.body // ""' <<<"$pr_json") || return 1
+  head_oid=$(jq -r '.headRefOid' <<<"$pr_json") || return 1
+  ci_verdict=$(dispatch_ci_verdict_rest "$head_oid") || return 1
 
   printf 'PR #%s\n' "$pr_number"
   printf 'labels: %s\n' "$labels_str"
