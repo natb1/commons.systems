@@ -577,6 +577,10 @@ case "$args" in
     # MUST precede the generic `api repos/*/issues/*` branch.
     # $args form: "api -X DELETE repos/.../issues/<N>/labels/<url-encoded-name>"
     echo "$args" >> "$STUB_DIR/gh-issue-remove-label-rest-calls.log"
+    if [[ -f "$STUB_DIR/gh-404-remove-label" ]]; then
+      echo "gh: Not Found (HTTP 404)" >&2
+      exit 1
+    fi
     if [[ -f "$STUB_DIR/gh-fail-rest" ]]; then
       echo "stub forced gh api failure" >&2
       exit 1
@@ -584,9 +588,11 @@ case "$args" in
     echo '[]'
     ;;
   "api -X PATCH "*/issues/[0-9]*)
-    # gh_issue_close_rest sentinel (#2255): PATCH .../issues/<N> with state=closed.
+    # gh_issue_close_rest AND gh_issue_edit_rest sentinel (#2255, #2256): both are
+    # PATCH .../issues/<N> calls, so they share this branch and log to the same file.
     # MUST precede the generic `api repos/*/issues/*` branch.
-    # $args form: "api -X PATCH repos/.../issues/<N> -f state=closed"
+    # $args forms: "api -X PATCH repos/.../issues/<N> -f state=closed [...]" (close)
+    #              "api -X PATCH repos/.../issues/<N> -f title=... [...]"   (edit)
     echo "$args" >> "$STUB_DIR/gh-issue-close-rest-calls.log"
     if [[ -f "$STUB_DIR/gh-fail-rest" ]]; then
       echo "stub forced gh api failure" >&2
@@ -621,13 +627,24 @@ case "$args" in
     echo '{"number":9999,"html_url":"https://github.com/test/repo/issues/9999"}'
     ;;
   "api -X PUT "*/pulls/*/merge*)
-    # gh_pr_merge_rest sentinel (#2255): PUT .../pulls/<N>/merge.
+    # gh_pr_merge_rest sentinel (#2255, #2256): PUT .../pulls/<N>/merge.
     # MUST precede the generic `api repos/*/pulls/*` branch.
     # $args form: "api -X PUT repos/.../pulls/<N>/merge -f merge_method=..."
     echo "$args" >> "$STUB_DIR/gh-pr-merge-rest-calls.log"
     if [[ -f "$STUB_DIR/gh-fail-rest" ]]; then
       echo "stub forced gh api failure" >&2
       exit 1
+    fi
+    # Optional per-PR failure injection (#2256): if $STUB_DIR/pr-merge-fail-on
+    # holds a PR number matching the <N> in this merge's path, emit a
+    # non-transient error and exit non-zero so gh_retry returns immediately and
+    # dispatch-auto-merge takes its HARD_ERROR path for that PR.
+    if [[ -f "$STUB_DIR/pr-merge-fail-on" ]]; then
+      merge_num=$(printf '%s' "$args" | sed -E 's#.*pulls/([0-9]+)/merge.*#\1#')
+      if [[ "$merge_num" == "$(cat "$STUB_DIR/pr-merge-fail-on")" ]]; then
+        echo "merge of the base branch into #$merge_num was rejected" >&2
+        exit 1
+      fi
     fi
     echo '{}'
     ;;
@@ -714,9 +731,20 @@ case "$args" in
     fi
     ;;
   label\ create\ *)
-    # dispatch-complete-phase / dispatch-apply-office-hours create the label only
-    # when the apply reported it missing.
+    # #2256: the label-op scripts now ensure-the-label-exists-first (a `gh label
+    # create` runs on EVERY add path, before the REST POST .../issues/<N>/labels).
+    # Default: log the argv + exit 0 (create succeeds). A $STUB_DIR/gh-label-exists
+    # marker models the already-exists case — emit gh's "already exists" message and
+    # exit 1 — so the ensure-first tolerance (proceed to the REST add) is testable.
     echo "$args" >> "$STUB_DIR/gh-label-create.log"
+    if [[ -f "$STUB_DIR/gh-label-exists" ]]; then
+      echo "gh: Validation Failed (HTTP 422): already_exists" >&2
+      exit 1
+    fi
+    if [[ -f "$STUB_DIR/gh-fail-label-create" ]]; then
+      echo "gh: could not create label (HTTP 500): Internal Server Error" >&2
+      exit 1
+    fi
     ;;
   issue\ edit\ *)
     # Multiple scripts (dispatch-apply-office-hours, dispatch-qa-apply-main-qa-labels, ...)
@@ -1944,6 +1972,17 @@ case "$err_rlf" in *"gh_issue_remove_label_rest: gh api failed"*) m=yes ;; *) m=
 assert_eq "remove-label: gh-failure stderr names helper" "yes" "$m"
 teardown
 
+echo "Test: gh_issue_remove_label_rest -- label-absent 404 is a no-op (returns 0, silent)"
+setup
+: > "$STUB_DIR/gh-404-remove-label"
+rc_rl404=0
+err_rl404=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_remove_label_rest 42 dispatch:office-hours 2>&1 >/dev/null) || rc_rl404=$?
+assert_eq "remove-label: 404 absent label → success" "0" "$rc_rl404"
+# Preserves the porcelain no-op-when-absent contract: no error/WARNING on stderr.
+case "$err_rl404" in *error:*|*WARNING*) m=no ;; *) m=yes ;; esac
+assert_eq "remove-label: 404 absent label → silent stderr" "yes" "$m"
+teardown
+
 # --- gh_issue_close_rest ---
 echo "Test: gh_issue_close_rest -- PATCH to correct path with state=closed"
 setup
@@ -1984,6 +2023,100 @@ case "$err_clf" in *"gh_issue_close_rest: gh api failed"*) m=yes ;; *) m=no ;; e
 assert_eq "close: gh-failure stderr names helper" "yes" "$m"
 teardown
 
+echo "Test: gh_issue_close_rest -- --reason sends state_reason"
+setup
+: > "$STUB_DIR/gh-issue-close-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_close_rest 42 --reason completed
+if grep -q 'state_reason=completed' "$STUB_DIR/gh-issue-close-rest-calls.log"; then r=yes; else r=no; fi
+assert_eq "close: --reason sends state_reason=completed" "yes" "$r"
+teardown
+
+echo "Test: gh_issue_close_rest -- --comment posts a comment then closes"
+setup
+: > "$STUB_DIR/gh-issue-close-rest-calls.log"
+: > "$STUB_DIR/gh-issue-comment-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_close_rest 42 --comment "closing note"
+if grep -q 'issues/42/comments' "$STUB_DIR/gh-issue-comment-rest-calls.log"; then c=yes; else c=no; fi
+assert_eq "close: --comment fires POST issues/42/comments" "yes" "$c"
+if grep -q 'issues/42' "$STUB_DIR/gh-issue-close-rest-calls.log"; then p=yes; else p=no; fi
+assert_eq "close: --comment still fires PATCH issues/42" "yes" "$p"
+teardown
+
+# --- gh_issue_edit_rest ---
+echo "Test: gh_issue_edit_rest -- --title only sends title="
+setup
+: > "$STUB_DIR/gh-issue-close-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_edit_rest 42 --title "new title"
+if grep -q 'PATCH' "$STUB_DIR/gh-issue-close-rest-calls.log"; then m=yes; else m=no; fi
+assert_eq "edit: log contains PATCH" "yes" "$m"
+if grep -q 'issues/42' "$STUB_DIR/gh-issue-close-rest-calls.log"; then p=yes; else p=no; fi
+assert_eq "edit: log contains issues/42 path" "yes" "$p"
+if grep -q 'title=new title' "$STUB_DIR/gh-issue-close-rest-calls.log"; then t=yes; else t=no; fi
+assert_eq "edit: --title sends title=" "yes" "$t"
+teardown
+
+echo "Test: gh_issue_edit_rest -- --body only sends body="
+setup
+: > "$STUB_DIR/gh-issue-close-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_edit_rest 42 --body "new body"
+if grep -q 'body=new body' "$STUB_DIR/gh-issue-close-rest-calls.log"; then b=yes; else b=no; fi
+assert_eq "edit: --body sends body=" "yes" "$b"
+teardown
+
+echo "Test: gh_issue_edit_rest -- --body-file uses -F body=@"
+setup
+: > "$STUB_DIR/gh-issue-close-rest-calls.log"
+printf '%s' "edit body from file" > "$STUB_DIR/edit-body.txt"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_edit_rest 42 --body-file "$STUB_DIR/edit-body.txt"
+if grep -q -- '-F body=@' "$STUB_DIR/gh-issue-close-rest-calls.log"; then f=yes; else f=no; fi
+assert_eq "edit: --body-file uses -F body=@ flag" "yes" "$f"
+teardown
+
+echo "Test: gh_issue_edit_rest -- --repo flag emits cross-repo segment"
+setup
+: > "$STUB_DIR/gh-issue-close-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_edit_rest 42 --title "t" --repo owner/other-repo
+if grep -q 'repos/owner/other-repo/issues/42' "$STUB_DIR/gh-issue-close-rest-calls.log"; then seg=yes; else seg=no; fi
+assert_eq "edit: --repo uses cross-repo segment" "yes" "$seg"
+teardown
+
+echo "Test: gh_issue_edit_rest -- --body and --body-file together return non-zero"
+setup
+rc_edx=0
+err_edx=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_edit_rest 42 --body "b" --body-file /dev/null 2>&1 >/dev/null) || rc_edx=$?
+assert_eq "edit: --body+--body-file → non-zero" "1" "$rc_edx"
+case "$err_edx" in *"mutually exclusive"*) m=yes ;; *) m=no ;; esac
+assert_eq "edit: --body+--body-file stderr names conflict" "yes" "$m"
+teardown
+
+echo "Test: gh_issue_edit_rest -- no title/body returns non-zero"
+setup
+rc_ede=0
+err_ede=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_edit_rest 42 2>&1 >/dev/null) || rc_ede=$?
+assert_eq "edit: no title/body → non-zero" "1" "$rc_ede"
+case "$err_ede" in *"at least one of --title/--body/--body-file is required"*) m=yes ;; *) m=no ;; esac
+assert_eq "edit: no-fields stderr names requirement" "yes" "$m"
+teardown
+
+echo "Test: gh_issue_edit_rest -- missing number returns non-zero"
+setup
+rc_edn=0
+err_edn=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_edit_rest --title "t" 2>&1 >/dev/null) || rc_edn=$?
+assert_eq "edit: missing number → non-zero" "1" "$rc_edn"
+case "$err_edn" in *"gh_issue_edit_rest: issue number is required"*) m=yes ;; *) m=no ;; esac
+assert_eq "edit: missing-number stderr names helper" "yes" "$m"
+teardown
+
+echo "Test: gh_issue_edit_rest -- gh failure returns non-zero with diagnostic stderr"
+setup
+: > "$STUB_DIR/gh-fail-rest"
+rc_edf=0
+err_edf=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_edit_rest 42 --title "t" 2>&1 >/dev/null) || rc_edf=$?
+assert_eq "edit: gh failure → non-zero" "1" "$rc_edf"
+case "$err_edf" in *"gh_issue_edit_rest: gh api failed"*) m=yes ;; *) m=no ;; esac
+assert_eq "edit: gh-failure stderr names helper" "yes" "$m"
+teardown
+
 # --- gh_issue_create_rest ---
 echo "Test: gh_issue_create_rest -- POST to correct path, echoes html_url, forwards title/body/labels"
 setup
@@ -2016,8 +2149,26 @@ assert_eq "create: missing-title stderr names helper" "yes" "$m"
 rc_icb=0
 err_icb=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_create_rest --title "t" 2>&1 >/dev/null) || rc_icb=$?
 assert_eq "create: missing --body → non-zero" "1" "$rc_icb"
-case "$err_icb" in *"gh_issue_create_rest: --body is required"*) m=yes ;; *) m=no ;; esac
-assert_eq "create: missing-body stderr names helper" "yes" "$m"
+case "$err_icb" in *"exactly one of --body/--body-file is required"*) m=yes ;; *) m=no ;; esac
+assert_eq "create: missing-body stderr names requirement" "yes" "$m"
+teardown
+
+echo "Test: gh_issue_create_rest -- --body-file reads body from file, uses -F body=@"
+setup
+: > "$STUB_DIR/gh-issue-create-rest-calls.log"
+printf '%s' "body from file" > "$STUB_DIR/create-body.txt"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_create_rest --title "t" --body-file "$STUB_DIR/create-body.txt" >/dev/null
+if grep -q -- '-F body=@' "$STUB_DIR/gh-issue-create-rest-calls.log"; then f=yes; else f=no; fi
+assert_eq "create: --body-file uses -F body=@ flag" "yes" "$f"
+teardown
+
+echo "Test: gh_issue_create_rest -- --body and --body-file together return non-zero"
+setup
+rc_icx=0
+err_icx=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_create_rest --title "t" --body "b" --body-file /dev/null 2>&1 >/dev/null) || rc_icx=$?
+assert_eq "create: --body+--body-file → non-zero" "1" "$rc_icx"
+case "$err_icx" in *"mutually exclusive"*) m=yes ;; *) m=no ;; esac
+assert_eq "create: --body+--body-file stderr names conflict" "yes" "$m"
 teardown
 
 echo "Test: gh_issue_create_rest -- gh failure returns non-zero with diagnostic stderr"
@@ -2132,6 +2283,26 @@ if grep -q 'repos/owner/other-repo/pulls/42/merge' "$STUB_DIR/gh-pr-merge-rest-c
 assert_eq "pr-merge: --repo uses cross-repo segment" "yes" "$seg"
 teardown
 
+echo "Test: gh_pr_merge_rest -- --subject/--body send commit_title/commit_message"
+setup
+: > "$STUB_DIR/gh-pr-merge-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_pr_merge_rest 42 --squash --subject "S" --body "B"
+if grep -q 'commit_title=S' "$STUB_DIR/gh-pr-merge-rest-calls.log"; then s=yes; else s=no; fi
+assert_eq "pr-merge: --subject sends commit_title=S" "yes" "$s"
+if grep -q 'commit_message=B' "$STUB_DIR/gh-pr-merge-rest-calls.log"; then b=yes; else b=no; fi
+assert_eq "pr-merge: --body sends commit_message=B" "yes" "$b"
+teardown
+
+echo "Test: gh_pr_merge_rest -- empty --body omits commit_message"
+setup
+: > "$STUB_DIR/gh-pr-merge-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_pr_merge_rest 42 --squash --subject "S" --body ""
+if grep -q 'commit_message=' "$STUB_DIR/gh-pr-merge-rest-calls.log"; then cm=yes; else cm=no; fi
+assert_eq "pr-merge: empty --body omits commit_message" "no" "$cm"
+if grep -q 'commit_title=S' "$STUB_DIR/gh-pr-merge-rest-calls.log"; then s=yes; else s=no; fi
+assert_eq "pr-merge: --subject still sent with empty body" "yes" "$s"
+teardown
+
 echo "Test: gh_pr_merge_rest -- missing number returns non-zero"
 setup
 rc_pm=0
@@ -2236,6 +2407,14 @@ setup
 : > "$STUB_DIR/gh-issue-close-rest-calls.log"
 source "$TMPDIR_TEST/lib.sh"; gh_issue_close_rest 42
 assert_rest_only "close" "$STUB_DIR/gh-issue-close-rest-calls.log"
+teardown
+
+# --- gh_issue_edit_rest ---
+echo "Test: gh_issue_edit_rest -- consumes REST bucket, not GraphQL"
+setup
+: > "$STUB_DIR/gh-issue-close-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_issue_edit_rest 42 --title "t"
+assert_rest_only "edit" "$STUB_DIR/gh-issue-close-rest-calls.log"
 teardown
 
 # --- gh_issue_create_rest ---
@@ -3503,7 +3682,9 @@ echo "=== dispatch-close-resolved ==="
 
 # dispatch-close-resolved <N> --reason "<text>" (#1456): reads state via
 # `gh issue view <N> --json state --jq .state`; if not closed, runs
-# `gh issue close <N> --reason completed --comment "$REASON"`; if already CLOSED,
+# `gh_issue_close_rest <N> --reason completed --comment "$REASON"` (#2256;
+# REST-backed: POST .../issues/<N>/comments then PATCH .../issues/<N>
+# state=closed&state_reason=completed); if already CLOSED,
 # skips the close (idempotent, no dup comment). ALWAYS writes the resolved-closed
 # sentinel under $CLAUDE_JOB_DIR (atomic), UNLESS CLAUDE_JOB_DIR is unset/not-a-dir
 # (then a no-op exit 0). Arg violations → exit 2 before any gh call.
@@ -3519,11 +3700,18 @@ export CLAUDE_JOB_DIR="$TMPDIR_TEST/job"
 mkdir -p "$CLAUDE_JOB_DIR"
 "$TMPDIR_TEST/dispatch-close-resolved" 700 --reason "epic done"
 TOTAL=$((TOTAL + 1))
-if [[ -f "$STUB_DIR/gh-issue-close.log" ]] \
-   && grep -q "issue close 700 --reason completed" "$STUB_DIR/gh-issue-close.log"; then
-  PASS=$((PASS + 1)); echo "  PASS: close-resolved OPEN: gh issue close invoked"
+# REST close (#2256): the PATCH carries issues/700 + state=closed + the --reason
+# as state_reason=completed; the --comment fires a prior POST .../comments.
+if [[ -f "$STUB_DIR/gh-issue-close-rest-calls.log" ]] \
+   && grep -q "PATCH" "$STUB_DIR/gh-issue-close-rest-calls.log" \
+   && grep -q "issues/700" "$STUB_DIR/gh-issue-close-rest-calls.log" \
+   && grep -q "state=closed" "$STUB_DIR/gh-issue-close-rest-calls.log" \
+   && grep -q "state_reason=completed" "$STUB_DIR/gh-issue-close-rest-calls.log" \
+   && [[ -f "$STUB_DIR/gh-issue-comment-rest-calls.log" ]] \
+   && grep -q "issues/700/comments" "$STUB_DIR/gh-issue-comment-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: close-resolved OPEN: REST close (PATCH state_reason=completed) + comment invoked"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: close-resolved OPEN: gh issue close invoked"
+  FAIL=$((FAIL + 1)); echo "  FAIL: close-resolved OPEN: REST close (PATCH state_reason=completed) + comment invoked"
 fi
 TOTAL=$((TOTAL + 1))
 if [[ -f "$CLAUDE_JOB_DIR/resolved-closed" ]]; then
@@ -3543,10 +3731,12 @@ export CLAUDE_JOB_DIR="$TMPDIR_TEST/job"
 mkdir -p "$CLAUDE_JOB_DIR"
 "$TMPDIR_TEST/dispatch-close-resolved" 701 --reason "epic done"
 TOTAL=$((TOTAL + 1))
-if [[ ! -e "$STUB_DIR/gh-issue-close.log" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: close-resolved CLOSED: gh issue close NOT invoked"
+# REST close (#2256): neither the PATCH close log nor the comment log should exist.
+if [[ ! -e "$STUB_DIR/gh-issue-close-rest-calls.log" \
+   && ! -e "$STUB_DIR/gh-issue-comment-rest-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: close-resolved CLOSED: REST close NOT invoked"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: close-resolved CLOSED: gh issue close NOT invoked"
+  FAIL=$((FAIL + 1)); echo "  FAIL: close-resolved CLOSED: REST close NOT invoked"
 fi
 TOTAL=$((TOTAL + 1))
 if [[ -f "$CLAUDE_JOB_DIR/resolved-closed" ]]; then
@@ -8788,45 +8978,73 @@ label_create_state() {
   [[ -f "$STUB_DIR/gh-label-create.log" ]] && echo "present" || echo "absent"
 }
 
-# Phase → label mapping. The label already exists (default stub mode), so
-# the script applies it with a single `gh pr edit` and issues no `gh label create`.
-echo "Test: qa → dispatch:qa-done (apply only, no label create)"
+# #2256: migrated to ensure-label-exists-first + REST add. Every add path now runs
+# `gh label create` (canonical BFD4F2 metadata) and then a REST POST
+# .../issues/<PR>/labels (a PR is an issue in REST). The label-create create
+# succeeds in default stub mode; the REST POST args land in
+# gh-issue-set-labels-rest-calls.log as "api -X POST .../issues/<N>/labels -f labels[]=<label>".
+echo "Test: qa → dispatch:qa-done (ensure label + REST add)"
 setup
 "$TMPDIR_TEST/dispatch-complete-phase" 21 qa
-assert_eq "qa applies dispatch:qa-done" \
-  "pr edit 21 --add-label dispatch:qa-done" "$(cat "$STUB_DIR/gh-pr-edit.log")"
-assert_eq "qa: no gh label create when label exists" "absent" "$(label_create_state)"
-teardown
-
-echo "Test: review → dispatch:reviewed (apply only, no label create)"
-setup
-"$TMPDIR_TEST/dispatch-complete-phase" 30 review
-assert_eq "review applies dispatch:reviewed" \
-  "pr edit 30 --add-label dispatch:reviewed" "$(cat "$STUB_DIR/gh-pr-edit.log")"
-assert_eq "review: no gh label create when label exists" "absent" "$(label_create_state)"
-teardown
-
-# Label missing: the apply fails "not found", so the script creates the
-# label (BFD4F2, "dispatch workflow: <suffix> phase complete") and retries.
-echo "Test: label missing → create then retry"
-setup
-echo "label-missing" > "$STUB_DIR/pr-edit-mode"
-"$TMPDIR_TEST/dispatch-complete-phase" 30 qa
-assert_eq "label-missing: label created with workflow description" \
+TOTAL=$((TOTAL + 1))
+if grep -q 'issues/21/labels' "$STUB_DIR/gh-issue-set-labels-rest-calls.log" \
+   && grep -q 'labels\[\]=dispatch:qa-done' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: qa REST-adds dispatch:qa-done to issues/21/labels"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: qa REST-adds dispatch:qa-done to issues/21/labels"
+  echo "    actual: '$(cat "$STUB_DIR/gh-issue-set-labels-rest-calls.log" 2>/dev/null)'"
+fi
+assert_eq "qa: ensure-first runs gh label create" \
   "label create dispatch:qa-done --color BFD4F2 --description dispatch workflow: qa-done phase complete" \
   "$(cat "$STUB_DIR/gh-label-create.log")"
-assert_eq "label-missing: label applied on retry" \
-  "pr edit 30 --add-label dispatch:qa-done" "$(cat "$STUB_DIR/gh-pr-edit.log")"
 teardown
 
-# An apply failure unrelated to a missing label exits non-zero and creates
-# no label.
-echo "Test: other apply failure → non-zero exit, no label create"
+echo "Test: review → dispatch:reviewed (ensure label + REST add)"
 setup
-echo "other-failure" > "$STUB_DIR/pr-edit-mode"
+"$TMPDIR_TEST/dispatch-complete-phase" 30 review
+TOTAL=$((TOTAL + 1))
+if grep -q 'issues/30/labels' "$STUB_DIR/gh-issue-set-labels-rest-calls.log" \
+   && grep -q 'labels\[\]=dispatch:reviewed' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: review REST-adds dispatch:reviewed to issues/30/labels"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: review REST-adds dispatch:reviewed to issues/30/labels"
+  echo "    actual: '$(cat "$STUB_DIR/gh-issue-set-labels-rest-calls.log" 2>/dev/null)'"
+fi
+assert_eq "review: ensure-first runs gh label create" \
+  "label create dispatch:reviewed --color BFD4F2 --description dispatch workflow: reviewed phase complete" \
+  "$(cat "$STUB_DIR/gh-label-create.log")"
+teardown
+
+# Label already exists in the repo: `gh label create` returns the already-exists
+# error, which the ensure-first idiom tolerates and proceeds to the REST add.
+echo "Test: label already exists → tolerated, REST add still fires"
+setup
+: > "$STUB_DIR/gh-label-exists"
+if "$TMPDIR_TEST/dispatch-complete-phase" 30 qa; then rc=0; else rc=$?; fi
+assert_eq "already-exists tolerated: exit 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if grep -q 'issues/30/labels' "$STUB_DIR/gh-issue-set-labels-rest-calls.log" \
+   && grep -q 'labels\[\]=dispatch:qa-done' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: already-exists still REST-adds the label"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: already-exists still REST-adds the label"
+fi
+teardown
+
+# A label-create failure unrelated to already-exists exits non-zero and issues
+# no REST add (the label could not be guaranteed to exist). The gh-fail-label-create
+# marker makes the stub's `label create` branch emit a generic error and exit 1.
+echo "Test: non-already-exists label-create failure → non-zero exit, no REST add"
+setup
+: > "$STUB_DIR/gh-fail-label-create"
 if "$TMPDIR_TEST/dispatch-complete-phase" 40 qa 2>/dev/null; then rc=0; else rc=$?; fi
-assert_eq "other apply failure exits non-zero" "1" "$rc"
-assert_eq "other failure: no spurious label create" "absent" "$(label_create_state)"
+assert_eq "create failure exits non-zero" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -f "$STUB_DIR/gh-issue-set-labels-rest-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: create failure issues no REST add"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: create failure issues no REST add"
+fi
 teardown
 
 # Unknown phase → non-zero exit.
@@ -8870,28 +9088,56 @@ log_state() {
   [[ -f "$STUB_DIR/$1" ]] && echo "present" || echo "absent"
 }
 
-# Happy path: the issue carries no office-hours label, so the script applies it
-# to the ISSUE and posts a why-comment containing the reason text.
-echo "Test: label absent → apply to issue + post why-comment"
+# Happy path: the issue carries no office-hours label. #2256: the script now
+# ensure-label-exists-first (`gh label create` with canonical FBCA04 metadata) then
+# REST-adds the label to the ISSUE (POST .../issues/42/labels). The why-comment is
+# now REST-backed too via gh_issue_comment_rest (POST .../issues/42/comments).
+echo "Test: label absent → ensure label + REST add to issue + post why-comment"
 setup
 echo '{"state":"open","labels":[]}' > "$STUB_DIR/arg-issue-42.json"
 "$TMPDIR_TEST/dispatch-apply-office-hours" 42 "phase exited before completion"
-assert_eq "applies dispatch:office-hours to the issue" \
-  "issue edit 42 --add-label dispatch:office-hours" "$(cat "$STUB_DIR/gh-issue-edit.log")"
-assert_eq "happy path: no gh label create when label exists" \
-  "absent" "$(log_state gh-label-create.log)"
 TOTAL=$((TOTAL + 1))
-if grep -q "Reason: phase exited before completion" "$STUB_DIR/gh-issue-comment.log"; then
+if grep -q 'issues/42/labels' "$STUB_DIR/gh-issue-set-labels-rest-calls.log" \
+   && grep -q 'labels\[\]=dispatch:office-hours' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: REST-adds dispatch:office-hours to issues/42/labels"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: REST-adds dispatch:office-hours to issues/42/labels"
+  echo "    actual: '$(cat "$STUB_DIR/gh-issue-set-labels-rest-calls.log" 2>/dev/null)'"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "^label create dispatch:office-hours --color FBCA04 " "$STUB_DIR/gh-label-create.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: ensure-first creates with FBCA04 metadata"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: ensure-first creates with FBCA04 metadata"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "Reason: phase exited before completion" "$STUB_DIR/gh-issue-comment-rest-calls.log"; then
   PASS=$((PASS + 1)); echo "  PASS: why-comment contains the reason"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: why-comment contains the reason"
 fi
 TOTAL=$((TOTAL + 1))
-if grep -q "^issue comment 42 " "$STUB_DIR/gh-issue-comment.log"; then
+if grep -q "issues/42/comments" "$STUB_DIR/gh-issue-comment-rest-calls.log"; then
   PASS=$((PASS + 1)); echo "  PASS: comment targets the issue"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: comment targets the issue"
 fi
+teardown
+
+# Already-exists tolerance: the office-hours label already exists in the repo, so
+# `gh label create` errors already-exists; the ensure-first idiom tolerates it and
+# still REST-adds the label + posts the comment.
+echo "Test: label already exists in repo → tolerated, REST add + comment still fire"
+setup
+: > "$STUB_DIR/gh-label-exists"
+"$TMPDIR_TEST/dispatch-apply-office-hours" 42 "phase exited before completion"
+TOTAL=$((TOTAL + 1))
+if grep -q 'labels\[\]=dispatch:office-hours' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: already-exists still REST-adds the label"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: already-exists still REST-adds the label"
+fi
+assert_eq "already-exists: why-comment still posted" "present" "$(log_state gh-issue-comment-rest-calls.log)"
 teardown
 
 # Idempotent: the issue already carries the label → no re-apply, no duplicate
@@ -8901,7 +9147,7 @@ setup
 echo '{"state":"open","labels":[{"name":"dispatch:office-hours"}]}' > "$STUB_DIR/arg-issue-42.json"
 "$TMPDIR_TEST/dispatch-apply-office-hours" 42 "phase ran but did not advance"
 assert_eq "idempotent: no label edit" "absent" "$(log_state gh-issue-edit.log)"
-assert_eq "idempotent: no duplicate comment" "absent" "$(log_state gh-issue-comment.log)"
+assert_eq "idempotent: no duplicate comment" "absent" "$(log_state gh-issue-comment-rest-calls.log)"
 teardown
 
 # Missing reason (only an issue number) → non-zero exit, no edit, no comment.
@@ -8910,7 +9156,7 @@ setup
 if "$TMPDIR_TEST/dispatch-apply-office-hours" 42 2>/dev/null; then rc=0; else rc=$?; fi
 assert_eq "missing reason exits non-zero" "1" "$rc"
 assert_eq "missing reason: no label edit" "absent" "$(log_state gh-issue-edit.log)"
-assert_eq "missing reason: no comment" "absent" "$(log_state gh-issue-comment.log)"
+assert_eq "missing reason: no comment" "absent" "$(log_state gh-issue-comment-rest-calls.log)"
 teardown
 
 # Empty reason → same as missing reason.
@@ -8936,27 +9182,28 @@ setup
 if "$TMPDIR_TEST/dispatch-apply-office-hours" "--repo other/repo" "a reason" 2>/dev/null; then rc=0; else rc=$?; fi
 assert_eq "non-numeric issue number exits non-zero" "1" "$rc"
 assert_eq "non-numeric issue number: no label edit" "absent" "$(log_state gh-issue-edit.log)"
-assert_eq "non-numeric issue number: no comment" "absent" "$(log_state gh-issue-comment.log)"
+assert_eq "non-numeric issue number: no comment" "absent" "$(log_state gh-issue-comment-rest-calls.log)"
 teardown
 
-# Create-on-first-use: the apply fails "not found" (the *label* does not exist
-# in the repo yet), so the script creates it with the canonical FBCA04 color and
-# retries the edit, then posts the comment.
-echo "Test: label not found → create (FBCA04) then retry + comment"
+# Never-block-a-hook: a non-already-exists `gh label create` failure must warn on
+# stderr and exit 0 (a hook must never be torn down). No REST add, no comment.
+echo "Test: label-create failure (not already-exists) → warn, exit 0, no add/comment"
 setup
-echo '{"state":"open","labels":[]}' > "$STUB_DIR/arg-issue-42.json"
-echo "label-missing" > "$STUB_DIR/issue-edit-mode"
-"$TMPDIR_TEST/dispatch-apply-office-hours" 42 "phase exited before completion"
-TOTAL=$((TOTAL + 1))
-if grep -q "^label create dispatch:office-hours --color FBCA04 " "$STUB_DIR/gh-label-create.log"; then
-  PASS=$((PASS + 1)); echo "  PASS: label created with FBCA04 color"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: label created with FBCA04 color"
-fi
-assert_eq "create-on-first-use: label applied on retry" \
-  "issue edit 42 --add-label dispatch:office-hours" "$(cat "$STUB_DIR/gh-issue-edit.log")"
-assert_eq "create-on-first-use: why-comment posted" \
-  "present" "$(log_state gh-issue-comment.log)"
+: > "$STUB_DIR/gh-fail-label-create"
+if "$TMPDIR_TEST/dispatch-apply-office-hours" 42 "phase exited before completion" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "label-create failure: exit 0 (never block a hook)" "0" "$rc"
+assert_eq "label-create failure: no REST add" "absent" "$(log_state gh-issue-set-labels-rest-calls.log)"
+assert_eq "label-create failure: no comment" "absent" "$(log_state gh-issue-comment-rest-calls.log)"
+teardown
+
+# Never-block-a-hook: a REST add failure (label created, but POST .../labels fails)
+# must also warn + exit 0 and post no comment.
+echo "Test: REST add failure → warn, exit 0, no comment"
+setup
+: > "$STUB_DIR/gh-fail-rest"
+if "$TMPDIR_TEST/dispatch-apply-office-hours" 42 "phase exited before completion" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "REST add failure: exit 0 (never block a hook)" "0" "$rc"
+assert_eq "REST add failure: no comment" "absent" "$(log_state gh-issue-comment-rest-calls.log)"
 teardown
 
 # dispatch-apply-office-hours owns the FBCA04 hex. (A single-source-of-truth
@@ -8976,31 +9223,38 @@ fi
 echo ""
 echo "=== dispatch-apply-planned ==="
 
-# Happy path: the label already exists in the repo (default stub mode), so the
-# script applies it to the ISSUE with a single `gh issue edit` and no create.
-echo "Test: label exists → apply dispatch:planned to issue, no label create"
+# Happy path: #2256 ensure-label-exists-first (`gh label create`, canonical 0E8A16
+# metadata) then REST-add to the ISSUE (POST .../issues/55/labels). The create
+# succeeds in default stub mode.
+echo "Test: ensure label (0E8A16) + REST add dispatch:planned to issue"
 setup
-"$TMPDIR_TEST/dispatch-apply-planned" 55
-assert_eq "applies dispatch:planned to the issue" \
-  "issue edit 55 --add-label dispatch:planned" "$(cat "$STUB_DIR/gh-issue-edit.log")"
-assert_eq "label exists: no gh label create" "absent" "$(log_state gh-label-create.log)"
-teardown
-
-# Create-on-first-use: the apply fails "not found" (the label does not exist in
-# the repo yet), so the script creates it with the canonical 0E8A16 color and
-# retries the edit.
-echo "Test: label not found → create (0E8A16) then retry"
-setup
-echo "label-missing" > "$STUB_DIR/issue-edit-mode"
 "$TMPDIR_TEST/dispatch-apply-planned" 55
 TOTAL=$((TOTAL + 1))
-if grep -q "^label create dispatch:planned --color 0E8A16 " "$STUB_DIR/gh-label-create.log"; then
-  PASS=$((PASS + 1)); echo "  PASS: label created with 0E8A16 color"
+if grep -q 'issues/55/labels' "$STUB_DIR/gh-issue-set-labels-rest-calls.log" \
+   && grep -q 'labels\[\]=dispatch:planned' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: REST-adds dispatch:planned to issues/55/labels"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: label created with 0E8A16 color"
+  FAIL=$((FAIL + 1)); echo "  FAIL: REST-adds dispatch:planned to issues/55/labels"
+  echo "    actual: '$(cat "$STUB_DIR/gh-issue-set-labels-rest-calls.log" 2>/dev/null)'"
 fi
-assert_eq "create-on-first-use: label applied on retry" \
-  "issue edit 55 --add-label dispatch:planned" "$(cat "$STUB_DIR/gh-issue-edit.log")"
+assert_eq "ensure-first creates with 0E8A16 metadata" \
+  "label create dispatch:planned --color 0E8A16 --description dispatch workflow: an approved plan exists; implement phase is next" \
+  "$(cat "$STUB_DIR/gh-label-create.log")"
+teardown
+
+# Already-exists tolerance: `gh label create` errors already-exists; the idiom
+# tolerates it and still REST-adds the label.
+echo "Test: label already exists → tolerated, REST add still fires"
+setup
+: > "$STUB_DIR/gh-label-exists"
+if "$TMPDIR_TEST/dispatch-apply-planned" 55; then rc=0; else rc=$?; fi
+assert_eq "already-exists tolerated: exit 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if grep -q 'labels\[\]=dispatch:planned' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: already-exists still REST-adds dispatch:planned"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: already-exists still REST-adds dispatch:planned"
+fi
 teardown
 
 # Non-numeric, flag-like issue number → hard error (exit 1), no gh calls.
@@ -9025,91 +9279,99 @@ teardown
 echo ""
 echo "=== dispatch-qa-apply-main-qa-labels (#1758) ==="
 
-# Happy path: both main-qa and dispatch:office-hours labels exist in the repo
-# (default stub mode), so remove-label succeeds, both adds succeed, and the
-# script exits 0. No label create needed.
-echo "Test: happy path → remove help-wanted, add main-qa, route to office-hours; exit 0"
+# Happy path (#2256). Step 1 REST-DELETEs "help wanted" (issues/42/labels/help%20wanted).
+# Step 2 ensure-first-creates main-qa (canonical 5319E7) then REST-adds it. Step 3's
+# dispatch-apply-office-hours (the real migrated sibling) ensure-creates
+# dispatch:office-hours and REST-adds it too. Both REST adds land in
+# gh-issue-set-labels-rest-calls.log; both creates land in gh-label-create.log.
+echo "Test: happy path → REST-remove help-wanted, REST-add main-qa, route to office-hours; exit 0"
 setup
 echo '{"state":"open","labels":[]}' > "$STUB_DIR/arg-issue-42.json"
 if "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" 42; then rc=0; else rc=$?; fi
 assert_eq "happy path: exit 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
-if grep -q -- "--remove-label help wanted" "$STUB_DIR/gh-issue-edit.log"; then
-  PASS=$((PASS + 1)); echo "  PASS: removed help wanted"
+if grep -q 'DELETE' "$STUB_DIR/gh-issue-remove-label-rest-calls.log" \
+   && grep -q 'issues/42/labels/help%20wanted' "$STUB_DIR/gh-issue-remove-label-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: REST-removed help wanted"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: removed help wanted"
+  FAIL=$((FAIL + 1)); echo "  FAIL: REST-removed help wanted"
+  echo "    actual: '$(cat "$STUB_DIR/gh-issue-remove-label-rest-calls.log" 2>/dev/null)'"
 fi
 TOTAL=$((TOTAL + 1))
-if grep -q -- "--add-label main-qa" "$STUB_DIR/gh-issue-edit.log"; then
-  PASS=$((PASS + 1)); echo "  PASS: added main-qa"
+if grep -q 'labels\[\]=main-qa' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: REST-added main-qa"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: added main-qa"
+  FAIL=$((FAIL + 1)); echo "  FAIL: REST-added main-qa"
 fi
 TOTAL=$((TOTAL + 1))
-if grep -q -- "--add-label dispatch:office-hours" "$STUB_DIR/gh-issue-edit.log"; then
-  PASS=$((PASS + 1)); echo "  PASS: routed to office-hours"
+if grep -q 'labels\[\]=dispatch:office-hours' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: routed to office-hours (REST add)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: routed to office-hours"
+  FAIL=$((FAIL + 1)); echo "  FAIL: routed to office-hours (REST add)"
 fi
-assert_eq "no gh label create" "absent" "$(log_state gh-label-create.log)"
+TOTAL=$((TOTAL + 1))
+if grep -q "^label create main-qa --color 5319E7 " "$STUB_DIR/gh-label-create.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: ensure-first created main-qa with 5319E7"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: ensure-first created main-qa with 5319E7"
+fi
 teardown
 
-# Idempotent re-run: the "help wanted" label is no longer on the issue so the
-# remove-label call returns "not found". The script must tolerate this and still
-# apply main-qa and dispatch:office-hours, exiting 0.
-echo "Test: remove-label-missing → tolerated, main-qa and office-hours still applied; exit 0"
+# Idempotent re-run: the "help wanted" label is no longer on the issue, so the REST
+# DELETE returns 404. gh_issue_remove_label_rest treats that as no-op success; the
+# script still REST-adds main-qa and routes to office-hours, exiting 0.
+echo "Test: help-wanted absent (404) → tolerated, main-qa and office-hours still applied; exit 0"
 setup
 echo '{"state":"open","labels":[]}' > "$STUB_DIR/arg-issue-42.json"
-echo "remove-label-missing" > "$STUB_DIR/issue-edit-mode"
+: > "$STUB_DIR/gh-404-remove-label"
 if "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" 42; then rc=0; else rc=$?; fi
-assert_eq "not-found removal tolerated, exit 0" "0" "$rc"
+assert_eq "404 removal tolerated, exit 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
-if grep -q -- "--add-label main-qa" "$STUB_DIR/gh-issue-edit.log"; then
+if grep -q 'issues/42/labels/help%20wanted' "$STUB_DIR/gh-issue-remove-label-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: REST DELETE attempted (then 404-tolerated)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: REST DELETE attempted (then 404-tolerated)"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q 'labels\[\]=main-qa' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then
   PASS=$((PASS + 1)); echo "  PASS: main-qa applied after tolerated removal"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: main-qa applied after tolerated removal"
 fi
 TOTAL=$((TOTAL + 1))
-if grep -q -- "--add-label dispatch:office-hours" "$STUB_DIR/gh-issue-edit.log"; then
+if grep -q 'labels\[\]=dispatch:office-hours' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then
   PASS=$((PASS + 1)); echo "  PASS: office-hours routing still runs"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: office-hours routing still runs"
 fi
-TOTAL=$((TOTAL + 1))
-if ! grep -q -- "--remove-label" "$STUB_DIR/gh-issue-edit.log"; then
-  PASS=$((PASS + 1)); echo "  PASS: remove-label not logged (not-found path fired)"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: remove-label unexpectedly logged"
-fi
 teardown
 
-# Lazy label-create: the main-qa label does not yet exist in the repo. The
-# first add attempt fails "not found"; the script creates the label with
-# canonical metadata (5319E7) and retries the add. The office-hours step runs
-# unaffected.
-echo "Test: main-qa-missing → create with canonical metadata, retry add, office-hours unaffected; exit 0"
+# Already-exists label-create: main-qa already exists in the repo. `gh label create`
+# errors already-exists; the ensure-first idiom tolerates it and still REST-adds the
+# label. The office-hours step runs unaffected.
+echo "Test: main-qa already exists → tolerated, REST add, office-hours unaffected; exit 0"
 setup
 echo '{"state":"open","labels":[]}' > "$STUB_DIR/arg-issue-42.json"
-echo "main-qa-missing" > "$STUB_DIR/issue-edit-mode"
+: > "$STUB_DIR/gh-label-exists"
 if "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" 42; then rc=0; else rc=$?; fi
-assert_eq "lazy create: exit 0" "0" "$rc"
+assert_eq "already-exists: exit 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
 if grep -q "^label create main-qa --color 5319E7 --description QA verification that can only run against deployed main/production" "$STUB_DIR/gh-label-create.log"; then
-  PASS=$((PASS + 1)); echo "  PASS: created with canonical metadata"
+  PASS=$((PASS + 1)); echo "  PASS: ensure-first attempted with canonical metadata"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: created with canonical metadata"
+  FAIL=$((FAIL + 1)); echo "  FAIL: ensure-first attempted with canonical metadata"
 fi
 TOTAL=$((TOTAL + 1))
-if grep -q -- "--add-label main-qa" "$STUB_DIR/gh-issue-edit.log"; then
-  PASS=$((PASS + 1)); echo "  PASS: main-qa applied on retry"
+if grep -q 'labels\[\]=main-qa' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: main-qa REST-added despite already-exists create"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: main-qa applied on retry"
+  FAIL=$((FAIL + 1)); echo "  FAIL: main-qa REST-added despite already-exists create"
 fi
 TOTAL=$((TOTAL + 1))
-if grep -q -- "--add-label dispatch:office-hours" "$STUB_DIR/gh-issue-edit.log"; then
-  PASS=$((PASS + 1)); echo "  PASS: office-hours unaffected by lazy create"
+if grep -q 'labels\[\]=dispatch:office-hours' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: office-hours unaffected by already-exists create"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: office-hours unaffected by lazy create"
+  FAIL=$((FAIL + 1)); echo "  FAIL: office-hours unaffected by already-exists create"
 fi
 teardown
 
@@ -20778,9 +21040,10 @@ jit_setup() {
 
   # gh PATH stub. Every matched subcommand is appended to gh-calls.log so the
   # debounce test can assert the log is absent (zero gh calls). issue list reads
-  # open-issues.json / closed-issues.json fixtures if present, else "[]". The
-  # `issue create` case captures stdin to gh-issue-create-body.txt so tests can
-  # verify the body (including the jit-due marker) the engine sent.
+  # open-issues.json / closed-issues.json fixtures if present, else "[]". The REST
+  # create arm (`api -X POST .../issues`, #2256) logs its full args to
+  # gh-issue-create-rest-calls.log so tests can verify the body (including the
+  # jit-due marker) the engine sent.
   cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
@@ -20789,6 +21052,14 @@ echo "$args" >> "$STUB_DIR/gh-calls.log"
 case "$args" in
   "label create "*)
     # Idempotent label create — default success.
+    ;;
+  "api -X POST "*/issues\ *)
+    # gh_issue_create_rest sentinel (#2256): POST .../issues (new issue creation).
+    # MUST precede the generic issue-list REST branch below, whose pattern would
+    # otherwise swallow this POST. Echoes html_url so the script's URL→number
+    # parse keeps working (matches the prior porcelain stub's URL echo).
+    echo "$args" >> "$STUB_DIR/gh-issue-create-rest-calls.log"
+    echo '{"number":123,"html_url":"https://github.com/test-owner/test-repo/issues/123"}'
     ;;
   *"api "*"repos/"*"/issues"*)
     # gh_issue_list_rest (#2258): the engine's open/closed scans now hit REST
@@ -20806,10 +21077,6 @@ case "$args" in
     else
       echo '[]'
     fi
-    ;;
-  "issue create "*)
-    echo "$args" >> "$STUB_DIR/gh-issue-create.log"
-    echo "https://github.com/test-owner/test-repo/issues/123"
     ;;
   "project item-add "*)
     echo '{"id":"PVTI_jit001","title":"JIT issue","type":"Issue"}'
@@ -20903,21 +21170,21 @@ calls=$(cat "$STUB_DIR/gh-calls.log")
 TOTAL=$((TOTAL + 1))
 if [[ "$calls" == *"label create"* && "$calls" == *"issues?"*"state=open"* \
    && "$calls" == *"issues?"*"state=closed"* \
-   && "$calls" == *"issue create"* && "$calls" == *"project item-add"* ]]; then
+   && "$calls" == *"api -X POST "*"/issues "* && "$calls" == *"project item-add"* ]]; then
   PASS=$((PASS + 1))
-  echo "  PASS: cold start invoked label create / list / create / item-add"
+  echo "  PASS: cold start invoked label create / list / create (REST) / item-add"
 else
   FAIL=$((FAIL + 1))
   echo "  FAIL: cold start invoked label create / list / create / item-add"
   echo "    gh-calls.log: $calls"
 fi
-create_log=$(cat "$STUB_DIR/gh-issue-create.log" 2>/dev/null || true)
+create_log=$(cat "$STUB_DIR/gh-issue-create-rest-calls.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$create_log" == *"<!-- jit-due: 2026-01-01T12:00:00Z -->"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: cold start embedded jit-due marker in issue body"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: cold start embedded jit-due marker in issue body"
-  echo "    gh-issue-create.log: $create_log"
+  echo "    gh-issue-create-rest-calls.log: $create_log"
 fi
 jit_teardown
 
@@ -20956,13 +21223,13 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: roadmap cold start reports created #123 (due 2026-01-08T00:00:00Z)"
   echo "    actual: $out"
 fi
-create_log=$(cat "$STUB_DIR/gh-issue-create.log" 2>/dev/null || true)
+create_log=$(cat "$STUB_DIR/gh-issue-create-rest-calls.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$create_log" == *"<!-- jit-due: 2026-01-08T00:00:00Z -->"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: roadmap cold start embedded jit-due marker in issue body"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: roadmap cold start embedded jit-due marker in issue body"
-  echo "    gh-issue-create.log: $create_log"
+  echo "    gh-issue-create-rest-calls.log: $create_log"
 fi
 jit_teardown
 
@@ -21001,11 +21268,11 @@ else
   echo "    actual: $out"
 fi
 TOTAL=$((TOTAL + 1))
-if [[ ! -f "$STUB_DIR/gh-issue-create.log" ]]; then
+if [[ ! -f "$STUB_DIR/gh-issue-create-rest-calls.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: within-window made no issue create call"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: within-window made no issue create call"
-  echo "    gh-issue-create.log: $(cat "$STUB_DIR/gh-issue-create.log")"
+  echo "    gh-issue-create-rest-calls.log: $(cat "$STUB_DIR/gh-issue-create-rest-calls.log")"
 fi
 jit_teardown
 
@@ -21046,11 +21313,11 @@ else
   echo "    actual: $out"
 fi
 TOTAL=$((TOTAL + 1))
-if [[ ! -f "$STUB_DIR/gh-issue-create.log" ]]; then
+if [[ ! -f "$STUB_DIR/gh-issue-create-rest-calls.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: roadmap within-window made no issue create call"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: roadmap within-window made no issue create call"
-  echo "    gh-issue-create.log: $(cat "$STUB_DIR/gh-issue-create.log")"
+  echo "    gh-issue-create-rest-calls.log: $(cat "$STUB_DIR/gh-issue-create-rest-calls.log")"
 fi
 jit_teardown
 
@@ -21092,11 +21359,11 @@ else
   echo "    actual: $out"
 fi
 TOTAL=$((TOTAL + 1))
-if [[ ! -f "$STUB_DIR/gh-issue-create.log" ]]; then
+if [[ ! -f "$STUB_DIR/gh-issue-create-rest-calls.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: roadmap exact-7d-boundary made no issue create call"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: roadmap exact-7d-boundary made no issue create call"
-  echo "    gh-issue-create.log: $(cat "$STUB_DIR/gh-issue-create.log")"
+  echo "    gh-issue-create-rest-calls.log: $(cat "$STUB_DIR/gh-issue-create-rest-calls.log")"
 fi
 jit_teardown
 
@@ -21137,13 +21404,13 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: past-window reports created #123 (due 2026-01-01T00:00:00Z)"
   echo "    actual: $out"
 fi
-create_log=$(cat "$STUB_DIR/gh-issue-create.log" 2>/dev/null || true)
+create_log=$(cat "$STUB_DIR/gh-issue-create-rest-calls.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$create_log" == *"<!-- jit-due: 2026-01-01T00:00:00Z -->"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: past-window embedded jit-due marker in issue body"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: past-window embedded jit-due marker in issue body"
-  echo "    gh-issue-create.log: $create_log"
+  echo "    gh-issue-create-rest-calls.log: $create_log"
 fi
 jit_teardown
 
@@ -21185,13 +21452,13 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: roadmap past-window reports created #123 (due 2026-01-05T00:00:00Z)"
   echo "    actual: $out"
 fi
-create_log=$(cat "$STUB_DIR/gh-issue-create.log" 2>/dev/null || true)
+create_log=$(cat "$STUB_DIR/gh-issue-create-rest-calls.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$create_log" == *"<!-- jit-due: 2026-01-05T00:00:00Z -->"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: roadmap past-window embedded jit-due marker in issue body"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: roadmap past-window embedded jit-due marker in issue body"
-  echo "    gh-issue-create.log: $create_log"
+  echo "    gh-issue-create-rest-calls.log: $create_log"
 fi
 jit_teardown
 
@@ -21234,13 +21501,13 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: roadmap past-window reports created #123 (due 2026-01-07T23:59:59Z)"
   echo "    actual: $out"
 fi
-create_log=$(cat "$STUB_DIR/gh-issue-create.log" 2>/dev/null || true)
+create_log=$(cat "$STUB_DIR/gh-issue-create-rest-calls.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$create_log" == *"<!-- jit-due: 2026-01-07T23:59:59Z -->"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: roadmap 7d+1s-past-boundary embedded jit-due marker in issue body"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: roadmap 7d+1s-past-boundary embedded jit-due marker in issue body"
-  echo "    gh-issue-create.log: $create_log"
+  echo "    gh-issue-create-rest-calls.log: $create_log"
 fi
 jit_teardown
 
@@ -21276,11 +21543,11 @@ else
   echo "    actual: $out"
 fi
 TOTAL=$((TOTAL + 1))
-if [[ ! -f "$STUB_DIR/gh-issue-create.log" ]]; then
+if [[ ! -f "$STUB_DIR/gh-issue-create-rest-calls.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: open-guard made no issue create call"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: open-guard made no issue create call"
-  echo "    gh-issue-create.log: $(cat "$STUB_DIR/gh-issue-create.log")"
+  echo "    gh-issue-create-rest-calls.log: $(cat "$STUB_DIR/gh-issue-create-rest-calls.log")"
 fi
 jit_teardown
 
@@ -21318,11 +21585,11 @@ else
   echo "    actual: $out"
 fi
 TOTAL=$((TOTAL + 1))
-if [[ ! -f "$STUB_DIR/gh-issue-create.log" ]]; then
+if [[ ! -f "$STUB_DIR/gh-issue-create-rest-calls.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: roadmap open-guard made no issue create call"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: roadmap open-guard made no issue create call"
-  echo "    gh-issue-create.log: $(cat "$STUB_DIR/gh-issue-create.log")"
+  echo "    gh-issue-create-rest-calls.log: $(cat "$STUB_DIR/gh-issue-create-rest-calls.log")"
 fi
 jit_teardown
 
@@ -21366,13 +21633,13 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: check-fire reports created #123 (due 2026-01-02T00:00:00Z)"
   echo "    actual: $out"
 fi
-create_log=$(cat "$STUB_DIR/gh-issue-create.log" 2>/dev/null || true)
+create_log=$(cat "$STUB_DIR/gh-issue-create-rest-calls.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$create_log" == *"<!-- jit-due: 2026-01-02T00:00:00Z -->"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: check-fire embedded jit-due marker in issue body"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: check-fire embedded jit-due marker in issue body"
-  echo "    gh-issue-create.log: $create_log"
+  echo "    gh-issue-create-rest-calls.log: $create_log"
 fi
 jit_teardown
 
@@ -21413,11 +21680,11 @@ else
   echo "    actual: $out"
 fi
 TOTAL=$((TOTAL + 1))
-if [[ ! -f "$STUB_DIR/gh-issue-create.log" ]]; then
+if [[ ! -f "$STUB_DIR/gh-issue-create-rest-calls.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: check-no-fire made no issue create call"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: check-no-fire made no issue create call"
-  echo "    gh-issue-create.log: $(cat "$STUB_DIR/gh-issue-create.log")"
+  echo "    gh-issue-create-rest-calls.log: $(cat "$STUB_DIR/gh-issue-create-rest-calls.log")"
 fi
 jit_teardown
 
@@ -21551,8 +21818,8 @@ fi
 echo '[{"number":123}]' > "$STUB_DIR/open-issues.json"
 calls_before=$(wc -l < "$STUB_DIR/gh-calls.log")
 creates_before=0
-[[ -f "$STUB_DIR/gh-issue-create.log" ]] \
-  && creates_before=$(wc -l < "$STUB_DIR/gh-issue-create.log")
+[[ -f "$STUB_DIR/gh-issue-create-rest-calls.log" ]] \
+  && creates_before=$(wc -l < "$STUB_DIR/gh-issue-create-rest-calls.log")
 # Run 2: the open-issue guard fires — skipped, no second create.
 rc=0
 out2=$("$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>/dev/null) || rc=$?
@@ -21565,8 +21832,8 @@ else
   echo "    actual: $out2"
 fi
 creates_after=0
-[[ -f "$STUB_DIR/gh-issue-create.log" ]] \
-  && creates_after=$(wc -l < "$STUB_DIR/gh-issue-create.log")
+[[ -f "$STUB_DIR/gh-issue-create-rest-calls.log" ]] \
+  && creates_after=$(wc -l < "$STUB_DIR/gh-issue-create-rest-calls.log")
 assert_eq "idempotency run 2 made no second issue create" \
   "$creates_before" "$creates_after"
 jit_teardown
@@ -21601,13 +21868,13 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: no-dueAfter reports created #123 (no dueAfter*; due not stamped)"
   echo "    actual: $out"
 fi
-create_log=$(cat "$STUB_DIR/gh-issue-create.log" 2>/dev/null || true)
+create_log=$(cat "$STUB_DIR/gh-issue-create-rest-calls.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$create_log" != *"jit-due"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: no-dueAfter embedded no jit-due marker in issue body"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: no-dueAfter embedded no jit-due marker in issue body"
-  echo "    gh-issue-create.log: $create_log"
+  echo "    gh-issue-create-rest-calls.log: $create_log"
 fi
 jit_teardown
 
@@ -21645,11 +21912,11 @@ else
   echo "    stderr: $err"
 fi
 TOTAL=$((TOTAL + 1))
-if [[ ! -f "$STUB_DIR/gh-issue-create.log" ]]; then
+if [[ ! -f "$STUB_DIR/gh-issue-create-rest-calls.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: cadence+dueAfterCreate created no issue"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: cadence+dueAfterCreate created no issue"
-  echo "    gh-issue-create.log: $(cat "$STUB_DIR/gh-issue-create.log")"
+  echo "    gh-issue-create-rest-calls.log: $(cat "$STUB_DIR/gh-issue-create-rest-calls.log")"
 fi
 jit_teardown
 
@@ -21693,11 +21960,11 @@ else
   echo "    stderr: $err"
 fi
 TOTAL=$((TOTAL + 1))
-if [[ ! -f "$STUB_DIR/gh-issue-create.log" ]]; then
+if [[ ! -f "$STUB_DIR/gh-issue-create-rest-calls.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: check+dueAfterClose created no issue"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: check+dueAfterClose created no issue"
-  echo "    gh-issue-create.log: $(cat "$STUB_DIR/gh-issue-create.log")"
+  echo "    gh-issue-create-rest-calls.log: $(cat "$STUB_DIR/gh-issue-create-rest-calls.log")"
 fi
 jit_teardown
 
@@ -21753,10 +22020,11 @@ statements_setup() {
   # debounce test can assert the log is absent (zero gh calls). The REST issues
   # arm (`api ... repos/.../issues`, #2258) reads issue-list.json if present,
   # else "[]", remapped to snake_case; supports transient-failure injection via
-  # issue-list-fail-once. `issue create` logs its full args
-  # (including --body) to gh-issue-create.log so the body can be asserted,
-  # and echoes a deterministic issue URL. `project item-add` matches the gh
-  # subcommand that dispatch-project-item-add invokes internally.
+  # issue-list-fail-once. The REST create arm (`api -X POST .../issues`, #2256)
+  # logs its full args (including -f body=...) to gh-issue-create-rest-calls.log so
+  # the body can be asserted, and echoes a deterministic issue URL (html_url).
+  # `project item-add` matches the gh subcommand that dispatch-project-item-add
+  # invokes internally.
   cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
@@ -21765,6 +22033,15 @@ echo "$args" >> "$STUB_DIR/gh-calls.log"
 case "$args" in
   "label create "*)
     # Idempotent label create — default success.
+    ;;
+  "api -X POST "*/issues\ *)
+    # gh_issue_create_rest sentinel (#2256): POST .../issues (new issue creation).
+    # MUST precede the generic issue-list REST branch below, whose pattern would
+    # otherwise swallow this POST. Echoes html_url so the script's URL→number
+    # parse keeps working (matches the prior porcelain stub's URL echo). The full
+    # args (incl. title/body/labels) are logged so body content can be asserted.
+    echo "$args" >> "$STUB_DIR/gh-issue-create-rest-calls.log"
+    echo '{"number":777,"html_url":"https://github.com/test-owner/test-repo/issues/777"}'
     ;;
   *"api "*"repos/"*"/issues"*)
     # (#2258) dispatch-statements-scan now batches via gh_issue_list_rest, which
@@ -21783,11 +22060,6 @@ case "$args" in
     else
       echo '[]'
     fi
-    ;;
-  "issue create "*)
-    # Capture the full args (including --body) so body content can be asserted.
-    echo "$args" >> "$STUB_DIR/gh-issue-create.log"
-    echo "https://github.com/test-owner/test-repo/issues/777"
     ;;
   *"project item-add "*)
     echo '{"id":"PVTI_stmt001","title":"Parse statement","type":"Issue"}'
@@ -21902,26 +22174,26 @@ else
 fi
 calls=$(cat "$STUB_DIR/gh-calls.log")
 TOTAL=$((TOTAL + 1))
-if [[ "$calls" == *"repos/test-owner/test-repo/issues"* && "$calls" == *"issue create"* \
+if [[ "$calls" == *"repos/test-owner/test-repo/issues"* && "$calls" == *"api -X POST "*"/issues "* \
    && "$calls" == *"project item-add"* ]]; then
   PASS=$((PASS + 1))
-  echo "  PASS: new-file invoked issue list (REST) / issue create / project item-add"
+  echo "  PASS: new-file invoked issue list (REST) / issue create (REST) / project item-add"
 else
   FAIL=$((FAIL + 1))
-  echo "  FAIL: new-file invoked issue list (REST) / issue create / project item-add"
+  echo "  FAIL: new-file invoked issue list (REST) / issue create (REST) / project item-add"
   echo "    gh-calls.log: $calls"
 fi
-# Assert both labels are present in the issue create call.
+# Assert both labels are present in the REST issue create call (labels[]=...).
 create_args=""
-[[ -f "$STUB_DIR/gh-issue-create.log" ]] && create_args=$(cat "$STUB_DIR/gh-issue-create.log")
+[[ -f "$STUB_DIR/gh-issue-create-rest-calls.log" ]] && create_args=$(cat "$STUB_DIR/gh-issue-create-rest-calls.log")
 TOTAL=$((TOTAL + 1))
-if [[ "$create_args" == *"--label statements:bank"* && "$create_args" == *"--label help wanted"* ]]; then
+if [[ "$create_args" == *"labels[]=statements:bank"* && "$create_args" == *"labels[]=help wanted"* ]]; then
   PASS=$((PASS + 1))
-  echo "  PASS: new-file issue create carries both --label statements:bank and --label help wanted"
+  echo "  PASS: new-file issue create carries both labels[]=statements:bank and labels[]=help wanted"
 else
   FAIL=$((FAIL + 1))
-  echo "  FAIL: new-file issue create carries both --label statements:bank and --label help wanted"
-  echo "    gh-issue-create.log: $create_args"
+  echo "  FAIL: new-file issue create carries both labels[]=statements:bank and labels[]=help wanted"
+  echo "    gh-issue-create-rest-calls.log: $create_args"
 fi
 statements_teardown
 
@@ -21949,11 +22221,11 @@ else
   echo "    actual: $out"
 fi
 TOTAL=$((TOTAL + 1))
-if [[ ! -f "$STUB_DIR/gh-issue-create.log" ]]; then
+if [[ ! -f "$STUB_DIR/gh-issue-create-rest-calls.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: open-hit made no issue create call"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: open-hit made no issue create call"
-  echo "    gh-issue-create.log: $(cat "$STUB_DIR/gh-issue-create.log")"
+  echo "    gh-issue-create-rest-calls.log: $(cat "$STUB_DIR/gh-issue-create-rest-calls.log")"
 fi
 statements_teardown
 
@@ -21982,11 +22254,11 @@ else
   echo "    actual: $out"
 fi
 TOTAL=$((TOTAL + 1))
-if [[ ! -f "$STUB_DIR/gh-issue-create.log" ]]; then
+if [[ ! -f "$STUB_DIR/gh-issue-create-rest-calls.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: closed-hit made no issue create call"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: closed-hit made no issue create call"
-  echo "    gh-issue-create.log: $(cat "$STUB_DIR/gh-issue-create.log")"
+  echo "    gh-issue-create-rest-calls.log: $(cat "$STUB_DIR/gh-issue-create-rest-calls.log")"
 fi
 statements_teardown
 
@@ -22003,7 +22275,7 @@ expected_hash=$(sha256sum "$TMPDIR_TEST/statements-dir/acct.qfx" | awk '{print $
 rc=0
 out=$("$TMPDIR_TEST/scripts/dispatch-statements-scan" 2>/dev/null) || rc=$?
 assert_eq "body-check exits 0" "0" "$rc"
-body=$(cat "$STUB_DIR/gh-issue-create.log")
+body=$(cat "$STUB_DIR/gh-issue-create-rest-calls.log")
 TOTAL=$((TOTAL + 1))
 if [[ "$body" == *"acct.qfx"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: body contains the filename acct.qfx"
@@ -22044,11 +22316,12 @@ filed_count=$(printf '%s\n' "$out" | grep -c "bank: filed #" || true)
 skipped_count=$(printf '%s\n' "$out" | grep -c "bank: skipped " || true)
 assert_eq "in-run-dup filed exactly one issue (stdout)" "1" "$filed_count"
 assert_eq "in-run-dup skipped exactly one file (stdout)" "1" "$skipped_count"
-# The body is multi-line, so counting lines of gh-issue-create.log overcounts.
-# Count the distinct `issue create ` invocations recorded in gh-calls.log.
+# The REST body is multi-line (-f body=<multiline>), so wc -l overcounts.
+# Count the distinct create POSTs by anchoring on the first physical line of each
+# `api -X POST repos/.../issues ` invocation recorded in gh-calls.log.
 create_count=0
 [[ -f "$STUB_DIR/gh-calls.log" ]] \
-  && create_count=$(grep -c "^issue create " "$STUB_DIR/gh-calls.log" || true)
+  && create_count=$(grep -cE "^api -X POST repos/[^ ]*/issues " "$STUB_DIR/gh-calls.log" || true)
 assert_eq "in-run-dup made exactly one issue create" "1" "$create_count"
 TOTAL=$((TOTAL + 1))
 # Sorted order: a.qfx files #777, b.qfx is skipped referencing #777.
@@ -22107,11 +22380,11 @@ else
   echo "    actual: $out"
 fi
 TOTAL=$((TOTAL + 1))
-if [[ ! -f "$STUB_DIR/gh-issue-create.log" ]]; then
+if [[ ! -f "$STUB_DIR/gh-issue-create-rest-calls.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: dir-absent made no issue create call"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: dir-absent made no issue create call"
-  echo "    gh-issue-create.log: $(cat "$STUB_DIR/gh-issue-create.log")"
+  echo "    gh-issue-create-rest-calls.log: $(cat "$STUB_DIR/gh-issue-create-rest-calls.log")"
 fi
 statements_teardown
 
@@ -22146,11 +22419,11 @@ else
   echo "    actual stderr: $err"
 fi
 TOTAL=$((TOTAL + 1))
-if [[ ! -f "$STUB_DIR/gh-issue-create.log" ]]; then
+if [[ ! -f "$STUB_DIR/gh-issue-create-rest-calls.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: malformed-list made no issue create call"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: malformed-list made no issue create call"
-  echo "    gh-issue-create.log: $(cat "$STUB_DIR/gh-issue-create.log")"
+  echo "    gh-issue-create-rest-calls.log: $(cat "$STUB_DIR/gh-issue-create-rest-calls.log")"
 fi
 statements_teardown
 
@@ -22181,7 +22454,7 @@ fi
 TOTAL=$((TOTAL + 1))
 # The symlink target's hash must never reach an issue create call.
 create_args=""
-[[ -f "$STUB_DIR/gh-issue-create.log" ]] && create_args=$(cat "$STUB_DIR/gh-issue-create.log")
+[[ -f "$STUB_DIR/gh-issue-create-rest-calls.log" ]] && create_args=$(cat "$STUB_DIR/gh-issue-create-rest-calls.log")
 if [[ "$create_args" != *"$secret_hash"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: symlink-skip never published the symlink target's hash"
 else
@@ -22213,11 +22486,11 @@ else
   echo "    actual stderr: $err"
 fi
 TOTAL=$((TOTAL + 1))
-if [[ ! -f "$STUB_DIR/gh-issue-create.log" ]]; then
+if [[ ! -f "$STUB_DIR/gh-issue-create-rest-calls.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: ctrl-char-name filed nothing"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: ctrl-char-name filed nothing"
-  echo "    gh-issue-create.log: $(cat "$STUB_DIR/gh-issue-create.log")"
+  echo "    gh-issue-create-rest-calls.log: $(cat "$STUB_DIR/gh-issue-create-rest-calls.log")"
 fi
 statements_teardown
 
@@ -22242,12 +22515,16 @@ rc=0
 out=$("$TMPDIR_TEST/scripts/dispatch-statements-scan" 2>/dev/null) || rc=$?
 assert_eq "one-list-call exits 0" "0" "$rc"
 list_count=0
+# The list call is `api [--paginate] repos/.../issues?...` (query string); the
+# create POSTs also contain repos/.../issues, so anchor the list count on `issues?`
+# to exclude them.
 [[ -f "$STUB_DIR/gh-calls.log" ]] \
-  && list_count=$(grep -c 'repos/.*/issues' "$STUB_DIR/gh-calls.log" || true)
+  && list_count=$(grep -c 'repos/[^ ]*/issues?' "$STUB_DIR/gh-calls.log" || true)
 assert_eq "one-list-call made exactly one issue list (REST) call" "1" "$list_count"
 create_count=0
+# Multi-line REST bodies, so anchor the create count on each POST's first line.
 [[ -f "$STUB_DIR/gh-calls.log" ]] \
-  && create_count=$(grep -c '^issue create ' "$STUB_DIR/gh-calls.log" || true)
+  && create_count=$(grep -cE '^api -X POST repos/[^ ]*/issues ' "$STUB_DIR/gh-calls.log" || true)
 assert_eq "one-list-call made exactly five issue create calls" "5" "$create_count"
 statements_teardown
 
@@ -22283,11 +22560,11 @@ else
   echo "    actual: $out"
 fi
 TOTAL=$((TOTAL + 1))
-if [[ ! -f "$STUB_DIR/gh-issue-create.log" ]]; then
+if [[ ! -f "$STUB_DIR/gh-issue-create-rest-calls.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: retry-list made no issue create call"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: retry-list made no issue create call"
-  echo "    gh-issue-create.log: $(cat "$STUB_DIR/gh-issue-create.log")"
+  echo "    gh-issue-create-rest-calls.log: $(cat "$STUB_DIR/gh-issue-create-rest-calls.log")"
 fi
 statements_teardown
 
@@ -22317,11 +22594,11 @@ else
   echo "    actual stderr: $err"
 fi
 TOTAL=$((TOTAL + 1))
-if [[ ! -f "$STUB_DIR/gh-issue-create.log" ]]; then
+if [[ ! -f "$STUB_DIR/gh-issue-create-rest-calls.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: truncation-guard made no issue create call"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: truncation-guard made no issue create call"
-  echo "    gh-issue-create.log: $(cat "$STUB_DIR/gh-issue-create.log")"
+  echo "    gh-issue-create-rest-calls.log: $(cat "$STUB_DIR/gh-issue-create-rest-calls.log")"
 fi
 statements_teardown
 
@@ -22645,6 +22922,12 @@ ohs_setup() {
     "$TMPDIR_TEST/hooks/dispatch-office-hours-strip.sh"
   chmod +x "$TMPDIR_TEST/hooks/dispatch-office-hours-strip.sh"
 
+  # The hook now sources lib.sh via $SCRIPTS (= TMPDIR_TEST/hooks/../skills/
+  # dispatch-propagate/scripts) so gh_issue_remove_label_rest is defined. Stage
+  # the REAL lib so the strip actually issues `gh api -X DELETE .../labels/...`.
+  cp "$SCRIPT_DIR/lib.sh" \
+    "$TMPDIR_TEST/skills/dispatch-propagate/scripts/lib.sh"
+
   cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-find-pr" <<'FAKE'
 #!/usr/bin/env bash
 [[ -f "$STUB_DIR/find-pr-output" ]] && cat "$STUB_DIR/find-pr-output"
@@ -22657,6 +22940,10 @@ FAKE
 STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
 args="$*"
 case "$args" in
+  api\ -X\ DELETE\ *labels*)
+    # REST label-remove from the real lib.sh's gh_issue_remove_label_rest:
+    # `api -X DELETE repos/{owner}/{repo}/issues/<N>/labels/<name>`.
+    echo "$args" >> "$STUB_DIR/gh-api-delete.log" ;;
   pr\ edit\ *) echo "$args" >> "$STUB_DIR/gh-pr-edit.log" ;;
   issue\ edit\ *) echo "$args" >> "$STUB_DIR/gh-issue-edit.log" ;;
   *) echo "gh stub: unknown invocation: $args" >&2; exit 1 ;;
@@ -22694,7 +22981,12 @@ ohs_teardown() {
 
 # --- Test 1: branch <N>-* + PR exists → strip from both PR and issue ----------
 # The hook strips from both targets so a stale issue label (applied before the PR
-# was opened) is also cleared. gh --remove-label is a no-op when the label is absent.
+# was opened) is also cleared. The REST helper gh_issue_remove_label_rest is a
+# no-op when the label is absent (404 → success). After migration both the PR
+# and the issue strip go through `gh api -X DELETE .../issues/<N>/labels/<name>`,
+# distinguished only by <N> (456 = PR, 123 = issue). The helper URL-encodes only
+# space→%20, so the literal `dispatch:office-hours` (colon unescaped) appears in
+# the path.
 
 echo "Test: strip hook on <N>-* branch with PR → strips from both PR and issue"
 ohs_setup
@@ -22703,40 +22995,39 @@ echo "456" > "$STUB_DIR/find-pr-output"
 "$TMPDIR_TEST/hooks/dispatch-office-hours-strip.sh" < /dev/null >/dev/null 2>&1
 rc=$?
 assert_eq "strip: hook exits 0" "0" "$rc"
-pr_edit_log=$(cat "$STUB_DIR/gh-pr-edit.log" 2>/dev/null || true)
+api_delete_log=$(cat "$STUB_DIR/gh-api-delete.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ "$pr_edit_log" == *"pr edit 456 --remove-label dispatch:office-hours"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: strip: 'gh pr edit 456 --remove-label dispatch:office-hours' was invoked"
+if [[ "$api_delete_log" == *"api -X DELETE repos/{owner}/{repo}/issues/456/labels/dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: strip: REST DELETE issues/456/labels/dispatch:office-hours (PR) was invoked"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: strip: 'gh pr edit 456 --remove-label dispatch:office-hours' was invoked"
-  echo "    pr-edit-log: $pr_edit_log"
+  FAIL=$((FAIL + 1)); echo "  FAIL: strip: REST DELETE issues/456/labels/dispatch:office-hours (PR) was invoked"
+  echo "    api-delete-log: $api_delete_log"
 fi
-issue_edit_log=$(cat "$STUB_DIR/gh-issue-edit.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ "$issue_edit_log" == *"issue edit 123 --remove-label dispatch:office-hours"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: strip: 'gh issue edit 123 --remove-label dispatch:office-hours' also invoked (clears stale issue label)"
+if [[ "$api_delete_log" == *"api -X DELETE repos/{owner}/{repo}/issues/123/labels/dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: strip: REST DELETE issues/123/labels/dispatch:office-hours (issue) also invoked (clears stale issue label)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: strip: 'gh issue edit 123 --remove-label dispatch:office-hours' also invoked (clears stale issue label)"
-  echo "    issue-edit-log: $issue_edit_log"
+  FAIL=$((FAIL + 1)); echo "  FAIL: strip: REST DELETE issues/123/labels/dispatch:office-hours (issue) also invoked (clears stale issue label)"
+  echo "    api-delete-log: $api_delete_log"
 fi
 ohs_teardown
 
 # --- Test 2: branch <N>-* + no PR → strip from issue -------------------------
 
-echo "Test: strip hook on <N>-* branch with no PR → 'gh issue edit --remove-label dispatch:office-hours'"
+echo "Test: strip hook on <N>-* branch with no PR → REST DELETE issues/789/labels/dispatch:office-hours"
 ohs_setup
 echo "789-bare" > "$STUB_DIR/current-branch.txt"
 # No find-pr-output → fall back to issue.
 "$TMPDIR_TEST/hooks/dispatch-office-hours-strip.sh" < /dev/null >/dev/null 2>&1
 rc=$?
 assert_eq "strip (no PR): hook exits 0" "0" "$rc"
-issue_edit_log=$(cat "$STUB_DIR/gh-issue-edit.log" 2>/dev/null || true)
+api_delete_log=$(cat "$STUB_DIR/gh-api-delete.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ "$issue_edit_log" == *"issue edit 789 --remove-label dispatch:office-hours"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: strip (no PR): 'gh issue edit 789 --remove-label dispatch:office-hours' was invoked"
+if [[ "$api_delete_log" == *"api -X DELETE repos/{owner}/{repo}/issues/789/labels/dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: strip (no PR): REST DELETE issues/789/labels/dispatch:office-hours was invoked"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: strip (no PR): 'gh issue edit 789 --remove-label dispatch:office-hours' was invoked"
-  echo "    issue-edit-log: $issue_edit_log"
+  FAIL=$((FAIL + 1)); echo "  FAIL: strip (no PR): REST DELETE issues/789/labels/dispatch:office-hours was invoked"
+  echo "    api-delete-log: $api_delete_log"
 fi
 ohs_teardown
 
@@ -22749,7 +23040,8 @@ echo "main" > "$STUB_DIR/current-branch.txt"
 rc=$?
 assert_eq "strip (non-issue): hook exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" ]]; then
+if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" \
+   && ! -e "$STUB_DIR/gh-api-delete.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: strip (non-issue): no gh call was invoked"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: strip (non-issue): no gh call was invoked"
@@ -22772,21 +23064,20 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: strip open-stdin: hook killed at 0.5s — read is still stalling"
 fi
 # Correctness: the payload is drain-only, so assert the strip still fired.
-pr_edit_log=$(cat "$STUB_DIR/gh-pr-edit.log" 2>/dev/null || true)
+api_delete_log=$(cat "$STUB_DIR/gh-api-delete.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ "$pr_edit_log" == *"pr edit 456 --remove-label dispatch:office-hours"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: strip open-stdin: 'gh pr edit 456 --remove-label' still invoked (drain did not break strip)"
+if [[ "$api_delete_log" == *"api -X DELETE repos/{owner}/{repo}/issues/456/labels/dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: strip open-stdin: REST DELETE issues/456/labels (PR) still invoked (drain did not break strip)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: strip open-stdin: 'gh pr edit 456 --remove-label' NOT invoked (drain broke strip)"
-  echo "    pr-edit-log: $pr_edit_log"
+  FAIL=$((FAIL + 1)); echo "  FAIL: strip open-stdin: REST DELETE issues/456/labels (PR) NOT invoked (drain broke strip)"
+  echo "    api-delete-log: $api_delete_log"
 fi
-issue_edit_log=$(cat "$STUB_DIR/gh-issue-edit.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ "$issue_edit_log" == *"issue edit 123 --remove-label dispatch:office-hours"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: strip open-stdin: 'gh issue edit 123 --remove-label' still invoked (drain did not break strip)"
+if [[ "$api_delete_log" == *"api -X DELETE repos/{owner}/{repo}/issues/123/labels/dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: strip open-stdin: REST DELETE issues/123/labels (issue) still invoked (drain did not break strip)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: strip open-stdin: 'gh issue edit 123 --remove-label' NOT invoked (drain broke strip)"
-  echo "    issue-edit-log: $issue_edit_log"
+  FAIL=$((FAIL + 1)); echo "  FAIL: strip open-stdin: REST DELETE issues/123/labels (issue) NOT invoked (drain broke strip)"
+  echo "    api-delete-log: $api_delete_log"
 fi
 ohs_teardown
 
@@ -22996,6 +23287,12 @@ case "$args" in
   issue\ edit\ *--remove-label*)
     echo "$args" >> "$STUB_DIR/gh-issue-remove.log"
     ;;
+  api\ -X\ DELETE\ *labels*)
+    # REST label-remove (gh_issue_remove_label_rest from the real lib.sh):
+    # `api -X DELETE repos/{owner}/{repo}/issues/<N>/labels/<name>`. Record the
+    # full argv so tests can assert the path + method the helper truly emits.
+    echo "$args" >> "$STUB_DIR/gh-api-delete.log"
+    ;;
   label\ create\ *)
     echo "$args" >> "$STUB_DIR/gh-label-create.log"
     ;;
@@ -23049,21 +23346,20 @@ export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 "$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
 rc=$?
 assert_eq "stop advance: hook exits 0" "0" "$rc"
-pr_remove_log=$(cat "$STUB_DIR/gh-pr-remove.log" 2>/dev/null || true)
+api_delete_log=$(cat "$STUB_DIR/gh-api-delete.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ "$pr_remove_log" == *"pr edit 456 --remove-label dispatch:office-hours"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: stop advance: PR --remove-label invoked"
+if [[ "$api_delete_log" == *"api -X DELETE repos/{owner}/{repo}/issues/456/labels/dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop advance: PR REST DELETE labels/dispatch:office-hours invoked"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: stop advance: PR --remove-label invoked"
-  echo "    pr-remove-log: $pr_remove_log"
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop advance: PR REST DELETE labels/dispatch:office-hours invoked"
+  echo "    api-delete-log: $api_delete_log"
 fi
-issue_remove_log=$(cat "$STUB_DIR/gh-issue-remove.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ "$issue_remove_log" == *"issue edit 123 --remove-label dispatch:office-hours"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: stop advance: issue --remove-label invoked"
+if [[ "$api_delete_log" == *"api -X DELETE repos/{owner}/{repo}/issues/123/labels/dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop advance: issue REST DELETE labels/dispatch:office-hours invoked"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: stop advance: issue --remove-label invoked"
-  echo "    issue-remove-log: $issue_remove_log"
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop advance: issue REST DELETE labels/dispatch:office-hours invoked"
+  echo "    api-delete-log: $api_delete_log"
 fi
 spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
 assert_eq "stop advance: spawn invoked exactly once" "1" "$spawn_calls"
@@ -23162,21 +23458,20 @@ self_close_calls=$(wc -l < "$STUB_DIR/self-close-calls.log" 2>/dev/null || echo 
 assert_eq "stop clean-review: self-close invoked exactly once" "1" "$self_close_calls"
 spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
 assert_eq "stop clean-review: spawn invoked exactly once" "1" "$spawn_calls"
-pr_remove_log=$(cat "$STUB_DIR/gh-pr-remove.log" 2>/dev/null || true)
+api_delete_log=$(cat "$STUB_DIR/gh-api-delete.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ "$pr_remove_log" == *"pr edit 456 --remove-label dispatch:office-hours"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: stop clean-review: PR --remove-label invoked"
+if [[ "$api_delete_log" == *"api -X DELETE repos/{owner}/{repo}/issues/456/labels/dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop clean-review: PR REST DELETE labels/dispatch:office-hours invoked"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: stop clean-review: PR --remove-label invoked"
-  echo "    pr-remove-log: $pr_remove_log"
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop clean-review: PR REST DELETE labels/dispatch:office-hours invoked"
+  echo "    api-delete-log: $api_delete_log"
 fi
-issue_remove_log=$(cat "$STUB_DIR/gh-issue-remove.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ "$issue_remove_log" == *"issue edit 123 --remove-label dispatch:office-hours"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: stop clean-review: issue --remove-label invoked"
+if [[ "$api_delete_log" == *"api -X DELETE repos/{owner}/{repo}/issues/123/labels/dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop clean-review: issue REST DELETE labels/dispatch:office-hours invoked"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: stop clean-review: issue --remove-label invoked"
-  echo "    issue-remove-log: $issue_remove_log"
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop clean-review: issue REST DELETE labels/dispatch:office-hours invoked"
+  echo "    api-delete-log: $api_delete_log"
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" ]]; then
@@ -23216,7 +23511,8 @@ rc=$?
 assert_eq "stop fix-checks-retry: hook exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" \
-   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" \
+   && ! -e "$STUB_DIR/gh-api-delete.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: stop fix-checks-retry: no label add or remove invoked"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: stop fix-checks-retry: no label add or remove invoked"
@@ -23261,7 +23557,8 @@ else
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" \
-   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" \
+   && ! -e "$STUB_DIR/gh-api-delete.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: stop needs-human: no fix-checks-attempt label add or remove invoked (Branch A only parks via office-hours)"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: stop needs-human: no fix-checks-attempt label add or remove invoked (Branch A only parks via office-hours)"
@@ -23372,7 +23669,7 @@ else
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-pr-remove.log" \
-   && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+   && ! -e "$STUB_DIR/gh-issue-remove.log" && ! -e "$STUB_DIR/gh-api-delete.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: stop marker-absent: no PR calls and no remove calls"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: stop marker-absent: no PR calls and no remove calls"
@@ -23561,9 +23858,10 @@ fi
 # Did NOT self-close (Branch D is a non-advance, not an advance).
 assert_eq "stop #1230 crash-window: self-close NOT invoked" "absent" "$(log_state self-close-calls.log)"
 # Did NOT strip — Branch B's strip is the only remove path; its absence proves
-# we did NOT take Branch B (no false advance).
-assert_eq "stop #1230 crash-window: no PR remove-label (no strip)" "absent" "$(log_state gh-pr-remove.log)"
-assert_eq "stop #1230 crash-window: no issue remove-label (no strip)" "absent" "$(log_state gh-issue-remove.log)"
+# we did NOT take Branch B (no false advance). The strip now issues
+# `gh api -X DELETE .../labels/...` (gh_issue_remove_label_rest), logged to
+# gh-api-delete.log, so its absence is the no-strip witness for both targets.
+assert_eq "stop #1230 crash-window: no REST DELETE remove-label (no strip)" "absent" "$(log_state gh-api-delete.log)"
 # Branch D still re-seeds the chain.
 spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
 assert_eq "stop #1230 crash-window: spawn invoked exactly once" "1" "$spawn_calls"
@@ -23626,7 +23924,7 @@ rc=$?
 assert_eq "stop not-ready-marker: hook exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/apply-office-hours.log" && ! -e "$STUB_DIR/gh-pr-remove.log" \
-   && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+   && ! -e "$STUB_DIR/gh-issue-remove.log" && ! -e "$STUB_DIR/gh-api-delete.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: stop not-ready-marker: no office-hours apply, no strip"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: stop not-ready-marker: no office-hours apply, no strip"
@@ -23648,7 +23946,8 @@ rc=$?
 assert_eq "stop no-job-dir: hook exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" \
-   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" \
+   && ! -e "$STUB_DIR/gh-api-delete.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: stop no-job-dir: no gh calls invoked"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: stop no-job-dir: no gh calls invoked"
@@ -23681,7 +23980,8 @@ rc=$?
 assert_eq "stop router-name: hook exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" \
-   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" \
+   && ! -e "$STUB_DIR/gh-api-delete.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: stop router-name: no gh calls invoked"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: stop router-name: no gh calls invoked"
@@ -23788,7 +24088,8 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: stop empty-phase: self-close NOT invoked (no false advance)"
 fi
 TOTAL=$((TOTAL + 1))
-if [[ ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+if [[ ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" \
+   && ! -e "$STUB_DIR/gh-api-delete.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: stop empty-phase: no remove-label calls (no strip)"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: stop empty-phase: no remove-label calls (no strip)"
@@ -23828,7 +24129,8 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: stop unknown-phase: self-close NOT invoked (corrupt marker doesn't drive advance)"
 fi
 TOTAL=$((TOTAL + 1))
-if [[ ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+if [[ ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" \
+   && ! -e "$STUB_DIR/gh-api-delete.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: stop unknown-phase: no remove-label calls (no strip)"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: stop unknown-phase: no remove-label calls (no strip)"
@@ -23886,7 +24188,8 @@ rc=$?
 assert_eq "stop fix-conflicts-retry: hook exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" \
-   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" \
+   && ! -e "$STUB_DIR/gh-api-delete.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: stop fix-conflicts-retry: no label add or remove invoked"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: stop fix-conflicts-retry: no label add or remove invoked"
@@ -23926,7 +24229,8 @@ else
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" \
-   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" \
+   && ! -e "$STUB_DIR/gh-api-delete.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: stop fix-conflicts-no-pr-backstop: no label add or remove invoked"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: stop fix-conflicts-no-pr-backstop: no label add or remove invoked"
@@ -24048,7 +24352,8 @@ else
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" \
-   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" \
+   && ! -e "$STUB_DIR/gh-api-delete.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: stop fix-conflicts-ambiguous: no attempt label add or remove invoked (Branch A only parks via office-hours)"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: stop fix-conflicts-ambiguous: no attempt label add or remove invoked (Branch A only parks via office-hours)"
@@ -24071,21 +24376,20 @@ export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 "$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
 rc=$?
 assert_eq "stop fix-conflicts-advance: hook exits 0" "0" "$rc"
-pr_remove_log=$(cat "$STUB_DIR/gh-pr-remove.log" 2>/dev/null || true)
+api_delete_log=$(cat "$STUB_DIR/gh-api-delete.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ "$pr_remove_log" == *"pr edit 456 --remove-label dispatch:office-hours"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: stop fix-conflicts-advance: PR --remove-label invoked"
+if [[ "$api_delete_log" == *"api -X DELETE repos/{owner}/{repo}/issues/456/labels/dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop fix-conflicts-advance: PR REST DELETE labels/dispatch:office-hours invoked"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: stop fix-conflicts-advance: PR --remove-label invoked"
-  echo "    pr-remove-log: $pr_remove_log"
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop fix-conflicts-advance: PR REST DELETE labels/dispatch:office-hours invoked"
+  echo "    api-delete-log: $api_delete_log"
 fi
-issue_remove_log=$(cat "$STUB_DIR/gh-issue-remove.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ "$issue_remove_log" == *"issue edit 123 --remove-label dispatch:office-hours"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: stop fix-conflicts-advance: issue --remove-label invoked"
+if [[ "$api_delete_log" == *"api -X DELETE repos/{owner}/{repo}/issues/123/labels/dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stop fix-conflicts-advance: issue REST DELETE labels/dispatch:office-hours invoked"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: stop fix-conflicts-advance: issue --remove-label invoked"
-  echo "    issue-remove-log: $issue_remove_log"
+  FAIL=$((FAIL + 1)); echo "  FAIL: stop fix-conflicts-advance: issue REST DELETE labels/dispatch:office-hours invoked"
+  echo "    api-delete-log: $api_delete_log"
 fi
 spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
 assert_eq "stop fix-conflicts-advance: spawn invoked exactly once" "1" "$spawn_calls"
@@ -24122,7 +24426,8 @@ else
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" \
-   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" \
+   && ! -e "$STUB_DIR/gh-api-delete.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: parse-job-done: no label add or remove invoked"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: parse-job-done: no label add or remove invoked"
@@ -24158,7 +24463,8 @@ else
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" \
-   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" ]]; then
+   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" \
+   && ! -e "$STUB_DIR/gh-api-delete.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: resolved-closed: no label add or remove invoked"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: resolved-closed: no label add or remove invoked"
@@ -24220,13 +24526,13 @@ self_close_calls=$(wc -l < "$STUB_DIR/self-close-calls.log" 2>/dev/null || echo 
 assert_eq "#2025 plan→implement advance: self-close invoked exactly once" "1" "$self_close_calls"
 sweep_calls=$(wc -l < "$STUB_DIR/sweep-calls.log" 2>/dev/null || echo 0)
 assert_eq "#2025 plan→implement advance: sweep invoked (sweep log present)" "1" "$sweep_calls"
-issue_remove_log=$(cat "$STUB_DIR/gh-issue-remove.log" 2>/dev/null || true)
+api_delete_log=$(cat "$STUB_DIR/gh-api-delete.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ "$issue_remove_log" == *"issue edit 123 --remove-label dispatch:office-hours"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: #2025 plan→implement advance: strip_office_hours_label ran (issue remove-label)"
+if [[ "$api_delete_log" == *"api -X DELETE repos/{owner}/{repo}/issues/123/labels/dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2025 plan→implement advance: strip_office_hours_label ran (issue REST DELETE labels/dispatch:office-hours)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: #2025 plan→implement advance: strip_office_hours_label ran (issue remove-label)"
-  echo "    issue-remove-log: $issue_remove_log"
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2025 plan→implement advance: strip_office_hours_label ran (issue REST DELETE labels/dispatch:office-hours)"
+  echo "    api-delete-log: $api_delete_log"
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
@@ -24582,7 +24888,11 @@ mkdir -p "$FINALIZE_STUB_DIR" "$FINALIZE_BIN" "$FINALIZE_SCRIPTS"
 # Copy the real finalize script into the scripts dir so $SCRIPT_DIR resolves there.
 cp "$SCRIPT_DIR/dispatch-finalize-phase" "$FINALIZE_SCRIPTS/dispatch-finalize-phase"
 chmod +x "$FINALIZE_SCRIPTS/dispatch-finalize-phase"
-# finalize-phase sources lib.sh (gh_issue_view_rest, #2257) via its $SCRIPT_DIR.
+# dispatch-finalize-phase now `source`s lib.sh via $SCRIPT_DIR for the REST-backed
+# gh helpers: gh_issue_remove_label_rest (the label mutation, #2256) and
+# gh_issue_view_rest (the issue read, #2257). Copy lib.sh alongside it so the
+# source resolves (this private tmpdir does not use the shared `setup`, which
+# copies lib.sh).
 cp "$SCRIPT_DIR/lib.sh" "$FINALIZE_SCRIPTS/lib.sh"
 
 # Stub dispatch-spawn-tick: log to order.log and spawn-calls.log.
@@ -24611,8 +24921,12 @@ exit 0
 STUB
 chmod +x "$FINALIZE_SCRIPTS/dispatch-self-close"
 
-# Stub gh: handle issue view (rate-limit labels — return empty), pr edit --remove-label,
-# issue edit --remove-label. Log remove calls for assertion.
+# Stub gh: handle issue view (rate-limit labels — return empty) and the #2256
+# REST DELETE label removals (gh api -X DELETE .../issues/<N>/labels/<name>). A PR
+# is an issue in REST, so both the PR-456 and issue-123 office-hours removals hit
+# the same issues/<N>/labels/<name> path; log every DELETE to one file and assert
+# on the number. Return an empty body (success) so gh_issue_remove_label_rest's
+# 404-tolerance branch is not triggered.
 cat > "$FINALIZE_BIN/gh" <<'STUB'
 #!/usr/bin/env bash
 FINALIZE_STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
@@ -24624,11 +24938,9 @@ case "$args" in
     # .state|ascii_upcase does not error).
     printf '{"number":0,"state":"open","labels":[]}\n'
     ;;
-  pr\ edit\ *--remove-label*)
-    echo "$args" >> "$FINALIZE_STUB_DIR/gh-pr-remove.log"
-    ;;
-  issue\ edit\ *--remove-label*)
-    echo "$args" >> "$FINALIZE_STUB_DIR/gh-issue-remove.log"
+  api\ -X\ DELETE\ */issues/*/labels/*)
+    echo "$args" >> "$FINALIZE_STUB_DIR/gh-label-remove.log"
+    echo '[]'
     ;;
   *)
     echo "gh stub: unknown invocation: $args" >&2
@@ -24647,24 +24959,23 @@ mkdir -p "$CLAUDE_JOB_DIR"
 rc=$?
 assert_eq "#2243 D2 dispatch-finalize-phase: exits 0" "0" "$rc"
 
-# Assert office-hours removed from the PR.
-pr_remove_log=$(cat "$FINALIZE_STUB_DIR/gh-pr-remove.log" 2>/dev/null || true)
+# Assert office-hours REST-removed from the PR (issues/456/labels/dispatch:office-hours).
+remove_log=$(cat "$FINALIZE_STUB_DIR/gh-label-remove.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ "$pr_remove_log" == *"pr edit 456 --remove-label dispatch:office-hours"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: #2243 D2: --remove-label dispatch:office-hours issued for PR 456"
+if [[ "$remove_log" == *"issues/456/labels/dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2243 D2: REST DELETE dispatch:office-hours issued for PR 456"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: #2243 D2: --remove-label dispatch:office-hours issued for PR 456"
-  echo "    gh-pr-remove.log: $pr_remove_log"
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2243 D2: REST DELETE dispatch:office-hours issued for PR 456"
+  echo "    gh-label-remove.log: $remove_log"
 fi
 
-# Assert office-hours removed from the issue.
-issue_remove_log=$(cat "$FINALIZE_STUB_DIR/gh-issue-remove.log" 2>/dev/null || true)
+# Assert office-hours REST-removed from the issue (issues/123/labels/dispatch:office-hours).
 TOTAL=$((TOTAL + 1))
-if [[ "$issue_remove_log" == *"issue edit 123 --remove-label dispatch:office-hours"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: #2243 D2: --remove-label dispatch:office-hours issued for issue 123"
+if [[ "$remove_log" == *"issues/123/labels/dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2243 D2: REST DELETE dispatch:office-hours issued for issue 123"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: #2243 D2: --remove-label dispatch:office-hours issued for issue 123"
-  echo "    gh-issue-remove.log: $issue_remove_log"
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2243 D2: REST DELETE dispatch:office-hours issued for issue 123"
+  echo "    gh-label-remove.log: $remove_log"
 fi
 
 # Assert spawn invoked exactly once.
@@ -25949,8 +26260,9 @@ exit 1
 STUB
   chmod +x "$TMPDIR_TEST/bin/curl"
 
-  # gh PATH stub. Extends the JIT-engine stub with issue close + a body-bearing
-  # issue list reading open-issues.json.
+  # gh PATH stub. Extends the JIT-engine stub with REST close (PATCH .../issues/<N>
+  # + POST .../issues/<N>/comments, #2256) + a body-bearing issue list reading
+  # open-issues.json.
   cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
@@ -25958,6 +26270,26 @@ args="$*"
 echo "$args" >> "$STUB_DIR/gh-calls.log"
 case "$args" in
   "label create "*)
+    ;;
+  "api -X POST "*/issues/*/comments*)
+    # gh_issue_close_rest --comment sub-call (#2256): POST .../issues/<N>/comments.
+    # MUST precede the generic issue-list REST branch below.
+    echo "$args" >> "$STUB_DIR/gh-issue-comment-rest-calls.log"
+    echo '{}'
+    ;;
+  "api -X PATCH "*/issues/[0-9]*)
+    # gh_issue_close_rest sentinel (#2256): PATCH .../issues/<N> (state=closed).
+    # MUST precede the generic issue-list REST branch below.
+    echo "$args" >> "$STUB_DIR/gh-issue-close-rest-calls.log"
+    echo '{}'
+    ;;
+  "api -X POST "*/issues\ *)
+    # gh_issue_create_rest sentinel (#2256): POST .../issues (new issue creation).
+    # MUST precede the generic issue-list REST branch below, whose pattern would
+    # otherwise swallow this POST. Echoes html_url so the script's URL→number
+    # parse keeps working (matches the prior porcelain stub's URL echo).
+    echo "$args" >> "$STUB_DIR/gh-issue-create-rest-calls.log"
+    echo '{"number":777,"html_url":"https://github.com/fixture-owner/fixture-repo/issues/777"}'
     ;;
   *"api "*"repos/"*"/issues"*)
     # gh_issue_list_rest (#2258): the calendar import's open-issue dedup scan now
@@ -25970,13 +26302,6 @@ case "$args" in
     else
       echo '[]'
     fi
-    ;;
-  "issue create "*)
-    echo "$args" >> "$STUB_DIR/gh-issue-create.log"
-    echo "https://github.com/fixture-owner/fixture-repo/issues/777"
-    ;;
-  "issue close "*)
-    echo "$args" >> "$STUB_DIR/gh-issue-close.log"
     ;;
   "project item-add "*)
     echo '{"id":"PVTI_cal001","title":"Cal issue","type":"Issue"}'
@@ -26103,17 +26428,17 @@ else
 fi
 # The created issue carries the marker and the configured label.
 TOTAL=$((TOTAL + 1))
-create_args=$(cat "$STUB_DIR/gh-issue-create.log" 2>/dev/null || echo "")
+create_args=$(cat "$STUB_DIR/gh-issue-create-rest-calls.log" 2>/dev/null || echo "")
 if [[ "$create_args" == *"event=evt-today"* \
    && "$create_args" == *"start=2026-05-26T16:00:00Z"* \
    && "$create_args" == *"end=2026-05-26T17:00:00Z"* \
-   && "$create_args" == *"--label jit:calendar"* ]]; then
+   && "$create_args" == *"labels[]=jit:calendar"* ]]; then
   PASS=$((PASS + 1))
-  echo "  PASS: rule-1 issue body carries marker and --label jit:calendar"
+  echo "  PASS: rule-1 issue body carries marker and labels[]=jit:calendar"
 else
   FAIL=$((FAIL + 1))
-  echo "  FAIL: rule-1 issue body carries marker and --label jit:calendar"
-  echo "    gh-issue-create.log: $create_args"
+  echo "  FAIL: rule-1 issue body carries marker and labels[]=jit:calendar"
+  echo "    gh-issue-create-rest-calls.log: $create_args"
 fi
 # project item-add was called.
 TOTAL=$((TOTAL + 1))
@@ -26152,11 +26477,11 @@ rc=0
 out=$("$TMPDIR_TEST/scripts/dispatch-jit-calendar-import" 2>/dev/null) || rc=$?
 assert_eq "declined exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ ! -f "$STUB_DIR/gh-issue-create.log" ]]; then
+if [[ ! -f "$STUB_DIR/gh-issue-create-rest-calls.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: declined event filed no issue"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: declined event filed no issue"
-  echo "    gh-issue-create.log: $(cat "$STUB_DIR/gh-issue-create.log")"
+  echo "    gh-issue-create-rest-calls.log: $(cat "$STUB_DIR/gh-issue-create-rest-calls.log")"
 fi
 cal_teardown
 
@@ -26222,11 +26547,11 @@ rc=0
 out=$("$TMPDIR_TEST/scripts/dispatch-jit-calendar-import" 2>/dev/null) || rc=$?
 assert_eq "future-reminder exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ ! -f "$STUB_DIR/gh-issue-create.log" ]]; then
+if [[ ! -f "$STUB_DIR/gh-issue-create-rest-calls.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: future-reminder filed no issue"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: future-reminder filed no issue"
-  echo "    gh-issue-create.log: $(cat "$STUB_DIR/gh-issue-create.log")"
+  echo "    gh-issue-create-rest-calls.log: $(cat "$STUB_DIR/gh-issue-create-rest-calls.log")"
 fi
 cal_teardown
 
@@ -26260,13 +26585,13 @@ TOTAL=$((TOTAL + 1))
 # Count create invocations, not log lines: the --body arg contains embedded
 # newlines, so one create spans multiple lines in the log.
 create_lines=0
-[[ -f "$STUB_DIR/gh-issue-create.log" ]] \
-  && create_lines=$(grep -c "^issue create" "$STUB_DIR/gh-issue-create.log")
+[[ -f "$STUB_DIR/gh-issue-create-rest-calls.log" ]] \
+  && create_lines=$(grep -cE "^api -X POST repos/[^ ]*/issues " "$STUB_DIR/gh-issue-create-rest-calls.log")
 if [[ "$create_lines" -eq 1 ]]; then
   PASS=$((PASS + 1)); echo "  PASS: both-rules filed exactly one issue"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: both-rules filed exactly one issue"
-  echo "    gh-issue-create.log: $(cat "$STUB_DIR/gh-issue-create.log" 2>&1)"
+  echo "    gh-issue-create-rest-calls.log: $(cat "$STUB_DIR/gh-issue-create-rest-calls.log" 2>&1)"
 fi
 cal_teardown
 
@@ -26312,21 +26637,21 @@ out=$("$TMPDIR_TEST/scripts/dispatch-jit-calendar-import" 2>/dev/null) || rc=$?
 assert_eq "open-guard exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
 create_lines=0
-[[ -f "$STUB_DIR/gh-issue-create.log" ]] \
-  && create_lines=$(grep -c "^issue create" "$STUB_DIR/gh-issue-create.log")
+[[ -f "$STUB_DIR/gh-issue-create-rest-calls.log" ]] \
+  && create_lines=$(grep -cE "^api -X POST repos/[^ ]*/issues " "$STUB_DIR/gh-issue-create-rest-calls.log")
 if [[ "$create_lines" -eq 1 ]]; then
   PASS=$((PASS + 1)); echo "  PASS: open-guard filed only evt-fresh (one create)"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: open-guard filed only evt-fresh (one create)"
-  echo "    gh-issue-create.log: $(cat "$STUB_DIR/gh-issue-create.log" 2>&1)"
+  echo "    gh-issue-create-rest-calls.log: $(cat "$STUB_DIR/gh-issue-create-rest-calls.log" 2>&1)"
 fi
 TOTAL=$((TOTAL + 1))
-create_args=$(cat "$STUB_DIR/gh-issue-create.log" 2>/dev/null || echo "")
+create_args=$(cat "$STUB_DIR/gh-issue-create-rest-calls.log" 2>/dev/null || echo "")
 if [[ "$create_args" == *"event=evt-fresh"* && "$create_args" != *"event=evt-suppress"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: open-guard filed evt-fresh and not evt-suppress"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: open-guard filed evt-fresh and not evt-suppress"
-  echo "    gh-issue-create.log: $create_args"
+  echo "    gh-issue-create-rest-calls.log: $create_args"
 fi
 cal_teardown
 
@@ -26356,12 +26681,16 @@ else
   echo "    actual: $out"
 fi
 TOTAL=$((TOTAL + 1))
-close_args=$(cat "$STUB_DIR/gh-issue-close.log" 2>/dev/null || echo "")
-if [[ "$close_args" == *"issue close 91"* && "$close_args" == *"--comment"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: close-past invoked gh issue close 91 with a --comment"
+# REST close (#2256): the PATCH closes issues/91 and the --comment fires a prior
+# POST .../issues/91/comments.
+close_args=$(cat "$STUB_DIR/gh-issue-close-rest-calls.log" 2>/dev/null || echo "")
+comment_args=$(cat "$STUB_DIR/gh-issue-comment-rest-calls.log" 2>/dev/null || echo "")
+if [[ "$close_args" == *"PATCH"*"issues/91"* && "$comment_args" == *"issues/91/comments"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: close-past invoked REST close of issues/91 with a comment"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: close-past invoked gh issue close 91 with a --comment"
-  echo "    gh-issue-close.log: $close_args"
+  FAIL=$((FAIL + 1)); echo "  FAIL: close-past invoked REST close of issues/91 with a comment"
+  echo "    gh-issue-close-rest-calls.log: $close_args"
+  echo "    gh-issue-comment-rest-calls.log: $comment_args"
 fi
 cal_teardown
 
@@ -26407,12 +26736,12 @@ assert_eq "forged-marker exits 0" "0" "$rc"
 # Defense 1: the issue with the future real end is NOT closed (the forged past
 # end must not drive a close).
 TOTAL=$((TOTAL + 1))
-close_args=$(cat "$STUB_DIR/gh-issue-close.log" 2>/dev/null || echo "")
-if [[ "$close_args" != *"issue close 92"* ]]; then
+close_args=$(cat "$STUB_DIR/gh-issue-close-rest-calls.log" 2>/dev/null || echo "")
+if [[ "$close_args" != *"issues/92"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: forged past-end marker does not close issue #92"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: forged past-end marker does not close issue #92"
-  echo "    gh-issue-close.log: $close_args"
+  echo "    gh-issue-close-rest-calls.log: $close_args"
 fi
 # Defense 2: the forged victim ID does not suppress the real victim event — it
 # is still filed (a first-match parse would have skipped it as already-open).
@@ -26450,17 +26779,19 @@ out=$("$TMPDIR_TEST/scripts/dispatch-jit-calendar-import" 2>/dev/null) || rc=$?
 assert_eq "overrides exits 0" "0" "$rc"
 gh_calls=$(cat "$STUB_DIR/gh-calls.log")
 TOTAL=$((TOTAL + 1))
-if [[ "$gh_calls" == *"--repo custom-owner/custom-repo"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: overrides used --repo custom-owner/custom-repo"
+# REST create (#2256): --repo lands as the repos/<owner>/<repo>/issues path
+# segment; --label lands as labels[]=<name>.
+if [[ "$gh_calls" == *"repos/custom-owner/custom-repo/issues"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: overrides used repos/custom-owner/custom-repo/issues"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: overrides used --repo custom-owner/custom-repo"
+  FAIL=$((FAIL + 1)); echo "  FAIL: overrides used repos/custom-owner/custom-repo/issues"
   echo "    gh-calls.log: $gh_calls"
 fi
 TOTAL=$((TOTAL + 1))
-if [[ "$gh_calls" == *"--label custom-label"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: overrides used --label custom-label"
+if [[ "$gh_calls" == *"labels[]=custom-label"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: overrides used labels[]=custom-label"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: overrides used --label custom-label"
+  FAIL=$((FAIL + 1)); echo "  FAIL: overrides used labels[]=custom-label"
   echo "    gh-calls.log: $gh_calls"
 fi
 cal_teardown
@@ -26496,7 +26827,7 @@ else
   echo "    actual: $out"
 fi
 TOTAL=$((TOTAL + 1))
-create_args=$(cat "$STUB_DIR/gh-issue-create.log" 2>/dev/null || echo "")
+create_args=$(cat "$STUB_DIR/gh-issue-create-rest-calls.log" 2>/dev/null || echo "")
 if [[ "$create_args" == *"event=evt-allday"* \
    && "$create_args" == *"start=2026-05-26"* \
    && "$create_args" == *"end=2026-05-27"* \
@@ -26507,7 +26838,7 @@ if [[ "$create_args" == *"event=evt-allday"* \
 else
   FAIL=$((FAIL + 1))
   echo "  FAIL: all-day title and body carry (all-day), not (00:00)"
-  echo "    gh-issue-create.log: $create_args"
+  echo "    gh-issue-create-rest-calls.log: $create_args"
 fi
 cal_teardown
 
@@ -27133,8 +27464,9 @@ STUB
 
   # PATH-shimmed gh for the Step 1c latch re-arm (#1085). The open-latch query
   # reads main-broken-open.txt (one issue number per line; absent → no open
-  # latch, the re-arm short-circuits). `issue close` is logged to
-  # gh-issue-close.log so a test can assert whether the latch was closed.
+  # latch, the re-arm short-circuits). The REST close (#2256) logs its PATCH to
+  # gh-issue-close-rest-calls.log and the --comment POST to
+  # gh-issue-comment-rest-calls.log so a test can assert whether the latch was closed.
   cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
@@ -27167,8 +27499,16 @@ case "$args" in
     if [[ -f "$STUB_DIR/check-runs-${sha}.json" ]]; then cat "$STUB_DIR/check-runs-${sha}.json"
     else echo '{"check_runs":[]}'; fi
     ;;
-  issue\ close\ *)
-    echo "$args" >> "$STUB_DIR/gh-issue-close.log"
+  "api -X POST "*/issues/*/comments*)
+    # gh_issue_close_rest --comment sub-call (#2256): POST .../issues/<N>/comments.
+    # The latch-reset closes now post the why-comment then PATCH the issue closed.
+    echo "$args" >> "$STUB_DIR/gh-issue-comment-rest-calls.log"
+    echo '{}'
+    ;;
+  "api -X PATCH "*/issues/[0-9]*)
+    # gh_issue_close_rest sentinel (#2256): PATCH .../issues/<N> (state=closed).
+    echo "$args" >> "$STUB_DIR/gh-issue-close-rest-calls.log"
+    echo '{}'
     ;;
   "pr list --state open --limit 300 --json number,isDraft,labels,headRefOid,mergeable")
     # dispatch-reconcile-ready's one fetch. $STUB_DIR/reconcile-pr-list.json
@@ -27302,8 +27642,12 @@ chmod +x "$TMPDIR_TEST/dispatch-select-target"
 printf '99\n' > "$STUB_DIR/main-broken-open.txt"
 out=$(run_sel_tick)
 assert_eq "re-arm green+open: decision line" "empty" "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "re-arm green+open: latch issue closed" "issue close 99 --comment origin/main is green again; closing the main-broken latch (re-arming the gate)." \
-  "$(cat "$STUB_DIR/gh-issue-close.log" 2>/dev/null || echo MISSING)"
+# REST close (#2256): the latch close is now a POST .../issues/99/comments
+# carrying the re-arm message + a PATCH .../issues/99 (state=closed).
+assert_eq "re-arm green+open: latch issue PATCH-closed" "present" \
+  "$(grep -q 'PATCH.*issues/99' "$STUB_DIR/gh-issue-close-rest-calls.log" 2>/dev/null && echo present || echo absent)"
+assert_eq "re-arm green+open: latch close carries the re-arm comment" "present" \
+  "$(grep -q 'issues/99/comments -f body=origin/main is green again; closing the main-broken latch (re-arming the gate).' "$STUB_DIR/gh-issue-comment-rest-calls.log" 2>/dev/null && echo present || echo absent)"
 sel_tick_teardown
 
 # --- Step 1c latch re-arm: red main + open latch issue → NOT closed -----------
@@ -27320,7 +27664,7 @@ printf '99\n' > "$STUB_DIR/main-broken-open.txt"
 out=$(run_sel_tick)
 assert_eq "re-arm red+open: decision line" "empty" "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "re-arm red+open: latch issue NOT closed" "absent" \
-  "$([[ -e "$STUB_DIR/gh-issue-close.log" ]] && echo present || echo absent)"
+  "$([[ -e "$STUB_DIR/gh-issue-close-rest-calls.log" || -e "$STUB_DIR/gh-issue-comment-rest-calls.log" ]] && echo present || echo absent)"
 sel_tick_teardown
 
 # --- Step 1c latch re-arm: green main + NO open latch issue → no-op -----------
@@ -27338,7 +27682,7 @@ chmod +x "$TMPDIR_TEST/dispatch-select-target"
 out=$(run_sel_tick)
 assert_eq "re-arm green+no-issue: decision line" "empty" "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "re-arm green+no-issue: no close attempted" "absent" \
-  "$([[ -e "$STUB_DIR/gh-issue-close.log" ]] && echo present || echo absent)"
+  "$([[ -e "$STUB_DIR/gh-issue-close-rest-calls.log" || -e "$STUB_DIR/gh-issue-comment-rest-calls.log" ]] && echo present || echo absent)"
 sel_tick_teardown
 
 # --- Step 1d (cont.): auto-merge wiring, main healthy → invoked (#1540) -------
@@ -27514,9 +27858,12 @@ printf '2\n' > "$DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE"   # stale counter to reset
 # (default `empty`).
 out=$(run_sel_tick)
 assert_eq "recover: decision line" "empty" "$(printf '%s\n' "$out" | tail -n 1)"
-assert_eq "recover: latch closed" \
-  "issue close 77 --comment local main ff-merges clean again; closing the sync-broken latch" \
-  "$(cat "$STUB_DIR/gh-issue-close.log")"
+# REST close (#2256): POST .../issues/77/comments (re-arm message) + PATCH
+# .../issues/77 (state=closed).
+assert_eq "recover: latch PATCH-closed" "present" \
+  "$(grep -q 'PATCH.*issues/77' "$STUB_DIR/gh-issue-close-rest-calls.log" 2>/dev/null && echo present || echo absent)"
+assert_eq "recover: latch close carries the re-arm comment" "present" \
+  "$(grep -q 'issues/77/comments -f body=local main ff-merges clean again; closing the sync-broken latch' "$STUB_DIR/gh-issue-comment-rest-calls.log" 2>/dev/null && echo present || echo absent)"
 assert_eq "recover: counter reset" "absent" \
   "$([ -f "$DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE" ] && echo present || echo absent)"
 sel_tick_teardown
@@ -28188,11 +28535,16 @@ sel_tick_teardown
 ESB_SCRIPT="$SCRIPT_DIR/dispatch-escalate-sync-broken"
 ESB_TMPDIR=""
 ESB_CAPTURE=""
+ESB_STUB_DIR=""
 
 esb_setup() {
   ESB_TMPDIR=$(mktemp -d)
   ESB_CAPTURE="$ESB_TMPDIR/capture"
-  mkdir -p "$ESB_TMPDIR/bin" "$ESB_CAPTURE"
+  # #2256: REST sentinel logs live alongside the capture dir. The gh stub records
+  # the full argv of each `gh api` mutation here so the migrated PATCH/POST calls
+  # can be asserted (mirrors the shared stub's gh-issue-*-rest-calls.log files).
+  ESB_STUB_DIR="$ESB_TMPDIR/stub"
+  mkdir -p "$ESB_TMPDIR/bin" "$ESB_CAPTURE" "$ESB_STUB_DIR"
 
   # git shim: fixed diagnostics for the three queries the script runs.
   cat > "$ESB_TMPDIR/bin/git" <<'STUB'
@@ -28206,28 +28558,33 @@ esac
 STUB
   chmod +x "$ESB_TMPDIR/bin/git"
 
-  # gh shim: parses --body-file/--title out of "$@" regardless of create/edit,
-  # copies the body to capture/body.txt and the title to capture/title.txt. For
-  # `issue list` it returns capture/existing.txt (empty/absent → no open latch →
-  # CREATE path; nonempty → EDIT path). `issue create` echoes a URL so the
-  # script's ${create_out##*/} yields a bare number; `issue edit` exits 0.
+  # gh shim: the script now drives the REST helpers gh_issue_edit_rest /
+  # gh_issue_create_rest (#2256), which call `gh api -X PATCH|POST ... -f title=...
+  # -F body=@<file>`. This stub (a) copies the body to capture/body.txt and the
+  # title to capture/title.txt for the #1546 content assertions — keying on the
+  # REST `-f title=` / `-F body=@` flags, NOT the old porcelain --title/--body-file
+  # — and (b) logs each mutation's full argv to the shared REST sentinel files
+  # (gh-issue-close-rest-calls.log for PATCH .../issues/<N>; gh-issue-create-rest-calls.log
+  # for POST .../issues). `gh label create` is logged and exits 0 (or models
+  # already-exists when $STUB_DIR/gh-label-exists is present). `gh api --paginate`
+  # serves the find-or-create latch query (capture/existing.txt seeds an open latch).
   cat > "$ESB_TMPDIR/bin/gh" <<STUB
 #!/usr/bin/env bash
 CAP="$ESB_CAPTURE"
+STUB_DIR="$ESB_STUB_DIR"
 STUB
   cat >> "$ESB_TMPDIR/bin/gh" <<'STUB'
-sub="$1 $2"
-# Pull --title <val> and --body-file <path> out of the argv.
-prev=""
+args="$*"
+# Pull title=<val> (from `-f title=...`) and body=@<path> (from `-F body=@...`)
+# out of the argv; capture their values for the body-content assertions.
 for a in "$@"; do
-  case "$prev" in
-    --title)     printf '%s' "$a" > "$CAP/title.txt" ;;
-    --body-file) cat "$a" > "$CAP/body.txt" ;;
+  case "$a" in
+    title=*)  printf '%s' "${a#title=}" > "$CAP/title.txt" ;;
+    body=@*)  bf="${a#body=@}"; [[ -f "$bf" ]] && cat "$bf" > "$CAP/body.txt" ;;
   esac
-  prev="$a"
 done
-case "$sub" in
-  "api --paginate")
+case "$args" in
+  "api --paginate"*)
     # gh_issue_list_rest uses REST: gh api --paginate repos/{owner}/{repo}/issues?...
     # Return the open-latch number if seeded; absent file means no open latch.
     # gh_issue_list_rest remaps from snake_case REST to camelCase; serve snake_case.
@@ -28239,14 +28596,30 @@ case "$sub" in
     fi
     exit 0
     ;;
-  "issue create")
-    echo "https://github.com/x/y/issues/123"
+  "api -X PATCH "*/issues/[0-9]*)
+    # gh_issue_edit_rest sentinel: PATCH .../issues/<N> (EDIT path).
+    echo "$args" >> "$STUB_DIR/gh-issue-close-rest-calls.log"
+    echo '{}'
     ;;
-  "issue edit")
-    : # title/body already captured above
+  "api -X POST "*/issues\ *)
+    # gh_issue_create_rest sentinel: POST .../issues (CREATE path). The helper pipes
+    # the response through `jq -r .html_url`, so emit JSON carrying html_url; the
+    # script's ${create_out##*/} then yields the bare trailing number (123).
+    echo "$args" >> "$STUB_DIR/gh-issue-create-rest-calls.log"
+    echo '{"html_url":"https://github.com/x/y/issues/123"}'
     ;;
-  "label create")
-    : # create-on-not-found path; not exercised here
+  "label create"*)
+    # Ensure-first latch-label create. Log the argv; model already-exists when the
+    # marker is present (the script must tolerate it and still create the issue).
+    echo "$args" >> "$STUB_DIR/gh-label-create.log"
+    if [[ -f "$STUB_DIR/gh-label-exists" ]]; then
+      echo "gh: Validation Failed (HTTP 422): already_exists" >&2
+      exit 1
+    fi
+    if [[ -f "$STUB_DIR/gh-fail-label-create" ]]; then
+      echo "gh: could not create label (HTTP 500): Internal Server Error" >&2
+      exit 1
+    fi
     ;;
   *)
     echo "gh stub (esb): unknown invocation: $*" >&2
@@ -28264,7 +28637,7 @@ STUB
 esb_teardown() {
   export PATH="$SAVED_PATH"
   rm -rf "$ESB_TMPDIR"
-  ESB_TMPDIR="" ; ESB_CAPTURE=""
+  ESB_TMPDIR="" ; ESB_CAPTURE="" ; ESB_STUB_DIR=""
 }
 
 # Reset just the capture dir between runs within one setup.
@@ -28326,6 +28699,91 @@ assert_eq "edit-path: existing issue number echoed" "99" "$EDIT_NUM"
 TITLE=$(cat "$ESB_CAPTURE/title.txt" 2>/dev/null || true)
 assert_eq "edit-path title: fetch-failed 'cannot reach origin/main'" "1" \
   "$(grep -cF 'cannot reach origin/main' <<<"$TITLE" || true)"
+esb_teardown
+
+# --- #2256: EDIT path fires a REST PATCH .../issues/<existing> carrying title+body
+# The migrated edit drives gh_issue_edit_rest → `gh api -X PATCH repos/.../issues/99`.
+# Assert the PATCH sentinel fired against the existing number, and that the title
+# and body (from the --body-file the script composed) were both captured.
+echo "Test: dispatch-escalate-sync-broken edit path → REST PATCH .../issues/<existing> (#2256)"
+esb_setup
+printf '99\n' > "$ESB_CAPTURE/existing.txt"   # an open latch → EDIT path
+EDIT_NUM=$(printf '%s' "fatal: unable to access origin" \
+  | "$ESB_SCRIPT" --reason fetch-failed) || EDIT_NUM="ERR"
+assert_eq "edit-rest: existing issue number echoed" "99" "$EDIT_NUM"
+EDIT_LOG="$ESB_STUB_DIR/gh-issue-close-rest-calls.log"
+assert_eq "edit-rest: PATCH fired" "1" \
+  "$([ -f "$EDIT_LOG" ] && grep -q 'PATCH' "$EDIT_LOG" && echo 1 || echo 0)"
+assert_eq "edit-rest: PATCH targets issues/99" "1" \
+  "$([ -f "$EDIT_LOG" ] && grep -q 'issues/99' "$EDIT_LOG" && echo 1 || echo 0)"
+TITLE=$(cat "$ESB_CAPTURE/title.txt" 2>/dev/null || true)
+BODY=$(cat "$ESB_CAPTURE/body.txt" 2>/dev/null || true)
+assert_eq "edit-rest: PATCH carried the title" "1" \
+  "$(grep -cF 'cannot reach origin/main' <<<"$TITLE" || true)"
+assert_eq "edit-rest: PATCH carried the body (fetch-stderr section)" "1" \
+  "$(grep -cF '## git fetch origin main (captured stderr)' <<<"$BODY" || true)"
+esb_teardown
+
+# --- #2256: CREATE path fires a REST POST .../issues with the latch labels -------
+# The migrated create drives gh_issue_create_rest → `gh api -X POST repos/.../issues
+# -f title=... -F body=@<file> -f labels[]=dispatch:sync-broken -f labels[]=bug
+# -f labels[]=priority`. Assert the POST sentinel fired carrying body=@ (the
+# --body-file flag) and all three labels, and that stdout is the parsed number.
+echo "Test: dispatch-escalate-sync-broken create path → REST POST .../issues with labels (#2256)"
+esb_setup
+# No existing.txt → list empty → CREATE path. No gh-label-exists marker → label
+# create succeeds.
+ISSUE_NUM=$(printf '%s' "CONFLICT (content): Merge conflict in foo" \
+  | "$ESB_SCRIPT" --reason merge-failed) || ISSUE_NUM="ERR"
+assert_eq "create-rest: stdout is the parsed issue number" "123" "$ISSUE_NUM"
+CREATE_LOG="$ESB_STUB_DIR/gh-issue-create-rest-calls.log"
+assert_eq "create-rest: POST fired" "1" \
+  "$([ -f "$CREATE_LOG" ] && grep -q 'POST' "$CREATE_LOG" && echo 1 || echo 0)"
+assert_eq "create-rest: POST carried body=@ (--body-file)" "1" \
+  "$([ -f "$CREATE_LOG" ] && grep -q -- '-F body=@' "$CREATE_LOG" && echo 1 || echo 0)"
+assert_eq "create-rest: POST carried labels[]=dispatch:sync-broken" "1" \
+  "$([ -f "$CREATE_LOG" ] && grep -q 'labels\[\]=dispatch:sync-broken' "$CREATE_LOG" && echo 1 || echo 0)"
+assert_eq "create-rest: POST carried labels[]=bug" "1" \
+  "$([ -f "$CREATE_LOG" ] && grep -q 'labels\[\]=bug' "$CREATE_LOG" && echo 1 || echo 0)"
+assert_eq "create-rest: POST carried labels[]=priority" "1" \
+  "$([ -f "$CREATE_LOG" ] && grep -q 'labels\[\]=priority' "$CREATE_LOG" && echo 1 || echo 0)"
+esb_teardown
+
+# --- #2256 REGRESSION GUARD: latch label initially ABSENT --------------------
+# This is the exact regression this unit must not introduce: REST POST /issues
+# silently drops an unknown label[], so the latch could be created WITHOUT its
+# dispatch:sync-broken label. The ensure-first restructure prevents that by
+# running `gh label create` BEFORE the create. With NO gh-label-exists marker the
+# stub's `label create` SUCCEEDS (models the label being absent and then created);
+# assert that (a) `gh label create dispatch:sync-broken` was invoked, and (b) the
+# created issue STILL carries labels[]=dispatch:sync-broken in the POST.
+echo "Test: dispatch-escalate-sync-broken create path with ABSENT latch label → label create + label retained (#2256)"
+esb_setup
+ISSUE_NUM=$(printf '%s' "CONFLICT (content): Merge conflict in foo" \
+  | "$ESB_SCRIPT" --reason merge-failed) || ISSUE_NUM="ERR"
+assert_eq "absent-label: create still succeeds (issue number)" "123" "$ISSUE_NUM"
+LABEL_LOG="$ESB_STUB_DIR/gh-label-create.log"
+assert_eq "absent-label: gh label create dispatch:sync-broken was invoked" "1" \
+  "$([ -f "$LABEL_LOG" ] && grep -q 'label create dispatch:sync-broken' "$LABEL_LOG" && echo 1 || echo 0)"
+CREATE_LOG="$ESB_STUB_DIR/gh-issue-create-rest-calls.log"
+assert_eq "absent-label: created issue STILL carries labels[]=dispatch:sync-broken" "1" \
+  "$([ -f "$CREATE_LOG" ] && grep -q 'labels\[\]=dispatch:sync-broken' "$CREATE_LOG" && echo 1 || echo 0)"
+esb_teardown
+
+# --- #2256: latch label ALREADY EXISTS → already-exists tolerated, no abort ----
+# The ensure-first idiom tolerates only an already-exists error from `gh label
+# create`. With the gh-label-exists marker the stub emits gh's already-exists
+# message and exits 1; the script must NOT abort and must still create the issue
+# with the latch label.
+echo "Test: dispatch-escalate-sync-broken create path with already-exists latch label → tolerated (#2256)"
+esb_setup
+: > "$ESB_STUB_DIR/gh-label-exists"   # `gh label create` returns already-exists (exit 1)
+ISSUE_NUM=$(printf '%s' "CONFLICT (content): Merge conflict in foo" \
+  | "$ESB_SCRIPT" --reason merge-failed) || ISSUE_NUM="ERR"
+assert_eq "already-exists: create still succeeds (issue number)" "123" "$ISSUE_NUM"
+CREATE_LOG="$ESB_STUB_DIR/gh-issue-create-rest-calls.log"
+assert_eq "already-exists: created issue carries labels[]=dispatch:sync-broken" "1" \
+  "$([ -f "$CREATE_LOG" ] && grep -q 'labels\[\]=dispatch:sync-broken' "$CREATE_LOG" && echo 1 || echo 0)"
 esb_teardown
 
 # --- Invalid --reason → clear nonzero error ----------------------------------
@@ -32240,19 +32698,27 @@ open_pr_setup() {
 
   cp "$SCRIPT_DIR/dispatch-open-pr" "$TMPDIR_TEST/scripts/dispatch-open-pr"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-open-pr"
+  # #2256: dispatch-open-pr now sources its sibling lib.sh (for gh_issue_edit_rest),
+  # so the copied script's SCRIPT_DIR must contain a real lib.sh.
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
 
   cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 # gh stub emulating GitHub's close parser for dispatch-open-pr tests.
 TREE="$(cd "$(dirname "$0")/.." && pwd)"
 
-# Locate the value following --body-file in the argument list.
+# Locate the body file: `pr create` passes it as `--body-file <path>`; the
+# migrated re-apply (#2256) drives gh_issue_edit_rest → `gh api -X PATCH
+# repos/.../issues/<N> -F body=@<path>`, so recognize that form too.
 body_file=""
 prev=""
 for a in "$@"; do
   if [[ "$prev" == "--body-file" ]]; then
     body_file="$a"
   fi
+  case "$a" in
+    body=@*) body_file="${a#body=@}" ;;
+  esac
   prev="$a"
 done
 
@@ -32286,11 +32752,16 @@ case "$1 $2" in
     write_close_set "$body_file"
     echo "https://github.com/natb1/commons.systems/pull/1500"
     ;;
-  "pr edit")
+  "api -X")
+    # #2256: the body re-apply after a stray-keyword strip now goes through
+    # gh_issue_edit_rest → `gh api -X PATCH repos/.../issues/<PR_NUM> -F body=@<file>`.
+    # Behave like the old `pr edit` branch: refresh last-body.txt and re-derive the
+    # close set from the corrected body (so the re-verify `pr view` sees it), and
+    # log the full argv to the shared REST PATCH sentinel.
+    echo "$*" >> "$TREE/gh-issue-close-rest-calls.log"
     cp "$body_file" "$TREE/last-body.txt"
     write_close_set "$body_file"
-    echo "edit" >> "$TREE/edit-calls.log"
-    echo "https://github.com/natb1/commons.systems/pull/1500"
+    echo '{}'
     ;;
   "pr view")
     if [[ -f "$TREE/close-set.txt" ]]; then
@@ -32342,7 +32813,10 @@ printf 'This change also fixes #999 in passing.\n' > "$TMPDIR_TEST/body.txt"
 out=$("$TMPDIR_TEST/scripts/dispatch-open-pr" 1119 --title "t" --body-file "$TMPDIR_TEST/body.txt" 2>/dev/null) && rc=0 || rc=$?
 assert_eq "open-pr: stray fixes #999 → stdout PR number" "1500" "$out"
 assert_eq "open-pr: stray fixes #999 → rc 0" "0" "$rc"
-assert_eq "open-pr: stray fixes #999 → an edit occurred" "1" "$([[ -s "$TMPDIR_TEST/edit-calls.log" ]] && echo 1 || echo 0)"
+# #2256: the re-apply now fires a REST PATCH .../issues/<PR_NUM> (PR #1500), not the
+# old porcelain `pr edit`. Assert the PATCH sentinel fired against the PR number.
+assert_eq "open-pr: stray fixes #999 → a REST PATCH re-apply occurred" "1" "$([[ -s "$TMPDIR_TEST/gh-issue-close-rest-calls.log" ]] && echo 1 || echo 0)"
+assert_eq "open-pr: stray fixes #999 → PATCH targets issues/1500" "1" "$([ -f "$TMPDIR_TEST/gh-issue-close-rest-calls.log" ] && grep -q 'issues/1500' "$TMPDIR_TEST/gh-issue-close-rest-calls.log" && echo 1 || echo 0)"
 assert_eq "open-pr: stray fixes #999 → final close set is just 1119" "1119" "$(cat "$TMPDIR_TEST/close-set.txt")"
 assert_eq "open-pr: stray fixes #999 → keyword stripped from corrected body" "0" "$(grep -cE '(close[sd]?|fix(e[sd])?|resolve[sd]?)[ \t]*:?[ \t]*#999' "$TMPDIR_TEST/last-body.txt" || true)"
 open_pr_teardown
@@ -34432,7 +34906,7 @@ out=$("$TMPDIR_TEST/dispatch-reconcile-ready" 2>/dev/null)
 assert_eq "scope gate: no stdout" "" "$out"
 assert_eq "scope gate: no promote call" "absent" "$(reconcile_log_state gh-pr-ready.log)"
 assert_eq "scope gate: no demote call" "absent" "$(reconcile_log_state gh-pr-ready-undo.log)"
-assert_eq "scope gate: no edit/remove-label call" "absent" "$(reconcile_log_state gh-pr-edit.log)"
+assert_eq "scope gate: no remove-label call" "absent" "$(reconcile_log_state gh-issue-remove-label-rest-calls.log)"
 teardown
 
 # Scope gate, ready side: a non-reviewed ready PR that is failing+CONFLICTING
@@ -34448,7 +34922,8 @@ teardown
 
 # --- Attempt-clear: promote removes ALL dispatch:*-attempt-* labels ---------
 # A promotable PR also carries two attempt counters; both are removed via
-# gh pr edit --remove-label, and dispatch:reviewed is NOT among the removed.
+# gh_issue_remove_label_rest (REST DELETE .../issues/<N>/labels/<name>; PRs are
+# issues in REST), and dispatch:reviewed is NOT among the removed.
 echo "Test: promote clears all dispatch:*-attempt-* labels, keeps dispatch:reviewed (#18)"
 setup
 ATTEMPT_LABELS='[{"name":"dispatch:reviewed"},{"name":"dispatch:verify-attempt-2"},{"name":"dispatch:ci-wait-attempt-1"}]'
@@ -34457,19 +34932,19 @@ make_reconcile_pr 18 true MERGEABLE "$GREEN_ROLLUP" "$ATTEMPT_LABELS" \
 out=$("$TMPDIR_TEST/dispatch-reconcile-ready" 2>/dev/null)
 assert_eq "attempt-clear: still promoted" "promoted #18" "$out"
 assert_eq "attempt-clear: gh pr ready #18 logged" "18" "$(cat "$STUB_DIR/gh-pr-ready.log")"
-edit_log=$(cat "$STUB_DIR/gh-pr-edit.log")
+rm_log=$(cat "$STUB_DIR/gh-issue-remove-label-rest-calls.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if grep -q 'pr edit 18 --remove-label dispatch:verify-attempt-2' <<<"$edit_log" \
-   && grep -q 'pr edit 18 --remove-label dispatch:ci-wait-attempt-1' <<<"$edit_log"; then
-  PASS=$((PASS + 1)); echo "  PASS: attempt-clear: both attempt labels removed"
+if grep -q 'DELETE repos/{owner}/{repo}/issues/18/labels/dispatch:verify-attempt-2' <<<"$rm_log" \
+   && grep -q 'DELETE repos/{owner}/{repo}/issues/18/labels/dispatch:ci-wait-attempt-1' <<<"$rm_log"; then
+  PASS=$((PASS + 1)); echo "  PASS: attempt-clear: both attempt labels removed via REST DELETE"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: attempt-clear: both attempt labels removed"
-  echo "    actual gh-pr-edit.log: '$edit_log'"
+  FAIL=$((FAIL + 1)); echo "  FAIL: attempt-clear: both attempt labels removed via REST DELETE"
+  echo "    actual gh-issue-remove-label-rest-calls.log: '$rm_log'"
 fi
 TOTAL=$((TOTAL + 1))
-if grep -q 'remove-label dispatch:reviewed' <<<"$edit_log"; then
+if grep -q 'labels/dispatch:reviewed' <<<"$rm_log"; then
   FAIL=$((FAIL + 1)); echo "  FAIL: attempt-clear: dispatch:reviewed must NOT be removed"
-  echo "    actual gh-pr-edit.log: '$edit_log'"
+  echo "    actual gh-issue-remove-label-rest-calls.log: '$rm_log'"
 else
   PASS=$((PASS + 1)); echo "  PASS: attempt-clear: dispatch:reviewed not removed"
 fi
@@ -36599,11 +37074,15 @@ echo "=== dispatch-retriage-orphaned-followups (#1812) ==="
 # gated by the static dispatch:review-followup label (server-side filter bypassed in stub).
 # Per-PR state comes from retriage-pr-<N>.json (gh api repos/{owner}/{repo}/pulls/<N>,
 # REST shape: lowercase state, snake_case merged_at).
-# The office-hours park flows through the REAL copied dispatch-apply-office-hours,
-# which logs to gh-issue-edit.log / gh-issue-comment.log; the per-PR processed
-# marker hits the generic `pr edit *` branch, logged to gh-pr-edit.log.
+# #2256: the office-hours park flows through the REAL copied dispatch-apply-office-hours,
+# which REST-adds dispatch:office-hours (gh-issue-set-labels-rest-calls.log) and posts
+# the why-comment via REST (gh-issue-comment-rest-calls.log); the per-PR processed marker is a REST
+# add to issues/<PR>/labels, also in gh-issue-set-labels-rest-calls.log.
 
 # (a) closed-unmerged source PR + open marker-bearing follow-up → park + mark
+# #2256: the office-hours park flows through the real migrated dispatch-apply-office-hours
+# (REST-adds dispatch:office-hours to issues/101/labels, REST why-comment); the
+# per-PR processed marker is a REST add to issues/1704/labels (a PR is an issue in REST).
 echo "Test: closed-unmerged source PR → park follow-up on office-hours + mark PR"
 setup
 printf '[{"number":101,"labels":[{"name":"dispatch:review-followup"}],"body":"orphan finding <!-- dispatch:source-pr 1704 -->"}]\n' > "$STUB_DIR/issue-list.json"
@@ -36612,21 +37091,28 @@ printf '{"state":"closed","merged_at":null,"labels":[]}\n' > "$STUB_DIR/retriage
 # issue's labels via gh_issue_view_rest (#2257) → arg-issue-101.json.
 echo '{"state":"open","labels":[]}' > "$STUB_DIR/arg-issue-101.json"
 out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null)
-assert_eq "a: office-hours applied to the follow-up issue" \
-  "issue edit 101 --add-label dispatch:office-hours" "$(cat "$STUB_DIR/gh-issue-edit.log")"
-assert_eq "a: why-comment posted to the follow-up issue" "present" "$(log_state gh-issue-comment.log)"
 TOTAL=$((TOTAL + 1))
-if grep -q 'issue comment 101 ' "$STUB_DIR/gh-issue-comment.log" \
-   && grep -q 'closed unmerged' "$STUB_DIR/gh-issue-comment.log"; then
+if grep -q 'issues/101/labels' "$STUB_DIR/gh-issue-set-labels-rest-calls.log" \
+   && grep -q 'labels\[\]=dispatch:office-hours' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: a: office-hours REST-added to the follow-up issue 101"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: a: office-hours REST-added to the follow-up issue 101"
+  echo "    actual: '$(cat "$STUB_DIR/gh-issue-set-labels-rest-calls.log" 2>/dev/null)'"
+fi
+assert_eq "a: why-comment posted to the follow-up issue" "present" "$(log_state gh-issue-comment-rest-calls.log)"
+TOTAL=$((TOTAL + 1))
+if grep -q 'issues/101/comments' "$STUB_DIR/gh-issue-comment-rest-calls.log" \
+   && grep -q 'closed unmerged' "$STUB_DIR/gh-issue-comment-rest-calls.log"; then
   PASS=$((PASS + 1)); echo "  PASS: a: why-comment names issue 101 and the closed-unmerged reason"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: a: why-comment names issue 101 and the closed-unmerged reason"
 fi
 TOTAL=$((TOTAL + 1))
-if grep -q 'pr edit 1704 --add-label dispatch:orphans-retriaged' "$STUB_DIR/gh-pr-edit.log"; then
-  PASS=$((PASS + 1)); echo "  PASS: a: source PR #1704 marked dispatch:orphans-retriaged"
+if grep -q 'issues/1704/labels' "$STUB_DIR/gh-issue-set-labels-rest-calls.log" \
+   && grep -q 'labels\[\]=dispatch:orphans-retriaged' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: a: source PR #1704 REST-marked dispatch:orphans-retriaged"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: a: source PR #1704 marked dispatch:orphans-retriaged"
+  FAIL=$((FAIL + 1)); echo "  FAIL: a: source PR #1704 REST-marked dispatch:orphans-retriaged"
 fi
 assert_eq "a: one retriaged stdout line" \
   "retriaged #101 (source PR #1704 closed unmerged)" "$out"
@@ -36638,8 +37124,8 @@ setup
 printf '[{"number":102,"labels":[{"name":"dispatch:review-followup"}],"body":"orphan finding <!-- dispatch:source-pr 1688 -->"}]\n' > "$STUB_DIR/issue-list.json"
 printf '{"state":"closed","merged_at":"2026-01-01T00:00:00Z","labels":[]}\n' > "$STUB_DIR/retriage-pr-1688.json"
 out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null)
-assert_eq "b: no office-hours edit on a merged source PR" "absent" "$(log_state gh-issue-edit.log)"
-assert_eq "b: no PR marker on a merged source PR" "absent" "$(log_state gh-pr-edit.log)"
+assert_eq "b: no label add (park or marker) on a merged source PR" "absent" "$(log_state gh-issue-set-labels-rest-calls.log)"
+assert_eq "b: no why-comment on a merged source PR" "absent" "$(log_state gh-issue-comment-rest-calls.log)"
 assert_eq "b: no stdout on a merged source PR" "" "$out"
 teardown
 
@@ -36649,8 +37135,8 @@ setup
 printf '[{"number":103,"labels":[{"name":"dispatch:review-followup"}],"body":"orphan finding <!-- dispatch:source-pr 1900 -->"}]\n' > "$STUB_DIR/issue-list.json"
 printf '{"state":"open","merged_at":null,"labels":[]}\n' > "$STUB_DIR/retriage-pr-1900.json"
 out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null)
-assert_eq "c: no office-hours edit on an open source PR" "absent" "$(log_state gh-issue-edit.log)"
-assert_eq "c: no PR marker on an open source PR" "absent" "$(log_state gh-pr-edit.log)"
+assert_eq "c: no label add (park or marker) on an open source PR" "absent" "$(log_state gh-issue-set-labels-rest-calls.log)"
+assert_eq "c: no why-comment on an open source PR" "absent" "$(log_state gh-issue-comment-rest-calls.log)"
 assert_eq "c: no stdout on an open source PR" "" "$out"
 teardown
 
@@ -36660,8 +37146,8 @@ setup
 printf '[{"number":104,"labels":[{"name":"dispatch:review-followup"}],"body":"orphan finding <!-- dispatch:source-pr 1704 -->"}]\n' > "$STUB_DIR/issue-list.json"
 printf '{"state":"closed","merged_at":null,"labels":[{"name":"dispatch:orphans-retriaged"}]}\n' > "$STUB_DIR/retriage-pr-1704.json"
 out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null)
-assert_eq "d: no re-park when PR already marked" "absent" "$(log_state gh-issue-edit.log)"
-assert_eq "d: no re-mark when PR already marked" "absent" "$(log_state gh-pr-edit.log)"
+assert_eq "d: no re-park/re-mark label add when PR already marked" "absent" "$(log_state gh-issue-set-labels-rest-calls.log)"
+assert_eq "d: no why-comment when PR already marked" "absent" "$(log_state gh-issue-comment-rest-calls.log)"
 assert_eq "d: no stdout when PR already marked" "" "$out"
 teardown
 
@@ -36671,8 +37157,8 @@ setup
 printf '[{"number":105,"labels":[{"name":"bug"}],"body":"a normal issue with no marker"}]\n' > "$STUB_DIR/issue-list.json"
 if out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null); then rc=0; else rc=$?; fi
 assert_eq "e: exits 0 with no labeled issues" "0" "$rc"
-assert_eq "e: no office-hours edit" "absent" "$(log_state gh-issue-edit.log)"
-assert_eq "e: no PR marker" "absent" "$(log_state gh-pr-edit.log)"
+assert_eq "e: no label add (park or marker)" "absent" "$(log_state gh-issue-set-labels-rest-calls.log)"
+assert_eq "e: no why-comment" "absent" "$(log_state gh-issue-comment-rest-calls.log)"
 assert_eq "e: no stdout" "" "$out"
 teardown
 
@@ -36689,8 +37175,8 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: f: warns about the skipped scan on stderr"
   echo "    actual stderr: '$err'"
 fi
-assert_eq "f: no office-hours edit when the scan fails" "absent" "$(log_state gh-issue-edit.log)"
-assert_eq "f: no PR marker when the scan fails" "absent" "$(log_state gh-pr-edit.log)"
+assert_eq "f: no label add when the scan fails" "absent" "$(log_state gh-issue-set-labels-rest-calls.log)"
+assert_eq "f: no why-comment when the scan fails" "absent" "$(log_state gh-issue-comment-rest-calls.log)"
 teardown
 
 # (g) body with TWO source-pr markers → last-wins anti-spoof (reference.md)
@@ -36709,11 +37195,17 @@ printf '{"state":"open","merged_at":null,"labels":[]}\n' > "$STUB_DIR/retriage-p
 printf '{"state":"closed","merged_at":null,"labels":[]}\n' > "$STUB_DIR/retriage-pr-1704.json"
 echo '{"state":"open","labels":[]}' > "$STUB_DIR/arg-issue-106.json"
 out=$("$TMPDIR_TEST/dispatch-retriage-orphaned-followups" 2>/dev/null)
-assert_eq "g: parks the follow-up against the LAST marker's PR (#1704)" \
-  "issue edit 106 --add-label dispatch:office-hours" "$(cat "$STUB_DIR/gh-issue-edit.log")"
 TOTAL=$((TOTAL + 1))
-if grep -q 'pr edit 1704 --add-label dispatch:orphans-retriaged' "$STUB_DIR/gh-pr-edit.log" \
-   && ! grep -q 'pr edit 1500 ' "$STUB_DIR/gh-pr-edit.log"; then
+if grep -q 'issues/106/labels' "$STUB_DIR/gh-issue-set-labels-rest-calls.log" \
+   && grep -q 'labels\[\]=dispatch:office-hours' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: g: parks follow-up 106 against the LAST marker's PR (#1704)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: g: parks follow-up 106 against the LAST marker's PR (#1704)"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q 'issues/1704/labels' "$STUB_DIR/gh-issue-set-labels-rest-calls.log" \
+   && grep -q 'labels\[\]=dispatch:orphans-retriaged' "$STUB_DIR/gh-issue-set-labels-rest-calls.log" \
+   && ! grep -q 'issues/1500/labels' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then
   PASS=$((PASS + 1)); echo "  PASS: g: marks the LAST PR (#1704), never the spoofed first (#1500)"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: g: marks the LAST PR (#1704), never the spoofed first (#1500)"
@@ -36753,15 +37245,19 @@ printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVI
   > "$STUB_DIR/auto-merge-pr-list.json"
 out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
 assert_eq "merge: stdout is 'merged #50'" "merged #50" "$out"
-assert_eq "merge: gh pr merge log present" "present" "$(log_state gh-pr-merge.log)"
+assert_eq "merge: REST merge log present" "present" "$(log_state gh-pr-merge-rest-calls.log)"
 TOTAL=$((TOTAL + 1))
-if grep -q -- '--squash' "$STUB_DIR/gh-pr-merge.log" \
-   && grep -q -- '--subject' "$STUB_DIR/gh-pr-merge.log" \
-   && grep -q -- '--body' "$STUB_DIR/gh-pr-merge.log"; then
-  PASS=$((PASS + 1)); echo "  PASS: merge args carry --squash, --subject, and --body"
+# REST merge (#2256): PUT .../pulls/50/merge with merge_method=squash,
+# commit_title=<PR title>, and commit_message carrying the PR body's Closes #N
+# (so GitHub's squash-merge auto-closes the issue).
+if grep -q 'pulls/50/merge' "$STUB_DIR/gh-pr-merge-rest-calls.log" \
+   && grep -q 'merge_method=squash' "$STUB_DIR/gh-pr-merge-rest-calls.log" \
+   && grep -q 'commit_title=PR 50' "$STUB_DIR/gh-pr-merge-rest-calls.log" \
+   && grep -q 'commit_message=Closes #50' "$STUB_DIR/gh-pr-merge-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: merge args carry merge_method=squash, commit_title, and commit_message (Closes #50)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: merge args carry --squash, --subject, and --body"
-  echo "    actual gh-pr-merge.log: '$(cat "$STUB_DIR/gh-pr-merge.log")'"
+  FAIL=$((FAIL + 1)); echo "  FAIL: merge args carry merge_method=squash, commit_title, and commit_message (Closes #50)"
+  echo "    actual gh-pr-merge-rest-calls.log: '$(cat "$STUB_DIR/gh-pr-merge-rest-calls.log")'"
 fi
 teardown
 
@@ -36773,7 +37269,7 @@ printf '[%s]' "$(make_auto_merge_pr 50 true MERGEABLE "$GREEN_ROLLUP" "$AM_REVIE
   > "$STUB_DIR/auto-merge-pr-list.json"
 out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
 assert_eq "draft: no stdout" "" "$out"
-assert_eq "draft: no merge call" "absent" "$(log_state gh-pr-merge.log)"
+assert_eq "draft: no merge call" "absent" "$(log_state gh-pr-merge-rest-calls.log)"
 teardown
 
 # --- 3. demote-race skip -----------------------------------------------------
@@ -36788,7 +37284,7 @@ printf '[%s]' "$(make_auto_merge_pr 50 true MERGEABLE "$GREEN_ROLLUP" "$AM_REVIE
   > "$STUB_DIR/auto-merge-pr-list.json"
 out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
 assert_eq "demote-race: no stdout" "" "$out"
-assert_eq "demote-race: no merge call" "absent" "$(log_state gh-pr-merge.log)"
+assert_eq "demote-race: no merge call" "absent" "$(log_state gh-pr-merge-rest-calls.log)"
 teardown
 
 # --- 4. missing dispatch:reviewed → skip -------------------------------------
@@ -36799,7 +37295,7 @@ printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_NO_R
   > "$STUB_DIR/auto-merge-pr-list.json"
 out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
 assert_eq "no-reviewed: no stdout" "" "$out"
-assert_eq "no-reviewed: no merge call" "absent" "$(log_state gh-pr-merge.log)"
+assert_eq "no-reviewed: no merge call" "absent" "$(log_state gh-pr-merge-rest-calls.log)"
 teardown
 
 # --- 5. CI verdict failing → skip --------------------------------------------
@@ -36810,7 +37306,7 @@ printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$FAILING_ROLLUP" "$AM_RE
   > "$STUB_DIR/auto-merge-pr-list.json"
 out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
 assert_eq "failing: no stdout" "" "$out"
-assert_eq "failing: no merge call" "absent" "$(log_state gh-pr-merge.log)"
+assert_eq "failing: no merge call" "absent" "$(log_state gh-pr-merge-rest-calls.log)"
 teardown
 
 # --- 6. CI verdict pending → skip --------------------------------------------
@@ -36821,7 +37317,7 @@ printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$PENDING_ROLLUP" "$AM_RE
   > "$STUB_DIR/auto-merge-pr-list.json"
 out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
 assert_eq "pending: no stdout" "" "$out"
-assert_eq "pending: no merge call" "absent" "$(log_state gh-pr-merge.log)"
+assert_eq "pending: no merge call" "absent" "$(log_state gh-pr-merge-rest-calls.log)"
 teardown
 
 # --- 7. mergeable CONFLICTING → skip -----------------------------------------
@@ -36832,7 +37328,7 @@ printf '[%s]' "$(make_auto_merge_pr 50 false CONFLICTING "$GREEN_ROLLUP" "$AM_RE
   > "$STUB_DIR/auto-merge-pr-list.json"
 out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
 assert_eq "conflicting: no stdout" "" "$out"
-assert_eq "conflicting: no merge call" "absent" "$(log_state gh-pr-merge.log)"
+assert_eq "conflicting: no merge call" "absent" "$(log_state gh-pr-merge-rest-calls.log)"
 teardown
 
 # --- 8. mergeable UNKNOWN → skip ---------------------------------------------
@@ -36843,7 +37339,7 @@ printf '[%s]' "$(make_auto_merge_pr 50 false UNKNOWN "$GREEN_ROLLUP" "$AM_REVIEW
   > "$STUB_DIR/auto-merge-pr-list.json"
 out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
 assert_eq "unknown: no stdout" "" "$out"
-assert_eq "unknown: no merge call" "absent" "$(log_state gh-pr-merge.log)"
+assert_eq "unknown: no merge call" "absent" "$(log_state gh-pr-merge-rest-calls.log)"
 teardown
 
 # --- 9. zero closing issues → skip -------------------------------------------
@@ -36856,7 +37352,7 @@ printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVI
   > "$STUB_DIR/auto-merge-pr-list.json"
 out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
 assert_eq "no-closing: no stdout" "" "$out"
-assert_eq "no-closing: no merge call" "absent" "$(log_state gh-pr-merge.log)"
+assert_eq "no-closing: no merge call" "absent" "$(log_state gh-pr-merge-rest-calls.log)"
 teardown
 
 # --- 10. multi-closing PR → merge --------------------------------------------
@@ -36869,7 +37365,7 @@ printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVI
   > "$STUB_DIR/auto-merge-pr-list.json"
 out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
 assert_eq "multi-closing: stdout is 'merged #50'" "merged #50" "$out"
-assert_eq "multi-closing: gh pr merge log present" "present" "$(log_state gh-pr-merge.log)"
+assert_eq "multi-closing: REST merge log present" "present" "$(log_state gh-pr-merge-rest-calls.log)"
 teardown
 
 # --- 11. closing issue is a bug → merge (type-agnostic, #1739) ----------------
@@ -36883,7 +37379,7 @@ printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVI
   > "$STUB_DIR/auto-merge-pr-list.json"
 out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
 assert_eq "bug-merge: stdout is 'merged #50'" "merged #50" "$out"
-assert_eq "bug-merge: gh pr merge log present" "present" "$(log_state gh-pr-merge.log)"
+assert_eq "bug-merge: REST merge log present" "present" "$(log_state gh-pr-merge-rest-calls.log)"
 teardown
 
 # --- 12. closing issue is a security issue → merge (type-agnostic, #1739) -----
@@ -36895,7 +37391,7 @@ printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVI
   > "$STUB_DIR/auto-merge-pr-list.json"
 out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
 assert_eq "security-merge: stdout is 'merged #50'" "merged #50" "$out"
-assert_eq "security-merge: gh pr merge log present" "present" "$(log_state gh-pr-merge.log)"
+assert_eq "security-merge: REST merge log present" "present" "$(log_state gh-pr-merge-rest-calls.log)"
 teardown
 
 # --- 13. config enabled:false → no-op (no fetch) -----------------------------
@@ -36907,7 +37403,7 @@ printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVI
   > "$STUB_DIR/auto-merge-pr-list.json"
 out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
 assert_eq "disabled: no stdout" "" "$out"
-assert_eq "disabled: no merge call" "absent" "$(log_state gh-pr-merge.log)"
+assert_eq "disabled: no merge call" "absent" "$(log_state gh-pr-merge-rest-calls.log)"
 assert_eq "disabled: no PR fetch" "absent" "$(log_state gh-auto-merge-pr-list.log)"
 teardown
 
@@ -36919,7 +37415,7 @@ printf '[%s]' "$(make_auto_merge_pr 50 false MERGEABLE "$GREEN_ROLLUP" "$AM_REVI
   > "$STUB_DIR/auto-merge-pr-list.json"
 out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
 assert_eq "no-config: stdout is 'merged #50'" "merged #50" "$out"
-assert_eq "no-config: gh pr merge log present" "present" "$(log_state gh-pr-merge.log)"
+assert_eq "no-config: REST merge log present" "present" "$(log_state gh-pr-merge-rest-calls.log)"
 assert_eq "no-config: PR fetch present" "present" "$(log_state gh-auto-merge-pr-list.log)"
 teardown
 
@@ -36940,12 +37436,12 @@ write_auto_merge_config_enabled
 out=$("$TMPDIR_TEST/dispatch-auto-merge" 2>/dev/null)
 assert_eq "multi-PR: stdout is 'merged #50' only" "merged #50" "$out"
 TOTAL=$((TOTAL + 1))
-if grep -q 'pr merge 50' "$STUB_DIR/gh-pr-merge.log" \
-   && ! grep -q 'pr merge 51' "$STUB_DIR/gh-pr-merge.log"; then
-  PASS=$((PASS + 1)); echo "  PASS: multi-PR: merge log carries pr merge 50 but NOT pr merge 51"
+if grep -q 'pulls/50/merge' "$STUB_DIR/gh-pr-merge-rest-calls.log" \
+   && ! grep -q 'pulls/51/merge' "$STUB_DIR/gh-pr-merge-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: multi-PR: merge log carries pulls/50/merge but NOT pulls/51/merge"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: multi-PR: merge log carries pr merge 50 but NOT pr merge 51"
-  echo "    actual gh-pr-merge.log: '$(cat "$STUB_DIR/gh-pr-merge.log" 2>/dev/null)'"
+  FAIL=$((FAIL + 1)); echo "  FAIL: multi-PR: merge log carries pulls/50/merge but NOT pulls/51/merge"
+  echo "    actual gh-pr-merge-rest-calls.log: '$(cat "$STUB_DIR/gh-pr-merge-rest-calls.log" 2>/dev/null)'"
 fi
 teardown
 
@@ -36981,8 +37477,8 @@ assert_eq "merge-fail: stdout omits 'merged #50'" "absent" \
 assert_eq "merge-fail: stderr names #50" "present" \
   "$(printf '%s' "$am_stderr" | grep -q '#50' && echo present || echo absent)"
 # (d) The merge of the PR after the failed one was actually attempted.
-assert_eq "merge-fail: pr merge 51 attempted" "present" \
-  "$(grep -q 'pr merge 51' "$STUB_DIR/gh-pr-merge.log" && echo present || echo absent)"
+assert_eq "merge-fail: pulls/51/merge attempted" "present" \
+  "$(grep -q 'pulls/51/merge' "$STUB_DIR/gh-pr-merge-rest-calls.log" && echo present || echo absent)"
 teardown
 
 # --- 17. executable-bit guard ------------------------------------------------
@@ -37765,10 +38261,13 @@ srl_teardown
 # dispatch:rate-limit-retry-<n> label from the issue on a clean advance, so a
 # recovered session starts its next death from a fresh counter. The hook has no
 # test harness, so this covers the idiom at the label-pipeline level: the exact
-# `gh issue view ... --jq '<filter>' | while read lbl; gh issue edit
-# --remove-label "$lbl"` pipeline, with a gh stub that runs the REAL jq filter
-# against a labels fixture and records each --remove-label arg. Asserts the
-# remove fires for the matching retry labels and NOT for non-matching labels.
+# `gh issue view ... --jq '<filter>' | while read lbl;
+# gh_issue_remove_label_rest "$ISSUE_NUM" "$lbl"` pipeline (#2255 migrated the
+# per-label remove from porcelain `gh issue edit --remove-label` to the REST
+# helper, which issues `gh api -X DELETE .../labels/<name>`). The gh stub runs
+# the REAL jq filter against a labels fixture and records each DELETE path's
+# label segment. Asserts the remove fires for the matching retry labels and NOT
+# for non-matching labels.
 echo ""
 echo "=== dispatch-stop.sh rate-limit-retry counter-reset idiom ==="
 
@@ -37791,8 +38290,8 @@ JSON
 
 # fake gh: `issue view --json labels --jq <filter>` runs the REAL jq filter
 # against the labels fixture (so the test exercises the actual select(test(...))
-# regex, not a hand-rolled list). `issue edit --remove-label <lbl>` records the
-# label to remove-log.
+# regex, not a hand-rolled list). `api -X DELETE .../labels/<name>` (the REST
+# remove the migrated helper issues) records <name> to remove-log.
 cat > "$TMPDIR_TEST/bin/gh" <<STUB
 #!/usr/bin/env bash
 if [[ "\$1" == "issue" && "\$2" == "view" ]]; then
@@ -37806,26 +38305,27 @@ if [[ "\$1" == "issue" && "\$2" == "view" ]]; then
   jq -r "\$filter" "$TMPDIR_TEST/labels.json"
   exit 0
 fi
-if [[ "\$1" == "issue" && "\$2" == "edit" ]]; then
-  prev=""
-  for a in "\$@"; do
-    [[ "\$prev" == "--remove-label" ]] && echo "\$a" >> "$TMPDIR_TEST/remove-log"
-    prev="\$a"
-  done
+if [[ "\$1" == "api" && "\$2" == "-X" && "\$3" == "DELETE" ]]; then
+  # path is the last arg: repos/{owner}/{repo}/issues/<N>/labels/<name>.
+  path="\${@: -1}"
+  echo "\${path##*/labels/}" >> "$TMPDIR_TEST/remove-log"
   exit 0
 fi
 exit 0
 STUB
 chmod +x "$TMPDIR_TEST/bin/gh"
 
-# Reproduce the exact dispatch-stop.sh clear_rate_limit_retry_labels pipeline.
+# Reproduce the exact dispatch-stop.sh clear_rate_limit_retry_labels pipeline,
+# calling the REAL gh_issue_remove_label_rest (sourced from lib.sh) so the test
+# exercises the migrated mechanism (REST DELETE), not a hand-rolled porcelain.
 ISSUE_NUM=1733
 (
   PATH="$TMPDIR_TEST/bin:$PATH"
+  source "$SCRIPT_DIR/lib.sh"
   gh issue view "$ISSUE_NUM" --json labels --jq \
     '.labels[].name | select(test("^dispatch:rate-limit-retry-[0-9]+$"))' 2>/dev/null \
     | while IFS= read -r lbl; do
-        [ -n "$lbl" ] && gh issue edit "$ISSUE_NUM" --remove-label "$lbl" >/dev/null 2>&1 \
+        [ -n "$lbl" ] && gh_issue_remove_label_rest "$ISSUE_NUM" "$lbl" >/dev/null 2>&1 \
           || true
       done || true
 )
