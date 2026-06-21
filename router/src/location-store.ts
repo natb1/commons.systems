@@ -62,9 +62,6 @@ export function subscribe(callback: () => void): () => void {
 export function getSnapshot(): Snapshot {
   const key = location.pathname + location.search;
   if (cachedSnapshot === null || key !== cachedKey) {
-    // parsePath() handles trailing-slash path normalization; its mutable
-    // URLSearchParams is replaced with an immutable one so the stably-shared
-    // cached snapshot cannot be corrupted by a consumer mutating params.
     cachedSnapshot = {
       path: parsePath().path,
       params: new ReadonlyURLSearchParams(location.search),
