@@ -91,7 +91,7 @@ fi
 build_issue_section() {
   local n="$1"
   local json
-  json=$(gh_retry gh issue view "$n" --json number,title,state,body,comments) || return 1
+  json=$(gh_issue_view_rest "$n" --comments) || return 1
   jq -r '
     "## Issue #\(.number) (\(.state)): \(.title)\n\n" +
     (.body // "") +

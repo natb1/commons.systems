@@ -894,12 +894,11 @@ case "$args" in
     ;;
   issue\ view\ *\ --json\ *)
     # Generic catch-all for `gh issue view <num> --json <FIELDS>` calls from
-    # call sites that still use the GraphQL porcelain (NOT migrated to
-    # gh_issue_view_rest in #2257): dispatch-digest-window, dispatch-drift-scan,
-    # dispatch-context-pack, issue-primary/parent/blocking, and the issue-siblings
-    # OPEN branch (which needs comments). Logs the FIELDS token so tests can assert
-    # which fields were requested, then serves issue-<num>.json if present, else a
-    # minimal default carrying only number/state/stateReason.
+    # call sites that still use the GraphQL porcelain (GraphQL exemptions kept in
+    # #2257, e.g. dispatch-find-pr --json closedByPullRequestsReferences).
+    # Logs the FIELDS token so tests can assert which fields were requested,
+    # then serves issue-<num>.json if present, else a minimal default carrying
+    # only number/state/stateReason.
     num=$(printf '%s' "$args" | awk '{print $3}')
     fields="${args##* --json }"
     echo "$fields" >> "$STUB_DIR/gh-issue-view-fields.log"
@@ -31513,11 +31512,14 @@ digest_window_setup() {
 args="$*"
 TREE="$(cd "$(dirname "$0")/.." && pwd)"
 case "$args" in
-  issue\ view\ *\ --repo\ *\ --json\ createdAt,labels)
+  api\ repos/*/issues/[0-9]*)
+    # gh_issue_view_rest single-issue GET: gh api repos/<repo>/issues/<N>.
+    # MUST precede the api repos/*/issues* list arm (first-match-wins).
+    # Serves issue.json in raw REST shape (created_at, not createdAt).
     if [[ -f "$TREE/issue.json" ]]; then
       cat "$TREE/issue.json"
     else
-      echo '{"createdAt":"2026-01-01T00:00:00Z","labels":[{"name":"jit:digest"}]}'
+      echo '{"number":30,"title":"","body":"","state":"open","state_reason":null,"created_at":"2026-01-01T00:00:00Z","labels":[{"name":"jit:digest"}],"assignees":[]}'
     fi
     ;;
   api\ repos/*/issues*)
@@ -31552,7 +31554,7 @@ digest_window_teardown() {
 echo "Test: dispatch-digest-window prints the prior closed digest closedAt (steady state)"
 digest_window_setup
 cat > "$TMPDIR_TEST/issue.json" <<'EOF'
-{"createdAt":"2026-05-01T00:00:00Z","labels":[{"name":"jit:digest"}]}
+{"number":30,"title":"","body":"","state":"open","state_reason":null,"created_at":"2026-05-01T00:00:00Z","labels":[{"name":"jit:digest"}],"assignees":[]}
 EOF
 cat > "$TMPDIR_TEST/closed.json" <<'EOF'
 [{"number":10,"closedAt":"2026-05-20T00:00:00Z"},{"number":11,"closedAt":"2026-05-25T12:00:00Z"}]
@@ -31567,7 +31569,7 @@ digest_window_teardown
 echo "Test: dispatch-digest-window falls back to createdAt on cold start (no prior closed)"
 digest_window_setup
 cat > "$TMPDIR_TEST/issue.json" <<'EOF'
-{"createdAt":"2026-06-01T09:00:00Z","labels":[{"name":"jit:digest"}]}
+{"number":40,"title":"","body":"","state":"open","state_reason":null,"created_at":"2026-06-01T09:00:00Z","labels":[{"name":"jit:digest"}],"assignees":[]}
 EOF
 # No closed.json — the stub's default empty list applies.
 out=$("$TMPDIR_TEST/scripts/dispatch-digest-window" some-owner/some-repo 40); rc=$?
@@ -31580,7 +31582,7 @@ digest_window_teardown
 echo "Test: dispatch-digest-window excludes the issue's own closedAt"
 digest_window_setup
 cat > "$TMPDIR_TEST/issue.json" <<'EOF'
-{"createdAt":"2026-05-01T00:00:00Z","labels":[{"name":"jit:digest"}]}
+{"number":30,"title":"","body":"","state":"open","state_reason":null,"created_at":"2026-05-01T00:00:00Z","labels":[{"name":"jit:digest"}],"assignees":[]}
 EOF
 # Issue 30 is itself closed with a later closedAt than the real prior (20).
 # The script must ignore its own entry and anchor on the prior digest's closedAt.
@@ -31597,7 +31599,7 @@ digest_window_teardown
 echo "Test: dispatch-digest-window exits 1 when the issue carries no jit:* label"
 digest_window_setup
 cat > "$TMPDIR_TEST/issue.json" <<'EOF'
-{"createdAt":"2026-05-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"}]}
+{"number":50,"title":"","body":"","state":"open","state_reason":null,"created_at":"2026-05-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"bug"}],"assignees":[]}
 EOF
 # Capture with the set -e-safe pattern: a bare `cmd; rc=$?` would abort the
 # suite when the command exits nonzero.
@@ -31677,11 +31679,13 @@ drift_scan_setup() {
 args="$*"
 TREE="$(cd "$(dirname "$0")/.." && pwd)"
 case "$args" in
-  issue\ view\ *\ --json\ createdAt,body)
+  api\ repos/*/issues/[0-9]*)
+    # gh_issue_view_rest single-issue GET: gh api repos/.../issues/<N>.
+    # Serves issue.json in raw REST shape (created_at, not createdAt).
     if [[ -f "$TREE/issue.json" ]]; then
       cat "$TREE/issue.json"
     else
-      echo '{"createdAt":"2026-01-01T00:00:00Z","body":"no refs"}'
+      echo '{"number":1080,"title":"","body":"no refs","state":"open","state_reason":null,"created_at":"2026-01-01T00:00:00Z","labels":[],"assignees":[]}'
     fi
     ;;
   api\ *repos/*/pulls\?state=closed*)
@@ -31741,7 +31745,7 @@ drift_scan_setup
 printf 'echo hi\n' > "$TMPDIR_TEST/tree/present.sh"
 printf 'presentName_token here\n' > "$TMPDIR_TEST/tree/lib.txt"
 cat > "$TMPDIR_TEST/issue.json" <<'EOF'
-{"createdAt":"2026-06-03T00:00:00Z","body":"Touches `present.sh` and `does/not/exist.ts`. Uses `presentName_token` and `absentName_token`."}
+{"number":1080,"title":"","body":"Touches `present.sh` and `does/not/exist.ts`. Uses `presentName_token` and `absentName_token`.","state":"open","state_reason":null,"created_at":"2026-06-03T00:00:00Z","labels":[],"assignees":[]}
 EOF
 cat > "$TMPDIR_TEST/prs.json" <<'EOF'
 [{"number":42,"title":"some pr","created_at":"2026-05-20T00:00:00Z","merged_at":"2026-06-04T00:00:00Z","updated_at":"2026-06-04T00:00:00Z"}]
@@ -31769,7 +31773,7 @@ echo "Test: dispatch-drift-scan trips the too-wide-window guard at the 100-PR li
 drift_scan_setup
 printf 'echo hi\n' > "$TMPDIR_TEST/tree/present.sh"
 cat > "$TMPDIR_TEST/issue.json" <<'EOF'
-{"createdAt":"2026-06-03T00:00:00Z","body":"Touches `present.sh`."}
+{"number":1080,"title":"","body":"Touches `present.sh`.","state":"open","state_reason":null,"created_at":"2026-06-03T00:00:00Z","labels":[],"assignees":[]}
 EOF
 # REST snake_case fixtures, all merged IN-WINDOW (merged_at >= the 2026-06-03
 # anchor) so the local merged_at filter keeps all 100 and the >=100 in-window
@@ -31803,7 +31807,7 @@ drift_scan_teardown
 echo "Test: dispatch-drift-scan skips the commit scan when no path refs are named"
 drift_scan_setup
 cat > "$TMPDIR_TEST/issue.json" <<'EOF'
-{"createdAt":"2026-06-03T00:00:00Z","body":"Uses `somename_ref` only."}
+{"number":1080,"title":"","body":"Uses `somename_ref` only.","state":"open","state_reason":null,"created_at":"2026-06-03T00:00:00Z","labels":[],"assignees":[]}
 EOF
 cd "$TMPDIR_TEST/tree"
 out=$("$TMPDIR_TEST/scripts/dispatch-drift-scan" 1080); rc=$?
@@ -31827,7 +31831,7 @@ printf 'echo hi\n' > "$TMPDIR_TEST/tree/present.sh"
 awk 'BEGIN { for (i = 0; i < 20000; i++) print "scalename_tok appears here" }' \
   > "$TMPDIR_TEST/tree/big.txt"
 cat > "$TMPDIR_TEST/issue.json" <<'EOF'
-{"createdAt":"2026-06-03T00:00:00Z","body":"Uses `scalename_tok` across `present.sh`."}
+{"number":1080,"title":"","body":"Uses `scalename_tok` across `present.sh`.","state":"open","state_reason":null,"created_at":"2026-06-03T00:00:00Z","labels":[],"assignees":[]}
 EOF
 cat > "$TMPDIR_TEST/prs.json" <<'EOF'
 []
@@ -31850,7 +31854,7 @@ echo "Test: dispatch-drift-scan does not classify slash-commands as path refs"
 drift_scan_setup
 printf 'echo hi\n' > "$TMPDIR_TEST/tree/present.sh"
 cat > "$TMPDIR_TEST/issue.json" <<'EOF'
-{"createdAt":"2026-06-03T00:00:00Z","body":"Run `/qa-fix` and `/file-issue` then `present.sh`."}
+{"number":1080,"title":"","body":"Run `/qa-fix` and `/file-issue` then `present.sh`.","state":"open","state_reason":null,"created_at":"2026-06-03T00:00:00Z","labels":[],"assignees":[]}
 EOF
 cat > "$TMPDIR_TEST/prs.json" <<'EOF'
 []
@@ -31874,7 +31878,7 @@ echo "Test: dispatch-drift-scan does not glob-expand backtick spans against the 
 drift_scan_setup
 printf 'echo hi\n' > "$TMPDIR_TEST/tree/globbed_unique_xyz.sh"
 cat > "$TMPDIR_TEST/issue.json" <<'EOF'
-{"createdAt":"2026-06-03T00:00:00Z","body":"Touches `*` widely."}
+{"number":1080,"title":"","body":"Touches `*` widely.","state":"open","state_reason":null,"created_at":"2026-06-03T00:00:00Z","labels":[],"assignees":[]}
 EOF
 cat > "$TMPDIR_TEST/prs.json" <<'EOF'
 []
@@ -31896,7 +31900,7 @@ echo "Test: dispatch-drift-scan rejects path-traversal reference tokens"
 drift_scan_setup
 printf 'echo hi\n' > "$TMPDIR_TEST/tree/present.sh"
 cat > "$TMPDIR_TEST/issue.json" <<'EOF'
-{"createdAt":"2026-06-03T00:00:00Z","body":"Touches `present.sh` and `../../../etc/passwd`."}
+{"number":1080,"title":"","body":"Touches `present.sh` and `../../../etc/passwd`.","state":"open","state_reason":null,"created_at":"2026-06-03T00:00:00Z","labels":[],"assignees":[]}
 EOF
 cat > "$TMPDIR_TEST/prs.json" <<'EOF'
 []
@@ -35414,27 +35418,14 @@ ctxpack_setup() {
   # $CTXPACK_STUB/; see the per-test setup for which fixtures are written.
   #
   # Failure injection: if $CTXPACK_STUB/fail-issue-view exists, the
-  # "issue view <N> --json number,title,state,body,comments" arm exits 1 with a
-  # non-transient diagnostic (avoids gh_retry retrying).  Similarly
-  # $CTXPACK_STUB/fail-merge-base causes the git merge-base arm to exit 1.
+  # "api repos/.../issues/<N>" arm exits 1 with a non-transient diagnostic
+  # (avoids gh_retry retrying).  Similarly $CTXPACK_STUB/fail-merge-base causes
+  # the git merge-base arm to exit 1.
   cat > "$CTXPACK_DIR/bin/gh" <<'GHSTUB'
 #!/usr/bin/env bash
 STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
 args="$*"
 case "$args" in
-  # --issue slice: dispatch-context-pack calls gh_retry gh issue view <N> --json number,title,state,body,comments
-  issue\ view\ *\ --json\ number,title,state,body,comments)
-    if [[ -f "$STUB_DIR/fail-issue-view" ]]; then
-      echo "error: simulated failure fetching issue" >&2
-      exit 1
-    fi
-    num=$(echo "$args" | awk '{print $3}')
-    if [[ -f "$STUB_DIR/issue-full-${num}.json" ]]; then
-      cat "$STUB_DIR/issue-full-${num}.json"
-    else
-      echo "{\"number\":$num,\"title\":\"Issue $num\",\"state\":\"OPEN\",\"body\":\"body text\",\"comments\":[]}"
-    fi
-    ;;
   # --pr slice cross-check: dispatch-find-pr calls gh issue view <N> --json closedByPullRequestsReferences
   issue\ view\ *\ --json\ closedByPullRequestsReferences)
     num=$(echo "$args" | awk '{print $3}')
@@ -35492,6 +35483,31 @@ case "$args" in
       # Default: no parent — 404 exit
       echo "Not Found (HTTP 404)" >&2
       exit 1
+    fi
+    ;;
+  # --issue slice comments: gh_issue_view_rest --comments second call.
+  # MUST precede the single-issue GET arm (first-match-wins).
+  api\ --paginate\ */issues/*/comments)
+    num=$(echo "$args" | grep -oE '[0-9]+' | tail -1)
+    if [[ -f "$STUB_DIR/issue-comments-${num}.json" ]]; then
+      cat "$STUB_DIR/issue-comments-${num}.json"
+    else
+      echo "[]"
+    fi
+    ;;
+  # --issue slice: gh_issue_view_rest base GET.
+  # Serves raw REST shape (lowercase state, created_at, etc.).
+  # MUST follow all subpath arms (/dependencies, /sub_issues, /parent, /comments).
+  api\ */issues/[0-9]*)
+    if [[ -f "$STUB_DIR/fail-issue-view" ]]; then
+      echo "error: simulated failure fetching issue" >&2
+      exit 1
+    fi
+    num=$(echo "$args" | grep -oE '[0-9]+' | tail -1)
+    if [[ -f "$STUB_DIR/issue-full-${num}.json" ]]; then
+      cat "$STUB_DIR/issue-full-${num}.json"
+    else
+      echo "{\"number\":$num,\"title\":\"Issue $num\",\"state\":\"open\",\"state_reason\":null,\"body\":\"body text\",\"created_at\":null,\"labels\":[],\"assignees\":[]}"
     fi
     ;;
   *)
@@ -35571,23 +35587,29 @@ ctxpack_teardown() {
 echo "Test: ctxpack --issue renders title, body, and comment thread"
 ctxpack_setup
 
-# Fixture: issue 5 with one seeded comment. The body and the comment author +
-# body must both appear in output — this proves the --json render path (plain
-# `gh issue view` without --json would suppress comments).
+# Fixture: issue 5 with one seeded comment. The raw REST base object is served
+# by the api */issues/[0-9]* arm; the comments are fetched separately via the
+# api --paginate */issues/*/comments arm.
 cat > "$CTXPACK_STUB/issue-full-5.json" <<'EOF'
 {
   "number": 5,
   "title": "My test issue",
-  "state": "OPEN",
+  "state": "open",
+  "state_reason": null,
   "body": "Issue body content here.",
-  "comments": [
-    {
-      "author": {"login": "alice"},
-      "createdAt": "2026-01-15T10:00:00Z",
-      "body": "SEEDED_COMMENT_BODY"
-    }
-  ]
+  "created_at": "2026-01-10T00:00:00Z",
+  "labels": [],
+  "assignees": []
 }
+EOF
+cat > "$CTXPACK_STUB/issue-comments-5.json" <<'EOF'
+[
+  {
+    "user": {"login": "alice"},
+    "created_at": "2026-01-15T10:00:00Z",
+    "body": "SEEDED_COMMENT_BODY"
+  }
+]
 EOF
 
 rc=0; out=$("$CTXPACK_DIR/dispatch-context-pack" 5 --issue 2>/dev/null) || rc=$?
@@ -35607,7 +35629,10 @@ else
   echo "    actual: $out"
 fi
 TOTAL=$((TOTAL+1))
-if [[ "$out" == *"### Comments"* && "$out" == *"**@alice**"* && "$out" == *"SEEDED_COMMENT_BODY"* ]]; then
+# Assert the full rendered comment line byte-identical: "**@alice** (date): body"
+# This verifies that the REST comments shape (user.login, created_at, body) maps
+# correctly through gh_issue_view_rest --comments into the jq render.
+if [[ "$out" == *"### Comments"* && "$out" == *"**@alice** (2026-01-15T10:00:00Z): SEEDED_COMMENT_BODY"* ]]; then
   PASS=$((PASS+1)); echo "  PASS: ctxpack --issue: contains comment thread"
 else
   FAIL=$((FAIL+1)); echo "  FAIL: ctxpack --issue: contains comment thread"
@@ -35910,7 +35935,7 @@ ctxpack_setup
 
 # Provide minimal fixtures for all four slices.
 cat > "$CTXPACK_STUB/issue-full-5.json" <<'EOF'
-{"number":5,"title":"Combined test","state":"OPEN","body":"combo body","comments":[]}
+{"number":5,"title":"Combined test","state":"open","state_reason":null,"body":"combo body","created_at":null,"labels":[],"assignees":[]}
 EOF
 # No parent for relations (default → no-parent exit).
 touch "$CTXPACK_STUB/no-parent-5"

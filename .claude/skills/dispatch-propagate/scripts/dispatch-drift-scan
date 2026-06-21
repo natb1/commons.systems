@@ -64,9 +64,9 @@ fi
 
 # ---- Step A: fetch the issue (one gh call) ----------------------------------
 
-ISSUE_JSON=$(gh issue view "$N" --json createdAt,body)
-CREATED_AT=$(printf '%s' "$ISSUE_JSON" | jq -r '.createdAt')
-BODY=$(printf '%s' "$ISSUE_JSON" | jq -r '.body')
+ISSUE_JSON=$(gh_issue_view_rest "$N")
+CREATED_AT=$(jq -r '.createdAt' <<<"$ISSUE_JSON")
+BODY=$(jq -r '.body' <<<"$ISSUE_JSON")
 
 # ---- Step B: extract references from single-backtick spans ------------------
 # Pull every `...` run, strip the backticks, tokenize on whitespace, partition.
