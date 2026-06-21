@@ -3629,11 +3629,8 @@ setup
 printf 'not json{\n' > "$DISPATCH_CONFIG_DIR/epic.json"
 if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 71 >/dev/null 2>"$TMPDIR_TEST/err.txt"; then rc=0; else rc=$?; fi
 assert_eq "gate: malformed epic.json → exit 3" "3" "$rc"
-if grep -q 'dispatch-epic-resolved-candidate:' "$TMPDIR_TEST/err.txt"; then
-  assert_eq "gate: malformed epic.json → candidate diagnostic on stderr" "pass" "pass"
-else
-  assert_eq "gate: malformed epic.json → candidate diagnostic on stderr" "pass" "fail"
-fi
+if grep -q 'dispatch-epic-resolved-candidate:' "$TMPDIR_TEST/err.txt"; then diag=yes; else diag=no; fi
+assert_eq "gate: malformed epic.json → candidate diagnostic on stderr" "yes" "$diag"
 teardown
 
 # ============================================================================
