@@ -104,7 +104,7 @@ N=$(resolve_issue_number "${POSITIONALS[0]}")
 # State-aware gh close/skip
 # ---------------------------------------------------------------------------
 
-STATE=$(gh issue view "$N" --json state --jq .state)
+STATE=$(gh_issue_view_rest "$N" | jq -r '.state')
 
 if [ "$(printf '%s' "$STATE" | tr '[:upper:]' '[:lower:]')" = "closed" ]; then
   echo "dispatch-close-resolved: #$N already CLOSED; skipping re-close, writing sentinel only" >&2

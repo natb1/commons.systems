@@ -91,8 +91,8 @@ fi
 # routed to a phase skill. Fetch state once, before provisioning. On a gh
 # failure, log and continue (do not strand the issue on a transient error) —
 # matches the gh-failure fallbacks already used below.
-ISSUE_STATE=$(gh_retry gh issue view "$N" --json state -q .state) || {
-  echo "dispatch-route: gh issue view $N --json state failed; continuing to route" >&2
+ISSUE_STATE=$(gh_issue_view_rest "$N" | jq -r '.state') || {
+  echo "dispatch-route: gh_issue_view_rest $N (state) failed; continuing to route" >&2
   ISSUE_STATE=""
 }
 if [[ "$ISSUE_STATE" == "CLOSED" ]]; then
@@ -193,11 +193,11 @@ case "$PHASE" in
     PARSE_JOB=0
     if [[ -n "$CONFIGURED_LABELS" ]]; then
       ISSUE_LABELS=""
-      ISSUE_LABELS=$(gh issue view "$N" --json labels | jq -r '.labels[].name') || {
+      ISSUE_LABELS=$(gh_issue_view_rest "$N" | jq -r '.labels[].name') || {
         # gh failure (network error, auth issue, etc.) — fall back to the safe
         # default of INVOKE /plan-issue rather than exiting non-zero without a
         # directive, which would leave the stop hook with a misleading reason.
-        echo "dispatch-route: gh issue view $N --json labels failed; defaulting to INVOKE /plan-issue" >&2
+        echo "dispatch-route: gh_issue_view_rest $N (labels) failed; defaulting to INVOKE /plan-issue" >&2
         echo "INVOKE /plan-issue"
         exit 0
       }

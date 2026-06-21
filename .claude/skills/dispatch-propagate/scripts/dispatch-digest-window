@@ -49,10 +49,9 @@ fi
 
 # ---- Step 1: fetch the digest issue's label and createdAt -------------------
 
-ISSUE_JSON=$(gh issue view "$NUM" --repo "$REPO" --json createdAt,labels)
+ISSUE_JSON=$(gh_issue_view_rest "$NUM" --repo "$REPO")
 
-JIT_LABEL=$(printf '%s' "$ISSUE_JSON" \
-  | jq -r '.labels[].name | select(startswith("jit:"))' \
+JIT_LABEL=$(jq -r '.labels[].name | select(startswith("jit:"))' <<<"$ISSUE_JSON" \
   | head -n1)
 
 if [[ -z "$JIT_LABEL" ]]; then
@@ -60,7 +59,7 @@ if [[ -z "$JIT_LABEL" ]]; then
   exit 1
 fi
 
-CREATED_AT=$(printf '%s' "$ISSUE_JSON" | jq -r '.createdAt')
+CREATED_AT=$(jq -r '.createdAt' <<<"$ISSUE_JSON")
 
 # ---- Step 2: find the newest prior closed issue with the same jit label -----
 # Exclude <num> itself: a digest issue may be closed mid-run, but it must never

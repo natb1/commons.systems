@@ -28,8 +28,8 @@ fi
 # auth, etc.) makes the pipeline non-zero → exit 3 (hard error, distinct from
 # "not a candidate"). A genuinely-empty-labels success ({"labels":[]}) exits 0
 # with ISSUE_LABELS empty → falls through to the empty-intersection check → exit 1.
-ISSUE_LABELS=$(gh_retry gh issue view "$N" --json labels | jq -r '.labels[].name') || {
-  echo "dispatch-epic-resolved-candidate: gh issue view $N --json labels failed" >&2
+ISSUE_LABELS=$(gh_issue_view_rest "$N" | jq -r '.labels[].name') || {
+  echo "dispatch-epic-resolved-candidate: gh_issue_view_rest $N (labels) failed" >&2
   exit 3
 }
 
@@ -49,7 +49,7 @@ fi
 # failure from "not a candidate" (exit 1). Capture raw stream first so a
 # non-zero subscript exit is caught by the || branch before the jq pipeline
 # can mask it.
-kids_stream=$("$SCRIPT_DIR/issue-sub-issues" "$N" "number,state,stateReason") || {
+kids_stream=$("$SCRIPT_DIR/issue-sub-issues" "$N") || {
   echo "dispatch-epic-resolved-candidate: issue-sub-issues failed for $N" >&2
   exit 3
 }
