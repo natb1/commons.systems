@@ -48,6 +48,10 @@ export function formatResetClock(resetAt: Date, now: Date): string {
  * captures only the now-derived output — the two resets' clock + countdown
  * strings. A memo keyed on this signature reuses its element (and skips the
  * re-render) across a tick that does not change any of those strings.
+ *
+ * Covers: fiveHourResetsAt clock+countdown, weeklyResetsAt clock+countdown —
+ * must mirror CapacityBand's now-derived output. When adding a new now-derived
+ * field to CapacityBand, add it here too or the memo will miss its changes.
  */
 export function capacityBandKey(sample: UsageSample | null, now: Date): string {
   if (sample === null) return "";
