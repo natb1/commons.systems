@@ -22,10 +22,12 @@ vi.mock("@commons-systems/errorutil/log", () => ({
 }));
 
 const mockSetLocalDirectory = vi.fn();
+const mockClearLocalDirectory = vi.fn();
 const mockGetMetadata = vi.fn();
 const mockCacheMetadataBatch = vi.fn();
 vi.mock("../src/sidecar.js", () => ({
   setLocalDirectory: (...args: unknown[]) => mockSetLocalDirectory(...args),
+  clearLocalDirectory: (...args: unknown[]) => mockClearLocalDirectory(...args),
   getMetadata: (...args: unknown[]) => mockGetMetadata(...args),
   cacheMetadataBatch: (...args: unknown[]) => mockCacheMetadataBatch(...args),
 }));

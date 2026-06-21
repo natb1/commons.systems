@@ -133,7 +133,10 @@ export function initPlayer(
       })
       .catch((err) => {
         if (deferProgrammerError(err)) return;
-        logError(err, { operation: "audio-source-resolve", id: item.id });
+        logError(err, {
+          operation: "audio-source-resolve",
+          id: item.origin === "local" ? "local:*" : item.id,
+        });
         if (generation !== playGeneration) return;
         advanceOrStop(currentIndex);
       });
@@ -202,7 +205,10 @@ export function initPlayer(
               audioEl.currentTime = positionSeconds;
             } catch (err) {
               if (deferProgrammerError(err)) return;
-              logError(err, { operation: "restore-seek", id: item.id });
+              logError(err, {
+                operation: "restore-seek",
+                id: item.origin === "local" ? "local:*" : item.id,
+              });
             }
           };
           audioEl.addEventListener("loadedmetadata", seek, { once: true });
@@ -211,7 +217,10 @@ export function initPlayer(
       })
       .catch((err) => {
         if (deferProgrammerError(err)) return;
-        logError(err, { operation: "restore-resolve", id: item.id });
+        logError(err, {
+          operation: "restore-resolve",
+          id: item.origin === "local" ? "local:*" : item.id,
+        });
       });
   }
 

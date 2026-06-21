@@ -25,7 +25,9 @@ export async function extractAudioMetadata(
   format: AudioFormat,
 ): Promise<AudioTags> {
   try {
-    const metadata = await parseBuffer(new Uint8Array(buf));
+    const metadata = await parseBuffer(new Uint8Array(buf), undefined, {
+      skipCovers: true,
+    });
     const { common, format: fmt } = metadata;
     const tags: AudioTags = {};
 
@@ -38,14 +40,17 @@ export async function extractAudioMetadata(
     const album = cleanString(common.album);
     if (album !== undefined) tags.album = album;
 
-    if (typeof common.track?.no === "number") tags.trackNumber = common.track.no;
+    const trackNo = common.track?.no;
+    if (typeof trackNo === "number" && Number.isFinite(trackNo)) tags.trackNumber = trackNo;
 
     const genre = cleanString(common.genre?.[0]);
     if (genre !== undefined) tags.genre = genre;
 
-    if (typeof common.year === "number") tags.year = common.year;
+    const year = common.year;
+    if (typeof year === "number" && Number.isFinite(year)) tags.year = year;
 
-    if (typeof fmt.duration === "number") tags.duration = fmt.duration;
+    const duration = fmt.duration;
+    if (typeof duration === "number" && Number.isFinite(duration)) tags.duration = duration;
 
     return tags;
   } catch (err) {

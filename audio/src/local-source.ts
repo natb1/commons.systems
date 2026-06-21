@@ -18,6 +18,7 @@ import type { LocalDirectoryHandleLike } from "@commons-systems/mediautil/local-
 import { logError } from "@commons-systems/errorutil/log";
 import {
   cacheMetadataBatch,
+  clearLocalDirectory,
   getMetadata,
   setLocalDirectory,
 } from "./sidecar.js";
@@ -223,6 +224,7 @@ export async function regrantLocalFolder(): Promise<boolean> {
 /** Forget the persisted folder and disconnect the source. */
 export async function disconnectLocalFolder(): Promise<void> {
   await store.remove(PURPOSE);
+  clearLocalDirectory();
   currentHandle = null;
   currentSource = null;
   state = "none";

@@ -186,9 +186,11 @@ describe("initPlayer", () => {
       expect(playlistEl.querySelector(".playlist-active")?.textContent).toContain(
         "Song Two",
       );
+      // Local ids embed the filename (PII); the error sink must receive a
+      // redacted token, never the real local:<filename>.
       expect(mockLogError).toHaveBeenCalledWith(expect.any(Error), {
         operation: "audio-source-resolve",
-        id: "local:song.mp3",
+        id: "local:*",
       });
     });
   });

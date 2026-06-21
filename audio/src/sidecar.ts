@@ -86,9 +86,11 @@ function coerceMetadata(raw: unknown): Record<string, AudioTags> {
     if (typeof value.artist === "string") entry.artist = value.artist;
     if (typeof value.album === "string") entry.album = value.album;
     if (typeof value.genre === "string") entry.genre = value.genre;
-    if (typeof value.trackNumber === "number") entry.trackNumber = value.trackNumber;
-    if (typeof value.year === "number") entry.year = value.year;
-    if (typeof value.duration === "number") entry.duration = value.duration;
+    if (typeof value.trackNumber === "number" && Number.isFinite(value.trackNumber))
+      entry.trackNumber = value.trackNumber;
+    if (typeof value.year === "number" && Number.isFinite(value.year)) entry.year = value.year;
+    if (typeof value.duration === "number" && Number.isFinite(value.duration))
+      entry.duration = value.duration;
     out[key] = entry;
   }
   return out;
@@ -108,7 +110,8 @@ function coercePlayerState(raw: unknown): PlayerState | undefined {
     : [];
   const out: PlayerState = { queue };
   if (typeof raw.currentLocalName === "string") out.currentLocalName = raw.currentLocalName;
-  if (typeof raw.positionSeconds === "number") out.positionSeconds = raw.positionSeconds;
+  if (typeof raw.positionSeconds === "number" && Number.isFinite(raw.positionSeconds))
+    out.positionSeconds = raw.positionSeconds;
   return out;
 }
 
@@ -261,6 +264,20 @@ let writeChain: Promise<void> = Promise.resolve();
 export function setLocalDirectory(handle: FileSystemDirectoryHandle, isWritable: boolean): void {
   dirHandle = handle;
   writable = isWritable;
+  cachedModel = null;
+  loadPromise = null;
+  writeChain = Promise.resolve();
+}
+
+/**
+ * Unbind the directory (called when the folder is disconnected). Drops the
+ * handle, marks not-writable, and resets the cache + write chain so an in-flight
+ * write enqueued before disconnect cannot target the now-stale folder and the
+ * next access re-loads an empty model.
+ */
+export function clearLocalDirectory(): void {
+  dirHandle = null;
+  writable = false;
   cachedModel = null;
   loadPromise = null;
   writeChain = Promise.resolve();

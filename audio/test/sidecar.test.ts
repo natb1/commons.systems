@@ -12,6 +12,7 @@ import {
   readSidecar,
   writeSidecar,
   setLocalDirectory,
+  clearLocalDirectory,
   getMetadata,
   cacheMetadata,
   cacheMetadataBatch,
@@ -543,6 +544,39 @@ describe("cacheMetadata / getMetadata — writable=false", () => {
     expect(await getMetadata("song.mp3")).toEqual({ title: "In-memory" });
 
     // .commons-audio dir was never created
+    const anySubdirs = (dir as unknown as { _subdirs: Record<string, unknown> })._subdirs; // type-safety-ok: test fake internals (_subdirs) access
+    expect(anySubdirs[".commons-audio"]).toBeUndefined();
+  });
+});
+
+describe("clearLocalDirectory", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("drops the handle and resets the model so the next access is empty", async () => {
+    const dir = makeEmptyDir();
+    setLocalDirectory(dir, true);
+    await cacheMetadata("song.mp3", { title: "Cached" });
+    await flushWrites();
+    expect(await getMetadata("song.mp3")).toEqual({ title: "Cached" });
+
+    clearLocalDirectory();
+
+    // Unbound: the next access re-loads the empty model, not the stale cache.
+    expect(await getMetadata("song.mp3")).toBeUndefined();
+  });
+
+  it("a write enqueued after clear does not touch the disconnected folder", async () => {
+    const dir = makeEmptyDir();
+    setLocalDirectory(dir, true);
+
+    clearLocalDirectory();
+
+    await cacheMetadata("late.mp3", { title: "Late" });
+    await flushWrites();
+
+    // No disk write hit the now-disconnected folder.
     const anySubdirs = (dir as unknown as { _subdirs: Record<string, unknown> })._subdirs; // type-safety-ok: test fake internals (_subdirs) access
     expect(anySubdirs[".commons-audio"]).toBeUndefined();
   });

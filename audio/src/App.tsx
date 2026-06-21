@@ -46,12 +46,11 @@ export function App() {
   // wait for the local folder to restore (binding the sidecar and making local
   // tracks listable), list local tracks (for title/artist when rebuilding the
   // queue), read the persisted local-only player state, and restore it seeked +
-  // paused. Runs once: playerHandle is set a single time by Player's onReady, and
-  // the ref guards against any re-run.
-  const restoredRef = useRef(false);
+  // paused. Re-runs on libraryRefreshKey so a folder regrant after FSA permission
+  // loss still restores the persisted queue; player.restore()'s own queue.length
+  // guard prevents a double-restore on the initial load.
   useEffect(() => {
-    if (!playerHandle || restoredRef.current) return;
-    restoredRef.current = true;
+    if (!playerHandle) return;
     let cancelled = false;
     void (async () => {
       await ensureLocalFolderRestored();
@@ -63,7 +62,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [playerHandle]);
+  }, [playerHandle, libraryRefreshKey]);
 
   // Panel toggle: Escape + click-outside close, only while open (matches
   // panel-toggle.ts's no-op-when-closed semantics, and avoids a stale `open`).
