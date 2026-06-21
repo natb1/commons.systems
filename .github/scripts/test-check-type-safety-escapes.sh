@@ -467,7 +467,7 @@ echo "========================================"
 echo "  Results: $FINAL_PASS passed, $FINAL_FAIL failed"
 echo "========================================"
 
-EXPECTED=19
+EXPECTED=20
 ACTUAL=$(( FINAL_PASS + FINAL_FAIL ))
 if [ "$ACTUAL" -ne "$EXPECTED" ]; then
   echo "ERROR: expected $EXPECTED test results but got $ACTUAL (a test subshell may have crashed)" >&2
