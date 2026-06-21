@@ -3,16 +3,36 @@ set -euo pipefail
 
 REPO_ROOT=$(git rev-parse --show-toplevel)
 
+# Source lib.sh for is_shell_script (used to scope both rules to shell scripts).
+SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib.sh
+source "$SCRIPTS/lib.sh"
+
 # Detect: echo "$VAR" | jq  (quoted variable form only — see .claude/rules/shell-json.md)
 # Covers optional echo flags (echo -e / echo -n) and the braced ${VAR} form, both
 # of which are the same anti-pattern. Single-quoted to prevent the shell from
 # interpreting \$ as $ (which would make \$ an ERE end-anchor, breaking the match).
 PATTERN='echo([[:space:]]+-[a-zA-Z]+)?[[:space:]]+"\$\{?[A-Za-z_][A-Za-z0-9_]*\}?"[[:space:]]*\|[[:space:]]*jq'
 
-# Compute the unified-0 diff of added lines in .sh files against origin/main.
+# Detect: net-new raw gh issue/pr porcelain that should use the lib.sh REST helpers.
+# Banned set: gh issue (view|edit|create|close|comment) and gh pr (view|edit|merge).
+# `gh pr ready` is deliberately excluded. Built from non-contiguous ERE alternatives
+# so this assignment line cannot match itself.
+PORCELAIN_PATTERN='(^|[^[:alnum:]_])gh[[:space:]]+issue[[:space:]]+(view|edit|create|close|comment)([[:space:]]|$)|(^|[^[:alnum:]_])gh[[:space:]]+pr[[:space:]]+(view|edit|merge)([[:space:]]|$)'
+
+# Allow-marker for the porcelain rule: a standalone comment on the line immediately
+# preceding a call suppresses that one call. Reason text after the token is optional.
+ALLOW_RE='^[[:space:]]*#[[:space:]]*lint-allow:[[:space:]]*gh-rest-porcelain\b'
+
+# Compute the whole-repo unified-0 diff of added lines against origin/main.
+# Scope is broadened to ALL files (no pathspec); the per-file is_shell_script
+# guard below restricts both rules to shell scripts. This broadened scope applies
+# to BOTH the echo-into-jq rule and the gh-rest-porcelain rule — safe because both
+# are net-new-only (only this PR's added lines are scanned; pre-existing sites in
+# extensionless shell scripts are not retroactively flagged).
 # Run from REPO_ROOT so that relative paths in diff output are consistent.
-if ! DIFF=$(git -C "$REPO_ROOT" diff origin/main...HEAD --unified=0 -- '*.sh'); then
-  echo "ERROR: could not diff origin/main...HEAD for *.sh files" >&2
+if ! DIFF=$(git -C "$REPO_ROOT" diff origin/main...HEAD --unified=0); then
+  echo "ERROR: could not diff origin/main...HEAD" >&2
   exit 1
 fi
 
@@ -22,7 +42,10 @@ HUNK_RE='^@@ -[0-9]+(,[0-9]+)? \+([0-9]+)(,[0-9]+)? @@'
 
 CURRENT_PATH=""
 LINE_NUM=0
+SKIP_FILE=true
+PREV_WAS_ALLOW=0
 VIOLATIONS=()
+PORCELAIN_VIOLATIONS=()
 
 while IFS= read -r line; do
   # +++ header: new-file path (or /dev/null for deleted files)
@@ -30,22 +53,30 @@ while IFS= read -r line; do
     rest="${line#+++ }"
     if [[ "$rest" == '/dev/null' ]]; then
       CURRENT_PATH=""
+      # Deleted file: nothing to scan for this file.
+      SKIP_FILE=true
     else
       # Strip leading b/ prefix from diff paths
       CURRENT_PATH="${rest#b/}"
+      # Scope both rules to shell scripts. is_shell_script runs under set -e and
+      # returns 1 for non-shell files; guard it so a return-1 does not abort.
+      if is_shell_script "$CURRENT_PATH"; then SKIP_FILE=false; else SKIP_FILE=true; fi
     fi
     LINE_NUM=0
+    PREV_WAS_ALLOW=0
     continue
   fi
 
   # --- header: ignore (marks old-file side)
   if [[ "$line" == '--- '* ]]; then
+    PREV_WAS_ALLOW=0
     continue
   fi
 
   # Hunk header: extract the new-side start line number
   if [[ "$line" =~ $HUNK_RE ]]; then
     LINE_NUM="${BASH_REMATCH[2]}"
+    PREV_WAS_ALLOW=0
     continue
   fi
 
@@ -54,16 +85,37 @@ while IFS= read -r line; do
     # Strip the leading +
     content="${line:1}"
 
-    # Skip comment lines (first non-whitespace character is #)
-    if [[ "$content" =~ ^[[:space:]]*# ]]; then
+    # Files that are not shell scripts (or deleted): scan nothing.
+    if [[ "$SKIP_FILE" == true ]]; then
       LINE_NUM=$(( LINE_NUM + 1 ))
       continue
     fi
 
-    # Test against the anti-pattern
+    # Comment lines (first non-whitespace character is #): skipped by both content
+    # rules, but the porcelain allow-marker is tracked here.
+    if [[ "$content" =~ ^[[:space:]]*# ]]; then
+      if [[ "$content" =~ $ALLOW_RE ]]; then
+        PREV_WAS_ALLOW=1
+      else
+        PREV_WAS_ALLOW=0
+      fi
+      LINE_NUM=$(( LINE_NUM + 1 ))
+      continue
+    fi
+
+    # echo-into-jq rule (ignores the allow-marker — always checked).
     if [[ "$content" =~ $PATTERN ]]; then
       VIOLATIONS+=("${CURRENT_PATH}:${LINE_NUM}: ${content}")
     fi
+
+    # gh-rest-porcelain rule. Suppressed for this line only when the immediately
+    # preceding added line was the allow-marker.
+    if [[ "$PREV_WAS_ALLOW" -eq 0 ]] && [[ "$content" =~ $PORCELAIN_PATTERN ]]; then
+      PORCELAIN_VIOLATIONS+=("${CURRENT_PATH}:${LINE_NUM}: ${content}")
+    fi
+
+    # Any non-comment added line resets the allow-marker.
+    PREV_WAS_ALLOW=0
 
     LINE_NUM=$(( LINE_NUM + 1 ))
     continue
@@ -74,8 +126,11 @@ while IFS= read -r line; do
 
 done <<<"$DIFF"
 
+FAILED=0
+
 if [[ ${#VIOLATIONS[@]} -gt 0 ]]; then
-  echo "FAIL: echo-into-jq violations found in net-new .sh lines:" >&2
+  FAILED=1
+  echo "FAIL: echo-into-jq violations found in net-new shell-script lines:" >&2
   for v in "${VIOLATIONS[@]}"; do
     echo "  $v" >&2
   done
@@ -96,7 +151,43 @@ convention for committed .sh files, not a claim that the bug occurs in bash.
 
 See: .claude/rules/shell-json.md
 REMEDIATION
+fi
+
+if [[ ${#PORCELAIN_VIOLATIONS[@]} -gt 0 ]]; then
+  FAILED=1
+  echo "FAIL: net-new raw gh issue/pr porcelain found in committed shell scripts:" >&2
+  for v in "${PORCELAIN_VIOLATIONS[@]}"; do
+    echo "  $v" >&2
+  done
+  cat >&2 <<'REMEDIATION'
+
+Remediation — replace raw `gh issue/pr` porcelain with the REST helper in lib.sh.
+The token-to-helper mapping (subcommand on the left, helper on the right):
+
+    issue view     gh_issue_view_rest
+    issue edit     gh_issue_edit_rest
+    issue create   gh_issue_create_rest
+    issue close    gh_issue_close_rest
+    issue comment  gh_issue_comment_rest
+    pr view        gh_pr_view_rest
+    pr edit        gh_issue_edit_rest   (PRs are issues in REST — serves the --body edit; lib.sh:1033)
+    pr merge       gh_pr_merge_rest
+
+Exceptions:
+  - Genuine GraphQL-only fields (closingIssuesReferences,
+    closedByPullRequestsReferences) have no REST equivalent and are the
+    intended documented exceptions.
+  - To suppress this rule for one deliberate call, put the marker comment
+    `# lint-allow: gh-rest-porcelain <reason>` on the line immediately
+    preceding the call.
+
+Why this matters: the REST helpers share the gh GraphQL rate-limit bucket more
+sparingly and keep mutation/read paths uniform after the #2260 migration.
+REMEDIATION
+fi
+
+if [[ "$FAILED" -ne 0 ]]; then
   exit 1
 fi
 
-echo "PASS: no net-new echo-into-jq violations in added .sh lines"
+echo "PASS: no net-new echo-into-jq or gh-rest-porcelain violations in added shell-script lines"
