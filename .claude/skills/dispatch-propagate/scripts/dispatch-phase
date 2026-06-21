@@ -23,9 +23,9 @@
 #     whose headRefName starts with "<issue>-".
 #   - Otherwise: treated as a branch name. Matched exactly.
 #
-# For a no-PR target, the phase is `plan` unless the issue carries the
-# `dispatch:planned` label (then `implement`). This is determined by fetching
-# the issue's labels via `gh issue view`.
+# For a no-PR target, the phase is `main-qa` if the issue carries the `main-qa`
+# label (checked first); `implement` if it carries `dispatch:planned`; otherwise
+# `plan`. This is determined by fetching the issue's labels via `gh issue view`.
 # A gh/network failure in this fetch exits non-zero (it is no longer silently mapped to plan); transient blips self-heal via gh_retry.
 #
 # Environment:

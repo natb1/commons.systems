@@ -2477,6 +2477,18 @@ result=$("$TMPDIR_TEST/dispatch-phase" "42")
 assert_eq "no PR + main-qa → main-qa" "main-qa" "$result"
 teardown
 
+# 1b-3. No PR + main-qa AND dispatch:planned → main-qa (#2274). Directly exercises
+# the precedence claim from 1b-2: the main-qa check runs BEFORE the dispatch:planned
+# check, so an issue carrying both labels routes to main-qa, not implement. If the
+# two grep -qxF checks were swapped, this would regress to implement.
+echo "Test: no PR + main-qa + dispatch:planned → main-qa (precedence)"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf '{"state":"open","labels":[{"name":"main-qa"},{"name":"dispatch:planned"}]}\n' > "$STUB_DIR/arg-issue-42.json"
+result=$("$TMPDIR_TEST/dispatch-phase" "42")
+assert_eq "no PR + main-qa + dispatch:planned → main-qa" "main-qa" "$result"
+teardown
+
 # 1c. No PR + labels without dispatch:planned → plan (explicit non-empty labels).
 echo "Test: no PR + non-planned label → plan"
 setup
@@ -3112,9 +3124,10 @@ assert_eq "no PR + dispatch:planned → INVOKE /implement (directive)" \
 assert_eq "no PR + dispatch:planned → INVOKE /implement (exit 0)" "0" "$ROUTE_RC"
 teardown
 
-# 1b-2. No PR + main-qa label → INVOKE /qa-main (#2274). dispatch-phase returns
-# main-qa for the issue; the router maps main-qa → INVOKE /qa-main straight
-# through with no worktree provisioning.
+# 1b-2. No PR + main-qa label → INVOKE /qa-main (#2274). dispatch-route always
+# provisions the worktree first (the unconditional dispatch-provision-worktree
+# call), then dispatch-phase returns main-qa for the issue; the router maps
+# main-qa → INVOKE /qa-main.
 echo "Test: no PR + main-qa label → INVOKE /qa-main"
 setup
 echo '[]' > "$STUB_DIR/pr-list-full.json"

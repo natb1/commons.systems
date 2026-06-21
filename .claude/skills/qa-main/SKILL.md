@@ -32,7 +32,7 @@ Run every `gh` call and every gh-invoking script with
 `dangerouslyDisableSandbox: true` — `gh`'s TLS validation is blocked by the
 sandbox (`.claude/rules/sandbox.md`). That covers:
 
-- The `gh issue view` state check (Step 2).
+- The `gh_issue_view_rest` state check (Step 2) — it calls `gh api`.
 - `dispatch-context-pack` (Step 3) — it calls `gh`.
 - `dispatch-close-resolved` (Steps 2, 5) — it *looks* like a local script but
   calls `gh issue view`/`gh issue close` internally.
@@ -66,7 +66,8 @@ esac
 Read the follow-up's current state (`dangerouslyDisableSandbox: true` — `gh`):
 
 ```bash
-STATE=$(gh issue view "$N" --json state --jq .state)
+source .claude/skills/dispatch-propagate/scripts/lib.sh
+STATE=$(gh_issue_view_rest "$N" | jq -r '.state')
 ```
 
 If the issue is **already CLOSED**, an interrupted prior run closed it but may
