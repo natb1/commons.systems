@@ -343,7 +343,7 @@ describe("useViewerController go-to input", () => {
     await flushInit();
 
     const input = container.querySelector(".viewer-goto-input") as HTMLInputElement;
-    const status = container.querySelector(".viewer-goto-status") as HTMLElement;
+    const status = container.querySelector(".viewer-goto-status") as HTMLElement; // type-safety-ok: querySelector result narrowed by test setup guarantee
     input.value = "50";
     await act(async () => { captured!.submitGoto(); });
     await flushInit();
