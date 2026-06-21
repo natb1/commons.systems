@@ -132,7 +132,7 @@ for N in "${!PR_FOLLOWUPS[@]}"; do
   # stays porcelain (REST POST /repos/.../labels — not a migration target);
   # tolerate only an already-exists error and continue (non-aborting scan) on any
   # other create/add failure.
-  if ! create_out=$(gh label create "$RETRIAGED_LABEL" \
+  if ! create_out=$(gh_retry gh label create "$RETRIAGED_LABEL" \
       --color "$RETRIAGED_COLOR" --description "$RETRIAGED_DESC" 2>&1); then
     case "$create_out" in
       *already\ exists*|*already_exists*) : ;;   # label already present — fine
