@@ -51,7 +51,9 @@ test.describe("blog smoke", () => {
     expect(response.headers()["content-type"]).toMatch(/^image\//);
   });
 
-  test("homepage loads without JS errors @smoke", async ({ page }) => {
+  // @build: hydrateRoot onto prerendered HTML; the raw dev server (no prerender)
+  // throws hydration mismatches, so the zero-error assertion needs the build.
+  test("homepage loads without JS errors @smoke @build", async ({ page }) => {
     const errors: string[] = [];
     page.on("pageerror", (err) => errors.push(err.message));
 

@@ -1,13 +1,16 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
 import { logError } from "@commons-systems/errorutil/log";
 import { initScrollIndicator } from "@commons-systems/components/scroll-indicator";
-import { formatUtcDate } from "../date.ts";
 import type {
   BlogRollEntry,
   BlogRollStrategy,
   LatestPost,
 } from "../blog-roll/types.ts";
+import {
+  sortBlogrollByPublishedDesc,
+  type BlogRollItem,
+} from "../blog-roll/sort-by-date.ts";
 import type { InfoPanelData } from "./info-panel.ts";
 import { InfoPanel } from "./InfoPanel.tsx";
 
@@ -24,28 +27,14 @@ export interface InfoPanelRegionProps {
   /** Mount the sticky-sidebar custom scroll indicator (landing/blog only). */
   useScrollIndicator?: boolean;
   /**
-   * Raw, pre-sanitized HTML for landing's About panel (from renderAboutPanelHtml,
-   * wired by a later unit). When present, the About content replaces the standard
-   * panel and the blog-roll hydration is skipped entirely. When absent (the common
-   * case), the standard info panel renders.
-   *
-   * Sanitization contract: InfoPanelRegion does NOT sanitize this value — it is
-   * injected verbatim via `dangerouslySetInnerHTML` (see render branch below).
-   * The caller guarantees the HTML is already safe; current callers pass
-   * hard-coded template literals such as `renderAboutPanelHtml`.
-   *
-   * Widening trigger: if this prop is ever widened to carry dynamic or
-   * user-influenced content, add a `DOMPurify.sanitize(...)` pass at the
-   * injection site before it reaches `dangerouslySetInnerHTML`. `dompurify` is
-   * already a dependency — see `blog/src/pages/HomeRegion.tsx` for the
-   * existing `DOMPurify.sanitize(html, { ADD_ATTR: [...] })` usage to reuse.
+   * A ReactNode for landing's About panel (wired by a later unit). When present,
+   * the About content replaces the standard panel and the blog-roll hydration is
+   * skipped entirely. When absent (the common case), the standard info panel
+   * renders. React renders this node (server-side via `renderToString`,
+   * client-side via the panel root) and escapes text, so no manual sanitization
+   * contract applies.
    */
-  aboutContent?: string;
-}
-
-interface FetchResult {
-  entry: BlogRollEntry;
-  post: LatestPost | null;
+  aboutContent?: ReactNode;
 }
 
 /**
@@ -56,7 +45,7 @@ interface FetchResult {
 function fetchAllLatestPosts(
   blogRoll: BlogRollEntry[],
   strategies: Map<string, BlogRollStrategy>,
-): Promise<FetchResult>[] {
+): Promise<BlogRollItem>[] {
   return blogRoll.map((entry) => {
     const strategy = strategies.get(entry.id);
     if (!strategy) {
@@ -78,78 +67,25 @@ function fetchAllLatestPosts(
   });
 }
 
-/** Reproduces info-panel.ts's updateBlogrollEntry against the InfoPanel DOM. */
-function updateBlogrollEntry(panel: HTMLElement, entry: BlogRollEntry, post: LatestPost): void {
-  const entryLink = panel.querySelector(`#blogroll-entry-${CSS.escape(entry.id)}`);
-  const placeholder = panel.querySelector(`#blogroll-latest-${CSS.escape(entry.id)}`);
-  const dateSpan = panel.querySelector(`#blogroll-date-${CSS.escape(entry.id)}`);
-  if (!entryLink || !placeholder) {
-    logError(new Error(`Blogroll DOM element missing for entry "${entry.id}"`), {
-      operation: "update-blogroll-entry",
-    });
-    return;
-  }
-
-  placeholder.textContent = post.title;
-  entryLink.setAttribute("href", post.url);
-  if (dateSpan && post.publishedAt) {
-    dateSpan.textContent = formatUtcDate(post.publishedAt, "short");
-    dateSpan.setAttribute("data-iso", post.publishedAt);
-  }
-}
-
-/** Reproduces info-panel.ts's sortBlogrollByDate: re-sort entries by date desc. */
-function sortBlogrollByDate(panel: HTMLElement): void {
-  const firstItem = panel.querySelector("li[data-blogroll-id]");
-  const blogrollList = firstItem?.parentElement;
-  if (!blogrollList) return;
-
-  const items = [...blogrollList.querySelectorAll("li[data-blogroll-id]")];
-  items.sort((a, b) => {
-    const dateA = a.querySelector(".blogroll-date")?.getAttribute("data-iso") || "";
-    const dateB = b.querySelector(".blogroll-date")?.getAttribute("data-iso") || "";
-    if (!dateA && !dateB) return 0;
-    if (!dateA) return 1;
-    if (!dateB) return -1;
-    return new Date(dateB).getTime() - new Date(dateA).getTime();
-  });
-
-  for (const item of items) {
-    blogrollList.appendChild(item);
-  }
-}
-
 /**
- * The info-panel sidebar body, owning the same DOM the legacy imperative
- * renderInfoPanel + hydrateInfoPanel pair produced. The JSX delegates verbatim to
- * the frozen presentational <InfoPanel> so the server (react-dom/server) and
- * client (hydrateRoot) initial markup are byte-identical; the effect then
- * reproduces hydrateInfoPanel's per-entry latest-post fetch and re-sort, mutating
- * the DOM imperatively against the same ids/classes/attrs InfoPanel emits.
+ * The info-panel sidebar body. Order and content of the blogroll are driven by
+ * React state (an ordered, enriched `{ entry, post }` list), so React owns the
+ * DOM: the JSX delegates to the frozen presentational <InfoPanel>, and a sort is
+ * a pure function of state rather than an imperative reorder of React-owned nodes.
  *
- * The host <aside id="info-panel" class="sidebar"> is the scroll container (the
- * element Unit 3's hydrateRoot mounts into and the legacy driver passed to
- * hydrateInfoPanel / initScrollIndicator). InfoPanel renders only its children
- * (matching renderInfoPanel's output), so the effects reach the host via
- * `document.getElementById("info-panel")` — the parity-correct root, since the
- * delegated fragment exposes no single ref-able element.
+ * The initial state is computed by a LAZY useState initializer that is a pure
+ * function of `data` — map `data.blogRoll` to `{ entry, post: buildTimeFeeds[id] }`
+ * and sort by published date. That initializer runs during render on BOTH the
+ * server (react-dom/server renderToString) and the client first render, with no
+ * effect involved, so the SSR'd markup is already build-time-date-sorted and is
+ * byte-identical to the client's first render — the hydration-parity contract.
  *
- * PURE and fully prop-driven: no app state and no router hooks. Refs are used
- * solely for hydration mechanics (mount/cancel guards), never for shared state.
+ * The fetch effect then re-fetches each entry's latest post, re-sorts, and calls
+ * setState; InfoPanel keys each <li> by id, so the reorder reconciles via stable
+ * keys and emits the same ids/classes/attrs. Skipped on the About panel.
  *
- * panelKey REMOUNT INVARIANT (load-bearing): the blogroll effect below re-sorts
- * the React-rendered <li> nodes imperatively (sortBlogrollByDate's appendChild),
- * mutating DOM this component's React root owns. That is only safe because
- * callers bump `panelKey` whenever the blogroll data (blogRoll / strategies)
- * changes, mounting a FRESH React root that side-steps stale-child
- * reconciliation. A same-key re-render with updated strategies instead skips
- * root teardown and RECONCILES the existing tree, letting a later reconcile pass
- * disagree with — and fight — the imperative reorder. `forceInfoPanelRefresh`
- * (create-blog-app.ts) is the required mechanism: it bumps `panelKey` before
- * re-rendering. Any call site that changes blogroll data via a bare same-key
- * re-render, bypassing forceInfoPanelRefresh, is incorrect. The long-term fix
- * that removes this invariant by driving order through React state is tracked in
- * #2173.
+ * PURE and fully prop-driven aside from the blogroll state. Refs are used solely
+ * for hydration mechanics (mount/cancel guards), never for shared state.
  */
 export function InfoPanelRegion({
   data,
@@ -160,8 +96,20 @@ export function InfoPanelRegion({
   const mountedRef = useRef(true);
   const blogRoll = data.blogRoll;
 
-  // Blog-roll hydration: fetch each entry's latest post, write it into the
-  // delegated DOM, then re-sort by date. Skipped on the About panel (no blogroll).
+  // Ordered, enriched blogroll. Lazy initializer is a pure function of `data`, so
+  // server and client first renders produce identical (date-sorted) markup.
+  const [items, setItems] = useState<BlogRollItem[]>(() =>
+    sortBlogrollByPublishedDesc(
+      blogRoll.map((entry) => ({
+        entry,
+        post: data.buildTimeFeeds?.[entry.id] ?? null,
+      })),
+    ),
+  );
+
+  // Blog-roll hydration: fetch each entry's latest post, sort by date, and drive
+  // the result through state (React reconciles the DOM). Skipped on the About
+  // panel (no blogroll).
   useEffect(() => {
     if (aboutContent !== undefined) return;
 
@@ -172,16 +120,10 @@ export function InfoPanelRegion({
     let cancelled = false;
     const isCurrent = () => mountedRef.current && !cancelled;
 
-    const panel = document.getElementById("info-panel");
-    if (!panel) return; // host not present (e.g. About panel) — no error
-
     Promise.all(fetchAllLatestPosts(blogRoll, strategies))
       .then((results) => {
         if (!isCurrent()) return;
-        for (const { entry, post } of results) {
-          if (post) updateBlogrollEntry(panel, entry, post);
-        }
-        sortBlogrollByDate(panel);
+        setItems(sortBlogrollByPublishedDesc(results));
       })
       // Intentional silent degradation — user sees build-time content, not an error.
       .catch((err) => {
@@ -208,9 +150,26 @@ export function InfoPanelRegion({
   }, [useScrollIndicator, aboutContent]);
 
   if (aboutContent !== undefined) {
-    // aboutContent is injected verbatim — see the prop contract + widening trigger above.
-    return <div dangerouslySetInnerHTML={{ __html: aboutContent }} />;
+    return <div>{aboutContent}</div>;
   }
 
-  return <InfoPanel data={data} />;
+  // Derive the panel data from state: order from the sorted entries, content from
+  // a buildTimeFeeds map merged with the state's posts. Spread `data` so the live
+  // passthrough fields (linkSections, topPosts, rssFeedUrl, opmlUrl, …) still flow
+  // through on a re-render that keeps the same panelKey (e.g. sign-in bumping
+  // topPosts). Only blogRoll order and the feed map come from state.
+  const feedsFromState: Record<string, LatestPost | null> = {};
+  for (const { entry, post } of items) {
+    // Degradation fallback: a null post (unavailable feed / failed fetch) keeps the
+    // build-time content rather than blanking the entry — preserving the "user sees
+    // build-time content" behavior the hydration effect's catch claims.
+    feedsFromState[entry.id] = post ?? data.buildTimeFeeds?.[entry.id] ?? null;
+  }
+  const derivedData: InfoPanelData = {
+    ...data,
+    blogRoll: items.map(({ entry }) => entry),
+    buildTimeFeeds: feedsFromState,
+  };
+
+  return <InfoPanel data={derivedData} />;
 }

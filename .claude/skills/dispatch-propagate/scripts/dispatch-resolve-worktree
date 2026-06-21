@@ -88,7 +88,7 @@ source "$SCRIPT_DIR/lib-claude-agents.sh"
 # GitHub-sourced name before it reaches git fetch/rev-list/checkout.
 resolve_pr_head() {
   local pr="$1" pr_head
-  pr_head=$(gh pr view "$pr" --json headRefName | jq -r '.headRefName // empty')
+  pr_head=$(gh_pr_view_rest "$pr" | jq -r '.headRefName // empty')
   if [[ -z "$pr_head" || "$pr_head" == -* || "$pr_head" == *..* || ! "$pr_head" =~ ^[A-Za-z0-9._/-]+$ ]]; then
     echo "error: PR #$pr returned an unusable head branch name '$pr_head' for issue $ISSUE" >&2
     exit 1
@@ -172,7 +172,7 @@ if [[ -n "$pr" ]]; then
   exit 0
 fi
 
-if ! TITLE=$(gh issue view "$ISSUE" --json title | jq -er '.title'); then
+if ! TITLE=$(gh_issue_view_rest "$ISSUE" | jq -er '.title'); then
   echo "error: failed to fetch title for issue $ISSUE" >&2
   exit 1
 fi

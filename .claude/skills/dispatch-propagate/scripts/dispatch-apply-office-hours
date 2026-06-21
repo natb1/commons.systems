@@ -26,6 +26,11 @@
 # WITHOUT `set -e` so a guarded gh failure does not abort the script.
 set -uo pipefail
 
+# Source lib.sh for the REST-backed gh helpers: gh_issue_view_rest (the issue
+# read, #2257) and the label-set/remove mutations (#2256).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+
 ISSUE_NUM="${1:-}"
 REASON="${2:-}"
 
@@ -51,41 +56,43 @@ fi
 # Idempotency gate: if the issue already carries the label, do nothing. A gh
 # read failure here is non-fatal — warn and bail out without parking, since we
 # cannot tell whether a comment was already posted.
-if labels_json=$(gh issue view "$ISSUE_NUM" --json labels 2>&1); then
+# Do NOT capture stderr into labels_json: gh_issue_view_rest retries via gh_retry
+# and signals failure through its return code; merging retry stderr into the value
+# would corrupt the JSON the jq below parses. The helper's own diagnostics already
+# reach stderr.
+if labels_json=$(gh_issue_view_rest "$ISSUE_NUM"); then
   if printf '%s' "$labels_json" \
       | jq -e --arg l "$LABEL" '.labels[]? | select(.name == $l)' >/dev/null 2>&1; then
     # Label already present — no-op, no duplicate comment.
     exit 0
   fi
 else
-  echo "dispatch-apply-office-hours: warning: could not read labels for issue #$ISSUE_NUM: $labels_json" >&2
+  echo "dispatch-apply-office-hours: warning: could not read labels for issue #$ISSUE_NUM" >&2
   exit 0
 fi
 
-# Apply the label to the ISSUE first. Once the label exists in the repo — the
-# common case — this is the only edit call that runs.
-if ! apply_output=$(gh issue edit "$ISSUE_NUM" --add-label "$LABEL" 2>&1); then
-  # The edit failed. gh reports a missing *label* (not a missing issue) with a
-  # "not found" message; in that case the label simply does not exist yet —
-  # create it with the canonical metadata and retry once. Any other failure is
-  # real: warn and exit 0 (never block a hook), and post no comment.
-  if [[ "$apply_output" != *"not found"* ]]; then
-    echo "dispatch-apply-office-hours: warning: could not apply $LABEL to issue #$ISSUE_NUM: $apply_output" >&2
-    exit 0
-  fi
-  if ! create_output=$(gh label create "$LABEL" --color "$LABEL_COLOR" --description "$LABEL_DESC" 2>&1); then
-    echo "dispatch-apply-office-hours: warning: could not create label $LABEL: $create_output" >&2
-    exit 0
-  fi
-  if ! retry_output=$(gh issue edit "$ISSUE_NUM" --add-label "$LABEL" 2>&1); then
-    echo "dispatch-apply-office-hours: warning: could not apply $LABEL to issue #$ISSUE_NUM after create: $retry_output" >&2
-    exit 0
-  fi
+# Ensure the label exists in the repo, then add it to the ISSUE via REST.
+# `gh label create` stays porcelain (REST POST /repos/.../labels — not a migration
+# target). Tolerate only an already-exists error — the common case — and warn +
+# exit 0 (never block a hook) on any other create failure. A real REST add failure
+# likewise warns + exits 0, posting no comment.
+if ! create_output=$(gh label create "$LABEL" --color "$LABEL_COLOR" --description "$LABEL_DESC" 2>&1); then
+  case "$create_output" in
+    *already\ exists*|*already_exists*) : ;;   # label already present — fine
+    *)
+      echo "dispatch-apply-office-hours: warning: could not create label $LABEL: $create_output" >&2
+      exit 0
+      ;;
+  esac
+fi
+if ! add_output=$(gh_issue_set_labels_rest "$ISSUE_NUM" "$LABEL" 2>&1); then
+  echo "dispatch-apply-office-hours: warning: could not apply $LABEL to issue #$ISSUE_NUM: $add_output" >&2
+  exit 0
 fi
 
 # The label is now on the issue. Post the why-comment. A comment failure is
 # non-fatal (the label still landed) — warn and exit 0.
-if ! comment_output=$(gh issue comment "$ISSUE_NUM" --body "Parked on \`$LABEL\`. Reason: $REASON" 2>&1); then
+if ! comment_output=$(gh_issue_comment_rest "$ISSUE_NUM" --body "Parked on \`$LABEL\`. Reason: $REASON" 2>&1); then
   echo "dispatch-apply-office-hours: warning: could not post why-comment on issue #$ISSUE_NUM: $comment_output" >&2
   exit 0
 fi
