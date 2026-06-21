@@ -242,7 +242,7 @@ write_identity_stub() {
   local worktree_path="$1" n="$2"
   local branch title
   branch="$(basename "$worktree_path")"
-  title="$(gh issue view "$n" --json title --jq .title)" || {
+  title="$(gh_issue_view_rest "$n" | jq -r '.title')" || {
     echo "write_identity_stub: gh issue view #$n failed; CLAUDE.local.md stub not written" >&2
     return 1
   }
@@ -349,10 +349,10 @@ process_one_target() {
       fi
     fi
 
-    # Closed-target guard. gh issue view returns OPEN/CLOSED (uppercase). A gh
-    # failure must not fail open (silently dispatching to a possibly-closed
+    # Closed-target guard. gh_issue_view_rest returns OPEN/CLOSED (uppercase). A
+    # gh failure must not fail open (silently dispatching to a possibly-closed
     # issue) — surface it as a hard error.
-    ISSUE_STATE=$(gh issue view "$n" --json state -q .state 2>/dev/null) || {
+    ISSUE_STATE=$( { gh_issue_view_rest "$n" | jq -r '.state'; } 2>/dev/null) || {
       echo "dispatch-materialize-spawn: failed to fetch state for issue #$n" >&2
       return 2
     }
