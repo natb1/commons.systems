@@ -13,6 +13,7 @@ describe("serializeQueueMetrics / parseQueueMetrics", () => {
     computedAt: new Date("2026-06-07T12:00:00Z"),
     groupId: "natb1",
     memberEmails: ["alice@example.com", "bob@example.com"],
+    parked: [],
   };
 
   it("round-trips a full snapshot with a finite runwayDays", () => {
@@ -82,5 +83,56 @@ describe("serializeQueueMetrics / parseQueueMetrics", () => {
     // base.runwayDays is 24 (non-null); netDrainPerDay 0 violates the invariant.
     const doc = { ...serializeQueueMetrics(base), netDrainPerDay: 0 };
     expect(parseQueueMetrics(doc)).toBeNull();
+  });
+
+  it("parses a doc with no parked field with parked: [] (back-compat regression guard)", () => {
+    const doc = serializeQueueMetrics(base) as Record<string, unknown>;
+    delete doc.parked;
+    const parsed = parseQueueMetrics(doc);
+    expect(parsed).not.toBeNull();
+    expect(parsed!.parked).toEqual([]);
+  });
+
+  it("skips malformed parked items while the core snapshot still parses", () => {
+    const doc: Record<string, unknown> = {
+      ...serializeQueueMetrics(base),
+      parked: [
+        // missing required url field
+        { number: 42, title: "broken item", repo: "natb1/commons.systems", createdAt: new Date("2026-06-01T00:00:00Z") },
+        // valid item
+        { number: 99, title: "valid item", url: "https://github.com/natb1/commons.systems/issues/99", repo: "natb1/commons.systems", createdAt: new Date("2026-06-02T00:00:00Z") },
+      ],
+    };
+    const parsed = parseQueueMetrics(doc);
+    expect(parsed).not.toBeNull();
+    expect(parsed!.parked).toHaveLength(1);
+    expect(parsed!.parked[0].number).toBe(99);
+  });
+
+  it("round-trips a snapshot with a non-empty parked array", () => {
+    const createdAt = new Date("2026-05-15T10:00:00Z");
+    const snapshot: QueueMetricsSnapshot = {
+      ...base,
+      parked: [
+        {
+          number: 1466,
+          title: "office-hours: surface parked dispatch:office-hours work on the dashboard",
+          url: "https://github.com/natb1/commons.systems/issues/1466",
+          createdAt,
+          repo: "natb1/commons.systems",
+          phase: "dispatch:plan",
+        },
+      ],
+    };
+    const serialized = serializeQueueMetrics(snapshot);
+    const parsed = parseQueueMetrics(serialized);
+    expect(parsed).not.toBeNull();
+    expect(parsed!.parked).toHaveLength(1);
+    expect(parsed!.parked[0].number).toBe(1466);
+    expect(parsed!.parked[0].title).toBe("office-hours: surface parked dispatch:office-hours work on the dashboard");
+    expect(parsed!.parked[0].url).toBe("https://github.com/natb1/commons.systems/issues/1466");
+    expect(parsed!.parked[0].createdAt).toEqual(createdAt);
+    expect(parsed!.parked[0].repo).toBe("natb1/commons.systems");
+    expect(parsed!.parked[0].phase).toBe("dispatch:plan");
   });
 });
