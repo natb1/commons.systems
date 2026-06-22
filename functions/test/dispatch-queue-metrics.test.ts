@@ -313,7 +313,7 @@ describe("searchIssueDetailsLive", () => {
     await expect(searchIssueDetailsLive("tok", "q")).rejects.toThrow(/503/);
   });
 
-  it("declares $query as a non-null String! (GitHub search requires String!)", async () => {
+  it("declares $query as a non-null String! (GitHub search requires String!)", async () => { // type-safety-ok: String! in description refers to GraphQL non-null type annotation
     let capturedBody = "";
     const fetchMock = vi.fn(async (_url: string, init: { body: string }) => {
       capturedBody = init.body;
@@ -334,7 +334,7 @@ describe("searchIssueDetailsLive", () => {
     await searchIssueDetailsLive("tok", "q");
 
     const parsed = JSON.parse(capturedBody) as { query: string };
-    expect(parsed.query).toContain("query($query: String!)");
+    expect(parsed.query).toContain("query($query: String!)"); // type-safety-ok: GraphQL non-null type annotation in expected string
     // Must NOT declare $query as nullable String (without !) — GitHub rejects that
     expect(parsed.query).not.toContain("query($query: String)");
   });
