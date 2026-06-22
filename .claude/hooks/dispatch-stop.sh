@@ -475,16 +475,23 @@ session_has_inflight_background_task() {
   fi
   # UPDATE TRIGGER: this literal `launched in background. Task ID: <ID>` is the
   # Workflow/Task tool's `tool_result` output format, emitted by the Claude Code
-  # harness — there is no in-repo definition to track. If the harness changes that
-  # output format, THIS launch pattern AND the matching `taskId":"<ID>"`
-  # notification pattern below must both be updated.
+  # harness — there is no in-repo definition to track. The notification pattern
+  # below is now anchored on the `<task-notification>` envelope; if the harness
+  # renames that wrapper, BOTH this launch pattern AND the envelope anchor must be
+  # updated.
   launched=$(printf '%s\n' "$scan_src" | grep -oE 'launched in background\. Task ID: [A-Za-z0-9_-]+' \
     | grep -oE '[A-Za-z0-9_-]+$' | sort -u)
   [ -n "$launched" ] || return 1
-  # Tolerate the JSONL backslash-escaped quote form (\"taskId\":\"<ID>\") as
-  # well as the bare "taskId":"<ID>" form — the <task-notification> payload is a
-  # string value, so its inner quotes are backslash-escaped in the record.
-  notified=$(printf '%s\n' "$scan_src" | grep -oE 'taskId\\?":\\?"[A-Za-z0-9_-]+' \
+  # Notifications are identified by the `<task-notification>` envelope, NOT a bare
+  # `taskId` substring: the launch record's own sibling `toolUseResult.taskId` also
+  # carries the bare "taskId":"<ID>" form, so a substring-only match would
+  # self-match the launch into `notified`, empty the set difference, and wrongly
+  # report not-in-flight (#2365). The grep -F 'task-notification' stage scopes the
+  # taskId extraction to envelope records only. Within those, tolerate the JSONL
+  # backslash-escaped quote form (\"taskId\":\"<ID>\") as well as the bare form —
+  # the envelope payload is a string value, so its inner quotes are escaped.
+  notified=$(printf '%s\n' "$scan_src" | grep -F 'task-notification' \
+    | grep -oE 'taskId\\?":\\?"[A-Za-z0-9_-]+' \
     | grep -oE '[A-Za-z0-9_-]+$' | sort -u)
   # In-flight iff at least one launched ID has no matching notification, i.e.
   # the set difference (launched ∖ notified) is non-empty. comm -23 lists lines
