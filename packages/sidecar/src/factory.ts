@@ -207,18 +207,21 @@ export function createSidecar<TData, TPatch>(
         if (dirHandle !== handle) {
           return cachedModel ?? emptyModel();
         }
+        let result: TData;
         if (model === null) {
           corruptOnDisk = true;
-          cachedModel = emptyModel();
+          result = emptyModel();
+          cachedModel = result;
           logError(
             new Error("sidecar corrupt on disk; suppressing writes to preserve recoverable user data"),
             { operation: "ensureLoaded" },
           );
         } else {
           corruptOnDisk = false;
-          cachedModel = model;
+          result = model;
+          cachedModel = result;
         }
-        return cachedModel as TData;
+        return result;
       });
     }
     return loadPromise;
