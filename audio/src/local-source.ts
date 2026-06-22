@@ -24,10 +24,15 @@ import {
 } from "./sidecar.js";
 import type { CachedMetadata } from "./sidecar.js";
 import { extractAudioMetadata } from "./local-metadata.js";
+import { mapWithConcurrency } from "./concurrency.js";
 import { AUDIO_FORMATS } from "./types.js";
 import type { AudioFormat, AudioTags, LibraryItem } from "./types.js";
 
 const PURPOSE = "library-folder";
+/** Peak simultaneous file reads during enrichment. Each uncached file is
+ * read fully into an ArrayBuffer before tag extraction; bounding this caps
+ * peak memory so large folders don't OOM on low-RAM (≤2GB) devices. */
+const ENRICH_READ_CONCURRENCY = 16;
 const store = createFsaHandleStore({ app: "audio" });
 
 const MIME_TYPES: Record<AudioFormat, string> = {
@@ -385,7 +390,11 @@ async function enrichLocalItem(item: LibraryItem): Promise<EnrichResult> {
 }
 
 async function enrichLocalItems(items: LibraryItem[]): Promise<void> {
-  const results = await Promise.all(items.map((item) => enrichLocalItem(item)));
+  const results = await mapWithConcurrency(
+    items,
+    ENRICH_READ_CONCURRENCY,
+    enrichLocalItem,
+  );
   const newEntries = Object.fromEntries(
     results.filter((r) => r.entry !== null).map((r) => r.entry as [string, CachedMetadata]),
   );
