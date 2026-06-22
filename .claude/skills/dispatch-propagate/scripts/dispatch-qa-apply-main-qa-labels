@@ -32,7 +32,11 @@ ISSUE_NUM=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --route)
-      ROUTE="${2:-}"
+      if [[ $# -lt 2 || -z "${2:-}" ]]; then
+        echo "error: dispatch-qa-apply-main-qa-labels: --route requires a value (human|autonomous)" >&2
+        exit 1
+      fi
+      ROUTE="$2"
       shift 2
       ;;
     --route=*)
