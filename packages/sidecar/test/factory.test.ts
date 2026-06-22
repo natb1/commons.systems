@@ -52,15 +52,15 @@ describe("createSidecar factory", () => {
   });
 
   // 1. parseSidecar tolerates malformed JSON
-  it("parseSidecar returns emptyModel for malformed JSON", () => {
+  it("parseSidecar returns null for malformed JSON", () => {
     const result = sidecar.parseSidecar("not json{");
-    expect(result).toEqual({ version: 1, values: {} });
+    expect(result).toBeNull();
   });
 
   // 2. parseSidecar of a non-object root
-  it("parseSidecar returns emptyModel for non-object root", () => {
-    expect(sidecar.parseSidecar("[1,2,3]")).toEqual({ version: 1, values: {} });
-    expect(sidecar.parseSidecar("42")).toEqual({ version: 1, values: {} });
+  it("parseSidecar returns null for non-object root", () => {
+    expect(sidecar.parseSidecar("[1,2,3]")).toBeNull();
+    expect(sidecar.parseSidecar("42")).toBeNull();
   });
 
   // 3. parseSidecar of a valid object → coerced model

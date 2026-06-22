@@ -51,8 +51,8 @@ export interface CreateSidecarOptions<TData, TPatch> {
 
 /** The stateful sidecar handle returned by `createSidecar`. */
 export interface SidecarHandle<TData, TPatch> {
-  parseSidecar(text: string): TData;
-  readSidecar(dir: FileSystemDirectoryHandle): Promise<TData>;
+  parseSidecar(text: string): TData | null;
+  readSidecar(dir: FileSystemDirectoryHandle): Promise<TData | null>;
   writeSidecar(dir: FileSystemDirectoryHandle, data: TData): Promise<void>;
   setLocalDirectory(handle: FileSystemDirectoryHandle, isWritable: boolean): void;
   clearLocalDirectory(): void;
@@ -85,6 +85,12 @@ export function createSidecar<TData, TPatch>(
   let cachedModel: TData | null = null;
   let loadPromise: Promise<TData> | null = null;
 
+  // True when the bound folder has a sidecar file on disk that exists but
+  // could not be parsed (corrupt). While set, disk writes are suppressed so a
+  // routine save cannot overwrite the user's still-recoverable bytes; the
+  // in-memory model proceeds from an empty model so the session stays usable.
+  let corruptOnDisk = false;
+
   // Single-flight write chain: every mutation appends to this promise so
   // concurrent saves cannot race or interleave on the file. Each link merges its
   // patch against the result of the prior link, then persists (disk write gated
@@ -94,33 +100,34 @@ export function createSidecar<TData, TPatch>(
   /**
    * Parse sidecar text into a model. Tolerant of untrusted/partial on-disk
    * contents (input validation at the system edge, not a banned fallback):
-   * - JSON parse failure or a non-object top level → log + fresh empty model.
+   * - JSON parse failure or a non-object top level → log + `null` (signals
+   *   corruption; the caller must not overwrite the file).
    * - The per-app `coerce` callback coerces each field independently and forces
-   *   `version` to 1.
+   *   `version`.
    * Never throws.
    */
-  function parseSidecar(text: string): TData {
+  function parseSidecar(text: string): TData | null {
     let parsed: unknown;
     try {
       parsed = JSON.parse(text);
     } catch (err) {
       logError(err, { operation: "parseSidecar" });
-      return emptyModel();
+      return null;
     }
     if (!isPlainObject(parsed)) {
       logError(new Error("sidecar root is not an object"), { operation: "parseSidecar" });
-      return emptyModel();
+      return null;
     }
     return coerce(parsed);
   }
 
   /**
    * Read and parse the sidecar from `dir`. A missing sidecar directory or file
-   * (NotFoundError) yields an empty model. Any other unexpected error is logged
-   * and also yields an empty model, so a flaky read never crashes the render.
-   * Never throws.
+   * (NotFoundError) yields an empty model (a missing file is safe to start fresh
+   * from). Any other unexpected error is logged and yields `null` (corrupt or
+   * unknown → the caller must not overwrite the file). Never throws.
    */
-  async function readSidecar(dir: FileSystemDirectoryHandle): Promise<TData> {
+  async function readSidecar(dir: FileSystemDirectoryHandle): Promise<TData | null> {
     try {
       const sidecarDir = await dir.getDirectoryHandle(sidecarDirName);
       const fileHandle = await sidecarDir.getFileHandle(sidecarFileName);
@@ -131,7 +138,7 @@ export function createSidecar<TData, TPatch>(
         return emptyModel();
       }
       logError(err, { operation: "readSidecar" });
-      return emptyModel();
+      return null;
     }
   }
 
@@ -164,6 +171,7 @@ export function createSidecar<TData, TPatch>(
     writable = isWritable;
     cachedModel = null;
     loadPromise = null;
+    corruptOnDisk = false;
     writeChain = Promise.resolve();
   }
 
@@ -178,6 +186,7 @@ export function createSidecar<TData, TPatch>(
     writable = false;
     cachedModel = null;
     loadPromise = null;
+    corruptOnDisk = false;
     writeChain = Promise.resolve();
   }
 
@@ -189,12 +198,28 @@ export function createSidecar<TData, TPatch>(
     if (cachedModel !== null) return cachedModel;
     if (loadPromise === null) {
       const handle = dirHandle;
-      loadPromise = (handle === null ? Promise.resolve(emptyModel()) : readSidecar(handle)).then(
-        (model) => {
+      loadPromise = (
+        handle === null ? Promise.resolve<TData | null>(emptyModel()) : readSidecar(handle)
+      ).then((model) => {
+        // The handle may have been rebound (setLocalDirectory) while readSidecar
+        // was in flight. A stale result must not mutate the freshly-reset state —
+        // discard it so the next ensureLoaded re-reads the current handle.
+        if (dirHandle !== handle) {
+          return cachedModel ?? emptyModel();
+        }
+        if (model === null) {
+          corruptOnDisk = true;
+          cachedModel = emptyModel();
+          logError(
+            new Error("sidecar corrupt on disk; suppressing writes to preserve recoverable user data"),
+            { operation: "ensureLoaded" },
+          );
+        } else {
+          corruptOnDisk = false;
           cachedModel = model;
-          return model;
-        },
-      );
+        }
+        return cachedModel as TData;
+      });
     }
     return loadPromise;
   }
@@ -221,6 +246,9 @@ export function createSidecar<TData, TPatch>(
         const model = await ensureLoaded();
         const merged = mergeSidecar(model, patch);
         cachedModel = merged;
+        // Corruption was logged once at load time; return silently here so
+        // repeated saves don't spam the error log.
+        if (corruptOnDisk) return;
         // Persist to the SNAPSHOT handle (not the live global), so a switch that
         // races in after the guard still writes to the folder this patch was for.
         if (snapshotWritable && snapshotHandle !== null) {
