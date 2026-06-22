@@ -38042,7 +38042,7 @@ assert_eq "dispatch-auto-merge is executable" "yes" \
 # dispatch-detect-transient-death tests (#1733)
 # ============================================================================
 #
-# Exercises the rate-limit-death detector: exit 0 iff the transcript's LAST
+# Exercises the transient-death detector: exit 0 iff the transcript's LAST
 # assistant turn is an isApiErrorMessage:true turn whose joined text contains any
 # of the allowlisted transient-death signatures — the original rate-limit
 # substring `(not your usage limit)`, `529 Overloaded`, or `Stream idle timeout`;
@@ -38061,7 +38061,7 @@ drd_teardown() {
   TMPDIR_TEST=""
 }
 
-# The rate-limit-death turn: isApiErrorMessage:true + the `(not your usage limit)`
+# A transient-death turn (rate-limit signature): isApiErrorMessage:true + the `(not your usage limit)`
 # server-overload substring. A normal assistant final turn has no isApiErrorMessage.
 RL_TURN='{"type":"assistant","isApiErrorMessage":true,"message":{"role":"assistant","content":[{"type":"text","text":"API Error: Server is temporarily limiting requests (not your usage limit) · Rate limited"}]}}'
 NORMAL_TURN='{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"work in progress"}]}}'
@@ -38079,7 +38079,7 @@ echo "Test: last turn is the rate-limit apiError → exit 0 (match)"
 drd_setup
 printf '%s\n' "$NORMAL_TURN" "$RL_TURN" > "$TMPDIR_TEST/match.jsonl"
 if "$DRD" "$TMPDIR_TEST/match.jsonl"; then rc=0; else rc=$?; fi
-assert_eq "rate-limit-death match exits 0" "0" "$rc"
+assert_eq "transient-death (rate-limit) match exits 0" "0" "$rc"
 drd_teardown
 
 # --- Test 2: NO-MATCH — a normal assistant final turn → exit 1 ---------------
