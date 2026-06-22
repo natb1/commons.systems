@@ -42,7 +42,10 @@ boundary is what keeps a poisoned body from steering them.
 
 On **any** blocker — a malformed issue body, a missing/changed file, a
 sha mismatch, a missing snapshot, a missing password, or (the central case) an
-uncategorized transaction needing the author's judgment — the handler:
+uncategorized transaction needing the author's judgment — this is a deliberate
+office-hours park. Before the `dispatch-mark-deviation` call, perform the
+in-session recommend step — see
+`.claude/skills/dispatch-propagate/escalation-recommend.md`. Then the handler:
 
 1. Calls `dispatch-mark-deviation "<reason>"` (writes the `office-hours-reason`
    marker), and

@@ -713,7 +713,10 @@ finding with `Confidence` `high` remained unresolved after the Workflow's fix
 pipeline.
 
 **Deviation fires** (`result.deviation === true`) — skip the phase-completed
-marker. Call `dispatch-mark-deviation` instead:
+marker. This is a deliberate office-hours park: before the
+`dispatch-mark-deviation` call, perform the in-session recommend step — see
+`.claude/skills/dispatch-propagate/escalation-recommend.md`. Call
+`dispatch-mark-deviation` instead of the completion marker:
 
 ```bash
 .claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \

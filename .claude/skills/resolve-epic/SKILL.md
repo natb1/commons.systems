@@ -136,7 +136,10 @@ Then take exactly one terminal action:
 
 - **Not autonomously verifiable** — the epic carries *any* criterion you cannot
   confirm on your own (a runtime/behavioral claim or an explicit human-sign-off
-  criterion). Escalate to office-hours, **naming the specific unverifiable
+  criterion). This is a deliberate office-hours park: before the
+  `dispatch-mark-deviation` call, perform the in-session recommend step — see
+  `.claude/skills/dispatch-propagate/escalation-recommend.md`. Escalate to
+  office-hours, **naming the specific unverifiable
   criterion** so the office-hours comment tells the human exactly what to check:
 
   ```bash

@@ -238,8 +238,10 @@ carries the fix into the implement chain):
 
 Then **STOP** (Branch R; the bug rides the implement chain separately).
 
-**cannot-verify** — the safety valve. A pure local write, **NO** sandbox
-override:
+**cannot-verify** — the safety valve. This is a deliberate office-hours park:
+before the `dispatch-mark-deviation` call, perform the in-session recommend step —
+see `.claude/skills/dispatch-propagate/escalation-recommend.md`. The marker write
+itself is a pure local write, **NO** sandbox override:
 
 ```bash
 .claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \
