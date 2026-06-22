@@ -169,9 +169,14 @@ export function validateNode(value: unknown): IntentionNode {
     throw new IntentionSchemaError(`Expected object for intention node, got ${typeof value}`);
   }
 
+  const id = requireString(value.id, "id");
+  if (id === "") {
+    throw new IntentionSchemaError("id must be a non-empty string");
+  }
+
   return {
     // Required core.
-    id: requireString(value.id, "id"),
+    id,
     statement: requireString(value.statement, "statement"),
     owner: requireOneOf(value.owner, OWNERS, "owner"),
     status: requireOneOf(value.status, STATUSES, "status"),

@@ -11,8 +11,17 @@ import { IntentionSchemaError } from "./errors.js";
  * complete and deterministic. The markdown body is a cosmetic render of
  * `statement` and is not parsed back on read.
  */
+function assertPathSafeId(id: string): void {
+  if (id.includes("/") || id.includes("\\") || id.includes("..")) {
+    throw new IntentionSchemaError(
+      `Node id contains path separators or traversal sequences: "${id}"`
+    );
+  }
+}
+
 export function writeNode(dir: string, node: IntentionNodeInput): void {
   const validated = validateNode(node);
+  assertPathSafeId(validated.id);
   mkdirSync(dir, { recursive: true });
   // `stringify` already ends its output with a newline, so the closing fence
   // lands on its own line.
@@ -27,6 +36,7 @@ export function writeNode(dir: string, node: IntentionNodeInput): void {
  * the markdown body is ignored.
  */
 export function readNode(dir: string, id: string): IntentionNode {
+  assertPathSafeId(id);
   const raw = readFileSync(join(dir, `${id}.md`), "utf8");
   return validateNode(parse(extractFrontmatter(raw, id)));
 }
