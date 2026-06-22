@@ -1,0 +1,88 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+import type { IntentionNode } from "../src/schema.js";
+import { listNodes, readNode, writeNode } from "../src/store.js";
+
+function tempDir(): string {
+  return mkdtempSync(join(tmpdir(), "intentions-"));
+}
+
+describe("store round-trip", () => {
+  it("is lossless for a fully-populated node", () => {
+    const dir = tempDir();
+    const node: IntentionNode = {
+      id: "root-1",
+      statement: "Keep the commons aligned with its charter.",
+      owner: "human",
+      status: "codified",
+      parent: "charter",
+      rationale: "Alignment is the project's reason for being.",
+      reading: "See CHARTER.md section 2.",
+      gap: "No automated alignment check exists yet.",
+      clarifications: [
+        { question: "Who arbitrates conflicts?", answer: "The charter owner." },
+        { question: "How often is it reviewed?", answer: "Each digest cycle." },
+      ],
+      tooling_goals: ["align-cli", "intention-tree"],
+      success_signal: {
+        observable: "intention-tree builds without orphans",
+        sensor: "align --check",
+        threshold: "0 orphans",
+        is_proxy: false,
+      },
+    };
+
+    writeNode(dir, node);
+    const read = readNode(dir, node.id);
+    expect(read).toEqual(node);
+  });
+
+  it("applies defaults for a minimal node", () => {
+    const dir = tempDir();
+    // Only the required core; optional fields omitted entirely.
+    const minimal = {
+      id: "leaf-1",
+      statement: "Do the small thing.",
+      owner: "ai",
+      status: "raw",
+    } as IntentionNode;
+
+    writeNode(dir, minimal);
+    const read = readNode(dir, "leaf-1");
+
+    expect(read).toEqual({
+      id: "leaf-1",
+      statement: "Do the small thing.",
+      owner: "ai",
+      status: "raw",
+      parent: null,
+      rationale: null,
+      reading: null,
+      gap: null,
+      clarifications: [],
+      tooling_goals: [],
+      success_signal: null,
+    });
+  });
+});
+
+describe("listNodes", () => {
+  it("returns every node sorted by id", () => {
+    const dir = tempDir();
+    const ids = ["c-node", "a-node", "b-node"];
+    for (const id of ids) {
+      writeNode(dir, {
+        id,
+        statement: `Statement for ${id}`,
+        owner: "procedure",
+        status: "delegated",
+      } as IntentionNode);
+    }
+
+    const nodes = listNodes(dir);
+    expect(nodes).toHaveLength(3);
+    expect(nodes.map((n) => n.id)).toEqual(["a-node", "b-node", "c-node"]);
+  });
+});
