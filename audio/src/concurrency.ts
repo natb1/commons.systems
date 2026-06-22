@@ -13,6 +13,7 @@ export async function mapWithConcurrency<T, R>(
   limit: number,
   fn: (item: T, index: number) => Promise<R>,
 ): Promise<R[]> {
+  if (limit <= 0) throw new Error('mapWithConcurrency: limit must be > 0');
   const results = new Array<R>(items.length);
   let next = 0;
   async function worker(): Promise<void> {

@@ -49,4 +49,13 @@ describe("mapWithConcurrency", () => {
     const result = await mapWithConcurrency(items, 10, async (x) => x * 2);
     expect(result).toEqual([2, 4, 6]);
   });
+
+  it("propagates the first rejection (matches Promise.all semantics)", async () => {
+    await expect(
+      mapWithConcurrency([1, 2, 3], 2, async (x) => {
+        if (x === 1) throw new Error("boom");
+        return x;
+      }),
+    ).rejects.toThrow("boom");
+  });
 });

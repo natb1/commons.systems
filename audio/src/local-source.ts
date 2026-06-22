@@ -393,7 +393,7 @@ async function enrichLocalItems(items: LibraryItem[]): Promise<void> {
   const results = await mapWithConcurrency(
     items,
     ENRICH_READ_CONCURRENCY,
-    (item) => enrichLocalItem(item),
+    enrichLocalItem,
   );
   const newEntries = Object.fromEntries(
     results.filter((r) => r.entry !== null).map((r) => r.entry as [string, CachedMetadata]),
