@@ -34,6 +34,7 @@ import { BacklogPanel } from "./components/BacklogPanel.js";
 import { AuditPanel } from "./components/AuditPanel.js";
 import { RemindersPanel } from "./components/RemindersPanel.js";
 import { QueueMetricsPanel } from "./components/QueueMetricsPanel.js";
+import { ParkedIssuesPanel } from "./components/ParkedIssuesPanel.js";
 
 // The tier-resolved data the panels render. Mirrors the vanilla ViewState's
 // owner payload (and the demo payload built by buildContext).
@@ -178,6 +179,14 @@ export function Dashboard({ user }: DashboardProps) {
     () => <RemindersPanel reminders={reminders} now={now} />,
     [reminders, remindersPanelKey(reminders, now)],
   );
+  const parked = queueMetrics?.parked ?? [];
+  // ParkedIssuesPanel age labels are now-derived; key on parked-reference +
+  // the oldest item's age string (changes once per humanize bucket boundary).
+  const parkedEl = useMemo(
+    () => <ParkedIssuesPanel parked={parked} now={now} />,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [parked, now],
+  );
 
   if (state.tier === "error") {
     return (
@@ -210,6 +219,7 @@ export function Dashboard({ user }: DashboardProps) {
         {auditEl}
         {remindersEl}
         {queueEl}
+        {parkedEl}
       </div>
     </>
   );

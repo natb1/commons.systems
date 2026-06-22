@@ -68,12 +68,12 @@ describe("Dashboard demo tier (user=null)", () => {
     expect(banner!.textContent).toBe("Demo data — sign in to see your queue.");
   });
 
-  it("renders the panel grid with all seven panels", () => {
+  it("renders the panel grid with all eight panels", () => {
     const { container } = render(<Dashboard user={null} />);
     const grid = container.querySelector(".panel-grid");
     expect(grid).not.toBeNull();
-    // capacity, pace, history, backlog, audit, reminders, queue-metrics
-    expect(grid!.children).toHaveLength(7);
+    // capacity, pace, history, backlog, audit, reminders, queue-metrics, parked
+    expect(grid!.children).toHaveLength(8);
   });
 
   it("marks the three full-width panels (history, backlog, audit) as panel-grid-full", () => {
