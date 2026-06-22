@@ -90,6 +90,8 @@ fi
 gh_issue_remove_label_rest "$N" dispatch:office-hours >/dev/null 2>&1 \
   || echo "[dispatch-finalize-phase] WARNING: remove-label dispatch:office-hours on issue #$N failed (non-fatal)" >&2
 
+# Ordering matters: spawn the tick BEFORE the Step 4 sweep so the dispatch chain
+# is re-established before the reaper runs — never reorder these two.
 # Step 3: spawn the next dispatch tick (idempotent via fixed-unit dedup).
 "$SCRIPT_DIR/dispatch-spawn-tick" || true
 
