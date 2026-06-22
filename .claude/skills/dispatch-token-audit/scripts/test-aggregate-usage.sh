@@ -966,6 +966,43 @@ assert_eq "coverage: window.sidecar_present_rate (2/3)" "$EXPECTED_COV_RATE" \
 rm -rf "$COV_ROOT"
 
 # ---------------------------------------------------------------------------
+# Alternation coverage (#2351): every phase skill in the classifier's worker
+# alternation must classify a first-message <command-name> session as "worker".
+# The #2268 cov block above exercises only 3 of the 10; a typo in any of the
+# other 7 skill names would silently misclassify those sessions as "other".
+# ISOLATED fixture: one minimal worker session per skill, each in its own root
+# so the shared totals stay untouched. Keep this list in lockstep with the
+# alternation regex in aggregate-usage.sh's classifier.
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "--- alternation coverage: all 10 phase skills classify as worker (#2351) ---"
+
+for skill in plan-issue implement qa-fix review-fix fix-checks fix-conflicts \
+             qa-main budget-parse-job resolve-epic office-hours; do
+  ALT_ROOT=$(mktemp -d)
+  trap 'rm -rf "$ALT_ROOT"; teardown' EXIT INT TERM
+  alt_worktree="$ALT_ROOT/-home-x-worktrees-2351-alternation"
+  mkdir -p "$alt_worktree"
+  alt_jsonl="$alt_worktree/sess-alt.jsonl"
+  printf '%s\n' "{\"type\":\"user\",\"message\":{\"content\":\"<command-name>/$skill</command-name>\"}}" \
+    >> "$alt_jsonl"
+  printf '%s\n' '{"type":"assistant","attributionSkill":"plan-implement","isSidechain":false,"gitBranch":"2351-alternation","message":{"model":"claude-opus-4-8","usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}}' \
+    >> "$alt_jsonl"
+  jq . "$alt_jsonl" >/dev/null
+  touch "$alt_jsonl"
+
+  OUT_ALT=$(
+    export DISPATCH_AUDIT_PROJECTS_ROOT="$ALT_ROOT"
+    bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
+  )
+  assert_eq "alternation: /$skill session classifies as worker" "worker" \
+    "$(jq -r '[.sessions[]|select(.id=="sess-alt")][0].type' <<<"$OUT_ALT")"
+
+  rm -rf "$ALT_ROOT"
+done
+
+# ---------------------------------------------------------------------------
 # Sidecar-coverage metric, case (c): zero-worker edge (#2268). ISOLATED fixture
 # with only a router-tick session (no worker). The eligible denominator is 0, so
 # sidecar_present_rate must be null (not 0, not a divide-by-zero) and
@@ -1015,7 +1052,7 @@ echo ""
 echo "--- freeform interactive session classifies as other, excluded from sidecar_eligible (#2351) ---"
 
 FREEFORM_ROOT=$(mktemp -d)
-trap 'rm -rf "$FREEFORM_ROOT" "$FAKE_WRITER_DIR"; teardown' EXIT INT TERM
+trap 'rm -rf "$FREEFORM_ROOT"; teardown' EXIT INT TERM
 freeform_worktree="$FREEFORM_ROOT/-home-x-worktrees-2351-freeform"
 mkdir -p "$freeform_worktree"
 freeform_jsonl="$freeform_worktree/sess-freeform.jsonl"
