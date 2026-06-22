@@ -27,7 +27,7 @@ function makeHandle() {
       values:
         isPlainObject(parsed.values)
           ? Object.fromEntries(
-              Object.entries(parsed.values as Record<string, unknown>).filter(
+              Object.entries(parsed.values).filter(
                 ([, v]) => typeof v === "number",
               ) as [string, number][],
             )
@@ -95,7 +95,7 @@ describe("createSidecar factory", () => {
 
   // 7. setLocalDirectory then clearLocalDirectory resets to emptyModel
   it("clearLocalDirectory resets state so ensureLoaded returns emptyModel", async () => {
-    const fakeHandle = {} as unknown as FileSystemDirectoryHandle;
+    const fakeHandle = {} as unknown as FileSystemDirectoryHandle; // type-safety-ok: test-only stub, no FSA methods are called in this test
     sidecar.setLocalDirectory(fakeHandle, false);
     await sidecar.enqueueWrite({ values: { a: 99 } });
     await sidecar.flushWrites();
