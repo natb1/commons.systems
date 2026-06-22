@@ -665,6 +665,33 @@ fork site below (same discipline as the `fixes_applied_count` tally in Step 3.7)
       finding}` (the disposition contributes `id`/`title`/`kind`; the residue
       contributes `url_path`/`expected_outcome`/`finding`).
 
+      **Determine the route.** The **parent thread** (this caller — it holds the
+      joined residue fields above and these documented criteria) computes a
+      per-item `route` for each joined needs-main item. The `identifier` does not
+      exist yet (the Step 3.6.2 emitter produces it). So compute `route` here
+      against the `id`-keyed join, then carry it across to each item's
+      `identifier` once Step 3.6.2 emits one `{identifier, …}` object per input
+      item, in input order — the parent owns this `id`↔`identifier`
+      correspondence and ends with an `identifier`→`route` map threaded into the
+      Step 3.6.3 forks.
+
+      - `autonomous` (apply `main-qa` only; **withhold** `dispatch:office-hours`
+        so the router routes the follow-up to `/qa-main`) — when verification is
+        an **objective check observable on public deployed prod** that
+        `/qa-main`'s read-only Claude-in-Chrome flow can perform: hitting a
+        deployed public URL and checking deployed behavior, element-or-text
+        presence, console errors, network responses, or public analytics. **No**
+        auth wall, **no** private credentials/accounts, **no** subjective
+        product/UX judgment.
+      - `human` (apply `main-qa` + `dispatch:office-hours`, unchanged) — when
+        verification needs private credentials/accounts Claude lacks (an
+        auth-walled view), subjective product/UX judgment, or the user's product
+        intent.
+      - **Uncertain → `human`** (conservative default). The asymmetry is
+        explicit: a wrongly-`autonomous` item is recoverable via `/qa-main`'s
+        cannot-verify valve, but a verification that needs the user must never be
+        silently skipped.
+
    2. **Compose the follow-ups** by piping the joined needs-main items through the
       Unit-1 emitter (pure — no network/git/gh, runs sandboxed-fine, no
       `dangerouslyDisableSandbox` needed for this call):
@@ -679,9 +706,12 @@ fork site below (same discipline as the `fixes_applied_count` tally in Step 3.7)
       `title` so `dispatch-followup-exists` can dedup it.
 
    3. **File each follow-up.** For each emitted `{identifier, title, body}`, fork a
-      subagent (`subagent_type: general-purpose`, `model: sonnet`). These subagents
-      touch only GitHub and never the working tree, so fan them out in parallel
-      (multiple Agent calls in one message). Each subagent, with
+      subagent (`subagent_type: general-purpose`, `model: sonnet`). Pass this
+      item's `route` (from the parent's `identifier`→`route` map, Step 3.6.1) into
+      the subagent prompt **as data**. The subagent does **not** make the
+      determination — it only relays the value to the script in sub-step c. These
+      subagents touch only GitHub and never the working tree, so fan them out in
+      parallel (multiple Agent calls in one message). Each subagent, with
       `dangerouslyDisableSandbox: true` for the `gh` calls (`gh` needs network — see
       `.claude/rules/sandbox.md`):
 
@@ -716,12 +746,15 @@ fork site below (same discipline as the `fixes_applied_count` tally in Step 3.7)
          (`dangerouslyDisableSandbox: true` — it calls `gh`):
 
          ```bash
-         .claude/skills/dispatch-propagate/scripts/dispatch-qa-apply-main-qa-labels "<followup-N>"
+         .claude/skills/dispatch-propagate/scripts/dispatch-qa-apply-main-qa-labels "<followup-N>" --route <autonomous|human>
          ```
 
-         This removes `help wanted` and adds `main-qa` + `dispatch:office-hours`,
-         leaving `@me` — so the follow-up lands on the office-hours queue (human
-         review), not the autonomous dispatch queue.
+         Pass the `route` relayed into this subagent. The script always removes
+         `help wanted` and adds `main-qa`, leaving `@me`. For `--route human` it
+         **also** adds `dispatch:office-hours`, so the follow-up lands on the
+         office-hours queue (human review). For `--route autonomous` it
+         **withholds** `dispatch:office-hours`, so the router routes the follow-up
+         to the autonomous `/qa-main` handler instead.
 
       d. Returns `<followup-N>` mapped to its `identifier`.
 
@@ -1045,7 +1078,10 @@ fork site below (same discipline as the `fixes_applied_count` tally in Step 3.7)
      `needs-main` item, list its follow-up: `#<followup-N>` (newly filed), or
      "already tracked by #<N>" (an existing tracking issue was found via
      `dispatch-followup-exists`), using the `identifier`→`<N>` mappings Step 3.6
-     captured.
+     captured. Record each follow-up's **route** from the `identifier`→`route`
+     map: an `autonomous` follow-up routed to the `/qa-main` handler (`main-qa`
+     only), versus a `human` follow-up routed to office-hours human review
+     (`main-qa` + `dispatch:office-hours`).
    - **Assessed by Opus (already satisfied)** — include this sub-list only when
      `result.already_satisfied` is non-empty. For each item in
      `result.already_satisfied`, list its `title` and `rationale`. These items had
@@ -1142,8 +1178,11 @@ fork site below (same discipline as the `fixes_applied_count` tally in Step 3.7)
      - a failed pre-QA acceptance check (Step 3b, a bug needing a plan-mode fix).
 
    `needs-main`-class residue items are in **neither** part of the set — they were
-   filed as follow-ups in Step 3.6, now carrying `main-qa` + `dispatch:office-hours`
-   so they route to office-hours human review rather than the autonomous queue.
+   filed as follow-ups in Step 3.6, always carrying `main-qa`. Each carries
+   `dispatch:office-hours` **only** when its Step-3.6.1 determination is `human`,
+   routing it to office-hours human review; `autonomous` follow-ups withhold
+   `dispatch:office-hours` and route to the `/qa-main` handler. Either way they
+   are filed, not escalated.
 
    `already-satisfied` residue items are likewise in **neither** part of the set —
    they are **dropped as PASS** by the Workflow (partitioned into

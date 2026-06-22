@@ -163,24 +163,25 @@ function coercePlaylists(raw: unknown): Record<string, string[]> {
 /**
  * Parse sidecar text into a model. Tolerant of untrusted/partial on-disk
  * contents (input validation at the system edge, not a banned fallback):
- * - JSON parse failure or a non-object top level → log + fresh empty model.
+ * - JSON parse failure or a non-object top level → log + `null` (signals
+ *   corruption; the caller must not overwrite the file).
  * - `metadata`, `playerState`, and `playlists` are coerced INDEPENDENTLY, so
  *   malformed metadata never discards a good playerState and vice-versa.
  * - Within each field, wrong-typed leaves are dropped.
  * - `version` is forced to 2.
  * Never throws.
  */
-export function parseSidecar(text: string): SidecarData {
+export function parseSidecar(text: string): SidecarData | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch (err) {
     logError(err, { operation: "parseSidecar" });
-    return emptyModel();
+    return null;
   }
   if (!isPlainObject(parsed)) {
     logError(new Error("sidecar root is not an object"), { operation: "parseSidecar" });
-    return emptyModel();
+    return null;
   }
   return {
     version: 2,
@@ -226,11 +227,12 @@ export function mergeSidecar(existing: SidecarData, patch: SidecarPatch): Sideca
 
 /**
  * Read and parse the sidecar from `dir`. A missing `.commons-audio` directory or
- * `index.json` file (NotFoundError) yields an empty model. Any other unexpected
- * error is logged and also yields an empty model, so a flaky read never crashes
- * the library render. Never throws.
+ * `index.json` file (NotFoundError) yields an empty model (a missing file is
+ * safe to start fresh from). Any other unexpected error is logged and yields
+ * `null` (corrupt/unknown → the caller must not overwrite the file). Never
+ * throws.
  */
-export async function readSidecar(dir: FileSystemDirectoryHandle): Promise<SidecarData> {
+export async function readSidecar(dir: FileSystemDirectoryHandle): Promise<SidecarData | null> {
   try {
     const sidecarDir = await dir.getDirectoryHandle(SIDECAR_DIR);
     const fileHandle = await sidecarDir.getFileHandle(SIDECAR_FILE);
@@ -241,7 +243,7 @@ export async function readSidecar(dir: FileSystemDirectoryHandle): Promise<Sidec
       return emptyModel();
     }
     logError(err, { operation: "readSidecar" });
-    return emptyModel();
+    return null;
   }
 }
 
@@ -280,6 +282,12 @@ let writable = false;
 let cachedModel: SidecarData | null = null;
 let loadPromise: Promise<SidecarData> | null = null;
 
+// True when the bound folder has a sidecar file on disk that exists but
+// could not be parsed (corrupt). While set, disk writes are suppressed so a
+// routine save cannot overwrite the user's still-recoverable bytes; the
+// in-memory model proceeds from an empty model so the session stays usable.
+let corruptOnDisk = false;
+
 // Single-flight write chain: every mutation appends to this promise so the
 // player-state save and the metadata batch cannot race or interleave on the
 // file. Each link merges its patch against the result of the prior link, then
@@ -289,27 +297,37 @@ let writeChain: Promise<void> = Promise.resolve();
 /**
  * Store the retained directory handle and writable flag (called by Unit 3 after
  * the folder is picked / permission resolved). Invalidates the cached model so
- * the next access re-reads lazily from the new handle.
+ * the next access re-reads lazily from the new handle. The
+ * `writeChain = Promise.resolve()` reset only detaches FUTURE enqueues from the
+ * old chain; it does NOT stop an already-enqueued stale write — that is the job
+ * of the `enqueueWrite` snapshot guard, which skips any task whose bound handle
+ * no longer matches the live one.
  */
 export function setLocalDirectory(handle: FileSystemDirectoryHandle, isWritable: boolean): void {
   dirHandle = handle;
   writable = isWritable;
   cachedModel = null;
   loadPromise = null;
+  corruptOnDisk = false;
   writeChain = Promise.resolve();
 }
 
 /**
  * Unbind the directory (called when the folder is disconnected). Drops the
- * handle, marks not-writable, and resets the cache + write chain so an in-flight
- * write enqueued before disconnect cannot target the now-stale folder and the
- * next access re-loads an empty model.
+ * handle, marks not-writable, and resets the cache + write chain. The
+ * `writeChain = Promise.resolve()` reset only detaches FUTURE enqueues from the
+ * old chain — it does NOT cancel an already-enqueued write, which still runs.
+ * What prevents a stale write from landing in a later-connected folder is the
+ * `enqueueWrite` snapshot guard: an orphaned task whose snapshot handle no
+ * longer matches the live `dirHandle` is skipped. The cache reset makes the
+ * next access re-load an empty model.
  */
 export function clearLocalDirectory(): void {
   dirHandle = null;
   writable = false;
   cachedModel = null;
   loadPromise = null;
+  corruptOnDisk = false;
   writeChain = Promise.resolve();
 }
 
@@ -321,12 +339,28 @@ export async function ensureLoaded(): Promise<SidecarData> {
   if (cachedModel !== null) return cachedModel;
   if (loadPromise === null) {
     const handle = dirHandle;
-    loadPromise = (handle === null ? Promise.resolve(emptyModel()) : readSidecar(handle)).then(
-      (model) => {
+    loadPromise = (
+      handle === null ? Promise.resolve<SidecarData | null>(emptyModel()) : readSidecar(handle)
+    ).then((model) => {
+      // The handle may have been rebound (setLocalDirectory) while readSidecar
+      // was in flight. A stale result must not mutate the freshly-reset state —
+      // discard it so the next ensureLoaded re-reads the current handle.
+      if (dirHandle !== handle) {
+        return cachedModel ?? emptyModel();
+      }
+      if (model === null) {
+        corruptOnDisk = true;
+        cachedModel = emptyModel();
+        logError(
+          new Error("sidecar corrupt on disk; suppressing writes to preserve recoverable user data"),
+          { operation: "ensureLoaded" },
+        );
+      } else {
+        corruptOnDisk = false;
         cachedModel = model;
-        return model;
-      },
-    );
+      }
+      return cachedModel;
+    });
   }
   return loadPromise;
 }
@@ -341,13 +375,28 @@ export async function ensureLoaded(): Promise<SidecarData> {
  * per-link catch keeps one failed write from poisoning the chain.
  */
 function enqueueWrite(patch: SidecarPatch): Promise<void> {
+  const snapshotHandle = dirHandle;
+  const snapshotWritable = writable;
   writeChain = writeChain
     .then(async () => {
+      // TOCTOU guard: if the bound directory changed between enqueue and
+      // execution (rapid disconnect/reconnect), this patch was issued for the
+      // previous folder — skip it entirely so it neither persists to the new
+      // folder nor contaminates the new folder's in-memory model.
+      if (dirHandle !== snapshotHandle) return;
       const model = await ensureLoaded();
       const merged = mergeSidecar(model, patch);
       cachedModel = merged;
-      if (writable && dirHandle !== null) {
-        await writeSidecar(dirHandle, merged);
+      // The corruption was already logged once at load time (ensureLoaded);
+      // return silently here so repeated saves (e.g. periodic playback-position
+      // persistence) don't spam the error log.
+      if (corruptOnDisk) {
+        return;
+      }
+      // Persist to the SNAPSHOT handle (not the live global), so a switch that
+      // races in after the guard still writes to the folder this patch was for.
+      if (snapshotWritable && snapshotHandle !== null) {
+        await writeSidecar(snapshotHandle, merged);
       }
     })
     .catch((err) => {
