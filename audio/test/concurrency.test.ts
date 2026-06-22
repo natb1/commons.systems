@@ -28,7 +28,7 @@ describe("mapWithConcurrency", () => {
     // Drain: as each in-flight item resolves, a worker pulls the next item and
     // pushes a fresh release resolver — so keep going while any are pending.
     while (release.length > 0) {
-      release.shift()!();
+      release.shift()?.();
       await tick();
     }
 
