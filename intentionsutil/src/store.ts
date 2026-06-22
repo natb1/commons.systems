@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parse, stringify } from "yaml";
-import { validateNode, type IntentionNode } from "./schema.js";
+import { validateNode, type IntentionNode, type IntentionNodeInput } from "./schema.js";
 import { IntentionSchemaError } from "./errors.js";
 
 /**
@@ -11,7 +11,7 @@ import { IntentionSchemaError } from "./errors.js";
  * complete and deterministic. The markdown body is a cosmetic render of
  * `statement` and is not parsed back on read.
  */
-export function writeNode(dir: string, node: IntentionNode): void {
+export function writeNode(dir: string, node: IntentionNodeInput): void {
   const validated = validateNode(node);
   mkdirSync(dir, { recursive: true });
   // `stringify` already ends its output with a newline, so the closing fence

@@ -102,6 +102,13 @@ function parsePrinciples(charter: string): Principle[] {
 
 // --- Issue leaves from open GitHub issues ----------------------------------
 
+interface RawIssueItem {
+  number: number;
+  title: string;
+  body: string | null;
+  pull_request?: unknown;
+}
+
 interface OpenIssue {
   number: number;
   title: string;
@@ -122,14 +129,14 @@ function fetchOpenIssues(): OpenIssue[] {
     "--slurp",
     "/repos/{owner}/{repo}/issues?state=open&per_page=100",
   ]);
-  const pages = JSON.parse(out) as Array<Array<Record<string, unknown>>>;
+  const pages: Array<Array<RawIssueItem>> = JSON.parse(out);
   const items = pages.flat();
   return items
     .filter((it) => it.pull_request === undefined)
     .map((it) => ({
-      number: it.number as number,
-      title: (it.title as string) ?? "",
-      body: (it.body as string | null) ?? null,
+      number: it.number,
+      title: it.title ?? "",
+      body: it.body ?? null,
     }));
 }
 
@@ -205,7 +212,7 @@ function main(): void {
       status: "codified", // charter principles are settled
       parent: null,
       rationale: p.prose,
-    } as never);
+    });
   }
 
   // Issue leaves — two passes.
@@ -233,7 +240,7 @@ function main(): void {
       parent,
       rationale: scope,
       reading: scope,
-    } as never);
+    });
   }
 
   const total = principles.length + openIssues.length;

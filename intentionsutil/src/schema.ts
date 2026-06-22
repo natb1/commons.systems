@@ -54,6 +54,26 @@ export interface IntentionNode {
   success_signal: SuccessSignal | null;
 }
 
+/**
+ * Input type for writeNode. Only the required core is mandatory; optional
+ * fields may be omitted and validateNode will apply their defaults. This lets
+ * backfill callers omit dialectic fields (clarifications, tooling_goals, etc.)
+ * that only exist after the dialectic runs.
+ */
+export interface IntentionNodeInput {
+  id: string;
+  statement: string;
+  owner: Owner;
+  status: Status;
+  parent?: string | null;
+  rationale?: string | null;
+  reading?: string | null;
+  gap?: string | null;
+  clarifications?: Clarification[];
+  tooling_goals?: string[];
+  success_signal?: SuccessSignal | null;
+}
+
 // --- Local guards ----------------------------------------------------------
 // Re-implemented locally (not cross-imported from firestoreutil) so
 // intentionsutil stays self-contained. They throw IntentionSchemaError.
@@ -74,10 +94,11 @@ function requireBoolean(value: unknown, field: string): boolean {
 
 function requireOneOf<T extends string>(value: unknown, allowed: readonly T[], field: string): T {
   const s = requireString(value, field);
-  if (!(allowed as readonly string[]).includes(s)) {
+  const found = allowed.find((a) => a === s);
+  if (found === undefined) {
     throw new IntentionSchemaError(`Invalid ${field}: "${s}"`);
   }
-  return s as T;
+  return found;
 }
 
 function requireStringArray(value: unknown, field: string): string[] {

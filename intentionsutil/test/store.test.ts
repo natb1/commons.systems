@@ -42,14 +42,12 @@ describe("store round-trip", () => {
   it("applies defaults for a minimal node", () => {
     const dir = tempDir();
     // Only the required core; optional fields omitted entirely.
-    const minimal = {
+    writeNode(dir, {
       id: "leaf-1",
       statement: "Do the small thing.",
       owner: "ai",
       status: "raw",
-    } as IntentionNode;
-
-    writeNode(dir, minimal);
+    });
     const read = readNode(dir, "leaf-1");
 
     expect(read).toEqual({
@@ -78,7 +76,7 @@ describe("listNodes", () => {
         statement: `Statement for ${id}`,
         owner: "procedure",
         status: "delegated",
-      } as IntentionNode);
+      });
     }
 
     const nodes = listNodes(dir);
