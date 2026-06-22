@@ -37,9 +37,21 @@ So engaging an item here clears the label automatically; this skill does **not**
 clear it itself, and on completion the item is dispatch-eligible again. The
 session simply ends; the next `/dispatch-propagate` router (re-seeded by the
 heartbeat) returns the de-labeled item to the dispatch chain. There is no in-skill
-hand-off and no Stop-hook action — the Stop hook ignores non-`<N>-` session names,
-and office-hours sessions are named `office-hours-<N>` (which does not match its
-`^[0-9]+-` discriminator).
+hand-off.
+
+Stop-hook behavior differs by queue path:
+
+- **Fresh `/office-hours` session** — named `office-hours-<N>`, which does not
+  match the Stop hook's `^[0-9]+-` discriminator. The hook ignores it; no chain
+  action on stop.
+- **Resumed originating session** (`resume` / `resume-provision` dispositions,
+  #2356) — named by the worktree basename (`<N>-slug`), which **does** match
+  `^[0-9]+-`. The Stop hook treats it like any other phase worker: if the
+  phase-completed marker is present (Branch B), the chain advances; if absent
+  (Branch A), the hook re-applies `dispatch:office-hours` — correct, because the
+  item still needs a human. The strip hook is keyed on the git branch (`<N>-*`),
+  not the session name, so it still clears `dispatch:office-hours` on the human's
+  first prompt regardless of which path launched the session.
 
 ## Steps
 
@@ -376,14 +388,17 @@ and office-hours sessions are named `office-hours-<N>` (which does not match its
         only state change this disposition makes; a genuinely-broken behavior is
         the human's call to file a fix separately (out of scope). **Stop.**
 
-   **Stop semantics.** This session is named `office-hours-<N>`, which the Stop
-   hook ignores (its `^[0-9]+-` discriminator does not match), so stopping
-   triggers no chain action — exactly as the other dispositions end. Unlike the
-   `<N>-…` dispositions, the `dispatch-office-hours-strip` hook does **not** fire
-   here (the branch is `main`, not `<N>-…`), so the `dispatch:office-hours` label
-   is not auto-cleared on your first prompt. **Closing the issue is what removes
-   the item from the `--state open` office-hours queue** — that is why the close
-   matters. If you leave it open (not-verified branch), it correctly resurfaces.
+   **Stop semantics.** This describes the fresh `office-hours-<N>`-named session
+   that runs on `main` for the `main-qa` disposition. That session name does not
+   match the Stop hook's `^[0-9]+-` discriminator, so stopping triggers no chain
+   action. For the `resume` / `resume-provision` arms (basename-named sessions),
+   the Stop hook acts on stop like it does for `idle` — see
+   [Label clearing is automatic]. Unlike the `<N>-…` dispositions, the
+   `dispatch-office-hours-strip` hook does **not** fire here (the branch is
+   `main`, not `<N>-…`), so the `dispatch:office-hours` label is not auto-cleared
+   on your first prompt. **Closing the issue is what removes the item from the
+   `--state open` office-hours queue** — that is why the close matters. If you
+   leave it open (not-verified branch), it correctly resurfaces.
 
 [QA data policy]: ../qa-fix/SKILL.md
 [Label clearing is automatic]: #label-clearing-is-automatic
