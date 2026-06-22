@@ -190,7 +190,7 @@ These slices are yield metrics, not cost metrics — they do not sort into the r
 
 ## Per-session artifact join
 
-The `artifact` field on each `.sessions[]` entry carries the per-session GitHub join record. Its `{repo, issue, pr, base_sha, branch}` shape, the session-id join key, and the sidecar's role as the authoritative-source for the overlapping join keys are described in Step 3 above. The field is `null` for sessions with no sidecar — subagent transcripts, router ticks, pre-#1861 worker sessions, and any non-worker session that did not write one.
+The `artifact` field on each `.sessions[]` entry carries the per-session GitHub join record. Its `{repo, issue, pr, base_sha, branch}` shape, the session-id join key, and the sidecar's role as the authoritative source for the overlapping join keys are described in Step 3 above. `base_sha` is the worktree HEAD at session start — preserved across resume — so it anchors each session to the repository state it began from. The field is `null` for sessions with no sidecar — subagent transcripts, router ticks, pre-#1861 worker sessions, and any non-worker session that did not write one.
 
 **jq slices against `tmp/usage-audit.json`:**
 
