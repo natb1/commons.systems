@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# dispatch-epic-labels — single source of the default epic label for dispatch.
+#
+# Loads the `epic` config (dispatch.config/epic.json) and emits the configured
+# label set, or the built-in default when the config file is absent.
+#
+# Stdout protocol:
+#   newline-separated label names — one label per line.
+#   Default (no-config): emits "epic".
+#   Configured: emits the labels array from epic.json, one per line.
+#   Empty labels array in config: emits nothing (intentional override that
+#     disables epic recognition).
+#
+# Exit codes:
+#   0  labels emitted (or default emitted).
+#   1  epic.json present but invalid JSON or fails schema validation
+#      (error propagated from dispatch-config-load — clear error, not silent
+#      fallback; the default applies ONLY to the no-config / file-absent case).
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# The default epic label — the single authoritative definition for issue #2235.
+DEFAULT_EPIC_LABELS="epic"
+
+EPIC_CONFIG=$("$SCRIPT_DIR/dispatch-config-load" epic)
+if [[ "$EPIC_CONFIG" == "no-config" ]]; then
+  printf '%s\n' "$DEFAULT_EPIC_LABELS"
+else
+  jq -r '.labels[]' <<<"$EPIC_CONFIG"
+fi

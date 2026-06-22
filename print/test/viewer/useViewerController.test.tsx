@@ -33,6 +33,7 @@ function Host(props: UseViewerControllerArgs): React.ReactElement {
         <div ref={r.canvasWrapRef} className="viewer-canvas-wrap" />
       </div>
       <input ref={r.gotoInputRef} className="viewer-goto-input" type="number" />
+      <span ref={r.gotoStatusRef} className="viewer-goto-status" role="status" aria-live="polite" />
       <button ref={r.spreadToggleRef} className="viewer-spread-toggle" aria-pressed="false" />
     </div>
   );
@@ -330,7 +331,7 @@ describe("useViewerController go-to input", () => {
     expect(renderer.goToFraction).toHaveBeenCalledWith(0.5);
   });
 
-  it("percent mode: Calculating cycle disables+restores the input", async () => {
+  it("percent mode: Calculating cycle uses readOnly+aria-busy+aria-live and returns focus, never disabled", async () => {
     let resolveFraction!: () => void;
     const pending = new Promise<void>((resolve) => { resolveFraction = resolve; });
     const renderer = makeMockRenderer({ goToFraction: vi.fn().mockReturnValue(pending) });
@@ -342,18 +343,28 @@ describe("useViewerController go-to input", () => {
     await flushInit();
 
     const input = container.querySelector(".viewer-goto-input") as HTMLInputElement;
+    const status = container.querySelector(".viewer-goto-status") as HTMLElement; // type-safety-ok: querySelector result narrowed by test setup guarantee
     input.value = "50";
     await act(async () => { captured!.submitGoto(); });
     await flushInit();
 
-    expect(input.disabled).toBe(true);
+    // While pending: readOnly + aria-busy (never disabled), with the live status.
+    expect(input.disabled).toBe(false);
+    expect(input.readOnly).toBe(true);
+    expect(input.getAttribute("aria-busy")).toBe("true");
     expect(input.placeholder).toBe("Calculating…");
+    expect(status.textContent).toBe("Calculating location…");
 
     await act(async () => { resolveFraction(); });
     await flushInit();
 
+    // After settle: attributes cleared, status emptied, focus returned to input.
     expect(input.disabled).toBe(false);
+    expect(input.readOnly).toBe(false);
+    expect(input.hasAttribute("aria-busy")).toBe(false);
     expect(input.placeholder).toBe("%");
+    expect(status.textContent).toBe("");
+    expect(document.activeElement).toBe(input);
   });
 
   it("percent mode: gotoInFlight lock prevents re-entrancy", async () => {

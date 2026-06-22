@@ -1,1 +1,13 @@
-export { default } from "@commons-systems/config/eslint";
+import baseConfig from "@commons-systems/config/eslint";
+
+export default [
+  ...baseConfig,
+  {
+    rules: {
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
+      ],
+    },
+  },
+];
