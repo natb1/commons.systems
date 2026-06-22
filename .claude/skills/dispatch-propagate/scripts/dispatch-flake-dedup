@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+# Deterministic, state-spanning flake-dedup guard. Given a flake fingerprint,
+# find-or-record a same-fingerprint tracking issue and tell the caller whether
+# to file fresh.
+# Usage: dispatch-flake-dedup <fingerprint> --body-file <f> [--repo owner/repo]
+#
+# WHY THIS EXISTS
+#   This is the flake-path analogue of `dispatch-followup-exists` (the security
+#   path). The flake-filing step needs an idempotent guard: before filing a new
+#   flake tracking issue, it must check whether one already tracks the same
+#   fingerprint and, if so, record the recurrence on the existing issue rather
+#   than open a duplicate. This script is that guard. It records the recurrence
+#   (a comment, plus a reopen when the existing issue is closed) and reports the
+#   existing issue; on no match it tells the caller to file fresh via /file-issue.
+#
+# STATE SCOPE
+#   The match spans OPEN and CLOSED issues. A flake that was tracked, fixed, and
+#   the issue closed can recur — an open-only dedup would re-file it. Spanning
+#   closed state lets a recurrence reopen the original tracking issue and append
+#   the new evidence, keeping one durable thread per fingerprint.
+#
+# CRITERION-#4 TITLE INVARIANT
+#   For a FUTURE run's match to work, the fingerprint must sit at a token
+#   boundary in the tracking issue's title. /file-issue files flake trackers as
+#   `Flaky CI: <fingerprint>`, so the fingerprint ends the title — satisfying the
+#   boundary-aware match below (`endswith($id)` / `contains($id + " ")`). The
+#   title reassert that re-establishes this invariant lives in the SKILL wiring
+#   (a later unit), not here.
+#
+# WHY IT REUSES dispatch-followup-exists
+#   The state-spanning, boundary-aware title match is non-trivial (see that
+#   script's MATCHING header for the prefix-collision traps it avoids). Rather
+#   than reimplement that jq here and risk divergence, this guard calls the
+#   sibling for the match and adds only the flake-specific recurrence recording
+#   (comment / reopen) on top.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+
+if [[ "$#" -lt 1 || -z "${1:-}" ]]; then
+  echo "error: usage: dispatch-flake-dedup <fingerprint> --body-file <f> [--repo owner/repo]" >&2
+  exit 2
+fi
+
+fingerprint="$1"
+shift
+
+body_file=""
+repo=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --body-file) body_file="$2"; shift 2 ;;
+    --repo)      repo="$2";      shift 2 ;;
+    *)
+      echo "error: dispatch-flake-dedup: unexpected argument '$1'" >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [[ -z "$body_file" ]]; then
+  echo "error: dispatch-flake-dedup: --body-file <f> is required" >&2
+  exit 2
+fi
+if [[ ! -f "$body_file" ]]; then
+  echo "error: dispatch-flake-dedup: --body-file '$body_file' does not exist" >&2
+  exit 2
+fi
+
+# --repo is forwarded ONLY to the lib helpers below. dispatch-followup-exists
+# takes the identifier as $1 and no --repo flag, so it is not forwarded there.
+local_repo_args=()
+[[ -n "$repo" ]] && local_repo_args=(--repo "$repo")
+
+# 1. Match via the sibling — REUSE its state-spanning, boundary-aware match.
+#    Under `set -e`, a non-zero exit from dispatch-followup-exists propagates
+#    (no `|| true` guard masks it).
+match=$("$SCRIPT_DIR/dispatch-followup-exists" "$fingerprint")
+
+# 2. No match → caller files fresh via /file-issue.
+if [[ -z "$match" ]]; then
+  echo "NONE"
+  exit 0
+fi
+
+# 3. Match → record the recurrence on the existing issue, keyed by its state.
+state=$(gh_issue_view_rest "$match" "${local_repo_args[@]}" | jq -r '.state')
+
+case "$state" in
+  OPEN)
+    gh_issue_comment_rest "$match" --body-file "$body_file" "${local_repo_args[@]}"
+    echo "EXISTING $match"
+    ;;
+  CLOSED)
+    gh_issue_reopen_rest "$match" --comment "$(cat "$body_file")" "${local_repo_args[@]}"
+    echo "REOPENED $match"
+    ;;
+  *)
+    echo "error: dispatch-flake-dedup: unexpected state '$state' for issue $match" >&2
+    exit 1
+    ;;
+esac
