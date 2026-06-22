@@ -1054,4 +1054,24 @@ describe("corrupt sidecar — fail-closed", () => {
     expect(readBack).not.toBeNull();
     expect(readBack?.playerState).toMatchObject({ queue: ["a.mp3"], positionSeconds: 5 });
   });
+
+  it("rebinding a clean dir after a corrupt one re-enables disk writes", async () => {
+    // Corrupt folder: writes are suppressed, corrupt bytes preserved.
+    const { dir: corruptDir, fileHandle: corruptFile } = makePreloadedDir("{not json");
+    setLocalDirectory(corruptDir, true);
+    await savePlayerState({ queue: ["x.mp3"], positionSeconds: 1 });
+    await flushWrites();
+    expect(corruptFile._state.content).toBe("{not json");
+    expect(corruptFile.createWritable).not.toHaveBeenCalled();
+
+    // Rebind a clean folder → corrupt flag cleared → writes resume.
+    const cleanDir = makeEmptyDir();
+    setLocalDirectory(cleanDir, true);
+    await savePlayerState({ queue: ["a.mp3"], currentLocalName: "a.mp3", positionSeconds: 12 });
+    await flushWrites();
+
+    const readBack = await readSidecar(cleanDir);
+    if (!readBack) throw new Error("expected non-null sidecar");
+    expect(readBack.playerState).toEqual({ queue: ["a.mp3"], currentLocalName: "a.mp3", positionSeconds: 12 });
+  });
 });
