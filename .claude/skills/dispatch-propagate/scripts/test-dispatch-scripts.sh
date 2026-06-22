@@ -38914,9 +38914,9 @@ STAMP="$SCRIPT_DIR/dispatch-stamp-session"
   git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
   ( cd "$d" && "$STAMP" --session-id sessok --transcript-path "$d/sess..x.jsonl" )
   sc="$d/sess..x.dispatch-stamp.json"
-  assert_eq "stamp: ..‐in‐filename passes (sidecar written)" "yes" \
+  assert_eq "stamp: ..-in-filename passes (sidecar written)" "yes" \
     "$([ -f "$sc" ] && echo yes || echo no)"
-  assert_eq "stamp: ..‐in‐filename .issue == 999" "999" "$(jq -r .issue "$sc")"
+  assert_eq "stamp: ..-in-filename .issue == 999" "999" "$(jq -r .issue "$sc")"
   rm -rf "$d"
 )
 
@@ -38931,6 +38931,7 @@ STAMP="$SCRIPT_DIR/dispatch-stamp-session"
   git -C "$d" checkout -q -b 999-fixture
   git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
   rc=0
+  mkdir -p "$d/sub"
   ( cd "$d" && "$STAMP" --session-id sessok --transcript-path "$d/sub/../evil.jsonl" ) 2>/dev/null || rc=$?
   assert_eq "stamp: --transcript-path embedded /../ exits 2" "2" "$rc"
   assert_eq "stamp: --transcript-path embedded /../ writes no sidecar" "no" \
@@ -38953,6 +38954,26 @@ STAMP="$SCRIPT_DIR/dispatch-stamp-session"
   assert_eq "stamp: --transcript-path control char exits 2" "2" "$rc"
   assert_eq "stamp: --transcript-path control char writes no sidecar" "no" \
     "$([ -f "${tpath%.jsonl}.dispatch-stamp.json" ] && echo yes || echo no)"
+  rm -rf "$d"
+)
+
+# 14. Trailing `/..` traversal sequence exits 2 and writes no sidecar.
+#     Exercises the `*'/..'` alternative (path ending in foo/..), distinct from
+#     test #10's leading `../` and test #12's embedded `/../` forms. With a real
+#     $d/sub directory present, a guard bypass would resolve $d/sub/.. to $d and
+#     write $d/sub/...dispatch-stamp.json (== $d/.dispatch-stamp.json).
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b 999-fixture
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  rc=0
+  mkdir -p "$d/sub"
+  ( cd "$d" && "$STAMP" --session-id sessok --transcript-path "$d/sub/.." ) 2>/dev/null || rc=$?
+  assert_eq "stamp: --transcript-path trailing /.. exits 2" "2" "$rc"
+  assert_eq "stamp: --transcript-path trailing /.. writes no sidecar" "no" \
+    "$([ -f "$d/sub/...dispatch-stamp.json" ] && echo yes || echo no)"
   rm -rf "$d"
 )
 
