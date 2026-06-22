@@ -18,7 +18,7 @@
 // the live in-memory queue interleaves cloud + local items, so a mixed-queue
 // numeric index could not round-trip through a local-only persisted queue.
 
-import { logError } from "@commons-systems/errorutil/log";
+import { createSidecar, serializeSidecar, isPlainObject } from "@commons-systems/sidecar";
 import type { AudioTags } from "./types.js";
 
 const SIDECAR_DIR = ".commons-audio";
@@ -76,10 +76,6 @@ type SidecarPatch = Partial<{
 /** A fresh, empty model. playerState stays undefined; playlists stays `{}`. */
 function emptyModel(): SidecarData {
   return { version: 2, metadata: {}, playlists: {} };
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /** Coerce a raw value into typed `AudioTags`, keeping only leaves whose type
@@ -161,41 +157,6 @@ function coercePlaylists(raw: unknown): Record<string, string[]> {
 }
 
 /**
- * Parse sidecar text into a model. Tolerant of untrusted/partial on-disk
- * contents (input validation at the system edge, not a banned fallback):
- * - JSON parse failure or a non-object top level → log + fresh empty model.
- * - `metadata`, `playerState`, and `playlists` are coerced INDEPENDENTLY, so
- *   malformed metadata never discards a good playerState and vice-versa.
- * - Within each field, wrong-typed leaves are dropped.
- * - `version` is forced to 2.
- * Never throws.
- */
-export function parseSidecar(text: string): SidecarData {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch (err) {
-    logError(err, { operation: "parseSidecar" });
-    return emptyModel();
-  }
-  if (!isPlainObject(parsed)) {
-    logError(new Error("sidecar root is not an object"), { operation: "parseSidecar" });
-    return emptyModel();
-  }
-  return {
-    version: 2,
-    metadata: coerceMetadata(parsed.metadata),
-    playerState: coercePlayerState(parsed.playerState),
-    playlists: coercePlaylists(parsed.playlists),
-  };
-}
-
-/** Serialize a model to JSON text (pretty-printed for sync-friendly diffs). */
-export function serializeSidecar(data: SidecarData): string {
-  return JSON.stringify(data, null, 2);
-}
-
-/**
  * Return a NEW model where the patch's per-field entries win but untouched data
  * is preserved. This is the no-clobber guarantee: merging the player position
  * never drops the metadata cache, a sibling metadata entry, or a playlist.
@@ -221,145 +182,43 @@ export function mergeSidecar(existing: SidecarData, patch: SidecarPatch): Sideca
 }
 
 // ---------------------------------------------------------------------------
-// B. FSA I/O over the directory handle (exported for tests)
+// B. Centralized machinery, wired with the audio schema (Unit 2306)
 // ---------------------------------------------------------------------------
 
-/**
- * Read and parse the sidecar from `dir`. A missing `.commons-audio` directory or
- * `index.json` file (NotFoundError) yields an empty model. Any other unexpected
- * error is logged and also yields an empty model, so a flaky read never crashes
- * the library render. Never throws.
- */
-export async function readSidecar(dir: FileSystemDirectoryHandle): Promise<SidecarData> {
-  try {
-    const sidecarDir = await dir.getDirectoryHandle(SIDECAR_DIR);
-    const fileHandle = await sidecarDir.getFileHandle(SIDECAR_FILE);
-    const file = await fileHandle.getFile();
-    return parseSidecar(await file.text());
-  } catch (err) {
-    if (err instanceof DOMException && err.name === "NotFoundError") {
-      return emptyModel();
-    }
-    logError(err, { operation: "readSidecar" });
-    return emptyModel();
-  }
-}
+// One singleton sidecar handle per app: the shared factory owns the parse/read/
+// write tail, the retained directory handle, the lazily-loaded in-memory model,
+// and the single-flight write chain. The audio app supplies only its
+// schema-specific bits below — directory/file names, the empty model, the
+// per-field coercion assembled in `coerce`, and the no-clobber `mergeSidecar`.
+const sidecar = createSidecar<SidecarData, SidecarPatch>({
+  sidecarDirName: SIDECAR_DIR,
+  sidecarFileName: SIDECAR_FILE,
+  emptyModel,
+  coerce: (parsed) => ({
+    version: 2,
+    metadata: coerceMetadata(parsed.metadata),
+    playerState: coercePlayerState(parsed.playerState),
+    playlists: coercePlaylists(parsed.playlists),
+  }),
+  mergeSidecar,
+});
 
-/**
- * Write `data` to the sidecar, creating `.commons-audio/index.json` as needed.
- * On a write/close failure, abort() the writable (discarding the temp write
- * rather than committing a truncated file, since createWritable defaults to
- * keepExistingData: false) then rethrow.
- */
-export async function writeSidecar(
-  dir: FileSystemDirectoryHandle,
-  data: SidecarData,
-): Promise<void> {
-  const sidecarDir = await dir.getDirectoryHandle(SIDECAR_DIR, { create: true });
-  const fileHandle = await sidecarDir.getFileHandle(SIDECAR_FILE, { create: true });
-  const writableStream = await fileHandle.createWritable();
-  try {
-    await writableStream.write(serializeSidecar(data));
-    await writableStream.close();
-  } catch (e) {
-    await writableStream.abort();
-    throw e;
-  }
-}
+const {
+  parseSidecar,
+  readSidecar,
+  writeSidecar,
+  setLocalDirectory,
+  clearLocalDirectory,
+  ensureLoaded,
+  enqueueWrite,
+  flushWrites,
+} = sidecar;
 
-// ---------------------------------------------------------------------------
-// C. Handle retention + in-memory model + serialized writes (stateful core)
-// ---------------------------------------------------------------------------
-
-let dirHandle: FileSystemDirectoryHandle | null = null;
-let writable = false;
-
-// The single in-memory model. `cachedModel` is the loaded model; `loadPromise`
-// dedupes a concurrent first-load. Both are reset by setLocalDirectory so the
-// next access re-reads from the new handle.
-let cachedModel: SidecarData | null = null;
-let loadPromise: Promise<SidecarData> | null = null;
-
-// Single-flight write chain: every mutation appends to this promise so the
-// player-state save and the metadata batch cannot race or interleave on the
-// file. Each link merges its patch against the result of the prior link, then
-// persists (disk write gated by `writable`).
-let writeChain: Promise<void> = Promise.resolve();
-
-/**
- * Store the retained directory handle and writable flag (called by Unit 3 after
- * the folder is picked / permission resolved). Invalidates the cached model so
- * the next access re-reads lazily from the new handle.
- */
-export function setLocalDirectory(handle: FileSystemDirectoryHandle, isWritable: boolean): void {
-  dirHandle = handle;
-  writable = isWritable;
-  cachedModel = null;
-  loadPromise = null;
-  writeChain = Promise.resolve();
-}
-
-/**
- * Unbind the directory (called when the folder is disconnected). Drops the
- * handle, marks not-writable, and resets the cache + write chain so an in-flight
- * write enqueued before disconnect cannot target the now-stale folder and the
- * next access re-loads an empty model.
- */
-export function clearLocalDirectory(): void {
-  dirHandle = null;
-  writable = false;
-  cachedModel = null;
-  loadPromise = null;
-  writeChain = Promise.resolve();
-}
-
-/**
- * Ensure the in-memory model is loaded (lazily, once) and return it. With no
- * directory bound, returns an empty model. readSidecar never throws.
- */
-export async function ensureLoaded(): Promise<SidecarData> {
-  if (cachedModel !== null) return cachedModel;
-  if (loadPromise === null) {
-    const handle = dirHandle;
-    loadPromise = (handle === null ? Promise.resolve(emptyModel()) : readSidecar(handle)).then(
-      (model) => {
-        cachedModel = model;
-        return model;
-      },
-    );
-  }
-  return loadPromise;
-}
-
-/**
- * Queue a merge-and-persist onto the single-flight write chain. The merge runs
- * inside the task (after ensureLoaded) so each link merges against the prior
- * link's result — the no-clobber serialization guarantee. The in-memory model is
- * ALWAYS updated so the current session stays consistent; the disk write is
- * gated by `writable` (metadata extraction and player-state work in-memory even
- * when the folder is not writable, and the disk save silently no-ops). The
- * per-link catch keeps one failed write from poisoning the chain.
- */
-function enqueueWrite(patch: SidecarPatch): Promise<void> {
-  writeChain = writeChain
-    .then(async () => {
-      const model = await ensureLoaded();
-      const merged = mergeSidecar(model, patch);
-      cachedModel = merged;
-      if (writable && dirHandle !== null) {
-        await writeSidecar(dirHandle, merged);
-      }
-    })
-    .catch((err) => {
-      logError(err, { operation: "sidecarWrite" });
-    });
-  return writeChain;
-}
-
-/** Drain the pending write chain. Unit 8 tests await this to assert persistence. */
-export function flushWrites(): Promise<void> {
-  return writeChain;
-}
+// Re-export the shared surface the rest of the app (and the Unit 8 tests)
+// consume. `ensureLoaded` / `enqueueWrite` stay private — they back only the
+// accessors below.
+export { serializeSidecar };
+export { parseSidecar, readSidecar, writeSidecar, setLocalDirectory, clearLocalDirectory, flushWrites };
 
 // ---------------------------------------------------------------------------
 // D. Accessors

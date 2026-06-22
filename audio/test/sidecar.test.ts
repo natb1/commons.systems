@@ -132,6 +132,41 @@ function makePreloadedDir(content: string): {
   return { dir, fileHandle };
 }
 
+/**
+ * Build a preloaded dir whose FIRST getDirectoryHandle(".commons-audio") call
+ * parks until release() is called, gating the read at the first FSA round-trip
+ * — the exact window the mid-read folder-switch TOCTOU exploits. Later calls
+ * delegate to the real preloaded behavior.
+ */
+function makeGatedPreloadedDir(content: string): {
+  dir: FileSystemDirectoryHandle;
+  release: () => void;
+} {
+  const { dir } = makePreloadedDir(content);
+  const realGetDirectoryHandle = dir.getDirectoryHandle.bind(dir);
+  let released: (() => void) | null = null;
+  let gated = false;
+  (dir as unknown as { getDirectoryHandle: unknown }).getDirectoryHandle = vi // type-safety-ok: test fake overrides getDirectoryHandle to gate the first FSA round-trip
+    .fn()
+    .mockImplementation((name: string, opts?: { create?: boolean }) => {
+      if (!gated) {
+        gated = true;
+        return new Promise((res) => {
+          released = () => res(realGetDirectoryHandle(name, opts));
+        });
+      }
+      return realGetDirectoryHandle(name, opts);
+    });
+  return {
+    dir,
+    release: () => {
+      if (released === null)
+        throw new Error("release() called before the gated read was reached");
+      released();
+    },
+  };
+}
+
 /** Build a fake directory with `.commons-audio` dir but NO `index.json`. */
 function makeDirWithMissingFile(): FileSystemDirectoryHandle {
   const subdir = makeFakeSubdir({}, true);
@@ -160,33 +195,35 @@ describe("parseSidecar", () => {
     expect(result).toEqual(data);
   });
 
-  it("returns empty model for empty string", () => {
-    expect(parseSidecar("")).toEqual({ version: 2, metadata: {}, playlists: {} });
+  it("returns null for empty string", () => {
+    expect(parseSidecar("")).toBeNull();
   });
 
-  it("returns empty model for corrupt JSON", () => {
-    expect(parseSidecar("{not json")).toEqual({ version: 2, metadata: {}, playlists: {} });
+  it("returns null for corrupt JSON", () => {
+    expect(parseSidecar("{not json")).toBeNull();
   });
 
-  it("returns empty model for non-object top-level: number", () => {
-    expect(parseSidecar("42")).toEqual({ version: 2, metadata: {}, playlists: {} });
+  it("returns null for non-object top-level: number", () => {
+    expect(parseSidecar("42")).toBeNull();
   });
 
-  it("returns empty model for non-object top-level: null", () => {
-    expect(parseSidecar("null")).toEqual({ version: 2, metadata: {}, playlists: {} });
+  it("returns null for non-object top-level: null", () => {
+    expect(parseSidecar("null")).toBeNull();
   });
 
-  it("returns empty model for non-object top-level: string", () => {
-    expect(parseSidecar('"a string"')).toEqual({ version: 2, metadata: {}, playlists: {} });
+  it("returns null for non-object top-level: string", () => {
+    expect(parseSidecar('"a string"')).toBeNull();
   });
 
-  it("returns empty model for non-object top-level: array", () => {
-    expect(parseSidecar("[1,2,3]")).toEqual({ version: 2, metadata: {}, playlists: {} });
+  it("returns null for non-object top-level: array", () => {
+    expect(parseSidecar("[1,2,3]")).toBeNull();
   });
 
   it("forces version to 2 regardless of input", () => {
     const json = JSON.stringify({ version: 99, metadata: {}, playlists: {} });
-    expect(parseSidecar(json).version).toBe(2);
+    const result = parseSidecar(json);
+    if (!result) throw new Error("expected non-null for valid input");
+    expect(result.version).toBe(2);
   });
 
   it("coerces missing metadata to {} while preserving valid playerState", () => {
@@ -195,6 +232,7 @@ describe("parseSidecar", () => {
       playerState: { queue: ["a.mp3"], currentLocalName: "a.mp3", positionSeconds: 10 },
     });
     const result = parseSidecar(json);
+    if (!result) throw new Error("expected non-null for valid input");
     expect(result.metadata).toEqual({});
     expect(result.playerState?.queue).toEqual(["a.mp3"]);
   });
@@ -206,6 +244,7 @@ describe("parseSidecar", () => {
       playerState: { queue: ["b.mp3"] },
     });
     const result = parseSidecar(json);
+    if (!result) throw new Error("expected non-null for valid input");
     expect(result.metadata).toEqual({});
     expect(result.playerState?.queue).toEqual(["b.mp3"]);
   });
@@ -217,6 +256,7 @@ describe("parseSidecar", () => {
       playlists: {},
     });
     const result = parseSidecar(json);
+    if (!result) throw new Error("expected non-null for valid input");
     expect(result.metadata["song.mp3"]?.tags.title).toBe("Keep");
     expect("duration" in (result.metadata["song.mp3"]?.tags ?? {})).toBe(false);
   });
@@ -231,6 +271,7 @@ describe("parseSidecar", () => {
         playlists: { Favs: ["old.mp3"] },
       });
       const result = parseSidecar(json);
+      if (!result) throw new Error("expected non-null for valid input");
       expect(result.version).toBe(2);
       // The legacy metadata entry is dropped → a cache miss → re-extraction later.
       expect(result.metadata).toEqual({});
@@ -251,6 +292,7 @@ describe("parseSidecar", () => {
         playlists: {},
       });
       const result = parseSidecar(json);
+      if (!result) throw new Error("expected non-null for valid input");
       expect("bad-size.mp3" in result.metadata).toBe(false);
       expect("missing-lm.mp3" in result.metadata).toBe(false);
       expect("no-tags.mp3" in result.metadata).toBe(false);
@@ -271,6 +313,7 @@ describe("parseSidecar", () => {
         playlists: { Good: ["a.mp3", "b.mp3"], Bad: "not-an-array" },
       });
       const result = parseSidecar(json);
+      if (!result) throw new Error("expected non-null for valid input");
       expect(result.playlists?.["Good"]).toEqual(["a.mp3", "b.mp3"]);
       expect("Bad" in (result.playlists ?? {})).toBe(false);
     });
@@ -282,6 +325,7 @@ describe("parseSidecar", () => {
         playlists: { Mix: ["a.mp3", 42, null, "b.mp3"] },
       });
       const result = parseSidecar(json);
+      if (!result) throw new Error("expected non-null for valid input");
       expect(result.playlists?.["Mix"]).toEqual(["a.mp3", "b.mp3"]);
     });
   });
@@ -290,6 +334,7 @@ describe("parseSidecar", () => {
     it("non-array queue defaults to []", () => {
       const json = JSON.stringify({ version: 1, metadata: {}, playerState: { queue: "bad" } });
       const result = parseSidecar(json);
+      if (!result) throw new Error("expected non-null for valid input");
       expect(result.playerState?.queue).toEqual([]);
     });
 
@@ -300,6 +345,7 @@ describe("parseSidecar", () => {
         playerState: { queue: [], currentLocalName: 42 },
       });
       const result = parseSidecar(json);
+      if (!result) throw new Error("expected non-null for valid input");
       expect("currentLocalName" in (result.playerState ?? {})).toBe(false);
     });
 
@@ -310,18 +356,21 @@ describe("parseSidecar", () => {
         playerState: { queue: [], positionSeconds: "bad" },
       });
       const result = parseSidecar(json);
+      if (!result) throw new Error("expected non-null for valid input");
       expect("positionSeconds" in (result.playerState ?? {})).toBe(false);
     });
 
     it("a plain-object playerState always yields at least { queue: [] }", () => {
       const json = JSON.stringify({ version: 1, metadata: {}, playerState: {} });
       const result = parseSidecar(json);
+      if (!result) throw new Error("expected non-null for valid input");
       expect(result.playerState).toEqual({ queue: [] });
     });
 
     it("a non-object playerState yields undefined", () => {
       const json = JSON.stringify({ version: 1, metadata: {}, playerState: "invalid" });
       const result = parseSidecar(json);
+      if (!result) throw new Error("expected non-null for valid input");
       expect(result.playerState).toBeUndefined();
     });
 
@@ -332,6 +381,7 @@ describe("parseSidecar", () => {
         playerState: 42,
       });
       const result = parseSidecar(json);
+      if (!result) throw new Error("expected non-null for valid input");
       expect(result.metadata["song.mp3"]?.tags.title).toBe("Keep");
       expect(result.playerState).toBeUndefined();
     });
@@ -490,9 +540,9 @@ describe("readSidecar", () => {
     expect(result).toEqual({ version: 2, metadata: {}, playlists: {} });
   });
 
-  it("returns empty model when content is corrupt JSON", async () => {
+  it("returns null when content is corrupt JSON", async () => {
     const { dir } = makePreloadedDir("{not json");
-    await expect(readSidecar(dir)).resolves.toEqual({ version: 2, metadata: {}, playlists: {} });
+    await expect(readSidecar(dir)).resolves.toBeNull();
   });
 });
 
@@ -562,6 +612,7 @@ describe("cacheMetadata / getMetadata — writable=true", () => {
     });
 
     const readBack = await readSidecar(dir);
+    if (!readBack) throw new Error("expected non-null sidecar");
     expect(readBack.metadata["song.mp3"]).toEqual({
       tags: { title: "Test Song", duration: 180 },
       size: 1024,
@@ -577,6 +628,7 @@ describe("cacheMetadata / getMetadata — writable=true", () => {
     await flushWrites();
 
     const readBack = await readSidecar(dir);
+    if (!readBack) throw new Error("expected non-null sidecar");
     expect(readBack.metadata["song.mp3"]).toEqual({
       tags: { title: "My Song" },
       size: 10,
@@ -594,6 +646,7 @@ describe("cacheMetadata / getMetadata — writable=true", () => {
     await flushWrites();
 
     const readBack = await readSidecar(dir);
+    if (!readBack) throw new Error("expected non-null sidecar");
     expect(readBack.metadata["a.mp3"]).toEqual({
       tags: { title: "A", duration: 100 },
       size: 1,
@@ -669,6 +722,136 @@ describe("clearLocalDirectory", () => {
   });
 });
 
+describe("folder switch — stale-handle TOCTOU", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // Helper: read a dir's sidecar without disturbing the module's bound handle.
+  const subdirsOf = (dir: FileSystemDirectoryHandle) =>
+    (dir as unknown as { _subdirs: Record<string, unknown> })._subdirs; // type-safety-ok: test fake internals (_subdirs) access
+
+  it("drops an in-flight stale write after a synchronous folder switch", async () => {
+    const dirA = makeEmptyDir();
+    const dirB = makeEmptyDir();
+
+    setLocalDirectory(dirA, true);
+    // task_A snapshots A; its body is a pending microtask.
+    void cacheMetadata("a.mp3", { tags: { title: "A", duration: 100 }, size: 1, lastModified: 1 });
+    // Switch to B synchronously, before task_A's body runs.
+    setLocalDirectory(dirB, true);
+    void cacheMetadata("b.mp3", { tags: { title: "B", duration: 200 }, size: 2, lastModified: 2 });
+    await flushWrites();
+
+    // A's stale write was skipped — its sidecar dir was never created.
+    expect(subdirsOf(dirA)[".commons-audio"]).toBeUndefined();
+    // B got its write.
+    const readB = await readSidecar(dirB);
+    expect(readB.metadata["b.mp3"]).toEqual({
+      tags: { title: "B", duration: 200 },
+      size: 2,
+      lastModified: 2,
+    });
+  });
+
+  it("in-memory model reflects the new folder, not the stale one", async () => {
+    const dirA = makeEmptyDir();
+    const dirB = makeEmptyDir();
+
+    setLocalDirectory(dirA, true);
+    void cacheMetadata("a.mp3", { tags: { title: "A" }, size: 1, lastModified: 1 });
+    setLocalDirectory(dirB, true);
+    void cacheMetadata("b.mp3", { tags: { title: "B" }, size: 2, lastModified: 2 });
+    await flushWrites();
+
+    // A's patch never merged into B's model.
+    expect(await getMetadata("a.mp3")).toBeUndefined();
+    expect(await getMetadata("b.mp3")).toEqual({
+      tags: { title: "B" },
+      size: 2,
+      lastModified: 2,
+    });
+  });
+
+  it("a mid-session switch writes player-state to the correct folder", async () => {
+    const dirA = makeEmptyDir();
+    const dirB = makeEmptyDir();
+
+    setLocalDirectory(dirA, true);
+    void savePlayerState({ queue: ["a.mp3"], currentLocalName: "a.mp3", positionSeconds: 5 });
+    setLocalDirectory(dirB, true);
+    void savePlayerState({ queue: ["b.mp3"], currentLocalName: "b.mp3", positionSeconds: 7 });
+    await flushWrites();
+
+    const readB = await readSidecar(dirB);
+    expect(readB.playerState).toEqual({
+      queue: ["b.mp3"],
+      currentLocalName: "b.mp3",
+      positionSeconds: 7,
+    });
+    // A's stale player-state write was skipped.
+    expect(subdirsOf(dirA)[".commons-audio"]).toBeUndefined();
+  });
+
+  it("a stale-skip does not wedge the chain: subsequent writes still drain", async () => {
+    const dirA = makeEmptyDir();
+    const dirB = makeEmptyDir();
+
+    setLocalDirectory(dirA, true);
+    void cacheMetadata("a.mp3", { tags: { title: "A" }, size: 1, lastModified: 1 });
+    setLocalDirectory(dirB, true);
+    void cacheMetadata("b.mp3", { tags: { title: "B" }, size: 2, lastModified: 2 });
+    // A further write on the current folder after the stale-skip.
+    void cacheMetadata("c.mp3", { tags: { title: "C" }, size: 3, lastModified: 3 });
+    await flushWrites();
+
+    const readB = await readSidecar(dirB);
+    expect(readB.metadata["b.mp3"]).toEqual({ tags: { title: "B" }, size: 2, lastModified: 2 });
+    expect(readB.metadata["c.mp3"]).toEqual({ tags: { title: "C" }, size: 3, lastModified: 3 });
+    expect(subdirsOf(dirA)[".commons-audio"]).toBeUndefined();
+  });
+
+  it("drops an in-flight stale write when the switch lands mid-read", async () => {
+    const { dir: dirA, release } = makeGatedPreloadedDir(
+      serializeSidecar({
+        version: 2,
+        metadata: { "diskA.mp3": { tags: { title: "DiskA" }, size: 9, lastModified: 9 } },
+        playlists: {},
+      }),
+    );
+    const dirB = makeEmptyDir();
+
+    setLocalDirectory(dirA, true);
+    // task_A snapshots dirA + generation; capture its promise directly — the
+    // switch below resets writeChain, so a post-switch flushWrites() would drain
+    // only the new chain, not task_A.
+    const pA = cacheMetadata("a.mp3", { tags: { title: "A" }, size: 1, lastModified: 1 });
+    // One microtask tick parks task_A on the gated read (the chain body runs as a
+    // single microtask; ensureLoaded → readSidecar → getDirectoryHandle is
+    // synchronous up to the gated await, so the body suspends on the gate).
+    await Promise.resolve();
+    // Switch to dirB DURING the in-flight dirA read: increments generation, nulls cache.
+    setLocalDirectory(dirB, true);
+    // Resolve dirA's read, letting task_A run past both contamination sites.
+    release();
+    // Safe: the per-link .catch in enqueueWrite swallows; awaiting guarantees both
+    // sites executed (site 1 inside the loadPromise ensureLoaded awaits, site 2 right after).
+    await pA;
+
+    // Site 2: task_A's merged patch must NOT have leaked into dirB's cache.
+    expect(await getMetadata("a.mp3")).toBeUndefined();
+    // Site 1: dirA's raw disk model must NOT have leaked into dirB's cache.
+    expect(await getMetadata("diskA.mp3")).toBeUndefined();
+
+    // dirB's cache is clean + usable: a fresh dirB write lands and the stale keys stay gone.
+    await cacheMetadata("b.mp3", { tags: { title: "B" }, size: 2, lastModified: 2 });
+    await flushWrites();
+    expect(await getMetadata("b.mp3")).toEqual({ tags: { title: "B" }, size: 2, lastModified: 2 });
+    expect(await getMetadata("a.mp3")).toBeUndefined();
+    expect(await getMetadata("diskA.mp3")).toBeUndefined();
+  });
+});
+
 describe("cacheMetadataBatch", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -697,6 +880,7 @@ describe("cacheMetadataBatch", () => {
     await flushWrites();
 
     const readBack = await readSidecar(dir);
+    if (!readBack) throw new Error("expected non-null sidecar");
     expect(readBack.metadata["a.mp3"]).toEqual({
       tags: { title: "A", duration: 100 },
       size: 1,
@@ -729,6 +913,7 @@ describe("savePlayerState / getPlayerState", () => {
     });
 
     const readBack = await readSidecar(dir);
+    if (!readBack) throw new Error("expected non-null sidecar");
     expect(readBack.playerState).toEqual({
       queue: ["a.mp3"],
       currentLocalName: "a.mp3",
@@ -781,6 +966,7 @@ describe("savePlaylist / getPlaylists", () => {
     expect(await getPlaylists()).toEqual({ Favs: ["a.mp3", "b.mp3"] });
 
     const readBack = await readSidecar(dir);
+    if (!readBack) throw new Error("expected non-null sidecar");
     expect(readBack.playlists?.["Favs"]).toEqual(["a.mp3", "b.mp3"]);
   });
 });
@@ -809,5 +995,42 @@ describe("sidecar — loads from pre-existing file", () => {
       positionSeconds: 25,
     });
     expect(await getPlaylists()).toEqual({ Old: ["existing.mp3"] });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F. Corrupt sidecar — fail-closed acceptance criteria
+// ---------------------------------------------------------------------------
+
+describe("corrupt sidecar — fail-closed", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("corrupt sidecar: savePlayerState does NOT overwrite the file (AC4)", async () => {
+    const { dir, fileHandle } = makePreloadedDir("{not json");
+    setLocalDirectory(dir, true);
+
+    await savePlayerState({ queue: ["a.mp3"], currentLocalName: "a.mp3", positionSeconds: 12 });
+    await flushWrites();
+
+    // File on disk is untouched — corrupt bytes preserved for recovery.
+    expect(fileHandle._state.content).toBe("{not json");
+    expect(fileHandle.createWritable).not.toHaveBeenCalled();
+
+    // In-memory session still works (the merge applied to an empty model).
+    expect(await getPlayerState()).toMatchObject({ queue: ["a.mp3"], positionSeconds: 12 });
+  });
+
+  it("missing sidecar (NotFoundError): savePlayerState DOES write (AC5)", async () => {
+    const dir = makeDirWithMissingFile();
+    setLocalDirectory(dir, true);
+
+    await savePlayerState({ queue: ["a.mp3"], positionSeconds: 5 });
+    await flushWrites();
+
+    const readBack = await readSidecar(dir);
+    expect(readBack).not.toBeNull();
+    expect(readBack?.playerState).toMatchObject({ queue: ["a.mp3"], positionSeconds: 5 });
   });
 });

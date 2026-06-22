@@ -23,6 +23,7 @@ import { selectLatestSample, type UsageSample } from "./usage-samples.js";
 import { capacityBandKey } from "./capacity-band.js";
 import { remindersPanelKey } from "./reminders.js";
 import type { Reminder } from "./reminders.js";
+import { parkedPanelKey } from "./queue-metrics.js";
 import type { QueueMetricsSnapshot } from "./queue-metrics.js";
 import type { IssueSample } from "./issue-samples.js";
 import type { AuditAggregate } from "./audit-aggregates.js";
@@ -34,6 +35,7 @@ import { BacklogPanel } from "./components/BacklogPanel.js";
 import { AuditPanel } from "./components/AuditPanel.js";
 import { RemindersPanel } from "./components/RemindersPanel.js";
 import { QueueMetricsPanel } from "./components/QueueMetricsPanel.js";
+import { ParkedIssuesPanel } from "./components/ParkedIssuesPanel.js";
 
 // The tier-resolved data the panels render. Mirrors the vanilla ViewState's
 // owner payload (and the demo payload built by buildContext).
@@ -178,6 +180,15 @@ export function Dashboard({ user }: DashboardProps) {
     () => <RemindersPanel reminders={reminders} now={now} />,
     [reminders, remindersPanelKey(reminders, now)],
   );
+  const parked = queueMetrics?.parked ?? [];
+  // ParkedIssuesPanel age labels are now-derived; key on parked-reference + the
+  // per-row age strings (in sorted order). The key changes only when a displayed
+  // age label crosses a humanize bucket boundary, so a tick that changes no
+  // visible label reuses the same element (matching capacityEl/remindersEl).
+  const parkedEl = useMemo(
+    () => <ParkedIssuesPanel parked={parked} now={now} />,
+    [parked, parkedPanelKey(parked, now)],
+  );
 
   if (state.tier === "error") {
     return (
@@ -210,6 +221,7 @@ export function Dashboard({ user }: DashboardProps) {
         {auditEl}
         {remindersEl}
         {queueEl}
+        {parkedEl}
       </div>
     </>
   );

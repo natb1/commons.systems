@@ -30,10 +30,13 @@ vi.mock("firebase-functions/params", () => ({
 
 import {
   buildQueueSearchQueries,
+  buildOfficeHoursQuery,
   computeQueueMetrics,
   searchIssueCountLive,
+  searchIssueDetailsLive,
   sampleDispatchQueueCore,
 } from "../src/dispatch-queue-metrics";
+import type { ParkedIssue } from "../src/dispatch-queue-metrics";
 
 interface InMemoryDocRef {
   path: string;
@@ -219,6 +222,98 @@ describe("searchIssueCountLive", () => {
   });
 });
 
+describe("buildOfficeHoursQuery", () => {
+  it("builds the parked dispatch:office-hours query for a repo", () => {
+    expect(buildOfficeHoursQuery("natb1/commons.systems")).toBe(
+      'repo:natb1/commons.systems is:issue is:open label:"dispatch:office-hours"',
+    );
+  });
+});
+
+describe("searchIssueDetailsLive", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("maps issue nodes to ParkedIssue, with createdAt a real Date and best-effort phase", async () => {
+    const fetchMock = vi.fn(async (_url: string, init: { body: string }) => {
+      const parsed = JSON.parse(init.body) as { query: string; variables: { query: string } };
+      expect(parsed.query).toContain("search(query: $query, type: ISSUE, first: 100)");
+      expect(parsed.query).toContain("nameWithOwner");
+      expect(parsed.variables.query).toBe(
+        'repo:natb1/commons.systems is:issue is:open label:"dispatch:office-hours"',
+      );
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: {
+            search: {
+              nodes: [
+                {
+                  number: 100,
+                  title: "Parked plan item",
+                  url: "https://github.com/natb1/commons.systems/issues/100",
+                  createdAt: "2026-06-01T12:00:00Z",
+                  labels: {
+                    nodes: [
+                      { name: "dispatch:office-hours" },
+                      { name: "dispatch:plan" },
+                      { name: "help wanted" },
+                    ],
+                  },
+                  repository: { nameWithOwner: "natb1/commons.systems" },
+                },
+                {
+                  number: 101,
+                  title: "Parked with no phase",
+                  url: "https://github.com/natb1/commons.systems/issues/101",
+                  createdAt: "2026-06-02T09:30:00Z",
+                  labels: { nodes: [{ name: "dispatch:office-hours" }] },
+                  repository: { nameWithOwner: "natb1/commons.systems" },
+                },
+              ],
+            },
+          },
+        }),
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const parked = await searchIssueDetailsLive(
+      "tok",
+      buildOfficeHoursQuery("natb1/commons.systems"),
+    );
+
+    expect(parked).toHaveLength(2);
+    const [a, b] = parked;
+    expect(a.number).toBe(100);
+    expect(a.title).toBe("Parked plan item");
+    expect(a.url).toBe("https://github.com/natb1/commons.systems/issues/100");
+    expect(a.repo).toBe("natb1/commons.systems");
+    // createdAt MUST be a real Date, not the raw ISO string.
+    expect(a.createdAt).toBeInstanceOf(Date);
+    expect(a.createdAt.toISOString()).toBe("2026-06-01T12:00:00.000Z");
+    // phase = first dispatch:* label other than dispatch:office-hours.
+    expect(a.phase).toBe("dispatch:plan");
+    // No dispatch:* phase label -> phase omitted entirely (Firestore-safe).
+    expect(b.phase).toBeUndefined();
+    expect("phase" in b).toBe(false);
+  });
+
+  it("throws on a non-OK HTTP response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: false,
+        status: 503,
+        text: async () => "service unavailable",
+      })),
+    );
+    await expect(searchIssueDetailsLive("tok", "q")).rejects.toThrow(/503/);
+  });
+});
+
 describe("sampleDispatchQueueCore", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -241,6 +336,7 @@ describe("sampleDispatchQueueCore", () => {
 
     await sampleDispatchQueueCore({
       searchIssueCount: async (query: string) => counts[query],
+      searchIssueDetails: async () => [],
       firestore: store as unknown as Firestore,
       namespace: "office-hours/prod",
       queueRepos: ["natb1/commons.systems"],
@@ -265,6 +361,119 @@ describe("sampleDispatchQueueCore", () => {
     expect(written.memberEmails).toEqual(["owner@example.com"]);
   });
 
+  it("writes injected parked details into the snapshot under `parked`", async () => {
+    const store = createInMemoryFirestore();
+    const now = new Date("2026-06-07T08:30:00Z");
+
+    const counts: Record<string, number> = {};
+    const q = buildQueueSearchQueries("natb1/commons.systems", now);
+    counts[q.open] = 28;
+    counts[q.closed] = 28;
+    counts[q.created] = 14;
+    counts[q.security] = 0;
+    counts[q.bug] = 0;
+    counts[q.enhancement] = 0;
+    counts[q.other] = 0;
+
+    const fakeParked: ParkedIssue[] = [
+      {
+        number: 200,
+        title: "Parked A",
+        url: "https://github.com/natb1/commons.systems/issues/200",
+        createdAt: new Date("2026-06-01T00:00:00Z"),
+        repo: "natb1/commons.systems",
+        phase: "dispatch:plan",
+      },
+      {
+        number: 201,
+        title: "Parked B",
+        url: "https://github.com/natb1/commons.systems/issues/201",
+        createdAt: new Date("2026-06-02T00:00:00Z"),
+        repo: "natb1/commons.systems",
+      },
+    ];
+
+    await sampleDispatchQueueCore({
+      searchIssueCount: async (query: string) => counts[query],
+      searchIssueDetails: async (query: string) => {
+        expect(query).toBe(buildOfficeHoursQuery("natb1/commons.systems"));
+        return fakeParked;
+      },
+      firestore: store as unknown as Firestore, // type-safety-ok: test-only cast of in-memory stub to Firestore interface
+      namespace: "office-hours/prod",
+      queueRepos: ["natb1/commons.systems"],
+      groupId: "group-1",
+      memberEmails: ["owner@example.com"],
+      now,
+    });
+
+    const written = store._docs.get("office-hours/prod/metrics/dispatch-queue") as Record< // type-safety-ok: test-only cast to access written doc fields
+      string,
+      unknown
+    >;
+    expect(written.parked).toEqual(fakeParked);
+  });
+
+  it("concatenates parked details across repos into `parked`", async () => {
+    const store = createInMemoryFirestore();
+    const now = new Date("2026-06-07T08:30:00Z");
+
+    const repoA = "natb1/commons.systems";
+    const repoB = "natb1/other-repo";
+    const qA = buildQueueSearchQueries(repoA, now);
+    const qB = buildQueueSearchQueries(repoB, now);
+    const counts: Record<string, number> = {};
+    for (const qq of [qA, qB]) {
+      counts[qq.open] = 0;
+      counts[qq.closed] = 0;
+      counts[qq.created] = 0;
+      counts[qq.security] = 0;
+      counts[qq.bug] = 0;
+      counts[qq.enhancement] = 0;
+      counts[qq.other] = 0;
+    }
+
+    const parkedByRepo: Record<string, ParkedIssue[]> = {
+      [buildOfficeHoursQuery(repoA)]: [
+        {
+          number: 1,
+          title: "A1",
+          url: "https://github.com/natb1/commons.systems/issues/1",
+          createdAt: new Date("2026-06-01T00:00:00Z"),
+          repo: repoA,
+        },
+      ],
+      [buildOfficeHoursQuery(repoB)]: [
+        {
+          number: 2,
+          title: "B1",
+          url: "https://github.com/natb1/other-repo/issues/2",
+          createdAt: new Date("2026-06-02T00:00:00Z"),
+          repo: repoB,
+        },
+      ],
+    };
+
+    await sampleDispatchQueueCore({
+      searchIssueCount: async (query: string) => counts[query],
+      searchIssueDetails: async (query: string) => parkedByRepo[query] ?? [],
+      firestore: store as unknown as Firestore, // type-safety-ok: test-only cast of in-memory stub to Firestore interface
+      namespace: "office-hours/prod",
+      queueRepos: [repoA, repoB],
+      groupId: "group-1",
+      memberEmails: ["owner@example.com"],
+      now,
+    });
+
+    const written = store._docs.get("office-hours/prod/metrics/dispatch-queue") as Record< // type-safety-ok: test-only cast to access written doc fields
+      string,
+      unknown
+    >;
+    const parked = written.parked as ParkedIssue[]; // type-safety-ok: test-only cast to inspect parked array written to store
+    expect(parked).toHaveLength(2);
+    expect(parked.map((p) => p.number)).toEqual([1, 2]);
+  });
+
   it("writes runwayDays null when the queue is flat or growing", async () => {
     const store = createInMemoryFirestore();
     const now = new Date("2026-06-07T08:30:00Z");
@@ -281,6 +490,7 @@ describe("sampleDispatchQueueCore", () => {
 
     await sampleDispatchQueueCore({
       searchIssueCount: async (query: string) => counts[query],
+      searchIssueDetails: async () => [],
       firestore: store as unknown as Firestore,
       namespace: "office-hours/prod",
       queueRepos: ["natb1/commons.systems"],
@@ -313,6 +523,7 @@ describe("sampleDispatchQueueCore", () => {
 
     await sampleDispatchQueueCore({
       searchIssueCount: async (query: string) => counts[query],
+      searchIssueDetails: async () => [],
       firestore: store as unknown as Firestore,
       namespace: "office-hours/prod",
       queueRepos: ["natb1/commons.systems"],
@@ -369,6 +580,7 @@ describe("sampleDispatchQueueCore", () => {
 
     await sampleDispatchQueueCore({
       searchIssueCount: async (query: string) => counts[query],
+      searchIssueDetails: async () => [],
       firestore: store as unknown as Firestore,
       namespace: "office-hours/prod",
       queueRepos: [repoA, repoB],
@@ -412,6 +624,7 @@ describe("sampleDispatchQueueCore", () => {
 
     await sampleDispatchQueueCore({
       searchIssueCount: async (query: string) => counts[query],
+      searchIssueDetails: async () => [],
       firestore: store as unknown as Firestore,
       namespace: "office-hours/prod",
       queueRepos: ["natb1/commons.systems"],

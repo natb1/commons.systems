@@ -339,6 +339,19 @@ assert_eq "sessions sess-worker artifact.issue" "999" \
 assert_eq "sessions sess-router artifact null" "null" \
   "$(jq '.sessions[] | select(.id=="sess-router") | .artifact' <<<"$OUT")"
 
+# sidecar-coverage metric (#2268): worker sessions are the eligible denominator.
+# The shared fixture has exactly ONE worker (sess-worker), which carries a
+# sidecar → sidecar_eligible==1, sidecar_present==1, rate==1. The 2 subagents,
+# the router-tick, and the recovery session are EXCLUDED from the denominator
+# (they legitimately carry artifact:null), proving case (b): a non-worker with no
+# sidecar does not inflate sidecar_eligible.
+assert_eq "window.sidecar_eligible (1 worker; subagent/router/recovery excluded)" "1" \
+  "$(jq '.window.sidecar_eligible' <<<"$OUT")"
+assert_eq "window.sidecar_present (worker has sidecar)" "1" \
+  "$(jq '.window.sidecar_present' <<<"$OUT")"
+assert_eq "window.sidecar_present_rate (1/1)" "1" \
+  "$(jq '.window.sidecar_present_rate' <<<"$OUT")"
+
 assert_eq 'tool_errors: "Exit code N" count' "1" \
   "$(jq '[.tool_errors[] | select(.signature=="Exit code N")] | length' <<<"$OUT")"
 assert_eq 'tool_errors: "Exit code N" .count field' "1" \
@@ -893,6 +906,96 @@ assert_eq 'enum: by_model[claude-3-7-sonnet-20250219].cost_usd (sonnet)' "$EXPEC
   "$(jq '.by_model["claude-3-7-sonnet-20250219"].cost_usd' <"$ENUM_ROOT/out.json")"
 
 rm -rf "$ENUM_ROOT"
+
+# ---------------------------------------------------------------------------
+# Sidecar-coverage metric, case (a): several worker sessions, some with sidecars
+# (#2268). ISOLATED fixture: a fresh projects root with THREE worker sessions,
+# TWO carrying a sibling .dispatch-stamp.json. Expected: sidecar_eligible==3,
+# sidecar_present==2, sidecar_present_rate == 2/3 (derived via jq, not hardcoded).
+# Its own root so the shared setup() one-worker count assertions stay untouched.
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "--- sidecar-coverage: several workers, some sidecars (#2268) ---"
+
+COV_ROOT=$(mktemp -d)
+trap 'rm -rf "$COV_ROOT" "$FAKE_WRITER_DIR"; teardown' EXIT INT TERM
+cov_worktree="$COV_ROOT/-home-x-worktrees-2268-coverage"
+mkdir -p "$cov_worktree"
+
+# Three worker sessions; sess-cov-a and sess-cov-b carry a sidecar, sess-cov-c
+# does not. Each is a minimal worker transcript (first user line classifies as
+# worker; one zero-usage assistant line keeps totals/price irrelevant here).
+for s in a b c; do
+  cov_jsonl="$cov_worktree/sess-cov-$s.jsonl"
+  printf '%s\n' '{"type":"user","message":{"content":"<command-name>/dispatch-worker</command-name>"}}' \
+    >> "$cov_jsonl"
+  printf '%s\n' '{"type":"assistant","attributionSkill":"plan-implement","isSidechain":false,"gitBranch":"2268-coverage","message":{"model":"claude-opus-4-8","usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}}' \
+    >> "$cov_jsonl"
+  jq . "$cov_jsonl" >/dev/null
+  touch "$cov_jsonl"
+done
+
+# Sibling sidecars for a and b only (c stays sidecar-less).
+for s in a b; do
+  cov_stamp="$cov_worktree/sess-cov-$s.dispatch-stamp.json"
+  printf '%s\n' '{"schema":1,"session_id":"sess-cov-'"$s"'","repo":"natb1/commons.systems","issue":2268,"pr":3000,"branch":"2268-coverage","base_sha":"cafef00d","stamped_at":"2026-01-01T00:00:00Z"}' \
+    >> "$cov_stamp"
+  jq . "$cov_stamp" >/dev/null
+done
+
+OUT_COV=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$COV_ROOT"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
+)
+
+EXPECTED_COV_RATE=$(jq -n '2/3')
+assert_eq "coverage: window.sidecar_eligible (3 workers)" "3" \
+  "$(jq '.window.sidecar_eligible' <<<"$OUT_COV")"
+assert_eq "coverage: window.sidecar_present (2 with sidecars)" "2" \
+  "$(jq '.window.sidecar_present' <<<"$OUT_COV")"
+assert_eq "coverage: window.sidecar_present_rate (2/3)" "$EXPECTED_COV_RATE" \
+  "$(jq '.window.sidecar_present_rate' <<<"$OUT_COV")"
+
+rm -rf "$COV_ROOT"
+
+# ---------------------------------------------------------------------------
+# Sidecar-coverage metric, case (c): zero-worker edge (#2268). ISOLATED fixture
+# with only a router-tick session (no worker). The eligible denominator is 0, so
+# sidecar_present_rate must be null (not 0, not a divide-by-zero) and
+# sidecar_eligible must be 0. Its own root so the shared totals stay untouched.
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "--- sidecar-coverage: zero-worker edge → rate null (#2268) ---"
+
+NOWORKER_ROOT=$(mktemp -d)
+trap 'rm -rf "$NOWORKER_ROOT" "$FAKE_WRITER_DIR"; teardown' EXIT INT TERM
+noworker_bare="$NOWORKER_ROOT/-home-x--bare"
+mkdir -p "$noworker_bare"
+noworker_jsonl="$noworker_bare/sess-noworker.jsonl"
+
+# first user line (any content); assistant with gitBranch HEAD → router-tick.
+printf '%s\n' '{"type":"user","message":{"content":"<command-name>/dispatch</command-name>"}}' \
+  >> "$noworker_jsonl"
+printf '%s\n' '{"type":"assistant","gitBranch":"HEAD","message":{"model":"claude-opus-4-8","usage":{"input_tokens":1,"cache_creation_input_tokens":2,"cache_read_input_tokens":4,"output_tokens":1}}}' \
+  >> "$noworker_jsonl"
+jq . "$noworker_jsonl" >/dev/null
+touch "$noworker_jsonl"
+
+OUT_NOWORKER=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$NOWORKER_ROOT"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
+)
+
+assert_eq "zero-worker: window.sidecar_eligible == 0" "0" \
+  "$(jq '.window.sidecar_eligible' <<<"$OUT_NOWORKER")"
+assert_eq "zero-worker: window.sidecar_present == 0" "0" \
+  "$(jq '.window.sidecar_present' <<<"$OUT_NOWORKER")"
+assert_eq "zero-worker: window.sidecar_present_rate is null (zero denom)" "null" \
+  "$(jq '.window.sidecar_present_rate' <<<"$OUT_NOWORKER")"
+
+rm -rf "$NOWORKER_ROOT"
 
 report_results
 exit $FAIL

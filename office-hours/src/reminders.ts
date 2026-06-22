@@ -18,7 +18,7 @@ export function sortByDueAscending(reminders: Reminder[]): Reminder[] {
   return [...reminders].sort((a, b) => a.dueAt.getTime() - b.dueAt.getTime());
 }
 
-function humanize(absMs: number): string {
+export function humanize(absMs: number): string {
   if (absMs < HOUR) return `${Math.round(absMs / MINUTE)}m`;
   if (absMs < DAY) return `${Math.round(absMs / HOUR)}h`;
   return `${Math.round(absMs / DAY)}d`;
