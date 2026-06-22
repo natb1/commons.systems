@@ -34527,8 +34527,10 @@ cat > "$ehu_tmp/bin/systemctl" <<'STUB'
 printf '%s\n' "$*" >> "$STUB_LOG"
 for a in "$@"; do
   case "$a" in
+    show) printf '%s\n' "${STUB_SUBSTATE-dead}"; exit 0 ;;
     is-active) exit "${STUB_IS_ACTIVE_RC:-0}" ;;
     enable)    exit "${STUB_ENABLE_RC:-0}" ;;
+    restart)   exit "${STUB_RESTART_RC:-0}" ;;
     daemon-reload) exit "${STUB_RELOAD_RC:-0}" ;;
   esac
 done
@@ -34546,7 +34548,7 @@ if (
   export DISPATCH_HEARTBEAT_UNIT_DIR="$ehu_unit_dir"
   export DISPATCH_HEARTBEAT_SYSTEMCTL_CMD="$ehu_tmp/bin/systemctl"
   export STUB_LOG="$ehu_log"
-  export STUB_IS_ACTIVE_RC=3 STUB_ENABLE_RC=0 STUB_RELOAD_RC=0
+  export STUB_SUBSTATE=dead STUB_ENABLE_RC=0 STUB_RESTART_RC=0 STUB_RELOAD_RC=0
   source "$SCRIPT_DIR/lib.sh"
   ensure_heartbeat_units "$ehu_tmp/main-worktree"
 ); then
@@ -34567,39 +34569,45 @@ if (
   fi
   if [ -f "$ehu_tmr" ]; then
     TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: cold path wrote dispatch-heartbeat.timer"
-    grep -q '^OnUnitActiveSec=15min$' "$ehu_tmr" \
-      && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: timer has OnUnitActiveSec=15min"; } \
-      || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: timer missing OnUnitActiveSec=15min"; }
+    grep -q '^OnCalendar=\*:0/15$' "$ehu_tmr" \
+      && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: timer has OnCalendar=*:0/15"; } \
+      || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: timer missing OnCalendar=*:0/15"; }
     grep -q '^OnBootSec=2min$' "$ehu_tmr" \
       && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: timer has OnBootSec=2min"; } \
       || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: timer missing OnBootSec=2min"; }
     grep -q '^Persistent=true$' "$ehu_tmr" \
       && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: timer has Persistent=true"; } \
       || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: timer missing Persistent=true"; }
+    grep -q '^RandomizedDelaySec=30$' "$ehu_tmr" \
+      && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: timer has RandomizedDelaySec=30"; } \
+      || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: timer missing RandomizedDelaySec=30"; }
   else
-    TOTAL=$((TOTAL + 4)); FAIL=$((FAIL + 4))
+    TOTAL=$((TOTAL + 5)); FAIL=$((FAIL + 5))
     echo "  FAIL: cold path did not write dispatch-heartbeat.timer"
   fi
   grep -q 'daemon-reload' "$ehu_log" \
     && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: cold path ran daemon-reload"; } \
     || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: cold path did not run daemon-reload"; }
-  grep -q 'enable --now dispatch-heartbeat.timer' "$ehu_log" \
-    && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: cold path ran enable --now dispatch-heartbeat.timer"; } \
-    || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: cold path did not run enable --now dispatch-heartbeat.timer"; }
+  grep -q 'enable dispatch-heartbeat.timer' "$ehu_log" \
+    && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: cold path ran enable dispatch-heartbeat.timer"; } \
+    || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: cold path did not run enable dispatch-heartbeat.timer"; }
+  grep -q 'restart dispatch-heartbeat.timer' "$ehu_log" \
+    && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: cold path ran restart dispatch-heartbeat.timer"; } \
+    || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: cold path did not run restart dispatch-heartbeat.timer"; }
 else
-  TOTAL=$((TOTAL + 10)); FAIL=$((FAIL + 10))
+  TOTAL=$((TOTAL + 12)); FAIL=$((FAIL + 12))
   echo "  FAIL: ensure_heartbeat_units (cold path) returned non-zero"
 fi
 
-# --- 2. Hot path: both units byte-identical + timer active → no-op ------------
-# The hot-path short-circuit checks is-active (STUB_IS_ACTIVE_RC=0 → active);
-# it returns early and must not run daemon-reload or enable --now.
+# --- 2. Hot path: both units byte-identical + timer armed → no-op -------------
+# The hot-path short-circuit checks SubState (STUB_SUBSTATE=waiting → armed); it
+# returns early and must not run daemon-reload, enable, or restart.
 : > "$ehu_log"
 if (
   export DISPATCH_HEARTBEAT_UNIT_DIR="$ehu_unit_dir"
   export DISPATCH_HEARTBEAT_SYSTEMCTL_CMD="$ehu_tmp/bin/systemctl"
   export STUB_LOG="$ehu_log"
-  export STUB_IS_ACTIVE_RC=0 STUB_ENABLE_RC=0 STUB_RELOAD_RC=0
+  export STUB_SUBSTATE=waiting STUB_ENABLE_RC=0 STUB_RESTART_RC=0 STUB_RELOAD_RC=0
   source "$SCRIPT_DIR/lib.sh"
   ensure_heartbeat_units "$ehu_tmp/main-worktree"
 ); then
@@ -34611,13 +34619,51 @@ if (
   fi
   TOTAL=$((TOTAL + 1))
   if ! grep -q 'enable' "$ehu_log"; then
-    PASS=$((PASS + 1)); echo "  PASS: hot path did not re-run enable --now"
+    PASS=$((PASS + 1)); echo "  PASS: hot path did not re-run enable"
   else
-    FAIL=$((FAIL + 1)); echo "  FAIL: hot path re-ran enable --now"
+    FAIL=$((FAIL + 1)); echo "  FAIL: hot path re-ran enable"
+  fi
+  TOTAL=$((TOTAL + 1))
+  if ! grep -q 'restart' "$ehu_log"; then
+    PASS=$((PASS + 1)); echo "  PASS: hot path did not re-run restart"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: hot path re-ran restart"
+  fi
+else
+  TOTAL=$((TOTAL + 3)); FAIL=$((FAIL + 3))
+  echo "  FAIL: ensure_heartbeat_units (hot path) returned non-zero"
+fi
+
+# --- 2b. Elapsed strand: units match but SubState=elapsed → repair (#2375) -----
+# The #2375 stranded state: units are byte-identical on disk (installed by the
+# cold path above, still present), but the timer is active (elapsed) — no future
+# fire. is-active would read 0 (healthy), but heartbeat_timer_is_armed requires
+# SubState=waiting, so this must fall through to the repair path and re-arm:
+# daemon-reload + restart fire.
+: > "$ehu_log"
+if (
+  export DISPATCH_HEARTBEAT_UNIT_DIR="$ehu_unit_dir"
+  export DISPATCH_HEARTBEAT_SYSTEMCTL_CMD="$ehu_tmp/bin/systemctl"
+  export STUB_LOG="$ehu_log"
+  export STUB_SUBSTATE=elapsed STUB_ENABLE_RC=0 STUB_RESTART_RC=0 STUB_RELOAD_RC=0
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_heartbeat_units "$ehu_tmp/main-worktree"
+); then
+  TOTAL=$((TOTAL + 1))
+  if grep -q 'daemon-reload' "$ehu_log"; then
+    PASS=$((PASS + 1)); echo "  PASS: elapsed timer fell through to repair (daemon-reload)"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: elapsed timer short-circuited (no daemon-reload)"
+  fi
+  TOTAL=$((TOTAL + 1))
+  if grep -q 'restart dispatch-heartbeat.timer' "$ehu_log"; then
+    PASS=$((PASS + 1)); echo "  PASS: elapsed timer is re-armed (#2375) (restart fired)"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: elapsed timer was not re-armed (no restart)"
   fi
 else
   TOTAL=$((TOTAL + 2)); FAIL=$((FAIL + 2))
-  echo "  FAIL: ensure_heartbeat_units (hot path) returned non-zero"
+  echo "  FAIL: ensure_heartbeat_units (elapsed strand) returned non-zero"
 fi
 
 # --- 3. cleanup_stale_heartbeat_units: path-change disable (#2056) ------------
