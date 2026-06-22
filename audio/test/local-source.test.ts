@@ -461,6 +461,59 @@ describe("enrichment", () => {
     expect(batchArg["tune.flac"]).toEqual({ tags: { artist: "Y" }, size: 9, lastModified: 2000 });
   });
 
+  it("file whose getFile() fails on resolve (resolveLocalFile null) is not in the batch; cached stale tags stay visible", async () => {
+    // song.mp3 lists fine (the scan's getFile succeeds), but the LATER resolve
+    // for enrichment fails: getFile() itself throws (not just arrayBuffer) so
+    // resolveLocalFile returns null. Orthogonal to the TOCTOU case, where
+    // getFile succeeds and only arrayBuffer throws. With a stale cache entry
+    // present, no new entry is contributed (do NOT cache `{}`), and the stale
+    // tags must remain visible to the user via listLocalTracks's cache overlay.
+    // getFile must succeed for the listing scans (so the item is listed and
+    // stays visible) but fail for the enrichment resolve in between, modelling a
+    // transient getFile failure. resolveLocalFile catches that throw → null.
+    let songGetFileCalls = 0;
+    const failingEntry: FakeEntry = {
+      kind: "file",
+      name: "song.mp3",
+      // Call 1 = enrich's listing scan (succeeds → item listed).
+      // Call 2 = enrich's resolveLocalFile (throws → null, the path under test).
+      // Call 3 = the final listLocalTracks re-scan (succeeds → item still listed).
+      getFile: async () => {
+        songGetFileCalls += 1;
+        if (songGetFileCalls === 2) throw new Error("getFile error");
+        return { size: 8, lastModified: 1000, arrayBuffer: async () => bytes("song.mp3") };
+      },
+    };
+    const goodEntry = fileEntry("tune.flac", 2000, 9);
+    const handle = fakeDir([failingEntry, goodEntry]);
+    connectDir(handle);
+
+    // song.mp3 has a STALE cached entry; tune.flac is uncached.
+    mockGetMetadata.mockImplementation(async (name: string) => {
+      if (name === "song.mp3")
+        return { tags: { artist: "Stale" }, size: 999, lastModified: 1 };
+      return undefined;
+    });
+    mockExtract.mockResolvedValue({ artist: "Y" });
+    mockCacheMetadataBatch.mockResolvedValue(undefined);
+
+    const mod = await loadModule();
+    await mod.connectLocalFolder();
+    await mod.enrichLocalTracks();
+
+    // song.mp3 never reached extraction (resolveLocalFile returned null).
+    expect(mockExtract).toHaveBeenCalledTimes(1);
+    // batch arg must not include the failing file (no new entry → retry later).
+    const batchArg = mockCacheMetadataBatch.mock.calls[0][0] as Record<string, unknown>; // type-safety-ok: mock-call introspection in test
+    expect("song.mp3" in batchArg).toBe(false);
+    expect(batchArg["tune.flac"]).toEqual({ tags: { artist: "Y" }, size: 9, lastModified: 2000 });
+
+    // The stale cached tags stay user-visible (listLocalTracks overlays cache).
+    const items = await mod.listLocalTracks();
+    const song = items.find((i) => i.localName === "song.mp3");
+    expect(song?.artist).toBe("Stale");
+  });
+
   // -------------------------------------------------------------------------
   // Acceptance criteria 5(a)-(c): fingerprint re-validation in enrichment.
   // -------------------------------------------------------------------------
@@ -518,6 +571,48 @@ describe("enrichment", () => {
       tags: { artist: "Fresh" },
       size: 50,
       lastModified: 9999,
+    });
+  });
+
+  // (b1)/(b2): the fingerprint gate is `cached.size === fp.size &&
+  // cached.lastModified === fp.lastModified`. Exercise each sub-condition
+  // independently so a regression from `&&` to `||` is caught.
+  it.each([
+    {
+      label: "(b1) same size, different lastModified → re-extract",
+      live: { lastModified: 9999, size: 8 },
+      cached: { size: 8, lastModified: 1000 },
+    },
+    {
+      label: "(b2) different size, same lastModified → re-extract",
+      live: { lastModified: 1000, size: 50 },
+      cached: { size: 8, lastModified: 1000 },
+    },
+  ])("$label", async ({ live, cached }) => {
+    const handle = fakeDir([fileEntry("song.mp3", live.lastModified, live.size)]);
+    connectDir(handle);
+
+    // Stale cache: exactly one fingerprint field differs from the live file.
+    mockGetMetadata.mockResolvedValue({
+      tags: { artist: "Old" },
+      size: cached.size,
+      lastModified: cached.lastModified,
+    });
+    mockExtract.mockResolvedValue({ artist: "Fresh" });
+    mockCacheMetadataBatch.mockResolvedValue(undefined);
+
+    const mod = await loadModule();
+    await mod.connectLocalFolder();
+    await mod.enrichLocalTracks();
+
+    // One field differing must still be treated as a mismatch → extraction ran.
+    expect(mockExtract).toHaveBeenCalledTimes(1);
+    // The new entry carries the NEW (live) fingerprint.
+    const batchArg = mockCacheMetadataBatch.mock.calls[0][0] as Record<string, unknown>; // type-safety-ok: mock-call introspection in test
+    expect(batchArg["song.mp3"]).toEqual({
+      tags: { artist: "Fresh" },
+      size: live.size,
+      lastModified: live.lastModified,
     });
   });
 

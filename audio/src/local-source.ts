@@ -335,61 +335,62 @@ export async function resolveLocalFile(item: LibraryItem): Promise<File | null> 
 // cache `{}`), so a transient read failure retries on the next pass.
 // ---------------------------------------------------------------------------
 
-/** Result of enriching one item: the overlaid item plus an optional new cache
- * entry (`[localName, CachedMetadata]`) to be persisted in the pass's single
- * batched write. `entry` is null when nothing new was extracted (fresh cache
- * hit, no localName, or an unreadable file) so it contributes nothing to the
- * batch. */
+/** Result of enriching one item: an optional new cache entry (`[localName,
+ * CachedMetadata]`) to be persisted in the pass's single batched write. `entry`
+ * is null when nothing new was extracted (fresh cache hit, no localName, or an
+ * unreadable file) so it contributes nothing to the batch.
+ *
+ * This pass does NOT overlay the listed item: enrichment exists only to populate
+ * the sidecar cache. The user-visible tags (fresh or stale-but-cached) come from
+ * `listLocalTracks`'s own cache overlay on the next render, so there is nothing
+ * to return for display. */
 interface EnrichResult {
-  item: LibraryItem;
   entry: [string, CachedMetadata] | null;
 }
 
 async function enrichLocalItem(item: LibraryItem): Promise<EnrichResult> {
   const localName = item.localName;
   // Cloud-shaped safety; local items always carry a localName.
-  if (!localName) return { item, entry: null };
+  if (!localName) return { entry: null };
   const cached = await getMetadata(localName);
   const file = await resolveLocalFile(item);
-  // Could not read this file. Overlay the cached (stale-but-present) tags if we
-  // have them; never contribute a new entry (do NOT cache `{}` — that would
-  // permanently suppress a retry). A later pass retries.
+  // Could not read this file: contribute no entry (do NOT cache `{}` — that
+  // would permanently suppress a retry). A later pass retries. The cached
+  // (stale-but-present) tags stay user-visible via `listLocalTracks`'s overlay.
   if (file === null) {
-    return { item: cached !== undefined ? overlay(item, cached.tags) : item, entry: null };
+    return { entry: null };
   }
   const fp = { size: file.size, lastModified: file.lastModified };
-  // Fresh cache hit: the file's content is unchanged since extraction. Overlay
-  // the cached tags and skip extraction — no `arrayBuffer()` read.
+  // Fresh cache hit: the file's content is unchanged since extraction. Skip
+  // extraction — no `arrayBuffer()` read — and contribute no new entry.
   if (cached !== undefined && cached.size === fp.size && cached.lastModified === fp.lastModified) {
-    return { item: overlay(item, cached.tags), entry: null };
+    return { entry: null };
   }
   // Miss or mismatch: read the bytes and re-extract. Guard `arrayBuffer()` in a
   // try/catch — TOCTOU: the file can vanish between `getFile()` and the byte
-  // read. On failure, overlay the cached tags if present (else leave as-is) and
-  // contribute no entry, so a later pass retries.
+  // read. On failure, contribute no entry so a later pass retries (the cached
+  // tags, if any, remain visible through `listLocalTracks`).
   let buf: ArrayBuffer;
   try {
     buf = await file.arrayBuffer();
   } catch (err) {
     logError(err, { operation: "enrich-local-item" });
-    return { item: cached !== undefined ? overlay(item, cached.tags) : item, entry: null };
+    return { entry: null };
   }
   const tags = await extractAudioMetadata(buf, item.format);
   // Contribute this entry to the pass's single batched write, fingerprinted with
   // the file's current size/lastModified (an empty `{}` extract is still a
-  // present entry: it caches so we don't re-extract a tagless file every pass,
-  // and `overlay` with `{}` keeps the placeholders).
-  return { item: overlay(item, tags), entry: [localName, { tags, ...fp }] };
+  // present entry: it caches so we don't re-extract a tagless file every pass).
+  return { entry: [localName, { tags, ...fp }] };
 }
 
-async function enrichLocalItems(items: LibraryItem[]): Promise<LibraryItem[]> {
+async function enrichLocalItems(items: LibraryItem[]): Promise<void> {
   const results = await Promise.all(items.map((item) => enrichLocalItem(item)));
   const newEntries = Object.fromEntries(
     results.filter((r) => r.entry !== null).map((r) => r.entry as [string, CachedMetadata]),
   );
   // Empty → no-op (write suppression on a focus-rescan with no changed files).
   await cacheMetadataBatch(newEntries);
-  return results.map((r) => r.item);
 }
 
 /**
