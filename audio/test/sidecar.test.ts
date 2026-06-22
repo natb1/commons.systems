@@ -684,17 +684,21 @@ describe("folder switch — stale-handle TOCTOU", () => {
 
     setLocalDirectory(dirA, true);
     // task_A snapshots A; its body is a pending microtask.
-    void cacheMetadata("a.mp3", { title: "A", duration: 100 });
+    void cacheMetadata("a.mp3", { tags: { title: "A", duration: 100 }, size: 1, lastModified: 1 });
     // Switch to B synchronously, before task_A's body runs.
     setLocalDirectory(dirB, true);
-    void cacheMetadata("b.mp3", { title: "B", duration: 200 });
+    void cacheMetadata("b.mp3", { tags: { title: "B", duration: 200 }, size: 2, lastModified: 2 });
     await flushWrites();
 
-    // B got its write.
-    const readB = await readSidecar(dirB);
-    expect(readB.metadata["b.mp3"]).toEqual({ title: "B", duration: 200 });
     // A's stale write was skipped — its sidecar dir was never created.
     expect(subdirsOf(dirA)[".commons-audio"]).toBeUndefined();
+    // B got its write.
+    const readB = await readSidecar(dirB);
+    expect(readB.metadata["b.mp3"]).toEqual({
+      tags: { title: "B", duration: 200 },
+      size: 2,
+      lastModified: 2,
+    });
   });
 
   it("in-memory model reflects the new folder, not the stale one", async () => {
@@ -702,14 +706,18 @@ describe("folder switch — stale-handle TOCTOU", () => {
     const dirB = makeEmptyDir();
 
     setLocalDirectory(dirA, true);
-    void cacheMetadata("a.mp3", { title: "A" });
+    void cacheMetadata("a.mp3", { tags: { title: "A" }, size: 1, lastModified: 1 });
     setLocalDirectory(dirB, true);
-    void cacheMetadata("b.mp3", { title: "B" });
+    void cacheMetadata("b.mp3", { tags: { title: "B" }, size: 2, lastModified: 2 });
     await flushWrites();
 
     // A's patch never merged into B's model.
     expect(await getMetadata("a.mp3")).toBeUndefined();
-    expect(await getMetadata("b.mp3")).toEqual({ title: "B" });
+    expect(await getMetadata("b.mp3")).toEqual({
+      tags: { title: "B" },
+      size: 2,
+      lastModified: 2,
+    });
   });
 
   it("a mid-session switch writes player-state to the correct folder", async () => {
@@ -737,16 +745,16 @@ describe("folder switch — stale-handle TOCTOU", () => {
     const dirB = makeEmptyDir();
 
     setLocalDirectory(dirA, true);
-    void cacheMetadata("a.mp3", { title: "A" });
+    void cacheMetadata("a.mp3", { tags: { title: "A" }, size: 1, lastModified: 1 });
     setLocalDirectory(dirB, true);
-    void cacheMetadata("b.mp3", { title: "B" });
+    void cacheMetadata("b.mp3", { tags: { title: "B" }, size: 2, lastModified: 2 });
     // A further write on the current folder after the stale-skip.
-    void cacheMetadata("c.mp3", { title: "C" });
+    void cacheMetadata("c.mp3", { tags: { title: "C" }, size: 3, lastModified: 3 });
     await flushWrites();
 
     const readB = await readSidecar(dirB);
-    expect(readB.metadata["b.mp3"]).toEqual({ title: "B" });
-    expect(readB.metadata["c.mp3"]).toEqual({ title: "C" });
+    expect(readB.metadata["b.mp3"]).toEqual({ tags: { title: "B" }, size: 2, lastModified: 2 });
+    expect(readB.metadata["c.mp3"]).toEqual({ tags: { title: "C" }, size: 3, lastModified: 3 });
     expect(subdirsOf(dirA)[".commons-audio"]).toBeUndefined();
   });
 });
