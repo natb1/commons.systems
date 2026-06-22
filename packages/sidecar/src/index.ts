@@ -1,3 +1,2 @@
-// Centralized on-disk JSON sidecar machinery shared by the audio and print apps.
-// The generic factory and helpers are added in the next unit.
-export {};
+export { createSidecar, serializeSidecar, isPlainObject } from "./factory.ts";
+export type { CreateSidecarOptions, SidecarHandle } from "./factory.ts";
