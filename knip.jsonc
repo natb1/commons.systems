@@ -37,6 +37,13 @@
     "jscpd" // dispatch-review-erosion runs node_modules/.bin/jscpd; .claude/** is in ignoreFiles so knip can't trace it
   ],
 
+  // System binaries invoked via execFileSync or similar — not npm packages, so
+  // they cannot be declared in package.json. Each entry suppresses exactly one
+  // binary name.
+  "ignoreBinaries": [
+    "gh" // intentionsutil/scripts/backfill.ts: `execFileSync("gh", ...)` — GitHub CLI, a system binary
+  ],
+
   // Internal imports inside the COPIED scaffolding templates resolve only after
   // the template is scaffolded into a new app; `ignoreFiles` excludes the files
   // as dead-code candidates but not their internal import resolution.
@@ -70,6 +77,7 @@
     "authutil": { "entry": ["bin/**"] },
     "firebaseutil": { "entry": ["bin/**"] },
     "firestoreutil": { "entry": ["bin/**"] },
-    "functions": { "entry": ["scripts/**"] }
+    "functions": { "entry": ["scripts/**"] },
+    "intentionsutil": { "entry": ["scripts/**"] }
   }
 }

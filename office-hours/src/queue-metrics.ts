@@ -1,4 +1,23 @@
 import { logError } from "@commons-systems/errorutil/log";
+import { humanize } from "./reminders.js";
+
+/**
+ * A parked issue waiting for office-hours attention.
+ */
+export interface ParkedIssue {
+  /** GitHub issue number. */
+  number: number;
+  /** Issue title. */
+  title: string;
+  /** Full GitHub URL to the issue. */
+  url: string;
+  /** Timestamp when the issue was created. */
+  createdAt: Date;
+  /** Repository in "owner/name" form, e.g. "natb1/commons.systems". */
+  repo: string;
+  /** Best-effort dispatch residue label (e.g. "dispatch:review"); optional. */
+  phase?: string;
+}
 
 /**
  * A single point-in-time snapshot of the dispatch-queue metrics.
@@ -27,6 +46,8 @@ export interface QueueMetricsSnapshot {
   groupId: string;
   /** Denormalized member emails for Firestore security-rule auth checks. */
   memberEmails: string[];
+  /** Issues currently parked awaiting office-hours attention. */
+  parked: ParkedIssue[];
 }
 
 /**
@@ -45,6 +66,14 @@ export function serializeQueueMetrics(s: QueueMetricsSnapshot): Record<string, u
     computedAt: s.computedAt,
     groupId: s.groupId,
     memberEmails: s.memberEmails,
+    parked: s.parked.map((p) => ({
+      number: p.number,
+      title: p.title,
+      url: p.url,
+      createdAt: p.createdAt,
+      repo: p.repo,
+      ...(p.phase !== undefined ? { phase: p.phase } : {}),
+    })),
   };
 }
 
@@ -74,6 +103,25 @@ export function parseQueueMetrics(data: Record<string, unknown>): QueueMetricsSn
       ? (data.memberEmails as string[])
       : null;
   const computedAt = toDate(data.computedAt);
+
+  // Parse parked issues leniently and independently of the strict required-field
+  // gate below. A missing, null, or malformed parked field must never fail the
+  // whole snapshot parse — it degrades gracefully to an empty array instead.
+  const parked: ParkedIssue[] = Array.isArray(data.parked)
+    ? (data.parked as unknown[]).flatMap((item) => { // type-safety-ok: lenient parse casts unvalidated Firestore data to iterate it safely
+        if (typeof item !== "object" || item === null) return [];
+        const i = item as Record<string, unknown>; // type-safety-ok: cast each item to access fields by name in lenient parse
+        const number = typeof i.number === "number" && Number.isFinite(i.number) ? i.number : null;
+        const title = typeof i.title === "string" ? i.title : null;
+        const url = typeof i.url === "string" ? i.url : null;
+        const repo = typeof i.repo === "string" ? i.repo : null;
+        const createdAt = toDate(i.createdAt);
+        if (number === null || title === null || url === null || repo === null || createdAt === null) return [];
+        const parsed: ParkedIssue = { number, title, url, createdAt, repo };
+        if (typeof i.phase === "string") parsed.phase = i.phase;
+        return [parsed];
+      })
+    : [];
 
   let runwayDays: number | null;
   let runwayDaysValid: boolean;
@@ -127,5 +175,28 @@ export function parseQueueMetrics(data: Record<string, unknown>): QueueMetricsSn
     computedAt,
     groupId,
     memberEmails,
+    parked,
   };
+}
+
+/**
+ * Content signature for the parked-issues panel's now-derived output.
+ *
+ * The sort order depends only on `createdAt` (fixed per array), so it is covered
+ * by the caller's `parked`-reference dep; this key captures the now-derived
+ * per-row output — each item's `humanize(now − createdAt)` age string — in the
+ * panel's oldest-first sorted order. A memo keyed on this signature reuses its
+ * element (and skips the re-render) across a tick that changes none of those age
+ * labels. Empty array → "".
+ *
+ * Covers: per-row age label (in sorted order) — must mirror ParkedIssuesPanel's
+ * now-derived output. When adding a new now-derived field to ParkedIssuesPanel,
+ * add it here too or the memo will miss its changes.
+ */
+export function parkedPanelKey(parked: ParkedIssue[], now: Date): string {
+  const nowMs = now.getTime();
+  return [...parked]
+    .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+    .map((item) => humanize(nowMs - item.createdAt.getTime()))
+    .join("~");
 }

@@ -47,6 +47,7 @@ if ! issue_json=$(gh api "repos/{owner}/{repo}/issues/$N" 2>&1); then
 fi
 
 if printf '%s' "$issue_json" | jq -e 'has("pull_request")' > /dev/null 2>&1; then
+  # lint-allow: gh-rest-porcelain GraphQL-only closingIssuesReferences (no REST equivalent)
   closing_json=$(gh pr view "$N" --json closingIssuesReferences)
   count=$(printf '%s' "$closing_json" | jq '.closingIssuesReferences | length')
 

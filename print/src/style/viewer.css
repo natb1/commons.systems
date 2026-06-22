@@ -157,7 +157,7 @@ body.viewer-active {
 .viewer-canvas-wrap.spread-mode {
   display: flex;
   flex-direction: row;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .spread-page {
@@ -292,6 +292,18 @@ body.viewer-active {
   display: none !important;
 }
 
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .viewer-prev:disabled,
 .viewer-next:disabled,
 .viewer-zoom-in:disabled,
@@ -414,7 +426,7 @@ body.viewer-active {
 }
 
 .viewer-search-result-snippet mark {
-  background: #fde68a;
+  background: #fde68a; /* ds-lint-disable-line: search-result highlight swatch, no mark/highlight token */
   color: inherit;
   border-radius: var(--radius-none);
 }

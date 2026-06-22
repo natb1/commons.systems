@@ -216,6 +216,7 @@ INTENDED_SORTED="$(printf '%s\n' "${INTENDED[@]}" | sort -n -u)"
 MAX_PASSES=2
 pass=0
 while :; do
+  # lint-allow: gh-rest-porcelain GraphQL-only closingIssuesReferences (no REST equivalent)
   PARSED="$(gh pr view "$PR_NUM" --json closingIssuesReferences \
     -q '.closingIssuesReferences[].number' | sort -n -u)"
 

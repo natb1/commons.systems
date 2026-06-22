@@ -18,11 +18,13 @@
     "functions",
     "htmlutil",
     "idbutil",
+    "intentionsutil",
     "landing",
     "local-first",
     "mediautil",
     "print",
     "packages/ds",
+    "packages/sidecar",
     "router",
     "style",
     "rules-test"

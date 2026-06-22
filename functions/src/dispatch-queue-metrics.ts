@@ -139,6 +139,41 @@ interface SearchCountResponse {
   search: { issueCount: number };
 }
 
+// A parked dispatch:office-hours issue, surfaced for the dashboard. This wire
+// shape must match office-hours/src/queue-metrics.ts independently (there is no
+// shared types package). `url` is emitted by the producer (not constructed
+// client-side); `createdAt` is a real Date (the app's toDate helper returns null
+// for raw strings, so a string would silently drop every parked item); `phase`
+// is a best-effort dispatch residue label, omitted when none applies.
+export interface ParkedIssue {
+  number: number;
+  title: string;
+  url: string;
+  createdAt: Date;
+  repo: string;
+  phase?: string;
+}
+
+interface SearchDetailsResponse {
+  search: {
+    nodes: Array<{
+      number: number;
+      title: string;
+      url: string;
+      createdAt: string;
+      labels: { nodes: Array<{ name: string }> };
+      repository: { nameWithOwner: string };
+    }>;
+  };
+}
+
+// Builds the GitHub issue-search query for parked dispatch:office-hours work in
+// one repo. Kept separate from buildQueueSearchQueries / QueueSearchQueries so
+// the details fetch stays entirely off the stride-7 count aggregation path.
+export function buildOfficeHoursQuery(queueRepo: string): string {
+  return `repo:${queueRepo} is:issue is:open label:"dispatch:office-hours"`;
+}
+
 // Posts a single GraphQL `search(... type: ISSUE) { issueCount }` query and
 // returns the count. Throws on non-OK HTTP and on GraphQL `errors`. Mirrors the
 // local githubGraphQL helper in office-hours-sync.ts (which is not exported).
@@ -179,6 +214,80 @@ export async function searchIssueCountLive(token: string, query: string): Promis
   return json.data.search.issueCount;
 }
 
+// Posts a single GraphQL `search(... type: ISSUE) { nodes { ... } }` query and
+// maps each issue node to a ParkedIssue. Same fetch/auth/error-handling shape as
+// searchIssueCountLive, but fetches node details instead of a count. Single page
+// (first: 100, no pagination loop): a parked queue over 100 is pathological and
+// truncation is acceptable. `query` is bound as the $query GraphQL variable (not
+// interpolated) so it cannot inject into the query body.
+export async function searchIssueDetailsLive(
+  token: string,
+  query: string,
+): Promise<ParkedIssue[]> {
+  const gql = `
+    query($query: String!) { # // type-safety-ok: GraphQL non-null type annotation, not a TypeScript assertion
+      search(query: $query, type: ISSUE, first: 100) {
+        nodes {
+          ... on Issue {
+            number
+            title
+            url
+            createdAt
+            labels(first: 20) { nodes { name } }
+            repository { nameWithOwner }
+          }
+        }
+      }
+    }
+  `;
+  const res = await fetch("https://api.github.com/graphql", {
+    method: "POST",
+    headers: {
+      Authorization: `bearer ${token}`,
+      "User-Agent": "dispatch-queue-metrics/1.0",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ query: gql, variables: { query } }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(
+      `GitHub GraphQL request failed: ${res.status} ${truncateForLog(text)}`,
+    );
+  }
+
+  const json = (await res.json()) as GraphQLResponse<SearchDetailsResponse>; // type-safety-ok: res.json() returns unknown; cast matches documented GraphQL response schema
+  if (json.errors && json.errors.length > 0) {
+    throw new Error(
+      `GitHub GraphQL errors: ${json.errors.map((e) => e.message).join("; ")}`,
+    );
+  }
+  if (!json.data) {
+    throw new Error("GitHub GraphQL response missing data");
+  }
+
+  return json.data.search.nodes.map((node) => {
+    // Best-effort dispatch phase: the first dispatch:* label other than
+    // dispatch:office-hours (which is the bucket itself, not a phase).
+    const phase = node.labels.nodes
+      .map((l) => l.name)
+      .find((n) => n.startsWith("dispatch:") && n !== "dispatch:office-hours");
+    return {
+      number: node.number,
+      title: node.title,
+      url: node.url,
+      // GitHub returns createdAt as an ISO string; the app's toDate helper
+      // returns null for strings, so it MUST be a real Date on the wire.
+      createdAt: new Date(node.createdAt),
+      repo: node.repository.nameWithOwner,
+      // Omit phase entirely when absent — firebase-admin rejects an explicit
+      // undefined in a written document.
+      ...(phase ? { phase } : {}),
+    };
+  });
+}
+
 // Runs the seven searches per repo via the injected `searchIssueCount` and
 // aggregates the counts across all configured repos, computes the snapshot, and
 // writes the field map to `${namespace}/metrics/dispatch-queue`. The snapshot
@@ -188,6 +297,7 @@ export async function searchIssueCountLive(token: string, query: string): Promis
 // `${namespace}/issue-samples`.
 export async function sampleDispatchQueueCore(deps: {
   searchIssueCount: (query: string) => Promise<number>;
+  searchIssueDetails: (query: string) => Promise<ParkedIssue[]>;
   firestore: Firestore;
   namespace: string;
   queueRepos: string[];
@@ -237,6 +347,14 @@ export async function sampleDispatchQueueCore(deps: {
     windowDays: WINDOW_DAYS,
   });
 
+  // Parked dispatch:office-hours details, fetched on a completely separate code
+  // path from the stride-7 count aggregation above. One details search per repo
+  // in parallel, concatenated across repos.
+  const parkedPerRepo = await Promise.all(
+    deps.queueRepos.map((r) => deps.searchIssueDetails(buildOfficeHoursQuery(r))),
+  );
+  const parked = parkedPerRepo.flat();
+
   const docRef = deps.firestore.doc(`${deps.namespace}/metrics/dispatch-queue`);
   await docRef.set({
     openHelpWanted,
@@ -248,6 +366,7 @@ export async function sampleDispatchQueueCore(deps: {
     computedAt: deps.now,
     groupId: deps.groupId,
     memberEmails: deps.memberEmails,
+    parked,
   });
 
   await deps.firestore.collection(`${deps.namespace}/issue-samples`).add({
@@ -350,6 +469,7 @@ export const sampleDispatchQueueMetrics = onSchedule(
 
       await sampleDispatchQueueCore({
         searchIssueCount: (query) => searchIssueCountLive(token, query),
+        searchIssueDetails: (query) => searchIssueDetailsLive(token, query),
         firestore,
         namespace,
         queueRepos,
