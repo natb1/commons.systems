@@ -3527,8 +3527,11 @@ teardown
 # route's "candidate hard error" else branch still falls back to INVOKE /plan-issue
 # at exit 0 (#2296). GATE-4 covers the candidate exit-3 in isolation; this asserts
 # the end-to-end route fallback through a dispatch-config-load failure.
-# dispatch-epic-labels (config-load) is the candidate's FIRST step and exits 3 on
-# malformed epic.json BEFORE the epic-label gate or sub-issues fetch, so no
+# dispatch-epic-labels (config-load) is the candidate's FIRST step and exits 1 on
+# malformed epic.json (set -e propagation from dispatch-config-load);
+# dispatch-epic-resolved-candidate then surfaces that failure as exit 3
+# via its `|| { exit 3 }` branch. This happens BEFORE the epic-label gate or
+# sub-issues fetch, so no
 # sub-issues fixture is needed. The "epic" label on the issue documents that even a
 # would-be epic candidate still falls back safely when its config is malformed.
 echo "Test: no PR + malformed epic.json → candidate exit 3 → INVOKE /plan-issue"
