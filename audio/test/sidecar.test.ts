@@ -1072,6 +1072,6 @@ describe("corrupt sidecar — fail-closed", () => {
 
     const readBack = await readSidecar(cleanDir);
     if (!readBack) throw new Error("expected non-null sidecar");
-    expect(readBack.playerState).toMatchObject({ queue: ["a.mp3"], positionSeconds: 12 });
+    expect(readBack.playerState).toEqual({ queue: ["a.mp3"], currentLocalName: "a.mp3", positionSeconds: 12 });
   });
 });
