@@ -42,10 +42,24 @@ export interface PlayerState {
   positionSeconds?: number;
 }
 
+/**
+ * A cached metadata entry: the extracted tags plus a content fingerprint (the
+ * file's `size` + `lastModified` at extraction time). The fingerprint lets the
+ * enrichment path detect when a file's content has changed since its tags were
+ * cached, so a stale entry is re-extracted rather than overlaid forever.
+ */
+export interface CachedMetadata {
+  tags: AudioTags;
+  /** FSA File.size at extraction time (content fingerprint). */
+  size: number;
+  /** FSA File.lastModified (ms since epoch) at extraction time. */
+  lastModified: number;
+}
+
 export interface SidecarData {
-  version: 1;
+  version: 2;
   /** Metadata cache, keyed by localName (bare filename). */
-  metadata: Record<string, AudioTags>;
+  metadata: Record<string, CachedMetadata>;
   /** Player-state for the local queue (absent until first saved). */
   playerState?: PlayerState;
   /** Playlists, keyed by name; each value is a list of localNames. */
@@ -54,44 +68,60 @@ export interface SidecarData {
 
 /** The shape a patch may carry — an arbitrary subset of fields, playerState partial. */
 type SidecarPatch = Partial<{
-  metadata: Record<string, AudioTags>;
+  metadata: Record<string, CachedMetadata>;
   playerState: Partial<PlayerState>;
   playlists: Record<string, string[]>;
 }>;
 
 /** A fresh, empty model. playerState stays undefined; playlists stays `{}`. */
 function emptyModel(): SidecarData {
-  return { version: 1, metadata: {}, playlists: {} };
+  return { version: 2, metadata: {}, playlists: {} };
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/** Coerce a raw value into typed `AudioTags`, keeping only leaves whose type
+ * matches (`title`/`artist`/`album`/`genre` strings; `trackNumber`/`year`/
+ * `duration` finite numbers). Wrong-typed leaves are dropped so a malformed
+ * on-disk entry can never surface as a non-string title or non-number duration
+ * downstream. */
+function coerceTags(value: Record<string, unknown>): AudioTags {
+  const entry: AudioTags = {};
+  if (typeof value.title === "string") entry.title = value.title;
+  if (typeof value.artist === "string") entry.artist = value.artist;
+  if (typeof value.album === "string") entry.album = value.album;
+  if (typeof value.genre === "string") entry.genre = value.genre;
+  if (typeof value.trackNumber === "number" && Number.isFinite(value.trackNumber))
+    entry.trackNumber = value.trackNumber;
+  if (typeof value.year === "number" && Number.isFinite(value.year)) entry.year = value.year;
+  if (typeof value.duration === "number" && Number.isFinite(value.duration))
+    entry.duration = value.duration;
+  return entry;
+}
+
 /**
- * Coerce a raw `metadata` value into the typed cache, keeping only entries whose
- * value is a plain object and, within each, only the leaves whose type matches
- * `AudioTags` (`title`/`artist`/`album`/`genre` strings; `trackNumber`/`year`/
- * `duration` numbers). Wrong-typed leaves are dropped so a malformed on-disk
- * entry can never surface as a non-string title or non-number duration
- * downstream.
+ * Coerce a raw `metadata` value into the typed cache, keeping only entries that
+ * are a well-formed `CachedMetadata` wrapper: a plain `tags` object plus finite
+ * numeric `size` and `lastModified` (the content fingerprint). The inner `tags`
+ * leaves are coerced per-leaf so a malformed leaf can never surface downstream.
+ *
+ * This IS the v1→v2 migration: a legacy v1 entry is a bare `AudioTags` object
+ * (no `tags`/`size`/`lastModified` wrapper), so it fails the wrapper checks and
+ * is DROPPED at parse — absent from the in-memory model, the enrichment path
+ * then sees `undefined` and re-extracts with a fresh fingerprint. No separate
+ * migration step.
  */
-function coerceMetadata(raw: unknown): Record<string, AudioTags> {
+function coerceMetadata(raw: unknown): Record<string, CachedMetadata> {
   if (!isPlainObject(raw)) return {};
-  const out: Record<string, AudioTags> = {};
+  const out: Record<string, CachedMetadata> = {};
   for (const [key, value] of Object.entries(raw)) {
     if (!isPlainObject(value)) continue;
-    const entry: AudioTags = {};
-    if (typeof value.title === "string") entry.title = value.title;
-    if (typeof value.artist === "string") entry.artist = value.artist;
-    if (typeof value.album === "string") entry.album = value.album;
-    if (typeof value.genre === "string") entry.genre = value.genre;
-    if (typeof value.trackNumber === "number" && Number.isFinite(value.trackNumber))
-      entry.trackNumber = value.trackNumber;
-    if (typeof value.year === "number" && Number.isFinite(value.year)) entry.year = value.year;
-    if (typeof value.duration === "number" && Number.isFinite(value.duration))
-      entry.duration = value.duration;
-    out[key] = entry;
+    if (typeof value.size !== "number" || !Number.isFinite(value.size)) continue;
+    if (typeof value.lastModified !== "number" || !Number.isFinite(value.lastModified)) continue;
+    if (!isPlainObject(value.tags)) continue;
+    out[key] = { tags: coerceTags(value.tags), size: value.size, lastModified: value.lastModified };
   }
   return out;
 }
@@ -137,7 +167,7 @@ function coercePlaylists(raw: unknown): Record<string, string[]> {
  * - `metadata`, `playerState`, and `playlists` are coerced INDEPENDENTLY, so
  *   malformed metadata never discards a good playerState and vice-versa.
  * - Within each field, wrong-typed leaves are dropped.
- * - `version` is forced to 1.
+ * - `version` is forced to 2.
  * Never throws.
  */
 export function parseSidecar(text: string): SidecarData {
@@ -153,7 +183,7 @@ export function parseSidecar(text: string): SidecarData {
     return emptyModel();
   }
   return {
-    version: 1,
+    version: 2,
     metadata: coerceMetadata(parsed.metadata),
     playerState: coercePlayerState(parsed.playerState),
     playlists: coercePlaylists(parsed.playlists),
@@ -183,7 +213,7 @@ export function mergeSidecar(existing: SidecarData, patch: SidecarPatch): Sideca
       })()
     : existing.playerState;
   return {
-    version: 1,
+    version: 2,
     metadata: { ...existing.metadata, ...patch.metadata },
     playerState,
     playlists: { ...existing.playlists, ...patch.playlists },
@@ -339,7 +369,7 @@ export function flushWrites(): Promise<void> {
  * Read a cached metadata entry by localName, ensuring the model is loaded.
  * Returns undefined when no entry is cached.
  */
-export async function getMetadata(localName: string): Promise<AudioTags | undefined> {
+export async function getMetadata(localName: string): Promise<CachedMetadata | undefined> {
   const model = await ensureLoaded();
   return model.metadata[localName];
 }
@@ -350,8 +380,8 @@ export async function getMetadata(localName: string): Promise<AudioTags | undefi
  * shows enriched data; the disk persist no-ops when not writable. Returns the
  * chain promise so callers can await persistence.
  */
-export async function cacheMetadata(localName: string, tags: AudioTags): Promise<void> {
-  return enqueueWrite({ metadata: { [localName]: tags } });
+export async function cacheMetadata(localName: string, entry: CachedMetadata): Promise<void> {
+  return enqueueWrite({ metadata: { [localName]: entry } });
 }
 
 /**
@@ -362,7 +392,7 @@ export async function cacheMetadata(localName: string, tags: AudioTags): Promise
  * no-op — it neither touches the chain nor writes the file, preserving
  * focus-rescan write suppression when nothing is new.
  */
-export async function cacheMetadataBatch(entries: Record<string, AudioTags>): Promise<void> {
+export async function cacheMetadataBatch(entries: Record<string, CachedMetadata>): Promise<void> {
   if (Object.keys(entries).length === 0) return;
   return enqueueWrite({ metadata: entries });
 }
