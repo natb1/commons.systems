@@ -1022,6 +1022,22 @@ describe("corrupt sidecar — fail-closed", () => {
     expect(await getPlayerState()).toMatchObject({ queue: ["a.mp3"], positionSeconds: 12 });
   });
 
+  it("corrupt sidecar: all four write entry points are gated (AC4b)", async () => {
+    const { dir, fileHandle } = makePreloadedDir("{not json");
+    setLocalDirectory(dir, true);
+
+    await savePlayerState({ queue: ["a.mp3"], currentLocalName: "a.mp3", positionSeconds: 12 });
+    await cacheMetadata("song.mp3", { tags: { title: "X" }, size: 10, lastModified: 1 });
+    await cacheMetadataBatch({ "a.mp3": { tags: { title: "A" }, size: 1, lastModified: 1 } });
+    await savePlaylist("Favs", ["a.mp3", "b.mp3"]);
+    await flushWrites();
+
+    // No caller wrote — the shared corrupt-dir gate suppressed every write path.
+    expect(fileHandle.createWritable).not.toHaveBeenCalled();
+    // Corrupt bytes on disk are preserved for recovery.
+    expect(fileHandle._state.content).toBe("{not json");
+  });
+
   it("missing sidecar (NotFoundError): savePlayerState DOES write (AC5)", async () => {
     const dir = makeDirWithMissingFile();
     setLocalDirectory(dir, true);
