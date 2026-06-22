@@ -20,8 +20,16 @@
  * A `navigate`/`popstate` that actually changes `pathname+search` yields a new
  * reference; a no-op render yields the same one. `navigate` does not invalidate
  * the cache manually — `getSnapshot` recomputes lazily because the key changed.
+ *
+ * The cached snapshot's `params` is a `ReadonlyURLSearchParams` (immutable): it
+ * is handed out by stable reference, so if it were a plain mutable
+ * `URLSearchParams` any consumer's `.set()`/`.append()`/`.delete()`/`.sort()`
+ * would corrupt the shared cached snapshot in place. The read-only wrapper makes
+ * those mutators throw instead, so consumers cannot silently corrupt shared
+ * location state.
  */
 import { parsePath } from "./index";
+import { ReadonlyURLSearchParams } from "./readonly-url-search-params";
 
 type Snapshot = { path: string; params: URLSearchParams };
 
@@ -54,7 +62,10 @@ export function subscribe(callback: () => void): () => void {
 export function getSnapshot(): Snapshot {
   const key = location.pathname + location.search;
   if (cachedSnapshot === null || key !== cachedKey) {
-    cachedSnapshot = parsePath();
+    cachedSnapshot = {
+      path: parsePath().path,
+      params: new ReadonlyURLSearchParams(location.search),
+    };
     cachedKey = key;
   }
   return cachedSnapshot;

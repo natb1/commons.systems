@@ -1050,6 +1050,56 @@ gh_issue_close_rest() {
   }
 }
 
+# REST-backed mutation: reopen a closed issue (#2337).
+# Uses PATCH repos/{owner}/{repo}/issues/<N> with state=open (no state_reason).
+# Args: $1 = <N> (issue number, required); --comment <body> (optional; posts the
+#   comment BEFORE the reopen, matching gh_issue_close_rest's comment-then-mutate
+#   ordering); --repo owner/repo (optional).
+# On gh failure: errors to stderr and returns 1.
+gh_issue_reopen_rest() {
+  local num="" comment="" has_comment="" repo=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --comment) comment="$2"; has_comment=1; shift 2 ;;
+      --repo)    repo="$2";    shift 2 ;;
+      --*) echo "error: gh_issue_reopen_rest: unknown flag '$1'" >&2; return 1 ;;
+      *)
+        if [[ -z "$num" ]]; then
+          num="$1"; shift 1
+        else
+          echo "error: gh_issue_reopen_rest: unexpected argument '$1'" >&2; return 1
+        fi
+        ;;
+    esac
+  done
+  if [[ -z "$num" ]]; then
+    echo "error: gh_issue_reopen_rest: issue number is required" >&2
+    return 1
+  fi
+
+  local path
+  if [[ -n "$repo" ]]; then
+    path="repos/$repo/issues/$num"
+  else
+    path="repos/{owner}/{repo}/issues/$num"
+  fi
+
+  # --comment: post the comment BEFORE the reopen (matches the porcelain ordering),
+  # reusing the exact POST issues/<N>/comments shape from gh_issue_comment_rest.
+  if [[ -n "$has_comment" ]]; then
+    local comments_path="$path/comments"
+    gh_retry gh api -X POST "$comments_path" -f "body=$comment" >/dev/null || {
+      echo "error: gh_issue_reopen_rest: gh api failed for $comments_path" >&2
+      return 1
+    }
+  fi
+
+  gh_retry gh api -X PATCH "$path" -f state=open >/dev/null || {
+    echo "error: gh_issue_reopen_rest: gh api failed for $path" >&2
+    return 1
+  }
+}
+
 # REST-backed mutation: edit an issue's title and/or body (#2255).
 # Uses PATCH repos/{owner}/{repo}/issues/<N>. PRs are issues in REST, so this same
 # helper later serves `gh pr edit --body`.

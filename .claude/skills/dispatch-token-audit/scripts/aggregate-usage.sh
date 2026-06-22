@@ -216,7 +216,11 @@ def cmd_prefix(c):
            or ($firstuser_str | test("/recover-api-error")) ) then "recovery"
     elif ( ($path | test("--bare"))
            or ( [ $a[] | select(.gitBranch=="HEAD") ] | length > 0 ) ) then "router-tick"
-    elif ($firstuser_str | test("dispatch-worker")) then "worker"
+    # Real --bg dispatch workers are spawned with a phase-skill slash command.
+    # Their first user message is a <command-name>/<skill></command-name> block
+    # whose skill is one of the dispatch worker phase set. This alternation must
+    # be updated when a new dispatch worker phase skill is added.
+    elif ($firstuser_str | test("<command-name>/(plan-issue|implement|qa-fix|review-fix|fix-checks|fix-conflicts|qa-main|budget-parse-job|resolve-epic|office-hours)</command-name>")) then "worker"
     else "other" end ) as $type
 
 # Peak context across assistant msgs.
@@ -675,7 +679,15 @@ def outcome_rates($o):
     } ) as $baseline_lens
 
 | {
-    window: $win,
+    window: ( $win + {
+      sidecar_eligible:  ( [ $sessions[] | select(.type=="worker") ] | length ),
+      sidecar_present:   ( [ $sessions[] | select(.type=="worker" and .artifact!=null) ] | length ),
+      sidecar_present_rate:
+        ( ( [ $sessions[] | select(.type=="worker") ] | length ) as $elig
+          | if $elig==0 then null
+            else ( [ $sessions[] | select(.type=="worker" and .artifact!=null) ] | length ) / $elig
+            end )
+    } ),
     price_model: {
       note: "price_proxy_usd is an Opus-list-price-equivalent USD proxy for RANKING (uniform rate, not the bill); cost_usd is the truthful per-model bill from actual_rates_per_mtok",
       input_per_mtok: RATE_INPUT,

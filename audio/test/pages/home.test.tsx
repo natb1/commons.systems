@@ -8,12 +8,24 @@ import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const mockListLibrary = vi.fn();
+const mockEnrichLocalTracks = vi.fn();
+const mockListLocalTracks = vi.fn();
+const mockGetPlaylists = vi.fn();
+const mockSavePlaylist = vi.fn();
 
 vi.mock("../../src/library.js", () => ({
   listLibrary: (...args: unknown[]) => mockListLibrary(...args),
 }));
 
-vi.mock("../../src/local-source.js", () => ({}));
+vi.mock("../../src/local-source.js", () => ({
+  enrichLocalTracks: (...args: unknown[]) => mockEnrichLocalTracks(...args),
+  listLocalTracks: (...args: unknown[]) => mockListLocalTracks(...args),
+}));
+
+vi.mock("../../src/sidecar.js", () => ({
+  getPlaylists: (...args: unknown[]) => mockGetPlaylists(...args),
+  savePlaylist: (...args: unknown[]) => mockSavePlaylist(...args),
+}));
 
 // Home.tsx → player.js → storage.js → firebase.js (config requires env);
 // mock storage.js to keep the component render unit isolated from Firebase config.
@@ -80,12 +92,18 @@ function makeMockPlayer(): PlayerHandle & {
   add: ReturnType<typeof vi.fn>;
   remove: ReturnType<typeof vi.fn>;
   isQueued: ReturnType<typeof vi.fn>;
+  restore: ReturnType<typeof vi.fn>;
+  getLocalQueueNames: ReturnType<typeof vi.fn>;
+  loadPlaylist: ReturnType<typeof vi.fn>;
   destroy: ReturnType<typeof vi.fn>;
 } {
   return {
     add: vi.fn(),
     remove: vi.fn(),
     isQueued: vi.fn().mockReturnValue(false),
+    restore: vi.fn(),
+    getLocalQueueNames: vi.fn().mockReturnValue([]),
+    loadPlaylist: vi.fn(),
     destroy: vi.fn(),
   };
 }
@@ -113,6 +131,10 @@ describe("Home", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockListLibrary.mockResolvedValue([]);
+    mockEnrichLocalTracks.mockResolvedValue(undefined);
+    mockListLocalTracks.mockResolvedValue([]);
+    mockGetPlaylists.mockResolvedValue({});
+    mockSavePlaylist.mockResolvedValue(undefined);
     mockGetCacheStats.mockResolvedValue({ trackCount: 0, totalBytes: 0 });
     mockClearCache.mockResolvedValue(undefined);
   });
@@ -120,6 +142,9 @@ describe("Home", () => {
   afterEach(() => {
     // Ensure no lingering DOM nodes
     document.body.innerHTML = "";
+    // Remove any window.prompt / window.alert stubs (happy-dom leaves them
+    // undefined, so they must be stubbed, not spied).
+    vi.unstubAllGlobals();
   });
 
   it("calls listLibrary with null and shows public-notice when signed out", async () => {
@@ -655,6 +680,168 @@ describe("Home", () => {
       expect(mockLogError).toHaveBeenCalledWith(expect.any(Error), {
         operation: "clear-cache",
       });
+
+      await cleanup(container, root);
+    });
+  });
+
+  describe("cache-first enrichment", () => {
+    it("runs enrichLocalTracks and re-lists after the initial load", async () => {
+      const { container, root } = await render(
+        <Home user={null} player={null} refreshKey={0} />,
+      );
+
+      expect(mockEnrichLocalTracks).toHaveBeenCalledTimes(1);
+      // Two listLibrary calls: the cache-overlay first paint, then the rescan
+      // that swaps in freshly-extracted tags.
+      expect(mockListLibrary.mock.calls.length).toBe(2);
+
+      await cleanup(container, root);
+    });
+
+    it("re-renders with the enriched tags after the enrichment pass", async () => {
+      // First paint shows placeholder tags; the post-enrichment rescan shows real
+      // tags overlaid by listLocalTracks from the now-populated sidecar cache.
+      mockListLibrary
+        .mockResolvedValueOnce([
+          makeLocalItem({ id: "local:song.mp3", artist: "Unknown artist" }),
+        ])
+        .mockResolvedValueOnce([
+          makeLocalItem({ id: "local:song.mp3", artist: "Real Artist" }),
+        ]);
+
+      const { container, root } = await render(
+        <Home user={null} player={null} refreshKey={0} />,
+      );
+
+      const row = container.querySelector('[data-id="local:song.mp3"]')!; // type-safety-ok: DOM element asserted present after render in test
+      expect(row.querySelector(".artist")!.textContent).toBe("Real Artist"); // type-safety-ok: DOM element asserted present after render in test
+
+      await cleanup(container, root);
+    });
+
+    it("does not enrich or re-list when the initial load fails", async () => {
+      mockListLibrary.mockReset();
+      mockListLibrary.mockRejectedValue(new Error("network failure"));
+
+      const { container, root } = await render(
+        <Home user={null} player={null} refreshKey={0} />,
+      );
+
+      expect(mockEnrichLocalTracks).not.toHaveBeenCalled();
+      // Only the single failed load — no enrichment-triggered rescan.
+      expect(mockListLibrary.mock.calls.length).toBe(1);
+
+      await cleanup(container, root);
+    });
+  });
+
+  describe("playlists", () => {
+    it("populates the load-playlist-select options from getPlaylists", async () => {
+      mockGetPlaylists.mockResolvedValue({ Chill: ["a.mp3"], Focus: ["b.mp3"] });
+      const { container, root } = await render(
+        <Home user={null} player={makeMockPlayer()} refreshKey={0} />,
+      );
+
+      const select =
+        container.querySelector<HTMLSelectElement>("#load-playlist-select")!; // type-safety-ok: DOM element asserted present after render in test
+      const optionValues = Array.from(select.options).map((o) => o.value);
+      expect(optionValues).toEqual(["", "Chill", "Focus"]);
+
+      await cleanup(container, root);
+    });
+
+    it("saves the current local queue as a named playlist", async () => {
+      const player = makeMockPlayer();
+      player.getLocalQueueNames.mockReturnValue(["song.mp3", "two.mp3"]);
+      vi.stubGlobal("prompt", vi.fn().mockReturnValue("  My List  "));
+
+      const { container, root } = await render(
+        <Home user={null} player={player} refreshKey={0} />,
+      );
+
+      const btn =
+        container.querySelector<HTMLButtonElement>("#save-playlist-btn")!; // type-safety-ok: DOM element asserted present after render in test
+      await act(async () => {
+        btn.click();
+      });
+
+      // Name is trimmed.
+      expect(mockSavePlaylist).toHaveBeenCalledWith("My List", [
+        "song.mp3",
+        "two.mp3",
+      ]);
+
+      await cleanup(container, root);
+    });
+
+    it("alerts and does not save when the queue has no local tracks", async () => {
+      const player = makeMockPlayer();
+      player.getLocalQueueNames.mockReturnValue([]);
+      vi.stubGlobal("prompt", vi.fn().mockReturnValue("Empty"));
+      const alertMock = vi.fn();
+      vi.stubGlobal("alert", alertMock);
+
+      const { container, root } = await render(
+        <Home user={null} player={player} refreshKey={0} />,
+      );
+
+      const btn =
+        container.querySelector<HTMLButtonElement>("#save-playlist-btn")!; // type-safety-ok: DOM element asserted present after render in test
+      await act(async () => {
+        btn.click();
+      });
+
+      expect(alertMock).toHaveBeenCalled();
+      expect(mockSavePlaylist).not.toHaveBeenCalled();
+
+      await cleanup(container, root);
+    });
+
+    it("does not save when the prompt is cancelled", async () => {
+      const player = makeMockPlayer();
+      player.getLocalQueueNames.mockReturnValue(["song.mp3"]);
+      vi.stubGlobal("prompt", vi.fn().mockReturnValue(null));
+
+      const { container, root } = await render(
+        <Home user={null} player={player} refreshKey={0} />,
+      );
+
+      const btn =
+        container.querySelector<HTMLButtonElement>("#save-playlist-btn")!; // type-safety-ok: DOM element asserted present after render in test
+      await act(async () => {
+        btn.click();
+      });
+
+      expect(mockSavePlaylist).not.toHaveBeenCalled();
+
+      await cleanup(container, root);
+    });
+
+    it("loads a playlist into the player on select change", async () => {
+      mockGetPlaylists.mockResolvedValue({ Chill: ["a.mp3", "b.mp3"] });
+      const localItems = [
+        makeLocalItem({ id: "local:a.mp3", localName: "a.mp3" }),
+        makeLocalItem({ id: "local:b.mp3", localName: "b.mp3" }),
+      ];
+      mockListLocalTracks.mockResolvedValue(localItems);
+      const player = makeMockPlayer();
+
+      const { container, root } = await render(
+        <Home user={null} player={player} refreshKey={0} />,
+      );
+
+      const select =
+        container.querySelector<HTMLSelectElement>("#load-playlist-select")!; // type-safety-ok: DOM element asserted present after render in test
+      await act(async () => {
+        select.value = "Chill";
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+
+      expect(player.loadPlaylist).toHaveBeenCalledWith(
+        ["a.mp3", "b.mp3"],
+        localItems,
+      );
 
       await cleanup(container, root);
     });

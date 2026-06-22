@@ -57,6 +57,9 @@ setup() {
   # to TMPDIR_TEST for the copied dispatch-route, so the candidate (and its own
   # close helper, exercised directly) must sit alongside it.
   cp "$SCRIPT_DIR/dispatch-epic-resolved-candidate" "$TMPDIR_TEST/dispatch-epic-resolved-candidate"
+  # dispatch-epic-resolved-candidate resolves the epic-labels helper via its
+  # SCRIPT_DIR (= TMPDIR_TEST for this copy), so the helper must sit alongside it.
+  cp "$SCRIPT_DIR/dispatch-epic-labels" "$TMPDIR_TEST/dispatch-epic-labels"
   cp "$SCRIPT_DIR/dispatch-close-resolved" "$TMPDIR_TEST/dispatch-close-resolved"
   cp "$SCRIPT_DIR/dispatch-select-target" "$TMPDIR_TEST/dispatch-select-target"
   cp "$SCRIPT_DIR/office-hours-select-target" "$TMPDIR_TEST/office-hours-select-target"
@@ -123,6 +126,7 @@ setup() {
            "$TMPDIR_TEST/dispatch-find-pr" \
            "$TMPDIR_TEST/dispatch-route" \
            "$TMPDIR_TEST/dispatch-epic-resolved-candidate" \
+           "$TMPDIR_TEST/dispatch-epic-labels" \
            "$TMPDIR_TEST/dispatch-close-resolved" \
            "$TMPDIR_TEST/dispatch-resolve-arg" \
            "$TMPDIR_TEST/dispatch-select-target" \
@@ -2042,6 +2046,57 @@ if grep -q 'issues/42' "$STUB_DIR/gh-issue-close-rest-calls.log"; then p=yes; el
 assert_eq "close: --comment still fires PATCH issues/42" "yes" "$p"
 teardown
 
+  # --- gh_issue_reopen_rest (#2337) ---
+  echo "Test: gh_issue_reopen_rest -- PATCH to correct path with state=open"
+  setup
+  : > "$STUB_DIR/gh-issue-close-rest-calls.log"
+  source "$TMPDIR_TEST/lib.sh"; gh_issue_reopen_rest 42
+  if grep -q 'PATCH' "$STUB_DIR/gh-issue-close-rest-calls.log"; then m=yes; else m=no; fi
+  assert_eq "reopen: log contains PATCH" "yes" "$m"
+  if grep -q 'issues/42' "$STUB_DIR/gh-issue-close-rest-calls.log"; then p=yes; else p=no; fi
+  assert_eq "reopen: log contains issues/42 path" "yes" "$p"
+  if grep -q 'state=open' "$STUB_DIR/gh-issue-close-rest-calls.log"; then s=yes; else s=no; fi
+  assert_eq "reopen: log contains state=open" "yes" "$s"
+  teardown
+
+  echo "Test: gh_issue_reopen_rest -- --repo flag emits cross-repo segment"
+  setup
+  : > "$STUB_DIR/gh-issue-close-rest-calls.log"
+  source "$TMPDIR_TEST/lib.sh"; gh_issue_reopen_rest 42 --repo owner/other-repo
+  if grep -q 'repos/owner/other-repo/issues/42' "$STUB_DIR/gh-issue-close-rest-calls.log"; then seg=yes; else seg=no; fi
+  assert_eq "reopen: --repo uses cross-repo segment" "yes" "$seg"
+  teardown
+
+  echo "Test: gh_issue_reopen_rest -- missing number returns non-zero"
+  setup
+  rc_ro=0
+  err_ro=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_reopen_rest 2>&1 >/dev/null) || rc_ro=$?
+  assert_eq "reopen: missing number → non-zero" "1" "$rc_ro"
+  case "$err_ro" in *"gh_issue_reopen_rest: issue number is required"*) m=yes ;; *) m=no ;; esac
+  assert_eq "reopen: missing-number stderr names helper" "yes" "$m"
+  teardown
+
+  echo "Test: gh_issue_reopen_rest -- gh failure returns non-zero with diagnostic stderr"
+  setup
+  : > "$STUB_DIR/gh-fail-rest"
+  rc_rof=0
+  err_rof=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_reopen_rest 42 2>&1 >/dev/null) || rc_rof=$?
+  assert_eq "reopen: gh failure → non-zero" "1" "$rc_rof"
+  case "$err_rof" in *"gh_issue_reopen_rest: gh api failed"*) m=yes ;; *) m=no ;; esac
+  assert_eq "reopen: gh-failure stderr names helper" "yes" "$m"
+  teardown
+
+  echo "Test: gh_issue_reopen_rest -- --comment posts a comment then reopens"
+  setup
+  : > "$STUB_DIR/gh-issue-close-rest-calls.log"
+  : > "$STUB_DIR/gh-issue-comment-rest-calls.log"
+  source "$TMPDIR_TEST/lib.sh"; gh_issue_reopen_rest 42 --comment "reopening note"
+  if grep -q 'issues/42/comments' "$STUB_DIR/gh-issue-comment-rest-calls.log"; then c=yes; else c=no; fi
+  assert_eq "reopen: --comment fires POST issues/42/comments" "yes" "$c"
+  if grep -q 'issues/42' "$STUB_DIR/gh-issue-close-rest-calls.log"; then p=yes; else p=no; fi
+  assert_eq "reopen: --comment still fires PATCH issues/42" "yes" "$p"
+  teardown
+
 # --- gh_issue_edit_rest ---
 echo "Test: gh_issue_edit_rest -- --title only sends title="
 setup
@@ -2409,6 +2464,14 @@ source "$TMPDIR_TEST/lib.sh"; gh_issue_close_rest 42
 assert_rest_only "close" "$STUB_DIR/gh-issue-close-rest-calls.log"
 teardown
 
+  # --- gh_issue_reopen_rest ---
+  echo "Test: gh_issue_reopen_rest -- consumes REST bucket, not GraphQL"
+  setup
+  : > "$STUB_DIR/gh-issue-close-rest-calls.log"
+  source "$TMPDIR_TEST/lib.sh"; gh_issue_reopen_rest 42
+  assert_rest_only "reopen" "$STUB_DIR/gh-issue-close-rest-calls.log"
+  teardown
+
 # --- gh_issue_edit_rest ---
 echo "Test: gh_issue_edit_rest -- consumes REST bucket, not GraphQL"
 setup
@@ -2464,6 +2527,29 @@ echo '[]' > "$STUB_DIR/pr-list-full.json"
 printf '{"state":"open","labels":[{"name":"dispatch:planned"}]}\n' > "$STUB_DIR/arg-issue-42.json"
 result=$("$TMPDIR_TEST/dispatch-phase" "42")
 assert_eq "no PR + dispatch:planned → implement" "implement" "$result"
+teardown
+
+# 1b-2. No PR + main-qa label → main-qa (#2274). dispatch-phase checks for the
+# main-qa label BEFORE the dispatch:planned check, so a main-qa issue routes to
+# the main-qa phase regardless of other labels.
+echo "Test: no PR + main-qa label → main-qa"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf '{"state":"open","labels":[{"name":"main-qa"}]}\n' > "$STUB_DIR/arg-issue-42.json"
+result=$("$TMPDIR_TEST/dispatch-phase" "42")
+assert_eq "no PR + main-qa → main-qa" "main-qa" "$result"
+teardown
+
+# 1b-3. No PR + main-qa AND dispatch:planned → main-qa (#2274). Directly exercises
+# the precedence claim from 1b-2: the main-qa check runs BEFORE the dispatch:planned
+# check, so an issue carrying both labels routes to main-qa, not implement. If the
+# two grep -qxF checks were swapped, this would regress to implement.
+echo "Test: no PR + main-qa + dispatch:planned → main-qa (precedence)"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf '{"state":"open","labels":[{"name":"main-qa"},{"name":"dispatch:planned"}]}\n' > "$STUB_DIR/arg-issue-42.json"
+result=$("$TMPDIR_TEST/dispatch-phase" "42")
+assert_eq "no PR + main-qa + dispatch:planned → main-qa" "main-qa" "$result"
 teardown
 
 # 1c. No PR + labels without dispatch:planned → plan (explicit non-empty labels).
@@ -3101,6 +3187,20 @@ assert_eq "no PR + dispatch:planned → INVOKE /implement (directive)" \
 assert_eq "no PR + dispatch:planned → INVOKE /implement (exit 0)" "0" "$ROUTE_RC"
 teardown
 
+# 1b-2. No PR + main-qa label → INVOKE /qa-main (#2274). dispatch-route always
+# provisions the worktree first (the unconditional dispatch-provision-worktree
+# call), then dispatch-phase returns main-qa for the issue; the router maps
+# main-qa → INVOKE /qa-main.
+echo "Test: no PR + main-qa label → INVOKE /qa-main"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+printf '{"state":"open","labels":[{"name":"main-qa"}]}\n' > "$STUB_DIR/arg-issue-42.json"
+route_run 42 /wt/42-my-feature
+assert_eq "no PR + main-qa → INVOKE /qa-main (directive)" "INVOKE /qa-main" "$ROUTE_OUT"
+assert_eq "no PR + main-qa → INVOKE /qa-main (exit 0)" "0" "$ROUTE_RC"
+teardown
+
 # 1c. Closed issue → STOP closed (#1845). The router's closed-issue guard fires
 # AFTER the worktree cross-check and BEFORE provisioning: it fetches the issue
 # state once and short-circuits a closed issue so its lingering worktree is never
@@ -3482,6 +3582,30 @@ assert_eq "parse-job wins over candidate → INVOKE /budget-parse-job (directive
 assert_eq "parse-job wins over candidate → INVOKE /budget-parse-job (exit 0)" "0" "$ROUTE_RC"
 teardown
 
+# 26a. dispatch-route integration: malformed epic.json → candidate exits 3 →
+# route's "candidate hard error" else branch still falls back to INVOKE /plan-issue
+# at exit 0 (#2296). GATE-4 covers the candidate exit-3 in isolation; this asserts
+# the end-to-end route fallback through a dispatch-config-load failure.
+# dispatch-epic-labels (config-load) is the candidate's FIRST step and exits 1 on
+# malformed epic.json (set -e propagation from dispatch-config-load);
+# dispatch-epic-resolved-candidate then surfaces that failure as exit 3
+# via its `|| { exit 3 }` branch. This happens BEFORE the epic-label gate or
+# sub-issues fetch, so no
+# sub-issues fixture is needed. The "epic" label on the issue documents that even a
+# would-be epic candidate still falls back safely when its config is malformed.
+echo "Test: no PR + malformed epic.json → candidate exit 3 → INVOKE /plan-issue"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo "/wt/58-epic" > "$STUB_DIR/worktree-toplevel.txt"
+printf 'not json{\n' > "$DISPATCH_CONFIG_DIR/epic.json"
+printf '{"state":"open","labels":[{"name":"epic"}]}\n' > "$STUB_DIR/arg-issue-58.json"
+route_run 58 /wt/58-epic
+assert_eq "malformed epic.json → candidate exit 3 → INVOKE /plan-issue (directive)" \
+  "INVOKE /plan-issue" "$ROUTE_OUT"
+assert_eq "malformed epic.json → candidate exit 3 → INVOKE /plan-issue (exit 0)" \
+  "0" "$ROUTE_RC"
+teardown
+
 # ============================================================================
 # dispatch-epic-resolved-candidate tests
 # ============================================================================
@@ -3583,7 +3707,9 @@ teardown
 
 # --- Epic-label gate (#1594) ------------------------------------------------
 # The gate runs BEFORE the sub-issues check: an issue is a candidate only if it
-# carries a configured epic label. Unconfigured → never a candidate. A real
+# carries a configured epic label — the configured set from epic.json, or the
+# built-in default ("epic") when no epic.json is present. A present config
+# replaces the default entirely (the configured set is used verbatim). A real
 # label-fetch failure → exit 3 (distinct from "not a candidate").
 
 # GATE-1. Epic configured, but the issue LACKS the configured label, even though
@@ -3600,16 +3726,57 @@ if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 68 >/dev/null 2>&1; then rc=0
 assert_eq "gate: configured but unlabeled would-be candidate → exit 1" "1" "$rc"
 teardown
 
-# GATE-2. NO epic config at all → never a candidate (no-config safe default),
-# regardless of sub-issue state (all children CLOSED/COMPLETED here).
-echo "Test: gate — no epic config → exit 1 regardless of sub-issue state"
+# GATE-2. NO epic config at all + issue carries the default "epic" label + all
+# children CLOSED/COMPLETED → candidate (exit 0). The helper emits the built-in
+# default "epic", the issue carries it, and all children are complete.
+echo "Test: gate — no config + default epic label + all children complete → exit 0"
 setup
 printf '{"state":"open","labels":[{"name":"epic"}]}\n' > "$STUB_DIR/arg-issue-69.json"
 printf '[{"number":691}]\n' > "$STUB_DIR/subissues-69.json"
 printf '{"title":"c","body":"","comments":[],"number":691,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
   > "$STUB_DIR/issue-691.json"
 if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 69 >/dev/null 2>&1; then rc=0; else rc=$?; fi
-assert_eq "gate: no epic config → exit 1 (no-config safe default)" "1" "$rc"
+assert_eq "gate: no config + default epic label + all children complete → exit 0" "0" "$rc"
+teardown
+
+# GATE-2b. NO epic config + issue carries a NON-epic label ("enhancement") + all
+# children CLOSED/COMPLETED → not a candidate (exit 1). The default set contains
+# only "epic"; "enhancement" is not in it, so the gate blocks it.
+echo "Test: gate — no config + non-epic label → exit 1"
+setup
+printf '{"state":"open","labels":[{"name":"enhancement"}]}\n' > "$STUB_DIR/arg-issue-71.json"
+printf '[{"number":711}]\n' > "$STUB_DIR/subissues-71.json"
+printf '{"title":"c","body":"","comments":[],"number":711,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
+  > "$STUB_DIR/issue-711.json"
+if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 71 >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "gate: no config + non-epic label → exit 1 (default set does not match)" "1" "$rc"
+teardown
+
+# GATE-2c. Override-precedence: epic.json present with {"labels":["big-epic"]} +
+# issue carries "big-epic" + all children CLOSED/COMPLETED → candidate (exit 0).
+echo "Test: gate — config override big-epic + issue carries big-epic → exit 0"
+setup
+printf '{"labels":["big-epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
+printf '{"state":"open","labels":[{"name":"big-epic"}]}\n' > "$STUB_DIR/arg-issue-72.json"
+printf '[{"number":721}]\n' > "$STUB_DIR/subissues-72.json"
+printf '{"title":"c","body":"","comments":[],"number":721,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
+  > "$STUB_DIR/issue-721.json"
+if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 72 >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "gate: override big-epic + issue carries big-epic → exit 0" "0" "$rc"
+teardown
+
+# GATE-2d. Override-precedence: epic.json present with {"labels":["big-epic"]} +
+# issue carries only "epic" (the former default) → not a candidate (exit 1). The
+# configured set REPLACES the default, so plain "epic" is no longer recognized.
+echo "Test: gate — config override big-epic + issue carries plain epic → exit 1"
+setup
+printf '{"labels":["big-epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
+printf '{"state":"open","labels":[{"name":"epic"}]}\n' > "$STUB_DIR/arg-issue-73.json"
+printf '[{"number":731}]\n' > "$STUB_DIR/subissues-73.json"
+printf '{"title":"c","body":"","comments":[],"number":731,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
+  > "$STUB_DIR/issue-731.json"
+if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 73 >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "gate: override big-epic + issue carries plain epic → exit 1 (config replaces default)" "1" "$rc"
 teardown
 
 # GATE-3. Epic configured, but the label fetch HARD-fails (deterministic, not
@@ -3620,6 +3787,42 @@ printf '{"labels":["epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
 touch "$STUB_DIR/gh-fail-issue-labels-70"
 if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 70 >/dev/null 2>&1; then rc=0; else rc=$?; fi
 assert_eq "gate: label fetch hard failure → exit 3" "3" "$rc"
+teardown
+
+# GATE-4. Malformed epic.json → dispatch-config-load exits 1 → candidate must
+# surface the loader failure as exit 3 (guard added in #2239).
+echo "Test: gate — malformed epic.json → exit 3 with candidate diagnostic"
+setup
+printf 'not json{\n' > "$DISPATCH_CONFIG_DIR/epic.json"
+if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 71 >/dev/null 2>"$TMPDIR_TEST/err.txt"; then rc=0; else rc=$?; fi
+assert_eq "gate: malformed epic.json → exit 3" "3" "$rc"
+if grep -q 'dispatch-epic-resolved-candidate:' "$TMPDIR_TEST/err.txt"; then diag=yes; else diag=no; fi
+assert_eq "gate: malformed epic.json → candidate diagnostic on stderr" "yes" "$diag"
+teardown
+
+# ============================================================================
+# dispatch-epic-labels unit tests (#2235)
+# ============================================================================
+echo ""
+echo "=== dispatch-epic-labels ==="
+
+# The helper is copied into TMPDIR_TEST by setup() (task A wiring), and it calls
+# dispatch-config-load which setup() also copies. Run it directly and assert stdout.
+
+# E-1. No epic.json in $DISPATCH_CONFIG_DIR → stdout is exactly "epic" (the
+# built-in default).
+echo "Test: dispatch-epic-labels — no config → stdout is 'epic'"
+setup
+out=$("$TMPDIR_TEST/dispatch-epic-labels")
+assert_eq "no config → stdout is 'epic'" "epic" "$out"
+teardown
+
+# E-2. epic.json = {"labels":["a","b"]} → stdout is "a" then "b" (two lines).
+echo "Test: dispatch-epic-labels — config with two labels → stdout is 'a' then 'b'"
+setup
+printf '{"labels":["a","b"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
+out=$("$TMPDIR_TEST/dispatch-epic-labels")
+assert_eq "config two labels → stdout is 'a' then 'b'" "$(printf 'a\nb')" "$out"
 teardown
 
 # ============================================================================
@@ -4152,6 +4355,23 @@ printf '[{"number":10,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"dis
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "PR with parked issue skipped; unparked sibling returned" "pr 20 20-other fix-checks" "$result"
+teardown
+
+# 2c. An issue carrying BOTH main-qa AND dispatch:office-hours is SKIPPED by the
+# issue queue's office-hours filter (#2274 acceptance criterion #4). The issue
+# also carries "help wanted" so it enters the sort; the dispatch:office-hours
+# label is the operative skip (line 1003 of dispatch-select-target). Without
+# the skip, the OLDER parked issue would win; with it the sibling is selected.
+echo "Test: main-qa + dispatch:office-hours issue skipped; sibling chosen"
+setup
+echo '[]' > "$STUB_DIR/pr-list-union.json"
+# Issue 10 is older, carries main-qa + office-hours + help wanted → skipped.
+# Issue 20 is newer, carries only help wanted → selected.
+printf '[{"number":10,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"main-qa"},{"name":"dispatch:office-hours"}]},{"number":20,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "main-qa + office-hours issue skipped; unparked sibling chosen" "issue 20" "$result"
 teardown
 
 # 3. When no eligible PR exists, a help-wanted issue is chosen.
@@ -7626,6 +7846,30 @@ assert_eq "attachable session, empty cwd, no worktree → fresh fallback with - 
 unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
+# OHST19. Registered-worktree null-cwd degrade (#2281): an attachable session
+# reporting an EMPTY cwd whose <N>-* worktree IS registered and on disk → attach
+# in place via the known worktree path (IDLE_WT_PATH), not a fresh launch.
+# Pre-#2281 the empty cwd failed both -d and -n checks and fell to bucket 3.
+echo "Test: registered worktree + null-cwd session → idle (attach via worktree path)"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+mkdir -p "$TMPDIR_TEST/wt/42-x"
+# CRITICAL: the path REGISTERED in worktree-list.txt must be the SAME on-disk
+# path that is mkdir'd above, so IDLE_WT_PATH (derived from
+# WORKTREE_PATHS_BY_NUM) resolves to a real directory. Do NOT copy OHST13's
+# split fake-path/real-path setup: there the registered path is a non-existent
+# /worktrees/42-x and the test passes via IDLE_CWD, which would NOT exercise the
+# IDLE_WT_PATH check this case is for.
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree %s\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  "$TMPDIR_TEST/wt/42-x" > "$STUB_DIR/worktree-list.txt"
+# Registered basename 42-x has no session; office-hours-42 is attachable with a
+# 2-field (name:state) fake → EMPTY cwd → null-cwd degrade.
+office_hours_state_fake_claude "office-hours-42:waiting"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "registered worktree + null cwd → idle via worktree path" "idle s-office-hours-42" "$result"
+teardown
+
 # ============================================================================
 # office-hours (entry point) tests
 # ============================================================================
@@ -7938,11 +8182,12 @@ teardown
 
 # OH11. resume arm end-to-end (#2240): the selector emits `resume <N> <sid> <cwd>`
 # for a removed-but-recoverable session whose worktree is on disk. The entry
-# resumes it as a --bg job named office-hours-<N> rooted at <cwd>, then attaches BY
-# NAME. Stub the selector to emit the directive; a fake claude logs the --bg argv,
-# serves the post-resume registry (office-hours-42 under a FORKED sessionId, so
-# attach must resolve by NAME not by the verb's sess-abc), and echoes attach.
-echo "Test: resume directive → --bg --resume kick named office-hours-N, attach by name"
+# resumes it as a --bg job named by the worktree basename (42-x) rooted at <cwd>,
+# carrying NO "continue" prompt (it parks for the human), then attaches BY NAME.
+# Stub the selector to emit the directive; a fake claude logs the --bg argv,
+# serves the post-resume registry (42-x under a FORKED sessionId, so attach must
+# resolve by NAME not by the verb's sess-abc), and echoes attach.
+echo "Test: resume directive → --bg --resume kick named by worktree basename, no continue, attach by name"
 setup
 mkdir -p "$TMPDIR_TEST/wt/42-x"
 cat > "$TMPDIR_TEST/office-hours-select-target" <<EOF
@@ -7955,7 +8200,7 @@ cat > "$TMPDIR_TEST/bin/claude" <<'FAKE'
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 case "$1" in
   agents)
-    echo '[{"sessionId":"forked-xyz","id":"j-office-hours-42","pid":1,"state":"idle","status":"idle","name":"office-hours-42","cwd":""}]'
+    echo '[{"sessionId":"forked-xyz","id":"j-42-x","pid":1,"state":"idle","status":"idle","name":"42-x","cwd":""}]'
     ;;
   attach)
     echo "LAUNCH: attach $2"
@@ -7972,15 +8217,21 @@ export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/bin/claude"   # verify_agent_registered_u
 export LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=0          # don't sleep between verify polls
 result=$("$TMPDIR_TEST/office-hours")
 bg=$(cat "$TMPDIR_TEST/bg-argv-log" 2>/dev/null || true)
-assert_eq "resume kick argv (single, no fork)" "--bg --name office-hours-42 --permission-mode auto --resume sess-abc continue" "$bg"
-assert_eq "resume attaches by name → j-office-hours-42 (not the verb sessionId)" "LAUNCH: attach j-office-hours-42" "$result"
+assert_eq "resume kick argv (single, no fork, no continue)" "--bg --name 42-x --permission-mode auto --resume sess-abc" "$bg"
+# The resume must NOT auto-run work: no "continue" prompt token, and the --name
+# must equal the worktree basename (42-x), matching the Stop hook's ^[0-9]+- gate.
+oh_has_continue=no; [[ "$bg" == *continue* ]] && oh_has_continue=yes
+assert_eq "resume kick carries no continue prompt token" "no" "$oh_has_continue"
+oh_name=$(printf '%s\n' "$bg" | sed -n 's/.*--name \([^ ]*\).*/\1/p')
+assert_eq "resume --name equals worktree basename" "42-x" "$oh_name"
+assert_eq "resume attaches by name → j-42-x (not the verb sessionId)" "LAUNCH: attach j-42-x" "$result"
 unset OFFICE_HOURS_CLAUDE_CMD CLAUDE_AGENTS_CMD LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
 teardown
 
 # OH12. resume fork-retry (#2240): the primary --bg --resume kick fails (a dead
 # sessionId can collide in the registry), so the entry retries ONCE with
 # --fork-session, then attaches BY NAME (the forked id is reachable via the stable
-# office-hours-<N> name). The fake fails any --bg kick lacking --fork-session.
+# worktree basename). The fake fails any --bg kick lacking --fork-session.
 echo "Test: resume primary kick fails → fork-session retry, then attach by name"
 setup
 mkdir -p "$TMPDIR_TEST/wt/42-x"
@@ -7994,7 +8245,7 @@ cat > "$TMPDIR_TEST/bin/claude" <<'FAKE'
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 case "$1" in
   agents)
-    echo '[{"sessionId":"forked-xyz","id":"j-office-hours-42","pid":1,"state":"idle","status":"idle","name":"office-hours-42","cwd":""}]'
+    echo '[{"sessionId":"forked-xyz","id":"j-42-x","pid":1,"state":"idle","status":"idle","name":"42-x","cwd":""}]'
     exit 0
     ;;
   attach)
@@ -8015,9 +8266,9 @@ export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/bin/claude"   # verify_agent_registered_u
 export LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=0          # don't sleep between verify polls
 result=$("$TMPDIR_TEST/office-hours")
 mapfile -t oh_resume_argv < "$TMPDIR_TEST/bg-argv-log"
-assert_eq "primary kick carries no --fork-session" "--bg --name office-hours-42 --permission-mode auto --resume sess-abc continue" "${oh_resume_argv[0]:-}"
-assert_eq "fork retry appends --fork-session before continue" "--bg --name office-hours-42 --permission-mode auto --resume sess-abc --fork-session continue" "${oh_resume_argv[1]:-}"
-assert_eq "after fork, attach by name → j-office-hours-42" "LAUNCH: attach j-office-hours-42" "$result"
+assert_eq "primary kick carries no --fork-session (no continue)" "--bg --name 42-x --permission-mode auto --resume sess-abc" "${oh_resume_argv[0]:-}"
+assert_eq "fork retry appends --fork-session (no continue)" "--bg --name 42-x --permission-mode auto --resume sess-abc --fork-session" "${oh_resume_argv[1]:-}"
+assert_eq "after fork, attach by name → j-42-x" "LAUNCH: attach j-42-x" "$result"
 unset OFFICE_HOURS_CLAUDE_CMD CLAUDE_AGENTS_CMD LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
 teardown
 
@@ -8026,8 +8277,8 @@ teardown
 # dead/colliding sessionId (claude --bg returns before registration; a rejected
 # id never registers). The verify gate must catch this (rc 0 is not enough) and
 # retry with --fork-session, after which the session registers and attach
-# resolves by name. The fake registers office-hours-42 ONLY after a --fork-session
-# kick.
+# resolves by name. The fake registers the basename session (42-x) ONLY after a
+# --fork-session kick.
 echo "Test: resume primary kick returns 0 but never registers → verify fails → fork"
 setup
 mkdir -p "$TMPDIR_TEST/wt/42-x"
@@ -8043,7 +8294,7 @@ case "$1" in
   agents)
     # Registered ONLY after a --fork-session kick created the marker.
     if [[ -f "$ROOT/forked" ]]; then
-      echo '[{"sessionId":"forked-xyz","id":"j-office-hours-42","pid":1,"state":"idle","status":"idle","name":"office-hours-42","cwd":""}]'
+      echo '[{"sessionId":"forked-xyz","id":"j-42-x","pid":1,"state":"idle","status":"idle","name":"42-x","cwd":""}]'
     else
       echo '[]'
     fi
@@ -8067,9 +8318,9 @@ export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/bin/claude"
 export LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=0
 result=$("$TMPDIR_TEST/office-hours")
 mapfile -t oh_resume_argv < "$TMPDIR_TEST/bg-argv-log"
-assert_eq "primary kick (rc 0, unregistered) carries no --fork-session" "--bg --name office-hours-42 --permission-mode auto --resume sess-abc continue" "${oh_resume_argv[0]:-}"
-assert_eq "verify-fail triggers fork retry (rc 0 alone is not enough)" "--bg --name office-hours-42 --permission-mode auto --resume sess-abc --fork-session continue" "${oh_resume_argv[1]:-}"
-assert_eq "after fork registers, attach by name → j-office-hours-42" "LAUNCH: attach j-office-hours-42" "$result"
+assert_eq "primary kick (rc 0, unregistered) carries no --fork-session (no continue)" "--bg --name 42-x --permission-mode auto --resume sess-abc" "${oh_resume_argv[0]:-}"
+assert_eq "verify-fail triggers fork retry (rc 0 alone is not enough)" "--bg --name 42-x --permission-mode auto --resume sess-abc --fork-session" "${oh_resume_argv[1]:-}"
+assert_eq "after fork registers, attach by name → j-42-x" "LAUNCH: attach j-42-x" "$result"
 unset OFFICE_HOURS_CLAUDE_CMD CLAUDE_AGENTS_CMD LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
 teardown
 
@@ -9392,6 +9643,85 @@ setup
 if "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" 2>/dev/null; then rc=0; else rc=$?; fi
 assert_eq "missing issue number exits non-zero" "1" "$rc"
 assert_eq "missing arg: no label edit" "absent" "$(log_state gh-issue-edit.log)"
+teardown
+
+# --route autonomous: Step 1 (remove help-wanted) and Step 2 (add main-qa) run
+# unconditionally; Step 3 is skipped, so dispatch:office-hours is ABSENT from the
+# set-labels log. Exit 0.
+echo "Test: --route autonomous → help-wanted removed, main-qa added, office-hours withheld; exit 0"
+setup
+echo '{"state":"open","labels":[]}' > "$STUB_DIR/arg-issue-42.json"
+if "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" 42 --route autonomous 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "--route autonomous: exit 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if grep -q 'DELETE' "$STUB_DIR/gh-issue-remove-label-rest-calls.log" \
+   && grep -q 'issues/42/labels/help%20wanted' "$STUB_DIR/gh-issue-remove-label-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: autonomous route: REST-removed help wanted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: autonomous route: REST-removed help wanted"
+  echo "    actual: '$(cat "$STUB_DIR/gh-issue-remove-label-rest-calls.log" 2>/dev/null)'"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q 'labels\[\]=main-qa' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: autonomous route: REST-added main-qa"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: autonomous route: REST-added main-qa"
+fi
+TOTAL=$((TOTAL + 1))
+if ! grep -q 'labels\[\]=dispatch:office-hours' "$STUB_DIR/gh-issue-set-labels-rest-calls.log" 2>/dev/null; then
+  PASS=$((PASS + 1)); echo "  PASS: autonomous route: dispatch:office-hours withheld"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: autonomous route: dispatch:office-hours withheld (should be absent)"
+fi
+teardown
+
+# --route human (explicit): identical to the default no-flag path. Steps 1-3 all
+# run, including the dispatch-apply-office-hours call that REST-adds office-hours.
+echo "Test: --route human (explicit) → help-wanted removed, main-qa added, office-hours applied; exit 0"
+setup
+echo '{"state":"open","labels":[]}' > "$STUB_DIR/arg-issue-42.json"
+if "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" 42 --route human; then rc=0; else rc=$?; fi
+assert_eq "--route human explicit: exit 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if grep -q 'DELETE' "$STUB_DIR/gh-issue-remove-label-rest-calls.log" \
+   && grep -q 'issues/42/labels/help%20wanted' "$STUB_DIR/gh-issue-remove-label-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: explicit human route: REST-removed help wanted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: explicit human route: REST-removed help wanted"
+  echo "    actual: '$(cat "$STUB_DIR/gh-issue-remove-label-rest-calls.log" 2>/dev/null)'"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q 'labels\[\]=main-qa' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: explicit human route: REST-added main-qa"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: explicit human route: REST-added main-qa"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q 'labels\[\]=dispatch:office-hours' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: explicit human route: dispatch:office-hours applied"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: explicit human route: dispatch:office-hours applied"
+fi
+teardown
+
+# Invalid --route value: the script must exit 1 with an error to stderr and must
+# NOT write any label ops (no REST removes, no REST adds).
+echo "Test: --route bogus → non-zero exit, no label writes"
+setup
+if "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" 42 --route bogus 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "--route bogus: non-zero exit" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if ! grep -q '.' "$STUB_DIR/gh-issue-remove-label-rest-calls.log" 2>/dev/null; then
+  PASS=$((PASS + 1)); echo "  PASS: invalid route: no REST remove-label writes"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: invalid route: no REST remove-label writes (should be absent)"
+fi
+TOTAL=$((TOTAL + 1))
+if ! grep -q '.' "$STUB_DIR/gh-issue-set-labels-rest-calls.log" 2>/dev/null; then
+  PASS=$((PASS + 1)); echo "  PASS: invalid route: no REST set-labels writes"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: invalid route: no REST set-labels writes (should be absent)"
+fi
 teardown
 
 # ============================================================================
@@ -19788,6 +20118,11 @@ if pm_out=$("$SCRIPT_DIR/dispatch-phase-model" fix-conflicts 2>/dev/null); then 
 assert_eq "phase-model: fix-conflicts exits 0" "0" "$pm_rc"
 assert_eq "phase-model: fix-conflicts → claude-sonnet-4-6" "claude-sonnet-4-6" "$pm_out"
 
+echo "Test: dispatch-phase-model maps main-qa → claude-sonnet-4-6 (#2274)"
+if pm_out=$("$SCRIPT_DIR/dispatch-phase-model" main-qa 2>/dev/null); then pm_rc=0; else pm_rc=$?; fi
+assert_eq "phase-model: main-qa exits 0" "0" "$pm_rc"
+assert_eq "phase-model: main-qa → claude-sonnet-4-6" "claude-sonnet-4-6" "$pm_out"
+
 echo "Test: dispatch-phase-model maps unmapped phases → empty (default → Opus, no override)"
 for ph in implement done; do
   if pm_out=$("$SCRIPT_DIR/dispatch-phase-model" "$ph" 2>/dev/null); then pm_rc=0; else pm_rc=$?; fi
@@ -24863,6 +25198,90 @@ if [[ ! -e "$STUB_DIR/spawn-calls.log" ]]; then
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: #2243 D1.3 one outstanding task: NOT spawned"
   echo "    spawn-calls: $(cat "$STUB_DIR/spawn-calls.log")"
+fi
+stop_teardown
+
+# --- Test #2261-D1.4: stale prior-session launch is ignored → normal Branch A park ---
+# A launch line from a DIFFERENT/old sessionId is a stale record carried forward
+# by a resume; the session-scoped scan (#2261) must ignore it, so with no
+# current-session launch the hook falls through to the normal Branch A
+# office-hours park.
+
+echo "Test: #2261 D1.4 stale prior-session launch ignored → normal Branch A park"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "implement" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+# No phase-completed marker.
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+# Fixture: old-session has a launch but NO notification; current session has a
+# record but no launch. The session-scoped scan must filter out the old-session
+# launch so the in-flight gate does not fire.
+cat > "$TMPDIR_TEST/transcript.jsonl" <<'EOF'
+{"type":"user","sessionId":"old-session-zzz","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: stale111"}]}}
+{"type":"assistant","sessionId":"cur-session-aaa","message":{"content":[{"type":"text","text":"working"}]}}
+EOF
+FIXTURE="$TMPDIR_TEST/transcript.jsonl"
+printf '%s\n' '{"transcript_path":"'"$FIXTURE"'","session_id":"cur-session-aaa"}' | "$TMPDIR_TEST/hooks/dispatch-stop.sh" >/dev/null 2>&1
+rc=$?
+assert_eq "#2261 D1.4 stale prior-session launch: hook exits 0" "0" "$rc"
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
+apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
+TOTAL=$((TOTAL + 1))
+if [[ "$apply_issue" == "123" && -n "$apply_reason" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2261 D1.4 stale prior-session launch: dispatch-apply-office-hours invoked with issue 123 + non-empty reason"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2261 D1.4 stale prior-session launch: dispatch-apply-office-hours invoked with issue 123 + non-empty reason"
+  echo "    apply-log: $apply_log"
+fi
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "#2261 D1.4 stale prior-session launch: spawn invoked exactly once" "1" "$spawn_calls"
+stop_teardown
+
+# --- Test #2261-D1.5: current-session launch detected despite stale other-session noise → hand-back ---
+# The live #2243 guard: a current-session launch with no notification IS
+# in-flight and must hand back, even when a stale completed launch from another
+# session is also present; proves session-scoping did not regress #2243.
+
+echo "Test: #2261 D1.5 current-session launch in-flight despite stale noise → hand-back"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "implement" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+# No phase-completed marker.
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+# Fixture: current session launched live222 with NO notification → in-flight.
+# Old session launched stale333 and received its notification → fully completed
+# and must be filtered out by session-scoping.
+cat > "$TMPDIR_TEST/transcript.jsonl" <<'EOF'
+{"type":"user","sessionId":"cur-session-aaa","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: live222"}]}}
+{"type":"user","sessionId":"old-session-zzz","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: stale333"}]}}
+{"type":"user","sessionId":"old-session-zzz","message":{"content":[{"type":"tool_result","content":"{\"taskId\":\"stale333\",\"status\":\"completed\"}"}]}}
+EOF
+FIXTURE="$TMPDIR_TEST/transcript.jsonl"
+printf '%s\n' '{"transcript_path":"'"$FIXTURE"'","session_id":"cur-session-aaa"}' | "$TMPDIR_TEST/hooks/dispatch-stop.sh" >/dev/null 2>&1
+rc=$?
+assert_eq "#2261 D1.5 current-session in-flight: hook exits 0 (hand-back)" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2261 D1.5 current-session in-flight: NOT parked on office-hours"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2261 D1.5 current-session in-flight: NOT parked on office-hours"
+  echo "    apply-log: $(cat "$STUB_DIR/apply-office-hours.log")"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/spawn-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2261 D1.5 current-session in-flight: NOT spawned (redundant tick suppressed)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2261 D1.5 current-session in-flight: NOT spawned (redundant tick suppressed)"
+  echo "    spawn-calls: $(cat "$STUB_DIR/spawn-calls.log")"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2261 D1.5 current-session in-flight: NOT self-closed"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2261 D1.5 current-session in-flight: NOT self-closed"
 fi
 stop_teardown
 
@@ -32514,6 +32933,139 @@ out=$("$TMPDIR_TEST/scripts/dispatch-followup-exists" "CodeQL js/sql-injection a
 assert_eq "followup-exists: codeql alert-number prefix collision (#5 vs #50) → empty" "" "$out"
 followup_exists_teardown
 
+  # ============================================================================
+  # === dispatch-flake-dedup (#2337) ===
+  # ============================================================================
+
+  echo "Test: dispatch-flake-dedup"
+
+  # Dedicated setup modeled on followup_exists_setup, but with a MUTATION-RECORDING
+  # gh stub. dispatch-flake-dedup matches (via dispatch-followup-exists) AND records
+  # the recurrence (comment on open; reopen+comment on closed). stdout alone does
+  # not prove the mutation fired, so the stub records side effects to marker files
+  # the cases assert on:
+  #   - comments-fired : one <N> per POST .../issues/<N>/comments
+  #   - reopen-fired   : one <N> per PATCH .../issues/<N> carrying state=open
+  # The issue LIST (followup-exists match) and the single-issue VIEW (state read)
+  # both derive from the same $TREE/issues.json fixture, which carries a per-issue
+  # `state` field (open/closed).
+  flake_dedup_setup() {
+    TMPDIR_TEST=$(mktemp -d)
+    mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/bin" "$TMPDIR_TEST/scripts/stub"
+
+    cp "$SCRIPT_DIR/dispatch-flake-dedup" "$TMPDIR_TEST/scripts/dispatch-flake-dedup"
+    cp "$SCRIPT_DIR/dispatch-followup-exists" "$TMPDIR_TEST/scripts/dispatch-followup-exists"
+    cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
+    chmod +x "$TMPDIR_TEST/scripts/dispatch-flake-dedup" \
+             "$TMPDIR_TEST/scripts/dispatch-followup-exists"
+
+    # gh_retry must not sleep (no retries are expected here, but be safe).
+    export GH_RETRY_BASE_DELAY=0
+
+    cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
+#!/usr/bin/env bash
+args="$*"
+TREE="$(cd "$(dirname "$0")/.." && pwd)/scripts"
+MARK="$TREE/stub"
+case "$args" in
+  *"api -X POST "*"/issues/"*"/comments"*)
+    # recurrence comment (open path, and the comment leg of the reopen path)
+    n=$(printf '%s' "$args" | sed -E 's#.*/issues/([0-9]+)/comments.*#\1#')
+    echo "$n" >> "$MARK/comments-fired"
+    echo '{}'
+    ;;
+  *"api -X PATCH "*"/issues/"[0-9]*)
+    # reopen: PATCH .../issues/<N> with state=open
+    case "$args" in
+      *state=open*)
+        n=$(printf '%s' "$args" | sed -E 's#.*/issues/([0-9]+).*#\1#')
+        echo "$n" >> "$MARK/reopen-fired"
+        ;;
+    esac
+    echo '{}'
+    ;;
+  *"api "*"/issues/"[0-9]*)
+    # single-issue VIEW (gh_issue_view_rest): emit a raw REST object carrying the
+    # fixture issue's lowercase state; the helper upcases it.
+    n="${args##*/}"
+    state=$(jq -r --argjson n "$n" '.[] | select(.number==$n) | .state' "$TREE/issues.json")
+    printf '{"number":%s,"state":"%s"}\n' "$n" "$state"
+    ;;
+  *"api "*"/issues"*)
+    # issue LIST (gh_issue_list_rest via dispatch-followup-exists): whole fixture,
+    # remapped to REST shape WITH title (the script passes --include-title).
+    if [[ -f "$TREE/issues.json" ]]; then
+      jq 'map({number, pull_request: null, created_at: null, closed_at: null, labels: []} + (if has("title") then {title} else {} end))' "$TREE/issues.json"
+    else
+      echo '[]'
+    fi
+    ;;
+  *)
+    echo "gh stub: unknown invocation: $args" >&2
+    exit 1
+    ;;
+esac
+STUB
+    chmod +x "$TMPDIR_TEST/bin/gh"
+
+    SAVED_PATH_FD="$PATH"
+    export PATH="$TMPDIR_TEST/bin:$PATH"
+  }
+
+  flake_dedup_teardown() {
+    rm -rf "$TMPDIR_TEST"
+    TMPDIR_TEST=""
+    unset GH_RETRY_BASE_DELAY
+    export PATH="$SAVED_PATH_FD"
+  }
+
+  FP="acceptance — fellspiral/e2e/navigation.spec.ts:4:3 page loads without JS errors @smoke"
+
+  # CASE 1 — OPEN match → EXISTING <N>, comment fired, no reopen. (criterion #2)
+  flake_dedup_setup
+  printf '[{"number":501,"title":"Flaky CI: %s","state":"open"}]\n' "$FP" > "$TMPDIR_TEST/scripts/issues.json"
+  printf 'recurred on PR #900 / run http://x\n' > "$TMPDIR_TEST/body.md"
+  out=$("$TMPDIR_TEST/scripts/dispatch-flake-dedup" "$FP" --body-file "$TMPDIR_TEST/body.md")
+  assert_eq "flake-dedup: open match → EXISTING <N>" "EXISTING 501" "$out"
+  if grep -qx '501' "$TMPDIR_TEST/scripts/stub/comments-fired" 2>/dev/null; then c=yes; else c=no; fi
+  assert_eq "flake-dedup: open match → comment fired on 501" "yes" "$c"
+  if [[ -s "$TMPDIR_TEST/scripts/stub/reopen-fired" ]]; then r=yes; else r=no; fi
+  assert_eq "flake-dedup: open match → no reopen" "no" "$r"
+  flake_dedup_teardown
+
+  # CASE 2 — CLOSED match → REOPENED <N>, reopen fired, comment fired. (criterion #3)
+  flake_dedup_setup
+  printf '[{"number":501,"title":"Flaky CI: %s","state":"closed"}]\n' "$FP" > "$TMPDIR_TEST/scripts/issues.json"
+  printf 'recurred on PR #900 / run http://x\n' > "$TMPDIR_TEST/body.md"
+  out=$("$TMPDIR_TEST/scripts/dispatch-flake-dedup" "$FP" --body-file "$TMPDIR_TEST/body.md")
+  assert_eq "flake-dedup: closed match → REOPENED <N>" "REOPENED 501" "$out"
+  if grep -qx '501' "$TMPDIR_TEST/scripts/stub/reopen-fired" 2>/dev/null; then r=yes; else r=no; fi
+  assert_eq "flake-dedup: closed match → reopen fired on 501" "yes" "$r"
+  if grep -qx '501' "$TMPDIR_TEST/scripts/stub/comments-fired" 2>/dev/null; then c=yes; else c=no; fi
+  assert_eq "flake-dedup: closed match → comment fired on 501" "yes" "$c"
+  flake_dedup_teardown
+
+  # CASE 3 — NO match → NONE, no side effects. (criterion #5)
+  flake_dedup_setup
+  printf '[]\n' > "$TMPDIR_TEST/scripts/issues.json"
+  printf 'recurred on PR #900 / run http://x\n' > "$TMPDIR_TEST/body.md"
+  out=$("$TMPDIR_TEST/scripts/dispatch-flake-dedup" "$FP" --body-file "$TMPDIR_TEST/body.md")
+  assert_eq "flake-dedup: no match → NONE" "NONE" "$out"
+  if [[ -s "$TMPDIR_TEST/scripts/stub/comments-fired" ]]; then c=yes; else c=no; fi
+  assert_eq "flake-dedup: no match → no comment" "no" "$c"
+  if [[ -s "$TMPDIR_TEST/scripts/stub/reopen-fired" ]]; then r=yes; else r=no; fi
+  assert_eq "flake-dedup: no match → no reopen" "no" "$r"
+  flake_dedup_teardown
+
+  # CASE 4 — canonical-title match: title is exactly `Flaky CI: <fp>`, probe <fp>
+  # (the deterministic half of criterion #4 — run 2 matches run 1's canonical title).
+  flake_dedup_setup
+  printf '[{"number":777,"title":"Flaky CI: %s","state":"open"}]\n' "$FP" > "$TMPDIR_TEST/scripts/issues.json"
+  printf 'recurred\n' > "$TMPDIR_TEST/body.md"
+  out=$("$TMPDIR_TEST/scripts/dispatch-flake-dedup" "$FP" --body-file "$TMPDIR_TEST/body.md")
+  assert_eq "flake-dedup: canonical-title match → EXISTING <N>" "EXISTING 777" "$out"
+  flake_dedup_teardown
+
 echo ""
 echo "=== dispatch-mark-complete / dispatch-mark-deviation ==="
 
@@ -37487,18 +38039,19 @@ assert_eq "dispatch-auto-merge is executable" "yes" \
   "$([[ -x "$SCRIPT_DIR/dispatch-auto-merge" ]] && echo yes || echo no)"
 
 # ============================================================================
-# dispatch-detect-rate-limit-death tests (#1733)
+# dispatch-detect-transient-death tests (#1733)
 # ============================================================================
 #
-# Exercises the rate-limit-death detector: exit 0 iff the transcript's LAST
-# assistant turn is an isApiErrorMessage:true turn whose joined text contains the
-# literal `(not your usage limit)`; exit 1 otherwise (fail-safe). Fixtures are
-# one compact JSON object per line, written with printf '%s\n' (NOT echo) so the
-# JSONL is byte-exact.
+# Exercises the transient-death detector: exit 0 iff the transcript's LAST
+# assistant turn is an isApiErrorMessage:true turn whose joined text contains any
+# of the allowlisted transient-death signatures — the original rate-limit
+# substring `(not your usage limit)`, `529 Overloaded`, or `Stream idle timeout`;
+# exit 1 otherwise (fail-safe). Fixtures are one compact JSON object per line,
+# written with printf '%s\n' (NOT echo) so the JSONL is byte-exact.
 echo ""
-echo "=== dispatch-detect-rate-limit-death ==="
+echo "=== dispatch-detect-transient-death ==="
 
-DRD="$SCRIPT_DIR/dispatch-detect-rate-limit-death"
+DRD="$SCRIPT_DIR/dispatch-detect-transient-death"
 
 drd_setup() {
   TMPDIR_TEST=$(mktemp -d)
@@ -37508,20 +38061,25 @@ drd_teardown() {
   TMPDIR_TEST=""
 }
 
-# The rate-limit-death turn: isApiErrorMessage:true + the `(not your usage limit)`
+# A transient-death turn (rate-limit signature): isApiErrorMessage:true + the `(not your usage limit)`
 # server-overload substring. A normal assistant final turn has no isApiErrorMessage.
 RL_TURN='{"type":"assistant","isApiErrorMessage":true,"message":{"role":"assistant","content":[{"type":"text","text":"API Error: Server is temporarily limiting requests (not your usage limit) · Rate limited"}]}}'
 NORMAL_TURN='{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"work in progress"}]}}'
 # The user's OWN usage-limit exhaustion error — apiError, but WITHOUT the
 # `(not your usage limit)` substring, so the detector must NOT match it.
 USAGE_TURN='{"type":"assistant","isApiErrorMessage":true,"message":{"role":"assistant","content":[{"type":"text","text":"API Error: You have exceeded your usage limit. Resets at 5pm."}]}}'
+# Transient 529 server-overload death (full real sentence; the matcher keys on
+# the short substring `529 Overloaded`, surviving the drifting em-dash + URL).
+OVERLOADED_TURN='{"type":"assistant","isApiErrorMessage":true,"message":{"role":"assistant","content":[{"type":"text","text":"API Error: 529 Overloaded. This is a server-side issue, usually temporary — try again in a moment. If it persists, check https://status.claude.com."}]}}'
+# Streaming transport stall death.
+IDLE_TURN='{"type":"assistant","isApiErrorMessage":true,"message":{"role":"assistant","content":[{"type":"text","text":"API Error: Stream idle timeout - partial response received"}]}}'
 
 # --- Test 1: MATCH — last assistant turn IS the rate-limit apiError → exit 0 --
 echo "Test: last turn is the rate-limit apiError → exit 0 (match)"
 drd_setup
 printf '%s\n' "$NORMAL_TURN" "$RL_TURN" > "$TMPDIR_TEST/match.jsonl"
 if "$DRD" "$TMPDIR_TEST/match.jsonl"; then rc=0; else rc=$?; fi
-assert_eq "rate-limit-death match exits 0" "0" "$rc"
+assert_eq "transient-death (rate-limit) match exits 0" "0" "$rc"
 drd_teardown
 
 # --- Test 2: NO-MATCH — a normal assistant final turn → exit 1 ---------------
@@ -37581,6 +38139,53 @@ drd_teardown
 echo "Test: no transcript argument → exit 1"
 if "$DRD"; then rc=0; else rc=$?; fi
 assert_eq "no-arg detector exits 1" "1" "$rc"
+
+# --- Test 9: MATCH — last turn is 529 Overloaded apiError → exit 0 -----------
+echo "Test: last turn is 529 Overloaded apiError → exit 0 (match)"
+drd_setup
+printf '%s\n' "$NORMAL_TURN" "$OVERLOADED_TURN" > "$TMPDIR_TEST/overloaded.jsonl"
+if "$DRD" "$TMPDIR_TEST/overloaded.jsonl"; then rc=0; else rc=$?; fi
+assert_eq "529 Overloaded match exits 0" "0" "$rc"
+drd_teardown
+
+# --- Test 10: MATCH — last turn is Stream idle timeout apiError → exit 0 -----
+echo "Test: last turn is Stream idle timeout apiError → exit 0 (match)"
+drd_setup
+printf '%s\n' "$NORMAL_TURN" "$IDLE_TURN" > "$TMPDIR_TEST/idle.jsonl"
+if "$DRD" "$TMPDIR_TEST/idle.jsonl"; then rc=0; else rc=$?; fi
+assert_eq "Stream idle timeout match exits 0" "0" "$rc"
+drd_teardown
+
+# --- Test 11: NOT-LAST — 529 Overloaded present but a later normal turn follows
+# A session that recovered after a 529 and died later for a different reason has
+# a DIFFERENT last turn; must NOT self-heal.
+echo "Test: 529 Overloaded apiError present but NOT the last turn (recovered) → exit 1"
+drd_setup
+printf '%s\n' "$OVERLOADED_TURN" "$NORMAL_TURN" > "$TMPDIR_TEST/overloaded-notlast.jsonl"
+if "$DRD" "$TMPDIR_TEST/overloaded-notlast.jsonl"; then rc=0; else rc=$?; fi
+assert_eq "529 Overloaded not the last turn exits 1" "1" "$rc"
+drd_teardown
+
+# --- Test 12: SYSTEM-LINE ONLY — `529 Overloaded` appears on a non-assistant
+# line; the last ASSISTANT turn is normal → exit 1. Proves the matcher reads
+# only assistant turns, not system/tool lines that happen to contain the text.
+echo "Test: 529 Overloaded only in a system line, last assistant turn normal → exit 1"
+drd_setup
+SYSTEM_TURN='{"type":"system","content":"529 Overloaded noise"}'
+printf '%s\n' "$SYSTEM_TURN" "$NORMAL_TURN" > "$TMPDIR_TEST/system-only.jsonl"
+if "$DRD" "$TMPDIR_TEST/system-only.jsonl"; then rc=0; else rc=$?; fi
+assert_eq "529 in system line only exits 1" "1" "$rc"
+drd_teardown
+
+# --- Test 13: NOT-LAST — Stream idle timeout present but a later normal turn
+# A session that recovered after a stream-idle-timeout and died later for a
+# different reason has a DIFFERENT last turn; must NOT self-heal.
+echo "Test: Stream idle timeout apiError present but NOT the last turn (recovered) → exit 1"
+drd_setup
+printf '%s\n' "$IDLE_TURN" "$NORMAL_TURN" > "$TMPDIR_TEST/idle-notlast.jsonl"
+if "$DRD" "$TMPDIR_TEST/idle-notlast.jsonl"; then rc=0; else rc=$?; fi
+assert_eq "Stream idle timeout not the last turn exits 1" "1" "$rc"
+drd_teardown
 
 # ============================================================================
 # dispatch-recover-dispatched-phase tests (#2025)
@@ -38455,7 +39060,9 @@ STAMP="$SCRIPT_DIR/dispatch-stamp-session"
   rm -rf "$root"
 )
 
-# 6. Idempotent re-write preserves a set .pr (does not clobber to null).
+# 6. Idempotent re-write preserves a set .pr (does not clobber to null),
+#    preserves session-start .base_sha (not advanced to post-resume HEAD),
+#    and advances .stamped_at (re-derived, not preserved).
 (
   d=$(mktemp -d)
   git -C "$d" init -q
@@ -38463,12 +39070,186 @@ STAMP="$SCRIPT_DIR/dispatch-stamp-session"
   git -C "$d" checkout -q -b 999-fixture
   git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
   sc="$d/sess6.dispatch-stamp.json"
-  # Seed a sidecar that already carries a backfilled pr.
+  # Seed a sidecar that already carries a backfilled pr and a session-start base_sha.
   printf '%s\n' '{"schema":1,"session_id":"sess6","repo":"old/repo","issue":1,"pr":4242,"branch":"old","base_sha":"old","stamped_at":"2026-01-01T00:00:00Z"}' > "$sc"
   ( cd "$d" && "$STAMP" --session-id sess6 --transcript-path "$d/sess6.jsonl" )
   assert_eq "stamp: re-write preserves set .pr" "4242" "$(jq -r .pr "$sc")"
   assert_eq "stamp: re-write re-derives .branch" "999-fixture" "$(jq -r .branch "$sc")"
-  assert_eq "stamp: re-write re-derives .base_sha" "$(git -C "$d" rev-parse HEAD)" "$(jq -r .base_sha "$sc")"
+  assert_eq "stamp: re-write PRESERVES session-start .base_sha" "old" "$(jq -r .base_sha "$sc")"
+  assert_eq "stamp: re-write advances .stamped_at (re-derived, not preserved)" "differs" \
+    "$([ "$(jq -r .stamped_at "$sc")" != "2026-01-01T00:00:00Z" ] && echo differs || echo same)"
+  rm -rf "$d"
+)
+
+# 6b. Idempotent re-write with an explicitly-null .base_sha falls through to
+#     the HEAD-derived fallback (exercises the jq `// empty` operator that
+#     distinguishes JSON null from a real SHA in dispatch-stamp-session).
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b 999-fixture
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  sc="$d/sess6b.dispatch-stamp.json"
+  # Seed a sidecar whose base_sha is JSON null (not the string "null", not absent).
+  printf '%s\n' '{"schema":1,"session_id":"sess6b","repo":"old/repo","issue":1,"pr":null,"branch":"old","base_sha":null,"stamped_at":"2026-01-01T00:00:00Z"}' > "$sc"
+  ( cd "$d" && "$STAMP" --session-id sess6b --transcript-path "$d/sess6b.jsonl" )
+  assert_eq "stamp: re-write with null .base_sha falls through to HEAD" "$(git -C "$d" rev-parse HEAD)" "$(jq -r .base_sha "$sc")"
+  rm -rf "$d"
+)
+
+# 7. Resume after HEAD moves (ff-merge) preserves the session-start .base_sha.
+#    This encodes #2270's failure mode: an initial stamp records HEAD=A; a later
+#    git merge --ff-only moves HEAD to B; the resume re-stamp must keep base_sha=A.
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b 999-fixture
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  A=$(git -C "$d" rev-parse HEAD)
+  # Initial stamp at HEAD=A.
+  ( cd "$d" && "$STAMP" --session-id sess7 --transcript-path "$d/sess7.jsonl" )
+  sc="$d/sess7.dispatch-stamp.json"
+  assert_eq "stamp: initial .base_sha is A" "$A" "$(jq -r .base_sha "$sc")"
+  # HEAD moves to B (simulating an ff-merge of origin/main).
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m advance
+  B=$(git -C "$d" rev-parse HEAD)
+  assert_eq "stamp: HEAD advanced (B != A)" "no" \
+    "$([ "$A" = "$B" ] && echo yes || echo no)"
+  # Resume re-stamp must preserve A, not adopt B.
+  ( cd "$d" && "$STAMP" --session-id sess7 --transcript-path "$d/sess7.jsonl" )
+  assert_eq "stamp: resume preserves session-start .base_sha (A, not B)" "$A" "$(jq -r .base_sha "$sc")"
+  rm -rf "$d"
+)
+
+# 8. Mode A guard: --session-id with a `..` path-traversal segment exits 2 and
+#    writes no sidecar. The 999-fixture worker branch is load-bearing — the
+#    guard fires BEFORE the branch gate, so were it removed the input would flow
+#    past the gate and a sidecar WOULD be written, failing the assertion below.
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b 999-fixture
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  rc=0
+  ( cd "$d" && "$STAMP" --session-id ../evil --transcript-path "$d/sess.jsonl" ) 2>/dev/null || rc=$?
+  assert_eq "stamp: --session-id ../evil exits 2" "2" "$rc"
+  assert_eq "stamp: --session-id ../evil writes no sidecar" "no" \
+    "$([ -f "$d/sess.dispatch-stamp.json" ] && echo yes || echo no)"
+  rm -rf "$d"
+)
+
+# 9. Mode A guard: --session-id with a `/` path component exits 2 and writes no
+#    sidecar (the session id is a bare stem; a slash is malformed).
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b 999-fixture
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  rc=0
+  ( cd "$d" && "$STAMP" --session-id foo/bar --transcript-path "$d/sess.jsonl" ) 2>/dev/null || rc=$?
+  assert_eq "stamp: --session-id foo/bar exits 2" "2" "$rc"
+  assert_eq "stamp: --session-id foo/bar writes no sidecar" "no" \
+    "$([ -f "$d/sess.dispatch-stamp.json" ] && echo yes || echo no)"
+  rm -rf "$d"
+)
+
+# 10. Mode A guard: --transcript-path with a `..` segment exits 2 and writes no
+#     sidecar. The sidecar path is derived ${TRANSCRIPT_PATH%.jsonl}.dispatch-stamp.json,
+#     so with cd "$d" and transcript ../evil.jsonl the would-be sidecar lands at
+#     $d/../evil.dispatch-stamp.json — OUTSIDE $d. The no-sidecar assertion MUST
+#     target that exact escaped path; a `find "$d"` scan would never see it and
+#     would green even with the guard removed.
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b 999-fixture
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  rc=0
+  ( cd "$d" && "$STAMP" --session-id sessok --transcript-path ../evil.jsonl ) 2>/dev/null || rc=$?
+  assert_eq "stamp: --transcript-path ../evil.jsonl exits 2" "2" "$rc"
+  assert_eq "stamp: --transcript-path ../evil.jsonl writes no sidecar (escaped path)" "no" \
+    "$([ -f "$d/../evil.dispatch-stamp.json" ] && echo yes || echo no)"
+  rm -rf "$d"
+)
+
+# 11. Positive case: `..` appearing as a SUBSTRING of a filename component is
+#     NOT a traversal sequence and must pass the guard. E.g. `sess..x.jsonl`
+#     contains `..` inside one segment — the old `*..*` pattern rejected it;
+#     the new anchored pattern accepts it. Assert the sidecar is written and
+#     the derived .issue field is correct.
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b 999-fixture
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  ( cd "$d" && "$STAMP" --session-id sessok --transcript-path "$d/sess..x.jsonl" )
+  sc="$d/sess..x.dispatch-stamp.json"
+  assert_eq "stamp: ..-in-filename passes (sidecar written)" "yes" \
+    "$([ -f "$sc" ] && echo yes || echo no)"
+  assert_eq "stamp: ..-in-filename .issue == 999" "999" "$(jq -r .issue "$sc")"
+  rm -rf "$d"
+)
+
+# 12. Embedded `/../` traversal sequence exits 2 and writes no sidecar.
+#     Exercises the `*'/../'*` alternative (different from test #10's leading
+#     `../` form). The would-be sidecar is derived from the transcript path, so
+#     it would land at $d/sub/../evil.dispatch-stamp.json (== $d/evil.dispatch-stamp.json).
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b 999-fixture
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  rc=0
+  mkdir -p "$d/sub"
+  ( cd "$d" && "$STAMP" --session-id sessok --transcript-path "$d/sub/../evil.jsonl" ) 2>/dev/null || rc=$?
+  assert_eq "stamp: --transcript-path embedded /../ exits 2" "2" "$rc"
+  assert_eq "stamp: --transcript-path embedded /../ writes no sidecar" "no" \
+    "$([ -f "$d/sub/../evil.dispatch-stamp.json" ] && echo yes || echo no)"
+  rm -rf "$d"
+)
+
+# 13. Control char in --transcript-path exits 2 and writes no sidecar.
+#     Uses a literal tab character (assembled via $'\t' concatenation) inside
+#     the path. $'\t' must be a standalone quoting form, not embedded in "…".
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b 999-fixture
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  rc=0
+  tpath="$d/sess"$'\t'"evil.jsonl"
+  ( cd "$d" && "$STAMP" --session-id sessok --transcript-path "$tpath" ) 2>/dev/null || rc=$?
+  assert_eq "stamp: --transcript-path control char exits 2" "2" "$rc"
+  assert_eq "stamp: --transcript-path control char writes no sidecar" "no" \
+    "$([ -f "${tpath%.jsonl}.dispatch-stamp.json" ] && echo yes || echo no)"
+  rm -rf "$d"
+)
+
+# 14. Trailing `/..` traversal sequence exits 2 and writes no sidecar.
+#     Exercises the `*'/..'` alternative (path ending in foo/..), distinct from
+#     test #10's leading `../` and test #12's embedded `/../` forms. With a real
+#     $d/sub directory present, a guard bypass would resolve $d/sub/.. to $d and
+#     write $d/sub/...dispatch-stamp.json (== $d/.dispatch-stamp.json).
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b 999-fixture
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  rc=0
+  mkdir -p "$d/sub"
+  ( cd "$d" && "$STAMP" --session-id sessok --transcript-path "$d/sub/.." ) 2>/dev/null || rc=$?
+  assert_eq "stamp: --transcript-path trailing /.. exits 2" "2" "$rc"
+  assert_eq "stamp: --transcript-path trailing /.. writes no sidecar" "no" \
+    "$([ -f "$d/sub/...dispatch-stamp.json" ] && echo yes || echo no)"
   rm -rf "$d"
 )
 

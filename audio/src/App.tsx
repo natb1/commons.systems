@@ -9,6 +9,8 @@ import { NavControls } from "./components/NavControls.js";
 import { RouteErrorBoundary } from "./components/RouteErrorBoundary.js";
 import { Player } from "./Player.js";
 import type { PlayerHandle } from "./player.js";
+import { ensureLocalFolderRestored, listLocalTracks } from "./local-source.js";
+import { getPlayerState } from "./sidecar.js";
 import { Home } from "./pages/Home.js";
 import { About } from "./pages/About.js";
 
@@ -39,6 +41,28 @@ export function App() {
     });
     return unsubscribe;
   }, []);
+
+  // Player-state restore (ports main.ts:75-81). Once the player engine is ready,
+  // wait for the local folder to restore (binding the sidecar and making local
+  // tracks listable), list local tracks (for title/artist when rebuilding the
+  // queue), read the persisted local-only player state, and restore it seeked +
+  // paused. Re-runs on libraryRefreshKey so a folder regrant after FSA permission
+  // loss still restores the persisted queue; player.restore()'s own queue.length
+  // guard prevents a double-restore on the initial load.
+  useEffect(() => {
+    if (!playerHandle) return;
+    let cancelled = false;
+    void (async () => {
+      await ensureLocalFolderRestored();
+      const localItems = await listLocalTracks();
+      const restoreState = await getPlayerState();
+      if (cancelled || !restoreState) return;
+      playerHandle.restore(restoreState, localItems);
+    })().catch((err) => logError(err, { operation: "restore-player-state" }));
+    return () => {
+      cancelled = true;
+    };
+  }, [playerHandle, libraryRefreshKey]);
 
   // Panel toggle: Escape + click-outside close, only while open (matches
   // panel-toggle.ts's no-op-when-closed semantics, and avoids a stale `open`).

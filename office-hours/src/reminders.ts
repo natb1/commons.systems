@@ -18,7 +18,7 @@ export function sortByDueAscending(reminders: Reminder[]): Reminder[] {
   return [...reminders].sort((a, b) => a.dueAt.getTime() - b.dueAt.getTime());
 }
 
-function humanize(absMs: number): string {
+export function humanize(absMs: number): string {
   if (absMs < HOUR) return `${Math.round(absMs / MINUTE)}m`;
   if (absMs < DAY) return `${Math.round(absMs / HOUR)}h`;
   return `${Math.round(absMs / DAY)}d`;
@@ -32,4 +32,24 @@ export function formatDueLabel(dueAt: Date, now: Date): string {
   const delta = dueAt.getTime() - now.getTime();
   if (delta < 0) return `overdue ${humanize(-delta)}`;
   return `due in ${humanize(delta)}`;
+}
+
+/**
+ * Content signature for the reminders panel's now-derived output.
+ *
+ * The sort order depends only on `dueAt` (fixed per array), so it is covered by
+ * the caller's `reminders`-reference dep; this key captures the now-derived
+ * per-row output — the due label, whose `overdue …`/`due in …` prefix already
+ * discriminates the overdue boundary — in sorted order. A
+ * memo keyed on this signature reuses its element (and skips the re-render)
+ * across a tick that changes none of those rows. Empty array → "".
+ *
+ * Covers: per-row due label (in sorted order) — must mirror RemindersPanel's
+ * now-derived output. When adding a new now-derived field to RemindersPanel,
+ * add it here too or the memo will miss its changes.
+ */
+export function remindersPanelKey(reminders: Reminder[], now: Date): string {
+  return sortByDueAscending(reminders)
+    .map((r) => formatDueLabel(r.dueAt, now))
+    .join("~");
 }

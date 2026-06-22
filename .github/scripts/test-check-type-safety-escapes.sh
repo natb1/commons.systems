@@ -298,6 +298,30 @@ EOF
 )
 
 echo ""
+echo "=== Known false negative (D2): in-string 'type-safety-ok:' marker suppresses a real hatch ==="
+(
+  # D2 LIMITATION, KNOWN FALSE NEGATIVE: the suppression check matches the
+  # `// type-safety-ok:` marker against the full raw line before any string
+  # stripping, so a `// type-safety-ok:` marker living INSIDE a string literal
+  # on the same line as a real `as Foo` hatch suppresses that hatch. RC=0 /
+  # 0 findings is the documented, expected behavior here — NOT a bug this test
+  # endorses as correct. It pins current behavior so a future real fix has a
+  # test to flip.
+  F="${TEST_TMPDIR}/f"; cat > "$F" <<'EOF'
++++ b/a.ts
+@@ -1,0 +1,1 @@
++const msg = "x // type-safety-ok: y"; const x = y as Foo;
+EOF
+  scan_fixture "$F"
+  n=$(err_count)
+  if [ "$RC" -eq 0 ] && [ "$n" -eq 0 ]; then
+    pass "in-string type-safety-ok marker -> hatch suppressed (KNOWN D2 false negative)"
+  else
+    fail "D2 false negative (rc=$RC count=$n): $(cat "$OUT_FILE")"
+  fi
+)
+
+echo ""
 echo "=== Suppression: EMPTY reason '// type-safety-ok:' does NOT suppress ==="
 (
   F="${TEST_TMPDIR}/f"; cat > "$F" <<'EOF'
@@ -443,7 +467,7 @@ echo "========================================"
 echo "  Results: $FINAL_PASS passed, $FINAL_FAIL failed"
 echo "========================================"
 
-EXPECTED=19
+EXPECTED=20
 ACTUAL=$(( FINAL_PASS + FINAL_FAIL ))
 if [ "$ACTUAL" -ne "$EXPECTED" ]; then
   echo "ERROR: expected $EXPECTED test results but got $ACTUAL (a test subshell may have crashed)" >&2

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
 import { logError } from "@commons-systems/errorutil/log";
 import { initScrollIndicator } from "@commons-systems/components/scroll-indicator";
@@ -27,23 +27,14 @@ export interface InfoPanelRegionProps {
   /** Mount the sticky-sidebar custom scroll indicator (landing/blog only). */
   useScrollIndicator?: boolean;
   /**
-   * Raw, pre-sanitized HTML for landing's About panel (from renderAboutPanelHtml,
-   * wired by a later unit). When present, the About content replaces the standard
-   * panel and the blog-roll hydration is skipped entirely. When absent (the common
-   * case), the standard info panel renders.
-   *
-   * Sanitization contract: InfoPanelRegion does NOT sanitize this value — it is
-   * injected verbatim via `dangerouslySetInnerHTML` (see render branch below).
-   * The caller guarantees the HTML is already safe; current callers pass
-   * hard-coded template literals such as `renderAboutPanelHtml`.
-   *
-   * Widening trigger: if this prop is ever widened to carry dynamic or
-   * user-influenced content, add a `DOMPurify.sanitize(...)` pass at the
-   * injection site before it reaches `dangerouslySetInnerHTML`. `dompurify` is
-   * already a dependency — see `blog/src/pages/HomeRegion.tsx` for the
-   * existing `DOMPurify.sanitize(html, { ADD_ATTR: [...] })` usage to reuse.
+   * A ReactNode for landing's About panel (wired by a later unit). When present,
+   * the About content replaces the standard panel and the blog-roll hydration is
+   * skipped entirely. When absent (the common case), the standard info panel
+   * renders. React renders this node (server-side via `renderToString`,
+   * client-side via the panel root) and escapes text, so no manual sanitization
+   * contract applies.
    */
-  aboutContent?: string;
+  aboutContent?: ReactNode;
 }
 
 /**
@@ -159,8 +150,7 @@ export function InfoPanelRegion({
   }, [useScrollIndicator, aboutContent]);
 
   if (aboutContent !== undefined) {
-    // aboutContent is injected verbatim — see the prop contract + widening trigger above.
-    return <div dangerouslySetInnerHTML={{ __html: aboutContent }} />;
+    return <div>{aboutContent}</div>;
   }
 
   // Derive the panel data from state: order from the sorted entries, content from

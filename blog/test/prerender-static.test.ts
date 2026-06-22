@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { createElement } from "react";
 import {
   prerenderStaticPage,
   loadPostsForPrerender,
@@ -45,7 +46,7 @@ function makeStaticConfig(
       description: "About this site",
       ...pageOverrides,
     },
-    bodyHtml: '<article id="about-body">About body</article>',
+    body: createElement("article", { id: "about-body" }, "About body"),
     navLinks: [
       { href: "/", label: "Home" },
       { href: "/about", label: "About" },
@@ -173,11 +174,13 @@ describe("prerenderStaticPage", () => {
     expect(html).toContain("default hero marker");
   });
 
-  it("injects bodyHtml into <main id=\"app\">", () => {
+  it("injects the body ReactNode (wrapped in a <div>) into <main id=\"app\">", () => {
     prerenderStaticPage(makeStaticConfig());
     const html = getWrittenHtml("/dist/about/index.html");
+    // The body is server-rendered wrapped in a <div> so it byte-matches the
+    // client's createElement("div", null, node) entry-hydration wrapper.
     expect(html).toContain(
-      '<main id="app"><article id="about-body">About body</article></main>',
+      '<main id="app"><div><article id="about-body">About body</article></div></main>',
     );
   });
 
@@ -190,8 +193,11 @@ describe("prerenderStaticPage", () => {
   });
 
   it("renders the panel through InfoPanelRegion's aboutContent branch when aboutContent is set", () => {
-    const aboutPanel =
-      '<section class="panel-section profile-card"><p class="profile-name">Nathan Buesgens</p></section>';
+    const aboutPanel = createElement(
+      "section",
+      { className: "panel-section profile-card" },
+      createElement("p", { className: "profile-name" }, "Nathan Buesgens"),
+    );
     prerenderStaticPage(
       makeStaticConfig({
         aboutContent: aboutPanel,
@@ -200,7 +206,7 @@ describe("prerenderStaticPage", () => {
       }),
     );
     const html = getWrittenHtml("/dist/about/index.html");
-    // InfoPanelRegion's aboutContent branch wraps the raw HTML in a <div>, so the
+    // InfoPanelRegion's aboutContent branch wraps the node in a <div>, so the
     // prerendered #info-panel matches what the client hydrates on a deep /about entry.
     expect(html).toContain(
       '<aside id="info-panel" class="sidebar"><div><section class="panel-section profile-card"><p class="profile-name">Nathan Buesgens</p></section></div></aside>',
@@ -209,7 +215,7 @@ describe("prerenderStaticPage", () => {
   });
 
   it("renders the panel through InfoPanelRegion even without panelHtml when aboutContent is set", () => {
-    const aboutPanel = '<section class="profile-card">about</section>';
+    const aboutPanel = createElement("section", { className: "profile-card" }, "about");
     prerenderStaticPage(
       makeStaticConfig({ aboutContent: aboutPanel, panelHtml: undefined }),
     );
