@@ -25,9 +25,9 @@
 #          `idle-provision <sessionId> <branch>` (below).
 #       3. Worktree swept AND `origin/<branch>` missing (or no cwd known) → fall
 #          back to the fresh path for this same issue, which — finding no
-#          registered worktree — emits `office-hours <N> <phase> <pr> -`; the
-#          consumer's `-` guard prints a clear swept-worktree diagnostic and
-#          exits. Fresh fallback with a diagnostic, never a silent failure.
+#          registered worktree — emits `office-hours <N> -`; the consumer's `-`
+#          guard prints a clear swept-worktree diagnostic and exits. Fresh
+#          fallback with a diagnostic, never a silent failure.
 #
 #   idle-provision <sessionId> <branch>
 #     The oldest labeled item whose originating session is attachable but whose
@@ -81,21 +81,14 @@
 #     still exists. The consumer re-provisions the worktree from the remote
 #     branch, then resumes the originating session — symmetric with
 #     `idle-provision` for the removed-but-recoverable case.
-#   office-hours <issue> <phase> <pr-or-dash> <worktree-path>
+#   office-hours <issue> <worktree-path>
 #     The oldest labeled item with NO live session — a sessionless item that
-#     /office-hours picks up fresh.
+#     /office-hours picks up fresh. The fresh disposition is a pure dispatch
+#     verb (#2387): it carries ONLY the issue number and worktree path. The
+#     selector no longer re-derives a phase or PR to thread an autonomous
+#     workflow — it does not call dispatch-phase, dispatch-find-pr, or
+#     dispatch-ci-ready. /office-hours attaches a human-driven session.
 #     <issue> — the selected issue number.
-#     <phase> — implement | qa | code-review | review | security | fix-checks |
-#               waiting | done | main-qa. `waiting` comes from dispatch-ci-ready
-#               (draft PR with CI still pending); `main-qa` is set here for a
-#               fresh item carrying the `main-qa` label (a needs-main QA
-#               follow-up, #1648) and overrides the dispatch-phase value; all
-#               other values come from dispatch-phase.
-#               /office-hours branches on this: implement → plan-approval
-#               residue; qa → QA walkthrough residue; anything past qa →
-#               deviation-review; main-qa → the no-worktree main-qa review.
-#     <pr-or-dash> — the issue's open PR number, or `-` when none exists. A
-#               main-qa follow-up has no PR, so this is `-`.
 #     <worktree-path> — the path to the item's <N>-* worktree, or `-` when no
 #               <N>-* worktree is registered. The entry script launches the
 #               fresh /office-hours session worker-style with --cwd this path.
@@ -124,9 +117,10 @@
 # the opposite-convention coordination that the entry script and this selector
 # previously split between them.
 #
-# Reuses dispatch-phase and dispatch-find-pr (passed a shared open-PR list to
-# avoid redundant gh calls), and the lib.sh / lib-claude-agents.sh worktree
-# helpers, exactly as dispatch-select-target does.
+# Reuses the lib.sh / lib-claude-agents.sh worktree helpers, exactly as
+# dispatch-select-target does. The fresh path no longer calls dispatch-phase,
+# dispatch-find-pr, or dispatch-ci-ready — its disposition is a pure dispatch
+# verb (#2387).
 #
 # Sandbox: the worktree-liveness check shells out to `claude agents --json`
 # (via lib-claude-agents.sh), which reaches the local daemon over a Unix
@@ -324,9 +318,9 @@ done <<< "$SORTED"
 #   3. Worktree swept AND `origin/<branch>` missing, OR no cwd known → fall back
 #      to the fresh path for this issue (clear IDLE_ID, set FRESH_NUM). With no
 #      registered worktree the fresh path's wt_path lookup comes back empty, so it
-#      emits `office-hours <N> <phase> <pr> -`, and the consumer's `-` guard
-#      prints a clear swept-worktree diagnostic and exits — fresh fallback with a
-#      diagnostic, never a silent failure.
+#      emits `office-hours <N> -`, and the consumer's `-` guard prints a clear
+#      swept-worktree diagnostic and exits — fresh fallback with a diagnostic,
+#      never a silent failure.
 if [[ -n "$IDLE_ID" ]]; then
   if [[ -d "$IDLE_WT_PATH" || -d "$IDLE_CWD" ]]; then
     printf 'idle %s\n' "$IDLE_ID"
@@ -384,32 +378,12 @@ for rec_num in "${SESSIONLESS_NUMS[@]:-}"; do
   break
 done
 
-# Priority 3: pick up the oldest sessionless item fresh. The open-PR list is
-# fetched lazily here — only the fresh path needs it, so the resume path makes
-# no `gh pr list` call. The field set is dispatch-phase's superset;
-# dispatch-find-pr accepts it too (mirrors dispatch-select-target's
-# DISPATCH_PR_LIST_FILE). The list is written to a temp file and passed by path,
-# sidestepping the E2BIG an inline JSON string hits past ~32 open PRs (#1646).
+# Priority 3: pick up the oldest sessionless item fresh. The fresh disposition is
+# now pure dispatch — issue number + worktree path only (#2387). It no longer
+# derives a phase or PR (no dispatch-phase / dispatch-find-pr / dispatch-ci-ready
+# call, and so no `gh pr list`): /office-hours attaches a human-driven session
+# rather than threading an autonomous workflow.
 if [[ -n "$FRESH_NUM" ]]; then
-  PR_LIST=$(pr_list_open "number,headRefName,isDraft,headRefOid,labels,mergeable")
-  PR_LIST_FILE=$(pr_list_export_file "$PR_LIST")
-  trap 'rm -f "$PR_LIST_FILE"' EXIT
-  # Readiness gate: dispatch-phase no longer emits `waiting`; check CI readiness
-  # first. A not-ready draft PR (exit 1) maps to phase=waiting, preserving
-  # the byte-identical output contract callers expect. Exit >= 2 is an exec/IO
-  # error (e.g. unreadable DISPATCH_PR_LIST_FILE) — surface it, don't map to waiting.
-  ci_rc=0
-  DISPATCH_PR_LIST_FILE="$PR_LIST_FILE" "$SCRIPT_DIR/dispatch-ci-ready" "$FRESH_NUM" >/dev/null || ci_rc=$?
-  if (( ci_rc >= 2 )); then
-    echo "error: dispatch-ci-ready failed (exit $ci_rc) for $FRESH_NUM — environment error, not a CI verdict" >&2
-    exit "$ci_rc"
-  fi
-  if (( ci_rc == 1 )); then
-    phase="waiting"
-  else
-    phase=$(DISPATCH_PR_LIST_FILE="$PR_LIST_FILE" "$SCRIPT_DIR/dispatch-phase" "$FRESH_NUM")
-  fi
-  pr=$(DISPATCH_PR_LIST_FILE="$PR_LIST_FILE" "$SCRIPT_DIR/dispatch-find-pr" "$FRESH_NUM")
   # The path to this item's <N>-* worktree (newline-separated values per key;
   # take the first), or empty when no <N>-* worktree is registered.
   wt_path=$(printf '%s' "${WORKTREE_PATHS_BY_NUM[$FRESH_NUM]:-}" | head -n 1)
@@ -428,10 +402,9 @@ if [[ -n "$FRESH_NUM" ]]; then
     if ! MAIN_WORKTREE="$(resolve_main_worktree)"; then
       exit 1
     fi
-    phase="main-qa"
     wt_path="$MAIN_WORKTREE"
   fi
-  printf 'office-hours %s %s %s %s\n' "$FRESH_NUM" "$phase" "${pr:--}" "${wt_path:--}"
+  printf 'office-hours %s %s\n' "$FRESH_NUM" "${wt_path:--}"
   exit 0
 fi
 
