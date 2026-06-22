@@ -2046,6 +2046,57 @@ if grep -q 'issues/42' "$STUB_DIR/gh-issue-close-rest-calls.log"; then p=yes; el
 assert_eq "close: --comment still fires PATCH issues/42" "yes" "$p"
 teardown
 
+  # --- gh_issue_reopen_rest (#2337) ---
+  echo "Test: gh_issue_reopen_rest -- PATCH to correct path with state=open"
+  setup
+  : > "$STUB_DIR/gh-issue-close-rest-calls.log"
+  source "$TMPDIR_TEST/lib.sh"; gh_issue_reopen_rest 42
+  if grep -q 'PATCH' "$STUB_DIR/gh-issue-close-rest-calls.log"; then m=yes; else m=no; fi
+  assert_eq "reopen: log contains PATCH" "yes" "$m"
+  if grep -q 'issues/42' "$STUB_DIR/gh-issue-close-rest-calls.log"; then p=yes; else p=no; fi
+  assert_eq "reopen: log contains issues/42 path" "yes" "$p"
+  if grep -q 'state=open' "$STUB_DIR/gh-issue-close-rest-calls.log"; then s=yes; else s=no; fi
+  assert_eq "reopen: log contains state=open" "yes" "$s"
+  teardown
+
+  echo "Test: gh_issue_reopen_rest -- --repo flag emits cross-repo segment"
+  setup
+  : > "$STUB_DIR/gh-issue-close-rest-calls.log"
+  source "$TMPDIR_TEST/lib.sh"; gh_issue_reopen_rest 42 --repo owner/other-repo
+  if grep -q 'repos/owner/other-repo/issues/42' "$STUB_DIR/gh-issue-close-rest-calls.log"; then seg=yes; else seg=no; fi
+  assert_eq "reopen: --repo uses cross-repo segment" "yes" "$seg"
+  teardown
+
+  echo "Test: gh_issue_reopen_rest -- missing number returns non-zero"
+  setup
+  rc_ro=0
+  err_ro=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_reopen_rest 2>&1 >/dev/null) || rc_ro=$?
+  assert_eq "reopen: missing number → non-zero" "1" "$rc_ro"
+  case "$err_ro" in *"gh_issue_reopen_rest: issue number is required"*) m=yes ;; *) m=no ;; esac
+  assert_eq "reopen: missing-number stderr names helper" "yes" "$m"
+  teardown
+
+  echo "Test: gh_issue_reopen_rest -- gh failure returns non-zero with diagnostic stderr"
+  setup
+  : > "$STUB_DIR/gh-fail-rest"
+  rc_rof=0
+  err_rof=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_reopen_rest 42 2>&1 >/dev/null) || rc_rof=$?
+  assert_eq "reopen: gh failure → non-zero" "1" "$rc_rof"
+  case "$err_rof" in *"gh_issue_reopen_rest: gh api failed"*) m=yes ;; *) m=no ;; esac
+  assert_eq "reopen: gh-failure stderr names helper" "yes" "$m"
+  teardown
+
+  echo "Test: gh_issue_reopen_rest -- --comment posts a comment then reopens"
+  setup
+  : > "$STUB_DIR/gh-issue-close-rest-calls.log"
+  : > "$STUB_DIR/gh-issue-comment-rest-calls.log"
+  source "$TMPDIR_TEST/lib.sh"; gh_issue_reopen_rest 42 --comment "reopening note"
+  if grep -q 'issues/42/comments' "$STUB_DIR/gh-issue-comment-rest-calls.log"; then c=yes; else c=no; fi
+  assert_eq "reopen: --comment fires POST issues/42/comments" "yes" "$c"
+  if grep -q 'issues/42' "$STUB_DIR/gh-issue-close-rest-calls.log"; then p=yes; else p=no; fi
+  assert_eq "reopen: --comment still fires PATCH issues/42" "yes" "$p"
+  teardown
+
 # --- gh_issue_edit_rest ---
 echo "Test: gh_issue_edit_rest -- --title only sends title="
 setup
@@ -2412,6 +2463,14 @@ setup
 source "$TMPDIR_TEST/lib.sh"; gh_issue_close_rest 42
 assert_rest_only "close" "$STUB_DIR/gh-issue-close-rest-calls.log"
 teardown
+
+  # --- gh_issue_reopen_rest ---
+  echo "Test: gh_issue_reopen_rest -- consumes REST bucket, not GraphQL"
+  setup
+  : > "$STUB_DIR/gh-issue-close-rest-calls.log"
+  source "$TMPDIR_TEST/lib.sh"; gh_issue_reopen_rest 42
+  assert_rest_only "reopen" "$STUB_DIR/gh-issue-close-rest-calls.log"
+  teardown
 
 # --- gh_issue_edit_rest ---
 echo "Test: gh_issue_edit_rest -- consumes REST bucket, not GraphQL"
@@ -7785,6 +7844,30 @@ office_hours_state_fake_claude "office-hours-42:waiting"
 result=$("$TMPDIR_TEST/office-hours-select-target")
 assert_eq "attachable session, empty cwd, no worktree → fresh fallback with - 5th field" "office-hours 42 plan - -" "$result"
 unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
+# OHST19. Registered-worktree null-cwd degrade (#2281): an attachable session
+# reporting an EMPTY cwd whose <N>-* worktree IS registered and on disk → attach
+# in place via the known worktree path (IDLE_WT_PATH), not a fresh launch.
+# Pre-#2281 the empty cwd failed both -d and -n checks and fell to bucket 3.
+echo "Test: registered worktree + null-cwd session → idle (attach via worktree path)"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+mkdir -p "$TMPDIR_TEST/wt/42-x"
+# CRITICAL: the path REGISTERED in worktree-list.txt must be the SAME on-disk
+# path that is mkdir'd above, so IDLE_WT_PATH (derived from
+# WORKTREE_PATHS_BY_NUM) resolves to a real directory. Do NOT copy OHST13's
+# split fake-path/real-path setup: there the registered path is a non-existent
+# /worktrees/42-x and the test passes via IDLE_CWD, which would NOT exercise the
+# IDLE_WT_PATH check this case is for.
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree %s\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  "$TMPDIR_TEST/wt/42-x" > "$STUB_DIR/worktree-list.txt"
+# Registered basename 42-x has no session; office-hours-42 is attachable with a
+# 2-field (name:state) fake → EMPTY cwd → null-cwd degrade.
+office_hours_state_fake_claude "office-hours-42:waiting"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "registered worktree + null cwd → idle via worktree path" "idle s-office-hours-42" "$result"
 teardown
 
 # ============================================================================
@@ -25111,6 +25194,90 @@ else
 fi
 stop_teardown
 
+# --- Test #2261-D1.4: stale prior-session launch is ignored → normal Branch A park ---
+# A launch line from a DIFFERENT/old sessionId is a stale record carried forward
+# by a resume; the session-scoped scan (#2261) must ignore it, so with no
+# current-session launch the hook falls through to the normal Branch A
+# office-hours park.
+
+echo "Test: #2261 D1.4 stale prior-session launch ignored → normal Branch A park"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "implement" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+# No phase-completed marker.
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+# Fixture: old-session has a launch but NO notification; current session has a
+# record but no launch. The session-scoped scan must filter out the old-session
+# launch so the in-flight gate does not fire.
+cat > "$TMPDIR_TEST/transcript.jsonl" <<'EOF'
+{"type":"user","sessionId":"old-session-zzz","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: stale111"}]}}
+{"type":"assistant","sessionId":"cur-session-aaa","message":{"content":[{"type":"text","text":"working"}]}}
+EOF
+FIXTURE="$TMPDIR_TEST/transcript.jsonl"
+printf '%s\n' '{"transcript_path":"'"$FIXTURE"'","session_id":"cur-session-aaa"}' | "$TMPDIR_TEST/hooks/dispatch-stop.sh" >/dev/null 2>&1
+rc=$?
+assert_eq "#2261 D1.4 stale prior-session launch: hook exits 0" "0" "$rc"
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
+apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
+TOTAL=$((TOTAL + 1))
+if [[ "$apply_issue" == "123" && -n "$apply_reason" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2261 D1.4 stale prior-session launch: dispatch-apply-office-hours invoked with issue 123 + non-empty reason"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2261 D1.4 stale prior-session launch: dispatch-apply-office-hours invoked with issue 123 + non-empty reason"
+  echo "    apply-log: $apply_log"
+fi
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "#2261 D1.4 stale prior-session launch: spawn invoked exactly once" "1" "$spawn_calls"
+stop_teardown
+
+# --- Test #2261-D1.5: current-session launch detected despite stale other-session noise → hand-back ---
+# The live #2243 guard: a current-session launch with no notification IS
+# in-flight and must hand back, even when a stale completed launch from another
+# session is also present; proves session-scoping did not regress #2243.
+
+echo "Test: #2261 D1.5 current-session launch in-flight despite stale noise → hand-back"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "implement" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+# No phase-completed marker.
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+# Fixture: current session launched live222 with NO notification → in-flight.
+# Old session launched stale333 and received its notification → fully completed
+# and must be filtered out by session-scoping.
+cat > "$TMPDIR_TEST/transcript.jsonl" <<'EOF'
+{"type":"user","sessionId":"cur-session-aaa","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: live222"}]}}
+{"type":"user","sessionId":"old-session-zzz","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: stale333"}]}}
+{"type":"user","sessionId":"old-session-zzz","message":{"content":[{"type":"tool_result","content":"{\"taskId\":\"stale333\",\"status\":\"completed\"}"}]}}
+EOF
+FIXTURE="$TMPDIR_TEST/transcript.jsonl"
+printf '%s\n' '{"transcript_path":"'"$FIXTURE"'","session_id":"cur-session-aaa"}' | "$TMPDIR_TEST/hooks/dispatch-stop.sh" >/dev/null 2>&1
+rc=$?
+assert_eq "#2261 D1.5 current-session in-flight: hook exits 0 (hand-back)" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2261 D1.5 current-session in-flight: NOT parked on office-hours"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2261 D1.5 current-session in-flight: NOT parked on office-hours"
+  echo "    apply-log: $(cat "$STUB_DIR/apply-office-hours.log")"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/spawn-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2261 D1.5 current-session in-flight: NOT spawned (redundant tick suppressed)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2261 D1.5 current-session in-flight: NOT spawned (redundant tick suppressed)"
+  echo "    spawn-calls: $(cat "$STUB_DIR/spawn-calls.log")"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2261 D1.5 current-session in-flight: NOT self-closed"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2261 D1.5 current-session in-flight: NOT self-closed"
+fi
+stop_teardown
+
 # ============================================================================
 # dispatch-finalize-phase tests (#2243)
 # ============================================================================
@@ -32759,6 +32926,139 @@ out=$("$TMPDIR_TEST/scripts/dispatch-followup-exists" "CodeQL js/sql-injection a
 assert_eq "followup-exists: codeql alert-number prefix collision (#5 vs #50) → empty" "" "$out"
 followup_exists_teardown
 
+  # ============================================================================
+  # === dispatch-flake-dedup (#2337) ===
+  # ============================================================================
+
+  echo "Test: dispatch-flake-dedup"
+
+  # Dedicated setup modeled on followup_exists_setup, but with a MUTATION-RECORDING
+  # gh stub. dispatch-flake-dedup matches (via dispatch-followup-exists) AND records
+  # the recurrence (comment on open; reopen+comment on closed). stdout alone does
+  # not prove the mutation fired, so the stub records side effects to marker files
+  # the cases assert on:
+  #   - comments-fired : one <N> per POST .../issues/<N>/comments
+  #   - reopen-fired   : one <N> per PATCH .../issues/<N> carrying state=open
+  # The issue LIST (followup-exists match) and the single-issue VIEW (state read)
+  # both derive from the same $TREE/issues.json fixture, which carries a per-issue
+  # `state` field (open/closed).
+  flake_dedup_setup() {
+    TMPDIR_TEST=$(mktemp -d)
+    mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/bin" "$TMPDIR_TEST/scripts/stub"
+
+    cp "$SCRIPT_DIR/dispatch-flake-dedup" "$TMPDIR_TEST/scripts/dispatch-flake-dedup"
+    cp "$SCRIPT_DIR/dispatch-followup-exists" "$TMPDIR_TEST/scripts/dispatch-followup-exists"
+    cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
+    chmod +x "$TMPDIR_TEST/scripts/dispatch-flake-dedup" \
+             "$TMPDIR_TEST/scripts/dispatch-followup-exists"
+
+    # gh_retry must not sleep (no retries are expected here, but be safe).
+    export GH_RETRY_BASE_DELAY=0
+
+    cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
+#!/usr/bin/env bash
+args="$*"
+TREE="$(cd "$(dirname "$0")/.." && pwd)/scripts"
+MARK="$TREE/stub"
+case "$args" in
+  *"api -X POST "*"/issues/"*"/comments"*)
+    # recurrence comment (open path, and the comment leg of the reopen path)
+    n=$(printf '%s' "$args" | sed -E 's#.*/issues/([0-9]+)/comments.*#\1#')
+    echo "$n" >> "$MARK/comments-fired"
+    echo '{}'
+    ;;
+  *"api -X PATCH "*"/issues/"[0-9]*)
+    # reopen: PATCH .../issues/<N> with state=open
+    case "$args" in
+      *state=open*)
+        n=$(printf '%s' "$args" | sed -E 's#.*/issues/([0-9]+).*#\1#')
+        echo "$n" >> "$MARK/reopen-fired"
+        ;;
+    esac
+    echo '{}'
+    ;;
+  *"api "*"/issues/"[0-9]*)
+    # single-issue VIEW (gh_issue_view_rest): emit a raw REST object carrying the
+    # fixture issue's lowercase state; the helper upcases it.
+    n="${args##*/}"
+    state=$(jq -r --argjson n "$n" '.[] | select(.number==$n) | .state' "$TREE/issues.json")
+    printf '{"number":%s,"state":"%s"}\n' "$n" "$state"
+    ;;
+  *"api "*"/issues"*)
+    # issue LIST (gh_issue_list_rest via dispatch-followup-exists): whole fixture,
+    # remapped to REST shape WITH title (the script passes --include-title).
+    if [[ -f "$TREE/issues.json" ]]; then
+      jq 'map({number, pull_request: null, created_at: null, closed_at: null, labels: []} + (if has("title") then {title} else {} end))' "$TREE/issues.json"
+    else
+      echo '[]'
+    fi
+    ;;
+  *)
+    echo "gh stub: unknown invocation: $args" >&2
+    exit 1
+    ;;
+esac
+STUB
+    chmod +x "$TMPDIR_TEST/bin/gh"
+
+    SAVED_PATH_FD="$PATH"
+    export PATH="$TMPDIR_TEST/bin:$PATH"
+  }
+
+  flake_dedup_teardown() {
+    rm -rf "$TMPDIR_TEST"
+    TMPDIR_TEST=""
+    unset GH_RETRY_BASE_DELAY
+    export PATH="$SAVED_PATH_FD"
+  }
+
+  FP="acceptance — fellspiral/e2e/navigation.spec.ts:4:3 page loads without JS errors @smoke"
+
+  # CASE 1 — OPEN match → EXISTING <N>, comment fired, no reopen. (criterion #2)
+  flake_dedup_setup
+  printf '[{"number":501,"title":"Flaky CI: %s","state":"open"}]\n' "$FP" > "$TMPDIR_TEST/scripts/issues.json"
+  printf 'recurred on PR #900 / run http://x\n' > "$TMPDIR_TEST/body.md"
+  out=$("$TMPDIR_TEST/scripts/dispatch-flake-dedup" "$FP" --body-file "$TMPDIR_TEST/body.md")
+  assert_eq "flake-dedup: open match → EXISTING <N>" "EXISTING 501" "$out"
+  if grep -qx '501' "$TMPDIR_TEST/scripts/stub/comments-fired" 2>/dev/null; then c=yes; else c=no; fi
+  assert_eq "flake-dedup: open match → comment fired on 501" "yes" "$c"
+  if [[ -s "$TMPDIR_TEST/scripts/stub/reopen-fired" ]]; then r=yes; else r=no; fi
+  assert_eq "flake-dedup: open match → no reopen" "no" "$r"
+  flake_dedup_teardown
+
+  # CASE 2 — CLOSED match → REOPENED <N>, reopen fired, comment fired. (criterion #3)
+  flake_dedup_setup
+  printf '[{"number":501,"title":"Flaky CI: %s","state":"closed"}]\n' "$FP" > "$TMPDIR_TEST/scripts/issues.json"
+  printf 'recurred on PR #900 / run http://x\n' > "$TMPDIR_TEST/body.md"
+  out=$("$TMPDIR_TEST/scripts/dispatch-flake-dedup" "$FP" --body-file "$TMPDIR_TEST/body.md")
+  assert_eq "flake-dedup: closed match → REOPENED <N>" "REOPENED 501" "$out"
+  if grep -qx '501' "$TMPDIR_TEST/scripts/stub/reopen-fired" 2>/dev/null; then r=yes; else r=no; fi
+  assert_eq "flake-dedup: closed match → reopen fired on 501" "yes" "$r"
+  if grep -qx '501' "$TMPDIR_TEST/scripts/stub/comments-fired" 2>/dev/null; then c=yes; else c=no; fi
+  assert_eq "flake-dedup: closed match → comment fired on 501" "yes" "$c"
+  flake_dedup_teardown
+
+  # CASE 3 — NO match → NONE, no side effects. (criterion #5)
+  flake_dedup_setup
+  printf '[]\n' > "$TMPDIR_TEST/scripts/issues.json"
+  printf 'recurred on PR #900 / run http://x\n' > "$TMPDIR_TEST/body.md"
+  out=$("$TMPDIR_TEST/scripts/dispatch-flake-dedup" "$FP" --body-file "$TMPDIR_TEST/body.md")
+  assert_eq "flake-dedup: no match → NONE" "NONE" "$out"
+  if [[ -s "$TMPDIR_TEST/scripts/stub/comments-fired" ]]; then c=yes; else c=no; fi
+  assert_eq "flake-dedup: no match → no comment" "no" "$c"
+  if [[ -s "$TMPDIR_TEST/scripts/stub/reopen-fired" ]]; then r=yes; else r=no; fi
+  assert_eq "flake-dedup: no match → no reopen" "no" "$r"
+  flake_dedup_teardown
+
+  # CASE 4 — canonical-title match: title is exactly `Flaky CI: <fp>`, probe <fp>
+  # (the deterministic half of criterion #4 — run 2 matches run 1's canonical title).
+  flake_dedup_setup
+  printf '[{"number":777,"title":"Flaky CI: %s","state":"open"}]\n' "$FP" > "$TMPDIR_TEST/scripts/issues.json"
+  printf 'recurred\n' > "$TMPDIR_TEST/body.md"
+  out=$("$TMPDIR_TEST/scripts/dispatch-flake-dedup" "$FP" --body-file "$TMPDIR_TEST/body.md")
+  assert_eq "flake-dedup: canonical-title match → EXISTING <N>" "EXISTING 777" "$out"
+  flake_dedup_teardown
+
 echo ""
 echo "=== dispatch-mark-complete / dispatch-mark-deviation ==="
 
@@ -38951,6 +39251,82 @@ STAMP="$SCRIPT_DIR/dispatch-stamp-session"
   assert_eq "stamp: --transcript-path ../evil.jsonl exits 2" "2" "$rc"
   assert_eq "stamp: --transcript-path ../evil.jsonl writes no sidecar (escaped path)" "no" \
     "$([ -f "$d/../evil.dispatch-stamp.json" ] && echo yes || echo no)"
+  rm -rf "$d"
+)
+
+# 11. Positive case: `..` appearing as a SUBSTRING of a filename component is
+#     NOT a traversal sequence and must pass the guard. E.g. `sess..x.jsonl`
+#     contains `..` inside one segment — the old `*..*` pattern rejected it;
+#     the new anchored pattern accepts it. Assert the sidecar is written and
+#     the derived .issue field is correct.
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b 999-fixture
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  ( cd "$d" && "$STAMP" --session-id sessok --transcript-path "$d/sess..x.jsonl" )
+  sc="$d/sess..x.dispatch-stamp.json"
+  assert_eq "stamp: ..-in-filename passes (sidecar written)" "yes" \
+    "$([ -f "$sc" ] && echo yes || echo no)"
+  assert_eq "stamp: ..-in-filename .issue == 999" "999" "$(jq -r .issue "$sc")"
+  rm -rf "$d"
+)
+
+# 12. Embedded `/../` traversal sequence exits 2 and writes no sidecar.
+#     Exercises the `*'/../'*` alternative (different from test #10's leading
+#     `../` form). The would-be sidecar is derived from the transcript path, so
+#     it would land at $d/sub/../evil.dispatch-stamp.json (== $d/evil.dispatch-stamp.json).
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b 999-fixture
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  rc=0
+  mkdir -p "$d/sub"
+  ( cd "$d" && "$STAMP" --session-id sessok --transcript-path "$d/sub/../evil.jsonl" ) 2>/dev/null || rc=$?
+  assert_eq "stamp: --transcript-path embedded /../ exits 2" "2" "$rc"
+  assert_eq "stamp: --transcript-path embedded /../ writes no sidecar" "no" \
+    "$([ -f "$d/sub/../evil.dispatch-stamp.json" ] && echo yes || echo no)"
+  rm -rf "$d"
+)
+
+# 13. Control char in --transcript-path exits 2 and writes no sidecar.
+#     Uses a literal tab character (assembled via $'\t' concatenation) inside
+#     the path. $'\t' must be a standalone quoting form, not embedded in "…".
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b 999-fixture
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  rc=0
+  tpath="$d/sess"$'\t'"evil.jsonl"
+  ( cd "$d" && "$STAMP" --session-id sessok --transcript-path "$tpath" ) 2>/dev/null || rc=$?
+  assert_eq "stamp: --transcript-path control char exits 2" "2" "$rc"
+  assert_eq "stamp: --transcript-path control char writes no sidecar" "no" \
+    "$([ -f "${tpath%.jsonl}.dispatch-stamp.json" ] && echo yes || echo no)"
+  rm -rf "$d"
+)
+
+# 14. Trailing `/..` traversal sequence exits 2 and writes no sidecar.
+#     Exercises the `*'/..'` alternative (path ending in foo/..), distinct from
+#     test #10's leading `../` and test #12's embedded `/../` forms. With a real
+#     $d/sub directory present, a guard bypass would resolve $d/sub/.. to $d and
+#     write $d/sub/...dispatch-stamp.json (== $d/.dispatch-stamp.json).
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b 999-fixture
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  rc=0
+  mkdir -p "$d/sub"
+  ( cd "$d" && "$STAMP" --session-id sessok --transcript-path "$d/sub/.." ) 2>/dev/null || rc=$?
+  assert_eq "stamp: --transcript-path trailing /.. exits 2" "2" "$rc"
+  assert_eq "stamp: --transcript-path trailing /.. writes no sidecar" "no" \
+    "$([ -f "$d/sub/...dispatch-stamp.json" ] && echo yes || echo no)"
   rm -rf "$d"
 )
 

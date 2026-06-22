@@ -17,6 +17,7 @@
     "@commons-systems/components": "file:../components",
     "@commons-systems/authutil": "file:../authutil",
     "@commons-systems/ds": "file:../packages/ds",
+    "@commons-systems/sidecar": "file:../packages/sidecar",
     "@commons-systems/firebaseutil": "file:../firebaseutil",
     "@commons-systems/firestoreutil": "file:../firestoreutil",
     "@commons-systems/errorutil": "file:../errorutil",

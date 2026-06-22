@@ -42,6 +42,7 @@ vi.mock("../src/audit-data.js", async (importOriginal) => ({
 import { Dashboard } from "../src/Dashboard.js";
 import type { UsageSample } from "../src/usage-samples.js";
 import type { Reminder } from "../src/reminders.js";
+import type { QueueMetricsSnapshot } from "../src/queue-metrics.js";
 
 // The history-band chart modules read --fg via getThemeFg; happy-dom has no
 // stylesheet, so set it on the document root for the duration of each test
@@ -68,12 +69,12 @@ describe("Dashboard demo tier (user=null)", () => {
     expect(banner!.textContent).toBe("Demo data — sign in to see your queue.");
   });
 
-  it("renders the panel grid with all seven panels", () => {
+  it("renders the panel grid with all eight panels", () => {
     const { container } = render(<Dashboard user={null} />);
     const grid = container.querySelector(".panel-grid");
     expect(grid).not.toBeNull();
-    // capacity, pace, history, backlog, audit, reminders, queue-metrics
-    expect(grid!.children).toHaveLength(7);
+    // capacity, pace, history, backlog, audit, reminders, queue-metrics, parked
+    expect(grid?.children).toHaveLength(8);
   });
 
   it("marks the three full-width panels (history, backlog, audit) as panel-grid-full", () => {
@@ -119,7 +120,7 @@ const makeReminder = (title: string, offsetMs: number): Reminder => ({
   dueAt: new Date(now.getTime() + offsetMs),
 });
 
-const queueMetricsFixture = {
+const queueMetricsFixture: QueueMetricsSnapshot = {
   openHelpWanted: 12,
   closedPerDay: 3.2,
   createdPerDay: 1.7,
@@ -129,6 +130,16 @@ const queueMetricsFixture = {
   computedAt: new Date("2026-06-10T00:00:00Z"),
   groupId: "group-abc",
   memberEmails: ["owner@example.com"],
+  parked: [
+    {
+      number: 1466,
+      title: "office-hours: surface parked dispatch:office-hours work",
+      url: "https://github.com/natb1/commons.systems/issues/1466",
+      createdAt: new Date("2026-06-09T00:00:00Z"),
+      repo: "natb1/commons.systems",
+      phase: "dispatch:office-hours",
+    },
+  ],
 };
 
 describe("Dashboard owner tier with data", () => {
@@ -153,6 +164,19 @@ describe("Dashboard owner tier with data", () => {
     );
     expect(container.querySelector(".demo-banner")).toBeNull();
     expect(container.querySelector(".error")).toBeNull();
+  });
+
+  it("renders a parked-issue list item for each parked issue and no empty state", async () => {
+    const { container } = render(<Dashboard user={fakeUser} />);
+    await waitFor(() =>
+      expect(container.querySelectorAll("li.parked-issue").length).toBe(
+        queueMetricsFixture.parked.length,
+      ),
+    );
+    const texts = Array.from(container.querySelectorAll(".empty")).map(
+      (el) => el.textContent,
+    );
+    expect(texts).not.toContain("Nothing parked.");
   });
 });
 
@@ -179,6 +203,7 @@ describe("Dashboard owner tier — empty", () => {
       expect(t).toContain("No usage history to chart.");
       expect(t).toContain("No worker history to chart.");
       expect(t).toContain("No queue metrics yet.");
+      expect(t).toContain("Nothing parked.");
     });
   });
 });

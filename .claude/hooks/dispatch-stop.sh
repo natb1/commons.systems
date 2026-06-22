@@ -132,6 +132,21 @@ if [ -z "$TRANSCRIPT_PATH" ] && [ -n "${CLAUDE_JOB_DIR:-}" ] && [ -f "$STATE_FIL
   fi
 fi
 
+# Resolve the current session ID for session_has_inflight_background_task's
+# session-scoped scan (#2261). PAYLOAD is the PRIMARY source: it reflects the
+# actually-running session, whereas state.json can be stale across a re-stamp.
+# Here-string feeds jq (NOT `echo "$PAYLOAD" | jq` — zsh echo un-escapes \t/\n
+# and corrupts the JSON; see .claude/rules/shell-json.md). Fallback when the
+# payload yields nothing: reuse the `_sid` already parsed from $STATE_FILE in the
+# block above (do not re-read). `${_sid:-}` is mandatory — `_sid` is only set
+# inside that `if` block, and under `set -u` + the ERR trap a bare unset
+# reference would abort the whole hook. When CURRENT_SESSION_ID stays empty the
+# scan degrades to the whole file (today's behavior).
+CURRENT_SESSION_ID=$(jq -r '.session_id // empty' <<<"$PAYLOAD" 2>/dev/null) || CURRENT_SESSION_ID=""
+if [ -z "$CURRENT_SESSION_ID" ] && [ -n "${_sid:-}" ]; then
+  CURRENT_SESSION_ID="$_sid"
+fi
+
 # Resolve issue number from the validated JOB_NAME (<N>-<slug>). Discriminator 2
 # guarantees JOB_NAME matches ^[0-9]+-, so the numeric prefix is non-empty.
 ISSUE_NUM="${JOB_NAME%%-*}"
@@ -416,20 +431,60 @@ session_scheduled_wakeup() {
 #            status; any notification means the task resumed the session and is
 #            no longer in-flight.
 #
-# Grep the file directly for literal substrings (not echo-into-jq): the IDs are
-# plain substrings, so grep is robust and sidesteps the control-char trap
+# Grep for literal substrings (not echo-into-jq): the IDs are plain substrings,
+# so grep is robust and sidesteps the control-char trap
 # (.claude/rules/shell-json.md), mirroring dispatch-recover-dispatched-phase /
 # dispatch-detect-rate-limit-death.
+#
+# Session-scoped scan (#2261): the extractions run against the CURRENT session's
+# records only, not the whole file. A RESUMED session carries the prior run's
+# transcript records forward into its own <sessionId>.jsonl, and each carried
+# record retains its ORIGINAL `sessionId`. A whole-file scan therefore re-detects
+# a background task launched-but-never-notified by a now-dead prior run as a
+# false in-flight positive — yielding hand-back and silently stalling the chain.
+# Filtering to CURRENT_SESSION_ID drops those carried records. This stays safe
+# for the live #2243 case: a still-running session's OWN launch record carries
+# that same session's sessionId (verified), so it survives the filter and still
+# hands back correctly.
+#
+# The whole-file fallback (CURRENT_SESSION_ID empty) is DELIBERATE and
+# LOAD-BEARING, and the asymmetry is exact — do NOT "simplify" it away per
+# code-style.md:
+#   - It fires ONLY when CURRENT_SESSION_ID is unresolvable (empty payload AND no
+#     state.json sessionId). That preserves today's exact behavior in that case.
+#   - It MUST NOT fire on "the scoped scan found no launch." When
+#     CURRENT_SESSION_ID IS resolved but the scoped scan finds no current-session
+#     launch, the correct result is a normal `return 1` (not in-flight). Softening
+#     that into a whole-file retry would re-detect the stale prior-session launch
+#     and reintroduce #2261.
 session_has_inflight_background_task() {
   [ -n "$TRANSCRIPT_PATH" ] && [ -r "$TRANSCRIPT_PATH" ] || return 1
-  local launched notified
-  launched=$(grep -oE 'launched in background\. Task ID: [A-Za-z0-9_-]+' "$TRANSCRIPT_PATH" 2>/dev/null \
+  local launched notified scan_src
+  # Scope the scan to the CURRENT session's raw records when CURRENT_SESSION_ID
+  # is resolved; otherwise fall back to the whole file (today's behavior). The
+  # gate is computed ONCE on CURRENT_SESSION_ID being empty. The whole-file leg
+  # is DELIBERATE and LOAD-BEARING — see the docblock above for why it must never
+  # become a `return 1` (#2261 vs #2243 asymmetry).
+  if [ -z "$CURRENT_SESSION_ID" ]; then
+    scan_src=$(cat "$TRANSCRIPT_PATH")
+  else
+    # Real transcripts carry the top-level un-escaped `"sessionId":"<id>"` form
+    # (no space after colon, raw quotes), so grep -F matches — keeping this
+    # function's literal-substring / control-char-trap-avoiding philosophy.
+    scan_src=$(grep -F "\"sessionId\":\"$CURRENT_SESSION_ID\"" "$TRANSCRIPT_PATH" 2>/dev/null)
+  fi
+  # UPDATE TRIGGER: this literal `launched in background. Task ID: <ID>` is the
+  # Workflow/Task tool's `tool_result` output format, emitted by the Claude Code
+  # harness — there is no in-repo definition to track. If the harness changes that
+  # output format, THIS launch pattern AND the matching `taskId":"<ID>"`
+  # notification pattern below must both be updated.
+  launched=$(printf '%s\n' "$scan_src" | grep -oE 'launched in background\. Task ID: [A-Za-z0-9_-]+' \
     | grep -oE '[A-Za-z0-9_-]+$' | sort -u)
   [ -n "$launched" ] || return 1
   # Tolerate the JSONL backslash-escaped quote form (\"taskId\":\"<ID>\") as
   # well as the bare "taskId":"<ID>" form — the <task-notification> payload is a
   # string value, so its inner quotes are backslash-escaped in the record.
-  notified=$(grep -oE 'taskId\\?":\\?"[A-Za-z0-9_-]+' "$TRANSCRIPT_PATH" 2>/dev/null \
+  notified=$(printf '%s\n' "$scan_src" | grep -oE 'taskId\\?":\\?"[A-Za-z0-9_-]+' \
     | grep -oE '[A-Za-z0-9_-]+$' | sort -u)
   # In-flight iff at least one launched ID has no matching notification, i.e.
   # the set difference (launched ∖ notified) is non-empty. comm -23 lists lines
