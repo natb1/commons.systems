@@ -1,6 +1,7 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 
-export type { NavLink } from "@commons-systems/ds";
+import type { NavLink } from "@commons-systems/ds/navigation/nav-link";
+export type { NavLink };
 
 /** Minimal user shape for the nav, decoupled from any auth provider. */
 export interface NavUser {
