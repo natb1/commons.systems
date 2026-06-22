@@ -46,9 +46,9 @@ Apply the steps in order:
 Three reused agents feed the evaluation. The doc defines exactly how each feeds the
 ROI inequality and the consistency check; this skill only names them:
 
-- **FINANCIAL** — `.claude/agents/roadmap-finance.md`; estimates the left-side costs
+- **FINANCIAL** — `.claude/agents/align-financial.md`; estimates the left-side costs
   (`build`, `run`, `manual_cost`, `frequency`).
-- **TECHNICAL** — `.claude/agents/roadmap-engineering.md`; estimates `maintenance`
+- **TECHNICAL** — `.claude/agents/align-technical.md`; estimates `maintenance`
   and holds a veto if the codified artifact would not be safe to abandon.
-- **Auditor** — `.claude/agents/roadmap-auditor.md`; the consistency veto layer that
+- **Auditor** — `.claude/agents/align-consistency.md`; the consistency veto layer that
   checks charter compliance and ratchet risk.
