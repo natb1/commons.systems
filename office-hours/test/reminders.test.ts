@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { sortByDueAscending, formatDueLabel } from "../src/reminders.js";
+import { sortByDueAscending, formatDueLabel, remindersPanelKey } from "../src/reminders.js";
 
 const MINUTE = 60_000;
 const HOUR = 3_600_000;
@@ -94,5 +94,46 @@ describe("formatDueLabel", () => {
   it('returns "due in 0m" when due exactly now', () => {
     const dueAt = new Date(now.getTime());
     expect(formatDueLabel(dueAt, now)).toBe("due in 0m");
+  });
+});
+
+describe("remindersPanelKey", () => {
+  const now = new Date("2026-01-01T12:00:00Z");
+
+  const makeReminder = (jitKey: string, offsetMs: number) => ({
+    jitKey,
+    title: `Reminder ${jitKey}`,
+    repo: "natb1/office-hours-nate",
+    issueNumber: 1,
+    dueAt: new Date(now.getTime() + offsetMs),
+  });
+
+  it("returns empty string for an empty array", () => {
+    expect(remindersPanelKey([], now)).toBe("");
+  });
+
+  it("is stable across a no-boundary 60s tick", () => {
+    // Offsets chosen far from X.5h rounding edges:
+    // 3h+10m → absMs/HOUR = 3.167 → round=3; +60s → 3.150 → round=3 (stable)
+    // 7h+10m → absMs/HOUR = 7.167 → round=7; +60s → 7.150 → round=7 (stable)
+    const rs = [
+      makeReminder("a", 3 * HOUR + 10 * MINUTE),
+      makeReminder("b", 7 * HOUR + 10 * MINUTE),
+    ];
+    const key1 = remindersPanelKey(rs, now);
+    const key2 = remindersPanelKey(rs, new Date(now.getTime() + 60_000));
+    expect(key1).toBe(key2);
+  });
+
+  it("changes when a reminder flips from future to overdue", () => {
+    // Reminder due at now+30_000ms: before tick delta=+30000 → "due in 1m"|""
+    // After +60_000ms tick delta=-30000 → "overdue 1m"|"overdue"
+    const rs = [
+      makeReminder("flipping", 30_000),
+      makeReminder("far-out", 5 * HOUR + 10 * MINUTE),
+    ];
+    const key1 = remindersPanelKey(rs, now);
+    const key2 = remindersPanelKey(rs, new Date(now.getTime() + 60_000));
+    expect(key1).not.toBe(key2);
   });
 });
