@@ -209,13 +209,22 @@ export function createSidecar<TData, TPatch>(
    * failed write from poisoning the chain.
    */
   function enqueueWrite(patch: TPatch): Promise<void> {
+    const snapshotHandle = dirHandle;
+    const snapshotWritable = writable;
     writeChain = writeChain
       .then(async () => {
+        // TOCTOU guard: if the bound directory changed between enqueue and
+        // execution (rapid disconnect/reconnect), this patch was issued for the
+        // previous folder — skip it entirely so it neither persists to the new
+        // folder nor contaminates the new folder's in-memory model.
+        if (dirHandle !== snapshotHandle) return;
         const model = await ensureLoaded();
         const merged = mergeSidecar(model, patch);
         cachedModel = merged;
-        if (writable && dirHandle !== null) {
-          await writeSidecar(dirHandle, merged);
+        // Persist to the SNAPSHOT handle (not the live global), so a switch that
+        // races in after the guard still writes to the folder this patch was for.
+        if (snapshotWritable && snapshotHandle !== null) {
+          await writeSidecar(snapshotHandle, merged);
         }
       })
       .catch((err) => {
