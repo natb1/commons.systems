@@ -18,4 +18,5 @@ export type { CheckboxProps } from "./forms/Checkbox.tsx";
 
 // navigation
 export { Nav } from "./navigation/Nav.tsx";
-export type { NavProps, NavLink } from "./navigation/Nav.tsx";
+export type { NavProps } from "./navigation/Nav.tsx";
+export type { NavLink } from "./navigation/nav-link.ts";
