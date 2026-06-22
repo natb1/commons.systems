@@ -281,6 +281,9 @@ let writable = false;
 // next access re-reads from the new handle.
 let cachedModel: SidecarData | null = null;
 let loadPromise: Promise<SidecarData> | null = null;
+// Incremented on every setLocalDirectory / clearLocalDirectory so in-memory
+// assignments can be guarded against writes that started before the switch.
+let generation = 0;
 
 // True when the bound folder has a sidecar file on disk that exists but
 // could not be parsed (corrupt). While set, disk writes are suppressed so a
@@ -307,6 +310,7 @@ export function setLocalDirectory(handle: FileSystemDirectoryHandle, isWritable:
   dirHandle = handle;
   writable = isWritable;
   cachedModel = null;
+  generation++;
   loadPromise = null;
   corruptOnDisk = false;
   writeChain = Promise.resolve();
@@ -326,6 +330,7 @@ export function clearLocalDirectory(): void {
   dirHandle = null;
   writable = false;
   cachedModel = null;
+  generation++;
   loadPromise = null;
   corruptOnDisk = false;
   writeChain = Promise.resolve();
@@ -339,12 +344,17 @@ export async function ensureLoaded(): Promise<SidecarData> {
   if (cachedModel !== null) return cachedModel;
   if (loadPromise === null) {
     const handle = dirHandle;
+    const gen = generation;
     loadPromise = (
       handle === null ? Promise.resolve<SidecarData | null>(emptyModel()) : readSidecar(handle)
     ).then((model) => {
-      // The handle may have been rebound (setLocalDirectory) while readSidecar
-      // was in flight. A stale result must not mutate the freshly-reset state —
-      // discard it so the next ensureLoaded re-reads the current handle.
+      // The handle may have been rebound (setLocalDirectory / clearLocalDirectory)
+      // while readSidecar was in flight. A stale result must not mutate the
+      // freshly-reset state — discard it so the next ensureLoaded re-reads the
+      // current handle. The generation guard on `cachedModel = model` below
+      // additionally covers the clear-then-reconnect-with-the-same-handle case,
+      // where this handle check passes (identical handle object) but the folder
+      // was unbound and rebound, so the read is still stale.
       if (dirHandle !== handle) {
         return cachedModel ?? emptyModel();
       }
@@ -355,11 +365,14 @@ export async function ensureLoaded(): Promise<SidecarData> {
           new Error("sidecar corrupt on disk; suppressing writes to preserve recoverable user data"),
           { operation: "ensureLoaded" },
         );
-      } else {
-        corruptOnDisk = false;
-        cachedModel = model;
+        return cachedModel;
       }
-      return cachedModel;
+      corruptOnDisk = false;
+      // Skip the in-memory cache write when a switch landed during the read
+      // (generation moved), but still return the freshly-read model so an
+      // in-flight enqueueWrite task has its folder's data to merge and persist.
+      if (generation === gen) cachedModel = model;
+      return model;
     });
   }
   return loadPromise;
@@ -377,16 +390,21 @@ export async function ensureLoaded(): Promise<SidecarData> {
 function enqueueWrite(patch: SidecarPatch): Promise<void> {
   const snapshotHandle = dirHandle;
   const snapshotWritable = writable;
+  const snapshotGen = generation;
   writeChain = writeChain
     .then(async () => {
       // TOCTOU guard: if the bound directory changed between enqueue and
       // execution (rapid disconnect/reconnect), this patch was issued for the
       // previous folder — skip it entirely so it neither persists to the new
       // folder nor contaminates the new folder's in-memory model.
+      // The generation snapshot additionally guards the `cachedModel = merged`
+      // assignment below: a folder switch that lands during the ensureLoaded
+      // await window increments `generation`, so the stale task's merge result
+      // is never written into the new folder's in-memory cache.
       if (dirHandle !== snapshotHandle) return;
       const model = await ensureLoaded();
       const merged = mergeSidecar(model, patch);
-      cachedModel = merged;
+      if (generation === snapshotGen) cachedModel = merged;
       // The corruption was already logged once at load time (ensureLoaded);
       // return silently here so repeated saves (e.g. periodic playback-position
       // persistence) don't spam the error log.
