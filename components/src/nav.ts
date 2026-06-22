@@ -1,10 +1,6 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 
-export interface NavLink {
-  readonly href: string;
-  readonly label: string;
-  readonly align?: "end";
-}
+export type { NavLink } from "@commons-systems/ds";
 
 /** Minimal user shape for the nav, decoupled from any auth provider. */
 export interface NavUser {
