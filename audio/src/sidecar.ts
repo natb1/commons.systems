@@ -289,7 +289,11 @@ let writeChain: Promise<void> = Promise.resolve();
 /**
  * Store the retained directory handle and writable flag (called by Unit 3 after
  * the folder is picked / permission resolved). Invalidates the cached model so
- * the next access re-reads lazily from the new handle.
+ * the next access re-reads lazily from the new handle. The
+ * `writeChain = Promise.resolve()` reset only detaches FUTURE enqueues from the
+ * old chain; it does NOT stop an already-enqueued stale write — that is the job
+ * of the `enqueueWrite` snapshot guard, which skips any task whose bound handle
+ * no longer matches the live one.
  */
 export function setLocalDirectory(handle: FileSystemDirectoryHandle, isWritable: boolean): void {
   dirHandle = handle;
@@ -301,9 +305,13 @@ export function setLocalDirectory(handle: FileSystemDirectoryHandle, isWritable:
 
 /**
  * Unbind the directory (called when the folder is disconnected). Drops the
- * handle, marks not-writable, and resets the cache + write chain so an in-flight
- * write enqueued before disconnect cannot target the now-stale folder and the
- * next access re-loads an empty model.
+ * handle, marks not-writable, and resets the cache + write chain. The
+ * `writeChain = Promise.resolve()` reset only detaches FUTURE enqueues from the
+ * old chain — it does NOT cancel an already-enqueued write, which still runs.
+ * What prevents a stale write from landing in a later-connected folder is the
+ * `enqueueWrite` snapshot guard: an orphaned task whose snapshot handle no
+ * longer matches the live `dirHandle` is skipped. The cache reset makes the
+ * next access re-load an empty model.
  */
 export function clearLocalDirectory(): void {
   dirHandle = null;
@@ -341,13 +349,22 @@ export async function ensureLoaded(): Promise<SidecarData> {
  * per-link catch keeps one failed write from poisoning the chain.
  */
 function enqueueWrite(patch: SidecarPatch): Promise<void> {
+  const snapshotHandle = dirHandle;
+  const snapshotWritable = writable;
   writeChain = writeChain
     .then(async () => {
+      // TOCTOU guard: if the bound directory changed between enqueue and
+      // execution (rapid disconnect/reconnect), this patch was issued for the
+      // previous folder — skip it entirely so it neither persists to the new
+      // folder nor contaminates the new folder's in-memory model.
+      if (dirHandle !== snapshotHandle) return;
       const model = await ensureLoaded();
       const merged = mergeSidecar(model, patch);
       cachedModel = merged;
-      if (writable && dirHandle !== null) {
-        await writeSidecar(dirHandle, merged);
+      // Persist to the SNAPSHOT handle (not the live global), so a switch that
+      // races in after the guard still writes to the folder this patch was for.
+      if (snapshotWritable && snapshotHandle !== null) {
+        await writeSidecar(snapshotHandle, merged);
       }
     })
     .catch((err) => {
