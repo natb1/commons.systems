@@ -150,8 +150,10 @@ function makeEmptyDir(): FileSystemDirectoryHandle {
 describe("parseSidecar", () => {
   it("parses a valid sidecar JSON into the model", () => {
     const data: SidecarData = {
-      version: 1,
-      metadata: { "song.mp3": { title: "My Song", duration: 200 } },
+      version: 2,
+      metadata: {
+        "song.mp3": { tags: { title: "My Song", duration: 200 }, size: 1024, lastModified: 111 },
+      },
       playlists: { Favs: ["song.mp3"] },
     };
     const result = parseSidecar(JSON.stringify(data));
@@ -159,37 +161,37 @@ describe("parseSidecar", () => {
   });
 
   it("returns empty model for empty string", () => {
-    expect(parseSidecar("")).toEqual({ version: 1, metadata: {}, playlists: {} });
+    expect(parseSidecar("")).toEqual({ version: 2, metadata: {}, playlists: {} });
   });
 
   it("returns empty model for corrupt JSON", () => {
-    expect(parseSidecar("{not json")).toEqual({ version: 1, metadata: {}, playlists: {} });
+    expect(parseSidecar("{not json")).toEqual({ version: 2, metadata: {}, playlists: {} });
   });
 
   it("returns empty model for non-object top-level: number", () => {
-    expect(parseSidecar("42")).toEqual({ version: 1, metadata: {}, playlists: {} });
+    expect(parseSidecar("42")).toEqual({ version: 2, metadata: {}, playlists: {} });
   });
 
   it("returns empty model for non-object top-level: null", () => {
-    expect(parseSidecar("null")).toEqual({ version: 1, metadata: {}, playlists: {} });
+    expect(parseSidecar("null")).toEqual({ version: 2, metadata: {}, playlists: {} });
   });
 
   it("returns empty model for non-object top-level: string", () => {
-    expect(parseSidecar('"a string"')).toEqual({ version: 1, metadata: {}, playlists: {} });
+    expect(parseSidecar('"a string"')).toEqual({ version: 2, metadata: {}, playlists: {} });
   });
 
   it("returns empty model for non-object top-level: array", () => {
-    expect(parseSidecar("[1,2,3]")).toEqual({ version: 1, metadata: {}, playlists: {} });
+    expect(parseSidecar("[1,2,3]")).toEqual({ version: 2, metadata: {}, playlists: {} });
   });
 
-  it("forces version to 1 regardless of input", () => {
+  it("forces version to 2 regardless of input", () => {
     const json = JSON.stringify({ version: 99, metadata: {}, playlists: {} });
-    expect(parseSidecar(json).version).toBe(1);
+    expect(parseSidecar(json).version).toBe(2);
   });
 
   it("coerces missing metadata to {} while preserving valid playerState", () => {
     const json = JSON.stringify({
-      version: 1,
+      version: 2,
       playerState: { queue: ["a.mp3"], currentLocalName: "a.mp3", positionSeconds: 10 },
     });
     const result = parseSidecar(json);
@@ -199,7 +201,7 @@ describe("parseSidecar", () => {
 
   it("coerces wrong-typed metadata (array) to {} but preserves playerState", () => {
     const json = JSON.stringify({
-      version: 1,
+      version: 2,
       metadata: [1, 2],
       playerState: { queue: ["b.mp3"] },
     });
@@ -208,15 +210,57 @@ describe("parseSidecar", () => {
     expect(result.playerState?.queue).toEqual(["b.mp3"]);
   });
 
-  it("drops wrong-typed duration but keeps string title in metadata", () => {
+  it("drops wrong-typed duration but keeps string title in a wrapper entry's tags", () => {
     const json = JSON.stringify({
-      version: 1,
-      metadata: { "song.mp3": { title: "Keep", duration: "bad" } },
+      version: 2,
+      metadata: { "song.mp3": { tags: { title: "Keep", duration: "bad" }, size: 10, lastModified: 5 } },
       playlists: {},
     });
     const result = parseSidecar(json);
-    expect(result.metadata["song.mp3"]?.title).toBe("Keep");
-    expect("duration" in (result.metadata["song.mp3"] ?? {})).toBe(false);
+    expect(result.metadata["song.mp3"]?.tags.title).toBe("Keep");
+    expect("duration" in (result.metadata["song.mp3"]?.tags ?? {})).toBe(false);
+  });
+
+  describe("v1→v2 migration + fingerprint coercion", () => {
+    it("drops legacy v1 bare-AudioTags metadata entries (cache miss) while keeping playerState + playlists", () => {
+      const json = JSON.stringify({
+        version: 1,
+        // Legacy shape: bare AudioTags, no tags/size/lastModified wrapper.
+        metadata: { "old.mp3": { title: "Legacy", duration: 200 } },
+        playerState: { queue: ["old.mp3"], currentLocalName: "old.mp3", positionSeconds: 7 },
+        playlists: { Favs: ["old.mp3"] },
+      });
+      const result = parseSidecar(json);
+      expect(result.version).toBe(2);
+      // The legacy metadata entry is dropped → a cache miss → re-extraction later.
+      expect(result.metadata).toEqual({});
+      // Sibling state survives the migration untouched.
+      expect(result.playerState?.queue).toEqual(["old.mp3"]);
+      expect(result.playlists?.["Favs"]).toEqual(["old.mp3"]);
+    });
+
+    it("drops an entry with a non-numeric or missing size/lastModified, keeps a well-formed wrapper", () => {
+      const json = JSON.stringify({
+        version: 2,
+        metadata: {
+          "bad-size.mp3": { tags: { title: "A" }, size: "nope", lastModified: 5 },
+          "missing-lm.mp3": { tags: { title: "B" }, size: 10 },
+          "no-tags.mp3": { size: 10, lastModified: 5 },
+          "good.mp3": { tags: { title: "Good", duration: "bad" }, size: 20, lastModified: 9 },
+        },
+        playlists: {},
+      });
+      const result = parseSidecar(json);
+      expect("bad-size.mp3" in result.metadata).toBe(false);
+      expect("missing-lm.mp3" in result.metadata).toBe(false);
+      expect("no-tags.mp3" in result.metadata).toBe(false);
+      // Well-formed wrapper kept; inner tags still coerced per-leaf (bad duration dropped).
+      expect(result.metadata["good.mp3"]).toEqual({
+        tags: { title: "Good" },
+        size: 20,
+        lastModified: 9,
+      });
+    });
   });
 
   describe("playlists coercion", () => {
@@ -283,12 +327,12 @@ describe("parseSidecar", () => {
 
     it("malformed playerState does not discard good metadata (independence, vice-versa)", () => {
       const json = JSON.stringify({
-        version: 1,
-        metadata: { "song.mp3": { title: "Keep" } },
+        version: 2,
+        metadata: { "song.mp3": { tags: { title: "Keep" }, size: 10, lastModified: 1 } },
         playerState: 42,
       });
       const result = parseSidecar(json);
-      expect(result.metadata["song.mp3"]?.title).toBe("Keep");
+      expect(result.metadata["song.mp3"]?.tags.title).toBe("Keep");
       expect(result.playerState).toBeUndefined();
     });
   });
@@ -308,30 +352,33 @@ describe("parseSidecar", () => {
 describe("mergeSidecar", () => {
   it("metadata patch wins per-key while untouched siblings + playerState + playlists are preserved", () => {
     const existing: SidecarData = {
-      version: 1,
+      version: 2,
       metadata: {
-        "song.mp3": { title: "Old" },
-        "other.mp3": { title: "Other" },
+        "song.mp3": { tags: { title: "Old" }, size: 10, lastModified: 1 },
+        "other.mp3": { tags: { title: "Other" }, size: 20, lastModified: 2 },
       },
       playerState: { queue: ["song.mp3"], currentLocalName: "song.mp3", positionSeconds: 30 },
       playlists: { Favs: ["song.mp3"] },
     };
-    const result = mergeSidecar(existing, { metadata: { "song.mp3": { title: "New" } } });
+    const result = mergeSidecar(existing, {
+      metadata: { "song.mp3": { tags: { title: "New" }, size: 11, lastModified: 3 } },
+    });
 
-    expect(result.metadata["song.mp3"]?.title).toBe("New");
+    expect(result.metadata["song.mp3"]?.tags.title).toBe("New");
+    expect(result.metadata["song.mp3"]?.size).toBe(11);
     // Sibling preserved
-    expect(result.metadata["other.mp3"]?.title).toBe("Other");
+    expect(result.metadata["other.mp3"]?.tags.title).toBe("Other");
     // playerState preserved
     expect(result.playerState).toEqual(existing.playerState);
     // Playlists preserved
     expect(result.playlists).toEqual(existing.playlists);
-    expect(result.version).toBe(1);
+    expect(result.version).toBe(2);
   });
 
   it("playerState partial patch keeps existing queue + currentLocalName", () => {
     const existing: SidecarData = {
-      version: 1,
-      metadata: { "a.mp3": { title: "A" } },
+      version: 2,
+      metadata: { "a.mp3": { tags: { title: "A" }, size: 10, lastModified: 1 } },
       playerState: { queue: ["a.mp3"], currentLocalName: "a.mp3", positionSeconds: 10 },
       playlists: {},
     };
@@ -341,13 +388,13 @@ describe("mergeSidecar", () => {
     expect(result.playerState?.currentLocalName).toBe("a.mp3");
     expect(result.playerState?.positionSeconds).toBe(99);
     // Metadata preserved
-    expect(result.metadata["a.mp3"]?.title).toBe("A");
+    expect(result.metadata["a.mp3"]?.tags.title).toBe("A");
   });
 
   it("playlist patch preserves metadata + playerState", () => {
     const existing: SidecarData = {
-      version: 1,
-      metadata: { "b.mp3": { title: "B" } },
+      version: 2,
+      metadata: { "b.mp3": { tags: { title: "B" }, size: 10, lastModified: 1 } },
       playerState: { queue: ["b.mp3"] },
       playlists: { Old: ["b.mp3"] },
     };
@@ -361,7 +408,7 @@ describe("mergeSidecar", () => {
 
   it("returns a new object (does not mutate existing)", () => {
     const existing: SidecarData = {
-      version: 1,
+      version: 2,
       metadata: {},
       playlists: { Favs: ["x.mp3"] },
     };
@@ -379,10 +426,14 @@ describe("mergeSidecar", () => {
 describe("serializeSidecar + parseSidecar round-trip", () => {
   it("round-trips a complete model (metadata + playerState + playlists)", () => {
     const data: SidecarData = {
-      version: 1,
+      version: 2,
       metadata: {
-        "song.mp3": { title: "Song", artist: "Artist", duration: 180 },
-        "tune.flac": { title: "Tune", year: 2020 },
+        "song.mp3": {
+          tags: { title: "Song", artist: "Artist", duration: 180 },
+          size: 1000,
+          lastModified: 111,
+        },
+        "tune.flac": { tags: { title: "Tune", year: 2020 }, size: 2000, lastModified: 222 },
       },
       playerState: {
         queue: ["song.mp3", "tune.flac"],
@@ -396,12 +447,16 @@ describe("serializeSidecar + parseSidecar round-trip", () => {
   });
 
   it("round-trips an empty model", () => {
-    const empty: SidecarData = { version: 1, metadata: {}, playlists: {} };
+    const empty: SidecarData = { version: 2, metadata: {}, playlists: {} };
     expect(parseSidecar(serializeSidecar(empty))).toEqual(empty);
   });
 
   it("serializes to valid JSON (parseable by JSON.parse)", () => {
-    const data: SidecarData = { version: 1, metadata: { "a.mp3": { duration: 5 } }, playlists: {} };
+    const data: SidecarData = {
+      version: 2,
+      metadata: { "a.mp3": { tags: { duration: 5 }, size: 10, lastModified: 1 } },
+      playlists: {},
+    };
     expect(() => JSON.parse(serializeSidecar(data))).not.toThrow();
   });
 });
@@ -413,8 +468,8 @@ describe("serializeSidecar + parseSidecar round-trip", () => {
 describe("readSidecar", () => {
   it("reads and parses a present sidecar file", async () => {
     const data: SidecarData = {
-      version: 1,
-      metadata: { "song.mp3": { title: "Found", duration: 100 } },
+      version: 2,
+      metadata: { "song.mp3": { tags: { title: "Found", duration: 100 }, size: 50, lastModified: 7 } },
       playlists: { Favs: ["song.mp3"] },
     };
     const { dir } = makePreloadedDir(serializeSidecar(data));
@@ -426,18 +481,18 @@ describe("readSidecar", () => {
   it("returns empty model when the .commons-audio directory is absent (NotFoundError)", async () => {
     const dir = makeEmptyDir();
     const result = await readSidecar(dir);
-    expect(result).toEqual({ version: 1, metadata: {}, playlists: {} });
+    expect(result).toEqual({ version: 2, metadata: {}, playlists: {} });
   });
 
   it("returns empty model when index.json is absent (NotFoundError)", async () => {
     const dir = makeDirWithMissingFile();
     const result = await readSidecar(dir);
-    expect(result).toEqual({ version: 1, metadata: {}, playlists: {} });
+    expect(result).toEqual({ version: 2, metadata: {}, playlists: {} });
   });
 
   it("returns empty model when content is corrupt JSON", async () => {
     const { dir } = makePreloadedDir("{not json");
-    await expect(readSidecar(dir)).resolves.toEqual({ version: 1, metadata: {}, playlists: {} });
+    await expect(readSidecar(dir)).resolves.toEqual({ version: 2, metadata: {}, playlists: {} });
   });
 });
 
@@ -445,8 +500,8 @@ describe("writeSidecar", () => {
   it("write-then-read round-trip", async () => {
     const dir = makeEmptyDir();
     const data: SidecarData = {
-      version: 1,
-      metadata: { "song.mp3": { title: "Written" } },
+      version: 2,
+      metadata: { "song.mp3": { tags: { title: "Written" }, size: 33, lastModified: 4 } },
       playlists: {},
     };
 
@@ -462,7 +517,7 @@ describe("writeSidecar", () => {
     const dir = makeFakeDir({ ".commons-audio": subdir });
 
     await expect(
-      writeSidecar(dir, { version: 1, metadata: {}, playlists: {} }),
+      writeSidecar(dir, { version: 2, metadata: {}, playlists: {} }),
     ).rejects.toThrow("write failed");
     expect(fileHandle._abortSpy).toHaveBeenCalled();
   });
@@ -474,7 +529,7 @@ describe("writeSidecar", () => {
     const dir = makeFakeDir({ ".commons-audio": subdir });
 
     await expect(
-      writeSidecar(dir, { version: 1, metadata: {}, playlists: {} }),
+      writeSidecar(dir, { version: 2, metadata: {}, playlists: {} }),
     ).rejects.toThrow("close failed");
     expect(fileHandle._abortSpy).toHaveBeenCalled();
   });
@@ -493,24 +548,40 @@ describe("cacheMetadata / getMetadata — writable=true", () => {
     const dir = makeEmptyDir();
     setLocalDirectory(dir, true);
 
-    await cacheMetadata("song.mp3", { title: "Test Song", duration: 180 });
+    await cacheMetadata("song.mp3", {
+      tags: { title: "Test Song", duration: 180 },
+      size: 1024,
+      lastModified: 111,
+    });
     await flushWrites();
 
-    expect(await getMetadata("song.mp3")).toEqual({ title: "Test Song", duration: 180 });
+    expect(await getMetadata("song.mp3")).toEqual({
+      tags: { title: "Test Song", duration: 180 },
+      size: 1024,
+      lastModified: 111,
+    });
 
     const readBack = await readSidecar(dir);
-    expect(readBack.metadata["song.mp3"]).toEqual({ title: "Test Song", duration: 180 });
+    expect(readBack.metadata["song.mp3"]).toEqual({
+      tags: { title: "Test Song", duration: 180 },
+      size: 1024,
+      lastModified: 111,
+    });
   });
 
   it("key is the bare filename, no 'local:' prefix on disk", async () => {
     const dir = makeEmptyDir();
     setLocalDirectory(dir, true);
 
-    await cacheMetadata("song.mp3", { title: "My Song" });
+    await cacheMetadata("song.mp3", { tags: { title: "My Song" }, size: 10, lastModified: 1 });
     await flushWrites();
 
     const readBack = await readSidecar(dir);
-    expect(readBack.metadata["song.mp3"]).toEqual({ title: "My Song" });
+    expect(readBack.metadata["song.mp3"]).toEqual({
+      tags: { title: "My Song" },
+      size: 10,
+      lastModified: 1,
+    });
     expect(Object.keys(readBack.metadata).some((k) => k.startsWith("local:"))).toBe(false);
   });
 
@@ -518,13 +589,21 @@ describe("cacheMetadata / getMetadata — writable=true", () => {
     const dir = makeEmptyDir();
     setLocalDirectory(dir, true);
 
-    void cacheMetadata("a.mp3", { title: "A", duration: 100 });
-    void cacheMetadata("b.mp3", { title: "B", duration: 200 });
+    void cacheMetadata("a.mp3", { tags: { title: "A", duration: 100 }, size: 1, lastModified: 1 });
+    void cacheMetadata("b.mp3", { tags: { title: "B", duration: 200 }, size: 2, lastModified: 2 });
     await flushWrites();
 
     const readBack = await readSidecar(dir);
-    expect(readBack.metadata["a.mp3"]).toEqual({ title: "A", duration: 100 });
-    expect(readBack.metadata["b.mp3"]).toEqual({ title: "B", duration: 200 });
+    expect(readBack.metadata["a.mp3"]).toEqual({
+      tags: { title: "A", duration: 100 },
+      size: 1,
+      lastModified: 1,
+    });
+    expect(readBack.metadata["b.mp3"]).toEqual({
+      tags: { title: "B", duration: 200 },
+      size: 2,
+      lastModified: 2,
+    });
   });
 });
 
@@ -537,11 +616,15 @@ describe("cacheMetadata / getMetadata — writable=false", () => {
     const dir = makeEmptyDir();
     setLocalDirectory(dir, false);
 
-    await cacheMetadata("song.mp3", { title: "In-memory" });
+    await cacheMetadata("song.mp3", { tags: { title: "In-memory" }, size: 10, lastModified: 1 });
     await flushWrites();
 
     // In-memory accessible
-    expect(await getMetadata("song.mp3")).toEqual({ title: "In-memory" });
+    expect(await getMetadata("song.mp3")).toEqual({
+      tags: { title: "In-memory" },
+      size: 10,
+      lastModified: 1,
+    });
 
     // .commons-audio dir was never created
     const anySubdirs = (dir as unknown as { _subdirs: Record<string, unknown> })._subdirs; // type-safety-ok: test fake internals (_subdirs) access
@@ -557,9 +640,13 @@ describe("clearLocalDirectory", () => {
   it("drops the handle and resets the model so the next access is empty", async () => {
     const dir = makeEmptyDir();
     setLocalDirectory(dir, true);
-    await cacheMetadata("song.mp3", { title: "Cached" });
+    await cacheMetadata("song.mp3", { tags: { title: "Cached" }, size: 10, lastModified: 1 });
     await flushWrites();
-    expect(await getMetadata("song.mp3")).toEqual({ title: "Cached" });
+    expect(await getMetadata("song.mp3")).toEqual({
+      tags: { title: "Cached" },
+      size: 10,
+      lastModified: 1,
+    });
 
     clearLocalDirectory();
 
@@ -573,7 +660,7 @@ describe("clearLocalDirectory", () => {
 
     clearLocalDirectory();
 
-    await cacheMetadata("late.mp3", { title: "Late" });
+    await cacheMetadata("late.mp3", { tags: { title: "Late" }, size: 10, lastModified: 1 });
     await flushWrites();
 
     // No disk write hit the now-disconnected folder.
@@ -686,14 +773,22 @@ describe("cacheMetadataBatch", () => {
     setLocalDirectory(dir, true);
 
     await cacheMetadataBatch({
-      "a.mp3": { title: "A", duration: 100 },
-      "b.mp3": { title: "B", duration: 200 },
+      "a.mp3": { tags: { title: "A", duration: 100 }, size: 1, lastModified: 1 },
+      "b.mp3": { tags: { title: "B", duration: 200 }, size: 2, lastModified: 2 },
     });
     await flushWrites();
 
     const readBack = await readSidecar(dir);
-    expect(readBack.metadata["a.mp3"]).toEqual({ title: "A", duration: 100 });
-    expect(readBack.metadata["b.mp3"]).toEqual({ title: "B", duration: 200 });
+    expect(readBack.metadata["a.mp3"]).toEqual({
+      tags: { title: "A", duration: 100 },
+      size: 1,
+      lastModified: 1,
+    });
+    expect(readBack.metadata["b.mp3"]).toEqual({
+      tags: { title: "B", duration: 200 },
+      size: 2,
+      lastModified: 2,
+    });
   });
 });
 
@@ -775,15 +870,21 @@ describe("savePlaylist / getPlaylists", () => {
 describe("sidecar — loads from pre-existing file", () => {
   it("reads existing sidecar from disk on first access", async () => {
     const existingData: SidecarData = {
-      version: 1,
-      metadata: { "existing.mp3": { title: "Existing", duration: 200 } },
+      version: 2,
+      metadata: {
+        "existing.mp3": { tags: { title: "Existing", duration: 200 }, size: 99, lastModified: 8 },
+      },
       playerState: { queue: ["existing.mp3"], currentLocalName: "existing.mp3", positionSeconds: 25 },
       playlists: { Old: ["existing.mp3"] },
     };
     const { dir } = makePreloadedDir(serializeSidecar(existingData));
     setLocalDirectory(dir, true);
 
-    expect(await getMetadata("existing.mp3")).toEqual({ title: "Existing", duration: 200 });
+    expect(await getMetadata("existing.mp3")).toEqual({
+      tags: { title: "Existing", duration: 200 },
+      size: 99,
+      lastModified: 8,
+    });
     expect(await getPlayerState()).toEqual({
       queue: ["existing.mp3"],
       currentLocalName: "existing.mp3",
