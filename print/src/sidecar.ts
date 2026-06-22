@@ -106,8 +106,19 @@ const sidecar = createSidecar<SidecarData, Partial<Pick<SidecarData, "metadata" 
   mergeSidecar,
 });
 
-const { parseSidecar, readSidecar, writeSidecar, setLocalDirectory, ensureLoaded, enqueueWrite, flushWrites } =
-  sidecar;
+const { writeSidecar, setLocalDirectory, ensureLoaded, enqueueWrite, flushWrites } = sidecar;
+
+// Restore the original non-nullable SidecarData contracts: the factory's parseSidecar
+// returns TData | null on parse failure, but print's original parseSidecar always
+// returned SidecarData (emptyModel() on all failure paths). Wrap both to preserve
+// that contract so callers do not need to null-check.
+function parseSidecar(text: string): SidecarData {
+  return sidecar.parseSidecar(text) ?? emptyModel();
+}
+
+async function readSidecar(dir: FileSystemDirectoryHandle): Promise<SidecarData> {
+  return (await sidecar.readSidecar(dir)) ?? emptyModel();
+}
 
 // Re-export the shared surface the rest of the app (and the Unit 7 tests)
 // consume. `ensureLoaded` is also imported by local-folder-ui.ts, so it is

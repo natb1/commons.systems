@@ -143,28 +143,28 @@ describe("parseSidecar", () => {
     expect(result).toEqual(data);
   });
 
-  it("returns null for missing/empty string", () => {
-    expect(parseSidecar("")).toBeNull();
+  it("returns empty model for missing/empty string", () => {
+    expect(parseSidecar("")).toEqual({ version: 1, metadata: {}, positions: {} });
   });
 
-  it("returns null for corrupt JSON", () => {
-    expect(parseSidecar("{not json")).toBeNull();
+  it("returns empty model for corrupt JSON", () => {
+    expect(parseSidecar("{not json")).toEqual({ version: 1, metadata: {}, positions: {} });
   });
 
-  it("returns null for non-object top-level: number", () => {
-    expect(parseSidecar("42")).toBeNull();
+  it("returns empty model for non-object top-level: number", () => {
+    expect(parseSidecar("42")).toEqual({ version: 1, metadata: {}, positions: {} });
   });
 
-  it("returns null for non-object top-level: null", () => {
-    expect(parseSidecar("null")).toBeNull();
+  it("returns empty model for non-object top-level: null", () => {
+    expect(parseSidecar("null")).toEqual({ version: 1, metadata: {}, positions: {} });
   });
 
-  it("returns null for non-object top-level: string", () => {
-    expect(parseSidecar('"a string"')).toBeNull();
+  it("returns empty model for non-object top-level: string", () => {
+    expect(parseSidecar('"a string"')).toEqual({ version: 1, metadata: {}, positions: {} });
   });
 
-  it("returns null for non-object top-level: array", () => {
-    expect(parseSidecar("[1,2,3]")).toBeNull();
+  it("returns empty model for non-object top-level: array", () => {
+    expect(parseSidecar("[1,2,3]")).toEqual({ version: 1, metadata: {}, positions: {} });
   });
 
   it("coerces missing metadata to {} while preserving valid positions", () => {
@@ -332,9 +332,9 @@ describe("readSidecar", () => {
     expect(result).toEqual({ version: 1, metadata: {}, positions: {} });
   });
 
-  it("returns null when content is corrupt JSON", async () => {
+  it("never throws even when the sidecar content is corrupt JSON", async () => {
     const { dir } = makePreloadedDir("{not json");
-    await expect(readSidecar(dir)).resolves.toBeNull();
+    await expect(readSidecar(dir)).resolves.toEqual({ version: 1, metadata: {}, positions: {} });
   });
 });
 
