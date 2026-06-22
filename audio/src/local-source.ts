@@ -22,6 +22,7 @@ import {
   getMetadata,
   setLocalDirectory,
 } from "./sidecar.js";
+import type { CachedMetadata } from "./sidecar.js";
 import { extractAudioMetadata } from "./local-metadata.js";
 import { AUDIO_FORMATS } from "./types.js";
 import type { AudioFormat, AudioTags, LibraryItem } from "./types.js";
@@ -242,6 +243,12 @@ export function hasLocalFolder(): boolean {
  * `getMetadata` calls `ensureLoaded` internally, which is a no-op once the model
  * is cached. Uncached items keep their synchronous placeholders until the async
  * `enrichLocalTracks` pass (Unit 5) extracts and caches their real tags.
+ *
+ * This path overlays whatever is cached and does NOT validate the fingerprint
+ * (no `getFile()`): it is the cheap first-render overlay. The post-render
+ * `enrichLocalTracks` pass detects a stale entry (fingerprint mismatch),
+ * re-extracts, and re-caches; a later re-render then overlays the fresh cache.
+ * This keeps the cheap-list / IO-enrichment split.
  * Returns [] when none / on error.
  */
 export async function listLocalTracks(): Promise<LibraryItem[]> {
@@ -253,7 +260,7 @@ export async function listLocalTracks(): Promise<LibraryItem[]> {
     return Promise.all(
       items.map(async (item) => {
         const cached = item.localName ? await getMetadata(item.localName) : undefined;
-        return cached !== undefined ? overlay(item, cached) : item;
+        return cached !== undefined ? overlay(item, cached.tags) : item;
       }),
     );
   } catch (err) {
@@ -281,85 +288,109 @@ export async function resolveLocalAudioSource(localName: string): Promise<string
 }
 
 /**
- * Resolve a listed local item's raw bytes for metadata enrichment, or null when
- * unavailable. Distinct from `resolveLocalAudioSource` (which wraps bytes in a
- * blob URL for `<audio>`) — enrichment needs the raw ArrayBuffer, not a URL.
+ * Resolve a listed local item to its `File` for metadata enrichment, or null
+ * when unavailable. Distinct from `resolveLocalAudioSource` (which wraps bytes in
+ * a blob URL for `<audio>`) — enrichment needs the File so it can read both the
+ * content fingerprint (`size`/`lastModified`) and, on a cache miss, the bytes.
  *
  * DESIGN NOTE — returns null on ANY failure ON PURPOSE; do not "correct" this to
  * throw. The repo code-style rule prefers clear errors over fallbacks, but this
  * is a deliberate, documented exception: enrichment is BEST-EFFORT and runs over
  * every listed file. A vanished file ("Local file no longer present"), a read
  * miss, or a permission error here is a skip-and-retry-later signal, not a
- * misconfiguration to surface. Unit 4 relies on the null return to AVOID caching
- * an empty `{}` (which would permanently suppress a retry). The error is still
- * logged for observability before returning null.
+ * misconfiguration to surface. The enrichment path relies on the null return to
+ * AVOID caching an empty `{}` (which would permanently suppress a retry). The
+ * error is still logged for observability before returning null.
  */
-export async function resolveLocalBytes(
-  item: LibraryItem,
-): Promise<ArrayBuffer | null> {
+export async function resolveLocalFile(item: LibraryItem): Promise<File | null> {
   if (!currentHandle) return null;
   currentSource ??= buildSource(currentHandle);
   try {
-    return await currentSource.resolveToBlob(item);
+    return await currentSource.resolveToFile(item);
   } catch (err) {
-    logError(err, { operation: "resolve-local-bytes" });
+    logError(err, { operation: "resolve-local-file" });
     return null;
   }
 }
 
 // ---------------------------------------------------------------------------
-// Async metadata enrichment overlay (cache-first, single batched write).
+// Async metadata enrichment overlay (cache-first w/ fingerprint re-validation,
+// single batched write).
 //
-// `listLocalTracks` overlays only ALREADY-cached tags (cheap, no IO). This pass
-// extracts real tags for the UNCACHED files and populates the cache, so a later
-// re-render's `listLocalTracks` overlays the fresh entries. Unit 5 invokes
-// `enrichLocalTracks` AFTER the initial render.
+// `listLocalTracks` overlays whatever is cached (cheap, no IO, no fingerprint
+// check). This pass reads each file's content fingerprint (`size` +
+// `lastModified`) and:
+//   - FRESH cache hit (fingerprint matches): overlay the cached tags, no
+//     extraction, no `arrayBuffer()` read — cheap.
+//   - MISS or MISMATCH (no cache, fingerprint differs, or a legacy v1 entry
+//     already dropped at parse): re-extract from the bytes and cache the new
+//     tags WITH the new fingerprint, so the next render overlays fresh data.
+// Unit 5 invokes `enrichLocalTracks` AFTER the initial render.
 //
-// Write suppression: an entry is accumulated ONLY when the cache was `undefined`
-// AND the bytes read OK. A focus-rescan with no new files finds every item
-// already cached → `newEntries` is empty → `cacheMetadataBatch` no-ops (no disk
-// write). A `null` (unreadable) buffer must NOT contribute an entry (do not
+// Write suppression: an entry is accumulated ONLY when extraction actually ran
+// (a real miss/mismatch with a readable file). A focus-rescan where every
+// fingerprint matches finds every item fresh → `newEntries` is empty →
+// `cacheMetadataBatch` no-ops (no disk write). An unreadable file (resolve null
+// or a TOCTOU `arrayBuffer()` failure) must NOT contribute an entry (do not
 // cache `{}`), so a transient read failure retries on the next pass.
 // ---------------------------------------------------------------------------
 
-/** Result of enriching one item: the overlaid item plus an optional new cache
- * entry (`[localName, tags]`) to be persisted in the pass's single batched
- * write. `entry` is null when nothing new was extracted (cached hit, no
- * localName, or an unreadable file) so it contributes nothing to the batch. */
+/** Result of enriching one item: an optional new cache entry (`[localName,
+ * CachedMetadata]`) to be persisted in the pass's single batched write. `entry`
+ * is null when nothing new was extracted (fresh cache hit, no localName, or an
+ * unreadable file) so it contributes nothing to the batch.
+ *
+ * This pass does NOT overlay the listed item: enrichment exists only to populate
+ * the sidecar cache. The user-visible tags (fresh or stale-but-cached) come from
+ * `listLocalTracks`'s own cache overlay on the next render, so there is nothing
+ * to return for display. */
 interface EnrichResult {
-  item: LibraryItem;
-  entry: [string, AudioTags] | null;
+  entry: [string, CachedMetadata] | null;
 }
 
 async function enrichLocalItem(item: LibraryItem): Promise<EnrichResult> {
   const localName = item.localName;
   // Cloud-shaped safety; local items always carry a localName.
-  if (!localName) return { item, entry: null };
+  if (!localName) return { entry: null };
   const cached = await getMetadata(localName);
-  // Present entry (even `{}`) means already extracted — overlay, no new entry.
-  if (cached !== undefined) return { item: overlay(item, cached), entry: null };
-  // No entry yet: read bytes and extract. `resolveLocalBytes` catches its own
-  // errors (returns null) and `extractAudioMetadata` returns `{}` on any parse
-  // failure, so no try/catch is needed here.
-  const buf = await resolveLocalBytes(item);
-  // Could not read this file — do NOT cache `{}` (that would permanently
-  // suppress retry). A later pass retries.
-  if (buf === null) return { item, entry: null };
+  const file = await resolveLocalFile(item);
+  // Could not read this file: contribute no entry (do NOT cache `{}` — that
+  // would permanently suppress a retry). A later pass retries. The cached
+  // (stale-but-present) tags stay user-visible via `listLocalTracks`'s overlay.
+  if (file === null) {
+    return { entry: null };
+  }
+  const fp = { size: file.size, lastModified: file.lastModified };
+  // Fresh cache hit: the file's content is unchanged since extraction. Skip
+  // extraction — no `arrayBuffer()` read — and contribute no new entry.
+  if (cached !== undefined && cached.size === fp.size && cached.lastModified === fp.lastModified) {
+    return { entry: null };
+  }
+  // Miss or mismatch: read the bytes and re-extract. Guard `arrayBuffer()` in a
+  // try/catch — TOCTOU: the file can vanish between `getFile()` and the byte
+  // read. On failure, contribute no entry so a later pass retries (the cached
+  // tags, if any, remain visible through `listLocalTracks`).
+  let buf: ArrayBuffer;
+  try {
+    buf = await file.arrayBuffer();
+  } catch (err) {
+    logError(err, { operation: "enrich-local-item" });
+    return { entry: null };
+  }
   const tags = await extractAudioMetadata(buf, item.format);
-  // Contribute this entry to the pass's single batched write (an empty `{}`
-  // extract is still a present entry: it caches so we don't re-extract a tagless
-  // file every pass, and `overlay` with `{}` keeps the placeholders).
-  return { item: overlay(item, tags), entry: [localName, tags] };
+  // Contribute this entry to the pass's single batched write, fingerprinted with
+  // the file's current size/lastModified (an empty `{}` extract is still a
+  // present entry: it caches so we don't re-extract a tagless file every pass).
+  return { entry: [localName, { tags, ...fp }] };
 }
 
-async function enrichLocalItems(items: LibraryItem[]): Promise<LibraryItem[]> {
+async function enrichLocalItems(items: LibraryItem[]): Promise<void> {
   const results = await Promise.all(items.map((item) => enrichLocalItem(item)));
   const newEntries = Object.fromEntries(
-    results.filter((r) => r.entry !== null).map((r) => r.entry as [string, AudioTags]),
+    results.filter((r) => r.entry !== null).map((r) => r.entry as [string, CachedMetadata]),
   );
-  // Empty → no-op (write suppression on a focus-rescan with no new files).
+  // Empty → no-op (write suppression on a focus-rescan with no changed files).
   await cacheMetadataBatch(newEntries);
-  return results.map((r) => r.item);
 }
 
 /**
@@ -373,7 +404,7 @@ export async function enrichLocalTracks(): Promise<void> {
   if (!currentHandle) return;
   try {
     currentSource ??= buildSource(currentHandle);
-    // list() also populates the source index so resolveLocalBytes finds handles.
+    // list() also populates the source index so resolveLocalFile finds handles.
     const items = await currentSource.list();
     await enrichLocalItems(items);
   } catch (err) {
