@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import {
   createLocalFolderMediaSource,
   type LocalDirEntryLike,
-  type LocalFolderMediaSource,
 } from "../src/local-folder";
 
 interface TestItem {
