@@ -47,7 +47,7 @@ if #2366 finalizes the schema with renamed or restructured fields, update this t
 | `owner` | `human` \| `ai` \| `procedure`. The current owner. The recommendation is a *target relative to this* — "push down" means move below it, "hold" means stay. |
 | `status` | `raw` \| `refining` \| `delegated` \| `codified`. Gates eligibility — a node still being refined may not be ready for a delegation recommendation. |
 | `clarifications[]` | Resolved ambiguities. A clarification that removes ambiguity can move a node off `c`. |
-| `tooling_goals[]` | Investments already named on this node. Append to this list, do not duplicate an entry that already says the same thing. |
+| `tooling_goals[]` | Investments already named on this node. Read for context — the evaluation does not write it. The output `tooling_goal` (see [Output contract](#output-contract)) is a recommendation; the caller should append a non-null output `tooling_goal` here if it is not already present, do not duplicate an entry that already says the same thing. |
 | `success_signal` | The observable that says the intention is met. An explicit observable / sensor / threshold pushes a node toward `a` — work with a checkable output is more systematizable. |
 
 `parent`, `reading`, `gap`, and `id` are read for context and echo only (`id` is
@@ -142,11 +142,12 @@ they do not by themselves decide. They reuse the existing roadmap agents:
 
 ### Greedy codification
 
-Greedy codification is correct when a push-down survives CAN and the consistency
-check. Those two checks already absorb the old "don't over-codify" worry — CAN keeps
-the unscriptable unscripted, and the consistency layer catches the ratchet teeth. So
-the ROI inequality is the only remaining gate: if the numbers clear it, push down,
-because the freed attention compounds.
+Greedy codification is correct when a push-down survives CAN, clears the ROI
+inequality, and the consistency layer does not veto it. Those three checks, in that
+order (CAN → ROI → consistency, matching the SKILL.md steps), together absorb the old
+"don't over-codify" worry — CAN keeps the unscriptable unscripted, the ROI inequality
+rejects the not-worth-it push-downs, and the consistency layer catches the ratchet
+teeth. When all three pass, push down, because the freed attention compounds.
 
 ## Consistency / veto layer
 
@@ -187,15 +188,18 @@ persisted consumer can grep it deterministically:
 | `can_category` | string | no | enum `{a, b, c}` |
 | `confidence` | string | no | enum `{high, medium, low}` |
 | `rationale` | string | no | prose naming which CAN test decided the category |
-| `roi_verdict` | string | yes | enum `{push_down, decline, n/a}`; `n/a` when `can_category == c` |
+| `roi_verdict` | string | no | always one of enum `{push_down, decline, n/a}` — never JSON `null`; the string `"n/a"` (not `null`) when `can_category == c` |
 | `roi_rationale` | string | yes | which side of the inequality won, with the financial and technical inputs; `null` when `roi_verdict == n/a` |
 | `tooling_goal` | object | yes | present iff the assessor named a concrete investment to move the boundary down; else `null` |
-| `veto` | object | yes | present iff the consistency layer vetoed; else `null` |
+| `veto` | object | yes | present iff a veto fired (consistency layer or TECHNICAL "safe to abandon"); else `null` |
 
 Nested shapes:
 
 - `tooling_goal` = `{ "goal": string, "moves_category_to": enum {a, b}, "rough_cost": string }`
-- `veto` = `{ "by": const "consistency", "reason": string }`
+- `veto` = `{ "by": enum {consistency, technical}, "reason": string }` — `consistency`
+  when the auditor/consistency layer fires (charter compliance, ratchet risk),
+  `technical` when the TECHNICAL perspective fires (the codified artifact would not be
+  safe to abandon).
 
 ### Strict validation and invariants
 
@@ -212,8 +216,9 @@ as the outcome-envelope reader.
 - `tooling_goal != null` ⟹ the boundary could move: `can_category == c`, OR
   `confidence == low`, OR the named investment lowers a confidently-`b` node toward
   `a` (`moves_category_to: a`).
-- `veto != null` ⟹ `roi_verdict` is `decline`, or the recommendation holds ownership
-  in place.
+- `veto != null` ⟹ `roi_verdict == "decline"`. A veto overrides a ROI-positive
+  push-down: the emitted `roi_verdict` is set to `decline` (not left as `push_down`),
+  and `recommended_owner` holds ownership in place at the input `owner`.
 
 ## Worked examples
 
@@ -304,5 +309,39 @@ Node: `statement` = "decide which roadmap epic to prioritize next quarter",
     "rough_cost": "medium"
   },
   "veto": null
+}
+```
+
+### `b`, push_down then veto — consistency overrides a ROI-positive push-down
+
+Node: `statement` = "auto-merge any green dependency-bump PR without review",
+`owner` = `ai`.
+
+- **CAN.** Too contextual to fully script — judging which bumps are safe — but a
+  skilled agent with merge-policy instructions would handle it reliably. Category `b`,
+  high confidence.
+- **SHOULD.** `build` is modest, `frequency` is high, `attention_value_freed` is real.
+  Left side < right side. ROI alone says `push_down`.
+- **Consistency / veto.** The auditor fires: codifying auto-merge creates a ratchet
+  tooth — once merges run unattended they resist later re-introduction of review, and
+  this conflicts with the standing change-control charter principle. The push-down is
+  vetoed. `roi_verdict` is overridden to `decline`, `recommended_owner` holds at the
+  input `owner` (`ai`), and `veto` carries the reason.
+
+```json
+{
+  "schema": "delegability.eval.v1",
+  "node_id": "node-autodep-merge",
+  "recommended_owner": "ai",
+  "can_category": "b",
+  "confidence": "high",
+  "rationale": "CAN test b passed: too contextual to fully script, but a skilled agent with merge-policy instructions would judge which dependency bumps are safe to merge reliably.",
+  "roi_verdict": "decline",
+  "roi_rationale": "ROI alone clears (modest build, high frequency, real attention_value_freed: left side < right side), but the consistency layer vetoed, so the verdict is overridden to decline.",
+  "tooling_goal": null,
+  "veto": {
+    "by": "consistency",
+    "reason": "Codifying unattended auto-merge creates a ratchet tooth that resists later re-introduction of review, conflicting with the change-control charter principle."
+  }
 }
 ```

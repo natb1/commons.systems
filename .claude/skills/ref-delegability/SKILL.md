@@ -26,13 +26,17 @@ Apply the steps in order:
 
 1. Run the [CAN classifier](../../docs/delegability.md#can-classifier-feasibility) —
    test `a` first, then `b`, else `c`. Emit a `can_category` and a mandatory
-   `rationale` naming which test decided it.
+   `rationale` naming which test decided it. If `can_category == c`, set
+   `roi_verdict: "n/a"` and `roi_rationale: null`, then skip step 2 and proceed to
+   step 3.
 2. When `can_category` ≠ `c`, run
    [SHOULD economics](../../docs/delegability.md#should-economics-push-down-roi) —
    evaluate the ROI inequality and emit `roi_verdict` (`push_down` or `decline`) plus
    `roi_rationale`.
 3. Check the consistency / veto layer. A push-down that survives CAN and SHOULD is
-   still declined if the auditor perspective vetoes it.
+   still declined if either veto source rejects it: the TECHNICAL perspective vetoes
+   when the codified artifact would not be safe to abandon, and the Auditor
+   (consistency) perspective vetoes on charter-compliance or ratchet-risk grounds.
 4. Emit the [output contract](../../docs/delegability.md#output-contract) object with
    all required fields. An object missing any always-present field is invalid — do not
    coerce defaults; re-run instead.
