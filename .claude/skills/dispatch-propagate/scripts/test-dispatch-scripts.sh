@@ -3523,6 +3523,27 @@ assert_eq "parse-job wins over candidate → INVOKE /budget-parse-job (directive
 assert_eq "parse-job wins over candidate → INVOKE /budget-parse-job (exit 0)" "0" "$ROUTE_RC"
 teardown
 
+# 26a. dispatch-route integration: malformed epic.json → candidate exits 3 →
+# route's "candidate hard error" else branch still falls back to INVOKE /plan-issue
+# at exit 0 (#2296). GATE-4 covers the candidate exit-3 in isolation; this asserts
+# the end-to-end route fallback through a dispatch-config-load failure.
+# dispatch-epic-labels (config-load) is the candidate's FIRST step and exits 3 on
+# malformed epic.json BEFORE the epic-label gate or sub-issues fetch, so no
+# sub-issues fixture is needed. The "epic" label on the issue documents that even a
+# would-be epic candidate still falls back safely when its config is malformed.
+echo "Test: no PR + malformed epic.json → candidate exit 3 → INVOKE /plan-issue"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo "/wt/58-epic" > "$STUB_DIR/worktree-toplevel.txt"
+printf 'not json{\n' > "$DISPATCH_CONFIG_DIR/epic.json"
+printf '{"state":"open","labels":[{"name":"epic"}]}\n' > "$STUB_DIR/arg-issue-58.json"
+route_run 58 /wt/58-epic
+assert_eq "malformed epic.json → candidate exit 3 → INVOKE /plan-issue (directive)" \
+  "INVOKE /plan-issue" "$ROUTE_OUT"
+assert_eq "malformed epic.json → candidate exit 3 → INVOKE /plan-issue (exit 0)" \
+  "0" "$ROUTE_RC"
+teardown
+
 # ============================================================================
 # dispatch-epic-resolved-candidate tests
 # ============================================================================
