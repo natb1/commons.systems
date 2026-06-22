@@ -38036,10 +38036,11 @@ assert_eq "dispatch-auto-merge is executable" "yes" \
 # ============================================================================
 #
 # Exercises the rate-limit-death detector: exit 0 iff the transcript's LAST
-# assistant turn is an isApiErrorMessage:true turn whose joined text contains the
-# literal `(not your usage limit)`; exit 1 otherwise (fail-safe). Fixtures are
-# one compact JSON object per line, written with printf '%s\n' (NOT echo) so the
-# JSONL is byte-exact.
+# assistant turn is an isApiErrorMessage:true turn whose joined text contains any
+# of the allowlisted transient-death signatures — the original rate-limit
+# substring `(not your usage limit)`, `529 Overloaded`, or `Stream idle timeout`;
+# exit 1 otherwise (fail-safe). Fixtures are one compact JSON object per line,
+# written with printf '%s\n' (NOT echo) so the JSONL is byte-exact.
 echo ""
 echo "=== dispatch-detect-rate-limit-death ==="
 
@@ -38167,6 +38168,16 @@ SYSTEM_TURN='{"type":"system","content":"529 Overloaded noise"}'
 printf '%s\n' "$SYSTEM_TURN" "$NORMAL_TURN" > "$TMPDIR_TEST/system-only.jsonl"
 if "$DRD" "$TMPDIR_TEST/system-only.jsonl"; then rc=0; else rc=$?; fi
 assert_eq "529 in system line only exits 1" "1" "$rc"
+drd_teardown
+
+# --- Test 13: NOT-LAST — Stream idle timeout present but a later normal turn
+# A session that recovered after a stream-idle-timeout and died later for a
+# different reason has a DIFFERENT last turn; must NOT self-heal.
+echo "Test: Stream idle timeout apiError present but NOT the last turn (recovered) → exit 1"
+drd_setup
+printf '%s\n' "$IDLE_TURN" "$NORMAL_TURN" > "$TMPDIR_TEST/idle-notlast.jsonl"
+if "$DRD" "$TMPDIR_TEST/idle-notlast.jsonl"; then rc=0; else rc=$?; fi
+assert_eq "Stream idle timeout not the last turn exits 1" "1" "$rc"
 drd_teardown
 
 # ============================================================================

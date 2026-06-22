@@ -61,4 +61,4 @@ grep_args=()
 for sig in "${TRANSIENT_SIGNATURES[@]}"; do grep_args+=(-e "$sig"); done
 
 printf '%s' "$last" | grep -q '"e":true' \
-  && printf '%s' "$last" | grep -qF "${grep_args[@]}"
+  && printf '%s' "$last" | grep -qF "${grep_args[@]}"   # -F applies to ALL -e patterns: every signature is matched as a literal fixed string, so new TRANSIENT_SIGNATURES entries must NOT rely on regex metacharacters (`.`, `*`, etc.)
