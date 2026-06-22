@@ -3,7 +3,7 @@
 # Usage: dispatch-phase <issue-num|branch>
 #
 # Prints exactly one actionable phase name to stdout:
-#   plan | implement | fix-conflicts | fix-checks | qa | review | done
+#   plan | implement | fix-conflicts | fix-checks | qa | review | main-qa | done
 #
 # This script answers ONLY "which phase skill runs." It does NOT report CI
 # readiness. When a draft PR's CI has no verdict yet (checks still in progress),
@@ -23,9 +23,9 @@
 #     whose headRefName starts with "<issue>-".
 #   - Otherwise: treated as a branch name. Matched exactly.
 #
-# For a no-PR target, the phase is `plan` unless the issue carries the
-# `dispatch:planned` label (then `implement`). This is determined by fetching
-# the issue's labels via `gh issue view`.
+# For a no-PR target, the phase is `main-qa` if the issue carries the `main-qa`
+# label (checked first); `implement` if it carries `dispatch:planned`; otherwise
+# `plan`. This is determined by fetching the issue's labels via `gh issue view`.
 # A gh/network failure in this fetch exits non-zero (it is no longer silently mapped to plan); transient blips self-heal via gh_retry.
 #
 # Environment:
@@ -86,7 +86,9 @@ if [[ -z "$PR" || "$PR" == "null" ]]; then
     echo "dispatch-phase: failed to parse labels JSON for #$ISSUE_NUM" >&2
     exit 1
   }
-  if grep -qxF "dispatch:planned" <<<"$ISSUE_LABELS"; then
+  if grep -qxF "main-qa" <<<"$ISSUE_LABELS"; then
+    echo "main-qa"
+  elif grep -qxF "dispatch:planned" <<<"$ISSUE_LABELS"; then
     echo "implement"
   else
     echo "plan"

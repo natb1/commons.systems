@@ -57,6 +57,9 @@ setup() {
   # to TMPDIR_TEST for the copied dispatch-route, so the candidate (and its own
   # close helper, exercised directly) must sit alongside it.
   cp "$SCRIPT_DIR/dispatch-epic-resolved-candidate" "$TMPDIR_TEST/dispatch-epic-resolved-candidate"
+  # dispatch-epic-resolved-candidate resolves the epic-labels helper via its
+  # SCRIPT_DIR (= TMPDIR_TEST for this copy), so the helper must sit alongside it.
+  cp "$SCRIPT_DIR/dispatch-epic-labels" "$TMPDIR_TEST/dispatch-epic-labels"
   cp "$SCRIPT_DIR/dispatch-close-resolved" "$TMPDIR_TEST/dispatch-close-resolved"
   cp "$SCRIPT_DIR/dispatch-select-target" "$TMPDIR_TEST/dispatch-select-target"
   cp "$SCRIPT_DIR/office-hours-select-target" "$TMPDIR_TEST/office-hours-select-target"
@@ -123,6 +126,7 @@ setup() {
            "$TMPDIR_TEST/dispatch-find-pr" \
            "$TMPDIR_TEST/dispatch-route" \
            "$TMPDIR_TEST/dispatch-epic-resolved-candidate" \
+           "$TMPDIR_TEST/dispatch-epic-labels" \
            "$TMPDIR_TEST/dispatch-close-resolved" \
            "$TMPDIR_TEST/dispatch-resolve-arg" \
            "$TMPDIR_TEST/dispatch-select-target" \
@@ -2478,6 +2482,29 @@ result=$("$TMPDIR_TEST/dispatch-phase" "42")
 assert_eq "no PR + dispatch:planned → implement" "implement" "$result"
 teardown
 
+# 1b-2. No PR + main-qa label → main-qa (#2274). dispatch-phase checks for the
+# main-qa label BEFORE the dispatch:planned check, so a main-qa issue routes to
+# the main-qa phase regardless of other labels.
+echo "Test: no PR + main-qa label → main-qa"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf '{"state":"open","labels":[{"name":"main-qa"}]}\n' > "$STUB_DIR/arg-issue-42.json"
+result=$("$TMPDIR_TEST/dispatch-phase" "42")
+assert_eq "no PR + main-qa → main-qa" "main-qa" "$result"
+teardown
+
+# 1b-3. No PR + main-qa AND dispatch:planned → main-qa (#2274). Directly exercises
+# the precedence claim from 1b-2: the main-qa check runs BEFORE the dispatch:planned
+# check, so an issue carrying both labels routes to main-qa, not implement. If the
+# two grep -qxF checks were swapped, this would regress to implement.
+echo "Test: no PR + main-qa + dispatch:planned → main-qa (precedence)"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf '{"state":"open","labels":[{"name":"main-qa"},{"name":"dispatch:planned"}]}\n' > "$STUB_DIR/arg-issue-42.json"
+result=$("$TMPDIR_TEST/dispatch-phase" "42")
+assert_eq "no PR + main-qa + dispatch:planned → main-qa" "main-qa" "$result"
+teardown
+
 # 1c. No PR + labels without dispatch:planned → plan (explicit non-empty labels).
 echo "Test: no PR + non-planned label → plan"
 setup
@@ -3113,6 +3140,20 @@ assert_eq "no PR + dispatch:planned → INVOKE /implement (directive)" \
 assert_eq "no PR + dispatch:planned → INVOKE /implement (exit 0)" "0" "$ROUTE_RC"
 teardown
 
+# 1b-2. No PR + main-qa label → INVOKE /qa-main (#2274). dispatch-route always
+# provisions the worktree first (the unconditional dispatch-provision-worktree
+# call), then dispatch-phase returns main-qa for the issue; the router maps
+# main-qa → INVOKE /qa-main.
+echo "Test: no PR + main-qa label → INVOKE /qa-main"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+printf '{"state":"open","labels":[{"name":"main-qa"}]}\n' > "$STUB_DIR/arg-issue-42.json"
+route_run 42 /wt/42-my-feature
+assert_eq "no PR + main-qa → INVOKE /qa-main (directive)" "INVOKE /qa-main" "$ROUTE_OUT"
+assert_eq "no PR + main-qa → INVOKE /qa-main (exit 0)" "0" "$ROUTE_RC"
+teardown
+
 # 1c. Closed issue → STOP closed (#1845). The router's closed-issue guard fires
 # AFTER the worktree cross-check and BEFORE provisioning: it fetches the issue
 # state once and short-circuits a closed issue so its lingering worktree is never
@@ -3595,7 +3636,9 @@ teardown
 
 # --- Epic-label gate (#1594) ------------------------------------------------
 # The gate runs BEFORE the sub-issues check: an issue is a candidate only if it
-# carries a configured epic label. Unconfigured → never a candidate. A real
+# carries a configured epic label — the configured set from epic.json, or the
+# built-in default ("epic") when no epic.json is present. A present config
+# replaces the default entirely (the configured set is used verbatim). A real
 # label-fetch failure → exit 3 (distinct from "not a candidate").
 
 # GATE-1. Epic configured, but the issue LACKS the configured label, even though
@@ -3612,16 +3655,57 @@ if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 68 >/dev/null 2>&1; then rc=0
 assert_eq "gate: configured but unlabeled would-be candidate → exit 1" "1" "$rc"
 teardown
 
-# GATE-2. NO epic config at all → never a candidate (no-config safe default),
-# regardless of sub-issue state (all children CLOSED/COMPLETED here).
-echo "Test: gate — no epic config → exit 1 regardless of sub-issue state"
+# GATE-2. NO epic config at all + issue carries the default "epic" label + all
+# children CLOSED/COMPLETED → candidate (exit 0). The helper emits the built-in
+# default "epic", the issue carries it, and all children are complete.
+echo "Test: gate — no config + default epic label + all children complete → exit 0"
 setup
 printf '{"state":"open","labels":[{"name":"epic"}]}\n' > "$STUB_DIR/arg-issue-69.json"
 printf '[{"number":691}]\n' > "$STUB_DIR/subissues-69.json"
 printf '{"title":"c","body":"","comments":[],"number":691,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
   > "$STUB_DIR/issue-691.json"
 if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 69 >/dev/null 2>&1; then rc=0; else rc=$?; fi
-assert_eq "gate: no epic config → exit 1 (no-config safe default)" "1" "$rc"
+assert_eq "gate: no config + default epic label + all children complete → exit 0" "0" "$rc"
+teardown
+
+# GATE-2b. NO epic config + issue carries a NON-epic label ("enhancement") + all
+# children CLOSED/COMPLETED → not a candidate (exit 1). The default set contains
+# only "epic"; "enhancement" is not in it, so the gate blocks it.
+echo "Test: gate — no config + non-epic label → exit 1"
+setup
+printf '{"state":"open","labels":[{"name":"enhancement"}]}\n' > "$STUB_DIR/arg-issue-71.json"
+printf '[{"number":711}]\n' > "$STUB_DIR/subissues-71.json"
+printf '{"title":"c","body":"","comments":[],"number":711,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
+  > "$STUB_DIR/issue-711.json"
+if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 71 >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "gate: no config + non-epic label → exit 1 (default set does not match)" "1" "$rc"
+teardown
+
+# GATE-2c. Override-precedence: epic.json present with {"labels":["big-epic"]} +
+# issue carries "big-epic" + all children CLOSED/COMPLETED → candidate (exit 0).
+echo "Test: gate — config override big-epic + issue carries big-epic → exit 0"
+setup
+printf '{"labels":["big-epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
+printf '{"state":"open","labels":[{"name":"big-epic"}]}\n' > "$STUB_DIR/arg-issue-72.json"
+printf '[{"number":721}]\n' > "$STUB_DIR/subissues-72.json"
+printf '{"title":"c","body":"","comments":[],"number":721,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
+  > "$STUB_DIR/issue-721.json"
+if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 72 >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "gate: override big-epic + issue carries big-epic → exit 0" "0" "$rc"
+teardown
+
+# GATE-2d. Override-precedence: epic.json present with {"labels":["big-epic"]} +
+# issue carries only "epic" (the former default) → not a candidate (exit 1). The
+# configured set REPLACES the default, so plain "epic" is no longer recognized.
+echo "Test: gate — config override big-epic + issue carries plain epic → exit 1"
+setup
+printf '{"labels":["big-epic"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
+printf '{"state":"open","labels":[{"name":"epic"}]}\n' > "$STUB_DIR/arg-issue-73.json"
+printf '[{"number":731}]\n' > "$STUB_DIR/subissues-73.json"
+printf '{"title":"c","body":"","comments":[],"number":731,"state":"CLOSED","stateReason":"COMPLETED"}\n' \
+  > "$STUB_DIR/issue-731.json"
+if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 73 >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "gate: override big-epic + issue carries plain epic → exit 1 (config replaces default)" "1" "$rc"
 teardown
 
 # GATE-3. Epic configured, but the label fetch HARD-fails (deterministic, not
@@ -3643,6 +3727,31 @@ if "$TMPDIR_TEST/dispatch-epic-resolved-candidate" 71 >/dev/null 2>"$TMPDIR_TEST
 assert_eq "gate: malformed epic.json → exit 3" "3" "$rc"
 if grep -q 'dispatch-epic-resolved-candidate:' "$TMPDIR_TEST/err.txt"; then diag=yes; else diag=no; fi
 assert_eq "gate: malformed epic.json → candidate diagnostic on stderr" "yes" "$diag"
+teardown
+
+# ============================================================================
+# dispatch-epic-labels unit tests (#2235)
+# ============================================================================
+echo ""
+echo "=== dispatch-epic-labels ==="
+
+# The helper is copied into TMPDIR_TEST by setup() (task A wiring), and it calls
+# dispatch-config-load which setup() also copies. Run it directly and assert stdout.
+
+# E-1. No epic.json in $DISPATCH_CONFIG_DIR → stdout is exactly "epic" (the
+# built-in default).
+echo "Test: dispatch-epic-labels — no config → stdout is 'epic'"
+setup
+out=$("$TMPDIR_TEST/dispatch-epic-labels")
+assert_eq "no config → stdout is 'epic'" "epic" "$out"
+teardown
+
+# E-2. epic.json = {"labels":["a","b"]} → stdout is "a" then "b" (two lines).
+echo "Test: dispatch-epic-labels — config with two labels → stdout is 'a' then 'b'"
+setup
+printf '{"labels":["a","b"]}\n' > "$DISPATCH_CONFIG_DIR/epic.json"
+out=$("$TMPDIR_TEST/dispatch-epic-labels")
+assert_eq "config two labels → stdout is 'a' then 'b'" "$(printf 'a\nb')" "$out"
 teardown
 
 # ============================================================================
@@ -4175,6 +4284,23 @@ printf '[{"number":10,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"dis
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "PR with parked issue skipped; unparked sibling returned" "pr 20 20-other fix-checks" "$result"
+teardown
+
+# 2c. An issue carrying BOTH main-qa AND dispatch:office-hours is SKIPPED by the
+# issue queue's office-hours filter (#2274 acceptance criterion #4). The issue
+# also carries "help wanted" so it enters the sort; the dispatch:office-hours
+# label is the operative skip (line 1003 of dispatch-select-target). Without
+# the skip, the OLDER parked issue would win; with it the sibling is selected.
+echo "Test: main-qa + dispatch:office-hours issue skipped; sibling chosen"
+setup
+echo '[]' > "$STUB_DIR/pr-list-union.json"
+# Issue 10 is older, carries main-qa + office-hours + help wanted → skipped.
+# Issue 20 is newer, carries only help wanted → selected.
+printf '[{"number":10,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"main-qa"},{"name":"dispatch:office-hours"}]},{"number":20,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "main-qa + office-hours issue skipped; unparked sibling chosen" "issue 20" "$result"
 teardown
 
 # 3. When no eligible PR exists, a help-wanted issue is chosen.
@@ -9455,6 +9581,85 @@ setup
 if "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" 2>/dev/null; then rc=0; else rc=$?; fi
 assert_eq "missing issue number exits non-zero" "1" "$rc"
 assert_eq "missing arg: no label edit" "absent" "$(log_state gh-issue-edit.log)"
+teardown
+
+# --route autonomous: Step 1 (remove help-wanted) and Step 2 (add main-qa) run
+# unconditionally; Step 3 is skipped, so dispatch:office-hours is ABSENT from the
+# set-labels log. Exit 0.
+echo "Test: --route autonomous → help-wanted removed, main-qa added, office-hours withheld; exit 0"
+setup
+echo '{"state":"open","labels":[]}' > "$STUB_DIR/arg-issue-42.json"
+if "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" 42 --route autonomous 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "--route autonomous: exit 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if grep -q 'DELETE' "$STUB_DIR/gh-issue-remove-label-rest-calls.log" \
+   && grep -q 'issues/42/labels/help%20wanted' "$STUB_DIR/gh-issue-remove-label-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: autonomous route: REST-removed help wanted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: autonomous route: REST-removed help wanted"
+  echo "    actual: '$(cat "$STUB_DIR/gh-issue-remove-label-rest-calls.log" 2>/dev/null)'"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q 'labels\[\]=main-qa' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: autonomous route: REST-added main-qa"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: autonomous route: REST-added main-qa"
+fi
+TOTAL=$((TOTAL + 1))
+if ! grep -q 'labels\[\]=dispatch:office-hours' "$STUB_DIR/gh-issue-set-labels-rest-calls.log" 2>/dev/null; then
+  PASS=$((PASS + 1)); echo "  PASS: autonomous route: dispatch:office-hours withheld"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: autonomous route: dispatch:office-hours withheld (should be absent)"
+fi
+teardown
+
+# --route human (explicit): identical to the default no-flag path. Steps 1-3 all
+# run, including the dispatch-apply-office-hours call that REST-adds office-hours.
+echo "Test: --route human (explicit) → help-wanted removed, main-qa added, office-hours applied; exit 0"
+setup
+echo '{"state":"open","labels":[]}' > "$STUB_DIR/arg-issue-42.json"
+if "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" 42 --route human; then rc=0; else rc=$?; fi
+assert_eq "--route human explicit: exit 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if grep -q 'DELETE' "$STUB_DIR/gh-issue-remove-label-rest-calls.log" \
+   && grep -q 'issues/42/labels/help%20wanted' "$STUB_DIR/gh-issue-remove-label-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: explicit human route: REST-removed help wanted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: explicit human route: REST-removed help wanted"
+  echo "    actual: '$(cat "$STUB_DIR/gh-issue-remove-label-rest-calls.log" 2>/dev/null)'"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q 'labels\[\]=main-qa' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: explicit human route: REST-added main-qa"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: explicit human route: REST-added main-qa"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q 'labels\[\]=dispatch:office-hours' "$STUB_DIR/gh-issue-set-labels-rest-calls.log"; then
+  PASS=$((PASS + 1)); echo "  PASS: explicit human route: dispatch:office-hours applied"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: explicit human route: dispatch:office-hours applied"
+fi
+teardown
+
+# Invalid --route value: the script must exit 1 with an error to stderr and must
+# NOT write any label ops (no REST removes, no REST adds).
+echo "Test: --route bogus → non-zero exit, no label writes"
+setup
+if "$TMPDIR_TEST/dispatch-qa-apply-main-qa-labels" 42 --route bogus 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "--route bogus: non-zero exit" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if ! grep -q '.' "$STUB_DIR/gh-issue-remove-label-rest-calls.log" 2>/dev/null; then
+  PASS=$((PASS + 1)); echo "  PASS: invalid route: no REST remove-label writes"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: invalid route: no REST remove-label writes (should be absent)"
+fi
+TOTAL=$((TOTAL + 1))
+if ! grep -q '.' "$STUB_DIR/gh-issue-set-labels-rest-calls.log" 2>/dev/null; then
+  PASS=$((PASS + 1)); echo "  PASS: invalid route: no REST set-labels writes"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: invalid route: no REST set-labels writes (should be absent)"
+fi
 teardown
 
 # ============================================================================
@@ -19850,6 +20055,11 @@ echo "Test: dispatch-phase-model maps fix-conflicts → claude-sonnet-4-6 (#2042
 if pm_out=$("$SCRIPT_DIR/dispatch-phase-model" fix-conflicts 2>/dev/null); then pm_rc=0; else pm_rc=$?; fi
 assert_eq "phase-model: fix-conflicts exits 0" "0" "$pm_rc"
 assert_eq "phase-model: fix-conflicts → claude-sonnet-4-6" "claude-sonnet-4-6" "$pm_out"
+
+echo "Test: dispatch-phase-model maps main-qa → claude-sonnet-4-6 (#2274)"
+if pm_out=$("$SCRIPT_DIR/dispatch-phase-model" main-qa 2>/dev/null); then pm_rc=0; else pm_rc=$?; fi
+assert_eq "phase-model: main-qa exits 0" "0" "$pm_rc"
+assert_eq "phase-model: main-qa → claude-sonnet-4-6" "claude-sonnet-4-6" "$pm_out"
 
 echo "Test: dispatch-phase-model maps unmapped phases → empty (default → Opus, no override)"
 for ph in implement done; do
@@ -38757,7 +38967,9 @@ STAMP="$SCRIPT_DIR/dispatch-stamp-session"
   rm -rf "$root"
 )
 
-# 6. Idempotent re-write preserves a set .pr (does not clobber to null).
+# 6. Idempotent re-write preserves a set .pr (does not clobber to null),
+#    preserves session-start .base_sha (not advanced to post-resume HEAD),
+#    and advances .stamped_at (re-derived, not preserved).
 (
   d=$(mktemp -d)
   git -C "$d" init -q
@@ -38765,12 +38977,56 @@ STAMP="$SCRIPT_DIR/dispatch-stamp-session"
   git -C "$d" checkout -q -b 999-fixture
   git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
   sc="$d/sess6.dispatch-stamp.json"
-  # Seed a sidecar that already carries a backfilled pr.
+  # Seed a sidecar that already carries a backfilled pr and a session-start base_sha.
   printf '%s\n' '{"schema":1,"session_id":"sess6","repo":"old/repo","issue":1,"pr":4242,"branch":"old","base_sha":"old","stamped_at":"2026-01-01T00:00:00Z"}' > "$sc"
   ( cd "$d" && "$STAMP" --session-id sess6 --transcript-path "$d/sess6.jsonl" )
   assert_eq "stamp: re-write preserves set .pr" "4242" "$(jq -r .pr "$sc")"
   assert_eq "stamp: re-write re-derives .branch" "999-fixture" "$(jq -r .branch "$sc")"
-  assert_eq "stamp: re-write re-derives .base_sha" "$(git -C "$d" rev-parse HEAD)" "$(jq -r .base_sha "$sc")"
+  assert_eq "stamp: re-write PRESERVES session-start .base_sha" "old" "$(jq -r .base_sha "$sc")"
+  assert_eq "stamp: re-write advances .stamped_at (re-derived, not preserved)" "differs" \
+    "$([ "$(jq -r .stamped_at "$sc")" != "2026-01-01T00:00:00Z" ] && echo differs || echo same)"
+  rm -rf "$d"
+)
+
+# 6b. Idempotent re-write with an explicitly-null .base_sha falls through to
+#     the HEAD-derived fallback (exercises the jq `// empty` operator that
+#     distinguishes JSON null from a real SHA in dispatch-stamp-session).
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b 999-fixture
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  sc="$d/sess6b.dispatch-stamp.json"
+  # Seed a sidecar whose base_sha is JSON null (not the string "null", not absent).
+  printf '%s\n' '{"schema":1,"session_id":"sess6b","repo":"old/repo","issue":1,"pr":null,"branch":"old","base_sha":null,"stamped_at":"2026-01-01T00:00:00Z"}' > "$sc"
+  ( cd "$d" && "$STAMP" --session-id sess6b --transcript-path "$d/sess6b.jsonl" )
+  assert_eq "stamp: re-write with null .base_sha falls through to HEAD" "$(git -C "$d" rev-parse HEAD)" "$(jq -r .base_sha "$sc")"
+  rm -rf "$d"
+)
+
+# 7. Resume after HEAD moves (ff-merge) preserves the session-start .base_sha.
+#    This encodes #2270's failure mode: an initial stamp records HEAD=A; a later
+#    git merge --ff-only moves HEAD to B; the resume re-stamp must keep base_sha=A.
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b 999-fixture
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  A=$(git -C "$d" rev-parse HEAD)
+  # Initial stamp at HEAD=A.
+  ( cd "$d" && "$STAMP" --session-id sess7 --transcript-path "$d/sess7.jsonl" )
+  sc="$d/sess7.dispatch-stamp.json"
+  assert_eq "stamp: initial .base_sha is A" "$A" "$(jq -r .base_sha "$sc")"
+  # HEAD moves to B (simulating an ff-merge of origin/main).
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m advance
+  B=$(git -C "$d" rev-parse HEAD)
+  assert_eq "stamp: HEAD advanced (B != A)" "no" \
+    "$([ "$A" = "$B" ] && echo yes || echo no)"
+  # Resume re-stamp must preserve A, not adopt B.
+  ( cd "$d" && "$STAMP" --session-id sess7 --transcript-path "$d/sess7.jsonl" )
+  assert_eq "stamp: resume preserves session-start .base_sha (A, not B)" "$A" "$(jq -r .base_sha "$sc")"
   rm -rf "$d"
 )
 

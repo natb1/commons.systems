@@ -1,6 +1,5 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { logError } from "@commons-systems/errorutil/log";
-import type { User } from "../auth.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { listCloud } from "../library.js";
 import { getMediaDownloadUrl } from "../storage.js";
@@ -76,20 +75,6 @@ export async function loadMediaHtml(): Promise<string> {
     logError(error, { operation: "load-media" });
     return '<p id="media-error">Could not load media library.</p>';
   }
-}
-
-export async function renderHome(user: User | null): Promise<string> {
-  const mediaHtml = await loadMediaHtml();
-
-  const publicNotice = !user
-    ? '<p id="public-notice">Showing public domain items. Sign in to see your full library.</p>'
-    : "";
-
-  return `
-    <h2>Library</h2>
-    ${publicNotice}
-    ${mediaHtml}
-  `;
 }
 
 export function wireDownloadActions(outlet: HTMLElement): void {
