@@ -459,11 +459,6 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
       postsErrorMsg = undefined;
     }
     router.navigate(); // re-dispatch → re-renders body (home shows new posts; admin re-checks)
-    // router.navigate() only loads posts on the home route; re-fetch on /admin
-    // so the info panel populates even when not on home.
-    if (path === "/admin") {
-      await loadPosts();
-    }
     renderPanel(); // re-render panel with new cachedPosts
   }
 
