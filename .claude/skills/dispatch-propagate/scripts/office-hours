@@ -62,7 +62,8 @@
 #                                   daemon registry but its on-disk transcript is
 #                                   recoverable and its <N>-* worktree is present
 #                                   (#2240). Resume it in place as a --bg job named
-#                                   office-hours-<N> rooted at <cwd> (--resume, with
+#                                   by the worktree basename (<N>-slug) rooted at
+#                                   <cwd> (--resume, with
 #                                   a --fork-session retry if the kick fails on a
 #                                   stale/colliding id), then attach BY NAME — a
 #                                   forked retry mints a new sessionId, so the
