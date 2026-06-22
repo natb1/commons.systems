@@ -3,7 +3,7 @@
 # (server-overload rate-limit, 529 Overloaded, or stream idle timeout) rather
 # than the user's own usage-limit exhaustion.
 #
-# Usage: dispatch-detect-rate-limit-death <transcript-path>
+# Usage: dispatch-detect-transient-death <transcript-path>
 #
 # Exit codes (fail-safe, positive-evidence-only):
 #   0 — the session's LAST assistant turn matches an allowlisted transient

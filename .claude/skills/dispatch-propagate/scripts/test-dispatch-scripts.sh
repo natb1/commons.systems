@@ -38032,7 +38032,7 @@ assert_eq "dispatch-auto-merge is executable" "yes" \
   "$([[ -x "$SCRIPT_DIR/dispatch-auto-merge" ]] && echo yes || echo no)"
 
 # ============================================================================
-# dispatch-detect-rate-limit-death tests (#1733)
+# dispatch-detect-transient-death tests (#1733)
 # ============================================================================
 #
 # Exercises the rate-limit-death detector: exit 0 iff the transcript's LAST
@@ -38042,9 +38042,9 @@ assert_eq "dispatch-auto-merge is executable" "yes" \
 # exit 1 otherwise (fail-safe). Fixtures are one compact JSON object per line,
 # written with printf '%s\n' (NOT echo) so the JSONL is byte-exact.
 echo ""
-echo "=== dispatch-detect-rate-limit-death ==="
+echo "=== dispatch-detect-transient-death ==="
 
-DRD="$SCRIPT_DIR/dispatch-detect-rate-limit-death"
+DRD="$SCRIPT_DIR/dispatch-detect-transient-death"
 
 drd_setup() {
   TMPDIR_TEST=$(mktemp -d)
