@@ -3535,6 +3535,30 @@ assert_eq "parse-job wins over candidate → INVOKE /budget-parse-job (directive
 assert_eq "parse-job wins over candidate → INVOKE /budget-parse-job (exit 0)" "0" "$ROUTE_RC"
 teardown
 
+# 26a. dispatch-route integration: malformed epic.json → candidate exits 3 →
+# route's "candidate hard error" else branch still falls back to INVOKE /plan-issue
+# at exit 0 (#2296). GATE-4 covers the candidate exit-3 in isolation; this asserts
+# the end-to-end route fallback through a dispatch-config-load failure.
+# dispatch-epic-labels (config-load) is the candidate's FIRST step and exits 1 on
+# malformed epic.json (set -e propagation from dispatch-config-load);
+# dispatch-epic-resolved-candidate then surfaces that failure as exit 3
+# via its `|| { exit 3 }` branch. This happens BEFORE the epic-label gate or
+# sub-issues fetch, so no
+# sub-issues fixture is needed. The "epic" label on the issue documents that even a
+# would-be epic candidate still falls back safely when its config is malformed.
+echo "Test: no PR + malformed epic.json → candidate exit 3 → INVOKE /plan-issue"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo "/wt/58-epic" > "$STUB_DIR/worktree-toplevel.txt"
+printf 'not json{\n' > "$DISPATCH_CONFIG_DIR/epic.json"
+printf '{"state":"open","labels":[{"name":"epic"}]}\n' > "$STUB_DIR/arg-issue-58.json"
+route_run 58 /wt/58-epic
+assert_eq "malformed epic.json → candidate exit 3 → INVOKE /plan-issue (directive)" \
+  "INVOKE /plan-issue" "$ROUTE_OUT"
+assert_eq "malformed epic.json → candidate exit 3 → INVOKE /plan-issue (exit 0)" \
+  "0" "$ROUTE_RC"
+teardown
+
 # ============================================================================
 # dispatch-epic-resolved-candidate tests
 # ============================================================================
@@ -39027,6 +39051,60 @@ STAMP="$SCRIPT_DIR/dispatch-stamp-session"
   # Resume re-stamp must preserve A, not adopt B.
   ( cd "$d" && "$STAMP" --session-id sess7 --transcript-path "$d/sess7.jsonl" )
   assert_eq "stamp: resume preserves session-start .base_sha (A, not B)" "$A" "$(jq -r .base_sha "$sc")"
+  rm -rf "$d"
+)
+
+# 8. Mode A guard: --session-id with a `..` path-traversal segment exits 2 and
+#    writes no sidecar. The 999-fixture worker branch is load-bearing — the
+#    guard fires BEFORE the branch gate, so were it removed the input would flow
+#    past the gate and a sidecar WOULD be written, failing the assertion below.
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b 999-fixture
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  rc=0
+  ( cd "$d" && "$STAMP" --session-id ../evil --transcript-path "$d/sess.jsonl" ) 2>/dev/null || rc=$?
+  assert_eq "stamp: --session-id ../evil exits 2" "2" "$rc"
+  assert_eq "stamp: --session-id ../evil writes no sidecar" "no" \
+    "$([ -f "$d/sess.dispatch-stamp.json" ] && echo yes || echo no)"
+  rm -rf "$d"
+)
+
+# 9. Mode A guard: --session-id with a `/` path component exits 2 and writes no
+#    sidecar (the session id is a bare stem; a slash is malformed).
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b 999-fixture
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  rc=0
+  ( cd "$d" && "$STAMP" --session-id foo/bar --transcript-path "$d/sess.jsonl" ) 2>/dev/null || rc=$?
+  assert_eq "stamp: --session-id foo/bar exits 2" "2" "$rc"
+  assert_eq "stamp: --session-id foo/bar writes no sidecar" "no" \
+    "$([ -f "$d/sess.dispatch-stamp.json" ] && echo yes || echo no)"
+  rm -rf "$d"
+)
+
+# 10. Mode A guard: --transcript-path with a `..` segment exits 2 and writes no
+#     sidecar. The sidecar path is derived ${TRANSCRIPT_PATH%.jsonl}.dispatch-stamp.json,
+#     so with cd "$d" and transcript ../evil.jsonl the would-be sidecar lands at
+#     $d/../evil.dispatch-stamp.json — OUTSIDE $d. The no-sidecar assertion MUST
+#     target that exact escaped path; a `find "$d"` scan would never see it and
+#     would green even with the guard removed.
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b 999-fixture
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  rc=0
+  ( cd "$d" && "$STAMP" --session-id sessok --transcript-path ../evil.jsonl ) 2>/dev/null || rc=$?
+  assert_eq "stamp: --transcript-path ../evil.jsonl exits 2" "2" "$rc"
+  assert_eq "stamp: --transcript-path ../evil.jsonl writes no sidecar (escaped path)" "no" \
+    "$([ -f "$d/../evil.dispatch-stamp.json" ] && echo yes || echo no)"
   rm -rf "$d"
 )
 
