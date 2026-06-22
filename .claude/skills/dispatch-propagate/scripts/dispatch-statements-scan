@@ -11,8 +11,9 @@
 # file's sha256 and consults that map: if a parse-job issue already carries the
 # hash the file is skipped; otherwise a single parse-job issue is filed whose
 # body names only the filename and the sha256 — never the statement contents.
-# The bounded per-new-file `gh issue create` fan-out is wrapped in gh_retry
-# backoff. The data stays in the user's folder. No statements entry is
+# The bounded per-new-file issue-create fan-out goes through the REST-backed
+# `gh_issue_create_rest` helper (internally gh_retry-wrapped for backoff).
+# The data stays in the user's folder. No statements entry is
 # hardcoded: the scan is fully driven by config.
 #
 # Why batched: the prior design fired one rate-limited `gh search issues` query
@@ -300,13 +301,15 @@ for (( i = 0; i < STATEMENTS_COUNT; i++ )); do
   # core-API call, then seed SEEN_HASHES from their bodies. This replaces the
   # per-file Search-API query that exhausted the ~30 req/min Search budget on a
   # cold scan of a large folder. Only run when there is at least one file to
-  # dedup. gh_retry wraps the call for transient-failure backoff; its retry
-  # lines go to stderr, so capture stderr to a tmpfile (never 2>&1 into the
-  # stdout we parse).
+  # dedup. gh_issue_list_rest wraps gh_retry INTERNALLY for transient-failure
+  # backoff; its retry lines go to stderr, so capture stderr to a tmpfile (never
+  # 2>&1 into the stdout we parse). The helper paginates per_page=100 then slices
+  # to --limit, so the `len == ISSUE_LIST_LIMIT` truncation guard below now sees
+  # a list actually capped at the limit (rather than gh's old server-side cap).
   if [[ "${#MATCHED[@]}" -gt 0 ]]; then
     tmpfile=$(mktemp)
-    out=$(gh_retry gh issue list --repo "$REPO" --label "$LABEL" --state all \
-      --limit "$ISSUE_LIST_LIMIT" --json number,body 2>"$tmpfile")
+    out=$(gh_issue_list_rest --repo "$REPO" --label "$LABEL" --state all \
+      --limit "$ISSUE_LIST_LIMIT" --include-body 2>"$tmpfile")
     rc=$?
     err=$(cat "$tmpfile"); rm -f "$tmpfile"
     if [[ "$rc" -ne 0 ]]; then
@@ -384,18 +387,18 @@ for (( i = 0; i < STATEMENTS_COUNT; i++ )); do
 - sha256: \`$HASH\`"
 
     tmpfile=$(mktemp)
-    CREATE_OUT=$(gh_retry gh issue create --repo "$REPO" --title "$TITLE" --body "$BODY" \
+    CREATE_OUT=$(gh_issue_create_rest --repo "$REPO" --title "$TITLE" --body "$BODY" \
       --label "$LABEL" --label "help wanted" 2>"$tmpfile")
     CREATE_RC=$?
     CREATE_ERR=$(cat "$tmpfile"); rm -f "$tmpfile"
     if [[ "$CREATE_RC" -ne 0 ]]; then
-      echo "$KEY: error (gh issue create failed for $base: $CREATE_ERR)" >&2
+      echo "$KEY: error (gh_issue_create_rest failed for $base: $CREATE_ERR)" >&2
       HARD_ERROR=1
       ENTRY_HARD_ERROR=1
       break
     fi
-    # gh issue create prints the new issue URL on stdout. The trailing path
-    # segment is the issue number.
+    # gh_issue_create_rest echoes the new issue URL on stdout. The trailing
+    # path segment is the issue number.
     ISSUE_URL=$(printf '%s' "$CREATE_OUT" | tail -n1)
     ISSUE_NUM="${ISSUE_URL##*/}"
     if [[ -z "$ISSUE_NUM" || ! "$ISSUE_NUM" =~ ^[0-9]+$ ]]; then

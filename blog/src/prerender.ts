@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import { join } from "node:path";
-import { createElement } from "react";
+import { createElement, type ReactNode } from "react";
 import { renderToString } from "react-dom/server";
 import { escapeHtml } from "@commons-systems/htmlutil";
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
@@ -64,17 +64,19 @@ export interface StaticPageConfig {
   /** Page metadata; `page.url` is also the output path (e.g. "/about" — leading
    *  slash required, no trailing slash). */
   page: StaticPageMeta;
-  /** Injected into `<main id="app">`. */
-  bodyHtml: string;
+  /** A ReactNode server-rendered (wrapped in a `<div>`) into `<main id="app">`,
+   *  byte-matching the client's `createElement("div", null, node)` entry-hydration
+   *  wrapper in create-blog-app.ts so `#app` hydrates without a mismatch. */
+  body: ReactNode;
   navLinks: NavLink[];
   /** Pre-rendered info panel HTML — produced by `loadPostsForPrerender`.
    *  Used only when `aboutContent` is not set; ignored otherwise. */
   panelHtml?: string;
-  /** Raw, pre-sanitized HTML for an About-style panel. When set, the panel is
+  /** A ReactNode for an About-style panel. When set, the panel is
    *  server-rendered through `InfoPanelRegion` (matching the client's
    *  `panelElement()` aboutContent branch) instead of using `panelHtml`, so the
    *  prerendered `#info-panel` hydrates without a mismatch. */
-  aboutContent?: string;
+  aboutContent?: ReactNode;
   jsonLdBlocks?: Record<string, unknown>[];
   relMe?: string[];
   /** Defaults to true. Set false to keep the landing-hero block in this static page. */
@@ -127,9 +129,9 @@ function renderNavHtml(links: NavLink[], showHomeLink: boolean = false): string 
 // client hydrates #info-panel with — so the prerendered markup matches and
 // hydrateRoot reuses it. strategies is unused during SSR render (the blogroll
 // fetch effect runs only on the client), so an empty Map is fine. When
-// aboutContent is set, InfoPanelRegion ignores `data` and renders the raw About
-// HTML (matching the client's panelElement() aboutContent branch).
-export function renderPanelHtml(data: InfoPanelData, aboutContent?: string): string {
+// aboutContent is set, InfoPanelRegion ignores `data` and renders the About
+// ReactNode (matching the client's panelElement() aboutContent branch).
+export function renderPanelHtml(data: InfoPanelData, aboutContent?: ReactNode): string {
   return renderToString(
     createElement(InfoPanelRegion, { data, strategies: new Map(), aboutContent }),
   );
@@ -334,7 +336,7 @@ export function prerenderStaticPage(config: StaticPageConfig): void {
     titleSuffix,
     distDir,
     page,
-    bodyHtml,
+    body,
     navLinks,
     panelHtml,
     aboutContent,
@@ -384,6 +386,9 @@ export function prerenderStaticPage(config: StaticPageConfig): void {
     throw new Error("prerenderStaticPage requires either aboutContent or panelHtml");
   }
 
+  // Server-render the body wrapped in a <div> so it byte-matches the client's
+  // entry-hydration wrapper createElement("div", null, node) in create-blog-app.ts.
+  const bodyHtml = renderToString(createElement("div", null, body));
   html = injectMain(html, bodyHtml);
   html = injectInfoPanel(html, renderedPanel);
   html = injectNav(html, renderNavHtml(navLinks, showHomeLink));

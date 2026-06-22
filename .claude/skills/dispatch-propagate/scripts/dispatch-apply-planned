@@ -4,14 +4,17 @@
 #
 # dispatch:planned means "an approved plan exists; the implement phase is next" —
 # the cheap discriminator the router reads. The label is applied to the ISSUE,
-# not a PR, because no PR exists yet at plan time. (Apply-first ordering and
-# missing-label handling mirror dispatch-complete-phase, explained inline below.)
+# not a PR, because no PR exists yet at plan time. (Ensure-label-exists-first then
+# add-via-REST ordering mirrors dispatch-complete-phase, explained inline below.)
 #
 # This script is the single source of truth for the dispatch:planned label
 # create metadata (color and description).
 #
 # A missing arg or a non-numeric issue-num is a clear error, not a fallback.
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
 
 ISSUE_NUM="${1:-}"
 [[ -z "$ISSUE_NUM" ]] && { echo "usage: dispatch-apply-planned <issue-num>" >&2; exit 1; }
@@ -22,11 +25,14 @@ LABEL="dispatch:planned"
 COLOR="0E8A16"   # distinct from the complete-phase and office-hours (FBCA04) label colors
 DESC="dispatch workflow: an approved plan exists; implement phase is next"
 
-# Apply first; gh issue edit --add-label is naturally idempotent.
-if apply_output=$(gh issue edit "$ISSUE_NUM" --add-label "$LABEL" 2>&1); then
-  exit 0
+# Ensure the label exists (idempotent), then add it via REST. `gh label create`
+# stays porcelain (REST POST /repos/.../labels — not a migration target). Tolerate
+# only an already-exists error; surface anything else rather than silently dropping
+# the label.
+if ! create_out=$(gh label create "$LABEL" --color "$COLOR" --description "$DESC" 2>&1); then
+  case "$create_out" in
+    *already\ exists*|*already_exists*) : ;;   # label already present — fine
+    *) echo "error: dispatch-apply-planned: gh label create failed: $create_out" >&2; exit 1 ;;
+  esac
 fi
-# Missing-label → create with canonical metadata, retry once. Any other failure is real.
-if [[ "$apply_output" != *"not found"* ]]; then echo "$apply_output" >&2; exit 1; fi
-gh label create "$LABEL" --color "$COLOR" --description "$DESC"
-gh issue edit "$ISSUE_NUM" --add-label "$LABEL"
+gh_issue_set_labels_rest "$ISSUE_NUM" "$LABEL"

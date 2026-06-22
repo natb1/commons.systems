@@ -30,9 +30,14 @@ export interface LocalFolderMediaSourceConfig<T extends { id: string; addedAt: s
   toItem: (file: File, name: string) => T | null;
 }
 
+export interface LocalFolderMediaSource<T extends { id: string; addedAt: string }>
+  extends MediaSource<T> {
+  resolveToFile(item: T): Promise<File>;
+}
+
 export function createLocalFolderMediaSource<T extends { id: string; addedAt: string }>(
   config: LocalFolderMediaSourceConfig<T>,
-): MediaSource<T> {
+): LocalFolderMediaSource<T> {
   const index = new Map<string, LocalFileHandleLike>();
   const items = new Map<string, T>();
   let pendingScan: Promise<T[]> | null = null;
@@ -93,7 +98,7 @@ export function createLocalFolderMediaSource<T extends { id: string; addedAt: st
       return item ?? null;
     },
 
-    async resolveToBlob(item) {
+    async resolveToFile(item) {
       let handle = index.get(item.id);
       if (!handle) {
         await scan();
@@ -106,7 +111,11 @@ export function createLocalFolderMediaSource<T extends { id: string; addedAt: st
       // revoked, IO failure) — propagate it rather than masking it as
       // "no longer present", which is reserved for a genuinely absent entry.
       const file = await handle.getFile();
-      return file.arrayBuffer();
+      return file;
+    },
+
+    async resolveToBlob(item) {
+      return (await this.resolveToFile(item)).arrayBuffer();
     },
   };
 }
