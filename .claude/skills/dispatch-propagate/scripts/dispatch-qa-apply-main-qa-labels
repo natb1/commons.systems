@@ -1,12 +1,21 @@
 #!/usr/bin/env bash
 # Apply main-qa routing labels to a needs-main QA follow-up issue.
-# Usage: dispatch-qa-apply-main-qa-labels <issue-num>
+# Usage: dispatch-qa-apply-main-qa-labels <issue-num> [--route human|autonomous]
 #
-# Idempotent: safe to re-run. Performs three label ops:
-#   1. Removes "help wanted" (tolerates absent — not an error).
+# --route selects how the follow-up is routed downstream (default: human):
+#   human      → Step 3 applies "dispatch:office-hours" (human review queue).
+#   autonomous → Step 3 is SKIPPED; "dispatch:office-hours" is withheld so the
+#                router routes the follow-up to the autonomous /qa-main handler.
+# Both --route VAL and --route=VAL forms are accepted. Any other value is a
+# clear error (exit 1), not a silent fallback.
+#
+# Idempotent: safe to re-run. Performs up to three label ops:
+#   1. Removes "help wanted" (tolerates absent — not an error). UNCONDITIONAL.
 #   2. Applies "main-qa" (ensure-label-exists-first, then add via REST).
+#      UNCONDITIONAL — every follow-up carries main-qa regardless of route.
 #   3. Applies "dispatch:office-hours" via the shared helper (which also posts
-#      a why-comment on first apply).
+#      a why-comment on first apply). ROUTE-CONDITIONAL — runs only for the
+#      human route; skipped for autonomous.
 #
 # @me / assignees are never touched.
 set -euo pipefail
@@ -14,11 +23,42 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
 
-ISSUE_NUM="${1:-}"
+# Parse a leading --route flag; collect the lone non-flag positional into
+# ISSUE_NUM so the positional contract (`dispatch-qa-apply-main-qa-labels 42`)
+# is unchanged. A flag-like positional such as "--repo other/repo" is NOT a
+# --route flag, so it falls through to ISSUE_NUM and fails the numeric guard.
+ROUTE="human"
+ISSUE_NUM=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --route)
+      if [[ $# -lt 2 || -z "${2:-}" ]]; then
+        echo "error: dispatch-qa-apply-main-qa-labels: --route requires a value (human|autonomous)" >&2
+        exit 1
+      fi
+      ROUTE="$2"
+      shift 2
+      ;;
+    --route=*)
+      ROUTE="${1#--route=}"
+      shift
+      ;;
+    *)
+      ISSUE_NUM="$1"
+      shift
+      ;;
+  esac
+done
+
+# Validate ROUTE: clear error on any unexpected value (no silent fallback).
+if [[ "$ROUTE" != "human" && "$ROUTE" != "autonomous" ]]; then
+  echo "error: dispatch-qa-apply-main-qa-labels: --route must be 'human' or 'autonomous', got '${ROUTE}'" >&2
+  exit 1
+fi
 
 # Missing arg is a clear misuse, not a recoverable condition — hard error.
 if [[ -z "$ISSUE_NUM" ]]; then
-  echo "error: usage: dispatch-qa-apply-main-qa-labels <issue-num>" >&2
+  echo "error: usage: dispatch-qa-apply-main-qa-labels <issue-num> [--route human|autonomous]" >&2
   exit 1
 fi
 
@@ -65,12 +105,18 @@ if ! gh_issue_set_labels_rest "$ISSUE_NUM" "$MAIN_QA_LABEL"; then
   exit 1
 fi
 
-# ---- Step 3: Apply "dispatch:office-hours" ----------------------------------
+# ---- Step 3: Apply "dispatch:office-hours" (route-conditional) ---------------
 #
-# Reuse the shared helper — it owns idempotency, label creation, and the
-# why-comment. Pass a clear reason so a human reading the parked issue
-# understands why it landed in office-hours.
-"$SCRIPT_DIR/dispatch-apply-office-hours" "$ISSUE_NUM" \
-  "needs-main QA: this follow-up can only be verified against deployed main/production — routed to office-hours for human review"
+# Only the human route lands the follow-up in office-hours. The autonomous route
+# withholds dispatch:office-hours so the router hands the follow-up to /qa-main.
+if [[ "$ROUTE" == "human" ]]; then
+  # Reuse the shared helper — it owns idempotency, label creation, and the
+  # why-comment. Pass a clear reason so a human reading the parked issue
+  # understands why it landed in office-hours.
+  "$SCRIPT_DIR/dispatch-apply-office-hours" "$ISSUE_NUM" \
+    "needs-main QA: this follow-up can only be verified against deployed main/production — routed to office-hours for human review"
+else
+  echo "dispatch-qa-apply-main-qa-labels: autonomous route — withholding dispatch:office-hours; routed to /qa-main" >&2
+fi
 
 exit 0
