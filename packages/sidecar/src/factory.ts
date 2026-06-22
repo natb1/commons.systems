@@ -97,6 +97,10 @@ export function createSidecar<TData, TPatch>(
   // by `writable`).
   let writeChain: Promise<void> = Promise.resolve();
 
+  // Incremented on every setLocalDirectory / clearLocalDirectory so in-memory
+  // assignments can be guarded against writes that started before the switch.
+  let generation = 0;
+
   /**
    * Parse sidecar text into a model. Tolerant of untrusted/partial on-disk
    * contents (input validation at the system edge, not a banned fallback):
@@ -170,6 +174,7 @@ export function createSidecar<TData, TPatch>(
     dirHandle = handle;
     writable = isWritable;
     cachedModel = null;
+    generation++;
     loadPromise = null;
     corruptOnDisk = false;
     writeChain = Promise.resolve();
@@ -185,6 +190,7 @@ export function createSidecar<TData, TPatch>(
     dirHandle = null;
     writable = false;
     cachedModel = null;
+    generation++;
     loadPromise = null;
     corruptOnDisk = false;
     writeChain = Promise.resolve();
@@ -198,6 +204,7 @@ export function createSidecar<TData, TPatch>(
     if (cachedModel !== null) return cachedModel;
     if (loadPromise === null) {
       const handle = dirHandle;
+      const gen = generation;
       loadPromise = (
         handle === null ? Promise.resolve<TData | null>(emptyModel()) : readSidecar(handle)
       ).then((model) => {
@@ -219,7 +226,7 @@ export function createSidecar<TData, TPatch>(
         } else {
           corruptOnDisk = false;
           result = model;
-          cachedModel = result;
+          if (generation === gen) cachedModel = result;
         }
         return result;
       });
@@ -239,6 +246,7 @@ export function createSidecar<TData, TPatch>(
   function enqueueWrite(patch: TPatch): Promise<void> {
     const snapshotHandle = dirHandle;
     const snapshotWritable = writable;
+    const snapshotGen = generation;
     writeChain = writeChain
       .then(async () => {
         // TOCTOU guard: if the bound directory changed between enqueue and
@@ -248,7 +256,7 @@ export function createSidecar<TData, TPatch>(
         if (dirHandle !== snapshotHandle) return;
         const model = await ensureLoaded();
         const merged = mergeSidecar(model, patch);
-        cachedModel = merged;
+        if (generation === snapshotGen) cachedModel = merged;
         // Corruption was logged once at load time; return silently here so
         // repeated saves don't spam the error log.
         if (corruptOnDisk) return;
