@@ -38823,6 +38823,60 @@ STAMP="$SCRIPT_DIR/dispatch-stamp-session"
   rm -rf "$d"
 )
 
+# 8. Mode A guard: --session-id with a `..` path-traversal segment exits 2 and
+#    writes no sidecar. The 999-fixture worker branch is load-bearing — the
+#    guard fires BEFORE the branch gate, so were it removed the input would flow
+#    past the gate and a sidecar WOULD be written, failing the assertion below.
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b 999-fixture
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  rc=0
+  ( cd "$d" && "$STAMP" --session-id ../evil --transcript-path "$d/sess.jsonl" ) 2>/dev/null || rc=$?
+  assert_eq "stamp: --session-id ../evil exits 2" "2" "$rc"
+  assert_eq "stamp: --session-id ../evil writes no sidecar" "no" \
+    "$([ -f "$d/sess.dispatch-stamp.json" ] && echo yes || echo no)"
+  rm -rf "$d"
+)
+
+# 9. Mode A guard: --session-id with a `/` path component exits 2 and writes no
+#    sidecar (the session id is a bare stem; a slash is malformed).
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b 999-fixture
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  rc=0
+  ( cd "$d" && "$STAMP" --session-id foo/bar --transcript-path "$d/sess.jsonl" ) 2>/dev/null || rc=$?
+  assert_eq "stamp: --session-id foo/bar exits 2" "2" "$rc"
+  assert_eq "stamp: --session-id foo/bar writes no sidecar" "no" \
+    "$([ -f "$d/sess.dispatch-stamp.json" ] && echo yes || echo no)"
+  rm -rf "$d"
+)
+
+# 10. Mode A guard: --transcript-path with a `..` segment exits 2 and writes no
+#     sidecar. The sidecar path is derived ${TRANSCRIPT_PATH%.jsonl}.dispatch-stamp.json,
+#     so with cd "$d" and transcript ../evil.jsonl the would-be sidecar lands at
+#     $d/../evil.dispatch-stamp.json — OUTSIDE $d. The no-sidecar assertion MUST
+#     target that exact escaped path; a `find "$d"` scan would never see it and
+#     would green even with the guard removed.
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b 999-fixture
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  rc=0
+  ( cd "$d" && "$STAMP" --session-id sessok --transcript-path ../evil.jsonl ) 2>/dev/null || rc=$?
+  assert_eq "stamp: --transcript-path ../evil.jsonl exits 2" "2" "$rc"
+  assert_eq "stamp: --transcript-path ../evil.jsonl writes no sidecar (escaped path)" "no" \
+    "$([ -f "$d/../evil.dispatch-stamp.json" ] && echo yes || echo no)"
+  rm -rf "$d"
+)
+
 # ============================================================================
 # dispatch-open-pr — PR backfill into the per-session sidecar (#1861)
 # ============================================================================
