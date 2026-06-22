@@ -202,7 +202,7 @@ jq '.sessions | map({id, artifact}) | map(select(.artifact != null))' tmp/usage-
 jq '.sessions | map(select(.artifact.issue == 1861)) | map({id, type, price_proxy_usd, artifact})' tmp/usage-audit.json
 
 # Filter sessions by PR number — substitute your target PR for <PR_NUMBER>
-jq '.sessions | map(select(.artifact.pr == <PR_NUMBER>)) | map({id, type, price_proxy_usd, artifact})' tmp/usage-audit.json
+jq '.sessions | map(select(.artifact.pr == "<PR_NUMBER>")) | map({id, type, price_proxy_usd, artifact})' tmp/usage-audit.json
 
 # Token spend grouped by issue — which issues consumed the most proxy spend
 jq '[.sessions[] | select(.artifact != null)] | group_by(.artifact.issue) | map({issue: .[0].artifact.issue, sessions: length, price_proxy_usd: (map(.price_proxy_usd) | add)}) | sort_by(-.price_proxy_usd)' tmp/usage-audit.json
