@@ -190,9 +190,7 @@ These slices are yield metrics, not cost metrics — they do not sort into the r
 
 ## Per-session artifact join
 
-Each dispatch worker session writes a sidecar file next to its transcript before it starts work. `aggregate-usage.sh` reads the sidecar and surfaces its contents on every entry in `.sessions[]` as the `artifact` field. The join is by transcript stem: `<session-id>.jsonl` and `<session-id>.dispatch-stamp.json` share the same stem, so the script locates the sidecar from the transcript path directly — no separate index or lookup is needed.
-
-**`artifact`** — present on every `.sessions[]` entry. It is the sidecar record `{repo, issue, pr, base_sha, branch}`, or `null` for sessions with no sidecar (subagent transcripts, router ticks, pre-#1861 worker sessions, and any non-worker session that did not write one). The four primary join keys are `{repo, issue, pr, base_sha}`; `branch` is also present for human-readable context. `base_sha` is the worktree HEAD at session start — preserved across resume — so it anchors each session to the repository state it began from.
+The `artifact` field on each `.sessions[]` entry carries the per-session GitHub join record. Its `{repo, issue, pr, base_sha, branch}` shape, the session-id join key, and the sidecar's role as the authoritative-source for the overlapping join keys are described in Step 3 above. The field is `null` for sessions with no sidecar — subagent transcripts, router ticks, pre-#1861 worker sessions, and any non-worker session that did not write one.
 
 **jq slices against `tmp/usage-audit.json`:**
 
@@ -209,5 +207,3 @@ jq '.sessions | map(select(.artifact.pr == 1889)) | map({id, type, price_proxy_u
 # Token spend grouped by issue — which issues consumed the most proxy spend
 jq '[.sessions[] | select(.artifact != null)] | group_by(.artifact.issue) | map({issue: .[0].artifact.issue, sessions: length, price_proxy_usd: (map(.price_proxy_usd) | add)}) | sort_by(-.price_proxy_usd)' tmp/usage-audit.json
 ```
-
-**Sidecar ownership.** The sidecar is the single authoritative source for the overlapping join keys (`repo/issue/pr/base_sha`). The #1860 outcome envelope carries only its own non-overlapping outcome fields (findings, disposition, fix counts) — it does not repeat the join keys. This keeps the two records non-redundant: join on session id to combine cost figures with artifact context and outcome yield in one query.
