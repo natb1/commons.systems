@@ -493,6 +493,7 @@ DISPATCH_PR_LIST_LIMIT="${DISPATCH_PR_LIST_LIMIT:-300}"
 pr_list_open() {
   local fields="$1"
   local out rc len
+  # lint-allow: gh-rest-porcelain pr_list_open is the canonical open-PR wrapper; predates the list ban, gh_pr_list_rest exists for new code
   out=$(gh pr list --state open --limit "$DISPATCH_PR_LIST_LIMIT" --json "$fields")
   rc=$?
   [[ "$rc" -ne 0 ]] && return "$rc"
