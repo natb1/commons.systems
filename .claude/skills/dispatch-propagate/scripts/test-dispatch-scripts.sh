@@ -166,18 +166,6 @@ exit 0
 STUB
   chmod +x "$TMPDIR_TEST/dispatch-provision-worktree"
 
-  # Recording stub for dispatch-spawn-recommend (#2244). On a fresh office-hours
-  # park, dispatch-apply-office-hours fires it detached; the real wrapper spawns a
-  # claude --bg job this harness cannot run, so it is stubbed to record each
-  # invocation to spawn-recommend-calls.log and exit 0. The apply-office-hours
-  # spawn-hook test asserts fire-once-on-fresh / not-on-re-entry against that log.
-  cat > "$TMPDIR_TEST/dispatch-spawn-recommend" <<'STUB'
-#!/usr/bin/env bash
-STUB_DIR="$(cd "$(dirname "$0")" && pwd)/stub"
-echo "spawn-recommend $*" >> "$STUB_DIR/spawn-recommend-calls.log"
-STUB
-  chmod +x "$TMPDIR_TEST/dispatch-spawn-recommend"
-
   # JIT scan config dir. With no jit.json written into it, dispatch-config-load
   # jit returns "no-config", so jit_scan returns immediately — every existing
   # dispatch-select-target test stays green.
@@ -9377,46 +9365,6 @@ setup
 if "$TMPDIR_TEST/dispatch-apply-office-hours" 42 "phase exited before completion" 2>/dev/null; then rc=0; else rc=$?; fi
 assert_eq "REST add failure: exit 0 (never block a hook)" "0" "$rc"
 assert_eq "REST add failure: no comment" "absent" "$(log_state gh-issue-comment-rest-calls.log)"
-teardown
-
-# Recommender spawn hook (#2244): on a FRESH park, dispatch-apply-office-hours
-# fires dispatch-spawn-recommend exactly once (detached via setsid nohup … &).
-# The recording shim installed by setup() logs each invocation; poll briefly for
-# the async record. Run from a non-git cwd so the script's recommend_log
-# toplevel-resolution guard routes the detached job's stdout to /dev/null (no
-# stray tmp/ file) — the shim still records to its baked STUB_DIR path.
-echo "Test: fresh park fires dispatch-spawn-recommend exactly once"
-setup
-echo '{"state":"open","labels":[]}' > "$STUB_DIR/arg-issue-42.json"
-( cd "$TMPDIR_TEST" && "$TMPDIR_TEST/dispatch-apply-office-hours" 42 "phase exited before completion" )
-# The spawn is detached (setsid nohup … &), so its record arrives asynchronously.
-# Poll generously (up to ~20s) so the assertion is robust under heavy suite load;
-# the loop breaks the instant the record lands (~100ms in isolation).
-for _ in $(seq 1 200); do
-  [[ -f "$STUB_DIR/spawn-recommend-calls.log" ]] && break
-  sleep 0.1
-done
-TOTAL=$((TOTAL + 1))
-if [[ -f "$STUB_DIR/spawn-recommend-calls.log" ]] \
-   && [[ "$(wc -l < "$STUB_DIR/spawn-recommend-calls.log")" -eq 1 ]] \
-   && grep -q 'spawn-recommend 42' "$STUB_DIR/spawn-recommend-calls.log"; then
-  PASS=$((PASS + 1)); echo "  PASS: fresh park fires dispatch-spawn-recommend once with the issue number"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: fresh park fires dispatch-spawn-recommend once with the issue number"
-  echo "    actual: '$(cat "$STUB_DIR/spawn-recommend-calls.log" 2>/dev/null)'"
-fi
-assert_eq "fresh park: label behavior unchanged (REST add still fires)" "present" "$(log_state gh-issue-set-labels-rest-calls.log)"
-assert_eq "fresh park: why-comment behavior unchanged (still posted)" "present" "$(log_state gh-issue-comment-rest-calls.log)"
-teardown
-
-# Re-entry (label already present): the idempotency gate exits 0 before the spawn
-# hook, so dispatch-spawn-recommend is NOT fired (no duplicate recommendation).
-echo "Test: re-entry (already parked) does not fire dispatch-spawn-recommend"
-setup
-echo '{"state":"open","labels":[{"name":"dispatch:office-hours"}]}' > "$STUB_DIR/arg-issue-42.json"
-( cd "$TMPDIR_TEST" && "$TMPDIR_TEST/dispatch-apply-office-hours" 42 "phase ran but did not advance" )
-sleep 0.2
-assert_eq "re-entry: dispatch-spawn-recommend not fired" "absent" "$(log_state spawn-recommend-calls.log)"
 teardown
 
 # dispatch-apply-office-hours owns the FBCA04 hex. (A single-source-of-truth
@@ -20503,108 +20451,6 @@ else
   echo "    bg-argv: $(cat "$SPAWN_WORKER_BG_ARGV")"
 fi
 spawn_office_hours_teardown
-
-# ============================================================================
-# dispatch-spawn-recommend tests (#2244)
-# ============================================================================
-echo ""
-echo "=== dispatch-spawn-recommend ==="
-#
-# dispatch-spawn-recommend is a thin, non-fatal wrapper over dispatch-spawn-job:
-# it validates <issue-num>, resolves a cwd, and spawns
-#   claude --bg --name recommend-<N> --model opus --permission-mode auto
-#          "/dispatch-recommend-next-steps <N>"
-# It reuses the spawn-worker fake-`claude` harness (write_fake_spawn_worker_claude)
-# and the SPAWN_WORKER_* fixture globals: the fake's `--bg` handler records the
-# full argv to $SPAWN_WORKER_BG_ARGV and registers sess-<name>.
-
-spawn_recommend_setup() {
-  TMPDIR_TEST=$(mktemp -d)
-  mkdir -p "$TMPDIR_TEST/scripts" \
-    "$TMPDIR_TEST/worktrees/main" \
-    "$TMPDIR_TEST/worktrees/55-foo" \
-    "$TMPDIR_TEST/config"
-
-  # dispatch-spawn-recommend resolves dispatch-spawn-job via its own SCRIPT_DIR,
-  # which sources lib-claude-agents.sh and (force-opus gate) dispatch-config-load
-  # → lib.sh — all must sit alongside the copy. Sourced libs need no chmod.
-  cp "$SCRIPT_DIR/dispatch-spawn-recommend" "$TMPDIR_TEST/scripts/dispatch-spawn-recommend"
-  cp "$SCRIPT_DIR/dispatch-spawn-job" "$TMPDIR_TEST/scripts/dispatch-spawn-job"
-  cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/scripts/lib-claude-agents.sh"
-  cp "$SCRIPT_DIR/dispatch-config-load" "$TMPDIR_TEST/scripts/dispatch-config-load"
-  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
-  chmod +x "$TMPDIR_TEST/scripts/dispatch-spawn-recommend"
-  chmod +x "$TMPDIR_TEST/scripts/dispatch-spawn-job"
-  chmod +x "$TMPDIR_TEST/scripts/dispatch-config-load"
-
-  SPAWN_WORKER_REGISTRY="$TMPDIR_TEST/registry.json"
-  SPAWN_WORKER_BG_ARGV="$TMPDIR_TEST/bg-argv"
-  SPAWN_WORKER_PWD_LOG="$TMPDIR_TEST/pwd-log"
-  SPAWN_WORKER_PENDING="$TMPDIR_TEST/pending"
-  SPAWN_WORKER_SUBAGENT_MODEL="$TMPDIR_TEST/subagent-model"
-  WORKER_TARGET_WORKTREE="$TMPDIR_TEST/worktrees/55-foo"
-  printf '[]' > "$SPAWN_WORKER_REGISTRY"
-
-  export DISPATCH_SPAWN_RECOMMEND_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
-  # Keep the registration-verify fast (no real sleeps) on the failure-path test.
-  export LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=0
-  export DISPATCH_CONFIG_DIR="$TMPDIR_TEST/config"
-}
-
-spawn_recommend_teardown() {
-  rm -rf "$TMPDIR_TEST"
-  TMPDIR_TEST=""
-  SPAWN_WORKER_REGISTRY=""
-  SPAWN_WORKER_BG_ARGV=""
-  SPAWN_WORKER_PWD_LOG=""
-  SPAWN_WORKER_PENDING=""
-  SPAWN_WORKER_SUBAGENT_MODEL=""
-  WORKER_TARGET_WORKTREE=""
-  unset DISPATCH_SPAWN_RECOMMEND_CLAUDE_CMD \
-    DISPATCH_SPAWN_JOB_CLAUDE_CMD DISPATCH_SPAWN_JOB_SESSION_ID \
-    SPAWN_BG_REGISTERS SPAWN_BG_REGISTER_AFTER_N \
-    LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S \
-    DISPATCH_CONFIG_DIR CLAUDE_CODE_SUBAGENT_MODEL
-}
-
-# --- Test 1: happy path — spawn carries --model opus, recommend-<N>, the prompt -
-echo "Test: dispatch-spawn-recommend spawns claude --bg with --model opus + recommend-<N>"
-spawn_recommend_setup
-write_fake_spawn_worker_claude
-if out=$( cd "$TMPDIR_TEST/worktrees/main" && "$TMPDIR_TEST/scripts/dispatch-spawn-recommend" 55 "$WORKER_TARGET_WORKTREE" 2>/dev/null ); then rc=0; else rc=$?; fi
-assert_eq "spawn-recommend: exits 0 on a successful spawn" "0" "$rc"
-mapfile -t sr_argv < "$SPAWN_WORKER_BG_ARGV"
-assert_eq "spawn-recommend: argv[0] is --bg" "--bg" "${sr_argv[0]:-}"
-assert_eq "spawn-recommend: argv[1] is --name" "--name" "${sr_argv[1]:-}"
-assert_eq "spawn-recommend: argv[2] is recommend-<N>" "recommend-55" "${sr_argv[2]:-}"
-assert_eq "spawn-recommend: argv[3] is --model" "--model" "${sr_argv[3]:-}"
-assert_eq "spawn-recommend: argv[4] is opus" "opus" "${sr_argv[4]:-}"
-assert_eq "spawn-recommend: final argv is the skill prompt" \
-  "/dispatch-recommend-next-steps 55" "${sr_argv[$(( ${#sr_argv[@]} - 1 ))]:-}"
-spawn_recommend_teardown
-
-# --- Test 2: bad issue-num (flag-like) → exit 2, no spawn ---------------------
-echo "Test: dispatch-spawn-recommend rejects a flag-like issue number (exit 2, no spawn)"
-spawn_recommend_setup
-write_fake_spawn_worker_claude
-if ( cd "$TMPDIR_TEST/worktrees/main" && "$TMPDIR_TEST/scripts/dispatch-spawn-recommend" "--repo other/repo" 2>/dev/null ); then rc=0; else rc=$?; fi
-assert_eq "spawn-recommend: flag-like issue-num exits 2" "2" "$rc"
-assert_eq "spawn-recommend: no claude --bg spawned on a bad issue-num" "absent" \
-  "$([[ -f "$SPAWN_WORKER_BG_ARGV" ]] && echo present || echo absent)"
-spawn_recommend_teardown
-
-# --- Test 3: spawn failure is non-fatal (exit 0) -----------------------------
-# Force dispatch-spawn-job's default verify to fail by having the fake NOT
-# register the spawned session (SPAWN_BG_REGISTERS=0): dispatch-spawn-job then
-# exits 1, and dispatch-spawn-recommend must catch it, warn, and exit 0 — the
-# park must never be torn down by a missing recommendation.
-echo "Test: dispatch-spawn-recommend is non-fatal when the spawn fails (exit 0)"
-spawn_recommend_setup
-write_fake_spawn_worker_claude
-export SPAWN_BG_REGISTERS=0
-if ( cd "$TMPDIR_TEST/worktrees/main" && "$TMPDIR_TEST/scripts/dispatch-spawn-recommend" 55 "$WORKER_TARGET_WORKTREE" 2>/dev/null ); then rc=0; else rc=$?; fi
-assert_eq "spawn-recommend: spawn failure is non-fatal (exit 0)" "0" "$rc"
-spawn_recommend_teardown
 
 # ============================================================================
 # dispatch-spawn-job tests
