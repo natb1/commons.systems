@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # fetch-analytics.sh — fetch Google Analytics 4 (GA4) and Google Search Console
 # data and emit a single formatted text block to stdout, for consumption by the
-# roadmap skill's Phase 1 context gathering.
+# align skill's Phase 1 context gathering.
 #
 # GA4 metrics (per deployed app, 30-day window): page views, sessions, bounce
 # rate; top-10 referral sources by sessions; top-10 landing pages. Search
@@ -43,14 +43,14 @@
 #      configured with your own client id/secret and BOTH scopes above) and
 #      capture the refresh token it issues.
 #   4. Store all three values in pass under stable paths and source them as
-#      env vars before invoking /roadmap.
+#      env vars before invoking /align.
 #
 # Config env vars (with defaults):
-#   ROADMAP_GA4_PROPERTY_IDS    App→property map, comma-separated app:propertyId
+#   ALIGN_GA4_PROPERTY_IDS    App→property map, comma-separated app:propertyId
 #                               pairs, e.g. "landing:111,budget:222,print:333".
 #                               When unset, the GA4 section is skipped (note
 #                               on stdout); Search Console still runs.
-#   ROADMAP_SEARCH_CONSOLE_SITE Search Console property string.
+#   ALIGN_SEARCH_CONSOLE_SITE Search Console property string.
 #                               Default: sc-domain:commons.systems.
 #
 # Sandbox: callers MUST wrap this script with dangerouslyDisableSandbox: true —
@@ -68,7 +68,7 @@ set -euo pipefail
 # ---- Step 0: no-config gate -------------------------------------------------
 # Any of the three OAuth env vars unset/empty → print a parenthetical note to
 # stdout, exit 0. Unlike dispatch-jit-calendar-import (which exits silently),
-# this script surfaces the skip to the parent so roadmap Phase 1 can log
+# this script surfaces the skip to the parent so align Phase 1 can log
 # it in the context file.
 if [[ -z "${GOOGLE_ANALYTICS_CLIENT_ID:-}" \
    || -z "${GOOGLE_ANALYTICS_CLIENT_SECRET:-}" \
@@ -78,8 +78,8 @@ if [[ -z "${GOOGLE_ANALYTICS_CLIENT_ID:-}" \
 fi
 
 # ---- Step 1: resolve config env vars with defaults --------------------------
-ROADMAP_GA4_PROPERTY_IDS="${ROADMAP_GA4_PROPERTY_IDS:-}"
-ROADMAP_SEARCH_CONSOLE_SITE="${ROADMAP_SEARCH_CONSOLE_SITE:-sc-domain:commons.systems}"
+ALIGN_GA4_PROPERTY_IDS="${ALIGN_GA4_PROPERTY_IDS:-}"
+ALIGN_SEARCH_CONSOLE_SITE="${ALIGN_SEARCH_CONSOLE_SITE:-sc-domain:commons.systems}"
 
 # ---- Step 2: exchange the refresh token for an access token ----------------
 TOKEN_RC=0
@@ -103,7 +103,7 @@ fi
 # ---- helper: extract an .error.message reason from a JSON response ----------
 # Prints the API error message if the response carries an `.error` object,
 # otherwise prints nothing. Used to surface per-API failures at the boundary.
-# The reason is echoed into the context file the roadmap personas read, and its
+# The reason is echoed into the context file the align personas read, and its
 # text is server-controlled, so strip newlines/carriage returns and truncate to
 # stop a crafted API response from forging section markers (prompt injection).
 api_error_reason() {
@@ -112,12 +112,12 @@ api_error_reason() {
 }
 
 # ---- Step 3: GA4 per app ----------------------------------------------------
-# Read the app→property map from ROADMAP_GA4_PROPERTY_IDS. When unset, skip ONLY
+# Read the app→property map from ALIGN_GA4_PROPERTY_IDS. When unset, skip ONLY
 # the GA4 section — Search Console still runs.
-if [[ -z "$ROADMAP_GA4_PROPERTY_IDS" ]]; then
-  echo "(GA4: skipped — ROADMAP_GA4_PROPERTY_IDS not set)"
+if [[ -z "$ALIGN_GA4_PROPERTY_IDS" ]]; then
+  echo "(GA4: skipped — ALIGN_GA4_PROPERTY_IDS not set)"
 else
-  IFS=',' read -r -a GA4_PAIRS <<<"$ROADMAP_GA4_PROPERTY_IDS"
+  IFS=',' read -r -a GA4_PAIRS <<<"$ALIGN_GA4_PROPERTY_IDS"
   for pair in "${GA4_PAIRS[@]}"; do
     [[ -z "$pair" ]] && continue
     APP="${pair%%:*}"
@@ -127,7 +127,7 @@ else
       continue
     fi
     # Validate both halves before they reach a curl URL or the context file.
-    # APP is echoed into headers read by the roadmap personas, so restrict it to
+    # APP is echoed into headers read by the align personas, so restrict it to
     # a charset that cannot forge newlines/section markers; GA4 property IDs are
     # always numeric, so a strict numeric guard also blocks URL-path injection.
     if [[ ! "$APP" =~ ^[A-Za-z0-9_-]+$ ]]; then
@@ -295,8 +295,8 @@ fi
 # Search Console property forms (sc-domain:<host> or an https:// URL) — this
 # blocks '?'/'#'/'@'/space from restructuring the request URL.
 echo "--- Search Console ---"
-if [[ ! "$ROADMAP_SEARCH_CONSOLE_SITE" =~ ^(sc-domain:[A-Za-z0-9.-]+|https://[A-Za-z0-9._/-]+)$ ]]; then
-  echo "(Search Console skipped: ROADMAP_SEARCH_CONSOLE_SITE must be 'sc-domain:<host>' or an 'https://...' URL)"
+if [[ ! "$ALIGN_SEARCH_CONSOLE_SITE" =~ ^(sc-domain:[A-Za-z0-9.-]+|https://[A-Za-z0-9._/-]+)$ ]]; then
+  echo "(Search Console skipped: ALIGN_SEARCH_CONSOLE_SITE must be 'sc-domain:<host>' or an 'https://...' URL)"
   exit 0
 fi
 
@@ -304,7 +304,7 @@ fi
 # Both are required: sc-domain:commons.systems has only colons (no slashes), while
 # https:// URL properties also have slashes that must be percent-encoded for the
 # site identifier to be a valid single URL path segment.
-ENCODED_SITE="${ROADMAP_SEARCH_CONSOLE_SITE//:/%3A}"
+ENCODED_SITE="${ALIGN_SEARCH_CONSOLE_SITE//:/%3A}"
 ENCODED_SITE="${ENCODED_SITE//\//%2F}"
 SC_URL="https://searchconsole.googleapis.com/webmasters/v3/sites/${ENCODED_SITE}/searchAnalytics/query"
 
