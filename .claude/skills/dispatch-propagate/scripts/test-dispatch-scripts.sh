@@ -7846,6 +7846,30 @@ assert_eq "attachable session, empty cwd, no worktree → fresh fallback with - 
 unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
+# OHST19. Registered-worktree null-cwd degrade (#2281): an attachable session
+# reporting an EMPTY cwd whose <N>-* worktree IS registered and on disk → attach
+# in place via the known worktree path (IDLE_WT_PATH), not a fresh launch.
+# Pre-#2281 the empty cwd failed both -d and -n checks and fell to bucket 3.
+echo "Test: registered worktree + null-cwd session → idle (attach via worktree path)"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+mkdir -p "$TMPDIR_TEST/wt/42-x"
+# CRITICAL: the path REGISTERED in worktree-list.txt must be the SAME on-disk
+# path that is mkdir'd above, so IDLE_WT_PATH (derived from
+# WORKTREE_PATHS_BY_NUM) resolves to a real directory. Do NOT copy OHST13's
+# split fake-path/real-path setup: there the registered path is a non-existent
+# /worktrees/42-x and the test passes via IDLE_CWD, which would NOT exercise the
+# IDLE_WT_PATH check this case is for.
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree %s\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  "$TMPDIR_TEST/wt/42-x" > "$STUB_DIR/worktree-list.txt"
+# Registered basename 42-x has no session; office-hours-42 is attachable with a
+# 2-field (name:state) fake → EMPTY cwd → null-cwd degrade.
+office_hours_state_fake_claude "office-hours-42:waiting"
+result=$("$TMPDIR_TEST/office-hours-select-target")
+assert_eq "registered worktree + null cwd → idle via worktree path" "idle s-office-hours-42" "$result"
+teardown
+
 # ============================================================================
 # office-hours (entry point) tests
 # ============================================================================
