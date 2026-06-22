@@ -9461,6 +9461,18 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: dispatch-apply-office-hours owns FBCA04"
 fi
 
+# Regression guard (#2244): the detached recommend-<N> machinery was removed in
+# favor of the in-session recommend step (see escalation-recommend.md). Assert the
+# script never re-references dispatch-spawn-recommend, so the detached spawn path
+# cannot silently return.
+echo "Test: dispatch-apply-office-hours no longer references dispatch-spawn-recommend"
+TOTAL=$((TOTAL + 1))
+if ! grep -q 'dispatch-spawn-recommend' "$SCRIPT_DIR/dispatch-apply-office-hours"; then
+  PASS=$((PASS + 1)); echo "  PASS: no dispatch-spawn-recommend reference in dispatch-apply-office-hours"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: dispatch-spawn-recommend reference resurfaced in dispatch-apply-office-hours"
+fi
+
 # ============================================================================
 # dispatch-apply-planned tests
 # ============================================================================
