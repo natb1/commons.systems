@@ -9,6 +9,8 @@ import { listLibrary } from "../library.js";
 import { formatDuration } from "../player.js";
 import type { PlayerHandle } from "../player.js";
 import { getCacheStats, clearCache, CACHE_UPDATED_EVENT } from "../audio-cache.js";
+import { enrichLocalTracks, listLocalTracks } from "../local-source.js";
+import { savePlaylist, getPlaylists } from "../sidecar.js";
 
 export interface HomeProps {
   user: User | null;
@@ -124,6 +126,7 @@ export function Home(props: HomeProps) {
   const { user, player, refreshKey } = props;
   const [state, setState] = useState<LibraryState>({ status: "loading" });
   const [cacheStats, setCacheStats] = useState("");
+  const [playlistNames, setPlaylistNames] = useState<string[]>([]);
   // A DataIntegrityError is stored, then thrown during render so the route-level
   // RouteErrorBoundary catches it (a component cannot catch its own throw).
   const [fatalError, setFatalError] = useState<unknown>(null);
@@ -165,44 +168,61 @@ export function Home(props: HomeProps) {
   //  - focus rescan (true): no loading state, swaps in the new items in place,
   //    and on error logs {operation:"library-rescan"} leaving the region intact.
   const loadLibrary = useCallback(
-    async (isRescan: boolean, isActive: () => boolean) => {
+    async (isRescan: boolean, isActive: () => boolean): Promise<boolean> => {
       if (!isRescan) setState({ status: "loading" });
       try {
         const items = await listLibrary(user);
-        if (!isActive()) return;
+        if (!isActive()) return false;
         setState({ status: "loaded", items });
+        return true;
       } catch (error: unknown) {
-        if (!isActive()) return;
+        if (!isActive()) return false;
         if (isRescan) {
           logError(error, { operation: "library-rescan" });
-          return; // leave the current region intact
+          return false; // leave the current region intact
         }
         if (error instanceof DataIntegrityError) {
           setFatalError(error);
-          return;
+          return false;
         }
         if (!deferProgrammerError(error)) {
           logError(error, { operation: "load-media" });
         }
         setState({ status: "error" });
+        return false;
       }
     },
     [user],
   );
 
-  // Initial load: on mount, user change, or a folder-connect refreshKey bump.
-  // The `cancelled` flag guards against a stale-user race (an earlier user's
-  // fetch resolving after the user changed).
+  // Initial load + cache-first enrichment (ports home.ts:267-270). The first
+  // load shows cached/placeholder tags immediately (cheap, no IO); the async
+  // enrichment pass then extracts tags from any uncached local files, and a
+  // rescan reload swaps in the real tags. Runs on mount, user change, or a
+  // folder-connect refreshKey bump. The `cancelled` flag guards against
+  // stale-user / unmount races.
   useEffect(() => {
     let cancelled = false;
-    void loadLibrary(false, () => !cancelled);
+    void (async () => {
+      // Skip enrichment when the first load failed: a fatal DataIntegrityError
+      // hands off to the error boundary, and a plain error already shows
+      // #media-error — re-listing would just fail again (mirrors the old
+      // afterRenderHome only running after a successful render).
+      const ok = await loadLibrary(false, () => !cancelled);
+      if (cancelled || !ok) return;
+      await enrichLocalTracks();
+      if (cancelled) return;
+      await loadLibrary(true, () => !cancelled);
+    })();
     return () => {
       cancelled = true;
     };
   }, [loadLibrary, refreshKey]);
 
-  // Focus rescan (home.ts:135-145): re-fetch the library on window focus, behind
-  // a re-entrancy guard, leaving the region intact on error.
+  // Focus rescan (home.ts:143-154): on window focus, re-enrich (a folder the user
+  // edited while away may have new files) then re-fetch the library, behind a
+  // re-entrancy guard, leaving the region intact on error. enrichLocalTracks
+  // suppresses its sidecar write when nothing new was extracted.
   const rescanningRef = useRef(false);
   useEffect(() => {
     const controller = new AbortController();
@@ -211,10 +231,12 @@ export function Home(props: HomeProps) {
       () => {
         if (rescanningRef.current) return;
         rescanningRef.current = true;
-        void loadLibrary(true, () => mountedRef.current)
-          .finally(() => {
-            rescanningRef.current = false;
-          });
+        void (async () => {
+          await enrichLocalTracks();
+          await loadLibrary(true, () => mountedRef.current);
+        })().finally(() => {
+          rescanningRef.current = false;
+        });
       },
       { signal: controller.signal },
     );
@@ -244,6 +266,52 @@ export function Home(props: HomeProps) {
         logError(err, { operation: "clear-cache" });
         setCacheStats("Failed to clear cache. Try again.");
       });
+  };
+
+  // Playlists (ports home.ts:218-265). Minimal save-current-queue / load-by-name
+  // over the sidecar accessors; local-only. The select is reset to its
+  // placeholder each render (value="") so re-picking the same playlist re-fires.
+  const refreshPlaylists = useCallback(() => {
+    getPlaylists()
+      .then((playlists) => {
+        if (!mountedRef.current) return;
+        setPlaylistNames(Object.keys(playlists));
+      })
+      .catch((err: unknown) => {
+        logError(err, { operation: "load-playlist-options" });
+      });
+  }, []);
+
+  // Load playlist names on mount and after a folder-connect refreshKey bump (the
+  // sidecar — hence its playlists — binds during folder restore/connect).
+  useEffect(() => {
+    refreshPlaylists();
+  }, [refreshPlaylists, refreshKey]);
+
+  const onSavePlaylist = () => {
+    const name = window.prompt("Playlist name")?.trim();
+    if (!name || !player) return;
+    const names = player.getLocalQueueNames();
+    if (names.length === 0) {
+      window.alert("Queue has no local tracks");
+      return;
+    }
+    savePlaylist(name, names)
+      .then(refreshPlaylists)
+      .catch((err: unknown) => logError(err, { operation: "save-playlist" }));
+  };
+
+  const onLoadPlaylist = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const name = e.currentTarget.value;
+    if (!name || !player) return;
+    getPlaylists()
+      .then(async (playlists) => {
+        const names = playlists[name];
+        if (!names) return;
+        const items = await listLocalTracks();
+        player.loadPlaylist(names, items);
+      })
+      .catch((err: unknown) => logError(err, { operation: "load-playlist" }));
   };
 
   if (fatalError !== null) throw fatalError;
@@ -285,6 +353,24 @@ export function Home(props: HomeProps) {
         <Button id="clear-cache-btn" onClick={onClearCache}>
           Clear audio cache
         </Button>
+      </section>
+      <section id="playlists">
+        <Button id="save-playlist-btn" onClick={onSavePlaylist}>
+          Save queue as playlist
+        </Button>
+        <select
+          id="load-playlist-select"
+          aria-label="Load playlist"
+          value=""
+          onChange={onLoadPlaylist}
+        >
+          <option value="">Load playlist…</option>
+          {playlistNames.map((name) => (
+            <option key={name} value={name}>
+              {name}
+            </option>
+          ))}
+        </select>
       </section>
     </>
   );
