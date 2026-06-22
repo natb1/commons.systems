@@ -334,9 +334,19 @@ export async function ensureLoaded(): Promise<SidecarData> {
     loadPromise = (
       handle === null ? Promise.resolve<SidecarData | null>(emptyModel()) : readSidecar(handle)
     ).then((model) => {
+      // The handle may have been rebound (setLocalDirectory) while readSidecar
+      // was in flight. A stale result must not mutate the freshly-reset state —
+      // discard it so the next ensureLoaded re-reads the current handle.
+      if (dirHandle !== handle) {
+        return cachedModel ?? emptyModel();
+      }
       if (model === null) {
         corruptOnDisk = true;
         cachedModel = emptyModel();
+        logError(
+          new Error("sidecar corrupt on disk; suppressing writes to preserve recoverable user data"),
+          { operation: "ensureLoaded" },
+        );
       } else {
         corruptOnDisk = false;
         cachedModel = model;
@@ -362,11 +372,10 @@ function enqueueWrite(patch: SidecarPatch): Promise<void> {
       const model = await ensureLoaded();
       const merged = mergeSidecar(model, patch);
       cachedModel = merged;
+      // The corruption was already logged once at load time (ensureLoaded);
+      // return silently here so repeated saves (e.g. periodic playback-position
+      // persistence) don't spam the error log.
       if (corruptOnDisk) {
-        logError(
-          new Error("sidecar corrupt on disk; skipping write to preserve recoverable user data"),
-          { operation: "sidecarWrite" },
-        );
         return;
       }
       if (writable && dirHandle !== null) {

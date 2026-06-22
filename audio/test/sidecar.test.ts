@@ -577,6 +577,7 @@ describe("cacheMetadata / getMetadata — writable=true", () => {
     });
 
     const readBack = await readSidecar(dir);
+    if (!readBack) throw new Error("expected non-null sidecar");
     expect(readBack.metadata["song.mp3"]).toEqual({
       tags: { title: "Test Song", duration: 180 },
       size: 1024,
@@ -592,6 +593,7 @@ describe("cacheMetadata / getMetadata — writable=true", () => {
     await flushWrites();
 
     const readBack = await readSidecar(dir);
+    if (!readBack) throw new Error("expected non-null sidecar");
     expect(readBack.metadata["song.mp3"]).toEqual({
       tags: { title: "My Song" },
       size: 10,
@@ -609,6 +611,7 @@ describe("cacheMetadata / getMetadata — writable=true", () => {
     await flushWrites();
 
     const readBack = await readSidecar(dir);
+    if (!readBack) throw new Error("expected non-null sidecar");
     expect(readBack.metadata["a.mp3"]).toEqual({
       tags: { title: "A", duration: 100 },
       size: 1,
@@ -712,6 +715,7 @@ describe("cacheMetadataBatch", () => {
     await flushWrites();
 
     const readBack = await readSidecar(dir);
+    if (!readBack) throw new Error("expected non-null sidecar");
     expect(readBack.metadata["a.mp3"]).toEqual({
       tags: { title: "A", duration: 100 },
       size: 1,
@@ -744,6 +748,7 @@ describe("savePlayerState / getPlayerState", () => {
     });
 
     const readBack = await readSidecar(dir);
+    if (!readBack) throw new Error("expected non-null sidecar");
     expect(readBack.playerState).toEqual({
       queue: ["a.mp3"],
       currentLocalName: "a.mp3",
@@ -796,6 +801,7 @@ describe("savePlaylist / getPlaylists", () => {
     expect(await getPlaylists()).toEqual({ Favs: ["a.mp3", "b.mp3"] });
 
     const readBack = await readSidecar(dir);
+    if (!readBack) throw new Error("expected non-null sidecar");
     expect(readBack.playlists?.["Favs"]).toEqual(["a.mp3", "b.mp3"]);
   });
 });
