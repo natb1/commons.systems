@@ -2581,8 +2581,8 @@ EOF
 
 # Install and activate the durable always-on heartbeat: a `systemd --user`
 # `dispatch-heartbeat.timer` firing `dispatch-heartbeat.service` (a no-arg
-# `dispatch-tick`) on a flat drumbeat — `OnBootSec=2min`,
-# `OnUnitActiveSec=15min`, `Persistent=true`. This gives the autonomous chain a
+# `dispatch-tick`) on a wall-clock schedule — `OnBootSec=2min`,
+# `OnCalendar=*:0/15`, `Persistent=true` (#2375). This gives the autonomous chain a
 # liveness floor that is independent of Stop hooks and reseed timers, so the
 # chain self-recovers from abnormal worker death and post-cap stalls where no
 # Stop hook fires and no reseed is armed (#2022). A flat drumbeat is safe and
@@ -2643,6 +2643,27 @@ cleanup_stale_heartbeat_units() {
   # suppress the failure and warn; never abort the caller.
   echo "WARNING: cleanup_stale_heartbeat_units: installed heartbeat unit points at '$installed_workdir' but current main worktree is '$current_main_worktree'; disabling stale timer/service before rewrite" >&2
   "$systemctl_cmd" --user disable --now dispatch-heartbeat.timer dispatch-heartbeat.service || true
+}
+
+# Returns 0 only when the heartbeat timer is armed with a future trigger
+# (SubState=waiting). 'elapsed' (the #2375 stranded state: active but no future
+# fire), 'dead' (inactive), and any other/unrecognized substate all return
+# non-zero so the caller falls through to repair. SubState is the reliable
+# discriminator: NextElapseUSecRealtime is empty for a healthy monotonic timer
+# too, so parsing it would mis-detect.
+# Args: $1 = systemctl command
+heartbeat_timer_is_armed() {
+  local systemctl_cmd="$1"
+  local substate
+  substate=$("$systemctl_cmd" --user show dispatch-heartbeat.timer \
+    --property=SubState --value 2>/dev/null) || return 1
+  # 'waiting' = a future trigger is armed (healthy). 'elapsed' = the #2375
+  # stranded state (active, no future fire). 'dead' = inactive. Fail-safe:
+  # treat anything that is not explicitly 'waiting' as needing repair, so an
+  # unrecognized substate can never be read as healthy. (A transient
+  # 'running' during a heartbeat fire causes at most one harmless re-arm; the
+  # tick oneshot is fast, so the window is tiny.)
+  [ "$substate" = "waiting" ]
 }
 
 # Best-effort: a failure here must not abort the caller (a tick/reseed
@@ -2723,10 +2744,13 @@ WorkingDirectory=$main_worktree
 EOF
 )
 
-  # Desired timer unit: a flat drumbeat. OnBootSec=2min gives a fast post-boot
-  # tick; OnUnitActiveSec=15min sets the steady-state cadence; Persistent=true
-  # makes a missed firing (host asleep/off at the scheduled time) run on the
-  # next wake instead of being skipped.
+  # Desired timer unit: a wall-clock schedule (#2375). OnCalendar=*:0/15 fires at
+  # :00/:15/:30/:45 regardless of when the service last activated, so the timer
+  # always has a future trigger and can never strand in `active (elapsed)` after a
+  # restart (the failure mode a monotonic OnUnitActiveSec drumbeat fell into).
+  # OnBootSec=2min keeps a fast first post-boot tick; Persistent=true is now
+  # meaningful — it catches up a wall-clock fire missed while the host was
+  # asleep/off; RandomizedDelaySec=30 smooths the post-boot launcher storm.
   local desired_timer
   desired_timer=$(cat <<EOF
 [Unit]
@@ -2734,8 +2758,9 @@ Description=Dispatch chain periodic heartbeat timer (#2022)
 
 [Timer]
 OnBootSec=2min
-OnUnitActiveSec=15min
+OnCalendar=*:0/15
 Persistent=true
+RandomizedDelaySec=30
 
 [Install]
 WantedBy=timers.target
@@ -2743,12 +2768,14 @@ EOF
 )
 
   # Steady-state hot path: if both installed units already match byte-for-byte
-  # AND the timer is active, do nothing — skip the writes, daemon-reload, and
-  # enable entirely. (Like the daemon service, the timer must actually be
-  # RUNNING, so the content compare carries an is-active check.)
+  # AND the timer is armed with a future trigger, do nothing — skip the writes,
+  # daemon-reload, and enable entirely. `is-active` is too weak here: it returns
+  # 0 for an `active (elapsed)` timer (the #2375 stranded state), so a dead timer
+  # would be read as healthy. heartbeat_timer_is_armed requires SubState=waiting,
+  # so an elapsed timer falls through to the repair path below.
   if [ -f "$SERVICE_PATH" ] && [ "$(cat "$SERVICE_PATH")" = "$desired_service" ] \
      && [ -f "$TIMER_PATH" ] && [ "$(cat "$TIMER_PATH")" = "$desired_timer" ] \
-     && "$SYSTEMCTL_CMD" --user is-active --quiet dispatch-heartbeat.timer; then
+     && heartbeat_timer_is_armed "$SYSTEMCTL_CMD"; then
     return 0
   fi
 
@@ -2827,11 +2854,18 @@ EOF
     return 1
   fi
 
-  # Install + activate idempotently: enable symlinks the timer under
-  # WantedBy=timers.target (so it auto-starts on every user-session start) and
-  # --now starts it without restarting an already-running instance.
-  if ! "$SYSTEMCTL_CMD" --user enable --now dispatch-heartbeat.timer; then
-    echo "WARNING: ensure_heartbeat_units: systemctl --user enable --now dispatch-heartbeat.timer failed; periodic heartbeat unavailable" >&2
+  # Install + re-arm idempotently. enable symlinks the timer under
+  # WantedBy=timers.target (so it auto-starts on every user-session start).
+  # `enable --now` is NOT enough to repair a stranded timer: its implicit `start`
+  # is a no-op on an already-active `elapsed` timer, so the next fire is never
+  # recomputed. A separate `restart` re-arms in every case — cold install
+  # (inactive → start) and repair (active-elapsed → recompute next elapse) (#2375).
+  if ! "$SYSTEMCTL_CMD" --user enable dispatch-heartbeat.timer; then
+    echo "WARNING: ensure_heartbeat_units: systemctl --user enable dispatch-heartbeat.timer failed; periodic heartbeat unavailable" >&2
+    return 1
+  fi
+  if ! "$SYSTEMCTL_CMD" --user restart dispatch-heartbeat.timer; then
+    echo "WARNING: ensure_heartbeat_units: systemctl --user restart dispatch-heartbeat.timer failed; periodic heartbeat unavailable" >&2
     return 1
   fi
 }
