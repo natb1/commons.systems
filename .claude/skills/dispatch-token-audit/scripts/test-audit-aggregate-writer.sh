@@ -38,7 +38,7 @@ AA_EXPIRE=1812136000   # AA_NOW + 365*86400
 # payload_bytes/tool_errors) so we can assert their absence in the doc. window
 # .until is 2026-06-10 (a different day than NOW's 2026-06-04).
 PAYLOAD='{
-  "window": {"days": 7, "since": "2026-06-03 12:00:00", "until": "2026-06-10 12:00:00", "files_scanned": 42, "files_failed": 1},
+  "window": {"days": 7, "since": "2026-06-03 12:00:00", "until": "2026-06-10 12:00:00", "files_scanned": 42, "files_failed": 1, "sidecar_eligible": 3, "sidecar_present": 2, "sidecar_present_rate": 0.6666666666666666},
   "price_model": {"note": "proxy", "input_per_mtok": 15, "cache_creation_per_mtok": 18.75, "cache_read_per_mtok": 1.5, "output_per_mtok": 75},
   "totals": {"input": 100, "cache_creation": 200, "cache_read": 300, "output": 400, "sessions": 5, "turns": 50, "price_proxy_usd": 1.23},
   "by_session_type": {"worker": {"input": 1}},
@@ -80,7 +80,7 @@ assert_eq "priceModel omits note" "false" "$(jq -c '.doc.priceModel | has("note"
 
 # --- Case 4: curated values match input -------------------------------------
 assert_eq "window meta projected" \
-  '{"days":7,"since":"2026-06-03 12:00:00","until":"2026-06-10 12:00:00","files_scanned":42,"files_failed":1}' \
+  '{"days":7,"since":"2026-06-03 12:00:00","until":"2026-06-10 12:00:00","files_scanned":42,"files_failed":1,"sidecar_eligible":3,"sidecar_present":2}' \
   "$(jq -c '.doc.window' <<<"$OUT")"
 assert_eq "totals projected" \
   '{"input":100,"cache_creation":200,"cache_read":300,"output":400,"sessions":5,"turns":50,"price_proxy_usd":1.23}' \
@@ -177,6 +177,20 @@ MISSING_ERR=$(printf '%s' "$NO_BY_PHASE" | node "$WRITER_MJS" --dry-run 2>&1 >/d
 assert_eq "stdin missing by_phase → exit non-zero" "1" "$([[ "$MISSING_RC" -ne 0 ]] && echo 1 || echo 0)"
 assert_eq "stdin missing by_phase → diagnostic" "1" \
   "$([[ "$MISSING_ERR" == *'audit-aggregate-writer: payload field by_phase must be a JSON object'* ]] && echo 1 || echo 0)"
+
+# (c'') stdin missing window.sidecar_eligible → finite-number error (fail-closed).
+NO_ELIGIBLE=$(jq -c 'del(.window.sidecar_eligible)' <<<"$PAYLOAD")
+NO_ELIGIBLE_ERR=$(printf '%s' "$NO_ELIGIBLE" | node "$WRITER_MJS" --dry-run 2>&1 >/dev/null) && NO_ELIGIBLE_RC=0 || NO_ELIGIBLE_RC=$?
+assert_eq "stdin missing window.sidecar_eligible → exit non-zero" "1" "$([[ "$NO_ELIGIBLE_RC" -ne 0 ]] && echo 1 || echo 0)"
+assert_eq "stdin missing window.sidecar_eligible → diagnostic" "1" \
+  "$([[ "$NO_ELIGIBLE_ERR" == *'audit-aggregate-writer: payload field window.sidecar_eligible must be a finite number'* ]] && echo 1 || echo 0)"
+
+# (c''') stdin missing window.sidecar_present → finite-number error (fail-closed).
+NO_PRESENT=$(jq -c 'del(.window.sidecar_present)' <<<"$PAYLOAD")
+NO_PRESENT_ERR=$(printf '%s' "$NO_PRESENT" | node "$WRITER_MJS" --dry-run 2>&1 >/dev/null) && NO_PRESENT_RC=0 || NO_PRESENT_RC=$?
+assert_eq "stdin missing window.sidecar_present → exit non-zero" "1" "$([[ "$NO_PRESENT_RC" -ne 0 ]] && echo 1 || echo 0)"
+assert_eq "stdin missing window.sidecar_present → diagnostic" "1" \
+  "$([[ "$NO_PRESENT_ERR" == *'audit-aggregate-writer: payload field window.sidecar_present must be a finite number'* ]] && echo 1 || echo 0)"
 
 # (d) --dry-run without SECRET_OVERRIDE → the dry-run-only guard.
 assert_fail "dry-run without SECRET_OVERRIDE → fail-closed" \

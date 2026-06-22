@@ -14,14 +14,22 @@
 #     the event actually fires in --bg mode.
 # (b) Whether the hook command has working local `git` access in the worktree
 #     context where it runs — dispatch-stamp-session calls `git rev-parse`
-#     and `git remote get-url`; if git is unavailable or CWD is wrong the stamp silently
-#     no-ops (never blocks).
+#     and `git remote get-url`; if git is unavailable or CWD is wrong the stamp
+#     silently no-ops (never blocks).
 #
-# FALLBACK: if this hook proves unreliable for detached --bg sessions, add a
-# scripted dispatch-stamp-session call at the start of each phase SKILL.md
-# (plan-issue, implement, qa-fix, review-fix, etc.) as a belt-and-suspenders
-# write. NOT implemented here — implement only if live testing shows the hook
-# is insufficient.
+# MONITOR: dispatch-token-audit now surfaces window.sidecar_eligible (count of
+# top-level worker sessions scanned), window.sidecar_present (those carrying a
+# .dispatch-stamp.json sidecar), and a derived window.sidecar_present_rate
+# (float in [0,1], or null when no workers were scanned). A drop in
+# sidecar_present_rate for worker sessions is observable from existing
+# transcripts WITHOUT a full dispatch run — this is the data-driven signal for
+# the two uncertainties above.
+#
+# ESCALATION: if the monitored rate shows the hook is insufficient for detached
+# --bg sessions, add a scripted dispatch-stamp-session call at the start of
+# each phase SKILL.md (plan-issue, implement, qa-fix, review-fix, etc.) as a
+# belt-and-suspenders write. NOT implemented — the monitor provides a
+# data-driven trigger for filing that follow-up if needed.
 set -uo pipefail
 trap 'echo "[stamp-dispatch-session] WARNING: unexpected error on line $LINENO" >&2; exit 0' ERR
 
