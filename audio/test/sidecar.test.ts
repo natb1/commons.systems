@@ -184,7 +184,9 @@ describe("parseSidecar", () => {
 
   it("forces version to 1 regardless of input", () => {
     const json = JSON.stringify({ version: 99, metadata: {}, playlists: {} });
-    expect(parseSidecar(json)!.version).toBe(1);
+    const result = parseSidecar(json);
+    if (!result) throw new Error("expected non-null for valid input");
+    expect(result.version).toBe(1);
   });
 
   it("coerces missing metadata to {} while preserving valid playerState", () => {
@@ -192,7 +194,8 @@ describe("parseSidecar", () => {
       version: 1,
       playerState: { queue: ["a.mp3"], currentLocalName: "a.mp3", positionSeconds: 10 },
     });
-    const result = parseSidecar(json)!;
+    const result = parseSidecar(json);
+    if (!result) throw new Error("expected non-null for valid input");
     expect(result.metadata).toEqual({});
     expect(result.playerState?.queue).toEqual(["a.mp3"]);
   });
@@ -203,7 +206,8 @@ describe("parseSidecar", () => {
       metadata: [1, 2],
       playerState: { queue: ["b.mp3"] },
     });
-    const result = parseSidecar(json)!;
+    const result = parseSidecar(json);
+    if (!result) throw new Error("expected non-null for valid input");
     expect(result.metadata).toEqual({});
     expect(result.playerState?.queue).toEqual(["b.mp3"]);
   });
@@ -214,7 +218,8 @@ describe("parseSidecar", () => {
       metadata: { "song.mp3": { title: "Keep", duration: "bad" } },
       playlists: {},
     });
-    const result = parseSidecar(json)!;
+    const result = parseSidecar(json);
+    if (!result) throw new Error("expected non-null for valid input");
     expect(result.metadata["song.mp3"]?.title).toBe("Keep");
     expect("duration" in (result.metadata["song.mp3"] ?? {})).toBe(false);
   });
@@ -226,7 +231,8 @@ describe("parseSidecar", () => {
         metadata: {},
         playlists: { Good: ["a.mp3", "b.mp3"], Bad: "not-an-array" },
       });
-      const result = parseSidecar(json)!;
+      const result = parseSidecar(json);
+      if (!result) throw new Error("expected non-null for valid input");
       expect(result.playlists?.["Good"]).toEqual(["a.mp3", "b.mp3"]);
       expect("Bad" in (result.playlists ?? {})).toBe(false);
     });
@@ -237,7 +243,8 @@ describe("parseSidecar", () => {
         metadata: {},
         playlists: { Mix: ["a.mp3", 42, null, "b.mp3"] },
       });
-      const result = parseSidecar(json)!;
+      const result = parseSidecar(json);
+      if (!result) throw new Error("expected non-null for valid input");
       expect(result.playlists?.["Mix"]).toEqual(["a.mp3", "b.mp3"]);
     });
   });
@@ -245,7 +252,8 @@ describe("parseSidecar", () => {
   describe("playerState coercion", () => {
     it("non-array queue defaults to []", () => {
       const json = JSON.stringify({ version: 1, metadata: {}, playerState: { queue: "bad" } });
-      const result = parseSidecar(json)!;
+      const result = parseSidecar(json);
+      if (!result) throw new Error("expected non-null for valid input");
       expect(result.playerState?.queue).toEqual([]);
     });
 
@@ -255,7 +263,8 @@ describe("parseSidecar", () => {
         metadata: {},
         playerState: { queue: [], currentLocalName: 42 },
       });
-      const result = parseSidecar(json)!;
+      const result = parseSidecar(json);
+      if (!result) throw new Error("expected non-null for valid input");
       expect("currentLocalName" in (result.playerState ?? {})).toBe(false);
     });
 
@@ -265,19 +274,22 @@ describe("parseSidecar", () => {
         metadata: {},
         playerState: { queue: [], positionSeconds: "bad" },
       });
-      const result = parseSidecar(json)!;
+      const result = parseSidecar(json);
+      if (!result) throw new Error("expected non-null for valid input");
       expect("positionSeconds" in (result.playerState ?? {})).toBe(false);
     });
 
     it("a plain-object playerState always yields at least { queue: [] }", () => {
       const json = JSON.stringify({ version: 1, metadata: {}, playerState: {} });
-      const result = parseSidecar(json)!;
+      const result = parseSidecar(json);
+      if (!result) throw new Error("expected non-null for valid input");
       expect(result.playerState).toEqual({ queue: [] });
     });
 
     it("a non-object playerState yields undefined", () => {
       const json = JSON.stringify({ version: 1, metadata: {}, playerState: "invalid" });
-      const result = parseSidecar(json)!;
+      const result = parseSidecar(json);
+      if (!result) throw new Error("expected non-null for valid input");
       expect(result.playerState).toBeUndefined();
     });
 
@@ -287,7 +299,8 @@ describe("parseSidecar", () => {
         metadata: { "song.mp3": { title: "Keep" } },
         playerState: 42,
       });
-      const result = parseSidecar(json)!;
+      const result = parseSidecar(json);
+      if (!result) throw new Error("expected non-null for valid input");
       expect(result.metadata["song.mp3"]?.title).toBe("Keep");
       expect(result.playerState).toBeUndefined();
     });
