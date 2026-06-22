@@ -53,9 +53,16 @@ fi
 # Filter to comments authored by the trusted dispatch identity's numeric id to
 # prevent a forged-plan injection from an untrusted external user on a public repo.
 # PLAN_AUTHOR_ID is validated ^[0-9]+$ above, so passing it via --argjson is safe.
+# Match the marker only as the comment's FIRST LINE (startswith), never as a
+# substring anywhere — the writer always emits it as line 1. A `contains` match
+# would also select an UNRELATED comment that merely documents this marker in its
+# prose (e.g. a dispatch:recommended-steps comment about this very feature), and
+# `first()` returns the EARLIEST match: an older marker-documenting comment would
+# then shadow the real plan and be read as the plan. (Symmetric to the
+# dispatch-write-plan / dispatch-write-recommendation find fix.)
 CID=$(gh api --paginate "repos/{owner}/{repo}/issues/$N/comments" \
   | jq -r --arg m "$MARKER" --argjson author_id "$PLAN_AUTHOR_ID" \
-      'first(.[] | select((.body | contains($m)) and (.user.id == $author_id)) | .id)')
+      'first(.[] | select((.body | startswith($m)) and (.user.id == $author_id)) | .id)')
 if [[ -z "$CID" ]]; then
   echo "dispatch-read-plan: no <!-- dispatch:plan --> comment found on issue #$N" >&2
   exit 1

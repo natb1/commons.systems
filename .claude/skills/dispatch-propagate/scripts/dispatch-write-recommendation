@@ -57,9 +57,17 @@ tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
 printf '%s\n%s\n' "$MARKER" "$CONTENT" > "$tmp"
 
+# Match the marker only as the comment's FIRST LINE (startswith), never as a
+# substring anywhere in the body. The marker is always written as line 1
+# (printf '%s\n%s\n' "$MARKER" "$CONTENT"), so an anchored match still finds the
+# writer's own comment — but a `contains` substring match would also match a
+# DIFFERENT comment that merely documents this marker in its prose (e.g. a
+# dispatch:plan comment whose body describes this very marker), and the PATCH
+# below would then overwrite that unrelated comment in place. That clobbered the
+# #2244 plan comment once; first-line anchoring prevents the collision.
 CID=$(gh api --paginate "repos/{owner}/{repo}/issues/$N/comments" \
   | jq -r --arg m "$MARKER" --argjson author_id "$PLAN_AUTHOR_ID" \
-      'first(.[] | select((.body | contains($m)) and (.user.id == $author_id)) | .id)')
+      'first(.[] | select((.body | startswith($m)) and (.user.id == $author_id)) | .id)')
 
 if [[ -n "$CID" ]]; then
   gh api --method PATCH "repos/{owner}/{repo}/issues/comments/$CID" \

@@ -34548,6 +34548,29 @@ else
 fi
 rm -rf "$wp_forge"
 
+# marker-in-prose shadow regression (#2244): an EARLIER trusted comment that
+# merely DOCUMENTS the plan marker in its prose (here a recommended-steps comment
+# whose body discusses this very feature) must NOT shadow the real plan. The plan
+# marker is always the writer's FIRST line; with the pre-fix `contains` + `first()`
+# (earliest match) the documenting comment is returned AS the plan — silently
+# feeding dispatch-run-verification the wrong body. First-line `startswith`
+# anchoring returns the real (later) plan instead. This is the exact failure that
+# would defeat restoring a clobbered plan comment.
+jq -nc '[
+  {id:1, body:"<!-- dispatch:recommended-steps -->\n## Recommended\nResume the persisted <!-- dispatch:plan --> via dispatch-read-plan.", user:{id:9001, login:"plan-bot"}},
+  {id:2, body:"<!-- dispatch:plan -->\nREAL PLAN BODY", user:{id:9001, login:"plan-bot"}}
+]' > "$WP_STORE"
+echo 2 > "$WP_COUNTER"
+shadow_out=$(PATH="$wp_root/bin:$SAVED_PATH" "$WP_READ" 7) && shadow_rc=0 || shadow_rc=$?
+assert_eq "read-plan: marker-documenting comment does not shadow the real plan (exit 0)" "0" "$shadow_rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$shadow_out" == *"REAL PLAN BODY"* && "$shadow_out" != *"## Recommended"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: read-plan returns the real plan, not the earlier marker-documenting comment"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: read-plan returns the real plan, not the earlier marker-documenting comment"
+  echo "    actual: '$shadow_out'"
+fi
+
 # Build a bare-repo + worktree fixture whose origin remote is <url>. Creates a
 # temp root with .bare/, seeds one commit on main via a throwaway seed repo,
 # adds a worktree at worktrees/42-foo, and echoes the root path for the caller
@@ -34810,6 +34833,36 @@ assert_eq "write-recommendation: non-numeric arg exits 2" "2" "$rc"
 # 6. missing arg → clear error, exit 2.
 if PATH="$wr_root/bin:$SAVED_PATH" "$WR_WRITE" <<<"REC" 2>/dev/null; then rc=0; else rc=$?; fi
 assert_eq "write-recommendation: missing arg exits 2" "2" "$rc"
+
+# 7. marker-in-prose regression (#2244): a DIFFERENT comment that merely DOCUMENTS
+#    the recommended-steps marker in its prose (here a dispatch:plan comment whose
+#    body describes the marker) must NOT be matched and overwritten in place. The
+#    writer must POST a fresh comment, not PATCH the documenting one. This guards
+#    the first-line (startswith) anchoring against the substring-`contains` find
+#    that clobbered the #2244 plan comment. Against the pre-fix `contains` predicate
+#    this seeds length 1 → PATCH → stays length 1 (clobbered); the fix POSTs → 2.
+jq -nc --arg rm "$WR_MARKER" \
+  '[{id:1, body:("<!-- dispatch:plan -->\n## Plan\nUnit 1 clones the writer with the marker " + $rm + " (collision-free)."), user:{id:9001, login:"plan-bot"}}]' \
+  > "$WR_STORE"
+echo 1 > "$WR_COUNTER"
+if ! PATH="$wr_root/bin:$SAVED_PATH" "$WR_WRITE" 7 <<<"FRESH REC"; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: write-recommendation (marker-in-prose) failed unexpectedly"
+fi
+assert_eq "write-recommendation: documenting comment NOT clobbered (store grows to 2)" \
+  "2" "$(jq 'length' "$WR_STORE")"
+TOTAL=$((TOTAL + 1))
+if jq -e '.[] | select(.id==1) | .body | startswith("<!-- dispatch:plan -->")' "$WR_STORE" >/dev/null \
+   && jq -e '.[] | select(.id==1) | .body | contains("Unit 1 clones")' "$WR_STORE" >/dev/null; then
+  PASS=$((PASS + 1)); echo "  PASS: the dispatch:plan comment is left intact (not overwritten)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: the dispatch:plan comment is left intact (not overwritten)"
+fi
+TOTAL=$((TOTAL + 1))
+if jq -e --arg m "$WR_MARKER" '.[] | select(.body|startswith($m)) | select(.body|contains("FRESH REC"))' "$WR_STORE" >/dev/null; then
+  PASS=$((PASS + 1)); echo "  PASS: a fresh recommended-steps comment was POSTed alongside it"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: a fresh recommended-steps comment was POSTed alongside it"
+fi
 
 unset DISPATCH_PLAN_AUTHOR_ID
 rm -rf "$wr_root"
