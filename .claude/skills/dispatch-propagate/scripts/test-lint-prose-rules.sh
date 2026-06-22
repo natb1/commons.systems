@@ -177,6 +177,10 @@ _GH='gh'
 PORC_ISSUE_VIEW="RES=\$($_GH issue view \"\$N\" --json title)"
 # Produces: RES=$(gh pr view "$N" --json closingIssuesReferences)
 PORC_PR_VIEW="RES=\$($_GH pr view \"\$N\" --json closingIssuesReferences)"
+# Produces: RES=$(gh issue list --label dispatch:planned --json number)
+PORC_ISSUE_LIST="RES=\$($_GH issue list --label dispatch:planned --json number)"
+# Produces: RES=$(gh pr list --state open --json number)
+PORC_PR_LIST="RES=\$($_GH pr list --state open --json number)"
 
 # Shebang line for extensionless fixtures: construct with printf so zsh
 # history expansion does not escape the '!' in '#!/usr/bin/env bash'.
@@ -319,5 +323,33 @@ git -C "$REPO" commit --quiet -m "edit only the call line"
 run_sut
 assert_eq "preexisting-marker-call-edit: exit 0" "0" "$RC"
 assert_contains "preexisting-marker-call-edit: PASS printed" "PASS" "$OUT"
+
+# ---------------------------------------------------------------------------
+# Test 13: net-new `gh issue list` porcelain in a .sh file is flagged.
+# ---------------------------------------------------------------------------
+echo "Test 13: net-new gh-issue-list porcelain is flagged"
+make_repo
+printf '%s\n' "$PORC_ISSUE_LIST" >> "$REPO/script.sh"
+git -C "$REPO" add -A
+git -C "$REPO" commit --quiet -m "add issue-list porcelain"
+run_sut
+[ "$RC" -ne 0 ] && _t13_rc=nonzero || _t13_rc=zero
+assert_eq "issue-list: exit non-zero" "nonzero" "$_t13_rc"
+assert_contains "issue-list: output names the file" "script.sh" "$OUT"
+assert_contains "issue-list: remediation helper present" "gh_issue_list_rest" "$OUT"
+
+# ---------------------------------------------------------------------------
+# Test 14: net-new `gh pr list` porcelain in a .sh file is flagged.
+# ---------------------------------------------------------------------------
+echo "Test 14: net-new gh-pr-list porcelain is flagged"
+make_repo
+printf '%s\n' "$PORC_PR_LIST" >> "$REPO/script.sh"
+git -C "$REPO" add -A
+git -C "$REPO" commit --quiet -m "add pr-list porcelain"
+run_sut
+[ "$RC" -ne 0 ] && _t14_rc=nonzero || _t14_rc=zero
+assert_eq "pr-list: exit non-zero" "nonzero" "$_t14_rc"
+assert_contains "pr-list: output names the file" "script.sh" "$OUT"
+assert_contains "pr-list: remediation helper present" "gh_pr_list_rest" "$OUT"
 
 report_results

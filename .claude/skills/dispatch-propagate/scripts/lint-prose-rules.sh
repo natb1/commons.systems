@@ -15,10 +15,10 @@ source "$SCRIPTS/lib.sh"
 PATTERN='echo([[:space:]]+-[a-zA-Z]+)?[[:space:]]+"\$\{?[A-Za-z_][A-Za-z0-9_]*\}?"[[:space:]]*\|[[:space:]]*jq'
 
 # Detect: net-new raw gh issue/pr porcelain that should use the lib.sh REST helpers.
-# Banned set: gh issue (view|edit|create|close|comment) and gh pr (view|edit|merge).
+# Banned set: gh issue (view|edit|create|close|comment|list) and gh pr (view|edit|merge|list).
 # `gh pr ready` is deliberately excluded. Built from non-contiguous ERE alternatives
 # so this assignment line cannot match itself.
-PORCELAIN_PATTERN='(^|[^[:alnum:]_])gh[[:space:]]+issue[[:space:]]+(view|edit|create|close|comment)([[:space:]]|$)|(^|[^[:alnum:]_])gh[[:space:]]+pr[[:space:]]+(view|edit|merge)([[:space:]]|$)'
+PORCELAIN_PATTERN='(^|[^[:alnum:]_])gh[[:space:]]+issue[[:space:]]+(view|edit|create|close|comment|list)([[:space:]]|$)|(^|[^[:alnum:]_])gh[[:space:]]+pr[[:space:]]+(view|edit|merge|list)([[:space:]]|$)'
 
 # Allow-marker for the porcelain rule: a standalone comment on the line immediately
 # preceding a call suppresses that one call. Reason text after the token is optional.
@@ -182,9 +182,11 @@ The token-to-helper mapping (subcommand on the left, helper on the right):
     issue create   gh_issue_create_rest
     issue close    gh_issue_close_rest
     issue comment  gh_issue_comment_rest
+    issue list     gh_issue_list_rest
     pr view        gh_pr_view_rest
     pr edit        gh_issue_edit_rest   (PRs are issues in REST — serves the --body edit; see gh_issue_edit_rest in lib.sh)
     pr merge       gh_pr_merge_rest
+    pr list        gh_pr_list_rest
 
 Exceptions:
   - Genuine GraphQL-only fields (closingIssuesReferences,
