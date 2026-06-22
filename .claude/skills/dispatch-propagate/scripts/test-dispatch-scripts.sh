@@ -25087,6 +25087,90 @@ else
 fi
 stop_teardown
 
+# --- Test #2261-D1.4: stale prior-session launch is ignored → normal Branch A park ---
+# A launch line from a DIFFERENT/old sessionId is a stale record carried forward
+# by a resume; the session-scoped scan (#2261) must ignore it, so with no
+# current-session launch the hook falls through to the normal Branch A
+# office-hours park.
+
+echo "Test: #2261 D1.4 stale prior-session launch ignored → normal Branch A park"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "implement" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+# No phase-completed marker.
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+# Fixture: old-session has a launch but NO notification; current session has a
+# record but no launch. The session-scoped scan must filter out the old-session
+# launch so the in-flight gate does not fire.
+cat > "$TMPDIR_TEST/transcript.jsonl" <<'EOF'
+{"type":"user","sessionId":"old-session-zzz","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: stale111"}]}}
+{"type":"assistant","sessionId":"cur-session-aaa","message":{"content":[{"type":"text","text":"working"}]}}
+EOF
+FIXTURE="$TMPDIR_TEST/transcript.jsonl"
+printf '%s\n' '{"transcript_path":"'"$FIXTURE"'","session_id":"cur-session-aaa"}' | "$TMPDIR_TEST/hooks/dispatch-stop.sh" >/dev/null 2>&1
+rc=$?
+assert_eq "#2261 D1.4 stale prior-session launch: hook exits 0" "0" "$rc"
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
+apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
+TOTAL=$((TOTAL + 1))
+if [[ "$apply_issue" == "123" && -n "$apply_reason" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2261 D1.4 stale prior-session launch: dispatch-apply-office-hours invoked with issue 123 + non-empty reason"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2261 D1.4 stale prior-session launch: dispatch-apply-office-hours invoked with issue 123 + non-empty reason"
+  echo "    apply-log: $apply_log"
+fi
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "#2261 D1.4 stale prior-session launch: spawn invoked exactly once" "1" "$spawn_calls"
+stop_teardown
+
+# --- Test #2261-D1.5: current-session launch detected despite stale other-session noise → hand-back ---
+# The live #2243 guard: a current-session launch with no notification IS
+# in-flight and must hand back, even when a stale completed launch from another
+# session is also present; proves session-scoping did not regress #2243.
+
+echo "Test: #2261 D1.5 current-session launch in-flight despite stale noise → hand-back"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "implement" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+# No phase-completed marker.
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+# Fixture: current session launched live222 with NO notification → in-flight.
+# Old session launched stale333 and received its notification → fully completed
+# and must be filtered out by session-scoping.
+cat > "$TMPDIR_TEST/transcript.jsonl" <<'EOF'
+{"type":"user","sessionId":"cur-session-aaa","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: live222"}]}}
+{"type":"user","sessionId":"old-session-zzz","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: stale333"}]}}
+{"type":"user","sessionId":"old-session-zzz","message":{"content":[{"type":"tool_result","content":"{\"taskId\":\"stale333\",\"status\":\"completed\"}"}]}}
+EOF
+FIXTURE="$TMPDIR_TEST/transcript.jsonl"
+printf '%s\n' '{"transcript_path":"'"$FIXTURE"'","session_id":"cur-session-aaa"}' | "$TMPDIR_TEST/hooks/dispatch-stop.sh" >/dev/null 2>&1
+rc=$?
+assert_eq "#2261 D1.5 current-session in-flight: hook exits 0 (hand-back)" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2261 D1.5 current-session in-flight: NOT parked on office-hours"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2261 D1.5 current-session in-flight: NOT parked on office-hours"
+  echo "    apply-log: $(cat "$STUB_DIR/apply-office-hours.log")"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/spawn-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2261 D1.5 current-session in-flight: NOT spawned (redundant tick suppressed)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2261 D1.5 current-session in-flight: NOT spawned (redundant tick suppressed)"
+  echo "    spawn-calls: $(cat "$STUB_DIR/spawn-calls.log")"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2261 D1.5 current-session in-flight: NOT self-closed"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2261 D1.5 current-session in-flight: NOT self-closed"
+fi
+stop_teardown
+
 # ============================================================================
 # dispatch-finalize-phase tests (#2243)
 # ============================================================================
