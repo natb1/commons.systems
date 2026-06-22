@@ -1,4 +1,5 @@
 import { logError } from "@commons-systems/errorutil/log";
+import { humanize } from "./reminders.js";
 
 /**
  * A parked issue waiting for office-hours attention.
@@ -176,4 +177,26 @@ export function parseQueueMetrics(data: Record<string, unknown>): QueueMetricsSn
     memberEmails,
     parked,
   };
+}
+
+/**
+ * Content signature for the parked-issues panel's now-derived output.
+ *
+ * The sort order depends only on `createdAt` (fixed per array), so it is covered
+ * by the caller's `parked`-reference dep; this key captures the now-derived
+ * per-row output — each item's `humanize(now − createdAt)` age string — in the
+ * panel's oldest-first sorted order. A memo keyed on this signature reuses its
+ * element (and skips the re-render) across a tick that changes none of those age
+ * labels. Empty array → "".
+ *
+ * Covers: per-row age label (in sorted order) — must mirror ParkedIssuesPanel's
+ * now-derived output. When adding a new now-derived field to ParkedIssuesPanel,
+ * add it here too or the memo will miss its changes.
+ */
+export function parkedPanelKey(parked: ParkedIssue[], now: Date): string {
+  const nowMs = now.getTime();
+  return [...parked]
+    .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+    .map((item) => humanize(nowMs - item.createdAt.getTime()))
+    .join("~");
 }

@@ -31,6 +31,12 @@ export function getDemoQueueMetrics(): QueueMetricsSnapshot {
     // memberEmails is a denormalized auth field stripped from the public seed
     // bundle (see vite-plugin-queue-seed.ts); the demo snapshot carries none.
     memberEmails: [],
+    // parked is hardcoded here rather than read from the virtual module: the
+    // vite plugin serializes the seed via JSON.stringify (see
+    // vite-plugin-queue-seed.ts), which turns Date objects into ISO strings and
+    // would break parseQueueMetrics's toDate() helper (it only accepts Date or
+    // Timestamp). Keeping the demo parked items as live Date objects here avoids
+    // that incompatibility.
     parked: [
       {
         number: 1466,

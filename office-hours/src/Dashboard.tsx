@@ -23,6 +23,7 @@ import { selectLatestSample, type UsageSample } from "./usage-samples.js";
 import { capacityBandKey } from "./capacity-band.js";
 import { remindersPanelKey } from "./reminders.js";
 import type { Reminder } from "./reminders.js";
+import { parkedPanelKey } from "./queue-metrics.js";
 import type { QueueMetricsSnapshot } from "./queue-metrics.js";
 import type { IssueSample } from "./issue-samples.js";
 import type { AuditAggregate } from "./audit-aggregates.js";
@@ -180,11 +181,13 @@ export function Dashboard({ user }: DashboardProps) {
     [reminders, remindersPanelKey(reminders, now)],
   );
   const parked = queueMetrics?.parked ?? [];
-  // ParkedIssuesPanel age labels are now-derived; key on parked-reference +
-  // the oldest item's age string (changes once per humanize bucket boundary).
+  // ParkedIssuesPanel age labels are now-derived; key on parked-reference + the
+  // per-row age strings (in sorted order). The key changes only when a displayed
+  // age label crosses a humanize bucket boundary, so a tick that changes no
+  // visible label reuses the same element (matching capacityEl/remindersEl).
   const parkedEl = useMemo(
     () => <ParkedIssuesPanel parked={parked} now={now} />,
-    [parked, now],
+    [parked, parkedPanelKey(parked, now)],
   );
 
   if (state.tier === "error") {
