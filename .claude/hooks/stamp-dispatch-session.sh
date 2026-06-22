@@ -14,7 +14,7 @@
 #     the event actually fires in --bg mode.
 # (b) Whether the hook command has working local `git` access in the worktree
 #     context where it runs — dispatch-stamp-session calls `git rev-parse`
-#     and `git log`; if git is unavailable or CWD is wrong the stamp silently
+#     and `git remote get-url`; if git is unavailable or CWD is wrong the stamp silently
 #     no-ops (never blocks).
 #
 # FALLBACK: if this hook proves unreliable for detached --bg sessions, add a
