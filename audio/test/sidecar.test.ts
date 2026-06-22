@@ -1036,6 +1036,11 @@ describe("corrupt sidecar — fail-closed", () => {
     expect(fileHandle.createWritable).not.toHaveBeenCalled();
     // Corrupt bytes on disk are preserved for recovery.
     expect(fileHandle._state.content).toBe("{not json");
+
+    // In-memory session still works for every caller (the merge applied to an empty model).
+    expect(await getPlayerState()).toMatchObject({ queue: ["a.mp3"], positionSeconds: 12 });
+    expect(await getMetadata("song.mp3")).toBeDefined();
+    expect(await getPlaylists()).toEqual({ Favs: ["a.mp3", "b.mp3"] });
   });
 
   it("missing sidecar (NotFoundError): savePlayerState DOES write (AC5)", async () => {
