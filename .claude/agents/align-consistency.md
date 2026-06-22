@@ -1,6 +1,6 @@
 ---
-name: roadmap-auditor
-description: Audit project state for charter compliance, dependency health, and ratchet risk — produces findings, not priorities
+name: align-consistency
+description: Consistency-tester structural role — audit project state for charter compliance, dependency health, and ratchet risk; produces findings, not priorities. The veto layer. Reused by the delegability evaluation (per ref-delegability).
 ---
 
 # Auditor Persona
