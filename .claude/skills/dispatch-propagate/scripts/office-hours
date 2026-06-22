@@ -148,7 +148,7 @@ job_id_for_name() {
 # attach_session_by_name <name> — exec `claude attach` on the background job named
 # <name>. The resume arms attach BY NAME, never by the selector's <sessionId>: a
 # --fork-session retry mints a NEW sessionId, so the original is stale, while the
-# name office-hours-<N> is the stable handle.
+# worktree basename is the stable handle.
 attach_session_by_name() {
   local name="$1" job_id
   job_id=$(job_id_for_name "$name")
@@ -161,33 +161,38 @@ attach_session_by_name() {
 
 # resume_session <sessionId> <N> <cwd> — resume a REMOVED-but-recoverable
 # originating session (#2240) in place. Mirrors dispatch-resume-worker's resume
-# mechanism INLINE — it is NOT invoked, because that script's worker-only
-# `^[0-9]+-` name gate rejects the office-hours-<N> name used here.
+# mechanism INLINE — it is NOT invoked, because that script submits a "continue"
+# prompt, whereas the office-hours resume must OMIT any prompt: the resumed
+# session is blocked on a human who should attach and drive, so without a
+# -p/--print prompt the --bg launch boots interactive and parks awaiting input
+# (mirroring the idle disposition). The session is named by the worktree
+# basename (`<N>-slug`), so it IS the original phase worker as far as the Stop
+# hook's `^[0-9]+-` discriminator is concerned.
 #
-# Kick the session as a --bg job named office-hours-<N>, rooted at <cwd> via a
-# subshell `cd` so SessionStart-derived attributes key on the right directory. A
-# successful resume requires BOTH a clean kick AND verified registration:
-# `claude --bg` returns BEFORE the daemon registers the session, and a
-# dead/colliding <sessionId> is rejected ASYNCHRONOUSLY (the kick returns 0, yet
-# no session ever registers). So gate on kick-rc-0 AND verify_agent_registered_
-# under, mirroring dispatch-resume-worker. On a failed kick OR a failed verify,
-# retry ONCE with --fork-session, which resumes off a fresh id derived from the
-# same transcript. Both attempts failing to register is a hard error (a clear
-# message beats a silent fresh-spawn).
+# Kick the session as a --bg job named by the worktree basename (`<N>-slug`),
+# rooted at <cwd> via a subshell `cd` so SessionStart-derived attributes key on
+# the right directory. A successful resume requires BOTH a clean kick AND
+# verified registration: `claude --bg` returns BEFORE the daemon registers the
+# session, and a dead/colliding <sessionId> is rejected ASYNCHRONOUSLY (the kick
+# returns 0, yet no session ever registers). So gate on kick-rc-0 AND
+# verify_agent_registered_under, mirroring dispatch-resume-worker. On a failed
+# kick OR a failed verify, retry ONCE with --fork-session, which resumes off a
+# fresh id derived from the same transcript. Both attempts failing to register
+# is a hard error (a clear message beats a silent fresh-spawn).
 #
 # THE FORKED-SESSIONID TRAP: --fork-session mints a NEW sessionId, so the
 # selector's <sessionId> is stale for attach. attach_session_by_name keys on the
-# stable name office-hours-<N>, never the original sessionId.
+# stable worktree basename, never the original sessionId.
 resume_session() {
-  local session_id="$1" num="$2" cwd="$3" name="office-hours-$2" rc=0
+  local session_id="$1" num="$2" cwd="$3" name="$(basename "$3")" rc=0
   ( cd "$cwd" && "$CLAUDE_CMD" --bg --name "$name" --permission-mode auto \
-      --resume "$session_id" "continue" ) >/dev/null 2>&1 || rc=$?
+      --resume "$session_id" ) >/dev/null 2>&1 || rc=$?
   if [[ "$rc" -ne 0 ]] || ! verify_agent_registered_under "$name" "$cwd"; then
     # Primary kick failed, or it returned 0 but no session registered (an
     # async-rejected stale/colliding id). Retry ONCE off a fresh forked id.
     rc=0
     ( cd "$cwd" && "$CLAUDE_CMD" --bg --name "$name" --permission-mode auto \
-        --resume "$session_id" --fork-session "continue" ) >/dev/null 2>&1 || rc=$?
+        --resume "$session_id" --fork-session ) >/dev/null 2>&1 || rc=$?
     if [[ "$rc" -ne 0 ]] || ! verify_agent_registered_under "$name" "$cwd"; then
       echo "office-hours: failed to resume session $session_id for #$num under name $name in $cwd (both --resume and --fork-session kicks failed to register a live session). Run 'claude agents' to inspect." >&2
       exit 1
@@ -247,7 +252,8 @@ case "$verb" in
   resume)
     # a b c = <N> <sessionId> <cwd>. The originating session was removed from the
     # daemon registry but its transcript is recoverable and its <N>-* worktree is
-    # on disk — resume it in place under name office-hours-<N>, then attach by name.
+    # on disk — resume it in place under the worktree basename (`<N>-slug`), then
+    # attach by name.
     resume_session "$b" "$a" "$c"
     ;;
   resume-provision)
