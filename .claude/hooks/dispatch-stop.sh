@@ -434,7 +434,7 @@ session_scheduled_wakeup() {
 # Grep for literal substrings (not echo-into-jq): the IDs are plain substrings,
 # so grep is robust and sidesteps the control-char trap
 # (.claude/rules/shell-json.md), mirroring dispatch-recover-dispatched-phase /
-# dispatch-detect-rate-limit-death.
+# dispatch-detect-transient-death.
 #
 # Session-scoped scan (#2261): the extractions run against the CURRENT session's
 # records only, not the whole file. A RESUMED session carries the prior run's
@@ -622,7 +622,7 @@ fi
 #   - marker absent AND this is one of Branch A's two continuation gates that
 #     RESUME the same session rather than concluding an attempt: a live
 #     idle-poller (session_scheduled_wakeup) or a transient rate-limit death
-#     (dispatch-detect-rate-limit-death). Counting an idle-poller would bump once
+#     (dispatch-detect-transient-death). Counting an idle-poller would bump once
 #     per poll cycle and blow the ceiling on a single healthy review phase
 #     (#1590). These mirror the gates at ~lines 383 and 397 below — keep the two
 #     in sync. (The rate-limit gate can fall through to an office-hours park when
@@ -637,7 +637,7 @@ fi
 if [ "$ISSUE_OFFICE_HOURS_PRESENT" = no ] \
    && { [ -n "$MARKER_PHASE" ] \
         || { ! session_scheduled_wakeup \
-             && ! "$SCRIPTS/dispatch-detect-rate-limit-death" "$TRANSCRIPT_PATH" 2>/dev/null; }; }; then
+             && ! "$SCRIPTS/dispatch-detect-transient-death" "$TRANSCRIPT_PATH" 2>/dev/null; }; }; then
   attempt_verdict=$("$SCRIPTS/dispatch-attempt-count" "$ISSUE_NUM" 2>/dev/null) || attempt_verdict=proceed
   if [ "$attempt_verdict" = escalate ]; then
     # Re-read the just-bumped total to name it in the office-hours reason (AC4).
@@ -681,7 +681,7 @@ if [ -z "$MARKER_PHASE" ]; then
   # retry. Checked AFTER the scheduled-wakeup gate (a live poller still takes
   # precedence) and BEFORE the office-hours park below. On a positive detection
   # arm a backed-off resume of the dead session in place.
-  if "$SCRIPTS/dispatch-detect-rate-limit-death" "$TRANSCRIPT_PATH"; then
+  if "$SCRIPTS/dispatch-detect-transient-death" "$TRANSCRIPT_PATH"; then
     _sid=$(jq -r '.sessionId // empty' "$STATE_FILE" 2>/dev/null)
     _cwd=$(jq -r '.cwd // empty' "$STATE_FILE" 2>/dev/null)
     _model=$("$SCRIPTS/dispatch-phase-model" "$CURRENT_PHASE" 2>/dev/null || true)
