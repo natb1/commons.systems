@@ -34,10 +34,15 @@ export function readNode(dir: string, id: string): IntentionNode {
 /**
  * Read every `*.md` node file in `dir`, validating each, sorted by id for a
  * stable result.
+ *
+ * `README.md` is a non-node companion doc the backfill writes alongside the
+ * node files (and `pruneStaleNodes` preserves) — it has no frontmatter, so it
+ * is excluded here to match that contract. Without this, `listNodes` on the
+ * real store directory throws on the README's missing fence.
  */
 export function listNodes(dir: string): IntentionNode[] {
   return readdirSync(dir)
-    .filter((name) => name.endsWith(".md"))
+    .filter((name) => name.endsWith(".md") && name !== "README.md")
     .map((name) => name.slice(0, -".md".length))
     .sort()
     .map((id) => readNode(dir, id));

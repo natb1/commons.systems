@@ -1,4 +1,4 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -82,5 +82,21 @@ describe("listNodes", () => {
     const nodes = listNodes(dir);
     expect(nodes).toHaveLength(3);
     expect(nodes.map((n) => n.id)).toEqual(["a-node", "b-node", "c-node"]);
+  });
+
+  it("skips the non-node README.md companion doc", () => {
+    const dir = tempDir();
+    writeNode(dir, {
+      id: "leaf-1",
+      statement: "Do the small thing.",
+      owner: "ai",
+      status: "raw",
+    });
+    // The backfill writes a frontmatter-less README.md alongside the node
+    // files; listNodes must skip it rather than throw on its missing fence.
+    writeFileSync(join(dir, "README.md"), "# Intentions store\n\nNot a node.\n");
+
+    const nodes = listNodes(dir);
+    expect(nodes.map((n) => n.id)).toEqual(["leaf-1"]);
   });
 });
