@@ -14,7 +14,7 @@
 // sidecar lives inside the folder and travels with it, so keying on the id
 // (which embeds the folder name) would break portability and folder rename.
 
-import { logError } from "@commons-systems/errorutil/log";
+import { createSidecar, serializeSidecar, isPlainObject } from "@commons-systems/sidecar";
 
 const SIDECAR_DIR = ".commons-print";
 const SIDECAR_FILE = "index.json";
@@ -34,10 +34,6 @@ export interface SidecarData {
 /** A fresh, empty model. */
 function emptyModel(): SidecarData {
   return { version: 1, metadata: {}, positions: {} };
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /**
@@ -74,41 +70,6 @@ function coercePositions(raw: unknown): SidecarData["positions"] {
 }
 
 /**
- * Parse sidecar text into a model. Tolerant of untrusted/partial on-disk
- * contents (input validation at the system edge, not a banned fallback):
- * - JSON parse failure or a non-object top level → log + fresh empty model.
- * - A missing/wrong-typed `metadata` or `positions` field is coerced to `{}`
- *   independently, so malformed metadata does not discard good positions.
- * - Within each field, wrong-typed leaves are dropped: positions keeps only
- *   string values; metadata keeps only string `title` / number `pageCount`.
- * - `version` is forced to 1.
- * Never throws.
- */
-export function parseSidecar(text: string): SidecarData {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch (err) {
-    logError(err, { operation: "parseSidecar" });
-    return emptyModel();
-  }
-  if (!isPlainObject(parsed)) {
-    logError(new Error("sidecar root is not an object"), { operation: "parseSidecar" });
-    return emptyModel();
-  }
-  return {
-    version: 1,
-    metadata: coerceMetadata(parsed.metadata),
-    positions: coercePositions(parsed.positions),
-  };
-}
-
-/** Serialize a model to JSON text (pretty-printed for sync-friendly diffs). */
-export function serializeSidecar(data: SidecarData): string {
-  return JSON.stringify(data, null, 2);
-}
-
-/**
  * Return a NEW model where the patch's per-key entries win but untouched keys
  * are preserved. This is the no-clobber guarantee: merging one position never
  * drops the metadata cache or sibling positions.
@@ -125,134 +86,39 @@ export function mergeSidecar(
 }
 
 // ---------------------------------------------------------------------------
-// B. FSA I/O over the directory handle (exported for tests)
+// B. Centralized machinery, wired with the print schema (Unit 2306)
 // ---------------------------------------------------------------------------
 
-/**
- * Read and parse the sidecar from `dir`. A missing `.commons-print` directory
- * or `index.json` file (NotFoundError) yields an empty model. Any other
- * unexpected error is logged and also yields an empty model, so a flaky read
- * never crashes the list render. Never throws.
- */
-export async function readSidecar(dir: FileSystemDirectoryHandle): Promise<SidecarData> {
-  try {
-    const sidecarDir = await dir.getDirectoryHandle(SIDECAR_DIR);
-    const fileHandle = await sidecarDir.getFileHandle(SIDECAR_FILE);
-    const file = await fileHandle.getFile();
-    return parseSidecar(await file.text());
-  } catch (err) {
-    if (err instanceof DOMException && err.name === "NotFoundError") {
-      return emptyModel();
-    }
-    logError(err, { operation: "readSidecar" });
-    return emptyModel();
-  }
-}
+// One singleton sidecar handle per app: the shared factory owns the parse/read/
+// write tail, the retained directory handle, the lazily-loaded in-memory model,
+// and the single-flight write chain. The print app supplies only its
+// schema-specific bits below — directory/file names, the empty model, the
+// per-field coercion assembled in `coerce`, and the no-clobber `mergeSidecar`.
+const sidecar = createSidecar<SidecarData, Partial<Pick<SidecarData, "metadata" | "positions">>>({
+  sidecarDirName: SIDECAR_DIR,
+  sidecarFileName: SIDECAR_FILE,
+  emptyModel,
+  coerce: (parsed) => ({
+    version: 1,
+    metadata: coerceMetadata(parsed.metadata),
+    positions: coercePositions(parsed.positions),
+  }),
+  mergeSidecar,
+});
 
-/**
- * Write `data` to the sidecar, creating `.commons-print/index.json` as needed.
- * Mirrors budget/src/local-file.ts: on a write/close failure, abort() the
- * writable (discarding the temp write rather than committing a truncated file,
- * since createWritable defaults to keepExistingData: false) then rethrow.
- */
-export async function writeSidecar(
-  dir: FileSystemDirectoryHandle,
-  data: SidecarData,
-): Promise<void> {
-  const sidecarDir = await dir.getDirectoryHandle(SIDECAR_DIR, { create: true });
-  const fileHandle = await sidecarDir.getFileHandle(SIDECAR_FILE, { create: true });
-  const writable = await fileHandle.createWritable();
-  try {
-    await writable.write(serializeSidecar(data));
-    await writable.close();
-  } catch (e) {
-    await writable.abort();
-    throw e;
-  }
-}
+const { parseSidecar, readSidecar, writeSidecar, setLocalDirectory, ensureLoaded, enqueueWrite, flushWrites } =
+  sidecar;
+
+// Re-export the shared surface the rest of the app (and the Unit 7 tests)
+// consume. `ensureLoaded` is also imported by local-folder-ui.ts, so it is
+// re-exported. `enqueueWrite` stays private — it backs only the accessors and
+// the position store below. (print never exported `clearLocalDirectory`, so it
+// is not re-exported here — no behavior change.)
+export { serializeSidecar };
+export { parseSidecar, readSidecar, writeSidecar, setLocalDirectory, ensureLoaded, flushWrites };
 
 // ---------------------------------------------------------------------------
-// C. Handle retention + in-memory model + serialized writes (stateful core)
-// ---------------------------------------------------------------------------
-
-let dirHandle: FileSystemDirectoryHandle | null = null;
-let writable = false;
-
-// The single in-memory model. `cachedModel` is the loaded model; `loadPromise`
-// dedupes a concurrent first-load. Both are reset by setLocalDirectory so the
-// next access re-reads from the new handle.
-let cachedModel: SidecarData | null = null;
-let loadPromise: Promise<SidecarData> | null = null;
-
-// Single-flight write chain: every mutation appends to this promise so the
-// debounced position save (Unit 6) and the enrichment batch (Unit 5) cannot
-// race or interleave on the file. Each link merges its patch against the result
-// of the prior link, then persists (disk write gated by `writable`).
-let writeChain: Promise<void> = Promise.resolve();
-
-/**
- * Store the retained directory handle and writable flag (called by Unit 4 after
- * the folder is picked / permission resolved). Invalidates the cached model so
- * the next access re-reads lazily from the new handle.
- */
-export function setLocalDirectory(handle: FileSystemDirectoryHandle, isWritable: boolean): void {
-  dirHandle = handle;
-  writable = isWritable;
-  cachedModel = null;
-  loadPromise = null;
-  writeChain = Promise.resolve();
-}
-
-/**
- * Ensure the in-memory model is loaded (lazily, once) and return it. With no
- * directory bound, returns an empty model. readSidecar never throws.
- */
-export async function ensureLoaded(): Promise<SidecarData> {
-  if (cachedModel !== null) return cachedModel;
-  if (loadPromise === null) {
-    const handle = dirHandle;
-    loadPromise = (handle === null ? Promise.resolve(emptyModel()) : readSidecar(handle)).then(
-      (model) => {
-        cachedModel = model;
-        return model;
-      },
-    );
-  }
-  return loadPromise;
-}
-
-/**
- * Queue a merge-and-persist onto the single-flight write chain. The merge runs
- * inside the task (after ensureLoaded) so each link merges against the prior
- * link's result — the no-clobber serialization guarantee. The in-memory model
- * is ALWAYS updated so the current session stays consistent; the disk write is
- * gated by `writable` (constraint 4: extraction/positions work in-memory even
- * when the folder is not writable, and save silently no-ops on disk). The
- * per-link catch keeps one failed write from poisoning the chain.
- */
-function enqueueWrite(patch: Partial<Pick<SidecarData, "metadata" | "positions">>): Promise<void> {
-  writeChain = writeChain
-    .then(async () => {
-      const model = await ensureLoaded();
-      const merged = mergeSidecar(model, patch);
-      cachedModel = merged;
-      if (writable && dirHandle !== null) {
-        await writeSidecar(dirHandle, merged);
-      }
-    })
-    .catch((err) => {
-      logError(err, { operation: "sidecarWrite" });
-    });
-  return writeChain;
-}
-
-/** Drain the pending write chain. Unit 7 tests await this to assert persistence. */
-export function flushWrites(): Promise<void> {
-  return writeChain;
-}
-
-// ---------------------------------------------------------------------------
-// D. Accessors for Units 5 & 6
+// C. Accessors for Units 5 & 6
 // ---------------------------------------------------------------------------
 
 /**
@@ -295,7 +161,7 @@ export async function cacheMetadataBatch(
 }
 
 // ---------------------------------------------------------------------------
-// E. PositionStore interface + sidecar-backed implementation
+// D. PositionStore interface + sidecar-backed implementation
 // ---------------------------------------------------------------------------
 
 export interface PositionStore {
