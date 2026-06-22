@@ -18,6 +18,7 @@
     "functions",
     "htmlutil",
     "idbutil",
+    "intentionsutil",
     "landing",
     "local-first",
     "mediautil",
