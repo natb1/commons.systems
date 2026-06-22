@@ -25,6 +25,7 @@
     "@commons-systems/local-first": "*",
     "@commons-systems/mediautil": "*",
     "@commons-systems/router": "*",
+    "@commons-systems/sidecar": "*",
     "@commons-systems/style": "*",
     "epubjs": "^0.3.93",
     "firebase": "^12.9.0",
