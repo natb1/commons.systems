@@ -675,7 +675,15 @@ def outcome_rates($o):
     } ) as $baseline_lens
 
 | {
-    window: $win,
+    window: ( $win + {
+      sidecar_eligible:  ( [ $sessions[] | select(.type=="worker") ] | length ),
+      sidecar_present:   ( [ $sessions[] | select(.type=="worker" and .artifact!=null) ] | length ),
+      sidecar_present_rate:
+        ( ( [ $sessions[] | select(.type=="worker") ] | length ) as $elig
+          | if $elig==0 then null
+            else ( [ $sessions[] | select(.type=="worker" and .artifact!=null) ] | length ) / $elig
+            end )
+    } ),
     price_model: {
       note: "price_proxy_usd is an Opus-list-price-equivalent USD proxy for RANKING (uniform rate, not the bill); cost_usd is the truthful per-model bill from actual_rates_per_mtok",
       input_per_mtok: RATE_INPUT,

@@ -281,6 +281,8 @@ function loadPayload(raw) {
     until: win.until,
     files_scanned: requireNumber(win, "window", "files_scanned"),
     files_failed: requireNumber(win, "window", "files_failed"),
+    sidecar_eligible: requireNumber(win, "window", "sidecar_eligible"),
+    sidecar_present: requireNumber(win, "window", "sidecar_present"),
   };
 
   const totals = {

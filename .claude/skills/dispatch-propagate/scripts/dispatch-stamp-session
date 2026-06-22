@@ -174,7 +174,10 @@ fi
 # Reject path-traversal / control chars. The session id is a bare stem (no path
 # component), so a slash, `..`, or control char is malformed → exit 2. The
 # transcript path is a legitimate absolute path (slashes expected), so reject
-# only `..` and control chars there.
+# only an actual `..` traversal sequence (anchored: a bare `..`, a leading
+# `../`, a trailing `/..`, or an embedded `/../`) and control chars — NOT a
+# `..` substring inside a single path segment (e.g. `/home/user/..foo/bar.jsonl`
+# is a legitimate path and must not be rejected).
 case "$SESSION_ID" in
   *..*|*/*|*[[:cntrl:]]*)
     echo "dispatch-stamp-session: --session-id contains illegal characters: $SESSION_ID" >&2
@@ -182,7 +185,7 @@ case "$SESSION_ID" in
     ;;
 esac
 case "$TRANSCRIPT_PATH" in
-  *..*|*[[:cntrl:]]*)
+  '..'|'../'*|*'/..'|*'/../'*|*[[:cntrl:]]*)
     echo "dispatch-stamp-session: --transcript-path contains illegal characters: $TRANSCRIPT_PATH" >&2
     exit 2
     ;;
