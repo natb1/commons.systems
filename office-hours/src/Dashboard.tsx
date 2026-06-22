@@ -184,7 +184,6 @@ export function Dashboard({ user }: DashboardProps) {
   // the oldest item's age string (changes once per humanize bucket boundary).
   const parkedEl = useMemo(
     () => <ParkedIssuesPanel parked={parked} now={now} />,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [parked, now],
   );
 

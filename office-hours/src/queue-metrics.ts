@@ -107,9 +107,9 @@ export function parseQueueMetrics(data: Record<string, unknown>): QueueMetricsSn
   // gate below. A missing, null, or malformed parked field must never fail the
   // whole snapshot parse — it degrades gracefully to an empty array instead.
   const parked: ParkedIssue[] = Array.isArray(data.parked)
-    ? (data.parked as unknown[]).flatMap((item) => {
+    ? (data.parked as unknown[]).flatMap((item) => { // type-safety-ok: lenient parse casts unvalidated Firestore data to iterate it safely
         if (typeof item !== "object" || item === null) return [];
-        const i = item as Record<string, unknown>;
+        const i = item as Record<string, unknown>; // type-safety-ok: cast each item to access fields by name in lenient parse
         const number = typeof i.number === "number" && Number.isFinite(i.number) ? i.number : null;
         const title = typeof i.title === "string" ? i.title : null;
         const url = typeof i.url === "string" ? i.url : null;

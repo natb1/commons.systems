@@ -86,11 +86,11 @@ describe("serializeQueueMetrics / parseQueueMetrics", () => {
   });
 
   it("parses a doc with no parked field with parked: [] (back-compat regression guard)", () => {
-    const doc = serializeQueueMetrics(base) as Record<string, unknown>;
+    const doc = serializeQueueMetrics(base) as Record<string, unknown>; // type-safety-ok: test-only cast to mutate serialized doc before parsing
     delete doc.parked;
     const parsed = parseQueueMetrics(doc);
     expect(parsed).not.toBeNull();
-    expect(parsed!.parked).toEqual([]);
+    expect(parsed?.parked).toEqual([]);
   });
 
   it("skips malformed parked items while the core snapshot still parses", () => {
@@ -105,8 +105,8 @@ describe("serializeQueueMetrics / parseQueueMetrics", () => {
     };
     const parsed = parseQueueMetrics(doc);
     expect(parsed).not.toBeNull();
-    expect(parsed!.parked).toHaveLength(1);
-    expect(parsed!.parked[0].number).toBe(99);
+    expect(parsed?.parked).toHaveLength(1);
+    expect(parsed?.parked[0].number).toBe(99);
   });
 
   it("round-trips a snapshot with a non-empty parked array", () => {
@@ -127,12 +127,12 @@ describe("serializeQueueMetrics / parseQueueMetrics", () => {
     const serialized = serializeQueueMetrics(snapshot);
     const parsed = parseQueueMetrics(serialized);
     expect(parsed).not.toBeNull();
-    expect(parsed!.parked).toHaveLength(1);
-    expect(parsed!.parked[0].number).toBe(1466);
-    expect(parsed!.parked[0].title).toBe("office-hours: surface parked dispatch:office-hours work on the dashboard");
-    expect(parsed!.parked[0].url).toBe("https://github.com/natb1/commons.systems/issues/1466");
-    expect(parsed!.parked[0].createdAt).toEqual(createdAt);
-    expect(parsed!.parked[0].repo).toBe("natb1/commons.systems");
-    expect(parsed!.parked[0].phase).toBe("dispatch:plan");
+    expect(parsed?.parked).toHaveLength(1);
+    expect(parsed?.parked[0].number).toBe(1466);
+    expect(parsed?.parked[0].title).toBe("office-hours: surface parked dispatch:office-hours work on the dashboard");
+    expect(parsed?.parked[0].url).toBe("https://github.com/natb1/commons.systems/issues/1466");
+    expect(parsed?.parked[0].createdAt).toEqual(createdAt);
+    expect(parsed?.parked[0].repo).toBe("natb1/commons.systems");
+    expect(parsed?.parked[0].phase).toBe("dispatch:plan");
   });
 });

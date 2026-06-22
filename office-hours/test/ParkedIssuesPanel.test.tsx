@@ -54,7 +54,7 @@ describe("ParkedIssuesPanel", () => {
       const link = li.querySelector(".parked-issue-title");
       expect(link).not.toBeNull();
       expect(link?.tagName).toBe("A");
-      expect((link as HTMLAnchorElement).href).toMatch(/github\.com/);
+      expect((link as HTMLAnchorElement).href).toMatch(/github\.com/); // type-safety-ok: DOM cast to access typed href; element kind confirmed by tagName check above
       expect(link?.textContent).not.toBe("");
 
       const age = li.querySelector(".parked-issue-age");

@@ -73,7 +73,7 @@ describe("Dashboard demo tier (user=null)", () => {
     const grid = container.querySelector(".panel-grid");
     expect(grid).not.toBeNull();
     // capacity, pace, history, backlog, audit, reminders, queue-metrics, parked
-    expect(grid!.children).toHaveLength(8);
+    expect(grid?.children).toHaveLength(8);
   });
 
   it("marks the three full-width panels (history, backlog, audit) as panel-grid-full", () => {

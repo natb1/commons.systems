@@ -399,7 +399,7 @@ describe("sampleDispatchQueueCore", () => {
         expect(query).toBe(buildOfficeHoursQuery("natb1/commons.systems"));
         return fakeParked;
       },
-      firestore: store as unknown as Firestore,
+      firestore: store as unknown as Firestore, // type-safety-ok: test-only cast of in-memory stub to Firestore interface
       namespace: "office-hours/prod",
       queueRepos: ["natb1/commons.systems"],
       groupId: "group-1",
@@ -407,7 +407,7 @@ describe("sampleDispatchQueueCore", () => {
       now,
     });
 
-    const written = store._docs.get("office-hours/prod/metrics/dispatch-queue") as Record<
+    const written = store._docs.get("office-hours/prod/metrics/dispatch-queue") as Record< // type-safety-ok: test-only cast to access written doc fields
       string,
       unknown
     >;
@@ -457,7 +457,7 @@ describe("sampleDispatchQueueCore", () => {
     await sampleDispatchQueueCore({
       searchIssueCount: async (query: string) => counts[query],
       searchIssueDetails: async (query: string) => parkedByRepo[query] ?? [],
-      firestore: store as unknown as Firestore,
+      firestore: store as unknown as Firestore, // type-safety-ok: test-only cast of in-memory stub to Firestore interface
       namespace: "office-hours/prod",
       queueRepos: [repoA, repoB],
       groupId: "group-1",
@@ -465,11 +465,11 @@ describe("sampleDispatchQueueCore", () => {
       now,
     });
 
-    const written = store._docs.get("office-hours/prod/metrics/dispatch-queue") as Record<
+    const written = store._docs.get("office-hours/prod/metrics/dispatch-queue") as Record< // type-safety-ok: test-only cast to access written doc fields
       string,
       unknown
     >;
-    const parked = written.parked as ParkedIssue[];
+    const parked = written.parked as ParkedIssue[]; // type-safety-ok: test-only cast to inspect parked array written to store
     expect(parked).toHaveLength(2);
     expect(parked.map((p) => p.number)).toEqual([1, 2]);
   });

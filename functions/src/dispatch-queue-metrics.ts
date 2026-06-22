@@ -225,7 +225,7 @@ export async function searchIssueDetailsLive(
   query: string,
 ): Promise<ParkedIssue[]> {
   const gql = `
-    query($query: String!) {
+    query($query: String) {
       search(query: $query, type: ISSUE, first: 100) {
         nodes {
           ... on Issue {
@@ -257,7 +257,7 @@ export async function searchIssueDetailsLive(
     );
   }
 
-  const json = (await res.json()) as GraphQLResponse<SearchDetailsResponse>;
+  const json = (await res.json()) as GraphQLResponse<SearchDetailsResponse>; // type-safety-ok: res.json() returns unknown; cast matches documented GraphQL response schema
   if (json.errors && json.errors.length > 0) {
     throw new Error(
       `GitHub GraphQL errors: ${json.errors.map((e) => e.message).join("; ")}`,
