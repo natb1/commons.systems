@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   createLocalFolderMediaSource,
   type LocalDirEntryLike,
+  type LocalFolderMediaSource,
 } from "../src/local-folder";
 
 interface TestItem {
@@ -229,5 +230,70 @@ describe("resolveToBlob", () => {
     };
 
     await expect(source.resolveToBlob(item)).rejects.toThrow("file removed");
+  });
+});
+
+describe("resolveToFile", () => {
+  it("returns the File for a present item with correct name, size, and lastModified", async () => {
+    const content = "hello world";
+    const file = new File([content], "doc.txt", { lastModified: 12345678 });
+    const dir = makeFakeDirectory([{ kind: "file", name: "doc.txt", file }]);
+    const source = createLocalFolderMediaSource<TestItem>({
+      directory: dir,
+      toItem,
+    }) as LocalFolderMediaSource<TestItem>;
+
+    const items = await source.list();
+    const result = await source.resolveToFile(items[0]);
+
+    expect(result.name).toBe("doc.txt");
+    expect(result.size).toBe(new TextEncoder().encode(content).byteLength);
+    expect(result.lastModified).toBe(12345678);
+  });
+
+  it("throws with 'Local file no longer present' when id is absent after re-scan", async () => {
+    const dir = {
+      values(): AsyncIterableIterator<LocalDirEntryLike> {
+        return (async function* () {})();
+      },
+    };
+    const source = createLocalFolderMediaSource<TestItem>({
+      directory: dir,
+      toItem,
+    }) as LocalFolderMediaSource<TestItem>;
+
+    const missingItem: TestItem = {
+      id: "id:gone.txt",
+      addedAt: new Date(1000).toISOString(),
+      name: "gone.txt",
+    };
+
+    await expect(source.resolveToFile(missingItem)).rejects.toThrow(
+      /Local file no longer present/,
+    );
+  });
+
+  it("coalesces onto an in-flight scan", async () => {
+    const content = "hello world";
+    const file = new File([content], "doc.txt", { lastModified: 1000 });
+    const dir = makeFakeDirectory([{ kind: "file", name: "doc.txt", file }]);
+    const source = createLocalFolderMediaSource<TestItem>({
+      directory: dir,
+      toItem,
+    }) as LocalFolderMediaSource<TestItem>;
+
+    const presentItem: TestItem = {
+      id: "id:doc.txt",
+      addedAt: new Date(1000).toISOString(),
+      name: "doc.txt",
+    };
+
+    // Start a scan but do not await it: resolveToFile must coalesce onto this
+    // in-flight scan rather than observe the momentarily-empty index and re-scan.
+    const p1 = source.list();
+    const result = await source.resolveToFile(presentItem);
+
+    expect(result.name).toBe("doc.txt");
+    await p1;
   });
 });
