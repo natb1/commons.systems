@@ -12,6 +12,7 @@
 #                                       that needs Opus)
 #   fix-conflicts → claude-sonnet-4-6  (#2042: mechanical patch work; no product-code authoring
 #                                       that needs Opus)
+#   main-qa      → claude-sonnet-4-6   (#2274: review-like; no product-code authoring)
 #   *            → (empty)             unmapped phases inherit the session default (Opus)
 #
 # Generated policy override (#2028):
@@ -63,7 +64,7 @@ PHASE="$1"
 
 # Hardcoded default for this phase (empty → inherit the session default, Opus).
 case "$PHASE" in
-  qa|review|fix-checks|fix-conflicts)
+  qa|review|fix-checks|fix-conflicts|main-qa)
     DEFAULT_MODEL="claude-sonnet-4-6"
     ;;
   *)

@@ -32,9 +32,11 @@
 # detached `HEAD`, and any `office-hours-*` branch. A no-op emits at most one
 # short stderr diagnostic and exits 0 — it must NEVER block session start.
 #
-# Mode A is idempotent w.r.t. a backfilled pr: if the sidecar already exists and
-# carries a non-null `.pr`, that value is preserved (everything else is
-# re-derived); otherwise `pr` is written as null.
+# Mode A is idempotent w.r.t. a backfilled pr and the session-start base_sha: if
+# the sidecar already exists, a non-null `.pr` and a non-empty `.base_sha` are
+# preserved (base_sha stays the session-start anchor across resumes); the
+# remaining git-sourced fields and the timestamp are re-derived. When no prior
+# sidecar exists, `pr` is written as null and base_sha is the current HEAD.
 #
 # Mode B — PR backfill (run once a PR number is known). Locates the sidecar by
 # the session id (a UUID) under the projects root via a maxdepth-2 find, then
@@ -172,7 +174,10 @@ fi
 # Reject path-traversal / control chars. The session id is a bare stem (no path
 # component), so a slash, `..`, or control char is malformed → exit 2. The
 # transcript path is a legitimate absolute path (slashes expected), so reject
-# only `..` and control chars there.
+# only an actual `..` traversal sequence (anchored: a bare `..`, a leading
+# `../`, a trailing `/..`, or an embedded `/../`) and control chars — NOT a
+# `..` substring inside a single path segment (e.g. `/home/user/..foo/bar.jsonl`
+# is a legitimate path and must not be rejected).
 case "$SESSION_ID" in
   *..*|*/*|*[[:cntrl:]]*)
     echo "dispatch-stamp-session: --session-id contains illegal characters: $SESSION_ID" >&2
@@ -180,7 +185,7 @@ case "$SESSION_ID" in
     ;;
 esac
 case "$TRANSCRIPT_PATH" in
-  *..*|*[[:cntrl:]]*)
+  '..'|'../'*|*'/..'|*'/../'*|*[[:cntrl:]]*)
     echo "dispatch-stamp-session: --transcript-path contains illegal characters: $TRANSCRIPT_PATH" >&2
     exit 2
     ;;
@@ -238,15 +243,25 @@ fi
 # Locate the sidecar path: transcript with .jsonl → .dispatch-stamp.json.
 sidecar="${TRANSCRIPT_PATH%.jsonl}.dispatch-stamp.json"
 
-# Idempotency: a re-run re-derives every git-sourced field (repo/issue/branch/
-# base_sha) and the timestamp, but must PRESERVE a non-null `.pr` written by a
-# prior --backfill-pr — a re-stamp must never clobber a known PR number back to
-# null. Only `.pr` is carried forward; nothing else is preserved.
+# Idempotency: Mode A runs on both `startup` and `resume`. `base_sha` is one of
+# the audit join keys {repo, issue, pr, base_sha} and must anchor the session's
+# STARTING ground truth — a resume after committed work must NOT advance it to
+# the post-resume HEAD. When the sidecar already exists, preserve its `base_sha`
+# (and a non-null `.pr` from a prior `--backfill-pr`); only the first (startup)
+# write derives `base_sha` from HEAD. `repo`/`issue`/`branch` are stable within
+# a session and are harmlessly re-derived. `stamped_at` deliberately DOES
+# re-derive on every stamp: unlike `base_sha` it is not a join key (not carried
+# into the audit `artifact` record), so it records the most-recent stamp time,
+# not session start.
 pr=null
 if [[ -f "$sidecar" ]]; then
   existing_pr=$(jq '.pr' "$sidecar" 2>/dev/null || echo null)
   if [[ -n "$existing_pr" && "$existing_pr" != "null" ]]; then
     pr="$existing_pr"
+  fi
+  existing_base_sha=$(jq -r '.base_sha // empty' "$sidecar" 2>/dev/null || true)
+  if [[ -n "$existing_base_sha" ]]; then
+    base_sha="$existing_base_sha"
   fi
 fi
 

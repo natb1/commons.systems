@@ -1,0 +1,20 @@
+{
+  "name": "@commons-systems/sidecar",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "lint": "eslint src/",
+    "test": "vitest run"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@commons-systems/errorutil": "*"
+  },
+  "devDependencies": {
+    "@commons-systems/config": "file:../../config",
+    "typescript": "^5.7.3"
+  }
+}

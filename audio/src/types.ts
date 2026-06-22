@@ -25,3 +25,13 @@ export type LibraryItem = AudioItem & {
   readonly origin: AudioOrigin;
   readonly localName?: string;
 };
+
+export interface AudioTags {
+  title?: string;
+  artist?: string;
+  album?: string;
+  trackNumber?: number;
+  genre?: string;
+  year?: number;
+  duration?: number;
+}

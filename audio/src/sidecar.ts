@@ -1,0 +1,283 @@
+// Owns the `.commons-audio/index.json` sidecar for a local (on-disk) audio
+// folder: one in-memory JSON model holding ALL local items' metadata cache plus
+// the player-state and playlists for local items, persisted back into the
+// user's own folder so the data rides their folder sync and works fully
+// unauthenticated.
+//
+// Cloud items are untouched (they use Firestore). This module is the single
+// owner of the retained directory handle and the only writer of the sidecar —
+// the metadata cache path (Unit 3) and the player-state path funnel their
+// writes through here so saving the player position never clobbers the metadata
+// cache or a sibling entry.
+//
+// The metadata map is keyed on the BARE FILENAME (`localName`), NOT
+// `item.storagePath`: a local item's `storagePath` is the empty string (see
+// types.ts / local-source.ts toItem), so keying on it would collide every local
+// item on `""`. The persisted player-state queue is LOCAL-ONLY and identifies
+// the current track by its `localName` (a filename), NOT a numeric queue index:
+// the live in-memory queue interleaves cloud + local items, so a mixed-queue
+// numeric index could not round-trip through a local-only persisted queue.
+
+import { createSidecar, serializeSidecar, isPlainObject } from "@commons-systems/sidecar";
+import type { AudioTags } from "./types.js";
+
+const SIDECAR_DIR = ".commons-audio";
+const SIDECAR_FILE = "index.json";
+
+// ---------------------------------------------------------------------------
+// A. Pure schema + helpers (exported for Unit 8 tests)
+// ---------------------------------------------------------------------------
+
+/**
+ * Persisted player-state for the LOCAL queue. The live queue interleaves cloud +
+ * local items, but only the local items survive a reload, so the queue is a list
+ * of `localName`s and the current track is named (not indexed).
+ */
+export interface PlayerState {
+  /** Ordered localNames of the local-only persisted queue. */
+  queue: string[];
+  /** localName of the current track, when that track is local. */
+  currentLocalName?: string;
+  /** Playback position (seconds) of the current track. */
+  positionSeconds?: number;
+}
+
+/**
+ * A cached metadata entry: the extracted tags plus a content fingerprint (the
+ * file's `size` + `lastModified` at extraction time). The fingerprint lets the
+ * enrichment path detect when a file's content has changed since its tags were
+ * cached, so a stale entry is re-extracted rather than overlaid forever.
+ */
+export interface CachedMetadata {
+  tags: AudioTags;
+  /** FSA File.size at extraction time (content fingerprint). */
+  size: number;
+  /** FSA File.lastModified (ms since epoch) at extraction time. */
+  lastModified: number;
+}
+
+export interface SidecarData {
+  version: 2;
+  /** Metadata cache, keyed by localName (bare filename). */
+  metadata: Record<string, CachedMetadata>;
+  /** Player-state for the local queue (absent until first saved). */
+  playerState?: PlayerState;
+  /** Playlists, keyed by name; each value is a list of localNames. */
+  playlists?: Record<string, string[]>;
+}
+
+/** The shape a patch may carry — an arbitrary subset of fields, playerState partial. */
+type SidecarPatch = Partial<{
+  metadata: Record<string, CachedMetadata>;
+  playerState: Partial<PlayerState>;
+  playlists: Record<string, string[]>;
+}>;
+
+/** A fresh, empty model. playerState stays undefined; playlists stays `{}`. */
+function emptyModel(): SidecarData {
+  return { version: 2, metadata: {}, playlists: {} };
+}
+
+/** Coerce a raw value into typed `AudioTags`, keeping only leaves whose type
+ * matches (`title`/`artist`/`album`/`genre` strings; `trackNumber`/`year`/
+ * `duration` finite numbers). Wrong-typed leaves are dropped so a malformed
+ * on-disk entry can never surface as a non-string title or non-number duration
+ * downstream. */
+function coerceTags(value: Record<string, unknown>): AudioTags {
+  const entry: AudioTags = {};
+  if (typeof value.title === "string") entry.title = value.title;
+  if (typeof value.artist === "string") entry.artist = value.artist;
+  if (typeof value.album === "string") entry.album = value.album;
+  if (typeof value.genre === "string") entry.genre = value.genre;
+  if (typeof value.trackNumber === "number" && Number.isFinite(value.trackNumber))
+    entry.trackNumber = value.trackNumber;
+  if (typeof value.year === "number" && Number.isFinite(value.year)) entry.year = value.year;
+  if (typeof value.duration === "number" && Number.isFinite(value.duration))
+    entry.duration = value.duration;
+  return entry;
+}
+
+/**
+ * Coerce a raw `metadata` value into the typed cache, keeping only entries that
+ * are a well-formed `CachedMetadata` wrapper: a plain `tags` object plus finite
+ * numeric `size` and `lastModified` (the content fingerprint). The inner `tags`
+ * leaves are coerced per-leaf so a malformed leaf can never surface downstream.
+ *
+ * This IS the v1→v2 migration: a legacy v1 entry is a bare `AudioTags` object
+ * (no `tags`/`size`/`lastModified` wrapper), so it fails the wrapper checks and
+ * is DROPPED at parse — absent from the in-memory model, the enrichment path
+ * then sees `undefined` and re-extracts with a fresh fingerprint. No separate
+ * migration step.
+ */
+function coerceMetadata(raw: unknown): Record<string, CachedMetadata> {
+  if (!isPlainObject(raw)) return {};
+  const out: Record<string, CachedMetadata> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (!isPlainObject(value)) continue;
+    if (typeof value.size !== "number" || !Number.isFinite(value.size)) continue;
+    if (typeof value.lastModified !== "number" || !Number.isFinite(value.lastModified)) continue;
+    if (!isPlainObject(value.tags)) continue;
+    out[key] = { tags: coerceTags(value.tags), size: value.size, lastModified: value.lastModified };
+  }
+  return out;
+}
+
+/**
+ * Coerce a raw `playerState` value. A non-plain-object yields undefined; any
+ * plain object (even `{}`) yields at least `{ queue: [] }`. `queue` keeps only a
+ * string-element array (defaulting to `[]`); `currentLocalName`/`positionSeconds`
+ * are kept only when their type matches, so a malformed field is dropped at the
+ * system edge.
+ */
+function coercePlayerState(raw: unknown): PlayerState | undefined {
+  if (!isPlainObject(raw)) return undefined;
+  const queue = Array.isArray(raw.queue)
+    ? raw.queue.filter((v): v is string => typeof v === "string")
+    : [];
+  const out: PlayerState = { queue };
+  if (typeof raw.currentLocalName === "string") out.currentLocalName = raw.currentLocalName;
+  if (typeof raw.positionSeconds === "number" && Number.isFinite(raw.positionSeconds))
+    out.positionSeconds = raw.positionSeconds;
+  return out;
+}
+
+/**
+ * Coerce a raw `playlists` value into the typed map, keeping only entries whose
+ * value is an array and filtering that array to its string elements. A
+ * non-plain-object yields `{}`.
+ */
+function coercePlaylists(raw: unknown): Record<string, string[]> {
+  if (!isPlainObject(raw)) return {};
+  const out: Record<string, string[]> = {};
+  for (const [name, value] of Object.entries(raw)) {
+    if (!Array.isArray(value)) continue;
+    out[name] = value.filter((v): v is string => typeof v === "string");
+  }
+  return out;
+}
+
+/**
+ * Return a NEW model where the patch's per-field entries win but untouched data
+ * is preserved. This is the no-clobber guarantee: merging the player position
+ * never drops the metadata cache, a sibling metadata entry, or a playlist.
+ * - `metadata` / `playlists`: per-key/per-name shallow merge.
+ * - `playerState`: when the patch carries one, its fields merge over the
+ *   existing state (so a `positionSeconds`-only patch keeps the existing queue),
+ *   with `queue` re-guaranteed to an array. When the patch omits it, the
+ *   existing player-state is preserved untouched.
+ */
+export function mergeSidecar(existing: SidecarData, patch: SidecarPatch): SidecarData {
+  const playerState = patch.playerState
+    ? (() => {
+        const merged = { ...existing.playerState, ...patch.playerState };
+        return { ...merged, queue: merged.queue ?? [] };
+      })()
+    : existing.playerState;
+  return {
+    version: 2,
+    metadata: { ...existing.metadata, ...patch.metadata },
+    playerState,
+    playlists: { ...existing.playlists, ...patch.playlists },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// B. Centralized machinery, wired with the audio schema (Unit 2306)
+// ---------------------------------------------------------------------------
+
+// One singleton sidecar handle per app: the shared factory owns the parse/read/
+// write tail, the retained directory handle, the lazily-loaded in-memory model,
+// and the single-flight write chain. The audio app supplies only its
+// schema-specific bits below — directory/file names, the empty model, the
+// per-field coercion assembled in `coerce`, and the no-clobber `mergeSidecar`.
+const sidecar = createSidecar<SidecarData, SidecarPatch>({
+  sidecarDirName: SIDECAR_DIR,
+  sidecarFileName: SIDECAR_FILE,
+  emptyModel,
+  coerce: (parsed) => ({
+    version: 2,
+    metadata: coerceMetadata(parsed.metadata),
+    playerState: coercePlayerState(parsed.playerState),
+    playlists: coercePlaylists(parsed.playlists),
+  }),
+  mergeSidecar,
+});
+
+const {
+  parseSidecar,
+  readSidecar,
+  writeSidecar,
+  setLocalDirectory,
+  clearLocalDirectory,
+  ensureLoaded,
+  enqueueWrite,
+  flushWrites,
+} = sidecar;
+
+// Re-export the shared surface the rest of the app (and the Unit 8 tests)
+// consume. `ensureLoaded` / `enqueueWrite` stay private — they back only the
+// accessors below.
+export { serializeSidecar };
+export { parseSidecar, readSidecar, writeSidecar, setLocalDirectory, clearLocalDirectory, flushWrites };
+
+// ---------------------------------------------------------------------------
+// D. Accessors
+// ---------------------------------------------------------------------------
+
+/**
+ * Read a cached metadata entry by localName, ensuring the model is loaded.
+ * Returns undefined when no entry is cached.
+ */
+export async function getMetadata(localName: string): Promise<CachedMetadata | undefined> {
+  const model = await ensureLoaded();
+  return model.metadata[localName];
+}
+
+/**
+ * Merge one metadata entry into the model and persist via the serialized write
+ * chain. The in-memory model updates even when not writable, so this session
+ * shows enriched data; the disk persist no-ops when not writable. Returns the
+ * chain promise so callers can await persistence.
+ */
+export async function cacheMetadata(localName: string, entry: CachedMetadata): Promise<void> {
+  return enqueueWrite({ metadata: { [localName]: entry } });
+}
+
+/**
+ * Merge many metadata entries into the model in a SINGLE serialized write. This
+ * is the batch form of `cacheMetadata`: the enrichment path accumulates every
+ * newly-extracted entry for a render pass and persists them in one index.json
+ * rewrite, instead of N sequential full-file rewrites. An empty `entries` is a
+ * no-op — it neither touches the chain nor writes the file, preserving
+ * focus-rescan write suppression when nothing is new.
+ */
+export async function cacheMetadataBatch(entries: Record<string, CachedMetadata>): Promise<void> {
+  if (Object.keys(entries).length === 0) return;
+  return enqueueWrite({ metadata: entries });
+}
+
+/** Read the persisted player-state, ensuring the model is loaded. */
+export async function getPlayerState(): Promise<PlayerState | undefined> {
+  const model = await ensureLoaded();
+  return model.playerState;
+}
+
+/**
+ * Merge a player-state patch through the serialized write chain. A partial patch
+ * (e.g. `positionSeconds` only) keeps the existing queue and current track — see
+ * mergeSidecar's no-clobber player-state merge.
+ */
+export async function savePlayerState(patch: Partial<PlayerState>): Promise<void> {
+  return enqueueWrite({ playerState: patch });
+}
+
+/** Read all playlists, ensuring the model is loaded. */
+export async function getPlaylists(): Promise<Record<string, string[]>> {
+  const model = await ensureLoaded();
+  return model.playlists ?? {};
+}
+
+/** Merge one playlist (name → localNames) through the serialized write chain. */
+export async function savePlaylist(name: string, localNames: string[]): Promise<void> {
+  return enqueueWrite({ playlists: { [name]: localNames } });
+}

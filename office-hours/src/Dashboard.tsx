@@ -20,7 +20,10 @@ import { getOwnerIssueSamples, getDemoIssueSamples } from "./issue-data.js";
 import { getOwnerAuditAggregates, getDemoAuditAggregates } from "./audit-data.js";
 
 import { selectLatestSample, type UsageSample } from "./usage-samples.js";
+import { capacityBandKey } from "./capacity-band.js";
+import { remindersPanelKey } from "./reminders.js";
 import type { Reminder } from "./reminders.js";
+import { parkedPanelKey } from "./queue-metrics.js";
 import type { QueueMetricsSnapshot } from "./queue-metrics.js";
 import type { IssueSample } from "./issue-samples.js";
 import type { AuditAggregate } from "./audit-aggregates.js";
@@ -32,6 +35,7 @@ import { BacklogPanel } from "./components/BacklogPanel.js";
 import { AuditPanel } from "./components/AuditPanel.js";
 import { RemindersPanel } from "./components/RemindersPanel.js";
 import { QueueMetricsPanel } from "./components/QueueMetricsPanel.js";
+import { ParkedIssuesPanel } from "./components/ParkedIssuesPanel.js";
 
 // The tier-resolved data the panels render. Mirrors the vanilla ViewState's
 // owner payload (and the demo payload built by buildContext).
@@ -133,9 +137,13 @@ export function Dashboard({ user }: DashboardProps) {
   const data = state.tier === "owner" ? state.data : demoData;
   const { samples, reminders, queueMetrics, issueSamples, auditAggregates } = data;
 
-  // The two time-sensitive panels recompute their latest-sample / sort against
-  // the live `now`; they are rendered directly (not memoized) so each tick
-  // refreshes them.
+  // The two time-sensitive panels (capacity, reminders) are memoized as elements
+  // keyed on a content signature: each panel's now-derived output (clocks,
+  // countdowns, due labels) is captured by its *Key helper, so a 60s tick that
+  // does not change any displayed string reuses the same element and the panel
+  // does not re-render (React element-identity bailout). A tick that does change
+  // the output bumps the key and rebuilds. The non-now fields are covered by the
+  // data-reference deps. latestSample stays memoized on `[samples]`.
   const latestSample = useMemo(() => selectLatestSample(samples), [samples]);
 
   // The non-time-sensitive panels are memoized on their data only, so a `now`
@@ -158,6 +166,29 @@ export function Dashboard({ user }: DashboardProps) {
     [auditAggregates],
   );
   const queueEl = useMemo(() => <QueueMetricsPanel metrics={queueMetrics} />, [queueMetrics]);
+
+  // `now` is intentionally omitted from these dep arrays: the *Key helper
+  // captures every now-derived change to the panel's output, so a tick that
+  // does not change a clock/countdown/due-label reuses the same element and
+  // the panel does not re-render (React element-identity bailout). A tick
+  // that does change the output bumps the key and rebuilds.
+  const capacityEl = useMemo(
+    () => <CapacityBand sample={latestSample} now={now} />,
+    [latestSample, capacityBandKey(latestSample, now)],
+  );
+  const remindersEl = useMemo(
+    () => <RemindersPanel reminders={reminders} now={now} />,
+    [reminders, remindersPanelKey(reminders, now)],
+  );
+  const parked = queueMetrics?.parked ?? [];
+  // ParkedIssuesPanel age labels are now-derived; key on parked-reference + the
+  // per-row age strings (in sorted order). The key changes only when a displayed
+  // age label crosses a humanize bucket boundary, so a tick that changes no
+  // visible label reuses the same element (matching capacityEl/remindersEl).
+  const parkedEl = useMemo(
+    () => <ParkedIssuesPanel parked={parked} now={now} />,
+    [parked, parkedPanelKey(parked, now)],
+  );
 
   if (state.tier === "error") {
     return (
@@ -183,13 +214,14 @@ export function Dashboard({ user }: DashboardProps) {
       {/* Panel order matches the vanilla PANELS registry:
           capacity, pace, history, backlog, audit, reminders, queue-metrics. */}
       <div className="panel-grid">
-        <CapacityBand sample={latestSample} now={now} />
+        {capacityEl}
         {paceEl}
         {historyEl}
         {backlogEl}
         {auditEl}
-        <RemindersPanel reminders={reminders} now={now} />
+        {remindersEl}
         {queueEl}
+        {parkedEl}
       </div>
     </>
   );

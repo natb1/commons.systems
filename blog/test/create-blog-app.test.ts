@@ -744,6 +744,31 @@ describe("createBlogApp routing and panel behavior", () => {
     expect(getPosts).toHaveBeenCalledTimes(1);
   });
 
+  // /admin sign-in: exactly one getPosts call (no redundant re-fetch after router.navigate).
+  it("sign-in on /admin calls getPosts exactly once", async () => {
+    history.pushState({}, "", "/admin");
+    const config = makeConfig({ buildTimeMetadata: [PUBLISHED_POST], buildTimeContent: PUBLISHED_CONTENT });
+
+    let authCallback: ((user: { uid: string } | null) => void) | undefined;
+    config.firebase.onAuthStateChanged = vi.fn((cb) => {
+      authCallback = cb;
+      return Promise.resolve();
+    });
+    scaffoldDom(config, "/admin");
+
+    handle = createBlogApp(config);
+    await settle();
+    (getPosts as ReturnType<typeof vi.fn>).mockClear(); // type-safety-ok: vitest mock cast
+
+    // Fire sign-in with a new uid → refreshAfterAuthChange → loadPosts once.
+    await act(async () => {
+      authCallback!({ uid: "u2" } as never); // type-safety-ok: captured auth callback + test user fixture
+      await Promise.resolve();
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    await vi.waitFor(() => expect(getPosts).toHaveBeenCalledTimes(1));
+  });
+
   // Nav island — #sign-in click invokes firebase.signIn (signed-out /admin).
   it("renders the React nav and wires #sign-in to firebase.signIn on /admin", async () => {
     history.pushState({}, "", "/admin");

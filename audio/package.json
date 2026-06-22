@@ -17,6 +17,7 @@
     "@commons-systems/components": "file:../components",
     "@commons-systems/authutil": "file:../authutil",
     "@commons-systems/ds": "file:../packages/ds",
+    "@commons-systems/sidecar": "file:../packages/sidecar",
     "@commons-systems/firebaseutil": "file:../firebaseutil",
     "@commons-systems/firestoreutil": "file:../firestoreutil",
     "@commons-systems/errorutil": "file:../errorutil",
@@ -28,6 +29,7 @@
     "@commons-systems/style": "file:../style",
     "firebase": "^12.9.0",
     "missing.css": "^1.1.3",
+    "music-metadata": "11.13.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

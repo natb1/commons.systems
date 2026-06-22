@@ -68,9 +68,9 @@ if [ "$EXPLICIT" = false ]; then
     case "$file" in
       nix/*|flake.nix|flake.lock) RUN_NIX=true ;;
       firestore.rules) RUN_RULES=true ;;
-      *.sh) RUN_PROSE=true ;;
       *.css|*.tsx) RUN_DS_DRIFT=true ;;
     esac
+    if is_shell_script "$file"; then RUN_PROSE=true; fi
   done <<< "$CHANGED"
 fi
 
