@@ -653,9 +653,11 @@ describe("enrichment", () => {
       else uncached.add(name);
     }
 
-    mockGetMetadata.mockImplementation(async (name: string) =>
-      preCached.has(name) ? { artist: "cached" } : undefined,
-    );
+    mockGetMetadata.mockImplementation(async (name: string) => {
+      if (!preCached.has(name)) return undefined;
+      const i = parseInt(name.replace(/^track/, "").replace(/\.mp3$/, ""), 10);
+      return { tags: { artist: "cached" }, size: bytes(name).byteLength, lastModified: 1000 + i };
+    });
     mockExtract.mockResolvedValue({ artist: "fresh" });
     mockCacheMetadataBatch.mockResolvedValue(undefined);
 
@@ -672,9 +674,14 @@ describe("enrichment", () => {
     for (const name of preCached) {
       expect(name in batchArg).toBe(false);
     }
-    // Each uncached entry carries its extracted tag.
+    // Each uncached entry carries its extracted tag plus the content fingerprint.
     for (const name of uncached) {
-      expect(batchArg[name]).toEqual({ artist: "fresh" });
+      const i = parseInt(name.replace(/^track/, "").replace(/\.mp3$/, ""), 10);
+      expect(batchArg[name]).toEqual({
+        tags: { artist: "fresh" },
+        size: bytes(name).byteLength,
+        lastModified: 1000 + i,
+      });
     }
   });
 });
