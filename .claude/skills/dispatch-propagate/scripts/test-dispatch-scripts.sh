@@ -25101,7 +25101,7 @@ export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 # Fixture: one Workflow launch line, no <task-notification>.
 cat > "$TMPDIR_TEST/transcript.jsonl" <<'EOF'
 {"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{}}]}}
-{"type":"user","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: w4stq5fyf"}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: w4stq5fyf"}]},"toolUseResult":{"status":"async_launched","taskId":"w4stq5fyf"}}
 EOF
 FIXTURE="$TMPDIR_TEST/transcript.jsonl"
 printf '%s\n' '{"transcript_path":"'"$FIXTURE"'"}' | "$TMPDIR_TEST/hooks/dispatch-stop.sh" >/dev/null 2>&1
@@ -25143,8 +25143,8 @@ echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
 export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 # Fixture: launch line + matching task-notification (backslash-escaped quote form).
 cat > "$TMPDIR_TEST/transcript.jsonl" <<'EOF'
-{"type":"user","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: w4stq5fyf"}]}}
-{"type":"user","message":{"content":[{"type":"tool_result","content":"{\"taskId\":\"w4stq5fyf\",\"status\":\"completed\"}"}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: w4stq5fyf"}]},"toolUseResult":{"status":"async_launched","taskId":"w4stq5fyf"}}
+{"type":"assistant","message":{"content":[{"type":"text","text":"<task-notification>{\"type\":\"workflow-completed\",\"taskId\":\"w4stq5fyf\",\"status\":\"completed\"}</task-notification>"}]}}
 EOF
 FIXTURE="$TMPDIR_TEST/transcript.jsonl"
 printf '%s\n' '{"transcript_path":"'"$FIXTURE"'"}' | "$TMPDIR_TEST/hooks/dispatch-stop.sh" >/dev/null 2>&1
@@ -25177,9 +25177,9 @@ echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
 export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 # Fixture: two launch lines, only the first notified.
 cat > "$TMPDIR_TEST/transcript.jsonl" <<'EOF'
-{"type":"user","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: aaa111bbb"}]}}
-{"type":"user","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: ccc222ddd"}]}}
-{"type":"user","message":{"content":[{"type":"tool_result","content":"{\"taskId\":\"aaa111bbb\",\"status\":\"completed\"}"}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: aaa111bbb"}]},"toolUseResult":{"status":"async_launched","taskId":"aaa111bbb"}}
+{"type":"user","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: ccc222ddd"}]},"toolUseResult":{"status":"async_launched","taskId":"ccc222ddd"}}
+{"type":"assistant","message":{"content":[{"type":"text","text":"<task-notification>{\"type\":\"workflow-completed\",\"taskId\":\"aaa111bbb\",\"status\":\"completed\"}</task-notification>"}]}}
 EOF
 FIXTURE="$TMPDIR_TEST/transcript.jsonl"
 printf '%s\n' '{"transcript_path":"'"$FIXTURE"'"}' | "$TMPDIR_TEST/hooks/dispatch-stop.sh" >/dev/null 2>&1
@@ -25218,7 +25218,7 @@ export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 # record but no launch. The session-scoped scan must filter out the old-session
 # launch so the in-flight gate does not fire.
 cat > "$TMPDIR_TEST/transcript.jsonl" <<'EOF'
-{"type":"user","sessionId":"old-session-zzz","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: stale111"}]}}
+{"type":"user","sessionId":"old-session-zzz","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: stale111"}]},"toolUseResult":{"status":"async_launched","taskId":"stale111"}}
 {"type":"assistant","sessionId":"cur-session-aaa","message":{"content":[{"type":"text","text":"working"}]}}
 EOF
 FIXTURE="$TMPDIR_TEST/transcript.jsonl"
@@ -25255,9 +25255,9 @@ export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 # Old session launched stale333 and received its notification → fully completed
 # and must be filtered out by session-scoping.
 cat > "$TMPDIR_TEST/transcript.jsonl" <<'EOF'
-{"type":"user","sessionId":"cur-session-aaa","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: live222"}]}}
-{"type":"user","sessionId":"old-session-zzz","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: stale333"}]}}
-{"type":"user","sessionId":"old-session-zzz","message":{"content":[{"type":"tool_result","content":"{\"taskId\":\"stale333\",\"status\":\"completed\"}"}]}}
+{"type":"user","sessionId":"cur-session-aaa","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: live222"}]},"toolUseResult":{"status":"async_launched","taskId":"live222"}}
+{"type":"user","sessionId":"old-session-zzz","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: stale333"}]},"toolUseResult":{"status":"async_launched","taskId":"stale333"}}
+{"type":"assistant","sessionId":"old-session-zzz","message":{"content":[{"type":"text","text":"<task-notification>{\"type\":\"workflow-completed\",\"taskId\":\"stale333\",\"status\":\"completed\"}</task-notification>"}]}}
 EOF
 FIXTURE="$TMPDIR_TEST/transcript.jsonl"
 printf '%s\n' '{"transcript_path":"'"$FIXTURE"'","session_id":"cur-session-aaa"}' | "$TMPDIR_TEST/hooks/dispatch-stop.sh" >/dev/null 2>&1
@@ -25283,6 +25283,87 @@ if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: #2261 D1.5 current-session in-flight: NOT self-closed"
 fi
+stop_teardown
+
+# --- Test #2365-D1.6: faithful launch record (toolUseResult bare taskId), no notification → hand-back ---
+# Reproduces the REAL transcript shape: the Workflow launch tool_result line also
+# carries a top-level `toolUseResult.taskId` in the BARE "taskId":"<ID>" form. With
+# no <task-notification> record, the task is in-flight. The pre-fix `notified`
+# pattern self-matched the launch record's own bare toolUseResult.taskId, emptying
+# the set difference and wrongly parking; the envelope-anchored fix hands back.
+
+echo "Test: #2365 D1.6 faithful launch (toolUseResult bare taskId), no notification → hand-back"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "implement" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+# No phase-completed marker.
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+# Fixture: real-shape launch line WITH toolUseResult bare taskId metadata, no notification.
+cat > "$TMPDIR_TEST/transcript.jsonl" <<'EOF'
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: inflight365a"}]},"toolUseResult":{"status":"async_launched","taskId":"inflight365a"}}
+EOF
+FIXTURE="$TMPDIR_TEST/transcript.jsonl"
+printf '%s\n' '{"transcript_path":"'"$FIXTURE"'"}' | "$TMPDIR_TEST/hooks/dispatch-stop.sh" >/dev/null 2>&1
+rc=$?
+assert_eq "#2365 D1.6 in-flight Workflow: hook exits 0 (hand-back)" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2365 D1.6 in-flight Workflow: NOT parked on office-hours"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2365 D1.6 in-flight Workflow: NOT parked on office-hours"
+  echo "    apply-log: $(cat "$STUB_DIR/apply-office-hours.log")"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/spawn-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2365 D1.6 in-flight Workflow: NOT spawned (redundant tick suppressed)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2365 D1.6 in-flight Workflow: NOT spawned (redundant tick suppressed)"
+  echo "    spawn-calls: $(cat "$STUB_DIR/spawn-calls.log")"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2365 D1.6 in-flight Workflow: NOT self-closed"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2365 D1.6 in-flight Workflow: NOT self-closed"
+fi
+stop_teardown
+
+# --- Test #2365-D1.7: faithful launch record + real <task-notification> → normal Branch A park ---
+# The converse of D1.6: the same faithful launch record (toolUseResult bare taskId)
+# PLUS a real <task-notification> envelope for the same ID means the task completed.
+# The in-flight gate must NOT fire; execution falls through to the normal Branch A
+# office-hours park. Proves the envelope-anchored fix still detects completion.
+
+echo "Test: #2365 D1.7 faithful launch + real task-notification → normal Branch A park (office-hours applied, spawn invoked)"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "implement" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+# No phase-completed marker.
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+# Fixture: faithful launch line + matching real <task-notification> envelope.
+cat > "$TMPDIR_TEST/transcript.jsonl" <<'EOF'
+{"type":"user","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: inflight365a"}]},"toolUseResult":{"status":"async_launched","taskId":"inflight365a"}}
+{"type":"assistant","message":{"content":[{"type":"text","text":"<task-notification>{\"type\":\"workflow-completed\",\"taskId\":\"inflight365a\",\"status\":\"completed\"}</task-notification>"}]}}
+EOF
+FIXTURE="$TMPDIR_TEST/transcript.jsonl"
+printf '%s\n' '{"transcript_path":"'"$FIXTURE"'"}' | "$TMPDIR_TEST/hooks/dispatch-stop.sh" >/dev/null 2>&1
+rc=$?
+assert_eq "#2365 D1.7 completed Workflow: hook exits 0" "0" "$rc"
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
+apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
+TOTAL=$((TOTAL + 1))
+if [[ "$apply_issue" == "123" && -n "$apply_reason" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2365 D1.7 completed Workflow: dispatch-apply-office-hours invoked with issue 123 + non-empty reason"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2365 D1.7 completed Workflow: dispatch-apply-office-hours invoked with issue 123 + non-empty reason"
+  echo "    apply-log: $apply_log"
+fi
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "#2365 D1.7 completed Workflow: spawn invoked exactly once" "1" "$spawn_calls"
 stop_teardown
 
 # ============================================================================
