@@ -27,7 +27,7 @@ export const PERSON: Person = {
 
 export const SITE_DEFAULTS: SiteDefaults = {
   title: "commons.systems",
-  description: "Software you own, not a platform you rent. Forkable, local-first apps built with commons.systems, and running without it.",
+  description: "Know the software that runs your business. Forkable, local-first apps built with commons.systems — and running without it.",
   image: "/og-card.png",
 };
 

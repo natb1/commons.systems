@@ -10,7 +10,7 @@ test.describe("hero band", () => {
 
     const tagline = page.locator(".page > header .tagline");
     await expect(tagline).toBeVisible();
-    await expect(tagline).toHaveText("Software you own, not a platform you rent.");
+    await expect(tagline).toHaveText("Know the software that runs your business.");
 
     const taglineBox = await tagline.boundingBox();
     const viewport = page.viewportSize();
@@ -25,7 +25,7 @@ test.describe("hero band", () => {
     const tagline = page.locator(".page > header .tagline");
     const innerText = await tagline.evaluate((el) => (el as HTMLElement).innerText);
     const textContent = await tagline.evaluate((el) => el.textContent);
-    expect(innerText).toBe("Software you own, not a platform you rent.");
+    expect(innerText).toBe("Know the software that runs your business.");
     expect(innerText).toBe(textContent);
   });
 
