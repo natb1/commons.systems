@@ -293,6 +293,7 @@ FRESH_NUM=""
 IDLE_ID=""
 IDLE_CWD=""
 IDLE_NUM=""
+IDLE_WT_PATH=""
 SESSIONLESS_NUMS=()
 while IFS= read -r issue_num; do
   [[ -z "$issue_num" ]] && continue
@@ -301,6 +302,7 @@ while IFS= read -r issue_num; do
     # and remember the issue so the post-loop classifier can derive its branch.
     IFS=$'\t' read -r IDLE_ID IDLE_CWD <<< "$pair"
     IDLE_NUM="$issue_num"
+    IDLE_WT_PATH=$(printf '%s' "${WORKTREE_PATHS_BY_NUM[$IDLE_NUM]:-}" | head -n 1)
     break
   else
     rc=$?
@@ -326,7 +328,7 @@ done <<< "$SORTED"
 #      prints a clear swept-worktree diagnostic and exits — fresh fallback with a
 #      diagnostic, never a silent failure.
 if [[ -n "$IDLE_ID" ]]; then
-  if [[ -d "$IDLE_CWD" ]]; then
+  if [[ -d "$IDLE_WT_PATH" || -d "$IDLE_CWD" ]]; then
     printf 'idle %s\n' "$IDLE_ID"
     exit 0
   elif [[ -n "$IDLE_CWD" ]]; then
