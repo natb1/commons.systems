@@ -225,7 +225,7 @@ export async function searchIssueDetailsLive(
   query: string,
 ): Promise<ParkedIssue[]> {
   const gql = `
-    query($query: String) {
+    query($query: String!) {
       search(query: $query, type: ISSUE, first: 100) {
         nodes {
           ... on Issue {
