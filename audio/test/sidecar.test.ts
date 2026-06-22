@@ -132,6 +132,41 @@ function makePreloadedDir(content: string): {
   return { dir, fileHandle };
 }
 
+/**
+ * Build a preloaded dir whose FIRST getDirectoryHandle(".commons-audio") call
+ * parks until release() is called, gating the read at the first FSA round-trip
+ * — the exact window the mid-read folder-switch TOCTOU exploits. Later calls
+ * delegate to the real preloaded behavior.
+ */
+function makeGatedPreloadedDir(content: string): {
+  dir: FileSystemDirectoryHandle;
+  release: () => void;
+} {
+  const { dir } = makePreloadedDir(content);
+  const realGetDirectoryHandle = dir.getDirectoryHandle.bind(dir);
+  let released: (() => void) | null = null;
+  let gated = false;
+  (dir as unknown as { getDirectoryHandle: unknown }).getDirectoryHandle = vi // type-safety-ok: test fake overrides getDirectoryHandle to gate the first FSA round-trip
+    .fn()
+    .mockImplementation((name: string, opts?: { create?: boolean }) => {
+      if (!gated) {
+        gated = true;
+        return new Promise((res) => {
+          released = () => res(realGetDirectoryHandle(name, opts));
+        });
+      }
+      return realGetDirectoryHandle(name, opts);
+    });
+  return {
+    dir,
+    release: () => {
+      if (released === null)
+        throw new Error("release() called before the gated read was reached");
+      released();
+    },
+  };
+}
+
 /** Build a fake directory with `.commons-audio` dir but NO `index.json`. */
 function makeDirWithMissingFile(): FileSystemDirectoryHandle {
   const subdir = makeFakeSubdir({}, true);
@@ -774,6 +809,46 @@ describe("folder switch — stale-handle TOCTOU", () => {
     expect(readB.metadata["b.mp3"]).toEqual({ tags: { title: "B" }, size: 2, lastModified: 2 });
     expect(readB.metadata["c.mp3"]).toEqual({ tags: { title: "C" }, size: 3, lastModified: 3 });
     expect(subdirsOf(dirA)[".commons-audio"]).toBeUndefined();
+  });
+
+  it("drops an in-flight stale write when the switch lands mid-read", async () => {
+    const { dir: dirA, release } = makeGatedPreloadedDir(
+      serializeSidecar({
+        version: 2,
+        metadata: { "diskA.mp3": { tags: { title: "DiskA" }, size: 9, lastModified: 9 } },
+        playlists: {},
+      }),
+    );
+    const dirB = makeEmptyDir();
+
+    setLocalDirectory(dirA, true);
+    // task_A snapshots dirA + generation; capture its promise directly — the
+    // switch below resets writeChain, so a post-switch flushWrites() would drain
+    // only the new chain, not task_A.
+    const pA = cacheMetadata("a.mp3", { tags: { title: "A" }, size: 1, lastModified: 1 });
+    // One microtask tick parks task_A on the gated read (the chain body runs as a
+    // single microtask; ensureLoaded → readSidecar → getDirectoryHandle is
+    // synchronous up to the gated await, so the body suspends on the gate).
+    await Promise.resolve();
+    // Switch to dirB DURING the in-flight dirA read: increments generation, nulls cache.
+    setLocalDirectory(dirB, true);
+    // Resolve dirA's read, letting task_A run past both contamination sites.
+    release();
+    // Safe: the per-link .catch in enqueueWrite swallows; awaiting guarantees both
+    // sites executed (site 1 inside the loadPromise ensureLoaded awaits, site 2 right after).
+    await pA;
+
+    // Site 2: task_A's merged patch must NOT have leaked into dirB's cache.
+    expect(await getMetadata("a.mp3")).toBeUndefined();
+    // Site 1: dirA's raw disk model must NOT have leaked into dirB's cache.
+    expect(await getMetadata("diskA.mp3")).toBeUndefined();
+
+    // dirB's cache is clean + usable: a fresh dirB write lands and the stale keys stay gone.
+    await cacheMetadata("b.mp3", { tags: { title: "B" }, size: 2, lastModified: 2 });
+    await flushWrites();
+    expect(await getMetadata("b.mp3")).toEqual({ tags: { title: "B" }, size: 2, lastModified: 2 });
+    expect(await getMetadata("a.mp3")).toBeUndefined();
+    expect(await getMetadata("diskA.mp3")).toBeUndefined();
   });
 });
 

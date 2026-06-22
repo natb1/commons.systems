@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# Detects whether a Claude session died on a transient Anthropic server-overload
-# rate-limit rather than the user's own usage-limit exhaustion.
+# Detects whether a Claude session died on a transient server-side API death
+# (server-overload rate-limit, 529 Overloaded, or stream idle timeout) rather
+# than the user's own usage-limit exhaustion.
 #
 # Usage: dispatch-detect-rate-limit-death <transcript-path>
 #
 # Exit codes (fail-safe, positive-evidence-only):
-#   0 — the session's LAST assistant turn is a server-overload rate-limit error
+#   0 — the session's LAST assistant turn matches an allowlisted transient
+#       server-side death signature
 #   1 — any doubt: file unreadable, no assistant turns, last turn does not match
 #
 # JSONL shape matched (the death turn):
@@ -19,9 +21,11 @@
 # self-heal sessions that actually terminated on the rate-limit, not ones that
 # already recovered and died later for a different reason.
 #
-# WHY "(not your usage limit)": this substring appears only in the server-overload
-# error, not in the user-quota-exhaustion error. Auto-retry on quota exhaustion
-# would loop forever; we must never trigger it.
+# WHY the allowlist: only substrings known to be safe for a plain --resume retry
+# are listed. The user's quota-exhaustion error must never match — auto-retry on
+# quota exhaustion would loop forever. Similarly, errors that re-fail on a
+# verbatim retry (`prompt is too long`/413, `invalid_request_error`, etc.) must
+# never be added here.
 #
 # Real fixture (line 44 of the JSONL is the rate-limit turn, but NOT the last
 # assistant turn in that file, so the script correctly exits 1 for it):
@@ -41,5 +45,20 @@ last=$(jq -rc 'select(.type=="assistant")
 
 [ -n "$last" ] || exit 1
 
+# Positive allowlist: only signatures known to self-heal on a plain --resume
+# retry belong here. NEVER add re-failing deaths — `prompt is too long`/413,
+# `invalid_request_error`, or the resume-only `thinking blocks cannot be
+# modified` corruption all re-fail forever on a verbatim retry and must keep
+# falling through to office-hours. Match SHORT stable substrings, not full
+# sentences (the 529 message carries a drifting em-dash + URL).
+TRANSIENT_SIGNATURES=(
+  '(not your usage limit)'   # server-overload rate limit (original #1733)
+  '529 Overloaded'           # HTTP 529 server overload
+  'Stream idle timeout'      # streaming transport stall
+)
+
+grep_args=()
+for sig in "${TRANSIENT_SIGNATURES[@]}"; do grep_args+=(-e "$sig"); done
+
 printf '%s' "$last" | grep -q '"e":true' \
-  && printf '%s' "$last" | grep -qF '(not your usage limit)'
+  && printf '%s' "$last" | grep -qF "${grep_args[@]}"   # -F applies to ALL -e patterns: every signature is matched as a literal fixed string, so new TRANSIENT_SIGNATURES entries must NOT rely on regex metacharacters (`.`, `*`, etc.)
