@@ -241,7 +241,7 @@ describe("resolveToFile", () => {
     const source = createLocalFolderMediaSource<TestItem>({
       directory: dir,
       toItem,
-    }) as LocalFolderMediaSource<TestItem>;
+    });
 
     const items = await source.list();
     const result = await source.resolveToFile(items[0]);
@@ -260,7 +260,7 @@ describe("resolveToFile", () => {
     const source = createLocalFolderMediaSource<TestItem>({
       directory: dir,
       toItem,
-    }) as LocalFolderMediaSource<TestItem>;
+    });
 
     const missingItem: TestItem = {
       id: "id:gone.txt",
@@ -280,7 +280,7 @@ describe("resolveToFile", () => {
     const source = createLocalFolderMediaSource<TestItem>({
       directory: dir,
       toItem,
-    }) as LocalFolderMediaSource<TestItem>;
+    });
 
     const presentItem: TestItem = {
       id: "id:doc.txt",

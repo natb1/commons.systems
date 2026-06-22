@@ -287,9 +287,10 @@ describe("resolveLocalFile", () => {
       id: "local:tune.flac",
     } as LibraryItem); // type-safety-ok: partial LibraryItem fixture for test
     expect(file).not.toBeNull();
-    expect(file!.size).toBe(42); // type-safety-ok: file asserted non-null on the preceding line
-    expect(file!.lastModified).toBe(3000);
-    expect(new TextDecoder().decode(await file!.arrayBuffer())).toBe("tune.flac");
+    if (file == null) throw new Error("Expected file to be non-null");
+    expect(file.size).toBe(42);
+    expect(file.lastModified).toBe(3000);
+    expect(new TextDecoder().decode(await file.arrayBuffer())).toBe("tune.flac");
   });
 
   it("returns null (not a throw) when the item is no longer present", async () => {
