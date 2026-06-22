@@ -38618,6 +38618,23 @@ STAMP="$SCRIPT_DIR/dispatch-stamp-session"
   rm -rf "$d"
 )
 
+# 6b. Idempotent re-write with an explicitly-null .base_sha falls through to
+#     the HEAD-derived fallback (exercises the jq `// empty` operator that
+#     distinguishes JSON null from a real SHA in dispatch-stamp-session).
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b 999-fixture
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  sc="$d/sess6b.dispatch-stamp.json"
+  # Seed a sidecar whose base_sha is JSON null (not the string "null", not absent).
+  printf '%s\n' '{"schema":1,"session_id":"sess6b","repo":"old/repo","issue":1,"pr":null,"branch":"old","base_sha":null,"stamped_at":"2026-01-01T00:00:00Z"}' > "$sc"
+  ( cd "$d" && "$STAMP" --session-id sess6b --transcript-path "$d/sess6b.jsonl" )
+  assert_eq "stamp: re-write with null .base_sha falls through to HEAD" "$(git -C "$d" rev-parse HEAD)" "$(jq -r .base_sha "$sc")"
+  rm -rf "$d"
+)
+
 # 7. Resume after HEAD moves (ff-merge) preserves the session-start .base_sha.
 #    This encodes #2270's failure mode: an initial stamp records HEAD=A; a later
 #    git merge --ff-only moves HEAD to B; the resume re-stamp must keep base_sha=A.
