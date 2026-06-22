@@ -23,6 +23,7 @@
     "mediautil",
     "print",
     "packages/ds",
+    "packages/sidecar",
     "router",
     "style",
     "rules-test"
