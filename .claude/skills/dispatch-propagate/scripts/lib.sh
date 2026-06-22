@@ -44,7 +44,7 @@ is_shell_script() {
   [[ -f "$resolved" ]] || return 1
   local first
   IFS= read -r first < "$resolved" || true
-  if [[ "$first" =~ ^#!.*/(env[[:space:]]+)?(ba)?sh([[:space:]]|$) ]]; then
+  if [[ "$first" =~ ^#!.*/(env[[:space:]]+(-S[[:space:]]+)?)?(ba|z)?sh([[:space:]]|$) ]]; then
     return 0
   fi
   return 1

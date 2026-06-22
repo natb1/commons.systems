@@ -285,4 +285,39 @@ run_sut
 assert_eq "porcelain-comment: exit 0" "0" "$RC"
 assert_contains "porcelain-comment: PASS printed" "PASS" "$OUT"
 
+# ---------------------------------------------------------------------------
+# Test 12: pre-existing allow-marker (on origin/main) suppresses a call line
+# that is the ONLY net-new edit. Under --unified=0 the unchanged marker line is
+# omitted from the diff, so PREV_WAS_ALLOW alone never sees it; the working-tree
+# lookup at LINE_NUM-1 must still find the marker and suppress the call.
+# ---------------------------------------------------------------------------
+echo "Test 12: pre-existing allow-marker suppresses a call-only edit"
+REPO=$(mktemp -d "$TMP_ROOT/repo.XXXXXX")
+BARE=$(mktemp -d "$TMP_ROOT/bare.XXXXXX")
+git -C "$BARE" init --bare --quiet --initial-branch=main
+git -C "$REPO" init --quiet --initial-branch=main
+git -C "$REPO" config user.email "test@example.com"
+git -C "$REPO" config user.name "Test User"
+git -C "$REPO" remote add origin "$BARE"
+# Baseline: marker + porcelain call already committed to main, both unchanged
+# on the branch except the call line.
+printf '%s\n' '#!/usr/bin/env bash' > "$REPO/script.sh"
+printf '%s\n' "# lint-allow: gh-rest-porcelain needs-graphql-field" >> "$REPO/script.sh"
+printf '%s\n' "$PORC_PR_VIEW" >> "$REPO/script.sh"
+git -C "$REPO" add -A
+git -C "$REPO" commit --quiet -m "baseline with marker+porcelain"
+git -C "$REPO" push --quiet origin main
+git -C "$REPO" checkout --quiet -b feature
+git -C "$REPO" fetch --quiet origin main
+# Branch change: edit ONLY the call line (the marker stays unchanged, so it is
+# absent from the unified-0 diff). The edited line is still a porcelain call.
+printf '%s\n' '#!/usr/bin/env bash' > "$REPO/script.sh"
+printf '%s\n' "# lint-allow: gh-rest-porcelain needs-graphql-field" >> "$REPO/script.sh"
+printf '%s\n' "RES=\$($_GH pr view \"\$M\" --json closingIssuesReferences)" >> "$REPO/script.sh"
+git -C "$REPO" add -A
+git -C "$REPO" commit --quiet -m "edit only the call line"
+run_sut
+assert_eq "preexisting-marker-call-edit: exit 0" "0" "$RC"
+assert_contains "preexisting-marker-call-edit: PASS printed" "PASS" "$OUT"
+
 report_results

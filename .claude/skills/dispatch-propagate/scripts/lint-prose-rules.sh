@@ -108,10 +108,20 @@ while IFS= read -r line; do
       VIOLATIONS+=("${CURRENT_PATH}:${LINE_NUM}: ${content}")
     fi
 
-    # gh-rest-porcelain rule. Suppressed for this line only when the immediately
-    # preceding added line was the allow-marker.
-    if [[ "$PREV_WAS_ALLOW" -eq 0 ]] && [[ "$content" =~ $PORCELAIN_PATTERN ]]; then
-      PORCELAIN_VIOLATIONS+=("${CURRENT_PATH}:${LINE_NUM}: ${content}")
+    # gh-rest-porcelain rule. Suppressed for this line when the immediately
+    # preceding line is the allow-marker. The marker may be a net-new added line
+    # (PREV_WAS_ALLOW) OR a pre-existing line not present in the unified-0 diff —
+    # the latter happens when a future PR edits only the call line. Consult the
+    # working-tree file at LINE_NUM-1 to catch the pre-existing-marker case.
+    if [[ "$content" =~ $PORCELAIN_PATTERN ]]; then
+      suppressed=$PREV_WAS_ALLOW
+      if [[ "$suppressed" -eq 0 ]] && [[ "$LINE_NUM" -gt 1 ]]; then
+        prev_line=$(sed -n "$(( LINE_NUM - 1 ))p" "$REPO_ROOT/$CURRENT_PATH")
+        if [[ "$prev_line" =~ $ALLOW_RE ]]; then suppressed=1; fi
+      fi
+      if [[ "$suppressed" -eq 0 ]]; then
+        PORCELAIN_VIOLATIONS+=("${CURRENT_PATH}:${LINE_NUM}: ${content}")
+      fi
     fi
 
     # Any non-comment added line resets the allow-marker.
@@ -123,6 +133,9 @@ while IFS= read -r line; do
 
   # Everything else (diff headers, index lines, - lines): ignore.
   # Do not advance the new-side line counter for these.
+  # Reset the allow-marker so its suppression cannot carry across any
+  # intervening non-added diff line (removed/context/index) to a later call.
+  PREV_WAS_ALLOW=0
 
 done <<<"$DIFF"
 
@@ -170,7 +183,7 @@ The token-to-helper mapping (subcommand on the left, helper on the right):
     issue close    gh_issue_close_rest
     issue comment  gh_issue_comment_rest
     pr view        gh_pr_view_rest
-    pr edit        gh_issue_edit_rest   (PRs are issues in REST — serves the --body edit; lib.sh:1060)
+    pr edit        gh_issue_edit_rest   (PRs are issues in REST — serves the --body edit; see gh_issue_edit_rest in lib.sh)
     pr merge       gh_pr_merge_rest
 
 Exceptions:
