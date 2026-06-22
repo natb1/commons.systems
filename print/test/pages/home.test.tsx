@@ -209,6 +209,28 @@ describe("loadMediaHtml", () => {
     expect(html).toContain('data-id="a&amp;b"');
   });
 
+  it("escapes HTML special characters in storagePath", async () => {
+    mockListCloud.mockResolvedValue([
+      makeMediaItem({ storagePath: 'media/"<x>.pdf' }),
+    ]);
+
+    const html = await loadMediaHtml();
+
+    expect(html).toContain('data-path="media/&quot;&lt;x&gt;.pdf"');
+    expect(html).not.toContain('data-path="media/"');
+  });
+
+  it("escapes HTML special characters in markdownPath", async () => {
+    mockListCloud.mockResolvedValue([
+      makeMediaItem({ markdownPath: 'media/"<x>.md' }),
+    ]);
+
+    const html = await loadMediaHtml();
+
+    expect(html).toContain('data-md-path="media/&quot;&lt;x&gt;.md"');
+    expect(html).not.toContain('data-md-path="media/"');
+  });
+
   it("renders items in the order returned by listCloud", async () => {
     mockListCloud.mockResolvedValue([
       makeMediaItem({ id: "first", title: "First" }),
