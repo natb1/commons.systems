@@ -114,15 +114,18 @@ assert_eq "took POST branch (startswith anchoring)" "POST" "$(cat "$TMPDIR_TEST/
 teardown
 
 # ---------------------------------------------------------------------------
-# Test 7: --read mode returns the stamped node-id
+# Test 7: --read mode returns the stamped node-id through the real jq split filter
 # ---------------------------------------------------------------------------
-echo "Test 7: --read mode returns node-id"
+echo "Test 7: --read mode returns the stamped node-id through the real jq split filter"
 setup
-export STUB_EXISTING=1
+export STUB_EXISTING=1        # keep set for the WHOLE test so the read path resolves CID 777
 exit_code=0
-output="$("$STAMP_SCRIPT" --read 5 2>/dev/null)" || exit_code=$?
-assert_eq "exits 0" "0" "$exit_code"
-assert_eq "stdout is the node-id" "goal-foo" "$output"
+"$STAMP_SCRIPT" 5 goal-roundtrip 2>/dev/null || exit_code=$?   # LIST returns existing comment 777 → PATCH branch → writes posted-body.txt
+assert_eq "stamp exits 0" "0" "$exit_code"
+exit_code=0
+output="$("$STAMP_SCRIPT" --read 5 2>/dev/null)" || exit_code=$?   # LIST resolves CID 777 → GET on comments/777 → stateful handler runs real --jq '.body | split("\n")[1]'
+assert_eq "read exits 0" "0" "$exit_code"
+assert_eq "read returns the stamped node-id" "goal-roundtrip" "$output"
 teardown
 
 # ---------------------------------------------------------------------------
