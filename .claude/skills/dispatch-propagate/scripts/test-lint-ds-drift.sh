@@ -43,6 +43,8 @@ VIOL_JSX_GAP="gap: '8${_PX}',"
 # multiline split: property name and value on separate lines — neither fires alone
 VIOL_JSX_MULTILINE_NAME="fontSize:"
 VIOL_JSX_MULTILINE_VALUE="'14${_PX}',"
+# fontSize: '14px', // ds-lint-disable-line: ...  (escaped JSX violation, // form)
+VIOL_JSX_ESCAPED="fontSize: '14${_PX}', // ds-lint-disable-line: SVG label, no exact token"
 
 # Build a fresh ephemeral repo. Sets globals: REPO, BARE.
 # $1 (optional): "with_violation" — seed the origin/main baseline with a
@@ -353,10 +355,12 @@ mkdir -p "$REPO/myapp/src/components"
   printf '%s\n' 'const style = {'
   printf '%s\n' '  fontWeight: 400,'
   printf '%s\n' '  fontWeight: 700,'
-  printf '%s\n' "  fontSize: 'var(--type-sm)',"
+  printf '%s\n' "  fontSize: 'var(--text-sm)',"
   printf '%s\n' "  borderRadius: '4px',"
   printf '%s\n' '  margin: 0,'
   printf '%s\n' '  gap: 0,'
+  printf '%s\n' "  marginTop: 'var(--space-1)',"
+  printf '%s\n' "  paddingTop: 'var(--space-2)',"
   printf '%s\n' '};'
 } > "$REPO/myapp/src/components/Widget.tsx"
 git -C "$REPO" add -A
@@ -364,5 +368,26 @@ git -C "$REPO" commit --quiet -m "add JSX clean camelCase lines"
 run_sut
 assert_eq "jsx-clean-battery: exit 0" "0" "$RC"
 assert_contains "jsx-clean-battery: PASS printed" "PASS" "$OUT"
+
+# ---------------------------------------------------------------------------
+# Test 23: real JSX violation carrying the inline // escape hatch is NOT
+# flagged. Mirrors Test 13 (the CSS /* ... */ form) for the TSX-appropriate
+# `// ds-lint-disable-line: <reason>` single-line comment form documented at
+# lint-ds-drift.sh:215. Guards the escape-hatch check (`*ds-lint-disable-line*`)
+# against a regression that broke it specifically for TSX-style // comments.
+# ---------------------------------------------------------------------------
+echo "Test 23: escaped JSX violation (// form) is not flagged"
+make_repo
+mkdir -p "$REPO/myapp/src/components"
+{
+  printf '%s\n' 'const style = {'
+  printf '%s\n' "  $VIOL_JSX_ESCAPED"
+  printf '%s\n' '};'
+} > "$REPO/myapp/src/components/Widget.tsx"
+git -C "$REPO" add -A
+git -C "$REPO" commit --quiet -m "add escaped JSX violation"
+run_sut
+assert_eq "jsx-escaped: exit 0" "0" "$RC"
+assert_contains "jsx-escaped: PASS printed" "PASS" "$OUT"
 
 report_results
