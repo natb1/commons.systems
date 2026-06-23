@@ -47,10 +47,11 @@ describe("store round-trip", () => {
       owner: "human",
       status: "codified",
       parent: "root-1",
+      // rationale ends with \n (trailing newline); reading does not — exercises both chomping cases
       rationale:
         "Block scalars in YAML can silently strip trailing newlines\nor fold long lines.\n\nThis test pins the guarantee that neither transformation occurs.\n",
       reading:
-        "See yaml-spec.org section 8.1 on block scalar chomping.\n\nAlso review the 'clip', 'strip', and 'keep' indicators.",
+        "See yaml.org/spec/1.2/spec.html section 8.1.1.2 on block scalar chomping.\n\nAlso review the 'clip', 'strip', and 'keep' indicators.",
       gap: "No automated check for block-scalar fidelity existed before this test.",
       clarifications: [
         {
