@@ -44,4 +44,21 @@ describe("paginateGhApi", () => {
     expect(mockExec).not.toHaveBeenCalled();
     expect(result).toEqual([{ id: 1 }]);
   });
+
+  it("throws when args is empty", () => {
+    expect(() => paginateGhApi([])).toThrow(/args must not be empty/);
+    expect(mockExec).not.toHaveBeenCalled();
+  });
+
+  it("propagates runner errors to the caller", () => {
+    const boom = new Error("gh exploded");
+    const runner = vi.fn(() => {
+      throw boom;
+    });
+
+    expect(() => paginateGhApi(["/z"], runner)).toThrow(boom);
+
+    expect(runner).toHaveBeenCalledTimes(1);
+    expect(mockExec).not.toHaveBeenCalled();
+  });
 });
