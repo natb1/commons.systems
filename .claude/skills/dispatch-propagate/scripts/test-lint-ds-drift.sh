@@ -339,4 +339,32 @@ run_sut
 assert_eq "jsx-multiline: exit 0 (known gap)" "0" "$RC"
 assert_contains "jsx-multiline: PASS printed" "PASS" "$OUT"
 
+# ---------------------------------------------------------------------------
+# Test 22: JSX clean-line false-positive battery (camelCase analog of Tests 5-12).
+# A battery of legitimate camelCase style-object values on added lines in an
+# in-scope .tsx file — none of which the four JSX detectors should reach. This
+# exercises the false-positive (precision) side of FONTSIZE_JSX_RE,
+# FONTWEIGHT_JSX_RE, SPACING_JSX_RE, and SPACING_GAP_JSX_RE: a future regex edit
+# that widens any JSX detector to over-match would start flagging legitimate app
+# code, and this test would catch that regression.
+# ---------------------------------------------------------------------------
+echo "Test 22: JSX clean camelCase lines pass (precision battery)"
+make_repo
+mkdir -p "$REPO/myapp/src/components"
+{
+  printf '%s\n' 'const style = {'
+  printf '%s\n' '  fontWeight: 400,'
+  printf '%s\n' '  fontWeight: 700,'
+  printf '%s\n' "  fontSize: 'var(--type-sm)',"
+  printf '%s\n' "  borderRadius: '4px',"
+  printf '%s\n' '  margin: 0,'
+  printf '%s\n' '  gap: 0,'
+  printf '%s\n' '};'
+} > "$REPO/myapp/src/components/Widget.tsx"
+git -C "$REPO" add -A
+git -C "$REPO" commit --quiet -m "add JSX clean camelCase lines"
+run_sut
+assert_eq "jsx-clean-battery: exit 0" "0" "$RC"
+assert_contains "jsx-clean-battery: PASS printed" "PASS" "$OUT"
+
 report_results
