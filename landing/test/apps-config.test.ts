@@ -15,7 +15,7 @@ describe("APPS", () => {
     ];
     expect(APPS.map((a) => a.url)).toEqual(expected);
     for (const app of APPS) {
-      expect(app.url).toMatch(/^https:\/\/[a-z][a-z-]*\.commons\.systems/);
+      expect(app.url).toMatch(/^https:\/\/[a-z]([a-z0-9-]*[a-z0-9])?\.commons\.systems/);
     }
   });
 
@@ -43,6 +43,7 @@ describe("OVERFLOW_APPS", () => {
 
   it("OVERFLOW_APPS entries satisfy the same invariants", () => {
     for (const app of OVERFLOW_APPS) {
+      expect(app.url).toMatch(/^https:\/\/[a-z]([a-z0-9-]*[a-z0-9])?\.commons\.systems/);
       expect(app.problem.length).toBeGreaterThan(0);
       expect(app.screenshotAlt.length).toBeGreaterThan(0);
       expect(app.screenshot.startsWith("/screenshots/")).toBe(true);

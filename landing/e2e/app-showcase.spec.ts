@@ -117,6 +117,8 @@ test.describe("app showcase", () => {
   }) => {
     await page.goto("/");
 
+    await page.waitForSelector("details.app-showcase-overflow");
+
     const details = page.locator("details.app-showcase-overflow");
     await expect(details).not.toHaveAttribute("open", /.*/);
 
