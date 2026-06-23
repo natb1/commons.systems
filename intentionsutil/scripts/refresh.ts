@@ -39,7 +39,7 @@ const trackersDir = join(repoRoot, "trackers");
 
 /** Run a `gh` subcommand and return stdout. Throws on non-zero exit. */
 function gh(args: string[]): string {
-  return execFileSync("gh", args, { encoding: "utf8" });
+  return execFileSync("gh", args, { encoding: "utf8", maxBuffer: 100 * 1024 * 1024 });
 }
 
 // --- GitHub JSON shapes ----------------------------------------------------
