@@ -22,6 +22,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { writeNode } from "../src/store.js";
 import { ghErrorText } from "../src/errors.js";
+import { paginateGhApi } from "./gh-utils.js";
 
 // --- Paths -----------------------------------------------------------------
 // The script lives at `intentionsutil/scripts/backfill.ts`, so the repo root is
@@ -191,14 +192,10 @@ interface OpenIssue {
  * per page); we flatten it. This is robust regardless of page count.
  */
 export function fetchOpenIssues(): OpenIssue[] {
-  const out = ghWithRetry([
-    "api",
-    "--paginate",
-    "--slurp",
-    "/repos/{owner}/{repo}/issues?state=open&per_page=100",
-  ]);
-  const pages: Array<Array<RawIssueItem>> = JSON.parse(out);
-  const items = pages.flat();
+  const items = paginateGhApi<RawIssueItem>(
+    ["/repos/{owner}/{repo}/issues?state=open&per_page=100"],
+    ghWithRetry,
+  );
   return items
     .filter((it) => it.pull_request === undefined)
     .map((it) => ({
