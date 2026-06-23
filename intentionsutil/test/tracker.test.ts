@@ -186,6 +186,16 @@ describe("mapping helpers", () => {
     expect(issueToNodeId(7, dir)).toBe("goal-foo");
   });
 
+  it("issueToNodeId falls back to 'issue-N' when the dir does not exist", () => {
+    const nonExistentDir = join(tempDir(), "does-not-exist");
+    expect(issueToNodeId(99, nonExistentDir)).toBe("issue-99");
+  });
+
+  it("issueToNodeId falls back to 'issue-N' when no tracker matches the issue", () => {
+    const emptyDir = tempDir();
+    expect(issueToNodeId(99, emptyDir)).toBe("issue-99");
+  });
+
   it("nodeIdToIssue returns null for an unmapped non-'issue-' id with no file", () => {
     const dir = tempDir();
     expect(nodeIdToIssue("goal-missing", dir)).toBeNull();

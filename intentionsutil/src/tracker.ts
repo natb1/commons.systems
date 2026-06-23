@@ -143,7 +143,7 @@ export function nodeIdToIssue(node_id: string, trackersDir: string): number | nu
   return null;
 }
 
-export function issueToNodeId(issue_number: number, trackersDir: string): string | null {
+export function issueToNodeId(issue_number: number, trackersDir: string): string {
   if (!existsSync(trackersDir)) {
     return `issue-${issue_number}`;
   }
