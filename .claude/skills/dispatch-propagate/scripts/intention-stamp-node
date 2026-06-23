@@ -9,7 +9,7 @@ MARKER='<!-- intention:node-id -->'
 usage() {
   echo "Usage:" >&2
   echo "  intention-stamp-node <issue-num> <node-id>    # write/upsert" >&2
-  echo "  intention-stamp-node --read <issue-num>       # read back node-id" >&2
+  echo "  intention-stamp-node --read <issue-num>       # read back node-id (empty stdout + exit 0 if no stamp comment exists)" >&2
   exit 2
 }
 
@@ -71,6 +71,9 @@ elif [[ $# -eq 2 && "$1" == "--read" ]]; then
   CID="$(dispatch_marker_comment_id "$N" "$MARKER")"
 
   if [[ -z "$CID" ]]; then
+    # Contract: no stamp comment → empty stdout + exit 0 (not an error).
+    # Callers use "empty stdout = no stamp" to detect absence; do not change
+    # this to exit non-zero or print an error without updating callers.
     exit 0
   fi
 
