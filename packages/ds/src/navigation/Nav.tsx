@@ -1,10 +1,5 @@
 import type { HTMLAttributes, ReactNode, CSSProperties } from "react";
-
-export interface NavLink {
-  href: string;
-  label: string;
-  align?: "end";
-}
+import type { NavLink } from "./nav-link.ts";
 
 export interface NavProps extends HTMLAttributes<HTMLElement> {
   links: NavLink[];

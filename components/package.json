@@ -13,7 +13,8 @@
     "./autocomplete": "./src/autocomplete.ts"
   },
   "peerDependencies": {
-    "@commons-systems/htmlutil": "*"
+    "@commons-systems/htmlutil": "*",
+    "@commons-systems/ds": "*"
   },
   "scripts": {
     "test": "vitest run",
