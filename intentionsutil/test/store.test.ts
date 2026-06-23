@@ -39,6 +39,43 @@ describe("store round-trip", () => {
     expect(read).toEqual(node);
   });
 
+  it("is lossless for a node with multi-line string fields", () => {
+    const dir = tempDir();
+    const node: IntentionNode = {
+      id: "multi-1",
+      statement: "Preserve multi-line content through the store round-trip.",
+      owner: "human",
+      status: "codified",
+      parent: "root-1",
+      rationale:
+        "Block scalars in YAML can silently strip trailing newlines\nor fold long lines.\n\nThis test pins the guarantee that neither transformation occurs.\n",
+      reading:
+        "See yaml-spec.org section 8.1 on block scalar chomping.\n\nAlso review the 'clip', 'strip', and 'keep' indicators.",
+      gap: "No automated check for block-scalar fidelity existed before this test.",
+      clarifications: [
+        {
+          question: "Does the yaml library clip trailing newlines?",
+          answer: "Not when fields are read back via parse — this test confirms it.",
+        },
+        {
+          question: "Are internal blank lines preserved?",
+          answer: "Yes — the rationale field above contains one.",
+        },
+      ],
+      tooling_goals: ["yaml-round-trip", "intention-store"],
+      success_signal: {
+        observable: "readNode returns the exact node written, including trailing newlines",
+        sensor: "vitest store.test.ts",
+        threshold: "0 diff",
+        is_proxy: false,
+      },
+    };
+
+    writeNode(dir, node);
+    const read = readNode(dir, node.id);
+    expect(read).toEqual(node);
+  });
+
   it("applies defaults for a minimal node", () => {
     const dir = tempDir();
     // Only the required core; optional fields omitted entirely.
