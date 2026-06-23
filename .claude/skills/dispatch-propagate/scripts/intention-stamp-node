@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+
+MARKER='<!-- intention:node-id -->'
+
+usage() {
+  echo "Usage:" >&2
+  echo "  intention-stamp-node <issue-num> <node-id>    # write/upsert" >&2
+  echo "  intention-stamp-node --read <issue-num>       # read back node-id" >&2
+  exit 2
+}
+
+resolve_repo() {
+  local common_dir url
+  common_dir="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || {
+    echo "intention-stamp-node: not inside a git repository" >&2; exit 1; }
+  url="$(git --git-dir="$common_dir" config --get remote.origin.url 2>/dev/null)" || {
+    echo "intention-stamp-node: no remote.origin.url in git config at $common_dir" >&2; exit 1; }
+  GH_REPO="$(gh_repo_from_remote "$url" intention-stamp-node)" || exit 1
+  export GH_REPO
+}
+
+if [[ $# -eq 2 && "$1" != "--read" ]]; then
+  # Write/upsert mode
+  N="$1"
+  NODE_ID="$2"
+
+  # Validate issue number
+  if [[ ! "$N" =~ ^[1-9][0-9]*$ ]]; then
+    echo "intention-stamp-node: invalid issue number '$N' (must be a positive integer)" >&2
+    exit 2
+  fi
+
+  # Validate node-id: reject path traversal and directory separators
+  if [[ "$NODE_ID" == */* || "$NODE_ID" == *\\* || "$NODE_ID" == *..* ]]; then
+    echo "intention-stamp-node: node-id '$NODE_ID' contains forbidden characters ('/', '\\', or '..')" >&2
+    exit 2
+  fi
+
+  resolve_repo
+
+  tmp="$(mktemp)"
+  trap 'rm -f "$tmp"' EXIT
+
+  printf '%s\n%s\n' "$MARKER" "$NODE_ID" > "$tmp"
+
+  CID="$(dispatch_marker_comment_id "$N" "$MARKER")"
+
+  if [[ -z "$CID" ]]; then
+    gh api --method POST "repos/{owner}/{repo}/issues/$N/comments" \
+      --field body=@"$tmp" >/dev/null
+  else
+    gh api --method PATCH "repos/{owner}/{repo}/issues/comments/$CID" \
+      --field body=@"$tmp" >/dev/null
+  fi
+
+elif [[ $# -eq 2 && "$1" == "--read" ]]; then
+  # Read mode
+  N="$2"
+
+  if [[ ! "$N" =~ ^[1-9][0-9]*$ ]]; then
+    echo "intention-stamp-node: invalid issue number '$N' (must be a positive integer)" >&2
+    exit 2
+  fi
+
+  resolve_repo
+
+  CID="$(dispatch_marker_comment_id "$N" "$MARKER")"
+
+  if [[ -z "$CID" ]]; then
+    exit 0
+  fi
+
+  gh api "repos/{owner}/{repo}/issues/comments/$CID" --jq '.body | split("\n")[1]'
+
+else
+  usage
+fi

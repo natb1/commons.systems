@@ -22,6 +22,10 @@ Nothing else reads this snapshot yet. It exists so the intention-tree model has
 real data to validate against; wiring it into the dispatch chain, office-hours,
 or any other system is later work.
 
+Execution state (issue open/closed, linked PRs, dispatch labels) lives in
+`../trackers/`, never in `intentions/`. The two stores are kept physically
+separate by design: the tree owns intention, GitHub owns execution.
+
 ## The two node layers
 
 The snapshot contains two layers that share one id space:
