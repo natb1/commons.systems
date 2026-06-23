@@ -68,6 +68,31 @@ describe("resolveLinkedPrs stage-2 catch", () => {
     driveStage2Throw(ghError("gh: HTTP 403 Forbidden"));
     expect(() => resolveLinkedPrs(123, [])).toThrow();
   });
+
+  it("gh issue view throws — catch returns stage-1-only PRs, does not throw", () => {
+    // Simulate the issue being deleted/transferred: `gh issue view` exits
+    // non-zero. The catch at refresh.ts must swallow it, skip stage 2, and
+    // return only the stage-1 prefix-matched PRs. PR 900 head branch does not
+    // start with "2417-" (stage-2-only probe) — it must be absent from the result.
+    const allPulls = [
+      { number: 900, state: "closed" as const, merged_at: "2026-01-01T00:00:00Z", head: { ref: "renamed-branch" } },
+      { number: 901, state: "open" as const, merged_at: null, head: { ref: "2417-some-branch" } },
+      { number: 902, state: "closed" as const, merged_at: "2026-02-01T00:00:00Z", head: { ref: "2417-other-branch" } },
+    ];
+    driveStage2Throw(
+      ghError(
+        "GraphQL: Could not resolve to an issue or pull request with the number of 2417. (repository.issue)",
+      ),
+    );
+
+    let result: ReturnType<typeof resolveLinkedPrs> | undefined;
+    expect(() => {
+      result = resolveLinkedPrs(2417, allPulls);
+    }).not.toThrow();
+
+    // Only stage-1 prefix matches (901 open, 902 merged); no stage-2 entry.
+    expect(result?.map((p) => p.number)).toEqual([901, 902]);
+  });
 });
 
 describe("resolveLinkedPrs merge/dedup (additive)", () => {
@@ -230,4 +255,5 @@ describe("resolveLinkedPrs", () => {
       );
     });
   });
+
 });
