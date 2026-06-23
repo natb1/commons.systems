@@ -16,14 +16,13 @@ beforeEach(() => {
   mockExec.mockReset();
 });
 
-// Drive the two gh calls resolveLinkedPrs makes: stage 1 (args[0] === "api")
-// returns an empty pages array; stage 2 (args[0] === "issue") throws the
-// supplied error so we can assert swallow-vs-rethrow behavior.
+// Drive the two gh calls resolveLinkedPrs makes: stage 1 (gh api) returns an
+// empty pages array; stage 2 (gh issue view) throws the supplied error so we
+// can assert swallow-vs-rethrow behavior.
 function driveStage2Throw(err: Error): void {
-  mockExec.mockImplementation((_cmd: unknown, args?: readonly string[]) => {
-    if (args?.[0] === "api") return JSON.stringify([[]]) as unknown as Buffer;
-    throw err;
-  });
+  mockExec
+    .mockReturnValueOnce(JSON.stringify([[]])) // stage 1: gh api → empty pages
+    .mockImplementationOnce(() => { throw err; }); // stage 2: gh issue view → throws
 }
 
 describe("resolveLinkedPrs stage-2 catch", () => {
