@@ -289,3 +289,62 @@ svg [aria-label="tip"] text { fill: #222; }
   color: var(--danger, #ff6b6b);
   padding: 0.5rem 0.75rem;
 }
+.intention-tree-heading {
+  font-size: 1rem;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: 0.75rem;
+}
+.intention-node-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.intention-node {
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.intention-node--frontier {
+  border-left: 2px solid var(--accent);
+  padding-left: 0.5rem;
+}
+.intention-node-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+}
+.intention-node-statement {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.intention-node-badges {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+.intention-tracker {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.25rem 0 0.5rem 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.intention-tracker--untracked {
+  color: var(--muted);
+  font-style: italic;
+}
+.intention-pr {
+  display: inline;
+}
+.intention-node > .intention-node-list {
+  padding-left: 1.25rem;
+  margin-left: 0.25rem;
+  margin-top: 0.25rem;
+  border-left: 1px solid var(--border);
+}
