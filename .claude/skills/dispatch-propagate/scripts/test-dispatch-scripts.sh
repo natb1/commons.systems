@@ -34754,7 +34754,31 @@ else
   echo "  FAIL: ensure_heartbeat_units (elapsed strand) returned non-zero"
 fi
 
-# --- 2c. Elapsed strand + enable fails → repair path returns non-zero, WARNs --
+# --- 2c. Restart failure → non-zero return + WARNING (RV-002, #2388) ----------
+# enable succeeds but `systemctl restart` fails (STUB_RESTART_RC=1). SubState=dead
+# forces fall-through past the hot-path early-return so the restart step is reached;
+# the install/re-arm path must surface a non-zero return and a WARNING to stderr
+# (lib.sh:2868-2870).
+: > "$ehu_log"
+ehu_restart_stderr="$ehu_tmp/restart-fail.stderr"
+ehu_restart_rc=0
+(
+  export DISPATCH_HEARTBEAT_UNIT_DIR="$ehu_unit_dir"
+  export DISPATCH_HEARTBEAT_SYSTEMCTL_CMD="$ehu_tmp/bin/systemctl"
+  export STUB_LOG="$ehu_log"
+  export STUB_SUBSTATE=dead STUB_ENABLE_RC=0 STUB_RESTART_RC=1 STUB_RELOAD_RC=0
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_heartbeat_units "$ehu_tmp/main-worktree"
+) 2>"$ehu_restart_stderr" || ehu_restart_rc=$?
+assert_eq "restart failure → non-zero return" "1" "$ehu_restart_rc"
+TOTAL=$((TOTAL + 1))
+if grep -q 'WARNING: ensure_heartbeat_units: systemctl --user restart dispatch-heartbeat.timer failed' "$ehu_restart_stderr"; then
+  PASS=$((PASS + 1)); echo "  PASS: restart failure emitted WARNING to stderr"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: restart failure did not emit expected WARNING to stderr"
+fi
+
+# --- 2d. Elapsed strand + enable fails → repair path returns non-zero, WARNs --
 # Parity with the cold-path degrade case (block 4a in the ensure_daemon_service
 # suite): on the elapsed/repair path, when `systemctl --user enable` fails the
 # function must return non-zero AND emit its WARNING to stderr (lib.sh:2864-2867,
