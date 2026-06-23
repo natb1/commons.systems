@@ -11,13 +11,7 @@ rationale: >-
   - Update at least one app (office-hours) to reference the shared token instead
   of
     a local/hardcoded value.
-reading: >-
-  - Add `--danger` (and `--ok`) to the `:root` token block in
-  `style/default.css`,
-    using `light-dark()` consistent with the existing tokens.
-  - Update at least one app (office-hours) to reference the shared token instead
-  of
-    a local/hardcoded value.
+reading: null
 gap: null
 clarifications: []
 tooling_goals: []
