@@ -2,11 +2,17 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Plugin } from "vite";
-// Build-time-only VALUE import: this plugin runs in Node during `vite build`
-// and under vitest, never in the browser bundle. It is the ONLY office-hours
-// module allowed to value-import intentionsutil (listNodes/listTrackers pull in
-// node:fs + yaml). The data module and React component use `import type` only.
-import { activeFrontier, listNodes, listTrackers } from "@commons-systems/intentionsutil";
+// Value imports use RELATIVE SOURCE PATHS, not the bare "@commons-systems/intentionsutil"
+// specifier. vite bundles vite.config.ts (and this plugin) via esbuild but EXTERNALIZES
+// bare workspace specifiers; Node's ESM loader then cannot load intentionsutil's TS-only
+// source (its internal `.js` imports resolve only to `.ts` on disk), which breaks both
+// `vite build` and vitest at config-load time. A relative path is inlined by esbuild
+// (it resolves `.js`→`.ts` and recursively bundles the source) instead of externalized.
+// This is the only office-hours module that value-imports intentionsutil; it runs in Node
+// at build time, never in the browser bundle.
+import { listNodes } from "../../intentionsutil/src/store.js";
+import { activeFrontier } from "../../intentionsutil/src/goals.js";
+import { listTrackers } from "../../intentionsutil/src/tracker.js";
 import type { ExecutionTracker } from "@commons-systems/intentionsutil";
 
 const VIRTUAL_MODULE_ID = "virtual:office-hours-intention-tree-seed";
