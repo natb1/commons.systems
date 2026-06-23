@@ -30,6 +30,7 @@ interface RawPull {
 function makeExecMock(opts: {
   pullsPages: RawPull[][];
   closingRefs: { number: number }[];
+  throwOnIssueView?: boolean;
 }): void {
   mockExec.mockImplementation((_cmd, args) => {
     if (!args) throw new Error("args not provided to mock");
@@ -37,6 +38,11 @@ function makeExecMock(opts: {
       return JSON.stringify(opts.pullsPages);
     }
     if (args.includes("issue") && args.includes("view")) {
+      if (opts.throwOnIssueView) {
+        throw new Error(
+          "gh issue view failed: could not resolve to an issue (simulated deleted/transferred issue)",
+        );
+      }
       return JSON.stringify({ closedByPullRequestsReferences: opts.closingRefs });
     }
     throw new Error(`Unexpected gh call: ${args.join(" ")}`);
@@ -134,5 +140,26 @@ describe("resolveLinkedPrs", () => {
     expect(() => resolveLinkedPrs(2417)).toThrow(
       /closing-reference PR #999 for issue #2417 is absent from the repo pulls list/,
     );
+  });
+
+  it("gh issue view throws — catch returns stage-1-only PRs, does not throw", () => {
+    // Simulate the issue being deleted/transferred: `gh issue view` exits
+    // non-zero. The catch at refresh.ts must swallow it, skip stage 2, and
+    // return only the stage-1 prefix-matched PRs. closingRefs names PR 900
+    // (a stage-2-only PR) to prove stage 2 is skipped — 900 must be absent.
+    makeExecMock({
+      pullsPages: PULLS_LIST_FIXTURE,
+      closingRefs: [{ number: 900 }],
+      throwOnIssueView: true,
+    });
+
+    let result: ReturnType<typeof resolveLinkedPrs> | undefined;
+    expect(() => {
+      result = resolveLinkedPrs(2417);
+    }).not.toThrow();
+
+    // Only stage-1 prefix matches (901 open, 902 merged); no stage-2 entry.
+    expect(result?.map((p) => p.number)).toEqual([901, 902]);
+    expect(result?.some((p) => p.number === 900)).toBe(false);
   });
 });
