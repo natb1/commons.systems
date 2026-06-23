@@ -176,8 +176,35 @@ body[data-route="other"] .landing-hero {
   line-height: 1.4;
 }
 
+.app-showcase-overflow {
+  margin-block-end: var(--space-4);
+}
+.app-showcase-overflow summary {
+  cursor: pointer;
+  padding: var(--space-2) var(--space-1);
+  color: var(--muted);
+  font-weight: var(--weight-bold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-heading);
+  transition: color var(--duration-fast) var(--ease), outline-color var(--duration-fast) var(--ease);
+}
+.app-showcase-overflow summary:hover {
+  color: var(--accent);
+}
+.app-showcase-overflow summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.app-showcase-overflow-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
+  margin-block-start: var(--space-4);
+}
+
 @media (max-width: 768px) {
   .landing-hero-grid { grid-template-columns: 1fr; }
+  .app-showcase-overflow-cards { grid-template-columns: 1fr; }
 }
 
 .profile-card {

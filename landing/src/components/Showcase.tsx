@@ -29,9 +29,25 @@ function ShowcaseCard({ app }: { app: AppCard }) {
  * into the `.landing-hero` placeholder node). Kept separate from the section
  * wrapper so the client mount does not nest a second `.landing-hero` section.
  */
-export function ShowcaseContent({ apps }: { apps: AppCard[] }) {
+export function ShowcaseContent({
+  apps,
+  overflow = [],
+}: {
+  apps: AppCard[];
+  overflow?: AppCard[];
+}) {
   return (
     <>
+      {overflow.length > 0 && (
+        <details className="app-showcase-overflow">
+          <summary>More apps</summary>
+          <div className="app-showcase-overflow-cards">
+            {overflow.map((app) => (
+              <ShowcaseCard key={app.url} app={app} />
+            ))}
+          </div>
+        </details>
+      )}
       <div className="landing-hero-band">
         <p className="landing-hero-band-headline">
           Build with commons.systems. Learn to run without.
@@ -60,10 +76,16 @@ export function ShowcaseContent({ apps }: { apps: AppCard[] }) {
  * wholesale (blog's injectHomeExtra). The client never renders this wrapper —
  * it mounts ShowcaseContent into the existing placeholder node instead.
  */
-export function Showcase({ apps }: { apps: AppCard[] }) {
+export function Showcase({
+  apps,
+  overflow = [],
+}: {
+  apps: AppCard[];
+  overflow?: AppCard[];
+}) {
   return (
     <section className="landing-hero app-showcase" aria-label="Featured apps">
-      <ShowcaseContent apps={apps} />
+      <ShowcaseContent apps={apps} overflow={overflow} />
     </section>
   );
 }
