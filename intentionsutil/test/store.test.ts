@@ -25,7 +25,7 @@ describe("store round-trip", () => {
         { question: "Who arbitrates conflicts?", answer: "The charter owner." },
         { question: "How often is it reviewed?", answer: "Each digest cycle." },
       ],
-      tooling_goals: ["align-cli", "intention-tree"],
+      tooling_goals: [{ kind: "actuator", statement: "align-cli" }, { kind: "sensor", statement: "intention-tree" }],
       success_signal: {
         observable: "intention-tree builds without orphans",
         sensor: "align --check",
@@ -63,7 +63,7 @@ describe("store round-trip", () => {
           answer: "Yes — the rationale field above contains one.",
         },
       ],
-      tooling_goals: ["yaml-round-trip", "intention-store"],
+      tooling_goals: [{ kind: "actuator", statement: "yaml-round-trip" }, { kind: "sensor", statement: "intention-store" }],
       success_signal: {
         observable: "readNode returns the exact node written, including trailing newlines",
         sensor: "vitest store.test.ts",
