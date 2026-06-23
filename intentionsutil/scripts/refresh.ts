@@ -103,21 +103,19 @@ export function resolveLinkedPrs(issueNumber: number): LinkedPr[] {
   ]);
   const pages: RawPull[][] = JSON.parse(pullsOut);
 
-  // Every fetched pull, by number, with its state derived once. Both stages
-  // source their `LinkedPr` from here.
+  // Single pass over the flattened pulls: record every fetched pull (by number,
+  // state derived once) in `allPulls` so both stages can source their `LinkedPr`
+  // from here, and in the same iteration populate stage 1's branch-prefix
+  // matches in `byNumber`.
   const allPulls = new Map<number, LinkedPr>();
-  for (const pr of pages.flat()) {
-    allPulls.set(pr.number, {
-      number: pr.number,
-      state: pr.merged_at !== null ? "merged" : pr.state,
-    });
-  }
-
   const prefix = `${issueNumber}-`;
   for (const pr of pages.flat()) {
+    const entry: LinkedPr = {
+      number: pr.number,
+      state: pr.merged_at !== null ? "merged" : pr.state,
+    };
+    allPulls.set(pr.number, entry);
     if (pr.head.ref.startsWith(prefix)) {
-      const entry = allPulls.get(pr.number);
-      if (!entry) throw new Error(`PR #${pr.number} in paginated list missing from allPulls`);
       byNumber.set(pr.number, entry);
     }
   }

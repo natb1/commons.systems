@@ -121,4 +121,18 @@ describe("resolveLinkedPrs", () => {
     expect(pr902Entries).toHaveLength(1);
     expect(pr902Entries[0].state).toBe("merged");
   });
+
+  it("absent closing-ref PR throws — closing ref whose number is missing from the pulls list aborts", () => {
+    // PR 999 is in closedByPullRequestsReferences but NOT in the paginated
+    // pulls list, so its state cannot be resolved. Stage 2 must throw rather
+    // than write a record with an undefined/defaulted state.
+    makeExecMock({
+      pullsPages: PULLS_LIST_FIXTURE,
+      closingRefs: [{ number: 999 }],
+    });
+
+    expect(() => resolveLinkedPrs(2417)).toThrow(
+      /closing-reference PR #999 for issue #2417 is absent from the repo pulls list/,
+    );
+  });
 });
