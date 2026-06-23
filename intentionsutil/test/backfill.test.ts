@@ -3,10 +3,14 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("node:child_process", () => ({ execFileSync: vi.fn() }));
 
 import { execFileSync } from "node:child_process";
+import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   ghWithRetry,
   fetchParentNumber,
   fetchOpenIssues,
+  pruneStaleNodes,
   GhError,
   isTransientGhError,
   parseHttpStatus,
@@ -165,5 +169,21 @@ describe("fetchOpenIssues", () => {
 
     const issues = fetchOpenIssues();
     expect(issues).toEqual([{ number: 1, title: "issue", body: "b1" }]);
+  });
+});
+
+describe("pruneStaleNodes", () => {
+  it("removes only the issue-leaf files, preserving principle roots and README", () => {
+    const dir = mkdtempSync(join(tmpdir(), "intentions-prune-"));
+    // pruneStaleNodes never reads content, so empty stub files suffice.
+    writeFileSync(join(dir, "principle-x.md"), "");
+    writeFileSync(join(dir, "issue-1.md"), "");
+    writeFileSync(join(dir, "README.md"), "");
+
+    pruneStaleNodes(dir);
+
+    expect(existsSync(join(dir, "principle-x.md"))).toBe(true);
+    expect(existsSync(join(dir, "README.md"))).toBe(true);
+    expect(existsSync(join(dir, "issue-1.md"))).toBe(false);
   });
 });
