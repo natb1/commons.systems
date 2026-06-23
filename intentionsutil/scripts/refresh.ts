@@ -63,22 +63,13 @@ interface RawPull {
 
 interface ClosingPrRef {
   number: number;
-  state: "OPEN" | "CLOSED" | "MERGED";
 }
 
 interface IssueView {
   closedByPullRequestsReferences: ClosingPrRef[];
 }
 
-type LinkedPr = { number: number; state: "open" | "closed" | "merged" };
-
-// GraphQL PR-state literals → the narrow tracker union. An explicit mapping
-// (not `.toLowerCase()`, which widens to `string`) keeps the result assignable.
-const GQL_STATE: Record<"OPEN" | "CLOSED" | "MERGED", "open" | "closed" | "merged"> = {
-  OPEN: "open",
-  CLOSED: "closed",
-  MERGED: "merged",
-};
+export type LinkedPr = { number: number; state: "open" | "closed" | "merged" };
 
 // --- Linked-PR resolution (two-stage) --------------------------------------
 
@@ -90,12 +81,16 @@ const GQL_STATE: Record<"OPEN" | "CLOSED" | "MERGED", "open" | "closed" | "merge
  *     in-progress PR that is not yet recorded as a closing reference.
  *
  *   Stage 2 (GraphQL closingReferences): the issue's own
- *     `closedByPullRequestsReferences`. This list alone is a sufficient
- *     snapshot in most cases; stage 1 only adds the not-yet-linked open PR.
+ *     `closedByPullRequestsReferences` supplies WHICH extra PR numbers to
+ *     include (the branch-renamed / closing-ref case stage 1 misses). The
+ *     porcelain returns only each reference's number — not its state — so the
+ *     state for each such PR is read from the stage-1 pulls list, which already
+ *     holds every repo PR (`--paginate&state=all`) with `merged_at` and
+ *     `state`. No second GitHub call.
  *
  * The two lists are merged and deduped by PR number. Stage 1 wins on a number
- * conflict (its `merged_at`-derived state is computed directly from the PR
- * record rather than the issue's reference view).
+ * conflict; either way the `LinkedPr` (with its `merged_at`-derived state) comes
+ * from the same already-fetched pulls list.
  */
 export function resolveLinkedPrs(issueNumber: number): LinkedPr[] {
   const byNumber = new Map<number, LinkedPr>();
@@ -108,17 +103,27 @@ export function resolveLinkedPrs(issueNumber: number): LinkedPr[] {
     "/repos/{owner}/{repo}/pulls?state=all&per_page=100",
   ]);
   const pages: RawPull[][] = JSON.parse(pullsOut);
+
+  // Single pass over the flattened pulls: record every fetched pull (by number,
+  // state derived once) in `allPulls` so both stages can source their `LinkedPr`
+  // from here, and in the same iteration populate stage 1's branch-prefix
+  // matches in `byNumber`.
+  const allPulls = new Map<number, LinkedPr>();
   const prefix = `${issueNumber}-`;
   for (const pr of pages.flat()) {
+    const entry: LinkedPr = {
+      number: pr.number,
+      state: pr.merged_at !== null ? "merged" : pr.state,
+    };
+    allPulls.set(pr.number, entry);
     if (pr.head.ref.startsWith(prefix)) {
-      byNumber.set(pr.number, {
-        number: pr.number,
-        state: pr.merged_at !== null ? "merged" : pr.state,
-      });
+      byNumber.set(pr.number, entry);
     }
   }
 
-  // Stage 2: GraphQL closing references (branch-renamed / closing-ref case).
+  // Stage 2: closing references (branch-renamed / closing-ref case). Each
+  // reference supplies only a PR number; its state is read from the stage-1
+  // pulls list (`allPulls`).
   // `gh issue view` exits non-zero if the issue was deleted or transferred;
   // that is the one documented expected error, caught here so a missing issue
   // yields an empty stage-2 list rather than aborting (mirrors backfill.ts's
@@ -147,7 +152,15 @@ export function resolveLinkedPrs(issueNumber: number): LinkedPr[] {
     for (const ref of view.closedByPullRequestsReferences) {
       // Stage 1 wins on conflict: only add a number stage 1 did not already see.
       if (!byNumber.has(ref.number)) {
-        byNumber.set(ref.number, { number: ref.number, state: GQL_STATE[ref.state] });
+        const linked = allPulls.get(ref.number);
+        if (linked === undefined) {
+          throw new Error(
+            `refresh: closing-reference PR #${ref.number} for issue #${issueNumber} ` +
+              `is absent from the repo pulls list; cannot resolve its state ` +
+              `(a same-repo PR should always be present given --paginate)`,
+          );
+        }
+        byNumber.set(ref.number, linked);
       }
     }
   }
