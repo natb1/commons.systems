@@ -26,6 +26,7 @@ import {
   type ExecutionTracker,
 } from "../src/tracker.js";
 import { listNodes } from "../src/store.js";
+import { ghErrorText } from "../src/errors.js";
 
 // --- Paths -----------------------------------------------------------------
 // The script lives at `intentionsutil/scripts/refresh.ts`, so the repo root is
@@ -139,9 +140,20 @@ export function resolveLinkedPrs(issueNumber: number, allPulls: RawPull[]): Link
   try {
     // lint-allow: gh-rest-porcelain GraphQL-only closedByPullRequestsReferences (no REST equivalent)
     viewOut = gh(["issue", "view", String(issueNumber), "--json", "closedByPullRequestsReferences"]);
-  } catch {
-    // Expected: issue deleted/transferred → treat as no closing references.
-    viewOut = null;
+  } catch (err) {
+    // Only the documented expected error — issue deleted/transferred, which gh
+    // reports as a "Could not resolve to an issue or pull request" GraphQL error
+    // — is absorbed (treated as no closing references, mirroring backfill.ts's
+    // /parent 404 discipline). Every other error class (rate-limit 429/403, auth
+    // failure, network failure) must propagate rather than be silently nulled.
+    // refresh.ts's gh() throws the raw execFileSync error, so inspect its stderr
+    // (not an instanceof GhError check — gh() never produces a GhError).
+    const text = ghErrorText(err);
+    if (/could not resolve to (a|an) (issue|pull request)/i.test(text)) {
+      viewOut = null;
+    } else {
+      throw err;
+    }
   }
   if (viewOut !== null) {
     const view: IssueView = JSON.parse(viewOut);

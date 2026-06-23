@@ -42,6 +42,54 @@ describe("fetchAllPulls", () => {
   });
 });
 
+// Drive the stage-2 gh issue view call resolveLinkedPrs makes: throws the
+// supplied error so we can assert swallow-vs-rethrow behavior. No stage-1
+// mock is needed — resolveLinkedPrs no longer calls gh api internally.
+function driveStage2Throw(err: Error): void {
+  mockExec.mockImplementationOnce(() => { throw err; }); // stage 2: gh issue view → throws
+}
+
+describe("resolveLinkedPrs stage-2 catch", () => {
+  it("swallows the deleted/transferred (Could not resolve) error and returns the stage-1 result", () => {
+    driveStage2Throw(
+      ghError(
+        "GraphQL: Could not resolve to an issue or pull request with the number of 123. (repository.issue)",
+      ),
+    );
+    expect(resolveLinkedPrs(123, [])).toEqual([]);
+  });
+
+  it("re-throws a rate-limit (429) error instead of swallowing it", () => {
+    driveStage2Throw(ghError("gh: API rate limit (HTTP 429)"));
+    expect(() => resolveLinkedPrs(123, [])).toThrow();
+  });
+
+  it("re-throws an auth failure (403) instead of swallowing it", () => {
+    driveStage2Throw(ghError("gh: HTTP 403 Forbidden"));
+    expect(() => resolveLinkedPrs(123, [])).toThrow();
+  });
+});
+
+describe("resolveLinkedPrs merge/dedup (additive)", () => {
+  it("stage 1 wins on a number conflict: its state is kept over stage 2's", () => {
+    const allPulls = [{ number: 500, state: "closed" as const, merged_at: "2026-06-01T00:00:00Z", head: { ref: "123-feature" } }];
+    mockExec.mockReturnValueOnce(JSON.stringify({ closedByPullRequestsReferences: [{ number: 500 }] }));
+    expect(resolveLinkedPrs(123, allPulls)).toEqual([{ number: 500, state: "merged" }]);
+  });
+
+  it("adds a stage-2 PR that stage 1 did not see (additive path)", () => {
+    const allPulls = [
+      { number: 501, state: "open" as const, merged_at: null, head: { ref: "123-wip" } },
+      { number: 502, state: "closed" as const, merged_at: "2026-06-02T00:00:00Z", head: { ref: "renamed-502" } },
+    ];
+    mockExec.mockReturnValueOnce(JSON.stringify({ closedByPullRequestsReferences: [{ number: 502 }] }));
+    expect(resolveLinkedPrs(123, allPulls)).toEqual([
+      { number: 501, state: "open" },
+      { number: 502, state: "merged" },
+    ]);
+  });
+});
+
 describe("resolveLinkedPrs", () => {
   it("issues zero gh api pulls calls — only the stage-2 issue-view call", () => {
     const prebuiltPulls = [
@@ -180,20 +228,6 @@ describe("resolveLinkedPrs", () => {
       expect(() => resolveLinkedPrs(2414, pulls)).toThrow(
         /closing-reference PR #999 for issue #2414 is absent from the repo pulls list/,
       );
-    });
-
-    it("stage-2 gh issue view throw yields empty stage-2 contribution without aborting", () => {
-      const pulls = [
-        { number: 30, state: "open" as const, merged_at: null, head: { ref: "2414-z" } },
-      ];
-      mockExec.mockImplementationOnce(() => {
-        throw ghError("gh: Not Found (HTTP 404)");
-      });
-
-      const result = resolveLinkedPrs(2414, pulls);
-
-      expect(result).toHaveLength(1);
-      expect(result[0]).toEqual({ number: 30, state: "open" });
     });
   });
 });
