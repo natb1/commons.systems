@@ -44,9 +44,7 @@ function makeExecMock(opts: {
     }
     if (args.includes("issue") && args.includes("view")) {
       if (opts.viewThrows) {
-        throw new Error(
-          "gh issue view exited with non-zero status (deleted/transferred issue)",
-        );
+        throw ghError("GraphQL: Could not resolve to an issue or pull request with the number of 2417. (repository.issue)");
       }
       return JSON.stringify({ closedByPullRequestsReferences: opts.closingRefs });
     }
