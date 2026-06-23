@@ -51,8 +51,11 @@ describe("resolveLinkedPrs", () => {
     resolveLinkedPrs(2414, prebuiltPulls);
 
     expect(mockExec).toHaveBeenCalledTimes(1);
-    expect(mockExec.mock.calls[0][1][0]).toBe("issue");
-    expect(mockExec.mock.calls[0][1][1]).toBe("view");
+    expect(mockExec).toHaveBeenCalledWith(
+      "gh",
+      expect.arrayContaining(["issue", "view"]),
+      expect.anything(),
+    );
   });
 
   describe("merge/dedup behavior", () => {
