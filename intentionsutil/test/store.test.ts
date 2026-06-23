@@ -19,7 +19,7 @@ describe("store round-trip", () => {
       status: "codified",
       parent: "charter",
       rationale: "Alignment is the project's reason for being.",
-      reading: "See CHARTER.md section 2.",
+      reading: "See the alignment principles.",
       gap: "No automated alignment check exists yet.",
       clarifications: [
         { question: "Who arbitrates conflicts?", answer: "The charter owner." },
