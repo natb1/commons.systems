@@ -34,6 +34,14 @@ describe("activeFrontier", () => {
     expect(frontier.map((n) => n.id)).toEqual(["leaf"]);
   });
 
+  it("includes delegated and refining leaves (all non-codified leaves survive)", () => {
+    const delegated = node({ id: "delegated", status: "delegated" });
+    const refining = node({ id: "refining", status: "refining" });
+
+    const frontier = activeFrontier([delegated, refining]);
+    expect(frontier.map((n) => n.id)).toEqual(["delegated", "refining"]);
+  });
+
   it("preserves input order among surviving nodes", () => {
     const a = node({ id: "a", status: "raw" });
     const b = node({ id: "b", status: "raw" });

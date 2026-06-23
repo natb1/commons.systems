@@ -23,24 +23,25 @@ export function realizationForOwner(owner: Owner): Realization {
 }
 
 /**
- * A node is a leaf when no other node names it as a parent. Childless nodes —
- * including childless principle roots — are leaves.
- */
-export function isLeaf(node: IntentionNode, all: IntentionNode[]): boolean {
-  return !all.some((n) => n.parent === node.id);
-}
-
-/**
  * The active frontier: the leaf nodes that still have open work.
  *
- * The predicate is `status !== "codified" && isLeaf(node, nodes)`. Rationale:
- * every issue leaf is currently `status: "raw"`, so gating on a
- * `delegated`/`codified` status would yield an empty frontier. Leaf-ness alone
- * would wrongly include the childless `codified` principle roots; the
- * `!== "codified"` clause drops those. Input order is preserved (filter only).
+ * A node is a leaf when no other node names it as a parent; childless nodes —
+ * including childless principle roots — are leaves. The predicate is
+ * `status !== "codified" && <node is a leaf>`. Rationale: every issue leaf is
+ * currently `status: "raw"`, so gating on a `delegated`/`codified` status would
+ * yield an empty frontier. Leaf-ness alone would wrongly include the childless
+ * `codified` principle roots; the `!== "codified"` clause drops those. Input
+ * order is preserved (filter only).
+ *
+ * Leaf-ness is resolved against a Set of all non-null parent ids built once up
+ * front, so the whole pass is O(n) rather than O(n²) (a per-node scan over all
+ * nodes).
  */
 export function activeFrontier(nodes: IntentionNode[]): IntentionNode[] {
-  return nodes.filter((node) => node.status !== "codified" && isLeaf(node, nodes));
+  const parentIds = new Set(
+    nodes.map((n) => n.parent).filter((p): p is string => p !== null),
+  );
+  return nodes.filter((node) => node.status !== "codified" && !parentIds.has(node.id));
 }
 
 /**

@@ -74,4 +74,28 @@ describe("validateNode", () => {
       }),
     ).toThrow();
   });
+
+  it("rejects a tooling_goal that is a bare string", () => {
+    expect(() =>
+      validateNode({
+        id: "n6",
+        statement: "Old format.",
+        owner: "human",
+        status: "raw",
+        tooling_goals: ["bare-string"],
+      }),
+    ).toThrow();
+  });
+
+  it("rejects a tooling_goal with missing statement", () => {
+    expect(() =>
+      validateNode({
+        id: "n7",
+        statement: "Missing statement.",
+        owner: "human",
+        status: "raw",
+        tooling_goals: [{ kind: "actuator" }],
+      }),
+    ).toThrow();
+  });
 });
