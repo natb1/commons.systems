@@ -17,6 +17,7 @@ import type { Status } from "@commons-systems/intentionsutil";
 
 export interface IntentionTreePanelProps {
   view: IntentionTreeView;
+  className?: string;
 }
 
 const STATUS_VARIANT: Record<Status, BadgeProps["variant"]> = {
@@ -99,8 +100,10 @@ export function IntentionTreePanel(props: IntentionTreePanelProps) {
     );
   }
 
+  const rootClass = ["intention-tree", props.className].filter(Boolean).join(" ");
+
   return (
-    <section className="intention-tree">
+    <section className={rootClass}>
       <h2 className="intention-tree-heading">INTENTION TREE</h2>
       {view.tree.length === 0 ? (
         <p className="empty">No intentions yet.</p>
