@@ -40,6 +40,68 @@
 // If a required identity param is missing/invalid the function logs one line and
 // returns without writing. A live outage in any single source is swallowed by
 // that source's try/catch so the schedule keeps running cheaply.
+//
+// SETUP STEPS (one-time manual provisioning, performed by the repo owner
+// post-merge; the function deploys dormant until these are completed):
+//
+//   1. Google APIs. In the Google Cloud project that backs the Firebase project:
+//      enable the "Google Analytics Data API" (GA4 runReport) and the
+//      "Google Search Console API" (searchAnalytics). Both can be enabled via
+//      the Cloud Console APIs & Services library or `gcloud services enable`.
+//
+//   2. Google OAuth credential. Create an OAuth 2.0 client ID (Desktop or Web
+//      application type) in the Cloud Console. Grant the credential
+//      `analytics.readonly` (to run GA4 reports) and `webmasters.readonly` (to
+//      query Search Console) scopes. Exchange the auth code for a refresh token
+//      once (e.g. using the OAuth playground or a one-time local script); that
+//      refresh token is long-lived and is what you set as the secret below.
+//
+//   3. PSI API key (optional). A keyless call works but is IP-rate-limited. If
+//      that becomes a problem, create an API key in the Cloud Console for the
+//      "PageSpeed Insights API" and set it via `PAGESPEED_API_KEY` below.
+//
+//   4. GitHub App — traffic read. The current GitHub App installation has
+//      read-only `Issues` permission. GitHub's traffic API (clones, views,
+//      referrers) requires push access on the repo. To unlock traffic data,
+//      extend the SAME installation's permissions to additionally include
+//      `Contents: read` or a traffic-scoped permission. Until then, traffic
+//      is silently omitted from each run while public stats (stars/forks/
+//      watchers) continue to be collected — no error is raised.
+//
+//   5. Secrets. Set each secret via `firebase functions:secrets:set`:
+//        OFFICE_HOURS_GITHUB_APP_PRIVATE_KEY  — already set (reused)
+//        OFFICE_HOURS_MEMBER_EMAILS           — already set (reused)
+//        GOOGLE_ANALYTICS_CLIENT_SECRET       — OAuth client secret from step 2
+//        GOOGLE_ANALYTICS_REFRESH_TOKEN       — OAuth refresh token from step 2
+//        PAGESPEED_API_KEY                    — PSI key from step 3 (optional)
+//
+//   6. Config vars. Set each `defineString` var in the Firebase Functions
+//      config (`.env.<project>` or `firebase functions:config:set` depending
+//      on your Firebase CLI version):
+//        PROJECT_SIGNALS_GITHUB_REPO          — "owner/name" of the repo to track
+//        GOOGLE_ANALYTICS_CLIENT_ID           — OAuth client ID from step 2
+//        PROJECT_SIGNALS_GA4_PROPERTY_IDS     — "app:propertyId,app:propertyId,..."
+//        PROJECT_SIGNALS_GSC_SITE             — defaults to "sc-domain:commons.systems"
+//                                               (covers all commons.systems subdomains;
+//                                               one site config suffices for the whole
+//                                               domain property already verified in GSC)
+//        PROJECT_SIGNALS_PSI_URLS             — comma-separated https:// URLs to audit
+//        PROJECT_SIGNALS_PSI_STRATEGY         — "mobile" (default) or "desktop"
+//
+//   7. Post-deploy live QA. After deploying, trigger one manual run from the
+//      Firebase Console (Functions → collectProjectSignals → Test) and verify:
+//      - The `office-hours/{env}/metrics/project-signals` document is written
+//        with whichever sources are configured.
+//      - A new document appears in `office-hours/{env}/signal-samples`.
+//      - The PROJECT SIGNALS panel in the office-hours dashboard renders the
+//        collected values.
+//
+// Intention-graph contract (see also lines 10–17 above):
+//   `office-hours/{env}/metrics/project-signals` and the `signal-samples` time
+//   series are the Firestore paths the intention graph's per-node readings
+//   (#2371) will read to attach live project signals to the nodes they bear on.
+//   Do not rename or restructure these paths without updating #2371's
+//   implementation.
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret, defineString } from "firebase-functions/params";
 import { getApps, initializeApp } from "firebase-admin/app";
