@@ -6,7 +6,7 @@ cd "$REPO_ROOT"
 # shellcheck source=../../dispatch-propagate/scripts/lib.sh
 source "$REPO_ROOT/.claude/skills/dispatch-propagate/scripts/lib.sh"
 
-OUTPUT="$REPO_ROOT/tmp/roadmap-context.txt"
+OUTPUT="$REPO_ROOT/tmp/align-context.txt"
 # Pre-create the file owner-only: it now holds analytics data (Search Console
 # queries, traffic) that should not be world-readable. A later '>' redirect
 # truncates but preserves the existing mode, so 0600 sticks.
@@ -43,11 +43,11 @@ gh api "repos/$OWNER_REPO" --jq '{stargazers_count, forks_count, watchers_count}
 
 echo ""
 echo "=== Analytics (GA4 + Search Console) ==="
-"$REPO_ROOT/.claude/skills/roadmap/scripts/fetch-analytics.sh" || true
+"$REPO_ROOT/.claude/skills/align/scripts/fetch-analytics.sh" || true
 
 echo ""
 echo "=== Web Performance (PageSpeed Insights) ==="
-"$REPO_ROOT/.claude/skills/roadmap/scripts/fetch-psi.sh" || true
+"$REPO_ROOT/.claude/skills/align/scripts/fetch-psi.sh" || true
 } > "$OUTPUT"
 
 echo "$OUTPUT"
