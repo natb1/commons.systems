@@ -9,7 +9,7 @@ user-invocable: true
 `/align` is the project's **dialectic engine**. Structural roles drive a
 decompose → assess → synthesize → challenge → re-synthesize loop over a set of
 evaluative perspectives, then triage the open backlog and produce recommended
-edits to `ROADMAP.md`, `CHARTER.md`, and the issue backlog.
+edits to `ROADMAP.md` and the issue backlog.
 
 The engine keeps **two orthogonal layers** and never conflates them:
 
@@ -30,8 +30,8 @@ must never be conflated:
 
 This run operates at **rung-5 — the project's charter-level intent**. At rung-5
 there is **no persisted intention tree** (out of scope, tracked by #2366), so the
-engine runs over the charter-level intent directly: it reads `CHARTER.md`'s
-standing evaluative intentions, `ROADMAP.md`, all work completed since the last
+engine runs over the charter-level intent directly: it reads the intention
+graph's principle roots (`intentions/principle-*.md`), `ROADMAP.md`, all work completed since the last
 review, and analytics, the same inputs the assessment has always used.
 
 This skill runs on one of two **triggers**:
@@ -105,7 +105,7 @@ role is not a perspective and a perspective is not a structural role.
 
 | Role | Agent def | What it does |
 |---|---|---|
-| Decomposer | `align-decomposer` | At rung-5, reads `CHARTER.md` and emits the **perspective roster** for the run — which charter-derived perspectives the charter currently calls for. It does not decompose a tree (there is none at rung-5). |
+| Decomposer | `align-decomposer` | At rung-5, reads the intention graph's principle roots and emits the **perspective roster** for the run — which charter-derived perspectives the charter currently calls for. It does not decompose a tree (there is none at rung-5). |
 | Consistency-tester | `align-consistency` | The **veto layer**: charter compliance, dependency health, ratchet risk. Produces findings/warnings, not priorities. A critical finding can veto a priority. |
 | Delegability-assessor | `align-delegability-assessor` | For one synthetic intention node, runs CAN → SHOULD → consistency and emits one `delegability.eval.v1` object (see `.claude/docs/delegability.md`). |
 | Contrarian | `align-contrarian` | One concentrated adversarial pass over the synthesis. |
@@ -133,7 +133,7 @@ regression.
 ## Assessment window (both triggers)
 
 The assessment evaluates `ROADMAP.md` and **all work completed since the last
-align review** against `CHARTER.md`. Compute the window-start timestamp first:
+align review** against the intention graph. Compute the window-start timestamp first:
 
 - **Scheduled trigger:** the review issue anchors the window.
 
@@ -177,7 +177,7 @@ align review** against `CHARTER.md`. Compute the window-start timestamp first:
 Pass `WINDOW_START` into the perspective context (Phase 1): instruct the
 perspectives to evaluate `ROADMAP.md` and **all work completed since
 `WINDOW_START`** (or the full project history when there is no prior review)
-against `CHARTER.md`.
+against the intention graph.
 
 ## Phase 1: Gather context
 
@@ -259,8 +259,8 @@ when credentials are absent), the PSI section is always attempted.
 
 Read the decomposer agent definition `.claude/agents/align-decomposer.md` and
 launch it (Agent tool, `subagent_type: "general-purpose"`, the def's prompt
-inline) over `CHARTER.md`. At rung-5 it does not decompose a tree — it reads the
-charter's standing evaluative intentions and emits the **perspective roster**:
+inline) over the intention graph's principle roots. At rung-5 it does not decompose a tree — it reads the
+intention graph's principle roots and emits the **perspective roster**:
 the charter-derived perspectives the charter calls for today.
 
 From the roster, decide which perspective agents to load for Phase 2:
