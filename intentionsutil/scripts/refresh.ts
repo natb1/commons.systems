@@ -15,7 +15,6 @@
 //   npx tsx intentionsutil/scripts/refresh.ts <node-id>   # refresh one node
 //   npx tsx intentionsutil/scripts/refresh.ts             # refresh all
 
-import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -27,6 +26,7 @@ import {
 } from "../src/tracker.js";
 import { listNodes } from "../src/store.js";
 import { ghErrorText } from "../src/errors.js";
+import { gh, paginateGhApi } from "./gh-utils.js";
 
 // --- Paths -----------------------------------------------------------------
 // The script lives at `intentionsutil/scripts/refresh.ts`, so the repo root is
@@ -35,13 +35,6 @@ const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = dirname(dirname(scriptDir));
 const intentionsDir = join(repoRoot, "intentions");
 const trackersDir = join(repoRoot, "trackers");
-
-// --- Helpers ---------------------------------------------------------------
-
-/** Run a `gh` subcommand and return stdout. Throws on non-zero exit. */
-function gh(args: string[]): string {
-  return execFileSync("gh", args, { encoding: "utf8", maxBuffer: 100 * 1024 * 1024 });
-}
 
 // --- GitHub JSON shapes ----------------------------------------------------
 
@@ -79,14 +72,9 @@ export type LinkedPr = { number: number; state: "open" | "closed" | "merged" };
  * `resolveLinkedPrs` — do NOT call inside a per-node loop.
  */
 export function fetchAllPulls(): RawPull[] {
-  const pullsOut = gh([
-    "api",
-    "--paginate",
-    "--slurp",
+  return paginateGhApi<RawPull>([
     "/repos/{owner}/{repo}/pulls?state=all&per_page=100",
   ]);
-  const pages: RawPull[][] = JSON.parse(pullsOut);
-  return pages.flat();
 }
 
 /**
