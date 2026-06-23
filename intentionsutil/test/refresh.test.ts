@@ -4,6 +4,7 @@ vi.mock("node:child_process", () => ({ execFileSync: vi.fn() }));
 
 import { execFileSync } from "node:child_process";
 import { fetchAllPulls, resolveLinkedPrs } from "../scripts/refresh.js";
+import { validateTracker, type ExecutionTracker } from "../src/tracker.js";
 
 const mockExec = vi.mocked(execFileSync);
 
@@ -58,6 +59,54 @@ describe("resolveLinkedPrs", () => {
     );
   });
 
+  it("core regression — stage-2-only closing ref has defined state (not undefined)", () => {
+    // PR 900: head ref "renamed-branch" does NOT start with "2414-" so stage 1
+    // skips it. Stage 2 (closedByPullRequestsReferences) adds it. Its state
+    // must be resolved from the pulls list (merged_at set → "merged").
+    const allPulls = [
+      { number: 900, state: "closed" as const, merged_at: "2026-01-01T00:00:00Z", head: { ref: "renamed-branch" } },
+    ];
+    mockExec.mockReturnValueOnce(
+      JSON.stringify({ closedByPullRequestsReferences: [{ number: 900 }] }),
+    );
+
+    const result = resolveLinkedPrs(2414, allPulls);
+
+    const pr900Entries = result.filter((p) => p.number === 900);
+    expect(pr900Entries).toHaveLength(1);
+    const pr900 = pr900Entries[0];
+    expect(pr900.state).not.toBeUndefined();
+    expect(pr900.state).toBe("merged");
+  });
+
+  it("validateTracker round-trip — record with resolveLinkedPrs result passes validation after JSON round-trip", () => {
+    // This reproduces the old failure mode: JSON.stringify dropped undefined state keys,
+    // causing validateTracker to reject the re-parsed record.
+    const allPulls = [
+      { number: 900, state: "closed" as const, merged_at: "2026-01-01T00:00:00Z", head: { ref: "renamed-branch" } },
+    ];
+    mockExec.mockReturnValueOnce(
+      JSON.stringify({ closedByPullRequestsReferences: [{ number: 900 }] }),
+    );
+
+    const linkedPrs = resolveLinkedPrs(2414, allPulls);
+
+    const record: ExecutionTracker = {
+      node_id: "test-node",
+      issue_number: 2414,
+      state: "open",
+      linked_prs: linkedPrs,
+      dispatch_labels: ["dispatch:planned"],
+      refreshed_at: new Date().toISOString(),
+    };
+
+    // Direct validation must pass.
+    expect(() => validateTracker(record)).not.toThrow();
+
+    // JSON round-trip must also pass (reproduces the original undefined-key bug).
+    expect(() => validateTracker(JSON.parse(JSON.stringify(record)))).not.toThrow();
+  });
+
   describe("merge/dedup behavior", () => {
     it("stage-1 branch-prefix filter: only includes PRs whose head branch starts with the issue number", () => {
       const pulls = [
@@ -91,12 +140,14 @@ describe("resolveLinkedPrs", () => {
     it("stage-1 wins on number conflict; stage-2 only adds numbers stage-1 did not see", () => {
       const pulls = [
         { number: 20, state: "open" as const, merged_at: null, head: { ref: "2414-a" } },
+        // PR 21 is in allPulls (state closed via merged_at null) so stage-2 can resolve its state.
+        { number: 21, state: "closed" as const, merged_at: null, head: { ref: "other-branch" } },
       ];
       mockExec.mockReturnValueOnce(
         JSON.stringify({
           closedByPullRequestsReferences: [
-            { number: 20, state: "MERGED" },
-            { number: 21, state: "CLOSED" },
+            { number: 20 },
+            { number: 21 },
           ],
         }),
       );
@@ -104,15 +155,31 @@ describe("resolveLinkedPrs", () => {
       const result = resolveLinkedPrs(2414, pulls);
 
       expect(result).toHaveLength(2);
-      // Stage-1 wins for #20: state is "open", not "merged"
+      // Stage-1 wins for #20: state is "open" (from pulls list, matched prefix)
       const pr20 = result.find((p) => p.number === 20);
       expect(pr20?.state).toBe("open");
-      // Stage-2 adds #21 with "closed"
+      // Stage-2 adds #21 with "closed" (resolved from pulls list)
       const pr21 = result.find((p) => p.number === 21);
       expect(pr21?.state).toBe("closed");
       // Sorted ascending by number
       expect(result[0].number).toBe(20);
       expect(result[1].number).toBe(21);
+    });
+
+    it("absent closing-ref PR throws — closing ref whose number is missing from the pulls list aborts", () => {
+      // PR 999 is in closedByPullRequestsReferences but NOT in allPulls,
+      // so its state cannot be resolved. Stage 2 must throw rather than
+      // write a record with an undefined/defaulted state.
+      const pulls = [
+        { number: 30, state: "open" as const, merged_at: null, head: { ref: "2414-z" } },
+      ];
+      mockExec.mockReturnValueOnce(
+        JSON.stringify({ closedByPullRequestsReferences: [{ number: 999 }] }),
+      );
+
+      expect(() => resolveLinkedPrs(2414, pulls)).toThrow(
+        /closing-reference PR #999 for issue #2414 is absent from the repo pulls list/,
+      );
     });
 
     it("stage-2 gh issue view throw yields empty stage-2 contribution without aborting", () => {
