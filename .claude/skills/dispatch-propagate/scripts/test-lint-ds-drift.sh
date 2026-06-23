@@ -31,6 +31,19 @@ VIOL_ESCAPED="font-size: 11${_PX}; /* ds-lint-disable-line: SVG label, no exact 
 # /* brand was #abcdef */  (hex in a comment line)
 COMMENT_HEX="/* brand was ${_H}abcdef */"
 
+# JSX camelCase violation fixtures (camelCase analogs of the CSS violations above)
+# fontSize: '14px',  (px font-size in JSX)
+VIOL_JSX_FONTSIZE="fontSize: '14${_PX}',"
+# fontWeight: 300,  (off-scale font-weight in JSX)
+VIOL_JSX_FONTWEIGHT="fontWeight: 300,"
+# marginTop: '5px',  (px spacing in JSX)
+VIOL_JSX_MARGIN="marginTop: '5${_PX}',"
+# gap: '8px',  (px gap in JSX)
+VIOL_JSX_GAP="gap: '8${_PX}',"
+# multiline split: property name and value on separate lines — neither fires alone
+VIOL_JSX_MULTILINE_NAME="fontSize:"
+VIOL_JSX_MULTILINE_VALUE="'14${_PX}',"
+
 # Build a fresh ephemeral repo. Sets globals: REPO, BARE.
 # $1 (optional): "with_violation" — seed the origin/main baseline with a
 #   violating hex line in the in-scope CSS file.
