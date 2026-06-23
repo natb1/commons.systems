@@ -557,17 +557,20 @@ Then the session ends — the posted report is the office-hours session's output
 `/align` was previously named `/roadmap`; the rename shipped in #2370 (PR
 #2392, already merged). The in-repo example config
 (`.claude/skills/dispatch-propagate/scripts/jit.example.json`) and this skill
-already use the new values — `skill: 'align'` and `label: 'jit:align'`.
+already use the new values — `"skill": "align"` and `"label": "jit:align"`.
 
 A deployed instance's live `jit.json` is **not tracked in this repo**, so the
 rename does not propagate to it automatically. Any deployed instance whose
 live config still carries the old values will break at its next scheduled JIT
-run: `dispatch-jit-reminder` opens a `jit:roadmap`-labeled issue and invokes
-`/roadmap`, a skill that no longer exists. Operators of such instances must,
+run: `dispatch-jit-engine` creates a `jit:roadmap`-labeled issue (or finds one
+already open) and `dispatch-jit-reminder` invokes `/roadmap`, a skill that no
+longer exists. Operators of such instances must,
 if they have not already:
 
 1. In their live `jit.json` (or equivalent deployed config), change
    `"skill": "roadmap"` to `"skill": "align"` and `"label": "jit:roadmap"` to
    `"label": "jit:align"`.
-2. Close or relabel any open `jit:roadmap` issues, which would otherwise be
-   orphaned with no handler.
+2. Close or relabel to `jit:align` any open `jit:roadmap` issues. Closing
+   anchors the `remindAfterClose` timer so the next `jit:align` issue is
+   created after the configured interval; relabeling to `jit:align` lets the
+   existing issue be picked up immediately on the next dispatch tick.
