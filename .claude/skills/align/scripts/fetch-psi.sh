@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # fetch-psi.sh — query the PageSpeed Insights (PSI / Lighthouse lab) API once per
 # deployed-app URL and emit a single formatted text block to stdout, for
-# consumption by the roadmap skill's Phase 1 context gathering.
+# consumption by the align skill's Phase 1 context gathering.
 #
 # PSI returns synthetic ("lab") Lighthouse results that are always available
-# regardless of real traffic, so this feed works in autonomous /roadmap runs
+# regardless of real traffic, so this feed works in autonomous /align runs
 # even when no app has measurable RUM. Per URL it reports the four Lighthouse
 # category scores (performance, SEO, accessibility, best practices, each 0-100)
 # and the core lab metrics (LCP, CLS, TBT, FCP). When the response carries a
@@ -12,7 +12,7 @@
 #
 # PAGESPEED_API_KEY — OPTIONAL. The PSI API works keyless at low volume (it is
 # rate-limited per source IP). This is the no-config default that makes the feed
-# available in autonomous /roadmap runs where no interactive `pass` warm-up
+# available in autonomous /align runs where no interactive `pass` warm-up
 # happens. Set the key only to raise the rate limit; when set it is passed as the
 # `key` query param. Per the pass/GPG section of .claude/rules/sandbox.md, source
 # it from the secret store before invoking, e.g.
@@ -24,10 +24,10 @@
 # stdout and PROCEEDS — it does not exit.
 #
 # Config env vars (with defaults):
-#   ROADMAP_PSI_URLS     Comma-separated list of https:// URLs to test.
+#   ALIGN_PSI_URLS     Comma-separated list of https:// URLs to test.
 #                        Default: the five canonical custom-domain app URLs
 #                        (commons.systems, budget., print., audio., fellspiral.).
-#   ROADMAP_PSI_STRATEGY PSI strategy: "mobile" or "desktop". Default: mobile.
+#   ALIGN_PSI_STRATEGY PSI strategy: "mobile" or "desktop". Default: mobile.
 #
 # Sandbox: callers MUST wrap this script with dangerouslyDisableSandbox: true —
 # it makes `curl` calls to www.googleapis.com, which the sandbox's network
@@ -44,8 +44,18 @@ set -euo pipefail
 # ---- Step 1: resolve config env vars with defaults --------------------------
 # PAGESPEED_API_KEY is optional — keyless is the no-config default.
 PAGESPEED_API_KEY="${PAGESPEED_API_KEY:-}"
-ROADMAP_PSI_URLS="${ROADMAP_PSI_URLS:-https://commons.systems,https://budget.commons.systems,https://print.commons.systems,https://audio.commons.systems,https://fellspiral.commons.systems}"
-ROADMAP_PSI_STRATEGY="${ROADMAP_PSI_STRATEGY:-mobile}"
+ALIGN_PSI_URLS="${ALIGN_PSI_URLS:-https://commons.systems,https://budget.commons.systems,https://print.commons.systems,https://audio.commons.systems,https://fellspiral.commons.systems}"
+ALIGN_PSI_STRATEGY="${ALIGN_PSI_STRATEGY:-mobile}"
+
+# Validate ALIGN_PSI_STRATEGY to the two accepted values before the loop. It is
+# echoed verbatim into the context file the align personas read (line below), so
+# a newline or section-marker in the env var could forge a context section
+# heading (prompt injection). Fail early on anything else. Mirrors the
+# ALIGN_SEARCH_CONSOLE_SITE guard in fetch-analytics.sh.
+if [[ ! "$ALIGN_PSI_STRATEGY" =~ ^(mobile|desktop)$ ]]; then
+  echo "(PSI: invalid ALIGN_PSI_STRATEGY '${ALIGN_PSI_STRATEGY}' — must be mobile or desktop)"
+  exit 0
+fi
 
 if [[ -z "$PAGESPEED_API_KEY" ]]; then
   echo "(PSI: running keyless — set PAGESPEED_API_KEY for higher rate limits)"
@@ -58,7 +68,7 @@ KEY_ARGS=()
 # ---- helper: extract an .error.message reason from a JSON response ----------
 # Prints the API error message if the response carries an `.error` object,
 # otherwise prints nothing. Used to surface per-URL failures at the boundary.
-# The reason is echoed into the context file the roadmap personas read, and its
+# The reason is echoed into the context file the align personas read, and its
 # text is server-controlled, so strip newlines/carriage returns and truncate to
 # stop a crafted API response from forging section markers (prompt injection).
 api_error_reason() {
@@ -67,7 +77,7 @@ api_error_reason() {
 }
 
 # ---- Step 2: per-URL loop ---------------------------------------------------
-IFS=',' read -r -a PSI_URLS <<<"$ROADMAP_PSI_URLS"
+IFS=',' read -r -a PSI_URLS <<<"$ALIGN_PSI_URLS"
 for URL in "${PSI_URLS[@]}"; do
   [[ -z "$URL" ]] && continue
   # Validate each URL before it reaches a curl arg or the context file. Require a
@@ -79,12 +89,12 @@ for URL in "${PSI_URLS[@]}"; do
     continue
   fi
 
-  echo "--- PSI: ${URL} (${ROADMAP_PSI_STRATEGY}) ---"
+  echo "--- PSI: ${URL} (${ALIGN_PSI_STRATEGY}) ---"
 
   RC=0
   RESP=$(curl -sf -G --max-time 60 \
     --data-urlencode "url=$URL" \
-    --data-urlencode "strategy=$ROADMAP_PSI_STRATEGY" \
+    --data-urlencode "strategy=$ALIGN_PSI_STRATEGY" \
     --data-urlencode "category=performance" \
     --data-urlencode "category=seo" \
     --data-urlencode "category=accessibility" \
