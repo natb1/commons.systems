@@ -11,7 +11,8 @@
 #   (neither)        → return empty array []
 #
 # STUB_DIR must be set to a writable directory where POST/PATCH calls record
-# posted-method.txt and posted-body.txt.
+# posted-method.txt and posted-body.txt. GET replays posted-body.txt so the
+# real --jq filter is exercised against the stored body.
 
 METHOD=""
 URL=""
@@ -93,12 +94,16 @@ fi
 # gh api repos/{owner}/{repo}/issues/comments/<CID> [--jq <filter>]
 if [[ -z "$METHOD" && $PAGINATE -eq 0 ]]; then
   if [[ "$URL" == */issues/comments/* ]]; then
+    if [[ ! -f "${STUB_DIR}/posted-body.txt" ]]; then
+      echo "stub: GET called but no posted-body.txt in STUB_DIR='${STUB_DIR}' — run a POST/PATCH first" >&2
+      exit 1
+    fi
     if [[ -n "$JQ_FILTER" ]]; then
-      # Script uses: --jq '.body | split("\n")[1]'
-      # Return the node-id directly since the stub can't run jq
-      printf 'goal-foo\n'
+      # Reconstruct {"body": <stored body>} and apply the real --jq filter so the
+      # production split expression (.body | split("\n")[1]) is exercised by tests.
+      jq -Rs '{body: .}' < "${STUB_DIR}/posted-body.txt" | jq -r "$JQ_FILTER"
     else
-      printf '{"body":"<!-- intention:node-id -->\ngoal-foo\n"}\n'
+      jq -Rs '{body: .}' < "${STUB_DIR}/posted-body.txt"
     fi
     exit 0
   fi
