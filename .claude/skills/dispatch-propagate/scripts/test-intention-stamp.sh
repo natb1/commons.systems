@@ -125,4 +125,17 @@ assert_eq "exits 0" "0" "$exit_code"
 assert_eq "stdout is the node-id" "goal-foo" "$output"
 teardown
 
+# ---------------------------------------------------------------------------
+# Test 8: --read mode with no existing comment → exit 0, empty stdout
+# STUB_EXISTING is NOT set, so the LIST stub returns [] → CID empty →
+# the script's `if [[ -z "$CID" ]]; then exit 0; fi` path (no output).
+# ---------------------------------------------------------------------------
+echo "Test 8: --read mode with no comment returns empty stdout"
+setup
+exit_code=0
+output="$("$STAMP_SCRIPT" --read 5 2>/dev/null)" || exit_code=$?
+assert_eq "exits 0" "0" "$exit_code"
+assert_eq "stdout is empty" "" "$output"
+teardown
+
 report_results
