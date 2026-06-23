@@ -15,14 +15,11 @@ const mockExec = vi.mocked(execFileSync);
 
 // Build an Error shaped like execFileSync's throw (strings because encoding:utf8).
 function ghError(stderr: string, stdout = ""): Error {
-  const e = new Error("Command failed") as Error & {
-    stderr: string;
-    stdout: string;
-    status: number;
-  };
-  e.stderr = stderr;
-  e.stdout = stdout;
-  e.status = 1; // gh exits 1 regardless of HTTP status
+  const e = Object.assign(new Error("Command failed"), {
+    stderr,
+    stdout,
+    status: 1, // gh exits 1 regardless of HTTP status
+  });
   return e;
 }
 
@@ -58,10 +55,11 @@ describe("ghWithRetry", () => {
     }
 
     expect(caught).toBeInstanceOf(GhError);
-    expect((caught as GhError).httpStatus).toBe(503);
-    expect((caught as GhError).message).toContain("api");
-    expect((caught as GhError).message).toContain("x");
-    expect((caught as GhError).message).toContain("HTTP 503");
+    if (!(caught instanceof GhError)) throw new Error("unreachable");
+    expect(caught.httpStatus).toBe(503);
+    expect(caught.message).toContain("api");
+    expect(caught.message).toContain("x");
+    expect(caught.message).toContain("HTTP 503");
     expect(mockExec).toHaveBeenCalledTimes(3);
   });
 
@@ -78,7 +76,8 @@ describe("ghWithRetry", () => {
     }
 
     expect(caught).toBeInstanceOf(GhError);
-    expect((caught as GhError).httpStatus).toBe(404);
+    if (!(caught instanceof GhError)) throw new Error("unreachable");
+    expect(caught.httpStatus).toBe(404);
     expect(mockExec).toHaveBeenCalledTimes(1);
   });
 });
@@ -106,7 +105,8 @@ describe("fetchParentNumber", () => {
     }
 
     expect(caught).toBeInstanceOf(GhError);
-    expect((caught as GhError).httpStatus).toBe(429);
+    if (!(caught instanceof GhError)) throw new Error("unreachable");
+    expect(caught.httpStatus).toBe(429);
   });
 
   it("parses the parent number on the happy path", () => {
