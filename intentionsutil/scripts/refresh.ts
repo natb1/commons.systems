@@ -74,6 +74,22 @@ export type LinkedPr = { number: number; state: "open" | "closed" | "merged" };
 // --- Linked-PR resolution (two-stage) --------------------------------------
 
 /**
+ * Fetch the full repo pulls list once. Returns a flat `RawPull[]` across all
+ * paginated pages. Callers should fetch this once and pass it to
+ * `resolveLinkedPrs` — do NOT call inside a per-node loop.
+ */
+export function fetchAllPulls(): RawPull[] {
+  const pullsOut = gh([
+    "api",
+    "--paginate",
+    "--slurp",
+    "/repos/{owner}/{repo}/pulls?state=all&per_page=100",
+  ]);
+  const pages: RawPull[][] = JSON.parse(pullsOut);
+  return pages.flat();
+}
+
+/**
  * Resolve the PRs linked to an issue, combining two authorities:
  *
  *   Stage 1 (REST branch-prefix): every PR whose head branch starts with
@@ -92,30 +108,22 @@ export type LinkedPr = { number: number; state: "open" | "closed" | "merged" };
  * conflict; either way the `LinkedPr` (with its `merged_at`-derived state) comes
  * from the same already-fetched pulls list.
  */
-export function resolveLinkedPrs(issueNumber: number): LinkedPr[] {
+export function resolveLinkedPrs(issueNumber: number, allPulls: RawPull[]): LinkedPr[] {
   const byNumber = new Map<number, LinkedPr>();
 
   // Stage 1: REST pulls list, branch-prefix filtered.
-  const pullsOut = gh([
-    "api",
-    "--paginate",
-    "--slurp",
-    "/repos/{owner}/{repo}/pulls?state=all&per_page=100",
-  ]);
-  const pages: RawPull[][] = JSON.parse(pullsOut);
-
-  // Single pass over the flattened pulls: record every fetched pull (by number,
-  // state derived once) in `allPulls` so both stages can source their `LinkedPr`
+  // Single pass over allPulls: record every fetched pull (by number, state
+  // derived once) in `pullsByNumber` so both stages can source their `LinkedPr`
   // from here, and in the same iteration populate stage 1's branch-prefix
   // matches in `byNumber`.
-  const allPulls = new Map<number, LinkedPr>();
+  const pullsByNumber = new Map<number, LinkedPr>();
   const prefix = `${issueNumber}-`;
-  for (const pr of pages.flat()) {
+  for (const pr of allPulls) {
     const entry: LinkedPr = {
       number: pr.number,
       state: pr.merged_at !== null ? "merged" : pr.state,
     };
-    allPulls.set(pr.number, entry);
+    pullsByNumber.set(pr.number, entry);
     if (pr.head.ref.startsWith(prefix)) {
       byNumber.set(pr.number, entry);
     }
@@ -123,7 +131,7 @@ export function resolveLinkedPrs(issueNumber: number): LinkedPr[] {
 
   // Stage 2: closing references (branch-renamed / closing-ref case). Each
   // reference supplies only a PR number; its state is read from the stage-1
-  // pulls list (`allPulls`).
+  // pulls list (`pullsByNumber`).
   // `gh issue view` exits non-zero if the issue was deleted or transferred;
   // that is the one documented expected error, caught here so a missing issue
   // yields an empty stage-2 list rather than aborting (mirrors backfill.ts's
@@ -152,7 +160,7 @@ export function resolveLinkedPrs(issueNumber: number): LinkedPr[] {
     for (const ref of view.closedByPullRequestsReferences) {
       // Stage 1 wins on conflict: only add a number stage 1 did not already see.
       if (!byNumber.has(ref.number)) {
-        const linked = allPulls.get(ref.number);
+        const linked = pullsByNumber.get(ref.number);
         if (linked === undefined) {
           throw new Error(
             `refresh: closing-reference PR #${ref.number} for issue #${issueNumber} ` +
@@ -176,7 +184,7 @@ export function resolveLinkedPrs(issueNumber: number): LinkedPr[] {
  * such as a principle root or a `goal-foo` with no tracker) — that case is
  * logged and skipped.
  */
-function refreshNode(nodeId: string): ExecutionTracker | null {
+function refreshNode(nodeId: string, allPulls: RawPull[]): ExecutionTracker | null {
   const issueNumber = nodeIdToIssue(nodeId, trackersDir);
   if (issueNumber === null) {
     console.warn(`refresh: node "${nodeId}" does not resolve to an issue number; skipping`);
@@ -191,7 +199,7 @@ function refreshNode(nodeId: string): ExecutionTracker | null {
     .filter((n) => n.startsWith("dispatch:"))
     .sort();
 
-  const linkedPrs = resolveLinkedPrs(issueNumber);
+  const linkedPrs = resolveLinkedPrs(issueNumber, allPulls);
 
   const record: ExecutionTracker = {
     node_id: nodeId,
@@ -229,7 +237,15 @@ function main(): void {
 
   if (args.length > 0) {
     const nodeId = args[0];
-    const record = refreshNode(nodeId);
+    // Resolve the node to an issue BEFORE the expensive O(N) pulls fetch: a
+    // principle root or unresolvable node id would make fetchAllPulls() wasted
+    // work, since refreshNode() returns null without consuming the pulls list.
+    if (nodeIdToIssue(nodeId, trackersDir) === null) {
+      console.warn(`refresh: node "${nodeId}" does not resolve to an issue number; skipping`);
+      return;
+    }
+    const allPulls = fetchAllPulls();
+    const record = refreshNode(nodeId, allPulls);
     if (record !== null) {
       console.log(`Refreshed ${record.node_id} (issue #${record.issue_number}) → ${trackersDir}`);
     }
@@ -237,9 +253,10 @@ function main(): void {
   }
 
   const nodeIds = allNodeIds();
+  const allPulls = fetchAllPulls();
   let refreshed = 0;
   for (const nodeId of nodeIds) {
-    if (refreshNode(nodeId) !== null) refreshed++;
+    if (refreshNode(nodeId, allPulls) !== null) refreshed++;
   }
   console.log(
     `Refresh complete: ${refreshed} of ${nodeIds.length} nodes resolved to issues → ${trackersDir}`,
