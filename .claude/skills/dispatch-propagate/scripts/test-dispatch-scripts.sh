@@ -34747,6 +34747,32 @@ else
   echo "  FAIL: ensure_heartbeat_units (elapsed strand) returned non-zero"
 fi
 
+# --- 2c. Elapsed strand + enable fails → repair path returns non-zero, WARNs --
+# Parity with the cold-path degrade case (block 4a in the ensure_daemon_service
+# suite): on the elapsed/repair path, when `systemctl --user enable` fails the
+# function must return non-zero AND emit its WARNING to stderr (lib.sh:2864-2867,
+# RV-003 from PR #2382). Reuses the units the cold path installed in
+# $ehu_unit_dir; redirects stderr to a file so the WARNING can be asserted.
+: > "$ehu_log"
+ehu_err="$ehu_tmp/enable-fail-stderr"
+ehu_rc=0
+if (
+  export DISPATCH_HEARTBEAT_UNIT_DIR="$ehu_unit_dir"
+  export DISPATCH_HEARTBEAT_SYSTEMCTL_CMD="$ehu_tmp/bin/systemctl"
+  export STUB_LOG="$ehu_log"
+  export STUB_SUBSTATE=elapsed STUB_ENABLE_RC=1 STUB_RESTART_RC=0 STUB_RELOAD_RC=0
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_heartbeat_units "$ehu_tmp/main-worktree"
+) 2>"$ehu_err"; then
+  ehu_rc=0
+else
+  ehu_rc=$?
+fi
+assert_eq "elapsed+enable-fail: ensure_heartbeat_units returns non-zero" "1" "$ehu_rc"
+assert_eq "elapsed+enable-fail: WARNING on stderr" "present" \
+  "$(grep -q 'WARNING: ensure_heartbeat_units: systemctl --user enable dispatch-heartbeat.timer failed' "$ehu_err" \
+     && echo present || echo absent)"
+
 # --- 3. cleanup_stale_heartbeat_units: path-change disable (#2056) ------------
 # Called DIRECTLY (not via ensure_heartbeat_units): the "paths match" case would
 # otherwise hit the hot-path early-return before reaching the cleanup call.
