@@ -1,6 +1,6 @@
 ---
-name: roadmap-finance
-description: Analyze project state through cost sustainability, dependency economics, and charter-consistent monetization lens
+name: align-financial
+description: Intrinsic FINANCIAL perspective — analyze project state through cost sustainability, dependency economics, and charter-consistent monetization lens; estimates the push-down ROI left-side terms. Reused by the delegability evaluation (per ref-delegability).
 ---
 
 # Finance Persona

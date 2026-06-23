@@ -1,6 +1,6 @@
 ---
-name: roadmap-product
-description: Analyze project state through user value, charter alignment, and competitive positioning lens
+name: align-product
+description: Charter-derived perspective — analyze project state through user value, charter alignment, and competitive positioning lens (current commons materialization).
 ---
 
 # Product Persona

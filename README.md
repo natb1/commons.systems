@@ -136,7 +136,7 @@ Tunables live in `dispatch.config/target-workers.json` (see `dispatch-propagate/
 
 The office-hours queue is the human-driven counterpart to the dispatch queue.
 Items land here when work needs live human attention: an inbound idea to
-triage, a requirement that changed mid-flight, a roadmap reassessment, or a
+triage, a requirement that changed mid-flight, an alignment reassessment, or a
 jit-reminder that runs as a session rather than autonomously. The
 `dispatch:office-hours` label is the signal an item belongs here (see [Two
 queues, two control paths](#two-queues-two-control-paths)). Prioritization
@@ -177,13 +177,15 @@ restart.
 
 #### 4. Periodic reassessment
 
-[`/roadmap`](.claude/skills/roadmap/SKILL.md) runs a structured five-persona
-roadmap reassessment: each persona analyzes project state, the synthesis is
-debated, proposed `ROADMAP.md` edits are produced, and the open backlog is
-triaged (add `help wanted`, update body, or close as not planned for each
-unlabeled issue). Run it interactively to step back from the queue and ask
+[`/align`](.claude/skills/align/SKILL.md) runs a structured alignment
+reassessment: financial and technical perspectives assess project state
+independently, then charter-derived product and marketing perspectives do the
+same; the dialectic engine synthesizes the four inputs into priorities; a
+contrarian challenges the synthesis; the engine re-synthesizes; and the open
+backlog is triaged (add `help wanted`, update body, or close as not planned for
+each unlabeled issue). Run it interactively to step back from the queue and ask
 whether the priority ladder still matches the project's direction. It also runs
-autonomously on a 7-day `roadmap` jit cadence — posting the full report as a
+autonomously on a 7-day `align` jit cadence — posting the full report as a
 comment on the review issue and closing it to anchor the next cycle.
 
 #### 5. Skill-running JIT reminders
@@ -191,7 +193,7 @@ comment on the review issue and closing it to anchor the next cycle.
 Most jit-reminders surface a summary for a human to read; some instead run a
 skill when selected. [`/digest`](.claude/skills/digest/SKILL.md) runs as an
 office-hours session (interactive demos require a user present);
-[`/roadmap`](.claude/skills/roadmap/SKILL.md) runs as an office-hours
+[`/align`](.claude/skills/align/SKILL.md) runs as an office-hours
 session with no interactive stops — it posts its report and closes the review issue. The jit engine itself
 lives in the Dispatch Queue spine's [JIT-on-dispatch](#4-jit-on-dispatch)
 subsection — this covers only the office-hours-side surfacing.

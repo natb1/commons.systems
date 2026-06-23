@@ -14101,36 +14101,36 @@ else
 fi
 config_teardown
 
-# --- Test 2d: roadmap jit (7d/14d, skill: roadmap) validates -----------------
+# --- Test 2d: align jit (7d/14d, skill: align) validates -----------------
 
-echo "Test: roadmap jit (7d/14d, skill: roadmap) validates"
+echo "Test: align jit (7d/14d, skill: align) validates"
 config_setup
 cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
 {
   "jits": [
     {
-      "key": "roadmap",
+      "key": "align",
       "repo": "test-owner/test-repo",
-      "label": "jit:roadmap",
-      "title": "Roadmap review",
-      "body": "Recurring roadmap review.",
+      "label": "jit:align",
+      "title": "Alignment review",
+      "body": "Recurring align review.",
       "project": "test-project",
       "remindAfterClose": "7d",
       "dueAfterClose": "14d",
       "debounce": "1h",
-      "skill": "roadmap"
+      "skill": "align"
     }
   ]
 }
 EOF
 out=$("$TMPDIR_TEST/scripts/dispatch-config-load" jit 2>/dev/null); rc=$?
-assert_eq "roadmap jit exits 0" "0" "$rc"
-roadmap_skill=$(printf '%s' "$out" | jq -r '.jits[0].skill')
-assert_eq "roadmap jit skill value" "roadmap" "$roadmap_skill"
-roadmap_remind=$(printf '%s' "$out" | jq -r '.jits[0].remindAfterClose')
-assert_eq "roadmap jit remindAfterClose value" "7d" "$roadmap_remind"
-roadmap_due=$(printf '%s' "$out" | jq -r '.jits[0].dueAfterClose')
-assert_eq "roadmap jit dueAfterClose value" "14d" "$roadmap_due"
+assert_eq "align jit exits 0" "0" "$rc"
+align_skill=$(printf '%s' "$out" | jq -r '.jits[0].skill')
+assert_eq "align jit skill value" "align" "$align_skill"
+align_remind=$(printf '%s' "$out" | jq -r '.jits[0].remindAfterClose')
+assert_eq "align jit remindAfterClose value" "7d" "$align_remind"
+align_due=$(printf '%s' "$out" | jq -r '.jits[0].dueAfterClose')
+assert_eq "align jit dueAfterClose value" "14d" "$align_due"
 config_teardown
 
 # --- Test 3: absent file prints no-config and exits 0 ------------------------
@@ -21523,24 +21523,24 @@ else
 fi
 jit_teardown
 
-# --- Test 2-roadmap: roadmap jit (7d/14d) cadence cold start -----------------
+# --- Test 2-align: align jit (7d/14d) cadence cold start -----------------
 
-echo "Test: dispatch-jit-engine roadmap jit cadence cold start creates an issue"
+echo "Test: dispatch-jit-engine align jit cadence cold start creates an issue"
 jit_setup
 jit_write_projects
 cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
 {
   "jits": [
     {
-      "key": "roadmap",
+      "key": "align",
       "repo": "test-owner/test-repo",
-      "label": "jit:roadmap",
-      "title": "Roadmap review",
-      "body": "Recurring roadmap review.",
+      "label": "jit:align",
+      "title": "Alignment review",
+      "body": "Recurring align review.",
       "project": "test-project",
       "remindAfterClose": "7d",
       "dueAfterClose": "14d",
-      "skill": "roadmap"
+      "skill": "align"
     }
   ]
 }
@@ -21548,22 +21548,29 @@ EOF
 # open-issues.json and closed-issues.json absent — open/closed both "[]".
 rc=0
 out=$("$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>/dev/null) || rc=$?
-assert_eq "roadmap cold start exits 0" "0" "$rc"
+assert_eq "align cold start exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
 # Cold start with remind=7d, due=14d, NOW=2026-01-01T00:00:00Z:
 # DUE = NOW + 14d - 7d = NOW + 7d = 2026-01-08T00:00:00Z.
-if [[ "$out" == *"roadmap: created #123 (due 2026-01-08T00:00:00Z)"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: roadmap cold start reports created #123 (due 2026-01-08T00:00:00Z)"
+if [[ "$out" == *"align: created #123 (due 2026-01-08T00:00:00Z)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: align cold start reports created #123 (due 2026-01-08T00:00:00Z)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap cold start reports created #123 (due 2026-01-08T00:00:00Z)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: align cold start reports created #123 (due 2026-01-08T00:00:00Z)"
   echo "    actual: $out"
 fi
 create_log=$(cat "$STUB_DIR/gh-issue-create-rest-calls.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$create_log" == *"<!-- jit-due: 2026-01-08T00:00:00Z -->"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: roadmap cold start embedded jit-due marker in issue body"
+  PASS=$((PASS + 1)); echo "  PASS: align cold start embedded jit-due marker in issue body"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap cold start embedded jit-due marker in issue body"
+  FAIL=$((FAIL + 1)); echo "  FAIL: align cold start embedded jit-due marker in issue body"
+  echo "    gh-issue-create-rest-calls.log: $create_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$create_log" == *"title=Alignment review"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: align cold start created issue with configured title"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: align cold start created issue with configured title"
   echo "    gh-issue-create-rest-calls.log: $create_log"
 fi
 jit_teardown
@@ -21611,24 +21618,24 @@ else
 fi
 jit_teardown
 
-# --- Test 3-roadmap: roadmap jit (7d/14d) within window — skipped, no issue created ---
+# --- Test 3-align: align jit (7d/14d) within window — skipped, no issue created ---
 
-echo "Test: dispatch-jit-engine roadmap jit within remindAfterClose is skipped"
+echo "Test: dispatch-jit-engine align jit within remindAfterClose is skipped"
 jit_setup
 jit_write_projects
 cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
 {
   "jits": [
     {
-      "key": "roadmap",
+      "key": "align",
       "repo": "test-owner/test-repo",
-      "label": "jit:roadmap",
-      "title": "Roadmap review",
-      "body": "Recurring roadmap review.",
+      "label": "jit:align",
+      "title": "Alignment review",
+      "body": "Recurring align review.",
       "project": "test-project",
       "remindAfterClose": "7d",
       "dueAfterClose": "14d",
-      "skill": "roadmap"
+      "skill": "align"
     }
   ]
 }
@@ -21639,41 +21646,41 @@ printf '[{"number":40,"closedAt":"%s"}]\n' "$closed_at" \
   > "$STUB_DIR/closed-issues.json"
 rc=0
 out=$("$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>/dev/null) || rc=$?
-assert_eq "roadmap within-window exits 0" "0" "$rc"
+assert_eq "align within-window exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ "$out" == *"roadmap: skipped (within remindAfterClose)"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: roadmap within-window reports skipped (within remindAfterClose)"
+if [[ "$out" == *"align: skipped (within remindAfterClose)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: align within-window reports skipped (within remindAfterClose)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap within-window reports skipped (within remindAfterClose)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: align within-window reports skipped (within remindAfterClose)"
   echo "    actual: $out"
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -f "$STUB_DIR/gh-issue-create-rest-calls.log" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: roadmap within-window made no issue create call"
+  PASS=$((PASS + 1)); echo "  PASS: align within-window made no issue create call"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap within-window made no issue create call"
+  FAIL=$((FAIL + 1)); echo "  FAIL: align within-window made no issue create call"
   echo "    gh-issue-create-rest-calls.log: $(cat "$STUB_DIR/gh-issue-create-rest-calls.log")"
 fi
 jit_teardown
 
-# --- Test 3b-roadmap: roadmap jit (7d/14d) at the exact 7d boundary — skipped (inclusive) ---
+# --- Test 3b-align: align jit (7d/14d) at the exact 7d boundary — skipped (inclusive) ---
 
-echo "Test: dispatch-jit-engine roadmap jit at the exact 7d boundary is skipped"
+echo "Test: dispatch-jit-engine align jit at the exact 7d boundary is skipped"
 jit_setup
 jit_write_projects
 cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
 {
   "jits": [
     {
-      "key": "roadmap",
+      "key": "align",
       "repo": "test-owner/test-repo",
-      "label": "jit:roadmap",
-      "title": "Roadmap review",
-      "body": "Recurring roadmap review.",
+      "label": "jit:align",
+      "title": "Alignment review",
+      "body": "Recurring align review.",
       "project": "test-project",
       "remindAfterClose": "7d",
       "dueAfterClose": "14d",
-      "skill": "roadmap"
+      "skill": "align"
     }
   ]
 }
@@ -21685,19 +21692,19 @@ printf '[{"number":40,"closedAt":"%s"}]\n' "$closed_at" \
   > "$STUB_DIR/closed-issues.json"
 rc=0
 out=$("$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>/dev/null) || rc=$?
-assert_eq "roadmap exact-7d-boundary exits 0" "0" "$rc"
+assert_eq "align exact-7d-boundary exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ "$out" == *"roadmap: skipped (within remindAfterClose)"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: roadmap exact-7d-boundary reports skipped (within remindAfterClose)"
+if [[ "$out" == *"align: skipped (within remindAfterClose)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: align exact-7d-boundary reports skipped (within remindAfterClose)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap exact-7d-boundary reports skipped (within remindAfterClose)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: align exact-7d-boundary reports skipped (within remindAfterClose)"
   echo "    actual: $out"
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -f "$STUB_DIR/gh-issue-create-rest-calls.log" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: roadmap exact-7d-boundary made no issue create call"
+  PASS=$((PASS + 1)); echo "  PASS: align exact-7d-boundary made no issue create call"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap exact-7d-boundary made no issue create call"
+  FAIL=$((FAIL + 1)); echo "  FAIL: align exact-7d-boundary made no issue create call"
   echo "    gh-issue-create-rest-calls.log: $(cat "$STUB_DIR/gh-issue-create-rest-calls.log")"
 fi
 jit_teardown
@@ -21749,24 +21756,24 @@ else
 fi
 jit_teardown
 
-# --- Test 4-roadmap: roadmap jit (7d/14d) cadence steady state ---------------
+# --- Test 4-align: align jit (7d/14d) cadence steady state ---------------
 
-echo "Test: dispatch-jit-engine roadmap jit past remindAfterClose creates an issue"
+echo "Test: dispatch-jit-engine align jit past remindAfterClose creates an issue"
 jit_setup
 jit_write_projects
 cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
 {
   "jits": [
     {
-      "key": "roadmap",
+      "key": "align",
       "repo": "test-owner/test-repo",
-      "label": "jit:roadmap",
-      "title": "Roadmap review",
-      "body": "Recurring roadmap review.",
+      "label": "jit:align",
+      "title": "Alignment review",
+      "body": "Recurring align review.",
       "project": "test-project",
       "remindAfterClose": "7d",
       "dueAfterClose": "14d",
-      "skill": "roadmap"
+      "skill": "align"
     }
   ]
 }
@@ -21777,44 +21784,44 @@ printf '[{"number":40,"closedAt":"%s"}]\n' "$closed_at" \
   > "$STUB_DIR/closed-issues.json"
 rc=0
 out=$("$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>/dev/null) || rc=$?
-assert_eq "roadmap past-window exits 0" "0" "$rc"
+assert_eq "align past-window exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
 # closedAt = NOW − 10d = 2025-12-22T00:00:00Z, dueAfterClose = 14d →
 # DUE = closedAt + 14d = 2026-01-05T00:00:00Z.
-if [[ "$out" == *"roadmap: created #123 (due 2026-01-05T00:00:00Z)"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: roadmap past-window reports created #123 (due 2026-01-05T00:00:00Z)"
+if [[ "$out" == *"align: created #123 (due 2026-01-05T00:00:00Z)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: align past-window reports created #123 (due 2026-01-05T00:00:00Z)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap past-window reports created #123 (due 2026-01-05T00:00:00Z)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: align past-window reports created #123 (due 2026-01-05T00:00:00Z)"
   echo "    actual: $out"
 fi
 create_log=$(cat "$STUB_DIR/gh-issue-create-rest-calls.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$create_log" == *"<!-- jit-due: 2026-01-05T00:00:00Z -->"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: roadmap past-window embedded jit-due marker in issue body"
+  PASS=$((PASS + 1)); echo "  PASS: align past-window embedded jit-due marker in issue body"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap past-window embedded jit-due marker in issue body"
+  FAIL=$((FAIL + 1)); echo "  FAIL: align past-window embedded jit-due marker in issue body"
   echo "    gh-issue-create-rest-calls.log: $create_log"
 fi
 jit_teardown
 
-# --- Test 4b-roadmap: roadmap jit (7d/14d) one second past the 7d boundary — creates ---
+# --- Test 4b-align: align jit (7d/14d) one second past the 7d boundary — creates ---
 
-echo "Test: dispatch-jit-engine roadmap jit one second past the 7d boundary creates an issue"
+echo "Test: dispatch-jit-engine align jit one second past the 7d boundary creates an issue"
 jit_setup
 jit_write_projects
 cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
 {
   "jits": [
     {
-      "key": "roadmap",
+      "key": "align",
       "repo": "test-owner/test-repo",
-      "label": "jit:roadmap",
-      "title": "Roadmap review",
-      "body": "Recurring roadmap review.",
+      "label": "jit:align",
+      "title": "Alignment review",
+      "body": "Recurring align review.",
       "project": "test-project",
       "remindAfterClose": "7d",
       "dueAfterClose": "14d",
-      "skill": "roadmap"
+      "skill": "align"
     }
   ]
 }
@@ -21826,22 +21833,22 @@ printf '[{"number":40,"closedAt":"%s"}]\n' "$closed_at" \
   > "$STUB_DIR/closed-issues.json"
 rc=0
 out=$("$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>/dev/null) || rc=$?
-assert_eq "roadmap 7d+1s-past-boundary exits 0" "0" "$rc"
+assert_eq "align 7d+1s-past-boundary exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
 # closedAt = NOW − (7d+1s) = 2025-12-24T23:59:59Z, dueAfterClose = 14d →
 # DUE = closedAt + 14d = 2026-01-07T23:59:59Z.
-if [[ "$out" == *"roadmap: created #123 (due 2026-01-07T23:59:59Z)"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: roadmap past-window reports created #123 (due 2026-01-07T23:59:59Z)"
+if [[ "$out" == *"align: created #123 (due 2026-01-07T23:59:59Z)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: align past-window reports created #123 (due 2026-01-07T23:59:59Z)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap past-window reports created #123 (due 2026-01-07T23:59:59Z)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: align past-window reports created #123 (due 2026-01-07T23:59:59Z)"
   echo "    actual: $out"
 fi
 create_log=$(cat "$STUB_DIR/gh-issue-create-rest-calls.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$create_log" == *"<!-- jit-due: 2026-01-07T23:59:59Z -->"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: roadmap 7d+1s-past-boundary embedded jit-due marker in issue body"
+  PASS=$((PASS + 1)); echo "  PASS: align 7d+1s-past-boundary embedded jit-due marker in issue body"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap 7d+1s-past-boundary embedded jit-due marker in issue body"
+  FAIL=$((FAIL + 1)); echo "  FAIL: align 7d+1s-past-boundary embedded jit-due marker in issue body"
   echo "    gh-issue-create-rest-calls.log: $create_log"
 fi
 jit_teardown
@@ -21886,24 +21893,24 @@ else
 fi
 jit_teardown
 
-# --- Test 5-roadmap: roadmap jit (7d/14d) open-issue guard — skipped when an open issue exists ---
+# --- Test 5-align: align jit (7d/14d) open-issue guard — skipped when an open issue exists ---
 
-echo "Test: dispatch-jit-engine roadmap jit skips when an open issue with the label exists"
+echo "Test: dispatch-jit-engine align jit skips when an open issue with the label exists"
 jit_setup
 jit_write_projects
 cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
 {
   "jits": [
     {
-      "key": "roadmap",
+      "key": "align",
       "repo": "test-owner/test-repo",
-      "label": "jit:roadmap",
-      "title": "Roadmap review",
-      "body": "Recurring roadmap review.",
+      "label": "jit:align",
+      "title": "Alignment review",
+      "body": "Recurring align review.",
       "project": "test-project",
       "remindAfterClose": "7d",
       "dueAfterClose": "14d",
-      "skill": "roadmap"
+      "skill": "align"
     }
   ]
 }
@@ -21911,19 +21918,19 @@ EOF
 echo '[{"number":50}]' > "$STUB_DIR/open-issues.json"
 rc=0
 out=$("$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>/dev/null) || rc=$?
-assert_eq "roadmap open-guard exits 0" "0" "$rc"
+assert_eq "align open-guard exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ "$out" == *"roadmap: skipped (open issue exists)"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: roadmap open-guard reports skipped (open issue exists)"
+if [[ "$out" == *"align: skipped (open issue exists)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: align open-guard reports skipped (open issue exists)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap open-guard reports skipped (open issue exists)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: align open-guard reports skipped (open issue exists)"
   echo "    actual: $out"
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -f "$STUB_DIR/gh-issue-create-rest-calls.log" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: roadmap open-guard made no issue create call"
+  PASS=$((PASS + 1)); echo "  PASS: align open-guard made no issue create call"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap open-guard made no issue create call"
+  FAIL=$((FAIL + 1)); echo "  FAIL: align open-guard made no issue create call"
   echo "    gh-issue-create-rest-calls.log: $(cat "$STUB_DIR/gh-issue-create-rest-calls.log")"
 fi
 jit_teardown
@@ -34746,6 +34753,32 @@ else
   TOTAL=$((TOTAL + 2)); FAIL=$((FAIL + 2))
   echo "  FAIL: ensure_heartbeat_units (elapsed strand) returned non-zero"
 fi
+
+# --- 2c. Elapsed strand + enable fails → repair path returns non-zero, WARNs --
+# Parity with the cold-path degrade case (block 4a in the ensure_daemon_service
+# suite): on the elapsed/repair path, when `systemctl --user enable` fails the
+# function must return non-zero AND emit its WARNING to stderr (lib.sh:2864-2867,
+# RV-003 from PR #2382). Reuses the units the cold path installed in
+# $ehu_unit_dir; redirects stderr to a file so the WARNING can be asserted.
+: > "$ehu_log"
+ehu_err="$ehu_tmp/enable-fail-stderr"
+ehu_rc=0
+if (
+  export DISPATCH_HEARTBEAT_UNIT_DIR="$ehu_unit_dir"
+  export DISPATCH_HEARTBEAT_SYSTEMCTL_CMD="$ehu_tmp/bin/systemctl"
+  export STUB_LOG="$ehu_log"
+  export STUB_SUBSTATE=elapsed STUB_ENABLE_RC=1 STUB_RESTART_RC=0 STUB_RELOAD_RC=0
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_heartbeat_units "$ehu_tmp/main-worktree"
+) 2>"$ehu_err"; then
+  ehu_rc=0
+else
+  ehu_rc=$?
+fi
+assert_eq "elapsed+enable-fail: ensure_heartbeat_units returns non-zero" "1" "$ehu_rc"
+assert_eq "elapsed+enable-fail: WARNING on stderr" "present" \
+  "$(grep -q 'WARNING: ensure_heartbeat_units: systemctl --user enable dispatch-heartbeat.timer failed' "$ehu_err" \
+     && echo present || echo absent)"
 
 # --- 3. cleanup_stale_heartbeat_units: path-change disable (#2056) ------------
 # Called DIRECTLY (not via ensure_heartbeat_units): the "paths match" case would
