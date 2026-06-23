@@ -12,6 +12,11 @@ export type Status = "raw" | "refining" | "delegated" | "codified";
 
 export const STATUSES: readonly Status[] = ["raw", "refining", "delegated", "codified"];
 
+/** What kind of tooling a goal codifies. */
+export type ToolingKind = "actuator" | "sensor";
+
+export const TOOLING_KINDS: readonly ToolingKind[] = ["actuator", "sensor"];
+
 // --- Structured optional fields --------------------------------------------
 
 /** A measurable signal that a node's intention is being met. */
@@ -26,6 +31,12 @@ export interface SuccessSignal {
 export interface Clarification {
   question: string;
   answer: string;
+}
+
+/** A tooling goal a node aims to produce or change. */
+export interface ToolingGoal {
+  kind: ToolingKind;
+  statement: string;
 }
 
 // --- Node ------------------------------------------------------------------
@@ -50,7 +61,7 @@ export interface IntentionNode {
   reading: string | null;
   gap: string | null;
   clarifications: Clarification[];
-  tooling_goals: string[];
+  tooling_goals: ToolingGoal[];
   success_signal: SuccessSignal | null;
 }
 
@@ -70,7 +81,7 @@ export interface IntentionNodeInput {
   reading?: string | null;
   gap?: string | null;
   clarifications?: Clarification[];
-  tooling_goals?: string[];
+  tooling_goals?: ToolingGoal[];
   success_signal?: SuccessSignal | null;
 }
 
@@ -99,18 +110,6 @@ function requireOneOf<T extends string>(value: unknown, allowed: readonly T[], f
     throw new IntentionSchemaError(`Invalid ${field}: "${s}"`);
   }
   return found;
-}
-
-function requireStringArray(value: unknown, field: string): string[] {
-  if (!Array.isArray(value)) {
-    throw new IntentionSchemaError(`Expected array for ${field}, got ${typeof value}`);
-  }
-  return value.map((item, i) => {
-    if (typeof item !== "string") {
-      throw new IntentionSchemaError(`Expected string at ${field}[${i}], got ${typeof item}`);
-    }
-    return item;
-  });
 }
 
 function optionalString(value: unknown, field: string): string | null {
@@ -148,6 +147,21 @@ function validateClarifications(value: unknown, field: string): Clarification[] 
     return {
       question: requireString(item.question, `${field}[${i}].question`),
       answer: requireString(item.answer, `${field}[${i}].answer`),
+    };
+  });
+}
+
+function validateToolingGoals(value: unknown, field: string): ToolingGoal[] {
+  if (!Array.isArray(value)) {
+    throw new IntentionSchemaError(`Expected array for ${field}, got ${typeof value}`);
+  }
+  return value.map((item, i) => {
+    if (!isPlainObject(item)) {
+      throw new IntentionSchemaError(`Expected object at ${field}[${i}], got ${typeof item}`);
+    }
+    return {
+      kind: requireOneOf(item.kind, TOOLING_KINDS, `${field}[${i}].kind`),
+      statement: requireString(item.statement, `${field}[${i}].statement`),
     };
   });
 }
@@ -195,7 +209,7 @@ export function validateNode(value: unknown): IntentionNode {
     tooling_goals:
       value.tooling_goals == null
         ? []
-        : requireStringArray(value.tooling_goals, "tooling_goals"),
+        : validateToolingGoals(value.tooling_goals, "tooling_goals"),
     success_signal:
       value.success_signal == null
         ? null

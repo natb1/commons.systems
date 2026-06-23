@@ -13,7 +13,7 @@ describe("validateNode", () => {
       reading: "rd",
       gap: "g",
       clarifications: [{ question: "q", answer: "a" }],
-      tooling_goals: ["t"],
+      tooling_goals: [{ kind: "actuator", statement: "t" }],
       success_signal: {
         observable: "o",
         sensor: "s",
@@ -59,6 +59,18 @@ describe("validateNode", () => {
         statement: "Bad owner.",
         owner: "robot",
         status: "raw",
+      }),
+    ).toThrow();
+  });
+
+  it("rejects a tooling_goal with a bad kind", () => {
+    expect(() =>
+      validateNode({
+        id: "n5",
+        statement: "Bad tooling kind.",
+        owner: "human",
+        status: "raw",
+        tooling_goals: [{ kind: "lever", statement: "x" }],
       }),
     ).toThrow();
   });
