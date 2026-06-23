@@ -174,9 +174,9 @@ else
   report_fail "Native Linux should skip gracefully with message" "Exit code: $EXIT_CODE, Message: $SKIP_MESSAGE"
 fi
 
-# Test 6: Windows user detection prioritizes first non-system directory
+# Test 6: Heuristic fallback picks alphabetically-first non-system directory (last-resort role)
 echo ""
-echo "=== Test 6: User detection priority with multiple users ==="
+echo "=== Test 6: Fallback heuristic picks first user when no override and no interop ==="
 TEMP_MOUNT4=$(mktemp -d)
 CLEANUP_DIRS+=("$TEMP_MOUNT4")
 
@@ -185,9 +185,9 @@ mkdir -p "$TEMP_MOUNT4/c/Users"/{charlie,alice,bob,Public}
 WINDOWS_USER=$(ls "$TEMP_MOUNT4/c/Users/" 2>/dev/null | grep -v -E '^(All Users|Default|Default User|Public|desktop.ini)$' | head -n1)
 
 if [[ "$WINDOWS_USER" == "alice" ]]; then
-  report_pass "User detection uses alphabetically first valid user"
+  report_pass "Heuristic fallback picks alphabetically-first valid user when no override and no interop"
 else
-  report_fail "User detection priority incorrect" "Expected: alice, Got: $WINDOWS_USER"
+  report_fail "Heuristic fallback priority incorrect" "Expected: alice, Got: $WINDOWS_USER"
 fi
 
 # Test 7: Permission denied on /mnt/c/Users (error handling)
@@ -570,6 +570,260 @@ if [[ "$WINDOWS_USER" == "raceuser" ]]; then
   fi
 else
   report_fail "Test setup failed - user detection" "Expected 'raceuser', got: '$WINDOWS_USER'"
+fi
+
+# Tests 24-26: Three-tier detection chain precedence tests
+#
+# These tests exercise the full three-tier Windows-user detection chain from
+# wezterm.nix (override env var > cmd.exe/wslpath interop > ls/grep/head
+# heuristic) using PATH-stubbed executables and a temp mount that stands in
+# for /mnt/c.
+#
+# Setup shared by Tests 24-26: stub dir, stubs, and temp mount with two user dirs
+echo ""
+echo "=== Tests 24-26 setup: stub dir and temp mount ==="
+STUBDIR=$(mktemp -d)
+CLEANUP_DIRS+=("$STUBDIR")
+TEMP_MOUNT_CHAIN=$(mktemp -d)
+CLEANUP_DIRS+=("$TEMP_MOUNT_CHAIN")
+
+# Populate two user directories: alice (alphabetically first) and bob.
+# The heuristic alone would pick alice; interop will pick bob — proving tier order.
+mkdir -p "$TEMP_MOUNT_CHAIN/c/Users/alice"
+mkdir -p "$TEMP_MOUNT_CHAIN/c/Users/bob"
+
+# cmd.exe stub: emits a Windows path with a trailing \r (exercises tr -d '\r')
+cat > "$STUBDIR/cmd.exe" <<'STUB_EOF'
+#!/bin/sh
+printf 'C:\\Users\\bob\r\n'
+STUB_EOF
+chmod +x "$STUBDIR/cmd.exe"
+
+# wslpath stub: maps the Windows C:\Users\bob path to the temp mount.
+# Reads TEMP_MOUNT_CHAIN from the environment so it doesn't need to be
+# baked in at stub-creation time.
+# Real wslpath is called as: wslpath -u <windows-path>
+# so $1 is the flag (-u) and $2 is the path.
+cat > "$STUBDIR/wslpath" <<'STUB_EOF'
+#!/bin/sh
+# Accept wslpath -u <path> form; $1 is the flag, $2 is the Windows path.
+WIN_PATH="$2"
+if [ "$WIN_PATH" = "C:\\Users\\bob" ] || [ "$WIN_PATH" = "C:/Users/bob" ]; then
+  printf '%s/c/Users/bob' "$TEMP_MOUNT_CHAIN"
+else
+  printf '%s' "$WIN_PATH"
+fi
+STUB_EOF
+chmod +x "$STUBDIR/wslpath"
+
+# Build a PATH that has the stubs but excludes /mnt/c/Windows/System32 so
+# that cmd.exe/wslpath always resolve to the stubs — not to real WSL interop
+# binaries on a live WSL host — and so the sanitized PATH (no stubs, no
+# System32) used by Test 26 still has coreutils (ls, head, tr).
+INTEROP_FREE_PATH=$(printf '%s' "$PATH" | tr ':' '\n' | grep -vF '/mnt/c/Windows' | paste -sd:)
+STUB_PATH="$STUBDIR:$INTEROP_FREE_PATH"
+
+# Test 24: Override (Tier 1) wins over interop (Tier 2)
+echo ""
+echo "=== Test 24: Override env var wins over interop ==="
+
+# Sub-test 24a: override names an existing dir → WINDOWS_USER comes from override
+(
+  export TEMP_MOUNT_CHAIN
+  WEZTERM_WINDOWS_USER=alice
+
+  TARGET_DIR=""
+  WINDOWS_USER=""
+
+  # Tier 1
+  if [ -n "${WEZTERM_WINDOWS_USER:-}" ]; then
+    if [ -d "$TEMP_MOUNT_CHAIN/c/Users/$WEZTERM_WINDOWS_USER" ]; then
+      WINDOWS_USER="$WEZTERM_WINDOWS_USER"
+      TARGET_DIR="$TEMP_MOUNT_CHAIN/c/Users/$WINDOWS_USER"
+    else
+      echo "WARNING: WEZTERM_WINDOWS_USER='$WEZTERM_WINDOWS_USER' set but $TEMP_MOUNT_CHAIN/c/Users/$WEZTERM_WINDOWS_USER does not exist; falling back to auto-detection" >&2
+    fi
+  fi
+
+  # Tier 2 (stubs available, but Tier 1 already set TARGET_DIR)
+  if [ -z "$TARGET_DIR" ] && PATH="$STUB_PATH" command -v cmd.exe >/dev/null 2>&1 && PATH="$STUB_PATH" command -v wslpath >/dev/null 2>&1; then
+    WIN_PROFILE=$(PATH="$STUB_PATH" cmd.exe /c echo %USERPROFILE% 2>/dev/null | tr -d '\r')
+    CAND=$(PATH="$STUB_PATH" wslpath -u "$WIN_PROFILE" 2>/dev/null)
+    if [ -n "$CAND" ] && [ -d "$CAND" ]; then
+      TARGET_DIR="$CAND"
+      WINDOWS_USER=$(basename "$CAND")
+    fi
+  fi
+
+  # Tier 3
+  if [ -z "$TARGET_DIR" ]; then
+    WINDOWS_USER=$(ls "$TEMP_MOUNT_CHAIN/c/Users/" 2>/dev/null | grep -v -E '^(All Users|Default|Default User|Public|desktop.ini)$' | head -n1)
+    if [ -n "$WINDOWS_USER" ] && [ -d "$TEMP_MOUNT_CHAIN/c/Users/$WINDOWS_USER" ]; then
+      TARGET_DIR="$TEMP_MOUNT_CHAIN/c/Users/$WINDOWS_USER"
+    fi
+  fi
+
+  printf '%s' "$WINDOWS_USER"
+) > "$TMPDIR/wezterm_test24a_result" 2>"$TMPDIR/wezterm_test24a_warn"
+RESULT_24A=$(cat "$TMPDIR/wezterm_test24a_result")
+rm -f "$TMPDIR/wezterm_test24a_result" "$TMPDIR/wezterm_test24a_warn"
+
+if [[ "$RESULT_24A" == "alice" ]]; then
+  report_pass "Test 24a: override (existing dir) wins over interop — got alice"
+else
+  report_fail "Test 24a: override should win over interop" "Expected: alice, Got: $RESULT_24A"
+fi
+
+# Sub-test 24b: override names a MISSING dir → warns and falls through to interop (bob)
+(
+  export TEMP_MOUNT_CHAIN
+  WEZTERM_WINDOWS_USER=nosuchuser
+
+  TARGET_DIR=""
+  WINDOWS_USER=""
+
+  # Tier 1
+  if [ -n "${WEZTERM_WINDOWS_USER:-}" ]; then
+    if [ -d "$TEMP_MOUNT_CHAIN/c/Users/$WEZTERM_WINDOWS_USER" ]; then
+      WINDOWS_USER="$WEZTERM_WINDOWS_USER"
+      TARGET_DIR="$TEMP_MOUNT_CHAIN/c/Users/$WINDOWS_USER"
+    else
+      echo "WARNING: WEZTERM_WINDOWS_USER='$WEZTERM_WINDOWS_USER' set but $TEMP_MOUNT_CHAIN/c/Users/$WEZTERM_WINDOWS_USER does not exist; falling back to auto-detection" >&2
+    fi
+  fi
+
+  # Tier 2 (stubs available, Tier 1 missed → fall through)
+  if [ -z "$TARGET_DIR" ] && PATH="$STUB_PATH" command -v cmd.exe >/dev/null 2>&1 && PATH="$STUB_PATH" command -v wslpath >/dev/null 2>&1; then
+    WIN_PROFILE=$(PATH="$STUB_PATH" cmd.exe /c echo %USERPROFILE% 2>/dev/null | tr -d '\r')
+    CAND=$(PATH="$STUB_PATH" wslpath -u "$WIN_PROFILE" 2>/dev/null)
+    if [ -n "$CAND" ] && [ -d "$CAND" ]; then
+      TARGET_DIR="$CAND"
+      WINDOWS_USER=$(basename "$CAND")
+    fi
+  fi
+
+  # Tier 3
+  if [ -z "$TARGET_DIR" ]; then
+    WINDOWS_USER=$(ls "$TEMP_MOUNT_CHAIN/c/Users/" 2>/dev/null | grep -v -E '^(All Users|Default|Default User|Public|desktop.ini)$' | head -n1)
+    if [ -n "$WINDOWS_USER" ] && [ -d "$TEMP_MOUNT_CHAIN/c/Users/$WINDOWS_USER" ]; then
+      TARGET_DIR="$TEMP_MOUNT_CHAIN/c/Users/$WINDOWS_USER"
+    fi
+  fi
+
+  printf '%s' "$WINDOWS_USER"
+) > "$TMPDIR/wezterm_test24b_result" 2>"$TMPDIR/wezterm_test24b_warn"
+RESULT_24B=$(cat "$TMPDIR/wezterm_test24b_result")
+WARN_24B=$(cat "$TMPDIR/wezterm_test24b_warn")
+rm -f "$TMPDIR/wezterm_test24b_result" "$TMPDIR/wezterm_test24b_warn"
+
+if [[ "$RESULT_24B" == "bob" ]] && [[ "$WARN_24B" =~ "WARNING:" ]]; then
+  report_pass "Test 24b: override missing dir → warns and falls through to interop (bob)"
+else
+  report_fail "Test 24b: missing override should warn and fall through to interop" \
+    "Expected bob + WARNING, Got: result=$RESULT_24B warn=$WARN_24B"
+fi
+
+# Test 25: Interop (Tier 2) wins over heuristic (Tier 3) when no override is set
+echo ""
+echo "=== Test 25: Interop wins over heuristic when no override ==="
+
+(
+  export TEMP_MOUNT_CHAIN
+  unset WEZTERM_WINDOWS_USER 2>/dev/null || true
+
+  TARGET_DIR=""
+  WINDOWS_USER=""
+
+  # Tier 1 (no override)
+  if [ -n "${WEZTERM_WINDOWS_USER:-}" ]; then
+    if [ -d "$TEMP_MOUNT_CHAIN/c/Users/$WEZTERM_WINDOWS_USER" ]; then
+      WINDOWS_USER="$WEZTERM_WINDOWS_USER"
+      TARGET_DIR="$TEMP_MOUNT_CHAIN/c/Users/$WINDOWS_USER"
+    else
+      echo "WARNING: WEZTERM_WINDOWS_USER='$WEZTERM_WINDOWS_USER' set but $TEMP_MOUNT_CHAIN/c/Users/$WEZTERM_WINDOWS_USER does not exist; falling back to auto-detection" >&2
+    fi
+  fi
+
+  # Tier 2 (stubs in PATH → cmd.exe and wslpath found)
+  if [ -z "$TARGET_DIR" ] && PATH="$STUB_PATH" command -v cmd.exe >/dev/null 2>&1 && PATH="$STUB_PATH" command -v wslpath >/dev/null 2>&1; then
+    WIN_PROFILE=$(PATH="$STUB_PATH" cmd.exe /c echo %USERPROFILE% 2>/dev/null | tr -d '\r')
+    CAND=$(PATH="$STUB_PATH" wslpath -u "$WIN_PROFILE" 2>/dev/null)
+    if [ -n "$CAND" ] && [ -d "$CAND" ]; then
+      TARGET_DIR="$CAND"
+      WINDOWS_USER=$(basename "$CAND")
+    fi
+  fi
+
+  # Tier 3
+  if [ -z "$TARGET_DIR" ]; then
+    WINDOWS_USER=$(ls "$TEMP_MOUNT_CHAIN/c/Users/" 2>/dev/null | grep -v -E '^(All Users|Default|Default User|Public|desktop.ini)$' | head -n1)
+    if [ -n "$WINDOWS_USER" ] && [ -d "$TEMP_MOUNT_CHAIN/c/Users/$WINDOWS_USER" ]; then
+      TARGET_DIR="$TEMP_MOUNT_CHAIN/c/Users/$WINDOWS_USER"
+    fi
+  fi
+
+  printf '%s' "$WINDOWS_USER"
+) > "$TMPDIR/wezterm_test25_result" 2>/dev/null
+RESULT_25=$(cat "$TMPDIR/wezterm_test25_result")
+rm -f "$TMPDIR/wezterm_test25_result"
+
+if [[ "$RESULT_25" == "bob" ]]; then
+  report_pass "Test 25: interop wins over heuristic — got bob, not alphabetically-first alice"
+else
+  report_fail "Test 25: interop should win over heuristic" "Expected: bob, Got: $RESULT_25"
+fi
+
+# Test 26: Heuristic fallback (Tier 3) when interop binaries are absent from PATH
+echo ""
+echo "=== Test 26: Heuristic fallback when interop binaries absent from PATH ==="
+# Build a PATH that has coreutils but no cmd.exe/wslpath (no stubs, no System32).
+# This is deterministic on both Linux CI and WSL dev hosts.
+NO_INTEROP_PATH=$(printf '%s' "$PATH" | tr ':' '\n' | grep -vF '/mnt/c/Windows' | grep -vF "$STUBDIR" | paste -sd:)
+
+(
+  export TEMP_MOUNT_CHAIN
+  unset WEZTERM_WINDOWS_USER 2>/dev/null || true
+
+  TARGET_DIR=""
+  WINDOWS_USER=""
+
+  # Tier 1 (no override)
+  if [ -n "${WEZTERM_WINDOWS_USER:-}" ]; then
+    if [ -d "$TEMP_MOUNT_CHAIN/c/Users/$WEZTERM_WINDOWS_USER" ]; then
+      WINDOWS_USER="$WEZTERM_WINDOWS_USER"
+      TARGET_DIR="$TEMP_MOUNT_CHAIN/c/Users/$WINDOWS_USER"
+    else
+      echo "WARNING: WEZTERM_WINDOWS_USER='$WEZTERM_WINDOWS_USER' set but $TEMP_MOUNT_CHAIN/c/Users/$WEZTERM_WINDOWS_USER does not exist; falling back to auto-detection" >&2
+    fi
+  fi
+
+  # Tier 2: cmd.exe not found on NO_INTEROP_PATH → skip
+  if [ -z "$TARGET_DIR" ] && PATH="$NO_INTEROP_PATH" command -v cmd.exe >/dev/null 2>&1 && PATH="$NO_INTEROP_PATH" command -v wslpath >/dev/null 2>&1; then
+    WIN_PROFILE=$(PATH="$NO_INTEROP_PATH" cmd.exe /c echo %USERPROFILE% 2>/dev/null | tr -d '\r')
+    CAND=$(PATH="$NO_INTEROP_PATH" wslpath -u "$WIN_PROFILE" 2>/dev/null)
+    if [ -n "$CAND" ] && [ -d "$CAND" ]; then
+      TARGET_DIR="$CAND"
+      WINDOWS_USER=$(basename "$CAND")
+    fi
+  fi
+
+  # Tier 3 (heuristic last resort)
+  if [ -z "$TARGET_DIR" ]; then
+    WINDOWS_USER=$(ls "$TEMP_MOUNT_CHAIN/c/Users/" 2>/dev/null | grep -v -E '^(All Users|Default|Default User|Public|desktop.ini)$' | head -n1)
+    if [ -n "$WINDOWS_USER" ] && [ -d "$TEMP_MOUNT_CHAIN/c/Users/$WINDOWS_USER" ]; then
+      TARGET_DIR="$TEMP_MOUNT_CHAIN/c/Users/$WINDOWS_USER"
+    fi
+  fi
+
+  printf '%s' "$WINDOWS_USER"
+) > "$TMPDIR/wezterm_test26_result" 2>/dev/null
+RESULT_26=$(cat "$TMPDIR/wezterm_test26_result")
+rm -f "$TMPDIR/wezterm_test26_result"
+
+if [[ "$RESULT_26" == "alice" ]]; then
+  report_pass "Test 26: heuristic fallback picks alphabetically-first user when interop absent"
+else
+  report_fail "Test 26: heuristic should pick alice when interop absent" "Expected: alice, Got: $RESULT_26"
 fi
 
 # Summary
