@@ -92,6 +92,7 @@ fi
 # Cross-check via the issue's own closedByPullRequestsReferences.
 # gh issue view exits non-zero if the issue was deleted, transferred, or the
 # network failed — suppress that so the script returns empty instead of aborting.
+# lint-allow: gh-rest-porcelain GraphQL-only closedByPullRequestsReferences (no REST equivalent)
 if CLOSING=$(gh issue view "$ARG" --json closedByPullRequestsReferences 2>/dev/null); then
   printf '%s' "$CLOSING" \
     | jq -r '.closedByPullRequestsReferences

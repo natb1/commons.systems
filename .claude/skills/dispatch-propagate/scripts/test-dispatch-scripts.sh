@@ -14101,36 +14101,36 @@ else
 fi
 config_teardown
 
-# --- Test 2d: roadmap jit (7d/14d, skill: roadmap) validates -----------------
+# --- Test 2d: align jit (7d/14d, skill: align) validates -----------------
 
-echo "Test: roadmap jit (7d/14d, skill: roadmap) validates"
+echo "Test: align jit (7d/14d, skill: align) validates"
 config_setup
 cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
 {
   "jits": [
     {
-      "key": "roadmap",
+      "key": "align",
       "repo": "test-owner/test-repo",
-      "label": "jit:roadmap",
-      "title": "Roadmap review",
-      "body": "Recurring roadmap review.",
+      "label": "jit:align",
+      "title": "Alignment review",
+      "body": "Recurring align review.",
       "project": "test-project",
       "remindAfterClose": "7d",
       "dueAfterClose": "14d",
       "debounce": "1h",
-      "skill": "roadmap"
+      "skill": "align"
     }
   ]
 }
 EOF
 out=$("$TMPDIR_TEST/scripts/dispatch-config-load" jit 2>/dev/null); rc=$?
-assert_eq "roadmap jit exits 0" "0" "$rc"
-roadmap_skill=$(printf '%s' "$out" | jq -r '.jits[0].skill')
-assert_eq "roadmap jit skill value" "roadmap" "$roadmap_skill"
-roadmap_remind=$(printf '%s' "$out" | jq -r '.jits[0].remindAfterClose')
-assert_eq "roadmap jit remindAfterClose value" "7d" "$roadmap_remind"
-roadmap_due=$(printf '%s' "$out" | jq -r '.jits[0].dueAfterClose')
-assert_eq "roadmap jit dueAfterClose value" "14d" "$roadmap_due"
+assert_eq "align jit exits 0" "0" "$rc"
+align_skill=$(printf '%s' "$out" | jq -r '.jits[0].skill')
+assert_eq "align jit skill value" "align" "$align_skill"
+align_remind=$(printf '%s' "$out" | jq -r '.jits[0].remindAfterClose')
+assert_eq "align jit remindAfterClose value" "7d" "$align_remind"
+align_due=$(printf '%s' "$out" | jq -r '.jits[0].dueAfterClose')
+assert_eq "align jit dueAfterClose value" "14d" "$align_due"
 config_teardown
 
 # --- Test 3: absent file prints no-config and exits 0 ------------------------
@@ -21523,24 +21523,24 @@ else
 fi
 jit_teardown
 
-# --- Test 2-roadmap: roadmap jit (7d/14d) cadence cold start -----------------
+# --- Test 2-align: align jit (7d/14d) cadence cold start -----------------
 
-echo "Test: dispatch-jit-engine roadmap jit cadence cold start creates an issue"
+echo "Test: dispatch-jit-engine align jit cadence cold start creates an issue"
 jit_setup
 jit_write_projects
 cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
 {
   "jits": [
     {
-      "key": "roadmap",
+      "key": "align",
       "repo": "test-owner/test-repo",
-      "label": "jit:roadmap",
-      "title": "Roadmap review",
-      "body": "Recurring roadmap review.",
+      "label": "jit:align",
+      "title": "Alignment review",
+      "body": "Recurring align review.",
       "project": "test-project",
       "remindAfterClose": "7d",
       "dueAfterClose": "14d",
-      "skill": "roadmap"
+      "skill": "align"
     }
   ]
 }
@@ -21548,22 +21548,29 @@ EOF
 # open-issues.json and closed-issues.json absent — open/closed both "[]".
 rc=0
 out=$("$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>/dev/null) || rc=$?
-assert_eq "roadmap cold start exits 0" "0" "$rc"
+assert_eq "align cold start exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
 # Cold start with remind=7d, due=14d, NOW=2026-01-01T00:00:00Z:
 # DUE = NOW + 14d - 7d = NOW + 7d = 2026-01-08T00:00:00Z.
-if [[ "$out" == *"roadmap: created #123 (due 2026-01-08T00:00:00Z)"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: roadmap cold start reports created #123 (due 2026-01-08T00:00:00Z)"
+if [[ "$out" == *"align: created #123 (due 2026-01-08T00:00:00Z)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: align cold start reports created #123 (due 2026-01-08T00:00:00Z)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap cold start reports created #123 (due 2026-01-08T00:00:00Z)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: align cold start reports created #123 (due 2026-01-08T00:00:00Z)"
   echo "    actual: $out"
 fi
 create_log=$(cat "$STUB_DIR/gh-issue-create-rest-calls.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$create_log" == *"<!-- jit-due: 2026-01-08T00:00:00Z -->"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: roadmap cold start embedded jit-due marker in issue body"
+  PASS=$((PASS + 1)); echo "  PASS: align cold start embedded jit-due marker in issue body"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap cold start embedded jit-due marker in issue body"
+  FAIL=$((FAIL + 1)); echo "  FAIL: align cold start embedded jit-due marker in issue body"
+  echo "    gh-issue-create-rest-calls.log: $create_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$create_log" == *"title=Alignment review"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: align cold start created issue with configured title"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: align cold start created issue with configured title"
   echo "    gh-issue-create-rest-calls.log: $create_log"
 fi
 jit_teardown
@@ -21611,24 +21618,24 @@ else
 fi
 jit_teardown
 
-# --- Test 3-roadmap: roadmap jit (7d/14d) within window — skipped, no issue created ---
+# --- Test 3-align: align jit (7d/14d) within window — skipped, no issue created ---
 
-echo "Test: dispatch-jit-engine roadmap jit within remindAfterClose is skipped"
+echo "Test: dispatch-jit-engine align jit within remindAfterClose is skipped"
 jit_setup
 jit_write_projects
 cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
 {
   "jits": [
     {
-      "key": "roadmap",
+      "key": "align",
       "repo": "test-owner/test-repo",
-      "label": "jit:roadmap",
-      "title": "Roadmap review",
-      "body": "Recurring roadmap review.",
+      "label": "jit:align",
+      "title": "Alignment review",
+      "body": "Recurring align review.",
       "project": "test-project",
       "remindAfterClose": "7d",
       "dueAfterClose": "14d",
-      "skill": "roadmap"
+      "skill": "align"
     }
   ]
 }
@@ -21639,41 +21646,41 @@ printf '[{"number":40,"closedAt":"%s"}]\n' "$closed_at" \
   > "$STUB_DIR/closed-issues.json"
 rc=0
 out=$("$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>/dev/null) || rc=$?
-assert_eq "roadmap within-window exits 0" "0" "$rc"
+assert_eq "align within-window exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ "$out" == *"roadmap: skipped (within remindAfterClose)"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: roadmap within-window reports skipped (within remindAfterClose)"
+if [[ "$out" == *"align: skipped (within remindAfterClose)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: align within-window reports skipped (within remindAfterClose)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap within-window reports skipped (within remindAfterClose)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: align within-window reports skipped (within remindAfterClose)"
   echo "    actual: $out"
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -f "$STUB_DIR/gh-issue-create-rest-calls.log" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: roadmap within-window made no issue create call"
+  PASS=$((PASS + 1)); echo "  PASS: align within-window made no issue create call"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap within-window made no issue create call"
+  FAIL=$((FAIL + 1)); echo "  FAIL: align within-window made no issue create call"
   echo "    gh-issue-create-rest-calls.log: $(cat "$STUB_DIR/gh-issue-create-rest-calls.log")"
 fi
 jit_teardown
 
-# --- Test 3b-roadmap: roadmap jit (7d/14d) at the exact 7d boundary — skipped (inclusive) ---
+# --- Test 3b-align: align jit (7d/14d) at the exact 7d boundary — skipped (inclusive) ---
 
-echo "Test: dispatch-jit-engine roadmap jit at the exact 7d boundary is skipped"
+echo "Test: dispatch-jit-engine align jit at the exact 7d boundary is skipped"
 jit_setup
 jit_write_projects
 cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
 {
   "jits": [
     {
-      "key": "roadmap",
+      "key": "align",
       "repo": "test-owner/test-repo",
-      "label": "jit:roadmap",
-      "title": "Roadmap review",
-      "body": "Recurring roadmap review.",
+      "label": "jit:align",
+      "title": "Alignment review",
+      "body": "Recurring align review.",
       "project": "test-project",
       "remindAfterClose": "7d",
       "dueAfterClose": "14d",
-      "skill": "roadmap"
+      "skill": "align"
     }
   ]
 }
@@ -21685,19 +21692,19 @@ printf '[{"number":40,"closedAt":"%s"}]\n' "$closed_at" \
   > "$STUB_DIR/closed-issues.json"
 rc=0
 out=$("$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>/dev/null) || rc=$?
-assert_eq "roadmap exact-7d-boundary exits 0" "0" "$rc"
+assert_eq "align exact-7d-boundary exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ "$out" == *"roadmap: skipped (within remindAfterClose)"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: roadmap exact-7d-boundary reports skipped (within remindAfterClose)"
+if [[ "$out" == *"align: skipped (within remindAfterClose)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: align exact-7d-boundary reports skipped (within remindAfterClose)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap exact-7d-boundary reports skipped (within remindAfterClose)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: align exact-7d-boundary reports skipped (within remindAfterClose)"
   echo "    actual: $out"
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -f "$STUB_DIR/gh-issue-create-rest-calls.log" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: roadmap exact-7d-boundary made no issue create call"
+  PASS=$((PASS + 1)); echo "  PASS: align exact-7d-boundary made no issue create call"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap exact-7d-boundary made no issue create call"
+  FAIL=$((FAIL + 1)); echo "  FAIL: align exact-7d-boundary made no issue create call"
   echo "    gh-issue-create-rest-calls.log: $(cat "$STUB_DIR/gh-issue-create-rest-calls.log")"
 fi
 jit_teardown
@@ -21749,24 +21756,24 @@ else
 fi
 jit_teardown
 
-# --- Test 4-roadmap: roadmap jit (7d/14d) cadence steady state ---------------
+# --- Test 4-align: align jit (7d/14d) cadence steady state ---------------
 
-echo "Test: dispatch-jit-engine roadmap jit past remindAfterClose creates an issue"
+echo "Test: dispatch-jit-engine align jit past remindAfterClose creates an issue"
 jit_setup
 jit_write_projects
 cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
 {
   "jits": [
     {
-      "key": "roadmap",
+      "key": "align",
       "repo": "test-owner/test-repo",
-      "label": "jit:roadmap",
-      "title": "Roadmap review",
-      "body": "Recurring roadmap review.",
+      "label": "jit:align",
+      "title": "Alignment review",
+      "body": "Recurring align review.",
       "project": "test-project",
       "remindAfterClose": "7d",
       "dueAfterClose": "14d",
-      "skill": "roadmap"
+      "skill": "align"
     }
   ]
 }
@@ -21777,44 +21784,44 @@ printf '[{"number":40,"closedAt":"%s"}]\n' "$closed_at" \
   > "$STUB_DIR/closed-issues.json"
 rc=0
 out=$("$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>/dev/null) || rc=$?
-assert_eq "roadmap past-window exits 0" "0" "$rc"
+assert_eq "align past-window exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
 # closedAt = NOW − 10d = 2025-12-22T00:00:00Z, dueAfterClose = 14d →
 # DUE = closedAt + 14d = 2026-01-05T00:00:00Z.
-if [[ "$out" == *"roadmap: created #123 (due 2026-01-05T00:00:00Z)"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: roadmap past-window reports created #123 (due 2026-01-05T00:00:00Z)"
+if [[ "$out" == *"align: created #123 (due 2026-01-05T00:00:00Z)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: align past-window reports created #123 (due 2026-01-05T00:00:00Z)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap past-window reports created #123 (due 2026-01-05T00:00:00Z)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: align past-window reports created #123 (due 2026-01-05T00:00:00Z)"
   echo "    actual: $out"
 fi
 create_log=$(cat "$STUB_DIR/gh-issue-create-rest-calls.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$create_log" == *"<!-- jit-due: 2026-01-05T00:00:00Z -->"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: roadmap past-window embedded jit-due marker in issue body"
+  PASS=$((PASS + 1)); echo "  PASS: align past-window embedded jit-due marker in issue body"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap past-window embedded jit-due marker in issue body"
+  FAIL=$((FAIL + 1)); echo "  FAIL: align past-window embedded jit-due marker in issue body"
   echo "    gh-issue-create-rest-calls.log: $create_log"
 fi
 jit_teardown
 
-# --- Test 4b-roadmap: roadmap jit (7d/14d) one second past the 7d boundary — creates ---
+# --- Test 4b-align: align jit (7d/14d) one second past the 7d boundary — creates ---
 
-echo "Test: dispatch-jit-engine roadmap jit one second past the 7d boundary creates an issue"
+echo "Test: dispatch-jit-engine align jit one second past the 7d boundary creates an issue"
 jit_setup
 jit_write_projects
 cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
 {
   "jits": [
     {
-      "key": "roadmap",
+      "key": "align",
       "repo": "test-owner/test-repo",
-      "label": "jit:roadmap",
-      "title": "Roadmap review",
-      "body": "Recurring roadmap review.",
+      "label": "jit:align",
+      "title": "Alignment review",
+      "body": "Recurring align review.",
       "project": "test-project",
       "remindAfterClose": "7d",
       "dueAfterClose": "14d",
-      "skill": "roadmap"
+      "skill": "align"
     }
   ]
 }
@@ -21826,22 +21833,22 @@ printf '[{"number":40,"closedAt":"%s"}]\n' "$closed_at" \
   > "$STUB_DIR/closed-issues.json"
 rc=0
 out=$("$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>/dev/null) || rc=$?
-assert_eq "roadmap 7d+1s-past-boundary exits 0" "0" "$rc"
+assert_eq "align 7d+1s-past-boundary exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
 # closedAt = NOW − (7d+1s) = 2025-12-24T23:59:59Z, dueAfterClose = 14d →
 # DUE = closedAt + 14d = 2026-01-07T23:59:59Z.
-if [[ "$out" == *"roadmap: created #123 (due 2026-01-07T23:59:59Z)"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: roadmap past-window reports created #123 (due 2026-01-07T23:59:59Z)"
+if [[ "$out" == *"align: created #123 (due 2026-01-07T23:59:59Z)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: align past-window reports created #123 (due 2026-01-07T23:59:59Z)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap past-window reports created #123 (due 2026-01-07T23:59:59Z)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: align past-window reports created #123 (due 2026-01-07T23:59:59Z)"
   echo "    actual: $out"
 fi
 create_log=$(cat "$STUB_DIR/gh-issue-create-rest-calls.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ "$create_log" == *"<!-- jit-due: 2026-01-07T23:59:59Z -->"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: roadmap 7d+1s-past-boundary embedded jit-due marker in issue body"
+  PASS=$((PASS + 1)); echo "  PASS: align 7d+1s-past-boundary embedded jit-due marker in issue body"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap 7d+1s-past-boundary embedded jit-due marker in issue body"
+  FAIL=$((FAIL + 1)); echo "  FAIL: align 7d+1s-past-boundary embedded jit-due marker in issue body"
   echo "    gh-issue-create-rest-calls.log: $create_log"
 fi
 jit_teardown
@@ -21886,24 +21893,24 @@ else
 fi
 jit_teardown
 
-# --- Test 5-roadmap: roadmap jit (7d/14d) open-issue guard — skipped when an open issue exists ---
+# --- Test 5-align: align jit (7d/14d) open-issue guard — skipped when an open issue exists ---
 
-echo "Test: dispatch-jit-engine roadmap jit skips when an open issue with the label exists"
+echo "Test: dispatch-jit-engine align jit skips when an open issue with the label exists"
 jit_setup
 jit_write_projects
 cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
 {
   "jits": [
     {
-      "key": "roadmap",
+      "key": "align",
       "repo": "test-owner/test-repo",
-      "label": "jit:roadmap",
-      "title": "Roadmap review",
-      "body": "Recurring roadmap review.",
+      "label": "jit:align",
+      "title": "Alignment review",
+      "body": "Recurring align review.",
       "project": "test-project",
       "remindAfterClose": "7d",
       "dueAfterClose": "14d",
-      "skill": "roadmap"
+      "skill": "align"
     }
   ]
 }
@@ -21911,19 +21918,19 @@ EOF
 echo '[{"number":50}]' > "$STUB_DIR/open-issues.json"
 rc=0
 out=$("$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>/dev/null) || rc=$?
-assert_eq "roadmap open-guard exits 0" "0" "$rc"
+assert_eq "align open-guard exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ "$out" == *"roadmap: skipped (open issue exists)"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: roadmap open-guard reports skipped (open issue exists)"
+if [[ "$out" == *"align: skipped (open issue exists)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: align open-guard reports skipped (open issue exists)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap open-guard reports skipped (open issue exists)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: align open-guard reports skipped (open issue exists)"
   echo "    actual: $out"
 fi
 TOTAL=$((TOTAL + 1))
 if [[ ! -f "$STUB_DIR/gh-issue-create-rest-calls.log" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: roadmap open-guard made no issue create call"
+  PASS=$((PASS + 1)); echo "  PASS: align open-guard made no issue create call"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: roadmap open-guard made no issue create call"
+  FAIL=$((FAIL + 1)); echo "  FAIL: align open-guard made no issue create call"
   echo "    gh-issue-create-rest-calls.log: $(cat "$STUB_DIR/gh-issue-create-rest-calls.log")"
 fi
 jit_teardown
@@ -25101,7 +25108,7 @@ export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 # Fixture: one Workflow launch line, no <task-notification>.
 cat > "$TMPDIR_TEST/transcript.jsonl" <<'EOF'
 {"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{}}]}}
-{"type":"user","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: w4stq5fyf"}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: w4stq5fyf"}]},"toolUseResult":{"status":"async_launched","taskId":"w4stq5fyf"}}
 EOF
 FIXTURE="$TMPDIR_TEST/transcript.jsonl"
 printf '%s\n' '{"transcript_path":"'"$FIXTURE"'"}' | "$TMPDIR_TEST/hooks/dispatch-stop.sh" >/dev/null 2>&1
@@ -25143,8 +25150,8 @@ echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
 export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 # Fixture: launch line + matching task-notification (backslash-escaped quote form).
 cat > "$TMPDIR_TEST/transcript.jsonl" <<'EOF'
-{"type":"user","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: w4stq5fyf"}]}}
-{"type":"user","message":{"content":[{"type":"tool_result","content":"{\"taskId\":\"w4stq5fyf\",\"status\":\"completed\"}"}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: w4stq5fyf"}]},"toolUseResult":{"status":"async_launched","taskId":"w4stq5fyf"}}
+{"type":"assistant","message":{"content":[{"type":"text","text":"<task-notification>{\"type\":\"workflow-completed\",\"taskId\":\"w4stq5fyf\",\"status\":\"completed\"}</task-notification>"}]}}
 EOF
 FIXTURE="$TMPDIR_TEST/transcript.jsonl"
 printf '%s\n' '{"transcript_path":"'"$FIXTURE"'"}' | "$TMPDIR_TEST/hooks/dispatch-stop.sh" >/dev/null 2>&1
@@ -25177,9 +25184,9 @@ echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
 export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 # Fixture: two launch lines, only the first notified.
 cat > "$TMPDIR_TEST/transcript.jsonl" <<'EOF'
-{"type":"user","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: aaa111bbb"}]}}
-{"type":"user","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: ccc222ddd"}]}}
-{"type":"user","message":{"content":[{"type":"tool_result","content":"{\"taskId\":\"aaa111bbb\",\"status\":\"completed\"}"}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: aaa111bbb"}]},"toolUseResult":{"status":"async_launched","taskId":"aaa111bbb"}}
+{"type":"user","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: ccc222ddd"}]},"toolUseResult":{"status":"async_launched","taskId":"ccc222ddd"}}
+{"type":"assistant","message":{"content":[{"type":"text","text":"<task-notification>{\"type\":\"workflow-completed\",\"taskId\":\"aaa111bbb\",\"status\":\"completed\"}</task-notification>"}]}}
 EOF
 FIXTURE="$TMPDIR_TEST/transcript.jsonl"
 printf '%s\n' '{"transcript_path":"'"$FIXTURE"'"}' | "$TMPDIR_TEST/hooks/dispatch-stop.sh" >/dev/null 2>&1
@@ -25218,7 +25225,7 @@ export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 # record but no launch. The session-scoped scan must filter out the old-session
 # launch so the in-flight gate does not fire.
 cat > "$TMPDIR_TEST/transcript.jsonl" <<'EOF'
-{"type":"user","sessionId":"old-session-zzz","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: stale111"}]}}
+{"type":"user","sessionId":"old-session-zzz","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: stale111"}]},"toolUseResult":{"status":"async_launched","taskId":"stale111"}}
 {"type":"assistant","sessionId":"cur-session-aaa","message":{"content":[{"type":"text","text":"working"}]}}
 EOF
 FIXTURE="$TMPDIR_TEST/transcript.jsonl"
@@ -25255,9 +25262,9 @@ export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 # Old session launched stale333 and received its notification → fully completed
 # and must be filtered out by session-scoping.
 cat > "$TMPDIR_TEST/transcript.jsonl" <<'EOF'
-{"type":"user","sessionId":"cur-session-aaa","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: live222"}]}}
-{"type":"user","sessionId":"old-session-zzz","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: stale333"}]}}
-{"type":"user","sessionId":"old-session-zzz","message":{"content":[{"type":"tool_result","content":"{\"taskId\":\"stale333\",\"status\":\"completed\"}"}]}}
+{"type":"user","sessionId":"cur-session-aaa","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: live222"}]},"toolUseResult":{"status":"async_launched","taskId":"live222"}}
+{"type":"user","sessionId":"old-session-zzz","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: stale333"}]},"toolUseResult":{"status":"async_launched","taskId":"stale333"}}
+{"type":"assistant","sessionId":"old-session-zzz","message":{"content":[{"type":"text","text":"<task-notification>{\"type\":\"workflow-completed\",\"taskId\":\"stale333\",\"status\":\"completed\"}</task-notification>"}]}}
 EOF
 FIXTURE="$TMPDIR_TEST/transcript.jsonl"
 printf '%s\n' '{"transcript_path":"'"$FIXTURE"'","session_id":"cur-session-aaa"}' | "$TMPDIR_TEST/hooks/dispatch-stop.sh" >/dev/null 2>&1
@@ -25283,6 +25290,87 @@ if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: #2261 D1.5 current-session in-flight: NOT self-closed"
 fi
+stop_teardown
+
+# --- Test #2365-D1.6: faithful launch record (toolUseResult bare taskId), no notification → hand-back ---
+# Reproduces the REAL transcript shape: the Workflow launch tool_result line also
+# carries a top-level `toolUseResult.taskId` in the BARE "taskId":"<ID>" form. With
+# no <task-notification> record, the task is in-flight. The pre-fix `notified`
+# pattern self-matched the launch record's own bare toolUseResult.taskId, emptying
+# the set difference and wrongly parking; the envelope-anchored fix hands back.
+
+echo "Test: #2365 D1.6 faithful launch (toolUseResult bare taskId), no notification → hand-back"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "implement" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+# No phase-completed marker.
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+# Fixture: real-shape launch line WITH toolUseResult bare taskId metadata, no notification.
+cat > "$TMPDIR_TEST/transcript.jsonl" <<'EOF'
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: inflight365a"}]},"toolUseResult":{"status":"async_launched","taskId":"inflight365a"}}
+EOF
+FIXTURE="$TMPDIR_TEST/transcript.jsonl"
+printf '%s\n' '{"transcript_path":"'"$FIXTURE"'"}' | "$TMPDIR_TEST/hooks/dispatch-stop.sh" >/dev/null 2>&1
+rc=$?
+assert_eq "#2365 D1.6 in-flight Workflow: hook exits 0 (hand-back)" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2365 D1.6 in-flight Workflow: NOT parked on office-hours"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2365 D1.6 in-flight Workflow: NOT parked on office-hours"
+  echo "    apply-log: $(cat "$STUB_DIR/apply-office-hours.log")"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/spawn-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2365 D1.6 in-flight Workflow: NOT spawned (redundant tick suppressed)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2365 D1.6 in-flight Workflow: NOT spawned (redundant tick suppressed)"
+  echo "    spawn-calls: $(cat "$STUB_DIR/spawn-calls.log")"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2365 D1.6 in-flight Workflow: NOT self-closed"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2365 D1.6 in-flight Workflow: NOT self-closed"
+fi
+stop_teardown
+
+# --- Test #2365-D1.7: faithful launch record + real <task-notification> → normal Branch A park ---
+# The converse of D1.6: the same faithful launch record (toolUseResult bare taskId)
+# PLUS a real <task-notification> envelope for the same ID means the task completed.
+# The in-flight gate must NOT fire; execution falls through to the normal Branch A
+# office-hours park. Proves the envelope-anchored fix still detects completion.
+
+echo "Test: #2365 D1.7 faithful launch + real task-notification → normal Branch A park (office-hours applied, spawn invoked)"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "implement" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+# No phase-completed marker.
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+# Fixture: faithful launch line + matching real <task-notification> envelope.
+cat > "$TMPDIR_TEST/transcript.jsonl" <<'EOF'
+{"type":"user","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: inflight365a"}]},"toolUseResult":{"status":"async_launched","taskId":"inflight365a"}}
+{"type":"assistant","message":{"content":[{"type":"text","text":"<task-notification>{\"type\":\"workflow-completed\",\"taskId\":\"inflight365a\",\"status\":\"completed\"}</task-notification>"}]}}
+EOF
+FIXTURE="$TMPDIR_TEST/transcript.jsonl"
+printf '%s\n' '{"transcript_path":"'"$FIXTURE"'"}' | "$TMPDIR_TEST/hooks/dispatch-stop.sh" >/dev/null 2>&1
+rc=$?
+assert_eq "#2365 D1.7 completed Workflow: hook exits 0" "0" "$rc"
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+apply_issue=$(printf '%s' "$apply_log" | awk '{print $1}')
+apply_reason=$(printf '%s' "$apply_log" | cut -d' ' -f2-)
+TOTAL=$((TOTAL + 1))
+if [[ "$apply_issue" == "123" && -n "$apply_reason" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2365 D1.7 completed Workflow: dispatch-apply-office-hours invoked with issue 123 + non-empty reason"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2365 D1.7 completed Workflow: dispatch-apply-office-hours invoked with issue 123 + non-empty reason"
+  echo "    apply-log: $apply_log"
+fi
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "#2365 D1.7 completed Workflow: spawn invoked exactly once" "1" "$spawn_calls"
 stop_teardown
 
 # ============================================================================
@@ -34527,8 +34615,10 @@ cat > "$ehu_tmp/bin/systemctl" <<'STUB'
 printf '%s\n' "$*" >> "$STUB_LOG"
 for a in "$@"; do
   case "$a" in
+    show) printf '%s\n' "${STUB_SUBSTATE-dead}"; exit 0 ;;
     is-active) exit "${STUB_IS_ACTIVE_RC:-0}" ;;
     enable)    exit "${STUB_ENABLE_RC:-0}" ;;
+    restart)   exit "${STUB_RESTART_RC:-0}" ;;
     daemon-reload) exit "${STUB_RELOAD_RC:-0}" ;;
   esac
 done
@@ -34546,7 +34636,7 @@ if (
   export DISPATCH_HEARTBEAT_UNIT_DIR="$ehu_unit_dir"
   export DISPATCH_HEARTBEAT_SYSTEMCTL_CMD="$ehu_tmp/bin/systemctl"
   export STUB_LOG="$ehu_log"
-  export STUB_IS_ACTIVE_RC=3 STUB_ENABLE_RC=0 STUB_RELOAD_RC=0
+  export STUB_SUBSTATE=dead STUB_ENABLE_RC=0 STUB_RESTART_RC=0 STUB_RELOAD_RC=0
   source "$SCRIPT_DIR/lib.sh"
   ensure_heartbeat_units "$ehu_tmp/main-worktree"
 ); then
@@ -34567,39 +34657,45 @@ if (
   fi
   if [ -f "$ehu_tmr" ]; then
     TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: cold path wrote dispatch-heartbeat.timer"
-    grep -q '^OnUnitActiveSec=15min$' "$ehu_tmr" \
-      && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: timer has OnUnitActiveSec=15min"; } \
-      || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: timer missing OnUnitActiveSec=15min"; }
+    grep -q '^OnCalendar=\*:0/15$' "$ehu_tmr" \
+      && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: timer has OnCalendar=*:0/15"; } \
+      || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: timer missing OnCalendar=*:0/15"; }
     grep -q '^OnBootSec=2min$' "$ehu_tmr" \
       && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: timer has OnBootSec=2min"; } \
       || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: timer missing OnBootSec=2min"; }
     grep -q '^Persistent=true$' "$ehu_tmr" \
       && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: timer has Persistent=true"; } \
       || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: timer missing Persistent=true"; }
+    grep -q '^RandomizedDelaySec=30$' "$ehu_tmr" \
+      && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: timer has RandomizedDelaySec=30"; } \
+      || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: timer missing RandomizedDelaySec=30"; }
   else
-    TOTAL=$((TOTAL + 4)); FAIL=$((FAIL + 4))
+    TOTAL=$((TOTAL + 5)); FAIL=$((FAIL + 5))
     echo "  FAIL: cold path did not write dispatch-heartbeat.timer"
   fi
   grep -q 'daemon-reload' "$ehu_log" \
     && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: cold path ran daemon-reload"; } \
     || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: cold path did not run daemon-reload"; }
-  grep -q 'enable --now dispatch-heartbeat.timer' "$ehu_log" \
-    && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: cold path ran enable --now dispatch-heartbeat.timer"; } \
-    || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: cold path did not run enable --now dispatch-heartbeat.timer"; }
+  grep -q 'enable dispatch-heartbeat.timer' "$ehu_log" \
+    && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: cold path ran enable dispatch-heartbeat.timer"; } \
+    || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: cold path did not run enable dispatch-heartbeat.timer"; }
+  grep -q 'restart dispatch-heartbeat.timer' "$ehu_log" \
+    && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: cold path ran restart dispatch-heartbeat.timer"; } \
+    || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: cold path did not run restart dispatch-heartbeat.timer"; }
 else
-  TOTAL=$((TOTAL + 10)); FAIL=$((FAIL + 10))
+  TOTAL=$((TOTAL + 12)); FAIL=$((FAIL + 12))
   echo "  FAIL: ensure_heartbeat_units (cold path) returned non-zero"
 fi
 
-# --- 2. Hot path: both units byte-identical + timer active → no-op ------------
-# The hot-path short-circuit checks is-active (STUB_IS_ACTIVE_RC=0 → active);
-# it returns early and must not run daemon-reload or enable --now.
+# --- 2. Hot path: both units byte-identical + timer armed → no-op -------------
+# The hot-path short-circuit checks SubState (STUB_SUBSTATE=waiting → armed); it
+# returns early and must not run daemon-reload, enable, or restart.
 : > "$ehu_log"
 if (
   export DISPATCH_HEARTBEAT_UNIT_DIR="$ehu_unit_dir"
   export DISPATCH_HEARTBEAT_SYSTEMCTL_CMD="$ehu_tmp/bin/systemctl"
   export STUB_LOG="$ehu_log"
-  export STUB_IS_ACTIVE_RC=0 STUB_ENABLE_RC=0 STUB_RELOAD_RC=0
+  export STUB_SUBSTATE=waiting STUB_ENABLE_RC=0 STUB_RESTART_RC=0 STUB_RELOAD_RC=0
   source "$SCRIPT_DIR/lib.sh"
   ensure_heartbeat_units "$ehu_tmp/main-worktree"
 ); then
@@ -34611,14 +34707,102 @@ if (
   fi
   TOTAL=$((TOTAL + 1))
   if ! grep -q 'enable' "$ehu_log"; then
-    PASS=$((PASS + 1)); echo "  PASS: hot path did not re-run enable --now"
+    PASS=$((PASS + 1)); echo "  PASS: hot path did not re-run enable"
   else
-    FAIL=$((FAIL + 1)); echo "  FAIL: hot path re-ran enable --now"
+    FAIL=$((FAIL + 1)); echo "  FAIL: hot path re-ran enable"
+  fi
+  TOTAL=$((TOTAL + 1))
+  if ! grep -q 'restart' "$ehu_log"; then
+    PASS=$((PASS + 1)); echo "  PASS: hot path did not re-run restart"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: hot path re-ran restart"
+  fi
+else
+  TOTAL=$((TOTAL + 3)); FAIL=$((FAIL + 3))
+  echo "  FAIL: ensure_heartbeat_units (hot path) returned non-zero"
+fi
+
+# --- 2b. Elapsed strand: units match but SubState=elapsed → repair (#2375) -----
+# The #2375 stranded state: units are byte-identical on disk (installed by the
+# cold path above, still present), but the timer is active (elapsed) — no future
+# fire. is-active would read 0 (healthy), but heartbeat_timer_is_armed requires
+# SubState=waiting, so this must fall through to the repair path and re-arm:
+# daemon-reload + restart fire.
+: > "$ehu_log"
+if (
+  export DISPATCH_HEARTBEAT_UNIT_DIR="$ehu_unit_dir"
+  export DISPATCH_HEARTBEAT_SYSTEMCTL_CMD="$ehu_tmp/bin/systemctl"
+  export STUB_LOG="$ehu_log"
+  export STUB_SUBSTATE=elapsed STUB_ENABLE_RC=0 STUB_RESTART_RC=0 STUB_RELOAD_RC=0
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_heartbeat_units "$ehu_tmp/main-worktree"
+); then
+  TOTAL=$((TOTAL + 1))
+  if grep -q 'daemon-reload' "$ehu_log"; then
+    PASS=$((PASS + 1)); echo "  PASS: elapsed timer fell through to repair (daemon-reload)"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: elapsed timer short-circuited (no daemon-reload)"
+  fi
+  TOTAL=$((TOTAL + 1))
+  if grep -q 'restart dispatch-heartbeat.timer' "$ehu_log"; then
+    PASS=$((PASS + 1)); echo "  PASS: elapsed timer is re-armed (#2375) (restart fired)"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: elapsed timer was not re-armed (no restart)"
   fi
 else
   TOTAL=$((TOTAL + 2)); FAIL=$((FAIL + 2))
-  echo "  FAIL: ensure_heartbeat_units (hot path) returned non-zero"
+  echo "  FAIL: ensure_heartbeat_units (elapsed strand) returned non-zero"
 fi
+
+# --- 2c. Restart failure → non-zero return + WARNING (RV-002, #2388) ----------
+# enable succeeds but `systemctl restart` fails (STUB_RESTART_RC=1). SubState=dead
+# forces fall-through past the hot-path early-return so the restart step is reached;
+# the install/re-arm path must surface a non-zero return and a WARNING to stderr
+# (lib.sh:2868-2870).
+: > "$ehu_log"
+ehu_restart_stderr="$ehu_tmp/restart-fail.stderr"
+ehu_restart_rc=0
+(
+  export DISPATCH_HEARTBEAT_UNIT_DIR="$ehu_unit_dir"
+  export DISPATCH_HEARTBEAT_SYSTEMCTL_CMD="$ehu_tmp/bin/systemctl"
+  export STUB_LOG="$ehu_log"
+  export STUB_SUBSTATE=dead STUB_ENABLE_RC=0 STUB_RESTART_RC=1 STUB_RELOAD_RC=0
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_heartbeat_units "$ehu_tmp/main-worktree"
+) 2>"$ehu_restart_stderr" || ehu_restart_rc=$?
+assert_eq "restart failure → non-zero return" "1" "$ehu_restart_rc"
+TOTAL=$((TOTAL + 1))
+if grep -q 'WARNING: ensure_heartbeat_units: systemctl --user restart dispatch-heartbeat.timer failed' "$ehu_restart_stderr"; then
+  PASS=$((PASS + 1)); echo "  PASS: restart failure emitted WARNING to stderr"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: restart failure did not emit expected WARNING to stderr"
+fi
+
+# --- 2d. Elapsed strand + enable fails → repair path returns non-zero, WARNs --
+# Parity with the cold-path degrade case (block 4a in the ensure_daemon_service
+# suite): on the elapsed/repair path, when `systemctl --user enable` fails the
+# function must return non-zero AND emit its WARNING to stderr (lib.sh:2864-2867,
+# RV-003 from PR #2382). Reuses the units the cold path installed in
+# $ehu_unit_dir; redirects stderr to a file so the WARNING can be asserted.
+: > "$ehu_log"
+ehu_err="$ehu_tmp/enable-fail-stderr"
+ehu_rc=0
+if (
+  export DISPATCH_HEARTBEAT_UNIT_DIR="$ehu_unit_dir"
+  export DISPATCH_HEARTBEAT_SYSTEMCTL_CMD="$ehu_tmp/bin/systemctl"
+  export STUB_LOG="$ehu_log"
+  export STUB_SUBSTATE=elapsed STUB_ENABLE_RC=1 STUB_RESTART_RC=0 STUB_RELOAD_RC=0
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_heartbeat_units "$ehu_tmp/main-worktree"
+) 2>"$ehu_err"; then
+  ehu_rc=0
+else
+  ehu_rc=$?
+fi
+assert_eq "elapsed+enable-fail: ensure_heartbeat_units returns non-zero" "1" "$ehu_rc"
+assert_eq "elapsed+enable-fail: WARNING on stderr" "present" \
+  "$(grep -q 'WARNING: ensure_heartbeat_units: systemctl --user enable dispatch-heartbeat.timer failed' "$ehu_err" \
+     && echo present || echo absent)"
 
 # --- 3. cleanup_stale_heartbeat_units: path-change disable (#2056) ------------
 # Called DIRECTLY (not via ensure_heartbeat_units): the "paths match" case would

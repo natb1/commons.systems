@@ -231,7 +231,7 @@
 #category-sankey { width: 100%; max-width: 1200px; margin: 0 auto var(--space-4); }
 #category-sankey svg { display: block; }
 .sankey-node rect { cursor: default; }
-.sankey-node text { font-size: 11px; }
+.sankey-node text { font-size: 11px; /* ds-lint-disable-line: SVG label, no exact --text-* token (micro=10.4px/xs=12px) */ }
 .sankey-link { opacity: 0.4; }
 .sankey-link:hover { opacity: 0.7; }
 
@@ -241,7 +241,7 @@
 #accounts-chart-controls { margin-bottom: var(--space-2); }
 #budgets-chart { width: 100%; margin-bottom: var(--space-4); }
 /* Plot's built-in tip background is light; force tip text dark so it remains readable on every chart. */
-svg [aria-label="tip"] text { fill: #222; }
+svg [aria-label="tip"] text { fill: #222; /* ds-lint-disable-line: Plot tooltip text, deliberate dark-on-light data-viz override */ }
 .chart-layout {
   display: flex;
   align-items: stretch;
@@ -594,7 +594,7 @@ svg [aria-label="tip"] text { fill: #222; }
 
 .virtual-badge {
   font-size: 0.7em;
-  padding: 1px 5px;
+  padding: 1px 5px; /* ds-lint-disable-line: hairline badge padding, deliberate */
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--fg) 10%, transparent);
   color: var(--fg);
@@ -690,7 +690,7 @@ svg [aria-label="tip"] text { fill: #222; }
 .reconcile-suggested-badge {
   display: inline-block;
   font-size: 0.7em;
-  padding: 1px 5px;
+  padding: 1px 5px; /* ds-lint-disable-line: hairline badge padding, deliberate */
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--fg) 10%, transparent);
   color: var(--fg);

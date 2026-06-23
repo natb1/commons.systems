@@ -67,6 +67,6 @@ test.describe("hero band", () => {
     await expect(page.locator(".landing-hero-band")).toContainText(
       "Build with commons.systems. Learn to run without.",
     );
-    await expect(page.locator("a.app-card")).toHaveCount(3);
+    await expect(page.locator("a.app-card")).toHaveCount(4);
   });
 });

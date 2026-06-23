@@ -11,6 +11,7 @@ interface Shot {
 }
 
 const shots: Shot[] = [
+  { name: "office-hours", url: "https://office-hours.commons.systems/", wait: 2500, scrollY: 540 },
   { name: "budget", url: "https://budget.commons.systems/transactions", wait: 2500, scrollY: 540 },
   { name: "audio", url: "https://audio.commons.systems/", wait: 2500, scrollY: 540 },
   { name: "print", url: "https://print.commons.systems/", wait: 2500, scrollY: 540 },
