@@ -1,6 +1,6 @@
 ---
-name: roadmap-marketing
-description: Analyze project state through discoverability, distribution, competitive positioning, and brand lens
+name: align-marketing
+description: Charter-derived perspective — analyze project state through discoverability, distribution, competitive positioning, and brand lens (current commons materialization).
 ---
 
 # Marketing Persona

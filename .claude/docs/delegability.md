@@ -133,12 +133,12 @@ proceduralized.
 ### Perspectives intrinsic to delegation
 
 Two perspectives are always consulted on a SHOULD decision. They estimate the terms;
-they do not by themselves decide. They reuse the existing roadmap agents:
+they do not by themselves decide. They reuse the existing align agents:
 
 | Perspective | Derived from | Estimates |
 |---|---|---|
-| FINANCIAL | `.claude/agents/roadmap-finance.md` — cost analysis, break-even, sustainability | the left-side costs (`build`, `run`), `manual_cost`, and `frequency` |
-| TECHNICAL | `.claude/agents/roadmap-engineering.md` — impact × risk × effort, forkability, "safe to abandon" | `maintenance`, and a veto if the codified artifact would not be safe to abandon |
+| FINANCIAL | `.claude/agents/align-financial.md` — cost analysis, break-even, sustainability | the left-side costs (`build`, `run`), `manual_cost`, and `frequency` |
+| TECHNICAL | `.claude/agents/align-technical.md` — impact × risk × effort, forkability, "safe to abandon" | `maintenance`, and a veto if the codified artifact would not be safe to abandon |
 
 ### Greedy codification
 
@@ -151,7 +151,7 @@ teeth. When all three pass, push down, because the freed attention compounds.
 
 ## Consistency / veto layer
 
-A consistency-tester derived from `.claude/agents/roadmap-auditor.md` — charter
+A consistency-tester derived from `.claude/agents/align-consistency.md` — charter
 compliance and ratchet risk — runs over the recommendation. It does not produce the
 recommendation; it can veto one. A push-down that is CAN-feasible and ROI-positive is
 still declined if it conflicts with a standing intention or a charter principle — for
