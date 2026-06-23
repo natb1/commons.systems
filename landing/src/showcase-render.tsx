@@ -7,6 +7,6 @@ import type { AppCard } from "./site-config.ts";
  * replaces the `<section class="landing-hero">` placeholder with this string).
  * The client mount in main.tsx renders ShowcaseContent directly instead.
  */
-export function renderShowcase(apps: AppCard[]): string {
-  return renderToStaticMarkup(<Showcase apps={apps} />);
+export function renderShowcase(primary: AppCard[], overflow: AppCard[] = []): string {
+  return renderToStaticMarkup(<Showcase apps={primary} overflow={overflow} />);
 }
