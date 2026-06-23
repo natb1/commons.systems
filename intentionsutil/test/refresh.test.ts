@@ -30,6 +30,7 @@ interface RawPull {
 function makeExecMock(opts: {
   pullsPages: RawPull[][];
   closingRefs: { number: number }[];
+  viewThrows?: boolean;
 }): void {
   mockExec.mockImplementation((_cmd, args) => {
     if (!args) throw new Error("args not provided to mock");
@@ -37,6 +38,11 @@ function makeExecMock(opts: {
       return JSON.stringify(opts.pullsPages);
     }
     if (args.includes("issue") && args.includes("view")) {
+      if (opts.viewThrows) {
+        throw new Error(
+          "gh issue view exited with non-zero status (deleted/transferred issue)",
+        );
+      }
       return JSON.stringify({ closedByPullRequestsReferences: opts.closingRefs });
     }
     throw new Error(`Unexpected gh call: ${args.join(" ")}`);
@@ -120,6 +126,27 @@ describe("resolveLinkedPrs", () => {
     const pr902Entries = result.filter((p) => p.number === 902);
     expect(pr902Entries).toHaveLength(1);
     expect(pr902Entries[0].state).toBe("merged");
+  });
+
+  it("gh issue view throws (deleted/transferred issue) — stage 2 skipped, only stage-1 results returned", () => {
+    // closingRefs includes PR 900 (head ref "renamed-branch", no "2417-" prefix)
+    // deliberately — not an empty list. PR 900 is reachable ONLY via stage 2
+    // (closedByPullRequestsReferences). If the catch fires correctly, stage 2 is
+    // skipped entirely and 900 is excluded → result is [901, 902]. If the mock
+    // somehow failed to throw, stage 2 would add 900 → [900, 901, 902] and the
+    // assertion below would fail, proving the throw actually fired.
+    makeExecMock({
+      pullsPages: PULLS_LIST_FIXTURE,
+      closingRefs: [{ number: 900 }],
+      viewThrows: true,
+    });
+
+    expect(() => resolveLinkedPrs(2417)).not.toThrow();
+
+    const result = resolveLinkedPrs(2417);
+    expect(result.map((p) => p.number)).toEqual([901, 902]);
+    expect(result.find((p) => p.number === 901)?.state).toBe("open");
+    expect(result.find((p) => p.number === 902)?.state).toBe("merged");
   });
 
   it("absent closing-ref PR throws — closing ref whose number is missing from the pulls list aborts", () => {
