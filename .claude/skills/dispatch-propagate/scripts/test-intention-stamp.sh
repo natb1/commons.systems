@@ -141,4 +141,17 @@ assert_eq "exits 0" "0" "$exit_code"
 assert_eq "stdout is empty" "" "$output"
 teardown
 
+# ---------------------------------------------------------------------------
+# Test 9: malformed --jq filter in the GET handler exits non-zero (pipefail)
+# Without `set -euo pipefail` in the stub, a non-zero jq exit is masked by the
+# handler's trailing `exit 0`, silently succeeding. With pipefail it surfaces.
+# ---------------------------------------------------------------------------
+echo "Test 9: malformed --jq filter in GET handler exits non-zero"
+setup
+# Seed a stored body so the GET handler reaches the jq pipeline.
+printf '<!-- intention:node-id -->\ngoal-x\n' > "$TMPDIR_TEST/stub/posted-body.txt"
+assert_exit_nonzero "malformed --jq exits non-zero" \
+  "$TMPDIR_TEST/bin/gh" api repos/o/r/issues/comments/777 --jq 'bad jq ('
+teardown
+
 report_results
