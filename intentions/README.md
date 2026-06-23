@@ -14,7 +14,8 @@ npx tsx intentionsutil/scripts/backfill.ts
 ```
 
 The script is strictly read-only toward GitHub (only `gh api` GETs). It
-overwrites the node files from current state, so manual edits will be lost.
+regenerates only the `issue-*.md` leaves from current GitHub state; the
+`principle-*.md` roots are left untouched.
 
 ## Not yet consumed
 
@@ -30,10 +31,10 @@ separate by design: the tree owns intention, GitHub owns execution.
 
 The snapshot contains two layers that share one id space:
 
-- **Principle roots** (`principle-*.md`) — parsed from the `## Principles`
-  section of the repo-root `CHARTER.md`. One node per `### <Title>` subsection,
-  with `parent: null` (roots), `status: codified`, and the subsection prose as
-  `rationale`.
+- **Principle roots** (`principle-*.md`) — authoritative, hand-maintained,
+  parent-less nodes (`parent: null`), `status: codified`, with the principle
+  prose as `rationale`. Backfill does not generate or prune these files; they
+  are edited directly and committed like any other source file.
 - **Issue leaves** (`issue-*.md`) — one node per open GitHub issue (pull
   requests excluded), `status: raw`. Leaves are linked to one another by the
   existing GitHub issue hierarchy: a node's `parent` is set to its GitHub parent
