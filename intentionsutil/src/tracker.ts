@@ -125,7 +125,7 @@ export function readTracker(dir: string, node_id: string): ExecutionTracker {
 
 export function listTrackers(dir: string): ExecutionTracker[] {
   return readdirSync(dir)
-    .filter((n) => n.endsWith(".json") && n !== "README.md")
+    .filter((n) => n.endsWith(".json"))
     .sort()
     .map((n) => readTracker(dir, n.slice(0, -".json".length)));
 }
@@ -143,7 +143,7 @@ export function nodeIdToIssue(node_id: string, trackersDir: string): number | nu
   return null;
 }
 
-export function issueToNodeId(issue_number: number, trackersDir: string): string | null {
+export function issueToNodeId(issue_number: number, trackersDir: string): string {
   if (!existsSync(trackersDir)) {
     return `issue-${issue_number}`;
   }
