@@ -42,6 +42,11 @@ done
 
 # ---- LIST comments (paginate, no method, URL ends with /comments not /comments/<id>) ----
 if [[ $PAGINATE -eq 1 && -z "$METHOD" ]]; then
+  # LIST body is a FIXED FIXTURE — the `old-node` value in the JSON below is
+  # hardcoded and does NOT track ${STUB_DIR}/posted-body.txt. It exists only
+  # for comment-ID (CID) resolution used by Tests 5 and 7. Any future test
+  # that needs to assert the CURRENT comment body must use the GET branch
+  # (single-comment --read path), not LIST.
   if [[ "$URL" == */comments ]]; then
     if [[ "${STUB_EXISTING:-0}" == "1" ]]; then
       # Matching comment: body starts with the marker, author id matches.
