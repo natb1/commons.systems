@@ -125,7 +125,7 @@ export function readTracker(dir: string, node_id: string): ExecutionTracker {
 
 export function listTrackers(dir: string): ExecutionTracker[] {
   return readdirSync(dir)
-    .filter((n) => n.endsWith(".json") && n !== "README.md")
+    .filter((n) => n.endsWith(".json"))
     .sort()
     .map((n) => readTracker(dir, n.slice(0, -".json".length)));
 }
