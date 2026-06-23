@@ -19,7 +19,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { writeNode } from "../src/store.js";
 
 // --- Paths -----------------------------------------------------------------
@@ -40,9 +40,77 @@ function kebab(s: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-/** Run a `gh` subcommand and return stdout. Throws on non-zero exit. */
-function gh(args: string[]): string {
-  return execFileSync("gh", args, { encoding: "utf8" });
+/**
+ * Error from a `gh` invocation that carries the parsed HTTP status (when one
+ * could be recovered from gh's output text). `gh api` exits 1 on an HTTP error
+ * regardless of the status code, so the status is parsed from stderr/stdout, not
+ * the exit code — see `parseHttpStatus`.
+ */
+export class GhError extends Error {
+  readonly httpStatus: number | null;
+  constructor(message: string, httpStatus: number | null, cause?: unknown) {
+    super(message, { cause });
+    this.name = "GhError";
+    this.httpStatus = httpStatus;
+  }
+}
+
+/** Extract an `HTTP <ddd>` status from gh's output text. Returns null if absent. */
+export function parseHttpStatus(text: string): number | null {
+  const m = /HTTP (\d{3})/.exec(text);
+  return m ? Number(m[1]) : null;
+}
+
+/**
+ * True when gh's output text indicates a transient failure worth retrying:
+ * HTTP 429, any HTTP 5xx, or a rate-limit / availability phrase. Mirrors
+ * `_gh_error_is_transient` in `.claude/skills/dispatch-propagate/scripts/lib.sh`.
+ * A bare HTTP 403 is NOT treated as transient.
+ */
+export function isTransientGhError(text: string): boolean {
+  return /HTTP 429|HTTP 5\d\d|secondary rate limit|abuse detection|retry your request|temporarily unavailable|Service Unavailable|Bad Gateway|timed out|i\/o timeout|deadline exceeded|connection reset|TLS handshake/i.test(
+    text,
+  );
+}
+
+/** Block the current thread for `ms` milliseconds (keeps the script synchronous). */
+function sleepSync(ms: number): void {
+  if (ms <= 0) return;
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/**
+ * Run a `gh` subcommand and return stdout, retrying transient failures
+ * (rate limits, 5xx) with exponential backoff. Throws a `GhError` on a
+ * deterministic failure or once attempts are exhausted. Knobs are read per-call
+ * from the environment so tests can tune them: GH_RETRY_ATTEMPTS (default 4),
+ * GH_RETRY_BASE_DELAY_MS (default 1000).
+ */
+export function ghWithRetry(args: string[]): string {
+  const attempts = Math.max(
+    1,
+    parseInt(process.env.GH_RETRY_ATTEMPTS ?? "4", 10) || 4,
+  );
+  const baseDelayMs = Number(process.env.GH_RETRY_BASE_DELAY_MS ?? "1000");
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return execFileSync("gh", args, { encoding: "utf8" });
+    } catch (err) {
+      const e = err as { stderr?: unknown; stdout?: unknown };
+      const text = String(e.stderr ?? "") + "\n" + String(e.stdout ?? "");
+      if (attempt < attempts && isTransientGhError(text)) {
+        sleepSync(baseDelayMs * 2 ** (attempt - 1));
+        continue;
+      }
+      const status = parseHttpStatus(text);
+      throw new GhError(
+        `gh ${args.join(" ")} failed${status != null ? ` (HTTP ${status})` : ""}: ${text.trim()}`,
+        status,
+        err,
+      );
+    }
+  }
+  throw new Error("unreachable");
 }
 
 // --- Principle roots from CHARTER.md ---------------------------------------
@@ -122,8 +190,8 @@ interface OpenIssue {
  * `--paginate --slurp` returns a single JSON array-of-arrays (one inner array
  * per page); we flatten it. This is robust regardless of page count.
  */
-function fetchOpenIssues(): OpenIssue[] {
-  const out = gh([
+export function fetchOpenIssues(): OpenIssue[] {
+  const out = ghWithRetry([
     "api",
     "--paginate",
     "--slurp",
@@ -162,18 +230,27 @@ function extractScope(body: string | null): string | null {
 }
 
 /**
- * Resolve an issue's GitHub parent number. The `/parent` endpoint 404s (gh
- * exits non-zero, so execFileSync throws) when there is no parent — that is the
- * one documented expected error, caught here and only here so real errors (auth,
- * rate-limit) elsewhere still surface. Returns null when there is no parent.
+ * Resolve an issue's GitHub parent number. The `/parent` endpoint 404s when
+ * there is no parent — that, and only that, is the expected error: a real HTTP
+ * 404 returns null. Any other failure (auth, or a rate limit already
+ * retried+re-thrown by `ghWithRetry`) surfaces rather than being silently
+ * nulled. Returns null when there is no parent.
  */
-function fetchParentNumber(issueNumber: number): number | null {
+export function fetchParentNumber(issueNumber: number): number | null {
   let out: string;
   try {
-    out = gh(["api", `/repos/{owner}/{repo}/issues/${issueNumber}/parent`, "--jq", ".number"]);
-  } catch {
-    // Expected: no parent → /parent 404s.
-    return null;
+    out = ghWithRetry([
+      "api",
+      `/repos/{owner}/{repo}/issues/${issueNumber}/parent`,
+      "--jq",
+      ".number",
+    ]);
+  } catch (err) {
+    // Expected: no parent → /parent 404s. Only a real 404 means "no parent";
+    // anything else (e.g. a rate limit already retried+re-thrown by
+    // ghWithRetry) must surface rather than be silently nulled.
+    if (err instanceof GhError && err.httpStatus === 404) return null;
+    throw err;
   }
   const trimmed = out.trim();
   if (trimmed === "") return null;
@@ -250,4 +327,6 @@ function main(): void {
   );
 }
 
-main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main();
+}
