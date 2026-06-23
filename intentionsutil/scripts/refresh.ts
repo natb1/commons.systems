@@ -116,7 +116,9 @@ export function resolveLinkedPrs(issueNumber: number): LinkedPr[] {
   const prefix = `${issueNumber}-`;
   for (const pr of pages.flat()) {
     if (pr.head.ref.startsWith(prefix)) {
-      byNumber.set(pr.number, allPulls.get(pr.number)!);
+      const entry = allPulls.get(pr.number);
+      if (!entry) throw new Error(`PR #${pr.number} in paginated list missing from allPulls`);
+      byNumber.set(pr.number, entry);
     }
   }
 

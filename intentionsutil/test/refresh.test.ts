@@ -32,14 +32,14 @@ function makeExecMock(opts: {
   closingRefs: { number: number }[];
 }): void {
   mockExec.mockImplementation((_cmd, args) => {
-    const argArr = args as string[];
-    if (argArr.includes("api") && argArr.some((a) => a.includes("/pulls"))) {
+    if (!args) throw new Error("args not provided to mock");
+    if (args.includes("api") && args.some((a) => a.includes("/pulls"))) {
       return JSON.stringify(opts.pullsPages);
     }
-    if (argArr.includes("issue") && argArr.includes("view")) {
+    if (args.includes("issue") && args.includes("view")) {
       return JSON.stringify({ closedByPullRequestsReferences: opts.closingRefs });
     }
-    throw new Error(`Unexpected gh call: ${argArr.join(" ")}`);
+    throw new Error(`Unexpected gh call: ${args.join(" ")}`);
   });
 }
 
@@ -59,10 +59,11 @@ describe("resolveLinkedPrs", () => {
 
     const result = resolveLinkedPrs(2417);
 
-    const pr900 = result.find((p) => p.number === 900);
-    expect(pr900).toBeDefined();
-    expect(pr900!.state).not.toBeUndefined();
-    expect(pr900!.state).toBe("merged");
+    const pr900Entries = result.filter((p) => p.number === 900);
+    expect(pr900Entries).toHaveLength(1);
+    const pr900 = pr900Entries[0];
+    expect(pr900.state).not.toBeUndefined();
+    expect(pr900.state).toBe("merged");
   });
 
   it("validateTracker round-trip — record with resolveLinkedPrs result passes validation after JSON round-trip", () => {
@@ -100,9 +101,10 @@ describe("resolveLinkedPrs", () => {
 
     const result = resolveLinkedPrs(2417);
 
-    const pr901 = result.find((p) => p.number === 901);
-    expect(pr901).toBeDefined();
-    expect(pr901!.state).toBe("open");
+    const pr901Entries = result.filter((p) => p.number === 901);
+    expect(pr901Entries).toHaveLength(1);
+    const pr901 = pr901Entries[0];
+    expect(pr901.state).toBe("open");
   });
 
   it("stage-1 wins on conflict — PR in both prefix list and closing refs is not duplicated and keeps stage-1 state", () => {
