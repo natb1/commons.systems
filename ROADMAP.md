@@ -2,7 +2,7 @@
 
 ## Strategy
 
-commons.systems propagates through useful artifacts — tools that solve real problems better than their institutional alternatives in at least one dimension the user cares about. The philosophy is embedded in the architecture (local-first, forkable, deliberate dependencies), not argued in text. Four audiences engage at progressive depth: the author uses tools daily, users encounter tools that work, practitioners fork and adapt, collaborators read the [charter](CHARTER.md). For the full diagnosis and principles, see [CHARTER.md](CHARTER.md).
+commons.systems propagates through useful artifacts — tools that solve real problems better than their institutional alternatives in at least one dimension the user cares about. The philosophy is embedded in the architecture (local-first, forkable, deliberate dependencies), not argued in text. Four audiences engage at progressive depth: the author uses tools daily, users encounter tools that work, practitioners fork and adapt, collaborators engage with the charter. For the full diagnosis and principles, see the intention graph (`intentions/`).
 
 ### Prioritizing work
 
@@ -34,7 +34,7 @@ When choosing a new domain, these criteria help identify where the author's prob
 
 **Bottleneck:** Discoverability. The project is producing artifacts into a vacuum. The next phase focuses on making existing work findable while continuing to deepen author-usage artifacts.
 
-**Resourcing:** The [charter's](CHARTER.md) Resourcing section adds contracting to the model — institutions pay for help that brings them in as practitioners. It is not a gated phase: an institution drawn in by the portfolio is, by the fact of engaging, evidence that the artifacts work. So resourcing is not a separate priority — it runs on portfolio strength, and the artifact-quality and discoverability work already prioritized is what builds that portfolio. The `/about` page is the destination.
+**Resourcing:** The project's resourcing model adds contracting — institutions pay for help that brings them in as practitioners. It is not a gated phase: an institution drawn in by the portfolio is, by the fact of engaging, evidence that the artifacts work. So resourcing is not a separate priority — it runs on portfolio strength, and the artifact-quality and discoverability work already prioritized is what builds that portfolio. The `/about` page is the destination.
 
 ## Priorities
 
@@ -114,9 +114,9 @@ When choosing a new domain, these criteria help identify where the author's prob
 
 ### 10. Wind-down criteria ([#444](https://github.com/natb1/commons.systems/issues/444))
 
-- **Why:** The charter's Assumption 6 says "define what 'purpose served' looks like before the ratchet has a chance to form." The ratchet forms when external obligations accumulate from tier-3 engagement, so wind-down criteria must ship before any tier-3 artifact (#440, #442) does. Not a prerequisite for publishing #223 — the tentpole starts the evaluation clock but does not itself form the ratchet.
+- **Why:** The danger of an institution is the inability to reverse it — the principle of philosophical mobility (`intentions/principle-philosophical-mobility-over-detachment.md`) holds that standing down must be what happens on its own, by inaction. So wind-down criteria must be defined before the ratchet has a chance to form. The ratchet forms when external obligations accumulate from tier-3 engagement, so wind-down criteria must ship before any tier-3 artifact (#440, #442) does. Not a prerequisite for publishing #223 — the tentpole starts the evaluation clock but does not itself form the ratchet.
 - **Validation tier:** Collaborators.
-- **Done when:** CHARTER.md includes concrete, testable wind-down criteria.
+- **Done when:** the intention graph includes concrete, testable wind-down criteria.
 - **Gate:** Required before any tier-3 priority advances.
 
 ## Feedback loop
@@ -131,7 +131,7 @@ This document should be revisited after each priority ships or when new informat
 
 ## How this document works
 
-This roadmap applies the [charter's](CHARTER.md) strategy to current conditions. It changes frequently — whenever a priority ships, the assessment shifts, or new information changes what matters most. The charter constrains this document; this document operationalizes the charter.
+This roadmap applies the charter's strategy to current conditions. It changes frequently — whenever a priority ships, the assessment shifts, or new information changes what matters most. The charter constrains this document; this document operationalizes the charter.
 
 Each priority follows a consistent schema: why (traced to strategy), validation tier (which audience tier this serves — author, users, practitioners, or collaborators), distribution (how people encounter it), done-when (testable completion criteria), and signal (what to check afterward). The distribution field is the key discipline — if you can't say where people will find an artifact, building it is premature.
 
