@@ -21,6 +21,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:f
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { writeNode } from "../src/store.js";
+import { ghErrorText } from "../src/errors.js";
 
 // --- Paths -----------------------------------------------------------------
 // The script lives at `intentionsutil/scripts/backfill.ts`, so the repo root is
@@ -96,8 +97,7 @@ export function ghWithRetry(args: string[]): string {
     try {
       return execFileSync("gh", args, { encoding: "utf8" });
     } catch (err) {
-      const e = err as { stderr?: unknown; stdout?: unknown };
-      const text = String(e.stderr ?? "") + "\n" + String(e.stdout ?? "");
+      const text = ghErrorText(err);
       if (attempt < attempts && isTransientGhError(text)) {
         sleepSync(baseDelayMs * 2 ** (attempt - 1));
         continue;
