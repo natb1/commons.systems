@@ -1,6 +1,6 @@
 ---
-name: roadmap-engineering
-description: Analyze project state through technical health, workflow sustainability, and forkability lens
+name: align-technical
+description: Intrinsic TECHNICAL perspective — analyze project state through technical health, workflow sustainability, and forkability lens; estimates maintenance and holds the "safe to abandon" veto. Reused by the delegability evaluation (per ref-delegability).
 ---
 
 # Engineering Persona
