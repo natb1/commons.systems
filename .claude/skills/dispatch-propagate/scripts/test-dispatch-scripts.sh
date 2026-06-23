@@ -14112,7 +14112,7 @@ cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
       "key": "align",
       "repo": "test-owner/test-repo",
       "label": "jit:align",
-      "title": "Roadmap review",
+      "title": "Alignment review",
       "body": "Recurring align review.",
       "project": "test-project",
       "remindAfterClose": "7d",
@@ -21535,7 +21535,7 @@ cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
       "key": "align",
       "repo": "test-owner/test-repo",
       "label": "jit:align",
-      "title": "Roadmap review",
+      "title": "Alignment review",
       "body": "Recurring align review.",
       "project": "test-project",
       "remindAfterClose": "7d",
@@ -21564,6 +21564,13 @@ if [[ "$create_log" == *"<!-- jit-due: 2026-01-08T00:00:00Z -->"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: align cold start embedded jit-due marker in issue body"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: align cold start embedded jit-due marker in issue body"
+  echo "    gh-issue-create-rest-calls.log: $create_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$create_log" == *"title=Alignment review"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: align cold start created issue with configured title"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: align cold start created issue with configured title"
   echo "    gh-issue-create-rest-calls.log: $create_log"
 fi
 jit_teardown
@@ -21623,7 +21630,7 @@ cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
       "key": "align",
       "repo": "test-owner/test-repo",
       "label": "jit:align",
-      "title": "Roadmap review",
+      "title": "Alignment review",
       "body": "Recurring align review.",
       "project": "test-project",
       "remindAfterClose": "7d",
@@ -21668,7 +21675,7 @@ cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
       "key": "align",
       "repo": "test-owner/test-repo",
       "label": "jit:align",
-      "title": "Roadmap review",
+      "title": "Alignment review",
       "body": "Recurring align review.",
       "project": "test-project",
       "remindAfterClose": "7d",
@@ -21761,7 +21768,7 @@ cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
       "key": "align",
       "repo": "test-owner/test-repo",
       "label": "jit:align",
-      "title": "Roadmap review",
+      "title": "Alignment review",
       "body": "Recurring align review.",
       "project": "test-project",
       "remindAfterClose": "7d",
@@ -21809,7 +21816,7 @@ cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
       "key": "align",
       "repo": "test-owner/test-repo",
       "label": "jit:align",
-      "title": "Roadmap review",
+      "title": "Alignment review",
       "body": "Recurring align review.",
       "project": "test-project",
       "remindAfterClose": "7d",
@@ -21898,7 +21905,7 @@ cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
       "key": "align",
       "repo": "test-owner/test-repo",
       "label": "jit:align",
-      "title": "Roadmap review",
+      "title": "Alignment review",
       "body": "Recurring align review.",
       "project": "test-project",
       "remindAfterClose": "7d",

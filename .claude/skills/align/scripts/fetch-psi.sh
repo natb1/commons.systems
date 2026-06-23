@@ -47,6 +47,16 @@ PAGESPEED_API_KEY="${PAGESPEED_API_KEY:-}"
 ALIGN_PSI_URLS="${ALIGN_PSI_URLS:-https://commons.systems,https://budget.commons.systems,https://print.commons.systems,https://audio.commons.systems,https://fellspiral.commons.systems}"
 ALIGN_PSI_STRATEGY="${ALIGN_PSI_STRATEGY:-mobile}"
 
+# Validate ALIGN_PSI_STRATEGY to the two accepted values before the loop. It is
+# echoed verbatim into the context file the align personas read (line below), so
+# a newline or section-marker in the env var could forge a context section
+# heading (prompt injection). Fail early on anything else. Mirrors the
+# ALIGN_SEARCH_CONSOLE_SITE guard in fetch-analytics.sh.
+if [[ ! "$ALIGN_PSI_STRATEGY" =~ ^(mobile|desktop)$ ]]; then
+  echo "(PSI: invalid ALIGN_PSI_STRATEGY '${ALIGN_PSI_STRATEGY}' — must be mobile or desktop)"
+  exit 0
+fi
+
 if [[ -z "$PAGESPEED_API_KEY" ]]; then
   echo "(PSI: running keyless — set PAGESPEED_API_KEY for higher rate limits)"
 fi

@@ -43,6 +43,14 @@ A structured challenge the **re-synthesis step incorporates**. Include:
   agreed, where that agreement may hide a shared blind spot rather than confirm the
   call.
 
+## Focus Question Assessment (on-demand only)
+
+When the engine ran with a focus question (on-demand mode), add this section:
+whether the synthesis **adequately answered the focus question**, and what your
+challenge reveals about that answer — where the synthesis's response to the focus
+question is weak, incomplete, or rests on an assumption you've challenged above.
+Omit this section entirely when there is no focus question.
+
 Rank the items by how **load-bearing** the challenge is — how much of the synthesis
 shifts if the challenge holds. The most load-bearing challenge goes first.
 
@@ -57,3 +65,7 @@ shifts if the challenge holds. The most load-bearing challenge goes first.
   was stress-tested.
 - You attack the synthesis; you do not produce the final priority list. Your output
   feeds the re-synthesis, which decides what survives your challenge.
+- **When a focus question was provided (on-demand mode), also evaluate whether the
+  synthesis adequately answered it** and write that evaluation under the **Focus
+  Question Assessment** section, so the re-synthesis step picks it up. Skip this when
+  no focus question was given.

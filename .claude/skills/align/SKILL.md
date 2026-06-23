@@ -354,7 +354,7 @@ and adjust the merging weights accordingly.
    |---|---|
    | `statement` | the priority's one-line "What". |
    | `rationale` | the priority's "Why" (charter/audience trace). |
-   | `owner` | default `human` (a roadmap priority is human-decided by default) unless the synthesis states it is already AI- or procedure-owned. |
+   | `owner` | default `human` (a top-level charter priority is human-decided by default) unless the synthesis states it is already AI- or procedure-owned. |
    | `success_signal` | the priority's "done-when / signal" (the ROADMAP schema carries `signal`). |
    | `status` | `refining` (synthetic stand-in; no transitions are persisted). |
    | `node_id` | a synthetic slug, e.g. `rung5-<short-slug>` (not persisted). |
@@ -431,7 +431,7 @@ Enumerate every **open** issue in `natb1/commons.systems` carrying **neither**
 `help wanted` **nor** any `jit:*` label — the un-queued, non-reminder backlog:
 
 ```bash
-gh issue list --repo natb1/commons.systems --state open --json number,title,labels,body --limit 200
+gh issue list --repo "$REVIEW_REPO" --state open --json number,title,labels,body --limit 200
 ```
 
 Run with `dangerouslyDisableSandbox: true`. Filter out any issue whose labels
