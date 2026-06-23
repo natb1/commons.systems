@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 # gh stub for test-intention-stamp.sh
 # The real script passes repos/{owner}/{repo}/... with literal braces — gh would expand
 # them from GH_REPO, but this stub receives the literal string. Match on substrings.
