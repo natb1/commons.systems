@@ -22,7 +22,8 @@ clarifications:
   - question: Does a leaf differ in type from a root?
     answer: No — every node is the same type at any altitude.
 tooling_goals:
-  - intentionsutil
+  - kind: actuator
+    statement: intentionsutil
 success_signal:
   observable: nodes validated by validateNode
   sensor: vitest
@@ -53,7 +54,7 @@ authoritative data.
 | `reading`        | `string \| null`      | no       | Source the node was read from during backfill. Defaults to `null`. |
 | `gap`            | `string \| null`      | no       | A known shortfall between intention and current state. Defaults to `null`. |
 | `clarifications` | `Clarification[]`     | no       | Q&A pairs resolved during the dialectic. Defaults to `[]`. |
-| `tooling_goals`  | `string[]`            | no       | Tooling the node aims to produce or change. Defaults to `[]`. |
+| `tooling_goals`  | `ToolingGoal[]`       | no       | Tooling the node aims to produce or change. Defaults to `[]`. |
 | `success_signal` | `SuccessSignal \| null` | no     | A measurable signal the intention is met. Defaults to `null`. |
 
 ### `SuccessSignal`
@@ -71,6 +72,13 @@ authoritative data.
 | ---------- | -------- | ------- |
 | `question` | `string` | A question raised during the dialectic. |
 | `answer`   | `string` | Its resolved answer. |
+
+### `ToolingGoal`
+
+| Name        | Type           | Meaning |
+| ----------- | -------------- | ------- |
+| `kind`      | `ToolingKind` enum | What the goal codifies. |
+| `statement` | `string`       | The tooling goal, in one sentence. |
 
 ## Enums
 
@@ -90,6 +98,13 @@ authoritative data.
 | `refining`  | Being clarified through the dialectic. |
 | `delegated` | Handed to an owner to act on. |
 | `codified`  | Realized in tooling, code, or a procedure. |
+
+### `ToolingKind`
+
+| Value       | Meaning |
+| ----------- | ------- |
+| `actuator`  | Codifies *doing* — an automated procedure or action. |
+| `sensor`    | Codifies *knowing* — an observation or measurement. |
 
 ## Required vs. optional
 
