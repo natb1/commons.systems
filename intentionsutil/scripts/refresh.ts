@@ -18,7 +18,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   writeTracker,
   nodeIdToIssue,
@@ -68,7 +68,7 @@ interface IssueView {
   closedByPullRequestsReferences: ClosingPrRef[];
 }
 
-type LinkedPr = { number: number; state: "open" | "closed" | "merged" };
+export type LinkedPr = { number: number; state: "open" | "closed" | "merged" };
 
 // --- Linked-PR resolution (two-stage) --------------------------------------
 
@@ -91,7 +91,7 @@ type LinkedPr = { number: number; state: "open" | "closed" | "merged" };
  * conflict; either way the `LinkedPr` (with its `merged_at`-derived state) comes
  * from the same already-fetched pulls list.
  */
-function resolveLinkedPrs(issueNumber: number): LinkedPr[] {
+export function resolveLinkedPrs(issueNumber: number): LinkedPr[] {
   const byNumber = new Map<number, LinkedPr>();
 
   // Stage 1: REST pulls list, branch-prefix filtered.
@@ -234,4 +234,6 @@ function main(): void {
   );
 }
 
-main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main();
+}
