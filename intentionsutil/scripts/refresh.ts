@@ -18,7 +18,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   writeTracker,
   nodeIdToIssue,
@@ -96,7 +96,7 @@ const GQL_STATE: Record<"OPEN" | "CLOSED" | "MERGED", "open" | "closed" | "merge
  * conflict (its `merged_at`-derived state is computed directly from the PR
  * record rather than the issue's reference view).
  */
-function resolveLinkedPrs(issueNumber: number): LinkedPr[] {
+export function resolveLinkedPrs(issueNumber: number): LinkedPr[] {
   const byNumber = new Map<number, LinkedPr>();
 
   // Stage 1: REST pulls list, branch-prefix filtered.
@@ -126,9 +126,21 @@ function resolveLinkedPrs(issueNumber: number): LinkedPr[] {
   try {
     // lint-allow: gh-rest-porcelain GraphQL-only closedByPullRequestsReferences (no REST equivalent)
     viewOut = gh(["issue", "view", String(issueNumber), "--json", "closedByPullRequestsReferences"]);
-  } catch {
-    // Expected: issue deleted/transferred → treat as no closing references.
-    viewOut = null;
+  } catch (err) {
+    // Only the documented expected error — issue deleted/transferred, which gh
+    // reports as a "Could not resolve to an issue or pull request" GraphQL error
+    // — is absorbed (treated as no closing references, mirroring backfill.ts's
+    // /parent 404 discipline). Every other error class (rate-limit 429/403, auth
+    // failure, network failure) must propagate rather than be silently nulled.
+    // refresh.ts's gh() throws the raw execFileSync error, so inspect its stderr
+    // (not an instanceof GhError check — gh() never produces a GhError).
+    const e = err as { stderr?: unknown; stdout?: unknown };
+    const text = String(e.stderr ?? "") + "\n" + String(e.stdout ?? "");
+    if (/could not resolve to (a|an)/i.test(text)) {
+      viewOut = null;
+    } else {
+      throw err;
+    }
   }
   if (viewOut !== null) {
     const view: IssueView = JSON.parse(viewOut);
@@ -221,4 +233,6 @@ function main(): void {
   );
 }
 
-main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main();
+}
