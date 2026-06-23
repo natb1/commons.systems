@@ -18,7 +18,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   writeTracker,
   nodeIdToIssue,
@@ -82,6 +82,22 @@ const GQL_STATE: Record<"OPEN" | "CLOSED" | "MERGED", "open" | "closed" | "merge
 // --- Linked-PR resolution (two-stage) --------------------------------------
 
 /**
+ * Fetch the full repo pulls list once. Returns a flat `RawPull[]` across all
+ * paginated pages. Callers should fetch this once and pass it to
+ * `resolveLinkedPrs` — do NOT call inside a per-node loop.
+ */
+export function fetchAllPulls(): RawPull[] {
+  const pullsOut = gh([
+    "api",
+    "--paginate",
+    "--slurp",
+    "/repos/{owner}/{repo}/pulls?state=all&per_page=100",
+  ]);
+  const pages: RawPull[][] = JSON.parse(pullsOut);
+  return pages.flat();
+}
+
+/**
  * Resolve the PRs linked to an issue, combining two authorities:
  *
  *   Stage 1 (REST branch-prefix): every PR whose head branch starts with
@@ -96,19 +112,12 @@ const GQL_STATE: Record<"OPEN" | "CLOSED" | "MERGED", "open" | "closed" | "merge
  * conflict (its `merged_at`-derived state is computed directly from the PR
  * record rather than the issue's reference view).
  */
-function resolveLinkedPrs(issueNumber: number): LinkedPr[] {
+export function resolveLinkedPrs(issueNumber: number, allPulls: RawPull[]): LinkedPr[] {
   const byNumber = new Map<number, LinkedPr>();
 
   // Stage 1: REST pulls list, branch-prefix filtered.
-  const pullsOut = gh([
-    "api",
-    "--paginate",
-    "--slurp",
-    "/repos/{owner}/{repo}/pulls?state=all&per_page=100",
-  ]);
-  const pages: RawPull[][] = JSON.parse(pullsOut);
   const prefix = `${issueNumber}-`;
-  for (const pr of pages.flat()) {
+  for (const pr of allPulls) {
     if (pr.head.ref.startsWith(prefix)) {
       byNumber.set(pr.number, {
         number: pr.number,
@@ -151,7 +160,7 @@ function resolveLinkedPrs(issueNumber: number): LinkedPr[] {
  * such as a principle root or a `goal-foo` with no tracker) — that case is
  * logged and skipped.
  */
-function refreshNode(nodeId: string): ExecutionTracker | null {
+function refreshNode(nodeId: string, allPulls: RawPull[]): ExecutionTracker | null {
   const issueNumber = nodeIdToIssue(nodeId, trackersDir);
   if (issueNumber === null) {
     console.warn(`refresh: node "${nodeId}" does not resolve to an issue number; skipping`);
@@ -166,7 +175,7 @@ function refreshNode(nodeId: string): ExecutionTracker | null {
     .filter((n) => n.startsWith("dispatch:"))
     .sort();
 
-  const linkedPrs = resolveLinkedPrs(issueNumber);
+  const linkedPrs = resolveLinkedPrs(issueNumber, allPulls);
 
   const record: ExecutionTracker = {
     node_id: nodeId,
@@ -204,7 +213,8 @@ function main(): void {
 
   if (args.length > 0) {
     const nodeId = args[0];
-    const record = refreshNode(nodeId);
+    const allPulls = fetchAllPulls();
+    const record = refreshNode(nodeId, allPulls);
     if (record !== null) {
       console.log(`Refreshed ${record.node_id} (issue #${record.issue_number}) → ${trackersDir}`);
     }
@@ -212,13 +222,16 @@ function main(): void {
   }
 
   const nodeIds = allNodeIds();
+  const allPulls = fetchAllPulls();
   let refreshed = 0;
   for (const nodeId of nodeIds) {
-    if (refreshNode(nodeId) !== null) refreshed++;
+    if (refreshNode(nodeId, allPulls) !== null) refreshed++;
   }
   console.log(
     `Refresh complete: ${refreshed} of ${nodeIds.length} nodes resolved to issues → ${trackersDir}`,
   );
 }
 
-main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main();
+}
