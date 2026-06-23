@@ -18,8 +18,8 @@ REMOTE_URL=$(git remote get-url origin)
 OWNER_REPO=$(echo "$REMOTE_URL" | sed -E 's|.*github\.com[:/]||; s|\.git$||')
 
 {
-echo "=== CHARTER.md ==="
-cat CHARTER.md
+echo "=== Intention graph: principle roots ==="
+cat intentions/principle-*.md
 
 echo ""
 echo "=== ROADMAP.md ==="

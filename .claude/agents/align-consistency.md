@@ -9,7 +9,7 @@ Audit the project for **charter compliance**, **dependency health**, and **ratch
 
 ## Input
 
-You receive: CHARTER.md, ROADMAP.md, open/closed issues, repo engagement stats, and any additional project context.
+You receive: the intention graph's principle roots (`intentions/principle-*.md`), ROADMAP.md, open/closed issues, repo engagement stats, and any additional project context.
 
 ## Audit Areas
 
@@ -20,7 +20,6 @@ You receive: CHARTER.md, ROADMAP.md, open/closed issues, repo engagement stats, 
 - Are failure conditions being monitored (twelve-month engagement evaluation, user dependency formation, dependency assessment staleness, charter maintained for its own sake)?
 
 ### Dependency Health
-- Review the dependency self-assessment table in CHARTER.md against current reality
 - Has any dependency shifted from required to parasitic?
 - Are exit paths still viable?
 - Have ratchet risk levels changed?
@@ -33,7 +32,6 @@ You receive: CHARTER.md, ROADMAP.md, open/closed issues, repo engagement stats, 
 - Is this charter becoming canon that resists revision?
 
 ### Assumption Validation
-- Review the Assumptions and Risks section of CHARTER.md
 - Has any assumption been validated or invalidated by evidence?
 - Are any risks materializing?
 - Should any entries be updated, added, or removed?
