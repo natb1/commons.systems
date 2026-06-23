@@ -213,6 +213,13 @@ function main(): void {
 
   if (args.length > 0) {
     const nodeId = args[0];
+    // Resolve the node to an issue BEFORE the expensive O(N) pulls fetch: a
+    // principle root or unresolvable node id would make fetchAllPulls() wasted
+    // work, since refreshNode() returns null without consuming the pulls list.
+    if (nodeIdToIssue(nodeId, trackersDir) === null) {
+      console.warn(`refresh: node "${nodeId}" does not resolve to an issue number; skipping`);
+      return;
+    }
     const allPulls = fetchAllPulls();
     const record = refreshNode(nodeId, allPulls);
     if (record !== null) {
