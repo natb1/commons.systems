@@ -68,7 +68,7 @@ export function parseHttpStatus(text: string): number | null {
  * A bare HTTP 403 is NOT treated as transient.
  */
 export function isTransientGhError(text: string): boolean {
-  return /HTTP 429|HTTP 5\d\d|secondary rate limit|abuse detection|retry your request|temporarily unavailable|Service Unavailable|Bad Gateway/i.test(
+  return /HTTP 429|HTTP 5\d\d|secondary rate limit|abuse detection|retry your request|temporarily unavailable|Service Unavailable|Bad Gateway|timed out|i\/o timeout|deadline exceeded|connection reset|TLS handshake/i.test(
     text,
   );
 }
@@ -87,7 +87,10 @@ function sleepSync(ms: number): void {
  * GH_RETRY_BASE_DELAY_MS (default 1000).
  */
 export function ghWithRetry(args: string[]): string {
-  const attempts = Number(process.env.GH_RETRY_ATTEMPTS ?? "4");
+  const attempts = Math.max(
+    1,
+    parseInt(process.env.GH_RETRY_ATTEMPTS ?? "4", 10) || 4,
+  );
   const baseDelayMs = Number(process.env.GH_RETRY_BASE_DELAY_MS ?? "1000");
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {

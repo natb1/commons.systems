@@ -6,6 +6,7 @@ import { execFileSync } from "node:child_process";
 import {
   ghWithRetry,
   fetchParentNumber,
+  fetchOpenIssues,
   GhError,
   isTransientGhError,
   parseHttpStatus,
@@ -128,5 +129,41 @@ describe("parseHttpStatus / isTransientGhError", () => {
     expect(isTransientGhError("HTTP 429")).toBe(true);
     expect(isTransientGhError("HTTP 403 Forbidden")).toBe(false);
     expect(isTransientGhError("secondary rate limit")).toBe(true);
+  });
+
+  it("classifies the HTTP 5xx digit range directly", () => {
+    expect(isTransientGhError("HTTP 500")).toBe(true);
+    expect(isTransientGhError("HTTP 599")).toBe(true);
+  });
+});
+
+describe("fetchOpenIssues", () => {
+  it("flattens multi-page slurped results", () => {
+    mockExec.mockReturnValue(
+      JSON.stringify([
+        [{ number: 1, title: "one", body: "b1" }],
+        [{ number: 2, title: "two", body: "b2" }],
+      ]),
+    );
+
+    const issues = fetchOpenIssues();
+    expect(issues).toEqual([
+      { number: 1, title: "one", body: "b1" },
+      { number: 2, title: "two", body: "b2" },
+    ]);
+  });
+
+  it("excludes pull requests", () => {
+    mockExec.mockReturnValue(
+      JSON.stringify([
+        [
+          { number: 1, title: "issue", body: "b1" },
+          { number: 2, title: "pr", body: "b2", pull_request: {} },
+        ],
+      ]),
+    );
+
+    const issues = fetchOpenIssues();
+    expect(issues).toEqual([{ number: 1, title: "issue", body: "b1" }]);
   });
 });
