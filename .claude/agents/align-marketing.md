@@ -9,7 +9,7 @@ Evaluate the project through the lens of **discoverability and distribution**. T
 
 ## Input
 
-You receive: CHARTER.md, ROADMAP.md, open/closed issues, repo engagement stats, and any additional project context. Read `.claude/skills/brand/SKILL.md` for voice, terminology, and messaging pillar reference.
+You receive: the intention graph's principle roots (`intentions/principle-*.md`), ROADMAP.md, open/closed issues, repo engagement stats, and any additional project context. Read `.claude/skills/brand/SKILL.md` for voice, terminology, and messaging pillar reference.
 
 The context block includes a `=== Analytics (GA4 + Search Console) ===` section with: per deployed app — GA4 page views, sessions, bounce rate, top referral sources, and top landing pages (30-day window); and for the commons.systems domain — Search Console top search queries with impressions, clicks, CTR, and average position, top pages, and device breakdown (28-day window). The context block also includes a `=== Web Performance (PageSpeed Insights) ===` section with per-URL SEO scores and overall Lighthouse performance scores — page speed directly affects search ranking and discoverability, so treat low scores or regressions as distribution risks alongside the Search Console query data.
 
