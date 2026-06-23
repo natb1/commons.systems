@@ -44,8 +44,8 @@ function makeExecMock(opts: {
     }
     if (args.includes("issue") && args.includes("view")) {
       if (opts.throwOnIssueView) {
-        throw new Error(
-          "gh issue view failed: could not resolve to an issue (simulated deleted/transferred issue)",
+        throw ghError(
+          "GraphQL: Could not resolve to an issue or pull request with the number of 2417. (repository.issue)",
         );
       }
       return JSON.stringify({ closedByPullRequestsReferences: opts.closingRefs });
