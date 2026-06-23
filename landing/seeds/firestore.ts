@@ -33,13 +33,13 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
           } satisfies PostSeedData,
         },
         {
-          id: "harness-engineering-in-practice",
+          id: "maintaining-alignment-long-horizon-agents",
           data: {
-            title: "A Harness I Own and Can Walk Away From",
+            title: "Harness Engineering: Maintaining Alignment for Long-Horizon Agentic Workflows",
             published: true,
-            publishedAt: "2026-06-19T00:00:00Z",
-            filename: "harness-engineering-in-practice.md",
-            previewDescription: "A field report on harness engineering: how a forkable, self-hosted agent harness contains the long-horizon failure modes that degrade autonomous coding agents.",
+            publishedAt: "2026-06-22T00:00:00Z",
+            filename: "maintaining-alignment-long-horizon-agents.md",
+            previewDescription: "Once frontier models are capable enough to delegate long-horizon work to, maintaining alignment is the bottleneck. A field report on a self-hosted agent harness — two queues and the /align skill — that keeps an autonomous coding workflow pointed at your intent.",
           } satisfies PostSeedData,
         },
         {
