@@ -586,6 +586,8 @@ STUBDIR=$(mktemp -d)
 CLEANUP_DIRS+=("$STUBDIR")
 TEMP_MOUNT_CHAIN=$(mktemp -d)
 CLEANUP_DIRS+=("$TEMP_MOUNT_CHAIN")
+RESULT_DIR=$(mktemp -d)
+CLEANUP_DIRS+=("$RESULT_DIR")
 
 # Populate two user directories: alice (alphabetically first) and bob.
 # The heuristic alone would pick alice; interop will pick bob — proving tier order.
@@ -664,9 +666,9 @@ echo "=== Test 24: Override env var wins over interop ==="
   fi
 
   printf '%s' "$WINDOWS_USER"
-) > "$TMPDIR/wezterm_test24a_result" 2>"$TMPDIR/wezterm_test24a_warn"
-RESULT_24A=$(cat "$TMPDIR/wezterm_test24a_result")
-rm -f "$TMPDIR/wezterm_test24a_result" "$TMPDIR/wezterm_test24a_warn"
+) > "$RESULT_DIR/wezterm_test24a_result" 2>"$RESULT_DIR/wezterm_test24a_warn"
+RESULT_24A=$(cat "$RESULT_DIR/wezterm_test24a_result")
+rm -f "$RESULT_DIR/wezterm_test24a_result" "$RESULT_DIR/wezterm_test24a_warn"
 
 if [[ "$RESULT_24A" == "alice" ]]; then
   report_pass "Test 24a: override (existing dir) wins over interop — got alice"
@@ -711,10 +713,10 @@ fi
   fi
 
   printf '%s' "$WINDOWS_USER"
-) > "$TMPDIR/wezterm_test24b_result" 2>"$TMPDIR/wezterm_test24b_warn"
-RESULT_24B=$(cat "$TMPDIR/wezterm_test24b_result")
-WARN_24B=$(cat "$TMPDIR/wezterm_test24b_warn")
-rm -f "$TMPDIR/wezterm_test24b_result" "$TMPDIR/wezterm_test24b_warn"
+) > "$RESULT_DIR/wezterm_test24b_result" 2>"$RESULT_DIR/wezterm_test24b_warn"
+RESULT_24B=$(cat "$RESULT_DIR/wezterm_test24b_result")
+WARN_24B=$(cat "$RESULT_DIR/wezterm_test24b_warn")
+rm -f "$RESULT_DIR/wezterm_test24b_result" "$RESULT_DIR/wezterm_test24b_warn"
 
 if [[ "$RESULT_24B" == "bob" ]] && [[ "$WARN_24B" =~ "WARNING:" ]]; then
   report_pass "Test 24b: override missing dir → warns and falls through to interop (bob)"
@@ -763,9 +765,9 @@ echo "=== Test 25: Interop wins over heuristic when no override ==="
   fi
 
   printf '%s' "$WINDOWS_USER"
-) > "$TMPDIR/wezterm_test25_result" 2>/dev/null
-RESULT_25=$(cat "$TMPDIR/wezterm_test25_result")
-rm -f "$TMPDIR/wezterm_test25_result"
+) > "$RESULT_DIR/wezterm_test25_result" 2>/dev/null
+RESULT_25=$(cat "$RESULT_DIR/wezterm_test25_result")
+rm -f "$RESULT_DIR/wezterm_test25_result"
 
 if [[ "$RESULT_25" == "bob" ]]; then
   report_pass "Test 25: interop wins over heuristic — got bob, not alphabetically-first alice"
@@ -816,9 +818,9 @@ NO_INTEROP_PATH=$(printf '%s' "$PATH" | tr ':' '\n' | grep -vF '/mnt/c/Windows' 
   fi
 
   printf '%s' "$WINDOWS_USER"
-) > "$TMPDIR/wezterm_test26_result" 2>/dev/null
-RESULT_26=$(cat "$TMPDIR/wezterm_test26_result")
-rm -f "$TMPDIR/wezterm_test26_result"
+) > "$RESULT_DIR/wezterm_test26_result" 2>/dev/null
+RESULT_26=$(cat "$RESULT_DIR/wezterm_test26_result")
+rm -f "$RESULT_DIR/wezterm_test26_result"
 
 if [[ "$RESULT_26" == "alice" ]]; then
   report_pass "Test 26: heuristic fallback picks alphabetically-first user when interop absent"
