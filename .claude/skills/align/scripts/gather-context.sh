@@ -19,7 +19,11 @@ OWNER_REPO=$(echo "$REMOTE_URL" | sed -E 's|.*github\.com[:/]||; s|\.git$||')
 
 {
 echo "=== Intention graph: principle roots ==="
-cat intentions/principle-*.md
+if ls intentions/principle-*.md 1>/dev/null 2>&1; then
+  cat intentions/principle-*.md
+else
+  echo "(no principle roots found)"
+fi
 
 echo ""
 echo "=== ROADMAP.md ==="

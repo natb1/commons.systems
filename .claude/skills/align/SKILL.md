@@ -260,7 +260,7 @@ when credentials are absent), the PSI section is always attempted.
 Read the decomposer agent definition `.claude/agents/align-decomposer.md` and
 launch it (Agent tool, `subagent_type: "general-purpose"`, the def's prompt
 inline) over the intention graph's principle roots. At rung-5 it does not decompose a tree — it reads the
-charter's standing evaluative intentions and emits the **perspective roster**:
+intention graph's principle roots and emits the **perspective roster**:
 the charter-derived perspectives the charter calls for today.
 
 From the roster, decide which perspective agents to load for Phase 2:

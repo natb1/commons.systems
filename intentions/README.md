@@ -1,9 +1,11 @@
 # intentions/
 
-A read-only, backfilled, point-in-time snapshot of the project's intention
-tree. Each `*.md` file is one intention node — the same uniform node model at
-every altitude — stored as YAML frontmatter with a cosmetic `# <statement>`
-body. The schema and store live in `../intentionsutil/`.
+A point-in-time snapshot of the project's intention tree. The `principle-*.md`
+roots are authoritative and hand-maintained; the `issue-*.md` leaves are
+backfilled from GitHub state. Each `*.md` file is one intention node — the same
+uniform node model at every altitude — stored as YAML frontmatter with a
+cosmetic `# <statement>` body. The schema and store live in
+`../intentionsutil/`.
 
 ## Regenerating
 

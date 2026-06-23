@@ -114,7 +114,7 @@ When choosing a new domain, these criteria help identify where the author's prob
 
 ### 10. Wind-down criteria ([#444](https://github.com/natb1/commons.systems/issues/444))
 
-- **Why:** The charter's Assumption 6 says "define what 'purpose served' looks like before the ratchet has a chance to form." The ratchet forms when external obligations accumulate from tier-3 engagement, so wind-down criteria must ship before any tier-3 artifact (#440, #442) does. Not a prerequisite for publishing #223 — the tentpole starts the evaluation clock but does not itself form the ratchet.
+- **Why:** The danger of an institution is the inability to reverse it — the principle of philosophical mobility (`intentions/principle-philosophical-mobility-over-detachment.md`) holds that standing down must be what happens on its own, by inaction. So wind-down criteria must be defined before the ratchet has a chance to form. The ratchet forms when external obligations accumulate from tier-3 engagement, so wind-down criteria must ship before any tier-3 artifact (#440, #442) does. Not a prerequisite for publishing #223 — the tentpole starts the evaluation clock but does not itself form the ratchet.
 - **Validation tier:** Collaborators.
 - **Done when:** the intention graph includes concrete, testable wind-down criteria.
 - **Gate:** Required before any tier-3 priority advances.
