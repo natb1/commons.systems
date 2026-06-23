@@ -26,6 +26,7 @@ import {
   type ExecutionTracker,
 } from "../src/tracker.js";
 import { listNodes } from "../src/store.js";
+import { ghErrorText } from "../src/errors.js";
 
 // --- Paths -----------------------------------------------------------------
 // The script lives at `intentionsutil/scripts/refresh.ts`, so the repo root is
@@ -134,9 +135,8 @@ export function resolveLinkedPrs(issueNumber: number): LinkedPr[] {
     // failure, network failure) must propagate rather than be silently nulled.
     // refresh.ts's gh() throws the raw execFileSync error, so inspect its stderr
     // (not an instanceof GhError check — gh() never produces a GhError).
-    const e = err as { stderr?: unknown; stdout?: unknown };
-    const text = String(e.stderr ?? "") + "\n" + String(e.stdout ?? "");
-    if (/could not resolve to (a|an)/i.test(text)) {
+    const text = ghErrorText(err);
+    if (/could not resolve to (a|an) (issue|pull request)/i.test(text)) {
       viewOut = null;
     } else {
       throw err;

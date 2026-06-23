@@ -45,3 +45,50 @@ describe("resolveLinkedPrs stage-2 catch", () => {
     expect(() => resolveLinkedPrs(123)).toThrow();
   });
 });
+
+// Drive the two gh calls with successful (non-throwing) returns: stage 1 (gh
+// api --slurp) returns the supplied pages of PRs; stage 2 (gh issue view)
+// returns the supplied closing-references view.
+function driveBothSucceed(
+  pages: { number: number; state: "open" | "closed"; merged_at: string | null; ref: string }[][],
+  closingRefs: { number: number; state: "OPEN" | "CLOSED" | "MERGED" }[],
+): void {
+  const slurped = pages.map((page) =>
+    page.map((pr) => ({
+      number: pr.number,
+      state: pr.state,
+      merged_at: pr.merged_at,
+      head: { ref: pr.ref },
+    })),
+  );
+  mockExec
+    .mockReturnValueOnce(JSON.stringify(slurped)) // stage 1: gh api → pages
+    .mockReturnValueOnce(
+      JSON.stringify({ closedByPullRequestsReferences: closingRefs }),
+    ); // stage 2: gh issue view → closing references
+}
+
+describe("resolveLinkedPrs merge/dedup", () => {
+  it("stage 1 wins on a number conflict: its state is kept over stage 2's", () => {
+    // Both stages report PR #500, but with different states. Stage 1's
+    // merged_at-derived state ("merged") must win over stage 2's "OPEN".
+    driveBothSucceed(
+      [[{ number: 500, state: "closed", merged_at: "2026-06-01T00:00:00Z", ref: "123-feature" }]],
+      [{ number: 500, state: "OPEN" }],
+    );
+    expect(resolveLinkedPrs(123)).toEqual([{ number: 500, state: "merged" }]);
+  });
+
+  it("adds a stage-2 PR that stage 1 did not see (additive path)", () => {
+    // Stage 1 finds the open in-progress PR #501 (branch-prefix match); stage 2
+    // contributes a separate closing reference #502 not present in stage 1.
+    driveBothSucceed(
+      [[{ number: 501, state: "open", merged_at: null, ref: "123-wip" }]],
+      [{ number: 502, state: "MERGED" }],
+    );
+    expect(resolveLinkedPrs(123)).toEqual([
+      { number: 501, state: "open" },
+      { number: 502, state: "merged" },
+    ]);
+  });
+});
