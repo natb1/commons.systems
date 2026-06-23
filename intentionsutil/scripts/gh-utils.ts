@@ -31,6 +31,9 @@ export function paginateGhApi<T>(
   args: string[],
   runner: (args: string[]) => string = gh,
 ): T[] {
+  if (args.length === 0) {
+    throw new Error("paginateGhApi: args must not be empty (no endpoint specified)");
+  }
   const out = runner(["api", "--paginate", "--slurp", ...args]);
   const pages: T[][] = JSON.parse(out);
   return pages.flat();
