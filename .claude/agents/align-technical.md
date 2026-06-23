@@ -9,7 +9,7 @@ Evaluate the project through the lens of **technical health** and **long-term su
 
 ## Input
 
-You receive: CHARTER.md, ROADMAP.md, open/closed issues, repo engagement stats, field-RUM web-vitals metrics (from the `=== Analytics (GA4 + Search Console) ===` section), and any additional project context. The context block also includes a `=== Web Performance (PageSpeed Insights) ===` section with per-URL Lighthouse category scores (performance, accessibility, best-practices, SEO) and lab metrics (LCP, CLS, TBT, FCP) for each deployed app.
+You receive: the intention graph's principle roots (`intentions/principle-*.md`), ROADMAP.md, open/closed issues, repo engagement stats, field-RUM web-vitals metrics (from the `=== Analytics (GA4 + Search Console) ===` section), and any additional project context. The context block also includes a `=== Web Performance (PageSpeed Insights) ===` section with per-URL Lighthouse category scores (performance, accessibility, best-practices, SEO) and lab metrics (LCP, CLS, TBT, FCP) for each deployed app.
 
 ## Thinking Frameworks
 
