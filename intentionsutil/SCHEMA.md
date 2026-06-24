@@ -52,7 +52,7 @@ authoritative data.
 | `parent`         | `string \| null`      | no       | `id` of the parent node; `null` for a root. Defaults to `null`. |
 | `rationale`      | `string \| null`      | no       | Why this intention exists. Defaults to `null`. |
 | `reading`        | `string \| null`      | no       | The current measured value of the `success_signal` observable; `null` until a sensor populates it. Defaults to `null`. |
-| `gap`            | `string \| null`      | no       | A known shortfall between intention and current state. Defaults to `null`. |
+| `gap`            | `string \| null`      | no       | The shortfall between `reading` and `success_signal.threshold`, mechanically derived by `deriveGap`; `null` when the reading meets the threshold or no signal exists. Defaults to `null`. |
 | `clarifications` | `Clarification[]`     | no       | Q&A pairs resolved during the dialectic. Defaults to `[]`. |
 | `tooling_goals`  | `ToolingGoal[]`       | no       | Tooling the node aims to produce or change. Defaults to `[]`. |
 | `success_signal` | `SuccessSignal \| null` | no     | A measurable signal the intention is met. Defaults to `null`. |
@@ -112,9 +112,10 @@ The required core — `id`, `statement`, `owner`, `status` — is always present
 strictly validated. The optional fields tolerate being absent or `null`. This
 split is load-bearing: read-only backfill has a real source only for `id`,
 `parent`, `statement`, `rationale`, `owner`, and `status`. The
-dialectic fields (`clarifications`, `tooling_goals`, `success_signal`, `gap`)
-come from a dialectic that has not run yet, and `reading` is populated by a
-sensor after the dialectic runs, so `validateNode` must accept nodes
+dialectic fields (`clarifications`, `tooling_goals`, `success_signal`) come
+from a dialectic that has not run yet, and `reading` and `gap` are
+sensor-populated after the dialectic runs (`reading` measured by the sensor,
+`gap` mechanically derived from it), so `validateNode` must accept nodes
 without them rather than rejecting backfilled nodes as invalid.
 
 ## Round-trip guarantee

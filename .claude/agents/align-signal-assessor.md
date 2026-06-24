@@ -29,7 +29,7 @@ consumes:
   term, plus a "safe to abandon" concern (a sensor that would rot if left untouched).
 
 The **node** you receive carries: `statement`, `rationale`, `owner`,
-`success_signal`, `status`, and `node_id`. At rung-5 the SKILL constructs these
+`success_signal`, `status`, `tooling_goals`, and `node_id`. At rung-5 the SKILL constructs these
 synthetically from each top priority — you **consume** them, you do **not** invent the
 mapping from priority to node.
 

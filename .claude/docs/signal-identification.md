@@ -220,10 +220,9 @@ consumer can grep it deterministically:
 
 Nested shape:
 
-- `tooling_goal` = `{ "kind": "sensor", "goal": string, "rough_cost": string }` — `kind`
+- `tooling_goal` = `{ "kind": "sensor", "statement": string }` — `kind`
   is always `"sensor"` (this is the schema `ToolingGoal{kind:"sensor"}` the
-  `instrument` action emits), `goal` names the sensor to build, `rough_cost` is its
-  size.
+  `instrument` action emits), `statement` names the sensor to build.
 
 ### Strict validation and invariants
 
@@ -311,8 +310,7 @@ ones", `owner` = `ai`, `status` = `delegated`.
   "economics_rationale": "Left side ≪ right side: small build (an assertion over projectGoals), near-zero run, frequency every frontier render, low maintenance and safe to abandon (TECHNICAL); the decision it informs — trusting the frontier ordering — is frequent and valuable (FINANCIAL).",
   "tooling_goal": {
     "kind": "sensor",
-    "goal": "add an ordering assertion over projectGoals output that gap-present nodes precede gap-absent ones",
-    "rough_cost": "low"
+    "statement": "add an ordering assertion over projectGoals output that gap-present nodes precede gap-absent ones"
   }
 }
 ```

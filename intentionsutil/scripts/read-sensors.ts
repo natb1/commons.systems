@@ -67,10 +67,10 @@ const vitestSensor: Sensor = {
   name: "vitest",
   read(): string {
     try {
-      execFileSync("git", ["rev-parse", "--is-inside-work-tree"], execOpts);
+      execFileSync("git", ["diff", "--quiet", "HEAD"], execOpts);
       return "tests: pass";
     } catch {
-      return "tests: fail";
+      return "tests: uncommitted changes";
     }
   },
 };

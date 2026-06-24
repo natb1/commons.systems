@@ -134,12 +134,14 @@ export interface IntentionCandidate {
  *
  * Mechanical rule: a node with `success_signal.is_proxy === true` that has a
  * non-null `reading` (it was actually measured) AND a non-null `deriveGap`
- * (it still falls short of threshold). A proxy that reads "met" yet the
- * intention is plainly not met would surface as a non-null gap here; a proxy
- * not yet read (reading null) is NOT flagged — there is nothing to contradict
- * yet, even though `deriveGap` returns a "no reading yet" string. The gap is
- * computed via `deriveGap`, not read from the stored `node.gap`, so the
- * predicate is self-contained and total.
+ * (it still falls short of threshold). This flags proxies with a measured
+ * reading that does not meet threshold; a proxy whose reading meets threshold
+ * has a null `deriveGap` and is NOT flagged. The converse case — a proxy that
+ * reads "met" yet the intention is plainly not met — is not mechanically
+ * detectable here. A proxy not yet read (reading null) is also NOT flagged —
+ * there is nothing to contradict yet, even though `deriveGap` returns a "no
+ * reading yet" string. The gap is computed via `deriveGap`, not read from the
+ * stored `node.gap`, so the predicate is self-contained and total.
  */
 export function findFalsifiedProxies(nodes: IntentionNode[]): IntentionNode[] {
   return nodes.filter(

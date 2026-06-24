@@ -16,6 +16,10 @@ mkdir -p "$(dirname "$OUTPUT")"
 # Derive owner/repo from git remote
 REMOTE_URL=$(git remote get-url origin)
 OWNER_REPO=$(echo "$REMOTE_URL" | sed -E 's|.*github\.com[:/]||; s|\.git$||')
+if [[ ! "$OWNER_REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+  echo "error: could not derive owner/repo from remote URL" >&2
+  exit 1
+fi
 
 # Each sensor function emits ONLY its header line plus its body — no leading or
 # trailing blank line. The blank-line separators between sections are the
@@ -92,7 +96,7 @@ sensor_open_issues
 echo ""
 sensor_closed_issues
 echo ""
-sensor_repo_stats
+sensor_repo_stats || true
 echo ""
 external_sensor_analytics
 echo ""
