@@ -19694,13 +19694,21 @@ STUB
   chmod +x "$TMPDIR_TEST/bin/systemd-run"
 
   # systemctl fake: `list-units` prints \$TMPDIR_TEST/timer-units (default empty
-  # → no pending dispatch-reseed* timer). Any other subcommand is a no-op exit 0.
+  # → no pending dispatch-reseed* timer); `show` (heartbeat_timer_is_armed's
+  # SubState query) prints \$TMPDIR_TEST/hb-substate (default empty → not
+  # 'waiting' → heartbeat not armed, preserving the genuine-failure path for the
+  # pre-#2445 tests). Any other subcommand is a no-op exit 0.
   : > "$TMPDIR_TEST/timer-units"
+  : > "$TMPDIR_TEST/hb-substate"
   cat > "$TMPDIR_TEST/bin/systemctl" <<STUB
 #!/usr/bin/env bash
 for a in "\$@"; do
   if [[ "\$a" == "list-units" ]]; then
     cat "$TMPDIR_TEST/timer-units"
+    exit 0
+  fi
+  if [[ "\$a" == "show" ]]; then
+    cat "$TMPDIR_TEST/hb-substate"
     exit 0
   fi
 done
@@ -19744,6 +19752,21 @@ STUB
   chmod +x "$TMPDIR_TEST/bin/daemon-systemctl"
   export DISPATCH_DAEMON_UNIT_DIR="$TMPDIR_TEST/daemon-systemd-user"
   export DISPATCH_DAEMON_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/daemon-systemctl"
+  # ensure_heartbeat_units (called at the top of recover) would otherwise write
+  # to the real ~/.config/systemd/user and run the real `systemctl --user`. Wire
+  # it to a temp unit dir and its OWN logging stub so it stays hermetic AND does
+  # not pollute daemon-systemctl-log (which the continuation-no-op / cap tests
+  # assert is empty). Note heartbeat_timer_is_armed() (the #2445 benign-mode
+  # check) uses the RECOVER systemctl ($DISPATCH_TICK_RECOVER_SYSTEMCTL_CMD, the
+  # main fake) instead, so the two heartbeat paths are independent.
+  cat > "$TMPDIR_TEST/bin/heartbeat-systemctl" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/heartbeat-systemctl-log"
+exit 0
+STUB
+  chmod +x "$TMPDIR_TEST/bin/heartbeat-systemctl"
+  export DISPATCH_HEARTBEAT_UNIT_DIR="$TMPDIR_TEST/heartbeat-systemd-user"
+  export DISPATCH_HEARTBEAT_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/heartbeat-systemctl"
   # ensure_daemon_service only needs a non-empty, newline/quote-free path; it
   # does not execute this binary in tests — the claude stub already exists for
   # the CLAUDE_AGENTS_CMD path, so reuse it.
@@ -19779,6 +19802,8 @@ tr_teardown() {
   unset DISPATCH_TICK_RECOVER_RESET_WINDOW
   unset DISPATCH_TICK_RECOVER_HEARTBEAT
   unset DISPATCH_DAEMON_UNIT_DIR DISPATCH_DAEMON_SYSTEMCTL_CMD DISPATCH_DAEMON_CLAUDE_CMD
+  unset DISPATCH_HEARTBEAT_UNIT_DIR DISPATCH_HEARTBEAT_SYSTEMCTL_CMD
+  unset DISPATCH_TICK_RECOVER_BENIGN
 }
 
 # tr_seed_state <count> <last_failure> — write the consecutive-failure state.
@@ -19799,6 +19824,12 @@ tr_state_count() {
   else
     echo none
   fi
+}
+
+# tr_heartbeat_armed — make the recover systemctl fake report the heartbeat timer
+# as armed (SubState=waiting), so heartbeat_timer_is_armed() returns 0.
+tr_heartbeat_armed() {
+  echo waiting > "$TMPDIR_TEST/hb-substate"
 }
 
 # --- Test 1: first failure, no continuation → arms a reseed ------------------
@@ -19893,8 +19924,12 @@ assert_eq "pending-timer: no reseed armed (systemd-run log empty)" "" "$log"
 # Continuation no-op path: ensure_daemon_service must NOT have run (no arming).
 assert_eq "pending-timer: daemon service not touched (continuation no-op)" \
   "" "$(cat "$TMPDIR_TEST/daemon-systemctl-log" 2>/dev/null || true)"
-# The timer continuation branch must NOT reset the count (state left untouched).
-assert_eq "pending-timer: state count preserved (not reset)" "2" "$(tr_state_count)"
+# The timer continuation branch resets a climbed count to 0 (#2445): a pending
+# reseed genuinely carries the chain, so this failure is covered — leaving the
+# count stale would let the next failure with no pending timer re-escalate off
+# it (the #2320→#2445 re-file pattern). Crash loops still escalate because a
+# firing reseed is --collect'd before the next OnFailure.
+assert_eq "pending-timer: climbed count reset to 0 on continuation (#2445)" "0" "$(tr_state_count)"
 tr_teardown
 
 # --- Test 4: cap reached → escalate, not retry -------------------------------
@@ -20091,6 +20126,90 @@ if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
 assert_eq "heartbeat-ge-reset: dispatch-tick-recover exits 2" "2" "$rc"
 log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 assert_eq "heartbeat-ge-reset: no reseed armed (systemd-run log empty)" "" "$log"
+tr_teardown
+
+# --- Test 13: BENIGN empty + heartbeat armed → no-op, NOT counted (#2445) -----
+# The #2445 false positive: a benign `empty`/`drain` tick was counted as a
+# consecutive failure. With the durable heartbeat armed, a benign tick is a
+# success signal — recover must no-op and never arm a reseed or count a failure.
+echo "Test: BENIGN disposition with heartbeat armed no-ops without counting a failure (#2445)"
+tr_setup
+tr_heartbeat_armed
+export DISPATCH_TICK_RECOVER_BENIGN=empty
+# Fresh state, heartbeat armed → no reseed, no escalation, exit 0.
+if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "benign-armed: dispatch-tick-recover exits 0" "0" "$rc"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+assert_eq "benign-armed: no reseed armed (systemd-run log empty)" "" "$log"
+ghlog=$(cat "$TMPDIR_TEST/gh-log" 2>/dev/null || true)
+assert_eq "benign-armed: no escalation (gh log empty)" "" "$ghlog"
+tr_teardown
+
+# --- Test 14: BENIGN resets a stale/climbed count → no false escalation -------
+# Reproduces the #2445 mechanism directly: a count parked well past the cap
+# (116, as observed in production) must be RESET by a benign tick while the
+# heartbeat carries the chain — never re-escalated off the stale count.
+echo "Test: BENIGN disposition resets a climbed count and does not escalate (#2445 regression)"
+tr_setup
+tr_heartbeat_armed
+tr_seed_state 116 999000
+export DISPATCH_TICK_RECOVER_BENIGN=empty
+if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "benign-reset: dispatch-tick-recover exits 0" "0" "$rc"
+assert_eq "benign-reset: count reset to 0" "0" "$(tr_state_count)"
+ghlog=$(cat "$TMPDIR_TEST/gh-log" 2>/dev/null || true)
+assert_eq "benign-reset: no chain-stalled latch created (gh log empty)" "" "$ghlog"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+assert_eq "benign-reset: no reseed armed (systemd-run log empty)" "" "$log"
+tr_teardown
+
+# --- Test 15: BENIGN + heartbeat DOWN → backstop reseed, count=1, no escalate --
+# Degraded-carrier safety net: if the heartbeat is not armed and no reseed is
+# pending, a benign tick really would dead-end, so recover arms a single backstop
+# reseed. But it is still not a failure: the count lands at 1 (a fresh single
+# attempt), well under the cap, so it can never escalate from a benign tick even
+# across repeated heartbeat-down cycles.
+echo "Test: BENIGN disposition with heartbeat down arms one backstop reseed without escalating (#2445)"
+tr_setup
+# hb-substate left empty → heartbeat not armed; no reseed timer; seed a climbed
+# count to prove benign cannot escalate even from past the cap.
+tr_seed_state 116 999000
+export DISPATCH_TICK_RECOVER_BENIGN=drain
+if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "benign-hb-down: dispatch-tick-recover exits 0" "0" "$rc"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+# Fresh single attempt → BASE * 2^0 = 300, reseed_at = NOW (1000000) + 300.
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"--on-calendar=@1000300"* && "$log" == *"--unit=dispatch-reseed-1000300"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: benign-hb-down: arms a single flat backstop reseed at NOW+BASE"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: benign-hb-down: expected backstop reseed at @1000300, got: $log"
+fi
+assert_eq "benign-hb-down: count is 1 (fresh single attempt, not escalated)" "1" "$(tr_state_count)"
+ghlog=$(cat "$TMPDIR_TEST/gh-log" 2>/dev/null || true)
+assert_eq "benign-hb-down: no chain-stalled latch created (gh log empty)" "" "$ghlog"
+tr_teardown
+
+# --- Test 16: genuine-crash path (BENIGN unset) still escalates past the cap ---
+# Guard that the #2445 fix did NOT blind crash recovery: with BENIGN unset and a
+# count already past the cap, recover must still escalate (create the latch), even
+# though the heartbeat is armed. continuation_present is deliberately not taught
+# the heartbeat.
+echo "Test: genuine-crash path past cap still escalates even with heartbeat armed (#2445 guard)"
+tr_setup
+tr_heartbeat_armed
+tr_seed_state 3 999999   # NOW-last_failure (1000000-999999=1) < RESET_WINDOW → count 3→4 > cap 3
+if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "crash-past-cap: dispatch-tick-recover exits 0" "0" "$rc"
+ghlog=$(cat "$TMPDIR_TEST/gh-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$ghlog" == *"issue create"* && "$ghlog" == *"chain-stalled"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: crash-past-cap: escalated via chain-stalled latch issue"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: crash-past-cap: expected chain-stalled issue create, got: $ghlog"
+fi
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+assert_eq "crash-past-cap: no reseed armed on escalation (systemd-run log empty)" "" "$log"
 tr_teardown
 
 # ============================================================================
