@@ -776,6 +776,7 @@ gh_issue_view_rest() {
     state: (.state | ascii_upcase),
     stateReason: ((.state_reason // null) | (if . == null then null else ascii_upcase end)),
     createdAt: .created_at,
+    closedAt: .closed_at,
     labels: ((.labels // []) | map({name})),
     assignees: ((.assignees // []) | map({login}))
   }') || return 1
@@ -807,6 +808,125 @@ gh_issue_view_rest() {
   }
 
   jq --argjson comments "$comments" '. + {comments: $comments}' <<<"$projected"
+}
+
+# Resolve a CI run's createdAt and headSha via `gh run view` (porcelain, not
+# gh api). The GitHub Actions API is a separate REST bucket from the core REST
+# bucket used by gh api, so this call does not spend the core rate-limit.
+# Args: $1 = <run-id> (required); --repo owner/repo (optional).
+# Output: {"createdAt":"<iso8601>","headSha":"<sha>"} on stdout.
+gh_run_view_rest() {
+  local id="" repo=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --repo) repo="$2"; shift 2 ;;
+      --*) echo "error: gh_run_view_rest: unknown flag '$1'" >&2; return 1 ;;
+      *)
+        if [[ -z "$id" ]]; then
+          id="$1"; shift 1
+        else
+          echo "error: gh_run_view_rest: unexpected argument '$1'" >&2; return 1
+        fi
+        ;;
+    esac
+  done
+  if [[ -z "$id" ]]; then
+    echo "error: gh_run_view_rest: run id is required" >&2
+    return 1
+  fi
+
+  local cmd=(gh run view "$id" --json createdAt,headSha)
+  [[ -n "$repo" ]] && cmd+=(--repo "$repo")
+
+  local out
+  out=$(gh_retry "${cmd[@]}") || {
+    echo "error: gh_run_view_rest: gh run view failed for run $id" >&2
+    return 1
+  }
+  printf '%s\n' "$out"
+}
+
+# Return the commit SHA that closed an issue, or empty string when the issue
+# was closed manually (no commit). Uses the REST issue timeline endpoint, which
+# is on the core REST rate-limit bucket.
+# Args: $1 = <N> (issue number, required); --repo owner/repo (optional).
+# Output: closing commit SHA on stdout, or empty string when none.
+gh_issue_closing_commit_rest() {
+  local num="" repo=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --repo) repo="$2"; shift 2 ;;
+      --*) echo "error: gh_issue_closing_commit_rest: unknown flag '$1'" >&2; return 1 ;;
+      *)
+        if [[ -z "$num" ]]; then
+          num="$1"; shift 1
+        else
+          echo "error: gh_issue_closing_commit_rest: unexpected argument '$1'" >&2; return 1
+        fi
+        ;;
+    esac
+  done
+  if [[ -z "$num" ]]; then
+    echo "error: gh_issue_closing_commit_rest: issue number is required" >&2
+    return 1
+  fi
+
+  local path
+  if [[ -n "$repo" ]]; then
+    path="repos/$repo/issues/$num/timeline"
+  else
+    path="repos/{owner}/{repo}/issues/$num/timeline"
+  fi
+
+  gh_retry gh api "$path" \
+    | jq -r '[.[] | select(.event=="closed")] | last | .commit_id // empty' || {
+    echo "error: gh_issue_closing_commit_rest: gh api failed for $path" >&2
+    return 1
+  }
+}
+
+# Compare two commits via the GitHub REST compare endpoint and return their
+# relationship. Uses the core REST rate-limit bucket.
+# Args: $1 = <base-commit> (required); $2 = <head-sha> (required);
+#   --repo owner/repo (optional).
+# Output: one of: ahead / identical / behind / diverged on stdout.
+gh_commit_is_ancestor_rest() {
+  local base="" head="" repo=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --repo) repo="$2"; shift 2 ;;
+      --*) echo "error: gh_commit_is_ancestor_rest: unknown flag '$1'" >&2; return 1 ;;
+      *)
+        if [[ -z "$base" ]]; then
+          base="$1"; shift 1
+        elif [[ -z "$head" ]]; then
+          head="$1"; shift 1
+        else
+          echo "error: gh_commit_is_ancestor_rest: unexpected argument '$1'" >&2; return 1
+        fi
+        ;;
+    esac
+  done
+  if [[ -z "$base" ]]; then
+    echo "error: gh_commit_is_ancestor_rest: base commit is required" >&2
+    return 1
+  fi
+  if [[ -z "$head" ]]; then
+    echo "error: gh_commit_is_ancestor_rest: head sha is required" >&2
+    return 1
+  fi
+
+  local path
+  if [[ -n "$repo" ]]; then
+    path="repos/$repo/compare/$base...$head"
+  else
+    path="repos/{owner}/{repo}/compare/$base...$head"
+  fi
+
+  gh_retry gh api "$path" | jq -r '.status' || {
+    echo "error: gh_commit_is_ancestor_rest: gh api failed for $path" >&2
+    return 1
+  }
 }
 
 # REST-backed drop-in for `gh pr view <N> --json
