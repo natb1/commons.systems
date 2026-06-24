@@ -58,7 +58,7 @@ describe("IntentionTreePanel heading", () => {
     const { container } = render(<IntentionTreePanel view={fixtureView} />);
     const heading = container.querySelector(".intention-tree-heading");
     expect(heading).not.toBeNull();
-    expect(heading!.textContent).toBe("INTENTION TREE");
+    expect(heading!.textContent).toBe("INTENTION TREE"); // type-safety-ok: asserted not-null by the preceding expect()
   });
 });
 
@@ -85,7 +85,7 @@ describe("IntentionTreePanel node rendering", () => {
       li.querySelector(".intention-node-statement")?.textContent === "Root intention statement",
     );
     expect(rootLi).toBeDefined();
-    expect(rootLi!.classList.contains("intention-node--frontier")).toBe(false);
+    expect(rootLi!.classList.contains("intention-node--frontier")).toBe(false); // type-safety-ok: asserted defined by the preceding expect()
   });
 });
 
@@ -119,16 +119,16 @@ describe("IntentionTreePanel tracker overlay", () => {
     const { container } = render(<IntentionTreePanel view={fixtureView} />);
     const tracker = container.querySelector(".intention-tracker:not(.intention-tracker--untracked)");
     expect(tracker).not.toBeNull();
-    expect(tracker!.textContent).toContain("issue #");
-    expect(tracker!.textContent).toContain("2367");
-    expect(tracker!.textContent).toContain("PR #999");
+    expect(tracker!.textContent).toContain("issue #"); // type-safety-ok: asserted not-null by the preceding expect()
+    expect(tracker!.textContent).toContain("2367"); // type-safety-ok: asserted not-null by the preceding expect()
+    expect(tracker!.textContent).toContain("PR #999"); // type-safety-ok: asserted not-null by the preceding expect()
   });
 
   it("untracked frontier node renders .intention-tracker--untracked with 'not yet tracked'", () => {
     const { container } = render(<IntentionTreePanel view={fixtureView} />);
     const untracked = container.querySelector(".intention-tracker--untracked");
     expect(untracked).not.toBeNull();
-    expect(untracked!.textContent).toContain("not yet tracked");
+    expect(untracked!.textContent).toContain("not yet tracked"); // type-safety-ok: asserted not-null by the preceding expect()
   });
 });
 
@@ -142,7 +142,7 @@ describe("IntentionTreePanel empty view", () => {
     const { container } = render(<IntentionTreePanel view={emptyView} />);
     const empty = container.querySelector(".empty");
     expect(empty).not.toBeNull();
-    expect(empty!.textContent).toBe("No intentions yet.");
+    expect(empty!.textContent).toBe("No intentions yet."); // type-safety-ok: asserted not-null by the preceding expect()
     expect(container.querySelectorAll(".intention-node")).toHaveLength(0);
   });
 });

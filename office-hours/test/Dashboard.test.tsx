@@ -87,7 +87,7 @@ describe("Dashboard demo tier (user=null)", () => {
     const { container } = render(<Dashboard user={null} />);
     const heading = container.querySelector(".intention-tree-heading");
     expect(heading).not.toBeNull();
-    expect(heading!.textContent).toBe("INTENTION TREE");
+    expect(heading!.textContent).toBe("INTENTION TREE"); // type-safety-ok: asserted not-null by the preceding expect()
     // The panel root carries panel-grid-full as a direct child of the grid
     const fullWidthWithHeading = container.querySelector(
       ".panel-grid > .panel-grid-full .intention-tree-heading",

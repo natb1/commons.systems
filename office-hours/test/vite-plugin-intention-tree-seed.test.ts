@@ -59,7 +59,7 @@ describe("officeHoursIntentionTreeSeedPlugin", () => {
     };
 
     beforeAll(() => {
-      const body = moduleCode!.replace("export default", "return");
+      const body = moduleCode!.replace("export default", "return"); // type-safety-ok: assigned by the outer beforeAll; the preceding 'produces module code' test asserts it is defined
       seed = new Function(body)() as typeof seed;
     });
 

@@ -47,7 +47,7 @@ export interface IntentionTreeView {
  * effects, no I/O.
  *
  * Key behaviors:
- * - Multi-root: any node whose `parent` is null is a root. The charter
+ * - Multi-root: each node whose `parent` is null is a root. The charter
  *   principles are `parent: null` roots, so the forest legitimately has
  *   multiple roots.
  * - Orphan-as-root: a node whose `parent` id is non-null but names no node in
@@ -70,7 +70,7 @@ export function buildTree(nodes: SlimIntentionNode[]): IntentionTreeNode[] {
 
   const roots: IntentionTreeNode[] = [];
   for (const node of nodes) {
-    const treeNode = byId.get(node.id)!;
+    const treeNode = byId.get(node.id)!; // type-safety-ok: populated for every node in the first pass over the same nodes array
     const parent = node.parent === null ? undefined : byId.get(node.parent);
     if (parent === undefined) {
       // parent is null (real root) OR parent id is absent (orphan-as-root)
