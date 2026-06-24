@@ -26,8 +26,16 @@ else
 fi
 
 echo ""
-echo "=== ROADMAP.md ==="
-cat ROADMAP.md
+echo "=== Intention graph: strategy roots ==="
+if ls intentions/strategy-*.md 1>/dev/null 2>&1; then
+  cat intentions/strategy-*.md
+else
+  echo "(no strategy roots found)"
+fi
+
+echo ""
+echo "=== Active frontier (generated from the intention graph) ==="
+npx tsx intentionsutil/scripts/frontier-view.ts
 
 echo ""
 echo "=== README.md ==="
