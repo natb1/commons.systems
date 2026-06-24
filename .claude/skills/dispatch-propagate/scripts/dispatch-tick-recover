@@ -89,6 +89,15 @@
 #     Replaces the `claude` invocation in lib-claude-agents.sh's
 #     claude_agents_count_busy_workers. Default: `claude`.
 #
+#   DISPATCH_TICK_RECOVER_BENIGN
+#     Set by the inline `empty`/`drain` callers in dispatch-tick to the
+#     disposition token. Marks this invocation a benign no-work continuation
+#     request, NOT a tick failure: recover resets the consecutive-failure count
+#     and guarantees a continuation (heartbeat/reseed, or a single backstop
+#     reseed if the heartbeat is down) without ever counting toward the stall cap
+#     or escalating. Unset on the OnFailure= genuine-crash path. See the Step-2.5
+#     block and #2445. Default: unset (genuine-failure behavior).
+#
 # Sandbox: this runs as a systemd `OnFailure=` unit OUTSIDE Claude's Bash
 # sandbox. `systemd-run --user` / `systemctl --user` talk to the user's systemd
 # over D-Bus, `claude agents --json` reaches the local daemon over a Unix
@@ -110,6 +119,14 @@ STATE_PATH="${DISPATCH_TICK_RECOVER_STATE_PATH:-$HOME/.local/share/commons-dispa
 SYSTEMCTL_CMD="${DISPATCH_TICK_RECOVER_SYSTEMCTL_CMD:-systemctl}"
 SYSTEMD_RUN_CMD="${DISPATCH_TICK_RECOVER_SYSTEMD_RUN_CMD:-systemd-run}"
 GH_CMD="${DISPATCH_TICK_RECOVER_GH_CMD:-gh}"
+
+# Benign no-work disposition signal (#2445). The inline empty/drain callers in
+# dispatch-tick set this to the disposition token ('empty' / 'drain'); the
+# OnFailure= genuine-crash path leaves it unset. A benign tick ran select-tick to
+# a clean no-work decision — it is NOT a failure and must not climb the
+# consecutive-failure stall cap. See the Step-2.5 block below for the full
+# rationale (#1557's empty-routing was obsoleted by #2022's durable heartbeat).
+BENIGN="${DISPATCH_TICK_RECOVER_BENIGN:-}"
 
 # Integer tunables. Validate before any value reaches a `(( ))` arithmetic
 # context — bash arithmetic evaluates array-index command substitution (e.g.
@@ -253,8 +270,56 @@ continuation_present() {
 # Read state now so Step 3 has the current COUNT and LAST_FAILURE values.
 read_state
 
+# ---- Step 2.5: benign no-work disposition (empty/drain) — NOT a failure -----
+#
+# #1557 originally routed `empty` (and #1445 `drain`) ticks through this recover
+# counter so a queue persistently blocked on a human would eventually escalate.
+# #2022 then added the durable `dispatch-heartbeat.timer`, which re-runs a no-arg
+# tick every cycle regardless of any reseed — so the chain now self-continues
+# whether or not a benign tick arms anything. That obsoleted routing benign ticks
+# through the FAILURE counter: a benign tick that reached a clean no-work decision
+# is a SUCCESS signal, not a stall. Counting it climbs COUNT unbounded (every
+# benign cycle finds "no pending dispatch-reseed* timer") until it trips the cap
+# and files a false `dispatch:chain-stalled` latch while the chain is
+# demonstrably alive — the #2445 false positive (COUNT reached 116 from benign
+# `empty` ticks alone while workers kept spawning).
+#
+# So in benign mode: reset the count (a clean tick is success) and guarantee a
+# continuation WITHOUT ever counting a failure or escalating:
+#   - heartbeat armed OR a reseed timer pending → continuation guaranteed → no-op.
+#   - heartbeat down AND no reseed pending → the durable carrier is broken, so a
+#     benign tick really would dead-end: fall through to Step 5 to arm a single
+#     backstop reseed. The count was just reset to 0, so Step 3 yields COUNT=1
+#     (<= CAP) and Step 4 cannot escalate — a degraded carrier is repaired, never
+#     reported as a chain stall.
+# This branch never runs on the OnFailure= genuine-crash path (BENIGN unset),
+# which keeps its full count/escalate/fast-reseed behavior — recover's reason for
+# being. continuation_present alone is deliberately NOT taught the heartbeat: that
+# would blind crash recovery (a real crash must get a fast reseed and count toward
+# a crash-loop cap, not wait up to a heartbeat cycle).
+if [[ -n "$BENIGN" ]]; then
+  if (( STATE_COUNT != 0 )); then
+    write_state 0 "$STATE_LAST_FAILURE" || true
+    STATE_COUNT=0
+  fi
+  if continuation_present || heartbeat_timer_is_armed "$SYSTEMCTL_CMD"; then
+    echo "dispatch-tick-recover: benign '$BENIGN' disposition; chain carried by heartbeat/reseed; not counted as a failure" >&2
+    exit 0
+  fi
+  echo "dispatch-tick-recover: benign '$BENIGN' disposition but heartbeat not armed and no reseed pending; arming a backstop reseed (carrier degraded, not counted as a failure)" >&2
+  # Force a fresh single-attempt episode so Step 3 yields COUNT=1 and Step 4
+  # cannot escalate from a benign tick.
+  STATE_LAST_FAILURE=0
+fi
+
 if continuation_present; then
   echo "dispatch-tick-recover: continuation present; no-op" >&2
+  # A pending reseed timer genuinely carries the chain, so this failure is
+  # covered — clear any climbed count so a later crash with no pending timer
+  # starts a fresh episode instead of re-escalating off a stale count (#2445).
+  # Crash loops still escalate: a firing reseed is `--collect`'d before the next
+  # OnFailure, so the no-timer increment path is still reached when truly stuck.
+  (( STATE_COUNT != 0 )) && { write_state 0 "$STATE_LAST_FAILURE" || true; }
   exit 0
 fi
 
