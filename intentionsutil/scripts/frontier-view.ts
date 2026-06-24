@@ -3,7 +3,7 @@
 // Renders the active-frontier view by reading the local `intentions/` store,
 // computing the goal projection, and writing the rendered frontier to stdout.
 // It reads only the local store (no gh, no network) and writes only stdout —
-// no committed file, no ROADMAP.md.
+// no committed roadmap file.
 //
 // Run from anywhere (the store dir is resolved relative to this file, not cwd):
 //   npx tsx intentionsutil/scripts/frontier-view.ts

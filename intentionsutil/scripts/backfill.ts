@@ -198,9 +198,9 @@ export function fetchParentNumber(issueNumber: number): number | null {
  * a rerun is a true point-in-time snapshot of the open issues — without this,
  * a leaf whose source disappeared (a closed issue) would linger as a stale
  * orphan. Pruning is deliberately scoped to exactly what backfill
- * regenerates: principle roots (`principle-*.md`) are authoritative and
- * hand-maintained, and `README.md` is a companion doc, so neither matches
- * `issue-*.md` and both survive.
+ * regenerates: principle roots (`principle-*.md`) and strategy doctrine nodes
+ * (`strategy-*.md`) are authoritative and hand-maintained, and `README.md` is
+ * a companion doc, so none of these match `issue-*.md` and all survive.
  */
 export function pruneStaleNodes(dir: string): void {
   if (!existsSync(dir)) return;
