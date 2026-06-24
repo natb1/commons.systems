@@ -40568,12 +40568,26 @@ STUB
   chmod +x "$TMPDIR_TEST/bin/systemctl"
   export DISPATCH_SCAN_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/systemctl"
 
-  # gh fake: issue view --jq prints FAKE_OH (default "false" = not parked).
+  # gh fake: issue view --json labels --jq <filter> emits the REAL gh JSON shape
+  # ({"labels":[{"name":"..."}]}) and runs the script's actual --jq filter over it
+  # via real jq, so guard (b)'s office-hours detection is exercised end-to-end.
+  # FAKE_OH=true seeds a dispatch:office-hours label; otherwise labels is empty.
   # Any other subcommand exits 0 silently.
   cat > "$TMPDIR_TEST/bin/fake-gh" <<STUB
 #!/usr/bin/env bash
 if [[ "\$1" == "issue" && "\$2" == "view" ]]; then
-  echo "\${FAKE_OH:-false}"
+  filter="any(.labels[]; .name==\"x\")"
+  prev=""
+  for a in "\$@"; do
+    if [[ "\$prev" == "--jq" ]]; then filter="\$a"; fi
+    prev="\$a"
+  done
+  if [[ "\${FAKE_OH:-false}" == "true" ]]; then
+    body='{"labels":[{"name":"dispatch:office-hours"}]}'
+  else
+    body='{"labels":[]}'
+  fi
+  printf '%s' "\$body" | jq -r "\$filter"
   exit 0
 fi
 exit 0

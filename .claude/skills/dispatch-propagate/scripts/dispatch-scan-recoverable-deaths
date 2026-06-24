@@ -182,7 +182,7 @@ for N in "${ORDER[@]}"; do
     # round-trip per terminal row. Fail safe — on a gh failure default to
     # `true` (parked → skip), never proceed on an unknown label state.
     oh=$("$GH" issue view "$N" --json labels \
-           --jq 'any(.name=="dispatch:office-hours")' 2>/dev/null) || oh="true"
+           --jq 'any(.labels[]; .name=="dispatch:office-hours")' 2>/dev/null) || oh="true"
     if [[ "$oh" != "false" ]]; then
       exit 0
     fi
