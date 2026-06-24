@@ -375,7 +375,7 @@ if (( COUNT > CAP )); then
     if ! "$GH_CMD" issue create \
          --title "dispatch chain stalled: ${CAP} consecutive tick failures left no continuation" \
          --body-file "$body_file" \
-         --label dispatch:chain-stalled --label bug --label priority \
+         --label dispatch:chain-stalled --label bug --label priority --label dispatch:office-hours \
          2>"$create_err"; then
       if grep -qi "not found" "$create_err"; then
         "$GH_CMD" label create dispatch:chain-stalled \
@@ -383,7 +383,7 @@ if (( COUNT > CAP )); then
         "$GH_CMD" issue create \
           --title "dispatch chain stalled: ${CAP} consecutive tick failures left no continuation" \
           --body-file "$body_file" \
-          --label dispatch:chain-stalled --label bug --label priority \
+          --label dispatch:chain-stalled --label bug --label priority --label dispatch:office-hours \
           >&2 || echo "dispatch-tick-recover: chain-stalled issue create failed after label bootstrap" >&2
       else
         cat "$create_err" >&2
