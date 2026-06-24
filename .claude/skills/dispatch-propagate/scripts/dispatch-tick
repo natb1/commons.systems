@@ -398,13 +398,13 @@ run_materialize() {
       # #1445 backstop: a no-spawn drain (target-done / worktree-conflict /
       # fan-out-all-done) spawns no worker and the headless tick never calls
       # dispatch-self-close, so nothing else guarantees a continuation. Trigger
-      # the continuation-guarantor directly. Best-effort: recover self-limits
-      # (its continuation-check resets the consecutive-failure count when a
-      # reseed timer or busy worker already exists) and escalates past its cap
-      # via a dispatch:chain-stalled issue — both intended. Its OnFailure=
-      # handler is not wired on this direct call, which is fine: recover almost
-      # never fails and any real failure is logged below.
-      "$SCRIPT_DIR/dispatch-tick-recover" || \
+      # the continuation-guarantor directly, flagging it BENIGN (#2445): a
+      # no-spawn drain is a clean no-work decision, not a tick failure, so recover
+      # must guarantee a continuation (heartbeat/reseed) without counting toward
+      # the stall cap. Its OnFailure= handler is not wired on this direct call,
+      # which is fine: recover almost never fails and any real failure is logged
+      # below.
+      DISPATCH_TICK_RECOVER_BENIGN="$token" "$SCRIPT_DIR/dispatch-tick-recover" || \
         echo "dispatch-tick: dispatch-tick-recover failed on '$token' (continuation not guaranteed)" >&2
       exit 0
       ;;
@@ -430,18 +430,19 @@ case "${1:-}" in
     # leaf is claimed/parked/excluded while the fleet is below target) spawns
     # no worker and arms no continuation on its own, so the chain dead-ends
     # until an external kick. Route it through the same continuation-guarantor
-    # `drain` uses (#1445): it bounds retries via its consecutive-failure
-    # counter (catching reservation reclaims / clearing parks across a few
-    # ticks), escalates to dispatch:chain-stalled when persistently blocked on
-    # a human, and safely no-ops when a live busy worker already exists.
+    # `drain` uses (#1445) — flagged BENIGN (#2445): an `empty` tick is a clean
+    # no-work decision, not a tick failure. recover guarantees a continuation
+    # (the #2022 durable heartbeat normally carries it; a backstop reseed only if
+    # the heartbeat is down) WITHOUT counting toward the consecutive-failure
+    # stall cap. Counting benign `empty` ticks as failures was the #2445 false
+    # positive: COUNT climbed unbounded (every benign cycle finds no reseed timer)
+    # and filed a `dispatch:chain-stalled` latch while the chain was alive.
     # Autonomous-only (mirror the #1453 convergence-reseed guard above): a
     # `--manual` empty is a one-shot human probe (an explicit <N> never
-    # resolves to empty), so it must NOT be forced through the backstop, where
-    # with zero live workers it would arm a continuation and increment the
-    # failure counter — the mis-escalation criterion 3 forbids.
+    # resolves to empty), so it must NOT be forced through the backstop.
     echo "dispatch-tick: select-tick disposition 'empty'; nothing spawned" >&2
     if [[ -z "$MANUAL" && -z "$ARG" ]]; then
-      "$SCRIPT_DIR/dispatch-tick-recover" || \
+      DISPATCH_TICK_RECOVER_BENIGN=empty "$SCRIPT_DIR/dispatch-tick-recover" || \
         echo "dispatch-tick: dispatch-tick-recover failed on 'empty' (continuation not guaranteed)" >&2
     fi
     exit 0
