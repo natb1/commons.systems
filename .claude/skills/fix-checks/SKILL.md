@@ -168,12 +168,16 @@ Cross-iteration memory lives entirely in `tmp/fix-checks-summary.md` (see
         1. Write the recurrence body to `tmp/flake-recurrence.md` (git-ignored
            `tmp/`, like the accumulator): the fingerprint, the reproduce command,
            the failure excerpt, and a `recurred on PR #<pr> / run <url>` line.
-        2. Run the guard, passing the fingerprint as the dedup key:
+        2. Run the guard, passing the fingerprint as the dedup key and the failing
+           run's id (the same run fix-checks already identified when computing the
+           fingerprint in sub-step 1):
            ```bash
            DISP=$(.claude/skills/dispatch-propagate/scripts/dispatch-flake-dedup \
-             "<fingerprint>" --body-file tmp/flake-recurrence.md)
+             "<fingerprint>" --body-file tmp/flake-recurrence.md \
+             --run-id <run-id>)
            ```
-           It prints exactly one line: `NONE`, `EXISTING <N>`, or `REOPENED <N>`.
+           It prints exactly one line: `NONE`, `EXISTING <N>`, `REOPENED <N>`, or
+           `STALE <N>`.
            Parse it into a disposition and (when present) the issue number `<N>`.
         3. Branch on the disposition:
            - **`EXISTING <N>`** — a same-fingerprint issue is already open and the
@@ -184,6 +188,19 @@ Cross-iteration memory lives entirely in `tmp/fix-checks-summary.md` (see
              recurrence (the "closed-as-fixed but still firing" signal a human
              should see on one issue, not N dups). Do **not** file. Flake issue =
              `#<N>`, disposition `REOPENED`.
+           - **`STALE <N>`** — a same-fingerprint issue was closed-as-fixed and
+             the guard determined this triggering run pre-dates the fix that closed
+             it: the PR branch is stale and is still emitting the pre-fix
+             signature. The guard fired no comment and no reopen — suppressing the
+             oscillation is the point. Do **not** file. Do **not** reopen. Flake
+             issue = `#<N>`, disposition `STALE`. **Skip sub-step 3 (block the
+             PR's tracked issue)** — wiring a `blocked_by` dependency here is
+             deferred by design: the STALE disposition stops the reopen oscillation
+             only; a stale PR branch that keeps emitting the pre-fix signature is
+             the upstream subagent's "main already fixed it" classification job
+             (merge main), tracked separately. Record the accumulator note (sub-step
+             4) marking this recurrence as suppressed-stale, then fall through
+             directly to sub-step 5 (post accumulator, push nothing).
            - **`NONE`** — no same-fingerprint issue exists; file one via
              `/file-issue` as before. Launch a subagent (`subagent_type:
              general-purpose`, `model: sonnet`) that invokes `/file-issue` via the
@@ -231,7 +248,8 @@ Cross-iteration memory lives entirely in `tmp/fix-checks-summary.md` (see
         fingerprint does not re-add the dependency or error. This step consumes
         `<N>` uniformly for every disposition (`CREATED`, `EXISTING`, or
         `REOPENED`) — it makes no open-only assumption about the flake issue's
-        state.
+        state. **`STALE` is the one exception: skip this sub-step entirely** —
+        deferred by design (see the `STALE` branch above).
      4. **Record a flake iteration in the accumulator** (the skill's top-level
         Step 7) — see [Accumulator](#accumulator); a flake entry is visually
         distinct from a generic no-repro one.
@@ -345,8 +363,10 @@ Cross-iteration memory lives entirely in `tmp/fix-checks-summary.md` (see
   - **Fix** — the fix applied and its commit SHA. Include only when **Outcome**
     is `fixed`; omit otherwise.
   - **Flake issue** — *`flake` outcome only* — the canonical tracking issue, written
-    as `#<N> (CREATED)`, `#<N> (EXISTING)`, or `#<N> (REOPENED)` per the
-    `dispatch-flake-dedup` / `/file-issue` disposition. Omit for every other outcome.
+    as `#<N> (CREATED)`, `#<N> (EXISTING)`, `#<N> (REOPENED)`, or
+    `#<N> (STALE-SUPPRESSED)` per the `dispatch-flake-dedup` / `/file-issue`
+    disposition. `STALE-SUPPRESSED` marks a recurrence suppressed as a stale-head
+    false positive — no reopen was fired. Omit for every other outcome.
   - **Fingerprint** — *`flake` outcome only* — the dedupe key computed in the
     Flake sub-path (the failing check name plus the stable identifier). Omit for
     every other outcome.
