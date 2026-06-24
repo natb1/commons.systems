@@ -484,9 +484,9 @@ export async function fetchGscLive(
 
   return {
     site,
-    topQueries: (queryReport.rows ?? []).map(mapRow("query")) as GscSignals["topQueries"],
-    topPages: (pageReport.rows ?? []).map(mapRow("page")) as GscSignals["topPages"],
-    devices: (deviceReport.rows ?? []).map(mapRow("device")) as GscSignals["devices"],
+    topQueries: (queryReport.rows ?? []).map(mapRow("query")) as GscSignals["topQueries"], // type-safety-ok: mapRow output matches the GscSignals field shape
+    topPages: (pageReport.rows ?? []).map(mapRow("page")) as GscSignals["topPages"], // type-safety-ok: mapRow output matches the GscSignals field shape
+    devices: (deviceReport.rows ?? []).map(mapRow("device")) as GscSignals["devices"], // type-safety-ok: mapRow output matches the GscSignals field shape
   };
 }
 
@@ -820,7 +820,7 @@ export const collectProjectSignals = onSchedule(
     }
 
     try {
-      const firestore = getFirestore(adminApp!);
+      const firestore = getFirestore(adminApp!); // type-safety-ok: adminApp is initialized at module load before any scheduled trigger fires
       await collectProjectSignalsCore({
         firestore,
         namespace,

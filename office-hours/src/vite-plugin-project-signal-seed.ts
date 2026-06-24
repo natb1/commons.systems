@@ -15,7 +15,7 @@ export function projectSignalSeedPlugin(): Plugin {
       // public JS bundle. The UI never reads it; Firestore rules gate access
       // server-side. computedAtOffsetMin is also omitted: it is converted to
       // computedAt at build time below.
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars -- destructure-omit memberEmails from the public bundle
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars -- destructure-omit memberEmails from the public bundle // type-safety-ok: deliberate destructure-omit to exclude memberEmails and computedAtOffsetMin from the public bundle
       const { memberEmails, computedAtOffsetMin, ...rest } = projectSignalSeeds;
       moduleCode =
         `const seed = ${JSON.stringify(rest)};\n` +

@@ -108,7 +108,7 @@ describe("ProjectSignalsPanel(null)", () => {
     const { container } = render(<ProjectSignalsPanel snapshot={null} />);
     const empty = container.querySelector(".empty");
     expect(empty).not.toBeNull();
-    expect(empty!.textContent).toBe("No project signals yet.");
+    expect(empty!.textContent).toBe("No project signals yet."); // type-safety-ok: non-null verified by preceding .not.toBeNull() assertion
     expect(container.querySelectorAll(".project-signals-source")).toHaveLength(0);
   });
 
@@ -116,7 +116,7 @@ describe("ProjectSignalsPanel(null)", () => {
     const { container } = render(<ProjectSignalsPanel snapshot={null} />);
     const heading = container.querySelector(".project-signals-heading");
     expect(heading).not.toBeNull();
-    expect(heading!.textContent).toBe("PROJECT SIGNALS");
+    expect(heading!.textContent).toBe("PROJECT SIGNALS"); // type-safety-ok: non-null verified by preceding .not.toBeNull() assertion
   });
 });
 

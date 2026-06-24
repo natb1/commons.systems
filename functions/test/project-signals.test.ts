@@ -89,7 +89,7 @@ describe("fetchGithubStatsLive", () => {
       return okJson({ stargazers_count: 42, forks_count: 7, watchers_count: 42 });
     });
     const stats = await fetchGithubStatsLive(
-      fetchMock as unknown as typeof fetch,
+      fetchMock as unknown as typeof fetch, // type-safety-ok: vi.fn() mock typed as global fetch for DI test
       "tok",
       "natb1/commons.systems",
     );
@@ -104,7 +104,7 @@ describe("fetchGithubStatsLive", () => {
   it("throws on a non-OK response", async () => {
     const fetchMock = vi.fn(async () => ({ ok: false, status: 404, text: async () => "nope" }));
     await expect(
-      fetchGithubStatsLive(fetchMock as unknown as typeof fetch, "tok", "a/b"),
+      fetchGithubStatsLive(fetchMock as unknown as typeof fetch, "tok", "a/b"), // type-safety-ok: vi.fn() mock typed as global fetch for DI test
     ).rejects.toThrow(/404/);
   });
 });
@@ -121,7 +121,7 @@ describe("fetchGithubTrafficLive", () => {
       throw new Error(`unexpected url ${url}`);
     });
     const traffic = await fetchGithubTrafficLive(
-      fetchMock as unknown as typeof fetch,
+      fetchMock as unknown as typeof fetch, // type-safety-ok: vi.fn() mock typed as global fetch for DI test
       "tok",
       "a/b",
     );
@@ -137,7 +137,7 @@ describe("fetchGithubTrafficLive", () => {
   it("throws (403) so the caller can omit traffic", async () => {
     const fetchMock = vi.fn(async () => ({ ok: false, status: 403, text: async () => "forbidden" }));
     await expect(
-      fetchGithubTrafficLive(fetchMock as unknown as typeof fetch, "tok", "a/b"),
+      fetchGithubTrafficLive(fetchMock as unknown as typeof fetch, "tok", "a/b"), // type-safety-ok: vi.fn() mock typed as global fetch for DI test
     ).rejects.toThrow(/403/);
   });
 });
@@ -149,7 +149,7 @@ describe("fetchGoogleAccessTokenLive", () => {
       expect(init.body).toContain("grant_type=refresh_token");
       return okJson({ access_token: "ya29.abc" });
     });
-    const token = await fetchGoogleAccessTokenLive(fetchMock as unknown as typeof fetch, {
+    const token = await fetchGoogleAccessTokenLive(fetchMock as unknown as typeof fetch, { // type-safety-ok: vi.fn() mock typed as global fetch for DI test
       clientId: "cid",
       clientSecret: "secret",
       refreshToken: "refresh",
@@ -160,7 +160,7 @@ describe("fetchGoogleAccessTokenLive", () => {
   it("throws when the response carries no access_token", async () => {
     const fetchMock = vi.fn(async () => okJson({ error: "invalid_grant" }));
     await expect(
-      fetchGoogleAccessTokenLive(fetchMock as unknown as typeof fetch, {
+      fetchGoogleAccessTokenLive(fetchMock as unknown as typeof fetch, { // type-safety-ok: vi.fn() mock typed as global fetch for DI test
         clientId: "c",
         clientSecret: "s",
         refreshToken: "r",
@@ -200,7 +200,7 @@ describe("fetchGa4Live", () => {
       });
     });
 
-    const ga4 = await fetchGa4Live(fetchMock as unknown as typeof fetch, "tok", "landing", "12345");
+    const ga4 = await fetchGa4Live(fetchMock as unknown as typeof fetch, "tok", "landing", "12345"); // type-safety-ok: vi.fn() mock typed as global fetch for DI test
     expect(ga4.app).toBe("landing");
     expect(ga4.pageViews).toBe(1234);
     expect(ga4.sessions).toBe(567);
@@ -238,7 +238,7 @@ describe("fetchGscLive", () => {
     });
 
     const gsc = await fetchGscLive(
-      fetchMock as unknown as typeof fetch,
+      fetchMock as unknown as typeof fetch, // type-safety-ok: vi.fn() mock typed as global fetch for DI test
       "tok",
       "sc-domain:commons.systems",
       new Date("2026-06-23T00:00:00Z"),
@@ -280,7 +280,7 @@ describe("fetchPsiLive", () => {
     });
 
     const psi = await fetchPsiLive(
-      fetchMock as unknown as typeof fetch,
+      fetchMock as unknown as typeof fetch, // type-safety-ok: vi.fn() mock typed as global fetch for DI test
       "https://commons.systems",
       "mobile",
       undefined,
@@ -306,7 +306,7 @@ describe("fetchPsiLive", () => {
       }),
     );
     const psi = await fetchPsiLive(
-      fetchMock as unknown as typeof fetch,
+      fetchMock as unknown as typeof fetch, // type-safety-ok: vi.fn() mock typed as global fetch for DI test
       "https://commons.systems",
       "mobile",
       undefined,
@@ -324,7 +324,7 @@ describe("fetchPsiLive", () => {
       return okJson({ lighthouseResult: { categories: {}, audits: {} } });
     });
     await fetchPsiLive(
-      fetchMock as unknown as typeof fetch,
+      fetchMock as unknown as typeof fetch, // type-safety-ok: vi.fn() mock typed as global fetch for DI test
       "https://commons.systems",
       "desktop",
       "secret-key",
@@ -454,7 +454,7 @@ describe("collectProjectSignalsCore", () => {
       fetchPsi: async () => psi,
     });
 
-    const doc = store._docs.get("office-hours/prod/metrics/project-signals") as Record<
+    const doc = store._docs.get("office-hours/prod/metrics/project-signals") as Record< // type-safety-ok: in-memory test fixture returns known shape
       string,
       unknown
     >;
@@ -481,7 +481,7 @@ describe("collectProjectSignalsCore", () => {
       fetchPsi: null,
     });
 
-    const doc = store._docs.get("office-hours/prod/metrics/project-signals") as Record<
+    const doc = store._docs.get("office-hours/prod/metrics/project-signals") as Record< // type-safety-ok: in-memory test fixture returns known shape
       string,
       unknown
     >;
@@ -501,7 +501,7 @@ describe("collectProjectSignalsCore", () => {
       fetchPsi: async () => psi,
     });
 
-    const sample = store._docs.get("office-hours/prod/signal-samples/auto-0") as Record<
+    const sample = store._docs.get("office-hours/prod/signal-samples/auto-0") as Record< // type-safety-ok: in-memory test fixture returns known shape
       string,
       unknown
     >;
@@ -537,7 +537,7 @@ describe("collectProjectSignalsCore", () => {
       fetchPsi: async () => psi,
     });
 
-    const sample = store._docs.get("office-hours/prod/signal-samples/auto-0") as Record<
+    const sample = store._docs.get("office-hours/prod/signal-samples/auto-0") as Record< // type-safety-ok: in-memory test fixture returns known shape
       string,
       unknown
     >;
@@ -558,12 +558,12 @@ describe("collectProjectSignalsCore", () => {
       fetchPsi: async () => psi,
     });
 
-    const doc = store._docs.get("office-hours/prod/metrics/project-signals") as Record<
+    const doc = store._docs.get("office-hours/prod/metrics/project-signals") as Record< // type-safety-ok: in-memory test fixture returns known shape
       string,
       unknown
     >;
-    expect((doc.ga4 as Ga4AppSignals[]).map((a) => a.app)).toEqual(["landing", "budget"]);
-    expect((doc.psi as PsiUrlSignals[]).map((p) => p.url)).toEqual([
+    expect((doc.ga4 as Ga4AppSignals[]).map((a) => a.app)).toEqual(["landing", "budget"]); // type-safety-ok: fixture doc written with these exact types above
+    expect((doc.psi as PsiUrlSignals[]).map((p) => p.url)).toEqual([ // type-safety-ok: fixture doc written with these exact types above
       "https://commons.systems",
       "https://budget.commons.systems",
     ]);

@@ -97,7 +97,7 @@ function parseGithubSignals(raw: unknown): GithubSignals | undefined {
     const viewsCount = typeof td.viewsCount === "number" && Number.isFinite(td.viewsCount) ? td.viewsCount : null;
     const viewsUniques = typeof td.viewsUniques === "number" && Number.isFinite(td.viewsUniques) ? td.viewsUniques : null;
     const topReferrers = Array.isArray(td.topReferrers)
-      ? (td.topReferrers as unknown[]).flatMap((r) => {
+      ? (td.topReferrers as unknown[]).flatMap((r) => { // type-safety-ok: Array.isArray narrows to any[]; cast to unknown[] avoids implicit any
           if (typeof r !== "object" || r === null) return [];
           const ri = r as Record<string, unknown>; // type-safety-ok: lenient parse
           const referrer = typeof ri.referrer === "string" ? ri.referrer : null;
@@ -118,7 +118,7 @@ function parseGithubSignals(raw: unknown): GithubSignals | undefined {
 function parseGa4Signals(raw: unknown): Ga4AppSignals[] | undefined {
   if (!Array.isArray(raw)) return undefined;
   const results: Ga4AppSignals[] = [];
-  for (const item of raw as unknown[]) {
+  for (const item of raw as unknown[]) { // type-safety-ok: Array.isArray early-return above narrows to any[]; cast to unknown[] avoids implicit any
     if (typeof item !== "object" || item === null) continue;
     const d = item as Record<string, unknown>; // type-safety-ok: lenient parse
     const app = typeof d.app === "string" ? d.app : null;
@@ -128,7 +128,7 @@ function parseGa4Signals(raw: unknown): Ga4AppSignals[] | undefined {
     if (app === null || pageViews === null || sessions === null || bounceRate === null) continue;
 
     const topReferralSources = Array.isArray(d.topReferralSources)
-      ? (d.topReferralSources as unknown[]).flatMap((r) => {
+      ? (d.topReferralSources as unknown[]).flatMap((r) => { // type-safety-ok: Array.isArray narrows to any[]; cast to unknown[] avoids implicit any
           if (typeof r !== "object" || r === null) return [];
           const ri = r as Record<string, unknown>; // type-safety-ok: lenient parse
           const source = typeof ri.source === "string" ? ri.source : null;
@@ -139,7 +139,7 @@ function parseGa4Signals(raw: unknown): Ga4AppSignals[] | undefined {
       : [];
 
     const topLandingPages = Array.isArray(d.topLandingPages)
-      ? (d.topLandingPages as unknown[]).flatMap((r) => {
+      ? (d.topLandingPages as unknown[]).flatMap((r) => { // type-safety-ok: Array.isArray narrows to any[]; cast to unknown[] avoids implicit any
           if (typeof r !== "object" || r === null) return [];
           const ri = r as Record<string, unknown>; // type-safety-ok: lenient parse
           const page = typeof ri.page === "string" ? ri.page : null;
@@ -151,7 +151,7 @@ function parseGa4Signals(raw: unknown): Ga4AppSignals[] | undefined {
       : [];
 
     const webVitals = Array.isArray(d.webVitals)
-      ? (d.webVitals as unknown[]).flatMap((r) => {
+      ? (d.webVitals as unknown[]).flatMap((r) => { // type-safety-ok: Array.isArray narrows to any[]; cast to unknown[] avoids implicit any
           if (typeof r !== "object" || r === null) return [];
           const ri = r as Record<string, unknown>; // type-safety-ok: lenient parse
           const metric = typeof ri.metric === "string" ? ri.metric : null;
@@ -178,7 +178,7 @@ function parseGscSignals(raw: unknown): GscSignals | undefined {
     rows.flatMap((r) => {
       if (typeof r !== "object" || r === null) return [];
       const ri = r as Record<string, unknown>; // type-safety-ok: lenient parse
-      const k = typeof ri[key] === "string" ? ri[key] as string : null;
+      const k = typeof ri[key] === "string" ? ri[key] as string : null; // type-safety-ok: variable index prevents TS narrowing; typeof guard confirms string
       const clicks = typeof ri.clicks === "number" && Number.isFinite(ri.clicks) ? ri.clicks : null;
       const impressions = typeof ri.impressions === "number" && Number.isFinite(ri.impressions) ? ri.impressions : null;
       const ctr = typeof ri.ctr === "number" && Number.isFinite(ri.ctr) ? ri.ctr : null;
@@ -187,9 +187,9 @@ function parseGscSignals(raw: unknown): GscSignals | undefined {
       return [{ [key]: k, clicks, impressions, ctr, position }];
     });
 
-  const topQueries = Array.isArray(d.topQueries) ? parseSearchRow("query")(d.topQueries as unknown[]) as GscSignals["topQueries"] : [];
-  const topPages = Array.isArray(d.topPages) ? parseSearchRow("page")(d.topPages as unknown[]) as GscSignals["topPages"] : [];
-  const devices = Array.isArray(d.devices) ? parseSearchRow("device")(d.devices as unknown[]) as GscSignals["devices"] : [];
+  const topQueries = Array.isArray(d.topQueries) ? parseSearchRow("query")(d.topQueries as unknown[]) as GscSignals["topQueries"] : []; // type-safety-ok: Array.isArray narrows to any[]; cast to unknown[] avoids implicit any; outer cast asserts the parseSearchRow shape matches GscSignals
+  const topPages = Array.isArray(d.topPages) ? parseSearchRow("page")(d.topPages as unknown[]) as GscSignals["topPages"] : []; // type-safety-ok: Array.isArray narrows to any[]; cast to unknown[] avoids implicit any; outer cast asserts the parseSearchRow shape matches GscSignals
+  const devices = Array.isArray(d.devices) ? parseSearchRow("device")(d.devices as unknown[]) as GscSignals["devices"] : []; // type-safety-ok: Array.isArray narrows to any[]; cast to unknown[] avoids implicit any; outer cast asserts the parseSearchRow shape matches GscSignals
 
   return { site, topQueries, topPages, devices };
 }
@@ -197,7 +197,7 @@ function parseGscSignals(raw: unknown): GscSignals | undefined {
 function parsePsiSignals(raw: unknown): PsiUrlSignals[] | undefined {
   if (!Array.isArray(raw)) return undefined;
   const results: PsiUrlSignals[] = [];
-  for (const item of raw as unknown[]) {
+  for (const item of raw as unknown[]) { // type-safety-ok: Array.isArray early-return above narrows to any[]; cast to unknown[] avoids implicit any
     if (typeof item !== "object" || item === null) continue;
     const d = item as Record<string, unknown>; // type-safety-ok: lenient parse
     const url = typeof d.url === "string" ? d.url : null;
@@ -246,7 +246,7 @@ export function parseProjectSignals(data: Record<string, unknown>): ProjectSigna
   const groupId = typeof data.groupId === "string" ? data.groupId : null;
   const memberEmails =
     Array.isArray(data.memberEmails) && data.memberEmails.every((e) => typeof e === "string")
-      ? (data.memberEmails as string[])
+      ? (data.memberEmails as string[]) // type-safety-ok: every() verifies element types but TS cannot narrow unknown[] to string[] via every()
       : null;
 
   if (computedAt === null || groupId === null || memberEmails === null) {
