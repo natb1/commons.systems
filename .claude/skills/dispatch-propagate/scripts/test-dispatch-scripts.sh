@@ -1270,6 +1270,14 @@ verdict_rest_case "verdict: failure → failing" \
   "sha-failure" '[{"status":"completed","conclusion":"failure"}]' "failing"
 verdict_rest_case "verdict: in_progress (null conclusion) → pending" \
   "sha-inprog" '[{"status":"in_progress","conclusion":null}]' "pending"
+verdict_rest_case "verdict: desynced in_progress + success conclusion → passing" \
+  "sha-desynced-success" '[{"status":"in_progress","conclusion":"success","completed_at":"2026-06-19T04:17:24Z"}]' "passing"
+verdict_rest_case "verdict: completed success + desynced in_progress success → passing" \
+  "sha-desynced-mixed" '[{"status":"completed","conclusion":"success"},{"status":"in_progress","conclusion":"success","completed_at":"2026-06-19T04:17:24Z"}]' "passing"
+verdict_rest_case "verdict: genuine pending + desynced in_progress success → pending" \
+  "sha-desynced-genuine-pending" '[{"status":"in_progress","conclusion":null},{"status":"in_progress","conclusion":"success","completed_at":"2026-06-19T04:17:24Z"}]' "pending"
+verdict_rest_case "verdict: desynced in_progress + failure conclusion → failing" \
+  "sha-desynced-failure" '[{"status":"in_progress","conclusion":"failure","completed_at":"2026-06-19T04:17:24Z"}]' "failing"
 verdict_rest_case "verdict: queued → pending" \
   "sha-queued" '[{"status":"queued","conclusion":null}]' "pending"
 verdict_rest_case "verdict: failing + still-running → failing (failure wins)" \
