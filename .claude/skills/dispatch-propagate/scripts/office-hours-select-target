@@ -168,7 +168,7 @@ emit_blocker_signal() {
     blockers=$(gh_api_array "/repos/{owner}/{repo}/issues/$num/dependencies/blocked_by" '[.[] | select(.state == "open" or .state == "OPEN") | .number] | join(",")') || blockers=""
     if [[ -n "$blockers" ]]; then
       # join() yields e.g. `2387,2390`; render each with a leading `#`.
-      echo "office-hours-select-target: NOTE — selected #$num has open blocker(s): #${blockers//,/,#} — signal, not a gate; the human judges readiness." >&2
+      echo "office-hours-select-target: NOTE — selected #$num has open blocker(s): #${blockers//,/, #} — signal, not a gate; the human judges readiness." >&2
     else
       # Race/failure: count said >0 but the listing came back empty. Surface the
       # advisory without specific numbers; still non-fatal, still stderr-only.
