@@ -879,8 +879,8 @@ gh_issue_closing_commit_rest() {
     path="repos/{owner}/{repo}/issues/$num/timeline"
   fi
 
-  gh_retry gh api "$path" \
-    | jq -r '[.[] | select(.event=="closed")] | last | .commit_id // empty' || {
+  gh_retry gh api --paginate "$path" \
+    | jq -rs '[.[][] | select(.event=="closed")] | last | .commit_id // empty' || {
     echo "error: gh_issue_closing_commit_rest: gh api failed for $path" >&2
     return 1
   }

@@ -143,7 +143,17 @@ Cross-iteration memory lives entirely in `tmp/fix-checks-summary.md` (see
      as its own tracking issue and block the PR's tracked issue on it. Push
      nothing — there is no fix to this PR. Follow these sub-steps:
 
-     1. **Compute a flake fingerprint (rigid precedence — deterministic across
+     1. **Capture the failing run id.** The Step 3 checks output lists, for each
+        check, a GitHub Actions run URL of the form
+        `https://github.com/<owner>/<repo>/actions/runs/<id>` (optionally with a
+        `/job/<job-id>` suffix). Parse the URL for the **failing** check and read
+        the numeric `<id>` segment immediately after `/actions/runs/` into
+        `RUN_ID` — that trailing all-digits run id, not any `/job/<job-id>` that
+        may follow it. This is the run whose excerpt sub-step 2 fingerprints, and
+        the run id the `dispatch-flake-dedup` guard needs for its CLOSED-path
+        stale-head comparison (sub-step 3); without it the guard's closed-issue
+        path hard-errors.
+     2. **Compute a flake fingerprint (rigid precedence — deterministic across
         runs).** The fingerprint is `<failing-check-name> — <stable-id>`, where
         `<stable-id>` is chosen by this **fixed precedence** (use the first the
         failure excerpt provides):
@@ -158,7 +168,7 @@ Cross-iteration memory lives entirely in `tmp/fix-checks-summary.md` (see
         dedup key passed to `dispatch-flake-dedup` and (b) the verbatim trailing
         token of the canonical tracking-issue title `Flaky CI: <fingerprint>`. Use
         the **same** fingerprint value for both — do not recompute it.
-     2. **Find-or-file the flake issue (deterministic guard before
+     3. **Find-or-file the flake issue (deterministic guard before
         `/file-issue`).** A same-fingerprint tracking issue may already exist —
         **open or closed**. Run the deterministic, state-spanning guard FIRST and
         only file fresh when it reports no match. This closes the old leak where a
@@ -169,12 +179,11 @@ Cross-iteration memory lives entirely in `tmp/fix-checks-summary.md` (see
            `tmp/`, like the accumulator): the fingerprint, the reproduce command,
            the failure excerpt, and a `recurred on PR #<pr> / run <url>` line.
         2. Run the guard, passing the fingerprint as the dedup key and the failing
-           run's id (the same run fix-checks already identified when computing the
-           fingerprint in sub-step 1):
+           run's id captured in sub-step 1 (`$RUN_ID`):
            ```bash
            DISP=$(.claude/skills/dispatch-propagate/scripts/dispatch-flake-dedup \
              "<fingerprint>" --body-file tmp/flake-recurrence.md \
-             --run-id <run-id>)
+             --run-id "$RUN_ID")
            ```
            It prints exactly one line: `NONE`, `EXISTING <N>`, `REOPENED <N>`, or
            `STALE <N>`.
@@ -193,14 +202,14 @@ Cross-iteration memory lives entirely in `tmp/fix-checks-summary.md` (see
              it: the PR branch is stale and is still emitting the pre-fix
              signature. The guard fired no comment and no reopen — suppressing the
              oscillation is the point. Do **not** file. Do **not** reopen. Flake
-             issue = `#<N>`, disposition `STALE`. **Skip sub-step 3 (block the
+             issue = `#<N>`, disposition `STALE`. **Skip sub-step 4 (block the
              PR's tracked issue)** — wiring a `blocked_by` dependency here is
              deferred by design: the STALE disposition stops the reopen oscillation
              only; a stale PR branch that keeps emitting the pre-fix signature is
              the upstream subagent's "main already fixed it" classification job
              (merge main), tracked separately. Record the accumulator note (sub-step
-             4) marking this recurrence as suppressed-stale, then fall through
-             directly to sub-step 5 (post accumulator, push nothing).
+             5) marking this recurrence as suppressed-stale, then fall through
+             directly to sub-step 6 (post accumulator, push nothing).
            - **`NONE`** — no same-fingerprint issue exists; file one via
              `/file-issue` as before. Launch a subagent (`subagent_type:
              general-purpose`, `model: sonnet`) that invokes `/file-issue` via the
@@ -232,7 +241,7 @@ Cross-iteration memory lives entirely in `tmp/fix-checks-summary.md` (see
                pre-existing (possibly human-filed, differently-titled) issue. Do
                **NOT** reassert its title — re-titling an unrelated issue would
                corrupt it. Flake issue = `#<M>`, disposition `EXISTING`.
-     3. **Block the PR's tracked issue on the flake issue.** In this thread, use
+     4. **Block the PR's tracked issue on the flake issue.** In this thread, use
         the PR body already captured in Step 1's pack output (`=== PR ===` section)
         and parse its `Closes #N` line(s) for the issue(s) this PR implements. For **each** tracked issue, record a
         `blocked_by` dependency **on that tracked issue, targeting each flake issue
@@ -250,10 +259,10 @@ Cross-iteration memory lives entirely in `tmp/fix-checks-summary.md` (see
         `REOPENED`) — it makes no open-only assumption about the flake issue's
         state. **`STALE` is the one exception: skip this sub-step entirely** —
         deferred by design (see the `STALE` branch above).
-     4. **Record a flake iteration in the accumulator** (the skill's top-level
+     5. **Record a flake iteration in the accumulator** (the skill's top-level
         Step 7) — see [Accumulator](#accumulator); a flake entry is visually
         distinct from a generic no-repro one.
-     5. **Post the accumulator (Step 8) and stop (Step 9). Push nothing** — the
+     6. **Post the accumulator (Step 8) and stop (Step 9). Push nothing** — the
         same terminal behavior as the generic no-repro outcome. On the next
         `/dispatch-propagate` run the PR's tracked issue carries a `blocked_by` against the
         flake issue; `/dispatch-propagate`'s queue scan skips blocked issues, so the PR is

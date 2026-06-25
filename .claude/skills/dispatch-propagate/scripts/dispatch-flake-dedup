@@ -142,11 +142,18 @@ case "$state" in
     run_head=$(jq -r '.headSha' <<<"$run_info")
 
     stale=0
+    # Track which signal(s) fired so the suppression log states the actual reason.
+    # The message differs by source: recency means the run pre-dates the close,
+    # while ancestry means the run is recent but its branch head lacks the fix —
+    # conflating them makes oscillation-incident diagnosis misleading.
+    stale_recency=0
+    stale_ancestry=0
 
     # Recency floor / fallback: run pre-dates the close. ISO-8601 UTC `Z` strings
     # compare correctly under bash lexicographic `<`.
     if [[ "$run_created" < "$closed_at" ]]; then
       stale=1
+      stale_recency=1
     fi
 
     # Ancestry (primary signal): does the run's head contain the closing fix?
@@ -159,12 +166,21 @@ case "$state" in
         status=$(gh_commit_is_ancestor_rest "$closing" "$run_head" "${local_repo_args[@]}")
         if [[ "$status" == "behind" || "$status" == "diverged" ]]; then
           stale=1
+          stale_ancestry=1
         fi
       fi
     fi
 
     if [[ "$stale" -eq 1 ]]; then
-      echo "dispatch-flake-dedup: suppressing reopen of #$match — run $run_id pre-dates closing fix (stale-head)" >&2
+      # Describe the operative signal accurately. Recency-only and both →
+      # "pre-dates closing fix"; ancestry-only → the run is recent but its branch
+      # head does not contain the fix.
+      if [[ "$stale_recency" -eq 1 ]]; then
+        stale_detail="run $run_id pre-dates closing fix (stale-head)"
+      else
+        stale_detail="branch head does not contain closing fix (stale-head)"
+      fi
+      echo "dispatch-flake-dedup: suppressing reopen of #$match — $stale_detail" >&2
       echo "STALE $match"
       exit 0
     fi
