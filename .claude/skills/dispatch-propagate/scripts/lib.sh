@@ -150,6 +150,51 @@ gh_retry() {
   return 1
 }
 
+# Run a firebase-tools deploy command, retrying ONLY on the transient auth
+# failure with exponential backoff. Args: the command and its arguments (e.g.
+# `firebase_deploy_retry npx firebase-tools hosting:channel:deploy ...`).
+# Unlike gh_retry, the retryable signature ("Failed to authenticate") arrives on
+# the command's STDOUT (inside the firebase-tools --json payload), not stderr —
+# so classification reads the combined stdout+stderr, and the failure-forward
+# path forwards STDOUT too, keeping the JSON error visible to the caller's
+# downstream preview-URL extraction.
+# On success: prints the command's stdout and returns 0. On a non-auth failure
+# or once attempts are exhausted: forwards the last attempt's stdout to stdout
+# and its stderr to >&2, then returns the command's real exit code (no
+# swallowing — see .claude/rules/code-style.md). Only "Failed to authenticate"
+# is treated as transient — every other failure fails fast.
+# Tunables (env): FIREBASE_DEPLOY_RETRY_ATTEMPTS (default 3 = up to 3 attempts),
+# FIREBASE_DEPLOY_RETRY_BASE_DELAY (default 5 seconds).
+firebase_deploy_retry() {
+  local attempts="${FIREBASE_DEPLOY_RETRY_ATTEMPTS:-3}"
+  local delay="${FIREBASE_DEPLOY_RETRY_BASE_DELAY:-5}"
+  local attempt out rc err combined tmpfile
+  tmpfile=$(mktemp) || { echo "error: could not create temp file" >&2; return 1; }
+  for (( attempt=1; attempt<=attempts; attempt++ )); do
+    out=$("$@" 2>"$tmpfile")
+    rc=$?
+    if [[ "$rc" -eq 0 ]]; then
+      printf '%s\n' "$out"
+      rm -f "$tmpfile"
+      return 0
+    fi
+    err=$(cat "$tmpfile")
+    combined="$out"$'\n'"$err"
+    if [[ "$attempt" -ge "$attempts" ]] || [[ "${combined,,}" != *"failed to authenticate"* ]]; then
+      printf '%s\n' "$out"
+      printf '%s' "$err" >&2
+      rm -f "$tmpfile"
+      return "$rc"
+    fi
+    echo "firebase_deploy_retry: transient auth failure (attempt $attempt/$attempts), retrying in ${delay}s" >&2
+    sleep "$delay"
+    delay=$(( delay * 2 ))
+  done
+  # Unreachable — the loop returns on every path — but keep the temp file clean.
+  rm -f "$tmpfile"
+  return 1
+}
+
 # Call gh api and validate the response is a JSON array before applying a jq filter.
 # Args: $1 = API path (e.g. "/repos/{owner}/{repo}/issues/42/sub_issues")
 #        $2 = jq filter to apply to the array (e.g. '.[].number')
