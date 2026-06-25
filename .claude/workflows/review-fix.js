@@ -989,7 +989,7 @@ return {
   deviation,
   security_note: _a.security_note,
   // coverage_incomplete is independent of `deviation`: it flags a launch-efficiency
-  // back-off (security wave skipped because both quality finders died — model
+  // back-off (security wave skipped because the code-review quality finder failed — model
   // likely throttled), surfaced in the Step 6 partial-coverage comment line.
   coverage_incomplete,
   coverage_note,

@@ -5,7 +5,7 @@
 #
 # Reads three key=value lines on stdin (as emitted by dispatch-security-surface),
 # in any order, blank lines ignored:
-#   surface=<empty|docs|code>
+#   surface=<empty|docs|tests|code>
 #   deps=<true|false>
 #   app_or_rules=<true|false>
 # Missing keys default to: surface=empty, deps=false, app_or_rules=false.
@@ -24,7 +24,7 @@
 #   erosion              (surface==code)
 #   npm                  (deps==true)
 #
-# surface empty/docs => exactly code-review (zero security finders).
+# surface empty/docs/tests => exactly code-review (zero security finders).
 # surface==code       => 4 always-on security finders + codeql + erosion.
 # app_or_rules==true  => additionally auth, data-exposure, firebase (7 total).
 # deps==true          => additionally npm (independent of surface).
@@ -53,7 +53,7 @@ done
 
 # --- emit finder set ------------------------------------------------------------
 
-# Always-present finder (review quality, all surfaces including empty/docs).
+# Always-present finder (review quality, all surfaces including empty/docs/tests).
 echo "code-review"
 
 # Security finders: only when surface==code.
