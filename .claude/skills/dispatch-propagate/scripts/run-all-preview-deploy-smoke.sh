@@ -13,39 +13,6 @@ CHANGED_APPS=$("$SCRIPT_DIR/get-changed-apps.sh")
 
 ensure_deps
 
-# Auth probe (#2481): the per-app deploys run firebase-tools with --json, which
-# suppresses ALL of its diagnostics — --debug is ignored and no firebase-debug.log
-# is written — so the real cause of a "Failed to authenticate" deploy never reaches
-# the job log. Run one standalone NON-json probe up front (not wrapped in
-# firebase_deploy_retry) so the actual error surfaces, and report which key the CI
-# cred file carries WITHOUT dumping the private key. This makes a CI auth failure
-# diagnosable and fails fast before six build+deploy cycles burn ~20 minutes.
-echo "=== Firebase auth probe ==="
-echo "GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-<unset>}"
-if [ -n "${GOOGLE_APPLICATION_CREDENTIALS:-}" ] && [ -f "$GOOGLE_APPLICATION_CREDENTIALS" ]; then
-  ls -l "$GOOGLE_APPLICATION_CREDENTIALS"
-  if jq -r '.private_key_id' "$GOOGLE_APPLICATION_CREDENTIALS" 2>/dev/null | grep -q '^4a8d027'; then
-    echo "CI-KEY: NEW (re-provisioned 4a8d027… key)"
-  else
-    echo "CI-KEY: STALE/OTHER (cred file does not carry the 4a8d027… key)"
-  fi
-else
-  echo "WARNING: GOOGLE_APPLICATION_CREDENTIALS missing or not a file"
-fi
-echo "firebase-tools version: $(npx firebase-tools --version 2>/dev/null | tail -1)"
-echo "runner clock (UTC): $(date -u '+%Y-%m-%dT%H:%M:%SZ')  epoch=$(date -u +%s)"
-# Stray auth env that could shadow GOOGLE_APPLICATION_CREDENTIALS (print presence,
-# never the value — these are secret-bearing).
-[ -n "${FIREBASE_TOKEN:-}" ] && echo "FIREBASE_TOKEN: set (would override ADC)" || echo "FIREBASE_TOKEN: unset"
-[ -n "${GOOGLE_OAUTH_ACCESS_TOKEN:-}" ] && echo "GOOGLE_OAUTH_ACCESS_TOKEN: set" || echo "GOOGLE_OAUTH_ACCESS_TOKEN: unset"
-echo "--- projects:list --debug (non-json; underlying token-endpoint error surfaces) ---"
-npx firebase-tools projects:list --debug 2>&1 | tail -50 || echo "AUTH PROBE FAILED (see above)"
-if [ -f "$REPO_ROOT/firebase-debug.log" ]; then
-  echo "--- firebase-debug.log (last 60 lines) ---"
-  tail -60 "$REPO_ROOT/firebase-debug.log"
-fi
-echo "=== end auth probe ==="
-
 FAILURES=()
 DEPLOYED=0
 PREVIEW_COMMENT=""
