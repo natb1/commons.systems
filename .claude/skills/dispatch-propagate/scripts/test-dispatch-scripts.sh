@@ -20041,10 +20041,12 @@ if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
 assert_eq "cap: dispatch-tick-recover exits 0" "0" "$rc"
 ghlog=$(cat "$TMPDIR_TEST/gh-log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ "$ghlog" == *"issue create"* && "$ghlog" == *"--label dispatch:chain-stalled"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: cap: gh issue create with --label dispatch:chain-stalled"
+if [[ "$ghlog" == *"issue create"* \
+   && "$ghlog" == *"--label dispatch:chain-stalled"* \
+   && "$ghlog" == *"--label dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: cap: issue create with --label dispatch:chain-stalled and --label dispatch:office-hours"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: cap: gh issue create with --label dispatch:chain-stalled"
+  FAIL=$((FAIL + 1)); echo "  FAIL: cap: issue create with --label dispatch:chain-stalled and --label dispatch:office-hours"
   echo "    gh-log: $ghlog"
 fi
 log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
@@ -20194,7 +20196,8 @@ else
   echo "    log: $log"
 fi
 TOTAL=$((TOTAL + 1))
-if [[ "$ghlog" == *"issue create"* && "$ghlog" == *"--label dispatch:chain-stalled"* ]]; then
+if [[ "$ghlog" == *"issue create"* && "$ghlog" == *"--label dispatch:chain-stalled"* \
+   && "$ghlog" == *"--label dispatch:office-hours"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: phantom-busy: round 4 escalates (chain-stalled issue)"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: phantom-busy: round 4 escalates (chain-stalled issue)"
@@ -20300,7 +20303,8 @@ if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
 assert_eq "crash-past-cap: dispatch-tick-recover exits 0" "0" "$rc"
 ghlog=$(cat "$TMPDIR_TEST/gh-log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ "$ghlog" == *"issue create"* && "$ghlog" == *"chain-stalled"* ]]; then
+if [[ "$ghlog" == *"issue create"* && "$ghlog" == *"chain-stalled"* \
+   && "$ghlog" == *"--label dispatch:office-hours"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: crash-past-cap: escalated via chain-stalled latch issue"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: crash-past-cap: expected chain-stalled issue create, got: $ghlog"
