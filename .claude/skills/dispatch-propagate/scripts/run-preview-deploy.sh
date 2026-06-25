@@ -31,7 +31,7 @@ cd "$REPO_ROOT"
 
 # Deploy hosting channel — reuses existing channel if present (uses deploy target from .firebaserc)
 echo "Deploying to preview channel '$CHANNEL_ID' on site '$HOSTING_SITE'..."
-DEPLOY_OUTPUT=$(npx firebase-tools hosting:channel:deploy "$CHANNEL_ID" \
+DEPLOY_OUTPUT=$(firebase_deploy_retry npx firebase-tools hosting:channel:deploy "$CHANNEL_ID" \
   --only "$APP_NAME" \
   --project "$FIREBASE_PROJECT_ID" \
   --expires 7d \
