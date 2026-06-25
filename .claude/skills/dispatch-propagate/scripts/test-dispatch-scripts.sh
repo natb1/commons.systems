@@ -1697,7 +1697,7 @@ assert_eq "issue: assignees narrowed to [{login}]" "alice" "$(jq -r '.assignees[
 assert_eq "issue: assignee objects carry ONLY login" "1" "$(jq '.assignees[0] | keys | length' <<<"$iv")"
 assert_eq "issue: raw REST extra field dropped" "" "$(jq -r '.extra_rest_field // empty' <<<"$iv")"
 # Top-level keys are exactly the porcelain set.
-assert_eq "issue: top-level key set" "assignees body createdAt labels number state stateReason title" \
+assert_eq "issue: top-level key set" "assignees body closedAt createdAt labels number state stateReason title" \
   "$(jq -r 'keys | join(" ")' <<<"$iv")"
 teardown
 
@@ -1710,11 +1710,14 @@ printf '%s\n' '{
   "state": "closed",
   "state_reason": "completed",
   "created_at": "2026-02-03T04:05:06Z",
+  "closed_at": "2026-02-04T05:06:07Z",
   "labels": [],
   "assignees": []
 }' > "$STUB_DIR/view-issue-9002.json"
 iv2=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_view_rest 9002)
 assert_eq "issue: closed → CLOSED" "CLOSED" "$(jq -r '.state' <<<"$iv2")"
+# closedAt passthrough from closed_at (the stale-head gate's recency floor, #2442).
+assert_eq "issue: closedAt passthrough from closed_at" "2026-02-04T05:06:07Z" "$(jq -r '.closedAt' <<<"$iv2")"
 # REST lowercase state_reason `completed` → porcelain UPPERCASE enum COMPLETED.
 assert_eq "issue: stateReason completed upcased to COMPLETED" "COMPLETED" "$(jq -r '.stateReason' <<<"$iv2")"
 # A second non-null case: not_planned → NOT_PLANNED.
@@ -33199,12 +33202,28 @@ case "$args" in
     esac
     echo '{}'
     ;;
+  *"run view "*)
+    # gh_run_view_rest: `gh run view <id> --json createdAt,headSha` (porcelain,
+    # no `api` token → no collision with the api globs). Emit the run.json fixture.
+    if [[ -f "$TREE/run.json" ]]; then cat "$TREE/run.json"; else echo '{}'; fi
+    ;;
+  *"api "*"/compare/"*)
+    # gh_commit_is_ancestor_rest: `gh api .../compare/<base>...<head>`. Wrap the
+    # one-word compare-status fixture as {"status":"<word>"}; jq reads .status.
+    printf '{"status":"%s"}\n' "$(cat "$TREE/compare-status" 2>/dev/null)"
+    ;;
+  *"api "*"/issues/"*"/timeline"*)
+    # gh_issue_closing_commit_rest: `gh api .../issues/<N>/timeline`. MUST precede
+    # the VIEW glob below — `[0-9]*` matches `501/timeline`, swallowing this call.
+    if [[ -f "$TREE/timeline.json" ]]; then cat "$TREE/timeline.json"; else echo '[]'; fi
+    ;;
   *"api "*"/issues/"[0-9]*)
-    # single-issue VIEW (gh_issue_view_rest): emit a raw REST object carrying the
-    # fixture issue's lowercase state; the helper upcases it.
+    # single-issue VIEW (gh_issue_view_rest): emit a raw REST object from the
+    # fixture issue carrying its lowercase state plus snake_case closed_at /
+    # state_reason; the helper upcases state/state_reason and maps closed_at →
+    # closedAt for the stale-head gate to read.
     n="${args##*/}"
-    state=$(jq -r --argjson n "$n" '.[] | select(.number==$n) | .state' "$TREE/issues.json")
-    printf '{"number":%s,"state":"%s"}\n' "$n" "$state"
+    jq -c --argjson n "$n" '.[] | select(.number==$n) | {number, state, closed_at: (.closed_at // null), state_reason: (.state_reason // null)}' "$TREE/issues.json"
     ;;
   *"api "*"/issues"*)
     # issue LIST (gh_issue_list_rest via dispatch-followup-exists): whole fixture,
@@ -33248,16 +33267,22 @@ STUB
   assert_eq "flake-dedup: open match → no reopen" "no" "$r"
   flake_dedup_teardown
 
-  # CASE 2 — CLOSED match → REOPENED <N>, reopen fired, comment fired. (criterion #3)
+  # CASE 2 — CLOSED match, FRESH run → REOPENED <N>, reopen fired, comment fired.
+  # (criterion #3) Under the stale-head gate (#2442) the CLOSED path requires
+  # --run-id. Fresh = run.createdAt AFTER closed_at (recency fresh) AND the run
+  # head contains the closing fix (ancestry `identical`).
   flake_dedup_setup
-  printf '[{"number":501,"title":"Flaky CI: %s","state":"closed"}]\n' "$FP" > "$TMPDIR_TEST/scripts/issues.json"
+  printf '[{"number":501,"title":"Flaky CI: %s","state":"closed","closed_at":"2026-01-01T00:00:00Z"}]\n' "$FP" > "$TMPDIR_TEST/scripts/issues.json"
+  printf '{"createdAt":"2026-02-01T00:00:00Z","headSha":"headsha"}\n' > "$TMPDIR_TEST/scripts/run.json"
+  printf 'identical\n' > "$TMPDIR_TEST/scripts/compare-status"
+  printf '[{"event":"closed","commit_id":"closingsha"}]\n' > "$TMPDIR_TEST/scripts/timeline.json"
   printf 'recurred on PR #900 / run http://x\n' > "$TMPDIR_TEST/body.md"
-  out=$("$TMPDIR_TEST/scripts/dispatch-flake-dedup" "$FP" --body-file "$TMPDIR_TEST/body.md")
-  assert_eq "flake-dedup: closed match → REOPENED <N>" "REOPENED 501" "$out"
+  out=$("$TMPDIR_TEST/scripts/dispatch-flake-dedup" "$FP" --body-file "$TMPDIR_TEST/body.md" --run-id 12345)
+  assert_eq "flake-dedup: closed match, fresh run → REOPENED <N>" "REOPENED 501" "$out"
   if grep -qx '501' "$TMPDIR_TEST/scripts/stub/reopen-fired" 2>/dev/null; then r=yes; else r=no; fi
-  assert_eq "flake-dedup: closed match → reopen fired on 501" "yes" "$r"
+  assert_eq "flake-dedup: closed match, fresh run → reopen fired on 501" "yes" "$r"
   if grep -qx '501' "$TMPDIR_TEST/scripts/stub/comments-fired" 2>/dev/null; then c=yes; else c=no; fi
-  assert_eq "flake-dedup: closed match → comment fired on 501" "yes" "$c"
+  assert_eq "flake-dedup: closed match, fresh run → comment fired on 501" "yes" "$c"
   flake_dedup_teardown
 
   # CASE 3 — NO match → NONE, no side effects. (criterion #5)
@@ -33279,6 +33304,98 @@ STUB
   printf 'recurred\n' > "$TMPDIR_TEST/body.md"
   out=$("$TMPDIR_TEST/scripts/dispatch-flake-dedup" "$FP" --body-file "$TMPDIR_TEST/body.md")
   assert_eq "flake-dedup: canonical-title match → EXISTING <N>" "EXISTING 777" "$out"
+  flake_dedup_teardown
+
+  # === STALE-HEAD REOPEN GATE (#2442) ===
+
+  # CASE 5 — STALE by recency: run.createdAt BEFORE closed_at trips STALE even
+  # though ancestry is fresh (compare `identical`, closing commit present) —
+  # proving the recency floor ALONE suppresses the reopen. No comment, no reopen.
+  flake_dedup_setup
+  printf '[{"number":501,"title":"Flaky CI: %s","state":"closed","closed_at":"2026-02-01T00:00:00Z"}]\n' "$FP" > "$TMPDIR_TEST/scripts/issues.json"
+  printf '{"createdAt":"2026-01-01T00:00:00Z","headSha":"headsha"}\n' > "$TMPDIR_TEST/scripts/run.json"
+  printf 'identical\n' > "$TMPDIR_TEST/scripts/compare-status"
+  printf '[{"event":"closed","commit_id":"closingsha"}]\n' > "$TMPDIR_TEST/scripts/timeline.json"
+  printf 'recurred on PR #900 / run http://x\n' > "$TMPDIR_TEST/body.md"
+  out=$("$TMPDIR_TEST/scripts/dispatch-flake-dedup" "$FP" --body-file "$TMPDIR_TEST/body.md" --run-id 12345 2>"$TMPDIR_TEST/err")
+  assert_eq "flake-dedup: stale by recency → STALE <N>" "STALE 501" "$out"
+  if [[ -s "$TMPDIR_TEST/scripts/stub/comments-fired" ]]; then c=yes; else c=no; fi
+  assert_eq "flake-dedup: stale by recency → no comment" "no" "$c"
+  if [[ -s "$TMPDIR_TEST/scripts/stub/reopen-fired" ]]; then r=yes; else r=no; fi
+  assert_eq "flake-dedup: stale by recency → no reopen" "no" "$r"
+  if grep -q 'suppressing reopen' "$TMPDIR_TEST/err"; then g=yes; else g=no; fi
+  assert_eq "flake-dedup: stale by recency → suppression logged to stderr" "yes" "$g"
+  flake_dedup_teardown
+
+  # CASE 6 — STALE by ancestry (the discriminating case): run.createdAt is AFTER
+  # closed_at (recency says FRESH) yet the run head is `behind` the closing fix
+  # (ancestry says STALE). This is the ONLY case that fails under a recency-only
+  # implementation — the divergent stub values (created-after-close + `behind`)
+  # force the ancestry signal to carry the verdict. No comment, no reopen.
+  flake_dedup_setup
+  printf '[{"number":501,"title":"Flaky CI: %s","state":"closed","closed_at":"2026-01-01T00:00:00Z"}]\n' "$FP" > "$TMPDIR_TEST/scripts/issues.json"
+  printf '{"createdAt":"2026-02-01T00:00:00Z","headSha":"headsha"}\n' > "$TMPDIR_TEST/scripts/run.json"
+  printf 'behind\n' > "$TMPDIR_TEST/scripts/compare-status"
+  printf '[{"event":"closed","commit_id":"closingsha"}]\n' > "$TMPDIR_TEST/scripts/timeline.json"
+  printf 'recurred on PR #900 / run http://x\n' > "$TMPDIR_TEST/body.md"
+  out=$("$TMPDIR_TEST/scripts/dispatch-flake-dedup" "$FP" --body-file "$TMPDIR_TEST/body.md" --run-id 12345)
+  assert_eq "flake-dedup: stale by ancestry → STALE <N>" "STALE 501" "$out"
+  if [[ -s "$TMPDIR_TEST/scripts/stub/comments-fired" ]]; then c=yes; else c=no; fi
+  assert_eq "flake-dedup: stale by ancestry → no comment" "no" "$c"
+  if [[ -s "$TMPDIR_TEST/scripts/stub/reopen-fired" ]]; then r=yes; else r=no; fi
+  assert_eq "flake-dedup: stale by ancestry → no reopen" "no" "$r"
+  flake_dedup_teardown
+
+  # CASE 7 — null commit_id (manual close) → ancestry skipped → recency fallback →
+  # REOPENED. timeline commit_id is null, so the closing commit is empty and the
+  # ancestry signal is skipped; compare-status `behind` MUST be ignored. recency
+  # is fresh (run after close), so the reopen fires.
+  flake_dedup_setup
+  printf '[{"number":501,"title":"Flaky CI: %s","state":"closed","closed_at":"2026-01-01T00:00:00Z"}]\n' "$FP" > "$TMPDIR_TEST/scripts/issues.json"
+  printf '{"createdAt":"2026-02-01T00:00:00Z","headSha":"headsha"}\n' > "$TMPDIR_TEST/scripts/run.json"
+  printf 'behind\n' > "$TMPDIR_TEST/scripts/compare-status"
+  printf '[{"event":"closed","commit_id":null}]\n' > "$TMPDIR_TEST/scripts/timeline.json"
+  printf 'recurred on PR #900 / run http://x\n' > "$TMPDIR_TEST/body.md"
+  out=$("$TMPDIR_TEST/scripts/dispatch-flake-dedup" "$FP" --body-file "$TMPDIR_TEST/body.md" --run-id 12345)
+  assert_eq "flake-dedup: null commit_id → recency fallback → REOPENED <N>" "REOPENED 501" "$out"
+  if grep -qx '501' "$TMPDIR_TEST/scripts/stub/reopen-fired" 2>/dev/null; then r=yes; else r=no; fi
+  assert_eq "flake-dedup: null commit_id → reopen fired on 501" "yes" "$r"
+  if grep -qx '501' "$TMPDIR_TEST/scripts/stub/comments-fired" 2>/dev/null; then c=yes; else c=no; fi
+  assert_eq "flake-dedup: null commit_id → comment fired on 501" "yes" "$c"
+  flake_dedup_teardown
+
+  # CASE 8 — NOT_PLANNED close → ancestry skipped → recency fallback → REOPENED.
+  # state_reason=not_planned means there was no fix, so ancestry is skipped;
+  # compare-status `behind` and the present timeline commit_id MUST be ignored.
+  # recency is fresh (run after close), so the reopen fires.
+  flake_dedup_setup
+  printf '[{"number":501,"title":"Flaky CI: %s","state":"closed","closed_at":"2026-01-01T00:00:00Z","state_reason":"not_planned"}]\n' "$FP" > "$TMPDIR_TEST/scripts/issues.json"
+  printf '{"createdAt":"2026-02-01T00:00:00Z","headSha":"headsha"}\n' > "$TMPDIR_TEST/scripts/run.json"
+  printf 'behind\n' > "$TMPDIR_TEST/scripts/compare-status"
+  printf '[{"event":"closed","commit_id":"closingsha"}]\n' > "$TMPDIR_TEST/scripts/timeline.json"
+  printf 'recurred on PR #900 / run http://x\n' > "$TMPDIR_TEST/body.md"
+  out=$("$TMPDIR_TEST/scripts/dispatch-flake-dedup" "$FP" --body-file "$TMPDIR_TEST/body.md" --run-id 12345)
+  assert_eq "flake-dedup: not_planned → recency fallback → REOPENED <N>" "REOPENED 501" "$out"
+  if grep -qx '501' "$TMPDIR_TEST/scripts/stub/reopen-fired" 2>/dev/null; then r=yes; else r=no; fi
+  assert_eq "flake-dedup: not_planned → reopen fired on 501" "yes" "$r"
+  if grep -qx '501' "$TMPDIR_TEST/scripts/stub/comments-fired" 2>/dev/null; then c=yes; else c=no; fi
+  assert_eq "flake-dedup: not_planned → comment fired on 501" "yes" "$c"
+  flake_dedup_teardown
+
+  # CASE 9 — (guardrail) CLOSED match, missing --run-id → non-zero exit + stderr.
+  # The CLOSED path requires --run-id; an absent one is a misconfigured caller and
+  # must fail loud rather than reopen blind.
+  flake_dedup_setup
+  printf '[{"number":501,"title":"Flaky CI: %s","state":"closed","closed_at":"2026-01-01T00:00:00Z"}]\n' "$FP" > "$TMPDIR_TEST/scripts/issues.json"
+  printf 'recurred on PR #900 / run http://x\n' > "$TMPDIR_TEST/body.md"
+  if "$TMPDIR_TEST/scripts/dispatch-flake-dedup" "$FP" --body-file "$TMPDIR_TEST/body.md" 2>"$TMPDIR_TEST/err"; then ec=0; else ec=$?; fi
+  assert_eq "flake-dedup: closed match, missing --run-id → non-zero exit" "1" "$ec"
+  if grep -q 'run-id is required' "$TMPDIR_TEST/err"; then g=yes; else g=no; fi
+  assert_eq "flake-dedup: closed match, missing --run-id → stderr error" "yes" "$g"
+  if [[ -s "$TMPDIR_TEST/scripts/stub/comments-fired" ]]; then c=yes; else c=no; fi
+  assert_eq "flake-dedup: closed match, missing --run-id → no comment" "no" "$c"
+  if [[ -s "$TMPDIR_TEST/scripts/stub/reopen-fired" ]]; then r=yes; else r=no; fi
+  assert_eq "flake-dedup: closed match, missing --run-id → no reopen" "no" "$r"
   flake_dedup_teardown
 
 echo ""
