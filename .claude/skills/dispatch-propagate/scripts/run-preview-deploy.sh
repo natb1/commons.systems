@@ -31,21 +31,27 @@ cd "$REPO_ROOT"
 
 # Deploy hosting channel — reuses existing channel if present (uses deploy target from .firebaserc)
 echo "Deploying to preview channel '$CHANNEL_ID' on site '$HOSTING_SITE'..."
-# --debug surfaces the underlying auth-failure cause (the real HTTP status /
-# token-endpoint error body that firebase-tools' generic "Failed to authenticate"
-# --json message hides — see #2481). firebase-tools routes --debug to STDERR while
-# the --json result stays on STDOUT, so the preview-URL extraction below is
-# unaffected. firebase_deploy_retry captures stderr per attempt and forwards it to
-# the job log ONLY on a final failure (discarding it on success), so this adds the
-# diagnostic trace exactly when a deploy fails and nothing when it succeeds.
 DEPLOY_OUTPUT=$(firebase_deploy_retry npx firebase-tools hosting:channel:deploy "$CHANNEL_ID" \
   --only "$APP_NAME" \
   --project "$FIREBASE_PROJECT_ID" \
   --expires 7d \
-  --debug \
   --json) || {
   echo "Deploy failed:" >&2
   echo "$DEPLOY_OUTPUT" >&2
+  # firebase-tools' generic "Failed to authenticate" --json message hides the real
+  # cause (the token-endpoint HTTP status / error body — invalid_grant, a 429
+  # RESOURCE_EXHAUSTED quota, clock skew, etc.). --debug does NOT surface it: under
+  # --json firebase-tools silences the stderr logger. But it always writes a
+  # full-verbosity firebase-debug.log to its cwd (REPO_ROOT here) regardless of
+  # --json, including the failed auth API call. Surface that on failure so the next
+  # preview-and-smoke failure is root-causable (see #2481).
+  if [ -f "$REPO_ROOT/firebase-debug.log" ]; then
+    echo "--- firebase-debug.log (last 100 lines) ---" >&2
+    tail -100 "$REPO_ROOT/firebase-debug.log" >&2
+    echo "--- end firebase-debug.log ---" >&2
+  else
+    echo "(no firebase-debug.log found at $REPO_ROOT)" >&2
+  fi
   exit 1
 }
 
