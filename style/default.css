@@ -1,3 +1,5 @@
+/* TEMP: forces all apps dirty to run preview-and-smoke and verify #2519 --debug
+   instrumentation does not break stdout URL extraction. Reverted before merge. */
 @import "@commons-systems/ds/tokens/colors.css";
 @import "@commons-systems/ds/tokens/typography.css";
 @import "@commons-systems/ds/tokens/spacing.css";
