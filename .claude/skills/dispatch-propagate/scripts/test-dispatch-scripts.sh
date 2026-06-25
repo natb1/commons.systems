@@ -40976,6 +40976,68 @@ assert_eq "T8: daemon UNKNOWN → 0 schedule calls" "0" "$lines"
 scan_teardown
 
 # ============================================================================
+# firebase_deploy_retry (#2481)
+# ============================================================================
+echo "=== firebase_deploy_retry (#2481) ==="
+export FIREBASE_DEPLOY_RETRY_BASE_DELAY=0
+export FIREBASE_DEPLOY_RETRY_ATTEMPTS=3
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/lib.sh"
+
+FDR_DIR=$(mktemp -d)
+
+# --- Case 1: retry-then-succeed, signature on STDOUT (empty stderr) ---------
+FDR_COUNTER="$FDR_DIR/counter1"
+printf '0' > "$FDR_COUNTER"
+FDR_STUB1="$FDR_DIR/stub-success"
+cat > "$FDR_STUB1" <<STUB
+#!/usr/bin/env bash
+n=\$(cat "$FDR_COUNTER")
+n=\$(( n + 1 ))
+printf '%s' "\$n" > "$FDR_COUNTER"
+if [[ "\$n" -lt 3 ]]; then
+  # Transient auth failure: signature on STDOUT, nothing on stderr.
+  printf '%s\n' 'Failed to authenticate'
+  exit 1
+fi
+printf '%s\n' '{"result":{"site":{"url":"https://example.web.app"}}}'
+exit 0
+STUB
+chmod +x "$FDR_STUB1"
+
+fdr_actual=$(firebase_deploy_retry "$FDR_STUB1" 2>/dev/null)
+fdr_rc=$?
+assert_eq "firebase_deploy_retry: returns final success JSON on stdout" \
+  '{"result":{"site":{"url":"https://example.web.app"}}}' "$fdr_actual"
+assert_eq "firebase_deploy_retry: exit code 0 on eventual success" "0" "$fdr_rc"
+fdr_count1=$(cat "$FDR_COUNTER")
+assert_eq "firebase_deploy_retry: retried until success (3 attempts)" "3" "$fdr_count1"
+
+# --- Case 2: non-auth failure is NOT retried -------------------------------
+FDR_COUNTER2="$FDR_DIR/counter2"
+printf '0' > "$FDR_COUNTER2"
+FDR_STUB2="$FDR_DIR/stub-fail"
+cat > "$FDR_STUB2" <<STUB
+#!/usr/bin/env bash
+n=\$(cat "$FDR_COUNTER2")
+n=\$(( n + 1 ))
+printf '%s' "\$n" > "$FDR_COUNTER2"
+printf '%s\n' 'some other deploy error' >&2
+exit 1
+STUB
+chmod +x "$FDR_STUB2"
+
+fdr_rc2=0
+firebase_deploy_retry "$FDR_STUB2" >/dev/null 2>&1 || fdr_rc2=$?
+fdr_count2=$(cat "$FDR_COUNTER2")
+assert_eq "firebase_deploy_retry: non-auth failure not retried (1 attempt)" "1" "$fdr_count2"
+assert_eq "firebase_deploy_retry: non-auth failure returns nonzero" "nonzero" \
+  "$([[ $fdr_rc2 -ne 0 ]] && echo nonzero || echo zero)"
+
+rm -rf "$FDR_DIR"
+unset FIREBASE_DEPLOY_RETRY_BASE_DELAY FIREBASE_DEPLOY_RETRY_ATTEMPTS
+
+# ============================================================================
 # summary
 # ============================================================================
 report_results
