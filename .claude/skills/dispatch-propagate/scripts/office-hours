@@ -23,13 +23,14 @@
 #                                   dispatch router (#1010), the artifact
 #                                   dispatch-self-close's continuation invariant
 #                                   keeps alive. No skill is loaded.
-#   office-hours <N> <phase> <pr> <worktree-path>
-#                                 → launch the fresh /office-hours session
-#                                   worker-style: a `--bg` job named
-#                                   office-hours-<N>, with cwd = that
-#                                   worktree (5th field), via
-#                                   dispatch-spawn-office-hours; then attach the
-#                                   human to it. Born in the worktree, the session's
+#   office-hours <N> <worktree-path>
+#                                 → launch a BARE `--bg` session named
+#                                   office-hours-<N>, with cwd = that worktree
+#                                   (2nd field) — no skill loaded, no prompt, so
+#                                   it boots interactive and parks awaiting the
+#                                   human, who attaches and drives the work
+#                                   manually (#2387). Then attach the human to
+#                                   it. Born in the worktree, the session's
 #                                   branch is <N>-..., so the strip hook clears
 #                                   the dispatch:office-hours label. EXCEPTION:
 #                                   for main-qa items, cwd is the main worktree
@@ -37,14 +38,14 @@
 #                                   strip hook `^[0-9]+` discriminator — the
 #                                   label is NOT auto-cleared; closing the issue
 #                                   is what removes it from the queue (see
-#                                   SKILL.md Step 5). The session also holds the
+#                                   SKILL.md Step 1b). The session also holds the
 #                                   per-worktree concurrency
 #                                   lock via the occupancy guard's
 #                                   office-hours-name check in
 #                                   worktree_has_live_session, which recognizes
 #                                   the office-hours-<N> session as occupying the
 #                                   <N>-slug worktree. When no <N>-* worktree
-#                                   resolves (5th field `-`), exit non-zero with
+#                                   resolves (2nd field `-`), exit non-zero with
 #                                   a diagnostic and launch nothing.
 #   idle-provision <sessionId> <branch>
 #                                 → the originating session's worktree was swept
@@ -107,8 +108,8 @@ CLAUDE_CMD="${OFFICE_HOURS_CLAUDE_CMD:-claude}"
 #
 # `claude attach <id>` resolves a job by its SHORT job id — the `id` field of
 # `claude agents --json`, the first UUID group of the sessionId — NOT the full
-# sessionId. The selector and dispatch-spawn-office-hours both traffic in
-# sessionIds (stable session identity), so translate to the job id HERE, at the
+# sessionId. The selector traffics in sessionIds (stable session identity), so
+# translate to the job id HERE, at the
 # single point of attach, by looking the session up in the live registry. (Until
 # this translation existed, the sessionId was passed straight to `claude attach`,
 # which always failed with `No job matching '<sessionId>'` — the regression that
@@ -202,6 +203,42 @@ resume_session() {
   attach_session_by_name "$name"
 }
 
+# fresh_session <N> <wt> — spawn a BARE fresh office-hours-<N> session (no skill,
+# no prompt) rooted in the <N>-* worktree, that parks awaiting the human, who
+# attaches and drives the work manually (#2387). Office-hours is now a pure
+# dispatcher: it selects an item and attaches a human-driven session — it loads
+# no skill and threads no phase/pr.
+#
+# Kick a PROMPTLESS, NON-resume --bg job named office-hours-<N>, rooted at <wt>
+# via a subshell `cd` so SessionStart-derived attributes key on the right
+# directory. Without a -p/--print prompt the --bg launch boots interactive and
+# parks awaiting input — the same promptless-parking behavior resume_session
+# documents for its resume arm — so the human can attach and drive. (This
+# promptless-parking behavior is confirmed at QA: it is a manual check that needs
+# the live Claude daemon and cannot run here/in CI. The documented fallback, if
+# the promptless kick does NOT park, is to add a minimal benign non-skill prose
+# prompt to the single kick line below — e.g. "Office-hours session for issue
+# #$N — a human will drive this; await their input." — a one-line change, NOT a
+# `/…` skill/phase prompt. Do not implement the fallback unless QA shows parking
+# does not hold.)
+#
+# A successful spawn requires BOTH a clean kick AND verified registration:
+# `claude --bg` returns BEFORE the daemon registers the session, so gate on
+# kick-rc-0 AND verify_agent_registered_under, mirroring resume_session. Unlike
+# resume_session there is NO --fork-session retry — forking is a resume-only
+# mechanism (it resumes off a fresh id derived from an existing transcript); a
+# fresh kick that fails to register is a hard error, so report it and exit.
+fresh_session() {
+  local num="$1" cwd="$2" name="office-hours-$1" rc=0
+  ( cd "$cwd" && "$CLAUDE_CMD" --bg --name "$name" --permission-mode auto \
+      ) >/dev/null 2>&1 || rc=$?
+  if [[ "$rc" -ne 0 ]] || ! verify_agent_registered_under "$name" "$cwd"; then
+    echo "office-hours: failed to launch a fresh bare session for #$num under name $name in $cwd (the --bg kick failed to register a live session). Run 'claude agents' to inspect." >&2
+    exit 1
+  fi
+  attach_session_by_name "$name"
+}
+
 # One call to the single source of truth; dispatch on the returned verb.
 directive=$("$SCRIPT_DIR/office-hours-select-target")
 read -r verb a b c d <<< "$directive"
@@ -212,9 +249,10 @@ case "$verb" in
     attach_session "$a"
     ;;
   office-hours)
-    # a b c d = <N> <phase> <pr-or-dash> <worktree-path>. Launch a fresh
-    # /office-hours session worker-style — a --bg job named office-hours-<N>,
-    # rooted in the <N>-* worktree — then attach the human via attach. Rooting
+    # a b = <N> <worktree-path>. Launch a BARE --bg session named office-hours-<N>,
+    # rooted in the <N>-* worktree — no skill loaded, no prompt, so it parks
+    # awaiting the human, who attaches and drives the work manually (#2387).
+    # fresh_session does the kick, the registration gate, and the attach. Rooting
     # it in the worktree clears the dispatch:office-hours label for non-main-qa
     # items (the strip hook resolves <N> from the cwd branch); for main-qa items
     # the cwd is the main worktree (branch main), which the strip hook's ^[0-9]+
@@ -223,21 +261,11 @@ case "$verb" in
     # held via the occupancy guard's office-hours-name check (see
     # worktree_has_live_session), which recognizes the office-hours-<N> session
     # as occupying the <N>-slug worktree.
-    if [[ -z "$d" || "$d" == "-" ]]; then
+    if [[ -z "$b" || "$b" == "-" ]]; then
       echo "office-hours: no <N>-* worktree resolved for #$a — cannot launch a fresh session (the worktree may have been swept). Re-create the worktree or re-run /ready." >&2
       exit 1
     fi
-    # The spawn wrapper runs `claude --bg` and queries `claude agents`; point it
-    # at the same launch command this script uses so a test fake serves both. It
-    # prints the spawned (or deduped) session id on stdout.
-    export DISPATCH_SPAWN_OFFICE_HOURS_CLAUDE_CMD="$CLAUDE_CMD"
-    if ! sid=$("$SCRIPT_DIR/dispatch-spawn-office-hours" "$a" "$b" "$c" "$d"); then
-      echo "office-hours: failed to launch a fresh /office-hours session for #$a in $d" >&2
-      exit 1
-    fi
-    # sid is the spawned (or deduped) session's sessionId; attach_session
-    # translates it to the daemon job id `claude attach` requires.
-    attach_session "$sid"
+    fresh_session "$a" "$b"
     ;;
   idle-provision)
     # a = originating sessionId; b = remote branch whose worktree was swept.
