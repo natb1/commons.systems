@@ -33,8 +33,17 @@ else
   echo "WARNING: GOOGLE_APPLICATION_CREDENTIALS missing or not a file"
 fi
 echo "firebase-tools version: $(npx firebase-tools --version 2>/dev/null | tail -1)"
-echo "--- projects:list (no --json; real auth error surfaces here) ---"
-npx firebase-tools projects:list || echo "AUTH PROBE FAILED (see error above)"
+echo "runner clock (UTC): $(date -u '+%Y-%m-%dT%H:%M:%SZ')  epoch=$(date -u +%s)"
+# Stray auth env that could shadow GOOGLE_APPLICATION_CREDENTIALS (print presence,
+# never the value — these are secret-bearing).
+[ -n "${FIREBASE_TOKEN:-}" ] && echo "FIREBASE_TOKEN: set (would override ADC)" || echo "FIREBASE_TOKEN: unset"
+[ -n "${GOOGLE_OAUTH_ACCESS_TOKEN:-}" ] && echo "GOOGLE_OAUTH_ACCESS_TOKEN: set" || echo "GOOGLE_OAUTH_ACCESS_TOKEN: unset"
+echo "--- projects:list --debug (non-json; underlying token-endpoint error surfaces) ---"
+npx firebase-tools projects:list --debug 2>&1 | tail -50 || echo "AUTH PROBE FAILED (see above)"
+if [ -f "$REPO_ROOT/firebase-debug.log" ]; then
+  echo "--- firebase-debug.log (last 60 lines) ---"
+  tail -60 "$REPO_ROOT/firebase-debug.log"
+fi
 echo "=== end auth probe ==="
 
 FAILURES=()
