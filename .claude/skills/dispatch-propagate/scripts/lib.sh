@@ -604,8 +604,9 @@ dispatch_classify_rollup() {
   pending=$(printf '%s' "$rollup" | jq '
     map(
       if has("conclusion") then
-        # Check run: pending if status != COMPLETED
-        .status != "COMPLETED"
+        # Check run: pending only if no terminal conclusion yet (a desynced
+        # status=in_progress + non-null conclusion is concluded, not pending) — #2457
+        (.conclusion // "") == "" and .status != "COMPLETED"
       else
         # Status context: pending if state is PENDING or EXPECTED
         (.state == "PENDING" or .state == "EXPECTED")

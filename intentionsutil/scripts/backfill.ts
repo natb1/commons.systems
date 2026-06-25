@@ -24,6 +24,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { writeNode } from "../src/store.js";
 import { ghErrorText } from "../src/errors.js";
 import { paginateGhApi } from "./gh-utils.js";
+import type { IntentionNodeInput } from "../src/schema.js";
 
 // --- Paths -----------------------------------------------------------------
 // The script lives at `intentionsutil/scripts/backfill.ts`, so the repo root is
@@ -147,7 +148,7 @@ export function fetchOpenIssues(): OpenIssue[] {
  * to the next `^## ` or EOF, trimmed. Returns null when there is no such
  * section.
  */
-function extractScope(body: string | null): string | null {
+export function extractScope(body: string | null): string | null {
   if (!body) return null;
   const lines = body.split("\n");
   const startIdx = lines.findIndex((l) => /^## Scope\s*$/.test(l));
@@ -191,6 +192,26 @@ export function fetchParentNumber(issueNumber: number): number | null {
   return Number(trimmed);
 }
 
+/**
+ * Build the IntentionNodeInput for an issue leaf node. Pure function — takes
+ * the already-fetched issue and resolved parent string; does no network I/O.
+ * `reading` is always null: it is sensor-populated, not backfill-populated.
+ */
+export function buildIssueNode(
+  issue: OpenIssue,
+  parent: string | null,
+): IntentionNodeInput {
+  return {
+    id: `issue-${issue.number}`,
+    statement: issue.title.trim(),
+    owner: "human",
+    status: "raw", // not yet refined through the dialectic
+    parent,
+    rationale: extractScope(issue.body),
+    reading: null, // sensor-populated measurement; null at backfill time
+  };
+}
+
 // --- Main ------------------------------------------------------------------
 
 /**
@@ -223,7 +244,6 @@ function main(): void {
 
   // Pass 2: build and write each node.
   for (const issue of openIssues) {
-    const scope = extractScope(issue.body);
     const parentNum = fetchParentNumber(issue.number);
     // Referential integrity: only link a parent that is itself an open issue
     // (and thus has a node file). A GitHub parent that is CLOSED has no node
@@ -232,15 +252,7 @@ function main(): void {
     const parent =
       parentNum !== null && openNumbers.has(parentNum) ? `issue-${parentNum}` : null;
 
-    writeNode(intentionsDir, {
-      id: `issue-${issue.number}`,
-      statement: issue.title.trim(),
-      owner: "human",
-      status: "raw", // not yet refined through the dialectic
-      parent,
-      rationale: scope,
-      reading: scope,
-    });
+    writeNode(intentionsDir, buildIssueNode(issue, parent));
   }
 
   console.log(

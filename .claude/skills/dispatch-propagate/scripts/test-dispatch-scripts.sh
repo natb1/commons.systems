@@ -1270,6 +1270,14 @@ verdict_rest_case "verdict: failure → failing" \
   "sha-failure" '[{"status":"completed","conclusion":"failure"}]' "failing"
 verdict_rest_case "verdict: in_progress (null conclusion) → pending" \
   "sha-inprog" '[{"status":"in_progress","conclusion":null}]' "pending"
+verdict_rest_case "verdict: desynced in_progress + success conclusion → passing" \
+  "sha-desynced-success" '[{"status":"in_progress","conclusion":"success","completed_at":"2026-06-19T04:17:24Z"}]' "passing"
+verdict_rest_case "verdict: completed success + desynced in_progress success → passing" \
+  "sha-desynced-mixed" '[{"status":"completed","conclusion":"success"},{"status":"in_progress","conclusion":"success","completed_at":"2026-06-19T04:17:24Z"}]' "passing"
+verdict_rest_case "verdict: genuine pending + desynced in_progress success → pending" \
+  "sha-desynced-genuine-pending" '[{"status":"in_progress","conclusion":null},{"status":"in_progress","conclusion":"success","completed_at":"2026-06-19T04:17:24Z"}]' "pending"
+verdict_rest_case "verdict: desynced in_progress + failure conclusion → failing" \
+  "sha-desynced-failure" '[{"status":"in_progress","conclusion":"failure","completed_at":"2026-06-19T04:17:24Z"}]' "failing"
 verdict_rest_case "verdict: queued → pending" \
   "sha-queued" '[{"status":"queued","conclusion":null}]' "pending"
 verdict_rest_case "verdict: failing + still-running → failing (failure wins)" \
@@ -40622,6 +40630,353 @@ RECOVER="$SCRIPT_DIR/dispatch-recover-session-id"
   assert_eq "recover: wrong-issue → no stdout" "" "$out"
   rm -rf "$root"
 ) || true
+
+# ============================================================================
+# dispatch-scan-recoverable-deaths
+# ============================================================================
+#
+# Exercises the tick-time scanner that finds transient API-error phase-worker
+# deaths the Stop hook never saw and arms the existing resume machinery.
+#
+# Harness mirrors srl_*:
+#   $TMPDIR_TEST/scripts/   — scan script + lib-claude-agents.sh + detect script
+#   $TMPDIR_TEST/bin/       — all external-command stubs
+#   $TMPDIR_TEST/agents.json — test-controlled JSON array for the claude fake
+#   $TMPDIR_TEST/timer-units — test-controlled list-units output
+#   $TMPDIR_TEST/sched-log  — appended once per schedule call (line-count == call-count)
+#
+# Every external command is overridden via the env-override variables the scan
+# exports. HOME is redirected to $TMPDIR_TEST so transcript paths resolve there.
+echo ""
+echo "=== dispatch-scan-recoverable-deaths ==="
+
+SCAN_SAVED_HOME="$HOME"
+
+scan_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/bin"
+
+  # Copy the script under test and its libs.
+  cp "$SCRIPT_DIR/dispatch-scan-recoverable-deaths" \
+    "$TMPDIR_TEST/scripts/dispatch-scan-recoverable-deaths"
+  cp "$SCRIPT_DIR/lib-claude-agents.sh" \
+    "$TMPDIR_TEST/scripts/lib-claude-agents.sh"
+  # Copy the REAL detector so tests exercise its actual logic.
+  cp "$SCRIPT_DIR/dispatch-detect-transient-death" \
+    "$TMPDIR_TEST/scripts/dispatch-detect-transient-death"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-scan-recoverable-deaths"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-detect-transient-death"
+
+  # claude fake: prints agents.json regardless of args. Default: empty array.
+  echo '[]' > "$TMPDIR_TEST/agents.json"
+  cat > "$TMPDIR_TEST/bin/claude" <<STUB
+#!/usr/bin/env bash
+cat "$TMPDIR_TEST/agents.json"
+exit 0
+STUB
+  chmod +x "$TMPDIR_TEST/bin/claude"
+  export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/bin/claude"
+
+  # systemctl fake: list-units prints $TMPDIR_TEST/timer-units (default empty).
+  # Any other subcommand exits 0.
+  : > "$TMPDIR_TEST/timer-units"
+  cat > "$TMPDIR_TEST/bin/systemctl" <<STUB
+#!/usr/bin/env bash
+for a in "\$@"; do
+  if [[ "\$a" == "list-units" ]]; then
+    cat "$TMPDIR_TEST/timer-units"
+    exit 0
+  fi
+done
+exit 0
+STUB
+  chmod +x "$TMPDIR_TEST/bin/systemctl"
+  export DISPATCH_SCAN_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/systemctl"
+
+  # gh fake: issue view --json labels --jq <filter> emits the REAL gh JSON shape
+  # ({"labels":[{"name":"..."}]}) and runs the script's actual --jq filter over it
+  # via real jq, so guard (b)'s office-hours detection is exercised end-to-end.
+  # FAKE_OH=true seeds a dispatch:office-hours label; otherwise labels is empty.
+  # Any other subcommand exits 0 silently.
+  cat > "$TMPDIR_TEST/bin/fake-gh" <<STUB
+#!/usr/bin/env bash
+if [[ "\$1" == "issue" && "\$2" == "view" ]]; then
+  filter="any(.labels[]; .name==\"x\")"
+  prev=""
+  for a in "\$@"; do
+    if [[ "\$prev" == "--jq" ]]; then filter="\$a"; fi
+    prev="\$a"
+  done
+  if [[ "\${FAKE_OH:-false}" == "true" ]]; then
+    body='{"labels":[{"name":"dispatch:office-hours"}]}'
+  else
+    body='{"labels":[]}'
+  fi
+  printf '%s' "\$body" | jq -r "\$filter"
+  exit 0
+fi
+exit 0
+STUB
+  chmod +x "$TMPDIR_TEST/bin/fake-gh"
+  export DISPATCH_SCAN_GH_CMD="$TMPDIR_TEST/bin/fake-gh"
+
+  # schedule stub: logs all argv as one line, prints "reseeded fake-unit at 0".
+  cat > "$TMPDIR_TEST/bin/fake-sched" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/sched-log"
+echo "reseeded fake-unit at 0"
+STUB
+  chmod +x "$TMPDIR_TEST/bin/fake-sched"
+  export DISPATCH_SCAN_SCHEDULE_CMD="$TMPDIR_TEST/bin/fake-sched"
+
+  # phase stubs: return fixed test-controlled values.
+  cat > "$TMPDIR_TEST/bin/fake-phase" <<'STUB'
+#!/usr/bin/env bash
+echo "implement"
+STUB
+  chmod +x "$TMPDIR_TEST/bin/fake-phase"
+  export DISPATCH_SCAN_PHASE_CMD="$TMPDIR_TEST/bin/fake-phase"
+
+  cat > "$TMPDIR_TEST/bin/fake-phase-model" <<'STUB'
+#!/usr/bin/env bash
+echo "claude-opus"
+STUB
+  chmod +x "$TMPDIR_TEST/bin/fake-phase-model"
+  export DISPATCH_SCAN_PHASE_MODEL_CMD="$TMPDIR_TEST/bin/fake-phase-model"
+
+  cat > "$TMPDIR_TEST/bin/fake-phase-effort" <<'STUB'
+#!/usr/bin/env bash
+echo "high"
+STUB
+  chmod +x "$TMPDIR_TEST/bin/fake-phase-effort"
+  export DISPATCH_SCAN_PHASE_EFFORT_CMD="$TMPDIR_TEST/bin/fake-phase-effort"
+
+  # The scan uses the REAL detector script already copied into scripts/.
+  # Set DETECT_CMD to that copy so it resolves without the real SCRIPT_DIR.
+  export DISPATCH_SCAN_DETECT_CMD="$TMPDIR_TEST/scripts/dispatch-detect-transient-death"
+
+  # Redirect HOME so transcript paths ($HOME/.claude/projects/...) are isolated.
+  export HOME="$TMPDIR_TEST"
+}
+
+scan_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  export HOME="$SCAN_SAVED_HOME"
+  unset CLAUDE_AGENTS_CMD
+  unset DISPATCH_SCAN_SYSTEMCTL_CMD
+  unset DISPATCH_SCAN_GH_CMD
+  unset DISPATCH_SCAN_SCHEDULE_CMD
+  unset DISPATCH_SCAN_PHASE_CMD
+  unset DISPATCH_SCAN_PHASE_MODEL_CMD
+  unset DISPATCH_SCAN_PHASE_EFFORT_CMD
+  unset DISPATCH_SCAN_DETECT_CMD
+  unset FAKE_OH
+}
+
+# Helper: write a MATCHING last-turn JSONL (detector exits 0 on this).
+# Usage: scan_write_matching <transcript-path>
+scan_write_matching() {
+  local path="$1"
+  mkdir -p "$(dirname "$path")"
+  printf '%s\n' '{"type":"assistant","isApiErrorMessage":true,"message":{"role":"assistant","content":[{"type":"text","text":"API Error: Server is temporarily limiting requests (not your usage limit) · Rate limited"}]}}' \
+    > "$path"
+}
+
+# Helper: write a NON-matching last-turn JSONL (detector exits 1 on this).
+# Usage: scan_write_nonmatching <transcript-path>
+scan_write_nonmatching() {
+  local path="$1"
+  mkdir -p "$(dirname "$path")"
+  printf '%s\n' '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Work completed successfully."}]}}' \
+    > "$path"
+}
+
+# Helper: count lines in sched-log (0 if absent).
+scan_sched_lines() {
+  if [[ -f "$TMPDIR_TEST/sched-log" ]]; then
+    wc -l < "$TMPDIR_TEST/sched-log"
+  else
+    echo 0
+  fi
+}
+
+# Helper: set up an agents.json with one session row for N=1733.
+# Usage: scan_one_agent_row <sessionId> <state>
+# cwd and name follow the canonical 1733-slug shape.
+scan_one_agent_row() {
+  local sid="$1" state="$2"
+  printf '[{"sessionId":"%s","state":"%s","name":"1733-slug","cwd":"/work/1733-slug"}]\n' \
+    "$sid" "$state" > "$TMPDIR_TEST/agents.json"
+}
+
+# --- Test 1: Matching newest failed → resume armed (AC1/AC6-a) ----------------
+echo "Test: matching newest failed → resume armed (AC1/AC6-a)"
+scan_setup
+scan_one_agent_row "sess-ABC" "failed"
+slug=$(printf '%s' "/work/1733-slug" | tr '/.' '--')
+transcript="$TMPDIR_TEST/.claude/projects/$slug/sess-ABC.jsonl"
+scan_write_matching "$transcript"
+touch -d "2026-01-01 12:00:00" "$transcript"
+rc=0
+"$TMPDIR_TEST/scripts/dispatch-scan-recoverable-deaths" 2>"$TMPDIR_TEST/stderr" || rc=$?
+assert_eq "T1: rc is 0" "0" "$rc"
+lines=$(scan_sched_lines)
+assert_eq "T1: sched-log has exactly 1 line" "1" "$lines"
+log=$(cat "$TMPDIR_TEST/sched-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"sess-ABC"* && "$log" == *"1733"* && "$log" == *"claude-opus"* && "$log" == *"high"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: T1: sched call contains sessionId + N + model + effort"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: T1: sched call contains sessionId + N + model + effort"
+  echo "    log: $log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"claude-opus high"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: T1: model and effort appear adjacent in correct order"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: T1: model and effort appear adjacent in correct order"
+  echo "    log: $log"
+fi
+scan_teardown
+
+# --- Test 2: Non-matching newest failed → no resume (AC4/AC6-b) ---------------
+echo "Test: non-matching newest failed → no resume (AC4/AC6-b)"
+scan_setup
+scan_one_agent_row "sess-DEF" "failed"
+slug=$(printf '%s' "/work/1733-slug" | tr '/.' '--')
+transcript="$TMPDIR_TEST/.claude/projects/$slug/sess-DEF.jsonl"
+scan_write_nonmatching "$transcript"
+touch -d "2026-01-01 12:00:00" "$transcript"
+rc=0
+"$TMPDIR_TEST/scripts/dispatch-scan-recoverable-deaths" 2>"$TMPDIR_TEST/stderr" || rc=$?
+assert_eq "T2: rc is 0" "0" "$rc"
+lines=$(scan_sched_lines)
+assert_eq "T2: sched-log has 0 lines (no match)" "0" "$lines"
+scan_teardown
+
+# --- Test 3: Already-armed timer → no double-resume (AC3/AC6-c) ---------------
+echo "Test: already-armed timer → no double-resume (AC3/AC6-c)"
+scan_setup
+scan_one_agent_row "sess-GHI" "failed"
+slug=$(printf '%s' "/work/1733-slug" | tr '/.' '--')
+transcript="$TMPDIR_TEST/.claude/projects/$slug/sess-GHI.jsonl"
+scan_write_matching "$transcript"
+touch -d "2026-01-01 12:00:00" "$transcript"
+# Seed timer-units with an already-armed timer for N=1733.
+echo "dispatch-rate-limit-resume-1733-12345.timer loaded" > "$TMPDIR_TEST/timer-units"
+rc=0
+"$TMPDIR_TEST/scripts/dispatch-scan-recoverable-deaths" 2>"$TMPDIR_TEST/stderr" || rc=$?
+assert_eq "T3: rc is 0" "0" "$rc"
+lines=$(scan_sched_lines)
+assert_eq "T3: armed timer guard fires → 0 lines" "0" "$lines"
+scan_teardown
+
+# --- Test 4: Multi-row same issue → exactly 1 call for newest sessionId -------
+echo "Test: multi-row same issue → 1 schedule call, newest sessionId selected"
+scan_setup
+# Two failed rows for N=1733 (same cwd), distinct sessionIds that are not substrings
+# of each other. OLD row has older mtime; NEWER row has newer mtime.
+printf '[{"sessionId":"sess-old-AAA","state":"failed","name":"1733-slug","cwd":"/work/1733-slug"},{"sessionId":"sess-new-BBB","state":"failed","name":"1733-slug","cwd":"/work/1733-slug"}]\n' \
+  > "$TMPDIR_TEST/agents.json"
+slug=$(printf '%s' "/work/1733-slug" | tr '/.' '--')
+t_old="$TMPDIR_TEST/.claude/projects/$slug/sess-old-AAA.jsonl"
+t_new="$TMPDIR_TEST/.claude/projects/$slug/sess-new-BBB.jsonl"
+scan_write_matching "$t_old"
+scan_write_matching "$t_new"
+touch -d "2026-01-01 10:00:00" "$t_old"
+touch -d "2026-01-01 12:00:00" "$t_new"
+rc=0
+"$TMPDIR_TEST/scripts/dispatch-scan-recoverable-deaths" 2>"$TMPDIR_TEST/stderr" || rc=$?
+assert_eq "T4: rc is 0" "0" "$rc"
+lines=$(scan_sched_lines)
+assert_eq "T4: exactly 1 schedule call for 2 matching rows" "1" "$lines"
+log=$(cat "$TMPDIR_TEST/sched-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"sess-new-BBB"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: T4: newest sessionId (sess-new-BBB) selected"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: T4: newest sessionId (sess-new-BBB) selected"
+  echo "    log: $log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$log" != *"sess-old-AAA"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: T4: older sessionId (sess-old-AAA) NOT in sched call"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: T4: older sessionId (sess-old-AAA) NOT in sched call"
+  echo "    log: $log"
+fi
+scan_teardown
+
+# --- Test 5: Supersession — newer done row supersedes older failed row --------
+echo "Test: newer done row supersedes older matching failed row → 0 lines"
+scan_setup
+printf '[{"sessionId":"sess-old-CCC","state":"failed","name":"1733-slug","cwd":"/work/1733-slug"},{"sessionId":"sess-new-DDD","state":"done","name":"1733-slug","cwd":"/work/1733-slug"}]\n' \
+  > "$TMPDIR_TEST/agents.json"
+slug=$(printf '%s' "/work/1733-slug" | tr '/.' '--')
+t_old="$TMPDIR_TEST/.claude/projects/$slug/sess-old-CCC.jsonl"
+t_new="$TMPDIR_TEST/.claude/projects/$slug/sess-new-DDD.jsonl"
+scan_write_matching "$t_old"
+scan_write_nonmatching "$t_new"
+# Newer mtime on the done transcript so it wins the selection.
+touch -d "2026-01-01 10:00:00" "$t_old"
+touch -d "2026-01-01 12:00:00" "$t_new"
+rc=0
+"$TMPDIR_TEST/scripts/dispatch-scan-recoverable-deaths" 2>"$TMPDIR_TEST/stderr" || rc=$?
+assert_eq "T5: rc is 0" "0" "$rc"
+lines=$(scan_sched_lines)
+assert_eq "T5: done supersedes old failed → 0 lines" "0" "$lines"
+scan_teardown
+
+# --- Test 6: Live session blocks (AC5) ----------------------------------------
+echo "Test: live (working) session blocks recovery → 0 lines (AC5)"
+scan_setup
+# One working (active) row and one older matching failed row for same N.
+printf '[{"sessionId":"sess-live-EEE","state":"working","name":"1733-slug","cwd":"/work/1733-slug"},{"sessionId":"sess-dead-FFF","state":"failed","name":"1733-slug","cwd":"/work/1733-slug"}]\n' \
+  > "$TMPDIR_TEST/agents.json"
+slug=$(printf '%s' "/work/1733-slug" | tr '/.' '--')
+t_failed="$TMPDIR_TEST/.claude/projects/$slug/sess-dead-FFF.jsonl"
+scan_write_matching "$t_failed"
+touch -d "2026-01-01 10:00:00" "$t_failed"
+rc=0
+"$TMPDIR_TEST/scripts/dispatch-scan-recoverable-deaths" 2>"$TMPDIR_TEST/stderr" || rc=$?
+assert_eq "T6: rc is 0" "0" "$rc"
+lines=$(scan_sched_lines)
+assert_eq "T6: live session guard fires → 0 lines" "0" "$lines"
+scan_teardown
+
+# --- Test 7: Office-hours blocks (guard b) ------------------------------------
+echo "Test: office-hours parked → blocks recovery → 0 lines (guard b)"
+scan_setup
+scan_one_agent_row "sess-GGG" "failed"
+slug=$(printf '%s' "/work/1733-slug" | tr '/.' '--')
+transcript="$TMPDIR_TEST/.claude/projects/$slug/sess-GGG.jsonl"
+scan_write_matching "$transcript"
+touch -d "2026-01-01 12:00:00" "$transcript"
+export FAKE_OH="true"
+rc=0
+"$TMPDIR_TEST/scripts/dispatch-scan-recoverable-deaths" 2>"$TMPDIR_TEST/stderr" || rc=$?
+assert_eq "T7: rc is 0" "0" "$rc"
+lines=$(scan_sched_lines)
+assert_eq "T7: office-hours guard fires → 0 lines" "0" "$lines"
+scan_teardown
+
+# --- Test 8: Daemon UNKNOWN fail-safe → exit 0, 0 lines -----------------------
+echo "Test: daemon UNKNOWN (claude exits non-zero) → exit 0 and 0 lines (fail-safe)"
+scan_setup
+# Override CLAUDE_AGENTS_CMD with a stub that exits 1 (daemon unreachable).
+cat > "$TMPDIR_TEST/bin/claude-fail" <<'STUB'
+#!/usr/bin/env bash
+exit 1
+STUB
+chmod +x "$TMPDIR_TEST/bin/claude-fail"
+export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/bin/claude-fail"
+rc=0
+"$TMPDIR_TEST/scripts/dispatch-scan-recoverable-deaths" 2>"$TMPDIR_TEST/stderr" || rc=$?
+assert_eq "T8: rc is 0 on daemon UNKNOWN" "0" "$rc"
+lines=$(scan_sched_lines)
+assert_eq "T8: daemon UNKNOWN → 0 schedule calls" "0" "$lines"
+scan_teardown
 
 # ============================================================================
 # summary
