@@ -6,8 +6,9 @@
 // writes to GitHub.
 //
 // It produces two internally-linked layers that share one id space:
-//   (a) PRINCIPLE ROOTS parsed from CHARTER.md's `## Principles` section
-//       (each `### <Title>` becomes a parent-less node), and
+//   (a) PRINCIPLE ROOTS — authoritative, hand-maintained, parent-less nodes
+//       that this script no longer generates; backfill manages only the
+//       issue-leaf layer, and
 //   (b) ISSUE LEAVES from open GitHub issues, linked to one another by the
 //       existing GitHub issue hierarchy (`/parent`).
 // There is intentionally NO cross-layer principle<->issue link; that is
@@ -17,12 +18,13 @@
 //   npx tsx intentionsutil/scripts/backfill.ts
 
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { writeNode } from "../src/store.js";
 import { ghErrorText } from "../src/errors.js";
 import { paginateGhApi } from "./gh-utils.js";
+import type { IntentionNodeInput } from "../src/schema.js";
 
 // --- Paths -----------------------------------------------------------------
 // The script lives at `intentionsutil/scripts/backfill.ts`, so the repo root is
@@ -30,17 +32,8 @@ import { paginateGhApi } from "./gh-utils.js";
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = dirname(dirname(scriptDir));
 const intentionsDir = join(repoRoot, "intentions");
-const charterPath = join(repoRoot, "CHARTER.md");
 
 // --- Helpers ---------------------------------------------------------------
-
-/** lowercase, collapse runs of non-alphanumerics to single hyphens, trim. */
-function kebab(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
 
 /**
  * Error from a `gh` invocation that carries the parsed HTTP status (when one
@@ -114,61 +107,6 @@ export function ghWithRetry(args: string[]): string {
   throw new Error("unreachable");
 }
 
-// --- Principle roots from CHARTER.md ---------------------------------------
-
-interface Principle {
-  title: string;
-  prose: string;
-}
-
-/**
- * Parse the `## Principles` section of CHARTER.md into principle subsections.
- *
- * The section runs from the `## Principles` line to the next top-level `## `
- * heading (`## Strategy`). Within it, each `### <Title>` line starts a
- * subsection whose prose is the lines up to the next `### ` or section-ending
- * `## `. Boundaries anchor on `^## ` (exactly two hashes) so `### ` subsections
- * never end the section, and on `^### ` for titles.
- */
-function parsePrinciples(charter: string): Principle[] {
-  const lines = charter.split("\n");
-
-  // Find the `## Principles` line, then the next `^## ` line after it.
-  const startIdx = lines.findIndex((l) => /^## Principles\s*$/.test(l));
-  if (startIdx === -1) {
-    throw new Error("CHARTER.md: could not find a `## Principles` section");
-  }
-  let endIdx = lines.length;
-  for (let i = startIdx + 1; i < lines.length; i++) {
-    if (/^## /.test(lines[i])) {
-      endIdx = i;
-      break;
-    }
-  }
-
-  const section = lines.slice(startIdx + 1, endIdx);
-  const principles: Principle[] = [];
-  let current: { title: string; body: string[] } | null = null;
-  for (const line of section) {
-    const m = /^### (.+)$/.exec(line);
-    if (m) {
-      if (current) {
-        principles.push({ title: current.title, prose: current.body.join("\n").trim() });
-      }
-      current = { title: m[1].trim(), body: [] };
-    } else if (current) {
-      current.body.push(line);
-    }
-  }
-  if (current) {
-    principles.push({ title: current.title, prose: current.body.join("\n").trim() });
-  }
-  if (principles.length === 0) {
-    throw new Error("CHARTER.md: `## Principles` section contained no `### ` subsections");
-  }
-  return principles;
-}
-
 // --- Issue leaves from open GitHub issues ----------------------------------
 
 interface RawIssueItem {
@@ -210,7 +148,7 @@ export function fetchOpenIssues(): OpenIssue[] {
  * to the next `^## ` or EOF, trimmed. Returns null when there is no such
  * section.
  */
-function extractScope(body: string | null): string | null {
+export function extractScope(body: string | null): string | null {
   if (!body) return null;
   const lines = body.split("\n");
   const startIdx = lines.findIndex((l) => /^## Scope\s*$/.test(l));
@@ -254,18 +192,41 @@ export function fetchParentNumber(issueNumber: number): number | null {
   return Number(trimmed);
 }
 
+/**
+ * Build the IntentionNodeInput for an issue leaf node. Pure function — takes
+ * the already-fetched issue and resolved parent string; does no network I/O.
+ * `reading` is always null: it is sensor-populated, not backfill-populated.
+ */
+export function buildIssueNode(
+  issue: OpenIssue,
+  parent: string | null,
+): IntentionNodeInput {
+  return {
+    id: `issue-${issue.number}`,
+    statement: issue.title.trim(),
+    owner: "human",
+    status: "raw", // not yet refined through the dialectic
+    parent,
+    rationale: extractScope(issue.body),
+    reading: null, // sensor-populated measurement; null at backfill time
+  };
+}
+
 // --- Main ------------------------------------------------------------------
 
 /**
- * Remove existing `*.md` node files so regeneration is a true point-in-time
- * snapshot — without this, a node whose source disappeared (e.g. a closed
- * issue) would linger as a stale orphan on a rerun. Non-node files (README.md)
- * are preserved.
+ * Remove the issue-leaf node files (`issue-*.md`) that main() regenerates, so
+ * a rerun is a true point-in-time snapshot of the open issues — without this,
+ * a leaf whose source disappeared (a closed issue) would linger as a stale
+ * orphan. Pruning is deliberately scoped to exactly what backfill
+ * regenerates: principle roots (`principle-*.md`) are authoritative and
+ * hand-maintained, and `README.md` is a companion doc, so neither matches
+ * `issue-*.md` and both survive.
  */
-function pruneStaleNodes(dir: string): void {
+export function pruneStaleNodes(dir: string): void {
   if (!existsSync(dir)) return;
   for (const name of readdirSync(dir)) {
-    if (name.endsWith(".md") && name !== "README.md") {
+    if (name.startsWith("issue-") && name.endsWith(".md")) {
       rmSync(join(dir, name));
     }
   }
@@ -275,20 +236,6 @@ function main(): void {
   mkdirSync(intentionsDir, { recursive: true });
   pruneStaleNodes(intentionsDir);
 
-  // Principle roots.
-  const charter = readFileSync(charterPath, "utf8");
-  const principles = parsePrinciples(charter);
-  for (const p of principles) {
-    writeNode(intentionsDir, {
-      id: `principle-${kebab(p.title)}`,
-      statement: p.title, // verbatim heading text, commas and all
-      owner: "human",
-      status: "codified", // charter principles are settled
-      parent: null,
-      rationale: p.prose,
-    });
-  }
-
   // Issue leaves — two passes.
   // Pass 1: collect the full set of open issue numbers (PRs already excluded)
   // so parent membership can be checked.
@@ -297,7 +244,6 @@ function main(): void {
 
   // Pass 2: build and write each node.
   for (const issue of openIssues) {
-    const scope = extractScope(issue.body);
     const parentNum = fetchParentNumber(issue.number);
     // Referential integrity: only link a parent that is itself an open issue
     // (and thus has a node file). A GitHub parent that is CLOSED has no node
@@ -306,21 +252,11 @@ function main(): void {
     const parent =
       parentNum !== null && openNumbers.has(parentNum) ? `issue-${parentNum}` : null;
 
-    writeNode(intentionsDir, {
-      id: `issue-${issue.number}`,
-      statement: issue.title.trim(),
-      owner: "human",
-      status: "raw", // not yet refined through the dialectic
-      parent,
-      rationale: scope,
-      reading: scope,
-    });
+    writeNode(intentionsDir, buildIssueNode(issue, parent));
   }
 
-  const total = principles.length + openIssues.length;
   console.log(
-    `Backfill complete: ${principles.length} principle roots, ` +
-      `${openIssues.length} issue leaves, ${total} nodes total → ${intentionsDir}`,
+    `Backfill complete: ${openIssues.length} issue leaves → ${intentionsDir}`,
   );
 }
 

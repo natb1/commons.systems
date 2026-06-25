@@ -1270,6 +1270,14 @@ verdict_rest_case "verdict: failure → failing" \
   "sha-failure" '[{"status":"completed","conclusion":"failure"}]' "failing"
 verdict_rest_case "verdict: in_progress (null conclusion) → pending" \
   "sha-inprog" '[{"status":"in_progress","conclusion":null}]' "pending"
+verdict_rest_case "verdict: desynced in_progress + success conclusion → passing" \
+  "sha-desynced-success" '[{"status":"in_progress","conclusion":"success","completed_at":"2026-06-19T04:17:24Z"}]' "passing"
+verdict_rest_case "verdict: completed success + desynced in_progress success → passing" \
+  "sha-desynced-mixed" '[{"status":"completed","conclusion":"success"},{"status":"in_progress","conclusion":"success","completed_at":"2026-06-19T04:17:24Z"}]' "passing"
+verdict_rest_case "verdict: genuine pending + desynced in_progress success → pending" \
+  "sha-desynced-genuine-pending" '[{"status":"in_progress","conclusion":null},{"status":"in_progress","conclusion":"success","completed_at":"2026-06-19T04:17:24Z"}]' "pending"
+verdict_rest_case "verdict: desynced in_progress + failure conclusion → failing" \
+  "sha-desynced-failure" '[{"status":"in_progress","conclusion":"failure","completed_at":"2026-06-19T04:17:24Z"}]' "failing"
 verdict_rest_case "verdict: queued → pending" \
   "sha-queued" '[{"status":"queued","conclusion":null}]' "pending"
 verdict_rest_case "verdict: failing + still-running → failing (failure wins)" \
@@ -19694,13 +19702,21 @@ STUB
   chmod +x "$TMPDIR_TEST/bin/systemd-run"
 
   # systemctl fake: `list-units` prints \$TMPDIR_TEST/timer-units (default empty
-  # → no pending dispatch-reseed* timer). Any other subcommand is a no-op exit 0.
+  # → no pending dispatch-reseed* timer); `show` (heartbeat_timer_is_armed's
+  # SubState query) prints \$TMPDIR_TEST/hb-substate (default empty → not
+  # 'waiting' → heartbeat not armed, preserving the genuine-failure path for the
+  # pre-#2445 tests). Any other subcommand is a no-op exit 0.
   : > "$TMPDIR_TEST/timer-units"
+  : > "$TMPDIR_TEST/hb-substate"
   cat > "$TMPDIR_TEST/bin/systemctl" <<STUB
 #!/usr/bin/env bash
 for a in "\$@"; do
   if [[ "\$a" == "list-units" ]]; then
     cat "$TMPDIR_TEST/timer-units"
+    exit 0
+  fi
+  if [[ "\$a" == "show" ]]; then
+    cat "$TMPDIR_TEST/hb-substate"
     exit 0
   fi
 done
@@ -19744,6 +19760,21 @@ STUB
   chmod +x "$TMPDIR_TEST/bin/daemon-systemctl"
   export DISPATCH_DAEMON_UNIT_DIR="$TMPDIR_TEST/daemon-systemd-user"
   export DISPATCH_DAEMON_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/daemon-systemctl"
+  # ensure_heartbeat_units (called at the top of recover) would otherwise write
+  # to the real ~/.config/systemd/user and run the real `systemctl --user`. Wire
+  # it to a temp unit dir and its OWN logging stub so it stays hermetic AND does
+  # not pollute daemon-systemctl-log (which the continuation-no-op / cap tests
+  # assert is empty). Note heartbeat_timer_is_armed() (the #2445 benign-mode
+  # check) uses the RECOVER systemctl ($DISPATCH_TICK_RECOVER_SYSTEMCTL_CMD, the
+  # main fake) instead, so the two heartbeat paths are independent.
+  cat > "$TMPDIR_TEST/bin/heartbeat-systemctl" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/heartbeat-systemctl-log"
+exit 0
+STUB
+  chmod +x "$TMPDIR_TEST/bin/heartbeat-systemctl"
+  export DISPATCH_HEARTBEAT_UNIT_DIR="$TMPDIR_TEST/heartbeat-systemd-user"
+  export DISPATCH_HEARTBEAT_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/heartbeat-systemctl"
   # ensure_daemon_service only needs a non-empty, newline/quote-free path; it
   # does not execute this binary in tests — the claude stub already exists for
   # the CLAUDE_AGENTS_CMD path, so reuse it.
@@ -19779,6 +19810,8 @@ tr_teardown() {
   unset DISPATCH_TICK_RECOVER_RESET_WINDOW
   unset DISPATCH_TICK_RECOVER_HEARTBEAT
   unset DISPATCH_DAEMON_UNIT_DIR DISPATCH_DAEMON_SYSTEMCTL_CMD DISPATCH_DAEMON_CLAUDE_CMD
+  unset DISPATCH_HEARTBEAT_UNIT_DIR DISPATCH_HEARTBEAT_SYSTEMCTL_CMD
+  unset DISPATCH_TICK_RECOVER_BENIGN
 }
 
 # tr_seed_state <count> <last_failure> — write the consecutive-failure state.
@@ -19799,6 +19832,12 @@ tr_state_count() {
   else
     echo none
   fi
+}
+
+# tr_heartbeat_armed — make the recover systemctl fake report the heartbeat timer
+# as armed (SubState=waiting), so heartbeat_timer_is_armed() returns 0.
+tr_heartbeat_armed() {
+  echo waiting > "$TMPDIR_TEST/hb-substate"
 }
 
 # --- Test 1: first failure, no continuation → arms a reseed ------------------
@@ -19893,8 +19932,12 @@ assert_eq "pending-timer: no reseed armed (systemd-run log empty)" "" "$log"
 # Continuation no-op path: ensure_daemon_service must NOT have run (no arming).
 assert_eq "pending-timer: daemon service not touched (continuation no-op)" \
   "" "$(cat "$TMPDIR_TEST/daemon-systemctl-log" 2>/dev/null || true)"
-# The timer continuation branch must NOT reset the count (state left untouched).
-assert_eq "pending-timer: state count preserved (not reset)" "2" "$(tr_state_count)"
+# The timer continuation branch resets a climbed count to 0 (#2445): a pending
+# reseed genuinely carries the chain, so this failure is covered — leaving the
+# count stale would let the next failure with no pending timer re-escalate off
+# it (the #2320→#2445 re-file pattern). Crash loops still escalate because a
+# firing reseed is --collect'd before the next OnFailure.
+assert_eq "pending-timer: climbed count reset to 0 on continuation (#2445)" "0" "$(tr_state_count)"
 tr_teardown
 
 # --- Test 4: cap reached → escalate, not retry -------------------------------
@@ -20091,6 +20134,90 @@ if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
 assert_eq "heartbeat-ge-reset: dispatch-tick-recover exits 2" "2" "$rc"
 log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 assert_eq "heartbeat-ge-reset: no reseed armed (systemd-run log empty)" "" "$log"
+tr_teardown
+
+# --- Test 13: BENIGN empty + heartbeat armed → no-op, NOT counted (#2445) -----
+# The #2445 false positive: a benign `empty`/`drain` tick was counted as a
+# consecutive failure. With the durable heartbeat armed, a benign tick is a
+# success signal — recover must no-op and never arm a reseed or count a failure.
+echo "Test: BENIGN disposition with heartbeat armed no-ops without counting a failure (#2445)"
+tr_setup
+tr_heartbeat_armed
+export DISPATCH_TICK_RECOVER_BENIGN=empty
+# Fresh state, heartbeat armed → no reseed, no escalation, exit 0.
+if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "benign-armed: dispatch-tick-recover exits 0" "0" "$rc"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+assert_eq "benign-armed: no reseed armed (systemd-run log empty)" "" "$log"
+ghlog=$(cat "$TMPDIR_TEST/gh-log" 2>/dev/null || true)
+assert_eq "benign-armed: no escalation (gh log empty)" "" "$ghlog"
+tr_teardown
+
+# --- Test 14: BENIGN resets a stale/climbed count → no false escalation -------
+# Reproduces the #2445 mechanism directly: a count parked well past the cap
+# (116, as observed in production) must be RESET by a benign tick while the
+# heartbeat carries the chain — never re-escalated off the stale count.
+echo "Test: BENIGN disposition resets a climbed count and does not escalate (#2445 regression)"
+tr_setup
+tr_heartbeat_armed
+tr_seed_state 116 999000
+export DISPATCH_TICK_RECOVER_BENIGN=empty
+if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "benign-reset: dispatch-tick-recover exits 0" "0" "$rc"
+assert_eq "benign-reset: count reset to 0" "0" "$(tr_state_count)"
+ghlog=$(cat "$TMPDIR_TEST/gh-log" 2>/dev/null || true)
+assert_eq "benign-reset: no chain-stalled latch created (gh log empty)" "" "$ghlog"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+assert_eq "benign-reset: no reseed armed (systemd-run log empty)" "" "$log"
+tr_teardown
+
+# --- Test 15: BENIGN + heartbeat DOWN → backstop reseed, count=1, no escalate --
+# Degraded-carrier safety net: if the heartbeat is not armed and no reseed is
+# pending, a benign tick really would dead-end, so recover arms a single backstop
+# reseed. But it is still not a failure: the count lands at 1 (a fresh single
+# attempt), well under the cap, so it can never escalate from a benign tick even
+# across repeated heartbeat-down cycles.
+echo "Test: BENIGN disposition with heartbeat down arms one backstop reseed without escalating (#2445)"
+tr_setup
+# hb-substate left empty → heartbeat not armed; no reseed timer; seed a climbed
+# count to prove benign cannot escalate even from past the cap.
+tr_seed_state 116 999000
+export DISPATCH_TICK_RECOVER_BENIGN=drain
+if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "benign-hb-down: dispatch-tick-recover exits 0" "0" "$rc"
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+# Fresh single attempt → BASE * 2^0 = 300, reseed_at = NOW (1000000) + 300.
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"--on-calendar=@1000300"* && "$log" == *"--unit=dispatch-reseed-1000300"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: benign-hb-down: arms a single flat backstop reseed at NOW+BASE"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: benign-hb-down: expected backstop reseed at @1000300, got: $log"
+fi
+assert_eq "benign-hb-down: count is 1 (fresh single attempt, not escalated)" "1" "$(tr_state_count)"
+ghlog=$(cat "$TMPDIR_TEST/gh-log" 2>/dev/null || true)
+assert_eq "benign-hb-down: no chain-stalled latch created (gh log empty)" "" "$ghlog"
+tr_teardown
+
+# --- Test 16: genuine-crash path (BENIGN unset) still escalates past the cap ---
+# Guard that the #2445 fix did NOT blind crash recovery: with BENIGN unset and a
+# count already past the cap, recover must still escalate (create the latch), even
+# though the heartbeat is armed. continuation_present is deliberately not taught
+# the heartbeat.
+echo "Test: genuine-crash path past cap still escalates even with heartbeat armed (#2445 guard)"
+tr_setup
+tr_heartbeat_armed
+tr_seed_state 3 999999   # NOW-last_failure (1000000-999999=1) < RESET_WINDOW → count 3→4 > cap 3
+if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "crash-past-cap: dispatch-tick-recover exits 0" "0" "$rc"
+ghlog=$(cat "$TMPDIR_TEST/gh-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$ghlog" == *"issue create"* && "$ghlog" == *"chain-stalled"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: crash-past-cap: escalated via chain-stalled latch issue"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: crash-past-cap: expected chain-stalled issue create, got: $ghlog"
+fi
+log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
+assert_eq "crash-past-cap: no reseed armed on escalation (systemd-run log empty)" "" "$log"
 tr_teardown
 
 # ============================================================================
@@ -40386,6 +40513,353 @@ RECOVER="$SCRIPT_DIR/dispatch-recover-session-id"
   assert_eq "recover: wrong-issue → no stdout" "" "$out"
   rm -rf "$root"
 ) || true
+
+# ============================================================================
+# dispatch-scan-recoverable-deaths
+# ============================================================================
+#
+# Exercises the tick-time scanner that finds transient API-error phase-worker
+# deaths the Stop hook never saw and arms the existing resume machinery.
+#
+# Harness mirrors srl_*:
+#   $TMPDIR_TEST/scripts/   — scan script + lib-claude-agents.sh + detect script
+#   $TMPDIR_TEST/bin/       — all external-command stubs
+#   $TMPDIR_TEST/agents.json — test-controlled JSON array for the claude fake
+#   $TMPDIR_TEST/timer-units — test-controlled list-units output
+#   $TMPDIR_TEST/sched-log  — appended once per schedule call (line-count == call-count)
+#
+# Every external command is overridden via the env-override variables the scan
+# exports. HOME is redirected to $TMPDIR_TEST so transcript paths resolve there.
+echo ""
+echo "=== dispatch-scan-recoverable-deaths ==="
+
+SCAN_SAVED_HOME="$HOME"
+
+scan_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/bin"
+
+  # Copy the script under test and its libs.
+  cp "$SCRIPT_DIR/dispatch-scan-recoverable-deaths" \
+    "$TMPDIR_TEST/scripts/dispatch-scan-recoverable-deaths"
+  cp "$SCRIPT_DIR/lib-claude-agents.sh" \
+    "$TMPDIR_TEST/scripts/lib-claude-agents.sh"
+  # Copy the REAL detector so tests exercise its actual logic.
+  cp "$SCRIPT_DIR/dispatch-detect-transient-death" \
+    "$TMPDIR_TEST/scripts/dispatch-detect-transient-death"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-scan-recoverable-deaths"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-detect-transient-death"
+
+  # claude fake: prints agents.json regardless of args. Default: empty array.
+  echo '[]' > "$TMPDIR_TEST/agents.json"
+  cat > "$TMPDIR_TEST/bin/claude" <<STUB
+#!/usr/bin/env bash
+cat "$TMPDIR_TEST/agents.json"
+exit 0
+STUB
+  chmod +x "$TMPDIR_TEST/bin/claude"
+  export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/bin/claude"
+
+  # systemctl fake: list-units prints $TMPDIR_TEST/timer-units (default empty).
+  # Any other subcommand exits 0.
+  : > "$TMPDIR_TEST/timer-units"
+  cat > "$TMPDIR_TEST/bin/systemctl" <<STUB
+#!/usr/bin/env bash
+for a in "\$@"; do
+  if [[ "\$a" == "list-units" ]]; then
+    cat "$TMPDIR_TEST/timer-units"
+    exit 0
+  fi
+done
+exit 0
+STUB
+  chmod +x "$TMPDIR_TEST/bin/systemctl"
+  export DISPATCH_SCAN_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/systemctl"
+
+  # gh fake: issue view --json labels --jq <filter> emits the REAL gh JSON shape
+  # ({"labels":[{"name":"..."}]}) and runs the script's actual --jq filter over it
+  # via real jq, so guard (b)'s office-hours detection is exercised end-to-end.
+  # FAKE_OH=true seeds a dispatch:office-hours label; otherwise labels is empty.
+  # Any other subcommand exits 0 silently.
+  cat > "$TMPDIR_TEST/bin/fake-gh" <<STUB
+#!/usr/bin/env bash
+if [[ "\$1" == "issue" && "\$2" == "view" ]]; then
+  filter="any(.labels[]; .name==\"x\")"
+  prev=""
+  for a in "\$@"; do
+    if [[ "\$prev" == "--jq" ]]; then filter="\$a"; fi
+    prev="\$a"
+  done
+  if [[ "\${FAKE_OH:-false}" == "true" ]]; then
+    body='{"labels":[{"name":"dispatch:office-hours"}]}'
+  else
+    body='{"labels":[]}'
+  fi
+  printf '%s' "\$body" | jq -r "\$filter"
+  exit 0
+fi
+exit 0
+STUB
+  chmod +x "$TMPDIR_TEST/bin/fake-gh"
+  export DISPATCH_SCAN_GH_CMD="$TMPDIR_TEST/bin/fake-gh"
+
+  # schedule stub: logs all argv as one line, prints "reseeded fake-unit at 0".
+  cat > "$TMPDIR_TEST/bin/fake-sched" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/sched-log"
+echo "reseeded fake-unit at 0"
+STUB
+  chmod +x "$TMPDIR_TEST/bin/fake-sched"
+  export DISPATCH_SCAN_SCHEDULE_CMD="$TMPDIR_TEST/bin/fake-sched"
+
+  # phase stubs: return fixed test-controlled values.
+  cat > "$TMPDIR_TEST/bin/fake-phase" <<'STUB'
+#!/usr/bin/env bash
+echo "implement"
+STUB
+  chmod +x "$TMPDIR_TEST/bin/fake-phase"
+  export DISPATCH_SCAN_PHASE_CMD="$TMPDIR_TEST/bin/fake-phase"
+
+  cat > "$TMPDIR_TEST/bin/fake-phase-model" <<'STUB'
+#!/usr/bin/env bash
+echo "claude-opus"
+STUB
+  chmod +x "$TMPDIR_TEST/bin/fake-phase-model"
+  export DISPATCH_SCAN_PHASE_MODEL_CMD="$TMPDIR_TEST/bin/fake-phase-model"
+
+  cat > "$TMPDIR_TEST/bin/fake-phase-effort" <<'STUB'
+#!/usr/bin/env bash
+echo "high"
+STUB
+  chmod +x "$TMPDIR_TEST/bin/fake-phase-effort"
+  export DISPATCH_SCAN_PHASE_EFFORT_CMD="$TMPDIR_TEST/bin/fake-phase-effort"
+
+  # The scan uses the REAL detector script already copied into scripts/.
+  # Set DETECT_CMD to that copy so it resolves without the real SCRIPT_DIR.
+  export DISPATCH_SCAN_DETECT_CMD="$TMPDIR_TEST/scripts/dispatch-detect-transient-death"
+
+  # Redirect HOME so transcript paths ($HOME/.claude/projects/...) are isolated.
+  export HOME="$TMPDIR_TEST"
+}
+
+scan_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  export HOME="$SCAN_SAVED_HOME"
+  unset CLAUDE_AGENTS_CMD
+  unset DISPATCH_SCAN_SYSTEMCTL_CMD
+  unset DISPATCH_SCAN_GH_CMD
+  unset DISPATCH_SCAN_SCHEDULE_CMD
+  unset DISPATCH_SCAN_PHASE_CMD
+  unset DISPATCH_SCAN_PHASE_MODEL_CMD
+  unset DISPATCH_SCAN_PHASE_EFFORT_CMD
+  unset DISPATCH_SCAN_DETECT_CMD
+  unset FAKE_OH
+}
+
+# Helper: write a MATCHING last-turn JSONL (detector exits 0 on this).
+# Usage: scan_write_matching <transcript-path>
+scan_write_matching() {
+  local path="$1"
+  mkdir -p "$(dirname "$path")"
+  printf '%s\n' '{"type":"assistant","isApiErrorMessage":true,"message":{"role":"assistant","content":[{"type":"text","text":"API Error: Server is temporarily limiting requests (not your usage limit) · Rate limited"}]}}' \
+    > "$path"
+}
+
+# Helper: write a NON-matching last-turn JSONL (detector exits 1 on this).
+# Usage: scan_write_nonmatching <transcript-path>
+scan_write_nonmatching() {
+  local path="$1"
+  mkdir -p "$(dirname "$path")"
+  printf '%s\n' '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Work completed successfully."}]}}' \
+    > "$path"
+}
+
+# Helper: count lines in sched-log (0 if absent).
+scan_sched_lines() {
+  if [[ -f "$TMPDIR_TEST/sched-log" ]]; then
+    wc -l < "$TMPDIR_TEST/sched-log"
+  else
+    echo 0
+  fi
+}
+
+# Helper: set up an agents.json with one session row for N=1733.
+# Usage: scan_one_agent_row <sessionId> <state>
+# cwd and name follow the canonical 1733-slug shape.
+scan_one_agent_row() {
+  local sid="$1" state="$2"
+  printf '[{"sessionId":"%s","state":"%s","name":"1733-slug","cwd":"/work/1733-slug"}]\n' \
+    "$sid" "$state" > "$TMPDIR_TEST/agents.json"
+}
+
+# --- Test 1: Matching newest failed → resume armed (AC1/AC6-a) ----------------
+echo "Test: matching newest failed → resume armed (AC1/AC6-a)"
+scan_setup
+scan_one_agent_row "sess-ABC" "failed"
+slug=$(printf '%s' "/work/1733-slug" | tr '/.' '--')
+transcript="$TMPDIR_TEST/.claude/projects/$slug/sess-ABC.jsonl"
+scan_write_matching "$transcript"
+touch -d "2026-01-01 12:00:00" "$transcript"
+rc=0
+"$TMPDIR_TEST/scripts/dispatch-scan-recoverable-deaths" 2>"$TMPDIR_TEST/stderr" || rc=$?
+assert_eq "T1: rc is 0" "0" "$rc"
+lines=$(scan_sched_lines)
+assert_eq "T1: sched-log has exactly 1 line" "1" "$lines"
+log=$(cat "$TMPDIR_TEST/sched-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"sess-ABC"* && "$log" == *"1733"* && "$log" == *"claude-opus"* && "$log" == *"high"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: T1: sched call contains sessionId + N + model + effort"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: T1: sched call contains sessionId + N + model + effort"
+  echo "    log: $log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"claude-opus high"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: T1: model and effort appear adjacent in correct order"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: T1: model and effort appear adjacent in correct order"
+  echo "    log: $log"
+fi
+scan_teardown
+
+# --- Test 2: Non-matching newest failed → no resume (AC4/AC6-b) ---------------
+echo "Test: non-matching newest failed → no resume (AC4/AC6-b)"
+scan_setup
+scan_one_agent_row "sess-DEF" "failed"
+slug=$(printf '%s' "/work/1733-slug" | tr '/.' '--')
+transcript="$TMPDIR_TEST/.claude/projects/$slug/sess-DEF.jsonl"
+scan_write_nonmatching "$transcript"
+touch -d "2026-01-01 12:00:00" "$transcript"
+rc=0
+"$TMPDIR_TEST/scripts/dispatch-scan-recoverable-deaths" 2>"$TMPDIR_TEST/stderr" || rc=$?
+assert_eq "T2: rc is 0" "0" "$rc"
+lines=$(scan_sched_lines)
+assert_eq "T2: sched-log has 0 lines (no match)" "0" "$lines"
+scan_teardown
+
+# --- Test 3: Already-armed timer → no double-resume (AC3/AC6-c) ---------------
+echo "Test: already-armed timer → no double-resume (AC3/AC6-c)"
+scan_setup
+scan_one_agent_row "sess-GHI" "failed"
+slug=$(printf '%s' "/work/1733-slug" | tr '/.' '--')
+transcript="$TMPDIR_TEST/.claude/projects/$slug/sess-GHI.jsonl"
+scan_write_matching "$transcript"
+touch -d "2026-01-01 12:00:00" "$transcript"
+# Seed timer-units with an already-armed timer for N=1733.
+echo "dispatch-rate-limit-resume-1733-12345.timer loaded" > "$TMPDIR_TEST/timer-units"
+rc=0
+"$TMPDIR_TEST/scripts/dispatch-scan-recoverable-deaths" 2>"$TMPDIR_TEST/stderr" || rc=$?
+assert_eq "T3: rc is 0" "0" "$rc"
+lines=$(scan_sched_lines)
+assert_eq "T3: armed timer guard fires → 0 lines" "0" "$lines"
+scan_teardown
+
+# --- Test 4: Multi-row same issue → exactly 1 call for newest sessionId -------
+echo "Test: multi-row same issue → 1 schedule call, newest sessionId selected"
+scan_setup
+# Two failed rows for N=1733 (same cwd), distinct sessionIds that are not substrings
+# of each other. OLD row has older mtime; NEWER row has newer mtime.
+printf '[{"sessionId":"sess-old-AAA","state":"failed","name":"1733-slug","cwd":"/work/1733-slug"},{"sessionId":"sess-new-BBB","state":"failed","name":"1733-slug","cwd":"/work/1733-slug"}]\n' \
+  > "$TMPDIR_TEST/agents.json"
+slug=$(printf '%s' "/work/1733-slug" | tr '/.' '--')
+t_old="$TMPDIR_TEST/.claude/projects/$slug/sess-old-AAA.jsonl"
+t_new="$TMPDIR_TEST/.claude/projects/$slug/sess-new-BBB.jsonl"
+scan_write_matching "$t_old"
+scan_write_matching "$t_new"
+touch -d "2026-01-01 10:00:00" "$t_old"
+touch -d "2026-01-01 12:00:00" "$t_new"
+rc=0
+"$TMPDIR_TEST/scripts/dispatch-scan-recoverable-deaths" 2>"$TMPDIR_TEST/stderr" || rc=$?
+assert_eq "T4: rc is 0" "0" "$rc"
+lines=$(scan_sched_lines)
+assert_eq "T4: exactly 1 schedule call for 2 matching rows" "1" "$lines"
+log=$(cat "$TMPDIR_TEST/sched-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"sess-new-BBB"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: T4: newest sessionId (sess-new-BBB) selected"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: T4: newest sessionId (sess-new-BBB) selected"
+  echo "    log: $log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$log" != *"sess-old-AAA"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: T4: older sessionId (sess-old-AAA) NOT in sched call"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: T4: older sessionId (sess-old-AAA) NOT in sched call"
+  echo "    log: $log"
+fi
+scan_teardown
+
+# --- Test 5: Supersession — newer done row supersedes older failed row --------
+echo "Test: newer done row supersedes older matching failed row → 0 lines"
+scan_setup
+printf '[{"sessionId":"sess-old-CCC","state":"failed","name":"1733-slug","cwd":"/work/1733-slug"},{"sessionId":"sess-new-DDD","state":"done","name":"1733-slug","cwd":"/work/1733-slug"}]\n' \
+  > "$TMPDIR_TEST/agents.json"
+slug=$(printf '%s' "/work/1733-slug" | tr '/.' '--')
+t_old="$TMPDIR_TEST/.claude/projects/$slug/sess-old-CCC.jsonl"
+t_new="$TMPDIR_TEST/.claude/projects/$slug/sess-new-DDD.jsonl"
+scan_write_matching "$t_old"
+scan_write_nonmatching "$t_new"
+# Newer mtime on the done transcript so it wins the selection.
+touch -d "2026-01-01 10:00:00" "$t_old"
+touch -d "2026-01-01 12:00:00" "$t_new"
+rc=0
+"$TMPDIR_TEST/scripts/dispatch-scan-recoverable-deaths" 2>"$TMPDIR_TEST/stderr" || rc=$?
+assert_eq "T5: rc is 0" "0" "$rc"
+lines=$(scan_sched_lines)
+assert_eq "T5: done supersedes old failed → 0 lines" "0" "$lines"
+scan_teardown
+
+# --- Test 6: Live session blocks (AC5) ----------------------------------------
+echo "Test: live (working) session blocks recovery → 0 lines (AC5)"
+scan_setup
+# One working (active) row and one older matching failed row for same N.
+printf '[{"sessionId":"sess-live-EEE","state":"working","name":"1733-slug","cwd":"/work/1733-slug"},{"sessionId":"sess-dead-FFF","state":"failed","name":"1733-slug","cwd":"/work/1733-slug"}]\n' \
+  > "$TMPDIR_TEST/agents.json"
+slug=$(printf '%s' "/work/1733-slug" | tr '/.' '--')
+t_failed="$TMPDIR_TEST/.claude/projects/$slug/sess-dead-FFF.jsonl"
+scan_write_matching "$t_failed"
+touch -d "2026-01-01 10:00:00" "$t_failed"
+rc=0
+"$TMPDIR_TEST/scripts/dispatch-scan-recoverable-deaths" 2>"$TMPDIR_TEST/stderr" || rc=$?
+assert_eq "T6: rc is 0" "0" "$rc"
+lines=$(scan_sched_lines)
+assert_eq "T6: live session guard fires → 0 lines" "0" "$lines"
+scan_teardown
+
+# --- Test 7: Office-hours blocks (guard b) ------------------------------------
+echo "Test: office-hours parked → blocks recovery → 0 lines (guard b)"
+scan_setup
+scan_one_agent_row "sess-GGG" "failed"
+slug=$(printf '%s' "/work/1733-slug" | tr '/.' '--')
+transcript="$TMPDIR_TEST/.claude/projects/$slug/sess-GGG.jsonl"
+scan_write_matching "$transcript"
+touch -d "2026-01-01 12:00:00" "$transcript"
+export FAKE_OH="true"
+rc=0
+"$TMPDIR_TEST/scripts/dispatch-scan-recoverable-deaths" 2>"$TMPDIR_TEST/stderr" || rc=$?
+assert_eq "T7: rc is 0" "0" "$rc"
+lines=$(scan_sched_lines)
+assert_eq "T7: office-hours guard fires → 0 lines" "0" "$lines"
+scan_teardown
+
+# --- Test 8: Daemon UNKNOWN fail-safe → exit 0, 0 lines -----------------------
+echo "Test: daemon UNKNOWN (claude exits non-zero) → exit 0 and 0 lines (fail-safe)"
+scan_setup
+# Override CLAUDE_AGENTS_CMD with a stub that exits 1 (daemon unreachable).
+cat > "$TMPDIR_TEST/bin/claude-fail" <<'STUB'
+#!/usr/bin/env bash
+exit 1
+STUB
+chmod +x "$TMPDIR_TEST/bin/claude-fail"
+export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/bin/claude-fail"
+rc=0
+"$TMPDIR_TEST/scripts/dispatch-scan-recoverable-deaths" 2>"$TMPDIR_TEST/stderr" || rc=$?
+assert_eq "T8: rc is 0 on daemon UNKNOWN" "0" "$rc"
+lines=$(scan_sched_lines)
+assert_eq "T8: daemon UNKNOWN → 0 schedule calls" "0" "$lines"
+scan_teardown
 
 # ============================================================================
 # summary
