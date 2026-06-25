@@ -367,10 +367,11 @@ if (( COUNT > CAP )); then
       echo '```'
     } > "$body_file"
 
-    # apply-first / create-on-not-found: the dispatch:chain-stalled label may
-    # not exist yet. Try the create; if it fails because the label is "not
-    # found", create the label ONCE (no --color — single-sourced elsewhere) and
-    # retry. bug + priority already exist and sort the fix to the top.
+    # apply-first / create-on-not-found: the dispatch:chain-stalled and
+    # dispatch:office-hours labels may not exist yet. Try the create; if it
+    # fails because a label is "not found", create the missing labels ONCE
+    # (no --color — single-sourced elsewhere) and retry. bug + priority already
+    # exist and sort the fix to the top.
     create_err=$(mktemp) || { echo "dispatch-tick-recover: could not create temp file" >&2; exit 2; }
     if ! "$GH_CMD" issue create \
          --title "dispatch chain stalled: ${CAP} consecutive tick failures left no continuation" \
@@ -380,6 +381,8 @@ if (( COUNT > CAP )); then
       if grep -qi "not found" "$create_err"; then
         "$GH_CMD" label create dispatch:chain-stalled \
           --description "dispatch workflow: the chain stalled with no continuation past the recover cap" 2>/dev/null || true
+        "$GH_CMD" label create dispatch:office-hours \
+          --description "dispatch workflow: parked for human attention in office-hours" 2>/dev/null || true
         "$GH_CMD" issue create \
           --title "dispatch chain stalled: ${CAP} consecutive tick failures left no continuation" \
           --body-file "$body_file" \
