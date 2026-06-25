@@ -19,14 +19,10 @@ import { getOwnerSamples, getDemoSamples } from "./usage-data.js";
 import { getOwnerIssueSamples, getDemoIssueSamples } from "./issue-data.js";
 import { getOwnerAuditAggregates, getDemoAuditAggregates } from "./audit-data.js";
 
-import { selectLatestSample, type UsageSample } from "./usage-samples.js";
+import { selectLatestSample } from "./usage-samples.js";
 import { capacityBandKey } from "./capacity-band.js";
 import { remindersPanelKey } from "./reminders.js";
-import type { Reminder } from "./reminders.js";
 import { parkedPanelKey } from "./queue-metrics.js";
-import type { QueueMetricsSnapshot } from "./queue-metrics.js";
-import type { IssueSample } from "./issue-samples.js";
-import type { AuditAggregate } from "./audit-aggregates.js";
 
 import { CapacityBand } from "./components/CapacityBand.js";
 import { PacePanel } from "./components/PacePanel.js";
@@ -37,15 +33,7 @@ import { RemindersPanel } from "./components/RemindersPanel.js";
 import { QueueMetricsPanel } from "./components/QueueMetricsPanel.js";
 import { ParkedIssuesPanel } from "./components/ParkedIssuesPanel.js";
 
-// The tier-resolved data the panels render. Mirrors the vanilla ViewState's
-// owner payload (and the demo payload built by buildContext).
-interface PanelData {
-  samples: UsageSample[];
-  reminders: Reminder[];
-  queueMetrics: QueueMetricsSnapshot | null;
-  issueSamples: IssueSample[];
-  auditAggregates: AuditAggregate[];
-}
+import { type PanelData } from "./panel-equality.js";
 
 type ViewState =
   | { tier: "demo" } // unauthenticated → labeled demo
