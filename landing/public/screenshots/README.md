@@ -18,11 +18,12 @@ this directory.
 
 ## Sources and framing
 
-| File          | URL                                         | Scroll offset |
-| ------------- | ------------------------------------------- | ------------- |
-| `budget.png`  | `https://budget.commons.systems/transactions` | 540           |
-| `audio.png`   | `https://audio.commons.systems/`            | 540           |
-| `print.png`   | `https://print.commons.systems/`            | 540           |
+| File               | URL                                           | Scroll offset |
+| ------------------ | --------------------------------------------- | ------------- |
+| `office-hours.png` | `https://office-hours.commons.systems/`       | 540           |
+| `budget.png`       | `https://budget.commons.systems/transactions` | 540           |
+| `audio.png`        | `https://audio.commons.systems/`              | 540           |
+| `print.png`        | `https://print.commons.systems/`              | 540           |
 
 The CSS in `landing/src/style/theme.css` crops to 3:2 at render time via
 `aspect-ratio: 3/2` with `object-fit: cover` / `object-position: top left`, so the

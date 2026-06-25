@@ -9,6 +9,7 @@
   },
   "exports": {
     ".": "./src/index.ts",
+    "./navigation/nav-link": "./src/navigation/nav-link.ts",
     "./styles.css": "./styles.css",
     "./fonts.css": "./fonts.css",
     "./base.css": "./base.css",

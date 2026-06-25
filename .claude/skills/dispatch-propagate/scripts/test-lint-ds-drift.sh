@@ -31,6 +31,21 @@ VIOL_ESCAPED="font-size: 11${_PX}; /* ds-lint-disable-line: SVG label, no exact 
 # /* brand was #abcdef */  (hex in a comment line)
 COMMENT_HEX="/* brand was ${_H}abcdef */"
 
+# JSX camelCase violation fixtures (camelCase analogs of the CSS violations above)
+# fontSize: '14px',  (px font-size in JSX)
+VIOL_JSX_FONTSIZE="fontSize: '14${_PX}',"
+# fontWeight: 300,  (off-scale font-weight in JSX)
+VIOL_JSX_FONTWEIGHT="fontWeight: 300,"
+# marginTop: '5px',  (px spacing in JSX)
+VIOL_JSX_MARGIN="marginTop: '5${_PX}',"
+# gap: '8px',  (px gap in JSX)
+VIOL_JSX_GAP="gap: '8${_PX}',"
+# multiline split: property name and value on separate lines — neither fires alone
+VIOL_JSX_MULTILINE_NAME="fontSize:"
+VIOL_JSX_MULTILINE_VALUE="'14${_PX}',"
+# fontSize: '14px', // ds-lint-disable-line: ...  (escaped JSX violation, // form)
+VIOL_JSX_ESCAPED="fontSize: '14${_PX}', // ds-lint-disable-line: SVG label, no exact token"
+
 # Build a fresh ephemeral repo. Sets globals: REPO, BARE.
 # $1 (optional): "with_violation" — seed the origin/main baseline with a
 #   violating hex line in the in-scope CSS file.
@@ -218,5 +233,161 @@ git -C "$REPO" commit --quiet -m "add ds hex"
 run_sut
 assert_eq "out-of-scope: exit 0" "0" "$RC"
 assert_contains "out-of-scope: PASS printed" "PASS" "$OUT"
+
+# ---------------------------------------------------------------------------
+# Test 17: net-new px fontSize in a JSX style object IS flagged → [px font-size].
+# Exercises FONTSIZE_JSX_RE — the JSX camelCase detector, previously uncovered.
+# ---------------------------------------------------------------------------
+echo "Test 17: net-new JSX px fontSize is flagged"
+make_repo
+mkdir -p "$REPO/myapp/src/components"
+{
+  printf '%s\n' 'const style = {'
+  printf '%s\n' "  $VIOL_JSX_FONTSIZE"
+  printf '%s\n' '};'
+} > "$REPO/myapp/src/components/Widget.tsx"
+git -C "$REPO" add -A
+git -C "$REPO" commit --quiet -m "add JSX fontSize violation"
+run_sut
+[ "$RC" -ne 0 ] && _rc=nonzero || _rc=zero
+assert_eq "jsx-fontSize: exit non-zero" "nonzero" "$_rc"
+assert_contains "jsx-fontSize: output names the file" "Widget.tsx" "$OUT"
+assert_contains "jsx-fontSize: px font-size detector tag" "[px font-size]" "$OUT"
+
+# ---------------------------------------------------------------------------
+# Test 18: net-new off-scale JSX fontWeight IS flagged → [off-scale font-weight].
+# Exercises FONTWEIGHT_JSX_RE.
+# ---------------------------------------------------------------------------
+echo "Test 18: net-new JSX off-scale fontWeight is flagged"
+make_repo
+mkdir -p "$REPO/myapp/src/components"
+{
+  printf '%s\n' 'const style = {'
+  printf '%s\n' "  $VIOL_JSX_FONTWEIGHT"
+  printf '%s\n' '};'
+} > "$REPO/myapp/src/components/Widget.tsx"
+git -C "$REPO" add -A
+git -C "$REPO" commit --quiet -m "add JSX fontWeight violation"
+run_sut
+[ "$RC" -ne 0 ] && _rc=nonzero || _rc=zero
+assert_eq "jsx-fontWeight: exit non-zero" "nonzero" "$_rc"
+assert_contains "jsx-fontWeight: output names the file" "Widget.tsx" "$OUT"
+assert_contains "jsx-fontWeight: off-scale detector tag" "[off-scale font-weight]" "$OUT"
+
+# ---------------------------------------------------------------------------
+# Test 19: net-new px JSX marginTop IS flagged → [px spacing].
+# Exercises SPACING_JSX_RE.
+# ---------------------------------------------------------------------------
+echo "Test 19: net-new JSX px marginTop is flagged"
+make_repo
+mkdir -p "$REPO/myapp/src/components"
+{
+  printf '%s\n' 'const style = {'
+  printf '%s\n' "  $VIOL_JSX_MARGIN"
+  printf '%s\n' '};'
+} > "$REPO/myapp/src/components/Widget.tsx"
+git -C "$REPO" add -A
+git -C "$REPO" commit --quiet -m "add JSX margin violation"
+run_sut
+[ "$RC" -ne 0 ] && _rc=nonzero || _rc=zero
+assert_eq "jsx-margin: exit non-zero" "nonzero" "$_rc"
+assert_contains "jsx-margin: output names the file" "Widget.tsx" "$OUT"
+assert_contains "jsx-margin: px spacing detector tag" "[px spacing]" "$OUT"
+
+# ---------------------------------------------------------------------------
+# Test 20: net-new px JSX gap IS flagged → [px spacing].
+# Exercises SPACING_GAP_JSX_RE.
+# ---------------------------------------------------------------------------
+echo "Test 20: net-new JSX px gap is flagged"
+make_repo
+mkdir -p "$REPO/myapp/src/components"
+{
+  printf '%s\n' 'const style = {'
+  printf '%s\n' "  $VIOL_JSX_GAP"
+  printf '%s\n' '};'
+} > "$REPO/myapp/src/components/Widget.tsx"
+git -C "$REPO" add -A
+git -C "$REPO" commit --quiet -m "add JSX gap violation"
+run_sut
+[ "$RC" -ne 0 ] && _rc=nonzero || _rc=zero
+assert_eq "jsx-gap: exit non-zero" "nonzero" "$_rc"
+assert_contains "jsx-gap: output names the file" "Widget.tsx" "$OUT"
+assert_contains "jsx-gap: px spacing detector tag" "[px spacing]" "$OUT"
+
+# ---------------------------------------------------------------------------
+# Test 21: multiline JSX form (property name and value on separate lines) is
+# NOT flagged — a KNOWN GAP locked in as a characterization test.
+# The single-line detectors process the diff line-by-line in isolation:
+# the `fontSize:` line carries no px, and the `'14px'` value line carries no
+# `fontSize`, so neither line matches any single-line detector and the linter
+# exits 0 (PASS). This asserts CURRENT (passing) behavior to catch UNINTENDED
+# changes; it is a documented limitation, not a weakened test. FLIP this
+# assertion to expect a violation if/when multiline detection is ever added.
+# ---------------------------------------------------------------------------
+echo "Test 21: multiline JSX fontSize is not caught (known single-line-regex gap)"
+make_repo
+mkdir -p "$REPO/myapp/src/components"
+{
+  printf '%s\n' 'const style = {'
+  printf '%s\n' "  $VIOL_JSX_MULTILINE_NAME"
+  printf '%s\n' "  $VIOL_JSX_MULTILINE_VALUE"
+  printf '%s\n' '};'
+} > "$REPO/myapp/src/components/Widget.tsx"
+git -C "$REPO" add -A
+git -C "$REPO" commit --quiet -m "add multiline JSX fontSize"
+run_sut
+assert_eq "jsx-multiline: exit 0 (known gap)" "0" "$RC"
+assert_contains "jsx-multiline: PASS printed" "PASS" "$OUT"
+
+# ---------------------------------------------------------------------------
+# Test 22: JSX clean-line false-positive battery (camelCase analog of Tests 5-12).
+# A battery of legitimate camelCase style-object values on added lines in an
+# in-scope .tsx file — none of which the four JSX detectors should reach. This
+# exercises the false-positive (precision) side of FONTSIZE_JSX_RE,
+# FONTWEIGHT_JSX_RE, SPACING_JSX_RE, and SPACING_GAP_JSX_RE: a future regex edit
+# that widens any JSX detector to over-match would start flagging legitimate app
+# code, and this test would catch that regression.
+# ---------------------------------------------------------------------------
+echo "Test 22: JSX clean camelCase lines pass (precision battery)"
+make_repo
+mkdir -p "$REPO/myapp/src/components"
+{
+  printf '%s\n' 'const style = {'
+  printf '%s\n' '  fontWeight: 400,'
+  printf '%s\n' '  fontWeight: 700,'
+  printf '%s\n' "  fontSize: 'var(--text-sm)',"
+  printf '%s\n' "  borderRadius: '4px',"
+  printf '%s\n' '  margin: 0,'
+  printf '%s\n' '  gap: 0,'
+  printf '%s\n' "  marginTop: 'var(--space-1)',"
+  printf '%s\n' "  paddingTop: 'var(--space-2)',"
+  printf '%s\n' '};'
+} > "$REPO/myapp/src/components/Widget.tsx"
+git -C "$REPO" add -A
+git -C "$REPO" commit --quiet -m "add JSX clean camelCase lines"
+run_sut
+assert_eq "jsx-clean-battery: exit 0" "0" "$RC"
+assert_contains "jsx-clean-battery: PASS printed" "PASS" "$OUT"
+
+# ---------------------------------------------------------------------------
+# Test 23: real JSX violation carrying the inline // escape hatch is NOT
+# flagged. Mirrors Test 13 (the CSS /* ... */ form) for the TSX-appropriate
+# `// ds-lint-disable-line: <reason>` single-line comment form documented at
+# lint-ds-drift.sh:215. Guards the escape-hatch check (`*ds-lint-disable-line*`)
+# against a regression that broke it specifically for TSX-style // comments.
+# ---------------------------------------------------------------------------
+echo "Test 23: escaped JSX violation (// form) is not flagged"
+make_repo
+mkdir -p "$REPO/myapp/src/components"
+{
+  printf '%s\n' 'const style = {'
+  printf '%s\n' "  $VIOL_JSX_ESCAPED"
+  printf '%s\n' '};'
+} > "$REPO/myapp/src/components/Widget.tsx"
+git -C "$REPO" add -A
+git -C "$REPO" commit --quiet -m "add escaped JSX violation"
+run_sut
+assert_eq "jsx-escaped: exit 0" "0" "$RC"
+assert_contains "jsx-escaped: PASS printed" "PASS" "$OUT"
 
 report_results
