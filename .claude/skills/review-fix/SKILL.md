@@ -6,7 +6,7 @@ description: Review phase — the workflow's single terminal review pass. Runs t
 # Review and Fix
 
 The `review` phase of the issue workflow, dispatched by the dispatch chain. This
-skill consolidates what were three separate review phases — code-review, review,
+skill consolidates what were three separate review phases — code-review, generic review,
 and security — into one pass over a single diff. It invokes the **Workflow tool**
 on `.claude/workflows/review-fix.js`, which fans out surface-conditional finders,
 deduplicates and classifies findings in code, adversarially verifies `Required`
