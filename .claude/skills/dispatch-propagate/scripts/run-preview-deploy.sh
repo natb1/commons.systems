@@ -38,20 +38,6 @@ DEPLOY_OUTPUT=$(firebase_deploy_retry npx firebase-tools hosting:channel:deploy 
   --json) || {
   echo "Deploy failed:" >&2
   echo "$DEPLOY_OUTPUT" >&2
-  # firebase-tools' generic "Failed to authenticate" --json message hides the real
-  # cause (the token-endpoint HTTP status / error body — invalid_grant, a 429
-  # RESOURCE_EXHAUSTED quota, clock skew, etc.). --debug does NOT surface it: under
-  # --json firebase-tools silences the stderr logger. But it always writes a
-  # full-verbosity firebase-debug.log to its cwd (REPO_ROOT here) regardless of
-  # --json, including the failed auth API call. Surface that on failure so the next
-  # preview-and-smoke failure is root-causable (see #2481).
-  if [ -f "$REPO_ROOT/firebase-debug.log" ]; then
-    echo "--- firebase-debug.log (last 100 lines) ---" >&2
-    tail -100 "$REPO_ROOT/firebase-debug.log" >&2
-    echo "--- end firebase-debug.log ---" >&2
-  else
-    echo "(no firebase-debug.log found at $REPO_ROOT)" >&2
-  fi
   exit 1
 }
 
