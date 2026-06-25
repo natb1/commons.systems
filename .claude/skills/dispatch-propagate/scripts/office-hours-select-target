@@ -4,6 +4,17 @@
 # once and the thin `office-hours` entry-script dispatcher and the /office-hours
 # skill consume its verb without re-enumerating.
 #
+# Open-blocker SIGNAL (#2443): for every issue-bearing disposition (idle,
+# idle-provision, resume, resume-provision, and the fresh `office-hours` verb)
+# the selector surfaces the selected item's open-blocker status as a STDERR
+# advisory immediately before emitting its stdout verb. This is SIGNAL, NOT A
+# GATE — it never skips, defers, or alters the disposition; the human judges
+# readiness (generalizing the main-qa #1648 precedent to every disposition). The
+# stdout disposition protocol below is unchanged: everything new goes to stderr,
+# so each consumer's positional `read -r` parse stays byte-for-byte identical.
+# The parked-router and empty dispositions carry no issue number and emit no
+# signal.
+#
 # The office-hours queue is "open issues carrying the dispatch:office-hours
 # label" (the label is issue-anchored, #868/#909). The selector enumerates those
 # issues oldest-first, makes ONE per-item liveness call against each item's
@@ -131,6 +142,40 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
 source "$SCRIPT_DIR/lib-claude-agents.sh"
+
+# emit_blocker_signal <issue-num> — surface the selected item's open-blocker
+# status to STDERR as a SIGNAL, never a gate (generalizing the main-qa #1648
+# precedent, #2443). Touches neither stdout nor the exit code, so the stdout
+# disposition protocol every consumer parses stays byte-identical. Reuses the
+# count_open_blockers / gh_api_array helpers (lib.sh) — the same blocked_by query
+# dispatch-check-blockers uses — so the signal can never diverge from the gate.
+emit_blocker_signal() {
+  local num="$1"
+  # Capture the count NON-FATALLY: the two-line form keeps `set -e` honest (a
+  # `local cnt=$(...)` would mask the substitution's exit status behind local's).
+  local cnt
+  cnt=$(count_open_blockers "$num" 2>/dev/null) || cnt=""
+  if [[ -z "$cnt" || ! "$cnt" =~ ^[0-9]+$ ]]; then
+    # Clear error over silent fallback (.claude/rules/code-style.md): note the
+    # failed lookup on stderr; do not swallow it, do not touch stdout/exit.
+    echo "office-hours-select-target: NOTE — could not determine open-blocker status for #$num (blocked_by lookup failed); surfaced without a blocker signal" >&2
+    return
+  fi
+  if (( cnt > 0 )); then
+    # Name the open blockers, same endpoint/jq shape dispatch-check-blockers uses,
+    # captured non-fatally with the same two-line `|| =""` form.
+    local blockers
+    blockers=$(gh_api_array "/repos/{owner}/{repo}/issues/$num/dependencies/blocked_by" '[.[] | select(.state == "open" or .state == "OPEN") | .number] | join(",")') || blockers=""
+    if [[ -n "$blockers" ]]; then
+      # join() yields e.g. `2387,2390`; render each with a leading `#`.
+      echo "office-hours-select-target: NOTE — selected #$num has open blocker(s): #${blockers//,/,#} — signal, not a gate; the human judges readiness." >&2
+    else
+      # Race/failure: count said >0 but the listing came back empty. Surface the
+      # advisory without specific numbers; still non-fatal, still stderr-only.
+      echo "office-hours-select-target: NOTE — selected #$num has open blocker(s) — signal, not a gate; the human judges readiness." >&2
+    fi
+  fi
+}
 
 # resolve_main_worktree — print the MAIN worktree path on stdout (rc 0), or print
 # a diagnostic and return non-zero when the project root cannot be resolved. The
@@ -323,6 +368,7 @@ done <<< "$SORTED"
 #      never a silent failure.
 if [[ -n "$IDLE_ID" ]]; then
   if [[ -d "$IDLE_WT_PATH" || -d "$IDLE_CWD" ]]; then
+    emit_blocker_signal "$IDLE_NUM"
     printf 'idle %s\n' "$IDLE_ID"
     exit 0
   elif [[ -n "$IDLE_CWD" ]]; then
@@ -331,6 +377,7 @@ if [[ -n "$IDLE_ID" ]]; then
     # a repo carrying `origin`. Suppress output; branch on the exit code.
     branch=$(basename "$IDLE_CWD")
     if git -C "$(resolve_main_worktree)" ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+      emit_blocker_signal "$IDLE_NUM"
       printf 'idle-provision %s %s\n' "$IDLE_ID" "$branch"
       exit 0
     fi
@@ -363,6 +410,7 @@ for rec_num in "${SESSIONLESS_NUMS[@]:-}"; do
   [[ -z "$rec_sid" ]] && continue
   rec_cwd=$(printf '%s' "${WORKTREE_PATHS_BY_NUM[$rec_num]:-}" | head -n 1)
   if [[ -n "$rec_cwd" && -d "$rec_cwd" ]]; then
+    emit_blocker_signal "$rec_num"
     printf 'resume %s %s %s\n' "$rec_num" "$rec_sid" "$rec_cwd"
     exit 0
   fi
@@ -370,6 +418,7 @@ for rec_num in "${SESSIONLESS_NUMS[@]:-}"; do
   # via `git -C <main>` (the selector's cwd is not guaranteed to carry origin),
   # mirroring the idle-provision swept check.
   if git -C "$(resolve_main_worktree)" ls-remote --exit-code --heads origin "$rec_branch" >/dev/null 2>&1; then
+    emit_blocker_signal "$rec_num"
     printf 'resume-provision %s %s %s\n' "$rec_num" "$rec_sid" "$rec_branch"
     exit 0
   fi
@@ -404,6 +453,7 @@ if [[ -n "$FRESH_NUM" ]]; then
     fi
     wt_path="$MAIN_WORKTREE"
   fi
+  emit_blocker_signal "$FRESH_NUM"
   printf 'office-hours %s %s\n' "$FRESH_NUM" "${wt_path:--}"
   exit 0
 fi
