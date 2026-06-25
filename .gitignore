@@ -9,6 +9,7 @@ CLAUDE.local.md
 !functions/.env.commons-systems
 node_modules/
 dist/
+storybook-static/
 functions/lib/
 .firebase/
 .firebase-acceptance-*
