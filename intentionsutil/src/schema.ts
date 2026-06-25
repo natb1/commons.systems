@@ -55,10 +55,11 @@ export interface IntentionNode {
   status: Status;
 
   // Optional — backfill has a source for some of these; the dialectic fields
-  // do not exist until the dialectic runs, so they default rather than throw.
+  // do not exist until the dialectic runs, and reading is sensor-populated,
+  // so they default rather than throw.
   parent: string | null;
   rationale: string | null;
-  reading: string | null;
+  reading: string | null; // current measured value of success_signal.observable; null until a sensor populates it
   gap: string | null;
   clarifications: Clarification[];
   tooling_goals: ToolingGoal[];

@@ -14,3 +14,13 @@ export { writeTracker, readTracker, listTrackers, nodeIdToIssue, issueToNodeId }
 export type { ExecutionTracker } from "./tracker.js";
 export { projectGoals, activeFrontier, realizationForOwner, renderFrontier } from "./goals.js";
 export type { Goal, Realization } from "./goals.js";
+export {
+  SensorRegistry,
+  readNodeSignal,
+  deriveGap,
+  findFalsifiedProxies,
+  findCodificationDrift,
+  surfaceCandidates,
+  confirmPushDowns,
+} from "./sensors.js";
+export type { Sensor, Reading, IntentionCandidate } from "./sensors.js";

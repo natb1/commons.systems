@@ -1270,6 +1270,14 @@ verdict_rest_case "verdict: failure → failing" \
   "sha-failure" '[{"status":"completed","conclusion":"failure"}]' "failing"
 verdict_rest_case "verdict: in_progress (null conclusion) → pending" \
   "sha-inprog" '[{"status":"in_progress","conclusion":null}]' "pending"
+verdict_rest_case "verdict: desynced in_progress + success conclusion → passing" \
+  "sha-desynced-success" '[{"status":"in_progress","conclusion":"success","completed_at":"2026-06-19T04:17:24Z"}]' "passing"
+verdict_rest_case "verdict: completed success + desynced in_progress success → passing" \
+  "sha-desynced-mixed" '[{"status":"completed","conclusion":"success"},{"status":"in_progress","conclusion":"success","completed_at":"2026-06-19T04:17:24Z"}]' "passing"
+verdict_rest_case "verdict: genuine pending + desynced in_progress success → pending" \
+  "sha-desynced-genuine-pending" '[{"status":"in_progress","conclusion":null},{"status":"in_progress","conclusion":"success","completed_at":"2026-06-19T04:17:24Z"}]' "pending"
+verdict_rest_case "verdict: desynced in_progress + failure conclusion → failing" \
+  "sha-desynced-failure" '[{"status":"in_progress","conclusion":"failure","completed_at":"2026-06-19T04:17:24Z"}]' "failing"
 verdict_rest_case "verdict: queued → pending" \
   "sha-queued" '[{"status":"queued","conclusion":null}]' "pending"
 verdict_rest_case "verdict: failing + still-running → failing (failure wins)" \
@@ -1689,7 +1697,7 @@ assert_eq "issue: assignees narrowed to [{login}]" "alice" "$(jq -r '.assignees[
 assert_eq "issue: assignee objects carry ONLY login" "1" "$(jq '.assignees[0] | keys | length' <<<"$iv")"
 assert_eq "issue: raw REST extra field dropped" "" "$(jq -r '.extra_rest_field // empty' <<<"$iv")"
 # Top-level keys are exactly the porcelain set.
-assert_eq "issue: top-level key set" "assignees body createdAt labels number state stateReason title" \
+assert_eq "issue: top-level key set" "assignees body closedAt createdAt labels number state stateReason title" \
   "$(jq -r 'keys | join(" ")' <<<"$iv")"
 teardown
 
@@ -1702,11 +1710,14 @@ printf '%s\n' '{
   "state": "closed",
   "state_reason": "completed",
   "created_at": "2026-02-03T04:05:06Z",
+  "closed_at": "2026-02-04T05:06:07Z",
   "labels": [],
   "assignees": []
 }' > "$STUB_DIR/view-issue-9002.json"
 iv2=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_view_rest 9002)
 assert_eq "issue: closed → CLOSED" "CLOSED" "$(jq -r '.state' <<<"$iv2")"
+# closedAt passthrough from closed_at (the stale-head gate's recency floor, #2442).
+assert_eq "issue: closedAt passthrough from closed_at" "2026-02-04T05:06:07Z" "$(jq -r '.closedAt' <<<"$iv2")"
 # REST lowercase state_reason `completed` → porcelain UPPERCASE enum COMPLETED.
 assert_eq "issue: stateReason completed upcased to COMPLETED" "COMPLETED" "$(jq -r '.stateReason' <<<"$iv2")"
 # A second non-null case: not_planned → NOT_PLANNED.
@@ -33191,12 +33202,28 @@ case "$args" in
     esac
     echo '{}'
     ;;
+  *"run view "*)
+    # gh_run_view_rest: `gh run view <id> --json createdAt,headSha` (porcelain,
+    # no `api` token → no collision with the api globs). Emit the run.json fixture.
+    if [[ -f "$TREE/run.json" ]]; then cat "$TREE/run.json"; else echo '{}'; fi
+    ;;
+  *"api "*"/compare/"*)
+    # gh_commit_is_ancestor_rest: `gh api .../compare/<base>...<head>`. Wrap the
+    # one-word compare-status fixture as {"status":"<word>"}; jq reads .status.
+    printf '{"status":"%s"}\n' "$(cat "$TREE/compare-status" 2>/dev/null)"
+    ;;
+  *"api "*"/issues/"*"/timeline"*)
+    # gh_issue_closing_commit_rest: `gh api .../issues/<N>/timeline`. MUST precede
+    # the VIEW glob below — `[0-9]*` matches `501/timeline`, swallowing this call.
+    if [[ -f "$TREE/timeline.json" ]]; then cat "$TREE/timeline.json"; else echo '[]'; fi
+    ;;
   *"api "*"/issues/"[0-9]*)
-    # single-issue VIEW (gh_issue_view_rest): emit a raw REST object carrying the
-    # fixture issue's lowercase state; the helper upcases it.
+    # single-issue VIEW (gh_issue_view_rest): emit a raw REST object from the
+    # fixture issue carrying its lowercase state plus snake_case closed_at /
+    # state_reason; the helper upcases state/state_reason and maps closed_at →
+    # closedAt for the stale-head gate to read.
     n="${args##*/}"
-    state=$(jq -r --argjson n "$n" '.[] | select(.number==$n) | .state' "$TREE/issues.json")
-    printf '{"number":%s,"state":"%s"}\n' "$n" "$state"
+    jq -c --argjson n "$n" '.[] | select(.number==$n) | {number, state, closed_at: (.closed_at // null), state_reason: (.state_reason // null)}' "$TREE/issues.json"
     ;;
   *"api "*"/issues"*)
     # issue LIST (gh_issue_list_rest via dispatch-followup-exists): whole fixture,
@@ -33240,16 +33267,22 @@ STUB
   assert_eq "flake-dedup: open match → no reopen" "no" "$r"
   flake_dedup_teardown
 
-  # CASE 2 — CLOSED match → REOPENED <N>, reopen fired, comment fired. (criterion #3)
+  # CASE 2 — CLOSED match, FRESH run → REOPENED <N>, reopen fired, comment fired.
+  # (criterion #3) Under the stale-head gate (#2442) the CLOSED path requires
+  # --run-id. Fresh = run.createdAt AFTER closed_at (recency fresh) AND the run
+  # head contains the closing fix (ancestry `identical`).
   flake_dedup_setup
-  printf '[{"number":501,"title":"Flaky CI: %s","state":"closed"}]\n' "$FP" > "$TMPDIR_TEST/scripts/issues.json"
+  printf '[{"number":501,"title":"Flaky CI: %s","state":"closed","closed_at":"2026-01-01T00:00:00Z"}]\n' "$FP" > "$TMPDIR_TEST/scripts/issues.json"
+  printf '{"createdAt":"2026-02-01T00:00:00Z","headSha":"headsha"}\n' > "$TMPDIR_TEST/scripts/run.json"
+  printf 'identical\n' > "$TMPDIR_TEST/scripts/compare-status"
+  printf '[{"event":"closed","commit_id":"closingsha"}]\n' > "$TMPDIR_TEST/scripts/timeline.json"
   printf 'recurred on PR #900 / run http://x\n' > "$TMPDIR_TEST/body.md"
-  out=$("$TMPDIR_TEST/scripts/dispatch-flake-dedup" "$FP" --body-file "$TMPDIR_TEST/body.md")
-  assert_eq "flake-dedup: closed match → REOPENED <N>" "REOPENED 501" "$out"
+  out=$("$TMPDIR_TEST/scripts/dispatch-flake-dedup" "$FP" --body-file "$TMPDIR_TEST/body.md" --run-id 12345)
+  assert_eq "flake-dedup: closed match, fresh run → REOPENED <N>" "REOPENED 501" "$out"
   if grep -qx '501' "$TMPDIR_TEST/scripts/stub/reopen-fired" 2>/dev/null; then r=yes; else r=no; fi
-  assert_eq "flake-dedup: closed match → reopen fired on 501" "yes" "$r"
+  assert_eq "flake-dedup: closed match, fresh run → reopen fired on 501" "yes" "$r"
   if grep -qx '501' "$TMPDIR_TEST/scripts/stub/comments-fired" 2>/dev/null; then c=yes; else c=no; fi
-  assert_eq "flake-dedup: closed match → comment fired on 501" "yes" "$c"
+  assert_eq "flake-dedup: closed match, fresh run → comment fired on 501" "yes" "$c"
   flake_dedup_teardown
 
   # CASE 3 — NO match → NONE, no side effects. (criterion #5)
@@ -33271,6 +33304,98 @@ STUB
   printf 'recurred\n' > "$TMPDIR_TEST/body.md"
   out=$("$TMPDIR_TEST/scripts/dispatch-flake-dedup" "$FP" --body-file "$TMPDIR_TEST/body.md")
   assert_eq "flake-dedup: canonical-title match → EXISTING <N>" "EXISTING 777" "$out"
+  flake_dedup_teardown
+
+  # === STALE-HEAD REOPEN GATE (#2442) ===
+
+  # CASE 5 — STALE by recency: run.createdAt BEFORE closed_at trips STALE even
+  # though ancestry is fresh (compare `identical`, closing commit present) —
+  # proving the recency floor ALONE suppresses the reopen. No comment, no reopen.
+  flake_dedup_setup
+  printf '[{"number":501,"title":"Flaky CI: %s","state":"closed","closed_at":"2026-02-01T00:00:00Z"}]\n' "$FP" > "$TMPDIR_TEST/scripts/issues.json"
+  printf '{"createdAt":"2026-01-01T00:00:00Z","headSha":"headsha"}\n' > "$TMPDIR_TEST/scripts/run.json"
+  printf 'identical\n' > "$TMPDIR_TEST/scripts/compare-status"
+  printf '[{"event":"closed","commit_id":"closingsha"}]\n' > "$TMPDIR_TEST/scripts/timeline.json"
+  printf 'recurred on PR #900 / run http://x\n' > "$TMPDIR_TEST/body.md"
+  out=$("$TMPDIR_TEST/scripts/dispatch-flake-dedup" "$FP" --body-file "$TMPDIR_TEST/body.md" --run-id 12345 2>"$TMPDIR_TEST/err")
+  assert_eq "flake-dedup: stale by recency → STALE <N>" "STALE 501" "$out"
+  if [[ -s "$TMPDIR_TEST/scripts/stub/comments-fired" ]]; then c=yes; else c=no; fi
+  assert_eq "flake-dedup: stale by recency → no comment" "no" "$c"
+  if [[ -s "$TMPDIR_TEST/scripts/stub/reopen-fired" ]]; then r=yes; else r=no; fi
+  assert_eq "flake-dedup: stale by recency → no reopen" "no" "$r"
+  if grep -q 'suppressing reopen' "$TMPDIR_TEST/err"; then g=yes; else g=no; fi
+  assert_eq "flake-dedup: stale by recency → suppression logged to stderr" "yes" "$g"
+  flake_dedup_teardown
+
+  # CASE 6 — STALE by ancestry (the discriminating case): run.createdAt is AFTER
+  # closed_at (recency says FRESH) yet the run head is `behind` the closing fix
+  # (ancestry says STALE). This is the ONLY case that fails under a recency-only
+  # implementation — the divergent stub values (created-after-close + `behind`)
+  # force the ancestry signal to carry the verdict. No comment, no reopen.
+  flake_dedup_setup
+  printf '[{"number":501,"title":"Flaky CI: %s","state":"closed","closed_at":"2026-01-01T00:00:00Z"}]\n' "$FP" > "$TMPDIR_TEST/scripts/issues.json"
+  printf '{"createdAt":"2026-02-01T00:00:00Z","headSha":"headsha"}\n' > "$TMPDIR_TEST/scripts/run.json"
+  printf 'behind\n' > "$TMPDIR_TEST/scripts/compare-status"
+  printf '[{"event":"closed","commit_id":"closingsha"}]\n' > "$TMPDIR_TEST/scripts/timeline.json"
+  printf 'recurred on PR #900 / run http://x\n' > "$TMPDIR_TEST/body.md"
+  out=$("$TMPDIR_TEST/scripts/dispatch-flake-dedup" "$FP" --body-file "$TMPDIR_TEST/body.md" --run-id 12345)
+  assert_eq "flake-dedup: stale by ancestry → STALE <N>" "STALE 501" "$out"
+  if [[ -s "$TMPDIR_TEST/scripts/stub/comments-fired" ]]; then c=yes; else c=no; fi
+  assert_eq "flake-dedup: stale by ancestry → no comment" "no" "$c"
+  if [[ -s "$TMPDIR_TEST/scripts/stub/reopen-fired" ]]; then r=yes; else r=no; fi
+  assert_eq "flake-dedup: stale by ancestry → no reopen" "no" "$r"
+  flake_dedup_teardown
+
+  # CASE 7 — null commit_id (manual close) → ancestry skipped → recency fallback →
+  # REOPENED. timeline commit_id is null, so the closing commit is empty and the
+  # ancestry signal is skipped; compare-status `behind` MUST be ignored. recency
+  # is fresh (run after close), so the reopen fires.
+  flake_dedup_setup
+  printf '[{"number":501,"title":"Flaky CI: %s","state":"closed","closed_at":"2026-01-01T00:00:00Z"}]\n' "$FP" > "$TMPDIR_TEST/scripts/issues.json"
+  printf '{"createdAt":"2026-02-01T00:00:00Z","headSha":"headsha"}\n' > "$TMPDIR_TEST/scripts/run.json"
+  printf 'behind\n' > "$TMPDIR_TEST/scripts/compare-status"
+  printf '[{"event":"closed","commit_id":null}]\n' > "$TMPDIR_TEST/scripts/timeline.json"
+  printf 'recurred on PR #900 / run http://x\n' > "$TMPDIR_TEST/body.md"
+  out=$("$TMPDIR_TEST/scripts/dispatch-flake-dedup" "$FP" --body-file "$TMPDIR_TEST/body.md" --run-id 12345)
+  assert_eq "flake-dedup: null commit_id → recency fallback → REOPENED <N>" "REOPENED 501" "$out"
+  if grep -qx '501' "$TMPDIR_TEST/scripts/stub/reopen-fired" 2>/dev/null; then r=yes; else r=no; fi
+  assert_eq "flake-dedup: null commit_id → reopen fired on 501" "yes" "$r"
+  if grep -qx '501' "$TMPDIR_TEST/scripts/stub/comments-fired" 2>/dev/null; then c=yes; else c=no; fi
+  assert_eq "flake-dedup: null commit_id → comment fired on 501" "yes" "$c"
+  flake_dedup_teardown
+
+  # CASE 8 — NOT_PLANNED close → ancestry skipped → recency fallback → REOPENED.
+  # state_reason=not_planned means there was no fix, so ancestry is skipped;
+  # compare-status `behind` and the present timeline commit_id MUST be ignored.
+  # recency is fresh (run after close), so the reopen fires.
+  flake_dedup_setup
+  printf '[{"number":501,"title":"Flaky CI: %s","state":"closed","closed_at":"2026-01-01T00:00:00Z","state_reason":"not_planned"}]\n' "$FP" > "$TMPDIR_TEST/scripts/issues.json"
+  printf '{"createdAt":"2026-02-01T00:00:00Z","headSha":"headsha"}\n' > "$TMPDIR_TEST/scripts/run.json"
+  printf 'behind\n' > "$TMPDIR_TEST/scripts/compare-status"
+  printf '[{"event":"closed","commit_id":"closingsha"}]\n' > "$TMPDIR_TEST/scripts/timeline.json"
+  printf 'recurred on PR #900 / run http://x\n' > "$TMPDIR_TEST/body.md"
+  out=$("$TMPDIR_TEST/scripts/dispatch-flake-dedup" "$FP" --body-file "$TMPDIR_TEST/body.md" --run-id 12345)
+  assert_eq "flake-dedup: not_planned → recency fallback → REOPENED <N>" "REOPENED 501" "$out"
+  if grep -qx '501' "$TMPDIR_TEST/scripts/stub/reopen-fired" 2>/dev/null; then r=yes; else r=no; fi
+  assert_eq "flake-dedup: not_planned → reopen fired on 501" "yes" "$r"
+  if grep -qx '501' "$TMPDIR_TEST/scripts/stub/comments-fired" 2>/dev/null; then c=yes; else c=no; fi
+  assert_eq "flake-dedup: not_planned → comment fired on 501" "yes" "$c"
+  flake_dedup_teardown
+
+  # CASE 9 — (guardrail) CLOSED match, missing --run-id → non-zero exit + stderr.
+  # The CLOSED path requires --run-id; an absent one is a misconfigured caller and
+  # must fail loud rather than reopen blind.
+  flake_dedup_setup
+  printf '[{"number":501,"title":"Flaky CI: %s","state":"closed","closed_at":"2026-01-01T00:00:00Z"}]\n' "$FP" > "$TMPDIR_TEST/scripts/issues.json"
+  printf 'recurred on PR #900 / run http://x\n' > "$TMPDIR_TEST/body.md"
+  if "$TMPDIR_TEST/scripts/dispatch-flake-dedup" "$FP" --body-file "$TMPDIR_TEST/body.md" 2>"$TMPDIR_TEST/err"; then ec=0; else ec=$?; fi
+  assert_eq "flake-dedup: closed match, missing --run-id → non-zero exit" "1" "$ec"
+  if grep -q 'run-id is required' "$TMPDIR_TEST/err"; then g=yes; else g=no; fi
+  assert_eq "flake-dedup: closed match, missing --run-id → stderr error" "yes" "$g"
+  if [[ -s "$TMPDIR_TEST/scripts/stub/comments-fired" ]]; then c=yes; else c=no; fi
+  assert_eq "flake-dedup: closed match, missing --run-id → no comment" "no" "$c"
+  if [[ -s "$TMPDIR_TEST/scripts/stub/reopen-fired" ]]; then r=yes; else r=no; fi
+  assert_eq "flake-dedup: closed match, missing --run-id → no reopen" "no" "$r"
   flake_dedup_teardown
 
 echo ""
@@ -40505,6 +40630,353 @@ RECOVER="$SCRIPT_DIR/dispatch-recover-session-id"
   assert_eq "recover: wrong-issue → no stdout" "" "$out"
   rm -rf "$root"
 ) || true
+
+# ============================================================================
+# dispatch-scan-recoverable-deaths
+# ============================================================================
+#
+# Exercises the tick-time scanner that finds transient API-error phase-worker
+# deaths the Stop hook never saw and arms the existing resume machinery.
+#
+# Harness mirrors srl_*:
+#   $TMPDIR_TEST/scripts/   — scan script + lib-claude-agents.sh + detect script
+#   $TMPDIR_TEST/bin/       — all external-command stubs
+#   $TMPDIR_TEST/agents.json — test-controlled JSON array for the claude fake
+#   $TMPDIR_TEST/timer-units — test-controlled list-units output
+#   $TMPDIR_TEST/sched-log  — appended once per schedule call (line-count == call-count)
+#
+# Every external command is overridden via the env-override variables the scan
+# exports. HOME is redirected to $TMPDIR_TEST so transcript paths resolve there.
+echo ""
+echo "=== dispatch-scan-recoverable-deaths ==="
+
+SCAN_SAVED_HOME="$HOME"
+
+scan_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/bin"
+
+  # Copy the script under test and its libs.
+  cp "$SCRIPT_DIR/dispatch-scan-recoverable-deaths" \
+    "$TMPDIR_TEST/scripts/dispatch-scan-recoverable-deaths"
+  cp "$SCRIPT_DIR/lib-claude-agents.sh" \
+    "$TMPDIR_TEST/scripts/lib-claude-agents.sh"
+  # Copy the REAL detector so tests exercise its actual logic.
+  cp "$SCRIPT_DIR/dispatch-detect-transient-death" \
+    "$TMPDIR_TEST/scripts/dispatch-detect-transient-death"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-scan-recoverable-deaths"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-detect-transient-death"
+
+  # claude fake: prints agents.json regardless of args. Default: empty array.
+  echo '[]' > "$TMPDIR_TEST/agents.json"
+  cat > "$TMPDIR_TEST/bin/claude" <<STUB
+#!/usr/bin/env bash
+cat "$TMPDIR_TEST/agents.json"
+exit 0
+STUB
+  chmod +x "$TMPDIR_TEST/bin/claude"
+  export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/bin/claude"
+
+  # systemctl fake: list-units prints $TMPDIR_TEST/timer-units (default empty).
+  # Any other subcommand exits 0.
+  : > "$TMPDIR_TEST/timer-units"
+  cat > "$TMPDIR_TEST/bin/systemctl" <<STUB
+#!/usr/bin/env bash
+for a in "\$@"; do
+  if [[ "\$a" == "list-units" ]]; then
+    cat "$TMPDIR_TEST/timer-units"
+    exit 0
+  fi
+done
+exit 0
+STUB
+  chmod +x "$TMPDIR_TEST/bin/systemctl"
+  export DISPATCH_SCAN_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/systemctl"
+
+  # gh fake: issue view --json labels --jq <filter> emits the REAL gh JSON shape
+  # ({"labels":[{"name":"..."}]}) and runs the script's actual --jq filter over it
+  # via real jq, so guard (b)'s office-hours detection is exercised end-to-end.
+  # FAKE_OH=true seeds a dispatch:office-hours label; otherwise labels is empty.
+  # Any other subcommand exits 0 silently.
+  cat > "$TMPDIR_TEST/bin/fake-gh" <<STUB
+#!/usr/bin/env bash
+if [[ "\$1" == "issue" && "\$2" == "view" ]]; then
+  filter="any(.labels[]; .name==\"x\")"
+  prev=""
+  for a in "\$@"; do
+    if [[ "\$prev" == "--jq" ]]; then filter="\$a"; fi
+    prev="\$a"
+  done
+  if [[ "\${FAKE_OH:-false}" == "true" ]]; then
+    body='{"labels":[{"name":"dispatch:office-hours"}]}'
+  else
+    body='{"labels":[]}'
+  fi
+  printf '%s' "\$body" | jq -r "\$filter"
+  exit 0
+fi
+exit 0
+STUB
+  chmod +x "$TMPDIR_TEST/bin/fake-gh"
+  export DISPATCH_SCAN_GH_CMD="$TMPDIR_TEST/bin/fake-gh"
+
+  # schedule stub: logs all argv as one line, prints "reseeded fake-unit at 0".
+  cat > "$TMPDIR_TEST/bin/fake-sched" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/sched-log"
+echo "reseeded fake-unit at 0"
+STUB
+  chmod +x "$TMPDIR_TEST/bin/fake-sched"
+  export DISPATCH_SCAN_SCHEDULE_CMD="$TMPDIR_TEST/bin/fake-sched"
+
+  # phase stubs: return fixed test-controlled values.
+  cat > "$TMPDIR_TEST/bin/fake-phase" <<'STUB'
+#!/usr/bin/env bash
+echo "implement"
+STUB
+  chmod +x "$TMPDIR_TEST/bin/fake-phase"
+  export DISPATCH_SCAN_PHASE_CMD="$TMPDIR_TEST/bin/fake-phase"
+
+  cat > "$TMPDIR_TEST/bin/fake-phase-model" <<'STUB'
+#!/usr/bin/env bash
+echo "claude-opus"
+STUB
+  chmod +x "$TMPDIR_TEST/bin/fake-phase-model"
+  export DISPATCH_SCAN_PHASE_MODEL_CMD="$TMPDIR_TEST/bin/fake-phase-model"
+
+  cat > "$TMPDIR_TEST/bin/fake-phase-effort" <<'STUB'
+#!/usr/bin/env bash
+echo "high"
+STUB
+  chmod +x "$TMPDIR_TEST/bin/fake-phase-effort"
+  export DISPATCH_SCAN_PHASE_EFFORT_CMD="$TMPDIR_TEST/bin/fake-phase-effort"
+
+  # The scan uses the REAL detector script already copied into scripts/.
+  # Set DETECT_CMD to that copy so it resolves without the real SCRIPT_DIR.
+  export DISPATCH_SCAN_DETECT_CMD="$TMPDIR_TEST/scripts/dispatch-detect-transient-death"
+
+  # Redirect HOME so transcript paths ($HOME/.claude/projects/...) are isolated.
+  export HOME="$TMPDIR_TEST"
+}
+
+scan_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  export HOME="$SCAN_SAVED_HOME"
+  unset CLAUDE_AGENTS_CMD
+  unset DISPATCH_SCAN_SYSTEMCTL_CMD
+  unset DISPATCH_SCAN_GH_CMD
+  unset DISPATCH_SCAN_SCHEDULE_CMD
+  unset DISPATCH_SCAN_PHASE_CMD
+  unset DISPATCH_SCAN_PHASE_MODEL_CMD
+  unset DISPATCH_SCAN_PHASE_EFFORT_CMD
+  unset DISPATCH_SCAN_DETECT_CMD
+  unset FAKE_OH
+}
+
+# Helper: write a MATCHING last-turn JSONL (detector exits 0 on this).
+# Usage: scan_write_matching <transcript-path>
+scan_write_matching() {
+  local path="$1"
+  mkdir -p "$(dirname "$path")"
+  printf '%s\n' '{"type":"assistant","isApiErrorMessage":true,"message":{"role":"assistant","content":[{"type":"text","text":"API Error: Server is temporarily limiting requests (not your usage limit) · Rate limited"}]}}' \
+    > "$path"
+}
+
+# Helper: write a NON-matching last-turn JSONL (detector exits 1 on this).
+# Usage: scan_write_nonmatching <transcript-path>
+scan_write_nonmatching() {
+  local path="$1"
+  mkdir -p "$(dirname "$path")"
+  printf '%s\n' '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Work completed successfully."}]}}' \
+    > "$path"
+}
+
+# Helper: count lines in sched-log (0 if absent).
+scan_sched_lines() {
+  if [[ -f "$TMPDIR_TEST/sched-log" ]]; then
+    wc -l < "$TMPDIR_TEST/sched-log"
+  else
+    echo 0
+  fi
+}
+
+# Helper: set up an agents.json with one session row for N=1733.
+# Usage: scan_one_agent_row <sessionId> <state>
+# cwd and name follow the canonical 1733-slug shape.
+scan_one_agent_row() {
+  local sid="$1" state="$2"
+  printf '[{"sessionId":"%s","state":"%s","name":"1733-slug","cwd":"/work/1733-slug"}]\n' \
+    "$sid" "$state" > "$TMPDIR_TEST/agents.json"
+}
+
+# --- Test 1: Matching newest failed → resume armed (AC1/AC6-a) ----------------
+echo "Test: matching newest failed → resume armed (AC1/AC6-a)"
+scan_setup
+scan_one_agent_row "sess-ABC" "failed"
+slug=$(printf '%s' "/work/1733-slug" | tr '/.' '--')
+transcript="$TMPDIR_TEST/.claude/projects/$slug/sess-ABC.jsonl"
+scan_write_matching "$transcript"
+touch -d "2026-01-01 12:00:00" "$transcript"
+rc=0
+"$TMPDIR_TEST/scripts/dispatch-scan-recoverable-deaths" 2>"$TMPDIR_TEST/stderr" || rc=$?
+assert_eq "T1: rc is 0" "0" "$rc"
+lines=$(scan_sched_lines)
+assert_eq "T1: sched-log has exactly 1 line" "1" "$lines"
+log=$(cat "$TMPDIR_TEST/sched-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"sess-ABC"* && "$log" == *"1733"* && "$log" == *"claude-opus"* && "$log" == *"high"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: T1: sched call contains sessionId + N + model + effort"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: T1: sched call contains sessionId + N + model + effort"
+  echo "    log: $log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"claude-opus high"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: T1: model and effort appear adjacent in correct order"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: T1: model and effort appear adjacent in correct order"
+  echo "    log: $log"
+fi
+scan_teardown
+
+# --- Test 2: Non-matching newest failed → no resume (AC4/AC6-b) ---------------
+echo "Test: non-matching newest failed → no resume (AC4/AC6-b)"
+scan_setup
+scan_one_agent_row "sess-DEF" "failed"
+slug=$(printf '%s' "/work/1733-slug" | tr '/.' '--')
+transcript="$TMPDIR_TEST/.claude/projects/$slug/sess-DEF.jsonl"
+scan_write_nonmatching "$transcript"
+touch -d "2026-01-01 12:00:00" "$transcript"
+rc=0
+"$TMPDIR_TEST/scripts/dispatch-scan-recoverable-deaths" 2>"$TMPDIR_TEST/stderr" || rc=$?
+assert_eq "T2: rc is 0" "0" "$rc"
+lines=$(scan_sched_lines)
+assert_eq "T2: sched-log has 0 lines (no match)" "0" "$lines"
+scan_teardown
+
+# --- Test 3: Already-armed timer → no double-resume (AC3/AC6-c) ---------------
+echo "Test: already-armed timer → no double-resume (AC3/AC6-c)"
+scan_setup
+scan_one_agent_row "sess-GHI" "failed"
+slug=$(printf '%s' "/work/1733-slug" | tr '/.' '--')
+transcript="$TMPDIR_TEST/.claude/projects/$slug/sess-GHI.jsonl"
+scan_write_matching "$transcript"
+touch -d "2026-01-01 12:00:00" "$transcript"
+# Seed timer-units with an already-armed timer for N=1733.
+echo "dispatch-rate-limit-resume-1733-12345.timer loaded" > "$TMPDIR_TEST/timer-units"
+rc=0
+"$TMPDIR_TEST/scripts/dispatch-scan-recoverable-deaths" 2>"$TMPDIR_TEST/stderr" || rc=$?
+assert_eq "T3: rc is 0" "0" "$rc"
+lines=$(scan_sched_lines)
+assert_eq "T3: armed timer guard fires → 0 lines" "0" "$lines"
+scan_teardown
+
+# --- Test 4: Multi-row same issue → exactly 1 call for newest sessionId -------
+echo "Test: multi-row same issue → 1 schedule call, newest sessionId selected"
+scan_setup
+# Two failed rows for N=1733 (same cwd), distinct sessionIds that are not substrings
+# of each other. OLD row has older mtime; NEWER row has newer mtime.
+printf '[{"sessionId":"sess-old-AAA","state":"failed","name":"1733-slug","cwd":"/work/1733-slug"},{"sessionId":"sess-new-BBB","state":"failed","name":"1733-slug","cwd":"/work/1733-slug"}]\n' \
+  > "$TMPDIR_TEST/agents.json"
+slug=$(printf '%s' "/work/1733-slug" | tr '/.' '--')
+t_old="$TMPDIR_TEST/.claude/projects/$slug/sess-old-AAA.jsonl"
+t_new="$TMPDIR_TEST/.claude/projects/$slug/sess-new-BBB.jsonl"
+scan_write_matching "$t_old"
+scan_write_matching "$t_new"
+touch -d "2026-01-01 10:00:00" "$t_old"
+touch -d "2026-01-01 12:00:00" "$t_new"
+rc=0
+"$TMPDIR_TEST/scripts/dispatch-scan-recoverable-deaths" 2>"$TMPDIR_TEST/stderr" || rc=$?
+assert_eq "T4: rc is 0" "0" "$rc"
+lines=$(scan_sched_lines)
+assert_eq "T4: exactly 1 schedule call for 2 matching rows" "1" "$lines"
+log=$(cat "$TMPDIR_TEST/sched-log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$log" == *"sess-new-BBB"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: T4: newest sessionId (sess-new-BBB) selected"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: T4: newest sessionId (sess-new-BBB) selected"
+  echo "    log: $log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$log" != *"sess-old-AAA"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: T4: older sessionId (sess-old-AAA) NOT in sched call"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: T4: older sessionId (sess-old-AAA) NOT in sched call"
+  echo "    log: $log"
+fi
+scan_teardown
+
+# --- Test 5: Supersession — newer done row supersedes older failed row --------
+echo "Test: newer done row supersedes older matching failed row → 0 lines"
+scan_setup
+printf '[{"sessionId":"sess-old-CCC","state":"failed","name":"1733-slug","cwd":"/work/1733-slug"},{"sessionId":"sess-new-DDD","state":"done","name":"1733-slug","cwd":"/work/1733-slug"}]\n' \
+  > "$TMPDIR_TEST/agents.json"
+slug=$(printf '%s' "/work/1733-slug" | tr '/.' '--')
+t_old="$TMPDIR_TEST/.claude/projects/$slug/sess-old-CCC.jsonl"
+t_new="$TMPDIR_TEST/.claude/projects/$slug/sess-new-DDD.jsonl"
+scan_write_matching "$t_old"
+scan_write_nonmatching "$t_new"
+# Newer mtime on the done transcript so it wins the selection.
+touch -d "2026-01-01 10:00:00" "$t_old"
+touch -d "2026-01-01 12:00:00" "$t_new"
+rc=0
+"$TMPDIR_TEST/scripts/dispatch-scan-recoverable-deaths" 2>"$TMPDIR_TEST/stderr" || rc=$?
+assert_eq "T5: rc is 0" "0" "$rc"
+lines=$(scan_sched_lines)
+assert_eq "T5: done supersedes old failed → 0 lines" "0" "$lines"
+scan_teardown
+
+# --- Test 6: Live session blocks (AC5) ----------------------------------------
+echo "Test: live (working) session blocks recovery → 0 lines (AC5)"
+scan_setup
+# One working (active) row and one older matching failed row for same N.
+printf '[{"sessionId":"sess-live-EEE","state":"working","name":"1733-slug","cwd":"/work/1733-slug"},{"sessionId":"sess-dead-FFF","state":"failed","name":"1733-slug","cwd":"/work/1733-slug"}]\n' \
+  > "$TMPDIR_TEST/agents.json"
+slug=$(printf '%s' "/work/1733-slug" | tr '/.' '--')
+t_failed="$TMPDIR_TEST/.claude/projects/$slug/sess-dead-FFF.jsonl"
+scan_write_matching "$t_failed"
+touch -d "2026-01-01 10:00:00" "$t_failed"
+rc=0
+"$TMPDIR_TEST/scripts/dispatch-scan-recoverable-deaths" 2>"$TMPDIR_TEST/stderr" || rc=$?
+assert_eq "T6: rc is 0" "0" "$rc"
+lines=$(scan_sched_lines)
+assert_eq "T6: live session guard fires → 0 lines" "0" "$lines"
+scan_teardown
+
+# --- Test 7: Office-hours blocks (guard b) ------------------------------------
+echo "Test: office-hours parked → blocks recovery → 0 lines (guard b)"
+scan_setup
+scan_one_agent_row "sess-GGG" "failed"
+slug=$(printf '%s' "/work/1733-slug" | tr '/.' '--')
+transcript="$TMPDIR_TEST/.claude/projects/$slug/sess-GGG.jsonl"
+scan_write_matching "$transcript"
+touch -d "2026-01-01 12:00:00" "$transcript"
+export FAKE_OH="true"
+rc=0
+"$TMPDIR_TEST/scripts/dispatch-scan-recoverable-deaths" 2>"$TMPDIR_TEST/stderr" || rc=$?
+assert_eq "T7: rc is 0" "0" "$rc"
+lines=$(scan_sched_lines)
+assert_eq "T7: office-hours guard fires → 0 lines" "0" "$lines"
+scan_teardown
+
+# --- Test 8: Daemon UNKNOWN fail-safe → exit 0, 0 lines -----------------------
+echo "Test: daemon UNKNOWN (claude exits non-zero) → exit 0 and 0 lines (fail-safe)"
+scan_setup
+# Override CLAUDE_AGENTS_CMD with a stub that exits 1 (daemon unreachable).
+cat > "$TMPDIR_TEST/bin/claude-fail" <<'STUB'
+#!/usr/bin/env bash
+exit 1
+STUB
+chmod +x "$TMPDIR_TEST/bin/claude-fail"
+export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/bin/claude-fail"
+rc=0
+"$TMPDIR_TEST/scripts/dispatch-scan-recoverable-deaths" 2>"$TMPDIR_TEST/stderr" || rc=$?
+assert_eq "T8: rc is 0 on daemon UNKNOWN" "0" "$rc"
+lines=$(scan_sched_lines)
+assert_eq "T8: daemon UNKNOWN → 0 schedule calls" "0" "$lines"
+scan_teardown
 
 # ============================================================================
 # summary

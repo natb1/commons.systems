@@ -14,6 +14,8 @@ import {
   GhError,
   isTransientGhError,
   parseHttpStatus,
+  buildIssueNode,
+  extractScope,
 } from "../scripts/backfill.js";
 
 const mockExec = vi.mocked(execFileSync);
@@ -169,6 +171,37 @@ describe("fetchOpenIssues", () => {
 
     const issues = fetchOpenIssues();
     expect(issues).toEqual([{ number: 1, title: "issue", body: "b1" }]);
+  });
+});
+
+describe("buildIssueNode", () => {
+  it("sets reading to null at backfill time", () => {
+    const issue = { number: 42, title: "Fix the thing", body: null };
+    const node = buildIssueNode(issue, null);
+    expect(node.reading).toBeNull();
+  });
+
+  it("sets rationale from the issue body scope section", () => {
+    const body = "## Scope\nDo the work.\n## Other\nignored";
+    const issue = { number: 7, title: "Add feature", body };
+    const node = buildIssueNode(issue, "issue-5");
+    expect(node.rationale).toBe(extractScope(body));
+    expect(node.rationale).toBe("Do the work.");
+  });
+
+  it("links the parent when provided", () => {
+    const issue = { number: 10, title: "Child issue", body: null };
+    const node = buildIssueNode(issue, "issue-5");
+    expect(node.parent).toBe("issue-5");
+    expect(node.id).toBe("issue-10");
+    expect(node.owner).toBe("human");
+    expect(node.status).toBe("raw");
+  });
+
+  it("sets parent to null when no parent is provided", () => {
+    const issue = { number: 3, title: "Root issue", body: null };
+    const node = buildIssueNode(issue, null);
+    expect(node.parent).toBeNull();
   });
 });
 
