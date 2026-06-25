@@ -31,10 +31,18 @@ cd "$REPO_ROOT"
 
 # Deploy hosting channel — reuses existing channel if present (uses deploy target from .firebaserc)
 echo "Deploying to preview channel '$CHANNEL_ID' on site '$HOSTING_SITE'..."
+# --debug surfaces the underlying auth-failure cause (the real HTTP status /
+# token-endpoint error body that firebase-tools' generic "Failed to authenticate"
+# --json message hides — see #2481). firebase-tools routes --debug to STDERR while
+# the --json result stays on STDOUT, so the preview-URL extraction below is
+# unaffected. firebase_deploy_retry captures stderr per attempt and forwards it to
+# the job log ONLY on a final failure (discarding it on success), so this adds the
+# diagnostic trace exactly when a deploy fails and nothing when it succeeds.
 DEPLOY_OUTPUT=$(firebase_deploy_retry npx firebase-tools hosting:channel:deploy "$CHANNEL_ID" \
   --only "$APP_NAME" \
   --project "$FIREBASE_PROJECT_ID" \
   --expires 7d \
+  --debug \
   --json) || {
   echo "Deploy failed:" >&2
   echo "$DEPLOY_OUTPUT" >&2
