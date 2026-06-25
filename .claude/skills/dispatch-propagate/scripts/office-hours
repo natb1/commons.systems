@@ -78,6 +78,11 @@
 #                                   launching Claude. The empty queue is handled
 #                                   entirely in bash; no session is booted.
 #
+# Open-blocker advisory: the selector may print a `NOTE —` open-blocker line to
+# STDERR for the selected item (a signal, not a gate). This script captures only
+# stdout (`directive=$(...)`), so that advisory passes straight through to the
+# human's terminal — do NOT redirect or suppress the selector's stderr.
+#
 # Liveness now lives entirely in the selector, under a single UNKNOWN→skip
 # fail-safe convention — the old entry-vs-selector dual-convention coordination
 # (this script treating UNKNOWN as not-resumable while the selector treated it as
