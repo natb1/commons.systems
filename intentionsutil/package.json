@@ -14,7 +14,8 @@
     "lint": "eslint src/",
     "detect-rung": "tsx scripts/detect-rung.ts",
     "frontier-view": "tsx scripts/frontier-view.ts",
-    "read-sensors": "tsx scripts/read-sensors.ts"
+    "read-sensors": "tsx scripts/read-sensors.ts",
+    "write-node": "tsx scripts/write-node.ts"
   },
   "dependencies": {
     "yaml": "^2.9.0"
