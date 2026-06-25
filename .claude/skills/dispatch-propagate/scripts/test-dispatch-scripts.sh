@@ -32089,15 +32089,13 @@ assert_eq "qa-needs-main-followup: 2-item input → length 2" "2" "$(printf '%s'
 
 echo "Test: dispatch-review-finders"
 
-# empty surface → exactly code-review and review
+# empty surface → exactly code-review
 out=$(printf 'surface=empty\ndeps=false\napp_or_rules=false\n' | "$SCRIPT_DIR/dispatch-review-finders")
-assert_eq "finders: empty → code-review,review only" "code-review
-review" "$out"
+assert_eq "finders: empty → code-review only" "code-review" "$out"
 
-# docs surface → exactly code-review and review
+# docs surface → exactly code-review
 out=$(printf 'surface=docs\ndeps=false\napp_or_rules=false\n' | "$SCRIPT_DIR/dispatch-review-finders")
-assert_eq "finders: docs → code-review,review only" "code-review
-review" "$out"
+assert_eq "finders: docs → code-review only" "code-review" "$out"
 
 # code + app_or_rules=false + deps=false → 4 always-on security finders present
 n=$(printf 'surface=code\ndeps=false\napp_or_rules=false\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -cE '^(input-validation|secrets|red-team|security-review)$')
@@ -32135,10 +32133,9 @@ assert_eq "finders: code surface → codeql present" "1" "$n"
 n=$(printf 'surface=docs\ndeps=false\napp_or_rules=false\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -c '^codeql$' || true)
 assert_eq "finders: docs surface → codeql absent" "0" "$n"
 
-# tests surface → exactly code-review and review (no security finders)
+# tests surface → exactly code-review (no security finders)
 out=$(printf 'surface=tests\ndeps=false\napp_or_rules=false\n' | "$SCRIPT_DIR/dispatch-review-finders")
-assert_eq "finders: tests → code-review,review only" "code-review
-review" "$out"
+assert_eq "finders: tests → code-review only" "code-review" "$out"
 
 # ============================================================================
 # === dispatch-review-dedup ===
