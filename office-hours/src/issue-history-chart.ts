@@ -1,12 +1,14 @@
 import * as Plot from "@observablehq/plot";
-import { type IssueSample } from "./issue-samples.js";
+import { sampleTotal, type IssueSample } from "./issue-samples.js";
 import { fitBacklogRunway, runwayVerdict } from "./backlog-runway.js";
 import {
   getThemeFg,
+  readChartPalette,
   assembleChartLayout,
   buildLegend,
   computeChartWidth,
   renderAxisSvg,
+  mountResponsiveChart,
   MARGIN_RIGHT,
   MARGIN_BOTTOM,
   AXIS_WIDTH,
@@ -14,25 +16,23 @@ import {
 
 /** Per-sample chart width allocation along the time axis. */
 const POINT_WIDTH = 60;
-/** Approximate visible width before horizontal scrolling kicks in. */
-const CONTAINER_WIDTH = 640;
 const CHART_HEIGHT = 220;
-
-const COLOR_HELP_WANTED = "#42a5f5";
-const COLOR_OTHER = "#26a69a";
-const COLOR_PROJECTION = "#ab47bc";
 
 interface Point {
   x: Date;
-  openHelpWanted: number;
+  openSecurity: number;
+  openBug: number;
+  openEnhancement: number;
   openOther: number;
 }
 
 /**
- * Renders the office-hours backlog-history panel: a stacked area chart of
- * openHelpWanted (bottom) + openOther (top) over sampledAt — the two summing to
- * total backlog — plus a dashed runway projection line extended to the queue's
- * zero-crossing when draining, plus a textContent-assertable runway caption.
+ * Renders the office-hours backlog-history panel: a stacked area chart of the
+ * four mutually-exclusive work-type buckets — security (bottom), bug,
+ * enhancement, other (top) — over sampledAt, the four summing to total backlog,
+ * plus a dashed runway projection line (fitted on the total) extended to the
+ * queue's zero-crossing when draining, plus a textContent-assertable runway
+ * caption.
  *
  * Pure: does not mutate the input array. Returns the panel root element (which
  * receives panel-grid-full from the registry), or an empty-state element when
@@ -66,32 +66,60 @@ export function renderIssueHistoryChart(samples: IssueSample[]): HTMLElement {
 
   const points: Point[] = sorted.map((s) => ({
     x: s.sampledAt,
-    openHelpWanted: s.openHelpWanted,
+    openSecurity: s.openSecurity,
+    openBug: s.openBug,
+    openEnhancement: s.openEnhancement,
     openOther: s.openOther,
   }));
 
-  const maxTotal = Math.max(...points.map((p) => p.openHelpWanted + p.openOther));
+  const maxTotal = Math.max(...sorted.map((s) => sampleTotal(s)));
   const yDomain: [number, number] = [0, Math.max(1, Math.ceil(maxTotal * 1.1))];
 
   const fg = getThemeFg(container);
+  // DS categorical palette, read from the container at runtime.
+  const palette = readChartPalette(container);
+  // Precedence buckets mapped onto the DS palette by hue (security warmest →
+  // other coolest), with projection on the dashed-overlay slot.
+  const COLOR_SECURITY = palette[2]; // --chart-3 terracotta
+  const COLOR_BUG = palette[1]; // --chart-2 amber
+  const COLOR_ENHANCEMENT = palette[0]; // --chart-1 slate-blue
+  const COLOR_OTHER = palette[5]; // --chart-6 teal
+  const COLOR_PROJECTION = palette[4]; // --chart-5 tan (dashed projection)
   const sharedStyle = { background: "transparent", color: fg };
 
   const axisSvg = renderAxisSvg({ height: CHART_HEIGHT, style: sharedStyle, yDomain, label: "issues" });
 
-  // Stacked areas: openHelpWanted on the bottom, openOther stacked on top.
+  // Stacked areas in precedence order: security (bottom), bug, enhancement,
+  // other (top), each offset by the cumulative sum of the buckets beneath it.
   const marks: Plot.Markish[] = [
     Plot.areaY(points, {
       x: "x",
       y1: 0,
-      y2: "openHelpWanted",
-      fill: COLOR_HELP_WANTED,
+      y2: "openSecurity",
+      fill: COLOR_SECURITY,
       fillOpacity: 0.6,
       curve: "monotone-x",
     }),
     Plot.areaY(points, {
       x: "x",
-      y1: "openHelpWanted",
-      y2: (d: Point) => d.openHelpWanted + d.openOther,
+      y1: (d: Point) => d.openSecurity,
+      y2: (d: Point) => d.openSecurity + d.openBug,
+      fill: COLOR_BUG,
+      fillOpacity: 0.6,
+      curve: "monotone-x",
+    }),
+    Plot.areaY(points, {
+      x: "x",
+      y1: (d: Point) => d.openSecurity + d.openBug,
+      y2: (d: Point) => d.openSecurity + d.openBug + d.openEnhancement,
+      fill: COLOR_ENHANCEMENT,
+      fillOpacity: 0.6,
+      curve: "monotone-x",
+    }),
+    Plot.areaY(points, {
+      x: "x",
+      y1: (d: Point) => d.openSecurity + d.openBug + d.openEnhancement,
+      y2: (d: Point) => d.openSecurity + d.openBug + d.openEnhancement + d.openOther,
       fill: COLOR_OTHER,
       fillOpacity: 0.6,
       curve: "monotone-x",
@@ -100,22 +128,17 @@ export function renderIssueHistoryChart(samples: IssueSample[]): HTMLElement {
 
   const fit = fitBacklogRunway(samples);
 
-  let width: number;
-  let xDomain: [Date, Date];
-
   const first = sorted[0].sampledAt.getTime();
   const last = sorted[sorted.length - 1].sampledAt.getTime();
   const dataDays = (last - first) / 86_400_000;
+  const isDraining = fit.state === "draining" && dataDays > 0;
 
-  if (fit.state === "draining" && dataDays > 0) {
-    xDomain = [sorted[0].sampledAt, fit.crossingAt];
+  // x domain and the projection mark are width-independent — compute once.
+  const xDomain: [Date, Date] = isDraining
+    ? [sorted[0].sampledAt, fit.crossingAt]
+    : [sorted[0].sampledAt, sorted[sorted.length - 1].sampledAt];
 
-    const pxPerDay = (points.length * POINT_WIDTH) / dataDays;
-    width = Math.max(
-      points.length * POINT_WIDTH + pxPerDay * fit.daysUntilEmpty + MARGIN_RIGHT,
-      CONTAINER_WIDTH - AXIS_WIDTH,
-    );
-
+  if (isDraining) {
     // Dashed projection from the fitted value at the last actual point down to
     // the zero-crossing.
     const fittedLast = Math.max(0, fit.slope * dataDays + fit.intercept);
@@ -135,27 +158,7 @@ export function renderIssueHistoryChart(samples: IssueSample[]): HTMLElement {
         },
       ),
     );
-  } else {
-    xDomain = [sorted[0].sampledAt, sorted[sorted.length - 1].sampledAt];
-    width = computeChartWidth(points.length, POINT_WIDTH, CONTAINER_WIDTH);
   }
-
-  const chartSvg = Plot.plot({
-    width,
-    height: CHART_HEIGHT,
-    marginBottom: MARGIN_BOTTOM,
-    marginLeft: 0,
-    marginRight: MARGIN_RIGHT,
-    style: sharedStyle,
-    x: { type: "time", label: null, domain: xDomain },
-    y: { label: null, axis: null, grid: true, domain: yDomain },
-    marks,
-  });
-
-  chartSvg.style.width = `${width}px`;
-  chartSvg.style.minWidth = `${width}px`;
-
-  const { layout, wrapper } = assembleChartLayout(axisSvg, chartSvg);
 
   // Runway caption — textContent-assertable, mirroring queue-band's runway DOM.
   const caption = document.createElement("p");
@@ -168,19 +171,57 @@ export function renderIssueHistoryChart(samples: IssueSample[]): HTMLElement {
   caption.appendChild(stateSpan);
 
   const legend = buildLegend([
-    { label: "help wanted", color: COLOR_HELP_WANTED },
+    { label: "security", color: COLOR_SECURITY },
+    { label: "bug", color: COLOR_BUG },
+    { label: "enhancement", color: COLOR_ENHANCEMENT },
     { label: "other", color: COLOR_OTHER },
     { label: "projection", color: COLOR_PROJECTION, dashed: true },
   ]);
 
-  container.replaceChildren(layout, caption, legend);
+  // Block-level slot the ResizeObserver measures; .chart-scroll-wrapper inside
+  // clips horizontally so the slot stays at the panel content-box width.
+  const slot = document.createElement("div");
 
-  // Scroll to the newest data (rightmost) on first paint. scrollWidth is 0 for a
-  // detached element, and this container is still detached here, so defer the
-  // assignment to the next frame — by then a layout pass has run.
-  requestAnimationFrame(() => {
-    wrapper.scrollLeft = wrapper.scrollWidth;
+  mountResponsiveChart(slot, (width) => {
+    let chartWidth: number;
+    if (isDraining) {
+      const pxPerDay = (points.length * POINT_WIDTH) / dataDays;
+      chartWidth = Math.max(
+        points.length * POINT_WIDTH + pxPerDay * fit.daysUntilEmpty + MARGIN_RIGHT,
+        width - AXIS_WIDTH,
+      );
+    } else {
+      chartWidth = computeChartWidth(points.length, POINT_WIDTH, width);
+    }
+
+    const chartSvg = Plot.plot({
+      width: chartWidth,
+      height: CHART_HEIGHT,
+      marginBottom: MARGIN_BOTTOM,
+      marginLeft: 0,
+      marginRight: MARGIN_RIGHT,
+      style: sharedStyle,
+      x: { type: "time", label: null, domain: xDomain },
+      y: { label: null, axis: null, grid: true, domain: yDomain },
+      marks,
+    });
+
+    chartSvg.style.width = `${chartWidth}px`;
+    chartSvg.style.minWidth = `${chartWidth}px`;
+
+    const { layout, wrapper } = assembleChartLayout(axisSvg, chartSvg);
+
+    // Scroll to the newest data (rightmost). scrollWidth is 0 for a detached
+    // element, and the slot is detached on the first paint, so defer to the next
+    // frame — by then a layout pass has run.
+    requestAnimationFrame(() => {
+      wrapper.scrollLeft = wrapper.scrollWidth;
+    });
+
+    return layout;
   });
+
+  container.replaceChildren(slot, caption, legend);
 
   return container;
 }

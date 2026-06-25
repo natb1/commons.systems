@@ -4,13 +4,13 @@ const MINUTE = 60_000;
 const HOUR = 3_600_000;
 const DAY = 86_400_000;
 
-function workerState(active: number, target: number): string {
+export function workerState(active: number, target: number): string {
   if (target === 0) return "paused";
   if (active < target) return "spawning";
   return "steady";
 }
 
-function formatCountdown(resetAt: Date, now: Date): string {
+export function formatCountdown(resetAt: Date, now: Date): string {
   const delta = resetAt.getTime() - now.getTime();
   if (delta < MINUTE) return "now";
   if (delta >= DAY) {
@@ -27,7 +27,7 @@ function formatCountdown(resetAt: Date, now: Date): string {
   return `in ${m}m`;
 }
 
-function formatResetClock(resetAt: Date, now: Date): string {
+export function formatResetClock(resetAt: Date, now: Date): string {
   const timeStr = resetAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   if (
     resetAt.getFullYear() === now.getFullYear() &&
@@ -38,6 +38,29 @@ function formatResetClock(resetAt: Date, now: Date): string {
   }
   const dayStr = resetAt.toLocaleDateString([], { weekday: "short" });
   return `${dayStr} ${timeStr}`;
+}
+
+/**
+ * Content signature for the capacity band's now-derived output.
+ *
+ * The non-time fields (percentages, worker counts/state) do not depend on
+ * `now`, so the caller's `sample`-reference dep already covers them; this key
+ * captures only the now-derived output — the two resets' clock + countdown
+ * strings. A memo keyed on this signature reuses its element (and skips the
+ * re-render) across a tick that does not change any of those strings.
+ *
+ * Covers: fiveHourResetsAt clock+countdown, weeklyResetsAt clock+countdown —
+ * must mirror CapacityBand's now-derived output. When adding a new now-derived
+ * field to CapacityBand, add it here too or the memo will miss its changes.
+ */
+export function capacityBandKey(sample: UsageSample | null, now: Date): string {
+  if (sample === null) return "";
+  return [
+    formatResetClock(sample.fiveHourResetsAt, now),
+    formatCountdown(sample.fiveHourResetsAt, now),
+    formatResetClock(sample.weeklyResetsAt, now),
+    formatCountdown(sample.weeklyResetsAt, now),
+  ].join("|");
 }
 
 function buildResetItem(label: string, resetAt: Date, now: Date): HTMLElement {

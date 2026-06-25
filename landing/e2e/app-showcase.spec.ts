@@ -1,8 +1,8 @@
 import { test, expect } from "@commons-systems/config/playwright-test";
 
 const APP_HREFS = [
+  "https://office-hours.commons.systems",
   "https://budget.commons.systems",
-  "https://audio.commons.systems",
   "https://print.commons.systems",
 ];
 
@@ -24,7 +24,7 @@ test.describe("app showcase", () => {
   }) => {
     await page.goto("/");
 
-    const cards = page.locator("a.app-card");
+    const cards = page.locator(".landing-hero-grid a.app-card");
     await expect(cards).toHaveCount(3);
 
     for (let i = 0; i < APP_HREFS.length; i++) {
@@ -37,9 +37,11 @@ test.describe("app showcase", () => {
   }) => {
     await page.goto("/");
 
-    const cards = page.locator("a.app-card");
+    const cards = page.locator(".landing-hero-grid a.app-card");
+    // Auto-wait for the client-mounted (React createRoot, deferred) cards
+    // before the non-waiting .count() read — same reason as the focus test.
+    await expect(cards).toHaveCount(3);
     const count = await cards.count();
-    expect(count).toBe(3);
 
     for (let i = 0; i < count; i++) {
       const img = cards.nth(i).locator("img");
@@ -52,10 +54,18 @@ test.describe("app showcase", () => {
 
   test("each card is keyboard-focusable via .focus()", async ({ page }) => {
     await page.goto("/");
+    // The showcase mounts client-side via React createRoot (deferred), so the
+    // cards are not in the DOM synchronously at load. Wait for them before the
+    // synchronous focus check below — mirrors the auto-waiting locators the
+    // sibling tests use, and keeps the test honest against the non-prerendered
+    // dev server (on a prerendered build the cards are already present at load).
+    await page.waitForSelector(".landing-hero-grid a.app-card");
 
     for (let i = 0; i < 3; i++) {
       const isActive = await page.evaluate((idx) => {
-        const cards = document.querySelectorAll<HTMLAnchorElement>("a.app-card");
+        const cards = document.querySelectorAll<HTMLAnchorElement>(
+          ".landing-hero-grid a.app-card",
+        );
         const target = cards[idx];
         if (!target) return false;
         target.focus();
@@ -70,6 +80,10 @@ test.describe("app showcase", () => {
 
     test(".landing-hero-grid collapses to a single column", async ({ page }) => {
       await page.goto("/");
+      // Wait for the client-mounted (React createRoot, deferred) showcase cards
+      // before the synchronous geometry read below — same reason as the
+      // keyboard-focus test above.
+      await page.waitForSelector(".landing-hero-grid a.app-card");
 
       const xs = await page.evaluate(() => {
         const cards = Array.from(
@@ -91,10 +105,30 @@ test.describe("app showcase", () => {
   }) => {
     await page.goto("/");
 
-    await expect(page.locator("a.app-card")).toHaveCount(3);
+    await expect(page.locator("a.app-card")).toHaveCount(4);
 
     const scripts = await page.locator('script[type="application/ld+json"]').allTextContents();
     const softwareAppCount = scripts.filter(t => JSON.parse(t)["@type"] === "SoftwareApplication").length;
-    expect(softwareAppCount).toBe(3);
+    expect(softwareAppCount).toBe(4);
+  });
+
+  test("overflow card is collapsed by default and revealed on summary toggle", async ({
+    page,
+  }) => {
+    await page.goto("/");
+
+    await page.waitForSelector("details.app-showcase-overflow");
+
+    const details = page.locator("details.app-showcase-overflow");
+    await expect(details).not.toHaveAttribute("open", /.*/);
+
+    const overflowCard = page.locator(
+      '.app-showcase-overflow a.app-card[href="https://audio.commons.systems"]',
+    );
+    await expect(overflowCard).toBeHidden();
+
+    await page.locator(".app-showcase-overflow summary").click();
+
+    await expect(overflowCard).toBeVisible();
   });
 });

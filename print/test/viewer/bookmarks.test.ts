@@ -1,48 +1,156 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { createRoot, type Root } from "react-dom/client";
+import { act } from "react";
+import React from "react";
+
+// useBookmarks transitively imports src/bookmarks.ts → firebase/firestore → firebase.js.
+// Stub that module so the test environment does not need a Firebase project.
+vi.mock("../../src/bookmarks.js", () => ({
+  getBookmarks: vi.fn().mockResolvedValue([]),
+  saveBookmarks: vi.fn().mockResolvedValue(undefined),
+}));
+
 import {
-  renderBookmarksToggle,
-  renderBookmarksSection,
-  initBookmarks,
+  useBookmarks,
+  pickBookmarksStore,
+  loadLocalBookmarks,
+  saveLocalBookmarks,
   type BookmarksStore,
-} from "../../src/viewer/bookmarks";
+} from "../../src/viewer/useBookmarks";
+import { BookmarksPanel } from "../../src/viewer/BookmarksPanel";
 import type { Bookmark } from "../../src/bookmarks";
 import { makeMockRenderer } from "./mock-renderer";
+import type { UseViewerControllerResult } from "../../src/viewer/useViewerController";
 
-function createContainer(): HTMLElement {
-  const el = document.createElement("div");
-  el.innerHTML = renderBookmarksToggle() + renderBookmarksSection();
-  return el;
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function inMemoryStore(initial: Bookmark[] = []): {
+  store: BookmarksStore;
+  state: { current: Bookmark[]; saveCalls: Bookmark[][] };
+} {
+  const state: { current: Bookmark[]; saveCalls: Bookmark[][] } = {
+    current: initial.slice(),
+    saveCalls: [],
+  };
+  const store: BookmarksStore = {
+    load: async () => state.current.slice(),
+    save: async (b: Bookmark[]) => {
+      state.current = b.slice();
+      state.saveCalls.push(b.slice());
+    },
+  };
+  return { store, state };
 }
 
-async function flushInit(): Promise<void> {
+/**
+ * Build a minimal UseViewerControllerResult that satisfies useBookmarks.
+ * navSignal is a prop so re-renders can bump it to trigger memo recomputation.
+ */
+function makeMockController(
+  overrides: Partial<UseViewerControllerResult> = {},
+  navSignal = 0,
+): UseViewerControllerResult {
+  const renderer = makeMockRenderer();
+  return {
+    getRenderer: () => renderer,
+    onPanelNavigate: vi.fn(),
+    navSignal,
+    // The rest are unused by useBookmarks; fill with stubs.
+    canvasWrapRef: { current: null } as React.RefObject<HTMLDivElement>,
+    gotoInputRef: { current: null } as React.RefObject<HTMLInputElement>,
+    gotoStatusRef: { current: null } as React.RefObject<HTMLSpanElement>, // type-safety-ok: test mock-ref fixture; matches the same as-cast pattern used by all sibling ref fields in this object
+    spreadToggleRef: { current: null } as React.RefObject<HTMLButtonElement>,
+    viewerRef: { current: null } as React.RefObject<HTMLElement>,
+    positionLabel: "Page 1 / 10",
+    canGoPrev: false,
+    canGoNext: true,
+    zoomOutDisabled: true,
+    zoomResetDisabled: true,
+    spreadEnabled: false,
+    gotoMode: null,
+    searchable: false,
+    hasZoom: false,
+    hasSpread: false,
+    panelCollapsed: false,
+    orientation: "landscape",
+    loadError: null,
+    goPrev: vi.fn(),
+    goNext: vi.fn(),
+    goToPage: vi.fn(),
+    submitGoto: vi.fn(),
+    zoomIn: vi.fn(),
+    zoomOut: vi.fn(),
+    zoomReset: vi.fn(),
+    toggleSpread: vi.fn(),
+    togglePanel: vi.fn(),
+    onSearchNavigate: vi.fn(),
+    readFailed: false,
+    mediaId: "media-1",
+    uid: null,
+    ...overrides,
+  } as UseViewerControllerResult;
+}
+
+// ---------------------------------------------------------------------------
+// Host component: calls useBookmarks and renders toggle + panel
+// ---------------------------------------------------------------------------
+
+function HostComponent({
+  controller,
+  store,
+}: {
+  controller: UseViewerControllerResult;
+  store: BookmarksStore;
+}) {
+  const bm = useBookmarks(controller, store);
+  return React.createElement(
+    "div",
+    null,
+    React.createElement(
+      "button",
+      {
+        className: "viewer-bookmark-toggle",
+        "aria-pressed": bm.currentBookmarked,
+        disabled: bm.toggleDisabled,
+        onClick: bm.toggleBookmark,
+        "aria-label": "Bookmark this page",
+      },
+      "\u{1F516}",
+    ),
+    React.createElement(BookmarksPanel, { bookmarks: bm }),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Flush helpers
+// ---------------------------------------------------------------------------
+
+async function flushMicrotasks(): Promise<void> {
   for (let i = 0; i < 20; i++) {
     await Promise.resolve();
   }
 }
 
-describe("renderBookmarksToggle", () => {
-  it("renders a toggle button, aria-pressed=false, disabled", () => {
-    const html = renderBookmarksToggle();
-    expect(html).toContain('class="viewer-bookmark-toggle"');
-    expect(html).toContain('aria-pressed="false"');
-    expect(html).toContain("disabled");
+async function flushAct(): Promise<void> {
+  await act(async () => {
+    await flushMicrotasks();
   });
-});
+}
 
-describe("renderBookmarksSection", () => {
-  it("renders the section hidden with a list", () => {
-    const html = renderBookmarksSection();
-    expect(html).toContain('class="viewer-bookmarks bookmarks-hidden"');
-    expect(html).toContain('class="viewer-bookmarks-list"');
-    expect(html).toContain("Bookmarks");
-  });
-});
+// ---------------------------------------------------------------------------
+// Tests: useBookmarks + BookmarksPanel
+// ---------------------------------------------------------------------------
 
-describe("initBookmarks", () => {
+describe("useBookmarks + BookmarksPanel", () => {
   let container: HTMLElement;
+  let root: Root;
 
   beforeEach(() => {
-    container = createContainer();
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    localStorage.clear();
     if (typeof globalThis.reportError !== "function") {
       globalThis.reportError = () => {};
     }
@@ -50,33 +158,30 @@ describe("initBookmarks", () => {
   });
 
   afterEach(() => {
+    act(() => root.unmount());
+    document.body.removeChild(container);
     vi.mocked(globalThis.reportError).mockRestore();
   });
 
-  function inMemoryStore(initial: Bookmark[] = []) {
-    const state: { current: Bookmark[]; saveCalls: Bookmark[][] } = {
-      current: initial.slice(),
-      saveCalls: [],
-    };
-    const store: BookmarksStore = {
-      load: async () => state.current.slice(),
-      save: async (b: Bookmark[]) => {
-        state.current = b.slice();
-        state.saveCalls.push(b.slice());
-      },
-    };
-    return { store, state };
+  async function mount(
+    controller: UseViewerControllerResult,
+    store: BookmarksStore,
+  ): Promise<void> {
+    root = createRoot(container);
+    await act(async () => {
+      root.render(React.createElement(HostComponent, { controller, store }));
+    });
+    await flushAct();
   }
 
-  it("empty set: section hidden, toggle aria-pressed=false, toggle enabled after init", async () => {
+  it("empty set: no .viewer-bookmarks, toggle aria-pressed=false, toggle enabled after load", async () => {
     const { store } = inMemoryStore([]);
-    const renderer = makeMockRenderer();
-    initBookmarks(container, renderer, store, vi.fn());
-    await flushInit();
+    const controller = makeMockController();
+    await mount(controller, store);
 
-    const section = container.querySelector(".viewer-bookmarks") as HTMLElement;
+    const section = container.querySelector(".viewer-bookmarks");
     const toggle = container.querySelector(".viewer-bookmark-toggle") as HTMLButtonElement;
-    expect(section.classList.contains("bookmarks-hidden")).toBe(true);
+    expect(section).toBeNull();
     expect(toggle.getAttribute("aria-pressed")).toBe("false");
     expect(toggle.disabled).toBe(false);
   });
@@ -87,18 +192,20 @@ describe("initBookmarks", () => {
       get position() { return "4"; },
       get positionLabel() { return "Page 4 / 10"; },
     });
-    initBookmarks(container, renderer, store, vi.fn());
-    await flushInit();
+    const controller = makeMockController({ getRenderer: () => renderer });
+    await mount(controller, store);
 
     const toggle = container.querySelector(".viewer-bookmark-toggle") as HTMLButtonElement;
-    toggle.click();
-    await flushInit();
+    await act(async () => {
+      toggle.click();
+      await flushMicrotasks();
+    });
 
     expect(state.saveCalls.length).toBe(1);
     expect(state.saveCalls[0]).toEqual([{ position: "4", label: "Page 4 / 10" }]);
 
-    const section = container.querySelector(".viewer-bookmarks") as HTMLElement;
-    expect(section.classList.contains("bookmarks-hidden")).toBe(false);
+    const section = container.querySelector(".viewer-bookmarks");
+    expect(section).not.toBeNull();
     expect(toggle.getAttribute("aria-pressed")).toBe("true");
 
     const entry = container.querySelector(".viewer-bookmark-entry") as HTMLElement;
@@ -112,75 +219,164 @@ describe("initBookmarks", () => {
       get position() { return "4"; },
       get positionLabel() { return "Page 4 / 10"; },
     });
-    initBookmarks(container, renderer, store, vi.fn());
-    await flushInit();
+    const controller = makeMockController({ getRenderer: () => renderer });
+    await mount(controller, store);
 
-    const section = container.querySelector(".viewer-bookmarks") as HTMLElement;
+    // Section should appear since we loaded with a bookmark.
     const toggle = container.querySelector(".viewer-bookmark-toggle") as HTMLButtonElement;
-    // Loaded with the current position bookmarked
     expect(toggle.getAttribute("aria-pressed")).toBe("true");
-    expect(section.classList.contains("bookmarks-hidden")).toBe(false);
+    expect(container.querySelector(".viewer-bookmarks")).not.toBeNull();
 
-    toggle.click();
-    await flushInit();
+    await act(async () => {
+      toggle.click();
+      await flushMicrotasks();
+    });
 
-    expect(section.classList.contains("bookmarks-hidden")).toBe(true);
+    expect(container.querySelector(".viewer-bookmarks")).toBeNull();
     expect(toggle.getAttribute("aria-pressed")).toBe("false");
   });
 
-  it("clicking a bookmark entry navigates via goToPosition and calls onNavigate", async () => {
+  it("clicking a bookmark entry navigates via goToPosition and calls onPanelNavigate", async () => {
     const goToPosition = vi.fn().mockResolvedValue(undefined);
-    const onNavigate = vi.fn();
+    const onPanelNavigate = vi.fn();
     const { store } = inMemoryStore([{ position: "7", label: "Page 7 / 10" }]);
     const renderer = makeMockRenderer({ goToPosition });
-    initBookmarks(container, renderer, store, onNavigate);
-    await flushInit();
+    const controller = makeMockController({ getRenderer: () => renderer, onPanelNavigate });
+    await mount(controller, store);
 
     const entry = container.querySelector(".viewer-bookmark-entry") as HTMLElement;
-    entry.click();
+    await act(async () => {
+      entry.click();
+      await flushMicrotasks();
+    });
 
     expect(goToPosition).toHaveBeenCalledWith("7");
-
-    await flushInit();
-    expect(onNavigate).toHaveBeenCalled();
+    expect(onPanelNavigate).toHaveBeenCalled();
   });
 
-  it("sync() sets aria-pressed based on whether renderer.position is bookmarked", async () => {
-    const { store } = inMemoryStore([{ position: "3", label: "Page 3 / 10" }]);
-    let pos = "3";
+  it("sync: re-render with new position + bumped navSignal flips aria-pressed", async () => {
+    // Start at position "1" (not bookmarked); have "3" bookmarked.
+    let pos = "1";
     const renderer = makeMockRenderer();
-    // Spread copies a getter's value, so override position imperatively to track `pos`.
     Object.defineProperty(renderer, "position", { get: () => pos, configurable: true });
-    const handle = initBookmarks(container, renderer, store, vi.fn());
-    await flushInit();
+    const { store } = inMemoryStore([{ position: "3", label: "Page 3 / 10" }]);
+    let navSignal = 0;
+    const controller = makeMockController({ getRenderer: () => renderer }, navSignal);
+
+    // Initial mount: position="1", not bookmarked.
+    root = createRoot(container);
+    await act(async () => {
+      root.render(React.createElement(HostComponent, { controller, store }));
+    });
+    await flushAct();
 
     const toggle = container.querySelector(".viewer-bookmark-toggle") as HTMLButtonElement;
-    expect(toggle.getAttribute("aria-pressed")).toBe("true");
-
-    // Move to a non-bookmarked position and resync
-    pos = "5";
-    handle.sync();
     expect(toggle.getAttribute("aria-pressed")).toBe("false");
 
-    // Back to a bookmarked position
+    // Move to bookmarked position "3" and bump navSignal.
     pos = "3";
-    handle.sync();
+    navSignal = 1;
+    const controller2 = makeMockController({ getRenderer: () => renderer }, navSignal);
+    await act(async () => {
+      root.render(React.createElement(HostComponent, { controller: controller2, store }));
+      await flushMicrotasks();
+    });
+
     expect(toggle.getAttribute("aria-pressed")).toBe("true");
+
+    // Move back to non-bookmarked position "1".
+    pos = "1";
+    navSignal = 2;
+    const controller3 = makeMockController({ getRenderer: () => renderer }, navSignal);
+    await act(async () => {
+      root.render(React.createElement(HostComponent, { controller: controller3, store }));
+      await flushMicrotasks();
+    });
+
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
   });
 
-  it("cleanup removes listeners", async () => {
-    const goToPosition = vi.fn().mockResolvedValue(undefined);
-    const { store } = inMemoryStore([{ position: "2", label: "Page 2 / 10" }]);
-    const renderer = makeMockRenderer({ goToPosition });
-    const handle = initBookmarks(container, renderer, store, vi.fn());
-    await flushInit();
+  it("unmount does not throw", async () => {
+    const { store } = inMemoryStore([]);
+    const controller = makeMockController();
+    await mount(controller, store);
+    expect(() => act(() => root.unmount())).not.toThrow();
+  });
+});
 
-    handle.cleanup();
+// ---------------------------------------------------------------------------
+// Tests: pickBookmarksStore local path
+// ---------------------------------------------------------------------------
 
-    const entry = container.querySelector(".viewer-bookmark-entry") as HTMLElement;
-    entry.click();
-    await flushInit();
+describe("pickBookmarksStore", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
 
-    expect(goToPosition).not.toHaveBeenCalled();
+  it("uid=null → local store; round-trip load/save persists to localStorage", async () => {
+    const store = pickBookmarksStore(null, false, "media-abc");
+    await store.save([{ position: "5", label: "Page 5" }]);
+    const loaded = await store.load();
+    expect(loaded).toEqual([{ position: "5", label: "Page 5" }]);
+  });
+
+  it("readFailed=true → local store even with uid present", async () => {
+    const store = pickBookmarksStore("user-1", true, "media-abc");
+    await store.save([{ position: "2", label: "Page 2" }]);
+    const loaded = await store.load();
+    expect(loaded).toEqual([{ position: "2", label: "Page 2" }]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: loadLocalBookmarks / saveLocalBookmarks
+// ---------------------------------------------------------------------------
+
+describe("loadLocalBookmarks / saveLocalBookmarks", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    if (typeof globalThis.reportError !== "function") {
+      globalThis.reportError = () => {};
+    }
+    vi.spyOn(globalThis, "reportError").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.mocked(globalThis.reportError).mockRestore();
+  });
+
+  it("round-trip: save then load returns the same bookmarks", () => {
+    const bm: Bookmark[] = [{ position: "3", label: "Chapter 3" }];
+    saveLocalBookmarks("media-1", bm);
+    expect(loadLocalBookmarks("media-1")).toEqual(bm);
+  });
+
+  it("returns [] for missing key", () => {
+    expect(loadLocalBookmarks("no-such-media")).toEqual([]);
+  });
+
+  it("returns [] and calls reportError for malformed JSON", () => {
+    localStorage.setItem("bookmarks:media-bad", "NOT_JSON{{{{");
+    const result = loadLocalBookmarks("media-bad");
+    expect(result).toEqual([]);
+    expect(globalThis.reportError).toHaveBeenCalled();
+  });
+
+  it("returns [] for non-array JSON", () => {
+    localStorage.setItem("bookmarks:media-obj", JSON.stringify({ position: "1", label: "x" }));
+    expect(loadLocalBookmarks("media-obj")).toEqual([]);
+  });
+
+  it("filters out entries missing position or label", () => {
+    localStorage.setItem(
+      "bookmarks:media-partial",
+      JSON.stringify([
+        { position: "1", label: "good" },
+        { position: "2" },
+        { label: "no-pos" },
+        42,
+      ]),
+    );
+    expect(loadLocalBookmarks("media-partial")).toEqual([{ position: "1", label: "good" }]);
   });
 });

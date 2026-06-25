@@ -46,10 +46,11 @@ esac
 `<N>` is the issue number used by the remaining steps for their `tmp/` filenames.
 
 Then resolve whether a draft PR already exists by running the context pack (use
-`dangerouslyDisableSandbox: true` — it calls `gh`):
+`dangerouslyDisableSandbox: true` — it calls `gh`). Add `--phase-log` so the same
+call also returns any prior cross-phase handoff note:
 
 ```bash
-.claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$N" --pr
+.claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$N" --pr --phase-log
 ```
 
 Read the `=== PR ===` section of the output. **CRITICAL: detect no-PR by the
@@ -57,11 +58,63 @@ Read the `=== PR ===` section of the output. **CRITICAL: detect no-PR by the
 output contains `PR: none`, no PR exists yet — run all steps. If it contains
 `PR #<num>`, capture that number as `PR_NUM`.
 
-If a PR already exists, the build + PR already happened: capture its number as
-`PR_NUM`, **skip Steps 1–3**, and go straight to the Step 4 marker write (this
-covers a same-tick crash between PR-open and marker-write). If no PR exists, run
-all steps. (`dispatch-route` normally routes a PR-bearing issue to fix-checks/qa/review,
-not implement, so this is a same-tick crash-recovery edge.)
+Read the `=== PHASE-LOG #N ===` section into `PRIOR_PHASE_LOG` — the handoff note
+a prior attempt or earlier phase left. Treat the sentinel `phase-log: none` as
+empty. When non-empty, feed it into the Step 2 unit-build context so a rebuild or
+re-plan sees why a prior attempt diverged. An absent note leaves Step 2 unchanged.
+
+If a PR already exists, the build + PR already happened: this is the **re-entry
+branch**. Capture its number as `PR_NUM`, **skip Steps 1–4**, and go straight to
+Step 5 — on re-entry only the **marker** write runs; the Step 5 **phase-log write
+is skipped** (this covers a same-tick crash between PR-open and marker-write).
+Note that the preamble took the re-entry branch (a PR already existed at entry) —
+Step 5 keys its phase-log gate on this. If no PR exists, run all steps (the
+preamble did NOT take the re-entry branch). (`dispatch-route` normally routes a
+PR-bearing issue to fix-checks/qa/review, not implement, so this is a same-tick
+crash-recovery edge.)
+
+**Open-blocker re-check (non-re-entry path only).** When the preamble finds
+`PR: none` — i.e. this is a fresh run, not a crash recovery — verify that the
+target issue has no open blockers before beginning any build work. This catches
+the race window between the queue-gate check (in `/dispatch-propagate`) and now.
+Skip this check on the re-entry branch (`PR #<num>` already exists): the build
+already happened and passed this gate on first run; re-checking would needlessly
+re-park a same-tick crash recovery.
+
+Run with `dangerouslyDisableSandbox: true` — `dispatch-check-blockers` calls
+`gh` (see `.claude/rules/sandbox.md`). Tolerant capture:
+
+```bash
+if out=$(.claude/skills/dispatch-propagate/scripts/dispatch-check-blockers "$N"); then
+  rc=0
+else
+  rc=$?
+fi
+```
+
+Route on `rc`:
+
+- **`rc == 0`** — no open blocker. Proceed unchanged.
+- **`rc == 2`** — `$out` is `blocked:<nums>`. Real open blocker found. Call
+  `dispatch-mark-deviation`, then stop (skip the Step 5 completion marker).
+  Marker absence triggers Stop hook Branch A (`dispatch:office-hours`).
+  `dispatch-mark-deviation` is already one of `/implement`'s two single-named-exit
+  terminal actions, so the single-named-exit invariant in `## Steps` still holds:
+
+  ```bash
+  .claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \
+    "/implement: target #$N has an open blocker ($out) - raced past the queue gate; parking"
+  ```
+
+- **`rc == 1`** (or any other non-zero) — environment error; blockers unverified.
+  Not "no blockers." Call `dispatch-mark-deviation` with a distinct reason
+  including `$rc`, then stop (skip the Step 5 completion marker). Never proceed
+  on `rc == 1`:
+
+  ```bash
+  .claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \
+    "/implement: could not verify open blockers for #$N (dispatch-check-blockers exit $rc)"
+  ```
 
 ## Steps
 
@@ -69,8 +122,9 @@ not implement, so this is a same-tick crash-recovery edge.)
 final action is a call to `dispatch-mark-complete` (no deviation) or
 `dispatch-mark-deviation` (deviation). This is the single named exit.
 
-- Any OTHER most-recent tool call — a unit finishing in Step 2, the draft PR
-  opening in Step 3 — means the orchestrator is mid-loop, not done.
+- Any OTHER most-recent tool call — a unit finishing in Step 2, a verification
+  run in Step 3, the draft PR opening in Step 4 — means the orchestrator is
+  mid-loop, not done.
 - Mid-loop, the next message contains the next tool call, never a closing
   summary. Do not end the turn until the named exit fires.
 
@@ -97,8 +151,9 @@ Exit codes:
 Before building, create a tracked task list with the harness `TaskCreate` tool:
 
 - one task per planned unit from the Step 1 plan,
-- one task for "open the draft PR" (Step 3),
-- one task for "write the completion marker" (Step 4).
+- one task for "execute the plan's verification" (Step 3),
+- one task for "open the draft PR" (Step 4),
+- one task for "write the completion marker" (Step 5).
 
 Mark each task completed via the harness `TaskUpdate` tool as it lands. This
 keeps the remaining work durable and visible rather than held in the model's
@@ -110,7 +165,9 @@ For each unit in the plan read in Step 1, in dependency order, invoke
 
 - `model` — the unit's planned model.
 - `scope` — the unit's scope.
-- `context` — the plan and issue context the unit needs.
+- `context` — the plan and issue context the unit needs. When `PRIOR_PHASE_LOG`
+  (from the preamble) is non-empty, include it here so a rebuild or re-plan sees
+  why a prior attempt diverged.
 - `commit_intent` — the "why" of this unit's change.
 
 `/implement-unit` launches the implementation subagent, forks `/commit-merge-push`,
@@ -119,7 +176,75 @@ and recovers from merge / pre-commit / push errors. This is a normal in-session 
 model-selection heuristic in `/implement-unit` — see that skill for the heuristic
 (it is the canonical home; do not restate it here).
 
-### 3. Open the draft PR
+### 3. Execute the plan's Verification section
+
+After every unit is built, run the plan's auto-runnable checks. The runner reads
+the full plan markdown on stdin and routes on its exit code (use
+`dangerouslyDisableSandbox: true` — `dispatch-read-plan` calls `gh`). The
+runner's own exit-4 check (empty/absent stdin) is the PRIMARY guard against an
+upstream `dispatch-read-plan` failure being masked; the `set -o pipefail` prefix
+is belt-and-suspenders for the residual case where `dispatch-read-plan` fails
+but `dispatch-run-verification` still exits 0 (a bare `pipefail` cannot rescue
+the exit-3 mask, since the runner's exit 3 is itself non-zero):
+
+```bash
+set -o pipefail
+.claude/skills/dispatch-propagate/scripts/dispatch-read-plan <N> \
+  | .claude/skills/dispatch-propagate/scripts/dispatch-run-verification
+```
+
+Route on the exit code:
+
+- **exit 3** — the plan names no ```verify checks. Proceed to Step 4 and open the
+  PR unchanged. This is a clean proceed, not a swallowed error (per
+  `.claude/rules/code-style.md`): the runner reports "no checks to run" by design,
+  and acceptance criterion 4 requires no false block when the plan defines no
+  checks.
+- **exit 0** — every ```verify block passed. Proceed to Step 4 and open the PR.
+- **exit 1** — a ```verify block failed; the runner reports the failing block
+  index on its output. Enter the bounded fix lane: using the failing output, fix
+  the defect with one corrective `/implement-unit` (via the Skill tool), then
+  re-run the runner above. Cap at **2** fix attempts (mirroring `qa-fix`'s
+  `CAP=2`). If the runner still exits 1 after the cap, do **not** open the PR:
+  call `dispatch-mark-deviation` naming the failing check, then **stop** — skip
+  the Step 5 completion marker.
+
+  ```bash
+  .claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \
+    "/implement: plan verification failed after 2 fix attempts (check <index>)"
+  ```
+
+  This `dispatch-mark-deviation` is one of the two existing single-named-exit
+  terminal actions — the only terminal actions remain `dispatch-mark-complete`
+  (no deviation) and `dispatch-mark-deviation` (deviation) — so the single-named-exit
+  invariant still holds. The Stop hook reads marker-absence as Branch A and parks
+  the issue for human review.
+- **exit 5** — the plan has an unclosed/malformed ```verify fence (opened inside
+  the Verification section but never closed before EOF). This is a
+  **plan-authoring error**, not a failing verify block — the worker cannot repair
+  the plan comment, so do **not** enter the `/implement-unit` fix lane. Route
+  straight to `dispatch-mark-deviation` with an accurate reason and **stop** (skip
+  the Step 5 completion marker):
+
+  ```bash
+  .claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \
+    "/implement: plan verification could not run — malformed plan (unclosed verify fence)"
+  ```
+
+- **any other non-zero exit** — exit **4** (empty/absent plan input: the upstream
+  `dispatch-read-plan` failed and the runner refused to emit the exit-3
+  "proceed unchanged" signal), or any upstream failure surfaced via `set -o
+  pipefail`. This is an environment/upstream error, **not** a verify-block
+  failure — do **not** enter the `/implement-unit` fix lane. Route straight to
+  `dispatch-mark-deviation` with an accurate reason and **stop** (skip the Step 5
+  completion marker):
+
+  ```bash
+  .claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \
+    "/implement: plan verification could not run — upstream dispatch-read-plan failed or plan input was empty"
+  ```
+
+### 4. Open the draft PR
 
 After every unit is committed and pushed, write the PR body prose to
 `tmp/pr-body.md`, then open the draft PR with `dispatch-open-pr` (use
@@ -149,15 +274,59 @@ diagnostic naming the offending number. If it exits non-zero, read the
 diagnostic and fix the body or `--closes` set rather than opening the PR by
 hand.
 
-### 4. Check for deviation, then write the marker (or skip it), then stop
+### 5. Write the handoff note, check for deviation, then write the marker (or skip it), then stop
 
-Before writing the marker, judge whether the implementation deviated from the
+**Ordering invariant.** The phase-log write must PRECEDE the terminal action so
+the terminal action stays last: `dispatch-mark-complete` (no deviation) or
+`dispatch-mark-deviation` (deviation) remains the single named exit. On the normal
+path, write the phase-log entry once here, before the deviation branch, so both
+terminal branches (deviation and no-deviation) share it.
+
+First write the handoff note — **only when Steps 1–4 ran this turn** (i.e. the
+preamble did NOT take the re-entry branch). Compose a terse "what-changed" digest
+of the implementation to `tmp/phase-log-entry-$N.md` — a one-line summary of what
+shipped; on a clean as-planned build the body is a line like `failed: none`.
+Compose it **unconditionally** (no "only on failure" branch) — that is the
+failure-vs-success axis (always log, even a clean pass), orthogonal to the
+re-entry gate below. Then upsert it into the issue's phase-log comment (use
+`dangerouslyDisableSandbox: true` — the script calls `gh`):
+
+```bash
+.claude/skills/dispatch-propagate/scripts/dispatch-write-phase-log \
+  "$N" --phase implement --reentry false < tmp/phase-log-entry-$N.md
+```
+
+On the crash-recovery re-entry path (Steps 1–4 skipped this turn), call the
+writer with `--reentry true </dev/null` — the script enforces the skip and
+preserves the prior `(implement, 1)` entry verbatim (no body needed, exit 0).
+**Gate on whether Steps 1–4 ran this turn, not on PR presence:** `PR_NUM` is set
+on both paths at Step 5 (the normal path created it in Step 4; re-entry captured
+it in the preamble), so a `[ -n "$PR_NUM" ]` gate would skip the write ALWAYS and
+break the normal path.
+
+```bash
+.claude/skills/dispatch-propagate/scripts/dispatch-write-phase-log \
+  "$N" --phase implement --reentry true </dev/null
+```
+
+No attempt counter — implement is single-pass, so the default `--attempt 1`
+applies. On re-entry there is no fresh outcome data: recomposing the digest from
+this turn's limited context would OVERWRITE the prior attempt's accurate entry
+with a thinner restatement. The script enforces the skip via `--reentry true` —
+the prior entry, if any, is already correct and durable; if the original pass
+crashed before writing one, skipping still yields an honest absence — never
+fabricate content now. This skip-preserves-verbatim behavior is covered by the
+behavioral test `.claude/skills/dispatch-propagate/scripts/test-phase-log-reentry.sh`.
+
+Judge whether the implementation deviated from the
 persisted plan — scope shifted mid-implementation, or the plan could not be
 fully implemented as written. Base this on the `/implement-unit` outcomes
-observed in Step 2.
+observed in Step 2. On the re-entry path (Steps 1–4 were skipped this pass),
+no `/implement-unit` outcomes were observed — treat deviation as false and
+proceed to `dispatch-mark-complete`.
 
 **Deviation fires** — skip the `phase-completed` marker. Instead call
-`dispatch-mark-deviation` to write the office-hours-reason atomically. If Step 3
+`dispatch-mark-deviation` to write the office-hours-reason atomically. If Step 4
 already opened a draft PR, it stays open. The Stop hook reads marker-absence as Branch A,
 applies `dispatch:office-hours` to the issue (surfacing this reason in the
 why-comment), and parks the issue for human review.

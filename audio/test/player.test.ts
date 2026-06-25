@@ -15,6 +15,12 @@ vi.mock("../src/local-source.js", () => ({
     mockResolveLocalAudioSource(...args),
 }));
 
+const mockSavePlayerState = vi.fn();
+
+vi.mock("../src/sidecar.js", () => ({
+  savePlayerState: (...args: unknown[]) => mockSavePlayerState(...args),
+}));
+
 const mockLogError = vi.fn();
 
 vi.mock("@commons-systems/errorutil/log", () => ({
@@ -23,6 +29,7 @@ vi.mock("@commons-systems/errorutil/log", () => ({
 
 import { formatDuration, initPlayer } from "../src/player";
 import type { PlayRequest } from "../src/player";
+import type { LibraryItem } from "../src/types.js";
 
 describe("formatDuration", () => {
   it("formats 0 seconds", () => {
@@ -92,6 +99,7 @@ describe("initPlayer", () => {
     mockResolveAudioSource.mockResolvedValue("blob:http://localhost/track-blob");
     mockResolveLocalAudioSource.mockResolvedValue("blob:http://localhost/local-blob");
     mockRemoveFile.mockResolvedValue(undefined);
+    mockSavePlayerState.mockResolvedValue(undefined);
   });
 
   it("renders empty state on init", () => {
@@ -178,9 +186,11 @@ describe("initPlayer", () => {
       expect(playlistEl.querySelector(".playlist-active")?.textContent).toContain(
         "Song Two",
       );
+      // Local ids embed the filename (PII); the error sink must receive a
+      // redacted token, never the real local:<filename>.
       expect(mockLogError).toHaveBeenCalledWith(expect.any(Error), {
         operation: "audio-source-resolve",
-        id: "local:song.mp3",
+        id: "local:*",
       });
     });
   });
@@ -313,6 +323,27 @@ describe("initPlayer", () => {
         }),
       );
       expect(mockRemoveFile).toHaveBeenCalledWith("media/t1.mp3");
+    });
+
+    it("skips storage-cache eviction for a local track's media error", async () => {
+      const player = initPlayer(audioEl, playlistEl);
+      player.add(localTrack);
+      player.add(track2);
+
+      await vi.waitFor(() => expect(audioEl.play).toHaveBeenCalledTimes(1));
+
+      audioEl.dispatchEvent(new Event("error"));
+
+      await vi.waitFor(() => expect(audioEl.play).toHaveBeenCalledTimes(2));
+      expect(mockResolveAudioSource).toHaveBeenCalledWith("media/t2.mp3");
+      expect(mockLogError).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          operation: "audio-element-error",
+          id: "local:song.mp3",
+        }),
+      );
+      expect(mockRemoveFile).not.toHaveBeenCalled();
     });
 
     it("logs the MediaError and its code", async () => {
@@ -561,6 +592,138 @@ describe("initPlayer", () => {
         expect(audioEl.src).toContain("t3-blob");
       });
       expect(audioEl.play).toHaveBeenCalled();
+    });
+  });
+
+  describe("player-state persistence", () => {
+    it("local-only queue: persists localName and currentLocalName (not a numeric index)", async () => {
+      const player = initPlayer(audioEl, playlistEl);
+      player.add(localTrack);
+
+      // playTrack fires → persistState(0) is called
+      // Grab the last call to mockSavePlayerState
+      await vi.waitFor(() => {
+        expect(mockSavePlayerState).toHaveBeenCalled();
+      });
+
+      const lastCall = mockSavePlayerState.mock.calls.at(-1)![0] as ReturnType<typeof mockSavePlayerState>; // type-safety-ok: mock-call introspection in test
+      expect(lastCall.queue).toEqual(["song.mp3"]);
+      expect(lastCall.currentLocalName).toBe("song.mp3");
+      expect(lastCall.positionSeconds).toBe(0);
+    });
+
+    it("cloud track is not included in persisted queue", async () => {
+      const player = initPlayer(audioEl, playlistEl);
+      // Add cloud track first (autoplays); local is queued but not current
+      player.add(track1);
+
+      await vi.waitFor(() => {
+        expect(mockSavePlayerState).toHaveBeenCalled();
+      });
+
+      // Add a local track to the queue while cloud is current
+      player.add(localTrack);
+
+      const lastCall = mockSavePlayerState.mock.calls.at(-1)![0] as ReturnType<typeof mockSavePlayerState>; // type-safety-ok: mock-call introspection in test
+      // Local queue includes only local items
+      expect(lastCall.queue).toEqual(["song.mp3"]);
+      // Current track is cloud → currentLocalName is undefined
+      expect(lastCall.currentLocalName).toBeUndefined();
+    });
+
+    it("currentLocalName is the filename, never a numeric index", async () => {
+      const player = initPlayer(audioEl, playlistEl);
+      player.add(localTrack);
+
+      await vi.waitFor(() => {
+        expect(mockSavePlayerState).toHaveBeenCalled();
+      });
+
+      const allCalls = mockSavePlayerState.mock.calls;
+      for (const call of allCalls) {
+        const arg = call[0] as { currentLocalName?: unknown };
+        if (arg.currentLocalName !== undefined) {
+          expect(typeof arg.currentLocalName).toBe("string");
+          expect(typeof arg.currentLocalName).not.toBe("number");
+        }
+      }
+    });
+  });
+
+  describe("restore", () => {
+    /** Build a minimal LibraryItem for a local file. */
+    function makeLocalLibraryItem(localName: string, title: string): LibraryItem {
+      return {
+        id: "local:" + localName,
+        title,
+        artist: "Test Artist",
+        album: "Test Album",
+        trackNumber: null,
+        genre: "",
+        year: null,
+        duration: 180,
+        format: "mp3",
+        publicDomain: false,
+        sourceNotes: "Local file",
+        storagePath: "",
+        groupId: null,
+        memberEmails: [],
+        addedAt: new Date(1000).toISOString(),
+        origin: "local",
+        localName,
+      };
+    }
+
+    it("restores queue paused and seeked to saved position", async () => {
+      const player = initPlayer(audioEl, playlistEl);
+      const state = {
+        queue: ["song.mp3"],
+        currentLocalName: "song.mp3",
+        positionSeconds: 42,
+      };
+      const items = [makeLocalLibraryItem("song.mp3", "My Song")];
+
+      player.restore(state, items);
+
+      // playlist should render the restored track title synchronously
+      expect(playlistEl.textContent).toContain("My Song");
+
+      // wait for resolveLocalAudioSource to resolve → src is set
+      await vi.waitFor(() => {
+        expect(audioEl.src).toContain("blob:");
+      });
+
+      // play must NOT be called (restore leaves it paused)
+      expect(audioEl.play).not.toHaveBeenCalled();
+
+      // Dispatch loadedmetadata to trigger the seek
+      audioEl.dispatchEvent(new Event("loadedmetadata"));
+      expect(audioEl.currentTime).toBe(42);
+    });
+
+    it("empty queue is a no-op (no play, no src change)", async () => {
+      const player = initPlayer(audioEl, playlistEl);
+      player.restore({ queue: [], currentLocalName: undefined, positionSeconds: 0 }, []);
+
+      expect(audioEl.play).not.toHaveBeenCalled();
+      expect(audioEl.getAttribute("src")).toBeNull();
+    });
+
+    it("restore with positionSeconds=0 does not seek (no loadedmetadata listener)", async () => {
+      const player = initPlayer(audioEl, playlistEl);
+      const state = { queue: ["song.mp3"], currentLocalName: "song.mp3", positionSeconds: 0 };
+      const items = [makeLocalLibraryItem("song.mp3", "Song Zero")];
+
+      player.restore(state, items);
+
+      await vi.waitFor(() => {
+        expect(audioEl.src).toContain("blob:");
+      });
+
+      expect(audioEl.play).not.toHaveBeenCalled();
+      // Dispatching loadedmetadata should be a no-op (no listener registered for pos=0)
+      audioEl.dispatchEvent(new Event("loadedmetadata"));
+      expect(audioEl.currentTime).toBe(0);
     });
   });
 });

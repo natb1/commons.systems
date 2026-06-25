@@ -4,18 +4,19 @@
 # call live-state preamble into a single scripted call.
 #
 # Usage:
-#   dispatch-context-pack <N> [--issue] [--relations] [--pr] [--diff]
+#   dispatch-context-pack <N> [--issue] [--relations] [--pr] [--phase-log] [--diff]
 #
 #   <N>            Issue number (digits only, positive).
 #   --issue        Issue title, state, body, and comments.
 #   --relations    Blockers / sub-issues / parent / siblings as
 #                  titles + state + URL only (never full bodies).
 #   --pr           PR number, labels, CI rollup, and body.
+#   --phase-log    The <!-- dispatch:phase-log --> handoff-note comment body, or `phase-log: none`.
 #   --diff         merge-base, --stat, changed-file list, and capped hunks.
 #
 # At least one section flag is required. Sections are emitted in a fixed
-# canonical order — issue → relations → pr → diff — regardless of the order
-# the flags are given on the command line.
+# canonical order — issue → relations → pr → phase-log → diff — regardless of
+# the order the flags are given on the command line.
 #
 # Exit codes:
 #   0   success — every requested section built and flushed.
@@ -35,7 +36,7 @@ source "$SCRIPT_DIR/lib.sh"
 
 N="${1:-}"
 if [[ -z "$N" || ! "$N" =~ ^[1-9][0-9]*$ ]]; then
-  echo "error: usage: dispatch-context-pack <N> [--issue] [--relations] [--pr] [--diff] — <N> must be a positive integer" >&2
+  echo "error: usage: dispatch-context-pack <N> [--issue] [--relations] [--pr] [--phase-log] [--diff] — <N> must be a positive integer" >&2
   exit 2
 fi
 shift
@@ -45,6 +46,7 @@ shift
 WANT_ISSUE=0
 WANT_RELATIONS=0
 WANT_PR=0
+WANT_PHASELOG=0
 WANT_DIFF=0
 
 while [[ "$#" -gt 0 ]]; do
@@ -52,9 +54,10 @@ while [[ "$#" -gt 0 ]]; do
     --issue)     WANT_ISSUE=1 ;;
     --relations) WANT_RELATIONS=1 ;;
     --pr)        WANT_PR=1 ;;
+    --phase-log) WANT_PHASELOG=1 ;;
     --diff)      WANT_DIFF=1 ;;
     *)
-      echo "error: unknown flag '$1' — expected --issue, --relations, --pr, or --diff" >&2
+      echo "error: unknown flag '$1' — expected --issue, --relations, --pr, --phase-log, or --diff" >&2
       exit 2
       ;;
   esac
@@ -63,8 +66,8 @@ done
 
 # A zero-flag invocation is a usage error, not a silent no-op: an empty pack
 # masks a caller bug (input validation at the edge, per .claude/rules/code-style.md).
-if (( WANT_ISSUE + WANT_RELATIONS + WANT_PR + WANT_DIFF == 0 )); then
-  echo "error: no section selected — pass at least one of --issue, --relations, --pr, --diff" >&2
+if (( WANT_ISSUE + WANT_RELATIONS + WANT_PR + WANT_PHASELOG + WANT_DIFF == 0 )); then
+  echo "error: no section selected — pass at least one of --issue, --relations, --pr, --phase-log, --diff" >&2
   exit 2
 fi
 
@@ -88,7 +91,7 @@ fi
 build_issue_section() {
   local n="$1"
   local json
-  json=$(gh_retry gh issue view "$n" --json number,title,state,body,comments) || return 1
+  json=$(gh_issue_view_rest "$n" --comments) || return 1
   jq -r '
     "## Issue #\(.number) (\(.state)): \(.title)\n\n" +
     (.body // "") +
@@ -160,18 +163,38 @@ build_pr_section() {
   fi
 
   local pr_json
-  pr_json=$(gh_retry gh pr view "$pr_num" --json number,labels,statusCheckRollup,body) || return 1
+  pr_json=$(gh_pr_view_rest "$pr_num") || return 1
 
-  local pr_number labels_str ci_verdict pr_body
+  local pr_number labels_str ci_verdict pr_body head_oid
   pr_number=$(jq -r '.number' <<<"$pr_json") || return 1
   labels_str=$(jq -r '[ .labels[].name ] | if length == 0 then "(none)" else join(", ") end' <<<"$pr_json") || return 1
-  ci_verdict=$(dispatch_classify_rollup "$(jq -c '.statusCheckRollup' <<<"$pr_json")") || return 1
   pr_body=$(jq -r '.body // ""' <<<"$pr_json") || return 1
+  head_oid=$(jq -r '.headRefOid' <<<"$pr_json") || return 1
+  ci_verdict=$(dispatch_ci_verdict_rest "$head_oid") || return 1
 
   printf 'PR #%s\n' "$pr_number"
   printf 'labels: %s\n' "$labels_str"
   printf 'ci: %s\n' "$ci_verdict"
   printf '\n%s\n' "$pr_body"
+}
+
+# --phase-log: the <!-- dispatch:phase-log --> handoff-note comment body, or the
+# sentinel `phase-log: none` when no such comment exists. Mirrors build_pr_section's
+# absent-comment sentinel: absence is a legitimate degrade-clean case (a fresh issue
+# has no phase-log yet), NOT an error — returning non-zero would abort the whole pack
+# for every caller. The author-id filter (inside dispatch_marker_comment_id) is
+# required: same forged-comment vector as dispatch-read-plan on a public repo.
+build_phase_log_section() {
+  local n="$1"
+  local cid
+  cid=$(dispatch_marker_comment_id "$n" '<!-- dispatch:phase-log -->') || return 1
+  if [[ -z "$cid" ]]; then
+    printf 'phase-log: none\n'
+    return 0
+  fi
+  local body
+  body=$(gh_retry gh api "repos/{owner}/{repo}/issues/comments/$cid" --jq '.body') || return 1
+  printf '%s\n' "$body"
 }
 
 # --diff: diff the worktree branch against its merge-base with the already-merged
@@ -267,6 +290,7 @@ build_diff_section() {
 ISSUE_OUT=""
 REL_OUT=""
 PR_OUT=""
+PHASELOG_OUT=""
 DIFF_OUT=""
 
 if [[ "$WANT_ISSUE" == 1 ]]; then
@@ -294,6 +318,14 @@ if [[ "$WANT_PR" == 1 ]]; then
 $PR_BODY"
 fi
 
+if [[ "$WANT_PHASELOG" == 1 ]]; then
+  # --phase-log slice (the <!-- dispatch:phase-log --> comment body, or
+  # `phase-log: none`). Header line, blank line, then prose.
+  PHASELOG_BODY=$(build_phase_log_section "$N") || { echo "error: --phase-log: failed to build phase-log section for #$N" >&2; exit 1; }
+  PHASELOG_OUT="=== PHASE-LOG #$N ===
+$PHASELOG_BODY"
+fi
+
 if [[ "$WANT_DIFF" == 1 ]]; then
   # --diff slice (merge-base vs origin/main, --stat, --name-only, capped
   # whole-file hunks). Unlike the slices above, the builder owns its
@@ -317,6 +349,7 @@ emit() {
 [[ -n "$ISSUE_OUT" ]] && emit "$ISSUE_OUT"
 [[ -n "$REL_OUT" ]] && emit "$REL_OUT"
 [[ -n "$PR_OUT" ]] && emit "$PR_OUT"
+[[ -n "$PHASELOG_OUT" ]] && emit "$PHASELOG_OUT"
 [[ -n "$DIFF_OUT" ]] && emit "$DIFF_OUT"
 
 exit 0

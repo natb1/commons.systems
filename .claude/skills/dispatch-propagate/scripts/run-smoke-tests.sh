@@ -40,10 +40,8 @@ for i in $(seq 1 30); do
   sleep 2
 done
 
-# Install Playwright browsers (skip if nix provides them via PLAYWRIGHT_BROWSERS_PATH)
-if [ -z "${PLAYWRIGHT_BROWSERS_PATH:-}" ]; then
-  npx playwright install --with-deps chromium
-fi
+# Install Playwright browsers (bounded timeout+retry; skips when nix provides them)
+playwright_install_with_deps
 
 # Run smoke tests
 BASE_URL="$BASE_URL" npx playwright test --config e2e/playwright.config.ts --grep @hosting --project=desktop

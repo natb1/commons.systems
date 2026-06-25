@@ -216,7 +216,11 @@ def cmd_prefix(c):
            or ($firstuser_str | test("/recover-api-error")) ) then "recovery"
     elif ( ($path | test("--bare"))
            or ( [ $a[] | select(.gitBranch=="HEAD") ] | length > 0 ) ) then "router-tick"
-    elif ($firstuser_str | test("dispatch-worker")) then "worker"
+    # Real --bg dispatch workers are spawned with a phase-skill slash command.
+    # Their first user message is a <command-name>/<skill></command-name> block
+    # whose skill is one of the dispatch worker phase set. This alternation must
+    # be updated when a new dispatch worker phase skill is added.
+    elif ($firstuser_str | test("<command-name>/(plan-issue|implement|qa-fix|review-fix|fix-checks|fix-conflicts|qa-main|budget-parse-job|resolve-epic|office-hours)</command-name>")) then "worker"
     else "other" end ) as $type
 
 # Peak context across assistant msgs.
@@ -260,14 +264,35 @@ def cmd_prefix(c):
 # The capture anchors on the full literal marker `<!-- dispatch:outcome:v1 -->`
 # per the reader contract in .claude/docs/outcome-envelope.md. The body is
 # non-greedy (`.*?`) so it stops at the FIRST closing fence — robust to `}`/`{`
-# inside string values and to multiple envelopes in one result. The "m" flag
-# makes "." cross newlines so a pretty-printed multi-line JSON object is
-# captured whole.
+# inside string values and to multiple envelopes in one result. The "m" flag is
+# LOAD-BEARING and must not be removed: jq uses the Oniguruma engine, where "m"
+# means DOTALL — "." matches newlines — which is NOT the same as PCRE's "m"
+# (multiline anchors, where "m" only makes ^/$ match at line boundaries). Without
+# "m", "." stops at the first newline and a pretty-printed body is silently
+# truncated. This matters because dispatch-emit-outcome runs `jq -n` WITHOUT
+# `-c`, so it emits a pretty-printed MULTI-LINE JSON object; the "m" flag is what
+# lets this single regex capture it whole. (Verify the DOTALL semantics directly:
+# `printf 'A\nB' | jq -Rs '[match("A(?<x>.)B"; "m")][0].captures[0].string'` ->
+# "\n" (the "." captured the newline); drop the "m" and `[match(...)]` is [].
+# test-aggregate-usage.sh guards this with a multi-line fixture.)
 #
 # LAST-WINS (reader contract): collect every envelope match across all
 # tool_results in document order and take the last. fromjson is wrapped in
 # try/catch so a malformed envelope binds null and NEVER aborts the file —
 # mirroring the clear-error/files_failed philosophy.
+#
+# STRICT VALIDATION (#1909): after a successful fromjson, a PARTIAL envelope
+# (valid JSON missing a required rate-feeding count key) binds null and is
+# treated as ABSENT — never coerced to a zero-count object. The doc marks the
+# three rate-feeding counts (findings_surfaced, findings_actionable,
+# fixes_applied) non-nullable, so we validate each is a `number` (a type check
+# catches both a missing key AND an explicit null). Without this, rate()'s
+# `($num // 0)` would silently fabricate a 0 rate from a partial envelope. Per
+# .claude/rules/code-style.md (clear errors over defensive fallbacks), surface
+# the gap as outcome:null instead. This single stage-1 chokepoint propagates to
+# per-session outcome/outcome_rates and pooled by_phase_outcome downstream.
+# followups_filed/subagents_launched are intentionally NOT validated here —
+# they do not feed rate(), so they keep their `// 0` coercion downstream.
 | ( [ $msgs[]
       | select(.type=="user")
       | .message.content
@@ -277,7 +302,12 @@ def cmd_prefix(c):
       | match("<!-- dispatch:outcome:v1 -->\\s*```json\\s*(?<j>.*?)\\s*```"; "gm")
       | .captures[0].string
     ] | last // null ) as $outcome_raw
-| ( ($outcome_raw // "") | try fromjson catch null ) as $outcome
+| ( ($outcome_raw // "") | try fromjson catch null ) as $parsed
+| ( if ($parsed | type) == "object"
+      and ($parsed.findings_surfaced   | type) == "number"
+      and ($parsed.findings_actionable | type) == "number"
+      and ($parsed.fixes_applied       | type) == "number"
+    then $parsed else null end ) as $outcome
 
 # Ordered per-session token list of tool calls, in document order. Bash calls
 # become "Bash:<cmd_prefix>"; other tools become their name.
@@ -312,6 +342,7 @@ def cmd_prefix(c):
 | {
     type: $type,
     id: $id,
+    artifact: ( ($stamp[0] // null) | if . == null then null else {repo, issue, pr, base_sha, branch} end ),
     file: $path,
     primary_model: $primary_model,
     models: $models,
@@ -347,6 +378,50 @@ def price(u):
   + (u.cache_read     // 0) * RATE_CACHE_READ
   + (u.output         // 0) * RATE_OUTPUT ) / 1e6;
 
+# --- Truthful per-model cost (#2027, generation-aware #2102) --------------
+# Actual list rates per Mtok, keyed by a generation-aware rate class (see
+# rate_class below). Unlike the proxy above, this prices each session by its
+# REAL model so cost_usd is the actual bill. Convention: a bare family key
+# (opus/sonnet/haiku) = the current generation; a *_3 / *_3_5 key = that
+# retired Claude 3.x generation. Claude 3 cache rates are formula-derived
+# (1.25x write / 0.1x read of input), not exact historical cents.
+def ACTUAL_RATES:
+  { opus:      {input:5,    cache_creation:6.25,    cache_read:0.50,  output:25},
+    sonnet:    {input:3,    cache_creation:3.75,    cache_read:0.30,  output:15},
+    haiku:     {input:1,    cache_creation:1.25,    cache_read:0.10,  output:5},
+    opus_3:    {input:15,   cache_creation:18.75,   cache_read:1.50,  output:75},
+    haiku_3:   {input:0.25, cache_creation:0.3125,  cache_read:0.025, output:1.25},
+    haiku_3_5: {input:0.80, cache_creation:1.00,    cache_read:0.08,  output:4.00} };
+def family($m):
+  if   ($m | startswith("claude-opus") or startswith("claude-3-opus")) then "opus"
+  elif ($m | startswith("claude-sonnet")
+         or startswith("claude-3-sonnet")
+         or startswith("claude-3-5-sonnet")
+         or startswith("claude-3-7-sonnet")) then "sonnet"
+  elif ($m | startswith("claude-haiku")
+         or startswith("claude-3-haiku")
+         or startswith("claude-3-5-haiku")) then "haiku"
+  else null end;
+def rate_class($m):
+  if   ($m | startswith("claude-3-opus"))    then "opus_3"
+  elif ($m | startswith("claude-3-5-haiku")) then "haiku_3_5"
+  elif ($m | startswith("claude-3-haiku"))   then "haiku_3"
+  else family($m) end;
+def cost(u; $model):
+  family($model) as $fam
+  | rate_class($model) as $rc
+  | ((u.input//0)+(u.cache_creation//0)+(u.cache_read//0)+(u.output//0)) as $tok
+  | if $fam == null then
+      (if $tok == 0 then 0
+       else error("dispatch-token-audit: unpriceable model '\($model)' carries \($tok) tokens; add it to the price table") end)
+    else (ACTUAL_RATES[$rc]) as $r
+      | ( (u.input//0)*$r.input + (u.cache_creation//0)*$r.cache_creation
+        + (u.cache_read//0)*$r.cache_read + (u.output//0)*$r.output ) / 1e6
+    end;
+def session_cost($r):
+  reduce ($r.by_skill_model | to_entries[]) as $e (0;
+    . + cost($e.value.usage; ($e.key | split("\t")[1])));
+
 def zero_usage: {input:0, cache_creation:0, cache_read:0, output:0};
 def add_usage(a; b):
   {
@@ -356,13 +431,14 @@ def add_usage(a; b):
     output:         ((a.output         // 0) + (b.output         // 0))
   };
 
-# A flat bucket record {input,cache_creation,cache_read,output,turns,price_proxy_usd}
-def zero_bucket: {input:0, cache_creation:0, cache_read:0, output:0, turns:0, price_proxy_usd:0};
+# A flat bucket record {input,cache_creation,cache_read,output,turns,price_proxy_usd,cost_usd}
+def zero_bucket: {input:0, cache_creation:0, cache_read:0, output:0, turns:0, price_proxy_usd:0, cost_usd:0};
 def add_to_bucket(bucket; u; turns):
   ( add_usage(bucket; u) ) as $nu
   | $nu + {
       turns: ((bucket.turns // 0) + turns),
-      price_proxy_usd: price($nu)
+      price_proxy_usd: price($nu),
+      cost_usd: (bucket.cost_usd // 0)
     };
 
 # Consecutive n-grams of a token list as arrays. range upper bound goes negative
@@ -393,7 +469,8 @@ def outcome_rates($o):
 | ( $tot_usage + {
       sessions: ($rows | length),
       turns: ([ $rows[].turns ] | add // 0),
-      price_proxy_usd: price($tot_usage)
+      price_proxy_usd: price($tot_usage),
+      cost_usd: ([ $rows[] | session_cost(.) ] | add // 0)
     } ) as $totals
 
 # ---- by_session_type (all five buckets always present) ----
@@ -405,6 +482,7 @@ def outcome_rates($o):
     # add sessions count per type
     | reduce $rows[] as $r (.; .[$r.type].sessions = ((.[$r.type].sessions // 0) + 1))
     | reduce (to_entries[] | select(.value.sessions == null)) as $e (.; .[$e.key].sessions = 0)
+    | reduce $rows[] as $r (.; .[$r.type].cost_usd = ((.[$r.type].cost_usd // 0) + session_cost($r)))
   ) as $by_session_type
 
 # ---- by_phase (seven named phases always present) + by_phase_model ----
@@ -419,9 +497,16 @@ def outcome_rates($o):
         .[$e.key] = add_to_bucket((.[$e.key] // zero_bucket); $e.value.usage; $e.value.turns)
       )
     ) ) as $by_phase
+| ( reduce $rows[] as $r ($by_phase;
+      reduce ($r.by_skill_model | to_entries[]) as $e (.;
+        ($e.key | split("\t")) as $k
+        | .[$k[0]] = ((.[$k[0]] // zero_bucket) | .cost_usd += cost($e.value.usage; $k[1]))
+      )
+    ) ) as $by_phase
 | ( reduce $rows[] as $r ({};
       reduce ($r.by_skill_model | to_entries[]) as $e (.;
-        .[$e.key] = add_to_bucket((.[$e.key] // zero_bucket); $e.value.usage; $e.value.turns)
+        .[$e.key] = ( add_to_bucket((.[$e.key] // zero_bucket); $e.value.usage; $e.value.turns)
+                      | .cost_usd += cost($e.value.usage; ($e.key | split("\t")[1])) )
       )
     ) ) as $by_phase_model
 
@@ -429,7 +514,8 @@ def outcome_rates($o):
 | ( reduce $rows[] as $r ({};
       reduce ($r.by_skill_model | to_entries[]) as $e (.;
         ($e.key | split("\t")[1]) as $model
-        | .[$model] = add_to_bucket((.[$model] // zero_bucket); $e.value.usage; $e.value.turns)
+        | .[$model] = ( add_to_bucket((.[$model] // zero_bucket); $e.value.usage; $e.value.turns)
+                        | .cost_usd += cost($e.value.usage; $model) )
       )
     ) ) as $by_model
 
@@ -500,14 +586,16 @@ def outcome_rates($o):
 
 # ---- by_phase_outcome (pooled hit-rate per envelope phase, #1860) ----
 # Keyed by the envelope's own `.phase` enum value (e.g. "review", "qa") — NOT by
-# skill name like $by_phase. DOUBLE-COUNT GUARD: fold ONLY non-subagent rows that
-# carry an envelope. Per the doc, only top-level worker sessions emit; a subagent
-# transcript that happens to print the marker is excluded so it cannot inflate
-# the pool. Counts are SUMMED across a phase's rows, then the same null-guarded
-# formulas are applied to the pooled sums (pooled rate, not a mean of per-run
-# rates). disposition_distribution counts rows per disposition enum value.
+# skill name like $by_phase. DOUBLE-COUNT GUARD: admit ONLY the allowlisted emitter
+# types — `worker` and `router-tick` — that carry an envelope. The `subagent`,
+# `recovery`, and `other` session types are excluded: subagents are nested
+# transcripts that cannot be top-level emitters, and recovery/other are not
+# proven envelope emitters. Counts are SUMMED across a phase's rows, then the
+# same null-guarded formulas are applied to the pooled sums (pooled rate, not a
+# mean of per-run rates). disposition_distribution counts rows per disposition
+# enum value.
 | ( reduce ( $rows[]
-             | select(.type != "subagent" and .outcome != null) ) as $r ({};
+             | select((.type == "worker" or .type == "router-tick") and .outcome != null) ) as $r ({};
       ($r.outcome.phase // "<unknown>") as $ph
       | ($r.outcome) as $o
       | .[$ph] as $cur
@@ -536,11 +624,13 @@ def outcome_rates($o):
 # rates — they never crash the formula (rate() guards a null/zero denominator).
 | ( [ $rows[] | {
         id: .id, file: .file, type: .type,
+        artifact: .artifact,
         model: .primary_model, models: .models,
         turns: .turns, peak_context: .peak_context,
         input: .usage.input, cache_creation: .usage.cache_creation,
         cache_read: .usage.cache_read, output: .usage.output,
         price_proxy_usd: price(.usage),
+        cost_usd: session_cost(.),
         phases: ( reduce (.by_skill | to_entries[]) as $e ({}; .[$e.key] = price($e.value.usage)) ),
         outcome: .outcome,
         outcome_rates: ( if .outcome == null then null else outcome_rates(.outcome) end )
@@ -589,13 +679,22 @@ def outcome_rates($o):
     } ) as $baseline_lens
 
 | {
-    window: $win,
+    window: ( $win + {
+      sidecar_eligible:  ( [ $sessions[] | select(.type=="worker") ] | length ),
+      sidecar_present:   ( [ $sessions[] | select(.type=="worker" and .artifact!=null) ] | length ),
+      sidecar_present_rate:
+        ( ( [ $sessions[] | select(.type=="worker") ] | length ) as $elig
+          | if $elig==0 then null
+            else ( [ $sessions[] | select(.type=="worker" and .artifact!=null) ] | length ) / $elig
+            end )
+    } ),
     price_model: {
-      note: "Opus list-price-equivalent USD proxy; relative magnitude, not the bill",
+      note: "price_proxy_usd is an Opus-list-price-equivalent USD proxy for RANKING (uniform rate, not the bill); cost_usd is the truthful per-model bill from actual_rates_per_mtok",
       input_per_mtok: RATE_INPUT,
       cache_creation_per_mtok: RATE_CACHE_CREATION,
       cache_read_per_mtok: RATE_CACHE_READ,
-      output_per_mtok: RATE_OUTPUT
+      output_per_mtok: RATE_OUTPUT,
+      actual_rates_per_mtok: ACTUAL_RATES
     },
     totals: $totals,
     by_session_type: $by_session_type,
@@ -627,7 +726,12 @@ if [[ -d "$PROJECTS_ROOT" ]]; then
   # Gather candidate project dirs (worktrees + bare), then find *.jsonl in window.
   while IFS= read -r -d '' file; do
     FILES_SCANNED=$((FILES_SCANNED + 1))
-    if jq -cs -f "$TMP/stage1.jq" "$file" >>"$STAGE1_OUT" 2>/dev/null; then
+    # Per-session sidecar (#1861): <stem>.dispatch-stamp.json next to the
+    # transcript. Most transcripts have none; --slurpfile needs a readable file,
+    # so absent sidecars point at /dev/null, which slurps to [].
+    stamp="${file%.jsonl}.dispatch-stamp.json"
+    [[ -f "$stamp" ]] || stamp=/dev/null
+    if jq -cs --slurpfile stamp "$stamp" -f "$TMP/stage1.jq" "$file" >>"$STAGE1_OUT" 2>/dev/null; then
       :
     else
       FILES_FAILED=$((FILES_FAILED + 1))

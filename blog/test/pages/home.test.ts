@@ -1,18 +1,25 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-
-if (typeof globalThis.reportError !== "function") {
-  globalThis.reportError = () => {};
-}
-
-vi.mock("marked", () => ({
-  Marked: class {
-    parse = vi.fn((md: string) => Promise.resolve(`<p>${md}</p>`));
-  },
-}));
-
-import { renderHomeHtml, hydrateHome } from "../../src/pages/home";
+import { describe, it, expect } from "vitest";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { EmptyFeed, PostFeed } from "../../src/pages/Home.tsx";
 import type { PostContent } from "../../src/pages/home";
 import type { PostMeta } from "../../src/post-types";
+
+// Local static-markup helper reproducing the former renderHomeHtml bridge
+// (deleted with the imperative code in src/pages/home.ts). It renders the frozen
+// presentational components directly so every assertion body below stays
+// identical — preserving the rendered-markup coverage. The hydrateHome behavior
+// (fetch/parse/sanitize, h1-title update, error fallback, scroll-to-post,
+// staleness) now lives in HomeRegion and is covered in ../home-region.test.tsx.
+function renderHomeHtml(
+  posts: PostMeta[],
+  postLinkPrefix = "/post/",
+  contentMap?: Record<string, PostContent>,
+): string {
+  return posts.length === 0
+    ? renderToStaticMarkup(createElement(EmptyFeed))
+    : renderToStaticMarkup(createElement(PostFeed, { posts, postLinkPrefix, contentMap }));
+}
 
 const publishedPost: PostMeta = {
   id: "hello-world",
@@ -56,7 +63,11 @@ describe("renderHomeHtml", () => {
 
   it("renders publishedAt in a time element", () => {
     const html = renderHomeHtml([publishedPost]);
-    expect(html).toContain('datetime="2026-01-01T00:00:00Z"');
+    // React's static renderer emits the datetime attribute as `dateTime`
+    // (camelCase). HTML attribute names are case-insensitive, so the browser
+    // parses `<time dateTime="...">` as `datetime`; the hydrator never queries
+    // this attribute, so the casing is cosmetic.
+    expect(html).toMatch(/<time [^>]*=["']2026-01-01T00:00:00Z["']/i);
   });
 
   it("shows [draft] badge for unpublished posts", () => {
@@ -136,167 +147,5 @@ describe("renderHomeHtml", () => {
     };
     const html = renderHomeHtml([publishedPost], "/post/", contentMap);
     expect(html).toContain("Loading...");
-  });
-});
-
-describe("hydrateHome", () => {
-  let outlet: HTMLDivElement;
-  let mockFetchPost: ReturnType<typeof vi.fn>;
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    outlet = document.createElement("div");
-    mockFetchPost = vi.fn();
-  });
-
-  it("injects fetched content into the placeholder div", async () => {
-    outlet.innerHTML = renderHomeHtml([publishedPost]);
-    mockFetchPost.mockResolvedValue("# Hello");
-
-    hydrateHome(outlet, [publishedPost], mockFetchPost);
-    await vi.waitFor(() => {
-      const content = outlet.querySelector("#post-content-hello-world");
-      expect(content?.innerHTML).toContain("<p>");
-      expect(content?.innerHTML).not.toContain("Loading...");
-    });
-  });
-
-  it("shows error message when fetch fails", async () => {
-    outlet.innerHTML = renderHomeHtml([publishedPost]);
-    mockFetchPost.mockRejectedValue(new Error("network error"));
-
-    hydrateHome(outlet, [publishedPost], mockFetchPost);
-    await vi.waitFor(() => {
-      const content = outlet.querySelector("#post-content-hello-world");
-      expect(content?.innerHTML).toContain("Could not load post content. Try refreshing.");
-    });
-  });
-
-  it("does not write to DOM if outlet no longer contains the posts container", async () => {
-    outlet.innerHTML = renderHomeHtml([publishedPost]);
-
-    // Simulate navigation away by clearing outlet
-    let resolveFetch!: (value: string) => void;
-    mockFetchPost.mockReturnValue(
-      new Promise((resolve) => {
-        resolveFetch = resolve;
-      }),
-    );
-
-    hydrateHome(outlet, [publishedPost], mockFetchPost);
-    outlet.innerHTML = "<p>Navigated away</p>";
-    resolveFetch("# Hello");
-
-    await new Promise((r) => setTimeout(r, 50));
-    expect(outlet.innerHTML).toBe("<p>Navigated away</p>");
-  });
-
-  it("strips h1 from markdown and updates h2 title", async () => {
-    outlet.innerHTML = renderHomeHtml([publishedPost]);
-    mockFetchPost.mockResolvedValue("# Markdown Title\nBody text here.");
-
-    hydrateHome(outlet, [publishedPost], mockFetchPost);
-    await vi.waitFor(() => {
-      const content = outlet.querySelector("#post-content-hello-world");
-      expect(content?.innerHTML).not.toContain("Markdown Title");
-      expect(content?.innerHTML).toContain("Body text here.");
-    });
-
-    const titleSpan = outlet.querySelector(
-      "#post-hello-world h2 .post-title",
-    );
-    expect(titleSpan?.textContent).toBe("Markdown Title");
-  });
-
-  it("scrolls to target article when scrollTo is provided", async () => {
-    // Add a header so hydrateHome can measure its height
-    const header = document.createElement("header");
-    Object.defineProperty(header, "offsetHeight", { value: 60, configurable: true });
-    document.body.appendChild(header);
-
-    outlet.innerHTML = renderHomeHtml([publishedPost]);
-    mockFetchPost.mockResolvedValue("# Hello");
-
-    const scrollSpy = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
-
-    try {
-      hydrateHome(outlet, [publishedPost], mockFetchPost, "hello-world");
-      await vi.waitFor(() => {
-        expect(scrollSpy).toHaveBeenCalled();
-      });
-
-      // getBoundingClientRect().top is 0 in happy-dom, so Math.max(0, 0 + 0 - 60 - 16) = 0
-      const call = scrollSpy.mock.calls[0][0] as ScrollToOptions;
-      expect(call.top).toBe(0);
-      expect(call.behavior).toBe("instant");
-    } finally {
-      scrollSpy.mockRestore();
-      document.body.removeChild(header);
-    }
-  });
-
-  it("skips scroll from stale hydration when outlet is re-rendered between calls", async () => {
-    const header = document.createElement("header");
-    Object.defineProperty(header, "offsetHeight", { value: 60, configurable: true });
-    document.body.appendChild(header);
-
-    const scrollSpy = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
-
-    try {
-      // --- First hydration with a deferred fetch ---
-      outlet.innerHTML = renderHomeHtml([publishedPost]);
-      let resolveFirst!: (value: string) => void;
-      const firstFetch = vi.fn(
-        () => new Promise<string>((resolve) => { resolveFirst = resolve; }),
-      );
-      hydrateHome(outlet, [publishedPost], firstFetch, "hello-world");
-
-      // --- Simulate re-render (auth state change replaces outlet contents) ---
-      outlet.innerHTML = renderHomeHtml([publishedPost]);
-
-      // --- Second hydration with its own deferred fetch ---
-      let resolveSecond!: (value: string) => void;
-      const secondFetch = vi.fn(
-        () => new Promise<string>((resolve) => { resolveSecond = resolve; }),
-      );
-      hydrateHome(outlet, [publishedPost], secondFetch, "hello-world");
-
-      // Resolve both fetches — first hydration's container is no longer in the DOM
-      resolveFirst("# Hello");
-      resolveSecond("# Hello");
-
-      await vi.waitFor(() => {
-        expect(scrollSpy).toHaveBeenCalledTimes(1);
-      });
-
-      // The single scroll call should come from the second hydration
-      const call = scrollSpy.mock.calls[0][0] as ScrollToOptions;
-      expect(call.behavior).toBe("instant");
-    } finally {
-      scrollSpy.mockRestore();
-      document.body.removeChild(header);
-    }
-  });
-
-  it("skips fetch for posts with data-hydrated attribute", async () => {
-    const contentMap: Record<string, PostContent> = {
-      "hello-world": { html: "<p>Pre-rendered</p>", title: "Hello World" },
-    };
-    outlet.innerHTML = renderHomeHtml([publishedPost], "/post/", contentMap);
-    mockFetchPost.mockResolvedValue("# Hello");
-
-    hydrateHome(outlet, [publishedPost], mockFetchPost);
-    await new Promise((r) => setTimeout(r, 50));
-    expect(mockFetchPost).not.toHaveBeenCalled();
-  });
-
-  it("still fetches for posts without data-hydrated attribute", async () => {
-    outlet.innerHTML = renderHomeHtml([publishedPost]);
-    mockFetchPost.mockResolvedValue("# Hello");
-
-    hydrateHome(outlet, [publishedPost], mockFetchPost);
-    await vi.waitFor(() => {
-      expect(mockFetchPost).toHaveBeenCalledWith("hello-world.md");
-    });
   });
 });

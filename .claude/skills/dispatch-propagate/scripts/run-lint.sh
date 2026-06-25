@@ -11,6 +11,8 @@ source "$SCRIPTS/lib.sh"
 declare -A DIRTY_APPS
 RUN_NIX=false
 RUN_RULES=false
+RUN_PROSE=false
+RUN_DS_DRIFT=false
 EXPLICIT=false
 
 while [[ $# -gt 0 ]]; do
@@ -31,8 +33,18 @@ while [[ $# -gt 0 ]]; do
       EXPLICIT=true
       shift
       ;;
+    --prose)
+      RUN_PROSE=true
+      EXPLICIT=true
+      shift
+      ;;
+    --ds-drift)
+      RUN_DS_DRIFT=true
+      EXPLICIT=true
+      shift
+      ;;
     *)
-      echo "Usage: run-lint.sh [--app <dir>] [--nix] [--rules]" >&2
+      echo "Usage: run-lint.sh [--app <dir>] [--nix] [--rules] [--prose] [--ds-drift]" >&2
       exit 1
       ;;
   esac
@@ -56,7 +68,9 @@ if [ "$EXPLICIT" = false ]; then
     case "$file" in
       nix/*|flake.nix|flake.lock) RUN_NIX=true ;;
       firestore.rules) RUN_RULES=true ;;
+      *.css|*.tsx) RUN_DS_DRIFT=true ;;
     esac
+    if is_shell_script "$file"; then RUN_PROSE=true; fi
   done <<< "$CHANGED"
 fi
 
@@ -101,7 +115,29 @@ if [ "$RUN_RULES" = true ]; then
   fi
 fi
 
-if [ ${#APP_DIRS[@]} -eq 0 ] && [ "$RUN_NIX" = false ] && [ "$RUN_RULES" = false ]; then
+# Run prose-rule lint
+if [ "$RUN_PROSE" = true ]; then
+  echo "=== Prose-rule lint ==="
+  if "$SCRIPTS/lint-prose-rules.sh"; then
+    echo "PASS: prose rules"
+  else
+    echo "FAIL: prose rules" >&2
+    FAILURES+=(prose)
+  fi
+fi
+
+# Run ds-drift lint
+if [ "$RUN_DS_DRIFT" = true ]; then
+  echo "=== ds-drift lint ==="
+  if "$SCRIPTS/lint-ds-drift.sh"; then
+    echo "PASS: ds-drift"
+  else
+    echo "FAIL: ds-drift" >&2
+    FAILURES+=(ds-drift)
+  fi
+fi
+
+if [ ${#APP_DIRS[@]} -eq 0 ] && [ "$RUN_NIX" = false ] && [ "$RUN_RULES" = false ] && [ "$RUN_PROSE" = false ] && [ "$RUN_DS_DRIFT" = false ]; then
   echo "No lint targets matched changed files. Nothing to check."
   exit 0
 fi

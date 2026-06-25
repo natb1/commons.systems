@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { createElement } from "react";
 import {
   prerenderStaticPage,
   loadPostsForPrerender,
@@ -45,7 +46,7 @@ function makeStaticConfig(
       description: "About this site",
       ...pageOverrides,
     },
-    bodyHtml: '<article id="about-body">About body</article>',
+    body: createElement("article", { id: "about-body" }, "About body"),
     navLinks: [
       { href: "/", label: "Home" },
       { href: "/about", label: "About" },
@@ -173,11 +174,13 @@ describe("prerenderStaticPage", () => {
     expect(html).toContain("default hero marker");
   });
 
-  it("injects bodyHtml into <main id=\"app\">", () => {
+  it("injects the body ReactNode (wrapped in a <div>) into <main id=\"app\">", () => {
     prerenderStaticPage(makeStaticConfig());
     const html = getWrittenHtml("/dist/about/index.html");
+    // The body is server-rendered wrapped in a <div> so it byte-matches the
+    // client's createElement("div", null, node) entry-hydration wrapper.
     expect(html).toContain(
-      '<main id="app"><article id="about-body">About body</article></main>',
+      '<main id="app"><div><article id="about-body">About body</article></div></main>',
     );
   });
 
@@ -189,12 +192,72 @@ describe("prerenderStaticPage", () => {
     );
   });
 
+  it("renders the panel through InfoPanelRegion's aboutContent branch when aboutContent is set", () => {
+    const aboutPanel = createElement(
+      "section",
+      { className: "panel-section profile-card" },
+      createElement("p", { className: "profile-name" }, "Nathan Buesgens"),
+    );
+    prerenderStaticPage(
+      makeStaticConfig({
+        aboutContent: aboutPanel,
+        // panelHtml is ignored when aboutContent is set — its content must not leak.
+        panelHtml: '<section class="panel-section"><h3>IGNORED PANEL</h3></section>',
+      }),
+    );
+    const html = getWrittenHtml("/dist/about/index.html");
+    // InfoPanelRegion's aboutContent branch wraps the node in a <div>, so the
+    // prerendered #info-panel matches what the client hydrates on a deep /about entry.
+    expect(html).toContain(
+      '<aside id="info-panel" class="sidebar"><div><section class="panel-section profile-card"><p class="profile-name">Nathan Buesgens</p></section></div></aside>',
+    );
+    expect(html).not.toContain("IGNORED PANEL");
+  });
+
+  it("renders the panel through InfoPanelRegion even without panelHtml when aboutContent is set", () => {
+    const aboutPanel = createElement("section", { className: "profile-card" }, "about");
+    prerenderStaticPage(
+      makeStaticConfig({ aboutContent: aboutPanel, panelHtml: undefined }),
+    );
+    const html = getWrittenHtml("/dist/about/index.html");
+    expect(html).toContain('<aside id="info-panel" class="sidebar"><div>');
+    expect(html).toContain("profile-card");
+  });
+
+  it("throws when neither aboutContent nor panelHtml is provided", () => {
+    expect(() =>
+      prerenderStaticPage(makeStaticConfig({ panelHtml: undefined })),
+    ).toThrow("requires either aboutContent or panelHtml");
+  });
+
   it("injects nav links into <app-nav>", () => {
+    prerenderStaticPage(makeStaticConfig({ showHomeLink: true }));
+    const html = getWrittenHtml("/dist/about/index.html");
+    // The <app-nav> wrapper survives; inside it the ds Nav renders both links
+    // (the /about link is align:undefined here, so it stays in the start group)
+    // plus the home link, anonymously (no "Login").
+    expect(html).toContain('<app-nav id="nav">');
+    expect(html).toContain("cs-nav");
+    expect(html).toContain('href="/"');
+    expect(html).toContain("Home");
+    expect(html).toContain('href="/about"');
+    expect(html).toContain("About");
+    expect(html).toContain('href="https://commons.systems/"');
+    expect(html).not.toContain("Login");
+  });
+
+  it("omits home link from nav when showHomeLink is false (default)", () => {
     prerenderStaticPage(makeStaticConfig());
     const html = getWrittenHtml("/dist/about/index.html");
-    expect(html).toContain('<app-nav id="nav"><span class="nav-links">');
-    expect(html).toContain('<a href="/">Home</a>');
-    expect(html).toContain('<a href="/about">About</a>');
+    // Nav still renders with cs-nav and the configured nav links.
+    expect(html).toContain('<app-nav id="nav">');
+    expect(html).toContain("cs-nav");
+    expect(html).toContain('href="/"');
+    expect(html).toContain("Home");
+    expect(html).toContain('href="/about"');
+    expect(html).toContain("About");
+    // Home link to commons.systems root must be absent.
+    expect(html).not.toContain('href="https://commons.systems/"');
   });
 
   it("writes output to ${distDir}${path}/index.html and creates the directory", () => {
@@ -291,7 +354,7 @@ describe("loadPostsForPrerender", () => {
     }) as typeof fs.readFileSync);
   });
 
-  it("returns topPosts, panelHtml, allArticlesHtml, and rendered posts", async () => {
+  it("returns topPosts, panelHtml, bodyHtml, and rendered posts", async () => {
     const result = await loadPostsForPrerender({
       seed: {
         collections: [
@@ -326,8 +389,12 @@ describe("loadPostsForPrerender", () => {
     expect(result.topPosts).toHaveLength(1);
     expect(result.topPosts[0].id).toBe("hello-world");
     expect(result.rendered).toHaveLength(1);
-    expect(result.rendered[0].articleHtml).toContain('<article id="post-hello-world">');
-    expect(result.allArticlesHtml).toContain('<article id="post-hello-world">');
+    expect(result.rendered[0].meta.id).toBe("hello-world");
+    // bodyHtml is the server-rendered HomeRegion feed (the #posts container).
+    expect(result.bodyHtml).toContain('id="posts"');
+    expect(result.bodyHtml).toContain('id="post-hello-world"');
+    expect(result.bodyHtml).toContain('id="post-content-hello-world"');
+    expect(result.bodyHtml).toContain("data-hydrated");
     expect(result.panelHtml).toContain("Top Posts");
     expect(result.panelHtml).toContain("Hello World");
   });
@@ -376,9 +443,9 @@ describe("loadPostsForPrerender", () => {
     });
 
     expect(result.topPosts.map((p) => p.id)).toEqual(["second", "hello-world"]);
-    expect(result.allArticlesHtml).toContain("<hr>");
-    const firstIdx = result.allArticlesHtml.indexOf("post-second");
-    const secondIdx = result.allArticlesHtml.indexOf("post-hello-world");
+    expect(result.bodyHtml).toContain("<hr/>");
+    const firstIdx = result.bodyHtml.indexOf("post-second");
+    const secondIdx = result.bodyHtml.indexOf("post-hello-world");
     expect(firstIdx).toBeLessThan(secondIdx);
   });
 });

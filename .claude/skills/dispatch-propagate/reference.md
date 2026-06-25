@@ -126,6 +126,56 @@ lock is reclaimed automatically. Same-session re-entry (e.g. after a context cle
 cleanly because the recorded sessionId matches the re-entering session's own
 `CLAUDE_CODE_SESSION_ID`.
 
+## Max-hold / heartbeat staleness cap
+
+Before #2104, the dead-holder reclaim covered the case where a router crashes mid-selection
+and its sessionId disappears from `claude agents --json`. It did not cover a holder that is
+still live but wedged — a session that resumed after a crash without releasing, or one that
+stalled indefinitely inside a retry or wait loop. A wedged live holder blocked the chain
+permanently because no acquisition could proceed against a foreign sessionId that remained
+visible in the agents list.
+
+The staleness cap adds a second reclaim condition: if the recorded foreign holder is live but
+the lock-file mtime is older than `max_hold_seconds`, the acquirer reclaims it regardless,
+logging a `reclaimed stale lock from … (held …s > max_hold …s)` diagnostic. This reclaim
+runs AFTER the existing liveness resolve, so a daemon probe failure that returns UNKNOWN still
+folds to LIVE→BUSY — the acquirer does not steal on uncertainty. `max_hold_seconds` is
+configured in `dispatch.config/selection-lock.json` (`{ "max_hold_seconds": 300 }`), with
+`DISPATCH_LOCK_MAX_HOLD_SECONDS` as an env override; config takes precedence. The default is
+300 seconds.
+
+The **lock-file mtime is the heartbeat**. Only a claim/reclaim write or a `--heartbeat`
+touch bumps it; the low-level append-open and flock do not. `dispatch-acquire-lock
+--heartbeat` is a strict-owner mode: if the caller's sessionId matches the recorded holder it
+bumps the mtime and prints `refreshed`; otherwise it noops. It issues no daemon probe and
+completes in under 100ms. The held region (`dispatch-select-tick`, `dispatch-materialize-spawn`)
+calls `--heartbeat` after each best-effort sub-step completes and before each cross-process
+HOLD handoff.
+
+Three invariants govern correctness of this mechanism:
+
+1. **`max_hold_seconds` bounds the worst-case gap between two consecutive heartbeat *refreshes*,
+   not the worst-case total hold duration.** A dispossessed holder is never signaled it lost the
+   lock: after a stale-reclaim, its next `--heartbeat` sees a foreign sessionId and silently
+   noops. The guarantee against a false reclaim is therefore "heartbeats keep arriving faster
+   than `max_hold_seconds`," not "the hold is short." Legitimate multi-step sequences
+   that take longer than 300 seconds are safe as long as each sub-step finishes and fires a
+   heartbeat within the window.
+
+2. **Heartbeats fire on sub-step *completion*, never inside a retry / poll / wait loop.** The
+   failure mode being fixed is a holder wedged inside a loop — one that is live (visible to
+   `claude agents --json`) but making no selection progress. Placing a refresh inside such a
+   loop would keep the mtime fresh while the holder spins and the wedge would recur. Refreshes
+   are placed only after a sub-step returns, ensuring that a genuinely stalled holder stops
+   refreshing and becomes reclaimable.
+
+3. **The per-worktree spawn dedup — not the heartbeat — is the real #1068 safety net.** When a
+   stale-reclaim races a still-live holder, both may proceed to the selection scan. The existing
+   per-worktree dedup in `dispatch-spawn-job` is what prevents two selectors from spawning the
+   same target. Live-stale reclaim exercises that backstop more often than the existing dead-holder
+   reclaim does. The no-reclaim-when-fresh behavior keeps the race rare; the per-worktree marker
+   keeps it safe when it happens.
+
 ## Per-worktree invariant
 
 The selection lock is **per-repo** and serializes the router's selection
@@ -151,6 +201,8 @@ The two mechanisms have orthogonal scopes:
 
 - **Selection lock** — per-repo, held by the router for the
   duration of Steps 1–5. Prevents two routers from selecting the same target.
+  A live-but-wedged holder is reclaimed once its heartbeat (lock-file mtime) exceeds
+  `max_hold_seconds` (default 300; see *Max-hold / heartbeat staleness cap*).
 - **Per-worktree dedup** (`dispatch-launch-worker`, via `dispatch-spawn-job`) —
   per-worktree-path, enforced at every router-to-worker spawn. Prevents two
   workers from racing on the same issue.
@@ -244,9 +296,9 @@ than one issue per file. The issue body carries only the filename and full
 sha256; the statement contents stay in the user's folder on disk.
 
 Idempotency is keyed on GitHub state, not a side file. For each file the scan
-computes its sha256 and runs `gh search issues` (which covers open AND closed
-issues) to check whether an issue with that hash already exists under the
-entry's label. A hit → skip; no hit → file. This is consistent with the #755
+computes its sha256 and runs `gh issue list --state all` (GraphQL-backed `gh
+issue list`; covers open AND closed issues) to check whether an issue with that hash already exists
+under the entry's label. A hit → skip; no hit → file. This is consistent with the #755
 no-drift-prone-side-file principle. The local `tmp/dispatch-statements-state.json`
 debounce timestamp is a per-machine rate-limiter only — it skips the network
 calls within the configured window so a noisy tick does not hammer GitHub, but
@@ -463,7 +515,9 @@ or a malformed `now`), `dispatch-target-workers` prints `1` and writes a
 one-line note to stderr — the chain degrades to "spawn one per tick". When only
 `five_hour` is absent while `seven_day` is present, Stages 1–3 run with
 `used_5h` treated as 0 — gate-open → max workers. Non-numeric `used_*` values
-are treated as missing (fail-closed). The stdout contract — a single integer —
+are handled asymmetrically: non-numeric `used_weekly` is treated as missing
+(fail-closed → N=1); non-numeric `used_5h` is treated as 0 (fail-open →
+weekly-bounded max workers). The stdout contract — a single integer —
 and the router gate `LIVE_COUNT >= TARGET_N` are unchanged.
 
 ## The #725 cap-keyed re-seed
@@ -600,6 +654,79 @@ dependency-free. In dry-run mode the member-email payload is injected via the
 `DISPATCH_USAGE_SAMPLES_SECRET_OVERRIDE` env var (the raw comma-separated string
 the secret would return). This seam is for testing only — it is never consulted
 in real mode, which always reads Secret Manager.
+
+## The dispatch:review-followup follow-up marker
+
+Every follow-up issue filed by the `review-fix` skill's 5a and 5b subagents
+receives two things:
+
+1. A `<!-- dispatch:source-pr <N> -->` body marker (where `<N>` is the PR under
+   review) recording provenance: "this follow-up's out-of-scope findings were
+   surfaced while reviewing PR #<N>."
+2. The static label `dispatch:review-followup`.
+
+The body marker is the machine key consumed by the
+`dispatch-retriage-orphaned-followups` scan. The static label is a cheap
+server-side pre-filter that narrows the scan's fetch to review follow-up issues,
+and also lets humans filter "all review follow-ups" in the UI.
+
+The marker is appended immediately after `/file-issue` returns the new issue
+number, via read-modify-write: fetch the current body with
+`gh issue view <N> --json body -q .body`, append the marker as the last line,
+and set the combined body back with `gh issue edit <N> --body`. Never pass the
+marker alone — `--body` replaces the whole body and would clobber the finding
+content.
+
+The static label is added with a plain `gh issue edit <N> --add-label
+dispatch:review-followup`. It is pre-created once during the PR's QA backfill,
+so adding it is idempotent and race-free across parallel 5a/5b subagents — there
+is NO create-on-not-found dance (this replaced the old create-on-not-found idiom
+used by the former per-PR `source-pr:<N>` label).
+
+Marker reads use last-wins: when the scan parses the body it takes the final
+`<!-- dispatch:source-pr <N> -->` occurrence, so a crafted earlier marker in a
+finding body cannot spoof identity.
+
+In 5a the value substituted is the literal `<PR_NUM>` the main thread passes
+into the fork prompt; in 5b it is the shell variable `$PR_NUM` already in scope.
+
+## Step 2e — orphaned follow-up re-triage scan
+
+`dispatch-retriage-orphaned-followups` is a best-effort Step-2e tick scan that
+runs on every tick immediately after the Step-2d merge-queue reconcile. It
+exists to clean up review follow-up issues that became orphaned when their source
+PR was abandoned or superseded rather than merged.
+
+**What it does.** The scan fetches open issues pre-filtered by the static
+`dispatch:review-followup` label (server-side) and reads each issue's
+`<!-- dispatch:source-pr <N> -->` body marker to learn the source PR `<N>`.
+For each distinct PR `<N>` found, the scan calls `gh pr view <N>` and checks
+the PR's merge state. If PR #<N> is closed without merging (state `closed`,
+`merged` false), every open issue carrying that body marker is parked on
+`dispatch:office-hours` with a why-comment explaining that the source PR was
+closed unmerged and human re-triage is needed. The parked issues surface in the
+office-hours queue the same way any other `dispatch:office-hours`-labeled issue
+does.
+
+**Idempotency key.** Once a source PR's follow-ups have been processed, the scan
+applies the per-PR label `dispatch:orphans-retriaged` to the PR itself. On
+subsequent ticks the scan checks for this label before re-processing a
+closed-unmerged PR, skipping PRs already marked — so each closed-unmerged PR is
+processed exactly once. This avoids re-parking already-parked issues or
+duplicating why-comments.
+
+**Relation to the review-followup marker.** The scan reads the
+`<!-- dispatch:source-pr <N> -->` body marker (gated by the static
+`dispatch:review-followup` label) described in the preceding section as its
+input — without the marker it has no way to identify which issues belong to
+which source PR.
+
+**Pass-through prefix.** The scan's stdout lines are passed through the
+orchestrator with the `retriage:` prefix (see the `dispatch-select-tick` header
+comment for the full pass-through-lines ordering). A silent no-op when no open
+issue carries the `dispatch:review-followup` label / `<!-- dispatch:source-pr <N> -->`
+body marker, or when all source PRs that are closed-unmerged have already been
+retriaged.
 
 ## Target-keyed CI-wait reseed (#979)
 

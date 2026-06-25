@@ -24,16 +24,16 @@
       "skill": "digest"
     },
     {
-      "key": "roadmap",
+      "key": "align",
       "repo": "example-owner/example-repo",
-      "label": "jit:roadmap",
-      "title": "Roadmap review",
-      "body": "Recurring roadmap review. Reassesses ROADMAP.md and work completed since the previous review against CHARTER.md, triages the backlog, then closes to anchor the next cycle.",
+      "label": "jit:align",
+      "title": "Align review",
+      "body": "Recurring align review. Reassesses ROADMAP.md and work completed since the previous review against the project's principles (the intention graph), triages the backlog, then closes to anchor the next cycle.",
       "project": "example-project",
       "remindAfterClose": "7d",
       "dueAfterClose": "14d",
       "debounce": "1h",
-      "skill": "roadmap"
+      "skill": "align"
     }
   ]
 }

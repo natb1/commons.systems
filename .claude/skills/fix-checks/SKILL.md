@@ -143,27 +143,105 @@ Cross-iteration memory lives entirely in `tmp/fix-checks-summary.md` (see
      as its own tracking issue and block the PR's tracked issue on it. Push
      nothing — there is no fix to this PR. Follow these sub-steps:
 
-     1. **Compute a flake fingerprint.** Combine the failing check name with the
-        most stable identifier in the failure excerpt — the test name, file path,
-        or CI workflow name, whichever is most specific. This string is the dedupe
-        key; it must identify the same flake across re-runs.
-     2. **File the flake issue.** Launch a subagent (`subagent_type:
-        general-purpose`, `model: sonnet`) that invokes `/file-issue` via the
-        Skill tool. Build its `$INPUT` with a leading `--follow-up` token first,
-        then a title hint on the next line — a short imperative summary that encodes
-        the fingerprint, e.g. `Flaky CI: <check> — <stable identifier>` — followed
-        by a body containing the fingerprint, the reproduce command, and the failure
-        excerpt. (The `--follow-up` token is a classification no-op here — a flake
-        is a `bug`, which suppresses `enhancement` — but is passed for consistency.)
-        `/file-issue` runs the full pipeline: duplicate detection, 8-category
-        evaluation, decomposition gate, type/topic classification, creation (or
-        match of an existing open issue), `@me` assignment, `help wanted`, type
-        label, and any matched topic label. It ends with a
-        `===FILE-ISSUE-RESULTS===` … `===FILE-ISSUE-RESULTS-END===` block; the
-        subagent reads the `<disposition> <N>` record(s) between the sentinels (a
-        flake is one topic, so normally one record — iterate if more) and returns
-        each `<N>` with its `CREATED`/`EXISTING` disposition to this thread.
-     3. **Block the PR's tracked issue on the flake issue.** In this thread, use
+     1. **Capture the failing run id.** The Step 3 checks output lists, for each
+        check, a GitHub Actions run URL of the form
+        `https://github.com/<owner>/<repo>/actions/runs/<id>` (optionally with a
+        `/job/<job-id>` suffix). Parse the URL for the **failing** check and read
+        the numeric `<id>` segment immediately after `/actions/runs/` into
+        `RUN_ID` — that trailing all-digits run id, not any `/job/<job-id>` that
+        may follow it. This is the run whose excerpt sub-step 2 fingerprints, and
+        the run id the `dispatch-flake-dedup` guard needs for its CLOSED-path
+        stale-head comparison (sub-step 3); without it the guard's closed-issue
+        path hard-errors.
+     2. **Compute a flake fingerprint (rigid precedence — deterministic across
+        runs).** The fingerprint is `<failing-check-name> — <stable-id>`, where
+        `<stable-id>` is chosen by this **fixed precedence** (use the first the
+        failure excerpt provides):
+        1. the **test node id** — e.g. `path/to/test.spec.ts:LINE:COL test title`;
+        2. else the **file path:line**;
+        3. else the **CI workflow name**.
+        Read `<stable-id>` from the excerpt strictly by this precedence and
+        **never paraphrase or summarize it** — the same flake must yield a
+        byte-identical fingerprint string on every run, or dedup silently fails in
+        production (no fixture test exercises the live fingerprint computation, so
+        nothing catches a divergent string). This exact string is both (a) the
+        dedup key passed to `dispatch-flake-dedup` and (b) the verbatim trailing
+        token of the canonical tracking-issue title `Flaky CI: <fingerprint>`. Use
+        the **same** fingerprint value for both — do not recompute it.
+     3. **Find-or-file the flake issue (deterministic guard before
+        `/file-issue`).** A same-fingerprint tracking issue may already exist —
+        **open or closed**. Run the deterministic, state-spanning guard FIRST and
+        only file fresh when it reports no match. This closes the old leak where a
+        closed same-fingerprint issue read as "already resolved, so a recurrence is
+        new information" and got re-filed as a duplicate. In this thread
+        (`dangerouslyDisableSandbox: true` — the script calls `gh`):
+        1. Write the recurrence body to `tmp/flake-recurrence.md` (git-ignored
+           `tmp/`, like the accumulator): the fingerprint, the reproduce command,
+           the failure excerpt, and a `recurred on PR #<pr> / run <url>` line.
+        2. Run the guard, passing the fingerprint as the dedup key and the failing
+           run's id captured in sub-step 1 (`$RUN_ID`):
+           ```bash
+           DISP=$(.claude/skills/dispatch-propagate/scripts/dispatch-flake-dedup \
+             "<fingerprint>" --body-file tmp/flake-recurrence.md \
+             --run-id "$RUN_ID")
+           ```
+           It prints exactly one line: `NONE`, `EXISTING <N>`, `REOPENED <N>`, or
+           `STALE <N>`.
+           Parse it into a disposition and (when present) the issue number `<N>`.
+        3. Branch on the disposition:
+           - **`EXISTING <N>`** — a same-fingerprint issue is already open and the
+             guard appended this recurrence as a comment. Do **not** file. Flake
+             issue = `#<N>`, disposition `EXISTING`.
+           - **`REOPENED <N>`** — a same-fingerprint issue was closed-as-fixed but
+             the flake fired again; the guard reopened it and appended this
+             recurrence (the "closed-as-fixed but still firing" signal a human
+             should see on one issue, not N dups). Do **not** file. Flake issue =
+             `#<N>`, disposition `REOPENED`.
+           - **`STALE <N>`** — a same-fingerprint issue was closed-as-fixed and
+             the guard determined this triggering run pre-dates the fix that closed
+             it: the PR branch is stale and is still emitting the pre-fix
+             signature. The guard fired no comment and no reopen — suppressing the
+             oscillation is the point. Do **not** file. Do **not** reopen. Flake
+             issue = `#<N>`, disposition `STALE`. **Skip sub-step 4 (block the
+             PR's tracked issue)** — wiring a `blocked_by` dependency here is
+             deferred by design: the STALE disposition stops the reopen oscillation
+             only; a stale PR branch that keeps emitting the pre-fix signature is
+             the upstream subagent's "main already fixed it" classification job
+             (merge main), tracked separately. Record the accumulator note (sub-step
+             5) marking this recurrence as suppressed-stale, then fall through
+             directly to sub-step 6 (post accumulator, push nothing).
+           - **`NONE`** — no same-fingerprint issue exists; file one via
+             `/file-issue` as before. Launch a subagent (`subagent_type:
+             general-purpose`, `model: sonnet`) that invokes `/file-issue` via the
+             Skill tool, building its `$INPUT` with a leading `--follow-up` token
+             first, then a title hint `Flaky CI: <fingerprint>` on the next line,
+             then a body containing the fingerprint, the reproduce command, and the
+             failure excerpt. (The `--follow-up` token is a classification no-op
+             here — a flake is a `bug`, which suppresses `enhancement` — but is
+             passed for consistency.) `/file-issue` runs the full pipeline:
+             duplicate detection, 8-category evaluation, decomposition gate,
+             type/topic classification, creation (or match of an existing issue),
+             `@me` assignment, `help wanted`, type label, and any matched topic
+             label. It ends with a `===FILE-ISSUE-RESULTS===` …
+             `===FILE-ISSUE-RESULTS-END===` block; the subagent reads the
+             `<disposition> <N>` record (a flake is one topic, so normally one
+             record) and returns `<N>` with its disposition. Then:
+             - **`CREATED <N>`** — `/file-issue` created a fresh issue, but its
+               title-improver (`/file-issue` Step 4) may have reworded the title
+               and dropped the verbatim fingerprint — which would break a future
+               run's match. **Reassert the canonical title** so the fingerprint is
+               the literal trailing token regardless of the rewording
+               (`dangerouslyDisableSandbox: true`):
+               ```bash
+               source .claude/skills/dispatch-propagate/scripts/lib.sh
+               gh_issue_edit_rest <N> --title "Flaky CI: <fingerprint>"
+               ```
+               Flake issue = `#<N>`, disposition `CREATED`.
+             - **`EXISTING <M>`** — `/file-issue`'s fuzzy dedup matched a
+               pre-existing (possibly human-filed, differently-titled) issue. Do
+               **NOT** reassert its title — re-titling an unrelated issue would
+               corrupt it. Flake issue = `#<M>`, disposition `EXISTING`.
+     4. **Block the PR's tracked issue on the flake issue.** In this thread, use
         the PR body already captured in Step 1's pack output (`=== PR ===` section)
         and parse its `Closes #N` line(s) for the issue(s) this PR implements. For **each** tracked issue, record a
         `blocked_by` dependency **on that tracked issue, targeting each flake issue
@@ -176,11 +254,15 @@ Cross-iteration memory lives entirely in `tmp/fix-checks-summary.md` (see
         syntax — all `gh` calls use `dangerouslyDisableSandbox: true`). Idempotent:
         first list the tracked issue's current `blocked_by`, and skip the POST if
         the flake issue is already present, so a re-run against the same
-        fingerprint does not re-add the dependency or error.
-     4. **Record a flake iteration in the accumulator** (the skill's top-level
+        fingerprint does not re-add the dependency or error. This step consumes
+        `<N>` uniformly for every disposition (`CREATED`, `EXISTING`, or
+        `REOPENED`) — it makes no open-only assumption about the flake issue's
+        state. **`STALE` is the one exception: skip this sub-step entirely** —
+        deferred by design (see the `STALE` branch above).
+     5. **Record a flake iteration in the accumulator** (the skill's top-level
         Step 7) — see [Accumulator](#accumulator); a flake entry is visually
         distinct from a generic no-repro one.
-     5. **Post the accumulator (Step 8) and stop (Step 9). Push nothing** — the
+     6. **Post the accumulator (Step 8) and stop (Step 9). Push nothing** — the
         same terminal behavior as the generic no-repro outcome. On the next
         `/dispatch-propagate` run the PR's tracked issue carries a `blocked_by` against the
         flake issue; `/dispatch-propagate`'s queue scan skips blocked issues, so the PR is
@@ -289,9 +371,11 @@ Cross-iteration memory lives entirely in `tmp/fix-checks-summary.md` (see
   - **Why not caught** — the `why_not_caught` diagnosis.
   - **Fix** — the fix applied and its commit SHA. Include only when **Outcome**
     is `fixed`; omit otherwise.
-  - **Flake issue** — *`flake` outcome only* — the tracking issue filed via
-    `/file-issue`, written as `#<N> (CREATED)` or `#<N> (EXISTING)`. Omit for
-    every other outcome.
+  - **Flake issue** — *`flake` outcome only* — the canonical tracking issue, written
+    as `#<N> (CREATED)`, `#<N> (EXISTING)`, `#<N> (REOPENED)`, or
+    `#<N> (STALE-SUPPRESSED)` per the `dispatch-flake-dedup` / `/file-issue`
+    disposition. `STALE-SUPPRESSED` marks a recurrence suppressed as a stale-head
+    false positive — no reopen was fired. Omit for every other outcome.
   - **Fingerprint** — *`flake` outcome only* — the dedupe key computed in the
     Flake sub-path (the failing check name plus the stable identifier). Omit for
     every other outcome.

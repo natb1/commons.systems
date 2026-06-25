@@ -40,6 +40,8 @@ source "$SCRIPT_DIR/lib-worktree-in-sync.sh"
 source "$SCRIPT_DIR/lib-claude-agents.sh"
 # shellcheck source=./lib-reservation-ledger.sh
 source "$SCRIPT_DIR/lib-reservation-ledger.sh"
+# shellcheck source=./lib-worktree-reap.sh
+source "$SCRIPT_DIR/lib-worktree-reap.sh"
 
 # Resolve project root + worktrees root via resolve_project_root (lib.sh), which
 # returns the project root in both classic (.git) and bare (.bare) layouts.
@@ -61,6 +63,118 @@ if [[ $# -gt 0 ]]; then
   echo "usage: dispatch-sweep" >&2
   exit 2
 fi
+
+# ---- Not-in-sync reap: grace window + now-epoch ------------------------------
+# A merged/closed worktree that is not in sync is skipped (recoverable work may
+# be present), but an indefinitely-skipped worktree accumulates forever. After a
+# bounded grace it is quarantined and force-reaped. Resolve the grace ONCE here.
+# Precedence: sweep config notInSyncGraceSeconds → env override → baked default.
+# `no-config` (file absent) means "use defaults", following the load-with-default
+# pattern in dispatch-target-workers.
+NOT_IN_SYNC_GRACE_S=86400
+# Fold dispatch-config-load's stderr into CONFIG_OUT (2>&1, mirroring the loader's
+# own idiom): a malformed sweep.json exits non-zero with a diagnostic on stderr,
+# and discarding it would silently fall back to the default — over-/under-retaining
+# worktrees with no operator signal. On failure the else-branch logs that diagnostic.
+# The env override is the lowest-precedence fallback: it must fire whenever the
+# config does not supply a usable value — both when the file is absent (no-config)
+# AND when the file is present but omits/malforms notInSyncGraceSeconds — so val is
+# resolved first, then a single integer-guarded fallback chain handles env/default.
+# The config path is integer-guarded (^[0-9]+$) to match the env path: jq -r emits
+# floats/scientific-notation verbatim, and a non-integer in an arithmetic [[ -lt ]]
+# would error and reap every not-in-sync worktree immediately.
+if CONFIG_OUT=$("$SCRIPT_DIR/dispatch-config-load" sweep 2>&1); then
+  val=""
+  if [[ "$CONFIG_OUT" != "no-config" ]]; then
+    val=$(jq -r '.notInSyncGraceSeconds // empty' <<<"$CONFIG_OUT")
+  fi
+  if [[ "$val" =~ ^[0-9]+$ ]]; then
+    NOT_IN_SYNC_GRACE_S="$val"
+  elif [[ "${DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S:-}" =~ ^[0-9]+$ ]]; then
+    NOT_IN_SYNC_GRACE_S="$DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S"
+  fi
+else
+  log "SWEEP_CONFIG_ERROR: $CONFIG_OUT"
+  if [[ "${DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S:-}" =~ ^[0-9]+$ ]]; then
+    NOT_IN_SYNC_GRACE_S="$DISPATCH_SWEEP_NOT_IN_SYNC_GRACE_S"
+  fi
+fi
+
+# "now" in epoch seconds for marker age math. Distinct from DISPATCH_SWEEP_NOW
+# (the ISO-8601 string used only for log() timestamps). reap_marker_record reads
+# the same override internally so the stamp and the age math share one clock.
+if [[ "${DISPATCH_SWEEP_NOW_EPOCH:-}" =~ ^[0-9]+$ ]]; then
+  NOW_EPOCH="$DISPATCH_SWEEP_NOW_EPOCH"
+else
+  NOW_EPOCH=$(date -u +%s)
+fi
+
+# reap_or_skip_not_in_sync <suffix> <wt-path> <wt-branch> <wt-basename> <log-suffix>
+# Shared decision for BOTH not-in-sync branches (merged + closed). <suffix> is the
+# log token suffix (MERGED|CLOSED). It sits IN PLACE OF the bare
+# `log "SKIP_*_NOT_IN_SYNC"` calls, INSIDE the existing reservation + live-session
+# guards, so a reserved/live worktree never reaches this path (AC3 by construction).
+#   1. marker absent → record (start the grace clock) → log SKIP_<SUFFIX>_NOT_IN_SYNC.
+#   2. age < grace → log SKIP_<SUFFIX>_NOT_IN_SYNC with age/grace.
+#   3. age >= grace → quarantine; on failure log SKIP_<SUFFIX>_NOT_IN_SYNC_QUARANTINE_FAILED
+#      (worktree + marker left intact); on success assert dest is not inside the
+#      worktree, force-remove the worktree + branch, clear the marker, log
+#      REAP_<SUFFIX>_NOT_IN_SYNC.
+reap_or_skip_not_in_sync() {
+  local suffix="$1" wt_path="$2" wt_branch="$3" wt_basename="$4" log_suffix="$5"
+
+  local marker_epoch
+  if ! marker_epoch=$(reap_marker_read "$PROJECT_ROOT" "$wt_basename"); then
+    # First not-in-sync observation: start the grace clock (write-once).
+    reap_marker_record "$PROJECT_ROOT" "$wt_basename" || true
+    log "SKIP_${suffix}_NOT_IN_SYNC: '$wt_path' branch=$wt_branch $log_suffix (grace clock started)"
+    return 0
+  fi
+
+  local age=$((NOW_EPOCH - marker_epoch))
+  if [[ "$age" -lt "$NOT_IN_SYNC_GRACE_S" ]]; then
+    log "SKIP_${suffix}_NOT_IN_SYNC: '$wt_path' branch=$wt_branch $log_suffix age_seconds=$age grace_seconds=$NOT_IN_SYNC_GRACE_S"
+    return 0
+  fi
+
+  # Aged past grace: quarantine BEFORE any destructive removal. A quarantine
+  # failure ABORTS the reap (never force-remove on quarantine error — that is the
+  # irreversible-data-loss path). Worktree and marker are left intact.
+  local dest
+  if ! dest=$(reap_quarantine "$PROJECT_ROOT" "$wt_path" "$wt_basename"); then
+    log "SKIP_${suffix}_NOT_IN_SYNC_QUARANTINE_FAILED: '$wt_path' branch=$wt_branch $log_suffix age_seconds=$age grace_seconds=$NOT_IN_SYNC_GRACE_S"
+    return 0
+  fi
+
+  # Belt-and-suspenders: the quarantine MUST NOT be inside the worktree we are
+  # about to force-remove (else the removal deletes the quarantine — AC2
+  # violated). With the root resolved from the runner this never fires, but assert
+  # it with trailing-slash boundaries (so a sibling-prefix name does not false-fire).
+  case "$dest/" in
+    "$wt_path"/*)
+      log "SKIP_${suffix}_NOT_IN_SYNC_QUARANTINE_FAILED: '$wt_path' branch=$wt_branch $log_suffix quarantine_inside_worktree='$dest'"
+      return 0
+      ;;
+  esac
+  case "$wt_path/" in
+    "$dest"/*)
+      log "SKIP_${suffix}_NOT_IN_SYNC_QUARANTINE_FAILED: '$wt_path' branch=$wt_branch $log_suffix worktree_inside_quarantine='$dest'"
+      return 0
+      ;;
+  esac
+
+  if git worktree remove --force "$wt_path" 2>>"$LOG_FILE"; then
+    git worktree prune 2>/dev/null || true
+    if ! git branch -D "$wt_branch" >>"$LOG_FILE" 2>&1; then
+      log "BRANCH_DELETE_FAILED: branch=$wt_branch (worktree removed; branch retained)"
+    fi
+    reap_marker_clear "$PROJECT_ROOT" "$wt_basename" || true
+    log "REAP_${suffix}_NOT_IN_SYNC: '$wt_path' branch=$wt_branch $log_suffix age_seconds=$age grace_seconds=$NOT_IN_SYNC_GRACE_S quarantine='$dest'"
+  else
+    log "SKIP_WORKTREE_REMOVE_FAILED: '$wt_path' branch=$wt_branch"
+  fi
+  return 0
+}
 
 # ---- Step 1: enumerate registered worktrees ---------------------------------
 # list_worktree_records (lib.sh) walks `git worktree list --porcelain` and emits
@@ -116,8 +230,8 @@ while [[ $i -lt ${#WT_PATHS[@]} ]]; do
   # with `--head` instead of a creation-ordered `--limit N` window that never
   # sees the merged backlog tail. A failure here is isolated to this worktree
   # (defect 2, #1313): log and move on, never abort the sweep.
-  if ! pr_json=$(gh_retry gh pr list --head "$wt_branch" --state all --json state,number); then
-    log "ERROR_PR_STATE_FETCH: branch=$wt_branch gh pr list --head failed"
+  if ! pr_json=$(gh_pr_list_rest --head "$wt_branch" --state all); then
+    log "ERROR_PR_STATE_FETCH: branch=$wt_branch gh_pr_list_rest --head failed"
     continue
   fi
 
@@ -134,8 +248,8 @@ while [[ $i -lt ${#WT_PATHS[@]} ]]; do
     if [[ -n "$wt_num" ]]; then
       issue_num="$wt_num"
       # Per-worktree issue fetch; a failure is isolated (defect 2, #1313).
-      if ! issue_state=$(gh_retry gh issue view "$issue_num" --json state -q .state); then
-        log "ERROR_ISSUE_STATE_FETCH: branch=$wt_branch issue=$issue_num gh issue view failed"
+      if ! issue_state=$(gh_issue_view_rest "$issue_num" | jq -r '.state'); then
+        log "ERROR_ISSUE_STATE_FETCH: branch=$wt_branch issue=$issue_num gh_issue_view_rest failed"
         continue
       fi
       case "$issue_state" in
@@ -148,12 +262,15 @@ while [[ $i -lt ${#WT_PATHS[@]} ]]; do
               if ! git branch -D "$wt_branch" >>"$LOG_FILE" 2>&1; then
                 log "BRANCH_DELETE_FAILED: branch=$wt_branch (worktree removed; branch retained)"
               fi
+              # Clear any not-in-sync marker so a future same-named worktree never
+              # inherits a stale grace timestamp.
+              reap_marker_clear "$PROJECT_ROOT" "$(basename "$wt_path")" || true
               log "REMOVE_CLOSED_ISSUE: '$wt_path' branch=$wt_branch issue=#$issue_num"
             else
               log "SKIP_WORKTREE_REMOVE_FAILED: '$wt_path' branch=$wt_branch"
             fi
           else
-            log "SKIP_CLOSED_NOT_IN_SYNC: '$wt_path' branch=$wt_branch issue=#$issue_num"
+            reap_or_skip_not_in_sync CLOSED "$wt_path" "$wt_branch" "$(basename "$wt_path")" "issue=#$issue_num"
           fi
           ;;
         OPEN)
@@ -182,13 +299,37 @@ while [[ $i -lt ${#WT_PATHS[@]} ]]; do
       if ! git branch -D "$wt_branch" >>"$LOG_FILE" 2>&1; then
         log "BRANCH_DELETE_FAILED: branch=$wt_branch (worktree removed; branch retained)"
       fi
+      # Clear any not-in-sync marker so a future same-named worktree never
+      # inherits a stale grace timestamp.
+      reap_marker_clear "$PROJECT_ROOT" "$(basename "$wt_path")" || true
       log "REMOVE_MERGED: '$wt_path' branch=$wt_branch pr=#$pr_num"
     else
       log "SKIP_WORKTREE_REMOVE_FAILED: '$wt_path' branch=$wt_branch"
     fi
   else
-    log "SKIP_MERGED_NOT_IN_SYNC: '$wt_path' branch=$wt_branch"
+    reap_or_skip_not_in_sync MERGED "$wt_path" "$wt_branch" "$(basename "$wt_path")" "pr=#$pr_num"
   fi
 done
+
+# ---- GC vanished markers -----------------------------------------------------
+# Delete any not-in-sync marker whose basename is no longer a registered worktree
+# (the worktree was removed by another path, or never re-registered). Prevents a
+# future same-named worktree from inheriting a stale grace timestamp.
+if marker_dir=$(reap_marker_dir "$PROJECT_ROOT") && [[ -d "$marker_dir" ]]; then
+  declare -A registered=()
+  for p in ${WT_PATHS[@]+"${WT_PATHS[@]}"}; do
+    registered["$(basename "$p")"]=1
+  done
+  shopt -s nullglob
+  for mf in "$marker_dir"/*; do
+    [[ -f "$mf" ]] || continue
+    mb=$(basename "$mf")
+    if [[ -z "${registered[$mb]:-}" ]]; then
+      reap_marker_clear "$PROJECT_ROOT" "$mb" || true
+      log "GC_NOT_IN_SYNC_MARKER: vanished worktree basename=$mb"
+    fi
+  done
+  shopt -u nullglob
+fi
 
 exit 0

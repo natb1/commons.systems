@@ -30,9 +30,7 @@ cd "$REPO_ROOT/$APP_DIR"
 # (require the production build / prerendered output, absent from the dev server)
 # — everything else runs.
 if [ -n "$EXTERNAL_BASE_URL" ]; then
-  if [ -z "${PLAYWRIGHT_BROWSERS_PATH:-}" ]; then
-    npx playwright install --with-deps chromium
-  fi
+  playwright_install_with_deps
   BASE_URL="$EXTERNAL_BASE_URL" npx playwright test --config e2e/playwright.config.ts --grep-invert "@hosting|@testonly|@build"
   exit 0
 fi
@@ -98,12 +96,10 @@ env "${BUILD_ARGS[@]}" npm run build
 
 cd "$REPO_ROOT"
 
-# Install Playwright browsers (skip if nix provides them via PLAYWRIGHT_BROWSERS_PATH)
-if [ -z "${PLAYWRIGHT_BROWSERS_PATH:-}" ]; then
-  cd "$REPO_ROOT/$APP_DIR"
-  npx playwright install --with-deps chromium
-  cd "$REPO_ROOT"
-fi
+# Install Playwright browsers (bounded timeout+retry; skips when nix provides them).
+# Subshell keeps the surrounding code running from $REPO_ROOT; under set -e a
+# non-zero subshell aborts the parent.
+(cd "$REPO_ROOT/$APP_DIR" && playwright_install_with_deps)
 
 # Generate temporary firebase.json in repo root with relative path to dist.
 # Firebase emulator resolves public dir relative to the config file location.
@@ -199,9 +195,27 @@ fi
 
 npx firebase-tools emulators:start --only "$EMULATORS" --config "$TEMP_FIREBASE_JSON" --project "$EMULATOR_PROJECT_ID" &
 
-# Poll until hosting emulator serves content.
-# Timeout allows headroom for slow CI (npx download + emulator startup can take 30-60s).
-TIMEOUT=120
+# Poll until hosting emulator serves content. The loop exits the instant
+# curl gets a 200, so a larger ceiling never slows a healthy start — it only
+# adds headroom for slow CI (JVM cold start + scheduling jitter under
+# contention can push the hosting listener past a tight deadline; see #2192).
+# Override with EMULATOR_READY_TIMEOUT (seconds).
+TIMEOUT="${EMULATOR_READY_TIMEOUT:-300}"
+# Validate: non-numeric input would make `[ $ELAPSED -ge $TIMEOUT ]` print
+# 'integer expected' and evaluate false forever (infinite loop until the CI
+# job timeout), and a value <= 0 would time out on the first iteration before
+# the just-forked emulator has any chance to respond. Fail fast with a clear
+# message instead.
+case "$TIMEOUT" in
+  '' | *[^0-9]*)
+    echo "ERROR: EMULATOR_READY_TIMEOUT must be a positive integer (got '${EMULATOR_READY_TIMEOUT}')" >&2
+    exit 1
+    ;;
+esac
+if [ "$TIMEOUT" -le 0 ]; then
+  echo "ERROR: EMULATOR_READY_TIMEOUT must be a positive integer (got '${EMULATOR_READY_TIMEOUT}')" >&2
+  exit 1
+fi
 ELAPSED=0
 until curl -s -o /dev/null -w '%{http_code}' "http://localhost:${HOSTING_PORT}/" 2>/dev/null | grep -q '^200$'; do
   if [ $ELAPSED -ge $TIMEOUT ]; then
@@ -214,7 +228,9 @@ done
 
 echo "Firebase hosting emulator ready on port ${HOSTING_PORT}"
 
-# Poll until Firestore emulator is ready (if used)
+# Poll until Firestore emulator is ready (if used). Reuses the TIMEOUT set
+# above, so EMULATOR_READY_TIMEOUT governs every emulator's readiness ceiling —
+# hosting, Firestore, Auth, and Storage waits all share the same TIMEOUT.
 if [ "$USES_FIRESTORE" = true ]; then
   ELAPSED=0
   until curl -s -o /dev/null -w '%{http_code}' "http://localhost:${FIRESTORE_PORT}/" 2>/dev/null | grep -q '^200$'; do

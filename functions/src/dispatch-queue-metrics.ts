@@ -2,7 +2,9 @@
 // dispatch-queue runway metrics from GitHub issue search, writes them to the
 // `office-hours/{env}/metrics/dispatch-queue` Firestore snapshot document, and
 // appends one `office-hours/{env}/issue-samples/{autoId}` document per run
-// carrying the openHelpWanted / openOther split for the backlog-history time series.
+// carrying the four mutually-exclusive precedence buckets
+// (openSecurity / openBug / openEnhancement / openOther) for the
+// backlog-history time series.
 //
 // This is the sampler for the office-hours Queue view: the hosted app cannot run
 // `gh`, so the backlog / throughput / runway numbers are computed server-side on
@@ -11,15 +13,24 @@
 //
 // Counts are aggregated (summed) across all repos listed in
 // DISPATCH_METRICS_QUEUE_REPO. Three counts are scoped to `label:"help wanted"`
-// so inflow, outflow, and backlog compose into a coherent runway; the fourth
-// partitions the remaining open issues:
+// so inflow, outflow, and backlog compose into a coherent runway:
 //   - open:      is:issue is:open label:"help wanted"                         -> openHelpWanted
-//   - openOther: is:issue is:open -label:"help wanted"                        -> openOther
 //   - closed:    is:issue is:closed reason:completed label:"help wanted"
 //                closed:>=<today-14d>                                          -> closedPerDay = count / 14
 //   - created:   is:issue label:"help wanted" created:>=<today-14d>           -> createdPerDay = count / 14
-// `openHelpWanted` and `openOther` together partition the total open count.
-// `reason:completed` excludes not-planned / duplicate closes.
+// The remaining four counts partition the total open set into four
+// mutually-exclusive precedence buckets (each negates the higher-priority
+// labels) for the backlog-history chart:
+//   - security:    is:issue is:open label:"security"                          -> openSecurity
+//   - bug:         is:issue is:open label:"bug" -label:"security"             -> openBug
+//   - enhancement: is:issue is:open label:"enhancement" -label:"bug"
+//                  -label:"security"                                          -> openEnhancement
+//   - other:       is:issue is:open -label:"enhancement" -label:"bug"
+//                  -label:"security"                                          -> openOther
+// The four precedence buckets are mutually exclusive and exhaustive, so they
+// sum to the total open count. `openHelpWanted` is an orthogonal, overlapping
+// count that feeds only the runway. `reason:completed` excludes not-planned /
+// duplicate closes.
 //
 // Authentication — reuses the syncOfficeHours GitHub App auth:
 //   - The same GitHub App, JWT -> installation-token exchange, and private-key
@@ -74,19 +85,26 @@ export interface QueueSearchQueries {
   open: string;
   closed: string;
   created: string;
-  openOther: string;
+  security: string;
+  bug: string;
+  enhancement: string;
+  other: string;
 }
 
-// Builds the three GitHub issue-search query strings. `now` is injected so tests
+// Builds the seven GitHub issue-search query strings. `now` is injected so tests
 // pin the 14-day cutoff date deterministically. The cutoff is the YYYY-MM-DD
-// date 14 days before `now` (UTC).
+// date 14 days before `now` (UTC). `security`/`bug`/`enhancement`/`other` are the
+// four mutually-exclusive precedence buckets that partition the total open set.
 export function buildQueueSearchQueries(queueRepo: string, now: Date): QueueSearchQueries {
   const cutoff = new Date(now.getTime() - WINDOW_DAYS * DAY_MS).toISOString().slice(0, 10);
   return {
     open: `repo:${queueRepo} is:issue is:open label:"help wanted"`,
     closed: `repo:${queueRepo} is:issue is:closed reason:completed label:"help wanted" closed:>=${cutoff}`,
     created: `repo:${queueRepo} is:issue label:"help wanted" created:>=${cutoff}`,
-    openOther: `repo:${queueRepo} is:issue is:open -label:"help wanted"`,
+    security: `repo:${queueRepo} is:issue is:open label:"security"`,
+    bug: `repo:${queueRepo} is:issue is:open label:"bug" -label:"security"`,
+    enhancement: `repo:${queueRepo} is:issue is:open label:"enhancement" -label:"bug" -label:"security"`,
+    other: `repo:${queueRepo} is:issue is:open -label:"enhancement" -label:"bug" -label:"security"`,
   };
 }
 
@@ -119,6 +137,41 @@ interface GraphQLResponse<T> {
 
 interface SearchCountResponse {
   search: { issueCount: number };
+}
+
+// A parked dispatch:office-hours issue, surfaced for the dashboard. This wire
+// shape must match office-hours/src/queue-metrics.ts independently (there is no
+// shared types package). `url` is emitted by the producer (not constructed
+// client-side); `createdAt` is a real Date (the app's toDate helper returns null
+// for raw strings, so a string would silently drop every parked item); `phase`
+// is a best-effort dispatch residue label, omitted when none applies.
+export interface ParkedIssue {
+  number: number;
+  title: string;
+  url: string;
+  createdAt: Date;
+  repo: string;
+  phase?: string;
+}
+
+interface SearchDetailsResponse {
+  search: {
+    nodes: Array<{
+      number: number;
+      title: string;
+      url: string;
+      createdAt: string;
+      labels: { nodes: Array<{ name: string }> };
+      repository: { nameWithOwner: string };
+    }>;
+  };
+}
+
+// Builds the GitHub issue-search query for parked dispatch:office-hours work in
+// one repo. Kept separate from buildQueueSearchQueries / QueueSearchQueries so
+// the details fetch stays entirely off the stride-7 count aggregation path.
+export function buildOfficeHoursQuery(queueRepo: string): string {
+  return `repo:${queueRepo} is:issue is:open label:"dispatch:office-hours"`;
 }
 
 // Posts a single GraphQL `search(... type: ISSUE) { issueCount }` query and
@@ -161,14 +214,90 @@ export async function searchIssueCountLive(token: string, query: string): Promis
   return json.data.search.issueCount;
 }
 
-// Runs the four searches per repo via the injected `searchIssueCount` and
+// Posts a single GraphQL `search(... type: ISSUE) { nodes { ... } }` query and
+// maps each issue node to a ParkedIssue. Same fetch/auth/error-handling shape as
+// searchIssueCountLive, but fetches node details instead of a count. Single page
+// (first: 100, no pagination loop): a parked queue over 100 is pathological and
+// truncation is acceptable. `query` is bound as the $query GraphQL variable (not
+// interpolated) so it cannot inject into the query body.
+export async function searchIssueDetailsLive(
+  token: string,
+  query: string,
+): Promise<ParkedIssue[]> {
+  const gql = `
+    query($query: String!) { # // type-safety-ok: GraphQL non-null type annotation, not a TypeScript assertion
+      search(query: $query, type: ISSUE, first: 100) {
+        nodes {
+          ... on Issue {
+            number
+            title
+            url
+            createdAt
+            labels(first: 20) { nodes { name } }
+            repository { nameWithOwner }
+          }
+        }
+      }
+    }
+  `;
+  const res = await fetch("https://api.github.com/graphql", {
+    method: "POST",
+    headers: {
+      Authorization: `bearer ${token}`,
+      "User-Agent": "dispatch-queue-metrics/1.0",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ query: gql, variables: { query } }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(
+      `GitHub GraphQL request failed: ${res.status} ${truncateForLog(text)}`,
+    );
+  }
+
+  const json = (await res.json()) as GraphQLResponse<SearchDetailsResponse>; // type-safety-ok: res.json() returns unknown; cast matches documented GraphQL response schema
+  if (json.errors && json.errors.length > 0) {
+    throw new Error(
+      `GitHub GraphQL errors: ${json.errors.map((e) => e.message).join("; ")}`,
+    );
+  }
+  if (!json.data) {
+    throw new Error("GitHub GraphQL response missing data");
+  }
+
+  return json.data.search.nodes.map((node) => {
+    // Best-effort dispatch phase: the first dispatch:* label other than
+    // dispatch:office-hours (which is the bucket itself, not a phase).
+    const phase = node.labels.nodes
+      .map((l) => l.name)
+      .find((n) => n.startsWith("dispatch:") && n !== "dispatch:office-hours");
+    return {
+      number: node.number,
+      title: node.title,
+      url: node.url,
+      // GitHub returns createdAt as an ISO string; the app's toDate helper
+      // returns null for strings, so it MUST be a real Date on the wire.
+      createdAt: new Date(node.createdAt),
+      repo: node.repository.nameWithOwner,
+      // Omit phase entirely when absent — firebase-admin rejects an explicit
+      // undefined in a written document.
+      ...(phase ? { phase } : {}),
+    };
+  });
+}
+
+// Runs the seven searches per repo via the injected `searchIssueCount` and
 // aggregates the counts across all configured repos, computes the snapshot, and
 // writes the field map to `${namespace}/metrics/dispatch-queue`. The snapshot
 // field map matches office-hours/src/queue-metrics.ts exactly. In the same run
-// it also appends one `issue-samples` document (the cross-repo openHelpWanted /
-// openOther split) to `${namespace}/issue-samples`.
+// it also appends one `issue-samples` document (the cross-repo four-bucket
+// precedence split openSecurity / openBug / openEnhancement / openOther) to
+// `${namespace}/issue-samples`.
 export async function sampleDispatchQueueCore(deps: {
   searchIssueCount: (query: string) => Promise<number>;
+  searchIssueDetails: (query: string) => Promise<ParkedIssue[]>;
   firestore: Firestore;
   namespace: string;
   queueRepos: string[];
@@ -179,25 +308,36 @@ export async function sampleDispatchQueueCore(deps: {
   const perRepoQueries = deps.queueRepos.map((r) => buildQueueSearchQueries(r, deps.now));
 
   // Flatten every repo×query search into a single Promise.all so all repos run
-  // in parallel, then sum each of the four query counts across all repos.
+  // in parallel, then sum each of the seven query counts across all repos. The
+  // flat order (open, closed, created, security, bug, enhancement, other) must
+  // match the stride-7 index math below.
   const counts = await Promise.all(
     perRepoQueries.flatMap((q) => [
       deps.searchIssueCount(q.open),
       deps.searchIssueCount(q.closed),
       deps.searchIssueCount(q.created),
-      deps.searchIssueCount(q.openOther),
+      deps.searchIssueCount(q.security),
+      deps.searchIssueCount(q.bug),
+      deps.searchIssueCount(q.enhancement),
+      deps.searchIssueCount(q.other),
     ]),
   );
 
   let openHelpWanted = 0;
   let closedCount = 0;
   let createdCount = 0;
+  let openSecurity = 0;
+  let openBug = 0;
+  let openEnhancement = 0;
   let openOther = 0;
   for (let i = 0; i < perRepoQueries.length; i++) {
-    openHelpWanted += counts[i * 4 + 0];
-    closedCount += counts[i * 4 + 1];
-    createdCount += counts[i * 4 + 2];
-    openOther += counts[i * 4 + 3];
+    openHelpWanted += counts[i * 7 + 0];
+    closedCount += counts[i * 7 + 1];
+    createdCount += counts[i * 7 + 2];
+    openSecurity += counts[i * 7 + 3];
+    openBug += counts[i * 7 + 4];
+    openEnhancement += counts[i * 7 + 5];
+    openOther += counts[i * 7 + 6];
   }
 
   const { closedPerDay, createdPerDay, netDrainPerDay, runwayDays } = computeQueueMetrics({
@@ -206,6 +346,14 @@ export async function sampleDispatchQueueCore(deps: {
     createdCount,
     windowDays: WINDOW_DAYS,
   });
+
+  // Parked dispatch:office-hours details, fetched on a completely separate code
+  // path from the stride-7 count aggregation above. One details search per repo
+  // in parallel, concatenated across repos.
+  const parkedPerRepo = await Promise.all(
+    deps.queueRepos.map((r) => deps.searchIssueDetails(buildOfficeHoursQuery(r))),
+  );
+  const parked = parkedPerRepo.flat();
 
   const docRef = deps.firestore.doc(`${deps.namespace}/metrics/dispatch-queue`);
   await docRef.set({
@@ -218,11 +366,14 @@ export async function sampleDispatchQueueCore(deps: {
     computedAt: deps.now,
     groupId: deps.groupId,
     memberEmails: deps.memberEmails,
+    parked,
   });
 
   await deps.firestore.collection(`${deps.namespace}/issue-samples`).add({
     sampledAt: deps.now,
-    openHelpWanted,
+    openSecurity,
+    openBug,
+    openEnhancement,
     openOther,
     groupId: deps.groupId,
     memberEmails: deps.memberEmails,
@@ -318,6 +469,7 @@ export const sampleDispatchQueueMetrics = onSchedule(
 
       await sampleDispatchQueueCore({
         searchIssueCount: (query) => searchIssueCountLive(token, query),
+        searchIssueDetails: (query) => searchIssueDetailsLive(token, query),
         firestore,
         namespace,
         queueRepos,

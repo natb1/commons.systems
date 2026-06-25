@@ -1,8 +1,13 @@
 import * as fs from "node:fs";
 import { join } from "node:path";
+import { createElement, type ReactNode } from "react";
+import { renderToString } from "react-dom/server";
 import { escapeHtml } from "@commons-systems/htmlutil";
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
+import { BlogNav } from "./components/BlogNav.tsx";
 import type { InfoPanelData } from "./components/info-panel.ts";
+import { InfoPanelRegion } from "./components/InfoPanelRegion.tsx";
+import { HomeRegion } from "./pages/HomeRegion.tsx";
 import {
   siteDefaultOgEntries,
   postOgEntries,
@@ -13,9 +18,7 @@ import {
 } from "./og-meta.ts";
 import { validatePublishedPosts, type PostMeta, type PublishedPost } from "./post-types.ts";
 import { formatPageTitle } from "./page-title.ts";
-import { renderInfoPanel } from "./components/info-panel.ts";
-import { createMarked, renderPostContents } from "./marked-config.ts";
-import { renderArticle } from "./pages/home.ts";
+import { createMarked, renderPostContents, type PostContent } from "./marked-config.ts";
 import {
   organizationJsonLd,
   blogPostingJsonLd,
@@ -27,12 +30,9 @@ import {
   type Author,
   type SoftwareApplication,
 } from "./seo.ts";
+import type { NavLink } from "@commons-systems/ds";
 
-export interface NavLink {
-  readonly href: string;
-  readonly label: string;
-  readonly align?: "end";
-}
+export type { NavLink };
 
 export interface PrerenderConfig {
   siteUrl: string;
@@ -52,6 +52,9 @@ export interface PrerenderConfig {
    *  When set, per-post pages also strip the `landing-hero` section.
    *  Throws if the marker is absent from the template. */
   homeExtraHtml?: string;
+  /** Whether to include the `commons.systems` home link in the prerendered nav.
+   *  Defaults to `false`. */
+  showHomeLink?: boolean;
 }
 
 export interface StaticPageConfig {
@@ -61,23 +64,43 @@ export interface StaticPageConfig {
   /** Page metadata; `page.url` is also the output path (e.g. "/about" — leading
    *  slash required, no trailing slash). */
   page: StaticPageMeta;
-  /** Injected into `<main id="app">`. */
-  bodyHtml: string;
+  /** A ReactNode server-rendered (wrapped in a `<div>`) into `<main id="app">`,
+   *  byte-matching the client's `createElement("div", null, node)` entry-hydration
+   *  wrapper in create-blog-app.ts so `#app` hydrates without a mismatch. */
+  body: ReactNode;
   navLinks: NavLink[];
-  /** Pre-rendered info panel HTML — produced by `loadPostsForPrerender`. */
-  panelHtml: string;
+  /** Pre-rendered info panel HTML — produced by `loadPostsForPrerender`.
+   *  Used only when `aboutContent` is not set; ignored otherwise. */
+  panelHtml?: string;
+  /** A ReactNode for an About-style panel. When set, the panel is
+   *  server-rendered through `InfoPanelRegion` (matching the client's
+   *  `panelElement()` aboutContent branch) instead of using `panelHtml`, so the
+   *  prerendered `#info-panel` hydrates without a mismatch. */
+  aboutContent?: ReactNode;
   jsonLdBlocks?: Record<string, unknown>[];
   relMe?: string[];
   /** Defaults to true. Set false to keep the landing-hero block in this static page. */
   stripHero?: boolean;
+  /** Whether to include the `commons.systems` home link in the prerendered nav.
+   *  Defaults to `false`. */
+  showHomeLink?: boolean;
 }
 
 export interface PostsArtifacts {
   topPosts: PostMeta[];
+  /** Server-rendered `HomeRegion` (the `#posts` feed) — the single body shared by
+   *  the root index and every per-post page. */
+  bodyHtml: string;
+  /** Server-rendered `InfoPanelRegion` — the info-panel sidebar body. */
   panelHtml: string;
-  allArticlesHtml: string;
+  /** Per-post metadata for the SEO iteration in `prerenderPosts` (og/canonical/JSON-LD). */
   rendered: RenderedPost[];
 }
+
+/** Client's `HomeRegion.fetchPost` has no analogue at build time — the prerender
+ *  embeds the build-time content directly via `contentMap`, so the SSR render
+ *  never fetches. A no-op keeps the prop type satisfied. */
+const NOOP_FETCH: (filename: string) => Promise<string> = () => Promise.resolve("");
 
 function ogTagsToHtml(entries: OgTagEntry[]): string {
   return entries
@@ -85,19 +108,37 @@ function ogTagsToHtml(entries: OgTagEntry[]): string {
     .join("\n    ");
 }
 
-function renderNavHtml(links: NavLink[]): string {
-  const anchors = links
-    .map((l) => {
-      const alignAttr = l.align === "end" ? ` data-align="end"` : "";
-      return `<a href="${escapeHtml(l.href)}"${alignAttr}>${escapeHtml(l.label)}</a>`;
-    })
-    .join("");
-  return `<span class="nav-links">${anchors}</span>`;
+// Render the nav anonymously (showAuth=false, user=null) so no stray "Login"
+// control leaks into the static HTML. showHomeLink comes from the caller's
+// config and defaults to false. renderToString (not renderToStaticMarkup) so the
+// prerendered nav carries the hydration markers `hydrateRoot` reuses.
+function renderNavHtml(links: NavLink[], showHomeLink: boolean = false): string {
+  return renderToString(
+    createElement(BlogNav, {
+      links,
+      showHomeLink,
+      showAuth: false,
+      user: null,
+      onSignIn: () => {},
+      onSignOut: () => {},
+    }),
+  );
+}
+
+// Server-render the info panel through InfoPanelRegion — the SAME component the
+// client hydrates #info-panel with — so the prerendered markup matches and
+// hydrateRoot reuses it. strategies is unused during SSR render (the blogroll
+// fetch effect runs only on the client), so an empty Map is fine. When
+// aboutContent is set, InfoPanelRegion ignores `data` and renders the About
+// ReactNode (matching the client's panelElement() aboutContent branch).
+export function renderPanelHtml(data: InfoPanelData, aboutContent?: ReactNode): string {
+  return renderToString(
+    createElement(InfoPanelRegion, { data, strategies: new Map(), aboutContent }),
+  );
 }
 
 interface RenderedPost {
   meta: PublishedPost;
-  articleHtml: string;
 }
 
 function injectMain(html: string, innerHtml: string): string {
@@ -164,22 +205,32 @@ export async function loadPostsForPrerender(args: {
   const published = validatePublishedPosts(args.seed);
   published.sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
 
-  const contentMap = await renderPostContents(
+  const contentMap: Record<string, PostContent> = await renderPostContents(
     published,
     (filename) => fs.readFileSync(join(args.postDir, filename), "utf-8"),
     marked,
   );
 
-  const rendered: RenderedPost[] = published.map((meta) => ({
-    meta,
-    articleHtml: renderArticle(meta, "/post/", contentMap[meta.id]),
-  }));
-
+  const rendered: RenderedPost[] = published.map((meta) => ({ meta }));
   const topPosts: PostMeta[] = rendered.map((p) => p.meta);
-  const panelHtml = renderInfoPanel({ ...args.infoPanel, topPosts });
-  const allArticlesHtml = rendered.map((p) => p.articleHtml).join("\n      <hr>\n      ");
 
-  return { topPosts, panelHtml, allArticlesHtml, rendered };
+  // The body is the single HomeRegion render shared by every page — byte-identical
+  // to the client's initial HomeRegion render (which delegates to PostFeed), so
+  // the #posts/#post-{id}/#post-content-{id} ids, data-hydrated, <hr> placement,
+  // and Card markup all match for hydration. The SSR render embeds build-time
+  // content via contentMap and never calls fetchPost (the useEffect is client-only).
+  const bodyHtml = renderToString(
+    createElement(HomeRegion, {
+      posts: topPosts,
+      contentMap,
+      postLinkPrefix: "/post/",
+      fetchPost: NOOP_FETCH,
+    }),
+  );
+
+  const panelHtml = renderPanelHtml({ ...args.infoPanel, topPosts, postLinkPrefix: "/post/" });
+
+  return { topPosts, bodyHtml, panelHtml, rendered };
 }
 
 // Build-time counterpart of og-meta.ts. Generates per-post HTML files with
@@ -204,17 +255,18 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
     relMe,
     softwareApplications,
     homeExtraHtml,
+    showHomeLink,
   } = config;
 
   const template = fs.readFileSync(join(distDir, "index.html"), "utf-8");
 
-  const { panelHtml, allArticlesHtml, rendered } = await loadPostsForPrerender({
+  const { panelHtml, bodyHtml, rendered } = await loadPostsForPrerender({
     seed,
     postDir,
     infoPanel,
   });
 
-  const navHtml = renderNavHtml(navLinks);
+  const navHtml = renderNavHtml(navLinks, showHomeLink);
 
   const relMeHtml = relMe ? relMeLinkTags(relMe) : "";
 
@@ -229,7 +281,7 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
     relMeHtml,
   ]);
 
-  let rootHtml = injectMain(template, `<div id="posts">${allArticlesHtml}</div>`);
+  let rootHtml = injectMain(template, bodyHtml);
   rootHtml = injectInfoPanel(rootHtml, panelHtml);
   rootHtml = injectNav(rootHtml, navHtml);
   if (homeExtraHtml !== undefined) {
@@ -261,7 +313,7 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
     html = html.replace(/<title>.*?<\/title>/, `<title>${escapeHtml(formatPageTitle(titleSuffix, meta.title))}</title>`);
     if (html === beforeTitle) throw new Error(`<title> tag not found in template`);
 
-    html = injectMain(html, `<div id="posts">${allArticlesHtml}</div>`);
+    html = injectMain(html, bodyHtml);
     html = injectInfoPanel(html, panelHtml);
     html = injectNav(html, navHtml);
     if (homeExtraHtml !== undefined) {
@@ -284,12 +336,14 @@ export function prerenderStaticPage(config: StaticPageConfig): void {
     titleSuffix,
     distDir,
     page,
-    bodyHtml,
+    body,
     navLinks,
     panelHtml,
+    aboutContent,
     jsonLdBlocks,
     relMe,
     stripHero,
+    showHomeLink,
   } = config;
 
   const template = fs.readFileSync(join(distDir, "index.html"), "utf-8");
@@ -318,9 +372,26 @@ export function prerenderStaticPage(config: StaticPageConfig): void {
   html = injectBeforeHead(html, ogBlock, "static page template");
   html = injectBeforeHead(html, seoHead, "static page template");
 
+  // When aboutContent is set, server-render the panel through InfoPanelRegion's
+  // aboutContent branch — matching the client's panelElement(), which hydrates
+  // #info-panel with InfoPanelRegion(aboutContent=…) on a deep /about entry. The
+  // data object is ignored in that branch, so a minimal one suffices. Otherwise
+  // fall back to the caller-supplied pre-rendered panelHtml.
+  let renderedPanel: string;
+  if (aboutContent !== undefined) {
+    renderedPanel = renderPanelHtml({ linkSections: [], topPosts: [], blogRoll: [] }, aboutContent);
+  } else if (panelHtml !== undefined) {
+    renderedPanel = panelHtml;
+  } else {
+    throw new Error("prerenderStaticPage requires either aboutContent or panelHtml");
+  }
+
+  // Server-render the body wrapped in a <div> so it byte-matches the client's
+  // entry-hydration wrapper createElement("div", null, node) in create-blog-app.ts.
+  const bodyHtml = renderToString(createElement("div", null, body));
   html = injectMain(html, bodyHtml);
-  html = injectInfoPanel(html, panelHtml);
-  html = injectNav(html, renderNavHtml(navLinks));
+  html = injectInfoPanel(html, renderedPanel);
+  html = injectNav(html, renderNavHtml(navLinks, showHomeLink));
 
   if (stripHero !== false) {
     html = stripHomeExtra(html);

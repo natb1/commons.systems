@@ -35,9 +35,10 @@
 #     - CodeQL: `CodeQL <rule_id> alert #<n>`
 #
 # MATCHING
-#   gh's --search is tokenized/fuzzy, so it only narrows the candidate set
-#   server-side (wrapping the identifier in literal double-quotes and adding the
-#   `in:title` qualifier). The authoritative match is the jq post-filter.
+#   The full issue list is fetched via REST (gh_issue_list_rest) and the
+#   authoritative match is the jq post-filter below — there is no server-side
+#   narrowing. (The prior implementation used a fuzzy `gh issue list --search
+#   "...in:title"` to pre-narrow, but the jq filter was always the decision.)
 #
 #   The post-filter is BOUNDARY-AWARE, not a bare substring test. A title matches
 #   only when the identifier sits at a token boundary — it either ends the title
@@ -53,6 +54,9 @@
 #   end-of-string. The first matching issue number is printed; nothing if none.
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+
 if [[ "$#" -lt 1 || -z "${1:-}" ]]; then
   echo "error: usage: dispatch-followup-exists <identifier>" >&2
   exit 2
@@ -60,6 +64,16 @@ fi
 
 identifier="$1"
 
-gh issue list --search "\"$identifier\" in:title" --state all --json number,title --limit 100 \
+# Fetch the full issue history (open AND closed) via REST and apply the same
+# authoritative boundary-aware jq post-filter below — the prior `--search` only
+# narrowed the candidate set server-side; the jq match was always the decision.
+# Two behavioral notes from dropping `--search "...in:title"` and `--limit 100`:
+#   (a) This now pulls the full issue list rather than a ≤100 server-narrowed
+#       set. Acceptable: it runs on the idle REST bucket and fires only per
+#       security-followup (not per tick).
+#   (b) `[0]` shifts from "first server-search hit" to "most-recently-created
+#       match" (the helper sorts created desc) — irrelevant for an existence
+#       check, which only cares whether ANY match exists.
+gh_issue_list_rest --state all --include-title \
   | jq -r --arg id "$identifier" \
       '[.[] | select((.title | endswith($id)) or (.title | contains($id + " ")))][0].number // empty'

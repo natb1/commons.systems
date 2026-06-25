@@ -28,6 +28,54 @@ resolve_issue_number() {
   echo "$num"
 }
 
+# Determine whether a repo-relative path is a shell script.
+# Args: $1 = repo-relative path (as produced by git diff --name-only)
+# Returns 0 if the file is a shell script (either by .sh extension or by
+# bash/sh shebang on the first line); returns 1 otherwise.
+# Reads the file via $REPO_ROOT/$1 — REPO_ROOT must be set by the caller.
+# Safe under set -euo pipefail.
+is_shell_script() {
+  local path="$1"
+  # Cheap check: .sh extension — no file read needed.
+  if [[ "$path" == *.sh ]]; then
+    return 0
+  fi
+  local resolved="$REPO_ROOT/$path"
+  [[ -f "$resolved" ]] || return 1
+  local first
+  IFS= read -r first < "$resolved" || true
+  if [[ "$first" =~ ^#!.*/(env[[:space:]]+(-S[[:space:]]+)?)?(ba|z)?sh([[:space:]]|$) ]]; then
+    return 0
+  fi
+  return 1
+}
+
+# Derive and validate owner/repo from a git remote URL.
+# Args: $1 = remote.origin.url value; $2 = caller name (error-message prefix).
+# Resolve owner/repo from the remote so gh addresses the repo independent of cwd
+# (dirname(common_dir) is not a working tree in the bare-repo + worktrees layout).
+# Handles https://github.com/<owner>/<repo>(.git) and git@github.com:<owner>/<repo>(.git).
+# Prints owner/repo to stdout on success; on an empty/non-GitHub/malformed result,
+# prints a caller-prefixed message to stderr and returns 1.
+gh_repo_from_remote() {
+  local url="$1" caller="$2" stripped repo
+  stripped="${url%.git}"
+  repo="${stripped#*github.com[:/]}"
+  if [[ -z "$stripped" ]]; then
+    echo "$caller: could not resolve owner/repo from remote.origin.url ('$url')" >&2
+    return 1
+  fi
+  if [[ "$repo" == "$stripped" ]]; then
+    echo "$caller: remote is not a GitHub repository ('$url')" >&2
+    return 1
+  fi
+  if [[ ! "$repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+    echo "$caller: unexpected owner/repo format from remote.origin.url ('$url'): $repo" >&2
+    return 1
+  fi
+  printf '%s\n' "$repo"
+}
+
 # ---- parse_duration <str> — duration string to whole seconds ----------------
 # Accepts <int><unit> where unit is one of s|m|h|d|w (second/minute/hour/day/
 # week). Prints the duration in seconds on stdout and returns 0. On unparseable
@@ -134,25 +182,72 @@ gh_api_array() {
   fi
 }
 
+# dispatch_marker_comment_id <N> <marker> — echo the id of the issue comment
+# whose body starts with <marker> (first line), authored by the trusted dispatch
+# identity, or empty when none. Uses startswith (not contains) so prose mentions
+# of the marker string in other comments are never matched. Consolidates the author-id-filtered find jq currently duplicated inline
+# in dispatch-read-plan and dispatch-write-plan (those two are deliberately NOT
+# migrated in this PR — see issue #2039 plan; the greenfield migration is a
+# deferred follow-up). Resolves the trusted author id from `gh api user --jq '.id'`
+# (validated ^[0-9]+$, overridable via DISPATCH_PLAN_AUTHOR_ID for parity with the
+# plan scripts), fetches comments via gh_retry, and applies the same
+# author-id-filtered first(...) selector. Returns non-zero with a stderr message
+# on an unresolvable author id (clear error, not a fallback). Echoes nothing
+# (empty) when no matching comment exists. A gh_retry or jq pipeline failure
+# returns non-zero (a clear error), distinct from the empty-output absent case —
+# mirroring gh_api_array's error propagation rather than silently swallowing it.
+dispatch_marker_comment_id() {
+  local n="$1" marker="$2"
+  local author_id="${DISPATCH_PLAN_AUTHOR_ID:-$(gh api user --jq '.id')}"
+  if [[ ! "$author_id" =~ ^[0-9]+$ ]]; then
+    echo "dispatch_marker_comment_id: could not resolve a numeric comment author id (got: '$author_id')" >&2
+    return 1
+  fi
+  local raw
+  raw=$(gh_retry gh api --paginate "repos/{owner}/{repo}/issues/$n/comments") \
+    || return 1
+  local cid
+  cid=$(printf '%s\n' "$raw" | jq -r --arg m "$marker" --argjson author_id "$author_id" \
+      'first(.[] | select((.body | startswith($m)) and (.user.id == $author_id)) | .id)') \
+    || return 1
+  if [[ -z "$cid" || "$cid" == "null" ]]; then
+    return 0
+  fi
+  printf '%s\n' "$cid"
+}
+
 # List issues (NOT pull requests) via the GitHub REST API rather than
 # `gh issue list` (which GraphQL-backs). Keeping the per-tick dispatch issue
 # scans on REST keeps them off the shared GraphQL rate-limit bucket, which the
 # per-tick scan was self-exhausting (#1601).
 #
 # Contract:
-#   gh_issue_list_rest --state <open|closed> [--repo <owner/repo>] [--label <name>] [--limit <n>]
+#   gh_issue_list_rest --state <open|closed|all> [--repo <owner/repo>] [--label <name>] [--limit <n>] [--include-title] [--include-body]
 #
 # Flags:
-#   --state  (required) open|closed.
+#   --state  (required) open|closed|all. `all` is accepted — REST's
+#            issues?state=all is native and needs no special-casing.
 #   --repo   (optional) owner/repo for a cross-repo scan; when absent the path
 #            uses the {owner}/{repo} placeholder gh auto-resolves for the
 #            current repo.
 #   --label  (optional) a single label name; URL-encoded minimally (space→%20;
 #            the colon in values like dispatch:main-broken is query-safe).
-#   --limit  (optional) per_page cap. When ABSENT we --paginate the full set
-#            (REST --paginate has no silent-truncation hazard, unlike gh pr/issue
-#            list's --limit default). When PRESENT we fetch a SINGLE page of that
-#            size (no --paginate).
+#   --limit  (optional) cap on the number of issues returned. When ABSENT we
+#            --paginate the full set (REST --paginate has no silent-truncation
+#            hazard, unlike gh pr/issue list's --limit default). When PRESENT and
+#            <= 100 we fetch a SINGLE page of that size (no --paginate). When
+#            PRESENT and > 100 we --paginate at per_page=100 and slice the merged
+#            result to the first <limit> objects in the final jq projection —
+#            REST clamps per_page to 100, so a single-page per_page=<limit> would
+#            silently truncate to <= 100. The slice preserves the
+#            `len == limit ⇒ truncated` guard semantics: paginate-all-then-slice
+#            yields len == limit iff at least <limit> issues exist.
+#   --include-title (optional) when present, the projected objects additionally
+#            carry a `title` field. Omitted by default so the repo-wide per-tick
+#            callers stay byte-identical and payload-lean.
+#   --include-body (optional) when present, the projected objects additionally
+#            carry `title` and `body` fields. Omitted by default so the repo-wide per-tick
+#            callers stay byte-identical and payload-lean.
 #
 # Output: one merged JSON array on stdout. REST /issues returns issues AND PRs;
 # only PR objects carry a `pull_request` key, so we filter those out to match
@@ -160,18 +255,23 @@ gh_api_array() {
 # camelCase shape downstream jq expects ({number, createdAt, closedAt, labels}).
 # `labels` is already [{name,...}] in REST, so it passes through unchanged; a null
 # closedAt on open issues is harmless. Results are sorted created-descending so a
-# downstream `.[0]` is the most-recently-created issue.
+# downstream `.[0]` is the most-recently-created issue. When --include-title is
+# passed, each projected object also carries a `title` field; when --include-body
+# is passed, each carries BOTH `title` and `body` fields; both flags may be
+# passed together (idempotent — title appears once).
 #
 # On gh failure: errors to stderr and returns 1 (clear-errors convention, no
 # fallback).
 gh_issue_list_rest() {
-  local state="" repo="" label="" limit=""
+  local state="" repo="" label="" limit="" include_title="" include_body=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --state) state="$2"; shift 2 ;;
       --repo)  repo="$2";  shift 2 ;;
       --label) label="$2"; shift 2 ;;
       --limit) limit="$2"; shift 2 ;;
+      --include-title) include_title=1; shift 1 ;;
+      --include-body) include_body=1; shift 1 ;;
       *) echo "error: gh_issue_list_rest: unknown flag '$1'" >&2; return 1 ;;
     esac
   done
@@ -187,8 +287,26 @@ gh_issue_list_rest() {
     path="repos/{owner}/{repo}/issues"
   fi
 
-  local per_page="100"
-  [[ -n "$limit" ]] && per_page="$limit"
+  # When --limit > 100, REST clamps a single page's per_page to 100, so we must
+  # --paginate at per_page=100 and slice the merged result down to <limit> in the
+  # projection. A limit <= 100 fits one page (per_page=<limit>, no --paginate).
+  local paginate="" per_page="100" slice=""
+  if [[ -n "$limit" ]]; then
+    if [[ ! "$limit" =~ ^[0-9]+$ ]]; then
+      echo "error: gh_issue_list_rest: --limit must be a non-negative integer (got '$limit')" >&2
+      return 1
+    fi
+    if (( limit > 100 )); then
+      paginate=1
+      per_page="100"
+      slice="$limit"
+    else
+      per_page="$limit"
+    fi
+  else
+    paginate=1
+  fi
+
   local query="state=$state&per_page=$per_page&sort=created&direction=desc"
   if [[ -n "$label" ]]; then
     # Minimal URL-encode: space → %20 (colon is query-safe).
@@ -197,21 +315,168 @@ gh_issue_list_rest() {
   fi
 
   local raw
-  if [[ -n "$limit" ]]; then
+  if [[ -n "$paginate" ]]; then
+    # Full set (--limit absent) or --limit > 100: REST --paginate has no
+    # silent-truncation hazard; a >100 limit is enforced by the projection slice.
+    raw=$(gh_retry gh api --paginate "$path?$query") || {
+      echo "error: gh_issue_list_rest: gh api failed for $path?$query" >&2
+      return 1
+    }
+  else
     # Single page (no --paginate) — caller wants at most one page of per_page.
     raw=$(gh_retry gh api "$path?$query") || {
       echo "error: gh_issue_list_rest: gh api failed for $path?$query" >&2
       return 1
     }
+  fi
+
+  # Build the projection: filter PRs, remap to camelCase, conditionally add
+  # title/body, then conditionally slice to <limit> (only when --limit > 100).
+  local fields="number, createdAt: .created_at, closedAt: .closed_at, labels"
+  # --include-title ⇒ add title. --include-body ⇒ add BOTH title and body
+  # (origin/main #2255's shipped semantics). Add title once when either flag is
+  # set (avoid a duplicate `title` key when both are passed), then body only for
+  # --include-body.
+  if [[ -n "$include_title" || -n "$include_body" ]]; then
+    fields="$fields, title"
+  fi
+  [[ -n "$include_body" ]] && fields="$fields, body"
+  local projection="add // [] | map(select(.pull_request == null)) | map({$fields})"
+  [[ -n "$slice" ]] && projection="$projection | .[:$slice]"
+  printf '%s' "$raw" | jq -s "$projection"
+}
+
+# List pull requests via the GitHub REST API rather than `gh pr list` (which
+# GraphQL-backs). Keeping per-tick dispatch PR scans on REST keeps them off the
+# shared GraphQL rate-limit bucket the per-tick scan was self-exhausting (#1601,
+# #2258). Mirrors gh_issue_list_rest's --limit discipline.
+#
+# Contract:
+#   gh_pr_list_rest --state <open|closed|all> [--repo <owner/repo>] [--head <branch>] [--limit <n>]
+#
+# Flags:
+#   --state  (required) open|closed|all. REST's pulls?state=all is native.
+#   --repo   (optional) owner/repo for a cross-repo scan; when absent the path
+#            uses the {owner}/{repo} placeholder gh auto-resolves for the
+#            current repo.
+#   --head   (optional) filter to PRs from a single head branch. REST wants
+#            head=<owner>:<branch>. The owner is the FIRST path segment of --repo
+#            when given (cut on /); otherwise it is resolved from the current
+#            repo via `gh repo view --json owner -q .owner.login` (wrapped in
+#            gh_retry). Resolution is lazy — only performed when --head is set and
+#            --repo is absent — so the common no-head call path makes no extra
+#            API call.
+#   --limit  (optional) cap on PRs returned. SAME three-way discipline as
+#            gh_issue_list_rest: ABSENT ⇒ --paginate the full set (REST --paginate
+#            has no silent-truncation hazard); PRESENT and <= 100 ⇒ a SINGLE page
+#            of per_page=<limit> (no --paginate); PRESENT and > 100 ⇒ --paginate
+#            at the REST-clamped per_page=100 and slice the merged result to the
+#            first <limit> objects in the final jq projection. The slice preserves
+#            the `len == limit ⇒ truncated` guard semantics.
+#
+# Endpoint: repos/{owner}/{repo}/pulls (or repos/$repo/pulls with --repo). The
+# query string carries state, per_page, and head (when set). No sort/direction
+# param is emitted (this unit migrates no call sites — see #2258).
+#
+# Projection: a FIXED {number, state, title, mergedAt, createdAt} shape, remapped
+# from REST snake_case (merged_at → mergedAt, created_at → createdAt). REST
+# /pulls returns ONLY pull requests, so — unlike /issues — no pull_request filter
+# is needed; every element is a PR.
+#
+# State normalization (CRITICAL): REST PR `state` is only open|closed and does
+# not distinguish merged from closed-unmerged, but consuming scripts compare
+# against the GraphQL state enum (OPEN/CLOSED/MERGED). We normalize IN the jq
+# projection to that vocabulary:
+#   REST open                          → OPEN
+#   REST closed with merged_at != null → MERGED
+#   REST closed with merged_at == null → CLOSED
+#
+# Output: one merged JSON array on stdout.
+#
+# On gh failure: errors to stderr and returns 1 (clear-errors convention, no
+# fallback).
+gh_pr_list_rest() {
+  local state="" repo="" head="" limit=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --state) state="$2"; shift 2 ;;
+      --repo)  repo="$2";  shift 2 ;;
+      --head)  head="$2";  shift 2 ;;
+      --limit) limit="$2"; shift 2 ;;
+      *) echo "error: gh_pr_list_rest: unknown flag '$1'" >&2; return 1 ;;
+    esac
+  done
+  if [[ -z "$state" ]]; then
+    echo "error: gh_pr_list_rest: --state is required" >&2
+    return 1
+  fi
+
+  local path
+  if [[ -n "$repo" ]]; then
+    path="repos/$repo/pulls"
   else
-    # Full set — REST --paginate has no silent-truncation hazard.
+    path="repos/{owner}/{repo}/pulls"
+  fi
+
+  # When --limit > 100, REST clamps a single page's per_page to 100, so we must
+  # --paginate at per_page=100 and slice the merged result down to <limit> in the
+  # projection. A limit <= 100 fits one page (per_page=<limit>, no --paginate).
+  local paginate="" per_page="100" slice=""
+  if [[ -n "$limit" ]]; then
+    if [[ ! "$limit" =~ ^[0-9]+$ ]]; then
+      echo "error: gh_pr_list_rest: --limit must be a non-negative integer (got '$limit')" >&2
+      return 1
+    fi
+    if (( limit > 100 )); then
+      paginate=1
+      per_page="100"
+      slice="$limit"
+    else
+      per_page="$limit"
+    fi
+  else
+    paginate=1
+  fi
+
+  local query="state=$state&per_page=$per_page"
+  if [[ -n "$head" ]]; then
+    # Resolve the head owner: first segment of --repo when given, else the
+    # current repo's owner login. Lazy — only when --head is set.
+    local head_owner
+    if [[ -n "$repo" ]]; then
+      head_owner="${repo%%/*}"
+    else
+      head_owner=$(gh_retry gh repo view --json owner -q .owner.login) || {
+        echo "error: gh_pr_list_rest: could not resolve current repo owner for --head" >&2
+        return 1
+      }
+    fi
+    query="$query&head=$head_owner:$head"
+  fi
+
+  local raw
+  if [[ -n "$paginate" ]]; then
+    # Full set (--limit absent) or --limit > 100: REST --paginate has no
+    # silent-truncation hazard; a >100 limit is enforced by the projection slice.
     raw=$(gh_retry gh api --paginate "$path?$query") || {
-      echo "error: gh_issue_list_rest: gh api failed for $path?$query" >&2
+      echo "error: gh_pr_list_rest: gh api failed for $path?$query" >&2
+      return 1
+    }
+  else
+    # Single page (no --paginate) — caller wants at most one page of per_page.
+    raw=$(gh_retry gh api "$path?$query") || {
+      echo "error: gh_pr_list_rest: gh api failed for $path?$query" >&2
       return 1
     }
   fi
 
-  printf '%s' "$raw" | jq -s 'add // [] | map(select(.pull_request == null)) | map({number, createdAt: .created_at, closedAt: .closed_at, labels})'
+  # Build the projection: fixed field set, remap snake_case to camelCase, and
+  # normalize REST open|closed to the GraphQL OPEN|MERGED|CLOSED vocabulary; then
+  # conditionally slice to <limit> (only when --limit > 100).
+  local projection
+  projection='add // [] | map({number, state: (if .state == "open" then "OPEN" elif .merged_at != null then "MERGED" else "CLOSED" end), title, mergedAt: .merged_at, createdAt: .created_at})'
+  [[ -n "$slice" ]] && projection="$projection | .[:$slice]"
+  printf '%s' "$raw" | jq -s "$projection"
 }
 
 # The explicit open-PR fetch cap. gh pr list defaults to 30, which silently
@@ -228,6 +493,7 @@ DISPATCH_PR_LIST_LIMIT="${DISPATCH_PR_LIST_LIMIT:-300}"
 pr_list_open() {
   local fields="$1"
   local out rc len
+  # lint-allow: gh-rest-porcelain pr_list_open is the canonical open-PR wrapper; predates the list ban, gh_pr_list_rest exists for new code
   out=$(gh pr list --state open --limit "$DISPATCH_PR_LIST_LIMIT" --json "$fields")
   rc=$?
   [[ "$rc" -ne 0 ]] && return "$rc"
@@ -338,8 +604,9 @@ dispatch_classify_rollup() {
   pending=$(printf '%s' "$rollup" | jq '
     map(
       if has("conclusion") then
-        # Check run: pending if status != COMPLETED
-        .status != "COMPLETED"
+        # Check run: pending only if no terminal conclusion yet (a desynced
+        # status=in_progress + non-null conclusion is concluded, not pending) — #2457
+        (.conclusion // "") == "" and .status != "COMPLETED"
       else
         # Status context: pending if state is PENDING or EXPECTED
         (.state == "PENDING" or .state == "EXPECTED")
@@ -432,6 +699,756 @@ dispatch_ci_verdict_rest() {
   printf '%s\n' "$verdict"
 }
 
+# REST-backed drop-in for `gh issue view <N> --json
+# number,title,body,state,stateReason,createdAt,labels,assignees` (#2255). The
+# dispatch fleet exhausts GitHub's shared GraphQL rate-limit bucket while the
+# REST bucket sits idle; the `gh issue view` porcelain spends GraphQL, this
+# helper spends REST.
+# Args: $1 = <N> (issue number, required); --repo owner/repo (optional, defaults
+#   to the current repo via the {owner}/{repo} placeholder); --comments (optional
+#   boolean) opts into a SECOND REST call that fetches the issue's comments.
+# Output: one JSON object on stdout matching the porcelain shape — an EXPLICIT
+#   named projection (not a passthrough of the raw REST object) so the shape is
+#   pinned and tested:
+#     {number, title, body, state, stateReason, createdAt,
+#      labels:[{name}], assignees:[{login}]}
+#   With --comments, also: comments:[{author:{login}, createdAt, body}].
+# Byte-compat bridges over the raw REST shape:
+#   - state: REST returns lowercase `open`/`closed`; the porcelain emits the
+#     UPPERCASE GraphQL enum `OPEN`/`CLOSED`. `ascii_upcase` bridges it (same as
+#     dispatch_ci_verdict_rest's enum bridge).
+#   - stateReason: REST's snake_case `state_reason` is lowercase
+#     (`completed`/`not_planned`/`reopened`/null); the porcelain emits the
+#     UPPERCASE GraphQL enum (`COMPLETED`/`NOT_PLANNED`/`REOPENED`/null).
+#     `ascii_upcase` bridges it; null is preserved exactly (no upcase of null).
+#   - createdAt: remapped from REST's snake_case `created_at` (ISO 8601 string,
+#     same value the porcelain `createdAt` carries).
+#   - labels / assignees: narrowed to the porcelain-visible keys (`name` /
+#     `login`) rather than passing the full REST objects through.
+# Comments (--comments): a SECOND REST call against the issue's comments endpoint
+#   (built with the SAME --repo logic as the main path). It uses the slurp idiom
+#   (`gh api --paginate ... | jq -s 'map(.[]) | ...'`) rather than gh_api_array:
+#   gh_api_array fetches WITHOUT --paginate (it would truncate at 30 comments),
+#   and --paginate can't be bolted onto it (--paginate emits one JSON doc per
+#   page, breaking gh_api_array's single-array `type=="array"` validator). Each
+#   comment is remapped to {author:{login}, createdAt, body}. Without the flag
+#   there is no second call and no `comments` key.
+# On gh failure: errors to stderr and returns 1 (clear-errors convention, no
+# fallback).
+gh_issue_view_rest() {
+  local num="" repo="" want_comments=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --repo) repo="$2"; shift 2 ;;
+      --comments) want_comments=1; shift 1 ;;
+      --*) echo "error: gh_issue_view_rest: unknown flag '$1'" >&2; return 1 ;;
+      *)
+        if [[ -z "$num" ]]; then
+          num="$1"; shift 1
+        else
+          echo "error: gh_issue_view_rest: unexpected argument '$1'" >&2; return 1
+        fi
+        ;;
+    esac
+  done
+  if [[ -z "$num" ]]; then
+    echo "error: gh_issue_view_rest: issue number is required" >&2
+    return 1
+  fi
+
+  local path
+  if [[ -n "$repo" ]]; then
+    path="repos/$repo/issues/$num"
+  else
+    path="repos/{owner}/{repo}/issues/$num"
+  fi
+
+  local raw
+  raw=$(gh_retry gh api "$path") || {
+    echo "error: gh_issue_view_rest: gh api failed for $path" >&2
+    return 1
+  }
+
+  local projected
+  projected=$(printf '%s' "$raw" | jq '{
+    number,
+    title,
+    body: (.body // ""),
+    state: (.state | ascii_upcase),
+    stateReason: ((.state_reason // null) | (if . == null then null else ascii_upcase end)),
+    createdAt: .created_at,
+    closedAt: .closed_at,
+    labels: ((.labels // []) | map({name})),
+    assignees: ((.assignees // []) | map({login}))
+  }') || return 1
+
+  if [[ "$want_comments" -eq 0 ]]; then
+    printf '%s\n' "$projected"
+    return 0
+  fi
+
+  # --comments: a second REST call against the issue's comments endpoint, built
+  # with the same --repo logic as the main path. Slurp the per-page arrays
+  # (--paginate emits one array doc per page), flatten, and remap to the
+  # porcelain comment shape. See dispatch_ci_verdict_rest / the header comment for
+  # why gh_api_array can't be used here.
+  local comments_path
+  if [[ -n "$repo" ]]; then
+    comments_path="repos/$repo/issues/$num/comments"
+  else
+    comments_path="repos/{owner}/{repo}/issues/$num/comments"
+  fi
+
+  local comments
+  comments=$(gh_retry gh api --paginate "$comments_path" \
+    | jq -s 'map(.[]) | map({author: {login: .user.login},
+                            createdAt: .created_at,
+                            body: (.body // "")})') || {
+    echo "error: gh_issue_view_rest: gh api failed for $comments_path" >&2
+    return 1
+  }
+
+  jq --argjson comments "$comments" '. + {comments: $comments}' <<<"$projected"
+}
+
+# Resolve a CI run's createdAt and headSha via `gh run view` (porcelain, not
+# gh api). The GitHub Actions API is a separate REST bucket from the core REST
+# bucket used by gh api, so this call does not spend the core rate-limit.
+# Args: $1 = <run-id> (required); --repo owner/repo (optional).
+# Output: {"createdAt":"<iso8601>","headSha":"<sha>"} on stdout.
+gh_run_view_rest() {
+  local id="" repo=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --repo) repo="$2"; shift 2 ;;
+      --*) echo "error: gh_run_view_rest: unknown flag '$1'" >&2; return 1 ;;
+      *)
+        if [[ -z "$id" ]]; then
+          id="$1"; shift 1
+        else
+          echo "error: gh_run_view_rest: unexpected argument '$1'" >&2; return 1
+        fi
+        ;;
+    esac
+  done
+  if [[ -z "$id" ]]; then
+    echo "error: gh_run_view_rest: run id is required" >&2
+    return 1
+  fi
+
+  local cmd=(gh run view "$id" --json createdAt,headSha)
+  [[ -n "$repo" ]] && cmd+=(--repo "$repo")
+
+  local out
+  out=$(gh_retry "${cmd[@]}") || {
+    echo "error: gh_run_view_rest: gh run view failed for run $id" >&2
+    return 1
+  }
+  printf '%s\n' "$out"
+}
+
+# Return the commit SHA that closed an issue, or empty string when the issue
+# was closed manually (no commit). Uses the REST issue timeline endpoint, which
+# is on the core REST rate-limit bucket.
+# Args: $1 = <N> (issue number, required); --repo owner/repo (optional).
+# Output: closing commit SHA on stdout, or empty string when none.
+gh_issue_closing_commit_rest() {
+  local num="" repo=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --repo) repo="$2"; shift 2 ;;
+      --*) echo "error: gh_issue_closing_commit_rest: unknown flag '$1'" >&2; return 1 ;;
+      *)
+        if [[ -z "$num" ]]; then
+          num="$1"; shift 1
+        else
+          echo "error: gh_issue_closing_commit_rest: unexpected argument '$1'" >&2; return 1
+        fi
+        ;;
+    esac
+  done
+  if [[ -z "$num" ]]; then
+    echo "error: gh_issue_closing_commit_rest: issue number is required" >&2
+    return 1
+  fi
+
+  local path
+  if [[ -n "$repo" ]]; then
+    path="repos/$repo/issues/$num/timeline"
+  else
+    path="repos/{owner}/{repo}/issues/$num/timeline"
+  fi
+
+  gh_retry gh api --paginate "$path" \
+    | jq -rs '[.[][] | select(.event=="closed")] | last | .commit_id // empty' || {
+    echo "error: gh_issue_closing_commit_rest: gh api failed for $path" >&2
+    return 1
+  }
+}
+
+# Compare two commits via the GitHub REST compare endpoint and return their
+# relationship. Uses the core REST rate-limit bucket.
+# Args: $1 = <base-commit> (required); $2 = <head-sha> (required);
+#   --repo owner/repo (optional).
+# Output: one of: ahead / identical / behind / diverged on stdout.
+gh_commit_is_ancestor_rest() {
+  local base="" head="" repo=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --repo) repo="$2"; shift 2 ;;
+      --*) echo "error: gh_commit_is_ancestor_rest: unknown flag '$1'" >&2; return 1 ;;
+      *)
+        if [[ -z "$base" ]]; then
+          base="$1"; shift 1
+        elif [[ -z "$head" ]]; then
+          head="$1"; shift 1
+        else
+          echo "error: gh_commit_is_ancestor_rest: unexpected argument '$1'" >&2; return 1
+        fi
+        ;;
+    esac
+  done
+  if [[ -z "$base" ]]; then
+    echo "error: gh_commit_is_ancestor_rest: base commit is required" >&2
+    return 1
+  fi
+  if [[ -z "$head" ]]; then
+    echo "error: gh_commit_is_ancestor_rest: head sha is required" >&2
+    return 1
+  fi
+
+  local path
+  if [[ -n "$repo" ]]; then
+    path="repos/$repo/compare/$base...$head"
+  else
+    path="repos/{owner}/{repo}/compare/$base...$head"
+  fi
+
+  gh_retry gh api "$path" | jq -r '.status' || {
+    echo "error: gh_commit_is_ancestor_rest: gh api failed for $path" >&2
+    return 1
+  }
+}
+
+# REST-backed drop-in for `gh pr view <N> --json
+# number,title,body,state,mergeable,mergeStateStatus,headRefName,headRefOid,labels`
+# (#2255). Spends the REST rate-limit bucket instead of GraphQL, like
+# gh_issue_view_rest.
+# Args: $1 = <N> (PR number, required); --repo owner/repo (optional).
+# Output: one JSON object on stdout matching the porcelain shape — an EXPLICIT
+#   named projection: {number, title, body, state, mergeable, mergeStateStatus,
+#   headRefName, headRefOid, labels:[{name}]}.
+# Byte-compat bridges over the raw REST shape:
+#   - state: lowercase `open`/`closed` → UPPERCASE via `ascii_upcase`. (REST has
+#     no distinct MERGED state — a merged PR is state `closed` — so a consumer
+#     that distinguishes the porcelain `MERGED` state must not migrate to this
+#     helper without handling that.)
+#   - mergeable: REST returns a BOOLEAN (true/false/null); the porcelain emits
+#     the GraphQL enum string `MERGEABLE`/`CONFLICTING`/`UNKNOWN` that dispatch
+#     call sites string-compare. Mapped explicitly: true→MERGEABLE,
+#     false→CONFLICTING, null (or absent)→UNKNOWN.
+#   - mergeStateStatus: remapped from REST's snake_case `mergeable_state` and
+#     `ascii_upcase`d to match the porcelain GraphQL enum casing (REST is
+#     lowercase `clean`/`dirty`/`blocked`).
+#   - headRefName: the PR's head branch name, remapped from REST's `head.ref`
+#     (same value the porcelain `headRefName` carries).
+#   - headRefOid: the PR's head commit oid, remapped from REST's `head.sha`
+#     (same value the porcelain `headRefOid` carries).
+#   - labels: narrowed to the porcelain-visible key (`name`) rather than passing
+#     the full REST label objects through (same as gh_issue_view_rest's labels).
+# On gh failure: errors to stderr and returns 1 (clear-errors convention, no
+# fallback).
+gh_pr_view_rest() {
+  local num="" repo=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --repo) repo="$2"; shift 2 ;;
+      --*) echo "error: gh_pr_view_rest: unknown flag '$1'" >&2; return 1 ;;
+      *)
+        if [[ -z "$num" ]]; then
+          num="$1"; shift 1
+        else
+          echo "error: gh_pr_view_rest: unexpected argument '$1'" >&2; return 1
+        fi
+        ;;
+    esac
+  done
+  if [[ -z "$num" ]]; then
+    echo "error: gh_pr_view_rest: PR number is required" >&2
+    return 1
+  fi
+
+  local path
+  if [[ -n "$repo" ]]; then
+    path="repos/$repo/pulls/$num"
+  else
+    path="repos/{owner}/{repo}/pulls/$num"
+  fi
+
+  local raw
+  raw=$(gh_retry gh api "$path") || {
+    echo "error: gh_pr_view_rest: gh api failed for $path" >&2
+    return 1
+  }
+
+  printf '%s' "$raw" | jq '{
+    number,
+    title,
+    body: (.body // ""),
+    state: (.state | ascii_upcase),
+    mergeable: (
+      if .mergeable == true then "MERGEABLE"
+      elif .mergeable == false then "CONFLICTING"
+      else "UNKNOWN" end
+    ),
+    mergeStateStatus: ((.mergeable_state // "") | ascii_upcase),
+    headRefName: .head.ref,
+    headRefOid: .head.sha,
+    labels: ((.labels // []) | map({name}))
+  }'
+}
+
+# REST-backed mutation: add one or more labels to an issue (#2255).
+# Uses POST repos/{owner}/{repo}/issues/<N>/labels which is ADDITIVE (matching
+# `gh issue edit --add-label`). Each label is a separate -f flag so gh_retry
+# can re-invoke safely without draining a stdin pipe.
+# Args: $1 = <N> (issue number, required); then one or more label names;
+#   --repo owner/repo (optional).
+# On gh failure: errors to stderr and returns 1.
+gh_issue_set_labels_rest() {
+  local num="" repo=""
+  local -a labels=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --repo) repo="$2"; shift 2 ;;
+      --*) echo "error: gh_issue_set_labels_rest: unknown flag '$1'" >&2; return 1 ;;
+      *)
+        if [[ -z "$num" ]]; then
+          num="$1"; shift 1
+        else
+          labels+=("$1"); shift 1
+        fi
+        ;;
+    esac
+  done
+  if [[ -z "$num" ]]; then
+    echo "error: gh_issue_set_labels_rest: issue number is required" >&2
+    return 1
+  fi
+  if [[ "${#labels[@]}" -eq 0 ]]; then
+    echo "error: gh_issue_set_labels_rest: at least one label is required" >&2
+    return 1
+  fi
+
+  local path
+  if [[ -n "$repo" ]]; then
+    path="repos/$repo/issues/$num/labels"
+  else
+    path="repos/{owner}/{repo}/issues/$num/labels"
+  fi
+
+  local -a label_flags=()
+  for lbl in "${labels[@]}"; do
+    label_flags+=(-f "labels[]=$lbl")
+  done
+
+  gh_retry gh api -X POST "$path" "${label_flags[@]}" >/dev/null || {
+    echo "error: gh_issue_set_labels_rest: gh api failed for $path" >&2
+    return 1
+  }
+}
+
+# REST-backed mutation: remove a single label from an issue (#2255).
+# Uses DELETE repos/{owner}/{repo}/issues/<N>/labels/<name>.
+# URL-encodes minimally (space→%20) mirroring gh_issue_list_rest.
+# Args: $1 = <N> (issue number, required); $2 = <label> (required);
+#   --repo owner/repo (optional).
+# A label-absent 404 is treated as success (no-op), mirroring the porcelain
+# `gh ... --remove-label` contract. On any other gh failure: errors to stderr
+# and returns 1.
+gh_issue_remove_label_rest() {
+  local num="" label="" repo=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --repo) repo="$2"; shift 2 ;;
+      --*) echo "error: gh_issue_remove_label_rest: unknown flag '$1'" >&2; return 1 ;;
+      *)
+        if [[ -z "$num" ]]; then
+          num="$1"; shift 1
+        elif [[ -z "$label" ]]; then
+          label="$1"; shift 1
+        else
+          echo "error: gh_issue_remove_label_rest: unexpected argument '$1'" >&2; return 1
+        fi
+        ;;
+    esac
+  done
+  if [[ -z "$num" ]]; then
+    echo "error: gh_issue_remove_label_rest: issue number is required" >&2
+    return 1
+  fi
+  if [[ -z "$label" ]]; then
+    echo "error: gh_issue_remove_label_rest: label name is required" >&2
+    return 1
+  fi
+
+  # Minimal URL-encode: space → %20 (mirrors gh_issue_list_rest).
+  local enc_label="${label// /%20}"
+
+  local path
+  if [[ -n "$repo" ]]; then
+    path="repos/$repo/issues/$num/labels/$enc_label"
+  else
+    path="repos/{owner}/{repo}/issues/$num/labels/$enc_label"
+  fi
+
+  local err
+  if ! err=$(gh_retry gh api -X DELETE "$path" 2>&1 >/dev/null); then
+    # Porcelain `gh ... --remove-label` is a no-op when the label is absent; REST
+    # DELETE returns 404 in that case. The issue/PR is known to exist, so a 404
+    # here means the label was not present — treat it as success (faithful to the
+    # porcelain contract, not a fallback).
+    case "$err" in
+      *"HTTP 404"*|*"Not Found"*) return 0 ;;
+      *) echo "error: gh_issue_remove_label_rest: gh api failed for $path" >&2; return 1 ;;
+    esac
+  fi
+}
+
+# REST-backed mutation: close an issue (#2255).
+# Uses PATCH repos/{owner}/{repo}/issues/<N> with state=closed.
+# Args: $1 = <N> (issue number, required); --reason <completed|not_planned>
+#   (optional; maps to state_reason, matching `gh issue close --reason`); --comment
+#   <body> (optional; posts the comment BEFORE the close, matching the porcelain's
+#   comment-then-close ordering); --repo owner/repo (optional).
+# On gh failure: errors to stderr and returns 1.
+gh_issue_close_rest() {
+  local num="" reason="" comment="" has_comment="" repo=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --reason)  reason="$2";  shift 2 ;;
+      --comment) comment="$2"; has_comment=1; shift 2 ;;
+      --repo)    repo="$2";    shift 2 ;;
+      --*) echo "error: gh_issue_close_rest: unknown flag '$1'" >&2; return 1 ;;
+      *)
+        if [[ -z "$num" ]]; then
+          num="$1"; shift 1
+        else
+          echo "error: gh_issue_close_rest: unexpected argument '$1'" >&2; return 1
+        fi
+        ;;
+    esac
+  done
+  if [[ -z "$num" ]]; then
+    echo "error: gh_issue_close_rest: issue number is required" >&2
+    return 1
+  fi
+
+  local path
+  if [[ -n "$repo" ]]; then
+    path="repos/$repo/issues/$num"
+  else
+    path="repos/{owner}/{repo}/issues/$num"
+  fi
+
+  # --comment: post the comment BEFORE the close (matches the porcelain ordering),
+  # reusing the exact POST issues/<N>/comments shape from gh_issue_comment_rest.
+  if [[ -n "$has_comment" ]]; then
+    local comments_path="$path/comments"
+    gh_retry gh api -X POST "$comments_path" -f "body=$comment" >/dev/null || {
+      echo "error: gh_issue_close_rest: gh api failed for $comments_path" >&2
+      return 1
+    }
+  fi
+
+  # --reason: send state_reason only when passed (preserves prior behavior for
+  # callers that omit it). The flag value maps directly to GitHub's state_reason.
+  local -a reason_flag=()
+  [[ -n "$reason" ]] && reason_flag=(-f "state_reason=$reason")
+
+  gh_retry gh api -X PATCH "$path" -f state=closed "${reason_flag[@]}" >/dev/null || {
+    echo "error: gh_issue_close_rest: gh api failed for $path" >&2
+    return 1
+  }
+}
+
+# REST-backed mutation: reopen a closed issue (#2337).
+# Uses PATCH repos/{owner}/{repo}/issues/<N> with state=open (no state_reason).
+# Args: $1 = <N> (issue number, required); --comment <body> (optional; posts the
+#   comment BEFORE the reopen, matching gh_issue_close_rest's comment-then-mutate
+#   ordering); --repo owner/repo (optional).
+# On gh failure: errors to stderr and returns 1.
+gh_issue_reopen_rest() {
+  local num="" comment="" has_comment="" repo=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --comment) comment="$2"; has_comment=1; shift 2 ;;
+      --repo)    repo="$2";    shift 2 ;;
+      --*) echo "error: gh_issue_reopen_rest: unknown flag '$1'" >&2; return 1 ;;
+      *)
+        if [[ -z "$num" ]]; then
+          num="$1"; shift 1
+        else
+          echo "error: gh_issue_reopen_rest: unexpected argument '$1'" >&2; return 1
+        fi
+        ;;
+    esac
+  done
+  if [[ -z "$num" ]]; then
+    echo "error: gh_issue_reopen_rest: issue number is required" >&2
+    return 1
+  fi
+
+  local path
+  if [[ -n "$repo" ]]; then
+    path="repos/$repo/issues/$num"
+  else
+    path="repos/{owner}/{repo}/issues/$num"
+  fi
+
+  # --comment: post the comment BEFORE the reopen (matches the porcelain ordering),
+  # reusing the exact POST issues/<N>/comments shape from gh_issue_comment_rest.
+  if [[ -n "$has_comment" ]]; then
+    local comments_path="$path/comments"
+    gh_retry gh api -X POST "$comments_path" -f "body=$comment" >/dev/null || {
+      echo "error: gh_issue_reopen_rest: gh api failed for $comments_path" >&2
+      return 1
+    }
+  fi
+
+  gh_retry gh api -X PATCH "$path" -f state=open >/dev/null || {
+    echo "error: gh_issue_reopen_rest: gh api failed for $path" >&2
+    return 1
+  }
+}
+
+# REST-backed mutation: edit an issue's title and/or body (#2255).
+# Uses PATCH repos/{owner}/{repo}/issues/<N>. PRs are issues in REST, so this same
+# helper later serves `gh pr edit --body`.
+# Args: $1 = <N> (issue number, required); --title <t> and/or --body <b> OR
+#   --body-file <f> (at least one of title/body required; --body/--body-file
+#   mutually exclusive); --repo owner/repo (optional).
+# On gh failure: errors to stderr and returns 1.
+gh_issue_edit_rest() {
+  local num="" title="" has_title="" body="" body_file="" repo=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --title)     title="$2"; has_title=1; shift 2 ;;
+      --body)      body="$2";      shift 2 ;;
+      --body-file) body_file="$2"; shift 2 ;;
+      --repo)      repo="$2";      shift 2 ;;
+      --*) echo "error: gh_issue_edit_rest: unknown flag '$1'" >&2; return 1 ;;
+      *)
+        if [[ -z "$num" ]]; then
+          num="$1"; shift 1
+        else
+          echo "error: gh_issue_edit_rest: unexpected argument '$1'" >&2; return 1
+        fi
+        ;;
+    esac
+  done
+  if [[ -z "$num" ]]; then
+    echo "error: gh_issue_edit_rest: issue number is required" >&2
+    return 1
+  fi
+  if [[ -n "$body" && -n "$body_file" ]]; then
+    echo "error: gh_issue_edit_rest: --body and --body-file are mutually exclusive" >&2
+    return 1
+  fi
+  if [[ -z "$has_title" && -z "$body" && -z "$body_file" ]]; then
+    echo "error: gh_issue_edit_rest: at least one of --title/--body/--body-file is required" >&2
+    return 1
+  fi
+
+  local path
+  if [[ -n "$repo" ]]; then
+    path="repos/$repo/issues/$num"
+  else
+    path="repos/{owner}/{repo}/issues/$num"
+  fi
+
+  local -a edit_flags=()
+  [[ -n "$has_title" ]] && edit_flags+=(-f "title=$title")
+  if [[ -n "$body_file" ]]; then
+    # -F body=@file re-reads the file on each retry attempt — safe for gh_retry.
+    edit_flags+=(-F "body=@$body_file")
+  elif [[ -n "$body" ]]; then
+    edit_flags+=(-f "body=$body")
+  fi
+
+  gh_retry gh api -X PATCH "$path" "${edit_flags[@]}" >/dev/null || {
+    echo "error: gh_issue_edit_rest: gh api failed for $path" >&2
+    return 1
+  }
+}
+
+# REST-backed mutation: create a new issue (#2255).
+# Uses POST repos/{owner}/{repo}/issues.
+# Echoes the new issue URL (.html_url) to stdout, matching `gh issue create` output.
+# Args: --title <t> (required); --body <b> OR --body-file <f> (exactly one
+#   required); --label <l> (repeatable); --repo owner/repo (optional).
+# On gh failure: errors to stderr and returns 1.
+gh_issue_create_rest() {
+  local title="" body="" body_file="" repo=""
+  local -a label_flags=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --title)     title="$2"; shift 2 ;;
+      --body)      body="$2";      shift 2 ;;
+      --body-file) body_file="$2"; shift 2 ;;
+      --label) label_flags+=(-f "labels[]=$2"); shift 2 ;;
+      --repo)  repo="$2";  shift 2 ;;
+      *) echo "error: gh_issue_create_rest: unknown flag '$1'" >&2; return 1 ;;
+    esac
+  done
+  if [[ -z "$title" ]]; then
+    echo "error: gh_issue_create_rest: --title is required" >&2
+    return 1
+  fi
+  if [[ -n "$body" && -n "$body_file" ]]; then
+    echo "error: gh_issue_create_rest: --body and --body-file are mutually exclusive" >&2
+    return 1
+  fi
+  if [[ -z "$body" && -z "$body_file" ]]; then
+    echo "error: gh_issue_create_rest: exactly one of --body/--body-file is required" >&2
+    return 1
+  fi
+
+  local path
+  if [[ -n "$repo" ]]; then
+    path="repos/$repo/issues"
+  else
+    path="repos/{owner}/{repo}/issues"
+  fi
+
+  local -a body_flag=()
+  if [[ -n "$body_file" ]]; then
+    # -F body=@file re-reads the file on each retry attempt — safe for gh_retry.
+    body_flag=(-F "body=@$body_file")
+  else
+    body_flag=(-f "body=$body")
+  fi
+
+  local raw
+  raw=$(gh_retry gh api -X POST "$path" \
+    -f "title=$title" \
+    "${body_flag[@]}" \
+    "${label_flags[@]}") || {
+    echo "error: gh_issue_create_rest: gh api failed for $path" >&2
+    return 1
+  }
+
+  printf '%s' "$raw" | jq -r '.html_url'
+}
+
+# REST-backed mutation: add a comment to an issue (#2255).
+# Uses POST repos/{owner}/{repo}/issues/<N>/comments.
+# Args: $1 = <N> (issue number, required); --body <b> OR --body-file <f>
+#   (exactly one required); --repo owner/repo (optional).
+# On gh failure: errors to stderr and returns 1.
+gh_issue_comment_rest() {
+  local num="" body="" body_file="" repo=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --body)      body="$2";      shift 2 ;;
+      --body-file) body_file="$2"; shift 2 ;;
+      --repo)      repo="$2";      shift 2 ;;
+      --*) echo "error: gh_issue_comment_rest: unknown flag '$1'" >&2; return 1 ;;
+      *)
+        if [[ -z "$num" ]]; then
+          num="$1"; shift 1
+        else
+          echo "error: gh_issue_comment_rest: unexpected argument '$1'" >&2; return 1
+        fi
+        ;;
+    esac
+  done
+  if [[ -z "$num" ]]; then
+    echo "error: gh_issue_comment_rest: issue number is required" >&2
+    return 1
+  fi
+  if [[ -z "$body" && -z "$body_file" ]]; then
+    echo "error: gh_issue_comment_rest: --body or --body-file is required" >&2
+    return 1
+  fi
+  if [[ -n "$body" && -n "$body_file" ]]; then
+    echo "error: gh_issue_comment_rest: --body and --body-file are mutually exclusive" >&2
+    return 1
+  fi
+
+  local path
+  if [[ -n "$repo" ]]; then
+    path="repos/$repo/issues/$num/comments"
+  else
+    path="repos/{owner}/{repo}/issues/$num/comments"
+  fi
+
+  local -a body_flag=()
+  if [[ -n "$body_file" ]]; then
+    # -F body=@file re-reads the file on each retry attempt — safe for gh_retry.
+    body_flag=(-F "body=@$body_file")
+  else
+    body_flag=(-f "body=$body")
+  fi
+
+  gh_retry gh api -X POST "$path" "${body_flag[@]}" >/dev/null || {
+    echo "error: gh_issue_comment_rest: gh api failed for $path" >&2
+    return 1
+  }
+}
+
+# REST-backed mutation: merge a pull request (#2255).
+# Uses PUT repos/{owner}/{repo}/pulls/<N>/merge with merge_method.
+# Args: $1 = <N> (PR number, required); [--squash|--merge|--rebase] (default:
+#   merge); --subject <s> (optional; commit_title); --body <b> (optional;
+#   commit_message); --repo owner/repo (optional).
+# On gh failure: errors to stderr and returns 1.
+gh_pr_merge_rest() {
+  local num="" method="merge" subject="" has_subject="" body="" has_body="" repo=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --squash)  method="squash"; shift 1 ;;
+      --merge)   method="merge";  shift 1 ;;
+      --rebase)  method="rebase"; shift 1 ;;
+      --subject) subject="$2"; has_subject=1; shift 2 ;;
+      --body)    body="$2";    has_body=1;    shift 2 ;;
+      --repo)    repo="$2";       shift 2 ;;
+      --*) echo "error: gh_pr_merge_rest: unknown flag '$1'" >&2; return 1 ;;
+      *)
+        if [[ -z "$num" ]]; then
+          num="$1"; shift 1
+        else
+          echo "error: gh_pr_merge_rest: unexpected argument '$1'" >&2; return 1
+        fi
+        ;;
+    esac
+  done
+  if [[ -z "$num" ]]; then
+    echo "error: gh_pr_merge_rest: PR number is required" >&2
+    return 1
+  fi
+
+  local path
+  if [[ -n "$repo" ]]; then
+    path="repos/$repo/pulls/$num/merge"
+  else
+    path="repos/{owner}/{repo}/pulls/$num/merge"
+  fi
+
+  # commit_title only when --subject is passed. commit_message is OMITTED when the
+  # --body value is empty: `gh pr merge --body ""` yields an empty commit-message
+  # body (no extra body lines), which the REST API replicates by sending no
+  # commit_message at all.
+  local -a commit_flags=()
+  [[ -n "$has_subject" ]] && commit_flags+=(-f "commit_title=$subject")
+  [[ -n "$has_body" && -n "$body" ]] && commit_flags+=(-f "commit_message=$body")
+
+  gh_retry gh api -X PUT "$path" -f "merge_method=$method" "${commit_flags[@]}" >/dev/null || {
+    echo "error: gh_pr_merge_rest: gh api failed for $path" >&2
+    return 1
+  }
+}
+
 # Detect what Firebase features the app uses.
 # Sets global variables: USES_FIRESTORE, USES_AUTH, USES_STORAGE, USES_FUNCTIONS
 # Args: $1 = path to app src/ directory, $2 = repo root, $3 = app name
@@ -489,6 +1506,40 @@ ensure_deps() {
       "$(dirname "${BASH_SOURCE[0]}")/npm-ci-with-retry.sh"
     )
   fi
+}
+
+# ---- playwright_install_with_deps — bounded, timed Playwright browser install -
+# Wraps `npx playwright install --with-deps chromium` (which shells out to apt-get
+# and can stall indefinitely on a flaky archive mirror — #1899) in a per-attempt
+# `timeout` plus a small retry loop, so a transient network stall fails fast and
+# retries instead of hanging until GitHub's 6-hour job cap. Skips entirely when
+# PLAYWRIGHT_BROWSERS_PATH is set (nix provides browsers). Must run from the app
+# directory (npx resolves the project's playwright). Tunables (env):
+# PLAYWRIGHT_INSTALL_TIMEOUT (default 300 seconds, per attempt),
+# PLAYWRIGHT_INSTALL_ATTEMPTS (default 2 = 1 try + 1 retry). Returns non-zero (so
+# the caller's `set -e` aborts) once attempts are exhausted.
+playwright_install_with_deps() {
+  if [ -n "${PLAYWRIGHT_BROWSERS_PATH:-}" ]; then
+    return 0
+  fi
+  local timeout_s="${PLAYWRIGHT_INSTALL_TIMEOUT:-300}"
+  local attempts="${PLAYWRIGHT_INSTALL_ATTEMPTS:-2}"
+  local attempt=1
+  while [ "$attempt" -le "$attempts" ]; do
+    if [ "$attempt" -gt 1 ]; then
+      echo "playwright_install_with_deps: attempt $attempt/$attempts" >&2
+    fi
+    if timeout --kill-after=30 "$timeout_s" npx playwright install --with-deps chromium; then
+      return 0
+    fi
+    echo "playwright_install_with_deps: attempt $attempt/$attempts failed or timed out after ${timeout_s}s" >&2
+    attempt=$((attempt + 1))
+    if [ "$attempt" -le "$attempts" ]; then
+      sleep 5
+    fi
+  done
+  echo "playwright_install_with_deps: failed after $attempts attempts" >&2
+  return 1
 }
 
 # Ensure Playwright browsers are resolvable. When PLAYWRIGHT_BROWSERS_PATH is
@@ -1447,6 +2498,496 @@ EOF
   # --now starts it without restarting an already-running instance.
   if ! "$SYSTEMCTL_CMD" --user enable --now dispatch-claude-daemon.service; then
     echo "WARNING: ensure_daemon_service: systemctl --user enable --now dispatch-claude-daemon.service failed; durable daemon service unavailable" >&2
+    return 1
+  fi
+}
+
+
+# Install and activate the durable `dispatch-sweep-periodic.timer` (+ its paired
+# `dispatch-sweep-periodic.service`) so the worktree garbage-collector fires on a
+# wall-clock cadence instead of only from a finishing worker's Stop hook (#2023).
+# The sweep launcher currently runs only when a worker stops, so an idle or
+# drained chain never GCs its stale worktrees. A `systemd --user` timer ticks
+# regardless of chain activity, keeping the sweep durable across idle periods.
+#
+# The .service is Type=oneshot and carries NO [Install] section — the .timer
+# pulls it in via Unit=, and a oneshot with an [Install] would be pointlessly
+# enable-able on its own. ExecStart points at `dispatch-spawn-sweep` (the
+# launcher), NOT `dispatch-sweep` directly, so each fire still gets the
+# launcher's fixed-unit dedup + 300s throttle rather than racing the Stop-hook
+# spawns.
+#
+# Best-effort: a failure here must not abort the caller (a tick/reseed/worker
+# launcher), so we warn to stderr and return non-zero — never `exit`. A missing
+# timer just means the sweep falls back to the prior Stop-hook-only behavior.
+# Args: $1 = main worktree path
+ensure_sweep_timer() {
+  local main_worktree="$1"
+
+  # A systemd unit file is line-structured: each line is an independent
+  # directive. An embedded newline in any value we interpolate below would land
+  # as an attacker-controlled extra directive in the [Service] section. The
+  # main worktree path comes from git output or a test override and never
+  # legitimately contains a newline; reject it rather than emit a malformed
+  # unit (best-effort: warn + return per this helper's contract — never exit).
+  if [[ "$main_worktree" == *$'\n'* ]]; then
+    echo "WARNING: ensure_sweep_timer: main worktree path contains a newline; refusing to write unit; periodic sweep unavailable" >&2
+    return 1
+  fi
+  # WorkingDirectory= does not unescape quotes, so a space in the bare path would
+  # split the value at the first space; reject it (same contract: warn + return 1).
+  if [[ "$main_worktree" == *' '* ]]; then
+    echo "WARNING: ensure_sweep_timer: main worktree path contains a space; refusing to write unit; periodic sweep unavailable" >&2
+    return 1
+  fi
+  # ExecStart= is double-quoted ("$SWEEP_SCRIPT"); SWEEP_SCRIPT is derived from
+  # main_worktree below. An embedded double-quote in the path would prematurely
+  # close that quoted token, making systemd parse the executable and arguments
+  # wrong (bad-setting) and permanently break the unit. The path never
+  # legitimately contains a double-quote; reject it rather than emit a malformed
+  # unit (same contract: warn + return 1).
+  if [[ "$main_worktree" == *'"'* ]]; then
+    echo "WARNING: ensure_sweep_timer: main worktree path contains a double-quote; refusing to write unit; periodic sweep unavailable" >&2
+    return 1
+  fi
+  # ExecStart= is double-quoted and systemd C-unescapes it, so a backslash in
+  # the path would be misread as an escape sequence and corrupt the executable
+  # token. The path never legitimately contains a backslash; reject it (#1212).
+  if [[ "$main_worktree" == *'\'* ]]; then
+    echo "WARNING: ensure_sweep_timer: main worktree path contains a backslash; refusing to write unit; periodic sweep unavailable" >&2
+    return 1
+  fi
+
+  local SWEEP_SCRIPT="$main_worktree/.claude/skills/dispatch-propagate/scripts/dispatch-spawn-sweep"
+  local UNIT_DIR="${DISPATCH_SWEEP_TIMER_UNIT_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user}"
+  local SERVICE_PATH="$UNIT_DIR/dispatch-sweep-periodic.service"
+  local TIMER_PATH="$UNIT_DIR/dispatch-sweep-periodic.timer"
+  local SYSTEMCTL_CMD="${DISPATCH_SWEEP_TIMER_SYSTEMCTL_CMD:-systemctl}"
+
+  # Sanitize PATH for the Environment= line (see strip_unit_env_path).
+  local safe_path
+  safe_path=$(strip_unit_env_path "$PATH")
+
+  # Desired .service content. Environment=PATH= captures the launching caller's
+  # full nix-store PATH at write time, for the same reason the recover and daemon
+  # units do — the systemd user manager's minimal default PATH omits the nix
+  # store, so dispatch-spawn-sweep (and the dispatch-sweep it launches) could not
+  # otherwise resolve git/jq/claude.
+  #
+  # ExecStart= and Environment= are double-quoted: systemd unescapes C-style
+  # quotes for these two directives, so a path containing spaces is parsed as a
+  # single token rather than split into an executable + spurious arguments.
+  # WorkingDirectory= is the exception — it does NOT unescape quotes; a leading
+  # `"` makes the path non-absolute and systemd rejects the unit (bad-setting),
+  # so it takes the bare path (the no-spaces invariant is enforced by the guard
+  # above, so the bare value is a single token).
+  #
+  # Deliberately NO [Install] section — the .timer pulls this oneshot in via
+  # Unit=, so the service is never enabled on its own.
+  local desired_service
+  desired_service=$(cat <<EOF
+[Unit]
+Description=Dispatch periodic worktree sweep (timer-triggered)
+
+[Service]
+Type=oneshot
+Environment="PATH=$safe_path"
+ExecStart="$SWEEP_SCRIPT"
+WorkingDirectory=$main_worktree
+EOF
+)
+
+  # Desired .timer content. OnBootSec delays the first fire past session start so
+  # the boot-time launcher storm settles; OnUnitActiveSec re-arms 15min after
+  # each activation for the steady cadence. Unit= names the paired oneshot above.
+  #
+  # Deliberately NO Persistent= — it only affects OnCalendar= timers (catching up
+  # missed wall-clock fires across downtime) and is a no-op for the monotonic
+  # OnBootSec=/OnUnitActiveSec= triggers used here.
+  local desired_timer
+  desired_timer=$(cat <<EOF
+[Unit]
+Description=Dispatch periodic worktree sweep timer
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=15min
+Unit=dispatch-sweep-periodic.service
+
+[Install]
+WantedBy=timers.target
+EOF
+)
+
+  # Steady-state hot path: if BOTH installed units already match byte-for-byte
+  # AND the timer is active (armed), skip the write/reload/enable entirely.
+  # (Like the durable daemon and unlike the OnFailure-only recover unit, the
+  # timer must actually be RUNNING — an "active" timer is one that is armed and
+  # will fire — so we add an is-active check to the content compare.)
+  if [ -f "$SERVICE_PATH" ] && [ "$(cat "$SERVICE_PATH")" = "$desired_service" ] \
+     && [ -f "$TIMER_PATH" ] && [ "$(cat "$TIMER_PATH")" = "$desired_timer" ] \
+     && "$SYSTEMCTL_CMD" --user is-active --quiet dispatch-sweep-periodic.timer; then
+    return 0
+  fi
+
+  if ! mkdir -p "$UNIT_DIR"; then
+    echo "WARNING: ensure_sweep_timer: mkdir -p $UNIT_DIR failed; periodic sweep unavailable" >&2
+    return 1
+  fi
+
+  # Write the .service atomically only when its content differs: temp file in the
+  # same dir, then mv into place.
+  if [ ! -f "$SERVICE_PATH" ] || [ "$(cat "$SERVICE_PATH")" != "$desired_service" ]; then
+    local tmp_service
+    tmp_service=$(mktemp "$UNIT_DIR/.dispatch-sweep-periodic.service.XXXXXX") || {
+      echo "WARNING: ensure_sweep_timer: could not create temp file in $UNIT_DIR; periodic sweep unavailable" >&2
+      return 1
+    }
+    if ! printf '%s\n' "$desired_service" > "$tmp_service"; then
+      echo "WARNING: ensure_sweep_timer: failed to write $tmp_service; periodic sweep unavailable" >&2
+      rm -f "$tmp_service"
+      return 1
+    fi
+    if ! mv "$tmp_service" "$SERVICE_PATH"; then
+      echo "WARNING: ensure_sweep_timer: failed to install $SERVICE_PATH; periodic sweep unavailable" >&2
+      rm -f "$tmp_service"
+      return 1
+    fi
+  fi
+
+  # Write the .timer atomically only when its content differs: temp file in the
+  # same dir, then mv into place.
+  if [ ! -f "$TIMER_PATH" ] || [ "$(cat "$TIMER_PATH")" != "$desired_timer" ]; then
+    local tmp_timer
+    tmp_timer=$(mktemp "$UNIT_DIR/.dispatch-sweep-periodic.timer.XXXXXX") || {
+      echo "WARNING: ensure_sweep_timer: could not create temp file in $UNIT_DIR; periodic sweep unavailable" >&2
+      return 1
+    }
+    if ! printf '%s\n' "$desired_timer" > "$tmp_timer"; then
+      echo "WARNING: ensure_sweep_timer: failed to write $tmp_timer; periodic sweep unavailable" >&2
+      rm -f "$tmp_timer"
+      return 1
+    fi
+    if ! mv "$tmp_timer" "$TIMER_PATH"; then
+      echo "WARNING: ensure_sweep_timer: failed to install $TIMER_PATH; periodic sweep unavailable" >&2
+      rm -f "$tmp_timer"
+      return 1
+    fi
+  fi
+
+  # daemon-reload unconditionally on this slow path, outside both write blocks.
+  # The hot path above already returned early when both units matched
+  # byte-for-byte AND the timer was active; reaching here means at least one unit
+  # was just written OR both exist on disk but the timer is not active. A
+  # daemon-reload that failed on a prior call (after the mv succeeded) leaves the
+  # units on disk but unknown to systemd, so the content compare skips the write
+  # blocks on every later call — running the reload outside those blocks ensures
+  # it is retried until systemd has loaded the units, instead of falling straight
+  # through to a doomed `enable --now`. Both files are on disk before the reload
+  # since the timer's Unit= references the service.
+  if ! "$SYSTEMCTL_CMD" --user daemon-reload; then
+    echo "WARNING: ensure_sweep_timer: systemctl --user daemon-reload failed; periodic sweep unavailable" >&2
+    return 1
+  fi
+
+  # Install + activate the TIMER (not the oneshot service): enable symlinks it
+  # under WantedBy=timers.target (so it re-arms on every user-session start) and
+  # --now arms it immediately. A .timer does nothing until this enable --now;
+  # the paired service stays inert until the timer triggers it.
+  if ! "$SYSTEMCTL_CMD" --user enable --now dispatch-sweep-periodic.timer; then
+    echo "WARNING: ensure_sweep_timer: systemctl --user enable --now dispatch-sweep-periodic.timer failed; periodic sweep unavailable" >&2
+    return 1
+  fi
+}
+
+
+# Install and activate the durable always-on heartbeat: a `systemd --user`
+# `dispatch-heartbeat.timer` firing `dispatch-heartbeat.service` (a no-arg
+# `dispatch-tick`) on a wall-clock schedule — `OnBootSec=2min`,
+# `OnCalendar=*:0/15`, `Persistent=true` (#2375). This gives the autonomous chain a
+# liveness floor that is independent of Stop hooks and reseed timers, so the
+# chain self-recovers from abnormal worker death and post-cap stalls where no
+# Stop hook fires and no reseed is armed (#2022). A flat drumbeat is safe and
+# costs zero model tokens when idle: `dispatch-tick` is a pure-bash sequencer
+# with no model session, and it is self-suppressing — busy / concurrency-cap /
+# empty-disposition ticks spawn no worker.
+#
+# #1010 coexistence rationale: the heartbeat provides automatic liveness, while
+# the `dispatch:chain-stalled` escalation (#1010) is kept for human visibility.
+# The two are NOT mutually exclusive — the heartbeat is the machine that keeps
+# the chain alive, and the escalation latch is the human-facing signal that the
+# chain went quiet; neither replaces the other, and this helper does not touch
+# (let alone auto-close) the escalation latch.
+#
+# ExecStart=dispatch-tick-direct + KillMode=process worker-survival rationale:
+# ExecStart runs `dispatch-tick` DIRECTLY (not `dispatch-spawn-tick`), mirroring
+# the proven reseed timer→tick path (see dispatch-schedule-reseed:460-475). The
+# heartbeat-spawned worker's first `claude` call attaches to the durable
+# `dispatch-claude-daemon.service` cgroup, not this oneshot service's cgroup, so
+# when the heartbeat `Type=oneshot` service exits, the worker survives.
+# `KillMode=process` is the degraded-path fallback for hosts where the durable
+# daemon service is unavailable: it confines the kill to the dispatch-tick
+# process itself, so a detached worker survives the oneshot service finishing.
+# `OnFailure=dispatch-tick-recover.service` chains a crashing tick to the same
+# systemd-owned recovery handler the tick/reseed launchers use.
+#
+# Disable a stale heartbeat timer/service whose installed unit points at a
+# different main-worktree path than the current one (#2056). Between a dispatch
+# checkout path change and the first ensure_heartbeat_units call from the new
+# path, the timer's Persistent=true can fire dispatch-heartbeat.service at the
+# old/missing path. Detect the mismatch from the installed WorkingDirectory= and
+# disable the stale units before the caller rewrites them.
+#
+# Best-effort: the heartbeat service has no [Install] section, so `disable` exits
+# non-zero by design. Suppress that and never abort the caller (a tick/reseed
+# launcher) — the subsequent unit rewrite is what actually repairs the state.
+# Args: $1 = installed service-unit path, $2 = current main worktree path,
+#       $3 = systemctl command
+cleanup_stale_heartbeat_units() {
+  local service_path="$1"
+  local current_main_worktree="$2"
+  local systemctl_cmd="$3"
+
+  # No prior units → nothing to clean up.
+  [ -f "$service_path" ] || return 0
+
+  local installed_workdir
+  installed_workdir=$(sed -n 's/^WorkingDirectory=//p' "$service_path" | head -1)
+
+  # No WorkingDirectory= to compare → nothing to do.
+  [ -n "$installed_workdir" ] || return 0
+
+  # Path unchanged → the timer points at the right place; leave it running.
+  [ "$installed_workdir" = "$current_main_worktree" ] && return 0
+
+  # Path changed: stop the stale timer/service before the caller rewrites the
+  # unit content. Best-effort — disable exits non-zero (no [Install] section), so
+  # suppress the failure and warn; never abort the caller.
+  echo "WARNING: cleanup_stale_heartbeat_units: installed heartbeat unit points at '$installed_workdir' but current main worktree is '$current_main_worktree'; disabling stale timer/service before rewrite" >&2
+  "$systemctl_cmd" --user disable --now dispatch-heartbeat.timer dispatch-heartbeat.service || true
+}
+
+# Returns 0 only when the heartbeat timer is armed with a future trigger
+# (SubState=waiting). 'elapsed' (the #2375 stranded state: active but no future
+# fire), 'dead' (inactive), and any other/unrecognized substate all return
+# non-zero so the caller falls through to repair. SubState is the reliable
+# discriminator: NextElapseUSecRealtime is empty for a healthy monotonic timer
+# too, so parsing it would mis-detect.
+# Args: $1 = systemctl command
+heartbeat_timer_is_armed() {
+  local systemctl_cmd="$1"
+  local substate
+  substate=$("$systemctl_cmd" --user show dispatch-heartbeat.timer \
+    --property=SubState --value 2>/dev/null) || return 1
+  # 'waiting' = a future trigger is armed (healthy). 'elapsed' = the #2375
+  # stranded state (active, no future fire). 'dead' = inactive. Fail-safe:
+  # treat anything that is not explicitly 'waiting' as needing repair, so an
+  # unrecognized substate can never be read as healthy. (A transient
+  # 'running' during a heartbeat fire causes at most one harmless re-arm; the
+  # tick oneshot is fast, so the window is tiny.)
+  [ "$substate" = "waiting" ]
+}
+
+# Best-effort: a failure here must not abort the caller (a tick/reseed
+# launcher), so we warn to stderr and return non-zero — never `exit`. A missing
+# heartbeat just means the chain falls back to the prior Stop-hook/reseed-only
+# liveness behavior.
+# Args: $1 = main worktree path
+ensure_heartbeat_units() {
+  local main_worktree="$1"
+
+  # A systemd unit file is line-structured: each line is an independent
+  # directive. An embedded newline in the interpolated worktree path would land
+  # as an attacker-controlled extra directive in the [Service] section. The main
+  # worktree path comes from git output or a test override and never
+  # legitimately contains a newline; reject it rather than emit a malformed unit
+  # (best-effort: warn + return per this helper's contract — never exit).
+  if [[ "$main_worktree" == *$'\n'* ]]; then
+    echo "WARNING: ensure_heartbeat_units: main worktree path contains a newline; refusing to write unit; periodic heartbeat unavailable" >&2
+    return 1
+  fi
+  # WorkingDirectory= does not unescape quotes, so a space in the bare path would
+  # split the value at the first space; reject it (same contract: warn + return 1).
+  if [[ "$main_worktree" == *' '* ]]; then
+    echo "WARNING: ensure_heartbeat_units: main worktree path contains a space; refusing to write unit; periodic heartbeat unavailable" >&2
+    return 1
+  fi
+  # ExecStart= is double-quoted ("$TICK_SCRIPT"); an embedded double-quote in the
+  # path would prematurely close that quoted token, making systemd parse the
+  # executable and arguments wrong (bad-setting) and permanently break the unit.
+  # The path never legitimately contains a double-quote; reject it.
+  if [[ "$main_worktree" == *'"'* ]]; then
+    echo "WARNING: ensure_heartbeat_units: main worktree path contains a double-quote; refusing to write unit; periodic heartbeat unavailable" >&2
+    return 1
+  fi
+  # ExecStart= is double-quoted and systemd C-unescapes it, so a backslash in the
+  # path would be misread as an escape sequence and corrupt the executable token.
+  # The path never legitimately contains a backslash; reject it (#1212).
+  if [[ "$main_worktree" == *'\'* ]]; then
+    echo "WARNING: ensure_heartbeat_units: main worktree path contains a backslash; refusing to write unit; periodic heartbeat unavailable" >&2
+    return 1
+  fi
+
+  local TICK_SCRIPT="$main_worktree/.claude/skills/dispatch-propagate/scripts/dispatch-tick"
+  local UNIT_DIR="${DISPATCH_HEARTBEAT_UNIT_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user}"
+  local SERVICE_PATH="$UNIT_DIR/dispatch-heartbeat.service"
+  local TIMER_PATH="$UNIT_DIR/dispatch-heartbeat.timer"
+  local SYSTEMCTL_CMD="${DISPATCH_HEARTBEAT_SYSTEMCTL_CMD:-systemctl}"
+
+  # Sanitize PATH for the Environment= line (see strip_unit_env_path).
+  local safe_path
+  safe_path=$(strip_unit_env_path "$PATH")
+
+  # Desired service unit. ExecStart runs `dispatch-tick` directly with no args
+  # (see the dispatch-tick-direct + KillMode=process rationale above); the
+  # heartbeat-spawned worker attaches to the durable daemon cgroup and survives
+  # this oneshot service exiting. Environment=PATH= captures the launching
+  # caller's full nix-store PATH at write time, for the same reason the recover
+  # and daemon units do — so the tick (and any worker it spawns) can resolve
+  # git/jq/claude.
+  #
+  # ExecStart= and Environment= are double-quoted: systemd unescapes C-style
+  # quotes for these two directives, so a path containing spaces is parsed as a
+  # single token rather than split into an executable + spurious arguments.
+  # WorkingDirectory= is the exception — it does NOT unescape quotes and takes
+  # the bare path (the no-spaces invariant is enforced by the guard above).
+  local desired_service
+  desired_service=$(cat <<EOF
+[Unit]
+Description=Dispatch chain periodic heartbeat tick (#2022)
+OnFailure=dispatch-tick-recover.service
+
+[Service]
+Type=oneshot
+Environment="PATH=$safe_path"
+ExecStart="$TICK_SCRIPT"
+KillMode=process
+WorkingDirectory=$main_worktree
+EOF
+)
+
+  # Desired timer unit: a wall-clock schedule (#2375). OnCalendar=*:0/15 fires at
+  # :00/:15/:30/:45 regardless of when the service last activated, so the timer
+  # always has a future trigger and can never strand in `active (elapsed)` after a
+  # restart (the failure mode a monotonic OnUnitActiveSec drumbeat fell into).
+  # OnBootSec=2min keeps a fast first post-boot tick; Persistent=true is now
+  # meaningful — it catches up a wall-clock fire missed while the host was
+  # asleep/off; RandomizedDelaySec=30 smooths the post-boot launcher storm.
+  local desired_timer
+  desired_timer=$(cat <<EOF
+[Unit]
+Description=Dispatch chain periodic heartbeat timer (#2022)
+
+[Timer]
+OnBootSec=2min
+OnCalendar=*:0/15
+Persistent=true
+RandomizedDelaySec=30
+
+[Install]
+WantedBy=timers.target
+EOF
+)
+
+  # Steady-state hot path: if both installed units already match byte-for-byte
+  # AND the timer is armed with a future trigger, do nothing — skip the writes,
+  # daemon-reload, and enable entirely. `is-active` is too weak here: it returns
+  # 0 for an `active (elapsed)` timer (the #2375 stranded state), so a dead timer
+  # would be read as healthy. heartbeat_timer_is_armed requires SubState=waiting,
+  # so an elapsed timer falls through to the repair path below.
+  if [ -f "$SERVICE_PATH" ] && [ "$(cat "$SERVICE_PATH")" = "$desired_service" ] \
+     && [ -f "$TIMER_PATH" ] && [ "$(cat "$TIMER_PATH")" = "$desired_timer" ] \
+     && heartbeat_timer_is_armed "$SYSTEMCTL_CMD"; then
+    return 0
+  fi
+
+  # Path-change cleanup (#2056): if the installed unit names a different main
+  # worktree, the path changed — disable the stale timer/service before
+  # rewriting the unit content below. Reaching here means the hot path did not
+  # short-circuit, so either the content differs (path change included) or the
+  # timer is inactive. Best-effort; never aborts.
+  cleanup_stale_heartbeat_units "$SERVICE_PATH" "$main_worktree" "$SYSTEMCTL_CMD"
+
+  if ! mkdir -p "$UNIT_DIR"; then
+    echo "WARNING: ensure_heartbeat_units: mkdir -p $UNIT_DIR failed; periodic heartbeat unavailable" >&2
+    return 1
+  fi
+
+  # Write each unit atomically only when its content differs: temp file in the
+  # same dir (umask 077 so the temp file is 0600 during write), chmod 0644 before
+  # mv so systemd can read the installed unit.
+  local old_umask
+  old_umask=$(umask)
+
+  if [ ! -f "$SERVICE_PATH" ] || [ "$(cat "$SERVICE_PATH")" != "$desired_service" ]; then
+    local tmp_service
+    umask 077
+    tmp_service=$(mktemp "$UNIT_DIR/.dispatch-heartbeat.service.XXXXXX") || {
+      umask "$old_umask"
+      echo "WARNING: ensure_heartbeat_units: could not create temp file in $UNIT_DIR; periodic heartbeat unavailable" >&2
+      return 1
+    }
+    umask "$old_umask"
+    if ! printf '%s\n' "$desired_service" > "$tmp_service"; then
+      echo "WARNING: ensure_heartbeat_units: failed to write $tmp_service; periodic heartbeat unavailable" >&2
+      rm -f "$tmp_service"
+      return 1
+    fi
+    chmod 0644 "$tmp_service"
+    if ! mv "$tmp_service" "$SERVICE_PATH"; then
+      echo "WARNING: ensure_heartbeat_units: failed to install $SERVICE_PATH; periodic heartbeat unavailable" >&2
+      rm -f "$tmp_service"
+      return 1
+    fi
+  fi
+
+  if [ ! -f "$TIMER_PATH" ] || [ "$(cat "$TIMER_PATH")" != "$desired_timer" ]; then
+    local tmp_timer
+    umask 077
+    tmp_timer=$(mktemp "$UNIT_DIR/.dispatch-heartbeat.timer.XXXXXX") || {
+      umask "$old_umask"
+      echo "WARNING: ensure_heartbeat_units: could not create temp file in $UNIT_DIR; periodic heartbeat unavailable" >&2
+      return 1
+    }
+    umask "$old_umask"
+    if ! printf '%s\n' "$desired_timer" > "$tmp_timer"; then
+      echo "WARNING: ensure_heartbeat_units: failed to write $tmp_timer; periodic heartbeat unavailable" >&2
+      rm -f "$tmp_timer"
+      return 1
+    fi
+    chmod 0644 "$tmp_timer"
+    if ! mv "$tmp_timer" "$TIMER_PATH"; then
+      echo "WARNING: ensure_heartbeat_units: failed to install $TIMER_PATH; periodic heartbeat unavailable" >&2
+      rm -f "$tmp_timer"
+      return 1
+    fi
+  fi
+
+  # daemon-reload unconditionally on this slow path. The hot path above already
+  # returned early when both units matched byte-for-byte AND the timer was
+  # active; reaching here means a unit was just written OR the timer is not
+  # active. A daemon-reload that failed on a prior call (after the mv succeeded)
+  # leaves a unit on disk but unknown to systemd, so the content compare skips
+  # the write block on every later call — running the reload outside that block
+  # ensures it is retried until systemd has loaded the units, instead of falling
+  # straight through to a doomed `enable --now`.
+  if ! "$SYSTEMCTL_CMD" --user daemon-reload; then
+    echo "WARNING: ensure_heartbeat_units: systemctl --user daemon-reload failed; periodic heartbeat may be stale" >&2
+    return 1
+  fi
+
+  # Install + re-arm idempotently. enable symlinks the timer under
+  # WantedBy=timers.target (so it auto-starts on every user-session start).
+  # `enable --now` is NOT enough to repair a stranded timer: its implicit `start`
+  # is a no-op on an already-active `elapsed` timer, so the next fire is never
+  # recomputed. A separate `restart` re-arms in every case — cold install
+  # (inactive → start) and repair (active-elapsed → recompute next elapse) (#2375).
+  if ! "$SYSTEMCTL_CMD" --user enable dispatch-heartbeat.timer; then
+    echo "WARNING: ensure_heartbeat_units: systemctl --user enable dispatch-heartbeat.timer failed; periodic heartbeat unavailable" >&2
+    return 1
+  fi
+  if ! "$SYSTEMCTL_CMD" --user restart dispatch-heartbeat.timer; then
+    echo "WARNING: ensure_heartbeat_units: systemctl --user restart dispatch-heartbeat.timer failed; periodic heartbeat unavailable" >&2
     return 1
   fi
 }

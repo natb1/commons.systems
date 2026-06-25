@@ -1,23 +1,64 @@
 #!/usr/bin/env bash
 # Apply main-qa routing labels to a needs-main QA follow-up issue.
-# Usage: dispatch-qa-apply-main-qa-labels <issue-num>
+# Usage: dispatch-qa-apply-main-qa-labels <issue-num> [--route human|autonomous]
 #
-# Idempotent: safe to re-run. Performs three label ops:
-#   1. Removes "help wanted" (tolerates absent — not an error).
-#   2. Applies "main-qa" (add-then-create-on-not-found pattern).
+# --route selects how the follow-up is routed downstream (default: human):
+#   human      → Step 3 applies "dispatch:office-hours" (human review queue).
+#   autonomous → Step 3 is SKIPPED; "dispatch:office-hours" is withheld so the
+#                router routes the follow-up to the autonomous /qa-main handler.
+# Both --route VAL and --route=VAL forms are accepted. Any other value is a
+# clear error (exit 1), not a silent fallback.
+#
+# Idempotent: safe to re-run. Performs up to three label ops:
+#   1. Removes "help wanted" (tolerates absent — not an error). UNCONDITIONAL.
+#   2. Applies "main-qa" (ensure-label-exists-first, then add via REST).
+#      UNCONDITIONAL — every follow-up carries main-qa regardless of route.
 #   3. Applies "dispatch:office-hours" via the shared helper (which also posts
-#      a why-comment on first apply).
+#      a why-comment on first apply). ROUTE-CONDITIONAL — runs only for the
+#      human route; skipped for autonomous.
 #
 # @me / assignees are never touched.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
 
-ISSUE_NUM="${1:-}"
+# Parse a leading --route flag; collect the lone non-flag positional into
+# ISSUE_NUM so the positional contract (`dispatch-qa-apply-main-qa-labels 42`)
+# is unchanged. A flag-like positional such as "--repo other/repo" is NOT a
+# --route flag, so it falls through to ISSUE_NUM and fails the numeric guard.
+ROUTE="human"
+ISSUE_NUM=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --route)
+      if [[ $# -lt 2 || -z "${2:-}" ]]; then
+        echo "error: dispatch-qa-apply-main-qa-labels: --route requires a value (human|autonomous)" >&2
+        exit 1
+      fi
+      ROUTE="$2"
+      shift 2
+      ;;
+    --route=*)
+      ROUTE="${1#--route=}"
+      shift
+      ;;
+    *)
+      ISSUE_NUM="$1"
+      shift
+      ;;
+  esac
+done
+
+# Validate ROUTE: clear error on any unexpected value (no silent fallback).
+if [[ "$ROUTE" != "human" && "$ROUTE" != "autonomous" ]]; then
+  echo "error: dispatch-qa-apply-main-qa-labels: --route must be 'human' or 'autonomous', got '${ROUTE}'" >&2
+  exit 1
+fi
 
 # Missing arg is a clear misuse, not a recoverable condition — hard error.
 if [[ -z "$ISSUE_NUM" ]]; then
-  echo "error: usage: dispatch-qa-apply-main-qa-labels <issue-num>" >&2
+  echo "error: usage: dispatch-qa-apply-main-qa-labels <issue-num> [--route human|autonomous]" >&2
   exit 1
 fi
 
@@ -32,48 +73,50 @@ fi
 
 # ---- Step 1: Remove "help wanted" -------------------------------------------
 #
-# Tolerate the absent case: gh exits non-zero with a "not found" message when
-# the label is not present on the issue. Treat absent as success — a re-run
-# after the label was already removed must not fail.
-if ! hw_output=$(gh issue edit "$ISSUE_NUM" --remove-label "help wanted" 2>&1); then
-  if [[ "$hw_output" == *"not found"* ]]; then
-    # Label not present — already removed or never applied. That is fine.
-    true
-  else
-    echo "dispatch-qa-apply-main-qa-labels: warning: could not remove 'help wanted' from issue #$ISSUE_NUM: $hw_output" >&2
-    exit 1
-  fi
+# gh_issue_remove_label_rest owns the absent-label tolerance: a label-absent HTTP
+# 404 is treated as no-op success (faithful to the porcelain --remove-label
+# contract), so a re-run after the label was already removed does not fail.
+if ! gh_issue_remove_label_rest "$ISSUE_NUM" "help wanted"; then
+  echo "dispatch-qa-apply-main-qa-labels: warning: could not remove 'help wanted' from issue #$ISSUE_NUM" >&2
+  exit 1
 fi
 
 # ---- Step 2: Apply "main-qa" -------------------------------------------------
 #
-# Add-then-create-on-not-found: try the edit first; if gh reports the label
-# does not exist in the repo, create it with canonical metadata and retry once.
+# Ensure the label exists (idempotent), then add it via REST. `gh label create`
+# stays porcelain (REST POST /repos/.../labels — not a migration target). Tolerate
+# only an already-exists error; surface anything else rather than silently dropping
+# the label.
 MAIN_QA_LABEL="main-qa"
 MAIN_QA_COLOR="5319E7"
 MAIN_QA_DESC="QA verification that can only run against deployed main/production"
 
-if ! mq_output=$(gh issue edit "$ISSUE_NUM" --add-label "$MAIN_QA_LABEL" 2>&1); then
-  if [[ "$mq_output" != *"not found"* ]]; then
-    echo "dispatch-qa-apply-main-qa-labels: warning: could not apply $MAIN_QA_LABEL to issue #$ISSUE_NUM: $mq_output" >&2
-    exit 1
-  fi
-  if ! create_output=$(gh label create "$MAIN_QA_LABEL" --color "$MAIN_QA_COLOR" --description "$MAIN_QA_DESC" 2>&1); then
-    echo "dispatch-qa-apply-main-qa-labels: warning: could not create label $MAIN_QA_LABEL: $create_output" >&2
-    exit 1
-  fi
-  if ! retry_output=$(gh issue edit "$ISSUE_NUM" --add-label "$MAIN_QA_LABEL" 2>&1); then
-    echo "dispatch-qa-apply-main-qa-labels: warning: could not apply $MAIN_QA_LABEL to issue #$ISSUE_NUM after create: $retry_output" >&2
-    exit 1
-  fi
+if ! create_output=$(gh label create "$MAIN_QA_LABEL" --color "$MAIN_QA_COLOR" --description "$MAIN_QA_DESC" 2>&1); then
+  case "$create_output" in
+    *already\ exists*|*already_exists*) : ;;   # label already present — fine
+    *)
+      echo "dispatch-qa-apply-main-qa-labels: warning: could not create label $MAIN_QA_LABEL: $create_output" >&2
+      exit 1
+      ;;
+  esac
+fi
+if ! gh_issue_set_labels_rest "$ISSUE_NUM" "$MAIN_QA_LABEL"; then
+  echo "dispatch-qa-apply-main-qa-labels: warning: could not apply $MAIN_QA_LABEL to issue #$ISSUE_NUM" >&2
+  exit 1
 fi
 
-# ---- Step 3: Apply "dispatch:office-hours" ----------------------------------
+# ---- Step 3: Apply "dispatch:office-hours" (route-conditional) ---------------
 #
-# Reuse the shared helper — it owns idempotency, label creation, and the
-# why-comment. Pass a clear reason so a human reading the parked issue
-# understands why it landed in office-hours.
-"$SCRIPT_DIR/dispatch-apply-office-hours" "$ISSUE_NUM" \
-  "needs-main QA: this follow-up can only be verified against deployed main/production — routed to office-hours for human review"
+# Only the human route lands the follow-up in office-hours. The autonomous route
+# withholds dispatch:office-hours so the router hands the follow-up to /qa-main.
+if [[ "$ROUTE" == "human" ]]; then
+  # Reuse the shared helper — it owns idempotency, label creation, and the
+  # why-comment. Pass a clear reason so a human reading the parked issue
+  # understands why it landed in office-hours.
+  "$SCRIPT_DIR/dispatch-apply-office-hours" "$ISSUE_NUM" \
+    "needs-main QA: this follow-up can only be verified against deployed main/production — routed to office-hours for human review"
+else
+  echo "dispatch-qa-apply-main-qa-labels: autonomous route — withholding dispatch:office-hours; routed to /qa-main" >&2
+fi
 
 exit 0

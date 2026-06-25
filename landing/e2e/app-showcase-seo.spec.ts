@@ -2,21 +2,27 @@ import { test, expect } from "@commons-systems/config/playwright-test";
 
 const APPS = [
   {
+    name: "Office-hours",
+    url: "https://office-hours.commons.systems",
+    applicationCategory: "BusinessApplication",
+    operatingSystem: "Web",
+  },
+  {
     name: "Budget",
     url: "https://budget.commons.systems",
     applicationCategory: "FinanceApplication",
     operatingSystem: "Web",
   },
   {
-    name: "Audio",
-    url: "https://audio.commons.systems",
-    applicationCategory: "MultimediaApplication",
-    operatingSystem: "Web",
-  },
-  {
     name: "Print",
     url: "https://print.commons.systems",
     applicationCategory: "BookApplication",
+    operatingSystem: "Web",
+  },
+  {
+    name: "Audio",
+    url: "https://audio.commons.systems",
+    applicationCategory: "MultimediaApplication",
     operatingSystem: "Web",
   },
 ];
@@ -43,12 +49,12 @@ async function getSoftwareApplicationJsonLd(
 }
 
 test.describe("SEO: SoftwareApplication JSON-LD", () => {
-  test("homepage has exactly 3 SoftwareApplication JSON-LD scripts @build", async ({
+  test("homepage has exactly 4 SoftwareApplication JSON-LD scripts @build", async ({
     page,
   }) => {
     await page.goto("/");
     const apps = await getSoftwareApplicationJsonLd(page);
-    expect(apps).toHaveLength(3);
+    expect(apps).toHaveLength(4);
   });
 
   test("each SoftwareApplication has correct url, category, os, and name @build", async ({

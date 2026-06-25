@@ -13,6 +13,7 @@
     "icons": "node scripts/generate-icons.mjs"
   },
   "dependencies": {
+    "@commons-systems/ds": "*",
     "@commons-systems/idbutil": "*",
     "@commons-systems/analyticsutil": "*",
     "@commons-systems/components": "*",
@@ -24,15 +25,21 @@
     "@commons-systems/local-first": "*",
     "@commons-systems/mediautil": "*",
     "@commons-systems/router": "*",
+    "@commons-systems/sidecar": "*",
     "@commons-systems/style": "*",
     "epubjs": "^0.3.93",
     "firebase": "^12.9.0",
     "missing.css": "^1.1.3",
     "pdfjs-dist": "^4.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "unzipit": "^1.4.3"
   },
   "devDependencies": {
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
     "fake-indexeddb": "^6.2.5",
+    "sharp": "^0.34.5",
     "vite": "^6.4.3"
   }
 }

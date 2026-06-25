@@ -29,7 +29,7 @@
 #      - Exact match → the PR number is echoed and the script exits 0.
 #      - EXTRA closed numbers (a stray closing keyword in prose) → the offending
 #        keyword before `#E` is stripped from the body, the body is re-applied
-#        via `gh pr edit --body-file`, and the PR is re-verified. Bounded to two
+#        via `gh_issue_edit_rest --body-file`, and the PR is re-verified. Bounded to two
 #        correction passes; an extra surviving past that exits non-zero.
 #      - MISSING numbers (intended but not closed) → exit non-zero immediately
 #        with a diagnostic naming the missing number(s). Per
@@ -60,6 +60,11 @@ usage() {
 # The closing keywords GitHub recognizes (.claude/rules/issue-references.md).
 # Used both for stripping a stray keyword before an extra number.
 KEYWORD_RE='close[sd]?|fix(?:e[sd])?|resolve[sd]?'
+
+# Resolve this script's own directory so the sibling dispatch-stamp-session
+# (PR backfill) is found regardless of the caller's cwd.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
 
 # --- argument parsing ---------------------------------------------------------
 
@@ -211,10 +216,17 @@ INTENDED_SORTED="$(printf '%s\n' "${INTENDED[@]}" | sort -n -u)"
 MAX_PASSES=2
 pass=0
 while :; do
+  # lint-allow: gh-rest-porcelain GraphQL-only closingIssuesReferences (no REST equivalent)
   PARSED="$(gh pr view "$PR_NUM" --json closingIssuesReferences \
     -q '.closingIssuesReferences[].number' | sort -n -u)"
 
   if [[ "$PARSED" == "$INTENDED_SORTED" ]]; then
+    # Stamp the now-known PR number into this session's dispatch sidecar so the
+    # token audit can join the session to its PR (#1861). The backfill is
+    # non-fatal (it exits 0 on any miss) and all its output goes to stderr; the
+    # `|| true` defends the set -e shell against any non-zero. The stdout
+    # contract is preserved: the bare PR number remains the ONLY stdout line.
+    "$SCRIPT_DIR/dispatch-stamp-session" --backfill-pr "$PR_NUM" 1>&2 || true
     echo "$PR_NUM"
     exit 0
   fi
@@ -259,6 +271,6 @@ while :; do
     perl -i -pe 's/\b(?:'"$KEYWORD_RE"')[ \t]*:?[ \t]*(?=#\Q'"$E"'\E\b)//gi' "$BODY_FILE"
   done <<< "$EXTRA"
 
-  gh pr edit "$PR_NUM" --body-file "$BODY_FILE" >/dev/null
+  gh_issue_edit_rest "$PR_NUM" --body-file "$BODY_FILE" >/dev/null
   pass=$((pass + 1))
 done

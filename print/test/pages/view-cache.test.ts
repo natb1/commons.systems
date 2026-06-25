@@ -16,10 +16,6 @@ vi.mock("../../src/auth.js", () => ({
   signOut: vi.fn(),
   onAuthStateChanged: vi.fn(),
 }));
-vi.mock("../../src/viewer/shell.js", () => ({
-  renderViewerShell: vi.fn().mockReturnValue('<div class="viewer">mock viewer</div>'),
-  initViewer: vi.fn().mockReturnValue(() => {}),
-}));
 // view.ts imports makeFirestorePositionStore, which transitively loads firebase.js
 // (requiring Firebase env vars at module load). This test only exercises
 // resolveFileSource, so stub the position store to keep the module graph clean.
