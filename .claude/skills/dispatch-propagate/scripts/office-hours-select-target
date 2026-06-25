@@ -95,8 +95,8 @@
 #               EXCEPTION: a `main-qa` item has NO <N>-* worktree (it is a
 #               brand-new, no-PR issue, #1648), so this field is the MAIN
 #               worktree path instead — a real existing directory the entry
-#               dispatcher's `-` guard accepts and dispatch-spawn-office-hours
-#               uses as the spawn --cwd. The main-qa review needs no worktree
+#               dispatcher's `-` guard accepts and fresh_session (in the entry
+#               script) uses as the spawn --cwd. The main-qa review needs no worktree
 #               (pure gh: read the issue, present it, close it).
 #   parked-router <sessionId> <name>
 #     A target-less parked /dispatch-propagate router (#1010). When no labeled
@@ -393,8 +393,8 @@ if [[ -n "$FRESH_NUM" ]]; then
   # It is the first office-hours kind reaching the queue without a prior phase
   # having provisioned an <N>-* worktree, so wt_path is empty above. Surface the
   # MAIN worktree as the spawn cwd instead: a real existing directory means the
-  # entry dispatcher's `-` guard never trips and dispatch-spawn-office-hours
-  # accepts the cwd. Detect the label in the already-fetched ISSUE_LIST json
+  # entry dispatcher's `-` guard never trips and fresh_session (in the entry
+  # script) uses it as the spawn --cwd. Detect the label in the already-fetched ISSUE_LIST json
   # (no extra gh call); `.labels // []` stays null-tolerant for label-less items.
   if jq -e --argjson n "$FRESH_NUM" \
        'any(.[]; .number == $n and ((.labels // []) | any(.name == "main-qa")))' \

@@ -38,7 +38,7 @@
 #                                   strip hook `^[0-9]+` discriminator — the
 #                                   label is NOT auto-cleared; closing the issue
 #                                   is what removes it from the queue (see
-#                                   SKILL.md Step 5). The session also holds the
+#                                   SKILL.md Step 1b). The session also holds the
 #                                   per-worktree concurrency
 #                                   lock via the occupancy guard's
 #                                   office-hours-name check in
