@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+import type { AnchorHTMLAttributes } from "react";
 import {
   Button,
   Badge,
@@ -55,8 +56,9 @@ describe("cs-* class names", () => {
   });
 
   it("polymorphic Card with as='a' renders an <a> and is interactive", () => {
+    const anchorProps: AnchorHTMLAttributes<HTMLAnchorElement> = { href: "/" };
     const html = renderToStaticMarkup(
-      <Card as="a" href="/">
+      <Card as="a" {...anchorProps}>
         Content
       </Card>,
     );

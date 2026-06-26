@@ -7273,7 +7273,7 @@ echo ""
 echo "=== office-hours-select-target ==="
 #
 # Selects the oldest open issue carrying dispatch:office-hours whose <N>-*
-# worktree has no live session. Output: `office-hours <issue> <phase> <pr|->`.
+# worktree has no live session. Output: `office-hours <issue> <worktree-path|->`.
 # Reuses the select-target gh/git/claude fakes (oh-issue-list.json seeds the
 # office-hours queue; pr-list-full.json drives dispatch-phase/dispatch-find-pr).
 
@@ -7878,6 +7878,87 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree %s\nHEAD
 office_hours_state_fake_claude "office-hours-42:waiting"
 result=$("$TMPDIR_TEST/office-hours-select-target")
 assert_eq "registered worktree + null cwd → idle via worktree path" "idle s-office-hours-42" "$result"
+teardown
+
+# OHST20 (#2443). Blocked fresh item is STILL emitted (signal, not a gate) AND
+# the open-blocker advisory fires on STDERR. Mirrors OHST1's fresh-disposition
+# shape: oldest labeled sessionless no-PR item → `office-hours 42 -`. The
+# regression guard: the open blocker must NOT change the stdout disposition (the
+# item is surfaced, not skipped); the advisory rides STDERR only.
+echo "Test: blocked fresh item still surfaced (unchanged stdout) + signal fires"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+# 42 has one OPEN blocker (#2387) — count_open_blockers sees 1, the listing names it.
+printf '[{"number":2387,"state":"open"}]\n' > "$STUB_DIR/blockers-42.json"
+select_target_fake_claude   # orphan world: no live sessions → fresh
+result=$("$TMPDIR_TEST/office-hours-select-target" 2>"$TMPDIR_TEST/oh-stderr.txt")
+assert_eq "blocked fresh item still surfaced (stdout unchanged)" "office-hours 42 -" "$result"
+assert_eq "blocked item: advisory names the blocker #2387" "1" \
+  "$(grep -c '#2387' "$TMPDIR_TEST/oh-stderr.txt")"
+assert_eq "blocked item: advisory frames it as signal, not a gate" "1" \
+  "$(grep -c 'signal, not a gate' "$TMPDIR_TEST/oh-stderr.txt")"
+teardown
+
+# OHST21 (#2443). Unblocked item emits NO blocker advisory. Same fresh shape as
+# OHST20 but with no blockers-42.json (the fake serves `[]`), so count is 0 and
+# emit_blocker_signal stays silent. Stdout disposition is unchanged.
+echo "Test: unblocked fresh item → no blocker advisory on stderr"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude   # no blockers-42.json → fake returns []
+result=$("$TMPDIR_TEST/office-hours-select-target" 2>"$TMPDIR_TEST/oh-stderr.txt")
+assert_eq "unblocked fresh item: stdout disposition correct" "office-hours 42 -" "$result"
+# Harness has no assert_not_contains; assert absence by counting matches.
+assert_eq "unblocked item: no blocker advisory emitted" "0" \
+  "$(grep -c 'has open blocker(s)' "$TMPDIR_TEST/oh-stderr.txt")"
+teardown
+
+# OHST22 (#2443). main-qa BLOCKED item is still surfaced (no #1648 regression):
+# a main-qa-labelled, no-PR, no-worktree item takes the main-qa fresh override
+# (main worktree as the 2nd field, OHST12) AND, being blocked, fires its
+# STDERR signal. Open blockers never gate the main-qa override.
+echo "Test: blocked main-qa item still surfaced (main override) + signal fires"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"main-qa"}]}]\n' \
+  > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+mkdir -p "$TMPDIR_TEST/worktrees/main"
+printf '[{"number":2387,"state":"open"}]\n' > "$STUB_DIR/blockers-42.json"
+select_target_fake_claude   # no live sessions → fresh, main-qa override
+result=$("$TMPDIR_TEST/office-hours-select-target" 2>"$TMPDIR_TEST/oh-stderr.txt")
+assert_eq "blocked main-qa item still surfaced (main worktree path)" \
+  "office-hours 42 $TMPDIR_TEST/worktrees/main" "$result"
+assert_eq "blocked main-qa item: advisory names the blocker #2387" "1" \
+  "$(grep -c '#2387' "$TMPDIR_TEST/oh-stderr.txt")"
+assert_eq "blocked main-qa item: framed as signal, not a gate" "1" \
+  "$(grep -c 'signal, not a gate' "$TMPDIR_TEST/oh-stderr.txt")"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
+# OHST23 (#2443). Blocker-lookup failure is NON-FATAL: the gh-fail-blocked_by-42
+# marker forces the blocked_by API to fail, so count_open_blockers comes back
+# empty. The selector still exits 0 with its normal stdout disposition and emits
+# the `could not determine` advisory (clear error over silent fallback).
+echo "Test: blocker-lookup failure is non-fatal (normal disposition + note)"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+# Failure injection: blocked_by lookup for #42 errors out.
+touch "$STUB_DIR/gh-fail-blocked_by-42"
+select_target_fake_claude
+rc=0
+result=$("$TMPDIR_TEST/office-hours-select-target" 2>"$TMPDIR_TEST/oh-stderr.txt") || rc=$?
+assert_eq "lookup failure: selector still exits 0" "0" "$rc"
+assert_eq "lookup failure: stdout disposition unchanged" "office-hours 42 -" "$result"
+assert_eq "lookup failure: emits could-not-determine note" "1" \
+  "$(grep -c 'could not determine open-blocker status for #42' "$TMPDIR_TEST/oh-stderr.txt")"
 teardown
 
 # ============================================================================
@@ -19960,10 +20041,12 @@ if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
 assert_eq "cap: dispatch-tick-recover exits 0" "0" "$rc"
 ghlog=$(cat "$TMPDIR_TEST/gh-log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ "$ghlog" == *"issue create"* && "$ghlog" == *"--label dispatch:chain-stalled"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: cap: gh issue create with --label dispatch:chain-stalled"
+if [[ "$ghlog" == *"issue create"* \
+   && "$ghlog" == *"--label dispatch:chain-stalled"* \
+   && "$ghlog" == *"--label dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: cap: issue create with --label dispatch:chain-stalled and --label dispatch:office-hours"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: cap: gh issue create with --label dispatch:chain-stalled"
+  FAIL=$((FAIL + 1)); echo "  FAIL: cap: issue create with --label dispatch:chain-stalled and --label dispatch:office-hours"
   echo "    gh-log: $ghlog"
 fi
 log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
@@ -20113,7 +20196,8 @@ else
   echo "    log: $log"
 fi
 TOTAL=$((TOTAL + 1))
-if [[ "$ghlog" == *"issue create"* && "$ghlog" == *"--label dispatch:chain-stalled"* ]]; then
+if [[ "$ghlog" == *"issue create"* && "$ghlog" == *"--label dispatch:chain-stalled"* \
+   && "$ghlog" == *"--label dispatch:office-hours"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: phantom-busy: round 4 escalates (chain-stalled issue)"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: phantom-busy: round 4 escalates (chain-stalled issue)"
@@ -20219,7 +20303,8 @@ if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
 assert_eq "crash-past-cap: dispatch-tick-recover exits 0" "0" "$rc"
 ghlog=$(cat "$TMPDIR_TEST/gh-log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ "$ghlog" == *"issue create"* && "$ghlog" == *"chain-stalled"* ]]; then
+if [[ "$ghlog" == *"issue create"* && "$ghlog" == *"chain-stalled"* \
+   && "$ghlog" == *"--label dispatch:office-hours"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: crash-past-cap: escalated via chain-stalled latch issue"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: crash-past-cap: expected chain-stalled issue create, got: $ghlog"
