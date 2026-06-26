@@ -344,12 +344,16 @@ describe("validation helpers", () => {
   it("isValidGscSite", () => {
     expect(isValidGscSite("sc-domain:commons.systems")).toBe(true);
     expect(isValidGscSite("https://commons.systems/")).toBe(true);
+    // hostname hyphen must be accepted as a literal (the `-` is a literal class member, not a range)
+    expect(isValidGscSite("https://my-site.commons.systems/")).toBe(true);
     expect(isValidGscSite("ftp://x")).toBe(false);
     expect(isValidGscSite("sc-domain:has space")).toBe(false);
   });
 
   it("isValidPsiUrl", () => {
     expect(isValidPsiUrl("https://commons.systems")).toBe(true);
+    // hostname hyphen must be accepted as a literal (the `-` is a literal class member, not a range)
+    expect(isValidPsiUrl("https://my-site.commons.systems")).toBe(true);
     expect(isValidPsiUrl("http://commons.systems")).toBe(false);
     expect(isValidPsiUrl("https://x?q=1")).toBe(false);
   });
