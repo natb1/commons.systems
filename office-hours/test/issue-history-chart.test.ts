@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { renderIssueHistoryChart } from "../src/issue-history-chart.js";
+import { renderIssueHistoryChart, POINT_WIDTH, MAX_PROJECTION_DAYS } from "../src/issue-history-chart.js";
 import { fitBacklogRunway } from "../src/backlog-runway.js";
+import { MARGIN_RIGHT } from "../src/chart-util.js";
 import type { IssueSample } from "../src/issue-samples.js";
 
 function withFg(): HTMLElement {
@@ -145,11 +146,6 @@ describe("renderIssueHistoryChart", () => {
   });
 
   it("draining with long horizon: forward projection capped at MAX_PROJECTION_DAYS, chart width far below uncapped", () => {
-    // Mirror the source constants for an independent width re-derivation.
-    const POINT_WIDTH = 60;
-    const MARGIN_RIGHT = 20;
-    const MAX_PROJECTION_DAYS = 14;
-
     // 20 daily samples (dataDays = 19) with a shallow decline → daysUntilEmpty
     // far exceeds the 14-day ceiling, so the cap binds on MAX_PROJECTION_DAYS
     // (not on dataDays and not on daysUntilEmpty).
@@ -189,5 +185,51 @@ describe("renderIssueHistoryChart", () => {
     expect(actualWidth).toBeCloseTo(cappedWidth, 1);
     // The cap matters: the uncapped width is far larger.
     expect(uncappedWidth).toBeGreaterThan(cappedWidth * 1.5);
+  });
+
+  it("draining with short history: forward projection capped at dataDays, not MAX_PROJECTION_DAYS", () => {
+    // 10 daily samples (dataDays = 9 < MAX_PROJECTION_DAYS = 14) with a gentle
+    // decline → daysUntilEmpty ≈ 40 days >> dataDays, so dataDays is the binding
+    // cap (not daysUntilEmpty and not MAX_PROJECTION_DAYS).
+    //
+    // N = 10 keeps the computed formula width (1220px) above happy-dom's ~590px
+    // floor so Math.max picks the formula, making the cap observable.
+    const N = 10;
+    // Totals: 40, 39, 38, ... 31 — exact slope = -1/day, intercept = 40,
+    // daysUntilEmpty = 40 >> dataDays = 9.
+    const shortHistoryFixture: IssueSample[] = Array.from({ length: N }, (_, i) => ({
+      sampledAt: new Date(Date.UTC(2026, 4, 1 + i)),
+      openSecurity: 1,
+      openBug: 10 - i, // 10 → 1
+      openEnhancement: 15,
+      openOther: 14,
+      groupId: "g",
+    }));
+
+    const fit = fitBacklogRunway(shortHistoryFixture);
+    expect(fit.state).toBe("draining");
+    if (fit.state !== "draining") throw new Error("expected draining fit");
+
+    const dataDays = N - 1; // 9
+    expect(dataDays).toBeLessThan(MAX_PROJECTION_DAYS); // dataDays is the binding cap
+    expect(fit.daysUntilEmpty).toBeGreaterThan(MAX_PROJECTION_DAYS); // crossing is not binding
+
+    const host = withFg();
+    const el = renderIssueHistoryChart(shortHistoryFixture);
+    host.appendChild(el);
+
+    const svg = el.querySelector(".chart-scroll-wrapper svg") as HTMLElement;
+    const actualWidth = parseFloat(svg.style.width);
+
+    const pxPerDay = (N * POINT_WIDTH) / dataDays;
+    // dataDays binds: projection extends exactly dataDays into the future.
+    const dataDaysCappedWidth = N * POINT_WIDTH + pxPerDay * dataDays + MARGIN_RIGHT;
+    const maxDaysCappedWidth = N * POINT_WIDTH + pxPerDay * MAX_PROJECTION_DAYS + MARGIN_RIGHT;
+
+    // The formula must exceed the happy-dom floor or the cap is not observable.
+    expect(dataDaysCappedWidth).toBeGreaterThan(590);
+    expect(actualWidth).toBeCloseTo(dataDaysCappedWidth, 1);
+    // Confirm dataDays cap is genuinely tighter than MAX_PROJECTION_DAYS.
+    expect(dataDaysCappedWidth).toBeLessThan(maxDaysCappedWidth);
   });
 });

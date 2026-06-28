@@ -15,9 +15,9 @@ import {
 } from "./chart-util.js";
 
 /** Per-sample chart width allocation along the time axis. */
-const POINT_WIDTH = 60;
+export const POINT_WIDTH = 60;
 /** Readability ceiling on the chart's forward projection window (days). */
-const MAX_PROJECTION_DAYS = 14;
+export const MAX_PROJECTION_DAYS = 14;
 const CHART_HEIGHT = 220;
 
 interface Point {
@@ -141,10 +141,9 @@ export function renderIssueHistoryChart(samples: IssueSample[]): HTMLElement {
   //     <= 50% of the chart even for a short history);
   //   - MAX_PROJECTION_DAYS: a hard ceiling for long histories;
   //   - daysUntilEmpty: end at the real crossing when the queue empties soon.
-  const projectionDays =
-    fit.state === "draining" && isDraining
-      ? Math.min(fit.daysUntilEmpty, dataDays, MAX_PROJECTION_DAYS)
-      : 0;
+  const projectionDays = isDraining
+    ? Math.min(fit.daysUntilEmpty, dataDays, MAX_PROJECTION_DAYS)
+    : 0;
   const projectionEnd = new Date(last + projectionDays * 86_400_000);
 
   // x domain and the projection mark are width-independent — compute once.
