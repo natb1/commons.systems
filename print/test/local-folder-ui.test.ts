@@ -238,7 +238,8 @@ describe("renderLocalIntoList — scan failure", () => {
 
     const retryButton = container.querySelector<HTMLButtonElement>("#local-folder-retry");
     expect(retryButton).not.toBeNull();
-    retryButton!.click();
+    if (!retryButton) throw new Error('retryButton not found');
+    retryButton.click();
 
     await vi.waitFor(() =>
       expect(container.querySelector("#local-folder-error")).toBeNull(),
