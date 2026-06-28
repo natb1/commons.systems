@@ -12,12 +12,12 @@ const workspaceConfig: Array<{ test: { name: string; root: string } }> =
 
 describe("vitest.config.ts", () => {
   it("excludes rules-test", () => {
-    expect(workspaceDirs).not.toContain("rules-test");
+    expect(workspaceDirs).not.toContain("packages/rules-test");
   });
 
   it("includes all other workspaces from package.json", () => {
     const expected = rootPkg.workspaces.filter(
-      (w: string) => w !== "rules-test",
+      (w: string) => w !== "packages/rules-test",
     );
     expect(workspaceDirs).toEqual(expected);
   });
