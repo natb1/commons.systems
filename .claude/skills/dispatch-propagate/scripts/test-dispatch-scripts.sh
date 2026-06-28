@@ -1714,7 +1714,7 @@ printf '%s\n' '{
 }' > "$STUB_DIR/view-issue-9002.json"
 iv2=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_view_rest 9002)
 assert_eq "issue: closed → CLOSED" "CLOSED" "$(jq -r '.state' <<<"$iv2")"
-# closedAt passthrough from closed_at (the stale-head gate's recency floor, #2442).
+# closedAt passthrough from closed_at: REST snake_case → porcelain camelCase.
 assert_eq "issue: closedAt passthrough from closed_at" "2026-02-04T05:06:07Z" "$(jq -r '.closedAt' <<<"$iv2")"
 # REST lowercase state_reason `completed` → porcelain UPPERCASE enum COMPLETED.
 assert_eq "issue: stateReason completed upcased to COMPLETED" "COMPLETED" "$(jq -r '.stateReason' <<<"$iv2")"
@@ -33147,9 +33147,9 @@ STUB
   flake_dedup_teardown
 
   # CASE 2 — CLOSED match, FRESH run → REOPENED <N>, reopen fired, comment fired.
-  # (criterion #3) Under the stale-head gate (#2442) the CLOSED path requires
-  # --run-id. Fresh = run.createdAt AFTER closed_at (recency fresh) AND the run
-  # head contains the closing fix (ancestry `identical`).
+  # (criterion #3) Under the stale-head gate (#2442, #2518) the CLOSED path requires
+  # --run-id. Fresh = a real closing commit is present and the run head contains it
+  # (ancestry `identical`), so the gate falls through to reopen.
   flake_dedup_setup
   printf '[{"number":501,"title":"Flaky CI: %s","state":"closed","closed_at":"2026-01-01T00:00:00Z"}]\n' "$FP" > "$TMPDIR_TEST/scripts/issues.json"
   printf '{"createdAt":"2026-02-01T00:00:00Z","headSha":"headsha"}\n' > "$TMPDIR_TEST/scripts/run.json"
@@ -33187,9 +33187,12 @@ STUB
 
   # === STALE-HEAD REOPEN GATE (#2442) ===
 
-  # CASE 5 — STALE by recency: run.createdAt BEFORE closed_at trips STALE even
-  # though ancestry is fresh (compare `identical`, closing commit present) —
-  # proving the recency floor ALONE suppresses the reopen. No comment, no reopen.
+  # CASE 5 — recency removed → REOPEN (#2518): run.createdAt is BEFORE closed_at
+  # (the old recency floor would have tripped STALE here) but the run head
+  # contains the closing fix (ancestry `identical`, real closing commit present).
+  # Ancestry-only is decisive, so this REOPENs. This is exactly the case the
+  # removed recency floor wrongly suppressed: it fails under the old recency code
+  # (which would emit STALE) and passes under ancestry-only.
   flake_dedup_setup
   printf '[{"number":501,"title":"Flaky CI: %s","state":"closed","closed_at":"2026-02-01T00:00:00Z"}]\n' "$FP" > "$TMPDIR_TEST/scripts/issues.json"
   printf '{"createdAt":"2026-01-01T00:00:00Z","headSha":"headsha"}\n' > "$TMPDIR_TEST/scripts/run.json"
@@ -33197,20 +33200,20 @@ STUB
   printf '[{"event":"closed","commit_id":"closingsha"}]\n' > "$TMPDIR_TEST/scripts/timeline.json"
   printf 'recurred on PR #900 / run http://x\n' > "$TMPDIR_TEST/body.md"
   out=$("$TMPDIR_TEST/scripts/dispatch-flake-dedup" "$FP" --body-file "$TMPDIR_TEST/body.md" --run-id 12345 2>"$TMPDIR_TEST/err")
-  assert_eq "flake-dedup: stale by recency → STALE <N>" "STALE 501" "$out"
-  if [[ -s "$TMPDIR_TEST/scripts/stub/comments-fired" ]]; then c=yes; else c=no; fi
-  assert_eq "flake-dedup: stale by recency → no comment" "no" "$c"
-  if [[ -s "$TMPDIR_TEST/scripts/stub/reopen-fired" ]]; then r=yes; else r=no; fi
-  assert_eq "flake-dedup: stale by recency → no reopen" "no" "$r"
+  assert_eq "flake-dedup: recency removed (run pre-close, head contains fix) → REOPENED <N>" "REOPENED 501" "$out"
+  if grep -qx '501' "$TMPDIR_TEST/scripts/stub/reopen-fired" 2>/dev/null; then r=yes; else r=no; fi
+  assert_eq "flake-dedup: recency removed → reopen fired on 501" "yes" "$r"
+  if grep -qx '501' "$TMPDIR_TEST/scripts/stub/comments-fired" 2>/dev/null; then c=yes; else c=no; fi
+  assert_eq "flake-dedup: recency removed → comment fired on 501" "yes" "$c"
   if grep -q 'suppressing reopen' "$TMPDIR_TEST/err"; then g=yes; else g=no; fi
-  assert_eq "flake-dedup: stale by recency → suppression logged to stderr" "yes" "$g"
+  assert_eq "flake-dedup: recency removed → no suppression logged" "no" "$g"
   flake_dedup_teardown
 
-  # CASE 6 — STALE by ancestry (the discriminating case): run.createdAt is AFTER
-  # closed_at (recency says FRESH) yet the run head is `behind` the closing fix
-  # (ancestry says STALE). This is the ONLY case that fails under a recency-only
-  # implementation — the divergent stub values (created-after-close + `behind`)
-  # force the ancestry signal to carry the verdict. No comment, no reopen.
+  # CASE 6 — STALE by ancestry (the surviving #2442 case): a real closing commit
+  # exists and the run head is `behind` it, so ancestry — the sole decisive
+  # signal — suppresses the reopen. run.createdAt is AFTER closed_at, which the
+  # removed recency floor would have treated as fresh; the verdict is carried
+  # entirely by ancestry. No comment, no reopen.
   flake_dedup_setup
   printf '[{"number":501,"title":"Flaky CI: %s","state":"closed","closed_at":"2026-01-01T00:00:00Z"}]\n' "$FP" > "$TMPDIR_TEST/scripts/issues.json"
   printf '{"createdAt":"2026-02-01T00:00:00Z","headSha":"headsha"}\n' > "$TMPDIR_TEST/scripts/run.json"
@@ -33225,36 +33228,40 @@ STUB
   assert_eq "flake-dedup: stale by ancestry → no reopen" "no" "$r"
   flake_dedup_teardown
 
-  # CASE 7 — null commit_id (manual close) → ancestry skipped → recency fallback →
-  # REOPENED. timeline commit_id is null, so the closing commit is empty and the
-  # ancestry signal is skipped; compare-status `behind` MUST be ignored. recency
-  # is fresh (run after close), so the reopen fires.
+  # CASE 7 — null commit_id (manual close), the live incident (PR #1849 / tracker
+  # #2481). timeline commit_id is null, so there is no closing commit and ancestry
+  # leaves stale=0 → REOPEN; compare-status `behind` MUST be ignored. run.createdAt
+  # is BEFORE closed_at — the run-before-close that the removed recency floor would
+  # have suppressed as STALE (the infinite-STALE bug); under ancestry-only the
+  # empty closing commit → REOPEN. This is the regression test the incident needs.
   flake_dedup_setup
-  printf '[{"number":501,"title":"Flaky CI: %s","state":"closed","closed_at":"2026-01-01T00:00:00Z"}]\n' "$FP" > "$TMPDIR_TEST/scripts/issues.json"
-  printf '{"createdAt":"2026-02-01T00:00:00Z","headSha":"headsha"}\n' > "$TMPDIR_TEST/scripts/run.json"
+  printf '[{"number":501,"title":"Flaky CI: %s","state":"closed","closed_at":"2026-02-01T00:00:00Z"}]\n' "$FP" > "$TMPDIR_TEST/scripts/issues.json"
+  printf '{"createdAt":"2026-01-01T00:00:00Z","headSha":"headsha"}\n' > "$TMPDIR_TEST/scripts/run.json"
   printf 'behind\n' > "$TMPDIR_TEST/scripts/compare-status"
   printf '[{"event":"closed","commit_id":null}]\n' > "$TMPDIR_TEST/scripts/timeline.json"
   printf 'recurred on PR #900 / run http://x\n' > "$TMPDIR_TEST/body.md"
   out=$("$TMPDIR_TEST/scripts/dispatch-flake-dedup" "$FP" --body-file "$TMPDIR_TEST/body.md" --run-id 12345)
-  assert_eq "flake-dedup: null commit_id → recency fallback → REOPENED <N>" "REOPENED 501" "$out"
+  assert_eq "flake-dedup: null commit_id (run pre-close) → REOPENED <N>" "REOPENED 501" "$out"
   if grep -qx '501' "$TMPDIR_TEST/scripts/stub/reopen-fired" 2>/dev/null; then r=yes; else r=no; fi
   assert_eq "flake-dedup: null commit_id → reopen fired on 501" "yes" "$r"
   if grep -qx '501' "$TMPDIR_TEST/scripts/stub/comments-fired" 2>/dev/null; then c=yes; else c=no; fi
   assert_eq "flake-dedup: null commit_id → comment fired on 501" "yes" "$c"
   flake_dedup_teardown
 
-  # CASE 8 — NOT_PLANNED close → ancestry skipped → recency fallback → REOPENED.
+  # CASE 8 — NOT_PLANNED close → ancestry skipped → stale=0 → REOPENED.
   # state_reason=not_planned means there was no fix, so ancestry is skipped;
-  # compare-status `behind` and the present timeline commit_id MUST be ignored.
-  # recency is fresh (run after close), so the reopen fires.
+  # compare-status `behind` and the present timeline commit_id MUST be ignored. The
+  # run.createdAt is BEFORE closed_at — the run-before-close that the removed
+  # recency floor would have suppressed as STALE; under ancestry-only there is no
+  # closing fix to be behind, so it REOPENs. This flip discriminates old vs new code.
   flake_dedup_setup
-  printf '[{"number":501,"title":"Flaky CI: %s","state":"closed","closed_at":"2026-01-01T00:00:00Z","state_reason":"not_planned"}]\n' "$FP" > "$TMPDIR_TEST/scripts/issues.json"
-  printf '{"createdAt":"2026-02-01T00:00:00Z","headSha":"headsha"}\n' > "$TMPDIR_TEST/scripts/run.json"
+  printf '[{"number":501,"title":"Flaky CI: %s","state":"closed","closed_at":"2026-02-01T00:00:00Z","state_reason":"not_planned"}]\n' "$FP" > "$TMPDIR_TEST/scripts/issues.json"
+  printf '{"createdAt":"2026-01-01T00:00:00Z","headSha":"headsha"}\n' > "$TMPDIR_TEST/scripts/run.json"
   printf 'behind\n' > "$TMPDIR_TEST/scripts/compare-status"
   printf '[{"event":"closed","commit_id":"closingsha"}]\n' > "$TMPDIR_TEST/scripts/timeline.json"
   printf 'recurred on PR #900 / run http://x\n' > "$TMPDIR_TEST/body.md"
   out=$("$TMPDIR_TEST/scripts/dispatch-flake-dedup" "$FP" --body-file "$TMPDIR_TEST/body.md" --run-id 12345)
-  assert_eq "flake-dedup: not_planned → recency fallback → REOPENED <N>" "REOPENED 501" "$out"
+  assert_eq "flake-dedup: not_planned (run pre-close) → REOPENED <N>" "REOPENED 501" "$out"
   if grep -qx '501' "$TMPDIR_TEST/scripts/stub/reopen-fired" 2>/dev/null; then r=yes; else r=no; fi
   assert_eq "flake-dedup: not_planned → reopen fired on 501" "yes" "$r"
   if grep -qx '501' "$TMPDIR_TEST/scripts/stub/comments-fired" 2>/dev/null; then c=yes; else c=no; fi
