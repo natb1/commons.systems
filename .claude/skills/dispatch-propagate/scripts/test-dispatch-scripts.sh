@@ -25603,6 +25603,181 @@ export PATH="$SAVED_PATH"
 rm -rf "$FINALIZE_TMPDIR"
 
 # ============================================================================
+# #2541: Workflow-phase office-hours escalation must STICK across an in-flight
+# background-Workflow hand-back. Two Stop-hook regression guards modeling the
+# #2243 D1.x cluster (reuse stop_setup/stop_teardown and the D1.1 in-flight
+# fixture: a background Workflow launch line with NO trailing <task-notification>).
+#
+#   Test 1 — Unit-2 bump-skip: a Stop firing mid-flight (background Workflow still
+#     running, marker absent, office-hours NOT yet present) hands back WITHOUT
+#     bumping the issue-anchored attempt counter. The bump condition (line ~646 of
+#     dispatch-stop.sh) is gated by `! session_has_inflight_background_task`
+#     (Unit 2); revert that term and the bump fires once per hand-back turn,
+#     burning the ceiling on a healthy phase.
+#   Test 2 — park-stands idempotency: a repeated hand-back while the issue is
+#     ALREADY parked on office-hours leaves the durable park intact. Here the bump
+#     is skipped by the PRE-EXISTING `ISSUE_OFFICE_HOURS_PRESENT=yes` arm of the
+#     same guard (not the Unit-2 term), and the inflight gate (~line 686) exits
+#     BEFORE Branch A recovery-advance / Branch B — the only sites that strip
+#     office-hours — so the label survives: no bump, no strip, no re-park.
+#
+# The bump is observed via a dispatch-attempt-count stub staged into the hook's
+# $SCRIPTS dir that logs every invocation; the real stop_setup installs no such
+# stub (line 651 is its single call site), so each test adds one and asserts the
+# log is ABSENT to prove the bump path was skipped.
+# ============================================================================
+
+echo "Test: #2541 in-flight hand-back (office-hours absent) → NO attempt-counter bump, no park/spawn/self-close"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "implement" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+# No phase-completed marker → marker absent (Branch A).
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+# Logging dispatch-attempt-count stub: records every invocation so an
+# (unexpected) bump is observable. Must never be reached on this hand-back.
+cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-attempt-count" <<'FAKE'
+#!/usr/bin/env bash
+echo "$*" >> "$STUB_DIR/attempt-count.log"
+echo "proceed"
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-attempt-count"
+# Fixture: one background Workflow launch line, no <task-notification> → in-flight.
+cat > "$TMPDIR_TEST/transcript.jsonl" <<'EOF'
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: w4stq5fyf"}]},"toolUseResult":{"status":"async_launched","taskId":"w4stq5fyf"}}
+EOF
+FIXTURE="$TMPDIR_TEST/transcript.jsonl"
+printf '%s\n' '{"transcript_path":"'"$FIXTURE"'"}' | "$TMPDIR_TEST/hooks/dispatch-stop.sh" >/dev/null 2>&1
+rc=$?
+assert_eq "#2541 in-flight no-bump: hook exits 0 (hand-back)" "0" "$rc"
+# Unit-2 guard: `! session_has_inflight_background_task` makes the bump condition
+# false, so dispatch-attempt-count is never invoked.
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/attempt-count.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2541 in-flight no-bump: dispatch-attempt-count NOT invoked (counter not bumped)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2541 in-flight no-bump: dispatch-attempt-count NOT invoked (counter not bumped)"
+  echo "    attempt-count.log: $(cat "$STUB_DIR/attempt-count.log")"
+fi
+# Disposition is the in-flight hand-back (not a park).
+DLOG_FILE="$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl"
+assert_eq "#2541 in-flight no-bump: decision log disposition" "hand-back-inflight-task" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.disposition')"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2541 in-flight no-bump: NOT parked on office-hours"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2541 in-flight no-bump: NOT parked on office-hours"
+  echo "    apply-log: $(cat "$STUB_DIR/apply-office-hours.log")"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/spawn-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2541 in-flight no-bump: NOT spawned"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2541 in-flight no-bump: NOT spawned"
+  echo "    spawn-calls: $(cat "$STUB_DIR/spawn-calls.log")"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/self-close-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2541 in-flight no-bump: NOT self-closed"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2541 in-flight no-bump: NOT self-closed"
+fi
+stop_teardown
+
+echo "Test: #2541 repeated hand-back while office-hours ALREADY present → park stands (no bump, no strip)"
+stop_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "implement" > "$STUB_DIR/current-phase.txt"
+echo '{"name":"123-foo-bar"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+# No phase-completed marker → marker absent (Branch A).
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+# Logging attempt-count stub (as Test 1).
+cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-attempt-count" <<'FAKE'
+#!/usr/bin/env bash
+echo "$*" >> "$STUB_DIR/attempt-count.log"
+echo "proceed"
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-attempt-count"
+# Override gh so the issue reads as ALREADY parked on dispatch:office-hours
+# (ISSUE_OFFICE_HOURS_PRESENT=yes). pr list returns [] (a successful empty fetch);
+# any label strip (issue edit --remove-label or REST DELETE) is logged so the
+# test can assert the durable park was NOT removed.
+cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
+#!/usr/bin/env bash
+STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
+args="$*"
+case "$args" in
+  issue\ view\ *)
+    printf 'dispatch:office-hours\n'
+    ;;
+  pr\ list\ *)
+    echo "[]"
+    ;;
+  issue\ edit\ *--remove-label*)
+    echo "$args" >> "$STUB_DIR/gh-issue-remove.log"
+    ;;
+  api\ -X\ DELETE\ *labels*)
+    echo "$args" >> "$STUB_DIR/gh-api-delete.log"
+    ;;
+  *)
+    echo "gh stub: unknown invocation: $args" >&2
+    exit 1
+    ;;
+esac
+STUB
+chmod +x "$TMPDIR_TEST/bin/gh"
+# Fixture: same in-flight background Workflow (no notification).
+cat > "$TMPDIR_TEST/transcript.jsonl" <<'EOF'
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","content":"Workflow launched in background. Task ID: w4stq5fyf"}]},"toolUseResult":{"status":"async_launched","taskId":"w4stq5fyf"}}
+EOF
+FIXTURE="$TMPDIR_TEST/transcript.jsonl"
+printf '%s\n' '{"transcript_path":"'"$FIXTURE"'"}' | "$TMPDIR_TEST/hooks/dispatch-stop.sh" >/dev/null 2>&1
+rc=$?
+assert_eq "#2541 park-stands: hook exits 0 (hand-back)" "0" "$rc"
+# office-hours present → the bump-skip guard's first arm (ISSUE_OFFICE_HOURS_PRESENT=no)
+# is false → dispatch-attempt-count never invoked. The parked issue's counter is
+# not inflated by a repeated hand-back.
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/attempt-count.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2541 park-stands: dispatch-attempt-count NOT invoked (already-parked issue not re-counted)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2541 park-stands: dispatch-attempt-count NOT invoked (already-parked issue not re-counted)"
+  echo "    attempt-count.log: $(cat "$STUB_DIR/attempt-count.log")"
+fi
+# Disposition is the in-flight hand-back; the durable park survives.
+DLOG_FILE="$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl"
+assert_eq "#2541 park-stands: decision log disposition" "hand-back-inflight-task" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.disposition')"
+# The inflight gate exits BEFORE Branch A recovery-advance / Branch B, the only
+# sites that strip office-hours — so the label is never removed (park stands).
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-issue-remove.log" && ! -e "$STUB_DIR/gh-api-delete.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2541 park-stands: office-hours NOT stripped (durable park survives)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2541 park-stands: office-hours NOT stripped (durable park survives)"
+  echo "    gh-issue-remove.log: $(cat "$STUB_DIR/gh-issue-remove.log" 2>/dev/null || true)"
+  echo "    gh-api-delete.log: $(cat "$STUB_DIR/gh-api-delete.log" 2>/dev/null || true)"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2541 park-stands: NOT re-parked (no redundant apply)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2541 park-stands: NOT re-parked (no redundant apply)"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/spawn-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: #2541 park-stands: NOT spawned"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: #2541 park-stands: NOT spawned"
+fi
+stop_teardown
+
+# ============================================================================
 # ensure_deps (lib.sh) retry tests
 # ============================================================================
 echo ""
