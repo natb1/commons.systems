@@ -219,8 +219,8 @@ interface ProjectSignalSample {
   forks?: number;
   pageViews?: number; // summed across GA4 apps
   sessions?: number; // summed across GA4 apps
-  gscClicks?: number; // summed
-  gscImpressions?: number; // summed
+  gscClicks?: number; // summed from topPages
+  gscImpressions?: number; // summed from topPages
   psiPerformance?: number; // first-URL mobile performance
 }
 
@@ -629,10 +629,10 @@ export async function collectProjectSignalsCore(deps: CollectProjectSignalsDeps)
   const pageViews = ga4 ? ga4.reduce((sum, a) => sum + a.pageViews, 0) : undefined;
   const sessions = ga4 ? ga4.reduce((sum, a) => sum + a.sessions, 0) : undefined;
   const gscClicks = gsc
-    ? gsc.topQueries.reduce((sum, q) => sum + q.clicks, 0)
+    ? gsc.topPages.reduce((sum, p) => sum + p.clicks, 0)
     : undefined;
   const gscImpressions = gsc
-    ? gsc.topQueries.reduce((sum, q) => sum + q.impressions, 0)
+    ? gsc.topPages.reduce((sum, p) => sum + p.impressions, 0)
     : undefined;
   const psiPerformance =
     psi && psi.length > 0 && psi[0].performance !== null ? psi[0].performance : undefined;
