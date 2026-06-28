@@ -42,12 +42,21 @@ vi.mock("../src/library.js", async () => {
   };
 });
 
+vi.mock("../src/sidecar.js", () => ({
+  ensureLoaded: vi.fn(() => Promise.resolve()),
+  cacheMetadataBatch: vi.fn(() => Promise.resolve()),
+  getMetadata: vi.fn(() => Promise.resolve(undefined)),
+  setLocalDirectory: vi.fn(() => Promise.resolve()),
+}));
+
 import {
   decideFolderUiState,
   initLocalFolder,
+  renderLocalIntoList,
   FOCUS_RESCAN_DEBOUNCE_MS,
 } from "../src/local-folder-ui.js";
 import { listLocal } from "../src/library.js";
+import type { MediaItem } from "../src/types.js";
 
 describe("decideFolderUiState", () => {
   it("returns 'open' when no handle is persisted (null)", () => {
@@ -197,5 +206,96 @@ describe("initLocalFolder — focus-rescan debounce", () => {
     await vi.advanceTimersByTimeAsync(FOCUS_RESCAN_DEBOUNCE_MS);
 
     expect(listLocal).not.toHaveBeenCalled();
+  });
+});
+
+describe("renderLocalIntoList — scan failure", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(listLocal).mockReset();
+    vi.mocked(listLocal).mockResolvedValue([]);
+  });
+
+  it("(a) REJECT → NOTICE: renders error notice with retry button on scan rejection", async () => {
+    vi.mocked(listLocal).mockRejectedValueOnce(new Error("scan failed"));
+    const container = document.createElement("div");
+    container.innerHTML = '<ul id="media-list"></ul>';
+
+    await renderLocalIntoList(container);
+
+    expect(container.querySelector("#local-folder-error")).not.toBeNull();
+    expect(container.querySelector("#local-folder-retry")).not.toBeNull();
+  });
+
+  it("(b) RECOVERY BUTTON: clicking retry removes the error notice and rescans", async () => {
+    vi.mocked(listLocal)
+      .mockRejectedValueOnce(new Error("scan failed"))
+      .mockResolvedValue([]);
+    const container = document.createElement("div");
+    container.innerHTML = '<ul id="media-list"></ul>';
+
+    await renderLocalIntoList(container);
+
+    const retryButton = container.querySelector<HTMLButtonElement>("#local-folder-retry");
+    expect(retryButton).not.toBeNull();
+    if (!retryButton) throw new Error('retryButton not found');
+    retryButton.click();
+
+    await vi.waitFor(() =>
+      expect(container.querySelector("#local-folder-error")).toBeNull(),
+    );
+    expect(vi.mocked(listLocal).mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("(c) NO-STACK IDEMPOTENCY: repeated failures do not stack duplicate error notices", async () => {
+    vi.mocked(listLocal).mockRejectedValue(new Error("scan failed"));
+    const container = document.createElement("div");
+    container.innerHTML = '<ul id="media-list"></ul>';
+
+    await renderLocalIntoList(container);
+    await renderLocalIntoList(container);
+
+    expect(container.querySelectorAll("#local-folder-error").length).toBe(1);
+  });
+
+  it("(d) DISCRIMINATOR: a successful scan shows items and no error notice", async () => {
+    const oneItem: MediaItem = {
+      id: "local:f/a.pdf",
+      title: "a",
+      mediaType: "pdf",
+      tags: {},
+      publicDomain: false,
+      sourceNotes: "",
+      storagePath: "local:f/a.pdf",
+      markdownPath: null,
+      groupId: null,
+      memberEmails: [],
+      addedAt: "2024-01-01T00:00:00Z",
+      origin: "local",
+    };
+    vi.mocked(listLocal).mockResolvedValue([oneItem]);
+    const container = document.createElement("div");
+    container.innerHTML = '<ul id="media-list"></ul>';
+
+    await renderLocalIntoList(container);
+
+    expect(container.querySelector(".media-item-local")).not.toBeNull();
+    expect(container.querySelector("#local-folder-error")).toBeNull();
+  });
+
+  it("(e) EMPTY-ANCHOR FALLBACK: renders the notice before #media-empty when the cloud library is empty", async () => {
+    vi.mocked(listLocal).mockRejectedValueOnce(new Error("scan failed"));
+    const container = document.createElement("div");
+    container.innerHTML = '<p id="media-empty">No media items available.</p>';
+
+    await renderLocalIntoList(container);
+
+    const notice = container.querySelector("#local-folder-error");
+    expect(notice).not.toBeNull();
+    expect(container.querySelector("#local-folder-retry")).not.toBeNull();
+    // The notice is anchored before the empty-state placeholder.
+    const empty = container.querySelector("#media-empty");
+    if (!notice) throw new Error("#local-folder-error not found");
+    expect(notice.nextElementSibling).toBe(empty);
   });
 });
