@@ -5,6 +5,7 @@ import {
   issueSamplesEqual,
   auditAggregatesEqual,
   queueMetricsEqual,
+  projectSignalsEqual,
   mergePanelData,
   type PanelData,
 } from "../src/panel-equality.js";
@@ -13,6 +14,7 @@ import type { Reminder } from "../src/reminders.js";
 import type { IssueSample } from "../src/issue-samples.js";
 import type { AuditAggregate } from "../src/audit-aggregates.js";
 import type { QueueMetricsSnapshot, ParkedIssue } from "../src/queue-metrics.js";
+import type { ProjectSignalsSnapshot } from "../src/project-signals.js";
 
 // ---------------------------------------------------------------------------
 // Fixture builders — each call returns fresh object references so the
@@ -94,6 +96,16 @@ function makeQueueMetrics(overrides: Partial<QueueMetricsSnapshot> = {}): QueueM
     groupId: "grp-a",
     memberEmails: ["alice@example.com", "bob@example.com"],
     parked: [makeParkedIssue()],
+    ...overrides,
+  };
+}
+
+function makeProjectSignals(overrides: Partial<ProjectSignalsSnapshot> = {}): ProjectSignalsSnapshot {
+  return {
+    computedAt: new Date(BASE_MS),
+    groupId: "grp-a",
+    memberEmails: ["alice@example.com"],
+    github: { repo: "natb1/commons.systems", stars: 42, forks: 3, watchers: 5 },
     ...overrides,
   };
 }
@@ -464,6 +476,79 @@ describe("queueMetricsEqual", () => {
 });
 
 // ---------------------------------------------------------------------------
+// projectSignalsEqual
+// ---------------------------------------------------------------------------
+
+describe("projectSignalsEqual", () => {
+  it("returns true for (null, null)", () => {
+    expect(projectSignalsEqual(null, null)).toBe(true);
+  });
+
+  it("returns false for (null, snapshot)", () => {
+    expect(projectSignalsEqual(null, makeProjectSignals())).toBe(false);
+  });
+
+  it("returns false for (snapshot, null)", () => {
+    expect(projectSignalsEqual(makeProjectSignals(), null)).toBe(false);
+  });
+
+  it("returns true for identical content with different references", () => {
+    expect(projectSignalsEqual(makeProjectSignals(), makeProjectSignals())).toBe(true);
+  });
+
+  it("returns false when computedAt differs by 1ms", () => {
+    expect(
+      projectSignalsEqual(
+        makeProjectSignals({ computedAt: new Date(BASE_MS) }),
+        makeProjectSignals({ computedAt: new Date(BASE_MS + 1) }),
+      ),
+    ).toBe(false);
+  });
+
+  it("returns false when groupId differs", () => {
+    expect(
+      projectSignalsEqual(makeProjectSignals(), makeProjectSignals({ groupId: "grp-b" })),
+    ).toBe(false);
+  });
+
+  it("returns false when memberEmails length differs", () => {
+    expect(
+      projectSignalsEqual(
+        makeProjectSignals({ memberEmails: ["a@example.com"] }),
+        makeProjectSignals({ memberEmails: ["a@example.com", "b@example.com"] }),
+      ),
+    ).toBe(false);
+  });
+
+  it("returns false when memberEmails element differs", () => {
+    expect(
+      projectSignalsEqual(
+        makeProjectSignals({ memberEmails: ["a@example.com"] }),
+        makeProjectSignals({ memberEmails: ["z@example.com"] }),
+      ),
+    ).toBe(false);
+  });
+
+  it("returns false when github.stars differs", () => {
+    expect(
+      projectSignalsEqual(
+        makeProjectSignals({ github: { repo: "natb1/cs", stars: 10, forks: 1, watchers: 2 } }),
+        makeProjectSignals({ github: { repo: "natb1/cs", stars: 99, forks: 1, watchers: 2 } }),
+      ),
+    ).toBe(false);
+  });
+
+  it("returns false when github present vs absent", () => {
+    expect(
+      projectSignalsEqual(
+        makeProjectSignals({ github: undefined }),
+        makeProjectSignals({ github: { repo: "natb1/cs", stars: 1, forks: 0, watchers: 0 } }),
+      ),
+    ).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // mergePanelData
 // ---------------------------------------------------------------------------
 
@@ -474,14 +559,15 @@ function makePanelData(overrides: Partial<PanelData> = {}): PanelData {
     queueMetrics: makeQueueMetrics(),
     issueSamples: [makeIssueSample()],
     auditAggregates: [makeAuditAggregate()],
+    projectSignals: makeProjectSignals(),
     ...overrides,
   };
 }
 
 describe("mergePanelData", () => {
-  it("returns prev itself when all five slices have equal content (no-churn keystone)", () => {
+  it("returns prev itself when all six slices have equal content (no-churn keystone)", () => {
     const prev = makePanelData();
-    // next has fresh references but same content in all five slices
+    // next has fresh references but same content in all six slices
     const next = makePanelData();
     const merged = mergePanelData(prev, next);
     expect(merged).toBe(prev);
@@ -500,6 +586,7 @@ describe("mergePanelData", () => {
     expect(merged.queueMetrics).toBe(prev.queueMetrics);
     expect(merged.issueSamples).toBe(prev.issueSamples);
     expect(merged.auditAggregates).toBe(prev.auditAggregates);
+    expect(merged.projectSignals).toBe(prev.projectSignals);
   });
 
   it("returns a new object when queueMetrics changed, keeping other prev references", () => {
@@ -513,6 +600,23 @@ describe("mergePanelData", () => {
     expect(merged.queueMetrics).toBe(next.queueMetrics);
     expect(merged.samples).toBe(prev.samples);
     expect(merged.reminders).toBe(prev.reminders);
+    expect(merged.issueSamples).toBe(prev.issueSamples);
+    expect(merged.auditAggregates).toBe(prev.auditAggregates);
+    expect(merged.projectSignals).toBe(prev.projectSignals);
+  });
+
+  it("returns a new object when projectSignals changed, keeping other prev references", () => {
+    const prev = makePanelData();
+    const changedSignals = makeProjectSignals({ groupId: "grp-b" });
+    const next = makePanelData({ projectSignals: changedSignals });
+
+    const merged = mergePanelData(prev, next);
+
+    expect(merged).not.toBe(prev);
+    expect(merged.projectSignals).toBe(next.projectSignals);
+    expect(merged.samples).toBe(prev.samples);
+    expect(merged.reminders).toBe(prev.reminders);
+    expect(merged.queueMetrics).toBe(prev.queueMetrics);
     expect(merged.issueSamples).toBe(prev.issueSamples);
     expect(merged.auditAggregates).toBe(prev.auditAggregates);
   });

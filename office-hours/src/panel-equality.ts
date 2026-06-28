@@ -3,6 +3,7 @@ import type { Reminder } from "./reminders.js";
 import type { QueueMetricsSnapshot } from "./queue-metrics.js";
 import type { IssueSample } from "./issue-samples.js";
 import type { AuditAggregate } from "./audit-aggregates.js";
+import type { ProjectSignalsSnapshot } from "./project-signals.js";
 
 /**
  * The tier-resolved data the panels render. Mirrors the vanilla ViewState's
@@ -17,6 +18,7 @@ export interface PanelData {
   queueMetrics: QueueMetricsSnapshot | null;
   issueSamples: IssueSample[];
   auditAggregates: AuditAggregate[];
+  projectSignals: ProjectSignalsSnapshot | null;
 }
 
 // WHY per-field coverage matters: for append-only collections (samples,
@@ -170,13 +172,44 @@ export function queueMetricsEqual(
   return true;
 }
 
+/**
+ * Content equality for ProjectSignalsSnapshot (nullable). (null, null) → true.
+ * Compares required scalar fields (computedAt by .getTime(), groupId) and
+ * memberEmails element-wise. The optional sub-objects (github, ga4, gsc, psi)
+ * contain no Date values at any level, so JSON.stringify gives correct structural
+ * equality without per-field enumeration of their deeply nested shapes.
+ */
+export function projectSignalsEqual(
+  a: ProjectSignalsSnapshot | null,
+  b: ProjectSignalsSnapshot | null,
+): boolean {
+  if (a === null && b === null) return true;
+  if (a === null || b === null) return false;
+
+  if (a.computedAt.getTime() !== b.computedAt.getTime()) return false;
+  if (a.groupId !== b.groupId) return false;
+
+  if (a.memberEmails.length !== b.memberEmails.length) return false;
+  for (let i = 0; i < a.memberEmails.length; i++) {
+    if (a.memberEmails[i] !== b.memberEmails[i]) return false;
+  }
+
+  // Optional signal sub-objects — no Date fields at any depth
+  if (JSON.stringify(a.github) !== JSON.stringify(b.github)) return false;
+  if (JSON.stringify(a.ga4) !== JSON.stringify(b.ga4)) return false;
+  if (JSON.stringify(a.gsc) !== JSON.stringify(b.gsc)) return false;
+  if (JSON.stringify(a.psi) !== JSON.stringify(b.psi)) return false;
+
+  return true;
+}
+
 // ---------------------------------------------------------------------------
 // Top-level merge helper
 // ---------------------------------------------------------------------------
 
 /**
  * Returns a PanelData that reuses prev's slices where the content predicate
- * reports equal, and takes next's slices where it changed. If ALL five slices
+ * reports equal, and takes next's slices where it changed. If ALL six slices
  * are reused, returns `prev` itself unchanged — preserving object identity so
  * React's Object.is bails the render. Otherwise returns a new object mixing
  * prev and next slices.
@@ -187,8 +220,9 @@ export function mergePanelData(prev: PanelData, next: PanelData): PanelData {
   const queueMetricsEq = queueMetricsEqual(prev.queueMetrics, next.queueMetrics);
   const issueSamplesEq = issueSamplesEqual(prev.issueSamples, next.issueSamples);
   const auditAggregatesEq = auditAggregatesEqual(prev.auditAggregates, next.auditAggregates);
+  const projectSignalsEq = projectSignalsEqual(prev.projectSignals, next.projectSignals);
 
-  if (samplesEq && remindersEq && queueMetricsEq && issueSamplesEq && auditAggregatesEq) {
+  if (samplesEq && remindersEq && queueMetricsEq && issueSamplesEq && auditAggregatesEq && projectSignalsEq) {
     return prev;
   }
 
@@ -198,5 +232,6 @@ export function mergePanelData(prev: PanelData, next: PanelData): PanelData {
     queueMetrics: queueMetricsEq ? prev.queueMetrics : next.queueMetrics,
     issueSamples: issueSamplesEq ? prev.issueSamples : next.issueSamples,
     auditAggregates: auditAggregatesEq ? prev.auditAggregates : next.auditAggregates,
+    projectSignals: projectSignalsEq ? prev.projectSignals : next.projectSignals,
   };
 }

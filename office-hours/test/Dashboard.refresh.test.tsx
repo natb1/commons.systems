@@ -16,7 +16,7 @@ vi.mock("../src/firebase.js", () => ({
   NAMESPACE: { project: "office-hours", env: "test" },
 }));
 
-// The owner tier calls the five getOwner* loaders. Mock the four data modules
+// The owner tier calls the six getOwner* loaders. Mock all five data modules
 // so the loaders are controllable per test, keeping the real getDemo* getters
 // via importOriginal (mirrors Dashboard.test.tsx).
 const getOwnerSamples = vi.fn();
@@ -24,6 +24,7 @@ const getOwnerReminders = vi.fn();
 const getOwnerQueueMetrics = vi.fn();
 const getOwnerIssueSamples = vi.fn();
 const getOwnerAuditAggregates = vi.fn();
+const getOwnerProjectSignals = vi.fn();
 
 vi.mock("../src/usage-data.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/usage-data.js")>()),
@@ -41,6 +42,10 @@ vi.mock("../src/issue-data.js", async (importOriginal) => ({
 vi.mock("../src/audit-data.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/audit-data.js")>()),
   getOwnerAuditAggregates: (...args: unknown[]) => getOwnerAuditAggregates(...args),
+}));
+vi.mock("../src/project-signals-data.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/project-signals-data.js")>()),
+  getOwnerProjectSignals: (...args: unknown[]) => getOwnerProjectSignals(...args),
 }));
 
 import { Dashboard } from "../src/Dashboard.js";
@@ -144,7 +149,7 @@ async function advanceOneRefresh() {
   });
 }
 
-// Configure the four non-varying getters to a stable populated baseline for the
+// Configure the five non-varying getters to a stable populated baseline for the
 // propagation tests, leaving the one under test free to use mockResolvedValueOnce.
 function setStableBaseline() {
   getOwnerSamples.mockResolvedValue([baseSample]);
@@ -152,6 +157,7 @@ function setStableBaseline() {
   getOwnerQueueMetrics.mockResolvedValue(baseQueue);
   getOwnerIssueSamples.mockResolvedValue([]);
   getOwnerAuditAggregates.mockResolvedValue([]);
+  getOwnerProjectSignals.mockResolvedValue(null);
 }
 
 describe("Dashboard refresh: per-collection refresh→panel propagation", () => {
@@ -314,6 +320,7 @@ describe("Dashboard refresh: graceful null persistence", () => {
     getOwnerQueueMetrics.mockResolvedValue(null);
     getOwnerIssueSamples.mockResolvedValue([]);
     getOwnerAuditAggregates.mockResolvedValue([]);
+    getOwnerProjectSignals.mockResolvedValue(null);
 
     const { container } = render(<Dashboard user={fakeUser} />);
     await flushOwnerLoad();
@@ -393,6 +400,7 @@ describe("Dashboard refresh: unmount / user-change guard", () => {
     getOwnerQueueMetrics.mockResolvedValue(baseQueue);
     getOwnerIssueSamples.mockResolvedValue([]);
     getOwnerAuditAggregates.mockResolvedValue([]);
+    getOwnerProjectSignals.mockResolvedValue(null);
 
     const { container, rerender } = render(<Dashboard user={userA} />);
     await flushOwnerLoad();

@@ -4,6 +4,7 @@ import type { User } from "firebase/auth";
 
 import type { UsageSample } from "../src/usage-samples.js";
 import type { Reminder } from "../src/reminders.js";
+import type { ParkedIssue } from "../src/queue-metrics.js";
 
 // Dashboard.tsx imports db/NAMESPACE from firebase.js, whose createAppContext
 // requires VITE_FIREBASE_* env at module load. A trivial stub keeps the render
@@ -276,7 +277,8 @@ function cloneReminder(r: Reminder): Reminder {
 // queueMetricsFixture omits `parked` (harmless for the 60s-tick tests, which
 // never run mergePanelData), but the refresh path calls queueMetricsEqual, which
 // reads `.parked.length` — so the merge fixtures must carry it.
-const refreshQueueFixture = { ...queueMetricsFixture, parked: [] as never[] };
+const emptyParked: ParkedIssue[] = [];
+const refreshQueueFixture = { ...queueMetricsFixture, parked: emptyParked };
 function cloneQueue(q: typeof refreshQueueFixture): typeof refreshQueueFixture {
   return {
     ...q,
