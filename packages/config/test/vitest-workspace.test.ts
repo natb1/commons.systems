@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, it, expect } from "vitest";
 
-const root = resolve(import.meta.dirname, "../..");
+const root = resolve(import.meta.dirname, "../../..");
 const rootPkg = JSON.parse(readFileSync(resolve(root, "package.json"), "utf-8"));
 
 const mod = await import(resolve(root, "vitest.config.ts"));

@@ -26,7 +26,7 @@ const includeTestOnly = process.env.SEED_TEST_ONLY === "true";
 
 let items: StorageSeedItem[];
 try {
-  const mod = (await import(`../../${appName}/seeds/storage.js`)) as {
+  const mod = (await import(`../../../${appName}/seeds/storage.js`)) as {
     default: StorageSeedItem[];
   };
   items = mod.default;

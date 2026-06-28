@@ -18,7 +18,7 @@ if (!host) {
 
 let testUser: AuthUser;
 try {
-  const mod = (await import(`../../${appName}/seeds/auth.js`)) as {
+  const mod = (await import(`../../../${appName}/seeds/auth.js`)) as {
     default: AuthUser;
   };
   testUser = mod.default;

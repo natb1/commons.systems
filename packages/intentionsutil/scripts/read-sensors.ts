@@ -40,7 +40,7 @@ import { IntentionSchemaError } from "../src/errors.js";
 // root is two directories up. Resolve from this file's own location, never from
 // cwd — the local-first sensors run their commands with `cwd: repoRoot`.
 const scriptDir = dirname(fileURLToPath(import.meta.url));
-const repoRoot = dirname(dirname(scriptDir));
+const repoRoot = dirname(dirname(dirname(scriptDir)));
 const intentionsDir = join(repoRoot, "intentions");
 
 // --- Local-first default sensors -------------------------------------------

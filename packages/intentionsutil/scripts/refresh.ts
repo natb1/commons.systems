@@ -32,7 +32,7 @@ import { gh, paginateGhApi } from "./gh-utils.js";
 // The script lives at `intentionsutil/scripts/refresh.ts`, so the repo root is
 // two directories up. Resolve from this file's own location, never from cwd.
 const scriptDir = dirname(fileURLToPath(import.meta.url));
-const repoRoot = dirname(dirname(scriptDir));
+const repoRoot = dirname(dirname(dirname(scriptDir)));
 const intentionsDir = join(repoRoot, "intentions");
 const trackersDir = join(repoRoot, "trackers");
 

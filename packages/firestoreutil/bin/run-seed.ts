@@ -20,7 +20,7 @@ if (!namespace) {
 
 let appSeed: Omit<SeedSpec, "namespace">;
 try {
-  const mod = (await import(`../../${appName}/seeds/firestore.js`)) as {
+  const mod = (await import(`../../../${appName}/seeds/firestore.js`)) as {
     default: Omit<SeedSpec, "namespace">;
   };
   appSeed = mod.default;

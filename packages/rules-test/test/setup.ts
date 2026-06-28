@@ -13,7 +13,7 @@ import { doc, getDoc, setDoc, setLogLevel, getDocs, collection, query, where } f
 // Suppress Firestore client-side warnings about permission-denied (expected in tests)
 setLogLevel("error");
 
-const repoRoot = resolve(import.meta.dirname, "../..");
+const repoRoot = resolve(import.meta.dirname, "../../..");
 
 let testEnv: RulesTestEnvironment;
 

@@ -7,7 +7,7 @@ import { dirname, join } from "node:path";
 // The config file lives at <root>/config/eslint.config.js, so its dir is
 // <root>/config and the parent is the repo root. Resolve cwd-independently so
 // the layering rule works regardless of which workspace eslint runs from.
-const rootDir = dirname(dirname(fileURLToPath(import.meta.url)));
+const rootDir = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 
 // Derive the top-level app package list dynamically from the workspace
 // manifests. Apps are the dependency-graph roots: unscoped workspace names

@@ -23,7 +23,7 @@ import { projectGoals, renderFrontier } from "../src/goals.js";
 // root is two directories up. Resolve from this file's own location, never
 // from cwd.
 const scriptDir = dirname(fileURLToPath(import.meta.url));
-const repoRoot = dirname(dirname(scriptDir));
+const repoRoot = dirname(dirname(dirname(scriptDir)));
 const intentionsDir = join(repoRoot, "intentions");
 
 // --- Main ------------------------------------------------------------------

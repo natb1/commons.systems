@@ -30,7 +30,7 @@ import type { IntentionNodeInput } from "../src/schema.js";
 // The script lives at `intentionsutil/scripts/backfill.ts`, so the repo root is
 // two directories up. Resolve from this file's own location, never from cwd.
 const scriptDir = dirname(fileURLToPath(import.meta.url));
-const repoRoot = dirname(dirname(scriptDir));
+const repoRoot = dirname(dirname(dirname(scriptDir)));
 const intentionsDir = join(repoRoot, "intentions");
 
 // --- Helpers ---------------------------------------------------------------
