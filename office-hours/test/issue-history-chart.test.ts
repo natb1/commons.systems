@@ -106,7 +106,7 @@ describe("renderIssueHistoryChart", () => {
 
     const stateSpan = el.querySelector(".backlog-runway-state");
     expect(stateSpan).not.toBeNull();
-    expect(stateSpan!.textContent).toMatch(/to clear the open backlog/);
+    expect(stateSpan!.textContent).toMatch(/to clear the open backlog/); // type-safety-ok: non-null asserted by preceding expect
     expect(stateSpan!.classList.contains("draining")).toBe(true);
 
     const legend = el.querySelector(".trend-legend");
@@ -176,7 +176,7 @@ describe("renderIssueHistoryChart", () => {
     const el = renderIssueHistoryChart(longHorizonFixture);
     host.appendChild(el);
 
-    const svg = el.querySelector(".chart-scroll-wrapper svg") as HTMLElement;
+    const svg = el.querySelector(".chart-scroll-wrapper svg") as HTMLElement; // type-safety-ok: SVGElement lacks style.width; cast needed to read inline width
     const actualWidth = parseFloat(svg.style.width);
 
     const pxPerDay = (N * POINT_WIDTH) / dataDays;
