@@ -205,7 +205,10 @@ describe("feedFetchPlugin buildStart error handling", () => {
       (plugin as any).load(RESOLVED_VIRTUAL_MODULE_ID), // type-safety-ok: invoking Vite plugin hook directly in unit test
     ) as Record<string, unknown>; // type-safety-ok: narrowing parseVirtualModule's unknown JSON
     expect(feedData["test"]).toBeNull();
-    expect(warn).toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("[feed-fetch] test"),
+      expect.any(TypeError),
+    );
   });
 
   it("re-throws a fatal build error on a bad-URL TypeError", async () => {
