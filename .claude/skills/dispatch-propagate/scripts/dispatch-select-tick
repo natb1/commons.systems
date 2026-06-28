@@ -390,7 +390,20 @@ if [[ -z "$OPEN_MB" ]]; then
     done <<< "$MERGE_OUT"
   fi
 fi
-# Heartbeat: refresh after the auto-merge sub-step completes (#2104).
+
+# --- Step 1d (cont.): post-merge reconciliation (#2512) ----------------------
+# Closes any issue GitHub's merge-time auto-close silently left OPEN (see #2481).
+# Runs unconditionally (NOT gated on $OPEN_MB): it merges nothing, only repairs
+# already-merged work's closing issues, so it is safe during a main-broken
+# episode. Best-effort: a failure here must not abort the tick.
+RECONCILE_MERGED_OUT=$("$SCRIPT_DIR/dispatch-reconcile-merged") || true
+if [[ -n "$RECONCILE_MERGED_OUT" ]]; then
+  while IFS= read -r recon_line; do
+    [[ -n "$recon_line" ]] && echo "reconcile-merged: $recon_line"
+  done <<< "$RECONCILE_MERGED_OUT"
+fi
+
+# Heartbeat: refresh after the auto-merge and reconcile-merged sub-steps complete (#2104, #2512).
 refresh_lock
 
 # --- Step 1b: run-scoped concurrency gate (autonomous no-arg queue path only) -

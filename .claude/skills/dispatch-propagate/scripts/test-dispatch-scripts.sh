@@ -75,7 +75,6 @@ setup() {
   # it. Selector-only tests never run provisioning (the selector only checks
   # ls-remote); entry tests that exercise provisioning stub the helper directly.
   cp "$SCRIPT_DIR/dispatch-provision-from-remote" "$TMPDIR_TEST/dispatch-provision-from-remote"
-  cp "$SCRIPT_DIR/dispatch-spawn-office-hours" "$TMPDIR_TEST/dispatch-spawn-office-hours"
   cp "$SCRIPT_DIR/dispatch-spawn-job" "$TMPDIR_TEST/dispatch-spawn-job"
   cp "$SCRIPT_DIR/dispatch-trace-leaf" "$TMPDIR_TEST/dispatch-trace-leaf"
   cp "$SCRIPT_DIR/dispatch-check-blockers" "$TMPDIR_TEST/dispatch-check-blockers"
@@ -99,6 +98,11 @@ setup() {
   # SCRIPT_DIR (= TMPDIR_TEST for this copy) — both already copied below/above,
   # so both resolve.
   cp "$SCRIPT_DIR/dispatch-auto-merge" "$TMPDIR_TEST/dispatch-auto-merge"
+  # dispatch-reconcile-merged (#2512) sources lib.sh (gh_retry, gh_issue_view_rest,
+  # gh_issue_close_rest, dispatch_marker_comment_id) via its SCRIPT_DIR (= TMPDIR_TEST
+  # for this copy) — lib.sh is copied below, so the source resolves.
+  cp "$SCRIPT_DIR/dispatch-reconcile-merged" "$TMPDIR_TEST/dispatch-reconcile-merged"
+  chmod +x "$TMPDIR_TEST/dispatch-reconcile-merged"
   # dispatch-retriage-orphaned-followups (#1812) sources lib.sh (gh_issue_list_rest,
   # gh_retry) and calls dispatch-apply-office-hours via its SCRIPT_DIR (= TMPDIR_TEST
   # for this copy) — both already copied here, so both resolve.
@@ -133,7 +137,6 @@ setup() {
            "$TMPDIR_TEST/office-hours-select-target" \
            "$TMPDIR_TEST/office-hours" \
            "$TMPDIR_TEST/dispatch-provision-from-remote" \
-           "$TMPDIR_TEST/dispatch-spawn-office-hours" \
            "$TMPDIR_TEST/dispatch-spawn-job" \
            "$TMPDIR_TEST/dispatch-trace-leaf" \
            "$TMPDIR_TEST/dispatch-check-blockers" \
@@ -602,6 +605,19 @@ case "$args" in
       echo "stub forced gh api failure" >&2
       exit 1
     fi
+    # Optional per-issue close-failure injection (#2512): if issue-close-fail-on
+    # holds an issue number matching the <N> in this PATCH's path, emit a
+    # non-transient error and exit non-zero so gh_retry returns immediately and
+    # the caller (dispatch-reconcile-merged) takes its gh_issue_close_rest
+    # HARD_ERROR path for that issue. Default-absent, so existing tests sharing
+    # this PATCH branch are unaffected.
+    if [[ -f "$STUB_DIR/issue-close-fail-on" ]]; then
+      close_num=$(printf '%s' "$args" | sed -E 's#.*issues/([0-9]+).*#\1#')
+      if [[ "$close_num" == "$(cat "$STUB_DIR/issue-close-fail-on")" ]]; then
+        echo "issue close PATCH for #$close_num was rejected" >&2
+        exit 1
+      fi
+    fi
     echo '{}'
     ;;
   "api -X POST "*/issues/*/comments*)
@@ -840,6 +856,16 @@ case "$args" in
     echo "pr list" >> "$STUB_DIR/gh-auto-merge-pr-list.log"
     if [[ -f "$STUB_DIR/auto-merge-pr-list.json" ]]; then
       cat "$STUB_DIR/auto-merge-pr-list.json"
+    else
+      echo "[]"
+    fi
+    ;;
+  "pr list --state merged --json number,title,mergedAt,closingIssuesReferences --limit "*)
+    # dispatch-reconcile-merged's one fetch (#2512). reconcile-merged-pr-list.json
+    # supplies the per-test merged-PR array; absence means no merged PRs.
+    echo "pr list" >> "$STUB_DIR/gh-reconcile-merged-pr-list.log"
+    if [[ -f "$STUB_DIR/reconcile-merged-pr-list.json" ]]; then
+      cat "$STUB_DIR/reconcile-merged-pr-list.json"
     else
       echo "[]"
     fi
@@ -1716,7 +1742,7 @@ printf '%s\n' '{
 }' > "$STUB_DIR/view-issue-9002.json"
 iv2=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_view_rest 9002)
 assert_eq "issue: closed → CLOSED" "CLOSED" "$(jq -r '.state' <<<"$iv2")"
-# closedAt passthrough from closed_at (the stale-head gate's recency floor, #2442).
+# closedAt passthrough from closed_at: REST snake_case → porcelain camelCase.
 assert_eq "issue: closedAt passthrough from closed_at" "2026-02-04T05:06:07Z" "$(jq -r '.closedAt' <<<"$iv2")"
 # REST lowercase state_reason `completed` → porcelain UPPERCASE enum COMPLETED.
 assert_eq "issue: stateReason completed upcased to COMPLETED" "COMPLETED" "$(jq -r '.stateReason' <<<"$iv2")"
@@ -3248,6 +3274,52 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: STOP closed is in the launcher's no-park benign-races arm"
 fi
 
+# 1e. Merged-PR guard (#2511, complements #1845): an OPEN issue whose closing PR
+# has already MERGED — GitHub failed to auto-close it — must self-close instead
+# of looping on INVOKE /implement. The guard fires AFTER the closed-issue guard
+# and BEFORE provisioning, detecting the merged closing PR via the issue's own
+# closedByPullRequestsReferences (issue-closing-prs-<num>.json stub). On the
+# PRE-FIX code (open + dispatch:planned, no guard) this routed to INVOKE
+# /implement, so the assertion genuinely guards the new behavior.
+echo "Test: open issue + merged closing PR → STOP merged-pr-closed"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo "/wt/44-merged-feature" > "$STUB_DIR/worktree-toplevel.txt"
+printf '{"state":"open","labels":[{"name":"dispatch:planned"}]}\n' > "$STUB_DIR/arg-issue-44.json"
+printf '{"closedByPullRequestsReferences":[{"number":900,"state":"MERGED"}]}\n' > "$STUB_DIR/issue-closing-prs-44.json"
+route_run 44 /wt/44-merged-feature
+assert_eq "open + merged closing PR → STOP merged-pr-closed (directive)" "STOP merged-pr-closed" "$ROUTE_OUT"
+assert_eq "open + merged closing PR → STOP merged-pr-closed (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# 1f. The MERGED filter: an open issue whose closing PR is still OPEN (not
+# merged) must NOT trip the guard — it routes normally. Proves the
+# select(.state == "MERGED") filter is load-bearing.
+echo "Test: open issue + OPEN (not merged) closing PR → INVOKE /implement"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+printf '{"state":"open","labels":[{"name":"dispatch:planned"}]}\n' > "$STUB_DIR/arg-issue-42.json"
+printf '{"closedByPullRequestsReferences":[{"number":901,"state":"OPEN"}]}\n' > "$STUB_DIR/issue-closing-prs-42.json"
+route_run 42 /wt/42-my-feature
+assert_eq "open + OPEN closing PR → guard not tripped → INVOKE /implement (directive)" "INVOKE /implement" "$ROUTE_OUT"
+assert_eq "open + OPEN closing PR → INVOKE /implement (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# 1g. The route-level test above cannot prove the launcher closes the issue
+# (driving dispatch-launch-worker end-to-end is out of scope for this harness).
+# Assert at the source that dispatch-launch-worker has a DEDICATED
+# "STOP merged-pr-closed") arm that invokes dispatch-close-resolved — i.e. it is
+# NOT folded into the benign no-park arm (which would leave the issue open).
+echo "Test: dispatch-launch-worker handles STOP merged-pr-closed via dispatch-close-resolved"
+TOTAL=$((TOTAL + 1))
+if grep -Eq '"STOP merged-pr-closed"\)' "$SCRIPT_DIR/dispatch-launch-worker" \
+   && grep -q 'dispatch-close-resolved' "$SCRIPT_DIR/dispatch-launch-worker"; then
+  PASS=$((PASS + 1)); echo "  PASS: launcher closes the issue on STOP merged-pr-closed"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: launcher closes the issue on STOP merged-pr-closed"
+fi
+
 # 2. Draft + failing CI → INVOKE /fix-checks.
 echo "Test: draft + failing CI → INVOKE /fix-checks"
 setup
@@ -4163,8 +4235,8 @@ FAKE
 # style) entry path. Serves `agents` from an oh-registry.json (starts empty); on
 # `--bg` records argv + $PWD and registers
 # {"sessionId":"sess-<name>","id":"job-<name>",...} under --name (so
-# dispatch-spawn-job's verify + dispatch-spawn-office-hours' resolve both find
-# it, and the entry's sessionId→job-id resolution finds the `id`; sessionId and
+# the entry's name-based registration check finds it, and the entry's
+# sessionId→job-id resolution finds the `id`; sessionId and
 # `id` are DISTINCT so the test proves attach uses the job `id`); prints
 # `LAUNCH: $*` on anything else (the entry's attach).
 office_hours_fresh_fake_claude() {
@@ -7275,7 +7347,7 @@ echo ""
 echo "=== office-hours-select-target ==="
 #
 # Selects the oldest open issue carrying dispatch:office-hours whose <N>-*
-# worktree has no live session. Output: `office-hours <issue> <phase> <pr|->`.
+# worktree has no live session. Output: `office-hours <issue> <worktree-path|->`.
 # Reuses the select-target gh/git/claude fakes (oh-issue-list.json seeds the
 # office-hours queue; pr-list-full.json drives dispatch-phase/dispatch-find-pr).
 
@@ -7288,7 +7360,7 @@ echo '[]' > "$STUB_DIR/pr-list-full.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 select_target_fake_claude   # orphan world: no live sessions
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "oldest labeled item selected (plan, no PR)" "office-hours 42 plan - -" "$result"
+assert_eq "oldest labeled item selected (plan, no PR)" "office-hours 42 -" "$result"
 teardown
 
 # OHST2. A qa item — draft PR, CI green, no dispatch:* label → phase qa, PR num.
@@ -7302,7 +7374,7 @@ printf '[{"number":7,"headRefName":"50-feat","isDraft":true,"headRefOid":"sha7",
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 select_target_fake_claude
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "qa item selected with its PR number" "office-hours 50 qa 7 -" "$result"
+assert_eq "qa item selected with its PR number" "office-hours 50 -" "$result"
 teardown
 
 # OHST3. The oldest labeled item whose <N>-* worktree has an idle (attachable)
@@ -7367,7 +7439,7 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktre
   > "$STUB_DIR/worktree-list.txt"
 office_hours_state_fake_claude "42-x:working"
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "working item skipped; sessionless sibling 99 chosen fresh" "office-hours 99 plan - -" "$result"
+assert_eq "working item skipped; sessionless sibling 99 chosen fresh" "office-hours 99 -" "$result"
 teardown
 
 # OHST3e. Working-skip, lone → empty: the only labeled item (42) has a `working`
@@ -7583,7 +7655,7 @@ export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
 # sessionless) plus a parked dispatch-* router under main.
 parked_router_fake_claude "dispatch-abc123:waiting"
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "labeled item selected over parked router" "office-hours 42 plan - -" "$result"
+assert_eq "labeled item selected over parked router" "office-hours 42 -" "$result"
 unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
@@ -7603,8 +7675,10 @@ unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
 # OHST10. A labeled item whose draft PR has CI still in progress (pending rollup)
-# → dispatch-ci-ready returns not-ready → phase=waiting, PR number present.
-echo "Test: labeled item with pending-CI draft PR → waiting, PR number"
+# → the selector no longer re-derives phase/PR (#2387); it emits the two-field
+# fresh disposition `office-hours <N> <wt>`. With no <N>-* worktree on disk the
+# path field is `-`. /office-hours attaches a human-driven session, not a phase.
+echo "Test: labeled item with draft PR → two-field fresh disposition"
 setup
 printf '[{"number":50,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
 printf '[%s]\n' "$(make_pr 7 "50-feat" "true" "$NO_LABELS" "$PENDING_ROLLUP")" \
@@ -7612,12 +7686,12 @@ printf '[%s]\n' "$(make_pr 7 "50-feat" "true" "$NO_LABELS" "$PENDING_ROLLUP")" \
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 select_target_fake_claude
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "pending-CI draft PR → waiting, PR number" "office-hours 50 waiting 7 -" "$result"
+assert_eq "draft-PR item → two-field fresh disposition (no phase/PR)" "office-hours 50 -" "$result"
 teardown
 
 # OHST11. A sessionless labeled item whose <N>-* worktree exists on disk (an
 # orphan: no live session) → the fresh disposition carries that worktree path
-# as its 5th field, so the entry script can launch the fresh session --cwd it.
+# as its 2nd (path) field, so the entry script can launch the fresh session --cwd it.
 echo "Test: sessionless item with an orphan worktree → worktree path emitted"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
@@ -7626,14 +7700,14 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktre
   > "$STUB_DIR/worktree-list.txt"
 select_target_fake_claude   # orphan: no live sessions → sessionless, picked fresh
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "fresh disposition carries the worktree path" "office-hours 42 plan - /worktrees/42-x" "$result"
+assert_eq "fresh disposition carries the worktree path" "office-hours 42 /worktrees/42-x" "$result"
 teardown
 
 # OHST12. A fresh item carrying the `main-qa` label (#1648) — a needs-main QA
-# follow-up that is brand-new, no-PR, NO-WORKTREE — overrides phase=main-qa and
-# emits the MAIN worktree as the 5th field (not `-`), so the entry dispatcher's
-# `-` guard never trips and dispatch-spawn-office-hours accepts the cwd.
-echo "Test: fresh main-qa-labelled item → phase main-qa, main worktree as cwd"
+# follow-up that is brand-new, no-PR, NO-WORKTREE — emits the MAIN worktree as
+# the 2nd (path) field (not `-`), so the entry dispatcher's `-` guard never trips
+# and fresh_session can cd into the main worktree as the spawn cwd.
+echo "Test: fresh main-qa-labelled item → main worktree as cwd"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"main-qa"}]}]\n' \
   > "$STUB_DIR/oh-issue-list.json"
@@ -7641,15 +7715,14 @@ echo '[]' > "$STUB_DIR/pr-list-full.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
 # The selector itself does not stat this path; this mkdir is a convention match
-# documenting the production contract (dispatch-spawn-office-hours requires the
-# cwd to exist). A full entry-point integration test for the main-qa fresh-spawn
-# path is needed to actually exercise the dispatch-spawn-office-hours directory
-# guard.
+# documenting the production contract (fresh_session must be able to cd into the
+# cwd). A full entry-point integration test for the main-qa fresh-spawn path is
+# needed to actually exercise fresh_session's cwd guard.
 mkdir -p "$TMPDIR_TEST/worktrees/main"
 select_target_fake_claude   # no live sessions → sessionless, picked fresh
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "main-qa override: phase main-qa, main worktree 5th field" \
-  "office-hours 42 main-qa - $TMPDIR_TEST/worktrees/main" "$result"
+assert_eq "main-qa override: main worktree as 2nd (path) field" \
+  "office-hours 42 $TMPDIR_TEST/worktrees/main" "$result"
 unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
@@ -7697,9 +7770,9 @@ teardown
 # OHST15. Remote-branch-missing fallback (#2241 bucket 3): same swept setup as
 # OHST14 but `origin/<branch>` is ABSENT (no remote-branches.txt) → the selector
 # cannot re-provision, so it falls back to the fresh path for this issue. With no
-# registered worktree the wt_path lookup is empty → 5th field `-`; no PR → phase
-# plan. The consumer's `-` guard later prints the swept diagnostic (see OH10).
-echo "Test: swept worktree + remote branch missing → fresh fallback (5th field -)"
+# registered worktree the wt_path lookup is empty → path field `-`. The consumer's
+# `-` guard later prints the swept diagnostic (see OH10).
+echo "Test: swept worktree + remote branch missing → fresh fallback (path field -)"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
 echo '[]' > "$STUB_DIR/pr-list-full.json"
@@ -7708,7 +7781,7 @@ printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n' > "$STUB_DIR/wo
 export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
 office_hours_state_fake_claude "42-x:waiting:/worktrees/42-x"
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "swept worktree, remote branch missing → fresh fallback with - 5th field" "office-hours 42 plan - -" "$result"
+assert_eq "swept worktree, remote branch missing → fresh fallback with - path field" "office-hours 42 -" "$result"
 unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
@@ -7753,7 +7826,7 @@ mkdir -p "$DISPATCH_STAMP_PROJECTS_ROOT/proj-42"
 printf '%s\n' '{"schema":1,"session_id":"rec-sess-42","repo":"natb1/commons.systems","issue":42,"pr":null,"branch":"42-x","base_sha":"deadbeef","stamped_at":"2026-06-01T10:00:00Z"}' \
   > "$DISPATCH_STAMP_PROJECTS_ROOT/proj-42/rec-sess-42.dispatch-stamp.json"
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "removed, transcript purged → fresh-launch fallback" "office-hours 42 plan - -" "$result"
+assert_eq "removed, transcript purged → fresh-launch fallback" "office-hours 42 -" "$result"
 unset DISPATCH_STAMP_PROJECTS_ROOT
 teardown
 
@@ -7817,7 +7890,7 @@ echo '[]' > "$STUB_DIR/pr-list-full.json"
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n' > "$STUB_DIR/worktree-list.txt"   # no 42-* worktree
 office_hours_state_fake_claude   # WORKING daemon reporting no sessions ([], rc 0)
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "worktree-free item under WORKING daemon → fresh-launch" "office-hours 42 plan - -" "$result"
+assert_eq "worktree-free item under WORKING daemon → fresh-launch" "office-hours 42 -" "$result"
 teardown
 
 # OHST17. Working-session-no-worktree skip (#2241 criterion-5, latent double-claim
@@ -7843,7 +7916,7 @@ teardown
 # (no 3rd field) with no registered <N>-* worktree → the selector finds it
 # attachable but cannot derive a branch (empty cwd fails both the `-d` and the
 # non-empty `[[ -n "$IDLE_CWD" ]]` checks) → bucket 3 → fall through to the fresh
-# path. No PR → plan; no worktree → 5th field `-`.
+# path. No worktree → path field `-`.
 echo "Test: attachable session with empty cwd, no worktree → fresh fallback"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
@@ -7853,7 +7926,7 @@ export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
 # office-hours-42 (exact-match name) with NO cwd field → empty cwd → null-cwd degrade.
 office_hours_state_fake_claude "office-hours-42:waiting"
 result=$("$TMPDIR_TEST/office-hours-select-target")
-assert_eq "attachable session, empty cwd, no worktree → fresh fallback with - 5th field" "office-hours 42 plan - -" "$result"
+assert_eq "attachable session, empty cwd, no worktree → fresh fallback with - path field" "office-hours 42 -" "$result"
 unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
 teardown
 
@@ -7881,6 +7954,87 @@ result=$("$TMPDIR_TEST/office-hours-select-target")
 assert_eq "registered worktree + null cwd → idle via worktree path" "idle s-office-hours-42" "$result"
 teardown
 
+# OHST20 (#2443). Blocked fresh item is STILL emitted (signal, not a gate) AND
+# the open-blocker advisory fires on STDERR. Mirrors OHST1's fresh-disposition
+# shape: oldest labeled sessionless no-PR item → `office-hours 42 -`. The
+# regression guard: the open blocker must NOT change the stdout disposition (the
+# item is surfaced, not skipped); the advisory rides STDERR only.
+echo "Test: blocked fresh item still surfaced (unchanged stdout) + signal fires"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+# 42 has one OPEN blocker (#2387) — count_open_blockers sees 1, the listing names it.
+printf '[{"number":2387,"state":"open"}]\n' > "$STUB_DIR/blockers-42.json"
+select_target_fake_claude   # orphan world: no live sessions → fresh
+result=$("$TMPDIR_TEST/office-hours-select-target" 2>"$TMPDIR_TEST/oh-stderr.txt")
+assert_eq "blocked fresh item still surfaced (stdout unchanged)" "office-hours 42 -" "$result"
+assert_eq "blocked item: advisory names the blocker #2387" "1" \
+  "$(grep -c '#2387' "$TMPDIR_TEST/oh-stderr.txt")"
+assert_eq "blocked item: advisory frames it as signal, not a gate" "1" \
+  "$(grep -c 'signal, not a gate' "$TMPDIR_TEST/oh-stderr.txt")"
+teardown
+
+# OHST21 (#2443). Unblocked item emits NO blocker advisory. Same fresh shape as
+# OHST20 but with no blockers-42.json (the fake serves `[]`), so count is 0 and
+# emit_blocker_signal stays silent. Stdout disposition is unchanged.
+echo "Test: unblocked fresh item → no blocker advisory on stderr"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude   # no blockers-42.json → fake returns []
+result=$("$TMPDIR_TEST/office-hours-select-target" 2>"$TMPDIR_TEST/oh-stderr.txt")
+assert_eq "unblocked fresh item: stdout disposition correct" "office-hours 42 -" "$result"
+# Harness has no assert_not_contains; assert absence by counting matches.
+assert_eq "unblocked item: no blocker advisory emitted" "0" \
+  "$(grep -c 'has open blocker(s)' "$TMPDIR_TEST/oh-stderr.txt")"
+teardown
+
+# OHST22 (#2443). main-qa BLOCKED item is still surfaced (no #1648 regression):
+# a main-qa-labelled, no-PR, no-worktree item takes the main-qa fresh override
+# (main worktree as the 2nd field, OHST12) AND, being blocked, fires its
+# STDERR signal. Open blockers never gate the main-qa override.
+echo "Test: blocked main-qa item still surfaced (main override) + signal fires"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"main-qa"}]}]\n' \
+  > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+mkdir -p "$TMPDIR_TEST/worktrees/main"
+printf '[{"number":2387,"state":"open"}]\n' > "$STUB_DIR/blockers-42.json"
+select_target_fake_claude   # no live sessions → fresh, main-qa override
+result=$("$TMPDIR_TEST/office-hours-select-target" 2>"$TMPDIR_TEST/oh-stderr.txt")
+assert_eq "blocked main-qa item still surfaced (main worktree path)" \
+  "office-hours 42 $TMPDIR_TEST/worktrees/main" "$result"
+assert_eq "blocked main-qa item: advisory names the blocker #2387" "1" \
+  "$(grep -c '#2387' "$TMPDIR_TEST/oh-stderr.txt")"
+assert_eq "blocked main-qa item: framed as signal, not a gate" "1" \
+  "$(grep -c 'signal, not a gate' "$TMPDIR_TEST/oh-stderr.txt")"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
+# OHST23 (#2443). Blocker-lookup failure is NON-FATAL: the gh-fail-blocked_by-42
+# marker forces the blocked_by API to fail, so count_open_blockers comes back
+# empty. The selector still exits 0 with its normal stdout disposition and emits
+# the `could not determine` advisory (clear error over silent fallback).
+echo "Test: blocker-lookup failure is non-fatal (normal disposition + note)"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+# Failure injection: blocked_by lookup for #42 errors out.
+touch "$STUB_DIR/gh-fail-blocked_by-42"
+select_target_fake_claude
+rc=0
+result=$("$TMPDIR_TEST/office-hours-select-target" 2>"$TMPDIR_TEST/oh-stderr.txt") || rc=$?
+assert_eq "lookup failure: selector still exits 0" "0" "$rc"
+assert_eq "lookup failure: stdout disposition unchanged" "office-hours 42 -" "$result"
+assert_eq "lookup failure: emits could-not-determine note" "1" \
+  "$(grep -c 'could not determine open-blocker status for #42' "$TMPDIR_TEST/oh-stderr.txt")"
+teardown
+
 # ============================================================================
 # office-hours (entry point) tests
 # ============================================================================
@@ -7889,8 +8043,9 @@ echo "=== office-hours (entry point) ==="
 #
 # The single user entry point to the office-hours queue (#759). It is now a thin
 # dispatcher: it calls office-hours-select-target once and switches on the verb —
-# live / parked-router (exec `claude attach <sessionId>`), fresh-with-args
-# (exec `claude "/office-hours <N> <phase> <pr>"`), or empty (print a queue-empty
+# live / parked-router (exec `claude attach <sessionId>`), fresh (spawn a BARE
+# promptless `--bg` session named office-hours-<N> and attach by name, #2387),
+# or empty (print a queue-empty
 # message and exit WITHOUT launching). These are therefore entry+selector
 # integration tests: setup copies the real selector into TMPDIR_TEST, the
 # selector emits the disposition, and office_hours_fake_claude serves the
@@ -7924,12 +8079,13 @@ result=$("$TMPDIR_TEST/office-hours")
 assert_eq "attaches the oldest idle item's session by its job id" "LAUNCH: attach j-42-x" "$result"
 teardown
 
-# OH3. Labeled items but none with a live session → launch the fresh /office-hours
-# session worker-style (a --bg job named office-hours-<N>, cwd = that worktree)
-# via dispatch-spawn-office-hours, then attach the human by resuming the spawned
-# session id. Fixes the originally-reported label leak (#1160): born in the
-# worktree, the session's branch is <N>-..., so the strip hook clears the label.
-echo "Test: labeled item, none live → spawn worker-style --bg then attach"
+# OH3. Labeled items but none with a live session → spawn a BARE PROMPTLESS
+# --bg session named office-hours-<N>, cwd = that worktree (#2387) — no
+# `/office-hours` positional prompt, so the session parks awaiting the human, who
+# attaches and drives manually. The entry then attaches by name. Fixes the
+# originally-reported label leak (#1160): born in the worktree, the session's
+# branch is <N>-..., so the strip hook clears the label.
+echo "Test: labeled item, none live → bare promptless --bg spawn then attach"
 setup
 mkdir -p "$TMPDIR_TEST/worktrees/42-x"
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
@@ -7939,14 +8095,18 @@ office_hours_fresh_fake_claude
 result=$("$TMPDIR_TEST/office-hours")
 # Attaches the human to the just-spawned session, by its resolved job id.
 assert_eq "fresh path attaches the spawned session's job id" "LAUNCH: attach job-office-hours-42" "$result"
-# The spawn was a --bg job named office-hours-<N> running /office-hours.
+# The spawn was a BARE --bg job named office-hours-<N> — no skill prompt.
 mapfile -t oh_argv < "$TMPDIR_TEST/oh-bg-argv"
 assert_eq "fresh: --bg" "--bg" "${oh_argv[0]:-}"
 assert_eq "fresh: --name" "--name" "${oh_argv[1]:-}"
 assert_eq "fresh: name is office-hours-<N>" "office-hours-42" "${oh_argv[2]:-}"
 assert_eq "fresh: --permission-mode" "--permission-mode" "${oh_argv[3]:-}"
 assert_eq "fresh: permission mode is auto" "auto" "${oh_argv[4]:-}"
-assert_eq "fresh: prompt is /office-hours with args" "/office-hours 42 plan -" "${oh_argv[5]:-}"
+# Bare promptless spawn (#2387): the recorded argv must carry NO /office-hours
+# positional skill prompt (a position-independent substring check over the whole
+# argv, mirroring the resume test's "no continue" idiom).
+oh_has_prompt=no; [[ "$(cat "$TMPDIR_TEST/oh-bg-argv")" == */office-hours* ]] && oh_has_prompt=yes
+assert_eq "fresh: no /office-hours positional skill prompt" "no" "$oh_has_prompt"
 # The --bg job was born in the worktree (cwd = worktree path).
 oh_pwd=$(head -1 "$TMPDIR_TEST/oh-pwd-log" 2>/dev/null || true)
 assert_eq "fresh: spawn cwd is the worktree" "$(realpath "$TMPDIR_TEST/worktrees/42-x")" "$(realpath "$oh_pwd" 2>/dev/null)"
@@ -7967,7 +8127,7 @@ assert_eq "attaches the idle office-hours-<N> session by its job id" "LAUNCH: at
 teardown
 
 # OH3b. Sessionless item with NO <N>-* worktree on disk (the worktree was swept) →
-# the selector emits `-` for the 5th field, so the entry script exits non-zero with
+# the selector emits `-` for the path field, so the entry script exits non-zero with
 # a clear diagnostic and launches nothing (clear-errors-over-fallbacks).
 echo "Test: sessionless item with no worktree → non-zero exit, no launch"
 setup
@@ -7982,7 +8142,7 @@ teardown
 
 # OH3d. main-qa fresh-spawn negative path (OHST12): a main-qa-labelled, no-PR item
 # whose DISPATCH_OFFICE_HOURS_MAIN_WORKTREE directory does NOT exist → the entry
-# script exits 1 and records no spawn (dispatch-spawn-office-hours directory guard).
+# script exits 1 and records no spawn (fresh_session's cwd-into-worktree fails).
 echo "Test: main-qa item with missing main worktree dir → exit 1, no spawn"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"main-qa"}]}]\n' \
@@ -8171,7 +8331,7 @@ teardown
 
 # OH10. Swept-and-unprovisionable diagnostic (#2241 criterion-3, end-to-end): a
 # swept attachable session whose `origin/<branch>` is ABSENT → the selector falls
-# back to the fresh path with a `-` 5th field (`office-hours 42 plan - -`); the
+# back to the fresh path with a `-` path field (`office-hours 42 -`); the
 # entry's `[[ -z "$d" || "$d" == "-" ]]` guard prints the swept-worktree
 # diagnostic and exits non-zero without launching anything.
 echo "Test: swept + unprovisionable → swept diagnostic, exit non-zero, no launch"
@@ -19955,10 +20115,12 @@ if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
 assert_eq "cap: dispatch-tick-recover exits 0" "0" "$rc"
 ghlog=$(cat "$TMPDIR_TEST/gh-log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ "$ghlog" == *"issue create"* && "$ghlog" == *"--label dispatch:chain-stalled"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: cap: gh issue create with --label dispatch:chain-stalled"
+if [[ "$ghlog" == *"issue create"* \
+   && "$ghlog" == *"--label dispatch:chain-stalled"* \
+   && "$ghlog" == *"--label dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: cap: issue create with --label dispatch:chain-stalled and --label dispatch:office-hours"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: cap: gh issue create with --label dispatch:chain-stalled"
+  FAIL=$((FAIL + 1)); echo "  FAIL: cap: issue create with --label dispatch:chain-stalled and --label dispatch:office-hours"
   echo "    gh-log: $ghlog"
 fi
 log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
@@ -20108,7 +20270,8 @@ else
   echo "    log: $log"
 fi
 TOTAL=$((TOTAL + 1))
-if [[ "$ghlog" == *"issue create"* && "$ghlog" == *"--label dispatch:chain-stalled"* ]]; then
+if [[ "$ghlog" == *"issue create"* && "$ghlog" == *"--label dispatch:chain-stalled"* \
+   && "$ghlog" == *"--label dispatch:office-hours"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: phantom-busy: round 4 escalates (chain-stalled issue)"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: phantom-busy: round 4 escalates (chain-stalled issue)"
@@ -20214,7 +20377,8 @@ if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
 assert_eq "crash-past-cap: dispatch-tick-recover exits 0" "0" "$rc"
 ghlog=$(cat "$TMPDIR_TEST/gh-log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ "$ghlog" == *"issue create"* && "$ghlog" == *"chain-stalled"* ]]; then
+if [[ "$ghlog" == *"issue create"* && "$ghlog" == *"chain-stalled"* \
+   && "$ghlog" == *"--label dispatch:office-hours"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: crash-past-cap: escalated via chain-stalled latch issue"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: crash-past-cap: expected chain-stalled issue create, got: $ghlog"
@@ -20320,7 +20484,7 @@ assert_eq "review-fix: no /code-review max --fix invocation" "no" "$rf_fix"
 echo "=== spawn fake-claude harness (shared) ==="
 #
 # This section defines only the shared fake-`claude` harness reused by the
-# dispatch-spawn-office-hours and dispatch-spawn-job test sections that follow:
+# dispatch-spawn-job test section that follows:
 # the write_fake_spawn_worker_claude / spawn_worker_setup / spawn_worker_teardown
 # helpers and the SPAWN_WORKER_* fixture globals. (The dedicated
 # dispatch-spawn-worker tests were removed with that script in #1392; the
@@ -20459,218 +20623,6 @@ spawn_worker_teardown() {
     LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S \
     DISPATCH_CONFIG_DIR CLAUDE_CODE_SUBAGENT_MODEL
 }
-
-# ============================================================================
-# dispatch-spawn-office-hours tests
-# ============================================================================
-echo "=== dispatch-spawn-office-hours ==="
-#
-# dispatch-spawn-office-hours is the office-hours fresh-launch counterpart of
-# dispatch-launch-worker: it spawns a /office-hours --bg job with --name
-# office-hours-<N> (not the worktree basename) and --cwd = worktree path via
-# dispatch-spawn-job, then — unlike the launcher, which `exec`s the spawn and is
-# done — resolves the spawned (or deduped) session id by office-hours-<N> and
-# prints it, so the caller can attach a human via `claude attach`.
-#
-# It reuses the spawn-worker fake-`claude` harness (write_fake_spawn_worker_claude)
-# and the SPAWN_WORKER_* fixture globals: that fake's `--bg` handler registers
-# `{"sessionId":"sess-<name>",...,"name":"<name>"}`, so the resolved id for the
-# 839-test-worker target is deterministically `sess-office-hours-839`.
-#
-# The test shell runs under `set -e`; the script can exit non-zero, so every
-# invocation is wrapped in an `if`/`|| rc=$?` to capture the code.
-
-spawn_office_hours_setup() {
-  TMPDIR_TEST=$(mktemp -d)
-  mkdir -p "$TMPDIR_TEST/scripts" \
-    "$TMPDIR_TEST/worktrees/main" \
-    "$TMPDIR_TEST/worktrees/839-test-worker" \
-    "$TMPDIR_TEST/config"
-
-  # dispatch-spawn-office-hours sources lib-claude-agents.sh from its own
-  # directory and runs dispatch-spawn-job from there, so both must sit alongside
-  # the copy. lib-claude-agents.sh is sourced, not executed — no chmod; the two
-  # executables are run, so they are chmod'd.
-  # dispatch-spawn-job's force-opus gate calls dispatch-config-load, which
-  # sources lib.sh — both must sit alongside the copy. dispatch-config-load is
-  # run, so it is chmod'd; lib.sh is sourced, no chmod.
-  cp "$SCRIPT_DIR/dispatch-spawn-office-hours" "$TMPDIR_TEST/scripts/dispatch-spawn-office-hours"
-  cp "$SCRIPT_DIR/dispatch-spawn-job" "$TMPDIR_TEST/scripts/dispatch-spawn-job"
-  cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/scripts/lib-claude-agents.sh"
-  cp "$SCRIPT_DIR/dispatch-config-load" "$TMPDIR_TEST/scripts/dispatch-config-load"
-  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
-  chmod +x "$TMPDIR_TEST/scripts/dispatch-spawn-office-hours"
-  chmod +x "$TMPDIR_TEST/scripts/dispatch-spawn-job"
-  chmod +x "$TMPDIR_TEST/scripts/dispatch-config-load"
-
-  # Reuse the SPAWN_WORKER_* fixture globals so write_fake_spawn_worker_claude
-  # (which references them) backs this script too.
-  SPAWN_WORKER_REGISTRY="$TMPDIR_TEST/registry.json"
-  SPAWN_WORKER_BG_ARGV="$TMPDIR_TEST/bg-argv"
-  SPAWN_WORKER_PWD_LOG="$TMPDIR_TEST/pwd-log"
-  SPAWN_WORKER_PENDING="$TMPDIR_TEST/pending"
-  SPAWN_WORKER_SUBAGENT_MODEL="$TMPDIR_TEST/subagent-model"
-  WORKER_TARGET_WORKTREE="$TMPDIR_TEST/worktrees/839-test-worker"
-  printf '[]' > "$SPAWN_WORKER_REGISTRY"
-
-  export DISPATCH_SPAWN_OFFICE_HOURS_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
-  export DISPATCH_SPAWN_OFFICE_HOURS_SESSION_ID="sess-self"
-
-  # Point dispatch-config-load at the test's config dir so force-opus.json is
-  # under test control (absent config dir → no-config → gate off by default).
-  export DISPATCH_CONFIG_DIR="$TMPDIR_TEST/config"
-}
-
-spawn_office_hours_teardown() {
-  rm -rf "$TMPDIR_TEST"
-  TMPDIR_TEST=""
-  SPAWN_WORKER_REGISTRY=""
-  SPAWN_WORKER_BG_ARGV=""
-  SPAWN_WORKER_PWD_LOG=""
-  SPAWN_WORKER_PENDING=""
-  SPAWN_WORKER_SUBAGENT_MODEL=""
-  WORKER_TARGET_WORKTREE=""
-  unset DISPATCH_SPAWN_OFFICE_HOURS_CLAUDE_CMD DISPATCH_SPAWN_OFFICE_HOURS_SESSION_ID \
-    DISPATCH_SPAWN_JOB_CLAUDE_CMD DISPATCH_SPAWN_JOB_SESSION_ID \
-    SPAWN_BG_REGISTERS SPAWN_BG_REGISTER_AFTER_N \
-    LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S \
-    DISPATCH_CONFIG_DIR CLAUDE_CODE_SUBAGENT_MODEL
-}
-
-# --- Test 1: happy path — spawn worker-style, resolve + print the id ---------
-
-echo "Test: an empty registry spawns one /office-hours --bg job and prints the resolved id"
-spawn_office_hours_setup
-write_fake_spawn_worker_claude
-SPAWN_CALLER_CWD="$TMPDIR_TEST/worktrees/main"
-if out=$( cd "$SPAWN_CALLER_CWD" && "$TMPDIR_TEST/scripts/dispatch-spawn-office-hours" 839 implement - "$WORKER_TARGET_WORKTREE" 2>/dev/null ); then rc=0; else rc=$?; fi
-assert_eq "spawn-oh: dispatch-spawn-office-hours exits 0" "0" "$rc"
-# stdout is exactly the resolved session id (the only thing printed).
-assert_eq "spawn-oh: stdout is the resolved session id" "sess-office-hours-839" "$out"
-# The recorded argv must be exactly:
-#   --bg --name office-hours-<N> --permission-mode auto
-#   "/office-hours 839 implement -"
-mapfile -t oh_bg_argv < "$SPAWN_WORKER_BG_ARGV"
-assert_eq "spawn-oh: argv[0] is --bg" "--bg" "${oh_bg_argv[0]:-}"
-assert_eq "spawn-oh: argv[1] is --name" "--name" "${oh_bg_argv[1]:-}"
-assert_eq "spawn-oh: argv[2] is office-hours-<N>" \
-  "office-hours-839" "${oh_bg_argv[2]:-}"
-assert_eq "spawn-oh: argv[3] is --permission-mode" "--permission-mode" "${oh_bg_argv[3]:-}"
-assert_eq "spawn-oh: argv[4] is auto" "auto" "${oh_bg_argv[4]:-}"
-assert_eq "spawn-oh: argv[5] is '/office-hours 839 implement -'" \
-  "/office-hours 839 implement -" "${oh_bg_argv[5]:-}"
-spawn_office_hours_teardown
-
-# --- Test 2: spawn cwd is the target worktree path ---------------------------
-
-echo "Test: dispatch-spawn-office-hours invokes 'claude --bg' from the target worktree path"
-spawn_office_hours_setup
-write_fake_spawn_worker_claude
-SPAWN_CALLER_CWD="$TMPDIR_TEST/worktrees/main"
-if out=$( cd "$SPAWN_CALLER_CWD" && "$TMPDIR_TEST/scripts/dispatch-spawn-office-hours" 839 implement - "$WORKER_TARGET_WORKTREE" 2>/dev/null ); then rc=0; else rc=$?; fi
-assert_eq "spawn-oh-cwd: exits 0" "0" "$rc"
-oh_pwd_line=$(head -1 "$SPAWN_WORKER_PWD_LOG" 2>/dev/null || true)
-TOTAL=$((TOTAL + 1))
-if [[ "$(realpath "$oh_pwd_line" 2>/dev/null)" == "$(realpath "$WORKER_TARGET_WORKTREE")" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: spawn-oh-cwd: 'claude --bg' ran with cwd = target worktree path"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-oh-cwd: 'claude --bg' ran with cwd = target worktree path"
-  echo "    pwd-log:  '$oh_pwd_line'"
-  echo "    expected: '$WORKER_TARGET_WORKTREE'"
-fi
-spawn_office_hours_teardown
-
-# --- Test 3: dedup hit — resolve the existing same-name session for attach ----
-
-echo "Test: a live same-name session deduplicates the spawn; its id is resolved for attach"
-spawn_office_hours_setup
-# Prime the registry with a different sessionId whose name matches office-hours-<N>
-# (the name the spawn now uses). dispatch-spawn-job dedups (no --bg); the resolve
-# then returns this existing session — the one to resume.
-printf '%s' \
-  '[{"sessionId":"sess-other","pid":4242,"cwd":"/worker","kind":"background","status":"busy","name":"office-hours-839"}]' \
-  > "$SPAWN_WORKER_REGISTRY"
-write_fake_spawn_worker_claude
-if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-office-hours" 839 implement - "$WORKER_TARGET_WORKTREE" 2>/dev/null); then rc=0; else rc=$?; fi
-assert_eq "dedup-oh: dispatch-spawn-office-hours exits 0" "0" "$rc"
-assert_eq "dedup-oh: stdout is the existing session id (resolved for attach)" "sess-other" "$out"
-# No --bg invocation was recorded — nothing was spawned.
-TOTAL=$((TOTAL + 1))
-if [[ ! -e "$SPAWN_WORKER_BG_ARGV" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: dedup-oh: no 'claude --bg' invocation recorded"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: dedup-oh: no 'claude --bg' invocation recorded"
-  echo "    bg-argv: $(cat "$SPAWN_WORKER_BG_ARGV")"
-fi
-spawn_office_hours_teardown
-
-# --- Test 4: wrong arg count -------------------------------------------------
-
-echo "Test: wrong argument count exits 2"
-spawn_office_hours_setup
-write_fake_spawn_worker_claude
-# Three args (missing <worktree-path>).
-if "$TMPDIR_TEST/scripts/dispatch-spawn-office-hours" 839 implement - 2>/dev/null; then oh_rc=0; else oh_rc=$?; fi
-assert_eq "argcount-oh: three args → exit 2" "2" "$oh_rc"
-# Five args (extra trailing argument).
-if "$TMPDIR_TEST/scripts/dispatch-spawn-office-hours" 839 implement - "$WORKER_TARGET_WORKTREE" extra 2>/dev/null; then oh_rc=0; else oh_rc=$?; fi
-assert_eq "argcount-oh: five args → exit 2" "2" "$oh_rc"
-spawn_office_hours_teardown
-
-# --- Test 5: invalid issue number --------------------------------------------
-
-echo "Test: a non-integer issue number exits 2"
-spawn_office_hours_setup
-write_fake_spawn_worker_claude
-if "$TMPDIR_TEST/scripts/dispatch-spawn-office-hours" abc implement - "$WORKER_TARGET_WORKTREE" 2>/dev/null; then oh_rc=0; else oh_rc=$?; fi
-assert_eq "badnum-oh: non-integer <N> → exit 2" "2" "$oh_rc"
-spawn_office_hours_teardown
-
-# --- Test 6: missing worktree dir --------------------------------------------
-
-echo "Test: a non-existent worktree path exits 2"
-spawn_office_hours_setup
-write_fake_spawn_worker_claude
-if "$TMPDIR_TEST/scripts/dispatch-spawn-office-hours" 839 implement - "$TMPDIR_TEST/worktrees/does-not-exist" 2>/dev/null; then oh_rc=0; else oh_rc=$?; fi
-assert_eq "noworktree-oh: non-existent <worktree-path> → exit 2" "2" "$oh_rc"
-spawn_office_hours_teardown
-
-# --- Test 7: bad phase / bad pr token ----------------------------------------
-
-echo "Test: a malformed phase or pr token exits 2"
-spawn_office_hours_setup
-write_fake_spawn_worker_claude
-# Bad phase (uppercase + metacharacter).
-if "$TMPDIR_TEST/scripts/dispatch-spawn-office-hours" 839 "QA!" - "$WORKER_TARGET_WORKTREE" 2>/dev/null; then oh_rc=0; else oh_rc=$?; fi
-assert_eq "badtoken-oh: malformed phase → exit 2" "2" "$oh_rc"
-# Bad pr token (neither a positive integer nor '-').
-if "$TMPDIR_TEST/scripts/dispatch-spawn-office-hours" 839 implement x "$WORKER_TARGET_WORKTREE" 2>/dev/null; then oh_rc=0; else oh_rc=$?; fi
-assert_eq "badtoken-oh: malformed pr token → exit 2" "2" "$oh_rc"
-spawn_office_hours_teardown
-
-# --- Test 8: unknown registry exits 1 ----------------------------------------
-
-echo "Test: an unparseable session registry causes dispatch-spawn-office-hours to exit 1"
-spawn_office_hours_setup
-# A registry that is not a JSON array: lib-claude-agents.sh's
-# claude_sessions_under (used by dispatch-spawn-job's dedup) and
-# claude_sessions_with_name (used by dispatch-spawn-office-hours' resolve) both
-# return 1 (UNKNOWN). The dedup treats UNKNOWN as "a session may be running"
-# and emits 'deduped'; the resolve then cannot query the registry for the
-# session id — dispatch-spawn-office-hours must exit 1 with a diagnostic.
-printf '%s' 'not-a-json-array' > "$SPAWN_WORKER_REGISTRY"
-write_fake_spawn_worker_claude
-if "$TMPDIR_TEST/scripts/dispatch-spawn-office-hours" 839 implement - "$WORKER_TARGET_WORKTREE" 2>/dev/null; then oh_rc=0; else oh_rc=$?; fi
-assert_eq "unknown-registry-oh: dispatch-spawn-office-hours exits 1" "1" "$oh_rc"
-# No --bg invocation was recorded — the dedup guard suppressed the spawn.
-TOTAL=$((TOTAL + 1))
-if [[ ! -e "$SPAWN_WORKER_BG_ARGV" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: unknown-registry-oh: no 'claude --bg' invocation recorded"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: unknown-registry-oh: no 'claude --bg' invocation recorded"
-  echo "    bg-argv: $(cat "$SPAWN_WORKER_BG_ARGV")"
-fi
-spawn_office_hours_teardown
 
 # ============================================================================
 # dispatch-spawn-job tests
@@ -26373,12 +26325,16 @@ else
 fi
 restore_teardown
 
-# --- Test 3b: office-hours-<N> session → office-hours body, no ARGUMENTS -----
-# An office-hours-<N> session restores the /office-hours skill body regardless
-# of the item's dispatch phase (matched by session --name ahead of phase
-# routing). The branch supplies ISSUE_NUM; the phase here is qa but the name
-# wins.
-echo "Test: restore-dispatch-skill office-hours-<N> name → office-hours body, no ARGUMENTS"
+# --- Test 3b: office-hours-<N> session → restore NOTHING (#2387) -------------
+# An office-hours-<N> session is a bare human-driven session with no skill
+# running — the `office-hours` entry script spawns it promptless (#2387). On a
+# post-context-clear the hook restores NOTHING for it (the office-hours-<N> arm
+# exits 0): no base-directory line, no SKILL.md body marker, and no ARGUMENTS
+# line. The arm is matched by session --name ahead of phase routing, so it does
+# NOT fall through to the phase-deriving `else` (which would wrongly inject a
+# phase skill into the human's bare session). The phase here is qa, but the
+# name wins and suppresses it.
+echo "Test: restore-dispatch-skill office-hours-<N> name → restore nothing"
 restore_setup
 set_agents_name "office-hours-903"
 # The name is not the ^[0-9]+- worker shape, so ISSUE_NUM / WORKTREE_BASENAME
@@ -26387,18 +26343,18 @@ echo "903-foo" > "$STUB_DIR/current-branch.txt"
 echo "qa" > "$STUB_DIR/current-phase.txt"
 output=$(run_restore)
 TOTAL=$((TOTAL + 1))
-expected_dir="Base directory for this skill: $TMPDIR_TEST/.claude/skills/office-hours"
-if [[ "$output" == *"$expected_dir"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: office-hours: base directory line emitted"
+if [[ "$output" != *"Base directory for this skill:"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: office-hours: no base directory line emitted"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: office-hours: base directory line emitted"
+  FAIL=$((FAIL + 1)); echo "  FAIL: office-hours: no base directory line emitted"
   echo "    output: $output"
 fi
 TOTAL=$((TOTAL + 1))
-if [[ "$output" == *"RESTORE_MARKER_office-hours"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: office-hours: SKILL.md body marker emitted"
+if [[ "$output" != *"RESTORE_MARKER_office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: office-hours: no SKILL.md body marker emitted"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: office-hours: SKILL.md body marker emitted"
+  FAIL=$((FAIL + 1)); echo "  FAIL: office-hours: no SKILL.md body marker emitted"
+  echo "    output: $output"
 fi
 TOTAL=$((TOTAL + 1))
 if ! printf '%s\n' "$output" | grep -q '^ARGUMENTS:'; then
@@ -32089,15 +32045,13 @@ assert_eq "qa-needs-main-followup: 2-item input → length 2" "2" "$(printf '%s'
 
 echo "Test: dispatch-review-finders"
 
-# empty surface → exactly code-review and review
+# empty surface → exactly code-review
 out=$(printf 'surface=empty\ndeps=false\napp_or_rules=false\n' | "$SCRIPT_DIR/dispatch-review-finders")
-assert_eq "finders: empty → code-review,review only" "code-review
-review" "$out"
+assert_eq "finders: empty → code-review only" "code-review" "$out"
 
-# docs surface → exactly code-review and review
+# docs surface → exactly code-review
 out=$(printf 'surface=docs\ndeps=false\napp_or_rules=false\n' | "$SCRIPT_DIR/dispatch-review-finders")
-assert_eq "finders: docs → code-review,review only" "code-review
-review" "$out"
+assert_eq "finders: docs → code-review only" "code-review" "$out"
 
 # code + app_or_rules=false + deps=false → 4 always-on security finders present
 n=$(printf 'surface=code\ndeps=false\napp_or_rules=false\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -cE '^(input-validation|secrets|red-team|security-review)$')
@@ -32135,10 +32089,9 @@ assert_eq "finders: code surface → codeql present" "1" "$n"
 n=$(printf 'surface=docs\ndeps=false\napp_or_rules=false\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -c '^codeql$' || true)
 assert_eq "finders: docs surface → codeql absent" "0" "$n"
 
-# tests surface → exactly code-review and review (no security finders)
+# tests surface → exactly code-review (no security finders)
 out=$(printf 'surface=tests\ndeps=false\napp_or_rules=false\n' | "$SCRIPT_DIR/dispatch-review-finders")
-assert_eq "finders: tests → code-review,review only" "code-review
-review" "$out"
+assert_eq "finders: tests → code-review only" "code-review" "$out"
 
 # ============================================================================
 # === dispatch-review-dedup ===
@@ -33268,9 +33221,9 @@ STUB
   flake_dedup_teardown
 
   # CASE 2 — CLOSED match, FRESH run → REOPENED <N>, reopen fired, comment fired.
-  # (criterion #3) Under the stale-head gate (#2442) the CLOSED path requires
-  # --run-id. Fresh = run.createdAt AFTER closed_at (recency fresh) AND the run
-  # head contains the closing fix (ancestry `identical`).
+  # (criterion #3) Under the stale-head gate (#2442, #2518) the CLOSED path requires
+  # --run-id. Fresh = a real closing commit is present and the run head contains it
+  # (ancestry `identical`), so the gate falls through to reopen.
   flake_dedup_setup
   printf '[{"number":501,"title":"Flaky CI: %s","state":"closed","closed_at":"2026-01-01T00:00:00Z"}]\n' "$FP" > "$TMPDIR_TEST/scripts/issues.json"
   printf '{"createdAt":"2026-02-01T00:00:00Z","headSha":"headsha"}\n' > "$TMPDIR_TEST/scripts/run.json"
@@ -33308,9 +33261,12 @@ STUB
 
   # === STALE-HEAD REOPEN GATE (#2442) ===
 
-  # CASE 5 — STALE by recency: run.createdAt BEFORE closed_at trips STALE even
-  # though ancestry is fresh (compare `identical`, closing commit present) —
-  # proving the recency floor ALONE suppresses the reopen. No comment, no reopen.
+  # CASE 5 — recency removed → REOPEN (#2518): run.createdAt is BEFORE closed_at
+  # (the old recency floor would have tripped STALE here) but the run head
+  # contains the closing fix (ancestry `identical`, real closing commit present).
+  # Ancestry-only is decisive, so this REOPENs. This is exactly the case the
+  # removed recency floor wrongly suppressed: it fails under the old recency code
+  # (which would emit STALE) and passes under ancestry-only.
   flake_dedup_setup
   printf '[{"number":501,"title":"Flaky CI: %s","state":"closed","closed_at":"2026-02-01T00:00:00Z"}]\n' "$FP" > "$TMPDIR_TEST/scripts/issues.json"
   printf '{"createdAt":"2026-01-01T00:00:00Z","headSha":"headsha"}\n' > "$TMPDIR_TEST/scripts/run.json"
@@ -33318,20 +33274,20 @@ STUB
   printf '[{"event":"closed","commit_id":"closingsha"}]\n' > "$TMPDIR_TEST/scripts/timeline.json"
   printf 'recurred on PR #900 / run http://x\n' > "$TMPDIR_TEST/body.md"
   out=$("$TMPDIR_TEST/scripts/dispatch-flake-dedup" "$FP" --body-file "$TMPDIR_TEST/body.md" --run-id 12345 2>"$TMPDIR_TEST/err")
-  assert_eq "flake-dedup: stale by recency → STALE <N>" "STALE 501" "$out"
-  if [[ -s "$TMPDIR_TEST/scripts/stub/comments-fired" ]]; then c=yes; else c=no; fi
-  assert_eq "flake-dedup: stale by recency → no comment" "no" "$c"
-  if [[ -s "$TMPDIR_TEST/scripts/stub/reopen-fired" ]]; then r=yes; else r=no; fi
-  assert_eq "flake-dedup: stale by recency → no reopen" "no" "$r"
+  assert_eq "flake-dedup: recency removed (run pre-close, head contains fix) → REOPENED <N>" "REOPENED 501" "$out"
+  if grep -qx '501' "$TMPDIR_TEST/scripts/stub/reopen-fired" 2>/dev/null; then r=yes; else r=no; fi
+  assert_eq "flake-dedup: recency removed → reopen fired on 501" "yes" "$r"
+  if grep -qx '501' "$TMPDIR_TEST/scripts/stub/comments-fired" 2>/dev/null; then c=yes; else c=no; fi
+  assert_eq "flake-dedup: recency removed → comment fired on 501" "yes" "$c"
   if grep -q 'suppressing reopen' "$TMPDIR_TEST/err"; then g=yes; else g=no; fi
-  assert_eq "flake-dedup: stale by recency → suppression logged to stderr" "yes" "$g"
+  assert_eq "flake-dedup: recency removed → no suppression logged" "no" "$g"
   flake_dedup_teardown
 
-  # CASE 6 — STALE by ancestry (the discriminating case): run.createdAt is AFTER
-  # closed_at (recency says FRESH) yet the run head is `behind` the closing fix
-  # (ancestry says STALE). This is the ONLY case that fails under a recency-only
-  # implementation — the divergent stub values (created-after-close + `behind`)
-  # force the ancestry signal to carry the verdict. No comment, no reopen.
+  # CASE 6 — STALE by ancestry (the surviving #2442 case): a real closing commit
+  # exists and the run head is `behind` it, so ancestry — the sole decisive
+  # signal — suppresses the reopen. run.createdAt is AFTER closed_at, which the
+  # removed recency floor would have treated as fresh; the verdict is carried
+  # entirely by ancestry. No comment, no reopen.
   flake_dedup_setup
   printf '[{"number":501,"title":"Flaky CI: %s","state":"closed","closed_at":"2026-01-01T00:00:00Z"}]\n' "$FP" > "$TMPDIR_TEST/scripts/issues.json"
   printf '{"createdAt":"2026-02-01T00:00:00Z","headSha":"headsha"}\n' > "$TMPDIR_TEST/scripts/run.json"
@@ -33346,36 +33302,59 @@ STUB
   assert_eq "flake-dedup: stale by ancestry → no reopen" "no" "$r"
   flake_dedup_teardown
 
-  # CASE 7 — null commit_id (manual close) → ancestry skipped → recency fallback →
-  # REOPENED. timeline commit_id is null, so the closing commit is empty and the
-  # ancestry signal is skipped; compare-status `behind` MUST be ignored. recency
-  # is fresh (run after close), so the reopen fires.
+  # CASE 6b — STALE by ancestry via `diverged`. Identical to Case 6 except the
+  # run head and the closing fix have DIVERGED (neither is an ancestor of the
+  # other) rather than the head being plainly `behind`. The STALE gate is
+  # `[[ "$status" == "behind" || "$status" == "diverged" ]]`; this pins the
+  # `diverged` arm so a future edit that drops it is caught.
   flake_dedup_setup
   printf '[{"number":501,"title":"Flaky CI: %s","state":"closed","closed_at":"2026-01-01T00:00:00Z"}]\n' "$FP" > "$TMPDIR_TEST/scripts/issues.json"
   printf '{"createdAt":"2026-02-01T00:00:00Z","headSha":"headsha"}\n' > "$TMPDIR_TEST/scripts/run.json"
+  printf 'diverged\n' > "$TMPDIR_TEST/scripts/compare-status"
+  printf '[{"event":"closed","commit_id":"closingsha"}]\n' > "$TMPDIR_TEST/scripts/timeline.json"
+  printf 'recurred on PR #900 / run http://x\n' > "$TMPDIR_TEST/body.md"
+  out=$("$TMPDIR_TEST/scripts/dispatch-flake-dedup" "$FP" --body-file "$TMPDIR_TEST/body.md" --run-id 12345)
+  assert_eq "flake-dedup: stale by ancestry (diverged) → STALE <N>" "STALE 501" "$out"
+  if [[ -s "$TMPDIR_TEST/scripts/stub/comments-fired" ]]; then c=yes; else c=no; fi
+  assert_eq "flake-dedup: stale by ancestry (diverged) → no comment" "no" "$c"
+  if [[ -s "$TMPDIR_TEST/scripts/stub/reopen-fired" ]]; then r=yes; else r=no; fi
+  assert_eq "flake-dedup: stale by ancestry (diverged) → no reopen" "no" "$r"
+  flake_dedup_teardown
+
+  # CASE 7 — null commit_id (manual close), the live incident (PR #1849 / tracker
+  # #2481). timeline commit_id is null, so there is no closing commit and ancestry
+  # leaves stale=0 → REOPEN; compare-status `behind` MUST be ignored. run.createdAt
+  # is BEFORE closed_at — the run-before-close that the removed recency floor would
+  # have suppressed as STALE (the infinite-STALE bug); under ancestry-only the
+  # empty closing commit → REOPEN. This is the regression test the incident needs.
+  flake_dedup_setup
+  printf '[{"number":501,"title":"Flaky CI: %s","state":"closed","closed_at":"2026-02-01T00:00:00Z"}]\n' "$FP" > "$TMPDIR_TEST/scripts/issues.json"
+  printf '{"createdAt":"2026-01-01T00:00:00Z","headSha":"headsha"}\n' > "$TMPDIR_TEST/scripts/run.json"
   printf 'behind\n' > "$TMPDIR_TEST/scripts/compare-status"
   printf '[{"event":"closed","commit_id":null}]\n' > "$TMPDIR_TEST/scripts/timeline.json"
   printf 'recurred on PR #900 / run http://x\n' > "$TMPDIR_TEST/body.md"
   out=$("$TMPDIR_TEST/scripts/dispatch-flake-dedup" "$FP" --body-file "$TMPDIR_TEST/body.md" --run-id 12345)
-  assert_eq "flake-dedup: null commit_id → recency fallback → REOPENED <N>" "REOPENED 501" "$out"
+  assert_eq "flake-dedup: null commit_id (run pre-close) → REOPENED <N>" "REOPENED 501" "$out"
   if grep -qx '501' "$TMPDIR_TEST/scripts/stub/reopen-fired" 2>/dev/null; then r=yes; else r=no; fi
   assert_eq "flake-dedup: null commit_id → reopen fired on 501" "yes" "$r"
   if grep -qx '501' "$TMPDIR_TEST/scripts/stub/comments-fired" 2>/dev/null; then c=yes; else c=no; fi
   assert_eq "flake-dedup: null commit_id → comment fired on 501" "yes" "$c"
   flake_dedup_teardown
 
-  # CASE 8 — NOT_PLANNED close → ancestry skipped → recency fallback → REOPENED.
+  # CASE 8 — NOT_PLANNED close → ancestry skipped → stale=0 → REOPENED.
   # state_reason=not_planned means there was no fix, so ancestry is skipped;
-  # compare-status `behind` and the present timeline commit_id MUST be ignored.
-  # recency is fresh (run after close), so the reopen fires.
+  # compare-status `behind` and the present timeline commit_id MUST be ignored. The
+  # run.createdAt is BEFORE closed_at — the run-before-close that the removed
+  # recency floor would have suppressed as STALE; under ancestry-only there is no
+  # closing fix to be behind, so it REOPENs. This flip discriminates old vs new code.
   flake_dedup_setup
-  printf '[{"number":501,"title":"Flaky CI: %s","state":"closed","closed_at":"2026-01-01T00:00:00Z","state_reason":"not_planned"}]\n' "$FP" > "$TMPDIR_TEST/scripts/issues.json"
-  printf '{"createdAt":"2026-02-01T00:00:00Z","headSha":"headsha"}\n' > "$TMPDIR_TEST/scripts/run.json"
+  printf '[{"number":501,"title":"Flaky CI: %s","state":"closed","closed_at":"2026-02-01T00:00:00Z","state_reason":"not_planned"}]\n' "$FP" > "$TMPDIR_TEST/scripts/issues.json"
+  printf '{"createdAt":"2026-01-01T00:00:00Z","headSha":"headsha"}\n' > "$TMPDIR_TEST/scripts/run.json"
   printf 'behind\n' > "$TMPDIR_TEST/scripts/compare-status"
   printf '[{"event":"closed","commit_id":"closingsha"}]\n' > "$TMPDIR_TEST/scripts/timeline.json"
   printf 'recurred on PR #900 / run http://x\n' > "$TMPDIR_TEST/body.md"
   out=$("$TMPDIR_TEST/scripts/dispatch-flake-dedup" "$FP" --body-file "$TMPDIR_TEST/body.md" --run-id 12345)
-  assert_eq "flake-dedup: not_planned → recency fallback → REOPENED <N>" "REOPENED 501" "$out"
+  assert_eq "flake-dedup: not_planned (run pre-close) → REOPENED <N>" "REOPENED 501" "$out"
   if grep -qx '501' "$TMPDIR_TEST/scripts/stub/reopen-fired" 2>/dev/null; then r=yes; else r=no; fi
   assert_eq "flake-dedup: not_planned → reopen fired on 501" "yes" "$r"
   if grep -qx '501' "$TMPDIR_TEST/scripts/stub/comments-fired" 2>/dev/null; then c=yes; else c=no; fi
@@ -38467,6 +38446,175 @@ assert_eq "dispatch-auto-merge is executable" "yes" \
   "$([[ -x "$SCRIPT_DIR/dispatch-auto-merge" ]] && echo yes || echo no)"
 
 # ============================================================================
+# dispatch-reconcile-merged (#2512)
+# ============================================================================
+echo "=== dispatch-reconcile-merged (#2512) ==="
+
+# Fixed clock so window membership is deterministic.
+RM_NOW=1700000000
+rm_iso() { date -u -d "@$1" +%Y-%m-%dT%H:%M:%SZ; }          # epoch → ISO
+RM_INWIN=$(rm_iso $((RM_NOW - 3600)))      # 1h ago: past GRACE, within LOOKBACK
+RM_TOORECENT=$(rm_iso $((RM_NOW - 60)))    # 60s ago: inside GRACE → skip
+RM_TOOOLD=$(rm_iso $((RM_NOW - 200000)))   # >48h ago: beyond LOOKBACK → skip
+
+# Build one merged-PR fixture object. $1=pr $2=mergedAt-iso $3=closing-json
+make_merged_pr() {
+  printf '{"number":%s,"title":"PR %s","mergedAt":"%s","closingIssuesReferences":%s}' \
+    "$1" "$1" "$2" "$3"
+}
+
+# 1. Repairs a silent auto-close failure: in-window PR closing an OPEN issue.
+echo "Test: reconcile repairs a silent auto-close failure"
+setup
+printf '%s' "[$(make_merged_pr 8001 "$RM_INWIN" '[{"number":9001}]')]" \
+  > "$STUB_DIR/reconcile-merged-pr-list.json"
+printf '%s' '{"number":9001,"state":"open"}' > "$STUB_DIR/view-issue-9001.json"
+out=$(DISPATCH_PLAN_AUTHOR_ID=12345 DISPATCH_RECONCILE_NOW=$RM_NOW "$TMPDIR_TEST/dispatch-reconcile-merged" 2>/dev/null)
+assert_eq "reconcile: stdout repairs #9001" "reconciled #9001 (PR #8001)" "$out"
+assert_eq "reconcile: close call logged" "present" \
+  "$(grep -q 'issues/9001' "$STUB_DIR/gh-issue-close-rest-calls.log" && echo present || echo absent)"
+assert_eq "reconcile: diagnostic comment posted" "present" \
+  "$(grep -q 'issues/9001/comments' "$STUB_DIR/gh-issue-comment-rest-calls.log" && echo present || echo absent)"
+assert_eq "reconcile: exactly one comment posted" "1" \
+  "$(grep -c 'issues/9001/comments' "$STUB_DIR/gh-issue-comment-rest-calls.log")"
+teardown
+
+# 2. No-op when the closing issue is already CLOSED (Layer 1 idempotency).
+echo "Test: reconcile no-op when issue already CLOSED"
+setup
+printf '%s' "[$(make_merged_pr 8001 "$RM_INWIN" '[{"number":9001}]')]" \
+  > "$STUB_DIR/reconcile-merged-pr-list.json"
+printf '%s' '{"number":9001,"state":"closed"}' > "$STUB_DIR/view-issue-9001.json"
+out=$(DISPATCH_PLAN_AUTHOR_ID=12345 DISPATCH_RECONCILE_NOW=$RM_NOW "$TMPDIR_TEST/dispatch-reconcile-merged" 2>/dev/null)
+assert_eq "reconcile: closed-issue empty stdout" "" "$out"
+assert_eq "reconcile: closed-issue no close call" "absent" "$(log_state gh-issue-close-rest-calls.log)"
+assert_eq "reconcile: closed-issue no comment call" "absent" "$(log_state gh-issue-comment-rest-calls.log)"
+teardown
+
+# 3. Grace window: a too-recently-merged PR is skipped (races platform auto-close).
+echo "Test: reconcile skips PR inside the grace window"
+setup
+printf '%s' "[$(make_merged_pr 8001 "$RM_TOORECENT" '[{"number":9001}]')]" \
+  > "$STUB_DIR/reconcile-merged-pr-list.json"
+printf '%s' '{"number":9001,"state":"open"}' > "$STUB_DIR/view-issue-9001.json"
+out=$(DISPATCH_PLAN_AUTHOR_ID=12345 DISPATCH_RECONCILE_NOW=$RM_NOW "$TMPDIR_TEST/dispatch-reconcile-merged" 2>/dev/null)
+assert_eq "reconcile: grace-window empty stdout" "" "$out"
+assert_eq "reconcile: grace-window no close call" "absent" "$(log_state gh-issue-close-rest-calls.log)"
+assert_eq "reconcile: grace-window no comment call" "absent" "$(log_state gh-issue-comment-rest-calls.log)"
+teardown
+
+# 4. Lookback window: an ancient merged PR is skipped.
+echo "Test: reconcile skips PR beyond the lookback window"
+setup
+printf '%s' "[$(make_merged_pr 8001 "$RM_TOOOLD" '[{"number":9001}]')]" \
+  > "$STUB_DIR/reconcile-merged-pr-list.json"
+printf '%s' '{"number":9001,"state":"open"}' > "$STUB_DIR/view-issue-9001.json"
+out=$(DISPATCH_PLAN_AUTHOR_ID=12345 DISPATCH_RECONCILE_NOW=$RM_NOW "$TMPDIR_TEST/dispatch-reconcile-merged" 2>/dev/null)
+assert_eq "reconcile: lookback-window empty stdout" "" "$out"
+assert_eq "reconcile: lookback-window no close call" "absent" "$(log_state gh-issue-close-rest-calls.log)"
+assert_eq "reconcile: lookback-window no comment call" "absent" "$(log_state gh-issue-comment-rest-calls.log)"
+teardown
+
+# 5. Idempotent re-run: an OPEN issue already carrying the marker re-closes WITHOUT
+#    a new diagnostic comment (Layer 2 idempotency).
+echo "Test: reconcile re-run with marker present re-closes without re-commenting"
+setup
+printf '%s' "[$(make_merged_pr 8001 "$RM_INWIN" '[{"number":9001}]')]" \
+  > "$STUB_DIR/reconcile-merged-pr-list.json"
+printf '%s' '{"number":9001,"state":"open"}' > "$STUB_DIR/view-issue-9001.json"
+# The comment carries an `id` so dispatch_marker_comment_id resolves a non-empty
+# marker id (the marker-present path). A page2 fixture (empty array) is required:
+# the comments-sentinel stub's branch ends with `[[ -f ...page2 ]] && cat ...`, so
+# WITHOUT a page2 file that `[[ -f ]]` test returns 1 — gh exits non-zero, the
+# helper hard-errors, and the script exits 1 (aborting the suite under set -e).
+printf '%s' '[{"id":555,"body":"<!-- dispatch:auto-close-repair -->\nprior repair","user":{"id":12345}}]' \
+  > "$STUB_DIR/view-issue-comments-9001-page1.json"
+printf '%s' '[]' > "$STUB_DIR/view-issue-comments-9001-page2.json"
+out=$(DISPATCH_PLAN_AUTHOR_ID=12345 DISPATCH_RECONCILE_NOW=$RM_NOW "$TMPDIR_TEST/dispatch-reconcile-merged" 2>/dev/null)
+assert_eq "reconcile: marker-present stdout repairs #9001" "reconciled #9001 (PR #8001)" "$out"
+assert_eq "reconcile: marker-present close call logged" "present" \
+  "$(grep -q 'issues/9001' "$STUB_DIR/gh-issue-close-rest-calls.log" && echo present || echo absent)"
+assert_eq "reconcile: marker-present no new comment" "absent" "$(log_state gh-issue-comment-rest-calls.log)"
+teardown
+
+# 6. A merged PR that closes NO issue is skipped — but the list was still fetched.
+echo "Test: reconcile skips PR with empty closing set (but fetched the list)"
+setup
+printf '%s' "[$(make_merged_pr 8001 "$RM_INWIN" '[]')]" \
+  > "$STUB_DIR/reconcile-merged-pr-list.json"
+out=$(DISPATCH_PLAN_AUTHOR_ID=12345 DISPATCH_RECONCILE_NOW=$RM_NOW "$TMPDIR_TEST/dispatch-reconcile-merged" 2>/dev/null)
+assert_eq "reconcile: empty-closing-set empty stdout" "" "$out"
+assert_eq "reconcile: empty-closing-set no close call" "absent" "$(log_state gh-issue-close-rest-calls.log)"
+assert_eq "reconcile: empty-closing-set no comment call" "absent" "$(log_state gh-issue-comment-rest-calls.log)"
+assert_eq "reconcile: empty-closing-set still fetched PR list" "present" \
+  "$(log_state gh-reconcile-merged-pr-list.log)"
+teardown
+
+# --- HARD_ERROR paths --------------------------------------------------------
+# Each of the three per-item failure branches sets HARD_ERROR=1, `continue`s, and
+# drives the final `exit 1`. Without coverage a regression in the error-return
+# convention of any lib.sh helper (or the branch's own logging) would go unseen.
+
+# 7. gh_issue_view_rest (Layer 1 state read) failure → hard error, exit 1.
+echo "Test: reconcile hard-errors when gh_issue_view_rest fails"
+setup
+printf '%s' "[$(make_merged_pr 8001 "$RM_INWIN" '[{"number":9001}]')]" \
+  > "$STUB_DIR/reconcile-merged-pr-list.json"
+# gh-fail-rest forces every REST `api` call to fail; the merged-PR list fetch is a
+# `pr list` (not an `api` call) so it still succeeds, and gh_issue_view_rest — the
+# first REST call in the per-issue loop — is what fails.
+: > "$STUB_DIR/gh-fail-rest"
+rc=0
+err=$(DISPATCH_PLAN_AUTHOR_ID=12345 DISPATCH_RECONCILE_NOW=$RM_NOW "$TMPDIR_TEST/dispatch-reconcile-merged" 2>&1 >/dev/null) || rc=$?
+assert_eq "reconcile: view-failure exit 1" "1" "$rc"
+case "$err" in *"gh_issue_view_rest #9001 failed"*) m=yes ;; *) m=no ;; esac
+assert_eq "reconcile: view-failure stderr names the hard error" "yes" "$m"
+assert_eq "reconcile: view-failure short-circuits before close" "absent" \
+  "$(log_state gh-issue-close-rest-calls.log)"
+teardown
+
+# 8. dispatch_marker_comment_id (Layer 2 marker read) failure → hard error, exit 1.
+echo "Test: reconcile hard-errors when dispatch_marker_comment_id can't resolve author id"
+setup
+printf '%s' "[$(make_merged_pr 8001 "$RM_INWIN" '[{"number":9001}]')]" \
+  > "$STUB_DIR/reconcile-merged-pr-list.json"
+printf '%s' '{"number":9001,"state":"open"}' > "$STUB_DIR/view-issue-9001.json"
+# A non-numeric DISPATCH_PLAN_AUTHOR_ID trips the helper's author-id guard
+# (return 1) AFTER the OPEN-state read passes Layer 1, isolating the Layer 2 path.
+rc=0
+err=$(DISPATCH_PLAN_AUTHOR_ID=not-a-number DISPATCH_RECONCILE_NOW=$RM_NOW "$TMPDIR_TEST/dispatch-reconcile-merged" 2>&1 >/dev/null) || rc=$?
+assert_eq "reconcile: marker-id-failure exit 1" "1" "$rc"
+case "$err" in *"dispatch_marker_comment_id #9001 failed"*) m=yes ;; *) m=no ;; esac
+assert_eq "reconcile: marker-id-failure stderr names the hard error" "yes" "$m"
+assert_eq "reconcile: marker-id-failure short-circuits before close" "absent" \
+  "$(log_state gh-issue-close-rest-calls.log)"
+teardown
+
+# 9. gh_issue_close_rest (the closing PATCH) failure → hard error, exit 1.
+echo "Test: reconcile hard-errors when gh_issue_close_rest fails"
+setup
+printf '%s' "[$(make_merged_pr 8001 "$RM_INWIN" '[{"number":9001}]')]" \
+  > "$STUB_DIR/reconcile-merged-pr-list.json"
+printf '%s' '{"number":9001,"state":"open"}' > "$STUB_DIR/view-issue-9001.json"
+# No comments fixture → marker check resolves an empty id (markerless path), so
+# the script reaches the close. issue-close-fail-on injects a non-transient PATCH
+# rejection for #9001 so gh_issue_close_rest returns 1.
+printf '9001' > "$STUB_DIR/issue-close-fail-on"
+rc=0
+err=$(DISPATCH_PLAN_AUTHOR_ID=12345 DISPATCH_RECONCILE_NOW=$RM_NOW "$TMPDIR_TEST/dispatch-reconcile-merged" 2>&1 >/dev/null) || rc=$?
+assert_eq "reconcile: close-failure exit 1" "1" "$rc"
+case "$err" in *"gh_issue_close_rest #9001 failed"*) m=yes ;; *) m=no ;; esac
+assert_eq "reconcile: close-failure stderr names the hard error" "yes" "$m"
+assert_eq "reconcile: close-failure attempted the close PATCH" "present" \
+  "$(log_state gh-issue-close-rest-calls.log)"
+teardown
+
+# --- executable-bit guard ----------------------------------------------------
+echo "Test: dispatch-reconcile-merged is executable"
+assert_eq "dispatch-reconcile-merged is executable" "yes" \
+  "$([[ -x "$SCRIPT_DIR/dispatch-reconcile-merged" ]] && echo yes || echo no)"
+
+# ============================================================================
 # dispatch-detect-transient-death tests (#1733)
 # ============================================================================
 #
@@ -40977,6 +41125,197 @@ assert_eq "T8: rc is 0 on daemon UNKNOWN" "0" "$rc"
 lines=$(scan_sched_lines)
 assert_eq "T8: daemon UNKNOWN → 0 schedule calls" "0" "$lines"
 scan_teardown
+
+# ============================================================================
+# firebase_deploy_retry (#2481)
+# ============================================================================
+echo "=== firebase_deploy_retry (#2481) ==="
+export FIREBASE_DEPLOY_RETRY_BASE_DELAY=0
+export FIREBASE_DEPLOY_RETRY_ATTEMPTS=3
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/lib.sh"
+
+FDR_DIR=$(mktemp -d)
+
+# --- Case 1: retry-then-succeed, signature on STDOUT (empty stderr) ---------
+FDR_COUNTER="$FDR_DIR/counter1"
+printf '0' > "$FDR_COUNTER"
+FDR_STUB1="$FDR_DIR/stub-success"
+cat > "$FDR_STUB1" <<STUB
+#!/usr/bin/env bash
+n=\$(cat "$FDR_COUNTER")
+n=\$(( n + 1 ))
+printf '%s' "\$n" > "$FDR_COUNTER"
+if [[ "\$n" -lt 3 ]]; then
+  # Transient auth failure: signature on STDOUT, nothing on stderr.
+  printf '%s\n' 'Failed to authenticate'
+  exit 1
+fi
+printf '%s\n' '{"result":{"site":{"url":"https://example.web.app"}}}'
+exit 0
+STUB
+chmod +x "$FDR_STUB1"
+
+fdr_actual=$(firebase_deploy_retry "$FDR_STUB1" 2>/dev/null)
+fdr_rc=$?
+assert_eq "firebase_deploy_retry: returns final success JSON on stdout" \
+  '{"result":{"site":{"url":"https://example.web.app"}}}' "$fdr_actual"
+assert_eq "firebase_deploy_retry: exit code 0 on eventual success" "0" "$fdr_rc"
+fdr_count1=$(cat "$FDR_COUNTER")
+assert_eq "firebase_deploy_retry: retried until success (3 attempts)" "3" "$fdr_count1"
+
+# --- Case 2: non-auth failure is NOT retried -------------------------------
+FDR_COUNTER2="$FDR_DIR/counter2"
+printf '0' > "$FDR_COUNTER2"
+FDR_STUB2="$FDR_DIR/stub-fail"
+cat > "$FDR_STUB2" <<STUB
+#!/usr/bin/env bash
+n=\$(cat "$FDR_COUNTER2")
+n=\$(( n + 1 ))
+printf '%s' "\$n" > "$FDR_COUNTER2"
+printf '%s\n' 'some other deploy error' >&2
+exit 1
+STUB
+chmod +x "$FDR_STUB2"
+
+fdr_rc2=0
+firebase_deploy_retry "$FDR_STUB2" >/dev/null 2>&1 || fdr_rc2=$?
+fdr_count2=$(cat "$FDR_COUNTER2")
+assert_eq "firebase_deploy_retry: non-auth failure not retried (1 attempt)" "1" "$fdr_count2"
+assert_eq "firebase_deploy_retry: non-auth failure returns nonzero" "nonzero" \
+  "$([[ $fdr_rc2 -ne 0 ]] && echo nonzero || echo zero)"
+
+# --- Case 3 (a): auth-class exhaustion runs the diagnostic -----------------
+FDR_STUB_A="$FDR_DIR/stub-always-auth-fail-a"
+cat > "$FDR_STUB_A" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' 'Failed to authenticate'
+exit 1
+STUB
+chmod +x "$FDR_STUB_A"
+
+FDR_DIAG_A="$FDR_DIR/diag-a"
+cat > "$FDR_DIAG_A" <<'DIAGSTUB'
+#!/usr/bin/env bash
+printf '%s\n' '[debug] Connecting to googleapis...'
+printf '%s\n' 'Invalid response body while trying to fetch https://www.googleapis.com/oauth2/v4/token: Premature close'
+exit 1
+DIAGSTUB
+chmod +x "$FDR_DIAG_A"
+export FIREBASE_AUTH_DIAGNOSTIC_CMD="$FDR_DIAG_A"
+
+FDR_STDOUT_A="$FDR_DIR/stdout-a"
+FDR_STDERR_A="$FDR_DIR/stderr-a"
+firebase_deploy_retry "$FDR_STUB_A" >"$FDR_STDOUT_A" 2>"$FDR_STDERR_A" || true
+assert_eq "firebase_deploy_retry: auth exhaustion - 'Failed to authenticate' on stdout" "yes" \
+  "$(grep -q 'Failed to authenticate' "$FDR_STDOUT_A" && echo yes || echo no)"
+assert_eq "firebase_deploy_retry: auth exhaustion - diagnostic shows 'Premature close' on stderr" "yes" \
+  "$(grep -q 'Premature close' "$FDR_STDERR_A" && echo yes || echo no)"
+
+# --- Case 3 (b): secrets are redacted (load-bearing test) -----------------
+# Diagnostic emits realistic --debug output with secrets adjacent to error/token
+# lines so they fall inside the grep -B1 -A2 window — proving redaction when absent.
+# Layout: "error: auth failed, sending token request" (line 1) puts Bearer (line 2)
+# and "access_token" JSON (line 3) inside its A2 window; "access_token" on line 3
+# ("token" match) puts PEM BEGIN (line 4) and PEM body (line 5) inside its A2 window;
+# "error: Premature close while fetching token" (line 7) puts eyJaaa JWT (line 8)
+# inside its A2 window. If redaction were broken, all four secret values would appear
+# verbatim in the emitted window.
+FDR_STUB_B="$FDR_DIR/stub-always-auth-fail-b"
+cat > "$FDR_STUB_B" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' 'Failed to authenticate'
+exit 1
+STUB
+chmod +x "$FDR_STUB_B"
+
+FDR_DIAG_B="$FDR_DIR/diag-b"
+cat > "$FDR_DIAG_B" <<'DIAGSTUB'
+#!/usr/bin/env bash
+printf '%s\n' 'error: auth failed, sending token request'
+printf '%s\n' 'authorization: Bearer ya29.LEAKME123456789'
+printf '%s\n' '"access_token": "ya29.SECRETVAL987654321"'
+printf '%s\n' '-----BEGIN PRIVATE KEY-----'
+printf '%s\n' 'MIIEvQIBADANBgkqhkiG9w0BAQEFAASC'
+printf '%s\n' '-----END PRIVATE KEY-----'
+printf '%s\n' 'error: Premature close while fetching token'
+printf '%s\n' 'eyJaaa.bbb.ccc'
+exit 1
+DIAGSTUB
+chmod +x "$FDR_DIAG_B"
+export FIREBASE_AUTH_DIAGNOSTIC_CMD="$FDR_DIAG_B"
+
+FDR_STDERR_B="$FDR_DIR/stderr-b"
+firebase_deploy_retry "$FDR_STUB_B" >/dev/null 2>"$FDR_STDERR_B" || true
+assert_eq "firebase_deploy_retry: redact - no raw ya29. token in diagnostic output" "no" \
+  "$(grep -q 'ya29\.' "$FDR_STDERR_B" && echo yes || echo no)"
+assert_eq "firebase_deploy_retry: redact - no raw JWT eyJaaa in diagnostic output" "no" \
+  "$(grep -q 'eyJaaa' "$FDR_STDERR_B" && echo yes || echo no)"
+assert_eq "firebase_deploy_retry: redact - no PEM body MIIEvQIBADANBg in diagnostic output" "no" \
+  "$(grep -q 'MIIEvQIBADANBg' "$FDR_STDERR_B" && echo yes || echo no)"
+assert_eq "firebase_deploy_retry: redact - error signature 'Premature' survives redaction" "yes" \
+  "$(grep -q 'Premature' "$FDR_STDERR_B" && echo yes || echo no)"
+
+# --- Case 3 (c): non-auth failure does NOT run the diagnostic --------------
+FDR_STUB_C="$FDR_DIR/stub-non-auth-c"
+cat > "$FDR_STUB_C" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' 'some other deploy error' >&2
+exit 1
+STUB
+chmod +x "$FDR_STUB_C"
+
+FDR_SENTINEL_C="$FDR_DIR/sentinel-c"
+FDR_DIAG_C="$FDR_DIR/diag-c"
+cat > "$FDR_DIAG_C" <<DIAGSTUB
+#!/usr/bin/env bash
+touch "$FDR_SENTINEL_C"
+exit 0
+DIAGSTUB
+chmod +x "$FDR_DIAG_C"
+export FIREBASE_AUTH_DIAGNOSTIC_CMD="$FDR_DIAG_C"
+
+firebase_deploy_retry "$FDR_STUB_C" >/dev/null 2>/dev/null || true
+fdr_sentinel_c_exists=$([[ -e "$FDR_SENTINEL_C" ]] && echo present || echo absent)
+assert_eq "firebase_deploy_retry: non-auth failure does not run diagnostic" "absent" \
+  "$fdr_sentinel_c_exists"
+
+# --- Case 3 (d): success path does NOT run the diagnostic ------------------
+FDR_COUNTER_D="$FDR_DIR/counter-d"
+printf '0' > "$FDR_COUNTER_D"
+FDR_STUB_D="$FDR_DIR/stub-success-d"
+cat > "$FDR_STUB_D" <<STUB
+#!/usr/bin/env bash
+n=\$(cat "$FDR_COUNTER_D")
+n=\$(( n + 1 ))
+printf '%s' "\$n" > "$FDR_COUNTER_D"
+if [[ "\$n" -lt 3 ]]; then
+  printf '%s\n' 'Failed to authenticate'
+  exit 1
+fi
+printf '%s\n' '{"result":{"ok":true}}'
+exit 0
+STUB
+chmod +x "$FDR_STUB_D"
+
+FDR_SENTINEL_D="$FDR_DIR/sentinel-d"
+FDR_DIAG_D="$FDR_DIR/diag-d"
+cat > "$FDR_DIAG_D" <<DIAGSTUB
+#!/usr/bin/env bash
+touch "$FDR_SENTINEL_D"
+exit 0
+DIAGSTUB
+chmod +x "$FDR_DIAG_D"
+export FIREBASE_AUTH_DIAGNOSTIC_CMD="$FDR_DIAG_D"
+
+firebase_deploy_retry "$FDR_STUB_D" >/dev/null 2>/dev/null || true
+fdr_sentinel_d_exists=$([[ -e "$FDR_SENTINEL_D" ]] && echo present || echo absent)
+assert_eq "firebase_deploy_retry: success path does not run diagnostic" "absent" \
+  "$fdr_sentinel_d_exists"
+
+unset FIREBASE_AUTH_DIAGNOSTIC_CMD
+rm -rf "$FDR_DIR"
+unset FIREBASE_DEPLOY_RETRY_BASE_DELAY FIREBASE_DEPLOY_RETRY_ATTEMPTS
 
 # ============================================================================
 # summary

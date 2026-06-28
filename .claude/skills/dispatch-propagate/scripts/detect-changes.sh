@@ -32,6 +32,12 @@ fi
 if echo "$CHANGED" | grep -qE '^(firestore\.rules$|storage\.rules$|rules-test/|\.claude/skills/dispatch-propagate/scripts/|firebase\.json$|package\.json$|package-lock\.json$)'; then
   echo "rules=true" >> "$GITHUB_OUTPUT"
 fi
+# storybook-smoke boots the packages/ds Storybook dev server. Trigger on any
+# packages/ds change (a component, story, token, or .storybook config edit can
+# break the dev bundle) and on edits to the smoke script itself.
+if echo "$CHANGED" | grep -qE '^(packages/ds/|\.claude/skills/dispatch-propagate/scripts/run-storybook-smoke\.sh$)'; then
+  echo "ds=true" >> "$GITHUB_OUTPUT"
+fi
 # dead-code check runs knip at repo root — any TS/JS/knip-config change can
 # orphan code elsewhere, so trigger on any such change across the repo.
 if echo "$CHANGED" | grep -qE '\.(ts|tsx|js|jsx|mjs|cjs)$|^knip\.(json|jsonc|ts)$'; then
