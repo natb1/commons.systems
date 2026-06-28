@@ -4,6 +4,7 @@ import { usageSamplesSeedDataPlugin } from "./src/vite-plugin-usage-samples-seed
 import { issueSamplesSeedDataPlugin } from "./src/vite-plugin-issue-samples-seed";
 import { officeHoursQueueSeedPlugin } from "./src/vite-plugin-queue-seed";
 import { auditAggregateSeedPlugin } from "./src/vite-plugin-audit-aggregate-seed";
+import { officeHoursIntentionTreeSeedPlugin } from "./src/vite-plugin-intention-tree-seed";
 import { projectSignalSeedPlugin } from "./src/vite-plugin-project-signal-seed";
 
 export default createAppConfig({
@@ -18,6 +19,7 @@ export default createAppConfig({
     issueSamplesSeedDataPlugin(),
     officeHoursQueueSeedPlugin(),
     auditAggregateSeedPlugin(),
+    officeHoursIntentionTreeSeedPlugin(),
     projectSignalSeedPlugin(),
   ],
   // Include .test.tsx (React panel tests) alongside the vanilla .test.ts; the
