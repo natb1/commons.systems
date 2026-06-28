@@ -28,11 +28,14 @@ jobs:
         env:
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: .github/scripts/firebase-auth.sh
-      # syncOfficeHours's and sampleDispatchQueueMetrics's non-secret defineString
-      # params come from repository Secrets, written into the dotenv
-      # firebase-tools reads at deploy time. Unset Secrets yield empty values,
-      # which deploy the functions dormant. The App private key and member emails
-      # are both secrets in Secret Manager; neither flows through this workflow.
+      # syncOfficeHours's, sampleDispatchQueueMetrics's, and collectProjectSignals's
+      # non-secret defineString params come from repository Secrets, written into the
+      # dotenv firebase-tools reads at deploy time. firebase deploy resolves EVERY
+      # defineString in non-interactive mode and fails if any is absent, even ones
+      # with a code-level default, so every param must be written here. Params with a
+      # natural default fall back to it inline; the rest must be set as repo Secrets.
+      # The collectProjectSignals secrets (GOOGLE_ANALYTICS_CLIENT_SECRET / _REFRESH_TOKEN,
+      # PAGESPEED_API_KEY) live in Secret Manager and do not flow through this workflow.
       - name: Write office-hours function config
         env:
           OFFICE_HOURS_GITHUB_APP_ID: ${{ secrets.OFFICE_HOURS_GITHUB_APP_ID }}
@@ -41,6 +44,12 @@ jobs:
           OFFICE_HOURS_FIRESTORE_NAMESPACE: ${{ secrets.OFFICE_HOURS_FIRESTORE_NAMESPACE || 'office-hours/prod' }}
           OFFICE_HOURS_GROUP_ID: ${{ secrets.OFFICE_HOURS_GROUP_ID }}
           DISPATCH_METRICS_QUEUE_REPO: ${{ secrets.DISPATCH_METRICS_QUEUE_REPO }}
+          PROJECT_SIGNALS_GITHUB_REPO: ${{ secrets.PROJECT_SIGNALS_GITHUB_REPO || 'natb1/commons.systems' }}
+          GOOGLE_ANALYTICS_CLIENT_ID: ${{ secrets.GOOGLE_ANALYTICS_CLIENT_ID }}
+          PROJECT_SIGNALS_GA4_PROPERTY_IDS: ${{ secrets.PROJECT_SIGNALS_GA4_PROPERTY_IDS }}
+          PROJECT_SIGNALS_GSC_SITE: ${{ secrets.PROJECT_SIGNALS_GSC_SITE || 'sc-domain:commons.systems' }}
+          PROJECT_SIGNALS_PSI_URLS: ${{ secrets.PROJECT_SIGNALS_PSI_URLS || 'https://commons.systems,https://budget.commons.systems,https://print.commons.systems,https://audio.commons.systems,https://fellspiral.commons.systems' }}
+          PROJECT_SIGNALS_PSI_STRATEGY: ${{ secrets.PROJECT_SIGNALS_PSI_STRATEGY || 'mobile' }}
         run: |
           cat > functions/.env.commons-systems <<EOF
           OFFICE_HOURS_GITHUB_APP_ID=${OFFICE_HOURS_GITHUB_APP_ID}
@@ -49,6 +58,12 @@ jobs:
           OFFICE_HOURS_FIRESTORE_NAMESPACE=${OFFICE_HOURS_FIRESTORE_NAMESPACE}
           OFFICE_HOURS_GROUP_ID=${OFFICE_HOURS_GROUP_ID}
           DISPATCH_METRICS_QUEUE_REPO=${DISPATCH_METRICS_QUEUE_REPO}
+          PROJECT_SIGNALS_GITHUB_REPO=${PROJECT_SIGNALS_GITHUB_REPO}
+          GOOGLE_ANALYTICS_CLIENT_ID=${GOOGLE_ANALYTICS_CLIENT_ID}
+          PROJECT_SIGNALS_GA4_PROPERTY_IDS=${PROJECT_SIGNALS_GA4_PROPERTY_IDS}
+          PROJECT_SIGNALS_GSC_SITE=${PROJECT_SIGNALS_GSC_SITE}
+          PROJECT_SIGNALS_PSI_URLS=${PROJECT_SIGNALS_PSI_URLS}
+          PROJECT_SIGNALS_PSI_STRATEGY=${PROJECT_SIGNALS_PSI_STRATEGY}
           EOF
       - name: Deploy functions
         run: ./node_modules/.bin/firebase deploy --only functions --force --project default
