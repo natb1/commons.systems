@@ -31,6 +31,10 @@ vi.mock("@commons-systems/local-first/fsa-handle-store", () => ({
 
 // Keep createLocalSource a no-op and listLocal empty so bindAndRender does no
 // real FSA work (markLocalFolderReady stays as the real Promise-deferred).
+//
+// listLocal returns [] here, so renderLocalIntoList produces no uncached rows
+// and constructs no IntersectionObserver — no IO stub is needed; add one only
+// if a future change makes this render produce uncached rows.
 vi.mock("../src/library.js", async () => {
   const actual = await vi.importActual<typeof import("../src/library.js")>(
     "../src/library.js",
