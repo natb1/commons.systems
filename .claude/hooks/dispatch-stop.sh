@@ -626,13 +626,15 @@ fi
 #   - the issue is already parked on office-hours (an office-hours-assisted run,
 #     or an already-parked issue): nothing to count, nothing to escalate; and an
 #     office-hours session must not inflate the autonomous counter.
-#   - marker absent AND this is one of Branch A's two continuation gates that
+#   - marker absent AND this is one of Branch A's three continuation gates that
 #     RESUME the same session rather than concluding an attempt: a live
-#     idle-poller (session_scheduled_wakeup) or a transient rate-limit death
-#     (dispatch-detect-transient-death). Counting an idle-poller would bump once
-#     per poll cycle and blow the ceiling on a single healthy review phase
-#     (#1590). These mirror the gates at ~lines 383 and 397 below — keep the two
-#     in sync. (The rate-limit gate can fall through to an office-hours park when
+#     idle-poller (session_scheduled_wakeup), a live phase running in the
+#     background (session_has_inflight_background_task, #2243), or a transient
+#     rate-limit death (dispatch-detect-transient-death). Counting an idle-poller
+#     or a background-phase hand-back would bump once per poll/turn cycle and blow
+#     the ceiling on a single healthy review/qa phase (#1590, #2243). These mirror
+#     the gates at ~lines 665, 674, and 691 below — keep the two in sync. (The
+#     rate-limit gate can fall through to an office-hours park when
 #     rescheduling fails; that park is then uncounted, which is harmless — it
 #     parks office-hours so the ceiling is moot and the counter resets on un-park.)
 # Everything else — Branch A genuine park, the #2025 recovery-advance, Branch
@@ -644,6 +646,7 @@ fi
 if [ "$ISSUE_OFFICE_HOURS_PRESENT" = no ] \
    && { [ -n "$MARKER_PHASE" ] \
         || { ! session_scheduled_wakeup \
+             && ! session_has_inflight_background_task \
              && ! "$SCRIPTS/dispatch-detect-transient-death" "$TRANSCRIPT_PATH" 2>/dev/null; }; }; then
   attempt_verdict=$("$SCRIPTS/dispatch-attempt-count" "$ISSUE_NUM" 2>/dev/null) || attempt_verdict=proceed
   if [ "$attempt_verdict" = escalate ]; then
