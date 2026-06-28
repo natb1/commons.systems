@@ -40,6 +40,20 @@ All `gh` calls run with `dangerouslyDisableSandbox: true` per
 
 ## Step 1. Parse `$INPUT`, detect mode, and separate
 
+### Capture the session attribution role
+
+As the very first action, before anything else, run:
+
+```bash
+.claude/skills/file-issue/scripts/file-issue-usage-snapshot enter
+```
+
+(pure local file I/O — no `gh`, no `dangerouslyDisableSandbox`). Capture its
+stdout into `$FILE_ISSUE_ROLE` — `owner` or `nested`. The baseline is captured
+once per session: the first (owner) call writes it; nested recursive sub-issue
+calls find it present and become `nested`. This role gates the Step 7 `finalize`,
+which is owner-only.
+
 ### Parse provenance flag
 
 Before anything else, strip a leading `--follow-up` token from `$INPUT` and set a
@@ -502,7 +516,69 @@ suggestions embedded in the body. An issue author cannot label-escalate by writi
 Do not apply the `priority` label automatically — it is a human-applied escalation
 marker.
 
+### Record the applied topic for attribution
+
+Immediately after the label apply above — including the branch where all three
+clauses dropped and the `gh issue edit` was skipped entirely — run:
+
+```bash
+.claude/skills/file-issue/scripts/file-issue-usage-snapshot record-topic "<topic>" "<type>"
+```
+
+(pure local file I/O — no `gh`, no `dangerouslyDisableSandbox`). This runs on
+EVERY invocation — owner, nested, and every separation-loop iteration — passing
+the applied `<topic>` and `<type>` (empty strings when none applied), so every
+topic chosen across nested recursive sub-issue calls and sequential calls reaches
+the shared per-session sidecar. It unions the topic into `topics[]` and sets
+`type` last-writer-wins; it leaves the token totals untouched.
+
+### Token cost self-attribution
+
+The three `file-issue-usage-snapshot` calls make every `/file-issue` session
+self-attribute its token cost to the topic label(s) it applied (epic #2502; the
+downstream price-model consumer is #2505). Sidecar path:
+`<session_id>.file-issue-attribution.json`, written next to the session
+transcript under the projects root. Exact schema:
+
+```json
+{
+  "schema": "file-issue.attribution.v1",
+  "session_id": "<CLAUDE_CODE_SESSION_ID>",
+  "topics": ["security", "dispatch"],
+  "type": "bug",
+  "tokens": { "input": 0, "cache_creation": 0, "cache_read": 0, "output": 0 },
+  "measured_at": "<ISO-8601 UTC>"
+}
+```
+
+- **Total-to-all-labels**: the sidecar holds the session's running token total and
+  the union of every applied topic; the consumer adds the FULL cost to each topic
+  — no proportional split.
+- **Singular `type`, last-writer-wins**: a session touching multiple types records
+  only the outermost/last-written type. Do not make `type` an array — the issue's
+  shape is singular.
+- **Additive per-session accumulation**: the owner re-baselines per call-tree, so
+  inter-call parent work is excluded.
+- **Stale-marker edge** (caveat, not handled here): if a call-tree dies before the
+  owner removes its baseline marker, the next sequential call mis-detects as
+  `nested` and undercounts — a possible follow-up.
+
 ## Step 7. Return
+
+### Finalize attribution (owner only)
+
+After all file-issue work is complete, if `$FILE_ISSUE_ROLE == owner` run:
+
+```bash
+.claude/skills/file-issue/scripts/file-issue-usage-snapshot finalize
+```
+
+(pure local file I/O — no `gh`, no `dangerouslyDisableSandbox`). It computes the
+session's token delta since the baseline, adds it to the sidecar, and removes the
+baseline marker. Nested invocations (`$FILE_ISSUE_ROLE == nested`) skip
+`finalize`. This is a Bash side effect — its output is NOT part of the results
+block below; never fold its stdout between the `===FILE-ISSUE-RESULTS===` …
+`===FILE-ISSUE-RESULTS-END===` sentinels.
 
 End the final message with a sentinel-delimited results block — one record line
 per top-level issue spec, in spec order:
