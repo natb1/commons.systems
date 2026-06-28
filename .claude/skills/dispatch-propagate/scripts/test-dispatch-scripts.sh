@@ -3246,6 +3246,52 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: STOP closed is in the launcher's no-park benign-races arm"
 fi
 
+# 1e. Merged-PR guard (#2511, complements #1845): an OPEN issue whose closing PR
+# has already MERGED — GitHub failed to auto-close it — must self-close instead
+# of looping on INVOKE /implement. The guard fires AFTER the closed-issue guard
+# and BEFORE provisioning, detecting the merged closing PR via the issue's own
+# closedByPullRequestsReferences (issue-closing-prs-<num>.json stub). On the
+# PRE-FIX code (open + dispatch:planned, no guard) this routed to INVOKE
+# /implement, so the assertion genuinely guards the new behavior.
+echo "Test: open issue + merged closing PR → STOP merged-pr-closed"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo "/wt/44-merged-feature" > "$STUB_DIR/worktree-toplevel.txt"
+printf '{"state":"open","labels":[{"name":"dispatch:planned"}]}\n' > "$STUB_DIR/arg-issue-44.json"
+printf '{"closedByPullRequestsReferences":[{"number":900,"state":"MERGED"}]}\n' > "$STUB_DIR/issue-closing-prs-44.json"
+route_run 44 /wt/44-merged-feature
+assert_eq "open + merged closing PR → STOP merged-pr-closed (directive)" "STOP merged-pr-closed" "$ROUTE_OUT"
+assert_eq "open + merged closing PR → STOP merged-pr-closed (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# 1f. The MERGED filter: an open issue whose closing PR is still OPEN (not
+# merged) must NOT trip the guard — it routes normally. Proves the
+# select(.state == "MERGED") filter is load-bearing.
+echo "Test: open issue + OPEN (not merged) closing PR → INVOKE /implement"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
+printf '{"state":"open","labels":[{"name":"dispatch:planned"}]}\n' > "$STUB_DIR/arg-issue-42.json"
+printf '{"closedByPullRequestsReferences":[{"number":901,"state":"OPEN"}]}\n' > "$STUB_DIR/issue-closing-prs-42.json"
+route_run 42 /wt/42-my-feature
+assert_eq "open + OPEN closing PR → guard not tripped → INVOKE /implement (directive)" "INVOKE /implement" "$ROUTE_OUT"
+assert_eq "open + OPEN closing PR → INVOKE /implement (exit 0)" "0" "$ROUTE_RC"
+teardown
+
+# 1g. The route-level test above cannot prove the launcher closes the issue
+# (driving dispatch-launch-worker end-to-end is out of scope for this harness).
+# Assert at the source that dispatch-launch-worker has a DEDICATED
+# "STOP merged-pr-closed") arm that invokes dispatch-close-resolved — i.e. it is
+# NOT folded into the benign no-park arm (which would leave the issue open).
+echo "Test: dispatch-launch-worker handles STOP merged-pr-closed via dispatch-close-resolved"
+TOTAL=$((TOTAL + 1))
+if grep -Eq '"STOP merged-pr-closed"\)' "$SCRIPT_DIR/dispatch-launch-worker" \
+   && grep -q 'dispatch-close-resolved' "$SCRIPT_DIR/dispatch-launch-worker"; then
+  PASS=$((PASS + 1)); echo "  PASS: launcher closes the issue on STOP merged-pr-closed"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: launcher closes the issue on STOP merged-pr-closed"
+fi
+
 # 2. Draft + failing CI → INVOKE /fix-checks.
 echo "Test: draft + failing CI → INVOKE /fix-checks"
 setup
