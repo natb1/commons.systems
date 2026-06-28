@@ -1,21 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { createLimiter } from "../src/concurrency";
-
-interface Deferred<T> {
-  promise: Promise<T>;
-  resolve: (value: T) => void;
-  reject: (reason: unknown) => void;
-}
-
-function deferred<T>(): Deferred<T> {
-  let resolve!: (value: T) => void; // type-safety-ok: assigned synchronously inside the Promise constructor below
-  let reject!: (reason: unknown) => void; // type-safety-ok: assigned synchronously inside the Promise constructor below
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-  return { promise, resolve, reject };
-}
+import { deferred, type Deferred } from "./utils";
 
 /** Flush the microtask queue by awaiting a chain of resolved promises. */
 async function flushMicrotasks(): Promise<void> {
@@ -66,7 +51,6 @@ describe("createLimiter", () => {
     it("a later task still runs after an earlier task rejects", async () => {
       const limiter = createLimiter(1);
 
-      const firstDone = deferred<void>();
       const scheduleFirst = limiter.schedule(() =>
         Promise.reject(new Error("first fails")),
       );
@@ -76,7 +60,6 @@ describe("createLimiter", () => {
       await expect(scheduleFirst).rejects.toThrow("first fails");
       const secondResult = await scheduleSecond;
       expect(secondResult).toBe("second ok");
-      void firstDone;
     });
   });
 

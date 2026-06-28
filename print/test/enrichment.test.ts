@@ -85,6 +85,7 @@ import {
 } from "../src/sidecar.js";
 import type { MediaItem, SidecarData } from "../src/sidecar.js";
 import type { MediaItem as LibMediaItem } from "../src/types.js";
+import { deferred } from "./utils";
 
 // ---------------------------------------------------------------------------
 // Fake FileSystemDirectoryHandle (same pattern as sidecar.test.ts)
@@ -205,21 +206,6 @@ function makeContainer(): HTMLElement {
   return container;
 }
 
-/**
- * A manually-resolvable promise. Used to gate `resolveLocalBlob` so a test can
- * hold reads in-flight and assert the limiter's bound deterministically — never
- * a real timer.
- */
-function deferred<T>() {
-  let resolve!: (v: T) => void; // type-safety-ok: assigned synchronously inside the Promise constructor below
-  let reject!: (e?: unknown) => void; // type-safety-ok: assigned synchronously inside the Promise constructor below
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-  return { promise, resolve, reject };
-}
-
 // ---------------------------------------------------------------------------
 // Fake IntersectionObserver. happy-dom has no real IntersectionObserver, so we
 // install a stub that only REGISTERS observed nodes (never fires `cb` on its
@@ -280,11 +266,6 @@ function rowNode(container: HTMLElement, item: LibMediaItem): Element {
     throw new Error(`rowNode: no rendered row found for item id "${item.id}"`);
   }
   return node;
-}
-
-/** Flush a few microtask turns (no real timers). */
-async function flushMicrotasks(times = 3): Promise<void> {
-  for (let i = 0; i < times; i++) await Promise.resolve();
 }
 
 // Install the FakeIO global for every test in the file. Stacks with each

@@ -32,18 +32,24 @@ export function createLimiter(limit: number): Limiter {
     return new Promise<T>((resolve, reject) => {
       function run(): void {
         active++;
-        fn().then(
-          (value) => {
-            active--;
-            next();
-            resolve(value);
-          },
-          (err) => {
-            active--;
-            next();
-            reject(err);
-          },
-        );
+        try {
+          fn().then(
+            (value) => {
+              active--;
+              next();
+              resolve(value);
+            },
+            (err) => {
+              active--;
+              next();
+              reject(err);
+            },
+          );
+        } catch (err) {
+          active--;
+          next();
+          reject(err);
+        }
       }
 
       if (active < limit) {
