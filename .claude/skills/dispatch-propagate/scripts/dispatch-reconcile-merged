@@ -57,6 +57,7 @@ MARKER='<!-- dispatch:auto-close-repair -->'
 # A single GraphQL call (gh pr list with closingIssuesReferences) — never a
 # per-PR gh pr view fan-out. A failed fetch is a HARD error: reconciling on a
 # partial snapshot could miss a stranded issue or act on stale data.
+# lint-allow: gh-rest-porcelain closingIssuesReferences is a GraphQL-only field with no REST equivalent
 PR_LIST=$(gh_retry gh pr list --state merged --json number,title,mergedAt,closingIssuesReferences --limit "$LIMIT") || {
   echo "dispatch-reconcile-merged: error: gh pr list failed" >&2
   exit 1
