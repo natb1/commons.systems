@@ -240,7 +240,41 @@ teardown() {
   if [[ -n "$ROOT" && -d "$ROOT" ]]; then
     rm -rf "$ROOT"
   fi
+  if [[ -n "${BINDIR:-}" && -d "${BINDIR:-}" ]]; then
+    rm -rf "$BINDIR"
+  fi
 }
+
+# Global gh stub on PATH (intercepts gh_issue_view_rest → gh api repos/.../issues/<N>
+# calls from aggregate-usage.sh). Inherits into all subshell aggregator runs via
+# the exported PATH below. Cleaned up by teardown() on exit.
+BINDIR=$(mktemp -d)
+cat > "$BINDIR/gh" <<'STUB_EOF'
+#!/usr/bin/env bash
+# Stub for: gh api repos/<repo>/issues/<N>
+# Parses N from the trailing /issues/<N> path segment; exits 0 always.
+issue_num=""
+for arg in "$@"; do
+  if [[ "$arg" =~ /issues/([0-9]+) ]]; then
+    issue_num="${BASH_REMATCH[1]}"
+    break
+  fi
+done
+if [[ "$issue_num" == "999" ]]; then
+  # Two topic labels (dispatch, testing infrastructure) + one type label (enhancement)
+  # — double-counted by by_topic because total-to-all-labels attribution.
+  printf '%s\n' '{"number":999,"state":"open","labels":[{"name":"dispatch"},{"name":"testing infrastructure"},{"name":"enhancement"}]}'
+elif [[ -n "$issue_num" ]]; then
+  # Any other issue (e.g. 2268 from the sidecar-coverage fixture): no labels.
+  printf '{"number":%s,"state":"open","labels":[]}\n' "$issue_num"
+else
+  # Unexpected call shape (not an issues endpoint): return a benign empty response.
+  printf '%s\n' '{"number":0,"state":"open","labels":[]}'
+fi
+exit 0
+STUB_EOF
+chmod +x "$BINDIR/gh"
+export PATH="$BINDIR:$PATH"
 
 trap teardown EXIT
 
@@ -286,6 +320,49 @@ assert_eq 'by_phase["plan-implement"].cost_usd' "$EXPECTED_WORKER_COST" \
   "$(jq '.by_phase["plan-implement"].cost_usd' <<<"$OUT")"
 assert_eq 'by_phase_model["plan-implement\tclaude-opus-4-8"].cost_usd' "$EXPECTED_WORKER_COST" \
   "$(jq '.by_phase_model["plan-implement\tclaude-opus-4-8"].cost_usd' <<<"$OUT")"
+
+# --- by_topic / by_type (#2503): issue 999 → dispatch + testing infrastructure + enhancement ---
+# All 9 topic keys and all 3 type keys are always present (seeded from zero_bucket).
+assert_eq 'by_topic keys == 9 sorted keys' \
+  '["audio","budget","dispatch","fellspiral","landing","other","print","security","testing infrastructure"]' \
+  "$(jq -c '.by_topic | keys' <<<"$OUT")"
+assert_eq 'by_type keys == ["bug","enhancement","none"]' \
+  '["bug","enhancement","none"]' \
+  "$(jq -c '.by_type | keys' <<<"$OUT")"
+
+# Same field set as by_phase: zero_bucket provides price_proxy_usd, input, cost_usd, turns.
+assert_eq 'by_topic.dispatch has price_proxy_usd' 'true' \
+  "$(jq '.by_topic.dispatch | has("price_proxy_usd")' <<<"$OUT")"
+assert_eq 'by_topic.dispatch has input' 'true' \
+  "$(jq '.by_topic.dispatch | has("input")' <<<"$OUT")"
+assert_eq 'by_topic.dispatch has cost_usd' 'true' \
+  "$(jq '.by_topic.dispatch | has("cost_usd")' <<<"$OUT")"
+assert_eq 'by_topic.dispatch has turns' 'true' \
+  "$(jq '.by_topic.dispatch | has("turns")' <<<"$OUT")"
+
+# Total-to-all-labels: sess-worker (issue 999) is counted in BOTH the dispatch and
+# the "testing infrastructure" buckets, so each bucket carries the full worker cost.
+assert_eq 'by_topic.dispatch.cost_usd == EXPECTED_WORKER_COST' "$EXPECTED_WORKER_COST" \
+  "$(jq '.by_topic.dispatch.cost_usd' <<<"$OUT")"
+assert_eq 'by_topic["testing infrastructure"].cost_usd == EXPECTED_WORKER_COST' "$EXPECTED_WORKER_COST" \
+  "$(jq '.by_topic["testing infrastructure"].cost_usd' <<<"$OUT")"
+
+# sum(by_topic.cost_usd) == totals.cost_usd + EXPECTED_WORKER_COST:
+# sess-worker is double-counted (dispatch + testing infrastructure); all other sessions
+# (subagents, router, recovery) have no artifact and resolve to "other" exactly once.
+assert_eq '(by_topic | sum cost_usd) == totals.cost_usd + EXPECTED_WORKER_COST' \
+  "$(jq -n --argjson tot "$(jq '.totals.cost_usd' <<<"$OUT")" \
+            --argjson w "$EXPECTED_WORKER_COST" '$tot + $w')" \
+  "$(jq '(.by_topic | to_entries | map(.value.cost_usd) | add)' <<<"$OUT")"
+
+# by_type: enhancement gets the worker (issue 999 carries enhancement); none gets
+# everyone without a type label (all un-stamped sessions: subagents + router + recovery).
+assert_eq 'by_type.enhancement.cost_usd == EXPECTED_WORKER_COST' "$EXPECTED_WORKER_COST" \
+  "$(jq '.by_type.enhancement.cost_usd' <<<"$OUT")"
+assert_eq 'by_type.none.cost_usd == totals.cost_usd - EXPECTED_WORKER_COST' \
+  "$(jq -n --argjson tot "$(jq '.totals.cost_usd' <<<"$OUT")" \
+            --argjson w "$EXPECTED_WORKER_COST" '$tot - $w')" \
+  "$(jq '.by_type.none.cost_usd' <<<"$OUT")"
 
 # agent-aaa: sonnet (skill <none>), usage (10,20,40,5) at sonnet rates
 # (3 / 3.75 / 0.30 / 15 per Mtok).
