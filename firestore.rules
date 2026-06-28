@@ -546,6 +546,22 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Signal samples are the project-signals time series (GitHub / GA4 / GSC /
+    // PSI headline scalars), written by the Admin-SDK collector
+    // (functions/src/project-signals.ts, #539). The `demo` env is world-readable
+    // for the public demo tier; every other env is owner-gated via the
+    // denormalized `memberEmails` field. Client writes are denied. The matching
+    // project-signals snapshot doc is already covered by the
+    // `match /office-hours/{env}/metrics/{metricId}` wildcard above.
+    match /office-hours/{env}/signal-samples/{sampleId} {
+      allow get: if env == "demo"
+        || (request.auth != null
+            && request.auth.token.email in resource.data.memberEmails);
+      allow list: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails;
+      allow write: if false;
+    }
+
     // Audit aggregates are the cost/cache-reuse time series, written by the
     // Admin-SDK aggregator. The `demo` env is world-readable for the public demo
     // tier; every other env is owner-gated via the denormalized `memberEmails`
