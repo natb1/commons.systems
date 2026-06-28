@@ -21,15 +21,10 @@ import { getOwnerIssueSamples, getDemoIssueSamples } from "./issue-data.js";
 import { getOwnerAuditAggregates, getDemoAuditAggregates } from "./audit-data.js";
 import { getDemoProjectSignals, getOwnerProjectSignals } from "./project-signals-data.js";
 
-import { selectLatestSample, type UsageSample } from "./usage-samples.js";
+import { selectLatestSample } from "./usage-samples.js";
 import { capacityBandKey } from "./capacity-band.js";
 import { remindersPanelKey } from "./reminders.js";
-import type { Reminder } from "./reminders.js";
 import { parkedPanelKey } from "./queue-metrics.js";
-import type { QueueMetricsSnapshot } from "./queue-metrics.js";
-import type { IssueSample } from "./issue-samples.js";
-import type { AuditAggregate } from "./audit-aggregates.js";
-import type { ProjectSignalsSnapshot } from "./project-signals.js";
 
 import { CapacityBand } from "./components/CapacityBand.js";
 import { PacePanel } from "./components/PacePanel.js";
@@ -42,16 +37,7 @@ import { ParkedIssuesPanel } from "./components/ParkedIssuesPanel.js";
 import { IntentionTreePanel } from "./components/IntentionTreePanel.js";
 import { ProjectSignalsPanel } from "./components/ProjectSignalsPanel.js";
 
-// The tier-resolved data the panels render. Mirrors the vanilla ViewState's
-// owner payload (and the demo payload built by buildContext).
-interface PanelData {
-  samples: UsageSample[];
-  reminders: Reminder[];
-  queueMetrics: QueueMetricsSnapshot | null;
-  issueSamples: IssueSample[];
-  auditAggregates: AuditAggregate[];
-  projectSignals: ProjectSignalsSnapshot | null;
-}
+import { mergePanelData, type PanelData } from "./panel-equality.js";
 
 type ViewState =
   | { tier: "demo" } // unauthenticated → labeled demo
@@ -65,6 +51,18 @@ export interface DashboardProps {
    */
   user: User | null;
 }
+
+// Bounded staleness ceiling for owner panel data. Producers write at most
+// ~hourly (sampleDispatchQueueMetrics) up to per-dispatch-tick (usage-samples).
+// Each refresh re-reads the FULL matching collection — the getters have no
+// limit/orderBy and the history charts render the entire accumulated history, so
+// the read set is the display set. At single-operator scale the steady-state
+// re-read cost is negligible; the interval is the only cost/staleness lever.
+// 5 min bounds worst-case staleness well under a work session while capping
+// whole-collection re-reads to 12/hour/collection. Kept separate from the 60s
+// `now` display tick — that tick is a zero-network setNow; coupling a
+// whole-collection re-read to it would 5x reads for no staleness benefit.
+const REFRESH_INTERVAL_MS = 5 * 60_000;
 
 export function Dashboard({ user }: DashboardProps) {
   // "demo" is the initial state so the view is meaningful before auth resolves
@@ -81,6 +79,21 @@ export function Dashboard({ user }: DashboardProps) {
     return () => clearInterval(id);
   }, []);
 
+  // Shared owner-tier fetch: the five-collection parallel Firestore read. Closes
+  // over the module-import `db`/`NAMESPACE`; re-created each render, but only ever
+  // referenced inside effects below, so the identity churn is harmless.
+  async function loadPanelData(currentUser: User): Promise<PanelData> {
+    const [samples, reminders, queueMetrics, issueSamples, auditAggregates, projectSignals] = await Promise.all([
+      getOwnerSamples(db, NAMESPACE, currentUser),
+      getOwnerReminders(db, NAMESPACE, currentUser),
+      getOwnerQueueMetrics(db, NAMESPACE, currentUser),
+      getOwnerIssueSamples(db, NAMESPACE, currentUser),
+      getOwnerAuditAggregates(db, NAMESPACE, currentUser),
+      getOwnerProjectSignals(db, NAMESPACE, currentUser),
+    ]);
+    return { samples, reminders, queueMetrics, issueSamples, auditAggregates, projectSignals };
+  }
+
   // Five-collection parallel Firestore load for the owner tier, with the
   // auth-change race guard (ports main.ts's refresh()). A null user paints demo;
   // an `ignore` flag set by cleanup keeps a stale in-flight load (success OR
@@ -93,21 +106,11 @@ export function Dashboard({ user }: DashboardProps) {
     let ignore = false;
     void (async () => {
       try {
-        const [samples, reminders, queueMetrics, issueSamples, auditAggregates, projectSignals] = await Promise.all([
-          getOwnerSamples(db, NAMESPACE, user),
-          getOwnerReminders(db, NAMESPACE, user),
-          getOwnerQueueMetrics(db, NAMESPACE, user),
-          getOwnerIssueSamples(db, NAMESPACE, user),
-          getOwnerAuditAggregates(db, NAMESPACE, user),
-          getOwnerProjectSignals(db, NAMESPACE, user),
-        ]);
+        const data = await loadPanelData(user);
         // Auth may have changed while the calls were in flight — skip so the
         // in-flight result does not clobber the already-updated view.
         if (ignore) return;
-        setState({
-          tier: "owner",
-          data: { samples, reminders, queueMetrics, issueSamples, auditAggregates, projectSignals },
-        });
+        setState({ tier: "owner", data });
       } catch (error) {
         // Same race guard on the error path.
         if (ignore) return;
@@ -121,6 +124,45 @@ export function Dashboard({ user }: DashboardProps) {
     })();
     return () => {
       ignore = true;
+    };
+  }, [user]);
+
+  // Periodic owner-tier refresh. Re-reads the five collections every
+  // REFRESH_INTERVAL_MS and merges via mergePanelData (which preserves stable
+  // references for unchanged collections, so the memoized panels above only
+  // rebuild when their data actually changed). Separate from the mount load and
+  // the 60s `now` tick. Refresh error policy DIVERGES from mount: a transient
+  // failure must not blow away last-good data or flip to the error tier.
+  useEffect(() => {
+    if (user === null) return;
+    let cancelled = false;
+    let inFlight = false;
+    const id = setInterval(() => {
+      if (inFlight) return; // skip a tick while the prior fetch is unresolved
+      inFlight = true;
+      void (async () => {
+        try {
+          const next = await loadPanelData(user);
+          if (cancelled) return; // unmount or user change happened mid-fetch
+          setState((prev) => {
+            if (prev.tier !== "owner") return prev; // don't resurrect owner over demo/error
+            const merged = mergePanelData(prev.data, next);
+            return merged === prev.data ? prev : { tier: "owner", data: merged };
+          });
+        } catch (error) {
+          // Log and leave existing state in place — retain last-good.
+          if (cancelled) return;
+          if (!deferProgrammerError(error)) {
+            logError(error, { operation: "refresh-owner-data" });
+          }
+        } finally {
+          inFlight = false;
+        }
+      })();
+    }, REFRESH_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
     };
   }, [user]);
 
