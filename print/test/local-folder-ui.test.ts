@@ -295,6 +295,7 @@ describe("renderLocalIntoList — scan failure", () => {
     expect(container.querySelector("#local-folder-retry")).not.toBeNull();
     // The notice is anchored before the empty-state placeholder.
     const empty = container.querySelector("#media-empty");
-    expect(notice!.nextElementSibling).toBe(empty);
+    if (!notice) throw new Error("#local-folder-error not found");
+    expect(notice.nextElementSibling).toBe(empty);
   });
 });
