@@ -17,6 +17,11 @@ const { Button, Card, Metric, Nav, Badge, Input, Select, Checkbox } = window.Com
 <Button variant="primary">Save</Button>
 ```
 
+There is also a `Landing` **template** — a full-page shell (sticky nav, hero,
+two-column main + sticky/collapsible context panel, footer) that composes the
+primitives. Render it on its own for a populated page scaffold:
+`<CommonsDS.Landing />`.
+
 ## Styling idiom — semantic props + CSS variables (NOT utility classes)
 
 This system has **no utility-class vocabulary** (no Tailwind, no `bg-*`/`p-*`).
