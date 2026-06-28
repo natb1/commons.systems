@@ -15,6 +15,7 @@ import { logError } from "@commons-systems/errorutil/log";
 
 import { db, NAMESPACE } from "./firebase.js";
 import { getOwnerReminders, getOwnerQueueMetrics, getDemoReminders, getDemoQueueMetrics } from "./data.js";
+import { getDemoIntentionTree } from "./intention-tree.js";
 import { getOwnerSamples, getDemoSamples } from "./usage-data.js";
 import { getOwnerIssueSamples, getDemoIssueSamples } from "./issue-data.js";
 import { getOwnerAuditAggregates, getDemoAuditAggregates } from "./audit-data.js";
@@ -33,6 +34,7 @@ import { AuditPanel } from "./components/AuditPanel.js";
 import { RemindersPanel } from "./components/RemindersPanel.js";
 import { QueueMetricsPanel } from "./components/QueueMetricsPanel.js";
 import { ParkedIssuesPanel } from "./components/ParkedIssuesPanel.js";
+import { IntentionTreePanel } from "./components/IntentionTreePanel.js";
 import { ProjectSignalsPanel } from "./components/ProjectSignalsPanel.js";
 
 import { mergePanelData, type PanelData } from "./panel-equality.js";
@@ -242,6 +244,15 @@ export function Dashboard({ user }: DashboardProps) {
     [parked, parkedPanelKey(parked, now)],
   );
 
+  // The intention tree is the project's single hierarchy — identical for every
+  // viewer, build-time data with no Firestore/owner tier and no time dependence —
+  // so it is built once here, never threaded through the owner Promise.all or
+  // PanelData. Rendered full-width like history/backlog/audit.
+  const intentionTreeEl = useMemo(
+    () => <IntentionTreePanel view={getDemoIntentionTree()} className="panel-grid-full" />,
+    [],
+  );
+
   if (state.tier === "error") {
     return (
       <p className="error" role="alert">
@@ -264,7 +275,8 @@ export function Dashboard({ user }: DashboardProps) {
         </p>
       )}
       {/* Panel order matches the vanilla PANELS registry:
-          capacity, pace, history, backlog, audit, reminders, queue-metrics. */}
+          capacity, pace, history, backlog, audit, reminders, queue-metrics,
+          parked; plus the build-time intention tree (full-width, appended last). */}
       <div className="panel-grid">
         {capacityEl}
         {paceEl}
@@ -274,6 +286,7 @@ export function Dashboard({ user }: DashboardProps) {
         {remindersEl}
         {queueEl}
         {parkedEl}
+        {intentionTreeEl}
         {projectSignalsEl}
       </div>
     </>

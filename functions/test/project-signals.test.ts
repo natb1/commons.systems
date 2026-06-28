@@ -418,7 +418,10 @@ describe("collectProjectSignalsCore", () => {
       { query: "a", clicks: 10, impressions: 100, ctr: 0.1, position: 2 },
       { query: "b", clicks: 5, impressions: 50, ctr: 0.1, position: 3 },
     ],
-    topPages: [],
+    topPages: [
+      { page: "/", clicks: 8, impressions: 80, ctr: 0.1, position: 2 },
+      { page: "/budget", clicks: 4, impressions: 40, ctr: 0.1, position: 3 },
+    ],
     devices: [],
   };
   const psi: PsiUrlSignals[] = [
@@ -518,9 +521,9 @@ describe("collectProjectSignalsCore", () => {
     // summed across GA4 apps
     expect(sample.pageViews).toBe(1200);
     expect(sample.sessions).toBe(500);
-    // summed GSC query clicks/impressions
-    expect(sample.gscClicks).toBe(15);
-    expect(sample.gscImpressions).toBe(150);
+    // summed from topPages
+    expect(sample.gscClicks).toBe(12);
+    expect(sample.gscImpressions).toBe(120);
     // first-URL mobile performance
     expect(sample.psiPerformance).toBe(88);
 
