@@ -206,6 +206,44 @@ export function settleEnrichment(): Promise<void> {
 }
 
 /**
+ * Remove any stale local-folder scan-error notice from the container. A no-op
+ * when none is present, so it is safe to call on every successful render pass.
+ */
+function clearLocalScanError(container: HTMLElement): void {
+  container.querySelector("#local-folder-error")?.remove();
+}
+
+/**
+ * Render an in-list scan-error notice with a retry button, anchored to the media
+ * list (or the empty-state placeholder) inside `container`. The folder
+ * open/grant buttons live in a separate nav section, so the notice is placed
+ * relative to the list the user is looking at. The anchor deliberately excludes
+ * `#media-error`: when the cloud list itself failed the user already sees an
+ * error, so suppressing the local notice then is intentional. A list-less route
+ * (e.g. the viewer page) has no anchor and is a silent no-op, mirroring
+ * `renderLocalIntoList`'s own early return.
+ */
+function renderLocalScanError(container: HTMLElement, onRetry: () => void): void {
+  clearLocalScanError(container);
+  const anchor =
+    container.querySelector("#media-list") ??
+    container.querySelector("#media-empty");
+  if (!anchor) return;
+  const p = document.createElement("p");
+  p.id = "local-folder-error";
+  p.className = "local-folder-error";
+  p.textContent = "Couldn't read this folder. ";
+  const button = document.createElement("button");
+  button.id = "local-folder-retry";
+  button.type = "button";
+  button.className = "local-folder-button";
+  button.textContent = "Try again";
+  button.addEventListener("click", onRetry);
+  p.appendChild(button);
+  anchor.insertAdjacentElement("beforebegin", p);
+}
+
+/**
  * Render the current local items into the shared media list, resolving at FIRST
  * PAINT: find (or create) the `#media-list` <ul>, do a single bounded sidecar
  * read, partition items into cached (overlaid with real metadata, zero file IO)
@@ -213,12 +251,33 @@ export function settleEnrichment(): Promise<void> {
  * immediately. Cold-folder metadata extraction for the uncached items is LAZY:
  * an IntersectionObserver schedules each row's bounded-concurrency read only as
  * it scrolls into view, so a folder of N files no longer kicks off N eager
- * reads — and a hung extract never blocks first paint or the focus listener.
- * No-ops when no media list or empty-state placeholder is present (e.g. viewer
- * page).
+ * reads — and a hung extract never blocks first paint or the focus listener. A
+ * whole-scan failure surfaces an in-list error notice with a retry instead of
+ * rejecting. No-ops when no media list or empty-state placeholder is present
+ * (e.g. viewer page).
  */
 export async function renderLocalIntoList(container: HTMLElement): Promise<void> {
-  const items = await listLocal();
+  let items: MediaItem[];
+  try {
+    items = await listLocal();
+  } catch (err) {
+    // A whole-scan enumeration rejection leaves the user on cloud-only with no
+    // signal. Surface it as an in-list notice with a retry rather than swallow
+    // it. The retry re-invokes a fresh scan (scan() clears pendingScan in its
+    // .finally), so it genuinely recovers.
+    logError(err, { operation: "local-folder-scan" });
+    renderLocalScanError(container, () =>
+      renderLocalIntoList(container).catch((e) =>
+        logError(e, { operation: "local-folder-rescan-retry" }),
+      ),
+    );
+    return;
+  }
+  // A scan that previously failed but now succeeds must drop its stale notice.
+  // Clear it as soon as recovery is confirmed — before the ul lookup and the
+  // unrelated ensureLoaded() await — so the notice does not linger for the full
+  // sidecar load.
+  clearLocalScanError(container);
   let ul = container.querySelector<HTMLUListElement>("#media-list");
   if (!ul) {
     // Empty cloud library renders a `#media-empty` <p> instead of a <ul>.

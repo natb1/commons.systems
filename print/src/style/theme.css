@@ -95,6 +95,12 @@
 }
 
 /* Local-folder items + controls */
+.local-folder-error {
+  color: var(--danger);
+  font-size: var(--text-sm);
+  margin: var(--space-1) 0 0;
+}
+
 .media-item-local .media-title a {
   color: inherit;
   text-decoration: none;
