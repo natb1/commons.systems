@@ -51,12 +51,12 @@ describe("fitBacklogRunway", () => {
     expect(isFinite(fit.daysUntilEmpty)).toBe(true);
   });
 
-  it("draining: runwayVerdict text matches 'until the queue empties'", () => {
+  it("draining: runwayVerdict text matches 'to clear the open backlog'", () => {
     const fit = fitBacklogRunway(drainingFixture);
     expect(fit.state).toBe("draining");
     const verdict = runwayVerdict(fit);
     expect(verdict.state).toBe("draining");
-    expect(verdict.text).toMatch(/until the queue empties/);
+    expect(verdict.text).toMatch(/to clear the open backlog/);
   });
 
   it("returns 'stable' for a flat backlog", () => {
@@ -126,7 +126,7 @@ describe("runwayVerdict", () => {
       crossingAt: new Date("2026-01-02T00:00:00Z"),
     };
     const { text } = runwayVerdict(fit);
-    expect(text).toMatch(/~1 day until the queue empties/);
+    expect(text).toMatch(/~1 day to clear the open backlog/);
   });
 
   it("formats plural 'days' when daysUntilEmpty rounds to > 1", () => {
@@ -138,6 +138,6 @@ describe("runwayVerdict", () => {
       crossingAt: new Date("2026-01-05T00:00:00Z"),
     };
     const { text } = runwayVerdict(fit);
-    expect(text).toMatch(/~4 days until the queue empties/);
+    expect(text).toMatch(/~4 days to clear the open backlog/);
   });
 });
