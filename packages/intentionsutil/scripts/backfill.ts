@@ -15,7 +15,7 @@
 // deferred dialectic work in a later epic stage.
 //
 // Run from anywhere (the output dir is resolved relative to this file, not cwd):
-//   npx tsx intentionsutil/scripts/backfill.ts
+//   npx tsx packages/intentionsutil/scripts/backfill.ts
 
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
@@ -27,8 +27,9 @@ import { paginateGhApi } from "./gh-utils.js";
 import type { IntentionNodeInput } from "../src/schema.js";
 
 // --- Paths -----------------------------------------------------------------
-// The script lives at `intentionsutil/scripts/backfill.ts`, so the repo root is
-// two directories up. Resolve from this file's own location, never from cwd.
+// The script lives at `packages/intentionsutil/scripts/backfill.ts`, so the repo
+// root is three directories up. Resolve from this file's own location, never
+// from cwd.
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = dirname(dirname(dirname(scriptDir)));
 const intentionsDir = join(repoRoot, "intentions");

@@ -9,7 +9,7 @@
 // no analytics, no network).
 //
 // Run from anywhere (the store dir is resolved relative to this file, not cwd):
-//   npx tsx intentionsutil/scripts/read-sensors.ts
+//   npx tsx packages/intentionsutil/scripts/read-sensors.ts
 //
 // SENSOR REGISTRATION PATTERN (documented once here, not enumerated per sensor):
 // A Sensor is registered under the name nodes put in `success_signal.sensor`. A
@@ -36,8 +36,8 @@ import { SensorRegistry, deriveGap, type Sensor } from "../src/sensors.js";
 import { IntentionSchemaError } from "../src/errors.js";
 
 // --- Paths -----------------------------------------------------------------
-// The script lives at `intentionsutil/scripts/read-sensors.ts`, so the repo
-// root is two directories up. Resolve from this file's own location, never from
+// The script lives at `packages/intentionsutil/scripts/read-sensors.ts`, so the
+// repo root is three directories up. Resolve from this file's own location, never from
 // cwd — the local-first sensors run their commands with `cwd: repoRoot`.
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = dirname(dirname(dirname(scriptDir)));
