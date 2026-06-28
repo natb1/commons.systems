@@ -85,7 +85,7 @@ fi
 BUILD_ARGS+=("VITE_FIREBASE_PROJECT_ID=${EMULATOR_PROJECT_ID}")
 
 # Firebase credentials — emulators don't validate these, but the client-side
-# config module (firebaseutil/src/config.ts) requires them at startup.
+# config module (packages/firebaseutil/src/config.ts) requires them at startup.
 BUILD_ARGS+=("VITE_FIREBASE_API_KEY=${VITE_FIREBASE_API_KEY:-emulator-api-key}")
 BUILD_ARGS+=("VITE_RECAPTCHA_SITE_KEY=${VITE_RECAPTCHA_SITE_KEY:-emulator-recaptcha-key}")
 
@@ -250,7 +250,7 @@ if [ "$USES_FIRESTORE" = true ]; then
   FIRESTORE_EMULATOR_HOST="localhost:${FIRESTORE_PORT}" \
   FIRESTORE_NAMESPACE="${EMULATOR_NAMESPACE}" \
   SEED_TEST_ONLY=true \
-  npx tsx firestoreutil/bin/run-seed.ts
+  npx tsx packages/firestoreutil/bin/run-seed.ts
 fi
 
 # Poll until Auth emulator is ready (if used)
@@ -268,7 +268,7 @@ if [ "$USES_AUTH" = true ]; then
 
   # Seed auth user
   echo "Seeding auth user..."
-  APP_NAME="$APP_NAME" AUTH_EMULATOR_HOST="localhost:${AUTH_PORT}" FIREBASE_PROJECT_ID="$EMULATOR_PROJECT_ID" npx tsx authutil/bin/run-auth-seed.ts
+  APP_NAME="$APP_NAME" AUTH_EMULATOR_HOST="localhost:${AUTH_PORT}" FIREBASE_PROJECT_ID="$EMULATOR_PROJECT_ID" npx tsx packages/authutil/bin/run-auth-seed.ts
 fi
 
 # Poll until Storage emulator is ready (if used).
@@ -289,7 +289,7 @@ if [ "$USES_STORAGE" = true ]; then
   # Seed Storage (if the app provides storage seed data)
   if [ -f "$REPO_ROOT/$APP_DIR/seeds/storage.ts" ]; then
     echo "Seeding Storage..."
-    APP_NAME="$APP_NAME" STORAGE_EMULATOR_HOST="localhost:${STORAGE_PORT}" STORAGE_BUCKET="${EMULATOR_PROJECT_ID}.firebasestorage.app" SEED_TEST_ONLY=true npx tsx "$REPO_ROOT/firebaseutil/bin/run-storage-seed.ts"
+    APP_NAME="$APP_NAME" STORAGE_EMULATOR_HOST="localhost:${STORAGE_PORT}" STORAGE_BUCKET="${EMULATOR_PROJECT_ID}.firebasestorage.app" SEED_TEST_ONLY=true npx tsx "$REPO_ROOT/packages/firebaseutil/bin/run-storage-seed.ts"
   fi
 fi
 
