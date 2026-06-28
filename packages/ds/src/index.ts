@@ -20,3 +20,7 @@ export type { CheckboxProps } from "./forms/Checkbox.tsx";
 export { Nav } from "./navigation/Nav.tsx";
 export type { NavProps } from "./navigation/Nav.tsx";
 export type { NavLink } from "./navigation/nav-link.ts";
+
+// templates
+export { Landing } from "./templates/Landing.tsx";
+export type { LandingProps } from "./templates/Landing.tsx";
