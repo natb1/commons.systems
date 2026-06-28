@@ -45,17 +45,17 @@
     grid-template-columns: 1fr var(--sidebar-width, 16rem);
   }
 
-  .page:has(.sidebar) > header {
+  .page:has(> .content-grid > .sidebar) > header {
     display: grid;
     grid-template-columns: 1fr var(--sidebar-width, 16rem);
     column-gap: var(--space-6);
   }
 
-  .page:has(.sidebar) > header > * {
+  .page:has(> .content-grid > .sidebar) > header > * {
     grid-column: 1;
   }
 
-  .page:has(.sidebar) > header > nav {
+  .page:has(> .content-grid > .sidebar) > header > nav {
     grid-column: 1 / -1;
   }
 
