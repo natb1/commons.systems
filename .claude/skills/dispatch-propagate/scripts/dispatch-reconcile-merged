@@ -59,7 +59,7 @@ MARKER='<!-- dispatch:auto-close-repair -->'
 # partial snapshot could miss a stranded issue or act on stale data.
 # lint-allow: gh-rest-porcelain closingIssuesReferences is a GraphQL-only field with no REST equivalent
 PR_LIST=$(gh_retry gh pr list --state merged --json number,title,mergedAt,closingIssuesReferences --limit "$LIMIT") || {
-  echo "dispatch-reconcile-merged: error: gh pr list failed" >&2
+  echo "dispatch-reconcile-merged: error: merged-PR fetch failed" >&2
   exit 1
 }
 
