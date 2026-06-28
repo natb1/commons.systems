@@ -80,6 +80,11 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# REST helper for per-issue label fetches (gh_issue_view_rest). SCRIPT_DIR-relative
+# so cwd is irrelevant; lib.sh's top level is only function defs + a few exports,
+# safe to source under `set -euo pipefail`.
+source "$SCRIPT_DIR/../../dispatch-propagate/scripts/lib.sh"
+
 DAYS=7
 JSON_OUT=""
 PROJECTS_ROOT="${DISPATCH_AUDIT_PROJECTS_ROOT:-$HOME/.claude/projects}"
@@ -752,9 +757,22 @@ WINDOW_JSON=$(jq -n \
   --argjson failed "$FILES_FAILED" \
   '{days:$days, since:$since, until:$until, files_scanned:$scanned, files_failed:$failed}')
 
+# Build a map of issue-number string -> array of label-name strings, fetched once
+# per distinct issue (the `sort -u` is the per-issue cache). Keyed by issue number
+# alone, which is safe under the single-repo natb1/commons.systems assumption; it
+# would collide if two repos shared an issue number.
+LABELS_BY_ISSUE='{}'
+while IFS=$'\t' read -r repo issue; do
+  [[ -z "$issue" ]] && continue
+  labels_json=$(gh_issue_view_rest "$issue" --repo "$repo" | jq -c '[.labels[].name]') || labels_json='[]'
+  LABELS_BY_ISSUE=$(jq -c --arg k "$issue" --argjson v "$labels_json" '.[$k] = $v' <<<"$LABELS_BY_ISSUE")
+done < <(
+  jq -r 'select(.artifact != null and .artifact.issue != null) | "\(.artifact.repo)\t\(.artifact.issue)"' "$STAGE1_OUT" | sort -u
+)
+
 # Stage-2: fold stage-1 lines into the final document. `jq -s` over an empty file
 # yields [], which the program handles as the zero-files case.
-DOC=$(jq -s --argjson window "$WINDOW_JSON" -f "$TMP/stage2.jq" "$STAGE1_OUT")
+DOC=$(jq -s --argjson window "$WINDOW_JSON" --argjson labels_by_issue "$LABELS_BY_ISSUE" -f "$TMP/stage2.jq" "$STAGE1_OUT")
 
 # No silent cap: if tool_sequences was truncated, report it to STDERR (never
 # stdout — stdout must stay a pure JSON document).
