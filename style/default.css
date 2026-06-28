@@ -5,6 +5,9 @@
 
 :root {
   --main-max-width: var(--max-width-prose);
+  --danger: light-dark(#c0392b, #ff6b6b);
+  --ok: light-dark(#2e7d32, #4caf50);
+
   --line-length: var(--main-max-width);
 
   /* Apps override on :root to lock a specific scheme (e.g., color-scheme: dark) */

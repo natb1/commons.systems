@@ -25,6 +25,7 @@
 #                                   an office-hours-reason is written here before printing it
 #   STOP wrong-worktree             cross-check failed (diagnostic on stderr); exits non-zero
 #   STOP closed                     issue is CLOSED — never dispatch a closed issue to a phase
+#   STOP merged-pr-closed           open issue, but its closing PR has MERGED — self-close (no re-implement loop)
 #
 # Usage error (missing <N> or <worktree-path>) → stderr message, exit 2 (matches
 # the sibling-script convention).
@@ -98,6 +99,28 @@ ISSUE_STATE=$(gh_issue_view_rest "$N" | jq -r '.state') || {
 }
 if [[ "$ISSUE_STATE" == "CLOSED" ]]; then
   echo "STOP closed"
+  exit 0
+fi
+
+# Merged-PR guard (#2511, complements #1845): an OPEN issue whose closing PR
+# has already MERGED — GitHub failed to auto-close it — must not be routed to a
+# build phase (it would loop on INVOKE /implement forever; the #1845
+# state==CLOSED guard can't fire because the issue is open). Detect via the
+# issue's own closedByPullRequestsReferences (GraphQL-only; no REST
+# equivalent), filtering to MERGED. On a gh failure, log and continue (do not
+# strand) — matches the closed-guard fallback above. One gh call per routed
+# worker (bounded by sustained-N), not per-issue.
+MERGED_CLOSING_PR=""
+# lint-allow: gh-rest-porcelain GraphQL-only closedByPullRequestsReferences (no REST equivalent)
+if CLOSING_JSON=$(gh_retry gh issue view "$N" --json closedByPullRequestsReferences 2>/dev/null); then
+  MERGED_CLOSING_PR=$(printf '%s' "$CLOSING_JSON" \
+    | jq -r '[.closedByPullRequestsReferences[] | select(.state == "MERGED") | .number] | first // empty')
+else
+  echo "dispatch-route: closedByPullRequestsReferences query for #$N failed; continuing to route" >&2
+fi
+if [[ -n "$MERGED_CLOSING_PR" ]]; then
+  echo "dispatch-route: #$N is OPEN but PR #$MERGED_CLOSING_PR (merged) closes it; routing to self-close" >&2
+  echo "STOP merged-pr-closed"
   exit 0
 fi
 

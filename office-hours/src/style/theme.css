@@ -47,7 +47,7 @@
   white-space: nowrap;
 }
 .reminder-due.overdue {
-  color: var(--danger, #ff6b6b);
+  color: var(--danger);
   font-weight: 700;
 }
 .parked-issues-heading {
@@ -157,7 +157,7 @@
   color: var(--warning, #f9c74f);
 }
 .capacity-worker-state.paused {
-  color: var(--danger, #ff6b6b);
+  color: var(--danger);
 }
 .queue-heading {
   font-size: 1rem;
@@ -193,7 +193,7 @@
   color: var(--muted);
 }
 .queue-runway-state.growing {
-  color: var(--danger, #ff6b6b);
+  color: var(--danger);
 }
 /* Plot tip text: force dark so it remains readable on every chart. */
 svg [aria-label="tip"] text { fill: #222; }
@@ -286,7 +286,7 @@ svg [aria-label="tip"] text { fill: #222; }
   margin-bottom: 1rem;
 }
 .error {
-  color: var(--danger, #ff6b6b);
+  color: var(--danger);
   padding: 0.5rem 0.75rem;
 }
 .intention-tree-heading {

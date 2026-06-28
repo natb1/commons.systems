@@ -20,6 +20,7 @@ const getOwnerReminders = vi.fn();
 const getOwnerQueueMetrics = vi.fn();
 const getOwnerIssueSamples = vi.fn();
 const getOwnerAuditAggregates = vi.fn();
+const getOwnerProjectSignals = vi.fn();
 
 vi.mock("../src/usage-data.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/usage-data.js")>()),
@@ -37,6 +38,10 @@ vi.mock("../src/issue-data.js", async (importOriginal) => ({
 vi.mock("../src/audit-data.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/audit-data.js")>()),
   getOwnerAuditAggregates: (...args: unknown[]) => getOwnerAuditAggregates(...args),
+}));
+vi.mock("../src/project-signals-data.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/project-signals-data.js")>()),
+  getOwnerProjectSignals: (...args: unknown[]) => getOwnerProjectSignals(...args),
 }));
 
 import { Dashboard } from "../src/Dashboard.js";
@@ -69,18 +74,18 @@ describe("Dashboard demo tier (user=null)", () => {
     expect(banner!.textContent).toBe("Demo data — sign in to see your queue.");
   });
 
-  it("renders the panel grid with all nine panels", () => {
+  it("renders the panel grid with all ten panels", () => {
     const { container } = render(<Dashboard user={null} />);
     const grid = container.querySelector(".panel-grid");
     expect(grid).not.toBeNull();
-    // capacity, pace, history, backlog, audit, reminders, queue-metrics, parked, intention-tree
-    expect(grid?.children).toHaveLength(9);
+    // capacity, pace, history, backlog, audit, reminders, queue-metrics, parked, intention-tree, project-signals
+    expect(grid?.children).toHaveLength(10);
   });
 
-  it("marks the four full-width panels (history, backlog, audit, intention-tree) as panel-grid-full", () => {
+  it("marks the five full-width panels (history, backlog, audit, intention-tree, project-signals) as panel-grid-full", () => {
     const { container } = render(<Dashboard user={null} />);
     const full = container.querySelectorAll(".panel-grid > .panel-grid-full");
-    expect(full).toHaveLength(4);
+    expect(full).toHaveLength(5);
   });
 
   it("renders the intention-tree panel full-width with INTENTION TREE heading", () => {
@@ -167,6 +172,7 @@ describe("Dashboard owner tier with data", () => {
     getOwnerQueueMetrics.mockResolvedValue(queueMetricsFixture);
     getOwnerIssueSamples.mockResolvedValue([]);
     getOwnerAuditAggregates.mockResolvedValue([]);
+    getOwnerProjectSignals.mockResolvedValue(null);
   });
 
   it("renders a reminder list item for each reminder and no demo banner", async () => {
@@ -199,6 +205,7 @@ describe("Dashboard owner tier — empty", () => {
     getOwnerQueueMetrics.mockResolvedValue(null);
     getOwnerIssueSamples.mockResolvedValue([]);
     getOwnerAuditAggregates.mockResolvedValue([]);
+    getOwnerProjectSignals.mockResolvedValue(null);
   });
 
   it("renders the exact empty-state strings for each panel", async () => {
@@ -229,6 +236,7 @@ describe("Dashboard error tier", () => {
     getOwnerQueueMetrics.mockResolvedValue(null);
     getOwnerIssueSamples.mockResolvedValue([]);
     getOwnerAuditAggregates.mockResolvedValue([]);
+    getOwnerProjectSignals.mockResolvedValue(null);
     vi.spyOn(console, "error").mockImplementation(() => {});
   });
 
