@@ -7,7 +7,7 @@ export async function signIn(
   // The auth module loads asynchronously via dynamic import. Wait for the
   // emulator setup to expose __signIn before calling it.
   await page.waitForFunction(
-    () => typeof (window as Record<string, unknown>).__signIn === "function",
+    () => typeof (window as unknown as Record<string, unknown>).__signIn === "function",
     { timeout: 10_000 },
   );
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
