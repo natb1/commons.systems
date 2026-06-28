@@ -4,6 +4,7 @@ import { usageSamplesSeedDataPlugin } from "./src/vite-plugin-usage-samples-seed
 import { issueSamplesSeedDataPlugin } from "./src/vite-plugin-issue-samples-seed";
 import { officeHoursQueueSeedPlugin } from "./src/vite-plugin-queue-seed";
 import { auditAggregateSeedPlugin } from "./src/vite-plugin-audit-aggregate-seed";
+import { projectSignalSeedPlugin } from "./src/vite-plugin-project-signal-seed";
 
 export default createAppConfig({
   esbuild: { jsx: "automatic", jsxImportSource: "react" },
@@ -17,6 +18,7 @@ export default createAppConfig({
     issueSamplesSeedDataPlugin(),
     officeHoursQueueSeedPlugin(),
     auditAggregateSeedPlugin(),
+    projectSignalSeedPlugin(),
   ],
   // Include .test.tsx (React panel tests) alongside the vanilla .test.ts; the
   // shared appBase default only matches test/**/*.test.ts.
