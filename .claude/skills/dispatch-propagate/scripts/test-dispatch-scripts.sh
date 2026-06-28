@@ -40916,6 +40916,135 @@ assert_eq "firebase_deploy_retry: non-auth failure not retried (1 attempt)" "1" 
 assert_eq "firebase_deploy_retry: non-auth failure returns nonzero" "nonzero" \
   "$([[ $fdr_rc2 -ne 0 ]] && echo nonzero || echo zero)"
 
+# --- Case 3 (a): auth-class exhaustion runs the diagnostic -----------------
+FDR_STUB_A="$FDR_DIR/stub-always-auth-fail-a"
+cat > "$FDR_STUB_A" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' 'Failed to authenticate'
+exit 1
+STUB
+chmod +x "$FDR_STUB_A"
+
+FDR_DIAG_A="$FDR_DIR/diag-a"
+cat > "$FDR_DIAG_A" <<'DIAGSTUB'
+#!/usr/bin/env bash
+printf '%s\n' '[debug] Connecting to googleapis...'
+printf '%s\n' 'Invalid response body while trying to fetch https://www.googleapis.com/oauth2/v4/token: Premature close'
+exit 1
+DIAGSTUB
+chmod +x "$FDR_DIAG_A"
+export FIREBASE_AUTH_DIAGNOSTIC_CMD="$FDR_DIAG_A"
+
+FDR_STDOUT_A="$FDR_DIR/stdout-a"
+FDR_STDERR_A="$FDR_DIR/stderr-a"
+firebase_deploy_retry "$FDR_STUB_A" >"$FDR_STDOUT_A" 2>"$FDR_STDERR_A" || true
+assert_eq "firebase_deploy_retry: auth exhaustion - 'Failed to authenticate' on stdout" "yes" \
+  "$(grep -q 'Failed to authenticate' "$FDR_STDOUT_A" && echo yes || echo no)"
+assert_eq "firebase_deploy_retry: auth exhaustion - diagnostic shows 'Premature close' on stderr" "yes" \
+  "$(grep -q 'Premature close' "$FDR_STDERR_A" && echo yes || echo no)"
+
+# --- Case 3 (b): secrets are redacted (load-bearing test) -----------------
+# Diagnostic emits realistic --debug output with secrets adjacent to error/token
+# lines so they fall inside the grep -B1 -A2 window — proving redaction when absent.
+# Layout: "error: auth failed, sending token request" (line 1) puts Bearer (line 2)
+# and "access_token" JSON (line 3) inside its A2 window; "access_token" on line 3
+# ("token" match) puts PEM BEGIN (line 4) and PEM body (line 5) inside its A2 window;
+# "error: Premature close while fetching token" (line 7) puts eyJaaa JWT (line 8)
+# inside its A2 window. If redaction were broken, all four secret values would appear
+# verbatim in the emitted window.
+FDR_STUB_B="$FDR_DIR/stub-always-auth-fail-b"
+cat > "$FDR_STUB_B" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' 'Failed to authenticate'
+exit 1
+STUB
+chmod +x "$FDR_STUB_B"
+
+FDR_DIAG_B="$FDR_DIR/diag-b"
+cat > "$FDR_DIAG_B" <<'DIAGSTUB'
+#!/usr/bin/env bash
+printf '%s\n' 'error: auth failed, sending token request'
+printf '%s\n' 'authorization: Bearer ya29.LEAKME123456789'
+printf '%s\n' '"access_token": "ya29.SECRETVAL987654321"'
+printf '%s\n' '-----BEGIN PRIVATE KEY-----'
+printf '%s\n' 'MIIEvQIBADANBgkqhkiG9w0BAQEFAASC'
+printf '%s\n' '-----END PRIVATE KEY-----'
+printf '%s\n' 'error: Premature close while fetching token'
+printf '%s\n' 'eyJaaa.bbb.ccc'
+exit 1
+DIAGSTUB
+chmod +x "$FDR_DIAG_B"
+export FIREBASE_AUTH_DIAGNOSTIC_CMD="$FDR_DIAG_B"
+
+FDR_STDERR_B="$FDR_DIR/stderr-b"
+firebase_deploy_retry "$FDR_STUB_B" >/dev/null 2>"$FDR_STDERR_B" || true
+assert_eq "firebase_deploy_retry: redact - no raw ya29. token in diagnostic output" "no" \
+  "$(grep -q 'ya29\.' "$FDR_STDERR_B" && echo yes || echo no)"
+assert_eq "firebase_deploy_retry: redact - no raw JWT eyJaaa in diagnostic output" "no" \
+  "$(grep -q 'eyJaaa' "$FDR_STDERR_B" && echo yes || echo no)"
+assert_eq "firebase_deploy_retry: redact - no PEM body MIIEvQIBADANBg in diagnostic output" "no" \
+  "$(grep -q 'MIIEvQIBADANBg' "$FDR_STDERR_B" && echo yes || echo no)"
+assert_eq "firebase_deploy_retry: redact - error signature 'Premature' survives redaction" "yes" \
+  "$(grep -q 'Premature' "$FDR_STDERR_B" && echo yes || echo no)"
+
+# --- Case 3 (c): non-auth failure does NOT run the diagnostic --------------
+FDR_STUB_C="$FDR_DIR/stub-non-auth-c"
+cat > "$FDR_STUB_C" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' 'some other deploy error' >&2
+exit 1
+STUB
+chmod +x "$FDR_STUB_C"
+
+FDR_SENTINEL_C="$FDR_DIR/sentinel-c"
+FDR_DIAG_C="$FDR_DIR/diag-c"
+cat > "$FDR_DIAG_C" <<DIAGSTUB
+#!/usr/bin/env bash
+touch "$FDR_SENTINEL_C"
+exit 0
+DIAGSTUB
+chmod +x "$FDR_DIAG_C"
+export FIREBASE_AUTH_DIAGNOSTIC_CMD="$FDR_DIAG_C"
+
+firebase_deploy_retry "$FDR_STUB_C" >/dev/null 2>/dev/null || true
+fdr_sentinel_c_exists=$([[ -e "$FDR_SENTINEL_C" ]] && echo present || echo absent)
+assert_eq "firebase_deploy_retry: non-auth failure does not run diagnostic" "absent" \
+  "$fdr_sentinel_c_exists"
+
+# --- Case 3 (d): success path does NOT run the diagnostic ------------------
+FDR_COUNTER_D="$FDR_DIR/counter-d"
+printf '0' > "$FDR_COUNTER_D"
+FDR_STUB_D="$FDR_DIR/stub-success-d"
+cat > "$FDR_STUB_D" <<STUB
+#!/usr/bin/env bash
+n=\$(cat "$FDR_COUNTER_D")
+n=\$(( n + 1 ))
+printf '%s' "\$n" > "$FDR_COUNTER_D"
+if [[ "\$n" -lt 3 ]]; then
+  printf '%s\n' 'Failed to authenticate'
+  exit 1
+fi
+printf '%s\n' '{"result":{"ok":true}}'
+exit 0
+STUB
+chmod +x "$FDR_STUB_D"
+
+FDR_SENTINEL_D="$FDR_DIR/sentinel-d"
+FDR_DIAG_D="$FDR_DIR/diag-d"
+cat > "$FDR_DIAG_D" <<DIAGSTUB
+#!/usr/bin/env bash
+touch "$FDR_SENTINEL_D"
+exit 0
+DIAGSTUB
+chmod +x "$FDR_DIAG_D"
+export FIREBASE_AUTH_DIAGNOSTIC_CMD="$FDR_DIAG_D"
+
+firebase_deploy_retry "$FDR_STUB_D" >/dev/null 2>/dev/null || true
+fdr_sentinel_d_exists=$([[ -e "$FDR_SENTINEL_D" ]] && echo present || echo absent)
+assert_eq "firebase_deploy_retry: success path does not run diagnostic" "absent" \
+  "$fdr_sentinel_d_exists"
+
+unset FIREBASE_AUTH_DIAGNOSTIC_CMD
 rm -rf "$FDR_DIR"
 unset FIREBASE_DEPLOY_RETRY_BASE_DELAY FIREBASE_DEPLOY_RETRY_ATTEMPTS
 
