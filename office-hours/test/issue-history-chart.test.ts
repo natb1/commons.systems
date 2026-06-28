@@ -105,7 +105,7 @@ describe("renderIssueHistoryChart", () => {
 
     const stateSpan = el.querySelector(".backlog-runway-state");
     expect(stateSpan).not.toBeNull();
-    expect(stateSpan!.textContent).toMatch(/until the queue empties/);
+    expect(stateSpan!.textContent).toMatch(/to clear the open backlog/);
     expect(stateSpan!.classList.contains("draining")).toBe(true);
 
     const legend = el.querySelector(".trend-legend");
