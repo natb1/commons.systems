@@ -403,7 +403,7 @@ if [[ -n "$RECONCILE_MERGED_OUT" ]]; then
   done <<< "$RECONCILE_MERGED_OUT"
 fi
 
-# Heartbeat: refresh after the auto-merge sub-step completes (#2104).
+# Heartbeat: refresh after the auto-merge and reconcile-merged sub-steps complete (#2104, #2512).
 refresh_lock
 
 # --- Step 1b: run-scoped concurrency gate (autonomous no-arg queue path only) -

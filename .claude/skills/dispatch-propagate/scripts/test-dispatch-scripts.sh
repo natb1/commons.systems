@@ -605,6 +605,19 @@ case "$args" in
       echo "stub forced gh api failure" >&2
       exit 1
     fi
+    # Optional per-issue close-failure injection (#2512): if issue-close-fail-on
+    # holds an issue number matching the <N> in this PATCH's path, emit a
+    # non-transient error and exit non-zero so gh_retry returns immediately and
+    # the caller (dispatch-reconcile-merged) takes its gh_issue_close_rest
+    # HARD_ERROR path for that issue. Default-absent, so existing tests sharing
+    # this PATCH branch are unaffected.
+    if [[ -f "$STUB_DIR/issue-close-fail-on" ]]; then
+      close_num=$(printf '%s' "$args" | sed -E 's#.*issues/([0-9]+).*#\1#')
+      if [[ "$close_num" == "$(cat "$STUB_DIR/issue-close-fail-on")" ]]; then
+        echo "issue close PATCH for #$close_num was rejected" >&2
+        exit 1
+      fi
+    fi
     echo '{}'
     ;;
   "api -X POST "*/issues/*/comments*)
@@ -38463,6 +38476,65 @@ assert_eq "reconcile: empty-closing-set no close call" "absent" "$(log_state gh-
 assert_eq "reconcile: empty-closing-set no comment call" "absent" "$(log_state gh-issue-comment-rest-calls.log)"
 assert_eq "reconcile: empty-closing-set still fetched PR list" "present" \
   "$(log_state gh-reconcile-merged-pr-list.log)"
+teardown
+
+# --- HARD_ERROR paths --------------------------------------------------------
+# Each of the three per-item failure branches sets HARD_ERROR=1, `continue`s, and
+# drives the final `exit 1`. Without coverage a regression in the error-return
+# convention of any lib.sh helper (or the branch's own logging) would go unseen.
+
+# 7. gh_issue_view_rest (Layer 1 state read) failure → hard error, exit 1.
+echo "Test: reconcile hard-errors when gh_issue_view_rest fails"
+setup
+printf '%s' "[$(make_merged_pr 8001 "$RM_INWIN" '[{"number":9001}]')]" \
+  > "$STUB_DIR/reconcile-merged-pr-list.json"
+# gh-fail-rest forces every REST `api` call to fail; the merged-PR list fetch is a
+# `pr list` (not an `api` call) so it still succeeds, and gh_issue_view_rest — the
+# first REST call in the per-issue loop — is what fails.
+: > "$STUB_DIR/gh-fail-rest"
+rc=0
+err=$(DISPATCH_PLAN_AUTHOR_ID=12345 DISPATCH_RECONCILE_NOW=$RM_NOW "$TMPDIR_TEST/dispatch-reconcile-merged" 2>&1 >/dev/null) || rc=$?
+assert_eq "reconcile: view-failure exit 1" "1" "$rc"
+case "$err" in *"gh_issue_view_rest #9001 failed"*) m=yes ;; *) m=no ;; esac
+assert_eq "reconcile: view-failure stderr names the hard error" "yes" "$m"
+assert_eq "reconcile: view-failure short-circuits before close" "absent" \
+  "$(log_state gh-issue-close-rest-calls.log)"
+teardown
+
+# 8. dispatch_marker_comment_id (Layer 2 marker read) failure → hard error, exit 1.
+echo "Test: reconcile hard-errors when dispatch_marker_comment_id can't resolve author id"
+setup
+printf '%s' "[$(make_merged_pr 8001 "$RM_INWIN" '[{"number":9001}]')]" \
+  > "$STUB_DIR/reconcile-merged-pr-list.json"
+printf '%s' '{"number":9001,"state":"open"}' > "$STUB_DIR/view-issue-9001.json"
+# A non-numeric DISPATCH_PLAN_AUTHOR_ID trips the helper's author-id guard
+# (return 1) AFTER the OPEN-state read passes Layer 1, isolating the Layer 2 path.
+rc=0
+err=$(DISPATCH_PLAN_AUTHOR_ID=not-a-number DISPATCH_RECONCILE_NOW=$RM_NOW "$TMPDIR_TEST/dispatch-reconcile-merged" 2>&1 >/dev/null) || rc=$?
+assert_eq "reconcile: marker-id-failure exit 1" "1" "$rc"
+case "$err" in *"dispatch_marker_comment_id #9001 failed"*) m=yes ;; *) m=no ;; esac
+assert_eq "reconcile: marker-id-failure stderr names the hard error" "yes" "$m"
+assert_eq "reconcile: marker-id-failure short-circuits before close" "absent" \
+  "$(log_state gh-issue-close-rest-calls.log)"
+teardown
+
+# 9. gh_issue_close_rest (the closing PATCH) failure → hard error, exit 1.
+echo "Test: reconcile hard-errors when gh_issue_close_rest fails"
+setup
+printf '%s' "[$(make_merged_pr 8001 "$RM_INWIN" '[{"number":9001}]')]" \
+  > "$STUB_DIR/reconcile-merged-pr-list.json"
+printf '%s' '{"number":9001,"state":"open"}' > "$STUB_DIR/view-issue-9001.json"
+# No comments fixture → marker check resolves an empty id (markerless path), so
+# the script reaches the close. issue-close-fail-on injects a non-transient PATCH
+# rejection for #9001 so gh_issue_close_rest returns 1.
+printf '9001' > "$STUB_DIR/issue-close-fail-on"
+rc=0
+err=$(DISPATCH_PLAN_AUTHOR_ID=12345 DISPATCH_RECONCILE_NOW=$RM_NOW "$TMPDIR_TEST/dispatch-reconcile-merged" 2>&1 >/dev/null) || rc=$?
+assert_eq "reconcile: close-failure exit 1" "1" "$rc"
+case "$err" in *"gh_issue_close_rest #9001 failed"*) m=yes ;; *) m=no ;; esac
+assert_eq "reconcile: close-failure stderr names the hard error" "yes" "$m"
+assert_eq "reconcile: close-failure attempted the close PATCH" "present" \
+  "$(log_state gh-issue-close-rest-calls.log)"
 teardown
 
 # --- executable-bit guard ----------------------------------------------------

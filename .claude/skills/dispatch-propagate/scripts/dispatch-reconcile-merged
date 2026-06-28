@@ -63,6 +63,14 @@ PR_LIST=$(gh_retry gh pr list --state merged --json number,title,mergedAt,closin
   exit 1
 }
 
+# The lookback window is implicitly bounded by LIMIT: if the merged-PR list hits
+# the limit, the oldest PRs in the window may be truncated away. Warn so a
+# high-frequency-merge sweep does not silently skip stranded issues; raise
+# DISPATCH_RECONCILE_LIMIT to widen the window.
+if [[ $(jq 'length' <<<"$PR_LIST") -ge "$LIMIT" ]]; then
+  echo "dispatch-reconcile-merged: warning: PR list hit the limit ($LIMIT); oldest merged PRs in the window may be missing from this sweep — raise DISPATCH_RECONCILE_LIMIT" >&2
+fi
+
 # ---- Step 2: per-PR window filter + per-issue reconciliation -----------------
 HARD_ERROR=0
 
