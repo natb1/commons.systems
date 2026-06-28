@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { renderIssueHistoryChart } from "../src/issue-history-chart.js";
+import { fitBacklogRunway } from "../src/backlog-runway.js";
 import type { IssueSample } from "../src/issue-samples.js";
 
 function withFg(): HTMLElement {
@@ -141,5 +142,52 @@ describe("renderIssueHistoryChart", () => {
 
     const text = stateSpan!.textContent ?? "";
     expect(text).not.toMatch(/NaN|Infinity/);
+  });
+
+  it("draining with long horizon: forward projection capped at MAX_PROJECTION_DAYS, chart width far below uncapped", () => {
+    // Mirror the source constants for an independent width re-derivation.
+    const POINT_WIDTH = 60;
+    const MARGIN_RIGHT = 20;
+    const MAX_PROJECTION_DAYS = 14;
+
+    // 20 daily samples (dataDays = 19) with a shallow decline → daysUntilEmpty
+    // far exceeds the 14-day ceiling, so the cap binds on MAX_PROJECTION_DAYS
+    // (not on dataDays and not on daysUntilEmpty).
+    const N = 20;
+    const longHorizonFixture: IssueSample[] = Array.from({ length: N }, (_, i) => ({
+      sampledAt: new Date(Date.UTC(2026, 4, 1 + i)),
+      openSecurity: 1,
+      openBug: 10,
+      openEnhancement: 10,
+      openOther: 30 - Math.floor(i / 2),
+      groupId: "g",
+    }));
+
+    const fit = fitBacklogRunway(longHorizonFixture);
+    expect(fit.state).toBe("draining");
+    if (fit.state !== "draining") throw new Error("expected draining fit");
+
+    // Consecutive daily UTC-midnight samples → dataDays is exactly N - 1.
+    const dataDays = N - 1;
+    expect(dataDays).toBeGreaterThan(MAX_PROJECTION_DAYS); // dataDays not binding
+    expect(fit.daysUntilEmpty).toBeGreaterThan(MAX_PROJECTION_DAYS); // crossing not binding
+
+    const host = withFg();
+    const el = renderIssueHistoryChart(longHorizonFixture);
+    host.appendChild(el);
+
+    const svg = el.querySelector(".chart-scroll-wrapper svg") as HTMLElement;
+    const actualWidth = parseFloat(svg.style.width);
+
+    const pxPerDay = (N * POINT_WIDTH) / dataDays;
+    const cappedWidth = N * POINT_WIDTH + pxPerDay * MAX_PROJECTION_DAYS + MARGIN_RIGHT;
+    const uncappedWidth = N * POINT_WIDTH + pxPerDay * fit.daysUntilEmpty + MARGIN_RIGHT;
+
+    // The capped formula must beat the happy-dom 590 floor, else Math.max would
+    // return the floor and the assertion below would not test the cap.
+    expect(cappedWidth).toBeGreaterThan(590);
+    expect(actualWidth).toBeCloseTo(cappedWidth, 1);
+    // The cap matters: the uncapped width is far larger.
+    expect(uncappedWidth).toBeGreaterThan(cappedWidth * 1.5);
   });
 });

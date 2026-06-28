@@ -16,6 +16,8 @@ import {
 
 /** Per-sample chart width allocation along the time axis. */
 const POINT_WIDTH = 60;
+/** Readability ceiling on the chart's forward projection window (days). */
+const MAX_PROJECTION_DAYS = 14;
 const CHART_HEIGHT = 220;
 
 interface Point {
@@ -133,20 +135,33 @@ export function renderIssueHistoryChart(samples: IssueSample[]): HTMLElement {
   const dataDays = (last - first) / 86_400_000;
   const isDraining = fit.state === "draining" && dataDays > 0;
 
+  // Cap the forward projection to a bounded window so empty future space no
+  // longer dominates the x-axis. The cap binds on whichever is smallest:
+  //   - dataDays: the future window never exceeds the past (projection stays
+  //     <= 50% of the chart even for a short history);
+  //   - MAX_PROJECTION_DAYS: a hard ceiling for long histories;
+  //   - daysUntilEmpty: end at the real crossing when the queue empties soon.
+  const projectionDays =
+    fit.state === "draining" && isDraining
+      ? Math.min(fit.daysUntilEmpty, dataDays, MAX_PROJECTION_DAYS)
+      : 0;
+  const projectionEnd = new Date(last + projectionDays * 86_400_000);
+
   // x domain and the projection mark are width-independent — compute once.
   const xDomain: [Date, Date] = isDraining
-    ? [sorted[0].sampledAt, fit.crossingAt]
+    ? [sorted[0].sampledAt, projectionEnd]
     : [sorted[0].sampledAt, sorted[sorted.length - 1].sampledAt];
 
   if (isDraining) {
     // Dashed projection from the fitted value at the last actual point down to
-    // the zero-crossing.
+    // the capped projection horizon (the real zero-crossing when the cap does
+    // not bind; a positive fitted value at the window edge when it does).
     const fittedLast = Math.max(0, fit.slope * dataDays + fit.intercept);
     marks.push(
       Plot.lineY(
         [
           { x: sorted[sorted.length - 1].sampledAt, y: fittedLast },
-          { x: fit.crossingAt, y: 0 },
+          { x: projectionEnd, y: Math.max(0, fit.slope * (dataDays + projectionDays) + fit.intercept) },
         ],
         {
           x: "x",
@@ -187,7 +202,7 @@ export function renderIssueHistoryChart(samples: IssueSample[]): HTMLElement {
     if (isDraining) {
       const pxPerDay = (points.length * POINT_WIDTH) / dataDays;
       chartWidth = Math.max(
-        points.length * POINT_WIDTH + pxPerDay * fit.daysUntilEmpty + MARGIN_RIGHT,
+        points.length * POINT_WIDTH + pxPerDay * projectionDays + MARGIN_RIGHT,
         width - AXIS_WIDTH,
       );
     } else {
