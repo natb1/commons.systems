@@ -116,7 +116,7 @@ if CLOSING_JSON=$(gh_retry gh issue view "$N" --json closedByPullRequestsReferen
   MERGED_CLOSING_PR=$(printf '%s' "$CLOSING_JSON" \
     | jq -r '[.closedByPullRequestsReferences[] | select(.state == "MERGED") | .number] | first // empty')
 else
-  echo "dispatch-route: gh issue view $N (closedByPullRequestsReferences) failed; continuing to route" >&2
+  echo "dispatch-route: closedByPullRequestsReferences query for #$N failed; continuing to route" >&2
 fi
 if [[ -n "$MERGED_CLOSING_PR" ]]; then
   echo "dispatch-route: #$N is OPEN but PR #$MERGED_CLOSING_PR (merged) closes it; routing to self-close" >&2
