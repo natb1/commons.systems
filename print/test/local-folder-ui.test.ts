@@ -282,4 +282,19 @@ describe("renderLocalIntoList — scan failure", () => {
     expect(container.querySelector(".media-item-local")).not.toBeNull();
     expect(container.querySelector("#local-folder-error")).toBeNull();
   });
+
+  it("(e) EMPTY-ANCHOR FALLBACK: renders the notice before #media-empty when the cloud library is empty", async () => {
+    vi.mocked(listLocal).mockRejectedValueOnce(new Error("scan failed"));
+    const container = document.createElement("div");
+    container.innerHTML = '<p id="media-empty">No media items available.</p>';
+
+    await renderLocalIntoList(container);
+
+    const notice = container.querySelector("#local-folder-error");
+    expect(notice).not.toBeNull();
+    expect(container.querySelector("#local-folder-retry")).not.toBeNull();
+    // The notice is anchored before the empty-state placeholder.
+    const empty = container.querySelector("#media-empty");
+    expect(notice!.nextElementSibling).toBe(empty);
+  });
 });

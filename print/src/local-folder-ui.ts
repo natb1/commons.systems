@@ -248,6 +248,11 @@ export async function renderLocalIntoList(container: HTMLElement): Promise<void>
     );
     return;
   }
+  // A scan that previously failed but now succeeds must drop its stale notice.
+  // Clear it as soon as recovery is confirmed — before the ul lookup and the
+  // unrelated ensureLoaded() await — so the notice does not linger for the full
+  // sidecar load.
+  clearLocalScanError(container);
   let ul = container.querySelector<HTMLUListElement>("#media-list");
   if (!ul) {
     // Empty cloud library renders a `#media-empty` <p> instead of a <ul>.
@@ -260,9 +265,6 @@ export async function renderLocalIntoList(container: HTMLElement): Promise<void>
   // Single bounded sidecar read AFTER the early-return guard: a focus event on a
   // list-less route (e.g. the viewer) must not read the sidecar.
   await ensureLoaded();
-
-  // A scan that previously failed but now succeeds must drop its stale notice.
-  clearLocalScanError(container);
 
   // Partition before insert. getMetadata is an in-memory lookup (zero file IO)
   // after ensureLoaded: a present entry overlays full title + pageCount now;
