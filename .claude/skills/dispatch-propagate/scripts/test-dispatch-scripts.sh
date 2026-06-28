@@ -33228,6 +33228,25 @@ STUB
   assert_eq "flake-dedup: stale by ancestry → no reopen" "no" "$r"
   flake_dedup_teardown
 
+  # CASE 6b — STALE by ancestry via `diverged`. Identical to Case 6 except the
+  # run head and the closing fix have DIVERGED (neither is an ancestor of the
+  # other) rather than the head being plainly `behind`. The STALE gate is
+  # `[[ "$status" == "behind" || "$status" == "diverged" ]]`; this pins the
+  # `diverged` arm so a future edit that drops it is caught.
+  flake_dedup_setup
+  printf '[{"number":501,"title":"Flaky CI: %s","state":"closed","closed_at":"2026-01-01T00:00:00Z"}]\n' "$FP" > "$TMPDIR_TEST/scripts/issues.json"
+  printf '{"createdAt":"2026-02-01T00:00:00Z","headSha":"headsha"}\n' > "$TMPDIR_TEST/scripts/run.json"
+  printf 'diverged\n' > "$TMPDIR_TEST/scripts/compare-status"
+  printf '[{"event":"closed","commit_id":"closingsha"}]\n' > "$TMPDIR_TEST/scripts/timeline.json"
+  printf 'recurred on PR #900 / run http://x\n' > "$TMPDIR_TEST/body.md"
+  out=$("$TMPDIR_TEST/scripts/dispatch-flake-dedup" "$FP" --body-file "$TMPDIR_TEST/body.md" --run-id 12345)
+  assert_eq "flake-dedup: stale by ancestry (diverged) → STALE <N>" "STALE 501" "$out"
+  if [[ -s "$TMPDIR_TEST/scripts/stub/comments-fired" ]]; then c=yes; else c=no; fi
+  assert_eq "flake-dedup: stale by ancestry (diverged) → no comment" "no" "$c"
+  if [[ -s "$TMPDIR_TEST/scripts/stub/reopen-fired" ]]; then r=yes; else r=no; fi
+  assert_eq "flake-dedup: stale by ancestry (diverged) → no reopen" "no" "$r"
+  flake_dedup_teardown
+
   # CASE 7 — null commit_id (manual close), the live incident (PR #1849 / tracker
   # #2481). timeline commit_id is null, so there is no closing commit and ancestry
   # leaves stale=0 → REOPEN; compare-status `behind` MUST be ignored. run.createdAt
