@@ -34,6 +34,20 @@ export function feedFetchPlugin(feeds: FeedConfig[]): Plugin {
             }
             return [id, post];
           } catch (err) {
+            // undici (Node 22+) throws `TypeError: fetch failed` for network-level
+            // failures (DNS, connection refused, temporary unreachability). These are
+            // transient infrastructure errors, not a build misconfiguration — soft-warn
+            // and skip the feed rather than fail the build. This early return MUST
+            // precede the bad-URL re-throw AND the classifyError check below: classifyError
+            // maps every TypeError to "programmer", so without this return a network
+            // TypeError would be re-thrown there and fail the build. Do not collapse this
+            // into a single inverted condition.
+            if (err instanceof TypeError && err.message === "fetch failed") {
+              console.warn(`[feed-fetch] ${id}: fetch error`, err);
+              return [id, null];
+            }
+            // Other TypeErrors (e.g. `Failed to parse URL from <url>`) indicate a
+            // genuinely invalid feed configuration — re-throw as a fatal build error.
             if (err instanceof TypeError) {
               throw new Error(`[feed-fetch] ${id}: invalid fetch configuration`, { cause: err });
             }

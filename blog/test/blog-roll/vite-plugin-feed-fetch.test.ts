@@ -1,8 +1,13 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import {
+  feedFetchPlugin,
   parseAtomFeedXml,
   parseRssFeedXml,
 } from "../../src/blog-roll/vite-plugin-feed-fetch";
+
+function parseVirtualModule(moduleCode: string): unknown {
+  return JSON.parse(moduleCode.replace("export default ", "").replace(/;$/, ""));
+}
 
 describe("parseAtomFeedXml", () => {
   it("extracts title, URL, and publishedAt from an Atom entry", () => {
@@ -175,5 +180,45 @@ describe("parseRssFeedXml", () => {
     const result = parseRssFeedXml(xml);
     expect(result?.title).toBe("A & B <3");
     expect(result?.url).toBe("https://example.com/a&b");
+  });
+});
+
+describe("feedFetchPlugin buildStart error handling", () => {
+  const RESOLVED_VIRTUAL_MODULE_ID = "\0virtual:blog-roll-feeds";
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("soft-warns and skips the feed on a network TypeError (build does not fail)", async () => {
+    vi.stubGlobal("fetch", () => Promise.reject(new TypeError("fetch failed")));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const plugin = feedFetchPlugin([
+      { id: "test", url: "https://example.com/feed.xml" },
+    ]);
+
+    await expect((plugin as any).buildStart()).resolves.toBeUndefined();
+
+    const feedData = parseVirtualModule(
+      (plugin as any).load(RESOLVED_VIRTUAL_MODULE_ID),
+    ) as Record<string, unknown>;
+    expect(feedData["test"]).toBeNull();
+    expect(warn).toHaveBeenCalled();
+  });
+
+  it("re-throws a fatal build error on a bad-URL TypeError", async () => {
+    vi.stubGlobal("fetch", () =>
+      Promise.reject(new TypeError("Failed to parse URL from not-a-url")),
+    );
+
+    const plugin = feedFetchPlugin([
+      { id: "test", url: "https://example.com/feed.xml" },
+    ]);
+
+    await expect((plugin as any).buildStart()).rejects.toThrow(
+      "invalid fetch configuration",
+    );
   });
 });
