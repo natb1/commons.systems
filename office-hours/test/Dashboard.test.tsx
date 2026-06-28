@@ -74,18 +74,30 @@ describe("Dashboard demo tier (user=null)", () => {
     expect(banner!.textContent).toBe("Demo data — sign in to see your queue.");
   });
 
-  it("renders the panel grid with all nine panels", () => {
+  it("renders the panel grid with all ten panels", () => {
     const { container } = render(<Dashboard user={null} />);
     const grid = container.querySelector(".panel-grid");
     expect(grid).not.toBeNull();
-    // capacity, pace, history, backlog, audit, reminders, queue-metrics, parked, project-signals
-    expect(grid?.children).toHaveLength(9);
+    // capacity, pace, history, backlog, audit, reminders, queue-metrics, parked, intention-tree, project-signals
+    expect(grid?.children).toHaveLength(10);
   });
 
-  it("marks the four full-width panels (history, backlog, audit, project-signals) as panel-grid-full", () => {
+  it("marks the five full-width panels (history, backlog, audit, intention-tree, project-signals) as panel-grid-full", () => {
     const { container } = render(<Dashboard user={null} />);
     const full = container.querySelectorAll(".panel-grid > .panel-grid-full");
-    expect(full).toHaveLength(4);
+    expect(full).toHaveLength(5);
+  });
+
+  it("renders the intention-tree panel full-width with INTENTION TREE heading", () => {
+    const { container } = render(<Dashboard user={null} />);
+    const heading = container.querySelector(".intention-tree-heading");
+    expect(heading).not.toBeNull();
+    expect(heading!.textContent).toBe("INTENTION TREE"); // type-safety-ok: asserted not-null by the preceding expect()
+    // The panel root carries panel-grid-full as a direct child of the grid
+    const fullWidthWithHeading = container.querySelector(
+      ".panel-grid > .panel-grid-full .intention-tree-heading",
+    );
+    expect(fullWidthWithHeading).not.toBeNull();
   });
 
   it("renders chart layouts from the demo samples (charts mount, no sign-in)", () => {
