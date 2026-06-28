@@ -1,23 +1,41 @@
 #!/usr/bin/env bash
-# dispatch-mark-deviation — scripted terminal office-hours-reason marker write.
+# dispatch-mark-deviation — terminal office-hours park (in-session + marker).
 #
 # Usage: dispatch-mark-deviation "<reason>"
 #
-# Writes the dispatch office-hours-reason marker that dispatch-stop.sh's
-# resolve_office_hours_reason() reads to park an issue into office-hours with a
-# context-specific reason. The marker is written atomically (tempfile + mv)
-# under the $CLAUDE_JOB_DIR guard, exactly as the phase skills previously did
-# inline at their Step-4 terminus when a phase deviates and needs user review.
-# A one-token script call is more reliable than re-deriving the atomic write in
-# the post-clear, skill-less build session.
+# Parks an issue into office-hours when a phase deviates and needs user review.
+# It does this two ways, belt-and-suspenders:
+#
+#   1. In-session park (primary): resolves the issue number from the worktree
+#      branch and calls dispatch-apply-office-hours <N> "<reason>" directly, so
+#      the dispatch:office-hours label lands WITHIN this session. This no longer
+#      depends on the Stop hook firing to land the park — necessary because for
+#      Workflow-phase skills (/qa-fix, /review-fix) dispatch-stop.sh Branch A can
+#      exit early on an in-flight background task and never reach its park call,
+#      leaving a marker-only escalation that never sticks (#2541). The park runs
+#      unconditionally (independent of $CLAUDE_JOB_DIR). dispatch-apply-office-hours
+#      is idempotent (no-ops if the label is already present) and issue-only-
+#      targeted, so a later Stop-hook apply or a re-run posts no duplicate comment.
+#
+#   2. office-hours-reason marker (fallback): writes the dispatch
+#      office-hours-reason marker that dispatch-stop.sh's
+#      resolve_office_hours_reason() reads, atomically (tempfile + mv) under the
+#      $CLAUDE_JOB_DIR guard, exactly as the phase skills previously did inline
+#      at their Step-4 terminus. Retained as a Stop-hook fallback path.
 #
 # Marker contents (byte format MUST be preserved — read by dispatch-stop.sh):
 #
 #   <reason>
 #
+# Issue-number resolution: the worktree dir basename's leading <N> (the same
+# idiom plan-issue's preamble and dispatch-office-hours-strip.sh use). If it does
+# not resolve to a bare positive integer (detached HEAD, non-<N> branch), the
+# in-session park is skipped with a stderr warning and the marker write still
+# runs — a clear diagnostic, not a silent fallback.
+#
 # When CLAUDE_JOB_DIR is unset/empty or not a directory the script is running
-# interactively (not under a dispatch job): it prints a diagnostic and no-ops
-# (exit 0), so the same Step-4 call is harmless in an interactive run.
+# interactively (not under a dispatch job): the MARKER write is skipped (exit 0).
+# The in-session park above still runs first regardless of CLAUDE_JOB_DIR.
 #
 # Exactly one non-empty reason argument is required; zero args, extra args, or
 # an empty reason is a clear error, not a fallback (exit 2).
@@ -35,6 +53,21 @@ if [[ -z "$REASON" ]]; then
   echo "dispatch-mark-deviation: reason must be non-empty" >&2
   echo "usage: dispatch-mark-deviation \"<reason>\"" >&2
   exit 2
+fi
+
+# In-session park (primary): resolve the issue number from the worktree branch
+# and apply the dispatch:office-hours label directly, so the park lands within
+# this session rather than depending on the Stop hook (which can exit early on an
+# in-flight background task and never reach its park call — #2541). This runs
+# regardless of CLAUDE_JOB_DIR, so it precedes the marker's job-dir guard below.
+N="$(basename "$(git rev-parse --show-toplevel 2>/dev/null || true)")"
+N="${N%%-*}"
+if [[ ! "$N" =~ ^[0-9]+$ ]]; then
+  echo "[dispatch-mark-deviation] WARNING: could not resolve issue number from branch; skipping in-session park" >&2
+else
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  "$SCRIPT_DIR/dispatch-apply-office-hours" "$N" "$REASON" \
+    || echo "[dispatch-mark-deviation] WARNING: in-session office-hours park failed for #$N; relying on Stop-hook marker fallback" >&2
 fi
 
 # CLAUDE_JOB_DIR guard: an interactive run (no dispatch job) is a no-op.
