@@ -218,7 +218,7 @@ describe("renderIssueHistoryChart", () => {
     const el = renderIssueHistoryChart(shortHistoryFixture);
     host.appendChild(el);
 
-    const svg = el.querySelector(".chart-scroll-wrapper svg") as HTMLElement;
+    const svg = el.querySelector(".chart-scroll-wrapper svg") as HTMLElement; // type-safety-ok: SVGElement lacks style.width; cast needed to read inline width
     const actualWidth = parseFloat(svg.style.width);
 
     const pxPerDay = (N * POINT_WIDTH) / dataDays;
