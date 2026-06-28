@@ -47,11 +47,11 @@ describe("renderHistoryBand", () => {
     expect(heading!.textContent).toBe("HISTORY");
   });
 
-  it("renders both chart layouts from a multi-sample array", () => {
+  it("renders the worker-history chart layout from a multi-sample array", () => {
     const band = withThemeFg(() => renderHistoryBand(multiSample));
-    // Each chart module wraps its plot in a .chart-layout element.
+    // The chart module wraps its plot in a .chart-layout element.
     const layouts = band.querySelectorAll(".chart-layout");
-    expect(layouts).toHaveLength(2);
+    expect(layouts).toHaveLength(1);
   });
 
   it("delegates empty-state to the chart modules for an empty array", () => {
@@ -59,11 +59,10 @@ describe("renderHistoryBand", () => {
     // Heading is still present.
     const heading = band.querySelector(".capacity-history-heading");
     expect(heading!.textContent).toBe("HISTORY");
-    // Both charts render their own empty-state element instead of a layout.
+    // The chart renders its own empty-state element instead of a layout.
     expect(band.querySelectorAll(".chart-layout")).toHaveLength(0);
     const empties = band.querySelectorAll(".empty");
-    expect(empties).toHaveLength(2);
-    expect(empties[0].textContent).toBe("No usage history to chart.");
-    expect(empties[1].textContent).toBe("No worker history to chart.");
+    expect(empties).toHaveLength(1);
+    expect(empties[0].textContent).toBe("No worker history to chart.");
   });
 });

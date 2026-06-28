@@ -1,7 +1,7 @@
 import { test, expect } from "@commons-systems/config/playwright-test";
 
 // The demo (unauthenticated) page renders the bundled usage-samples seed, so the
-// HISTORY band and both charts must appear without sign-in.
+// HISTORY band and the worker-history chart must appear without sign-in.
 test.describe("office-hours capacity history charts", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/");
@@ -19,11 +19,11 @@ test.describe("office-hours capacity history charts", () => {
     await expect(page.locator(".capacity-history-heading")).toHaveText("HISTORY");
   });
 
-  test("both charts render SVGs", async ({ page }) => {
+  test("worker-history chart renders SVG", async ({ page }) => {
     const svgs = page.locator(".capacity-history .chart-scroll-wrapper svg");
     // beforeEach already waited for the first SVG to be visible, so the count
     // can proceed immediately.
     const count = await svgs.count();
-    expect(count).toBeGreaterThanOrEqual(2);
+    expect(count).toBeGreaterThanOrEqual(1);
   });
 });
