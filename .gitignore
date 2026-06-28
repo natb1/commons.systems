@@ -21,6 +21,7 @@ ui-debug.log
 .direnv/
 **/tmp/
 budget-etl/budget-etl
+go.work.sum
 result
 
 # Claude Code sandbox /dev/null bind-mount artifacts — character device nodes
