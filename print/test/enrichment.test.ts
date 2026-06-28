@@ -211,8 +211,8 @@ function makeContainer(): HTMLElement {
  * a real timer.
  */
 function deferred<T>() {
-  let resolve!: (v: T) => void;
-  let reject!: (e?: unknown) => void;
+  let resolve!: (v: T) => void; // type-safety-ok: assigned synchronously inside the Promise constructor below
+  let reject!: (e?: unknown) => void; // type-safety-ok: assigned synchronously inside the Promise constructor below
   const promise = new Promise<T>((res, rej) => {
     resolve = res;
     reject = rej;
@@ -241,7 +241,7 @@ class FakeIO {
     this.cb = cb;
   }
   observe(el: Element): void {
-    ioRegistry.push({ cb: this.cb, el, observer: this as unknown as IntersectionObserver });
+    ioRegistry.push({ cb: this.cb, el, observer: this as unknown as IntersectionObserver }); // type-safety-ok: test stub, FakeIO only implements the methods the prod code calls
   }
   // Production calls unobserve as a one-shot before scheduling; a no-op here is
   // fine because each node is fired exactly once per pass.
@@ -249,7 +249,7 @@ class FakeIO {
   // Drop this observer's entries so a torn-down (prior-pass) observer cannot be
   // re-triggered.
   disconnect(): void {
-    ioRegistry = ioRegistry.filter((e) => e.observer !== (this as unknown as IntersectionObserver));
+    ioRegistry = ioRegistry.filter((e) => e.observer !== (this as unknown as IntersectionObserver)); // type-safety-ok: test stub self-reference for registry dedup
   }
   takeRecords(): IntersectionObserverEntry[] {
     return [];
@@ -262,7 +262,7 @@ function triggerIntersection(node: Element): void {
     const entry = ioRegistry[i];
     if (entry.el === node) {
       entry.cb(
-        [{ isIntersecting: true, target: node } as IntersectionObserverEntry],
+        [{ isIntersecting: true, target: node } as IntersectionObserverEntry], // type-safety-ok: partial stub entry with only the props the prod code reads
         entry.observer,
       );
       return;
@@ -291,7 +291,7 @@ async function flushMicrotasks(times = 3): Promise<void> {
 // describe's own clearAllMocks/innerHTML hooks.
 beforeEach(() => {
   ioRegistry = [];
-  vi.stubGlobal("IntersectionObserver", FakeIO as unknown as typeof IntersectionObserver);
+  vi.stubGlobal("IntersectionObserver", FakeIO as unknown as typeof IntersectionObserver); // type-safety-ok: test stub class replacing a browser global
 });
 afterEach(() => {
   vi.unstubAllGlobals();

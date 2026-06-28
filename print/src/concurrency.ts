@@ -23,7 +23,7 @@ export function createLimiter(limit: number): Limiter {
 
   function next(): void {
     if (queue.length > 0 && active < limit) {
-      const run = queue.shift()!;
+      const run = queue.shift()!; // type-safety-ok: queue.length > 0 checked on the preceding line
       run();
     }
   }

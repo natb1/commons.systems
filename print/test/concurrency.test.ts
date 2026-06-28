@@ -8,8 +8,8 @@ interface Deferred<T> {
 }
 
 function deferred<T>(): Deferred<T> {
-  let resolve!: (value: T) => void;
-  let reject!: (reason: unknown) => void;
+  let resolve!: (value: T) => void; // type-safety-ok: assigned synchronously inside the Promise constructor below
+  let reject!: (reason: unknown) => void; // type-safety-ok: assigned synchronously inside the Promise constructor below
   const promise = new Promise<T>((res, rej) => {
     resolve = res;
     reject = rej;
