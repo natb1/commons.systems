@@ -199,11 +199,11 @@ describe("feedFetchPlugin buildStart error handling", () => {
       { id: "test", url: "https://example.com/feed.xml" },
     ]);
 
-    await expect((plugin as any).buildStart()).resolves.toBeUndefined();
+    await expect((plugin as any).buildStart()).resolves.toBeUndefined(); // type-safety-ok: invoking Vite plugin hook directly in unit test
 
     const feedData = parseVirtualModule(
-      (plugin as any).load(RESOLVED_VIRTUAL_MODULE_ID),
-    ) as Record<string, unknown>;
+      (plugin as any).load(RESOLVED_VIRTUAL_MODULE_ID), // type-safety-ok: invoking Vite plugin hook directly in unit test
+    ) as Record<string, unknown>; // type-safety-ok: narrowing parseVirtualModule's unknown JSON
     expect(feedData["test"]).toBeNull();
     expect(warn).toHaveBeenCalled();
   });
@@ -217,7 +217,7 @@ describe("feedFetchPlugin buildStart error handling", () => {
       { id: "test", url: "https://example.com/feed.xml" },
     ]);
 
-    await expect((plugin as any).buildStart()).rejects.toThrow(
+    await expect((plugin as any).buildStart()).rejects.toThrow( // type-safety-ok: invoking Vite plugin hook directly in unit test
       "invalid fetch configuration",
     );
   });
