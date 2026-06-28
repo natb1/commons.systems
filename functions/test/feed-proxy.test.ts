@@ -11,7 +11,7 @@ vi.mock("firebase-admin/app-check", () => ({
 }));
 
 import { handleFeedProxy, ALLOWED_FEED_URLS, MAX_FEED_BYTES } from "../src/feed-proxy";
-import { FEED_REGISTRY } from "../../blog/src/blog-roll/feed-registry";
+import { FEED_REGISTRY } from "../../packages/blog/src/blog-roll/feed-registry";
 
 function createMockRes() {
   const res = {

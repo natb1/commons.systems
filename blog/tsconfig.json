@@ -1,8 +1,0 @@
-{
-  "extends": "@commons-systems/config/tsconfig.lib.json",
-  "compilerOptions": {
-    "jsx": "react-jsx",
-    "types": ["vite/client"]
-  },
-  "include": ["src", "test"]
-}

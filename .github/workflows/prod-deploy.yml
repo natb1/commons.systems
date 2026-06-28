@@ -11,7 +11,7 @@ on:
       - ".github/**"
       - "nix/**"
       - "scaffolding/**"
-      - "rules-test/**"
+      - "packages/rules-test/**"
       - "*.md"
       - "*.nix"
       - "flake.lock"
