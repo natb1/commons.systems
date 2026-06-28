@@ -284,15 +284,39 @@ function overlay(
 }
 
 /**
+ * Append a CSS-only loading spinner into the row's `.media-info`. Guards
+ * against double-insert. No-op on a null or detached node.
+ */
+function markRowLoading(node: Element | null): void {
+  if (node === null || !node.isConnected) return;
+  const info = node.querySelector(".media-info");
+  if (!info || info.querySelector(".media-loading")) return;
+  const spinner = document.createElement("span");
+  spinner.className = "media-loading";
+  spinner.setAttribute("aria-hidden", "true");
+  info.appendChild(spinner);
+}
+
+/**
+ * Remove any `.media-loading` spinner from the row. No-op on a null or
+ * detached node.
+ */
+function clearRowLoading(node: Element | null): void {
+  if (node === null || !node.isConnected) return;
+  node.querySelector(".media-loading")?.remove();
+}
+
+/**
  * Patch a captured local row in place with extracted metadata, building DOM via
  * textContent so no manual escaping is needed. A null or detached node is a
- * no-op.
+ * no-op. Clears the loading spinner (if present) before patching.
  */
 function patchLocalRow(
   node: Element | null,
   meta: { title?: string; pageCount?: number },
 ): void {
   if (node === null || !node.isConnected) return;
+  clearRowLoading(node);
   if (meta.title !== undefined) {
     const titleLink = node.querySelector(".media-title a");
     if (titleLink) titleLink.textContent = meta.title;
