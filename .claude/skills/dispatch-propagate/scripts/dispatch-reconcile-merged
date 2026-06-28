@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+#
+# dispatch-reconcile-merged — post-merge reconciliation sweep that closes any
+# issue GitHub's merge-time auto-close silently left OPEN (issue #2512).
+#
+# Runs in the tick immediately AFTER dispatch-auto-merge. When a squash-merged
+# PR carries `Closes #N`, GitHub normally closes #N at merge time — but that
+# auto-close is best-effort and occasionally does not fire (parser lag, a body
+# edited after merge, a closing reference added late). The result is a merged
+# PR whose work is on main while its issue is still OPEN, stranded forever
+# because no later tick re-examines a merged PR. This sweep is that re-examiner.
+#
+# Window — GRACE and LOOKBACK bound which merged PRs are reconciled:
+#   - GRACE (default 600s): a just-merged PR is NOT reconciled until it has aged
+#     past the grace window. GitHub's auto-close is asynchronous; closing inside
+#     the grace window would race the platform and double-close issues that were
+#     about to close on their own.
+#   - LOOKBACK (default 172800s = 48h): only PRs merged within the lookback are
+#     considered. Anything older has either already been reconciled or is a
+#     deliberate human decision to leave the issue open; re-litigating ancient
+#     merges is noise.
+#
+# Two-layer idempotency keeps the sweep safe to run every tick:
+#   - Layer 1 (state): an issue already CLOSED is a no-op — no comment, no
+#     PATCH. Only an OPEN closing-issue is a genuine auto-close miss.
+#   - Layer 2 (marker): an OPEN issue that already carries this script's marker
+#     comment was closed by a prior run that GitHub then somehow re-opened (or a
+#     race left the close un-applied); re-close WITHOUT re-commenting so the
+#     issue never accumulates duplicate diagnostics.
+#
+# Stdout protocol: exactly `reconciled #<iss> (PR #<n>)` per issue actually
+# closed by this sweep; NOTHING for any no-op or skip. All diagnostics go to
+# stderr.
+#
+# Sandbox note: the CALLER wraps every invocation of this script with
+# dangerouslyDisableSandbox (per .claude/rules/sandbox.md) because `gh` needs
+# network access and gh's TLS validation is blocked by the sandbox. This script
+# therefore sets NOTHING sandbox-related; that is the caller's responsibility.
+#
+# NOT set -e: a per-item hard error must not abort the sweep. gh exit codes are
+# captured explicitly with `|| rc=$?`; a failing item logs to stderr, sets
+# HARD_ERROR=1, and `continue`s (it self-heals on a later tick). The script
+# exits 1 at the end if any item hard-errored.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"  # gh_retry, gh_issue_view_rest, gh_issue_close_rest, dispatch_marker_comment_id
+
+# ---- Tunables (env-overridable) ---------------------------------------------
+GRACE=${DISPATCH_RECONCILE_GRACE:-600}
+LOOKBACK=${DISPATCH_RECONCILE_LOOKBACK:-172800}
+LIMIT=${DISPATCH_RECONCILE_LIMIT:-100}
+NOW=${DISPATCH_RECONCILE_NOW:-$(date -u +%s)}
+MARKER='<!-- dispatch:auto-close-repair -->'
+
+# ---- Step 1: one fresh fetch of recently-merged PRs -------------------------
+# A single GraphQL call (gh pr list with closingIssuesReferences) — never a
+# per-PR gh pr view fan-out. A failed fetch is a HARD error: reconciling on a
+# partial snapshot could miss a stranded issue or act on stale data.
+PR_LIST=$(gh_retry gh pr list --state merged --json number,title,mergedAt,closingIssuesReferences --limit "$LIMIT") || {
+  echo "dispatch-reconcile-merged: error: gh pr list failed" >&2
+  exit 1
+}
+
+# ---- Step 2: per-PR window filter + per-issue reconciliation -----------------
+HARD_ERROR=0
+
+while IFS= read -r pr; do
+  [[ -n "$pr" ]] || continue
+  PR_NUM=$(jq -r '.number' <<<"$pr")
+  MERGED_AT=$(jq -r '.mergedAt' <<<"$pr")
+
+  # Skip PRs that close no issue — nothing to reconcile.
+  HAS_CLOSING=$(jq -r '(.closingIssuesReferences | length) > 0' <<<"$pr")
+  [[ "$HAS_CLOSING" == "true" ]] || continue
+
+  # Window filter: reconcile only PRs aged past GRACE and within LOOKBACK.
+  MERGED_EPOCH=$(date -u -d "$MERGED_AT" +%s)
+  AGE=$(( NOW - MERGED_EPOCH ))
+  [[ "$AGE" -ge "$GRACE" ]] || continue
+  [[ "$AGE" -le "$LOOKBACK" ]] || continue
+
+  # ---- Per closing issue ----------------------------------------------------
+  while IFS= read -r iss; do
+    [[ -n "$iss" ]] || continue
+
+    # ---- Layer 1 — state check ----------------------------------------------
+    # Only an OPEN closing-issue is a genuine auto-close miss; CLOSED is a no-op.
+    rc=0
+    ISS_JSON=$(gh_issue_view_rest "$iss") || rc=$?
+    if [[ "$rc" -ne 0 ]]; then
+      echo "dispatch-reconcile-merged: error: gh_issue_view_rest #$iss failed (rc=$rc)" >&2
+      HARD_ERROR=1
+      continue
+    fi
+    STATE=$(jq -r '.state' <<<"$ISS_JSON")
+    [[ "$STATE" == "CLOSED" ]] && continue
+
+    # ---- Layer 2 — marker check ---------------------------------------------
+    # An OPEN issue already carrying our marker was closed by a prior run; close
+    # again WITHOUT re-commenting so diagnostics never accumulate.
+    rc=0
+    MARKER_ID=$(dispatch_marker_comment_id "$iss" "$MARKER") || rc=$?
+    if [[ "$rc" -ne 0 ]]; then
+      echo "dispatch-reconcile-merged: error: dispatch_marker_comment_id #$iss failed (rc=$rc)" >&2
+      HARD_ERROR=1
+      continue
+    fi
+
+    rc=0
+    if [[ -n "$MARKER_ID" ]]; then
+      gh_issue_close_rest "$iss" --reason completed || rc=$?
+    else
+      # The MARKER must be the very first characters of the body: the marker
+      # check is startswith-anchored on the comment's first line.
+      BODY=$(printf '%s\n\n%s\n' "$MARKER" "GitHub's merge-time auto-close did not fire for PR #$PR_NUM; closing this issue as completed (#2512).")
+      gh_issue_close_rest "$iss" --reason completed --comment "$BODY" || rc=$?
+    fi
+    if [[ "$rc" -ne 0 ]]; then
+      echo "dispatch-reconcile-merged: error: gh_issue_close_rest #$iss failed (rc=$rc)" >&2
+      HARD_ERROR=1
+      continue
+    fi
+    echo "reconciled #$iss (PR #$PR_NUM)"
+  done < <(jq -r '.closingIssuesReferences[].number' <<<"$pr")
+done < <(jq -c '.[]' <<<"$PR_LIST")
+
+if [[ "$HARD_ERROR" -ne 0 ]]; then
+  exit 1
+fi
+exit 0
