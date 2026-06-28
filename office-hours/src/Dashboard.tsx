@@ -18,6 +18,7 @@ import { getOwnerReminders, getOwnerQueueMetrics, getDemoReminders, getDemoQueue
 import { getOwnerSamples, getDemoSamples } from "./usage-data.js";
 import { getOwnerIssueSamples, getDemoIssueSamples } from "./issue-data.js";
 import { getOwnerAuditAggregates, getDemoAuditAggregates } from "./audit-data.js";
+import { getDemoProjectSignals, getOwnerProjectSignals } from "./project-signals-data.js";
 
 import { selectLatestSample, type UsageSample } from "./usage-samples.js";
 import { capacityBandKey } from "./capacity-band.js";
@@ -27,6 +28,7 @@ import { parkedPanelKey } from "./queue-metrics.js";
 import type { QueueMetricsSnapshot } from "./queue-metrics.js";
 import type { IssueSample } from "./issue-samples.js";
 import type { AuditAggregate } from "./audit-aggregates.js";
+import type { ProjectSignalsSnapshot } from "./project-signals.js";
 
 import { CapacityBand } from "./components/CapacityBand.js";
 import { PacePanel } from "./components/PacePanel.js";
@@ -36,6 +38,7 @@ import { AuditPanel } from "./components/AuditPanel.js";
 import { RemindersPanel } from "./components/RemindersPanel.js";
 import { QueueMetricsPanel } from "./components/QueueMetricsPanel.js";
 import { ParkedIssuesPanel } from "./components/ParkedIssuesPanel.js";
+import { ProjectSignalsPanel } from "./components/ProjectSignalsPanel.js";
 
 // The tier-resolved data the panels render. Mirrors the vanilla ViewState's
 // owner payload (and the demo payload built by buildContext).
@@ -45,6 +48,7 @@ interface PanelData {
   queueMetrics: QueueMetricsSnapshot | null;
   issueSamples: IssueSample[];
   auditAggregates: AuditAggregate[];
+  projectSignals: ProjectSignalsSnapshot | null;
 }
 
 type ViewState =
@@ -87,19 +91,20 @@ export function Dashboard({ user }: DashboardProps) {
     let ignore = false;
     void (async () => {
       try {
-        const [samples, reminders, queueMetrics, issueSamples, auditAggregates] = await Promise.all([
+        const [samples, reminders, queueMetrics, issueSamples, auditAggregates, projectSignals] = await Promise.all([
           getOwnerSamples(db, NAMESPACE, user),
           getOwnerReminders(db, NAMESPACE, user),
           getOwnerQueueMetrics(db, NAMESPACE, user),
           getOwnerIssueSamples(db, NAMESPACE, user),
           getOwnerAuditAggregates(db, NAMESPACE, user),
+          getOwnerProjectSignals(db, NAMESPACE, user),
         ]);
         // Auth may have changed while the calls were in flight — skip so the
         // in-flight result does not clobber the already-updated view.
         if (ignore) return;
         setState({
           tier: "owner",
-          data: { samples, reminders, queueMetrics, issueSamples, auditAggregates },
+          data: { samples, reminders, queueMetrics, issueSamples, auditAggregates, projectSignals },
         });
       } catch (error) {
         // Same race guard on the error path.
@@ -128,6 +133,7 @@ export function Dashboard({ user }: DashboardProps) {
       queueMetrics: getDemoQueueMetrics(),
       issueSamples: getDemoIssueSamples(),
       auditAggregates: getDemoAuditAggregates(),
+      projectSignals: getDemoProjectSignals(),
     }),
     [],
   );
@@ -135,7 +141,7 @@ export function Dashboard({ user }: DashboardProps) {
   // Resolve the active panel data for demo / owner. (The error tier returns
   // early below; these hooks still run unconditionally to satisfy rules-of-hooks.)
   const data = state.tier === "owner" ? state.data : demoData;
-  const { samples, reminders, queueMetrics, issueSamples, auditAggregates } = data;
+  const { samples, reminders, queueMetrics, issueSamples, auditAggregates, projectSignals } = data;
 
   // The two time-sensitive panels (capacity, reminders) are memoized as elements
   // keyed on a content signature: each panel's now-derived output (clocks,
@@ -166,6 +172,10 @@ export function Dashboard({ user }: DashboardProps) {
     [auditAggregates],
   );
   const queueEl = useMemo(() => <QueueMetricsPanel metrics={queueMetrics} />, [queueMetrics]);
+  const projectSignalsEl = useMemo(
+    () => <ProjectSignalsPanel snapshot={projectSignals} />,
+    [projectSignals],
+  );
 
   // `now` is intentionally omitted from these dep arrays: the *Key helper
   // captures every now-derived change to the panel's output, so a tick that
@@ -222,6 +232,7 @@ export function Dashboard({ user }: DashboardProps) {
         {remindersEl}
         {queueEl}
         {parkedEl}
+        {projectSignalsEl}
       </div>
     </>
   );

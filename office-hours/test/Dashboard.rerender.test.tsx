@@ -21,6 +21,7 @@ const getOwnerReminders = vi.fn();
 const getOwnerQueueMetrics = vi.fn();
 const getOwnerIssueSamples = vi.fn();
 const getOwnerAuditAggregates = vi.fn();
+const getOwnerProjectSignals = vi.fn();
 
 vi.mock("../src/usage-data.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/usage-data.js")>()),
@@ -38,6 +39,10 @@ vi.mock("../src/issue-data.js", async (importOriginal) => ({
 vi.mock("../src/audit-data.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/audit-data.js")>()),
   getOwnerAuditAggregates: (...args: unknown[]) => getOwnerAuditAggregates(...args),
+}));
+vi.mock("../src/project-signals-data.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/project-signals-data.js")>()),
+  getOwnerProjectSignals: (...args: unknown[]) => getOwnerProjectSignals(...args),
 }));
 
 // Render-count spy stand-ins for the two time-sensitive panels. Each is a
@@ -136,6 +141,7 @@ describe("Dashboard tick: time-sensitive panels skip re-render on an unchanged t
     getOwnerQueueMetrics.mockResolvedValue(queueMetricsFixture);
     getOwnerIssueSamples.mockResolvedValue([]);
     getOwnerAuditAggregates.mockResolvedValue([]);
+    getOwnerProjectSignals.mockResolvedValue(null);
   });
 
   it("does not re-render capacity/reminders when a 60s tick changes no displayed output", async () => {
