@@ -60,13 +60,14 @@
 //      that becomes a problem, create an API key in the Cloud Console for the
 //      "PageSpeed Insights API" and set it via `PAGESPEED_API_KEY` below.
 //
-//   4. GitHub App — traffic read. The current GitHub App installation has
-//      read-only `Issues` permission. GitHub's traffic API (clones, views,
-//      referrers) requires push access on the repo. To unlock traffic data,
-//      extend the SAME installation's permissions to additionally include
-//      `Contents: read` or a traffic-scoped permission. Until then, traffic
-//      is silently omitted from each run while public stats (stars/forks/
-//      watchers) continue to be collected — no error is raised.
+//   4. GitHub App — traffic read. GitHub's traffic API (clones, views,
+//      referrers) requires the `Administration: read` repository permission
+//      for a GitHub App — NOT `Contents: read`. To unlock traffic data, add
+//      `Administration: read` to the App's repository permissions, then accept
+//      the pending permission upgrade on the installation. Until then, traffic
+//      is silently omitted from each run (a 403 "Resource not accessible by
+//      integration") while public stats (stars/forks/watchers) continue to be
+//      collected — no error is raised.
 //
 //   5. Secrets. Set each secret via `firebase functions:secrets:set`:
 //        OFFICE_HOURS_GITHUB_APP_PRIVATE_KEY  — already set (reused)

@@ -14,6 +14,7 @@ import { escapeHtml } from "@commons-systems/htmlutil";
 import { createFsaHandleStore } from "@commons-systems/local-first/fsa-handle-store";
 import { logError } from "@commons-systems/errorutil/log";
 
+import { createLimiter } from "./concurrency.js";
 import {
   createLocalSource,
   listLocal,
@@ -22,12 +23,22 @@ import {
 import { extractMetadata } from "./local-metadata.js";
 import { mediaTypeBadge } from "./media-render.js";
 import {
-  cacheMetadataBatch,
+  cacheMetadata,
   ensureLoaded,
   getMetadata,
   setLocalDirectory,
 } from "./sidecar.js";
 import type { MediaItem } from "./types.js";
+
+/**
+ * Peak in-flight file reads during local-folder enrichment. Mirrors audio's
+ * concurrency value. Unit tests derive `limit + 1` from this to assert the
+ * bound. The limiter is created ONCE at module load (below) — never per render
+ * pass — so a focus-rescan mid-enrichment cannot spawn a second limiter and
+ * double the peak read count, regardless of how many rows are visible.
+ */
+export const ENRICH_READ_CONCURRENCY = 16;
+const limiter = createLimiter(ENRICH_READ_CONCURRENCY);
 
 const store = createFsaHandleStore({ app: "print" });
 const PURPOSE = "library-folder";
@@ -166,17 +177,29 @@ function renderLocalMediaItems(items: MediaItem[]): string {
 }
 
 /**
- * The detached enrichment task in flight (or `Promise.resolve()` when none).
- * Reassigned on every `renderLocalIntoList` pass so `settleEnrichment` always
- * awaits the most recent pass's enrichment. The twin of sidecar's `flushWrites`.
+ * The accumulated detached enrichment of the current render pass (or
+ * `Promise.resolve()` when none). Reset at the START of each
+ * `renderLocalIntoList` pass, then folded forward SYNCHRONOUSLY inside the
+ * IntersectionObserver callback as each visible row is scheduled, so
+ * `settleEnrichment` always awaits the most recent pass's scheduled reads. The
+ * twin of sidecar's `flushWrites`.
  */
 let pendingEnrichment: Promise<void> = Promise.resolve();
 
 /**
- * Settle seam: resolves when the in-flight detached enrichment of the latest
- * render pass has finished (every row patched and the batched cache write
- * enqueued). Tests await this before `flushWrites` to observe the cache write;
- * `bindAndRender` does NOT await it — first paint is already done.
+ * Handle to the previous render pass's IntersectionObserver, so each new pass
+ * can disconnect it before building a fresh one — avoiding leaked observers and
+ * observation of now-detached rows on a focus-rescan.
+ */
+let prevObserver: IntersectionObserver | null = null;
+
+/**
+ * Settle seam: resolves when the scheduled enrichment of the latest render pass
+ * has finished (every intersected row patched and its single cache write
+ * enqueued). Tests do `triggerIntersection(); await settleEnrichment();`, which
+ * works because the observer callback folds each scheduled read into
+ * `pendingEnrichment` synchronously before it returns. `bindAndRender` does NOT
+ * await it — first paint is already done.
  */
 export function settleEnrichment(): Promise<void> {
   return pendingEnrichment;
@@ -225,11 +248,13 @@ function renderLocalScanError(container: HTMLElement, onRetry: () => void): void
  * PAINT: find (or create) the `#media-list` <ul>, do a single bounded sidecar
  * read, partition items into cached (overlaid with real metadata, zero file IO)
  * vs uncached (filename-stem rows), strip prior local rows, and insert all rows
- * immediately. Cold-folder metadata extraction for the uncached items runs
- * DETACHED after this resolves — a hung extract never blocks first paint or the
- * focus listener. A whole-scan failure surfaces an in-list error notice with a
- * retry instead of rejecting. No-ops when no media list or empty-state
- * placeholder is present (e.g. viewer page).
+ * immediately. Cold-folder metadata extraction for the uncached items is LAZY:
+ * an IntersectionObserver schedules each row's bounded-concurrency read only as
+ * it scrolls into view, so a folder of N files no longer kicks off N eager
+ * reads — and a hung extract never blocks first paint or the focus listener. A
+ * whole-scan failure surfaces an in-list error notice with a retry instead of
+ * rejecting. No-ops when no media list or empty-state placeholder is present
+ * (e.g. viewer page).
  */
 export async function renderLocalIntoList(container: HTMLElement): Promise<void> {
   let items: MediaItem[];
@@ -284,49 +309,69 @@ export async function renderLocalIntoList(container: HTMLElement): Promise<void>
   for (const li of Array.from(ul.querySelectorAll(".media-item-local"))) {
     li.remove();
   }
+  // Reset the accumulator at the START of the pass: first paint schedules no
+  // enrichment yet — reads only begin as rows scroll into view (below).
+  pendingEnrichment = Promise.resolve();
+
   ul.insertAdjacentHTML("afterbegin", renderLocalMediaItems(rows));
-  // First paint is now done.
+  // First paint is now done. Rows render filename-only; NO spinner yet.
 
-  // Capture each uncached row's node by id, BY REFERENCE. item.id is
-  // `local:<folderId>/<name>` (contains `:` and `/`) so the data-id selector
-  // needs CSS.escape, not escapeHtml. Patching the captured node (never a
-  // re-query at patch time) means that patching a now-detached node (removed by
-  // a later render pass) succeeds silently but has no visible effect — the
-  // mutation reaches a node no longer in the document, not a live row.
-  const targets: { item: MediaItem; node: Element | null }[] = uncached.map(
-    (item) => ({
-      item,
-      node: ul.querySelector(`[data-id="${CSS.escape(item.id)}"]`),
-    }),
-  );
+  // Map each uncached row's NODE → item, looked up by id BY REFERENCE. item.id
+  // is `local:<folderId>/<name>` (contains `:` and `/`) so the data-id selector
+  // needs CSS.escape, not escapeHtml. Skip rows whose node lookup returns null.
+  // Keying on the node lets the observer callback resolve an `entry.target`
+  // back to its item. Patching the captured node (never a re-query at patch
+  // time) means patching a now-detached node — removed by a later render pass —
+  // succeeds silently but has no visible effect.
+  const nodeItems = new Map<Element, MediaItem>();
+  for (const item of uncached) {
+    const node = ul.querySelector(`[data-id="${CSS.escape(item.id)}"]`);
+    if (node === null) continue;
+    nodeItems.set(node, item);
+  }
 
-  // Kick off detached enrichment for the uncached items only — not awaited.
-  // Reassigned each pass so settleEnrichment tracks the latest render.
-  pendingEnrichment = runEnrichment(targets).catch((err) =>
-    logError(err, { operation: "local-folder-enrich" }),
-  );
-}
+  // Always tear down the previous pass's observer first: it observes rows this
+  // pass has just removed (now detached), and a focus-rescan would otherwise
+  // leak observers. A pass with zero uncached rows tears down and stops here —
+  // no new observer.
+  prevObserver?.disconnect();
+  if (nodeItems.size === 0) {
+    prevObserver = null;
+    return;
+  }
 
-/**
- * Enrich the uncached items, patching each row in place as its extract resolves.
- * Reads each file's bytes via `resolveLocalBlob`, extracts metadata (tolerant —
- * `{}` on error), and patches the captured node. Run with `Promise.all` so a
- * hung item never blocks another's patch. After all settle, persist every
- * newly-extracted entry in ONE batched cache write — an empty batch is a no-op,
- * preserving focus-rescan write suppression.
- *
- * Null-blob retry: a file that can't be read yields no patch and no cache entry,
- * so it re-extracts on the next focus pass rather than being permanently
- * suppressed by a cached `{}`.
- */
-async function runEnrichment(
-  targets: { item: MediaItem; node: Element | null }[],
-): Promise<void> {
-  const results = await Promise.all(targets.map((t) => enrichLocalItem(t)));
-  const newEntries = Object.fromEntries(
-    results.filter((r): r is [string, { title?: string; pageCount?: number }] => r !== null),
-  );
-  await cacheMetadataBatch(newEntries);
+  // Lazy enrichment: read + extract a row's bytes only when it scrolls into
+  // view. The callback is SYNCHRONOUS — all awaiting lives inside the scheduled
+  // fn — so `pendingEnrichment` is folded forward before the callback yields,
+  // making the `settleEnrichment` seam observable right after an intersection.
+  //
+  // Coherence under a mid-flight focus-rescan: the limiter is long-lived
+  // (module-scoped), so a rescan reuses it rather than spawning a second one
+  // that would double peak reads. In-flight tasks from the prior pass patch
+  // now-detached nodes — a no-op via patchLocalRow's isConnected guard — and
+  // their cacheMetadata write is idempotent for the same content, so the
+  // long-lived limiter + per-pass observer combination stays coherent.
+  const observer = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      // One-shot: unobserve before scheduling so a re-fire can't double-read
+      // (the per-row analog of budget's `loading` bool).
+      observer.unobserve(entry.target);
+      const item = nodeItems.get(entry.target);
+      if (item === undefined) continue;
+      const node = entry.target;
+      markRowLoading(node);
+      const p = limiter.schedule(() => enrichLocalItem({ item, node }));
+      // Fold into the accumulator SYNCHRONOUSLY (before this callback yields).
+      pendingEnrichment = Promise.allSettled([pendingEnrichment, p]).then(
+        () => {},
+      );
+    }
+  });
+  prevObserver = observer;
+  for (const node of nodeItems.keys()) {
+    observer.observe(node);
+  }
 }
 
 function overlay(
@@ -343,15 +388,39 @@ function overlay(
 }
 
 /**
+ * Append a CSS-only loading spinner into the row's `.media-info`. Guards
+ * against double-insert. No-op on a null or detached node.
+ */
+function markRowLoading(node: Element | null): void {
+  if (node === null || !node.isConnected) return;
+  const info = node.querySelector(".media-info");
+  if (!info || info.querySelector(".media-loading")) return;
+  const spinner = document.createElement("span");
+  spinner.className = "media-loading";
+  spinner.setAttribute("aria-hidden", "true");
+  info.appendChild(spinner);
+}
+
+/**
+ * Remove any `.media-loading` spinner from the row. No-op on a null or
+ * detached node.
+ */
+function clearRowLoading(node: Element | null): void {
+  if (node === null || !node.isConnected) return;
+  node.querySelector(".media-loading")?.remove();
+}
+
+/**
  * Patch a captured local row in place with extracted metadata, building DOM via
  * textContent so no manual escaping is needed. A null or detached node is a
- * no-op.
+ * no-op. Clears the loading spinner (if present) before patching.
  */
 function patchLocalRow(
   node: Element | null,
   meta: { title?: string; pageCount?: number },
 ): void {
   if (node === null || !node.isConnected) return;
+  clearRowLoading(node);
   if (meta.title !== undefined) {
     const titleLink = node.querySelector(".media-title a");
     if (titleLink) titleLink.textContent = meta.title;
@@ -368,29 +437,38 @@ function patchLocalRow(
 }
 
 /**
- * Extract one uncached item's metadata and patch its captured row. Returns the
- * `[storagePath, meta]` cache entry to contribute to the batched write, or null
- * when nothing new was extracted (unreadable file or extract error) so it
- * contributes nothing — and, for an unreadable file, is not cached, leaving the
- * null-retry path open.
+ * Extract one uncached item's metadata, patch its captured row, and persist the
+ * entry with a single incremental `cacheMetadata` write. Writes even when `meta`
+ * is `{}` — that empty entry is what suppresses re-extraction on the next render
+ * pass. Only an unreadable file (null blob) skips caching, leaving the
+ * null-retry path open so a later focus re-extracts it rather than being
+ * permanently suppressed by a cached `{}`.
+ *
+ * The loading spinner is cleared in a `finally`, REGARDLESS of outcome — so even
+ * a null-blob fallback row (which never reaches `patchLocalRow`) never keeps a
+ * stuck spinner. The inner try/catch swallows extract errors (logged); the
+ * finally runs in addition.
  */
 async function enrichLocalItem(
   target: { item: MediaItem; node: Element | null },
-): Promise<[string, { title?: string; pageCount?: number }] | null> {
+): Promise<void> {
   const { item, node } = target;
   try {
-    const buf = await resolveLocalBlob(item);
-    if (buf === null) {
-      // Could not read this file — do NOT cache `{}` (that would permanently
-      // suppress retry). A later focus retries.
-      return null;
+    try {
+      const buf = await resolveLocalBlob(item);
+      if (buf === null) {
+        // Could not read this file — do NOT cache `{}` (that would permanently
+        // suppress retry). A later focus retries.
+        return;
+      }
+      const meta = await extractMetadata(buf, item.mediaType);
+      patchLocalRow(node, meta);
+      // Persist incrementally: a single entry, written even when `meta` is `{}`.
+      await cacheMetadata(item.storagePath, meta);
+    } catch (err) {
+      logError(err, { operation: "local-folder-enrich", id: item.id });
     }
-    const meta = await extractMetadata(buf, item.mediaType);
-    patchLocalRow(node, meta);
-    // Contribute this entry to the render pass's single batched write.
-    return [item.storagePath, meta];
-  } catch (err) {
-    logError(err, { operation: "local-folder-enrich", id: item.id });
-    return null;
+  } finally {
+    clearRowLoading(node);
   }
 }

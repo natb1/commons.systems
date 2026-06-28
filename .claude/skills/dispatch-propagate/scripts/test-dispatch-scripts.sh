@@ -98,6 +98,11 @@ setup() {
   # SCRIPT_DIR (= TMPDIR_TEST for this copy) — both already copied below/above,
   # so both resolve.
   cp "$SCRIPT_DIR/dispatch-auto-merge" "$TMPDIR_TEST/dispatch-auto-merge"
+  # dispatch-reconcile-merged (#2512) sources lib.sh (gh_retry, gh_issue_view_rest,
+  # gh_issue_close_rest, dispatch_marker_comment_id) via its SCRIPT_DIR (= TMPDIR_TEST
+  # for this copy) — lib.sh is copied below, so the source resolves.
+  cp "$SCRIPT_DIR/dispatch-reconcile-merged" "$TMPDIR_TEST/dispatch-reconcile-merged"
+  chmod +x "$TMPDIR_TEST/dispatch-reconcile-merged"
   # dispatch-retriage-orphaned-followups (#1812) sources lib.sh (gh_issue_list_rest,
   # gh_retry) and calls dispatch-apply-office-hours via its SCRIPT_DIR (= TMPDIR_TEST
   # for this copy) — both already copied here, so both resolve.
@@ -600,6 +605,19 @@ case "$args" in
       echo "stub forced gh api failure" >&2
       exit 1
     fi
+    # Optional per-issue close-failure injection (#2512): if issue-close-fail-on
+    # holds an issue number matching the <N> in this PATCH's path, emit a
+    # non-transient error and exit non-zero so gh_retry returns immediately and
+    # the caller (dispatch-reconcile-merged) takes its gh_issue_close_rest
+    # HARD_ERROR path for that issue. Default-absent, so existing tests sharing
+    # this PATCH branch are unaffected.
+    if [[ -f "$STUB_DIR/issue-close-fail-on" ]]; then
+      close_num=$(printf '%s' "$args" | sed -E 's#.*issues/([0-9]+).*#\1#')
+      if [[ "$close_num" == "$(cat "$STUB_DIR/issue-close-fail-on")" ]]; then
+        echo "issue close PATCH for #$close_num was rejected" >&2
+        exit 1
+      fi
+    fi
     echo '{}'
     ;;
   "api -X POST "*/issues/*/comments*)
@@ -838,6 +856,16 @@ case "$args" in
     echo "pr list" >> "$STUB_DIR/gh-auto-merge-pr-list.log"
     if [[ -f "$STUB_DIR/auto-merge-pr-list.json" ]]; then
       cat "$STUB_DIR/auto-merge-pr-list.json"
+    else
+      echo "[]"
+    fi
+    ;;
+  "pr list --state merged --json number,title,mergedAt,closingIssuesReferences --limit "*)
+    # dispatch-reconcile-merged's one fetch (#2512). reconcile-merged-pr-list.json
+    # supplies the per-test merged-PR array; absence means no merged PRs.
+    echo "pr list" >> "$STUB_DIR/gh-reconcile-merged-pr-list.log"
+    if [[ -f "$STUB_DIR/reconcile-merged-pr-list.json" ]]; then
+      cat "$STUB_DIR/reconcile-merged-pr-list.json"
     else
       echo "[]"
     fi
@@ -1714,7 +1742,7 @@ printf '%s\n' '{
 }' > "$STUB_DIR/view-issue-9002.json"
 iv2=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_view_rest 9002)
 assert_eq "issue: closed → CLOSED" "CLOSED" "$(jq -r '.state' <<<"$iv2")"
-# closedAt passthrough from closed_at (the stale-head gate's recency floor, #2442).
+# closedAt passthrough from closed_at: REST snake_case → porcelain camelCase.
 assert_eq "issue: closedAt passthrough from closed_at" "2026-02-04T05:06:07Z" "$(jq -r '.closedAt' <<<"$iv2")"
 # REST lowercase state_reason `completed` → porcelain UPPERCASE enum COMPLETED.
 assert_eq "issue: stateReason completed upcased to COMPLETED" "COMPLETED" "$(jq -r '.stateReason' <<<"$iv2")"
@@ -33193,9 +33221,9 @@ STUB
   flake_dedup_teardown
 
   # CASE 2 — CLOSED match, FRESH run → REOPENED <N>, reopen fired, comment fired.
-  # (criterion #3) Under the stale-head gate (#2442) the CLOSED path requires
-  # --run-id. Fresh = run.createdAt AFTER closed_at (recency fresh) AND the run
-  # head contains the closing fix (ancestry `identical`).
+  # (criterion #3) Under the stale-head gate (#2442, #2518) the CLOSED path requires
+  # --run-id. Fresh = a real closing commit is present and the run head contains it
+  # (ancestry `identical`), so the gate falls through to reopen.
   flake_dedup_setup
   printf '[{"number":501,"title":"Flaky CI: %s","state":"closed","closed_at":"2026-01-01T00:00:00Z"}]\n' "$FP" > "$TMPDIR_TEST/scripts/issues.json"
   printf '{"createdAt":"2026-02-01T00:00:00Z","headSha":"headsha"}\n' > "$TMPDIR_TEST/scripts/run.json"
@@ -33233,9 +33261,12 @@ STUB
 
   # === STALE-HEAD REOPEN GATE (#2442) ===
 
-  # CASE 5 — STALE by recency: run.createdAt BEFORE closed_at trips STALE even
-  # though ancestry is fresh (compare `identical`, closing commit present) —
-  # proving the recency floor ALONE suppresses the reopen. No comment, no reopen.
+  # CASE 5 — recency removed → REOPEN (#2518): run.createdAt is BEFORE closed_at
+  # (the old recency floor would have tripped STALE here) but the run head
+  # contains the closing fix (ancestry `identical`, real closing commit present).
+  # Ancestry-only is decisive, so this REOPENs. This is exactly the case the
+  # removed recency floor wrongly suppressed: it fails under the old recency code
+  # (which would emit STALE) and passes under ancestry-only.
   flake_dedup_setup
   printf '[{"number":501,"title":"Flaky CI: %s","state":"closed","closed_at":"2026-02-01T00:00:00Z"}]\n' "$FP" > "$TMPDIR_TEST/scripts/issues.json"
   printf '{"createdAt":"2026-01-01T00:00:00Z","headSha":"headsha"}\n' > "$TMPDIR_TEST/scripts/run.json"
@@ -33243,20 +33274,20 @@ STUB
   printf '[{"event":"closed","commit_id":"closingsha"}]\n' > "$TMPDIR_TEST/scripts/timeline.json"
   printf 'recurred on PR #900 / run http://x\n' > "$TMPDIR_TEST/body.md"
   out=$("$TMPDIR_TEST/scripts/dispatch-flake-dedup" "$FP" --body-file "$TMPDIR_TEST/body.md" --run-id 12345 2>"$TMPDIR_TEST/err")
-  assert_eq "flake-dedup: stale by recency → STALE <N>" "STALE 501" "$out"
-  if [[ -s "$TMPDIR_TEST/scripts/stub/comments-fired" ]]; then c=yes; else c=no; fi
-  assert_eq "flake-dedup: stale by recency → no comment" "no" "$c"
-  if [[ -s "$TMPDIR_TEST/scripts/stub/reopen-fired" ]]; then r=yes; else r=no; fi
-  assert_eq "flake-dedup: stale by recency → no reopen" "no" "$r"
+  assert_eq "flake-dedup: recency removed (run pre-close, head contains fix) → REOPENED <N>" "REOPENED 501" "$out"
+  if grep -qx '501' "$TMPDIR_TEST/scripts/stub/reopen-fired" 2>/dev/null; then r=yes; else r=no; fi
+  assert_eq "flake-dedup: recency removed → reopen fired on 501" "yes" "$r"
+  if grep -qx '501' "$TMPDIR_TEST/scripts/stub/comments-fired" 2>/dev/null; then c=yes; else c=no; fi
+  assert_eq "flake-dedup: recency removed → comment fired on 501" "yes" "$c"
   if grep -q 'suppressing reopen' "$TMPDIR_TEST/err"; then g=yes; else g=no; fi
-  assert_eq "flake-dedup: stale by recency → suppression logged to stderr" "yes" "$g"
+  assert_eq "flake-dedup: recency removed → no suppression logged" "no" "$g"
   flake_dedup_teardown
 
-  # CASE 6 — STALE by ancestry (the discriminating case): run.createdAt is AFTER
-  # closed_at (recency says FRESH) yet the run head is `behind` the closing fix
-  # (ancestry says STALE). This is the ONLY case that fails under a recency-only
-  # implementation — the divergent stub values (created-after-close + `behind`)
-  # force the ancestry signal to carry the verdict. No comment, no reopen.
+  # CASE 6 — STALE by ancestry (the surviving #2442 case): a real closing commit
+  # exists and the run head is `behind` it, so ancestry — the sole decisive
+  # signal — suppresses the reopen. run.createdAt is AFTER closed_at, which the
+  # removed recency floor would have treated as fresh; the verdict is carried
+  # entirely by ancestry. No comment, no reopen.
   flake_dedup_setup
   printf '[{"number":501,"title":"Flaky CI: %s","state":"closed","closed_at":"2026-01-01T00:00:00Z"}]\n' "$FP" > "$TMPDIR_TEST/scripts/issues.json"
   printf '{"createdAt":"2026-02-01T00:00:00Z","headSha":"headsha"}\n' > "$TMPDIR_TEST/scripts/run.json"
@@ -33271,36 +33302,59 @@ STUB
   assert_eq "flake-dedup: stale by ancestry → no reopen" "no" "$r"
   flake_dedup_teardown
 
-  # CASE 7 — null commit_id (manual close) → ancestry skipped → recency fallback →
-  # REOPENED. timeline commit_id is null, so the closing commit is empty and the
-  # ancestry signal is skipped; compare-status `behind` MUST be ignored. recency
-  # is fresh (run after close), so the reopen fires.
+  # CASE 6b — STALE by ancestry via `diverged`. Identical to Case 6 except the
+  # run head and the closing fix have DIVERGED (neither is an ancestor of the
+  # other) rather than the head being plainly `behind`. The STALE gate is
+  # `[[ "$status" == "behind" || "$status" == "diverged" ]]`; this pins the
+  # `diverged` arm so a future edit that drops it is caught.
   flake_dedup_setup
   printf '[{"number":501,"title":"Flaky CI: %s","state":"closed","closed_at":"2026-01-01T00:00:00Z"}]\n' "$FP" > "$TMPDIR_TEST/scripts/issues.json"
   printf '{"createdAt":"2026-02-01T00:00:00Z","headSha":"headsha"}\n' > "$TMPDIR_TEST/scripts/run.json"
+  printf 'diverged\n' > "$TMPDIR_TEST/scripts/compare-status"
+  printf '[{"event":"closed","commit_id":"closingsha"}]\n' > "$TMPDIR_TEST/scripts/timeline.json"
+  printf 'recurred on PR #900 / run http://x\n' > "$TMPDIR_TEST/body.md"
+  out=$("$TMPDIR_TEST/scripts/dispatch-flake-dedup" "$FP" --body-file "$TMPDIR_TEST/body.md" --run-id 12345)
+  assert_eq "flake-dedup: stale by ancestry (diverged) → STALE <N>" "STALE 501" "$out"
+  if [[ -s "$TMPDIR_TEST/scripts/stub/comments-fired" ]]; then c=yes; else c=no; fi
+  assert_eq "flake-dedup: stale by ancestry (diverged) → no comment" "no" "$c"
+  if [[ -s "$TMPDIR_TEST/scripts/stub/reopen-fired" ]]; then r=yes; else r=no; fi
+  assert_eq "flake-dedup: stale by ancestry (diverged) → no reopen" "no" "$r"
+  flake_dedup_teardown
+
+  # CASE 7 — null commit_id (manual close), the live incident (PR #1849 / tracker
+  # #2481). timeline commit_id is null, so there is no closing commit and ancestry
+  # leaves stale=0 → REOPEN; compare-status `behind` MUST be ignored. run.createdAt
+  # is BEFORE closed_at — the run-before-close that the removed recency floor would
+  # have suppressed as STALE (the infinite-STALE bug); under ancestry-only the
+  # empty closing commit → REOPEN. This is the regression test the incident needs.
+  flake_dedup_setup
+  printf '[{"number":501,"title":"Flaky CI: %s","state":"closed","closed_at":"2026-02-01T00:00:00Z"}]\n' "$FP" > "$TMPDIR_TEST/scripts/issues.json"
+  printf '{"createdAt":"2026-01-01T00:00:00Z","headSha":"headsha"}\n' > "$TMPDIR_TEST/scripts/run.json"
   printf 'behind\n' > "$TMPDIR_TEST/scripts/compare-status"
   printf '[{"event":"closed","commit_id":null}]\n' > "$TMPDIR_TEST/scripts/timeline.json"
   printf 'recurred on PR #900 / run http://x\n' > "$TMPDIR_TEST/body.md"
   out=$("$TMPDIR_TEST/scripts/dispatch-flake-dedup" "$FP" --body-file "$TMPDIR_TEST/body.md" --run-id 12345)
-  assert_eq "flake-dedup: null commit_id → recency fallback → REOPENED <N>" "REOPENED 501" "$out"
+  assert_eq "flake-dedup: null commit_id (run pre-close) → REOPENED <N>" "REOPENED 501" "$out"
   if grep -qx '501' "$TMPDIR_TEST/scripts/stub/reopen-fired" 2>/dev/null; then r=yes; else r=no; fi
   assert_eq "flake-dedup: null commit_id → reopen fired on 501" "yes" "$r"
   if grep -qx '501' "$TMPDIR_TEST/scripts/stub/comments-fired" 2>/dev/null; then c=yes; else c=no; fi
   assert_eq "flake-dedup: null commit_id → comment fired on 501" "yes" "$c"
   flake_dedup_teardown
 
-  # CASE 8 — NOT_PLANNED close → ancestry skipped → recency fallback → REOPENED.
+  # CASE 8 — NOT_PLANNED close → ancestry skipped → stale=0 → REOPENED.
   # state_reason=not_planned means there was no fix, so ancestry is skipped;
-  # compare-status `behind` and the present timeline commit_id MUST be ignored.
-  # recency is fresh (run after close), so the reopen fires.
+  # compare-status `behind` and the present timeline commit_id MUST be ignored. The
+  # run.createdAt is BEFORE closed_at — the run-before-close that the removed
+  # recency floor would have suppressed as STALE; under ancestry-only there is no
+  # closing fix to be behind, so it REOPENs. This flip discriminates old vs new code.
   flake_dedup_setup
-  printf '[{"number":501,"title":"Flaky CI: %s","state":"closed","closed_at":"2026-01-01T00:00:00Z","state_reason":"not_planned"}]\n' "$FP" > "$TMPDIR_TEST/scripts/issues.json"
-  printf '{"createdAt":"2026-02-01T00:00:00Z","headSha":"headsha"}\n' > "$TMPDIR_TEST/scripts/run.json"
+  printf '[{"number":501,"title":"Flaky CI: %s","state":"closed","closed_at":"2026-02-01T00:00:00Z","state_reason":"not_planned"}]\n' "$FP" > "$TMPDIR_TEST/scripts/issues.json"
+  printf '{"createdAt":"2026-01-01T00:00:00Z","headSha":"headsha"}\n' > "$TMPDIR_TEST/scripts/run.json"
   printf 'behind\n' > "$TMPDIR_TEST/scripts/compare-status"
   printf '[{"event":"closed","commit_id":"closingsha"}]\n' > "$TMPDIR_TEST/scripts/timeline.json"
   printf 'recurred on PR #900 / run http://x\n' > "$TMPDIR_TEST/body.md"
   out=$("$TMPDIR_TEST/scripts/dispatch-flake-dedup" "$FP" --body-file "$TMPDIR_TEST/body.md" --run-id 12345)
-  assert_eq "flake-dedup: not_planned → recency fallback → REOPENED <N>" "REOPENED 501" "$out"
+  assert_eq "flake-dedup: not_planned (run pre-close) → REOPENED <N>" "REOPENED 501" "$out"
   if grep -qx '501' "$TMPDIR_TEST/scripts/stub/reopen-fired" 2>/dev/null; then r=yes; else r=no; fi
   assert_eq "flake-dedup: not_planned → reopen fired on 501" "yes" "$r"
   if grep -qx '501' "$TMPDIR_TEST/scripts/stub/comments-fired" 2>/dev/null; then c=yes; else c=no; fi
@@ -38390,6 +38444,175 @@ teardown
 echo "Test: dispatch-auto-merge is executable"
 assert_eq "dispatch-auto-merge is executable" "yes" \
   "$([[ -x "$SCRIPT_DIR/dispatch-auto-merge" ]] && echo yes || echo no)"
+
+# ============================================================================
+# dispatch-reconcile-merged (#2512)
+# ============================================================================
+echo "=== dispatch-reconcile-merged (#2512) ==="
+
+# Fixed clock so window membership is deterministic.
+RM_NOW=1700000000
+rm_iso() { date -u -d "@$1" +%Y-%m-%dT%H:%M:%SZ; }          # epoch → ISO
+RM_INWIN=$(rm_iso $((RM_NOW - 3600)))      # 1h ago: past GRACE, within LOOKBACK
+RM_TOORECENT=$(rm_iso $((RM_NOW - 60)))    # 60s ago: inside GRACE → skip
+RM_TOOOLD=$(rm_iso $((RM_NOW - 200000)))   # >48h ago: beyond LOOKBACK → skip
+
+# Build one merged-PR fixture object. $1=pr $2=mergedAt-iso $3=closing-json
+make_merged_pr() {
+  printf '{"number":%s,"title":"PR %s","mergedAt":"%s","closingIssuesReferences":%s}' \
+    "$1" "$1" "$2" "$3"
+}
+
+# 1. Repairs a silent auto-close failure: in-window PR closing an OPEN issue.
+echo "Test: reconcile repairs a silent auto-close failure"
+setup
+printf '%s' "[$(make_merged_pr 8001 "$RM_INWIN" '[{"number":9001}]')]" \
+  > "$STUB_DIR/reconcile-merged-pr-list.json"
+printf '%s' '{"number":9001,"state":"open"}' > "$STUB_DIR/view-issue-9001.json"
+out=$(DISPATCH_PLAN_AUTHOR_ID=12345 DISPATCH_RECONCILE_NOW=$RM_NOW "$TMPDIR_TEST/dispatch-reconcile-merged" 2>/dev/null)
+assert_eq "reconcile: stdout repairs #9001" "reconciled #9001 (PR #8001)" "$out"
+assert_eq "reconcile: close call logged" "present" \
+  "$(grep -q 'issues/9001' "$STUB_DIR/gh-issue-close-rest-calls.log" && echo present || echo absent)"
+assert_eq "reconcile: diagnostic comment posted" "present" \
+  "$(grep -q 'issues/9001/comments' "$STUB_DIR/gh-issue-comment-rest-calls.log" && echo present || echo absent)"
+assert_eq "reconcile: exactly one comment posted" "1" \
+  "$(grep -c 'issues/9001/comments' "$STUB_DIR/gh-issue-comment-rest-calls.log")"
+teardown
+
+# 2. No-op when the closing issue is already CLOSED (Layer 1 idempotency).
+echo "Test: reconcile no-op when issue already CLOSED"
+setup
+printf '%s' "[$(make_merged_pr 8001 "$RM_INWIN" '[{"number":9001}]')]" \
+  > "$STUB_DIR/reconcile-merged-pr-list.json"
+printf '%s' '{"number":9001,"state":"closed"}' > "$STUB_DIR/view-issue-9001.json"
+out=$(DISPATCH_PLAN_AUTHOR_ID=12345 DISPATCH_RECONCILE_NOW=$RM_NOW "$TMPDIR_TEST/dispatch-reconcile-merged" 2>/dev/null)
+assert_eq "reconcile: closed-issue empty stdout" "" "$out"
+assert_eq "reconcile: closed-issue no close call" "absent" "$(log_state gh-issue-close-rest-calls.log)"
+assert_eq "reconcile: closed-issue no comment call" "absent" "$(log_state gh-issue-comment-rest-calls.log)"
+teardown
+
+# 3. Grace window: a too-recently-merged PR is skipped (races platform auto-close).
+echo "Test: reconcile skips PR inside the grace window"
+setup
+printf '%s' "[$(make_merged_pr 8001 "$RM_TOORECENT" '[{"number":9001}]')]" \
+  > "$STUB_DIR/reconcile-merged-pr-list.json"
+printf '%s' '{"number":9001,"state":"open"}' > "$STUB_DIR/view-issue-9001.json"
+out=$(DISPATCH_PLAN_AUTHOR_ID=12345 DISPATCH_RECONCILE_NOW=$RM_NOW "$TMPDIR_TEST/dispatch-reconcile-merged" 2>/dev/null)
+assert_eq "reconcile: grace-window empty stdout" "" "$out"
+assert_eq "reconcile: grace-window no close call" "absent" "$(log_state gh-issue-close-rest-calls.log)"
+assert_eq "reconcile: grace-window no comment call" "absent" "$(log_state gh-issue-comment-rest-calls.log)"
+teardown
+
+# 4. Lookback window: an ancient merged PR is skipped.
+echo "Test: reconcile skips PR beyond the lookback window"
+setup
+printf '%s' "[$(make_merged_pr 8001 "$RM_TOOOLD" '[{"number":9001}]')]" \
+  > "$STUB_DIR/reconcile-merged-pr-list.json"
+printf '%s' '{"number":9001,"state":"open"}' > "$STUB_DIR/view-issue-9001.json"
+out=$(DISPATCH_PLAN_AUTHOR_ID=12345 DISPATCH_RECONCILE_NOW=$RM_NOW "$TMPDIR_TEST/dispatch-reconcile-merged" 2>/dev/null)
+assert_eq "reconcile: lookback-window empty stdout" "" "$out"
+assert_eq "reconcile: lookback-window no close call" "absent" "$(log_state gh-issue-close-rest-calls.log)"
+assert_eq "reconcile: lookback-window no comment call" "absent" "$(log_state gh-issue-comment-rest-calls.log)"
+teardown
+
+# 5. Idempotent re-run: an OPEN issue already carrying the marker re-closes WITHOUT
+#    a new diagnostic comment (Layer 2 idempotency).
+echo "Test: reconcile re-run with marker present re-closes without re-commenting"
+setup
+printf '%s' "[$(make_merged_pr 8001 "$RM_INWIN" '[{"number":9001}]')]" \
+  > "$STUB_DIR/reconcile-merged-pr-list.json"
+printf '%s' '{"number":9001,"state":"open"}' > "$STUB_DIR/view-issue-9001.json"
+# The comment carries an `id` so dispatch_marker_comment_id resolves a non-empty
+# marker id (the marker-present path). A page2 fixture (empty array) is required:
+# the comments-sentinel stub's branch ends with `[[ -f ...page2 ]] && cat ...`, so
+# WITHOUT a page2 file that `[[ -f ]]` test returns 1 — gh exits non-zero, the
+# helper hard-errors, and the script exits 1 (aborting the suite under set -e).
+printf '%s' '[{"id":555,"body":"<!-- dispatch:auto-close-repair -->\nprior repair","user":{"id":12345}}]' \
+  > "$STUB_DIR/view-issue-comments-9001-page1.json"
+printf '%s' '[]' > "$STUB_DIR/view-issue-comments-9001-page2.json"
+out=$(DISPATCH_PLAN_AUTHOR_ID=12345 DISPATCH_RECONCILE_NOW=$RM_NOW "$TMPDIR_TEST/dispatch-reconcile-merged" 2>/dev/null)
+assert_eq "reconcile: marker-present stdout repairs #9001" "reconciled #9001 (PR #8001)" "$out"
+assert_eq "reconcile: marker-present close call logged" "present" \
+  "$(grep -q 'issues/9001' "$STUB_DIR/gh-issue-close-rest-calls.log" && echo present || echo absent)"
+assert_eq "reconcile: marker-present no new comment" "absent" "$(log_state gh-issue-comment-rest-calls.log)"
+teardown
+
+# 6. A merged PR that closes NO issue is skipped — but the list was still fetched.
+echo "Test: reconcile skips PR with empty closing set (but fetched the list)"
+setup
+printf '%s' "[$(make_merged_pr 8001 "$RM_INWIN" '[]')]" \
+  > "$STUB_DIR/reconcile-merged-pr-list.json"
+out=$(DISPATCH_PLAN_AUTHOR_ID=12345 DISPATCH_RECONCILE_NOW=$RM_NOW "$TMPDIR_TEST/dispatch-reconcile-merged" 2>/dev/null)
+assert_eq "reconcile: empty-closing-set empty stdout" "" "$out"
+assert_eq "reconcile: empty-closing-set no close call" "absent" "$(log_state gh-issue-close-rest-calls.log)"
+assert_eq "reconcile: empty-closing-set no comment call" "absent" "$(log_state gh-issue-comment-rest-calls.log)"
+assert_eq "reconcile: empty-closing-set still fetched PR list" "present" \
+  "$(log_state gh-reconcile-merged-pr-list.log)"
+teardown
+
+# --- HARD_ERROR paths --------------------------------------------------------
+# Each of the three per-item failure branches sets HARD_ERROR=1, `continue`s, and
+# drives the final `exit 1`. Without coverage a regression in the error-return
+# convention of any lib.sh helper (or the branch's own logging) would go unseen.
+
+# 7. gh_issue_view_rest (Layer 1 state read) failure → hard error, exit 1.
+echo "Test: reconcile hard-errors when gh_issue_view_rest fails"
+setup
+printf '%s' "[$(make_merged_pr 8001 "$RM_INWIN" '[{"number":9001}]')]" \
+  > "$STUB_DIR/reconcile-merged-pr-list.json"
+# gh-fail-rest forces every REST `api` call to fail; the merged-PR list fetch is a
+# `pr list` (not an `api` call) so it still succeeds, and gh_issue_view_rest — the
+# first REST call in the per-issue loop — is what fails.
+: > "$STUB_DIR/gh-fail-rest"
+rc=0
+err=$(DISPATCH_PLAN_AUTHOR_ID=12345 DISPATCH_RECONCILE_NOW=$RM_NOW "$TMPDIR_TEST/dispatch-reconcile-merged" 2>&1 >/dev/null) || rc=$?
+assert_eq "reconcile: view-failure exit 1" "1" "$rc"
+case "$err" in *"gh_issue_view_rest #9001 failed"*) m=yes ;; *) m=no ;; esac
+assert_eq "reconcile: view-failure stderr names the hard error" "yes" "$m"
+assert_eq "reconcile: view-failure short-circuits before close" "absent" \
+  "$(log_state gh-issue-close-rest-calls.log)"
+teardown
+
+# 8. dispatch_marker_comment_id (Layer 2 marker read) failure → hard error, exit 1.
+echo "Test: reconcile hard-errors when dispatch_marker_comment_id can't resolve author id"
+setup
+printf '%s' "[$(make_merged_pr 8001 "$RM_INWIN" '[{"number":9001}]')]" \
+  > "$STUB_DIR/reconcile-merged-pr-list.json"
+printf '%s' '{"number":9001,"state":"open"}' > "$STUB_DIR/view-issue-9001.json"
+# A non-numeric DISPATCH_PLAN_AUTHOR_ID trips the helper's author-id guard
+# (return 1) AFTER the OPEN-state read passes Layer 1, isolating the Layer 2 path.
+rc=0
+err=$(DISPATCH_PLAN_AUTHOR_ID=not-a-number DISPATCH_RECONCILE_NOW=$RM_NOW "$TMPDIR_TEST/dispatch-reconcile-merged" 2>&1 >/dev/null) || rc=$?
+assert_eq "reconcile: marker-id-failure exit 1" "1" "$rc"
+case "$err" in *"dispatch_marker_comment_id #9001 failed"*) m=yes ;; *) m=no ;; esac
+assert_eq "reconcile: marker-id-failure stderr names the hard error" "yes" "$m"
+assert_eq "reconcile: marker-id-failure short-circuits before close" "absent" \
+  "$(log_state gh-issue-close-rest-calls.log)"
+teardown
+
+# 9. gh_issue_close_rest (the closing PATCH) failure → hard error, exit 1.
+echo "Test: reconcile hard-errors when gh_issue_close_rest fails"
+setup
+printf '%s' "[$(make_merged_pr 8001 "$RM_INWIN" '[{"number":9001}]')]" \
+  > "$STUB_DIR/reconcile-merged-pr-list.json"
+printf '%s' '{"number":9001,"state":"open"}' > "$STUB_DIR/view-issue-9001.json"
+# No comments fixture → marker check resolves an empty id (markerless path), so
+# the script reaches the close. issue-close-fail-on injects a non-transient PATCH
+# rejection for #9001 so gh_issue_close_rest returns 1.
+printf '9001' > "$STUB_DIR/issue-close-fail-on"
+rc=0
+err=$(DISPATCH_PLAN_AUTHOR_ID=12345 DISPATCH_RECONCILE_NOW=$RM_NOW "$TMPDIR_TEST/dispatch-reconcile-merged" 2>&1 >/dev/null) || rc=$?
+assert_eq "reconcile: close-failure exit 1" "1" "$rc"
+case "$err" in *"gh_issue_close_rest #9001 failed"*) m=yes ;; *) m=no ;; esac
+assert_eq "reconcile: close-failure stderr names the hard error" "yes" "$m"
+assert_eq "reconcile: close-failure attempted the close PATCH" "present" \
+  "$(log_state gh-issue-close-rest-calls.log)"
+teardown
+
+# --- executable-bit guard ----------------------------------------------------
+echo "Test: dispatch-reconcile-merged is executable"
+assert_eq "dispatch-reconcile-merged is executable" "yes" \
+  "$([[ -x "$SCRIPT_DIR/dispatch-reconcile-merged" ]] && echo yes || echo no)"
 
 # ============================================================================
 # dispatch-detect-transient-death tests (#1733)

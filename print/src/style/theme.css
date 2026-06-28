@@ -48,6 +48,24 @@
   border-radius: var(--radius-sm);
 }
 
+@keyframes media-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.media-loading {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  font-size: var(--text-xs);
+  border: 0.15em solid var(--muted);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: media-spin 0.7s linear infinite;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
 .media-actions {
   display: flex;
   gap: var(--space-1);
