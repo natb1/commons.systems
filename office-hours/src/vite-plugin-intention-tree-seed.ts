@@ -10,9 +10,9 @@ import type { Plugin } from "vite";
 // (it resolves `.js`→`.ts` and recursively bundles the source) instead of externalized.
 // This is the only office-hours module that value-imports intentionsutil; it runs in Node
 // at build time, never in the browser bundle.
-import { listNodes } from "../../intentionsutil/src/store.js";
-import { activeFrontier } from "../../intentionsutil/src/goals.js";
-import { listTrackers } from "../../intentionsutil/src/tracker.js";
+import { listNodes } from "../../packages/intentionsutil/src/store.js";
+import { activeFrontier } from "../../packages/intentionsutil/src/goals.js";
+import { listTrackers } from "../../packages/intentionsutil/src/tracker.js";
 import type { ExecutionTracker } from "@commons-systems/intentionsutil";
 
 const VIRTUAL_MODULE_ID = "virtual:office-hours-intention-tree-seed";

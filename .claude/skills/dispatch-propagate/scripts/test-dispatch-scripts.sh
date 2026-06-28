@@ -27801,7 +27801,7 @@ dc_teardown
 dc_setup
 assert_eq "detect-changes: rules=true for firestore.rules"         "true"  "$(dc_run rules 'firestore.rules')"
 assert_eq "detect-changes: rules=true for storage.rules"           "true"  "$(dc_run rules 'storage.rules')"
-assert_eq "detect-changes: rules=true for rules-test/ path"        "true"  "$(dc_run rules 'rules-test/x')"
+assert_eq "detect-changes: rules=true for packages/rules-test/ path"        "true"  "$(dc_run rules 'packages/rules-test/x')"
 assert_eq "detect-changes: rules=true for detect-changes.sh self"  "true"  "$(dc_run rules '.claude/skills/dispatch-propagate/scripts/detect-changes.sh')"
 assert_eq "detect-changes: rules=true for firebase.json"           "true"  "$(dc_run rules 'firebase.json')"
 assert_eq "detect-changes: rules=true for package.json"            "true"  "$(dc_run rules 'package.json')"

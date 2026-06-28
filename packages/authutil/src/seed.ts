@@ -35,7 +35,7 @@ export async function seedAuthUser(
     },
   );
   if (!createRes.ok) {
-    const body = await createRes.json();
+    const body = await createRes.json() as { error?: { message: string } };
     // Ignore duplicate — user already exists
     if (body.error?.message !== "DUPLICATE_LOCAL_ID") {
       throw new Error(`Failed to create auth user: ${JSON.stringify(body)}`);

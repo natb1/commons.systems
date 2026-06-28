@@ -6,7 +6,7 @@
 // no committed file, no ROADMAP.md.
 //
 // Run from anywhere (the store dir is resolved relative to this file, not cwd):
-//   npx tsx intentionsutil/scripts/frontier-view.ts
+//   npx tsx packages/intentionsutil/scripts/frontier-view.ts
 //
 // Determinism: `listNodes` returns nodes in id-sorted order, the projection
 // sort has a unique `id` final tiebreak, and the output carries no
@@ -19,11 +19,11 @@ import { listNodes } from "../src/store.js";
 import { projectGoals, renderFrontier } from "../src/goals.js";
 
 // --- Paths -----------------------------------------------------------------
-// The script lives at `intentionsutil/scripts/frontier-view.ts`, so the repo
-// root is two directories up. Resolve from this file's own location, never
-// from cwd.
+// The script lives at `packages/intentionsutil/scripts/frontier-view.ts`, so
+// the repo root is three directories up. Resolve from this file's own
+// location, never from cwd.
 const scriptDir = dirname(fileURLToPath(import.meta.url));
-const repoRoot = dirname(dirname(scriptDir));
+const repoRoot = dirname(dirname(dirname(scriptDir)));
 const intentionsDir = join(repoRoot, "intentions");
 
 // --- Main ------------------------------------------------------------------

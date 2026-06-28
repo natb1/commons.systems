@@ -14,7 +14,7 @@ const firebaseDedupe = [
 ];
 
 const appBase = defineConfig({
-  envDir: path.resolve(import.meta.dirname, ".."),
+  envDir: path.resolve(import.meta.dirname, "../.."),
   resolve: {
     dedupe: [...firebaseDedupe, "react", "react-dom", "react/jsx-runtime"],
   },

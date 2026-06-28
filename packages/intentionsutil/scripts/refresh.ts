@@ -12,8 +12,8 @@
 // `writeNode` is the diff-checkable expression of that split.
 //
 // Run from anywhere (paths resolve relative to this file, not cwd):
-//   npx tsx intentionsutil/scripts/refresh.ts <node-id>   # refresh one node
-//   npx tsx intentionsutil/scripts/refresh.ts             # refresh all
+//   npx tsx packages/intentionsutil/scripts/refresh.ts <node-id>   # refresh one node
+//   npx tsx packages/intentionsutil/scripts/refresh.ts             # refresh all
 
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -29,10 +29,11 @@ import { ghErrorText } from "../src/errors.js";
 import { gh, paginateGhApi } from "./gh-utils.js";
 
 // --- Paths -----------------------------------------------------------------
-// The script lives at `intentionsutil/scripts/refresh.ts`, so the repo root is
-// two directories up. Resolve from this file's own location, never from cwd.
+// The script lives at `packages/intentionsutil/scripts/refresh.ts`, so the repo
+// root is three directories up. Resolve from this file's own location, never
+// from cwd.
 const scriptDir = dirname(fileURLToPath(import.meta.url));
-const repoRoot = dirname(dirname(scriptDir));
+const repoRoot = dirname(dirname(dirname(scriptDir)));
 const intentionsDir = join(repoRoot, "intentions");
 const trackersDir = join(repoRoot, "trackers");
 

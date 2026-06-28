@@ -41,10 +41,10 @@ fi
 # Filter rules-test: excluded from vitest workspace projects and from typecheck.
 # (rules-test ships .ts files but its tsconfig is geared at the Firebase
 # rules-test harness, not standalone tsc --noEmit.)
-if [[ -n "${DIRTY_APPS[rules-test]+x}" ]]; then
+if [[ -n "${DIRTY_APPS[packages/rules-test]+x}" ]]; then
   echo "Note: rules-test excluded from typecheck (matches run-unit-tests.sh)" >&2
 fi
-unset 'DIRTY_APPS[rules-test]'
+unset 'DIRTY_APPS[packages/rules-test]'
 APP_DIRS=("${!DIRTY_APPS[@]}")
 
 if [ ${#APP_DIRS[@]} -eq 0 ]; then
