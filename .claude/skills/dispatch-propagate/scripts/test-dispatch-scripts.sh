@@ -98,6 +98,11 @@ setup() {
   # SCRIPT_DIR (= TMPDIR_TEST for this copy) — both already copied below/above,
   # so both resolve.
   cp "$SCRIPT_DIR/dispatch-auto-merge" "$TMPDIR_TEST/dispatch-auto-merge"
+  # dispatch-reconcile-merged (#2512) sources lib.sh (gh_retry, gh_issue_view_rest,
+  # gh_issue_close_rest, dispatch_marker_comment_id) via its SCRIPT_DIR (= TMPDIR_TEST
+  # for this copy) — lib.sh is copied below, so the source resolves.
+  cp "$SCRIPT_DIR/dispatch-reconcile-merged" "$TMPDIR_TEST/dispatch-reconcile-merged"
+  chmod +x "$TMPDIR_TEST/dispatch-reconcile-merged"
   # dispatch-retriage-orphaned-followups (#1812) sources lib.sh (gh_issue_list_rest,
   # gh_retry) and calls dispatch-apply-office-hours via its SCRIPT_DIR (= TMPDIR_TEST
   # for this copy) — both already copied here, so both resolve.
@@ -600,6 +605,19 @@ case "$args" in
       echo "stub forced gh api failure" >&2
       exit 1
     fi
+    # Optional per-issue close-failure injection (#2512): if issue-close-fail-on
+    # holds an issue number matching the <N> in this PATCH's path, emit a
+    # non-transient error and exit non-zero so gh_retry returns immediately and
+    # the caller (dispatch-reconcile-merged) takes its gh_issue_close_rest
+    # HARD_ERROR path for that issue. Default-absent, so existing tests sharing
+    # this PATCH branch are unaffected.
+    if [[ -f "$STUB_DIR/issue-close-fail-on" ]]; then
+      close_num=$(printf '%s' "$args" | sed -E 's#.*issues/([0-9]+).*#\1#')
+      if [[ "$close_num" == "$(cat "$STUB_DIR/issue-close-fail-on")" ]]; then
+        echo "issue close PATCH for #$close_num was rejected" >&2
+        exit 1
+      fi
+    fi
     echo '{}'
     ;;
   "api -X POST "*/issues/*/comments*)
@@ -838,6 +856,16 @@ case "$args" in
     echo "pr list" >> "$STUB_DIR/gh-auto-merge-pr-list.log"
     if [[ -f "$STUB_DIR/auto-merge-pr-list.json" ]]; then
       cat "$STUB_DIR/auto-merge-pr-list.json"
+    else
+      echo "[]"
+    fi
+    ;;
+  "pr list --state merged --json number,title,mergedAt,closingIssuesReferences --limit "*)
+    # dispatch-reconcile-merged's one fetch (#2512). reconcile-merged-pr-list.json
+    # supplies the per-test merged-PR array; absence means no merged PRs.
+    echo "pr list" >> "$STUB_DIR/gh-reconcile-merged-pr-list.log"
+    if [[ -f "$STUB_DIR/reconcile-merged-pr-list.json" ]]; then
+      cat "$STUB_DIR/reconcile-merged-pr-list.json"
     else
       echo "[]"
     fi
@@ -38416,6 +38444,175 @@ teardown
 echo "Test: dispatch-auto-merge is executable"
 assert_eq "dispatch-auto-merge is executable" "yes" \
   "$([[ -x "$SCRIPT_DIR/dispatch-auto-merge" ]] && echo yes || echo no)"
+
+# ============================================================================
+# dispatch-reconcile-merged (#2512)
+# ============================================================================
+echo "=== dispatch-reconcile-merged (#2512) ==="
+
+# Fixed clock so window membership is deterministic.
+RM_NOW=1700000000
+rm_iso() { date -u -d "@$1" +%Y-%m-%dT%H:%M:%SZ; }          # epoch → ISO
+RM_INWIN=$(rm_iso $((RM_NOW - 3600)))      # 1h ago: past GRACE, within LOOKBACK
+RM_TOORECENT=$(rm_iso $((RM_NOW - 60)))    # 60s ago: inside GRACE → skip
+RM_TOOOLD=$(rm_iso $((RM_NOW - 200000)))   # >48h ago: beyond LOOKBACK → skip
+
+# Build one merged-PR fixture object. $1=pr $2=mergedAt-iso $3=closing-json
+make_merged_pr() {
+  printf '{"number":%s,"title":"PR %s","mergedAt":"%s","closingIssuesReferences":%s}' \
+    "$1" "$1" "$2" "$3"
+}
+
+# 1. Repairs a silent auto-close failure: in-window PR closing an OPEN issue.
+echo "Test: reconcile repairs a silent auto-close failure"
+setup
+printf '%s' "[$(make_merged_pr 8001 "$RM_INWIN" '[{"number":9001}]')]" \
+  > "$STUB_DIR/reconcile-merged-pr-list.json"
+printf '%s' '{"number":9001,"state":"open"}' > "$STUB_DIR/view-issue-9001.json"
+out=$(DISPATCH_PLAN_AUTHOR_ID=12345 DISPATCH_RECONCILE_NOW=$RM_NOW "$TMPDIR_TEST/dispatch-reconcile-merged" 2>/dev/null)
+assert_eq "reconcile: stdout repairs #9001" "reconciled #9001 (PR #8001)" "$out"
+assert_eq "reconcile: close call logged" "present" \
+  "$(grep -q 'issues/9001' "$STUB_DIR/gh-issue-close-rest-calls.log" && echo present || echo absent)"
+assert_eq "reconcile: diagnostic comment posted" "present" \
+  "$(grep -q 'issues/9001/comments' "$STUB_DIR/gh-issue-comment-rest-calls.log" && echo present || echo absent)"
+assert_eq "reconcile: exactly one comment posted" "1" \
+  "$(grep -c 'issues/9001/comments' "$STUB_DIR/gh-issue-comment-rest-calls.log")"
+teardown
+
+# 2. No-op when the closing issue is already CLOSED (Layer 1 idempotency).
+echo "Test: reconcile no-op when issue already CLOSED"
+setup
+printf '%s' "[$(make_merged_pr 8001 "$RM_INWIN" '[{"number":9001}]')]" \
+  > "$STUB_DIR/reconcile-merged-pr-list.json"
+printf '%s' '{"number":9001,"state":"closed"}' > "$STUB_DIR/view-issue-9001.json"
+out=$(DISPATCH_PLAN_AUTHOR_ID=12345 DISPATCH_RECONCILE_NOW=$RM_NOW "$TMPDIR_TEST/dispatch-reconcile-merged" 2>/dev/null)
+assert_eq "reconcile: closed-issue empty stdout" "" "$out"
+assert_eq "reconcile: closed-issue no close call" "absent" "$(log_state gh-issue-close-rest-calls.log)"
+assert_eq "reconcile: closed-issue no comment call" "absent" "$(log_state gh-issue-comment-rest-calls.log)"
+teardown
+
+# 3. Grace window: a too-recently-merged PR is skipped (races platform auto-close).
+echo "Test: reconcile skips PR inside the grace window"
+setup
+printf '%s' "[$(make_merged_pr 8001 "$RM_TOORECENT" '[{"number":9001}]')]" \
+  > "$STUB_DIR/reconcile-merged-pr-list.json"
+printf '%s' '{"number":9001,"state":"open"}' > "$STUB_DIR/view-issue-9001.json"
+out=$(DISPATCH_PLAN_AUTHOR_ID=12345 DISPATCH_RECONCILE_NOW=$RM_NOW "$TMPDIR_TEST/dispatch-reconcile-merged" 2>/dev/null)
+assert_eq "reconcile: grace-window empty stdout" "" "$out"
+assert_eq "reconcile: grace-window no close call" "absent" "$(log_state gh-issue-close-rest-calls.log)"
+assert_eq "reconcile: grace-window no comment call" "absent" "$(log_state gh-issue-comment-rest-calls.log)"
+teardown
+
+# 4. Lookback window: an ancient merged PR is skipped.
+echo "Test: reconcile skips PR beyond the lookback window"
+setup
+printf '%s' "[$(make_merged_pr 8001 "$RM_TOOOLD" '[{"number":9001}]')]" \
+  > "$STUB_DIR/reconcile-merged-pr-list.json"
+printf '%s' '{"number":9001,"state":"open"}' > "$STUB_DIR/view-issue-9001.json"
+out=$(DISPATCH_PLAN_AUTHOR_ID=12345 DISPATCH_RECONCILE_NOW=$RM_NOW "$TMPDIR_TEST/dispatch-reconcile-merged" 2>/dev/null)
+assert_eq "reconcile: lookback-window empty stdout" "" "$out"
+assert_eq "reconcile: lookback-window no close call" "absent" "$(log_state gh-issue-close-rest-calls.log)"
+assert_eq "reconcile: lookback-window no comment call" "absent" "$(log_state gh-issue-comment-rest-calls.log)"
+teardown
+
+# 5. Idempotent re-run: an OPEN issue already carrying the marker re-closes WITHOUT
+#    a new diagnostic comment (Layer 2 idempotency).
+echo "Test: reconcile re-run with marker present re-closes without re-commenting"
+setup
+printf '%s' "[$(make_merged_pr 8001 "$RM_INWIN" '[{"number":9001}]')]" \
+  > "$STUB_DIR/reconcile-merged-pr-list.json"
+printf '%s' '{"number":9001,"state":"open"}' > "$STUB_DIR/view-issue-9001.json"
+# The comment carries an `id` so dispatch_marker_comment_id resolves a non-empty
+# marker id (the marker-present path). A page2 fixture (empty array) is required:
+# the comments-sentinel stub's branch ends with `[[ -f ...page2 ]] && cat ...`, so
+# WITHOUT a page2 file that `[[ -f ]]` test returns 1 — gh exits non-zero, the
+# helper hard-errors, and the script exits 1 (aborting the suite under set -e).
+printf '%s' '[{"id":555,"body":"<!-- dispatch:auto-close-repair -->\nprior repair","user":{"id":12345}}]' \
+  > "$STUB_DIR/view-issue-comments-9001-page1.json"
+printf '%s' '[]' > "$STUB_DIR/view-issue-comments-9001-page2.json"
+out=$(DISPATCH_PLAN_AUTHOR_ID=12345 DISPATCH_RECONCILE_NOW=$RM_NOW "$TMPDIR_TEST/dispatch-reconcile-merged" 2>/dev/null)
+assert_eq "reconcile: marker-present stdout repairs #9001" "reconciled #9001 (PR #8001)" "$out"
+assert_eq "reconcile: marker-present close call logged" "present" \
+  "$(grep -q 'issues/9001' "$STUB_DIR/gh-issue-close-rest-calls.log" && echo present || echo absent)"
+assert_eq "reconcile: marker-present no new comment" "absent" "$(log_state gh-issue-comment-rest-calls.log)"
+teardown
+
+# 6. A merged PR that closes NO issue is skipped — but the list was still fetched.
+echo "Test: reconcile skips PR with empty closing set (but fetched the list)"
+setup
+printf '%s' "[$(make_merged_pr 8001 "$RM_INWIN" '[]')]" \
+  > "$STUB_DIR/reconcile-merged-pr-list.json"
+out=$(DISPATCH_PLAN_AUTHOR_ID=12345 DISPATCH_RECONCILE_NOW=$RM_NOW "$TMPDIR_TEST/dispatch-reconcile-merged" 2>/dev/null)
+assert_eq "reconcile: empty-closing-set empty stdout" "" "$out"
+assert_eq "reconcile: empty-closing-set no close call" "absent" "$(log_state gh-issue-close-rest-calls.log)"
+assert_eq "reconcile: empty-closing-set no comment call" "absent" "$(log_state gh-issue-comment-rest-calls.log)"
+assert_eq "reconcile: empty-closing-set still fetched PR list" "present" \
+  "$(log_state gh-reconcile-merged-pr-list.log)"
+teardown
+
+# --- HARD_ERROR paths --------------------------------------------------------
+# Each of the three per-item failure branches sets HARD_ERROR=1, `continue`s, and
+# drives the final `exit 1`. Without coverage a regression in the error-return
+# convention of any lib.sh helper (or the branch's own logging) would go unseen.
+
+# 7. gh_issue_view_rest (Layer 1 state read) failure → hard error, exit 1.
+echo "Test: reconcile hard-errors when gh_issue_view_rest fails"
+setup
+printf '%s' "[$(make_merged_pr 8001 "$RM_INWIN" '[{"number":9001}]')]" \
+  > "$STUB_DIR/reconcile-merged-pr-list.json"
+# gh-fail-rest forces every REST `api` call to fail; the merged-PR list fetch is a
+# `pr list` (not an `api` call) so it still succeeds, and gh_issue_view_rest — the
+# first REST call in the per-issue loop — is what fails.
+: > "$STUB_DIR/gh-fail-rest"
+rc=0
+err=$(DISPATCH_PLAN_AUTHOR_ID=12345 DISPATCH_RECONCILE_NOW=$RM_NOW "$TMPDIR_TEST/dispatch-reconcile-merged" 2>&1 >/dev/null) || rc=$?
+assert_eq "reconcile: view-failure exit 1" "1" "$rc"
+case "$err" in *"gh_issue_view_rest #9001 failed"*) m=yes ;; *) m=no ;; esac
+assert_eq "reconcile: view-failure stderr names the hard error" "yes" "$m"
+assert_eq "reconcile: view-failure short-circuits before close" "absent" \
+  "$(log_state gh-issue-close-rest-calls.log)"
+teardown
+
+# 8. dispatch_marker_comment_id (Layer 2 marker read) failure → hard error, exit 1.
+echo "Test: reconcile hard-errors when dispatch_marker_comment_id can't resolve author id"
+setup
+printf '%s' "[$(make_merged_pr 8001 "$RM_INWIN" '[{"number":9001}]')]" \
+  > "$STUB_DIR/reconcile-merged-pr-list.json"
+printf '%s' '{"number":9001,"state":"open"}' > "$STUB_DIR/view-issue-9001.json"
+# A non-numeric DISPATCH_PLAN_AUTHOR_ID trips the helper's author-id guard
+# (return 1) AFTER the OPEN-state read passes Layer 1, isolating the Layer 2 path.
+rc=0
+err=$(DISPATCH_PLAN_AUTHOR_ID=not-a-number DISPATCH_RECONCILE_NOW=$RM_NOW "$TMPDIR_TEST/dispatch-reconcile-merged" 2>&1 >/dev/null) || rc=$?
+assert_eq "reconcile: marker-id-failure exit 1" "1" "$rc"
+case "$err" in *"dispatch_marker_comment_id #9001 failed"*) m=yes ;; *) m=no ;; esac
+assert_eq "reconcile: marker-id-failure stderr names the hard error" "yes" "$m"
+assert_eq "reconcile: marker-id-failure short-circuits before close" "absent" \
+  "$(log_state gh-issue-close-rest-calls.log)"
+teardown
+
+# 9. gh_issue_close_rest (the closing PATCH) failure → hard error, exit 1.
+echo "Test: reconcile hard-errors when gh_issue_close_rest fails"
+setup
+printf '%s' "[$(make_merged_pr 8001 "$RM_INWIN" '[{"number":9001}]')]" \
+  > "$STUB_DIR/reconcile-merged-pr-list.json"
+printf '%s' '{"number":9001,"state":"open"}' > "$STUB_DIR/view-issue-9001.json"
+# No comments fixture → marker check resolves an empty id (markerless path), so
+# the script reaches the close. issue-close-fail-on injects a non-transient PATCH
+# rejection for #9001 so gh_issue_close_rest returns 1.
+printf '9001' > "$STUB_DIR/issue-close-fail-on"
+rc=0
+err=$(DISPATCH_PLAN_AUTHOR_ID=12345 DISPATCH_RECONCILE_NOW=$RM_NOW "$TMPDIR_TEST/dispatch-reconcile-merged" 2>&1 >/dev/null) || rc=$?
+assert_eq "reconcile: close-failure exit 1" "1" "$rc"
+case "$err" in *"gh_issue_close_rest #9001 failed"*) m=yes ;; *) m=no ;; esac
+assert_eq "reconcile: close-failure stderr names the hard error" "yes" "$m"
+assert_eq "reconcile: close-failure attempted the close PATCH" "present" \
+  "$(log_state gh-issue-close-rest-calls.log)"
+teardown
+
+# --- executable-bit guard ----------------------------------------------------
+echo "Test: dispatch-reconcile-merged is executable"
+assert_eq "dispatch-reconcile-merged is executable" "yes" \
+  "$([[ -x "$SCRIPT_DIR/dispatch-reconcile-merged" ]] && echo yes || echo no)"
 
 # ============================================================================
 # dispatch-detect-transient-death tests (#1733)
