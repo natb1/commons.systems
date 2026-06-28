@@ -464,6 +464,12 @@ def outcome_rates($o):
     fix_rate:      rate($o.fixes_applied;       $o.findings_actionable)
   };
 
+def topic_labels: ["security","dispatch","testing infrastructure","landing","fellspiral","budget","print","audio"];
+def type_labels: ["bug","enhancement"];
+def labels_for($r): ($r.artifact.issue // null) as $iss | if $iss == null then [] else ($labels_by_issue[($iss|tostring)] // []) end;
+def topics_for($r): (labels_for($r)) as $L | ([ topic_labels[] | select(. as $t | $L | index($t)) ]) as $hit | if ($hit|length)==0 then ["other"] else $hit end;
+def types_for($r): (labels_for($r)) as $L | ([ type_labels[] | select(. as $t | $L | index($t)) ]) as $hit | if ($hit|length)==0 then ["none"] else $hit end;
+
 . as $rows
 
 # ---- window meta is merged in by the shell via --argjson window ----
@@ -523,6 +529,35 @@ def outcome_rates($o):
                         | .cost_usd += cost($e.value.usage; $model) )
       )
     ) ) as $by_model
+
+# ---- by_topic / by_type (per-axis sums intentionally exceed the grand total
+#      because each session is counted in every bucket its labels resolve to —
+#      total-to-all-labels) ----
+| ( {security: zero_bucket, dispatch: zero_bucket, "testing infrastructure": zero_bucket,
+     landing: zero_bucket, fellspiral: zero_bucket, budget: zero_bucket,
+     print: zero_bucket, audio: zero_bucket, other: zero_bucket} ) as $topic_seed
+| ( reduce $rows[] as $r ($topic_seed;
+      (topics_for($r)) as $ts
+      | reduce $ts[] as $t (.; .[$t] = add_to_bucket(.[$t]; $r.usage; $r.turns))
+    )
+  ) as $by_topic
+| ( reduce $rows[] as $r ($by_topic;
+      (topics_for($r)) as $ts
+      | reduce $ts[] as $t (.; .[$t].cost_usd = ((.[$t].cost_usd // 0) + session_cost($r)))
+    )
+  ) as $by_topic
+
+| ( {bug: zero_bucket, enhancement: zero_bucket, none: zero_bucket} ) as $type_seed
+| ( reduce $rows[] as $r ($type_seed;
+      (types_for($r)) as $ts
+      | reduce $ts[] as $t (.; .[$t] = add_to_bucket(.[$t]; $r.usage; $r.turns))
+    )
+  ) as $by_type
+| ( reduce $rows[] as $r ($by_type;
+      (types_for($r)) as $ts
+      | reduce $ts[] as $t (.; .[$t].cost_usd = ((.[$t].cost_usd // 0) + session_cost($r)))
+    )
+  ) as $by_type
 
 # ---- tool_errors (count + sessions_affected) ----
 | ( reduce $rows[] as $r ({};
@@ -706,6 +741,8 @@ def outcome_rates($o):
     by_phase: $by_phase,
     by_phase_outcome: $by_phase_outcome,
     by_model: $by_model,
+    by_topic: $by_topic,
+    by_type: $by_type,
     by_phase_model: $by_phase_model,
     tool_errors: $tool_errors,
     tool_sequences: $tool_sequences,
