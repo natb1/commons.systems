@@ -18,6 +18,7 @@ import { getOwnerReminders, getOwnerQueueMetrics, getDemoReminders, getDemoQueue
 import { getOwnerSamples, getDemoSamples } from "./usage-data.js";
 import { getOwnerIssueSamples, getDemoIssueSamples } from "./issue-data.js";
 import { getOwnerAuditAggregates, getDemoAuditAggregates } from "./audit-data.js";
+import { getDemoProjectSignals, getOwnerProjectSignals } from "./project-signals-data.js";
 
 import { selectLatestSample } from "./usage-samples.js";
 import { capacityBandKey } from "./capacity-band.js";
@@ -32,6 +33,7 @@ import { AuditPanel } from "./components/AuditPanel.js";
 import { RemindersPanel } from "./components/RemindersPanel.js";
 import { QueueMetricsPanel } from "./components/QueueMetricsPanel.js";
 import { ParkedIssuesPanel } from "./components/ParkedIssuesPanel.js";
+import { ProjectSignalsPanel } from "./components/ProjectSignalsPanel.js";
 
 import { mergePanelData, type PanelData } from "./panel-equality.js";
 
@@ -79,14 +81,15 @@ export function Dashboard({ user }: DashboardProps) {
   // over the module-import `db`/`NAMESPACE`; re-created each render, but only ever
   // referenced inside effects below, so the identity churn is harmless.
   async function loadPanelData(currentUser: User): Promise<PanelData> {
-    const [samples, reminders, queueMetrics, issueSamples, auditAggregates] = await Promise.all([
+    const [samples, reminders, queueMetrics, issueSamples, auditAggregates, projectSignals] = await Promise.all([
       getOwnerSamples(db, NAMESPACE, currentUser),
       getOwnerReminders(db, NAMESPACE, currentUser),
       getOwnerQueueMetrics(db, NAMESPACE, currentUser),
       getOwnerIssueSamples(db, NAMESPACE, currentUser),
       getOwnerAuditAggregates(db, NAMESPACE, currentUser),
+      getOwnerProjectSignals(db, NAMESPACE, currentUser),
     ]);
-    return { samples, reminders, queueMetrics, issueSamples, auditAggregates };
+    return { samples, reminders, queueMetrics, issueSamples, auditAggregates, projectSignals };
   }
 
   // Five-collection parallel Firestore load for the owner tier, with the
@@ -172,6 +175,7 @@ export function Dashboard({ user }: DashboardProps) {
       queueMetrics: getDemoQueueMetrics(),
       issueSamples: getDemoIssueSamples(),
       auditAggregates: getDemoAuditAggregates(),
+      projectSignals: getDemoProjectSignals(),
     }),
     [],
   );
@@ -179,7 +183,7 @@ export function Dashboard({ user }: DashboardProps) {
   // Resolve the active panel data for demo / owner. (The error tier returns
   // early below; these hooks still run unconditionally to satisfy rules-of-hooks.)
   const data = state.tier === "owner" ? state.data : demoData;
-  const { samples, reminders, queueMetrics, issueSamples, auditAggregates } = data;
+  const { samples, reminders, queueMetrics, issueSamples, auditAggregates, projectSignals } = data;
 
   // The two time-sensitive panels (capacity, reminders) are memoized as elements
   // keyed on a content signature: each panel's now-derived output (clocks,
@@ -210,6 +214,10 @@ export function Dashboard({ user }: DashboardProps) {
     [auditAggregates],
   );
   const queueEl = useMemo(() => <QueueMetricsPanel metrics={queueMetrics} />, [queueMetrics]);
+  const projectSignalsEl = useMemo(
+    () => <ProjectSignalsPanel snapshot={projectSignals} />,
+    [projectSignals],
+  );
 
   // `now` is intentionally omitted from these dep arrays: the *Key helper
   // captures every now-derived change to the panel's output, so a tick that
@@ -266,6 +274,7 @@ export function Dashboard({ user }: DashboardProps) {
         {remindersEl}
         {queueEl}
         {parkedEl}
+        {projectSignalsEl}
       </div>
     </>
   );

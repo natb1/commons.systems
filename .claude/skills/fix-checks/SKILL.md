@@ -198,8 +198,9 @@ Cross-iteration memory lives entirely in `tmp/fix-checks-summary.md` (see
              should see on one issue, not N dups). Do **not** file. Flake issue =
              `#<N>`, disposition `REOPENED`.
            - **`STALE <N>`** — a same-fingerprint issue was closed-as-fixed and
-             the guard determined this triggering run pre-dates the fix that closed
-             it: the PR branch is stale and is still emitting the pre-fix
+             the guard determined this triggering run's head does **not** contain
+             the closing fix commit (ancestry shows `behind`/`diverged`): the PR
+             branch is stale and is still emitting the pre-fix
              signature. The guard fired no comment and no reopen — suppressing the
              oscillation is the point. Do **not** file. Do **not** reopen. Flake
              issue = `#<N>`, disposition `STALE`. **Skip sub-step 4 (block the
