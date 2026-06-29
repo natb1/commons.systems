@@ -33,7 +33,10 @@ export type Rung = "rung-0" | "refine-workflow" | "rung-5";
  */
 export function detectRung(nodes: IntentionNode[]): Rung {
   const hasPrincipleRoot = nodes.some(
-    (n) => n.id.startsWith("principle-") && n.parent === null,
+    (n) =>
+      n.id.startsWith("principle-") &&
+      n.parent === null &&
+      n.status === "codified",
   );
   if (!hasPrincipleRoot) {
     return "rung-0";

@@ -31,6 +31,18 @@ describe("detectRung", () => {
     expect(detectRung([root])).toBe("refine-workflow");
   });
 
+  it("raw principle root, no children → rung-0", () => {
+    // Regression guard: a single raw (uncodified) principle-* root with no
+    // children. The hasPrincipleRoot guard counts only *codified* principle
+    // roots, so a raw root means the charter is not yet codified → rung-0.
+    // Without the status guard this misclassified as rung-5 (the raw leaf was
+    // a frontier goal). Contrast the codified-root test above (→ refine-
+    // workflow): the codified-vs-raw distinction is intentional — do not
+    // "align" these two expectations.
+    const root = node({ id: "principle-raw", status: "raw", parent: null });
+    expect(detectRung([root])).toBe("rung-0");
+  });
+
   it("roots + leaf goals → rung-5", () => {
     const root = node({ id: "principle-show-not-tell", status: "codified", parent: null });
     const leaf = node({ id: "issue-1", status: "raw", parent: "principle-show-not-tell" });

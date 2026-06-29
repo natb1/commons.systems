@@ -19,10 +19,10 @@ import { detectRung } from "../src/rungs.js";
 
 // --- Paths -----------------------------------------------------------------
 // The script lives at `intentionsutil/scripts/detect-rung.ts`, so the repo
-// root is two directories up. Resolve from this file's own location, never
+// root is three directories up. Resolve from this file's own location, never
 // from cwd.
 const scriptDir = dirname(fileURLToPath(import.meta.url));
-const repoRoot = dirname(dirname(scriptDir));
+const repoRoot = dirname(dirname(dirname(scriptDir)));
 const intentionsDir = join(repoRoot, "intentions");
 
 // --- Main ------------------------------------------------------------------

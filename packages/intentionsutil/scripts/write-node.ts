@@ -15,11 +15,11 @@ import { writeNode, readNode } from "../src/store.js";
 import { validateNode, type IntentionNode } from "../src/schema.js";
 
 // --- Paths -----------------------------------------------------------------
-// The script lives at `intentionsutil/scripts/write-node.ts`, so the repo
-// root is two directories up. Resolve from this file's own location, never
-// from cwd.
+// The script lives at `packages/intentionsutil/scripts/write-node.ts`, so the
+// repo root is three directories up. Resolve from this file's own location,
+// never from cwd.
 const scriptDir = dirname(fileURLToPath(import.meta.url));
-const repoRoot = dirname(dirname(scriptDir));
+const repoRoot = dirname(dirname(dirname(scriptDir)));
 const intentionsDir = join(repoRoot, "intentions");
 
 // --- Core helper (exported for tests) --------------------------------------
