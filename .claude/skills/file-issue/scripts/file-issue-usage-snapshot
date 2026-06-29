@@ -1,0 +1,289 @@
+#!/usr/bin/env bash
+# file-issue-usage-snapshot — self-attribute a file-issue session's token cost to
+# the topic label(s) the skill applied (issue #2504; epic #2502).
+#
+# This is the single home of the token-delta / topic-union / additive-sidecar
+# logic. It is PURE local file I/O — no `gh`, no network. The /file-issue
+# SKILL.md caller invokes the subcommands; the downstream price-model consumer
+# (#2505) reads the sidecar this script writes.
+#
+# WHERE IT READS / WRITES
+#   Projects root (default $HOME/.claude/projects, overridable via
+#   FILE_ISSUE_PROJECTS_ROOT — mirrors dispatch-token-audit's
+#   DISPATCH_AUDIT_PROJECTS_ROOT, used by the Unit-2 test fixture) contains
+#   per-project directories. The session's transcripts are:
+#     - top-level:  <projectdir>/<session_id>.jsonl
+#     - subagents:  <projectdir>/<session_id>/subagents/agent-*.jsonl
+#   (agent-*.meta.json companions are NOT transcripts; only *.jsonl is parsed.)
+#   The session's cumulative token total is the sum of assistant usage across
+#   BOTH the top-level transcript and every subagent transcript. Inside a
+#   subagent CLAUDE_CODE_SESSION_ID equals the PARENT session id, so the session
+#   id resolves the same dir whether file-issue runs in the main thread or a
+#   subagent.
+#
+#   The baseline/marker and the sidecar live in the directory containing the
+#   located canonical transcript: prefer the top-level <session_id>.jsonl's
+#   directory; if no top-level exists (e.g. the Unit-2 subagent-only fixture),
+#   fall back to the directory derived from a located subagent transcript. This
+#   location is deterministic so enter/record-topic/finalize within one session
+#   all resolve the same paths.
+#     baseline/marker: <session-dir>/<session_id>.file-issue-usage-baseline.json
+#     sidecar:         <session-dir>/<session_id>.file-issue-attribution.json
+#
+# SUBCOMMANDS
+#   enter
+#     Atomically create the baseline/marker holding the current cumulative token
+#     totals (per class) if ABSENT, and print `owner`; if PRESENT, print
+#     `nested` and touch nothing. The create-if-absent is atomic via a hardlink
+#     (ln fails with EEXIST when the target exists) — the owner test.
+#   record-topic <topic> <type>
+#     Find-or-create the sidecar; union a non-empty <topic> into topics[] (dedup,
+#     stable order); set type to <type> (last-writer-wins; empty string allowed =
+#     the no-type case); refresh measured_at; leave tokens untouched.
+#   finalize
+#     Find-or-create the sidecar; read the baseline; compute delta = current
+#     cumulative − baseline per token class; set tokens = existing_tokens + delta
+#     per class (additive, so repeated enter→finalize cycles each add their
+#     slice); refresh measured_at; then REMOVE the baseline/marker. A missing
+#     baseline at finalize is an environment error → exit non-zero (NOT a silent
+#     zero baseline).
+#
+# SIDECAR SCHEMA (file-issue.attribution.v1)
+#   {"schema":"file-issue.attribution.v1","session_id":"<id>",
+#    "topics":["security","dispatch"],"type":"bug",
+#    "tokens":{"input":0,"cache_creation":0,"cache_read":0,"output":0},
+#    "measured_at":"<ISO-8601 UTC>"}
+#   tokens are RAW token classes (no dollar figure — pricing is #2505).
+#
+# OUT OF SCOPE (note only, not built): crash / stale-marker recovery. A baseline
+# left behind by a crashed prior run in the same session makes a fresh `enter`
+# report `nested`. Recovering that is deliberately not handled here.
+#
+# EXIT CODES
+#   0  ok
+#   1  environment error (no session id, no transcript, missing baseline, etc.)
+#   2  usage error (bad/unknown subcommand or bad args)
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+PROJECTS_ROOT="${FILE_ISSUE_PROJECTS_ROOT:-${HOME:-}/.claude/projects}"
+
+usage() {
+  cat >&2 <<'EOF'
+usage: file-issue-usage-snapshot <subcommand>
+  enter                          create the per-session token baseline if absent
+                                 (prints `owner`), else print `nested`
+  record-topic <topic> <type>    union <topic> into the sidecar, set <type>
+  finalize                       add (current − baseline) to sidecar tokens,
+                                 then remove the baseline
+EOF
+}
+
+# --- jq usage helpers (copied VERBATIM from
+# --- dispatch-token-audit/scripts/aggregate-usage.sh lines ~131-152) ---------
+JQ_FUNCS='
+def usage_of(m):
+  ( m.message.usage // {} )
+  | {
+      input:          (.input_tokens // 0),
+      cache_creation: (.cache_creation_input_tokens // 0),
+      cache_read:     (.cache_read_input_tokens // 0),
+      output:         (.output_tokens // 0)
+    };
+
+def sum_usage(list):
+  reduce list[] as $u (
+    {input:0, cache_creation:0, cache_read:0, output:0};
+    {
+      input:          (.input + $u.input),
+      cache_creation: (.cache_creation + $u.cache_creation),
+      cache_read:     (.cache_read + $u.cache_read),
+      output:         (.output + $u.output)
+    }
+  );
+'
+
+# --- subcommand dispatch -----------------------------------------------------
+SUBCMD="${1:-}"
+case "$SUBCMD" in
+  enter|record-topic|finalize) ;;
+  '')
+    echo "file-issue-usage-snapshot: missing subcommand" >&2
+    usage
+    exit 2
+    ;;
+  *)
+    echo "file-issue-usage-snapshot: unknown subcommand '$SUBCMD'" >&2
+    usage
+    exit 2
+    ;;
+esac
+shift
+
+# --- resolve the session id --------------------------------------------------
+SESSION_ID="${CLAUDE_CODE_SESSION_ID:-}"
+if [[ -z "$SESSION_ID" ]]; then
+  echo "file-issue-usage-snapshot: CLAUDE_CODE_SESSION_ID is unset or empty" >&2
+  exit 1
+fi
+# The session id is a bare stem used in filenames and find patterns; a slash,
+# `..`, or control char is malformed (defensive check at the system edge).
+case "$SESSION_ID" in
+  *..*|*/*|*[[:cntrl:]]*)
+    echo "file-issue-usage-snapshot: CLAUDE_CODE_SESSION_ID contains illegal characters: $SESSION_ID" >&2
+    exit 1
+    ;;
+esac
+
+if [[ ! -d "$PROJECTS_ROOT" ]]; then
+  echo "file-issue-usage-snapshot: projects root '$PROJECTS_ROOT' is not a directory" >&2
+  exit 1
+fi
+
+# --- locate the session transcripts ------------------------------------------
+# Top-level transcript(s): <projectdir>/<session_id>.jsonl (depth 2 under root).
+# Subagent transcripts:    <projectdir>/<session_id>/subagents/*.jsonl.
+TRANSCRIPTS=()
+while IFS= read -r -d '' f; do
+  TRANSCRIPTS+=("$f")
+done < <(find "$PROJECTS_ROOT" -mindepth 2 -maxdepth 2 -type f -name "${SESSION_ID}.jsonl" -print0 2>/dev/null)
+while IFS= read -r -d '' f; do
+  TRANSCRIPTS+=("$f")
+done < <(find "$PROJECTS_ROOT" -type f -path "*/${SESSION_ID}/subagents/*.jsonl" -print0 2>/dev/null)
+
+if [[ ${#TRANSCRIPTS[@]} -eq 0 ]]; then
+  echo "file-issue-usage-snapshot: no transcript found for session $SESSION_ID under $PROJECTS_ROOT" >&2
+  exit 1
+fi
+
+# --- resolve the (deterministic) session dir ---------------------------------
+# Prefer the top-level transcript's directory; otherwise derive the project dir
+# from a subagent path (<projectdir>/<session_id>/subagents/agent.jsonl → up 3).
+toplevel=$(find "$PROJECTS_ROOT" -mindepth 2 -maxdepth 2 -type f -name "${SESSION_ID}.jsonl" 2>/dev/null | sort | head -n1)
+if [[ -n "$toplevel" ]]; then
+  SESSION_DIR=$(dirname "$toplevel")
+else
+  sub=$(find "$PROJECTS_ROOT" -type f -path "*/${SESSION_ID}/subagents/*.jsonl" 2>/dev/null | sort | head -n1)
+  SESSION_DIR=$(dirname "$(dirname "$(dirname "$sub")")")
+fi
+
+BASELINE="$SESSION_DIR/${SESSION_ID}.file-issue-usage-baseline.json"
+SIDECAR="$SESSION_DIR/${SESSION_ID}.file-issue-attribution.json"
+
+# --- helpers -----------------------------------------------------------------
+
+# Sum .message.usage across all type=="assistant" records in ALL located
+# transcripts. `jq -s f1 f2 …` builds one combined array, so the sum spans every
+# file. A parse failure is a clear error (code-style.md: no silently-wrong total).
+read_cumulative() {
+  if ! jq -s "$JQ_FUNCS"' sum_usage([ .[] | select(.type=="assistant") | usage_of(.) ])' \
+      "${TRANSCRIPTS[@]}" 2>/dev/null; then
+    echo "file-issue-usage-snapshot: failed to parse session transcript(s) for $SESSION_ID" >&2
+    return 1
+  fi
+}
+
+# Default (empty) sidecar object, schema-stamped.
+default_sidecar() {
+  jq -n --arg sid "$SESSION_ID" '
+    {
+      schema: "file-issue.attribution.v1",
+      session_id: $sid,
+      topics: [],
+      type: "",
+      tokens: {input:0, cache_creation:0, cache_read:0, output:0},
+      measured_at: ""
+    }'
+}
+
+# --- subcommands -------------------------------------------------------------
+case "$SUBCMD" in
+
+  enter)
+    if [[ $# -ne 0 ]]; then
+      echo "file-issue-usage-snapshot: enter takes no arguments" >&2
+      usage
+      exit 2
+    fi
+    cumulative=$(read_cumulative)
+    now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    tmp="$BASELINE.$$.tmp"
+    jq -n \
+      --arg sid "$SESSION_ID" \
+      --arg at "$now" \
+      --argjson tokens "$cumulative" \
+      '{session_id:$sid, captured_at:$at} + $tokens' > "$tmp"
+    # Atomic create-if-absent: ln fails with EEXIST when the baseline already
+    # exists, so exactly one caller wins ownership (the owner test).
+    if ln "$tmp" "$BASELINE" 2>/dev/null; then
+      rm -f "$tmp"
+      echo "owner"
+    else
+      rm -f "$tmp"
+      echo "nested"
+    fi
+    ;;
+
+  record-topic)
+    if [[ $# -ne 2 ]]; then
+      echo "file-issue-usage-snapshot: record-topic requires <topic> <type>" >&2
+      usage
+      exit 2
+    fi
+    topic="$1"
+    type="$2"
+    now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    if [[ -f "$SIDECAR" ]]; then
+      base_json=$(cat "$SIDECAR")
+    else
+      base_json=$(default_sidecar)
+    fi
+    out=$(jq \
+      --arg topic "$topic" \
+      --arg type "$type" \
+      --arg now "$now" '
+        .type = $type
+        | (if ($topic | length) > 0 and ((.topics // []) | index($topic) | not)
+             then .topics += [$topic]
+             else . end)
+        | .measured_at = $now
+      ' <<<"$base_json")
+    printf '%s\n' "$out" > "$SIDECAR.tmp"
+    mv "$SIDECAR.tmp" "$SIDECAR"
+    ;;
+
+  finalize)
+    if [[ $# -ne 0 ]]; then
+      echo "file-issue-usage-snapshot: finalize takes no arguments" >&2
+      usage
+      exit 2
+    fi
+    if [[ ! -f "$BASELINE" ]]; then
+      echo "file-issue-usage-snapshot: baseline '$BASELINE' missing at finalize (was enter run for this session?)" >&2
+      exit 1
+    fi
+    cumulative=$(read_cumulative)
+    baseline_json=$(cat "$BASELINE")
+    now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    if [[ -f "$SIDECAR" ]]; then
+      base_json=$(cat "$SIDECAR")
+    else
+      base_json=$(default_sidecar)
+    fi
+    out=$(jq \
+      --argjson cur "$cumulative" \
+      --argjson base "$baseline_json" \
+      --arg now "$now" '
+        .tokens.input          = ((.tokens.input // 0)          + ($cur.input          - $base.input))
+        | .tokens.cache_creation = ((.tokens.cache_creation // 0) + ($cur.cache_creation - $base.cache_creation))
+        | .tokens.cache_read     = ((.tokens.cache_read // 0)     + ($cur.cache_read     - $base.cache_read))
+        | .tokens.output         = ((.tokens.output // 0)         + ($cur.output         - $base.output))
+        | .measured_at = $now
+      ' <<<"$base_json")
+    printf '%s\n' "$out" > "$SIDECAR.tmp"
+    mv "$SIDECAR.tmp" "$SIDECAR"
+    rm -f "$BASELINE"
+    ;;
+
+esac

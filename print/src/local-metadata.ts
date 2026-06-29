@@ -41,23 +41,71 @@ export function parseOpfTitle(xml: string): string | undefined {
   return cleanTitle(plainTitle?.textContent);
 }
 
-async function extractPdf(buf: ArrayBuffer): Promise<{ title?: string; pageCount?: number }> {
-  // getDocument copies/detaches the buffer; pass a fresh Uint8Array view.
+/**
+ * Range transport that serves pdf.js's data requests by slicing the source Blob,
+ * so only the byte ranges pdf.js asks for are read (not the whole file).
+ *
+ * pdf.js never surfaces a range read that fails to call `onDataRange` — it just
+ * blocks forever waiting for the outstanding range, so `getDocument().promise`
+ * would never settle. To make a failed read observable, a rejected read settles
+ * the `error` promise; callers race it against their pdf.js work so the failure
+ * propagates to `extractMetadata`'s try/catch (which yields `{}`).
+ */
+export class BlobRangeTransport extends pdfjsLib.PDFDataRangeTransport {
+  /** Rejects with the first failing range read; never resolves. */
+  readonly error: Promise<never>;
+  private rejectError!: (reason: unknown) => void; // type-safety-ok: definite assignment assertion — Promise executor is synchronous so rejectError is set before requestDataRange can be called
+
+  constructor(private blob: Blob) {
+    super(blob.size, null);
+    this.error = new Promise<never>((_, reject) => {
+      this.rejectError = reject;
+    });
+    // Attach a no-op handler so a read failure that fires after the caller's
+    // race has already settled does not surface as an unhandled rejection.
+    this.error.catch(() => {});
+  }
+
+  requestDataRange(begin: number, end: number): void {
+    this.blob
+      .slice(begin, end)
+      .arrayBuffer()
+      .then((buf) => {
+        this.onDataRange(begin, new Uint8Array(buf));
+      })
+      .catch((err: unknown) => {
+        this.rejectError(err);
+      });
+  }
+}
+
+async function extractPdf(blob: Blob): Promise<{ title?: string; pageCount?: number }> {
+  // Range transport reads only the byte ranges pdf.js requests from the Blob.
+  const transport = new BlobRangeTransport(blob);
   let doc: pdfjsLib.PDFDocumentProxy | undefined;
   try {
-    doc = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
-    const pageCount = doc.numPages;
-    const { info } = await doc.getMetadata();
-    const title = cleanTitle((info as { Title?: string }).Title);
-    return title !== undefined ? { title, pageCount } : { pageCount };
+    const extract = (async () => {
+      doc = await pdfjsLib.getDocument({
+        range: transport,
+        disableStream: true,
+        disableAutoFetch: true,
+      }).promise;
+      const pageCount = doc.numPages;
+      const { info } = await doc.getMetadata();
+      const title = cleanTitle((info as { Title?: string }).Title);
+      return title !== undefined ? { title, pageCount } : { pageCount };
+    })();
+    // Race the transport's error channel: a failed range read never reaches
+    // pdf.js, so without this the extract promise would hang indefinitely.
+    return await Promise.race([extract, transport.error]);
   } finally {
     // Destroy the document — and its backing worker — even if getMetadata throws.
     await doc?.destroy();
   }
 }
 
-async function extractEpub(buf: ArrayBuffer): Promise<{ title?: string; pageCount?: number }> {
-  const { entries } = await unzip(buf);
+async function extractEpub(blob: Blob): Promise<{ title?: string; pageCount?: number }> {
+  const { entries } = await unzip(blob);
   const containerEntry = entries["META-INF/container.xml"];
   if (!containerEntry) return {};
   const opfPath = parseContainerXml(await containerEntry.text());
@@ -70,19 +118,19 @@ async function extractEpub(buf: ArrayBuffer): Promise<{ title?: string; pageCoun
 }
 
 /**
- * Extract `{ title?, pageCount? }` from in-memory bytes. Read-only: operates on
- * bytes already in memory, so extraction works even when the source folder is
- * not writable. Tolerant of untrusted/malformed file contents — any failure
- * (corrupt PDF, malformed or missing container.xml/OPF) is logged and reported
- * as `{}` so the caller can fall back to the filename stem.
+ * Extract `{ title?, pageCount? }` from a Blob, range-reading only the bytes
+ * needed. Read-only: never writes back, so extraction works even when the source
+ * folder is not writable. Tolerant of untrusted/malformed file contents — any
+ * failure (corrupt PDF, malformed or missing container.xml/OPF) is logged and
+ * reported as `{}` so the caller can fall back to the filename stem.
  */
 export async function extractMetadata(
-  buf: ArrayBuffer,
+  blob: Blob,
   mediaType: MediaType,
 ): Promise<{ title?: string; pageCount?: number }> {
   try {
-    if (mediaType === "pdf") return await extractPdf(buf);
-    if (mediaType === "epub") return await extractEpub(buf);
+    if (mediaType === "pdf") return await extractPdf(blob);
+    if (mediaType === "epub") return await extractEpub(blob);
     return {};
   } catch (err) {
     logError(err, { operation: "extractMetadata", mediaType });

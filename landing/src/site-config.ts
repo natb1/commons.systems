@@ -55,16 +55,16 @@ export const INFO_PANEL_LINK_SECTIONS: LinkSection[] = [
 ];
 
 /** Extends SoftwareApplication for JSON-LD reuse; overrides `description` to required and adds visual card fields. */
-export interface AppCard extends SoftwareApplication {
+export interface ProjectCard extends SoftwareApplication {
   description: string;
   screenshot: string;
   screenshotAlt: string;
   problem: string;
 }
 
-// App showcase source of truth. Screenshots are captured ad-hoc from production
-// subdomains at a 1200×800 viewport; .app-card-screenshot enforces the ratio at render time with object-fit: cover (see public/screenshots/README.md).
-export const APPS: AppCard[] = [
+// Project showcase source of truth. Screenshots are captured ad-hoc from production
+// subdomains at a 1200×800 viewport; .project-card-screenshot enforces the ratio at render time with object-fit: cover (see public/screenshots/README.md).
+export const PROJECTS: ProjectCard[] = [
   {
     name: "Office-hours",
     url: "https://office-hours.commons.systems",
@@ -97,7 +97,7 @@ export const APPS: AppCard[] = [
   },
 ];
 
-export const OVERFLOW_APPS: AppCard[] = [
+export const OVERFLOW_PROJECTS: ProjectCard[] = [
   {
     name: "Audio",
     url: "https://audio.commons.systems",

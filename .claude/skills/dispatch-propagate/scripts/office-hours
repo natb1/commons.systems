@@ -24,13 +24,13 @@
 #                                   dispatch-self-close's continuation invariant
 #                                   keeps alive. No skill is loaded.
 #   office-hours <N> <worktree-path>
-#                                 → launch a BARE `--bg` session named
+#                                 → launch a `--bg` session named
 #                                   office-hours-<N>, with cwd = that worktree
-#                                   (2nd field) — no skill loaded, no prompt, so
-#                                   it boots interactive and parks awaiting the
-#                                   human, who attaches and drives the work
-#                                   manually (#2387). Then attach the human to
-#                                   it. Born in the worktree, the session's
+#                                   (2nd field), booting the `/office-hours <N>`
+#                                   review-and-recommend skill (#2520). The skill
+#                                   reviews the item, presents best-next-steps,
+#                                   and STOPS — the human then attaches and
+#                                   drives. Born in the worktree, the session's
 #                                   branch is <N>-..., so the strip hook clears
 #                                   the dispatch:office-hours label. EXCEPTION:
 #                                   for main-qa items, cwd is the main worktree
@@ -208,24 +208,18 @@ resume_session() {
   attach_session_by_name "$name"
 }
 
-# fresh_session <N> <wt> — spawn a BARE fresh office-hours-<N> session (no skill,
-# no prompt) rooted in the <N>-* worktree, that parks awaiting the human, who
-# attaches and drives the work manually (#2387). Office-hours is now a pure
-# dispatcher: it selects an item and attaches a human-driven session — it loads
-# no skill and threads no phase/pr.
+# fresh_session <N> <wt> — spawn a fresh office-hours-<N> session rooted in the
+# <N>-* worktree, booting the `/office-hours <N>` review-and-recommend skill
+# (#2520). The skill reviews the item, presents best-next-steps, and STOPS —
+# the human then attaches by name and drives. This replaces the bare promptless
+# spawn (#2387): office-hours is no longer a pure dispatcher; it now boots a
+# one-shot skill so the human arrives to a ready recommendation, not a blank
+# session.
 #
-# Kick a PROMPTLESS, NON-resume --bg job named office-hours-<N>, rooted at <wt>
-# via a subshell `cd` so SessionStart-derived attributes key on the right
-# directory. Without a -p/--print prompt the --bg launch boots interactive and
-# parks awaiting input — the same promptless-parking behavior resume_session
-# documents for its resume arm — so the human can attach and drive. (This
-# promptless-parking behavior is confirmed at QA: it is a manual check that needs
-# the live Claude daemon and cannot run here/in CI. The documented fallback, if
-# the promptless kick does NOT park, is to add a minimal benign non-skill prose
-# prompt to the single kick line below — e.g. "Office-hours session for issue
-# #$N — a human will drive this; await their input." — a one-line change, NOT a
-# `/…` skill/phase prompt. Do not implement the fallback unless QA shows parking
-# does not hold.)
+# Kick a NON-resume --bg job named office-hours-<N>, rooted at <wt> via a
+# subshell `cd` so SessionStart-derived attributes key on the right directory.
+# The positional `/office-hours <N>` arg boots the review-and-recommend skill;
+# after it runs and stops the session waits for the human to attach and drive.
 #
 # A successful spawn requires BOTH a clean kick AND verified registration:
 # `claude --bg` returns BEFORE the daemon registers the session, so gate on
@@ -236,9 +230,9 @@ resume_session() {
 fresh_session() {
   local num="$1" cwd="$2" name="office-hours-$1" rc=0
   ( cd "$cwd" && "$CLAUDE_CMD" --bg --name "$name" --permission-mode auto \
-      ) >/dev/null 2>&1 || rc=$?
+      "/office-hours $num" ) >/dev/null 2>&1 || rc=$?
   if [[ "$rc" -ne 0 ]] || ! verify_agent_registered_under "$name" "$cwd"; then
-    echo "office-hours: failed to launch a fresh bare session for #$num under name $name in $cwd (the --bg kick failed to register a live session). Run 'claude agents' to inspect." >&2
+    echo "office-hours: failed to launch a fresh session for #$num under name $name in $cwd (the --bg kick failed to register a live session). Run 'claude agents' to inspect." >&2
     exit 1
   fi
   attach_session_by_name "$name"
@@ -254,9 +248,10 @@ case "$verb" in
     attach_session "$a"
     ;;
   office-hours)
-    # a b = <N> <worktree-path>. Launch a BARE --bg session named office-hours-<N>,
-    # rooted in the <N>-* worktree — no skill loaded, no prompt, so it parks
-    # awaiting the human, who attaches and drives the work manually (#2387).
+    # a b = <N> <worktree-path>. Launch a --bg session named office-hours-<N>,
+    # rooted in the <N>-* worktree, booting the `/office-hours <N>`
+    # review-and-recommend skill (#2520) — the skill reviews the item, presents
+    # best-next-steps, and stops; the human then attaches and drives.
     # fresh_session does the kick, the registration gate, and the attach. Rooting
     # it in the worktree clears the dispatch:office-hours label for non-main-qa
     # items (the strip hook resolves <N> from the cwd branch); for main-qa items

@@ -515,6 +515,53 @@ case "$args" in
       echo "[]"
     fi
     ;;
+  run\ view\ *)
+    # gh_run_view_rest sentinel (#2480): `gh run view <id> --json createdAt,headSha`.
+    # Uses the `run view` prefix (not `api`), so it cannot collide with any api arm.
+    # Log args; honor gh-fail-rest; serve run-view-<id>.json or default '{}'.
+    echo "$args" >> "$STUB_DIR/gh-run-view-rest-calls.log"
+    if [[ -f "$STUB_DIR/gh-fail-rest" ]]; then
+      echo "stub forced gh run view failure" >&2
+      exit 1
+    fi
+    id="${args#run view }"; id="${id%% *}"
+    if [[ -f "$STUB_DIR/run-view-${id}.json" ]]; then
+      cat "$STUB_DIR/run-view-${id}.json"
+    else
+      echo '{}'
+    fi
+    ;;
+  api\ *repos/*/issues/*/timeline*)
+    # gh_issue_closing_commit_rest sentinel (#2480): `gh api --paginate repos/.../issues/<N>/timeline`.
+    # MUST PRECEDE api\ --paginate\ repos/*/issues/9xxx/comments (line below) AND
+    # api\ repos/*/issues/9xxx (case is first-wins). The `api\ *` absorbs the
+    # optional --paginate token so both paginated and bare calls are caught here.
+    echo "$args" >> "$STUB_DIR/gh-issue-closing-commit-rest-calls.log"
+    if [[ -f "$STUB_DIR/gh-fail-rest" ]]; then
+      echo "stub forced gh api failure" >&2
+      exit 1
+    fi
+    num=$(printf '%s' "$args" | sed -E 's#.*issues/([0-9]+)/timeline.*#\1#')
+    if [[ -f "$STUB_DIR/timeline-${num}.json" ]]; then
+      cat "$STUB_DIR/timeline-${num}.json"
+    else
+      echo '[]'
+    fi
+    ;;
+  api\ repos/*/compare/*)
+    # gh_commit_is_ancestor_rest sentinel (#2480): `gh api repos/.../compare/<base>...<head>`.
+    # No collision with issues/pulls arms; placed here near other paginate arms for clarity.
+    echo "$args" >> "$STUB_DIR/gh-commit-is-ancestor-rest-calls.log"
+    if [[ -f "$STUB_DIR/gh-fail-rest" ]]; then
+      echo "stub forced gh api failure" >&2
+      exit 1
+    fi
+    if [[ -f "$STUB_DIR/compare-status.json" ]]; then
+      cat "$STUB_DIR/compare-status.json"
+    else
+      echo '{"status":"identical"}'
+    fi
+    ;;
   api\ --paginate\ repos/*/issues/9[0-9][0-9][0-9]/comments)
     # gh_issue_view_rest --comments sentinel branch (#2257): the helper's second
     # REST call. The pattern REQUIRES the literal `--paginate` token, so a
@@ -1906,6 +1953,134 @@ err_pvf=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_view_rest 9001 2>&1 >/dev/null) ||
 assert_eq "pr: gh failure → non-zero" "1" "$rc_pvf"
 case "$err_pvf" in *"gh_pr_view_rest: gh api failed"*) mpf=yes ;; *) mpf=no ;; esac
 assert_eq "pr: gh-failure stderr names the helper" "yes" "$mpf"
+teardown
+
+# ============================================================================
+# REST read helpers: run-view / closing-commit / compare (#2480)
+# ============================================================================
+echo "=== REST read helpers: run-view / closing-commit / compare (#2480) ==="
+
+# --- gh_run_view_rest ---
+
+echo "Test: gh_run_view_rest -- success: returns JSON with createdAt and headSha"
+setup
+printf '%s\n' '{"createdAt":"2026-01-02T03:04:05Z","headSha":"deadbeef"}' \
+  > "$STUB_DIR/run-view-9101.json"
+out=$(source "$TMPDIR_TEST/lib.sh"; gh_run_view_rest 9101)
+assert_eq "run-view: createdAt" "2026-01-02T03:04:05Z" "$(jq -r '.createdAt' <<<"$out")"
+assert_eq "run-view: headSha" "deadbeef" "$(jq -r '.headSha' <<<"$out")"
+teardown
+
+echo "Test: gh_run_view_rest -- --repo flag passes cross-repo segment to gh"
+setup
+: > "$STUB_DIR/gh-run-view-rest-calls.log"
+printf '%s\n' '{"createdAt":"2026-01-02T03:04:05Z","headSha":"deadbeef"}' \
+  > "$STUB_DIR/run-view-9101.json"
+source "$TMPDIR_TEST/lib.sh"; gh_run_view_rest 9101 --repo owner/other-repo >/dev/null
+if grep -q 'owner/other-repo' "$STUB_DIR/gh-run-view-rest-calls.log"; then seg=yes; else seg=no; fi
+assert_eq "run-view: --repo passes cross-repo segment" "yes" "$seg"
+teardown
+
+echo "Test: gh_run_view_rest -- missing run id returns non-zero with diagnostic stderr"
+setup
+rc=0
+err=$(source "$TMPDIR_TEST/lib.sh"; gh_run_view_rest 2>&1 >/dev/null) || rc=$?
+assert_eq "run-view: missing id → non-zero" "1" "$rc"
+case "$err" in *"gh_run_view_rest: run id is required"*) m=yes ;; *) m=no ;; esac
+assert_eq "run-view: missing-id stderr names the helper" "yes" "$m"
+teardown
+
+echo "Test: gh_run_view_rest -- gh failure returns non-zero with diagnostic stderr"
+setup
+: > "$STUB_DIR/gh-fail-rest"
+rc=0
+err=$(source "$TMPDIR_TEST/lib.sh"; gh_run_view_rest 9101 2>&1 >/dev/null) || rc=$?
+assert_eq "run-view: gh failure → non-zero" "1" "$rc"
+case "$err" in *"gh_run_view_rest: gh run view failed"*) m=yes ;; *) m=no ;; esac
+assert_eq "run-view: gh-failure stderr names the helper" "yes" "$m"
+teardown
+
+# --- gh_issue_closing_commit_rest ---
+
+echo "Test: gh_issue_closing_commit_rest -- returns closing commit SHA"
+setup
+printf '%s\n' '[{"event":"labeled"},{"event":"closed","commit_id":"abc123def"}]' \
+  > "$STUB_DIR/timeline-9201.json"
+out=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_closing_commit_rest 9201)
+assert_eq "closing-commit: returns SHA" "abc123def" "$out"
+teardown
+
+echo "Test: gh_issue_closing_commit_rest -- null commit_id (manual close) yields empty output"
+setup
+printf '%s\n' '[{"event":"closed","commit_id":null}]' \
+  > "$STUB_DIR/timeline-9202.json"
+out=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_closing_commit_rest 9202)
+assert_eq "closing-commit: null commit_id → empty" "" "$out"
+teardown
+
+echo "Test: gh_issue_closing_commit_rest -- no closed event yields empty output"
+setup
+printf '%s\n' '[{"event":"labeled"},{"event":"referenced"}]' \
+  > "$STUB_DIR/timeline-9203.json"
+out=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_closing_commit_rest 9203)
+assert_eq "closing-commit: no closed event → empty" "" "$out"
+teardown
+
+echo "Test: gh_issue_closing_commit_rest -- missing number returns non-zero with diagnostic stderr"
+setup
+rc=0
+err=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_closing_commit_rest 2>&1 >/dev/null) || rc=$?
+assert_eq "closing-commit: missing number → non-zero" "1" "$rc"
+case "$err" in *"gh_issue_closing_commit_rest: issue number is required"*) m=yes ;; *) m=no ;; esac
+assert_eq "closing-commit: missing-number stderr names the helper" "yes" "$m"
+teardown
+
+# --- gh_commit_is_ancestor_rest ---
+
+echo "Test: gh_commit_is_ancestor_rest -- behind (base is ancestor of head)"
+setup
+printf '%s\n' '{"status":"behind"}' > "$STUB_DIR/compare-status.json"
+out=$(source "$TMPDIR_TEST/lib.sh"; gh_commit_is_ancestor_rest base123 head456)
+assert_eq "compare: behind status" "behind" "$out"
+teardown
+
+echo "Test: gh_commit_is_ancestor_rest -- identical"
+setup
+printf '%s\n' '{"status":"identical"}' > "$STUB_DIR/compare-status.json"
+out=$(source "$TMPDIR_TEST/lib.sh"; gh_commit_is_ancestor_rest base123 head456)
+assert_eq "compare: identical status" "identical" "$out"
+teardown
+
+echo "Test: gh_commit_is_ancestor_rest -- diverged (non-ancestor)"
+setup
+printf '%s\n' '{"status":"diverged"}' > "$STUB_DIR/compare-status.json"
+out=$(source "$TMPDIR_TEST/lib.sh"; gh_commit_is_ancestor_rest base123 head456)
+assert_eq "compare: diverged status" "diverged" "$out"
+teardown
+
+echo "Test: gh_commit_is_ancestor_rest -- ahead"
+setup
+printf '%s\n' '{"status":"ahead"}' > "$STUB_DIR/compare-status.json"
+out=$(source "$TMPDIR_TEST/lib.sh"; gh_commit_is_ancestor_rest base123 head456)
+assert_eq "compare: ahead status" "ahead" "$out"
+teardown
+
+echo "Test: gh_commit_is_ancestor_rest -- missing base returns non-zero with diagnostic stderr"
+setup
+rc=0
+err=$(source "$TMPDIR_TEST/lib.sh"; gh_commit_is_ancestor_rest 2>&1 >/dev/null) || rc=$?
+assert_eq "compare: missing base → non-zero" "1" "$rc"
+case "$err" in *"gh_commit_is_ancestor_rest: base commit is required"*) m=yes ;; *) m=no ;; esac
+assert_eq "compare: missing-base stderr names the helper" "yes" "$m"
+teardown
+
+echo "Test: gh_commit_is_ancestor_rest -- missing head returns non-zero with diagnostic stderr"
+setup
+rc=0
+err=$(source "$TMPDIR_TEST/lib.sh"; gh_commit_is_ancestor_rest base123 2>&1 >/dev/null) || rc=$?
+assert_eq "compare: missing head → non-zero" "1" "$rc"
+case "$err" in *"gh_commit_is_ancestor_rest: head sha is required"*) m=yes ;; *) m=no ;; esac
+assert_eq "compare: missing-head stderr names the helper" "yes" "$m"
 teardown
 
 # ============================================================================
@@ -8041,17 +8216,17 @@ teardown
 echo ""
 echo "=== office-hours (entry point) ==="
 #
-# The single user entry point to the office-hours queue (#759). It is now a thin
+# The single user entry point to the office-hours queue (#759). It is a thin
 # dispatcher: it calls office-hours-select-target once and switches on the verb —
-# live / parked-router (exec `claude attach <sessionId>`), fresh (spawn a BARE
-# promptless `--bg` session named office-hours-<N> and attach by name, #2387),
-# or empty (print a queue-empty
-# message and exit WITHOUT launching). These are therefore entry+selector
-# integration tests: setup copies the real selector into TMPDIR_TEST, the
-# selector emits the disposition, and office_hours_fake_claude serves the
-# selector's `agents` liveness query and prints `LAUNCH: $*` on launch so each
-# case asserts which launch fired (or that none did). The fake's sessionId
-# convention is `s-<worktree-basename>`.
+# live / parked-router (exec `claude attach <sessionId>`), fresh (spawn a `--bg`
+# session named office-hours-<N> that boots the `/office-hours <N>`
+# review-and-recommend skill, then attach by name, #2520), or empty (print a
+# queue-empty message and exit WITHOUT launching). These are therefore
+# entry+selector integration tests: setup copies the real selector into
+# TMPDIR_TEST, the selector emits the disposition, and office_hours_fake_claude
+# serves the selector's `agents` liveness query and prints `LAUNCH: $*` on
+# launch so each case asserts which launch fired (or that none did). The fake's
+# sessionId convention is `s-<worktree-basename>`.
 
 # OH1. One labeled item whose <N>-* worktree has an idle (attachable) session →
 # attach it. The entry handles the renamed `idle` verb (was `live`).
@@ -8079,13 +8254,15 @@ result=$("$TMPDIR_TEST/office-hours")
 assert_eq "attaches the oldest idle item's session by its job id" "LAUNCH: attach j-42-x" "$result"
 teardown
 
-# OH3. Labeled items but none with a live session → spawn a BARE PROMPTLESS
-# --bg session named office-hours-<N>, cwd = that worktree (#2387) — no
-# `/office-hours` positional prompt, so the session parks awaiting the human, who
-# attaches and drives manually. The entry then attaches by name. Fixes the
-# originally-reported label leak (#1160): born in the worktree, the session's
-# branch is <N>-..., so the strip hook clears the label.
-echo "Test: labeled item, none live → bare promptless --bg spawn then attach"
+# OH3. Labeled items but none with a live session → spawn a --bg session named
+# office-hours-<N>, cwd = that worktree, booting the `/office-hours <N>`
+# review-and-recommend skill (#2520). The skill reviews the item and stops;
+# the human then attaches by name and drives. Fixes the originally-reported
+# label leak (#1160): born in the worktree, the session's branch is <N>-...,
+# so the strip hook clears the label.
+# NOTE: this is the ONLY disposition that boots a skill — the attach dispositions
+# (OH1/OH2/OH5b) go straight to `claude attach` and load no skill.
+echo "Test: labeled item, none live → /office-hours <N> skill --bg spawn then attach"
 setup
 mkdir -p "$TMPDIR_TEST/worktrees/42-x"
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
@@ -8095,18 +8272,18 @@ office_hours_fresh_fake_claude
 result=$("$TMPDIR_TEST/office-hours")
 # Attaches the human to the just-spawned session, by its resolved job id.
 assert_eq "fresh path attaches the spawned session's job id" "LAUNCH: attach job-office-hours-42" "$result"
-# The spawn was a BARE --bg job named office-hours-<N> — no skill prompt.
+# The spawn was a --bg job named office-hours-<N> booting the review skill.
 mapfile -t oh_argv < "$TMPDIR_TEST/oh-bg-argv"
 assert_eq "fresh: --bg" "--bg" "${oh_argv[0]:-}"
 assert_eq "fresh: --name" "--name" "${oh_argv[1]:-}"
 assert_eq "fresh: name is office-hours-<N>" "office-hours-42" "${oh_argv[2]:-}"
 assert_eq "fresh: --permission-mode" "--permission-mode" "${oh_argv[3]:-}"
 assert_eq "fresh: permission mode is auto" "auto" "${oh_argv[4]:-}"
-# Bare promptless spawn (#2387): the recorded argv must carry NO /office-hours
-# positional skill prompt (a position-independent substring check over the whole
-# argv, mirroring the resume test's "no continue" idiom).
-oh_has_prompt=no; [[ "$(cat "$TMPDIR_TEST/oh-bg-argv")" == */office-hours* ]] && oh_has_prompt=yes
-assert_eq "fresh: no /office-hours positional skill prompt" "no" "$oh_has_prompt"
+# Review-and-recommend skill spawn (#2520): the recorded argv must carry the
+# /office-hours <N> positional skill prompt (position-independent substring
+# check over the whole argv, mirroring the resume test's "no continue" idiom).
+oh_has_prompt=no; [[ "$(cat "$TMPDIR_TEST/oh-bg-argv")" == */office-hours\ 42* ]] && oh_has_prompt=yes
+assert_eq "fresh: carries /office-hours <N> review-and-recommend skill prompt" "yes" "$oh_has_prompt"
 # The --bg job was born in the worktree (cwd = worktree path).
 oh_pwd=$(head -1 "$TMPDIR_TEST/oh-pwd-log" 2>/dev/null || true)
 assert_eq "fresh: spawn cwd is the worktree" "$(realpath "$TMPDIR_TEST/worktrees/42-x")" "$(realpath "$oh_pwd" 2>/dev/null)"
@@ -26556,14 +26733,16 @@ else
 fi
 restore_teardown
 
-# --- Test 3b: office-hours-<N> session → restore NOTHING (#2387) -------------
-# An office-hours-<N> session is a bare human-driven session with no skill
-# running — the `office-hours` entry script spawns it promptless (#2387). On a
-# post-context-clear the hook restores NOTHING for it (the office-hours-<N> arm
-# exits 0): no base-directory line, no SKILL.md body marker, and no ARGUMENTS
-# line. The arm is matched by session --name ahead of phase routing, so it does
-# NOT fall through to the phase-deriving `else` (which would wrongly inject a
-# phase skill into the human's bare session). The phase here is qa, but the
+# --- Test 3b: office-hours-<N> session → restore NOTHING (#2520) -------------
+# An office-hours-<N> session boots a one-shot `/office-hours <N>`
+# review-and-recommend skill (#2520): the skill runs once at boot and stops;
+# the human drives after that. Because the review-and-recommend skill is a
+# boot-time one-shot and not a persistent phase skill, there is nothing to
+# restore on a context clear — the hook restores NOTHING (the office-hours-<N>
+# arm exits 0): no base-directory line, no SKILL.md body marker, and no
+# ARGUMENTS line. The arm is matched by session --name ahead of phase routing,
+# so it does NOT fall through to the phase-deriving `else` (which would wrongly
+# inject a phase skill into the human's session). The phase here is qa, but the
 # name wins and suppresses it.
 echo "Test: restore-dispatch-skill office-hours-<N> name → restore nothing"
 restore_setup

@@ -3,6 +3,8 @@ import {
   weeklyPaceCurve,
   elapsedWeekFraction,
   paceCurveAtFraction,
+  fractionToWindowDate,
+  formatWindowTick,
   WEEK_SECONDS,
   WINDOW_SECONDS,
   T,
@@ -102,6 +104,24 @@ describe("elapsedWeekFraction", () => {
   });
 });
 
+describe("fractionToWindowDate", () => {
+  it("f=0 is exactly one full week before the reset (window start)", () => {
+    expect(fractionToWindowDate(0, RESET).getTime()).toBe(
+      RESET.getTime() - WEEK_SECONDS * 1000,
+    );
+  });
+
+  it("f=1 is the reset itself", () => {
+    expect(fractionToWindowDate(1, RESET).getTime()).toBe(RESET.getTime());
+  });
+
+  it("f=0.5 is the half-week midpoint", () => {
+    expect(fractionToWindowDate(0.5, RESET).getTime()).toBe(
+      RESET.getTime() - 0.5 * WEEK_SECONDS * 1000,
+    );
+  });
+});
+
 describe("paceCurveAtFraction", () => {
   it("matches the rise-segment mid-week value at x=0.5", () => {
     // r=16.8, s≈0.5316, rise=65.95, terminal_seg=-68 → W=65.95.
@@ -140,5 +160,16 @@ describe("paceCurveAtFraction", () => {
         weeklyPaceCurve(s, RESET),
       );
     }
+  });
+});
+
+describe("formatWindowTick", () => {
+  it("renders a weekday + hour label for a fixed date", () => {
+    // Local-time constructor: 2026-06-14 is a Sunday, so the weekday token is
+    // "Sun" in the runtime's own zone regardless of TZ (the formatter zones by
+    // local time). The hour token is "9 AM".
+    const label = formatWindowTick(new Date(2026, 5, 14, 9, 0, 0));
+    expect(label).toContain("Sun");
+    expect(label).toMatch(/9\s*AM/);
   });
 });
