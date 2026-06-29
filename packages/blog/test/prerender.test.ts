@@ -702,14 +702,14 @@ describe("prerenderPosts", () => {
     const rootCall = vi.mocked(fs.writeFileSync).mock.calls.find(
       (c) => String(c[0]) === "/dist/index.html",
     );
-    const rootHtml = rootCall![1] as string;
+    const rootHtml = rootCall![1] as string; // type-safety-ok: vitest mock call arg; same pattern as existing tests
     expect(rootHtml).toContain("<footer><p>FOOTER MARKER</p></footer>");
     expect(rootHtml).not.toContain("<footer></footer>");
 
     const perPostCall = vi.mocked(fs.writeFileSync).mock.calls.find(
       (c) => String(c[0]).includes("post/hello-world"),
     );
-    const perPostHtml = perPostCall![1] as string;
+    const perPostHtml = perPostCall![1] as string; // type-safety-ok: vitest mock call arg; same pattern as existing tests
     expect(perPostHtml).toContain("<footer><p>FOOTER MARKER</p></footer>");
     expect(perPostHtml).not.toContain("<footer></footer>");
   });
@@ -725,7 +725,7 @@ describe("prerenderPosts", () => {
     const rootCall = vi.mocked(fs.writeFileSync).mock.calls.find(
       (c) => String(c[0]) === "/dist/index.html",
     );
-    const rootHtml = rootCall![1] as string;
+    const rootHtml = rootCall![1] as string; // type-safety-ok: vitest mock call arg; same pattern as existing tests
     expect(rootHtml).toContain("<footer></footer>");
   });
 
