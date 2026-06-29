@@ -130,7 +130,10 @@ The caller supplies:
        a leftover `<<<<<<<`/`=======`/`>>>>>>>` line) — if any remain, treat the
        verdict as **`ambiguous`** instead. Otherwise re-fork `/commit-merge-push` (the Step 2 invocation).
      - **`ambiguous <reason>`** (the subagent made **no** edits; `<reason>` is a
-       one-line explanation) → call `dispatch-mark-deviation` with `<reason>`,
+       one-line explanation) → this is a deliberate office-hours park: before the
+       `dispatch-mark-deviation` call, perform the in-session recommend step — see
+       `.claude/skills/dispatch-propagate/escalation-recommend.md`. Then call
+       `dispatch-mark-deviation` with `<reason>`,
        **skip** the caller's `phase-completed` marker, and **stop**. The
        Stop hook (`dispatch-stop.sh`, Branch A) reads the marker-absence, applies
        `dispatch:office-hours` to the issue, and surfaces `<reason>` in the
