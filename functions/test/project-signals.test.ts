@@ -263,6 +263,15 @@ describe("fetchGa4Live", () => {
       webVitals: [],
     });
   });
+
+  it("throws on a non-OK runReport response", async () => {
+    const fetchMock = vi.fn(async () => ({ ok: false, status: 403, text: async () => "quota exceeded" }));
+    await expect(
+      fetchGa4Live(fetchMock as unknown as typeof fetch, "tok", "12345", [ // type-safety-ok: vi.fn() mock typed as global fetch for DI test
+        { host: "commons.systems", app: "commons" },
+      ]),
+    ).rejects.toThrow(/403/);
+  });
 });
 
 describe("fetchGscLive", () => {

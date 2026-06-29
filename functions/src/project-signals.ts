@@ -406,13 +406,34 @@ export async function fetchGa4Live(
     return Number.isFinite(n) ? n : 0;
   };
 
-  // (a) Overview per host: page views, sessions, bounce rate (30-day window).
-  // GA4 returns one row per host; take each host's value DIRECTLY.
-  const overview = await runReport({
-    dateRanges: [GA4_WINDOW],
-    dimensions: [{ name: "hostName" }],
-    metrics: [{ name: "screenPageViews" }, { name: "sessions" }, { name: "bounceRate" }],
-  });
+  // The three reports POST to the same GA4 endpoint and are fully independent,
+  // so run them in parallel (mirrors the GitHub traffic-endpoint pattern above)
+  // to avoid tripling latency in a timeout-bound Function.
+  const [overview, referral, landing] = await Promise.all([
+    // (a) Overview per host: page views, sessions, bounce rate (30-day window).
+    // GA4 returns one row per host; take each host's value DIRECTLY.
+    runReport({
+      dateRanges: [GA4_WINDOW],
+      dimensions: [{ name: "hostName" }],
+      metrics: [{ name: "screenPageViews" }, { name: "sessions" }, { name: "bounceRate" }],
+    }),
+    // (b) Referral sources by host. No `limit` (global sessions-desc order),
+    // grouped by host then sliced to top-10 per host below.
+    runReport({
+      dateRanges: [GA4_WINDOW],
+      dimensions: [{ name: "hostName" }, { name: "sessionSource" }],
+      metrics: [{ name: "sessions" }],
+      orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
+    }),
+    // (c) Landing-page performance by host. Same no-limit, group-then-slice posture.
+    runReport({
+      dateRanges: [GA4_WINDOW],
+      dimensions: [{ name: "hostName" }, { name: "landingPage" }],
+      metrics: [{ name: "sessions" }, { name: "screenPageViews" }],
+      orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
+    }),
+  ]);
+
   const overviewByHost = new Map<string, { pageViews: number; sessions: number; bounceRate: number }>();
   for (const r of overview.rows ?? []) {
     const host = r.dimensionValues?.[0]?.value ?? "";
@@ -424,14 +445,6 @@ export async function fetchGa4Live(
     });
   }
 
-  // (b) Referral sources by host. No `limit` (global sessions-desc order),
-  // grouped by host then sliced to top-10 per host below.
-  const referral = await runReport({
-    dateRanges: [GA4_WINDOW],
-    dimensions: [{ name: "hostName" }, { name: "sessionSource" }],
-    metrics: [{ name: "sessions" }],
-    orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
-  });
   const referralByHost = new Map<string, Array<{ source: string; sessions: number }>>();
   for (const r of referral.rows ?? []) {
     const host = r.dimensionValues?.[0]?.value ?? "";
@@ -443,13 +456,6 @@ export async function fetchGa4Live(
     referralByHost.set(host, arr);
   }
 
-  // (c) Landing-page performance by host. Same no-limit, group-then-slice posture.
-  const landing = await runReport({
-    dateRanges: [GA4_WINDOW],
-    dimensions: [{ name: "hostName" }, { name: "landingPage" }],
-    metrics: [{ name: "sessions" }, { name: "screenPageViews" }],
-    orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
-  });
   const landingByHost = new Map<string, Array<{ page: string; sessions: number; views: number }>>();
   for (const r of landing.rows ?? []) {
     const host = r.dimensionValues?.[0]?.value ?? "";
