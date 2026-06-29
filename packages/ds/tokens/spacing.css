@@ -6,5 +6,7 @@
   --radius-none:0; --radius-sm:4px; --radius-md:6px; --radius-lg:8px;  /* radii are the exception, not the rule */
 
   --max-width-prose:48rem; --max-width-content:64rem; --max-width-wide:68rem;
+  --main-max-width: var(--max-width-prose);
   --sidebar-width:16rem; --texture-pitch:24px;
+  --header-height: 5rem;
 }

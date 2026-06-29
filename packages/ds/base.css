@@ -16,7 +16,7 @@ body {
 }
 
 .page {
-  max-width: var(--max-width-wide);
+  max-width: var(--main-max-width);
   margin: 0 auto;
   padding-inline: var(--space-4);
 }

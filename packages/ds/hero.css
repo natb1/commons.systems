@@ -1,0 +1,201 @@
+.hero {
+  background: var(--surface-card);
+  border: var(--border-width) solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+}
+
+.hero-content {
+  max-width: var(--max-width-prose);
+  margin-inline: auto;
+}
+
+.hero h2 {
+  font-size: var(--text-2xl);
+  margin-bottom: var(--space-2);
+}
+
+.hero-subtext {
+  color: var(--text-muted);
+  font-size: var(--text-lg);
+  margin: 0 0 var(--space-3);
+}
+
+.hero-body {
+  margin: 0 0 var(--space-6);
+}
+
+/* --- Action chips --- */
+
+.hero-chips {
+  margin-bottom: var(--space-6);
+}
+
+.hero-chip-row {
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: 0;
+}
+
+.hero-chip {
+  flex: 1 1 0;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-3) var(--space-3) var(--space-2);
+  border: var(--border-width) solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  transition: border-color var(--duration-fast) var(--ease), background var(--duration-fast) var(--ease);
+}
+
+.hero-chip:hover {
+  border-color: var(--accent);
+}
+
+.hero-chip--active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.chip-badge {
+  position: absolute;
+  top: 0;
+  left: 0.75rem;
+  transform: translateY(-50%);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-bold);
+  padding: 0.1rem 0.4rem;
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-heading);
+}
+
+.chip-badge--easy {
+  background: color-mix(in srgb, var(--success) 20%, transparent);
+  color: var(--success);
+}
+
+.chip-badge--medium {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--accent);
+}
+
+.chip-badge--hard {
+  background: color-mix(in srgb, var(--error) 20%, transparent);
+  color: var(--error);
+}
+
+.hero-chip-panel {
+  border: var(--border-width) solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  margin-top: var(--space-3);
+}
+
+.hero-chip-panel h3 {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-base);
+}
+
+.hero-chip-panel ol {
+  margin: 0;
+  padding-left: var(--space-6);
+}
+
+.hero-chip-panel li {
+  margin-bottom: var(--space-2);
+}
+
+.hero-chip-panel li:last-child {
+  margin-bottom: 0;
+}
+
+.hero-chip-panel p {
+  margin: 0 0 var(--space-3);
+}
+
+.inline-chip {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--accent);
+  border: var(--border-width) solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 0.1rem var(--space-2);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.inline-chip:hover {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+/* --- FAQ --- */
+
+.hero-faq {
+  border: var(--border-width) solid var(--border-default);
+  border-radius: var(--radius-md);
+}
+
+.hero-faq > summary {
+  cursor: pointer;
+  padding: var(--space-3) var(--space-4);
+  list-style: none;
+  font-weight: var(--weight-bold);
+}
+
+.hero-faq > summary::-webkit-details-marker {
+  display: none;
+}
+
+.hero-faq > summary::before {
+  content: "\25B6";
+  font-size: 0.6em;
+  display: inline-block;
+  margin-right: var(--space-3);
+  transition: transform var(--duration-fast) var(--ease);
+  opacity: 0.5;
+}
+
+.hero-faq[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.hero-faq-body {
+  padding: 0 var(--space-4) var(--space-4);
+}
+
+.hero-faq-body dl {
+  margin: 0;
+}
+
+.hero-faq-body dt {
+  font-weight: var(--weight-bold);
+  margin-top: var(--space-4);
+}
+
+.hero-faq-body dt:first-child {
+  margin-top: 0;
+}
+
+.hero-faq-body dd {
+  margin: var(--space-1) 0 0;
+}
+
+#hero-container {
+  margin-top: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+/* --- Responsive --- */
+
+@media (max-width: 767px) {
+  .hero-chip-row {
+    flex-direction: column;
+  }
+}
