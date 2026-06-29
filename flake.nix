@@ -61,18 +61,6 @@
             };
           });
 
-        apps = forAllSystems ({ pkgs, ... }:
-          let
-            home-manager-setup = pkgs.callPackage ./nix/apps/home-manager-setup.nix { };
-          in
-          {
-            home-manager-setup = {
-              type = "app";
-              program = "${home-manager-setup}/bin/home-manager-setup";
-            };
-          }
-        );
-
         checks = forAllSystems ({ pkgs, ... }:
           let
             weztermTests = pkgs.callPackage ./nix/home/wezterm.test.nix { };
@@ -102,37 +90,6 @@
       homeManagerModules = { default = ./nix/home/default.nix; };
       darwinModules      = { default = ./nix/darwin/default.nix; };
 
-      # Home Manager configurations (not per-system in flake schema)
-      mkHomeConfig = system:
-        let
-          pkgs = import nixpkgs {
-            inherit system;
-            overlays = [ claude-code-nix.overlays.default direnvSkipTestsOverlay ];
-            config.allowUnfreePredicate = pkg:
-              builtins.elem (nixpkgs.lib.getName pkg) [
-                "claude-code"
-              ];
-          };
-        in
-        home-manager.lib.homeManagerConfiguration {
-          inherit pkgs;
-          modules = [
-            homeManagerModules.default
-          ];
-          extraSpecialArgs = {
-            inherit inputs;
-          };
-        };
-
-      homeConfigurations = builtins.listToAttrs (
-        map (system: {
-          name = system;
-          value = mkHomeConfig system;
-        }) systems
-      ) // {
-        default = mkHomeConfig builtins.currentSystem;
-      };
-
       darwinConfigurations.default = darwin.lib.darwinSystem {
         specialArgs = { inherit inputs; };
         modules = [
@@ -145,8 +102,8 @@
             nixpkgs.hostPlatform = "aarch64-darwin";
 
             # System nixpkgs config — shared with home-manager via useGlobalPkgs.
-            # Mirrors mkHomeConfig so the reused nix/home/default.nix (which pulls
-            # the unfree pkgs.claude-code from the claude-code-nix overlay) builds.
+            # Applies the claude-code-nix overlay so the reused nix/home/default.nix
+            # (which pulls the unfree pkgs.claude-code from that overlay) builds.
             nixpkgs.overlays = [ claude-code-nix.overlays.default direnvSkipTestsOverlay ];
             nixpkgs.config.allowUnfreePredicate =
               pkg: builtins.elem (nixpkgs.lib.getName pkg) [ "claude-code" ];
@@ -157,12 +114,14 @@
             home-manager.users.n8 = { lib, ... }: {
               imports = [ homeManagerModules.default ];
 
-              # nix/home/default.nix derives username/homeDirectory impurely via
-              # builtins.getEnv (fine for the standalone --impure homeConfigurations,
-              # but it would throw under the PURE acceptance eval). Force them so the
-              # getEnv/throw thunks are never evaluated and pure eval passes.
-              home.username = lib.mkForce "n8";
-              home.homeDirectory = lib.mkForce "/Users/n8";
+              # The framework (nix/home/default.nix, nix/home/git.nix) no longer
+              # assigns home identity or git identity — it leaves them unset so each
+              # instance supplies its own. This office-hours-nate instance sets
+              # username/homeDirectory and the git identity directly.
+              home.username = "n8";
+              home.homeDirectory = "/Users/n8";
+              programs.git.settings.user.name = "Nathan Buesgens";
+              programs.git.settings.user.email = "nathan@natb1.com";
 
               # Out-of-scope constraint: do NOT enable programs.wezterm on Darwin.
               # nix/home/wezterm.nix unconditionally sets enable = true; override it
@@ -175,5 +134,5 @@
         ];
       };
     in
-    systemOutputs // { inherit homeConfigurations darwinConfigurations homeManagerModules darwinModules; };
+    systemOutputs // { inherit darwinConfigurations homeManagerModules darwinModules; };
 }
