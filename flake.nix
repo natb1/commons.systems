@@ -85,8 +85,21 @@
       };
 
       # Reusable module entry points (bare paths, no inputs threading)
+      #
+      # Overlay prerequisite: homeManagerModules.default imports
+      # nix/home/claude-code.nix, which installs pkgs.claude-code. That attribute
+      # exists only when claude-code-nix.overlays.default is applied to the pkgs
+      # set the module is evaluated against. A consumer importing this module
+      # with a plain nixpkgs.legacyPackages.<system> pkgs set (no overlay) hits
+      # `error: attribute 'claude-code' missing in set` at eval time. Apply
+      # claude-code-nix.overlays.default to nixpkgs before using this module.
+      #
+      # nixosModules is intentionally NOT exported: nix/nixos/configuration.nix
+      # is machine-specific (imports <nixos-wsl/modules> via the nixos-wsl
+      # channel, which is unresolvable under pure flake eval, and hardcodes
+      # wsl.* / the n8 user), so it is not a reusable module. The real machine
+      # consumes it through the /etc/nixos stub + channel, not this flake.
       homeManagerModules = { default = ./nix/home/default.nix; };
-      nixosModules       = { default = ./nix/nixos/configuration.nix; };
       darwinModules      = { default = ./nix/darwin/default.nix; };
 
       # Home Manager configurations (not per-system in flake schema)
@@ -162,5 +175,5 @@
         ];
       };
     in
-    systemOutputs // { inherit homeConfigurations; } // { inherit darwinConfigurations; } // { inherit homeManagerModules nixosModules darwinModules; };
+    systemOutputs // { inherit homeConfigurations darwinConfigurations homeManagerModules darwinModules; };
 }
