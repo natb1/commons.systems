@@ -14,6 +14,8 @@ export { writeTracker, readTracker, listTrackers, nodeIdToIssue, issueToNodeId }
 export type { ExecutionTracker } from "./tracker.js";
 export { projectGoals, activeFrontier, realizationForOwner, renderFrontier } from "./goals.js";
 export type { Goal, Realization } from "./goals.js";
+export { detectRung } from "./rungs.js";
+export type { Rung } from "./rungs.js";
 export {
   SensorRegistry,
   readNodeSignal,
