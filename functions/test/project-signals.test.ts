@@ -575,4 +575,26 @@ describe("collectProjectSignalsCore", () => {
       "https://budget.commons.systems",
     ]);
   });
+
+  it("omits ga4 and psi keys when fetch resolves to an empty array", async () => {
+    const store = createInMemoryFirestore();
+    await collectProjectSignalsCore({
+      ...baseArgs(store),
+      fetchGithub: null,
+      fetchGa4: async () => [],
+      fetchGsc: null,
+      fetchPsi: async () => [],
+    });
+
+    const doc = store._docs.get("office-hours/prod/metrics/project-signals") as Record< // type-safety-ok: in-memory test fixture returns known shape
+      string,
+      unknown
+    >;
+    expect(doc).toBeDefined();
+    // Empty-array results must be omitted (not written) so the client parser
+    // and server snapshot stay consistent — an empty [] on the server would be
+    // promoted to undefined by parseGa4Signals/parsePsiSignals on the client.
+    expect("ga4" in doc).toBe(false);
+    expect("psi" in doc).toBe(false);
+  });
 });

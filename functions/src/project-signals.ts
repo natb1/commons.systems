@@ -618,9 +618,9 @@ export async function collectProjectSignalsCore(deps: CollectProjectSignalsDeps)
     groupId: deps.groupId,
     memberEmails: deps.memberEmails,
     ...(github ? { github } : {}),
-    ...(ga4 ? { ga4 } : {}),
+    ...(ga4 && ga4.length > 0 ? { ga4 } : {}),
     ...(gsc ? { gsc } : {}),
-    ...(psi ? { psi } : {}),
+    ...(psi && psi.length > 0 ? { psi } : {}),
   };
   await deps.firestore.doc(`${deps.namespace}/metrics/project-signals`).set(snapshot);
 
