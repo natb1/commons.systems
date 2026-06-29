@@ -39,10 +39,9 @@ sandbox (`.claude/rules/sandbox.md`). That covers:
 - The `blocked_by` dependency reads (Steps 4, 5) — `gh api`.
 - The broken-exit filing path (Step 5) — `dispatch-followup-exists` and
   `/file-issue` both call `gh`.
+- `dispatch-mark-deviation` (Step 5, cannot-verify) — despite looking like a pure-local marker write, it now does an **in-session office-hours park** via `dispatch-apply-office-hours` (which calls `gh`) per #2541, **and** writes the marker to `$CLAUDE_JOB_DIR/office-hours-reason` (a path not in the sandbox write-allowlist), so both halves fail under the sandbox.
 
-`dispatch-mark-deviation` (Step 5, cannot-verify) is a pure local file write — it
-never calls `gh`, so it needs **no** sandbox override. The Claude-in-Chrome MCP
-tools are not Bash and take no sandbox flag.
+The Claude-in-Chrome MCP tools are not Bash and take no sandbox flag.
 
 ## Steps
 
@@ -110,6 +109,17 @@ Hold the parsed `EXPECTED_OUTCOME`, `URL_PATH`, and the blocker number for the
 verification in Step 4.
 
 ### 4. Verify the behavior against live prod via Claude-in-Chrome
+
+**4·0. Triage: is this follow-up browser-verifiable?**
+
+Before loading browser tools, check for the non-browser-verifiable class:
+
+- **No `URL_PATH`** (empty or absent).
+- **Non-browser outcome**: the expected behavior requires a CLI or server host — e.g. `nix flake check --pure-eval`, a darwin build, or any outcome with no browser-observable surface.
+
+If either holds → skip 4a–4e and route **straight to cannot-verify (Step 5)**. Name the specific reason in the `dispatch-mark-deviation` call (e.g. `"no url_path — outcome is a nix flake check, not observable in a browser"`).
+
+**Upstream classification note:** Ideally `/qa-fix`'s `needs-main` deferral flags non-browser-verifiable items at creation so they never route to qa-main. This is a prose note only — it does not modify `qa-fix/SKILL.md` or any deferral logic.
 
 **4a. Load browser tools — one ToolSearch call** (read-only observe set; no
 `form_input`, `gif_creator`, or `file_upload`):
@@ -180,16 +190,18 @@ unambiguous and reproducible against live prod.
 
 Decision tree, **first match wins**:
 
-1. Any environment barrier from Step 4 (tools unavailable, no browser, page won't
-   load after one retry, auth wall, localhost/emulator context, repeated browser
-   errors) → **cannot-verify**.
-2. Observed behavior matches `EXPECTED_OUTCOME` → **pass**.
-3. Expected absent / contradicted **AND** `DEPLOY_READY` is `not-yet` or
+1. Not browser-verifiable: no `URL_PATH` or non-browser outcome recognized in
+   Step 4·0 (caught before loading tools) → **cannot-verify**.
+2. Any environment barrier from Step 4a–4d (tools unavailable, no browser, page
+   won't load after one retry, auth wall, localhost/emulator context, repeated
+   browser errors) → **cannot-verify**.
+3. Observed behavior matches `EXPECTED_OUTCOME` → **pass**.
+4. Expected absent / contradicted **AND** `DEPLOY_READY` is `not-yet` or
    `merged-deploy-uncertain` → **cannot-verify** (deploy lag; the signal demotes
    only).
-4. Observed unambiguously and reproducibly contradicts `EXPECTED_OUTCOME`, no
+5. Observed unambiguously and reproducibly contradicts `EXPECTED_OUTCOME`, no
    barrier, **AND** `DEPLOY_READY == merged-and-likely-deployed` → **broken**.
-5. Everything else (partial / ambiguous / uncertain) → **cannot-verify**.
+6. Everything else (partial / ambiguous / uncertain) → **cannot-verify**.
 
 Then take exactly one terminal action.
 
@@ -238,8 +250,7 @@ carries the fix into the implement chain):
 
 Then **STOP** (Branch R; the bug rides the implement chain separately).
 
-**cannot-verify** — the safety valve. A pure local write, **NO** sandbox
-override:
+**cannot-verify** — the safety valve (`dangerouslyDisableSandbox: true` — in-session `gh` park via `dispatch-apply-office-hours` + `$CLAUDE_JOB_DIR` marker write):
 
 ```bash
 .claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \
