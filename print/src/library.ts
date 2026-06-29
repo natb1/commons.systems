@@ -148,8 +148,11 @@ export function hasLocalSource(): boolean {
   return localSource !== null;
 }
 
-/** Reset the bound local source. Test-only: lets order-independent tests
- *  assert the no-source-bound state regardless of suite execution order. */
+/** Reset the bound local source back to the no-source-bound state.
+ *  Production use: the local-folder "forget" handler calls this to clear the
+ *  in-memory local source when the user revokes a granted folder. Also used by
+ *  order-independent tests to assert the no-source-bound state regardless of
+ *  suite execution order. */
 export function resetLocalSource(): void {
   localSource = null;
 }
