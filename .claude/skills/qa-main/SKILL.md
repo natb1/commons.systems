@@ -250,7 +250,10 @@ carries the fix into the implement chain):
 
 Then **STOP** (Branch R; the bug rides the implement chain separately).
 
-**cannot-verify** — the safety valve (`dangerouslyDisableSandbox: true` — in-session `gh` park via `dispatch-apply-office-hours` + `$CLAUDE_JOB_DIR` marker write):
+**cannot-verify** — the safety valve. This is a deliberate office-hours park:
+before the `dispatch-mark-deviation` call, perform the in-session recommend step —
+see `.claude/skills/dispatch-propagate/escalation-recommend.md`. The marker write
+itself is a pure local write, **NO** sandbox override:
 
 ```bash
 .claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \
