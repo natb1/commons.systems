@@ -24,3 +24,5 @@ export type { NavLink } from "./navigation/nav-link.ts";
 // templates
 export { Landing } from "./templates/Landing.tsx";
 export type { LandingProps } from "./templates/Landing.tsx";
+export { OfficeHours } from "./templates/OfficeHours.tsx";
+export type { OfficeHoursProps } from "./templates/OfficeHours.tsx";

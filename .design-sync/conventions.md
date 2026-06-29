@@ -22,6 +22,17 @@ two-column main + sticky/collapsible context panel, footer) that composes the
 primitives. Render it on its own for a populated page scaffold:
 `<CommonsDS.Landing />`.
 
+`OfficeHours` is a second **template** — a populated snapshot of the office-hours
+operator dashboard, with two pages selected by the `page` prop, the way the app's
+nav header splits them. `page="status"` (the default) is the at-a-glance view
+(capacity, pace, backlog, intention tree); `page="other"` holds everything else
+(history, audit, reminders, queue, parked, project signals). Both pages are
+populated snapshots built from the same reusable primitives (sticky nav header
+carrying the Status/Other tabs, a responsive grid of `Card` panels holding
+`Metric` stat-cards, `Badge` status chips, and chart-shaped placeholders, shared
+footer). Render either for a dashboard page scaffold:
+`<CommonsDS.OfficeHours />` or `<CommonsDS.OfficeHours page="other" />`.
+
 ## Styling idiom — semantic props + CSS variables (NOT utility classes)
 
 This system has **no utility-class vocabulary** (no Tailwind, no `bg-*`/`p-*`).

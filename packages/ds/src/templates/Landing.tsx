@@ -7,6 +7,7 @@ import type {
 } from "react";
 import { Nav } from "../navigation/Nav.tsx";
 import { Card } from "../core/Card.tsx";
+import { TemplateFooter } from "./chrome.tsx";
 import type { NavLink } from "../navigation/nav-link.ts";
 
 export type LandingProps = HTMLAttributes<HTMLDivElement>;
@@ -331,31 +332,8 @@ export function Landing(props: LandingProps) {
         </div>
       </div>
 
-      {/* Common footer — same content as the landing project. */}
-      <footer>
-        <p>
-          Created with{" "}
-          <a
-            href="https://github.com/natb1/commons.systems"
-            target="_blank"
-            rel="noopener"
-          >
-            commons.systems
-          </a>{" "}
-          | © 2026 RUMOR.ML{" "}
-          <a
-            href="https://creativecommons.org/licenses/by-sa/4.0/"
-            target="_blank"
-            rel="noopener"
-          >
-            <img
-              src="https://mirrors.creativecommons.org/presskit/buttons/88x31/png/by-sa.png"
-              alt="CC-BY-SA"
-              style={{ width: "117px", height: "41px", verticalAlign: "middle" }}
-            />
-          </a>
-        </p>
-      </footer>
+      {/* Common footer — shared with the OfficeHours template. */}
+      <TemplateFooter />
     </div>
   );
 }
