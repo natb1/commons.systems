@@ -8225,17 +8225,20 @@ result=$("$TMPDIR_TEST/office-hours-select-target" 99)
 assert_eq "targeted fresh N=99: emits 99 not queue head 42" "office-hours 99 -" "$result"
 teardown
 
-# OHST25 (#2538). Non-queue <N> → empty: 777 is not a member of the office-hours
-# queue (only 42 is). Criterion-required: the queue-membership precondition fires
-# before any session query and emits `empty`.
-echo "Test: non-queue N=777 not in oh-issue-list → empty"
+# OHST25 (#2538). Non-queue <N> → `empty not-in-queue <N>`: 777 is not a member of
+# the office-hours queue (only 42 is). Criterion-required: the queue-membership
+# precondition fires before any session query and emits the richer empty verb whose
+# first token is still `empty` (so consumer bucket dispatch is unchanged) but whose
+# trailing `not-in-queue 777` lets the entry script print a precise non-member
+# message instead of the generic queue-empty one.
+echo "Test: non-queue N=777 not in oh-issue-list → empty not-in-queue 777"
 setup
 printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 select_target_fake_claude
 result=$("$TMPDIR_TEST/office-hours-select-target" 777)
-assert_eq "non-queue N=777 → empty" "empty" "$result"
+assert_eq "non-queue N=777 → empty not-in-queue 777" "empty not-in-queue 777" "$result"
 teardown
 
 # OHST26 (#2538). Targeted idle: 42 has an idle session; invoke with N=42 →
@@ -8454,6 +8457,21 @@ office_hours_fake_claude   # `[]`: no sessions under main, no parked router
 result=$("$TMPDIR_TEST/office-hours")
 assert_eq "empty queue → queue-empty message, no launch" "office-hours: queue is empty — nothing to resume or start." "$result"
 unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
+# OH4b (#2538). Targeted non-member <N> → the selector emits `empty not-in-queue
+# <N>` and the entry script prints a PRECISE non-member message — NOT the generic
+# queue-empty one — even though the queue has another member (42). This is the
+# end-to-end proof of the code-review fix: a non-member targeted <N> (e.g. a typo)
+# must not be told the queue is empty when other members exist.
+echo "Test: targeted non-member N=777 → not-in-queue message, no launch"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+office_hours_fake_claude
+result=$("$TMPDIR_TEST/office-hours" 777)
+assert_eq "targeted non-member N=777 → not-in-queue message, no launch" \
+  "office-hours: issue #777 is not in the office-hours queue — nothing to resume or start for it." "$result"
 teardown
 
 # OH5. Mixed: an older sessionless item + a newer idle-session item → attach the

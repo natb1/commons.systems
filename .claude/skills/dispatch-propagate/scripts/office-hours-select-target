@@ -120,6 +120,12 @@
 #     actively ticking and is NOT surfaced.
 #   empty
 #     None of the above exists.
+#   empty not-in-queue <N>
+#     Single-item mode (#2538) only: the targeted <N> is not a member of the
+#     office-hours queue. The first token is still `empty`, so a consumer's
+#     bucket dispatch is unchanged; the trailing `not-in-queue <N>` lets the
+#     entry script print a precise "issue #<N> is not in the office-hours queue"
+#     message instead of the generic queue-empty one.
 #
 # Single fail-safe convention: UNKNOWN → skip. When an item's liveness cannot be
 # determined (the daemon could not be queried for some worktree, and no worktree
@@ -448,8 +454,13 @@ emit_fresh() {
 # (acceptance criterion #3).
 if [[ -n "$TARGET_N" ]]; then
   # Queue-membership precondition: <N> must be a live office-hours queue item.
+  # When it is NOT, emit the richer `empty not-in-queue <N>` verb (the first
+  # token stays `empty`, so every consumer's bucket dispatch is unchanged) so the
+  # entry script can print a precise "issue #<N> is not in the office-hours queue"
+  # message instead of the generic queue-empty one — a non-member targeted <N>
+  # (e.g. a typo) must not be told the queue is empty when other members exist.
   if ! jq -e --argjson n "$TARGET_N" 'any(.[]; .number == $n)' <<<"$ISSUE_LIST" >/dev/null; then
-    echo "empty"
+    echo "empty not-in-queue $TARGET_N"
     exit 0
   fi
   tgt_wt_path=$(printf '%s' "${WORKTREE_PATHS_BY_NUM[$TARGET_N]:-}" | head -n 1)
