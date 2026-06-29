@@ -120,7 +120,10 @@ stops.
 
    **Bucket 3 — nothing to do.**
 
-   - `empty` — no item to engage. Report that and **stop**.
+   - `empty` — no item to engage. Report that and **stop**. A single-item
+     invocation against a non-member `<N>` emits `empty not-in-queue <N>` (same
+     bucket; the trailing fields say the targeted issue is not in the queue) —
+     report that the specific issue is not in the queue and **stop**.
 
 1. **Surface the parked context, review and recommend, then report where to engage.**
 

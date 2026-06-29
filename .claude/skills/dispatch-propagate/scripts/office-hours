@@ -77,6 +77,11 @@
 #   empty                         → print a queue-empty message and exit WITHOUT
 #                                   launching Claude. The empty queue is handled
 #                                   entirely in bash; no session is booted.
+#   empty not-in-queue <N>        → single-item mode (#2538): the targeted <N> is
+#                                   not a queue member. Print a precise "issue #<N>
+#                                   is not in the office-hours queue" message and
+#                                   exit WITHOUT launching. Same `empty` bucket;
+#                                   the trailing fields only refine the message.
 #
 # Open-blocker advisory: the selector may print a `NOTE —` open-blocker line to
 # STDERR for the selected item (a signal, not a gate). This script captures only
@@ -103,6 +108,17 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/lib-claude-agents.sh"
+
+# Optional positional <N>: target a specific queue item by issue number.
+if [[ $# -gt 0 ]]; then
+  if [[ ! "$1" =~ ^[0-9]+$ ]]; then
+    echo "office-hours: invalid target '$1' — expected a numeric issue number. Usage: office-hours [<N>]" >&2
+    exit 2
+  fi
+  TARGET_N="$1"
+else
+  TARGET_N=""
+fi
 
 # Launch target only. The selector reads CLAUDE_AGENTS_CMD from the environment
 # for its own liveness queries (default `claude`); this script does not set it.
@@ -239,7 +255,7 @@ fresh_session() {
 }
 
 # One call to the single source of truth; dispatch on the returned verb.
-directive=$("$SCRIPT_DIR/office-hours-select-target")
+directive=$("$SCRIPT_DIR/office-hours-select-target" ${TARGET_N:+"$TARGET_N"})
 read -r verb a b c d <<< "$directive"
 case "$verb" in
   idle|parked-router)
@@ -298,7 +314,16 @@ case "$verb" in
     resume_session "$b" "$a" "$(resolve_project_root)/worktrees/$c"
     ;;
   empty)
-    echo "office-hours: queue is empty — nothing to resume or start."
+    # Single-item mode (#2538): the selector emits `empty not-in-queue <N>` when
+    # the targeted <N> is absent from the queue (a = not-in-queue, b = <N>). Print
+    # a precise diagnostic for that case so a non-member <N> (e.g. a typo) is not
+    # falsely told the queue is empty when other members exist. The bare `empty`
+    # (a unset) keeps the truly-empty-queue message.
+    if [[ "$a" == "not-in-queue" ]]; then
+      echo "office-hours: issue #$b is not in the office-hours queue — nothing to resume or start for it."
+    else
+      echo "office-hours: queue is empty — nothing to resume or start."
+    fi
     exit 0
     ;;
   *)
