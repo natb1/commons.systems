@@ -24,6 +24,6 @@ test.describe("office-hours capacity history charts", () => {
     // beforeEach already waited for the first SVG to be visible, so the count
     // can proceed immediately.
     const count = await svgs.count();
-    expect(count).toBeGreaterThanOrEqual(1);
+    expect(count).toBe(1);
   });
 });

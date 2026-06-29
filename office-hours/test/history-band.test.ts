@@ -54,7 +54,7 @@ describe("renderHistoryBand", () => {
     expect(layouts).toHaveLength(1);
   });
 
-  it("delegates empty-state to the chart modules for an empty array", () => {
+  it("delegates empty-state to the chart module for an empty array", () => {
     const band = withThemeFg(() => renderHistoryBand([]));
     // Heading is still present.
     const heading = band.querySelector(".capacity-history-heading");

@@ -130,8 +130,6 @@ if [ -n "$REMOVED_LINES" ]; then
   DECL_REMOVED=$(printf '%s\n' "$REMOVED_LINES" | grep -cE "$DECL_PAT" || true)
 fi
 
-DECL_NET=$((DECL_ADDED - DECL_REMOVED))
-
 # ---------------------------------------------------------------------------
 # Signal 3: Whole test-file deletion
 # ---------------------------------------------------------------------------

@@ -6,10 +6,10 @@
 // renderHistoryBand — section.capacity-history, the HISTORY heading, the
 // one .chart-layout block, and the delegated per-core empty-state copy.
 //
-// happy-dom loads no stylesheet, so the cores' theme-var reads resolve to
+// happy-dom loads no stylesheet, so the core's theme-var reads resolve to
 // fallbacks unless mocked. We mock --fg and the DS --chart-1..6 palette on the
-// document root so readThemeVar/readChartPalette return real values (the cores
-// read them off their freshly-created element, which inherits the root vars).
+// document root so readThemeVar/readChartPalette return real values (the core
+// reads them off its freshly-created element, which inherits the root vars).
 import { describe, it, expect, afterEach, beforeEach } from "vitest";
 import { render, cleanup } from "@testing-library/react";
 import { HistoryBand } from "../src/components/HistoryBand.js";
@@ -33,7 +33,7 @@ const multiSample: UsageSample[] = [
   make({ sampledAt: new Date("2026-06-09T10:00:00Z"), activeWorkers: 4, targetWorkers: 4 }),
 ];
 
-// Mock the theme tokens the cores read: --fg plus the DS --chart-1..6 palette.
+// Mock the theme tokens the core reads: --fg plus the DS --chart-1..6 palette.
 beforeEach(() => {
   const root = document.documentElement.style;
   root.setProperty("--fg", "#e8eaed");
@@ -69,7 +69,7 @@ describe("HistoryBand", () => {
     expect(container.querySelectorAll(".chart-scroll-wrapper svg")).toHaveLength(1);
   });
 
-  it("delegates empty-state to the cores for an empty array", () => {
+  it("delegates empty-state to the core for an empty array", () => {
     const { container } = render(<HistoryBand samples={[]} />);
     // Heading is still present.
     expect(container.querySelector(".capacity-history-heading")!.textContent).toBe("HISTORY");
