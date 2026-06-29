@@ -159,6 +159,15 @@ describe("ProjectSignalsPanel — full snapshot", () => {
     expect(texts).toContain("420");             // top query impressions
   });
 
+  it("labels top-pages aggregate cards as estimates, not totals", () => {
+    const { container } = render(<ProjectSignalsPanel snapshot={fullSnapshot} />);
+    const texts = container.textContent ?? "";
+    expect(texts).toContain("top-pages clicks (est.)");
+    expect(texts).toContain("top-pages impressions (est.)");
+    expect(texts).not.toContain("total clicks");
+    expect(texts).not.toContain("total impressions");
+  });
+
   it("renders PSI scores for each URL", () => {
     const { container } = render(<ProjectSignalsPanel snapshot={fullSnapshot} />);
     const texts = container.textContent ?? "";
