@@ -556,6 +556,63 @@ if [ -f "$CLAUDE_JOB_DIR/resolved-closed" ]; then
   exit 0
 fi
 
+# Branch DEF — deferred/blocked disposition (#2616): a phase worker that could
+# not complete its phase but RESOLVED the deviation in-session — typically by
+# linking the missing blocked_by dependency — writes a `deferred` sentinel via
+# dispatch-mark-deferred instead of a phase-completed marker (advance) or relying
+# on an office-hours park (dispatch-mark-deviation). The deferred disposition is
+# gated on a hook-verifiable resolving condition: the issue must NOW be
+# blocked_by an OPEN issue. When that holds, do NOT apply dispatch:office-hours —
+# spawn the router and self-close. The router re-gates the issue on its blocked_by
+# links: it skips it while the blocker is open and selects it, routing to the
+# correct phase, once the blocker closes — with no office-hours label to manually
+# strip. When the condition does NOT hold (no open blocker, or the check cannot be
+# performed), fall back to the office-hours park — fail-safe toward human review,
+# matching Branch A's discriminator direction. Checked BEFORE the PR-centric
+# branches, beside Branches P and R: like them, a deferred disposition is a clean
+# terminal outcome with no PR and no phase advance, so it must not bump the
+# issue-anchored attempt counter below. The blocked_by gate routes through the
+# SAME dispatch-check-blockers / count_open_blockers helper the queue path uses,
+# so the hook and the router can never disagree on what counts as "blocked".
+if [ -f "$CLAUDE_JOB_DIR/deferred" ]; then
+  DLOG_BRANCH="deferred"
+  # cat under `|| true`: a command-substitution whose inner command fails would
+  # trip this file's `trap '...; exit 0' ERR` (independent of `set -e`). The
+  # [ -f ] guard above means it won't fail in practice; the guard matches the
+  # file's paranoia.
+  _defer_reason="$(cat "$CLAUDE_JOB_DIR/deferred" 2>/dev/null || true)"
+  # Guarded capture: dispatch-check-blockers exits NON-ZERO on the success path
+  # we care about (rc=2 = open blocker found), so a bare `cmd; rc=$?` would fire
+  # the ERR trap and exit 0 before this branch acts. The if/else form exempts it.
+  if "$SCRIPTS/dispatch-check-blockers" "$ISSUE_NUM" >/dev/null 2>&1; then
+    _blocker_rc=0
+  else
+    _blocker_rc=$?
+  fi
+  if [ "$_blocker_rc" -eq 2 ]; then
+    # Open blocker present — defer cleanly. No office-hours label; the router
+    # re-gates on blocked_by. Mirror Branches P/R: spawn + sweep + self-close.
+    DLOG_DISPOSITION="self-close"
+    spawn_tick
+    spawn_sweep
+    self_close
+    exit 0
+  fi
+  # No open blocker (rc=0) or the check could not be performed (rc=1/other) —
+  # fail-safe office-hours park. Mirror Branch A's park: apply + spawn only, no
+  # sweep and no self-close. The deferral reason is surfaced for the human.
+  DLOG_DISPOSITION="park"
+  if [ "$_blocker_rc" -eq 0 ]; then
+    _park_reason="deferred as blocked, but the issue has no open blocker — parking for human review (deferral reason: ${_defer_reason:-<none>})"
+  else
+    _park_reason="deferred as blocked, but the open-blocker check could not be performed (dispatch-check-blockers exit $_blocker_rc) — parking for human review (deferral reason: ${_defer_reason:-<none>})"
+  fi
+  "$SCRIPTS/dispatch-apply-office-hours" "$ISSUE_NUM" "$_park_reason" \
+    || echo "[dispatch-stop] WARNING: dispatch-apply-office-hours failed" >&2
+  spawn_tick
+  exit 0
+fi
+
 # Resolve PR (may be empty for implement-phase before the draft PR opens).
 PR_NUM=$("$SCRIPTS/dispatch-find-pr" "$ISSUE_NUM" 2>/dev/null) || PR_NUM=""
 

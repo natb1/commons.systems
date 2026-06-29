@@ -23822,6 +23822,24 @@ exit 0
 FAKE
   chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-self-close"
 
+  # Fake dispatch-check-blockers: the Branch DEF blocked_by gate (#2616). Default
+  # exit 0 (no open blocker). When $STUB_DIR/blockers.txt contains "2", exits 2
+  # and prints a blocked:<nums> line (open blocker present); when it contains "1",
+  # exits 1 (check failed / env error). Only Branch DEF invokes this, so the
+  # default never affects the marker/sentinel tests above (they write no
+  # `deferred` sentinel and skip the branch).
+  cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-check-blockers" <<'FAKE'
+#!/usr/bin/env bash
+mode="0"
+[[ -f "$STUB_DIR/blockers.txt" ]] && mode=$(cat "$STUB_DIR/blockers.txt")
+case "$mode" in
+  2) echo "blocked:9999"; exit 2 ;;
+  1) echo "error: gh/API failure" >&2; exit 1 ;;
+  *) exit 0 ;;
+esac
+FAKE
+  chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-check-blockers"
+
   # Fake dispatch-recover-dispatched-phase: prints $STUB_DIR/dispatched-phase.txt
   # when that file is present and non-empty, exits 0; otherwise exits 1 (no output).
   # The default non-zero exit keeps every existing marker-absent park test unaffected:
@@ -25069,6 +25087,101 @@ if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" \
   PASS=$((PASS + 1)); echo "  PASS: resolved-closed: no label add or remove invoked"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: resolved-closed: no label add or remove invoked"
+fi
+stop_teardown
+
+# --- Test DEF1: deferred sentinel + open blocker → spawn + self-close, no park (#2616)
+# A phase worker that resolved its deviation in-session (linked the missing
+# blocked_by) writes a `deferred` sentinel (no phase-completed marker). Branch DEF
+# verifies the resolving condition — the issue is now blocked_by an OPEN issue
+# (dispatch-check-blockers exit 2) — and on success does NOT apply
+# dispatch:office-hours: it spawns the router (which re-gates on blocked_by) and
+# self-closes. Mirrors Branches P/R. Checked ahead of the PR-centric branches.
+echo "Test: stop hook + deferred sentinel + open blocker → spawn + self-close, no office-hours"
+stop_setup
+echo "2553-page-shell" > "$STUB_DIR/current-branch.txt"
+echo '{"name":"2553-page-shell"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+printf 'resolved: linked blocked_by #2552\n' > "$TMPDIR_TEST/jobs/abcd1234/deferred"
+echo "2" > "$STUB_DIR/blockers.txt"   # open blocker present (exit 2)
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "deferred+blocker: hook exits 0" "0" "$rc"
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "deferred+blocker: spawn invoked exactly once" "1" "$spawn_calls"
+self_close_calls=$(wc -l < "$STUB_DIR/self-close-calls.log" 2>/dev/null || echo 0)
+assert_eq "deferred+blocker: self-close invoked exactly once" "1" "$self_close_calls"
+sweep_calls=$(wc -l < "$STUB_DIR/sweep-calls.log" 2>/dev/null || echo 0)
+assert_eq "deferred+blocker: sweep invoked exactly once" "1" "$sweep_calls"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: deferred+blocker: no office-hours apply"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: deferred+blocker: no office-hours apply"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" \
+   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" \
+   && ! -e "$STUB_DIR/gh-api-delete.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: deferred+blocker: no label add or remove invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: deferred+blocker: no label add or remove invoked"
+fi
+stop_teardown
+
+# --- Test DEF2: deferred sentinel + NO open blocker → office-hours park (fallback) (#2616)
+# The deferred disposition is gated: when no open blocker exists at stop time
+# (dispatch-check-blockers exit 0), Branch DEF FALLS BACK to the office-hours park
+# — fail-safe toward human review rather than a silent skip. It applies
+# dispatch:office-hours (with the deferral reason surfaced) and spawns the router,
+# but does NOT self-close (mirrors Branch A's park).
+echo "Test: stop hook + deferred sentinel + no open blocker → office-hours park (fallback)"
+stop_setup
+echo "2553-page-shell" > "$STUB_DIR/current-branch.txt"
+echo '{"name":"2553-page-shell"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+printf 'resolved: linked blocked_by #2552\n' > "$TMPDIR_TEST/jobs/abcd1234/deferred"
+echo "0" > "$STUB_DIR/blockers.txt"   # no open blocker (exit 0)
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "deferred+no-blocker: hook exits 0" "0" "$rc"
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "deferred+no-blocker: spawn invoked exactly once" "1" "$spawn_calls"
+self_close_calls=$(wc -l < "$STUB_DIR/self-close-calls.log" 2>/dev/null || echo 0)
+assert_eq "deferred+no-blocker: self-close NOT invoked" "0" "$self_close_calls"
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$apply_log" == *"2553"* && "$apply_log" == *"no open blocker"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: deferred+no-blocker: office-hours park applied with fallback reason"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: deferred+no-blocker: office-hours park applied with fallback reason"
+  echo "    apply-office-hours.log: $apply_log"
+fi
+stop_teardown
+
+# --- Test DEF3: deferred sentinel + blocker check FAILS → office-hours park (fallback) (#2616)
+# A gh/API failure in the blocked_by check (dispatch-check-blockers exit 1) is NOT
+# treated as "no blocker" — Branch DEF fails safe to the office-hours park, naming
+# the check failure, rather than self-closing on an unverified condition.
+echo "Test: stop hook + deferred sentinel + blocker check error → office-hours park (fallback)"
+stop_setup
+echo "2553-page-shell" > "$STUB_DIR/current-branch.txt"
+echo '{"name":"2553-page-shell"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+printf 'resolved: linked blocked_by #2552\n' > "$TMPDIR_TEST/jobs/abcd1234/deferred"
+echo "1" > "$STUB_DIR/blockers.txt"   # check failed (exit 1)
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "deferred+check-error: hook exits 0" "0" "$rc"
+self_close_calls=$(wc -l < "$STUB_DIR/self-close-calls.log" 2>/dev/null || echo 0)
+assert_eq "deferred+check-error: self-close NOT invoked" "0" "$self_close_calls"
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$apply_log" == *"could not be performed"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: deferred+check-error: office-hours park applied with check-failed reason"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: deferred+check-error: office-hours park applied with check-failed reason"
+  echo "    apply-office-hours.log: $apply_log"
 fi
 stop_teardown
 
@@ -33958,6 +34071,58 @@ assert_eq "mark-deviation: CLAUDE_JOB_DIR is a file still attempts in-session pa
   "90003 reason" "$(cat "$MD_APPLY_LOG" 2>/dev/null)"
 rm -f "$md_file"
 md_park_teardown
+
+echo ""
+echo "=== dispatch-mark-deferred (#2616) ==="
+
+MARK_DEFERRED="$SCRIPT_DIR/dispatch-mark-deferred"
+
+# ----- mark-deferred: writes exact one-line reason to the `deferred` sentinel -----
+# Unlike dispatch-mark-deviation, dispatch-mark-deferred does NOT apply the
+# office-hours park in-session (the Stop hook's Branch DEF owns the blocked_by
+# gate decision), so it needs no synthetic-N git repo and touches no network: it
+# only writes the sentinel.
+mdf_dir=$(mktemp -d)
+if CLAUDE_JOB_DIR="$mdf_dir" "$MARK_DEFERRED" "resolved: linked blocked_by #2552"; then mdf_ec=0; else mdf_ec=$?; fi
+assert_eq "mark-deferred: exit 0 on happy path" "0" "$mdf_ec"
+assert_eq "mark-deferred: writes exact deferred sentinel contents" \
+  "$(printf 'resolved: linked blocked_by #2552\n')" "$(cat "$mdf_dir/deferred")"
+# Must NOT write an office-hours-reason marker (it does not park in-session).
+assert_eq "mark-deferred: writes no office-hours-reason marker" "0" \
+  "$([ -f "$mdf_dir/office-hours-reason" ] && echo 1 || echo 0)"
+rm -rf "$mdf_dir"
+
+# ----- mark-deferred: no arg → exit 2 -----
+mdf_dir=$(mktemp -d)
+if CLAUDE_JOB_DIR="$mdf_dir" "$MARK_DEFERRED" 2>/dev/null; then mdf_ec=0; else mdf_ec=$?; fi
+assert_eq "mark-deferred: no arg exit 2" "2" "$mdf_ec"
+assert_eq "mark-deferred: no arg writes no sentinel" "0" \
+  "$([ -f "$mdf_dir/deferred" ] && echo 1 || echo 0)"
+rm -rf "$mdf_dir"
+
+# ----- mark-deferred: empty-string arg → exit 2 -----
+mdf_dir=$(mktemp -d)
+if CLAUDE_JOB_DIR="$mdf_dir" "$MARK_DEFERRED" "" 2>/dev/null; then mdf_ec=0; else mdf_ec=$?; fi
+assert_eq "mark-deferred: empty arg exit 2" "2" "$mdf_ec"
+rm -rf "$mdf_dir"
+
+# ----- mark-deferred: extra arg → exit 2 -----
+mdf_dir=$(mktemp -d)
+if CLAUDE_JOB_DIR="$mdf_dir" "$MARK_DEFERRED" "r1" "r2" 2>/dev/null; then mdf_ec=0; else mdf_ec=$?; fi
+assert_eq "mark-deferred: extra arg exit 2" "2" "$mdf_ec"
+rm -rf "$mdf_dir"
+
+# ----- mark-deferred: CLAUDE_JOB_DIR unset → exit 0, no sentinel, stderr diagnostic -----
+mdf_err=$( (unset CLAUDE_JOB_DIR; "$MARK_DEFERRED" "reason") 2>&1 1>/dev/null ) && mdf_ec=0 || mdf_ec=$?
+assert_eq "mark-deferred: unset CLAUDE_JOB_DIR exit 0" "0" "$mdf_ec"
+assert_eq "mark-deferred: unset CLAUDE_JOB_DIR emits diagnostic" "1" \
+  "$([ -n "$mdf_err" ] && echo 1 || echo 0)"
+
+# ----- mark-deferred: CLAUDE_JOB_DIR set to a file (not a dir) → exit 0, no write -----
+mdf_file=$(mktemp)
+if CLAUDE_JOB_DIR="$mdf_file" "$MARK_DEFERRED" "reason" 2>/dev/null; then mdf_ec=0; else mdf_ec=$?; fi
+assert_eq "mark-deferred: CLAUDE_JOB_DIR is a file exit 0" "0" "$mdf_ec"
+rm -f "$mdf_file"
 
 echo ""
 echo "=== dispatch-mark-parse-job-done ==="
