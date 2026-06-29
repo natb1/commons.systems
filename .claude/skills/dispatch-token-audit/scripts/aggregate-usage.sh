@@ -80,6 +80,11 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# REST helper for per-issue label fetches (gh_issue_view_rest). SCRIPT_DIR-relative
+# so cwd is irrelevant; lib.sh's top level is only function defs + a few exports,
+# safe to source under `set -euo pipefail`.
+source "$SCRIPT_DIR/../../dispatch-propagate/scripts/lib.sh"
+
 DAYS=7
 JSON_OUT=""
 PROJECTS_ROOT="${DISPATCH_AUDIT_PROJECTS_ROOT:-$HOME/.claude/projects}"
@@ -216,7 +221,11 @@ def cmd_prefix(c):
            or ($firstuser_str | test("/recover-api-error")) ) then "recovery"
     elif ( ($path | test("--bare"))
            or ( [ $a[] | select(.gitBranch=="HEAD") ] | length > 0 ) ) then "router-tick"
-    elif ($firstuser_str | test("dispatch-worker")) then "worker"
+    # Real --bg dispatch workers are spawned with a phase-skill slash command.
+    # Their first user message is a <command-name>/<skill></command-name> block
+    # whose skill is one of the dispatch worker phase set. This alternation must
+    # be updated when a new dispatch worker phase skill is added.
+    elif ($firstuser_str | test("<command-name>/(plan-issue|implement|qa-fix|review-fix|fix-checks|fix-conflicts|qa-main|budget-parse-job|resolve-epic|office-hours)</command-name>")) then "worker"
     else "other" end ) as $type
 
 # Peak context across assistant msgs.
@@ -455,6 +464,12 @@ def outcome_rates($o):
     fix_rate:      rate($o.fixes_applied;       $o.findings_actionable)
   };
 
+def topic_labels: ["security","dispatch","testing infrastructure","landing","fellspiral","budget","print","audio"];
+def type_labels: ["bug","enhancement"];
+def labels_for($r): ($r.artifact.issue // null) as $iss | if $iss == null then [] else ($labels_by_issue[($iss|tostring)] // []) end;
+def topics_for($r): (labels_for($r)) as $L | ([ topic_labels[] | select(. as $t | $L | index($t)) ]) as $hit | if ($hit|length)==0 then ["other"] else $hit end;
+def types_for($r): (labels_for($r)) as $L | ([ type_labels[] | select(. as $t | $L | index($t)) ]) as $hit | if ($hit|length)==0 then ["none"] else $hit end;
+
 . as $rows
 
 # ---- window meta is merged in by the shell via --argjson window ----
@@ -514,6 +529,35 @@ def outcome_rates($o):
                         | .cost_usd += cost($e.value.usage; $model) )
       )
     ) ) as $by_model
+
+# ---- by_topic / by_type (per-axis sums intentionally exceed the grand total
+#      because each session is counted in every bucket its labels resolve to —
+#      total-to-all-labels) ----
+| ( {security: zero_bucket, dispatch: zero_bucket, "testing infrastructure": zero_bucket,
+     landing: zero_bucket, fellspiral: zero_bucket, budget: zero_bucket,
+     print: zero_bucket, audio: zero_bucket, other: zero_bucket} ) as $topic_seed
+| ( reduce $rows[] as $r ($topic_seed;
+      (topics_for($r)) as $ts
+      | reduce $ts[] as $t (.; .[$t] = add_to_bucket(.[$t]; $r.usage; $r.turns))
+    )
+  ) as $by_topic
+| ( reduce $rows[] as $r ($by_topic;
+      (topics_for($r)) as $ts
+      | reduce $ts[] as $t (.; .[$t].cost_usd = ((.[$t].cost_usd // 0) + session_cost($r)))
+    )
+  ) as $by_topic
+
+| ( {bug: zero_bucket, enhancement: zero_bucket, none: zero_bucket} ) as $type_seed
+| ( reduce $rows[] as $r ($type_seed;
+      (types_for($r)) as $ts
+      | reduce $ts[] as $t (.; .[$t] = add_to_bucket(.[$t]; $r.usage; $r.turns))
+    )
+  ) as $by_type
+| ( reduce $rows[] as $r ($by_type;
+      (types_for($r)) as $ts
+      | reduce $ts[] as $t (.; .[$t].cost_usd = ((.[$t].cost_usd // 0) + session_cost($r)))
+    )
+  ) as $by_type
 
 # ---- tool_errors (count + sessions_affected) ----
 | ( reduce $rows[] as $r ({};
@@ -697,6 +741,8 @@ def outcome_rates($o):
     by_phase: $by_phase,
     by_phase_outcome: $by_phase_outcome,
     by_model: $by_model,
+    by_topic: $by_topic,
+    by_type: $by_type,
     by_phase_model: $by_phase_model,
     tool_errors: $tool_errors,
     tool_sequences: $tool_sequences,
@@ -748,9 +794,22 @@ WINDOW_JSON=$(jq -n \
   --argjson failed "$FILES_FAILED" \
   '{days:$days, since:$since, until:$until, files_scanned:$scanned, files_failed:$failed}')
 
+# Build a map of issue-number string -> array of label-name strings, fetched once
+# per distinct issue (the `sort -u` is the per-issue cache). Keyed by issue number
+# alone, which is safe under the single-repo natb1/commons.systems assumption; it
+# would collide if two repos shared an issue number.
+LABELS_BY_ISSUE='{}'
+while IFS=$'\t' read -r repo issue; do
+  [[ -z "$issue" ]] && continue
+  labels_json=$(gh_issue_view_rest "$issue" --repo "$repo" | jq -c '[.labels[].name]') || labels_json='[]'
+  LABELS_BY_ISSUE=$(jq -c --arg k "$issue" --argjson v "$labels_json" '.[$k] = $v' <<<"$LABELS_BY_ISSUE")
+done < <(
+  jq -r 'select(.artifact != null and .artifact.issue != null) | "\(.artifact.repo)\t\(.artifact.issue)"' "$STAGE1_OUT" | sort -u
+)
+
 # Stage-2: fold stage-1 lines into the final document. `jq -s` over an empty file
 # yields [], which the program handles as the zero-files case.
-DOC=$(jq -s --argjson window "$WINDOW_JSON" -f "$TMP/stage2.jq" "$STAGE1_OUT")
+DOC=$(jq -s --argjson window "$WINDOW_JSON" --argjson labels_by_issue "$LABELS_BY_ISSUE" -f "$TMP/stage2.jq" "$STAGE1_OUT")
 
 # No silent cap: if tool_sequences was truncated, report it to STDERR (never
 # stdout — stdout must stay a pure JSON document).

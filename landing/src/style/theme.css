@@ -138,7 +138,7 @@ body[data-route="other"] .landing-hero {
   gap: var(--space-4);
 }
 
-.app-card {
+.project-card {
   display: flex;
   flex-direction: column;
   border: var(--border-width) solid var(--border);
@@ -147,13 +147,13 @@ body[data-route="other"] .landing-hero {
   overflow: hidden;
   transition: border-color var(--duration-fast) var(--ease), outline-color var(--duration-fast) var(--ease);
 }
-.app-card:hover,
-.app-card:focus-visible {
+.project-card:hover,
+.project-card:focus-visible {
   border-color: var(--accent);
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
-.app-card-screenshot {
+.project-card-screenshot {
   display: block;
   width: 100%;
   height: auto;
@@ -162,13 +162,13 @@ body[data-route="other"] .landing-hero {
   object-position: top left;
   border-block-end: var(--border-width) solid var(--border);
 }
-.app-name {
+.project-name {
   padding: var(--space-3) var(--space-4) var(--space-1);
   font-weight: var(--weight-bold);
   text-transform: uppercase;
   letter-spacing: var(--tracking-heading);
 }
-.app-problem {
+.project-problem {
   margin: 0;
   padding: 0 var(--space-4) var(--space-4);
   color: var(--muted);
@@ -176,8 +176,41 @@ body[data-route="other"] .landing-hero {
   line-height: 1.4;
 }
 
+.project-showcase-overflow {
+  margin-block: var(--space-4) 0;
+  background: none;
+  border: 0;
+  padding: 0;
+  border-radius: 0;
+  overflow: visible;
+}
+.project-showcase-overflow summary {
+  cursor: pointer;
+  padding: var(--space-2) var(--space-1);
+  color: var(--muted);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-heading);
+  transition: color var(--duration-fast) var(--ease), outline-color var(--duration-fast) var(--ease);
+  margin-inline: 0;
+  margin-block: 0;
+}
+.project-showcase-overflow summary:hover {
+  color: var(--accent);
+}
+.project-showcase-overflow summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.project-showcase-overflow-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
+  margin-block-start: var(--space-4);
+}
+
 @media (max-width: 768px) {
   .landing-hero-grid { grid-template-columns: 1fr; }
+  .project-showcase-overflow-cards { grid-template-columns: 1fr; }
 }
 
 .profile-card {

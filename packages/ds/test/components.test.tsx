@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+import type { AnchorHTMLAttributes } from "react";
 import {
   Button,
   Badge,
@@ -9,9 +10,10 @@ import {
   Select,
   Checkbox,
   Nav,
+  Landing,
 } from "../src/index.ts";
 
-describe("all eight components importable from the barrel", () => {
+describe("all nine components importable from the barrel", () => {
   // A renderable React component is either a function component or a
   // forwardRef/memo exotic object (those carry a `$$typeof` symbol). Button and
   // Input forward refs, so they are objects rather than bare functions.
@@ -28,6 +30,7 @@ describe("all eight components importable from the barrel", () => {
     expect(isRenderable(Select)).toBe(true);
     expect(isRenderable(Checkbox)).toBe(true);
     expect(isRenderable(Nav)).toBe(true);
+    expect(isRenderable(Landing)).toBe(true);
   });
 });
 
@@ -55,8 +58,9 @@ describe("cs-* class names", () => {
   });
 
   it("polymorphic Card with as='a' renders an <a> and is interactive", () => {
+    const anchorProps: AnchorHTMLAttributes<HTMLAnchorElement> = { href: "/" };
     const html = renderToStaticMarkup(
-      <Card as="a" href="/">
+      <Card as="a" {...anchorProps}>
         Content
       </Card>,
     );
@@ -122,6 +126,18 @@ describe("cs-* class names", () => {
       <Nav links={[{ href: "/a", label: "A" }]} current="/a" />,
     );
     expect(html).toContain('aria-current="page"');
+  });
+
+  it("Landing renders the page shell with sticky header, grid, and panel", () => {
+    const html = renderToStaticMarkup(<Landing />);
+    expect(html).toContain("cs-landing");
+    expect(html).toContain("content-grid");
+    expect(html).toContain("sidebar");
+    expect(html).toContain("panel-toggle");
+    expect(html).toContain("<header");
+    expect(html).toContain("<footer");
+    // Composes the shared Nav primitive rather than a bespoke one.
+    expect(html).toContain("cs-nav");
   });
 });
 

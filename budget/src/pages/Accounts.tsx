@@ -289,7 +289,7 @@ function HeadlineMetrics({ report }: { report: IncomeStatementReport }) {
   const net = report.netIncome.current;
   const netChange = report.cashFlow.current.netChange;
   return (
-    <Card style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-4)", marginBlock: "1.5rem" }}>
+    <Card style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-4)", marginBlock: "var(--space-6)" }}>
       <Metric label="Net income" value={formatCurrency(net)} delta={report.currentLabel} deltaTone={tone(net)} />
       <Metric label="Savings rate" value={formatPercent(report.savingsRate.current)} delta={report.currentLabel} />
       <Metric label="Net change" value={formatSignedCurrency(netChange)} delta={report.currentLabel} deltaTone={tone(netChange)} />

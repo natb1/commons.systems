@@ -14,7 +14,7 @@ import buildTimeContent from "virtual:blog-post-content";
 import buildTimeMetadata from "virtual:blog-post-metadata";
 
 import { createRoot, type Root } from "react-dom/client";
-import { ABOUT_PAGE_META, APPS, INFO_PANEL_LINK_SECTIONS, NAV_LINKS, SITE_DEFAULTS, SITE_URL } from "./site-config.js";
+import { ABOUT_PAGE_META, PROJECTS, INFO_PANEL_LINK_SECTIONS, NAV_LINKS, OVERFLOW_PROJECTS, SITE_DEFAULTS, SITE_URL } from "./site-config.js";
 import { ShowcaseContent } from "./components/Showcase.js";
 import { About, AboutPanel } from "./pages/About.js";
 import { BLOG_ROLL_ENTRIES, createStrategies } from "./blog-roll/config.js";
@@ -51,9 +51,9 @@ function mountHero(hero: HTMLElement): void {
     heroRoot = createRoot(hero);
     heroNode = hero;
   }
-  hero.classList.add("app-showcase");
-  hero.setAttribute("aria-label", "Featured apps");
-  heroRoot!.render(<ShowcaseContent apps={APPS} />); // type-safety-ok: heroRoot is always set above — either by the if block or from a prior call
+  hero.classList.add("project-showcase");
+  hero.setAttribute("aria-label", "Featured projects");
+  heroRoot!.render(<ShowcaseContent projects={PROJECTS} overflow={OVERFLOW_PROJECTS} />); // type-safety-ok: heroRoot is always set above — either by the if block or from a prior call
 }
 
 createBlogApp({

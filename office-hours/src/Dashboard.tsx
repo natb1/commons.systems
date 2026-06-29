@@ -15,18 +15,16 @@ import { logError } from "@commons-systems/errorutil/log";
 
 import { db, NAMESPACE } from "./firebase.js";
 import { getOwnerReminders, getOwnerQueueMetrics, getDemoReminders, getDemoQueueMetrics } from "./data.js";
+import { getDemoIntentionTree } from "./intention-tree.js";
 import { getOwnerSamples, getDemoSamples } from "./usage-data.js";
 import { getOwnerIssueSamples, getDemoIssueSamples } from "./issue-data.js";
 import { getOwnerAuditAggregates, getDemoAuditAggregates } from "./audit-data.js";
+import { getDemoProjectSignals, getOwnerProjectSignals } from "./project-signals-data.js";
 
-import { selectLatestSample, type UsageSample } from "./usage-samples.js";
+import { selectLatestSample } from "./usage-samples.js";
 import { capacityBandKey } from "./capacity-band.js";
 import { remindersPanelKey } from "./reminders.js";
-import type { Reminder } from "./reminders.js";
 import { parkedPanelKey } from "./queue-metrics.js";
-import type { QueueMetricsSnapshot } from "./queue-metrics.js";
-import type { IssueSample } from "./issue-samples.js";
-import type { AuditAggregate } from "./audit-aggregates.js";
 
 import { CapacityBand } from "./components/CapacityBand.js";
 import { PacePanel } from "./components/PacePanel.js";
@@ -36,16 +34,10 @@ import { AuditPanel } from "./components/AuditPanel.js";
 import { RemindersPanel } from "./components/RemindersPanel.js";
 import { QueueMetricsPanel } from "./components/QueueMetricsPanel.js";
 import { ParkedIssuesPanel } from "./components/ParkedIssuesPanel.js";
+import { IntentionTreePanel } from "./components/IntentionTreePanel.js";
+import { ProjectSignalsPanel } from "./components/ProjectSignalsPanel.js";
 
-// The tier-resolved data the panels render. Mirrors the vanilla ViewState's
-// owner payload (and the demo payload built by buildContext).
-interface PanelData {
-  samples: UsageSample[];
-  reminders: Reminder[];
-  queueMetrics: QueueMetricsSnapshot | null;
-  issueSamples: IssueSample[];
-  auditAggregates: AuditAggregate[];
-}
+import { mergePanelData, type PanelData } from "./panel-equality.js";
 
 type ViewState =
   | { tier: "demo" } // unauthenticated → labeled demo
@@ -59,6 +51,18 @@ export interface DashboardProps {
    */
   user: User | null;
 }
+
+// Bounded staleness ceiling for owner panel data. Producers write at most
+// ~hourly (sampleDispatchQueueMetrics) up to per-dispatch-tick (usage-samples).
+// Each refresh re-reads the FULL matching collection — the getters have no
+// limit/orderBy and the history charts render the entire accumulated history, so
+// the read set is the display set. At single-operator scale the steady-state
+// re-read cost is negligible; the interval is the only cost/staleness lever.
+// 5 min bounds worst-case staleness well under a work session while capping
+// whole-collection re-reads to 12/hour/collection. Kept separate from the 60s
+// `now` display tick — that tick is a zero-network setNow; coupling a
+// whole-collection re-read to it would 5x reads for no staleness benefit.
+const REFRESH_INTERVAL_MS = 5 * 60_000;
 
 export function Dashboard({ user }: DashboardProps) {
   // "demo" is the initial state so the view is meaningful before auth resolves
@@ -75,6 +79,21 @@ export function Dashboard({ user }: DashboardProps) {
     return () => clearInterval(id);
   }, []);
 
+  // Shared owner-tier fetch: the five-collection parallel Firestore read. Closes
+  // over the module-import `db`/`NAMESPACE`; re-created each render, but only ever
+  // referenced inside effects below, so the identity churn is harmless.
+  async function loadPanelData(currentUser: User): Promise<PanelData> {
+    const [samples, reminders, queueMetrics, issueSamples, auditAggregates, projectSignals] = await Promise.all([
+      getOwnerSamples(db, NAMESPACE, currentUser),
+      getOwnerReminders(db, NAMESPACE, currentUser),
+      getOwnerQueueMetrics(db, NAMESPACE, currentUser),
+      getOwnerIssueSamples(db, NAMESPACE, currentUser),
+      getOwnerAuditAggregates(db, NAMESPACE, currentUser),
+      getOwnerProjectSignals(db, NAMESPACE, currentUser),
+    ]);
+    return { samples, reminders, queueMetrics, issueSamples, auditAggregates, projectSignals };
+  }
+
   // Five-collection parallel Firestore load for the owner tier, with the
   // auth-change race guard (ports main.ts's refresh()). A null user paints demo;
   // an `ignore` flag set by cleanup keeps a stale in-flight load (success OR
@@ -87,20 +106,11 @@ export function Dashboard({ user }: DashboardProps) {
     let ignore = false;
     void (async () => {
       try {
-        const [samples, reminders, queueMetrics, issueSamples, auditAggregates] = await Promise.all([
-          getOwnerSamples(db, NAMESPACE, user),
-          getOwnerReminders(db, NAMESPACE, user),
-          getOwnerQueueMetrics(db, NAMESPACE, user),
-          getOwnerIssueSamples(db, NAMESPACE, user),
-          getOwnerAuditAggregates(db, NAMESPACE, user),
-        ]);
+        const data = await loadPanelData(user);
         // Auth may have changed while the calls were in flight — skip so the
         // in-flight result does not clobber the already-updated view.
         if (ignore) return;
-        setState({
-          tier: "owner",
-          data: { samples, reminders, queueMetrics, issueSamples, auditAggregates },
-        });
+        setState({ tier: "owner", data });
       } catch (error) {
         // Same race guard on the error path.
         if (ignore) return;
@@ -117,6 +127,45 @@ export function Dashboard({ user }: DashboardProps) {
     };
   }, [user]);
 
+  // Periodic owner-tier refresh. Re-reads the five collections every
+  // REFRESH_INTERVAL_MS and merges via mergePanelData (which preserves stable
+  // references for unchanged collections, so the memoized panels above only
+  // rebuild when their data actually changed). Separate from the mount load and
+  // the 60s `now` tick. Refresh error policy DIVERGES from mount: a transient
+  // failure must not blow away last-good data or flip to the error tier.
+  useEffect(() => {
+    if (user === null) return;
+    let cancelled = false;
+    let inFlight = false;
+    const id = setInterval(() => {
+      if (inFlight) return; // skip a tick while the prior fetch is unresolved
+      inFlight = true;
+      void (async () => {
+        try {
+          const next = await loadPanelData(user);
+          if (cancelled) return; // unmount or user change happened mid-fetch
+          setState((prev) => {
+            if (prev.tier !== "owner") return prev; // don't resurrect owner over demo/error
+            const merged = mergePanelData(prev.data, next);
+            return merged === prev.data ? prev : { tier: "owner", data: merged };
+          });
+        } catch (error) {
+          // Log and leave existing state in place — retain last-good.
+          if (cancelled) return;
+          if (!deferProgrammerError(error)) {
+            logError(error, { operation: "refresh-owner-data" });
+          }
+        } finally {
+          inFlight = false;
+        }
+      })();
+    }, REFRESH_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [user]);
+
   // Demo data getters return fresh arrays per call. Build them once so the
   // memoized panels below see stable references across ticks (otherwise every
   // 60s tick would rebuild the charts — the flicker/re-scroll the vanilla
@@ -128,6 +177,7 @@ export function Dashboard({ user }: DashboardProps) {
       queueMetrics: getDemoQueueMetrics(),
       issueSamples: getDemoIssueSamples(),
       auditAggregates: getDemoAuditAggregates(),
+      projectSignals: getDemoProjectSignals(),
     }),
     [],
   );
@@ -135,7 +185,7 @@ export function Dashboard({ user }: DashboardProps) {
   // Resolve the active panel data for demo / owner. (The error tier returns
   // early below; these hooks still run unconditionally to satisfy rules-of-hooks.)
   const data = state.tier === "owner" ? state.data : demoData;
-  const { samples, reminders, queueMetrics, issueSamples, auditAggregates } = data;
+  const { samples, reminders, queueMetrics, issueSamples, auditAggregates, projectSignals } = data;
 
   // The two time-sensitive panels (capacity, reminders) are memoized as elements
   // keyed on a content signature: each panel's now-derived output (clocks,
@@ -166,6 +216,10 @@ export function Dashboard({ user }: DashboardProps) {
     [auditAggregates],
   );
   const queueEl = useMemo(() => <QueueMetricsPanel metrics={queueMetrics} />, [queueMetrics]);
+  const projectSignalsEl = useMemo(
+    () => <ProjectSignalsPanel snapshot={projectSignals} />,
+    [projectSignals],
+  );
 
   // `now` is intentionally omitted from these dep arrays: the *Key helper
   // captures every now-derived change to the panel's output, so a tick that
@@ -190,6 +244,15 @@ export function Dashboard({ user }: DashboardProps) {
     [parked, parkedPanelKey(parked, now)],
   );
 
+  // The intention tree is the project's single hierarchy — identical for every
+  // viewer, build-time data with no Firestore/owner tier and no time dependence —
+  // so it is built once here, never threaded through the owner Promise.all or
+  // PanelData. Rendered full-width like history/backlog/audit.
+  const intentionTreeEl = useMemo(
+    () => <IntentionTreePanel view={getDemoIntentionTree()} className="panel-grid-full" />,
+    [],
+  );
+
   if (state.tier === "error") {
     return (
       <p className="error" role="alert">
@@ -212,7 +275,8 @@ export function Dashboard({ user }: DashboardProps) {
         </p>
       )}
       {/* Panel order matches the vanilla PANELS registry:
-          capacity, pace, history, backlog, audit, reminders, queue-metrics. */}
+          capacity, pace, history, backlog, audit, reminders, queue-metrics,
+          parked; plus the build-time intention tree (full-width, appended last). */}
       <div className="panel-grid">
         {capacityEl}
         {paceEl}
@@ -222,6 +286,8 @@ export function Dashboard({ user }: DashboardProps) {
         {remindersEl}
         {queueEl}
         {parkedEl}
+        {intentionTreeEl}
+        {projectSignalsEl}
       </div>
     </>
   );

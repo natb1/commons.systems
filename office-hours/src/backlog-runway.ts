@@ -60,7 +60,7 @@ export function runwayVerdict(fit: BacklogRunwayFit): { text: string; state: str
     case "draining": {
       const days = Math.ceil(fit.daysUntilEmpty);
       const unit = days === 1 ? "day" : "days";
-      return { text: `~${days} ${unit} until the queue empties`, state: "draining" };
+      return { text: `~${days} ${unit} to clear the open backlog at current trend`, state: "draining" };
     }
     case "stable":
       return { text: "queue stable", state: "stable" };

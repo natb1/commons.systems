@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { renderShowcase } from "../src/showcase-render";
-import type { AppCard } from "../src/site-config";
+import type { ProjectCard } from "../src/site-config";
 
-const APPS: AppCard[] = [
+const PROJECTS: ProjectCard[] = [
   {
     name: "Alpha",
     url: "https://alpha.example.com",
@@ -27,31 +27,31 @@ const APPS: AppCard[] = [
 
 describe("renderShowcase", () => {
   it("contains the hero band headline", () => {
-    const html = renderShowcase(APPS);
+    const html = renderShowcase(PROJECTS);
     expect(html).toContain("Build with commons.systems. Learn to run without.");
   });
 
-  it("contains exactly one app-card anchor per app", () => {
-    const html = renderShowcase(APPS);
+  it("contains exactly one project-card anchor per project", () => {
+    const html = renderShowcase(PROJECTS);
     // The ds Card composes its own classes ahead of the consumer's, so each card
-    // anchor is `<a class="cs-card cs-card--interactive app-card" ...>`. Match the
-    // app-card token at the end of an anchor's class list (the closing quote
-    // excludes the `app-card-screenshot` img, which also starts with app-card).
-    const matches = html.match(/<a [^>]*class="[^"]*\bapp-card"/g);
+    // anchor is `<a class="cs-card cs-card--interactive project-card" ...>`. Match the
+    // project-card token at the end of an anchor's class list (the closing quote
+    // excludes the `project-card-screenshot` img, which also starts with project-card).
+    const matches = html.match(/<a [^>]*class="[^"]*\bproject-card"/g);
     expect(matches).not.toBeNull();
-    expect(matches!.length).toBe(APPS.length);
+    expect(matches!.length).toBe(PROJECTS.length); // type-safety-ok: guarded by expect(matches).not.toBeNull() above
   });
 
-  it("each anchor href matches the app url", () => {
-    const html = renderShowcase(APPS);
-    for (const app of APPS) {
+  it("each anchor href matches the project url", () => {
+    const html = renderShowcase(PROJECTS);
+    for (const app of PROJECTS) {
       expect(html).toContain(`href="${app.url}"`);
     }
   });
 
   it("each image has loading=\"lazy\" and correct src and alt", () => {
-    const html = renderShowcase(APPS);
-    for (const app of APPS) {
+    const html = renderShowcase(PROJECTS);
+    for (const app of PROJECTS) {
       const imgRegex = new RegExp(
         `<img[^>]*loading="lazy"[^>]*src="${app.screenshot}"[^>]*alt="${app.screenshotAlt}"`,
       );
@@ -62,10 +62,10 @@ describe("renderShowcase", () => {
     }
   });
 
-  it("HTML-escapes special characters in app.problem", () => {
-    const apps: AppCard[] = [
+  it("HTML-escapes special characters in project.problem", () => {
+    const apps: ProjectCard[] = [
       {
-        ...APPS[0],
+        ...PROJECTS[0],
         problem: "<script>alert('xss')</script>",
       },
     ];
@@ -74,10 +74,10 @@ describe("renderShowcase", () => {
     expect(html).toContain("&lt;script&gt;");
   });
 
-  it("HTML-escapes special characters in app.url", () => {
-    const apps: AppCard[] = [
+  it("HTML-escapes special characters in project.url", () => {
+    const apps: ProjectCard[] = [
       {
-        ...APPS[0],
+        ...PROJECTS[0],
         url: 'https://example.com/"onmouseover="alert(1)',
       },
     ];
@@ -86,21 +86,78 @@ describe("renderShowcase", () => {
     expect(html).toContain("&quot;");
   });
 
+  describe("overflow tier", () => {
+    const OVERFLOW: ProjectCard[] = [
+      {
+        name: "Gamma",
+        url: "https://gamma.example.com",
+        applicationCategory: "MultimediaApplication",
+        operatingSystem: "Web",
+        description: "Gamma description.",
+        problem: "Gamma problem statement.",
+        screenshot: "/screenshots/gamma.png",
+        screenshotAlt: "Gamma screenshot alt text.",
+      },
+    ];
+
+    it("includes the overflow card href in the SSR string (crawlable)", () => {
+      const html = renderShowcase(PROJECTS, OVERFLOW);
+      expect(html).toContain('href="https://gamma.example.com"');
+    });
+
+    it("renders a <details> that is collapsed by default", () => {
+      const html = renderShowcase(PROJECTS, OVERFLOW);
+      expect(html).toContain("<details");
+      expect(html).not.toContain("<details open");
+      expect(html).not.toMatch(/<details[^>]*\sopen/);
+    });
+
+    it("renders a <summary>", () => {
+      const html = renderShowcase(PROJECTS, OVERFLOW);
+      expect(html).toContain("<summary");
+    });
+
+    it("renders one <a class=\"project-card\" per primary and overflow project", () => {
+      const html = renderShowcase(PROJECTS, OVERFLOW);
+      const matches = html.match(/<a [^>]*class="[^"]*\bproject-card"/g);
+      expect(matches).not.toBeNull();
+      expect(matches).toHaveLength(PROJECTS.length + OVERFLOW.length);
+    });
+
+    it("renders no <details> when overflow is empty", () => {
+      const html = renderShowcase(PROJECTS);
+      expect(html).not.toContain("<details");
+    });
+
+    it("summary text is 'more…' and not 'More projects'", () => {
+      const html = renderShowcase(PROJECTS, OVERFLOW);
+      expect(html).toContain("more…");
+      expect(html).not.toContain("More projects");
+    });
+
+    it("<details> overflow block appears after .landing-hero-grid in SSR output", () => {
+      const html = renderShowcase(PROJECTS, OVERFLOW);
+      const gridIndex = html.indexOf("landing-hero-grid");
+      const detailsIndex = html.indexOf("<details");
+      expect(detailsIndex).toBeGreaterThan(gridIndex);
+    });
+  });
+
   describe("band CTAs", () => {
     it("renders Learn More link to /about", () => {
-      const html = renderShowcase(APPS);
+      const html = renderShowcase(PROJECTS);
       expect(html).toContain('href="/about"');
       expect(html).toContain("Learn More");
     });
 
     it("renders Source link to the GitHub repo", () => {
-      const html = renderShowcase(APPS);
+      const html = renderShowcase(PROJECTS);
       expect(html).toContain('href="https://github.com/natb1/commons.systems"');
       expect(html).toContain("Source");
     });
 
     it("CTA row appears after the subline", () => {
-      const html = renderShowcase(APPS);
+      const html = renderShowcase(PROJECTS);
       const sublineIndex = html.indexOf("landing-hero-band-subline");
       const ctaIndex = html.indexOf("landing-hero-band-cta");
       expect(ctaIndex).toBeGreaterThan(sublineIndex);

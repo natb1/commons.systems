@@ -87,7 +87,7 @@ setup() {
   local worker_jsonl="$worktree_dir/sess-worker.jsonl"
 
   # line 1: first user line — classifies as worker
-  printf '%s\n' '{"type":"user","message":{"content":"<command-name>/dispatch-worker</command-name>"}}' \
+  printf '%s\n' '{"type":"user","message":{"content":"<command-name>/plan-issue</command-name>"}}' \
     >> "$worker_jsonl"
 
   # line 2: assistant — plan-implement, opus, usage input=1000, cc=2000, cr=4000, out=500
@@ -240,7 +240,41 @@ teardown() {
   if [[ -n "$ROOT" && -d "$ROOT" ]]; then
     rm -rf "$ROOT"
   fi
+  if [[ -n "${BINDIR:-}" && -d "${BINDIR:-}" ]]; then
+    rm -rf "$BINDIR"
+  fi
 }
+
+# Global gh stub on PATH (intercepts gh_issue_view_rest → gh api repos/.../issues/<N>
+# calls from aggregate-usage.sh). Inherits into all subshell aggregator runs via
+# the exported PATH below. Cleaned up by teardown() on exit.
+BINDIR=$(mktemp -d)
+cat > "$BINDIR/gh" <<'STUB_EOF'
+#!/usr/bin/env bash
+# Stub for: gh api repos/<repo>/issues/<N>
+# Parses N from the trailing /issues/<N> path segment; exits 0 always.
+issue_num=""
+for arg in "$@"; do
+  if [[ "$arg" =~ /issues/([0-9]+) ]]; then
+    issue_num="${BASH_REMATCH[1]}"
+    break
+  fi
+done
+if [[ "$issue_num" == "999" ]]; then
+  # Two topic labels (dispatch, testing infrastructure) + one type label (enhancement)
+  # — double-counted by by_topic because total-to-all-labels attribution.
+  printf '%s\n' '{"number":999,"state":"open","labels":[{"name":"dispatch"},{"name":"testing infrastructure"},{"name":"enhancement"}]}'
+elif [[ -n "$issue_num" ]]; then
+  # Any other issue (e.g. 2268 from the sidecar-coverage fixture): no labels.
+  printf '{"number":%s,"state":"open","labels":[]}\n' "$issue_num"
+else
+  # Unexpected call shape (not an issues endpoint): return a benign empty response.
+  printf '%s\n' '{"number":0,"state":"open","labels":[]}'
+fi
+exit 0
+STUB_EOF
+chmod +x "$BINDIR/gh"
+export PATH="$BINDIR:$PATH"
 
 trap teardown EXIT
 
@@ -286,6 +320,49 @@ assert_eq 'by_phase["plan-implement"].cost_usd' "$EXPECTED_WORKER_COST" \
   "$(jq '.by_phase["plan-implement"].cost_usd' <<<"$OUT")"
 assert_eq 'by_phase_model["plan-implement\tclaude-opus-4-8"].cost_usd' "$EXPECTED_WORKER_COST" \
   "$(jq '.by_phase_model["plan-implement\tclaude-opus-4-8"].cost_usd' <<<"$OUT")"
+
+# --- by_topic / by_type (#2503): issue 999 → dispatch + testing infrastructure + enhancement ---
+# All 9 topic keys and all 3 type keys are always present (seeded from zero_bucket).
+assert_eq 'by_topic keys == 9 sorted keys' \
+  '["audio","budget","dispatch","fellspiral","landing","other","print","security","testing infrastructure"]' \
+  "$(jq -c '.by_topic | keys' <<<"$OUT")"
+assert_eq 'by_type keys == ["bug","enhancement","none"]' \
+  '["bug","enhancement","none"]' \
+  "$(jq -c '.by_type | keys' <<<"$OUT")"
+
+# Same field set as by_phase: zero_bucket provides price_proxy_usd, input, cost_usd, turns.
+assert_eq 'by_topic.dispatch has price_proxy_usd' 'true' \
+  "$(jq '.by_topic.dispatch | has("price_proxy_usd")' <<<"$OUT")"
+assert_eq 'by_topic.dispatch has input' 'true' \
+  "$(jq '.by_topic.dispatch | has("input")' <<<"$OUT")"
+assert_eq 'by_topic.dispatch has cost_usd' 'true' \
+  "$(jq '.by_topic.dispatch | has("cost_usd")' <<<"$OUT")"
+assert_eq 'by_topic.dispatch has turns' 'true' \
+  "$(jq '.by_topic.dispatch | has("turns")' <<<"$OUT")"
+
+# Total-to-all-labels: sess-worker (issue 999) is counted in BOTH the dispatch and
+# the "testing infrastructure" buckets, so each bucket carries the full worker cost.
+assert_eq 'by_topic.dispatch.cost_usd == EXPECTED_WORKER_COST' "$EXPECTED_WORKER_COST" \
+  "$(jq '.by_topic.dispatch.cost_usd' <<<"$OUT")"
+assert_eq 'by_topic["testing infrastructure"].cost_usd == EXPECTED_WORKER_COST' "$EXPECTED_WORKER_COST" \
+  "$(jq '.by_topic["testing infrastructure"].cost_usd' <<<"$OUT")"
+
+# sum(by_topic.cost_usd) == totals.cost_usd + EXPECTED_WORKER_COST:
+# sess-worker is double-counted (dispatch + testing infrastructure); all other sessions
+# (subagents, router, recovery) have no artifact and resolve to "other" exactly once.
+assert_eq '(by_topic | sum cost_usd) == totals.cost_usd + EXPECTED_WORKER_COST' \
+  "$(jq -n --argjson tot "$(jq '.totals.cost_usd' <<<"$OUT")" \
+            --argjson w "$EXPECTED_WORKER_COST" '$tot + $w')" \
+  "$(jq '(.by_topic | to_entries | map(.value.cost_usd) | add)' <<<"$OUT")"
+
+# by_type: enhancement gets the worker (issue 999 carries enhancement); none gets
+# everyone without a type label (all un-stamped sessions: subagents + router + recovery).
+assert_eq 'by_type.enhancement.cost_usd == EXPECTED_WORKER_COST' "$EXPECTED_WORKER_COST" \
+  "$(jq '.by_type.enhancement.cost_usd' <<<"$OUT")"
+assert_eq 'by_type.none.cost_usd == totals.cost_usd - EXPECTED_WORKER_COST' \
+  "$(jq -n --argjson tot "$(jq '.totals.cost_usd' <<<"$OUT")" \
+            --argjson w "$EXPECTED_WORKER_COST" '$tot - $w')" \
+  "$(jq '.by_type.none.cost_usd' <<<"$OUT")"
 
 # agent-aaa: sonnet (skill <none>), usage (10,20,40,5) at sonnet rates
 # (3 / 3.75 / 0.30 / 15 per Mtok).
@@ -638,7 +715,7 @@ mkdir -p "$partial_worktree"
 partial_jsonl="$partial_worktree/sess-partial.jsonl"
 
 # line 1: first user line — classifies as worker (mirror line 68)
-printf '%s\n' '{"type":"user","message":{"content":"<command-name>/dispatch-worker</command-name>"}}' \
+printf '%s\n' '{"type":"user","message":{"content":"<command-name>/plan-issue</command-name>"}}' \
   >> "$partial_jsonl"
 # line 2: assistant — opus, minimal usage (mirror the worker assistant shape)
 printf '%s\n' '{"type":"assistant","attributionSkill":"review-fix","isSidechain":false,"gitBranch":"1909-partial","message":{"model":"claude-opus-4-8","content":[{"type":"tool_use","id":"toolu_p01","name":"Bash","input":{"command":"echo hi"}}],"usage":{"input_tokens":1,"cache_creation_input_tokens":2,"cache_read_input_tokens":4,"output_tokens":1}}}' \
@@ -696,7 +773,7 @@ mkdir -p "$guard_worktree"
 guard_jsonl="$guard_worktree/sess-guard.jsonl"
 
 # line 1: first user line — classifies as worker
-printf '%s\n' '{"type":"user","message":{"content":"<command-name>/dispatch-worker</command-name>"}}' \
+printf '%s\n' '{"type":"user","message":{"content":"<command-name>/plan-issue</command-name>"}}' \
   >> "$guard_jsonl"
 # line 2: assistant — UNPRICEABLE model "gpt-fake-9" with NONZERO usage
 printf '%s\n' '{"type":"assistant","attributionSkill":"plan-implement","isSidechain":false,"gitBranch":"2027-guard","message":{"model":"gpt-fake-9","usage":{"input_tokens":1000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}}' \
@@ -731,7 +808,7 @@ synth_worktree="$SYNTH_ROOT/-home-x-worktrees-2027-synth"
 mkdir -p "$synth_worktree"
 synth_jsonl="$synth_worktree/sess-synth.jsonl"
 
-printf '%s\n' '{"type":"user","message":{"content":"<command-name>/dispatch-worker</command-name>"}}' \
+printf '%s\n' '{"type":"user","message":{"content":"<command-name>/plan-issue</command-name>"}}' \
   >> "$synth_jsonl"
 # assistant — unclassifiable "<synthetic>" model, ALL-ZERO usage → cost 0, no abort
 printf '%s\n' '{"type":"assistant","attributionSkill":"plan-implement","isSidechain":false,"gitBranch":"2027-synth","message":{"model":"<synthetic>","usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}}' \
@@ -771,7 +848,7 @@ mkdir -p "$haiku_worktree"
 haiku_jsonl="$haiku_worktree/sess-haiku.jsonl"
 
 # line 1: first user line — classifies as worker
-printf '%s\n' '{"type":"user","message":{"content":"<command-name>/dispatch-worker</command-name>"}}' \
+printf '%s\n' '{"type":"user","message":{"content":"<command-name>/plan-issue</command-name>"}}' \
   >> "$haiku_jsonl"
 # line 2: assistant — claude-haiku-4-5, distinct nonzero usage in all four components
 printf '%s\n' '{"type":"assistant","attributionSkill":"plan-implement","isSidechain":false,"gitBranch":"2027-haiku","message":{"model":"claude-haiku-4-5","usage":{"input_tokens":1000,"cache_creation_input_tokens":2000,"cache_read_input_tokens":4000,"output_tokens":500}}}' \
@@ -815,7 +892,7 @@ mkdir -p "$opus3_worktree"
 opus3_jsonl="$opus3_worktree/sess-opus3.jsonl"
 
 # line 1: first user line — classifies as worker
-printf '%s\n' '{"type":"user","message":{"content":"<command-name>/dispatch-worker</command-name>"}}' \
+printf '%s\n' '{"type":"user","message":{"content":"<command-name>/plan-issue</command-name>"}}' \
   >> "$opus3_jsonl"
 # line 2: assistant — claude-3-opus-20240229, distinct nonzero usage in all four components
 printf '%s\n' '{"type":"assistant","attributionSkill":"plan-implement","isSidechain":false,"gitBranch":"2102-opus3","message":{"model":"claude-3-opus-20240229","usage":{"input_tokens":1000,"cache_creation_input_tokens":2000,"cache_read_input_tokens":4000,"output_tokens":500}}}' \
@@ -848,7 +925,7 @@ mkdir -p "$haiku3_worktree"
 haiku3_jsonl="$haiku3_worktree/sess-haiku3.jsonl"
 
 # line 1: first user line — classifies as worker
-printf '%s\n' '{"type":"user","message":{"content":"<command-name>/dispatch-worker</command-name>"}}' \
+printf '%s\n' '{"type":"user","message":{"content":"<command-name>/plan-issue</command-name>"}}' \
   >> "$haiku3_jsonl"
 # line 2: assistant — claude-3-haiku-20240307, distinct nonzero usage in all four components
 printf '%s\n' '{"type":"assistant","attributionSkill":"plan-implement","isSidechain":false,"gitBranch":"2102-haiku3","message":{"model":"claude-3-haiku-20240307","usage":{"input_tokens":1000,"cache_creation_input_tokens":2000,"cache_read_input_tokens":4000,"output_tokens":500}}}' \
@@ -880,7 +957,7 @@ mkdir -p "$enum_worktree"
 enum_jsonl="$enum_worktree/sess-enum.jsonl"
 
 # line 1: first user line — classifies as worker
-printf '%s\n' '{"type":"user","message":{"content":"<command-name>/dispatch-worker</command-name>"}}' \
+printf '%s\n' '{"type":"user","message":{"content":"<command-name>/plan-issue</command-name>"}}' \
   >> "$enum_jsonl"
 # line 2: assistant — claude-3-5-haiku-20241022 (omitted in issue's fix snippet)
 printf '%s\n' '{"type":"assistant","attributionSkill":"plan-implement","isSidechain":false,"gitBranch":"2102-enum","message":{"model":"claude-3-5-haiku-20241022","usage":{"input_tokens":1000,"cache_creation_input_tokens":2000,"cache_read_input_tokens":4000,"output_tokens":500}}}' \
@@ -928,7 +1005,13 @@ mkdir -p "$cov_worktree"
 # worker; one zero-usage assistant line keeps totals/price irrelevant here).
 for s in a b c; do
   cov_jsonl="$cov_worktree/sess-cov-$s.jsonl"
-  printf '%s\n' '{"type":"user","message":{"content":"<command-name>/dispatch-worker</command-name>"}}' \
+  # Use three distinct real phase-skill commands to verify the alternation
+  case "$s" in
+    a) cov_cmd='<command-name>/plan-issue</command-name>' ;;
+    b) cov_cmd='<command-name>/qa-fix</command-name>' ;;
+    c) cov_cmd='<command-name>/review-fix</command-name>' ;;
+  esac
+  printf '%s\n' "{\"type\":\"user\",\"message\":{\"content\":\"$cov_cmd\"}}" \
     >> "$cov_jsonl"
   printf '%s\n' '{"type":"assistant","attributionSkill":"plan-implement","isSidechain":false,"gitBranch":"2268-coverage","message":{"model":"claude-opus-4-8","usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}}' \
     >> "$cov_jsonl"
@@ -958,6 +1041,43 @@ assert_eq "coverage: window.sidecar_present_rate (2/3)" "$EXPECTED_COV_RATE" \
   "$(jq '.window.sidecar_present_rate' <<<"$OUT_COV")"
 
 rm -rf "$COV_ROOT"
+
+# ---------------------------------------------------------------------------
+# Alternation coverage (#2351): every phase skill in the classifier's worker
+# alternation must classify a first-message <command-name> session as "worker".
+# The #2268 cov block above exercises only 3 of the 10; a typo in any of the
+# other 7 skill names would silently misclassify those sessions as "other".
+# ISOLATED fixture: one minimal worker session per skill, each in its own root
+# so the shared totals stay untouched. Keep this list in lockstep with the
+# alternation regex in aggregate-usage.sh's classifier.
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "--- alternation coverage: all 10 phase skills classify as worker (#2351) ---"
+
+for skill in plan-issue implement qa-fix review-fix fix-checks fix-conflicts \
+             qa-main budget-parse-job resolve-epic office-hours; do
+  ALT_ROOT=$(mktemp -d)
+  trap 'rm -rf "$ALT_ROOT"; teardown' EXIT INT TERM
+  alt_worktree="$ALT_ROOT/-home-x-worktrees-2351-alternation"
+  mkdir -p "$alt_worktree"
+  alt_jsonl="$alt_worktree/sess-alt.jsonl"
+  printf '%s\n' "{\"type\":\"user\",\"message\":{\"content\":\"<command-name>/$skill</command-name>\"}}" \
+    >> "$alt_jsonl"
+  printf '%s\n' '{"type":"assistant","attributionSkill":"plan-implement","isSidechain":false,"gitBranch":"2351-alternation","message":{"model":"claude-opus-4-8","usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}}' \
+    >> "$alt_jsonl"
+  jq . "$alt_jsonl" >/dev/null
+  touch "$alt_jsonl"
+
+  OUT_ALT=$(
+    export DISPATCH_AUDIT_PROJECTS_ROOT="$ALT_ROOT"
+    bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
+  )
+  assert_eq "alternation: /$skill session classifies as worker" "worker" \
+    "$(jq -r '[.sessions[]|select(.id=="sess-alt")][0].type' <<<"$OUT_ALT")"
+
+  rm -rf "$ALT_ROOT"
+done
 
 # ---------------------------------------------------------------------------
 # Sidecar-coverage metric, case (c): zero-worker edge (#2268). ISOLATED fixture
@@ -996,6 +1116,44 @@ assert_eq "zero-worker: window.sidecar_present_rate is null (zero denom)" "null"
   "$(jq '.window.sidecar_present_rate' <<<"$OUT_NOWORKER")"
 
 rm -rf "$NOWORKER_ROOT"
+
+# ---------------------------------------------------------------------------
+# Freeform interactive session discriminator (#2351). ISOLATED fixture: a
+# top-level worktree session whose first user message is freeform interactive
+# text (no <command-name> tag) must classify as "other" and must NOT be counted
+# in sidecar_eligible — proving the new alternation does not widen to match
+# arbitrary interactive sessions and inflate sidecar_present_rate.
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "--- freeform interactive session classifies as other, excluded from sidecar_eligible (#2351) ---"
+
+FREEFORM_ROOT=$(mktemp -d)
+trap 'rm -rf "$FREEFORM_ROOT"; teardown' EXIT INT TERM
+freeform_worktree="$FREEFORM_ROOT/-home-x-worktrees-2351-freeform"
+mkdir -p "$freeform_worktree"
+freeform_jsonl="$freeform_worktree/sess-freeform.jsonl"
+
+# line 1: freeform interactive text — no <command-name> tag, must classify as "other"
+printf '%s\n' '{"type":"user","message":{"content":"Can you help me debug this function?"}}' \
+  >> "$freeform_jsonl"
+# line 2: assistant — minimal usage, normal worktree gitBranch
+printf '%s\n' '{"type":"assistant","attributionSkill":"plan-implement","isSidechain":false,"gitBranch":"2351-freeform","message":{"model":"claude-opus-4-8","usage":{"input_tokens":1,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":1}}}' \
+  >> "$freeform_jsonl"
+jq . "$freeform_jsonl" >/dev/null
+touch "$freeform_jsonl"
+
+OUT_FREEFORM=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$FREEFORM_ROOT"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
+)
+
+assert_eq "freeform: session type is other (not worker)" "other" \
+  "$(jq -r '[.sessions[]|select(.id=="sess-freeform")][0].type' <<<"$OUT_FREEFORM")"
+assert_eq "freeform: window.sidecar_eligible == 0 (other session excluded)" "0" \
+  "$(jq '.window.sidecar_eligible' <<<"$OUT_FREEFORM")"
+
+rm -rf "$FREEFORM_ROOT"
 
 report_results
 exit $FAIL

@@ -6,7 +6,7 @@
  */
 import sharp from "sharp";
 import path from "node:path";
-import { BLOG_IMAGES } from "../../blog/src/image-config.ts";
+import { BLOG_IMAGES } from "../../packages/blog/src/image-config.ts";
 
 const ORIGINALS_DIR = path.resolve("fellspiral/originals");
 const PUBLIC_DIR = path.resolve("fellspiral/public");

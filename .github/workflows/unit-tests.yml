@@ -23,6 +23,10 @@ jobs:
       - name: Install nix (if nix files changed)
         if: steps.changes.outputs.nix == 'true'
         uses: DeterminateSystems/nix-installer-action@d96bc962e61b3049ce8128d03d57a1144fa96539 # main
+        with:
+          extra-conf: |
+            http2 = false
+            fallback = true
       - name: Set up Java (if firestore.rules changed)
         if: steps.changes.outputs.rules == 'true'
         uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
@@ -102,6 +106,10 @@ jobs:
       - name: Install nix (if nix files changed)
         if: steps.changes.outputs.nix == 'true'
         uses: DeterminateSystems/nix-installer-action@d96bc962e61b3049ce8128d03d57a1144fa96539 # main
+        with:
+          extra-conf: |
+            http2 = false
+            fallback = true
       - name: Set up Java (if firestore.rules changed)
         if: steps.changes.outputs.rules == 'true'
         uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
@@ -135,6 +143,26 @@ jobs:
         if: steps.changes.outputs.deadcode == 'true'
         run: .claude/skills/dispatch-propagate/scripts/run-dead-code.sh
 
+  storybook-smoke:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          fetch-depth: 0
+      - name: Detect changed file categories
+        id: changes
+        run: .claude/skills/dispatch-propagate/scripts/detect-changes.sh
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: steps.changes.outputs.ds == 'true'
+        with:
+          node-version-file: .node-version
+          cache: 'npm'
+      - name: Run Storybook dev-server smoke test
+        if: steps.changes.outputs.ds == 'true'
+        run: .claude/skills/dispatch-propagate/scripts/run-storybook-smoke.sh
+
   typecheck:
     runs-on: ubuntu-latest
     permissions:
@@ -164,6 +192,8 @@ jobs:
         run: .claude/skills/dispatch-propagate/scripts/test-write-phase-log.sh
       - name: Run prose-rule lint tests
         run: .claude/skills/dispatch-propagate/scripts/test-lint-prose-rules.sh
+      - name: Run ds-drift lint tests
+        run: .claude/skills/dispatch-propagate/scripts/test-lint-ds-drift.sh
       - name: Run worktree-remove hook tests
         run: .claude/hooks/test-worktree-remove.sh
       - name: Run statusline hook tests
@@ -198,6 +228,10 @@ jobs:
       - name: Install nix (only when flake or package-lock changed)
         if: steps.changes.outputs.nix == 'true' || steps.changes.outputs.playwright == 'true'
         uses: DeterminateSystems/nix-installer-action@d96bc962e61b3049ce8128d03d57a1144fa96539 # main
+        with:
+          extra-conf: |
+            http2 = false
+            fallback = true
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         if: steps.changes.outputs.nix == 'true' || steps.changes.outputs.playwright == 'true'
         with:

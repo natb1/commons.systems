@@ -1,0 +1,104 @@
+@import "@commons-systems/ds/tokens/colors.css";
+@import "@commons-systems/ds/tokens/typography.css";
+@import "@commons-systems/ds/tokens/spacing.css";
+@import "@commons-systems/ds/tokens/effects.css";
+@import "@commons-systems/ds/base.css";
+
+:root {
+  --danger: light-dark(#c0392b, #ff6b6b);
+  --ok: light-dark(#2e7d32, #4caf50);
+
+  --line-length: var(--main-max-width);
+
+  /* Apps override on :root to lock a specific scheme (e.g., color-scheme: dark) */
+  color-scheme: light dark;
+}
+
+nav {
+  display: flex;
+  align-items: baseline;
+}
+
+nav > app-nav {
+  flex: 1;
+}
+
+app-nav,
+app-nav .nav-links,
+app-nav .nav-home,
+app-nav .nav-auth {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-4);
+}
+
+app-nav .nav-home:empty {
+  display: none;
+}
+
+/* The first non-empty container after the links starts the right-aligned group.
+   When the home link is present it leads that group (margin-left:auto on
+   .nav-home). When it is absent/empty (display:none, e.g. landing opts out), the
+   auth container leads instead. */
+app-nav > .nav-links + .nav-home:not(:empty) {
+  margin-left: auto;
+}
+app-nav > .nav-links + .nav-home:empty + .nav-auth {
+  margin-left: auto;
+}
+
+app-nav .nav-links:has(a[data-align="end"]) {
+  flex: 1;
+}
+app-nav .nav-links a[data-align="end"] {
+  margin-left: auto;
+}
+
+.auth-toast {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  background: var(--error);
+  color: white;
+  padding: var(--space-2) var(--space-4);
+  text-align: center;
+}
+
+.auth-toast button {
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 1.2em;
+  cursor: pointer;
+  padding: 0 var(--space-1);
+}
+
+.autocomplete-dropdown {
+  position: absolute;
+  z-index: 10;
+  background: var(--surface);
+  border: var(--border-width) solid var(--border);
+  color: var(--fg);
+  max-height: 12rem;
+  overflow-y: auto;
+}
+
+.autocomplete-item {
+  padding: var(--space-1) var(--space-2);
+  cursor: pointer;
+}
+
+.autocomplete-item:hover,
+.autocomplete-item.selected {
+  background: var(--border);
+}
+
+.upload-label {
+  cursor: pointer;
+  text-decoration: underline;
+}
+.upload-label:hover {
+  text-decoration-thickness: 2px;
+}

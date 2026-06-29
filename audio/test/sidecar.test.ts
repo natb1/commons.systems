@@ -1022,6 +1022,27 @@ describe("corrupt sidecar — fail-closed", () => {
     expect(await getPlayerState()).toMatchObject({ queue: ["a.mp3"], positionSeconds: 12 });
   });
 
+  it("corrupt sidecar: all four write entry points are gated (AC4b)", async () => {
+    const { dir, fileHandle } = makePreloadedDir("{not json");
+    setLocalDirectory(dir, true);
+
+    await savePlayerState({ queue: ["a.mp3"], currentLocalName: "a.mp3", positionSeconds: 12 });
+    await cacheMetadata("song.mp3", { tags: { title: "X" }, size: 10, lastModified: 1 });
+    await cacheMetadataBatch({ "a.mp3": { tags: { title: "A" }, size: 1, lastModified: 1 } });
+    await savePlaylist("Favs", ["a.mp3", "b.mp3"]);
+    await flushWrites();
+
+    // No caller wrote — the shared corrupt-dir gate suppressed every write path.
+    expect(fileHandle.createWritable).not.toHaveBeenCalled();
+    // Corrupt bytes on disk are preserved for recovery.
+    expect(fileHandle._state.content).toBe("{not json");
+
+    // In-memory session still works for every caller (the merge applied to an empty model).
+    expect(await getPlayerState()).toMatchObject({ queue: ["a.mp3"], positionSeconds: 12 });
+    expect(await getMetadata("song.mp3")).toBeDefined();
+    expect(await getPlaylists()).toEqual({ Favs: ["a.mp3", "b.mp3"] });
+  });
+
   it("missing sidecar (NotFoundError): savePlayerState DOES write (AC5)", async () => {
     const dir = makeDirWithMissingFile();
     setLocalDirectory(dir, true);
@@ -1032,5 +1053,25 @@ describe("corrupt sidecar — fail-closed", () => {
     const readBack = await readSidecar(dir);
     expect(readBack).not.toBeNull();
     expect(readBack?.playerState).toMatchObject({ queue: ["a.mp3"], positionSeconds: 5 });
+  });
+
+  it("rebinding a clean dir after a corrupt one re-enables disk writes", async () => {
+    // Corrupt folder: writes are suppressed, corrupt bytes preserved.
+    const { dir: corruptDir, fileHandle: corruptFile } = makePreloadedDir("{not json");
+    setLocalDirectory(corruptDir, true);
+    await savePlayerState({ queue: ["x.mp3"], positionSeconds: 1 });
+    await flushWrites();
+    expect(corruptFile._state.content).toBe("{not json");
+    expect(corruptFile.createWritable).not.toHaveBeenCalled();
+
+    // Rebind a clean folder → corrupt flag cleared → writes resume.
+    const cleanDir = makeEmptyDir();
+    setLocalDirectory(cleanDir, true);
+    await savePlayerState({ queue: ["a.mp3"], currentLocalName: "a.mp3", positionSeconds: 12 });
+    await flushWrites();
+
+    const readBack = await readSidecar(cleanDir);
+    if (!readBack) throw new Error("expected non-null sidecar");
+    expect(readBack.playerState).toEqual({ queue: ["a.mp3"], currentLocalName: "a.mp3", positionSeconds: 12 });
   });
 });

@@ -28,6 +28,28 @@ resolve_issue_number() {
   echo "$num"
 }
 
+# Determine whether a repo-relative path is a shell script.
+# Args: $1 = repo-relative path (as produced by git diff --name-only)
+# Returns 0 if the file is a shell script (either by .sh extension or by
+# bash/sh shebang on the first line); returns 1 otherwise.
+# Reads the file via $REPO_ROOT/$1 — REPO_ROOT must be set by the caller.
+# Safe under set -euo pipefail.
+is_shell_script() {
+  local path="$1"
+  # Cheap check: .sh extension — no file read needed.
+  if [[ "$path" == *.sh ]]; then
+    return 0
+  fi
+  local resolved="$REPO_ROOT/$path"
+  [[ -f "$resolved" ]] || return 1
+  local first
+  IFS= read -r first < "$resolved" || true
+  if [[ "$first" =~ ^#!.*/(env[[:space:]]+(-S[[:space:]]+)?)?(ba|z)?sh([[:space:]]|$) ]]; then
+    return 0
+  fi
+  return 1
+}
+
 # Derive and validate owner/repo from a git remote URL.
 # Args: $1 = remote.origin.url value; $2 = caller name (error-message prefix).
 # Resolve owner/repo from the remote so gh addresses the repo independent of cwd
@@ -120,6 +142,115 @@ gh_retry() {
       return "$rc"
     fi
     echo "gh_retry: transient gh failure (attempt $attempt/$attempts), retrying in ${delay}s" >&2
+    sleep "$delay"
+    delay=$(( delay * 2 ))
+  done
+  # Unreachable — the loop returns on every path — but keep the temp file clean.
+  rm -f "$tmpfile"
+  return 1
+}
+
+# Neutralize secrets in firebase-tools --debug output. Reads stdin, writes the
+# redacted stream to stdout. This is the BACKSTOP control — firebase_auth_diagnostic's
+# allowlisted error window is the primary one. Ordering matters and is enforced here:
+#   1. the MULTI-LINE PEM private-key block FIRST — collapse everything from
+#      `-----BEGIN ... PRIVATE KEY-----` through `-----END ... PRIVATE KEY-----`
+#      (inclusive) to a single line via an awk range (a per-line sed cannot span
+#      lines), so the key bytes never reach the line-oriented passes below.
+#   2. single-line passes: `Bearer <token>` BEFORE bare `ya29.` tokens (so a
+#      bearer OAuth token collapses to `Bearer [REDACTED]` rather than leaking a
+#      `Bearer ` prefix), then bare OAuth tokens, JWTs, and keyed JSON / key=value
+#      secret values for access_token/refresh_token/id_token/client_secret/private_key.
+redact_firebase_secrets() {
+  awk '
+    /-----BEGIN [A-Z ]*PRIVATE KEY-----/ { print "[REDACTED PRIVATE KEY]"; inkey=1; next }
+    inkey && /-----END [A-Z ]*PRIVATE KEY-----/ { inkey=0; next }
+    inkey { next }
+    { print }
+  ' \
+  | sed -E \
+      -e 's/[Bb]earer[[:space:]]+[A-Za-z0-9._~+/=-]+/Bearer [REDACTED]/g' \
+      -e 's/ya29\.[A-Za-z0-9._-]+/[REDACTED-TOKEN]/g' \
+      -e 's/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/[REDACTED-JWT]/g' \
+      -e 's/("(access_token|refresh_token|id_token|client_secret|private_key)"[[:space:]]*:[[:space:]]*")[^"]*"/\1[REDACTED]"/g' \
+      -e 's/((access_token|refresh_token|id_token|client_secret|private_key)=)[^[:space:]&]+/\1[REDACTED]/g'
+}
+
+# On the auth-class deploy failure ONLY, run a one-shot NON-json firebase-tools
+# --debug probe to surface the underlying transport/credential error that the
+# --json deploy suppressed (e.g. a node/undici "Premature close" on the OAuth
+# token fetch surfacing as the generic "Failed to authenticate"). Writes a
+# redacted, allowlisted window of the probe output to STDERR. Never leaks
+# secrets: the captured output is first passed through redact_firebase_secrets
+# (backstop), then only a bounded window grep'd around the error signature is
+# emitted (allowlist — the primary control). The diagnostic command defaults to
+# `npx firebase-tools projects:list --debug`; override via env var
+# FIREBASE_AUTH_DIAGNOSTIC_CMD (word-split, for test injection). Runs under
+# `timeout` so a hung probe cannot stall the failure path; the probe's expected
+# non-zero exit is captured and does not trip a caller's `set -e`.
+firebase_auth_diagnostic() {
+  local cmd output rc window
+  read -ra cmd <<< "${FIREBASE_AUTH_DIAGNOSTIC_CMD:-npx firebase-tools projects:list --debug}"
+  echo "=== firebase auth diagnostic (non-json --debug) ===" >&2
+  if output=$(timeout 60 "${cmd[@]}" 2>&1); then
+    rc=0
+  else
+    rc=$?
+  fi
+  window=$(printf '%s\n' "$output" | redact_firebase_secrets \
+    | grep -iE -B1 -A2 'error|premature|invalid response|denied|token|fail' || true)
+  if [[ -z "$window" ]]; then
+    echo "auth diagnostic produced no recognizable error lines (exit $rc); auth may have recovered — original failure possibly transient" >&2
+  else
+    printf '%s\n' "$window" >&2
+  fi
+}
+
+# Run a firebase-tools deploy command, retrying ONLY on the transient auth
+# failure with exponential backoff. Args: the command and its arguments (e.g.
+# `firebase_deploy_retry npx firebase-tools hosting:channel:deploy ...`).
+# Unlike gh_retry, the retryable signature ("Failed to authenticate") arrives on
+# the command's STDOUT (inside the firebase-tools --json payload), not stderr —
+# so classification reads the combined stdout+stderr, and the failure-forward
+# path forwards STDOUT too, keeping the JSON error visible to the caller's
+# downstream preview-URL extraction.
+# On success: prints the command's stdout and returns 0. On a non-auth failure
+# or once attempts are exhausted: forwards the last attempt's stdout to stdout
+# and its stderr to >&2, then returns the command's real exit code (no
+# swallowing — see .claude/rules/code-style.md). Only "Failed to authenticate"
+# is treated as transient — every other failure fails fast.
+# When the FINAL forwarded failure is auth-class (the --json deploy only ever
+# yields the generic "Failed to authenticate"), additionally run
+# firebase_auth_diagnostic to surface the real underlying firebase-tools error
+# on STDERR (#2522). A non-auth failure already carries its real error in stderr
+# and does NOT trigger the probe.
+# Tunables (env): FIREBASE_DEPLOY_RETRY_ATTEMPTS (default 3 = up to 3 attempts),
+# FIREBASE_DEPLOY_RETRY_BASE_DELAY (default 5 seconds).
+firebase_deploy_retry() {
+  local attempts="${FIREBASE_DEPLOY_RETRY_ATTEMPTS:-3}"
+  local delay="${FIREBASE_DEPLOY_RETRY_BASE_DELAY:-5}"
+  local attempt out rc err combined tmpfile
+  tmpfile=$(mktemp) || { echo "error: could not create temp file" >&2; return 1; }
+  for (( attempt=1; attempt<=attempts; attempt++ )); do
+    out=$("$@" 2>"$tmpfile")
+    rc=$?
+    if [[ "$rc" -eq 0 ]]; then
+      printf '%s\n' "$out"
+      rm -f "$tmpfile"
+      return 0
+    fi
+    err=$(cat "$tmpfile")
+    combined="$out"$'\n'"$err"
+    if [[ "$attempt" -ge "$attempts" ]] || [[ "${combined,,}" != *"failed to authenticate"* ]]; then
+      printf '%s\n' "$out"
+      printf '%s' "$err" >&2
+      if [[ "${combined,,}" == *"failed to authenticate"* ]]; then
+        firebase_auth_diagnostic >&2
+      fi
+      rm -f "$tmpfile"
+      return "$rc"
+    fi
+    echo "firebase_deploy_retry: transient auth failure (attempt $attempt/$attempts), retrying in ${delay}s" >&2
     sleep "$delay"
     delay=$(( delay * 2 ))
   done
@@ -471,6 +602,7 @@ DISPATCH_PR_LIST_LIMIT="${DISPATCH_PR_LIST_LIMIT:-300}"
 pr_list_open() {
   local fields="$1"
   local out rc len
+  # lint-allow: gh-rest-porcelain pr_list_open is the canonical open-PR wrapper; predates the list ban, gh_pr_list_rest exists for new code
   out=$(gh pr list --state open --limit "$DISPATCH_PR_LIST_LIMIT" --json "$fields")
   rc=$?
   [[ "$rc" -ne 0 ]] && return "$rc"
@@ -581,8 +713,9 @@ dispatch_classify_rollup() {
   pending=$(printf '%s' "$rollup" | jq '
     map(
       if has("conclusion") then
-        # Check run: pending if status != COMPLETED
-        .status != "COMPLETED"
+        # Check run: pending only if no terminal conclusion yet (a desynced
+        # status=in_progress + non-null conclusion is concluded, not pending) — #2457
+        (.conclusion // "") == "" and .status != "COMPLETED"
       else
         # Status context: pending if state is PENDING or EXPECTED
         (.state == "PENDING" or .state == "EXPECTED")
@@ -753,6 +886,7 @@ gh_issue_view_rest() {
     state: (.state | ascii_upcase),
     stateReason: ((.state_reason // null) | (if . == null then null else ascii_upcase end)),
     createdAt: .created_at,
+    closedAt: .closed_at,
     labels: ((.labels // []) | map({name})),
     assignees: ((.assignees // []) | map({login}))
   }') || return 1
@@ -784,6 +918,125 @@ gh_issue_view_rest() {
   }
 
   jq --argjson comments "$comments" '. + {comments: $comments}' <<<"$projected"
+}
+
+# Resolve a CI run's createdAt and headSha via `gh run view` (porcelain, not
+# gh api). The GitHub Actions API is a separate REST bucket from the core REST
+# bucket used by gh api, so this call does not spend the core rate-limit.
+# Args: $1 = <run-id> (required); --repo owner/repo (optional).
+# Output: {"createdAt":"<iso8601>","headSha":"<sha>"} on stdout.
+gh_run_view_rest() {
+  local id="" repo=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --repo) repo="$2"; shift 2 ;;
+      --*) echo "error: gh_run_view_rest: unknown flag '$1'" >&2; return 1 ;;
+      *)
+        if [[ -z "$id" ]]; then
+          id="$1"; shift 1
+        else
+          echo "error: gh_run_view_rest: unexpected argument '$1'" >&2; return 1
+        fi
+        ;;
+    esac
+  done
+  if [[ -z "$id" ]]; then
+    echo "error: gh_run_view_rest: run id is required" >&2
+    return 1
+  fi
+
+  local cmd=(gh run view "$id" --json createdAt,headSha)
+  [[ -n "$repo" ]] && cmd+=(--repo "$repo")
+
+  local out
+  out=$(gh_retry "${cmd[@]}") || {
+    echo "error: gh_run_view_rest: gh run view failed for run $id" >&2
+    return 1
+  }
+  printf '%s\n' "$out"
+}
+
+# Return the commit SHA that closed an issue, or empty string when the issue
+# was closed manually (no commit). Uses the REST issue timeline endpoint, which
+# is on the core REST rate-limit bucket.
+# Args: $1 = <N> (issue number, required); --repo owner/repo (optional).
+# Output: closing commit SHA on stdout, or empty string when none.
+gh_issue_closing_commit_rest() {
+  local num="" repo=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --repo) repo="$2"; shift 2 ;;
+      --*) echo "error: gh_issue_closing_commit_rest: unknown flag '$1'" >&2; return 1 ;;
+      *)
+        if [[ -z "$num" ]]; then
+          num="$1"; shift 1
+        else
+          echo "error: gh_issue_closing_commit_rest: unexpected argument '$1'" >&2; return 1
+        fi
+        ;;
+    esac
+  done
+  if [[ -z "$num" ]]; then
+    echo "error: gh_issue_closing_commit_rest: issue number is required" >&2
+    return 1
+  fi
+
+  local path
+  if [[ -n "$repo" ]]; then
+    path="repos/$repo/issues/$num/timeline"
+  else
+    path="repos/{owner}/{repo}/issues/$num/timeline"
+  fi
+
+  gh_retry gh api --paginate "$path" \
+    | jq -rs '[.[][] | select(.event=="closed")] | last | .commit_id // empty' || {
+    echo "error: gh_issue_closing_commit_rest: gh api failed for $path" >&2
+    return 1
+  }
+}
+
+# Compare two commits via the GitHub REST compare endpoint and return their
+# relationship. Uses the core REST rate-limit bucket.
+# Args: $1 = <base-commit> (required); $2 = <head-sha> (required);
+#   --repo owner/repo (optional).
+# Output: one of: ahead / identical / behind / diverged on stdout.
+gh_commit_is_ancestor_rest() {
+  local base="" head="" repo=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --repo) repo="$2"; shift 2 ;;
+      --*) echo "error: gh_commit_is_ancestor_rest: unknown flag '$1'" >&2; return 1 ;;
+      *)
+        if [[ -z "$base" ]]; then
+          base="$1"; shift 1
+        elif [[ -z "$head" ]]; then
+          head="$1"; shift 1
+        else
+          echo "error: gh_commit_is_ancestor_rest: unexpected argument '$1'" >&2; return 1
+        fi
+        ;;
+    esac
+  done
+  if [[ -z "$base" ]]; then
+    echo "error: gh_commit_is_ancestor_rest: base commit is required" >&2
+    return 1
+  fi
+  if [[ -z "$head" ]]; then
+    echo "error: gh_commit_is_ancestor_rest: head sha is required" >&2
+    return 1
+  fi
+
+  local path
+  if [[ -n "$repo" ]]; then
+    path="repos/$repo/compare/$base...$head"
+  else
+    path="repos/{owner}/{repo}/compare/$base...$head"
+  fi
+
+  gh_retry gh api "$path" | jq -r '.status' || {
+    echo "error: gh_commit_is_ancestor_rest: gh api failed for $path" >&2
+    return 1
+  }
 }
 
 # REST-backed drop-in for `gh pr view <N> --json
@@ -2559,8 +2812,8 @@ EOF
 
 # Install and activate the durable always-on heartbeat: a `systemd --user`
 # `dispatch-heartbeat.timer` firing `dispatch-heartbeat.service` (a no-arg
-# `dispatch-tick`) on a flat drumbeat — `OnBootSec=2min`,
-# `OnUnitActiveSec=15min`, `Persistent=true`. This gives the autonomous chain a
+# `dispatch-tick`) on a wall-clock schedule — `OnBootSec=2min`,
+# `OnCalendar=*:0/15`, `Persistent=true` (#2375). This gives the autonomous chain a
 # liveness floor that is independent of Stop hooks and reseed timers, so the
 # chain self-recovers from abnormal worker death and post-cap stalls where no
 # Stop hook fires and no reseed is armed (#2022). A flat drumbeat is safe and
@@ -2621,6 +2874,27 @@ cleanup_stale_heartbeat_units() {
   # suppress the failure and warn; never abort the caller.
   echo "WARNING: cleanup_stale_heartbeat_units: installed heartbeat unit points at '$installed_workdir' but current main worktree is '$current_main_worktree'; disabling stale timer/service before rewrite" >&2
   "$systemctl_cmd" --user disable --now dispatch-heartbeat.timer dispatch-heartbeat.service || true
+}
+
+# Returns 0 only when the heartbeat timer is armed with a future trigger
+# (SubState=waiting). 'elapsed' (the #2375 stranded state: active but no future
+# fire), 'dead' (inactive), and any other/unrecognized substate all return
+# non-zero so the caller falls through to repair. SubState is the reliable
+# discriminator: NextElapseUSecRealtime is empty for a healthy monotonic timer
+# too, so parsing it would mis-detect.
+# Args: $1 = systemctl command
+heartbeat_timer_is_armed() {
+  local systemctl_cmd="$1"
+  local substate
+  substate=$("$systemctl_cmd" --user show dispatch-heartbeat.timer \
+    --property=SubState --value 2>/dev/null) || return 1
+  # 'waiting' = a future trigger is armed (healthy). 'elapsed' = the #2375
+  # stranded state (active, no future fire). 'dead' = inactive. Fail-safe:
+  # treat anything that is not explicitly 'waiting' as needing repair, so an
+  # unrecognized substate can never be read as healthy. (A transient
+  # 'running' during a heartbeat fire causes at most one harmless re-arm; the
+  # tick oneshot is fast, so the window is tiny.)
+  [ "$substate" = "waiting" ]
 }
 
 # Best-effort: a failure here must not abort the caller (a tick/reseed
@@ -2701,10 +2975,13 @@ WorkingDirectory=$main_worktree
 EOF
 )
 
-  # Desired timer unit: a flat drumbeat. OnBootSec=2min gives a fast post-boot
-  # tick; OnUnitActiveSec=15min sets the steady-state cadence; Persistent=true
-  # makes a missed firing (host asleep/off at the scheduled time) run on the
-  # next wake instead of being skipped.
+  # Desired timer unit: a wall-clock schedule (#2375). OnCalendar=*:0/15 fires at
+  # :00/:15/:30/:45 regardless of when the service last activated, so the timer
+  # always has a future trigger and can never strand in `active (elapsed)` after a
+  # restart (the failure mode a monotonic OnUnitActiveSec drumbeat fell into).
+  # OnBootSec=2min keeps a fast first post-boot tick; Persistent=true is now
+  # meaningful — it catches up a wall-clock fire missed while the host was
+  # asleep/off; RandomizedDelaySec=30 smooths the post-boot launcher storm.
   local desired_timer
   desired_timer=$(cat <<EOF
 [Unit]
@@ -2712,8 +2989,9 @@ Description=Dispatch chain periodic heartbeat timer (#2022)
 
 [Timer]
 OnBootSec=2min
-OnUnitActiveSec=15min
+OnCalendar=*:0/15
 Persistent=true
+RandomizedDelaySec=30
 
 [Install]
 WantedBy=timers.target
@@ -2721,12 +2999,14 @@ EOF
 )
 
   # Steady-state hot path: if both installed units already match byte-for-byte
-  # AND the timer is active, do nothing — skip the writes, daemon-reload, and
-  # enable entirely. (Like the daemon service, the timer must actually be
-  # RUNNING, so the content compare carries an is-active check.)
+  # AND the timer is armed with a future trigger, do nothing — skip the writes,
+  # daemon-reload, and enable entirely. `is-active` is too weak here: it returns
+  # 0 for an `active (elapsed)` timer (the #2375 stranded state), so a dead timer
+  # would be read as healthy. heartbeat_timer_is_armed requires SubState=waiting,
+  # so an elapsed timer falls through to the repair path below.
   if [ -f "$SERVICE_PATH" ] && [ "$(cat "$SERVICE_PATH")" = "$desired_service" ] \
      && [ -f "$TIMER_PATH" ] && [ "$(cat "$TIMER_PATH")" = "$desired_timer" ] \
-     && "$SYSTEMCTL_CMD" --user is-active --quiet dispatch-heartbeat.timer; then
+     && heartbeat_timer_is_armed "$SYSTEMCTL_CMD"; then
     return 0
   fi
 
@@ -2805,11 +3085,18 @@ EOF
     return 1
   fi
 
-  # Install + activate idempotently: enable symlinks the timer under
-  # WantedBy=timers.target (so it auto-starts on every user-session start) and
-  # --now starts it without restarting an already-running instance.
-  if ! "$SYSTEMCTL_CMD" --user enable --now dispatch-heartbeat.timer; then
-    echo "WARNING: ensure_heartbeat_units: systemctl --user enable --now dispatch-heartbeat.timer failed; periodic heartbeat unavailable" >&2
+  # Install + re-arm idempotently. enable symlinks the timer under
+  # WantedBy=timers.target (so it auto-starts on every user-session start).
+  # `enable --now` is NOT enough to repair a stranded timer: its implicit `start`
+  # is a no-op on an already-active `elapsed` timer, so the next fire is never
+  # recomputed. A separate `restart` re-arms in every case — cold install
+  # (inactive → start) and repair (active-elapsed → recompute next elapse) (#2375).
+  if ! "$SYSTEMCTL_CMD" --user enable dispatch-heartbeat.timer; then
+    echo "WARNING: ensure_heartbeat_units: systemctl --user enable dispatch-heartbeat.timer failed; periodic heartbeat unavailable" >&2
+    return 1
+  fi
+  if ! "$SYSTEMCTL_CMD" --user restart dispatch-heartbeat.timer; then
+    echo "WARNING: ensure_heartbeat_units: systemctl --user restart dispatch-heartbeat.timer failed; periodic heartbeat unavailable" >&2
     return 1
   fi
 }

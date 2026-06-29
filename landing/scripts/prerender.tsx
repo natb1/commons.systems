@@ -10,11 +10,12 @@ import appSeed from "../seeds/firestore.js";
 import { BLOG_ROLL_ENTRIES } from "../src/blog-roll/config.js";
 import {
   ABOUT_PAGE_META,
-  APPS,
+  PROJECTS,
   AUTHOR,
   INFO_PANEL_LINK_SECTIONS,
   NAV_LINKS,
   ORGANIZATION,
+  OVERFLOW_PROJECTS,
   PERSON,
   REL_ME,
   SITE_DEFAULTS,
@@ -74,8 +75,8 @@ try {
     organization: ORGANIZATION,
     author: AUTHOR,
     relMe: REL_ME,
-    softwareApplications: APPS,
-    homeExtraHtml: renderShowcase(APPS),
+    softwareApplications: [...PROJECTS, ...OVERFLOW_PROJECTS],
+    homeExtraHtml: renderShowcase(PROJECTS, OVERFLOW_PROJECTS),
     showHomeLink: false,
   });
 } catch (err) {
