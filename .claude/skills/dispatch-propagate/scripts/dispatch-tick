@@ -173,6 +173,43 @@ else
   MAIN_WORKTREE="$PROJECT_ROOT/worktrees/main"
 fi
 
+# --- Topic-usage daily producer (#2505) -------------------------------------
+# Env-gated, detached, best-effort: launch topic-usage-writer.mjs once per UTC
+# day to write per-topic/per-type token cost to Firestore.  The gate is OFF by
+# default (DISPATCH_TOPIC_USAGE_ENABLED unset or not "1") so existing behaviour
+# is completely unchanged on every normal tick.
+#
+# The producer OWNS sentinel writes; the tick only READS the sentinel to decide
+# whether to launch, avoiding relaunching on every (frequent) tick.
+if [[ "${DISPATCH_TOPIC_USAGE_ENABLED:-}" == "1" ]]; then
+  _TU_GROUP_ID="${DISPATCH_TOPIC_USAGE_GROUP_ID:-}"
+  if [[ -z "$_TU_GROUP_ID" ]]; then
+    echo "dispatch-tick: WARNING: DISPATCH_TOPIC_USAGE_ENABLED=1 but DISPATCH_TOPIC_USAGE_GROUP_ID is unset; skipping topic-usage producer" >&2
+  else
+    _TU_STATE_DIR="${DISPATCH_TOPIC_USAGE_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/dispatch}"
+    _TU_SENTINEL="$_TU_STATE_DIR/topic-usage-${_TU_GROUP_ID}.last-day"
+    _TU_TODAY="$(date -u +%Y-%m-%d)"
+    _TU_ALREADY_RAN=0
+    if [[ -f "$_TU_SENTINEL" ]]; then
+      _TU_LAST="$(cat "$_TU_SENTINEL")"
+      if [[ "$_TU_LAST" == "$_TU_TODAY" ]]; then
+        _TU_ALREADY_RAN=1
+      fi
+    fi
+    if [[ "$_TU_ALREADY_RAN" == "0" ]]; then
+      WRITER="${DISPATCH_TOPIC_USAGE_WRITER:-$SCRIPT_DIR/../../dispatch-token-audit/scripts/topic-usage-writer.mjs}"
+      mkdir -p "$_TU_STATE_DIR" 2>/dev/null || true
+      # Launch detached so the producer survives tick exit and never blocks the
+      # tick (a first-run backfill can take a while).  The subshell form keeps
+      # set -e from aborting on a failing spawn; the || is defensive style since
+      # the subshell exit is always 0 after a successful &-fork.
+      # Errors from node itself are captured in the log, not on the tick's stderr.
+      ( setsid node "$WRITER" >>"$_TU_STATE_DIR/topic-usage-producer.log" 2>&1 </dev/null & ) \
+        || echo "dispatch-tick: WARNING: topic-usage producer launch failed; telemetry tick skipped" >&2
+    fi
+  fi
+fi
+
 # --- Step 0: parse the single optional positional <N> ------------------------
 ARG=""
 MANUAL=""
