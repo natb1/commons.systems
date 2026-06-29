@@ -206,17 +206,19 @@ describe("buildIssueNode", () => {
 });
 
 describe("pruneStaleNodes", () => {
-  it("removes only the issue-leaf files, preserving principle roots and README", () => {
+  it("removes only the issue-leaf files, preserving principle roots, strategy roots, and README", () => {
     const dir = mkdtempSync(join(tmpdir(), "intentions-prune-"));
     // pruneStaleNodes never reads content, so empty stub files suffice.
     writeFileSync(join(dir, "principle-x.md"), "");
     writeFileSync(join(dir, "issue-1.md"), "");
     writeFileSync(join(dir, "README.md"), "");
+    writeFileSync(join(dir, "strategy-y.md"), "");
 
     pruneStaleNodes(dir);
 
     expect(existsSync(join(dir, "principle-x.md"))).toBe(true);
     expect(existsSync(join(dir, "README.md"))).toBe(true);
+    expect(existsSync(join(dir, "strategy-y.md"))).toBe(true);
     expect(existsSync(join(dir, "issue-1.md"))).toBe(false);
   });
 });
