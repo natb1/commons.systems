@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { renderPacePositionPanel } from "../src/pace-position-panel.js";
 import { type UsageSample } from "../src/usage-samples.js";
+import { fractionToWindowDate, formatWindowTick } from "../src/weekly-pace-curve.js";
 
 const baseSample: UsageSample = {
   sampledAt: new Date("2026-06-09T10:00:00Z"),
@@ -52,5 +53,33 @@ describe("renderPacePositionPanel", () => {
     expect(el.querySelector(".chart-scroll-wrapper svg")).not.toBeNull();
     // The PACE heading is present.
     expect(el.querySelector(".capacity-pace-heading")).not.toBeNull();
+  });
+
+  it("labels the x-axis ticks with current-week dates via the exported formatter", () => {
+    const host = withFg();
+    const el = renderPacePositionPanel(oneWeekSamples());
+    host.appendChild(el);
+
+    const weeklyResetsAt = new Date("2026-06-14T00:00:00Z");
+    const expected = [0, 0.25, 0.5, 0.75, 1].map((f) =>
+      formatWindowTick(fractionToWindowDate(f, weeklyResetsAt)),
+    );
+
+    const svg = el.querySelector(".chart-scroll-wrapper svg");
+    expect(svg).not.toBeNull();
+    const tickText = Array.from(svg!.querySelectorAll("text")).map((t) => t.textContent);
+    for (const label of expected) {
+      expect(tickText).toContain(label);
+    }
+  });
+
+  it("shows a caption communicating the current-week-only validity", () => {
+    const host = withFg();
+    const el = renderPacePositionPanel(oneWeekSamples());
+    host.appendChild(el);
+
+    const caption = el.querySelector(".capacity-pace-caption");
+    expect(caption).not.toBeNull();
+    expect(caption!.textContent).toContain("current week");
   });
 });

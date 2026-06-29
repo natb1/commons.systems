@@ -1,7 +1,7 @@
 import * as Plot from "@observablehq/plot";
 import { selectLatestSample, type UsageSample } from "./usage-samples.js";
 import { segmentByWeek, aheadBehindDelta, paceBackdrop } from "./pace-position.js";
-import { elapsedWeekFraction } from "./weekly-pace-curve.js";
+import { elapsedWeekFraction, fractionToWindowDate, formatWindowTick } from "./weekly-pace-curve.js";
 import {
   getThemeFg,
   readChartPalette,
@@ -87,7 +87,13 @@ export function renderPacePositionPanel(samples: UsageSample[]): HTMLElement {
       marginLeft: 0,
       marginRight: MARGIN_RIGHT,
       style: sharedStyle,
-      x: { domain: [0, 1], label: null },
+      x: {
+        domain: [0, 1],
+        label: null,
+        ticks: [0, 0.25, 0.5, 0.75, 1],
+        tickFormat: (f: number) =>
+          formatWindowTick(fractionToWindowDate(f, latest.weeklyResetsAt)),
+      },
       y: { domain: yDomain, label: null, axis: null, grid: true },
       marks: [
         // 1. Backdrop — the fixed W(x) ramp drawn once across x∈[0,1], muted.
@@ -127,7 +133,12 @@ export function renderPacePositionPanel(samples: UsageSample[]): HTMLElement {
     return layout;
   });
 
-  section.append(deltaEl, slot, legend);
+  const caption = document.createElement("p");
+  caption.className = "capacity-pace-caption";
+  caption.textContent =
+    "Dates label the current week; faded prior-week trails keep their shape, not these dates.";
+
+  section.append(deltaEl, slot, legend, caption);
 
   return section;
 }
