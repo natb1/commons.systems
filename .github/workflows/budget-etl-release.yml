@@ -26,7 +26,7 @@ jobs:
         with:
           go-version-file: go.work
       - name: Build binary
-        working-directory: budget-etl
+        working-directory: projects/budget-etl
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
@@ -35,4 +35,4 @@ jobs:
       - name: Attach to release
         uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2.3.2
         with:
-          files: budget-etl/budget-etl-${{ matrix.goos }}-${{ matrix.goarch }}
+          files: projects/budget-etl/budget-etl-${{ matrix.goos }}-${{ matrix.goarch }}

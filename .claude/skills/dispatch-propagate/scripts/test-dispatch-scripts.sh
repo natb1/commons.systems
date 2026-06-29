@@ -8210,6 +8210,114 @@ assert_eq "lookup failure: emits could-not-determine note" "1" \
   "$(grep -c 'could not determine open-blocker status for #42' "$TMPDIR_TEST/oh-stderr.txt")"
 teardown
 
+# OHST24 (#2538). Targeted fresh: two labeled sessionless items (42, older; 99, newer);
+# invoke with N=99 → the selector picks 99, overriding oldest-first order (no-arg
+# would pick 42). Criterion-required: proves single-item mode targets the specified
+# item rather than the queue head.
+echo "Test: targeted fresh N=99 overrides oldest-first; emits office-hours 99 -"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude   # orphan world: no live sessions
+result=$("$TMPDIR_TEST/office-hours-select-target" 99)
+assert_eq "targeted fresh N=99: emits 99 not queue head 42" "office-hours 99 -" "$result"
+teardown
+
+# OHST25 (#2538). Non-queue <N> → `empty not-in-queue <N>`: 777 is not a member of
+# the office-hours queue (only 42 is). Criterion-required: the queue-membership
+# precondition fires before any session query and emits the richer empty verb whose
+# first token is still `empty` (so consumer bucket dispatch is unchanged) but whose
+# trailing `not-in-queue 777` lets the entry script print a precise non-member
+# message instead of the generic queue-empty one.
+echo "Test: non-queue N=777 not in oh-issue-list → empty not-in-queue 777"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude
+result=$("$TMPDIR_TEST/office-hours-select-target" 777)
+assert_eq "non-queue N=777 → empty not-in-queue 777" "empty not-in-queue 777" "$result"
+teardown
+
+# OHST26 (#2538). Targeted idle: 42 has an idle session; invoke with N=42 →
+# the single-item branch routes the attachable disposition correctly and emits
+# `idle s-42-x`. (No-arg mode would also pick 42 as the oldest idle item; this
+# case exercises the idle disposition path through the single-item branch, not
+# targeting-override ordering — that is covered by OHST24.)
+echo "Test: targeted idle N=42 → idle disposition via single-item branch"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+mkdir -p "$TMPDIR_TEST/wt/42-x"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+office_hours_state_fake_claude "42-x:waiting:$TMPDIR_TEST/wt/42-x"
+result=$("$TMPDIR_TEST/office-hours-select-target" 42)
+assert_eq "targeted idle N=42 → idle s-42-x" "idle s-42-x" "$result"
+teardown
+
+# OHST27 (#2538). Targeted working item → empty: 42 has a `working` session (rc 3,
+# busy). Single-item mode collapses rc-3 to empty and never reaches the parked-router
+# block (acceptance criterion #3). DISPATCH_OFFICE_HOURS_MAIN_WORKTREE is set to a
+# controlled path so a parked-router false-match cannot fire. (No-arg mode would also
+# emit empty here for the lone working item; this exercises the rc-3 collapse through
+# the single-item branch.)
+echo "Test: targeted working N=42 → empty (rc-3 collapses; parked-router not reached)"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+office_hours_state_fake_claude "42-x:working"
+result=$("$TMPDIR_TEST/office-hours-select-target" 42)
+assert_eq "targeted working N=42 → empty (single-item mode, no parked-router)" "empty" "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
+# OHST28 (#2538, optional). Targeted resume: 42 is removed but recoverable (stamp
+# sidecar + transcript); its worktree is on disk. Single-item rc-1 → try_emit_resume
+# resolves the stamp and emits `resume`. Mirrors OHST15a exactly; worktree-list
+# carries the real on-disk path so WORKTREE_PATHS_BY_NUM resolves to a real dir.
+echo "Test: targeted resume N=42 — removed + recoverable + on-disk worktree → resume"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+mkdir -p "$TMPDIR_TEST/wt/42-x"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree %s\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  "$TMPDIR_TEST/wt/42-x" > "$STUB_DIR/worktree-list.txt"
+office_hours_state_fake_claude   # empty registry → removed
+export DISPATCH_STAMP_PROJECTS_ROOT="$TMPDIR_TEST/projects"
+mkdir -p "$DISPATCH_STAMP_PROJECTS_ROOT/proj-42"
+printf '%s\n' '{"schema":1,"session_id":"rec-sess-42","repo":"natb1/commons.systems","issue":42,"pr":null,"branch":"42-x","base_sha":"deadbeef","stamped_at":"2026-06-01T10:00:00Z"}' \
+  > "$DISPATCH_STAMP_PROJECTS_ROOT/proj-42/rec-sess-42.dispatch-stamp.json"
+touch "$DISPATCH_STAMP_PROJECTS_ROOT/proj-42/rec-sess-42.jsonl"
+result=$("$TMPDIR_TEST/office-hours-select-target" 42)
+assert_eq "targeted resume N=42: removed + on-disk worktree + transcript → resume in place" "resume 42 rec-sess-42 $TMPDIR_TEST/wt/42-x" "$result"
+unset DISPATCH_STAMP_PROJECTS_ROOT
+teardown
+
+# OHST29 (#2538, criterion #4). Blocker advisory on targeted fresh item: 42 has an
+# open blocker (#2387). Single-item mode still surfaces 42 (stdout unchanged) and
+# emits the blocker advisory on stderr. Mirrors OHST20 on the single-item path.
+echo "Test: targeted fresh N=42 with open blocker → surfaced (stdout) + advisory (stderr)"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf '[{"number":2387,"state":"open"}]\n' > "$STUB_DIR/blockers-42.json"
+select_target_fake_claude
+result=$("$TMPDIR_TEST/office-hours-select-target" 42 2>"$TMPDIR_TEST/oh-stderr.txt")
+assert_eq "targeted blocked N=42: stdout disposition unchanged" "office-hours 42 -" "$result"
+assert_eq "targeted blocked N=42: advisory names #2387" "1" \
+  "$(grep -c '#2387' "$TMPDIR_TEST/oh-stderr.txt")"
+assert_eq "targeted blocked N=42: advisory frames as signal, not a gate" "1" \
+  "$(grep -c 'signal, not a gate' "$TMPDIR_TEST/oh-stderr.txt")"
+teardown
+
 # ============================================================================
 # office-hours (entry point) tests
 # ============================================================================
@@ -8349,6 +8457,21 @@ office_hours_fake_claude   # `[]`: no sessions under main, no parked router
 result=$("$TMPDIR_TEST/office-hours")
 assert_eq "empty queue → queue-empty message, no launch" "office-hours: queue is empty — nothing to resume or start." "$result"
 unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
+# OH4b (#2538). Targeted non-member <N> → the selector emits `empty not-in-queue
+# <N>` and the entry script prints a PRECISE non-member message — NOT the generic
+# queue-empty one — even though the queue has another member (42). This is the
+# end-to-end proof of the code-review fix: a non-member targeted <N> (e.g. a typo)
+# must not be told the queue is empty when other members exist.
+echo "Test: targeted non-member N=777 → not-in-queue message, no launch"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+office_hours_fake_claude
+result=$("$TMPDIR_TEST/office-hours" 777)
+assert_eq "targeted non-member N=777 → not-in-queue message, no launch" \
+  "office-hours: issue #777 is not in the office-hours queue — nothing to resume or start for it." "$result"
 teardown
 
 # OH5. Mixed: an older sessionless item + a newer idle-session item → attach the
@@ -8670,6 +8793,24 @@ assert_eq "primary kick (rc 0, unregistered) carries no --fork-session (no conti
 assert_eq "verify-fail triggers fork retry (rc 0 alone is not enough)" "--bg --name 42-x --permission-mode auto --resume sess-abc --fork-session" "${oh_resume_argv[1]:-}"
 assert_eq "after fork registers, attach by name → j-42-x" "LAUNCH: attach j-42-x" "$result"
 unset OFFICE_HOURS_CLAUDE_CMD CLAUDE_AGENTS_CMD LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
+teardown
+
+# OH14 (#2538). Entry-script N passthrough: two labeled items, both idle (42 older,
+# 99 newer). Without <N>, no-arg mode would attach j-42-x (oldest idle). Passing
+# N=99 causes the entry script to forward 99 to the selector; the selector's
+# single-item mode targets 99-y's idle session, and the entry attaches j-99-y.
+# Proves criterion #1: the entry script correctly passes <N> to the selector.
+echo "Test: entry-script N=99 forwarded to selector; attaches j-99-y not j-42-x"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+mkdir -p "$TMPDIR_TEST/wt/42-x" "$TMPDIR_TEST/wt/99-y"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\nworktree /worktrees/99-y\nHEAD aaa111\nbranch refs/heads/99-y\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+office_hours_state_fake_claude "42-x:waiting:$TMPDIR_TEST/wt/42-x" "99-y:waiting:$TMPDIR_TEST/wt/99-y"
+result=$("$TMPDIR_TEST/office-hours" 99)
+assert_eq "entry N=99 forwarded: attaches j-99-y (not j-42-x, the no-arg head)" "LAUNCH: attach j-99-y" "$result"
 teardown
 
 # ============================================================================
@@ -9814,6 +9955,18 @@ if grep -q 'FBCA04' "$SCRIPT_DIR/dispatch-apply-office-hours"; then
   PASS=$((PASS + 1)); echo "  PASS: dispatch-apply-office-hours owns FBCA04"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: dispatch-apply-office-hours owns FBCA04"
+fi
+
+# Regression guard (#2244): the detached recommend-<N> machinery was removed in
+# favor of the in-session recommend step (see escalation-recommend.md). Assert the
+# script never re-references dispatch-spawn-recommend, so the detached spawn path
+# cannot silently return.
+echo "Test: dispatch-apply-office-hours no longer references dispatch-spawn-recommend"
+TOTAL=$((TOTAL + 1))
+if ! grep -q 'dispatch-spawn-recommend' "$SCRIPT_DIR/dispatch-apply-office-hours"; then
+  PASS=$((PASS + 1)); echo "  PASS: no dispatch-spawn-recommend reference in dispatch-apply-office-hours"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: dispatch-spawn-recommend reference resurfaced in dispatch-apply-office-hours"
 fi
 
 # ============================================================================
@@ -23822,6 +23975,24 @@ exit 0
 FAKE
   chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-self-close"
 
+  # Fake dispatch-check-blockers: the Branch DEF blocked_by gate (#2616). Default
+  # exit 0 (no open blocker). When $STUB_DIR/blockers.txt contains "2", exits 2
+  # and prints a blocked:<nums> line (open blocker present); when it contains "1",
+  # exits 1 (check failed / env error). Only Branch DEF invokes this, so the
+  # default never affects the marker/sentinel tests above (they write no
+  # `deferred` sentinel and skip the branch).
+  cat > "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-check-blockers" <<'FAKE'
+#!/usr/bin/env bash
+mode="0"
+[[ -f "$STUB_DIR/blockers.txt" ]] && mode=$(cat "$STUB_DIR/blockers.txt")
+case "$mode" in
+  2) echo "blocked:9999"; exit 2 ;;
+  1) echo "error: gh/API failure" >&2; exit 1 ;;
+  *) exit 0 ;;
+esac
+FAKE
+  chmod +x "$TMPDIR_TEST/skills/dispatch-propagate/scripts/dispatch-check-blockers"
+
   # Fake dispatch-recover-dispatched-phase: prints $STUB_DIR/dispatched-phase.txt
   # when that file is present and non-empty, exits 0; otherwise exits 1 (no output).
   # The default non-zero exit keeps every existing marker-absent park test unaffected:
@@ -25069,6 +25240,101 @@ if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" \
   PASS=$((PASS + 1)); echo "  PASS: resolved-closed: no label add or remove invoked"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: resolved-closed: no label add or remove invoked"
+fi
+stop_teardown
+
+# --- Test DEF1: deferred sentinel + open blocker → spawn + self-close, no park (#2616)
+# A phase worker that resolved its deviation in-session (linked the missing
+# blocked_by) writes a `deferred` sentinel (no phase-completed marker). Branch DEF
+# verifies the resolving condition — the issue is now blocked_by an OPEN issue
+# (dispatch-check-blockers exit 2) — and on success does NOT apply
+# dispatch:office-hours: it spawns the router (which re-gates on blocked_by) and
+# self-closes. Mirrors Branches P/R. Checked ahead of the PR-centric branches.
+echo "Test: stop hook + deferred sentinel + open blocker → spawn + self-close, no office-hours"
+stop_setup
+echo "2553-page-shell" > "$STUB_DIR/current-branch.txt"
+echo '{"name":"2553-page-shell"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+printf 'resolved: linked blocked_by #2552\n' > "$TMPDIR_TEST/jobs/abcd1234/deferred"
+echo "2" > "$STUB_DIR/blockers.txt"   # open blocker present (exit 2)
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "deferred+blocker: hook exits 0" "0" "$rc"
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "deferred+blocker: spawn invoked exactly once" "1" "$spawn_calls"
+self_close_calls=$(wc -l < "$STUB_DIR/self-close-calls.log" 2>/dev/null || echo 0)
+assert_eq "deferred+blocker: self-close invoked exactly once" "1" "$self_close_calls"
+sweep_calls=$(wc -l < "$STUB_DIR/sweep-calls.log" 2>/dev/null || echo 0)
+assert_eq "deferred+blocker: sweep invoked exactly once" "1" "$sweep_calls"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/apply-office-hours.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: deferred+blocker: no office-hours apply"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: deferred+blocker: no office-hours apply"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" \
+   && ! -e "$STUB_DIR/gh-pr-remove.log" && ! -e "$STUB_DIR/gh-issue-remove.log" \
+   && ! -e "$STUB_DIR/gh-api-delete.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: deferred+blocker: no label add or remove invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: deferred+blocker: no label add or remove invoked"
+fi
+stop_teardown
+
+# --- Test DEF2: deferred sentinel + NO open blocker → office-hours park (fallback) (#2616)
+# The deferred disposition is gated: when no open blocker exists at stop time
+# (dispatch-check-blockers exit 0), Branch DEF FALLS BACK to the office-hours park
+# — fail-safe toward human review rather than a silent skip. It applies
+# dispatch:office-hours (with the deferral reason surfaced) and spawns the router,
+# but does NOT self-close (mirrors Branch A's park).
+echo "Test: stop hook + deferred sentinel + no open blocker → office-hours park (fallback)"
+stop_setup
+echo "2553-page-shell" > "$STUB_DIR/current-branch.txt"
+echo '{"name":"2553-page-shell"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+printf 'resolved: linked blocked_by #2552\n' > "$TMPDIR_TEST/jobs/abcd1234/deferred"
+echo "0" > "$STUB_DIR/blockers.txt"   # no open blocker (exit 0)
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "deferred+no-blocker: hook exits 0" "0" "$rc"
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "deferred+no-blocker: spawn invoked exactly once" "1" "$spawn_calls"
+self_close_calls=$(wc -l < "$STUB_DIR/self-close-calls.log" 2>/dev/null || echo 0)
+assert_eq "deferred+no-blocker: self-close NOT invoked" "0" "$self_close_calls"
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$apply_log" == *"2553"* && "$apply_log" == *"no open blocker"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: deferred+no-blocker: office-hours park applied with fallback reason"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: deferred+no-blocker: office-hours park applied with fallback reason"
+  echo "    apply-office-hours.log: $apply_log"
+fi
+stop_teardown
+
+# --- Test DEF3: deferred sentinel + blocker check FAILS → office-hours park (fallback) (#2616)
+# A gh/API failure in the blocked_by check (dispatch-check-blockers exit 1) is NOT
+# treated as "no blocker" — Branch DEF fails safe to the office-hours park, naming
+# the check failure, rather than self-closing on an unverified condition.
+echo "Test: stop hook + deferred sentinel + blocker check error → office-hours park (fallback)"
+stop_setup
+echo "2553-page-shell" > "$STUB_DIR/current-branch.txt"
+echo '{"name":"2553-page-shell"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+printf 'resolved: linked blocked_by #2552\n' > "$TMPDIR_TEST/jobs/abcd1234/deferred"
+echo "1" > "$STUB_DIR/blockers.txt"   # check failed (exit 1)
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-stop.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "deferred+check-error: hook exits 0" "0" "$rc"
+self_close_calls=$(wc -l < "$STUB_DIR/self-close-calls.log" 2>/dev/null || echo 0)
+assert_eq "deferred+check-error: self-close NOT invoked" "0" "$self_close_calls"
+apply_log=$(cat "$STUB_DIR/apply-office-hours.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$apply_log" == *"could not be performed"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: deferred+check-error: office-hours park applied with check-failed reason"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: deferred+check-error: office-hours park applied with check-failed reason"
+  echo "    apply-office-hours.log: $apply_log"
 fi
 stop_teardown
 
@@ -33960,6 +34226,58 @@ rm -f "$md_file"
 md_park_teardown
 
 echo ""
+echo "=== dispatch-mark-deferred (#2616) ==="
+
+MARK_DEFERRED="$SCRIPT_DIR/dispatch-mark-deferred"
+
+# ----- mark-deferred: writes exact one-line reason to the `deferred` sentinel -----
+# Unlike dispatch-mark-deviation, dispatch-mark-deferred does NOT apply the
+# office-hours park in-session (the Stop hook's Branch DEF owns the blocked_by
+# gate decision), so it needs no synthetic-N git repo and touches no network: it
+# only writes the sentinel.
+mdf_dir=$(mktemp -d)
+if CLAUDE_JOB_DIR="$mdf_dir" "$MARK_DEFERRED" "resolved: linked blocked_by #2552"; then mdf_ec=0; else mdf_ec=$?; fi
+assert_eq "mark-deferred: exit 0 on happy path" "0" "$mdf_ec"
+assert_eq "mark-deferred: writes exact deferred sentinel contents" \
+  "$(printf 'resolved: linked blocked_by #2552\n')" "$(cat "$mdf_dir/deferred")"
+# Must NOT write an office-hours-reason marker (it does not park in-session).
+assert_eq "mark-deferred: writes no office-hours-reason marker" "0" \
+  "$([ -f "$mdf_dir/office-hours-reason" ] && echo 1 || echo 0)"
+rm -rf "$mdf_dir"
+
+# ----- mark-deferred: no arg → exit 2 -----
+mdf_dir=$(mktemp -d)
+if CLAUDE_JOB_DIR="$mdf_dir" "$MARK_DEFERRED" 2>/dev/null; then mdf_ec=0; else mdf_ec=$?; fi
+assert_eq "mark-deferred: no arg exit 2" "2" "$mdf_ec"
+assert_eq "mark-deferred: no arg writes no sentinel" "0" \
+  "$([ -f "$mdf_dir/deferred" ] && echo 1 || echo 0)"
+rm -rf "$mdf_dir"
+
+# ----- mark-deferred: empty-string arg → exit 2 -----
+mdf_dir=$(mktemp -d)
+if CLAUDE_JOB_DIR="$mdf_dir" "$MARK_DEFERRED" "" 2>/dev/null; then mdf_ec=0; else mdf_ec=$?; fi
+assert_eq "mark-deferred: empty arg exit 2" "2" "$mdf_ec"
+rm -rf "$mdf_dir"
+
+# ----- mark-deferred: extra arg → exit 2 -----
+mdf_dir=$(mktemp -d)
+if CLAUDE_JOB_DIR="$mdf_dir" "$MARK_DEFERRED" "r1" "r2" 2>/dev/null; then mdf_ec=0; else mdf_ec=$?; fi
+assert_eq "mark-deferred: extra arg exit 2" "2" "$mdf_ec"
+rm -rf "$mdf_dir"
+
+# ----- mark-deferred: CLAUDE_JOB_DIR unset → exit 0, no sentinel, stderr diagnostic -----
+mdf_err=$( (unset CLAUDE_JOB_DIR; "$MARK_DEFERRED" "reason") 2>&1 1>/dev/null ) && mdf_ec=0 || mdf_ec=$?
+assert_eq "mark-deferred: unset CLAUDE_JOB_DIR exit 0" "0" "$mdf_ec"
+assert_eq "mark-deferred: unset CLAUDE_JOB_DIR emits diagnostic" "1" \
+  "$([ -n "$mdf_err" ] && echo 1 || echo 0)"
+
+# ----- mark-deferred: CLAUDE_JOB_DIR set to a file (not a dir) → exit 0, no write -----
+mdf_file=$(mktemp)
+if CLAUDE_JOB_DIR="$mdf_file" "$MARK_DEFERRED" "reason" 2>/dev/null; then mdf_ec=0; else mdf_ec=$?; fi
+assert_eq "mark-deferred: CLAUDE_JOB_DIR is a file exit 0" "0" "$mdf_ec"
+rm -f "$mdf_file"
+
+echo ""
 echo "=== dispatch-mark-parse-job-done ==="
 
 MARK_PARSE_JOB_DONE="$SCRIPT_DIR/dispatch-mark-parse-job-done"
@@ -35808,6 +36126,29 @@ else
 fi
 rm -rf "$wp_forge"
 
+# marker-in-prose shadow regression (#2244): an EARLIER trusted comment that
+# merely DOCUMENTS the plan marker in its prose (here a recommended-steps comment
+# whose body discusses this very feature) must NOT shadow the real plan. The plan
+# marker is always the writer's FIRST line; with the pre-fix `contains` + `first()`
+# (earliest match) the documenting comment is returned AS the plan — silently
+# feeding dispatch-run-verification the wrong body. First-line `startswith`
+# anchoring returns the real (later) plan instead. This is the exact failure that
+# would defeat restoring a clobbered plan comment.
+jq -nc '[
+  {id:1, body:"<!-- dispatch:recommended-steps -->\n## Recommended\nResume the persisted <!-- dispatch:plan --> via dispatch-read-plan.", user:{id:9001, login:"plan-bot"}},
+  {id:2, body:"<!-- dispatch:plan -->\nREAL PLAN BODY", user:{id:9001, login:"plan-bot"}}
+]' > "$WP_STORE"
+echo 2 > "$WP_COUNTER"
+shadow_out=$(PATH="$wp_root/bin:$SAVED_PATH" "$WP_READ" 7) && shadow_rc=0 || shadow_rc=$?
+assert_eq "read-plan: marker-documenting comment does not shadow the real plan (exit 0)" "0" "$shadow_rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$shadow_out" == *"REAL PLAN BODY"* && "$shadow_out" != *"## Recommended"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: read-plan returns the real plan, not the earlier marker-documenting comment"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: read-plan returns the real plan, not the earlier marker-documenting comment"
+  echo "    actual: '$shadow_out'"
+fi
+
 # Build a bare-repo + worktree fixture whose origin remote is <url>. Creates a
 # temp root with .bare/, seeds one commit on main via a throwaway seed repo,
 # adds a worktree at worktrees/42-foo, and echoes the root path for the caller
@@ -35989,6 +36330,120 @@ else
   echo "    actual: '$(jq -c '.[] | select(.id == 1) | .body' "$wp_two/store.json")'"
 fi
 rm -rf "$wp_two"
+
+# ============================================================================
+# dispatch-write-recommendation tests (#2244)
+# ============================================================================
+echo ""
+echo "=== dispatch-write-recommendation ==="
+#
+# dispatch-write-recommendation is a clone of dispatch-write-plan with the marker
+# swapped to <!-- dispatch:recommended-steps -->. Reuse the same generic `gh api`
+# comment-store emulator (the write-plan fake gh body) over a fresh store, and
+# verify find-or-update (POST then in-place PATCH, no stacking), marker-on-first-
+# line, and the empty-STDIN / bad-arg clear errors (exit 2).
+wr_root=$(mktemp -d)
+mkdir -p "$wr_root/bin"
+WR_STORE="$wr_root/store.json"
+WR_COUNTER="$wr_root/counter"
+echo '[]' > "$WR_STORE"
+echo '0' > "$WR_COUNTER"
+cat > "$wr_root/bin/gh" <<WRGH
+#!/usr/bin/env bash
+set -uo pipefail
+STORE="$WR_STORE"
+COUNTER="$WR_COUNTER"
+WRGH
+# Reuse the generic emulator body from the write-plan fake gh (everything from
+# method="GET" onward) so the two stay byte-identical.
+sed -n '/^method="GET"/,$p' "$wp_root/bin/gh" >> "$wr_root/bin/gh"
+chmod +x "$wr_root/bin/gh"
+bash -n "$wr_root/bin/gh" || { FAIL=$((FAIL + 1)); echo "  FAIL: write-recommendation fake gh is not valid bash"; }
+
+WR_WRITE="$SCRIPT_DIR/dispatch-write-recommendation"
+WR_MARKER='<!-- dispatch:recommended-steps -->'
+# Pin the trusted author id (same env var the writer shares with dispatch-write-plan)
+# so the fake-gh-stamped author (9001) matches the author-filtered find scan.
+export DISPATCH_PLAN_AUTHOR_ID=9001
+
+# 1. POST-creates: empty store → one comment carrying the marker + REC A.
+if ! PATH="$wr_root/bin:$SAVED_PATH" "$WR_WRITE" 7 <<<"REC A"; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: write-recommendation (test 1) failed unexpectedly"
+fi
+assert_eq "write-recommendation: one comment after first write" "1" "$(jq 'length' "$WR_STORE")"
+TOTAL=$((TOTAL + 1))
+if jq -e --arg m "$WR_MARKER" '.[0].body | contains($m) and contains("REC A")' "$WR_STORE" >/dev/null; then
+  PASS=$((PASS + 1)); echo "  PASS: first comment carries the recommended-steps marker and REC A"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: first comment carries the recommended-steps marker and REC A"
+fi
+
+# 2. marker is the first line of the body.
+TOTAL=$((TOTAL + 1))
+wr_first_line=$(jq -r '.[0].body' "$WR_STORE" | head -1)
+if [[ "$wr_first_line" == "$WR_MARKER" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: the marker is the first line of the comment body"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: the marker is the first line of the comment body"
+  echo "    actual: '$wr_first_line'"
+fi
+
+# 3. PATCH-in-place: re-run updates the same comment; still exactly one comment.
+if ! PATH="$wr_root/bin:$SAVED_PATH" "$WR_WRITE" 7 <<<"REC B"; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: write-recommendation (test 3) failed unexpectedly"
+fi
+assert_eq "write-recommendation: still one comment after update" "1" "$(jq 'length' "$WR_STORE")"
+TOTAL=$((TOTAL + 1))
+if jq -e '.[0].body | contains("REC B") and (contains("REC A") | not)' "$WR_STORE" >/dev/null; then
+  PASS=$((PASS + 1)); echo "  PASS: update replaces REC A with REC B in place (no stacking)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: update replaces REC A with REC B in place (no stacking)"
+fi
+
+# 4. empty STDIN → clear error, exit 2.
+if PATH="$wr_root/bin:$SAVED_PATH" "$WR_WRITE" 7 </dev/null 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "write-recommendation: empty STDIN exits 2" "2" "$rc"
+
+# 5. non-numeric (flag-like) arg → clear error, exit 2.
+if PATH="$wr_root/bin:$SAVED_PATH" "$WR_WRITE" "--repo other/repo" <<<"REC" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "write-recommendation: non-numeric arg exits 2" "2" "$rc"
+
+# 6. missing arg → clear error, exit 2.
+if PATH="$wr_root/bin:$SAVED_PATH" "$WR_WRITE" <<<"REC" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "write-recommendation: missing arg exits 2" "2" "$rc"
+
+# 7. marker-in-prose regression (#2244): a DIFFERENT comment that merely DOCUMENTS
+#    the recommended-steps marker in its prose (here a dispatch:plan comment whose
+#    body describes the marker) must NOT be matched and overwritten in place. The
+#    writer must POST a fresh comment, not PATCH the documenting one. This guards
+#    the first-line (startswith) anchoring against the substring-`contains` find
+#    that clobbered the #2244 plan comment. Against the pre-fix `contains` predicate
+#    this seeds length 1 → PATCH → stays length 1 (clobbered); the fix POSTs → 2.
+jq -nc --arg rm "$WR_MARKER" \
+  '[{id:1, body:("<!-- dispatch:plan -->\n## Plan\nUnit 1 clones the writer with the marker " + $rm + " (collision-free)."), user:{id:9001, login:"plan-bot"}}]' \
+  > "$WR_STORE"
+echo 1 > "$WR_COUNTER"
+if ! PATH="$wr_root/bin:$SAVED_PATH" "$WR_WRITE" 7 <<<"FRESH REC"; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: write-recommendation (marker-in-prose) failed unexpectedly"
+fi
+assert_eq "write-recommendation: documenting comment NOT clobbered (store grows to 2)" \
+  "2" "$(jq 'length' "$WR_STORE")"
+TOTAL=$((TOTAL + 1))
+if jq -e '.[] | select(.id==1) | .body | startswith("<!-- dispatch:plan -->")' "$WR_STORE" >/dev/null \
+   && jq -e '.[] | select(.id==1) | .body | contains("Unit 1 clones")' "$WR_STORE" >/dev/null; then
+  PASS=$((PASS + 1)); echo "  PASS: the dispatch:plan comment is left intact (not overwritten)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: the dispatch:plan comment is left intact (not overwritten)"
+fi
+TOTAL=$((TOTAL + 1))
+if jq -e --arg m "$WR_MARKER" '.[] | select(.body|startswith($m)) | select(.body|contains("FRESH REC"))' "$WR_STORE" >/dev/null; then
+  PASS=$((PASS + 1)); echo "  PASS: a fresh recommended-steps comment was POSTed alongside it"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: a fresh recommended-steps comment was POSTed alongside it"
+fi
+
+unset DISPATCH_PLAN_AUTHOR_ID
+rm -rf "$wr_root"
 
 rm -rf "$wp_root"
 unset DISPATCH_PLAN_AUTHOR_ID

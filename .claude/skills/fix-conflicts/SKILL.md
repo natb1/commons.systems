@@ -233,8 +233,10 @@ hook's Branch B advances the chain.
 
 ### 7. `ambiguous <reason>` — restore the tree, skip the marker, escalate
 
-The conflict needs human judgment. Restore the clean tree and write the
-office-hours reason — but **skip the phase-completed marker**:
+The conflict needs human judgment. This is a deliberate office-hours park: before
+the `dispatch-mark-deviation` call below, perform the in-session recommend step —
+see `.claude/skills/dispatch-propagate/escalation-recommend.md`. Restore the clean
+tree and write the office-hours reason — but **skip the phase-completed marker**:
 
 ```bash
 git merge --abort

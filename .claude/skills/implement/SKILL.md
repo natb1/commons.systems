@@ -122,6 +122,11 @@ Route on `rc`:
 final action is a call to `dispatch-mark-complete` (no deviation) or
 `dispatch-mark-deviation` (deviation). This is the single named exit.
 
+Whenever the terminal action is a deliberate office-hours park
+(`dispatch-mark-deviation`), perform the in-session recommend step BEFORE that
+call — see `.claude/skills/dispatch-propagate/escalation-recommend.md`. This
+applies to every `dispatch-mark-deviation` site in this skill.
+
 - Any OTHER most-recent tool call — a unit finishing in Step 2, a verification
   run in Step 3, the draft PR opening in Step 4 — means the orchestrator is
   mid-loop, not done.

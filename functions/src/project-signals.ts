@@ -81,7 +81,11 @@
 //      on your Firebase CLI version):
 //        PROJECT_SIGNALS_GITHUB_REPO          — "owner/name" of the repo to track
 //        GOOGLE_ANALYTICS_CLIENT_ID           — OAuth client ID from step 2
-//        PROJECT_SIGNALS_GA4_PROPERTY_IDS     — "app:propertyId,app:propertyId,..."
+//        PROJECT_SIGNALS_GA4_PROPERTY_ID      — the single numeric GA4 property id
+//        PROJECT_SIGNALS_GA4_HOST_APPS        — "host:app,host:app,..." mapping each
+//                                               web-stream hostName to an app label
+//                                               (e.g. commons.systems:commons,
+//                                               budget.commons.systems:budget)
 //        PROJECT_SIGNALS_GSC_SITE             — defaults to "sc-domain:commons.systems"
 //                                               (covers all commons.systems subdomains;
 //                                               one site config suffices for the whole
@@ -128,7 +132,8 @@ const GITHUB_REPO = defineString("PROJECT_SIGNALS_GITHUB_REPO"); // owner/name; 
 const GA4_CLIENT_SECRET = defineSecret("GOOGLE_ANALYTICS_CLIENT_SECRET");
 const GA4_REFRESH_TOKEN = defineSecret("GOOGLE_ANALYTICS_REFRESH_TOKEN");
 const GA4_CLIENT_ID = defineString("GOOGLE_ANALYTICS_CLIENT_ID");
-const GA4_PROPERTY_IDS = defineString("PROJECT_SIGNALS_GA4_PROPERTY_IDS"); // "app:propertyId,app:propertyId,..."
+const GA4_PROPERTY_ID = defineString("PROJECT_SIGNALS_GA4_PROPERTY_ID"); // single numeric GA4 property id
+const GA4_HOST_APPS = defineString("PROJECT_SIGNALS_GA4_HOST_APPS"); // "host:app,host:app,..." (e.g. commons.systems:commons,budget.commons.systems:budget)
 const GSC_SITE = defineString("PROJECT_SIGNALS_GSC_SITE", { default: "sc-domain:commons.systems" });
 
 // PSI. Keyless by default; the key only raises the rate limit.
@@ -154,7 +159,7 @@ export interface ProjectSignalsSnapshot {
   groupId: string; // required
   memberEmails: string[]; // required; denormalized auth field the rules read
   github?: GithubSignals;
-  ga4?: Ga4AppSignals[]; // per app (app:propertyId config pairs)
+  ga4?: Ga4AppSignals[]; // per configured host (one property, split by hostName)
   gsc?: GscSignals; // single site
   psi?: PsiUrlSignals[]; // per deployed-app URL
 }
@@ -355,15 +360,28 @@ interface Ga4RunReportResponse {
 }
 
 // Posts the three stable GA4 runReport queries (overview, referral sources,
-// landing pages) for one property and parses them. Mirrors fetch-analytics.sh
+// landing pages) for ONE property and splits each by the `hostName` dimension,
+// emitting one Ga4AppSignals row per configured host. Mirrors fetch-analytics.sh
 // Step 3 (a)/(b)/(c); the web-vitals query (d) is intentionally not run, so
-// webVitals is always []. `app`/`propertyId` are pre-validated by the caller.
+// webVitals is always [].
+//
+// GA4's runReport is property-scoped (there is no stream-scoped report endpoint),
+// so a single property aggregates every app subdomain. Adding `hostName` as the
+// first dimension lets the report partition by host server-side: each host's
+// pageViews/sessions/bounceRate come straight from its own overview row (NEVER
+// averaged across hosts). For the referral/landing top-N, `hostName` first means
+// a query `limit` would cap TOTAL rows and `orderBys` would sort globally — so we
+// DROP the small per-query limit and instead group rows by host, then slice the
+// first 10 per host. Because the global order is sessions-desc, those first 10
+// rows for each host ARE that host's top-10. `propertyId` is pre-validated by the
+// caller; `hostApps` carries the host→app label map (a host absent from it is
+// dropped — it has no app label).
 export async function fetchGa4Live(
   fetchFn: FetchFn,
   accessToken: string,
-  app: string,
   propertyId: string,
-): Promise<Ga4AppSignals> {
+  hostApps: Array<{ host: string; app: string }>,
+): Promise<Ga4AppSignals[]> {
   const url = `https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`;
   const runReport = async (reportBody: Record<string, unknown>): Promise<Ga4RunReportResponse> => {
     const res = await fetchFn(url, {
@@ -376,7 +394,9 @@ export async function fetchGa4Live(
     });
     if (!res.ok) {
       const text = await res.text();
-      throw new Error(`GA4 runReport failed for ${app}: ${res.status} ${truncateForLog(text)}`);
+      throw new Error(
+        `GA4 runReport failed for property ${propertyId}: ${res.status} ${truncateForLog(text)}`,
+      );
     }
     return (await res.json()) as Ga4RunReportResponse; // type-safety-ok: cast matches documented GA4 runReport schema
   };
@@ -386,49 +406,82 @@ export async function fetchGa4Live(
     return Number.isFinite(n) ? n : 0;
   };
 
-  // (a) Overview: page views, sessions, bounce rate (30-day window).
-  const overview = await runReport({
-    dateRanges: [GA4_WINDOW],
-    metrics: [{ name: "screenPageViews" }, { name: "sessions" }, { name: "bounceRate" }],
-  });
-  const ov = overview.rows?.[0]?.metricValues ?? [];
+  // The three reports POST to the same GA4 endpoint and are fully independent,
+  // so run them in parallel (mirrors the GitHub traffic-endpoint pattern above)
+  // to avoid tripling latency in a timeout-bound Function.
+  const [overview, referral, landing] = await Promise.all([
+    // (a) Overview per host: page views, sessions, bounce rate (30-day window).
+    // GA4 returns one row per host; take each host's value DIRECTLY.
+    runReport({
+      dateRanges: [GA4_WINDOW],
+      dimensions: [{ name: "hostName" }],
+      metrics: [{ name: "screenPageViews" }, { name: "sessions" }, { name: "bounceRate" }],
+    }),
+    // (b) Referral sources by host. No `limit` (global sessions-desc order),
+    // grouped by host then sliced to top-10 per host below.
+    runReport({
+      dateRanges: [GA4_WINDOW],
+      dimensions: [{ name: "hostName" }, { name: "sessionSource" }],
+      metrics: [{ name: "sessions" }],
+      orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
+    }),
+    // (c) Landing-page performance by host. Same no-limit, group-then-slice posture.
+    runReport({
+      dateRanges: [GA4_WINDOW],
+      dimensions: [{ name: "hostName" }, { name: "landingPage" }],
+      metrics: [{ name: "sessions" }, { name: "screenPageViews" }],
+      orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
+    }),
+  ]);
 
-  // (b) Top-10 referral sources by sessions.
-  const referral = await runReport({
-    dateRanges: [GA4_WINDOW],
-    dimensions: [{ name: "sessionSource" }],
-    metrics: [{ name: "sessions" }],
-    orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
-    limit: 10,
-  });
-  const topReferralSources = (referral.rows ?? []).map((r) => ({
-    source: r.dimensionValues?.[0]?.value ?? "",
-    sessions: num(r.metricValues?.[0]?.value),
-  }));
+  const overviewByHost = new Map<string, { pageViews: number; sessions: number; bounceRate: number }>();
+  for (const r of overview.rows ?? []) {
+    const host = r.dimensionValues?.[0]?.value ?? "";
+    const m = r.metricValues ?? [];
+    overviewByHost.set(host, {
+      pageViews: num(m[0]?.value),
+      sessions: num(m[1]?.value),
+      bounceRate: num(m[2]?.value),
+    });
+  }
 
-  // (c) Landing-page performance.
-  const landing = await runReport({
-    dateRanges: [GA4_WINDOW],
-    dimensions: [{ name: "landingPage" }],
-    metrics: [{ name: "sessions" }, { name: "screenPageViews" }],
-    orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
-    limit: 10,
-  });
-  const topLandingPages = (landing.rows ?? []).map((r) => ({
-    page: r.dimensionValues?.[0]?.value ?? "",
-    sessions: num(r.metricValues?.[0]?.value),
-    views: num(r.metricValues?.[1]?.value),
-  }));
+  const referralByHost = new Map<string, Array<{ source: string; sessions: number }>>();
+  for (const r of referral.rows ?? []) {
+    const host = r.dimensionValues?.[0]?.value ?? "";
+    const arr = referralByHost.get(host) ?? [];
+    arr.push({
+      source: r.dimensionValues?.[1]?.value ?? "",
+      sessions: num(r.metricValues?.[0]?.value),
+    });
+    referralByHost.set(host, arr);
+  }
 
-  return {
-    app,
-    pageViews: num(ov[0]?.value),
-    sessions: num(ov[1]?.value),
-    bounceRate: num(ov[2]?.value),
-    topReferralSources,
-    topLandingPages,
-    webVitals: [],
-  };
+  const landingByHost = new Map<string, Array<{ page: string; sessions: number; views: number }>>();
+  for (const r of landing.rows ?? []) {
+    const host = r.dimensionValues?.[0]?.value ?? "";
+    const arr = landingByHost.get(host) ?? [];
+    arr.push({
+      page: r.dimensionValues?.[1]?.value ?? "",
+      sessions: num(r.metricValues?.[0]?.value),
+      views: num(r.metricValues?.[1]?.value),
+    });
+    landingByHost.set(host, arr);
+  }
+
+  // One entry per configured host, in hostApps order. A host that produced no
+  // data defaults to 0 metrics and empty top-N arrays.
+  return hostApps.map(({ host, app }) => {
+    const ov = overviewByHost.get(host);
+    return {
+      app,
+      pageViews: ov?.pageViews ?? 0,
+      sessions: ov?.sessions ?? 0,
+      bounceRate: ov?.bounceRate ?? 0,
+      topReferralSources: (referralByHost.get(host) ?? []).slice(0, 10),
+      topLandingPages: (landingByHost.get(host) ?? []).slice(0, 10),
+      webVitals: [],
+    };
+  });
 }
 
 interface GscQueryResponse {
@@ -751,7 +804,8 @@ export const collectProjectSignals = onSchedule(
     const ga4ClientId = GA4_CLIENT_ID.value();
     const ga4ClientSecret = GA4_CLIENT_SECRET.value();
     const ga4RefreshToken = GA4_REFRESH_TOKEN.value();
-    const ga4PropertyIds = GA4_PROPERTY_IDS.value();
+    const ga4PropertyId = GA4_PROPERTY_ID.value();
+    const ga4HostApps = parseGa4HostApps(GA4_HOST_APPS.value());
     const gscSite = GSC_SITE.value();
     if (!ga4ClientId || !ga4ClientSecret || !ga4RefreshToken) {
       console.log("collectProjectSignals: skipping ga4+gsc: Google OAuth not configured");
@@ -770,13 +824,14 @@ export const collectProjectSignals = onSchedule(
         return tokenPromise;
       };
 
-      const ga4Pairs = parseGa4Pairs(ga4PropertyIds);
-      if (ga4Pairs.length === 0) {
-        console.log("collectProjectSignals: skipping ga4: no valid app:propertyId pairs configured");
+      if (!/^\d+$/.test(ga4PropertyId)) {
+        console.log("collectProjectSignals: skipping ga4: missing/invalid PROJECT_SIGNALS_GA4_PROPERTY_ID");
+      } else if (ga4HostApps.length === 0) {
+        console.log("collectProjectSignals: skipping ga4: no valid host:app entries configured");
       } else {
         fetchGa4 = async (): Promise<Ga4AppSignals[]> => {
           const token = await googleToken();
-          return Promise.all(ga4Pairs.map((p) => fetchGa4Live(fetchFn, token, p.app, p.propertyId)));
+          return fetchGa4Live(fetchFn, token, ga4PropertyId, ga4HostApps);
         };
       }
 
@@ -868,22 +923,23 @@ export function isValidPsiUrl(url: string): boolean {
   return HTTPS_URL_RE.test(url);
 }
 
-// Parses "app:propertyId,app:propertyId,..." into validated pairs. An app name
-// must match [A-Za-z0-9_-]+ (echoed into a header), a property id must be numeric
-// (interpolated into a URL path). Invalid pairs are dropped. Mirrors
-// fetch-analytics.sh lines 120-140.
-export function parseGa4Pairs(raw: string): Array<{ app: string; propertyId: string }> {
+// Parses "host:app,host:app,..." into validated host→app entries. NOTE the order:
+// host is on the LEFT (matched against the GA4 `hostName` dimension; may contain
+// dots), app is on the RIGHT (the emitted label). Each entry is split on the
+// FIRST `:`. A host must match [A-Za-z0-9.-]+, an app must match [A-Za-z0-9_-]+;
+// malformed entries are dropped (same drop-invalid posture as the old pair parse).
+export function parseGa4HostApps(raw: string): Array<{ host: string; app: string }> {
   return raw
     .split(",")
     .map((s) => s.trim())
     .filter((s) => s.length > 0)
-    .map((pair) => {
-      const idx = pair.indexOf(":");
+    .map((entry) => {
+      const idx = entry.indexOf(":");
       if (idx <= 0) return null;
-      const app = pair.slice(0, idx);
-      const propertyId = pair.slice(idx + 1);
-      if (!/^[A-Za-z0-9_-]+$/.test(app) || !/^\d+$/.test(propertyId)) return null;
-      return { app, propertyId };
+      const host = entry.slice(0, idx);
+      const app = entry.slice(idx + 1);
+      if (!/^[A-Za-z0-9.-]+$/.test(host) || !/^[A-Za-z0-9_-]+$/.test(app)) return null;
+      return { host, app };
     })
-    .filter((p): p is { app: string; propertyId: string } => p !== null);
+    .filter((p): p is { host: string; app: string } => p !== null);
 }
