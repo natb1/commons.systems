@@ -59,6 +59,26 @@ export function elapsedWeekFraction(sampledAt: Date, weeklyResetsAt: Date): numb
 }
 
 /**
+ * The wall-clock date a fraction `f ∈ [0, 1]` of the weekly window maps to,
+ * given the window resets at `weeklyResetsAt`. The conceptual inverse of
+ * `elapsedWeekFraction`: `f = 0` is one full week before the reset
+ * (`weeklyResetsAt − 7d`), `f = 1` is the reset itself. Pure — no `Date.now()`.
+ */
+export function fractionToWindowDate(fraction: number, weeklyResetsAt: Date): Date {
+  return new Date(weeklyResetsAt.getTime() - (1 - fraction) * WEEK_SECONDS * 1000);
+}
+
+/**
+ * A compact tick label for a date within the current weekly window: weekday +
+ * hour, e.g. "Thu 9 AM". The single exported producer of x-axis tick labels —
+ * the PACE panel wires it into `tickFormat` and the panel test compares against
+ * it, so the test stays deterministic without pinning `TZ`.
+ */
+export function formatWindowTick(date: Date): string {
+  return new Intl.DateTimeFormat(undefined, { weekday: "short", hour: "numeric" }).format(date);
+}
+
+/**
  * The pace curve W(x) as a pure function of the elapsed-week fraction
  * `x ∈ [0, 1]`. Mirrors the awk `W_of` anchored floor→shoulder→terminal curve:
  *   r = (1 - x) * T  (remaining 5-hour windows)
