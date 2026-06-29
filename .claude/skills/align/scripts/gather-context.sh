@@ -41,9 +41,19 @@ sensor_principle_roots() {
   fi
 }
 
-sensor_roadmap() {
-  echo "=== ROADMAP.md ==="
-  cat ROADMAP.md
+sensor_strategy_roots() {
+  echo "=== Intention graph: strategy roots ==="
+  if ls intentions/strategy-*.md 1>/dev/null 2>&1; then
+    cat intentions/strategy-*.md
+  else
+    echo "(no strategy roots found)"
+  fi
+}
+
+sensor_active_frontier() {
+  echo "=== Active frontier (generated from the intention graph) ==="
+  npx tsx intentionsutil/scripts/frontier-view.ts \
+    || echo "(frontier-view failed; active frontier context unavailable)" >&2
 }
 
 sensor_readme() {
@@ -88,7 +98,9 @@ external_sensor_psi() {
 {
 sensor_principle_roots
 echo ""
-sensor_roadmap
+sensor_strategy_roots
+echo ""
+sensor_active_frontier
 echo ""
 sensor_readme
 echo ""
