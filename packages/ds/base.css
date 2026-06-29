@@ -16,7 +16,7 @@ body {
 }
 
 .page {
-  max-width: var(--max-width-wide);
+  max-width: var(--main-max-width);
   margin: 0 auto;
   padding-inline: var(--space-4);
 }
@@ -91,180 +91,82 @@ main {
 /* Landing template — the landing project's page shell: a stacked header
    (wordmark, tagline, nav row), an amber hero band over a card grid, and a
    responsive two-column body whose context panel is sticky on the wide layout
-   and a toggle-collapsible overlay below it. Most region looks are inline in
-   Landing.tsx; the structural grid, sticky pinning, breakpoint-conditional
-   collapse, and the custom scroll indicator (which needs media queries and a
-   body-level track) live here. Ported from the landing project's
-   default.css / layout.css / theme.css. */
+   and a toggle-collapsible overlay below it. The structural shell now uses the
+   canonical .content-grid / .sidebar / .panel-toggle contract from ds
+   layout.css; most region looks are inline in Landing.tsx. What remains here is
+   only the set of .cs-landing-scoped deltas needed to reproduce the original
+   Landing render on top of the canonical rules. Ported from the landing
+   project's default.css / layout.css / theme.css. */
 
-/* Header — wordmark and tagline stacked above the nav row. */
-.cs-landing__title {
-  font-size: var(--text-display);
-  margin-block: 0 var(--space-1);
+/* Width: the original Landing shell was the wide 68rem page. .page now reads
+   --main-max-width (default 48rem), so restore the wide width here. This is the
+   single most load-bearing override — without it Landing drops to 48rem. */
+.cs-landing {
+  --main-max-width: var(--max-width-wide);
 }
 
-.cs-landing__tagline {
-  color: var(--muted);
-  margin-block: 0 var(--space-2);
-  font-size: clamp(0.9rem, 2.5vw, 1.05rem);
+/* Body grid deltas vs canonical .content-grid:
+   - align-items: start — canonical dropped the align-items the original grid had.
+   - contain: none — canonical sets `contain: layout style`, which makes the grid
+     a containing block for the absolute .sidebar regardless of its `position`.
+     The original grid had no containment, so the narrow overlay anchored to the
+     wrapper, not the grid. Neutralize it to keep that behavior (and to match the
+     original's lack of an extra stacking/formatting context at any width). */
+.cs-landing .content-grid {
+  align-items: start;
+  contain: none;
 }
 
-/* Panel toggle — a right-aligned icon button in the nav, mobile-only. */
-.cs-landing__panel-toggle {
-  background: none;
-  border: var(--border-width) solid var(--border);
-  color: var(--fg);
-  cursor: pointer;
-  font-size: 1rem;
-  padding: 0.2rem var(--space-2);
-  transition: transform var(--duration-base) var(--ease);
-}
-
-.cs-landing__panel-toggle[aria-expanded="true"] {
-  transform: rotate(180deg);
-}
-
-/* Hero — a full-width band between the sticky header and the content grid, so
-   the sticky panel begins after the hero. */
-.cs-landing__hero {
-  margin-block: var(--space-8);
-}
-
-.cs-landing__hero-band {
-  background: var(--accent);
-  color: var(--bg);
-  padding: var(--space-5) var(--space-6);
-  margin-block-end: var(--space-6);
-  text-align: center;
-}
-
-.cs-landing__hero-headline {
-  margin: 0;
-  font-weight: var(--weight-bold);
-  font-size: clamp(1.1rem, 3vw, 1.5rem);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-heading);
-}
-
-.cs-landing__hero-subline {
-  margin: var(--space-1) 0 0;
-  font-size: clamp(0.85rem, 2.2vw, 1rem);
-  opacity: 0.9;
-}
-
-.cs-landing__hero-cta {
-  margin: var(--space-1) 0 0;
-  font-size: clamp(0.85rem, 2.2vw, 1rem);
-}
-
-.cs-landing__hero-cta a {
-  color: inherit;
-  text-decoration: underline;
-}
-
-.cs-landing__hero-cta span {
-  opacity: 0.6;
-}
-
-.cs-landing__hero-grid {
+/* Hero card grid — Landing-specific, has a breakpoint, so it stays a class.
+   Note the 768px max-width breakpoint, distinct from the 767px shell breakpoint. */
+.cs-landing .hero-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--space-4);
 }
 
-.cs-landing__app-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.cs-landing__app-name {
-  font-weight: var(--weight-bold);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-heading);
-}
-
-.cs-landing__app-problem {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.9rem;
-  line-height: 1.4;
-}
-
-/* Body grid. */
-.cs-landing__grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--space-6);
-  align-items: start;
-}
-
-.cs-landing__cc-badge {
-  width: 117px;
-  height: 41px;
-  vertical-align: middle;
-}
-
-/* Native scrollbar color — match the landing project, whose CSS framework
-   paints every scrollable element with a thin accent-colored bar over a
-   transparent track. The landing project relies on the native scrollbar (it
-   ships no custom indicator), so the panel does the same. */
-.cs-landing__panel {
-  scrollbar-color: var(--accent) transparent;
-  scrollbar-width: thin;
-}
-
-@media (min-width: 768px) {
-  .cs-landing__grid {
-    grid-template-columns: 1fr var(--sidebar-width, 16rem);
-  }
-
-  /* Pin the panel below the sticky header (its ~2×space-4 block padding plus a
-     gap), and cap its height so a tall panel scrolls on its own. */
-  .cs-landing__panel {
-    position: sticky;
-    top: calc(var(--space-12) + var(--space-4));
-    align-self: start;
-    max-height: calc(100vh - var(--space-16) - var(--space-8));
-    overflow-y: auto;
-  }
-
-  /* The toggle is mobile-only chrome; the wide layout always shows the panel. */
-  .cs-landing__panel-toggle {
-    display: none;
-  }
-}
-
 @media (max-width: 768px) {
-  .cs-landing__hero-grid {
+  .cs-landing .hero-grid {
     grid-template-columns: 1fr;
   }
 }
 
+/* Panel scrollbar — canonical .sidebar doesn't set scrollbar-width; the original
+   panel used a thin bar (the accent scrollbar-color is already document-wide from
+   base.css :root). */
+.cs-landing .sidebar {
+  scrollbar-width: thin;
+}
+
+@media (min-width: 768px) {
+  /* Wide sticky panel: restore the original top/max-height (canonical uses
+     7rem / 100vh−9rem; the original was 4rem / 100vh−6rem) and neutralize the
+     padding-bottom canonical adds (the original had none). canonical's
+     margin-block:0 / border-block:none are no-ops on an <aside>. */
+  .cs-landing .sidebar {
+    top: calc(var(--space-12) + var(--space-4));
+    max-height: calc(100vh - var(--space-16) - var(--space-8));
+    padding-bottom: 0;
+  }
+}
+
 @media (max-width: 767px) {
-  /* Anchor the absolute panel to the hero+grid wrapper, not the grid, so an
-     open panel drops directly below the sticky header and overlays the hero
-     (top: 0 of the wrapper sits at the hero's top) instead of starting below
-     the hero at the grid's top. */
-  .cs-landing__body {
+  /* Anchor the absolute panel to the hero+grid wrapper (the only direct <div>
+     child of .cs-landing), not the grid, so an open panel drops directly below
+     the sticky header and overlays the hero. Canonical anchors it to the grid
+     via .content-grid{position:relative}; undo that (position + contain are
+     neutralized above) and make the wrapper the containing block instead. */
+  .cs-landing > div {
     position: relative;
   }
 
-  .cs-landing__panel {
-    display: none;
-    position: absolute;
-    top: 0;
-    right: 0;
-    z-index: 5;
-    width: var(--sidebar-width, 16rem);
-    max-height: 80vh;
-    overflow-y: auto;
-    padding: var(--space-4);
-    background: var(--surface);
-    border: var(--border-width) solid var(--border);
+  .cs-landing .content-grid {
+    position: static;
   }
 
-  .cs-landing__panel--open {
-    display: block;
+  /* Narrow overlay background — the original used the card surface, canonical
+     uses the page surface. */
+  .cs-landing .sidebar {
+    background: var(--surface-card);
   }
 }
