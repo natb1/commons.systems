@@ -5,16 +5,16 @@ description: Monthly QFX merge workflow — identifies bank statements, generate
 
 # budget-etl
 
-Monthly statement merge workflow. Backed by `budget-etl/cmd/patch` (JSON-spec rule editor) and `budget-etl --report` (inspection report).
+Monthly statement merge workflow. Backed by `projects/budget-etl/cmd/patch` (JSON-spec rule editor) and `budget-etl --report` (inspection report).
 
 ## Sandbox
 
-Every `go run` that touches `budget-etl` or `budget-etl/cmd/patch` with `--keychain` needs `dangerouslyDisableSandbox: true` — `keychain.Get` shells out to `security`, which the sandbox blocks. See `.claude/rules/sandbox.md`.
+Every `go run` that touches `budget-etl` or `projects/budget-etl/cmd/patch` with `--keychain` needs `dangerouslyDisableSandbox: true` — `keychain.Get` shells out to `security`, which the sandbox blocks. See `.claude/rules/sandbox.md`.
 
 ## Precondition — Export BUDGET_ETL_PASSWORD
 
 Claude Code runs from the worktree root, where the nested
-`budget-etl/.envrc` is **not** active. Before any `go run`, export the
+`projects/budget-etl/.envrc` is **not** active. Before any `go run`, export the
 password into the shell:
 
 ```bash
@@ -75,7 +75,7 @@ It classifies all files first and moves nothing until every file classifies. If 
 
 ## Step 2 — Generate the inspect report
 
-Run from `budget-etl/`. Use `dangerouslyDisableSandbox: true`. `"$current"` is the authoritative input — it supplies both the categorization rules and the prior transactions.
+Run from `projects/budget-etl/`. Use `dangerouslyDisableSandbox: true`. `"$current"` is the authoritative input — it supplies both the categorization rules and the prior transactions.
 
 ```bash
 INPUT="$current"
@@ -93,7 +93,7 @@ Sort `uncategorized` by date so trip clusters appear in date order. For each row
 
 | institution | description | date | amount | recommended category | recommended budget |
 
-Source recommendations from historical patterns via `cmd/dump` + `jq`. Run from `budget-etl/`:
+Source recommendations from historical patterns via `cmd/dump` + `jq`. Run from `projects/budget-etl/`:
 
 ```bash
 go run ./cmd/dump "$INPUT" > /tmp/dump.json

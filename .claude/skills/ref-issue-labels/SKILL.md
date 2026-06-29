@@ -134,7 +134,7 @@ alongside a topic label.
   queue selection. Keyword signals: "fellspiral".
 
 - **`budget`** — concerns the budget app: the `budget/` frontend or the
-  `budget-etl/` pipeline. Ranks below `fellspiral` and above `print` in
+  `projects/budget-etl/` pipeline. Ranks below `fellspiral` and above `print` in
   `dispatch-select-target` queue selection. Keyword signals: "budget",
   "budget-etl", "QFX/OFX", "bank statement", "categorization", "budget.json".
 
