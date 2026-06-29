@@ -143,6 +143,22 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
 source "$SCRIPT_DIR/lib-claude-agents.sh"
 
+# Optional positional <N>: target a single queue item instead of enumerating the
+# whole queue (#2538). With no arg, TARGET_N stays empty and the full-queue
+# enumeration runs unchanged. With <N>, the single-item branch (added after both
+# ISSUE_LIST and WORKTREE_PATHS_BY_NUM are built, and after the per-item helpers
+# are defined) runs the SAME per-item cascade against that one item. Reject a
+# non-numeric arg with a clear error rather than silently falling back
+# (.claude/rules/code-style.md).
+TARGET_N=""
+if (( $# > 0 )); then
+  if [[ ! "$1" =~ ^[0-9]+$ ]]; then
+    echo "office-hours-select-target: invalid target '$1' — expected a numeric issue number" >&2
+    exit 2
+  fi
+  TARGET_N="$1"
+fi
+
 # emit_blocker_signal <issue-num> — surface the selected item's open-blocker
 # status to STDERR as a SIGNAL, never a gate (generalizing the main-qa #1648
 # precedent, #2443). Touches neither stdout nor the exit code, so the stdout
@@ -421,6 +437,39 @@ emit_fresh() {
   printf 'office-hours %s %s\n' "$num" "${wt_path:--}"
   exit 0
 }
+
+# Single-item mode (#2538): with a positional <N>, run the SAME per-item cascade
+# the no-arg enumeration uses — Unit 1's issue_live_session_id + try_emit_idle /
+# try_emit_resume / emit_fresh — against that one item, then terminate. Every path
+# below exits, so the no-arg enumeration never runs in single-item mode.
+# parked-router is target-less (no issue number; discovered by scanning dispatch-*
+# sessions under worktrees/main) and is structurally NOT a disposition for issue
+# <N>, so the non-engageable arm emits `empty` rather than falling back to it
+# (acceptance criterion #3).
+if [[ -n "$TARGET_N" ]]; then
+  # Queue-membership precondition: <N> must be a live office-hours queue item.
+  if ! jq -e --argjson n "$TARGET_N" 'any(.[]; .number == $n)' <<<"$ISSUE_LIST" >/dev/null; then
+    echo "empty"
+    exit 0
+  fi
+  tgt_wt_path=$(printf '%s' "${WORKTREE_PATHS_BY_NUM[$TARGET_N]:-}" | head -n 1)
+  tgt_rc=0
+  tgt_pair=$(issue_live_session_id "$TARGET_N") || tgt_rc=$?
+  case "$tgt_rc" in
+    0)  # attachable: pair is sessionId<TAB>cwd
+      IFS=$'\t' read -r tgt_sid tgt_cwd <<< "$tgt_pair"
+      try_emit_idle "$TARGET_N" "$tgt_sid" "$tgt_wt_path" "$tgt_cwd" || emit_fresh "$TARGET_N"
+      ;;
+    1)  # sessionless: try resume (codes 1 AND 2 both collapse to fresh in single-item mode)
+      try_emit_resume "$TARGET_N" || emit_fresh "$TARGET_N"
+      ;;
+    *)  # rc 2 (UNKNOWN) or rc 3 (working/busy/unrecognized): not engageable → empty.
+        # Single-item mode never reaches the parked-router block (see design note).
+      echo "empty"
+      exit 0
+      ;;
+  esac
+fi
 
 while IFS= read -r issue_num; do
   [[ -z "$issue_num" ]] && continue
