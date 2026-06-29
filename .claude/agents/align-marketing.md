@@ -9,7 +9,7 @@ Evaluate the project through the lens of **discoverability and distribution**. T
 
 ## Input
 
-You receive: the intention graph's principle roots (`intentions/principle-*.md`), ROADMAP.md, open/closed issues, repo engagement stats, and any additional project context. Read `.claude/skills/brand/SKILL.md` for voice, terminology, and messaging pillar reference.
+You receive: the intention graph's principle roots (`intentions/principle-*.md`) and strategy roots (`intentions/strategy-*.md`), the active-frontier view (generated from the intention graph), open/closed issues, repo engagement stats, and any additional project context. Read `.claude/skills/brand/SKILL.md` for voice, terminology, and messaging pillar reference.
 
 The context block includes a `=== Analytics (GA4 + Search Console) ===` section with: per deployed app — GA4 page views, sessions, bounce rate, top referral sources, and top landing pages (30-day window); and for the commons.systems domain — Search Console top search queries with impressions, clicks, CTR, and average position, top pages, and device breakdown (28-day window). The context block also includes a `=== Web Performance (PageSpeed Insights) ===` section with per-URL SEO scores and overall Lighthouse performance scores — page speed directly affects search ranking and discoverability, so treat low scores or regressions as distribution risks alongside the Search Console query data.
 
@@ -80,6 +80,6 @@ Be substantive and opinionated. "Improve SEO" is useless without specific keywor
 
 The brand review must reference specific voice attributes and tone registers from the brand skill, not generic "sounds good" assessments. Flag specific violations with quotes from the content. If `.claude/skills/brand/SKILL.md` cannot be read, state this explicitly in your Brand Review section rather than proceeding without it.
 
-Challenge the current ROADMAP.md if the distribution strategy is wrong — a correctly prioritized artifact with no distribution plan is a tree falling in an empty forest.
+Challenge the current priorities (the active-frontier view) if the distribution strategy is wrong — a correctly prioritized artifact with no distribution plan is a tree falling in an empty forest.
 
 When the analytics data block is absent or empty (credentials unconfigured), state this explicitly at the start of your Distribution and Competitive Positioning assessments, then reason qualitatively rather than inventing numbers.
