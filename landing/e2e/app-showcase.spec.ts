@@ -130,5 +130,17 @@ test.describe("app showcase", () => {
     await page.locator(".app-showcase-overflow summary").click();
 
     await expect(overflowCard).toBeVisible();
+
+    await expect(page.locator(".app-showcase-overflow summary")).toHaveText("more…");
+
+    const overflowAfterGrid = await page.evaluate(() => {
+      const grid = document.querySelector(".landing-hero-grid");
+      const overflow = document.querySelector("details.app-showcase-overflow");
+      if (!grid || !overflow) return false;
+      return (
+        grid.compareDocumentPosition(overflow) & Node.DOCUMENT_POSITION_FOLLOWING
+      ) !== 0;
+    });
+    expect(overflowAfterGrid).toBe(true);
   });
 });

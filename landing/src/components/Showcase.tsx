@@ -38,16 +38,6 @@ export function ShowcaseContent({
 }) {
   return (
     <>
-      {overflow.length > 0 && (
-        <details className="app-showcase-overflow">
-          <summary>More apps</summary>
-          <div className="app-showcase-overflow-cards">
-            {overflow.map((app) => (
-              <ShowcaseCard key={app.url} app={app} />
-            ))}
-          </div>
-        </details>
-      )}
       <div className="landing-hero-band">
         <p className="landing-hero-band-headline">
           Build with commons.systems. Learn to run without.
@@ -66,6 +56,16 @@ export function ShowcaseContent({
           <ShowcaseCard key={app.url} app={app} />
         ))}
       </div>
+      {overflow.length > 0 && (
+        <details className="app-showcase-overflow">
+          <summary>more…</summary>
+          <div className="app-showcase-overflow-cards">
+            {overflow.map((app) => (
+              <ShowcaseCard key={app.url} app={app} />
+            ))}
+          </div>
+        </details>
+      )}
     </>
   );
 }
