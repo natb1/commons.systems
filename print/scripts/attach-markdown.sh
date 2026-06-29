@@ -11,8 +11,8 @@ PROJECT="commons-systems"
 COLLECTION_PATH="print/prod/media"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=../../scaffolding/scripts/upload-media-core.sh
-source "$SCRIPT_DIR/../../scaffolding/scripts/upload-media-core.sh"
+# shellcheck source=../../packages/upload-media/upload-media-core.sh
+source "$SCRIPT_DIR/../../packages/upload-media/upload-media-core.sh"
 
 usage() {
   cat >&2 <<EOF
