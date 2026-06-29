@@ -1,6 +1,6 @@
 import { test, expect } from "@commons-systems/config/playwright-test";
 
-const APP_HREFS = [
+const PROJECT_HREFS = [
   "https://office-hours.commons.systems",
   "https://budget.commons.systems",
   "https://print.commons.systems",
@@ -19,7 +19,7 @@ test.describe("project showcase", () => {
     );
   });
 
-  test("three project cards render in PROJECTS order with correct hrefs", async ({
+  test("three project cards render in PROJECT_HREFS order with correct hrefs", async ({
     page,
   }) => {
     await page.goto("/");
@@ -27,8 +27,8 @@ test.describe("project showcase", () => {
     const cards = page.locator(".landing-hero-grid a.project-card");
     await expect(cards).toHaveCount(3);
 
-    for (let i = 0; i < APP_HREFS.length; i++) {
-      await expect(cards.nth(i)).toHaveAttribute("href", APP_HREFS[i]);
+    for (let i = 0; i < PROJECT_HREFS.length; i++) {
+      await expect(cards.nth(i)).toHaveAttribute("href", PROJECT_HREFS[i]);
     }
   });
 

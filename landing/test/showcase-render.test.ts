@@ -31,7 +31,7 @@ describe("renderShowcase", () => {
     expect(html).toContain("Build with commons.systems. Learn to run without.");
   });
 
-  it("contains exactly one project-card anchor per app", () => {
+  it("contains exactly one project-card anchor per project", () => {
     const html = renderShowcase(PROJECTS);
     // The ds Card composes its own classes ahead of the consumer's, so each card
     // anchor is `<a class="cs-card cs-card--interactive project-card" ...>`. Match the
@@ -42,7 +42,7 @@ describe("renderShowcase", () => {
     expect(matches!.length).toBe(PROJECTS.length); // type-safety-ok: guarded by expect(matches).not.toBeNull() above
   });
 
-  it("each anchor href matches the app url", () => {
+  it("each anchor href matches the project url", () => {
     const html = renderShowcase(PROJECTS);
     for (const app of PROJECTS) {
       expect(html).toContain(`href="${app.url}"`);
@@ -62,7 +62,7 @@ describe("renderShowcase", () => {
     }
   });
 
-  it("HTML-escapes special characters in app.problem", () => {
+  it("HTML-escapes special characters in project.problem", () => {
     const apps: ProjectCard[] = [
       {
         ...PROJECTS[0],
@@ -74,7 +74,7 @@ describe("renderShowcase", () => {
     expect(html).toContain("&lt;script&gt;");
   });
 
-  it("HTML-escapes special characters in app.url", () => {
+  it("HTML-escapes special characters in project.url", () => {
     const apps: ProjectCard[] = [
       {
         ...PROJECTS[0],
@@ -117,7 +117,7 @@ describe("renderShowcase", () => {
       expect(html).toContain("<summary");
     });
 
-    it("renders one <a class=\"project-card\" per primary and overflow app", () => {
+    it("renders one <a class=\"project-card\" per primary and overflow project", () => {
       const html = renderShowcase(PROJECTS, OVERFLOW);
       const matches = html.match(/<a [^>]*class="[^"]*\bproject-card"/g);
       expect(matches).not.toBeNull();

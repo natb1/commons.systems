@@ -23,7 +23,7 @@ function ShowcaseCard({ project }: { project: ProjectCard }) {
 }
 
 /**
- * The hero band + app grid. Rendered as the *children* of the existing
+ * The hero band + project grid. Rendered as the *children* of the existing
  * `.landing-hero` section — both at build time (inside the section wrapper that
  * `Showcase` adds for the prerender seam) and on the client (mounted directly
  * into the `.landing-hero` placeholder node). Kept separate from the section
