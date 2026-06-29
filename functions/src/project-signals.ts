@@ -221,7 +221,7 @@ interface ProjectSignalSample {
   sessions?: number; // summed across GA4 apps
   gscClicks?: number; // summed from topPages
   gscImpressions?: number; // summed from topPages
-  psiPerformance?: number; // first-URL mobile performance
+  psiPerformance?: number; // first-URL performance score at the configured strategy (mobile or desktop)
 }
 
 // ---------------------------------------------------------------------------
