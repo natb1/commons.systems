@@ -1,40 +1,40 @@
 import type { AnchorHTMLAttributes } from "react";
 import { Card } from "@commons-systems/ds";
-import type { AppCard } from "../site-config.ts";
+import type { ProjectCard } from "../site-config.ts";
 
-function ShowcaseCard({ app }: { app: AppCard }) {
+function ShowcaseCard({ project }: { project: ProjectCard }) {
   // href is an anchor attribute; Card's props extend HTMLAttributes<HTMLElement>
   // (no href), so type it explicitly and spread through Card's ...rest.
-  const anchorProps: AnchorHTMLAttributes<HTMLAnchorElement> = { href: app.url };
+  const anchorProps: AnchorHTMLAttributes<HTMLAnchorElement> = { href: project.url };
   return (
-    <Card as="a" interactive className="app-card" {...anchorProps}>
+    <Card as="a" interactive className="project-card" {...anchorProps}>
       <img
-        className="app-card-screenshot"
+        className="project-card-screenshot"
         loading="lazy"
-        src={app.screenshot}
-        alt={app.screenshotAlt}
+        src={project.screenshot}
+        alt={project.screenshotAlt}
         width={1200}
         height={800}
       />
-      <span className="app-name">{app.name}</span>
-      <p className="app-problem">{app.problem}</p>
+      <span className="project-name">{project.name}</span>
+      <p className="project-problem">{project.problem}</p>
     </Card>
   );
 }
 
 /**
- * The hero band + app grid. Rendered as the *children* of the existing
+ * The hero band + project grid. Rendered as the *children* of the existing
  * `.landing-hero` section — both at build time (inside the section wrapper that
  * `Showcase` adds for the prerender seam) and on the client (mounted directly
  * into the `.landing-hero` placeholder node). Kept separate from the section
  * wrapper so the client mount does not nest a second `.landing-hero` section.
  */
 export function ShowcaseContent({
-  apps,
+  projects,
   overflow = [],
 }: {
-  apps: AppCard[];
-  overflow?: AppCard[];
+  projects: ProjectCard[];
+  overflow?: ProjectCard[];
 }) {
   return (
     <>
@@ -52,16 +52,16 @@ export function ShowcaseContent({
         </p>
       </div>
       <div className="landing-hero-grid">
-        {apps.map((app) => (
-          <ShowcaseCard key={app.url} app={app} />
+        {projects.map((project) => (
+          <ShowcaseCard key={project.url} project={project} />
         ))}
       </div>
       {overflow.length > 0 && (
-        <details className="app-showcase-overflow">
+        <details className="project-showcase-overflow">
           <summary>more…</summary>
-          <div className="app-showcase-overflow-cards">
-            {overflow.map((app) => (
-              <ShowcaseCard key={app.url} app={app} />
+          <div className="project-showcase-overflow-cards">
+            {overflow.map((project) => (
+              <ShowcaseCard key={project.url} project={project} />
             ))}
           </div>
         </details>
@@ -77,15 +77,15 @@ export function ShowcaseContent({
  * it mounts ShowcaseContent into the existing placeholder node instead.
  */
 export function Showcase({
-  apps,
+  projects,
   overflow = [],
 }: {
-  apps: AppCard[];
-  overflow?: AppCard[];
+  projects: ProjectCard[];
+  overflow?: ProjectCard[];
 }) {
   return (
-    <section className="landing-hero app-showcase" aria-label="Featured apps">
-      <ShowcaseContent apps={apps} overflow={overflow} />
+    <section className="landing-hero project-showcase" aria-label="Featured projects">
+      <ShowcaseContent projects={projects} overflow={overflow} />
     </section>
   );
 }
