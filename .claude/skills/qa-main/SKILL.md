@@ -119,7 +119,7 @@ Before loading browser tools, check for the non-browser-verifiable class:
 
 If either holds → skip 4a–4e and route **straight to cannot-verify (Step 5)**. Name the specific reason in the `dispatch-mark-deviation` call (e.g. `"no url_path — outcome is a nix flake check, not observable in a browser"`).
 
-**Cross-reference (AC3):** Ideally `/qa-fix`'s `needs-main` deferral flags non-browser-verifiable items at creation so they never route to qa-main. This is a prose note only — it does not modify `qa-fix/SKILL.md` or any deferral logic.
+**Upstream classification note:** Ideally `/qa-fix`'s `needs-main` deferral flags non-browser-verifiable items at creation so they never route to qa-main. This is a prose note only — it does not modify `qa-fix/SKILL.md` or any deferral logic.
 
 **4a. Load browser tools — one ToolSearch call** (read-only observe set; no
 `form_input`, `gif_creator`, or `file_upload`):
