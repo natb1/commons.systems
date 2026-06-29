@@ -1302,9 +1302,12 @@ fork site below (same discipline as the `fixes_applied_count` tally in Step 3.7)
 
 ## Escalation
 
-On a user-input blocker, do **not** write the `phase-completed` marker. Instead
-call `dispatch-mark-deviation` so the Stop hook can surface the reason in the
-office-hours comment. The Stop hook (`.claude/hooks/dispatch-stop.sh`) reads
+On a user-input blocker, do **not** write the `phase-completed` marker. This is a
+deliberate office-hours park: before the `dispatch-mark-deviation` call, perform
+the in-session recommend step — see
+`.claude/skills/dispatch-propagate/escalation-recommend.md`. Instead of the
+completion marker, call `dispatch-mark-deviation` so the Stop hook can surface the
+reason in the office-hours comment. The Stop hook (`.claude/hooks/dispatch-stop.sh`) reads
 marker-absence as Branch A and applies `dispatch:office-hours` to the **issue**,
 parking it for the office-hours queue (`/office-hours` runs the user-input
 residue).
