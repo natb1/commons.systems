@@ -1,6 +1,6 @@
 go 1.23.3
 
 use (
-	./budget-etl
-	./scaffolding/firebase
+	./projects/budget-etl
+	./projects/scaffolding/firebase
 )
