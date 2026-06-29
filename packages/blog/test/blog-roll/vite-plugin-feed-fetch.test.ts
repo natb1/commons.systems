@@ -206,7 +206,7 @@ describe("feedFetchPlugin buildStart error handling", () => {
     ) as Record<string, unknown>; // type-safety-ok: narrowing parseVirtualModule's unknown JSON
     expect(feedData["test"]).toBeNull();
     expect(warn).toHaveBeenCalledWith(
-      expect.stringContaining("[feed-fetch] test"),
+      expect.stringContaining("[feed-fetch] test (https://example.com/feed.xml)"),
       expect.any(TypeError),
     );
   });
