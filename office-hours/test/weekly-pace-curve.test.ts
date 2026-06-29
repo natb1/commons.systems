@@ -162,3 +162,14 @@ describe("paceCurveAtFraction", () => {
     }
   });
 });
+
+describe("formatWindowTick", () => {
+  it("renders a weekday + hour label for a fixed date", () => {
+    // Local-time constructor: 2026-06-14 is a Sunday, so the weekday token is
+    // "Sun" in the runtime's own zone regardless of TZ (the formatter zones by
+    // local time). The hour token is "9 AM".
+    const label = formatWindowTick(new Date(2026, 5, 14, 9, 0, 0));
+    expect(label).toContain("Sun");
+    expect(label).toMatch(/9\s*AM/);
+  });
+});
