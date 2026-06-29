@@ -200,12 +200,16 @@ if [[ "${DISPATCH_TOPIC_USAGE_ENABLED:-}" == "1" ]]; then
       WRITER="${DISPATCH_TOPIC_USAGE_WRITER:-$SCRIPT_DIR/../../dispatch-token-audit/scripts/topic-usage-writer.mjs}"
       mkdir -p "$_TU_STATE_DIR" 2>/dev/null || true
       # Launch detached so the producer survives tick exit and never blocks the
-      # tick (a first-run backfill can take a while).  The subshell form keeps
-      # set -e from aborting on a failing spawn; the || is defensive style since
-      # the subshell exit is always 0 after a successful &-fork.
-      # Errors from node itself are captured in the log, not on the tick's stderr.
-      ( setsid node "$WRITER" >>"$_TU_STATE_DIR/topic-usage-producer.log" 2>&1 </dev/null & ) \
-        || echo "dispatch-tick: WARNING: topic-usage producer launch failed; telemetry tick skipped" >&2
+      # tick (a first-run backfill can take a while).  Backgrounding with `&`
+      # inside the subshell always exits 0 after the fork, so a trailing `||`
+      # can never observe a launch failure — check the precondition (node on
+      # PATH) synchronously here and surface a missing-node error on the tick's
+      # stderr at tick time.  Errors from node itself are captured in the log.
+      if ! command -v node >/dev/null 2>&1; then
+        echo "dispatch-tick: WARNING: node not found; topic-usage producer skipped" >&2
+      else
+        ( setsid node "$WRITER" >>"$_TU_STATE_DIR/topic-usage-producer.log" 2>&1 </dev/null & )
+      fi
     fi
   fi
 fi

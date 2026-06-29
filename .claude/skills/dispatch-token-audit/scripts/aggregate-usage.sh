@@ -162,6 +162,8 @@ if [[ -n "$DAY" ]]; then
   # The issue docId date is UTC, so bound the day in UTC.
   SINCE="$DAY 00:00:00"
   UNTIL="$(date -u -d "$DAY + 1 day" '+%Y-%m-%d') 00:00:00"
+  # The window spans exactly one calendar day; keep window metadata self-consistent.
+  DAYS=1
 else
   SINCE=$(date -d "$DAYS days ago" '+%Y-%m-%d %H:%M:%S')
   # UNTIL is "now", but `date` truncates to whole seconds while file mtimes carry
@@ -839,7 +841,7 @@ if [[ -d "$PROJECTS_ROOT" ]]; then
   done < <(
     find "$PROJECTS_ROOT" -mindepth 1 -maxdepth 1 -type d \
       \( -name '*worktrees*' -o -name '*--bare' \) -print0 \
-    | xargs -0 -r -I{} find {} -name '*.jsonl' -newermt "$SINCE" ! -newermt "$UNTIL" -print0
+    | xargs -0 -r -I{} env TZ=UTC find {} -name '*.jsonl' -newermt "$SINCE" ! -newermt "$UNTIL" -print0
   )
 fi
 

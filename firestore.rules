@@ -581,9 +581,11 @@ service cloud.firestore {
     // denormalized memberEmails field; the demo env is world-readable for the
     // unauthenticated demo view. Client writes are denied.
     match /office-hours/{env}/topic-usage/{docId} {
-      allow read: if env == "demo"
+      allow get: if env == "demo"
         || (request.auth != null
             && request.auth.token.email in resource.data.memberEmails);
+      allow list: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails;
       allow write: if false;
     }
 
