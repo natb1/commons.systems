@@ -55,6 +55,10 @@ export interface PrerenderConfig {
   /** Whether to include the `commons.systems` home link in the prerendered nav.
    *  Defaults to `false`. */
   showHomeLink?: boolean;
+  /** When provided, inject this HTML into the template's `<footer></footer>`
+   *  element (root index + every post page). Throws if the `<footer>` marker is
+   *  absent. */
+  footerHtml?: string;
 }
 
 export interface StaticPageConfig {
@@ -84,6 +88,9 @@ export interface StaticPageConfig {
   /** Whether to include the `commons.systems` home link in the prerendered nav.
    *  Defaults to `false`. */
   showHomeLink?: boolean;
+  /** When provided, inject this HTML into the template's `<footer></footer>`
+   *  element. Throws if the `<footer>` marker is absent. */
+  footerHtml?: string;
 }
 
 export interface PostsArtifacts {
@@ -165,6 +172,15 @@ function injectNav(html: string, navHtml: string): string {
     `<app-nav id="nav">${navHtml}</app-nav>`,
   );
   if (result === html) throw new Error('<app-nav id="nav"> marker not found in template');
+  return result;
+}
+
+function injectFooter(html: string, footerHtml: string): string {
+  const result = html.replace(
+    /<footer>.*?<\/footer>/s,
+    `<footer>${footerHtml}</footer>`,
+  );
+  if (result === html) throw new Error('<footer> marker not found in template');
   return result;
 }
 
@@ -256,6 +272,7 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
     softwareApplications,
     homeExtraHtml,
     showHomeLink,
+    footerHtml,
   } = config;
 
   const template = fs.readFileSync(join(distDir, "index.html"), "utf-8");
@@ -284,6 +301,9 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
   let rootHtml = injectMain(template, bodyHtml);
   rootHtml = injectInfoPanel(rootHtml, panelHtml);
   rootHtml = injectNav(rootHtml, navHtml);
+  if (footerHtml !== undefined) {
+    rootHtml = injectFooter(rootHtml, footerHtml);
+  }
   if (homeExtraHtml !== undefined) {
     rootHtml = injectHomeExtra(rootHtml, homeExtraHtml);
   }
@@ -316,6 +336,9 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
     html = injectMain(html, bodyHtml);
     html = injectInfoPanel(html, panelHtml);
     html = injectNav(html, navHtml);
+    if (footerHtml !== undefined) {
+      html = injectFooter(html, footerHtml);
+    }
     if (homeExtraHtml !== undefined) {
       html = stripHomeExtra(html);
     }
@@ -344,6 +367,7 @@ export function prerenderStaticPage(config: StaticPageConfig): void {
     relMe,
     stripHero,
     showHomeLink,
+    footerHtml,
   } = config;
 
   const template = fs.readFileSync(join(distDir, "index.html"), "utf-8");
@@ -392,6 +416,9 @@ export function prerenderStaticPage(config: StaticPageConfig): void {
   html = injectMain(html, bodyHtml);
   html = injectInfoPanel(html, renderedPanel);
   html = injectNav(html, renderNavHtml(navLinks, showHomeLink));
+  if (footerHtml !== undefined) {
+    html = injectFooter(html, footerHtml);
+  }
 
   if (stripHero !== false) {
     html = stripHomeExtra(html);
