@@ -1,7 +1,7 @@
-# App showcase screenshots
+# Project showcase screenshots
 
-These screenshots are captured ad-hoc from the production apps and committed as
-static assets. The landing page references them via `APPS` in
+These screenshots are captured ad-hoc from the deployed projects and committed as
+static assets. The landing page references them via `PROJECTS` in
 `landing/src/site-config.ts`.
 
 ## Regenerating
@@ -13,7 +13,7 @@ capture all three at a consistent 1200×800 (3:2) viewport:
 npx tsx landing/scripts/capture-screenshots.ts
 ```
 
-The script navigates each production URL, waits for `domcontentloaded` plus a 2.5 s timeout, scrolls 540 px past the app's own hero band to frame the actual UI — adjust `scrollY` in `capture-screenshots.ts` if an app's hero height changes — waits 500 ms for the scroll to settle, and writes each file into
+The script navigates each production URL, waits for `domcontentloaded` plus a 2.5 s timeout, scrolls 540 px past the project's own hero band to frame the actual UI — adjust `scrollY` in `capture-screenshots.ts` if a project's hero height changes — waits 500 ms for the scroll to settle, and writes each file into
 this directory.
 
 ## Sources and framing
@@ -31,7 +31,7 @@ top of each capture is what visitors see.
 
 ## When to regenerate
 
-- The target app's visible UI has changed in a way the current card no longer
+- The target project's visible UI has changed in a way the current card no longer
   represents (new nav, renamed sections, layout overhaul).
 - Seed data shown in the capture has drifted from what production serves.
 

@@ -23,6 +23,7 @@ const { mockHandle, mockStore } = vi.hoisted(() => ({
     queryPermission: vi.fn(() => Promise.resolve("granted")),
     requestPermission: vi.fn(() => Promise.resolve("granted")),
     put: vi.fn(() => Promise.resolve()),
+    remove: vi.fn(() => Promise.resolve()),
   },
 }));
 vi.mock("@commons-systems/local-first/fsa-handle-store", () => ({
@@ -59,7 +60,7 @@ import {
   renderLocalIntoList,
   FOCUS_RESCAN_DEBOUNCE_MS,
 } from "../src/local-folder-ui.js";
-import { listLocal } from "../src/library.js";
+import { createLocalSource, listLocal } from "../src/library.js";
 import type { MediaItem } from "../src/types.js";
 
 describe("decideFolderUiState", () => {
@@ -134,6 +135,65 @@ describe("initLocalFolder", () => {
 
     // The click handler is async; wait for it to resolve before asserting.
     await vi.waitFor(() => expect(onSourceBound).toHaveBeenCalledTimes(1));
+  });
+
+  it("change-folder: re-picks via showDirectoryPicker and re-binds the source", async () => {
+    const section = document.createElement("span");
+    const container = document.createElement("div");
+    cleanup = await initLocalFolder(section, container, vi.fn());
+
+    const changeBtn = section.querySelector<HTMLButtonElement>("#local-folder-change");
+    expect(changeBtn).not.toBeNull();
+
+    const newHandle = {} as FileSystemDirectoryHandle; // type-safety-ok: test mock only needs the reference, not real FSA methods
+    const origPicker = (window as unknown as Record<string, unknown>)["showDirectoryPicker"]; // type-safety-ok: test mock accesses non-standard window property
+    (window as unknown as Record<string, unknown>)["showDirectoryPicker"] = vi.fn( // type-safety-ok: test mock sets non-standard window property
+      () => Promise.resolve(newHandle),
+    );
+
+    try {
+      changeBtn!.click(); // type-safety-ok: expect(changeBtn).not.toBeNull() asserts non-null above
+
+      await vi.waitFor(() => {
+        expect(mockStore.put).toHaveBeenCalledWith("library-folder", newHandle);
+      });
+      expect(vi.mocked(createLocalSource)).toHaveBeenCalledWith(newHandle);
+    } finally {
+      (window as unknown as Record<string, unknown>)["showDirectoryPicker"] = origPicker; // type-safety-ok: test mock restores non-standard window property
+    }
+  });
+
+  it("forget-folder: removes the persisted handle and reverts nav to the open-folder button", async () => {
+    const section = document.createElement("span");
+    const container = document.createElement("div");
+    cleanup = await initLocalFolder(section, container, vi.fn());
+
+    const forgetBtn = section.querySelector<HTMLButtonElement>("#local-folder-forget");
+    expect(forgetBtn).not.toBeNull();
+
+    forgetBtn!.click(); // type-safety-ok: expect(forgetBtn).not.toBeNull() asserts non-null above
+
+    // Wait for the terminal state: the async handler runs remove → resetLocalSource
+    // → renderLocalIntoList → renderSection("open"). Poll for the nav revert.
+    await vi.waitFor(() => {
+      expect(section.querySelector("#local-folder-open")).not.toBeNull();
+    });
+    expect(mockStore.remove).toHaveBeenCalledWith("library-folder");
+    expect(section.querySelector("#local-folder-change")).toBeNull();
+    expect(section.querySelector("#local-folder-forget")).toBeNull();
+  });
+
+  it("stranded-recovery: change/forget controls render even when the initial scan fails", async () => {
+    vi.mocked(listLocal).mockRejectedValueOnce(new Error("scan failed"));
+
+    const section = document.createElement("span");
+    const container = document.createElement("div");
+    container.innerHTML = '<ul id="media-list"></ul>';
+
+    cleanup = await initLocalFolder(section, container, vi.fn());
+
+    expect(section.querySelector("#local-folder-change")).not.toBeNull();
+    expect(section.querySelector("#local-folder-forget")).not.toBeNull();
   });
 });
 
