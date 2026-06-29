@@ -118,7 +118,7 @@ export function Landing(props: LandingProps) {
           fontSize: "var(--text-xs)",
           textTransform: "uppercase",
           letterSpacing: "var(--tracking-label)",
-          color: "var(--muted)",
+          color: "var(--text-muted)",
           margin: "0 0 var(--space-2)",
         }}
       >
@@ -129,7 +129,7 @@ export function Landing(props: LandingProps) {
           <li key={link.label} style={{ marginBottom: "var(--space-1)" }}>
             <a
               href={link.href}
-              style={{ color: "var(--accent)", fontSize: "var(--text-sm)" }}
+              style={{ color: "var(--link)", fontSize: "var(--text-sm)" }}
             >
               {link.label}
             </a>
