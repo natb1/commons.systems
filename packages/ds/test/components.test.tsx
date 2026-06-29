@@ -131,8 +131,9 @@ describe("cs-* class names", () => {
   it("Landing renders the page shell with sticky header, grid, and panel", () => {
     const html = renderToStaticMarkup(<Landing />);
     expect(html).toContain("cs-landing");
-    expect(html).toContain("cs-landing__grid");
-    expect(html).toContain("cs-landing__panel");
+    expect(html).toContain("content-grid");
+    expect(html).toContain("sidebar");
+    expect(html).toContain("panel-toggle");
     expect(html).toContain("<header");
     expect(html).toContain("<footer");
     // Composes the shared Nav primitive rather than a bespoke one.
