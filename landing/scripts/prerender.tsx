@@ -23,6 +23,7 @@ import {
 } from "../src/site-config.js";
 import { About, AboutPanel } from "../src/pages/About.js";
 import { renderShowcase } from "../src/showcase-render.js";
+import { FOOTER_HTML } from "@commons-systems/components/footer";
 
 const distDir = join(dirname(new URL(import.meta.url).pathname), "..", "dist");
 const postDir = join(distDir, "..", "post");
@@ -51,6 +52,7 @@ try {
     aboutContent: <AboutPanel />,
     jsonLdBlocks: [personJsonLd(PERSON)],
     relMe: REL_ME,
+    footerHtml: FOOTER_HTML,
     showHomeLink: false,
   });
 } catch (err) {
@@ -77,6 +79,7 @@ try {
     relMe: REL_ME,
     softwareApplications: [...PROJECTS, ...OVERFLOW_PROJECTS],
     homeExtraHtml: renderShowcase(PROJECTS, OVERFLOW_PROJECTS),
+    footerHtml: FOOTER_HTML,
     showHomeLink: false,
   });
 } catch (err) {

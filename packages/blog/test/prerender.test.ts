@@ -34,6 +34,19 @@ const TEMPLATE_WITH_HERO = `<!DOCTYPE html>
 </body>
 </html>`;
 
+const TEMPLATE_WITH_FOOTER = `<!DOCTYPE html>
+<html>
+<head>
+  <title>My Blog</title>
+</head>
+<body>
+  <nav><app-nav id="nav"></app-nav></nav>
+  <main id="app"></main>
+  <aside id="info-panel" class="sidebar"></aside>
+  <footer></footer>
+</body>
+</html>`;
+
 const MARKDOWN_HELLO = `# Hello World Title
 This is the **hello world** post.`;
 
@@ -676,6 +689,51 @@ describe("prerenderPosts", () => {
     }) as typeof fs.readFileSync);
 
     await expect(prerenderPosts(makeConfig())).resolves.toBeUndefined();
+  });
+
+  it("injects footerHtml into <footer> on root and post pages when provided", async () => {
+    vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
+      if (String(path).endsWith("index.html")) return TEMPLATE_WITH_FOOTER;
+      return MARKDOWN_HELLO;
+    }) as typeof fs.readFileSync);
+
+    await prerenderPosts(makeConfig({ footerHtml: "<p>FOOTER MARKER</p>" }));
+
+    const rootCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+      (c) => String(c[0]) === "/dist/index.html",
+    );
+    const rootHtml = rootCall![1] as string; // type-safety-ok: vitest mock call arg; same pattern as existing tests
+    expect(rootHtml).toContain("<footer><p>FOOTER MARKER</p></footer>");
+    expect(rootHtml).not.toContain("<footer></footer>");
+
+    const perPostCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+      (c) => String(c[0]).includes("post/hello-world"),
+    );
+    const perPostHtml = perPostCall![1] as string; // type-safety-ok: vitest mock call arg; same pattern as existing tests
+    expect(perPostHtml).toContain("<footer><p>FOOTER MARKER</p></footer>");
+    expect(perPostHtml).not.toContain("<footer></footer>");
+  });
+
+  it("leaves <footer> untouched when footerHtml is not provided", async () => {
+    vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
+      if (String(path).endsWith("index.html")) return TEMPLATE_WITH_FOOTER;
+      return MARKDOWN_HELLO;
+    }) as typeof fs.readFileSync);
+
+    await prerenderPosts(makeConfig());
+
+    const rootCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+      (c) => String(c[0]) === "/dist/index.html",
+    );
+    const rootHtml = rootCall![1] as string; // type-safety-ok: vitest mock call arg; same pattern as existing tests
+    expect(rootHtml).toContain("<footer></footer>");
+  });
+
+  it("throws when footerHtml is set but <footer> is absent", async () => {
+    // The default TEMPLATE_WITH_HERO has no <footer> element.
+    await expect(
+      prerenderPosts(makeConfig({ footerHtml: "<p>FOOTER MARKER</p>" })),
+    ).rejects.toThrow("<footer> marker not found in template");
   });
 
   it("throws when homeExtraHtml is set but <section class=\"landing-hero\"> is absent", async () => {
