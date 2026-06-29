@@ -131,7 +131,7 @@ export async function initLocalFolder(
       section.innerHTML =
         '<button id="local-folder-open" class="local-folder-button" type="button">Open folder…</button>';
       section
-        .querySelector<HTMLButtonElement>("#local-folder-open")!
+        .querySelector<HTMLButtonElement>("#local-folder-open")! // type-safety-ok: innerHTML was just set with this id
         .addEventListener("click", () => {
           openFolder().catch((err) =>
             logError(err, { operation: "local-folder-open" }),
@@ -141,15 +141,15 @@ export async function initLocalFolder(
       section.innerHTML =
         '<button id="local-folder-grant" class="local-folder-button" type="button">Grant access to your folder</button>';
       section
-        .querySelector<HTMLButtonElement>("#local-folder-grant")!
+        .querySelector<HTMLButtonElement>("#local-folder-grant")! // type-safety-ok: innerHTML was just set with this id
         .addEventListener("click", () => {
           void (async () => {
-            const res = await store.requestPermission(handle!, "readwrite");
+            const res = await store.requestPermission(handle!, "readwrite"); // type-safety-ok: 'grant' state only reached when handle is non-null
             if (res === "granted") {
               // Render the change/forget controls, THEN bind the list — so the
               // controls persist even if the scan fails.
               renderSection("list");
-              await bindAndRender(handle as FileSystemDirectoryHandle, true);
+              await bindAndRender(handle as FileSystemDirectoryHandle, true); // type-safety-ok: 'grant' state only reached when handle is non-null
             }
           })().catch((err) =>
             logError(err, { operation: "local-folder-grant" }),
@@ -164,7 +164,7 @@ export async function initLocalFolder(
         '<button id="local-folder-forget" class="local-folder-button" type="button">Forget folder</button>' +
         "</div>";
       section
-        .querySelector<HTMLButtonElement>("#local-folder-change")!
+        .querySelector<HTMLButtonElement>("#local-folder-change")! // type-safety-ok: innerHTML was just set with this id
         .addEventListener("click", () => {
           // Reuse the picker flow; section is already "list" so no nav
           // re-render is needed — bindAndRender re-renders the list rows.
@@ -173,7 +173,7 @@ export async function initLocalFolder(
           );
         });
       section
-        .querySelector<HTMLButtonElement>("#local-folder-forget")!
+        .querySelector<HTMLButtonElement>("#local-folder-forget")! // type-safety-ok: innerHTML was just set with this id
         .addEventListener("click", () => {
           void (async () => {
             await store.remove(PURPOSE);

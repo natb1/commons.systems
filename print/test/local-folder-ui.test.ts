@@ -145,20 +145,20 @@ describe("initLocalFolder", () => {
     const changeBtn = section.querySelector<HTMLButtonElement>("#local-folder-change");
     expect(changeBtn).not.toBeNull();
 
-    const newHandle = {} as FileSystemDirectoryHandle;
-    const origPicker = (window as unknown as Record<string, unknown>)["showDirectoryPicker"];
-    (window as unknown as Record<string, unknown>)["showDirectoryPicker"] = vi.fn(
+    const newHandle = {} as FileSystemDirectoryHandle; // type-safety-ok: test mock only needs the reference, not real FSA methods
+    const origPicker = (window as unknown as Record<string, unknown>)["showDirectoryPicker"]; // type-safety-ok: test mock accesses non-standard window property
+    (window as unknown as Record<string, unknown>)["showDirectoryPicker"] = vi.fn( // type-safety-ok: test mock sets non-standard window property
       () => Promise.resolve(newHandle),
     );
 
-    changeBtn!.click();
+    changeBtn!.click(); // type-safety-ok: expect(changeBtn).not.toBeNull() asserts non-null above
 
     await vi.waitFor(() => {
       expect(mockStore.put).toHaveBeenCalledWith("library-folder", newHandle);
     });
     expect(vi.mocked(createLocalSource)).toHaveBeenCalledWith(newHandle);
 
-    (window as unknown as Record<string, unknown>)["showDirectoryPicker"] = origPicker;
+    (window as unknown as Record<string, unknown>)["showDirectoryPicker"] = origPicker; // type-safety-ok: test mock restores non-standard window property
   });
 
   it("forget-folder: removes the persisted handle and reverts nav to the open-folder button", async () => {
@@ -169,7 +169,7 @@ describe("initLocalFolder", () => {
     const forgetBtn = section.querySelector<HTMLButtonElement>("#local-folder-forget");
     expect(forgetBtn).not.toBeNull();
 
-    forgetBtn!.click();
+    forgetBtn!.click(); // type-safety-ok: expect(forgetBtn).not.toBeNull() asserts non-null above
 
     // Wait for the terminal state: the async handler runs remove → resetLocalSource
     // → renderLocalIntoList → renderSection("open"). Poll for the nav revert.
