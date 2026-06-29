@@ -78,7 +78,6 @@ const FINDING_ITEM_SCHEMA = {
     Source: {
       enum: [
         'code-review',
-        'review',
         'input-validation',
         'secrets',
         'red-team',
@@ -180,10 +179,10 @@ const FIX_SCHEMA = {
 // Returns the AGENT finder-source set (the codeql/npm finders are NOT agents —
 // they arrive via args.prescanned_findings — so they are excluded here).
 function agentFinderSet(surface, app_or_rules) {
-  // Any non-`code` surface (`empty`/`docs`/`tests`) yields only the two quality
-  // finders — the `surface === 'code'` gate below covers `tests` with no code
+  // Any non-`code` surface (`empty`/`docs`/`tests`) yields only the single quality
+  // finder — the `surface === 'code'` gate below covers `tests` with no code
   // change, since a test-only diff has no production attack surface.
-  const set = ['code-review', 'review'];
+  const set = ['code-review'];
   if (surface === 'code') {
     set.push('input-validation', 'secrets', 'red-team', 'security-review');
     if (app_or_rules) {
@@ -330,16 +329,6 @@ function finderPrompt(name, args) {
       SCHEMA_BLURB,
     ].join('\n');
   }
-  if (name === 'review') {
-    return [
-      'You are a findings-only PR-review subagent.',
-      'Invoke the built-in `/review` skill via the Skill tool — the generic PR review.',
-      ctx,
-      'Once /review returns, continue: normalize every finding it produced to the schema below',
-      'with Source "review" and OWASP "" and STRIDE "".',
-      SCHEMA_BLURB,
-    ].join('\n');
-  }
   if (name === 'security-review') {
     return [
       'You are a findings-only security-review subagent.',
@@ -381,16 +370,18 @@ let subagentsLaunched = 0;
 // --- 1. FINDERS (two waves, probe-gated) -------------------------------------
 phase('finders');
 const finderNames = agentFinderSet(_a.surface, _a.app_or_rules);
-// Probe-wave throttle short-circuit: the two always-on quality finders are real
-// review work that runs on every surface, so launch them FIRST as wave 1 and
-// double them as a throttle probe. If BOTH return null (a strong outage signal —
-// far more robust than one flake), skip the security finder wave entirely rather
-// than waste those launches on a throttled model. On empty/docs/tests surfaces
-// there are no security finders, so this degenerates to a single wave (no change).
-const qualityFinders = finderNames.filter((n) => n === 'code-review' || n === 'review');
-const securityFinders = finderNames.filter((n) => n !== 'code-review' && n !== 'review');
+// Probe-wave throttle short-circuit: the single always-on `code-review` quality
+// finder is real review work that runs on every surface, so launch it FIRST as
+// wave 1 and double it as a throttle probe. The `agent()` primitive already
+// retries internally, so a `null` result means the finder failed AFTER retries —
+// a genuine outage signal, not a one-off flake. On that signal, skip the security
+// finder wave entirely rather than waste those launches on a throttled model. On
+// empty/docs/tests surfaces there are no security finders, so this degenerates to
+// a single wave (no change).
+const qualityFinders = finderNames.filter((n) => n === 'code-review');
+const securityFinders = finderNames.filter((n) => n !== 'code-review');
 log(
-  `finders: wave 1 = ${qualityFinders.length} quality finder(s); ` +
+  `finders: wave 1 = ${qualityFinders.length} quality finder; ` +
     `${securityFinders.length} security finder(s) pending for surface=${_a.surface}`
 );
 
@@ -403,20 +394,20 @@ const launchFinder = (name) => () =>
     phase: 'finders',
   });
 
-// Wave 1 — the quality finders (also the throttle probe).
+// Wave 1 — the quality finder (also the throttle probe).
 subagentsLaunched += qualityFinders.length;
 const qualityResults = await parallel(qualityFinders.map(launchFinder));
 
-// Gate: both quality finders dead → model likely throttled; skip the security
+// Gate: the quality finder is dead → model likely throttled; skip the security
 // wave. coverage_incomplete records the degraded review for the Step 6 comment.
 let securityResults = [];
 let coverage_incomplete = false;
 let coverage_note = '';
-const bothQualityDead = qualityResults.filter(Boolean).length === 0;
-if (securityFinders.length && bothQualityDead) {
+const qualityDead = qualityResults.filter(Boolean).length === 0;
+if (securityFinders.length && qualityDead) {
   coverage_incomplete = true;
   coverage_note =
-    'Security finders skipped: both quality finders failed (model likely throttled).';
+    'Security finders skipped: the code-review quality finder failed (model likely throttled).';
   log(`finders: ${coverage_note} Backing off the security wave.`);
 } else if (securityFinders.length) {
   // Wave 2 — the surface-gated security finders.
@@ -546,12 +537,12 @@ if (deduped.length) {
   const classifyPrompt = [
     'Classify each finding into exactly one disposition bucket, preserving BOTH vocabularies.',
     'Disposition table (from /review-fix SKILL.md Step 3):',
-    '- Fixed (code-review/review): a concrete, in-scope code change applicable to this PR — implement it.',
+    '- Fixed (code-review): a concrete, in-scope code change applicable to this PR — implement it.',
     '- Required (security): a real vulnerability/weakness in the changed code that should be fixed.',
-    '- Informational (code-review/review): FYIs/notes/observations; no change required.',
-    '- Dismissed (code-review/review): nits, incorrect findings, or N/A; one-line rationale.',
+    '- Informational (code-review): FYIs/notes/observations; no change required.',
+    '- Dismissed (code-review): nits, incorrect findings, or N/A; one-line rationale.',
     '- False-positive (security): not an actual vulnerability — a misread / non-issue.',
-    '- Deferred (code-review/review): valid but out of scope for this PR (filed as a follow-up).',
+    '- Deferred (code-review): valid but out of scope for this PR (filed as a follow-up).',
     '- Out-of-scope (security): a genuine concern in pre-existing code the diff did not touch.',
     '- Fixed (erosion): an actionable net-erosion finding (Source "erosion") with a concrete refactor',
     '  that reverses the structural decay this diff introduced → Fixed (it runs the same adversarial',
@@ -559,10 +550,10 @@ if (deduped.length) {
     '- Informational (erosion): an advisory complexity/duplication increase with no clear single refactor',
     '  → Informational (an FYI; no change required and nothing is filed).',
     'RULES: A finding is NEVER Dismissed merely because the change is small — if it is a real',
-    'improvement within scope, classify it Fixed. When a code-review/review finding is ambiguous,',
+    'improvement within scope, classify it Fixed. When a code-review finding is ambiguous,',
     'default to Informational rather than inventing a code change.',
     'Also set security_class: "required" | "out-of-scope" | "false-positive" for security-sourced',
-    'findings, else "none" for code-review/review findings.',
+    'findings, else "none" for code-review findings.',
     'Return { "classifications": [ { "id", "bucket", "security_class" }, ... ] } — one per finding id.',
     `Findings:\n${JSON.stringify(compact, null, 2)}`,
   ].join('\n');
@@ -582,7 +573,7 @@ if (deduped.length) {
   }
   if (!classById.size) {
     log(
-      `classify: agent returned no usable classifications for ${deduped.length} finding(s) — falling back per-source (code-review/review → Deferred so they are filed, security → Out-of-scope)`
+      `classify: agent returned no usable classifications for ${deduped.length} finding(s) — falling back per-source (code-review → Deferred so they are filed, security → Out-of-scope)`
     );
   }
   const SEC_SOURCES = new Set([
@@ -600,7 +591,7 @@ if (deduped.length) {
     const c = classById.get(f.id);
     // Fallback when the classify agent gave no verdict for this finding: erosion
     // sources → Informational (advisory, not filed) per the Informational-erosion
-    // design intent; security sources → Out-of-scope; code-review/review → Deferred
+    // design intent; security sources → Out-of-scope; code-review → Deferred
     // (NOT Informational) so an unclassified-but-real finding is filed as a follow-up
     // rather than silently dropped from both the fix set and the follow-up filings.
     const bucket = c
@@ -837,7 +828,7 @@ const upheldErosionIds = new Set(
 // --- 6. FILE-PREP (pure JS, no gh) -------------------------------------------
 phase('file');
 
-// 6a. Deferred code-review/review findings → deferred_filings.
+// 6a. Deferred code-review findings → deferred_filings.
 function shortTitle(desc) {
   const text = (desc || '').trim();
   const firstSentence = text.split(/(?<=[.!?])\s/)[0] || text;
@@ -850,7 +841,7 @@ const blockerNums =
     : 'independent';
 
 const deferred_filings = deduped
-  // Deferred code-review/review findings, Unverified Required findings (every
+  // Deferred code-review findings, Unverified Required findings (every
   // skeptic failed), plus (issue #2064) upheld erosion findings Opus did NOT fix:
   // none are resolved in this terminal phase, so file a follow-up rather than
   // silently dropping them. A REFUTED erosion finding falls through all three
@@ -998,7 +989,7 @@ return {
   deviation,
   security_note: _a.security_note,
   // coverage_incomplete is independent of `deviation`: it flags a launch-efficiency
-  // back-off (security wave skipped because both quality finders died — model
+  // back-off (security wave skipped because the code-review quality finder failed — model
   // likely throttled), surfaced in the Step 6 partial-coverage comment line.
   coverage_incomplete,
   coverage_note,

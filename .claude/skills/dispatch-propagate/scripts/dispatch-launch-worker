@@ -191,6 +191,20 @@ case "$DIRECTIVE" in
     # issue's lingering worktree must never park). No park: release the slot and tick.
     release_and_tick
     ;;
+  "STOP merged-pr-closed")
+    # #2511: dispatch-route detected an OPEN issue whose closing PR has already
+    # merged (GitHub failed to auto-close). Close it as resolved — mechanically,
+    # no Claude session (the point: stop burning a worker spawn + office-hours
+    # park every tick). dispatch-close-resolved is REST-backed, state-aware, and
+    # idempotent, so a failed close self-heals on the next tick's re-detection.
+    # Unset CLAUDE_JOB_DIR for this call: the launcher is a headless setsid
+    # script, not a Claude session, so it never runs dispatch-stop.sh — the
+    # resolved-closed sentinel would be orphaned. Unsetting makes the sentinel
+    # write a clean no-op.
+    env -u CLAUDE_JOB_DIR "$SCRIPT_DIR/dispatch-close-resolved" "$N" \
+      --reason "Closing PR has merged but GitHub left #$N open; auto-closing as resolved (#2511 router guard)." || true
+    release_and_tick
+    ;;
   *)
     # Defensive: an unrecognized directive is an unexpected state. Per
     # .claude/rules/code-style.md, surface it (park with a clear reason) rather

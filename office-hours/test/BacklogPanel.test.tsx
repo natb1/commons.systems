@@ -59,7 +59,7 @@ describe("BacklogPanel", () => {
     const { container } = render(<BacklogPanel samples={drainingFixture} />);
     const stateSpan = container.querySelector(".backlog-runway-state");
     expect(stateSpan).not.toBeNull();
-    expect(stateSpan!.textContent).toMatch(/until the queue empties/);
+    expect(stateSpan!.textContent).toMatch(/to clear the open backlog/); // type-safety-ok: non-null asserted by preceding expect
     expect(stateSpan!.classList.contains("draining")).toBe(true);
 
     const projItem = Array.from(container.querySelectorAll(".trend-legend-item")).find(
