@@ -150,12 +150,12 @@ export function ProjectSignalsPanel(props: ProjectSignalsPanelProps) {
               <>
                 <Metric
                   className="project-signals-card"
-                  label="total clicks"
+                  label="top-pages clicks (est.)"
                   value={String(gsc.topPages.reduce((s, p) => s + p.clicks, 0))}
                 />
                 <Metric
                   className="project-signals-card"
-                  label="total impressions"
+                  label="top-pages impressions (est.)"
                   value={String(gsc.topPages.reduce((s, p) => s + p.impressions, 0))}
                 />
               </>

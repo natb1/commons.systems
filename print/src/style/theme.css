@@ -127,3 +127,8 @@
 .local-folder-button:hover {
   border-color: var(--fg);
 }
+
+.local-folder-controls {
+  display: flex;
+  gap: var(--space-1);
+}
