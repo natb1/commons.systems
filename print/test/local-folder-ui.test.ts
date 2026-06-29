@@ -151,14 +151,16 @@ describe("initLocalFolder", () => {
       () => Promise.resolve(newHandle),
     );
 
-    changeBtn!.click(); // type-safety-ok: expect(changeBtn).not.toBeNull() asserts non-null above
+    try {
+      changeBtn!.click(); // type-safety-ok: expect(changeBtn).not.toBeNull() asserts non-null above
 
-    await vi.waitFor(() => {
-      expect(mockStore.put).toHaveBeenCalledWith("library-folder", newHandle);
-    });
-    expect(vi.mocked(createLocalSource)).toHaveBeenCalledWith(newHandle);
-
-    (window as unknown as Record<string, unknown>)["showDirectoryPicker"] = origPicker; // type-safety-ok: test mock restores non-standard window property
+      await vi.waitFor(() => {
+        expect(mockStore.put).toHaveBeenCalledWith("library-folder", newHandle);
+      });
+      expect(vi.mocked(createLocalSource)).toHaveBeenCalledWith(newHandle);
+    } finally {
+      (window as unknown as Record<string, unknown>)["showDirectoryPicker"] = origPicker; // type-safety-ok: test mock restores non-standard window property
+    }
   });
 
   it("forget-folder: removes the persisted handle and reverts nav to the open-folder button", async () => {
