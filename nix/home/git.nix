@@ -1,9 +1,12 @@
 # Git Configuration Module
 #
-# This module configures Git settings through Home Manager.
-# Home Manager will merge these settings with your existing ~/.gitconfig,
-# so any settings you have defined manually will be preserved unless
-# explicitly overridden here.
+# This module configures git via Home Manager. The commons.systems framework
+# no longer bakes in a personal identity, and it no longer reads identity from
+# the environment.
+#
+# Identity (programs.git.settings.user.name / .email) must be supplied by the
+# consuming office-hours-nate instance flake. The assertion below fails loudly
+# if git is enabled without an identity set. See issue #2448 / epic #2446.
 
 {
   config,
