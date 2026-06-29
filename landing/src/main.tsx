@@ -5,6 +5,8 @@ import "@commons-systems/ds/tokens/spacing.css";
 import "@commons-systems/ds/tokens/effects.css";
 import "./style/theme.css";
 
+import "@commons-systems/components/footer";
+
 import { createBlogApp } from "@commons-systems/blog/create-blog-app";
 import { updateStaticPageMeta } from "@commons-systems/blog/og-meta";
 import { updateCanonical } from "@commons-systems/blog/canonical";

@@ -151,7 +151,7 @@ interface RenderedPost {
 function injectMain(html: string, innerHtml: string): string {
   const result = html.replace(
     /<main id="app">.*?<\/main>/s,
-    `<main id="app">${innerHtml}</main>`,
+    () => `<main id="app">${innerHtml}</main>`,
   );
   if (result === html) throw new Error('<main id="app"> marker not found in template');
   return result;
@@ -160,7 +160,7 @@ function injectMain(html: string, innerHtml: string): string {
 function injectInfoPanel(html: string, panelHtml: string): string {
   const result = html.replace(
     /<aside id="info-panel" class="sidebar">.*?<\/aside>/s,
-    `<aside id="info-panel" class="sidebar">${panelHtml}</aside>`,
+    () => `<aside id="info-panel" class="sidebar">${panelHtml}</aside>`,
   );
   if (result === html) throw new Error('<aside id="info-panel"> marker not found in template');
   return result;
@@ -169,7 +169,7 @@ function injectInfoPanel(html: string, panelHtml: string): string {
 function injectNav(html: string, navHtml: string): string {
   const result = html.replace(
     /<app-nav id="nav">.*?<\/app-nav>/s,
-    `<app-nav id="nav">${navHtml}</app-nav>`,
+    () => `<app-nav id="nav">${navHtml}</app-nav>`,
   );
   if (result === html) throw new Error('<app-nav id="nav"> marker not found in template');
   return result;
@@ -177,8 +177,8 @@ function injectNav(html: string, navHtml: string): string {
 
 function injectFooter(html: string, footerHtml: string): string {
   const result = html.replace(
-    /<footer>.*?<\/footer>/s,
-    `<footer>${footerHtml}</footer>`,
+    /<footer[^>]*>.*?<\/footer>/s,
+    () => `<footer>${footerHtml}</footer>`,
   );
   if (result === html) throw new Error('<footer> marker not found in template');
   return result;
@@ -187,7 +187,7 @@ function injectFooter(html: string, footerHtml: string): string {
 function injectHomeExtra(html: string, extraHtml: string): string {
   const result = html.replace(
     /<section class="landing-hero"[^>]*>.*?<\/section>/s,
-    extraHtml,
+    () => extraHtml,
   );
   if (result === html) throw new Error('<section class="landing-hero"> marker not found in template');
   return result;
