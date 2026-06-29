@@ -9,12 +9,22 @@ const mockDestroy = vi.fn().mockResolvedValue(undefined);
 const mockGetMetadata = vi.fn();
 const mockGetDocument = vi.fn();
 
-vi.mock("pdfjs-dist", () => ({
-  default: {},
-  getDocument: (...args: unknown[]) => mockGetDocument(...args),
-  GlobalWorkerOptions: { workerSrc: "" },
-  version: "0.0.0",
-}));
+vi.mock("pdfjs-dist", () => {
+  class PDFDataRangeTransport {
+    length: number;
+    constructor(length: number, _initialData: unknown) {
+      this.length = length;
+    }
+    onDataRange(_begin: number, _chunk: Uint8Array): void {}
+  }
+  return {
+    default: {},
+    getDocument: (...args: unknown[]) => mockGetDocument(...args),
+    GlobalWorkerOptions: { workerSrc: "" },
+    version: "0.0.0",
+    PDFDataRangeTransport,
+  };
+});
 
 // No-op the side-effect import of ./viewer/pdf.js (which sets workerSrc)
 vi.mock("../src/viewer/pdf.js", () => ({}));
@@ -24,7 +34,7 @@ vi.mock("@commons-systems/errorutil/log", () => ({
   logError: vi.fn(),
 }));
 
-import { parseContainerXml, parseOpfTitle, extractMetadata } from "../src/local-metadata.js";
+import { parseContainerXml, parseOpfTitle, extractMetadata, BlobRangeTransport } from "../src/local-metadata.js";
 
 // ---------------------------------------------------------------------------
 // parseContainerXml
@@ -225,7 +235,7 @@ describe("extractMetadata — pdf", () => {
   it("returns title and pageCount when Title is present", async () => {
     const { destroy } = makeFakeDoc("Great Book", 42);
 
-    const result = await extractMetadata(new ArrayBuffer(8), "pdf");
+    const result = await extractMetadata(new File([new Uint8Array(8)], "x.pdf"), "pdf");
 
     expect(result).toEqual({ title: "Great Book", pageCount: 42 });
     expect(destroy).toHaveBeenCalled();
@@ -234,7 +244,7 @@ describe("extractMetadata — pdf", () => {
   it("returns only pageCount when Title is empty/whitespace", async () => {
     const { destroy } = makeFakeDoc("   ", 10);
 
-    const result = await extractMetadata(new ArrayBuffer(8), "pdf");
+    const result = await extractMetadata(new File([new Uint8Array(8)], "x.pdf"), "pdf");
 
     expect(result).toEqual({ pageCount: 10 });
     expect(result.title).toBeUndefined();
@@ -244,7 +254,7 @@ describe("extractMetadata — pdf", () => {
   it("returns only pageCount when Title is undefined", async () => {
     const { destroy } = makeFakeDoc(undefined, 5);
 
-    const result = await extractMetadata(new ArrayBuffer(8), "pdf");
+    const result = await extractMetadata(new File([new Uint8Array(8)], "x.pdf"), "pdf");
 
     expect(result).toEqual({ pageCount: 5 });
     expect(destroy).toHaveBeenCalled();
@@ -260,7 +270,7 @@ describe("extractMetadata — pdf", () => {
     mockGetDocument.mockReturnValue({ promise: Promise.resolve(doc) });
 
     // extractMetadata swallows errors and returns {}
-    const result = await extractMetadata(new ArrayBuffer(8), "pdf");
+    const result = await extractMetadata(new File([new Uint8Array(8)], "x.pdf"), "pdf");
     expect(result).toEqual({});
     expect(destroy).toHaveBeenCalled();
   });
@@ -268,7 +278,7 @@ describe("extractMetadata — pdf", () => {
   it("returns {} and does not throw when getDocument rejects", async () => {
     mockGetDocument.mockReturnValue({ promise: Promise.reject(new Error("worker crash")) });
 
-    const result = await extractMetadata(new ArrayBuffer(8), "pdf");
+    const result = await extractMetadata(new File([new Uint8Array(8)], "x.pdf"), "pdf");
     expect(result).toEqual({});
   });
 });
@@ -281,5 +291,35 @@ describe("extractMetadata — unsupported type", () => {
   it("returns {} for image-archive without throwing", async () => {
     const result = await extractMetadata(new ArrayBuffer(0), "image-archive");
     expect(result).toEqual({});
+  });
+});
+
+// ---------------------------------------------------------------------------
+// BlobRangeTransport — range slicing behaviour
+// ---------------------------------------------------------------------------
+
+describe("BlobRangeTransport", () => {
+  it("slices exactly [begin, end) and delivers the chunk via onDataRange without reading the full file", async () => {
+    const bytes = new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    const file = new File([bytes], "x.pdf");
+
+    const t = new BlobRangeTransport(file);
+
+    const sliceSpy = vi.spyOn(file, "slice");
+    const arrayBufferSpy = vi.spyOn(file, "arrayBuffer");
+    const onDataRangeSpy = vi.spyOn(t, "onDataRange");
+
+    // requestDataRange returns void; fire it then flush the internal promise chain.
+    t.requestDataRange(2, 6);
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+    expect(sliceSpy).toHaveBeenCalledWith(2, 6);
+    expect(onDataRangeSpy).toHaveBeenCalledOnce();
+    const [begin, chunk] = onDataRangeSpy.mock.calls[0] as [number, Uint8Array];
+    expect(begin).toBe(2);
+    expect(chunk).toBeInstanceOf(Uint8Array);
+    expect(Array.from(chunk)).toEqual([2, 3, 4, 5]);
+    // The slice's own arrayBuffer() was called, but the file-level full read was not.
+    expect(arrayBufferSpy).not.toHaveBeenCalled();
   });
 });
