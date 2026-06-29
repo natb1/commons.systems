@@ -104,6 +104,17 @@ source "$SCRIPT_DIR/lib.sh"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/lib-claude-agents.sh"
 
+# Optional positional <N>: target a specific queue item by issue number.
+if [[ $# -gt 0 ]]; then
+  if [[ ! "$1" =~ ^[0-9]+$ ]]; then
+    echo "office-hours: invalid target '$1' — expected a numeric issue number. Usage: office-hours [<N>]" >&2
+    exit 2
+  fi
+  TARGET_N="$1"
+else
+  TARGET_N=""
+fi
+
 # Launch target only. The selector reads CLAUDE_AGENTS_CMD from the environment
 # for its own liveness queries (default `claude`); this script does not set it.
 CLAUDE_CMD="${OFFICE_HOURS_CLAUDE_CMD:-claude}"
@@ -245,7 +256,7 @@ fresh_session() {
 }
 
 # One call to the single source of truth; dispatch on the returned verb.
-directive=$("$SCRIPT_DIR/office-hours-select-target")
+directive=$("$SCRIPT_DIR/office-hours-select-target" ${TARGET_N:+"$TARGET_N"})
 read -r verb a b c d <<< "$directive"
 case "$verb" in
   idle|parked-router)
