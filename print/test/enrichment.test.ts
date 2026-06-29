@@ -34,11 +34,11 @@ vi.mock("@commons-systems/local-first/fsa-handle-store", () => ({
 }));
 
 // ---------------------------------------------------------------------------
-// Mock library.js: listLocal and resolveLocalBlob are overridable spies.
+// Mock library.js: listLocal and resolveLocalFile are overridable spies.
 // createLocalSource is a no-op. Other exports are real.
 // ---------------------------------------------------------------------------
 const mockListLocal = vi.fn<[], Promise<import("../src/types.js").MediaItem[]>>();
-const mockResolveLocalBlob = vi.fn<[import("../src/types.js").MediaItem], Promise<ArrayBuffer | null>>();
+const mockResolveLocalFile = vi.fn<[import("../src/types.js").MediaItem], Promise<File | null>>();
 
 vi.mock("../src/library.js", async () => {
   const actual = await vi.importActual<typeof import("../src/library.js")>("../src/library.js");
@@ -46,20 +46,20 @@ vi.mock("../src/library.js", async () => {
     ...actual,
     createLocalSource: vi.fn(),
     listLocal: () => mockListLocal(),
-    resolveLocalBlob: (item: import("../src/types.js").MediaItem) => mockResolveLocalBlob(item),
+    resolveLocalFile: (item: import("../src/types.js").MediaItem) => mockResolveLocalFile(item),
   };
 });
 
 // ---------------------------------------------------------------------------
 // Mock local-metadata.js extractMetadata as a spy
 // ---------------------------------------------------------------------------
-const mockExtractMetadata = vi.fn<[ArrayBuffer, import("../src/types.js").MediaType], Promise<{ title?: string; pageCount?: number }>>();
+const mockExtractMetadata = vi.fn<[Blob, import("../src/types.js").MediaType], Promise<{ title?: string; pageCount?: number }>>();
 
 vi.mock("../src/local-metadata.js", async () => {
   const actual = await vi.importActual<typeof import("../src/local-metadata.js")>("../src/local-metadata.js");
   return {
     ...actual,
-    extractMetadata: (buf: ArrayBuffer, mt: import("../src/types.js").MediaType) => mockExtractMetadata(buf, mt),
+    extractMetadata: (blob: Blob, mt: import("../src/types.js").MediaType) => mockExtractMetadata(blob, mt),
   };
 });
 
@@ -290,7 +290,7 @@ describe("enrichment — cached item (zero IO, no write)", () => {
     document.body.innerHTML = '';
   });
 
-  it("applies cached metadata without calling extractMetadata or resolveLocalBlob", async () => {
+  it("applies cached metadata without calling extractMetadata or resolveLocalFile", async () => {
     const item = makeLocalItem({ storagePath: "book.pdf", title: "book" });
     mockListLocal.mockResolvedValue([item]);
 
@@ -310,7 +310,7 @@ describe("enrichment — cached item (zero IO, no write)", () => {
     // The cached item is not uncached, so NO observer is registered for it and
     // there is nothing to trigger — no IO occurs.
     expect(ioRegistry).toHaveLength(0);
-    expect(mockResolveLocalBlob).not.toHaveBeenCalled();
+    expect(mockResolveLocalFile).not.toHaveBeenCalled();
     expect(mockExtractMetadata).not.toHaveBeenCalled();
 
     // Rendered item should show the enriched title
@@ -326,11 +326,11 @@ describe("enrichment — uncached item (extracts and caches)", () => {
     document.body.innerHTML = '';
   });
 
-  it("calls resolveLocalBlob and extractMetadata for uncached items", async () => {
-    const buf = new ArrayBuffer(8);
+  it("calls resolveLocalFile and extractMetadata for uncached items", async () => {
+    const file = new File([new Uint8Array(8)], "x.pdf");
     const item = makeLocalItem({ storagePath: "book.pdf", title: "book" });
     mockListLocal.mockResolvedValue([item]);
-    mockResolveLocalBlob.mockResolvedValue(buf);
+    mockResolveLocalFile.mockResolvedValue(file);
     mockExtractMetadata.mockResolvedValue({ title: "Extracted Title", pageCount: 20 });
 
     const dir = makeEmptyDir();
@@ -343,8 +343,8 @@ describe("enrichment — uncached item (extracts and caches)", () => {
     await settleEnrichment();
     await flushWrites();
 
-    expect(mockResolveLocalBlob).toHaveBeenCalledWith(item);
-    expect(mockExtractMetadata).toHaveBeenCalledWith(buf, "pdf");
+    expect(mockResolveLocalFile).toHaveBeenCalledWith(item);
+    expect(mockExtractMetadata).toHaveBeenCalledWith(file, "pdf");
 
     // Rendered HTML should reflect extracted title
     expect(container.innerHTML).toContain("Extracted Title");
@@ -355,10 +355,10 @@ describe("enrichment — uncached item (extracts and caches)", () => {
   });
 
   it("persists the cached metadata to disk (writable=true)", async () => {
-    const buf = new ArrayBuffer(4);
+    const file = new File([new Uint8Array(4)], "novel.epub");
     const item = makeLocalItem({ storagePath: "novel.epub", title: "novel" });
     mockListLocal.mockResolvedValue([item]);
-    mockResolveLocalBlob.mockResolvedValue(buf);
+    mockResolveLocalFile.mockResolvedValue(file);
     mockExtractMetadata.mockResolvedValue({ title: "Novel Title" });
 
     const dir = makeEmptyDir();
@@ -411,14 +411,14 @@ describe("enrichment — write suppression on focus-rescan", () => {
     expect(ioRegistry).toHaveLength(0);
     expect(indexHandle.createWritable.mock.calls.length).toBe(createWritableBefore);
     expect(mockExtractMetadata).not.toHaveBeenCalled();
-    expect(mockResolveLocalBlob).not.toHaveBeenCalled();
+    expect(mockResolveLocalFile).not.toHaveBeenCalled();
   });
 
   it("caches a present {} entry so a second render does NOT re-extract", async () => {
-    const buf = new ArrayBuffer(4);
+    const file = new File([new Uint8Array(4)], "unknown.pdf");
     const item = makeLocalItem({ storagePath: "unknown.pdf" });
     mockListLocal.mockResolvedValue([item]);
-    mockResolveLocalBlob.mockResolvedValue(buf);
+    mockResolveLocalFile.mockResolvedValue(file);
     // Extract returns empty (no title, no pageCount) — an {} entry IS cached
     mockExtractMetadata.mockResolvedValue({});
 
@@ -445,7 +445,7 @@ describe("enrichment — write suppression on focus-rescan", () => {
   });
 });
 
-describe("enrichment — resolveLocalBlob returns null (file gone)", () => {
+describe("enrichment — resolveLocalFile returns null (file gone)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -453,39 +453,39 @@ describe("enrichment — resolveLocalBlob returns null (file gone)", () => {
     document.body.innerHTML = '';
   });
 
-  it("does not cache {} when resolveLocalBlob returns null (so next render retries)", async () => {
+  it("does not cache {} when resolveLocalFile returns null (so next render retries)", async () => {
     const item = makeLocalItem({ storagePath: "gone.pdf" });
     mockListLocal.mockResolvedValue([item]);
-    mockResolveLocalBlob.mockResolvedValue(null);
+    mockResolveLocalFile.mockResolvedValue(null);
 
     const dir = makeEmptyDir();
     setLocalDirectory(dir, true);
 
     const container = makeContainer();
-    // First pass: scroll the row in → resolveLocalBlob returns null → no
+    // First pass: scroll the row in → resolveLocalFile returns null → no
     // extract, nothing cached.
     await renderLocalIntoList(container);
     triggerIntersection(rowNode(container, item));
     await settleEnrichment();
     await flushWrites();
 
-    // extractMetadata should NOT be called (no buf)
+    // extractMetadata should NOT be called (no file)
     expect(mockExtractMetadata).not.toHaveBeenCalled();
 
     // No entry should be cached (so next render can retry)
     const cached = await getMetadata("gone.pdf");
     expect(cached).toBeUndefined();
-    expect(mockResolveLocalBlob).toHaveBeenCalledTimes(1);
+    expect(mockResolveLocalFile).toHaveBeenCalledTimes(1);
 
     // Second pass: because nothing was cached, the row is STILL uncached, so a
     // fresh observer registers it. Scrolling it in again re-attempts the read —
-    // proving the null-blob path is a retry, not a permanent suppression.
+    // proving the null-file path is a retry, not a permanent suppression.
     await renderLocalIntoList(container);
     triggerIntersection(rowNode(container, item));
     await settleEnrichment();
     await flushWrites();
 
-    expect(mockResolveLocalBlob).toHaveBeenCalledTimes(2);
+    expect(mockResolveLocalFile).toHaveBeenCalledTimes(2);
     expect(mockExtractMetadata).not.toHaveBeenCalled();
   });
 });
@@ -513,7 +513,7 @@ describe("enrichment — early return when no media list present", () => {
     // Bails before any observer is constructed.
     expect(ioRegistry).toHaveLength(0);
     expect(mockExtractMetadata).not.toHaveBeenCalled();
-    expect(mockResolveLocalBlob).not.toHaveBeenCalled();
+    expect(mockResolveLocalFile).not.toHaveBeenCalled();
   });
 });
 
@@ -526,10 +526,10 @@ describe("enrichment — lazy: deferred until intersection (criterion 1)", () =>
   });
 
   it("does no file IO at first paint, then reads on intersection", async () => {
-    const buf = new ArrayBuffer(8);
+    const file = new File([new Uint8Array(8)], "x.pdf");
     const item = makeLocalItem({ storagePath: "book.pdf", title: "book" });
     mockListLocal.mockResolvedValue([item]);
-    mockResolveLocalBlob.mockResolvedValue(buf);
+    mockResolveLocalFile.mockResolvedValue(file);
     mockExtractMetadata.mockResolvedValue({ title: "Extracted Title" });
 
     const dir = makeEmptyDir();
@@ -539,7 +539,7 @@ describe("enrichment — lazy: deferred until intersection (criterion 1)", () =>
     await renderLocalIntoList(container);
 
     // First paint: the row is rendered but NOT yet enriched — no read fired.
-    expect(mockResolveLocalBlob).not.toHaveBeenCalled();
+    expect(mockResolveLocalFile).not.toHaveBeenCalled();
     expect(mockExtractMetadata).not.toHaveBeenCalled();
 
     // Scrolling the row into view defers-then-fires the read.
@@ -547,8 +547,8 @@ describe("enrichment — lazy: deferred until intersection (criterion 1)", () =>
     await settleEnrichment();
     await flushWrites();
 
-    expect(mockResolveLocalBlob).toHaveBeenCalledWith(item);
-    expect(mockExtractMetadata).toHaveBeenCalledWith(buf, "pdf");
+    expect(mockResolveLocalFile).toHaveBeenCalledWith(item);
+    expect(mockExtractMetadata).toHaveBeenCalledWith(file, "pdf");
   });
 });
 
@@ -576,9 +576,9 @@ describe("enrichment — bounded: reads route through the limiter (criterion 2)"
     // Each read returns a deferred we control. Resolving with `null` makes
     // enrichLocalItem return early (no extract/cache) — shortest deterministic
     // drain. The call itself fires regardless of the resolved value.
-    const gates: Array<ReturnType<typeof deferred<ArrayBuffer | null>>> = [];
-    mockResolveLocalBlob.mockImplementation(() => {
-      const g = deferred<ArrayBuffer | null>();
+    const gates: Array<ReturnType<typeof deferred<File | null>>> = [];
+    mockResolveLocalFile.mockImplementation(() => {
+      const g = deferred<File | null>();
       gates.push(g);
       return g.promise;
     });
@@ -597,14 +597,14 @@ describe("enrichment — bounded: reads route through the limiter (criterion 2)"
     }
 
     // Exactly the bound's worth of reads started; none have resolved.
-    expect(mockResolveLocalBlob).toHaveBeenCalledTimes(ENRICH_READ_CONCURRENCY);
+    expect(mockResolveLocalFile).toHaveBeenCalledTimes(ENRICH_READ_CONCURRENCY);
 
     // Free one slot → the queued (limit+1)th read now runs. Freeing a slot
     // takes enrichLocalItem through its awaits, so wait rather than count
     // microtasks.
     gates[0].resolve(null);
     await vi.waitFor(() =>
-      expect(mockResolveLocalBlob).toHaveBeenCalledTimes(ENRICH_READ_CONCURRENCY + 1),
+      expect(mockResolveLocalFile).toHaveBeenCalledTimes(ENRICH_READ_CONCURRENCY + 1),
     );
 
     // Drain everything so no pending read leaks into the next test's shared,
@@ -626,8 +626,8 @@ describe("enrichment — loading state (criterion 3)", () => {
   it("shows a spinner on intersection and clears it after the read settles", async () => {
     const item = makeLocalItem({ storagePath: "book.pdf", title: "book" });
     mockListLocal.mockResolvedValue([item]);
-    const gate = deferred<ArrayBuffer | null>();
-    mockResolveLocalBlob.mockReturnValue(gate.promise);
+    const gate = deferred<File | null>();
+    mockResolveLocalFile.mockReturnValue(gate.promise);
     mockExtractMetadata.mockResolvedValue({ title: "Extracted Title" });
 
     const dir = makeEmptyDir();
@@ -642,18 +642,18 @@ describe("enrichment — loading state (criterion 3)", () => {
     expect(node.querySelector(".media-loading")).not.toBeNull();
 
     // Resolve the read → patch + cache → spinner cleared.
-    gate.resolve(new ArrayBuffer(8));
+    gate.resolve(new File([], "x.pdf"));
     await settleEnrichment();
     await flushWrites();
 
     expect(node.querySelector(".media-loading")).toBeNull();
   });
 
-  it("clears the spinner even when the file is unreadable (null blob)", async () => {
+  it("clears the spinner even when the file is unreadable (null file)", async () => {
     const item = makeLocalItem({ storagePath: "gone.pdf", title: "gone" });
     mockListLocal.mockResolvedValue([item]);
-    const gate = deferred<ArrayBuffer | null>();
-    mockResolveLocalBlob.mockReturnValue(gate.promise);
+    const gate = deferred<File | null>();
+    mockResolveLocalFile.mockReturnValue(gate.promise);
 
     const dir = makeEmptyDir();
     setLocalDirectory(dir, true);
@@ -665,7 +665,7 @@ describe("enrichment — loading state (criterion 3)", () => {
     triggerIntersection(node);
     expect(node.querySelector(".media-loading")).not.toBeNull();
 
-    // Null blob never reaches patchLocalRow — the `finally` clear must still
+    // Null file never reaches patchLocalRow — the `finally` clear must still
     // remove the spinner.
     gate.resolve(null);
     await settleEnrichment();
