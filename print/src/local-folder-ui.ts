@@ -18,6 +18,7 @@ import { createLimiter } from "./concurrency.js";
 import {
   createLocalSource,
   listLocal,
+  resetLocalSource,
   resolveLocalBlob,
 } from "./library.js";
 import { extractMetadata } from "./local-metadata.js";
@@ -110,41 +111,92 @@ export async function initLocalFolder(
       const dir = await window.showDirectoryPicker!({ mode: "readwrite" });
       await store.put(PURPOSE, dir);
       await bindAndRender(dir, true);
+      // Surface the change/forget controls in-session (open→list) without a
+      // reload. From the "change" button the section is already "list", so this
+      // re-render is idempotent (re-binds the change/forget handlers fresh).
+      renderSection("list");
     } catch (e) {
       if ((e as DOMException)?.name === "AbortError") return;
       throw e;
     }
   }
 
-  if (state === "open") {
-    section.innerHTML =
-      '<button id="local-folder-open" class="local-folder-button" type="button">Open folder…</button>';
-    section
-      .querySelector<HTMLButtonElement>("#local-folder-open")!
-      .addEventListener("click", () => {
-        openFolder().catch((err) =>
-          logError(err, { operation: "local-folder-open" }),
-        );
-      });
-  } else if (state === "grant") {
-    section.innerHTML =
-      '<button id="local-folder-grant" class="local-folder-button" type="button">Grant access to your folder</button>';
-    section
-      .querySelector<HTMLButtonElement>("#local-folder-grant")!
-      .addEventListener("click", () => {
-        void (async () => {
-          const res = await store.requestPermission(handle!, "readwrite");
-          if (res === "granted") {
-            section.innerHTML = "";
-            await bindAndRender(handle as FileSystemDirectoryHandle, true);
-          }
-        })().catch((err) =>
-          logError(err, { operation: "local-folder-grant" }),
-        );
-      });
-  } else {
-    // "list" — permission already granted, bind and render.
-    section.innerHTML = "";
+  // Single, re-invokable nav-slot renderer: each branch sets the markup AND
+  // (re-)binds its click handlers, so every transition — open→list (first
+  // pick), grant→list (permission granted), forget's list→open — re-attaches
+  // listeners and never produces a dead button. Operates on `section` (the nav
+  // slot), distinct from `mediaListContainer` (the media list).
+  function renderSection(uiState: FolderUiState): void {
+    if (uiState === "open") {
+      section.innerHTML =
+        '<button id="local-folder-open" class="local-folder-button" type="button">Open folder…</button>';
+      section
+        .querySelector<HTMLButtonElement>("#local-folder-open")!
+        .addEventListener("click", () => {
+          openFolder().catch((err) =>
+            logError(err, { operation: "local-folder-open" }),
+          );
+        });
+    } else if (uiState === "grant") {
+      section.innerHTML =
+        '<button id="local-folder-grant" class="local-folder-button" type="button">Grant access to your folder</button>';
+      section
+        .querySelector<HTMLButtonElement>("#local-folder-grant")!
+        .addEventListener("click", () => {
+          void (async () => {
+            const res = await store.requestPermission(handle!, "readwrite");
+            if (res === "granted") {
+              // Render the change/forget controls, THEN bind the list — so the
+              // controls persist even if the scan fails.
+              renderSection("list");
+              await bindAndRender(handle as FileSystemDirectoryHandle, true);
+            }
+          })().catch((err) =>
+            logError(err, { operation: "local-folder-grant" }),
+          );
+        });
+    } else {
+      // "list" — persistent change/forget controls so the granted folder can be
+      // re-picked or cleared (replaces the old `section.innerHTML = ""`).
+      section.innerHTML =
+        '<div class="local-folder-controls">' +
+        '<button id="local-folder-change" class="local-folder-button" type="button">Change folder</button>' +
+        '<button id="local-folder-forget" class="local-folder-button" type="button">Forget folder</button>' +
+        "</div>";
+      section
+        .querySelector<HTMLButtonElement>("#local-folder-change")!
+        .addEventListener("click", () => {
+          // Reuse the picker flow; section is already "list" so no nav
+          // re-render is needed — bindAndRender re-renders the list rows.
+          openFolder().catch((err) =>
+            logError(err, { operation: "local-folder-change" }),
+          );
+        });
+      section
+        .querySelector<HTMLButtonElement>("#local-folder-forget")!
+        .addEventListener("click", () => {
+          void (async () => {
+            await store.remove(PURPOSE);
+            resetLocalSource();
+            // Drop the focus rescan so it cannot re-scan the forgotten folder.
+            if (focusCleanup) {
+              focusCleanup();
+              focusCleanup = null;
+            }
+            // With the source reset, listLocal() returns [] — this empties the
+            // local rows via the existing strip-`.media-item-local` logic.
+            await renderLocalIntoList(mediaListContainer);
+            // Revert the nav slot to the initial "Open folder…" state.
+            renderSection("open");
+          })().catch((err) =>
+            logError(err, { operation: "local-folder-forget" }),
+          );
+        });
+    }
+  }
+
+  renderSection(state);
+  if (state === "list") {
     await bindAndRender(handle as FileSystemDirectoryHandle, true);
   }
 
