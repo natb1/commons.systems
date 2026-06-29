@@ -33,9 +33,10 @@ in
     # precedence applies (falls through to ~/.gitconfig, then errors clearly).
     #
     # To customize, either:
-    #   1. Export environment variables before running home-manager switch:
+    #   1. Export environment variables and run home-manager switch with --impure:
     #        export GIT_AUTHOR_NAME="Your Name"
     #        export GIT_AUTHOR_EMAIL="you@example.com"
+    #        home-manager switch --flake .#default --impure
     #   2. Override in Home Manager: programs.git.settings.user.name = lib.mkForce "Your Name";
     #   3. Set values directly in ~/.gitconfig (takes precedence over this XDG config)
     settings = {
