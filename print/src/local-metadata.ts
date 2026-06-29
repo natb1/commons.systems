@@ -41,11 +41,35 @@ export function parseOpfTitle(xml: string): string | undefined {
   return cleanTitle(plainTitle?.textContent);
 }
 
-async function extractPdf(buf: ArrayBuffer): Promise<{ title?: string; pageCount?: number }> {
-  // getDocument copies/detaches the buffer; pass a fresh Uint8Array view.
+/**
+ * Range transport that serves pdf.js's data requests by slicing the source Blob,
+ * so only the byte ranges pdf.js asks for are read (not the whole file). Read
+ * errors are left to reject so extractMetadata's try/catch yields `{}`.
+ */
+export class BlobRangeTransport extends pdfjsLib.PDFDataRangeTransport {
+  constructor(private blob: Blob) {
+    super(blob.size, null);
+  }
+
+  requestDataRange(begin: number, end: number): void {
+    void this.blob
+      .slice(begin, end)
+      .arrayBuffer()
+      .then((buf) => {
+        this.onDataRange(begin, new Uint8Array(buf));
+      });
+  }
+}
+
+async function extractPdf(blob: Blob): Promise<{ title?: string; pageCount?: number }> {
+  // Range transport reads only the byte ranges pdf.js requests from the Blob.
   let doc: pdfjsLib.PDFDocumentProxy | undefined;
   try {
-    doc = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
+    doc = await pdfjsLib.getDocument({
+      range: new BlobRangeTransport(blob),
+      disableStream: true,
+      disableAutoFetch: true,
+    }).promise;
     const pageCount = doc.numPages;
     const { info } = await doc.getMetadata();
     const title = cleanTitle((info as { Title?: string }).Title);
@@ -56,8 +80,8 @@ async function extractPdf(buf: ArrayBuffer): Promise<{ title?: string; pageCount
   }
 }
 
-async function extractEpub(buf: ArrayBuffer): Promise<{ title?: string; pageCount?: number }> {
-  const { entries } = await unzip(buf);
+async function extractEpub(blob: Blob): Promise<{ title?: string; pageCount?: number }> {
+  const { entries } = await unzip(blob);
   const containerEntry = entries["META-INF/container.xml"];
   if (!containerEntry) return {};
   const opfPath = parseContainerXml(await containerEntry.text());
@@ -70,19 +94,19 @@ async function extractEpub(buf: ArrayBuffer): Promise<{ title?: string; pageCoun
 }
 
 /**
- * Extract `{ title?, pageCount? }` from in-memory bytes. Read-only: operates on
- * bytes already in memory, so extraction works even when the source folder is
- * not writable. Tolerant of untrusted/malformed file contents — any failure
- * (corrupt PDF, malformed or missing container.xml/OPF) is logged and reported
- * as `{}` so the caller can fall back to the filename stem.
+ * Extract `{ title?, pageCount? }` from a Blob, range-reading only the bytes
+ * needed. Read-only: never writes back, so extraction works even when the source
+ * folder is not writable. Tolerant of untrusted/malformed file contents — any
+ * failure (corrupt PDF, malformed or missing container.xml/OPF) is logged and
+ * reported as `{}` so the caller can fall back to the filename stem.
  */
 export async function extractMetadata(
-  buf: ArrayBuffer,
+  blob: Blob,
   mediaType: MediaType,
 ): Promise<{ title?: string; pageCount?: number }> {
   try {
-    if (mediaType === "pdf") return await extractPdf(buf);
-    if (mediaType === "epub") return await extractEpub(buf);
+    if (mediaType === "pdf") return await extractPdf(blob);
+    if (mediaType === "epub") return await extractEpub(blob);
     return {};
   } catch (err) {
     logError(err, { operation: "extractMetadata", mediaType });
