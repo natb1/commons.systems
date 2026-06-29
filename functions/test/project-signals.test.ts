@@ -36,7 +36,7 @@ import {
   fetchGscLive,
   fetchPsiLive,
   collectProjectSignalsCore,
-  parseGa4Pairs,
+  parseGa4HostApps,
   isValidOwnerName,
   isValidGscSite,
   isValidPsiUrl,
@@ -170,47 +170,98 @@ describe("fetchGoogleAccessTokenLive", () => {
 });
 
 describe("fetchGa4Live", () => {
-  it("parses overview/referral/landing reports and leaves webVitals empty", async () => {
+  it("splits one property by hostName into per-host rows (partitioned, not summed)", async () => {
     let call = 0;
     const fetchMock = vi.fn(async () => {
       call++;
       if (call === 1) {
-        // overview
-        return okJson({
-          rows: [{ metricValues: [{ value: "1234" }, { value: "567" }, { value: "0.42" }] }],
-        });
-      }
-      if (call === 2) {
-        // referral sources
+        // (a) overview — one row per host, metrics computed per host server-side.
         return okJson({
           rows: [
-            { dimensionValues: [{ value: "google" }], metricValues: [{ value: "300" }] },
-            { dimensionValues: [{ value: "(direct)" }], metricValues: [{ value: "200" }] },
+            {
+              dimensionValues: [{ value: "commons.systems" }],
+              metricValues: [{ value: "1234" }, { value: "567" }, { value: "0.42" }],
+            },
+            {
+              dimensionValues: [{ value: "budget.commons.systems" }],
+              metricValues: [{ value: "200" }, { value: "100" }, { value: "0.30" }],
+            },
           ],
         });
       }
-      // landing pages
+      if (call === 2) {
+        // (b) referral sources — interleaved across hosts in global sessions-desc
+        // order (no per-query limit), so grouping + per-host slice is exercised.
+        return okJson({
+          rows: [
+            { dimensionValues: [{ value: "commons.systems" }, { value: "google" }], metricValues: [{ value: "300" }] },
+            { dimensionValues: [{ value: "budget.commons.systems" }, { value: "(direct)" }], metricValues: [{ value: "250" }] },
+            { dimensionValues: [{ value: "commons.systems" }, { value: "(direct)" }], metricValues: [{ value: "200" }] },
+            { dimensionValues: [{ value: "budget.commons.systems" }, { value: "google" }], metricValues: [{ value: "50" }] },
+          ],
+        });
+      }
+      // (c) landing pages — interleaved across the same hosts.
       return okJson({
         rows: [
-          {
-            dimensionValues: [{ value: "/" }],
-            metricValues: [{ value: "150" }, { value: "400" }],
-          },
+          { dimensionValues: [{ value: "commons.systems" }, { value: "/" }], metricValues: [{ value: "150" }, { value: "400" }] },
+          { dimensionValues: [{ value: "budget.commons.systems" }, { value: "/budget" }], metricValues: [{ value: "90" }, { value: "120" }] },
+          { dimensionValues: [{ value: "commons.systems" }, { value: "/about" }], metricValues: [{ value: "40" }, { value: "80" }] },
         ],
       });
     });
 
-    const ga4 = await fetchGa4Live(fetchMock as unknown as typeof fetch, "tok", "landing", "12345"); // type-safety-ok: vi.fn() mock typed as global fetch for DI test
-    expect(ga4.app).toBe("landing");
-    expect(ga4.pageViews).toBe(1234);
-    expect(ga4.sessions).toBe(567);
-    expect(ga4.bounceRate).toBeCloseTo(0.42);
-    expect(ga4.topReferralSources).toEqual([
-      { source: "google", sessions: 300 },
-      { source: "(direct)", sessions: 200 },
+    // Three configured hosts; the third ("print.commons.systems") has NO data row
+    // and must default to 0 metrics + empty top-N arrays.
+    const ga4 = await fetchGa4Live(fetchMock as unknown as typeof fetch, "tok", "12345", [ // type-safety-ok: vi.fn() mock typed as global fetch for DI test
+      { host: "commons.systems", app: "commons" },
+      { host: "budget.commons.systems", app: "budget" },
+      { host: "print.commons.systems", app: "print" },
     ]);
-    expect(ga4.topLandingPages).toEqual([{ page: "/", sessions: 150, views: 400 }]);
-    expect(ga4.webVitals).toEqual([]);
+
+    expect(ga4.map((a) => a.app)).toEqual(["commons", "budget", "print"]);
+
+    // commons: its own overview row + its own partitioned top-N.
+    expect(ga4[0]).toEqual({
+      app: "commons",
+      pageViews: 1234,
+      sessions: 567,
+      bounceRate: 0.42,
+      topReferralSources: [
+        { source: "google", sessions: 300 },
+        { source: "(direct)", sessions: 200 },
+      ],
+      topLandingPages: [
+        { page: "/", sessions: 150, views: 400 },
+        { page: "/about", sessions: 40, views: 80 },
+      ],
+      webVitals: [],
+    });
+
+    // budget: its own values, NOT averaged/summed with commons.
+    expect(ga4[1]).toEqual({
+      app: "budget",
+      pageViews: 200,
+      sessions: 100,
+      bounceRate: 0.3,
+      topReferralSources: [
+        { source: "(direct)", sessions: 250 },
+        { source: "google", sessions: 50 },
+      ],
+      topLandingPages: [{ page: "/budget", sessions: 90, views: 120 }],
+      webVitals: [],
+    });
+
+    // print: configured but no data -> 0-default metrics, []-default top-N.
+    expect(ga4[2]).toEqual({
+      app: "print",
+      pageViews: 0,
+      sessions: 0,
+      bounceRate: 0,
+      topReferralSources: [],
+      topLandingPages: [],
+      webVitals: [],
+    });
   });
 });
 
@@ -362,13 +413,16 @@ describe("validation helpers", () => {
     expect(isValidPsiUrl("https://foo.com//path")).toBe(false);
   });
 
-  it("parseGa4Pairs keeps valid pairs and drops malformed ones", () => {
-    expect(parseGa4Pairs("landing:12345,budget:67890")).toEqual([
-      { app: "landing", propertyId: "12345" },
-      { app: "budget", propertyId: "67890" },
+  it("parseGa4HostApps keeps valid host:app entries and drops malformed ones", () => {
+    // host on the LEFT (may be dotted), app on the RIGHT.
+    expect(parseGa4HostApps("commons.systems:commons,budget.commons.systems:budget")).toEqual([
+      { host: "commons.systems", app: "commons" },
+      { host: "budget.commons.systems", app: "budget" },
     ]);
-    // non-numeric property id, missing colon, bad app charset all dropped
-    expect(parseGa4Pairs("landing:abc,nopair,bad app:1, :5, app:")).toEqual([]);
+    // missing colon, empty host, empty app, and bad app charset are all dropped.
+    expect(parseGa4HostApps("nocolon,:budget,commons.systems:, host:app x, ok.host:ok")).toEqual([
+      { host: "ok.host", app: "ok" },
+    ]);
   });
 });
 
