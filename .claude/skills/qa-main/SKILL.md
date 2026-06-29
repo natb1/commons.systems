@@ -110,6 +110,17 @@ verification in Step 4.
 
 ### 4. Verify the behavior against live prod via Claude-in-Chrome
 
+**4·0. Triage: is this follow-up browser-verifiable?**
+
+Before loading browser tools, check for the non-browser-verifiable class:
+
+- **No `URL_PATH`** (empty or absent).
+- **Non-browser outcome**: the expected behavior requires a CLI or server host — e.g. `nix flake check --pure-eval`, a darwin build, or any outcome with no browser-observable surface.
+
+If either holds → skip 4a–4e and route **straight to cannot-verify (Step 5)**. Name the specific reason in the `dispatch-mark-deviation` call (e.g. `"no url_path — outcome is a nix flake check, not observable in a browser"`).
+
+**Cross-reference (AC3):** Ideally `/qa-fix`'s `needs-main` deferral flags non-browser-verifiable items at creation so they never route to qa-main. This is a prose note only — it does not modify `qa-fix/SKILL.md` or any deferral logic.
+
 **4a. Load browser tools — one ToolSearch call** (read-only observe set; no
 `form_input`, `gif_creator`, or `file_upload`):
 
@@ -179,16 +190,18 @@ unambiguous and reproducible against live prod.
 
 Decision tree, **first match wins**:
 
-1. Any environment barrier from Step 4 (tools unavailable, no browser, page won't
-   load after one retry, auth wall, localhost/emulator context, repeated browser
-   errors) → **cannot-verify**.
-2. Observed behavior matches `EXPECTED_OUTCOME` → **pass**.
-3. Expected absent / contradicted **AND** `DEPLOY_READY` is `not-yet` or
+1. Not browser-verifiable: no `URL_PATH` or non-browser outcome recognized in
+   Step 4·0 (caught before loading tools) → **cannot-verify**.
+2. Any environment barrier from Step 4a–4d (tools unavailable, no browser, page
+   won't load after one retry, auth wall, localhost/emulator context, repeated
+   browser errors) → **cannot-verify**.
+3. Observed behavior matches `EXPECTED_OUTCOME` → **pass**.
+4. Expected absent / contradicted **AND** `DEPLOY_READY` is `not-yet` or
    `merged-deploy-uncertain` → **cannot-verify** (deploy lag; the signal demotes
    only).
-4. Observed unambiguously and reproducibly contradicts `EXPECTED_OUTCOME`, no
+5. Observed unambiguously and reproducibly contradicts `EXPECTED_OUTCOME`, no
    barrier, **AND** `DEPLOY_READY == merged-and-likely-deployed` → **broken**.
-5. Everything else (partial / ambiguous / uncertain) → **cannot-verify**.
+6. Everything else (partial / ambiguous / uncertain) → **cannot-verify**.
 
 Then take exactly one terminal action.
 
