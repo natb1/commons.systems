@@ -3,6 +3,7 @@ import { prerenderPosts } from "@commons-systems/blog/prerender";
 import { generateFeedXml } from "@commons-systems/blog/feed";
 import { generateSitemapXml } from "@commons-systems/blog/sitemap";
 import { FEED_REGISTRY } from "@commons-systems/blog/blog-roll/feed-registry";
+import { FOOTER_HTML } from "@commons-systems/components/footer";
 import appSeed from "../seeds/firestore.js";
 import {
   NAV_LINKS,
@@ -34,6 +35,7 @@ try {
     organization: ORGANIZATION,
     author: AUTHOR,
     relMe: REL_ME,
+    footerHtml: FOOTER_HTML,
     showHomeLink: true,
   });
 } catch (err) {

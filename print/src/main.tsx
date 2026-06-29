@@ -1,5 +1,6 @@
 import "missing.css";
 import "./style/theme.css";
+import "@commons-systems/components/footer";
 import { createHistoryRouter } from "@commons-systems/router";
 import { classifyError } from "@commons-systems/errorutil/classify";
 import { logError } from "@commons-systems/errorutil/log";
