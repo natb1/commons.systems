@@ -8,8 +8,7 @@
  */
 import { createFirebaseMediaSource } from "@commons-systems/mediautil/firebase";
 import { createLocalFolderMediaSource } from "@commons-systems/mediautil/local-folder";
-import type { LocalDirectoryHandleLike } from "@commons-systems/mediautil/local-folder";
-import type { MediaSource } from "@commons-systems/mediautil/source";
+import type { LocalDirectoryHandleLike, LocalFolderMediaSource } from "@commons-systems/mediautil/local-folder";
 
 import { getPublicMedia, getAllAccessibleMedia, getMediaItem } from "./firestore.js";
 import { storage, STORAGE_NAMESPACE } from "./firebase.js";
@@ -81,7 +80,7 @@ export function fileToLocalItem(file: File, name: string, folderId: string): Med
   };
 }
 
-let localSource: MediaSource<MediaItem> | null = null;
+let localSource: LocalFolderMediaSource<MediaItem> | null = null;
 
 let resolveLocalFolderReady!: () => void;
 const localFolderReadyPromise = new Promise<void>((resolve) => {
@@ -120,6 +119,13 @@ export async function resolveLocalBlob(item: MediaItem): Promise<ArrayBuffer | n
     throw new Error('No local source bound');
   }
   return localSource.resolveToBlob(item);
+}
+
+export async function resolveLocalFile(item: MediaItem): Promise<File | null> {
+  if (!localSource) {
+    throw new Error('No local source bound');
+  }
+  return localSource.resolveToFile(item);
 }
 
 export function hasLocalSource(): boolean {
