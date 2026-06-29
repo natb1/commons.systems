@@ -177,16 +177,22 @@ body[data-route="other"] .landing-hero {
 }
 
 .app-showcase-overflow {
-  margin-block-end: var(--space-4);
+  margin-block: var(--space-4) 0;
+  background: none;
+  border: 0;
+  padding: 0;
+  border-radius: 0;
+  overflow: visible;
 }
 .app-showcase-overflow summary {
   cursor: pointer;
   padding: var(--space-2) var(--space-1);
   color: var(--muted);
   font-weight: var(--weight-bold);
-  text-transform: uppercase;
   letter-spacing: var(--tracking-heading);
   transition: color var(--duration-fast) var(--ease), outline-color var(--duration-fast) var(--ease);
+  margin-inline: 0;
+  margin-block: 0;
 }
 .app-showcase-overflow summary:hover {
   color: var(--accent);

@@ -128,6 +128,19 @@ describe("renderShowcase", () => {
       const html = renderShowcase(APPS);
       expect(html).not.toContain("<details");
     });
+
+    it("summary text is 'more…' and not 'More apps'", () => {
+      const html = renderShowcase(APPS, OVERFLOW);
+      expect(html).toContain("more…");
+      expect(html).not.toContain("More apps");
+    });
+
+    it("<details> overflow block appears after .landing-hero-grid in SSR output", () => {
+      const html = renderShowcase(APPS, OVERFLOW);
+      const gridIndex = html.indexOf("landing-hero-grid");
+      const detailsIndex = html.indexOf("<details");
+      expect(detailsIndex).toBeGreaterThan(gridIndex);
+    });
   });
 
   describe("band CTAs", () => {
