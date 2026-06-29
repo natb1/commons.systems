@@ -699,8 +699,12 @@ fi
     WIN_PROFILE=$(PATH="$STUB_PATH" cmd.exe /c echo %USERPROFILE% 2>/dev/null | tr -d '\r')
     CAND=$(PATH="$STUB_PATH" wslpath -u "$WIN_PROFILE" 2>/dev/null)
     if [ -n "$CAND" ] && [ -d "$CAND" ]; then
-      TARGET_DIR="$CAND"
-      WINDOWS_USER=$(basename "$CAND")
+      if [[ "$CAND" == "$TEMP_MOUNT_CHAIN/c/Users/"* ]]; then
+        TARGET_DIR="$CAND"
+        WINDOWS_USER=$(basename "$CAND")
+      else
+        echo "WARNING: wslpath returned '$CAND' which is not under $TEMP_MOUNT_CHAIN/c/Users/; falling back to heuristic" >&2
+      fi
     fi
   fi
 
@@ -751,8 +755,12 @@ echo "=== Test 25: Interop wins over heuristic when no override ==="
     WIN_PROFILE=$(PATH="$STUB_PATH" cmd.exe /c echo %USERPROFILE% 2>/dev/null | tr -d '\r')
     CAND=$(PATH="$STUB_PATH" wslpath -u "$WIN_PROFILE" 2>/dev/null)
     if [ -n "$CAND" ] && [ -d "$CAND" ]; then
-      TARGET_DIR="$CAND"
-      WINDOWS_USER=$(basename "$CAND")
+      if [[ "$CAND" == "$TEMP_MOUNT_CHAIN/c/Users/"* ]]; then
+        TARGET_DIR="$CAND"
+        WINDOWS_USER=$(basename "$CAND")
+      else
+        echo "WARNING: wslpath returned '$CAND' which is not under $TEMP_MOUNT_CHAIN/c/Users/; falling back to heuristic" >&2
+      fi
     fi
   fi
 
@@ -826,6 +834,90 @@ if [[ "$RESULT_26" == "alice" ]]; then
   report_pass "Test 26: heuristic fallback picks alphabetically-first user when interop absent"
 else
   report_fail "Test 26: heuristic should pick alice when interop absent" "Expected: alice, Got: $RESULT_26"
+fi
+
+# Test 27: Prefix guard — wslpath returning a path outside /mnt/c/Users/ falls through to heuristic
+#
+# Guards against a manipulated Windows environment returning a %USERPROFILE% that,
+# after wslpath translation, resolves to a path outside /mnt/c/Users/. Without the
+# guard the activation script would use it as TARGET_DIR; with the guard it warns
+# and falls through to the heuristic, which selects alice from the temp mount.
+echo ""
+echo "=== Test 27: Tier 2 prefix guard rejects path outside /mnt/c/Users/ ==="
+
+# Build a wslpath stub that returns a path OUTSIDE /mnt/c/Users/ — pointing at
+# STUBDIR itself (which is an existing directory but not under /mnt/c/Users/).
+STUBDIR_T27=$(mktemp -d)
+CLEANUP_DIRS+=("$STUBDIR_T27")
+
+cat > "$STUBDIR_T27/cmd.exe" <<'STUB_EOF'
+#!/bin/sh
+printf 'C:\\Users\\bob\r\n'
+STUB_EOF
+chmod +x "$STUBDIR_T27/cmd.exe"
+
+# wslpath stub: returns STUBDIR_T27 (an existing dir, but not under /mnt/c/Users/)
+cat > "$STUBDIR_T27/wslpath" <<STUB_EOF
+#!/bin/sh
+printf '%s' "$STUBDIR_T27"
+STUB_EOF
+chmod +x "$STUBDIR_T27/wslpath"
+
+STUB_PATH_T27="$STUBDIR_T27:$INTEROP_FREE_PATH"
+
+(
+  export TEMP_MOUNT_CHAIN
+  unset WEZTERM_WINDOWS_USER 2>/dev/null || true
+
+  TARGET_DIR=""
+  WINDOWS_USER=""
+
+  # Tier 1 (no override)
+  if [ -n "${WEZTERM_WINDOWS_USER:-}" ]; then
+    if [ -d "$TEMP_MOUNT_CHAIN/c/Users/$WEZTERM_WINDOWS_USER" ]; then
+      WINDOWS_USER="$WEZTERM_WINDOWS_USER"
+      TARGET_DIR="$TEMP_MOUNT_CHAIN/c/Users/$WINDOWS_USER"
+    else
+      echo "WARNING: WEZTERM_WINDOWS_USER='$WEZTERM_WINDOWS_USER' set but $TEMP_MOUNT_CHAIN/c/Users/$WEZTERM_WINDOWS_USER does not exist; falling back to auto-detection" >&2
+    fi
+  fi
+
+  # Tier 2: stub returns a path outside /mnt/c/Users/ — prefix guard must reject it
+  if [ -z "$TARGET_DIR" ] && PATH="$STUB_PATH_T27" command -v cmd.exe >/dev/null 2>&1 && PATH="$STUB_PATH_T27" command -v wslpath >/dev/null 2>&1; then
+    WIN_PROFILE=$(PATH="$STUB_PATH_T27" cmd.exe /c echo %USERPROFILE% 2>/dev/null | tr -d '\r')
+    CAND=$(PATH="$STUB_PATH_T27" wslpath -u "$WIN_PROFILE" 2>/dev/null)
+    if [ -n "$CAND" ] && [ -d "$CAND" ]; then
+      case "$CAND" in
+        /mnt/c/Users/*)
+          TARGET_DIR="$CAND"
+          WINDOWS_USER=$(basename "$CAND")
+          ;;
+        *)
+          echo "WARNING: wslpath returned '$CAND' which is not under /mnt/c/Users/; falling back to heuristic" >&2
+          ;;
+      esac
+    fi
+  fi
+
+  # Tier 3 (heuristic last resort — should pick alice from TEMP_MOUNT_CHAIN)
+  if [ -z "$TARGET_DIR" ]; then
+    WINDOWS_USER=$(ls "$TEMP_MOUNT_CHAIN/c/Users/" 2>/dev/null | grep -v -E '^(All Users|Default|Default User|Public|desktop.ini)$' | head -n1)
+    if [ -n "$WINDOWS_USER" ] && [ -d "$TEMP_MOUNT_CHAIN/c/Users/$WINDOWS_USER" ]; then
+      TARGET_DIR="$TEMP_MOUNT_CHAIN/c/Users/$WINDOWS_USER"
+    fi
+  fi
+
+  printf '%s' "$WINDOWS_USER"
+) > "$RESULT_DIR/wezterm_test27_result" 2>"$RESULT_DIR/wezterm_test27_warn"
+RESULT_27=$(cat "$RESULT_DIR/wezterm_test27_result")
+WARN_27=$(cat "$RESULT_DIR/wezterm_test27_warn")
+rm -f "$RESULT_DIR/wezterm_test27_result" "$RESULT_DIR/wezterm_test27_warn"
+
+if [[ "$RESULT_27" == "alice" ]] && [[ "$WARN_27" =~ "WARNING:" ]]; then
+  report_pass "Test 27: prefix guard rejects out-of-/mnt/c/Users/ path, warns, falls through to heuristic (alice)"
+else
+  report_fail "Test 27: prefix guard should reject non-/mnt/c/Users/ path and fall through" \
+    "Expected alice + WARNING, Got: result=$RESULT_27 warn=$WARN_27"
 fi
 
 # Summary

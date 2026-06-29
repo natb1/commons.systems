@@ -171,8 +171,15 @@
           WIN_PROFILE=$(cmd.exe /c echo %USERPROFILE% 2>/dev/null | tr -d '\r')
           CAND=$(wslpath -u "$WIN_PROFILE" 2>/dev/null)
           if [ -n "$CAND" ] && [ -d "$CAND" ]; then
-            TARGET_DIR="$CAND"
-            WINDOWS_USER=$(basename "$CAND")
+            case "$CAND" in
+              /mnt/c/Users/*)
+                TARGET_DIR="$CAND"
+                WINDOWS_USER=$(basename "$CAND")
+                ;;
+              *)
+                echo "WARNING: wslpath returned '$CAND' which is not under /mnt/c/Users/; falling back to heuristic" >&2
+                ;;
+            esac
           fi
         fi
 
