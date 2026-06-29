@@ -12,7 +12,7 @@ import {
 
 const ENV = "test";
 
-const KNOWN_APPS = ["budget", "landing", "fellspiral", "print", "audio"];
+const KNOWN_PROJECTS = ["budget", "landing", "fellspiral", "print", "audio"];
 
 function validErrorDoc() {
   return {
@@ -39,7 +39,7 @@ describe("error logs", () => {
 
   setupCleanup();
 
-  for (const appName of KNOWN_APPS) {
+  for (const appName of KNOWN_PROJECTS) {
     describe(`${appName} errors`, () => {
       it("allows unauthenticated create with valid fields", async () => {
         const ctx = unauthenticatedContext(env);

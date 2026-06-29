@@ -221,7 +221,7 @@ interface ProjectSignalSample {
   sessions?: number; // summed across GA4 apps
   gscClicks?: number; // summed from topPages
   gscImpressions?: number; // summed from topPages
-  psiPerformance?: number; // first-URL mobile performance
+  psiPerformance?: number; // first-URL performance score at the configured strategy (mobile or desktop)
 }
 
 // ---------------------------------------------------------------------------
@@ -564,7 +564,7 @@ export interface CollectProjectSignalsDeps {
   // Each fetcher is null when its source is unconfigured (skipped entirely).
   fetchGithub: (() => Promise<GithubSignals>) | null;
   fetchGa4: (() => Promise<Ga4AppSignals[]>) | null;
-  fetchGsc: (() => Promise<GscSignals>) | null;
+  fetchGsc: ((now: Date) => Promise<GscSignals>) | null;
   fetchPsi: (() => Promise<PsiUrlSignals[]>) | null;
 }
 
@@ -594,7 +594,7 @@ export async function collectProjectSignalsCore(deps: CollectProjectSignalsDeps)
   }
   if (deps.fetchGsc) {
     try {
-      gsc = await deps.fetchGsc();
+      gsc = await deps.fetchGsc(deps.now);
     } catch (err) {
       console.error(
         `collectProjectSignals: gsc source failed: ${err instanceof Error ? err.message : String(err)}`,
@@ -618,9 +618,9 @@ export async function collectProjectSignalsCore(deps: CollectProjectSignalsDeps)
     groupId: deps.groupId,
     memberEmails: deps.memberEmails,
     ...(github ? { github } : {}),
-    ...(ga4 ? { ga4 } : {}),
+    ...(ga4 && ga4.length > 0 ? { ga4 } : {}),
     ...(gsc ? { gsc } : {}),
-    ...(psi ? { psi } : {}),
+    ...(psi && psi.length > 0 ? { psi } : {}),
   };
   await deps.firestore.doc(`${deps.namespace}/metrics/project-signals`).set(snapshot);
 
@@ -785,9 +785,9 @@ export const collectProjectSignals = onSchedule(
           `collectProjectSignals: PROJECT_SIGNALS_GSC_SITE "${gscSite}" is not a valid sc-domain:/https:// site; skipping gsc.`,
         );
       } else {
-        fetchGsc = async (): Promise<GscSignals> => {
+        fetchGsc = async (now: Date): Promise<GscSignals> => {
           const token = await googleToken();
-          return fetchGscLive(fetchFn, token, gscSite, new Date());
+          return fetchGscLive(fetchFn, token, gscSite, now);
         };
       }
     }
@@ -850,12 +850,22 @@ export function isValidOwnerName(repo: string): boolean {
   return slash > 0 && slash !== repo.length - 1 && repo.indexOf("/", slash + 1) === -1;
 }
 
+// Shared https URL pattern for GSC sites and PSI URLs: an https URL whose path
+// has no `..` traversal component and no `//` empty segment. Tightening the
+// allowed character set or the lookaheads here applies to both validators.
+const HTTPS_URL_RE =
+  /^https:\/\/(?!.*\/\/)(?!.*\.\.)[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]*)*$/;
+
+// isValidGscSite — accepts `sc-domain:<host>` (no slashes) or an https URL
+// whose path has no `..` traversal component and no `//` empty segment.
 export function isValidGscSite(site: string): boolean {
-  return /^(sc-domain:[A-Za-z0-9.-]+|https:\/\/[A-Za-z0-9._/-]+)$/.test(site);
+  return /^sc-domain:[A-Za-z0-9.-]+$/.test(site) || HTTPS_URL_RE.test(site);
 }
 
+// isValidPsiUrl — https URL with no `..` traversal component and no `//`
+// empty path segment.
 export function isValidPsiUrl(url: string): boolean {
-  return /^https:\/\/[A-Za-z0-9._/-]+$/.test(url);
+  return HTTPS_URL_RE.test(url);
 }
 
 // Parses "app:propertyId,app:propertyId,..." into validated pairs. An app name
