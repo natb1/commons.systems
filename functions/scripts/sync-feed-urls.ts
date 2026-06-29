@@ -3,7 +3,7 @@
 import { writeFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
-import { FEED_REGISTRY } from "../../blog/src/blog-roll/feed-registry";
+import { FEED_REGISTRY } from "../../packages/blog/src/blog-roll/feed-registry";
 
 if (FEED_REGISTRY.length === 0) {
   console.error("sync-feed-urls: FEED_REGISTRY is empty — refusing to generate an empty allowlist.");

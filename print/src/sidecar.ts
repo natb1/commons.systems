@@ -156,21 +156,6 @@ export async function cacheMetadata(
   return enqueueWrite({ metadata: { [filename]: meta } });
 }
 
-/**
- * Merge many metadata entries into the model in a SINGLE serialized write. This
- * is the batch form of `cacheMetadata`: the list-enrichment path accumulates
- * every newly-extracted entry for a render pass and persists them in one
- * index.json rewrite, instead of N sequential full-file rewrites (one per new
- * file). An empty `entries` is a no-op — it neither touches the chain nor writes
- * the file, preserving focus-rescan write suppression when nothing is new.
- */
-export async function cacheMetadataBatch(
-  entries: Record<string, { title?: string; pageCount?: number }>,
-): Promise<void> {
-  if (Object.keys(entries).length === 0) return;
-  return enqueueWrite({ metadata: entries });
-}
-
 // ---------------------------------------------------------------------------
 // D. PositionStore interface + sidecar-backed implementation
 // ---------------------------------------------------------------------------

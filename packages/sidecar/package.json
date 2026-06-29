@@ -14,7 +14,7 @@
     "@commons-systems/errorutil": "*"
   },
   "devDependencies": {
-    "@commons-systems/config": "file:../../config",
+    "@commons-systems/config": "file:../config",
     "typescript": "^5.7.3"
   }
 }

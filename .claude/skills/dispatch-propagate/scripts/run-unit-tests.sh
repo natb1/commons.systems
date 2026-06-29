@@ -87,10 +87,10 @@ fi
 
 # Filter rules-test: requires Firebase emulators (not supported by vitest run);
 # also excluded from vitest workspace projects in vitest.config.ts
-if [[ -n "${DIRTY_APPS[rules-test]+x}" ]]; then
+if [[ -n "${DIRTY_APPS[packages/rules-test]+x}" ]]; then
   echo "Warning: rules-test requires Firebase emulators; skipping from vitest run" >&2
 fi
-unset 'DIRTY_APPS[rules-test]'
+unset 'DIRTY_APPS[packages/rules-test]'
 APP_DIRS=("${!DIRTY_APPS[@]}")
 FAILURES=()
 

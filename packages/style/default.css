@@ -1,0 +1,165 @@
+@import "@commons-systems/ds/tokens/colors.css";
+@import "@commons-systems/ds/tokens/typography.css";
+@import "@commons-systems/ds/tokens/spacing.css";
+@import "@commons-systems/ds/tokens/effects.css";
+
+:root {
+  --main-max-width: var(--max-width-prose);
+  --danger: light-dark(#c0392b, #ff6b6b);
+  --ok: light-dark(#2e7d32, #4caf50);
+
+  --line-length: var(--main-max-width);
+
+  /* Apps override on :root to lock a specific scheme (e.g., color-scheme: dark) */
+  color-scheme: light dark;
+}
+
+body {
+  font-family: var(--font-body);
+  color: var(--fg);
+  background: var(--grid-texture), var(--bg);
+}
+
+.page {
+  max-width: var(--main-max-width);
+  margin: 0 auto;
+  padding-inline: var(--space-4);
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-heading);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-heading);
+  text-shadow: var(--glow-accent);
+}
+
+a {
+  color: var(--accent);
+}
+
+a:hover {
+  text-decoration-thickness: 2px;
+}
+
+nav {
+  display: flex;
+  align-items: baseline;
+}
+
+nav > app-nav {
+  flex: 1;
+}
+
+app-nav,
+app-nav .nav-links,
+app-nav .nav-home,
+app-nav .nav-auth {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-4);
+}
+
+app-nav .nav-home:empty {
+  display: none;
+}
+
+/* The first non-empty container after the links starts the right-aligned group.
+   When the home link is present it leads that group (margin-left:auto on
+   .nav-home). When it is absent/empty (display:none, e.g. landing opts out), the
+   auth container leads instead. */
+app-nav > .nav-links + .nav-home:not(:empty) {
+  margin-left: auto;
+}
+app-nav > .nav-links + .nav-home:empty + .nav-auth {
+  margin-left: auto;
+}
+
+app-nav .nav-links:has(a[data-align="end"]) {
+  flex: 1;
+}
+app-nav .nav-links a[data-align="end"] {
+  margin-left: auto;
+}
+
+header {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  z-index: 10;
+  border: var(--border-width) solid var(--border);
+  border-bottom-width: var(--border-width-strong);
+  padding-block: var(--space-4);
+  padding-inline: var(--space-6);
+  margin-bottom: var(--space-8);
+}
+
+footer {
+  border-top: var(--border-width-strong) solid var(--border);
+  padding-top: var(--space-4);
+  padding-bottom: var(--space-4);
+  margin-top: var(--space-8);
+  color: var(--muted);
+}
+
+*,
+*::before,
+*::after {
+  border-radius: var(--radius-none);
+}
+
+main {
+  background: var(--surface);
+  padding: var(--space-6);
+  border: var(--border-width) solid var(--border);
+}
+
+.auth-toast {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  background: var(--error);
+  color: white;
+  padding: var(--space-2) var(--space-4);
+  text-align: center;
+}
+
+.auth-toast button {
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 1.2em;
+  cursor: pointer;
+  padding: 0 var(--space-1);
+}
+
+.autocomplete-dropdown {
+  position: absolute;
+  z-index: 10;
+  background: var(--surface);
+  border: var(--border-width) solid var(--border);
+  color: var(--fg);
+  max-height: 12rem;
+  overflow-y: auto;
+}
+
+.autocomplete-item {
+  padding: var(--space-1) var(--space-2);
+  cursor: pointer;
+}
+
+.autocomplete-item:hover,
+.autocomplete-item.selected {
+  background: var(--border);
+}
+
+.upload-label {
+  cursor: pointer;
+  text-decoration: underline;
+}
+.upload-label:hover {
+  text-decoration-thickness: 2px;
+}

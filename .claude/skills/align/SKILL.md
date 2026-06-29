@@ -9,7 +9,8 @@ user-invocable: true
 `/align` is the project's **dialectic engine**. Structural roles drive a
 decompose → assess → synthesize → challenge → re-synthesize loop over a set of
 evaluative perspectives, then triage the open backlog and produce recommended
-edits to `ROADMAP.md`, `CHARTER.md`, and the issue backlog.
+frontier re-prioritizations, edits to the `strategy-*` doctrine nodes, and edits
+to the issue backlog.
 
 The engine keeps **two orthogonal layers** and never conflates them:
 
@@ -30,9 +31,11 @@ must never be conflated:
 
 This run operates at **rung-5 — the project's charter-level intent**. At rung-5
 there is **no persisted intention tree** (out of scope, tracked by #2366), so the
-engine runs over the charter-level intent directly: it reads `CHARTER.md`'s
-standing evaluative intentions, `ROADMAP.md`, all work completed since the last
-review, and analytics, the same inputs the assessment has always used.
+engine runs over the charter-level intent directly: it reads the intention
+graph's principle roots (`intentions/principle-*.md`), the `strategy-*` doctrine
+nodes, the active-frontier view (generated from the intention graph), all work
+completed since the last review, and analytics, the same inputs the assessment
+has always used.
 
 This skill runs on one of two **triggers**:
 
@@ -105,7 +108,7 @@ role is not a perspective and a perspective is not a structural role.
 
 | Role | Agent def | What it does |
 |---|---|---|
-| Decomposer | `align-decomposer` | At rung-5, reads `CHARTER.md` and emits the **perspective roster** for the run — which charter-derived perspectives the charter currently calls for. It does not decompose a tree (there is none at rung-5). |
+| Decomposer | `align-decomposer` | At rung-5, reads the intention graph's principle roots and emits the **perspective roster** for the run — which charter-derived perspectives the charter currently calls for. It does not decompose a tree (there is none at rung-5). |
 | Consistency-tester | `align-consistency` | The **veto layer**: charter compliance, dependency health, ratchet risk. Produces findings/warnings, not priorities. A critical finding can veto a priority. |
 | Delegability-assessor | `align-delegability-assessor` | For one synthetic intention node, runs CAN → SHOULD → consistency and emits one `delegability.eval.v1` object (see `.claude/docs/delegability.md`). |
 | Contrarian | `align-contrarian` | One concentrated adversarial pass over the synthesis. |
@@ -132,8 +135,9 @@ regression.
 
 ## Assessment window (both triggers)
 
-The assessment evaluates `ROADMAP.md` and **all work completed since the last
-align review** against `CHARTER.md`. Compute the window-start timestamp first:
+The assessment evaluates the active-frontier view and **all work completed since
+the last align review** against the intention graph. Compute the window-start
+timestamp first:
 
 - **Scheduled trigger:** the review issue anchors the window.
 
@@ -175,9 +179,9 @@ align review** against `CHARTER.md`. Compute the window-start timestamp first:
   entry with `skill == "align"`), treat this the same as the no-config case.
 
 Pass `WINDOW_START` into the perspective context (Phase 1): instruct the
-perspectives to evaluate `ROADMAP.md` and **all work completed since
+perspectives to evaluate the active-frontier view and **all work completed since
 `WINDOW_START`** (or the full project history when there is no prior review)
-against `CHARTER.md`.
+against the intention graph.
 
 ## Phase 1: Gather context
 
@@ -259,8 +263,8 @@ when credentials are absent), the PSI section is always attempted.
 
 Read the decomposer agent definition `.claude/agents/align-decomposer.md` and
 launch it (Agent tool, `subagent_type: "general-purpose"`, the def's prompt
-inline) over `CHARTER.md`. At rung-5 it does not decompose a tree — it reads the
-charter's standing evaluative intentions and emits the **perspective roster**:
+inline) over the intention graph's principle roots. At rung-5 it does not decompose a tree — it reads the
+intention graph's principle roots and emits the **perspective roster**:
 the charter-derived perspectives the charter calls for today.
 
 From the roster, decide which perspective agents to load for Phase 2:
@@ -355,7 +359,7 @@ and adjust the merging weights accordingly.
    | `statement` | the priority's one-line "What". |
    | `rationale` | the priority's "Why" (charter/audience trace). |
    | `owner` | default `human` (a top-level charter priority is human-decided by default) unless the synthesis states it is already AI- or procedure-owned. |
-   | `success_signal` | the priority's "done-when / signal" (the ROADMAP schema carries `signal`). |
+   | `success_signal` | the priority's "done-when / signal" (the intention node's `success_signal` field). |
    | `status` | `refining` (synthetic stand-in; no transitions are persisted). |
    | `node_id` | a synthetic slug, e.g. `rung5-<short-slug>` (not persisted). |
    | `clarifications[]`, `tooling_goals[]` | empty (no tree to read). |
@@ -454,13 +458,18 @@ recommendation, rationale.
 From the Phase 5 synthesis, produce recommended edits. These are the deliverable
 content for both the on-demand proposed-edits step and the scheduled report.
 
-### 1. Draft ROADMAP.md Update
-A complete draft of ROADMAP.md incorporating the synthesis (and user feedback on
-the on-demand trigger). Follow the existing ROADMAP.md structure:
-- Strategy section (update only if assessment warrants it)
-- Current assessment (update date, stats, what's working/not working, bottleneck)
-- Priorities (new ranked list with the schema: why, audience, distribution, done-when, signal)
-- Feedback loop (update triggers and metrics)
+### 1. Frontier & strategy recommendations
+Recommended re-prioritizations of the active frontier (which feed the *generated*
+active-frontier view — there is no committed roadmap file to edit), plus proposed
+edits to the `strategy-*` doctrine nodes when the prioritization or domain-selection
+doctrine itself shifts:
+- Frontier re-prioritizations — the new ranked priority set with each priority's
+  why (charter/audience trace), audience tier, distribution, done-when, and signal.
+- Strategy-node edits — proposed changes to `intentions/strategy-progressive-validation.md`
+  or `intentions/strategy-domain-selection.md`, only when doctrine has shifted.
+
+(Drop the superseded "Current assessment" deliverable — the recurring review re-derives
+it each cycle — and the "Feedback loop" deliverable — the signal arm is tracked separately.)
 
 ### 2. Proposed Charter Revisions
 If any perspective or the consistency-tester identified charter sections that
@@ -513,9 +522,9 @@ For each priority in the merged top-priority set, report its
 user responds.
 
 **Then present the recommendations.** After receiving user feedback, incorporate
-it and present the recommendations above (Draft ROADMAP.md Update, Proposed
-Charter Revisions, Existing Issues to Update, New Issues to File, Delegability
-findings), **plus** the backlog issue-triage table as an added section. No issue
+it and present the recommendations above (Frontier & strategy recommendations,
+Proposed Charter Revisions, Existing Issues to Update, New Issues to File,
+Delegability findings), **plus** the backlog issue-triage table as an added section. No issue
 is closed; nothing is posted to GitHub.
 
 ### Scheduled trigger
@@ -524,7 +533,7 @@ is closed; nothing is posted to GitHub.
 - the assessment window covered (`WINDOW_START` → now, or "full project history"
   on cold start);
 - the re-synthesized priorities (Phase 5);
-- the recommended ROADMAP.md updates, proposed charter revisions, and
+- the recommended frontier & strategy updates, proposed charter revisions, and
   existing-issue / new-issue recommendations, and the Delegability findings
   (Recommendations §1–5);
 - the backlog issue-triage table.

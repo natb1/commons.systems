@@ -63,7 +63,7 @@ The voice stays the same across all contexts. The tone — how much personality,
 | Blog posts | Ceiling | Yes | Assertions with support | "Recovering Autonomy with Coding Agents" |
 | Landing page | Mid-high | Sparingly | Concise claims, not arguments | Hero copy, project description |
 | About / services page | Mid-high | Yes | Concise claims, business-relevant | /about page |
-| Charter | Mid | When relevant | Structural claims, not personal ones | CHARTER.md |
+| Charter | Mid | When relevant | Structural claims, not personal ones | `intentions/` |
 | README | Mid-low | Minimal | Practical guidance, not philosophy | README.md |
 | Fork/plugin docs | Floor | No | None — describe what it does, how to use it | Setup instructions, API descriptions |
 | Issue descriptions | Floor | No | Scope and rationale only | GitHub issue bodies |
@@ -111,7 +111,7 @@ See `.claude/rules/writing-style.md` for the full list of banned corporate jargo
 
 ## Messaging Pillars
 
-These are the core themes the project communicates, derived from [CHARTER.md](../../../CHARTER.md). Content should reinforce one or more of these without restating them as slogans.
+These are the core themes the project communicates, derived from [the intention graph](../../../intentions/). Content should reinforce one or more of these without restating them as slogans.
 
 1. **Institutions that can't scale down become parasitic.** The diagnosis. Not a conspiracy — a structural pattern where the mechanisms that make institutions capable also prevent them from standing down.
 

@@ -74,10 +74,10 @@
     "office-hours": { "entry": ["seeds/**", "e2e/**"] },
     "print": { "entry": ["seeds/**", "e2e/**", "scripts/**"] },
     "budget": { "entry": ["seeds/**", "e2e/**", "scripts/**"] },
-    "authutil": { "entry": ["bin/**"] },
-    "firebaseutil": { "entry": ["bin/**"] },
-    "firestoreutil": { "entry": ["bin/**"] },
+    "packages/authutil": { "entry": ["bin/**"] },
+    "packages/firebaseutil": { "entry": ["bin/**"] },
+    "packages/firestoreutil": { "entry": ["bin/**"] },
     "functions": { "entry": ["scripts/**"] },
-    "intentionsutil": { "entry": ["scripts/**"] }
+    "packages/intentionsutil": { "entry": ["scripts/**"] }
   }
 }

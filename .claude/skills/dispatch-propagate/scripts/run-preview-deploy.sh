@@ -31,7 +31,7 @@ cd "$REPO_ROOT"
 
 # Deploy hosting channel — reuses existing channel if present (uses deploy target from .firebaserc)
 echo "Deploying to preview channel '$CHANNEL_ID' on site '$HOSTING_SITE'..."
-DEPLOY_OUTPUT=$(npx firebase-tools hosting:channel:deploy "$CHANNEL_ID" \
+DEPLOY_OUTPUT=$(firebase_deploy_retry npx firebase-tools hosting:channel:deploy "$CHANNEL_ID" \
   --only "$APP_NAME" \
   --project "$FIREBASE_PROJECT_ID" \
   --expires 7d \
@@ -44,7 +44,7 @@ DEPLOY_OUTPUT=$(npx firebase-tools hosting:channel:deploy "$CHANNEL_ID" \
 # Seed Firestore (idempotent — uses doc.set() with fixed IDs)
 if [ "$USES_FIRESTORE" = true ]; then
   echo "Seeding Firestore (namespace: ${PREVIEW_NAMESPACE})..."
-  APP_NAME="$APP_NAME" FIRESTORE_NAMESPACE="$PREVIEW_NAMESPACE" SEED_TEST_ONLY=true npx tsx firestoreutil/bin/run-seed.ts
+  APP_NAME="$APP_NAME" FIRESTORE_NAMESPACE="$PREVIEW_NAMESPACE" SEED_TEST_ONLY=true npx tsx packages/firestoreutil/bin/run-seed.ts
 fi
 
 # Extract preview URL from deploy output

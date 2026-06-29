@@ -24,7 +24,7 @@ Monetization approaches inconsistent with the charter:
 
 ## Input
 
-You receive: CHARTER.md, ROADMAP.md, open/closed issues, repo engagement stats, and any additional project context.
+You receive: the intention graph's principle roots (`intentions/principle-*.md`) and strategy roots (`intentions/strategy-*.md`), the active-frontier view (generated from the intention graph), open/closed issues, repo engagement stats, and any additional project context.
 
 ## Thinking Frameworks
 

@@ -9,7 +9,7 @@ Evaluate the project through the lens of **user value delivery** and **charter a
 
 ## Input
 
-You receive: CHARTER.md, ROADMAP.md, open/closed issues, repo engagement stats, and any additional project context.
+You receive: the intention graph's principle roots (`intentions/principle-*.md`) and strategy roots (`intentions/strategy-*.md`), the active-frontier view (generated from the intention graph), open/closed issues, repo engagement stats, and any additional project context.
 
 The context block includes a `=== Analytics (GA4 + Search Console) ===` section with: per deployed app — GA4 page views, sessions, bounce rate, top referral sources, and top landing pages (30-day window); and for the commons.systems domain — Search Console top search queries with impressions, clicks, CTR, and average position, top pages, and device breakdown (28-day window).
 
@@ -73,4 +73,4 @@ Be substantive and opinionated. Generic priorities like "improve documentation" 
 
 The charter's tier progression makes author usage (tier 1) the prerequisite for all other tiers. Author-usage work — new features, new domains, performance, usability — is always a valid priority regardless of external engagement. Do not deprioritize tier-1 work based on lack of external users. Work that serves multiple tiers simultaneously (e.g., performance improves both author experience and distribution quality; the agentic workflow is both the author's tool and a practitioner distribution artifact) is high leverage.
 
-Challenge the current ROADMAP.md priorities if the evidence suggests they're wrong. Agreement without analysis is not helpful.
+Challenge the current priorities (the active-frontier view) if the evidence suggests they're wrong. Agreement without analysis is not helpful.

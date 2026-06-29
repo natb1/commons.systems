@@ -6,7 +6,7 @@ const pkg = JSON.parse(
   readFileSync(resolve(import.meta.dirname, "package.json"), "utf-8"),
 );
 export const workspaceDirs: string[] = pkg.workspaces.filter(
-  (w: string) => w !== "rules-test",
+  (w: string) => w !== "packages/rules-test",
 );
 
 export default defineConfig({

@@ -473,14 +473,34 @@ session_has_inflight_background_task() {
     # function's literal-substring / control-char-trap-avoiding philosophy.
     scan_src=$(grep -F "\"sessionId\":\"$CURRENT_SESSION_ID\"" "$TRANSCRIPT_PATH" 2>/dev/null)
   fi
-  # UPDATE TRIGGER: this literal `launched in background. Task ID: <ID>` is the
-  # Workflow/Task tool's `tool_result` output format, emitted by the Claude Code
-  # harness — there is no in-repo definition to track. The notification pattern
-  # below is now anchored on the `<task-notification>` envelope; if the harness
-  # renames that wrapper, BOTH this launch pattern AND the envelope anchor must be
-  # updated.
-  launched=$(printf '%s\n' "$scan_src" | grep -oE 'launched in background\. Task ID: [A-Za-z0-9_-]+' \
-    | grep -oE '[A-Za-z0-9_-]+$' | sort -u)
+  # Launches are identified by STRUCTURALLY parsing each JSONL record and keying
+  # on the harness-emitted `toolUseResult.status == "async_launched"` field — NOT
+  # by substring-matching the human-readable `launched in background. Task ID:
+  # <ID>` text, and NOT by substring-matching the `async_launched`/`taskId`
+  # tokens. The prose AND those tokens are also content the dispatch worker's
+  # Bash tool reads (a reviewed PR's code, a `gh issue view` body, a PR comment),
+  # and any such content lands verbatim — JSON-escaped — inside a tool_result
+  # `content` string on a record bearing the current sessionId. A substring match
+  # (of the prose or of any field-name token) would let an attacker who places
+  # `async_launched "taskId":"X"` in any read content forge a phantom in-flight
+  # task, silently suppressing the issue-anchored attempt-counter bump and
+  # disabling the autonomous ceiling (#2541). Injected text always lands inside a
+  # JSON string *value*, so it can never manifest as a real sibling `.status`
+  # field — only a structural parse is immune. `jq -R … fromjson?` tolerates any
+  # non-JSON line (empty output); `objects` drops non-object records; `select`
+  # keys on the real `.toolUseResult.status` field; the ID is the real
+  # `.toolUseResult.taskId`. `printf '%s'`-into-pipe is jq-safe (the shell-json
+  # control-char trap is `echo "$VAR" | jq`, not this).
+  #
+  # UPDATE TRIGGER: `async_launched` is the Workflow/Task tool's `toolUseResult`
+  # status and `taskId` its sibling field — both emitted by the Claude Code
+  # harness, with no in-repo definition to track. The notification pattern below
+  # is anchored on the `<task-notification>` envelope; if the harness renames any
+  # of these (the `async_launched` status, the `toolUseResult.taskId` field, or
+  # the `task-notification` wrapper), the matching anchor here must be updated.
+  launched=$(printf '%s\n' "$scan_src" \
+    | jq -Rr 'fromjson? | objects | select(.toolUseResult.status=="async_launched") | .toolUseResult.taskId' 2>/dev/null \
+    | sort -u)
   [ -n "$launched" ] || return 1
   # Notifications are identified by the `<task-notification>` envelope, NOT a bare
   # `taskId` substring: the launch record's own sibling `toolUseResult.taskId` also
@@ -626,13 +646,15 @@ fi
 #   - the issue is already parked on office-hours (an office-hours-assisted run,
 #     or an already-parked issue): nothing to count, nothing to escalate; and an
 #     office-hours session must not inflate the autonomous counter.
-#   - marker absent AND this is one of Branch A's two continuation gates that
+#   - marker absent AND this is one of Branch A's three continuation gates that
 #     RESUME the same session rather than concluding an attempt: a live
-#     idle-poller (session_scheduled_wakeup) or a transient rate-limit death
-#     (dispatch-detect-transient-death). Counting an idle-poller would bump once
-#     per poll cycle and blow the ceiling on a single healthy review phase
-#     (#1590). These mirror the gates at ~lines 383 and 397 below — keep the two
-#     in sync. (The rate-limit gate can fall through to an office-hours park when
+#     idle-poller (session_scheduled_wakeup), a live phase running in the
+#     background (session_has_inflight_background_task, #2243), or a transient
+#     rate-limit death (dispatch-detect-transient-death). Counting an idle-poller
+#     or a background-phase hand-back would bump once per poll/turn cycle and blow
+#     the ceiling on a single healthy review/qa phase (#1590, #2243). These mirror
+#     the gates at ~lines 665, 674, and 691 below — keep the two in sync. (The
+#     rate-limit gate can fall through to an office-hours park when
 #     rescheduling fails; that park is then uncounted, which is harmless — it
 #     parks office-hours so the ceiling is moot and the counter resets on un-park.)
 # Everything else — Branch A genuine park, the #2025 recovery-advance, Branch
@@ -644,6 +666,7 @@ fi
 if [ "$ISSUE_OFFICE_HOURS_PRESENT" = no ] \
    && { [ -n "$MARKER_PHASE" ] \
         || { ! session_scheduled_wakeup \
+             && ! session_has_inflight_background_task \
              && ! "$SCRIPTS/dispatch-detect-transient-death" "$TRANSCRIPT_PATH" 2>/dev/null; }; }; then
   attempt_verdict=$("$SCRIPTS/dispatch-attempt-count" "$ISSUE_NUM" 2>/dev/null) || attempt_verdict=proceed
   if [ "$attempt_verdict" = escalate ]; then
