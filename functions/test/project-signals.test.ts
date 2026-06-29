@@ -524,7 +524,7 @@ describe("collectProjectSignalsCore", () => {
     // summed from topPages
     expect(sample.gscClicks).toBe(12);
     expect(sample.gscImpressions).toBe(120);
-    // first-URL mobile performance
+    // first-URL performance score at the configured strategy (mobile or desktop)
     expect(sample.psiPerformance).toBe(88);
 
     // Only the headline scalars + identity fields — no full sub-objects.
