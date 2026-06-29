@@ -229,6 +229,10 @@ git -C "$REPO" fetch --quiet origin main
 make_shims "$REPO"
 run_sut
 assert_eq "deletion: exit 0" "0" "$RC"
+# Guard against a vacuous pass: if get-changed-apps.sh auto-detection found no
+# apps, the SUT would exit 0 with a clean tree and extra.ts absent without ever
+# exercising the baseline swap. Assert ws actually entered the typecheck loop.
+assert_contains "deletion: ws typecheck ran" "=== Typecheck: ws ===" "$OUT"
 assert_eq "deletion: working tree clean after run (nothing resurrected/staged)" "" "$(git -C "$REPO" status --porcelain)"
 [ ! -f "$REPO/ws/src/extra.ts" ] && _t6_extra=absent || _t6_extra=present
 assert_eq "deletion: deleted file not left on disk" "absent" "$_t6_extra"
