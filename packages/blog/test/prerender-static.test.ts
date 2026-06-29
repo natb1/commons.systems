@@ -29,6 +29,21 @@ const TEMPLATE = `<!DOCTYPE html>
 </body>
 </html>`;
 
+const TEMPLATE_WITH_FOOTER = `<!DOCTYPE html>
+<html>
+<head>
+  <meta name="description" content="Default site description">
+  <title>My Blog</title>
+</head>
+<body>
+  <nav><app-nav id="nav"></app-nav></nav>
+  <section class="landing-hero">default hero marker</section>
+  <main id="app"></main>
+  <aside id="info-panel" class="sidebar"></aside>
+  <footer></footer>
+</body>
+</html>`;
+
 const MARKDOWN_HELLO = `# Hello World Title
 This is the **hello world** post.`;
 
@@ -330,6 +345,36 @@ describe("prerenderStaticPage", () => {
     expect(() => prerenderStaticPage(makeStaticConfig())).toThrow(
       "<title> tag not found",
     );
+  });
+
+  it("injects footerHtml into <footer> when provided", () => {
+    vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
+      if (String(path).endsWith("index.html")) return TEMPLATE_WITH_FOOTER;
+      throw new Error(`Unexpected readFileSync: ${path}`);
+    }) as typeof fs.readFileSync);
+
+    prerenderStaticPage(makeStaticConfig({ footerHtml: "<p>FOOTER MARKER</p>" }));
+    const html = getWrittenHtml("/dist/about/index.html");
+    expect(html).toContain("<footer><p>FOOTER MARKER</p></footer>");
+    expect(html).not.toContain("<footer></footer>");
+  });
+
+  it("leaves <footer> untouched when footerHtml is not provided", () => {
+    vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
+      if (String(path).endsWith("index.html")) return TEMPLATE_WITH_FOOTER;
+      throw new Error(`Unexpected readFileSync: ${path}`);
+    }) as typeof fs.readFileSync);
+
+    prerenderStaticPage(makeStaticConfig());
+    const html = getWrittenHtml("/dist/about/index.html");
+    expect(html).toContain("<footer></footer>");
+  });
+
+  it("throws when footerHtml is set but <footer> is absent", () => {
+    // The default TEMPLATE has no <footer> element.
+    expect(() =>
+      prerenderStaticPage(makeStaticConfig({ footerHtml: "<p>FOOTER MARKER</p>" })),
+    ).toThrow("<footer> marker not found in template");
   });
 
   it("throws when stripHero is true (default) and the landing-hero marker is absent", () => {

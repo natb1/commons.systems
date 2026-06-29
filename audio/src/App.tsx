@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { Nav } from "@commons-systems/ds";
+import { FOOTER_HTML } from "@commons-systems/components/footer";
 import { logError } from "@commons-systems/errorutil/log";
 import { onAuthStateChanged } from "./auth.js";
 import type { User } from "./auth.js";
@@ -168,30 +169,7 @@ export function App() {
           <Player onReady={setPlayerHandle} />
         </aside>
       </div>
-      <footer>
-        <p>
-          Created with{" "}
-          <a
-            href="https://github.com/natb1/commons.systems"
-            target="_blank"
-            rel="noopener"
-          >
-            commons.systems
-          </a>{" "}
-          | &copy; 2026 RUMOR.ML{" "}
-          <a
-            href="https://creativecommons.org/licenses/by-sa/4.0/"
-            target="_blank"
-            rel="noopener"
-          >
-            <img
-              src="https://mirrors.creativecommons.org/presskit/buttons/88x31/png/by-sa.png"
-              alt="CC-BY-SA"
-              className="cc-badge"
-            />
-          </a>
-        </p>
-      </footer>
+      <footer dangerouslySetInnerHTML={{ __html: FOOTER_HTML }} />
     </div>
   );
 }
