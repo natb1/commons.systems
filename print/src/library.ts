@@ -6,6 +6,8 @@
  * identical; `listCloud()` just dispatches the existing public / accessible
  * queries through `createFirebaseMediaSource`.
  */
+import { logError } from "@commons-systems/errorutil/log";
+
 import { createFirebaseMediaSource } from "@commons-systems/mediautil/firebase";
 import { createLocalFolderMediaSource } from "@commons-systems/mediautil/local-folder";
 import type { LocalDirectoryHandleLike, LocalFolderMediaSource } from "@commons-systems/mediautil/local-folder";
@@ -121,11 +123,25 @@ export async function resolveLocalBlob(item: MediaItem): Promise<ArrayBuffer | n
   return localSource.resolveToBlob(item);
 }
 
+/**
+ * Resolve a local item to a live `File`, or `null` when it can no longer be
+ * read. A vanished file, an index miss, or a permission error here is a
+ * skip-and-retry-later signal, not a misconfiguration to surface: the
+ * enrichment path relies on the `null` return to avoid caching an empty `{}`
+ * (which would permanently suppress a retry). The error is still logged for
+ * observability before returning null. Mirrors the audio app's
+ * `resolveLocalFile`.
+ */
 export async function resolveLocalFile(item: MediaItem): Promise<File | null> {
   if (!localSource) {
     throw new Error('No local source bound');
   }
-  return localSource.resolveToFile(item);
+  try {
+    return await localSource.resolveToFile(item);
+  } catch (err) {
+    logError(err, { operation: "resolve-local-file", id: item.id });
+    return null;
+  }
 }
 
 export function hasLocalSource(): boolean {

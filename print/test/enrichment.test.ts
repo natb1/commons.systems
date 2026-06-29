@@ -86,6 +86,7 @@ import {
 import type { MediaItem, SidecarData } from "../src/sidecar.js";
 import type { MediaItem as LibMediaItem } from "../src/types.js";
 import { deferred } from "./utils";
+import { logError } from "@commons-systems/errorutil/log";
 
 // ---------------------------------------------------------------------------
 // Fake FileSystemDirectoryHandle (same pattern as sidecar.test.ts)
@@ -487,6 +488,49 @@ describe("enrichment — resolveLocalFile returns null (file gone)", () => {
 
     expect(mockResolveLocalFile).toHaveBeenCalledTimes(2);
     expect(mockExtractMetadata).not.toHaveBeenCalled();
+  });
+
+  it("does not cache and clears the spinner when resolveLocalFile THROWS (real file-gone path)", async () => {
+    // Production resolveLocalFile (library.ts:124) does NOT return null when a
+    // file is absent — it throws. That throw propagates out of the awaited
+    // resolveLocalFile, skips the `if (file === null)` guard entirely, and is
+    // caught by enrichLocalItem's inner catch (which logs) before the `finally`
+    // clears the spinner. This test exercises that real catch path — the
+    // null-returning tests above only cover the defensive guard, which is dead
+    // code in production. A regression that removed the null guard would still
+    // pass those, but the throw path here keeps the genuine behavior covered.
+    const item = makeLocalItem({ storagePath: "gone.pdf", title: "gone" });
+    mockListLocal.mockResolvedValue([item]);
+    const gate = deferred<File | null>();
+    mockResolveLocalFile.mockReturnValue(gate.promise);
+
+    const dir = makeEmptyDir();
+    setLocalDirectory(dir, true);
+
+    const container = makeContainer();
+    await renderLocalIntoList(container);
+    const node = rowNode(container, item);
+
+    // Intersection adds the spinner synchronously while the read is in flight.
+    triggerIntersection(node);
+    expect(node.querySelector(".media-loading")).not.toBeNull();
+
+    // Reject the read → the throw lands in the inner catch (logError), then the
+    // `finally` clears the spinner. enrichLocalItem swallows the error, so the
+    // scheduled promise resolves and settleEnrichment drains normally.
+    gate.reject(new Error("File not found"));
+    await settleEnrichment();
+    await flushWrites();
+
+    // The throw path was taken (not the dead null guard): logError ran, which
+    // sits AFTER the guard's early return, so this discriminates the two paths.
+    expect(vi.mocked(logError)).toHaveBeenCalledTimes(1);
+
+    // No extract, no cache (so a later focus retries), and the spinner cleared.
+    expect(mockExtractMetadata).not.toHaveBeenCalled();
+    const cached = await getMetadata("gone.pdf");
+    expect(cached).toBeUndefined();
+    expect(node.querySelector(".media-loading")).toBeNull();
   });
 });
 

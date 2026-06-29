@@ -289,7 +289,7 @@ describe("extractMetadata — pdf", () => {
 
 describe("extractMetadata — unsupported type", () => {
   it("returns {} for image-archive without throwing", async () => {
-    const result = await extractMetadata(new ArrayBuffer(0), "image-archive");
+    const result = await extractMetadata(new Blob([]), "image-archive");
     expect(result).toEqual({});
   });
 });
