@@ -24,13 +24,13 @@ export function feedFetchPlugin(feeds: FeedConfig[]): Plugin {
               headers: { "User-Agent": "commons-systems-build/1.0" },
             });
             if (!response.ok) {
-              console.warn(`[feed-fetch] ${id}: HTTP ${response.status}`);
+              console.warn(`[feed-fetch] ${id} (${url}): HTTP ${response.status}`);
               return [id, null];
             }
             const text = await response.text();
             const post = parseAtomFeedXml(text) ?? parseRssFeedXml(text);
             if (!post) {
-              console.warn(`[feed-fetch] ${id}: no entries found in feed`);
+              console.warn(`[feed-fetch] ${id} (${url}): no entries found in feed`);
             }
             return [id, post];
           } catch (err) {
@@ -43,7 +43,7 @@ export function feedFetchPlugin(feeds: FeedConfig[]): Plugin {
             // TypeError would be re-thrown there and fail the build. Do not collapse this
             // into a single inverted condition.
             if (err instanceof TypeError && err.message === "fetch failed") {
-              console.warn(`[feed-fetch] ${id}: fetch error`, err);
+              console.warn(`[feed-fetch] ${id} (${url}): fetch error`, err);
               return [id, null];
             }
             // Other TypeErrors (e.g. `Failed to parse URL from <url>`) indicate a
@@ -52,7 +52,7 @@ export function feedFetchPlugin(feeds: FeedConfig[]): Plugin {
               throw new Error(`[feed-fetch] ${id}: invalid fetch configuration`, { cause: err });
             }
             if (classifyError(err) === "programmer") throw err;
-            console.warn(`[feed-fetch] ${id}: fetch error`, err);
+            console.warn(`[feed-fetch] ${id} (${url}): fetch error`, err);
             return [id, null];
           }
         }),
