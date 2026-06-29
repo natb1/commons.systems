@@ -3,6 +3,8 @@ import {
   weeklyPaceCurve,
   elapsedWeekFraction,
   paceCurveAtFraction,
+  fractionToWindowDate,
+  formatWindowTick,
   WEEK_SECONDS,
   WINDOW_SECONDS,
   T,
@@ -99,6 +101,24 @@ describe("elapsedWeekFraction", () => {
   it("clamps to 1 when remaining is negative (sampled past the reset)", () => {
     // remaining < 0 → (WEEK - remaining)/WEEK > 1, clamps to 1.
     expect(elapsedWeekFraction(at(-WINDOW_SECONDS), RESET)).toBe(1);
+  });
+});
+
+describe("fractionToWindowDate", () => {
+  it("f=0 is exactly one full week before the reset (window start)", () => {
+    expect(fractionToWindowDate(0, RESET).getTime()).toBe(
+      RESET.getTime() - WEEK_SECONDS * 1000,
+    );
+  });
+
+  it("f=1 is the reset itself", () => {
+    expect(fractionToWindowDate(1, RESET).getTime()).toBe(RESET.getTime());
+  });
+
+  it("f=0.5 is the half-week midpoint", () => {
+    expect(fractionToWindowDate(0.5, RESET).getTime()).toBe(
+      RESET.getTime() - 0.5 * WEEK_SECONDS * 1000,
+    );
   });
 });
 
