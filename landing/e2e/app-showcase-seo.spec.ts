@@ -1,6 +1,6 @@
 import { test, expect } from "@commons-systems/config/playwright-test";
 
-const APPS = [
+const PROJECTS = [
   {
     name: "Office-hours",
     url: "https://office-hours.commons.systems",
@@ -62,9 +62,9 @@ test.describe("SEO: SoftwareApplication JSON-LD", () => {
   }) => {
     await page.goto("/");
     const apps = await getSoftwareApplicationJsonLd(page);
-    expect(apps).toHaveLength(APPS.length);
+    expect(apps).toHaveLength(PROJECTS.length);
 
-    for (const expected of APPS) {
+    for (const expected of PROJECTS) {
       const match = apps.find((a) => a.url === expected.url);
       expect(match, `JSON-LD for ${expected.url}`).toBeTruthy();
       expect(match!.name).toBe(expected.name);
