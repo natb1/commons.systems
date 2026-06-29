@@ -210,7 +210,7 @@ export function resolveViewerProps(
     case "epub":
       return { item, createRenderer: (onError) => createEpubRenderer(onError), resolveSource: () => resolveFileSource(url, spath), store, uid };
     case "image-archive":
-      return { item, createRenderer: (onError) => createImageArchiveRenderer(onError, spath), resolveSource: () => Promise.resolve(url), store, uid };
+      return { item, createRenderer: (onError) => createImageArchiveRenderer(onError, spath), resolveSource: () => resolveFileSource(url, spath), store, uid };
     default: {
       const _exhaustive: never = item.mediaType;
       throw new Error(`Unsupported mediaType in viewer: ${_exhaustive}`);
