@@ -309,7 +309,10 @@ When EITHER:
 - **(b) Major scope deviation** — exploration revealed that the work needed
   deviates substantially from the written acceptance criteria —
 
-do **not** persist a partial plan and do **not** apply `dispatch:planned`. Instead,
+do **not** persist a partial plan and do **not** apply `dispatch:planned`. This is
+a deliberate office-hours park: before the `dispatch-mark-deviation` call below,
+perform the in-session recommend step — see
+`.claude/skills/dispatch-propagate/escalation-recommend.md`. Then
 call `dispatch-mark-deviation` with a clear reason (including the clarification
 question or scope deviation description, so the office-hours comment tells the
 user what decision is needed), then **stop**:

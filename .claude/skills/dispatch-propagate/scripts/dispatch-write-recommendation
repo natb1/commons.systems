@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
-# dispatch-write-plan — persist a plan to the issue's sentinel plan comment.
+# dispatch-write-recommendation — persist recommended next steps to the issue's sentinel comment.
 #
-# Usage: dispatch-write-plan <issue-num>   (plan markdown on STDIN)
+# Usage: dispatch-write-recommendation <issue-num>   (recommendation markdown on STDIN)
 #
-# Reads plan markdown from STDIN and writes it to a sentinel
-# <!-- dispatch:plan --> comment on issue <issue-num>. Find-or-update: if a
+# Reads recommendation markdown from STDIN and writes it to a sentinel
+# <!-- dispatch:recommended-steps --> comment on issue <issue-num>. Find-or-update: if a
 # comment containing the marker already exists AND is authored by the trusted
 # dispatch identity's immutable numeric id (.user.id, the gh-token account's id,
 # overridable via DISPATCH_PLAN_AUTHOR_ID), it is edited in place (PATCH);
 # otherwise a new comment is created (POST). A marker comment authored by any
 # other id is ignored and a fresh trusted-authored comment is POSTed instead.
 # The operation is idempotent —
-# re-running replaces the plan, it never stacks a second comment. The full plan
-# lives as a comment, not in the issue body, so the machine-authored plan never
-# clobbers the human-authored acceptance criteria.
+# re-running replaces the recommended next steps, it never stacks a second comment.
+# The recommended steps live as a comment, not in the issue body, so the
+# machine-authored recommendation never clobbers the human-authored acceptance criteria.
 #
 # The repo is resolved explicitly (GH_REPO from the common dir's remote.origin.url)
 # so gh addresses the right repository from any caller cwd. A missing arg, a
@@ -23,33 +23,33 @@ source "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 
 N="${1:-}"
 if [[ $# -ne 1 || -z "$N" ]]; then
-  echo "dispatch-write-plan: exactly one issue-num argument is required" >&2
-  echo "usage: dispatch-write-plan <issue-num>   (plan markdown on STDIN)" >&2
+  echo "dispatch-write-recommendation: exactly one issue-num argument is required" >&2
+  echo "usage: dispatch-write-recommendation <issue-num>   (recommendation markdown on STDIN)" >&2
   exit 2
 fi
 if [[ ! "$N" =~ ^[0-9]+$ ]]; then
-  echo "dispatch-write-plan: issue-num must be a positive integer, got: $N" >&2
-  echo "usage: dispatch-write-plan <issue-num>   (plan markdown on STDIN)" >&2
+  echo "dispatch-write-recommendation: issue-num must be a positive integer, got: $N" >&2
+  echo "usage: dispatch-write-recommendation <issue-num>   (recommendation markdown on STDIN)" >&2
   exit 2
 fi
 
 common_dir="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || {
-  echo "dispatch-write-plan: not inside a git repository" >&2; exit 1; }
+  echo "dispatch-write-recommendation: not inside a git repository" >&2; exit 1; }
 url="$(git --git-dir="$common_dir" config --get remote.origin.url 2>/dev/null)" || {
-  echo "dispatch-write-plan: no remote.origin.url in git config at $common_dir" >&2; exit 1; }
-GH_REPO="$(gh_repo_from_remote "$url" dispatch-write-plan)" || exit 1
+  echo "dispatch-write-recommendation: no remote.origin.url in git config at $common_dir" >&2; exit 1; }
+GH_REPO="$(gh_repo_from_remote "$url" dispatch-write-recommendation)" || exit 1
 export GH_REPO
 
-MARKER='<!-- dispatch:plan -->'
+MARKER='<!-- dispatch:recommended-steps -->'
 PLAN_AUTHOR_ID="${DISPATCH_PLAN_AUTHOR_ID:-$(gh api user --jq '.id')}"
 if [[ ! "$PLAN_AUTHOR_ID" =~ ^[0-9]+$ ]]; then
-  echo "dispatch-write-plan: could not resolve a numeric plan-comment author id (got: '$PLAN_AUTHOR_ID')" >&2
+  echo "dispatch-write-recommendation: could not resolve a numeric plan-comment author id (got: '$PLAN_AUTHOR_ID')" >&2
   exit 1
 fi
 
 CONTENT="$(cat)"
 if [[ -z "${CONTENT//[[:space:]]/}" ]]; then
-  echo "dispatch-write-plan: plan markdown on STDIN is empty" >&2
+  echo "dispatch-write-recommendation: recommendation markdown on STDIN is empty" >&2
   exit 2
 fi
 
@@ -61,9 +61,10 @@ printf '%s\n%s\n' "$MARKER" "$CONTENT" > "$tmp"
 # substring anywhere in the body. The marker is always written as line 1
 # (printf '%s\n%s\n' "$MARKER" "$CONTENT"), so an anchored match still finds the
 # writer's own comment — but a `contains` substring match would also match a
-# DIFFERENT comment that merely documents this marker in its prose, and the PATCH
-# below would then overwrite that unrelated comment in place. (Sibling writer
-# dispatch-write-recommendation hit exactly this collision on #2244.)
+# DIFFERENT comment that merely documents this marker in its prose (e.g. a
+# dispatch:plan comment whose body describes this very marker), and the PATCH
+# below would then overwrite that unrelated comment in place. That clobbered the
+# #2244 plan comment once; first-line anchoring prevents the collision.
 CID=$(gh api --paginate "repos/{owner}/{repo}/issues/$N/comments" \
   | jq -r --arg m "$MARKER" --argjson author_id "$PLAN_AUTHOR_ID" \
       'first(.[] | select((.body | startswith($m)) and (.user.id == $author_id)) | .id)')
