@@ -21,11 +21,11 @@ func TestTemplateDepsMatchRoot(t *testing.T) {
 	if !ok {
 		t.Fatal("runtime.Caller(0) failed to report this test file's path")
 	}
-	// This file lives at scaffolding/firebase/internal/scaffold/.
-	// Strip the filename, then climb four parents to the repo root.
-	repoRoot := filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(callerFile)))))
+	// This file lives at projects/scaffolding/firebase/internal/scaffold/.
+	// Strip the filename, then climb five parents to the repo root.
+	repoRoot := filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(callerFile))))))
 
-	templatePath := filepath.Join(repoRoot, "scaffolding", "firebase", "templates", "app", "package.json.tmpl")
+	templatePath := filepath.Join(repoRoot, "projects", "scaffolding", "firebase", "templates", "app", "package.json.tmpl")
 	rootPath := filepath.Join(repoRoot, "package.json")
 
 	template := readPackageJSON(t, templatePath)
