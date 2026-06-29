@@ -348,6 +348,8 @@ describe("validation helpers", () => {
     expect(isValidGscSite("https://my-site.commons.systems/")).toBe(true);
     expect(isValidGscSite("ftp://x")).toBe(false);
     expect(isValidGscSite("sc-domain:has space")).toBe(false);
+    expect(isValidGscSite("https://foo.com/../etc")).toBe(false);
+    expect(isValidGscSite("https://foo.com//path")).toBe(false);
   });
 
   it("isValidPsiUrl", () => {
@@ -356,6 +358,8 @@ describe("validation helpers", () => {
     expect(isValidPsiUrl("https://my-site.commons.systems")).toBe(true);
     expect(isValidPsiUrl("http://commons.systems")).toBe(false);
     expect(isValidPsiUrl("https://x?q=1")).toBe(false);
+    expect(isValidPsiUrl("https://foo.com/../etc")).toBe(false);
+    expect(isValidPsiUrl("https://foo.com//path")).toBe(false);
   });
 
   it("parseGa4Pairs keeps valid pairs and drops malformed ones", () => {
@@ -451,6 +455,23 @@ describe("collectProjectSignalsCore", () => {
     },
   ];
 
+  it("passes deps.now to the fetchGsc closure", async () => {
+    const store = createInMemoryFirestore();
+    let capturedNow: Date | undefined;
+    const fetchGsc = async (now: Date): Promise<GscSignals> => {
+      capturedNow = now;
+      return gsc;
+    };
+    await collectProjectSignalsCore({
+      ...baseArgs(store),
+      fetchGithub: null,
+      fetchGa4: null,
+      fetchGsc,
+      fetchPsi: null,
+    });
+    expect(capturedNow).toEqual(new Date("2026-06-23T08:30:00Z"));
+  });
+
   it("writes the shared doc with only the sources that succeeded", async () => {
     const store = createInMemoryFirestore();
     await collectProjectSignalsCore({
@@ -524,7 +545,7 @@ describe("collectProjectSignalsCore", () => {
     // summed from topPages
     expect(sample.gscClicks).toBe(12);
     expect(sample.gscImpressions).toBe(120);
-    // first-URL mobile performance
+    // first-URL performance score at the configured strategy (mobile or desktop)
     expect(sample.psiPerformance).toBe(88);
 
     // Only the headline scalars + identity fields — no full sub-objects.
@@ -574,5 +595,27 @@ describe("collectProjectSignalsCore", () => {
       "https://commons.systems",
       "https://budget.commons.systems",
     ]);
+  });
+
+  it("omits ga4 and psi keys when fetch resolves to an empty array", async () => {
+    const store = createInMemoryFirestore();
+    await collectProjectSignalsCore({
+      ...baseArgs(store),
+      fetchGithub: null,
+      fetchGa4: async () => [],
+      fetchGsc: null,
+      fetchPsi: async () => [],
+    });
+
+    const doc = store._docs.get("office-hours/prod/metrics/project-signals") as Record< // type-safety-ok: in-memory test fixture returns known shape
+      string,
+      unknown
+    >;
+    expect(doc).toBeDefined();
+    // Empty-array results must be omitted (not written) so the client parser
+    // and server snapshot stay consistent — an empty [] on the server would be
+    // promoted to undefined by parseGa4Signals/parsePsiSignals on the client.
+    expect("ga4" in doc).toBe(false);
+    expect("psi" in doc).toBe(false);
   });
 });

@@ -10,7 +10,8 @@ user-invocable: true
 on-demand trigger it **detects an entry rung** from repo state and routes; the
 **rung-5 dialectic engine** — a decompose → assess → synthesize → challenge →
 re-synthesize loop over a set of evaluative perspectives that triages the open
-backlog and produces recommended edits to `ROADMAP.md` and the issue backlog —
+backlog and produces recommended re-prioritizations, edits to the `strategy-*`
+doctrine nodes, and edits to the issue backlog —
 is one of those branches (the deepest), not the skill's sole identity. See
 **## Rung routing** for the entry-rung detector and the branches.
 
@@ -48,7 +49,8 @@ The rung-5 engine operates at the project's **charter-level intent**. The
 intention graph is now populated — principle roots and a goal frontier exist —
 so rung-5 is reached by the on-demand detector (or run unconditionally on the
 scheduled trigger), not assumed. The engine reads the intention graph's
-principle roots (`intentions/principle-*.md`), `ROADMAP.md`, all work completed
+principle roots (`intentions/principle-*.md`), the `strategy-*` doctrine nodes,
+the active-frontier view (generated from the intention graph), all work completed
 since the last review, and analytics, the same inputs the assessment has always
 used.
 
@@ -267,8 +269,9 @@ regression.
 
 ## Assessment window (both triggers)
 
-The assessment evaluates `ROADMAP.md` and **all work completed since the last
-align review** against the intention graph. Compute the window-start timestamp first:
+The assessment evaluates the active-frontier view and **all work completed since
+the last align review** against the intention graph. Compute the window-start
+timestamp first:
 
 - **Scheduled trigger:** the review issue anchors the window.
 
@@ -310,7 +313,7 @@ align review** against the intention graph. Compute the window-start timestamp f
   entry with `skill == "align"`), treat this the same as the no-config case.
 
 Pass `WINDOW_START` into the perspective context (Phase 1): instruct the
-perspectives to evaluate `ROADMAP.md` and **all work completed since
+perspectives to evaluate the active-frontier view and **all work completed since
 `WINDOW_START`** (or the full project history when there is no prior review)
 against the intention graph.
 
@@ -490,7 +493,7 @@ and adjust the merging weights accordingly.
    | `statement` | the priority's one-line "What". |
    | `rationale` | the priority's "Why" (charter/audience trace). |
    | `owner` | default `human` (a top-level charter priority is human-decided by default) unless the synthesis states it is already AI- or procedure-owned. |
-   | `success_signal` | the priority's "done-when / signal" (the ROADMAP schema carries `signal`). |
+   | `success_signal` | the priority's "done-when / signal" (the intention node's `success_signal` field). |
    | `status` | `refining` (synthetic stand-in; no transitions are persisted). |
    | `node_id` | a synthetic slug, e.g. `rung5-<short-slug>` (not persisted). |
    | `clarifications[]`, `tooling_goals[]` | empty (no tree to read). |
@@ -589,13 +592,18 @@ recommendation, rationale.
 From the Phase 5 synthesis, produce recommended edits. These are the deliverable
 content for both the on-demand proposed-edits step and the scheduled report.
 
-### 1. Draft ROADMAP.md Update
-A complete draft of ROADMAP.md incorporating the synthesis (and user feedback on
-the on-demand trigger). Follow the existing ROADMAP.md structure:
-- Strategy section (update only if assessment warrants it)
-- Current assessment (update date, stats, what's working/not working, bottleneck)
-- Priorities (new ranked list with the schema: why, audience, distribution, done-when, signal)
-- Feedback loop (update triggers and metrics)
+### 1. Frontier & strategy recommendations
+Recommended re-prioritizations of the active frontier (which feed the *generated*
+active-frontier view — there is no committed roadmap file to edit), plus proposed
+edits to the `strategy-*` doctrine nodes when the prioritization or domain-selection
+doctrine itself shifts:
+- Frontier re-prioritizations — the new ranked priority set with each priority's
+  why (charter/audience trace), audience tier, distribution, done-when, and signal.
+- Strategy-node edits — proposed changes to `intentions/strategy-progressive-validation.md`
+  or `intentions/strategy-domain-selection.md`, only when doctrine has shifted.
+
+(Drop the superseded "Current assessment" deliverable — the recurring review re-derives
+it each cycle — and the "Feedback loop" deliverable — the signal arm is tracked separately.)
 
 ### 2. Proposed Charter Revisions
 If any perspective or the consistency-tester identified charter sections that
@@ -648,9 +656,9 @@ For each priority in the merged top-priority set, report its
 user responds.
 
 **Then present the recommendations.** After receiving user feedback, incorporate
-it and present the recommendations above (Draft ROADMAP.md Update, Proposed
-Charter Revisions, Existing Issues to Update, New Issues to File, Delegability
-findings), **plus** the backlog issue-triage table as an added section. No issue
+it and present the recommendations above (Frontier & strategy recommendations,
+Proposed Charter Revisions, Existing Issues to Update, New Issues to File,
+Delegability findings), **plus** the backlog issue-triage table as an added section. No issue
 is closed; nothing is posted to GitHub.
 
 ### Scheduled trigger
@@ -659,7 +667,7 @@ is closed; nothing is posted to GitHub.
 - the assessment window covered (`WINDOW_START` → now, or "full project history"
   on cold start);
 - the re-synthesized priorities (Phase 5);
-- the recommended ROADMAP.md updates, proposed charter revisions, and
+- the recommended frontier & strategy updates, proposed charter revisions, and
   existing-issue / new-issue recommendations, and the Delegability findings
   (Recommendations §1–5);
 - the backlog issue-triage table.
