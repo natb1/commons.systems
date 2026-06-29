@@ -261,7 +261,7 @@ run-all-cleanup-preview.sh <pr-number>
 
 - **Project Management** (github): Created a [project](https://github.com/users/natb1/projects/2).
 - **Version Control** (git): Created a repo.
-- **Agentic Coding Tools** (Claude Code): `nix flake update && home-manager switch --flake .#default --impure`
+- **Agentic Coding Tools** (Claude Code): stand up your own `office-hours-nate` instance flake (template: [examples/office-hours-nate/flake.nix](examples/office-hours-nate/flake.nix)) that imports this framework's `homeManagerModules.default` and sets your identity, then `home-manager switch --flake <your-instance>#<system>` (add `--impure` on Linux/WSL — the `wezterm-windows` `builtins.fetchurl` still needs it).
 - **Infrastructure** (Firebase): Hosting and storage.
 
 ## Where to go next
