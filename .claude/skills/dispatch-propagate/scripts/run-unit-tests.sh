@@ -14,6 +14,7 @@ RUN_RULES=false
 RUN_CI_SCRIPTS=false
 RUN_PR_SCRIPTS=false
 RUN_TOKEN_AUDIT_SCRIPTS=false
+RUN_FILE_ISSUE_SCRIPTS=false
 EXPLICIT=false
 
 while [[ $# -gt 0 ]]; do
@@ -49,8 +50,13 @@ while [[ $# -gt 0 ]]; do
       EXPLICIT=true
       shift
       ;;
+    --file-issue-scripts)
+      RUN_FILE_ISSUE_SCRIPTS=true
+      EXPLICIT=true
+      shift
+      ;;
     *)
-      echo "Usage: run-unit-tests.sh [--app <dir>] [--nix] [--rules] [--ci-scripts] [--pr-scripts] [--token-audit-scripts]" >&2
+      echo "Usage: run-unit-tests.sh [--app <dir>] [--nix] [--rules] [--ci-scripts] [--pr-scripts] [--token-audit-scripts] [--file-issue-scripts]" >&2
       exit 1
       ;;
   esac
@@ -81,6 +87,7 @@ if [ "$EXPLICIT" = false ]; then
       .github/scripts/*) RUN_CI_SCRIPTS=true ;;
       .claude/skills/dispatch-propagate/scripts/*) RUN_PR_SCRIPTS=true ;;
       .claude/skills/dispatch-token-audit/scripts/*) RUN_TOKEN_AUDIT_SCRIPTS=true ;;
+      .claude/skills/file-issue/scripts/*) RUN_FILE_ISSUE_SCRIPTS=true ;;
     esac
   done <<< "$CHANGED"
 fi
@@ -214,7 +221,28 @@ if [ "$RUN_TOKEN_AUDIT_SCRIPTS" = true ]; then
   fi
 fi
 
-if [ ${#APP_DIRS[@]} -eq 0 ] && [ "$RUN_NIX" = false ] && [ "$RUN_RULES" = false ] && [ "$RUN_CI_SCRIPTS" = false ] && [ "$RUN_PR_SCRIPTS" = false ] && [ "$RUN_TOKEN_AUDIT_SCRIPTS" = false ]; then
+# Run file-issue script tests (skip test-helpers.sh if one ever exists)
+if [ "$RUN_FILE_ISSUE_SCRIPTS" = true ]; then
+  echo "=== File-issue script tests ==="
+  FILE_ISSUE_SCRIPTS="$REPO_ROOT/.claude/skills/file-issue/scripts"
+  FILE_ISSUE_FAIL=false
+  for test_script in "$FILE_ISSUE_SCRIPTS"/test-*.sh; do
+    name=$(basename "$test_script")
+    [[ "$name" == "test-helpers.sh" ]] && continue
+    echo "--- $name ---"
+    if "$test_script"; then
+      echo "PASS: $name"
+    else
+      echo "FAIL: $name" >&2
+      FILE_ISSUE_FAIL=true
+    fi
+  done
+  if [ "$FILE_ISSUE_FAIL" = true ]; then
+    FAILURES+=(file-issue-scripts)
+  fi
+fi
+
+if [ ${#APP_DIRS[@]} -eq 0 ] && [ "$RUN_NIX" = false ] && [ "$RUN_RULES" = false ] && [ "$RUN_CI_SCRIPTS" = false ] && [ "$RUN_PR_SCRIPTS" = false ] && [ "$RUN_TOKEN_AUDIT_SCRIPTS" = false ] && [ "$RUN_FILE_ISSUE_SCRIPTS" = false ]; then
   echo "No test suites matched changed files. Nothing to check."
   exit 0
 fi

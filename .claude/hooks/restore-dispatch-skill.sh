@@ -78,14 +78,16 @@ WORKTREE_PATH="$PROJECT_ROOT/worktrees/$WORKTREE_BASENAME"
 # phase skill to reload, so nothing is restored — the Stop hook
 # (dispatch-stop.sh) owns the disposition.
 #
-# An office-hours-<N> session is a bare human-driven session with no skill
-# running — the `office-hours` entry script spawns it promptless (since #2387).
-# There is no skill body to restore on a context clear, so this arm exits 0
-# (restore nothing). The arm is kept explicit (not deleted) so an
-# office-hours-<N> session does NOT fall through to the phase-deriving `else`,
-# which would wrongly inject a phase skill into the human's bare session.
+# An office-hours-<N> session boots a one-shot `/office-hours <N>`
+# review-and-recommend skill (#2520): the skill runs once at boot, presents
+# best-next-steps, and stops — the human drives after it stops. The
+# review-and-recommend skill is NOT a persistent phase skill, so there is
+# nothing to restore on a context clear; this arm exits 0 (restore nothing).
+# The arm is kept explicit (not deleted) so an office-hours-<N> session does
+# NOT fall through to the phase-deriving `else`, which would wrongly inject a
+# phase skill into the human's session.
 #
-# Note: this hook fires only on SessionStart:clear, so the initial bare spawn
+# Note: this hook fires only on SessionStart:clear, so the initial boot
 # is unaffected — this arm governs post-context-clear behavior only.
 #
 # Falls back to the one-line Reload directive if SKILL.md is missing or
