@@ -515,6 +515,53 @@ case "$args" in
       echo "[]"
     fi
     ;;
+  run\ view\ *)
+    # gh_run_view_rest sentinel (#2480): `gh run view <id> --json createdAt,headSha`.
+    # Uses the `run view` prefix (not `api`), so it cannot collide with any api arm.
+    # Log args; honor gh-fail-rest; serve run-view-<id>.json or default '{}'.
+    echo "$args" >> "$STUB_DIR/gh-run-view-rest-calls.log"
+    if [[ -f "$STUB_DIR/gh-fail-rest" ]]; then
+      echo "stub forced gh run view failure" >&2
+      exit 1
+    fi
+    id="${args#run view }"; id="${id%% *}"
+    if [[ -f "$STUB_DIR/run-view-${id}.json" ]]; then
+      cat "$STUB_DIR/run-view-${id}.json"
+    else
+      echo '{}'
+    fi
+    ;;
+  api\ *repos/*/issues/*/timeline*)
+    # gh_issue_closing_commit_rest sentinel (#2480): `gh api --paginate repos/.../issues/<N>/timeline`.
+    # MUST PRECEDE api\ --paginate\ repos/*/issues/9xxx/comments (line below) AND
+    # api\ repos/*/issues/9xxx (case is first-wins). The `api\ *` absorbs the
+    # optional --paginate token so both paginated and bare calls are caught here.
+    echo "$args" >> "$STUB_DIR/gh-issue-closing-commit-rest-calls.log"
+    if [[ -f "$STUB_DIR/gh-fail-rest" ]]; then
+      echo "stub forced gh api failure" >&2
+      exit 1
+    fi
+    num=$(printf '%s' "$args" | sed -E 's#.*issues/([0-9]+)/timeline.*#\1#')
+    if [[ -f "$STUB_DIR/timeline-${num}.json" ]]; then
+      cat "$STUB_DIR/timeline-${num}.json"
+    else
+      echo '[]'
+    fi
+    ;;
+  api\ repos/*/compare/*)
+    # gh_commit_is_ancestor_rest sentinel (#2480): `gh api repos/.../compare/<base>...<head>`.
+    # No collision with issues/pulls arms; placed here near other paginate arms for clarity.
+    echo "$args" >> "$STUB_DIR/gh-commit-is-ancestor-rest-calls.log"
+    if [[ -f "$STUB_DIR/gh-fail-rest" ]]; then
+      echo "stub forced gh api failure" >&2
+      exit 1
+    fi
+    if [[ -f "$STUB_DIR/compare-status.json" ]]; then
+      cat "$STUB_DIR/compare-status.json"
+    else
+      echo '{"status":"identical"}'
+    fi
+    ;;
   api\ --paginate\ repos/*/issues/9[0-9][0-9][0-9]/comments)
     # gh_issue_view_rest --comments sentinel branch (#2257): the helper's second
     # REST call. The pattern REQUIRES the literal `--paginate` token, so a
@@ -1906,6 +1953,134 @@ err_pvf=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_view_rest 9001 2>&1 >/dev/null) ||
 assert_eq "pr: gh failure → non-zero" "1" "$rc_pvf"
 case "$err_pvf" in *"gh_pr_view_rest: gh api failed"*) mpf=yes ;; *) mpf=no ;; esac
 assert_eq "pr: gh-failure stderr names the helper" "yes" "$mpf"
+teardown
+
+# ============================================================================
+# REST read helpers: run-view / closing-commit / compare (#2480)
+# ============================================================================
+echo "=== REST read helpers: run-view / closing-commit / compare (#2480) ==="
+
+# --- gh_run_view_rest ---
+
+echo "Test: gh_run_view_rest -- success: returns JSON with createdAt and headSha"
+setup
+printf '%s\n' '{"createdAt":"2026-01-02T03:04:05Z","headSha":"deadbeef"}' \
+  > "$STUB_DIR/run-view-9101.json"
+out=$(source "$TMPDIR_TEST/lib.sh"; gh_run_view_rest 9101)
+assert_eq "run-view: createdAt" "2026-01-02T03:04:05Z" "$(jq -r '.createdAt' <<<"$out")"
+assert_eq "run-view: headSha" "deadbeef" "$(jq -r '.headSha' <<<"$out")"
+teardown
+
+echo "Test: gh_run_view_rest -- --repo flag passes cross-repo segment to gh"
+setup
+: > "$STUB_DIR/gh-run-view-rest-calls.log"
+printf '%s\n' '{"createdAt":"2026-01-02T03:04:05Z","headSha":"deadbeef"}' \
+  > "$STUB_DIR/run-view-9101.json"
+source "$TMPDIR_TEST/lib.sh"; gh_run_view_rest 9101 --repo owner/other-repo >/dev/null
+if grep -q 'owner/other-repo' "$STUB_DIR/gh-run-view-rest-calls.log"; then seg=yes; else seg=no; fi
+assert_eq "run-view: --repo passes cross-repo segment" "yes" "$seg"
+teardown
+
+echo "Test: gh_run_view_rest -- missing run id returns non-zero with diagnostic stderr"
+setup
+rc=0
+err=$(source "$TMPDIR_TEST/lib.sh"; gh_run_view_rest 2>&1 >/dev/null) || rc=$?
+assert_eq "run-view: missing id → non-zero" "1" "$rc"
+case "$err" in *"gh_run_view_rest: run id is required"*) m=yes ;; *) m=no ;; esac
+assert_eq "run-view: missing-id stderr names the helper" "yes" "$m"
+teardown
+
+echo "Test: gh_run_view_rest -- gh failure returns non-zero with diagnostic stderr"
+setup
+: > "$STUB_DIR/gh-fail-rest"
+rc=0
+err=$(source "$TMPDIR_TEST/lib.sh"; gh_run_view_rest 9101 2>&1 >/dev/null) || rc=$?
+assert_eq "run-view: gh failure → non-zero" "1" "$rc"
+case "$err" in *"gh_run_view_rest: gh run view failed"*) m=yes ;; *) m=no ;; esac
+assert_eq "run-view: gh-failure stderr names the helper" "yes" "$m"
+teardown
+
+# --- gh_issue_closing_commit_rest ---
+
+echo "Test: gh_issue_closing_commit_rest -- returns closing commit SHA"
+setup
+printf '%s\n' '[{"event":"labeled"},{"event":"closed","commit_id":"abc123def"}]' \
+  > "$STUB_DIR/timeline-9201.json"
+out=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_closing_commit_rest 9201)
+assert_eq "closing-commit: returns SHA" "abc123def" "$out"
+teardown
+
+echo "Test: gh_issue_closing_commit_rest -- null commit_id (manual close) yields empty output"
+setup
+printf '%s\n' '[{"event":"closed","commit_id":null}]' \
+  > "$STUB_DIR/timeline-9202.json"
+out=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_closing_commit_rest 9202)
+assert_eq "closing-commit: null commit_id → empty" "" "$out"
+teardown
+
+echo "Test: gh_issue_closing_commit_rest -- no closed event yields empty output"
+setup
+printf '%s\n' '[{"event":"labeled"},{"event":"referenced"}]' \
+  > "$STUB_DIR/timeline-9203.json"
+out=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_closing_commit_rest 9203)
+assert_eq "closing-commit: no closed event → empty" "" "$out"
+teardown
+
+echo "Test: gh_issue_closing_commit_rest -- missing number returns non-zero with diagnostic stderr"
+setup
+rc=0
+err=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_closing_commit_rest 2>&1 >/dev/null) || rc=$?
+assert_eq "closing-commit: missing number → non-zero" "1" "$rc"
+case "$err" in *"gh_issue_closing_commit_rest: issue number is required"*) m=yes ;; *) m=no ;; esac
+assert_eq "closing-commit: missing-number stderr names the helper" "yes" "$m"
+teardown
+
+# --- gh_commit_is_ancestor_rest ---
+
+echo "Test: gh_commit_is_ancestor_rest -- behind (base is ancestor of head)"
+setup
+printf '%s\n' '{"status":"behind"}' > "$STUB_DIR/compare-status.json"
+out=$(source "$TMPDIR_TEST/lib.sh"; gh_commit_is_ancestor_rest base123 head456)
+assert_eq "compare: behind status" "behind" "$out"
+teardown
+
+echo "Test: gh_commit_is_ancestor_rest -- identical"
+setup
+printf '%s\n' '{"status":"identical"}' > "$STUB_DIR/compare-status.json"
+out=$(source "$TMPDIR_TEST/lib.sh"; gh_commit_is_ancestor_rest base123 head456)
+assert_eq "compare: identical status" "identical" "$out"
+teardown
+
+echo "Test: gh_commit_is_ancestor_rest -- diverged (non-ancestor)"
+setup
+printf '%s\n' '{"status":"diverged"}' > "$STUB_DIR/compare-status.json"
+out=$(source "$TMPDIR_TEST/lib.sh"; gh_commit_is_ancestor_rest base123 head456)
+assert_eq "compare: diverged status" "diverged" "$out"
+teardown
+
+echo "Test: gh_commit_is_ancestor_rest -- ahead"
+setup
+printf '%s\n' '{"status":"ahead"}' > "$STUB_DIR/compare-status.json"
+out=$(source "$TMPDIR_TEST/lib.sh"; gh_commit_is_ancestor_rest base123 head456)
+assert_eq "compare: ahead status" "ahead" "$out"
+teardown
+
+echo "Test: gh_commit_is_ancestor_rest -- missing base returns non-zero with diagnostic stderr"
+setup
+rc=0
+err=$(source "$TMPDIR_TEST/lib.sh"; gh_commit_is_ancestor_rest 2>&1 >/dev/null) || rc=$?
+assert_eq "compare: missing base → non-zero" "1" "$rc"
+case "$err" in *"gh_commit_is_ancestor_rest: base commit is required"*) m=yes ;; *) m=no ;; esac
+assert_eq "compare: missing-base stderr names the helper" "yes" "$m"
+teardown
+
+echo "Test: gh_commit_is_ancestor_rest -- missing head returns non-zero with diagnostic stderr"
+setup
+rc=0
+err=$(source "$TMPDIR_TEST/lib.sh"; gh_commit_is_ancestor_rest base123 2>&1 >/dev/null) || rc=$?
+assert_eq "compare: missing head → non-zero" "1" "$rc"
+case "$err" in *"gh_commit_is_ancestor_rest: head sha is required"*) m=yes ;; *) m=no ;; esac
+assert_eq "compare: missing-head stderr names the helper" "yes" "$m"
 teardown
 
 # ============================================================================
