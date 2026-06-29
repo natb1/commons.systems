@@ -1,16 +1,32 @@
 ---
 name: align
-description: Dialectic engine for charter-level alignment. Two orthogonal layers — structural roles (decomposer, consistency-tester, delegability-assessor, contrarian) drive the dialectic; perspectives (intrinsic financial+technical, charter-derived product+marketing) feed it. Perspectives assess independently, the engine synthesizes priorities, a single contrarian challenges the synthesis, it re-synthesizes, triages the backlog, and produces roadmap recommendations plus per-priority delegability findings. On-demand stops for user feedback; scheduled (the align jit) posts a report and closes the review issue.
+description: On-demand, `/align` detects the entry rung from repo state and routes — `rung-0` runs a Socratic intent interview that seeds principle roots, `refine-workflow` decomposes existing roots into a goal frontier, `rung-5` runs the dialectic engine over the charter-level intent (two orthogonal layers — structural roles drive the dialectic, perspectives feed it; it synthesizes priorities, a contrarian challenges, it re-synthesizes, triages the backlog, and produces roadmap recommendations plus per-priority delegability findings); the scheduled (align jit) trigger always runs the rung-5 dialectic and posts a report that closes the review issue.
 user-invocable: true
 ---
 
 # Align
 
-`/align` is the project's **dialectic engine**. Structural roles drive a
-decompose → assess → synthesize → challenge → re-synthesize loop over a set of
-evaluative perspectives, then triage the open backlog and produce recommended
-frontier re-prioritizations, edits to the `strategy-*` doctrine nodes, and edits
-to the issue backlog.
+`/align` meets a repository at whatever alignment depth it already has. On the
+on-demand trigger it **detects an entry rung** from repo state and routes; the
+**rung-5 dialectic engine** — a decompose → assess → synthesize → challenge →
+re-synthesize loop over a set of evaluative perspectives that triages the open
+backlog and produces recommended re-prioritizations, edits to the `strategy-*`
+doctrine nodes, and edits to the issue backlog —
+is one of those branches (the deepest), not the skill's sole identity. See
+**## Rung routing** for the entry-rung detector and the branches.
+
+Two constraints bound the routing:
+
+- Detection picks an **entry depth** — the depth this invocation starts at
+  because the structure for shallower depths already exists. It does **not**
+  impose a global delegation ladder. Delegation stays a per-intention continuum
+  (human → AI → procedure) decided node-by-node — the orthogonality bullets
+  below say this; routing does not change it.
+- The rungs are **alignment depths** (the arc: refine workflow → codify skills →
+  automate → owned loop), **not** the dispatch phase chain
+  (`plan → implement → qa → review`). "Rung N" means "this invocation enters at
+  depth N because the structure for depth < N already exists," never "the
+  project is at maturity N."
 
 The engine keeps **two orthogonal layers** and never conflates them:
 
@@ -29,13 +45,14 @@ must never be conflated:
 - **Delegation** — human → AI → procedure. A continuum applied per intention,
   never a single global rung the whole tree sits on.
 
-This run operates at **rung-5 — the project's charter-level intent**. At rung-5
-there is **no persisted intention tree** (out of scope, tracked by #2366), so the
-engine runs over the charter-level intent directly: it reads the intention
-graph's principle roots (`intentions/principle-*.md`), the `strategy-*` doctrine
-nodes, the active-frontier view (generated from the intention graph), all work
-completed since the last review, and analytics, the same inputs the assessment
-has always used.
+The rung-5 engine operates at the project's **charter-level intent**. The
+intention graph is now populated — principle roots and a goal frontier exist —
+so rung-5 is reached by the on-demand detector (or run unconditionally on the
+scheduled trigger), not assumed. The engine reads the intention graph's
+principle roots (`intentions/principle-*.md`), the `strategy-*` doctrine nodes,
+the active-frontier view (generated from the intention graph), all work completed
+since the last review, and analytics, the same inputs the assessment has always
+used.
 
 This skill runs on one of two **triggers**:
 
@@ -75,6 +92,123 @@ The skill takes optional arguments. Detect the trigger from them:
 
 - **Otherwise** → **on-demand** trigger. Treat any argument text as the
   **focus question** (see below), carried through every phase.
+
+## Rung routing (on-demand only)
+
+The **scheduled trigger always runs rung-5 unconditionally** — a background jit
+job has no human to interview, so no shallower rung is reachable. Rung detection
+is nested strictly **inside** the on-demand branch, so this holds by
+construction.
+
+On the **on-demand** trigger, run the detector and branch on its output:
+
+```bash
+RUNG=$(npx tsx intentionsutil/scripts/detect-rung.ts)
+```
+
+This is a local read of the intention graph — no `gh`, no network — so it runs
+in-sandbox. It prints exactly one of `rung-0` / `refine-workflow` / `rung-5`.
+
+Branch on `RUNG` into one of three **mutually-exclusive terminal** gates. This
+is the detection-preamble → mutually-exclusive-branch pattern that
+`.claude/skills/fix-checks/SKILL.md` and `.claude/skills/implement/SKILL.md`
+use: a detector runs first, then exactly one terminal branch handles the run.
+
+- `rung-0` → go to **## Rung-0: intent interview**. The repo has no principle
+  roots; seed them.
+- `refine-workflow` → go to **## Refine-workflow**. Roots exist but there is no
+  actionable goal frontier; decompose them.
+- `rung-5` → proceed to **## Rung-5: the dialectic engine** below (the existing
+  engine body).
+
+"automate" is **not** one of the detected rungs — it is the per-intention
+delegability push-down the rung-5 engine performs (see **## Automate
+(per-intention push-down)**), per the per-intention-continuum constraint.
+
+## Rung-0: intent interview
+
+The detector returned `rung-0`: the practitioner's repo has **no principle
+roots**. Run a Socratic dialectic that produces **root intention nodes**
+(`intentions/principle-*.md`).
+
+This same `/align` ran on **this** repository to seed its own principle roots —
+`intentions/principle-*.md` (the six roots like
+`intentions/principle-show-not-tell.md`). The practitioner is about to do the
+same on **their own** repo. Always their own repo, never a toy sandbox.
+
+Run the elicitation as a **normal conversation turn**: pose **one** question at
+a time, the practitioner replies in prose, and you capture the free-form answer.
+This is open-ended capture, not a menu — do **not** use `AskUserQuestion` for
+the elicitation itself.
+
+Reserve `AskUserQuestion` for the **bounded gate only** — e.g. "write these N
+principles / refine one / add another / stop." That is the same use
+`.claude/skills/new-requirement/SKILL.md` and
+`.claude/skills/office-hours/SKILL.md` make of it: option-picks, not free-form
+capture.
+
+Persist each resolved principle through the validated write CLI. It reads one
+node as JSON and validates it via `writeNode`/`validateNode` (rejecting a bad
+enum, a missing statement, or an unsafe id), landing a real
+`intentions/principle-*.md` on the practitioner's own repo:
+
+```bash
+echo '{"id":"principle-<slug>","statement":"<one-line principle>","owner":"human","status":"codified","parent":null,"rationale":"<why>"}' \
+  | npx tsx intentionsutil/scripts/write-node.ts
+```
+
+Root shape: `id` is `principle-<slug>`, `parent` is `null`, `owner` is `human`,
+`status` is `codified` — matching the existing roots. The CLI is the single
+node-authoring gate; never hand-author the markdown.
+
+The elicited free text carries shell metacharacters, so do **not** inline it
+unquoted. Either write the JSON to a temp file and pass `--file <path>`, or pipe
+it via stdin from a heredoc:
+
+```bash
+cat > "$TMPDIR/principle.json" <<'JSON'
+{"id":"principle-<slug>","statement":"<one-line principle>","owner":"human","status":"codified","parent":null,"rationale":"<why>"}
+JSON
+npx tsx intentionsutil/scripts/write-node.ts --file "$TMPDIR/principle.json"
+```
+
+Verification for this section is **behavioral / manual**: it requires an
+interactive interview and is not auto-verifiable. Do not place it in any
+`verify` block.
+
+## Refine-workflow
+
+The detector returned `refine-workflow`: principle roots exist, but there is no
+actionable **goal frontier**. Run a bounded **in-thread** decomposition pass —
+the same Socratic mechanism as rung-0, but starting from the **existing** roots
+— eliciting sub-intentions and concrete goals.
+
+Persist each elicited node as a **child** through the same write CLI, this time
+**with** a `parent` (the id of the root or sub-intention it refines) and an
+owner/status suited to its depth (a fresh goal leaf is `status: raw`):
+
+```bash
+echo '{"id":"<child-slug>","statement":"<one-line goal>","owner":"human","status":"raw","parent":"principle-<slug>","rationale":"<why>"}' \
+  | npx tsx intentionsutil/scripts/write-node.ts
+```
+
+Then project the result and present the goal frontier as the alignment artifact:
+
+```bash
+npx tsx intentionsutil/scripts/frontier-view.ts
+```
+
+No standalone decomposer agent is invoked here — the judgment is in-thread.
+`align-decomposer` deliberately does **not** decompose a tree. The real artifact
+is the child intention/goal nodes plus the projected frontier, on the
+practitioner's own repo. A refined goal can then be pushed down per **## Automate
+(per-intention push-down)**.
+
+## Rung-5: the dialectic engine
+
+The detector returned `rung-5` (or the scheduled trigger ran unconditionally):
+principle roots and a goal frontier exist. Run the dialectic engine below over
+the charter-level intent.
 
 ## Focus question (on-demand only)
 
@@ -560,6 +694,35 @@ The posted comment is a GitHub-rendered artifact: per
 their variants) adjacent to any `#N` in the report.
 
 Then the session ends — the posted report is the office-hours session's output.
+
+## Automate (per-intention push-down)
+
+"Automate" is the delegability push-down applied **per intention**, not a global
+rung. It runs on the real components the rung-5 engine already uses — no net-new
+machinery.
+
+- Run `align-delegability-assessor`
+  (`.claude/agents/align-delegability-assessor.md` +
+  `.claude/docs/delegability.md`), already invoked in Phase 3, over the frontier
+  goals.
+- For any goal whose `delegability.eval.v1` returns
+  `recommended_owner: procedure` (or `ai`) with a push-down `roi_verdict`, hand
+  it to the dispatch chain via `intention-emit` → `/file-issue`
+  (`.claude/skills/intention-emit/SKILL.md`). The codification then runs through
+  the normal `plan → implement → qa → review` dispatch chain.
+- Attach `signal.eval.v1` success signals via `align-signal-assessor`
+  (`.claude/agents/align-signal-assessor.md` +
+  `.claude/docs/signal-identification.md`).
+
+The rung model is **not** the dispatch phase chain. The rungs are alignment
+depths; the phase chain is the dispatch workflow a codified goal runs through —
+see the `### Phase model` section of
+`.claude/skills/dispatch-propagate/reference.md`. Pushing a goal down emits an
+issue that *enters* the phase chain; it does not move the project to a new rung.
+
+The real artifact is the filed issues and the recorded push-down evals. The
+refine-workflow branch references this subsection too — a refined goal can be
+pushed down — but it lives here with the rung-5 engine.
 
 ## Migrating from /roadmap (deployed instances)
 

@@ -1,6 +1,8 @@
 import "missing.css";
 import "./style/theme.css";
 
+import "@commons-systems/components/footer";
+
 import { createBlogApp } from "@commons-systems/blog/create-blog-app";
 import { ADMIN_GROUP_ID } from "@commons-systems/authutil/groups";
 
