@@ -486,8 +486,8 @@ describe("extractMetadata — epub bounded read", () => {
     // proves the read does not scale with the file.
     let totalSliced = 0;
     for (const call of sliceSpy.mock.calls) {
-      const begin = (call[0] as number | undefined) ?? 0;
-      const end = call[1] as number | undefined;
+      const begin = call[0] ?? 0;
+      const end = call[1];
       totalSliced += (end ?? file.size) - begin;
     }
     expect(totalSliced).toBeLessThan(128 * 1024); // 32x below the 4 MB filler
