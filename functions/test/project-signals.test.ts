@@ -348,6 +348,8 @@ describe("validation helpers", () => {
     expect(isValidGscSite("https://my-site.commons.systems/")).toBe(true);
     expect(isValidGscSite("ftp://x")).toBe(false);
     expect(isValidGscSite("sc-domain:has space")).toBe(false);
+    expect(isValidGscSite("https://foo.com/../etc")).toBe(false);
+    expect(isValidGscSite("https://foo.com//path")).toBe(false);
   });
 
   it("isValidPsiUrl", () => {
@@ -356,6 +358,8 @@ describe("validation helpers", () => {
     expect(isValidPsiUrl("https://my-site.commons.systems")).toBe(true);
     expect(isValidPsiUrl("http://commons.systems")).toBe(false);
     expect(isValidPsiUrl("https://x?q=1")).toBe(false);
+    expect(isValidPsiUrl("https://foo.com/../etc")).toBe(false);
+    expect(isValidPsiUrl("https://foo.com//path")).toBe(false);
   });
 
   it("parseGa4Pairs keeps valid pairs and drops malformed ones", () => {

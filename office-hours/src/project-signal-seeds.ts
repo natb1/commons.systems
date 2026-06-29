@@ -1,7 +1,7 @@
 import type { GithubSignals, Ga4AppSignals, GscSignals, PsiUrlSignals } from "./project-signals.js";
 
 export interface ProjectSignalSeed {
-  /** Minutes before "now" the snapshot was computed; the vite plugin converts it to computedAt at build time. */
+  /** Minutes before page-load "now" the snapshot was computed; the vite plugin embeds this as a literal and converts it to `computedAt` via `Date.now()` at module load time. */
   computedAtOffsetMin: number;
   groupId: string;
   memberEmails: string[];
