@@ -49,7 +49,7 @@ export function feedFetchPlugin(feeds: FeedConfig[]): Plugin {
             // Other TypeErrors (e.g. `Failed to parse URL from <url>`) indicate a
             // genuinely invalid feed configuration — re-throw as a fatal build error.
             if (err instanceof TypeError) {
-              throw new Error(`[feed-fetch] ${id}: invalid fetch configuration`, { cause: err });
+              throw new Error(`[feed-fetch] ${id} (${url}): invalid fetch configuration`, { cause: err });
             }
             if (classifyError(err) === "programmer") throw err;
             console.warn(`[feed-fetch] ${id} (${url}): fetch error`, err);
