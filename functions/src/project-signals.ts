@@ -564,7 +564,7 @@ export interface CollectProjectSignalsDeps {
   // Each fetcher is null when its source is unconfigured (skipped entirely).
   fetchGithub: (() => Promise<GithubSignals>) | null;
   fetchGa4: (() => Promise<Ga4AppSignals[]>) | null;
-  fetchGsc: (() => Promise<GscSignals>) | null;
+  fetchGsc: ((now: Date) => Promise<GscSignals>) | null;
   fetchPsi: (() => Promise<PsiUrlSignals[]>) | null;
 }
 
@@ -594,7 +594,7 @@ export async function collectProjectSignalsCore(deps: CollectProjectSignalsDeps)
   }
   if (deps.fetchGsc) {
     try {
-      gsc = await deps.fetchGsc();
+      gsc = await deps.fetchGsc(deps.now);
     } catch (err) {
       console.error(
         `collectProjectSignals: gsc source failed: ${err instanceof Error ? err.message : String(err)}`,
@@ -785,9 +785,9 @@ export const collectProjectSignals = onSchedule(
           `collectProjectSignals: PROJECT_SIGNALS_GSC_SITE "${gscSite}" is not a valid sc-domain:/https:// site; skipping gsc.`,
         );
       } else {
-        fetchGsc = async (): Promise<GscSignals> => {
+        fetchGsc = async (now: Date): Promise<GscSignals> => {
           const token = await googleToken();
-          return fetchGscLive(fetchFn, token, gscSite, new Date());
+          return fetchGscLive(fetchFn, token, gscSite, now);
         };
       }
     }
