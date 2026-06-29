@@ -1,21 +1,16 @@
-// Pure, side-effect-free presentational shell shared by the client App.tsx and
-// the server prerender.ts (SSG). It must import ONLY React + the ds Nav +
-// NAV_LINKS — NOT firebase, use-app-state, use-router, AuthControls, Hero,
-// Transactions, LegacyRoute, or any CSS — so it can render under `tsx` in Node
-// (renderToStaticMarkup) without tripping a browser global or a top-level
-// firebase side effect.
+// Thin, side-effect-free adapter that delegates entirely to the ds
+// <PageShell> chrome primitive, injecting budget's specifics: the "Budget"
+// wordmark, NAV_LINKS, and the budget-specific #hero-container hero
+// placeholder default. PageShell owns all the page/header/footer markup; this
+// file declares none of it.
 //
-// Both callers compose the exact same shell structure:
-//   <div className="page">
-//     <header><h1>Budget</h1> + ds <Nav .../></header>
-//     <hero content-grid>      (live <Hero/> on the client; empty placeholder
-//                               on the server, matching today's first paint
-//                               where the hero fills on mount)
-//     <div className="content-grid">{children}</div>   (the route body)
-//     <footer> commons.systems + CC-BY-SA badge
-//   </div>
+// Load-bearing SSG-safety note (shared by the client App.tsx and the server
+// prerender.ts): it must import ONLY React + ds + NAV_LINKS — NOT firebase,
+// use-app-state, use-router, AuthControls, Hero, Transactions, LegacyRoute, or
+// any CSS — so it can render under `tsx` in Node (renderToStaticMarkup)
+// without tripping a browser global or a top-level firebase side effect.
 import type { ReactNode } from "react";
-import { Nav } from "@commons-systems/ds";
+import { PageShell } from "@commons-systems/ds";
 import { NAV_LINKS } from "./nav-links.js";
 
 export interface AppShellProps {
@@ -35,18 +30,14 @@ export interface AppShellProps {
 
 export function AppShell({ current, navEnd, hero, children }: AppShellProps) {
   return (
-    <div className="page">
-      <header>
-        <h1>Budget</h1>
-        {/* ds Nav renders its own <nav>, so it goes directly under <header>
-            rather than nested in another <nav> (which would double-nest). */}
-        <Nav links={[...NAV_LINKS]} current={current} end={navEnd} />
-      </header>
-      {hero ?? <div id="hero-container" className="content-grid" />}
-      <div className="content-grid">{children}</div>
-      <footer>
-        <p>Created with <a href="https://github.com/natb1/commons.systems" target="_blank" rel="noopener noreferrer">commons.systems</a> | &copy; 2026 RUMOR.ML <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener noreferrer"><img src="https://mirrors.creativecommons.org/presskit/buttons/88x31/png/by-sa.png" alt="CC-BY-SA" className="cc-badge" /></a></p>
-      </footer>
-    </div>
+    <PageShell
+      wordmark="Budget"
+      navLinks={[...NAV_LINKS]}
+      current={current}
+      navEnd={navEnd}
+      hero={hero ?? <div id="hero-container" className="content-grid" />}
+    >
+      {children}
+    </PageShell>
   );
 }
