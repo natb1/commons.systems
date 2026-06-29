@@ -77,7 +77,9 @@ cleanup() {
   local ws
   for ws in "${TOUCHED_WORKSPACES[@]:-}"; do
     [ -z "$ws" ] && continue
+    git -C "$REPO_ROOT" reset -q HEAD -- "$ws" 2>/dev/null || true
     git -C "$REPO_ROOT" checkout HEAD -- "$ws" 2>/dev/null || true
+    git -C "$REPO_ROOT" clean -fdq -- "$ws" 2>/dev/null || true
   done
   exit $rc
 }
@@ -114,7 +116,17 @@ for ws in "${APP_DIRS[@]}"; do
     baseline_ok=true
     (cd "$REPO_ROOT" && npx tsc --noEmit --project "$ws") >/dev/null 2>&1 || baseline_ok=false
     # Restore HEAD version immediately; don't wait for the trap.
+    # Three steps, in order: after `checkout origin/main -- "$ws"` an
+    # origin/main-only file (one HEAD deletes) is staged `A` — in the index and
+    # on disk. `reset HEAD` unstages it (making it untracked); only then can
+    # `clean -fdq` remove it from disk. `checkout HEAD` restores the tracked
+    # files HEAD does have. Order reset->checkout->clean is required: without the
+    # reset, clean is a no-op (file still tracked); without the clean, the file
+    # lingers untracked on disk. `-fd` (no `-x`) preserves gitignored files; the
+    # `$ws` scope + the line-61 dirty guard mean clean only removes swap-introduced files.
+    git -C "$REPO_ROOT" reset -q HEAD -- "$ws"
     git -C "$REPO_ROOT" checkout HEAD -- "$ws"
+    git -C "$REPO_ROOT" clean -fdq -- "$ws"
 
     if [ "$baseline_ok" = false ]; then
       echo "$ws: skipping — origin/main has pre-existing typecheck errors"
