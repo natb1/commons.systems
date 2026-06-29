@@ -39,10 +39,9 @@ sandbox (`.claude/rules/sandbox.md`). That covers:
 - The `blocked_by` dependency reads (Steps 4, 5) — `gh api`.
 - The broken-exit filing path (Step 5) — `dispatch-followup-exists` and
   `/file-issue` both call `gh`.
+- `dispatch-mark-deviation` (Step 5, cannot-verify) — despite looking like a pure-local marker write, it now does an **in-session office-hours park** via `dispatch-apply-office-hours` (which calls `gh`) per #2541, **and** writes the marker to `$CLAUDE_JOB_DIR/office-hours-reason` (a path not in the sandbox write-allowlist), so both halves fail under the sandbox.
 
-`dispatch-mark-deviation` (Step 5, cannot-verify) is a pure local file write — it
-never calls `gh`, so it needs **no** sandbox override. The Claude-in-Chrome MCP
-tools are not Bash and take no sandbox flag.
+The Claude-in-Chrome MCP tools are not Bash and take no sandbox flag.
 
 ## Steps
 
@@ -238,8 +237,7 @@ carries the fix into the implement chain):
 
 Then **STOP** (Branch R; the bug rides the implement chain separately).
 
-**cannot-verify** — the safety valve. A pure local write, **NO** sandbox
-override:
+**cannot-verify** — the safety valve (`dangerouslyDisableSandbox: true` — in-session `gh` park via `dispatch-apply-office-hours` + `$CLAUDE_JOB_DIR` marker write):
 
 ```bash
 .claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \
