@@ -67,7 +67,7 @@ describe("renderPacePositionPanel", () => {
 
     const svg = el.querySelector(".chart-scroll-wrapper svg");
     expect(svg).not.toBeNull();
-    const tickText = Array.from(svg!.querySelectorAll("text")).map((t) => t.textContent);
+    const tickText = Array.from(svg!.querySelectorAll("text")).map((t) => t.textContent); // type-safety-ok: asserted not-null by the preceding expect
     for (const label of expected) {
       expect(tickText).toContain(label);
     }
@@ -80,6 +80,6 @@ describe("renderPacePositionPanel", () => {
 
     const caption = el.querySelector(".capacity-pace-caption");
     expect(caption).not.toBeNull();
-    expect(caption!.textContent).toContain("current week");
+    expect(caption!.textContent).toContain("current week"); // type-safety-ok: asserted not-null by the preceding expect
   });
 });
