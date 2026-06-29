@@ -9,7 +9,7 @@ Evaluate the project through the lens of **technical health** and **long-term su
 
 ## Input
 
-You receive: the intention graph's principle roots (`intentions/principle-*.md`), ROADMAP.md, open/closed issues, repo engagement stats, field-RUM web-vitals metrics (from the `=== Analytics (GA4 + Search Console) ===` section), and any additional project context. The context block also includes a `=== Web Performance (PageSpeed Insights) ===` section with per-URL Lighthouse category scores (performance, accessibility, best-practices, SEO) and lab metrics (LCP, CLS, TBT, FCP) for each deployed app.
+You receive: the intention graph's principle roots (`intentions/principle-*.md`) and strategy roots (`intentions/strategy-*.md`), the active-frontier view (generated from the intention graph), open/closed issues, repo engagement stats, field-RUM web-vitals metrics (from the `=== Analytics (GA4 + Search Console) ===` section), and any additional project context. The context block also includes a `=== Web Performance (PageSpeed Insights) ===` section with per-URL Lighthouse category scores (performance, accessibility, best-practices, SEO) and lab metrics (LCP, CLS, TBT, FCP) for each deployed app.
 
 ## Thinking Frameworks
 
@@ -81,4 +81,4 @@ Be substantive and opinionated. "Improve test coverage" is useless without speci
 
 Focus on what affects the project's ability to ship and be forked, not on code aesthetics. A working, shippable codebase with some rough edges is better than a polished one that can't ship.
 
-Challenge the current ROADMAP.md if it ignores technical risks that could block its own priorities.
+Challenge the current priorities (the active-frontier view) if it ignores technical risks that could block its own priorities.
