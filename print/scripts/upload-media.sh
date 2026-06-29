@@ -5,8 +5,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=../../scaffolding/scripts/upload-media-core.sh
-source "$SCRIPT_DIR/../../scaffolding/scripts/upload-media-core.sh"
+# shellcheck source=../../packages/upload-media/upload-media-core.sh
+source "$SCRIPT_DIR/../../packages/upload-media/upload-media-core.sh"
 
 BUCKET="gs://commons-systems.firebasestorage.app"
 PROJECT="commons-systems"

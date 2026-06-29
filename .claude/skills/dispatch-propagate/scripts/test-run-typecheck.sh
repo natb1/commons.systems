@@ -187,4 +187,50 @@ make_shims "$REPO"
 run_sut
 assert_eq "cleanup/fail: working tree clean" "" "$(git -C "$REPO" status --porcelain)"
 
+# --- Test 6: deletion branch — origin/main has a file HEAD deletes (#2607) ---
+# The baseline swap `git checkout origin/main -- <ws>` reintroduces the
+# origin/main-only file (staged A, on disk). A single-step `git checkout HEAD
+# -- <ws>` restore cannot delete it (HEAD has no such path), leaving the file
+# resurrected. The fix restores via reset->checkout->clean. This case needs
+# inline setup because make_repo builds only src/index.ts.
+echo "Test 6: deletion branch -> deleted file not resurrected after baseline swap"
+REPO=$(mktemp -d "$TMP_ROOT/repo.XXXXXX")
+BARE=$(mktemp -d "$TMP_ROOT/bare.XXXXXX")
+git -C "$BARE" init --bare --quiet --initial-branch=main
+git -C "$REPO" init --quiet --initial-branch=main
+git -C "$REPO" config user.email "test@example.com"
+git -C "$REPO" config user.name "Test User"
+git -C "$REPO" remote add origin "$BARE"
+cat > "$REPO/package.json" <<JSON
+{
+  "name": "test-repo",
+  "private": true,
+  "workspaces": ["ws"]
+}
+JSON
+mkdir -p "$REPO/ws/src"
+cat > "$REPO/ws/package.json" <<JSON
+{ "name": "@commons-systems/ws", "version": "0.0.0", "private": true }
+JSON
+cat > "$REPO/ws/tsconfig.json" <<'JSON'
+{ "include": ["src"] }
+JSON
+# origin/main carries both index.ts and extra.ts, both clean.
+write_state clean "$REPO/ws/src/index.ts"
+write_state clean "$REPO/ws/src/extra.ts"
+git -C "$REPO" add -A
+git -C "$REPO" commit --quiet -m "baseline (index + extra)"
+git -C "$REPO" push --quiet origin main
+# feature HEAD deletes extra.ts, so HEAD's tree lacks it.
+git -C "$REPO" checkout --quiet -b feature
+git -C "$REPO" rm --quiet "ws/src/extra.ts"
+git -C "$REPO" commit --quiet -m "head (rm extra.ts)"
+git -C "$REPO" fetch --quiet origin main
+make_shims "$REPO"
+run_sut
+assert_eq "deletion: exit 0" "0" "$RC"
+assert_eq "deletion: working tree clean after run (nothing resurrected/staged)" "" "$(git -C "$REPO" status --porcelain)"
+[ ! -f "$REPO/ws/src/extra.ts" ] && _t6_extra=absent || _t6_extra=present
+assert_eq "deletion: deleted file not left on disk" "absent" "$_t6_extra"
+
 report_results

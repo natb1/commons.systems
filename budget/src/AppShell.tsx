@@ -1,7 +1,9 @@
 // Pure, side-effect-free presentational shell shared by the client App.tsx and
 // the server prerender.ts (SSG). It must import ONLY React + the ds Nav +
-// NAV_LINKS — NOT firebase, use-app-state, use-router, AuthControls, Hero,
-// Transactions, LegacyRoute, or any CSS — so it can render under `tsx` in Node
+// NAV_LINKS + FOOTER_HTML (from @commons-systems/components/footer, which is
+// Node-safe: its DOM side-effect is guarded behind `typeof HTMLElement`) —
+// NOT firebase, use-app-state, use-router, AuthControls, Hero, Transactions,
+// LegacyRoute, or any CSS — so it can render under `tsx` in Node
 // (renderToStaticMarkup) without tripping a browser global or a top-level
 // firebase side effect.
 //
@@ -16,6 +18,7 @@
 //   </div>
 import type { ReactNode } from "react";
 import { Nav } from "@commons-systems/ds";
+import { FOOTER_HTML } from "@commons-systems/components/footer";
 import { NAV_LINKS } from "./nav-links.js";
 
 export interface AppShellProps {
@@ -44,9 +47,7 @@ export function AppShell({ current, navEnd, hero, children }: AppShellProps) {
       </header>
       {hero ?? <div id="hero-container" className="content-grid" />}
       <div className="content-grid">{children}</div>
-      <footer>
-        <p>Created with <a href="https://github.com/natb1/commons.systems" target="_blank" rel="noopener noreferrer">commons.systems</a> | &copy; 2026 RUMOR.ML <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener noreferrer"><img src="https://mirrors.creativecommons.org/presskit/buttons/88x31/png/by-sa.png" alt="CC-BY-SA" className="cc-badge" /></a></p>
-      </footer>
+      <footer dangerouslySetInnerHTML={{ __html: FOOTER_HTML }} />
     </div>
   );
 }
