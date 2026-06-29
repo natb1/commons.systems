@@ -853,13 +853,15 @@ export function isValidOwnerName(repo: string): boolean {
 // isValidGscSite — accepts `sc-domain:<host>` (no slashes) or an https URL
 // whose path has no `..` traversal component and no `//` empty segment.
 export function isValidGscSite(site: string): boolean {
-  return /^(sc-domain:[A-Za-z0-9.-]+|https:\/\/(?!.*\/\/)(?!.*\.\.)[A-Za-z0-9._/-]+)$/.test(site);
+  return /^(sc-domain:[A-Za-z0-9.-]+|https:\/\/(?!.*\/\/)(?!.*\.\.)[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]*)*)$/.test(
+    site,
+  );
 }
 
 // isValidPsiUrl — https URL with no `..` traversal component and no `//`
 // empty path segment.
 export function isValidPsiUrl(url: string): boolean {
-  return /^https:\/\/(?!.*\/\/)(?!.*\.\.)[A-Za-z0-9._/-]+$/.test(url);
+  return /^https:\/\/(?!.*\/\/)(?!.*\.\.)[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]*)*$/.test(url);
 }
 
 // Parses "app:propertyId,app:propertyId,..." into validated pairs. An app name
