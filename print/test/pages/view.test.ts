@@ -200,7 +200,7 @@ describe("resolveViewerProps", () => {
     expect(createEpubRenderer).toHaveBeenCalled();
   });
 
-  it("cloud image-archive: image-archive renderer factory built with the storagePath", async () => {
+  it("cloud image-archive: routes resolveSource through resolveFileSource (cache-first)", async () => {
     const item = makeMediaItem({ mediaType: "image-archive", storagePath: "media/archive.cbz" });
     const cached = new ArrayBuffer(16);
     vi.mocked(getFile).mockResolvedValueOnce(cached);
@@ -208,7 +208,7 @@ describe("resolveViewerProps", () => {
     const props = resolveViewerProps(item, false, "https://example.com/archive", null);
 
     props.createRenderer(() => {});
-    expect(createImageArchiveRenderer).toHaveBeenCalledWith(expect.any(Function), "media/archive.cbz");
+    expect(createImageArchiveRenderer).toHaveBeenCalledWith(expect.any(Function));
     // image-archive routes through resolveFileSource: cache-first whole-file load.
     await expect(props.resolveSource()).resolves.toBe(cached);
     expect(getFile).toHaveBeenCalledWith("media/archive.cbz");
@@ -441,7 +441,7 @@ describe("renderView", () => {
 
       const props = readyProps(getViewFrame());
       props.createRenderer(() => {});
-      expect(createImageArchiveRenderer).toHaveBeenCalledWith(expect.any(Function), "media/archive.cbz");
+      expect(createImageArchiveRenderer).toHaveBeenCalledWith(expect.any(Function));
     });
   });
 });
