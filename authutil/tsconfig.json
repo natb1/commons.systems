@@ -1,4 +1,0 @@
-{
-  "extends": "@commons-systems/config/tsconfig.lib.json",
-  "include": ["src", "seeds", "bin", "test", "e2e"]
-}

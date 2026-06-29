@@ -1,12 +1,12 @@
 ---
 name: review-fix
-description: Review phase — the workflow's single terminal review pass. Runs the combined /review-fix fan-out through the Workflow tool: surface-conditional finders (code-review, review, security domain reviewers) in parallel → code dedup → classify → adversarial-verify (Required findings refuted by severity-scaled skeptics — 2 for high-confidence, 1 below — before any Opus fix runs) → Opus fix fan-out → deferred/follow-up filing prep. Returns a compact disposition summary; applies fixes via one /commit-merge-push, files blocked_by follow-ups, posts one PR comment, and applies the dispatch:reviewed label
+description: Review phase — the workflow's single terminal review pass. Runs the combined /review-fix fan-out through the Workflow tool: surface-conditional finders (code-review, security domain reviewers) in parallel → code dedup → classify → adversarial-verify (Required findings refuted by severity-scaled skeptics — 2 for high-confidence, 1 below — before any Opus fix runs) → Opus fix fan-out → deferred/follow-up filing prep. Returns a compact disposition summary; applies fixes via one /commit-merge-push, files blocked_by follow-ups, posts one PR comment, and applies the dispatch:reviewed label
 ---
 
 # Review and Fix
 
 The `review` phase of the issue workflow, dispatched by the dispatch chain. This
-skill consolidates what were three separate review phases — code-review, review,
+skill consolidates what were three separate review phases — code-review, generic review,
 and security — into one pass over a single diff. It invokes the **Workflow tool**
 on `.claude/workflows/review-fix.js`, which fans out surface-conditional finders,
 deduplicates and classifies findings in code, adversarially verifies `Required`
@@ -360,26 +360,26 @@ Step 6 comment or note that no code changes were applied.
 
 Every finding from every source appears exactly once in one of these buckets. The
 Workflow's classifier preserves **both** vocabularies: the security pass's
-`required` / `out-of-scope` / `false-positive` axis and the code-review/review
+`required` / `out-of-scope` / `false-positive` axis and the code-review
 `Fixed` / `Informational` / `Dismissed` / `Deferred` axis.
 
 | Bucket | Source vocabulary | Meaning |
 |---|---|---|
-| Fixed | code-review/review | A concrete, in-scope code change applicable to this PR — applied by the Workflow's Opus fix agents. |
+| Fixed | code-review | A concrete, in-scope code change applicable to this PR — applied by the Workflow's Opus fix agents. |
 | Required | security | A real vulnerability or weakness in the changed code. Adversarially verified; upheld Required findings applied by the Workflow's Opus fix agents. |
 | Refuted | security | A Required finding refuted by the adversarial-verify step — dropped before any Opus fix, recorded in verify_report. |
-| Informational | code-review/review | FYIs, notes, observations surfaced for human reference; no change required. |
-| Dismissed | code-review/review | Nits, incorrect findings, or not applicable; no change, each with a one-line rationale. |
+| Informational | code-review | FYIs, notes, observations surfaced for human reference; no change required. |
+| Dismissed | code-review | Nits, incorrect findings, or not applicable; no change, each with a one-line rationale. |
 | False-positive | security | Not an actual vulnerability — a misread of the code or a non-issue; each with a one-line rationale. |
-| Deferred | code-review/review | Valid but out of scope for this PR; filed as a `blocked_by` follow-up in Step 6. |
+| Deferred | code-review | Valid but out of scope for this PR; filed as a `blocked_by` follow-up in Step 6. |
 | Out-of-scope | security | A genuine concern, but in pre-existing code the diff did not touch; meaningful CodeQL/npm out-of-scope findings are filed as `security` follow-ups in Step 6. |
 
 A finding is **never Dismissed/Disregarded purely because the change is small.**
-If a code-review/review finding is a real improvement within the PR's scope,
+If a code-review finding is a real improvement within the PR's scope,
 classify it Fixed and implement it — regardless of how trivial the diff is.
 Dismissed is for false positives, trivially wrong findings, or style preferences
 that are not actual improvements; smallness alone never qualifies (out-of-scope
-items go to Deferred, not Dismissed). When a code-review/review finding is
+items go to Deferred, not Dismissed). When a code-review finding is
 ambiguous, default to Informational rather than inventing a code change.
 
 ### 5. File meaningful out-of-scope findings as blocked_by follow-ups
@@ -423,7 +423,7 @@ create_out=$(gh label create "dispatch:review-followup" \
   || echo "review-fix: warning: could not ensure dispatch:review-followup label: $create_out" >&2
 ```
 
-#### 5a. Deferred code-review/review findings → `/file-issue` with a blocked-by link
+#### 5a. Deferred code-review findings → `/file-issue` with a blocked-by link
 
 The Workflow prepares `result.deferred_filings`, each entry carrying `title`,
 `body`, and `blocker_issue_nums` (the implementing issue numbers from
@@ -570,7 +570,7 @@ directory. Organize the body by disposition bucket, omitting any bucket with no
 entries (on a docs-only / empty diff the security note from `result.security_note`
 stands in for the security buckets):
 
-- **Fixed** — code-review/review findings implemented; one line per finding plus
+- **Fixed** — code-review findings implemented; one line per finding plus
   the fix commit SHA from Step 3.
 - **Required (security)** — security findings fixed; one line per finding plus the
   fix commit SHA, or the reason if left unresolved.
@@ -579,10 +579,10 @@ stands in for the security buckets):
   verdict and rationale. These were **not** fixed; include the skeptic rationale
   so the audit trail explains the drop.
 - **Informational** — surfaced for human reference; no action.
-- **Dismissed** — code-review/review false positives or nits; each with a
+- **Dismissed** — code-review false positives or nits; each with a
   one-line rationale.
 - **False-positive (security)** — each with a one-line rationale.
-- **Deferred** — out-of-scope code-review/review findings; each references its
+- **Deferred** — out-of-scope code-review findings; each references its
   follow-up issue `#<N>` from Step 5a.
 - **Out-of-scope (security)** — pre-existing CodeQL/npm findings; each meaningful
   one references its follow-up issue `#<N>` from Step 5b. CodeQL-sourced findings
@@ -819,7 +819,7 @@ through to the unified set — has these fields:
   several sources on one finding.
 - **OWASP** — the OWASP Top 10 (2021) category (e.g. `A01:2021 Broken Access
   Control`, `A03:2021 Injection`). Security findings only; empty for
-  code-review/review findings.
+  code-review findings.
 - **STRIDE** — one of Spoofing, Tampering, Repudiation, Information Disclosure,
   Denial of Service, Elevation of Privilege. Security findings only.
 - **Confidence** — `high`, `medium`, or `low`.
@@ -831,7 +831,7 @@ through to the unified set — has these fields:
 
 - **Empty, docs-only, or test-only diff** — `surface` is `empty`, `docs`, or
   `tests`; the Workflow launches no security finders and no security agents. The
-  code-review and review agents still run. The skill still applies
+  code-review agent still runs. The skill still applies
   `dispatch:reviewed` and writes the marker.
 - **A finder finds nothing** — record that source as clean; it contributes no
   findings to the Workflow.
@@ -868,7 +868,7 @@ something re-entry asserts.
 **Model split (#1172).** The dispatch chain runs this `review` phase orchestrator
 on **Sonnet** (via `dispatch-phase-model`, which maps `review →
 claude-sonnet-4-6`). The model tiering is now owned by the Workflow's per-`agent()`
-`model:` settings: finder agents (code-review, review, security domains) run on
+`model:` settings: finder agents (code-review, security domains) run on
 **Sonnet**, dedup/classify/verify agents run on **Sonnet**, and **fix-authoring
 Opus fix agents** (`model: opus`) write all working-tree changes. Fix-authoring is
 pinned to Opus **exactly once** in the Workflow's fix phase — there is no
@@ -876,15 +876,19 @@ double-tiering. The orchestrator (this skill) authors no product code.
 
 **Probe-wave throttle short-circuit (#1857).** On a `code` surface the Workflow
 splits the finder fan-out into two waves instead of one barrier. Wave 1 launches
-only the two always-on quality finders (`code-review`, `review`) — real review
-work that runs on every surface — and doubles them as a throttle probe. If **both**
-return `null` (a strong outage signal — far more robust than a single flake), the
-Workflow skips the security finder wave entirely rather than waste those launches
-on a throttled model, and sets `result.coverage_incomplete = true` with a human
-`result.coverage_note` (surfaced in the Step 6 partial-coverage line). Otherwise
-wave 2 launches the surface-gated security finders. On `empty`/`docs`/`tests`
-surfaces there are no security finders, so this degenerates to a single wave (no
-change). **Marker/label behavior is intentionally unchanged:** a throttled run
+only the single always-on `code-review` quality finder — real review work that
+runs on every surface — and doubles it as a throttle probe. If it returns `null`,
+the Workflow skips the security finder wave entirely rather than waste those
+launches on a throttled model, and sets `result.coverage_incomplete = true` with a
+human `result.coverage_note` (surfaced in the Step 6 partial-coverage line). The
+`agent()` primitive already retries internally, so a `null` result is a repeated
+failure after retries — a genuine outage signal, not a one-off flake. This
+deliberately accepts the reduced throttle-probe robustness of a single finder
+(versus the prior two): the internal retry means `null` already means "failed
+after retries". Otherwise wave 2 launches the surface-gated security finders. On
+`empty`/`docs`/`tests` surfaces there are no security finders, so this degenerates
+to a single wave (no change). **Marker/label behavior is intentionally unchanged:**
+a throttled run
 still applies `dispatch:reviewed` and writes the marker — this matches today's
 behavior when all finders return `null`, producing a degraded quality-only review.
 This is a launch-efficiency change only; genuine worker *death* on a transient

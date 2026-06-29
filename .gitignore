@@ -9,6 +9,7 @@ CLAUDE.local.md
 !functions/.env.commons-systems
 node_modules/
 dist/
+storybook-static/
 functions/lib/
 .firebase/
 .firebase-acceptance-*
@@ -20,6 +21,7 @@ ui-debug.log
 .direnv/
 **/tmp/
 budget-etl/budget-etl
+/go.work.sum
 result
 
 # Claude Code sandbox /dev/null bind-mount artifacts — character device nodes
@@ -46,3 +48,13 @@ result
 .erosion-baseline.*
 .erosion-jscpd-head.*
 .erosion-jscpd-base.*
+
+# design-sync (claude.ai/design) — transient build/verify state. The durable
+# set under .design-sync/ (config.json, NOTES.md, conventions.md, previews/,
+# overrides/) is committed; everything below regenerates per run.
+.ds-sync/
+ds-bundle/
+.design-sync/sb-reference/
+.design-sync/learnings/
+.design-sync/.cache/
+.design-sync/node_modules

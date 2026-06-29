@@ -78,22 +78,22 @@ WORKTREE_PATH="$PROJECT_ROOT/worktrees/$WORKTREE_BASENAME"
 # phase skill to reload, so nothing is restored — the Stop hook
 # (dispatch-stop.sh) owns the disposition.
 #
-# An office-hours-<N> session (started by the /office-hours entry point, #759)
-# is not a phase worker — it restores the /office-hours skill body, not a phase
-# skill, so its plan-mode paths survive a context clear. These sessions now
-# exist: dispatch-spawn-office-hours spawns them with --name office-hours-<N>
-# (since #1311). The name has no leading digit, so it misses the primary
-# ^[0-9]+- check and reaches ^office-hours-[0-9]+$ via the git-branch
-# fallback — this is correct and intended.
+# An office-hours-<N> session is a bare human-driven session with no skill
+# running — the `office-hours` entry script spawns it promptless (since #2387).
+# There is no skill body to restore on a context clear, so this arm exits 0
+# (restore nothing). The arm is kept explicit (not deleted) so an
+# office-hours-<N> session does NOT fall through to the phase-deriving `else`,
+# which would wrongly inject a phase skill into the human's bare session.
+#
+# Note: this hook fires only on SessionStart:clear, so the initial bare spawn
+# is unaffected — this arm governs post-context-clear behavior only.
 #
 # Falls back to the one-line Reload directive if SKILL.md is missing or
 # unreadable — defensive against a packaging error breaking recovery.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || exit 0
 DISPATCH_SCRIPTS="$SCRIPT_DIR/../skills/dispatch-propagate/scripts"
 if printf '%s\n' "$NAME" | grep -qE '^office-hours-[0-9]+$'; then
-  SKILL_DIR_NAME="office-hours"
-  SKILL_ARGS=""
-  DIRECTIVE="/office-hours"
+  exit 0
 else
   PHASE=$("$DISPATCH_SCRIPTS/dispatch-phase" "$ISSUE_NUM" 2>/dev/null) || PHASE=""
 

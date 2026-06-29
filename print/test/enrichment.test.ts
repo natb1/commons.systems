@@ -71,7 +71,11 @@ vi.mock("@commons-systems/errorutil/log", () => ({
 // ---------------------------------------------------------------------------
 // Import real modules AFTER mocks are declared
 // ---------------------------------------------------------------------------
-import { renderLocalIntoList, settleEnrichment } from "../src/local-folder-ui.js";
+import {
+  renderLocalIntoList,
+  settleEnrichment,
+  ENRICH_READ_CONCURRENCY,
+} from "../src/local-folder-ui.js";
 import {
   setLocalDirectory,
   flushWrites,
@@ -81,6 +85,7 @@ import {
 } from "../src/sidecar.js";
 import type { MediaItem, SidecarData } from "../src/sidecar.js";
 import type { MediaItem as LibMediaItem } from "../src/types.js";
+import { deferred } from "./utils";
 
 // ---------------------------------------------------------------------------
 // Fake FileSystemDirectoryHandle (same pattern as sidecar.test.ts)
@@ -202,6 +207,78 @@ function makeContainer(): HTMLElement {
 }
 
 // ---------------------------------------------------------------------------
+// Fake IntersectionObserver. happy-dom has no real IntersectionObserver, so we
+// install a stub that only REGISTERS observed nodes (never fires `cb` on its
+// own). A test fires the intersection for a specific row node via
+// `triggerIntersection`, which drives the production lazy path. Keying the
+// registry by element lets a test target one row; `triggerIntersection` picks
+// the MOST RECENT entry for a node so a multi-pass test resolves a fresh
+// pass-2 node, not a detached pass-1 one.
+// ---------------------------------------------------------------------------
+let ioRegistry: Array<{
+  cb: IntersectionObserverCallback;
+  el: Element;
+  observer: IntersectionObserver;
+}> = [];
+
+class FakeIO {
+  cb: IntersectionObserverCallback;
+  constructor(cb: IntersectionObserverCallback) {
+    this.cb = cb;
+  }
+  observe(el: Element): void {
+    ioRegistry.push({ cb: this.cb, el, observer: this as unknown as IntersectionObserver }); // type-safety-ok: test stub, FakeIO only implements the methods the prod code calls
+  }
+  // Production calls unobserve as a one-shot before scheduling; a no-op here is
+  // fine because each node is fired exactly once per pass.
+  unobserve(): void {}
+  // Drop this observer's entries so a torn-down (prior-pass) observer cannot be
+  // re-triggered.
+  disconnect(): void {
+    ioRegistry = ioRegistry.filter((e) => e.observer !== (this as unknown as IntersectionObserver)); // type-safety-ok: test stub self-reference for registry dedup
+  }
+  takeRecords(): IntersectionObserverEntry[] {
+    return [];
+  }
+}
+
+/** Fire `isIntersecting: true` for a specific row node (most recent entry). */
+function triggerIntersection(node: Element): void {
+  for (let i = ioRegistry.length - 1; i >= 0; i--) {
+    const entry = ioRegistry[i];
+    if (entry.el === node) {
+      entry.cb(
+        [{ isIntersecting: true, target: node } as IntersectionObserverEntry], // type-safety-ok: partial stub entry with only the props the prod code reads
+        entry.observer,
+      );
+      return;
+    }
+  }
+  throw new Error(
+    "triggerIntersection: no IntersectionObserver entry registered for the given node — the lazy enrichment path was not wired for it",
+  );
+}
+
+/** Look up a rendered local row node by its item id. */
+function rowNode(container: HTMLElement, item: LibMediaItem): Element {
+  const node = container.querySelector(`[data-id="${CSS.escape(item.id)}"]`);
+  if (node === null) {
+    throw new Error(`rowNode: no rendered row found for item id "${item.id}"`);
+  }
+  return node;
+}
+
+// Install the FakeIO global for every test in the file. Stacks with each
+// describe's own clearAllMocks/innerHTML hooks.
+beforeEach(() => {
+  ioRegistry = [];
+  vi.stubGlobal("IntersectionObserver", FakeIO as unknown as typeof IntersectionObserver); // type-safety-ok: test stub class replacing a browser global
+});
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -230,7 +307,9 @@ describe("enrichment — cached item (zero IO, no write)", () => {
     await renderLocalIntoList(container);
     await flushWrites();
 
-    // Neither resolveLocalBlob nor extractMetadata should be called
+    // The cached item is not uncached, so NO observer is registered for it and
+    // there is nothing to trigger — no IO occurs.
+    expect(ioRegistry).toHaveLength(0);
     expect(mockResolveLocalBlob).not.toHaveBeenCalled();
     expect(mockExtractMetadata).not.toHaveBeenCalled();
 
@@ -259,6 +338,8 @@ describe("enrichment — uncached item (extracts and caches)", () => {
 
     const container = makeContainer();
     await renderLocalIntoList(container);
+    // Lazy: enrichment fires only when the row scrolls into view.
+    triggerIntersection(rowNode(container, item));
     await settleEnrichment();
     await flushWrites();
 
@@ -285,6 +366,7 @@ describe("enrichment — uncached item (extracts and caches)", () => {
 
     const container = makeContainer();
     await renderLocalIntoList(container);
+    triggerIntersection(rowNode(container, item));
     await settleEnrichment();
     await flushWrites();
 
@@ -324,7 +406,9 @@ describe("enrichment — write suppression on focus-rescan", () => {
     await renderLocalIntoList(container);
     await flushWrites();
 
-    // createWritable should NOT have been called (no new writes)
+    // All items cached → no uncached row → no observer built → nothing to
+    // trigger. createWritable should NOT have been called (no new writes).
+    expect(ioRegistry).toHaveLength(0);
     expect(indexHandle.createWritable.mock.calls.length).toBe(createWritableBefore);
     expect(mockExtractMetadata).not.toHaveBeenCalled();
     expect(mockResolveLocalBlob).not.toHaveBeenCalled();
@@ -342,14 +426,19 @@ describe("enrichment — write suppression on focus-rescan", () => {
     setLocalDirectory(dir, true);
 
     const container = makeContainer();
-    // First render: extracts and caches {}
+    // First render: row is uncached → observer registers it. Scroll it into
+    // view → extract and cache {}.
     await renderLocalIntoList(container);
+    triggerIntersection(rowNode(container, item));
     await settleEnrichment();
     await flushWrites();
     expect(mockExtractMetadata).toHaveBeenCalledTimes(1);
 
-    // Second render (simulates focus rescan): {} is a defined entry → no re-extract
+    // Second render (simulates focus rescan): {} is now a defined cache entry,
+    // so the row partitions into `rows` (not `uncached`) → no observer is built
+    // for it → nothing to trigger → no re-extract.
     await renderLocalIntoList(container);
+    expect(ioRegistry).toHaveLength(0);
     await settleEnrichment();
     await flushWrites();
     expect(mockExtractMetadata).toHaveBeenCalledTimes(1); // still only once
@@ -373,7 +462,10 @@ describe("enrichment — resolveLocalBlob returns null (file gone)", () => {
     setLocalDirectory(dir, true);
 
     const container = makeContainer();
+    // First pass: scroll the row in → resolveLocalBlob returns null → no
+    // extract, nothing cached.
     await renderLocalIntoList(container);
+    triggerIntersection(rowNode(container, item));
     await settleEnrichment();
     await flushWrites();
 
@@ -383,6 +475,18 @@ describe("enrichment — resolveLocalBlob returns null (file gone)", () => {
     // No entry should be cached (so next render can retry)
     const cached = await getMetadata("gone.pdf");
     expect(cached).toBeUndefined();
+    expect(mockResolveLocalBlob).toHaveBeenCalledTimes(1);
+
+    // Second pass: because nothing was cached, the row is STILL uncached, so a
+    // fresh observer registers it. Scrolling it in again re-attempts the read —
+    // proving the null-blob path is a retry, not a permanent suppression.
+    await renderLocalIntoList(container);
+    triggerIntersection(rowNode(container, item));
+    await settleEnrichment();
+    await flushWrites();
+
+    expect(mockResolveLocalBlob).toHaveBeenCalledTimes(2);
+    expect(mockExtractMetadata).not.toHaveBeenCalled();
   });
 });
 
@@ -406,7 +510,168 @@ describe("enrichment — early return when no media list present", () => {
     await renderLocalIntoList(container);
     await flushWrites();
 
+    // Bails before any observer is constructed.
+    expect(ioRegistry).toHaveLength(0);
     expect(mockExtractMetadata).not.toHaveBeenCalled();
     expect(mockResolveLocalBlob).not.toHaveBeenCalled();
+  });
+});
+
+describe("enrichment — lazy: deferred until intersection (criterion 1)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it("does no file IO at first paint, then reads on intersection", async () => {
+    const buf = new ArrayBuffer(8);
+    const item = makeLocalItem({ storagePath: "book.pdf", title: "book" });
+    mockListLocal.mockResolvedValue([item]);
+    mockResolveLocalBlob.mockResolvedValue(buf);
+    mockExtractMetadata.mockResolvedValue({ title: "Extracted Title" });
+
+    const dir = makeEmptyDir();
+    setLocalDirectory(dir, true);
+
+    const container = makeContainer();
+    await renderLocalIntoList(container);
+
+    // First paint: the row is rendered but NOT yet enriched — no read fired.
+    expect(mockResolveLocalBlob).not.toHaveBeenCalled();
+    expect(mockExtractMetadata).not.toHaveBeenCalled();
+
+    // Scrolling the row into view defers-then-fires the read.
+    triggerIntersection(rowNode(container, item));
+    await settleEnrichment();
+    await flushWrites();
+
+    expect(mockResolveLocalBlob).toHaveBeenCalledWith(item);
+    expect(mockExtractMetadata).toHaveBeenCalledWith(buf, "pdf");
+  });
+});
+
+describe("enrichment — bounded: reads route through the limiter (criterion 2)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it("caps in-flight reads at ENRICH_READ_CONCURRENCY; the (limit+1)th waits", async () => {
+    // One more item than the limiter's bound, each with a distinct id AND
+    // storagePath so every row is a distinct node and a distinct cache key.
+    const count = ENRICH_READ_CONCURRENCY + 1;
+    const items = Array.from({ length: count }, (_, i) =>
+      makeLocalItem({
+        id: `local:library/book-${i}.pdf`,
+        storagePath: `book-${i}.pdf`,
+        title: `book-${i}`,
+      }),
+    );
+    mockListLocal.mockResolvedValue(items);
+
+    // Each read returns a deferred we control. Resolving with `null` makes
+    // enrichLocalItem return early (no extract/cache) — shortest deterministic
+    // drain. The call itself fires regardless of the resolved value.
+    const gates: Array<ReturnType<typeof deferred<ArrayBuffer | null>>> = [];
+    mockResolveLocalBlob.mockImplementation(() => {
+      const g = deferred<ArrayBuffer | null>();
+      gates.push(g);
+      return g.promise;
+    });
+
+    const dir = makeEmptyDir();
+    setLocalDirectory(dir, true);
+
+    const container = makeContainer();
+    await renderLocalIntoList(container);
+
+    // Scroll EVERY row into view. Scheduling is synchronous inside the observer
+    // callback: the first ENRICH_READ_CONCURRENCY run immediately, the last is
+    // queued behind the limiter (its `fn` not yet invoked).
+    for (const item of items) {
+      triggerIntersection(rowNode(container, item));
+    }
+
+    // Exactly the bound's worth of reads started; none have resolved.
+    expect(mockResolveLocalBlob).toHaveBeenCalledTimes(ENRICH_READ_CONCURRENCY);
+
+    // Free one slot → the queued (limit+1)th read now runs. Freeing a slot
+    // takes enrichLocalItem through its awaits, so wait rather than count
+    // microtasks.
+    gates[0].resolve(null);
+    await vi.waitFor(() =>
+      expect(mockResolveLocalBlob).toHaveBeenCalledTimes(ENRICH_READ_CONCURRENCY + 1),
+    );
+
+    // Drain everything so no pending read leaks into the next test's shared,
+    // module-scoped limiter.
+    for (const g of gates) g.resolve(null);
+    await settleEnrichment();
+    await flushWrites();
+  });
+});
+
+describe("enrichment — loading state (criterion 3)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it("shows a spinner on intersection and clears it after the read settles", async () => {
+    const item = makeLocalItem({ storagePath: "book.pdf", title: "book" });
+    mockListLocal.mockResolvedValue([item]);
+    const gate = deferred<ArrayBuffer | null>();
+    mockResolveLocalBlob.mockReturnValue(gate.promise);
+    mockExtractMetadata.mockResolvedValue({ title: "Extracted Title" });
+
+    const dir = makeEmptyDir();
+    setLocalDirectory(dir, true);
+
+    const container = makeContainer();
+    await renderLocalIntoList(container);
+    const node = rowNode(container, item);
+
+    // Intersection adds the spinner synchronously, while the read is in flight.
+    triggerIntersection(node);
+    expect(node.querySelector(".media-loading")).not.toBeNull();
+
+    // Resolve the read → patch + cache → spinner cleared.
+    gate.resolve(new ArrayBuffer(8));
+    await settleEnrichment();
+    await flushWrites();
+
+    expect(node.querySelector(".media-loading")).toBeNull();
+  });
+
+  it("clears the spinner even when the file is unreadable (null blob)", async () => {
+    const item = makeLocalItem({ storagePath: "gone.pdf", title: "gone" });
+    mockListLocal.mockResolvedValue([item]);
+    const gate = deferred<ArrayBuffer | null>();
+    mockResolveLocalBlob.mockReturnValue(gate.promise);
+
+    const dir = makeEmptyDir();
+    setLocalDirectory(dir, true);
+
+    const container = makeContainer();
+    await renderLocalIntoList(container);
+    const node = rowNode(container, item);
+
+    triggerIntersection(node);
+    expect(node.querySelector(".media-loading")).not.toBeNull();
+
+    // Null blob never reaches patchLocalRow — the `finally` clear must still
+    // remove the spinner.
+    gate.resolve(null);
+    await settleEnrichment();
+    await flushWrites();
+
+    expect(mockExtractMetadata).not.toHaveBeenCalled();
+    expect(node.querySelector(".media-loading")).toBeNull();
   });
 });
