@@ -52,7 +52,8 @@ sensor_strategy_roots() {
 
 sensor_active_frontier() {
   echo "=== Active frontier (generated from the intention graph) ==="
-  npx tsx intentionsutil/scripts/frontier-view.ts
+  npx tsx intentionsutil/scripts/frontier-view.ts \
+    || echo "(frontier-view failed; active frontier context unavailable)" >&2
 }
 
 sensor_readme() {
