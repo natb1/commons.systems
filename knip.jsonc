@@ -48,7 +48,7 @@
   // the template is scaffolded into a new app; `ignoreFiles` excludes the files
   // as dead-code candidates but not their internal import resolution.
   "ignoreUnresolved": [
-    "./firebase.js" // scaffolding/firebase/templates/app/src/{firestore,auth}.ts — created at scaffold time
+    "./firebase.js" // projects/scaffolding/firebase/templates/app/src/{firestore,auth}.ts — created at scaffold time
   ],
 
   // Trees that are NOT statically imported by any source file and must never be
@@ -60,7 +60,7 @@
     ".claude/**",
     // Firebase scaffolding templates are COPIED into new app scaffolds, not
     // imported. Their internal exports/types/imports resolve only post-copy.
-    "scaffolding/firebase/templates/**"
+    "projects/scaffolding/firebase/templates/**"
   ],
 
   "workspaces": {

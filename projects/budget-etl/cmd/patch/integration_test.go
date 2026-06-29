@@ -101,7 +101,7 @@ func ruleIDPresent(rs []export.Rule, id string) bool {
 
 // convertExportRulesForTest mirrors the conversion used by main.go's
 // convertExportRules. It is duplicated here because that helper is
-// package-private to the parent budget-etl/main.go and cmd/patch can't
+// package-private to the parent projects/budget-etl/main.go and cmd/patch can't
 // import it.
 //
 // DIVERGENCE RISK: this is a hand-maintained copy. When main.go's

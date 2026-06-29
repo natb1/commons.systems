@@ -559,19 +559,6 @@ fi
 # Resolve PR (may be empty for implement-phase before the draft PR opens).
 PR_NUM=$("$SCRIPTS/dispatch-find-pr" "$ISSUE_NUM" 2>/dev/null) || PR_NUM=""
 
-# Fetch the open-PR list once and share it with both the readiness gate and the
-# phase derivation below via DISPATCH_PR_LIST, avoiding a redundant `gh pr list`
-# per predicate. On fetch failure DISPATCH_PR_LIST stays empty and each script
-# falls back to its own self-fetch.
-# This batched per-tick call intentionally stays on GraphQL (gh pr list) because
-# both fields it requires — closingIssuesReferences (which issues a PR closes,
-# no REST-list equivalent) and statusCheckRollup (per-PR CI rollup, no
-# REST-list equivalent) — are GraphQL-only; there is no REST /pulls endpoint
-# that returns either field.
-DISPATCH_PR_LIST=$(pr_list_open "number,headRefName,isDraft,statusCheckRollup,labels,mergeable" 2>/dev/null) \
-  || DISPATCH_PR_LIST=""
-export DISPATCH_PR_LIST
-
 # Read marker (presence drives branch selection; content is for diagnostics).
 # Validate against the known phase set — a corrupt or unknown value falls
 # through to Branch A (treat as absent) rather than driving Branch B's
