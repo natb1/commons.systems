@@ -130,12 +130,48 @@ if [ -n "$REMOVED_LINES" ]; then
   DECL_REMOVED=$(printf '%s\n' "$REMOVED_LINES" | grep -cE "$DECL_PAT" || true)
 fi
 
-DECL_NET=$((DECL_ADDED - DECL_REMOVED))
-
 # ---------------------------------------------------------------------------
 # Signal 3: Whole test-file deletion
 # ---------------------------------------------------------------------------
 DELETED_FILES=$(git diff --diff-filter=D --name-only origin/main...HEAD -- "${TEST_GLOBS[@]}" 2>/dev/null || true)
+
+# ---------------------------------------------------------------------------
+# Co-deletion exemption: a test file deleted alongside its implementation file
+# is not a test-integrity violation — it is an intentional feature removal.
+# Exclude such files from Signal 2 (declaration removal count) and Signal 3.
+#
+# Matching: strip the .test/.spec suffix to get the base name (e.g.
+# usage-history-chart.test.ts → usage-history-chart), then check whether any
+# non-test file with that base name was also deleted in this PR. If so, the
+# test file and its declarations are exempt from both signals.
+# ---------------------------------------------------------------------------
+EXEMPT_DECL_REMOVED=0
+NON_EXEMPT_DELETED=()
+
+if [ -n "$DELETED_FILES" ]; then
+  DELETED_IMPL=$(git diff --diff-filter=D --name-only origin/main...HEAD 2>/dev/null \
+    | grep -vE '\.(test|spec)\.(ts|tsx|js|jsx)$' || true)
+  while IFS= read -r test_file; do
+    [ -z "$test_file" ] && continue
+    base_name=$(basename "$test_file" | sed -E 's/\.(test|spec)\.(ts|tsx|js|jsx)$//')
+    if printf '%s\n' "$DELETED_IMPL" | grep -qE "(^|/)${base_name}\.(ts|tsx|js|jsx)$"; then
+      FILE_DIFF=$(git diff --unified=0 origin/main...HEAD -- "$test_file" 2>/dev/null || true)
+      if [ -n "$FILE_DIFF" ]; then
+        FILE_REMOVED=$(printf '%s\n' "$FILE_DIFF" | grep '^-' | grep -v '^---' | grep -vE '^-[[:space:]]*//' || true)
+        if [ -n "$FILE_REMOVED" ]; then
+          FILE_DECL_REMOVED=$(printf '%s\n' "$FILE_REMOVED" | grep -cE "$DECL_PAT" || true)
+          EXEMPT_DECL_REMOVED=$((EXEMPT_DECL_REMOVED + FILE_DECL_REMOVED))
+        fi
+      fi
+    else
+      NON_EXEMPT_DELETED+=("$test_file")
+    fi
+  done <<< "$DELETED_FILES"
+fi
+
+# Correct Signal 2 for co-deleted test files.
+DECL_REMOVED=$((DECL_REMOVED - EXEMPT_DECL_REMOVED))
+DECL_NET=$((DECL_ADDED - DECL_REMOVED))
 
 # ---------------------------------------------------------------------------
 # Evaluate signals and report
@@ -154,11 +190,11 @@ if [ "$DECL_NET" -lt 0 ]; then
   VIOLATION_MSGS+=("  - Signal 2: $NET_REMOVED net test declaration(s) removed")
 fi
 
-if [ -n "$DELETED_FILES" ]; then
+if [ "${#NON_EXEMPT_DELETED[@]}" -gt 0 ]; then
   VIOLATION=1
-  while IFS= read -r f; do
+  for f in "${NON_EXEMPT_DELETED[@]}"; do
     VIOLATION_MSGS+=("  - Signal 3: test file deleted: $f")
-  done <<< "$DELETED_FILES"
+  done
 fi
 
 if [ "$VIOLATION" -eq 0 ]; then
