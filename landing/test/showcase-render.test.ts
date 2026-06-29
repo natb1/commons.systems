@@ -39,7 +39,7 @@ describe("renderShowcase", () => {
     // excludes the `project-card-screenshot` img, which also starts with project-card).
     const matches = html.match(/<a [^>]*class="[^"]*\bproject-card"/g);
     expect(matches).not.toBeNull();
-    expect(matches!.length).toBe(PROJECTS.length);
+    expect(matches!.length).toBe(PROJECTS.length); // type-safety-ok: guarded by expect(matches).not.toBeNull() above
   });
 
   it("each anchor href matches the app url", () => {
