@@ -54,7 +54,7 @@ export function parseOpfTitle(xml: string): string | undefined {
 export class BlobRangeTransport extends pdfjsLib.PDFDataRangeTransport {
   /** Rejects with the first failing range read; never resolves. */
   readonly error: Promise<never>;
-  private rejectError!: (reason: unknown) => void;
+  private rejectError!: (reason: unknown) => void; // type-safety-ok: definite assignment assertion — Promise executor is synchronous so rejectError is set before requestDataRange can be called
 
   constructor(private blob: Blob) {
     super(blob.size, null);
