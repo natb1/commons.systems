@@ -5,13 +5,13 @@ description: Guide a user through adding a new bank-statement parser to budget-e
 
 # budget-parser
 
-Adds a new parser to `budget-etl/internal/parse/` for a bank export format not already handled (QFX/OFX/CSV). The user provides a sample statement file; this skill identifies the format, generates the parser and test, registers the format in the dispatch table, and runs `go test`.
+Adds a new parser to `projects/budget-etl/internal/parse/` for a bank export format not already handled (QFX/OFX/CSV). The user provides a sample statement file; this skill identifies the format, generates the parser and test, registers the format in the dispatch table, and runs `go test`.
 
 ## Step 1 — Check prerequisites
 
 Run `go version`. If not found or non-zero, report that Go is required (https://go.dev/dl/) and stop.
 
-Confirm `budget-etl/internal/parse/` exists relative to the current directory. If not, the user is not in a clone of this repo — report and stop.
+Confirm `projects/budget-etl/internal/parse/` exists relative to the current directory. If not, the user is not in a clone of this repo — report and stop.
 
 ## Step 2 — Identify the format and record a header marker
 
@@ -27,7 +27,7 @@ Report the structure to the user in plain language before proceeding.
 
 ## Step 3 — Read the canonical types and the closest existing parser
 
-Read `budget-etl/internal/parse/parse.go` (defines `Transaction`, `ParseResult`, `detectFormat`, `ParseFile`) and `budget-etl/internal/parse/ofxutil.go` (defines the shared helpers `parseCents`, `parseOFXDate`, `convertRawTransaction`, and the `rawTransaction` struct).
+Read `projects/budget-etl/internal/parse/parse.go` (defines `Transaction`, `ParseResult`, `detectFormat`, `ParseFile`) and `projects/budget-etl/internal/parse/ofxutil.go` (defines the shared helpers `parseCents`, `parseOFXDate`, `convertRawTransaction`, and the `rawTransaction` struct).
 
 Pick the closest analog to the new format and read that parser:
 
@@ -49,7 +49,7 @@ If the new format has account types your code should not parse as transactions (
 
 Pick a `<Format>` placeholder. Uppercase it for Go identifiers (`formatQIF`, `parseQIF`, `TestParseQIF`) — matching the existing `formatCSV`/`formatOFX`/`formatSGML` style — and lowercase it for filenames (`qif.go`, `qif_test.go`). Use this same casing consistently through Steps 6 and 7.
 
-Write `budget-etl/internal/parse/<format>.go` with a function:
+Write `projects/budget-etl/internal/parse/<format>.go` with a function:
 
 ```go
 func parse<Format>(path string) (ParseResult, error)
@@ -71,12 +71,12 @@ Before copying the user's sample file into the repo, ask the user two things in 
 If the user declines to share a fixture, stop — the parser cannot be tested without one. Otherwise copy (and redact if requested) to:
 
 ```
-budget-etl/internal/parse/testdata/<institution>.<ext>
+projects/budget-etl/internal/parse/testdata/<institution>.<ext>
 ```
 
 ## Step 6 — Write the test
 
-Create `budget-etl/internal/parse/<format>_test.go`. Use `sgml_test.go` as the template, or `csv_test.go` if the format is delimited (its `TestParseCSV_EmptyFile` is the closer analog for empty-input handling).
+Create `projects/budget-etl/internal/parse/<format>_test.go`. Use `sgml_test.go` as the template, or `csv_test.go` if the format is delimited (its `TestParseCSV_EmptyFile` is the closer analog for empty-input handling).
 
 - A primary `TestParse<Format>` function that calls the parser directly against the fixture.
 - For at least one transaction, assert all four fields: `TransactionID`, `Date`, `Amount`, `Description`. Derive expected values by reading the fixture directly.
@@ -87,20 +87,20 @@ Transaction count is covered by `TestParseFile_Dispatch` in Step 7 — don't dup
 
 ## Step 7 — Register the format in the dispatch table
 
-Make three edits to `budget-etl/internal/parse/parse.go` in one pass:
+Make three edits to `projects/budget-etl/internal/parse/parse.go` in one pass:
 
 1. Add a `format<Format>` constant to the `format` iota block after the existing constants.
 2. Add a branch to `detectFormat` that returns `format<Format>` when the header matches the marker recorded in Step 2.
 3. Add a `case format<Format>:` branch in `ParseFile`'s switch that calls `parse<Format>(path)`.
 
-Then extend the existing tests in `budget-etl/internal/parse/parse_test.go`. Row fields are `{name, file, wantCount int, wantSkip bool}` for `TestParseFile_Dispatch` and `{name, file, want format}` for `TestDetectFormat`:
+Then extend the existing tests in `projects/budget-etl/internal/parse/parse_test.go`. Row fields are `{name, file, wantCount int, wantSkip bool}` for `TestParseFile_Dispatch` and `{name, file, want format}` for `TestDetectFormat`:
 
 - Add a `{"<Format>", filepath.Join("testdata", "<institution>.<ext>"), <count>, false}` row to `TestParseFile_Dispatch`.
 - Add a `{"<Format>", filepath.Join("testdata", "<institution>.<ext>"), format<Format>}` row to `TestDetectFormat`.
 
 ## Step 8 — Run `go test`
 
-From `budget-etl/`, run:
+From `projects/budget-etl/`, run:
 
 ```bash
 go test ./internal/parse/...
