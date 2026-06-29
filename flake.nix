@@ -118,8 +118,13 @@
               # assigns home identity or git identity — it leaves them unset so each
               # instance supplies its own. This office-hours-nate instance sets
               # username/homeDirectory and the git identity directly.
-              home.username = "n8";
-              home.homeDirectory = "/Users/n8";
+              #
+              # lib.mkForce overrides home-manager's nixos/common.nix, which derives
+              # homeDirectory from config.users.users.n8.home at priority 100. Since
+              # nix/darwin/default.nix defines no users.users.n8, that derivation yields
+              # null. mkForce (priority 50) ensures our values win.
+              home.username = lib.mkForce "n8";
+              home.homeDirectory = lib.mkForce "/Users/n8";
               programs.git.settings.user.name = "Nathan Buesgens";
               programs.git.settings.user.email = "nathan@natb1.com";
 
