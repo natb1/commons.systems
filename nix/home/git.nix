@@ -12,35 +12,39 @@
   ...
 }:
 
+let
+  gitSettings = config.programs.git.settings;
+  hasName = gitSettings ? user && gitSettings.user ? name && gitSettings.user.name != "";
+  hasEmail = gitSettings ? user && gitSettings.user ? email && gitSettings.user.email != "";
+in
 {
+  assertions = [
+    {
+      assertion = !config.programs.git.enable || (hasName && hasEmail);
+      message = ''
+        Git is enabled but no git identity is set.
+
+        The commons.systems framework no longer bakes in a personal git
+        identity. Set both of these in your office-hours-nate instance flake:
+
+          programs.git.settings.user.name  = "Your Name";
+          programs.git.settings.user.email = "you@example.com";
+
+        See issue #2448 / epic #2446 (the personal instance was split out of
+        the framework).
+      '';
+    }
+  ];
+
   programs.git = {
     enable = true;
 
-    # User identity - automatically detected from environment
-    # These values are read from GIT_AUTHOR_NAME and GIT_AUTHOR_EMAIL environment variables.
-    # If not set, sensible defaults are used.
-    #
-    # To customize, either:
-    #   1. Export environment variables: export GIT_AUTHOR_NAME="Your Name"
-    #   2. Override in Home Manager: programs.git.settings.user.name = lib.mkForce "Your Name";
-    #   3. Keep existing ~/.gitconfig values (Home Manager merges, not replaces)
+    # User identity (user.name / user.email) is intentionally NOT set here.
+    # The framework repo no longer bakes in a personal git identity; the
+    # consuming instance flake (office-hours-nate) supplies it via
+    # programs.git.settings.user.name / .email. The assertion below fails
+    # loudly if git is enabled without an identity. See issue #2448 / epic #2446.
     settings = {
-      user = {
-        name = lib.mkDefault (
-          let
-            envName = builtins.getEnv "GIT_AUTHOR_NAME";
-          in
-          if envName != "" then envName else "Nathan Buesgens"
-        );
-
-        email = lib.mkDefault (
-          let
-            envEmail = builtins.getEnv "GIT_AUTHOR_EMAIL";
-          in
-          if envEmail != "" then envEmail else "nathan@natb1.com"
-        );
-      };
-
       # Core settings
       pull = {
         rebase = true;
