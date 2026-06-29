@@ -451,6 +451,23 @@ describe("collectProjectSignalsCore", () => {
     },
   ];
 
+  it("passes deps.now to the fetchGsc closure", async () => {
+    const store = createInMemoryFirestore();
+    let capturedNow: Date | undefined;
+    const fetchGsc = async (now: Date): Promise<GscSignals> => {
+      capturedNow = now;
+      return gsc;
+    };
+    await collectProjectSignalsCore({
+      ...baseArgs(store),
+      fetchGithub: null,
+      fetchGa4: null,
+      fetchGsc,
+      fetchPsi: null,
+    });
+    expect(capturedNow).toEqual(new Date("2026-06-23T08:30:00Z"));
+  });
+
   it("writes the shared doc with only the sources that succeeded", async () => {
     const store = createInMemoryFirestore();
     await collectProjectSignalsCore({
