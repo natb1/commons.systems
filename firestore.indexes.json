@@ -43,6 +43,14 @@
         { "fieldPath": "memberEmails", "arrayConfig": "CONTAINS" },
         { "fieldPath": "sampledAt", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "topic-usage",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "memberEmails", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "date", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []
