@@ -270,6 +270,127 @@ assert_eq "backfill cap=1: dropped day is logged (no silent truncate)" "1" \
 rm -rf "$R2" "$S2" "$ERR2" "$ERR2B"
 
 # =========================================================================
+# Case 8: normal daily run — sentinel last-day == yesterday -> [today] only.
+# Guards the unchanged daily-run behavior (acceptance criterion 1).
+# =========================================================================
+R8=$(mktemp -d)
+S8=$(mktemp -d)
+printf '2026-06-19\n' > "$S8/topic-usage-grp-1.last-day"   # yesterday
+DAY8="2026-06-20"
+NOW8=$(date -u -d "$DAY8 12:00:00" +%s)
+WT8="$R8/-home-x-worktrees-daily"
+mkdir -p "$WT8"
+write_transcript "$WT8/sess.jsonl" 12 0 0 0
+touch -d "${DAY8}T12:00:00Z" "$WT8/sess.jsonl"
+OUT8=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$R8"
+  export DISPATCH_TOPIC_USAGE_STATE_DIR="$S8"
+  export DISPATCH_TOPIC_USAGE_NOW="$NOW8"
+  node "$WRITER_MJS" --dry-run 2>/dev/null
+)
+assert_eq "daily (last-day == yesterday): today only (1 element)" "1" "$(jq 'length' <<<"$OUT8")"
+assert_eq "daily (last-day == yesterday): the day is today" \
+  '["2026-06-20"]' "$(jq -c '[.[].doc.date]' <<<"$OUT8")"
+rm -rf "$R8" "$S8"
+
+# =========================================================================
+# Case 9: N-day offline recovery — sentinel last-day > one day ago backfills
+# the missed days lastDay+1..today (acceptance criteria 2 + 4). last-day is
+# 3 days behind today, so the producer was offline for the intervening days.
+# =========================================================================
+R9=$(mktemp -d)
+S9=$(mktemp -d)
+printf '2026-06-17\n' > "$S9/topic-usage-grp-1.last-day"   # 3 days behind 06-20
+DAY9="2026-06-20"
+NOW9=$(date -u -d "$DAY9 12:00:00" +%s)
+WT9="$R9/-home-x-worktrees-gap"
+mkdir -p "$WT9"
+# Activity on one of the missed days proves a real doc is produced for it.
+write_transcript "$WT9/sess-18.jsonl" 33 0 0 0
+touch -d "2026-06-18T12:00:00Z" "$WT9/sess-18.jsonl"
+ERR9=$(mktemp)
+OUT9=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$R9"
+  export DISPATCH_TOPIC_USAGE_STATE_DIR="$S9"
+  export DISPATCH_TOPIC_USAGE_NOW="$NOW9"
+  node "$WRITER_MJS" --dry-run 2>"$ERR9"
+)
+assert_eq "gap recovery: one element per missed day (lastDay+1..today)" "3" "$(jq 'length' <<<"$OUT9")"
+assert_eq "gap recovery: missed days are lastDay+1..today, ascending" \
+  '["2026-06-18","2026-06-19","2026-06-20"]' "$(jq -c '[.[].doc.date]' <<<"$OUT9")"
+assert_eq "gap recovery: docIds match the missed days" \
+  '["grp-1-2026-06-18","grp-1-2026-06-19","grp-1-2026-06-20"]' "$(jq -c '[.[].id]' <<<"$OUT9")"
+assert_eq "gap recovery: a log line names the gap" "1" \
+  "$(grep -cF 'gap recovery: sentinel last-day 2026-06-17 is 3 day(s) behind today 2026-06-20' "$ERR9" >/dev/null && echo 1 || echo 0)"
+assert_eq "gap recovery: covered-range log line" "1" \
+  "$(grep -cF 'covering 3 day(s) 2026-06-18..2026-06-20' "$ERR9" >/dev/null && echo 1 || echo 0)"
+# The missed day with activity carries that activity (input=33 -> other/none).
+assert_eq "gap recovery: 2026-06-18 doc carries its day's activity (other input=33)" "33" \
+  "$(jq '.[] | select(.doc.date=="2026-06-18") | .doc.byTopic.other.input' <<<"$OUT9")"
+# Dry-run is side-effect-free: sentinel still the pre-seeded last-day.
+assert_eq "gap recovery: dry-run leaves sentinel untouched" "2026-06-17" \
+  "$(cat "$S9/topic-usage-grp-1.last-day")"
+rm -rf "$R9" "$S9" "$ERR9"
+
+# =========================================================================
+# Case 10: gap recovery respects the backfill cap — when the missed range
+# exceeds the cap, only the most-recent N are kept and the drop is logged
+# (acceptance criterion 3; consistent with first-run cap behavior).
+# =========================================================================
+R10=$(mktemp -d)
+S10=$(mktemp -d)
+printf '2026-06-10\n' > "$S10/topic-usage-grp-1.last-day"  # missed 06-11..06-20 = 10 days
+DAY10="2026-06-20"
+NOW10=$(date -u -d "$DAY10 12:00:00" +%s)
+WT10="$R10/-home-x-worktrees-gapcap"
+mkdir -p "$WT10"
+write_transcript "$WT10/sess.jsonl" 5 0 0 0
+touch -d "${DAY10}T12:00:00Z" "$WT10/sess.jsonl"
+ERR10=$(mktemp)
+OUT10=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$R10"
+  export DISPATCH_TOPIC_USAGE_STATE_DIR="$S10"
+  export DISPATCH_TOPIC_USAGE_NOW="$NOW10"
+  export DISPATCH_TOPIC_USAGE_BACKFILL_CAP="3"
+  node "$WRITER_MJS" --dry-run 2>"$ERR10"
+)
+assert_eq "gap cap=3: only the 3 most-recent missed days kept" \
+  '["2026-06-18","2026-06-19","2026-06-20"]' "$(jq -c '[.[].doc.date]' <<<"$OUT10")"
+assert_eq "gap cap=3: dropped older days are logged (no silent truncate)" "1" \
+  "$(grep -cF 'cap 3 dropped 7 older day(s): 2026-06-11,2026-06-12,2026-06-13,2026-06-14,2026-06-15,2026-06-16,2026-06-17' "$ERR10" >/dev/null && echo 1 || echo 0)"
+rm -rf "$R10" "$S10" "$ERR10"
+
+# =========================================================================
+# Case 11: corrupt sentinel — an unparseable last-day is treated as a first
+# run (backfill of transcript days), logging a warning, rather than crashing
+# the daily producer or silently producing nothing.
+# =========================================================================
+R11=$(mktemp -d)
+S11=$(mktemp -d)
+printf 'not-a-date\n' > "$S11/topic-usage-grp-1.last-day"
+NOW11=$(date -u -d "2026-06-20 12:00:00" +%s)
+WT11="$R11/-home-x-worktrees-corrupt"
+mkdir -p "$WT11"
+write_transcript "$WT11/sess-d1.jsonl" 5 0 0 0
+write_transcript "$WT11/sess-d2.jsonl" 7 0 0 0
+touch -d "2026-06-15T12:00:00Z" "$WT11/sess-d1.jsonl"
+touch -d "2026-06-18T12:00:00Z" "$WT11/sess-d2.jsonl"
+ERR11=$(mktemp)
+OUT11=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$R11"
+  export DISPATCH_TOPIC_USAGE_STATE_DIR="$S11"
+  export DISPATCH_TOPIC_USAGE_NOW="$NOW11"
+  node "$WRITER_MJS" --dry-run 2>"$ERR11"
+)
+RC11=$?
+assert_eq "corrupt sentinel: exit 0 (does not crash the producer)" "0" "$RC11"
+assert_eq "corrupt sentinel: falls through to first-run backfill (transcript days)" \
+  '["2026-06-15","2026-06-18"]' "$(jq -c '[.[].doc.date]' <<<"$OUT11")"
+assert_eq "corrupt sentinel: a warning names the invalid last-day" "1" \
+  "$(grep -cF 'sentinel last-day "not-a-date" is not a valid YYYY-MM-DD' "$ERR11" >/dev/null && echo 1 || echo 0)"
+rm -rf "$R11" "$S11" "$ERR11"
+
+# =========================================================================
 # Case 7: fail-closed branches. Each must exit non-zero with a matching
 # one-line stderr diagnostic prefixed "topic-usage-writer:".
 # =========================================================================
