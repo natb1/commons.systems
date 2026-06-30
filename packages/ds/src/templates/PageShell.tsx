@@ -5,6 +5,7 @@ import { Footer } from "./Footer.tsx";
 
 export interface PageShellProps {
   wordmark: ReactNode;
+  className?: string;
   tagline?: ReactNode;
   navLinks: NavLink[];
   current?: string;
@@ -14,10 +15,10 @@ export interface PageShellProps {
 }
 
 export function PageShell(props: PageShellProps) {
-  const { wordmark, tagline, navLinks, current, navEnd, hero, children } = props;
+  const { wordmark, className, tagline, navLinks, current, navEnd, hero, children } = props;
 
   return (
-    <div className="page">
+    <div className={["page", className].filter(Boolean).join(" ")}>
       <header>
         <h1>{wordmark}</h1>
         {tagline && <p>{tagline}</p>}
