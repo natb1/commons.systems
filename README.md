@@ -262,6 +262,7 @@ run-all-cleanup-preview.sh <pr-number>
 - **Project Management** (github): Created a [project](https://github.com/users/natb1/projects/2).
 - **Version Control** (git): Created a repo.
 - **Agentic Coding Tools** (Claude Code): `nix flake update && home-manager switch --flake .#default --impure`
+  (Generic forker path — plain Linux/macOS without NixOS-WSL or nix-darwin. The author's WSL NixOS box activates home-manager atomically via `sudo nixos-rebuild switch` through `nixosConfigurations.nixos`; macOS via `darwin-rebuild switch` through `darwinConfigurations.default`.)
 - **Infrastructure** (Firebase): Hosting and storage.
 
 ## Where to go next

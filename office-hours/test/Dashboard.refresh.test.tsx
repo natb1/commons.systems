@@ -6,7 +6,7 @@ import type { UsageSample } from "../src/usage-samples.js";
 import type { Reminder } from "../src/reminders.js";
 import type { QueueMetricsSnapshot } from "../src/queue-metrics.js";
 import type { IssueSample } from "../src/issue-samples.js";
-import type { AuditAggregate } from "../src/audit-aggregates.js";
+import type { TopicUsageDoc } from "../src/topic-usage.js";
 
 // Dashboard.tsx imports db/NAMESPACE from firebase.js, whose createAppContext
 // requires VITE_FIREBASE_* env at module load. A trivial stub keeps the render
@@ -23,7 +23,7 @@ const getOwnerSamples = vi.fn();
 const getOwnerReminders = vi.fn();
 const getOwnerQueueMetrics = vi.fn();
 const getOwnerIssueSamples = vi.fn();
-const getOwnerAuditAggregates = vi.fn();
+const getOwnerTopicUsage = vi.fn();
 const getOwnerProjectSignals = vi.fn();
 
 vi.mock("../src/usage-data.js", async (importOriginal) => ({
@@ -39,9 +39,9 @@ vi.mock("../src/issue-data.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/issue-data.js")>()),
   getOwnerIssueSamples: (...args: unknown[]) => getOwnerIssueSamples(...args),
 }));
-vi.mock("../src/audit-data.js", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../src/audit-data.js")>()),
-  getOwnerAuditAggregates: (...args: unknown[]) => getOwnerAuditAggregates(...args),
+vi.mock("../src/topic-usage-data.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/topic-usage-data.js")>()),
+  getOwnerTopicUsage: (...args: unknown[]) => getOwnerTopicUsage(...args),
 }));
 vi.mock("../src/project-signals-data.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/project-signals-data.js")>()),
@@ -122,12 +122,19 @@ const issueSamplesPopulated: IssueSample[] = [
   { sampledAt: new Date(BASE - DAY), openSecurity: 1, openBug: 2, openEnhancement: 3, openOther: 5, groupId: "group-abc" },
 ];
 
-// Two valid audit aggregates (distinct timestamps) clear the <2-window guard so
-// renderAuditAggregateChart paints instead of the "No audit history to chart."
-// empty placeholder.
-const auditAggregatesPopulated: AuditAggregate[] = [
-  { computedAt: new Date(BASE - 2 * DAY), windowDays: 14, groupId: "group-abc", phaseSpend: { plan: 1.5 }, cacheRead: 100, cacheCreation: 10 },
-  { computedAt: new Date(BASE - DAY), windowDays: 14, groupId: "group-abc", phaseSpend: { plan: 2.5 }, cacheRead: 120, cacheCreation: 12 },
+// Two valid topic-usage docs (distinct dates) give renderTopicUsageChart real
+// data to paint instead of the "No topic usage to chart." empty placeholder.
+const topicUsagePopulated: TopicUsageDoc[] = [
+  {
+    date: "2026-06-18",
+    byTopic: { dispatch: { priceProxyUsd: 1.5, input: 1000, cacheRead: 100, cacheCreation: 10, output: 200 } },
+    byType: { bug: { priceProxyUsd: 0.5, input: 400, cacheRead: 40, cacheCreation: 4, output: 80 } },
+  },
+  {
+    date: "2026-06-19",
+    byTopic: { dispatch: { priceProxyUsd: 2.5, input: 1200, cacheRead: 120, cacheCreation: 12, output: 240 } },
+    byType: { bug: { priceProxyUsd: 1.0, input: 500, cacheRead: 50, cacheCreation: 5, output: 100 } },
+  },
 ];
 
 // Flush the mounted Promise.all load + effect-driven setState. Microtasks are
@@ -156,7 +163,7 @@ function setStableBaseline() {
   getOwnerReminders.mockResolvedValue([baseReminder]);
   getOwnerQueueMetrics.mockResolvedValue(baseQueue);
   getOwnerIssueSamples.mockResolvedValue([]);
-  getOwnerAuditAggregates.mockResolvedValue([]);
+  getOwnerTopicUsage.mockResolvedValue([]);
   getOwnerProjectSignals.mockResolvedValue(null);
 }
 
@@ -206,22 +213,22 @@ describe("Dashboard refresh: per-collection refresh→panel propagation", () => 
     expect(backlogEmpty()).not.toContain("No backlog history to chart.");
   });
 
-  it("audit-aggregates refresh propagates to the Audit panel (AC #5)", async () => {
+  it("topic-usage refresh propagates to the TopicUsage panel (AC #5)", async () => {
     setStableBaseline();
-    getOwnerAuditAggregates
+    getOwnerTopicUsage
       .mockResolvedValueOnce([])
-      .mockResolvedValueOnce(auditAggregatesPopulated);
+      .mockResolvedValueOnce(topicUsagePopulated);
 
     const { container } = render(<Dashboard user={fakeUser} />);
     await flushOwnerLoad();
 
-    const auditEmpty = () =>
-      Array.from(container.querySelectorAll(".audit-aggregate-chart .empty")).map((el) => el.textContent);
-    expect(auditEmpty()).toContain("No audit history to chart.");
+    const topicUsageEmpty = () =>
+      Array.from(container.querySelectorAll(".topic-usage-chart .empty")).map((el) => el.textContent);
+    expect(topicUsageEmpty()).toContain("No topic usage to chart.");
 
     await advanceOneRefresh();
 
-    expect(auditEmpty()).not.toContain("No audit history to chart.");
+    expect(topicUsageEmpty()).not.toContain("No topic usage to chart.");
   });
 
   it("reminders refresh propagates to the Reminders panel (AC #3)", async () => {
@@ -319,7 +326,7 @@ describe("Dashboard refresh: graceful null persistence", () => {
     getOwnerReminders.mockResolvedValue([baseReminder]);
     getOwnerQueueMetrics.mockResolvedValue(null);
     getOwnerIssueSamples.mockResolvedValue([]);
-    getOwnerAuditAggregates.mockResolvedValue([]);
+    getOwnerTopicUsage.mockResolvedValue([]);
     getOwnerProjectSignals.mockResolvedValue(null);
 
     const { container } = render(<Dashboard user={fakeUser} />);
@@ -399,7 +406,7 @@ describe("Dashboard refresh: unmount / user-change guard", () => {
     getOwnerReminders.mockResolvedValue([baseReminder]);
     getOwnerQueueMetrics.mockResolvedValue(baseQueue);
     getOwnerIssueSamples.mockResolvedValue([]);
-    getOwnerAuditAggregates.mockResolvedValue([]);
+    getOwnerTopicUsage.mockResolvedValue([]);
     getOwnerProjectSignals.mockResolvedValue(null);
 
     const { container, rerender } = render(<Dashboard user={userA} />);
