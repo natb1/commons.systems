@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
-import { AppNav } from "../../src/components/AppNav.tsx";
+import { AppNav, NAV_LINKS } from "../../src/components/AppNav.tsx";
 import type { User } from "../../src/auth.js";
 
 const mockUser = {
@@ -11,26 +11,25 @@ const mockUser = {
 } as unknown as User;
 
 describe("AppNav links", () => {
-  const html = renderToStaticMarkup(
-    <AppNav
-      user={null}
-      onSignIn={() => {}}
-      onSignOut={() => {}}
-      localFolderSlot={document.createElement("span")}
-    />,
-  );
-
-  it("renders Library link", () => {
-    expect(html).toContain('href="/"');
-    expect(html).toContain("Library");
+  // PageShell renders the ds <Nav> from NAV_LINKS now, not AppNav; the
+  // Library/About coverage relocates to the exported NAV_LINKS const.
+  it("exposes the Library link in NAV_LINKS", () => {
+    expect(NAV_LINKS).toContainEqual({ href: "/", label: "Library" });
   });
 
-  it("renders About link", () => {
-    expect(html).toContain('href="/about"');
-    expect(html).toContain("About");
+  it("exposes the About link in NAV_LINKS", () => {
+    expect(NAV_LINKS).toContainEqual({ href: "/about", label: "About" });
   });
 
   it("renders commons.systems home link", () => {
+    const html = renderToStaticMarkup(
+      <AppNav
+        user={null}
+        onSignIn={() => {}}
+        onSignOut={() => {}}
+        localFolderSlot={document.createElement("span")}
+      />,
+    );
     expect(html).toContain('href="https://commons.systems/"');
     expect(html).toContain("commons.systems");
   });

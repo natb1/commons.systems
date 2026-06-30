@@ -1,7 +1,7 @@
 import "missing.css";
 import "./style/theme.css";
-import "@commons-systems/components/footer";
 import { createHistoryRouter } from "@commons-systems/router";
+import { PageShell } from "@commons-systems/ds";
 import { classifyError } from "@commons-systems/errorutil/classify";
 import { logError } from "@commons-systems/errorutil/log";
 import { loadMediaHtml, afterRenderHome, wireDownloadActions } from "./pages/home.js";
@@ -10,7 +10,7 @@ import { initLocalFolder } from "./local-folder-ui.js";
 import { renderView, getViewFrame, markViewNotFound } from "./pages/view.js";
 import { createRoot, type Root } from "react-dom/client";
 import { flushSync } from "react-dom";
-import { AppNav } from "./components/AppNav.js";
+import { AppNav, NAV_LINKS } from "./components/AppNav.js";
 import { Hero } from "./pages/Hero.js";
 import { About } from "./pages/About.js";
 import { Home } from "./pages/Home.js";
@@ -20,39 +20,51 @@ import type { User } from "./auth.js";
 import { setViewerEmail, markLocalFolderReady } from "./library.js";
 import { trackPageView } from "./firebase.js";
 
-const navMount = document.getElementById("nav");
-if (!navMount) throw new Error("#nav element not found");
-const app = document.getElementById("app");
-if (!app) throw new Error("#app element not found");
-
-const heroContainer = document.getElementById("hero-container") as HTMLElement;
-if (!heroContainer) throw new Error("#hero-container element not found");
-createRoot(heroContainer).render(<Hero />);
-
 let currentUser: User | null = null;
 
 // Childless mount node we own outright. AppNav injects it (opaquely) into the
-// ds Nav's `end` slot; initLocalFolder fills it imperatively below. Because the
-// node has no React children, React never re-touches its injected content, so
-// the local-folder button survives nav re-renders on auth state change.
+// PageShell Nav's `end` slot; initLocalFolder fills it imperatively below.
+// Because the node has no React children, React never re-touches its injected
+// content, so the local-folder button survives shell re-renders on auth state
+// change.
 const localFolderSlot = document.createElement("span");
 localFolderSlot.id = "local-folder";
 
-const navRoot = createRoot(navMount);
-function renderNav() {
-  navRoot.render(
-    <AppNav
-      user={currentUser}
-      onSignIn={() => signIn()}
-      onSignOut={() => void signOut()}
-      localFolderSlot={localFolderSlot}
-    />,
+const rootMount = document.getElementById("root");
+if (!rootMount) throw new Error("#root element not found");
+const shellRoot = createRoot(rootMount);
+function renderShell() {
+  shellRoot.render(
+    <PageShell
+      wordmark="Print"
+      navLinks={NAV_LINKS}
+      navEnd={
+        <AppNav
+          user={currentUser}
+          onSignIn={() => signIn()}
+          onSignOut={() => void signOut()}
+          localFolderSlot={localFolderSlot}
+        />
+      }
+      hero={<div id="hero-container" className="content-grid" />}
+    >
+      <main id="app" />
+    </PageShell>,
   );
 }
-renderNav();
 
-// Mount the local-folder UI once, after the nav's first render places the slot
-// in the DOM. We own the mount node, so this runs unconditionally.
+// First render uses flushSync so the shell's #app/#hero-container nodes exist
+// synchronously before the one-time wiring below queries them.
+flushSync(() => renderShell());
+const app = document.getElementById("app");
+if (!app) throw new Error("#app element not found");
+const heroContainer = document.getElementById("hero-container") as HTMLElement;
+if (!heroContainer) throw new Error("#hero-container element not found");
+
+createRoot(heroContainer).render(<Hero />);
+
+// Mount the local-folder UI once, after the shell's first render places the
+// slot in the DOM. We own the mount node, so this runs unconditionally.
 initLocalFolder(localFolderSlot, app, () => router.navigate())
   .catch((err) => logError(err, { operation: "init-local-folder" }))
   .finally(() => markLocalFolderReady());
@@ -148,7 +160,7 @@ const router = createHistoryRouter(
 
 onAuthStateChanged((user) => {
   currentUser = user;
-  renderNav();
+  renderShell();
   heroContainer.hidden = user !== null;
   setViewerEmail(user?.email ?? null);
   router.navigate();
