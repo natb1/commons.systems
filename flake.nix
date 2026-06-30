@@ -107,6 +107,41 @@
       homeManagerModules = { default = ./nix/home/default.nix; };
       darwinModules      = { default = ./nix/darwin/default.nix; };
 
+      # Shared integrated home-manager wiring for the two host configs.
+      # darwinConfigurations.default and nixosConfigurations.nixos embed the same
+      # six settings (nixpkgs.overlays, nixpkgs.config.allowUnfreePredicate,
+      # home-manager.useGlobalPkgs/useUserPackages/extraSpecialArgs, and the
+      # users.n8 imports + forced username/homeDirectory). Only hostPlatform and
+      # homeDirectory differ and are parameters; platform-specific extras (darwin's
+      # wezterm disable, nixos's backupFileExtension) are layered as small sibling
+      # modules at each call site via the module system's native merge.
+      #
+      # hostPlatform in-module is the current idiom (the legacy `system` arg to
+      # darwinSystem/nixosSystem is discouraged). Overlay/allowUnfree mirror
+      # mkHomeConfig so the reused nix/home/default.nix (which pulls the unfree
+      # pkgs.claude-code from the claude-code-nix overlay) builds.
+      mkIntegratedHmConfig = { hostPlatform, homeDirectory }: {
+        nixpkgs.hostPlatform = hostPlatform;
+
+        nixpkgs.overlays = [ claude-code-nix.overlays.default direnvSkipTestsOverlay ];
+        nixpkgs.config.allowUnfreePredicate =
+          pkg: builtins.elem (nixpkgs.lib.getName pkg) [ "claude-code" ];
+
+        home-manager.useGlobalPkgs = true;
+        home-manager.useUserPackages = true;
+        home-manager.extraSpecialArgs = { inherit inputs; };
+        home-manager.users.n8 = { lib, ... }: {
+          imports = [ homeManagerModules.default ];
+
+          # nix/home/default.nix derives username/homeDirectory impurely via
+          # builtins.getEnv (fine for the standalone --impure homeConfigurations,
+          # but it would throw under the PURE acceptance eval). Force them so the
+          # getEnv/throw thunks are never evaluated and pure eval passes.
+          home.username = lib.mkForce "n8";
+          home.homeDirectory = lib.mkForce homeDirectory;
+        };
+      };
+
       # Home Manager configurations (not per-system in flake schema)
       mkHomeConfig = system:
         let
@@ -143,37 +178,18 @@
         modules = [
           darwinModules.default
           home-manager.darwinModules.home-manager
+          # The Mac is Apple Silicon.
+          (mkIntegratedHmConfig {
+            hostPlatform = "aarch64-darwin";
+            homeDirectory = "/Users/n8";
+          })
           {
-            # Architecture-aware: hostPlatform in-module is the current idiom
-            # (legacy `system` arg to darwinSystem is discouraged). The Mac is
-            # Apple Silicon.
-            nixpkgs.hostPlatform = "aarch64-darwin";
-
-            # System nixpkgs config — shared with home-manager via useGlobalPkgs.
-            # Mirrors mkHomeConfig so the reused nix/home/default.nix (which pulls
-            # the unfree pkgs.claude-code from the claude-code-nix overlay) builds.
-            nixpkgs.overlays = [ claude-code-nix.overlays.default direnvSkipTestsOverlay ];
-            nixpkgs.config.allowUnfreePredicate =
-              pkg: builtins.elem (nixpkgs.lib.getName pkg) [ "claude-code" ];
-
-            home-manager.useGlobalPkgs = true;
-            home-manager.useUserPackages = true;
-            home-manager.extraSpecialArgs = { inherit inputs; };
+            # Out-of-scope constraint: do NOT enable programs.wezterm on Darwin.
+            # nix/home/wezterm.nix unconditionally sets enable = true; override it
+            # here. (wezterm-windows.nix is already gated on isLinux, so it is a
+            # no-op on Darwin and needs no change.) This touches no shared file, so
+            # the NixOS/WSL host config stays byte-identical.
             home-manager.users.n8 = { lib, ... }: {
-              imports = [ homeManagerModules.default ];
-
-              # nix/home/default.nix derives username/homeDirectory impurely via
-              # builtins.getEnv (fine for the standalone --impure homeConfigurations,
-              # but it would throw under the PURE acceptance eval). Force them so the
-              # getEnv/throw thunks are never evaluated and pure eval passes.
-              home.username = lib.mkForce "n8";
-              home.homeDirectory = lib.mkForce "/Users/n8";
-
-              # Out-of-scope constraint: do NOT enable programs.wezterm on Darwin.
-              # nix/home/wezterm.nix unconditionally sets enable = true; override it
-              # here. (wezterm-windows.nix is already gated on isLinux, so it is a
-              # no-op on Darwin and needs no change.) This touches no shared file,
-              # so the NixOS/WSL host config stays byte-identical.
               programs.wezterm.enable = lib.mkForce false;
             };
           }
@@ -186,40 +202,20 @@
           nixos-wsl.nixosModules.default
           ./nix/nixos/configuration.nix
           home-manager.nixosModules.home-manager
+          (mkIntegratedHmConfig {
+            hostPlatform = "x86_64-linux";
+            homeDirectory = "/home/n8";
+          })
           {
-            nixpkgs.hostPlatform = "x86_64-linux";
-
-            # System nixpkgs config — shared with home-manager via useGlobalPkgs.
-            # Mirrors mkHomeConfig so the reused nix/home/default.nix (which pulls
-            # the unfree pkgs.claude-code from the claude-code-nix overlay) builds.
-            nixpkgs.overlays = [ claude-code-nix.overlays.default direnvSkipTestsOverlay ];
-            nixpkgs.config.allowUnfreePredicate =
-              pkg: builtins.elem (nixpkgs.lib.getName pkg) [ "claude-code" ];
-
-            home-manager.useGlobalPkgs = true;
-            home-manager.useUserPackages = true;
-            home-manager.extraSpecialArgs = { inherit inputs; };
-
             # backupFileExtension makes the clobber-abort impossible: when a switch
             # meets an unmanaged file it wants to own, it backs it up (.backup)
             # instead of aborting mid-activation. This option exists only in the
             # NixOS/nix-darwin module, not standalone home-manager.
             home-manager.backupFileExtension = "backup";
 
-            home-manager.users.n8 = { lib, ... }: {
-              imports = [ homeManagerModules.default ];
-
-              # nix/home/default.nix derives username/homeDirectory impurely via
-              # builtins.getEnv (fine for the standalone --impure homeConfigurations,
-              # but it would throw under the PURE acceptance eval). Force them so the
-              # getEnv/throw thunks are never evaluated and pure eval passes.
-              home.username = lib.mkForce "n8";
-              home.homeDirectory = lib.mkForce "/home/n8";
-
-              # Contrast with darwin: do NOT disable programs.wezterm here. Linux/WSL
-              # wants wezterm and its mux-server user service; the darwin config
-              # force-disables it only because macOS is out of scope there.
-            };
+            # Contrast with darwin: do NOT disable programs.wezterm here. Linux/WSL
+            # wants wezterm and its mux-server user service; the darwin config
+            # force-disables it only because macOS is out of scope there.
           }
         ];
       };
