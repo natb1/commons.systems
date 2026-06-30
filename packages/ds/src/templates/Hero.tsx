@@ -53,16 +53,25 @@ export function Hero(props: HeroProps) {
       </div>
       <div className="hero-band-grid">
         {cards.map((card, i) => {
-          const anchorProps: AnchorHTMLAttributes<HTMLAnchorElement> | undefined =
-            card.href !== undefined ? { href: card.href } : undefined;
+          if (card.href !== undefined) {
+            const anchorProps: AnchorHTMLAttributes<HTMLAnchorElement> = {
+              href: card.href,
+            };
+            return (
+              <Card
+                key={i}
+                as="a"
+                interactive
+                className="hero-band-card"
+                {...anchorProps}
+              >
+                <span className="hero-band-card-name">{card.name}</span>
+                <p className="hero-band-card-problem">{card.problem}</p>
+              </Card>
+            );
+          }
           return (
-            <Card
-              key={i}
-              as="a"
-              interactive
-              className="hero-band-card"
-              {...(anchorProps ?? {})}
-            >
+            <Card key={i} className="hero-band-card">
               <span className="hero-band-card-name">{card.name}</span>
               <p className="hero-band-card-problem">{card.problem}</p>
             </Card>

@@ -16,7 +16,7 @@ import {
   ContextPanelToggle,
 } from "../src/index.ts";
 
-describe("all nine components importable from the barrel", () => {
+describe("all twelve components importable from the barrel", () => {
   // A renderable React component is either a function component or a
   // forwardRef/memo exotic object (those carry a `$$typeof` symbol). Button and
   // Input forward refs, so they are objects rather than bare functions.
