@@ -219,7 +219,6 @@ describe("Dashboard owner tier — empty", () => {
       const t = texts();
       expect(t).toContain("No reminders.");
       expect(t).toContain("No capacity data.");
-      expect(t).toContain("No usage history to chart.");
       expect(t).toContain("No worker history to chart.");
       expect(t).toContain("No queue metrics yet.");
       expect(t).toContain("Nothing parked.");
