@@ -1,0 +1,18 @@
+/* Context panel — the two ContextPanel-specific deltas over the canonical
+   .sidebar contract (layout.css). The <ContextPanel> primitive renders an
+   <aside class="sidebar context-panel">, so these layer on top of the inherited
+   sticky-on-wide + absolute-overlay-on-narrow + toggle behavior. */
+
+/* Canonical .sidebar doesn't set scrollbar-width; the panel uses a thin bar
+   (the accent scrollbar-color is already document-wide from base.css :root). */
+.context-panel {
+  scrollbar-width: thin;
+}
+
+@media (max-width: 767px) {
+  /* Narrow overlay background — the panel uses the card surface (canonical
+     uses the page surface). */
+  .context-panel {
+    background: var(--surface-card);
+  }
+}
