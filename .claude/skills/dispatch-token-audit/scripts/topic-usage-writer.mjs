@@ -37,11 +37,16 @@
 //   A durable per-host date sentinel under the state dir records the last day
 //   processed (the producer OWNS sentinel writes — written only after a
 //   successful real-mode run).
-//     - Normal run (sentinel present): produce a doc for TODAY (UTC) only.
-//     - First run (sentinel absent): backfill one doc per available transcript
-//       UTC day (distinct days derived from transcript file mtimes), bounded by
-//       a day cap (keep the most recent N). The covered range and any
-//       cap-dropped days are logged to stderr — never silently truncated.
+//     - Normal run (sentinel last-day == yesterday): produce a doc for TODAY
+//       (UTC) only.
+//     - Gap recovery (sentinel last-day > one day ago): the producer was offline
+//       for one or more days; backfill one doc per missed calendar day
+//       (lastDay+1..today) so downtime gaps are recovered, not silently skipped,
+//       bounded by the same day cap.
+//     - First run (sentinel absent) or a corrupt sentinel: backfill one doc per
+//       available transcript UTC day (distinct days derived from transcript file
+//       mtimes), bounded by a day cap (keep the most recent N). The covered range
+//       and any cap-dropped days are logged to stderr — never silently truncated.
 //   The deterministic docId + .set() make a lost/stale sentinel a harmless
 //   idempotent re-write; the sentinel is a cost optimization only (it also
 //   bounds the gh-quota burst of an N-day backfill, since each per-day
@@ -67,8 +72,8 @@
 //     computedAt; defaults to Math.floor(Date.now()/1000). A positive integer.
 //   DISPATCH_TOPIC_USAGE_STATE_DIR       sentinel state dir; default
 //     ${XDG_STATE_HOME:-$HOME/.local/state}/dispatch.
-//   DISPATCH_TOPIC_USAGE_BACKFILL_CAP    first-run day cap; default 30. A
-//     positive integer.
+//   DISPATCH_TOPIC_USAGE_BACKFILL_CAP    backfill day cap (first run and gap
+//     recovery); default 30. A positive integer.
 //   DISPATCH_TOPIC_USAGE_AGGREGATE_SCRIPT  override the aggregate-usage.sh path
 //     (test seam). Default: <scriptdir>/aggregate-usage.sh.
 //   DISPATCH_AUDIT_PROJECTS_ROOT         REUSED (default $HOME/.claude/projects)
@@ -505,37 +510,80 @@ export function assembleDoc(produced, config, mkTimestamp) {
   };
 }
 
-// Determine the ordered list of UTC days to produce.
-//   sentinel present -> [today]
-//   sentinel absent  -> first-run backfill of distinct transcript days, capped
-//                       to the most recent N (covered range + drops logged).
-function targetDays(config) {
-  const today = utcDay(config.nowEpochSeconds);
-  if (fs.existsSync(sentinelPath(config))) {
-    return [today];
+// The UTC days strictly after `afterDay` up to and including `throughDay`,
+// ascending (YYYY-MM-DD). Empty when afterDay >= throughDay. null when afterDay
+// is not a YYYY-MM-DD string, so a corrupt/empty sentinel is handled as a first
+// run rather than crashing the daily producer.
+function missedDaysAfter(afterDay, throughDay) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(afterDay)) return null;
+  const DAY_MS = 86400000;
+  const startMs = Date.parse(`${afterDay}T00:00:00Z`);
+  const endMs = Date.parse(`${throughDay}T00:00:00Z`);
+  const out = [];
+  for (let ms = startMs + DAY_MS; ms <= endMs; ms += DAY_MS) {
+    out.push(new Date(ms).toISOString().slice(0, 10));
   }
-  // First run: backfill.
-  const days = transcriptDays(collectFiles(config.projectsRoot));
-  if (days.length === 0) {
-    log("first-run backfill: no transcript days found; producing today only");
-    return [today];
-  }
-  const cap = config.backfillCap;
+  return out;
+}
+
+// Cap an ascending day list to the most recent `cap`, logging the covered range
+// and any dropped older days (no silent truncation). Shared by the first-run
+// backfill and the gap-recovery path; `label` prefixes the log lines.
+function capDaysToBackfill(days, cap, label) {
   let kept = days;
   let dropped = [];
   if (days.length > cap) {
     dropped = days.slice(0, days.length - cap); // older days fall outside the cap
     kept = days.slice(days.length - cap);
   }
-  log(
-    `first-run backfill: covering ${kept.length} day(s) ${kept[0]}..${kept[kept.length - 1]}`,
-  );
+  log(`${label}: covering ${kept.length} day(s) ${kept[0]}..${kept[kept.length - 1]}`);
   if (dropped.length > 0) {
     log(
-      `first-run backfill: cap ${cap} dropped ${dropped.length} older day(s): ${dropped.join(",")}`,
+      `${label}: cap ${cap} dropped ${dropped.length} older day(s): ${dropped.join(",")}`,
     );
   }
   return kept;
+}
+
+// Determine the ordered list of UTC days to produce.
+//   sentinel present, last-day == yesterday    -> [today] (normal daily run)
+//   sentinel present, last-day > one day ago   -> gap recovery: the missed days
+//                                                 lastDay+1..today, capped.
+//   sentinel present, last-day same/future     -> [today] (idempotent re-run)
+//   sentinel absent or corrupt                 -> first-run backfill of distinct
+//                                                 transcript days, capped.
+// In every backfill case the covered range and any cap drops are logged.
+function targetDays(config) {
+  const today = utcDay(config.nowEpochSeconds);
+  if (fs.existsSync(sentinelPath(config))) {
+    const lastDay = fs.readFileSync(sentinelPath(config), "utf8").trim();
+    const missed = missedDaysAfter(lastDay, today);
+    if (missed === null) {
+      log(
+        `sentinel last-day "${lastDay}" is not a valid YYYY-MM-DD; treating as a first run and backfilling`,
+      );
+      // fall through to the first-run backfill below
+    } else if (missed.length <= 1) {
+      // last-day is yesterday (missed == [today]) or a same-day/future re-run
+      // (missed empty). Either way, today only — unchanged daily behavior.
+      return [today];
+    } else {
+      // The producer was offline for more than a day: backfill the missed days
+      // (lastDay+1..today) so downtime gaps are recovered, not silently skipped.
+      log(
+        `gap recovery: sentinel last-day ${lastDay} is ${missed.length} day(s) behind today ${today}; backfilling missed days`,
+      );
+      return capDaysToBackfill(missed, config.backfillCap, "gap recovery");
+    }
+  }
+  // First run (sentinel absent) or a corrupt sentinel: backfill the distinct
+  // transcript-activity days, capped to the most recent N.
+  const days = transcriptDays(collectFiles(config.projectsRoot));
+  if (days.length === 0) {
+    log("first-run backfill: no transcript days found; producing today only");
+    return [today];
+  }
+  return capDaysToBackfill(days, config.backfillCap, "first-run backfill");
 }
 
 async function main() {
