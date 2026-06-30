@@ -209,12 +209,17 @@ fi
 #     form reads as "gone" → wrongly exempt → masks weakening. FALSE-PRESENT is
 #     SAFE for soundness (it only over-fires, hurting efficacy): a bare
 #     substring would match `Cache` inside `CacheManager` and over-fire
-#     ("Hole 1"). Hence we match WORD-BOUNDARY declaration/export forms, never
-#     bare substrings, against the post-PR tree (HEAD) minus the test globs.
+#     ("Hole 1"). Hence we parse each mentioning file's EXPORTED/DECLARED names
+#     with EXPORT_AWK (declaration, default, and brace re-export forms — brace
+#     blocks joined across lines) and test EXACT set membership, never a bare
+#     substring and never an interpolated regex (so `$`-bearing identifiers like
+#     `$factory` match literally), against the post-PR tree (HEAD) minus tests.
 #
 #   * Bias when uncertain → FIRE. Any still-present removed-import symbol, any
 #     unverifiable (namespace/default) removed import, or an empty removed-import
-#     set ⇒ NOT exempt.
+#     set ⇒ NOT exempt. The exemption credit is symbol-granular: only removed
+#     test declarations whose block references a gone symbol are exempted, so a
+#     co-removed test for a still-present symbol cannot ride along.
 #
 # Double-counting guard: files already exempted by the basename loop are in
 # BASENAME_EXEMPT_FILES and skipped here (see the note at its declaration).
@@ -285,16 +290,116 @@ function process(stmt,   lb, rb, pre, name) {
 }
 /^[ \t]*import[ \t]/ {
   if (collecting) { process(buf); buf = ""; collecting = 0 }
-  if ($0 ~ /from/) { process($0); next }                 # complete single-line
+  # Order matters: classify an OPEN brace block first, so a member name that
+  # merely contains "from" as a substring (fromEntries, dateFromNow) cannot be
+  # misread as a complete single-line import. A complete single-line import has
+  # both "{" and "}" (or no brace at all), so it never matches this branch.
   if ($0 ~ /\{/ && $0 !~ /\}/) { buf = $0; collecting = 1; next }  # open brace block
+  # "from" as a keyword is followed by whitespace then the module-path quote;
+  # a member substring like fromEntries is "from" followed by a letter, so the
+  # whitespace anchor /from[ \t]/ does not match it.
+  if ($0 ~ /from[ \t]/) { process($0); next }            # complete single-line
   process($0); next                                      # side-effect / no-from
 }
 collecting {
   buf = buf " " $0
-  if ($0 ~ /\}/ || $0 ~ /from/) { process(buf); buf = ""; collecting = 0 }
+  # A multi-line brace block always closes with "}" before its "from '...'"
+  # clause, so "}" alone terminates collection. A bare /from/ substring test
+  # here would prematurely end on any continuation member containing "from".
+  if ($0 ~ /\}/) { process(buf); buf = ""; collecting = 0 }
   next
 }
 END { if (collecting) process(buf) }
+'
+
+# awk program: print the PUBLIC exported/declared names of a TS/JS source blob,
+# one per line, for the existence check. Mirror of IMPORT_AWK but on the export
+# side, so it must be LINE-oriented AND brace-aware:
+#
+#   * Declaration forms: export [default] [async] const|let|var|function|class|
+#     type|interface|enum NAME  → NAME.
+#   * Named-export braces: export { A, w as Widget }  → A and Widget. The PUBLIC
+#     name is the one RIGHT of `as` (the import side reads the left/source name;
+#     the export side exposes the right name). Multi-line `export {\n A,\n }`
+#     blocks are joined before member extraction — the reason a line-by-line
+#     `git grep` cannot see them (the original NAMED_EXPORT_FORM false-absent).
+#
+# The caller checks EXACT set membership (grep -xF) against these names, never a
+# regex, so identifier characters that are ERE-special — notably `$` in
+# `$factory`/`React$1` — are matched literally (the old interpolated-`$X` ERE
+# miscompile). Emitting only real export/declaration forms (not bare word hits)
+# keeps a comment mention of a deleted symbol from reading as "present".
+EXPORT_AWK='
+function emit_members(brace,   names, n, i, name) {
+  n = split(brace, names, ",")
+  for (i = 1; i <= n; i++) {
+    name = names[i]
+    gsub(/^[ \t]+/, "", name); gsub(/[ \t]+$/, "", name)
+    sub(/^type[ \t]+/, "", name)          # export { type Foo }
+    sub(/^.*[ \t]+as[ \t]+/, "", name)    # public name is right of `as`
+    gsub(/[^A-Za-z0-9_$].*$/, "", name)   # keep the leading identifier only
+    if (name != "") print name
+  }
+}
+collecting_export {
+  if ($0 ~ /\}/) {
+    rb = index($0, "}")
+    emit_members(ebuf " " substr($0, 1, rb - 1))
+    collecting_export = 0; ebuf = ""
+  } else {
+    ebuf = ebuf " " $0
+  }
+  next
+}
+/^[ \t]*export[ \t{]/ {
+  if ($0 ~ /export[ \t]*\{/) {                  # named-export brace
+    lb = index($0, "{")
+    if ($0 ~ /\}/) {
+      rb = index($0, "}")
+      emit_members(substr($0, lb + 1, rb - lb - 1))
+    } else {
+      ebuf = substr($0, lb + 1); collecting_export = 1   # open multi-line block
+    }
+    next
+  }
+  line = $0
+  sub(/^[ \t]*export[ \t]+/, "", line)          # anchored — never greedy-bite a
+  sub(/^default[ \t]+/, "", line)               # trailing-"export" identifier
+  sub(/^async[ \t]+/, "", line)
+  if (line ~ /^(const|let|var|function|class|type|interface|enum)[ \t]+/) {
+    sub(/^(const|let|var|function|class|type|interface|enum)[ \t]+/, "", line)
+    gsub(/[^A-Za-z0-9_$].*$/, "", line)
+    if (line != "") print line
+  }
+  next
+}
+END { if (collecting_export) emit_members(ebuf) }
+'
+
+# awk program: count removed test declarations whose block REFERENCES a gone
+# (REMOVED_NAMED) symbol — the symbol-granular credit that replaces the raw
+# F_DECL_REMOVED file-granular credit. Gone names arrive space-separated in
+# GONE (-v, so `$`-names are literal). A "block" runs from one removed `it(` /
+# `test(` / `describe(` line up to the next; it is credited only if some
+# identifier token in the block is a gone symbol. This denies credit to a
+# co-removed test for a STILL-IMPORTED or inline-helper symbol (the red-team
+# over-exemption), while still crediting legitimate gone-symbol cleanup.
+ATTRIB_AWK='
+BEGIN { n = split(GONE, g, " "); for (i = 1; i <= n; i++) if (g[i] != "") goneset[g[i]] = 1 }
+function flush() { if (in_block && block_refs) credited++ }
+{
+  if ($0 ~ /(^|[^A-Za-z0-9_$.])(it|test|describe)[ \t]*\(/ ||
+      $0 ~ /(^|[^A-Za-z0-9_$.])(it|test|describe)\.each([ \t]|\(|`|$)/) {
+    flush(); in_block = 1; block_refs = 0
+  }
+  s = $0
+  while (match(s, /[A-Za-z_$][A-Za-z0-9_$]*/)) {
+    tok = substr(s, RSTART, RLENGTH)
+    if (tok in goneset) block_refs = 1
+    s = substr(s, RSTART + RLENGTH)
+  }
+}
+END { flush(); print credited + 0 }
 '
 
 # Candidate test files changed vs origin/main (Modified files too, not just
@@ -360,25 +465,47 @@ while IFS= read -r F; do
   if [ "$HAS_UNVERIFIABLE_REMOVED_IMPORT" -eq 1 ]; then continue; fi
 
   # (c) Existence check: exempt only if EVERY removed-import symbol is ABSENT
-  # from the post-PR non-test tree (HEAD minus test globs). Word-boundary
-  # declaration/export forms only — never bare substrings. A git grep no-match
-  # exits 1 inside the if-condition (harmless); a MATCH ⇒ symbol present ⇒ fire.
+  # from the post-PR non-test tree (HEAD minus test globs). Two steps per symbol:
+  #   1. Fast literal pre-check — does X appear at all? `git grep -F` (fixed
+  #      string) keeps `$`-bearing identifiers literal; a no-match (exit 1, in the
+  #      if-condition) means X is absent everywhere ⇒ this symbol stays absent.
+  #   2. For each mentioning file, parse its EXPORTED/DECLARED names with
+  #      EXPORT_AWK (brace-aware, so multi-line `export { … }` is seen) and test
+  #      EXACT membership. This rejects a bare comment/usage mention of X (only
+  #      real export forms emit a name) and matches `$`-names literally.
+  # A MATCH ⇒ symbol present ⇒ NOT exempt (bias to fire).
   all_absent=1
   for X in $REMOVED_NAMED; do
-    DECL_FORM="(export[[:space:]]+)?(async[[:space:]]+)?(const|let|var|function|class|type|interface|enum)[[:space:]]+${X}\b"
-    DEFAULT_FORM="export[[:space:]]+default[[:space:]]+(async[[:space:]]+)?(function[[:space:]]+|class[[:space:]]+)?${X}\b"
-    NAMED_EXPORT_FORM="export[[:space:]]*\{[^}]*\b${X}\b[^}]*\}"
-    EXIST_PAT="${DECL_FORM}|${DEFAULT_FORM}|${NAMED_EXPORT_FORM}"
-    if git grep -qE "$EXIST_PAT" HEAD -- "${EXCLUDE_PATHSPECS[@]}"; then
+    X_FILES=$(git grep -lF -e "$X" HEAD -- "${EXCLUDE_PATHSPECS[@]}" 2>/dev/null || true)
+    [ -z "$X_FILES" ] && continue   # X mentioned nowhere ⇒ absent
+    found=0
+    while IFS= read -r XF; do
+      [ -z "$XF" ] && continue
+      # `git grep -l … HEAD` prefixes each path with `HEAD:`, so XF is already a
+      # rev:path spec usable directly by git show (no extra `HEAD:` prefix).
+      XF_SRC=$(git show "$XF" 2>/dev/null || true)
+      if printf '%s\n' "$XF_SRC" | awk "$EXPORT_AWK" | grep -qxF -- "$X"; then
+        found=1
+        break
+      fi
+    done <<< "$X_FILES"
+    if [ "$found" -eq 1 ]; then
       all_absent=0
       break
     fi
   done
 
   if [ "$all_absent" -eq 1 ]; then
-    # All removed-import subjects are gone → deleting F's tests is cleanup.
-    # Same raw-count accounting as :163 — added declarations are never credited.
-    EXEMPT_DECL_REMOVED=$((EXEMPT_DECL_REMOVED + F_DECL_REMOVED))
+    # Every removed-import subject is gone → deleting tests that exercised them
+    # is cleanup. Credit is SYMBOL-GRANULAR (not the raw F_DECL_REMOVED): only
+    # removed declarations whose block references a gone symbol are exempted, so
+    # a co-removed test for a still-imported or inline-helper symbol is NOT swept
+    # in (red-team over-exemption). Attributed ≤ F_DECL_REMOVED, so the global
+    # DECL_REMOVED subtraction cannot go negative.
+    GONE_SP=$(printf '%s\n' "$REMOVED_NAMED" | tr '\n' ' ')
+    F_ATTRIB=$(printf '%s\n' "$F_REMOVED" | awk -v GONE="$GONE_SP" "$ATTRIB_AWK" || true)
+    [ -z "$F_ATTRIB" ] && F_ATTRIB=0
+    EXEMPT_DECL_REMOVED=$((EXEMPT_DECL_REMOVED + F_ATTRIB))
   fi
 done <<< "$IMPORT_CANDIDATES"
 

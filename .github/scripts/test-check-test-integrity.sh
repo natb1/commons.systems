@@ -854,6 +854,238 @@ assert_stderr_contains "Test-integrity violation" "(p) re-export brace form: rem
 assert_stderr_contains "Signal 2" "(p) re-export brace form: Signal 2 fires"
 
 # ---------------------------------------------------------------------------
+# Case (q): "from"-substring CONTINUATION member must not drop later members
+# (code-review-0, collecting terminator at line ~294) → flag.
+#
+# multi.test.ts imports GoneSym from its own single-line statement and imports
+# fromList + AliveSymbol from a MULTI-LINE block whose CONTINUATION member
+# `fromList,` contains "from" as a substring. The buggy terminator (`|| $0 ~
+# /from/`) ended the brace block on that line, so fromList AND AliveSymbol were
+# dropped from OLD_TAGS while GoneSym (its own statement) survived. Feature
+# deletes GoneSym from a MODIFIED source file (so the basename loop does not
+# apply), removes GoneSym's import+test, and removes the alive import + the
+# AliveSymbol test — but AliveSymbol STILL EXISTS in source. With AliveSymbol
+# dropped from OLD_TAGS the removed-import set was just {GoneSym} (absent),
+# wrongly exempting the AliveSymbol weakening (exit 0). With the fix the block
+# closes only on "}", AliveSymbol is captured, found PRESENT ⇒ fire.
+# ---------------------------------------------------------------------------
+echo "--- case (q): from-substring continuation member drop → flag (Signal 2) ---"
+REPO=$(make_temp_repo)
+
+cat > "$REPO/gone.ts" <<'EOF'
+export const GoneSym = () => 1;
+EOF
+cat > "$REPO/alive.ts" <<'EOF'
+export const fromList = () => 0;
+export const AliveSymbol = () => 2;
+EOF
+cat > "$REPO/multi.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+import { GoneSym } from './gone';
+import {
+  fromList,
+  AliveSymbol,
+} from './alive';
+it('GoneSym', () => { expect(GoneSym()).toBe(1); });
+it('AliveSymbol', () => { expect(AliveSymbol()).toBe(2); });
+EOF
+git -C "$REPO" add gone.ts alive.ts multi.test.ts
+git -C "$REPO" commit -q -m "add gone/alive + multi-line import tests"
+git -C "$REPO" update-ref refs/remotes/origin/main HEAD
+
+git -C "$REPO" checkout -q -b feature2
+
+cat > "$REPO/gone.ts" <<'EOF'
+export const GoneOther = () => 9;
+EOF
+cat > "$REPO/multi.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+EOF
+git -C "$REPO" add gone.ts multi.test.ts
+git -C "$REPO" commit -q -m "remove GoneSym + AliveSymbol test; AliveSymbol still exists"
+
+run_check "$REPO"
+assert_exit 1 "(q) from-substring continuation member drop: exit 1"
+assert_stderr_contains "Test-integrity violation" "(q) from-substring continuation member drop: remediation text present"
+assert_stderr_contains "Signal 2" "(q) from-substring continuation member drop: Signal 2 fires"
+
+# ---------------------------------------------------------------------------
+# Case (q2): "from"-substring OPENING-line member must not short-circuit a
+# multi-line block (code-review-0, opening classifier at line ~288) → flag.
+#
+# Same shape as (q), but the multi-line block's OPENING line carries the
+# "from"-substring member: `import { fromEntries,`. The buggy opening classifier
+# (`if ($0 ~ /from/) process($0)`) treated that line as a complete single-line
+# import, dropping the continuation `AliveB }` from OLD_TAGS. The fix classifies
+# an open brace block first, so the block is collected and AliveB captured ⇒
+# PRESENT ⇒ fire.
+# ---------------------------------------------------------------------------
+echo "--- case (q2): from-substring opening-line member drop → flag (Signal 2) ---"
+REPO=$(make_temp_repo)
+
+cat > "$REPO/goneb.ts" <<'EOF'
+export const GoneB = () => 1;
+EOF
+cat > "$REPO/aliveb.ts" <<'EOF'
+export const fromEntries = () => 0;
+export const AliveB = () => 2;
+EOF
+cat > "$REPO/op.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+import { GoneB } from './goneb';
+import { fromEntries,
+  AliveB } from './aliveb';
+it('GoneB', () => { expect(GoneB()).toBe(1); });
+it('AliveB', () => { expect(AliveB()).toBe(2); });
+EOF
+git -C "$REPO" add goneb.ts aliveb.ts op.test.ts
+git -C "$REPO" commit -q -m "add goneb/aliveb + opening-line import tests"
+git -C "$REPO" update-ref refs/remotes/origin/main HEAD
+
+git -C "$REPO" checkout -q -b feature2
+
+cat > "$REPO/goneb.ts" <<'EOF'
+export const GoneBOther = () => 9;
+EOF
+cat > "$REPO/op.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+EOF
+git -C "$REPO" add goneb.ts op.test.ts
+git -C "$REPO" commit -q -m "remove GoneB + AliveB test; AliveB still exists"
+
+run_check "$REPO"
+assert_exit 1 "(q2) from-substring opening-line member drop: exit 1"
+assert_stderr_contains "Test-integrity violation" "(q2) from-substring opening-line member drop: remediation text present"
+assert_stderr_contains "Signal 2" "(q2) from-substring opening-line member drop: Signal 2 fires"
+
+# ---------------------------------------------------------------------------
+# Case (r): `$`-bearing identifier survives the existence check (code-review-2)
+# → flag.
+#
+# fac.ts exports $factory (a valid identifier; `$` is also ERE end-of-line).
+# The OLD existence check interpolated $X into an ERE, so `const $factory\b`
+# miscompiled and matched nothing ⇒ $factory read as absent ⇒ wrongly exempt
+# (exit 0). The fix uses a literal pre-check plus EXACT EXPORT_AWK membership, so
+# `$factory` is matched literally ⇒ PRESENT ⇒ fire.
+# ---------------------------------------------------------------------------
+echo "--- case (r): \$-identifier survives existence check → flag (Signal 2) ---"
+REPO=$(make_temp_repo)
+
+cat > "$REPO/fac.ts" <<'EOF'
+export const $factory = () => 1;
+EOF
+cat > "$REPO/fac.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+import { $factory } from './fac';
+it('$factory works', () => { expect($factory()).toBe(1); });
+EOF
+git -C "$REPO" add fac.ts fac.test.ts
+git -C "$REPO" commit -q -m "add fac + test"
+git -C "$REPO" update-ref refs/remotes/origin/main HEAD
+
+git -C "$REPO" checkout -q -b feature2
+
+cat > "$REPO/fac.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+EOF
+git -C "$REPO" add fac.test.ts
+git -C "$REPO" commit -q -m "remove \$factory test (\$factory still exists)"
+
+run_check "$REPO"
+assert_exit 1 "(r) \$-identifier survives: exit 1"
+assert_stderr_contains "Test-integrity violation" "(r) \$-identifier survives: remediation text present"
+assert_stderr_contains "Signal 2" "(r) \$-identifier survives: Signal 2 fires"
+
+# ---------------------------------------------------------------------------
+# Case (s): multi-line `export { }` re-export survives (code-review-1) → flag.
+#
+# mod2.ts exposes Gadget ONLY through a MULTI-LINE `export { w2 as Gadget }`
+# block — no `const/function Gadget` declaration. The OLD single-line
+# NAMED_EXPORT_FORM regex (`[^}]*` cannot cross newlines, and git grep is
+# line-oriented) never matched the split block ⇒ Gadget read as absent ⇒ wrongly
+# exempt (exit 0). The brace-aware EXPORT_AWK joins the block ⇒ Gadget PRESENT ⇒
+# fire.
+# ---------------------------------------------------------------------------
+echo "--- case (s): multi-line export brace survives → flag (Signal 2) ---"
+REPO=$(make_temp_repo)
+
+cat > "$REPO/mod2.ts" <<'EOF'
+const w2 = () => 1;
+export {
+  w2 as Gadget,
+};
+EOF
+cat > "$REPO/mod2.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+import { Gadget } from './mod2';
+it('Gadget works', () => { expect(Gadget()).toBe(1); });
+EOF
+git -C "$REPO" add mod2.ts mod2.test.ts
+git -C "$REPO" commit -q -m "add mod2 + test"
+git -C "$REPO" update-ref refs/remotes/origin/main HEAD
+
+git -C "$REPO" checkout -q -b feature2
+
+cat > "$REPO/mod2.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+EOF
+git -C "$REPO" add mod2.test.ts
+git -C "$REPO" commit -q -m "remove Gadget test (multi-line export survives)"
+
+run_check "$REPO"
+assert_exit 1 "(s) multi-line export brace survives: exit 1"
+assert_stderr_contains "Test-integrity violation" "(s) multi-line export brace survives: remediation text present"
+assert_stderr_contains "Signal 2" "(s) multi-line export brace survives: Signal 2 fires"
+
+# ---------------------------------------------------------------------------
+# Case (t): symbol-granular credit denies a co-removed inline-helper test
+# (red-team-1) → flag.
+#
+# feat.test.ts imports GoneSymbol and also has an inline helper localCalc, each
+# with its own test. Feature deletes GoneSymbol from a MODIFIED source file
+# (basename loop does NOT apply) and removes GoneSymbol's import+test AND
+# localCalc's test, keeping localCalc's definition. removed-import = {GoneSymbol}
+# (absent) ⇒ all_absent. The OLD file-granular credit swept BOTH removed tests
+# into the exemption (net 0 ⇒ exit 0), masking the localCalc weakening. The
+# symbol-granular credit only exempts the block referencing GoneSymbol, so the
+# localCalc test removal still nets −1 ⇒ fire.
+# ---------------------------------------------------------------------------
+echo "--- case (t): symbol-granular credit denies helper-test sweep → flag (Signal 2) ---"
+REPO=$(make_temp_repo)
+
+cat > "$REPO/feat.ts" <<'EOF'
+export const GoneSymbol = () => 1;
+export const Other = () => 9;
+EOF
+cat > "$REPO/feat.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+import { GoneSymbol } from './feat';
+function localCalc() { return 5; }
+it('GoneSymbol works', () => { expect(GoneSymbol()).toBe(1); });
+it('localCalc works', () => { expect(localCalc()).toBe(5); });
+EOF
+git -C "$REPO" add feat.ts feat.test.ts
+git -C "$REPO" commit -q -m "add feat + tests"
+git -C "$REPO" update-ref refs/remotes/origin/main HEAD
+
+git -C "$REPO" checkout -q -b feature2
+
+cat > "$REPO/feat.ts" <<'EOF'
+export const Other = () => 9;
+EOF
+cat > "$REPO/feat.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+function localCalc() { return 5; }
+EOF
+git -C "$REPO" add feat.ts feat.test.ts
+git -C "$REPO" commit -q -m "remove GoneSymbol + co-remove localCalc test"
+
+run_check "$REPO"
+assert_exit 1 "(t) symbol-granular credit: exit 1"
+assert_stderr_contains "Test-integrity violation" "(t) symbol-granular credit: remediation text present"
+assert_stderr_contains "Signal 2" "(t) symbol-granular credit: Signal 2 fires"
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""
