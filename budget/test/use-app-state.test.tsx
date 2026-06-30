@@ -19,7 +19,21 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, cleanup, waitFor, fireEvent, act } from "@testing-library/react";
 
 vi.mock("@commons-systems/ds", () => ({
-  Nav: ({ end }: { end?: React.ReactNode }) => <nav>{end}</nav>,
+  PageShell: ({
+    navEnd,
+    hero,
+    children,
+  }: {
+    navEnd?: React.ReactNode;
+    hero?: React.ReactNode;
+    children?: React.ReactNode;
+  }) => (
+    <div>
+      <nav>{navEnd}</nav>
+      {hero}
+      {children}
+    </div>
+  ),
 }));
 vi.mock("../src/pages/home.js", () => ({ renderHome: vi.fn().mockResolvedValue("<div>home</div>") }));
 // Every route is now a React page, not a LegacyRoute string render. Each mock
