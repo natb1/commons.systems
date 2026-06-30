@@ -18,10 +18,16 @@
 #   recursive find for *.jsonl picks up both top-level and subagent transcripts.
 #
 # USAGE
-#   aggregate-usage.sh [--days N] [--json-out PATH]
+#   aggregate-usage.sh [--days N | --day YYYY-MM-DD] [--json-out PATH]
+#                      [--exclude-sidecar-sessions]
 #     --days N        window in days (default 7); files with mtime newer than
 #                     "N days ago" are scanned. N must be a positive integer.
+#     --day YYYY-MM-DD  scan a single UTC calendar day [day 00:00:00, day+1
+#                     00:00:00). Mutually exclusive with --days.
 #     --json-out PATH write the document to PATH instead of stdout.
+#     --exclude-sidecar-sessions  opt-in (default off): skip any transcript whose
+#                     sibling <stem>.file-issue-attribution.json exists, dropping
+#                     that file-issue session from every bucket.
 #   DISPATCH_AUDIT_PROJECTS_ROOT  override the projects root (used by the test
 #                     fixture). Default: $HOME/.claude/projects.
 #   DISPATCH_AUDIT_AGGREGATES_ENABLED  opt-in persist gate: set to "1" to pipe
@@ -80,23 +86,53 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Single-sourced price-proxy rates (shared with Unit 2's .mjs). A missing file
+# fails loudly here under `set -e` (clear error over a silent fallback —
+# .claude/rules/code-style.md). Passed into stage-2 jq via --argjson price_model.
+PRICE_MODEL=$(cat "$SCRIPT_DIR/price-model.json")
+
 # REST helper for per-issue label fetches (gh_issue_view_rest). SCRIPT_DIR-relative
 # so cwd is irrelevant; lib.sh's top level is only function defs + a few exports,
 # safe to source under `set -euo pipefail`.
 source "$SCRIPT_DIR/../../dispatch-propagate/scripts/lib.sh"
 
 DAYS=7
+DAY=""
+DAYS_GIVEN=0
 JSON_OUT=""
+EXCLUDE_SIDECAR=0
 PROJECTS_ROOT="${DISPATCH_AUDIT_PROJECTS_ROOT:-$HOME/.claude/projects}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --days)
+      if [[ -n "$DAY" ]]; then
+        echo "error: --day and --days are mutually exclusive" >&2; exit 2
+      fi
       if [[ $# -lt 2 || "${2:-}" == -* || -z "${2:-}" ]]; then
         echo "error: --days requires a value" >&2; exit 2
       fi
       DAYS="$2"
+      DAYS_GIVEN=1
       shift 2
+      ;;
+    --day)
+      if [[ "$DAYS_GIVEN" == 1 ]]; then
+        echo "error: --day and --days are mutually exclusive" >&2; exit 2
+      fi
+      if [[ $# -lt 2 || "${2:-}" == -* || -z "${2:-}" ]]; then
+        echo "error: --day requires a value" >&2; exit 2
+      fi
+      # Strict YYYY-MM-DD format AND a real calendar date (date -u rejects e.g. 2025-13-40).
+      if [[ ! "$2" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || ! date -u -d "$2" '+%Y-%m-%d' >/dev/null 2>&1; then
+        echo "error: --day must be a valid YYYY-MM-DD date, got '$2'" >&2; exit 2
+      fi
+      DAY="$2"
+      shift 2
+      ;;
+    --exclude-sidecar-sessions)
+      EXCLUDE_SIDECAR=1
+      shift
       ;;
     --json-out)
       if [[ $# -lt 2 || "${2:-}" == -* || -z "${2:-}" ]]; then
@@ -107,7 +143,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     *)
       echo "error: unknown argument '$1'" >&2
-      echo "usage: aggregate-usage.sh [--days N] [--json-out PATH]" >&2
+      echo "usage: aggregate-usage.sh [--days N | --day YYYY-MM-DD] [--json-out PATH] [--exclude-sidecar-sessions]" >&2
       exit 2
       ;;
   esac
@@ -119,9 +155,24 @@ if [[ ! "$DAYS" =~ ^[1-9][0-9]*$ ]]; then
 fi
 
 # Explicit-timestamp window bounds. The relative `-newermt '7 days ago'` form is
-# broken here, so compute the concrete instant.
-SINCE=$(date -d "$DAYS days ago" '+%Y-%m-%d %H:%M:%S')
-UNTIL=$(date '+%Y-%m-%d %H:%M:%S')
+# broken here, so compute the concrete instant. The find filter below is half-open
+# in spirit: lower bound `-newermt "$SINCE"`, upper bound `! -newermt "$UNTIL"`.
+if [[ -n "$DAY" ]]; then
+  # Target-day window: a single UTC calendar day [<day> 00:00:00, <day+1> 00:00:00).
+  # The issue docId date is UTC, so bound the day in UTC.
+  SINCE="$DAY 00:00:00"
+  UNTIL="$(date -u -d "$DAY + 1 day" '+%Y-%m-%d') 00:00:00"
+  # The window spans exactly one calendar day; keep window metadata self-consistent.
+  DAYS=1
+else
+  SINCE=$(date -d "$DAYS days ago" '+%Y-%m-%d %H:%M:%S')
+  # UNTIL is "now", but `date` truncates to whole seconds while file mtimes carry
+  # sub-second precision; a `! -newermt "$UNTIL"` upper bound would otherwise drop
+  # a transcript written in the current second (mtime > floor(now)). Use +1s so the
+  # current second is included — real transcripts are never in the future, so this
+  # keeps --days output unchanged in practice.
+  UNTIL=$(date -d '+1 second' '+%Y-%m-%d %H:%M:%S')
+fi
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
@@ -370,13 +421,15 @@ STAGE1
 # document. The price proxy is applied here.
 # ---------------------------------------------------------------------------
 cat >"$TMP/stage2.jq" <<'STAGE2'
-# --- Price proxy (EDITABLE rate constants) -------------------------------
-# Opus list rates per Mtok. Applied to EVERY session regardless of its real
-# model: a relative-magnitude USD PROXY for ranking, NOT the actual bill.
-def RATE_INPUT:          15;
-def RATE_CACHE_CREATION: 18.75;
-def RATE_CACHE_READ:     1.5;
-def RATE_OUTPUT:         75;
+# --- Price proxy (rates single-sourced from price-model.json) -------------
+# Opus list rates per Mtok, supplied by the shell via --argjson price_model
+# (loaded from price-model.json, shared with Unit 2's .mjs). Applied to EVERY
+# session regardless of its real model: a relative-magnitude USD PROXY for
+# ranking, NOT the actual bill.
+def RATE_INPUT:          $price_model.input;
+def RATE_CACHE_CREATION: $price_model.cacheCreation;
+def RATE_CACHE_READ:     $price_model.cacheRead;
+def RATE_OUTPUT:         $price_model.output;
 def price(u):
   ( (u.input          // 0) * RATE_INPUT
   + (u.cache_creation // 0) * RATE_CACHE_CREATION
@@ -767,6 +820,12 @@ FILES_FAILED=0
 if [[ -d "$PROJECTS_ROOT" ]]; then
   # Gather candidate project dirs (worktrees + bare), then find *.jsonl in window.
   while IFS= read -r -d '' file; do
+    # --exclude-sidecar-sessions (opt-in, default off): drop a file-issue session
+    # entirely when its sibling sidecar <stem>.file-issue-attribution.json exists,
+    # so it never lands in any bucket. Skip BEFORE counting/scanning.
+    if [[ "$EXCLUDE_SIDECAR" == 1 && -f "${file%.jsonl}.file-issue-attribution.json" ]]; then
+      continue
+    fi
     FILES_SCANNED=$((FILES_SCANNED + 1))
     # Per-session sidecar (#1861): <stem>.dispatch-stamp.json next to the
     # transcript. Most transcripts have none; --slurpfile needs a readable file,
@@ -782,7 +841,7 @@ if [[ -d "$PROJECTS_ROOT" ]]; then
   done < <(
     find "$PROJECTS_ROOT" -mindepth 1 -maxdepth 1 -type d \
       \( -name '*worktrees*' -o -name '*--bare' \) -print0 \
-    | xargs -0 -r -I{} find {} -name '*.jsonl' -newermt "$SINCE" -print0
+    | xargs -0 -r -I{} env TZ=UTC find {} -name '*.jsonl' -newermt "$SINCE" ! -newermt "$UNTIL" -print0
   )
 fi
 
@@ -809,7 +868,7 @@ done < <(
 
 # Stage-2: fold stage-1 lines into the final document. `jq -s` over an empty file
 # yields [], which the program handles as the zero-files case.
-DOC=$(jq -s --argjson window "$WINDOW_JSON" --argjson labels_by_issue "$LABELS_BY_ISSUE" -f "$TMP/stage2.jq" "$STAGE1_OUT")
+DOC=$(jq -s --argjson window "$WINDOW_JSON" --argjson labels_by_issue "$LABELS_BY_ISSUE" --argjson price_model "$PRICE_MODEL" -f "$TMP/stage2.jq" "$STAGE1_OUT")
 
 # No silent cap: if tool_sequences was truncated, report it to STDERR (never
 # stdout — stdout must stay a pure JSON document).
