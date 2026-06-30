@@ -8210,6 +8210,114 @@ assert_eq "lookup failure: emits could-not-determine note" "1" \
   "$(grep -c 'could not determine open-blocker status for #42' "$TMPDIR_TEST/oh-stderr.txt")"
 teardown
 
+# OHST24 (#2538). Targeted fresh: two labeled sessionless items (42, older; 99, newer);
+# invoke with N=99 → the selector picks 99, overriding oldest-first order (no-arg
+# would pick 42). Criterion-required: proves single-item mode targets the specified
+# item rather than the queue head.
+echo "Test: targeted fresh N=99 overrides oldest-first; emits office-hours 99 -"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude   # orphan world: no live sessions
+result=$("$TMPDIR_TEST/office-hours-select-target" 99)
+assert_eq "targeted fresh N=99: emits 99 not queue head 42" "office-hours 99 -" "$result"
+teardown
+
+# OHST25 (#2538). Non-queue <N> → `empty not-in-queue <N>`: 777 is not a member of
+# the office-hours queue (only 42 is). Criterion-required: the queue-membership
+# precondition fires before any session query and emits the richer empty verb whose
+# first token is still `empty` (so consumer bucket dispatch is unchanged) but whose
+# trailing `not-in-queue 777` lets the entry script print a precise non-member
+# message instead of the generic queue-empty one.
+echo "Test: non-queue N=777 not in oh-issue-list → empty not-in-queue 777"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+select_target_fake_claude
+result=$("$TMPDIR_TEST/office-hours-select-target" 777)
+assert_eq "non-queue N=777 → empty not-in-queue 777" "empty not-in-queue 777" "$result"
+teardown
+
+# OHST26 (#2538). Targeted idle: 42 has an idle session; invoke with N=42 →
+# the single-item branch routes the attachable disposition correctly and emits
+# `idle s-42-x`. (No-arg mode would also pick 42 as the oldest idle item; this
+# case exercises the idle disposition path through the single-item branch, not
+# targeting-override ordering — that is covered by OHST24.)
+echo "Test: targeted idle N=42 → idle disposition via single-item branch"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+mkdir -p "$TMPDIR_TEST/wt/42-x"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+office_hours_state_fake_claude "42-x:waiting:$TMPDIR_TEST/wt/42-x"
+result=$("$TMPDIR_TEST/office-hours-select-target" 42)
+assert_eq "targeted idle N=42 → idle s-42-x" "idle s-42-x" "$result"
+teardown
+
+# OHST27 (#2538). Targeted working item → empty: 42 has a `working` session (rc 3,
+# busy). Single-item mode collapses rc-3 to empty and never reaches the parked-router
+# block (acceptance criterion #3). DISPATCH_OFFICE_HOURS_MAIN_WORKTREE is set to a
+# controlled path so a parked-router false-match cannot fire. (No-arg mode would also
+# emit empty here for the lone working item; this exercises the rc-3 collapse through
+# the single-item branch.)
+echo "Test: targeted working N=42 → empty (rc-3 collapses; parked-router not reached)"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+export DISPATCH_OFFICE_HOURS_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+office_hours_state_fake_claude "42-x:working"
+result=$("$TMPDIR_TEST/office-hours-select-target" 42)
+assert_eq "targeted working N=42 → empty (single-item mode, no parked-router)" "empty" "$result"
+unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
+# OHST28 (#2538, optional). Targeted resume: 42 is removed but recoverable (stamp
+# sidecar + transcript); its worktree is on disk. Single-item rc-1 → try_emit_resume
+# resolves the stamp and emits `resume`. Mirrors OHST15a exactly; worktree-list
+# carries the real on-disk path so WORKTREE_PATHS_BY_NUM resolves to a real dir.
+echo "Test: targeted resume N=42 — removed + recoverable + on-disk worktree → resume"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+mkdir -p "$TMPDIR_TEST/wt/42-x"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree %s\nHEAD def456\nbranch refs/heads/42-x\n\n' \
+  "$TMPDIR_TEST/wt/42-x" > "$STUB_DIR/worktree-list.txt"
+office_hours_state_fake_claude   # empty registry → removed
+export DISPATCH_STAMP_PROJECTS_ROOT="$TMPDIR_TEST/projects"
+mkdir -p "$DISPATCH_STAMP_PROJECTS_ROOT/proj-42"
+printf '%s\n' '{"schema":1,"session_id":"rec-sess-42","repo":"natb1/commons.systems","issue":42,"pr":null,"branch":"42-x","base_sha":"deadbeef","stamped_at":"2026-06-01T10:00:00Z"}' \
+  > "$DISPATCH_STAMP_PROJECTS_ROOT/proj-42/rec-sess-42.dispatch-stamp.json"
+touch "$DISPATCH_STAMP_PROJECTS_ROOT/proj-42/rec-sess-42.jsonl"
+result=$("$TMPDIR_TEST/office-hours-select-target" 42)
+assert_eq "targeted resume N=42: removed + on-disk worktree + transcript → resume in place" "resume 42 rec-sess-42 $TMPDIR_TEST/wt/42-x" "$result"
+unset DISPATCH_STAMP_PROJECTS_ROOT
+teardown
+
+# OHST29 (#2538, criterion #4). Blocker advisory on targeted fresh item: 42 has an
+# open blocker (#2387). Single-item mode still surfaces 42 (stdout unchanged) and
+# emits the blocker advisory on stderr. Mirrors OHST20 on the single-item path.
+echo "Test: targeted fresh N=42 with open blocker → surfaced (stdout) + advisory (stderr)"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf '[{"number":2387,"state":"open"}]\n' > "$STUB_DIR/blockers-42.json"
+select_target_fake_claude
+result=$("$TMPDIR_TEST/office-hours-select-target" 42 2>"$TMPDIR_TEST/oh-stderr.txt")
+assert_eq "targeted blocked N=42: stdout disposition unchanged" "office-hours 42 -" "$result"
+assert_eq "targeted blocked N=42: advisory names #2387" "1" \
+  "$(grep -c '#2387' "$TMPDIR_TEST/oh-stderr.txt")"
+assert_eq "targeted blocked N=42: advisory frames as signal, not a gate" "1" \
+  "$(grep -c 'signal, not a gate' "$TMPDIR_TEST/oh-stderr.txt")"
+teardown
+
 # ============================================================================
 # office-hours (entry point) tests
 # ============================================================================
@@ -8349,6 +8457,21 @@ office_hours_fake_claude   # `[]`: no sessions under main, no parked router
 result=$("$TMPDIR_TEST/office-hours")
 assert_eq "empty queue → queue-empty message, no launch" "office-hours: queue is empty — nothing to resume or start." "$result"
 unset DISPATCH_OFFICE_HOURS_MAIN_WORKTREE
+teardown
+
+# OH4b (#2538). Targeted non-member <N> → the selector emits `empty not-in-queue
+# <N>` and the entry script prints a PRECISE non-member message — NOT the generic
+# queue-empty one — even though the queue has another member (42). This is the
+# end-to-end proof of the code-review fix: a non-member targeted <N> (e.g. a typo)
+# must not be told the queue is empty when other members exist.
+echo "Test: targeted non-member N=777 → not-in-queue message, no launch"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/oh-issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+office_hours_fake_claude
+result=$("$TMPDIR_TEST/office-hours" 777)
+assert_eq "targeted non-member N=777 → not-in-queue message, no launch" \
+  "office-hours: issue #777 is not in the office-hours queue — nothing to resume or start for it." "$result"
 teardown
 
 # OH5. Mixed: an older sessionless item + a newer idle-session item → attach the
@@ -8670,6 +8793,24 @@ assert_eq "primary kick (rc 0, unregistered) carries no --fork-session (no conti
 assert_eq "verify-fail triggers fork retry (rc 0 alone is not enough)" "--bg --name 42-x --permission-mode auto --resume sess-abc --fork-session" "${oh_resume_argv[1]:-}"
 assert_eq "after fork registers, attach by name → j-42-x" "LAUNCH: attach j-42-x" "$result"
 unset OFFICE_HOURS_CLAUDE_CMD CLAUDE_AGENTS_CMD LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
+teardown
+
+# OH14 (#2538). Entry-script N passthrough: two labeled items, both idle (42 older,
+# 99 newer). Without <N>, no-arg mode would attach j-42-x (oldest idle). Passing
+# N=99 causes the entry script to forward 99 to the selector; the selector's
+# single-item mode targets 99-y's idle session, and the entry attaches j-99-y.
+# Proves criterion #1: the entry script correctly passes <N> to the selector.
+echo "Test: entry-script N=99 forwarded to selector; attaches j-99-y not j-42-x"
+setup
+printf '[{"number":42,"createdAt":"2024-01-01T00:00:00Z"},{"number":99,"createdAt":"2024-02-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/oh-issue-list.json"
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+mkdir -p "$TMPDIR_TEST/wt/42-x" "$TMPDIR_TEST/wt/99-y"
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\nworktree /worktrees/99-y\nHEAD aaa111\nbranch refs/heads/99-y\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+office_hours_state_fake_claude "42-x:waiting:$TMPDIR_TEST/wt/42-x" "99-y:waiting:$TMPDIR_TEST/wt/99-y"
+result=$("$TMPDIR_TEST/office-hours" 99)
+assert_eq "entry N=99 forwarded: attaches j-99-y (not j-42-x, the no-arg head)" "LAUNCH: attach j-99-y" "$result"
 teardown
 
 # ============================================================================

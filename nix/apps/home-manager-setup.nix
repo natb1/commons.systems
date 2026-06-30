@@ -35,5 +35,5 @@ pkgs.writeShellScriptBin "home-manager-setup" ''
   echo "  exec \$SHELL"
   echo ""
   echo "Future updates can use:"
-  echo "  home-manager switch --impure --flake .#$SYSTEM"
+  echo "  home-manager switch -b backup --impure --flake .#$SYSTEM"
 ''

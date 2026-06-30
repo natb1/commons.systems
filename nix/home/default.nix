@@ -7,10 +7,15 @@
 #     nix --extra-experimental-features 'nix-command flakes' run home-manager/master -- switch --extra-experimental-features 'nix-command flakes' --flake .#default --impure
 #
 #   After first activation (auto-detects system architecture):
-#     home-manager switch --flake .#default --impure
+#     home-manager switch -b backup --flake .#default --impure
 #
 #   Or explicitly specify system:
-#     home-manager switch --flake .#x86_64-linux --impure
+#     home-manager switch -b backup --flake .#x86_64-linux --impure
+#
+# Always pass `-b backup`: standalone home-manager has no equivalent of the
+# NixOS/nix-darwin module's `home-manager.backupFileExtension`, and without it a
+# switch aborts mid-activation when it meets an unmanaged file it wants to own
+# (e.g. a stray ~/.zprofile), leaving the profile half-updated.
 #
 # Note: --impure is required because home.username and home.homeDirectory are
 # automatically detected from your environment using builtins.getEnv.
@@ -87,6 +92,12 @@
     pkgs.google-cloud-sdk
     pkgs.pass
     pkgs.python3
+  ] ++ lib.optionals pkgs.stdenv.isDarwin [
+    # macOS: manage these with Nix instead of Homebrew. After switching, run
+    # `brew uninstall go` so the Nix copy is the one on PATH.
+    # (gh is already installed by programs.gh in gh.nix; jq above is Nix-only
+    # and not a brew formula — both are already Nix-managed on macOS.)
+    pkgs.go
   ];
 
   # Let Home Manager manage itself

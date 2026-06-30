@@ -53,14 +53,6 @@ const mockUnzip = vi.fn<(src: unknown) => Promise<ZipInfo>>();
 
 vi.mock("unzipit", () => ({
   unzip: (...args: unknown[]) => mockUnzip(...args),
-  HTTPRangeReader: vi.fn(),
-}));
-
-vi.mock("../../src/media-cache.js", () => ({
-  getChunk: vi.fn().mockResolvedValue(null),
-  putChunk: vi.fn().mockResolvedValue(undefined),
-  getFile: vi.fn().mockResolvedValue(null),
-  putFile: vi.fn().mockResolvedValue(undefined),
 }));
 
 function mockEntries(files: Record<string, Uint8Array>) {
@@ -69,18 +61,15 @@ function mockEntries(files: Record<string, Uint8Array>) {
   return result;
 }
 
-/** Re-apply global stubs after tests that call vi.stubGlobal("fetch", ...). */
-function restoreGlobalStubs() {
-  vi.unstubAllGlobals();
-  stubBrowserGlobals();
-}
+// The renderer now always receives a whole ArrayBuffer; unzip is mocked, so the
+// buffer contents are inert in tests.
+const ARCHIVE_BUF = new ArrayBuffer(0);
 
 function makeContainer(): HTMLElement {
   return document.createElement("div");
 }
 
-import { createImageArchiveRenderer, CachedRangeReader } from "../../src/viewer/image-archive.js";
-import { getChunk, putChunk, getFile, putFile } from "../../src/media-cache";
+import { createImageArchiveRenderer } from "../../src/viewer/image-archive.js";
 
 describe("createImageArchiveRenderer", () => {
   beforeEach(() => {
@@ -99,7 +88,7 @@ describe("createImageArchiveRenderer", () => {
     const parent = document.createElement("div");
     parent.appendChild(container);
     const renderer = createImageArchiveRenderer();
-    await renderer.init(container, "https://example.com/archive.zip");
+    await renderer.init(container, ARCHIVE_BUF);
     const img = container.querySelector("img") as HTMLImageElement;
     Object.defineProperty(img, "clientWidth", { value: 400, configurable: true });
     Object.defineProperty(img, "clientHeight", { value: 300, configurable: true });
@@ -114,7 +103,7 @@ describe("createImageArchiveRenderer", () => {
 
     const container = makeContainer();
     const renderer = createImageArchiveRenderer();
-    await renderer.init(container, "https://example.com/archive.zip");
+    await renderer.init(container, ARCHIVE_BUF);
 
     expect(renderer.pageCount).toBe(2);
     expect(renderer.currentPage).toBe(1);
@@ -130,7 +119,7 @@ describe("createImageArchiveRenderer", () => {
 
     const container = makeContainer();
     const renderer = createImageArchiveRenderer();
-    await renderer.init(container, "https://example.com/archive.zip");
+    await renderer.init(container, ARCHIVE_BUF);
 
     expect(container.querySelector("img")).not.toBeNull();
   });
@@ -140,7 +129,7 @@ describe("createImageArchiveRenderer", () => {
 
     const container = makeContainer();
     const renderer = createImageArchiveRenderer();
-    await renderer.init(container, "https://example.com/archive.zip");
+    await renderer.init(container, ARCHIVE_BUF);
 
     const img = container.querySelector("img") as HTMLImageElement;
     expect(img.alt).toBe("Page 1");
@@ -154,7 +143,7 @@ describe("createImageArchiveRenderer", () => {
 
     const container = makeContainer();
     const renderer = createImageArchiveRenderer();
-    await renderer.init(container, "https://example.com/archive.zip");
+    await renderer.init(container, ARCHIVE_BUF);
 
     const img = container.querySelector("img") as HTMLImageElement;
     const firstSrc = img.src;
@@ -174,7 +163,7 @@ describe("createImageArchiveRenderer", () => {
 
     const container = makeContainer();
     const renderer = createImageArchiveRenderer();
-    await renderer.init(container, "https://example.com/archive.zip");
+    await renderer.init(container, ARCHIVE_BUF);
 
     const img = container.querySelector("img") as HTMLImageElement;
     const firstSrc = img.src;
@@ -194,7 +183,7 @@ describe("createImageArchiveRenderer", () => {
 
     const container = makeContainer();
     const renderer = createImageArchiveRenderer();
-    await renderer.init(container, "https://example.com/archive.zip");
+    await renderer.init(container, ARCHIVE_BUF);
 
     await renderer.goToPage(2);
     await renderer.goToPosition("99");
@@ -209,7 +198,7 @@ describe("createImageArchiveRenderer", () => {
 
     const container = makeContainer();
     const renderer = createImageArchiveRenderer();
-    await renderer.init(container, "https://example.com/archive.zip");
+    await renderer.init(container, ARCHIVE_BUF);
 
     await renderer.next();
     expect(renderer.currentPage).toBe(2);
@@ -225,7 +214,7 @@ describe("createImageArchiveRenderer", () => {
 
     const container = makeContainer();
     const renderer = createImageArchiveRenderer();
-    await renderer.init(container, "https://example.com/archive.zip");
+    await renderer.init(container, ARCHIVE_BUF);
 
     await renderer.next();
     await renderer.prev();
@@ -242,7 +231,7 @@ describe("createImageArchiveRenderer", () => {
 
     const container = makeContainer();
     const renderer = createImageArchiveRenderer();
-    await renderer.init(container, "https://example.com/archive.zip");
+    await renderer.init(container, ARCHIVE_BUF);
 
     expect(renderer.positionLabel).toBe("Page 1 / 2");
     await renderer.next();
@@ -258,7 +247,7 @@ describe("createImageArchiveRenderer", () => {
 
     const container = makeContainer();
     const renderer = createImageArchiveRenderer();
-    await renderer.init(container, "https://example.com/archive.zip");
+    await renderer.init(container, ARCHIVE_BUF);
 
     expect(renderer.pageCount).toBe(1);
     expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
@@ -274,7 +263,7 @@ describe("createImageArchiveRenderer", () => {
 
     const container = makeContainer();
     const renderer = createImageArchiveRenderer();
-    await renderer.init(container, "https://example.com/archive.zip");
+    await renderer.init(container, ARCHIVE_BUF);
 
     expect(renderer.pageCount).toBe(4);
   });
@@ -288,7 +277,7 @@ describe("createImageArchiveRenderer", () => {
 
     const container = makeContainer();
     const renderer = createImageArchiveRenderer();
-    await renderer.init(container, "https://example.com/archive.zip");
+    await renderer.init(container, ARCHIVE_BUF);
 
     expect(renderer.currentPage).toBe(1);
     await renderer.goToPage(3);
@@ -305,7 +294,7 @@ describe("createImageArchiveRenderer", () => {
 
     const container = makeContainer();
     const renderer = createImageArchiveRenderer();
-    await renderer.init(container, "https://example.com/archive.zip");
+    await renderer.init(container, ARCHIVE_BUF);
 
     expect(container.querySelector("img")).not.toBeNull();
 
@@ -324,7 +313,7 @@ describe("createImageArchiveRenderer", () => {
 
     const container = makeContainer();
     const renderer = createImageArchiveRenderer();
-    await renderer.init(container, "https://example.com/archive.zip");
+    await renderer.init(container, ARCHIVE_BUF);
 
     await renderer.goToPage(0);
     expect(renderer.currentPage).toBe(1);
@@ -341,7 +330,7 @@ describe("createImageArchiveRenderer", () => {
 
     const container = makeContainer();
     const renderer = createImageArchiveRenderer();
-    await renderer.init(container, "https://example.com/archive.zip");
+    await renderer.init(container, ARCHIVE_BUF);
 
     expect(renderer.position).toBe("1");
     await renderer.goToPage(2);
@@ -357,7 +346,7 @@ describe("createImageArchiveRenderer", () => {
 
     const container = makeContainer();
     const renderer = createImageArchiveRenderer();
-    await renderer.init(container, "https://example.com/archive.zip", "3");
+    await renderer.init(container, ARCHIVE_BUF, "3");
 
     expect(renderer.currentPage).toBe(3);
     expect(renderer.position).toBe("3");
@@ -372,7 +361,7 @@ describe("createImageArchiveRenderer", () => {
     const container = makeContainer();
     const renderer = createImageArchiveRenderer();
 
-    await expect(renderer.init(container, "https://example.com/archive.zip")).rejects.toThrow(
+    await expect(renderer.init(container, ARCHIVE_BUF)).rejects.toThrow(
       "No images found in archive",
     );
   });
@@ -386,7 +375,7 @@ describe("createImageArchiveRenderer", () => {
     const container = makeContainer();
     const renderer = createImageArchiveRenderer();
 
-    const initPromise = renderer.init(container, "https://example.com/archive.zip");
+    const initPromise = renderer.init(container, ARCHIVE_BUF);
     renderer.destroy();
 
     resolveUnzip(makeMockEntries({ "image-001.png": new Uint8Array([1]) }));
@@ -414,7 +403,7 @@ describe("createImageArchiveRenderer", () => {
     parent.appendChild(container);
     const renderer = createImageArchiveRenderer();
 
-    const initPromise = renderer.init(container, "https://example.com/archive.zip");
+    const initPromise = renderer.init(container, ARCHIVE_BUF);
     renderer.destroy();
 
     resolveBlob(new Blob([new Uint8Array([1])]));
@@ -432,7 +421,7 @@ describe("createImageArchiveRenderer", () => {
 
     const container = makeContainer();
     const renderer = createImageArchiveRenderer();
-    await renderer.init(container, "https://example.com/archive.zip");
+    await renderer.init(container, ARCHIVE_BUF);
     renderer.destroy();
 
     await expect(renderer.goToPage(1)).rejects.toThrow("goToPage called after renderer was destroyed");
@@ -451,7 +440,7 @@ describe("createImageArchiveRenderer", () => {
 
     const container = makeContainer();
     const renderer = createImageArchiveRenderer();
-    await renderer.init(container, "https://example.com/archive.zip");
+    await renderer.init(container, ARCHIVE_BUF);
 
     const goToPromise = renderer.goToPage(2);
     renderer.destroy();
@@ -477,7 +466,7 @@ describe("createImageArchiveRenderer", () => {
 
     const container = makeContainer();
     const renderer = createImageArchiveRenderer();
-    await renderer.init(container, "https://example.com/archive.zip");
+    await renderer.init(container, ARCHIVE_BUF);
 
     const img = container.querySelector("img") as HTMLImageElement;
 
@@ -503,59 +492,9 @@ describe("createImageArchiveRenderer", () => {
 
     const container = makeContainer();
     const renderer = createImageArchiveRenderer();
-    await renderer.init(container, "https://example.com/archive.zip", "99");
+    await renderer.init(container, ARCHIVE_BUF, "99");
 
     expect(renderer.currentPage).toBe(1);
-  });
-
-  it("uses HTTPRangeReader with the provided URL", async () => {
-    mockEntries({ "image-001.png": new Uint8Array([1]) });
-    const { HTTPRangeReader } = await import("unzipit");
-
-    const container = makeContainer();
-    const renderer = createImageArchiveRenderer();
-    await renderer.init(container, "https://example.com/archive.zip");
-
-    expect(HTTPRangeReader).toHaveBeenCalledWith("https://example.com/archive.zip");
-  });
-
-  it("falls back to full fetch when HTTPRangeReader fails", async () => {
-    const fallbackEntries = makeMockEntries({ "image-001.png": new Uint8Array([1]) });
-    // First call (HTTPRangeReader path) rejects; second call (ArrayBuffer path) resolves
-    mockUnzip
-      .mockRejectedValueOnce(new Error("Range not supported"))
-      .mockResolvedValueOnce(fallbackEntries as unknown as ZipInfo);
-
-    const mockArrayBuffer = new ArrayBuffer(8);
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-      ok: true,
-      arrayBuffer: vi.fn().mockResolvedValue(mockArrayBuffer),
-    }));
-
-    const container = makeContainer();
-    const renderer = createImageArchiveRenderer();
-    await renderer.init(container, "https://example.com/archive.zip");
-
-    expect(renderer.pageCount).toBe(1);
-    expect(container.querySelector("img")).not.toBeNull();
-    expect(fetch).toHaveBeenCalledWith("https://example.com/archive.zip");
-    expect(mockUnzip).toHaveBeenCalledTimes(2);
-    expect(mockUnzip).toHaveBeenLastCalledWith(mockArrayBuffer);
-
-    restoreGlobalStubs();
-  });
-
-  it("throws on non-ok HTTP response in fallback path", async () => {
-    mockUnzip.mockRejectedValueOnce(new Error("Range not supported"));
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 404 }));
-
-    const container = makeContainer();
-    const renderer = createImageArchiveRenderer();
-    await expect(renderer.init(container, "https://example.com/archive.zip")).rejects.toThrow(
-      "Failed to fetch archive: 404",
-    );
-
-    restoreGlobalStubs();
   });
 
   it("prefetches next page after init", async () => {
@@ -567,7 +506,7 @@ describe("createImageArchiveRenderer", () => {
 
     const container = makeContainer();
     const renderer = createImageArchiveRenderer();
-    await renderer.init(container, "https://example.com/archive.zip");
+    await renderer.init(container, ARCHIVE_BUF);
 
     // Page 1 fetched for display, page 2 prefetched
     expect(result.entries["image-001.png"]!.blob).toHaveBeenCalledTimes(1);
@@ -584,7 +523,7 @@ describe("createImageArchiveRenderer", () => {
 
     const container = makeContainer();
     const renderer = createImageArchiveRenderer();
-    await renderer.init(container, "https://example.com/archive.zip");
+    await renderer.init(container, ARCHIVE_BUF);
 
     await renderer.goToPage(2);
 
@@ -600,7 +539,7 @@ describe("createImageArchiveRenderer", () => {
 
     const container = makeContainer();
     const renderer = createImageArchiveRenderer();
-    await renderer.init(container, "https://example.com/archive.zip");
+    await renderer.init(container, ARCHIVE_BUF);
 
     // Go to page 2 (already prefetched), then back to page 1 (already cached)
     await renderer.goToPage(2);
@@ -622,7 +561,7 @@ describe("createImageArchiveRenderer", () => {
 
     const container = makeContainer();
     const renderer = createImageArchiveRenderer(onError);
-    await renderer.init(container, "https://example.com/archive.zip");
+    await renderer.init(container, ARCHIVE_BUF);
 
     await vi.waitFor(() => expect(onError).toHaveBeenCalledWith(prefetchError));
   });
@@ -639,7 +578,7 @@ describe("createImageArchiveRenderer", () => {
     const reportSpy = vi.spyOn(globalThis, "reportError").mockImplementation(() => {});
     const container = makeContainer();
     const renderer = createImageArchiveRenderer();
-    await renderer.init(container, "https://example.com/archive.zip");
+    await renderer.init(container, ARCHIVE_BUF);
 
     await vi.waitFor(() => expect(reportSpy).toHaveBeenCalledWith(
       expect.objectContaining({ message: "Image prefetch failed for page 2" }),
@@ -661,7 +600,7 @@ describe("createImageArchiveRenderer", () => {
     const onError = vi.fn();
     const container = makeContainer();
     const renderer = createImageArchiveRenderer(onError);
-    await renderer.init(container, "https://example.com/archive.zip");
+    await renderer.init(container, ARCHIVE_BUF);
 
     // Wait for prefetch error
     await vi.waitFor(() => expect(onError).toHaveBeenCalledWith(prefetchError));
@@ -847,74 +786,6 @@ describe("createImageArchiveRenderer", () => {
     expect(renderer.isZoomed).toBe(false);
   });
 
-  it("uses CachedRangeReader when storagePath is provided", async () => {
-    mockEntries({ "image-001.png": new Uint8Array([1]) });
-    const { HTTPRangeReader } = await import("unzipit");
-
-    const container = makeContainer();
-    const renderer = createImageArchiveRenderer(undefined, "some/storage/path");
-    await renderer.init(container, "https://example.com/archive.zip");
-
-    // CachedRangeReader wraps HTTPRangeReader, so HTTPRangeReader is still constructed
-    expect(HTTPRangeReader).toHaveBeenCalledWith("https://example.com/archive.zip");
-    // unzip receives a CachedRangeReader (not an HTTPRangeReader mock directly)
-    const readerArg = mockUnzip.mock.calls[0]![0];
-    expect(readerArg).toBeInstanceOf(CachedRangeReader);
-  });
-
-  it("uses regular HTTPRangeReader when storagePath is not provided", async () => {
-    mockEntries({ "image-001.png": new Uint8Array([1]) });
-    vi.mocked(getChunk).mockClear();
-
-    const container = makeContainer();
-    const renderer = createImageArchiveRenderer();
-    await renderer.init(container, "https://example.com/archive.zip");
-
-    expect(getChunk).not.toHaveBeenCalled();
-  });
-
-  it("fallback with storagePath checks getFile cache first", async () => {
-    const cachedBuffer = new ArrayBuffer(8);
-    const fallbackEntries = makeMockEntries({ "image-001.png": new Uint8Array([1]) });
-    mockUnzip
-      .mockRejectedValueOnce(new Error("Range not supported"))
-      .mockResolvedValueOnce(fallbackEntries as unknown as ZipInfo);
-    vi.mocked(getFile).mockResolvedValueOnce(cachedBuffer);
-
-    const container = makeContainer();
-    const renderer = createImageArchiveRenderer(undefined, "some/storage/path");
-    await renderer.init(container, "https://example.com/archive.zip");
-
-    expect(getFile).toHaveBeenCalledWith("some/storage/path");
-    expect(renderer.pageCount).toBe(1);
-    expect(mockUnzip).toHaveBeenLastCalledWith(cachedBuffer);
-  });
-
-  it("fallback with storagePath calls putFile after fetch when not in cache", async () => {
-    const fallbackEntries = makeMockEntries({ "image-001.png": new Uint8Array([1]) });
-    mockUnzip
-      .mockRejectedValueOnce(new Error("Range not supported"))
-      .mockResolvedValueOnce(fallbackEntries as unknown as ZipInfo);
-    vi.mocked(getFile).mockResolvedValueOnce(null);
-
-    const mockArrayBuffer = new ArrayBuffer(8);
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-      ok: true,
-      arrayBuffer: vi.fn().mockResolvedValue(mockArrayBuffer),
-    }));
-
-    const container = makeContainer();
-    const renderer = createImageArchiveRenderer(undefined, "some/storage/path");
-    await renderer.init(container, "https://example.com/archive.zip");
-
-    expect(getFile).toHaveBeenCalledWith("some/storage/path");
-    expect(fetch).toHaveBeenCalledWith("https://example.com/archive.zip");
-    expect(putFile).toHaveBeenCalledWith("some/storage/path", mockArrayBuffer);
-    expect(renderer.pageCount).toBe(1);
-
-    restoreGlobalStubs();
-  });
-
   describe("renderPageInto", () => {
     it("creates an img element in the target container with correct src and alt", async () => {
       mockEntries({
@@ -924,7 +795,7 @@ describe("createImageArchiveRenderer", () => {
 
       const container = makeContainer();
       const renderer = createImageArchiveRenderer();
-      await renderer.init(container, "https://example.com/archive.zip");
+      await renderer.init(container, ARCHIVE_BUF);
 
       const target = makeContainer();
       await renderer.renderPageInto(2, target);
@@ -944,7 +815,7 @@ describe("createImageArchiveRenderer", () => {
 
       const container = makeContainer();
       const renderer = createImageArchiveRenderer();
-      await renderer.init(container, "https://example.com/archive.zip");
+      await renderer.init(container, ARCHIVE_BUF);
 
       // After init: page 1 fetched, page 2 prefetched
       expect(result.entries["image-003.png"]!.blob).not.toHaveBeenCalled();
@@ -964,7 +835,7 @@ describe("createImageArchiveRenderer", () => {
 
       const container = makeContainer();
       const renderer = createImageArchiveRenderer();
-      await renderer.init(container, "https://example.com/archive.zip");
+      await renderer.init(container, ARCHIVE_BUF);
 
       const target = makeContainer();
       await renderer.renderPageInto(0, target);
@@ -993,7 +864,7 @@ describe("createImageArchiveRenderer", () => {
 
       const container = makeContainer();
       const renderer = createImageArchiveRenderer();
-      await renderer.init(container, "https://example.com/archive.zip");
+      await renderer.init(container, ARCHIVE_BUF);
 
       const target = makeContainer();
       const renderPromise = renderer.renderPageInto(2, target);
@@ -1023,7 +894,7 @@ describe("createImageArchiveRenderer", () => {
 
       const container = makeContainer();
       const renderer = createImageArchiveRenderer();
-      await renderer.init(container, "https://example.com/archive.zip");
+      await renderer.init(container, ARCHIVE_BUF);
 
       const target = makeContainer();
       const stale = renderer.renderPageInto(2, target);

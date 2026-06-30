@@ -1,15 +1,15 @@
 // @vitest-environment happy-dom
 //
-// The <HistoryBand> chart-panel component (Unit 3). It wraps the two imperative
-// Observable Plot cores (renderUsageHistoryChart / renderWorkerHistoryChart) as
-// chart islands. These assert the e2e-load-bearing structure preserved from the
-// vanilla renderHistoryBand — section.capacity-history, the HISTORY heading, the
-// two .chart-layout blocks, and the delegated per-core empty-state copy.
+// The <HistoryBand> chart-panel component (Unit 3). It wraps the imperative
+// Observable Plot core (renderWorkerHistoryChart) as a chart island. These
+// assert the e2e-load-bearing structure preserved from the vanilla
+// renderHistoryBand — section.capacity-history, the HISTORY heading, the
+// one .chart-layout block, and the delegated per-core empty-state copy.
 //
-// happy-dom loads no stylesheet, so the cores' theme-var reads resolve to
+// happy-dom loads no stylesheet, so the core's theme-var reads resolve to
 // fallbacks unless mocked. We mock --fg and the DS --chart-1..6 palette on the
-// document root so readThemeVar/readChartPalette return real values (the cores
-// read them off their freshly-created element, which inherits the root vars).
+// document root so readThemeVar/readChartPalette return real values (the core
+// reads them off its freshly-created element, which inherits the root vars).
 import { describe, it, expect, afterEach, beforeEach } from "vitest";
 import { render, cleanup } from "@testing-library/react";
 import { HistoryBand } from "../src/components/HistoryBand.js";
@@ -33,7 +33,7 @@ const multiSample: UsageSample[] = [
   make({ sampledAt: new Date("2026-06-09T10:00:00Z"), activeWorkers: 4, targetWorkers: 4 }),
 ];
 
-// Mock the theme tokens the cores read: --fg plus the DS --chart-1..6 palette.
+// Mock the theme tokens the core reads: --fg plus the DS --chart-1..6 palette.
 beforeEach(() => {
   const root = document.documentElement.style;
   root.setProperty("--fg", "#e8eaed");
@@ -63,21 +63,20 @@ describe("HistoryBand", () => {
     expect(heading!.textContent).toBe("HISTORY");
   });
 
-  it("renders both chart layouts from a multi-sample array", () => {
+  it("renders the worker-history chart layout from a multi-sample array", () => {
     const { container } = render(<HistoryBand samples={multiSample} />);
-    expect(container.querySelectorAll(".chart-layout")).toHaveLength(2);
-    expect(container.querySelectorAll(".chart-scroll-wrapper svg")).toHaveLength(2);
+    expect(container.querySelectorAll(".chart-layout")).toHaveLength(1);
+    expect(container.querySelectorAll(".chart-scroll-wrapper svg")).toHaveLength(1);
   });
 
-  it("delegates empty-state to the cores for an empty array", () => {
+  it("delegates empty-state to the core for an empty array", () => {
     const { container } = render(<HistoryBand samples={[]} />);
     // Heading is still present.
     expect(container.querySelector(".capacity-history-heading")!.textContent).toBe("HISTORY");
     expect(container.querySelectorAll(".chart-layout")).toHaveLength(0);
     const empties = container.querySelectorAll(".empty");
-    expect(empties).toHaveLength(2);
-    expect(empties[0].textContent).toBe("No usage history to chart.");
-    expect(empties[1].textContent).toBe("No worker history to chart.");
+    expect(empties).toHaveLength(1);
+    expect(empties[0].textContent).toBe("No worker history to chart.");
   });
 
   it("draws series strokes using the mocked DS palette (no leftover ad-hoc hexes)", () => {
@@ -85,16 +84,16 @@ describe("HistoryBand", () => {
     // The legend swatches reflect the per-series colors read from the palette.
     const lines = Array.from(container.querySelectorAll(".trend-legend .legend-line")) as HTMLElement[];
     const colors = lines.map((l) => l.style.backgroundColor + l.style.backgroundImage).join(" ");
-    // Amber (--chart-2) is the leading series; teal (--chart-6) the second.
+    // Amber (--chart-2) is the active-workers series; tan (--chart-5) the dashed target.
     expect(colors).toMatch(/201, 138, 60|rgb\(201, 138, 60\)|#c98a3c/i);
-    expect(colors).toMatch(/95, 138, 138|rgb\(95, 138, 138\)|#5f8a8a/i);
+    expect(colors).toMatch(/176, 138, 79|rgb\(176, 138, 79\)|#b08a4f/i);
   });
 
   it("tears down the prior render on unmount (island cleanup)", () => {
     const { container, unmount } = render(<HistoryBand samples={multiSample} />);
-    expect(container.querySelectorAll(".chart-layout")).toHaveLength(2);
+    expect(container.querySelectorAll(".chart-layout")).toHaveLength(1);
     unmount();
-    // After unmount the islands' hosts are removed with the component subtree.
+    // After unmount the island's host is removed with the component subtree.
     expect(container.querySelectorAll(".chart-layout")).toHaveLength(0);
   });
 });
