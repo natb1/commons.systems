@@ -68,74 +68,16 @@ body {
   --main-max-width: var(--max-width-wide);
 }
 
-main {
-  min-width: 0;
-  margin-inline: 0;
-}
-
 /* clamp() keeps the 15-char monospace wordmark from overflowing at narrow viewports (~375px). */
 .page > header h1 {
   font-size: var(--text-display);
   margin-block: 0 var(--space-1);
 }
 
-.page > header .tagline {
+.page > header > p {
   color: var(--muted);
   margin-block: 0 var(--space-2);
   font-size: clamp(0.9rem, 2.5vw, 1.05rem);
-}
-
-/* Full-width section between the sticky header and .content-grid so the sticky sidebar begins after the hero. */
-.landing-hero {
-  margin-block: var(--space-8);
-}
-body[data-route="about"] .landing-hero,
-body[data-route="other"] .landing-hero {
-  display: none;
-}
-
-.landing-hero-band {
-  background: var(--accent);
-  color: var(--bg);
-  padding: var(--space-5) var(--space-6);
-  margin-block-end: var(--space-6);
-  text-align: center;
-}
-.landing-hero-band-headline {
-  margin: 0;
-  font-weight: var(--weight-bold);
-  font-size: clamp(1.1rem, 3vw, 1.5rem);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-heading);
-}
-.landing-hero-band-subline {
-  margin: var(--space-1) 0 0;
-  font-size: clamp(0.85rem, 2.2vw, 1rem);
-  opacity: 0.9;
-}
-.landing-hero-band-cta {
-  margin: var(--space-1) 0 0;
-  font-size: clamp(0.85rem, 2.2vw, 1rem);
-}
-.landing-hero-band-cta a {
-  color: inherit;
-  text-decoration: underline;
-}
-.landing-hero-band-cta a:hover {
-  color: var(--bg);
-  opacity: 0.75;
-}
-.landing-hero-band-cta a:focus-visible {
-  outline: 2px solid var(--bg);
-  outline-offset: 2px;
-}
-.landing-hero-band-cta span {
-  opacity: 0.6;
-}
-.landing-hero-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-4);
 }
 
 .project-card {
@@ -162,55 +104,11 @@ body[data-route="other"] .landing-hero {
   object-position: top left;
   border-block-end: var(--border-width) solid var(--border);
 }
-.project-name {
+.project-card .hero-band-card-name {
   padding: var(--space-3) var(--space-4) var(--space-1);
-  font-weight: var(--weight-bold);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-heading);
 }
-.project-problem {
-  margin: 0;
+.project-card .hero-band-card-problem {
   padding: 0 var(--space-4) var(--space-4);
-  color: var(--muted);
-  font-size: 0.9rem;
-  line-height: 1.4;
-}
-
-.project-showcase-overflow {
-  margin-block: var(--space-4) 0;
-  background: none;
-  border: 0;
-  padding: 0;
-  border-radius: 0;
-  overflow: visible;
-}
-.project-showcase-overflow summary {
-  cursor: pointer;
-  padding: var(--space-2) var(--space-1);
-  color: var(--muted);
-  font-weight: var(--weight-bold);
-  letter-spacing: var(--tracking-heading);
-  transition: color var(--duration-fast) var(--ease), outline-color var(--duration-fast) var(--ease);
-  margin-inline: 0;
-  margin-block: 0;
-}
-.project-showcase-overflow summary:hover {
-  color: var(--accent);
-}
-.project-showcase-overflow summary:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
-}
-.project-showcase-overflow-cards {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-4);
-  margin-block-start: var(--space-4);
-}
-
-@media (max-width: 768px) {
-  .landing-hero-grid { grid-template-columns: 1fr; }
-  .project-showcase-overflow-cards { grid-template-columns: 1fr; }
 }
 
 .profile-card {
