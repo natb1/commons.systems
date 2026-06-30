@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+# budget-config-load — standalone, repo-free per-user budget-etl config resolver.
+#
+# Resolves the per-user config file
+#   ${XDG_CONFIG_HOME:-$HOME/.config}/commons-systems/budget-etl.json
+# and validates it against the budget-etl schema. Unlike dispatch-config-load,
+# this resolver is self-contained: it sources no lib.sh, does no git lookup, and
+# reads no project-root dispatch.config/. It serves exactly one config type, so
+# it takes NO <type> argument. This lets the merged /budget skill resolve its
+# config for external users who have no repo checkout and no dispatch harness.
+#
+# stdout protocol:
+#   - "no-config"            the config file is absent (first-run signal)
+#   - <normalized JSON>      the config is present and valid (jq-normalized)
+# Errors print to stderr as "error: <file>: <message>".
+#
+# Exit codes:
+#   0  valid config printed, OR config absent ("no-config")
+#   1  config present but invalid (bad JSON, or schema violation)
+#   2  usage error (unexpected argument)
+#
+# Schema (budget-etl): a top-level JSON object with four required keys —
+#   downloads, statements, snapshotDir, current — each a non-empty string that
+#   is an absolute path (starts with "/") with no ".." path component.
+set -euo pipefail
+
+if [[ $# -gt 0 ]]; then
+  echo "usage: budget-config-load (no arguments)" >&2
+  exit 2
+fi
+
+CONFIG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/commons-systems/budget-etl.json"
+
+# Absent config file is the first-run signal, not an error.
+if [[ ! -e "$CONFIG_FILE" ]]; then
+  echo "no-config"
+  exit 0
+fi
+
+# Validate JSON syntax first. jq exits non-zero on invalid JSON; 2>&1 folds its
+# error message into $PARSED so it can be surfaced without a temp file.
+if ! PARSED=$(jq '.' "$CONFIG_FILE" 2>&1); then
+  echo "error: $CONFIG_FILE: invalid JSON: $PARSED" >&2
+  exit 1
+fi
+
+# An empty or whitespace-only file produces zero JSON values: jq '.' prints
+# nothing and exits 0, leaving $PARSED empty. Treat that as malformed input.
+if [[ -z "$PARSED" ]]; then
+  echo "error: $CONFIG_FILE: file is empty or contains no JSON value" >&2
+  exit 1
+fi
+
+# Schema validation (budget-etl). Ported verbatim from the budget-etl) case in
+# dispatch-config-load. top-level value must be an object; four required
+# non-empty string path fields. Paths may contain spaces. Each must be an
+# absolute path with no ".." component — these values become filesystem
+# destinations the budget-etl skill writes to and reads bank statements from, so
+# a relative or parent-traversing path could redirect those writes outside the
+# intended Drive mount.
+ERRORS=$(jq -r '
+  if type != "object" then
+    "top-level value must be a JSON object, got \(type)"
+  else
+    . as $cfg |
+    (["downloads","statements","snapshotDir","current"] |
+     .[] |
+     . as $field |
+     if ($cfg | has($field)) | not then
+       "missing required field \($field)"
+     elif ($cfg[$field] | type) != "string" then
+       "\($field) must be a string, got \($cfg[$field] | type)"
+     elif ($cfg[$field] | length) == 0 then
+       "\($field) must be a non-empty string"
+     elif ($cfg[$field] | startswith("/") | not) then
+       "\($field) must be an absolute path (start with /), got \($cfg[$field])"
+     elif ($cfg[$field] | test("(^|/)\\.\\.(/|$)")) then
+       "\($field) must not contain a \"..\" path component, got \($cfg[$field])"
+     else
+       empty
+     end)
+  end
+' "$CONFIG_FILE")
+
+if [[ -n "$ERRORS" ]]; then
+  while IFS= read -r line; do
+    echo "error: $CONFIG_FILE: $line" >&2
+  done <<< "$ERRORS"
+  exit 1
+fi
+
+# Print normalized JSON.
+printf '%s\n' "$PARSED"
