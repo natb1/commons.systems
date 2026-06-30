@@ -28,6 +28,8 @@ export { PageShell } from "./templates/PageShell.tsx";
 export type { PageShellProps } from "./templates/PageShell.tsx";
 export { Hero } from "./templates/Hero.tsx";
 export type { HeroProps, HeroCard, HeroCta } from "./templates/Hero.tsx";
+export { ContextPanel, ContextPanelToggle } from "./templates/ContextPanel.tsx";
+export type { ContextPanelProps, ContextPanelToggleProps } from "./templates/ContextPanel.tsx";
 export { Footer } from "./templates/Footer.tsx";
 export { FOOTER_HTML } from "./templates/footer.ts";
 export { OfficeHours } from "./templates/OfficeHours.tsx";
