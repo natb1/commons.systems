@@ -147,6 +147,34 @@
     '';
   };
 
+  # NixOS: run the mux server as a managed systemd user service.
+  #
+  # Otherwise the mux server is spawned lazily by `wezterm connect` as a detached
+  # process that never restarts. After `home-manager switch` upgrades wezterm, that
+  # stale process keeps the old binary, and a freshly-upgraded client fails the mux
+  # version handshake ("unexpected response ... UnitResponse").
+  #
+  # As a managed unit its ExecStart store path tracks the active generation, so
+  # home-manager's sd-switch (startServices defaults to true) restarts it onto the
+  # new binary on every switch — keeping the running mux in lockstep with the
+  # installed version. Cost: the restart drops live remote panes, which is inherent
+  # to upgrading the binary.
+  #
+  # Note: on a headless server this user service only runs while the user has a
+  # session. To keep it up across logins, enable lingering once on the box:
+  #   loginctl enable-linger <user>
+  systemd.user.services.wezterm-mux-server = lib.mkIf pkgs.stdenv.isLinux {
+    Unit = {
+      Description = "WezTerm multiplexer server";
+      After = [ "default.target" ];
+    };
+    Service = {
+      ExecStart = "${config.programs.wezterm.package}/bin/wezterm-mux-server --daemonize=false";
+      Restart = "on-failure";
+    };
+    Install.WantedBy = [ "default.target" ];
+  };
+
   # WSL: Copy config to Windows WezTerm location
   # This activation script runs after Home Manager generates config files.
   # DAG ordering: Must run after "linkGeneration" to ensure the source file exists
