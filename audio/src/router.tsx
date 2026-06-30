@@ -43,5 +43,31 @@ export function useRouter(): Router {
     trackPageView(to);
   }, []);
 
+  // Intercept clicks on in-app nav links (literal same-origin href starting with
+  // "/"). The home link (https://commons.systems/) and "#" auth links are
+  // excluded by the href test. Respect modified / non-primary clicks and
+  // download/target anchors so open-in-new-tab and downloads still work.
+  // Replaces App's former header onClick; navigate() owns pushState + setPath +
+  // trackPageView. No knownPaths allowlist — App maps unknown paths to "/".
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (e.button !== 0) return;
+      const anchor = (e.target as Element).closest("a");
+      if (!anchor) return;
+      if (anchor.hasAttribute("download")) return;
+      if (anchor.getAttribute("target")) return;
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const href = anchor.getAttribute("href");
+      if (!href || !href.startsWith("/") || href.startsWith("//")) return;
+      const url = new URL(href, location.origin);
+      if (url.origin !== location.origin) return;
+      e.preventDefault();
+      navigate(href);
+    };
+    const controller = new AbortController();
+    document.addEventListener("click", onClick, { signal: controller.signal });
+    return () => controller.abort();
+  }, [navigate]);
+
   return { path, navigate };
 }
