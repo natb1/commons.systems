@@ -55,7 +55,8 @@ func main() {
 	}
 	flag.CommandLine.Parse(args) //nolint:errcheck // flag.CommandLine uses ExitOnError, matching the prior flag.Parse() behavior
 
-	if *reportPath != "" && !*allowUncategorized {
+	effectiveAllowUncategorized := *allowUncategorized || forced == "report"
+	if *reportPath != "" && !effectiveAllowUncategorized {
 		fmt.Fprintln(os.Stderr, "Error: --report requires --allow-uncategorized")
 		os.Exit(1)
 	}

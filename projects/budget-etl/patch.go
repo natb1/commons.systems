@@ -78,9 +78,16 @@ func runPatch(specPath, inputPath, outputPath, keychainAccount string) error {
 //     budget.TransactionDocID-formatted doc ID
 //   - any remove.by_predicate item with all zero fields (would match every rule)
 func applySpec(out export.Output, spec Spec) (export.Output, error) {
+	removeByID := make(map[string]bool, len(spec.Remove.ByID))
+	for _, id := range spec.Remove.ByID {
+		removeByID[id] = true
+	}
+
 	existingIDs := make(map[string]bool, len(out.Rules))
 	for _, r := range out.Rules {
-		existingIDs[r.ID] = true
+		if !removeByID[r.ID] {
+			existingIDs[r.ID] = true
+		}
 	}
 
 	addIDs := make(map[string]bool, len(spec.Add))
@@ -104,11 +111,6 @@ func applySpec(out export.Output, spec Spec) (export.Output, error) {
 		if predicateIsEmpty(pred) {
 			return export.Output{}, fmt.Errorf("remove.by_predicate[%d]: all fields are zero, predicate would match every rule", i)
 		}
-	}
-
-	removeByID := make(map[string]bool, len(spec.Remove.ByID))
-	for _, id := range spec.Remove.ByID {
-		removeByID[id] = true
 	}
 
 	kept := make([]export.Rule, 0, len(out.Rules))
