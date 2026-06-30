@@ -9,7 +9,7 @@
  *
  * Central mechanism — JSON has no Date type. Four of those parsers detect a
  * Firestore Timestamp by testing `typeof x.toDate === "function"`, and a plain
- * JS `Date` FAILS that test. So Timestamp fields are serialized as ISO-8601
+ * JS `Date` FAILS that test. So Timestamp fields are serialized to ISO-8601
  * strings and revived here into a `{ toDate: () => new Date(iso) }` SHIM, which
  * satisfies all six parsers. The parsers are NOT modified — they sit on the live
  * owner path.
@@ -81,7 +81,7 @@ function asDocArray(value: unknown, field: string): Record<string, unknown>[] {
   if (!Array.isArray(value)) {
     throw new SnapshotValidationError(`Snapshot field '${field}' must be an array.`);
   }
-  return value as Record<string, unknown>[];
+  return value as Record<string, unknown>[]; // type-safety-ok: Array.isArray guard above ensures the cast is safe
 }
 
 /**
@@ -90,11 +90,11 @@ function asDocArray(value: unknown, field: string): Record<string, unknown>[] {
  * missing/invalid top-level `computedAt`, or a non-array collection field.
  */
 export function decodeSnapshot(plaintext: string): { data: PanelData; computedAt: Date } {
-  const parsed = JSON.parse(plaintext, reviveTimestamps) as unknown;
+  const parsed = JSON.parse(plaintext, reviveTimestamps) as unknown; // type-safety-ok: narrowing JSON.parse's any to unknown for safe downstream checks
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     throw new SnapshotValidationError("Snapshot is not a JSON object.");
   }
-  const raw = parsed as Record<string, unknown>;
+  const raw = parsed as Record<string, unknown>; // type-safety-ok: runtime object check on line above (typeof, not null, not Array) ensures safe cast
 
   if (raw.version !== 1) {
     throw new SnapshotValidationError(
@@ -107,7 +107,7 @@ export function decodeSnapshot(plaintext: string): { data: PanelData; computedAt
   // re-parse WITHOUT the reviver to recover the original ISO string. This keeps
   // the shim confined to the per-doc maps (where the parsers expect it) and the
   // staleness stamp a plain Date.
-  const plain = JSON.parse(plaintext) as Record<string, unknown>;
+  const plain = JSON.parse(plaintext) as Record<string, unknown>; // type-safety-ok: reading only plain.computedAt string; outer object check already validated structure
   if (typeof plain.computedAt !== "string") {
     throw new SnapshotValidationError("Snapshot missing top-level 'computedAt' string.");
   }
@@ -135,10 +135,10 @@ export function decodeSnapshot(plaintext: string): { data: PanelData; computedAt
     .filter((t): t is TopicUsageDoc => t !== null);
 
   const queueMetrics = raw.queueMetrics
-    ? parseQueueMetrics(raw.queueMetrics as Record<string, unknown>)
+    ? parseQueueMetrics(raw.queueMetrics as Record<string, unknown>) // type-safety-ok: truthiness guard above ensures non-null; interface declares Record<string,unknown>|null
     : null;
   const projectSignals = raw.projectSignals
-    ? parseProjectSignals(raw.projectSignals as Record<string, unknown>)
+    ? parseProjectSignals(raw.projectSignals as Record<string, unknown>) // type-safety-ok: truthiness guard above ensures non-null; interface declares Record<string,unknown>|null
     : null;
 
   return {

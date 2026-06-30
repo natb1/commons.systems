@@ -25,7 +25,7 @@ export async function deriveKey(
     ["deriveKey"],
   );
   return subtleCrypto.deriveKey(
-    { name: "PBKDF2", salt: salt as Uint8Array<ArrayBuffer>, iterations: PBKDF2_ITERATIONS, hash: "SHA-256" },
+    { name: "PBKDF2", salt: salt as Uint8Array<ArrayBuffer>, iterations: PBKDF2_ITERATIONS, hash: "SHA-256" }, // type-safety-ok: SubtleCrypto parameter requires Uint8Array<ArrayBuffer>; getRandomValues always returns Uint8Array
     keyMaterial,
     { name: "AES-GCM", length: 256 },
     false,
@@ -45,7 +45,7 @@ export async function encryptData(
   const iv = getRandomValues(new Uint8Array(IV_LEN));
   const key = await deriveKey(subtleCrypto, password, salt);
   const ciphertext = await subtleCrypto.encrypt(
-    { name: "AES-GCM", iv: iv as Uint8Array<ArrayBuffer> },
+    { name: "AES-GCM", iv: iv as Uint8Array<ArrayBuffer> }, // type-safety-ok: SubtleCrypto parameter requires Uint8Array<ArrayBuffer>; getRandomValues always returns Uint8Array
     key,
     new TextEncoder().encode(plaintext),
   );

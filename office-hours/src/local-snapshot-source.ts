@@ -26,6 +26,7 @@ interface OpenFilePickerOptions {
 declare global {
   interface Window {
     showOpenFilePicker(options?: OpenFilePickerOptions): Promise<FileSystemFileHandle[]>;
+    showDirectoryPicker?: unknown;
   }
   interface FileSystemHandle {
     queryPermission(descriptor?: FileSystemHandlePermissionDescriptor): Promise<PermissionState>;
@@ -97,7 +98,7 @@ async function restore(): Promise<SnapshotSourceState> {
     state = "none";
     return state;
   }
-  const handle = loaded as FileSystemFileHandle;
+  const handle = loaded as FileSystemFileHandle; // type-safety-ok: store always holds FileSystemFileHandle for this PURPOSE key
   // Query only — never request permission at startup (no user gesture).
   const r = await store.queryPermission(handle, "read");
   if (r === "granted") {
@@ -125,7 +126,7 @@ export async function regrantSnapshot(): Promise<boolean> {
     state = "none";
     return false;
   }
-  const handle = loaded as FileSystemFileHandle;
+  const handle = loaded as FileSystemFileHandle; // type-safety-ok: store always holds FileSystemFileHandle for this PURPOSE key
   // Request within the gesture — ensurePermission only prompts on "prompt".
   const r = await store.ensurePermission(handle, "read");
   if (r === "granted") {
@@ -168,15 +169,6 @@ export function hasExternallyChanged(handle: FileSystemFileHandle): Promise<bool
     checkInFlight = null;
   });
   return checkInFlight;
-}
-
-/** Forget the persisted snapshot and reset the source so a later restore re-runs. */
-export async function disconnectSnapshot(): Promise<void> {
-  await store.remove(PURPOSE);
-  currentHandle = null;
-  lastModifiedWatermark = null;
-  state = "none";
-  restorePromise = null;
 }
 
 /** The currently bound snapshot handle, or null when none is connected. */

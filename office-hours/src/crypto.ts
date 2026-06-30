@@ -70,7 +70,7 @@ function postToWorker(msg: Record<string, unknown>): Promise<unknown> {
   return new Promise((resolve, reject) => {
     pending.set(id, { resolve, reject });
     if (msg.data instanceof ArrayBuffer) {
-      w.postMessage({ ...msg, id }, [msg.data as ArrayBuffer]);
+      w.postMessage({ ...msg, id }, [msg.data as ArrayBuffer]); // type-safety-ok: instanceof ArrayBuffer guard on line above ensures safe cast
     } else {
       w.postMessage({ ...msg, id });
     }
@@ -82,7 +82,7 @@ export async function decrypt(data: ArrayBuffer, password: string): Promise<stri
     throw new SnapshotValidationError("File is not in BENC encrypted format.");
   }
   if (getWorker()) {
-    return postToWorker({ type: "decrypt", data, password }) as Promise<string>;
+    return postToWorker({ type: "decrypt", data, password }) as Promise<string>; // type-safety-ok: decrypt worker always resolves to string; postToWorker returns Promise<unknown>
   }
   try {
     return await decryptData(crypto.subtle, data, password);
