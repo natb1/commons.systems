@@ -51,10 +51,23 @@ Repo-specific gotchas for future re-syncs. One bullet per gotcha.
   grades carry.
 
 ## Verification env (WSL/Nix box)
-- Chromium: repo playwright is 1.60.0 → wants chromium rev 1223, already in the
-  `~/.cache/ms-playwright` cache. No download needed. `DS_CHROMIUM_PATH` is the
-  fallback if the cache ever misses.
-- npm cache writes (`.ds-sync` installs) need `dangerouslyDisableSandbox: true`.
+- **This is NixOS — the cached playwright chromium CANNOT run.** The
+  `~/.cache/ms-playwright/chromium-*` binaries are generic-linux dynamically
+  linked executables; launching one fails with *"NixOS cannot run dynamically
+  linked executables intended for generic linux environments"* (exit 127), which
+  the driver surfaces as `[RENDER_SKIPPED] browserType.launch: Target page,
+  context or browser has been closed`. **`DS_CHROMIUM_PATH` is REQUIRED, not a
+  cache-miss fallback.** Point it at the nix-patched chromium:
+  `export DS_CHROMIUM_PATH="$(ls /nix/store/*-chromium-*/bin/chromium | head -1)"`
+  (was chromium-131 on 2026-06-28; playwright 1.60 drives it fine via
+  `executablePath`). Set it before every `resync.mjs` / `compare.mjs` run.
+- **Pin `.ds-sync` playwright to the repo's version (1.60.0).** A bare
+  `npm i playwright` pulls latest, which wants chromium rev **1228** (not cached
+  and un-runnable anyway); `npm i playwright@1.60.0` keeps it matching the repo.
+  The `.ds-sync/node_modules` is transient (gitignored) — reinstall esbuild +
+  ts-morph + @types/react + playwright@1.60.0 on a fresh clone.
+- npm cache writes (`.ds-sync` installs) AND the driver/compare runs (esbuild +
+  chromium launch) need `dangerouslyDisableSandbox: true`.
 
 ## Providers / decorators
 - `.storybook/preview.ts` has **no decorators** — only imports `styles.css` and
@@ -72,11 +85,17 @@ Repo-specific gotchas for future re-syncs. One bullet per gotcha.
 - **Fonts depend on storybook `staticDirs`**: the woff2 are under
   `.storybook/public/fonts/`. If that path moves, `cfg.extraFonts` breaks.
   `[FONT_MISSING]` for IBM Plex (not the Cascadia/Source-Code fallbacks) = real.
-- **All 30 stories graded `match` from images on first sync** (8 components × 30
-  stories, no `close`, none skipped). No story caps hit (≤6 stories each). No
-  owned previews — all 8 use the generated story-module previews, so an upstream
+- **9 components, 31 stories, all graded `match`** — the original 8 (30 stories)
+  plus the **`Landing` template** (`Templates/Landing`, 1 story `Default`), added
+  2026-06-28. No `close`, none skipped. No story caps hit (≤6 stories each). No
+  owned previews — all 9 use the generated story-module previews, so an upstream
   story edit re-grades automatically on the next driver run.
-- **Toolchain assumed**: node 22.22.3, playwright 1.60 → chromium 1223 (cached).
-  Storybook 10, React 18.
+- **`Landing` is a full-page template** (`layout: fullscreen`): header+nav, amber
+  hero, three app cards, two-column main + sticky context panel, footer sidebar.
+  It did NOT trip `[GRID_OVERFLOW]` (renders within its cell) — no `cardMode`
+  override needed. If a future edit widens it, expect `wide` → `cardMode:column`.
+- **Toolchain assumed**: node 22.22.3, playwright 1.60 → chromium driven via
+  `DS_CHROMIUM_PATH` (nix chromium — the cached ms-playwright chromium is
+  un-runnable on this NixOS box; see Verification env). Storybook 10, React 18.
 - **No remote/CDN assets** in any story — captures are fully offline; no
   `[ASSETS_BLOCKED]` exposure.
