@@ -3,7 +3,7 @@ import {
   usageSamplesEqual,
   remindersEqual,
   issueSamplesEqual,
-  auditAggregatesEqual,
+  topicUsageEqual,
   queueMetricsEqual,
   projectSignalsEqual,
   mergePanelData,
@@ -12,7 +12,7 @@ import {
 import type { UsageSample } from "../src/usage-samples.js";
 import type { Reminder } from "../src/reminders.js";
 import type { IssueSample } from "../src/issue-samples.js";
-import type { AuditAggregate } from "../src/audit-aggregates.js";
+import type { TopicUsageDoc } from "../src/topic-usage.js";
 import type { QueueMetricsSnapshot, ParkedIssue } from "../src/queue-metrics.js";
 import type { ProjectSignalsSnapshot } from "../src/project-signals.js";
 
@@ -60,14 +60,18 @@ function makeIssueSample(overrides: Partial<IssueSample> = {}): IssueSample {
   };
 }
 
-function makeAuditAggregate(overrides: Partial<AuditAggregate> = {}): AuditAggregate {
+// A bucket carrying a given priceProxyUsd (the only charted field). The other
+// fields are filled with arbitrary stable values so topicUsageEqual can be
+// shown to ignore them.
+function makeBucket(priceProxyUsd: number): TopicUsageDoc["byTopic"][string] {
+  return { priceProxyUsd, input: 1000, cacheRead: 500, cacheCreation: 200, output: 300 };
+}
+
+function makeTopicUsageDoc(overrides: Partial<TopicUsageDoc> = {}): TopicUsageDoc {
   return {
-    computedAt: new Date(BASE_MS),
-    windowDays: 30,
-    groupId: "grp-a",
-    phaseSpend: { plan: 1.5, review: 2.0 },
-    cacheRead: 100,
-    cacheCreation: 50,
+    date: "2026-06-20",
+    byTopic: { dispatch: makeBucket(1.5), security: makeBucket(2.0) },
+    byType: { bug: makeBucket(0.5), enhancement: makeBucket(1.0) },
     ...overrides,
   };
 }
@@ -272,76 +276,65 @@ describe("issueSamplesEqual", () => {
 });
 
 // ---------------------------------------------------------------------------
-// auditAggregatesEqual
+// topicUsageEqual
 // ---------------------------------------------------------------------------
 
-describe("auditAggregatesEqual", () => {
+describe("topicUsageEqual", () => {
   it("returns true for identical content with different references", () => {
-    expect(auditAggregatesEqual([makeAuditAggregate()], [makeAuditAggregate()])).toBe(true);
+    expect(topicUsageEqual([makeTopicUsageDoc()], [makeTopicUsageDoc()])).toBe(true);
   });
 
-  it("returns false when windowDays differs", () => {
+  it("returns false when date differs", () => {
     expect(
-      auditAggregatesEqual([makeAuditAggregate()], [makeAuditAggregate({ windowDays: 7 })]),
+      topicUsageEqual([makeTopicUsageDoc()], [makeTopicUsageDoc({ date: "2026-06-21" })]),
     ).toBe(false);
   });
 
-  it("returns false when groupId differs", () => {
+  it("returns false when a byTopic priceProxyUsd changes", () => {
     expect(
-      auditAggregatesEqual([makeAuditAggregate()], [makeAuditAggregate({ groupId: "grp-b" })]),
-    ).toBe(false);
-  });
-
-  it("returns false when cacheRead differs", () => {
-    expect(
-      auditAggregatesEqual([makeAuditAggregate()], [makeAuditAggregate({ cacheRead: 999 })]),
-    ).toBe(false);
-  });
-
-  it("returns false when cacheCreation differs", () => {
-    expect(
-      auditAggregatesEqual([makeAuditAggregate()], [makeAuditAggregate({ cacheCreation: 999 })]),
-    ).toBe(false);
-  });
-
-  it("returns false when computedAt differs by 1ms", () => {
-    expect(
-      auditAggregatesEqual(
-        [makeAuditAggregate({ computedAt: new Date(BASE_MS) })],
-        [makeAuditAggregate({ computedAt: new Date(BASE_MS + 1) })],
+      topicUsageEqual(
+        [makeTopicUsageDoc({ byTopic: { dispatch: makeBucket(1.5), security: makeBucket(2.0) } })],
+        [makeTopicUsageDoc({ byTopic: { dispatch: makeBucket(9.9), security: makeBucket(2.0) } })],
       ),
     ).toBe(false);
   });
 
-  it("returns false when a phaseSpend value changes", () => {
+  it("returns false when a byType priceProxyUsd changes", () => {
     expect(
-      auditAggregatesEqual(
-        [makeAuditAggregate({ phaseSpend: { plan: 1.5, review: 2.0 } })],
-        [makeAuditAggregate({ phaseSpend: { plan: 9.9, review: 2.0 } })],
+      topicUsageEqual(
+        [makeTopicUsageDoc({ byType: { bug: makeBucket(0.5), enhancement: makeBucket(1.0) } })],
+        [makeTopicUsageDoc({ byType: { bug: makeBucket(0.5), enhancement: makeBucket(9.9) } })],
       ),
     ).toBe(false);
   });
 
-  it("returns false when a phaseSpend key is added", () => {
+  it("returns false when a byTopic key is added", () => {
     expect(
-      auditAggregatesEqual(
-        [makeAuditAggregate({ phaseSpend: { plan: 1.5, review: 2.0 } })],
-        [makeAuditAggregate({ phaseSpend: { plan: 1.5, review: 2.0, qa: 0.5 } })],
+      topicUsageEqual(
+        [makeTopicUsageDoc({ byTopic: { dispatch: makeBucket(1.5) } })],
+        [makeTopicUsageDoc({ byTopic: { dispatch: makeBucket(1.5), security: makeBucket(2.0) } })],
       ),
     ).toBe(false);
   });
 
-  it("returns false when a phaseSpend key is removed", () => {
+  it("returns false when a byTopic key is removed", () => {
     expect(
-      auditAggregatesEqual(
-        [makeAuditAggregate({ phaseSpend: { plan: 1.5, review: 2.0 } })],
-        [makeAuditAggregate({ phaseSpend: { plan: 1.5 } })],
+      topicUsageEqual(
+        [makeTopicUsageDoc({ byTopic: { dispatch: makeBucket(1.5), security: makeBucket(2.0) } })],
+        [makeTopicUsageDoc({ byTopic: { dispatch: makeBucket(1.5) } })],
       ),
     ).toBe(false);
+  });
+
+  it("returns true when only an uncharted bucket field changes", () => {
+    // priceProxyUsd is the only charted field; input/output/cache* are ignored.
+    const a = [makeTopicUsageDoc({ byTopic: { dispatch: { priceProxyUsd: 1.5, input: 100, cacheRead: 1, cacheCreation: 1, output: 1 } } })];
+    const b = [makeTopicUsageDoc({ byTopic: { dispatch: { priceProxyUsd: 1.5, input: 999, cacheRead: 9, cacheCreation: 9, output: 9 } } })];
+    expect(topicUsageEqual(a, b)).toBe(true);
   });
 
   it("returns false when array lengths differ", () => {
-    expect(auditAggregatesEqual([makeAuditAggregate()], [])).toBe(false);
+    expect(topicUsageEqual([makeTopicUsageDoc()], [])).toBe(false);
   });
 });
 
@@ -558,7 +551,7 @@ function makePanelData(overrides: Partial<PanelData> = {}): PanelData {
     reminders: [makeReminder()],
     queueMetrics: makeQueueMetrics(),
     issueSamples: [makeIssueSample()],
-    auditAggregates: [makeAuditAggregate()],
+    topicUsage: [makeTopicUsageDoc()],
     projectSignals: makeProjectSignals(),
     ...overrides,
   };
@@ -585,7 +578,7 @@ describe("mergePanelData", () => {
     expect(merged.reminders).toBe(prev.reminders);
     expect(merged.queueMetrics).toBe(prev.queueMetrics);
     expect(merged.issueSamples).toBe(prev.issueSamples);
-    expect(merged.auditAggregates).toBe(prev.auditAggregates);
+    expect(merged.topicUsage).toBe(prev.topicUsage);
     expect(merged.projectSignals).toBe(prev.projectSignals);
   });
 
@@ -601,7 +594,7 @@ describe("mergePanelData", () => {
     expect(merged.samples).toBe(prev.samples);
     expect(merged.reminders).toBe(prev.reminders);
     expect(merged.issueSamples).toBe(prev.issueSamples);
-    expect(merged.auditAggregates).toBe(prev.auditAggregates);
+    expect(merged.topicUsage).toBe(prev.topicUsage);
     expect(merged.projectSignals).toBe(prev.projectSignals);
   });
 
@@ -618,6 +611,6 @@ describe("mergePanelData", () => {
     expect(merged.reminders).toBe(prev.reminders);
     expect(merged.queueMetrics).toBe(prev.queueMetrics);
     expect(merged.issueSamples).toBe(prev.issueSamples);
-    expect(merged.auditAggregates).toBe(prev.auditAggregates);
+    expect(merged.topicUsage).toBe(prev.topicUsage);
   });
 });

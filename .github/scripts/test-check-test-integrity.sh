@@ -446,6 +446,646 @@ assert_exit 0 "(f) non-test change: exit 0"
 assert_stderr_empty "(f) non-test change: no output"
 
 # ---------------------------------------------------------------------------
+# Case (g): Canonical #2633 import-based co-deletion → exit 0, silent.
+#
+# cache.ts exports createRenderer (survives) and CachedRangeReader (deleted on
+# feature). The test imports BOTH on ONE import line and tests each. Feature:
+# delete CachedRangeReader from cache.ts, remove its test, and drop it from the
+# test's import line (keep createRenderer + its test). The OLD-minus-NEW import
+# set difference nets out the still-imported createRenderer, leaving
+# removed-imports = {CachedRangeReader}; that symbol is ABSENT from post-PR
+# source ⇒ the file's removed declaration is exempt ⇒ Signal 2 stays clean.
+# ---------------------------------------------------------------------------
+echo "--- case (g): import co-deletion happy path → exit 0 ---"
+REPO=$(make_temp_repo)
+
+cat > "$REPO/cache.ts" <<'EOF'
+export const createRenderer = () => 1;
+export const CachedRangeReader = () => 2;
+EOF
+cat > "$REPO/cache.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+import { createRenderer, CachedRangeReader } from './cache';
+it('createRenderer works', () => { expect(createRenderer()).toBe(1); });
+it('CachedRangeReader works', () => { expect(CachedRangeReader()).toBe(2); });
+EOF
+git -C "$REPO" add cache.ts cache.test.ts
+git -C "$REPO" commit -q -m "add cache + tests"
+git -C "$REPO" update-ref refs/remotes/origin/main HEAD
+
+git -C "$REPO" checkout -q -b feature2
+
+cat > "$REPO/cache.ts" <<'EOF'
+export const createRenderer = () => 1;
+EOF
+cat > "$REPO/cache.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+import { createRenderer } from './cache';
+it('createRenderer works', () => { expect(createRenderer()).toBe(1); });
+EOF
+git -C "$REPO" add cache.ts cache.test.ts
+git -C "$REPO" commit -q -m "remove CachedRangeReader + its test"
+
+run_check "$REPO"
+assert_exit 0 "(g) import co-deletion happy path: exit 0"
+assert_stderr_empty "(g) import co-deletion happy path: no output"
+
+# ---------------------------------------------------------------------------
+# Case (h): Weakening a still-existing symbol's test still fires → exit 1.
+#
+# widget.ts exports Foo, which STAYS. The test imports Foo and tests it.
+# Feature: remove the test and drop Foo from imports, but Foo still exists in
+# source. removed-imports = {Foo}; Foo is PRESENT in post-PR source ⇒ NOT
+# exempt ⇒ Signal 2 fires on the net declaration removal.
+# ---------------------------------------------------------------------------
+echo "--- case (h): weakening (symbol survives) → flag (Signal 2) ---"
+REPO=$(make_temp_repo)
+
+cat > "$REPO/widget.ts" <<'EOF'
+export const Foo = () => 1;
+EOF
+cat > "$REPO/widget.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+import { Foo } from './widget';
+it('Foo works', () => { expect(Foo()).toBe(1); });
+EOF
+git -C "$REPO" add widget.ts widget.test.ts
+git -C "$REPO" commit -q -m "add widget + test"
+git -C "$REPO" update-ref refs/remotes/origin/main HEAD
+
+git -C "$REPO" checkout -q -b feature2
+
+cat > "$REPO/widget.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+EOF
+git -C "$REPO" add widget.test.ts
+git -C "$REPO" commit -q -m "remove Foo test (Foo still exists)"
+
+run_check "$REPO"
+assert_exit 1 "(h) weakening: exit 1"
+assert_stderr_contains "Test-integrity violation" "(h) weakening: remediation text present"
+assert_stderr_contains "Signal 2" "(h) weakening: Signal 2 fires"
+
+# ---------------------------------------------------------------------------
+# Case (i): Mixed file — one symbol gone, one surviving in the same source file.
+#
+# mix.ts exports Gone and Survivor. The test imports and tests both. Feature:
+# remove BOTH tests, drop BOTH imports, delete Gone from source but KEEP
+# Survivor. removed-imports = {Gone, Survivor}; Survivor is still PRESENT ⇒ the
+# exemption requires EVERY removed-import symbol absent, so one survivor blocks
+# it ⇒ NOT exempt ⇒ Signal 2 fires.
+# ---------------------------------------------------------------------------
+echo "--- case (i): mixed gone/surviving same file → flag (Signal 2) ---"
+REPO=$(make_temp_repo)
+
+cat > "$REPO/mix.ts" <<'EOF'
+export const Gone = () => 1;
+export const Survivor = () => 2;
+EOF
+cat > "$REPO/mix.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+import { Gone, Survivor } from './mix';
+it('Gone works', () => { expect(Gone()).toBe(1); });
+it('Survivor works', () => { expect(Survivor()).toBe(2); });
+EOF
+git -C "$REPO" add mix.ts mix.test.ts
+git -C "$REPO" commit -q -m "add mix + tests"
+git -C "$REPO" update-ref refs/remotes/origin/main HEAD
+
+git -C "$REPO" checkout -q -b feature2
+
+cat > "$REPO/mix.ts" <<'EOF'
+export const Survivor = () => 2;
+EOF
+cat > "$REPO/mix.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+EOF
+git -C "$REPO" add mix.ts mix.test.ts
+git -C "$REPO" commit -q -m "remove both tests; Survivor still exists"
+
+run_check "$REPO"
+assert_exit 1 "(i) mixed gone/surviving: exit 1"
+assert_stderr_contains "Test-integrity violation" "(i) mixed gone/surviving: remediation text present"
+assert_stderr_contains "Signal 2" "(i) mixed gone/surviving: Signal 2 fires"
+
+# ---------------------------------------------------------------------------
+# Case (j): Vacuous-true guard — same-file helper, no import removed.
+#
+# The test defines a local helper inline (no import for the tested subject) and
+# removes one of two tests exercising it. No import binding is dropped ⇒
+# removed-imports = ∅ ⇒ the exemption's empty-set guard refuses to exempt
+# (closing the vacuous-true hole) ⇒ Signal 2 fires on the net declaration
+# removal.
+# ---------------------------------------------------------------------------
+echo "--- case (j): vacuous-true / same-file helper → flag (Signal 2) ---"
+REPO=$(make_temp_repo)
+
+cat > "$REPO/local.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+function localHelper() { return 1; }
+it('localHelper a', () => { expect(localHelper()).toBe(1); });
+it('localHelper b', () => { expect(localHelper()).toBe(1); });
+EOF
+git -C "$REPO" add local.test.ts
+git -C "$REPO" commit -q -m "add local helper tests"
+git -C "$REPO" update-ref refs/remotes/origin/main HEAD
+
+git -C "$REPO" checkout -q -b feature2
+
+cat > "$REPO/local.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+function localHelper() { return 1; }
+it('localHelper a', () => { expect(localHelper()).toBe(1); });
+EOF
+git -C "$REPO" add local.test.ts
+git -C "$REPO" commit -q -m "remove one helper test (no import dropped)"
+
+run_check "$REPO"
+assert_exit 1 "(j) vacuous-true: exit 1"
+assert_stderr_contains "Test-integrity violation" "(j) vacuous-true: remediation text present"
+assert_stderr_contains "Signal 2" "(j) vacuous-true: Signal 2 fires"
+
+# ---------------------------------------------------------------------------
+# Case (k): Substring false-match — word-boundary existence check → exit 0.
+#
+# store.ts: Cache is deleted as a declaration, but the longer identifier
+# CacheManager survives AND a comment mentioning Cache survives. The test
+# imported Cache and drops it + its test. The existence check matches
+# WORD-BOUNDARY declaration/export forms only, so `const Cache\b` does NOT match
+# inside `const CacheManager` and the comment text is not a declaration ⇒ Cache
+# reads as ABSENT ⇒ exempt ⇒ exit 0.
+# ---------------------------------------------------------------------------
+echo "--- case (k): substring false-match (CacheManager) → exit 0 ---"
+REPO=$(make_temp_repo)
+
+cat > "$REPO/store.ts" <<'EOF'
+export const Cache = () => 1;
+export const CacheManager = () => 2;
+EOF
+cat > "$REPO/store.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+import { Cache, CacheManager } from './store';
+it('Cache works', () => { expect(Cache()).toBe(1); });
+it('CacheManager works', () => { expect(CacheManager()).toBe(2); });
+EOF
+git -C "$REPO" add store.ts store.test.ts
+git -C "$REPO" commit -q -m "add store + tests"
+git -C "$REPO" update-ref refs/remotes/origin/main HEAD
+
+git -C "$REPO" checkout -q -b feature2
+
+cat > "$REPO/store.ts" <<'EOF'
+// Cache eviction is handled by CacheManager
+export const CacheManager = () => 2;
+EOF
+cat > "$REPO/store.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+import { CacheManager } from './store';
+it('CacheManager works', () => { expect(CacheManager()).toBe(2); });
+EOF
+git -C "$REPO" add store.ts store.test.ts
+git -C "$REPO" commit -q -m "remove Cache (CacheManager + comment survive)"
+
+run_check "$REPO"
+assert_exit 0 "(k) substring false-match: exit 0"
+assert_stderr_empty "(k) substring false-match: no output"
+
+# ---------------------------------------------------------------------------
+# Case (l): import type { … } participates → exit 0.
+#
+# types.ts exports GoneType. The test uses `import type { GoneType }` and a test
+# referencing the type. Feature: delete GoneType from source, remove its
+# `import type` line and its test. Type-only imports are parsed into the named
+# set ⇒ removed-imports = {GoneType}; absent from post-PR source ⇒ exempt ⇒
+# exit 0.
+# ---------------------------------------------------------------------------
+echo "--- case (l): import type co-deletion → exit 0 ---"
+REPO=$(make_temp_repo)
+
+cat > "$REPO/types.ts" <<'EOF'
+export type GoneType = { a: number };
+export const KEEP = 1;
+EOF
+cat > "$REPO/types.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+import type { GoneType } from './types';
+it('GoneType shape', () => { const v: GoneType = { a: 1 }; expect(v.a).toBe(1); });
+EOF
+git -C "$REPO" add types.ts types.test.ts
+git -C "$REPO" commit -q -m "add types + test"
+git -C "$REPO" update-ref refs/remotes/origin/main HEAD
+
+git -C "$REPO" checkout -q -b feature2
+
+cat > "$REPO/types.ts" <<'EOF'
+export const KEEP = 1;
+EOF
+cat > "$REPO/types.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+EOF
+git -C "$REPO" add types.ts types.test.ts
+git -C "$REPO" commit -q -m "remove GoneType + its type-only import + test"
+
+run_check "$REPO"
+assert_exit 0 "(l) import type co-deletion: exit 0"
+assert_stderr_empty "(l) import type co-deletion: no output"
+
+# ---------------------------------------------------------------------------
+# Case (m): Namespace `import * as ns` removal is unverifiable → flag.
+#
+# The test has `import * as cache from './cachem'` plus two tests. Feature
+# removes the namespace import line and one test (the surviving test is left
+# byte-identical so it does not double-count). A removed namespace import binds
+# no checkable source symbol ⇒ the removed named-import set is empty / the
+# import is unverifiable ⇒ NO exemption (bias to fire) ⇒ Signal 2 fires.
+# ---------------------------------------------------------------------------
+echo "--- case (m): namespace import removed → flag (Signal 2) ---"
+REPO=$(make_temp_repo)
+
+cat > "$REPO/cachem.ts" <<'EOF'
+export const foo = () => 1;
+EOF
+cat > "$REPO/cachem.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+import * as cache from './cachem';
+it('uses cache a', () => { expect(cache.foo()).toBe(1); });
+it('uses cache b', () => { expect(cache.foo()).toBe(1); });
+EOF
+git -C "$REPO" add cachem.ts cachem.test.ts
+git -C "$REPO" commit -q -m "add cachem + namespace-import tests"
+git -C "$REPO" update-ref refs/remotes/origin/main HEAD
+
+git -C "$REPO" checkout -q -b feature2
+
+cat > "$REPO/cachem.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+it('uses cache b', () => { expect(cache.foo()).toBe(1); });
+EOF
+git -C "$REPO" add cachem.test.ts
+git -C "$REPO" commit -q -m "remove namespace import + one test"
+
+run_check "$REPO"
+assert_exit 1 "(m) namespace import removed: exit 1"
+assert_stderr_contains "Test-integrity violation" "(m) namespace import removed: remediation text present"
+assert_stderr_contains "Signal 2" "(m) namespace import removed: Signal 2 fires"
+
+# ---------------------------------------------------------------------------
+# Case (n): Default import removal is unverifiable → flag.
+#
+# The test has `import Foo from './foo'` plus two tests. Feature removes the
+# default import line and one test (surviving test left byte-identical). A
+# removed default import binds no checkable source symbol ⇒ unverifiable ⇒ NO
+# exemption ⇒ Signal 2 fires.
+# ---------------------------------------------------------------------------
+echo "--- case (n): default import removed → flag (Signal 2) ---"
+REPO=$(make_temp_repo)
+
+cat > "$REPO/foo.ts" <<'EOF'
+export default function foo() { return 1; }
+EOF
+cat > "$REPO/foo.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+import Foo from './foo';
+it('Foo a', () => { expect(Foo()).toBe(1); });
+it('Foo b', () => { expect(Foo()).toBe(1); });
+EOF
+git -C "$REPO" add foo.ts foo.test.ts
+git -C "$REPO" commit -q -m "add foo + default-import tests"
+git -C "$REPO" update-ref refs/remotes/origin/main HEAD
+
+git -C "$REPO" checkout -q -b feature2
+
+cat > "$REPO/foo.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+it('Foo b', () => { expect(Foo()).toBe(1); });
+EOF
+git -C "$REPO" add foo.test.ts
+git -C "$REPO" commit -q -m "remove default import + one test"
+
+run_check "$REPO"
+assert_exit 1 "(n) default import removed: exit 1"
+assert_stderr_contains "Test-integrity violation" "(n) default import removed: remediation text present"
+assert_stderr_contains "Signal 2" "(n) default import removed: Signal 2 fires"
+
+# ---------------------------------------------------------------------------
+# Case (o): Multi-line import block — member extraction across lines → exit 0.
+#
+# The test imports Gone and Survivor in a MULTI-LINE `{ … }` block and tests
+# both. Feature: remove the `Gone,` member line and Gone's test, delete Gone
+# from source, keep Survivor (its member line + test stay). The parser joins the
+# multi-line block into one logical statement ⇒ removed-imports = {Gone}; absent
+# from post-PR source ⇒ exempt ⇒ exit 0.
+# ---------------------------------------------------------------------------
+echo "--- case (o): multi-line import block co-deletion → exit 0 ---"
+REPO=$(make_temp_repo)
+
+cat > "$REPO/mod.ts" <<'EOF'
+export const Gone = () => 1;
+export const Survivor = () => 2;
+EOF
+cat > "$REPO/mod.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+import {
+  Gone,
+  Survivor,
+} from './mod';
+it('Gone works', () => { expect(Gone()).toBe(1); });
+it('Survivor works', () => { expect(Survivor()).toBe(2); });
+EOF
+git -C "$REPO" add mod.ts mod.test.ts
+git -C "$REPO" commit -q -m "add mod + multi-line import tests"
+git -C "$REPO" update-ref refs/remotes/origin/main HEAD
+
+git -C "$REPO" checkout -q -b feature2
+
+cat > "$REPO/mod.ts" <<'EOF'
+export const Survivor = () => 2;
+EOF
+cat > "$REPO/mod.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+import {
+  Survivor,
+} from './mod';
+it('Survivor works', () => { expect(Survivor()).toBe(2); });
+EOF
+git -C "$REPO" add mod.ts mod.test.ts
+git -C "$REPO" commit -q -m "remove Gone member + its test"
+
+run_check "$REPO"
+assert_exit 0 "(o) multi-line import co-deletion: exit 0"
+assert_stderr_empty "(o) multi-line import co-deletion: no output"
+
+# ---------------------------------------------------------------------------
+# Case (p): Re-export / barrel brace form survives → flag.
+#
+# barrel.ts exposes Widget ONLY through an `export { w as Widget }` brace — there
+# is no `const/function/class Widget` declaration, so the first existence form
+# cannot catch it; only the named-export brace form can. The test imports Widget
+# and drops it + its test on feature. The existence check's brace form matches
+# `export { w as Widget }` ⇒ Widget PRESENT ⇒ NOT exempt ⇒ Signal 2 fires.
+# ---------------------------------------------------------------------------
+echo "--- case (p): re-export brace form survives → flag (Signal 2) ---"
+REPO=$(make_temp_repo)
+
+cat > "$REPO/barrel.ts" <<'EOF'
+const w = () => 1;
+export { w as Widget };
+EOF
+cat > "$REPO/barrel.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+import { Widget } from './barrel';
+it('Widget works', () => { expect(Widget()).toBe(1); });
+EOF
+git -C "$REPO" add barrel.ts barrel.test.ts
+git -C "$REPO" commit -q -m "add barrel + test"
+git -C "$REPO" update-ref refs/remotes/origin/main HEAD
+
+git -C "$REPO" checkout -q -b feature2
+
+cat > "$REPO/barrel.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+EOF
+git -C "$REPO" add barrel.test.ts
+git -C "$REPO" commit -q -m "remove Widget test (brace export survives)"
+
+run_check "$REPO"
+assert_exit 1 "(p) re-export brace form: exit 1"
+assert_stderr_contains "Test-integrity violation" "(p) re-export brace form: remediation text present"
+assert_stderr_contains "Signal 2" "(p) re-export brace form: Signal 2 fires"
+
+# ---------------------------------------------------------------------------
+# Case (q): "from"-substring CONTINUATION member must not drop later members
+# (code-review-0, collecting terminator at line ~294) → flag.
+#
+# multi.test.ts imports GoneSym from its own single-line statement and imports
+# fromList + AliveSymbol from a MULTI-LINE block whose CONTINUATION member
+# `fromList,` contains "from" as a substring. The buggy terminator (`|| $0 ~
+# /from/`) ended the brace block on that line, so fromList AND AliveSymbol were
+# dropped from OLD_TAGS while GoneSym (its own statement) survived. Feature
+# deletes GoneSym from a MODIFIED source file (so the basename loop does not
+# apply), removes GoneSym's import+test, and removes the alive import + the
+# AliveSymbol test — but AliveSymbol STILL EXISTS in source. With AliveSymbol
+# dropped from OLD_TAGS the removed-import set was just {GoneSym} (absent),
+# wrongly exempting the AliveSymbol weakening (exit 0). With the fix the block
+# closes only on "}", AliveSymbol is captured, found PRESENT ⇒ fire.
+# ---------------------------------------------------------------------------
+echo "--- case (q): from-substring continuation member drop → flag (Signal 2) ---"
+REPO=$(make_temp_repo)
+
+cat > "$REPO/gone.ts" <<'EOF'
+export const GoneSym = () => 1;
+EOF
+cat > "$REPO/alive.ts" <<'EOF'
+export const fromList = () => 0;
+export const AliveSymbol = () => 2;
+EOF
+cat > "$REPO/multi.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+import { GoneSym } from './gone';
+import {
+  fromList,
+  AliveSymbol,
+} from './alive';
+it('GoneSym', () => { expect(GoneSym()).toBe(1); });
+it('AliveSymbol', () => { expect(AliveSymbol()).toBe(2); });
+EOF
+git -C "$REPO" add gone.ts alive.ts multi.test.ts
+git -C "$REPO" commit -q -m "add gone/alive + multi-line import tests"
+git -C "$REPO" update-ref refs/remotes/origin/main HEAD
+
+git -C "$REPO" checkout -q -b feature2
+
+cat > "$REPO/gone.ts" <<'EOF'
+export const GoneOther = () => 9;
+EOF
+cat > "$REPO/multi.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+EOF
+git -C "$REPO" add gone.ts multi.test.ts
+git -C "$REPO" commit -q -m "remove GoneSym + AliveSymbol test; AliveSymbol still exists"
+
+run_check "$REPO"
+assert_exit 1 "(q) from-substring continuation member drop: exit 1"
+assert_stderr_contains "Test-integrity violation" "(q) from-substring continuation member drop: remediation text present"
+assert_stderr_contains "Signal 2" "(q) from-substring continuation member drop: Signal 2 fires"
+
+# ---------------------------------------------------------------------------
+# Case (q2): "from"-substring OPENING-line member must not short-circuit a
+# multi-line block (code-review-0, opening classifier at line ~288) → flag.
+#
+# Same shape as (q), but the multi-line block's OPENING line carries the
+# "from"-substring member: `import { fromEntries,`. The buggy opening classifier
+# (`if ($0 ~ /from/) process($0)`) treated that line as a complete single-line
+# import, dropping the continuation `AliveB }` from OLD_TAGS. The fix classifies
+# an open brace block first, so the block is collected and AliveB captured ⇒
+# PRESENT ⇒ fire.
+# ---------------------------------------------------------------------------
+echo "--- case (q2): from-substring opening-line member drop → flag (Signal 2) ---"
+REPO=$(make_temp_repo)
+
+cat > "$REPO/goneb.ts" <<'EOF'
+export const GoneB = () => 1;
+EOF
+cat > "$REPO/aliveb.ts" <<'EOF'
+export const fromEntries = () => 0;
+export const AliveB = () => 2;
+EOF
+cat > "$REPO/op.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+import { GoneB } from './goneb';
+import { fromEntries,
+  AliveB } from './aliveb';
+it('GoneB', () => { expect(GoneB()).toBe(1); });
+it('AliveB', () => { expect(AliveB()).toBe(2); });
+EOF
+git -C "$REPO" add goneb.ts aliveb.ts op.test.ts
+git -C "$REPO" commit -q -m "add goneb/aliveb + opening-line import tests"
+git -C "$REPO" update-ref refs/remotes/origin/main HEAD
+
+git -C "$REPO" checkout -q -b feature2
+
+cat > "$REPO/goneb.ts" <<'EOF'
+export const GoneBOther = () => 9;
+EOF
+cat > "$REPO/op.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+EOF
+git -C "$REPO" add goneb.ts op.test.ts
+git -C "$REPO" commit -q -m "remove GoneB + AliveB test; AliveB still exists"
+
+run_check "$REPO"
+assert_exit 1 "(q2) from-substring opening-line member drop: exit 1"
+assert_stderr_contains "Test-integrity violation" "(q2) from-substring opening-line member drop: remediation text present"
+assert_stderr_contains "Signal 2" "(q2) from-substring opening-line member drop: Signal 2 fires"
+
+# ---------------------------------------------------------------------------
+# Case (r): `$`-bearing identifier survives the existence check (code-review-2)
+# → flag.
+#
+# fac.ts exports $factory (a valid identifier; `$` is also ERE end-of-line).
+# The OLD existence check interpolated $X into an ERE, so `const $factory\b`
+# miscompiled and matched nothing ⇒ $factory read as absent ⇒ wrongly exempt
+# (exit 0). The fix uses a literal pre-check plus EXACT EXPORT_AWK membership, so
+# `$factory` is matched literally ⇒ PRESENT ⇒ fire.
+# ---------------------------------------------------------------------------
+echo "--- case (r): \$-identifier survives existence check → flag (Signal 2) ---"
+REPO=$(make_temp_repo)
+
+cat > "$REPO/fac.ts" <<'EOF'
+export const $factory = () => 1;
+EOF
+cat > "$REPO/fac.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+import { $factory } from './fac';
+it('$factory works', () => { expect($factory()).toBe(1); });
+EOF
+git -C "$REPO" add fac.ts fac.test.ts
+git -C "$REPO" commit -q -m "add fac + test"
+git -C "$REPO" update-ref refs/remotes/origin/main HEAD
+
+git -C "$REPO" checkout -q -b feature2
+
+cat > "$REPO/fac.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+EOF
+git -C "$REPO" add fac.test.ts
+git -C "$REPO" commit -q -m "remove \$factory test (\$factory still exists)"
+
+run_check "$REPO"
+assert_exit 1 "(r) \$-identifier survives: exit 1"
+assert_stderr_contains "Test-integrity violation" "(r) \$-identifier survives: remediation text present"
+assert_stderr_contains "Signal 2" "(r) \$-identifier survives: Signal 2 fires"
+
+# ---------------------------------------------------------------------------
+# Case (s): multi-line `export { }` re-export survives (code-review-1) → flag.
+#
+# mod2.ts exposes Gadget ONLY through a MULTI-LINE `export { w2 as Gadget }`
+# block — no `const/function Gadget` declaration. The OLD single-line
+# NAMED_EXPORT_FORM regex (`[^}]*` cannot cross newlines, and git grep is
+# line-oriented) never matched the split block ⇒ Gadget read as absent ⇒ wrongly
+# exempt (exit 0). The brace-aware EXPORT_AWK joins the block ⇒ Gadget PRESENT ⇒
+# fire.
+# ---------------------------------------------------------------------------
+echo "--- case (s): multi-line export brace survives → flag (Signal 2) ---"
+REPO=$(make_temp_repo)
+
+cat > "$REPO/mod2.ts" <<'EOF'
+const w2 = () => 1;
+export {
+  w2 as Gadget,
+};
+EOF
+cat > "$REPO/mod2.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+import { Gadget } from './mod2';
+it('Gadget works', () => { expect(Gadget()).toBe(1); });
+EOF
+git -C "$REPO" add mod2.ts mod2.test.ts
+git -C "$REPO" commit -q -m "add mod2 + test"
+git -C "$REPO" update-ref refs/remotes/origin/main HEAD
+
+git -C "$REPO" checkout -q -b feature2
+
+cat > "$REPO/mod2.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+EOF
+git -C "$REPO" add mod2.test.ts
+git -C "$REPO" commit -q -m "remove Gadget test (multi-line export survives)"
+
+run_check "$REPO"
+assert_exit 1 "(s) multi-line export brace survives: exit 1"
+assert_stderr_contains "Test-integrity violation" "(s) multi-line export brace survives: remediation text present"
+assert_stderr_contains "Signal 2" "(s) multi-line export brace survives: Signal 2 fires"
+
+# ---------------------------------------------------------------------------
+# Case (t): symbol-granular credit denies a co-removed inline-helper test
+# (red-team-1) → flag.
+#
+# feat.test.ts imports GoneSymbol and also has an inline helper localCalc, each
+# with its own test. Feature deletes GoneSymbol from a MODIFIED source file
+# (basename loop does NOT apply) and removes GoneSymbol's import+test AND
+# localCalc's test, keeping localCalc's definition. removed-import = {GoneSymbol}
+# (absent) ⇒ all_absent. The OLD file-granular credit swept BOTH removed tests
+# into the exemption (net 0 ⇒ exit 0), masking the localCalc weakening. The
+# symbol-granular credit only exempts the block referencing GoneSymbol, so the
+# localCalc test removal still nets −1 ⇒ fire.
+# ---------------------------------------------------------------------------
+echo "--- case (t): symbol-granular credit denies helper-test sweep → flag (Signal 2) ---"
+REPO=$(make_temp_repo)
+
+cat > "$REPO/feat.ts" <<'EOF'
+export const GoneSymbol = () => 1;
+export const Other = () => 9;
+EOF
+cat > "$REPO/feat.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+import { GoneSymbol } from './feat';
+function localCalc() { return 5; }
+it('GoneSymbol works', () => { expect(GoneSymbol()).toBe(1); });
+it('localCalc works', () => { expect(localCalc()).toBe(5); });
+EOF
+git -C "$REPO" add feat.ts feat.test.ts
+git -C "$REPO" commit -q -m "add feat + tests"
+git -C "$REPO" update-ref refs/remotes/origin/main HEAD
+
+git -C "$REPO" checkout -q -b feature2
+
+cat > "$REPO/feat.ts" <<'EOF'
+export const Other = () => 9;
+EOF
+cat > "$REPO/feat.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+function localCalc() { return 5; }
+EOF
+git -C "$REPO" add feat.ts feat.test.ts
+git -C "$REPO" commit -q -m "remove GoneSymbol + co-remove localCalc test"
+
+run_check "$REPO"
+assert_exit 1 "(t) symbol-granular credit: exit 1"
+assert_stderr_contains "Test-integrity violation" "(t) symbol-granular credit: remediation text present"
+assert_stderr_contains "Signal 2" "(t) symbol-granular credit: Signal 2 fires"
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""

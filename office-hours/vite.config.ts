@@ -3,7 +3,6 @@ import { officeHoursSeedDataPlugin } from "./src/vite-plugin-seed-data";
 import { usageSamplesSeedDataPlugin } from "./src/vite-plugin-usage-samples-seed";
 import { issueSamplesSeedDataPlugin } from "./src/vite-plugin-issue-samples-seed";
 import { officeHoursQueueSeedPlugin } from "./src/vite-plugin-queue-seed";
-import { auditAggregateSeedPlugin } from "./src/vite-plugin-audit-aggregate-seed";
 import { officeHoursIntentionTreeSeedPlugin } from "./src/vite-plugin-intention-tree-seed";
 import { projectSignalSeedPlugin } from "./src/vite-plugin-project-signal-seed";
 
@@ -18,7 +17,6 @@ export default createAppConfig({
     usageSamplesSeedDataPlugin(),
     issueSamplesSeedDataPlugin(),
     officeHoursQueueSeedPlugin(),
-    auditAggregateSeedPlugin(),
     officeHoursIntentionTreeSeedPlugin(),
     projectSignalSeedPlugin(),
   ],
