@@ -15896,15 +15896,15 @@ config_teardown
 # ============================================================================
 #
 # Both ingest-downloads.sh and identify-qfx.sh are copied into a fresh tmp
-# tree so BASH_SOURCE-based SCRIPT_DIR resolution works correctly. The budget-etl
-# scripts live at $SCRIPT_DIR/../../budget-etl/scripts/ relative to the
+# tree so BASH_SOURCE-based SCRIPT_DIR resolution works correctly. The budget
+# scripts live at $SCRIPT_DIR/../../budget/scripts/ relative to the
 # dispatch-propagate scripts dir.
 
 echo ""
 echo "=== ingest-downloads.sh ==="
 
-INGEST_SRC="$SCRIPT_DIR/../../budget-etl/scripts/ingest-downloads.sh"
-IDENTIFY_SRC="$SCRIPT_DIR/../../budget-etl/scripts/identify-qfx.sh"
+INGEST_SRC="$SCRIPT_DIR/../../budget/scripts/ingest-downloads.sh"
+IDENTIFY_SRC="$SCRIPT_DIR/../../budget/scripts/identify-qfx.sh"
 
 ING_TMP=""
 
