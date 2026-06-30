@@ -61,33 +61,33 @@ describe("toTopicUsage returns null for malformed docs", () => {
   });
 
   it("returns null when date is not a string", () => {
-    expect(toTopicUsage(makeRaw({ date: 20260629 as unknown as string }))).toBeNull();
+    expect(toTopicUsage(makeRaw({ date: 20260629 as unknown as string }))).toBeNull(); // type-safety-ok: intentional wrong-type input to test validator rejection
   });
 
   it("returns null when date is missing", () => {
     const raw = makeRaw();
-    delete (raw as Record<string, unknown>).date;
+    delete (raw as Record<string, unknown>).date; // type-safety-ok: property deletion to simulate missing field for validator test
     expect(toTopicUsage(raw)).toBeNull();
   });
 
   it("returns null when byTopic is not an object", () => {
-    expect(toTopicUsage(makeRaw({ byTopic: "dispatch" as unknown as Record<string, never> }))).toBeNull();
+    expect(toTopicUsage(makeRaw({ byTopic: "dispatch" as unknown as Record<string, never> }))).toBeNull(); // type-safety-ok: intentional wrong-type input to test validator rejection
   });
 
   it("returns null when byTopic is an array", () => {
-    expect(toTopicUsage(makeRaw({ byTopic: [] as unknown as Record<string, never> }))).toBeNull();
+    expect(toTopicUsage(makeRaw({ byTopic: [] as unknown as Record<string, never> }))).toBeNull(); // type-safety-ok: intentional wrong-type input to test validator rejection
   });
 
   it("returns null when byType is missing", () => {
     const raw = makeRaw();
-    delete (raw as Record<string, unknown>).byType;
+    delete (raw as Record<string, unknown>).byType; // type-safety-ok: property deletion to simulate missing field for validator test
     expect(toTopicUsage(raw)).toBeNull();
   });
 
   it("returns null when a bucket has a non-numeric field", () => {
     const raw = makeRaw({
       byTopic: {
-        dispatch: { ...validBucket, priceProxyUsd: "expensive" as unknown as number },
+        dispatch: { ...validBucket, priceProxyUsd: "expensive" as unknown as number }, // type-safety-ok: intentional wrong-type input to test validator rejection
       },
     });
     expect(toTopicUsage(raw)).toBeNull();
@@ -102,14 +102,14 @@ describe("toTopicUsage returns null for malformed docs", () => {
       output: 300,
     };
     const raw = makeRaw({
-      byTopic: { dispatch: incompleteBucket as unknown as typeof validBucket },
+      byTopic: { dispatch: incompleteBucket as unknown as typeof validBucket }, // type-safety-ok: intentional wrong-type input to test validator rejection
     });
     expect(toTopicUsage(raw)).toBeNull();
   });
 
   it("returns null when a bucket value is itself not an object", () => {
     const raw = makeRaw({
-      byTopic: { dispatch: 42 as unknown as typeof validBucket },
+      byTopic: { dispatch: 42 as unknown as typeof validBucket }, // type-safety-ok: intentional wrong-type input to test validator rejection
     });
     expect(toTopicUsage(raw)).toBeNull();
   });

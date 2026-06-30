@@ -95,7 +95,7 @@ describe("TopicUsagePanel", () => {
     const { container } = render(<TopicUsagePanel docs={[]} />);
     const empty = container.querySelector(".empty");
     expect(empty).not.toBeNull();
-    expect(empty!.textContent).toBe("No topic usage to chart.");
+    expect(empty?.textContent).toBe("No topic usage to chart.");
     expect(container.querySelector("svg")).toBeNull();
   });
 });

@@ -31,7 +31,7 @@ export const TYPE_BUCKETS = ["bug", "enhancement", "none"] as const;
 
 function isTopicUsageBucket(v: unknown): v is TopicUsageBucket {
   if (!v || typeof v !== "object" || Array.isArray(v)) return false;
-  const b = v as Record<string, unknown>;
+  const b = v as Record<string, unknown>; // type-safety-ok: narrowing unknown to Record after object-type guard checks
   return (
     typeof b.priceProxyUsd === "number" &&
     typeof b.input === "number" &&
@@ -45,7 +45,7 @@ function isStringKeyedBucketMap(
   v: unknown,
 ): v is Record<string, TopicUsageBucket> {
   if (!v || typeof v !== "object" || Array.isArray(v)) return false;
-  return Object.values(v as Record<string, unknown>).every(isTopicUsageBucket);
+  return Object.values(v as Record<string, unknown>).every(isTopicUsageBucket); // type-safety-ok: narrowing unknown to Record after object-type guard checks
 }
 
 export function toTopicUsage(raw: unknown): TopicUsageDoc | null {
@@ -56,7 +56,7 @@ export function toTopicUsage(raw: unknown): TopicUsageDoc | null {
     return null;
   }
 
-  const data = raw as Record<string, unknown>;
+  const data = raw as Record<string, unknown>; // type-safety-ok: narrowing unknown to Record after object-type guard checks
 
   const date = typeof data.date === "string" ? data.date : null;
   const byTopic = isStringKeyedBucketMap(data.byTopic) ? data.byTopic : null;

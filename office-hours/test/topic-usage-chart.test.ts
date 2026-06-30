@@ -73,7 +73,7 @@ describe("renderTopicUsageChart", () => {
     const el = renderTopicUsageChart([], "topic");
     const empty = el.querySelector(".empty");
     expect(empty).not.toBeNull();
-    expect(empty!.textContent).toBe("No topic usage to chart.");
+    expect(empty?.textContent).toBe("No topic usage to chart.");
     expect(el.querySelector("svg")).toBeNull();
   });
 
@@ -87,7 +87,7 @@ describe("renderTopicUsageChart", () => {
 
     const legend = el.querySelector(".trend-legend");
     expect(legend).not.toBeNull();
-    const labels = Array.from(legend!.querySelectorAll(".trend-legend-item")).map(
+    const labels = Array.from(legend?.querySelectorAll(".trend-legend-item") ?? []).map(
       (i) => i.textContent ?? "",
     );
     expect(labels).toEqual(["security", "dispatch"]);
