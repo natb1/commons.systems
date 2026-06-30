@@ -2,7 +2,19 @@
 #
 # Manages user-specific configuration files declaratively.
 #
-# To activate this configuration:
+# The author's own machines activate this module through their integrated host
+# configs rather than via standalone home-manager switch:
+#   - WSL NixOS box: `sudo nixos-rebuild switch` builds `nixosConfigurations.nixos`,
+#     which integrates home-manager as a NixOS module.
+#   - macOS box: `darwin-rebuild switch` builds `darwinConfigurations.default`,
+#     which integrates home-manager via nix-darwin.
+# On those integrated paths, the NixOS/nix-darwin module sets
+# `home-manager.backupFileExtension` automatically.
+#
+# The standalone instructions below are for the generic forker path — plain
+# Linux/macOS without NixOS-WSL or nix-darwin.
+#
+# To activate this configuration (generic forker path):
 #   First time (requires experimental features flags):
 #     nix --extra-experimental-features 'nix-command flakes' run home-manager/master -- switch --extra-experimental-features 'nix-command flakes' --flake .#default --impure
 #
@@ -12,9 +24,10 @@
 #   Or explicitly specify system:
 #     home-manager switch -b backup --flake .#x86_64-linux --impure
 #
-# Always pass `-b backup`: standalone home-manager has no equivalent of the
-# NixOS/nix-darwin module's `home-manager.backupFileExtension`, and without it a
-# switch aborts mid-activation when it meets an unmanaged file it wants to own
+# Always pass `-b backup` on the standalone forker path: standalone home-manager
+# has no equivalent of the NixOS/nix-darwin module's
+# `home-manager.backupFileExtension`, and without it a switch aborts
+# mid-activation when it meets an unmanaged file it wants to own
 # (e.g. a stray ~/.zprofile), leaving the profile half-updated.
 #
 # Note: --impure is required because home.username and home.homeDirectory are
