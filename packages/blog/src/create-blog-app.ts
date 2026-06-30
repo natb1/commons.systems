@@ -327,15 +327,15 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
   // The single ds PageShell tree for a given body. hero shows only on home.
   const shellElement = (appBody: ReactNode): ReactNode =>
     createElement(BlogPageShell, {
-      wordmark: config.shell!.wordmark,
-      tagline: config.shell!.tagline,
+      wordmark: config.shell!.wordmark, // type-safety-ok: shellElement is only called in shell mode
+      tagline: config.shell!.tagline, // type-safety-ok: shellElement is only called in shell mode
       navLinks: config.navLinks,
       current: currentPath,
       navEnd: navEndNode(),
-      hero: currentPath === "/" ? config.shell!.hero : undefined,
+      hero: currentPath === "/" ? config.shell!.hero : undefined, // type-safety-ok: shellElement is only called in shell mode
       panelOpen,
       panelId,
-      panelAriaLabel: config.shell!.panelAriaLabel,
+      panelAriaLabel: config.shell!.panelAriaLabel, // type-safety-ok: shellElement is only called in shell mode
       panel: panelElement(),
       children: appBody,
     });
@@ -343,7 +343,7 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
   // re-renders. The mode guard guarantees shellRoot is assigned here.
   function renderShell(appBody: ReactNode): void {
     currentAppBody = appBody;
-    shellRoot!.render(shellElement(appBody));
+    shellRoot!.render(shellElement(appBody)); // type-safety-ok: shellRoot assigned in the config.shell branch; renderShell runs only in shell mode
   }
 
   // ── Render bootstrap: shell (single ds PageShell root) vs legacy three-root.
@@ -360,9 +360,9 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
       shellRoot = hydrateRoot(rootEl, tree);
     } else {
       shellRoot = createRoot(rootEl);
-      flushSync(() => shellRoot!.render(tree));
+      flushSync(() => shellRoot!.render(tree)); // type-safety-ok: shellRoot assigned two lines above in this block
     }
-    teardowns.push(() => shellRoot!.unmount());
+    teardowns.push(() => shellRoot!.unmount()); // type-safety-ok: shellRoot assigned in this block
 
     // Now that PageShell has committed, #app and the header exist.
     const appEl = document.getElementById("app");
@@ -381,7 +381,7 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
     };
     const onShellOutsideClick = (e: MouseEvent): void => {
       if (!panelOpen) return;
-      const target = e.target as HTMLElement;
+      const target = e.target as HTMLElement; // type-safety-ok: document click handler target is always an HTMLElement
       const panelEl = document.getElementById(panelId);
       if (panelEl?.contains(target)) return;
       if (target.closest(".panel-toggle")) return;
@@ -413,22 +413,22 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
     navRoot = hydrateRoot(navMount, navElement(parsePath().path));
     appRoot = hydrateRoot(app, initialAppBody);
     panelRoot = hydrateRoot(infoPanel, panelElement());
-    teardowns.push(() => navRoot!.unmount());
-    teardowns.push(() => appRoot!.unmount());
-    teardowns.push(() => panelRoot!.unmount());
+    teardowns.push(() => navRoot!.unmount()); // type-safety-ok: navRoot assigned in this else branch
+    teardowns.push(() => appRoot!.unmount()); // type-safety-ok: appRoot assigned in this else branch
+    teardowns.push(() => panelRoot!.unmount()); // type-safety-ok: panelRoot assigned in this else branch
   }
 
   const renderNav = (path: string): void => {
-    navRoot!.render(navElement(path));
+    navRoot!.render(navElement(path)); // type-safety-ok: navRoot assigned in legacy branch; renderNav only called when !isShell
   };
   const renderPanel = (): void => {
-    panelRoot!.render(panelElement());
+    panelRoot!.render(panelElement()); // type-safety-ok: panelRoot assigned in legacy branch; renderPanel only called when !isShell
   };
   // Unified body render: shell collapses nav+panel+body into one root; legacy
   // renders the body root.
   const renderBody = (appBody: ReactNode): void => {
     if (isShell) renderShell(appBody);
-    else appRoot!.render(appBody);
+    else appRoot!.render(appBody); // type-safety-ok: appRoot assigned in legacy branch; renderBody legacy path only when !isShell
   };
   // Force InfoPanelRegion to REMOUNT (bumped panelKey re-runs its blogroll
   // fetch). Shell: re-render the single root reusing the current body; legacy:

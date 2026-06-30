@@ -889,15 +889,15 @@ function scaffoldShellDom(config: CreateBlogAppConfig, path = window.location.pa
     : createElement("div", null, undefined);
   const shellHtml = renderToString(
     createElement(BlogPageShell, {
-      wordmark: config.shell!.wordmark,
-      tagline: config.shell!.tagline,
+      wordmark: config.shell!.wordmark, // type-safety-ok: scaffoldShellDom is only called with a shell config
+      tagline: config.shell!.tagline, // type-safety-ok: scaffoldShellDom is only called with a shell config
       navLinks: config.navLinks,
       current: path,
       navEnd: shellNavEnd(config, path),
-      hero: path === "/" ? config.shell!.hero : undefined,
+      hero: path === "/" ? config.shell!.hero : undefined, // type-safety-ok: scaffoldShellDom is only called with a shell config
       panelOpen: false,
       panelId: SHELL_PANEL_ID,
-      panelAriaLabel: config.shell!.panelAriaLabel,
+      panelAriaLabel: config.shell!.panelAriaLabel, // type-safety-ok: scaffoldShellDom is only called with a shell config
       panel: createElement(InfoPanelRegion, {
         data: {
           linkSections: config.infoPanelLinkSections,
@@ -920,7 +920,7 @@ function scaffoldShellDom(config: CreateBlogAppConfig, path = window.location.pa
 describe("createBlogApp shell path", () => {
   beforeEach(() => {
     handle = undefined;
-    globalThis.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserver;
+    globalThis.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserver; // type-safety-ok: vitest mock cast
   });
 
   afterEach(() => {
@@ -956,7 +956,7 @@ describe("createBlogApp shell path", () => {
     handle = createBlogApp(config);
     await settle();
 
-    const root = document.getElementById("root")!;
+    const root = document.getElementById("root")!; // type-safety-ok: test DOM node mounted by scaffoldShellDom
     expect(root.querySelector(".page")).not.toBeNull();
     expect(root.querySelector("#app")).not.toBeNull();
     expect(root.querySelector(".cs-nav")).not.toBeNull();
@@ -1015,8 +1015,8 @@ describe("createBlogApp shell path", () => {
     handle = createBlogApp(config);
     await settle();
 
-    const panel = () => document.getElementById("info-panel")!;
-    const toggle = () => document.querySelector<HTMLElement>(".panel-toggle")!;
+    const panel = () => document.getElementById("info-panel")!; // type-safety-ok: test DOM node mounted by scaffoldShellDom
+    const toggle = () => document.querySelector<HTMLElement>(".panel-toggle")!; // type-safety-ok: test DOM node mounted by scaffoldShellDom
 
     // Starts closed.
     expect(panel().classList.contains("open")).toBe(false);
@@ -1050,7 +1050,7 @@ describe("createBlogApp shell path", () => {
     expect(panel().classList.contains("open")).toBe(true);
 
     await act(async () => {
-      document.querySelector<HTMLElement>(".page > header h1")!.click();
+      document.querySelector<HTMLElement>(".page > header h1")!.click(); // type-safety-ok: test DOM node mounted by scaffoldShellDom
       await Promise.resolve();
       await new Promise((r) => setTimeout(r, 0));
     });

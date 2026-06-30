@@ -131,7 +131,7 @@ export interface PostsArtifacts {
    *  the root index and every per-post page. */
   bodyHtml: string;
   /** The same `HomeRegion` as a ReactNode (not yet rendered). The shell path
-   *  nests it as PageShell's `children` so the whole shell renders in one
+   *  nests it — PageShell's `children` — so the whole shell renders in one
    *  `renderToString`; reusing one element across the root + every post page is
    *  safe (elements are immutable descriptions). */
   homeBody: ReactNode;
@@ -368,18 +368,18 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
   // the client, which hydrates the build-time metadata feed on home and post
   // pages alike).
   const renderShellHtml = (current: string): string => {
-    const panelId = shell!.panelId ?? "info-panel";
+    const panelId = shell!.panelId ?? "info-panel"; // type-safety-ok: renderShellHtml is only called inside if (shell) guards
     return renderToString(
       createElement(BlogPageShell, {
-        wordmark: shell!.wordmark,
-        tagline: shell!.tagline,
+        wordmark: shell!.wordmark, // type-safety-ok: renderShellHtml is only called inside if (shell) guards
+        tagline: shell!.tagline, // type-safety-ok: renderShellHtml is only called inside if (shell) guards
         navLinks,
         current,
         navEnd: shellNavEnd(showHomeLink ?? false, panelId),
-        hero: current === "/" ? shell!.hero : undefined,
+        hero: current === "/" ? shell!.hero : undefined, // type-safety-ok: renderShellHtml is only called inside if (shell) guards
         panelOpen: false,
         panelId,
-        panelAriaLabel: shell!.panelAriaLabel,
+        panelAriaLabel: shell!.panelAriaLabel, // type-safety-ok: renderShellHtml is only called inside if (shell) guards
         panel: createElement(InfoPanelRegion, {
           data: { ...infoPanel, topPosts, postLinkPrefix: "/post/" },
           strategies: new Map(),

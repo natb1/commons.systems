@@ -807,7 +807,7 @@ describe("prerenderPosts", () => {
       const perPostCall = vi.mocked(fs.writeFileSync).mock.calls.find(
         (c) => String(c[0]).includes("post/hello-world"),
       );
-      const html = perPostCall![1] as string;
+      const html = perPostCall![1] as string; // type-safety-ok: find() result asserted present by test; writeFileSync arg is always string
       // Shell chrome still injected, but no hero on a post page.
       expect(html).toContain('<div id="root"><div class="page">');
       expect(html).toContain('class="content-grid"');
@@ -833,7 +833,7 @@ describe("prerenderPosts", () => {
       const perPostCall = vi.mocked(fs.writeFileSync).mock.calls.find(
         (c) => String(c[0]).includes("post/hello-world"),
       );
-      const perPostHtml = perPostCall![1] as string;
+      const perPostHtml = perPostCall![1] as string; // type-safety-ok: find() result asserted present by test; writeFileSync arg is always string
       expect(perPostHtml).toContain('<link rel="canonical" href="https://example.com/post/hello-world">');
       expect(perPostHtml).toContain("<title>My Blog - Hello World</title>");
       expect(perPostHtml).toContain('"@type":"BlogPosting"');
@@ -855,6 +855,6 @@ describe("prerenderPosts", () => {
     const rootCall = vi.mocked(fs.writeFileSync).mock.calls.find(
       (c) => String(c[0]) === "/dist/index.html",
     );
-    return rootCall![1] as string;
+    return rootCall![1] as string; // type-safety-ok: find() result asserted present by test; writeFileSync arg is always string
   }
 });
