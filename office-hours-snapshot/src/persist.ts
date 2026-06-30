@@ -121,7 +121,7 @@ export async function writeSnapshot(
   const plaintext = typeof json === "string" ? json : JSON.stringify(json);
   const benc = await encryptData(
     crypto.webcrypto.subtle,
-    crypto.webcrypto.getRandomValues.bind(crypto.webcrypto),
+    (arr: Uint8Array): Uint8Array => { crypto.webcrypto.getRandomValues(arr as Uint8Array<ArrayBuffer>); return arr; },
     plaintext,
     password,
   );
