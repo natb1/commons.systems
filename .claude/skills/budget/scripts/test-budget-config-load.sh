@@ -114,13 +114,8 @@ EOF
 rc=0
 err=$("$RESOLVER" 2>&1 1>/dev/null) || rc=$?
 assert_eq "7j missing current field exits 1" "1" "$rc"
-TOTAL=$((TOTAL + 1))
-if [[ "$err" == *"current"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: 7j missing-current error names the field"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: 7j missing-current error names the field"
-  echo "    stderr: $err"
-fi
+field_mentioned="no"; [[ "$err" == *"current"* ]] && field_mentioned="yes"
+assert_eq "7j missing-current error names the field" "yes" "$field_mentioned"
 config_teardown
 
 # --- Test 7k: non-string field exits 1, stderr names the field ---------------
@@ -138,13 +133,8 @@ EOF
 rc=0
 err=$("$RESOLVER" 2>&1 1>/dev/null) || rc=$?
 assert_eq "7k non-string downloads exits 1" "1" "$rc"
-TOTAL=$((TOTAL + 1))
-if [[ "$err" == *"downloads"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: 7k non-string downloads stderr mentions downloads"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: 7k non-string downloads stderr mentions downloads"
-  echo "    stderr: $err"
-fi
+field_mentioned="no"; [[ "$err" == *"downloads"* ]] && field_mentioned="yes"
+assert_eq "7k non-string downloads stderr mentions downloads" "yes" "$field_mentioned"
 config_teardown
 
 # --- Test 7l: empty-string field exits 1, stderr names the field -------------
@@ -162,13 +152,8 @@ EOF
 rc=0
 err=$("$RESOLVER" 2>&1 1>/dev/null) || rc=$?
 assert_eq "7l empty snapshotDir exits 1" "1" "$rc"
-TOTAL=$((TOTAL + 1))
-if [[ "$err" == *"snapshotDir"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: 7l empty snapshotDir stderr mentions snapshotDir"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: 7l empty snapshotDir stderr mentions snapshotDir"
-  echo "    stderr: $err"
-fi
+field_mentioned="no"; [[ "$err" == *"snapshotDir"* ]] && field_mentioned="yes"
+assert_eq "7l empty snapshotDir stderr mentions snapshotDir" "yes" "$field_mentioned"
 config_teardown
 
 # --- Test 7m: absent budget-etl.json prints no-config and exits 0 ------------
@@ -196,13 +181,8 @@ EOF
 rc=0
 err=$("$RESOLVER" 2>&1 1>/dev/null) || rc=$?
 assert_eq "7n relative downloads exits 1" "1" "$rc"
-TOTAL=$((TOTAL + 1))
-if [[ "$err" == *"downloads"* && "$err" == *"absolute"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: 7n relative downloads error names the field and 'absolute'"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: 7n relative downloads error names the field and 'absolute'"
-  echo "    stderr: $err"
-fi
+field_and_keyword="no"; [[ "$err" == *"downloads"* && "$err" == *"absolute"* ]] && field_and_keyword="yes"
+assert_eq "7n relative downloads error names the field and 'absolute'" "yes" "$field_and_keyword"
 config_teardown
 
 # --- Test 7o: '..'-component path exits 1, names the field and '..' ----------
@@ -220,13 +200,57 @@ EOF
 rc=0
 err=$("$RESOLVER" 2>&1 1>/dev/null) || rc=$?
 assert_eq "7o '..' statements exits 1" "1" "$rc"
-TOTAL=$((TOTAL + 1))
-if [[ "$err" == *"statements"* && "$err" == *".."* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: 7o '..' statements error names the field and '..'"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: 7o '..' statements error names the field and '..'"
-  echo "    stderr: $err"
-fi
+field_and_keyword="no"; [[ "$err" == *"statements"* && "$err" == *".."* ]] && field_and_keyword="yes"
+assert_eq "7o '..' statements error names the field and '..'" "yes" "$field_and_keyword"
+config_teardown
+
+# --- Test 7p: an unexpected argument is a usage error (exit 2) ----------------
+#
+# The argument-rejection guard is new logic in this standalone resolver (it takes
+# no <type> argument, unlike dispatch-config-load) and has no dispatch-side
+# coverage. The guard runs before any config read, so no config_setup is needed.
+
+echo "Test: an unexpected argument exits 2 with a usage error"
+rc=0
+err=$("$RESOLVER" extra-arg 2>&1 1>/dev/null) || rc=$?
+assert_eq "7p unexpected argument exits 2" "2" "$rc"
+usage_mentioned="no"; [[ "$err" == *"usage"* ]] && usage_mentioned="yes"
+assert_eq "7p unexpected-argument error mentions 'usage'" "yes" "$usage_mentioned"
+
+# --- Test 7q: invalid JSON exits 1, stderr says 'invalid JSON' ----------------
+
+echo "Test: a file with invalid JSON exits 1 and stderr says 'invalid JSON'"
+config_setup
+printf '%s' '{bad json' > "$CONFIG_FILE"
+rc=0
+err=$("$RESOLVER" 2>&1 1>/dev/null) || rc=$?
+assert_eq "7q invalid JSON exits 1" "1" "$rc"
+invalid_mentioned="no"; [[ "$err" == *"invalid JSON"* ]] && invalid_mentioned="yes"
+assert_eq "7q invalid-JSON error says 'invalid JSON'" "yes" "$invalid_mentioned"
+config_teardown
+
+# --- Test 7r: a non-object top-level JSON value exits 1, says 'JSON object' ----
+
+echo "Test: a non-object top-level JSON value exits 1 and stderr says 'JSON object'"
+config_setup
+printf '%s' 'null' > "$CONFIG_FILE"
+rc=0
+err=$("$RESOLVER" 2>&1 1>/dev/null) || rc=$?
+assert_eq "7r non-object top-level value exits 1" "1" "$rc"
+object_mentioned="no"; [[ "$err" == *"JSON object"* ]] && object_mentioned="yes"
+assert_eq "7r non-object error says 'JSON object'" "yes" "$object_mentioned"
+config_teardown
+
+# --- Test 7s: an empty/whitespace-only file exits 1, stderr says 'empty' ------
+
+echo "Test: a whitespace-only file exits 1 and stderr says 'empty'"
+config_setup
+printf '%s' '   ' > "$CONFIG_FILE"
+rc=0
+err=$("$RESOLVER" 2>&1 1>/dev/null) || rc=$?
+assert_eq "7s whitespace-only file exits 1" "1" "$rc"
+empty_mentioned="no"; [[ "$err" == *"empty"* ]] && empty_mentioned="yes"
+assert_eq "7s whitespace-only error says 'empty'" "yes" "$empty_mentioned"
 config_teardown
 
 report_results

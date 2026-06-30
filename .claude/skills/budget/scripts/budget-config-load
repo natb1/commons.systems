@@ -51,7 +51,7 @@ if [[ -z "$PARSED" ]]; then
   exit 1
 fi
 
-# Schema validation (budget-etl). Ported verbatim from the budget-etl) case in
+# Schema validation (budget-etl). Ported verbatim from the budget-etl case in
 # dispatch-config-load. top-level value must be an object; four required
 # non-empty string path fields. Paths may contain spaces. Each must be an
 # absolute path with no ".." component — these values become filesystem
