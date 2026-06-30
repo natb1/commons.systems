@@ -36,7 +36,7 @@ declare global {
 const PURPOSE = "snapshot-file";
 const store = createFsaHandleStore({ app: "office-hours" });
 
-type SnapshotSourceState = "unsupported" | "none" | "granted" | "prompt" | "denied";
+export type SnapshotSourceState = "unsupported" | "none" | "granted" | "prompt" | "denied";
 
 let currentHandle: FileSystemFileHandle | null = null;
 let state: SnapshotSourceState = "none";
