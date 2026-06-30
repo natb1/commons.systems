@@ -19,7 +19,7 @@ const getOwnerSamples = vi.fn();
 const getOwnerReminders = vi.fn();
 const getOwnerQueueMetrics = vi.fn();
 const getOwnerIssueSamples = vi.fn();
-const getOwnerAuditAggregates = vi.fn();
+const getOwnerTopicUsage = vi.fn();
 const getOwnerProjectSignals = vi.fn();
 
 vi.mock("../src/usage-data.js", async (importOriginal) => ({
@@ -35,9 +35,9 @@ vi.mock("../src/issue-data.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/issue-data.js")>()),
   getOwnerIssueSamples: (...args: unknown[]) => getOwnerIssueSamples(...args),
 }));
-vi.mock("../src/audit-data.js", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../src/audit-data.js")>()),
-  getOwnerAuditAggregates: (...args: unknown[]) => getOwnerAuditAggregates(...args),
+vi.mock("../src/topic-usage-data.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/topic-usage-data.js")>()),
+  getOwnerTopicUsage: (...args: unknown[]) => getOwnerTopicUsage(...args),
 }));
 vi.mock("../src/project-signals-data.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/project-signals-data.js")>()),
@@ -78,11 +78,11 @@ describe("Dashboard demo tier (user=null)", () => {
     const { container } = render(<Dashboard user={null} />);
     const grid = container.querySelector(".panel-grid");
     expect(grid).not.toBeNull();
-    // capacity, pace, history, backlog, audit, reminders, queue-metrics, parked, intention-tree, project-signals
+    // capacity, pace, history, backlog, topic-usage, reminders, queue-metrics, parked, intention-tree, project-signals
     expect(grid?.children).toHaveLength(10);
   });
 
-  it("marks the five full-width panels (history, backlog, audit, intention-tree, project-signals) as panel-grid-full", () => {
+  it("marks the five full-width panels (history, backlog, topic-usage, intention-tree, project-signals) as panel-grid-full", () => {
     const { container } = render(<Dashboard user={null} />);
     const full = container.querySelectorAll(".panel-grid > .panel-grid-full");
     expect(full).toHaveLength(5);
@@ -171,7 +171,7 @@ describe("Dashboard owner tier with data", () => {
     ]);
     getOwnerQueueMetrics.mockResolvedValue(queueMetricsFixture);
     getOwnerIssueSamples.mockResolvedValue([]);
-    getOwnerAuditAggregates.mockResolvedValue([]);
+    getOwnerTopicUsage.mockResolvedValue([]);
     getOwnerProjectSignals.mockResolvedValue(null);
   });
 
@@ -204,7 +204,7 @@ describe("Dashboard owner tier — empty", () => {
     getOwnerReminders.mockResolvedValue([]);
     getOwnerQueueMetrics.mockResolvedValue(null);
     getOwnerIssueSamples.mockResolvedValue([]);
-    getOwnerAuditAggregates.mockResolvedValue([]);
+    getOwnerTopicUsage.mockResolvedValue([]);
     getOwnerProjectSignals.mockResolvedValue(null);
   });
 
@@ -234,7 +234,7 @@ describe("Dashboard error tier", () => {
     getOwnerReminders.mockRejectedValue(new Error("permission-denied"));
     getOwnerQueueMetrics.mockResolvedValue(null);
     getOwnerIssueSamples.mockResolvedValue([]);
-    getOwnerAuditAggregates.mockResolvedValue([]);
+    getOwnerTopicUsage.mockResolvedValue([]);
     getOwnerProjectSignals.mockResolvedValue(null);
     vi.spyOn(console, "error").mockImplementation(() => {});
   });
