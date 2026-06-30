@@ -3,9 +3,17 @@
 pkgs.writeShellScriptBin "home-manager-setup" ''
   set -euo pipefail
 
+  # Generic forker bootstrap: for plain Linux/macOS without NixOS-WSL or nix-darwin.
+  # The author's WSL NixOS box uses `sudo nixos-rebuild switch` (nixosConfigurations.nixos)
+  # and macOS uses `darwin-rebuild switch` (darwinConfigurations.default) instead.
+
   # Detect the current system
   SYSTEM="${pkgs.stdenv.hostPlatform.system}"
 
+  echo "home-manager-setup: generic forker bootstrap (plain Linux/macOS)"
+  echo "  NixOS-WSL users: use 'sudo nixos-rebuild switch' instead."
+  echo "  nix-darwin users: use 'darwin-rebuild switch' instead."
+  echo ""
   echo "Detected system: $SYSTEM"
   echo ""
 
