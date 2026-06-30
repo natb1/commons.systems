@@ -18,3 +18,6 @@ export type ReconciliationEntityType = (typeof RECONCILIATION_ENTITY_TYPES)[numb
 
 export const RULE_TYPES = ["categorization", "budget_assignment"] as const;
 export type RuleType = (typeof RULE_TYPES)[number];
+
+export const ACCOUNT_TYPES = ["asset", "liability", "equity", "income", "expense"] as const;
+export type AccountType = (typeof ACCOUNT_TYPES)[number];

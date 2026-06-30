@@ -1,0 +1,129 @@
+#!/usr/bin/env bash
+# dispatch-close-resolved — terminal close + sentinel for a resolved epic.
+#
+# Usage: dispatch-close-resolved <N> --reason "<text>"
+#
+# Called by /resolve-epic as the terminal step when an epic is verifiably
+# complete. It is state-aware so the already-CLOSED re-entry path still leaves
+# the resolved-closed sentinel (which dispatch-stop.sh Branch R reads to spawn
+# the next tick and self-close) WITHOUT posting a duplicate comment.
+#
+# Behavior:
+#   1. Validate args (exit 2 on any violation, before any gh call).
+#   2. Fetch the issue's current state once. If NOT already closed, close it
+#      via `gh_issue_close_rest "$N" --reason completed --comment "$REASON"`
+#      (REST-backed; posts the comment then PATCHes the issue closed). If already
+#      CLOSED, skip the close + comment and print a diagnostic to stderr so a
+#      re-entry is idempotent and never posts a duplicate comment.
+#   3. Write the resolved-closed sentinel atomically (tempfile + mv) under the
+#      $CLAUDE_JOB_DIR guard. The sentinel content is the reason (diagnostic
+#      only; presence drives dispatch-stop.sh). An interactive run (no
+#      CLAUDE_JOB_DIR) still performs the gh close but no-ops the sentinel
+#      write (exit 0).
+#
+# Sentinel contents (for diagnostics only — presence drives dispatch-stop.sh):
+#
+#   <reason>
+#
+# When CLAUDE_JOB_DIR is unset/empty or not a directory the script is running
+# interactively (not under a dispatch job): it prints a diagnostic and no-ops
+# the sentinel write (exit 0), so the same terminal call is harmless
+# interactively.
+#
+# Exactly one non-empty positional issue-number argument plus a non-empty
+# --reason value are required; any violation is a clear error (exit 2).
+set -euo pipefail
+
+source "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+
+# ---------------------------------------------------------------------------
+# Arg validation (must happen before any gh call)
+# ---------------------------------------------------------------------------
+
+usage() {
+  echo "usage: dispatch-close-resolved <N> --reason \"<text>\"" >&2
+}
+
+if [[ $# -eq 0 ]]; then
+  echo "dispatch-close-resolved: issue number is required" >&2
+  usage
+  exit 2
+fi
+
+# Parse: expect exactly one positional arg (the issue number) and --reason.
+POSITIONALS=()
+REASON=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --reason)
+      shift
+      if [[ $# -eq 0 ]]; then
+        echo "dispatch-close-resolved: --reason requires a value" >&2
+        usage
+        exit 2
+      fi
+      REASON="$1"
+      shift
+      ;;
+    --reason=*)
+      REASON="${1#--reason=}"
+      shift
+      ;;
+    -*)
+      echo "dispatch-close-resolved: unknown option: $1" >&2
+      usage
+      exit 2
+      ;;
+    *)
+      POSITIONALS+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if [[ ${#POSITIONALS[@]} -eq 0 ]]; then
+  echo "dispatch-close-resolved: issue number is required" >&2
+  usage
+  exit 2
+fi
+
+if [[ ${#POSITIONALS[@]} -gt 1 ]]; then
+  echo "dispatch-close-resolved: exactly one issue number argument is accepted (got ${#POSITIONALS[@]})" >&2
+  usage
+  exit 2
+fi
+
+if [[ -z "$REASON" ]]; then
+  echo "dispatch-close-resolved: --reason must be non-empty" >&2
+  usage
+  exit 2
+fi
+
+N=$(resolve_issue_number "${POSITIONALS[0]}")
+
+# ---------------------------------------------------------------------------
+# State-aware gh close/skip
+# ---------------------------------------------------------------------------
+
+STATE=$(gh_issue_view_rest "$N" | jq -r '.state')
+
+if [ "$(printf '%s' "$STATE" | tr '[:upper:]' '[:lower:]')" = "closed" ]; then
+  echo "dispatch-close-resolved: #$N already CLOSED; skipping re-close, writing sentinel only" >&2
+else
+  gh_issue_close_rest "$N" --reason completed --comment "$REASON"
+fi
+
+# ---------------------------------------------------------------------------
+# CLAUDE_JOB_DIR guard: sentinel write only
+# ---------------------------------------------------------------------------
+
+if [[ -z "${CLAUDE_JOB_DIR:-}" || ! -d "$CLAUDE_JOB_DIR" ]]; then
+  echo "dispatch-close-resolved: CLAUDE_JOB_DIR unset or not a directory; interactive run, skipping sentinel write" >&2
+  exit 0
+fi
+
+# Atomic write: tempfile + mv. Presence is read by dispatch-stop.sh Branch R;
+# the reason is diagnostic only.
+f="$CLAUDE_JOB_DIR/resolved-closed"
+printf '%s\n' "$REASON" > "$f.tmp"
+mv "$f.tmp" "$f"

@@ -1,0 +1,148 @@
+package parse
+
+import (
+	"encoding/csv"
+	"fmt"
+	"os"
+	"strings"
+	"time"
+)
+
+// parseCSV parses a bank statement CSV file.
+// Expected CSV format:
+//
+//	Line 1: account metadata [acctNumber, fromDate, toDate, startingBalance, endingBalance] — ending balance extracted
+//	Lines 2+: positional data rows with 6 fields:
+//	  [0] Date, [1] Amount, [2] Description, [3] (empty), [4] TransactionID, [5] Type
+//
+// Amount is always positive in the file. Type is "DEBIT" or "CREDIT".
+// Convention: DEBIT → positive (spending), CREDIT → negative (income).
+func parseCSV(path string) (ParseResult, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return ParseResult{}, err
+	}
+	defer f.Close()
+
+	reader := csv.NewReader(f)
+	// The metadata line has 5 fields, data lines have 6.
+	// Disable field count checking for this variable-width format.
+	reader.FieldsPerRecord = -1
+	records, err := reader.ReadAll()
+	if err != nil {
+		return ParseResult{}, fmt.Errorf("parsing CSV %s: %w", path, err)
+	}
+
+	if len(records) < 2 {
+		return ParseResult{}, fmt.Errorf("%s: CSV file has no data rows", path)
+	}
+
+	// Extract toDate and ending balance from metadata line (line 1) if available.
+	// Metadata format: [acctNumber, fromDate, toDate, startingBalance, endingBalance]
+	var balance int64
+	var balanceDate time.Time
+	meta := records[0]
+	if len(meta) >= 5 {
+		if meta[2] != "" {
+			bd, err := time.Parse("2006/01/02", meta[2])
+			if err != nil {
+				return ParseResult{}, fmt.Errorf("%s: parsing toDate %q from metadata: %w", path, meta[2], err)
+			}
+			balanceDate = bd
+		}
+		if meta[4] != "" {
+			b, err := parseCents(meta[4])
+			if err != nil {
+				return ParseResult{}, fmt.Errorf("%s: parsing balance %q from metadata: %w", path, meta[4], err)
+			}
+			balance = b
+		}
+	}
+
+	// First pass: collect all original trimmed IDs present in the file so that
+	// synthetic suffixes can never collide with a real later ID.
+	original := make(map[string]struct{})
+	for _, row := range records[1:] {
+		if len(row) >= 5 {
+			if id := strings.TrimSpace(row[4]); id != "" {
+				original[id] = struct{}{}
+			}
+		}
+	}
+
+	var txns []Transaction
+	used := make(map[string]struct{})
+	nextSuffix := make(map[string]int)
+	for i, row := range records[1:] {
+		if len(row) < 6 {
+			return ParseResult{}, fmt.Errorf("%s: line %d: expected 6 fields, got %d", path, i+2, len(row))
+		}
+
+		date, err := time.Parse("2006/01/02", row[0])
+		if err != nil {
+			return ParseResult{}, fmt.Errorf("%s: line %d: parsing date %q: %w", path, i+2, row[0], err)
+		}
+
+		amount, err := parseCents(row[1])
+		if err != nil {
+			return ParseResult{}, fmt.Errorf("%s: line %d: parsing amount %q: %w", path, i+2, row[1], err)
+		}
+
+		txnType := strings.TrimSpace(row[5])
+		switch txnType {
+		case "DEBIT":
+		case "CREDIT":
+			amount = -amount
+		default:
+			return ParseResult{}, fmt.Errorf("%s: line %d: unknown transaction type %q", path, i+2, txnType)
+		}
+
+		txnID := strings.TrimSpace(row[4])
+		if txnID == "" {
+			return ParseResult{}, fmt.Errorf("%s: line %d: missing transaction ID", path, i+2)
+		}
+
+		if _, taken := used[txnID]; taken {
+			base := txnID
+			n := nextSuffix[base]
+			if n < 2 {
+				n = 2 // map zero-value guard: first collision starts at X-2; stored values are always >= 3, so n is never 0 or 1
+			}
+			// Defensive termination guard. The per-ID counter keeps suffix
+			// assignment amortized O(rows): each base ID resumes its scan where
+			// the previous collision left off instead of restarting from 2. The
+			// scan is also implicitly bounded — every blocking X-n candidate must
+			// be an ID present in the finite file, so a free suffix always exists
+			// at or below n = len(records)-1. The explicit upper bound makes
+			// termination guaranteed in source against a future change that breaks
+			// that invariant; the error is not reachable on any input (you cannot
+			// pack more distinct X-n blockers into the file than it has rows).
+			found := false
+			for ; n <= len(records)-1; n++ {
+				candidate := fmt.Sprintf("%s-%d", base, n)
+				_, inUsed := used[candidate]
+				_, inOriginal := original[candidate]
+				if !inUsed && !inOriginal {
+					txnID = candidate
+					n++ // advance so nextSuffix stores the slot after the one just taken
+					found = true
+					break
+				}
+			}
+			if !found {
+				return ParseResult{}, fmt.Errorf("%s: line %d: cannot find unique suffix for duplicate ID %q within %d candidates", path, i+2, base, len(records)-1)
+			}
+			nextSuffix[base] = n // record next slot to try; counter never rewinds
+		}
+		used[txnID] = struct{}{}
+
+		txns = append(txns, Transaction{
+			TransactionID: txnID,
+			Date:          date,
+			Amount:        amount,
+			Description:   strings.TrimSpace(row[2]),
+		})
+	}
+
+	return ParseResult{Transactions: txns, Balance: balance, BalanceDate: balanceDate}, nil
+}

@@ -1,12 +1,12 @@
 import type { Transaction } from "./firestore.js";
 import { computeNetAmount } from "./balance.js";
 
-export interface CategoryLine {
+interface CategoryLine {
   readonly category: string;
   readonly amount: number;
 }
 
-export interface MonthlyIncomeStatement {
+interface MonthlyIncomeStatement {
   readonly income: readonly CategoryLine[];
   readonly expenses: readonly CategoryLine[];
   readonly totalIncome: number;
@@ -37,13 +37,13 @@ export interface VarianceRow {
   readonly variance: PeriodVariance;
 }
 
-export interface SavingsRateTriplet {
+interface SavingsRateTriplet {
   readonly current: number | null;
   readonly prior: number | null;
   readonly yoY: number | null;
 }
 
-export interface CashFlowTriplet {
+interface CashFlowTriplet {
   readonly current: CashFlowSummary;
   readonly prior: CashFlowSummary | null;
   readonly yoY: CashFlowSummary | null;
@@ -62,7 +62,7 @@ export interface IncomeStatementReport {
   readonly cashFlow: CashFlowTriplet;
 }
 
-export interface YearMonth {
+interface YearMonth {
   readonly year: number;
   /** 0-based month index (0 = January). */
   readonly monthIdx0: number;

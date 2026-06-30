@@ -18,3 +18,20 @@ export interface AudioItem {
   readonly memberEmails: readonly string[];
   readonly addedAt: string;
 }
+
+export type AudioOrigin = "cloud" | "local";
+
+export type LibraryItem = AudioItem & {
+  readonly origin: AudioOrigin;
+  readonly localName?: string;
+};
+
+export interface AudioTags {
+  title?: string;
+  artist?: string;
+  album?: string;
+  trackNumber?: number;
+  genre?: string;
+  year?: number;
+  duration?: number;
+}

@@ -1,15 +1,11 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { logError } from "@commons-systems/errorutil/log";
-import type { User } from "../auth.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
-import { getPublicMedia, getAllAccessibleMedia } from "../firestore.js";
+import { listCloud } from "../library.js";
 import { getMediaDownloadUrl } from "../storage.js";
-import { wireMarkdownActions } from "../markdown-actions.js";
-import type { MediaItem, MediaType } from "../types.js";
-
-function mediaTypeBadge(mediaType: MediaType): string {
-  return `<span class="media-badge">${escapeHtml(mediaType)}</span>`;
-}
+import { renderLocalIntoList } from "../local-folder-ui.js";
+import type { MediaItem } from "../types.js";
+import { mediaTypeBadge } from "../media-render.js";
 
 function renderMediaList(items: MediaItem[]): string {
   if (items.length === 0) {
@@ -70,32 +66,18 @@ async function handleDownload(button: HTMLButtonElement): Promise<void> {
   }
 }
 
-export async function renderHome(user: User | null): Promise<string> {
-  let mediaHtml: string;
+export async function loadMediaHtml(): Promise<string> {
   try {
-    const items = user?.email
-      ? await getAllAccessibleMedia(user.email)
-      : await getPublicMedia();
-
-    mediaHtml = renderMediaList(items);
+    const items = await listCloud();
+    return renderMediaList(items);
   } catch (error) {
     if (error instanceof DataIntegrityError) throw error;
     logError(error, { operation: "load-media" });
-    mediaHtml = '<p id="media-error">Could not load media library.</p>';
+    return '<p id="media-error">Could not load media library.</p>';
   }
-
-  const publicNotice = !user
-    ? '<p id="public-notice">Showing public domain items. Sign in to see your full library.</p>'
-    : "";
-
-  return `
-    <h2>Library</h2>
-    ${publicNotice}
-    ${mediaHtml}
-  `;
 }
 
-export function afterRenderHome(outlet: HTMLElement): void {
+export function wireDownloadActions(outlet: HTMLElement): void {
   outlet.addEventListener("click", (e) => {
     const target = e.target as HTMLElement;
     const downloadBtn = target.closest(".media-download") as HTMLButtonElement | null;
@@ -104,5 +86,12 @@ export function afterRenderHome(outlet: HTMLElement): void {
       handleDownload(downloadBtn).catch((err) => logError(err, { operation: "download" }));
     }
   });
-  wireMarkdownActions(outlet);
+}
+
+export function afterRenderHome(outlet: HTMLElement): void {
+  // Repopulate local items into the freshly-rendered media list. The folder
+  // button itself lives in the nav (initialized once at startup in main.ts).
+  renderLocalIntoList(outlet).catch((err) =>
+    logError(err, { operation: "local-folder-home-render" }),
+  );
 }

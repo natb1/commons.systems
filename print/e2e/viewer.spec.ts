@@ -1,11 +1,20 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@commons-systems/config/playwright-test";
 
 test.describe("viewer", () => {
-  // Public seed items (by addedAt desc):
-  //   1. "Little Nemo..." (test-image-archive, image-archive, 5 images)
-  //   2. "Republic" (plato-republic, PDF, 3 pages)
-  //   3. "Phaedrus" (plato-phaedrus, PDF, 1 page)
-  //   4. "Confessions..." (gutenberg-3296, EPUB)
+  // Seed source of truth: print/seeds/firestore.ts. Classification is derived
+  // from which `media` collection block a document sits in: items in a block
+  // WITHOUT a `testOnly` flag are public; items in a block with `testOnly: true`
+  // are seeded only when SEED_TEST_ONLY=true (so tests must not depend on them
+  // in the default emulator seed). Verify any item below against that file.
+  //
+  // Public seed items (by addedAt desc) — in the un-flagged `media` block:
+  //   1. "Republic" (plato-republic, PDF, 3 pages)
+  //   2. "Phaedrus" (plato-phaedrus, PDF, 1 page)
+  //   3. "Confessions..." (gutenberg-3296, EPUB)
+  //
+  // testOnly seed items (in the `testOnly: true` `media` block):
+  //   - "Little Nemo..." (test-image-archive, image-archive, 5 images)
+  //   - "Test Private Item" (test-private-item, PDF, private/grouped)
   //
   // Navigate to Republic (3 pages) for navigation testing:
   //   page.goto("/view/plato-republic")
@@ -89,14 +98,14 @@ test.describe("viewer", () => {
     await expect(page.locator(".viewer-pd")).toContainText("Public Domain");
   });
 
-  test("viewer loads for image archive item", async ({ page }) => {
+  test("viewer loads for image archive item @testonly", async ({ page }) => {
     await page.goto("/view/test-image-archive");
     await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
     await expect(page.locator(".viewer-canvas-wrap img")).toBeVisible();
     await expect(page.locator(".viewer-position")).toContainText("1 / 5");
   });
 
-  test("image navigation works", async ({ page }) => {
+  test("image navigation works @testonly", async ({ page }) => {
     await page.goto("/view/test-image-archive");
     await expect(page.locator(".viewer-position")).toContainText("1 / 5", {
       timeout: 15000,
@@ -122,7 +131,7 @@ test.describe("viewer", () => {
     await expect(next).toBeEnabled();
   });
 
-  test("keyboard navigation works for image archive", async ({ page }) => {
+  test("keyboard navigation works for image archive @testonly", async ({ page }) => {
     await page.goto("/view/test-image-archive");
     await expect(page.locator(".viewer-position")).toContainText("1 / 5", {
       timeout: 15000,
@@ -274,7 +283,7 @@ test.describe("viewer", () => {
     await expect(page.locator(".viewer-pd")).toContainText("Public Domain");
   });
 
-  test("image archive: default view fits image without scrollbars", async ({
+  test("image archive: default view fits image without scrollbars @testonly", async ({
     page,
   }) => {
     await page.goto("/view/test-image-archive");
@@ -291,7 +300,7 @@ test.describe("viewer", () => {
     expect(imgBox!.height).toBeLessThanOrEqual(containerBox!.height);
   });
 
-  test("image archive: zoom controls visible for image-archive", async ({
+  test("image archive: zoom controls visible for image-archive @testonly", async ({
     page,
   }) => {
     await page.goto("/view/test-image-archive");
@@ -314,7 +323,7 @@ test.describe("viewer", () => {
     await expect(page.locator(".viewer-zoom-out")).not.toBeVisible();
   });
 
-  test("image archive: zoom-in button makes image larger than container", async ({
+  test("image archive: zoom-in button makes image larger than container @testonly", async ({
     page,
   }) => {
     await page.goto("/view/test-image-archive");
@@ -338,7 +347,7 @@ test.describe("viewer", () => {
     expect(exceedsWidth || exceedsHeight).toBe(true);
   });
 
-  test("image archive: zoom-out button decreases zoom level", async ({
+  test("image archive: zoom-out button decreases zoom level @testonly", async ({
     page,
   }) => {
     await page.goto("/view/test-image-archive");
@@ -360,7 +369,7 @@ test.describe("viewer", () => {
     await expect(page.locator(".viewer-zoom-reset")).toBeEnabled();
   });
 
-  test("image archive: reset-zoom returns to fit-to-view", async ({
+  test("image archive: reset-zoom returns to fit-to-view @testonly", async ({
     page,
   }) => {
     await page.goto("/view/test-image-archive");
@@ -390,7 +399,7 @@ test.describe("viewer", () => {
     await expect(page.locator(".viewer-zoom-reset")).toBeDisabled();
   });
 
-  test("image archive: page navigation resets zoom", async ({ page }) => {
+  test("image archive: page navigation resets zoom @testonly", async ({ page }) => {
     await page.goto("/view/test-image-archive");
     const img = page.locator(".viewer-canvas-wrap img");
     await expect(img).toBeVisible({ timeout: 15000 });
@@ -440,6 +449,16 @@ test.describe("viewer", () => {
     });
   });
 
+  test("PDF renders with the CDN blocked (worker served from app origin)", async ({ page }) => {
+    // Block all jsdelivr CDN requests — the worker must load from the app origin.
+    await page.route("**/cdn.jsdelivr.net/**", (route) => route.abort());
+
+    await page.goto("/view/plato-republic");
+    await expect(page.locator(".viewer-position")).toContainText("1 / 3", {
+      timeout: 15000,
+    });
+  });
+
   test("EPUB loads from cache on second view @cache", async ({ page }) => {
     // First visit: load the EPUB normally
     await page.goto("/view/gutenberg-3296");
@@ -461,7 +480,7 @@ test.describe("viewer", () => {
     });
   });
 
-  test("image archive loads from cache on second view @cache", async ({
+  test("image archive loads from cache on second view @cache @testonly", async ({
     page,
   }) => {
     // First visit: load the image archive normally
@@ -481,18 +500,21 @@ test.describe("viewer", () => {
     // Block all Firebase Storage requests
     await page.route("**/*.googleapis.com/**", (route) => route.abort());
 
-    // Second visit: should load from cache
+    // Second visit: should load from cache. The page-2 position persisted on
+    // teardown (issue #1283 — the pending debounced save is now flushed), so the
+    // viewer restores directly to page 2, served from cache with Firebase Storage
+    // blocked.
     await page.goto("/view/test-image-archive");
-    await expect(page.locator(".viewer-position")).toContainText("1 / 5", {
+    await expect(page.locator(".viewer-position")).toContainText("2 / 5", {
       timeout: 15000,
     });
 
-    // Navigate to page 2 to verify lazy-loaded pages also cached
-    await page.locator(".viewer-next").click();
-    await expect(page.locator(".viewer-position")).toContainText("2 / 5");
+    // Navigate back to page 1 to verify it is also served from cache.
+    await page.locator(".viewer-prev").click();
+    await expect(page.locator(".viewer-position")).toContainText("1 / 5");
   });
 
-  test("spread toggle visible for PDF and image-archive, hidden for EPUB", async ({
+  test("spread toggle visible for PDF and image-archive, hidden for EPUB @testonly", async ({
     page,
   }) => {
     // PDF: spread toggle should be visible
@@ -511,7 +533,7 @@ test.describe("viewer", () => {
     await expect(page.locator(".viewer-spread-toggle")).toHaveClass(/spread-hidden/);
   });
 
-  test("two pages visible in spread mode for interior pages", async ({
+  test("two pages visible in spread mode for interior pages @testonly", async ({
     page,
   }) => {
     await page.goto("/view/test-image-archive");
@@ -531,7 +553,7 @@ test.describe("viewer", () => {
     await expect(spreadPages).toHaveCount(2);
   });
 
-  test("page 1 displayed solo and centered in spread mode", async ({
+  test("page 1 displayed solo and centered in spread mode @testonly", async ({
     page,
   }) => {
     await page.goto("/view/test-image-archive");
@@ -545,7 +567,7 @@ test.describe("viewer", () => {
     await expect(page.locator(".viewer-canvas-wrap.spread-mode.solo")).toBeVisible();
   });
 
-  test("navigation advances by spread, position label updates", async ({
+  test("navigation advances by spread, position label updates @testonly", async ({
     page,
   }) => {
     await page.goto("/view/test-image-archive");
@@ -569,7 +591,7 @@ test.describe("viewer", () => {
     await expect(page.locator(".viewer-position")).toContainText(/Pages 4\u20135 \/ 5/);
   });
 
-  test("toggle spread on/off preserves position", async ({ page }) => {
+  test("toggle spread on/off preserves position @testonly", async ({ page }) => {
     await page.goto("/view/test-image-archive");
     await expect(page.locator(".viewer-position")).toContainText("1 / 5", {
       timeout: 15000,
@@ -592,7 +614,7 @@ test.describe("viewer", () => {
     await expect(page.locator(".viewer-position")).toContainText("3 / 5");
   });
 
-  test("keyboard arrows advance by spread", async ({ page }) => {
+  test("keyboard arrows advance by spread @testonly", async ({ page }) => {
     await page.goto("/view/test-image-archive");
     await expect(page.locator(".viewer-position")).toContainText("1 / 5", {
       timeout: 15000,
@@ -628,14 +650,31 @@ test.describe("viewer", () => {
     await page.goto("/view/plato-republic");
     await expect(page.locator(".textLayer span").first()).toBeAttached({ timeout: 15000 });
 
-    // Capture text content on page 1
+    // Capture text content on page 1 — poll until the text layer populates
+    // (PDF.js fills span text asynchronously after node attachment).
+    await expect
+      .poll(
+        async () => ((await page.locator(".textLayer").textContent()) ?? "").trim().length,
+        { timeout: 15000 },
+      )
+      .toBeGreaterThan(0);
     const page1Text = await page.locator(".textLayer").textContent();
 
     // Navigate to page 2
     await page.locator(".viewer-next").click();
     await expect(page.locator(".viewer-position")).toContainText("2 / 3");
 
-    // Text layer content should differ on page 2
+    // Text layer content should differ on page 2 — poll until the page-2 text
+    // layer has populated with content distinct from page 1.
+    await expect
+      .poll(
+        async () => {
+          const t = ((await page.locator(".textLayer").textContent()) ?? "").trim();
+          return t.length > 0 && t !== (page1Text ?? "").trim();
+        },
+        { timeout: 15000 },
+      )
+      .toBe(true);
     const page2Text = await page.locator(".textLayer").textContent();
     expect(page2Text).not.toBe(page1Text);
   });
@@ -668,16 +707,62 @@ test.describe("viewer", () => {
     expect(Math.abs(nextBox!.width - expectedWidth)).toBeLessThan(tolerance);
   });
 
-  test("text layer not present for image archive", async ({ page }) => {
+  test("text layer not present for image archive @testonly", async ({ page }) => {
     await page.goto("/view/test-image-archive");
     await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
     await expect(page.locator(".textLayer")).not.toBeAttached();
   });
 
-  test("search section is hidden for image archive viewer", async ({ page }) => {
+  test("search section is hidden for image archive viewer @testonly", async ({ page }) => {
     await page.goto("/view/test-image-archive");
     await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
-    await expect(page.locator(".viewer-search")).toHaveClass(/search-hidden/);
+    await expect(page.locator(".viewer-search")).toHaveCount(0);
+  });
+
+  test("PDF full-document search finds, navigates, highlights, and clears", async ({ page }) => {
+    await page.goto("/view/plato-republic");
+    await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
+    await expect(page.locator(".textLayer span").first()).toBeAttached({ timeout: 15000 });
+
+    // Search UI un-hides for PDFs (positive counterpart to the image-archive test above).
+    await expect(page.locator(".viewer-search")).toBeVisible({ timeout: 15000 });
+
+    // Fill the query and press Enter to skip the 300ms debounce.
+    const input = page.locator(".viewer-search-input");
+    await input.fill("the");
+    await input.press("Enter");
+
+    // Wait for at least the first result to appear.
+    await expect(page.locator(".viewer-search-result").first()).toBeVisible({ timeout: 15000 });
+
+    // Assert multi-page coverage: "the" should match on more than one page of
+    // a 3-page PDF. Poll because renderResults is async (search awaits text content).
+    await expect
+      .poll(
+        async () => {
+          const labels = await page.locator(".viewer-search-result-label").allTextContents();
+          return new Set(labels).size;
+        },
+        { timeout: 15000 },
+      )
+      .toBeGreaterThanOrEqual(2);
+
+    // Click a result labeled "Page 2" to assert navigation is observable.
+    await page.locator(".viewer-search-result", { hasText: "Page 2" }).first().click();
+    await expect(page.locator(".viewer-position")).toContainText("2 / 3", { timeout: 15000 });
+
+    // A search-highlight span should be active in the text layer.
+    await expect(page.locator(".textLayer .search-highlight.active").first()).toBeVisible({ timeout: 15000 });
+
+    // Clear the query — highlights should be removed.
+    await input.fill("");
+    await input.press("Enter");
+    await expect
+      .poll(
+        async () => page.locator(".textLayer .search-highlight").count(),
+        { timeout: 15000 },
+      )
+      .toBe(0);
   });
 
   test("EPUB outline is visible with TOC entries", async ({ page }) => {
@@ -688,7 +773,7 @@ test.describe("viewer", () => {
     });
 
     const outline = page.locator(".viewer-outline");
-    await expect(outline).not.toHaveClass(/outline-hidden/, { timeout: 15000 });
+    await expect(outline).toBeVisible({ timeout: 15000 });
     const entries = page.locator(".viewer-outline-entry");
     await expect(entries.first()).toBeVisible();
     expect(await entries.count()).toBeGreaterThanOrEqual(3);
@@ -714,7 +799,7 @@ test.describe("viewer", () => {
 
     // Wait for outline to populate
     const outline = page.locator(".viewer-outline");
-    await expect(outline).not.toHaveClass(/outline-hidden/, { timeout: 15000 });
+    await expect(outline).toBeVisible({ timeout: 15000 });
 
     // First entry has nested children -- toggle button should be present
     const toggle = page.locator(".viewer-outline-toggle").first();
@@ -735,10 +820,10 @@ test.describe("viewer", () => {
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
   });
 
-  test("image archive outline is hidden", async ({ page }) => {
+  test("image archive outline is hidden @testonly", async ({ page }) => {
     await page.goto("/view/test-image-archive");
     await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
-    await expect(page.locator(".viewer-outline")).toHaveClass(/outline-hidden/);
+    await expect(page.locator(".viewer-outline")).toHaveCount(0);
   });
 
   test("PDF outline is hidden when PDF has no bookmarks", async ({ page }) => {
@@ -748,12 +833,36 @@ test.describe("viewer", () => {
     await expect(page.locator(".viewer-position")).toContainText("1 / 3", {
       timeout: 15000,
     });
-    await expect(page.locator(".viewer-outline")).toHaveClass(/outline-hidden/);
+    await expect(page.locator(".viewer-outline")).toHaveCount(0);
   });
 
   test("viewer does not show markdown buttons for document without markdownPath", async ({ page }) => {
     await page.goto("/view/plato-republic");
     await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
     await expect(page.locator(".viewer-md-actions")).toHaveCount(0);
+  });
+
+  test("rapid page navigation never surfaces a navigation error", async ({ page }) => {
+    await page.goto("/view/plato-republic");
+    await expect(page.locator(".viewer-position")).toContainText("1 / 3", { timeout: 15000 });
+    await expect(page.locator(".textLayer span").first()).toBeAttached({ timeout: 15000 });
+
+    // Synchronous burst: all clicks in one microtask window, so multiple
+    // renderPage calls overlap inside the getPage await (the #1146 race).
+    await page.evaluate(() => {
+      const next = document.querySelector(".viewer-next") as HTMLButtonElement;
+      const prev = document.querySelector(".viewer-prev") as HTMLButtonElement;
+      for (let i = 0; i < 6; i++) { next.click(); prev.click(); next.click(); }
+    });
+
+    const position = page.locator(".viewer-position");
+    await expect(position).not.toContainText("Navigation failed", { timeout: 5000 });
+    await expect(position).toContainText(/[1-3] \/ 3/, { timeout: 15000 });
+    await expect
+      .poll(
+        async () => ((await page.locator(".textLayer").textContent()) ?? "").trim().length,
+        { timeout: 15000 },
+      )
+      .toBeGreaterThan(0);
   });
 });

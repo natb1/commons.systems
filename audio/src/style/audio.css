@@ -28,12 +28,12 @@
 }
 
 #playlist-queue {
-  padding-left: 1.5rem;
+  padding-left: var(--space-6);
   margin: 0;
 }
 
 #playlist-queue li {
-  padding: 0.25rem 0;
+  padding: var(--space-1) 0;
 }
 
 .playlist-active {

@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+# Classify the changed-file surface for security-review gating.
+# Usage: printf '%s\n' path/to/file ... | dispatch-security-surface
+#
+# Reads newline-separated changed file paths on stdin. Prints exactly three
+# lines to stdout:
+#   surface=<empty|docs|tests|code>
+#   deps=<true|false>
+#   app_or_rules=<true|false>
+#
+# No network access, no git, no gh — pure stdin classification.
+set -euo pipefail
+
+# --- regex definitions -------------------------------------------------------
+
+# DOCS: markdown/text/plain-text documentation and license files. License-style
+# files are matched only as bare names (no extension); a doc-extension variant
+# like LICENSE.md already matches the first branch, so allowing an arbitrary
+# extension here would misclassify code files such as NOTICE.ts or LICENSE.sh as
+# docs and skip the security fan-out.
+DOCS_RE='(\.(md|mdx|markdown|txt|rst|adoc)$)|((^|/)(LICENSE|NOTICE|AUTHORS|CONTRIBUTORS)$)'
+
+# TEST: test/spec files that carry no production attack surface — standard
+# language test suffixes, Go _test.go files, __tests__ dirs, test/ and spec/
+# directory prefixes, and shell test scripts.
+TEST_RE='(\.(test|spec)\.(ts|tsx|js|jsx|mjs|cjs)$)|((^|/)[^/]+_test\.go$)|((^|/)__tests__/)|((^|/)(test|tests|spec|e2e)/)|((^|/)test-[^/]*\.(sh|bash)$)'
+
+# DEPS: npm dependency manifests.
+DEPS_RE='(^|/)package(-lock)?\.json$'
+
+# RULES: Firestore/Storage security rules files.
+RULES_RE='(^|/)(firestore|storage)\.rules$'
+
+# APP: application source file extensions.
+APP_RE='\.(ts|tsx|js|jsx|mjs|cjs|go)$'
+
+# --- read stdin into array ---------------------------------------------------
+
+paths=()
+while IFS= read -r line; do
+  # Skip blank / whitespace-only lines (spaces and tabs).
+  [[ -z "${line//[[:space:]]/}" ]] && continue
+  paths+=("$line")
+done
+
+# --- empty input -------------------------------------------------------------
+
+if [[ ${#paths[@]} -eq 0 ]]; then
+  echo "surface=empty"
+  echo "deps=false"
+  echo "app_or_rules=false"
+  exit 0
+fi
+
+# --- check all-docs ----------------------------------------------------------
+
+all_docs=true
+for path in "${paths[@]}"; do
+  if ! [[ "$path" =~ $DOCS_RE ]]; then
+    all_docs=false
+    break
+  fi
+done
+
+if [[ "$all_docs" == true ]]; then
+  echo "surface=docs"
+  echo "deps=false"
+  echo "app_or_rules=false"
+  exit 0
+fi
+
+# --- check all-tests ---------------------------------------------------------
+# A path that is also a dependency manifest (e.g. test/package.json) matches
+# TEST_RE via the directory-prefix patterns but still carries dependency attack
+# surface. Treat any such path as non-test so the diff falls through to the
+# surface=code branch, where DEPS_RE runs and the npm/CodeQL fan-out fires.
+
+all_tests=true
+for path in "${paths[@]}"; do
+  if ! [[ "$path" =~ $TEST_RE ]] || [[ "$path" =~ $DEPS_RE ]]; then
+    all_tests=false
+    break
+  fi
+done
+
+if [[ "$all_tests" == true ]]; then
+  echo "surface=tests"
+  echo "deps=false"
+  echo "app_or_rules=false"
+  exit 0
+fi
+
+# --- surface=code: compute deps and app_or_rules ----------------------------
+# Order is load-bearing: empty → all-docs → all-tests → code. A mixed
+# docs+tests diff (neither all-docs nor all-tests) correctly falls through
+# to code, which is the conservative boundary for mixed diffs.
+
+deps=false
+app_or_rules=false
+
+for path in "${paths[@]}"; do
+  if [[ "$path" =~ $DEPS_RE ]]; then
+    deps=true
+  fi
+  if [[ "$path" =~ $RULES_RE ]]; then
+    app_or_rules=true
+  elif [[ "$path" =~ $APP_RE ]] && ! [[ "$path" == .claude/* ]]; then
+    app_or_rules=true
+  fi
+  # Short-circuit: no further classification possible once both are true.
+  if [[ "$deps" == true && "$app_or_rules" == true ]]; then
+    break
+  fi
+done
+
+echo "surface=code"
+echo "deps=$deps"
+echo "app_or_rules=$app_or_rules"

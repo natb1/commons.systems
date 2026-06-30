@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@commons-systems/config/playwright-test";
 
 const IMAGE_PATHS = [
   "/woman-with-a-flower-head.webp",

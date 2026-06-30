@@ -1,0 +1,2247 @@
+package main
+
+import (
+	"encoding/json"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/natb1/commons.systems/budget-etl/internal/budget"
+	"github.com/natb1/commons.systems/budget-etl/internal/export"
+	"github.com/natb1/commons.systems/budget-etl/internal/journal"
+	"github.com/natb1/commons.systems/budget-etl/internal/parse"
+	"github.com/natb1/commons.systems/budget-etl/internal/password"
+	"github.com/natb1/commons.systems/budget-etl/internal/rules"
+)
+
+func TestSplitRules(t *testing.T) {
+	input := []export.Rule{
+		{ID: "r1", Type: "categorization", Pattern: "coffee", Target: "Food:Coffee", TransactionID: ""},
+		{ID: "r2", Type: "categorization", Pattern: "", Target: "Groceries", TransactionID: "txn-abc"},
+		{ID: "r3", Type: "budget_assignment", Pattern: "rent", Target: "budget-housing", TransactionID: ""},
+		{ID: "r4", Type: "budget_assignment", Pattern: "", Target: "budget-food", TransactionID: "txn-def"},
+	}
+
+	txnRules, general := splitRules(input)
+
+	if len(txnRules) != 2 {
+		t.Fatalf("expected 2 transaction-specific rules, got %d", len(txnRules))
+	}
+	if len(general) != 2 {
+		t.Fatalf("expected 2 general rules, got %d", len(general))
+	}
+
+	// Verify transaction-specific rules
+	if txnRules[0].ID != "r2" {
+		t.Errorf("expected txnRules[0].ID = %q, got %q", "r2", txnRules[0].ID)
+	}
+	if txnRules[1].ID != "r4" {
+		t.Errorf("expected txnRules[1].ID = %q, got %q", "r4", txnRules[1].ID)
+	}
+
+	// Verify general rules
+	if general[0].ID != "r1" {
+		t.Errorf("expected general[0].ID = %q, got %q", "r1", general[0].ID)
+	}
+	if general[1].ID != "r3" {
+		t.Errorf("expected general[1].ID = %q, got %q", "r3", general[1].ID)
+	}
+}
+
+func TestSplitRulesEmpty(t *testing.T) {
+	txnRules, general := splitRules(nil)
+	if txnRules != nil {
+		t.Errorf("expected nil txnRules for nil input, got %v", txnRules)
+	}
+	if general != nil {
+		t.Errorf("expected nil general for nil input, got %v", general)
+	}
+}
+
+func TestConvertExportRules(t *testing.T) {
+	minAmt := 200.01
+	maxAmt := 500.0
+	input := []export.Rule{
+		{
+			ID:          "r1",
+			Type:        "categorization",
+			Pattern:     "coffee",
+			Target:      "Food:Coffee",
+			Priority:    10,
+			Institution: "chase",
+			Account:     "checking",
+			MinAmount:   &minAmt,
+			MaxAmount:   &maxAmt,
+		},
+		{
+			ID:       "r2",
+			Type:     "budget_assignment",
+			Pattern:  "rent",
+			Target:   "budget-housing",
+			Priority: 5,
+		},
+	}
+
+	result, err := convertExportRules(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result) != 2 {
+		t.Fatalf("expected 2 rules, got %d", len(result))
+	}
+
+	// Verify all fields mapped correctly for first rule
+	r := result[0]
+	if r.ID != "r1" {
+		t.Errorf("ID: got %q, want %q", r.ID, "r1")
+	}
+	if r.Type != "categorization" {
+		t.Errorf("Type: got %q, want %q", r.Type, "categorization")
+	}
+	if r.Pattern != "coffee" {
+		t.Errorf("Pattern: got %q, want %q", r.Pattern, "coffee")
+	}
+	if r.Target != "Food:Coffee" {
+		t.Errorf("Target: got %q, want %q", r.Target, "Food:Coffee")
+	}
+	if r.Priority != 10 {
+		t.Errorf("Priority: got %d, want %d", r.Priority, 10)
+	}
+	if r.Institution != "chase" {
+		t.Errorf("Institution: got %q, want %q", r.Institution, "chase")
+	}
+	if r.Account != "checking" {
+		t.Errorf("Account: got %q, want %q", r.Account, "checking")
+	}
+	if r.MinAmount == nil || *r.MinAmount != 20001 {
+		t.Errorf("MinAmount: got %v, want 20001", r.MinAmount)
+	}
+	if r.MaxAmount == nil || *r.MaxAmount != 50000 {
+		t.Errorf("MaxAmount: got %v, want 50000", r.MaxAmount)
+	}
+
+	// Verify second rule (no amount filters)
+	r2 := result[1]
+	if r2.ID != "r2" {
+		t.Errorf("second rule ID: got %q, want %q", r2.ID, "r2")
+	}
+	if r2.Institution != "" {
+		t.Errorf("second rule Institution: got %q, want empty", r2.Institution)
+	}
+	if r2.Account != "" {
+		t.Errorf("second rule Account: got %q, want empty", r2.Account)
+	}
+	if r2.MinAmount != nil {
+		t.Errorf("second rule should not have MinAmount, got %d", *r2.MinAmount)
+	}
+	if r2.MaxAmount != nil {
+		t.Errorf("second rule should not have MaxAmount, got %d", *r2.MaxAmount)
+	}
+}
+
+func TestConvertExportRulesEmpty(t *testing.T) {
+	result, err := convertExportRules(nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 0 {
+		t.Errorf("expected empty result for nil input, got %d", len(result))
+	}
+}
+
+func TestConvertExportRulesRejectsCategoryFilterOnCategorization(t *testing.T) {
+	tests := []struct {
+		name    string
+		rule    export.Rule
+		wantErr bool
+	}{
+		{
+			name: "categorization with MatchCategory errors",
+			rule: export.Rule{
+				ID:            "r1",
+				Type:          "categorization",
+				Pattern:       "coffee",
+				Target:        "Food:Coffee",
+				MatchCategory: "Food",
+			},
+			wantErr: true,
+		},
+		{
+			name: "categorization with ExcludeCategory errors",
+			rule: export.Rule{
+				ID:              "r2",
+				Type:            "categorization",
+				Pattern:         "coffee",
+				Target:          "Food:Coffee",
+				ExcludeCategory: "Dining",
+			},
+			wantErr: true,
+		},
+		{
+			name: "categorization with Category errors",
+			rule: export.Rule{
+				ID:       "r3",
+				Type:     "categorization",
+				Pattern:  "coffee",
+				Target:   "Food:Coffee",
+				Category: "Food",
+			},
+			wantErr: true,
+		},
+		{
+			name: "budget_assignment with MatchCategory succeeds",
+			rule: export.Rule{
+				ID:            "r4",
+				Type:          "budget_assignment",
+				Pattern:       "coffee",
+				Target:        "budget-food",
+				MatchCategory: "Food",
+			},
+			wantErr: false,
+		},
+		{
+			name: "budget_assignment with ExcludeCategory succeeds",
+			rule: export.Rule{
+				ID:              "r5",
+				Type:            "budget_assignment",
+				Pattern:         "coffee",
+				Target:          "budget-food",
+				ExcludeCategory: "Dining",
+			},
+			wantErr: false,
+		},
+		{
+			name: "budget_assignment with Category succeeds",
+			rule: export.Rule{
+				ID:       "r6",
+				Type:     "budget_assignment",
+				Pattern:  "coffee",
+				Target:   "budget-food",
+				Category: "Food",
+			},
+			wantErr: false,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := convertExportRules([]export.Rule{tc.rule})
+			if tc.wantErr && err == nil {
+				t.Fatalf("expected error, got nil")
+			}
+			if !tc.wantErr && err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestApplyTransactionRulesRejectsCategoryFilterOnCategorization(t *testing.T) {
+	ts := time.Date(2025, 1, 15, 0, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name    string
+		rule    export.Rule
+		wantErr bool
+	}{
+		{
+			name: "categorization with MatchCategory errors",
+			rule: export.Rule{
+				ID:            "r1",
+				Type:          "categorization",
+				Target:        "Food:Coffee",
+				MatchCategory: "Food",
+				TransactionID: "doc-1",
+			},
+			wantErr: true,
+		},
+		{
+			name: "categorization with ExcludeCategory errors",
+			rule: export.Rule{
+				ID:              "r2",
+				Type:            "categorization",
+				Target:          "Food:Coffee",
+				ExcludeCategory: "Dining",
+				TransactionID:   "doc-1",
+			},
+			wantErr: true,
+		},
+		{
+			name: "categorization with Category errors",
+			rule: export.Rule{
+				ID:            "r3",
+				Type:          "categorization",
+				Target:        "Food:Coffee",
+				Category:      "Food",
+				TransactionID: "doc-1",
+			},
+			wantErr: true,
+		},
+		{
+			name: "budget_assignment with category fields succeeds",
+			rule: export.Rule{
+				ID:              "r4",
+				Type:            "budget_assignment",
+				Target:          "budget-food",
+				MatchCategory:   "Food",
+				ExcludeCategory: "Dining",
+				Category:        "Food",
+				TransactionID:   "doc-1",
+			},
+			wantErr: false,
+		},
+		{
+			name: "categorization with MatchCategory errors even when target transaction is absent",
+			rule: export.Rule{
+				ID:            "r5",
+				Type:          "categorization",
+				Target:        "Food:Coffee",
+				MatchCategory: "Food",
+				TransactionID: "doc-absent",
+			},
+			wantErr: true,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			txns := []budget.TransactionData{
+				{Description: "Test Item", Amount: 500, Timestamp: ts, TransactionID: "t1"},
+			}
+			docIDs := []string{"doc-1"}
+			err := applyTransactionRules(txns, docIDs, []export.Rule{tc.rule})
+			if tc.wantErr && err == nil {
+				t.Fatalf("expected error, got nil")
+			}
+			if !tc.wantErr && err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestApplyTransactionRules(t *testing.T) {
+	ts := time.Date(2025, 1, 15, 0, 0, 0, 0, time.UTC)
+
+	t.Run("categorization rule pre-populates Category", func(t *testing.T) {
+		txns := []budget.TransactionData{
+			{Description: "Test Item A", Amount: 500, Timestamp: ts, TransactionID: "t1"},
+		}
+		docIDs := []string{"doc-1"}
+		txnRules := []export.Rule{
+			{ID: "r1", Type: "categorization", Target: "Food:Coffee", TransactionID: "doc-1"},
+		}
+
+		if err := applyTransactionRules(txns, docIDs, txnRules); err != nil {
+			t.Fatalf("applyTransactionRules: %v", err)
+		}
+
+		if txns[0].Category != "Food:Coffee" {
+			t.Errorf("Category: got %q, want %q", txns[0].Category, "Food:Coffee")
+		}
+	})
+
+	t.Run("budget_assignment rule pre-populates Budget", func(t *testing.T) {
+		txns := []budget.TransactionData{
+			{Description: "Test Item B", Amount: 150000, Timestamp: ts, TransactionID: "t1"},
+		}
+		docIDs := []string{"doc-1"}
+		txnRules := []export.Rule{
+			{ID: "r1", Type: "budget_assignment", Target: "budget-housing", TransactionID: "doc-1"},
+		}
+
+		if err := applyTransactionRules(txns, docIDs, txnRules); err != nil {
+			t.Fatalf("applyTransactionRules: %v", err)
+		}
+
+		if txns[0].Budget != "budget-housing" {
+			t.Errorf("Budget: got %q, want %q", txns[0].Budget, "budget-housing")
+		}
+	})
+
+	t.Run("non-existent transaction IDs are ignored", func(t *testing.T) {
+		txns := []budget.TransactionData{
+			{Description: "Test Item C", Amount: 500, Timestamp: ts, TransactionID: "t1"},
+		}
+		docIDs := []string{"doc-1"}
+		txnRules := []export.Rule{
+			{ID: "r1", Type: "categorization", Target: "Food:Coffee", TransactionID: "doc-nonexistent"},
+		}
+
+		if err := applyTransactionRules(txns, docIDs, txnRules); err != nil {
+			t.Fatalf("applyTransactionRules: %v", err)
+		}
+
+		if txns[0].Category != "" {
+			t.Errorf("Category should be empty for non-matching rule, got %q", txns[0].Category)
+		}
+	})
+
+	t.Run("multiple rules for same transaction", func(t *testing.T) {
+		txns := []budget.TransactionData{
+			{Description: "Test Item D", Amount: 500, Timestamp: ts, TransactionID: "t1"},
+		}
+		docIDs := []string{"doc-1"}
+		txnRules := []export.Rule{
+			{ID: "r1", Type: "categorization", Target: "Food:Coffee", TransactionID: "doc-1"},
+			{ID: "r2", Type: "budget_assignment", Target: "budget-food", TransactionID: "doc-1"},
+		}
+
+		if err := applyTransactionRules(txns, docIDs, txnRules); err != nil {
+			t.Fatalf("applyTransactionRules: %v", err)
+		}
+
+		if txns[0].Category != "Food:Coffee" {
+			t.Errorf("Category: got %q, want %q", txns[0].Category, "Food:Coffee")
+		}
+		if txns[0].Budget != "budget-food" {
+			t.Errorf("Budget: got %q, want %q", txns[0].Budget, "budget-food")
+		}
+	})
+
+	t.Run("empty txnRules is a no-op", func(t *testing.T) {
+		txns := []budget.TransactionData{
+			{Description: "Test Item E", Amount: 500, Timestamp: ts, TransactionID: "t1"},
+		}
+		docIDs := []string{"doc-1"}
+
+		if err := applyTransactionRules(txns, docIDs, nil); err != nil {
+			t.Fatalf("applyTransactionRules: %v", err)
+		}
+
+		if txns[0].Category != "" || txns[0].Budget != "" {
+			t.Errorf("expected empty Category/Budget with nil rules, got %q / %q", txns[0].Category, txns[0].Budget)
+		}
+	})
+
+	t.Run("unrecognized rule type returns error", func(t *testing.T) {
+		txns := []budget.TransactionData{
+			{Description: "Test Item F", Amount: 500, Timestamp: ts, TransactionID: "t1"},
+		}
+		docIDs := []string{"doc-1"}
+		txnRules := []export.Rule{
+			{ID: "r1", Type: "invalid_type", Target: "something", TransactionID: "doc-1"},
+		}
+
+		err := applyTransactionRules(txns, docIDs, txnRules)
+		if err == nil {
+			t.Fatal("expected error for unrecognized rule type")
+		}
+	})
+}
+
+func TestApplyTransactionRulesSkippedByGeneral(t *testing.T) {
+	ts := time.Date(2025, 1, 15, 0, 0, 0, 0, time.UTC)
+
+	// Two transactions: one with transaction-specific rules, one without.
+	txns := []budget.TransactionData{
+		{
+			Description:   "test coffee purchase",
+			Amount:        500,
+			Timestamp:     ts,
+			Institution:   "test_bank",
+			Account:       "1234",
+			StatementID:   "test_bank-1234-2025-01",
+			TransactionID: "t1",
+		},
+		{
+			Description:   "another test coffee purchase",
+			Amount:        600,
+			Timestamp:     ts,
+			Institution:   "test_bank",
+			Account:       "1234",
+			StatementID:   "test_bank-1234-2025-01",
+			TransactionID: "t2",
+		},
+	}
+	docIDs := []string{"doc-1", "doc-2"}
+
+	// Transaction-specific rules for doc-1 only
+	txnSpecificRules := []export.Rule{
+		{ID: "r-txn-cat", Type: "categorization", Target: "Food:SpecialCoffee", TransactionID: "doc-1"},
+		{ID: "r-txn-bud", Type: "budget_assignment", Target: "budget-special", TransactionID: "doc-1"},
+	}
+
+	// General rules that match both transactions by pattern
+	generalRules := []rules.Rule{
+		{ID: "r-gen-cat", Type: "categorization", Pattern: "coffee", Target: "Food:GenericCoffee", Priority: 1},
+		{ID: "r-gen-bud", Type: "budget_assignment", Pattern: "coffee", Target: "budget-generic", Priority: 1},
+	}
+
+	// Step 1: Apply transaction-specific rules
+	if err := applyTransactionRules(txns, docIDs, txnSpecificRules); err != nil {
+		t.Fatalf("applyTransactionRules: %v", err)
+	}
+
+	// Verify transaction-specific values applied to doc-1
+	if txns[0].Category != "Food:SpecialCoffee" {
+		t.Fatalf("after txn rules, txns[0].Category = %q, want %q", txns[0].Category, "Food:SpecialCoffee")
+	}
+	if txns[0].Budget != "budget-special" {
+		t.Fatalf("after txn rules, txns[0].Budget = %q, want %q", txns[0].Budget, "budget-special")
+	}
+
+	// Step 2: Apply general categorization (should skip doc-1, categorize doc-2)
+	if uncategorized := rules.ApplyCategorization(txns, generalRules); len(uncategorized) > 0 {
+		t.Fatalf("ApplyCategorization: unexpected uncategorized: %v", uncategorized)
+	}
+
+	// Step 3: Apply general budget assignment (should skip doc-1, assign doc-2)
+	rules.ApplyBudgetAssignment(txns, generalRules)
+
+	// Verify doc-1 kept transaction-specific values (not overwritten by general rules)
+	if txns[0].Category != "Food:SpecialCoffee" {
+		t.Errorf("txns[0].Category overwritten by general rules: got %q, want %q", txns[0].Category, "Food:SpecialCoffee")
+	}
+	if txns[0].Budget != "budget-special" {
+		t.Errorf("txns[0].Budget overwritten by general rules: got %q, want %q", txns[0].Budget, "budget-special")
+	}
+
+	// Verify doc-2 was categorized/budgeted by general rules
+	if txns[1].Category != "Food:GenericCoffee" {
+		t.Errorf("txns[1].Category: got %q, want %q", txns[1].Category, "Food:GenericCoffee")
+	}
+	if txns[1].Budget != "budget-generic" {
+		t.Errorf("txns[1].Budget: got %q, want %q", txns[1].Budget, "budget-generic")
+	}
+}
+
+// writeCSVFixture writes a minimal bank statement CSV file to path with a
+// default metadata line (toDate 2025/01/31). Each entry is
+// [date, amount, description, "", txnID, type].
+func writeCSVFixture(t *testing.T, path string, rows [][6]string) {
+	t.Helper()
+	writeCSVFixtureMeta(t, path, "0000000000,2025/01/01,2025/01/31,100.00,50.00", rows)
+}
+
+// writeCSVFixtureBalance writes a minimal bank statement CSV file to path with
+// a caller-specified ending balance in the metadata header line.
+// Each entry is [date, amount, description, "", txnID, type].
+func writeCSVFixtureBalance(t *testing.T, path, balance string, rows [][6]string) {
+	t.Helper()
+	writeCSVFixtureMeta(t, path, "0000000000,2025/01/01,2025/01/31,100.00,"+balance, rows)
+}
+
+// writeCSVFixtureMeta writes a bank statement CSV file to path with an explicit
+// metadata line (acctNumber,fromDate,toDate,startingBalance,endingBalance). The
+// metadata toDate drives the inferred statement period (see ParseResult.InferPeriod),
+// so two fixtures with different toDates produce different statementIDs even with
+// identical transaction rows.
+func writeCSVFixtureMeta(t *testing.T, path, meta string, rows [][6]string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatalf("creating fixture dir: %v", err)
+	}
+	lines := []string{meta}
+	for _, r := range rows {
+		lines = append(lines, strings.Join(r[:], ","))
+	}
+	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0644); err != nil {
+		t.Fatalf("writing fixture: %v", err)
+	}
+}
+
+func TestRunMerge(t *testing.T) {
+	tmp := t.TempDir()
+
+	// Create a statement dir: test_bank/1234/2025-01/stmt.csv
+	// Two transactions: txn-A (5.00 debit) and txn-B (12.50 debit)
+	csvPath := filepath.Join(tmp, "statements", "test_bank", "1234", "2025-01", "stmt.csv")
+	writeCSVFixture(t, csvPath, [][6]string{
+		{"2025/01/10", "5.00", "TEST PURCHASE ALPHA", "", "TXN-A", "DEBIT"},
+		{"2025/01/15", "12.50", "TEST PURCHASE BETA", "", "TXN-B", "DEBIT"},
+	})
+
+	// Compute expected doc IDs for the dir transactions
+	docA := budget.TransactionDocID("test_bank-1234-2025-01", "TXN-A")
+	docB := budget.TransactionDocID("test_bank-1234-2025-01", "TXN-B")
+
+	// Create an input JSON with:
+	// - txn docA with a user note (overlaps with dir)
+	// - txn "input-only-1" (not in dir, retained)
+	// - A categorization rule matching "TEST PURCHASE" and a transaction-specific rule for docA
+	// - A budget assignment rule and budget definition
+	inputJSON := export.Output{
+		Version:   1,
+		GroupName: "test-group",
+		Transactions: []export.Transaction{
+			{
+				ID:                docA,
+				Institution:       "test_bank",
+				Account:           "1234",
+				Description:       "TEST PURCHASE ALPHA",
+				Amount:            5.00,
+				Timestamp:         "2025-01-10T00:00:00Z",
+				StatementID:       "test_bank-1234-2025-01",
+				Category:          "Old:Category",
+				Note:              "user note on alpha",
+				Reimbursement:     50,
+				NormalizedPrimary: true,
+			},
+			{
+				ID:                "input-only-1",
+				Institution:       "other_bank",
+				Account:           "5678",
+				Description:       "TEST INPUT ONLY",
+				Amount:            20.00,
+				Timestamp:         "2025-01-20T00:00:00Z",
+				StatementID:       "other_bank-5678-2025-01",
+				Category:          "Old:InputOnly",
+				NormalizedPrimary: true,
+			},
+		},
+		Rules: []export.Rule{
+			{ID: "cat-test", Type: "categorization", Pattern: "TEST PURCHASE", Target: "Test:General", Priority: 10},
+			{ID: "cat-test-input", Type: "categorization", Pattern: "TEST INPUT", Target: "Test:InputOnly", Priority: 10},
+			{ID: "txn-cat-a", Type: "categorization", Target: "Test:OverrideAlpha", TransactionID: docA},
+			{ID: "bud-test", Type: "budget_assignment", Pattern: "TEST", Target: "test-budget", Priority: 10},
+		},
+		Budgets: []export.Budget{
+			{ID: "test-budget", Name: "Test Budget", Allowance: 100},
+		},
+		NormalizationRules: []export.NormalizationRule{},
+	}
+
+	inputPath := filepath.Join(tmp, "input.json")
+	if err := export.WriteFile(inputPath, inputJSON, ""); err != nil {
+		t.Fatalf("writing input JSON: %v", err)
+	}
+
+	outputPath := filepath.Join(tmp, "output.json")
+	statementsDir := filepath.Join(tmp, "statements")
+
+	if err := runMerge(fileOpts{path: inputPath}, statementsDir, "", parse.DiscoverOpts{}, fileOpts{path: outputPath}); err != nil {
+		t.Fatalf("runMerge: %v", err)
+	}
+
+	// Read and verify output
+	data, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("reading output: %v", err)
+	}
+	var out export.Output
+	if err := json.Unmarshal(data, &out); err != nil {
+		t.Fatalf("parsing output: %v", err)
+	}
+
+	// Should have 3 transactions: docA, docB from dir + input-only-1
+	if len(out.Transactions) != 3 {
+		t.Fatalf("expected 3 transactions, got %d", len(out.Transactions))
+	}
+
+	txnByID := make(map[string]export.Transaction)
+	for _, txn := range out.Transactions {
+		txnByID[txn.ID] = txn
+	}
+
+	// docA: transaction-specific rule overrides category, user edits preserved
+	txnA := txnByID[docA]
+	if txnA.Category != "Test:OverrideAlpha" {
+		t.Errorf("docA category: got %q, want %q", txnA.Category, "Test:OverrideAlpha")
+	}
+	if txnA.Note != "user note on alpha" {
+		t.Errorf("docA note: got %q, want %q", txnA.Note, "user note on alpha")
+	}
+	if txnA.Reimbursement != 50 {
+		t.Errorf("docA reimbursement: got %v, want 50", txnA.Reimbursement)
+	}
+	// Amount comes from dir (cents -> dollars): 500 cents = 5.00
+	if txnA.Amount != 5.00 {
+		t.Errorf("docA amount: got %v, want 5.00", txnA.Amount)
+	}
+
+	// docB: new from dir, general rule assigns category/budget
+	txnB := txnByID[docB]
+	if txnB.Category != "Test:General" {
+		t.Errorf("docB category: got %q, want %q", txnB.Category, "Test:General")
+	}
+	if txnB.Budget == nil || *txnB.Budget != "test-budget" {
+		t.Errorf("docB budget: got %v, want test-budget", txnB.Budget)
+	}
+
+	// input-only-1: retained from input, general rule re-categorizes
+	txnInput := txnByID["input-only-1"]
+	if txnInput.ID == "" {
+		t.Fatal("input-only-1 missing from output")
+	}
+	if txnInput.Category != "Test:InputOnly" {
+		t.Errorf("input-only category: got %q, want %q", txnInput.Category, "Test:InputOnly")
+	}
+	if txnInput.StatementID != "other_bank-5678-2025-01" {
+		t.Errorf("input-only statementId: got %q, want preserved", txnInput.StatementID)
+	}
+
+	// Group name: resolved from input file (no --group flag passed)
+	if out.GroupName != "test-group" {
+		t.Errorf("groupName: got %q, want %q", out.GroupName, "test-group")
+	}
+
+	// Budget periods should exist (at least one, since we have budgeted transactions)
+	if len(out.BudgetPeriods) == 0 {
+		t.Error("expected at least one budget period")
+	}
+
+	// Rules preserved in output (including transaction-specific)
+	if len(out.Rules) != 4 {
+		t.Errorf("expected 4 rules in output, got %d", len(out.Rules))
+	}
+
+	// Statements: one from dir (test_bank-1234-2025-01) with balance from CSV metadata
+	if len(out.Statements) != 1 {
+		t.Fatalf("expected 1 statement, got %d", len(out.Statements))
+	}
+	stmt := out.Statements[0]
+	if stmt.StatementID != "test_bank-1234-2025-01" {
+		t.Errorf("statement.statementId = %q, want %q", stmt.StatementID, "test_bank-1234-2025-01")
+	}
+	if stmt.Balance != 50.00 {
+		t.Errorf("statement.balance = %v, want 50.00", stmt.Balance)
+	}
+	if stmt.Institution != "test_bank" {
+		t.Errorf("statement.institution = %q, want %q", stmt.Institution, "test_bank")
+	}
+	if stmt.Period != "2025-01" {
+		t.Errorf("statement.period = %q, want %q", stmt.Period, "2025-01")
+	}
+}
+
+func TestRunMergeGroupNameOverride(t *testing.T) {
+	tmp := t.TempDir()
+
+	// Minimal statement dir with one transaction
+	csvPath := filepath.Join(tmp, "statements", "test_bank", "1234", "2025-01", "stmt.csv")
+	writeCSVFixture(t, csvPath, [][6]string{
+		{"2025/01/10", "5.00", "TEST ITEM", "", "TXN-X", "DEBIT"},
+	})
+
+	docX := budget.TransactionDocID("test_bank-1234-2025-01", "TXN-X")
+	inputJSON := export.Output{
+		Version:   1,
+		GroupName: "original-group",
+		Transactions: []export.Transaction{
+			{
+				ID:                docX,
+				Institution:       "test_bank",
+				Account:           "1234",
+				Description:       "TEST ITEM",
+				Amount:            5.00,
+				Timestamp:         "2025-01-10T00:00:00Z",
+				StatementID:       "test_bank-1234-2025-01",
+				NormalizedPrimary: true,
+			},
+		},
+		Rules: []export.Rule{
+			{ID: "cat-test", Type: "categorization", Pattern: "TEST", Target: "Test:Cat", Priority: 1},
+		},
+		NormalizationRules: []export.NormalizationRule{},
+	}
+
+	inputPath := filepath.Join(tmp, "input.json")
+	if err := export.WriteFile(inputPath, inputJSON, ""); err != nil {
+		t.Fatalf("writing input: %v", err)
+	}
+
+	outputPath := filepath.Join(tmp, "output.json")
+	if err := runMerge(fileOpts{path: inputPath}, filepath.Join(tmp, "statements"), "override-group", parse.DiscoverOpts{}, fileOpts{path: outputPath}); err != nil {
+		t.Fatalf("runMerge: %v", err)
+	}
+
+	data, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("reading output: %v", err)
+	}
+	var out export.Output
+	if err := json.Unmarshal(data, &out); err != nil {
+		t.Fatalf("parsing output: %v", err)
+	}
+
+	if out.GroupName != "override-group" {
+		t.Errorf("groupName: got %q, want %q", out.GroupName, "override-group")
+	}
+}
+
+func TestRunMergeDedupOverlappingFiles(t *testing.T) {
+	tmp := t.TempDir()
+
+	// Two CSV files in different subdirectories that produce the same statementId
+	// (simulating overlapping QFX downloads for the same period).
+	// Both share transaction TXN-OVERLAP; file2 also has TXN-UNIQUE.
+	csv1 := filepath.Join(tmp, "statements", "test_bank", "1234", "2025-01", "download1.csv")
+	writeCSVFixture(t, csv1, [][6]string{
+		{"2025/01/10", "5.00", "SHARED PURCHASE", "", "TXN-OVERLAP", "DEBIT"},
+	})
+	csv2 := filepath.Join(tmp, "statements", "test_bank", "1234", "2025-01", "download2.csv")
+	writeCSVFixture(t, csv2, [][6]string{
+		{"2025/01/10", "5.00", "SHARED PURCHASE", "", "TXN-OVERLAP", "DEBIT"},
+		{"2025/01/15", "10.00", "UNIQUE PURCHASE", "", "TXN-UNIQUE", "DEBIT"},
+	})
+
+	inputJSON := export.Output{
+		Version:      1,
+		GroupName:    "test-group",
+		Transactions: []export.Transaction{},
+		Rules: []export.Rule{
+			{ID: "cat-all", Type: "categorization", Pattern: "PURCHASE", Target: "Test:General", Priority: 10},
+		},
+	}
+	inputPath := filepath.Join(tmp, "input.json")
+	if err := export.WriteFile(inputPath, inputJSON, ""); err != nil {
+		t.Fatalf("writing input JSON: %v", err)
+	}
+
+	outputPath := filepath.Join(tmp, "output.json")
+	if err := runMerge(fileOpts{path: inputPath}, filepath.Join(tmp, "statements"), "", parse.DiscoverOpts{}, fileOpts{path: outputPath}); err != nil {
+		t.Fatalf("runMerge: %v", err)
+	}
+
+	data, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("reading output: %v", err)
+	}
+	var out export.Output
+	if err := json.Unmarshal(data, &out); err != nil {
+		t.Fatalf("parsing output: %v", err)
+	}
+
+	// TXN-OVERLAP should appear once (deduped), TXN-UNIQUE once → 2 total
+	if len(out.Transactions) != 2 {
+		t.Fatalf("expected 2 transactions (deduped), got %d", len(out.Transactions))
+	}
+
+	docOverlap := budget.TransactionDocID("test_bank-1234-2025-01", "TXN-OVERLAP")
+	docUnique := budget.TransactionDocID("test_bank-1234-2025-01", "TXN-UNIQUE")
+	ids := make(map[string]int)
+	for _, txn := range out.Transactions {
+		ids[txn.ID]++
+	}
+	if ids[docOverlap] != 1 {
+		t.Errorf("TXN-OVERLAP: expected 1 occurrence, got %d", ids[docOverlap])
+	}
+	if ids[docUnique] != 1 {
+		t.Errorf("TXN-UNIQUE: expected 1 occurrence, got %d", ids[docUnique])
+	}
+
+	// Both overlapping CSV files share the same statementId; they must collapse
+	// to exactly one deduped statement record.
+	if len(out.Statements) != 1 {
+		t.Fatalf("expected 1 statement (deduped), got %d", len(out.Statements))
+	}
+	wantStmtID := "test_bank-1234-2025-01"
+	if out.Statements[0].StatementID != wantStmtID {
+		t.Errorf("statement.statementId = %q, want %q", out.Statements[0].StatementID, wantStmtID)
+	}
+	wantDocID := budget.StatementDocID(wantStmtID)
+	if out.Statements[0].ID != wantDocID {
+		t.Errorf("statement.id = %q, want %q", out.Statements[0].ID, wantDocID)
+	}
+}
+
+func TestRunMergeErrorsOnBalanceDisagreement(t *testing.T) {
+	tmp := t.TempDir()
+
+	// Two overlapping CSV files for the same institution/account/period — same
+	// statementId — but with different ending balances. dedupStatementData must
+	// detect the balance disagreement and return an error.
+	stmtID := "test_bank-1234-2025-01"
+	csv1 := filepath.Join(tmp, "statements", "test_bank", "1234", "2025-01", "download1.csv")
+	writeCSVFixtureBalance(t, csv1, "50.00", [][6]string{
+		{"2025/01/10", "5.00", "SHARED PURCHASE", "", "TXN-OVERLAP", "DEBIT"},
+	})
+	csv2 := filepath.Join(tmp, "statements", "test_bank", "1234", "2025-01", "download2.csv")
+	writeCSVFixtureBalance(t, csv2, "75.00", [][6]string{
+		{"2025/01/10", "5.00", "SHARED PURCHASE", "", "TXN-OVERLAP", "DEBIT"},
+	})
+
+	inputJSON := export.Output{
+		Version:      1,
+		GroupName:    "test-group",
+		Transactions: []export.Transaction{},
+		Rules: []export.Rule{
+			{ID: "cat-all", Type: "categorization", Pattern: "PURCHASE", Target: "Test:General", Priority: 10},
+		},
+	}
+	inputPath := filepath.Join(tmp, "input.json")
+	if err := export.WriteFile(inputPath, inputJSON, ""); err != nil {
+		t.Fatalf("writing input JSON: %v", err)
+	}
+
+	outputPath := filepath.Join(tmp, "output.json")
+	err := runMerge(fileOpts{path: inputPath}, filepath.Join(tmp, "statements"), "", parse.DiscoverOpts{}, fileOpts{path: outputPath})
+	if err == nil {
+		t.Fatal("runMerge: expected error for balance disagreement, got nil")
+	}
+	if !strings.Contains(err.Error(), stmtID) {
+		t.Errorf("error %q does not mention statementId %q", err.Error(), stmtID)
+	}
+	if !strings.Contains(err.Error(), "balance disagreement") {
+		t.Errorf("error %q does not contain 'balance disagreement'", err.Error())
+	}
+}
+
+// TestRunMergeCrossStatementDuplicateJournalAggregatesAgree is the end-to-end
+// acceptance test for issue #1271. One real purchase appears in two overlapping
+// statements (same institution/account, same description/amount/date, but
+// different statement periods → different statementIDs). autoNormalize flags the
+// cross-statement pair (no normalization rule needed), marking one primary and
+// one non-primary duplicate. The journal must credit the bank account for the
+// purchase exactly once — not twice — and the budget aggregate must count it
+// once. The two computed numbers must agree.
+func TestRunMergeCrossStatementDuplicateJournalAggregatesAgree(t *testing.T) {
+	tmp := t.TempDir()
+
+	// The same purchase ($7.25, "DUP PURCHASE", dated 2025-01-10) appears in two
+	// overlapping statements for the same account, producing two distinct
+	// statementIDs: test_bank-1234-2025-01 and test_bank-1234-2025-02. The period
+	// is inferred from each file's metadata toDate (InferPeriod prefers BalanceDate),
+	// so the two files carry different toDates (2025/01/31 vs 2025/02/28). The
+	// transaction row date — used by autoNormalize — is identical in both files.
+	csvJan := filepath.Join(tmp, "statements", "test_bank", "1234", "2025-01", "stmt.csv")
+	writeCSVFixtureMeta(t, csvJan, "0000000000,2025/01/01,2025/01/31,100.00,50.00", [][6]string{
+		{"2025/01/10", "7.25", "DUP PURCHASE", "", "TXN-DUP", "DEBIT"},
+	})
+	csvFeb := filepath.Join(tmp, "statements", "test_bank", "1234", "2025-02", "stmt.csv")
+	writeCSVFixtureMeta(t, csvFeb, "0000000000,2025/02/01,2025/02/28,50.00,40.00", [][6]string{
+		{"2025/01/10", "7.25", "DUP PURCHASE", "", "TXN-DUP", "DEBIT"},
+	})
+
+	const purchaseAmount = 7.25
+
+	stmtJan := "test_bank-1234-2025-01"
+	stmtFeb := "test_bank-1234-2025-02"
+	docJan := budget.TransactionDocID(stmtJan, "TXN-DUP")
+	docFeb := budget.TransactionDocID(stmtFeb, "TXN-DUP")
+
+	// Empty NormalizationRules: auto-normalization of exact cross-statement
+	// duplicates needs no rule. A categorization + budget_assignment rule lands
+	// the purchase in a budget period.
+	inputJSON := export.Output{
+		Version:      1,
+		GroupName:    "test-group",
+		Transactions: []export.Transaction{},
+		Rules: []export.Rule{
+			{ID: "cat-dup", Type: "categorization", Pattern: "DUP PURCHASE", Target: "Test:Dup", Priority: 10},
+			{ID: "bud-dup", Type: "budget_assignment", Pattern: "DUP PURCHASE", Target: "dup-budget", Priority: 10},
+		},
+		Budgets: []export.Budget{
+			{ID: "dup-budget", Name: "Dup Budget", Allowance: 100},
+		},
+		NormalizationRules: []export.NormalizationRule{},
+	}
+
+	inputPath := filepath.Join(tmp, "input.json")
+	if err := export.WriteFile(inputPath, inputJSON, ""); err != nil {
+		t.Fatalf("writing input JSON: %v", err)
+	}
+
+	outputPath := filepath.Join(tmp, "output.json")
+	if err := runMerge(fileOpts{path: inputPath}, filepath.Join(tmp, "statements"), "", parse.DiscoverOpts{}, fileOpts{path: outputPath}); err != nil {
+		t.Fatalf("runMerge: %v", err)
+	}
+
+	data, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("reading output: %v", err)
+	}
+	var out export.Output
+	if err := json.Unmarshal(data, &out); err != nil {
+		t.Fatalf("parsing output: %v", err)
+	}
+
+	// Sanity: both transactions survive dedup (distinct statementIDs), and exactly
+	// one is the non-primary normalized duplicate.
+	if len(out.Transactions) != 2 {
+		t.Fatalf("expected 2 transactions (distinct statementIDs), got %d", len(out.Transactions))
+	}
+	txnByID := make(map[string]export.Transaction, len(out.Transactions))
+	for _, txn := range out.Transactions {
+		txnByID[txn.ID] = txn
+	}
+	primaries, dups := 0, 0
+	for _, id := range []string{docJan, docFeb} {
+		txn, ok := txnByID[id]
+		if !ok {
+			t.Fatalf("expected transaction %q in output", id)
+		}
+		if txn.NormalizedID != nil && *txn.NormalizedID != "" && !txn.NormalizedPrimary {
+			dups++
+		} else if txn.NormalizedPrimary {
+			primaries++
+		}
+	}
+	if primaries != 1 || dups != 1 {
+		t.Fatalf("expected exactly 1 primary and 1 non-primary duplicate, got %d primary / %d duplicate", primaries, dups)
+	}
+
+	// Assertion 1: the journal credits the bank account for the purchase exactly
+	// ONCE. Sum the credits minus debits on the bank account; the net credit
+	// equals one purchase amount, not two. (A spending line credits the imported
+	// bank account.) AccountID encodes the underscore in "test_bank" as %5F, so
+	// the account id is "test%5Fbank_1234".
+	bankAccountID := journal.AccountID("test_bank", "1234")
+	var journalNetCredit float64
+	for _, leg := range out.JournalLegs {
+		if leg.AccountID == bankAccountID {
+			journalNetCredit += leg.Credit - leg.Debit
+		}
+	}
+	if journalNetCredit != purchaseAmount {
+		t.Errorf("journal bank-account net credit: got %v, want %v (one purchase, not two)", journalNetCredit, purchaseAmount)
+	}
+
+	// Assertion 2: the budget aggregate counts the purchase exactly ONCE. The
+	// dup-budget period total equals one purchase amount (net, reimbursement 0),
+	// with count 1.
+	var aggregateTotal float64
+	var periodCount int
+	for _, p := range out.BudgetPeriods {
+		if p.BudgetID == "dup-budget" {
+			aggregateTotal += p.Total
+			periodCount += p.Count
+		}
+	}
+	if periodCount != 1 {
+		t.Errorf("dup-budget aggregate count: got %d, want 1 (one purchase, not two)", periodCount)
+	}
+	if aggregateTotal != purchaseAmount {
+		t.Errorf("dup-budget aggregate total: got %v, want %v (one purchase, not two)", aggregateTotal, purchaseAmount)
+	}
+
+	// Assertion 3 (the explicit acceptance criterion): the journal's net for the
+	// purchase agrees with the aggregate total.
+	if journalNetCredit != aggregateTotal {
+		t.Errorf("journal net (%v) and aggregate total (%v) disagree", journalNetCredit, aggregateTotal)
+	}
+}
+
+func TestDeriveMonthlyStatements(t *testing.T) {
+	t.Run("multi-month QFX generates intermediate statements", func(t *testing.T) {
+		// Simulate AMEX-like scenario: balance -4312.99 at 2026-03-22,
+		// transactions from 2025-12 through 2026-03.
+		parsed := []parsedFile{{
+			sf: parse.StatementFile{
+				Path:        "amex/2011/activity.qfx",
+				Institution: "amex",
+				Account:     "2011",
+				Period:      "2026-03",
+			},
+			result: parse.ParseResult{
+				Balance:     -431299, // -$4312.99 in cents
+				BalanceDate: time.Date(2026, 3, 22, 0, 0, 0, 0, time.UTC),
+				Transactions: []parse.Transaction{
+					{Date: time.Date(2025, 12, 5, 0, 0, 0, 0, time.UTC), Amount: 10000},  // $100 spending
+					{Date: time.Date(2025, 12, 20, 0, 0, 0, 0, time.UTC), Amount: -5000}, // -$50 credit
+					{Date: time.Date(2026, 1, 10, 0, 0, 0, 0, time.UTC), Amount: 20000},  // $200 spending
+					{Date: time.Date(2026, 2, 15, 0, 0, 0, 0, time.UTC), Amount: 15000},  // $150 spending
+					{Date: time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC), Amount: 8000},    // $80 spending
+				},
+			},
+		}}
+
+		derived := deriveMonthlyStatements(parsed)
+
+		// Expect 3 derived statements: 2025-12, 2026-01, 2026-02
+		// (2026-03 is the original statement's month, not derived)
+		if len(derived) != 3 {
+			t.Fatalf("expected 3 derived statements, got %d", len(derived))
+		}
+
+		// Verify periods
+		periods := make([]string, len(derived))
+		for i, s := range derived {
+			periods[i] = s.Period
+		}
+		expectedPeriods := []string{"2025-12", "2026-01", "2026-02"}
+		for i, exp := range expectedPeriods {
+			if periods[i] != exp {
+				t.Errorf("derived[%d].Period = %q, want %q", i, periods[i], exp)
+			}
+		}
+
+		// Verify 2025-12 balance: known balance + all txns from Dec onward
+		// txns from 2025-12-01 onward: 10000 + (-5000) + 20000 + 15000 + 8000 = 48000
+		// derived = -431299 + 48000 = -383299 (-$3832.99)
+		if derived[0].Balance != -383299 {
+			t.Errorf("derived[0].Balance = %d, want %d", derived[0].Balance, -383299)
+		}
+
+		// Verify 2026-01 balance: known balance + txns from Jan onward
+		// txns from 2026-01-01 onward: 20000 + 15000 + 8000 = 43000
+		// derived = -431299 + 43000 = -388299 (-$3882.99)
+		if derived[1].Balance != -388299 {
+			t.Errorf("derived[1].Balance = %d, want %d", derived[1].Balance, -388299)
+		}
+
+		// Verify 2026-02 balance: known balance + txns from Feb onward
+		// txns from 2026-02-01 onward: 15000 + 8000 = 23000
+		// derived = -431299 + 23000 = -408299 (-$4082.99)
+		if derived[2].Balance != -408299 {
+			t.Errorf("derived[2].Balance = %d, want %d", derived[2].Balance, -408299)
+		}
+
+		// Verify balance dates are last day of each month
+		if derived[0].BalanceDate == nil || *derived[0].BalanceDate != time.Date(2025, 12, 31, 0, 0, 0, 0, time.UTC) {
+			t.Errorf("derived[0].BalanceDate = %v, want 2025-12-31", derived[0].BalanceDate)
+		}
+		if derived[1].BalanceDate == nil || *derived[1].BalanceDate != time.Date(2026, 1, 31, 0, 0, 0, 0, time.UTC) {
+			t.Errorf("derived[1].BalanceDate = %v, want 2026-01-31", derived[1].BalanceDate)
+		}
+		if derived[2].BalanceDate == nil || *derived[2].BalanceDate != time.Date(2026, 2, 28, 0, 0, 0, 0, time.UTC) {
+			t.Errorf("derived[2].BalanceDate = %v, want 2026-02-28", derived[2].BalanceDate)
+		}
+
+		// Verify institution/account
+		for i, s := range derived {
+			if s.Institution != "amex" || s.Account != "2011" {
+				t.Errorf("derived[%d]: inst=%q acct=%q, want amex/2011", i, s.Institution, s.Account)
+			}
+		}
+	})
+
+	t.Run("single month produces no derived statements", func(t *testing.T) {
+		parsed := []parsedFile{{
+			sf: parse.StatementFile{
+				Institution: "bank", Account: "1234", Period: "2026-03",
+			},
+			result: parse.ParseResult{
+				Balance:     100000,
+				BalanceDate: time.Date(2026, 3, 15, 0, 0, 0, 0, time.UTC),
+				Transactions: []parse.Transaction{
+					{Date: time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC), Amount: 5000},
+					{Date: time.Date(2026, 3, 10, 0, 0, 0, 0, time.UTC), Amount: 3000},
+				},
+			},
+		}}
+
+		derived := deriveMonthlyStatements(parsed)
+		if len(derived) != 0 {
+			t.Errorf("expected 0 derived statements for single-month data, got %d", len(derived))
+		}
+	})
+
+	t.Run("multiple files for same account produces no derived statements", func(t *testing.T) {
+		parsed := []parsedFile{
+			{
+				sf: parse.StatementFile{
+					Institution: "bank", Account: "1234", Period: "2026-01",
+				},
+				result: parse.ParseResult{
+					Balance:     200000,
+					BalanceDate: time.Date(2026, 1, 31, 0, 0, 0, 0, time.UTC),
+					Transactions: []parse.Transaction{
+						{Date: time.Date(2026, 1, 15, 0, 0, 0, 0, time.UTC), Amount: 5000},
+					},
+				},
+			},
+			{
+				sf: parse.StatementFile{
+					Institution: "bank", Account: "1234", Period: "2026-03",
+				},
+				result: parse.ParseResult{
+					Balance:     150000,
+					BalanceDate: time.Date(2026, 3, 15, 0, 0, 0, 0, time.UTC),
+					Transactions: []parse.Transaction{
+						{Date: time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC), Amount: 10000},
+						{Date: time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC), Amount: 8000},
+					},
+				},
+			},
+		}
+
+		derived := deriveMonthlyStatements(parsed)
+		if len(derived) != 0 {
+			t.Errorf("expected 0 derived statements for multi-file account, got %d", len(derived))
+		}
+	})
+
+	t.Run("no balance produces no derived statements", func(t *testing.T) {
+		parsed := []parsedFile{{
+			sf: parse.StatementFile{
+				Institution: "bank", Account: "1234", Period: "2026-03",
+			},
+			result: parse.ParseResult{
+				Balance: 0,
+				Transactions: []parse.Transaction{
+					{Date: time.Date(2025, 12, 1, 0, 0, 0, 0, time.UTC), Amount: 5000},
+					{Date: time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC), Amount: 8000},
+				},
+			},
+		}}
+
+		derived := deriveMonthlyStatements(parsed)
+		if len(derived) != 0 {
+			t.Errorf("expected 0 derived statements for zero balance, got %d", len(derived))
+		}
+	})
+}
+
+// TestDeriveMonthlyStatementsVirtual asserts that every derived anchor produced
+// by deriveMonthlyStatements carries Virtual == true.
+func TestDeriveMonthlyStatementsVirtual(t *testing.T) {
+	parsed := []parsedFile{{
+		sf: parse.StatementFile{
+			Institution: "testbank",
+			Account:     "9999",
+			Period:      "2026-03",
+		},
+		result: parse.ParseResult{
+			Balance:     500000, // $5000.00
+			BalanceDate: time.Date(2026, 3, 31, 0, 0, 0, 0, time.UTC),
+			Transactions: []parse.Transaction{
+				{Date: time.Date(2026, 1, 10, 0, 0, 0, 0, time.UTC), Amount: 10000},
+				{Date: time.Date(2026, 2, 15, 0, 0, 0, 0, time.UTC), Amount: 20000},
+				{Date: time.Date(2026, 3, 5, 0, 0, 0, 0, time.UTC), Amount: 5000},
+			},
+		},
+	}}
+
+	derived := deriveMonthlyStatements(parsed)
+	if len(derived) == 0 {
+		t.Fatal("expected at least one derived anchor, got none")
+	}
+	for i, s := range derived {
+		if !s.Virtual {
+			t.Errorf("derived[%d] (period=%q) has Virtual=false, want true", i, s.Period)
+		}
+	}
+}
+
+// TestMergeStatementsPreservesRealOverDerivedAnchor asserts the three-way merge
+// priority: real dir > real input > derived/virtual anchor.
+//
+//  1. Core criterion: a real input statement is preserved when a derived
+//     (Virtual=true) dir anchor exists for the same StatementID.
+//  2. Gap-fill: a derived anchor IS emitted for a period that has no real
+//     statement in either dir or input.
+func TestMergeStatementsPreservesRealOverDerivedAnchor(t *testing.T) {
+	// Two derived dir anchors:
+	//   anchor-A: "testbank-acct-2026-01" (Virtual=true, balance=$10 estimate)
+	//   anchor-B: "testbank-acct-2026-02" (Virtual=true, balance=$20 estimate — gap month)
+	//
+	// One real input statement:
+	//   real-A: "testbank-acct-2026-01" (Virtual=false, balance=$99 real value)
+	//
+	// After merge, the result for "testbank-acct-2026-01" must be the $99 real
+	// input statement (not the $10 derived estimate), and "testbank-acct-2026-02"
+	// must still appear (gap-fill preserved).
+
+	const (
+		stmtIDJanuary  = "testbank-acct-2026-01"
+		stmtIDFebruary = "testbank-acct-2026-02"
+	)
+
+	bdJan := time.Date(2026, 1, 31, 0, 0, 0, 0, time.UTC)
+	bdFeb := time.Date(2026, 2, 28, 0, 0, 0, 0, time.UTC)
+
+	dirStmts := []budget.StatementData{
+		{
+			StatementID: stmtIDJanuary,
+			Institution: "testbank",
+			Account:     "acct",
+			Balance:     1000, // $10.00 — derived estimate
+			Period:      "2026-01",
+			BalanceDate: &bdJan,
+			Virtual:     true,
+		},
+		{
+			StatementID: stmtIDFebruary,
+			Institution: "testbank",
+			Account:     "acct",
+			Balance:     2000, // $20.00 — derived estimate, gap month
+			Period:      "2026-02",
+			BalanceDate: &bdFeb,
+			Virtual:     true,
+		},
+	}
+
+	inputStmts := []export.Statement{
+		{
+			ID:          budget.StatementDocID(stmtIDJanuary),
+			StatementID: stmtIDJanuary,
+			Institution: "testbank",
+			Account:     "acct",
+			Balance:     99.00, // $99.00 — real measured balance
+			Period:      "2026-01",
+			BalanceDate: "2026-01-28",
+			Virtual:     false,
+		},
+	}
+
+	maxDates := map[string]*time.Time{} // no transactions; LastTransactionDate stays nil
+
+	result := mergeStatements(dirStmts, inputStmts, maxDates)
+
+	// Index the result by StatementID for easy lookup.
+	byStmtID := make(map[string]export.Statement, len(result))
+	for _, s := range result {
+		if _, dup := byStmtID[s.StatementID]; dup {
+			t.Errorf("duplicate StatementID %q in merge result", s.StatementID)
+		}
+		byStmtID[s.StatementID] = s
+	}
+
+	// 1. Core criterion: real input wins — $99 balance, Virtual=false.
+	jan, ok := byStmtID[stmtIDJanuary]
+	if !ok {
+		t.Fatalf("StatementID %q missing from merge result", stmtIDJanuary)
+	}
+	if jan.Virtual {
+		t.Errorf("result for %q has Virtual=true, want false (real input should win)", stmtIDJanuary)
+	}
+	if jan.Balance != 99.00 {
+		t.Errorf("result for %q has Balance=%.2f, want 99.00 (real input balance)", stmtIDJanuary, jan.Balance)
+	}
+
+	// 2. Gap-fill preserved: derived anchor for February still appears.
+	feb, ok := byStmtID[stmtIDFebruary]
+	if !ok {
+		t.Fatalf("StatementID %q missing from merge result — gap-fill regressed", stmtIDFebruary)
+	}
+	if !feb.Virtual {
+		t.Errorf("result for %q has Virtual=false, want true (should be the derived anchor)", stmtIDFebruary)
+	}
+	if feb.Balance != 20.00 {
+		t.Errorf("result for %q has Balance=%.2f, want 20.00 (derived anchor balance)", stmtIDFebruary, feb.Balance)
+	}
+
+	// 3. Exactly the two expected statements — no extras.
+	if len(result) != 2 {
+		t.Errorf("expected 2 statements in merge result, got %d", len(result))
+	}
+}
+
+// TestRunInputJSONPreservesDerivedAnchors is an end-to-end round-trip guard for
+// the runInputJSON path: runMerge generates derived virtual anchors from a
+// multi-month statement file, and feeding that output back through runInputJSON
+// must preserve those anchors. This catches the regression where runInputJSON's
+// statement loop drops every virtual statement (the `if s.Virtual { continue }`
+// at main.go:438), silently discarding derived balance-history anchors on a
+// --input-json run.
+func TestRunInputJSONPreservesDerivedAnchors(t *testing.T) {
+	tmp := t.TempDir()
+
+	// A single statement file for one account whose transactions span three
+	// months (Jan, Feb, Mar) with an ending balance — exactly the shape
+	// deriveMonthlyStatements turns into intermediate monthly anchors for the
+	// months before the file's own period (2026-03). The metadata toDate
+	// 2026/03/31 drives the inferred period and the $500.00 ending balance the
+	// anchors are derived from.
+	csvPath := filepath.Join(tmp, "statements", "test_bank", "1234", "2026-03", "stmt.csv")
+	writeCSVFixtureMeta(t, csvPath,
+		"0000000000,2026/01/01,2026/03/31,100.00,500.00",
+		[][6]string{
+			{"2026/01/10", "10.00", "TEST PURCHASE JAN", "", "TXN-JAN", "DEBIT"},
+			{"2026/02/15", "20.00", "TEST PURCHASE FEB", "", "TXN-FEB", "DEBIT"},
+			{"2026/03/05", "5.00", "TEST PURCHASE MAR", "", "TXN-MAR", "DEBIT"},
+		})
+
+	// Minimal input JSON: one transaction (the reader requires a non-empty
+	// transactions field) plus a categorization rule covering every
+	// transaction so the merge does not fail on uncategorized transactions.
+	inputJSON := export.Output{
+		Version:   1,
+		GroupName: "test-group",
+		Transactions: []export.Transaction{
+			{
+				ID:                budget.TransactionDocID("test_bank-1234-2026-03", "TXN-JAN"),
+				Institution:       "test_bank",
+				Account:           "1234",
+				Description:       "TEST PURCHASE JAN",
+				Amount:            10.00,
+				Timestamp:         "2026-01-10T00:00:00Z",
+				StatementID:       "test_bank-1234-2026-03",
+				NormalizedPrimary: true,
+			},
+		},
+		Rules: []export.Rule{
+			{ID: "cat-test", Type: "categorization", Pattern: "TEST PURCHASE", Target: "Test:General", Priority: 10},
+		},
+		NormalizationRules: []export.NormalizationRule{},
+	}
+	inputPath := filepath.Join(tmp, "input.json")
+	if err := export.WriteFile(inputPath, inputJSON, ""); err != nil {
+		t.Fatalf("writing input JSON: %v", err)
+	}
+
+	// Step 1: runMerge produces an output that includes derived virtual anchors.
+	mergedPath := filepath.Join(tmp, "merged.json")
+	statementsDir := filepath.Join(tmp, "statements")
+	if err := runMerge(fileOpts{path: inputPath}, statementsDir, "", parse.DiscoverOpts{}, fileOpts{path: mergedPath}); err != nil {
+		t.Fatalf("runMerge: %v", err)
+	}
+
+	mergedData, err := os.ReadFile(mergedPath)
+	if err != nil {
+		t.Fatalf("reading merged output: %v", err)
+	}
+	var merged export.Output
+	if err := json.Unmarshal(mergedData, &merged); err != nil {
+		t.Fatalf("parsing merged output: %v", err)
+	}
+
+	// Confirm the precondition: runMerge actually emitted derived virtual
+	// anchors. Without them the round-trip below would be vacuous.
+	var mergedVirtualIDs []string
+	for _, s := range merged.Statements {
+		if s.Virtual {
+			mergedVirtualIDs = append(mergedVirtualIDs, s.StatementID)
+		}
+	}
+	if len(mergedVirtualIDs) == 0 {
+		t.Fatalf("precondition failed: runMerge emitted no virtual anchors (statements: %d)", len(merged.Statements))
+	}
+
+	// Step 2: feed the merged output back into runInputJSON as input.
+	roundtripPath := filepath.Join(tmp, "roundtrip.json")
+	if err := runInputJSON(fileOpts{path: mergedPath}, fileOpts{path: roundtripPath}); err != nil {
+		t.Fatalf("runInputJSON: %v", err)
+	}
+
+	roundtripData, err := os.ReadFile(roundtripPath)
+	if err != nil {
+		t.Fatalf("reading roundtrip output: %v", err)
+	}
+	var roundtrip export.Output
+	if err := json.Unmarshal(roundtripData, &roundtrip); err != nil {
+		t.Fatalf("parsing roundtrip output: %v", err)
+	}
+
+	// Step 3: every derived virtual anchor must survive the round-trip.
+	survived := make(map[string]bool, len(roundtrip.Statements))
+	for _, s := range roundtrip.Statements {
+		if s.Virtual {
+			survived[s.StatementID] = true
+		}
+	}
+	for _, id := range mergedVirtualIDs {
+		if !survived[id] {
+			t.Errorf("derived virtual anchor %q dropped by runInputJSON round-trip", id)
+		}
+	}
+}
+
+// TestRunInputJSONSeedsVirtualRulesOnNil exercises the seed-on-nil migration
+// sentinel end-to-end through runInputJSON, using a synthetic plaintext snapshot
+// — no real encrypted snapshot or GPG credential required. It verifies the three
+// distinguishable states of VirtualTransactionRules:
+//   - absent (nil): seeds the legacy Synchrony->pet rule once, applies it
+//     (generating virtual transactions + the pet budget), and writes the seeded
+//     rule back into the output.
+//   - populated (the seeded output fed back in): the seed does not re-fire, the
+//     rule count stays stable, and virtual generation is identical.
+//   - explicit empty ([]): generation stays disabled and nothing is seeded.
+func TestRunInputJSONSeedsVirtualRulesOnNil(t *testing.T) {
+	// baseInput is a pre-refactor snapshot: PNC/5111 card payments to SYNCHRONY
+	// that the legacy rule targets, plus a categorization rule that sets the
+	// Transfer:CardPayment category the rule's source filter matches on.
+	baseInput := func() export.Output {
+		return export.Output{
+			Version:   1,
+			GroupName: "test-group",
+			Transactions: []export.Transaction{
+				{
+					ID:          budget.TransactionDocID("pnc-5111-2025-02", "TXN-1"),
+					Institution: "pnc",
+					Account:     "5111",
+					Description: "Online Payment To SYNCHRONY BANK",
+					Amount:      500.00,
+					Timestamp:   "2025-02-15T00:00:00Z",
+					StatementID: "pnc-5111-2025-02",
+				},
+				{
+					ID:          budget.TransactionDocID("pnc-5111-2025-03", "TXN-2"),
+					Institution: "pnc",
+					Account:     "5111",
+					Description: "Online Payment To SYNCHRONY BANK",
+					Amount:      600.00,
+					Timestamp:   "2025-03-15T00:00:00Z",
+					StatementID: "pnc-5111-2025-03",
+				},
+			},
+			Rules: []export.Rule{
+				{ID: "cat-sync", Type: "categorization", Pattern: "SYNCHRONY", Target: "Transfer:CardPayment", Priority: 10},
+			},
+			NormalizationRules: []export.NormalizationRule{},
+		}
+	}
+
+	runOnce := func(t *testing.T, in export.Output) export.Output {
+		t.Helper()
+		tmp := t.TempDir()
+		inputPath := filepath.Join(tmp, "input.json")
+		outputPath := filepath.Join(tmp, "output.json")
+		if err := export.WriteFile(inputPath, in, ""); err != nil {
+			t.Fatalf("writing input JSON: %v", err)
+		}
+		if err := runInputJSON(fileOpts{path: inputPath}, fileOpts{path: outputPath}); err != nil {
+			t.Fatalf("runInputJSON: %v", err)
+		}
+		data, err := os.ReadFile(outputPath)
+		if err != nil {
+			t.Fatalf("reading output: %v", err)
+		}
+		var out export.Output
+		if err := json.Unmarshal(data, &out); err != nil {
+			t.Fatalf("parsing output: %v", err)
+		}
+		return out
+	}
+
+	countSynchronyStmts := func(out export.Output) int {
+		n := 0
+		for _, s := range out.Statements {
+			if s.Virtual && strings.HasPrefix(s.StatementID, "synchrony-virtual-") {
+				n++
+			}
+		}
+		return n
+	}
+	hasPetBudget := func(out export.Output) bool {
+		for _, b := range out.Budgets {
+			if b.ID == "pet" {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Seeded by the first run, then asserted not to re-fire by the second.
+	var seeded export.Output
+
+	t.Run("seeds legacy rule when nil", func(t *testing.T) {
+		in := baseInput() // VirtualTransactionRules omitted -> marshals to null -> nil
+		seeded = runOnce(t, in)
+
+		if len(seeded.VirtualTransactionRules) != 1 {
+			t.Fatalf("expected exactly 1 seeded rule, got %d", len(seeded.VirtualTransactionRules))
+		}
+		r := seeded.VirtualTransactionRules[0]
+		if r.Institution != "pnc" || r.Account != "5111" || r.BudgetID != "pet" {
+			t.Errorf("seeded rule not the legacy Synchrony->pet rule: %+v", r)
+		}
+		// The seeded rule must actually be applied, not merely persisted.
+		if got := countSynchronyStmts(seeded); got != 2 {
+			t.Errorf("expected 2 virtual synchrony statements, got %d", got)
+		}
+		if !hasPetBudget(seeded) {
+			t.Error("expected a pet budget to be seeded from the virtual transactions")
+		}
+	})
+
+	t.Run("does not re-seed when already populated", func(t *testing.T) {
+		if len(seeded.VirtualTransactionRules) != 1 {
+			t.Skip("prior sub-test did not seed; nothing to round-trip")
+		}
+		// Feed the seeded output back in: VirtualTransactionRules is now non-nil,
+		// so the seed branch must not fire again.
+		out := runOnce(t, seeded)
+		if len(out.VirtualTransactionRules) != 1 {
+			t.Errorf("seed re-fired or rules dropped on round-trip: got %d rules, want 1", len(out.VirtualTransactionRules))
+		}
+		if got := countSynchronyStmts(out); got != 2 {
+			t.Errorf("virtual generation not stable on round-trip: got %d statements, want 2", got)
+		}
+	})
+
+	t.Run("explicit empty slice disables generation", func(t *testing.T) {
+		in := baseInput()
+		in.VirtualTransactionRules = []export.VirtualTransactionRule{} // explicit [] -> non-nil, no seed
+		out := runOnce(t, in)
+		if len(out.VirtualTransactionRules) != 0 {
+			t.Errorf("explicit empty slice was overwritten by seed: got %d rules, want 0", len(out.VirtualTransactionRules))
+		}
+		if got := countSynchronyStmts(out); got != 0 {
+			t.Errorf("generation ran despite disabled rules: got %d synchrony statements, want 0", got)
+		}
+		if hasPetBudget(out) {
+			t.Error("pet budget created despite generation being disabled")
+		}
+	})
+}
+
+// TestMain lets TestRemovedFlagsRejected re-exec this test binary as the real
+// budget-etl CLI: when BUDGET_ETL_TEST_RUN_MAIN=1 is set, it runs main()
+// instead of the test suite. main() parses flags via flag.CommandLine, and an
+// undefined flag makes flag.Parse() call os.Exit(2) — uncatchable in-process —
+// so the negative-flag check must run main() in a subprocess.
+func TestMain(m *testing.M) {
+	if os.Getenv("BUDGET_ETL_TEST_RUN_MAIN") == "1" {
+		main()
+		return
+	}
+	os.Exit(m.Run())
+}
+
+// TestRemovedFlagsRejected verifies the Firestore-mode flags deleted in #592
+// (--firestore/--env/--project/--dry-run) are no longer defined: passing one
+// must exit non-zero with flag's "flag provided but not defined" message.
+// Flag parsing runs before any file I/O or password resolution, so the
+// subprocess exits immediately.
+func TestRemovedFlagsRejected(t *testing.T) {
+	for _, arg := range []string{"-firestore", "-env=prod", "-project=x", "-dry-run"} {
+		t.Run(arg, func(t *testing.T) {
+			cmd := exec.Command(os.Args[0], arg)
+			cmd.Env = append(os.Environ(), "BUDGET_ETL_TEST_RUN_MAIN=1")
+			out, err := cmd.CombinedOutput()
+			if err == nil {
+				t.Fatalf("expected non-zero exit for %s; output:\n%s", arg, out)
+			}
+			if !strings.Contains(string(out), "flag provided but not defined") {
+				t.Errorf("for %s, missing 'flag provided but not defined'; output:\n%s", arg, out)
+			}
+		})
+	}
+}
+
+// TestPlaintextFlagWritesUnencryptedJSON runs the budget-etl CLI end-to-end
+// with --plaintext against a CSV fixture and verifies the output is
+// unencrypted JSON that round-trips through export.Output. This is the
+// happy-path for the Claude Code plugin distribution: no password env var,
+// no keychain, no encryption.
+func TestPlaintextFlagWritesUnencryptedJSON(t *testing.T) {
+	tmp := t.TempDir()
+
+	csvPath := filepath.Join(tmp, "statements", "test_bank", "1234", "2025-01", "stmt.csv")
+	writeCSVFixture(t, csvPath, [][6]string{
+		{"2025/01/10", "5.00", "TEST PURCHASE ALPHA", "", "TXN-A", "DEBIT"},
+		{"2025/01/15", "12.50", "TEST PURCHASE BETA", "", "TXN-B", "DEBIT"},
+	})
+
+	outputPath := filepath.Join(tmp, "output.json")
+	statementsDir := filepath.Join(tmp, "statements")
+
+	cmd := exec.Command(os.Args[0],
+		"-dir", statementsDir,
+		"-group", "test",
+		"-output", outputPath,
+		"-plaintext",
+	)
+	// Hermetic: drop any password env var so --plaintext is not rejected.
+	cmd.Env = subprocessEnvNoPassword()
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("budget-etl --plaintext failed: %v\noutput:\n%s", err, out)
+	}
+
+	data, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("reading output: %v", err)
+	}
+	if len(data) == 0 {
+		t.Fatal("output file is empty")
+	}
+	if data[0] != '{' {
+		t.Fatalf("output does not start with '{' (plaintext JSON); first byte = %q, output starts with %q", data[0], data[:min(len(data), 8)])
+	}
+	if export.IsEncrypted(data) {
+		t.Fatal("output starts with BENC magic bytes — encrypted, not plaintext")
+	}
+
+	var parsed export.Output
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("output does not round-trip through json.Unmarshal: %v", err)
+	}
+	if parsed.Version != 1 {
+		t.Errorf("output.Version = %d, want 1", parsed.Version)
+	}
+	if parsed.GroupName != "test" {
+		t.Errorf("output.GroupName = %q, want %q", parsed.GroupName, "test")
+	}
+	if len(parsed.Transactions) != 2 {
+		t.Errorf("output.Transactions: got %d, want 2", len(parsed.Transactions))
+	}
+}
+
+// TestPlaintextFlagWithFlatLayout runs the budget-etl CLI end-to-end with a
+// flat statement directory (no institution/account/period subdirs) using
+// --institution and --account to supply the missing metadata. Verifies that
+// the output is unencrypted plaintext JSON with the expected institution and
+// account on every transaction.
+func TestPlaintextFlagWithFlatLayout(t *testing.T) {
+	tmp := t.TempDir()
+
+	// Write the CSV fixture directly into a flat dir — no institution/account/period subdirs.
+	csvPath := filepath.Join(tmp, "stmt.csv")
+	writeCSVFixture(t, csvPath, [][6]string{
+		{"2025/01/10", "5.00", "TEST PURCHASE ALPHA", "", "TXN-A", "DEBIT"},
+		{"2025/01/15", "12.50", "TEST PURCHASE BETA", "", "TXN-B", "DEBIT"},
+	})
+
+	outputPath := filepath.Join(tmp, "output.json")
+
+	cmd := exec.Command(os.Args[0],
+		"-dir", tmp,
+		"-institution", "test_bank",
+		"-account", "1234",
+		"-group", "personal",
+		"-plaintext",
+		"-output", outputPath,
+	)
+	// Hermetic: drop any password env var so --plaintext is not rejected.
+	cmd.Env = subprocessEnvNoPassword()
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("budget-etl flat layout failed: %v\noutput:\n%s", err, out)
+	}
+
+	data, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("reading output: %v", err)
+	}
+	if len(data) == 0 {
+		t.Fatal("output file is empty")
+	}
+	if data[0] != '{' {
+		t.Fatalf("output does not start with '{' (plaintext JSON); first byte = %q", data[0])
+	}
+	if export.IsEncrypted(data) {
+		t.Fatal("output starts with BENC magic bytes — encrypted, not plaintext")
+	}
+
+	var parsed export.Output
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("output does not round-trip through json.Unmarshal: %v", err)
+	}
+	if parsed.Version != 1 {
+		t.Errorf("output.Version = %d, want 1", parsed.Version)
+	}
+	if parsed.GroupName != "personal" {
+		t.Errorf("output.GroupName = %q, want %q", parsed.GroupName, "personal")
+	}
+	if len(parsed.Transactions) == 0 {
+		t.Fatal("output.Transactions is empty")
+	}
+	for _, txn := range parsed.Transactions {
+		if txn.Institution != "test_bank" {
+			t.Errorf("transaction %s: Institution = %q, want %q", txn.ID, txn.Institution, "test_bank")
+		}
+		if txn.Account != "1234" {
+			t.Errorf("transaction %s: Account = %q, want %q", txn.ID, txn.Account, "1234")
+		}
+	}
+}
+
+// TestPlaintextFlagRejectsKeychain verifies that --plaintext --keychain
+// exits non-zero with a clear error message — the two flags are mutually
+// exclusive.
+func TestPlaintextFlagRejectsKeychain(t *testing.T) {
+	cmd := exec.Command(os.Args[0], "-plaintext", "-keychain", "some-account", "-dir", "x", "-group", "y", "-output", "z")
+	cmd.Env = subprocessEnvNoPassword()
+
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected non-zero exit; output:\n%s", out)
+	}
+	if !strings.Contains(string(out), "--plaintext cannot be combined with --keychain") {
+		t.Errorf("missing expected error message; output:\n%s", out)
+	}
+}
+
+// TestPlaintextFlagRejectsEnvPassword verifies that --plaintext while
+// BUDGET_ETL_PASSWORD is set exits non-zero with a clear error message.
+// Uses t.Setenv to keep the test hermetic.
+func TestPlaintextFlagRejectsEnvPassword(t *testing.T) {
+	t.Setenv("BUDGET_ETL_PASSWORD", "should-not-be-used")
+
+	cmd := exec.Command(os.Args[0], "-plaintext", "-dir", "x", "-group", "y", "-output", "z")
+	// Inherit env (including the BUDGET_ETL_PASSWORD we just set via t.Setenv).
+	cmd.Env = append(os.Environ(), "BUDGET_ETL_TEST_RUN_MAIN=1")
+
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected non-zero exit; output:\n%s", out)
+	}
+	if !strings.Contains(string(out), "--plaintext cannot be combined with BUDGET_ETL_PASSWORD") {
+		t.Errorf("missing expected error message; output:\n%s", out)
+	}
+}
+
+// TestVirtualStmtPrefix verifies that virtualStmtPrefix produces the expected
+// institution-account prefix string.
+func TestVirtualStmtPrefix(t *testing.T) {
+	if got := virtualStmtPrefix("synchrony", "virtual"); got != "synchrony-virtual-" {
+		t.Errorf("virtualStmtPrefix(%q,%q) = %q, want %q", "synchrony", "virtual", got, "synchrony-virtual-")
+	}
+	if got := virtualStmtPrefix("amazonstore", "virtual"); got != "amazonstore-virtual-" {
+		t.Errorf("virtualStmtPrefix(%q,%q) = %q, want %q", "amazonstore", "virtual", got, "amazonstore-virtual-")
+	}
+}
+
+// TestGenerateVirtualTransactions verifies the data-driven
+// generateVirtualTransactions function across multiple rule configurations.
+func TestGenerateVirtualTransactions(t *testing.T) {
+	synchronyRule := export.VirtualTransactionRule{
+		Institution:         "pnc",
+		Account:             "5111",
+		Category:            "Transfer:CardPayment",
+		DescriptionContains: "SYNCHRONY",
+		TargetInstitution:   "synchrony",
+		TargetAccount:       "virtual",
+		TargetCategory:      "Pet:Veterinarian",
+		TargetBudget:        "pet",
+		BudgetID:            "pet",
+		BudgetName:          "Pet",
+		AllowancePeriod:     "monthly",
+		Rollover:            "none",
+	}
+
+	t.Run("legacy synchrony parity", func(t *testing.T) {
+		allTxns := []budget.TransactionData{
+			{
+				Institution:   "pnc",
+				Account:       "5111",
+				Description:   "Online Payment To SYNCHRONY BANK",
+				Amount:        50000,
+				Timestamp:     time.Date(2025, 2, 15, 0, 0, 0, 0, time.UTC),
+				StatementID:   "pnc-5111-2025-02",
+				TransactionID: "txn-sync-1",
+				Category:      "Transfer:CardPayment",
+			},
+			{
+				Institution:   "pnc",
+				Account:       "5111",
+				Description:   "Online Payment To SYNCHRONY BANK",
+				Amount:        60000,
+				Timestamp:     time.Date(2025, 3, 15, 0, 0, 0, 0, time.UTC),
+				StatementID:   "pnc-5111-2025-03",
+				TransactionID: "txn-sync-2",
+				Category:      "Transfer:CardPayment",
+			},
+		}
+		docIDs := []string{"doc-sync-1", "doc-sync-2"}
+
+		res := generateVirtualTransactions(allTxns, docIDs, []export.VirtualTransactionRule{synchronyRule})
+
+		if len(res.transactions) != 2 {
+			t.Fatalf("expected 2 virtual transactions, got %d", len(res.transactions))
+		}
+
+		for _, vt := range res.transactions {
+			if vt.Institution != "synchrony" {
+				t.Errorf("Institution: got %q, want %q", vt.Institution, "synchrony")
+			}
+			if vt.Account != "virtual" {
+				t.Errorf("Account: got %q, want %q", vt.Account, "virtual")
+			}
+			if vt.Category != "Pet:Veterinarian" {
+				t.Errorf("Category: got %q, want %q", vt.Category, "Pet:Veterinarian")
+			}
+			if vt.Budget != "pet" {
+				t.Errorf("Budget: got %q, want %q", vt.Budget, "pet")
+			}
+			if !vt.Virtual {
+				t.Error("Virtual: got false, want true")
+			}
+		}
+
+		// Verify exact StatementIDs on virtual transactions
+		stmtIDs := make(map[string]bool)
+		for _, vt := range res.transactions {
+			stmtIDs[vt.StatementID] = true
+		}
+		if !stmtIDs["synchrony-virtual-2025-02"] {
+			t.Error("expected StatementID synchrony-virtual-2025-02")
+		}
+		if !stmtIDs["synchrony-virtual-2025-03"] {
+			t.Error("expected StatementID synchrony-virtual-2025-03")
+		}
+
+		// Verify TransactionIDs are "virtual-" + source docID
+		txnIDSet := make(map[string]bool)
+		for _, vt := range res.transactions {
+			txnIDSet[vt.TransactionID] = true
+		}
+		if !txnIDSet["virtual-doc-sync-1"] {
+			t.Error("expected TransactionID virtual-doc-sync-1")
+		}
+		if !txnIDSet["virtual-doc-sync-2"] {
+			t.Error("expected TransactionID virtual-doc-sync-2")
+		}
+
+		// Verify 2 statements with correct fields
+		if len(res.statements) != 2 {
+			t.Fatalf("expected 2 virtual statements, got %d", len(res.statements))
+		}
+		periods := make(map[string]bool)
+		for _, s := range res.statements {
+			if s.Balance != 0 {
+				t.Errorf("statement Balance: got %f, want 0", s.Balance)
+			}
+			if !s.Virtual {
+				t.Error("statement Virtual: got false, want true")
+			}
+			if s.Institution != "synchrony" {
+				t.Errorf("statement Institution: got %q, want %q", s.Institution, "synchrony")
+			}
+			if s.Account != "virtual" {
+				t.Errorf("statement Account: got %q, want %q", s.Account, "virtual")
+			}
+			periods[s.Period] = true
+		}
+		if !periods["2025-02"] || !periods["2025-03"] {
+			t.Errorf("statement periods: got %v, want {2025-02, 2025-03}", periods)
+		}
+
+		// Verify txnsByBudgetID["pet"] has 2 entries
+		if len(res.txnsByBudgetID["pet"]) != 2 {
+			t.Errorf("txnsByBudgetID[pet]: got %d entries, want 2", len(res.txnsByBudgetID["pet"]))
+		}
+	})
+
+	t.Run("distinct rule with non-matching txn excluded", func(t *testing.T) {
+		amazonRule := export.VirtualTransactionRule{
+			Institution:         "chase",
+			Account:             "7777",
+			Category:            "Transfer:CardPayment",
+			DescriptionContains: "AMAZON",
+			TargetInstitution:   "amazonstore",
+			TargetAccount:       "virtual",
+			TargetCategory:      "Shopping:Online",
+			TargetBudget:        "shopping",
+			BudgetID:            "shopping",
+			BudgetName:          "Shopping",
+			AllowancePeriod:     "monthly",
+			Rollover:            "none",
+		}
+
+		allTxns := []budget.TransactionData{
+			// Matching: chase/7777/Transfer:CardPayment with AMAZON in description
+			{
+				Institution:   "chase",
+				Account:       "7777",
+				Description:   "Payment To AMAZON MARKETPLACE",
+				Amount:        10000,
+				Timestamp:     time.Date(2025, 4, 10, 0, 0, 0, 0, time.UTC),
+				StatementID:   "chase-7777-2025-04",
+				TransactionID: "txn-amz-1",
+				Category:      "Transfer:CardPayment",
+			},
+			// Non-matching: wrong institution
+			{
+				Institution:   "pnc",
+				Account:       "7777",
+				Description:   "Payment To AMAZON MARKETPLACE",
+				Amount:        20000,
+				Timestamp:     time.Date(2025, 4, 12, 0, 0, 0, 0, time.UTC),
+				StatementID:   "pnc-7777-2025-04",
+				TransactionID: "txn-amz-wrong-inst",
+				Category:      "Transfer:CardPayment",
+			},
+		}
+		docIDs := []string{"doc-amz-1", "doc-amz-wrong-inst"}
+
+		res := generateVirtualTransactions(allTxns, docIDs, []export.VirtualTransactionRule{amazonRule})
+
+		if len(res.transactions) != 1 {
+			t.Fatalf("expected 1 virtual transaction, got %d", len(res.transactions))
+		}
+
+		vt := res.transactions[0]
+		if vt.Institution != "amazonstore" {
+			t.Errorf("Institution: got %q, want %q", vt.Institution, "amazonstore")
+		}
+		if vt.Account != "virtual" {
+			t.Errorf("Account: got %q, want %q", vt.Account, "virtual")
+		}
+		if vt.Category != "Shopping:Online" {
+			t.Errorf("Category: got %q, want %q", vt.Category, "Shopping:Online")
+		}
+		if vt.Budget != "shopping" {
+			t.Errorf("Budget: got %q, want %q", vt.Budget, "shopping")
+		}
+		if !vt.Virtual {
+			t.Error("Virtual: got false, want true")
+		}
+		if !strings.HasPrefix(vt.StatementID, "amazonstore-virtual-") {
+			t.Errorf("StatementID %q does not have prefix %q", vt.StatementID, "amazonstore-virtual-")
+		}
+		if vt.TransactionID != "virtual-doc-amz-1" {
+			t.Errorf("TransactionID: got %q, want %q", vt.TransactionID, "virtual-doc-amz-1")
+		}
+
+		// 1 statement for the single matched period
+		if len(res.statements) != 1 {
+			t.Fatalf("expected 1 statement, got %d", len(res.statements))
+		}
+		if res.statements[0].Period != "2025-04" {
+			t.Errorf("statement Period: got %q, want %q", res.statements[0].Period, "2025-04")
+		}
+
+		// txnsByBudgetID["shopping"] has 1 entry
+		if len(res.txnsByBudgetID["shopping"]) != 1 {
+			t.Errorf("txnsByBudgetID[shopping]: got %d, want 1", len(res.txnsByBudgetID["shopping"]))
+		}
+	})
+
+	t.Run("per-rule dedup by date and amount", func(t *testing.T) {
+		// Two txns with same date and amount under the synchrony rule -> only 1 virtual txn
+		allTxns := []budget.TransactionData{
+			{
+				Institution:   "pnc",
+				Account:       "5111",
+				Description:   "Online Payment To SYNCHRONY BANK",
+				Amount:        50000,
+				Timestamp:     time.Date(2025, 2, 15, 0, 0, 0, 0, time.UTC),
+				StatementID:   "pnc-5111-2025-02",
+				TransactionID: "txn-dup-a",
+				Category:      "Transfer:CardPayment",
+			},
+			{
+				Institution:   "pnc",
+				Account:       "5111",
+				Description:   "Online Payment To SYNCHRONY BANK",
+				Amount:        50000,
+				Timestamp:     time.Date(2025, 2, 15, 0, 0, 0, 0, time.UTC),
+				StatementID:   "pnc-5111-2025-02",
+				TransactionID: "txn-dup-b",
+				Category:      "Transfer:CardPayment",
+			},
+		}
+		docIDs := []string{"doc-dup-a", "doc-dup-b"}
+
+		res := generateVirtualTransactions(allTxns, docIDs, []export.VirtualTransactionRule{synchronyRule})
+
+		if len(res.transactions) != 1 {
+			t.Errorf("expected 1 transaction after per-rule dedup, got %d", len(res.transactions))
+		}
+	})
+
+	t.Run("skip virtual source rows", func(t *testing.T) {
+		// A virtual source txn that would otherwise match must be skipped
+		allTxns := []budget.TransactionData{
+			{
+				Institution:   "pnc",
+				Account:       "5111",
+				Description:   "Online Payment To SYNCHRONY BANK",
+				Amount:        50000,
+				Timestamp:     time.Date(2025, 2, 15, 0, 0, 0, 0, time.UTC),
+				StatementID:   "pnc-5111-2025-02",
+				TransactionID: "txn-virtual-src",
+				Category:      "Transfer:CardPayment",
+				Virtual:       true, // must be skipped
+			},
+		}
+		docIDs := []string{"doc-virtual-src"}
+
+		res := generateVirtualTransactions(allTxns, docIDs, []export.VirtualTransactionRule{synchronyRule})
+
+		if len(res.transactions) != 0 {
+			t.Errorf("expected 0 transactions (virtual source skipped), got %d", len(res.transactions))
+		}
+		if len(res.statements) != 0 {
+			t.Errorf("expected 0 statements (virtual source skipped), got %d", len(res.statements))
+		}
+	})
+
+	t.Run("empty filter field matches any", func(t *testing.T) {
+		// Rule with no Institution/Account/Category/DescriptionContains matches everything non-virtual
+		broadRule := export.VirtualTransactionRule{
+			TargetInstitution: "virtual-bank",
+			TargetAccount:     "catch-all",
+			TargetCategory:    "Misc",
+			TargetBudget:      "misc",
+			BudgetID:          "misc",
+		}
+		allTxns := []budget.TransactionData{
+			{
+				Institution:   "any-inst",
+				Account:       "any-acct",
+				Description:   "Some Transaction",
+				Amount:        1000,
+				Timestamp:     time.Date(2025, 1, 5, 0, 0, 0, 0, time.UTC),
+				StatementID:   "any-inst-any-acct-2025-01",
+				TransactionID: "txn-broad",
+				Category:      "SomeCategory",
+			},
+		}
+		docIDs := []string{"doc-broad"}
+
+		res := generateVirtualTransactions(allTxns, docIDs, []export.VirtualTransactionRule{broadRule})
+
+		if len(res.transactions) != 1 {
+			t.Errorf("expected 1 transaction for broad match-any rule, got %d", len(res.transactions))
+		}
+		if len(res.transactions) > 0 && res.transactions[0].Institution != "virtual-bank" {
+			t.Errorf("Institution: got %q, want %q", res.transactions[0].Institution, "virtual-bank")
+		}
+	})
+}
+
+// TestUpsertBudgetUpdatesExisting covers three behaviors of upsertVirtualBudgets:
+// overwrite of a stale allowance (the frozen-allowance bug fix), insertion when
+// absent, and skip when no transactions matched the rule.
+func TestUpsertBudgetUpdatesExisting(t *testing.T) {
+	petRule := export.VirtualTransactionRule{
+		BudgetID:        "pet",
+		BudgetName:      "Pet",
+		AllowancePeriod: "monthly",
+		Rollover:        "none",
+	}
+
+	petTxns := []budget.TransactionData{
+		{Amount: 50000, Timestamp: time.Date(2025, 1, 15, 0, 0, 0, 0, time.UTC)},
+		{Amount: 60000, Timestamp: time.Date(2025, 3, 15, 0, 0, 0, 0, time.UTC)},
+		{Amount: 70000, Timestamp: time.Date(2025, 6, 15, 0, 0, 0, 0, time.UTC)},
+	}
+
+	t.Run("overwrites stale allowance when budget already exists", func(t *testing.T) {
+		// Start with a stale allowance — this is the frozen-allowance bug scenario
+		budgets := []export.Budget{
+			{ID: "pet", Name: "Pet", Allowance: 999.99, AllowancePeriod: "monthly", Rollover: "none"},
+		}
+		txnsByBudgetID := map[string][]budget.TransactionData{
+			"pet": petTxns,
+		}
+
+		result := upsertVirtualBudgets(budgets, []export.VirtualTransactionRule{petRule}, txnsByBudgetID)
+
+		if len(result) != 1 {
+			t.Fatalf("expected 1 budget, got %d", len(result))
+		}
+		b := result[0]
+		if b.ID != "pet" {
+			t.Errorf("ID: got %q, want %q", b.ID, "pet")
+		}
+		// The stale allowance must be overwritten (the bug fix)
+		if b.Allowance == 999.99 {
+			t.Error("Allowance still 999.99 — frozen-allowance bug not fixed")
+		}
+		// Recomputed allowance: total $1800 over ~5 months ≈ $360/month
+		if b.Allowance < 200 || b.Allowance > 500 {
+			t.Errorf("Allowance out of expected range [200,500]: got %.2f", b.Allowance)
+		}
+		if b.Name != "Pet" {
+			t.Errorf("Name: got %q, want %q", b.Name, "Pet")
+		}
+		if b.AllowancePeriod != "monthly" {
+			t.Errorf("AllowancePeriod: got %q, want %q", b.AllowancePeriod, "monthly")
+		}
+		if b.Rollover != "none" {
+			t.Errorf("Rollover: got %q, want %q", b.Rollover, "none")
+		}
+	})
+
+	t.Run("inserts budget when not already present", func(t *testing.T) {
+		// Start with an unrelated budget — pet is absent
+		budgets := []export.Budget{
+			{ID: "other", Name: "Other", Allowance: 100.00, AllowancePeriod: "monthly", Rollover: "none"},
+		}
+		txnsByBudgetID := map[string][]budget.TransactionData{
+			"pet": petTxns,
+		}
+
+		result := upsertVirtualBudgets(budgets, []export.VirtualTransactionRule{petRule}, txnsByBudgetID)
+
+		if len(result) != 2 {
+			t.Fatalf("expected 2 budgets after insert, got %d", len(result))
+		}
+		// Find the pet budget
+		var petBudget *export.Budget
+		for i := range result {
+			if result[i].ID == "pet" {
+				petBudget = &result[i]
+				break
+			}
+		}
+		if petBudget == nil {
+			t.Fatal("pet budget not found after insert")
+		}
+		if petBudget.Allowance < 200 || petBudget.Allowance > 500 {
+			t.Errorf("inserted pet Allowance out of expected range [200,500]: got %.2f", petBudget.Allowance)
+		}
+	})
+
+	t.Run("skips rule with no matched transactions", func(t *testing.T) {
+		budgets := []export.Budget{
+			{ID: "other", Name: "Other", Allowance: 100.00, AllowancePeriod: "monthly", Rollover: "none"},
+		}
+		// txnsByBudgetID has no entry for "pet"
+		txnsByBudgetID := map[string][]budget.TransactionData{}
+
+		result := upsertVirtualBudgets(budgets, []export.VirtualTransactionRule{petRule}, txnsByBudgetID)
+
+		if len(result) != 1 {
+			t.Fatalf("expected 1 budget (no insert for empty txns), got %d", len(result))
+		}
+		if result[0].ID != "other" {
+			t.Errorf("expected only 'other' budget, got %q", result[0].ID)
+		}
+	})
+
+	t.Run("skips rule with BudgetID empty", func(t *testing.T) {
+		ruleNoBudgetID := export.VirtualTransactionRule{
+			BudgetID:        "",
+			BudgetName:      "NoBudget",
+			AllowancePeriod: "monthly",
+			Rollover:        "none",
+		}
+		budgets := []export.Budget{}
+		txnsByBudgetID := map[string][]budget.TransactionData{
+			"": petTxns, // even if keyed by empty string, BudgetID=="" must skip
+		}
+
+		result := upsertVirtualBudgets(budgets, []export.VirtualTransactionRule{ruleNoBudgetID}, txnsByBudgetID)
+
+		if len(result) != 0 {
+			t.Errorf("expected 0 budgets for rule with empty BudgetID, got %d", len(result))
+		}
+	})
+}
+
+// subprocessEnvNoPassword returns the current environment with any password env
+// var removed and the run-main marker appended. Re-exec subprocess tests use it
+// to drive main() hermetically without a password set, regardless of the
+// caller's environment.
+func subprocessEnvNoPassword() []string {
+	var env []string
+	for _, kv := range os.Environ() {
+		if !strings.HasPrefix(kv, password.EnvVar+"=") {
+			env = append(env, kv)
+		}
+	}
+	return append(env, "BUDGET_ETL_TEST_RUN_MAIN=1")
+}
+
+// TestSourceFileFlowsThrough verifies that a parsed file's statements-root-relative
+// RelPath is recorded as StatementData.SourceFile and carried into the exported
+// Statement, while derived balance anchors (no source file) stay empty.
+func TestSourceFileFlowsThrough(t *testing.T) {
+	parsed := []parsedFile{{
+		sf: parse.StatementFile{
+			Institution: "amex",
+			Account:     "2011",
+			Period:      "2026-03",
+			RelPath:     "amex/2011/2026-03/activity.qfx",
+		},
+		result: parse.ParseResult{Balance: 100000},
+	}}
+
+	stmts := buildStatementData(parsed, map[string]*time.Time{})
+	if len(stmts) != 1 {
+		t.Fatalf("expected 1 statement, got %d", len(stmts))
+	}
+	if want := "amex/2011/2026-03/activity.qfx"; stmts[0].SourceFile != want {
+		t.Errorf("StatementData.SourceFile = %q, want %q", stmts[0].SourceFile, want)
+	}
+
+	exported := buildExportStatements(stmts)
+	if len(exported) != 1 {
+		t.Fatalf("expected 1 exported statement, got %d", len(exported))
+	}
+	if want := "amex/2011/2026-03/activity.qfx"; exported[0].SourceFile != want {
+		t.Errorf("export.Statement.SourceFile = %q, want %q", exported[0].SourceFile, want)
+	}
+
+	// A derived balance anchor has no source file; SourceFile must stay empty.
+	derived := buildExportStatements([]budget.StatementData{{
+		StatementID: "amex-2011-2026-02",
+		Institution: "amex",
+		Account:     "2011",
+		Period:      "2026-02",
+	}})
+	if derived[0].SourceFile != "" {
+		t.Errorf("derived export.Statement.SourceFile = %q, want empty", derived[0].SourceFile)
+	}
+}

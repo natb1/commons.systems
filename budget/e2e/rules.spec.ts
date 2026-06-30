@@ -1,6 +1,6 @@
 import path from "path";
 import { fileURLToPath } from "url";
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@commons-systems/config/playwright-test";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixturePath = path.join(__dirname, "fixtures", "test-budget.json");
@@ -126,7 +126,7 @@ test.describe("rules", () => {
   test("clicking rules nav link navigates to rules page", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator("main > h2")).toHaveText("Budgets");
-    await page.click('app-nav a[href="/rules"]');
+    await page.click('nav.cs-nav a[href="/rules"]');
     await expect(page.locator("main > h2")).toHaveText("Rules");
   });
 

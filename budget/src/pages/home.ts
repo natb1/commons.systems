@@ -1,20 +1,15 @@
 import { Timestamp } from "firebase/firestore";
 import { escapeHtml } from "@commons-systems/htmlutil";
-import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
-import { type Transaction, type TransactionId, type Budget, type BudgetPeriod, type SerializedBudgetPeriod } from "../firestore.js";
-import { computeAllBudgetBalances, computeNetAmount, MS_PER_WEEK, weekStart } from "../balance.js";
-import type { TransactionQuery } from "../data-source.js";
+import { type Transaction } from "../firestore.js";
+import { computeNetAmount } from "../balance.js";
 
-import { classifyError } from "@commons-systems/errorutil/classify";
-import { logError } from "@commons-systems/errorutil/log";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
-import { uniqueSorted } from "./hydrate-util.js";
 import type { SerializedChartTransaction } from "./home-chart.js";
 
 /** Number of weeks loaded per scroll batch (initial load and each subsequent fetch). */
 export const SCROLL_BATCH_WEEKS = 12;
 
-function formatTimestamp(ts: Timestamp | null): string {
+export function formatTimestamp(ts: Timestamp | null): string {
   if (!ts) return "";
   const date = ts.toDate();
   if (isNaN(date.getTime())) {
@@ -84,7 +79,7 @@ function buildRowParts(txn: Transaction, editable: boolean, budgetIdToName: Map<
         <dt>Budget</dt><dd>${budgetCell}</dd>
         ${balanceRow}
         <dt>Group</dt><dd>${escapeHtml(groupName)}</dd>
-        <dt>Statement</dt><dd>${txn.statementId ? `<a href="#">statement</a>` : ""}</dd>
+        <dt>Statement</dt><dd>${txn.statementId ? `<button type="button" class="statement-source-link" data-statement-id="${escapeHtml(txn.statementId)}">view source</button>` : ""}</dd>
       </dl>`;
   return { txnIdAttr, noteCell, categoryCell, reimbursementCell, budgetCell, balanceRow, amountAttr, budgetIdAttr, timestampAttr, reimbursementAttr, categoryAttr, netAmountAttr, budgetNameAttr, detailDl };
 }
@@ -161,11 +156,20 @@ function renderNormalizedGroup(opts: RenderGroupOptions): string {
   </details>`;
 }
 
+/**
+ * Resolve a budget id to its name for chart serialization, degrading an unknown
+ * id to `null` rather than throwing.
+ *
+ * A scroll-loaded transaction can reference a budget added after the
+ * hydration-time `budgetIdToName` map was built. The chart is a derived view,
+ * so it treats such a transaction as unbudgeted instead of aborting
+ * serialization (#578). The editable table path (`buildRowParts`) stays strict
+ * and still throws on an unknown id: silently degrading it to unbudgeted there
+ * would misrepresent a transaction the user edits.
+ */
 function resolveBudgetName(budgetId: string | null, budgetIdToName: Map<string, string>): string | null {
   if (budgetId === null) return null;
-  const name = budgetIdToName.get(budgetId);
-  if (name === undefined) throw new DataIntegrityError(`Transaction references unknown budget ID: ${budgetId}`);
-  return name;
+  return budgetIdToName.get(budgetId) ?? null;
 }
 
 export function serializeChartTransactions(transactions: Transaction[], budgetIdToName: Map<string, string>): SerializedChartTransaction[] {
@@ -178,27 +182,6 @@ export function serializeChartTransactions(transactions: Transaction[], budgetId
       timestampMs: t.timestamp ? t.timestamp.toMillis() : null,
       budgetName: resolveBudgetName(t.budget, budgetIdToName),
     }));
-}
-
-function renderCategorySankey(transactions: Transaction[], budgets: Budget[]): string {
-  const budgetIdToName = new Map(budgets.map(b => [b.id, b.name]));
-  const chartData = serializeChartTransactions(transactions, budgetIdToName);
-  const json = JSON.stringify(chartData).replace(/</g, "\\u003c");
-  const categoryOpts = escapeHtml(JSON.stringify(uniqueSorted(transactions.map(t => t.category))));
-  const budgetOpts = escapeHtml(JSON.stringify(uniqueSorted(budgets.map(b => b.name))));
-  return `<div id="sankey-controls" data-category-options="${categoryOpts}" data-budget-options="${budgetOpts}">
-      <fieldset id="sankey-mode">
-        <label><input type="radio" name="sankey-mode" value="spending" checked> Spending</label>
-        <label><input type="radio" name="sankey-mode" value="credits"> Credits</label>
-      </fieldset>
-      <label id="unbudgeted-toggle"><input type="checkbox" id="sankey-unbudgeted"> Unbudgeted only</label>
-      <label id="card-payment-toggle"><input type="checkbox" id="sankey-card-payment"> Show card payments</label>
-      <label id="category-filter-label">Category: <input type="text" id="sankey-category-filter" data-autocomplete></label>
-      <label id="budget-filter-label">Budget: <input type="text" id="sankey-budget-filter" data-autocomplete></label>
-      <label>Weeks: <input type="number" id="sankey-weeks" value="12" min="1" max="104"></label>
-      <label>Ending week: <input type="range" id="sankey-end-week"> <span id="sankey-end-label"></span></label>
-    </div>
-    <div id="category-sankey"><script type="application/json" id="sankey-data">${json}</script></div>`;
 }
 
 /**
@@ -232,7 +215,12 @@ export function renderTransactionRows(
       const members = normalizedGroups.get(txn.normalizedId)!;
       const primary = members.find(t => t.normalizedPrimary);
       if (!primary) {
-        throw new DataIntegrityError(`Normalized group ${txn.normalizedId} has no primary transaction`);
+        // The group's single primary is in another scroll batch; that batch renders
+        // the canonical group row. Non-primary duplicates are hidden everywhere else
+        // (chart, balance, income), so suppress these orphan members here rather than
+        // throwing a fatal DataIntegrityError that kills the table / disconnects
+        // infinite scroll (#1266).
+        return [];
       }
       return renderNormalizedGroup({ primary, members, groupName, editable, budgetIdToName, balance: getBalance(primary.id) });
     })
@@ -246,111 +234,3 @@ export function compareByTimestampDesc(a: Transaction, b: Transaction): number {
   return b.timestamp.toMillis() - a.timestamp.toMillis();
 }
 
-function renderTransactionTable(
-  transactions: Transaction[],
-  authorized: boolean,
-  groupName: string,
-  budgets: Budget[],
-  budgetPeriods: BudgetPeriod[],
-  sinceMs: number | null,
-): string {
-  if (transactions.length === 0 && sinceMs === null) {
-    return "<p>No transactions found.</p>";
-  }
-
-  const budgetIdToName = new Map(budgets.map(b => [b.id, b.name]));
-  const balances = computeAllBudgetBalances(transactions, budgets, budgetPeriods);
-
-  const rows = renderTransactionRows(
-    transactions, groupName, authorized, budgetIdToName,
-    (id) => balances.get(id as TransactionId) ?? null,
-  );
-
-  // Budget map is always needed for scroll hydration (rendering budget names on appended rows)
-  const budgetNameToId: Record<string, string> = {};
-  for (const b of budgets) {
-    if (budgetNameToId[b.name] !== undefined) {
-      throw new DataIntegrityError(`Duplicate budget name: ${b.name}`);
-    }
-    budgetNameToId[b.name] = b.id;
-  }
-  const budgetMapAttr = escapeHtml(JSON.stringify(budgetNameToId));
-
-  let dataAttrs = ` data-group-name="${escapeHtml(groupName)}" data-editable="${authorized}" data-budget-map="${budgetMapAttr}"`;
-  if (authorized) {
-    const budgetNames = budgets.map(b => b.name).sort();
-    const budgetOpts = escapeHtml(JSON.stringify(budgetNames));
-    const categoryOpts = escapeHtml(JSON.stringify(uniqueSorted(transactions.map(t => t.category))));
-    const periodsData: SerializedBudgetPeriod[] = budgetPeriods.map((p) => ({
-      id: p.id,
-      budgetId: p.budgetId,
-      periodStartMs: p.periodStart.toMillis(),
-      periodEndMs: p.periodEnd.toMillis(),
-      total: p.total,
-      count: p.count,
-      categoryBreakdown: p.categoryBreakdown,
-    }));
-    const periodsAttr = escapeHtml(JSON.stringify(periodsData));
-    dataAttrs += [
-      ` data-budget-options="${budgetOpts}"`,
-      ` data-category-options="${categoryOpts}"`,
-      ` data-budget-periods="${periodsAttr}"`,
-    ].join("");
-  }
-
-  const sentinel = sinceMs !== null
-    ? `\n      <div id="scroll-sentinel" data-next-before="${sinceMs}" aria-hidden="true"></div>`
-    : "";
-
-  return `<div id="transactions-table"${dataAttrs}>
-      <div class="txn-header">
-        <span>Description</span>
-        <span>Note</span>
-        <span>Category</span>
-        <span class="amount">Amount</span>
-      </div>
-      ${rows}${sentinel}
-    </div>`;
-}
-
-export async function renderHome(options: RenderPageOptions): Promise<string> {
-  const { authorized, groupName, dataSource } = options;
-
-  // Seed data (unauthorized) is small — load all transactions without a time window.
-  // Authorized data uses a 12-week initial window with infinite scroll for older batches.
-  const sinceMs = authorized ? weekStart(Date.now() - SCROLL_BATCH_WEEKS * MS_PER_WEEK) : null;
-  const txnQuery: TransactionQuery = sinceMs !== null ? { since: Timestamp.fromMillis(sinceMs) } : {};
-
-  let tableHtml: string;
-  let chartHtml = "";
-  try {
-    const [transactions, budgets, budgetPeriods] = await Promise.all([
-      dataSource.getTransactions(txnQuery)
-        .catch((e) => { logError(e, { operation: "load-transactions" }); throw e; }),
-      dataSource.getBudgets()
-        .catch((e) => { logError(e, { operation: "load-budgets" }); throw e; }),
-      dataSource.getBudgetPeriods()
-        .catch((e) => { logError(e, { operation: "load-budget-periods" }); throw e; }),
-    ]);
-    transactions.sort(compareByTimestampDesc);
-    try {
-      chartHtml = renderCategorySankey(transactions, budgets);
-    } catch (chartError) {
-      const kind = classifyError(chartError);
-      if (kind === "programmer" || kind === "data-integrity" || kind === "range") throw chartError;
-      reportError(chartError);
-      logError(chartError, { operation: "chart-serialization" });
-      chartHtml = `<p class="chart-error">Chart unavailable.</p>`;
-    }
-    tableHtml = renderTransactionTable(transactions, authorized, groupName, budgets, budgetPeriods, sinceMs);
-  } catch (error) {
-    tableHtml = renderLoadError(error, "transactions-error");
-  }
-
-  return `
-    <h2>Transactions</h2>
-    ${renderPageNotices(options, "transactions")}
-    ${chartHtml}
-    ${tableHtml}
-  `;
-}

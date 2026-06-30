@@ -1,0 +1,143 @@
+/*
+ * Token dependency: this stylesheet uses var(--sidebar-width) for the two-column
+ * grid column width (at ≥768px) and the absolute-positioned sidebar width (at <768px).
+ * That token is defined in @commons-systems/ds/tokens/spacing.css and is provided
+ * transitively by @commons-systems/style/default.css. Each usage carries an explicit
+ * `16rem` fallback, so layout.css renders correctly regardless of import order; loading
+ * default.css (or the ds spacing tokens) lets the token override that fallback.
+ *
+ * Without --sidebar-width, var(--sidebar-width) resolves to a guaranteed-invalid value
+ * and the grid-template-columns declaration falls back to its initial value (none), so
+ * the grid loses its grid context and children lay out as blocks. The `16rem` fallback
+ * prevents this.
+ *
+ * The scaffolding/firebase/templates/app template imports default.css, so if a developer
+ * adds layout.css to it they should place it after the existing default.css import.
+ */
+.content-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-6);
+  contain: layout style;
+}
+
+/*
+ * missing.css sets `main { max-inline-size: var(--eff-line-length); inline-size: 100%;
+ * margin-inline: auto }`, which self-centers a top-level `main` in the viewport. Inside
+ * `.content-grid` we own the column layout, so pin `main` to the grid column start.
+ * Without this override, whenever the grid column resolves wider than `--eff-line-length`,
+ * `main` caps at `--eff-line-length` and auto-centers within its column — its left edge
+ * drifts right of the header's. The column width depends on a `25ch` sidebar value whose
+ * px equivalent shifts with font metrics; under `font-display: optional` the web font may
+ * miss its block period on a cold load and the fallback font's metrics apply for the page
+ * lifetime, so the misalignment is environment-specific (warm caches hide it locally).
+ * Removing the cap and zeroing the margins makes `main` fill the column from its start
+ * regardless of which font is active, so header and main left edges always coincide.
+ */
+.content-grid > main {
+  max-inline-size: none;
+  margin-inline: 0;
+  min-width: 0;
+}
+
+@media (min-width: 768px) {
+  .content-grid:has(> .sidebar) {
+    grid-template-columns: 1fr var(--sidebar-width, 16rem);
+  }
+
+  .page:has(> .content-grid > .sidebar) > header {
+    display: grid;
+    grid-template-columns: 1fr var(--sidebar-width, 16rem);
+    column-gap: var(--space-6);
+  }
+
+  .page:has(> .content-grid > .sidebar) > header > * {
+    grid-column: 1;
+  }
+
+  .page:has(> .content-grid > .sidebar) > header > nav {
+    grid-column: 1 / -1;
+  }
+
+  .sidebar {
+    position: sticky;
+    top: calc(var(--header-height, 5rem) + 2rem);
+    align-self: start;
+    max-height: calc(100vh - var(--header-height, 5rem) - 4rem);
+    overflow-y: auto;
+    margin-block: 0;
+    border-block: none;
+    padding-bottom: var(--space-4);
+  }
+
+  .panel-toggle {
+    display: none;
+  }
+}
+
+.panel-toggle {
+  background: none;
+  border: var(--border-width) solid var(--border-default);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 0.2rem var(--space-2);
+  transition: transform var(--duration-base) var(--ease);
+}
+
+.panel-toggle[aria-expanded="true"] {
+  transform: rotate(180deg);
+}
+
+@media (max-width: 767px) {
+  .content-grid {
+    position: relative;
+  }
+
+  .sidebar {
+    display: none;
+    position: absolute;
+    top: 0;
+    right: 0;
+    z-index: 5;
+    background: var(--surface-page);
+    border: var(--border-width) solid var(--border-default);
+    padding: var(--space-4);
+    width: var(--sidebar-width, 16rem);
+    max-height: 80vh;
+    overflow-y: auto;
+  }
+
+  .sidebar.open {
+    display: block;
+  }
+}
+
+.sidebar-overflow-bottom {
+  border-bottom: var(--border-width) solid var(--border-default);
+  box-shadow: var(--shadow-overflow-bottom);
+}
+
+.sidebar-overflow-top {
+  border-top: var(--border-width) solid var(--border-default);
+  box-shadow: var(--shadow-overflow-top);
+}
+
+.sidebar-overflow-top.sidebar-overflow-bottom {
+  box-shadow: var(--shadow-overflow-top), var(--shadow-overflow-bottom);
+}
+
+.sidebar-scroll-track {
+  position: fixed;
+  width: 5px;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.sidebar-scroll-thumb {
+  position: absolute;
+  width: 5px;
+  border-radius: 2.5px;
+  background: var(--border-default);
+  opacity: 0.8;
+}

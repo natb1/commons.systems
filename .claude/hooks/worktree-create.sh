@@ -13,9 +13,19 @@ set -euo pipefail
 WORKTREE_REGISTERED=0
 NEW_PATH=""
 
-# Claude captures hook stderr for error reporting; writing progress to /dev/tty
-# bypasses that capture so the user sees setup output in real time.
-LOG=/dev/tty
+# Open the progress-log destination as fd 3. Claude may capture hook stderr
+# for error reporting; writing to /dev/tty bypasses that capture so the user
+# sees setup output in real time. When invoked from a non-interactive parent
+# (e.g. `dispatch`, which backgrounds claude with `&`), the hook subprocess
+# has no controlling terminal and opening /dev/tty fails with ENXIO — fall
+# back to a dup of fd 2. Use fd duplication rather than `/dev/stderr` because
+# `/dev/stderr` resolves through `/proc/self/fd/2`, which re-opens the
+# underlying device by name; if fd 2 points at a TTY device but the process
+# lacks a controlling TTY, that re-open also fails with ENXIO.
+# Group `{ ...; }` scopes the `2>/dev/null` to silencing exec's open-failure
+# message only; without it, the `2>/dev/null` would persist past the `if` and
+# clobber the original stderr that the fallback (exec 3>&2) needs to dup.
+if { exec 3>/dev/tty; } 2>/dev/null; then :; else exec 3>&2; fi
 
 cleanup_worktree() {
   [ -n "$NEW_PATH" ] || return 0
@@ -49,26 +59,55 @@ PROJECT_ROOT=$(dirname "$GIT_COMMON_DIR")
 NEW_PATH="$PROJECT_ROOT/worktrees/$BRANCH"
 
 if [ -e "$NEW_PATH" ]; then
-  echo "[worktree-create] worktree $NEW_PATH already exists; re-syncing issue context" >"$LOG"
+  echo "[worktree-create] worktree $NEW_PATH already exists; refreshing identity stub" >&3
 else
   if git ls-remote --heads --exit-code origin "$BRANCH" >/dev/null 2>&1; then
-    git fetch origin "$BRANCH" >"$LOG" 2>&1
-    git worktree add "$NEW_PATH" "$BRANCH" >"$LOG" 2>&1
+    git fetch origin "$BRANCH" >&3 2>&1
+    git worktree add "$NEW_PATH" "$BRANCH" >&3 2>&1
   elif git rev-parse --verify --quiet "$BRANCH" >/dev/null 2>&1; then
-    git worktree add "$NEW_PATH" "$BRANCH" >"$LOG" 2>&1
+    git worktree add "$NEW_PATH" "$BRANCH" >&3 2>&1
   else
-    git fetch origin main >"$LOG" 2>&1
-    git worktree add -b "$BRANCH" "$NEW_PATH" origin/main >"$LOG" 2>&1
+    git fetch origin main >&3 2>&1
+    git worktree add -b "$BRANCH" "$NEW_PATH" origin/main >&3 2>&1
   fi
   WORKTREE_REGISTERED=1
 
-  direnv allow "$NEW_PATH" >"$LOG" 2>&1 || { echo "[worktree-create] ERROR: direnv allow failed for $NEW_PATH" >&2; exit 1; }
-  direnv exec "$NEW_PATH" true >"$LOG" 2>&1 || { echo "[worktree-create] ERROR: direnv exec failed for $NEW_PATH (non-zero exit from .envrc evaluation)" >&2; exit 1; }
+  direnv allow "$NEW_PATH" >&3 2>&1 || { echo "[worktree-create] ERROR: direnv allow failed for $NEW_PATH" >&2; exit 1; }
+  direnv exec "$NEW_PATH" true >&3 2>&1 || { echo "[worktree-create] ERROR: direnv exec failed for $NEW_PATH (non-zero exit from .envrc evaluation)" >&2; exit 1; }
 fi
 
 # Branch regex above guarantees a leading <issue-num>- prefix.
 ISSUE_NUM="${BRANCH%%-*}"
-(cd "$NEW_PATH" && "$(cd "$(dirname "$0")" && pwd)/../skills/ref-pr-workflow/scripts/sync-issue-context" "$ISSUE_NUM") >"$LOG" 2>&1 \
-  || { echo "[worktree-create] ERROR: sync-issue-context failed for issue $ISSUE_NUM" >&2; exit 1; }
+# Write the static identity stub to CLAUDE.local.md — static identity only
+# (issue number, title, branch, pointer to dispatch-context-pack); no issue
+# body/comments/related-issue bodies, so it stays tiny and never goes stale.
+# Any session needing live context runs dispatch-context-pack. This must stay
+# byte-identical to dispatch-materialize-spawn's write_identity_stub (the other
+# provisioning path). Fail-hard, matching the hook's existing posture.
+TITLE=$(gh issue view "$ISSUE_NUM" --json title --jq .title) \
+  || { echo "[worktree-create] ERROR: gh issue view #$ISSUE_NUM failed; cannot write CLAUDE.local.md stub" >&2; exit 1; }
+SAFE_TITLE=$(printf '%s' "$TITLE" | tr -d '\000-\037\177')
+SAFE_TITLE="${SAFE_TITLE:0:200}"
+cat > "$NEW_PATH/CLAUDE.local.md" <<EOF
+<!-- AUTO-GENERATED identity stub. Static identity only; do not edit. -->
+<!-- For live issue/PR/diff context, run dispatch-context-pack (pointer below). -->
+
+# Issue #$ISSUE_NUM: $SAFE_TITLE
+
+Branch: \`$BRANCH\`
+
+This worktree is provisioned for GitHub issue #$ISSUE_NUM. This file is a static
+identity anchor — it intentionally carries no issue body, comments, or
+related-issue context, so it stays tiny and never goes stale.
+
+For live, on-demand context, run:
+
+    .claude/skills/dispatch-propagate/scripts/dispatch-context-pack $ISSUE_NUM --issue --relations --pr --diff
+
+Pass only the slices you need (e.g. \`--issue\`).
+EOF
+
+mkdir -p "$NEW_PATH/tmp" && touch "$NEW_PATH/tmp/dispatch-worktree" \
+  || { echo "[worktree-create] ERROR: failed to write dispatch marker at $NEW_PATH/tmp/dispatch-worktree" >&2; exit 1; }
 
 echo "$NEW_PATH"

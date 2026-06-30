@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@commons-systems/config/playwright-test";
 import { signIn } from "@commons-systems/authutil/e2e/sign-in";
 
 test.describe("auth", () => {

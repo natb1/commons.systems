@@ -1,0 +1,333 @@
+#!/usr/bin/env bash
+# office-hours — the single user entry point to the office-hours queue (#759).
+#
+# A thin dispatcher over office-hours-select-target, which is the single source
+# of truth for the queue: it enumerates the open dispatch:office-hours issues and
+# their <N>-* worktrees once, makes one per-item liveness call, and emits exactly
+# one disposition. This script reads that disposition and acts on it — it does no
+# queue enumeration or liveness checking of its own (its only daemon query is the
+# single sessionId→job-id lookup attach_session does at the point of attach).
+#
+# The selector's dispositions name a session by its sessionId; this script
+# attaches via `claude attach`, which keys on the daemon JOB id (the `id` field
+# of `claude agents --json`, the sessionId's first UUID group), not the
+# sessionId. attach_session() bridges the two — see its comment.
+#
+# Dispositions and the action each triggers:
+#   idle <sessionId>              → attach the user to the idle/complete
+#                                   (waiting/done/idle) session the human can
+#                                   attend to so they supply any pending input
+#                                   (or review a completed run). No skill is
+#                                   loaded.
+#   parked-router <sessionId> ... → attach to re-engage a target-less parked
+#                                   dispatch router (#1010), the artifact
+#                                   dispatch-self-close's continuation invariant
+#                                   keeps alive. No skill is loaded.
+#   office-hours <N> <worktree-path>
+#                                 → launch a `--bg` session named
+#                                   office-hours-<N>, with cwd = that worktree
+#                                   (2nd field), booting the `/office-hours <N>`
+#                                   review-and-recommend skill (#2520). The skill
+#                                   reviews the item, presents best-next-steps,
+#                                   and STOPS — the human then attaches and
+#                                   drives. Born in the worktree, the session's
+#                                   branch is <N>-..., so the strip hook clears
+#                                   the dispatch:office-hours label. EXCEPTION:
+#                                   for main-qa items, cwd is the main worktree
+#                                   (branch `main`), which does not match the
+#                                   strip hook `^[0-9]+` discriminator — the
+#                                   label is NOT auto-cleared; closing the issue
+#                                   is what removes it from the queue (see
+#                                   SKILL.md Step 1b). The session also holds the
+#                                   per-worktree concurrency
+#                                   lock via the occupancy guard's
+#                                   office-hours-name check in
+#                                   worktree_has_live_session, which recognizes
+#                                   the office-hours-<N> session as occupying the
+#                                   <N>-slug worktree. When no <N>-* worktree
+#                                   resolves (2nd field `-`), exit non-zero with
+#                                   a diagnostic and launch nothing.
+#   idle-provision <sessionId> <branch>
+#                                 → the originating session's worktree was swept
+#                                   but its remote branch still exists. Provision
+#                                   the worktree from origin/<branch> via
+#                                   dispatch-provision-from-remote, then attach
+#                                   the originating session (exactly as `idle`
+#                                   does). On any provisioning failure, exit
+#                                   non-zero with a diagnostic naming the branch
+#                                   — the selector already confirmed the remote
+#                                   exists, so a failure here is a genuine error
+#                                   and a silent fresh-spawn would mask it.
+#   resume <N> <sessionId> <cwd>
+#                                 → the originating session was REMOVED from the
+#                                   daemon registry but its on-disk transcript is
+#                                   recoverable and its <N>-* worktree is present
+#                                   (#2240). Resume it in place as a --bg job named
+#                                   by the worktree basename (<N>-slug) rooted at
+#                                   <cwd> (--resume, with
+#                                   a --fork-session retry if the kick fails on a
+#                                   stale/colliding id), then attach BY NAME — a
+#                                   forked retry mints a new sessionId, so the
+#                                   verb's <sessionId> is stale for attach.
+#   resume-provision <N> <sessionId> <branch>
+#                                 → as resume, but the worktree was swept while
+#                                   origin/<branch> still exists: provision it from
+#                                   the remote first (dispatch-provision-from-remote),
+#                                   then resume in the freshly-landed worktree.
+#   empty                         → print a queue-empty message and exit WITHOUT
+#                                   launching Claude. The empty queue is handled
+#                                   entirely in bash; no session is booted.
+#   empty not-in-queue <N>        → single-item mode (#2538): the targeted <N> is
+#                                   not a queue member. Print a precise "issue #<N>
+#                                   is not in the office-hours queue" message and
+#                                   exit WITHOUT launching. Same `empty` bucket;
+#                                   the trailing fields only refine the message.
+#
+# Open-blocker advisory: the selector may print a `NOTE —` open-blocker line to
+# STDERR for the selected item (a signal, not a gate). This script captures only
+# stdout (`directive=$(...)`), so that advisory passes straight through to the
+# human's terminal — do NOT redirect or suppress the selector's stderr.
+#
+# Liveness now lives entirely in the selector, under a single UNKNOWN→skip
+# fail-safe convention — the old entry-vs-selector dual-convention coordination
+# (this script treating UNKNOWN as not-resumable while the selector treated it as
+# occupied) is gone, because the enumeration is no longer duplicated.
+#
+# Sandbox: the selector shells out to `claude agents --json` (via
+# lib-claude-agents.sh), which reaches the local daemon over a Unix socket — run
+# this script with `dangerouslyDisableSandbox: true`. See `.claude/rules/sandbox.md`.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# resolve_project_root (resume-provision worktree path) lives in lib.sh;
+# verify_agent_registered_under (the resume arms' post-kick registration check)
+# lives in lib-claude-agents.sh — the same two libs the selector sources. The
+# thin-dispatcher daemon-query note above still holds for the idle/fresh paths.
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/lib.sh"
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/lib-claude-agents.sh"
+
+# Optional positional <N>: target a specific queue item by issue number.
+if [[ $# -gt 0 ]]; then
+  if [[ ! "$1" =~ ^[0-9]+$ ]]; then
+    echo "office-hours: invalid target '$1' — expected a numeric issue number. Usage: office-hours [<N>]" >&2
+    exit 2
+  fi
+  TARGET_N="$1"
+else
+  TARGET_N=""
+fi
+
+# Launch target only. The selector reads CLAUDE_AGENTS_CMD from the environment
+# for its own liveness queries (default `claude`); this script does not set it.
+CLAUDE_CMD="${OFFICE_HOURS_CLAUDE_CMD:-claude}"
+
+# attach_session <sessionId> — exec `claude attach` on the background job that
+# owns <sessionId>.
+#
+# `claude attach <id>` resolves a job by its SHORT job id — the `id` field of
+# `claude agents --json`, the first UUID group of the sessionId — NOT the full
+# sessionId. The selector traffics in sessionIds (stable session identity), so
+# translate to the job id HERE, at the
+# single point of attach, by looking the session up in the live registry. (Until
+# this translation existed, the sessionId was passed straight to `claude attach`,
+# which always failed with `No job matching '<sessionId>'` — the regression that
+# shipped when #1597 switched the resume mechanism from `claude --resume`, which
+# DOES key on the sessionId, to `claude attach`, which does not.)
+#
+# A clear error beats a fallback: if the session is not in the live registry —
+# the daemon is unreachable, or it died between selection and attach — there is
+# no job to attach, so report it and exit rather than invoke attach with an
+# empty or stale handle.
+attach_session() {
+  local session_id="$1" job_id
+  # --all is required so a completed (done) session surfaced by the selector is
+  # visible here for job-id resolution (the default active-only listing omits it).
+  job_id=$("$CLAUDE_CMD" agents --json --all 2>/dev/null \
+    | jq -r --arg s "$session_id" '
+        if type == "array"
+        then (first(.[] | select(.sessionId == $s) | .id) // empty)
+        else empty end' 2>/dev/null) || true
+  if [[ -z "$job_id" ]]; then
+    echo "office-hours: no live background job for session $session_id — cannot attach (the daemon may be unreachable, or the session ended). Run 'claude agents' to inspect." >&2
+    exit 1
+  fi
+  exec "$CLAUDE_CMD" attach "$job_id"
+}
+
+# job_id_for_name <name> — echo the daemon job id of the live background job named
+# <name>, or empty. --all so a just-resumed (or just-forked) session is visible
+# regardless of its momentary state.
+job_id_for_name() {
+  "$CLAUDE_CMD" agents --json --all 2>/dev/null \
+    | jq -r --arg n "$1" '
+        if type == "array"
+        then (first(.[] | select(.name == $n) | .id) // empty)
+        else empty end' 2>/dev/null || true
+}
+
+# attach_session_by_name <name> — exec `claude attach` on the background job named
+# <name>. The resume arms attach BY NAME, never by the selector's <sessionId>: a
+# --fork-session retry mints a NEW sessionId, so the original is stale, while the
+# worktree basename is the stable handle.
+attach_session_by_name() {
+  local name="$1" job_id
+  job_id=$(job_id_for_name "$name")
+  if [[ -z "$job_id" ]]; then
+    echo "office-hours: no live background job named $name — cannot attach (the resume kick may have failed, or the daemon is unreachable). Run 'claude agents' to inspect." >&2
+    exit 1
+  fi
+  exec "$CLAUDE_CMD" attach "$job_id"
+}
+
+# resume_session <sessionId> <N> <cwd> — resume a REMOVED-but-recoverable
+# originating session (#2240) in place. Mirrors dispatch-resume-worker's resume
+# mechanism INLINE — it is NOT invoked, because that script submits a "continue"
+# prompt, whereas the office-hours resume must OMIT any prompt: the resumed
+# session is blocked on a human who should attach and drive, so without a
+# -p/--print prompt the --bg launch boots interactive and parks awaiting input
+# (mirroring the idle disposition). The session is named by the worktree
+# basename (`<N>-slug`), so it IS the original phase worker as far as the Stop
+# hook's `^[0-9]+-` discriminator is concerned.
+#
+# Kick the session as a --bg job named by the worktree basename (`<N>-slug`),
+# rooted at <cwd> via a subshell `cd` so SessionStart-derived attributes key on
+# the right directory. A successful resume requires BOTH a clean kick AND
+# verified registration: `claude --bg` returns BEFORE the daemon registers the
+# session, and a dead/colliding <sessionId> is rejected ASYNCHRONOUSLY (the kick
+# returns 0, yet no session ever registers). So gate on kick-rc-0 AND
+# verify_agent_registered_under, mirroring dispatch-resume-worker. On a failed
+# kick OR a failed verify, retry ONCE with --fork-session, which resumes off a
+# fresh id derived from the same transcript. Both attempts failing to register
+# is a hard error (a clear message beats a silent fresh-spawn).
+#
+# THE FORKED-SESSIONID TRAP: --fork-session mints a NEW sessionId, so the
+# selector's <sessionId> is stale for attach. attach_session_by_name keys on the
+# stable worktree basename, never the original sessionId.
+resume_session() {
+  local session_id="$1" num="$2" cwd="$3" name="$(basename "$3")" rc=0
+  ( cd "$cwd" && "$CLAUDE_CMD" --bg --name "$name" --permission-mode auto \
+      --resume "$session_id" ) >/dev/null 2>&1 || rc=$?
+  if [[ "$rc" -ne 0 ]] || ! verify_agent_registered_under "$name" "$cwd"; then
+    # Primary kick failed, or it returned 0 but no session registered (an
+    # async-rejected stale/colliding id). Retry ONCE off a fresh forked id.
+    rc=0
+    ( cd "$cwd" && "$CLAUDE_CMD" --bg --name "$name" --permission-mode auto \
+        --resume "$session_id" --fork-session ) >/dev/null 2>&1 || rc=$?
+    if [[ "$rc" -ne 0 ]] || ! verify_agent_registered_under "$name" "$cwd"; then
+      echo "office-hours: failed to resume session $session_id for #$num under name $name in $cwd (both --resume and --fork-session kicks failed to register a live session). Run 'claude agents' to inspect." >&2
+      exit 1
+    fi
+  fi
+  attach_session_by_name "$name"
+}
+
+# fresh_session <N> <wt> — spawn a fresh office-hours-<N> session rooted in the
+# <N>-* worktree, booting the `/office-hours <N>` review-and-recommend skill
+# (#2520). The skill reviews the item, presents best-next-steps, and STOPS —
+# the human then attaches by name and drives. This replaces the bare promptless
+# spawn (#2387): office-hours is no longer a pure dispatcher; it now boots a
+# one-shot skill so the human arrives to a ready recommendation, not a blank
+# session.
+#
+# Kick a NON-resume --bg job named office-hours-<N>, rooted at <wt> via a
+# subshell `cd` so SessionStart-derived attributes key on the right directory.
+# The positional `/office-hours <N>` arg boots the review-and-recommend skill;
+# after it runs and stops the session waits for the human to attach and drive.
+#
+# A successful spawn requires BOTH a clean kick AND verified registration:
+# `claude --bg` returns BEFORE the daemon registers the session, so gate on
+# kick-rc-0 AND verify_agent_registered_under, mirroring resume_session. Unlike
+# resume_session there is NO --fork-session retry — forking is a resume-only
+# mechanism (it resumes off a fresh id derived from an existing transcript); a
+# fresh kick that fails to register is a hard error, so report it and exit.
+fresh_session() {
+  local num="$1" cwd="$2" name="office-hours-$1" rc=0
+  ( cd "$cwd" && "$CLAUDE_CMD" --bg --name "$name" --permission-mode auto \
+      "/office-hours $num" ) >/dev/null 2>&1 || rc=$?
+  if [[ "$rc" -ne 0 ]] || ! verify_agent_registered_under "$name" "$cwd"; then
+    echo "office-hours: failed to launch a fresh session for #$num under name $name in $cwd (the --bg kick failed to register a live session). Run 'claude agents' to inspect." >&2
+    exit 1
+  fi
+  attach_session_by_name "$name"
+}
+
+# One call to the single source of truth; dispatch on the returned verb.
+directive=$("$SCRIPT_DIR/office-hours-select-target" ${TARGET_N:+"$TARGET_N"})
+read -r verb a b c d <<< "$directive"
+case "$verb" in
+  idle|parked-router)
+    # a = the idle/complete session / parked-router sessionId. attach_session
+    # translates it to the daemon job id `claude attach` requires.
+    attach_session "$a"
+    ;;
+  office-hours)
+    # a b = <N> <worktree-path>. Launch a --bg session named office-hours-<N>,
+    # rooted in the <N>-* worktree, booting the `/office-hours <N>`
+    # review-and-recommend skill (#2520) — the skill reviews the item, presents
+    # best-next-steps, and stops; the human then attaches and drives.
+    # fresh_session does the kick, the registration gate, and the attach. Rooting
+    # it in the worktree clears the dispatch:office-hours label for non-main-qa
+    # items (the strip hook resolves <N> from the cwd branch); for main-qa items
+    # the cwd is the main worktree (branch main), which the strip hook's ^[0-9]+
+    # discriminator does not match, so the label is NOT auto-cleared — see the
+    # header EXCEPTION note. The per-worktree concurrency lock is
+    # held via the occupancy guard's office-hours-name check (see
+    # worktree_has_live_session), which recognizes the office-hours-<N> session
+    # as occupying the <N>-slug worktree.
+    if [[ -z "$b" || "$b" == "-" ]]; then
+      echo "office-hours: no <N>-* worktree resolved for #$a — cannot launch a fresh session (the worktree may have been swept). Re-create the worktree or re-run /ready." >&2
+      exit 1
+    fi
+    fresh_session "$a" "$b"
+    ;;
+  idle-provision)
+    # a = originating sessionId; b = remote branch whose worktree was swept.
+    # Provision the worktree from origin/<branch> first, then attach as idle.
+    # Redirect stdout to stderr so progress/status lines don't pollute office-hours'
+    # stdout (which callers capture to read the LAUNCH directive).
+    if ! "$SCRIPT_DIR/dispatch-provision-from-remote" "$b" >&2; then
+      echo "office-hours: provisioning worktree for branch '$b' from the remote failed — cannot attach session $a. Check the output above: origin/$b may be missing or unfetchable (network/fetch error), the worktree-add may have failed, or origin/main may have a merge conflict with the branch." >&2
+      exit 1
+    fi
+    attach_session "$a"
+    ;;
+  resume)
+    # a b c = <N> <sessionId> <cwd>. The originating session was removed from the
+    # daemon registry but its transcript is recoverable and its <N>-* worktree is
+    # on disk — resume it in place under the worktree basename (`<N>-slug`), then
+    # attach by name.
+    resume_session "$b" "$a" "$c"
+    ;;
+  resume-provision)
+    # a b c = <N> <sessionId> <branch>. As resume, but the worktree was swept while
+    # origin/<branch> still exists: provision it from the remote first, then resume
+    # in the freshly-landed worktree. Redirect provision stdout to stderr so it does
+    # not pollute office-hours' captured stdout.
+    if ! "$SCRIPT_DIR/dispatch-provision-from-remote" "$c" >&2; then
+      echo "office-hours: provisioning worktree for branch '$c' from the remote failed — cannot resume session $b for #$a. Check the output above: origin/$c may be missing or unfetchable (network/fetch error), the worktree-add may have failed, or origin/main may have a merge conflict with the branch." >&2
+      exit 1
+    fi
+    # dispatch-provision-from-remote lands the worktree at <project-root>/worktrees/<branch>.
+    resume_session "$b" "$a" "$(resolve_project_root)/worktrees/$c"
+    ;;
+  empty)
+    # Single-item mode (#2538): the selector emits `empty not-in-queue <N>` when
+    # the targeted <N> is absent from the queue (a = not-in-queue, b = <N>). Print
+    # a precise diagnostic for that case so a non-member <N> (e.g. a typo) is not
+    # falsely told the queue is empty when other members exist. The bare `empty`
+    # (a unset) keeps the truly-empty-queue message.
+    if [[ "$a" == "not-in-queue" ]]; then
+      echo "office-hours: issue #$b is not in the office-hours queue — nothing to resume or start for it."
+    else
+      echo "office-hours: queue is empty — nothing to resume or start."
+    fi
+    exit 0
+    ;;
+  *)
+    echo "office-hours: unexpected directive from office-hours-select-target: $directive" >&2
+    exit 1
+    ;;
+esac

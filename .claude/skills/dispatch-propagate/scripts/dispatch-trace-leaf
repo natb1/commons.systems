@@ -1,0 +1,345 @@
+#!/usr/bin/env bash
+# Trace from issue N to the deepest open leaf (no open children).
+# Usage: dispatch-trace-leaf <issue-num> <queue|explicit> [--exclude <n>...]
+#
+# Walks open blockers and open sub-issues depth-first, visiting the
+# lowest-numbered open child first, to find the lowest-numbered reachable
+# open leaf. Prints one issue number.
+#
+# The optional --exclude <n>... argument names already-processed leaves the
+# trace must never return (#1062). It is the fan-out caller's running SEEN set:
+# a multi-leaf subtree whose first leaf was already spawned (and whose worktree
+# is now an orphan, not a live session — so the liveness filter below does not
+# skip it) would otherwise re-return that same leaf and stall the fan-out. An
+# excluded leaf is treated exactly like a live-owned/parked child — never
+# returned, descended past — so the trace advances to the next startable leaf
+# in the same subtree. The flag consumes the run of integer tokens following it
+# (stops at the next --flag or end of args). Passed only in queue mode; explicit
+# mode never receives it, so explicit behavior is unchanged.
+#
+# The mode argument controls worktree-awareness during the descent:
+#   explicit — descent is not worktree-aware. An existing <N>-* worktree on a
+#              child is fine (the dispatch caller resolves it via
+#              dispatch-resolve-worktree's explicit mode, which yields `enter`
+#              for the recycle-after-completion case, or `conflict` if a live
+#              session still owns the worktree — #837).
+#   queue    — descent filters out children whose issue <N> is CLAIMED: claimed
+#              by a LIVE Claude session (#914) or by an outstanding reservation
+#              marker (#1046). The claimed set is derived FORWARD once from
+#              claimed_issue_nums (the deduped union of live-session names and
+#              reservation markers, each keyed by issue <N>), not by walking
+#              every registered git worktree backward per call (#1474) — so trace
+#              latency is independent of worktree count. An orphan <N>-* worktree
+#              (on disk, no session, no marker) is not in the claimed set, so it
+#              stays descendable — a reuse signal, not a skip, matching the
+#              direct-row claimed-skip in dispatch-select-target (#905, #1046). A
+#              child with no live session and no reservation is never filtered.
+#              Queue mode also filters out a child parked on
+#              dispatch:office-hours (#1011): the label parks an item for human
+#              review and must remove it from autonomous selection (#757), so a
+#              parked child is treated exactly like a live-session-owned one —
+#              neither descended into nor returned as a startable leaf. If a
+#              node has open children but every one is live-owned or parked, the
+#              descent bubbles up too — that subtree has no ready work. If every
+#              reachable open leaf in the subtree is owned by a live session or
+#              parked, the script exits non-zero with a clear message on stderr
+#              so the /dispatch-propagate caller can stop instead of dispatching
+#              on a conflict.
+#
+# Falls back to printing N in `explicit` mode if cycles block every path to a
+# leaf (preserves historical behavior).
+#
+# Uses sibling scripts:
+#   issue-blocking   — prints JSON for each open blocker (gh issue view output)
+#   issue-sub-issues — prints JSON for each sub-issue (gh issue view output)
+#
+# Exit codes:
+#   0 — a leaf was found and printed to stdout
+#   1 — usage error — a hard failure the caller must not treat as "no work"
+#   2 — queue mode only: every reachable open leaf is owned by a live session,
+#       parked on dispatch:office-hours, or in the --exclude set
+#   3 — a sibling gh lookup (issue-blocking / issue-sub-issues) or the queue-mode
+#       office-hours-list call failed after gh_retry exhausted its retries; a
+#       hard, per-root failure the queue caller must skip (not dispatch) and the
+#       explicit caller must abort on
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+# lib-claude-agents.sh — provides the live-session half of the claimed set
+# (#914), consumed transitively by claimed_issue_nums below. Sourced here because
+# lib-reservation-ledger.sh depends on it; it sets -uo pipefail (not -e),
+# preserving this script's set -euo pipefail above.
+source "$SCRIPT_DIR/lib-claude-agents.sh"
+# claimed_issue_nums — queue mode derives its skip set FORWARD from this (#1474):
+# the deduped union of live-session-claimed (#914) and reservation-claimed (#1046)
+# issue <N> values. Replaces the former backward worktree walk. Load-guarded;
+# re-sources lib.sh / lib-claude-agents.sh harmlessly.
+source "$SCRIPT_DIR/lib-reservation-ledger.sh"
+
+ISSUE_NUM="${1:-}"
+MODE="${2:-}"
+if [[ -z "$ISSUE_NUM" || ! "$ISSUE_NUM" =~ ^[1-9][0-9]*$ ]] \
+   || [[ "$MODE" != "queue" && "$MODE" != "explicit" ]]; then
+  echo "error: usage: dispatch-trace-leaf <issue-num> <queue|explicit> [--exclude <n>...]" >&2
+  exit 1
+fi
+
+# Optional --exclude <n>...: a run of integer tokens naming already-processed
+# leaves the trace must never return (#1062). The topological-leaf branch in
+# find_leaf refuses to return any number in EXCLUDED, so the descent advances
+# past it. Consume the run of integer tokens following the flag (stops at the
+# next --flag or end of args), matching the variadic wire format the fan-out
+# caller uses to expand its SEEN set directly.
+declare -A EXCLUDED=()
+shift 2
+if [[ $# -gt 0 ]]; then
+  if [[ "$1" != "--exclude" ]]; then
+    echo "error: usage: dispatch-trace-leaf <issue-num> <queue|explicit> [--exclude <n>...]" >&2
+    exit 1
+  fi
+  shift
+  while [[ $# -gt 0 && "$1" =~ ^[0-9]+$ ]]; do
+    EXCLUDED["$1"]=1
+    shift
+  done
+  if [[ $# -gt 0 ]]; then
+    echo "error: usage: dispatch-trace-leaf <issue-num> <queue|explicit> [--exclude <n>...]" >&2
+    exit 1
+  fi
+fi
+
+# In queue mode, build the forward-derived claimed-issue set ONCE (#1474),
+# mirroring dispatch-select-target's CLAIMED_NUMS. claimed_issue_nums (via
+# lib-reservation-ledger.sh) emits the deduped union of the issue <N> values
+# claimed by live Claude sessions (#914) and by outstanding reservation markers
+# (#1046), one per line. Descent then skips a claimed child with a single map
+# lookup — no per-child liveness/reservation query, and no O(worktrees) walk
+# rebuilt on every queue-mode invocation (the selector calls this once per root,
+# so a backward worktree walk per call is strictly worse than its single walk).
+# claimed_issue_nums FAILS OPEN on a live-UNKNOWN daemon (degrades to the
+# reserved-only set internally), so a momentary daemon outage narrows skip
+# coverage rather than aborting the trace. An orphan <N>-* worktree (on disk, no
+# session, no marker) is NOT in this set, so it stays descendable — a reuse
+# signal, not a skip, matching the selector's direct-row claimed-skip (#905,
+# #1046).
+declare -A CLAIMED_NUMS=()
+if [[ "$MODE" == "queue" ]]; then
+  while IFS= read -r claimed_n; do
+    [[ -n "$claimed_n" ]] && CLAIMED_NUMS["$claimed_n"]=1
+  done < <(claimed_issue_nums)
+fi
+
+# True when issue <N> is in the forward-derived claimed set (live ∪ reserved).
+num_is_claimed() { [[ -n "${CLAIMED_NUMS[$1]:-}" ]]; }
+
+# In queue mode, gather the set of open issues parked on dispatch:office-hours
+# (#1011), keyed by issue number. The label parks an item for human review and
+# must remove it from autonomous selection (#757); dispatch-select-target
+# already filters it on top-level queue issues, but a parked leaf reachable from
+# an unparked parent slipped through this descent. Gathered once up front,
+# mirroring CLAIMED_NUMS above, so child_is_office_hours_parked is a map lookup
+# with no per-child gh round-trip. A gh failure here is a hard error, not
+# an empty set — silently returning a parked leaf is the very bug being fixed.
+# --limit 300 matches dispatch-select-target's open-issue cap: the parked set is
+# a subset of open issues, so the default limit of 30 could silently truncate it
+# and let a parked leaf past position 30 be returned as startable.
+declare -A OFFICE_HOURS_PARKED=()
+if [[ "$MODE" == "queue" ]]; then
+  parked_json=$(gh_issue_list_rest --state open --label "dispatch:office-hours" --limit 300) \
+    || { echo "error: dispatch-trace-leaf $ISSUE_NUM: gh issue list for the dispatch:office-hours parked set failed; aborting rather than risk returning a parked leaf" >&2; exit 3; }
+  while IFS= read -r parked_num; do
+    [[ -n "$parked_num" ]] && OFFICE_HOURS_PARKED["$parked_num"]=1
+  done < <(printf '%s' "$parked_json" | jq -r '.[].number')
+fi
+
+# True when the given issue number is parked on dispatch:office-hours (#1011).
+# A parked node is filtered from queue-mode descent exactly like a claimed child
+# (num_is_claimed, #914/#1046): neither descended into nor returned as a startable
+# leaf. The descent then falls through to the next startable sibling, or bubbles
+# up (exit 2) when every reachable open leaf is parked or claimed. Map lookup
+# against OFFICE_HOURS_PARKED, populated once in queue mode above.
+child_is_office_hours_parked() {
+  [[ -n "${OFFICE_HOURS_PARKED[$1]:-}" ]]
+}
+
+# cached_child_lookup <script-name> <cache-prefix> <num> — run a sibling
+# blocker/sub-issue lookup, memoized per tick under DISPATCH_TRACE_CACHE_DIR.
+# Prints the sibling's JSON stdout. Returns 1 on a sibling hard error (gh API
+# failure), exactly as a direct call would — and writes NOTHING to the cache, so
+# a failure is never memoized. Hit/miss is keyed by EXIT CODE, not output
+# emptiness: an empty-but-successful result is a valid cached value. When
+# DISPATCH_TRACE_CACHE_DIR is unset (isolated trace-leaf tests, manual runs), the
+# sibling runs directly with no caching — current behavior preserved. The same
+# issue is traced through multiple help-wanted roots within one tick, so this
+# collapses each (script, num) pair to a single gh round-trip per tick. (#1452)
+cached_child_lookup() {
+  local script_name="$1" prefix="$2" num="$3"
+  if [[ -z "${DISPATCH_TRACE_CACHE_DIR:-}" ]]; then
+    "$SCRIPT_DIR/$script_name" "$num"   # exit status (and the gh-failure hard error) propagates
+    return
+  fi
+  local cache_file="$DISPATCH_TRACE_CACHE_DIR/$prefix-$num"
+  if [[ -f "$cache_file" ]]; then
+    cat "$cache_file"
+    return 0
+  fi
+  # Miss: capture stdout, propagating a sibling hard error via `|| return 1`
+  # BEFORE any cache write — a failed lookup must never be memoized.
+  local out
+  out=$("$SCRIPT_DIR/$script_name" "$num") || return 1
+  printf '%s' "$out" >"$cache_file"
+  printf '%s' "$out"
+  return 0
+}
+
+# Collect open children of an issue: open blockers union open sub-issues.
+# Outputs sorted unique issue numbers, one per line, lowest first.
+open_children() {
+  local n="$1"
+  local children=()
+
+  # Gather open blockers. A non-zero exit from issue-blocking is a real gh API
+  # failure (empty output on success means genuinely no blockers) — propagate
+  # it as a hard error instead of collapsing it into "this issue has no
+  # children". No 2>/dev/null: let issue-blocking's stderr diagnostic surface.
+  local blocker_json
+  blocker_json=$(cached_child_lookup issue-blocking blocking "$n") || return 1
+  if [[ -n "$blocker_json" ]]; then
+    while IFS= read -r num; do
+      [[ -n "$num" ]] && children+=("$num")
+    done < <(printf '%s' "$blocker_json" | jq -r 'select(.state == "OPEN" or .state == "open") | .number' 2>/dev/null || true)
+  fi
+
+  # Gather open sub-issues. Same hard-error contract as the blocker lookup.
+  local sub_json
+  sub_json=$(cached_child_lookup issue-sub-issues sub-issues "$n") || return 1
+  if [[ -n "$sub_json" ]]; then
+    while IFS= read -r num; do
+      [[ -n "$num" ]] && children+=("$num")
+    done < <(printf '%s' "$sub_json" | jq -r 'select(.state == "OPEN" or .state == "open") | .number' 2>/dev/null || true)
+  fi
+
+  # Print unique numbers sorted ascending (lowest first).
+  if [[ ${#children[@]} -gt 0 ]]; then
+    printf '%s\n' "${children[@]}" | sort -un
+  fi
+  # Explicit success: the function would otherwise fall off the end returning
+  # the [[ ]] test's exit status (1 when there are no children), which a
+  # caller checking $? cannot distinguish from a sibling-script failure.
+  return 0
+}
+
+# Depth-first search for the lowest-numbered reachable open leaf.
+# Args: $1 = current issue number
+# Uses global VISITED associative array for cycle protection.
+# Returns 0 and prints the leaf number on success.
+# Returns 1 if no valid leaf is reachable through this subtree (cycles, or in
+# queue mode every reachable leaf is owned by a live session).
+# Returns 3 if a blocker/sub-issue lookup hit a hard error (gh API failure);
+# re-propagated through every recursive frame so the top level can map it to a
+# clean script-level abort instead of mis-selecting the issue as startable.
+declare -A VISITED=()
+
+find_leaf() {
+  local n="$1"
+
+  if [[ -n "${VISITED[$n]+x}" ]]; then
+    # Cycle detected — no leaf reachable via this path.
+    return 1
+  fi
+  VISITED["$n"]=1
+
+  # open_children returns non-zero only on a sibling gh-script failure. set -e
+  # is disabled here (find_leaf is always called from an `if` condition), so
+  # the status must be captured and checked explicitly.
+  local kids rc
+  kids=$(open_children "$n"); rc=$?
+  if [[ "$rc" -ne 0 ]]; then
+    return 3
+  fi
+
+  if [[ -z "$kids" ]]; then
+    # Topological leaf. An excluded leaf (#1062) — already processed by the
+    # fan-out caller — is treated exactly like a live-owned/parked child: never
+    # returned. return 1 (no valid leaf here) so the descent advances past it to
+    # the next startable sibling/leaf, or bubbles up to the exit-2 surface when
+    # the whole subtree is excluded. This single check covers both the root
+    # (passed directly to find_leaf) and every descended leaf — no separate root
+    # guard is needed.
+    if [[ -n "${EXCLUDED[$n]:-}" ]]; then
+      return 1
+    fi
+    # A valid leaf. Descended children are filtered before recursion (see the
+    # descent loop below, and the root guard above), so a queue-mode leaf
+    # reached here is never itself live-owned, reserved, or parked.
+    echo "$n"
+    return 0
+  fi
+
+  # Descend into children lowest-numbered first; return the first leaf found.
+  # In queue mode, skip any child whose issue <N> is in the forward-derived
+  # claimed set (live-session-owned, #914, or reserved, #1046) — an orphan child
+  # worktree (no session, no marker) is not claimed and stays descendable — and
+  # any child parked on dispatch:office-hours (#1011). If every child is skipped
+  # the loop finds nothing and we bubble up.
+  local kid leaf
+  while IFS= read -r kid; do
+    [[ -z "$kid" ]] && continue
+    [[ "$MODE" == "queue" ]] && num_is_claimed "$kid" && continue
+    [[ "$MODE" == "queue" ]] && child_is_office_hours_parked "$kid" && continue
+    # Capture the status explicitly (set -e is disabled here) so a hard error
+    # (rc 3) is distinguishable from "no leaf in this subtree" (rc 1).
+    leaf=$(find_leaf "$kid"); rc=$?
+    if [[ "$rc" -eq 0 ]]; then
+      echo "$leaf"
+      return 0
+    fi
+    [[ "$rc" -eq 3 ]] && return 3
+  done <<< "$kids"
+
+  return 1
+}
+
+# In queue mode the root issue is filtered exactly like a descended child
+# (#1011, #1046): if the starting issue is itself a topological leaf that is
+# parked or claimed (reserved/live-owned), the descent loop never gets a chance
+# to skip it, so guard it here before the trace. Force the no-startable-leaf
+# path (rc 2) so it flows into the exit-2 surface below, matching the
+# all-children-skipped case.
+if [[ "$MODE" == "queue" ]] && { child_is_office_hours_parked "$ISSUE_NUM" || num_is_claimed "$ISSUE_NUM"; }; then
+  trace_rc=2
+elif LEAF=$(find_leaf "$ISSUE_NUM"); then
+  trace_rc=0
+else
+  trace_rc=$?
+fi
+
+if [[ "$trace_rc" -eq 0 ]]; then
+  echo "$LEAF"
+  exit 0
+fi
+
+# A hard error (gh API failure during blocker/sub-issue resolution) must not be
+# treated as "no work" — aborting is correct in both modes. In particular this
+# stops explicit mode from falling through to the print-N cycle fallback below.
+if [[ "$trace_rc" -eq 3 ]]; then
+  echo "error: dispatch-trace-leaf $ISSUE_NUM: a blocker/sub-issue lookup failed (gh API error); aborting rather than treating $ISSUE_NUM as startable" >&2
+  exit 3
+fi
+
+# In queue mode, no valid leaf is reachable — every reachable open leaf is owned
+# by a live session, parked on dispatch:office-hours (#1011), or in the
+# --exclude set (#1062) (or cycles block every path); orphan worktrees were
+# descended through. Surface this so
+# /dispatch-propagate can stop with a clear message instead of dispatching on a
+# conflict. The "worktree-conflicted" token is retained for the pattern-matcher
+# in test-dispatch-scripts.sh that keys on it (dispatch-select-target only checks
+# the exit code, not the message text).
+if [[ "$MODE" == "queue" ]]; then
+  echo "error: all open leaves reachable from $ISSUE_NUM are worktree-conflicted (owned by a live session or parked on dispatch:office-hours)" >&2
+  exit 2
+fi
+
+# Explicit mode keeps the historical cycle-fallback behavior — print N.
+echo "$ISSUE_NUM"

@@ -1,0 +1,257 @@
+#!/usr/bin/env bash
+# dispatch-spawn-tick — launch the headless dispatch-tick as a transient
+# systemd-run --user unit so a synchronous caller (a hook) returns immediately.
+#
+# This REPLACES the old dispatch-spawn-router. dispatch-spawn-router spawned the
+# autonomous tick as a `claude --bg "/dispatch-propagate"` *model* session whose
+# only job was to call two scripts and relay one line — pure overhead (a session
+# boot, a context load, a teardown per tick). Unit 3 of #982 makes the tick fully
+# headless: the routing now lives in the dispatch-tick bash script, so the per-
+# tick model session is gone. dispatch-spawn-tick launches that headless script
+# via systemd-run instead of via `claude --bg`.
+#
+# Usage: dispatch-spawn-tick [<N>]
+#   An optional first positional <N> (a positive integer) makes the launched tick
+#   target-keyed — it runs `dispatch-tick <N>` so the chain returns to that
+#   specific target (the #979 CI-wait reseed timer's ExecStart passes <N>). A
+#   non-numeric / flag-like value, or any extra argument, is rejected with exit 2.
+#
+# Fixed-unit-name dedup + --collect:
+#   The systemd unit name is FIXED — `dispatch-tick` (no target) or
+#   `dispatch-tick-<N>` (target-keyed). The fixed name IS the dedup mechanism:
+#   while a tick unit is running, a second `systemd-run --unit=dispatch-tick ...`
+#   collides ("already exists") and we treat that as a no-op (`deduped`) — there
+#   is no point launching a second identical tick while the first is in flight.
+#   `--collect` makes systemd garbage-collect a finished OR FAILED transient unit
+#   so the fixed name frees for the next tick. Without --collect a non-zero
+#   dispatch-tick exit would leave a lingering failed unit and the next
+#   `--unit=dispatch-tick` would collide forever — wedging all future ticks.
+#   --collect does not always GC a failed unit empirically (#2013), so before
+#   each launch we also `reset-failed` the unit name when `is-failed` reports
+#   it stale — the robust belt-and-suspenders that frees the name and lets the
+#   chain self-heal even when --collect leaves the failed unit behind. The
+#   `is-failed` gate leaves a genuinely running tick untouched, preserving the
+#   intentional `deduped` collision for a real in-flight tick.
+#
+# OnFailure recovery (#1150):
+#   Before launching, ensure_recover_unit (lib.sh) idempotently installs the
+#   static dispatch-tick-recover.service unit (best-effort — a failure is
+#   non-fatal). Each transient tick unit then carries
+#   --property=OnFailure=dispatch-tick-recover.service. systemd fires that
+#   handler exactly when the tick unit fails abnormally (edge-triggered, owned
+#   by systemd, unskippable by a crashing tick), guaranteeing a chain
+#   continuation even when the tick aborts before producing a Stop-hook
+#   handoff or an armed reseed timer. OnFailure= resolves lazily at failure
+#   time, so passing it is safe even if ensure_recover_unit failed.
+#
+# KillMode=process — cgroup-reaping stop-gap (#1196):
+#   Claude Code's per-user bg supervisor daemon is spawned on demand by the
+#   first `claude` call inside a tick unit (the --bg worker kick in
+#   dispatch-spawn-job, or the `claude agents --json` liveness checks). That
+#   means the daemon — and the --bg-spare / --bg-pty-host children that host
+#   each worker — is born inside this transient unit's cgroup. systemd's
+#   default KillMode=control-group SIGTERMs the entire cgroup when the tick
+#   finishes, reaping the daemon and every running worker. The bg hosts are
+#   spawned detached: true (setsid) to outlive their launcher, but setsid
+#   only changes the session/process-group, not the cgroup, so cgroup-kill
+#   ignores it. Passing --property=KillMode=process makes a finishing tick
+#   kill only its own dispatch-tick process; the detached bg hosts survive as
+#   init orphans — exactly what detached: true is designed for. The durable
+#   daemon-ownership design is tracked in #1197; this is the minimal correct
+#   stop-gap.
+#
+# Durable daemon ownership (#1197 — supersedes the #1196 stop-gap):
+#   Before launching, ensure_daemon_service (lib.sh) idempotently installs and
+#   activates the durable dispatch-claude-daemon.service, a long-lived
+#   systemd --user service (Type=simple, Restart=always, ExecStart=<claude>
+#   daemon run) that hosts the bg supervisor daemon in a stable, non-transient
+#   cgroup. With it running, the first `claude` call in this tick attaches to
+#   that daemon via its lock instead of spawning one in this transient unit's
+#   cgroup — so the fleet no longer lives in tick cgroups and KillMode is
+#   irrelevant to its survival. KillMode=process (above) therefore becomes the
+#   degraded-path FALLBACK (for hosts where systemd --user is unavailable and
+#   the durable service cannot be installed), not the load-bearing mechanism.
+#   Best-effort: a failure to install the service is non-fatal — the on-demand
+#   daemon then survives a finishing tick via KillMode=process.
+#
+# Unlike dispatch-schedule-reseed (which schedules an --on-calendar TIMER), this
+# script runs the unit IMMEDIATELY: a transient .service, no --on-calendar /
+# --timer-property. The transient unit is itself the detachment — systemd runs
+# dispatch-tick in the background and the synchronous caller returns at once.
+#
+# --setenv=PATH="$PATH" propagates the launching caller's PATH into the transient
+# unit. Without it the unit inherits the systemd user manager's minimal default
+# PATH, which omits the nix store — so on NixOS/WSL hosts /usr/bin/env can't
+# resolve bash (exit 127) and dispatch-tick can't find git/jq/claude. The caller
+# (a dispatch hook or a reseed timer) carries the full nix-store PATH, so
+# capturing it at launch time makes the unit self-sufficient.
+#
+# Stdout protocol (exactly one word on the success paths):
+#   spawned   the transient unit was created (exit 0).
+#   deduped   a tick unit with this fixed name is already running — the
+#             systemd-run collision ("already exists") is treated as a no-op
+#             (exit 0).
+# Any other systemd-run failure echoes its stderr and passes the exit code
+# through.
+#
+# Exit codes:
+#   0  spawned or deduped (stdout disambiguates).
+#   2  a malformed target argument (non-numeric, flag-like, or more than one).
+#   non-zero — systemd-run failed for a reason other than the already-exists
+#              collision; the exit code is passed through.
+#
+# Environment overrides for testability (mirroring dispatch-schedule-reseed):
+#   DISPATCH_SPAWN_TICK_SYSTEMD_RUN_CMD  The `systemd-run` binary. Default:
+#                                        `systemd-run`.
+#   DISPATCH_SPAWN_TICK_SYSTEMCTL_CMD    The `systemctl` binary. Default:
+#                                        `systemctl`.
+#   DISPATCH_SPAWN_TICK_MAIN_WORKTREE    The main worktree path. When set, the
+#                                        script does NOT require a git repo.
+#                                        Default: <project-root>/worktrees/main,
+#                                        via resolve_project_root (lib.sh).
+#
+# Called from the dispatch hooks (the worker Stop-hook and the input-block hook)
+# and the reseed timers — all of which run OUTSIDE Claude's Bash sandbox. A
+# Bash-tool caller would need `dangerouslyDisableSandbox: true` because
+# `systemd-run --user` talks to the user's systemd over D-Bus, which the sandbox
+# blocks.
+#
+# NOT set -e: exits are handled explicitly (matching dispatch-schedule-reseed /
+# dispatch-spawn-router).
+set -uo pipefail
+
+# ---- Step 0: parse the optional target argument -----------------------------
+# An optional first positional <N> (a positive integer) makes the launched tick
+# target-keyed: it runs `dispatch-tick <N>` instead of the bare `dispatch-tick`.
+# Reject a non-numeric/flag-like value or any extra argument with exit 2 — a
+# malformed value would otherwise be interpolated into the unit name and the
+# dispatch-tick argv.
+TARGET_N=""
+if [[ $# -gt 1 ]]; then
+  echo "dispatch-spawn-tick: too many arguments (expected at most one target <N>)" >&2
+  exit 2
+fi
+if [[ $# -eq 1 ]]; then
+  if [[ ! "$1" =~ ^[1-9][0-9]*$ ]]; then
+    echo "dispatch-spawn-tick: target must be a positive integer, got '$1'" >&2
+    exit 2
+  fi
+  TARGET_N="$1"
+fi
+
+# ---- Step 1: resolve config -------------------------------------------------
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+
+# The headless tick runs from the main worktree (where every autonomous tick is
+# rooted). An explicit DISPATCH_SPAWN_TICK_MAIN_WORKTREE is authoritative and
+# bypasses the git lookup — tests rely on this. Otherwise resolve_project_root
+# (lib.sh) returns the project root in both classic (.git) and bare (.bare)
+# layouts.
+if [[ -n "${DISPATCH_SPAWN_TICK_MAIN_WORKTREE:-}" ]]; then
+  MAIN_WORKTREE="$DISPATCH_SPAWN_TICK_MAIN_WORKTREE"
+else
+  PROJECT_ROOT=$(resolve_project_root) \
+    || { echo "dispatch-spawn-tick: not in a git repo and DISPATCH_SPAWN_TICK_MAIN_WORKTREE is unset" >&2; exit 2; }
+  MAIN_WORKTREE="$PROJECT_ROOT/worktrees/main"
+fi
+
+# Install the OnFailure recovery unit (dispatch-tick-recover.service) before
+# launching the transient tick. Best-effort: OnFailure= resolves lazily at
+# failure time, so a failure here is non-fatal — a missing target only logs an
+# error if the tick ever fails. We still pass OnFailure= unconditionally below
+# so an abnormal tick exit is guaranteed a chain continuation (#1150).
+ensure_recover_unit "$MAIN_WORKTREE" || true
+
+# Install + activate the durable dispatch-claude-daemon.service (#1197) before
+# launching the transient tick, so the tick's first `claude` call attaches to a
+# daemon already running in a stable cgroup rather than spawning one in this
+# transient unit's cgroup. Best-effort: a failure here is non-fatal — the
+# on-demand daemon then falls back to surviving via KillMode=process (#1196).
+ensure_daemon_service || true
+# Install+enable the durable periodic sweep timer so idle/drained chains still GC worktrees (#2023).
+ensure_sweep_timer "$MAIN_WORKTREE" || true
+
+# Install the durable heartbeat timer (#2022) — a 15-min drumbeat that fires
+# dispatch-tick independently of Stop-hooks and reseed timers, so abnormal
+# worker death and post-cap stalls self-recover. Best-effort: a failure here
+# is non-fatal; the existing OnFailure + reseed chain still covers the
+# common-case recovery path.
+ensure_heartbeat_units "$MAIN_WORKTREE" || true
+
+SYSTEMD_RUN_CMD="${DISPATCH_SPAWN_TICK_SYSTEMD_RUN_CMD:-systemd-run}"
+SYSTEMCTL_CMD="${DISPATCH_SPAWN_TICK_SYSTEMCTL_CMD:-systemctl}"
+TICK_PATH="$MAIN_WORKTREE/.claude/skills/dispatch-propagate/scripts/dispatch-tick"
+
+# Fixed unit name — the dedup mechanism (see header). `dispatch-tick` when no
+# target, `dispatch-tick-<N>` when target-keyed.
+if [[ -n "$TARGET_N" ]]; then
+  UNIT_NAME="dispatch-tick-$TARGET_N"
+else
+  UNIT_NAME="dispatch-tick"
+fi
+
+# ---- Step 2: launch the transient unit immediately --------------------------
+# Free the fixed unit name from a lingering failed transient unit.
+# --collect is supposed to GC a failed transient unit, but empirically does
+# not always (#2013): a failed dispatch-tick unit can linger indefinitely and
+# then collide forever, silently wedging every launch. is-failed gates this so
+# a genuinely running tick is untouched (its --unit collision still yields the
+# intentional `deduped` below); reset-failed only clears a unit in the failed
+# state. Best-effort: systemctl may be absent on a degraded host — never abort
+# the launch on its account.
+if "$SYSTEMCTL_CMD" --user is-failed --quiet "$UNIT_NAME.service" 2>/dev/null; then
+  "$SYSTEMCTL_CMD" --user reset-failed "$UNIT_NAME.service" >/dev/null 2>&1 || true
+fi
+
+RUN_STDERR=$(mktemp)
+trap 'rm -f "$RUN_STDERR"' EXIT
+# Capture the exit code directly — after `if cmd; then ... fi`, `$?` is the exit
+# status of the `if` construct, NOT the exit code of `cmd`. Running `cmd` outside
+# an `if` and capturing `$?` immediately preserves the real exit code so the
+# "pass-through on unexpected failure" contract holds.
+if [[ -n "$TARGET_N" ]]; then
+  "$SYSTEMD_RUN_CMD" --user \
+       --unit="$UNIT_NAME" \
+       --collect \
+       --property=OnFailure=dispatch-tick-recover.service \
+       --property=KillMode=process \
+       --working-directory="$MAIN_WORKTREE" \
+       --setenv=PATH="$PATH" \
+       "$TICK_PATH" "$TARGET_N" \
+       2>"$RUN_STDERR"
+  RC=$?
+else
+  "$SYSTEMD_RUN_CMD" --user \
+       --unit="$UNIT_NAME" \
+       --collect \
+       --property=OnFailure=dispatch-tick-recover.service \
+       --property=KillMode=process \
+       --working-directory="$MAIN_WORKTREE" \
+       --setenv=PATH="$PATH" \
+       "$TICK_PATH" \
+       2>"$RUN_STDERR"
+  RC=$?
+fi
+
+if (( RC == 0 )); then
+  echo spawned
+  exit 0
+fi
+
+err=$(cat "$RUN_STDERR")
+# systemd's already-exists message varies slightly across versions
+# ("Unit ... already exists" / "Failed to start transient service unit: Unit
+# ... already exists"). Match on the substring rather than the full phrase. A
+# collision always names the colliding unit, so also require the unit name —
+# this keeps cross-version tolerance while preventing an unrelated failure whose
+# stderr happens to contain "already exists" from being silently treated as a
+# dedup no-op (which would mask a real launch failure and stall the chain).
+if [[ "$err" == *"already exists"* && "$err" == *"$UNIT_NAME"* ]]; then
+  echo deduped
+  exit 0
+fi
+
+# Some other failure — surface stderr and pass the exit code through.
+echo "$err" >&2
+exit "$RC"

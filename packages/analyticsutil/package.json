@@ -1,0 +1,19 @@
+{
+  "name": "@commons-systems/analyticsutil",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src/"
+  },
+  "peerDependencies": {
+    "@commons-systems/errorutil": "*",
+    "firebase": "^12.9.0",
+    "web-vitals": ">=4"
+  }
+}

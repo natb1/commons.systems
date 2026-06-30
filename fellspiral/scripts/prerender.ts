@@ -3,6 +3,7 @@ import { prerenderPosts } from "@commons-systems/blog/prerender";
 import { generateFeedXml } from "@commons-systems/blog/feed";
 import { generateSitemapXml } from "@commons-systems/blog/sitemap";
 import { FEED_REGISTRY } from "@commons-systems/blog/blog-roll/feed-registry";
+import { FOOTER_HTML } from "@commons-systems/components/footer";
 import appSeed from "../seeds/firestore.js";
 import {
   NAV_LINKS,
@@ -16,34 +17,63 @@ import {
 
 const distDir = join(dirname(new URL(import.meta.url).pathname), "..", "dist");
 
-await prerenderPosts({
-  siteUrl: SITE_URL,
-  titleSuffix: "Fellspiral",
-  distDir,
-  seed: appSeed,
-  postDir: join(distDir, "..", "post"),
-  navLinks: NAV_LINKS,
-  infoPanel: {
-    linkSections: INFO_PANEL_LINK_SECTIONS,
-    blogRoll: FEED_REGISTRY.map((f) => ({ id: f.id, name: f.name, url: f.homeUrl })),
-    rssFeedUrl: "/feed.xml",
-    opmlUrl: "/blogroll.opml",
-  },
-  siteDefaults: SITE_DEFAULTS,
-  organization: ORGANIZATION,
-  author: AUTHOR,
-  relMe: REL_ME,
-});
+try {
+  await prerenderPosts({
+    siteUrl: SITE_URL,
+    titleSuffix: "Fellspiral",
+    distDir,
+    seed: appSeed,
+    postDir: join(distDir, "..", "post"),
+    navLinks: NAV_LINKS,
+    infoPanel: {
+      linkSections: INFO_PANEL_LINK_SECTIONS,
+      blogRoll: FEED_REGISTRY.map((f) => ({ id: f.id, name: f.name, url: f.homeUrl })),
+      rssFeedUrl: "/feed.xml",
+      opmlUrl: "/blogroll.opml",
+    },
+    siteDefaults: SITE_DEFAULTS,
+    organization: ORGANIZATION,
+    author: AUTHOR,
+    relMe: REL_ME,
+    footerHtml: FOOTER_HTML,
+    showHomeLink: true,
+  });
+} catch (err) {
+  throw new Error(
+    `Prerender failed in fellspiral/scripts/prerender.ts (prerenderPosts): ${
+      err instanceof Error ? err.message : String(err)
+    }`,
+    { cause: err },
+  );
+}
 
-generateFeedXml({
-  title: "fellspiral",
-  siteUrl: SITE_URL,
-  distDir,
-  seed: appSeed,
-});
+try {
+  generateFeedXml({
+    title: "fellspiral",
+    siteUrl: SITE_URL,
+    distDir,
+    seed: appSeed,
+  });
+} catch (err) {
+  throw new Error(
+    `Prerender failed in fellspiral/scripts/prerender.ts (generateFeedXml): ${
+      err instanceof Error ? err.message : String(err)
+    }`,
+    { cause: err },
+  );
+}
 
-generateSitemapXml({
-  siteUrl: SITE_URL,
-  distDir,
-  seed: appSeed,
-});
+try {
+  generateSitemapXml({
+    siteUrl: SITE_URL,
+    distDir,
+    seed: appSeed,
+  });
+} catch (err) {
+  throw new Error(
+    `Prerender failed in fellspiral/scripts/prerender.ts (generateSitemapXml): ${
+      err instanceof Error ? err.message : String(err)
+    }`,
+    { cause: err },
+  );
+}

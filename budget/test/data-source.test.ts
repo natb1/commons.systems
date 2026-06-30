@@ -1,21 +1,8 @@
 import "fake-indexeddb/auto";
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { timestampMockFactory, makeParsedData } from "./helpers";
 
-vi.mock("firebase/firestore", () => {
-  class MockTimestamp {
-    constructor(
-      public readonly seconds: number,
-      public readonly nanoseconds: number,
-    ) {}
-    toMillis() {
-      return this.seconds * 1000 + this.nanoseconds / 1e6;
-    }
-    static fromMillis(ms: number) {
-      return new MockTimestamp(Math.floor(ms / 1000), (ms % 1000) * 1e6);
-    }
-  }
-  return { Timestamp: MockTimestamp };
-});
+vi.mock("firebase/firestore", () => timestampMockFactory());
 
 vi.mock("../src/firestore.js", () => ({
   getTransactions: vi.fn(),
@@ -30,11 +17,16 @@ vi.mock("virtual:budget-seed-data", async () => {
   return { default: SEED_DATA_MOCK };
 });
 
+const scheduleWriteBack = vi.fn();
+vi.mock("../src/file-sync.js", () => ({ scheduleWriteBack: () => scheduleWriteBack() }));
+
 import { Timestamp } from "firebase/firestore";
 import { storeParsedData, closeDb } from "../src/idb";
-import { IdbDataSource, SeedDataSource } from "../src/data-source";
-import type { TransactionId, BudgetPeriodId, RuleId } from "../src/firestore";
-import { makeParsedData } from "./helpers";
+import { IdbDataSource, SeedDataSource, FileSyncingDataSource } from "../src/data-source";
+import type { DataSource } from "../src/data-source";
+import type { TransactionId, BudgetId, BudgetPeriodId, RuleId } from "../src/firestore";
+import type { BudgetOverride } from "../src/entities/budget";
+import { DataIntegrityError } from "../src/entities/_helpers";
 
 beforeEach(async () => {
   await closeDb();
@@ -109,6 +101,49 @@ describe("IdbDataSource", () => {
     ).rejects.toThrow("Transaction nonexistent not found");
   });
 
+  it("updateTransaction rejects out-of-range reimbursement and does not persist", async () => {
+    await storeParsedData(makeParsedData());
+    const ds = new IdbDataSource();
+    await expect(
+      ds.updateTransaction("txn-1" as TransactionId, { reimbursement: 150 }),
+    ).rejects.toThrow(RangeError);
+    const txns = await ds.getTransactions();
+    expect(txns[0].reimbursement).toBe(0); // unchanged — never persisted
+  });
+
+  it("updateBudgetOverrides rejects out-of-order overrides and does not persist", async () => {
+    await storeParsedData(makeParsedData());
+    const ds = new IdbDataSource();
+    const outOfOrder: BudgetOverride[] = [
+      { date: Timestamp.fromMillis(2000), balance: 100 },
+      { date: Timestamp.fromMillis(1000), balance: 200 }, // earlier date — invalid
+    ];
+    await expect(
+      ds.updateBudgetOverrides("groceries" as BudgetId, outOfOrder),
+    ).rejects.toThrow(RangeError);
+    const budgets = await ds.getBudgets();
+    expect(budgets[0].overrides).toEqual([]); // unchanged — never persisted
+  });
+
+  it("getTransactions throws for a pre-existing out-of-range reimbursement record", async () => {
+    const data = makeParsedData();
+    data.transactions[0].reimbursement = 150; // simulates a row written before PR #1345
+    await storeParsedData(data);
+    const ds = new IdbDataSource();
+    await expect(ds.getTransactions()).rejects.toThrow(RangeError);
+  });
+
+  it("getBudgets throws for a pre-existing out-of-order overrides record", async () => {
+    const data = makeParsedData();
+    data.budgets[0].overrides = [
+      { dateMs: 2000, balance: 100 },
+      { dateMs: 1000, balance: 200 }, // earlier date — simulates a row written before PR #1686
+    ];
+    await storeParsedData(data);
+    const ds = new IdbDataSource();
+    await expect(ds.getBudgets()).rejects.toThrow(DataIntegrityError);
+  });
+
   it("adjustBudgetPeriodTotal does read-modify-write correctly", async () => {
     await storeParsedData(makeParsedData());
     const ds = new IdbDataSource();
@@ -176,6 +211,86 @@ describe("IdbDataSource", () => {
     await ds.deleteRule("r-1" as RuleId);
     const rules = await ds.getRules();
     expect(rules).toHaveLength(0);
+  });
+
+  describe("createJournalEntry", () => {
+    it("writes the entry and legs, returns parallel legIds", async () => {
+      await storeParsedData(makeParsedData());
+      const ds = new IdbDataSource();
+      const result = await ds.createJournalEntry(
+        { timestampMs: 1700000000000, description: "Test entry", note: null },
+        [
+          { accountId: "acct-a", debit: 50, credit: 0, cleared: true },
+          { accountId: "acct-b", debit: 0, credit: 50, cleared: true },
+        ],
+      );
+      expect(typeof result.entryId).toBe("string");
+      expect(result.legIds).toHaveLength(2);
+
+      const entries = await ds.getJournalEntries();
+      expect(entries).toHaveLength(1);
+      const entry = entries.find((e) => e.id === result.entryId);
+      expect(entry).toBeDefined();
+      expect(entry!.description).toBe("Test entry");
+      expect(entry!.legCount).toBe(2);
+
+      const legs = await ds.getJournalLegs();
+      expect(legs).toHaveLength(2);
+
+      const leg0 = legs.find((l) => l.id === result.legIds[0]);
+      expect(leg0).toBeDefined();
+      expect(leg0!.accountId).toBe("acct-a");
+      expect(leg0!.debit).toBe(50);
+      expect(leg0!.cleared).toBe(true);
+      expect(leg0!.entryId).toBe(result.entryId);
+      expect(leg0!.reconciledAt).toBeNull();
+
+      const leg1 = legs.find((l) => l.id === result.legIds[1]);
+      expect(leg1).toBeDefined();
+      expect(leg1!.accountId).toBe("acct-b");
+      expect(leg1!.credit).toBe(50);
+      expect(leg1!.entryId).toBe(result.entryId);
+      expect(leg1!.reconciledAt).toBeNull();
+    });
+
+    it("rejects fewer than 2 legs", async () => {
+      await storeParsedData(makeParsedData());
+      const ds = new IdbDataSource();
+      await expect(
+        ds.createJournalEntry(
+          { timestampMs: 1, description: "x" },
+          [{ accountId: "a", debit: 10, credit: 0, cleared: false }],
+        ),
+      ).rejects.toThrow(/at least 2 legs/);
+    });
+
+    it("rejects unbalanced legs", async () => {
+      await storeParsedData(makeParsedData());
+      const ds = new IdbDataSource();
+      await expect(
+        ds.createJournalEntry(
+          { timestampMs: 1, description: "x" },
+          [
+            { accountId: "a", debit: 50, credit: 0, cleared: false },
+            { accountId: "b", debit: 0, credit: 40, cleared: false },
+          ],
+        ),
+      ).rejects.toThrow(/[Uu]nbalanced/);
+    });
+
+    it("accepts a balanced entry within 0.005 tolerance", async () => {
+      await storeParsedData(makeParsedData());
+      const ds = new IdbDataSource();
+      const result = await ds.createJournalEntry(
+        { timestampMs: 1700000000000, description: "Near-balanced" },
+        [
+          { accountId: "a", debit: 50.004, credit: 0, cleared: false },
+          { accountId: "b", debit: 0, credit: 50, cleared: false },
+        ],
+      );
+      expect(result.entryId).toBeTruthy();
+      expect(result.legIds).toHaveLength(2);
+    });
   });
 
   describe("getTransactions with query params", () => {
@@ -284,6 +399,7 @@ describe("SeedDataSource", () => {
     await expect(ds.createNormalizationRule()).rejects.toThrow("Seed data is read-only");
     await expect(ds.updateNormalizationRule()).rejects.toThrow("Seed data is read-only");
     await expect(ds.deleteNormalizationRule()).rejects.toThrow("Seed data is read-only");
+    await expect(ds.createJournalEntry()).rejects.toThrow("Seed data is read-only");
   });
 
   it("getTransactions returns all seed transactions with Timestamp objects", async () => {
@@ -386,5 +502,80 @@ describe("SeedDataSource", () => {
     expect(aggs[0].creditTotal).toBe(500);
     expect(aggs[0].unbudgetedTotal).toBe(75);
     expect(aggs[0].groupId).toBeNull();
+  });
+});
+
+describe("FileSyncingDataSource", () => {
+  beforeEach(() => {
+    scheduleWriteBack.mockClear();
+  });
+
+  // Hand-rolled stub inner DataSource: every method is a vi.fn(); a real
+  // IdbDataSource is unnecessary to verify delegation + write-back arming.
+  function makeStubInner() {
+    return {
+      getTransactions: vi.fn().mockResolvedValue([{ id: "t1" }]),
+      getStatements: vi.fn().mockResolvedValue([]),
+      getStatementItems: vi.fn().mockResolvedValue([]),
+      getReconciliationNotes: vi.fn().mockResolvedValue([]),
+      getAccounts: vi.fn().mockResolvedValue([]),
+      getJournalEntries: vi.fn().mockResolvedValue([]),
+      getJournalLegs: vi.fn().mockResolvedValue([]),
+      getReconciliationEvents: vi.fn().mockResolvedValue([]),
+      getBudgets: vi.fn().mockResolvedValue([]),
+      getBudgetPeriods: vi.fn().mockResolvedValue([]),
+      getRules: vi.fn().mockResolvedValue([]),
+      getNormalizationRules: vi.fn().mockResolvedValue([]),
+      getWeeklyAggregates: vi.fn().mockResolvedValue([]),
+      updateTransaction: vi.fn().mockResolvedValue(undefined),
+      updateTransactionStatementItemLink: vi.fn().mockResolvedValue(undefined),
+      upsertReconciliationNote: vi.fn().mockResolvedValue(undefined),
+      deleteReconciliationNote: vi.fn().mockResolvedValue(undefined),
+      updateJournalLegCleared: vi.fn().mockResolvedValue(undefined),
+      createReconciliationEvent: vi.fn().mockResolvedValue(undefined),
+      createJournalEntry: vi.fn().mockResolvedValue({ entryId: "e1", legIds: [] }),
+      updateBudget: vi.fn().mockResolvedValue(undefined),
+      updateBudgetOverrides: vi.fn().mockResolvedValue(undefined),
+      adjustBudgetPeriodTotal: vi.fn().mockResolvedValue(undefined),
+      createRule: vi.fn().mockResolvedValue("rule-id-123" as RuleId),
+      updateRule: vi.fn().mockResolvedValue(undefined),
+      deleteRule: vi.fn().mockResolvedValue(undefined),
+      createNormalizationRule: vi.fn().mockResolvedValue("nrule-id-456"),
+      updateNormalizationRule: vi.fn().mockResolvedValue(undefined),
+      deleteNormalizationRule: vi.fn().mockResolvedValue(undefined),
+    };
+  }
+
+  it("a read delegates to inner and does NOT arm write-back", async () => {
+    const inner = makeStubInner();
+    const ds = new FileSyncingDataSource(inner as unknown as DataSource);
+    const result = await ds.getTransactions();
+    expect(inner.getTransactions).toHaveBeenCalledTimes(1);
+    expect(result).toEqual([{ id: "t1" }]);
+    expect(scheduleWriteBack).not.toHaveBeenCalled();
+  });
+
+  it("updateTransaction delegates and arms write-back exactly once", async () => {
+    const inner = makeStubInner();
+    const ds = new FileSyncingDataSource(inner as unknown as DataSource);
+    await ds.updateTransaction("t1" as TransactionId, { note: "x" });
+    expect(inner.updateTransaction).toHaveBeenCalledWith("t1", { note: "x" });
+    expect(scheduleWriteBack).toHaveBeenCalledTimes(1);
+  });
+
+  it("createRule returns the inner result and arms write-back", async () => {
+    const inner = makeStubInner();
+    const ds = new FileSyncingDataSource(inner as unknown as DataSource);
+    const id = await ds.createRule({
+      type: "categorization",
+      pattern: "TARGET",
+      target: "Shopping",
+      priority: 2,
+      institution: null,
+      account: null,
+    } as Parameters<DataSource["createRule"]>[0]);
+    expect(inner.createRule).toHaveBeenCalledTimes(1);
+    expect(id).toBe("rule-id-123");
+    expect(scheduleWriteBack).toHaveBeenCalledTimes(1);
   });
 });

@@ -24,6 +24,12 @@ export function weekStart(ms: number): number {
 
 const CREDIT_WEEKS = 12;
 
+const WEEKS_PER_PERIOD: Record<AllowancePeriod, number> = {
+  weekly: 1,
+  monthly: 52 / 12,
+  quarterly: 52 / 4,
+};
+
 export function computeNetAmount(amount: number, reimbursement: number): number {
   if (reimbursement < 0 || reimbursement > 100) {
     throw new RangeError(`reimbursement must be between 0 and 100, got ${reimbursement}`);
@@ -126,32 +132,36 @@ export function periodAllowance(
 
 /** Convert an allowance to its weekly equivalent for apples-to-apples comparison. */
 export function weeklyEquivalent(allowance: number, allowancePeriod: AllowancePeriod): number {
-  if (allowancePeriod === "weekly") return allowance;
-  if (allowancePeriod === "monthly") return allowance * 12 / 52;
-  if (allowancePeriod === "quarterly") return allowance * 4 / 52;
-  throw new DataIntegrityError(`Unrecognized allowancePeriod: ${allowancePeriod}`);
+  return allowance / WEEKS_PER_PERIOD[allowancePeriod];
 }
 
 /** Convert a weekly amount to the budget's native period scale (inverse of weeklyEquivalent). */
 export function periodEquivalent(weeklyAmount: number, allowancePeriod: AllowancePeriod): number {
-  if (allowancePeriod === "weekly") return weeklyAmount;
-  if (allowancePeriod === "monthly") return weeklyAmount * 52 / 12;
-  if (allowancePeriod === "quarterly") return weeklyAmount * 52 / 4;
-  throw new DataIntegrityError(`Unrecognized allowancePeriod: ${allowancePeriod}`);
+  return weeklyAmount * WEEKS_PER_PERIOD[allowancePeriod];
 }
 
-export function periodsForBudget(periods: BudgetPeriod[], budgetId: BudgetId): BudgetPeriod[] {
+function periodsForBudget(periods: BudgetPeriod[], budgetId: BudgetId): BudgetPeriod[] {
   return periods
     .filter((p) => p.budgetId === budgetId)
     .sort((a, b) => a.periodStart.toMillis() - b.periodStart.toMillis());
 }
 
-/** Return the override with the greatest date <= beforeMs, or null. Requires overrides sorted by date ascending. */
-export function findLatestOverride(overrides: BudgetOverride[], beforeMs: number): BudgetOverride | null {
+
+/**
+ * Latest override whose date falls within the half-open period
+ * [periodStartMs, periodEndMs), or null. Requires overrides sorted by
+ * date ascending.
+ */
+export function findOverrideInPeriod(
+  overrides: BudgetOverride[],
+  periodStartMs: number,
+  periodEndMs: number,
+): BudgetOverride | null {
   let result: BudgetOverride | null = null;
   for (const o of overrides) {
-    if (o.date.toMillis() <= beforeMs) result = o;
-    else break;
+    const ms = o.date.toMillis();
+    if (ms >= periodStartMs && ms < periodEndMs) result = o;
+    else if (ms >= periodEndMs) break;
   }
   return result;
 }
@@ -198,43 +208,30 @@ export function computeBudgetBalance(
 
   const targetPeriod = periods[targetPeriodIndex];
 
-  // Check for override that applies at or before the target period start
-  const targetStartMs = targetPeriod.periodStart.toMillis();
-  const override = findLatestOverride(budget.overrides, targetStartMs);
-
-  // Determine which period to start accumulating from
-  let startIdx = 0;
+  // Accumulate through prior periods, resetting to any override that falls
+  // inside the period (else applying normal rollover), then subtracting the
+  // period total. A later in-period override overwrites all prior accumulation.
   let running = 0;
-
-  // Find the period containing the override date (if any)
-  const overridePeriodIdx = override ? periods.findIndex(
-    (p) => {
-      const overrideMs = override.date.toMillis();
-      return p.periodStart.toMillis() <= overrideMs && overrideMs < p.periodEnd.toMillis();
-    },
-  ) : -1;
-
-  if (override && overridePeriodIdx !== -1 && overridePeriodIdx <= targetPeriodIndex) {
-    // Start from the override: set balance to override value, subtract the override period's total, then continue
-    startIdx = overridePeriodIdx + 1;
-    running = override.balance - periods[overridePeriodIdx].total;
-  }
-
-  // Accumulate through prior periods (from startIdx, which is 0 when no override)
-  for (let i = startIdx; i < targetPeriodIndex; i++) {
+  for (let i = 0; i < targetPeriodIndex; i++) {
+    const periodStart = periods[i].periodStart.toMillis();
+    const periodEnd = periods[i].periodEnd.toMillis();
+    const override = findOverrideInPeriod(budget.overrides, periodStart, periodEnd);
     const prevMs = i > 0 ? periods[i - 1].periodStart.toMillis() : null;
-    const allow = periodAllowance(budget.allowance, budget.allowancePeriod, prevMs, periods[i].periodStart.toMillis());
-    running = applyRollover(running, allow, budget.rollover);
+    const allow = periodAllowance(budget.allowance, budget.allowancePeriod, prevMs, periodStart);
+    running = override ? override.balance : applyRollover(running, allow, budget.rollover);
     running -= periods[i].total;
   }
 
-  // Apply rollover entering the target period (unless override is in this period)
-  if (override && overridePeriodIdx === targetPeriodIndex) {
-    // Override is in the target period: running starts at override balance
-    running = override.balance;
+  // Enter the target period: an in-period override replaces the rollover and no
+  // total is subtracted (the same-period txn walk below subtracts within-period spend).
+  const targetStartMs = targetPeriod.periodStart.toMillis();
+  const targetEndMs = targetPeriod.periodEnd.toMillis();
+  const targetOverride = findOverrideInPeriod(budget.overrides, targetStartMs, targetEndMs);
+  if (targetOverride) {
+    running = targetOverride.balance;
   } else {
     const prevMs = targetPeriodIndex > 0 ? periods[targetPeriodIndex - 1].periodStart.toMillis() : null;
-    const allow = periodAllowance(budget.allowance, budget.allowancePeriod, prevMs, targetPeriod.periodStart.toMillis());
+    const allow = periodAllowance(budget.allowance, budget.allowancePeriod, prevMs, targetStartMs);
     running = applyRollover(running, allow, budget.rollover);
   }
 
@@ -281,12 +278,12 @@ export function computePeriodBalances(
       const period = sorted[idx];
       const periodStartMs = period.periodStart.toMillis();
       const periodEndMs = period.periodEnd.toMillis();
-      const override = findLatestOverride(budget.overrides, periodStartMs);
+      const override = findOverrideInPeriod(budget.overrides, periodStartMs, periodEndMs);
       const prevMs = idx > 0 ? sorted[idx - 1].periodStart.toMillis() : null;
       const allow = periodAllowance(budget.allowance, budget.allowancePeriod, prevMs, periodStartMs);
 
       let running: number;
-      if (override && override.date.toMillis() >= periodStartMs && override.date.toMillis() < periodEndMs) {
+      if (override) {
         // Override is in this period: replaces rollover
         running = override.balance;
       } else {
@@ -323,11 +320,11 @@ export function computeAllBudgetBalances(
       const periodStartMs = period.periodStart.toMillis();
       const periodEndMs = period.periodEnd.toMillis();
 
-      const override = findLatestOverride(budget.overrides, periodStartMs);
+      const override = findOverrideInPeriod(budget.overrides, periodStartMs, periodEndMs);
       const prevMs = pIdx > 0 ? periods[pIdx - 1].periodStart.toMillis() : null;
       const allow = periodAllowance(budget.allowance, budget.allowancePeriod, prevMs, periodStartMs);
       let running: number;
-      if (override && override.date.toMillis() >= periodStartMs && override.date.toMillis() < periodEndMs) {
+      if (override) {
         accumulated = override.balance;
         running = accumulated;
       } else {
@@ -525,7 +522,7 @@ export function computeAverageWeeklySpending(periods: BudgetPeriod[]): number {
   return trailing.reduce((sum, [ms]) => sum + (weeklySpending.get(ms) ?? 0), 0) / 12;
 }
 
-export interface PerBudgetAverage {
+interface PerBudgetAverage {
   readonly avg12: number;
   readonly avg52: number;
 }
@@ -704,7 +701,7 @@ export function computeCashFlow(points: NetWorthPoint[]): CashFlowPoint[] {
   }));
 }
 
-export interface BalanceDivergence {
+interface BalanceDivergence {
   readonly institution: string;
   readonly account: string;
   readonly period: string;
@@ -712,7 +709,7 @@ export interface BalanceDivergence {
   readonly derivedBalance: number;
 }
 
-export interface NetWorthResult {
+interface NetWorthResult {
   readonly points: NetWorthPoint[];
   readonly divergences: BalanceDivergence[];
 }
@@ -930,48 +927,6 @@ function indexPeriodsForBudgets(periods: BudgetPeriod[]): {
 }
 
 /**
- * Compute diff (allowance minus trailing average) and the raw trailing averages
- * over 12- and 52-week windows. The latest observed week across all budgets is
- * excluded as typically incomplete.
- */
-export function computeBudgetDiffs(budgets: Budget[], periods: BudgetPeriod[]): Map<BudgetId, PerBudgetStats> {
-  const { latestWeekMs, periodsByBudget } = indexPeriodsForBudgets(periods);
-
-  const result = new Map<BudgetId, PerBudgetStats>();
-  for (const budget of budgets) {
-    const budgetPeriods = periodsByBudget.get(budget.id) ?? [];
-    const weeklyAllow = weeklyEquivalent(budget.allowance, budget.allowancePeriod);
-
-    // Build weekly spending map once, then compute both trailing windows.
-    const weeklySpending = new Map<number, number>();
-    for (const p of budgetPeriods) {
-      const entry = toSundayEntry(p.periodStart.toDate());
-      weeklySpending.set(entry.ms, (weeklySpending.get(entry.ms) ?? 0) + p.total);
-    }
-    const completed = [...weeklySpending.entries()]
-      .filter(([ms]) => latestWeekMs === undefined || ms !== latestWeekMs)
-      .sort((a, b) => a[0] - b[0]);
-
-    function trailingAvg(weekCount: number): number {
-      if (completed.length === 0 || latestWeekMs === undefined) return 0;
-      const windowMs = weekCount * MS_PER_WEEK;
-      const trailing = completed.filter(([ms]) => latestWeekMs - ms <= windowMs);
-      if (trailing.length === 0) return 0;
-      return trailing.reduce((acc, [, total]) => acc + total, 0) / weekCount;
-    }
-
-    const avg12 = trailingAvg(12);
-    const avg52 = trailingAvg(52);
-
-    result.set(budget.id, {
-      diff: { diff12: weeklyAllow - avg12, diff52: weeklyAllow - avg52 },
-      avg: { avg12, avg52 },
-    });
-  }
-  return result;
-}
-
-/**
  * A category's share is computed as abs(category.avgWeekly) / absTotal, where
  * absTotal is the sum of abs(avgWeekly) across all categories in the window.
  * Categories whose share is strictly below this threshold are folded into "Other".
@@ -998,43 +953,6 @@ export type PerBudgetCategoryVariance = Readonly<Record<VarianceWindow, readonly
  */
 export function isFavorableDiff(diff: number): boolean {
   return diff >= 0;
-}
-
-/**
- * Decompose each budget's trailing-window actual spending into per-category
- * weekly averages. Each category's total across the window is divided by the
- * fixed weekCount (12 or 52) regardless of how many weeks contain data, so
- * weeks with no data contribute zero rather than shrinking the divisor.
- *
- * The latest observed week (across all budgets) is excluded from both windows
- * because partial-week data would bias the average.
- * Included weeks are those whose start falls within `weekCount * MS_PER_WEEK`
- * of the latest week's start.
- *
- * Categories whose share falls below MATERIALITY_THRESHOLD are folded into a
- * single `kind: "other"` row appended after the sorted material rows.
- */
-export function computePerBudgetCategoryVariance(
-  budgets: Budget[],
-  periods: BudgetPeriod[],
-): Map<BudgetId, PerBudgetCategoryVariance> {
-  const { latestWeekMs, periodsByBudget } = indexPeriodsForBudgets(periods);
-
-  const result = new Map<BudgetId, PerBudgetCategoryVariance>();
-  for (const budget of budgets) {
-    const budgetPeriods = periodsByBudget.get(budget.id) ?? [];
-    const completed: { weekMs: number; period: BudgetPeriod }[] = [];
-    for (const p of budgetPeriods) {
-      const weekMs = toSundayEntry(p.periodStart.toDate()).ms;
-      if (weekMs === latestWeekMs) continue;
-      completed.push({ weekMs, period: p });
-    }
-    result.set(budget.id, {
-      12: decomposeWindow(completed, latestWeekMs, 12),
-      52: decomposeWindow(completed, latestWeekMs, 52),
-    });
-  }
-  return result;
 }
 
 /**
@@ -1104,8 +1022,12 @@ function decomposeWindow(
 }
 
 /**
- * Equivalent to calling computeBudgetDiffs and computePerBudgetCategoryVariance separately,
- * but builds the period index only once.
+ * Build the period index once and produce both per-budget stats (allowance
+ * diffs and raw trailing averages) and a per-category variance decomposition,
+ * over 12- and 52-week trailing windows. The latest observed week across all
+ * budgets is excluded as typically incomplete; categories whose share of the
+ * window's absolute total falls below MATERIALITY_THRESHOLD are folded into a
+ * trailing `kind: "other"` row.
  */
 export function computeBudgetStatsAndVariances(
   budgets: Budget[],

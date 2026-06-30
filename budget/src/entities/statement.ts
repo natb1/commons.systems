@@ -37,6 +37,8 @@ export interface Statement {
   readonly lastTransactionDate: Timestamp | null;
   readonly groupId: GroupId | null;
   readonly virtual: boolean;
+  /** Statements-root-relative path recorded by budget-etl. Null or absent for manual, derived, or pre-migration statements. */
+  readonly sourceFile?: string | null;
 }
 
 // ── IDB storage interface ─────────────────────────────────────────────────────
@@ -51,6 +53,7 @@ export interface IdbStatement {
   balanceDate: string | null;
   lastTransactionDateMs: number | null;
   virtual: boolean;
+  sourceFile?: string | null;
 }
 
 // ── Raw upload interface ──────────────────────────────────────────────────────
@@ -65,6 +68,7 @@ export interface RawStatement {
   balanceDate?: string;
   lastTransactionDate?: string | null;
   virtual?: boolean;
+  sourceFile?: string | null;
 }
 
 // ── Seed data type alias ──────────────────────────────────────────────────────
@@ -82,10 +86,16 @@ export interface SeedStatement {
   readonly balanceDate: string | null;
   readonly lastTransactionDateMs: number | null;
   readonly virtual: boolean;
+  readonly sourceFile?: string | null;
 }
 
 // ── Firestore → Statement ─────────────────────────────────────────────────────
 
+/**
+ * @public knip baseline (#2066): residual unused export, not deleted per the
+ * no-bulk-delete line — part of the symmetric per-entity parseFirestore* set.
+ * Deletion candidate; see PR notes.
+ */
 export function parseFirestoreStatement(docSnap: QueryDocumentSnapshot<DocumentData, DocumentData>): Statement {
   const data = docSnap.data();
   return {
@@ -99,6 +109,7 @@ export function parseFirestoreStatement(docSnap: QueryDocumentSnapshot<DocumentD
     lastTransactionDate: optionalTimestamp(data.lastTransactionDate, "lastTransactionDate"),
     groupId: optionalString(data.groupId, "groupId") as GroupId | null,
     virtual: data.virtual === true,
+    sourceFile: optionalString(data.sourceFile, "sourceFile"),
   };
 }
 
@@ -118,6 +129,7 @@ export function parseRawStatement(s: RawStatement, i: number): Statement {
       : null,
     groupId: null as GroupId | null,
     virtual: s.virtual ?? false,
+    sourceFile: s.sourceFile ?? null,
   };
 }
 
@@ -134,6 +146,7 @@ export function statementToIdbRecord(s: Statement): IdbStatement {
     balanceDate: s.balanceDate,
     lastTransactionDateMs: s.lastTransactionDate?.toMillis() ?? null,
     virtual: s.virtual,
+    sourceFile: s.sourceFile ?? null,
   };
 }
 
@@ -151,12 +164,13 @@ export function idbToStatement(row: IdbStatement): Statement {
     lastTransactionDate: msToTs(row.lastTransactionDateMs),
     groupId: null as GroupId | null,
     virtual: row.virtual ?? false,
+    sourceFile: row.sourceFile ?? null,
   };
 }
 
 // ── IdbStatement → RawStatement (export) ──────────────────────────────────────
 
-export function statementToRawJson(s: IdbStatement): object {
+export function statementToRawJson(s: IdbStatement): RawStatement {
   return {
     id: s.id,
     statementId: s.statementId,
@@ -168,6 +182,8 @@ export function statementToRawJson(s: IdbStatement): object {
     lastTransactionDate: s.lastTransactionDateMs != null
       ? new Date(s.lastTransactionDateMs).toISOString()
       : null,
+    virtual: s.virtual,
+    sourceFile: s.sourceFile ?? null,
   };
 }
 
@@ -184,5 +200,6 @@ export function serializeSeedStatement(raw: StatementSeedData, id: string): Seed
     balanceDate: raw.balanceDate ?? null,
     lastTransactionDateMs: toMs(raw.lastTransactionDate),
     virtual: raw.virtual,
+    sourceFile: raw.sourceFile ?? null,
   };
 }

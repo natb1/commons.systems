@@ -1,14 +1,22 @@
-import { hierarchy, tree, type HierarchyNode } from "d3-hierarchy";
 import { computeNetAmount, isCardPaymentCategory, MS_PER_WEEK, weekStart } from "../balance.js";
-import { formatCurrency } from "../format.js";
-import { showDropdown, registerAutocompleteListeners } from "@commons-systems/style/components/autocomplete";
+import { showDropdown, registerAutocompleteListeners } from "@commons-systems/components/autocomplete";
 import { parseJsonArray, makeDebounced } from "./hydrate-util.js";
 import { getThemeFg } from "./chart-util.js";
+import { renderSankeySvg } from "./sankey-render.js";
+import type { CategoryNode } from "./category-node.js";
 
 export type ChartMode = "spending" | "credits";
 
-/** Custom event name dispatched after scroll-loaded transactions are appended to the table. The chart listens for this to incorporate new data and re-apply filters. */
+/** Custom event name dispatched by home-hydrate.ts after scroll-loading older transactions. The chart listens for this to incorporate the new data and re-apply filters. */
 export const TRANSACTIONS_APPENDED_EVENT = "transactions-appended";
+
+/** Teardown for the legacy DOM-blob hydration path's current run.
+ * hydrateCategorySankey re-runs on every navigation back to /transactions
+ * (MutationObserver re-hydrate), so each run tears down the prior run before
+ * registering its own — otherwise listeners accumulate, keep dead containers
+ * alive, and re-run filterTable with stale closure state (#1267). The React
+ * island uses the effect-returned teardown instead of this module-level handle. */
+let hydrateTeardown: ChartTeardown | null = null;
 
 export interface SerializedChartTransaction {
   category: string;
@@ -17,14 +25,6 @@ export interface SerializedChartTransaction {
   reimbursement: number;
   timestampMs: number | null;
   budgetName: string | null;
-}
-
-export interface CategoryNode {
-  name: string;
-  fullPath: string;
-  value: number;
-  count: number;
-  children: CategoryNode[];
 }
 
 /** Compute sorted distinct week-start timestamps from transactions. */
@@ -72,7 +72,7 @@ export function filterByWeeks(
  * transactions whose category exactly matches the filter or starts with
  * categoryFilter + ":" (subcategories) are included.
  */
-export interface CategoryTreeOptions {
+interface CategoryTreeOptions {
   mode?: ChartMode;
   unbudgetedOnly?: boolean;
   showCardPayment?: boolean;
@@ -145,88 +145,56 @@ export function divideTreeValues(node: CategoryNode, divisor: number): void {
   for (const c of node.children) divideTreeValues(c, divisor);
 }
 
-const CATEGORY_COLORS = [
-  "#4e79a7", "#f28e2b", "#e15759", "#76b7b2",
-  "#59a14f", "#edc948", "#b07aa1", "#ff9da7",
-  "#9c755f", "#bab0ac",
-];
-
-function categoryColor(topLevelIndex: number, depth: number): string {
-  const base = CATEGORY_COLORS[topLevelIndex % CATEGORY_COLORS.length];
-  if (depth <= 1) return base;
-  const r = parseInt(base.slice(1, 3), 16);
-  const g = parseInt(base.slice(3, 5), 16);
-  const b = parseInt(base.slice(5, 7), 16);
-  const factor = Math.min(0.3 * (depth - 1), 0.6);
-  const lr = Math.round(r + (255 - r) * factor);
-  const lg = Math.round(g + (255 - g) * factor);
-  const lb = Math.round(b + (255 - b) * factor);
-  return `#${lr.toString(16).padStart(2, "0")}${lg.toString(16).padStart(2, "0")}${lb.toString(16).padStart(2, "0")}`;
-}
-
 function formatDate(ms: number): string {
   const d = new Date(ms);
   return `${d.getUTCMonth() + 1}/${d.getUTCDate()}/${d.getUTCFullYear()}`;
 }
 
-function tooltipText(data: CategoryNode, rootValue: number): string {
-  const pct = rootValue > 0 ? ((data.value / rootValue) * 100).toFixed(1) : "0.0";
-  return `${data.fullPath}\n${formatCurrency(data.value)}/wk (${pct}%)\n${data.count} transactions`;
+interface FilterTableOptions {
+  mode: ChartMode;
+  showCardPayment: boolean;
+  unbudgetedOnly: boolean;
+  categoryFilter: string;
+  budgetFilter: string;
 }
 
-function nodeHeight(value: number, rootValue: number, treeHeight: number): number {
-  return Math.max((value / rootValue) * treeHeight * NODE_SCALE, 4);
-}
+function filterTable(opts: FilterTableOptions): void {
+  const rows = document.querySelectorAll<HTMLElement>("#transactions-table .txn-row");
+  for (const row of rows) {
+    const category = row.dataset.category ?? "";
+    const hasBudget = (row.dataset.budgetName ?? "") !== "";
+    const isCardPayment = isCardPaymentCategory(category);
+    const rawNetAmount = row.dataset.netAmount;
+    if (rawNetAmount === undefined) throw new Error(`Transaction row missing data-net-amount`);
+    const netAmount = parseFloat(rawNetAmount);
+    if (!Number.isFinite(netAmount)) throw new Error(`Transaction row has invalid data-net-amount: "${rawNetAmount}"`);
+    const isSpending = netAmount > 0;
+    const isCredit = netAmount < 0;
 
-const SVG_NS = "http://www.w3.org/2000/svg";
-
-const OVERLAP_GAP = 8;
-const NODE_SCALE = 0.6;
-
-/**
- * Post-process d3.tree positions so proportional-height node rects never
- * overlap.  For each depth column we push nodes apart where needed, then
- * re-centre the column within the available height.  When the total required
- * height exceeds the available space we compress and reposition to fit.
- */
-function resolveOverlaps(
-  nodes: HierarchyNode<CategoryNode>[],
-  rootValue: number,
-  treeHeight: number,
-): void {
-  const byDepth = new Map<number, HierarchyNode<CategoryNode>[]>();
-  for (const node of nodes) {
-    if (node.depth === 0) continue;
-    const group = byDepth.get(node.depth) ?? [];
-    group.push(node);
-    byDepth.set(node.depth, group);
-  }
-
-  for (const [, group] of byDepth) {
-    group.sort((a, b) => a.x! - b.x!);
-    const heights = group.map(n => nodeHeight(n.data.value, rootValue, treeHeight));
-
-    for (let i = 1; i < group.length; i++) {
-      const minDist = (heights[i - 1] + heights[i]) / 2 + OVERLAP_GAP;
-      if (group[i].x! - group[i - 1].x! < minDist) {
-        group[i].x = group[i - 1].x! + minDist;
-      }
-    }
-
-    const top = group[0].x! - heights[0] / 2;
-    const bottom = group[group.length - 1].x! + heights[group.length - 1] / 2;
-    const used = bottom - top;
-
-    if (used <= treeHeight) {
-      const offset = (treeHeight - used) / 2 - top;
-      for (const node of group) node.x = node.x! + offset;
+    let visible: boolean;
+    if (opts.mode === "credits") {
+      visible = isCredit && (opts.showCardPayment || !isCardPayment);
     } else {
-      const scale = treeHeight / used;
-      for (const node of group) {
-        node.x = (node.x! - top) * scale;
-      }
+      visible = isSpending && (!opts.unbudgetedOnly || !hasBudget) && (opts.showCardPayment || !isCardPayment);
     }
+    if (visible && opts.categoryFilter) {
+      visible = category === opts.categoryFilter || category.startsWith(opts.categoryFilter + ":");
+    }
+    if (visible && opts.budgetFilter) {
+      const budgetName = row.dataset.budgetName ?? "";
+      visible = budgetName === opts.budgetFilter;
+    }
+    row.style.display = visible ? "" : "none";
   }
+}
+
+function attachFilterListeners(input: HTMLInputElement, options: string[], onBlur: (value: string) => void, signal: AbortSignal): void {
+  input.addEventListener("focus", () => showDropdown(input, options, ""), { signal });
+  input.addEventListener("input", () => showDropdown(input, options), { signal });
+  input.addEventListener("blur", () => {
+    if (input.value && !options.includes(input.value) && !options.some(o => o.startsWith(input.value + ":"))) input.value = "";
+    onBlur(input.value);
+  }, { signal });
 }
 
 function assertChartTransactions(data: unknown): asserts data is SerializedChartTransaction[] {
@@ -242,33 +210,48 @@ function assertChartTransactions(data: unknown): asserts data is SerializedChart
   }
 }
 
-export function hydrateCategorySankey(container: HTMLElement): void {
-  const scriptEl = container.querySelector('script[type="application/json"]');
-  if (!scriptEl?.textContent) {
-    throw new Error("category-sankey container is missing transaction data");
-  }
-  const parsed: unknown = JSON.parse(scriptEl.textContent);
-  assertChartTransactions(parsed);
-  const allTxns = parsed;
+/**
+ * Tear down the listeners and observers a single chart-core run registered.
+ * The arg-based React island returns this from its effect (React runs it before
+ * the effect re-runs / on unmount), which is the #1267 stale-listener fix without
+ * the module-level `appendedListener` bookkeeping. `hydrateCategorySankey` stores
+ * its run's teardown in a module-level `let` and calls it before re-running.
+ */
+export type ChartTeardown = () => void;
+
+const NOOP_TEARDOWN: ChartTeardown = () => {};
+
+/**
+ * Build the category Sankey chart imperatively into `container` from chart data
+ * passed in as an argument (NOT read from a DOM JSON blob). Wires the
+ * #sankey-controls inputs (rendered as siblings of the container), the
+ * TRANSACTIONS_APPENDED_EVENT scroll-append listener, and a ResizeObserver.
+ * Returns a teardown that removes the document listener and disconnects the
+ * observer; callers MUST invoke it before re-running against the same document
+ * (or on unmount) to avoid stale listeners firing with prior closure state (#1267).
+ *
+ * `categoryOptions`/`budgetOptions` arrive as args (previously read from
+ * `#sankey-controls` data attributes).
+ */
+export function buildCategorySankey(
+  container: HTMLElement,
+  chartData: SerializedChartTransaction[],
+  categoryOptions: string[],
+  budgetOptions: string[],
+): ChartTeardown {
+  assertChartTransactions(chartData);
+
+  const allTxns = chartData;
   if (allTxns.length === 0) {
     container.textContent = "No transaction data to chart.";
-    return;
+    return NOOP_TEARDOWN;
   }
 
   let weeks = distinctWeeks(allTxns);
   if (weeks.length === 0) {
     container.textContent = "No dated transactions to chart.";
-    return;
+    return NOOP_TEARDOWN;
   }
-
-  const collapsedPaths = new Set<string>();
-  let currentNumWeeks = 12;
-  let currentEndWeekIdx = weeks.length - 1;
-  let currentMode: ChartMode = "spending";
-  let currentUnbudgetedOnly = false;
-  let currentShowCardPayment = false;
-  let currentCategoryFilter = "";
-  let currentBudgetFilter = "";
 
   const controlsDiv = document.getElementById("sankey-controls");
   if (!controlsDiv) throw new Error("sankey-controls element not found");
@@ -280,23 +263,49 @@ export function hydrateCategorySankey(container: HTMLElement): void {
   const unbudgetedCheckbox = controlsDiv.querySelector("#sankey-unbudgeted") as HTMLInputElement | null;
   const cardPaymentToggle = controlsDiv.querySelector("#card-payment-toggle") as HTMLElement | null;
   const cardPaymentCheckbox = controlsDiv.querySelector("#sankey-card-payment") as HTMLInputElement | null;
-  const categoryFilterInputRaw = controlsDiv.querySelector("#sankey-category-filter") as HTMLInputElement | null;
-  const budgetFilterInputRaw = controlsDiv.querySelector("#sankey-budget-filter") as HTMLInputElement | null;
-  if (!weeksInput || !endSlider || !endLabel || modeRadios.length === 0 || !unbudgetedToggle || !unbudgetedCheckbox || !cardPaymentToggle || !cardPaymentCheckbox || !categoryFilterInputRaw || !budgetFilterInputRaw) {
+  const categoryFilterInputEl = controlsDiv.querySelector("#sankey-category-filter") as HTMLInputElement | null;
+  const budgetFilterInputEl = controlsDiv.querySelector("#sankey-budget-filter") as HTMLInputElement | null;
+  if (!weeksInput || !endSlider || !endLabel || modeRadios.length === 0 || !unbudgetedToggle || !unbudgetedCheckbox || !cardPaymentToggle || !cardPaymentCheckbox || !categoryFilterInputEl || !budgetFilterInputEl) {
     throw new Error("sankey control elements missing");
   }
-  const categoryFilterInput = categoryFilterInputRaw;
-  const budgetFilterInput = budgetFilterInputRaw;
+  const categoryFilterInput = categoryFilterInputEl;
+  const budgetFilterInput = budgetFilterInputEl;
 
-  const categoryOptions = parseJsonArray(controlsDiv.dataset.categoryOptions);
-  const budgetOptions = parseJsonArray(controlsDiv.dataset.budgetOptions);
+  // Seed the chart's filter state FROM the persisted controls rather than from
+  // hardcoded defaults. The component instance is not remounted on scroll-append
+  // (Transactions dropped the key), so an in-progress filter survives the rebuild
+  // and must be honored here. On the FIRST mount the controls hold their defaults
+  // (spending radio checked, empty filter inputs, weeks="12"), so these reads
+  // yield exactly the prior hardcoded behavior. currentEndWeekIdx is NOT
+  // preserved — it always tracks the latest window; collapsedPaths starts fresh.
+  const checkedMode = controlsDiv.querySelector<HTMLInputElement>('input[name="sankey-mode"]:checked')?.value;
+  const currentModeInit: ChartMode = checkedMode === "credits" ? "credits" : "spending";
+  const parsedWeeks = parseInt(weeksInput.value, 10);
+
+  const collapsedPaths = new Set<string>();
+  let currentNumWeeks = Number.isFinite(parsedWeeks) && parsedWeeks >= 1 ? parsedWeeks : 12;
+  let currentEndWeekIdx = weeks.length - 1;
+  let currentMode: ChartMode = currentModeInit;
+  let currentUnbudgetedOnly = unbudgetedCheckbox.checked;
+  let currentShowCardPayment = cardPaymentCheckbox.checked;
+  let currentCategoryFilter = categoryFilterInput.value;
+  let currentBudgetFilter = budgetFilterInput.value;
 
   endSlider.min = "0";
   endSlider.max = String(weeks.length - 1);
   endSlider.value = String(currentEndWeekIdx);
   endLabel.textContent = formatDate(weeks[currentEndWeekIdx]);
-
   const fg = getThemeFg(container);
+
+  function currentFilterOpts(): FilterTableOptions {
+    return {
+      mode: currentMode,
+      showCardPayment: currentShowCardPayment,
+      unbudgetedOnly: currentUnbudgetedOnly,
+      categoryFilter: currentCategoryFilter,
+      budgetFilter: currentBudgetFilter,
+    };
+  }
 
   function render(): void {
     const containerWidth = container.clientWidth;
@@ -319,194 +328,34 @@ export function hydrateCategorySankey(container: HTMLElement): void {
       return;
     }
 
-    function pruneCollapsed(n: CategoryNode): CategoryNode {
-      if (collapsedPaths.has(n.fullPath)) {
-        return { ...n, children: [] };
-      }
-      return { ...n, children: n.children.map(pruneCollapsed) };
-    }
-    const prunedRoot = pruneCollapsed(rootData);
-
-    const root = hierarchy(prunedRoot, d => d.children.length > 0 ? d.children : undefined);
-
-    const topLevelIndices = new Map<HierarchyNode<CategoryNode>, number>();
-    function assignIndex(node: HierarchyNode<CategoryNode>, index: number): void {
-      topLevelIndices.set(node, index);
-      node.children?.forEach(c => assignIndex(c, index));
-    }
-    root.children?.forEach((child, i) => assignIndex(child, i));
-
-    function getTopLevelIndex(node: HierarchyNode<CategoryNode>): number {
-      const idx = topLevelIndices.get(node);
-      if (idx === undefined) throw new Error(`Missing top-level index for node: ${node.data.fullPath}`);
-      return idx;
-    }
-
-    const svgHeight = Math.round(containerWidth * 3 / 4);
-    const margin = { top: 20, right: 160, bottom: 20, left: 10 };
-    const treeWidth = containerWidth - margin.left - margin.right;
-    const treeHeight = svgHeight - margin.top - margin.bottom;
-
-    // Passing [treeHeight, treeWidth] produces a horizontal layout: node.x is vertical, node.y is horizontal
-    const layout = tree<CategoryNode>().size([treeHeight, treeWidth]);
-    const treeRoot = layout(root);
-
-    const nodes = treeRoot.descendants();
-    resolveOverlaps(nodes, rootData.value, treeHeight);
-
-    const links = treeRoot.links();
-
-    const svg = document.createElementNS(SVG_NS, "svg");
-    svg.setAttribute("viewBox", `0 0 ${containerWidth} ${svgHeight}`);
-    svg.setAttribute("width", "100%");
-    svg.setAttribute("height", String(svgHeight));
-
-    const g = document.createElementNS(SVG_NS, "g");
-    g.setAttribute("transform", `translate(${margin.left},${margin.top})`);
-    svg.appendChild(g);
-
-    // Track cumulative vertical offset within each parent node rect so child link bands stack without overlapping
-    const parentStacks = new Map<HierarchyNode<CategoryNode>, number>();
-
-    for (const link of links) {
-      const source = link.source;
-      const target = link.target;
-      const parentValue = source.data.value;
-      const childValue = target.data.value;
-
-      if (parentValue === 0) continue;
-
-      const parentH = nodeHeight(source.data.value, rootData.value, treeHeight);
-      const childH = nodeHeight(target.data.value, rootData.value, treeHeight);
-      const bandWidth = (childValue / parentValue) * parentH;
-
-      const stackOffset = parentStacks.get(source) ?? 0;
-      parentStacks.set(source, stackOffset + bandWidth);
-
-      const sx = source.y;
-      const sy = source.x - parentH / 2 + stackOffset;
-      const tx = target.y;
-      const ty = target.x - childH / 2;
-
-      const midX = (sx + tx) / 2;
-      const bw = Math.max(bandWidth, 2);
-      const d = [
-        `M ${sx} ${sy}`,
-        `C ${midX} ${sy}, ${midX} ${ty}, ${tx} ${ty}`,
-        `L ${tx} ${ty + bw}`,
-        `C ${midX} ${ty + bw}, ${midX} ${sy + bw}, ${sx} ${sy + bw}`,
-        `Z`,
-      ].join(" ");
-
-      const topIdx = getTopLevelIndex(target);
-      const path = document.createElementNS(SVG_NS, "path");
-      path.setAttribute("d", d);
-      path.setAttribute("fill", categoryColor(topIdx, target.depth));
-      path.setAttribute("class", "sankey-link");
-      path.style.pointerEvents = "none";
-
-      const title = document.createElementNS(SVG_NS, "title");
-      title.textContent = tooltipText(target.data, rootData.value);
-      path.appendChild(title);
-
-      g.appendChild(path);
-    }
-
-    for (const node of nodes) {
-      if (node.depth === 0) continue;
-      const h = nodeHeight(node.data.value, rootData.value, treeHeight);
-      const w = 12;
-      const topIdx = getTopLevelIndex(node);
-      const hasChildren = (node.children?.length ?? 0) > 0 || collapsedPaths.has(node.data.fullPath);
-
-      const nodeG = document.createElementNS(SVG_NS, "g");
-      nodeG.setAttribute("class", "sankey-node");
-      nodeG.setAttribute("transform", `translate(${node.y - w / 2},${node.x - h / 2})`);
-
-      const rect = document.createElementNS(SVG_NS, "rect");
-      rect.setAttribute("width", String(w));
-      rect.setAttribute("height", String(h));
-      rect.setAttribute("fill", categoryColor(topIdx, node.depth));
-      rect.setAttribute("rx", "2");
-      if (hasChildren) {
-        rect.style.cursor = "pointer";
-        rect.addEventListener("click", () => {
-          if (collapsedPaths.has(node.data.fullPath)) {
-            collapsedPaths.delete(node.data.fullPath);
-          } else {
-            collapsedPaths.add(node.data.fullPath);
-          }
-          update();
-        });
-      }
-      nodeG.appendChild(rect);
-
-      if (h > 16) {
-        const text = document.createElementNS(SVG_NS, "text");
-        text.setAttribute("x", String(w + 4));
-        text.setAttribute("y", String(h / 2));
-        text.setAttribute("dy", "0.35em");
-        text.setAttribute("fill", fg);
-        text.style.cursor = "pointer";
-        text.textContent = `${node.data.name} ${formatCurrency(node.data.value)}/wk`;
-        text.addEventListener("click", () => {
-          categoryFilterInput.value = node.data.fullPath;
-          currentCategoryFilter = node.data.fullPath;
-          update();
-        });
-        nodeG.appendChild(text);
-      }
-
-      const title = document.createElementNS(SVG_NS, "title");
-      title.textContent = tooltipText(node.data, rootData.value);
-      nodeG.appendChild(title);
-
-      g.appendChild(nodeG);
-    }
-
+    const svg = renderSankeySvg({
+      container,
+      rootData,
+      collapsedPaths,
+      containerWidth,
+      fg,
+      onToggleCollapse: (fullPath) => {
+        if (collapsedPaths.has(fullPath)) collapsedPaths.delete(fullPath);
+        else collapsedPaths.add(fullPath);
+        update();
+      },
+      onSelectCategory: (fullPath) => {
+        categoryFilterInput.value = fullPath;
+        currentCategoryFilter = fullPath;
+        update();
+      },
+    });
     container.replaceChildren(svg);
   }
 
-  function filterTable(): void {
-    const rows = document.querySelectorAll<HTMLElement>("#transactions-table .txn-row");
-    for (const row of rows) {
-      const category = row.dataset.category ?? "";
-      const hasBudget = (row.dataset.budgetName ?? "") !== "";
-      const isCardPayment = isCardPaymentCategory(category);
-      const rawNetAmount = row.dataset.netAmount;
-      if (rawNetAmount === undefined) throw new Error(`Transaction row missing data-net-amount`);
-      const netAmount = parseFloat(rawNetAmount);
-      if (!Number.isFinite(netAmount)) throw new Error(`Transaction row has invalid data-net-amount: "${rawNetAmount}"`);
-      const isSpending = netAmount > 0;
-      const isCredit = netAmount < 0;
-
-      let visible: boolean;
-      if (currentMode === "credits") {
-        visible = isCredit && (currentShowCardPayment || !isCardPayment);
-      } else {
-        visible = isSpending && (!currentUnbudgetedOnly || !hasBudget) && (currentShowCardPayment || !isCardPayment);
-      }
-      if (visible && currentCategoryFilter) {
-        visible = category === currentCategoryFilter || category.startsWith(currentCategoryFilter + ":");
-      }
-      if (visible && currentBudgetFilter) {
-        const budgetName = row.dataset.budgetName ?? "";
-        visible = budgetName === currentBudgetFilter;
-      }
-      row.style.display = visible ? "" : "none";
-    }
-  }
-
   function update(): void {
-    try {
-      render();
-    } catch (error) {
+    try { render(); } catch (error) {
       container.textContent = "Chart rendering failed. Try refreshing the page.";
       setTimeout(() => { throw error; }, 0);
       return;
     }
     try {
-      filterTable();
+      filterTable(currentFilterOpts());
     } catch (error) {
       setTimeout(() => { throw error; }, 0);
     }
@@ -514,30 +363,53 @@ export function hydrateCategorySankey(container: HTMLElement): void {
 
   update();
 
-  // Integration point: home-hydrate.ts dispatches this event after scroll-loading older transactions.
-  // The listener merges new data into allTxns, adjusts the week slider to preserve the current
-  // position, then calls update() to re-render the chart and re-apply table filters.
-  document.addEventListener(TRANSACTIONS_APPENDED_EVENT, ((e: CustomEvent<SerializedChartTransaction[]>) => {
-    if (!container.isConnected) return;
+  // Listener for older transactions scroll-loaded by home-hydrate.ts. The chart
+  // update and the table re-filter run as two independent blocks: a failed chart
+  // serialization or render must not skip the table re-filter, which is the only
+  // thing that re-applies the active filter to scroll-loaded rows (#578).
+  //
+  // This run registers its own listener and hands ownership to the returned
+  // teardown; the caller removes it before re-running (#1267).
+  const localAppendedListener = ((e: CustomEvent<SerializedChartTransaction[]>) => {
+    const newTxns = e.detail;
+
+    // Chart-update block — skipped when the container is gone. Calls render()
+    // directly, not update(): the table re-filter runs as its own block below.
+    if (container.isConnected) {
+      try {
+        assertChartTransactions(newTxns);
+        const targetWeekMs = weeks[currentEndWeekIdx];
+        allTxns.push(...newTxns);
+        weeks = distinctWeeks(allTxns);
+        endSlider.max = String(weeks.length - 1);
+        currentEndWeekIdx = weeks.indexOf(targetWeekMs);
+        if (currentEndWeekIdx === -1) currentEndWeekIdx = weeks.length - 1;
+        endSlider.value = String(currentEndWeekIdx);
+        endLabel.textContent = formatDate(weeks[currentEndWeekIdx]);
+        render();
+      } catch (error) {
+        container.textContent = "Chart update failed after loading new transactions.";
+        setTimeout(() => { throw error; }, 0);
+      }
+    }
+
+    // Table re-filter block — runs unconditionally (see listener header).
     try {
-      const newTxns = e.detail;
-      assertChartTransactions(newTxns);
-      const targetWeekMs = weeks[currentEndWeekIdx];
-      allTxns.push(...newTxns);
-      weeks = distinctWeeks(allTxns);
-      endSlider.max = String(weeks.length - 1);
-      currentEndWeekIdx = weeks.indexOf(targetWeekMs);
-      if (currentEndWeekIdx === -1) currentEndWeekIdx = weeks.length - 1;
-      endSlider.value = String(currentEndWeekIdx);
-      endLabel.textContent = formatDate(weeks[currentEndWeekIdx]);
-      update();
+      filterTable(currentFilterOpts());
     } catch (error) {
-      container.textContent = "Chart update failed after loading new transactions.";
       setTimeout(() => { throw error; }, 0);
     }
-  }) as EventListener);
+  }) as EventListener;
+  document.addEventListener(TRANSACTIONS_APPENDED_EVENT, localAppendedListener);
 
   const debounced = makeDebounced();
+
+  // All control-element listeners are registered with this controller's signal
+  // so the returned teardown can remove every one with a single abort(). The
+  // React island reruns buildCategorySankey on each scroll-append against the
+  // same persistent control DOM nodes, so without this they would stack (#1267).
+  const controlListeners = new AbortController();
+  const controlSignal = controlListeners.signal;
 
   weeksInput.addEventListener("input", () => {
     const v = parseInt(weeksInput.value, 10);
@@ -545,7 +417,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
       currentNumWeeks = v;
       debounced(update, 100);
     }
-  });
+  }, { signal: controlSignal });
 
   endSlider.addEventListener("input", () => {
     const v = parseInt(endSlider.value, 10);
@@ -554,7 +426,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
       endLabel.textContent = formatDate(weeks[currentEndWeekIdx]);
       debounced(update, 100);
     }
-  });
+  }, { signal: controlSignal });
 
   modeRadios.forEach(radio => {
     radio.addEventListener("change", () => {
@@ -576,38 +448,29 @@ export function hydrateCategorySankey(container: HTMLElement): void {
         }
         update();
       }
-    });
+    }, { signal: controlSignal });
   });
 
   unbudgetedCheckbox.addEventListener("change", () => {
     currentUnbudgetedOnly = unbudgetedCheckbox.checked;
     update();
-  });
+  }, { signal: controlSignal });
 
   cardPaymentCheckbox.addEventListener("change", () => {
     currentShowCardPayment = cardPaymentCheckbox.checked;
     update();
-  });
+  }, { signal: controlSignal });
 
   registerAutocompleteListeners();
-
-  function attachFilterListeners(input: HTMLInputElement, options: string[], onBlur: (value: string) => void): void {
-    input.addEventListener("focus", () => showDropdown(input, options, ""));
-    input.addEventListener("input", () => showDropdown(input, options));
-    input.addEventListener("blur", () => {
-      if (input.value && !options.includes(input.value) && !options.some(o => o.startsWith(input.value + ":"))) input.value = "";
-      onBlur(input.value);
-    });
-  }
 
   attachFilterListeners(categoryFilterInput, categoryOptions, (value) => {
     currentCategoryFilter = value;
     update();
-  });
+  }, controlSignal);
   attachFilterListeners(budgetFilterInput, budgetOptions, (value) => {
     currentBudgetFilter = value;
     update();
-  });
+  }, controlSignal);
 
   let resizeTimer: ReturnType<typeof setTimeout> | undefined;
   const observer = new ResizeObserver(() => {
@@ -615,4 +478,43 @@ export function hydrateCategorySankey(container: HTMLElement): void {
     resizeTimer = setTimeout(update, 150);
   });
   observer.observe(container);
+
+  return () => {
+    document.removeEventListener(TRANSACTIONS_APPENDED_EVENT, localAppendedListener);
+    controlListeners.abort();
+    observer.disconnect();
+    clearTimeout(resizeTimer);
+  };
+}
+
+/**
+ * DOM-blob entry point preserved for the legacy hydration path and existing
+ * tests. Reads the serialized chart data from the `<script type="application/json">`
+ * blob and the option lists from `#sankey-controls` data attributes, then
+ * delegates to `buildCategorySankey`. Stores the prior run's teardown in a
+ * module-level `let` and invokes it before re-running so listeners do not
+ * accumulate across re-hydrations (#1267).
+ */
+export function hydrateCategorySankey(container: HTMLElement): void {
+  const scriptEl = container.querySelector('script[type="application/json"]');
+  if (!scriptEl?.textContent) {
+    throw new Error("category-sankey container is missing transaction data");
+  }
+  const parsed: unknown = JSON.parse(scriptEl.textContent);
+  assertChartTransactions(parsed);
+
+  // Tear down the prior run before this run can early-return, so an empty-data
+  // re-hydration cannot leave a stale listener firing with the previous run's
+  // closed-over state (#1267).
+  if (hydrateTeardown) {
+    hydrateTeardown();
+    hydrateTeardown = null;
+  }
+
+  const controlsDiv = document.getElementById("sankey-controls");
+  if (!controlsDiv) throw new Error("sankey-controls element not found");
+  const categoryOptions = parseJsonArray(controlsDiv.dataset.categoryOptions);
+  const budgetOptions = parseJsonArray(controlsDiv.dataset.budgetOptions);
+
+  hydrateTeardown = buildCategorySankey(container, parsed, categoryOptions, budgetOptions);
 }

@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# dispatch-mark-deferred — terminal "deviation resolved, defer as blocked" marker.
+#
+# Usage: dispatch-mark-deferred "<reason>"
+#
+# The third terminal disposition for a phase-skill worker, alongside
+# dispatch-mark-complete (advance) and dispatch-mark-deviation (office-hours
+# park). A worker uses it when it could not complete its phase but resolved the
+# deviation IN-SESSION by linking the missing dependency — typically: the issue
+# now `blocked_by` a still-open sibling whose deliverable the phase needs. Rather
+# than unconditionally re-parking the issue on a human (dispatch-mark-deviation),
+# the worker records "defer this issue as blocked" and lets the router re-gate it
+# on its blocked_by links: skipped while the blocker is open, selected (routed to
+# the correct phase) once the blocker closes — with no dispatch:office-hours label
+# to manually strip.
+#
+# PRECONDITION (caller's responsibility): the blocked_by link MUST already exist
+# before this script is called. This script does NOT create the dependency link.
+# dispatch-stop.sh independently VERIFIES the resolving condition — that the issue
+# is now blocked_by an OPEN issue — when it reads the deferred sentinel. If no
+# such open blocker exists at stop time (e.g. the caller forgot to link it, or the
+# blocker already closed), the hook FALLS BACK to the office-hours park, fail-safe
+# toward human review. So a deferred marker without a real open blocker is not a
+# silent skip of human review — it degrades to the deviation park.
+#
+# Unlike dispatch-mark-deviation, this script does NOT apply dispatch:office-hours
+# in-session: the whole point of the deferred disposition is to NOT park when the
+# blocked_by gate is satisfied, and only dispatch-stop.sh can verify that gate at
+# session end. The script's sole job is to write the sentinel the hook reads.
+#
+# Sentinel: $CLAUDE_JOB_DIR/deferred, written atomically (tempfile + mv). Its
+# byte content is the <reason>, used by dispatch-stop.sh as context in the
+# fallback office-hours why-comment when the gate is NOT satisfied. Presence (not
+# content) is what selects the deferred branch.
+#
+# When CLAUDE_JOB_DIR is unset/empty or not a directory the script is running
+# interactively (not under a dispatch job): the sentinel write is skipped
+# (exit 0) with a diagnostic, so the same terminal call is harmless interactively.
+#
+# Exactly one non-empty reason argument is required; zero args, extra args, or an
+# empty reason is a clear error, not a fallback (exit 2).
+set -euo pipefail
+
+if [[ $# -ne 1 ]]; then
+  echo "dispatch-mark-deferred: exactly one reason argument is required" >&2
+  echo "usage: dispatch-mark-deferred \"<reason>\"" >&2
+  exit 2
+fi
+
+REASON="$1"
+
+if [[ -z "$REASON" ]]; then
+  echo "dispatch-mark-deferred: reason must be non-empty" >&2
+  echo "usage: dispatch-mark-deferred \"<reason>\"" >&2
+  exit 2
+fi
+
+# CLAUDE_JOB_DIR guard: an interactive run (no dispatch job) is a no-op.
+if [[ -z "${CLAUDE_JOB_DIR:-}" || ! -d "$CLAUDE_JOB_DIR" ]]; then
+  echo "dispatch-mark-deferred: CLAUDE_JOB_DIR unset or not a directory; interactive run, skipping sentinel write" >&2
+  exit 0
+fi
+
+# Atomic write: tempfile + mv. The reason is surfaced by dispatch-stop.sh in the
+# fallback office-hours why-comment; the sentinel's mere presence selects the
+# deferred branch.
+f="$CLAUDE_JOB_DIR/deferred"
+printf '%s\n' "$REASON" > "$f.tmp"
+mv "$f.tmp" "$f"

@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@commons-systems/config/playwright-test";
 import { uploadFixture, uploadEncryptedFixture } from "./helpers";
 
 test.describe("upload", () => {

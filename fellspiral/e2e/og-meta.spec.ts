@@ -1,6 +1,6 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@commons-systems/config/playwright-test";
 
-function getMeta(page: import("@playwright/test").Page, selector: string) {
+function getMeta(page: import("@commons-systems/config/playwright-test").Page, selector: string) {
   return page.evaluate(
     (sel) => document.querySelector(sel)?.getAttribute("content") ?? null,
     selector,

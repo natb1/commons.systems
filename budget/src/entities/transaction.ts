@@ -39,6 +39,7 @@ export interface SeedTransaction {
   readonly timestampMs: number | null;
   readonly statementId: string | null;
   readonly statementItemId: string | null;
+  readonly journalEntryId: string | null;
   readonly normalizedId: string | null;
   readonly normalizedPrimary: boolean;
   readonly normalizedDescription: string | null;
@@ -73,6 +74,8 @@ export interface Transaction {
   readonly statementId: StatementId | null;
   /** Explicit link to the immutable statement line item this transaction was imported from. Null or undefined for manually entered transactions and older records written before the statement-items backfill. */
   readonly statementItemId?: StatementItemId | null;
+  /** Link to the JournalEntry this transaction maps to under the double-entry model. Null for historical rows until the migration script (issue #552) backfills them. */
+  readonly journalEntryId?: string | null;
   readonly groupId: GroupId | null;
   readonly normalizedId: string | null;
   readonly normalizedPrimary: boolean;
@@ -95,6 +98,7 @@ export interface IdbTransaction {
   timestampMs: number | null;
   statementId: string | null;
   statementItemId: string | null;
+  journalEntryId?: string | null;
   normalizedId: string | null;
   normalizedPrimary: boolean;
   normalizedDescription: string | null;
@@ -112,6 +116,7 @@ export interface RawTransaction {
   timestamp: string;
   statementId: string;
   statementItemId?: string | null;
+  journalEntryId?: string | null;
   category: string;
   budget: string | null;
   note: string;
@@ -142,6 +147,11 @@ function requireReimbursement(value: unknown): number {
 
 // ── Firestore → Transaction ───────────────────────────────────────────────────
 
+/**
+ * @public knip baseline (#2066): residual unused export, not deleted per the
+ * no-bulk-delete line — part of the symmetric per-entity parseFirestore* set.
+ * Deletion candidate; see PR notes.
+ */
 export function parseFirestoreTransaction(docSnap: QueryDocumentSnapshot<DocumentData, DocumentData>): Transaction {
   const data = docSnap.data();
   return {
@@ -157,6 +167,7 @@ export function parseFirestoreTransaction(docSnap: QueryDocumentSnapshot<Documen
     timestamp: optionalTimestamp(data.timestamp, "timestamp"),
     statementId: optionalString(data.statementId, "statementId") as StatementId | null,
     statementItemId: optionalString(data.statementItemId, "statementItemId") as StatementItemId | null,
+    journalEntryId: optionalString(data.journalEntryId, "journalEntryId"),
     groupId: optionalString(data.groupId, "groupId") as GroupId | null,
     normalizedId: optionalString(data.normalizedId, "normalizedId"),
     // Defaults to true for un-normalized transactions (field may be missing or null)
@@ -169,6 +180,8 @@ export function parseFirestoreTransaction(docSnap: QueryDocumentSnapshot<Documen
 // ── Raw upload → Transaction ──────────────────────────────────────────────────
 
 export function parseRawTransaction(t: RawTransaction, i: number): Transaction {
+  const reimbursement = t.reimbursement ?? 0;
+  validateReimbursementRange(reimbursement);
   return {
     id: requireUploadId(t.id, "transaction", i) as TransactionId,
     institution: t.institution ?? "",
@@ -177,11 +190,12 @@ export function parseRawTransaction(t: RawTransaction, i: number): Transaction {
     amount: t.amount ?? 0,
     note: t.note ?? "",
     category: t.category ?? "",
-    reimbursement: t.reimbursement ?? 0,
+    reimbursement,
     budget: (t.budget || null) as BudgetId | null,
     timestamp: t.timestamp ? parseISOTimestamp(t.timestamp, "transaction.timestamp") : null,
     statementId: (t.statementId || null) as StatementId | null,
     statementItemId: (t.statementItemId || null) as StatementItemId | null,
+    journalEntryId: t.journalEntryId || null,
     groupId: null as GroupId | null,
     normalizedId: t.normalizedId || null,
     normalizedPrimary: t.normalizedPrimary !== false,
@@ -206,6 +220,7 @@ export function transactionToIdbRecord(t: Transaction): IdbTransaction {
     timestampMs: t.timestamp?.toMillis() ?? null,
     statementId: t.statementId,
     statementItemId: t.statementItemId ?? null,
+    journalEntryId: t.journalEntryId ?? null,
     normalizedId: t.normalizedId,
     normalizedPrimary: t.normalizedPrimary,
     normalizedDescription: t.normalizedDescription,
@@ -216,6 +231,7 @@ export function transactionToIdbRecord(t: Transaction): IdbTransaction {
 // ── IdbTransaction → Transaction ─────────────────────────────────────────────
 
 export function idbToTransaction(row: IdbTransaction): Transaction {
+  validateReimbursementRange(row.reimbursement);
   return {
     id: row.id as TransactionId,
     institution: row.institution,
@@ -229,6 +245,7 @@ export function idbToTransaction(row: IdbTransaction): Transaction {
     timestamp: msToTs(row.timestampMs),
     statementId: (row.statementId ?? null) as StatementId | null,
     statementItemId: (row.statementItemId ?? null) as StatementItemId | null,
+    journalEntryId: row.journalEntryId ?? null,
     groupId: null as GroupId | null,
     normalizedId: row.normalizedId,
     normalizedPrimary: row.normalizedPrimary,
@@ -249,6 +266,7 @@ export function transactionToRawJson(t: IdbTransaction): RawTransaction {
     timestamp: msToISO(t.timestampMs),
     statementId: nullToEmpty(t.statementId),
     statementItemId: t.statementItemId ?? null,
+    journalEntryId: t.journalEntryId ?? null,
     category: t.category,
     budget: t.budget,
     note: t.note,
@@ -256,6 +274,7 @@ export function transactionToRawJson(t: IdbTransaction): RawTransaction {
     normalizedId: t.normalizedId,
     normalizedPrimary: t.normalizedPrimary,
     normalizedDescription: t.normalizedDescription,
+    virtual: t.virtual,
   };
 }
 
@@ -281,6 +300,7 @@ export function serializeSeedTransaction(raw: TransactionSeedData, id: string): 
     timestampMs: toMs(raw.timestamp),
     statementId: raw.statementId ?? null,
     statementItemId: raw.statementItemId ?? null,
+    journalEntryId: raw.journalEntryId ?? null,
     normalizedId: raw.normalizedId,
     normalizedPrimary: raw.normalizedPrimary,
     normalizedDescription: raw.normalizedDescription,

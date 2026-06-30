@@ -1,7 +1,0 @@
-{
-  "extends": "@commons-systems/config/tsconfig.lib.json",
-  "compilerOptions": {
-    "types": ["vite/client"]
-  },
-  "include": ["src", "test"]
-}

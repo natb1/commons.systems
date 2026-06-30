@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# dispatch-provision-worktree <worktree-path> — provision a freshly-added
+# worktree (direnv) and merge `origin/main` into it, run by the dispatch worker
+# itself BEFORE it derives its phase. The router's held-lock fan-out loop now
+# does only the cheap `git worktree add` (branched from origin/main, not yet
+# provisioned or merged); the multi-minute, budget-irrelevant provisioning and
+# merge are relocated here, out of the critical section (#1047 / part of #1044).
+#
+# The worker is born `--cwd` its worktree and re-derives its phase from PR/CI
+# ground truth, just as `restore-dispatch-skill.sh` does on context-clear — so
+# running provisioning + merge here, before phase derivation, ensures the phase
+# skill the worker later loads reads up-to-date `.claude/` files from the merged
+# tree.
+#
+# Body, in order:
+#   1. direnv allow <wt>        — re-grant the worktree's .envrc.
+#   2. direnv exec <wt> true    — trigger the .envrc (npm deps, etc.).
+#   3. exec dispatch-merge-main <wt> — fetch + merge origin/main locally.
+#
+# Exit-code contract — identical to dispatch-merge-main, because step 3 `exec`s
+# into it (this script's exit code IS dispatch-merge-main's):
+#   0 — clean merge or already-up-to-date.
+#   1 — fetch failure, a non-conflict merge failure, or a direnv warm-up failure.
+#   2 — usage error (missing/extra/flag-shaped arg). dispatch-merge-main also
+#       exits 2 for an un-cd-able path.
+#   3 — merge conflict; the merge has been aborted and the tree is left clean.
+#
+# dispatch-merge-main lives in this script's own directory (resolved via
+# SCRIPT_DIR), so the relocation does not change which merge primitive runs.
+#
+# `dangerouslyDisableSandbox: true` REQUIREMENT: the `git merge origin/main`
+# inside dispatch-merge-main is a tree-updating op over the read-only
+# `.claude/skills/**` sandbox carve-out — the canonical hazard documented in
+# `.claude/rules/sandbox.md` ("Tree-updating git ops touching read-only paths")
+# — and `direnv`/npm write the dependency cache. This mirrors dispatch-select-tick's
+# merge precedent. Callers must run it with `dangerouslyDisableSandbox: true`.
+#
+# Both direnv steps surface failures: each captures its combined output and exit
+# code, and on non-zero prints a diagnostic to stderr naming the worktree and the
+# direnv output, then exits 1. A failed warm-up leaves the cache unwarmed, so the
+# script aborts rather than proceeding to the merge with node/npm/npx unavailable
+# in the worker (#855).
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [[ $# -lt 1 ]]; then
+  echo "dispatch-provision-worktree: missing required <worktree-path> argument" >&2
+  exit 2
+fi
+if [[ $# -gt 1 ]]; then
+  echo "dispatch-provision-worktree: unexpected extra arguments after <worktree-path>" >&2
+  exit 2
+fi
+if [[ "$1" == -* ]]; then
+  echo "dispatch-provision-worktree: flag-shaped argument '$1' is not a worktree path" >&2
+  exit 2
+fi
+
+WT="$1"
+
+# Provision the worktree's environment. A direnv failure leaves the worktree's
+# cache unwarmed (node/npm/npx would be "command not found" in the worker), so
+# surface it and exit 1 (the non-conflict-failure code dispatch-route maps to
+# STOP provision-failed) rather than swallowing it and proceeding (#855).
+allow_rc=0
+allow_err=$(direnv allow "$WT" 2>&1) || allow_rc=$?
+if [[ "$allow_rc" -ne 0 ]]; then
+  {
+    echo "dispatch-provision-worktree: 'direnv allow $WT' failed (exit $allow_rc)."
+    echo "The worktree's direnv cache is unwarmed; node/npm/npx would be 'command not found' in the worker."
+    echo "direnv output:"
+    printf '%s\n' "$allow_err"
+  } >&2
+  exit 1
+fi
+
+exec_rc=0
+exec_err=$(direnv exec "$WT" true 2>&1) || exec_rc=$?
+if [[ "$exec_rc" -ne 0 ]]; then
+  {
+    echo "dispatch-provision-worktree: 'direnv exec $WT true' failed (exit $exec_rc)."
+    echo "The worktree's direnv cache is unwarmed; node/npm/npx would be 'command not found' in the worker."
+    echo "direnv output:"
+    printf '%s\n' "$exec_err"
+  } >&2
+  exit 1
+fi
+
+# Merge origin/main into the worktree's branch. `exec` so this script's exit
+# code IS dispatch-merge-main's (0 clean / 1 fetch-or-other / 3 conflict).
+exec "$SCRIPT_DIR/dispatch-merge-main" "$WT"

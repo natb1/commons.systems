@@ -70,13 +70,16 @@ STUB
 STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
 RESP_FILE=""
 HAS_DATA=false
-# Parse args to detect -d (POST) vs GET, and find -o target
+# Parse args: detect -d (POST) vs GET, find -o target, log request URLs.
+# Value-taking flags skip their value so it can't be mistaken for a URL.
 ARGS=("$@")
 for ((i=0; i<${#ARGS[@]}; i++)); do
   case "${ARGS[$i]}" in
     -d) HAS_DATA=true; echo "${ARGS[$((i+1))]}" > "$STUB_DIR/curl-body.json"; i=$((i+1)) ;;
     -o) RESP_FILE="${ARGS[$((i+1))]}"; i=$((i+1)) ;;
+    -w) i=$((i+1)) ;;
     --config) i=$((i+1)) ;;
+    https://*) echo "${ARGS[$i]}" >> "$STUB_DIR/curl-urls.log" ;;
   esac
 done
 
@@ -97,6 +100,12 @@ else
     BODY='{"error":{"code":404,"message":"NOT_FOUND"}}'
     if [ -n "$RESP_FILE" ]; then echo "$BODY" > "$RESP_FILE"; else echo "$BODY"; fi
     echo "404"
+  elif [ -f "$STUB_DIR/curl-group-padded" ]; then
+    # Members carry leading/trailing whitespace and mixed case to exercise the
+    # GCS member_emails trim+lowercase path.
+    BODY='{"name":"projects/commons-systems/databases/(default)/documents/print/prod/groups/test-group","fields":{"name":{"stringValue":"test-group"},"members":{"arrayValue":{"values":[{"stringValue":" alice@example.com "},{"stringValue":" BOB@EXAMPLE.COM "}]}}}}'
+    if [ -n "$RESP_FILE" ]; then echo "$BODY" > "$RESP_FILE"; else echo "$BODY"; fi
+    echo "200"
   else
     BODY='{"name":"projects/commons-systems/databases/(default)/documents/print/prod/groups/test-group","fields":{"name":{"stringValue":"test-group"},"members":{"arrayValue":{"values":[{"stringValue":"alice@example.com"},{"stringValue":"bob@example.com"}]}}}}'
     if [ -n "$RESP_FILE" ]; then echo "$BODY" > "$RESP_FILE"; else echo "$BODY"; fi
@@ -198,8 +207,8 @@ echo "Test 4: public upload -> correct GCS metadata and Firestore body"
 setup
 output=$(bash "$UPLOAD_SCRIPT" "$TMPDIR_TEST/stub/test-file.cbz" "My Title" "image-archive" --public 2>&1)
 headers=$(cat "$TMPDIR_TEST/stub/meta-headers.log")
-assert_contains "GCS has publicDomain:true" "x-goog-meta-publicDomain:true" "$headers"
-assert_not_contains "GCS has no groupId" "groupId" "$headers"
+assert_contains "GCS has publicDomain:true" "x-goog-meta-publicdomain:true" "$headers"
+assert_not_contains "GCS has no groupId" "groupid" "$headers"
 curl_body=$(cat "$TMPDIR_TEST/stub/curl-body.json")
 assert_contains "Firestore publicDomain is true" '"booleanValue": true' "$curl_body"
 assert_contains "Firestore memberEmails is empty array" '"values": []' "$curl_body"
@@ -212,8 +221,8 @@ echo "Test 5: --group -> resolves members and sets groupId"
 setup
 output=$(bash "$UPLOAD_SCRIPT" "$TMPDIR_TEST/stub/test-file.cbz" "Private Item" "epub" --group test-group 2>&1)
 headers=$(cat "$TMPDIR_TEST/stub/meta-headers.log")
-assert_contains "GCS has publicDomain:false" "x-goog-meta-publicDomain:false" "$headers"
-assert_contains "GCS has groupId" "x-goog-meta-groupId:test-group" "$headers"
+assert_contains "GCS has publicDomain:false" "x-goog-meta-publicdomain:false" "$headers"
+assert_contains "GCS has groupId" "x-goog-meta-groupid:test-group" "$headers"
 curl_body=$(cat "$TMPDIR_TEST/stub/curl-body.json")
 assert_contains "Firestore publicDomain is false" '"booleanValue": false' "$curl_body"
 assert_contains "Firestore has alice email" '"stringValue": "alice@example.com"' "$curl_body"
@@ -279,6 +288,32 @@ stderr=$(bash "$UPLOAD_SCRIPT" "$TMPDIR_TEST/stub/test-file.cbz" "Title" "epub" 
 assert_eq "exits 1" "1" "$exit_code"
 assert_contains "stderr mentions HTTP code" "HTTP 403" "$stderr"
 assert_contains "stderr mentions cleanup" "gsutil rm" "$stderr"
+teardown
+
+echo "Test 13: --group with slash -> group ID is percent-encoded in Firestore URL"
+setup
+output=$(bash "$UPLOAD_SCRIPT" "$TMPDIR_TEST/stub/test-file.cbz" "Private Item" "epub" --group 'has/slash' 2>&1)
+curl_urls=$(cat "$TMPDIR_TEST/stub/curl-urls.log")
+assert_contains "URL contains percent-encoded group ID" "groups/has%2Fslash" "$curl_urls"
+assert_not_contains "URL does not contain raw slash in group ID" "groups/has/slash" "$curl_urls"
+teardown
+
+echo "Test 14: --group with slash, lookup fails -> error quotes the raw group ID"
+setup
+touch "$TMPDIR_TEST/stub/curl-group-fail"
+exit_code=0
+stderr=$(bash "$UPLOAD_SCRIPT" "$TMPDIR_TEST/stub/test-file.cbz" "Title" "pdf" --group 'has/slash' 2>&1) || exit_code=$?
+assert_eq "exits 1" "1" "$exit_code"
+assert_contains "error quotes original unencoded group ID" "group 'has/slash'" "$stderr"
+teardown
+
+echo "Test 15: --group with whitespace-padded members -> GCS member_emails trimmed and lowercased"
+setup
+touch "$TMPDIR_TEST/stub/curl-group-padded"
+output=$(bash "$UPLOAD_SCRIPT" "$TMPDIR_TEST/stub/test-file.cbz" "Private Item" "epub" --group test-group 2>&1)
+headers=$(cat "$TMPDIR_TEST/stub/meta-headers.log")
+assert_contains "GCS member_emails trimmed and lowercased" "x-goog-meta-member_emails:alice@example.com,bob@example.com" "$headers"
+assert_not_contains "GCS member_emails has no spaces" "member_emails: " "$headers"
 teardown
 
 echo ""

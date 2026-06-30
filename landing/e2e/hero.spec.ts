@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@commons-systems/config/playwright-test";
 
 test.describe("hero band", () => {
   test("H1 and tagline render above the fold", async ({ page }) => {
@@ -65,8 +65,8 @@ test.describe("hero band", () => {
     await page.goto("/");
 
     await expect(page.locator(".landing-hero-band")).toContainText(
-      "Build with commons.systems. Run without.",
+      "Build with commons.systems. Learn to run without.",
     );
-    await expect(page.locator("a.app-card")).toHaveCount(3);
+    await expect(page.locator("a.project-card")).toHaveCount(4);
   });
 });

@@ -9,17 +9,19 @@ import type { GroupId } from "@commons-systems/authutil/groups";
 import type { Brand } from "@commons-systems/firestoreutil/brand";
 import {
   optionalString,
+  parseISOTimestamp,
   requireMs,
   requireNumber,
   requireSeedNumber,
   requireSeedString,
   requireString,
   requireTimestamp,
+  requireUploadFiniteNumber,
+  requireUploadId,
+  requireUploadString,
 } from "./_helpers.js";
 import type { StatementItemSeedData } from "../../seeds/firestore.js";
 import type { StatementId } from "./statement.js";
-
-// No upload/Raw shape — upload pipeline doesn't ingest these yet.
 
 export type StatementItemId = Brand<"StatementItemId">;
 
@@ -59,6 +61,21 @@ export interface IdbStatementItem {
   fitid: string;
 }
 
+// ── Raw upload interface ──────────────────────────────────────────────────────
+
+export interface RawStatementItem {
+  id: string;
+  statementItemId: string;
+  statementId: string;
+  institution: string;
+  account: string;
+  period: string;
+  amount: number;
+  timestamp: string;
+  description: string;
+  fitid: string;
+}
+
 // ── Seed data type alias ──────────────────────────────────────────────────────
 export type { StatementItemSeedData };
 
@@ -79,6 +96,11 @@ export interface SeedStatementItem {
 
 // ── Firestore → StatementItem ─────────────────────────────────────────────────
 
+/**
+ * @public knip baseline (#2066): residual unused export, not deleted per the
+ * no-bulk-delete line — part of the symmetric per-entity parseFirestore* set.
+ * Deletion candidate; see PR notes.
+ */
 export function parseFirestoreStatementItem(docSnap: QueryDocumentSnapshot<DocumentData, DocumentData>): StatementItem {
   const data = docSnap.data();
   return {
@@ -114,9 +136,44 @@ export function idbToStatementItem(row: IdbStatementItem): StatementItem {
   };
 }
 
+// ── Raw upload → StatementItem ────────────────────────────────────────────────
+
+export function parseRawStatementItem(raw: RawStatementItem, i: number): StatementItem {
+  return {
+    id: requireUploadId(raw.id, "statementItem", i),
+    statementItemId: requireUploadId(raw.statementItemId, "statementItem", i, "statementItemId") as StatementItemId,
+    statementId: requireUploadId(raw.statementId, "statementItem", i, "statementId") as StatementId,
+    institution: requireUploadString(raw.institution, "statementItem", i, "institution"),
+    account: requireUploadString(raw.account, "statementItem", i, "account"),
+    period: requireUploadString(raw.period, "statementItem", i, "period"),
+    amount: requireUploadFiniteNumber(raw.amount, "statementItem", i, "amount"),
+    timestamp: parseISOTimestamp(raw.timestamp, `statementItem[${i}].timestamp`),
+    description: requireUploadString(raw.description, "statementItem", i, "description"),
+    fitid: requireUploadString(raw.fitid, "statementItem", i, "fitid"),
+    groupId: null as GroupId | null,
+  };
+}
+
+// ── StatementItem → IdbStatementItem ─────────────────────────────────────────
+
+export function statementItemToIdbRecord(s: StatementItem): IdbStatementItem {
+  return {
+    id: s.id,
+    statementItemId: s.statementItemId,
+    statementId: s.statementId,
+    institution: s.institution,
+    account: s.account,
+    period: s.period,
+    amount: s.amount,
+    timestampMs: s.timestamp.toMillis(),
+    description: s.description,
+    fitid: s.fitid,
+  };
+}
+
 // ── IdbStatementItem → export JSON ────────────────────────────────────────────
 
-export function statementItemToRawJson(i: IdbStatementItem): object {
+export function statementItemToRawJson(i: IdbStatementItem): RawStatementItem {
   return {
     id: i.id,
     statementItemId: i.statementItemId,

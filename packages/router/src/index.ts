@@ -1,0 +1,159 @@
+import { deferProgrammerError } from "@commons-systems/errorutil/defer";
+import { logError } from "@commons-systems/errorutil/log";
+import { isModifiedEvent, resolveInternalHref } from "./navigation";
+
+export interface Route {
+  /**
+   * Path to match. A string matches by exact equality; a RegExp matches via
+   * `.test(path)`. The router resets the RegExp's `lastIndex` to 0 before each
+   * match, so a `g`- or `y`-flagged pattern is matched correctly regardless of
+   * call frequency. Those flags are unnecessary here — `lastIndex` is reset
+   * before every call — but they are safe. Note that `.test(path)` returns
+   * `true` if the pattern matches anywhere in the path, not just the whole
+   * string; users who want exact-boundary matching should anchor their
+   * patterns with `^` and `$`.
+   */
+  readonly path: `/${string}` | RegExp;
+  /**
+   * Return HTML to replace the outlet contents, or `null` to preserve
+   * existing DOM content (e.g., pre-rendered markup that only needs event
+   * binding via afterRender).
+   */
+  readonly render: (path: string) => string | null | Promise<string | null>;
+  /** See ./hydrate.ts for pattern selection guide (one-shot, observer-driven, async+staleness). */
+  readonly afterRender?: (outlet: HTMLElement, path: string) => void;
+}
+
+export interface RouterOptions {
+  /** Called with the parsed path and query params at the start of each navigation, before route matching. Exceptions do not prevent the route from rendering. Programmer errors are deferred as uncaught errors; other exceptions are caught and reported via `logError`. */
+  onNavigate?: (nav: { path: string; params: URLSearchParams }) => void;
+  /** Map an error to a user-facing message. Return undefined to use "Something went wrong. Please try again." */
+  formatError?: (error: unknown) => string | undefined;
+}
+
+export interface Router {
+  navigate(): void;
+  destroy(): void;
+  showTerminalError(html: string): void;
+}
+
+function matchRoute(routes: [Route, ...Route[]], path: string): Route | undefined {
+  return routes.find((r) => {
+    if (typeof r.path === "string") return r.path === path;
+    r.path.lastIndex = 0;
+    return r.path.test(path);
+  });
+}
+
+/**
+ * Core navigation logic. Returns navigate, setDestroyed, and isDestroyed so
+ * callers can wire up their own event listeners while reusing the rendering /
+ * error-handling pipeline.
+ */
+function createNavigator(
+  outlet: HTMLElement,
+  routes: [Route, ...Route[]],
+  resolvePath: () => { path: string; params: URLSearchParams },
+  options?: RouterOptions,
+): { navigate: () => Promise<void>; setDestroyed: () => void; isDestroyed: () => boolean } {
+  let navigationId = 0;
+  let destroyed = false;
+
+  async function navigate(): Promise<void> {
+    if (destroyed) return;
+    const id = ++navigationId;
+    const { path, params } = resolvePath();
+    try {
+      options?.onNavigate?.({ path, params });
+    } catch (e) {
+      if (!deferProgrammerError(e)) logError(e, { operation: "router-onNavigate" });
+    }
+    const route = matchRoute(routes, path) ?? routes[0];
+    try {
+      const html = await route.render(path);
+      if (id === navigationId) {
+        if (html !== null) outlet.innerHTML = html;
+        try {
+          route.afterRender?.(outlet, path);
+        } catch (afterError) {
+          if (deferProgrammerError(afterError)) return;
+          logError(afterError, { operation: "router-afterRender" });
+          outlet.insertAdjacentHTML(
+            "beforeend",
+            "<p>Some content failed to load. Try refreshing.</p>",
+          );
+        }
+      }
+    } catch (error) {
+      if (!deferProgrammerError(error)) logError(error, { operation: "router-render" });
+      if (id === navigationId) {
+        const message =
+          options?.formatError?.(error) ??
+          "Something went wrong. Please try again.";
+        outlet.innerHTML = `<p>${message}</p>`;
+      }
+    }
+  }
+
+  return {
+    navigate,
+    setDestroyed: () => { destroyed = true; },
+    isDestroyed: () => destroyed,
+  };
+}
+
+export function parsePath(): { path: string; params: URLSearchParams } {
+  return {
+    // Strip trailing slash so "/post/slug/" matches route "/post/:slug"
+    path: location.pathname.replace(/\/$/, "") || "/",
+    params: new URLSearchParams(location.search),
+  };
+}
+
+/**
+ * @param routes - Ordered route list. The first route serves as fallback when no path matches.
+ */
+export function createHistoryRouter(
+  outlet: HTMLElement,
+  routes: [Route, ...Route[]],
+  options?: RouterOptions,
+): Router {
+  const nav = createNavigator(outlet, routes, parsePath, options);
+
+  const onPopState = () => void nav.navigate();
+  window.addEventListener("popstate", onPopState);
+
+  const onClick = (e: MouseEvent) => {
+    if (nav.isDestroyed()) return;
+    if (isModifiedEvent(e)) return;
+    const anchor = (e.target as Element).closest("a");
+    if (!anchor) return;
+    if (anchor.hasAttribute("download")) return;
+    if (anchor.getAttribute("target")) return;
+    const href = anchor.getAttribute("href");
+    const path = resolveInternalHref(href);
+    if (path === null) return;
+    if (!matchRoute(routes, path)) return;
+    e.preventDefault();
+    history.pushState({}, "", href);
+    void nav.navigate();
+  };
+  document.addEventListener("click", onClick);
+
+  void nav.navigate();
+
+  function teardown(): void {
+    nav.setDestroyed();
+    window.removeEventListener("popstate", onPopState);
+    document.removeEventListener("click", onClick);
+  }
+
+  return {
+    navigate: onPopState,
+    destroy: teardown,
+    showTerminalError(html: string) {
+      teardown();
+      outlet.innerHTML = html;
+    },
+  };
+}

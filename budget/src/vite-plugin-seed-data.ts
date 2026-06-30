@@ -9,6 +9,14 @@ import { serializeSeedStatementItem } from "./entities/statement-item.js";
 import type { StatementItemSeedData } from "./entities/statement-item.js";
 import { serializeSeedReconciliationNote } from "./entities/reconciliation-note.js";
 import type { ReconciliationNoteSeedData } from "./entities/reconciliation-note.js";
+import { serializeSeedAccount } from "./entities/account.js";
+import type { AccountSeedData } from "./entities/account.js";
+import { serializeSeedJournalEntry } from "./entities/journal-entry.js";
+import type { JournalEntrySeedData } from "./entities/journal-entry.js";
+import { serializeSeedJournalLeg } from "./entities/journal-leg.js";
+import type { JournalLegSeedData } from "./entities/journal-leg.js";
+import { serializeSeedReconciliationEvent } from "./entities/reconciliation-event.js";
+import type { ReconciliationEventSeedData } from "./entities/reconciliation-event.js";
 import { serializeSeedBudget } from "./entities/budget.js";
 import type { BudgetSeedData } from "./entities/budget.js";
 import { serializeSeedBudgetPeriod } from "./entities/budget-period.js";
@@ -60,6 +68,22 @@ export function serializeSeedData(): SeedData {
     serializeSeedReconciliationNote(raw as unknown as ReconciliationNoteSeedData, id)
   );
 
+  const accounts = findCollection("seed-accounts").map(({ id, data: raw }) =>
+    serializeSeedAccount(raw as unknown as AccountSeedData, id)
+  );
+
+  const journalEntries = findCollection("seed-journal-entries").map(({ id, data: raw }) =>
+    serializeSeedJournalEntry(raw as unknown as JournalEntrySeedData, id)
+  );
+
+  const journalLegs = findCollection("seed-journal-legs").map(({ id, data: raw }) =>
+    serializeSeedJournalLeg(raw as unknown as JournalLegSeedData, id)
+  );
+
+  const reconciliationEvents = findCollection("seed-reconciliation-events").map(({ id, data: raw }) =>
+    serializeSeedReconciliationEvent(raw as unknown as ReconciliationEventSeedData, id)
+  );
+
   return {
     transactions,
     budgets,
@@ -69,6 +93,10 @@ export function serializeSeedData(): SeedData {
     statements,
     statementItems,
     reconciliationNotes,
+    accounts,
+    journalEntries,
+    journalLegs,
+    reconciliationEvents,
     weeklyAggregates,
   };
 }

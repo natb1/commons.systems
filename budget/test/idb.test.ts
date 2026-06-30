@@ -8,6 +8,9 @@ import {
   deleteRecord,
   clearAll,
   getMeta,
+  putFileHandle,
+  getFileHandle,
+  clearFileHandle,
   closeDb,
 } from "../src/idb";
 import { makeParsedData as makeBaseParsedData } from "./helpers";
@@ -148,5 +151,43 @@ describe("getMeta", () => {
   it("returns undefined when no data stored", async () => {
     const meta = await getMeta();
     expect(meta).toBeUndefined();
+  });
+});
+
+describe("putFileHandle / getFileHandle / clearFileHandle", () => {
+  it("round-trips a stub handle", async () => {
+    const stubHandle = { name: "budget.benc" } as unknown as FileSystemFileHandle;
+    await putFileHandle(stubHandle);
+    const result = await getFileHandle();
+    expect(result?.name).toBe("budget.benc");
+  });
+
+  it("returns undefined after clearFileHandle", async () => {
+    const stubHandle = { name: "budget.benc" } as unknown as FileSystemFileHandle;
+    await putFileHandle(stubHandle);
+    await clearFileHandle();
+    const result = await getFileHandle();
+    expect(result).toBeUndefined();
+  });
+});
+
+describe("storeParsedData preserves fileHandle meta record", () => {
+  it("preserves fileHandle while overwriting upload meta", async () => {
+    const stubHandle = { name: "budget.benc" } as unknown as FileSystemFileHandle;
+    await putFileHandle(stubHandle);
+
+    const data = makeParsedData();
+    await storeParsedData(data);
+
+    const handle = await getFileHandle();
+    expect(handle?.name).toBe("budget.benc");
+
+    const uploadMeta = await getMeta();
+    expect(uploadMeta).toEqual({
+      key: "upload",
+      groupName: "household",
+      version: 1,
+      exportedAt: "2025-06-15T10:30:00Z",
+    });
   });
 });

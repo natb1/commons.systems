@@ -7,6 +7,10 @@ import type {
   ReconciliationNote,
   ReconciliationEntityType,
   ReconciliationClassification,
+  Account,
+  JournalEntry,
+  JournalLeg,
+  ReconciliationEvent,
   Budget,
   BudgetOverride,
   BudgetPeriod,
@@ -19,19 +23,25 @@ import type {
   RuleId,
   NormalizationRuleId,
 } from "./firestore.js";
+import { assertLegStateTransition } from "./firestore.js";
 import seedData from "virtual:budget-seed-data";
 import { getAll, get, put, deleteRecord } from "./idb.js";
-import type { IdbTransaction, IdbStatement, IdbStatementItem, IdbReconciliationNote, IdbBudget, IdbBudgetPeriod, IdbRule, IdbNormalizationRule, IdbWeeklyAggregate } from "./idb.js";
-import { idbToTransaction } from "./entities/transaction.js";
+import type { IdbTransaction, IdbStatement, IdbStatementItem, IdbReconciliationNote, IdbAccount, IdbJournalEntry, IdbJournalLeg, IdbReconciliationEvent, IdbBudget, IdbBudgetPeriod, IdbRule, IdbNormalizationRule, IdbWeeklyAggregate } from "./idb.js";
+import { idbToTransaction, validateReimbursementRange } from "./entities/transaction.js";
 import { idbToStatement } from "./entities/statement.js";
 import { idbToStatementItem } from "./entities/statement-item.js";
 import { idbToReconciliationNote } from "./entities/reconciliation-note.js";
-import { idbToBudget } from "./entities/budget.js";
+import { idbToAccount, accountDocId } from "./entities/account.js";
+import { idbToJournalEntry } from "./entities/journal-entry.js";
+import { idbToJournalLeg } from "./entities/journal-leg.js";
+import { idbToReconciliationEvent } from "./entities/reconciliation-event.js";
+import { idbToBudget, validateBudgetOverrideOrdering } from "./entities/budget.js";
 import { idbToBudgetPeriod } from "./entities/budget-period.js";
 import { idbToRule } from "./entities/rule.js";
 import { idbToNormalizationRule } from "./entities/normalization-rule.js";
 import { idbToWeeklyAggregate } from "./entities/weekly-aggregate.js";
 import { filterByTimestamp } from "./entities/_helpers.js";
+import { scheduleWriteBack } from "./file-sync.js";
 
 export interface TransactionQuery {
   since?: Timestamp;
@@ -45,11 +55,37 @@ export interface ReconciliationNoteFields {
   note: string;
 }
 
+/**
+ * Everything an `IdbReconciliationEvent` record needs except the `legIds` array
+ * (passed separately) and the document `id` (derived from institution + account
+ * + reconciled-through date).
+ */
+export type ReconciliationEventFields = Omit<IdbReconciliationEvent, "id" | "legIds">;
+
+/** Fields for a new journal entry; the document `id` is generated on write. */
+export interface JournalEntryFields {
+  timestampMs: number;
+  description: string;
+  note?: string | null;
+}
+
+/** Fields for a new journal leg; the document `id` is generated on write. */
+export interface JournalLegFields {
+  accountId: string;
+  debit: number;
+  credit: number;
+  cleared: boolean;
+}
+
 export interface DataSource {
   getTransactions(query?: TransactionQuery): Promise<Transaction[]>;
   getStatements(): Promise<Statement[]>;
   getStatementItems(): Promise<StatementItem[]>;
   getReconciliationNotes(): Promise<ReconciliationNote[]>;
+  getAccounts(): Promise<Account[]>;
+  getJournalEntries(): Promise<JournalEntry[]>;
+  getJournalLegs(): Promise<JournalLeg[]>;
+  getReconciliationEvents(): Promise<ReconciliationEvent[]>;
   getBudgets(): Promise<Budget[]>;
   getBudgetPeriods(): Promise<BudgetPeriod[]>;
   getRules(): Promise<Rule[]>;
@@ -62,6 +98,13 @@ export interface DataSource {
   updateTransactionStatementItemLink(id: TransactionId, statementItemId: StatementItemId | null): Promise<void>;
   upsertReconciliationNote(fields: ReconciliationNoteFields): Promise<void>;
   deleteReconciliationNote(entityType: ReconciliationEntityType, entityId: string): Promise<void>;
+  updateJournalLegCleared(legId: string, cleared: boolean): Promise<void>;
+  createReconciliationEvent(fields: ReconciliationEventFields, legIds: string[]): Promise<ReconciliationEvent>;
+  /**
+   * Creates a balanced journal entry with its legs in one operation.
+   * `legIds[i]` in the result corresponds to `legs[i]` (same order).
+   */
+  createJournalEntry(entry: JournalEntryFields, legs: JournalLegFields[]): Promise<{ entryId: string; legIds: string[] }>;
   updateBudget(
     id: BudgetId,
     fields: Partial<Pick<Budget, "name" | "allowance" | "allowancePeriod" | "rollover">>,
@@ -98,6 +141,18 @@ export class SeedDataSource implements DataSource {
   async getReconciliationNotes(): Promise<ReconciliationNote[]> {
     return seedData.reconciliationNotes.map(idbToReconciliationNote);
   }
+  async getAccounts(): Promise<Account[]> {
+    return seedData.accounts.map(idbToAccount);
+  }
+  async getJournalEntries(): Promise<JournalEntry[]> {
+    return seedData.journalEntries.map(idbToJournalEntry);
+  }
+  async getJournalLegs(): Promise<JournalLeg[]> {
+    return seedData.journalLegs.map(idbToJournalLeg);
+  }
+  async getReconciliationEvents(): Promise<ReconciliationEvent[]> {
+    return seedData.reconciliationEvents.map(idbToReconciliationEvent);
+  }
   async getBudgets(): Promise<Budget[]> {
     return seedData.budgets.map(idbToBudget);
   }
@@ -123,6 +178,15 @@ export class SeedDataSource implements DataSource {
     throw new Error("Seed data is read-only");
   }
   async deleteReconciliationNote(): Promise<void> {
+    throw new Error("Seed data is read-only");
+  }
+  async updateJournalLegCleared(): Promise<void> {
+    throw new Error("Seed data is read-only");
+  }
+  async createReconciliationEvent(): Promise<ReconciliationEvent> {
+    throw new Error("Seed data is read-only");
+  }
+  async createJournalEntry(): Promise<{ entryId: string; legIds: string[] }> {
     throw new Error("Seed data is read-only");
   }
   async updateBudget(): Promise<void> {
@@ -188,6 +252,26 @@ export class IdbDataSource implements DataSource {
     return rows.map(idbToReconciliationNote);
   }
 
+  async getAccounts(): Promise<Account[]> {
+    const rows = await getAll<IdbAccount>("accounts");
+    return rows.map(idbToAccount);
+  }
+
+  async getJournalEntries(): Promise<JournalEntry[]> {
+    const rows = await getAll<IdbJournalEntry>("journalEntries");
+    return rows.map(idbToJournalEntry);
+  }
+
+  async getJournalLegs(): Promise<JournalLeg[]> {
+    const rows = await getAll<IdbJournalLeg>("journalLegs");
+    return rows.map(idbToJournalLeg);
+  }
+
+  async getReconciliationEvents(): Promise<ReconciliationEvent[]> {
+    const rows = await getAll<IdbReconciliationEvent>("reconciliationEvents");
+    return rows.map(idbToReconciliationEvent);
+  }
+
   async getBudgets(): Promise<Budget[]> {
     const rows = await getAll<IdbBudget>("budgets");
     return rows.map(idbToBudget);
@@ -217,6 +301,9 @@ export class IdbDataSource implements DataSource {
     id: TransactionId,
     fields: Partial<Pick<Transaction, "note" | "category" | "reimbursement" | "budget" | "normalizedId" | "normalizedPrimary" | "normalizedDescription">>,
   ): Promise<void> {
+    if (fields.reimbursement !== undefined) {
+      validateReimbursementRange(fields.reimbursement);
+    }
     await updateRecord<IdbTransaction>("transactions", id, "Transaction", fields);
   }
 
@@ -251,6 +338,77 @@ export class IdbDataSource implements DataSource {
     await deleteRecord("reconciliationNotes", id);
   }
 
+  async updateJournalLegCleared(legId: string, cleared: boolean): Promise<void> {
+    const row = await get<IdbJournalLeg>("journalLegs", legId);
+    if (!row) throw new Error(`Journal leg ${legId} not found`);
+    // assertLegStateTransition reads the domain shape; only cleared/reconciledAt matter.
+    assertLegStateTransition(
+      { cleared: row.cleared, reconciledAt: row.reconciledAtMs == null ? null : Timestamp.fromMillis(row.reconciledAtMs) },
+      cleared,
+    );
+    await put("journalLegs", { ...row, cleared } as unknown as Record<string, unknown>);
+  }
+
+  async createReconciliationEvent(
+    fields: ReconciliationEventFields,
+    legIds: string[],
+  ): Promise<ReconciliationEvent> {
+    const reconciledThrough = new Date(fields.reconciledThroughDateMs).toISOString().slice(0, 10);
+    const id = `${accountDocId(fields.institution, fields.account)}_${reconciledThrough}`;
+    const record: IdbReconciliationEvent = { id, ...fields, legIds: [...legIds] };
+    await put("reconciliationEvents", record as unknown as Record<string, unknown>);
+    // Stamp each cleared leg as reconciled by this event.
+    await Promise.all(
+      legIds.map((legId) =>
+        updateRecord<IdbJournalLeg>("journalLegs", legId, "Journal leg", {
+          reconciledAtMs: fields.reconciledAtMs,
+          reconciledEventId: id,
+        }),
+      ),
+    );
+    return idbToReconciliationEvent(record);
+  }
+
+  async createJournalEntry(
+    entry: JournalEntryFields,
+    legs: JournalLegFields[],
+  ): Promise<{ entryId: string; legIds: string[] }> {
+    if (legs.length < 2) throw new Error("A journal entry requires at least 2 legs");
+    const totalDebit = legs.reduce((s, l) => s + l.debit, 0);
+    const totalCredit = legs.reduce((s, l) => s + l.credit, 0);
+    if (Math.abs(totalDebit - totalCredit) > 0.005) {
+      throw new Error(`Unbalanced journal entry: debits ${totalDebit} != credits ${totalCredit}`);
+    }
+    const entryId = crypto.randomUUID();
+    const entryRecord: IdbJournalEntry = {
+      id: entryId,
+      timestampMs: entry.timestampMs,
+      description: entry.description,
+      note: entry.note ?? null,
+      legCount: legs.length,
+    };
+    await put("journalEntries", entryRecord as unknown as Record<string, unknown>);
+    const legIds: string[] = [];
+    for (const leg of legs) {
+      const legId = crypto.randomUUID();
+      legIds.push(legId);
+      const legRecord: IdbJournalLeg = {
+        id: legId,
+        entryId,
+        accountId: leg.accountId,
+        debit: leg.debit,
+        credit: leg.credit,
+        timestampMs: entry.timestampMs,
+        cleared: leg.cleared,
+        reconciledAtMs: null,
+        reconciledEventId: null,
+        statementItemId: null,
+      };
+      await put("journalLegs", legRecord as unknown as Record<string, unknown>);
+    }
+    return { entryId, legIds };
+  }
+
   async updateBudget(
     id: BudgetId,
     fields: Partial<Pick<Budget, "name" | "allowance" | "allowancePeriod" | "rollover">>,
@@ -259,6 +417,7 @@ export class IdbDataSource implements DataSource {
   }
 
   async updateBudgetOverrides(id: BudgetId, overrides: BudgetOverride[]): Promise<void> {
+    validateBudgetOverrideOrdering(overrides);
     const row = await get<IdbBudget>("budgets", id);
     if (!row) throw new Error(`Budget ${id} not found`);
     await put("budgets", {
@@ -330,5 +489,165 @@ export class IdbDataSource implements DataSource {
 
   async deleteNormalizationRule(id: NormalizationRuleId): Promise<void> {
     await deleteRecord("normalizationRules", id);
+  }
+}
+
+/**
+ * DataSource decorator that mirrors every mutation back to the on-disk `.benc`
+ * via a debounced encrypted write (see file-sync.ts). Reads delegate straight
+ * through. `scheduleWriteBack()` is a no-op until `configureFileSync` arms a
+ * handle, so this decorator is harmless to wrap around seed / upload sessions.
+ */
+export class FileSyncingDataSource implements DataSource {
+  constructor(private readonly inner: DataSource) {}
+
+  // Reads: delegate straight through.
+  getTransactions(query?: TransactionQuery): Promise<Transaction[]> {
+    return this.inner.getTransactions(query);
+  }
+  getStatements(): Promise<Statement[]> {
+    return this.inner.getStatements();
+  }
+  getStatementItems(): Promise<StatementItem[]> {
+    return this.inner.getStatementItems();
+  }
+  getReconciliationNotes(): Promise<ReconciliationNote[]> {
+    return this.inner.getReconciliationNotes();
+  }
+  getAccounts(): Promise<Account[]> {
+    return this.inner.getAccounts();
+  }
+  getJournalEntries(): Promise<JournalEntry[]> {
+    return this.inner.getJournalEntries();
+  }
+  getJournalLegs(): Promise<JournalLeg[]> {
+    return this.inner.getJournalLegs();
+  }
+  getReconciliationEvents(): Promise<ReconciliationEvent[]> {
+    return this.inner.getReconciliationEvents();
+  }
+  getBudgets(): Promise<Budget[]> {
+    return this.inner.getBudgets();
+  }
+  getBudgetPeriods(): Promise<BudgetPeriod[]> {
+    return this.inner.getBudgetPeriods();
+  }
+  getRules(): Promise<Rule[]> {
+    return this.inner.getRules();
+  }
+  getNormalizationRules(): Promise<NormalizationRule[]> {
+    return this.inner.getNormalizationRules();
+  }
+  getWeeklyAggregates(): Promise<WeeklyAggregate[]> {
+    return this.inner.getWeeklyAggregates();
+  }
+
+  // Mutations: delegate, then arm a debounced write-back, then return the result.
+  async updateTransaction(
+    id: TransactionId,
+    fields: Partial<Pick<Transaction, "note" | "category" | "reimbursement" | "budget" | "normalizedId" | "normalizedPrimary" | "normalizedDescription">>,
+  ): Promise<void> {
+    await this.inner.updateTransaction(id, fields);
+    scheduleWriteBack();
+  }
+
+  async updateTransactionStatementItemLink(
+    id: TransactionId,
+    statementItemId: StatementItemId | null,
+  ): Promise<void> {
+    await this.inner.updateTransactionStatementItemLink(id, statementItemId);
+    scheduleWriteBack();
+  }
+
+  async upsertReconciliationNote(fields: ReconciliationNoteFields): Promise<void> {
+    await this.inner.upsertReconciliationNote(fields);
+    scheduleWriteBack();
+  }
+
+  async deleteReconciliationNote(
+    entityType: ReconciliationEntityType,
+    entityId: string,
+  ): Promise<void> {
+    await this.inner.deleteReconciliationNote(entityType, entityId);
+    scheduleWriteBack();
+  }
+
+  async updateJournalLegCleared(legId: string, cleared: boolean): Promise<void> {
+    await this.inner.updateJournalLegCleared(legId, cleared);
+    scheduleWriteBack();
+  }
+
+  async createReconciliationEvent(
+    fields: ReconciliationEventFields,
+    legIds: string[],
+  ): Promise<ReconciliationEvent> {
+    const result = await this.inner.createReconciliationEvent(fields, legIds);
+    scheduleWriteBack();
+    return result;
+  }
+
+  async createJournalEntry(
+    entry: JournalEntryFields,
+    legs: JournalLegFields[],
+  ): Promise<{ entryId: string; legIds: string[] }> {
+    const result = await this.inner.createJournalEntry(entry, legs);
+    scheduleWriteBack();
+    return result;
+  }
+
+  async updateBudget(
+    id: BudgetId,
+    fields: Partial<Pick<Budget, "name" | "allowance" | "allowancePeriod" | "rollover">>,
+  ): Promise<void> {
+    await this.inner.updateBudget(id, fields);
+    scheduleWriteBack();
+  }
+
+  async updateBudgetOverrides(id: BudgetId, overrides: BudgetOverride[]): Promise<void> {
+    await this.inner.updateBudgetOverrides(id, overrides);
+    scheduleWriteBack();
+  }
+
+  async adjustBudgetPeriodTotal(id: BudgetPeriodId, delta: number): Promise<void> {
+    await this.inner.adjustBudgetPeriodTotal(id, delta);
+    scheduleWriteBack();
+  }
+
+  async createRule(fields: Omit<Rule, "id" | "groupId">): Promise<RuleId> {
+    const result = await this.inner.createRule(fields);
+    scheduleWriteBack();
+    return result;
+  }
+
+  async updateRule(
+    id: RuleId,
+    fields: Partial<Pick<Rule, "pattern" | "target" | "priority" | "type" | "institution" | "account" | "minAmount" | "maxAmount" | "excludeCategory" | "matchCategory">>,
+  ): Promise<void> {
+    await this.inner.updateRule(id, fields);
+    scheduleWriteBack();
+  }
+
+  async deleteRule(id: RuleId): Promise<void> {
+    await this.inner.deleteRule(id);
+    scheduleWriteBack();
+  }
+
+  async createNormalizationRule(fields: Omit<NormalizationRule, "id" | "groupId">): Promise<NormalizationRuleId> {
+    const result = await this.inner.createNormalizationRule(fields);
+    scheduleWriteBack();
+    return result;
+  }
+
+  async updateNormalizationRule(
+    id: NormalizationRuleId,
+    fields: Partial<Pick<NormalizationRule, "pattern" | "patternType" | "canonicalDescription" | "dateWindowDays" | "priority" | "institution" | "account">>,
+  ): Promise<void> {
+    await this.inner.updateNormalizationRule(id, fields);
+    scheduleWriteBack();
+  }
+
+  async deleteNormalizationRule(id: NormalizationRuleId): Promise<void> {
+    await this.inner.deleteNormalizationRule(id);
+    scheduleWriteBack();
   }
 }

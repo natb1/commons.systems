@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@commons-systems/config/playwright-test";
 
 test.describe("navigation", () => {
   test("page loads without JS errors @smoke", async ({ page }) => {
@@ -24,7 +24,7 @@ test.describe("navigation", () => {
   test("HTML shell structure @smoke", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator("header h1")).toHaveText("Budget");
-    await expect(page.locator("app-nav")).toBeVisible();
+    await expect(page.locator("nav.cs-nav")).toBeVisible();
     await expect(page.locator("main")).toBeVisible();
     await expect(page.locator("footer")).toBeVisible();
   });
@@ -37,14 +37,14 @@ test.describe("navigation", () => {
   test("clicking transactions nav link shows Transactions heading @smoke", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator("main > h2", { hasText: "Budgets" })).toBeVisible({ timeout: 10000 });
-    await page.click('app-nav a[href="/transactions"]');
+    await page.click('nav.cs-nav a[href="/transactions"]');
     await expect(page.locator("main > h2")).toHaveText("Transactions");
   });
 
   test("clicking budgets nav link returns to Budgets heading", async ({ page }) => {
     await page.goto("/transactions");
     await expect(page.locator("main > h2")).toHaveText("Transactions");
-    await page.click('app-nav a[href="/"]');
+    await page.click('nav.cs-nav a[href="/"]');
     await expect(page.locator("main > h2", { hasText: "Budgets" })).toBeVisible();
   });
 
@@ -56,7 +56,7 @@ test.describe("navigation", () => {
   test("clicking accounts nav link shows Accounts heading @smoke", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator("main > h2", { hasText: "Budgets" })).toBeVisible({ timeout: 10000 });
-    await page.click('app-nav a[href="/accounts"]');
+    await page.click('nav.cs-nav a[href="/accounts"]');
     await expect(page.locator("main > h2")).toHaveText("Accounts");
   });
 

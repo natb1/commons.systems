@@ -107,6 +107,10 @@ export function makeParsedData(overrides: Partial<ParsedData> = {}): ParsedData 
     statements: [],
     statementItems: [],
     reconciliationNotes: [],
+    accounts: [],
+    journalEntries: [],
+    journalLegs: [],
+    reconciliationEvents: [],
     weeklyAggregates: [],
     meta: {
       key: "upload",
@@ -124,6 +128,10 @@ export function createMockDataSource(overrides: Partial<DataSource> = {}): DataS
     getStatements: vi.fn().mockResolvedValue([]),
     getStatementItems: vi.fn().mockResolvedValue([]),
     getReconciliationNotes: vi.fn().mockResolvedValue([]),
+    getAccounts: vi.fn().mockResolvedValue([]),
+    getJournalEntries: vi.fn().mockResolvedValue([]),
+    getJournalLegs: vi.fn().mockResolvedValue([]),
+    getReconciliationEvents: vi.fn().mockResolvedValue([]),
     getBudgets: vi.fn().mockResolvedValue([]),
     getBudgetPeriods: vi.fn().mockResolvedValue([]),
     getRules: vi.fn().mockResolvedValue([]),
@@ -133,6 +141,9 @@ export function createMockDataSource(overrides: Partial<DataSource> = {}): DataS
     updateTransactionStatementItemLink: vi.fn(),
     upsertReconciliationNote: vi.fn(),
     deleteReconciliationNote: vi.fn(),
+    updateJournalLegCleared: vi.fn(),
+    createReconciliationEvent: vi.fn(),
+    createJournalEntry: vi.fn(),
     updateBudget: vi.fn(),
     updateBudgetOverrides: vi.fn(),
     adjustBudgetPeriodTotal: vi.fn(),
@@ -146,9 +157,25 @@ export function createMockDataSource(overrides: Partial<DataSource> = {}): DataS
   };
 }
 
+/** Chart series token values, mirroring packages/ds/tokens/colors.css (budget Sankey order). */
+export const CHART_TOKENS: Readonly<Record<string, string>> = {
+  "--chart-1": "#4d6f8f",
+  "--chart-2": "#c98a3c",
+  "--chart-3": "#a35d5d",
+  "--chart-4": "#7a8c5a",
+  "--chart-5": "#b08a4f",
+  "--chart-6": "#5f8a8a",
+};
+
 export function makeContainer(): HTMLElement {
   const container = document.createElement("div");
   container.style.setProperty("--fg", "#e0e0e0");
+  container.style.setProperty("--accent", "#e8943a");
+  container.style.setProperty("--favorable", "#4caf50");
+  container.style.setProperty("--unfavorable", "#e45858");
+  for (const [name, value] of Object.entries(CHART_TOKENS)) {
+    container.style.setProperty(name, value);
+  }
   document.body.appendChild(container);
   Object.defineProperty(container, "clientWidth", { value: 640 });
   return container;

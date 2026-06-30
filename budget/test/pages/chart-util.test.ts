@@ -1,7 +1,22 @@
 import { describe, it, expect } from "vitest";
-import { computePanelWidth, filterToWindow } from "../../src/pages/chart-util";
+import { chartSeriesColor, computePanelWidth, filterToWindow } from "../../src/pages/chart-util";
+import { makeContainer, CHART_TOKENS } from "../helpers";
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+describe("chartSeriesColor", () => {
+  it("resolves the --chart-N token for the given index", () => {
+    const container = makeContainer();
+    expect(chartSeriesColor(container, 0)).toBe(CHART_TOKENS["--chart-1"]);
+    expect(chartSeriesColor(container, 5)).toBe(CHART_TOKENS["--chart-6"]);
+  });
+
+  it("cycles back to --chart-1 after six series", () => {
+    const container = makeContainer();
+    expect(chartSeriesColor(container, 6)).toBe(CHART_TOKENS["--chart-1"]);
+    expect(chartSeriesColor(container, 7)).toBe(CHART_TOKENS["--chart-2"]);
+  });
+});
 
 describe("computePanelWidth", () => {
   it("returns budgetCount * 30 + 30 for typical counts", () => {

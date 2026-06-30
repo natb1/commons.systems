@@ -13,7 +13,7 @@
     profileExtra = lib.optionalString pkgs.stdenv.isDarwin ''
       eval "$(/opt/homebrew/bin/brew shellenv)"
     '';
-    initExtra = ''
+    initContent = lib.mkOrder 1000 ''
       __wezterm_set_git_branch() {
         local branch
         branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)

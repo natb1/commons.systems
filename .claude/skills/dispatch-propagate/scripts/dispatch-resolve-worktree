@@ -1,0 +1,196 @@
+#!/usr/bin/env bash
+# Resolve the worktree action for a dispatch target issue.
+# Usage: dispatch-resolve-worktree <issue-num> <explicit|queue>
+#
+# Prints exactly one decision line to stdout:
+#   enter <path>    — an existing <issue>-* worktree exists; the caller
+#                     uses <path>.
+#   create <branch> — no <issue>-* worktree exists; the caller materializes
+#                     <branch> and uses its path.
+#   create-existing <branch>
+#                   — no <issue>-* worktree exists, but the target has an open
+#                     PR (hence an existing branch); the caller materializes its
+#                     existing PR-head <branch> rather than branching a fresh
+#                     <issue>-<slug> from origin/main (#943).
+#   conflict <path> — an existing <issue>-* worktree is owned by another live
+#                     Claude session; /dispatch-propagate reports <path> and stops.
+#
+# The liveness check is mode-independent (#837): in both modes an existing
+# <issue>-* worktree yields `conflict` only when a live Claude session owns it,
+# and otherwise falls through to the `enter` path. Liveness is checked via
+# worktree_has_live_session (lib-claude-agents.sh), which is fail-safe: an
+# unqueryable daemon counts as owned and yields `conflict`.
+#   explicit — the target was named by an explicit /dispatch-propagate argument
+#              (recycle-after-completion). A sessionless worktree yields `enter`;
+#              the check stops the recycle path from firing into a worktree
+#              whose previous worker is still live.
+#   queue    — the target was queue-selected. A sessionless (orphan) worktree
+#              yields `enter` so the queue target recycles it instead of
+#              stalling the tick (#905); a live-owned one is a genuine race
+#              (dispatch-select-target's upstream filter is the primary gate).
+#
+# Branch reconciliation on the `enter` path (#913): a reused <issue>-* worktree
+# is matched by branch-name prefix, but the target's PR (resolved by
+# dispatch-find-pr via GitHub closing-linkage) may live on a different
+# <issue>-* branch. Before entering, the worktree's checked-out branch is
+# reconciled against the PR head branch:
+#   - no PR for <issue> (the implement phase) → enter unchanged.
+#   - worktree already on the PR head branch → enter unchanged (no checkout).
+#   - worktree on a different branch with no commits unique to it → the
+#     worktree is re-pointed to the PR head branch (lossless), then `enter`.
+#   - worktree on a different branch carrying unique commits → `conflict`,
+#     rather than silently discarding them.
+#
+# The `create` path checks dispatch-find-pr first (#943) — the create-path
+# sibling of #913's enter-path reconciliation: a target with an open PR but no
+# worktree yields `create-existing <pr-head>` instead of a fresh slug branch.
+#
+# The branch name printed by `create` matches the WorktreeCreate hook's
+# accepted form ^[0-9]+-[a-z0-9]+(-[a-z0-9]+)*$, full name <= 32 characters.
+#
+# A bad argument or a failed `gh issue view` is a clear error, not a fallback.
+#
+# This script is issue-keyed. A PR number passed as `<issue-num>` is rejected up
+# front (#926): the REST issues endpoint serves PRs too, and a PR's JSON carries
+# a "pull_request" key (the same discriminator dispatch-resolve-arg uses). Caller
+# must pass the PR's closing-issue number, not the PR number — otherwise the
+# create path would fabricate a stray <pr-num>-* worktree from origin/main.
+set -euo pipefail
+
+ISSUE="${1:-}"
+MODE="${2:-}"
+
+if [[ ! "$ISSUE" =~ ^[1-9][0-9]*$ ]] || [[ "$MODE" != "explicit" && "$MODE" != "queue" ]]; then
+  echo "error: usage: dispatch-resolve-worktree <issue-num> <explicit|queue>" >&2
+  exit 1
+fi
+
+# Reject a PR number passed as the issue key (#926). The gh call's stderr is
+# suppressed and a gh failure (404 / network) falls through to downstream
+# handling — only a definitive "pull_request" key trips the guard.
+if gh api "repos/{owner}/{repo}/issues/$ISSUE" 2>/dev/null | jq -e 'has("pull_request")' > /dev/null; then
+  echo "error: #$ISSUE is a PR, not an issue; pass the PR's closing-issue number to dispatch-resolve-worktree" >&2
+  exit 1
+fi
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+# worktree_has_live_session — both modes distinguish a live-session-owned
+# worktree (conflict) from an orphan one (enter / recycle); queue mode added
+# the check (#905), explicit mode made it mode-independent (#837).
+source "$SCRIPT_DIR/lib-claude-agents.sh"
+
+# Resolve and validate a PR's head branch name. Shared by the `enter`-path
+# reconciliation and the `create`-path PR check (#943).
+# A PR was found, so an empty/malformed headRefName is a failed lookup, not a
+# no-op — surfacing it as an error beats silently proceeding. The format guard
+# also blocks option/refspec injection (leading '-', '..') via this
+# GitHub-sourced name before it reaches git fetch/rev-list/checkout.
+resolve_pr_head() {
+  local pr="$1" pr_head
+  pr_head=$(gh_pr_view_rest "$pr" | jq -r '.headRefName // empty')
+  if [[ -z "$pr_head" || "$pr_head" == -* || "$pr_head" == *..* || ! "$pr_head" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+    echo "error: PR #$pr returned an unusable head branch name '$pr_head' for issue $ISSUE" >&2
+    exit 1
+  fi
+  printf '%s\n' "$pr_head"
+}
+
+# Reconcile a reused worktree's checked-out branch against the target PR's head
+# branch, then emit the `enter`/`conflict` decision (#913). Called on every
+# `enter`-bound path (explicit, and queue-orphan recycle).
+emit_enter_reconciled() {
+  local wt_path="$1" wt_branch="$2" pr pr_head unique
+  # dispatch-find-pr runs under the dispatch lock here (#1612), so zero its 1s
+  # self-fetch retry sleep (DISPATCH_FIND_PR_RETRY_DELAY=0). The retry's only job
+  # is to ride out a transient gh flake; dispatch-find-pr's
+  # closedByPullRequestsReferences cross-check still runs as the second "no PR"
+  # authority, so the false-'no PR' race stays guarded while the mandatory
+  # wall-clock sleep no longer extends the lock window.
+  if ! pr=$(DISPATCH_FIND_PR_RETRY_DELAY=0 "$SCRIPT_DIR/dispatch-find-pr" "$ISSUE"); then
+    echo "error: dispatch-find-pr failed for issue $ISSUE; cannot reconcile branch" >&2
+    exit 1
+  fi
+  if [[ -z "$pr" ]]; then echo "enter $wt_path"; return 0; fi   # no PR → unchanged
+  pr_head=$(resolve_pr_head "$pr") || exit 1
+  if [[ "$pr_head" == "$wt_branch" ]]; then     # already on PR head branch → no-op
+    echo "enter $wt_path"; return 0
+  fi
+  git -C "$wt_path" fetch --quiet origin "$pr_head"
+  unique=$(git -C "$wt_path" rev-list --count "origin/${pr_head}..${wt_branch}")
+  if [[ "$unique" -ne 0 ]]; then echo "conflict $wt_path"; return 0; fi  # unique commits → conflict
+  git -C "$wt_path" checkout --quiet -B "$pr_head" "origin/${pr_head}"   # lossless re-point
+  echo "enter $wt_path"
+}
+
+# `enter` / `conflict` — scan local worktrees for one whose branch carries the
+# <issue>-* prefix, via the shared list_worktree_records helper (lib.sh).
+# Records arrive in `git worktree list` order, so the first matching record wins.
+while IFS= read -r line; do
+  split_worktree_record "$line"
+  if [[ "$WT_NUM" == "$ISSUE" ]]; then
+    if worktree_has_live_session "$WT_PATH"; then
+      # A live session owns the worktree — mode-independent (#837). In queue
+      # mode this is a genuine race (dispatch-select-target's upstream filter
+      # is the primary gate); in explicit mode it stops the
+      # recycle-after-completion path from firing into a worktree whose
+      # previous worker is still live. Bare line, identical to queue mode.
+      echo "conflict $WT_PATH"
+    else
+      # explicit-enter, or queue-orphan recycle: reconcile the reused
+      # worktree's branch against the target PR's head branch before entering.
+      emit_enter_reconciled "$WT_PATH" "$WT_BRANCH"
+    fi
+    exit 0
+  fi
+done < <(list_worktree_records)
+
+# `create` — no worktree matched. Build a sanitized <issue>-<slug> branch name
+# from the issue title. `jq -e` exits non-zero on a null/missing .title, so the
+# guard catches a malformed response instead of slugging the literal "null".
+
+# Before slugifying a fresh branch, check whether the target already has an
+# open PR (hence an existing branch) but simply no worktree on disk — e.g. the
+# worktree was swept while the branch survived because its PR is still open
+# (#943). If so, the caller must materialize that existing PR-head branch, not
+# branch a fresh <issue>-<slug> from origin/main. This mirrors the enter path's
+# #913 reconciliation. No PR → fall through to the unchanged create logic.
+#
+# This create-path check (added by #1591) also runs under the dispatch lock, so
+# zero dispatch-find-pr's 1s self-fetch retry sleep here too (#1612), matching
+# emit_enter_reconciled above: the closedByPullRequestsReferences cross-check
+# still guards the false-'no PR' case, so only the lock-extending wall-clock
+# sleep is dropped. A genuine-new-issue (the common queue path) returns no PR
+# here, so without this it would pay the full sleep under the lock.
+if ! pr=$(DISPATCH_FIND_PR_RETRY_DELAY=0 "$SCRIPT_DIR/dispatch-find-pr" "$ISSUE"); then
+  echo "error: dispatch-find-pr failed for issue $ISSUE; cannot resolve create path" >&2
+  exit 1
+fi
+if [[ -n "$pr" ]]; then
+  pr_head=$(resolve_pr_head "$pr") || exit 1
+  echo "create-existing $pr_head"
+  exit 0
+fi
+
+if ! TITLE=$(gh_issue_view_rest "$ISSUE" | jq -er '.title'); then
+  echo "error: failed to fetch title for issue $ISSUE" >&2
+  exit 1
+fi
+
+# Lowercase, then collapse non-alphanumeric runs to single dashes and strip
+# leading/trailing dashes.
+slug=$(printf '%s' "$TITLE" \
+  | tr '[:upper:]' '[:lower:]' \
+  | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//')
+
+# Truncate so the full <issue>-<slug> name is <= 32 chars, then drop a trailing
+# `-` the cut may have left (runs were already collapsed, so at most one).
+slug="${slug:0:$((32 - ${#ISSUE} - 1))}"
+slug="${slug%-}"
+
+if [[ -z "$slug" ]]; then
+  echo "error: issue $ISSUE title produced an empty branch slug: '$TITLE'" >&2
+  exit 1
+fi
+
+echo "create $ISSUE-$slug"

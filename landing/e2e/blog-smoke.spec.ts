@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@commons-systems/config/playwright-test";
 
 // Smoke tests run against a deployed preview URL via run-smoke-tests.sh
 // (--grep @smoke). They verify the meta description tag and that the
@@ -51,7 +51,9 @@ test.describe("blog smoke", () => {
     expect(response.headers()["content-type"]).toMatch(/^image\//);
   });
 
-  test("homepage loads without JS errors @smoke", async ({ page }) => {
+  // @build: hydrateRoot onto prerendered HTML; the raw dev server (no prerender)
+  // throws hydration mismatches, so the zero-error assertion needs the build.
+  test("homepage loads without JS errors @smoke @build", async ({ page }) => {
     const errors: string[] = [];
     page.on("pageerror", (err) => errors.push(err.message));
 

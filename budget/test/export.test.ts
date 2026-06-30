@@ -1,20 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { timestampMockFactory } from "./helpers";
 
-vi.mock("firebase/firestore", () => {
-  class MockTimestamp {
-    constructor(
-      public readonly seconds: number,
-      public readonly nanoseconds: number,
-    ) {}
-    toMillis() {
-      return this.seconds * 1000 + this.nanoseconds / 1e6;
-    }
-    static fromMillis(ms: number) {
-      return new MockTimestamp(Math.floor(ms / 1000), (ms % 1000) * 1e6);
-    }
-  }
-  return { Timestamp: MockTimestamp };
-});
+vi.mock("firebase/firestore", () => timestampMockFactory());
 
 vi.mock("../src/idb", () => ({
   getAll: vi.fn(),
@@ -24,6 +11,15 @@ vi.mock("../src/idb", () => ({
 import { exportToJson } from "../src/export";
 import { getAll, getMeta } from "../src/idb";
 import { parseUploadedJson, toParsedData } from "../src/upload";
+import { collectionRegistry } from "../src/collection-registry.js";
+import type { DataStoreName } from "../src/collection-registry.js";
+import type { ParsedData } from "../src/idb";
+
+// Compile-time guard: ParsedData's keys must be exactly the registry stores plus
+// "meta". Registry drift surfaces as a tsc error here, not a runtime surprise.
+type AssertEqual<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
+const _parsedDataKeysExhaustive: AssertEqual<keyof ParsedData, DataStoreName | "meta"> = true;
+void _parsedDataKeysExhaustive;
 
 const mockGetAll = vi.mocked(getAll);
 const mockGetMeta = vi.mocked(getMeta);
@@ -111,6 +107,16 @@ const idbStatements = [
     balanceDate: null,
     lastTransactionDateMs: Date.parse("2025-06-10T00:00:00.000Z"),
     virtual: false,
+    sourceFile: null,
+  },
+];
+
+const idbWeeklyAggregates = [
+  {
+    id: "wa-2025-w24",
+    weekStartMs: Date.parse("2025-06-09T00:00:00.000Z"),
+    creditTotal: 52.3,
+    unbudgetedTotal: 10.5,
   },
 ];
 
@@ -140,6 +146,16 @@ function setupMocks() {
         return Promise.resolve([]);
       case "reconciliationNotes":
         return Promise.resolve([]);
+      case "accounts":
+        return Promise.resolve([]);
+      case "journalEntries":
+        return Promise.resolve([]);
+      case "journalLegs":
+        return Promise.resolve([]);
+      case "reconciliationEvents":
+        return Promise.resolve([]);
+      case "weeklyAggregates":
+        return Promise.resolve(idbWeeklyAggregates);
       default:
         throw new Error(`Unmocked store name in test: "${storeName}"`);
     }
@@ -157,6 +173,14 @@ describe("exportToJson", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
+  });
+
+  it("serializes keys in envelope-then-registry order", async () => {
+    const json = await exportToJson();
+    expect(Object.keys(JSON.parse(json))).toEqual([
+      "version", "exportedAt", "groupId", "groupName",
+      ...Object.keys(collectionRegistry),
+    ]);
   });
 
   it("exports all 6 collections with correct field mappings", async () => {
@@ -304,6 +328,53 @@ describe("exportToJson", () => {
     expect(data.budgets[0].overrides[0].balance).toBe(50);
   });
 
+  it("round-trip preserves virtual: true on transactions", async () => {
+    const original = mockGetAll.getMockImplementation()!;
+    mockGetAll.mockImplementation((storeName: string) =>
+      storeName === "transactions"
+        ? Promise.resolve([{ ...idbTransactions[0], id: "txn-virtual", virtual: true }])
+        : original(storeName),
+    );
+    const json = await exportToJson();
+    expect(JSON.parse(json).transactions[0].virtual).toBe(true);
+
+    const parsed = parseUploadedJson(json);
+    const data = toParsedData(parsed);
+    expect(data.transactions[0].virtual).toBe(true);
+  });
+
+  it("round-trip preserves virtual: true on statements", async () => {
+    const original = mockGetAll.getMockImplementation()!;
+    mockGetAll.mockImplementation((storeName: string) =>
+      storeName === "statements"
+        ? Promise.resolve([{ ...idbStatements[0], id: "stmt-virtual", virtual: true }])
+        : original(storeName),
+    );
+    const json = await exportToJson();
+    expect(JSON.parse(json).statements[0].virtual).toBe(true);
+
+    const parsed = parseUploadedJson(json);
+    const data = toParsedData(parsed);
+    expect(data.statements[0].virtual).toBe(true);
+  });
+
+  it("round-trip preserves journalEntryId on transactions", async () => {
+    const original = mockGetAll.getMockImplementation()!;
+    mockGetAll.mockImplementation((storeName: string) =>
+      storeName === "transactions"
+        ? Promise.resolve([{ ...idbTransactions[0], journalEntryId: "je-001" }])
+        : original(storeName),
+    );
+    const json = await exportToJson();
+    expect(JSON.parse(json).transactions[0].journalEntryId).toBe("je-001");
+
+    const parsed = parseUploadedJson(json);
+    expect(parsed.transactions[0].journalEntryId).toBe("je-001");
+
+    const data = toParsedData(parsed);
+    expect(data.transactions[0].journalEntryId).toBe("je-001");
+  });
+
   it("round-trip: export -> parseUploadedJson -> toParsedData produces equivalent IDB data", async () => {
     const json = await exportToJson();
     const parsed = parseUploadedJson(json);
@@ -357,5 +428,146 @@ describe("exportToJson", () => {
     // Meta
     expect(data.meta.groupName).toBe("household");
     expect(data.meta.version).toBe(1);
+  });
+
+  it("round-trip preserves weeklyAggregates unchanged", async () => {
+    const json = await exportToJson();
+    const output = JSON.parse(json);
+
+    // Criterion 1a: weeklyAggregates is present and non-empty in exported JSON
+    expect(output.weeklyAggregates).toBeDefined();
+    expect(output.weeklyAggregates).toHaveLength(1);
+    // weekStart should be an ISO string
+    expect(typeof output.weeklyAggregates[0].weekStart).toBe("string");
+    expect(output.weeklyAggregates[0].weekStart).toBe("2025-06-09T00:00:00.000Z");
+
+    // Criterion 1b: round-trip restores IDB records deep-equal to the original fixture
+    const parsed = parseUploadedJson(json);
+    const data = toParsedData(parsed);
+
+    expect(data.weeklyAggregates).toHaveLength(1);
+    expect(data.weeklyAggregates[0]).toEqual(idbWeeklyAggregates[0]);
+  });
+
+  it("round-trip empties no registry store", async () => {
+    // A non-empty, minimally-valid IDB fixture for EVERY registry collection.
+    // Reuses the module-level fixtures where they exist and adds minimal valid
+    // ones for the rest. Typing the map as Record<DataStoreName, unknown[]>
+    // makes a MISSING registry key a tsc error; the sort-equality guard below
+    // makes a future-ADDED registry key a runtime failure.
+    const idbAccountsFixture = [
+      {
+        id: "bankone_1234",
+        institution: "bankone",
+        account: "1234",
+        accountType: "asset" as const,
+        openingBalance: null,
+        openingBalanceDateMs: null,
+      },
+    ];
+    const idbJournalEntriesFixture = [
+      {
+        id: "je-001",
+        timestampMs: Date.parse("2025-06-10T00:00:00.000Z"),
+        description: "Transfer",
+        note: null,
+        legCount: 2,
+      },
+    ];
+    const idbJournalLegsFixture = [
+      {
+        id: "jl-001",
+        entryId: "je-001",
+        accountId: "bankone_1234",
+        debit: 100,
+        credit: 0,
+        timestampMs: Date.parse("2025-06-10T00:00:00.000Z"),
+        cleared: false,
+        reconciledAtMs: null,
+        reconciledEventId: null,
+        statementItemId: null,
+      },
+    ];
+    const idbStatementItemsFixture = [
+      {
+        id: "si-001",
+        statementItemId: "si-001",
+        statementId: "stmt-1",
+        institution: "bankone",
+        account: "1234",
+        period: "2025-06",
+        amount: -52.3,
+        timestampMs: Date.parse("2025-06-10T00:00:00.000Z"),
+        description: "KROGER",
+        fitid: "fit-001",
+      },
+    ];
+    const idbReconciliationNotesFixture = [
+      {
+        id: "transaction_txn-001",
+        entityType: "transaction" as const,
+        entityId: "txn-001",
+        classification: "timing" as const,
+        note: "pending clear",
+        updatedAtMs: Date.parse("2025-06-11T00:00:00.000Z"),
+        updatedBy: "nathan@natb1.com",
+      },
+    ];
+    const idbReconciliationEventsFixture = [
+      {
+        id: "bankone_1234_2025-06-10",
+        institution: "bankone",
+        account: "1234",
+        reconciledThroughDateMs: Date.parse("2025-06-10T00:00:00.000Z"),
+        bankBalance: 1234.56,
+        clearedBalance: 1234.56,
+        adjustment: 0,
+        reconciledBy: "nathan@natb1.com",
+        reconciledAtMs: Date.parse("2025-06-11T00:00:00.000Z"),
+        legIds: ["jl-001"],
+        adjustmentEntryId: null,
+      },
+    ];
+
+    const idbFixtures: Record<DataStoreName, unknown[]> = {
+      transactions: idbTransactions,
+      budgets: idbBudgets,
+      budgetPeriods: idbBudgetPeriods,
+      rules: idbRules,
+      normalizationRules: idbNormalizationRules,
+      statements: idbStatements,
+      statementItems: idbStatementItemsFixture,
+      reconciliationNotes: idbReconciliationNotesFixture,
+      accounts: idbAccountsFixture,
+      journalEntries: idbJournalEntriesFixture,
+      journalLegs: idbJournalLegsFixture,
+      reconciliationEvents: idbReconciliationEventsFixture,
+      weeklyAggregates: idbWeeklyAggregates,
+    };
+
+    // Exhaustiveness guard: a future registry entry added without a fixture FAILS here.
+    expect(Object.keys(idbFixtures).sort()).toEqual(Object.keys(collectionRegistry).sort());
+
+    const original = mockGetAll.getMockImplementation()!;
+    mockGetAll.mockImplementation((storeName: string) =>
+      storeName in idbFixtures
+        ? Promise.resolve(idbFixtures[storeName as DataStoreName])
+        : original(storeName),
+    );
+
+    try {
+      const json = await exportToJson();
+      const parsed = parseUploadedJson(json);
+      const data = toParsedData(parsed);
+
+      // Every registry store must survive the round-trip non-empty — derived from
+      // the registry, not a hardcoded list. This proves statementItems,
+      // reconciliationNotes, and reconciliationEvents (the #1268 fix) round-trip.
+      for (const name of Object.keys(collectionRegistry) as DataStoreName[]) {
+        expect(data[name], `store "${name}" emptied by round-trip`).not.toHaveLength(0);
+      }
+    } finally {
+      mockGetAll.mockImplementation(original);
+    }
   });
 });

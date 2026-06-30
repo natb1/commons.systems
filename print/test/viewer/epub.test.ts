@@ -22,34 +22,68 @@ function makeLocation(
   };
 }
 
+interface FakeSection {
+  href: string;
+  load: ReturnType<typeof vi.fn>;
+  unload: ReturnType<typeof vi.fn>;
+  find: ReturnType<typeof vi.fn>;
+}
+
 const mockRendition = {
   on: vi.fn(),
   once: vi.fn(),
   display: vi.fn().mockResolvedValue(undefined),
   next: vi.fn().mockResolvedValue(undefined),
   prev: vi.fn().mockResolvedValue(undefined),
+  currentLocation: vi.fn(),
   destroy: vi.fn(),
   hooks: { content: { register: vi.fn() } },
+  annotations: { highlight: vi.fn(), remove: vi.fn() },
 };
 
 const mockSpine = {
   length: 5,
   get: vi.fn().mockImplementation((index: number) => ({ href: `chapter-${index}.xhtml` })),
+  // `search` reads spine.spineItems while `init` reads spine.length — both must
+  // coexist on this same object. Replaced per-test in `beforeEach` (see below).
+  spineItems: [] as FakeSection[],
 };
 
 const mockBook = {
   ready: Promise.resolve(),
-  loaded: { spine: Promise.resolve() },
+  // `loaded.navigation` is a Promise `search` awaits; `navigation.get` is the
+  // label lookup. Two distinct "navigation" members.
+  loaded: { spine: Promise.resolve(), navigation: Promise.resolve() },
+  navigation: { get: vi.fn() as ReturnType<typeof vi.fn> },
+  load: vi.fn(),
   renderTo: vi.fn().mockReturnValue(mockRendition),
   spine: mockSpine,
   destroy: vi.fn(),
+  locations: {
+    generate: vi.fn().mockResolvedValue([]),
+    cfiFromPercentage: vi.fn().mockReturnValue("epubcfi(/6/4!/4/2)"),
+  },
 };
+
+/** Build a fresh fake spine section with the find/load/unload members search() uses. */
+function makeSection(
+  href: string,
+  matches: { cfi: string; excerpt: string }[] = [],
+): FakeSection {
+  return {
+    href,
+    load: vi.fn().mockResolvedValue(undefined),
+    unload: vi.fn(),
+    find: vi.fn().mockReturnValue(matches),
+  };
+}
 
 vi.mock("epubjs", () => ({
   default: vi.fn().mockImplementation(() => mockBook),
 }));
 
 import { createEpubRenderer } from "../../src/viewer/epub";
+import { MAX_SEARCH_RESULTS } from "../../src/viewer/types";
 
 describe("createEpubRenderer", () => {
   let container: HTMLElement;
@@ -61,8 +95,20 @@ describe("createEpubRenderer", () => {
     mockRendition.display.mockResolvedValue(undefined);
     mockRendition.next.mockResolvedValue(undefined);
     mockRendition.prev.mockResolvedValue(undefined);
+    mockRendition.currentLocation.mockReset();
     mockSpine.length = 5;
     mockSpine.get.mockImplementation((index: number) => ({ href: `chapter-${index}.xhtml` }));
+    // vi.clearAllMocks() only clears call history, not mockReturnValue/
+    // mockImplementation, so per-test find/navigation.get/load implementations
+    // would otherwise leak. Rebuild the section list and re-set implementations
+    // each test for isolation.
+    mockSpine.spineItems = [];
+    mockBook.navigation.get.mockReset();
+    mockBook.load.mockReset();
+    mockRendition.annotations.highlight.mockReset();
+    mockRendition.annotations.remove.mockReset();
+    mockBook.locations.generate.mockResolvedValue([]);
+    mockBook.locations.cfiFromPercentage.mockReturnValue("epubcfi(/6/4!/4/2)");
     container = document.createElement("div");
     if (typeof globalThis.reportError !== "function") {
       globalThis.reportError = () => {};
@@ -205,6 +251,111 @@ describe("createEpubRenderer", () => {
     });
   });
 
+  describe("goToPosition", () => {
+    it("displays the given CFI and syncs position from currentLocation", async () => {
+      const renderer = createEpubRenderer();
+      await renderer.init(container, "https://example.com/book.epub");
+
+      mockRendition.display.mockClear();
+
+      // epub.js does not reliably emit 'relocated' for display(cfi), so the
+      // fix reads rendition.currentLocation() after display() resolves. The
+      // returned CFI is intentionally different from the display argument so
+      // the assertion proves the state came from currentLocation(), not from
+      // the argument we passed in. once() is a no-op here (relocated never
+      // fires) — currentLocation() is the sole source of the updated state.
+      mockRendition.once.mockImplementation(() => {});
+      const resolvedCfi = "epubcfi(/6/8!/4/10/3)";
+      mockRendition.currentLocation.mockReturnValue(
+        makeLocation(3, 2, 7, false, false, resolvedCfi),
+      );
+
+      const requestedCfi = "epubcfi(/6/14!/4/2/2)";
+      await renderer.goToPosition(requestedCfi);
+
+      expect(mockRendition.display).toHaveBeenCalledWith(requestedCfi);
+      expect(renderer.position).toBe(resolvedCfi);
+    });
+
+    it("handles a currentLocation that returns a Promise", async () => {
+      const renderer = createEpubRenderer();
+      await renderer.init(container, "https://example.com/book.epub");
+
+      mockRendition.once.mockImplementation(() => {});
+      const resolvedCfi = "epubcfi(/6/12!/4/6/1)";
+      mockRendition.currentLocation.mockReturnValue(
+        Promise.resolve(makeLocation(2, 1, 4, false, false, resolvedCfi)),
+      );
+
+      await renderer.goToPosition("epubcfi(/6/14!/4/2/2)");
+
+      expect(renderer.position).toBe(resolvedCfi);
+    });
+
+    it("does nothing when rendition is not initialized", async () => {
+      const renderer = createEpubRenderer();
+
+      await renderer.goToPosition("epubcfi(/6/14!/4/2/2)");
+
+      expect(mockRendition.display).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("goToFraction", () => {
+    it("generates locations, maps the fraction to a CFI, and displays it", async () => {
+      const renderer = createEpubRenderer();
+      await renderer.init(container, "https://example.com/book.epub");
+
+      mockRendition.once.mockImplementation((_event: string, cb: () => void) => { cb(); });
+      mockRendition.display.mockClear();
+
+      await renderer.goToFraction!(0.5);
+
+      expect(mockBook.locations.generate).toHaveBeenCalledTimes(1);
+      expect(mockBook.locations.cfiFromPercentage).toHaveBeenCalledWith(0.5);
+      expect(mockRendition.display).toHaveBeenCalledWith("epubcfi(/6/4!/4/2)");
+    });
+
+    it("generates locations lazily and memoizes across calls", async () => {
+      const renderer = createEpubRenderer();
+      await renderer.init(container, "https://example.com/book.epub");
+
+      mockRendition.once.mockImplementation((_event: string, cb: () => void) => { cb(); });
+
+      // Not generated at init time.
+      expect(mockBook.locations.generate).not.toHaveBeenCalled();
+
+      await renderer.goToFraction!(0.25);
+      expect(mockBook.locations.generate).toHaveBeenCalledTimes(1);
+
+      // Second call reuses the memoized locations index.
+      await renderer.goToFraction!(0.75);
+      expect(mockBook.locations.generate).toHaveBeenCalledTimes(1);
+    });
+
+    it("clamps fractions above 1 down to 1", async () => {
+      const renderer = createEpubRenderer();
+      await renderer.init(container, "https://example.com/book.epub");
+
+      mockRendition.once.mockImplementation((_event: string, cb: () => void) => { cb(); });
+
+      await renderer.goToFraction!(1.5);
+
+      expect(mockBook.locations.cfiFromPercentage).toHaveBeenCalledWith(1);
+    });
+
+    it("clamps fractions below 0 up to 0", async () => {
+      const renderer = createEpubRenderer();
+      await renderer.init(container, "https://example.com/book.epub");
+
+      mockRendition.once.mockImplementation((_event: string, cb: () => void) => { cb(); });
+
+      await renderer.goToFraction!(-0.2);
+
+      expect(mockBook.locations.cfiFromPercentage).toHaveBeenCalledWith(0);
+    });
+  });
+
   describe("destroy", () => {
     it("calls rendition.destroy, book.destroy, and removes container div", async () => {
       const renderer = createEpubRenderer();
@@ -329,7 +480,7 @@ describe("createEpubRenderer", () => {
       mockRendition.once.mockImplementation(() => {});
 
       const nextPromise = renderer.next();
-      vi.advanceTimersByTime(5000);
+      vi.advanceTimersByTime(30000);
       await nextPromise;
 
       expect(mockRendition.next).toHaveBeenCalled();
@@ -402,7 +553,7 @@ describe("createEpubRenderer", () => {
       expect(globalThis.fetch).not.toHaveBeenCalled();
     });
 
-    it("revokes blob URLs after replacement", async () => {
+    it("does not revoke blob URLs after replacement", async () => {
       const hookCb = await initAndGetHook();
       const doc = makeMockDoc([{ rel: "stylesheet", href: "blob:http://localhost/xyz-789" }]);
 
@@ -413,7 +564,37 @@ describe("createEpubRenderer", () => {
 
       await hookCb({ document: doc });
 
-      expect(revokeStub).toHaveBeenCalledWith("blob:http://localhost/xyz-789");
+      expect(revokeStub).not.toHaveBeenCalled();
+    });
+
+    it("styles every chapter when multiple chapters share one blob URL", async () => {
+      const hookCb = await initAndGetHook();
+      const sharedHref = "blob:http://localhost/shared-1";
+      const revokedUrls = new Set<string>();
+      revokeStub.mockImplementation((url: string) => { revokedUrls.add(url); });
+
+      globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+        if (revokedUrls.has(url)) {
+          return Promise.reject(new Error(`blob URL already revoked: ${url}`));
+        }
+        return Promise.resolve({
+          ok: true,
+          text: () => Promise.resolve("body { color: red; }"),
+        });
+      });
+
+      const doc1 = makeMockDoc([{ rel: "stylesheet", href: sharedHref }]);
+      const doc2 = makeMockDoc([{ rel: "stylesheet", href: sharedHref }]);
+
+      await hookCb({ document: doc1 });
+      await hookCb({ document: doc2 });
+
+      for (const doc of [doc1, doc2]) {
+        const style = doc.head.querySelector("style");
+        expect(style).not.toBeNull();
+        expect(style!.textContent).toBe("body { color: red; }");
+        expect(doc.head.querySelector('link[rel="stylesheet"]')).toBeNull();
+      }
     });
 
     it("propagates fetch failure and calls reportError", async () => {
@@ -473,6 +654,478 @@ describe("createEpubRenderer", () => {
       );
       expect(displayErrorCall).toBeDefined();
       expect(typeof displayErrorCall![1]).toBe("function");
+    });
+  });
+
+  describe("search", () => {
+    const BASE_STYLES = { fill: "#fde68a" };
+    const ACTIVE_STYLES = { fill: "#f59e0b", "fill-opacity": "0.5" };
+
+    async function initRenderer() {
+      const renderer = createEpubRenderer();
+      await renderer.init(container, "https://example.com/book.epub");
+      return renderer;
+    }
+
+    function driveRelocated() {
+      // goToResult awaits waitForRelocated(), which resolves on the captured
+      // "relocated" once-callback. Mirror the next()/prev() pattern.
+      mockRendition.once.mockImplementation((_event: string, cb: () => void) => cb());
+    }
+
+    it("returns matches from every spine section", async () => {
+      const s0 = makeSection("ch0.xhtml", [{ cfi: "cfi-0", excerpt: "alpha fox beta" }]);
+      const s1 = makeSection("ch1.xhtml", [{ cfi: "cfi-1", excerpt: "gamma fox delta" }]);
+      const s2 = makeSection("ch2.xhtml", [{ cfi: "cfi-2", excerpt: "epsilon fox" }]);
+      mockSpine.spineItems = [s0, s1, s2];
+      mockBook.navigation.get.mockImplementation((href: string) => ({ label: `Label ${href}` }));
+
+      const renderer = await initRenderer();
+      const { results } = await renderer.search!("fox"); // type-safety-ok: optional renderer API method, present in this test harness
+
+      // load + find called on every section (matches across chapter boundaries).
+      for (const s of [s0, s1, s2]) {
+        expect(s.load).toHaveBeenCalledTimes(1);
+        expect(s.find).toHaveBeenCalledWith("fox");
+        expect(s.unload).toHaveBeenCalledTimes(1);
+      }
+      expect(results.map((r) => r.location)).toEqual(["cfi-0", "cfi-1", "cfi-2"]);
+      expect(results.map((r) => r.label)).toEqual([
+        "Label ch0.xhtml",
+        "Label ch1.xhtml",
+        "Label ch2.xhtml",
+      ]);
+    });
+
+    it("derives snippet/matchStart/matchLength satisfying the SearchResult invariant", async () => {
+      mockSpine.spineItems = [
+        makeSection("ch0.xhtml", [{ cfi: "cfi-0", excerpt: "the   quick brown\nfox jumps" }]),
+      ];
+      mockBook.navigation.get.mockReturnValue({ label: "Chapter One" });
+
+      const renderer = await initRenderer();
+      const { results } = await renderer.search!("brown"); // type-safety-ok: optional renderer API method, present in this test harness
+      const [result] = results;
+
+      // Whitespace collapsed to single spaces and trimmed.
+      expect(result!.snippet).toBe("the quick brown fox jumps");
+      expect(result!.matchStart).toBe(result!.snippet.indexOf("brown"));
+      expect(result!.matchLength).toBe(5);
+      // Invariant.
+      expect(result!.matchStart).toBeGreaterThanOrEqual(0);
+      expect(result!.matchLength).toBeGreaterThan(0);
+      expect(result!.matchStart + result!.matchLength).toBeLessThanOrEqual(result!.snippet.length);
+    });
+
+    it("handles '...'-padded excerpts and collapses internal whitespace", async () => {
+      mockSpine.spineItems = [
+        makeSection("ch0.xhtml", [{ cfi: "cfi-0", excerpt: "...lots of   text fox more text..." }]),
+      ];
+      mockBook.navigation.get.mockReturnValue({ label: "Padded" });
+
+      const renderer = await initRenderer();
+      const { results } = await renderer.search!("fox"); // type-safety-ok: optional renderer API method, present in this test harness
+      const [result] = results;
+
+      expect(result!.snippet).toBe("...lots of text fox more text...");
+      expect(result!.matchStart).toBe(result!.snippet.indexOf("fox"));
+      expect(result!.matchLength).toBe(3);
+      expect(result!.matchStart + result!.matchLength).toBeLessThanOrEqual(result!.snippet.length);
+    });
+
+    it("matches case-insensitively", async () => {
+      mockSpine.spineItems = [
+        makeSection("ch0.xhtml", [{ cfi: "cfi-0", excerpt: "A FOX in the henhouse" }]),
+      ];
+      mockBook.navigation.get.mockReturnValue({ label: "Caps" });
+
+      const renderer = await initRenderer();
+      const { results } = await renderer.search!("fox"); // type-safety-ok: optional renderer API method, present in this test harness
+      const [result] = results;
+
+      expect(result!.snippet).toBe("A FOX in the henhouse");
+      expect(result!.matchStart).toBe(2); // index of "FOX"
+      expect(result!.matchLength).toBe(3);
+    });
+
+    it("falls back to 'Ch. N' label when navigation.get returns undefined", async () => {
+      const s0 = makeSection("ch0.xhtml", [{ cfi: "cfi-0", excerpt: "fox" }]);
+      const s1 = makeSection("ch1.xhtml", [{ cfi: "cfi-1", excerpt: "fox" }]);
+      mockSpine.spineItems = [s0, s1];
+      mockBook.navigation.get.mockReturnValue(undefined);
+
+      const renderer = await initRenderer();
+      const { results } = await renderer.search!("fox"); // type-safety-ok: optional renderer API method, present in this test harness
+
+      expect(results.map((r) => r.label)).toEqual(["Ch. 1", "Ch. 2"]);
+    });
+
+    it("base-highlights each match cfi after the iteration completes", async () => {
+      mockSpine.spineItems = [
+        makeSection("ch0.xhtml", [{ cfi: "cfi-0", excerpt: "fox" }]),
+        makeSection("ch1.xhtml", [{ cfi: "cfi-1", excerpt: "fox" }]),
+      ];
+      mockBook.navigation.get.mockReturnValue({ label: "X" });
+
+      const renderer = await initRenderer();
+      await renderer.search!("fox");
+
+      expect(mockRendition.annotations.highlight).toHaveBeenCalledWith(
+        "cfi-0", {}, undefined, "viewer-search-hl", BASE_STYLES,
+      );
+      expect(mockRendition.annotations.highlight).toHaveBeenCalledWith(
+        "cfi-1", {}, undefined, "viewer-search-hl", BASE_STYLES,
+      );
+      // First search has no prior highlights, so remove is never called.
+      expect(mockRendition.annotations.remove).not.toHaveBeenCalled();
+    });
+
+    it("returns [] without loading any section for an empty/whitespace query", async () => {
+      const s0 = makeSection("ch0.xhtml", [{ cfi: "cfi-0", excerpt: "fox" }]);
+      mockSpine.spineItems = [s0];
+
+      const renderer = await initRenderer();
+      const response = await renderer.search!("   "); // type-safety-ok: optional renderer API method, present in this test harness
+
+      expect(response).toEqual({ results: [], truncated: false });
+      expect(s0.load).not.toHaveBeenCalled();
+      expect(s0.find).not.toHaveBeenCalled();
+      expect(mockRendition.annotations.highlight).not.toHaveBeenCalled();
+    });
+
+    it("only the latest of two overlapping searches performs its highlight burst", async () => {
+      // One section, find keyed by query so the two bursts are distinguishable.
+      const section: FakeSection = {
+        href: "ch0.xhtml",
+        unload: vi.fn(),
+        find: vi.fn().mockImplementation((q: string) =>
+          q === "first" ? [{ cfi: "cfi-A", excerpt: "first fox" }]
+                         : [{ cfi: "cfi-B", excerpt: "second fox" }],
+        ),
+        // Gate ONLY the first call's load so call-1 parks while call-2 finishes.
+        load: vi.fn(),
+      };
+      let releaseFirst!: () => void;
+      const gate = new Promise<void>((resolve) => { releaseFirst = resolve; });
+      section.load
+        .mockImplementationOnce(() => gate)
+        .mockImplementation(() => Promise.resolve());
+      mockSpine.spineItems = [section];
+      mockBook.navigation.get.mockReturnValue({ label: "X" });
+
+      const renderer = await initRenderer();
+
+      const p1 = renderer.search!("first");
+      // Let call-1 pass `await book.loaded.navigation` and park on the gated
+      // load() *inside* its loop, consuming the gate while _searchEpoch is still
+      // 1 — before call-2 bumps it. So call-1 is superseded mid-load and the
+      // post-loop epoch guard (not the new top-of-loop break) discards its burst.
+      await Promise.resolve();
+      const p2 = renderer.search!("second");
+
+      // call-2 runs to completion (its load resolves immediately).
+      await p2;
+      expect(mockRendition.annotations.highlight).toHaveBeenCalledWith(
+        "cfi-B", {}, undefined, "viewer-search-hl", BASE_STYLES,
+      );
+
+      // Release the superseded call-1; it must touch no highlight state.
+      releaseFirst();
+      await p1;
+
+      const highlightCfis = mockRendition.annotations.highlight.mock.calls.map((c) => c[0]);
+      expect(highlightCfis).not.toContain("cfi-A");
+      const removeCfis = mockRendition.annotations.remove.mock.calls.map((c) => c[0]);
+      expect(removeCfis).not.toContain("cfi-A");
+    });
+
+    it("a superseded search loads no further sections past the supersede point", async () => {
+      const s0: FakeSection = {
+        href: "ch0.xhtml",
+        unload: vi.fn(),
+        find: vi.fn().mockReturnValue([{ cfi: "cfi-0", excerpt: "alpha fox" }]),
+        load: vi.fn(),
+      };
+      // Gate ONLY call-1's load (the first load); call-2's load resolves immediately.
+      let release!: () => void; // type-safety-ok: definite assignment assertion — Promise constructor assigns release before it is used
+      const gate = new Promise<void>((resolve) => { release = resolve; });
+      s0.load
+        .mockImplementationOnce(() => gate)
+        .mockImplementation(() => Promise.resolve());
+      const s1 = makeSection("ch1.xhtml", [{ cfi: "cfi-1", excerpt: "beta fox" }]);
+      mockSpine.spineItems = [s0, s1];
+      mockBook.navigation.get.mockReturnValue({ label: "X" });
+
+      const renderer = await initRenderer();
+
+      const p1 = renderer.search!("first"); // type-safety-ok: search is optional on ContentRenderer but always present after initRenderer()
+      // Flush a macrotask so call-1 parks INSIDE the loop on the gated s0.load().
+      await new Promise((r) => setTimeout(r));
+      const p2 = renderer.search!("second"); // type-safety-ok: search is optional on ContentRenderer but always present after initRenderer()
+      // call-2's s0.load is the second call → resolves immediately; call-2 runs to
+      // completion, loading both s0 and s1.
+      await p2;
+
+      release();
+      await p1;
+
+      // s1.load is a shared mock over the single spine, so 1 call = only call-2
+      // reached it (call-1 broke at the top of i = 1); 2 calls would mean the
+      // superseded call-1 also loaded s1 (the unfixed behavior).
+      expect(s1.load).toHaveBeenCalledTimes(1);
+    });
+
+    it("skips a section whose load() rejects, surfaces via reportError, and returns matches from remaining sections", async () => {
+      const s0 = makeSection("ch0.xhtml", [{ cfi: "cfi-0", excerpt: "alpha fox beta" }]);
+      const s1 = makeSection("ch1.xhtml", [{ cfi: "cfi-1", excerpt: "gamma fox delta" }]);
+      const s2 = makeSection("ch2.xhtml", [{ cfi: "cfi-2", excerpt: "epsilon fox" }]);
+      s1.load.mockRejectedValue(new Error("boom"));
+      mockSpine.spineItems = [s0, s1, s2];
+      mockBook.navigation.get.mockImplementation((href: string) => ({ label: `Label ${href}` }));
+
+      const renderer = await initRenderer();
+      const { results } = await renderer.search!("fox"); // type-safety-ok: optional renderer API method, present in this test harness
+
+      // Every section's unload() must still be called (finally block runs
+      // for each section regardless of whether a sibling fails).
+      expect(s0.unload).toHaveBeenCalledTimes(1);
+      expect(s1.unload).toHaveBeenCalledTimes(1);
+      expect(s2.unload).toHaveBeenCalledTimes(1);
+      // Results contain only s0 and s2 matches — s1 is skipped.
+      expect(results.map((r) => r.location)).toEqual(["cfi-0", "cfi-2"]);
+      // The specific error from the failing section was surfaced via reportError.
+      expect(globalThis.reportError).toHaveBeenCalledWith(
+        expect.objectContaining({ message: "boom" }),
+      );
+    });
+
+    it("caps results at MAX_SEARCH_RESULTS, sets truncated=true, and still calls unload (AC2)", async () => {
+      // Build MAX_SEARCH_RESULTS + 1 matches so the cap fires mid-loop.
+      const overMatches = Array.from({ length: MAX_SEARCH_RESULTS + 1 }, (_, i) => ({
+        cfi: `cfi-over-${i}`,
+        excerpt: `fox excerpt ${i}`,
+      }));
+      const section = makeSection("ch0.xhtml", overMatches);
+      mockSpine.spineItems = [section];
+      mockBook.navigation.get.mockReturnValue({ label: "Ch. 1" });
+
+      const renderer = await initRenderer();
+      const result = await renderer.search!("fox"); // type-safety-ok: optional renderer API method, present in this test harness
+
+      // Result count is capped at the constant.
+      expect(result.results.length).toBe(MAX_SEARCH_RESULTS);
+      // Truncation flag is set.
+      expect(result.truncated).toBe(true);
+      // unload must have been called once regardless of early cap (finally block).
+      expect(section.unload).toHaveBeenCalledTimes(1);
+      // The highlight burst is bounded — exactly MAX_SEARCH_RESULTS annotations painted.
+      expect(mockRendition.annotations.highlight).toHaveBeenCalledTimes(MAX_SEARCH_RESULTS);
+    });
+
+    it("stops scanning further sections once the cap fires in an earlier section (AC2)", async () => {
+      // Section 0 alone overflows the cap; section 1 must never be loaded once
+      // truncation fires, exercising the outer-loop guard (`if (truncated) break;`).
+      const overMatches = Array.from({ length: MAX_SEARCH_RESULTS + 1 }, (_, i) => ({
+        cfi: `cfi-over-${i}`,
+        excerpt: `fox excerpt ${i}`,
+      }));
+      const s0 = makeSection("ch0.xhtml", overMatches);
+      const s1 = makeSection("ch1.xhtml", [{ cfi: "cfi-1", excerpt: "fox tail" }]);
+      mockSpine.spineItems = [s0, s1];
+      mockBook.navigation.get.mockReturnValue({ label: "Ch. 1" });
+
+      const renderer = await initRenderer();
+      const result = await renderer.search!("fox"); // type-safety-ok: optional renderer API method, present in this test harness
+
+      expect(result.truncated).toBe(true);
+      expect(result.results.length).toBe(MAX_SEARCH_RESULTS);
+      // s0 is loaded, but the cap fires before s1 is ever reached.
+      expect(s0.load).toHaveBeenCalledTimes(1);
+      expect(s1.load).not.toHaveBeenCalled();
+    });
+
+    it("does not truncate when total matches are within the cap", async () => {
+      const fewMatches = Array.from({ length: MAX_SEARCH_RESULTS }, (_, i) => ({
+        cfi: `cfi-few-${i}`,
+        excerpt: `fox few ${i}`,
+      }));
+      mockSpine.spineItems = [makeSection("ch0.xhtml", fewMatches)];
+      mockBook.navigation.get.mockReturnValue({ label: "Ch. 1" });
+
+      const renderer = await initRenderer();
+      const result = await renderer.search!("fox"); // type-safety-ok: optional renderer API method, present in this test harness
+
+      expect(result.results.length).toBe(MAX_SEARCH_RESULTS);
+      expect(result.truncated).toBe(false);
+    });
+
+    describe("goToResult", () => {
+      it("displays the result location and adds an active highlight", async () => {
+        const renderer = await initRenderer();
+        driveRelocated();
+
+        await renderer.goToResult!({
+          location: "cfi-0", label: "L", snippet: "fox", matchStart: 0, matchLength: 3,
+        });
+
+        expect(mockRendition.display).toHaveBeenCalledWith("cfi-0");
+        expect(mockRendition.annotations.highlight).toHaveBeenCalledWith(
+          "cfi-0", {}, undefined, "viewer-search-active", ACTIVE_STYLES,
+        );
+      });
+
+      it("demotes the prior active match to base style when re-navigating", async () => {
+        const renderer = await initRenderer();
+        driveRelocated();
+
+        const r0 = { location: "cfi-0", label: "L0", snippet: "fox", matchStart: 0, matchLength: 3 };
+        const r1 = { location: "cfi-1", label: "L1", snippet: "fox", matchStart: 0, matchLength: 3 };
+
+        await renderer.goToResult!(r0);
+        mockRendition.annotations.highlight.mockClear();
+        mockRendition.annotations.remove.mockClear();
+
+        await renderer.goToResult!(r1);
+
+        // Prior active cfi-0 is removed and re-added as a base highlight.
+        expect(mockRendition.annotations.remove).toHaveBeenCalledWith("cfi-0", "highlight");
+        expect(mockRendition.annotations.highlight).toHaveBeenCalledWith(
+          "cfi-0", {}, undefined, "viewer-search-hl", BASE_STYLES,
+        );
+        // The new match becomes active.
+        expect(mockRendition.annotations.highlight).toHaveBeenCalledWith(
+          "cfi-1", {}, undefined, "viewer-search-active", ACTIVE_STYLES,
+        );
+      });
+    });
+
+    describe("clearSearch", () => {
+      it("removes every previously added match highlight then becomes a no-op", async () => {
+        mockSpine.spineItems = [
+          makeSection("ch0.xhtml", [{ cfi: "cfi-0", excerpt: "fox" }]),
+          makeSection("ch1.xhtml", [{ cfi: "cfi-1", excerpt: "fox" }]),
+        ];
+        mockBook.navigation.get.mockReturnValue({ label: "X" });
+
+        const renderer = await initRenderer();
+        await renderer.search!("fox");
+
+        renderer.clearSearch!();
+        expect(mockRendition.annotations.remove).toHaveBeenCalledWith("cfi-0", "highlight");
+        expect(mockRendition.annotations.remove).toHaveBeenCalledWith("cfi-1", "highlight");
+
+        // State reset — a second clearSearch removes nothing.
+        mockRendition.annotations.remove.mockClear();
+        renderer.clearSearch!();
+        expect(mockRendition.annotations.remove).not.toHaveBeenCalled();
+      });
+
+      it("aborts an in-flight search so its highlights never appear after clearSearch", async () => {
+        // One section whose load parks on a gate; find returns a match.
+        const section: FakeSection = {
+          href: "ch0.xhtml",
+          unload: vi.fn(),
+          find: vi.fn().mockReturnValue([{ cfi: "cfi-A", excerpt: "fox" }]),
+          load: vi.fn() as ReturnType<typeof vi.fn>,
+        };
+        let releaseFirst!: () => void;
+        const gate = new Promise<void>((resolve) => { releaseFirst = resolve; });
+        section.load.mockImplementationOnce(() => gate);
+        mockSpine.spineItems = [section];
+        mockBook.navigation.get.mockReturnValue({ label: "X" });
+
+        const renderer = await initRenderer();
+
+        // Start the search — it parks on the gated section.load().
+        const p = renderer.search!("fox");
+
+        // Clear the search while parked.
+        renderer.clearSearch!();
+
+        // Release the gate so the in-flight search resumes and hits the epoch guard.
+        releaseFirst();
+        await p;
+
+        // The aborted search must not have painted any highlights.
+        const highlightCfis = mockRendition.annotations.highlight.mock.calls.map((c) => c[0]);
+        expect(highlightCfis).not.toContain("cfi-A");
+      });
+
+      it("stops loading not-yet-visited spine sections once clearSearch advances the epoch mid-loop", async () => {
+        // s0's load parks on a gate so the search is mid-loop (inside iteration 0)
+        // when clearSearch() fires; s1/s2 are plain sections that must never load.
+        const s0: FakeSection = {
+          href: "ch0.xhtml",
+          unload: vi.fn(),
+          find: vi.fn().mockReturnValue([{ cfi: "cfi-A", excerpt: "fox" }]),
+          load: vi.fn() as ReturnType<typeof vi.fn>, // type-safety-ok: same pattern as existing load mocks; cast exposes Vitest mock API alongside FakeSection type
+        };
+        let releaseFirst!: () => void; // type-safety-ok: Promise constructor assigns synchronously, so releaseFirst is set before any use
+        const gate = new Promise<void>((resolve) => { releaseFirst = resolve; });
+        s0.load.mockImplementationOnce(() => gate);
+        const s1 = makeSection("ch1.xhtml", [{ cfi: "cfi-1", excerpt: "fox" }]);
+        const s2 = makeSection("ch2.xhtml", [{ cfi: "cfi-2", excerpt: "fox" }]);
+        mockSpine.spineItems = [s0, s1, s2];
+        mockBook.navigation.get.mockReturnValue({ label: "X" });
+
+        const renderer = await initRenderer();
+
+        const p = renderer.search!("fox"); // type-safety-ok: search always set after initRenderer; same pattern as other tests in this suite
+        // Let search pass `await book.loaded.navigation` and park on s0.load()'s
+        // gate *inside* iteration 0 — so the epoch advances mid-loop, not pre-loop.
+        await Promise.resolve();
+        renderer.clearSearch!(); // type-safety-ok: clearSearch always set after initRenderer — bumps _searchEpoch so iteration 1's guard breaks
+        releaseFirst();
+        await p;
+
+        // The in-flight section completed; the not-yet-visited ones never loaded.
+        expect(s0.load).toHaveBeenCalledTimes(1);
+        expect(s1.load).not.toHaveBeenCalled();
+        expect(s2.load).not.toHaveBeenCalled();
+        // And the superseded search painted no highlight (post-loop guard holds).
+        const highlightCfis = mockRendition.annotations.highlight.mock.calls.map((c) => c[0]);
+        expect(highlightCfis).not.toContain("cfi-A");
+      });
+    });
+
+    describe("renderResult", () => {
+      it("is exposed as a method on the renderer", async () => {
+        const renderer = await initRenderer();
+        expect(typeof renderer.renderResult).toBe("function");
+      });
+
+      it("is a harmless no-op: resolves without throwing and does not call rendition.display", async () => {
+        const renderer = await initRenderer();
+
+        // Record display call count before renderResult — it may already have
+        // been called during init (initial display). Only new calls would matter.
+        const displayCallsBefore = mockRendition.display.mock.calls.length;
+
+        await expect(renderer.renderResult()).resolves.toBeUndefined();
+
+        // renderResult must not trigger an additional rendition.display call.
+        expect(mockRendition.display.mock.calls.length).toBe(displayCallsBefore);
+      });
+
+      it("is still a no-op when _activeCfi is armed: does not call rendition.display beyond goToResult", async () => {
+        const renderer = await initRenderer();
+
+        // Arm _activeCfi by driving a goToResult(). goToResult() awaits
+        // waitForRelocated(), which resolves on the rendition.once "relocated"
+        // callback — fire it synchronously via driveRelocated().
+        driveRelocated();
+        await renderer.goToResult({
+          location: "cfi-0", label: "L", snippet: "fox", matchStart: 0, matchLength: 3,
+        });
+
+        // Baseline includes the display("cfi-0") call made by goToResult().
+        const displayCallsBefore = mockRendition.display.mock.calls.length;
+
+        await expect(renderer.renderResult()).resolves.toBeUndefined();
+
+        // renderResult must not trigger any additional rendition.display call.
+        expect(mockRendition.display.mock.calls.length).toBe(displayCallsBefore);
+      });
     });
   });
 });

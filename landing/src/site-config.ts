@@ -1,11 +1,29 @@
 import type { LinkSection } from "@commons-systems/blog/components/info-panel";
 import type { NavLink } from "@commons-systems/blog/prerender";
-import type { SiteDefaults } from "@commons-systems/blog/og-meta";
-import type { Organization, Author, SoftwareApplication } from "@commons-systems/blog/seo";
+import type { SiteDefaults, StaticPageMeta } from "@commons-systems/blog/og-meta";
+import type { Organization, Author, Person, SoftwareApplication } from "@commons-systems/blog/seo";
 
 export const SITE_URL = "https://commons.systems";
 
-export const NAV_LINKS: NavLink[] = [{ href: "/", label: "Home" }];
+export const NAV_LINKS: NavLink[] = [
+  { href: "/", label: "Home" },
+  { href: "/about", label: "About", align: "end" },
+];
+
+export const ABOUT_PAGE_META: StaticPageMeta = {
+  url: "/about",
+  title: "About",
+  description: "Nathan Buesgens — independent contractor focused on training the AI skills that decouple a business from professional services and platform vendors.",
+  type: "profile",
+};
+
+export const PERSON: Person = {
+  name: "Nathan Buesgens",
+  url: `${SITE_URL}/about`,
+  email: "nathan@natb1.com",
+  jobTitle: "Independent contractor",
+  sameAs: ["https://github.com/natb1"],
+};
 
 export const SITE_DEFAULTS: SiteDefaults = {
   title: "commons.systems",
@@ -37,16 +55,26 @@ export const INFO_PANEL_LINK_SECTIONS: LinkSection[] = [
 ];
 
 /** Extends SoftwareApplication for JSON-LD reuse; overrides `description` to required and adds visual card fields. */
-export interface AppCard extends SoftwareApplication {
+export interface ProjectCard extends SoftwareApplication {
   description: string;
   screenshot: string;
   screenshotAlt: string;
   problem: string;
 }
 
-// App showcase source of truth. Screenshots are captured ad-hoc from production
-// subdomains at a 1200×800 viewport; .app-card-screenshot enforces the ratio at render time with object-fit: cover (see public/screenshots/README.md).
-export const APPS: AppCard[] = [
+// Project showcase source of truth. Screenshots are captured ad-hoc from production
+// subdomains at a 1200×800 viewport; .project-card-screenshot enforces the ratio at render time with object-fit: cover (see public/screenshots/README.md).
+export const PROJECTS: ProjectCard[] = [
+  {
+    name: "Office-hours",
+    url: "https://office-hours.commons.systems",
+    applicationCategory: "BusinessApplication",
+    operatingSystem: "Web",
+    description: "A live view of the just-in-time reminder queue — what's due, how soon, and whether you're keeping pace.",
+    problem: "Know what work is due and whether the queue is draining without digging through a backlog.",
+    screenshot: "/screenshots/office-hours.png",
+    screenshotAlt: "Office-hours app showing the reminder queue with due dates, queue depth, and runway.",
+  },
   {
     name: "Budget",
     url: "https://budget.commons.systems",
@@ -58,16 +86,6 @@ export const APPS: AppCard[] = [
     screenshotAlt: "Budget app showing a Sankey diagram of weekly spending by category.",
   },
   {
-    name: "Audio",
-    url: "https://audio.commons.systems",
-    applicationCategory: "MultimediaApplication",
-    operatingSystem: "Web",
-    description: "Local-first audio player for long-form listening — podcasts, lectures, audiobooks.",
-    problem: "Listen to long-form audio without a platform deciding what you hear next.",
-    screenshot: "/screenshots/audio.png",
-    screenshotAlt: "Audio app showing a library of classical music tracks with a player.",
-  },
-  {
     name: "Print",
     url: "https://print.commons.systems",
     applicationCategory: "BookApplication",
@@ -76,5 +94,18 @@ export const APPS: AppCard[] = [
     problem: "Read and bind your own books without a reader app that tracks your pages.",
     screenshot: "/screenshots/print.png",
     screenshotAlt: "Print app showing a library of public-domain books in PDF and EPUB.",
+  },
+];
+
+export const OVERFLOW_PROJECTS: ProjectCard[] = [
+  {
+    name: "Audio",
+    url: "https://audio.commons.systems",
+    applicationCategory: "MultimediaApplication",
+    operatingSystem: "Web",
+    description: "Local-first audio player for long-form listening — podcasts, lectures, audiobooks.",
+    problem: "Listen to long-form audio without a platform deciding what you hear next.",
+    screenshot: "/screenshots/audio.png",
+    screenshotAlt: "Audio app showing a library of classical music tracks with a player.",
   },
 ];

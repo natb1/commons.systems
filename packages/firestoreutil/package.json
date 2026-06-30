@@ -1,0 +1,25 @@
+{
+  "name": "@commons-systems/firestoreutil",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "main": "src/namespace.ts",
+  "exports": {
+    "./namespace": "./src/namespace.ts",
+    "./seed": "./src/seed.ts",
+    "./delete-namespace": "./src/delete-namespace.ts",
+    "./errors": "./src/errors.ts",
+    "./validate": "./src/validate.ts",
+    "./brand": "./src/brand.ts",
+    "./media-queries": "./src/media-queries.ts",
+    "./init": "./src/init.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src/"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.0.0"
+  }
+}

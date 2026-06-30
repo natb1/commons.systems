@@ -1,0 +1,349 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+
+// Mocked collaborators. file-sync's module-scoped state persists across imports,
+// so each test re-imports the module via vi.resetModules() (below) for isolation.
+const exportToJson = vi.fn<[], Promise<string>>();
+const encrypt = vi.fn<[string, string], Promise<ArrayBuffer>>();
+const writeFileToHandle = vi.fn<[FileSystemFileHandle, BufferSource], Promise<void>>();
+const readFileFromHandle = vi.fn<[FileSystemFileHandle], Promise<File>>();
+const queryReadWritePermission = vi.fn<[FileSystemFileHandle], Promise<PermissionState>>();
+const requestReadWritePermission = vi.fn<[FileSystemFileHandle], Promise<PermissionState>>();
+const logError = vi.fn();
+
+vi.mock("../src/export.js", () => ({ exportToJson: () => exportToJson() }));
+vi.mock("../src/crypto.js", () => ({ encrypt: (p: string, pw: string) => encrypt(p, pw) }));
+vi.mock("../src/local-file.js", () => ({
+  writeFileToHandle: (h: FileSystemFileHandle, d: BufferSource) => writeFileToHandle(h, d),
+  readFileFromHandle: (h: FileSystemFileHandle) => readFileFromHandle(h),
+  queryReadWritePermission: (h: FileSystemFileHandle) => queryReadWritePermission(h),
+  requestReadWritePermission: (h: FileSystemFileHandle) => requestReadWritePermission(h),
+}));
+vi.mock("@commons-systems/errorutil/log", () => ({ logError: (...a: unknown[]) => logError(...a) }));
+
+const HANDLE = { name: "budget.benc" } as unknown as FileSystemFileHandle;
+const PASSWORD = "hunter2";
+const BYTES = new Uint8Array([1, 2, 3]).buffer;
+const JSON_STR = '{"version":1}';
+
+type FileSync = typeof import("../src/file-sync.js");
+
+// Fresh module per test so module-scoped handle/password/timer state never leaks.
+async function loadFileSync(): Promise<FileSync> {
+  vi.resetModules();
+  return import("../src/file-sync.js");
+}
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.clearAllMocks();
+  exportToJson.mockResolvedValue(JSON_STR);
+  encrypt.mockResolvedValue(BYTES);
+  writeFileToHandle.mockResolvedValue(undefined);
+  readFileFromHandle.mockResolvedValue(new File([], "budget.benc", { lastModified: 5000 }));
+  queryReadWritePermission.mockResolvedValue("granted");
+  requestReadWritePermission.mockResolvedValue("granted");
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+const DEBOUNCE_MS = 800;
+
+describe("file-sync", () => {
+  it("scheduleWriteBack is a no-op before configureFileSync", async () => {
+    const fs = await loadFileSync();
+    fs.scheduleWriteBack();
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_MS);
+    expect(exportToJson).not.toHaveBeenCalled();
+    expect(writeFileToHandle).not.toHaveBeenCalled();
+  });
+
+  it("coalesces a burst of scheduleWriteBack calls into a single write", async () => {
+    const fs = await loadFileSync();
+    fs.configureFileSync(HANDLE, PASSWORD, 1000);
+    fs.scheduleWriteBack();
+    fs.scheduleWriteBack();
+    fs.scheduleWriteBack();
+    // Nothing fires until the debounce elapses.
+    expect(exportToJson).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_MS);
+    expect(exportToJson).toHaveBeenCalledTimes(1);
+    expect(encrypt).toHaveBeenCalledTimes(1);
+    expect(encrypt).toHaveBeenCalledWith(JSON_STR, PASSWORD);
+    expect(writeFileToHandle).toHaveBeenCalledTimes(1);
+    expect(writeFileToHandle).toHaveBeenCalledWith(HANDLE, BYTES);
+  });
+
+  it("flushWriteBack writes immediately and cancels the pending timer", async () => {
+    const fs = await loadFileSync();
+    fs.configureFileSync(HANDLE, PASSWORD, 1000);
+    fs.scheduleWriteBack();
+    await fs.flushWriteBack();
+    expect(writeFileToHandle).toHaveBeenCalledTimes(1);
+    expect(writeFileToHandle).toHaveBeenCalledWith(HANDLE, BYTES);
+    // The pending debounce timer was cancelled — advancing fires no second write.
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_MS);
+    expect(writeFileToHandle).toHaveBeenCalledTimes(1);
+  });
+
+  it("requests permission when query returns prompt, then writes on grant", async () => {
+    queryReadWritePermission.mockResolvedValue("prompt");
+    requestReadWritePermission.mockResolvedValue("granted");
+    const fs = await loadFileSync();
+    fs.configureFileSync(HANDLE, PASSWORD, 1000);
+    await fs.flushWriteBack();
+    expect(requestReadWritePermission).toHaveBeenCalledWith(HANDLE);
+    expect(writeFileToHandle).toHaveBeenCalledTimes(1);
+  });
+
+  it("logs and skips the write when permission is never granted", async () => {
+    queryReadWritePermission.mockResolvedValue("prompt");
+    requestReadWritePermission.mockResolvedValue("denied");
+    const fs = await loadFileSync();
+    fs.configureFileSync(HANDLE, PASSWORD, 1000);
+    const listener = vi.fn();
+    fs.setWriteBackStatusListener(listener);
+    await fs.flushWriteBack();
+    expect(requestReadWritePermission).toHaveBeenCalledWith(HANDLE);
+    expect(logError).toHaveBeenCalled();
+    expect(exportToJson).not.toHaveBeenCalled();
+    expect(writeFileToHandle).not.toHaveBeenCalled();
+    // Listener must have been called with false on the permission failure.
+    expect(listener).toHaveBeenCalledWith(false);
+    // dirty was re-set, so a retry write fires once permission is restored.
+    queryReadWritePermission.mockResolvedValue("granted");
+    fs.scheduleWriteBack();
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_MS);
+    expect(writeFileToHandle).toHaveBeenCalledTimes(1);
+  });
+
+  it("resetFileSync cancels a pending write and disarms subsequent schedules", async () => {
+    const fs = await loadFileSync();
+    fs.configureFileSync(HANDLE, PASSWORD, 1000);
+    fs.scheduleWriteBack();
+    fs.resetFileSync();
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_MS);
+    expect(writeFileToHandle).not.toHaveBeenCalled();
+    // After reset, scheduling is a no-op.
+    fs.scheduleWriteBack();
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_MS);
+    expect(writeFileToHandle).not.toHaveBeenCalled();
+  });
+
+  it("concurrent flushWriteBack awaits the in-flight write before returning", async () => {
+    // Simulate: a timer fires and starts a doWrite (inFlight); then a second
+    // flushWriteBack (e.g. from visibilitychange) is called while doWrite runs.
+    // The second caller must not return until the in-flight write completes.
+    let resolveWrite!: () => void;
+    writeFileToHandle.mockReturnValueOnce(
+      new Promise<void>((res) => { resolveWrite = res; }),
+    );
+    const fs = await loadFileSync();
+    fs.configureFileSync(HANDLE, PASSWORD, 1000);
+
+    // Start first flush — writeFileToHandle is blocked on resolveWrite.
+    const firstFlush = fs.flushWriteBack();
+
+    // Second flush (concurrent) — should await the in-flight write, not return immediately.
+    let secondFlushDone = false;
+    const secondFlush = fs.flushWriteBack().then(() => { secondFlushDone = true; });
+
+    // Neither flush has completed yet.
+    await Promise.resolve();
+    expect(secondFlushDone).toBe(false);
+
+    // Unblock the write.
+    resolveWrite();
+    await firstFlush;
+    await secondFlush;
+
+    // Both should have completed; only one actual write occurred.
+    expect(secondFlushDone).toBe(true);
+    expect(writeFileToHandle).toHaveBeenCalledTimes(1);
+  });
+
+  it("flush drains a mutation that arrives during an in-flight write", async () => {
+    // A mutation that lands while a write is in flight must reach disk before a
+    // concurrent flush (e.g. visibilitychange→hidden) returns — the flush cancels
+    // the debounce timer, so the writer loop is the only thing that can persist it.
+    let resolveWrite!: () => void;
+    writeFileToHandle.mockReturnValueOnce(
+      new Promise<void>((res) => { resolveWrite = res; }),
+    );
+    const fs = await loadFileSync();
+    fs.configureFileSync(HANDLE, PASSWORD, 1000);
+
+    // First write starts and blocks on resolveWrite.
+    const firstFlush = fs.flushWriteBack();
+
+    // A mutation lands mid-write, then a concurrent flush is requested.
+    fs.scheduleWriteBack();
+    let secondFlushDone = false;
+    const secondFlush = fs.flushWriteBack().then(() => { secondFlushDone = true; });
+
+    await Promise.resolve();
+    expect(secondFlushDone).toBe(false);
+
+    // Unblock the first write; the writer loop must run a second write for the
+    // mutation, and the concurrent flush must wait for it.
+    resolveWrite();
+    await firstFlush;
+    await secondFlush;
+
+    expect(secondFlushDone).toBe(true);
+    expect(writeFileToHandle).toHaveBeenCalledTimes(2);
+  });
+
+  it("writeFileToHandle rejection → listener false, dirty re-set, no busy-loop", async () => {
+    writeFileToHandle.mockRejectedValue(new Error("disk full"));
+    const fs = await loadFileSync();
+    fs.configureFileSync(HANDLE, PASSWORD, 1000);
+    const listener = vi.fn();
+    fs.setWriteBackStatusListener(listener);
+    fs.scheduleWriteBack();
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_MS);
+    expect(listener).toHaveBeenCalledWith(false);
+    expect(logError).toHaveBeenCalled();
+    // Only one write attempt — the failure must not spin or self-rearm.
+    const callsAfterFail = writeFileToHandle.mock.calls.length;
+    expect(callsAfterFail).toBe(1);
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_MS * 5);
+    expect(writeFileToHandle).toHaveBeenCalledTimes(callsAfterFail);
+  });
+
+  it("failure then success → listener gets true on the retry write", async () => {
+    writeFileToHandle.mockRejectedValueOnce(new Error("transient"));
+    const fs = await loadFileSync();
+    fs.configureFileSync(HANDLE, PASSWORD, 1000);
+    const listener = vi.fn();
+    fs.setWriteBackStatusListener(listener);
+    // First write fails.
+    fs.scheduleWriteBack();
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_MS);
+    expect(listener).toHaveBeenCalledWith(false);
+    // Retry write succeeds (beforeEach default mockResolvedValue takes over).
+    fs.scheduleWriteBack();
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_MS);
+    expect(listener).toHaveBeenCalledWith(true);
+  });
+
+  it("plain success path → listener gets true", async () => {
+    const fs = await loadFileSync();
+    fs.configureFileSync(HANDLE, PASSWORD, 1000);
+    const listener = vi.fn();
+    fs.setWriteBackStatusListener(listener);
+    fs.scheduleWriteBack();
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_MS);
+    expect(writeFileToHandle).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledWith(true);
+  });
+
+  it("abandons an in-flight write when the session is reset mid-write", async () => {
+    // Clear-data while a write is encrypting must not clobber the on-disk file
+    // with a post-clear (empty) snapshot. The generation guard makes doWrite bail
+    // before writeFileToHandle when resetFileSync ran after it started.
+    let resolveEncrypt!: (b: ArrayBuffer) => void;
+    encrypt.mockReturnValueOnce(
+      new Promise<ArrayBuffer>((res) => { resolveEncrypt = res; }),
+    );
+    const fs = await loadFileSync();
+    fs.configureFileSync(HANDLE, PASSWORD, 1000);
+
+    const flush = fs.flushWriteBack();
+    // Let doWrite run through the permission check + export and block on encrypt.
+    await vi.advanceTimersByTimeAsync(0);
+
+    // User clears data while the write is mid-flight.
+    fs.resetFileSync();
+
+    // The (now-stale) encryption finishes.
+    resolveEncrypt(BYTES);
+    await flush;
+
+    expect(writeFileToHandle).not.toHaveBeenCalled();
+  });
+
+  it("generation-mismatch abandon → listener NOT called, dirty NOT re-set", async () => {
+    let resolveEncrypt!: (b: ArrayBuffer) => void;
+    encrypt.mockReturnValueOnce(
+      new Promise<ArrayBuffer>((res) => { resolveEncrypt = res; }),
+    );
+    const fs = await loadFileSync();
+    fs.configureFileSync(HANDLE, PASSWORD, 1000);
+    const listener = vi.fn();
+    fs.setWriteBackStatusListener(listener);
+
+    const flush = fs.flushWriteBack();
+    // Let doWrite run through the permission check + export and block on encrypt.
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Reset session while the write is mid-flight.
+    fs.resetFileSync();
+
+    // The (now-stale) encryption finishes.
+    resolveEncrypt(BYTES);
+    await flush;
+
+    // The write was abandoned — writeFileToHandle must not have been called.
+    expect(writeFileToHandle).not.toHaveBeenCalled();
+    // The listener must NOT be called on abandon.
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it("stamps the watermark from the post-write file after a flush", async () => {
+    const fs = await loadFileSync();
+    fs.configureFileSync(HANDLE, PASSWORD, 1000);
+    fs.scheduleWriteBack();
+    await fs.flushWriteBack();
+    // readFileFromHandle returns a file with lastModified 5000 (beforeEach).
+    expect(fs.getLastSyncedModified()).toBe(5000);
+  });
+
+  it("getSyncHandle returns the armed handle, and both reset to null on resetFileSync", async () => {
+    const fs = await loadFileSync();
+    fs.configureFileSync(HANDLE, PASSWORD, 1000);
+    expect(fs.getSyncHandle()).toBe(HANDLE);
+    fs.resetFileSync();
+    expect(fs.getSyncHandle()).toBeNull();
+    expect(fs.getLastSyncedModified()).toBeNull();
+  });
+
+  it("getLastSyncedModified reflects the modifiedMs passed to configureFileSync", async () => {
+    const fs = await loadFileSync();
+    fs.configureFileSync(HANDLE, PASSWORD, 1000);
+    expect(fs.getLastSyncedModified()).toBe(1000);
+  });
+
+  it("advanceSyncWatermark updates getLastSyncedModified without configureFileSync", async () => {
+    const fs = await loadFileSync();
+    fs.advanceSyncWatermark(4242);
+    expect(fs.getLastSyncedModified()).toBe(4242);
+  });
+
+  it("advanceSyncWatermark does not bump generation — in-flight write completes normally", async () => {
+    // Contrast with "abandons an in-flight write when the session is reset mid-write":
+    // advanceSyncWatermark must NOT bump generation, so a write already in flight
+    // when the watermark advances must still reach disk.
+    let resolveEncrypt!: (b: ArrayBuffer) => void;
+    encrypt.mockReturnValueOnce(
+      new Promise<ArrayBuffer>((res) => { resolveEncrypt = res; }),
+    );
+    const fs = await loadFileSync();
+    fs.configureFileSync(HANDLE, PASSWORD, 1000);
+
+    const flush = fs.flushWriteBack();
+    // Let doWrite run through the permission check + export and block on encrypt.
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Advance the watermark mid-flight — must not bump generation.
+    fs.advanceSyncWatermark(7777);
+
+    // The (now-delayed) encryption finishes — write should proceed, not bail.
+    resolveEncrypt(BYTES);
+    await flush;
+
+    // The generation guard (gen !== generation) must still pass, so the write was not abandoned.
+    expect(writeFileToHandle).toHaveBeenCalled();
+  });
+});

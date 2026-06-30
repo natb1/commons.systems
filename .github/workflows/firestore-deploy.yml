@@ -1,10 +1,11 @@
-name: Firestore — Deploy Rules
+name: Firestore — Deploy Rules and Indexes
 
 on:
   push:
     branches: [main]
     paths:
       - "firestore.rules"
+      - "firestore.indexes.json"
 
 permissions:
   contents: read
@@ -17,13 +18,15 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: .node-version
+          cache: 'npm'
+      - name: Install dependencies
+        run: .claude/skills/dispatch-propagate/scripts/npm-ci-with-retry.sh
       - name: Authenticate with Firebase
         env:
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
         run: .github/scripts/firebase-auth.sh
-      - name: Deploy Firestore rules
-        run: npx firebase-tools deploy --only firestore:rules --project "$FIREBASE_PROJECT_ID"
+      - name: Deploy Firestore rules and indexes
+        run: ./node_modules/.bin/firebase deploy --only firestore:rules,firestore:indexes --project default
       - name: Cleanup credentials
         if: always()
         run: .github/scripts/firebase-auth-cleanup.sh

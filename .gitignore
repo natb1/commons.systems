@@ -1,8 +1,15 @@
 worktrees/
 CLAUDE.local.md
 .env
+.env.*
+!**/.env.example
+# Tracked: non-secret syncAgenda deploy config firebase-tools reads at deploy
+# time (functions/src/agenda-sync.ts). Holds no secrets — the private key is a
+# Secret Manager secret, not a dotenv value.
+!functions/.env.commons-systems
 node_modules/
 dist/
+storybook-static/
 functions/lib/
 .firebase/
 .firebase-acceptance-*
@@ -14,5 +21,40 @@ ui-debug.log
 .direnv/
 **/tmp/
 budget-etl/budget-etl
-productivity-tui/productivity-tui
+/go.work.sum
 result
+
+# Claude Code sandbox /dev/null bind-mount artifacts — character device nodes
+# bind-mounted over host shell/tool/editor config inside every worktree. Not
+# repo content and not committable (git cannot stage a character device); listed
+# here only to keep `git status` clean. Caveat: .gitmodules, .mcp.json, and
+# .claude/commands are names this repo could legitimately track in the future —
+# a real file at one of those paths needs a one-time `git add -f`.
+/.bash_profile
+/.bashrc
+/.profile
+/.zprofile
+/.zshrc
+/.gitconfig
+/.ripgreprc
+/.gitmodules
+/.mcp.json
+/.claude/commands
+/.claude/scheduled_tasks.lock
+/.idea
+/.vscode
+
+# dispatch-review-erosion temp dirs (cleaned up by trap, but excluded if SIGKILL)
+.erosion-baseline.*
+.erosion-jscpd-head.*
+.erosion-jscpd-base.*
+
+# design-sync (claude.ai/design) — transient build/verify state. The durable
+# set under .design-sync/ (config.json, NOTES.md, conventions.md, previews/,
+# overrides/) is committed; everything below regenerates per run.
+.ds-sync/
+ds-bundle/
+.design-sync/sb-reference/
+.design-sync/learnings/
+.design-sync/.cache/
+.design-sync/node_modules

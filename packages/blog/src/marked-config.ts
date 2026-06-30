@@ -1,0 +1,151 @@
+import { Marked } from "marked";
+import type { Tokens } from "marked";
+import { escapeHtml } from "@commons-systems/htmlutil";
+import type { PublishedPost } from "./post-types.ts";
+import { BLOG_IMAGES } from "./image-config.ts";
+
+interface ImageMeta {
+  width: number;
+  height: number;
+  srcset: { path: string; width: number }[];
+}
+
+/** Known image dimensions and responsive variants for blog images served from public/. */
+export const IMAGE_DIMENSIONS: Record<string, ImageMeta> = Object.fromEntries(
+  BLOG_IMAGES.map(img => [
+    `/${img.baseName}.webp`,
+    {
+      width: img.fullWidth,
+      height: img.fullHeight,
+      srcset: [
+        ...img.responsiveWidths.map(w => ({ path: `/${img.baseName}-${w}w.webp`, width: w })),
+        { path: `/${img.baseName}.webp`, width: img.fullWidth },
+      ],
+    },
+  ]),
+);
+
+function isExternalHref(href: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(href, "https://commons.systems");
+  } catch {
+    return false; // unparseable → treat as internal (no glyph)
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return false; // mailto:, tel:, …
+  const host = url.hostname;
+  return host !== "commons.systems" && !host.endsWith(".commons.systems");
+}
+
+// Only these href schemes/prefixes produce an anchor; everything else
+// (javascript:, data:, vbscript:, …) renders as plain text. Allowlist, not
+// denylist, so obfuscated schemes can't slip through. A reference beginning
+// with "." or "/" cannot encode a scheme (RFC 3986 schemes start with a
+// letter), so root-relative (/), same-dir (./), and parent-dir (../) paths are
+// safe. Bare relative paths (foo/bar) stay rejected: the blog's internal-link
+// convention is leading-slash.
+const SAFE_HREF = /^(https?:|mailto:|tel:|\.{0,2}\/|#)/i;
+
+// Creates a Marked instance that strips raw HTML from markdown (defense-in-depth)
+// and opens external post-body links in new tabs with rel="noopener noreferrer" to prevent
+// reverse tabnapping. The image renderer adds width/height, srcset/sizes, and
+// fetchpriority="high" on the first image per instance (likely LCP candidate).
+//
+// Server-side HTML sanitizer (isomorphic-dompurify) is unnecessary: link labels are
+// rendered via this.parser.parseInline, so raw HTML inside labels routes through
+// `html: () => ""` like all other raw HTML, and images validate against
+// IMAGE_DIMENSIONS (unknown paths throw). The client additionally runs DOMPurify
+// (see pages/home.ts). Unsafe URL protocols (e.g. javascript: hrefs) are rejected by
+// the SAFE_HREF allowlist guard at the top of link(): non-allowlisted schemes render
+// as escaped label text rather than an anchor. renderPostContents() additionally
+// pre-validates every post link via assertSafeHrefs(), so a non-allowlisted href in a
+// published post fails the build loudly instead of silently degrading to label text.
+export function createMarked(): Marked {
+  let imageIndex = 0;
+
+  return new Marked({
+    renderer: {
+      html: () => "",
+      link({ href, title, text, tokens }: Tokens.Link) {
+        if (!SAFE_HREF.test(href)) {
+          return escapeHtml(text);
+        }
+        const safeHref = escapeHtml(href);
+        const titleAttr = title ? ` title="${escapeHtml(title)}"` : "";
+        const external = isExternalHref(href);
+        const glyphHtml = external
+          ? '<span class="external-link-icon" aria-hidden="true">&#x2197;</span>'
+          : "";
+        const targetRel = external ? ' target="_blank" rel="noopener noreferrer"' : "";
+        const label = this.parser.parseInline(tokens);
+        return `<a href="${safeHref}"${titleAttr}${targetRel}>${label}${glyphHtml}</a>`;
+      },
+      image({ href, text }) {
+        const safeHref = escapeHtml(href);
+        const alt = text ? escapeHtml(text) : "";
+        const dims = IMAGE_DIMENSIONS[href];
+        if (!dims) {
+          throw new Error(`Image "${href}" not found in IMAGE_DIMENSIONS. Add its dimensions to marked-config.ts.`);
+        }
+        const loadAttr = imageIndex === 0
+          ? ' fetchpriority="high"'
+          : ' loading="lazy"';
+        imageIndex++;
+        const srcsetAttr = ` srcset="${dims.srcset.map(s => `${escapeHtml(s.path)} ${s.width}w`).join(", ")}"`;
+        // sizes: empirically matched to blog.css / fellspiral layout.css.
+        // Desktop: main column capped at ~49rem, narrower on small desktops.
+        // Mobile: full viewport minus page padding and filigree borders.
+        const sizesAttr = ' sizes="(min-width: 768px) min(49rem, calc(100vw - 22.5rem - 24px)), calc(100vw - 5rem - 24px)"';
+        return `<img src="${safeHref}" alt="${alt}" width="${dims.width}" height="${dims.height}"${srcsetAttr}${sizesAttr}${loadAttr}>`;
+      },
+    },
+  });
+}
+
+export function extractH1(markdown: string): { title: string; body: string } | null {
+  const match = markdown.match(/^#\s+(.+)/);
+  if (!match) return null;
+  return { title: match[1], body: markdown.replace(/^#\s+.+\n?/, "") };
+}
+
+export interface PostContent {
+  html: string;
+  title: string | null;
+}
+
+// Walk a post's markdown tokens and throw on any link whose href fails the
+// SAFE_HREF allowlist. The link renderer silently degrades such hrefs to escaped
+// label text (dropping the link and any inline formatting), so without this guard
+// an author who writes e.g. [**read more**](foo/bar) would publish the literal
+// markdown "**read more**" with no build-time signal. Surfacing the failure here —
+// on the real build path (vite plugin / prerender), not the unit-tested renderer —
+// turns that silent downgrade into a loud, actionable build error.
+function assertSafeHrefs(body: string, filename: string, marked: Marked): void {
+  marked.walkTokens(marked.lexer(body), token => {
+    if (token.type === "link" && !SAFE_HREF.test(token.href)) {
+      throw new Error(
+        `Post "${filename}" has a link with a non-allowlisted href "${token.href}". ` +
+          `Allowed: http(s):, mailto:, tel:, leading-slash/./../ relative paths, or #anchors. ` +
+          `See SAFE_HREF in marked-config.ts.`,
+      );
+    }
+  });
+}
+
+/** Parse markdown files into rendered HTML content. */
+export async function renderPostContents(
+  posts: PublishedPost[],
+  readFile: (path: string) => string,
+  marked: Marked,
+): Promise<Record<string, PostContent>> {
+  const results: Record<string, PostContent> = {};
+  for (const post of posts) {
+    const markdown = readFile(post.filename);
+    const h1 = extractH1(markdown);
+    const body = h1 ? h1.body : markdown;
+    assertSafeHrefs(body, post.filename, marked);
+    const html = await marked.parse(body);
+    results[post.id] = { html, title: h1 ? h1.title : null };
+  }
+  return results;
+}

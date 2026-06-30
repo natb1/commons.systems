@@ -1,20 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
+import { timestampMockFactory } from "./helpers";
 
-vi.mock("firebase/firestore", () => {
-  class MockTimestamp {
-    constructor(
-      public readonly seconds: number,
-      public readonly nanoseconds: number,
-    ) {}
-    toMillis() {
-      return this.seconds * 1000 + this.nanoseconds / 1e6;
-    }
-    static fromMillis(ms: number) {
-      return new MockTimestamp(Math.floor(ms / 1000), (ms % 1000) * 1e6);
-    }
-  }
-  return { Timestamp: MockTimestamp };
-});
+vi.mock("firebase/firestore", () => timestampMockFactory());
 
 import {
   parseUploadedJson,
@@ -366,5 +353,25 @@ describe("toParsedData", () => {
     const parsed = parseUploadedJson(JSON.stringify(input));
     const data = toParsedData(parsed);
     expect(data.transactions[0].timestampMs).toBeNull();
+  });
+
+  it("threads journalEntryId from RawTransaction through to IdbTransaction", () => {
+    const input = {
+      ...validInput,
+      transactions: [{ ...validInput.transactions[0], journalEntryId: "je-001" }],
+    };
+    const parsed = parseUploadedJson(JSON.stringify(input));
+    expect(parsed.transactions[0].journalEntryId).toBe("je-001");
+
+    const data = toParsedData(parsed);
+    expect(data.transactions[0].journalEntryId).toBe("je-001");
+  });
+
+  it("defaults missing journalEntryId to null on RawTransaction and IdbTransaction", () => {
+    const parsed = parseUploadedJson(JSON.stringify(validInput));
+    expect(parsed.transactions[0].journalEntryId).toBeNull();
+
+    const data = toParsedData(parsed);
+    expect(data.transactions[0].journalEntryId).toBeNull();
   });
 });

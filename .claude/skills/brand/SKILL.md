@@ -1,6 +1,6 @@
 ---
 name: brand
-description: Brand voice and messaging reference for commons.systems — use when writing or reviewing any user-facing content (landing pages, blog posts, documentation, issue descriptions, README)
+description: Brand voice, messaging, and visual tone reference for commons.systems — use when writing or reviewing any user-facing content (landing pages, blog posts, documentation, issue descriptions, README) or when designing/reviewing the visual language (styling, UI, design systems)
 user-invocable: false
 ---
 
@@ -44,7 +44,7 @@ Someone leaving notes for the next person. The writing assumes the reader might 
 
 ## What This Project Never Sounds Like
 
-**Startup hype.** No "revolutionizing," "disrupting," "unlocking potential," "empowering users." No breathless future-casting. No implied scale ambitions. No calls to action that sound like conversion funnels.
+**Startup hype.** No "revolutionizing," "disrupting," "unlocking potential," "empowering users." No breathless future-casting. No implied scale ambitions. No manufactured urgency or breathless calls to action. (A plain, honest call to action is not hype — see the Tone Spectrum note on the services context.)
 
 **Political activism.** No villains, no moral urgency, no "we must" or "it's time to." The charter diagnoses a structural problem but doesn't moralize about it. The project builds alternatives, it doesn't campaign against incumbents.
 
@@ -62,12 +62,27 @@ The voice stays the same across all contexts. The tone — how much personality,
 |---|---|---|---|---|
 | Blog posts | Ceiling | Yes | Assertions with support | "Recovering Autonomy with Coding Agents" |
 | Landing page | Mid-high | Sparingly | Concise claims, not arguments | Hero copy, project description |
-| Charter | Mid | When relevant | Structural claims, not personal ones | CHARTER.md |
+| About / services page | Mid-high | Yes | Concise claims, business-relevant | /about page |
+| Charter | Mid | When relevant | Structural claims, not personal ones | `intentions/` |
 | README | Mid-low | Minimal | Practical guidance, not philosophy | README.md |
 | Fork/plugin docs | Floor | No | None — describe what it does, how to use it | Setup instructions, API descriptions |
 | Issue descriptions | Floor | No | Scope and rationale only | GitHub issue bodies |
 
 Blog voice is the ceiling: the most expressive register, with assertions, cross-domain connections, and first person. Documentation voice is the floor: still direct, still no jargon, but fewer opinions and no first person. Everything else sits between. The range is narrow — it's all the same person adjusting how much personality comes through.
+
+The about / services page is the one context where the project makes an offer rather than only giving gifts. The voice does not change — the authority still comes from the artifacts that function as a portfolio, not from rhetoric. What changes is the *content*: pricing, what an engagement delivers, what the institution owns when it ends. Honesty about limitations is the selling point here, not a liability — a sophisticated buyer reads it as competence. Hype stays out: overclaiming is dishonest and validates nothing about whether the work is useful. A conversion funnel is not hype, though — a clear path with explicit calls to action that moves a curious institution toward an engagement is legitimate, and optimizing practitioner engagement depends on it. The line is hype and manufactured urgency, not the funnel itself.
+
+One terminology note for this page: `artifact` is the project's internal term, and a business reader has no context for it — describe deliverables with concrete plain nouns instead ("the software", "the application", "what's built"). `solution` as a noun still stays out; it is vendor jargon a sophisticated buyer discounts, and a business audience is not helped by it. This page is also written in the first person: the offer's core differentiator is that the buyer deals directly with the implementer, and third-person copy about the contractor implies the intermediary the offer denies.
+
+## Visual Tone
+
+The visual language is the same voice in another medium. Where the writing is "the neighbor showing you what they built in their garage," the interface should look built, not branded — functional, legible, honestly DIY. The aesthetic is **cassette-futurism**: the personal computer before platforms, a tool not a storefront.
+
+The concrete visual spec — tokens, the eight `cs-*` components, the square-corner reset, and the full list of what the system rejects — lives in [`packages/ds/README.md`](../../../packages/ds/README.md), the design system's own source of truth. This section holds only the cross-surface judgment that applies everywhere, including artifacts outside the design system (blog imagery, OG cards, diagrams).
+
+- **Functional minimalism, not retro costume.** Cassette-futurism is the restraint of early computing, not a theme-park version of it. CRT scanlines, fake vintage skeuomorphism, and blinking-cursor nostalgia are tell, not show — they manufacture a vibe instead of being one. The moment it looks like a costume, it has crossed from show into tell.
+- **Legibility is the honest form of polish.** "Looks like it works" has to actually work for real eyes. This is where the charter's privilege-gradient risk bites: an aesthetic that gatekeeps by taste narrows the audience. A user-facing surface may soften toward approachability without leaving the family.
+- **No platform chrome.** The absence is the statement: no signup walls, no cookie banners, no attention-grabbing modals, no account gate on the first screen. Flow carries the anti-platform message as much as the pixels do.
 
 ## Terminology
 
@@ -96,7 +111,7 @@ See `.claude/rules/writing-style.md` for the full list of banned corporate jargo
 
 ## Messaging Pillars
 
-These are the core themes the project communicates, derived from [CHARTER.md](../../../CHARTER.md). Content should reinforce one or more of these without restating them as slogans.
+These are the core themes the project communicates, derived from [the intention graph](../../../intentions/). Content should reinforce one or more of these without restating them as slogans.
 
 1. **Institutions that can't scale down become parasitic.** The diagnosis. Not a conspiracy — a structural pattern where the mechanisms that make institutions capable also prevent them from standing down.
 

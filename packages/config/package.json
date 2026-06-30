@@ -1,0 +1,24 @@
+{
+  "name": "@commons-systems/config",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint *.js"
+  },
+  "exports": {
+    "./tsconfig.app.json": "./tsconfig.app.json",
+    "./tsconfig.lib.json": "./tsconfig.lib.json",
+    "./eslint": "./eslint.config.js",
+    "./vite": "./vite.js",
+    "./playwright": "./playwright.js",
+    "./firebase-headers.test-helper": "./firebase-headers.test-helper.ts",
+    "./cache-headers-smoke": "./cache-headers-smoke.ts",
+    "./security-headers-smoke": "./security-headers-smoke.ts",
+    "./reachability-smoke": "./reachability-smoke.ts",
+    "./hosting-smoke-helpers": "./hosting-smoke-helpers.ts",
+    "./playwright-test": "./playwright-test.ts"
+  }
+}

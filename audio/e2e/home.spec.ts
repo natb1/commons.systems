@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@commons-systems/config/playwright-test";
 import { signIn } from "@commons-systems/authutil/e2e/sign-in";
 
 test.describe("home page content", () => {
@@ -10,7 +10,7 @@ test.describe("home page content", () => {
     await expect(page.locator("#media-error")).toHaveCount(0);
   });
 
-  test("public media listing shows 4 items", async ({ page }) => {
+  test("public media listing shows 4 items @testonly", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator(".audio-row")).toHaveCount(4, {
       timeout: 10000,
@@ -80,7 +80,7 @@ test.describe("home page content", () => {
     });
   });
 
-  test("auth integration shows private items", async ({ page }) => {
+  test("auth integration shows private items @testonly", async ({ page }) => {
     await page.goto("/");
     await signIn(page);
     await expect(page.locator(".audio-row")).toHaveCount(5, {

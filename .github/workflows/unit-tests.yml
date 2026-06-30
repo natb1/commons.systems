@@ -11,16 +11,22 @@ permissions:
 jobs:
   unit-tests:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           fetch-depth: 0
       - name: Detect changed file categories
         id: changes
-        run: .claude/skills/ref-pr-workflow/scripts/detect-changes.sh
+        run: .claude/skills/dispatch-propagate/scripts/detect-changes.sh
       - name: Install nix (if nix files changed)
         if: steps.changes.outputs.nix == 'true'
         uses: DeterminateSystems/nix-installer-action@d96bc962e61b3049ce8128d03d57a1144fa96539 # main
+        with:
+          extra-conf: |
+            http2 = false
+            fallback = true
       - name: Set up Java (if firestore.rules changed)
         if: steps.changes.outputs.rules == 'true'
         uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
@@ -30,21 +36,80 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: .node-version
+          cache: 'npm'
       - name: Run unit tests
-        run: .claude/skills/ref-pr-workflow/scripts/run-unit-tests.sh
+        run: .claude/skills/dispatch-propagate/scripts/run-unit-tests.sh
+
+  rules-test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          fetch-depth: 0
+      - name: Detect changed file categories
+        id: changes
+        run: .claude/skills/dispatch-propagate/scripts/detect-changes.sh
+      - name: Set up Java (if firestore.rules changed)
+        if: steps.changes.outputs.rules == 'true'
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .node-version
+          cache: 'npm'
+      - name: Cache Firebase emulators
+        if: steps.changes.outputs.rules == 'true'
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}
+      - name: Install workspace dependencies
+        if: steps.changes.outputs.rules == 'true'
+        run: .claude/skills/dispatch-propagate/scripts/npm-ci-with-retry.sh
+      - name: Run rules-test suite
+        id: run-rules-test
+        if: steps.changes.outputs.rules == 'true'
+        run: .claude/skills/dispatch-propagate/scripts/run-rules-test.sh
+      - name: Report rules-test outcome
+        if: always()
+        run: |
+          case "${{ steps.run-rules-test.outcome }}" in
+            success)
+              echo "rules-test suite ran and passed (rules-adjacent files changed)"
+              ;;
+            failure)
+              echo "rules-test suite ran and failed (rules-adjacent files changed)"
+              ;;
+            skipped)
+              echo "rules-test suite skipped (no rules-adjacent files changed, or a prior step failed before the suite could run)"
+              ;;
+            *)
+              echo "rules-test suite outcome unknown: '${{ steps.run-rules-test.outcome }}'"
+              ;;
+          esac
 
   lint:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           fetch-depth: 0
       - name: Detect changed file categories
         id: changes
-        run: .claude/skills/ref-pr-workflow/scripts/detect-changes.sh
+        run: .claude/skills/dispatch-propagate/scripts/detect-changes.sh
       - name: Install nix (if nix files changed)
         if: steps.changes.outputs.nix == 'true'
         uses: DeterminateSystems/nix-installer-action@d96bc962e61b3049ce8128d03d57a1144fa96539 # main
+        with:
+          extra-conf: |
+            http2 = false
+            fallback = true
       - name: Set up Java (if firestore.rules changed)
         if: steps.changes.outputs.rules == 'true'
         uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
@@ -54,12 +119,200 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: .node-version
+          cache: 'npm'
       - name: Run lint
-        run: .claude/skills/ref-pr-workflow/scripts/run-lint.sh
+        run: .claude/skills/dispatch-propagate/scripts/run-lint.sh
+
+  dead-code:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          fetch-depth: 0
+      - name: Detect changed file categories
+        id: changes
+        run: .claude/skills/dispatch-propagate/scripts/detect-changes.sh
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: steps.changes.outputs.deadcode == 'true'
+        with:
+          node-version-file: .node-version
+          cache: 'npm'
+      - name: Run dead-code check
+        if: steps.changes.outputs.deadcode == 'true'
+        run: .claude/skills/dispatch-propagate/scripts/run-dead-code.sh
+
+  storybook-smoke:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          fetch-depth: 0
+      - name: Detect changed file categories
+        id: changes
+        run: .claude/skills/dispatch-propagate/scripts/detect-changes.sh
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: steps.changes.outputs.ds == 'true'
+        with:
+          node-version-file: .node-version
+          cache: 'npm'
+      - name: Run Storybook dev-server smoke test
+        if: steps.changes.outputs.ds == 'true'
+        run: .claude/skills/dispatch-propagate/scripts/run-storybook-smoke.sh
+
+  typecheck:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .node-version
+          cache: 'npm'
+      - name: Run typecheck
+        run: .claude/skills/dispatch-propagate/scripts/run-typecheck.sh
 
   hook-tests:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
       - name: Run approve-workflow-commands hook tests
         run: .claude/hooks/test-approve-workflow-commands.sh
+      - name: Run dispatch script tests
+        run: .claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh
+      - name: Run write-phase-log tests
+        run: .claude/skills/dispatch-propagate/scripts/test-write-phase-log.sh
+      - name: Run prose-rule lint tests
+        run: .claude/skills/dispatch-propagate/scripts/test-lint-prose-rules.sh
+      - name: Run ds-drift lint tests
+        run: .claude/skills/dispatch-propagate/scripts/test-lint-ds-drift.sh
+      - name: Run worktree-remove hook tests
+        run: .claude/hooks/test-worktree-remove.sh
+      - name: Run statusline hook tests
+        run: .claude/hooks/test-statusline.sh
+      - name: Run type-safety escape-hatch sensor tests
+        run: .github/scripts/test-check-type-safety-escapes.sh
+      - name: Run test-integrity script tests
+        run: .github/scripts/test-check-test-integrity.sh
+
+  test-integrity:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          fetch-depth: 0
+      - name: Check for test deletions / disabling skips
+        run: .github/scripts/check-test-integrity.sh
+
+  playwright-version-sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          fetch-depth: 0
+      - name: Detect changed file categories
+        id: changes
+        run: .claude/skills/dispatch-propagate/scripts/detect-changes.sh
+      - name: Install nix (only when flake or package-lock changed)
+        if: steps.changes.outputs.nix == 'true' || steps.changes.outputs.playwright == 'true'
+        uses: DeterminateSystems/nix-installer-action@d96bc962e61b3049ce8128d03d57a1144fa96539 # main
+        with:
+          extra-conf: |
+            http2 = false
+            fallback = true
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: steps.changes.outputs.nix == 'true' || steps.changes.outputs.playwright == 'true'
+        with:
+          node-version-file: .node-version
+          cache: 'npm'
+      - name: Install workspace dependencies
+        if: steps.changes.outputs.nix == 'true' || steps.changes.outputs.playwright == 'true'
+        run: .claude/skills/dispatch-propagate/scripts/npm-ci-with-retry.sh
+      - name: Verify nix playwright-driver chromium matches npm @playwright/test
+        if: steps.changes.outputs.nix == 'true' || steps.changes.outputs.playwright == 'true'
+        run: nix develop --command .github/scripts/check-playwright-version-sync.sh
+
+  type-safety-sensor:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          fetch-depth: 0
+      - name: Flag net-new type-safety escape hatches
+        run: .github/scripts/check-type-safety-escapes.sh
+
+  go-tests:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          fetch-depth: 0
+      - name: Detect changed file categories
+        id: changes
+        run: .claude/skills/dispatch-propagate/scripts/detect-changes.sh
+      - name: Set up Go (if Go files changed)
+        if: steps.changes.outputs.go == 'true'
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: stable
+      - name: Run Go tests
+        if: steps.changes.outputs.go == 'true'
+        run: |
+          set -euo pipefail
+          # Capture the module list first: a discovery failure aborts under
+          # set -e, and an empty result fails explicitly — feeding the loop
+          # via process substitution would instead pass the job silently.
+          modules=$(.claude/skills/dispatch-propagate/scripts/list-go-modules.sh)
+          if [ -z "$modules" ]; then
+            echo "::error::No Go modules discovered by list-go-modules.sh"
+            exit 1
+          fi
+          failed=0
+          while IFS= read -r dir; do
+            echo "=== go test: $dir ==="
+            (cd "$dir" && go test ./...) || failed=1
+          done <<< "$modules"
+          exit "$failed"
+
+  darwin-build:
+    runs-on: macos-14
+    permissions:
+      contents: read
+    # No CI runtime baseline yet: the Build step has executed 0 times (it is
+    # gated on nix-file changes and every run so far has skipped it). 30 min is
+    # a conservative runaway guard vs GitHub's 6h default; tighten to ~2x the
+    # observed p95 once 3-5 real warm-cache runs accumulate. (#1932, 2026-06-19)
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          fetch-depth: 0
+      - name: Detect changed file categories
+        id: changes
+        run: .claude/skills/dispatch-propagate/scripts/detect-changes.sh
+      - name: Install nix (if nix files changed)
+        if: steps.changes.outputs.nix == 'true'
+        uses: DeterminateSystems/nix-installer-action@d96bc962e61b3049ce8128d03d57a1144fa96539 # main
+        with:
+          extra-conf: |
+            extra-substituters = https://claude-code.cachix.org
+            extra-trusted-public-keys = claude-code.cachix.org-1:YeXf2aNu7UTX8Vwrze0za1WEDS+4DuI2kVeWEE4fsRk=
+      - name: Build darwinConfigurations.default
+        if: steps.changes.outputs.nix == 'true'
+        run: .github/scripts/build-darwin-config.sh

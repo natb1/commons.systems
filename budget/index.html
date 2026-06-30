@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="dark" />
     <meta name="description" content="Personal finance tracking and budget visualization" />
+    <meta name="theme-color" content="#1a1714" />
+    <link rel="icon" type="image/svg+xml" href="/icons/icon.svg" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon-180.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="preconnect" href="https://firebaseinstallations.googleapis.com" />
     <title>Budget</title>
     <link
@@ -13,19 +17,7 @@
     />
   </head>
   <body>
-    <div class="page">
-      <header>
-        <h1>Budget</h1>
-        <nav><app-nav id="nav"></app-nav></nav>
-      </header>
-      <div id="hero-container" class="content-grid"></div>
-      <div class="content-grid">
-        <main id="app"></main>
-      </div>
-      <footer>
-        <p>Created with <a href="https://github.com/natb1/commons.systems" target="_blank" rel="noopener">commons.systems</a> | &copy; 2026 RUMOR.ML <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener"><img src="https://mirrors.creativecommons.org/presskit/buttons/88x31/png/by-sa.png" alt="CC-BY-SA" class="cc-badge"></a></p>
-      </footer>
-    </div>
-    <script type="module" src="/src/main.ts"></script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

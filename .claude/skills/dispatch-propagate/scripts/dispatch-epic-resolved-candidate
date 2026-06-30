@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+N=$(resolve_issue_number "${1:-}")
+
+# Epic-label gate (#1594, #2235). Treat an issue as an epic-resolved candidate
+# ONLY if it carries a recognized epic label. The all-children-closed shape alone
+# is not enough — an ordinary tracking issue or a manually-filed parent with all
+# children closed must NOT route to /resolve-epic (which can auto-close) without
+# author intent. Author intent is signaled by an explicit epic label; that label
+# plus /resolve-epic's own acceptance-criteria judgment are the two remaining
+# safety gates, so dropping a mandatory config file is still safe (no spurious
+# auto-close).
+#
+# Labels come from dispatch-epic-labels, which defaults to "epic" when no
+# dispatch.config/epic.json is present. A present epic.json overrides the default
+# label set. An empty labels array in the config is an intentional override that
+# disables epic recognition entirely (emits nothing → CONFIGURED_LABELS empty →
+# exit 1 below). A dispatch-config-load hard failure (invalid JSON, schema error)
+# propagates non-zero through the helper under set -e — clear error, not silent
+# fallback. This gate runs BEFORE the sub-issues fetch so a non-epic issue
+# short-circuits cheaply (exit 1) without the extra gh round-trip.
+CONFIGURED_LABELS=$("$SCRIPT_DIR/dispatch-epic-labels") || {
+  echo "dispatch-epic-resolved-candidate: dispatch-epic-labels failed (bad JSON/schema in dispatch.config/epic.json)" >&2
+  exit 3
+}
+if [[ -z "$CONFIGURED_LABELS" ]]; then
+  # No epic labels (empty config override) — nothing is an epic. Not a candidate.
+  exit 1
+fi
+
+# Fetch the issue's labels. With pipefail on, a real gh_retry failure (network,
+# auth, etc.) makes the pipeline non-zero → exit 3 (hard error, distinct from
+# "not a candidate"). A genuinely-empty-labels success ({"labels":[]}) exits 0
+# with ISSUE_LABELS empty → falls through to the empty-intersection check → exit 1.
+ISSUE_LABELS=$(gh_issue_view_rest "$N" | jq -r '.labels[].name') || {
+  echo "dispatch-epic-resolved-candidate: gh_issue_view_rest $N (labels) failed" >&2
+  exit 3
+}
+
+# Intersect the configured epic labels with the issue's labels (sorted-set
+# intersection via comm -12). An empty intersection — including the empty-labels
+# case above — means the issue carries no configured epic label → not a candidate.
+if [[ -z "$ISSUE_LABELS" ]] \
+  || ! comm -12 \
+       <(printf '%s\n' "$CONFIGURED_LABELS" | sort -u) \
+       <(printf '%s\n' "$ISSUE_LABELS" | sort -u) \
+       | grep -q .; then
+  exit 1
+fi
+
+# Fetch sub-issues with the lean explicit field set (number,state,stateReason).
+# Propagate a hard error as exit 3 so the caller can distinguish a real gh
+# failure from "not a candidate" (exit 1). Capture raw stream first so a
+# non-zero subscript exit is caught by the || branch before the jq pipeline
+# can mask it.
+kids_stream=$("$SCRIPT_DIR/issue-sub-issues" "$N") || {
+  echo "dispatch-epic-resolved-candidate: issue-sub-issues failed for $N" >&2
+  exit 3
+}
+
+# Slurp the per-child JSON objects (one per line from issue-sub-issues) into an
+# array. Use printf '%s' to avoid zsh echo interpreting \t/\n in captured JSON.
+kids_json=$(printf '%s' "$kids_stream" | jq -s '.')
+
+total=$(jq 'length' <<<"$kids_json")
+
+# Zero sub-issues — not a spent epic.
+if [[ "$total" -eq 0 ]]; then
+  exit 1
+fi
+
+# Count children that are closed-as-completed (case-insensitive). .stateReason
+# may be null; the // "" guard prevents ascii_upcase erroring on null.
+good=$(jq '[.[] | select(
+  ((.state // "") | ascii_upcase) == "CLOSED" and
+  ((.stateReason // "") | ascii_upcase) == "COMPLETED"
+)] | length' <<<"$kids_json")
+
+if [[ "$good" -eq "$total" ]]; then
+  exit 0
+fi
+
+exit 1

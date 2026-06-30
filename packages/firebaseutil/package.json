@@ -1,0 +1,25 @@
+{
+  "name": "@commons-systems/firebaseutil",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    "./config": "./src/config.ts",
+    "./app-context": "./src/app-context.ts",
+    "./error-sink": "./src/error-sink.ts",
+    "./defer-appcheck": "./src/defer-appcheck.ts",
+    "./seed-storage": "./src/seed-storage.ts"
+  },
+  "peerDependencies": {
+    "@commons-systems/errorutil": "*",
+    "@commons-systems/authutil": "*",
+    "firebase": ">=12",
+    "@commons-systems/analyticsutil": "*",
+    "@commons-systems/firestoreutil": "*"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src/"
+  }
+}

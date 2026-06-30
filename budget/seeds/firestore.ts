@@ -2,7 +2,7 @@
 // The firestoreutil seed runner writes these specs to Firestore using the Admin SDK,
 // which converts Date objects to Timestamps on write.
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
-import type { Transaction, Statement, StatementItem, ReconciliationNote, Rule, NormalizationRule, WeeklyAggregate } from "../src/firestore.js";
+import type { Transaction, Statement, StatementItem, ReconciliationNote, Rule, NormalizationRule, WeeklyAggregate, Account, JournalEntry, JournalLeg, ReconciliationEvent } from "../src/firestore.js";
 import type { Budget } from "../src/entities/budget.js";
 import type { BudgetPeriod } from "../src/entities/budget-period.js";
 import { TEST_USER } from "@commons-systems/authutil/seed";
@@ -67,6 +67,41 @@ export type WeeklyAggregateSeedData = Omit<WeeklyAggregate, "id" | "weekStart" |
   weekStart: Date;
   memberEmails: string[];
   groupId: string | null;
+};
+
+/** Seed accounts use Date for openingBalanceDate and add memberEmails for security rules. */
+export type AccountSeedData = Omit<Account, "id" | "openingBalance" | "openingBalanceDate" | "groupId"> & {
+  openingBalance: number | null;
+  openingBalanceDate: Date | null;
+  groupId: string | null;
+  memberEmails: string[];
+};
+
+/** Seed journal entries use Date instead of Timestamp and add memberEmails for security rules. */
+export type JournalEntrySeedData = Omit<JournalEntry, "id" | "timestamp" | "note" | "groupId"> & {
+  timestamp: Date;
+  note: string | null;
+  groupId: string | null;
+  memberEmails: string[];
+};
+
+/** Seed journal legs use Date instead of Timestamp and add memberEmails for security rules. */
+export type JournalLegSeedData = Omit<JournalLeg, "id" | "timestamp" | "reconciledAt" | "reconciledEventId" | "statementItemId" | "groupId"> & {
+  timestamp: Date;
+  reconciledAt: Date | null;
+  reconciledEventId: string | null;
+  statementItemId: string | null;
+  groupId: string | null;
+  memberEmails: string[];
+};
+
+/** Seed reconciliation events use Date instead of Timestamp and add memberEmails for security rules. */
+export type ReconciliationEventSeedData = Omit<ReconciliationEvent, "id" | "reconciledThroughDate" | "reconciledAt" | "adjustmentEntryId" | "groupId"> & {
+  reconciledThroughDate: Date;
+  reconciledAt: Date;
+  adjustmentEntryId: string | null;
+  groupId: string | null;
+  memberEmails: string[];
 };
 
 const budgetDocs: { id: string; data: BudgetSeedData }[] = [
@@ -878,6 +913,295 @@ const weeklyAggregateDocs: { id: string; data: WeeklyAggregateSeedData }[] = [
   { id: "household-2025-02-17", data: { weekStart: new Date("2025-02-17"), creditTotal: 0, unbudgetedTotal: 15.50, groupId: "household", memberEmails: [TEST_USER.email] } },
 ];
 
+const accountDocs: { id: string; data: AccountSeedData }[] = [
+  {
+    id: "Example Bank_Checking",
+    data: {
+      institution: "Example Bank",
+      account: "Checking",
+      accountType: "asset",
+      openingBalance: 1500,
+      openingBalanceDate: new Date("2024-10-01"),
+      groupId: "household",
+      memberEmails: [TEST_USER.email],
+    } satisfies AccountSeedData,
+  },
+  {
+    id: "Example Bank_Credit Card",
+    data: {
+      institution: "Example Bank",
+      account: "Credit Card",
+      accountType: "liability",
+      openingBalance: 0,
+      openingBalanceDate: new Date("2024-10-01"),
+      groupId: "household",
+      memberEmails: [TEST_USER.email],
+    } satisfies AccountSeedData,
+  },
+  {
+    id: "Example Credit Union_Savings",
+    data: {
+      institution: "Example Credit Union",
+      account: "Savings",
+      accountType: "asset",
+      openingBalance: 1000,
+      openingBalanceDate: new Date("2024-10-01"),
+      groupId: "household",
+      memberEmails: [TEST_USER.email],
+    } satisfies AccountSeedData,
+  },
+  {
+    id: "Budget_Uncategorized Expense",
+    data: {
+      institution: "Budget",
+      account: "Uncategorized Expense",
+      accountType: "expense",
+      openingBalance: null,
+      openingBalanceDate: null,
+      groupId: "household",
+      memberEmails: [TEST_USER.email],
+    } satisfies AccountSeedData,
+  },
+  {
+    id: "Budget_Uncategorized Income",
+    data: {
+      institution: "Budget",
+      account: "Uncategorized Income",
+      accountType: "income",
+      openingBalance: null,
+      openingBalanceDate: null,
+      groupId: "household",
+      memberEmails: [TEST_USER.email],
+    } satisfies AccountSeedData,
+  },
+  {
+    id: "Budget_Opening Balance Equity",
+    data: {
+      institution: "Budget",
+      account: "Opening Balance Equity",
+      accountType: "equity",
+      openingBalance: null,
+      openingBalanceDate: null,
+      groupId: "household",
+      memberEmails: [TEST_USER.email],
+    } satisfies AccountSeedData,
+  },
+  {
+    id: "Budget_Adjustment Suspense",
+    data: {
+      institution: "Budget",
+      account: "Adjustment Suspense",
+      accountType: "equity",
+      openingBalance: null,
+      openingBalanceDate: null,
+      groupId: "household",
+      memberEmails: [TEST_USER.email],
+    } satisfies AccountSeedData,
+  },
+];
+
+const journalEntryDocs: { id: string; data: JournalEntrySeedData }[] = [
+  {
+    id: "je-grocery",
+    data: {
+      timestamp: new Date("2025-02-05"),
+      description: "Grocery Store",
+      note: null,
+      legCount: 2,
+      groupId: "household",
+      memberEmails: [TEST_USER.email],
+    } satisfies JournalEntrySeedData,
+  },
+  {
+    id: "je-payroll",
+    data: {
+      timestamp: new Date("2025-02-14"),
+      description: "Payroll Deposit",
+      note: null,
+      legCount: 2,
+      groupId: "household",
+      memberEmails: [TEST_USER.email],
+    } satisfies JournalEntrySeedData,
+  },
+  {
+    id: "je-transfer",
+    data: {
+      timestamp: new Date("2025-02-18"),
+      description: "Transfer to Savings",
+      note: "Monthly savings transfer",
+      legCount: 2,
+      groupId: "household",
+      memberEmails: [TEST_USER.email],
+    } satisfies JournalEntrySeedData,
+  },
+  {
+    id: "je-cc",
+    data: {
+      timestamp: new Date("2025-02-10"),
+      description: "Hardware Store",
+      note: null,
+      legCount: 2,
+      groupId: "household",
+      memberEmails: [TEST_USER.email],
+    } satisfies JournalEntrySeedData,
+  },
+];
+
+const journalLegDocs: { id: string; data: JournalLegSeedData }[] = [
+  // je-grocery: expense 84.50 — debit Uncategorized Expense, credit Checking
+  {
+    id: "jl-grocery-expense",
+    data: {
+      entryId: "je-grocery",
+      accountId: "Budget_Uncategorized Expense",
+      debit: 84.50,
+      credit: 0,
+      timestamp: new Date("2025-02-05"),
+      cleared: false,
+      reconciledAt: null,
+      reconciledEventId: null,
+      statementItemId: null,
+      groupId: "household",
+      memberEmails: [TEST_USER.email],
+    } satisfies JournalLegSeedData,
+  },
+  {
+    id: "jl-grocery-checking",
+    data: {
+      entryId: "je-grocery",
+      accountId: "Example Bank_Checking",
+      debit: 0,
+      credit: 84.50,
+      timestamp: new Date("2025-02-05"),
+      cleared: true,
+      reconciledAt: new Date("2025-02-28"),
+      reconciledEventId: "Example Bank_Checking_2025-02-28",
+      statementItemId: "Example Bank_Checking_FITID-RECON-LINKED",
+      groupId: "household",
+      memberEmails: [TEST_USER.email],
+    } satisfies JournalLegSeedData,
+  },
+  // je-payroll: income 2400 — debit Checking, credit Uncategorized Income
+  {
+    id: "jl-payroll-checking",
+    data: {
+      entryId: "je-payroll",
+      accountId: "Example Bank_Checking",
+      debit: 2400,
+      credit: 0,
+      timestamp: new Date("2025-02-14"),
+      cleared: true,
+      reconciledAt: new Date("2025-02-28"),
+      reconciledEventId: "Example Bank_Checking_2025-02-28",
+      statementItemId: null,
+      groupId: "household",
+      memberEmails: [TEST_USER.email],
+    } satisfies JournalLegSeedData,
+  },
+  {
+    id: "jl-payroll-income",
+    data: {
+      entryId: "je-payroll",
+      accountId: "Budget_Uncategorized Income",
+      debit: 0,
+      credit: 2400,
+      timestamp: new Date("2025-02-14"),
+      cleared: false,
+      reconciledAt: null,
+      reconciledEventId: null,
+      statementItemId: null,
+      groupId: "household",
+      memberEmails: [TEST_USER.email],
+    } satisfies JournalLegSeedData,
+  },
+  // je-transfer: 300 — debit Savings, credit Checking
+  {
+    id: "jl-transfer-savings",
+    data: {
+      entryId: "je-transfer",
+      accountId: "Example Credit Union_Savings",
+      debit: 300,
+      credit: 0,
+      timestamp: new Date("2025-02-18"),
+      cleared: false,
+      reconciledAt: null,
+      reconciledEventId: null,
+      statementItemId: null,
+      groupId: "household",
+      memberEmails: [TEST_USER.email],
+    } satisfies JournalLegSeedData,
+  },
+  {
+    id: "jl-transfer-checking",
+    data: {
+      entryId: "je-transfer",
+      accountId: "Example Bank_Checking",
+      debit: 0,
+      credit: 300,
+      timestamp: new Date("2025-02-18"),
+      cleared: true,
+      reconciledAt: null,
+      reconciledEventId: null,
+      statementItemId: null,
+      groupId: "household",
+      memberEmails: [TEST_USER.email],
+    } satisfies JournalLegSeedData,
+  },
+  // je-cc: expense 45 — debit Uncategorized Expense, credit Credit Card
+  {
+    id: "jl-cc-expense",
+    data: {
+      entryId: "je-cc",
+      accountId: "Budget_Uncategorized Expense",
+      debit: 45,
+      credit: 0,
+      timestamp: new Date("2025-02-10"),
+      cleared: false,
+      reconciledAt: null,
+      reconciledEventId: null,
+      statementItemId: null,
+      groupId: "household",
+      memberEmails: [TEST_USER.email],
+    } satisfies JournalLegSeedData,
+  },
+  {
+    id: "jl-cc-card",
+    data: {
+      entryId: "je-cc",
+      accountId: "Example Bank_Credit Card",
+      debit: 0,
+      credit: 45,
+      timestamp: new Date("2025-02-10"),
+      cleared: false,
+      reconciledAt: null,
+      reconciledEventId: null,
+      statementItemId: null,
+      groupId: "household",
+      memberEmails: [TEST_USER.email],
+    } satisfies JournalLegSeedData,
+  },
+];
+
+const reconciliationEventDocs: { id: string; data: ReconciliationEventSeedData }[] = [
+  {
+    id: "Example Bank_Checking_2025-02-28",
+    data: {
+      institution: "Example Bank",
+      account: "Checking",
+      reconciledThroughDate: new Date("2025-02-28"),
+      bankBalance: 2315.50,
+      clearedBalance: 2315.50,
+      adjustment: 0,
+      reconciledBy: TEST_USER.email,
+      reconciledAt: new Date("2025-02-28"),
+      legIds: ["jl-grocery-checking", "jl-payroll-checking"],
+      adjustmentEntryId: null,
+      groupId: "household",
+      memberEmails: [TEST_USER.email],
+    } satisfies ReconciliationEventSeedData,
+  },
+];
+
 const appSeed: Omit<SeedSpec, "namespace"> = {
   collections: [
     {
@@ -962,6 +1286,14 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
     { name: "statement-items", testOnly: true, documents: seedStatementItemDocs },
     { name: "seed-reconciliation-notes", convergent: true, documents: seedReconciliationNoteDocs },
     { name: "reconciliation-notes", testOnly: true, documents: seedReconciliationNoteDocs },
+    { name: "seed-accounts", convergent: true, documents: accountDocs },
+    { name: "accounts", testOnly: true, documents: accountDocs },
+    { name: "seed-journal-entries", convergent: true, documents: journalEntryDocs },
+    { name: "journal-entries", testOnly: true, documents: journalEntryDocs },
+    { name: "seed-journal-legs", convergent: true, documents: journalLegDocs },
+    { name: "journal-legs", testOnly: true, documents: journalLegDocs },
+    { name: "seed-reconciliation-events", convergent: true, documents: reconciliationEventDocs },
+    { name: "reconciliation-events", testOnly: true, documents: reconciliationEventDocs },
     { name: "seed-weekly-aggregates", convergent: true, documents: weeklyAggregateDocs },
     { name: "weekly-aggregates", testOnly: true, documents: weeklyAggregateDocs },
   ],

@@ -1,0 +1,172 @@
+:root {
+  color-scheme: light dark;
+  /* Accent-colored scrollbars document-wide — the outer window plus any
+     scrollable region — matching the landing project, whose CSS framework sets
+     this on the root. Per-region overrides (e.g. the Landing context panel's
+     thin bar) layer on top. */
+  scrollbar-color: var(--accent) transparent;
+}
+
+/* Production chrome — global element defaults */
+
+body {
+  font-family: var(--font-body);
+  color: var(--text-primary);
+  background: var(--grid-texture), var(--bg);
+}
+
+.page {
+  max-width: var(--main-max-width);
+  margin: 0 auto;
+  padding-inline: var(--space-4);
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-heading);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-heading);
+  text-shadow: var(--glow-accent);
+}
+
+a {
+  color: var(--link);
+}
+
+a:hover {
+  text-decoration-thickness: var(--border-width-strong);
+}
+
+header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--surface-card);
+  border: var(--border-width) solid var(--border-default);
+  border-bottom-width: var(--border-width-strong);
+  padding-block: var(--space-4);
+  padding-inline: var(--space-6);
+  margin-bottom: var(--space-8);
+}
+
+footer {
+  border-top: var(--border-width-strong) solid var(--border-default);
+  padding-top: var(--space-4);
+  padding-bottom: var(--space-4);
+  margin-top: var(--space-8);
+  color: var(--text-muted);
+}
+
+*,
+*::before,
+*::after {
+  border-radius: var(--radius-none);
+}
+
+main {
+  background: var(--surface-card);
+  padding: var(--space-6);
+  border: var(--border-width) solid var(--border-default);
+}
+
+/* cs-* component interaction states (resting styles are inline in the components) */
+
+.cs-btn:active            { transform: translateY(1px); }
+.cs-btn:focus-visible     { outline: var(--focus-outline); outline-offset: var(--focus-offset); }
+.cs-btn--primary:hover    { background: color-mix(in srgb, var(--accent) 85%, black); }
+.cs-btn--secondary:hover  { border-color: var(--accent);
+                            background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.cs-btn--ghost:hover      { text-decoration: underline; text-decoration-thickness: 2px; }
+
+.cs-card--interactive:hover,
+.cs-card--interactive:focus { border-color: var(--accent);
+                              outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.cs-input:focus,
+.cs-select:focus          { border-color: var(--accent); outline: none; }
+
+.cs-nav__link:hover       { text-decoration: underline; text-decoration-thickness: 2px; }
+
+/* Landing template — the landing project's page shell: a stacked header
+   (wordmark, tagline, nav row), an amber hero band over a card grid, and a
+   responsive two-column body whose context panel is sticky on the wide layout
+   and a toggle-collapsible overlay below it. The structural shell now uses the
+   canonical .content-grid / .sidebar / .panel-toggle contract from ds
+   layout.css; most region looks are inline in Landing.tsx. What remains here is
+   only the set of .cs-landing-scoped deltas needed to reproduce the original
+   Landing render on top of the canonical rules. Ported from the landing
+   project's default.css / layout.css / theme.css. */
+
+/* Width: the original Landing shell was the wide 68rem page. .page now reads
+   --main-max-width (default 48rem), so restore the wide width here. This is the
+   single most load-bearing override — without it Landing drops to 48rem. */
+.cs-landing {
+  --main-max-width: var(--max-width-wide);
+}
+
+/* Body grid deltas vs canonical .content-grid:
+   - align-items: start — canonical dropped the align-items the original grid had.
+   - contain: none — canonical sets `contain: layout style`, which makes the grid
+     a containing block for the absolute .sidebar regardless of its `position`.
+     The original grid had no containment, so the narrow overlay anchored to the
+     wrapper, not the grid. Neutralize it to keep that behavior (and to match the
+     original's lack of an extra stacking/formatting context at any width). */
+.cs-landing .content-grid {
+  align-items: start;
+  contain: none;
+}
+
+/* Hero card grid — Landing-specific, has a breakpoint, so it stays a class.
+   Note the 768px max-width breakpoint, distinct from the 767px shell breakpoint. */
+.cs-landing .hero-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+@media (max-width: 768px) {
+  .cs-landing .hero-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Panel scrollbar — canonical .sidebar doesn't set scrollbar-width; the original
+   panel used a thin bar (the accent scrollbar-color is already document-wide from
+   base.css :root). */
+.cs-landing .sidebar {
+  scrollbar-width: thin;
+}
+
+@media (min-width: 768px) {
+  /* Wide sticky panel: restore the original top/max-height (canonical uses
+     7rem / 100vh−9rem; the original was 4rem / 100vh−6rem) and neutralize the
+     padding-bottom canonical adds (the original had none). canonical's
+     margin-block:0 / border-block:none are no-ops on an <aside>. */
+  .cs-landing .sidebar {
+    top: calc(var(--space-12) + var(--space-4));
+    max-height: calc(100vh - var(--space-16) - var(--space-8));
+    padding-bottom: 0;
+  }
+}
+
+@media (max-width: 767px) {
+  /* Anchor the absolute panel to the hero+grid wrapper (the only direct <div>
+     child of .cs-landing), not the grid, so an open panel drops directly below
+     the sticky header and overlays the hero. Canonical anchors it to the grid
+     via .content-grid{position:relative}; undo that (position + contain are
+     neutralized above) and make the wrapper the containing block instead. */
+  .cs-landing > div {
+    position: relative;
+  }
+
+  .cs-landing .content-grid {
+    position: static;
+  }
+
+  /* Narrow overlay background — the original used the card surface, canonical
+     uses the page surface. */
+  .cs-landing .sidebar {
+    background: var(--surface-card);
+  }
+}

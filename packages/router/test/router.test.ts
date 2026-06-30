@@ -1,0 +1,688 @@
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { parsePath, createHistoryRouter, type Route, type Router } from "../src/index";
+import { registerErrorSink, type ErrorSink } from "@commons-systems/errorutil/log";
+
+const escapeHtml = (s: string): string =>
+  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+describe("parsePath", () => {
+  it("returns pathname and empty params with no query string", () => {
+    const result = parsePath();
+    expect(result.path).toBe("/");
+    expect([...result.params]).toEqual([]);
+  });
+
+  it("strips trailing slash from pathname", () => {
+    history.pushState({}, "", "/post/hello-world/");
+    const result = parsePath();
+    expect(result.path).toBe("/post/hello-world");
+  });
+
+  it("preserves root path when pathname is just /", () => {
+    history.pushState({}, "", "/");
+    const result = parsePath();
+    expect(result.path).toBe("/");
+  });
+});
+
+describe("createHistoryRouter", () => {
+  let outlet: HTMLDivElement;
+  let routes: [Route, ...Route[]];
+  let router: Router;
+  let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+  let sink: ErrorSink;
+
+  beforeEach(() => {
+    history.pushState({}, "", "/");
+    outlet = document.createElement("div");
+    routes = [
+      { path: "/", render: () => "<h2>Home</h2>" },
+      { path: "/about", render: () => "<h2>About</h2>" },
+    ];
+    consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    sink = vi.fn() as ErrorSink;
+    registerErrorSink(sink);
+  });
+
+  afterEach(() => {
+    router?.destroy();
+    consoleErrorSpy.mockRestore();
+    registerErrorSink(undefined);
+  });
+
+  it("renders default route", async () => {
+    router = createHistoryRouter(outlet, routes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+  });
+
+  it("navigates on popstate", async () => {
+    router = createHistoryRouter(outlet, routes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+
+    history.pushState({}, "", "/about");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>About</h2>");
+    });
+  });
+
+  it("falls back to first route for unknown path", async () => {
+    history.pushState({}, "", "/nonexistent");
+    router = createHistoryRouter(outlet, routes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+  });
+
+  it("intercepts same-origin anchor clicks", async () => {
+    router = createHistoryRouter(outlet, routes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+
+    const anchor = document.createElement("a");
+    anchor.setAttribute("href", "/about");
+    document.body.appendChild(anchor);
+
+    try {
+      anchor.click();
+      await vi.waitFor(() => {
+        expect(outlet.innerHTML).toBe("<h2>About</h2>");
+      });
+      expect(location.pathname).toBe("/about");
+    } finally {
+      document.body.removeChild(anchor);
+    }
+  });
+
+  it("does not intercept links with target=_blank", async () => {
+    router = createHistoryRouter(outlet, routes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+
+    const anchor = document.createElement("a");
+    anchor.setAttribute("href", "/about");
+    anchor.setAttribute("target", "_blank");
+    document.body.appendChild(anchor);
+
+    try {
+      anchor.click();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    } finally {
+      document.body.removeChild(anchor);
+    }
+  });
+
+  it("does not intercept external links", async () => {
+    router = createHistoryRouter(outlet, routes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+
+    const anchor = document.createElement("a");
+    anchor.setAttribute("href", "https://external.com/page");
+    document.body.appendChild(anchor);
+
+    try {
+      anchor.click();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    } finally {
+      document.body.removeChild(anchor);
+    }
+  });
+
+  it("does not intercept hash-only links", async () => {
+    router = createHistoryRouter(outlet, routes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+
+    const anchor = document.createElement("a");
+    anchor.setAttribute("href", "#section");
+    document.body.appendChild(anchor);
+
+    try {
+      anchor.click();
+      await new Promise((r) => setTimeout(r, 10));
+      // Still on home since "#section" doesn't start with "/"
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    } finally {
+      document.body.removeChild(anchor);
+    }
+  });
+
+  it("destroy() stops popstate listener", async () => {
+    router = createHistoryRouter(outlet, routes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+
+    router.destroy();
+
+    history.pushState({}, "", "/about");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+  });
+
+  it("matches RegExp path", async () => {
+    const regexpRoutes: [Route, ...Route[]] = [
+      { path: "/", render: () => "<h2>Home</h2>" },
+      { path: /^\/post\//, render: (path) => `<h2>Post: ${escapeHtml(path)}</h2>` },
+    ];
+    history.pushState({}, "", "/post/hello-world");
+    router = createHistoryRouter(outlet, regexpRoutes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Post: /post/hello-world</h2>");
+    });
+  });
+
+  it("supports async render", async () => {
+    const asyncRoutes: [Route, ...Route[]] = [
+      { path: "/", render: () => Promise.resolve("<h2>Async Home</h2>") },
+    ];
+    router = createHistoryRouter(outlet, asyncRoutes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Async Home</h2>");
+    });
+  });
+
+  it("discards stale async render", async () => {
+    let resolveFirst!: (value: string) => void;
+    const slowRoutes: [Route, ...Route[]] = [
+      {
+        path: "/",
+        render: () => new Promise((resolve) => { resolveFirst = resolve; }),
+      },
+      { path: "/about", render: () => "<h2>About</h2>" },
+    ];
+    router = createHistoryRouter(outlet, slowRoutes);
+
+    history.pushState({}, "", "/about");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>About</h2>");
+    });
+
+    resolveFirst("<h2>Stale Home</h2>");
+    await new Promise((r) => setTimeout(r, 10));
+    expect(outlet.innerHTML).toBe("<h2>About</h2>");
+  });
+
+  it("shows generic error message when render throws", async () => {
+    const errorRoutes: [Route, ...Route[]] = [
+      { path: "/", render: () => { throw new Error("boom"); } },
+    ];
+    router = createHistoryRouter(outlet, errorRoutes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<p>Something went wrong. Please try again.</p>");
+    });
+    expect(sink).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({ operation: "router-render" }));
+  });
+
+  it("formatError returns custom message", async () => {
+    const errorRoutes: [Route, ...Route[]] = [
+      { path: "/", render: () => { throw new Error("boom"); } },
+    ];
+    router = createHistoryRouter(outlet, errorRoutes, {
+      formatError: () => "Custom error",
+    });
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<p>Custom error</p>");
+    });
+  });
+
+  it("formatError returning undefined falls through", async () => {
+    const errorRoutes: [Route, ...Route[]] = [
+      { path: "/", render: () => { throw new Error("boom"); } },
+    ];
+    router = createHistoryRouter(outlet, errorRoutes, {
+      formatError: () => undefined,
+    });
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<p>Something went wrong. Please try again.</p>");
+    });
+  });
+
+  it("strips query params for route matching", async () => {
+    history.pushState({}, "", "/about?group=household");
+    router = createHistoryRouter(outlet, routes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>About</h2>");
+    });
+  });
+
+  it("passes path to render function", async () => {
+    const pathRoutes: [Route, ...Route[]] = [
+      { path: /^\//, render: (path) => `<h2>Path: ${escapeHtml(path)}</h2>` },
+    ];
+    history.pushState({}, "", "/some/path");
+    router = createHistoryRouter(outlet, pathRoutes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Path: /some/path</h2>");
+    });
+  });
+
+  it("passes path to afterRender", async () => {
+    let receivedPath: string | undefined;
+    const afterRoutes: [Route, ...Route[]] = [
+      {
+        path: "/",
+        render: () => "<h2>Home</h2>",
+        afterRender: (_outlet, path) => { receivedPath = path; },
+      },
+    ];
+    router = createHistoryRouter(outlet, afterRoutes);
+    await vi.waitFor(() => {
+      expect(receivedPath).toBe("/");
+    });
+  });
+
+  it("calls afterRender after innerHTML set", async () => {
+    let sawContent = false;
+    const afterRoutes: [Route, ...Route[]] = [
+      {
+        path: "/",
+        render: () => "<h2>Home</h2>",
+        afterRender: (el) => { sawContent = el.innerHTML === "<h2>Home</h2>"; },
+      },
+    ];
+    router = createHistoryRouter(outlet, afterRoutes);
+    await vi.waitFor(() => {
+      expect(sawContent).toBe(true);
+    });
+  });
+
+  it("null render preserves existing DOM and still calls afterRender", async () => {
+    outlet.innerHTML = "<h2>Pre-rendered</h2>";
+    let afterRenderEl: HTMLElement | undefined;
+    const hydrateRoutes: [Route, ...Route[]] = [
+      {
+        path: "/",
+        render: () => null,
+        afterRender: (el) => { afterRenderEl = el; },
+      },
+    ];
+    router = createHistoryRouter(outlet, hydrateRoutes);
+    await vi.waitFor(() => {
+      expect(afterRenderEl).toBe(outlet);
+    });
+    expect(outlet.innerHTML).toBe("<h2>Pre-rendered</h2>");
+  });
+
+  it("does not call afterRender on stale navigation", async () => {
+    let afterRenderCalled = false;
+    let resolveFirst!: (value: string) => void;
+    const staleRoutes: [Route, ...Route[]] = [
+      {
+        path: "/",
+        render: () => new Promise((resolve) => { resolveFirst = resolve; }),
+        afterRender: () => { afterRenderCalled = true; },
+      },
+      { path: "/about", render: () => "<h2>About</h2>" },
+    ];
+    router = createHistoryRouter(outlet, staleRoutes);
+
+    history.pushState({}, "", "/about");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>About</h2>");
+    });
+
+    resolveFirst("<h2>Stale</h2>");
+    await new Promise((r) => setTimeout(r, 10));
+    expect(afterRenderCalled).toBe(false);
+  });
+
+  it("afterRender error appended inline", async () => {
+    const afterRoutes: [Route, ...Route[]] = [
+      {
+        path: "/",
+        render: () => "<h2>Home</h2>",
+        afterRender: () => { throw new Error("after boom"); },
+      },
+    ];
+    router = createHistoryRouter(outlet, afterRoutes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toContain("<h2>Home</h2>");
+      expect(outlet.innerHTML).toContain("Some content failed to load");
+    });
+    expect(sink).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({ operation: "router-afterRender" }));
+  });
+
+  it("afterRender TypeError/ReferenceError deferred", async () => {
+    const deferredErrors: unknown[] = [];
+    vi.spyOn(globalThis, "setTimeout").mockImplementation((fn: TimerHandler) => {
+      if (typeof fn === "function") {
+        try { fn(); } catch (e) { deferredErrors.push(e); }
+      }
+      return 0 as unknown as ReturnType<typeof setTimeout>;
+    });
+
+    try {
+      const afterRoutes: [Route, ...Route[]] = [
+        {
+          path: "/",
+          render: () => "<h2>Home</h2>",
+          afterRender: () => { throw new TypeError("type error"); },
+        },
+      ];
+      router = createHistoryRouter(outlet, afterRoutes);
+      await vi.waitFor(() => {
+        expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+      });
+      expect(deferredErrors).toHaveLength(1);
+      expect(deferredErrors[0]).toBeInstanceOf(TypeError);
+      expect(sink).not.toHaveBeenCalled();
+    } finally {
+      vi.mocked(globalThis.setTimeout).mockRestore();
+    }
+  });
+
+  it("throwing onNavigate does not prevent rendering", async () => {
+    router = createHistoryRouter(outlet, routes, {
+      onNavigate: () => { throw new Error("navigate boom"); },
+    });
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+    expect(sink).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({ operation: "router-onNavigate" }));
+  });
+
+  it("onNavigate TypeError/ReferenceError deferred", async () => {
+    const deferredErrors: unknown[] = [];
+    vi.spyOn(globalThis, "setTimeout").mockImplementation((fn: TimerHandler) => {
+      if (typeof fn === "function") {
+        try { fn(); } catch (e) { deferredErrors.push(e); }
+      }
+      return 0 as unknown as ReturnType<typeof setTimeout>;
+    });
+
+    try {
+      router = createHistoryRouter(outlet, routes, {
+        onNavigate: () => { throw new TypeError("type error"); },
+      });
+      await vi.waitFor(() => {
+        expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+      });
+      expect(deferredErrors).toHaveLength(1);
+      expect(deferredErrors[0]).toBeInstanceOf(TypeError);
+      expect(sink).not.toHaveBeenCalled();
+    } finally {
+      vi.mocked(globalThis.setTimeout).mockRestore();
+    }
+  });
+
+  it("onNavigate callback fires with path on each navigation", async () => {
+    const paths: string[] = [];
+    router = createHistoryRouter(outlet, routes, {
+      onNavigate: ({ path }) => { paths.push(path); },
+    });
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+
+    history.pushState({}, "", "/about");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>About</h2>");
+    });
+    expect(paths).toEqual(["/", "/about"]);
+  });
+
+  it("navigate() re-renders current route", async () => {
+    let renderCount = 0;
+    const countRoutes: [Route, ...Route[]] = [
+      { path: "/", render: () => { renderCount++; return "<h2>Home</h2>"; } },
+    ];
+    router = createHistoryRouter(outlet, countRoutes);
+    await vi.waitFor(() => {
+      expect(renderCount).toBe(1);
+    });
+
+    router.navigate();
+    await vi.waitFor(() => {
+      expect(renderCount).toBe(2);
+    });
+  });
+
+  it("navigate() is no-op after destroy()", async () => {
+    let renderCount = 0;
+    const countRoutes: [Route, ...Route[]] = [
+      { path: "/", render: () => { renderCount++; return "<h2>Home</h2>"; } },
+    ];
+    router = createHistoryRouter(outlet, countRoutes);
+    await vi.waitFor(() => {
+      expect(renderCount).toBe(1);
+    });
+
+    router.destroy();
+    router.navigate();
+    await new Promise((r) => setTimeout(r, 10));
+    expect(renderCount).toBe(1);
+  });
+
+  it("showTerminalError() calls destroy and sets outlet HTML", async () => {
+    router = createHistoryRouter(outlet, routes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+
+    router.showTerminalError("<p>Fatal error</p>");
+    expect(outlet.innerHTML).toBe("<p>Fatal error</p>");
+
+    history.pushState({}, "", "/about");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await new Promise((r) => setTimeout(r, 10));
+    expect(outlet.innerHTML).toBe("<p>Fatal error</p>");
+  });
+
+  it("does not intercept anchor with download attribute", async () => {
+    router = createHistoryRouter(outlet, routes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+
+    const pushStateSpy = vi.spyOn(history, "pushState");
+    const anchor = document.createElement("a");
+    anchor.setAttribute("href", "/about");
+    anchor.setAttribute("download", "");
+    document.body.appendChild(anchor);
+
+    try {
+      anchor.click();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(pushStateSpy).not.toHaveBeenCalled();
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    } finally {
+      document.body.removeChild(anchor);
+      pushStateSpy.mockRestore();
+    }
+  });
+
+  it("does not intercept anchor with target=_self", async () => {
+    router = createHistoryRouter(outlet, routes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+
+    const pushStateSpy = vi.spyOn(history, "pushState");
+    const anchor = document.createElement("a");
+    anchor.setAttribute("href", "/about");
+    anchor.setAttribute("target", "_self");
+    document.body.appendChild(anchor);
+
+    try {
+      anchor.click();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(pushStateSpy).not.toHaveBeenCalled();
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    } finally {
+      document.body.removeChild(anchor);
+      pushStateSpy.mockRestore();
+    }
+  });
+
+  it("does not intercept protocol-relative href and does not throw", async () => {
+    router = createHistoryRouter(outlet, routes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+
+    const pushStateSpy = vi.spyOn(history, "pushState");
+    const anchor = document.createElement("a");
+    anchor.setAttribute("href", "//external.com/path");
+    document.body.appendChild(anchor);
+
+    try {
+      expect(() => anchor.click()).not.toThrow();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(pushStateSpy).not.toHaveBeenCalled();
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    } finally {
+      document.body.removeChild(anchor);
+      pushStateSpy.mockRestore();
+    }
+  });
+
+  it("does not intercept backslash-prefixed href that resolves cross-origin", async () => {
+    router = createHistoryRouter(outlet, routes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+
+    const pushStateSpy = vi.spyOn(history, "pushState");
+    const anchor = document.createElement("a");
+    // "/\evil.com/about" — passes startsWith("/") && !startsWith("//")
+    // string guards but the WHATWG URL parser normalizes the backslash to a
+    // slash, resolving cross-origin to //evil.com/about.
+    anchor.setAttribute("href", "/" + "\\" + "evil.com/about");
+    document.body.appendChild(anchor);
+
+    try {
+      expect(() => anchor.click()).not.toThrow();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(pushStateSpy).not.toHaveBeenCalled();
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    } finally {
+      document.body.removeChild(anchor);
+      pushStateSpy.mockRestore();
+    }
+  });
+
+  it("does not intercept unknown same-origin path with no matching route", async () => {
+    router = createHistoryRouter(outlet, routes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+
+    const pushStateSpy = vi.spyOn(history, "pushState");
+    const anchor = document.createElement("a");
+    anchor.setAttribute("href", "/feed.xml");
+    document.body.appendChild(anchor);
+
+    try {
+      anchor.click();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(pushStateSpy).not.toHaveBeenCalled();
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    } finally {
+      document.body.removeChild(anchor);
+      pushStateSpy.mockRestore();
+    }
+  });
+
+  it("intercepts same-origin anchor to a real route (positive control)", async () => {
+    router = createHistoryRouter(outlet, routes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+
+    const pushStateSpy = vi.spyOn(history, "pushState");
+    const anchor = document.createElement("a");
+    anchor.setAttribute("href", "/about");
+    document.body.appendChild(anchor);
+
+    try {
+      anchor.click();
+      expect(pushStateSpy).toHaveBeenCalledWith({}, "", "/about");
+      await vi.waitFor(() => {
+        expect(outlet.innerHTML).toBe("<h2>About</h2>");
+      });
+    } finally {
+      document.body.removeChild(anchor);
+      pushStateSpy.mockRestore();
+    }
+  });
+
+  it("matches g-flagged RegExp route correctly under the onClick+navigate double call", async () => {
+    const gRoutes: [Route, ...Route[]] = [
+      { path: "/", render: () => "<h2>Home</h2>" },
+      { path: /^\/post\//g, render: (path) => `<h2>Post: ${escapeHtml(path)}</h2>` },
+    ];
+    router = createHistoryRouter(outlet, gRoutes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+
+    const anchor = document.createElement("a");
+    anchor.setAttribute("href", "/post/a");
+    document.body.appendChild(anchor);
+
+    try {
+      anchor.click();
+      await vi.waitFor(() => {
+        expect(outlet.innerHTML).toBe("<h2>Post: /post/a</h2>");
+      });
+      expect(location.pathname).toBe("/post/a");
+    } finally {
+      document.body.removeChild(anchor);
+    }
+  });
+
+  it("matches y-flagged RegExp route correctly under the onClick+navigate double call", async () => {
+    const yRoutes: [Route, ...Route[]] = [
+      { path: "/", render: () => "<h2>Home</h2>" },
+      { path: /^\/post\//y, render: (path) => `<h2>Post: ${escapeHtml(path)}</h2>` },
+    ];
+    router = createHistoryRouter(outlet, yRoutes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+
+    const anchor = document.createElement("a");
+    anchor.setAttribute("href", "/post/a");
+    document.body.appendChild(anchor);
+
+    try {
+      anchor.click();
+      await vi.waitFor(() => {
+        expect(outlet.innerHTML).toBe("<h2>Post: /post/a</h2>");
+      });
+      expect(location.pathname).toBe("/post/a");
+    } finally {
+      document.body.removeChild(anchor);
+    }
+  });
+
+  it("escapes HTML metacharacters in the interpolated path", () => {
+    const route: Route = {
+      path: /^\/post\//,
+      render: (path) => `<h2>Post: ${escapeHtml(path)}</h2>`,
+    };
+    const html = route.render("/post/<img src=x>&title=y");
+    expect(html).toBe("<h2>Post: /post/&lt;img src=x&gt;&amp;title=y</h2>");
+  });
+});

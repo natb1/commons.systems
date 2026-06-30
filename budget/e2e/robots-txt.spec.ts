@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@commons-systems/config/playwright-test";
 
 test.describe("robots.txt", () => {
   test("GET /robots.txt returns valid robots.txt, not HTML", async ({

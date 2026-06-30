@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# check-inbox-age — report whether the Gmail inbox holds mail older than a
+# given age. Designed as a check-script jit for dispatch-jit-engine.
+#
+# Queries the Gmail REST API for at least one message matching
+# `in:inbox older_than:<max-age>`. The presence of such a message means the
+# inbox has aged mail that warrants a reminder.
+#
+# Usage:
+#   check-inbox-age <max-age>
+#
+# Arguments:
+#   <max-age>  a Gmail `older_than:`-compatible value: <int>d, <int>m, or
+#              <int>y (days / months / years). e.g. 7d, 1m, 1y.
+#
+# Authentication — NO credentials are stored in this file. The Gmail OAuth
+# access token is read at runtime from the GMAIL_ACCESS_TOKEN environment
+# variable. Per the pass/GPG section of .claude/rules/sandbox.md, source it
+# from the secret store into the environment before invoking this script:
+#
+#   export GMAIL_ACCESS_TOKEN="$(pass show <path-to-gmail-token>)"
+#
+# (Warm the gpg-agent cache once in an interactive shell first, as that rule
+# describes.) This script reads only the env var; it never reads `pass` itself.
+#
+# Exit codes — this matches dispatch-jit-engine's check-script contract:
+#   0  fired — the inbox contains mail older than <max-age>.
+#   1  did not fire — the inbox is clear of mail that old.
+#   2  error — bad usage, GMAIL_ACCESS_TOKEN unset, or an API/network failure.
+set -euo pipefail
+
+# ---- Step 0: parse and validate the argument --------------------------------
+
+MAX_AGE="${1:-}"
+if [[ $# -ne 1 || -z "$MAX_AGE" ]]; then
+  echo "error: usage: check-inbox-age <max-age>  (e.g. 7d, 1m, 1y)" >&2
+  exit 2
+fi
+# Gmail `older_than:` accepts an integer followed by d (days), m (months), or
+# y (years).
+if [[ ! "$MAX_AGE" =~ ^[0-9]+[dmy]$ ]]; then
+  echo "error: <max-age> must be <int>d, <int>m, or <int>y (e.g. 7d, 1m, 1y); got '$MAX_AGE'" >&2
+  exit 2
+fi
+
+# ---- Step 1: read the access token from the environment --------------------
+
+if [[ -z "${GMAIL_ACCESS_TOKEN:-}" ]]; then
+  echo "error: GMAIL_ACCESS_TOKEN is unset or empty." >&2
+  echo "       Source it from the secret store before invoking this script, e.g." >&2
+  echo "         export GMAIL_ACCESS_TOKEN=\"\$(pass show <path-to-gmail-token>)\"" >&2
+  echo "       See the pass/GPG section of .claude/rules/sandbox.md." >&2
+  exit 2
+fi
+
+# ---- Step 2: query the Gmail API -------------------------------------------
+# --data-urlencode with -G appends the encoded params to the URL as a query
+# string. -sf keeps curl quiet and makes it fail (non-zero) on HTTP >= 400.
+RESPONSE=""
+CURL_RC=0
+RESPONSE=$(curl -sfG \
+  -H "Authorization: Bearer ${GMAIL_ACCESS_TOKEN}" \
+  --data-urlencode "q=in:inbox older_than:${MAX_AGE}" \
+  --data-urlencode "maxResults=1" \
+  "https://gmail.googleapis.com/gmail/v1/users/me/messages" 2>/dev/null) \
+  || CURL_RC=$?
+if [[ "$CURL_RC" -ne 0 ]]; then
+  echo "error: Gmail API request failed (curl exit $CURL_RC)." >&2
+  exit 2
+fi
+
+# ---- Step 3: interpret the response ----------------------------------------
+# A well-formed Gmail error response carries a top-level `.error` object.
+ERROR_MSG=$(printf '%s' "$RESPONSE" | jq -r '.error.message // empty')
+if [[ -n "$ERROR_MSG" ]]; then
+  echo "error: Gmail API returned an error: $ERROR_MSG" >&2
+  exit 2
+fi
+
+# `.messages` is a non-empty array when at least one message matches the query.
+MSG_COUNT=$(printf '%s' "$RESPONSE" | jq '(.messages // []) | length')
+if [[ "$MSG_COUNT" -gt 0 ]]; then
+  # Inbox holds mail older than <max-age> — fire.
+  exit 0
+fi
+
+# Inbox is clear of mail that old — do not fire.
+exit 1

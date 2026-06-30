@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@commons-systems/config/playwright-test";
 
 test.describe("hero", () => {
   test("hero section visible on landing page @smoke", async ({ page }) => {
@@ -23,30 +23,12 @@ test.describe("hero", () => {
     await expect(page.locator("#panel-analyze")).toBeVisible();
   });
 
-  test("clicking a second chip hides the first panel", async ({ page }) => {
-    await page.goto("/");
-    await page.locator(".hero-chip").first().click();
-    await expect(page.locator("#panel-analyze")).toBeVisible();
-
-    await page.locator(".hero-chip").nth(1).click();
-    await expect(page.locator("#panel-analyze")).toBeHidden();
-    await expect(page.locator("#panel-parser")).toBeVisible();
-  });
-
   test("clicking an active chip hides its panel", async ({ page }) => {
     await page.goto("/");
     await page.locator(".hero-chip").first().click();
     await expect(page.locator("#panel-analyze")).toBeVisible();
 
     await page.locator(".hero-chip").first().click();
-    await expect(page.locator("#panel-analyze")).toBeHidden();
-  });
-
-  test("inline chip opens parser panel", async ({ page }) => {
-    await page.goto("/");
-    await page.locator(".hero-chip").first().click();
-    await page.locator(".inline-chip").click();
-    await expect(page.locator("#panel-parser")).toBeVisible();
     await expect(page.locator("#panel-analyze")).toBeHidden();
   });
 

@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+ISSUE_NUM=$(resolve_issue_number "${1:-}")
+# Emit one JSON object per sub-issue via the REST-backed helper (#2257). The
+# helper has a FIXED projection (number,title,body,state,stateReason,createdAt,
+# labels,assignees); both live consumers (dispatch-epic-resolved-candidate and
+# dispatch-trace-leaf) read only number/state/stateReason, all in that
+# projection. The former per-call FIELDS arg drove the GraphQL `gh issue view
+# --json <FIELDS>` projection, which no longer exists — so it is gone.
+SUBS=$(gh_api_array "/repos/{owner}/{repo}/issues/$ISSUE_NUM/sub_issues" '.[].number')
+for sub in $SUBS; do
+  gh_issue_view_rest "$sub"
+done

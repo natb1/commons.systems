@@ -1,0 +1,241 @@
+#!/usr/bin/env bash
+# dispatch-spawn-sweep — launch the dispatch-sweep reaper as a transient
+# systemd-run --user unit so the synchronous Stop-hook caller returns at once.
+#
+# dispatch-sweep walks the worktree registrations and GCs stale ones (worktrees
+# whose worker session has died, leaving the checkout and its .bare/ registration
+# behind — #1451). It is a relatively heavy, gh-touching pass; running it inline
+# in every worker Stop-hook would both block the hook and hammer the GitHub API.
+# This launcher fires it as a transient .service in the background, exactly the
+# way dispatch-spawn-tick fires the headless tick: the transient unit IS the
+# detachment, so the hook returns immediately.
+#
+# TWO SEPARATE concurrency mechanisms (they are distinct — do not conflate them):
+#
+#   (a) Fixed unit name = dedup.
+#       The systemd unit name is FIXED — `dispatch-sweep`. While one sweep unit
+#       is running, a second `systemd-run --unit=dispatch-sweep ...` collides
+#       ("already exists") and we treat that as a no-op (`deduped`). This guards
+#       against two concurrent sweeps racing on the same `git worktree remove`
+#       (a double-remove would error/corrupt). The dedup is concurrency control,
+#       not rate control.
+#
+#   (b) mtime throttle = rate control.
+#       Independently of dedup, a throttle file's mtime gates how OFTEN a sweep
+#       may fire at all. A worker Stop happens often; the sweep is gh-heavy and
+#       must not run on every single Stop (GitHub rate limit). If the throttle
+#       file was stamped less than DISPATCH_SWEEP_THROTTLE_S seconds ago, this
+#       launcher prints `throttled` and exits WITHOUT launching — even when no
+#       sweep is currently running (so dedup would not have caught it). The
+#       throttle limits frequency; the dedup prevents overlap. They solve
+#       different problems.
+#
+#       Stamp-AFTER-launch: the throttle file is stamped only on the spawned and
+#       deduped success paths, never before the systemd-run call. Stamping before
+#       would let a non-dedup launch failure (D-Bus unavailable, systemd user
+#       instance not running, unit-file permission error) consume the full
+#       throttle window — the stamp would carry a fresh mtime even though no
+#       sweep ran, so every worker Stop for the next DISPATCH_SWEEP_THROTTLE_S
+#       seconds would print `throttled` and skip relaunching, opening
+#       multi-minute sweep-coverage gaps on a WSL host whose systemd user session
+#       is transiently unavailable. Stamping only on success lets a failed launch
+#       retry on the very next worker Stop.
+#
+#       Fail-open on an uncreatable stamp path: the stamp is best-effort. If
+#       MAIN_WORKTREE/tmp/ cannot be created (e.g. a missing main worktree), the
+#       stamp never persists and throttling becomes a no-op — every Stop fires a
+#       sweep (bounded by the dedup). This fails OPEN (more sweeps), not closed,
+#       which is the safer direction for stale-worktree GC.
+#
+# --collect:
+#   Makes systemd garbage-collect a finished OR FAILED transient unit so the
+#   fixed name `dispatch-sweep` frees for the next sweep. Without --collect a
+#   non-zero dispatch-sweep exit would leave a lingering failed unit and the
+#   next `--unit=dispatch-sweep` would collide forever — wedging all future
+#   sweeps. Same reasoning as dispatch-spawn-tick.
+#
+# --setenv=PATH="$PATH":
+#   Propagates the launching caller's PATH into the transient unit. Without it
+#   the unit inherits the systemd user manager's minimal default PATH, which
+#   omits the nix store — so on NixOS/WSL hosts /usr/bin/env can't resolve bash
+#   (exit 127) and dispatch-sweep can't find git/jq/claude. The caller (the
+#   worker Stop-hook) carries the full nix-store PATH, so capturing it at launch
+#   time makes the unit self-sufficient. Same as dispatch-spawn-tick.
+#
+# KillMode=process — cgroup-reaping stop-gap (#1196):
+#   dispatch-sweep calls worktree_has_live_session → `claude agents --json` to
+#   decide whether a worktree is still in use. That first `claude` call spawns
+#   Claude Code's per-user bg supervisor daemon on demand — and it is born
+#   inside THIS transient unit's cgroup. systemd's default
+#   KillMode=control-group SIGTERMs the entire cgroup when the sweep unit
+#   finishes, which would reap that daemon and every background dispatch worker
+#   it hosts. Passing --property=KillMode=process makes a finishing sweep kill
+#   only its own dispatch-sweep process; the detached daemon/workers survive as
+#   init orphans. This is the same minimal stop-gap dispatch-spawn-tick
+#   documents at its KillMode lines; the durable daemon-ownership design is
+#   tracked in #1197. The sweep's `claude agents --json` liveness checks are the
+#   daemon-parenting trigger, so KillMode=process is a HARD requirement here.
+#
+# DELIBERATE OMISSIONS (vs dispatch-spawn-tick):
+#   (a) NO OnFailure recovery unit / no ensure_recover_unit. The sweep is
+#       best-effort, not chain-critical: a failed sweep simply retries on the
+#       next worker Stop. (A failed LAUNCH does not stamp the throttle — see
+#       (b) above — so the retry is immediate, not throttle-delayed.)
+#       dispatch-spawn-tick IS
+#       chain-critical, so it installs dispatch-tick-recover.service to
+#       guarantee a chain continuation; the sweep needs no such guarantee.
+#   (b) NO ensure_daemon_service call. The sweep does not host the fleet — the
+#       durable-daemon ownership (#1197) is dispatch-spawn-tick's concern.
+#       KillMode=process alone suffices to protect the sweep's short-lived
+#       `claude agents --json` calls from reaping the daemon.
+#
+# Stdout protocol (exactly one word on every success path):
+#   spawned    the transient sweep unit was created (exit 0).
+#   deduped    a sweep unit with the fixed name is already running — the
+#              systemd-run collision ("already exists") is treated as a no-op
+#              (exit 0).
+#   throttled  the throttle window has not elapsed since the last sweep — no
+#              unit was launched (exit 0).
+#
+# Exit codes:
+#   0  spawned, deduped, or throttled (stdout disambiguates).
+#   2  a malformed config (positional argument passed, or not in a git repo with
+#      DISPATCH_SPAWN_SWEEP_MAIN_WORKTREE unset).
+#   non-zero — systemd-run failed for a reason other than the already-exists
+#              collision; the exit code is passed through.
+#
+# Environment overrides for testability (mirroring dispatch-spawn-tick):
+#   DISPATCH_SPAWN_SWEEP_SYSTEMD_RUN_CMD  The `systemd-run` binary. Default:
+#                                         `systemd-run`.
+#   DISPATCH_SPAWN_SWEEP_MAIN_WORKTREE    The main worktree path. When set, the
+#                                         script does NOT require a git repo.
+#                                         Default: <project-root>/worktrees/main,
+#                                         via resolve_project_root (lib.sh).
+#   DISPATCH_SPAWN_SWEEP_THROTTLE_FILE    The throttle stamp file. Default:
+#                                         <main-worktree>/tmp/dispatch-sweep-last.
+#   DISPATCH_SWEEP_THROTTLE_S             Throttle window in seconds. Default:
+#                                         300.
+#   DISPATCH_SPAWN_SWEEP_NOW              "now" epoch seconds, for deterministic
+#                                         throttle tests. Default: `date +%s`.
+#
+# Called from the worker Stop-hook, which runs OUTSIDE Claude's Bash sandbox. A
+# Bash-tool caller would need `dangerouslyDisableSandbox: true` because
+# `systemd-run --user` talks to the user's systemd over D-Bus, which the sandbox
+# blocks.
+#
+# NOT set -e: exits are handled explicitly (matching dispatch-spawn-tick).
+set -uo pipefail
+
+# ---- Step 0: reject any positional argument ---------------------------------
+# The sweep takes no target — it walks all worktrees. Reject any positional with
+# exit 2 (mirrors dispatch-sweep's own no-argument stance).
+if [[ $# -gt 0 ]]; then
+  echo "dispatch-spawn-sweep: takes no arguments" >&2
+  exit 2
+fi
+
+# ---- Step 1: resolve config -------------------------------------------------
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+
+# The sweep runs from the main worktree (where every autonomous pass is rooted).
+# An explicit DISPATCH_SPAWN_SWEEP_MAIN_WORKTREE is authoritative and bypasses
+# the git lookup — tests rely on this. Otherwise resolve_project_root (lib.sh)
+# returns the project root in both classic (.git) and bare (.bare) layouts.
+if [[ -n "${DISPATCH_SPAWN_SWEEP_MAIN_WORKTREE:-}" ]]; then
+  MAIN_WORKTREE="$DISPATCH_SPAWN_SWEEP_MAIN_WORKTREE"
+else
+  PROJECT_ROOT=$(resolve_project_root) \
+    || { echo "dispatch-spawn-sweep: not in a git repo and DISPATCH_SPAWN_SWEEP_MAIN_WORKTREE is unset" >&2; exit 2; }
+  MAIN_WORKTREE="$PROJECT_ROOT/worktrees/main"
+fi
+
+# ---- Step 2: throttle (rate control — distinct from the dedup below) --------
+# Keeps the gh-heavy sweep off every single worker Stop. If the throttle file
+# was stamped less than the window ago, do not launch at all. This is NOT the
+# dedup: it gates frequency even when no sweep is currently running.
+THROTTLE_FILE="${DISPATCH_SPAWN_SWEEP_THROTTLE_FILE:-$MAIN_WORKTREE/tmp/dispatch-sweep-last}"
+THROTTLE_S="${DISPATCH_SWEEP_THROTTLE_S:-300}"
+NOW="${DISPATCH_SPAWN_SWEEP_NOW:-$(date +%s)}"
+
+if [[ -e "$THROTTLE_FILE" ]]; then
+  # GNU stat (this repo runs on WSL/Linux — no BSD fallback by design). If the
+  # stat fails for an existing file, treat as not-throttled and proceed to
+  # launch — a stat error must not block the sweep.
+  if MTIME=$(stat -c %Y "$THROTTLE_FILE" 2>/dev/null); then
+    if (( NOW - MTIME < THROTTLE_S )); then
+      echo throttled
+      exit 0
+    fi
+  fi
+fi
+
+# The throttle is stamped AFTER a successful launch (see stamp_throttle below),
+# NOT before. Stamping before would let a non-dedup launch failure (D-Bus down,
+# systemd user instance not running, unit-file permission error) consume the full
+# throttle window: the stamp would carry a fresh mtime even though no sweep ran,
+# so every worker Stop for the next DISPATCH_SWEEP_THROTTLE_S seconds would print
+# `throttled` and skip relaunching — multi-minute sweep-coverage gaps on a WSL
+# host whose systemd user session is transiently unavailable. Stamping only on
+# the spawned/deduped paths lets a failed launch retry on the very next Stop.
+#
+# Note the stamp is best-effort: if MAIN_WORKTREE/tmp/ cannot be created (e.g. a
+# missing main worktree), the stamp never persists and throttling becomes a
+# no-op — every Stop fires a sweep. This fails OPEN (more sweeps, bounded by the
+# dedup), not closed, which is the safer direction for stale-worktree GC.
+stamp_throttle() {
+  mkdir -p "$(dirname "$THROTTLE_FILE")" 2>/dev/null || true
+  printf '%s\n' "$NOW" >"$THROTTLE_FILE" 2>/dev/null || true
+}
+
+# ---- Step 3: launch the transient sweep unit immediately --------------------
+SYSTEMD_RUN_CMD="${DISPATCH_SPAWN_SWEEP_SYSTEMD_RUN_CMD:-systemd-run}"
+SWEEP_PATH="$MAIN_WORKTREE/.claude/skills/dispatch-propagate/scripts/dispatch-sweep"
+
+# Fixed unit name — the dedup mechanism (see header (a)). A second launch while
+# this unit is running collides and is treated as a `deduped` no-op.
+UNIT_NAME="dispatch-sweep"
+
+RUN_STDERR=$(mktemp)
+trap 'rm -f "$RUN_STDERR"' EXIT
+# Capture the exit code directly — after `if cmd; then ... fi`, `$?` is the exit
+# status of the `if` construct, NOT the exit code of `cmd`. Running `cmd` outside
+# an `if` and capturing `$?` immediately preserves the real exit code so the
+# "pass-through on unexpected failure" contract holds.
+"$SYSTEMD_RUN_CMD" --user \
+     --unit="$UNIT_NAME" \
+     --collect \
+     --property=KillMode=process \
+     --working-directory="$MAIN_WORKTREE" \
+     --setenv=PATH="$PATH" \
+     "$SWEEP_PATH" \
+     2>"$RUN_STDERR"
+RC=$?
+
+if (( RC == 0 )); then
+  stamp_throttle
+  echo spawned
+  exit 0
+fi
+
+err=$(cat "$RUN_STDERR")
+# systemd's already-exists message varies slightly across versions
+# ("Unit ... already exists" / "Failed to start transient service unit: Unit
+# ... already exists"). Match on the substring rather than the full phrase. A
+# collision always names the colliding unit, so also require the unit name —
+# this keeps cross-version tolerance while preventing an unrelated failure whose
+# stderr happens to contain "already exists" from being silently treated as a
+# dedup no-op (which would mask a real launch failure).
+if [[ "$err" == *"already exists"* && "$err" == *"$UNIT_NAME"* ]]; then
+  # A sweep is already running — stamp the throttle so the next Stop respects the
+  # rate window (a sweep DID fire recently, just not by this caller).
+  stamp_throttle
+  echo deduped
+  exit 0
+fi
+
+# Some other failure — surface stderr and pass the exit code through. Crucially,
+# do NOT stamp the throttle here: an un-launched sweep must be retryable on the
+# very next worker Stop, not blocked for the full throttle window.
+echo "$err" >&2
+exit "$RC"

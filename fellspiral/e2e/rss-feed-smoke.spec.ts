@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@commons-systems/config/playwright-test";
 
 test.describe("rss feed smoke", () => {
   test("GET /feed.xml returns RSS XML @smoke", async ({ page }) => {

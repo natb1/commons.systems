@@ -1,7 +1,12 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@commons-systems/config/playwright-test";
 
 test.describe("navigation", () => {
-  test("page loads without JS errors @smoke", async ({ page }) => {
+  // @build: the blog hydrates (hydrateRoot) onto prerendered HTML. Against the
+  // raw Vite dev server (no prerender) hydration mismatches throw — a dev-server
+  // limitation, not a product error — so this zero-error assertion only holds on
+  // the prerendered build. Runs in CI acceptance and @smoke preview; excluded
+  // from the dev-server QA path.
+  test("page loads without JS errors @smoke @build", async ({ page }) => {
     const errors: Error[] = [];
     page.on("pageerror", (err) => errors.push(err));
     await page.route("https://raw.githubusercontent.com/**", (route) =>

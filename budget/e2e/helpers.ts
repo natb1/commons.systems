@@ -2,7 +2,7 @@ import path from "path";
 import fs from "node:fs";
 import crypto from "node:crypto";
 import { fileURLToPath } from "url";
-import type { Download, Page } from "@playwright/test";
+import type { Download, Page } from "@commons-systems/config/playwright-test";
 import { SALT_LEN, IV_LEN, PBKDF2_ITERATIONS, KEY_LEN } from "../src/crypto-core.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

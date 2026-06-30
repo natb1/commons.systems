@@ -1,0 +1,556 @@
+#!/usr/bin/env bash
+# dispatch-acquire-lock — acquire/release the process-level dispatch lock.
+#
+# This lock is the dispatch ROUTER's selection lock — held only across the
+# router's selection step (origin/main sync, JIT engine, dispatch-select-
+# target, leaf trace, worktree resolution). Phase-skill workers hold no
+# selection lock; they run lock-free and concurrent workers advance their own
+# issues' phases without contention. See
+# `.claude/skills/dispatch-propagate/SKILL.md` Step 0 (Acquire / Releasing / Per-
+# worktree invariant) for the full scoping story. The lock is shared with the
+# manual `/dispatch` shim, so a manual run cannot select the same target as
+# an in-flight chain tick.
+#
+# The lock serializes two routers racing on the same target selection — two
+# concurrent routers can pick the same `help wanted` issue or the same PR if
+# selection isn't serialized. It does not (and should not) cover phase
+# execution: per-worktree dedup at `dispatch-spawn-job` is what serializes
+# per-issue work.
+#
+# An fd-based `flock` cannot serialize /dispatch-propagate: the skill runs as many
+# separate Bash tool calls, each a fresh shell, so an fd flock would release
+# the instant its Bash call exits. The lock therefore keys on the Claude
+# *session* — identified by CLAUDE_CODE_SESSION_ID, a stable UUID exported into
+# every .claude session's environment — whose lifetime spans the whole tick.
+# The recorded sessionId is the lock holder.
+#
+# Foreign-holder liveness is resolved via `claude agents --json`, the daemon-
+# backed registry of live sessions. A recorded holder is "live" iff its
+# sessionId appears in a successfully-parsed registry; otherwise it is
+# reclaimable. The query distinguishes two outcomes:
+#   - Definite zero: zero exit + a valid JSON array (including `[]`) that does
+#     not contain the recorded sessionId → not live → reclaim.
+#   - Opaque failure: binary missing, non-zero exit, whitespace-only stdout,
+#     non-array JSON, or jq parse failure → treated as live (fail safe) so
+#     the lock is never stolen from a possibly-held foreign holder when the
+#     daemon cannot be queried.
+#
+# Headless holders bypass the registry (#1068). The systemd-launched dispatch-
+# tick has no real Claude session, so it synthesizes a `headless:<token>` holder
+# id (token = INVOCATION_ID or PID) — a bash string that never appears in
+# `claude agents --json`. Resolving its liveness through that registry would
+# always classify it dead, letting a concurrent tick steal a LIVE headless
+# holder's lock mid-selection (the duplicate-spawn defect of #1068). Instead the
+# tick writes a PID sentinel — `<lock-file dir>/dispatch-tick-<slug>.live`
+# containing its own PID — for the tick's lifetime, and resolve_holder_state
+# treats a `headless:*` holder as live iff that sentinel exists AND its recorded
+# PID is still alive (`kill -0`). PID-in-sentinel (not bare existence) keeps the
+# self-healing reclaim: a SIGKILL leaves a stale sentinel whose PID is gone, so
+# the next tick reads it dead and reclaims. The sentinel sits in the lock file's
+# own directory, so a concurrent tick in any worktree resolves the same path.
+#
+# Release is implicit and self-healing: when the session ends its sessionId
+# stops appearing in `claude agents --json`, so the next tick's read-check-
+# write reclaims the lock automatically. `--release` is an explicit optional
+# fast-path that the lock holder can call to release immediately — clearing
+# the recorded sessionId without waiting for self-healing to notice the
+# session has moved on.
+#
+# Marker-based reclaim. The dispatch lock covers Steps 0–6 of /dispatch-propagate
+# (target selection + worktree resolution + worker spawn; phase skills run lock-
+# free). The marker file `tmp/dispatch-worktree` is written in the selected
+# worktree at the end of Step 5 by dispatch-finalize-selection, which stamps the
+# finalizing holder's CLAUDE_CODE_SESSION_ID into it. As of #945 the lock is
+# held through Step 6 (spawn), so a LIVE holder with a marker is still mid-spawn
+# and legitimately owns the lock — the marker alone is NOT sufficient to reclaim.
+# Acquire reclaims a dead foreign holder (not in the registry) regardless of
+# marker state. A live holder — even with a marker — is still in the lock-covered
+# Steps 0–6 region and stays BUSY. `--release` from a different-sessionId caller
+# is always a noop for foreign holders (live or dead); dead holders are reclaimed
+# by the next acquire's dead-holder path. Only strict self-release (the caller's
+# SESSION_ID matches the recorded holder) clears the lock. This ensures a marker
+# can never cause a mid-spawn holder's lock to be stolen or released by a
+# concurrent subagent or next-tick router.
+# An empty marker — the `touch` stamped by .claude/hooks/worktree-create.sh on
+# every worktree creation — names no session and is inert. A marker naming an
+# older, since-finalized session likewise does not reclaim a different live
+# holder. Pre-marker stop paths (Steps 1–4 stop, Step 5 `conflict`) fire before
+# the marker exists, so the lenient branch does not engage and strict semantics
+# apply.
+#
+# Staleness-reclaim contract (#2104). Implicit/self-healing release reclaims a
+# DEAD holder; the staleness cap reclaims a LIVE-but-WEDGED holder. The lock-file
+# mtime is the heartbeat: only a claim/reclaim write or a `--heartbeat` touch
+# bumps it; the `exec 9>>` append-open and the `flock` do NOT. A holder that
+# wedges (e.g. spins forever in some step) stops emitting heartbeats, so its mtime
+# goes stale, and the next acquire reclaims the lock once the mtime is older than
+# MAX_HOLD_SECONDS — even though the session is still live in the registry. Three
+# invariants make this safe:
+#   INVARIANT #1 — MAX_HOLD_SECONDS bounds the worst-case gap between two
+#     CONSECUTIVE heartbeat refreshes during legitimate work, NOT the worst-case
+#     total hold. A dispossessed holder is never signaled it lost the lock (its
+#     next `--heartbeat` reads a foreign sid and noops), so the guarantee against
+#     a false reclaim is "heartbeats keep coming faster than MAX_HOLD_SECONDS,"
+#     not "the hold is short." A legitimately-long hold stays safe as long as it
+#     keeps refreshing.
+#   INVARIANT #2 — heartbeats fire on a step's COMPLETION, never inside a
+#     retry/poll/wait loop. A refresh inside a loop would keep the mtime fresh
+#     while the holder spins there, defeating the cap (the original wedge). This
+#     wiring lives at the call sites (a later unit), not in this script.
+#   INVARIANT #3 — when a stale-reclaim races a still-live holder, the
+#     reservation-marker / per-worktree spawn dedup — NOT the heartbeat — is the
+#     real #1068 safety net. No-reclaim-when-fresh keeps the race rare; the marker
+#     keeps it safe.
+#
+# Usage:
+#   dispatch-acquire-lock            — single-shot: print "acquired" or "busy".
+#   dispatch-acquire-lock --wait     — poll until acquired or the wait timeout
+#                                      elapses; print "acquired" or "busy".
+#   dispatch-acquire-lock --release  — clear our own recorded sessionId from
+#                                      the lock file; print "released" or
+#                                      "noop".
+#   dispatch-acquire-lock --heartbeat — strict-owner: bump the lock-file mtime
+#                                      (the heartbeat) iff we hold the lock;
+#                                      print "refreshed" or "noop".
+#
+# Environment overrides for testability:
+#   DISPATCH_LOCK_FILE          Override the lock-file path. When set, the
+#                               script does NOT require a git repo. Default:
+#                               <project-root>/tmp/dispatch.lock.
+#   CLAUDE_AGENTS_CMD           Override the `claude` invocation used for the
+#                               liveness check (same override pattern as
+#                               lib-claude-agents.sh). Default: claude.
+#   DISPATCH_LOCK_WAIT_TIMEOUT  --wait: max wall-clock seconds to poll before
+#                               giving up. 0 is valid (one attempt only).
+#                               Default: 300.
+#   DISPATCH_LOCK_WAIT_INTERVAL --wait: poll gap in seconds (fractional
+#                               allowed). Default: 5.
+#   DISPATCH_LOCK_PROBE_TIMEOUT Max seconds the `claude agents --json` liveness
+#                               probe may run before it is treated as a wedged
+#                               daemon (timeout-bounded, with a SIGKILL
+#                               backstop). A healthy probe is sub-second.
+#                               Must be a POSITIVE integer — 0 disables GNU
+#                               `timeout`'s bound and re-opens the unbounded-probe
+#                               hang, so it is rejected (exit 2). Default: 10.
+#   DISPATCH_LOCK_FLOCK_TIMEOUT Max seconds to wait for the in-section flock
+#                               before abandoning the attempt as contended.
+#                               MUST strictly exceed DISPATCH_LOCK_PROBE_TIMEOUT:
+#                               the probe is the only slow op inside the critical
+#                               section, so a waiter must not abandon a holder
+#                               that is legitimately mid-probe. Enforced at
+#                               startup (exit 2 on violation). Default: 15.
+#   DISPATCH_LOCK_MAX_HOLD_SECONDS
+#                               Max-hold / heartbeat staleness cap, in seconds: a
+#                               LIVE holder whose heartbeat (lock-file mtime) is
+#                               older than this is reclaimed by the next acquire,
+#                               even though its session is still live. Must be a
+#                               positive integer (^[0-9]+$). Lowest precedence
+#                               below selection-lock.json's max_hold_seconds;
+#                               default 300. See the staleness-reclaim contract
+#                               below. selection-lock.json max_hold_seconds
+#                               (loaded via dispatch-config-load) takes precedence
+#                               over this env var.
+#
+# Stdout protocol (exactly one word):
+#   acquired  this dispatch tick holds the lock — proceed with the tick.
+#   busy      another dispatch tick holds the lock — stop cleanly, no side effects.
+#             Also covers the case where the in-section flock wait timed out (a
+#             wedged holder pinned the critical section): the attempt resolves to
+#             contended rather than deadlocking. Under --wait, busy means the
+#             wait timeout elapsed; a one-line diagnostic (elapsed time + holding
+#             sessionId, or "(flock wait timeout)") is written to stderr.
+#   released  --release: our own recorded sessionId was cleared from the lock
+#             file.
+#   refreshed --heartbeat: we hold the lock; its mtime (heartbeat) was bumped.
+#   noop      --release OR --heartbeat: nothing to do — the lock was unheld or
+#             held by another session, so the file was left untouched.
+#
+# Exit codes:
+#   0  acquired/busy/released/noop (all are normal outcomes; stdout
+#      disambiguates).
+#   2  the script cannot operate — not in a git repo and DISPATCH_LOCK_FILE is
+#      unset, CLAUDE_CODE_SESSION_ID is unset, an unknown/extra command-line
+#      argument, a misconfigured timeout knob (DISPATCH_LOCK_PROBE_TIMEOUT not a
+#      positive integer, or DISPATCH_LOCK_FLOCK_TIMEOUT not strictly greater than
+#      it; acquire/wait only), or an unexpected internal sentinel from a flock
+#      subshell (a should-never-happen guard).
+#
+# NOT set -e: exits are handled explicitly (matching the sibling dispatch-sweep).
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+
+# ---- Step 0: parse the mode -------------------------------------------------
+# Done before any side effect so an unknown argument exits 2 cleanly: no lock
+# file resolved, no daemon queried, no file touched.
+MODE="acquire"
+if [[ $# -gt 0 ]]; then
+  case "$1" in
+    --wait)      MODE="wait" ;;
+    --release)   MODE="release" ;;
+    --heartbeat) MODE="heartbeat" ;;
+    *) echo "dispatch-acquire-lock: unknown argument '$1'" >&2; exit 2 ;;
+  esac
+  if [[ $# -gt 1 ]]; then
+    echo "dispatch-acquire-lock: unknown argument '$2'" >&2; exit 2
+  fi
+fi
+
+WAIT_TIMEOUT="${DISPATCH_LOCK_WAIT_TIMEOUT:-300}"
+WAIT_INTERVAL="${DISPATCH_LOCK_WAIT_INTERVAL:-5}"
+PROBE_TIMEOUT="${DISPATCH_LOCK_PROBE_TIMEOUT:-10}"
+FLOCK_TIMEOUT="${DISPATCH_LOCK_FLOCK_TIMEOUT:-15}"
+
+# ---- resolve the max-hold / heartbeat staleness cap -------------------------
+# MAX_HOLD_SECONDS bounds how stale a live holder's heartbeat (the lock-file
+# mtime) may get before the next acquire reclaims the lock — even though the
+# holder's session is still live. Resolved ONCE here, above the --wait poll loop,
+# never inside try_acquire (which forks a subshell every poll). Only acquire/wait
+# consume it; release/heartbeat skip the config shell-out entirely.
+#
+# INVARIANT #1: this caps the gap between two CONSECUTIVE heartbeat refreshes
+# during legitimate work, NOT the worst-case total hold. A dispossessed holder is
+# never told it lost the lock (its next --heartbeat reads a foreign sid and
+# noops), so the guarantee against a false reclaim is "refreshes keep arriving
+# faster than MAX_HOLD_SECONDS," not "the hold is short."
+#
+# Precedence mirrors dispatch-sweep: selection-lock.json max_hold_seconds (valid
+# integer) > DISPATCH_LOCK_MAX_HOLD_SECONDS env (^[0-9]+$) > baked default 300.
+# The config-load shell-out is TOLERANT (the `if ...; then ... else` wrapping):
+# an absent or erroring dispatch-config-load — the lock test harness copies only
+# dispatch-acquire-lock + lib.sh — falls back to env/default instead of erroring.
+# The default (300) pairs with dense per-sub-step heartbeat placement so the
+# worst-case inter-refresh gap stays well under 300s, and lets a single in-flight
+# --wait call (DISPATCH_LOCK_WAIT_TIMEOUT also defaults to 300) self-reclaim a
+# holder that goes stale mid-wait → one-tick recovery.
+MAX_HOLD_SECONDS=300
+if [[ "$MODE" == "acquire" || "$MODE" == "wait" ]]; then
+  if CONFIG_OUT=$("$SCRIPT_DIR/dispatch-config-load" selection-lock 2>&1); then
+    val=""
+    if [[ "$CONFIG_OUT" != "no-config" ]]; then
+      val=$(jq -r '.max_hold_seconds // empty' <<<"$CONFIG_OUT")
+    fi
+    if [[ "$val" =~ ^[0-9]+$ ]]; then
+      MAX_HOLD_SECONDS="$val"
+    elif [[ "${DISPATCH_LOCK_MAX_HOLD_SECONDS:-}" =~ ^[0-9]+$ ]]; then
+      MAX_HOLD_SECONDS="$DISPATCH_LOCK_MAX_HOLD_SECONDS"
+    fi
+  elif [[ "${DISPATCH_LOCK_MAX_HOLD_SECONDS:-}" =~ ^[0-9]+$ ]]; then
+    MAX_HOLD_SECONDS="$DISPATCH_LOCK_MAX_HOLD_SECONDS"
+  fi
+fi
+
+# resolve_holder_state <sessionId> — query the daemon's live-session registry
+# for <sessionId> and report its liveness via the return code. Covers the same
+# failure modes that lib-claude-agents.sh::claude_sessions_under treats as
+# UNKNOWN (binary missing, non-zero exit, whitespace-only output, non-array
+# JSON, jq failure), but inverts the return convention: this function returns 0
+# (LIVE — keep the lock) instead of 1 (unknown — caller folds to occupied). The
+# helper's question is "is anything running under this path?"; ours is "is THIS
+# sessionId still alive?". A zero-exit, valid `[]` is a definite "no live
+# sessions anywhere" and returns 1 (reclaim); only opaque failures fail safe to
+# LIVE.
+#
+# Return: 0 = live (or opaque failure → fail-safe live)
+#         1 = definitely not live (reclaim)
+#
+# The daemon probe is `timeout`-bounded (DISPATCH_LOCK_PROBE_TIMEOUT, with a
+# `-k 5` SIGKILL backstop): a wedged daemon that never returns must not block
+# the probe — and so the in-section flock — indefinitely. The KILL backstop is
+# required because plain `timeout` only sends SIGTERM and then waits for the
+# child, so a client that ignores SIGTERM would make `timeout` itself hang,
+# reproducing the deadlock. A timed-out probe exits non-zero, which the
+# `if ! out=$(...)` below folds to fail-safe LIVE → the caller stays BUSY.
+#
+# The `9>&-` redirection closes fd 9 (the flock fd, opened by the caller's
+# subshell) in the `claude` child. flock is on the open file description and
+# is released only when the LAST referencing fd closes; without the close,
+# any background helper `claude` ever spawns would inherit fd 9 and hold the
+# flock past our subshell's exit. Today `claude agents --json` is a query-and-
+# exit client, but the cost of defending against a future fork is one redir.
+# The redirections stay on the `timeout` simple command, which execs `claude`
+# with fd 9 already closed and stderr already silenced.
+resolve_holder_state() {
+  local sid="$1" out ids id
+  # Headless holders (the systemd-launched dispatch-tick's synthetic
+  # `headless:<token>` id) never appear in the `claude agents --json` registry —
+  # it tracks model sessions, not bash processes. Resolve their liveness through
+  # the PID sentinel the tick writes alongside the lock file (#1068): live iff
+  # the sentinel exists AND its recorded PID is still alive. A SIGKILL leaves a
+  # stale sentinel whose PID is gone, so it resolves DEAD and the lock self-heals.
+  # The daemon is never queried for these ids.
+  if [[ "$sid" == headless:* ]]; then
+    local sentinel pid=""
+    sentinel=$(headless_sentinel_path "$sid" "$LOCK_FILE")
+    [[ -f "$sentinel" ]] || return 1
+    IFS= read -r pid <"$sentinel" 2>/dev/null || true
+    [[ "$pid" =~ ^[0-9]+$ ]] || return 1
+    kill -0 "$pid" 2>/dev/null || return 1
+    return 0
+  fi
+  if ! out=$(timeout -k 5 "$PROBE_TIMEOUT" "${CLAUDE_AGENTS_CMD:-claude}" agents --json 2>/dev/null 9>&-); then
+    return 0
+  fi
+  if [[ -z "${out//[[:space:]]/}" ]]; then
+    return 0
+  fi
+  # One sessionId per line. `// ""` keeps the field a string even when absent.
+  if ! ids=$(jq -r '
+    if type == "array"
+    then .[] | .sessionId // ""
+    else error("not a JSON array")
+    end' <<<"$out" 2>/dev/null); then
+    return 0
+  fi
+  # Exact line-equality match against sid: a sessionId that prefixes or suffixes
+  # another row's sessionId cannot cross-match. Iterating in the shell (rather
+  # than `grep -F | head -n1`) avoids the pipefail+SIGPIPE interaction that can
+  # collapse a contended-but-live match into a non-zero exit and a wrong reclaim.
+  while IFS= read -r id; do
+    [[ "$id" == "$sid" ]] && return 0
+  done <<<"$ids"
+  # Definitely not live: registry parsed cleanly and our sid isn't in it.
+  return 1
+}
+
+# ---- Step 1: resolve the lock file ------------------------------------------
+# dispatch_lock_file (lib.sh) honors an explicit DISPATCH_LOCK_FILE (tests rely
+# on this) and otherwise resolves the shared project-root tmp/dispatch.lock (not
+# a per-worktree tmp/) so concurrent ticks in different worktrees contend on the
+# same file. The tick's headless-liveness sentinel resolves through the same
+# helper, keeping the lock script and the tick on one lock-file directory (#1068).
+LOCK_FILE=$(dispatch_lock_file) \
+  || { echo "ERROR: not in a git repo and DISPATCH_LOCK_FILE is unset" >&2; exit 2; }
+
+# ---- Step 2: identify our own session ---------------------------------------
+# CLAUDE_CODE_SESSION_ID is set in every real .claude session's environment.
+# An unset value indicates a misconfigured environment, so fail clear rather
+# than fall back to a less-stable identifier.
+SESSION_ID="${CLAUDE_CODE_SESSION_ID:-}"
+[[ -n "$SESSION_ID" ]] \
+  || { echo "ERROR: CLAUDE_CODE_SESSION_ID is unset" >&2; exit 2; }
+
+# The lock-file directory must exist before the first `exec 9>>` open.
+mkdir -p "$(dirname "$LOCK_FILE")" 2>/dev/null || true
+
+# ---- try_acquire — one atomic, flock-bounded read-check-write ---------------
+# Returns 0 (acquired) or 1 (contended); on contention sets the global
+# CONTENDED_SID to the live foreign holder's sessionId.
+#
+# The flock MUST be released between polls so a --wait loop does not block
+# other sessions. The brace-group `{ ...; } {fd}>>FILE` idiom does NOT release
+# the lock (and hides the fd var from the body). A command-substitution
+# subshell with a fixed numeric fd does: fd 9 closes when the subshell exits,
+# releasing the flock. The subshell prints a sentinel the parent decodes.
+CONTENDED_SID=""
+try_acquire() {            # 0 = acquired, 1 = contended; sets CONTENDED_SID
+  CONTENDED_SID=""
+  local result
+  result=$(
+    exec 9>>"$LOCK_FILE"
+    # Bounded mutex over the read-check-write. The only slow op inside the
+    # critical section is the timeout-bounded daemon probe, so a wait that
+    # exceeds FLOCK_TIMEOUT (> PROBE_TIMEOUT + margin) means the holder is
+    # wedged, not legitimately mid-probe. On timeout we leave the subshell
+    # WITHOUT running the read-check-write (which would be a racy unlocked
+    # read + clobbering write); the parent maps the sentinel to contended.
+    if ! flock -w "$FLOCK_TIMEOUT" 9; then
+      printf 'FLOCK_TIMEOUT'
+      exit 0
+    fi
+    local recorded="" live=0
+    IFS= read -r recorded <"$LOCK_FILE" 2>/dev/null || true
+    # Busy iff a different sessionId is recorded AND it is still a live
+    # session per `claude agents --json`. A live holder always blocks — even
+    # when its cwd carries a tmp/dispatch-worktree marker — because as of #945
+    # the lock is held through Step 6 (spawn): marker presence no longer implies
+    # the holder released the lock. Otherwise — no record, a stale record
+    # (sessionId not in the registry), our own session re-entering, or a dead
+    # foreign holder — we claim. An opaque-failure from resolve_holder_state
+    # (return 0) stays BUSY (fail safe).
+    if [[ -n "$recorded" && "$recorded" != "$SESSION_ID" ]]; then
+      if resolve_holder_state "$recorded"; then
+        live=1
+      fi
+      if (( live )); then
+        # Staleness cap (#2104): a live holder whose heartbeat — the lock-file
+        # mtime — is older than MAX_HOLD_SECONDS is wedged, so reclaim it even
+        # though its session is still live. This sits AFTER resolve_holder_state
+        # so an opaque daemon failure still folds to LIVE→BUSY (never steal on
+        # UNKNOWN). The mtime IS the heartbeat: the append-open + flock above do
+        # not bump it; only a claim/reclaim write or a --heartbeat touch does, so
+        # a wedged holder's mtime genuinely goes stale. The `holder_mtime != 0`
+        # guard makes a `stat` failure fail safe — without it `echo 0` would make
+        # `age` huge and spuriously reclaim a fresh holder. INVARIANT #3: when
+        # this stale-reclaim races a still-live holder, the reservation-marker /
+        # per-worktree spawn dedup — NOT the heartbeat — is the real #1068 net;
+        # no-reclaim-when-fresh keeps the race rare, the marker keeps it safe.
+        local holder_mtime now age
+        holder_mtime=$(stat -c %Y "$LOCK_FILE" 2>/dev/null || echo 0)
+        now=$(date +%s)
+        age=$(( now - holder_mtime ))
+        if (( holder_mtime != 0 && age > MAX_HOLD_SECONDS )); then
+          printf '%s\n' "$SESSION_ID" >"$LOCK_FILE"
+          echo "dispatch-acquire-lock: reclaimed stale lock from $recorded (held ${age}s > max_hold ${MAX_HOLD_SECONDS}s)" >&2
+          printf 'OK'
+        else
+          printf 'BUSY %s' "$recorded"
+        fi
+      else
+        # Dead holder (not in registry): reclaim regardless of marker state.
+        # A dead holder no longer holds the lock in any region (Steps 0–6 or
+        # beyond), so the marker does not change the reclaim decision.
+        printf '%s\n' "$SESSION_ID" >"$LOCK_FILE"
+        printf 'OK'
+      fi
+    else
+      printf '%s\n' "$SESSION_ID" >"$LOCK_FILE"
+      printf 'OK'
+    fi
+  )
+  case "$result" in
+    OK)       return 0 ;;
+    'BUSY '*) CONTENDED_SID="${result#BUSY }"; return 1 ;;
+    # The in-section flock wait timed out: a wedged holder is pinning the
+    # critical section. Treat as contended (never reclaim — we did NOT read
+    # the lock, so the holder is unknown) and surface a diagnostic string
+    # rather than a real sid, since populating one would require a racy
+    # unlocked read.
+    FLOCK_TIMEOUT) CONTENDED_SID="(flock wait timeout)"; return 1 ;;
+    *) echo "dispatch-acquire-lock: try_acquire — unexpected subshell output '$result'" >&2
+       exit 2 ;;
+  esac
+}
+
+# ---- validate the timeout knobs ---------------------------------------------
+# Only try_acquire (acquire/wait modes) consumes the probe + in-section flock
+# timeouts; --release and --heartbeat use neither, so leave them unvalidated and
+# unchanged. A misconfigured knob is a broken environment — fail clear (exit 2),
+# do not fall back (matches the clear-error-over-fallback rule; same convention
+# as the git-repo and CLAUDE_CODE_SESSION_ID guards above).
+if [[ "$MODE" != "release" && "$MODE" != "heartbeat" ]]; then
+  # PROBE_TIMEOUT must be a POSITIVE integer. `^[0-9]+$` alone is not enough:
+  # GNU `timeout 0 <cmd>` DISABLES the bound and runs the probe unbounded,
+  # silently re-opening the very wedged-daemon hang this script fixes (#1315).
+  if [[ ! "$PROBE_TIMEOUT" =~ ^[0-9]+$ || "$PROBE_TIMEOUT" -lt 1 ]]; then
+    echo "dispatch-acquire-lock: DISPATCH_LOCK_PROBE_TIMEOUT must be a positive integer (got '$PROBE_TIMEOUT'); 0 disables GNU timeout's bound and re-opens the unbounded-probe hang" >&2
+    exit 2
+  fi
+  if [[ ! "$FLOCK_TIMEOUT" =~ ^[0-9]+$ ]]; then
+    echo "dispatch-acquire-lock: DISPATCH_LOCK_FLOCK_TIMEOUT must be a non-negative integer (got '$FLOCK_TIMEOUT')" >&2
+    exit 2
+  fi
+  # FLOCK_TIMEOUT must STRICTLY exceed PROBE_TIMEOUT. The probe is the only slow
+  # op inside the critical section, so a waiter that gives up at or before the
+  # probe's normal ceiling would abandon a holder that is legitimately mid-probe
+  # and report a false busy. (The `-k 5` SIGKILL grace pushes a SIGTERM-ignoring
+  # probe to PROBE_TIMEOUT+5, but in that pathological case the holder genuinely
+  # IS wedged, so abandoning-to-busy is the fail-safe outcome — hence `>`, not
+  # `> PROBE_TIMEOUT + 5`, which the shipped 15/10 defaults would also fail.)
+  if [[ "$FLOCK_TIMEOUT" -le "$PROBE_TIMEOUT" ]]; then
+    echo "dispatch-acquire-lock: DISPATCH_LOCK_FLOCK_TIMEOUT ($FLOCK_TIMEOUT) must exceed DISPATCH_LOCK_PROBE_TIMEOUT ($PROBE_TIMEOUT); otherwise a waiter abandons a holder that is legitimately mid-probe" >&2
+    exit 2
+  fi
+fi
+
+# ---- dispatch the mode ------------------------------------------------------
+case "$MODE" in
+  acquire)
+    # Single-shot: one read-check-write attempt, no polling.
+    try_acquire && echo acquired || echo busy
+    exit 0
+    ;;
+
+  wait)
+    # Poll until acquired or the wall-clock timeout elapses. try_acquire runs
+    # first each iteration, so WAIT_TIMEOUT=0 still makes one real attempt.
+    SECONDS=0
+    while true; do
+      if try_acquire; then echo acquired; exit 0; fi
+      if (( SECONDS >= WAIT_TIMEOUT )); then
+        echo busy
+        echo "dispatch-acquire-lock: gave up after ${SECONDS}s; held by sessionId ${CONTENDED_SID:-unknown}" >&2
+        exit 0
+      fi
+      sleep "$WAIT_INTERVAL"
+    done
+    ;;
+
+  release)
+    # Re-read the recorded sessionId under flock and clear it only when it is
+    # our own session (strict self-release). Foreign holders always get noop,
+    # regardless of liveness or marker: as of #945 the lock extends through
+    # Step 6 (spawn), so a live foreign holder may be mid-spawn and must not be
+    # released; a dead foreign holder is reclaimed by the next tick's try_acquire
+    # dead-holder path. Truncate with `:` rather than `rm` — `rm` would orphan
+    # a concurrent acquire's already-open fd.
+    #
+    # Caller invariant: the lenient marker-based release path is gone, so
+    # `--release` only clears the lock when SESSION_ID matches the recorded
+    # holder. A caller running under a different CLAUDE_CODE_SESSION_ID than the
+    # one that acquired (e.g. from a subagent) gets a silent noop and the lock
+    # stays held until self-healing reclaim. Every release call site must run in
+    # the acquiring session.
+    result=$(
+      exec 9>>"$LOCK_FILE"
+      flock 9
+      recorded=""    # plain var: this subshell runs at script top level
+      should_release=0
+      IFS= read -r recorded <"$LOCK_FILE" 2>/dev/null || true
+      if [[ -n "$recorded" && "$recorded" == "$SESSION_ID" ]]; then
+        should_release=1
+      fi
+      # Foreign holder (recorded != SESSION_ID or empty): always noop. A live
+      # foreign holder may be mid-spawn; a dead foreign holder is handled by the
+      # next tick's dead-holder reclaim in try_acquire. should_release stays 0.
+      if (( should_release )); then
+        : >"$LOCK_FILE"
+        printf 'RELEASED'
+      else
+        printf 'NOOP'
+      fi
+    )
+    case "$result" in
+      RELEASED) echo released ;;
+      NOOP)     echo noop ;;
+      *) echo "dispatch-acquire-lock: --release — unexpected subshell output '$result'" >&2
+         exit 2 ;;
+    esac
+    exit 0
+    ;;
+
+  heartbeat)
+    # Strict-owner heartbeat: bump the lock-file mtime — the heartbeat carrier —
+    # iff we are the recorded holder, so a legitimately-long hold stays fresh and
+    # the staleness cap never reclaims it mid-work. `touch` is atomic and
+    # content-preserving (the recorded sessionId is untouched). NEVER refreshes a
+    # foreign holder's lock: a dispossessed holder reading a foreign sid here gets
+    # a silent noop (invariant #1 — it is never signaled it lost the lock). Issues
+    # NO `claude agents --json` probe, so a refresh stays sub-100ms.
+    #
+    # INVARIANT #2 (enforced at the CALL SITES, not here): refresh_lock callers
+    # must fire --heartbeat only on a sub-step's COMPLETION, never inside a
+    # retry/poll/wait loop — a refresh inside a loop would keep mtime fresh while
+    # the holder spins there, defeating the cap (the original wedge).
+    result=$(
+      exec 9>>"$LOCK_FILE"
+      flock 9
+      recorded=""    # plain var: this subshell runs at script top level
+      IFS= read -r recorded <"$LOCK_FILE" 2>/dev/null || true
+      if [[ -n "$recorded" && "$recorded" == "$SESSION_ID" ]]; then
+        touch "$LOCK_FILE"
+        printf 'REFRESHED'
+      else
+        printf 'NOOP'
+      fi
+    )
+    case "$result" in
+      REFRESHED) echo refreshed ;;
+      NOOP)      echo noop ;;
+      *) echo "dispatch-acquire-lock: --heartbeat — unexpected subshell output '$result'" >&2
+         exit 2 ;;
+    esac
+    exit 0
+    ;;
+esac

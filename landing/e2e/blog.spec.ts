@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@commons-systems/config/playwright-test";
 
 // Blog post content is inlined at build time by the vite blog-posts plugin.
 // No route interception is needed -- content comes from the build output.

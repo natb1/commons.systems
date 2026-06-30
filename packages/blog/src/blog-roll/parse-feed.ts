@@ -1,0 +1,48 @@
+import type { LatestPost } from "./types.ts";
+import { isParseableDate } from "../date.ts";
+
+function parseAtomFeed(doc: Document): LatestPost | null {
+  const entry = doc.querySelector("feed > entry");
+  if (!entry) return null;
+  const title = entry.querySelector("title")?.textContent ?? "";
+  const linkEl = entry.querySelector('link[rel="alternate"][href]') ?? entry.querySelector("link[href]");
+  const url = linkEl?.getAttribute("href") ?? "";
+  const rawPublished = entry.querySelector("published")?.textContent;
+  const rawUpdated = entry.querySelector("updated")?.textContent;
+  if (!title || !url) return null;
+  if (!url.startsWith("http://") && !url.startsWith("https://")) return null;
+  // Prefer the first parseable source: when <published> is present but
+  // unparseable, fall back to <updated> instead of dropping the date entirely.
+  const publishedAt =
+    rawPublished && isParseableDate(rawPublished)
+      ? rawPublished
+      : rawUpdated && isParseableDate(rawUpdated)
+        ? rawUpdated
+        : undefined;
+  return { title, url, publishedAt };
+}
+
+function parseRssFeed(doc: Document): LatestPost | null {
+  const item = doc.querySelector("rss > channel > item");
+  if (!item) return null;
+  const title = item.querySelector("title")?.textContent ?? "";
+  const url = item.querySelector("link")?.textContent ?? "";
+  const pubDate = item.querySelector("pubDate")?.textContent ?? undefined;
+  if (!title || !url) return null;
+  if (!url.startsWith("http://") && !url.startsWith("https://")) return null;
+  const publishedAt = pubDate && isParseableDate(pubDate) ? pubDate : undefined;
+  return { title, url, publishedAt };
+}
+
+export function parseXml(text: string): LatestPost | null {
+  // Strip default XML namespace declarations so querySelector matches element
+  // local names in all browsers. Firefox requires null-namespace for unqualified
+  // CSS selectors on XML documents; Chrome is lenient and ignores namespaces.
+  const cleaned = text.replace(/ xmlns=["'][^"']*["']/g, "");
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(cleaned, "application/xml");
+  if (doc.querySelector("parsererror")) {
+    return null;
+  }
+  return parseAtomFeed(doc) ?? parseRssFeed(doc);
+}

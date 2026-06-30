@@ -120,11 +120,21 @@ export function requireEnum<T extends string>(
   return value as T;
 }
 
+export function requireStringArray(value: unknown, field: string): string[] {
+  if (!Array.isArray(value) || value.some((x: unknown) => typeof x !== "string")) {
+    throw new DataIntegrityError(`Expected string[] for ${field}`);
+  }
+  return value as string[];
+}
+
 // ── Upload-side validators (throw UploadValidationError) ──────────────────────
 
-export function requireUploadId(value: unknown, entity: string, index: number): string {
+export function requireUploadId(
+  value: unknown, entity: string, index: number, field?: string,
+): string {
   if (typeof value !== "string" || value === "") {
-    throw new UploadValidationError(`${entity}[${index}] is missing a valid id`);
+    const suffix = field ? `.${field}` : "";
+    throw new UploadValidationError(`${entity}[${index}]${suffix} is missing a valid id`);
   }
   return value;
 }
@@ -154,6 +164,24 @@ export function requireUploadEnum<T extends string>(
     throw new UploadValidationError(`Invalid ${field} value: ${JSON.stringify(value)}`);
   }
   return value as T;
+}
+
+export function requireUploadNonNegativeNumber(
+  value: unknown, entity: string, index: number, field: string,
+): number {
+  if (typeof value !== "number" || !isFinite(value) || value < 0) {
+    throw new UploadValidationError(`${entity}[${index}].${field} must be a non-negative finite number`);
+  }
+  return value;
+}
+
+export function requireUploadStringArray(
+  value: unknown, entity: string, index: number, field: string,
+): string[] {
+  if (!Array.isArray(value) || value.some((x: unknown) => typeof x !== "string")) {
+    throw new UploadValidationError(`${entity}[${index}].${field} must be a string array`);
+  }
+  return value as string[];
 }
 
 // ── Seed-side validators (throw plain Error; run at vite build time) ──────────

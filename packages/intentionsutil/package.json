@@ -1,0 +1,23 @@
+{
+  "name": "@commons-systems/intentionsutil",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema.ts",
+    "./store": "./src/store.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src/",
+    "detect-rung": "tsx scripts/detect-rung.ts",
+    "frontier-view": "tsx scripts/frontier-view.ts",
+    "read-sensors": "tsx scripts/read-sensors.ts",
+    "write-node": "tsx scripts/write-node.ts"
+  },
+  "dependencies": {
+    "yaml": "^2.9.0"
+  }
+}

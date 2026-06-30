@@ -1,16 +1,16 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@commons-systems/config/playwright-test";
 
-const APPS = [
+const PROJECTS = [
+  {
+    name: "Office-hours",
+    url: "https://office-hours.commons.systems",
+    applicationCategory: "BusinessApplication",
+    operatingSystem: "Web",
+  },
   {
     name: "Budget",
     url: "https://budget.commons.systems",
     applicationCategory: "FinanceApplication",
-    operatingSystem: "Web",
-  },
-  {
-    name: "Audio",
-    url: "https://audio.commons.systems",
-    applicationCategory: "MultimediaApplication",
     operatingSystem: "Web",
   },
   {
@@ -19,10 +19,16 @@ const APPS = [
     applicationCategory: "BookApplication",
     operatingSystem: "Web",
   },
+  {
+    name: "Audio",
+    url: "https://audio.commons.systems",
+    applicationCategory: "MultimediaApplication",
+    operatingSystem: "Web",
+  },
 ];
 
 async function getSoftwareApplicationJsonLd(
-  page: import("@playwright/test").Page,
+  page: import("@commons-systems/config/playwright-test").Page,
 ) {
   const scripts = await page
     .locator('script[type="application/ld+json"]')
@@ -43,22 +49,22 @@ async function getSoftwareApplicationJsonLd(
 }
 
 test.describe("SEO: SoftwareApplication JSON-LD", () => {
-  test("homepage has exactly 3 SoftwareApplication JSON-LD scripts", async ({
+  test("homepage has exactly 4 SoftwareApplication JSON-LD scripts @build", async ({
     page,
   }) => {
     await page.goto("/");
     const apps = await getSoftwareApplicationJsonLd(page);
-    expect(apps).toHaveLength(3);
+    expect(apps).toHaveLength(4);
   });
 
-  test("each SoftwareApplication has correct url, category, os, and name", async ({
+  test("each SoftwareApplication has correct url, category, os, and name @build", async ({
     page,
   }) => {
     await page.goto("/");
     const apps = await getSoftwareApplicationJsonLd(page);
-    expect(apps).toHaveLength(APPS.length);
+    expect(apps).toHaveLength(PROJECTS.length);
 
-    for (const expected of APPS) {
+    for (const expected of PROJECTS) {
       const match = apps.find((a) => a.url === expected.url);
       expect(match, `JSON-LD for ${expected.url}`).toBeTruthy();
       expect(match!.name).toBe(expected.name);

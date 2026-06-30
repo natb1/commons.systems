@@ -1,10 +1,9 @@
 import * as Plot from "@observablehq/plot";
-import { schemeTableau10 } from "d3-scale-chromatic";
 import { UNBUDGETED_SERIES, type PerBudgetPoint } from "../balance.js";
 import type { ChartResult, WeekEntry } from "./budgets-chart.js";
-import { getThemeFg, assembleChartLayout, MARGIN_RIGHT, MARGIN_BOTTOM, computeChartWidth, renderAxisSvg } from "./chart-util.js";
+import { getThemeFg, chartSeriesColor, readThemeVar, assembleChartLayout, MARGIN_RIGHT, MARGIN_BOTTOM, computeChartWidth, renderAxisSvg } from "./chart-util.js";
 
-export interface AreaChartOptions {
+interface AreaChartOptions {
   readonly data: PerBudgetPoint[];
   readonly containerWidth: number;
   readonly panelWidth: number;
@@ -59,10 +58,11 @@ export function renderPerBudgetAreaChart(container: HTMLElement, options: AreaCh
     });
   }
 
-  // Assign colors: budgets get Tableau10, UNBUDGETED_SERIES gets gray
+  // Assign colors: budgets cycle the --chart-* tokens by sort order; UNBUDGETED_SERIES is pinned to --chart-6.
+  const unbudgetedColor = readThemeVar(container, "--chart-6");
   const colorDomain = sortedBudgets;
   const colorRange = sortedBudgets.map((name, i) =>
-    name === UNBUDGETED_SERIES ? "#9e9e9e" : schemeTableau10[i % schemeTableau10.length],
+    name === UNBUDGETED_SERIES ? unbudgetedColor : chartSeriesColor(container, i),
   );
 
   const chartWidth = computeChartWidth(weekCount, panelWidth, containerWidth);

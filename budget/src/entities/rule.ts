@@ -3,20 +3,14 @@
  * All per-entity representations (domain, IDB, raw/upload, seed declaration, seed data)
  * are defined or imported here; adaptor functions live alongside them.
  */
-import type { QueryDocumentSnapshot, DocumentData } from "firebase/firestore";
 import type { GroupId } from "@commons-systems/authutil/groups";
 import type { Brand } from "@commons-systems/firestoreutil/brand";
 import {
   emptyToNull,
   nullToEmpty,
-  optionalNumber,
-  optionalString,
-  requireEnum,
-  requireNumber,
   requireSeedEnum,
   requireSeedNumber,
   requireSeedString,
-  requireString,
   requireUploadEnum,
   requireUploadId,
 } from "./_helpers.js";
@@ -96,26 +90,6 @@ export interface SeedRule {
   readonly maxAmount: number | null;
   readonly excludeCategory: string | null;
   readonly matchCategory: string | null;
-}
-
-// ── Firestore → Rule ──────────────────────────────────────────────────────────
-
-export function parseFirestoreRule(docSnap: QueryDocumentSnapshot<DocumentData, DocumentData>): Rule {
-  const data = docSnap.data();
-  return {
-    id: docSnap.id as RuleId,
-    type: requireEnum(data.type, RULE_TYPES, "rule type"),
-    pattern: requireString(data.pattern, "pattern"),
-    target: requireString(data.target, "target"),
-    priority: requireNumber(data.priority, "priority"),
-    institution: optionalString(data.institution, "institution"),
-    account: optionalString(data.account, "account"),
-    minAmount: optionalNumber(data.minAmount, "minAmount"),
-    maxAmount: optionalNumber(data.maxAmount, "maxAmount"),
-    excludeCategory: optionalString(data.excludeCategory, "excludeCategory"),
-    matchCategory: optionalString(data.matchCategory, "matchCategory"),
-    groupId: optionalString(data.groupId, "groupId") as GroupId | null,
-  };
 }
 
 // ── Raw upload → Rule ─────────────────────────────────────────────────────────

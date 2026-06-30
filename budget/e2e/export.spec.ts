@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@commons-systems/config/playwright-test";
 import { uploadFixture, uploadEncryptedFixture, triggerExportDownload } from "./helpers";
 
 test.describe("export", () => {
@@ -81,6 +81,9 @@ test.describe("export", () => {
     await expect(page.locator(".export-data")).toBeVisible({ timeout: 10000 });
 
     const download = await triggerExportDownload(page);
+
+    const today = new Date().toISOString().slice(0, 10);
+    expect(download.suggestedFilename()).toBe(`budget-Test Household-${today}.benc`);
 
     const content = await (await download.createReadStream()).toArray();
     const buf = Buffer.concat(content);

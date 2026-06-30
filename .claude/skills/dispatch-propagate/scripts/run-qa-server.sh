@@ -1,0 +1,355 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Parse args: required <app-dir>, optional --detach in any position.
+DETACH=false
+APP_DIR=""
+for arg in "$@"; do
+  case "$arg" in
+    --detach)
+      DETACH=true
+      ;;
+    --*)
+      echo "ERROR: unknown flag: $arg" >&2
+      echo "Usage: run-qa-server.sh <app-dir> [--detach]" >&2
+      exit 1
+      ;;
+    *)
+      if [ -n "$APP_DIR" ]; then
+        echo "ERROR: unexpected extra argument: $arg" >&2
+        echo "Usage: run-qa-server.sh <app-dir> [--detach]" >&2
+        exit 1
+      fi
+      APP_DIR="$arg"
+      ;;
+  esac
+done
+if [ -z "$APP_DIR" ]; then
+  echo "Usage: run-qa-server.sh <app-dir> [--detach]" >&2
+  exit 1
+fi
+
+# Set true only at the very end, immediately before the detach exit 0, so the
+# cleanup trap can tell an intentional detached return from any other exit.
+DETACH_SUCCESS=false
+
+# Remember repo root (script must be invoked from repo root)
+REPO_ROOT="$(pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# shellcheck source=lib.sh
+source "$SCRIPT_DIR/lib.sh"
+
+APP_NAME=$(get_app_name "$APP_DIR")
+EMULATOR_PROJECT_ID=$(get_emulator_project_id)
+
+cleanup_stale_worktree_processes
+cleanup_stale_hub
+
+ensure_deps
+
+detect_features "$REPO_ROOT/$APP_DIR/src/" "$REPO_ROOT" "$APP_NAME"
+
+cd "$REPO_ROOT"
+
+# Count and allocate all needed ports atomically to avoid OS port recycling
+PORT_COUNT=1  # vite always needed
+if [ "$USES_FIRESTORE" = true ]; then PORT_COUNT=$((PORT_COUNT + 1)); fi
+if [ "$USES_AUTH" = true ]; then PORT_COUNT=$((PORT_COUNT + 1)); fi
+if [ "$USES_STORAGE" = true ]; then PORT_COUNT=$((PORT_COUNT + 1)); fi
+if [ "$USES_FUNCTIONS" = true ]; then PORT_COUNT=$((PORT_COUNT + 1)); fi
+
+# Claim the Vite port from a fixed pool (collision-safe via flock, held for the
+# script's lifetime) so the claude-in-chrome extension approves the origin once.
+# Called in the main shell — not a subshell — so the flock'd fd 200 survives.
+claim_fixed_vite_port
+echo "Vite dev server will use port $VITE_PORT (fixed pool — approve once in Chrome)"
+# Emulator ports stay ephemeral — the page's own JS reaches them, never the
+# extension, so they never trigger an approval prompt.
+EMU_PORT_COUNT=$((PORT_COUNT - 1))
+EXTRA_PORTS=""
+[ "$EMU_PORT_COUNT" -gt 0 ] && EXTRA_PORTS="$(find_available_ports "$EMU_PORT_COUNT")"
+
+NAMESPACE=""
+if [ "$USES_FIRESTORE" = true ]; then
+  NAMESPACE=$(get_firestore_namespace "$APP_NAME" "$(get_env_suffix qa)")
+fi
+FIRESTORE_PORT=""
+AUTH_PORT=""
+STORAGE_PORT=""
+FUNCTIONS_PORT=""
+for feature in FIRESTORE AUTH STORAGE FUNCTIONS; do
+  uses_var="USES_${feature}"
+  if [ "${!uses_var}" = true ]; then
+    port="${EXTRA_PORTS%% *}"
+    EXTRA_PORTS="${EXTRA_PORTS#* }"
+    declare "${feature}_PORT=$port"
+    echo "${feature,,} emulator will use port $port"
+  fi
+done
+
+# Generate temporary firebase.json (emulators only, no hosting — Vite serves)
+TEMP_FIREBASE_JSON="${REPO_ROOT}/.firebase-qa-$$.json"
+
+# Build emulators config. Each emulator binds "0.0.0.0" (all interfaces) instead
+# of the default 127.0.0.1 so its port is reachable from Chrome on the Windows
+# host — WSL2 NAT networking does not reliably forward 127.0.0.1-only emulator
+# ports. See .claude/docs/chrome-extension.md.
+EMULATORS_JSON="{"
+EMULATOR_LIST=""
+if [ "$USES_FIRESTORE" = true ]; then
+  EMULATORS_JSON="$EMULATORS_JSON\"firestore\": {\"host\": \"0.0.0.0\", \"port\": ${FIRESTORE_PORT}}"
+  EMULATOR_LIST="firestore"
+fi
+if [ "$USES_AUTH" = true ]; then
+  if [ -n "$EMULATOR_LIST" ]; then
+    EMULATORS_JSON="$EMULATORS_JSON, "
+    EMULATOR_LIST="$EMULATOR_LIST,auth"
+  else
+    EMULATOR_LIST="auth"
+  fi
+  EMULATORS_JSON="$EMULATORS_JSON\"auth\": {\"host\": \"0.0.0.0\", \"port\": ${AUTH_PORT}}"
+fi
+if [ "$USES_STORAGE" = true ]; then
+  if [ -n "$EMULATOR_LIST" ]; then
+    EMULATORS_JSON="$EMULATORS_JSON, "
+    EMULATOR_LIST="$EMULATOR_LIST,storage"
+  else
+    EMULATOR_LIST="storage"
+  fi
+  EMULATORS_JSON="$EMULATORS_JSON\"storage\": {\"host\": \"0.0.0.0\", \"port\": ${STORAGE_PORT}}"
+fi
+if [ "$USES_FUNCTIONS" = true ]; then
+  if [ -n "$EMULATOR_LIST" ]; then
+    EMULATORS_JSON="$EMULATORS_JSON, "
+    EMULATOR_LIST="$EMULATOR_LIST,functions"
+  else
+    EMULATOR_LIST="functions"
+  fi
+  EMULATORS_JSON="$EMULATORS_JSON\"functions\": {\"host\": \"0.0.0.0\", \"port\": ${FUNCTIONS_PORT}}"
+fi
+EMULATORS_JSON="$EMULATORS_JSON}"
+
+# Build top-level config
+CONFIG_JSON="{"
+if [ "$USES_FIRESTORE" = true ]; then
+  CONFIG_JSON="$CONFIG_JSON\"firestore\": {\"rules\": \"firestore.rules\"}, "
+fi
+if [ "$USES_STORAGE" = true ]; then
+  CONFIG_JSON="$CONFIG_JSON\"storage\": {\"rules\": \"storage.rules\"}, "
+fi
+if [ "$USES_FUNCTIONS" = true ]; then
+  CONFIG_JSON="$CONFIG_JSON\"functions\": {\"source\": \"functions\", \"runtime\": \"nodejs22\"}, "
+fi
+CONFIG_JSON="$CONFIG_JSON\"emulators\": $EMULATORS_JSON}"
+
+echo "$CONFIG_JSON" > "$TEMP_FIREBASE_JSON"
+
+# Capture worktree path now — working directory may change before trap fires, causing git rev-parse to fail
+WT_PATH="$(git rev-parse --show-toplevel)"
+
+# Cleanup on exit: kill all processes for this worktree, remove stale hub and temp config
+cleanup() {
+  # Detach success: the server is intentionally left running. Skip the kill and
+  # the shutdown echoes — only drop the temp emulator config (firebase-tools
+  # read --config at startup; kill_worktree_processes matches the emulator argv,
+  # not this file, so removing it does not strand the detached server).
+  if [ "$DETACH" = true ] && [ "$DETACH_SUCCESS" = true ]; then
+    rm -f "$TEMP_FIREBASE_JSON"
+    return
+  fi
+  echo ""
+  echo "Shutting down..."
+  kill_worktree_processes "$WT_PATH" || echo "WARNING: kill_worktree_processes failed" >&2
+  cleanup_stale_hub || echo "WARNING: cleanup_stale_hub failed" >&2
+  rm -f "$TEMP_FIREBASE_JSON"
+  echo "QA server stopped."
+}
+trap cleanup EXIT INT TERM
+
+# Build functions before starting emulator (if used)
+if [ "$USES_FUNCTIONS" = true ]; then
+  echo "Building Cloud Functions..."
+  (cd "$REPO_ROOT" && npm run -w functions build)
+fi
+
+# Start Firebase emulators in background (if any emulators needed)
+if [ -n "$EMULATOR_LIST" ]; then
+  if [ "$DETACH" = true ]; then
+    EMU_LOG="$(get_tmpdir)/qa-emulators-${APP_NAME}.log"
+    FIRESTORE_NAMESPACE="$NAMESPACE" \
+    setsid nohup npx firebase-tools emulators:start --only "$EMULATOR_LIST" --config "$TEMP_FIREBASE_JSON" --project "$EMULATOR_PROJECT_ID" >"$EMU_LOG" 2>&1 &
+  else
+    FIRESTORE_NAMESPACE="$NAMESPACE" \
+    npx firebase-tools emulators:start --only "$EMULATOR_LIST" --config "$TEMP_FIREBASE_JSON" --project "$EMULATOR_PROJECT_ID" &
+  fi
+fi
+
+TIMEOUT=30
+
+# Poll until Firestore emulator is ready (if used)
+if [ "$USES_FIRESTORE" = true ]; then
+  ELAPSED=0
+  until curl -s -o /dev/null -w '%{http_code}' "http://localhost:${FIRESTORE_PORT}/" 2>/dev/null | grep -q '^200$'; do
+    if [ $ELAPSED -ge $TIMEOUT ]; then
+      echo "ERROR: Firebase Firestore emulator did not start within ${TIMEOUT}s" >&2
+      exit 1
+    fi
+    sleep 1
+    ELAPSED=$((ELAPSED + 1))
+  done
+  echo "Firebase Firestore emulator ready on port ${FIRESTORE_PORT}"
+
+  # Seed Firestore with worktree-scoped qa namespace (e.g., "myapp/qa-main")
+  echo "Seeding Firestore (namespace: ${NAMESPACE})..."
+  APP_NAME="$APP_NAME" \
+  FIREBASE_PROJECT_ID="$EMULATOR_PROJECT_ID" \
+  FIRESTORE_EMULATOR_HOST="localhost:${FIRESTORE_PORT}" \
+  FIRESTORE_NAMESPACE="$NAMESPACE" \
+  npx tsx packages/firestoreutil/bin/run-seed.ts
+fi
+
+# Poll until Auth emulator is ready (if used)
+if [ "$USES_AUTH" = true ]; then
+  ELAPSED=0
+  until curl -s "http://localhost:${AUTH_PORT}/identitytoolkit.googleapis.com/v1/projects" >/dev/null 2>&1; do
+    if [ $ELAPSED -ge $TIMEOUT ]; then
+      echo "ERROR: Auth emulator did not start within ${TIMEOUT}s" >&2
+      exit 1
+    fi
+    sleep 1
+    ELAPSED=$((ELAPSED + 1))
+  done
+  echo "Firebase Auth emulator ready on port ${AUTH_PORT}"
+
+  # Seed auth user
+  echo "Seeding auth user..."
+  APP_NAME="$APP_NAME" AUTH_EMULATOR_HOST="localhost:${AUTH_PORT}" FIREBASE_PROJECT_ID="$EMULATOR_PROJECT_ID" npx tsx packages/authutil/bin/run-auth-seed.ts
+fi
+
+# Poll until Storage emulator is ready (if used).
+# The storage emulator root URL returns 404 (not 200 like Firestore), so check
+# for any valid HTTP response — a non-000 status means the server is listening.
+if [ "$USES_STORAGE" = true ]; then
+  ELAPSED=0
+  until curl -s -o /dev/null -w '%{http_code}' "http://localhost:${STORAGE_PORT}/" 2>/dev/null | grep -qE '^[1-5]'; do
+    if [ $ELAPSED -ge $TIMEOUT ]; then
+      echo "ERROR: Storage emulator did not start within ${TIMEOUT}s" >&2
+      exit 1
+    fi
+    sleep 1
+    ELAPSED=$((ELAPSED + 1))
+  done
+  echo "Firebase Storage emulator ready on port ${STORAGE_PORT}"
+fi
+
+# Seed storage emulator (if used and seed data exists)
+if [ "$USES_STORAGE" = true ] && [ -f "$REPO_ROOT/$APP_DIR/seeds/storage.ts" ]; then
+  echo "Seeding storage emulator..."
+  APP_NAME="$APP_NAME" STORAGE_EMULATOR_HOST="localhost:${STORAGE_PORT}" STORAGE_BUCKET="${EMULATOR_PROJECT_ID}.firebasestorage.app" npx tsx "$REPO_ROOT/packages/firebaseutil/bin/run-storage-seed.ts"
+fi
+
+VITE_ARGS=()
+if [ "$USES_FIRESTORE" = true ]; then
+  VITE_ARGS+=("VITE_FIRESTORE_EMULATOR_HOST=localhost:${FIRESTORE_PORT}" "VITE_FIRESTORE_NAMESPACE=${NAMESPACE}")
+fi
+if [ "$USES_AUTH" = true ]; then
+  VITE_ARGS+=("VITE_AUTH_EMULATOR_HOST=localhost:${AUTH_PORT}")
+fi
+if [ "$USES_STORAGE" = true ]; then
+  VITE_ARGS+=("VITE_STORAGE_EMULATOR_HOST=localhost:${STORAGE_PORT}")
+fi
+VITE_ARGS+=("VITE_FIREBASE_PROJECT_ID=${EMULATOR_PROJECT_ID}")
+if [ "$USES_FUNCTIONS" = true ]; then
+  VITE_ARGS+=("VITE_FUNCTIONS_EMULATOR_PORT=${FUNCTIONS_PORT}")
+fi
+
+# Set GitHub branch for apps that fetch raw content from GitHub
+VITE_ARGS+=("VITE_GITHUB_BRANCH=$(git branch --show-current)")
+
+# Firebase credentials — emulators don't validate these, but the client-side
+# config module (packages/firebaseutil/src/config.ts) requires them at startup.
+VITE_ARGS+=("VITE_FIREBASE_API_KEY=emulator-api-key")
+VITE_ARGS+=("VITE_RECAPTCHA_SITE_KEY=emulator-recaptcha-key")
+
+# Start Vite dev server
+cd "$REPO_ROOT/$APP_DIR"
+if [ "$DETACH" = true ]; then
+  VITE_LOG="$(get_tmpdir)/qa-vite-${APP_NAME}.log"
+  setsid nohup env "${VITE_ARGS[@]}" npx vite --port "${VITE_PORT}" --strictPort >"$VITE_LOG" 2>&1 &
+else
+  env "${VITE_ARGS[@]}" npx vite --port "${VITE_PORT}" --strictPort &
+fi
+cd "$REPO_ROOT"
+
+# Poll until Vite is serving
+ELAPSED=0
+until curl -s -o /dev/null -w '%{http_code}' "http://localhost:${VITE_PORT}/" 2>/dev/null | grep -q '^200$'; do
+  if [ $ELAPSED -ge $TIMEOUT ]; then
+    echo "ERROR: Vite dev server did not start within ${TIMEOUT}s" >&2
+    exit 1
+  fi
+  sleep 1
+  ELAPSED=$((ELAPSED + 1))
+done
+
+# Print summary
+echo ""
+echo "========================================"
+echo "  QA Server Ready"
+echo "========================================"
+echo ""
+echo "  App URL:  http://localhost:${VITE_PORT}"
+if [ "$USES_AUTH" = true ]; then
+  echo ""
+  echo "  Auth: Sign in via GitHub (emulator fake account picker)"
+  echo "  Seeded user: test@example.com (Test User)"
+fi
+if [ "$USES_FIRESTORE" = true ]; then
+  echo ""
+  echo "  Firestore emulator: localhost:${FIRESTORE_PORT}"
+  echo "  Firestore namespace: ${NAMESPACE}"
+fi
+if [ "$USES_AUTH" = true ]; then
+  echo "  Auth emulator:      localhost:${AUTH_PORT}"
+fi
+if [ "$USES_STORAGE" = true ]; then
+  echo "  Storage emulator:   localhost:${STORAGE_PORT}"
+fi
+if [ "$USES_FUNCTIONS" = true ]; then
+  echo "  Functions emulator: localhost:${FUNCTIONS_PORT}"
+fi
+echo ""
+if [ "$DETACH" = true ]; then
+  echo "  Stop: run-qa-cleanup.sh"
+else
+  echo "  Press Ctrl+C to stop"
+fi
+echo "========================================"
+echo ""
+
+# Remote access: forward ports to a remote tailnet client's localhost so the
+# served origin stays http://localhost:<vite>/ on every machine (#963). Emitted
+# unconditionally — the local operator ignores the ssh line; the remote operator
+# runs it first.
+EMU_PORTS=()
+[ -n "$FIRESTORE_PORT" ] && EMU_PORTS+=("$FIRESTORE_PORT")
+[ -n "$AUTH_PORT" ] && EMU_PORTS+=("$AUTH_PORT")
+[ -n "$STORAGE_PORT" ] && EMU_PORTS+=("$STORAGE_PORT")
+[ -n "$FUNCTIONS_PORT" ] && EMU_PORTS+=("$FUNCTIONS_PORT")
+print_remote_access_block "$VITE_PORT" "${EMU_PORTS[@]}"
+
+if [ "$DETACH" = true ]; then
+  # Detach: the server is up and ready. Return so the caller's single
+  # foreground Bash call completes; run-qa-cleanup.sh is the stop.
+  #
+  # Trade-off: claim_fixed_vite_port holds an flock on fd 200 for the script's
+  # lifetime; exiting here releases it early. That flock only closed a TOCTOU
+  # window — the function's own OS-level port probe plus Vite --strictPort still
+  # prevent an actual port collision, so early release is safe.
+  DETACH_SUCCESS=true
+  exit 0
+fi
+
+# Block until Ctrl+C
+wait

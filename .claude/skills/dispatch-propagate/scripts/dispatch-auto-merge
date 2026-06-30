@@ -1,0 +1,129 @@
+#!/usr/bin/env bash
+#
+# dispatch-auto-merge — tick-time reconciler that squash-merges every open PR
+# already at the dispatch "ready" state (issue #1739).
+#
+# Runs in the tick at Step 1d, immediately after dispatch-reconcile-ready (which
+# reconciles the draft↔ready bit). dispatch-reconcile-ready is the readiness
+# AUTHORITY; this script mirrors its predicate and only merges PRs that are
+# already ready by that definition:
+#
+#   ready(PR)  ≡  isDraft == false  ∧  dispatch:reviewed  ∧  CI == passing
+#                ∧  mergeable == MERGEABLE
+#
+# Eligibility ≡ readiness PLUS a non-empty closing-set guard: the PR must still
+# carry at least one `Closes #N`. This is defense-in-depth against a ready PR
+# that has lost its closing reference — it is NOT a type filter. dispatch:reviewed
+# already certifies the full review chain ran for any issue type, so a green
+# reviewed conflict-free PR auto-merges regardless of whether it closes a bug,
+# security, or enhancement issue.
+#
+# Config gate (ON by default): read from dispatch-config-load auto-merge. The
+# config file is an opt-OUT kill-switch (incident response), inverting the usual
+# absent→inert convention.
+#   - no config file  → `no-config` → armed (auto-merging is the default).
+#   - file present, .enabled == false → exit 0 with no output (kill-switch).
+#   - file present, .enabled == true → armed (redundant with the default).
+#
+# Merge: gh_pr_merge_rest <n> --squash with explicit --subject (the PR title)
+# and --body (the PR body), so the non-TTY squash is deterministic and the
+# `Closes #N` lines in the PR body land in the squash commit message, driving
+# GitHub's issue auto-close. The repo's delete_branch_on_merge setting reaps the
+# remote ref, so --delete-branch is NOT passed.
+#
+# Stdout protocol: exactly `merged #<n>` per PR actually merged; NOTHING for a
+# skip (an ineligible PR is silently passed over).
+#
+# Caller gating: the caller (the tick) is responsible for NOT invoking this
+# script during a red-main episode — this script does not check main's health.
+#
+# Sandbox note: the CALLER wraps every invocation of this script with
+# dangerouslyDisableSandbox (per .claude/rules/sandbox.md) because `gh` needs
+# network access and gh's TLS validation is blocked by the sandbox. This script
+# therefore sets NOTHING sandbox-related; that is the caller's responsibility.
+#
+# NOT set -e: a per-PR hard error must not abort the merge loop. gh exit codes
+# are captured explicitly with `|| rc=$?`; a failing PR logs to stderr, sets
+# HARD_ERROR=1, and `continue`s (it self-heals on a later tick). The script exits
+# 1 at the end if any PR's merge failed.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"  # pr_list_open, dispatch_ci_verdict_rest, gh_retry
+
+# ---- Step 1: config gate (no-op when off) -----------------------------------
+CFG=$("$SCRIPT_DIR/dispatch-config-load" auto-merge) || {
+  echo "dispatch-auto-merge: error: dispatch-config-load auto-merge failed" >&2
+  exit 1
+}
+# Default ON: an absent config file arms auto-merging. The file exists only as
+# an opt-OUT kill-switch (incident response). When present, enabled:false turns
+# the reconciler off; enabled:true (the redundant explicit form) keeps it on.
+if [[ "$CFG" != "no-config" ]]; then
+  ENABLED=$(jq -r '.enabled' <<<"$CFG")
+  [[ "$ENABLED" == "false" ]] && exit 0
+fi
+
+# ---- Step 2: one fresh fetch of every open PR -------------------------------
+# Never proceed on a partial fetch — a truncated snapshot could merge a PR whose
+# closing-issue picture is incomplete.
+PR_LIST_RC=0
+PR_LIST=$(pr_list_open "number,title,body,isDraft,labels,headRefOid,mergeable,closingIssuesReferences") || PR_LIST_RC=$?
+if [[ "$PR_LIST_RC" -ne 0 ]]; then
+  echo "dispatch-auto-merge: error: pr_list_open failed (rc=$PR_LIST_RC); cannot compute the mergeable set" >&2
+  exit 1
+fi
+
+# ---- Step 3: per-PR eligibility + merge -------------------------------------
+HARD_ERROR=0
+
+while IFS= read -r pr; do
+  [[ -n "$pr" ]] || continue
+  N=$(jq -r '.number' <<<"$pr")
+  IS_DRAFT=$(jq -r '.isDraft' <<<"$pr")
+  MERGEABLE=$(jq -r '.mergeable' <<<"$pr")
+
+  # ---- Readiness predicate (mirror dispatch-reconcile-ready) ----------------
+  # isDraft==false carries the demote race: if dispatch-reconcile-ready demoted
+  # this PR earlier in the same tick, the fresh fetch sees isDraft==true and
+  # this skips. Cheap gates first; the network CI verdict is done LAST so skips
+  # short-circuit before it.
+  [[ "$IS_DRAFT" == "false" ]] || continue
+  [[ "$MERGEABLE" == "MERGEABLE" ]] || continue
+  HAS_REVIEWED=$(jq -r '[.labels[].name] | index("dispatch:reviewed") != null' <<<"$pr")
+  [[ "$HAS_REVIEWED" == "true" ]] || continue
+
+  # ---- Closing-set guard (defense-in-depth, NOT a type filter) --------------
+  # A ready PR must still carry at least one Closes #N. This catches a PR that
+  # lost its closing reference; it does NOT gate on issue type.
+  HAS_CLOSING=$(jq -r '(.closingIssuesReferences | length) > 0' <<<"$pr")
+  [[ "$HAS_CLOSING" == "true" ]] || continue
+
+  # ---- CI verdict (REST, memoized) — the only per-PR network read; done last -
+  VERDICT=$(dispatch_ci_verdict_rest "$(jq -r '.headRefOid' <<<"$pr")")
+  [[ "$VERDICT" == "passing" ]] || continue
+
+  # ---- Merge ----------------------------------------------------------------
+  # Merge via the REST-backed gh_pr_merge_rest helper (PUT .../pulls/<N>/merge).
+  # --subject/--body are explicit so the non-TTY squash is deterministic and the
+  # PR body's Closes #N lines stay in the squash commit body (the helper passes
+  # --body as commit_message). .body // "" so a null body is not passed as the
+  # literal string "null"; an empty body makes the helper omit commit_message,
+  # matching the porcelain. No --delete-branch: the repo's
+  # delete_branch_on_merge reaps the remote ref.
+  PR_TITLE=$(jq -r '.title' <<<"$pr")
+  PR_BODY=$(jq -r '.body // ""' <<<"$pr")
+  rc=0
+  out=$(gh_pr_merge_rest "$N" --squash --subject "$PR_TITLE" --body "$PR_BODY" 2>&1) || rc=$?
+  if [[ "$rc" -ne 0 ]]; then
+    echo "dispatch-auto-merge: error: gh_pr_merge_rest #$N failed: $out" >&2
+    HARD_ERROR=1
+    continue
+  fi
+  echo "merged #$N"
+done < <(jq -c '.[]' <<<"$PR_LIST")
+
+if [[ "$HARD_ERROR" -ne 0 ]]; then
+  exit 1
+fi
+exit 0

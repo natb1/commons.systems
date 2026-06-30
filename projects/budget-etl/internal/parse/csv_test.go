@@ -1,0 +1,299 @@
+package parse
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+)
+
+func TestParseCSV(t *testing.T) {
+	path := filepath.Join("testdata", "bankone.csv")
+	result, err := parseCSV(path)
+	if err != nil {
+		t.Fatalf("parseCSV: %v", err)
+	}
+	if result.Skipped {
+		t.Fatal("expected non-skipped result")
+	}
+
+	// Balance: metadata ending balance is "12000.00" → 1200000 cents
+	if result.Balance != 1200000 {
+		t.Errorf("Balance = %d, want %d", result.Balance, 1200000)
+	}
+
+	// BalanceDate: metadata toDate is "2025/07/10"
+	wantBD := time.Date(2025, 7, 10, 0, 0, 0, 0, time.UTC)
+	if !result.BalanceDate.Equal(wantBD) {
+		t.Errorf("BalanceDate = %v, want %v", result.BalanceDate, wantBD)
+	}
+
+	txns := result.Transactions
+	if len(txns) != 4 {
+		t.Fatalf("expected 4 transactions, got %d", len(txns))
+	}
+
+	tests := []struct {
+		idx    int
+		id     string
+		date   string
+		amount int64 // cents
+		desc   string
+		typ    string // for documentation
+	}{
+		{0, "000111222", "2025-06-11", -40000, "Mobile Deposit Reference No.  000111222", "CREDIT"},
+		{1, "000333444", "2025-06-13", -300000, "Direct Deposit - Payroll", "CREDIT"},
+		{2, "ATM0055566", "2025-06-16", 20200, "ATM Withdrawal 123 Main St Anytown MD", "DEBIT"},
+		{3, "ATM0055566-2", "2025-06-16", 300, "ATM Transaction Fee - Withdrawal", "DEBIT"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.id, func(t *testing.T) {
+			txn := txns[tt.idx]
+			if txn.TransactionID != tt.id {
+				t.Errorf("TransactionID = %q, want %q", txn.TransactionID, tt.id)
+			}
+			wantDate, _ := time.Parse("2006-01-02", tt.date)
+			if !txn.Date.Equal(wantDate) {
+				t.Errorf("Date = %v, want %v", txn.Date, wantDate)
+			}
+			if txn.Amount != tt.amount {
+				t.Errorf("Amount = %d, want %d", txn.Amount, tt.amount)
+			}
+			if txn.Description != tt.desc {
+				t.Errorf("Description = %q, want %q", txn.Description, tt.desc)
+			}
+		})
+	}
+}
+
+func TestParseCSV_EmptyFile(t *testing.T) {
+	tmp := filepath.Join(t.TempDir(), "empty.csv")
+	if err := os.WriteFile(tmp, []byte("Date,Amount,Description,,TransactionID,Type\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := parseCSV(tmp)
+	if err == nil {
+		t.Fatal("expected error for CSV with no data rows")
+	}
+}
+
+func TestParseCSV_DuplicateIDs(t *testing.T) {
+	tmp := filepath.Join(t.TempDir(), "dupes.csv")
+	content := "00000000001234567890,2025/06/11,2025/07/10,15000.00,12000.00\n" +
+		"2025/06/16,202.00,\"ATM Withdrawal\",,\"ATM0055566\",\"DEBIT\"\n" +
+		"2025/06/16,3.00,\"ATM Fee\",,\"ATM0055566\",\"DEBIT\"\n" +
+		"2025/06/16,5.00,\"ATM Fee 2\",,\"ATM0055566\",\"DEBIT\"\n"
+	if err := os.WriteFile(tmp, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result, err := parseCSV(tmp)
+	if err != nil {
+		t.Fatalf("parseCSV: %v", err)
+	}
+	txns := result.Transactions
+	if len(txns) != 3 {
+		t.Fatalf("expected 3 transactions, got %d", len(txns))
+	}
+	if txns[0].TransactionID != "ATM0055566" {
+		t.Errorf("txn 0: ID = %q, want %q", txns[0].TransactionID, "ATM0055566")
+	}
+	if txns[1].TransactionID != "ATM0055566-2" {
+		t.Errorf("txn 1: ID = %q, want %q", txns[1].TransactionID, "ATM0055566-2")
+	}
+	if txns[2].TransactionID != "ATM0055566-3" {
+		t.Errorf("txn 2: ID = %q, want %q", txns[2].TransactionID, "ATM0055566-3")
+	}
+}
+
+// TestParseCSV_DuplicateIDCollision verifies that a synthetic duplicate suffix
+// never collides with a real later ID. Given IDs X, X, X-2 in file order:
+//   - row 1 (original X) → X
+//   - row 2 (duplicate X) → X-2 is taken by the original set, so skips to X-3
+//   - row 3 (original X-2) → X-2 (still free)
+func TestParseCSV_DuplicateIDCollision(t *testing.T) {
+	tmp := filepath.Join(t.TempDir(), "collision.csv")
+	content := "00000000001234567890,2025/06/11,2025/07/10,15000.00,12000.00\n" +
+		"2025/06/16,10.00,\"Row A\",,\"X\",\"DEBIT\"\n" +
+		"2025/06/16,20.00,\"Row B\",,\"X\",\"DEBIT\"\n" +
+		"2025/06/16,30.00,\"Row C\",,\"X-2\",\"DEBIT\"\n"
+	if err := os.WriteFile(tmp, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result, err := parseCSV(tmp)
+	if err != nil {
+		t.Fatalf("parseCSV: %v", err)
+	}
+	txns := result.Transactions
+	if len(txns) != 3 {
+		t.Fatalf("expected 3 transactions, got %d", len(txns))
+	}
+
+	// All three IDs must be distinct.
+	seen := make(map[string]int)
+	for idx, txn := range txns {
+		seen[txn.TransactionID] = idx
+	}
+	if len(seen) != 3 {
+		t.Errorf("expected 3 distinct IDs, got %d: %v", len(seen), seen)
+	}
+
+	// The duplicate X row (row 2) must skip the taken X-2 and become X-3.
+	if txns[1].TransactionID != "X-3" {
+		t.Errorf("txn 1: ID = %q, want %q", txns[1].TransactionID, "X-3")
+	}
+
+	// The real X-2 row (row 3) must keep its original ID.
+	if txns[2].TransactionID != "X-2" {
+		t.Errorf("txn 2: ID = %q, want %q", txns[2].TransactionID, "X-2")
+	}
+}
+
+// TestParseCSV_DuplicateIDDenseCollision verifies that the suffix scan correctly
+// skips a dense run of blocked candidates. Given IDs X, X-2, X-3, X in file
+// order (original set = {X, X-2, X-3}):
+//   - row 1 (X) → X
+//   - row 2 (X-2) → X-2
+//   - row 3 (X-3) → X-3
+//   - row 4 (duplicate X) → X-2 taken, X-3 taken, so advances to X-4
+func TestParseCSV_DuplicateIDDenseCollision(t *testing.T) {
+	tmp := filepath.Join(t.TempDir(), "dense.csv")
+	content := "00000000001234567890,2025/06/11,2025/07/10,15000.00,12000.00\n" +
+		"2025/06/16,10.00,\"Row A\",,\"X\",\"DEBIT\"\n" +
+		"2025/06/16,20.00,\"Row B\",,\"X-2\",\"DEBIT\"\n" +
+		"2025/06/16,30.00,\"Row C\",,\"X-3\",\"DEBIT\"\n" +
+		"2025/06/16,40.00,\"Row D\",,\"X\",\"DEBIT\"\n"
+	if err := os.WriteFile(tmp, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result, err := parseCSV(tmp)
+	if err != nil {
+		t.Fatalf("parseCSV: %v", err)
+	}
+	txns := result.Transactions
+	if len(txns) != 4 {
+		t.Fatalf("expected 4 transactions, got %d", len(txns))
+	}
+
+	// All four IDs must be distinct.
+	seen := make(map[string]int)
+	for idx, txn := range txns {
+		seen[txn.TransactionID] = idx
+	}
+	if len(seen) != 4 {
+		t.Errorf("expected 4 distinct IDs, got %d: %v", len(seen), seen)
+	}
+
+	// The duplicate X row (row 4) must skip X-2 and X-3 (both taken) and become X-4.
+	if txns[3].TransactionID != "X-4" {
+		t.Errorf("txn 3: ID = %q, want %q", txns[3].TransactionID, "X-4")
+	}
+}
+
+// TestParseCSV_DuplicateIDStress is both an acceptance-criteria document and a
+// real regression guard for the O(K+N) suffix-assignment fix (issue #1374).
+//
+// Why K=N=10000 (not K=1000):
+// At K=1000 the old quadratic code (O(K²+KN)) is still sub-millisecond in
+// practice, so a 1-second bound would pass and the test would document but not
+// guard. At K=N=10000 the old code performs ~2e8 map lookups (several seconds,
+// reliably exceeding the 1 s bound), while the new O(K+N) code does ~4e4
+// operations (microseconds). This asymmetry makes the test a genuine regression
+// guard: accidentally reverting to the quadratic loop causes an immediate
+// failure. Do NOT "simplify" the implementation back to the inner restart loop.
+func TestParseCSV_DuplicateIDStress(t *testing.T) {
+	const K = 10000 // rows with duplicate base ID "X" — drives suffix search
+	const N = 10000 // rows with pre-seeded suffixed IDs "X-2" … "X-(N+1)"
+
+	// Build the CSV: metadata line, then N pre-seeded rows, then K duplicate rows.
+	// The N pre-seeded rows consume X-2 through X-(N+1) as original IDs.
+	// When the K duplicate rows arrive, the suffix counter must skip over all of
+	// them without restarting from 2 each time (the old quadratic behaviour).
+	var sb strings.Builder
+	sb.WriteString("00000000001234567890,2025/06/11,2025/07/10,15000.00,12000.00\n")
+	for i := 2; i <= N+1; i++ {
+		fmt.Fprintf(&sb, "2025/06/16,1.00,\"Seeded row %d\",,\"X-%d\",\"DEBIT\"\n", i, i)
+	}
+	for i := 0; i < K; i++ {
+		fmt.Fprintf(&sb, "2025/06/16,1.00,\"Duplicate row %d\",,\"X\",\"DEBIT\"\n", i)
+	}
+
+	tmp := filepath.Join(t.TempDir(), "stress.csv")
+	if err := os.WriteFile(tmp, []byte(sb.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	start := time.Now()
+	result, err := parseCSV(tmp)
+	elapsed := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("parseCSV: %v", err)
+	}
+	if elapsed > time.Second {
+		t.Fatalf("parseCSV took %v (> 1s): suffix assignment is not O(K+N)", elapsed)
+	}
+
+	want := K + N
+	if len(result.Transactions) != want {
+		t.Fatalf("expected %d transactions, got %d", want, len(result.Transactions))
+	}
+
+	// All returned IDs must be distinct.
+	seen := make(map[string]struct{}, want)
+	for _, txn := range result.Transactions {
+		seen[txn.TransactionID] = struct{}{}
+	}
+	if len(seen) != want {
+		t.Errorf("expected %d distinct IDs, got %d (collisions present)", want, len(seen))
+	}
+
+	t.Logf("elapsed: %v for K=%d duplicate rows + N=%d pre-seeded rows", elapsed, K, N)
+}
+
+// TestParseCSV_AllDuplicateIDsPerformance guards against the O(M^2)
+// suffix-search regression fixed in #1375. With 50000 rows sharing the
+// same transaction ID, the unfixed code takes minutes; the fixed O(M)
+// code finishes in milliseconds. A 2-second wall-clock bound separates
+// them with wide margin and no CI flakiness.
+func TestParseCSV_AllDuplicateIDsPerformance(t *testing.T) {
+	const rows = 50000
+	var b strings.Builder
+	// metadata line: accountID, fromDate, toDate, openingBalance, closingBalance
+	b.WriteString("00000000001234567890,2025/06/11,2025/07/10,15000.00,12000.00\n")
+	for i := 0; i < rows; i++ {
+		b.WriteString("2025/06/16,1.00,\"Row\",,\"X\",\"DEBIT\"\n")
+	}
+
+	tmp := filepath.Join(t.TempDir(), "alldupes.csv")
+	if err := os.WriteFile(tmp, []byte(b.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	start := time.Now()
+	result, err := parseCSV(tmp)
+	elapsed := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("parseCSV: %v", err)
+	}
+	if elapsed > 2*time.Second {
+		t.Fatalf("parseCSV took %v for %d all-duplicate rows; want < 2s (O(M^2) regression?)", elapsed, rows)
+	}
+	if len(result.Transactions) != rows {
+		t.Fatalf("expected %d transactions, got %d", rows, len(result.Transactions))
+	}
+
+	// Suffix correctness at boundaries.
+	if got := result.Transactions[0].TransactionID; got != "X" {
+		t.Errorf("txn[0].TransactionID = %q, want %q", got, "X")
+	}
+	if got := result.Transactions[1].TransactionID; got != "X-2" {
+		t.Errorf("txn[1].TransactionID = %q, want %q", got, "X-2")
+	}
+	if got := result.Transactions[rows-1].TransactionID; got != "X-50000" {
+		t.Errorf("txn[%d].TransactionID = %q, want %q", rows-1, got, "X-50000")
+	}
+}

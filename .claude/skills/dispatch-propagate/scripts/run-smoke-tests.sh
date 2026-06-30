@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+APP_DIR="${1:?Usage: run-smoke-tests.sh <app-dir> <base-url>}"
+BASE_URL="${2:?Usage: run-smoke-tests.sh <app-dir> <base-url>}"
+
+# Remember repo root (script must be invoked from repo root)
+REPO_ROOT="$(pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# shellcheck source=lib.sh
+source "$SCRIPT_DIR/lib.sh"
+
+# Resolve nix-provisioned Playwright browsers when PLAYWRIGHT_BROWSERS_PATH is
+# unset (re-execs under `nix develop` on NixOS); no-op when the var is set or
+# nix is absent, leaving the npx fallback below to run.
+ensure_playwright_browsers "$0" "$@"
+
+ensure_deps
+
+cd "$REPO_ROOT/$APP_DIR"
+
+# Wait for Firebase CDN to serve the deployed content
+echo "Waiting for preview to become available at $BASE_URL..."
+READY=false
+TMPHTML=$(mktemp)
+trap 'rm -f "$TMPHTML"' EXIT
+for i in $(seq 1 30); do
+  STATUS=$(curl -s -o "$TMPHTML" -w '%{http_code}' "$BASE_URL")
+  if [[ "$STATUS" == "200" ]] && grep -q '<script type="module"' "$TMPHTML"; then
+    echo "Preview is ready."
+    READY=true
+    break
+  fi
+  if [ "$i" -eq 30 ]; then
+    echo "ERROR: Preview at $BASE_URL did not serve expected content after 60s (last HTTP status: $STATUS)" >&2
+    head -20 "$TMPHTML" >&2
+    exit 1
+  fi
+  sleep 2
+done
+
+# Install Playwright browsers (bounded timeout+retry; skips when nix provides them)
+playwright_install_with_deps
+
+# Run smoke tests
+BASE_URL="$BASE_URL" npx playwright test --config e2e/playwright.config.ts --grep @hosting --project=desktop

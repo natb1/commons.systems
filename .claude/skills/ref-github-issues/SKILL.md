@@ -68,8 +68,10 @@ gh api -X POST "/repos/{owner}/{repo}/issues/36/dependencies/blocked_by" \
 ```
 
 **Remove dependency (issue #36 is no longer blocked by #42):**
+
+Unlike the add (`POST`), removal takes the blocker's database ID as a **path
+parameter**, not a request body. Sending it as a body 404s.
 ```bash
 BLOCKER_DB_ID=$(gh api "/repos/{owner}/{repo}/issues/42" --jq '.id')
-gh api -X DELETE "/repos/{owner}/{repo}/issues/36/dependencies/blocked_by" \
-  --input - <<< "{\"issue_id\": $BLOCKER_DB_ID}"
+gh api -X DELETE "/repos/{owner}/{repo}/issues/36/dependencies/blocked_by/$BLOCKER_DB_ID"
 ```

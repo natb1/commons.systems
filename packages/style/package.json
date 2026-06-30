@@ -1,0 +1,18 @@
+{
+  "name": "@commons-systems/style",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "dependencies": {
+    "@commons-systems/ds": "*"
+  },
+  "scripts": {
+    "lint": "echo 'CSS-only package, nothing to lint'"
+  },
+  "exports": {
+    "./default.css": "./default.css",
+    "./layout.css": "./layout.css",
+    "./expandable-row.css": "./expandable-row.css",
+    "./hero.css": "./hero.css"
+  }
+}

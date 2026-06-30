@@ -2,7 +2,7 @@ import { classifyError } from "@commons-systems/errorutil/classify";
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
 import { logError } from "@commons-systems/errorutil/log";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
-import { showDropdown } from "@commons-systems/style/components/autocomplete";
+import { showDropdown } from "@commons-systems/components/autocomplete";
 
 const errorTimers = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
 
@@ -177,7 +177,7 @@ export function wireChartResize(
   getWrappers: () => HTMLElement[],
   errorEls: HTMLElement[],
   reattachScrollSync: () => void,
-): void {
+): ResizeObserver {
   let resizeTimer: ReturnType<typeof setTimeout> | null = null;
   const observer = new ResizeObserver(() => {
     if (!container.isConnected) {
@@ -210,6 +210,10 @@ export function wireChartResize(
     }, 150);
   });
   observer.observe(container);
+  // Returned so a React island caller can disconnect the observer on unmount
+  // (the LegacyRoute caller ignores the return; the observer also self-disconnects
+  // once the container leaves the document).
+  return observer;
 }
 
 export function uniqueSorted(values: (string | null)[]): string[] {

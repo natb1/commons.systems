@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@commons-systems/config/playwright-test";
 
 test.describe("og meta", () => {
   test("post page renders with history-mode URL", async ({ page }) => {

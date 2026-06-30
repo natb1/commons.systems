@@ -1,0 +1,6 @@
+go 1.23.3
+
+use (
+	./projects/budget-etl
+	./projects/scaffolding/firebase
+)

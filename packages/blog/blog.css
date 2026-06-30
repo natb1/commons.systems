@@ -1,0 +1,125 @@
+#posts img {
+  max-width: 100%;
+  height: auto;
+}
+
+#posts article h1,
+#posts article h2,
+#posts article h3 {
+  text-shadow: none;
+}
+
+#posts article {
+  margin-top: 4rem;
+}
+
+#posts article:first-child {
+  margin-top: 0;
+}
+
+.post-link {
+  text-decoration: none;
+  color: var(--accent);
+}
+
+.post-link:hover {
+  text-decoration: none;
+}
+
+.post-link:hover .post-title {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+}
+
+.external-link-icon {
+  margin-left: 0.15em;
+}
+
+.cc-badge {
+  width: 117px;
+  height: 41px;
+  vertical-align: middle;
+}
+
+/* Info panel */
+.panel-section {
+  margin-bottom: 1.5rem;
+}
+
+.panel-section h3 {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  margin-bottom: 0.5rem;
+}
+
+.panel-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.panel-list li {
+  margin-bottom: 0.4rem;
+}
+
+.panel-list a {
+  color: var(--accent);
+  font-size: 0.85rem;
+}
+
+.link-subtitle {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.blogroll-entry {
+  display: block;
+  text-decoration: none;
+}
+
+.blogroll-latest,
+.blogroll-date {
+  display: block;
+  color: var(--muted);
+}
+
+.blogroll-latest {
+  font-size: 0.75rem;
+}
+
+.blogroll-date {
+  font-size: 0.65rem;
+  opacity: 0.7;
+}
+
+.panel-section details {
+  margin-bottom: 0.1rem;
+  background: none;
+  border: none;
+}
+
+.panel-section summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--fg);
+  line-height: 1.4;
+}
+
+.panel-section details details {
+  margin-left: 1rem;
+}
+
+.feed-icon {
+  width: 0.75rem;
+  height: 0.75rem;
+  vertical-align: middle;
+  margin-left: 0.3rem;
+  opacity: 0.5;
+}
+
+.feed-icon:hover {
+  opacity: 0.8;
+}

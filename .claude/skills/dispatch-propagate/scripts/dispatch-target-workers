@@ -1,0 +1,595 @@
+#!/usr/bin/env bash
+# dispatch-target-workers — print the desired concurrent worker count.
+#
+# Computes a worker target from two decoupled controls: a weekly pace curve W
+# used as a BINARY gate, then a linear 5-hour worker ramp N. Weekly pace decides
+# WHETHER to spend (usage at/over the curve → pause); the 5h ramp decides HOW
+# MANY. Instead of a flat weekly cap, the weekly budget follows a cumulative-pace
+# CURVE keyed to how far through the weekly window we are (in 5-hour-window
+# terms), so spend spreads smoothly across the week rather than burning early and
+# idling. It is intentionally more conservative early-week than a flat-cap
+# controller — it pauses whenever actual usage runs ahead of the curve, even far
+# below the weekly cap.
+#
+# The two `used_*` telemetry fields stay in their own denominators
+# (used_weekly = % of weekly limit; used_5h = % of 5h limit). They couple only
+# through the SIGN of weekly headroom, so no weekly<->5h conversion is needed.
+#
+# Telemetry is read from ~/.local/share/commons-dispatch/rate_limits.json
+# (written by .claude/skills/dispatch-propagate/scripts/update-rate-limits.sh
+# on every statusline render). The path is overridable for tests.
+#
+# When telemetry is missing or unreadable, the script prints `1` (today's
+# "spawn one per tick" default) and writes a one-line note to stderr — the
+# algorithm is opt-in by telemetry presence.
+#
+# Usage:
+#   dispatch-target-workers              count mode (default): print the target.
+#   dispatch-target-workers --reopen-at  reopen mode: print the earliest epoch
+#                                        at which the worker target next becomes
+#                                        >= 1, or `none`.
+#   dispatch-target-workers --exhausted  exhausted mode: print `exhausted` when
+#                                        the weekly OR 5-hour window is genuinely
+#                                        out of tokens, else `ok`.
+#   dispatch-target-workers --max        max mode: print the resolved MAX_WORKERS
+#                                        concurrency ceiling (config
+#                                        max_concurrent_workers, default 8) and
+#                                        exit.
+#
+# Stdout protocol:
+#   count mode (default):
+#     <integer>   non-negative concurrent-worker target (0..max_workers).
+#   reopen mode (--reopen-at):
+#     <integer>   earliest epoch (seconds) at which the target next becomes >= 1
+#                 when the pace curve is currently the blocker, OR
+#     none        when the pace curve is not the blocker (target already >= 1,
+#                 or the 0 comes from an absolute cap / transient 5h fill rather
+#                 than a pace-curve pause), or the weekly anchor is absent.
+#   exhausted mode (--exhausted):
+#     exhausted   the weekly OR 5-hour window is GENUINELY out of tokens — its
+#                 used_% is at/near 100 (>= exhaustion_threshold_pct) with
+#                 resets_at still in the future. A hard stop even for
+#                 priority/main-broken work.
+#     ok          otherwise, INCLUDING missing/unreadable/invalid telemetry.
+#                 Exhausted mode fails OPEN: unknown usage is not genuine
+#                 exhaustion, so priority work is never suppressed on absent
+#                 data — the OPPOSITE posture from count mode's fallback-to-1.
+#                 This mode reads telemetry directly and never runs the
+#                 pace/ramp math, so "paced to 0" (a self-imposed throttle
+#                 priority work overrides) is reported as `ok`, distinct from
+#                 genuine `exhausted`.
+#
+# Exit codes:
+#   0  the script prints a number (count mode), epoch/`none` (reopen mode), or
+#      `exhausted`/`ok` (exhausted mode).
+#   2  unrecognized mode argument.
+#
+# Inputs (env-var overrides for tests; otherwise read from telemetry/config):
+#
+#   DISPATCH_TARGET_WORKERS_RATE_LIMITS_PATH
+#     Override the rate_limits.json path. Default:
+#     ~/.local/share/commons-dispatch/rate_limits.json.
+#
+#   DISPATCH_TARGET_WORKERS_NOW
+#     Override the current epoch seconds. Default: date +%s. The pace curve
+#     needs the elapsed fraction of the weekly window, so this is consulted.
+#
+#   DISPATCH_TARGET_WORKERS_USED_WEEKLY
+#   DISPATCH_TARGET_WORKERS_RESETS_AT_WEEKLY
+#   DISPATCH_TARGET_WORKERS_USED_5H
+#   DISPATCH_TARGET_WORKERS_RESETS_AT_5H
+#     Override each individual telemetry field. When set, they win over the
+#     value parsed from the rate_limits.json file. The override is per-field,
+#     so a test can supply some fields and let the file supply the rest. The
+#     weekly curve consumes used_weekly + resets_at_weekly + now; Stage 3
+#     consumes used_5h. The 5h resets_at is parsed for downstream consumers
+#     but not consulted here.
+#
+# Config (read via dispatch-config-load target-workers; all optional):
+#
+#   weekly_pace_floor_pct          default 50   early-week floor; W holds here
+#                                               until the terminal windows
+#   weekly_terminal_pct            default 100  terminal W at week end (r=0 anchor)
+#   weekly_terminal_windows        default 2    count of trailing 5-hour windows
+#                                               the linear terminal segment spans
+#                                               (>= 1); derived shoulder =
+#                                               weekly_terminal_pct -
+#                                               weekly_increment_cap_pct ·
+#                                               weekly_terminal_windows
+#   weekly_increment_cap_pct       default 10   terminal-segment slope (% per
+#                                               remaining window)
+#   weekly_curve_power             default 1    convexity of the rise; >1 back-loads
+#   five_hour_target_floor_pct     default 50   used_5h % at/below which workers
+#                                               are max
+#   five_hour_target_ceiling_pct   default 80   used_5h % at/above which workers
+#                                               are zero
+#   max_concurrent_workers         default 8
+#   exhaustion_threshold_pct       default 98   used_% (either window) at/near
+#                                               100 treated as genuine token
+#                                               exhaustion (--exhausted mode);
+#                                               above the 5h ramp's 80% zero-
+#                                               point so the 80→98 band stays a
+#                                               priority override, not a hard
+#                                               stop
+#
+# ---- The algorithm ----------------------------------------------------------
+#
+#   WEEK_SECONDS = 604800
+#
+#   # Stage 1 — weekly pace curve W (weekly %)
+#   remaining = resets_at_weekly - now;   if remaining <= 0: print 0; exit
+#   r        = remaining / 18000                                 # windows left
+#   T        = WEEK_SECONDS / 18000                              # = 33.6 windows
+#   shoulder = terminal - cap*Nterm                              # derived (= 80)
+#   s        = clamp((T - r) / (T - Nterm), 0, 1)                # rise progress [0,1]
+#   rise     = floor + (shoulder - floor)*s^p                    # power floor→shoulder
+#   terminal_seg = terminal - cap*r                              # linear final windows
+#   W        = max(floor, terminal_seg, rise)                    # monotone by construction
+#
+#   # Stage 2 — binary weekly gate
+#   hw = W - used_weekly
+#   if hw <= 0: print 0; exit              # at/over pace → pause
+#
+#   # Stage 3 — workers N from the 5h ramp
+#   r    = remaining / 18000                                     # windows left
+#   ceil5_eff = clamp(100*(terminal-used_weekly)/(r*wcap), ceil5, 100)  # dynamic catch-up ceiling
+#   span = ceil5_eff - floor5
+#   h5   = ceil5_eff - used_5h
+#   N = (h5 <= 0) ? 0 : (span <= 0) ? max_workers
+#                                   : clamp(round(max_workers * h5/span), 1, max_workers)
+#   print N
+#
+# - Early in the week W holds at floor (50%). As the final Nterm
+#   (weekly_terminal_windows, default 2) five-hour windows approach, the rise
+#   term climbs via a power curve (exponent p) from floor to the derived
+#   shoulder (= terminal - cap*Nterm = 80% at defaults). Over those final Nterm
+#   windows the linear terminal_seg (slope cap per window) governs, reaching
+#   terminal (100%) at week end (80 at r=2, 90 at r=1, 100 at r=0 with
+#   defaults). W is monotone non-decreasing by construction — a max of a
+#   constant floor, a non-decreasing power rise, and a positively-sloped linear
+#   segment — so it can never overshoot mid-week. The old #930 non-monotonicity
+#   pathology is now unrepresentable rather than validator-rejected.
+# - Gate closed (hw <= 0, used_weekly at/over W) → 0 workers regardless of 5h
+#   usage. The weekly pace curve simply pauses spending.
+# - Gate open (hw > 0) → N is a pure function of used_5h: max_workers at/below
+#   floor5, ramping linearly to 0 at/above ceil5_eff (the dynamic catch-up
+#   ceiling, which equals the static ceil5 mid-week and rises above it near
+#   end-of-week — see below). The clamp floor keeps N >= 1 for any used_5h
+#   strictly under ceil5_eff, so there is no `0 >= 0` router deadlock during
+#   healthy under-pace operation.
+# - The 5h ramp ceiling is dynamic: ceil5_eff rises above the static ceil5
+#   near end-of-week when the remaining windows r cannot close the weekly
+#   deficit D = terminal - used_weekly at the default per-window burn rate
+#   (required 5h usage u = 100*D/(r*wcap)). It is accelerator-only — the clamp
+#   lower bound is ceil5, so it never reduces N (over-pace slowdown stays the
+#   weekly gate's job). It is inert mid-week when usage is near pace (r large
+#   and D/r small → term < ceil5 → clamps to ceil5); when far behind pace it
+#   activates earlier, proportionally to the deficit. It saturates at 100 for a
+#   large deficit (required rate >
+#   wcap%/window), so it does not always catch up.
+#
+#   # Reopen crossing (--reopen-at mode)
+#   A pace-curve pause (the binary gate closing, hw<=0, from used_weekly >= W) is
+#   transient: W(t) rises over time to meet the flat (no workers spending)
+#   used_weekly, so the budget
+#   reopens on its own. Reopen mode reports WHEN. The Stage-1 curve is factored
+#   into an awk function W_of(t) returning the cumulative curve value at a
+#   candidate epoch t. With hw = W_of(now) - used_weekly:
+#     hw > 0  → `none` (the pace curve is not the blocker; any 0 is from the
+#               absolute cap or a transient 5h fill, handled elsewhere).
+#     hw <= 0 → solve W_of(t) = used_weekly for the earliest t in (now,
+#               resets_weekly] by bisection. W_of is monotonic increasing in t,
+#               so the bisection converges for any weekly_curve_power.
+#   Reopen mode computes only Stage 1; it never runs the binary gate or the 5h
+#   ramp.
+#
+# ---- Missing-telemetry fallback --------------------------------------------
+#
+# - File missing/unreadable, or both telemetry blocks missing → print 1
+#   (count mode) / `none` (reopen mode).
+# - Weekly anchor absent (missing used_weekly OR resets_at_weekly OR a
+#   malformed now) → print 1 (count mode) / `none` (reopen mode).
+# - Only `five_hour` missing → under pace, used_5h is treated as 0 → max workers
+#   from the 5h ramp. Irrelevant to reopen mode (Stage 1 only).
+set -euo pipefail
+
+# ---- Step 0: mode argument --------------------------------------------------
+#
+# Optional first arg selects the output:
+#   (absent / empty) → count mode (default): print the worker target.
+#   --reopen-at      → reopen mode: print the earliest reopen epoch or `none`.
+#   --max            → max mode: print the configured MAX_WORKERS ceiling and
+#                      exit.
+#   anything else    → error, exit 2.
+
+MODE="count"
+case "${1:-}" in
+  "")           MODE="count" ;;
+  --reopen-at)  MODE="reopen" ;;
+  --exhausted)  MODE="exhausted" ;;
+  --max)        MODE="max" ;;
+  *)
+    echo "dispatch-target-workers: unrecognized argument '$1' (expected --reopen-at, --exhausted, --max, or none)" >&2
+    exit 2
+    ;;
+esac
+
+# ---- Step 0: defaults & config ----------------------------------------------
+
+WEEKLY_PACE_FLOOR=50
+WEEKLY_TERMINAL=100
+WEEKLY_TERMINAL_WINDOWS=2
+WEEKLY_INCREMENT_CAP=10
+WEEKLY_CURVE_POWER=1
+FIVEH_TARGET_FLOOR=50
+FIVEH_TARGET_CEILING=80
+MAX_WORKERS=8
+EXHAUSTION_THRESHOLD=98
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Pull tunables from dispatch-config-load target-workers when present. Each
+# field is optional; only override the baked-in default when the field is
+# present. Use jq -r with `// empty` to express "field present" vs "field
+# absent or null" — jq's // also fires on `false`, but every tunable here is
+# numeric so that does not matter; if a boolean tunable is added later, the
+# schema-validator in dispatch-config-load must catch it before this loop.
+CONFIG_JSON=""
+if CONFIG_OUT=$("$SCRIPT_DIR/dispatch-config-load" target-workers 2>/dev/null); then
+  if [[ "$CONFIG_OUT" != "no-config" ]]; then
+    CONFIG_JSON="$CONFIG_OUT"
+  fi
+fi
+
+if [[ -n "$CONFIG_JSON" ]]; then
+  val=$(jq -r '.weekly_pace_floor_pct // empty' <<<"$CONFIG_JSON")
+  [[ -n "$val" ]] && WEEKLY_PACE_FLOOR="$val"
+  val=$(jq -r '.weekly_terminal_pct // empty' <<<"$CONFIG_JSON")
+  [[ -n "$val" ]] && WEEKLY_TERMINAL="$val"
+  val=$(jq -r '.weekly_terminal_windows // empty' <<<"$CONFIG_JSON")
+  [[ -n "$val" ]] && WEEKLY_TERMINAL_WINDOWS="$val"
+  val=$(jq -r '.weekly_increment_cap_pct // empty' <<<"$CONFIG_JSON")
+  [[ -n "$val" ]] && WEEKLY_INCREMENT_CAP="$val"
+  val=$(jq -r '.weekly_curve_power // empty' <<<"$CONFIG_JSON")
+  [[ -n "$val" ]] && WEEKLY_CURVE_POWER="$val"
+  val=$(jq -r '.five_hour_target_floor_pct // empty' <<<"$CONFIG_JSON")
+  [[ -n "$val" ]] && FIVEH_TARGET_FLOOR="$val"
+  val=$(jq -r '.five_hour_target_ceiling_pct // empty' <<<"$CONFIG_JSON")
+  [[ -n "$val" ]] && FIVEH_TARGET_CEILING="$val"
+  val=$(jq -r '.max_concurrent_workers // empty' <<<"$CONFIG_JSON")
+  [[ -n "$val" ]] && MAX_WORKERS="$val"
+  val=$(jq -r '.exhaustion_threshold_pct // empty' <<<"$CONFIG_JSON")
+  [[ -n "$val" ]] && EXHAUSTION_THRESHOLD="$val"
+fi
+
+# ---- --max mode: print the concurrency ceiling and exit ---------------------
+# MAX_WORKERS is a config-only constant (no telemetry input), so short-circuit
+# before the rate-limit load. dispatch-select-tick's manual fan-out reads it as
+# the absolute HEADROOM ceiling (#1458).
+if [[ "$MODE" == "max" ]]; then
+  echo "$MAX_WORKERS"
+  exit 0
+fi
+
+# ---- Step 1: load telemetry -------------------------------------------------
+
+RL_PATH="${DISPATCH_TARGET_WORKERS_RATE_LIMITS_PATH:-$HOME/.local/share/commons-dispatch/rate_limits.json}"
+NOW="${DISPATCH_TARGET_WORKERS_NOW:-$(date +%s)}"
+
+# Parse the file if it exists and is readable; otherwise WEEKLY_USED/etc stay
+# empty and the per-field env overrides have the last word.
+WEEKLY_USED=""
+WEEKLY_RESETS=""
+FIVEH_USED=""
+FIVEH_RESETS=""
+FILE_OK=0
+
+if [[ -r "$RL_PATH" ]]; then
+  # Each field's `// "" | tostring` lives inside its own parens — `|` binds
+  # looser than `,` in jq, so without the parens the `| tostring` would apply
+  # to the whole array stream instead of each per-element filter.
+  #
+  # Each field is followed by a trailing `|`. Without a sentinel:
+  #   - `@tsv` with leading-empty cells gets collapsed by `read -r IFS=$'\t'`
+  #     because tab is IFS whitespace.
+  #   - One field per line ends up with trailing-blank lines that command
+  #     substitution `$(...)` strips, so absent five_hour fields would
+  #     vanish.
+  # The `|` sentinel anchors every field unambiguously.
+  if PARSED=$(jq -r '
+      "\(.seven_day.used_percentage // "")|",
+      "\(.seven_day.resets_at // "")|",
+      "\(.five_hour.used_percentage // "")|",
+      "\(.five_hour.resets_at // "")|"
+    ' "$RL_PATH" 2>/dev/null); then
+    {
+      IFS= read -r line; WEEKLY_USED="${line%|}"
+      IFS= read -r line; WEEKLY_RESETS="${line%|}"
+      IFS= read -r line; FIVEH_USED="${line%|}"
+      IFS= read -r line; FIVEH_RESETS="${line%|}"
+    } <<<"$PARSED"
+    FILE_OK=1
+  fi
+fi
+
+# Per-field env overrides (test-injectable).
+[[ -n "${DISPATCH_TARGET_WORKERS_USED_WEEKLY:-}" ]] && WEEKLY_USED="$DISPATCH_TARGET_WORKERS_USED_WEEKLY"
+[[ -n "${DISPATCH_TARGET_WORKERS_RESETS_AT_WEEKLY:-}" ]] && WEEKLY_RESETS="$DISPATCH_TARGET_WORKERS_RESETS_AT_WEEKLY"
+[[ -n "${DISPATCH_TARGET_WORKERS_USED_5H:-}" ]] && FIVEH_USED="$DISPATCH_TARGET_WORKERS_USED_5H"
+[[ -n "${DISPATCH_TARGET_WORKERS_RESETS_AT_5H:-}" ]] && FIVEH_RESETS="$DISPATCH_TARGET_WORKERS_RESETS_AT_5H"
+
+# Sanitize `used_*` telemetry before it reaches `awk -v`. awk coerces a
+# non-numeric value to 0, which would read as "no usage yet"; treat any malformed
+# value as missing so the PRESENT check below routes it to that field's fallback.
+#
+# The two fields then have OPPOSITE fallback semantics, and that is deliberate:
+#   - WEEKLY_USED is the budget gate. Missing → the weekly anchor drops → Step 2
+#     fails closed to N=1 (count) / `none` (reopen). Losing the real budget guard
+#     must back off, matching dispatch-schedule-reseed's fail-closed posture.
+#   - FIVEH_USED is only the anti-burst ramp WITHIN the weekly budget. Missing →
+#     FIVEH_PRESENT=0 → FIVEH_USED_FOR_AWK=0 → full 5h headroom → N falls back to
+#     the WEEKLY-allowed count (fail open). This is safe: the weekly gate still
+#     bounds N, so a corrupt/absent 5h reading can only lose smoothing, never
+#     blow the budget. So 5h does NOT back off to zero on a bad value.
+for var in WEEKLY_USED FIVEH_USED; do
+  if [[ -n "${!var}" && ! "${!var}" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+    echo "dispatch-target-workers: $var has non-numeric value '${!var}'; treating as missing" >&2
+    printf -v "$var" ""
+  fi
+  # A used_percentage above 100 is physically impossible — reject it to missing
+  # so the PRESENT check routes it to this field's fallback (per the per-var
+  # semantics above: WEEKLY_USED fails closed to N=1; FIVEH_USED fails open to the
+  # weekly-bounded count) rather than acting on a poisoned value. 100 is a valid
+  # fully-used reading, so the bound is a strict `>`. awk (not bash `(( ))`)
+  # because the value may be a decimal — `(( 100.5 > 100 ))` is a fatal
+  # arithmetic syntax error under set -e.
+  if [[ -n "${!var}" ]] && awk -v u="${!var}" 'BEGIN{ exit !(u + 0 > 100) }'; then
+    echo "dispatch-target-workers: $var out of range (>100): '${!var}'; treating as missing" >&2
+    printf -v "$var" ""
+  fi
+done
+
+# Sanitize the weekly anchor inputs the curve depends on. `now` must be an
+# integer epoch; `resets_at_weekly` must be a number. A malformed value here
+# drops the weekly anchor → fall-closed to the missing-telemetry fallback,
+# rather than letting awk coerce garbage to 0 and miscompute the curve.
+if [[ ! "$NOW" =~ ^[0-9]+$ ]]; then
+  echo "dispatch-target-workers: NOW has non-integer value '$NOW'; treating weekly anchor as missing" >&2
+  NOW=""
+fi
+if [[ -n "$WEEKLY_RESETS" && ! "$WEEKLY_RESETS" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+  echo "dispatch-target-workers: WEEKLY_RESETS has non-numeric value '$WEEKLY_RESETS'; treating as missing" >&2
+  WEEKLY_RESETS=""
+fi
+# A weekly reset more than 8 days out is physically impossible for a 7-day
+# window (8 days = ~1 day margin over the nominal 7) — a hardcoded property of
+# the window, not a config knob. Reject to missing → weekly anchor drops →
+# fallback 1. Guard on both being non-empty (NOW may have been reset above;
+# WEEKLY_RESETS may have been emptied by the numeric check). awk (not bash
+# `(( ))`) because WEEKLY_RESETS may be a decimal.
+if [[ -n "$NOW" && -n "$WEEKLY_RESETS" ]] \
+   && awk -v r="$WEEKLY_RESETS" -v now="$NOW" 'BEGIN{ exit !(r + 0 > now + 691200) }'; then
+  echo "dispatch-target-workers: WEEKLY_RESETS '$WEEKLY_RESETS' more than 8 days out from now ($NOW); treating as missing" >&2
+  WEEKLY_RESETS=""
+fi
+
+# ---- Exhausted mode: telemetry-only genuine-exhaustion query ----------------
+#
+# Exhausted mode answers a different question from the pace/ramp math: is a
+# window GENUINELY out of tokens (used_% at/near 100 with a reset still in the
+# future), as opposed to merely PACED to zero by the self-imposed weekly gate or
+# 5h ramp? Priority/main-broken dispatch overrides a paced-zero but must still
+# hard-stop on genuine exhaustion. It is computed directly from telemetry,
+# independent of the curve.
+#
+# Fail open: missing/unreadable/invalid telemetry → `ok`. Unknown is not genuine
+# exhaustion, so priority work is never suppressed on absent data — the OPPOSITE
+# posture from count mode's fallback-to-1. A window is exhausted iff
+# used_% >= EXHAUSTION_THRESHOLD AND resets_at > now; print `exhausted` if EITHER
+# window is, else `ok`.
+if [[ "$MODE" == "exhausted" ]]; then
+  # FIVEH_RESETS is not sanitized above (count/reopen never read the 5h reset),
+  # so sanitize it here as count mode sanitizes WEEKLY_RESETS: a malformed value
+  # drops the 5h reset → that window cannot be "exhausted" (fail open).
+  if [[ -n "$FIVEH_RESETS" && ! "$FIVEH_RESETS" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+    echo "dispatch-target-workers: FIVEH_RESETS has non-numeric value '$FIVEH_RESETS'; treating as missing" >&2
+    FIVEH_RESETS=""
+  fi
+  # A missing/invalid NOW means we cannot compare resets_at to the present →
+  # fail open (`ok`). awk coerces an empty -v to 0, so guard on NOW != "".
+  if [[ -z "$NOW" ]]; then
+    echo ok
+    exit 0
+  fi
+  # A 5h reset more than 6 hours out is physically impossible for a 5-hour
+  # window (6h = ~1h margin) — a hardcoded window property, not a config knob.
+  # Reject → that window cannot be "exhausted" (fail open, consistent with this
+  # mode's fail-open-on-invalid posture). This bound lives ONLY in exhausted
+  # mode — count/reopen never read the 5h reset. awk (not bash `(( ))`) because
+  # FIVEH_RESETS may be a decimal; NOW is guaranteed non-empty here.
+  if [[ -n "$FIVEH_RESETS" ]] \
+     && awk -v r="$FIVEH_RESETS" -v now="$NOW" 'BEGIN{ exit !(r + 0 > now + 21600) }'; then
+    echo "dispatch-target-workers: FIVEH_RESETS '$FIVEH_RESETS' more than 6 hours out from now ($NOW); treating as missing" >&2
+    FIVEH_RESETS=""
+  fi
+  awk -v now="$NOW" \
+      -v used_weekly="$WEEKLY_USED" -v resets_weekly="$WEEKLY_RESETS" \
+      -v used_5h="$FIVEH_USED" -v resets_5h="$FIVEH_RESETS" \
+      -v threshold="$EXHAUSTION_THRESHOLD" \
+      'function exhausted(used, resets) {
+         # A window is genuinely exhausted only when its usage is at/near 100
+         # AND the reset is still in the future. Empty used/resets → not
+         # exhausted (fail open: a non-numeric stays empty and is skipped here,
+         # never coerced to a usage of 0 that could read as "exhausted").
+         if (used == "" || resets == "") return 0
+         return ((used + 0) >= (threshold + 0) && (resets + 0) > (now + 0))
+       }
+       BEGIN {
+         ex = (exhausted(used_weekly, resets_weekly) \
+               || exhausted(used_5h, resets_5h))
+         print (ex ? "exhausted" : "ok")
+       }'
+  exit 0
+fi
+
+# The weekly anchor requires BOTH used_weekly AND resets_at_weekly AND a valid
+# now. The 5h block is present iff used_5h survived sanitization.
+WEEKLY_PRESENT=0
+FIVEH_PRESENT=0
+[[ -n "$WEEKLY_USED" && -n "$WEEKLY_RESETS" && -n "$NOW" ]] && WEEKLY_PRESENT=1
+[[ -n "$FIVEH_USED" ]] && FIVEH_PRESENT=1
+
+# ---- Step 2: missing-telemetry fallback -------------------------------------
+#
+# The weekly anchor (used_weekly + resets_at_weekly + now) is required for the
+# pace curve. Without it (or without the whole file and no env overrides), fall
+# back to "spawn one per tick".
+
+if (( WEEKLY_PRESENT == 0 )); then
+  if (( FILE_OK == 0 )); then
+    echo "dispatch-target-workers: rate_limits.json missing or unreadable at $RL_PATH; using fallback (1)" >&2
+  else
+    echo "dispatch-target-workers: weekly anchor (seven_day used + resets_at, now) absent in $RL_PATH; using fallback (1)" >&2
+  fi
+  # Count mode falls back to "spawn one per tick". Reopen mode cannot compute a
+  # crossing without the weekly anchor, so it reports `none`.
+  if [[ "$MODE" == "reopen" ]]; then
+    echo none
+  else
+    echo 1
+  fi
+  exit 0
+fi
+
+# ---- Step 3: the pace pipeline (weekly gate + 5h ramp) ----------------------
+#
+# All arithmetic is delegated to a single awk invocation. awk's printf handles
+# both float math (the curve and linear ramp) and integer rounding
+# (int(x + 0.5)); `^` is exponentiation. awk is POSIX-ubiquitous on the dev
+# machines (bc is not).
+
+FIVEH_USED_FOR_AWK="$FIVEH_USED"
+if (( FIVEH_PRESENT == 0 )); then
+  FIVEH_USED_FOR_AWK=0
+fi
+
+awk -v mode="$MODE" \
+    -v now="$NOW" \
+    -v resets_weekly="$WEEKLY_RESETS" \
+    -v used_weekly="$WEEKLY_USED" \
+    -v used_5h="$FIVEH_USED_FOR_AWK" \
+    -v floor="$WEEKLY_PACE_FLOOR" \
+    -v terminal="$WEEKLY_TERMINAL" \
+    -v Nterm="$WEEKLY_TERMINAL_WINDOWS" \
+    -v wcap="$WEEKLY_INCREMENT_CAP" \
+    -v p="$WEEKLY_CURVE_POWER" \
+    -v floor5="$FIVEH_TARGET_FLOOR" \
+    -v ceil5="$FIVEH_TARGET_CEILING" \
+    -v max_workers="$MAX_WORKERS" \
+    'function clamp(v, lo, hi) {
+       v = v + 0
+       if (v < lo) return lo
+       if (v > hi) return hi
+       return v
+     }
+     # Stage 1 cumulative weekly pace curve evaluated at a candidate epoch t,
+     # expressed in remaining five-hour windows r. An explicitly-anchored
+     # floor->shoulder->terminal max curve: it holds a constant `floor` early in
+     # the week, rises (power `p`) to the derived `shoulder` as the terminal
+     # windows approach, then follows a linear terminal segment (slope `wcap` per
+     # window) up to `terminal` at week end. Computed as the max of those three
+     # pieces, so it is monotone non-decreasing in t by construction. T, floor,
+     # shoulder, wcap, p, and Nterm are BEGIN globals (awk functions see globals);
+     # only the t-dependent terms vary.
+     function W_of(t,    remaining, r, s, rise, terminal_seg, W) {
+       remaining = (resets_weekly + 0) - (t + 0)
+       r = remaining / 18000
+       s = clamp((T - r) / (T - (Nterm + 0)), 0, 1)   # clamp to [0,1] — load-bearing
+       rise = (floor + 0) + (shoulder - (floor + 0)) * (s ^ (p + 0))
+       terminal_seg = (terminal + 0) - (wcap + 0) * r
+       W = (floor + 0)
+       if (terminal_seg > W) W = terminal_seg
+       if (rise > W) W = rise
+       return W
+     }
+     BEGIN {
+       WEEK_SECONDS = 604800
+       T = WEEK_SECONDS / 18000                         # = 33.6 five-hour windows
+
+       shoulder = (terminal + 0) - (wcap + 0) * (Nterm + 0)
+       # The curve is monotone non-decreasing in t by construction — a max of
+       # monotone pieces: a constant `floor`, a non-decreasing power rise (since
+       # shoulder >= floor and s^p is non-decreasing for p > 0), and a linear
+       # terminal segment with positive slope wcap. So no `end`-solve and no
+       # monotonicity validator (the old #930 path) is needed here.
+
+       # ---- Reopen mode: earliest epoch the target next becomes >= 1 ----
+       if (mode == "reopen") {
+         remaining = (resets_weekly + 0) - (now + 0)
+         if (remaining <= 0) { print "none"; exit }
+
+         # Pace curve not the blocker → leave the absolute-cap / 5h-fill paths
+         # to handle it. Only a genuine pause (W_of(now) <= used_weekly) has a
+         # curve crossing.
+         hw = W_of(now) - (used_weekly + 0)
+         if (hw > 0) { print "none"; exit }
+
+         # Bisect (now, resets_weekly] for the earliest t where the rising
+         # curve meets used_weekly. W_of is monotonic increasing in t.
+         lo = now + 0
+         hi = resets_weekly + 0
+         for (i = 0; i < 60; i++) {
+           mid = (lo + hi) / 2
+           if (W_of(mid) >= (used_weekly + 0)) hi = mid
+           else lo = mid
+         }
+         fire = int(hi + 0.5)
+         # Unreachable: bisect only runs when W_of(now) <= used_weekly, and W_of
+         # is monotonic increasing, so hi (and thus fire) converges to a t >= now.
+         # Kept as a defensive clamp against boundary rounding.
+         if (fire < (now + 0)) fire = now + 0
+         print fire
+         exit
+       }
+
+       # ---- Count mode (default) ----
+
+       # ---- Stage 1: weekly pace curve W (weekly %) ----
+       remaining = (resets_weekly + 0) - (now + 0)
+       if (remaining <= 0) { print 0; exit }
+
+       W = W_of(now)
+
+       # ---- Stage 2: binary weekly gate ----
+       # Weekly usage at/over the pace curve → pause (0 workers) regardless of
+       # 5h headroom. Otherwise the gate is open and the 5h ramp decides N.
+       hw = W - (used_weekly + 0)
+       if (hw <= 0) { print 0; exit }
+
+       # ---- Stage 3: workers N from the 5h ramp ----
+       # Dynamic catch-up ceiling: raise the 5h ramp ceiling above the static
+       # default when the remaining windows cannot close the weekly deficit
+       # D = terminal - used_weekly at the default per-window burn rate. A full 5h
+       # window = wcap% of the weekly limit, so a 5h ceiling u% burns u/wcap weekly-%
+       # per window; closing D over r = remaining/18000 windows needs u = 100*D/(r*wcap)
+       # of 5h usage. clamp lower bound = ceil5 (accelerator only, never a throttle),
+       # upper bound = 100. remaining > 0 here (Stage 1 exits on remaining <= 0), so
+       # r > 0 — no divide-by-zero.
+       # max_workers at/below floor5, ramping linearly to 0 at/above ceil5_eff.
+       r = remaining / 18000
+       ceil5_eff = clamp(100 * ((terminal + 0) - (used_weekly + 0)) / (r * (wcap + 0)), (ceil5 + 0), 100)
+       span = ceil5_eff - (floor5 + 0)
+       h5 = ceil5_eff - (used_5h + 0)
+       if (h5 <= 0) {
+         N = 0
+       } else if (span <= 0) {
+         # Zero-width ramp (floor5 == ceil5, validator allows equal). Below
+         # ceil5 the limit is max_workers; dividing by span=0 would crash awk.
+         N = (max_workers + 0)
+       } else {
+         N = int((max_workers + 0) * h5 / span + 0.5)
+         N = clamp(N, 1, max_workers + 0)
+       }
+
+       print N
+     }'

@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@commons-systems/config/playwright-test";
 
 test.describe("CSS loading", () => {
   test("critical CSS is inlined in the head @smoke", async ({ page }) => {
@@ -27,7 +27,7 @@ test.describe("CSS loading", () => {
     expect(match![2]).toBeLessThan(80);
   });
 
-  test("full stylesheet loads after page load", async ({ page }) => {
+  test("full stylesheet loads after page load @build", async ({ page }) => {
     await page.goto("/");
     await page.waitForLoadState("load");
     const hasFullStylesheet = await page.evaluate(() => {

@@ -599,6 +599,79 @@ let
       touch $out
     '';
 
+  # Test 15: Fidelity anchor — activation script contains three-tier detection tokens
+  # Asserts the real nix string in wezterm.nix includes the key tokens introduced
+  # by the three-tier Windows-user detection chain (issue #62). The bash test suite
+  # validates the algorithm against a reimplementation; this test ties it to the
+  # actual nix activation string so a typo there fails here.
+  test-activation-script-tokens =
+    let
+      linuxPkgs = pkgs // {
+        stdenv = pkgs.stdenv // {
+          isLinux = true;
+          isDarwin = false;
+        };
+      };
+
+      mockConfig = {
+        home = {
+          username = "testuser";
+          homeDirectory = "/home/testuser";
+        };
+      };
+
+      mockLib = lib // {
+        hm = {
+          dag = {
+            entryAfter = deps: data: {
+              _type = "dagEntryAfter";
+              after = deps;
+              inherit data;
+            };
+          };
+        };
+      };
+
+      moduleResult = weztermModule {
+        config = mockConfig;
+        pkgs = linuxPkgs;
+        lib = mockLib;
+      };
+
+      activationScript = moduleResult.home.activation.copyWeztermToWindows or null;
+
+      dagEntry =
+        if activationScript != null && activationScript ? _type && activationScript._type == "if" then
+          activationScript.content or null
+        else
+          activationScript;
+
+      scriptData = if dagEntry != null && dagEntry ? data then dagEntry.data else null;
+
+      requiredTokens = [
+        "WEZTERM_WINDOWS_USER"
+        "cmd.exe"
+        "wslpath"
+        "USERPROFILE"
+      ];
+    in
+    pkgs.runCommand "test-activation-script-tokens" { } ''
+      ${
+        if scriptData != null then
+          "echo 'PASS: Activation script data is accessible'"
+        else
+          "echo 'FAIL: Activation script data is null — cannot check tokens' && exit 1"
+      }
+      ${lib.concatMapStringsSep "\n" (
+        token:
+        if scriptData != null && lib.hasInfix token scriptData then
+          "echo 'PASS: Activation script contains token: ${token}'"
+        else
+          "echo 'FAIL: Activation script missing token: ${token}' && exit 1"
+      ) requiredTokens}
+      touch $out
+    '';
+
   # Test: format-tab-title event handler
   test-format-tab-title =
     let
@@ -667,6 +740,7 @@ let
     test-activation-script-runtime
     test-homemanager-integration
     test-activation-dag-execution
+    test-activation-script-tokens
     test-format-tab-title
   ];
 
@@ -695,6 +769,7 @@ in
       test-activation-script-runtime
       test-homemanager-integration
       test-activation-dag-execution
+      test-activation-script-tokens
       test-format-tab-title
       ;
   };

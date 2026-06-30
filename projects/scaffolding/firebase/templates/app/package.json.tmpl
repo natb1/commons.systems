@@ -1,0 +1,27 @@
+{
+  "name": "{{.AppName}}",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src/"
+  },
+  "dependencies": {
+    "@commons-systems/analyticsutil": "*",
+    "@commons-systems/components": "*",
+    "@commons-systems/errorutil": "*",
+    "@commons-systems/authutil": "*",
+    "@commons-systems/router": "*",
+    "@commons-systems/firebaseutil": "*",
+    "@commons-systems/htmlutil": "*",
+    "@commons-systems/firestoreutil": "*",
+    "@commons-systems/style": "*",
+    "firebase": "^12.9.0",
+    "missing.css": "^1.1.3"
+  }
+}

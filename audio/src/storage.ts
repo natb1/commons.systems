@@ -1,7 +1,8 @@
 import { getDownloadURL, ref } from "firebase/storage";
 import { logError } from "@commons-systems/errorutil/log";
 import { storage, STORAGE_NAMESPACE } from "./firebase.js";
-import { getFile, putFile, CACHE_UPDATED_EVENT } from "./audio-cache.js";
+import { getFile, putFile, removeFile, CACHE_UPDATED_EVENT } from "./audio-cache.js";
+export { removeFile };
 
 const MIME_TYPES: Record<string, string> = {
   ".mp3": "audio/mpeg",

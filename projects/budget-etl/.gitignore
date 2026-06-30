@@ -1,0 +1,3 @@
+# Local build artifacts (go run / go build in cmd/* dirs)
+/dump
+/patch

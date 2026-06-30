@@ -1,0 +1,308 @@
+/**
+ * IndexedDB-backed LRU blob cache, shared by apps that cache binary media.
+ *
+ * Two object stores: `media-data` holds blobs, `media-meta` holds size +
+ * lastAccessed metadata (separated so eviction scans never load large buffers
+ * and read-path timestamp updates do not block data retrieval). A sentinel
+ * `__total__` entry in meta tracks aggregate cache size for O(1) capacity
+ * checks. The sentinel uses `lastAccessed: 0` so it sorts first in the
+ * eviction index; the eviction cursor explicitly skips it.
+ */
+import { createDbConnection } from "./connection.js";
+
+const DEFAULT_MAX_BYTES = 500 * 1024 * 1024;
+
+const DATA_STORE = "media-data";
+const META_STORE = "media-meta";
+const TOTAL_KEY = "__total__";
+
+interface DataEntry {
+  key: string;
+  data: ArrayBuffer | Uint8Array;
+}
+
+interface MetaEntry {
+  key: string;
+  size: number;
+  lastAccessed: number;
+}
+
+export interface LruBlobCacheConfig {
+  /** IDB database name. */
+  name: string;
+  /** IDB schema version. */
+  version: number;
+  /** Optional cap on aggregate cache size in bytes. Defaults to 500 MB. */
+  maxBytes?: number;
+  /**
+   * Called inside `onupgradeneeded` before the shared cache stores are ensured,
+   * so apps can drop legacy stores from earlier schema versions.
+   */
+  onUpgrade?: (db: IDBDatabase, oldVersion: number) => void;
+}
+
+export interface LruBlobCache {
+  getEntry<T extends ArrayBuffer | Uint8Array = ArrayBuffer | Uint8Array>(
+    key: string,
+  ): Promise<T | null>;
+  putEntry(key: string, data: ArrayBuffer | Uint8Array): Promise<void>;
+  deleteEntry(key: string): Promise<void>;
+  clearCache(): Promise<void>;
+  closeDb(): Promise<void>;
+  getStats(): Promise<{ entryCount: number; totalBytes: number }>;
+  readonly maxBytes: number;
+}
+
+export function createLruBlobCache(config: LruBlobCacheConfig): LruBlobCache {
+  const maxBytes = config.maxBytes ?? DEFAULT_MAX_BYTES;
+  if (!Number.isInteger(maxBytes) || maxBytes <= 0) {
+    throw new Error(
+      `LruBlobCache: maxBytes must be a positive integer, got ${maxBytes}`,
+    );
+  }
+
+  const { openDb, closeDb } = createDbConnection({
+    name: config.name,
+    version: config.version,
+    onUpgrade(db, oldVersion) {
+      config.onUpgrade?.(db, oldVersion);
+      if (!db.objectStoreNames.contains(DATA_STORE)) {
+        db.createObjectStore(DATA_STORE, { keyPath: "key" });
+      }
+      if (!db.objectStoreNames.contains(META_STORE)) {
+        const metaStore = db.createObjectStore(META_STORE, { keyPath: "key" });
+        metaStore.createIndex("lastAccessed", "lastAccessed", { unique: false });
+      }
+    },
+  });
+
+  /** Fire-and-forget: updates the LRU timestamp without blocking the caller. */
+  function touchLastAccessed(db: IDBDatabase, key: string): void {
+    const tx = db.transaction(META_STORE, "readwrite");
+    const store = tx.objectStore(META_STORE);
+    const getReq = store.get(key);
+    getReq.onsuccess = () => {
+      const entry = getReq.result as MetaEntry | undefined;
+      if (entry) {
+        entry.lastAccessed = Date.now();
+        store.put(entry);
+      }
+    };
+    tx.onerror = () => {
+      // Sanctioned bare reportError — see connection.ts for the full rationale;
+      // the global handler records it under operation "uncaught".
+      reportError(new Error("Failed to touch lastAccessed", { cause: tx.error }));
+    };
+  }
+
+  async function getTotalAndOldSize(
+    db: IDBDatabase,
+    key: string,
+  ): Promise<{ totalSize: number; oldSize: number }> {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(META_STORE, "readonly");
+      const store = tx.objectStore(META_STORE);
+      const totalReq = store.get(TOTAL_KEY);
+      const oldReq = store.get(key);
+      tx.oncomplete = () => {
+        const totalEntry = totalReq.result as MetaEntry | undefined;
+        const oldEntry = oldReq.result as MetaEntry | undefined;
+        resolve({
+          totalSize: totalEntry ? totalEntry.size : 0,
+          oldSize: oldEntry ? oldEntry.size : 0,
+        });
+      };
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  function updateTotalAfterEviction(
+    metaStore: IDBObjectStore,
+    evictedSize: number,
+    fallbackTotal: number,
+    resolve: () => void,
+    reject: (reason: unknown) => void,
+  ): void {
+    const totalReq = metaStore.get(TOTAL_KEY);
+    totalReq.onsuccess = () => {
+      const totalEntry = totalReq.result as MetaEntry | undefined;
+      const currentTotal = totalEntry ? totalEntry.size : fallbackTotal;
+      metaStore.put({ key: TOTAL_KEY, size: currentTotal - evictedSize, lastAccessed: 0 });
+      resolve();
+    };
+    totalReq.onerror = () => reject(totalReq.error);
+  }
+
+  /**
+   * The total-size read and eviction here run in a separate transaction from
+   * the subsequent put in the caller (putEntry); concurrent writes may briefly
+   * exceed the cap, which is acceptable for a best-effort cache.
+   */
+  async function evictIfNeeded(db: IDBDatabase, key: string, incomingSize: number): Promise<void> {
+    const { totalSize, oldSize } = await getTotalAndOldSize(db, key);
+    const delta = incomingSize - oldSize;
+
+    // When a replacement shrinks an entry (incomingSize < oldSize), delta < 0,
+    // so totalSize + delta < totalSize. Because the totalSize ≤ maxBytes
+    // invariant holds after every write, totalSize + delta < maxBytes and the
+    // guard below always returns early — a negative delta never triggers
+    // eviction in the sequential single-writer case. The eviction body is
+    // reachable on a negative delta only if totalSize has drifted above the cap
+    // via concurrent writes (the same best-effort window noted in the comment
+    // above evictIfNeeded). In that drifted path, the `entry.key === key` skip
+    // protects the entry being replaced from eviction.
+    if (totalSize + delta <= maxBytes) return;
+
+    const evictTx = db.transaction([DATA_STORE, META_STORE], "readwrite");
+    const metaStore = evictTx.objectStore(META_STORE);
+    const dataStore = evictTx.objectStore(DATA_STORE);
+    const evictIndex = metaStore.index("lastAccessed");
+
+    await new Promise<void>((resolve, reject) => {
+      let remaining = totalSize + delta - maxBytes;
+      let evictedSize = 0;
+      const req = evictIndex.openCursor();
+      req.onsuccess = () => {
+        if (remaining <= 0) {
+          updateTotalAfterEviction(metaStore, evictedSize, totalSize, resolve, reject);
+          return;
+        }
+        const cursor = req.result;
+        if (!cursor) {
+          updateTotalAfterEviction(metaStore, evictedSize, totalSize, resolve, reject);
+          return;
+        }
+        const entry = cursor.value as MetaEntry;
+        if (entry.key === TOTAL_KEY || entry.key === key) { cursor.continue(); return; }
+        remaining -= entry.size;
+        evictedSize += entry.size;
+        dataStore.delete(entry.key);
+        cursor.delete();
+        cursor.continue();
+      };
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function getEntry<T extends ArrayBuffer | Uint8Array>(
+    key: string,
+  ): Promise<T | null> {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(DATA_STORE, "readonly");
+      const req = tx.objectStore(DATA_STORE).get(key);
+      req.onsuccess = () => {
+        const entry = req.result as DataEntry | undefined;
+        if (entry) {
+          touchLastAccessed(db, key);
+          resolve(entry.data as T);
+        } else {
+          resolve(null);
+        }
+      };
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function putEntry(key: string, data: ArrayBuffer | Uint8Array): Promise<void> {
+    if (data.byteLength > maxBytes) {
+      throw new Error(
+        `Blob (${data.byteLength} bytes) exceeds cache maxBytes (${maxBytes}); not cached`,
+      );
+    }
+    const db = await openDb();
+    await evictIfNeeded(db, key, data.byteLength);
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction([DATA_STORE, META_STORE], "readwrite");
+      const dataStore = tx.objectStore(DATA_STORE);
+      const metaStore = tx.objectStore(META_STORE);
+
+      const existingReq = metaStore.get(key);
+      existingReq.onsuccess = () => {
+        const existing = existingReq.result as MetaEntry | undefined;
+        const oldSize = existing ? existing.size : 0;
+
+        dataStore.put({ key, data });
+        metaStore.put({ key, size: data.byteLength, lastAccessed: Date.now() });
+
+        const totalReq = metaStore.get(TOTAL_KEY);
+        totalReq.onsuccess = () => {
+          const totalEntry = totalReq.result as MetaEntry | undefined;
+          const currentTotal = totalEntry ? totalEntry.size : 0;
+          metaStore.put({ key: TOTAL_KEY, size: currentTotal - oldSize + data.byteLength, lastAccessed: 0 });
+        };
+        totalReq.onerror = () => reject(totalReq.error);
+      };
+
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  async function deleteEntry(key: string): Promise<void> {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction([DATA_STORE, META_STORE], "readwrite");
+      const dataStore = tx.objectStore(DATA_STORE);
+      const metaStore = tx.objectStore(META_STORE);
+
+      const existingReq = metaStore.get(key);
+      existingReq.onsuccess = () => {
+        const existing = existingReq.result as MetaEntry | undefined;
+        // Absent: no-op. Never decrement __total__ by a size we did not
+        // remove, or the sentinel drifts.
+        if (!existing) return;
+        const deletedSize = existing.size;
+
+        dataStore.delete(key);
+        metaStore.delete(key);
+
+        const totalReq = metaStore.get(TOTAL_KEY);
+        totalReq.onsuccess = () => {
+          const totalEntry = totalReq.result as MetaEntry | undefined;
+          const currentTotal = totalEntry ? totalEntry.size : 0;
+          metaStore.put({ key: TOTAL_KEY, size: Math.max(0, currentTotal - deletedSize), lastAccessed: 0 });
+        };
+        totalReq.onerror = () => reject(totalReq.error);
+      };
+
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  async function clearCache(): Promise<void> {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction([DATA_STORE, META_STORE], "readwrite");
+      tx.objectStore(DATA_STORE).clear();
+      tx.objectStore(META_STORE).clear();
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  async function getStats(): Promise<{ entryCount: number; totalBytes: number }> {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(META_STORE, "readonly");
+      const store = tx.objectStore(META_STORE);
+      const countReq = store.count();
+      const totalReq = store.get(TOTAL_KEY);
+      let entryCount = 0;
+      let totalBytes = 0;
+      countReq.onsuccess = () => {
+        const raw = countReq.result;
+        entryCount = raw > 0 ? raw - 1 : 0;
+      };
+      totalReq.onsuccess = () => {
+        const entry = totalReq.result as MetaEntry | undefined;
+        totalBytes = entry ? entry.size : 0;
+      };
+      tx.oncomplete = () => resolve({ entryCount, totalBytes });
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  return { getEntry, putEntry, deleteEntry, clearCache, closeDb, getStats, maxBytes };
+}

@@ -17,6 +17,7 @@ import {
   filterByWeeks,
   distinctWeeks,
   hydrateCategorySankey,
+  TRANSACTIONS_APPENDED_EVENT,
 } from "../../src/pages/home-chart";
 
 /** Monday 2025-01-06 00:00 UTC */
@@ -61,6 +62,9 @@ function makeContainer(txns?: SerializedChartTransaction[]): HTMLElement {
 
   const container = document.createElement("div");
   container.style.setProperty("--fg", "#e0e0e0");
+  // Sankey series colors resolve --chart-1..6 at render time (packages/ds/tokens/colors.css).
+  const chartTokens = ["#4d6f8f", "#c98a3c", "#a35d5d", "#7a8c5a", "#b08a4f", "#5f8a8a"];
+  chartTokens.forEach((v, i) => container.style.setProperty(`--chart-${i + 1}`, v));
   if (txns !== undefined) {
     const script = document.createElement("script");
     script.type = "application/json";
@@ -837,6 +841,54 @@ describe("hydrateCategorySankey", () => {
     expect(txnRows[1].style.display).toBe(""); // Travel
     expect(txnRows[2].style.display).toBe(""); // Gas
   });
+
+  it("second hydration removes the first listener so only one listener is ever active", () => {
+    // Spy on addEventListener/removeEventListener before any hydration.
+    const addSpy = vi.spyOn(document, "addEventListener");
+    const removeSpy = vi.spyOn(document, "removeEventListener");
+
+    try {
+      // First hydration — registers a listener.
+      const container1 = makeContainer([txn({ category: "Food", amount: 50 })]);
+      hydrateCategorySankey(container1);
+
+      // Capture the handler registered by the first hydration.
+      const firstAddCalls = addSpy.mock.calls.filter(([evt]) => evt === TRANSACTIONS_APPENDED_EVENT);
+      expect(firstAddCalls.length).toBeGreaterThanOrEqual(1);
+      const firstHandler = firstAddCalls[firstAddCalls.length - 1][1]; // last add = the one just registered
+
+      // Record remove-call count after first hydration (may be >0 if earlier tests left a handler).
+      const removeCountAfterFirst = removeSpy.mock.calls.filter(([evt]) => evt === TRANSACTIONS_APPENDED_EVENT).length;
+
+      // Second hydration (simulates navigating away and back) — must remove-before-add.
+      document.body.innerHTML = "";
+      const container2 = makeContainer([txn({ category: "Transport", amount: 30 })]);
+      hydrateCategorySankey(container2);
+
+      // The second hydration must have removed the handler registered by the first hydration.
+      const removeCallsAfter = removeSpy.mock.calls.filter(([evt]) => evt === TRANSACTIONS_APPENDED_EVENT);
+      expect(removeCallsAfter.length).toBe(removeCountAfterFirst + 1);
+      expect(removeCallsAfter[removeCallsAfter.length - 1][1]).toBe(firstHandler);
+
+      // And a new addEventListener call must have followed for the second hydration.
+      const addCallsAfter = addSpy.mock.calls.filter(([evt]) => evt === TRANSACTIONS_APPENDED_EVENT);
+      expect(addCallsAfter.length).toBe(firstAddCalls.length + 1);
+      // The new handler must be a fresh closure, not the same reference.
+      expect(addCallsAfter[addCallsAfter.length - 1][1]).not.toBe(firstHandler);
+    } finally {
+      // Remove the live handler the second hydration left attached to `document`
+      // before restoring the spies. hydrateCategorySankey registers a module-level
+      // listener that survives `document.body.innerHTML = ""` cleanup, so without
+      // this it would leak into the `transactions-appended event` block below and
+      // re-fire filterTable with a stale closure against a disconnected container.
+      const lastAdd = addSpy.mock.calls.filter(([evt]) => evt === TRANSACTIONS_APPENDED_EVENT).pop();
+      if (lastAdd) {
+        document.removeEventListener(TRANSACTIONS_APPENDED_EVENT, lastAdd[1] as EventListener);
+      }
+      addSpy.mockRestore();
+      removeSpy.mockRestore();
+    }
+  });
 });
 
 describe("transactions-appended event", () => {
@@ -932,36 +984,74 @@ describe("transactions-appended event", () => {
     expect(endLabel.textContent).toBe(initialLabelText);
   });
 
-  it("chart error does not propagate through dispatchEvent", () => {
+  it("chart error does not propagate, and the table re-filter still runs", () => {
     vi.useFakeTimers();
     try {
+      // A transactions table the scroll re-filter can act on.
+      const table = document.createElement("div");
+      table.id = "transactions-table";
+      document.body.appendChild(table);
+
       const container = makeContainer([
-        txn({ category: "Food", amount: 50 }),
+        txn({ category: "Food", amount: 50, budgetName: "Food" }),
       ]);
       hydrateCategorySankey(container);
 
-      // Dispatch event with invalid data to trigger an error inside the listener
+      // Activate a budget filter.
+      const budgetInput = document.querySelector("#sankey-budget-filter") as HTMLInputElement;
+      budgetInput.value = "Food";
+      budgetInput.dispatchEvent(new Event("blur"));
+
+      // Append a row that does not match the filter — not yet filtered.
+      const newRow = document.createElement("div");
+      newRow.className = "txn-row";
+      newRow.dataset.category = "Travel";
+      newRow.dataset.budgetName = "Vacation";
+      newRow.dataset.netAmount = "30";
+      table.appendChild(newRow);
+
+      // Dispatch event with invalid data to trigger an error in the chart-update block
       expect(() => {
         document.dispatchEvent(new CustomEvent("transactions-appended", {
           detail: [{ category: "Food", amount: "not a number" }],
         }));
       }).not.toThrow();
 
-      // Container should show error message instead of crashing
+      // Chart shows the error message instead of crashing...
       expect(container.textContent).toContain("Chart update failed");
+      // ...but the table re-filter still ran: the non-matching row is hidden (#578).
+      expect(newRow.style.display).toBe("none");
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it("event ignored when container is disconnected", () => {
+  it("table re-filter still runs after the chart container is disconnected", () => {
+    // A transactions table the scroll re-filter can act on.
+    const table = document.createElement("div");
+    table.id = "transactions-table";
+    document.body.appendChild(table);
+
     const container = makeContainer([
-      txn({ category: "Food", amount: 50 }),
+      txn({ category: "Food", amount: 50, budgetName: "Food" }),
     ]);
     hydrateCategorySankey(container);
 
-    // Remove container from DOM
+    // Activate a budget filter.
+    const budgetInput = document.querySelector("#sankey-budget-filter") as HTMLInputElement;
+    budgetInput.value = "Food";
+    budgetInput.dispatchEvent(new Event("blur"));
+
+    // Remove container from DOM — the chart-update block is skipped.
     container.remove();
+
+    // Append a row that does not match the filter — not yet filtered.
+    const newRow = document.createElement("div");
+    newRow.className = "txn-row";
+    newRow.dataset.category = "Travel";
+    newRow.dataset.budgetName = "Vacation";
+    newRow.dataset.netAmount = "30";
+    table.appendChild(newRow);
 
     // Dispatch event — should not throw
     expect(() => {
@@ -969,5 +1059,9 @@ describe("transactions-appended event", () => {
         detail: [txn({ category: "Transport", amount: 30 })],
       }));
     }).not.toThrow();
+
+    // The chart was ignored (container disconnected), but the table re-filter
+    // still ran: the non-matching row is hidden (#578).
+    expect(newRow.style.display).toBe("none");
   });
 });

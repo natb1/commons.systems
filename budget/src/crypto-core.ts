@@ -1,7 +1,7 @@
 // Shared BENC crypto primitives used by both crypto.ts (main thread) and
 // crypto-worker.ts (Web Worker). No main-thread-only dependencies allowed here.
 //
-// BENC encrypted file format (shared with budget-etl/internal/export/export.go):
+// BENC encrypted file format (shared with projects/budget-etl/internal/export/export.go):
 //   [magic 4B "BENC"][salt 16B][IV 12B][AES-256-GCM ciphertext + 16B auth tag]
 // Key derivation: PBKDF2-HMAC-SHA256, 600k iterations, 256-bit key.
 

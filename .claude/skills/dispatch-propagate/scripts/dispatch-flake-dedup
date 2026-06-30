@@ -1,0 +1,187 @@
+#!/usr/bin/env bash
+# Deterministic, state-spanning flake-dedup guard. Given a flake fingerprint,
+# find-or-record a same-fingerprint tracking issue and tell the caller whether
+# to file fresh.
+# Usage: dispatch-flake-dedup <fingerprint> --body-file <f> [--run-id <id>] [--repo owner/repo]
+#
+# WHY THIS EXISTS
+#   This is the flake-path analogue of `dispatch-followup-exists` (the security
+#   path). The flake-filing step needs an idempotent guard: before filing a new
+#   flake tracking issue, it must check whether one already tracks the same
+#   fingerprint and, if so, record the recurrence on the existing issue rather
+#   than open a duplicate. This script is that guard. It records the recurrence
+#   (a comment, plus a reopen when the existing issue is closed) and reports the
+#   existing issue; on no match it tells the caller to file fresh via /file-issue.
+#
+# STATE SCOPE
+#   The match spans OPEN and CLOSED issues. A flake that was tracked, fixed, and
+#   the issue closed can recur — an open-only dedup would re-file it. Spanning
+#   closed state lets a recurrence reopen the original tracking issue and append
+#   the new evidence, keeping one durable thread per fingerprint.
+#
+# CRITERION-#4 TITLE INVARIANT
+#   For a FUTURE run's match to work, the fingerprint must sit at a token
+#   boundary in the tracking issue's title. /file-issue files flake trackers as
+#   `Flaky CI: <fingerprint>`, so the fingerprint ends the title — satisfying the
+#   boundary-aware match below (`endswith($id)` / `contains($id + " ")`). The
+#   title reassert that re-establishes this invariant lives in the SKILL wiring
+#   (a later unit), not here.
+#
+# WHY IT REUSES dispatch-followup-exists
+#   The state-spanning, boundary-aware title match is non-trivial (see that
+#   script's MATCHING header for the prefix-collision traps it avoids). Rather
+#   than reimplement that jq here and risk divergence, this guard calls the
+#   sibling for the match and adds only the flake-specific recurrence recording
+#   (comment / reopen) on top.
+#
+# STALE-HEAD REOPEN GATE (CLOSED path only) — issues #2442, #2518
+#   A flake tracker is closed when its root cause merges to main. But a
+#   long-lived PR branch that pre-dates that fix keeps emitting the pre-fix
+#   failure signature; matching the same fingerprint on every tick would reopen
+#   the already-fixed issue indefinitely (reopen/close oscillation). So the
+#   CLOSED arm gates the reopen on POSITIVE evidence that the run head is behind
+#   the closing fix. ANCESTRY is the sole decisive signal — suppress (report
+#   STALE, no comment, no reopen) only when:
+#     - A real closing commit exists (the close was COMPLETED with a commit_id),
+#       AND that commit compared to the run's head SHA is `behind`/`diverged`.
+#       This is the #2442 case: a long-lived branch genuinely behind the fix.
+#   Everything else REOPENs (a live recurrence):
+#     - Real closing commit, head `ahead`/`identical` → the head contains the fix.
+#     - No closing commit — a manual close (null commit_id) or a NOT_PLANNED
+#       close (no fix) — the head cannot be stale relative to a fix that does not
+#       exist, so the contradiction surfaces via a reopen.
+#   The old recency floor (run.createdAt < closedAt → STALE) is REMOVED (#2518):
+#   it was the only live signal on a no-commit close and false-positived a head
+#   that already contains all of main, producing an infinite-STALE loop (the
+#   PR #1849 / tracker #2481 incident).
+#   --run-id is REQUIRED on the CLOSED path (validated at point of use) — ancestry
+#   needs the run's head SHA; OPEN/NONE never consult it. fix-checks is the only
+#   caller and always passes it.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+
+if [[ "$#" -lt 1 || -z "${1:-}" ]]; then
+  echo "error: usage: dispatch-flake-dedup <fingerprint> --body-file <f> [--run-id <id>] [--repo owner/repo]" >&2
+  exit 2
+fi
+
+fingerprint="$1"
+shift
+
+body_file=""
+repo=""
+run_id=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --body-file) body_file="$2"; shift 2 ;;
+    --repo)      repo="$2";      shift 2 ;;
+    --run-id)    run_id="$2";    shift 2 ;;
+    *)
+      echo "error: dispatch-flake-dedup: unexpected argument '$1'" >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [[ -z "$body_file" ]]; then
+  echo "error: dispatch-flake-dedup: --body-file <f> is required" >&2
+  exit 2
+fi
+if [[ ! -f "$body_file" ]]; then
+  echo "error: dispatch-flake-dedup: --body-file '$body_file' does not exist" >&2
+  exit 2
+fi
+
+# --repo is forwarded ONLY to the lib helpers below. dispatch-followup-exists
+# takes the identifier as $1 and no --repo flag, so it is not forwarded there.
+local_repo_args=()
+[[ -n "$repo" ]] && local_repo_args=(--repo "$repo")
+
+# 1. Match via the sibling — REUSE its state-spanning, boundary-aware match.
+#    Under `set -e`, a non-zero exit from dispatch-followup-exists propagates
+#    (no `|| true` guard masks it).
+match=$("$SCRIPT_DIR/dispatch-followup-exists" "$fingerprint")
+
+# 2. No match → caller files fresh via /file-issue.
+if [[ -z "$match" ]]; then
+  echo "NONE"
+  exit 0
+fi
+
+# 3. Match → record the recurrence on the existing issue, keyed by its state.
+#    Capture the whole projection once so the CLOSED arm can also read closedAt
+#    and stateReason from it without a second REST call. Per .claude/rules/
+#    shell-json.md, read fields with a here-string (jq <<<"$info"), never
+#    `echo "$info" | jq` (zsh echo would corrupt embedded \t/\n).
+info=$(gh_issue_view_rest "$match" "${local_repo_args[@]}")
+state=$(jq -r '.state' <<<"$info")
+
+case "$state" in
+  OPEN)
+    gh_issue_comment_rest "$match" --body-file "$body_file" "${local_repo_args[@]}"
+    echo "EXISTING $match"
+    ;;
+  CLOSED)
+    # STALE-HEAD REOPEN GATE — see the header block. Suppress the reopen only when
+    # ancestry shows the run head is behind a real closing fix; otherwise reopen.
+    state_reason=$(jq -r '.stateReason' <<<"$info")
+
+    # --run-id is required here. fix-checks always passes it; an empty value is a
+    # misconfigured caller, not a normal path — fail loud rather than reopen blind
+    # (.claude/rules/code-style.md: clear errors over silent fallbacks).
+    if [[ -z "$run_id" ]]; then
+      echo "error: dispatch-flake-dedup: --run-id is required to reopen closed issue $match (stale-head gate)" >&2
+      exit 1
+    fi
+
+    # Resolve the triggering run's head SHA. A failure here must abort, not fall
+    # through to a blind reopen. Under `set -euo pipefail` a failing command
+    # substitution in a bare assignment does abort, but capture status explicitly
+    # so the error message is specific.
+    run_info=$(gh_run_view_rest "$run_id" "${local_repo_args[@]}") || {
+      echo "error: dispatch-flake-dedup: could not resolve run $run_id for stale-head gate on issue $match" >&2
+      exit 1
+    }
+    run_head=$(jq -r '.headSha' <<<"$run_info")
+
+    # STALE requires POSITIVE evidence the run head is behind a real closing fix
+    # (issue #2518). Ancestry is the ONLY signal: resolve the commit that closed
+    # the issue and compare it to the run's head SHA.
+    #   - Real closing commit + head `behind`/`diverged` → STALE (the #2442 case:
+    #     a long-lived branch genuinely behind the fix).
+    #   - Real closing commit + head `ahead`/`identical` → fall through to REOPEN
+    #     (the head contains the fix; a live recurrence).
+    #   - No closing commit — a manual close (null commit_id) or a NOT_PLANNED
+    #     close (no fix) — leaves stale=0 → REOPEN: the head cannot be stale
+    #     relative to a fix that does not exist.
+    # The old recency floor (run.createdAt < closedAt) is REMOVED: it marked every
+    # run created before the administrative close time as stale — a false positive
+    # for a head that already contains all of main, and the only live signal on a
+    # no-commit close, which produced the #2518 infinite-STALE loop.
+    stale=0
+    if [[ "$state_reason" != "NOT_PLANNED" ]]; then
+      closing=$(gh_issue_closing_commit_rest "$match" "${local_repo_args[@]}")
+      if [[ -n "$closing" ]]; then
+        status=$(gh_commit_is_ancestor_rest "$closing" "$run_head" "${local_repo_args[@]}")
+        if [[ "$status" == "behind" || "$status" == "diverged" ]]; then
+          stale=1
+        fi
+      fi
+    fi
+
+    if [[ "$stale" -eq 1 ]]; then
+      echo "dispatch-flake-dedup: suppressing reopen of #$match — branch head does not contain closing fix (stale-head)" >&2
+      echo "STALE $match"
+      exit 0
+    fi
+
+    gh_issue_reopen_rest "$match" --comment "$(cat "$body_file")" "${local_repo_args[@]}"
+    echo "REOPENED $match"
+    ;;
+  *)
+    echo "error: dispatch-flake-dedup: unexpected state '$state' for issue $match" >&2
+    exit 1
+    ;;
+esac

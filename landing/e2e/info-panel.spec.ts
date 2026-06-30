@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@commons-systems/config/playwright-test";
 
 test.beforeEach(async ({ page }) => {
   await page.route("https://raw.githubusercontent.com/**", (route) =>
