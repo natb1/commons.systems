@@ -1,24 +1,18 @@
 # Windows WezTerm Installer (WSL only)
 #
-# Builds the WezTerm Windows binary set from the upstream WezTerm Windows nightly zip
-# and installs it declaratively into the Windows user's %LOCALAPPDATA%\WezTerm\
-# on each home-manager activation.
+# Downloads and installs the WezTerm Windows nightly binary to the Windows
+# user's %LOCALAPPDATA%\WezTerm\ at each home-manager activation.
 #
 # Why: the Windows GUI auto-connects to the NixOS mux server over SSH; when the
 # Windows binary and the NixOS wezterm package drift in version, the mux PDU
 # protocol fails and the GUI window closes immediately. Both sides track upstream
-# nightly: the NixOS package via nixpkgs, the Windows binary via an impure
-# builtins.fetchurl, so each switch picks up the same rolling nightly.
+# nightly: the NixOS package via nixpkgs, the Windows binary via a runtime curl
+# fetch in this activation script, so each switch picks up the same rolling nightly.
 #
 # Update workflow:
-#   The Windows zip auto-tracks upstream's rolling "nightly" tag via an in-module
-#   impure builtins.fetchurl (no flake input / lock pin), so each switch picks up
-#   current nightly content. Fetches are tarball-ttl-gated (default 1h); to force
-#   a fresh pull immediately, add --refresh:
-#     home-manager switch --flake .#default --impure --refresh
-#
-# When bumping nixpkgs (and thus wezterm), the impure fetch already tracks the
-# latest nightly, keeping the two sides in lockstep.
+#   The Windows zip auto-tracks upstream's rolling "nightly" tag via a runtime
+#   curl fetch on each activation — no flake input / lock pin so upstream
+#   republishes are automatically picked up. Each switch re-downloads the zip.
 
 {
   config,
@@ -27,48 +21,8 @@
   ...
 }:
 
-let
-  wezterm-windows-pkg = pkgs.stdenv.mkDerivation {
-    pname = "wezterm-windows";
-    version = "nightly";
-
-    # Impure raw-file fetch of the rolling upstream "nightly" Windows asset.
-    # Hashless (no flake input / lock pin) so a cold-cache re-fetch tolerates an
-    # upstream republish instead of failing a stale narHash check. Requires
-    # --impure eval (already the only mode used here). Raw .zip, no unpacking —
-    # the unzip nativeBuildInput + default unpackPhase extract it below.
-    src = builtins.fetchurl "https://github.com/wez/wezterm/releases/download/nightly/WezTerm-windows-nightly.zip";
-
-    nativeBuildInputs = [ pkgs.unzip ];
-
-    dontConfigure = true;
-    dontBuild = true;
-
-    # The default unpackPhase handles either an opaque .zip (when Nix downloads
-    # without auto-extraction) or an already-extracted directory. After unpack,
-    # locate the directory containing wezterm-gui.exe — release zips wrap the
-    # binaries in a single versioned subdirectory like
-    # WezTerm-windows-20260117-074626-90b5d1cb/.
-    installPhase = ''
-      runHook preInstall
-
-      GUI_EXE=$(find . -maxdepth 3 -name 'wezterm-gui.exe' -type f | head -n1)
-      if [ -z "$GUI_EXE" ]; then
-        echo "ERROR: wezterm-gui.exe not found in source" >&2
-        find . -maxdepth 3 -type f >&2
-        exit 1
-      fi
-
-      SOURCE_ROOT=$(dirname "$GUI_EXE")
-      mkdir -p $out
-      cp -r "$SOURCE_ROOT"/. $out/
-
-      runHook postInstall
-    '';
-  };
-in
 {
-  # WSL: install Windows WezTerm into the user's %LOCALAPPDATA%
+  # WSL: download and install Windows WezTerm into the user's %LOCALAPPDATA%.
   # DAG ordering: runs after "linkGeneration" so symlinks are stable before we
   # reach across the WSL boundary.
   home.activation.installWeztermWindows = lib.mkIf pkgs.stdenv.isLinux (
@@ -77,6 +31,7 @@ in
       readonly WW_ERR_USERNAME_DETECTION=22
       readonly WW_ERR_INSTALL_FAILED=23
       readonly WW_ERR_FILE_LOCKED=24
+      readonly WW_ERR_DOWNLOAD_FAILED=25
 
       if [ ! -d "/mnt/c/Users" ]; then
         echo "Not running on WSL, skipping Windows WezTerm install"
@@ -123,20 +78,41 @@ in
 
         TARGET_DIR="/mnt/c/Users/$WINDOWS_USER/AppData/Local/WezTerm"
 
-        $DRY_RUN_CMD ${pkgs.coreutils}/bin/mkdir -p "$TARGET_DIR"
-
-        # rsync without -p/-o/-g: /mnt/c is a Windows filesystem where unix
-        # permissions/ownership are not meaningful and attempting to set them
-        # produces spurious errors. -rlt preserves recursion, symlinks, and
-        # mtimes — enough to keep --delete idempotent across runs.
         if [ -z "$DRY_RUN_CMD" ]; then
+          # Download the nightly Windows zip and rsync its contents to TARGET_DIR.
+          # Re-downloads on each switch so the Windows binary stays in lockstep
+          # with the nixpkgs-managed mux server without a hash pin.
+          WW_TMPDIR=$(mktemp -d)
+          trap 'rm -rf "$WW_TMPDIR"' EXIT
+
+          ${pkgs.curl}/bin/curl -fsSL \
+            "https://github.com/wez/wezterm/releases/download/nightly/WezTerm-windows-nightly.zip" \
+            -o "$WW_TMPDIR/wezterm.zip" \
+            || { echo "ERROR: Failed to download WezTerm Windows nightly" >&2; exit $WW_ERR_DOWNLOAD_FAILED; }
+
+          ${pkgs.unzip}/bin/unzip -q "$WW_TMPDIR/wezterm.zip" -d "$WW_TMPDIR/extracted"
+
+          GUI_EXE=$(find "$WW_TMPDIR/extracted" -maxdepth 3 -name 'wezterm-gui.exe' -type f | head -n1)
+          if [ -z "$GUI_EXE" ]; then
+            echo "ERROR: wezterm-gui.exe not found in source" >&2
+            find "$WW_TMPDIR/extracted" -maxdepth 3 -type f >&2
+            exit $WW_ERR_INSTALL_FAILED
+          fi
+
+          SOURCE_ROOT=$(dirname "$GUI_EXE")
+          ${pkgs.coreutils}/bin/mkdir -p "$TARGET_DIR"
+
+          # rsync without -p/-o/-g: /mnt/c is a Windows filesystem where unix
+          # permissions/ownership are not meaningful and attempting to set them
+          # produces spurious errors. -rlt preserves recursion, symlinks, and
+          # mtimes — enough to keep --delete idempotent across runs.
           rsync_error=$(${pkgs.rsync}/bin/rsync -rlt --delete \
-            "${wezterm-windows-pkg}/" "$TARGET_DIR/" 2>&1)
+            "$SOURCE_ROOT/" "$TARGET_DIR/" 2>&1)
           rsync_exit=$?
           if [ $rsync_exit -ne 0 ]; then
             if echo "$rsync_error" | grep -qi "permission denied"; then
               echo "ERROR: Failed to install Windows WezTerm — files appear locked" >&2
-              echo "  Close WezTerm on Windows and re-run 'home-manager switch'" >&2
+              echo "  Close WezTerm on Windows and re-run 'nixos-rebuild switch'" >&2
               echo "  Details:" >&2
               echo "$rsync_error" | sed 's/^/    /' >&2
               exit $WW_ERR_FILE_LOCKED
@@ -147,8 +123,7 @@ in
             exit $WW_ERR_INSTALL_FAILED
           fi
         else
-          $DRY_RUN_CMD ${pkgs.rsync}/bin/rsync -rlt --delete \
-            "${wezterm-windows-pkg}/" "$TARGET_DIR/"
+          echo "Would download WezTerm nightly and install to $TARGET_DIR"
         fi
 
         echo "Installed Windows WezTerm to $TARGET_DIR"
