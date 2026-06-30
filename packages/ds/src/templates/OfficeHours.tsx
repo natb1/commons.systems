@@ -650,6 +650,10 @@ function OtherPanels() {
             { color: "var(--chart-3)", values: [1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 6, 7, 7] },
           ]}
         />
+        <p style={{ margin: "var(--space-3) 0 0" }}>
+          6 active / 8 target{" "}
+          <span style={{ color: "var(--accent)" }}>spawning</span>
+        </p>
       </Panel>
 
       <Panel title="Audit" full>
