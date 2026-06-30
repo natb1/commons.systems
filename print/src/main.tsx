@@ -58,7 +58,7 @@ function renderShell() {
 flushSync(() => renderShell());
 const app = document.getElementById("app");
 if (!app) throw new Error("#app element not found");
-const heroContainer = document.getElementById("hero-container") as HTMLElement;
+const heroContainer = document.getElementById("hero-container");
 if (!heroContainer) throw new Error("#hero-container element not found");
 
 createRoot(heroContainer).render(<Hero />);
