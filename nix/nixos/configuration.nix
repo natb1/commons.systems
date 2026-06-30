@@ -11,8 +11,6 @@
 
 {
   imports = [
-    # include NixOS-WSL modules (resolved via the nixos-wsl channel)
-    <nixos-wsl/modules>
     # Tailscale VPN for secure networking
     ./tailscale.nix
     # Windows drive mounts (Google Drive G: -> /mnt/g)
@@ -59,6 +57,9 @@
     home = "/home/n8";
     extraGroups = [ "wheel" "docker" ];
     shell = pkgs.zsh;
+    # Keep the wezterm-mux-server user service alive across logins declaratively,
+    # replacing the imperative `loginctl enable-linger`.
+    linger = true;
   };
 
   # environment.systemPackages = with pkgs; [ ]; # add system packages here
