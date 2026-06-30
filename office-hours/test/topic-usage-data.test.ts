@@ -114,8 +114,7 @@ describe("getOwnerTopicUsage", () => {
 });
 
 describe("getDemoTopicUsage", () => {
-  it("returns an empty array (demo tier is unauthenticated)", async () => {
-    const result = await getDemoTopicUsage();
-    expect(result).toEqual([]);
+  it("returns an empty array (demo tier is unauthenticated)", () => {
+    expect(getDemoTopicUsage()).toEqual([]);
   });
 });

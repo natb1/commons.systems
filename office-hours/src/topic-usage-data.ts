@@ -45,6 +45,6 @@ export async function getOwnerTopicUsage(
 
 // The demo tier is unauthenticated and the topic-usage list rule requires
 // request.auth != null, so there is no demo data source and the panel renders empty.
-export function getDemoTopicUsage(): Promise<TopicUsageDoc[]> {
-  return Promise.resolve([]);
+export function getDemoTopicUsage(): TopicUsageDoc[] {
+  return [];
 }
