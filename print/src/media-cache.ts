@@ -1,7 +1,7 @@
 /**
- * IndexedDB-backed LRU cache for print media files (PDFs, EPUBs, image archive
- * chunks). Thin wrapper around the shared `@commons-systems/idbutil/lru-blob-cache`
- * primitive. Whole files and range-request chunks share the same stores.
+ * IndexedDB-backed LRU cache for whole print media files (PDFs, EPUBs, image
+ * archives). Thin wrapper around the shared
+ * `@commons-systems/idbutil/lru-blob-cache` primitive.
  */
 import { createLruBlobCache } from "@commons-systems/idbutil/lru-blob-cache";
 
@@ -24,31 +24,10 @@ export const blobCache = cache;
 export const closeDb = cache.closeDb;
 export const clearCache = cache.clearCache;
 
-function chunkKey(storagePath: string, offset: number, length: number): string {
-  return `${storagePath}:${offset}:${length}`;
-}
-
 export function getFile(storagePath: string): Promise<ArrayBuffer | null> {
   return cache.getEntry<ArrayBuffer>(storagePath);
 }
 
 export function putFile(storagePath: string, data: ArrayBuffer): Promise<void> {
   return cache.putEntry(storagePath, data);
-}
-
-export function getChunk(
-  storagePath: string,
-  offset: number,
-  length: number,
-): Promise<Uint8Array | null> {
-  return cache.getEntry<Uint8Array>(chunkKey(storagePath, offset, length));
-}
-
-export function putChunk(
-  storagePath: string,
-  offset: number,
-  length: number,
-  data: Uint8Array,
-): Promise<void> {
-  return cache.putEntry(chunkKey(storagePath, offset, length), data);
 }
