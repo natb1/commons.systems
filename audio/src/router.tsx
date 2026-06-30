@@ -52,7 +52,8 @@ export function useRouter(): Router {
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
       if (e.button !== 0) return;
-      const anchor = (e.target as Element).closest("a");
+      if (!(e.target instanceof Element)) return;
+      const anchor = e.target.closest("a");
       if (!anchor) return;
       if (anchor.hasAttribute("download")) return;
       if (anchor.getAttribute("target")) return;
