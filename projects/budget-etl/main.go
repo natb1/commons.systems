@@ -21,6 +21,20 @@ import (
 )
 
 func main() {
+	args := os.Args[1:]
+	forced := "" // "", "report", or "merge"
+	if len(args) >= 1 {
+		switch args[0] {
+		case "patch":
+			os.Exit(runPatchCmd(args[1:]))
+		case "dump":
+			os.Exit(runDumpCmd(args[1:]))
+		case "report", "merge":
+			forced = args[0]
+			args = args[1:] // strip the subcommand word before flag parsing
+		}
+	}
+
 	dir := flag.String("dir", "", "Path to statement directory")
 	group := flag.String("group", "", "Group name to upload transactions for")
 	outputPath := flag.String("output", "", "Write JSON file")
@@ -33,14 +47,16 @@ func main() {
 	account := flag.String("account", "", "Account name for flat directory layout (requires --institution)")
 
 	flag.Usage = func() {
+		fmt.Fprintln(os.Stderr, "Subcommands: budget-etl <report|merge|patch|dump> [args]   (or use the legacy flag form below)")
 		fmt.Fprintln(os.Stderr, "Usage: budget-etl [--dir <path>] --group <name> --output <path> [--input <path>] [--keychain <name>] [--plaintext] [--report <path> --allow-uncategorized]")
 		fmt.Fprintln(os.Stderr, "  "+password.UsageNote)
 		fmt.Fprintln(os.Stderr, "  --plaintext skips password resolution entirely and writes unencrypted JSON; it cannot be combined with --keychain or "+password.EnvVar+".")
 		flag.PrintDefaults()
 	}
-	flag.Parse()
+	flag.CommandLine.Parse(args) //nolint:errcheck // flag.CommandLine uses ExitOnError, matching the prior flag.Parse() behavior
 
-	if *reportPath != "" && !*allowUncategorized {
+	effectiveAllowUncategorized := *allowUncategorized || forced == "report"
+	if *reportPath != "" && !effectiveAllowUncategorized {
 		fmt.Fprintln(os.Stderr, "Error: --report requires --allow-uncategorized")
 		os.Exit(1)
 	}
@@ -87,41 +103,64 @@ func main() {
 		pw = resolved
 	}
 
-	if *reportPath != "" {
+	switch forced {
+	case "report":
+		if *reportPath == "" {
+			fmt.Fprintln(os.Stderr, "Error: report subcommand requires --report")
+			os.Exit(1)
+		}
 		if err := runReport(fileOpts{path: *inputPath, password: pw}, *dir, disc, *reportPath); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
 		return
-	}
-
-	if *inputPath != "" && *dir != "" {
+	case "merge":
+		if *inputPath == "" || *dir == "" {
+			fmt.Fprintln(os.Stderr, "Error: merge subcommand requires --input and --dir")
+			os.Exit(1)
+		}
 		if err := runMerge(fileOpts{path: *inputPath, password: pw}, *dir, *group, disc, fileOpts{path: *outputPath, password: pw}); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
 		return
-	}
-	if *inputPath != "" {
-		if err := runInputJSON(fileOpts{path: *inputPath, password: pw}, fileOpts{path: *outputPath, password: pw}); err != nil {
+	default:
+		if *reportPath != "" {
+			if err := runReport(fileOpts{path: *inputPath, password: pw}, *dir, disc, *reportPath); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
+			return
+		}
+
+		if *inputPath != "" && *dir != "" {
+			if err := runMerge(fileOpts{path: *inputPath, password: pw}, *dir, *group, disc, fileOpts{path: *outputPath, password: pw}); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
+			return
+		}
+		if *inputPath != "" {
+			if err := runInputJSON(fileOpts{path: *inputPath, password: pw}, fileOpts{path: *outputPath, password: pw}); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
+			return
+		}
+
+		if *dir == "" || *group == "" {
+			flag.Usage()
+			os.Exit(1)
+		}
+		if *outputPath == "" {
+			fmt.Fprintln(os.Stderr, "Error: --output is required")
+			os.Exit(1)
+		}
+
+		if err := runDirJSON(*dir, *group, disc, fileOpts{path: *outputPath, password: pw}); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
-		return
-	}
-
-	if *dir == "" || *group == "" {
-		flag.Usage()
-		os.Exit(1)
-	}
-	if *outputPath == "" {
-		fmt.Fprintln(os.Stderr, "Error: --output is required")
-		os.Exit(1)
-	}
-
-	if err := runDirJSON(*dir, *group, disc, fileOpts{path: *outputPath, password: pw}); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
 	}
 }
 
