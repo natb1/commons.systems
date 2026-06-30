@@ -108,13 +108,13 @@ describe("buildPaceLineSpecs", () => {
       const specs = buildPaceLineSpecs(series, COLORS);
       const pace = specs.find((s) => s.role === "pace");
       expect(pace).toBeDefined();
-      expect(pace!.strokeDasharray).toBe("3,3");
+      expect(pace!.strokeDasharray).toBe("3,3"); // type-safety-ok: guaranteed defined by preceding toBeDefined assertion
     });
 
     it("uses the pace color", () => {
       const series: BudgetPaceSeries = { pace: PACE, current: CURRENT, previous: [] };
       const specs = buildPaceLineSpecs(series, COLORS);
-      const pace = specs.find((s) => s.role === "pace")!;
+      const pace = specs.find((s) => s.role === "pace")!; // type-safety-ok: guaranteed defined — test throws on undefined property access
       expect(pace.stroke).toBe(COLORS.pace);
     });
   });
@@ -125,14 +125,14 @@ describe("buildPaceLineSpecs", () => {
       const specs = buildPaceLineSpecs(series, COLORS);
       const current = specs.find((s) => s.role === "current");
       expect(current).toBeDefined();
-      expect(current!.strokeOpacity).toBe(1);
-      expect(current!.strokeWidth).toBe(2);
+      expect(current!.strokeOpacity).toBe(1); // type-safety-ok: guaranteed defined by preceding toBeDefined assertion
+      expect(current!.strokeWidth).toBe(2); // type-safety-ok: guaranteed defined by preceding toBeDefined assertion
     });
 
     it("uses the current color", () => {
       const series: BudgetPaceSeries = { pace: PACE, current: CURRENT, previous: [] };
       const specs = buildPaceLineSpecs(series, COLORS);
-      const current = specs.find((s) => s.role === "current")!;
+      const current = specs.find((s) => s.role === "current")!; // type-safety-ok: guaranteed defined — test throws on undefined property access
       expect(current.stroke).toBe(COLORS.current);
     });
 
