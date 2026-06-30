@@ -4,7 +4,7 @@ import { UploadValidationError } from "./upload.js";
 import {
   MAGIC, SALT_LEN, IV_LEN, HEADER_LEN, PBKDF2_ITERATIONS, KEY_LEN,
   encryptData, decryptData,
-} from "./crypto-core.js";
+} from "@commons-systems/crypto-core";
 
 export { SALT_LEN, IV_LEN, PBKDF2_ITERATIONS, KEY_LEN };
 

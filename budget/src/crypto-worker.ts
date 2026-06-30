@@ -1,7 +1,7 @@
 // Handles encrypt/decrypt in a Web Worker to avoid blocking the main thread.
 // PBKDF2 with 600k iterations is computationally expensive.
 
-import { encryptData, decryptData } from "./crypto-core.js";
+import { encryptData, decryptData } from "@commons-systems/crypto-core";
 
 self.onmessage = async (e: MessageEvent) => {
   const { id, type, password } = e.data;

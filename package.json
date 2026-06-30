@@ -4,6 +4,7 @@
   "workspaces": [
     "packages/config",
     "packages/analyticsutil",
+    "packages/crypto-core",
     "office-hours",
     "audio",
     "packages/authutil",
