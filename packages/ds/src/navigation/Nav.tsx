@@ -23,11 +23,14 @@ export function Nav(props: NavProps) {
 
   const renderLink = (link: NavLink) => {
     const isCurrent = link.href === current;
+    // Active-page treatment (shared by every template that renders Nav): inactive
+    // links are muted; the current page is the one accent, bold link. Color +
+    // weight, not the underline — the house `a` underline (base.css) is also the
+    // hover affordance, so an underline-only active state would read identically
+    // to a hovered link. aria-current both drives this and is the a11y signal.
     const linkStyle: CSSProperties = {
-      color: "var(--accent)",
-      ...(isCurrent
-        ? { textDecoration: "underline", textDecorationThickness: "2px" }
-        : {}),
+      color: isCurrent ? "var(--accent)" : "var(--text-muted)",
+      ...(isCurrent ? { fontWeight: "var(--weight-bold)" } : {}),
     };
     return (
       <a

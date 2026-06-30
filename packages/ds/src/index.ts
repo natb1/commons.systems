@@ -28,3 +28,5 @@ export { PageShell } from "./templates/PageShell.tsx";
 export type { PageShellProps } from "./templates/PageShell.tsx";
 export { Footer } from "./templates/Footer.tsx";
 export { FOOTER_HTML } from "./templates/footer.ts";
+export { OfficeHours } from "./templates/OfficeHours.tsx";
+export type { OfficeHoursProps } from "./templates/OfficeHours.tsx";
