@@ -2,8 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
-	"math"
 	"os"
 	"testing"
 
@@ -67,7 +65,7 @@ func TestApplySpecAndMerge(t *testing.T) {
 		}
 	}
 
-	ruleSet, err := convertExportRulesForTest(stage1.Rules)
+	ruleSet, err := convertExportRules(stage1.Rules)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,45 +97,3 @@ func ruleIDPresent(rs []export.Rule, id string) bool {
 	return false
 }
 
-// convertExportRulesForTest mirrors the conversion used by main.go's
-// convertExportRules. It is duplicated here because that helper is
-// package-private to the parent projects/budget-etl/main.go and cmd/patch can't
-// import it.
-//
-// DIVERGENCE RISK: this is a hand-maintained copy. When main.go's
-// convertExportRules changes (e.g. the validateCategoryFilterFields check
-// added below), this helper must be updated in lockstep or the integration
-// test will silently accept inputs the real binary rejects.
-func convertExportRulesForTest(exportRules []export.Rule) ([]rules.Rule, error) {
-	out := make([]rules.Rule, len(exportRules))
-	for i, r := range exportRules {
-		// Mirror convertExportRules' validateCategoryFilterFields call:
-		// category-filter fields are only valid on budget_assignment rules.
-		if r.Type == "categorization" && (r.MatchCategory != "" || r.ExcludeCategory != "" || r.Category != "") {
-			return nil, fmt.Errorf("rule %s: category-filter fields (matchCategory/excludeCategory/category) are only valid on budget_assignment rules, not categorization rules", r.ID)
-		}
-		out[i] = rules.Rule{
-			ID:              r.ID,
-			Type:            r.Type,
-			Pattern:         r.Pattern,
-			Target:          r.Target,
-			Priority:        r.Priority,
-			Institution:     r.Institution,
-			Account:         r.Account,
-			ExcludeCategory: r.ExcludeCategory,
-			MatchCategory:   r.MatchCategory,
-			Category:        r.Category,
-			MinAmount:       dollarsToCentsForTest(r.MinAmount),
-			MaxAmount:       dollarsToCentsForTest(r.MaxAmount),
-		}
-	}
-	return out, nil
-}
-
-func dollarsToCentsForTest(d *float64) *int64 {
-	if d == nil {
-		return nil
-	}
-	v := int64(math.Round(*d * 100))
-	return &v
-}

@@ -49,3 +49,21 @@ describe("PageShell", () => {
     expect(html).toContain('alt="CC-BY-SA"');
   });
 });
+
+describe("PageShell headerEnd slot", () => {
+  const html = renderToStaticMarkup(
+    <PageShell
+      wordmark="your.brand"
+      navLinks={[{ href: "/", label: "Home" }]}
+      headerEnd={<button className="panel-toggle">▸</button>}
+    >
+      <main />
+    </PageShell>,
+  );
+
+  it("renders headerEnd as a child of <header>", () => {
+    expect(html).toMatch(
+      /<header\b[^>]*>[\s\S]*?class="panel-toggle"[\s\S]*?<\/header>/,
+    );
+  });
+});

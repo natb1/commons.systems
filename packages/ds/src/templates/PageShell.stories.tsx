@@ -32,3 +32,10 @@ export const Default: Story = {
     ),
   },
 };
+
+export const WithHeaderEnd: Story = {
+  args: {
+    ...Default.args,
+    headerEnd: <button className="panel-toggle">▸</button>,
+  },
+};
