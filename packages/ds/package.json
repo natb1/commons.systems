@@ -18,6 +18,7 @@
     "./base.css": "./base.css",
     "./layout.css": "./layout.css",
     "./hero.css": "./hero.css",
+    "./charts.css": "./charts.css",
     "./tokens/colors.css": "./tokens/colors.css",
     "./tokens/typography.css": "./tokens/typography.css",
     "./tokens/spacing.css": "./tokens/spacing.css",
