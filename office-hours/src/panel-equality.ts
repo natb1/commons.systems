@@ -2,7 +2,7 @@ import type { UsageSample } from "./usage-samples.js";
 import type { Reminder } from "./reminders.js";
 import type { QueueMetricsSnapshot } from "./queue-metrics.js";
 import type { IssueSample } from "./issue-samples.js";
-import type { AuditAggregate } from "./audit-aggregates.js";
+import type { TopicUsageBucket, TopicUsageDoc } from "./topic-usage.js";
 import type { ProjectSignalsSnapshot } from "./project-signals.js";
 
 /**
@@ -17,12 +17,12 @@ export interface PanelData {
   reminders: Reminder[];
   queueMetrics: QueueMetricsSnapshot | null;
   issueSamples: IssueSample[];
-  auditAggregates: AuditAggregate[];
+  topicUsage: TopicUsageDoc[];
   projectSignals: ProjectSignalsSnapshot | null;
 }
 
 // WHY per-field coverage matters: for append-only collections (samples,
-// issueSamples, auditAggregates) a length change does most of the work. But
+// issueSamples, topicUsage) a length change does most of the work. But
 // `reminders` and the single `queueMetrics` doc mutate IN PLACE — same length,
 // changed fields — so per-field coverage is load-bearing there. Comparing every
 // Date by .getTime() is required because a re-fetch always yields fresh Date
@@ -37,17 +37,6 @@ function arraysEqual<T>(a: T[], b: T[], eq: (x: T, y: T) => boolean): boolean {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) {
     if (!eq(a[i], b[i])) return false;
-  }
-  return true;
-}
-
-/** Deep equality for Record<string, number>: same key set in both directions, equal values. */
-function phaseSpendEqual(a: Record<string, number>, b: Record<string, number>): boolean {
-  const aKeys = Object.keys(a);
-  const bKeys = Object.keys(b);
-  if (aKeys.length !== bKeys.length) return false;
-  for (const k of aKeys) {
-    if (!(k in b) || a[k] !== b[k]) return false;
   }
   return true;
 }
@@ -104,17 +93,35 @@ export function issueSamplesEqual(a: IssueSample[], b: IssueSample[]): boolean {
 }
 
 /**
- * Content equality for AuditAggregate arrays. Compares all 6 fields per item,
- * including a deep comparison of the phaseSpend record.
+ * Deep equality for a bucket map on the single charted field, priceProxyUsd:
+ * same key set in both directions, equal priceProxyUsd per key. The other
+ * bucket fields (input/output/cacheRead/cacheCreation) are not charted, so they
+ * are intentionally not compared — a refresh that changes only an uncharted
+ * field must not force a re-render.
  */
-export function auditAggregatesEqual(a: AuditAggregate[], b: AuditAggregate[]): boolean {
+function priceProxyMapEqual(
+  a: Record<string, TopicUsageBucket>,
+  b: Record<string, TopicUsageBucket>,
+): boolean {
+  const aKeys = Object.keys(a);
+  const bKeys = Object.keys(b);
+  if (aKeys.length !== bKeys.length) return false;
+  for (const k of aKeys) {
+    if (!(k in b) || a[k].priceProxyUsd !== b[k].priceProxyUsd) return false;
+  }
+  return true;
+}
+
+/**
+ * Content equality for TopicUsageDoc arrays. Compares per item the `date` and
+ * the charted field priceProxyUsd across both the byTopic and byType bucket
+ * maps (same key set in both directions, equal priceProxyUsd per key).
+ */
+export function topicUsageEqual(a: TopicUsageDoc[], b: TopicUsageDoc[]): boolean {
   return arraysEqual(a, b, (x, y) =>
-    x.computedAt.getTime() === y.computedAt.getTime() &&
-    x.windowDays === y.windowDays &&
-    x.groupId === y.groupId &&
-    phaseSpendEqual(x.phaseSpend, y.phaseSpend) &&
-    x.cacheRead === y.cacheRead &&
-    x.cacheCreation === y.cacheCreation,
+    x.date === y.date &&
+    priceProxyMapEqual(x.byTopic, y.byTopic) &&
+    priceProxyMapEqual(x.byType, y.byType),
   );
 }
 
@@ -219,10 +226,10 @@ export function mergePanelData(prev: PanelData, next: PanelData): PanelData {
   const remindersEq = remindersEqual(prev.reminders, next.reminders);
   const queueMetricsEq = queueMetricsEqual(prev.queueMetrics, next.queueMetrics);
   const issueSamplesEq = issueSamplesEqual(prev.issueSamples, next.issueSamples);
-  const auditAggregatesEq = auditAggregatesEqual(prev.auditAggregates, next.auditAggregates);
+  const topicUsageEq = topicUsageEqual(prev.topicUsage, next.topicUsage);
   const projectSignalsEq = projectSignalsEqual(prev.projectSignals, next.projectSignals);
 
-  if (samplesEq && remindersEq && queueMetricsEq && issueSamplesEq && auditAggregatesEq && projectSignalsEq) {
+  if (samplesEq && remindersEq && queueMetricsEq && issueSamplesEq && topicUsageEq && projectSignalsEq) {
     return prev;
   }
 
@@ -231,7 +238,7 @@ export function mergePanelData(prev: PanelData, next: PanelData): PanelData {
     reminders: remindersEq ? prev.reminders : next.reminders,
     queueMetrics: queueMetricsEq ? prev.queueMetrics : next.queueMetrics,
     issueSamples: issueSamplesEq ? prev.issueSamples : next.issueSamples,
-    auditAggregates: auditAggregatesEq ? prev.auditAggregates : next.auditAggregates,
+    topicUsage: topicUsageEq ? prev.topicUsage : next.topicUsage,
     projectSignals: projectSignalsEq ? prev.projectSignals : next.projectSignals,
   };
 }
