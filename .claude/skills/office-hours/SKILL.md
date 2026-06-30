@@ -180,16 +180,22 @@ stops.
         the selector in single-item mode purely to capture its `NOTE —` stderr
         advisory for `<N>`, and relay that — identical signal, identical wording,
         no second implementation (use `dangerouslyDisableSandbox: true` — it
-        queries `gh`):
+        queries `gh` and `claude agents --json`):
 
         ```bash
         .claude/skills/dispatch-propagate/scripts/office-hours-select-target <N>
         ```
 
+        The selector emits this advisory for the targeted `<N>` **regardless of
+        its session state** — including the primary entry-launched case where
+        `<N>`'s own (busy) session is the one asking — so the signal is present
+        on this path, not only when `<N>` is idle (#2614).
+
         Only the stderr `NOTE —` line matters here; the item's bucket was
-        already settled at Step 0. This single-item read is read-only `gh`, so it
-        does not violate this skill's pure-dispatcher constraint — it
-        attaches/resumes/spawns nothing. Do **not** run
+        already settled at Step 0. This single-item read is read-only `gh` and
+        `claude agents --json`, so it does not violate this skill's
+        pure-dispatcher constraint — it attaches/resumes/spawns nothing. Do
+        **not** run
         `office-hours-select-target` with **no** argument on a bare-`<N>`
         invocation: target-less it re-enumerates the whole queue and returns the
         queue head, not `<N>`, so it cannot produce the targeted item's advisory.
