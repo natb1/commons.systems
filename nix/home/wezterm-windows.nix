@@ -90,7 +90,8 @@
             -o "$WW_TMPDIR/wezterm.zip" \
             || { echo "ERROR: Failed to download WezTerm Windows nightly" >&2; exit $WW_ERR_DOWNLOAD_FAILED; }
 
-          ${pkgs.unzip}/bin/unzip -q "$WW_TMPDIR/wezterm.zip" -d "$WW_TMPDIR/extracted"
+          ${pkgs.unzip}/bin/unzip -q "$WW_TMPDIR/wezterm.zip" -d "$WW_TMPDIR/extracted" \
+            || { echo "ERROR: Failed to extract WezTerm zip" >&2; exit $WW_ERR_INSTALL_FAILED; }
 
           GUI_EXE=$(find "$WW_TMPDIR/extracted" -maxdepth 3 -name 'wezterm-gui.exe' -type f | head -n1)
           if [ -z "$GUI_EXE" ]; then
