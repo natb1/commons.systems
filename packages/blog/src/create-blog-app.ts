@@ -332,7 +332,7 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
       navLinks: config.navLinks,
       current: currentPath,
       navEnd: navEndNode(),
-      hero: isHomePath(currentPath) ? config.shell!.hero : undefined,
+      hero: currentPath === "/" ? config.shell!.hero : undefined,
       panelOpen,
       panelId,
       panelAriaLabel: config.shell!.panelAriaLabel,
