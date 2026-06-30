@@ -162,7 +162,7 @@ WT_PATH="$(git rev-parse --show-toplevel)"
 cleanup() {
   kill_worktree_processes "$WT_PATH" || echo "WARNING: kill_worktree_processes failed" >&2
   cleanup_stale_hub || echo "WARNING: cleanup_stale_hub failed" >&2
-  rm -f "$TEMP_FIREBASE_JSON"
+  rm -f "$TEMP_FIREBASE_JSON" "${EMU_LOG:-}"
 }
 trap cleanup EXIT INT TERM
 
@@ -193,13 +193,11 @@ if [ -n "$EMULATOR_NAMESPACE" ]; then
   export FIRESTORE_NAMESPACE="$EMULATOR_NAMESPACE"
 fi
 
-npx firebase-tools emulators:start --only "$EMULATORS" --config "$TEMP_FIREBASE_JSON" --project "$EMULATOR_PROJECT_ID" &
-
-# Poll until hosting emulator serves content. The loop exits the instant
-# curl gets a 200, so a larger ceiling never slows a healthy start — it only
-# adds headroom for slow CI (JVM cold start + scheduling jitter under
-# contention can push the hosting listener past a tight deadline; see #2192).
-# Override with EMULATOR_READY_TIMEOUT (seconds).
+# Validate the readiness timeout up front — every readiness poll below shares it.
+# Each poll loop exits the instant curl gets a 200, so a larger ceiling never
+# slows a healthy start; it only adds headroom for slow CI (JVM cold start +
+# scheduling jitter under contention can push a listener past a tight deadline;
+# see #2192). Override with EMULATOR_READY_TIMEOUT (seconds).
 TIMEOUT="${EMULATOR_READY_TIMEOUT:-300}"
 # Validate: non-numeric input would make `[ $ELAPSED -ge $TIMEOUT ]` print
 # 'integer expected' and evaluate false forever (infinite loop until the CI
@@ -216,34 +214,120 @@ if [ "$TIMEOUT" -le 0 ]; then
   echo "ERROR: EMULATOR_READY_TIMEOUT must be a positive integer (got '${EMULATOR_READY_TIMEOUT}')" >&2
   exit 1
 fi
-ELAPSED=0
-until curl -s -o /dev/null -w '%{http_code}' "http://localhost:${HOSTING_PORT}/" 2>/dev/null | grep -q '^200$'; do
-  if [ $ELAPSED -ge $TIMEOUT ]; then
-    echo "ERROR: Firebase hosting emulator did not start within ${TIMEOUT}s" >&2
+
+# The Functions emulator can hang non-deterministically at startup under CI
+# resource contention (#2630): `emulators:start` brings every emulator up as a
+# single process, so a Functions stall keeps the hosting listener from ever
+# serving 200 and the hosting readiness poll burns the full TIMEOUT — surfacing
+# as a misleading "hosting did not start within Ns" error. A fresh process
+# usually starts cleanly, so we relaunch on a readiness timeout. Override the
+# attempt count with EMULATOR_START_ATTEMPTS (default 2).
+ATTEMPTS="${EMULATOR_START_ATTEMPTS:-2}"
+case "$ATTEMPTS" in
+  '' | *[^0-9]*)
+    echo "ERROR: EMULATOR_START_ATTEMPTS must be a positive integer (got '${EMULATOR_START_ATTEMPTS}')" >&2
     exit 1
-  fi
-  sleep 1
-  ELAPSED=$((ELAPSED + 1))
-done
+    ;;
+esac
+if [ "$ATTEMPTS" -le 0 ]; then
+  echo "ERROR: EMULATOR_START_ATTEMPTS must be a positive integer (got '${EMULATOR_START_ATTEMPTS}')" >&2
+  exit 1
+fi
 
-echo "Firebase hosting emulator ready on port ${HOSTING_PORT}"
+# Capture emulator stdout/stderr. The process is backgrounded and its output
+# otherwise discarded, so a startup hang is invisible in CI; this log makes the
+# real stall (the Functions runtime, not hosting) visible and is printed on any
+# readiness-timeout failure. Removed by the cleanup() trap above.
+EMU_LOG="$(get_tmpdir)/acceptance-emulators-${APP_NAME}.log"
 
-# Poll until Firestore emulator is ready (if used). Reuses the TIMEOUT set
-# above, so EMULATOR_READY_TIMEOUT governs every emulator's readiness ceiling —
-# hosting, Firestore, Auth, and Storage waits all share the same TIMEOUT.
-if [ "$USES_FIRESTORE" = true ]; then
-  ELAPSED=0
-  until curl -s -o /dev/null -w '%{http_code}' "http://localhost:${FIRESTORE_PORT}/" 2>/dev/null | grep -q '^200$'; do
-    if [ $ELAPSED -ge $TIMEOUT ]; then
-      echo "ERROR: Firebase Firestore emulator did not start within ${TIMEOUT}s" >&2
-      exit 1
+# Launch every emulator and poll each used emulator's readiness endpoint. No
+# seeding here — seeds run once, after all emulators are confirmed ready, so a
+# relaunch on the retry path never re-seeds. Returns non-zero on the first
+# readiness timeout so the caller can tear down and retry.
+launch_and_await_emulators() {
+  npx firebase-tools emulators:start --only "$EMULATORS" --config "$TEMP_FIREBASE_JSON" --project "$EMULATOR_PROJECT_ID" >"$EMU_LOG" 2>&1 &
+
+  local elapsed=0
+  until curl -s -o /dev/null -w '%{http_code}' "http://localhost:${HOSTING_PORT}/" 2>/dev/null | grep -q '^200$'; do
+    if [ "$elapsed" -ge "$TIMEOUT" ]; then
+      echo "ERROR: Firebase hosting emulator did not start within ${TIMEOUT}s" >&2
+      return 1
     fi
     sleep 1
-    ELAPSED=$((ELAPSED + 1))
+    elapsed=$((elapsed + 1))
   done
-  echo "Firebase Firestore emulator ready on port ${FIRESTORE_PORT}"
+  echo "Firebase hosting emulator ready on port ${HOSTING_PORT}"
 
-  # Seed Firestore
+  if [ "$USES_FIRESTORE" = true ]; then
+    elapsed=0
+    until curl -s -o /dev/null -w '%{http_code}' "http://localhost:${FIRESTORE_PORT}/" 2>/dev/null | grep -q '^200$'; do
+      if [ "$elapsed" -ge "$TIMEOUT" ]; then
+        echo "ERROR: Firebase Firestore emulator did not start within ${TIMEOUT}s" >&2
+        return 1
+      fi
+      sleep 1
+      elapsed=$((elapsed + 1))
+    done
+    echo "Firebase Firestore emulator ready on port ${FIRESTORE_PORT}"
+  fi
+
+  if [ "$USES_AUTH" = true ]; then
+    elapsed=0
+    until curl -s "http://localhost:${AUTH_PORT}/identitytoolkit.googleapis.com/v1/projects" >/dev/null 2>&1; do
+      if [ "$elapsed" -ge "$TIMEOUT" ]; then
+        echo "ERROR: Auth emulator did not start within ${TIMEOUT}s" >&2
+        return 1
+      fi
+      sleep 1
+      elapsed=$((elapsed + 1))
+    done
+    echo "Firebase Auth emulator ready on port ${AUTH_PORT}"
+  fi
+
+  if [ "$USES_STORAGE" = true ]; then
+    elapsed=0
+    until curl -s -o /dev/null -w '%{http_code}' "http://localhost:${STORAGE_PORT}/" 2>/dev/null | grep -qE '^[1-5]'; do
+      if [ "$elapsed" -ge "$TIMEOUT" ]; then
+        echo "ERROR: Storage emulator did not start within ${TIMEOUT}s" >&2
+        return 1
+      fi
+      sleep 1
+      elapsed=$((elapsed + 1))
+    done
+    echo "Firebase Storage emulator ready on port ${STORAGE_PORT}"
+  fi
+
+  return 0
+}
+
+ATTEMPT=1
+while true; do
+  if launch_and_await_emulators; then
+    break
+  fi
+
+  echo "Emulator startup attempt ${ATTEMPT}/${ATTEMPTS} failed; last 50 lines of emulator output:" >&2
+  tail -n 50 "$EMU_LOG" >&2 2>/dev/null || true
+  echo "--- end emulator output ---" >&2
+
+  if [ "$ATTEMPT" -ge "$ATTEMPTS" ]; then
+    echo "ERROR: Firebase emulators did not become ready after ${ATTEMPTS} attempt(s)" >&2
+    exit 1
+  fi
+
+  # Tear the hung emulator and its stale hub down before relaunching, so the
+  # next emulators:start does not collide with a half-dead process or a stale
+  # hub file on the already-allocated ports.
+  kill_worktree_processes "$WT_PATH" || echo "WARNING: kill_worktree_processes failed" >&2
+  cleanup_stale_hub || echo "WARNING: cleanup_stale_hub failed" >&2
+
+  ATTEMPT=$((ATTEMPT + 1))
+  echo "Retrying emulator startup (attempt ${ATTEMPT}/${ATTEMPTS})..." >&2
+  sleep 5
+done
+
+# All emulators are ready — seed each used emulator once.
+if [ "$USES_FIRESTORE" = true ]; then
   echo "Seeding Firestore..."
   APP_NAME="$APP_NAME" \
   FIREBASE_PROJECT_ID="$EMULATOR_PROJECT_ID" \
@@ -253,44 +337,14 @@ if [ "$USES_FIRESTORE" = true ]; then
   npx tsx packages/firestoreutil/bin/run-seed.ts
 fi
 
-# Poll until Auth emulator is ready (if used)
 if [ "$USES_AUTH" = true ]; then
-  ELAPSED=0
-  until curl -s "http://localhost:${AUTH_PORT}/identitytoolkit.googleapis.com/v1/projects" >/dev/null 2>&1; do
-    if [ $ELAPSED -ge $TIMEOUT ]; then
-      echo "ERROR: Auth emulator did not start within ${TIMEOUT}s" >&2
-      exit 1
-    fi
-    sleep 1
-    ELAPSED=$((ELAPSED + 1))
-  done
-  echo "Firebase Auth emulator ready on port ${AUTH_PORT}"
-
-  # Seed auth user
   echo "Seeding auth user..."
   APP_NAME="$APP_NAME" AUTH_EMULATOR_HOST="localhost:${AUTH_PORT}" FIREBASE_PROJECT_ID="$EMULATOR_PROJECT_ID" npx tsx packages/authutil/bin/run-auth-seed.ts
 fi
 
-# Poll until Storage emulator is ready (if used).
-# The storage emulator root URL returns 404 (not 200 like Firestore), so check
-# for any valid HTTP response — a non-000 status means the server is listening.
-if [ "$USES_STORAGE" = true ]; then
-  ELAPSED=0
-  until curl -s -o /dev/null -w '%{http_code}' "http://localhost:${STORAGE_PORT}/" 2>/dev/null | grep -qE '^[1-5]'; do
-    if [ $ELAPSED -ge $TIMEOUT ]; then
-      echo "ERROR: Storage emulator did not start within ${TIMEOUT}s" >&2
-      exit 1
-    fi
-    sleep 1
-    ELAPSED=$((ELAPSED + 1))
-  done
-  echo "Firebase Storage emulator ready on port ${STORAGE_PORT}"
-
-  # Seed Storage (if the app provides storage seed data)
-  if [ -f "$REPO_ROOT/$APP_DIR/seeds/storage.ts" ]; then
-    echo "Seeding Storage..."
-    APP_NAME="$APP_NAME" STORAGE_EMULATOR_HOST="localhost:${STORAGE_PORT}" STORAGE_BUCKET="${EMULATOR_PROJECT_ID}.firebasestorage.app" SEED_TEST_ONLY=true npx tsx "$REPO_ROOT/packages/firebaseutil/bin/run-storage-seed.ts"
-  fi
+if [ "$USES_STORAGE" = true ] && [ -f "$REPO_ROOT/$APP_DIR/seeds/storage.ts" ]; then
+  echo "Seeding Storage..."
+  APP_NAME="$APP_NAME" STORAGE_EMULATOR_HOST="localhost:${STORAGE_PORT}" STORAGE_BUCKET="${EMULATOR_PROJECT_ID}.firebasestorage.app" SEED_TEST_ONLY=true npx tsx "$REPO_ROOT/packages/firebaseutil/bin/run-storage-seed.ts"
 fi
 
 # Run Playwright acceptance tests

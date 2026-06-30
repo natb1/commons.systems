@@ -476,6 +476,15 @@ if [[ -n "$TARGET_N" ]]; then
       ;;
     *)  # rc 2 (UNKNOWN) or rc 3 (working/busy/unrecognized): not engageable → empty.
         # Single-item mode never reaches the parked-router block (see design note).
+        # Still surface the open-blocker signal for the TARGETED item (#2614): the
+        # blocker status is a "signal, not a gate", independent of whether <N> is
+        # currently being worked. The `/office-hours` skill's bare-<N> path calls
+        # this in single-item mode purely for the stderr advisory, and on the
+        # primary entry-launched path <N>'s own (busy) session is the one asking —
+        # which lands here at rc 3. Without this emit it would get no signal at
+        # all. emit_blocker_signal touches only stderr, never stdout/exit, so the
+        # `empty` disposition every consumer parses stays byte-identical.
+      emit_blocker_signal "$TARGET_N"
       echo "empty"
       exit 0
       ;;
