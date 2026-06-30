@@ -62,6 +62,8 @@ describe("PageShell headerEnd slot", () => {
   );
 
   it("renders headerEnd as a child of <header>", () => {
-    expect(html).toContain('class="panel-toggle"');
+    expect(html).toMatch(
+      /<header\b[^>]*>[\s\S]*?class="panel-toggle"[\s\S]*?<\/header>/,
+    );
   });
 });
