@@ -17,11 +17,12 @@ import type { User } from "firebase/auth";
 import type { Firestore } from "firebase/firestore";
 
 import { createElement, Fragment, type ReactNode } from "react";
-import { hydrateRoot } from "react-dom/client";
+import { flushSync } from "react-dom";
+import { createRoot, hydrateRoot, type Root } from "react-dom/client";
 
 import type { Namespace } from "@commons-systems/firestoreutil/namespace";
 import { isInGroup, type GroupId } from "@commons-systems/authutil/groups";
-import type { NavLink } from "@commons-systems/ds";
+import { ContextPanelToggle, type NavLink } from "@commons-systems/ds";
 import { createHistoryRouter, parsePath } from "@commons-systems/router";
 import { classifyError } from "@commons-systems/errorutil/classify";
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
@@ -30,7 +31,8 @@ import { deferAppCheckInit } from "@commons-systems/firebaseutil/defer-appcheck"
 
 import { initPanelToggle } from "@commons-systems/components/panel-toggle";
 
-import { BlogNav } from "./components/BlogNav.tsx";
+import { BlogNav, BlogNavEnd } from "./components/BlogNav.tsx";
+import { BlogPageShell } from "./components/BlogPageShell.tsx";
 import { HomeRegion } from "./pages/HomeRegion.tsx";
 import { AdminRegion } from "./pages/AdminRegion.tsx";
 import { InfoPanelRegion } from "./components/InfoPanelRegion.tsx";
@@ -107,6 +109,20 @@ export interface CreateBlogAppConfig {
   onNavigate?: (path: string) => void;
   useScrollIndicator?: boolean;
   rehydrateOnAppCheck?: boolean;
+  /**
+   * Opt-in ds-chrome seam. When present, the renderer mounts a SINGLE ds
+   * `<PageShell>` root (via BlogPageShell) into `#${mount}` instead of the
+   * legacy three-root (`#nav` / `#app` / `#info-panel`) + static-markup path.
+   * Absent (the default — fellspiral) runs the legacy path VERBATIM.
+   */
+  shell?: {
+    mount: string;
+    wordmark: ReactNode;
+    tagline?: ReactNode;
+    hero?: ReactNode;
+    panelId?: string;
+    panelAriaLabel?: string;
+  };
 }
 
 export interface BlogAppHandle {
@@ -125,30 +141,34 @@ export interface BlogAppHandle {
 }
 
 export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
-  const navMount = document.getElementById("nav");
-  if (!navMount) throw new Error("#nav element not found");
-  const appEl = document.getElementById("app");
-  if (!appEl) throw new Error("#app element not found");
-  const app: HTMLElement = appEl;
-  const infoPanel = document.getElementById("info-panel");
-  if (!infoPanel) throw new Error("#info-panel element not found");
+  // The `#app` body element and the header ResizeObserver are needed by BOTH
+  // render paths, but in the shell path `#app` only exists AFTER the PageShell
+  // mounts, so they're resolved/created in the render-bootstrap block below.
+  let app: HTMLElement;
+  let headerObserver: ResizeObserver;
+  // Render roots: the legacy path owns the three hydrate roots (nav/app/panel);
+  // the shell path owns the single PageShell root. Each is assigned only in its
+  // matching branch and read only through a mode-guarded helper.
+  let navRoot: Root | undefined;
+  let appRoot: Root | undefined;
+  let panelRoot: Root | undefined;
+  let shellRoot: Root | undefined;
 
-  const header = document.querySelector(".page > header");
-  if (!header) throw new Error(".page > header element not found");
-  // Drift fix: always target document.documentElement (landing's behavior).
-  // fellspiral set --header-height on .content-grid; the shared shell unifies
-  // on the root element.
-  const headerObserver = new ResizeObserver(([entry]) => {
-    document.documentElement.style.setProperty(
-      "--header-height",
-      `${entry.borderBoxSize[0].blockSize}px`,
-    );
-  });
-  headerObserver.observe(header);
-
-  const toggle = document.getElementById("panel-toggle");
-  if (!toggle) throw new Error("#panel-toggle element not found");
-  initPanelToggle(infoPanel, toggle);
+  // Shared: observe the page header so the --header-height CSS var tracks its
+  // box. Always targets document.documentElement (landing's behavior); the
+  // shared shell unifies fellspiral's old .content-grid target onto the root.
+  const observeHeader = (): ResizeObserver => {
+    const headerEl = document.querySelector(".page > header");
+    if (!headerEl) throw new Error(".page > header element not found");
+    const obs = new ResizeObserver(([entry]) => {
+      document.documentElement.style.setProperty(
+        "--header-height",
+        `${entry.borderBoxSize[0].blockSize}px`,
+      );
+    });
+    obs.observe(headerEl);
+    return obs;
+  };
 
   // Teardown list: destroy() unwinds everything in one place. Declared before
   // the router/auth wiring below so those can register their teardowns.
@@ -258,23 +278,165 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
   // async/no-match path, which keeps the immediate dispatch reconcile).
   const hydratedExtraRoute =
     entryExtraNode !== undefined && !(entryExtraNode instanceof Promise);
-  const navRoot = hydrateRoot(navMount, navElement(parsePath().path));
-  const appRoot = hydrateRoot(
-    app,
-    hydratedExtraRoute
-      ? createElement("div", null, entryExtraNode)
-      : homeElement(initialSlug),
-  );
-  const panelRoot = hydrateRoot(infoPanel, panelElement());
-  teardowns.push(() => navRoot.unmount());
-  teardowns.push(() => appRoot.unmount());
-  teardowns.push(() => panelRoot.unmount());
+  // The entry-route body, used to hydrate #app (legacy) or seed the PageShell
+  // body (shell). Identical derivation in both paths.
+  const initialAppBody: ReactNode = hydratedExtraRoute
+    ? createElement("div", null, entryExtraNode)
+    : homeElement(initialSlug);
+
+  // ── Shell-path state (used only when config.shell is present) ──────────────
+  const isShell = config.shell !== undefined;
+  // Panel open/close lives in plain closure state and drives React re-renders;
+  // initPanelToggle's imperative className writes would be clobbered by a
+  // PageShell re-render, so the shell path reimplements the toggle in React.
+  let panelOpen = false;
+  const panelId = config.shell?.panelId ?? "info-panel";
+  // The latest body node, so a panel toggle / auth change can re-render the
+  // single shell root reusing the current body (the shell tree carries nav,
+  // panel, and body together, unlike the legacy three independent roots).
+  let currentAppBody: ReactNode = initialAppBody;
+
+  // Home-route predicate, shared by dispatch and the shell hero gate.
+  const isHomePath = (path: string): boolean => path === "/" || path.startsWith("/post/");
+
+  // The PageShell nav `end` slot: the legacy nav-end chrome (home link + auth
+  // control), then the React panel toggle. Recomputed per render so it tracks
+  // panelOpen / currentUser / currentPath.
+  const togglePanel = (): void => {
+    panelOpen = !panelOpen;
+    renderShell(currentAppBody);
+  };
+  const navEndNode = (): ReactNode =>
+    createElement(
+      Fragment,
+      null,
+      createElement(BlogNavEnd, {
+        showHomeLink: config.showHomeLink,
+        showAuth: currentPath === "/admin",
+        user: currentUser,
+        onSignIn: () => void config.firebase.signIn(),
+        onSignOut: () => void config.firebase.signOut(),
+      }),
+      createElement(ContextPanelToggle, {
+        open: panelOpen,
+        controls: panelId,
+        onToggle: togglePanel,
+      }),
+    );
+
+  // The single ds PageShell tree for a given body. hero shows only on home.
+  const shellElement = (appBody: ReactNode): ReactNode =>
+    createElement(BlogPageShell, {
+      wordmark: config.shell!.wordmark,
+      tagline: config.shell!.tagline,
+      navLinks: config.navLinks,
+      current: currentPath,
+      navEnd: navEndNode(),
+      hero: isHomePath(currentPath) ? config.shell!.hero : undefined,
+      panelOpen,
+      panelId,
+      panelAriaLabel: config.shell!.panelAriaLabel,
+      panel: panelElement(),
+      children: appBody,
+    });
+  // Re-render the single shell root, tracking the latest body for toggle/auth
+  // re-renders. The mode guard guarantees shellRoot is assigned here.
+  function renderShell(appBody: ReactNode): void {
+    currentAppBody = appBody;
+    shellRoot!.render(shellElement(appBody));
+  }
+
+  // ── Render bootstrap: shell (single ds PageShell root) vs legacy three-root.
+  if (config.shell) {
+    // The router constructs synchronously over #app, so #app must exist first.
+    // Branch on content presence (NOT env): a prerendered/scaffolded PageShell
+    // stays on the hydrate path; a dev-empty mount commits synchronously via
+    // flushSync (createRoot().render() is otherwise async and #app would not
+    // exist when the router constructs).
+    const rootEl = document.getElementById(config.shell.mount);
+    if (!rootEl) throw new Error(`#${config.shell.mount} element not found`);
+    const tree = shellElement(initialAppBody);
+    if (rootEl.childElementCount > 0) {
+      shellRoot = hydrateRoot(rootEl, tree);
+    } else {
+      shellRoot = createRoot(rootEl);
+      flushSync(() => shellRoot!.render(tree));
+    }
+    teardowns.push(() => shellRoot!.unmount());
+
+    // Now that PageShell has committed, #app and the header exist.
+    const appEl = document.getElementById("app");
+    if (!appEl) throw new Error("#app element not found");
+    app = appEl;
+    headerObserver = observeHeader();
+
+    // Panel close behavior ported from components/panel-toggle.ts: Escape and
+    // outside-click set panelOpen=false and re-render (no imperative DOM writes
+    // that React would clobber). Removers registered in teardowns for destroy().
+    const onShellKeydown = (e: KeyboardEvent): void => {
+      if (e.key === "Escape" && panelOpen) {
+        panelOpen = false;
+        renderShell(currentAppBody);
+      }
+    };
+    const onShellOutsideClick = (e: MouseEvent): void => {
+      if (!panelOpen) return;
+      const target = e.target as HTMLElement;
+      const panelEl = document.getElementById(panelId);
+      if (panelEl?.contains(target)) return;
+      if (target.closest(".panel-toggle")) return;
+      panelOpen = false;
+      renderShell(currentAppBody);
+    };
+    document.addEventListener("keydown", onShellKeydown);
+    document.addEventListener("click", onShellOutsideClick);
+    teardowns.push(() => document.removeEventListener("keydown", onShellKeydown));
+    teardowns.push(() => document.removeEventListener("click", onShellOutsideClick));
+  } else {
+    // Legacy three-root path — VERBATIM behavior (order + error messages).
+    const navMount = document.getElementById("nav");
+    if (!navMount) throw new Error("#nav element not found");
+    const appEl = document.getElementById("app");
+    if (!appEl) throw new Error("#app element not found");
+    app = appEl;
+    const infoPanel = document.getElementById("info-panel");
+    if (!infoPanel) throw new Error("#info-panel element not found");
+
+    headerObserver = observeHeader();
+
+    const toggle = document.getElementById("panel-toggle");
+    if (!toggle) throw new Error("#panel-toggle element not found");
+    initPanelToggle(infoPanel, toggle);
+
+    // Hydrate the three roots over the prerendered DOM (before creating the
+    // router, which dispatches synchronously on construction).
+    navRoot = hydrateRoot(navMount, navElement(parsePath().path));
+    appRoot = hydrateRoot(app, initialAppBody);
+    panelRoot = hydrateRoot(infoPanel, panelElement());
+    teardowns.push(() => navRoot!.unmount());
+    teardowns.push(() => appRoot!.unmount());
+    teardowns.push(() => panelRoot!.unmount());
+  }
 
   const renderNav = (path: string): void => {
-    navRoot.render(navElement(path));
+    navRoot!.render(navElement(path));
   };
   const renderPanel = (): void => {
-    panelRoot.render(panelElement());
+    panelRoot!.render(panelElement());
+  };
+  // Unified body render: shell collapses nav+panel+body into one root; legacy
+  // renders the body root.
+  const renderBody = (appBody: ReactNode): void => {
+    if (isShell) renderShell(appBody);
+    else appRoot!.render(appBody);
+  };
+  // Force InfoPanelRegion to REMOUNT (bumped panelKey re-runs its blogroll
+  // fetch). Shell: re-render the single root reusing the current body; legacy:
+  // re-render the panel root.
+  const rerenderPanelRegion = (): void => {
+    panelKey++;
+    if (isShell) renderShell(currentAppBody);
+    else renderPanel();
   };
 
   // Load posts into the driver state (no longer returns HTML — React renders).
@@ -340,21 +502,24 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
     // three root.render() calls on the first dispatch; hydrateRoot already committed
     // the correct initial tree. Analytics and body-dataset side-effects still run
     // unconditionally (see onNavigate / trackPageView below).
-    if (!isFirstDispatch) renderNav(path); // first dispatch: nav already hydrated for entry path
+    // Shell path: nav + panel + body are ONE root, re-rendered together at the
+    // body-render point below via renderBody; the separate top-of-dispatch
+    // nav/panel renders are legacy-only.
+    if (!isShell && !isFirstDispatch) renderNav(path); // first dispatch: nav already hydrated for entry path
     config.onNavigate?.(path); // landing sets document.body.dataset.route; fellspiral omits
     config.firebase.trackPageView(path);
     // Centralized panel render: one per navigation, so entering/leaving a route
     // with an infoPanelContentForPath override (landing's /about) toggles
     // aboutContent. The blogroll effect's stable deps mean a same-path home→home
     // nav does NOT re-fetch; only an aboutContent toggle re-runs it.
-    if (!isFirstDispatch) renderPanel(); // first dispatch: panel already hydrated for entry path
+    if (!isShell && !isFirstDispatch) renderPanel(); // first dispatch: panel already hydrated for entry path
 
-    const isHome = path === "/" || path.startsWith("/post/");
+    const isHome = isHomePath(path);
     if (isHome) {
       const slug = path.startsWith("/post/") ? path.slice(6) : undefined;
       // First dispatch: #app is already hydrated with homeElement(initialSlug) —
       // same as all three roots above, skip to avoid redundant root.render().
-      if (!isFirstDispatch) appRoot.render(homeElement(slug));
+      if (!isFirstDispatch) renderBody(homeElement(slug));
       // SEO + home hooks (old homeRoute.afterRender).
       config.onHomeAfterRender?.(slug);
       updateOgMeta(
@@ -376,7 +541,7 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
           config.adminGroupId,
         );
         if (seq === navSeq) {
-          appRoot.render(
+          renderBody(
             createElement(AdminRegion, {
               user: currentUser,
               isAdmin: admin,
@@ -387,7 +552,7 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
       } catch (error) {
         if (!deferProgrammerError(error)) logError(error, { operation: "admin-group-check" });
         if (seq === navSeq) {
-          appRoot.render(
+          renderBody(
             createElement(
               Fragment,
               null,
@@ -415,7 +580,7 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
       try {
         const node = await extra.render(path);
         if (seq === navSeq) {
-          appRoot.render(createElement("div", null, node));
+          renderBody(createElement("div", null, node));
           // Run afterRender after React commits the body.
           queueMicrotask(() => {
             if (seq === navSeq) extra.afterRender?.(app, path);
@@ -429,7 +594,7 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
 
     // No match — createHistoryRouter falls back to route[0] (the home regex),
     // so treat an unmatched path as home for parity.
-    appRoot.render(homeElement());
+    renderBody(homeElement());
   }
 
   const router = createHistoryRouter(
@@ -450,7 +615,10 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
   async function refreshAfterAuthChange(): Promise<void> {
     const { path } = parsePath();
     currentPath = path;
-    renderNav(path);
+    // Shell: nav + panel are part of the single root re-rendered by the
+    // router.navigate() re-dispatch below, so skip the legacy-only eager
+    // nav/panel renders.
+    if (!isShell) renderNav(path);
     if (currentUser !== null) {
       await loadPosts(); // sign-in: fetch firestore posts (incl. drafts)
     } else {
@@ -459,7 +627,7 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
       postsErrorMsg = undefined;
     }
     router.navigate(); // re-dispatch → re-renders body (home shows new posts; admin re-checks)
-    renderPanel(); // re-render panel with new cachedPosts
+    if (!isShell) renderPanel(); // re-render panel with new cachedPosts
   }
 
   // Capture the auth-state unsubscribe so destroy() can tear it down; without
@@ -510,12 +678,7 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
   // behavior so an app whose initial fetch was app-check-blocked recovers.
   deferAppCheckInit(
     config.firebase.initAppCheck,
-    config.rehydrateOnAppCheck
-      ? () => {
-          panelKey++;
-          renderPanel();
-        }
-      : undefined,
+    config.rehydrateOnAppCheck ? rerenderPanelRegion : undefined,
   );
 
   // Click-to-top: a named handler so destroy() can remove it.
@@ -537,8 +700,7 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
       for (const teardown of teardowns) teardown();
     },
     forceInfoPanelRefresh(): void {
-      panelKey++;
-      renderPanel();
+      rerenderPanelRegion();
     },
   };
 }
