@@ -1,0 +1,187 @@
+#!/usr/bin/env bash
+# budget-apply — mutating half of the monthly merge workflow.
+#
+# Applies a categorization rule patch to the current encrypted snapshot, merges
+# the archived statements into a fresh immutable snapshot, publishes that
+# snapshot onto the `current` path, and re-reports residual uncategorized so the
+# SKILL.md dialog can decide whether to iterate. It is the sibling of the
+# read-only budget-sync (Unit 2): budget-sync produces /tmp/inspect.json and the
+# user-facing categorization dialog produces the patch spec; budget-apply then
+# patches, merges, publishes, and re-reports.
+#
+# Argument:
+#   $1  patch-spec path (optional; default /tmp/budget-patch.json). The JSON
+#       spec is authored by the SKILL.md dialog — this script only applies it.
+#
+# Publish via `cp -f`, NOT `mv` and NOT `ln -s`: the merged snapshot must REMAIN
+# in snapshotDir as immutable history while `current` becomes an equal real-file
+# copy of it. A fresh mtime on `current` is what triggers the hosted app's
+# external-change reload. A symlink is deliberately not used because `ln -s`
+# fails on the /mnt/g Google Drive mount — the copy keeps `current` a real file.
+#
+# stdout protocol:
+#   - one line naming the chosen binary path (auditability)
+#   - a summary table: one row per new statement (institution | new txn count |
+#     first date | last date | balance)
+#   - the residual uncategorized count, the new snapshot path, and a line
+#     confirming `current` now equals it (overwritten in place, fresh mtime)
+# Errors print to stderr as descriptive messages naming the offending path/var.
+#
+# Exit codes:
+#   0  patch + merge + publish + re-report all succeeded
+#   1  missing spec file, invalid config, missing dir/mount, missing `current`,
+#      unsupported platform, binary download failure, or missing password
+#   3  no-config — the per-user config file is absent (first-run signal); the
+#      SKILL.md branches on this to walk the user through creating the config.
+#   non-zero  a budget-etl binary call (patch / merge / report) failed; its own
+#      exit code propagates via set -e with its stderr surfaced. In particular
+#      `merge` HARD-ERRORS on any residual uncategorized transaction — the
+#      desired gate: a categorization gap stops the merge.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# --- Step 1: resolve the patch-spec argument --------------------------------
+SPEC="${1:-/tmp/budget-patch.json}"
+if [[ ! -f "$SPEC" ]]; then
+  echo "budget-apply: patch spec not found: $SPEC" >&2
+  echo "Author the patch spec via the categorization dialog first, or pass its path as the first argument." >&2
+  exit 1
+fi
+
+# --- Step 2: resolve config -------------------------------------------------
+# Capture budget-config-load's exit code tolerantly so we can distinguish the
+# no-config first-run signal (exit 0, stdout "no-config") from a present-but-
+# invalid config (exit 1, stderr already explained).
+set +e
+CFG=$("$SCRIPT_DIR/budget-config-load")
+cfg_rc=$?
+set -e
+
+if [[ "$CFG" == "no-config" ]]; then
+  echo "budget-apply: no per-user budget-etl config found." >&2
+  echo "Create \${XDG_CONFIG_HOME:-\$HOME/.config}/commons-systems/budget-etl.json" >&2
+  echo "with the four absolute paths: downloads, statements, snapshotDir, current." >&2
+  exit 3
+fi
+
+if [[ $cfg_rc -ne 0 ]]; then
+  echo "budget-apply: budget-config-load reported an invalid config — see the error above" >&2
+  exit 1
+fi
+
+downloads=$(jq -r '.downloads'    <<<"$CFG")
+statements=$(jq -r '.statements'  <<<"$CFG")
+snapshotDir=$(jq -r '.snapshotDir' <<<"$CFG")
+current=$(jq -r '.current'        <<<"$CFG")
+
+# --- Step 3: verify dirs / Drive mount --------------------------------------
+# Fail loudly naming the missing path before mutating anything. A missing
+# statements dir means a stale/unmounted Drive. No silent fallback — see
+# .claude/rules/code-style.md. Every path stays double-quoted (paths may
+# contain spaces, e.g. "My Drive").
+[[ -d "$downloads" ]]  || { echo "budget-apply: downloads dir missing: $downloads" >&2; exit 1; }
+[[ -d "$statements" ]] || { echo "budget-apply: Drive mount missing (statements): $statements" >&2; exit 1; }
+[[ -d "$(dirname "$current")" ]] || { echo "budget-apply: Drive mount missing (parent of current): $(dirname "$current")" >&2; exit 1; }
+[[ -d "$snapshotDir" ]] || [[ -d "$(dirname "$snapshotDir")" ]] || { echo "budget-apply: Drive mount missing (snapshotDir): $snapshotDir" >&2; exit 1; }
+
+# `current` is the INPUT to the patch — it must already exist. budget-sync
+# bootstraps it on first run; budget-apply never creates it.
+[[ -f "$current" ]] || { echo "budget-apply: no current snapshot at $current — run budget-sync first (it bootstraps current)." >&2; exit 1; }
+
+# --- Step 4: detect platform & resolve the binary ---------------------------
+# Ported from .claude/skills/budget/SKILL.md Steps 1-2.
+uname_sm="$(uname -sm)"
+case "$uname_sm" in
+  "Darwin arm64")   platform="darwin-arm64" ;;
+  "Darwin x86_64")  platform="darwin-amd64" ;;
+  "Linux x86_64")   platform="linux-amd64" ;;
+  *)
+    echo "budget-apply: your platform \`$uname_sm\` is not in the pre-built binary set (darwin-arm64, darwin-amd64, linux-amd64)." >&2
+    echo "Fork the project at https://github.com/natb1/commons.systems/fork and run /budget-parser <path> from your fork to build the tool from source." >&2
+    exit 1
+    ;;
+esac
+
+# First-match-wins binary resolution. CLAUDE_PLUGIN_ROOT may be unset.
+plugin_bin="${CLAUDE_PLUGIN_ROOT:-}/bin/budget-etl-$platform"
+cache_bin="$HOME/.cache/commons-systems/bin/budget-etl-$platform"
+
+if [[ -n "${CLAUDE_PLUGIN_ROOT:-}" && -x "$plugin_bin" ]]; then
+  BUDGET_ETL_BIN="$plugin_bin"
+elif [[ -x "$cache_bin" ]]; then
+  BUDGET_ETL_BIN="$cache_bin"
+else
+  mkdir -p "$HOME/.cache/commons-systems/bin"
+  if ! curl -fSL -o "$cache_bin" \
+      "https://github.com/natb1/commons.systems/releases/latest/download/budget-etl-$platform"; then
+    echo "budget-apply: failed to download budget-etl-$platform from GitHub Releases (see curl error above)" >&2
+    exit 1
+  fi
+  chmod +x "$cache_bin"
+  BUDGET_ETL_BIN="$cache_bin"
+fi
+
+echo "budget-apply: using binary $BUDGET_ETL_BIN"
+
+# --- Step 5: require BUDGET_ETL_PASSWORD ------------------------------------
+# The password is mandatory now that plaintext output is gone. The SKILL.md
+# owns the password UX — this script never prompts. The binary reads
+# BUDGET_ETL_PASSWORD from the environment itself; it is never passed as a flag.
+if [[ -z "${BUDGET_ETL_PASSWORD:-}" ]]; then
+  echo "budget-apply: BUDGET_ETL_PASSWORD is not set." >&2
+  echo "Every snapshot read/write is encrypted now that plaintext output is gone." >&2
+  echo "export BUDGET_ETL_PASSWORD=... before running budget-apply." >&2
+  exit 1
+fi
+
+# --- Step 6: apply the rule patch -------------------------------------------
+# patch reads the current snapshot's rules+transactions, applies the JSON spec,
+# and writes a new staged snapshot. Output MUST differ from input (the binary
+# errors otherwise), hence a distinct /tmp path.
+"$BUDGET_ETL_BIN" patch --input "$current" --spec "$SPEC" --output /tmp/stage1.enc.json
+
+# --- Step 7: merge statements into a fresh immutable snapshot ----------------
+# merge HARD-ERRORS if any transaction is still uncategorized — that is the
+# desired gate: a categorization gap stops the merge and set -e propagates the
+# binary's own exit code with its stderr explaining which transactions remain.
+TS=$(date +%Y-%m-%dT%H-%M-%S)
+OUT="$snapshotDir/budget-$TS.enc.json"
+"$BUDGET_ETL_BIN" merge --input /tmp/stage1.enc.json --dir "$statements" --output "$OUT"
+
+# --- Step 8: publish onto `current` -----------------------------------------
+# cp -f, NOT mv and NOT ln -s: the merged snapshot stays in snapshotDir as
+# immutable history while `current` becomes an equal real-file copy with a fresh
+# mtime (the fresh mtime triggers the hosted app's external-change reload). A
+# symlink is deliberately avoided because `ln -s` fails on the /mnt/g Google
+# Drive mount.
+cp -f "$OUT" "$current"
+
+# --- Step 9: re-report residual uncategorized -------------------------------
+# Re-report against the PATCHED stage1 (not the merged OUT), mirroring the
+# budget-etl source: the SKILL.md loop branches on this residual to decide
+# whether to iterate the categorization dialog. report exits 0 even with
+# uncategorized and writes no snapshot.
+"$BUDGET_ETL_BIN" report --input /tmp/stage1.enc.json --dir "$statements" --report /tmp/inspect.json
+
+# --- Step 10: summary table -------------------------------------------------
+# One row per new statement: institution | new txn count | first date | last
+# date | balance. date_range is a 2-element [first,last] array.
+echo "budget-apply: merge complete"
+echo ""
+printf '%-24s %10s %-12s %-12s %12s\n' "institution" "new txns" "first date" "last date" "balance"
+jq -r '
+  .new_statements[]
+  | [.institution, (.txn_count | tostring), .date_range[0], .date_range[1], (.balance | tostring)]
+  | @tsv
+' /tmp/inspect.json | while IFS=$'\t' read -r inst txns first last bal; do
+  printf '%-24s %10s %-12s %-12s %12s\n' "$inst" "$txns" "$first" "$last" "$bal"
+done
+
+residual=$(jq '.uncategorized | length' /tmp/inspect.json)
+echo ""
+echo "  residual uncategorized: $residual"
+echo "  new snapshot:           $OUT"
+echo "  current now equals it:  $current (overwritten in place, fresh mtime)"
+
+exit 0
