@@ -1,0 +1,60 @@
+/* Hero band — the canonical full-width amber promo band over a 3-up card grid,
+   consumed by the <Hero> DS primitive. Ported from landing's .landing-hero* family
+   (landing/src/style/theme.css). Distinct from hero.css's unrelated .hero chip family. */
+
+/* Full-width section between the sticky header and .content-grid so the sticky
+   sidebar begins after the hero. */
+.hero-band-section {
+  margin-block: var(--space-8);
+}
+
+.hero-band {
+  background: var(--accent);
+  color: var(--bg);
+  padding: var(--space-5) var(--space-6);
+  margin-block-end: var(--space-6);
+  text-align: center;
+}
+.hero-band-headline {
+  margin: 0;
+  font-weight: var(--weight-bold);
+  font-size: clamp(1.1rem, 3vw, 1.5rem);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-heading);
+}
+.hero-band-subline {
+  margin: var(--space-1) 0 0;
+  font-size: clamp(0.85rem, 2.2vw, 1rem);
+  opacity: 0.9;
+}
+.hero-band-cta {
+  margin: var(--space-1) 0 0;
+  font-size: clamp(0.85rem, 2.2vw, 1rem);
+}
+.hero-band-cta a {
+  color: inherit;
+  text-decoration: underline;
+}
+.hero-band-cta a:hover {
+  color: var(--bg);
+  opacity: 0.75;
+}
+.hero-band-cta a:focus-visible {
+  outline: 2px solid var(--bg);
+  outline-offset: 2px;
+}
+.hero-band-cta span {
+  opacity: 0.6;
+}
+
+.hero-band-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+@media (max-width: 768px) {
+  .hero-band-grid {
+    grid-template-columns: 1fr;
+  }
+}
