@@ -18,7 +18,7 @@ import { getOwnerReminders, getOwnerQueueMetrics, getDemoReminders, getDemoQueue
 import { getDemoIntentionTree } from "./intention-tree.js";
 import { getOwnerSamples, getDemoSamples } from "./usage-data.js";
 import { getOwnerIssueSamples, getDemoIssueSamples } from "./issue-data.js";
-import { getOwnerAuditAggregates, getDemoAuditAggregates } from "./audit-data.js";
+import { getOwnerTopicUsage, getDemoTopicUsage } from "./topic-usage-data.js";
 import { getDemoProjectSignals, getOwnerProjectSignals } from "./project-signals-data.js";
 
 import { selectLatestSample } from "./usage-samples.js";
@@ -30,7 +30,7 @@ import { CapacityBand } from "./components/CapacityBand.js";
 import { PacePanel } from "./components/PacePanel.js";
 import { HistoryBand } from "./components/HistoryBand.js";
 import { BacklogPanel } from "./components/BacklogPanel.js";
-import { AuditPanel } from "./components/AuditPanel.js";
+import { TopicUsagePanel } from "./components/TopicUsagePanel.js";
 import { RemindersPanel } from "./components/RemindersPanel.js";
 import { QueueMetricsPanel } from "./components/QueueMetricsPanel.js";
 import { ParkedIssuesPanel } from "./components/ParkedIssuesPanel.js";
@@ -83,15 +83,15 @@ export function Dashboard({ user }: DashboardProps) {
   // over the module-import `db`/`NAMESPACE`; re-created each render, but only ever
   // referenced inside effects below, so the identity churn is harmless.
   async function loadPanelData(currentUser: User): Promise<PanelData> {
-    const [samples, reminders, queueMetrics, issueSamples, auditAggregates, projectSignals] = await Promise.all([
+    const [samples, reminders, queueMetrics, issueSamples, topicUsage, projectSignals] = await Promise.all([
       getOwnerSamples(db, NAMESPACE, currentUser),
       getOwnerReminders(db, NAMESPACE, currentUser),
       getOwnerQueueMetrics(db, NAMESPACE, currentUser),
       getOwnerIssueSamples(db, NAMESPACE, currentUser),
-      getOwnerAuditAggregates(db, NAMESPACE, currentUser),
+      getOwnerTopicUsage(db, NAMESPACE, currentUser),
       getOwnerProjectSignals(db, NAMESPACE, currentUser),
     ]);
-    return { samples, reminders, queueMetrics, issueSamples, auditAggregates, projectSignals };
+    return { samples, reminders, queueMetrics, issueSamples, topicUsage, projectSignals };
   }
 
   // Five-collection parallel Firestore load for the owner tier, with the
@@ -176,7 +176,9 @@ export function Dashboard({ user }: DashboardProps) {
       reminders: getDemoReminders(),
       queueMetrics: getDemoQueueMetrics(),
       issueSamples: getDemoIssueSamples(),
-      auditAggregates: getDemoAuditAggregates(),
+      // Demo tier is unauthenticated; the topic-usage list rule requires auth, so
+      // there is no demo source — the panel renders empty.
+      topicUsage: getDemoTopicUsage(),
       projectSignals: getDemoProjectSignals(),
     }),
     [],
@@ -185,7 +187,7 @@ export function Dashboard({ user }: DashboardProps) {
   // Resolve the active panel data for demo / owner. (The error tier returns
   // early below; these hooks still run unconditionally to satisfy rules-of-hooks.)
   const data = state.tier === "owner" ? state.data : demoData;
-  const { samples, reminders, queueMetrics, issueSamples, auditAggregates, projectSignals } = data;
+  const { samples, reminders, queueMetrics, issueSamples, topicUsage, projectSignals } = data;
 
   // The two time-sensitive panels (capacity, reminders) are memoized as elements
   // keyed on a content signature: each panel's now-derived output (clocks,
@@ -199,7 +201,7 @@ export function Dashboard({ user }: DashboardProps) {
   // The non-time-sensitive panels are memoized on their data only, so a `now`
   // tick does not rebuild them — matching the vanilla "re-render only the
   // time-sensitive panels" behavior. Full-width panels (history, backlog,
-  // audit) carry "panel-grid-full" on their own root — exactly as the vanilla
+  // topic-usage) carry "panel-grid-full" on their own root — exactly as the vanilla
   // buildPanelElement did with `el.classList.add` — so each stays a direct
   // grid child and the grid's margin-zeroing selectors keep matching.
   const paceEl = useMemo(() => <PacePanel samples={samples} />, [samples]);
@@ -211,9 +213,9 @@ export function Dashboard({ user }: DashboardProps) {
     () => <BacklogPanel samples={issueSamples} className="panel-grid-full" />,
     [issueSamples],
   );
-  const auditEl = useMemo(
-    () => <AuditPanel aggregates={auditAggregates} className="panel-grid-full" />,
-    [auditAggregates],
+  const topicUsageEl = useMemo(
+    () => <TopicUsagePanel docs={topicUsage} className="panel-grid-full" />,
+    [topicUsage],
   );
   const queueEl = useMemo(() => <QueueMetricsPanel metrics={queueMetrics} />, [queueMetrics]);
   const projectSignalsEl = useMemo(
@@ -247,7 +249,7 @@ export function Dashboard({ user }: DashboardProps) {
   // The intention tree is the project's single hierarchy — identical for every
   // viewer, build-time data with no Firestore/owner tier and no time dependence —
   // so it is built once here, never threaded through the owner Promise.all or
-  // PanelData. Rendered full-width like history/backlog/audit.
+  // PanelData. Rendered full-width like history/backlog/topic-usage.
   const intentionTreeEl = useMemo(
     () => <IntentionTreePanel view={getDemoIntentionTree()} className="panel-grid-full" />,
     [],
@@ -275,14 +277,14 @@ export function Dashboard({ user }: DashboardProps) {
         </p>
       )}
       {/* Panel order matches the vanilla PANELS registry:
-          capacity, pace, history, backlog, audit, reminders, queue-metrics,
+          capacity, pace, history, backlog, topic-usage, reminders, queue-metrics,
           parked; plus the build-time intention tree (full-width, appended last). */}
       <div className="panel-grid">
         {capacityEl}
         {paceEl}
         {historyEl}
         {backlogEl}
-        {auditEl}
+        {topicUsageEl}
         {remindersEl}
         {queueEl}
         {parkedEl}

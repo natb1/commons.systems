@@ -21,7 +21,7 @@ const getOwnerSamples = vi.fn();
 const getOwnerReminders = vi.fn();
 const getOwnerQueueMetrics = vi.fn();
 const getOwnerIssueSamples = vi.fn();
-const getOwnerAuditAggregates = vi.fn();
+const getOwnerTopicUsage = vi.fn();
 const getOwnerProjectSignals = vi.fn();
 
 vi.mock("../src/usage-data.js", async (importOriginal) => ({
@@ -37,9 +37,9 @@ vi.mock("../src/issue-data.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/issue-data.js")>()),
   getOwnerIssueSamples: (...args: unknown[]) => getOwnerIssueSamples(...args),
 }));
-vi.mock("../src/audit-data.js", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../src/audit-data.js")>()),
-  getOwnerAuditAggregates: (...args: unknown[]) => getOwnerAuditAggregates(...args),
+vi.mock("../src/topic-usage-data.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/topic-usage-data.js")>()),
+  getOwnerTopicUsage: (...args: unknown[]) => getOwnerTopicUsage(...args),
 }));
 vi.mock("../src/project-signals-data.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/project-signals-data.js")>()),
@@ -60,7 +60,7 @@ const remindersSpy = vi.fn();
 const paceSpy = vi.fn();
 const historySpy = vi.fn();
 const backlogSpy = vi.fn();
-const auditSpy = vi.fn();
+const topicUsageSpy = vi.fn();
 const queueSpy = vi.fn();
 const parkedSpy = vi.fn();
 
@@ -94,10 +94,10 @@ vi.mock("../src/components/BacklogPanel.js", () => ({
     return <section className="backlog-spy" />;
   },
 }));
-vi.mock("../src/components/AuditPanel.js", () => ({
-  AuditPanel: (props: unknown) => {
-    auditSpy(props);
-    return <section className="audit-spy" />;
+vi.mock("../src/components/TopicUsagePanel.js", () => ({
+  TopicUsagePanel: (props: unknown) => {
+    topicUsageSpy(props);
+    return <section className="topic-usage-spy" />;
   },
 }));
 vi.mock("../src/components/QueueMetricsPanel.js", () => ({
@@ -191,7 +191,7 @@ describe("Dashboard tick: time-sensitive panels skip re-render on an unchanged t
     getOwnerReminders.mockResolvedValue([farReminder]);
     getOwnerQueueMetrics.mockResolvedValue(queueMetricsFixture);
     getOwnerIssueSamples.mockResolvedValue([]);
-    getOwnerAuditAggregates.mockResolvedValue([]);
+    getOwnerTopicUsage.mockResolvedValue([]);
     getOwnerProjectSignals.mockResolvedValue(null);
   });
 
@@ -307,13 +307,13 @@ describe("Dashboard refresh: unchanged-content refresh re-renders no panel (#203
     getOwnerReminders.mockResolvedValueOnce([farReminder]);
     getOwnerQueueMetrics.mockResolvedValueOnce(refreshQueueFixture);
     getOwnerIssueSamples.mockResolvedValueOnce([]);
-    getOwnerAuditAggregates.mockResolvedValueOnce([]);
+    getOwnerTopicUsage.mockResolvedValueOnce([]);
     // Refresh cycle: same content, all-new references.
     getOwnerSamples.mockResolvedValueOnce([cloneSample(farSample)]);
     getOwnerReminders.mockResolvedValueOnce([cloneReminder(farReminder)]);
     getOwnerQueueMetrics.mockResolvedValueOnce(cloneQueue(refreshQueueFixture));
     getOwnerIssueSamples.mockResolvedValueOnce([]);
-    getOwnerAuditAggregates.mockResolvedValueOnce([]);
+    getOwnerTopicUsage.mockResolvedValueOnce([]);
 
     render(<Dashboard user={fakeUser} />);
     await flushOwnerLoad();
@@ -324,7 +324,7 @@ describe("Dashboard refresh: unchanged-content refresh re-renders no panel (#203
       pace: paceSpy.mock.calls.length,
       history: historySpy.mock.calls.length,
       backlog: backlogSpy.mock.calls.length,
-      audit: auditSpy.mock.calls.length,
+      topicUsage: topicUsageSpy.mock.calls.length,
       queue: queueSpy.mock.calls.length,
       parked: parkedSpy.mock.calls.length,
     };
@@ -340,7 +340,7 @@ describe("Dashboard refresh: unchanged-content refresh re-renders no panel (#203
     expect(paceSpy.mock.calls.length).toBe(counts.pace);
     expect(historySpy.mock.calls.length).toBe(counts.history);
     expect(backlogSpy.mock.calls.length).toBe(counts.backlog);
-    expect(auditSpy.mock.calls.length).toBe(counts.audit);
+    expect(topicUsageSpy.mock.calls.length).toBe(counts.topicUsage);
     expect(queueSpy.mock.calls.length).toBe(counts.queue);
     expect(parkedSpy.mock.calls.length).toBe(counts.parked);
   });
@@ -354,7 +354,7 @@ describe("Dashboard refresh: unchanged-content refresh re-renders no panel (#203
     getOwnerReminders.mockResolvedValueOnce([farReminder]);
     getOwnerQueueMetrics.mockResolvedValueOnce(refreshQueueFixture);
     getOwnerIssueSamples.mockResolvedValueOnce([]);
-    getOwnerAuditAggregates.mockResolvedValueOnce([]);
+    getOwnerTopicUsage.mockResolvedValueOnce([]);
     // Refresh cycle: every collection unchanged (new refs) EXCEPT issueSamples,
     // which gains content.
     getOwnerSamples.mockResolvedValueOnce([cloneSample(farSample)]);
@@ -363,7 +363,7 @@ describe("Dashboard refresh: unchanged-content refresh re-renders no panel (#203
     getOwnerIssueSamples.mockResolvedValueOnce([
       { sampledAt: new Date(BASE - 2 * DAY), openSecurity: 1, openBug: 2, openEnhancement: 3, openOther: 4, groupId: "group-abc" },
     ]);
-    getOwnerAuditAggregates.mockResolvedValueOnce([]);
+    getOwnerTopicUsage.mockResolvedValueOnce([]);
 
     render(<Dashboard user={fakeUser} />);
     await flushOwnerLoad();
@@ -374,7 +374,7 @@ describe("Dashboard refresh: unchanged-content refresh re-renders no panel (#203
       pace: paceSpy.mock.calls.length,
       history: historySpy.mock.calls.length,
       backlog: backlogSpy.mock.calls.length,
-      audit: auditSpy.mock.calls.length,
+      topicUsage: topicUsageSpy.mock.calls.length,
       queue: queueSpy.mock.calls.length,
       parked: parkedSpy.mock.calls.length,
     };
@@ -388,7 +388,7 @@ describe("Dashboard refresh: unchanged-content refresh re-renders no panel (#203
     expect(remindersSpy.mock.calls.length).toBe(counts.reminders);
     expect(paceSpy.mock.calls.length).toBe(counts.pace);
     expect(historySpy.mock.calls.length).toBe(counts.history);
-    expect(auditSpy.mock.calls.length).toBe(counts.audit);
+    expect(topicUsageSpy.mock.calls.length).toBe(counts.topicUsage);
     expect(queueSpy.mock.calls.length).toBe(counts.queue);
     expect(parkedSpy.mock.calls.length).toBe(counts.parked);
   });
