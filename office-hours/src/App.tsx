@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import type { User } from "firebase/auth";
-import { Nav } from "@commons-systems/ds";
-import { FOOTER_HTML } from "@commons-systems/components/footer";
+import { PageShell } from "@commons-systems/ds";
 
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
 import { logError } from "@commons-systems/errorutil/log";
@@ -37,17 +36,14 @@ export function App() {
   }, []);
 
   return (
-    <div className="page">
-      <header>
-        <h1>Office Hours</h1>
-        <Nav links={[]} end={<NavControls user={user} />} />
-      </header>
-      <div className="content-grid">
-        <main id="app">
-          <Dashboard user={user} />
-        </main>
-      </div>
-      <footer dangerouslySetInnerHTML={{ __html: FOOTER_HTML }} />
-    </div>
+    <PageShell
+      wordmark="Office Hours"
+      navLinks={[]}
+      navEnd={<NavControls user={user} />}
+    >
+      <main id="app">
+        <Dashboard user={user} />
+      </main>
+    </PageShell>
   );
 }
