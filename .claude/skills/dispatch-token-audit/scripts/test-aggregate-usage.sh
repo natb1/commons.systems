@@ -1155,5 +1155,148 @@ assert_eq "freeform: window.sidecar_eligible == 0 (other session excluded)" "0" 
 
 rm -rf "$FREEFORM_ROOT"
 
+# ---------------------------------------------------------------------------
+# (a) --day window respects BOTH bounds (#2505). ISOLATED fixture: three worker
+# transcripts whose mtimes straddle a fixed historical target day. The find is
+# bounded below by SINCE="<day> 00:00:00" and above by "! -newermt <day+1
+# 00:00:00>", so only the within-day file is scanned. Pick a fixed past day so
+# the test is deterministic; touch -d sets whole-second (.000) mtimes clear of
+# the boundary instants.
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "--- (a) --day window respects both bounds (#2505) ---"
+
+DAY_ROOT=$(mktemp -d)
+trap 'rm -rf "$DAY_ROOT" "$FAKE_WRITER_DIR"; teardown' EXIT INT TERM
+day_worktree="$DAY_ROOT/-home-x-worktrees-2505-day"
+mkdir -p "$day_worktree"
+
+TARGET_DAY="2025-06-15"
+# Three worker sessions; each a minimal worker transcript with nonzero usage so a
+# scanned session shows up in totals.
+for s in before within after; do
+  day_jsonl="$day_worktree/sess-$s.jsonl"
+  printf '%s\n' '{"type":"user","message":{"content":"<command-name>/plan-issue</command-name>"}}' \
+    >> "$day_jsonl"
+  printf '%s\n' '{"type":"assistant","attributionSkill":"plan-implement","isSidechain":false,"gitBranch":"2505-day","message":{"model":"claude-opus-4-8","usage":{"input_tokens":100,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}}' \
+    >> "$day_jsonl"
+  jq . "$day_jsonl" >/dev/null
+done
+# mtimes: before = day-1 noon (excluded), within = day noon (included),
+# after = day+1 noon (> UNTIL = day+1 00:00:00, excluded).
+touch -d "2025-06-14 12:00:00" "$day_worktree/sess-before.jsonl"
+touch -d "2025-06-15 12:00:00" "$day_worktree/sess-within.jsonl"
+touch -d "2025-06-16 12:00:00" "$day_worktree/sess-after.jsonl"
+
+OUT_DAY=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$DAY_ROOT"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --day "$TARGET_DAY"
+)
+assert_eq "day: only within-day file scanned (files_scanned==1)" "1" \
+  "$(jq '.window.files_scanned' <<<"$OUT_DAY")"
+assert_eq "day: only within-day session counted (totals.sessions==1)" "1" \
+  "$(jq '.totals.sessions' <<<"$OUT_DAY")"
+assert_eq "day: the within session is the one scanned" "sess-within" \
+  "$(jq -r '.sessions[0].id' <<<"$OUT_DAY")"
+assert_eq "day: window.since lower bound" "2025-06-15 00:00:00" \
+  "$(jq -r '.window.since' <<<"$OUT_DAY")"
+assert_eq "day: window.until upper bound (day+1)" "2025-06-16 00:00:00" \
+  "$(jq -r '.window.until' <<<"$OUT_DAY")"
+
+rm -rf "$DAY_ROOT"
+
+# ---------------------------------------------------------------------------
+# (b) --exclude-sidecar-sessions drops a sidecar session, keeps it when the flag
+# is absent (#2505). ISOLATED fixture: two worker sessions, both with NO artifact
+# (no .dispatch-stamp.json), so each resolves to topic "other" and type "none".
+# sess-drop has a sibling .file-issue-attribution.json; sess-keep does not.
+#   WITHOUT the flag: both sessions contribute (input 1000 + 2000 = 3000).
+#   WITH    the flag: only sess-keep contributes (input 1000).
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "--- (b) --exclude-sidecar-sessions drops sidecar session (#2505) ---"
+
+SIDE_ROOT=$(mktemp -d)
+trap 'rm -rf "$SIDE_ROOT" "$FAKE_WRITER_DIR"; teardown' EXIT INT TERM
+side_worktree="$SIDE_ROOT/-home-x-worktrees-2505-sidecar"
+mkdir -p "$side_worktree"
+
+# sess-keep: input 1000 ; sess-drop: input 2000. Both workers, no artifact.
+keep_jsonl="$side_worktree/sess-keep.jsonl"
+printf '%s\n' '{"type":"user","message":{"content":"<command-name>/file-issue</command-name>"}}' \
+  >> "$keep_jsonl"
+printf '%s\n' '{"type":"assistant","attributionSkill":"plan-implement","isSidechain":false,"gitBranch":"2505-sidecar","message":{"model":"claude-opus-4-8","usage":{"input_tokens":1000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}}' \
+  >> "$keep_jsonl"
+jq . "$keep_jsonl" >/dev/null
+
+drop_jsonl="$side_worktree/sess-drop.jsonl"
+printf '%s\n' '{"type":"user","message":{"content":"<command-name>/file-issue</command-name>"}}' \
+  >> "$drop_jsonl"
+printf '%s\n' '{"type":"assistant","attributionSkill":"plan-implement","isSidechain":false,"gitBranch":"2505-sidecar","message":{"model":"claude-opus-4-8","usage":{"input_tokens":2000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}}' \
+  >> "$drop_jsonl"
+jq . "$drop_jsonl" >/dev/null
+
+# Sidecar sibling for sess-drop only — the file-issue attribution marker.
+printf '%s\n' '{"chosen_topics":["dispatch"],"session_id":"sess-drop"}' \
+  > "$side_worktree/sess-drop.file-issue-attribution.json"
+jq . "$side_worktree/sess-drop.file-issue-attribution.json" >/dev/null
+
+touch "$keep_jsonl" "$drop_jsonl"
+
+# WITHOUT the flag: both sessions land in by_topic.other / by_type.none.
+OUT_SIDE_OFF=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$SIDE_ROOT"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
+)
+assert_eq "sidecar OFF: both sessions counted (totals.sessions==2)" "2" \
+  "$(jq '.totals.sessions' <<<"$OUT_SIDE_OFF")"
+assert_eq "sidecar OFF: by_topic.other.input == 1000+2000" "3000" \
+  "$(jq '.by_topic.other.input' <<<"$OUT_SIDE_OFF")"
+assert_eq "sidecar OFF: by_type.none.input == 1000+2000" "3000" \
+  "$(jq '.by_type.none.input' <<<"$OUT_SIDE_OFF")"
+
+# WITH the flag: sess-drop excluded; only sess-keep contributes.
+OUT_SIDE_ON=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$SIDE_ROOT"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7 --exclude-sidecar-sessions
+)
+assert_eq "sidecar ON: only sess-keep counted (totals.sessions==1)" "1" \
+  "$(jq '.totals.sessions' <<<"$OUT_SIDE_ON")"
+assert_eq "sidecar ON: the kept session is sess-keep" "sess-keep" \
+  "$(jq -r '.sessions[0].id' <<<"$OUT_SIDE_ON")"
+assert_eq "sidecar ON: by_topic.other.input == 1000 (sess-drop dropped)" "1000" \
+  "$(jq '.by_topic.other.input' <<<"$OUT_SIDE_ON")"
+assert_eq "sidecar ON: by_type.none.input == 1000 (sess-drop dropped)" "1000" \
+  "$(jq '.by_type.none.input' <<<"$OUT_SIDE_ON")"
+
+rm -rf "$SIDE_ROOT"
+
+# ---------------------------------------------------------------------------
+# (c) --day / --days mutual exclusivity and bad --day format both exit 2 (#2505).
+# rc captured with the subshell idiom (a bare $(...) under set -e would abort the
+# suite on the intended non-zero exit).
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "--- (c) --day/--days mutual exclusion + bad format exit 2 (#2505) ---"
+
+if ( bash "$SCRIPT_DIR/aggregate-usage.sh" --day 2025-06-15 --days 7 >/dev/null 2>&1 ); then
+  rc_mx1=0; else rc_mx1=$?; fi
+assert_eq "mutual-exclusion: --day then --days exits 2" "2" "$rc_mx1"
+
+if ( bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7 --day 2025-06-15 >/dev/null 2>&1 ); then
+  rc_mx2=0; else rc_mx2=$?; fi
+assert_eq "mutual-exclusion: --days then --day exits 2 (other order)" "2" "$rc_mx2"
+
+if ( bash "$SCRIPT_DIR/aggregate-usage.sh" --day badformat >/dev/null 2>&1 ); then
+  rc_bad=0; else rc_bad=$?; fi
+assert_eq "bad-format: --day badformat exits 2" "2" "$rc_bad"
+
+if ( bash "$SCRIPT_DIR/aggregate-usage.sh" --day 2025-13-40 >/dev/null 2>&1 ); then
+  rc_cal=0; else rc_cal=$?; fi
+assert_eq "bad-format: --day with invalid calendar date exits 2" "2" "$rc_cal"
+
 report_results
 exit $FAIL
