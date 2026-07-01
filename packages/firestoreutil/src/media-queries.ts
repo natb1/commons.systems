@@ -12,7 +12,7 @@ export function createMediaQueries<T extends { id: string; addedAt: string }>(
   const path = nsCollectionPath(namespace, collectionName);
 
   async function getPublicMedia(): Promise<T[]> {
-    const q = query(collection(db, path), where("publicDomain", "==", true));
+    const q = query(collection(db, path), where("publicDomain", "==", true)); // query-bounds-ok: shared media factory returns the full public library; pagination is a product decision tracked under #2686
     const snapshot = await getDocs(q);
     const items = snapshot.docs.map((docSnap) => toItem(docSnap.id, docSnap.data()));
     items.sort((a, b) => b.addedAt.localeCompare(a.addedAt));
@@ -20,7 +20,7 @@ export function createMediaQueries<T extends { id: string; addedAt: string }>(
   }
 
   async function getUserMedia(email: string): Promise<T[]> {
-    const q = query(collection(db, path), where("memberEmails", "array-contains", email));
+    const q = query(collection(db, path), where("memberEmails", "array-contains", email)); // query-bounds-ok: shared media factory returns the full user set; pagination is a product decision tracked under #2686
     const snapshot = await getDocs(q);
     const items = snapshot.docs.map((docSnap) => toItem(docSnap.id, docSnap.data()));
     items.sort((a, b) => b.addedAt.localeCompare(a.addedAt));
