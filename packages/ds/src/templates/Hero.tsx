@@ -24,6 +24,47 @@ export interface HeroProps {
   "aria-label"?: string;
 }
 
+function renderCard(card: HeroCard, key: number) {
+  const cardClassName = [
+    "hero-band-card",
+    card.className,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const contents = (
+    <>
+      {card.media !== undefined && (
+        <span className="hero-band-card-media">{card.media}</span>
+      )}
+      <span className="hero-band-card-name">{card.name}</span>
+      <p className="hero-band-card-problem">{card.problem}</p>
+    </>
+  );
+
+  if (card.href !== undefined) {
+    const anchorProps: AnchorHTMLAttributes<HTMLAnchorElement> = {
+      href: card.href,
+    };
+    return (
+      <Card
+        key={key}
+        as="a"
+        interactive
+        className={cardClassName}
+        {...anchorProps}
+      >
+        {contents}
+      </Card>
+    );
+  }
+  return (
+    <Card key={key} className={cardClassName}>
+      {contents}
+    </Card>
+  );
+}
+
 export function Hero(props: HeroProps) {
   const {
     headline,
@@ -34,47 +75,6 @@ export function Hero(props: HeroProps) {
     overflowLabel,
     "aria-label": ariaLabel,
   } = props;
-
-  function renderCard(card: HeroCard, key: number) {
-    const cardClassName = [
-      "hero-band-card",
-      card.className,
-    ]
-      .filter(Boolean)
-      .join(" ");
-
-    const contents = (
-      <>
-        {card.media !== undefined && (
-          <span className="hero-band-card-media">{card.media}</span>
-        )}
-        <span className="hero-band-card-name">{card.name}</span>
-        <p className="hero-band-card-problem">{card.problem}</p>
-      </>
-    );
-
-    if (card.href !== undefined) {
-      const anchorProps: AnchorHTMLAttributes<HTMLAnchorElement> = {
-        href: card.href,
-      };
-      return (
-        <Card
-          key={key}
-          as="a"
-          interactive
-          className={cardClassName}
-          {...anchorProps}
-        >
-          {contents}
-        </Card>
-      );
-    }
-    return (
-      <Card key={key} className={cardClassName}>
-        {contents}
-      </Card>
-    );
-  }
 
   return (
     <section className="hero-band-section" aria-label={ariaLabel ?? "Featured"}>
