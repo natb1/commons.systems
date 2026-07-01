@@ -166,7 +166,7 @@ function spawnNode(args: string[], stdin?: string): Promise<string> {
 }
 
 /** Default topic-usage runner: `topic-usage-writer.mjs --dry-run` (stdout JSON array). */
-export function defaultRunTopicUsage(): Promise<string> {
+function defaultRunTopicUsage(): Promise<string> {
   return spawnNode([TOPIC_USAGE_WRITER, "--dry-run"]);
 }
 
@@ -199,7 +199,7 @@ export async function runUsageSampleWriter(payloadJson: string): Promise<UsageSa
  * built on `runUsageSampleWriter`). Absent that payload there is nothing to
  * sample, so the producer starts/continues the series without a new point.
  */
-export function defaultSampleUsage(): Promise<UsageSample | null> {
+function defaultSampleUsage(): Promise<UsageSample | null> {
   return Promise.resolve(null);
 }
 
@@ -208,7 +208,7 @@ export function defaultSampleUsage(): Promise<UsageSample | null> {
  * `$DISPATCH_AGENTS_SNAPSHOT` override). Cheap and fail-soft — any error yields
  * `{}` so the snapshot still produces. Needs the host network at runtime.
  */
-export async function defaultProbeChainHealth(): Promise<ChainHealth> {
+async function defaultProbeChainHealth(): Promise<ChainHealth> {
   try {
     const override = process.env.DISPATCH_AGENTS_SNAPSHOT;
     // Prefer the env snapshot when present; otherwise shell `claude agents --json`.

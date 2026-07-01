@@ -22,7 +22,7 @@ export const CURRENT_FILENAME = "office-hours-current.benc";
 
 /** Prefix for the immutable, timestamped history files. */
 export const HISTORY_PREFIX = "office-hours-";
-export const HISTORY_SUFFIX = ".benc";
+const HISTORY_SUFFIX = ".benc";
 
 export interface WriteSnapshotArgs {
   /** Directory the encrypted snapshot is written to. Must already exist. */

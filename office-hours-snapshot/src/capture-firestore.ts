@@ -20,13 +20,13 @@
 import type { Firestore } from "firebase-admin/firestore";
 
 /** One `bulkWriter().set(ref, payload)` record, keyed back to its doc id. */
-export interface CapturedBulkSet {
+interface CapturedBulkSet {
   id: string;
   payload: Record<string, unknown>;
 }
 
 /** Read-back surface over everything the cores wrote. */
-export interface Captured {
+interface Captured {
   /** Payload written via `doc(path).set()` or `collection(c).doc(id).set()` (keyed by full path). */
   doc(path: string): Record<string, unknown> | undefined;
   /** Payloads appended via `collection(path).add()`, in insertion order. */

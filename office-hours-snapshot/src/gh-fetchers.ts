@@ -52,7 +52,7 @@ function truncate(text: string, max = 200): string {
  * Default runner: spawns the real `gh` CLI via execFile (argv array, no shell).
  * Rejects with a clear Error (including stderr) on any non-zero exit.
  */
-export const defaultGhRunner: GhRunner = (args) =>
+const defaultGhRunner: GhRunner = (args) =>
   new Promise((resolve, reject) => {
     execFile(
       "gh",

@@ -38,17 +38,17 @@ import type { TopicUsageDoc } from "../../office-hours/src/topic-usage.js";
  * replacing every `Date` (at any depth) with an ISO `string`. Reuses the
  * office-hours domain types rather than redefining their field shapes.
  */
-export type IsoDates<T> =
+type IsoDates<T> =
   T extends Date ? string :
   T extends (infer U)[] ? IsoDates<U>[] :
   T extends object ? { [K in keyof T]: IsoDates<T[K]> } :
   T;
 
-export type SerializedUsageSample = IsoDates<UsageSample>;
-export type SerializedIssueSample = IsoDates<IssueSample>;
-export type SerializedReminder = IsoDates<Reminder>;
-export type SerializedQueueMetrics = IsoDates<QueueMetricsSnapshot>;
-export type SerializedProjectSignals = IsoDates<ProjectSignalsSnapshot>;
+type SerializedUsageSample = IsoDates<UsageSample>;
+type SerializedIssueSample = IsoDates<IssueSample>;
+type SerializedReminder = IsoDates<Reminder>;
+type SerializedQueueMetrics = IsoDates<QueueMetricsSnapshot>;
+type SerializedProjectSignals = IsoDates<ProjectSignalsSnapshot>;
 
 // ---------------------------------------------------------------------------
 // Snapshot metadata types
@@ -73,7 +73,7 @@ export interface ChainHealth {
  * the N actually applied so the reader can tell a truncated series from a short
  * one.
  */
-export interface SnapshotWindow {
+interface SnapshotWindow {
   samples: number;
   issueSamples: number;
 }

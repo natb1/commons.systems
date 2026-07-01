@@ -32,7 +32,7 @@ export interface LoadConfigOptions {
 }
 
 /** Resolved Google OAuth credential triple, or null when none is configured. */
-export interface GoogleCreds {
+interface GoogleCreds {
   clientId: string;
   clientSecret: string;
   refreshToken: string;
