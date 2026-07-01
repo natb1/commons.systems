@@ -19,7 +19,7 @@ vi.mock("firebase/firestore", () => ({
 import { boundedQuery } from "../src/bounded-query";
 import type { Firestore } from "firebase/firestore";
 
-const mockDb = { type: "mock-firestore" } as unknown as Firestore;
+const mockDb = { type: "mock-firestore" } as unknown as Firestore; // type-safety-ok: test mock — no real Firestore instance available in unit tests
 const path = "test/ns/items";
 
 describe("boundedQuery", () => {

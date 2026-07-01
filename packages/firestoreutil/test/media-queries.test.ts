@@ -20,8 +20,8 @@ import { createMediaQueries } from "../src/media-queries";
 import type { Firestore } from "firebase/firestore";
 import type { Namespace } from "../src/namespace";
 
-const mockDb = { type: "mock-firestore" } as unknown as Firestore;
-const NAMESPACE = "test/ns" as Namespace;
+const mockDb = { type: "mock-firestore" } as unknown as Firestore; // type-safety-ok: test mock — no real Firestore instance available in unit tests
+const NAMESPACE = "test/ns" as Namespace; // type-safety-ok: test fixture — casting string literal to branded Namespace type
 
 interface TestItem {
   id: string;
@@ -30,7 +30,7 @@ interface TestItem {
 }
 
 function toItem(id: string, data: Record<string, unknown>): TestItem {
-  return { id, addedAt: data.addedAt as string, title: data.title as string };
+  return { id, addedAt: data.addedAt as string, title: data.title as string }; // type-safety-ok: data.addedAt and data.title are Record<string,unknown> fields that are strings in the test fixture
 }
 
 const { getPublicMedia, getUserMedia } = createMediaQueries(mockDb, NAMESPACE, "media", toItem);
