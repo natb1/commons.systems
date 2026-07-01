@@ -188,6 +188,8 @@ jobs:
         run: .claude/hooks/test-approve-workflow-commands.sh
       - name: Run dispatch script tests
         run: .claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh
+      - name: Run budget-config-load tests
+        run: .claude/skills/budget/scripts/test-budget-config-load.sh
       - name: Run write-phase-log tests
         run: .claude/skills/dispatch-propagate/scripts/test-write-phase-log.sh
       - name: Run prose-rule lint tests

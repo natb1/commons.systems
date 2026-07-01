@@ -88,85 +88,13 @@ main {
 
 .cs-nav__link:hover       { text-decoration: underline; text-decoration-thickness: 2px; }
 
-/* Landing template — the landing project's page shell: a stacked header
-   (wordmark, tagline, nav row), an amber hero band over a card grid, and a
-   responsive two-column body whose context panel is sticky on the wide layout
-   and a toggle-collapsible overlay below it. The structural shell now uses the
-   canonical .content-grid / .sidebar / .panel-toggle contract from ds
-   layout.css; most region looks are inline in Landing.tsx. What remains here is
-   only the set of .cs-landing-scoped deltas needed to reproduce the original
-   Landing render on top of the canonical rules. Ported from the landing
-   project's default.css / layout.css / theme.css. */
-
-/* Width: the original Landing shell was the wide 68rem page. .page now reads
-   --main-max-width (default 48rem), so restore the wide width here. This is the
-   single most load-bearing override — without it Landing drops to 48rem. */
+/* Landing template — the wide-page width modifier. Everything else the template
+   needs now lives in self-contained DS primitives: the hero band in hero-band.css,
+   the context panel's scrollbar + narrow-overlay background in context-panel.css,
+   and the shell/sticky/overlay behavior in the canonical .content-grid / .sidebar /
+   .panel-toggle contract (layout.css). What remains here is only the wide-width
+   delta: the original Landing shell was the wide 68rem page, but .page reads
+   --main-max-width (default 48rem), so restore the wide width. */
 .cs-landing {
   --main-max-width: var(--max-width-wide);
-}
-
-/* Body grid deltas vs canonical .content-grid:
-   - align-items: start — canonical dropped the align-items the original grid had.
-   - contain: none — canonical sets `contain: layout style`, which makes the grid
-     a containing block for the absolute .sidebar regardless of its `position`.
-     The original grid had no containment, so the narrow overlay anchored to the
-     wrapper, not the grid. Neutralize it to keep that behavior (and to match the
-     original's lack of an extra stacking/formatting context at any width). */
-.cs-landing .content-grid {
-  align-items: start;
-  contain: none;
-}
-
-/* Hero card grid — Landing-specific, has a breakpoint, so it stays a class.
-   Note the 768px max-width breakpoint, distinct from the 767px shell breakpoint. */
-.cs-landing .hero-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-4);
-}
-
-@media (max-width: 768px) {
-  .cs-landing .hero-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* Panel scrollbar — canonical .sidebar doesn't set scrollbar-width; the original
-   panel used a thin bar (the accent scrollbar-color is already document-wide from
-   base.css :root). */
-.cs-landing .sidebar {
-  scrollbar-width: thin;
-}
-
-@media (min-width: 768px) {
-  /* Wide sticky panel: restore the original top/max-height (canonical uses
-     7rem / 100vh−9rem; the original was 4rem / 100vh−6rem) and neutralize the
-     padding-bottom canonical adds (the original had none). canonical's
-     margin-block:0 / border-block:none are no-ops on an <aside>. */
-  .cs-landing .sidebar {
-    top: calc(var(--space-12) + var(--space-4));
-    max-height: calc(100vh - var(--space-16) - var(--space-8));
-    padding-bottom: 0;
-  }
-}
-
-@media (max-width: 767px) {
-  /* Anchor the absolute panel to the hero+grid wrapper (the only direct <div>
-     child of .cs-landing), not the grid, so an open panel drops directly below
-     the sticky header and overlays the hero. Canonical anchors it to the grid
-     via .content-grid{position:relative}; undo that (position + contain are
-     neutralized above) and make the wrapper the containing block instead. */
-  .cs-landing > div {
-    position: relative;
-  }
-
-  .cs-landing .content-grid {
-    position: static;
-  }
-
-  /* Narrow overlay background — the original used the card surface, canonical
-     uses the page surface. */
-  .cs-landing .sidebar {
-    background: var(--surface-card);
-  }
 }
