@@ -75,3 +75,46 @@
   font-size: 0.9rem;
   line-height: 1.4;
 }
+
+/* Media slot — an optional image/screenshot frame inside a hero card. */
+.hero-band-card-media {
+  display: block;
+  overflow: hidden;
+  border-radius: var(--radius, 4px);
+  line-height: 0;
+}
+.hero-band-card-media img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* Overflow disclosure — a <details> that reveals extra cards below the main grid. */
+.hero-band-overflow {
+  margin-block: var(--space-4) 0;
+  background: none;
+  border: 0;
+  padding: 0;
+  border-radius: 0;
+  overflow: visible;
+}
+.hero-band-overflow summary {
+  cursor: pointer;
+  padding: var(--space-2) var(--space-1);
+  color: var(--muted);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-heading);
+  transition: color var(--duration-fast) var(--ease), outline-color var(--duration-fast) var(--ease);
+  margin-inline: 0;
+  margin-block: 0;
+}
+.hero-band-overflow summary:hover {
+  color: var(--accent);
+}
+.hero-band-overflow summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.hero-band-overflow .hero-band-grid {
+  margin-block-start: var(--space-4);
+}
