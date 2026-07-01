@@ -180,7 +180,7 @@ async function defaultReadPriorHistory(
   try {
     buf = fs.readFileSync(file);
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") { // type-safety-ok: err from fs.readFileSync is always an ErrnoException for system errors
       return null; // no prior snapshot yet — start a fresh series.
     }
     throw err; // present-but-unreadable (EACCES, EISDIR, EIO, …) → surface, never silently reset history.
