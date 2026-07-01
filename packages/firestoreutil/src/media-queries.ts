@@ -1,7 +1,8 @@
-import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 import type { Firestore } from "firebase/firestore";
 import { nsCollectionPath } from "./namespace.js";
 import type { Namespace } from "./namespace.js";
+import { boundedQuery } from "./bounded-query.js";
 
 export function createMediaQueries<T extends { id: string; addedAt: string }>(
   db: Firestore,
@@ -12,16 +13,20 @@ export function createMediaQueries<T extends { id: string; addedAt: string }>(
   const path = nsCollectionPath(namespace, collectionName);
 
   async function getPublicMedia(): Promise<T[]> {
-    const q = query(collection(db, path), where("publicDomain", "==", true));
-    const snapshot = await getDocs(q);
+    const snapshot = await boundedQuery(db, path)
+      .where("publicDomain", "==", true)
+      .unbounded("public-domain media catalog is a small curated set; paginate if it grows")
+      .getDocs();
     const items = snapshot.docs.map((docSnap) => toItem(docSnap.id, docSnap.data()));
     items.sort((a, b) => b.addedAt.localeCompare(a.addedAt));
     return items;
   }
 
   async function getUserMedia(email: string): Promise<T[]> {
-    const q = query(collection(db, path), where("memberEmails", "array-contains", email));
-    const snapshot = await getDocs(q);
+    const snapshot = await boundedQuery(db, path)
+      .where("memberEmails", "array-contains", email)
+      .unbounded("media items per user are few; not yet paginated")
+      .getDocs();
     const items = snapshot.docs.map((docSnap) => toItem(docSnap.id, docSnap.data()));
     items.sort((a, b) => b.addedAt.localeCompare(a.addedAt));
     return items;

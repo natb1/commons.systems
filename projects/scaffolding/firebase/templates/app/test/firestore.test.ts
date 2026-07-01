@@ -4,12 +4,14 @@ const mockGetDocs = vi.fn();
 const mockCollection = vi.fn();
 const mockQuery = vi.fn();
 const mockOrderBy = vi.fn();
+const mockWhere = vi.fn();
 
 vi.mock("firebase/firestore", () => ({
   collection: (...args: unknown[]) => mockCollection(...args),
   getDocs: (...args: unknown[]) => mockGetDocs(...args),
   query: (...args: unknown[]) => mockQuery(...args),
   orderBy: (...args: unknown[]) => mockOrderBy(...args),
+  where: (...args: unknown[]) => mockWhere(...args),
 }));
 
 vi.mock("../src/firebase.js", () => ({
@@ -25,6 +27,7 @@ describe("getMessages", () => {
     mockCollection.mockReturnValue("mock-collection-ref");
     mockOrderBy.mockReturnValue("mock-order");
     mockQuery.mockReturnValue("mock-query");
+    mockWhere.mockReturnValue("mock-where");
   });
 
   it("queries the correct namespaced collection path", async () => {
@@ -43,7 +46,7 @@ describe("getMessages", () => {
 
     await getMessages();
 
-    expect(mockOrderBy).toHaveBeenCalledWith("createdAt");
+    expect(mockOrderBy).toHaveBeenCalledWith("createdAt", undefined);
   });
 
   it("maps Firestore documents to Message objects", async () => {
@@ -92,13 +95,14 @@ describe("getNotes", () => {
     vi.clearAllMocks();
     mockCollection.mockReturnValue("mock-collection-ref");
     mockOrderBy.mockReturnValue("mock-order");
+    mockWhere.mockReturnValue("mock-where");
     mockQuery.mockReturnValue("mock-query");
   });
 
   it("queries the correct namespaced collection path", async () => {
     mockGetDocs.mockResolvedValue({ docs: [] });
 
-    await getNotes();
+    await getNotes("user@example.com");
 
     expect(mockCollection).toHaveBeenCalledWith(
       { type: "mock-firestore" },
@@ -106,12 +110,13 @@ describe("getNotes", () => {
     );
   });
 
-  it("orders results by createdAt", async () => {
+  it("filters by memberEmails", async () => {
     mockGetDocs.mockResolvedValue({ docs: [] });
 
-    await getNotes();
+    await getNotes("user@example.com");
 
-    expect(mockOrderBy).toHaveBeenCalledWith("createdAt");
+    expect(mockWhere).toHaveBeenCalledWith("memberEmails", "array-contains", "user@example.com");
+    expect(mockOrderBy).not.toHaveBeenCalled();
   });
 
   it("maps Firestore documents to Note objects", async () => {
@@ -122,6 +127,8 @@ describe("getNotes", () => {
           data: () => ({
             text: "First note",
             createdAt: "2026-01-01T00:00:00Z",
+            groupId: "group-a",
+            memberEmails: ["user@example.com"],
           }),
         },
         {
@@ -129,23 +136,29 @@ describe("getNotes", () => {
           data: () => ({
             text: "Second note",
             createdAt: "2026-01-01T00:01:00Z",
+            groupId: "group-a",
+            memberEmails: ["user@example.com"],
           }),
         },
       ],
     });
 
-    const notes = await getNotes();
+    const notes = await getNotes("user@example.com");
 
     expect(notes).toEqual([
       {
         id: "note-1",
         text: "First note",
         createdAt: "2026-01-01T00:00:00Z",
+        groupId: "group-a",
+        memberEmails: ["user@example.com"],
       },
       {
         id: "note-2",
         text: "Second note",
         createdAt: "2026-01-01T00:01:00Z",
+        groupId: "group-a",
+        memberEmails: ["user@example.com"],
       },
     ]);
   });
