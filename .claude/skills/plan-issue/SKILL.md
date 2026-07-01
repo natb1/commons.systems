@@ -209,6 +209,90 @@ Two judgments stay with this session, after reading the script's evidence:
    plausibly relates to the issue's domain, optionally fetch its changed files
    to judge whether the overlap is incidental or substantive.
 
+#### Sequencing detection — auto-defer a clear unmerged-PR precondition
+
+`dispatch-drift-scan`'s `[ABSENT]` PATH flags can mean two different things: a
+path the issue is meant to **create** (a deliverable — absence is expected), or a
+path the issue must **modify or remove** that is missing because it lives only on
+an as-yet-unmerged PR's branch (a **precondition** — the work cannot proceed until
+that PR merges). The second case is a sequencing dependency. When it is
+unambiguous — exactly one open PR introduces the path, and that PR closes exactly
+one issue — `/plan-issue` defers autonomously by linking `blocked_by`, instead of
+parking a mechanical decision on office-hours. Any ambiguity keeps today's
+office-hours park. Run this between the drift judgments above and the three-way
+verdict below.
+
+1. **Identify the acceptance-criteria-target absent paths (model judgment — the
+   only judgment kept in prose).** From the `[ABSENT]` PATH flags, select those
+   the issue's acceptance criteria require **modifying or removing**. A path the
+   issue is itself meant to **create** is not a precondition — do not select it
+   (the helper's `proceed` verdict is the mechanical backstop, but obvious
+   own-deliverables should not even be probed). If no `[ABSENT]` path is an
+   AC-target precondition, skip straight to the three-way verdict.
+
+2. **Get a per-path verdict.** For each selected path, run (with
+   `dangerouslyDisableSandbox: true` — it calls `gh`):
+
+   ```bash
+   .claude/skills/dispatch-propagate/scripts/dispatch-find-owning-pr "$N" "<path>"
+   ```
+
+   Capture stdout (one verdict token) and the exit code. A **non-zero exit** is an
+   environment error — the probe produced no verdict; treat it as a not-clear park
+   (step 4 below) with a distinct "could not determine owning PR" reason. Never
+   auto-defer on an unverified probe. The verdict tokens:
+
+   - `proceed` — the path is on no open PR branch (a deliverable, not a
+     precondition).
+   - `defer:<B>` — a lone owning PR closes exactly one issue `<B>` and the
+     `blocked_by` link would be clean.
+   - `not-clear:<reason>` — `multiple-owning-prs`, `owning-pr-closes-<c>-issues`,
+     `already-blocked`, `would-cycle`, or `pr-list-truncated`.
+
+3. **Aggregate conservatively across all selected paths:**
+
+   - Any `not-clear:*` verdict, or any probe error → **park** via the existing
+     not-clear path (Step 6's recommend-then-`dispatch-mark-deviation`),
+     unchanged.
+   - All verdicts `proceed` → these absent paths are deliverables, not
+     preconditions → continue to the three-way verdict / normal planning.
+   - One or more `defer:<B>` and **all** `defer` verdicts name the **same single**
+     blocker `B` (with no `not-clear`) → **auto-defer** (step 4).
+   - `defer` verdicts naming **more than one distinct** blocker → **park**
+     (multi-blocker sequencing needs human judgment; blocking on one would be
+     arbitrary).
+
+4. **Auto-defer when clear.** Create the `blocked_by` link from target `N` to
+   blocker `B`, mark the issue deferred, then **stop** — persist **no** plan and
+   apply **no** `dispatch:office-hours`. Use the integer database id and guard
+   against a duplicate POST (the `ref-github-issues` / `intention-emit` idempotent
+   pattern), all with `dangerouslyDisableSandbox: true`:
+
+   ```bash
+   EXISTING=$(gh api "/repos/{owner}/{repo}/issues/$N/dependencies/blocked_by" --jq '.[].number')
+   if ! grep -qx "$B" <<<"$EXISTING"; then
+     BLOCKER_DB_ID=$(gh api "/repos/{owner}/{repo}/issues/$B" --jq '.id')
+     gh api -X POST "/repos/{owner}/{repo}/issues/$N/dependencies/blocked_by" \
+       --input - <<<"{\"issue_id\": $BLOCKER_DB_ID}"
+   fi
+   .claude/skills/dispatch-propagate/scripts/dispatch-mark-deferred \
+     "/plan-issue: #$N requires path(s) that live only on an open PR closing #$B; auto-deferring as blocked_by #$B, will re-plan when #$B closes"
+   ```
+
+   Then **stop**. The blocked_by link MUST exist before `dispatch-mark-deferred`
+   (its precondition): `dispatch-stop.sh` Branch DEF re-gates on that link, skips
+   office-hours, spawns the router, and re-plans automatically once `B` closes; if
+   no open blocker exists at stop time the hook falls back to the office-hours
+   park (fail-safe). `dispatch-mark-deferred` is the third terminal disposition
+   (alongside `dispatch-mark-complete` and `dispatch-mark-deviation`) and
+   preserves the single-named-exit invariant — do not also write a completion
+   marker or apply `dispatch:planned`.
+
+   Auto-defer is never *incorrect* — blocking is always safe; it is only possibly
+   suboptimal versus folding the extraction into the open PR. A human keeps the
+   fold / partial-now options by overriding the auto-created link before `B`
+   merges.
+
 #### Three-way verdict
 
 - **`proceed`** — drift absent or cosmetic; continue to the trivial-task skip and
