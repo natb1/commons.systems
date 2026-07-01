@@ -68,7 +68,7 @@ export async function getOwnerReminders(
   const snapshot = await boundedQuery(db, path)
     .where("memberEmails", "array-contains", user.email)
     .unbounded("owner reminder items are few; owner-scoped read")
-    .getDocs();
+    .getDocs(); // query-bounds-ok: bounded via .unbounded() above — owner-scoped; owner reminder items are few
   const reminders: Reminder[] = [];
   for (const d of snapshot.docs) {
     const reminder = toReminder(d.id, d.data());

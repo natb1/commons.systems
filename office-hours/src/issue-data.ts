@@ -35,7 +35,7 @@ export async function getOwnerIssueSamples(
     .where("memberEmails", "array-contains", user.email)
     .orderBy("sampledAt", "desc")
     .limit(ISSUE_SAMPLE_LIMIT);
-  const snapshot = await bounded.getDocs();
+  const snapshot = await bounded.getDocs(); // query-bounds-ok: bounded via .limit() on the builder above
   const samples: IssueSample[] = [];
   for (const d of snapshot.docs) {
     const sample = toIssueSample(d.id, d.data());

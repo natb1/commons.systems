@@ -18,7 +18,7 @@ export async function getOwnerTopicUsage(
     .limit(21);
   let snap;
   try {
-    snap = await bounded.getDocs();
+    snap = await bounded.getDocs(); // query-bounds-ok: bounded via .limit() on the builder above
   } catch (err) {
     if (classifyError(err) === "permission-denied") return [];
     // Let failed-precondition (missing composite index) and other errors propagate.

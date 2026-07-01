@@ -20,7 +20,7 @@ import type {
  * A query that has NOT yet been bounded. It has no terminal fetch method — the
  * only way to run it is to first pick a bound with `.limit(n)` or
  * `.unbounded(reason)`, which returns a {@link BoundedQuery}. Because
- * `.getDocs()` lives only on `BoundedQuery`, an accidentally-unbounded
+ * `getDocs` lives only on `BoundedQuery`, an accidentally-unbounded
  * collection scan is a compile error: the type IS the enforcement.
  */
 export interface UnboundedQuery {
@@ -30,7 +30,7 @@ export interface UnboundedQuery {
   limit(n: number): BoundedQuery;
   /**
    * Escape hatch: acknowledge that this query is intentionally a full
-   * collection scan. Appends no constraint — it only unlocks `.getDocs()` and
+   * collection scan. Appends no constraint — it only unlocks `getDocs` and
    * documents, via `reason`, why an unbounded scan is acceptable here. `reason`
    * must be non-empty.
    */
@@ -39,7 +39,7 @@ export interface UnboundedQuery {
 
 /**
  * A query that HAS been bounded (via `.limit(n)` or `.unbounded(reason)`) and so
- * exposes the terminal `.getDocs()`. Further `.where()` / `.orderBy()` calls
+ * exposes the terminal `getDocs` method. Further `.where()` / `.orderBy()` calls
  * keep constraining while remaining bounded.
  */
 export interface BoundedQuery {
@@ -47,10 +47,9 @@ export interface BoundedQuery {
   orderBy(field: string | FieldPath, direction?: OrderByDirection): BoundedQuery;
   /**
    * The only method that runs the query. Returns the raw {@link QuerySnapshot}
-   * (unmapped) so this is a drop-in replacement for
-   * `const snapshot = await getDocs(q)`.
+   * (unmapped) — a drop-in replacement for the raw SDK `getDocs` function.
    */
-  getDocs(): Promise<QuerySnapshot<DocumentData>>;
+  getDocs(): Promise<QuerySnapshot<DocumentData>>; // query-bounds-ok: BoundedQuery interface method — bounded by typestate
 }
 
 class QueryBuilder implements UnboundedQuery, BoundedQuery {
@@ -89,6 +88,7 @@ class QueryBuilder implements UnboundedQuery, BoundedQuery {
   }
 
   async getDocs(): Promise<QuerySnapshot<DocumentData>> {
+    // query-bounds-ok: BoundedQuery implementation — bounded by typestate; this method is only reachable after .limit() or .unbounded()
     const q = query(collection(this.db, this.path), ...this.constraints);
     return sdkGetDocs(q);
   }

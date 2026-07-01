@@ -49,7 +49,7 @@ export async function getPosts(db: Firestore, namespace: Namespace, user: User |
   const bounded = admin
     ? builder.orderBy("publishedAt", "desc").unbounded("blog post count is small; full list is intentional for index/sitemap/feed")
     : builder.where("published", "==", true).unbounded("blog post count is small; full list is intentional for index/sitemap/feed");
-  const snapshot = await bounded.getDocs();
+  const snapshot = await bounded.getDocs(); // query-bounds-ok: bounded via .unbounded() above — blog post count is small
   const posts: PostMeta[] = [];
   let skippedCount = 0;
   for (const d of snapshot.docs) {

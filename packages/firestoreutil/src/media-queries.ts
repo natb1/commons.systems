@@ -16,7 +16,7 @@ export function createMediaQueries<T extends { id: string; addedAt: string }>(
     const snapshot = await boundedQuery(db, path)
       .where("publicDomain", "==", true)
       .unbounded("public-domain media catalog is a small curated set; paginate if it grows")
-      .getDocs();
+      .getDocs(); // query-bounds-ok: bounded via .unbounded() above — public-domain media catalog is a small curated set
     const items = snapshot.docs.map((docSnap) => toItem(docSnap.id, docSnap.data()));
     items.sort((a, b) => b.addedAt.localeCompare(a.addedAt));
     return items;
@@ -26,7 +26,7 @@ export function createMediaQueries<T extends { id: string; addedAt: string }>(
     const snapshot = await boundedQuery(db, path)
       .where("memberEmails", "array-contains", email)
       .unbounded("media items per user are few; not yet paginated")
-      .getDocs();
+      .getDocs(); // query-bounds-ok: bounded via .unbounded() above — media items per user are few
     const items = snapshot.docs.map((docSnap) => toItem(docSnap.id, docSnap.data()));
     items.sort((a, b) => b.addedAt.localeCompare(a.addedAt));
     return items;

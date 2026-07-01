@@ -24,7 +24,7 @@ export async function getMessages(): Promise<Message[]> {
   const snapshot = await boundedQuery(db, path)
     .orderBy("createdAt")
     .unbounded("scaffolding template — choose a real bound or pagination when building on this")
-    .getDocs();
+    .getDocs(); // query-bounds-ok: bounded via .unbounded() above — scaffolding template; replace with a real bound
   return snapshot.docs.map((doc) => {
     const data = doc.data();
     return {
@@ -42,7 +42,7 @@ export async function getNotes(email: string): Promise<Note[]> {
   const snapshot = await boundedQuery(db, path)
     .where("memberEmails", "array-contains", email)
     .unbounded("scaffolding template — choose a real bound or pagination when building on this")
-    .getDocs();
+    .getDocs(); // query-bounds-ok: bounded via .unbounded() above — scaffolding template; replace with a real bound
   const notes = snapshot.docs.map((doc) => {
     const data = doc.data();
     return {

@@ -43,7 +43,7 @@ export async function getUserGroups(db: Firestore, namespace: Namespace, user: U
   const snapshot = await boundedQuery(db, groupsPath(namespace))
     .where("members", "array-contains", email)
     .unbounded("groups per user are small and finite")
-    .getDocs();
+    .getDocs(); // query-bounds-ok: bounded via .unbounded() above — groups per user are small and finite
   return snapshot.docs
     .map((docSnap) => {
       const name = docSnap.data().name;
