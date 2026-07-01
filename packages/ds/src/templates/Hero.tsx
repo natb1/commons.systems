@@ -10,6 +10,8 @@ export interface HeroCard {
   name: ReactNode;
   problem: ReactNode;
   href?: string;
+  media?: ReactNode;
+  className?: string;
 }
 
 export interface HeroProps {
@@ -17,11 +19,62 @@ export interface HeroProps {
   subline?: ReactNode;
   ctas?: HeroCta[];
   cards: HeroCard[];
+  overflow?: HeroCard[];
+  overflowLabel?: ReactNode;
   "aria-label"?: string;
 }
 
+function renderCard(card: HeroCard, key: number) {
+  const cardClassName = [
+    "hero-band-card",
+    card.className,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const contents = (
+    <>
+      {card.media !== undefined && (
+        <span className="hero-band-card-media">{card.media}</span>
+      )}
+      <span className="hero-band-card-name">{card.name}</span>
+      <p className="hero-band-card-problem">{card.problem}</p>
+    </>
+  );
+
+  if (card.href !== undefined) {
+    const anchorProps: AnchorHTMLAttributes<HTMLAnchorElement> = {
+      href: card.href,
+    };
+    return (
+      <Card
+        key={key}
+        as="a"
+        interactive
+        className={cardClassName}
+        {...anchorProps}
+      >
+        {contents}
+      </Card>
+    );
+  }
+  return (
+    <Card key={key} className={cardClassName}>
+      {contents}
+    </Card>
+  );
+}
+
 export function Hero(props: HeroProps) {
-  const { headline, subline, ctas, cards, "aria-label": ariaLabel } = props;
+  const {
+    headline,
+    subline,
+    ctas,
+    cards,
+    overflow,
+    overflowLabel,
+    "aria-label": ariaLabel,
+  } = props;
 
   return (
     <section className="hero-band-section" aria-label={ariaLabel ?? "Featured"}>
@@ -52,32 +105,16 @@ export function Hero(props: HeroProps) {
         )}
       </div>
       <div className="hero-band-grid">
-        {cards.map((card, i) => {
-          if (card.href !== undefined) {
-            const anchorProps: AnchorHTMLAttributes<HTMLAnchorElement> = {
-              href: card.href,
-            };
-            return (
-              <Card
-                key={i}
-                as="a"
-                interactive
-                className="hero-band-card"
-                {...anchorProps}
-              >
-                <span className="hero-band-card-name">{card.name}</span>
-                <p className="hero-band-card-problem">{card.problem}</p>
-              </Card>
-            );
-          }
-          return (
-            <Card key={i} className="hero-band-card">
-              <span className="hero-band-card-name">{card.name}</span>
-              <p className="hero-band-card-problem">{card.problem}</p>
-            </Card>
-          );
-        })}
+        {cards.map((card, i) => renderCard(card, i))}
       </div>
+      {overflow && overflow.length > 0 && (
+        <details className="hero-band-overflow">
+          <summary>{overflowLabel ?? "more…"}</summary>
+          <div className="hero-band-grid">
+            {overflow.map((card, i) => renderCard(card, i))}
+          </div>
+        </details>
+      )}
     </section>
   );
 }

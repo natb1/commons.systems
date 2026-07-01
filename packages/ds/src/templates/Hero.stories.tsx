@@ -27,3 +27,59 @@ export const Default: Story = {
     ],
   },
 };
+
+export const WithMediaAndOverflow: Story = {
+  args: {
+    headline: "Build with the template. Ship faster.",
+    subline: "Cards with optional media slots and an overflow disclosure.",
+    ctas: [{ label: "Get started", href: "#" }],
+    cards: [
+      {
+        name: "App one",
+        problem: "Primary card with a media slot.",
+        href: "#",
+        media: (
+          <img
+            src="https://placehold.co/400x200/e8943a/fff?text=App+one"
+            alt="App one screenshot"
+          />
+        ),
+      },
+      {
+        name: "App two",
+        problem: "Another primary card with a media slot.",
+        href: "#",
+        media: (
+          <img
+            src="https://placehold.co/400x200/333/fff?text=App+two"
+            alt="App two screenshot"
+          />
+        ),
+      },
+      {
+        name: "App three",
+        problem: "Third primary card without media.",
+        href: "#",
+      },
+    ],
+    overflow: [
+      {
+        name: "App four",
+        problem: "An overflow card with media.",
+        href: "#",
+        media: (
+          <img
+            src="https://placehold.co/400x200/555/fff?text=App+four"
+            alt="App four screenshot"
+          />
+        ),
+      },
+      {
+        name: "App five",
+        problem: "Another overflow card without media.",
+        href: "#",
+      },
+    ],
+    overflowLabel: "show more…",
+  },
+};

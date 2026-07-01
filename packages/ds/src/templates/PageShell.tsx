@@ -24,7 +24,7 @@ export function PageShell(props: PageShellProps) {
     <div className={["page", className].filter(Boolean).join(" ")}>
       <header>
         <h1>{wordmark}</h1>
-        {tagline && <p>{tagline}</p>}
+        {tagline && <p className="tagline">{tagline}</p>}
         <Nav links={navLinks} current={current} end={navEnd} />
         {headerEnd}
       </header>

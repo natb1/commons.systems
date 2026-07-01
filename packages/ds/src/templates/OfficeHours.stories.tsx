@@ -18,3 +18,9 @@ type Story = StoryObj<typeof OfficeHours>;
 // the Status/Other split the app's nav header exposes.
 export const Status: Story = { args: { page: "status" } };
 export const Other: Story = { args: { page: "other" } };
+
+// The Status page with a budget preselected, so the context panel renders the
+// BudgetPaceChart without a click — the design-surface view of the pace chart.
+export const StatusBudgetSelected: Story = {
+  args: { page: "status", defaultSelectedBudget: "weekly-tokens" },
+};

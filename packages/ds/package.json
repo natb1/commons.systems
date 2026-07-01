@@ -19,6 +19,7 @@
     "./base.css": "./base.css",
     "./layout.css": "./layout.css",
     "./hero.css": "./hero.css",
+    "./charts.css": "./charts.css",
     "./hero-band.css": "./hero-band.css",
     "./context-panel.css": "./context-panel.css",
     "./tokens/colors.css": "./tokens/colors.css",
@@ -28,6 +29,9 @@
   },
   "peerDependencies": {
     "react": ">=18"
+  },
+  "dependencies": {
+    "@observablehq/plot": "^0.6.17"
   },
   "devDependencies": {
     "@storybook/addon-docs": "^10.4.6",
