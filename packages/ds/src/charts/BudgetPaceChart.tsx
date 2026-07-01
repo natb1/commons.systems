@@ -75,7 +75,7 @@ export function BudgetPaceChart({
     // its clientWidth. Keep it block so the .chart-scroll-wrapper inside clips.
     const slot = document.createElement("div");
 
-    mountResponsiveChart(slot, (width) => {
+    const disconnectObserver = mountResponsiveChart(slot, (width) => {
       const chartWidth = width - AXIS_WIDTH;
       const sharedStyle = { background: "transparent", color: getThemeFg(section) };
 
@@ -136,6 +136,7 @@ export function BudgetPaceChart({
     host.appendChild(section);
 
     return () => {
+      disconnectObserver();
       host.replaceChildren();
     };
   }, [pace, current, previous, paceColor, currentColor, priorColor, currentLabel, paceLabel]);

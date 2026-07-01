@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import {
   MAX_PRIOR_WINDOWS,
   selectPriorWindows,
@@ -144,6 +144,13 @@ describe("buildPaceLineSpecs", () => {
   });
 
   describe("prior window specs — clamping", () => {
+    const five = [window(1), window(2), window(3), window(4), window(5)];
+    let priorsFromFive: ReturnType<typeof buildPaceLineSpecs>;
+    beforeEach(() => {
+      const series: BudgetPaceSeries = { pace: PACE, current: CURRENT, previous: five };
+      priorsFromFive = buildPaceLineSpecs(series, COLORS).filter((s) => s.role === "previous");
+    });
+
     it("produces 0 prior specs when previous is empty", () => {
       const series: BudgetPaceSeries = { pace: PACE, current: CURRENT, previous: [] };
       const specs = buildPaceLineSpecs(series, COLORS);
@@ -151,32 +158,20 @@ describe("buildPaceLineSpecs", () => {
     });
 
     it("produces exactly 3 prior specs when given 5 previous windows", () => {
-      const five = [window(1), window(2), window(3), window(4), window(5)];
-      const series: BudgetPaceSeries = { pace: PACE, current: CURRENT, previous: five };
-      const specs = buildPaceLineSpecs(series, COLORS);
-      const priors = specs.filter((s) => s.role === "previous");
-      expect(priors).toHaveLength(3);
+      expect(priorsFromFive).toHaveLength(3);
     });
 
     it("retains the 3 most recent windows (drops the 2 oldest) when given 5", () => {
-      const five = [window(1), window(2), window(3), window(4), window(5)];
-      const series: BudgetPaceSeries = { pace: PACE, current: CURRENT, previous: five };
-      const specs = buildPaceLineSpecs(series, COLORS);
-      const priors = specs.filter((s) => s.role === "previous");
       // Kept windows are 3, 4, 5 identified by their y values (id*10).
-      expect(priors[0].points[0].y).toBeCloseTo(window(3)[0].y);
-      expect(priors[1].points[0].y).toBeCloseTo(window(4)[0].y);
-      expect(priors[2].points[0].y).toBeCloseTo(window(5)[0].y);
+      expect(priorsFromFive[0].points[0].y).toBeCloseTo(window(3)[0].y);
+      expect(priorsFromFive[1].points[0].y).toBeCloseTo(window(4)[0].y);
+      expect(priorsFromFive[2].points[0].y).toBeCloseTo(window(5)[0].y);
     });
 
     it("oldest kept window has lowest opacity, newest has highest", () => {
-      const five = [window(1), window(2), window(3), window(4), window(5)];
-      const series: BudgetPaceSeries = { pace: PACE, current: CURRENT, previous: five };
-      const specs = buildPaceLineSpecs(series, COLORS);
-      const priors = specs.filter((s) => s.role === "previous");
-      // priors[0] = oldest kept (window 3), priors[2] = newest kept (window 5).
-      expect(priors[0].strokeOpacity).toBeLessThan(priors[1].strokeOpacity);
-      expect(priors[1].strokeOpacity).toBeLessThan(priors[2].strokeOpacity);
+      // priorsFromFive[0] = oldest kept (window 3), priorsFromFive[2] = newest kept (window 5).
+      expect(priorsFromFive[0].strokeOpacity).toBeLessThan(priorsFromFive[1].strokeOpacity);
+      expect(priorsFromFive[1].strokeOpacity).toBeLessThan(priorsFromFive[2].strokeOpacity);
     });
 
     it("all prior strokeOpacity values are strictly in (0,1)", () => {

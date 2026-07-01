@@ -13,13 +13,14 @@ export const CHART_HEIGHT = 220;
 /**
  * Mounts a chart into `slot` at its current width, then re-renders on resize.
  * Falls back to a fixed width when the slot has no measured width or when
- * ResizeObserver is unavailable.
+ * ResizeObserver is unavailable. Returns a cleanup function that disconnects
+ * the ResizeObserver; callers should invoke it when the slot is removed.
  */
-export function mountResponsiveChart(slot: HTMLElement, render: (width: number) => Node): void {
+export function mountResponsiveChart(slot: HTMLElement, render: (width: number) => Node): () => void {
   const w = slot.clientWidth || FALLBACK_CONTAINER_WIDTH;
   slot.replaceChildren(render(w));
   let last = w;
-  if (typeof ResizeObserver === "undefined") return;
+  if (typeof ResizeObserver === "undefined") return () => {};
   const obs = new ResizeObserver((entries) => {
     if (!slot.isConnected) {
       obs.disconnect();
@@ -33,6 +34,7 @@ export function mountResponsiveChart(slot: HTMLElement, render: (width: number) 
     }
   });
   obs.observe(slot);
+  return () => obs.disconnect();
 }
 
 /** Reads a trimmed CSS custom property off `container` (or a provided computed style). */
