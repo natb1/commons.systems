@@ -177,7 +177,7 @@ function diffValue(
 
   if (sk === "object") {
     const snapObj = snap as Record<string, unknown>; // type-safety-ok: shapeKind narrowed both sides to object
-    const refObj = ref as Record<string, unknown>;
+    const refObj = ref as Record<string, unknown>; // type-safety-ok: shapeKind narrowed both sides to object (same guard as snapObj above)
     if (treatAsMap) {
       // Dynamic-keyed map: compare a representative value's shape, not the keys.
       const sv = Object.values(snapObj)[0];
@@ -191,7 +191,7 @@ function diffValue(
 
   if (sk === "array") {
     const sa = snap as unknown[]; // type-safety-ok: shapeKind narrowed both sides to array
-    const ra = ref as unknown[];
+    const ra = ref as unknown[]; // type-safety-ok: shapeKind narrowed both sides to array (same guard as sa above)
     // SHAPE only — representative element, never length.
     if (sa.length > 0 && ra.length > 0) diffValue(field, sa[0], ra[0], `${label}[0]`, out);
     return;

@@ -10,9 +10,6 @@
   },
   "dependencies": {
     "@commons-systems/crypto-core": "*",
-    "@commons-systems/firestoreutil": "*",
-    "@commons-systems/functions": "*",
-    "office-hours": "*",
     "@google-cloud/secret-manager": "^6.1.3",
     "firebase-admin": "^13.0.0"
   }

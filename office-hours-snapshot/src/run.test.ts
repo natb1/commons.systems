@@ -101,7 +101,7 @@ describe("run", () => {
     expect(io.writeSnapshot).not.toHaveBeenCalled();
     expect(io.statSnapshotDir).not.toHaveBeenCalled();
     // It printed the serialized snapshot.
-    const printed = (io.stdout as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]).join("\n");
+    const printed = (io.stdout as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]).join("\n"); // type-safety-ok: cast vi mock to access .mock.calls in the test
     expect(printed).toContain('"scope": "full"');
   });
 
@@ -110,7 +110,7 @@ describe("run", () => {
     const env = { ...FULL_ENV, OFFICE_HOURS_MEMBER_EMAILS_OVERRIDE: "a@x.com,b@x.com" };
     await run(["--dry-run"], env, io);
     expect(io.resolveMemberEmailsFromSecret).not.toHaveBeenCalled();
-    const deps = (io.produceSnapshot as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const deps = (io.produceSnapshot as ReturnType<typeof vi.fn>).mock.calls[0][0]; // type-safety-ok: cast vi mock to access .mock.calls in the test
     expect(deps.memberEmails).toEqual(["a@x.com", "b@x.com"]);
   });
 
@@ -121,7 +121,7 @@ describe("run", () => {
     const code = await run([], env, io);
     expect(code).toBe(1);
     expect(io.writeSnapshot).not.toHaveBeenCalled();
-    const errs = (io.stderr as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]).join("\n");
+    const errs = (io.stderr as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]).join("\n"); // type-safety-ok: cast vi mock to access .mock.calls in the test
     expect(errs).toContain("OFFICE_HOURS_SNAPSHOT_PASSWORD");
   });
 
@@ -188,7 +188,7 @@ describe("run", () => {
   it("wires prior-history reading on a real run with a password", async () => {
     const io = makeIo();
     await run([], FULL_ENV, io);
-    const deps = (io.produceSnapshot as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const deps = (io.produceSnapshot as ReturnType<typeof vi.fn>).mock.calls[0][0]; // type-safety-ok: cast vi mock to access .mock.calls in the test
     expect(typeof deps.readPriorHistory).toBe("function");
     await deps.readPriorHistory();
     expect(io.readPriorHistory).toHaveBeenCalledWith("/mnt/g/snap", "pw");
@@ -197,7 +197,7 @@ describe("run", () => {
   it("does NOT wire prior-history reading on a dry-run", async () => {
     const io = makeIo();
     await run(["--dry-run"], FULL_ENV, io);
-    const deps = (io.produceSnapshot as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const deps = (io.produceSnapshot as ReturnType<typeof vi.fn>).mock.calls[0][0]; // type-safety-ok: cast vi mock to access .mock.calls in the test
     expect(deps.readPriorHistory).toBeUndefined();
     expect(io.readPriorHistory).not.toHaveBeenCalled();
   });
@@ -250,12 +250,12 @@ describe("defaultIo.readPriorHistory round-trip", () => {
 
       const prior = await defaultIo.readPriorHistory(dir, "pw");
       expect(prior).not.toBeNull();
-      expect(prior!.samples).toHaveLength(2);
-      expect(prior!.issueSamples).toHaveLength(1);
-      expect(prior!.samples[0].sampledAt).toBeInstanceOf(Date);
-      expect(prior!.samples[0].sampledAt.toISOString()).toBe(NOW.toISOString());
-      expect(prior!.issueSamples[0].sampledAt).toBeInstanceOf(Date);
-      expect(prior!.samples[0].groupId).toBe("g1");
+      expect(prior!.samples).toHaveLength(2); // type-safety-ok: prior asserted non-null by expect().not.toBeNull() above
+      expect(prior!.issueSamples).toHaveLength(1); // type-safety-ok: prior asserted non-null by expect().not.toBeNull() above
+      expect(prior!.samples[0].sampledAt).toBeInstanceOf(Date); // type-safety-ok: prior asserted non-null by expect().not.toBeNull() above
+      expect(prior!.samples[0].sampledAt.toISOString()).toBe(NOW.toISOString()); // type-safety-ok: prior asserted non-null by expect().not.toBeNull() above
+      expect(prior!.issueSamples[0].sampledAt).toBeInstanceOf(Date); // type-safety-ok: prior asserted non-null by expect().not.toBeNull() above
+      expect(prior!.samples[0].groupId).toBe("g1"); // type-safety-ok: prior asserted non-null by expect().not.toBeNull() above
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }

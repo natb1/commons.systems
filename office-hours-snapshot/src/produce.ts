@@ -172,7 +172,7 @@ export function defaultRunTopicUsage(): Promise<string> {
 
 /**
  * Pipe a usage payload to `usage-sample-writer.mjs --dry-run`, parse the
- * assembled doc (the writer renders timestamps as ISO strings in dry-run), and
+ * assembled doc (the writer renders timestamps as ISO strings in dry-run), and // type-safety-ok: false positive — 'as ISO strings' is prose in a JSDoc comment, not a type cast
  * map it to a `UsageSample`. Exported for Unit 9 to build its real `sampleUsage`
  * dep once it has a live usage payload; null resets fall back to `sampledAt`.
  */
@@ -213,7 +213,7 @@ export async function defaultProbeChainHealth(): Promise<ChainHealth> {
     const override = process.env.DISPATCH_AGENTS_SNAPSHOT;
     // Prefer the env snapshot when present; otherwise shell `claude agents --json`.
     const json = override !== undefined ? override : await spawnClaudeAgents();
-    const parsed = JSON.parse(json) as unknown;
+    const parsed = JSON.parse(json) as unknown; // type-safety-ok: JSON.parse returns any; as unknown forces explicit discrimination below
     return Array.isArray(parsed) ? { liveSessions: parsed.length } : {};
   } catch {
     return {};
@@ -434,14 +434,14 @@ export async function produceSnapshot(
 
 /** Parse `topic-usage-writer.mjs --dry-run` stdout → TopicUsageDoc[] (drops nulls). */
 function parseTopicUsageStdout(stdout: string): TopicUsageDoc[] {
-  const parsed = JSON.parse(stdout) as unknown;
+  const parsed = JSON.parse(stdout) as unknown; // type-safety-ok: JSON.parse returns any; as unknown forces explicit discrimination below
   if (!Array.isArray(parsed)) return [];
   return parsed.flatMap((entry) => {
     // Each entry is `{ id, doc }`; fall back to the entry itself if it is already
     // a bare document.
     const raw =
-      entry && typeof entry === "object" && "doc" in (entry as Record<string, unknown>)
-        ? (entry as Record<string, unknown>).doc
+      entry && typeof entry === "object" && "doc" in (entry as Record<string, unknown>) // type-safety-ok: object guard + 'in' check above; cast to read the 'doc' field
+        ? (entry as Record<string, unknown>).doc // type-safety-ok: same object guard; cast to access 'doc' field value
         : entry;
     const doc = toTopicUsage(raw);
     return doc ? [doc] : [];

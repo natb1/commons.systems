@@ -225,7 +225,7 @@ describe("checkParity — clean parity", () => {
 describe("checkParity — divergences", () => {
   it("reports a key the Firestore doc has but the snapshot lacks (missing-key)", async () => {
     const fx = cleanFixtures();
-    (fx.docs[`${NS}/metrics/dispatch-queue`] as Record<string, unknown>).extraField = 99;
+    (fx.docs[`${NS}/metrics/dispatch-queue`] as Record<string, unknown>).extraField = 99; // type-safety-ok: fixture mutation through opaque type to inject a field the parity check must detect
     const result = await checkParity(cleanSnapshot(), { reader: readerFor(fx), namespace: NS });
     expect(result.ok).toBe(false);
     expect(has(result.divergences, "queueMetrics", "missing-key")).toBe(true);
@@ -235,7 +235,7 @@ describe("checkParity — divergences", () => {
   it("reports a non-timestamp type mismatch (number vs string)", async () => {
     const snap = cleanSnapshot();
     // Corrupt the SNAPSHOT side so the Firestore doc still parses cleanly.
-    (snap.queueMetrics as Record<string, unknown>).openHelpWanted = "14";
+    (snap.queueMetrics as Record<string, unknown>).openHelpWanted = "14"; // type-safety-ok: fixture mutation through opaque type to corrupt a field for the type-mismatch test
     const result = await checkParity(snap, { reader: readerFor(cleanFixtures()), namespace: NS });
     expect(result.ok).toBe(false);
     expect(has(result.divergences, "queueMetrics", "type-mismatch")).toBe(true);
@@ -265,8 +265,8 @@ describe("checkParity — divergences", () => {
     // Replace (not mutate) the github sub-object: serializeProjectSignals
     // shallow-spreads, so the snapshot's `github` aliases the shared SIGNALS
     // fixture — an in-place mutation would leak into other tests.
-    const ps = snap.projectSignals as Record<string, unknown>;
-    ps.github = { ...(ps.github as Record<string, unknown>), stars: "12" }; // number → string on a nested field
+    const ps = snap.projectSignals as Record<string, unknown>; // type-safety-ok: fixture mutation through opaque type to replace the github sub-object
+    ps.github = { ...(ps.github as Record<string, unknown>), stars: "12" }; // type-safety-ok: same fixture mutation — spread-replace nested field with a type-mismatch value
     const result = await checkParity(snap, { reader: readerFor(cleanFixtures()), namespace: NS });
     expect(result.ok).toBe(false);
     expect(has(result.divergences, "projectSignals", "type-mismatch")).toBe(true);

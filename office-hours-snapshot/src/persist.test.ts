@@ -34,7 +34,7 @@ async function decrypt(filePath: string, password: string): Promise<string> {
 }
 
 describe("formatTimestamp", () => {
-  it("formats as YYYY-MM-DDTHH-MM-SS with dashes for colons", () => {
+  it("formats as YYYY-MM-DDTHH-MM-SS with dashes for colons", () => { // type-safety-ok: false positive — 'as YYYY-MM-DDTHH-MM-SS' appears in a test description string, not in code
     // Construct via local-time fields so the assertion is TZ-independent.
     const d = new Date(2026, 5, 30, 9, 4, 7); // 2026-06-30 09:04:07 local
     expect(formatTimestamp(d)).toBe("2026-06-30T09-04-07");

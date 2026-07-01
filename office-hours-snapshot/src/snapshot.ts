@@ -201,7 +201,7 @@ function serializeReminder(r: Reminder, now: string): SerializedReminder {
 /**
  * Reuses the office-hours `serializeQueueMetrics` for the field map (scalars,
  * memberEmails, parked construction incl. the optional `phase`), then ISO-ifies
- * the two date-bearing spots it leaves as Dates: top-level `computedAt` and each
+ * the two date-bearing spots it leaves as Dates: top-level `computedAt` and each // type-safety-ok: false positive — 'as Dates' is prose in a JSDoc comment, not a type cast
  * `parked[].createdAt`.
  */
 function serializeQueueMetricsToIso(

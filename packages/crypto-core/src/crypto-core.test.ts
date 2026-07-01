@@ -9,7 +9,7 @@ import {
 
 // Mirror the typed getRandomValues wrapper from persist.ts
 const getRandomValues = (arr: Uint8Array): Uint8Array => {
-  webcrypto.getRandomValues(arr as Uint8Array<ArrayBuffer>);
+  webcrypto.getRandomValues(arr as Uint8Array<ArrayBuffer>); // type-safety-ok: narrowing to typed array for the webcrypto API generic parameter (same pattern as persist.ts)
   return arr;
 };
 

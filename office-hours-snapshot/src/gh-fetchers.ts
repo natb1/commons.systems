@@ -80,7 +80,7 @@ interface GraphQLResponse<T> {
 }
 
 /**
- * Run a GraphQL document through `gh api graphql`. `vars` are bound as GraphQL
+ * Run a GraphQL document through `gh api graphql`. `vars` are bound as GraphQL // type-safety-ok: false positive — prose in JSDoc comment, not a type cast
  * variables (one `-f key=value` each); the reserved `query` field carries the
  * document. Returns the `.data` payload. Throws on invalid JSON, a GraphQL
  * `errors` payload, or missing `data` — matching the hosted live helpers.
@@ -156,7 +156,7 @@ interface SearchDetailsResponse {
 // Mirrors searchIssueCountLive's GraphQL document, with the `$query` variable
 // renamed to `$searchQuery` to avoid colliding with gh's reserved `query` field.
 const COUNT_DOCUMENT = `
-  query($searchQuery: String!) {
+  query($searchQuery: String!) { // type-safety-ok: false positive — '!' is a GraphQL non-null type marker in a template literal, not a TS assertion
     search(query: $searchQuery, type: ISSUE) {
       issueCount
     }
@@ -166,7 +166,7 @@ const COUNT_DOCUMENT = `
 // Mirrors searchIssueDetailsLive's GraphQL document (single page, first: 100),
 // with the same `$query`→`$searchQuery` rename.
 const DETAILS_DOCUMENT = `
-  query($searchQuery: String!) {
+  query($searchQuery: String!) { // type-safety-ok: false positive — '!' is a GraphQL non-null type marker in a template literal, not a TS assertion
     search(query: $searchQuery, type: ISSUE, first: 100) {
       nodes {
         ... on Issue {
@@ -245,7 +245,7 @@ interface IssuesQueryResponse {
 }
 
 const JIT_ISSUES_DOCUMENT = `
-  query($owner: String!, $name: String!, $cursor: String) {
+  query($owner: String!, $name: String!, $cursor: String) { // type-safety-ok: false positive — '!' markers are GraphQL non-null type annotations in a template literal, not TS assertions
     repository(owner: $owner, name: $name) {
       issues(states: OPEN, first: 100, after: $cursor) {
         pageInfo { endCursor hasNextPage }

@@ -98,7 +98,7 @@ export function createCaptureFirestore(): CaptureFirestore {
     },
     // The producer always captures a fresh, empty items collection, so the
     // office-hours sync core's reconcile read finds nothing to delete.
-    get: () => Promise.resolve({ docs: [] as Array<{ id: string; ref: StubDocRef }> }),
+    get: () => Promise.resolve({ docs: [] as Array<{ id: string; ref: StubDocRef }> }), // type-safety-ok: empty literal typed to the shape the sync core expects
   });
 
   const doc = (fullPath: string): StubDocRef => {

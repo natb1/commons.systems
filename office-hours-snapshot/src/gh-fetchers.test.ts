@@ -118,7 +118,7 @@ describe("searchIssueCount", () => {
     expect(calls[0][2]).toBe("-f");
     const docArg = calls[0][3]; // "query=<document>"
     expect(docArg.startsWith("query=")).toBe(true);
-    expect(docArg).toContain("$searchQuery: String!");
+    expect(docArg).toContain("$searchQuery: String!"); // type-safety-ok: false positive — '!' is a GraphQL non-null type marker inside a string literal, not a TS assertion
     expect(docArg).toContain("issueCount");
     expect(docArg).not.toContain("$query:");
     expect(calls[0]).toContain('searchQuery=repo:o/r is:issue is:open label:"help wanted"');
@@ -195,7 +195,7 @@ describe("searchIssueDetails", () => {
     // document carries first: 100 and the renamed variable
     const doc = calls[0][3];
     expect(doc).toContain("first: 100");
-    expect(doc).toContain("$searchQuery: String!");
+    expect(doc).toContain("$searchQuery: String!"); // type-safety-ok: false positive — '!' is a GraphQL non-null type marker inside a string literal, not a TS assertion
   });
 });
 

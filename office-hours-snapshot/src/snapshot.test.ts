@@ -30,7 +30,7 @@ function assertNoTimestamps(value: unknown, path = "$"): void {
       typeof (value as { toDate?: unknown }).toDate,
       `${path} has no .toDate (not a Timestamp)`,
     ).not.toBe("function");
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) { // type-safety-ok: value is unknown in recursive helper; cast to iterate object entries
       assertNoTimestamps(v, `${path}.${k}`);
     }
   }
@@ -66,7 +66,7 @@ describe("serializeSnapshot", () => {
   function buildInput(): SnapshotInput {
     const usage: UsageSample = {
       // exercise the Timestamp.toDate() path on one field
-      sampledAt: timestampStub(new Date("2026-06-30T11:00:00.000Z")) as unknown as Date,
+      sampledAt: timestampStub(new Date("2026-06-30T11:00:00.000Z")) as unknown as Date, // type-safety-ok: Timestamp stub cast to Date for schema compatibility in the test fixture
       fiveHourUsedPct: 12,
       weeklyUsedPct: 34,
       fiveHourResetsAt: new Date("2026-06-30T16:00:00.000Z"),
@@ -91,7 +91,7 @@ describe("serializeSnapshot", () => {
       title: "Weekly digest",
       repo: "natb1/commons.systems",
       issueNumber: 42,
-      dueAt: serverTimestampSentinel as unknown as Date,
+      dueAt: serverTimestampSentinel as unknown as Date, // type-safety-ok: server timestamp sentinel cast to Date for schema compatibility in the test fixture
     };
 
     const queueMetrics: QueueMetricsSnapshot = {

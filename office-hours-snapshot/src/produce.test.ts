@@ -19,7 +19,7 @@ function assertNoTimestamps(value: unknown, path = "$"): void {
       typeof (value as { toDate?: unknown }).toDate,
       `${path} has no .toDate (not a Timestamp)`,
     ).not.toBe("function");
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) { // type-safety-ok: value is unknown in recursive helper; cast to iterate object entries
       assertNoTimestamps(v, `${path}.${k}`);
     }
   }

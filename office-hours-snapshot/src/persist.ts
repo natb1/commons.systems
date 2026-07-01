@@ -121,7 +121,7 @@ export async function writeSnapshot(
   const plaintext = typeof json === "string" ? json : JSON.stringify(json);
   const benc = await encryptData(
     crypto.webcrypto.subtle,
-    (arr: Uint8Array): Uint8Array => { crypto.webcrypto.getRandomValues(arr as Uint8Array<ArrayBuffer>); return arr; },
+    (arr: Uint8Array): Uint8Array => { crypto.webcrypto.getRandomValues(arr as Uint8Array<ArrayBuffer>); return arr; }, // type-safety-ok: narrowing to typed array for the webcrypto API generic parameter
     plaintext,
     password,
   );
