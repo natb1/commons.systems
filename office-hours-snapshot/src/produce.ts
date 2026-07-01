@@ -148,6 +148,9 @@ const USAGE_SAMPLE_WRITER = path.join(
 function spawnNode(args: string[], stdin?: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn("node", args, { stdio: ["pipe", "pipe", "pipe"] });
+    // Suppress EPIPE if the child exits before draining stdin; the 'close'
+    // handler already captures a non-zero exit as a rejected promise.
+    child.stdin.on("error", () => {});
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", (c) => (stdout += c.toString()));

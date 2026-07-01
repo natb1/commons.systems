@@ -179,8 +179,11 @@ async function defaultReadPriorHistory(
   let buf: Buffer;
   try {
     buf = fs.readFileSync(file);
-  } catch {
-    return null; // no prior snapshot yet — start a fresh series.
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      return null; // no prior snapshot yet — start a fresh series.
+    }
+    throw err; // present-but-unreadable (EACCES, EISDIR, EIO, …) → surface, never silently reset history.
   }
   const ab = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer; // type-safety-ok: a file-backed Buffer is never SharedArrayBuffer-backed
   const plaintext = await decryptData(crypto.webcrypto.subtle, ab, password);
