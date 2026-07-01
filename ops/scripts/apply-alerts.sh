@@ -80,6 +80,10 @@ PROJECT_ID="$(jq -r '.projectId' "$BUDGET_FILE")"
 BILLING_ACCOUNT="$(gcloud billing projects describe "$PROJECT" \
   --format='value(billingAccountName)')"
 BILLING_ACCOUNT="${BILLING_ACCOUNT#billingAccounts/}"
+if [[ -z "$BILLING_ACCOUNT" ]]; then
+  echo "error: could not resolve billing account for $PROJECT" >&2
+  exit 1
+fi
 
 # One --threshold-rule=percent=P flag per element of thresholdPercents.
 THRESHOLD_FLAGS=()
