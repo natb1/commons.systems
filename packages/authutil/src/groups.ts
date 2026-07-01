@@ -39,7 +39,7 @@ function requireEmail(caller: string, user: User): string {
 
 export async function getUserGroups(db: Firestore, namespace: Namespace, user: User): Promise<Group[]> {
   const email = requireEmail("getUserGroups", user);
-  const q = query(collection(db, groupsPath(namespace)), where("members", "array-contains", email));
+  const q = query(collection(db, groupsPath(namespace)), where("members", "array-contains", email)); // query-bounds-ok: authz needs the complete group set; a limit would break isInGroup semantics
   const snapshot = await getDocs(q);
   return snapshot.docs
     .map((docSnap) => {

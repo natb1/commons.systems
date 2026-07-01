@@ -47,7 +47,7 @@ export async function getPosts(db: Firestore, namespace: Namespace, user: User |
   const q = admin
     ? query(collection(db, path), orderBy("publishedAt", "desc"))
     : query(collection(db, path), where("published", "==", true));
-  const snapshot = await getDocs(q);
+  const snapshot = await getDocs(q); // query-bounds-ok: blog index needs all published posts; pagination is a product decision tracked under #2686
   const posts: PostMeta[] = [];
   let skippedCount = 0;
   for (const d of snapshot.docs) {
