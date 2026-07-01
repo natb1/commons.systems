@@ -202,6 +202,8 @@ jobs:
         run: .claude/hooks/test-statusline.sh
       - name: Run type-safety escape-hatch sensor tests
         run: .github/scripts/test-check-type-safety-escapes.sh
+      - name: Run Firestore query-bounds sensor tests
+        run: .github/scripts/test-check-firestore-query-bounds.sh
       - name: Run test-integrity script tests
         run: .github/scripts/test-check-test-integrity.sh
 
@@ -256,6 +258,15 @@ jobs:
           fetch-depth: 0
       - name: Flag net-new type-safety escape hatches
         run: .github/scripts/check-type-safety-escapes.sh
+
+  firestore-query-bounds-sensor:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - name: Flag unbounded Firestore getDocs queries
+        run: .github/scripts/check-firestore-query-bounds.sh
 
   go-tests:
     runs-on: ubuntu-latest
