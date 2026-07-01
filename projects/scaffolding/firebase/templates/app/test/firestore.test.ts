@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mockGetDocs = vi.fn();
 const mockCollection = vi.fn();
+const mockLimit = vi.fn();
 const mockQuery = vi.fn();
 const mockOrderBy = vi.fn();
 const mockWhere = vi.fn();
@@ -9,6 +10,7 @@ const mockWhere = vi.fn();
 vi.mock("firebase/firestore", () => ({
   collection: (...args: unknown[]) => mockCollection(...args),
   getDocs: (...args: unknown[]) => mockGetDocs(...args),
+  limit: (...args: unknown[]) => mockLimit(...args),
   query: (...args: unknown[]) => mockQuery(...args),
   orderBy: (...args: unknown[]) => mockOrderBy(...args),
   where: (...args: unknown[]) => mockWhere(...args),
