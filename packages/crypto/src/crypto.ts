@@ -67,14 +67,15 @@ export function createBencCrypto(opts: { validationError: (message: string) => E
     }
   }
 
-  function postToWorker(msg: Record<string, unknown>): Promise<unknown> {
+  function postToWorker<T>(msg: Record<string, unknown>): Promise<T> {
     const w = getWorker();
     if (!w) throw new Error("crypto worker unavailable");
     const id = msgId++;
-    return new Promise((resolve, reject) => {
-      pending.set(id, { resolve, reject });
-      if (msg.data instanceof ArrayBuffer) {
-        w.postMessage({ ...msg, id }, [msg.data as ArrayBuffer]);
+    return new Promise<T>((resolve, reject) => {
+      pending.set(id, { resolve: resolve as (v: unknown) => void, reject });
+      const msgData = msg.data;
+      if (msgData instanceof ArrayBuffer) {
+        w.postMessage({ ...msg, id }, [msgData]);
       } else {
         w.postMessage({ ...msg, id });
       }
@@ -84,7 +85,7 @@ export function createBencCrypto(opts: { validationError: (message: string) => E
   async function encrypt(plaintext: string, password: string): Promise<ArrayBuffer> {
     if (!password) throw new Error("Password must not be empty for encryption.");
     if (getWorker()) {
-      return postToWorker({ type: "encrypt", plaintext, password }) as Promise<ArrayBuffer>;
+      return postToWorker<ArrayBuffer>({ type: "encrypt", plaintext, password });
     }
     return encryptData(crypto.subtle, (a) => crypto.getRandomValues(a), plaintext, password);
   }
@@ -94,7 +95,7 @@ export function createBencCrypto(opts: { validationError: (message: string) => E
       throw validationError("File is not in BENC encrypted format.");
     }
     if (getWorker()) {
-      return postToWorker({ type: "decrypt", data, password }) as Promise<string>;
+      return postToWorker<string>({ type: "decrypt", data, password });
     }
     try {
       return await decryptData(crypto.subtle, data, password);
