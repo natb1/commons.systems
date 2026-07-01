@@ -1,14 +1,7 @@
-import {
-  collection,
-  getDocs,
-  limit,
-  orderBy,
-  query,
-  where,
-  type Firestore,
-} from "firebase/firestore";
+import type { Firestore } from "firebase/firestore";
 import type { User } from "firebase/auth";
 import { nsCollectionPath, type Namespace } from "@commons-systems/firestoreutil/namespace";
+import { boundedQuery } from "@commons-systems/firestoreutil/bounded-query";
 import seedSamples from "virtual:office-hours-usage-seed-data";
 import { toUsageSample, type UsageSample } from "./usage-samples.js";
 
@@ -41,13 +34,11 @@ export async function getOwnerSamples(
 ): Promise<UsageSample[]> {
   if (!user.email) return [];
   const path = nsCollectionPath(namespace, "usage-samples");
-  const q = query(
-    collection(db, path),
-    where("memberEmails", "array-contains", user.email),
-    orderBy("sampledAt", "desc"),
-    limit(USAGE_SAMPLE_LIMIT),
-  );
-  const snapshot = await getDocs(q);
+  const bounded = boundedQuery(db, path)
+    .where("memberEmails", "array-contains", user.email)
+    .orderBy("sampledAt", "desc")
+    .limit(USAGE_SAMPLE_LIMIT);
+  const snapshot = await bounded.getDocs();
   const samples: UsageSample[] = [];
   for (const d of snapshot.docs) {
     const sample = toUsageSample(d.id, d.data());
