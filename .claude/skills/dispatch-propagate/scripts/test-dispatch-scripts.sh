@@ -32769,6 +32769,22 @@ assert_eq "finders: docs surface → codeql absent" "0" "$n"
 out=$(printf 'surface=tests\ndeps=false\napp_or_rules=false\n' | "$SCRIPT_DIR/dispatch-review-finders")
 assert_eq "finders: tests → code-review only" "code-review" "$out"
 
+# cost finder: present when surface=code + app_or_rules=true
+n=$(printf 'surface=code\ndeps=false\napp_or_rules=true\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -c '^cost$')
+assert_eq "finders: code+app → cost present" "1" "$n"
+
+# cost finder: absent when surface=code + app_or_rules=false
+n=$(printf 'surface=code\ndeps=false\napp_or_rules=false\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -c '^cost$' || true)
+assert_eq "finders: code !app → cost absent" "0" "$n"
+
+# cost finder: absent on docs surface
+n=$(printf 'surface=docs\ndeps=false\napp_or_rules=false\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -c '^cost$' || true)
+assert_eq "finders: docs surface → cost absent" "0" "$n"
+
+# cost finder: absent on tests surface
+n=$(printf 'surface=tests\ndeps=false\napp_or_rules=false\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -c '^cost$' || true)
+assert_eq "finders: tests surface → cost absent" "0" "$n"
+
 # ============================================================================
 # === dispatch-review-dedup ===
 # ============================================================================
