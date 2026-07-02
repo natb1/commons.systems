@@ -20,6 +20,7 @@ describe("store round-trip", () => {
       status: "codified",
       parent: "charter",
       serves: ["charter"],
+      recovers: ["delegation-1"],
       rationale: "Alignment is the project's reason for being.",
       reading: "See the alignment principles.",
       gap: "No automated alignment check exists yet.",
@@ -52,6 +53,7 @@ describe("store round-trip", () => {
       status: "codified",
       parent: "root-1",
       serves: [],
+      recovers: [],
       // rationale ends with \n (trailing newline); reading does not — exercises both chomping cases
       rationale:
         "Block scalars in YAML can silently strip trailing newlines\nor fold long lines.\n\nThis test pins the guarantee that neither transformation occurs.\n",
@@ -103,6 +105,7 @@ describe("store round-trip", () => {
       status: "raw",
       parent: null,
       serves: [],
+      recovers: [],
       rationale: null,
       reading: null,
       gap: null,

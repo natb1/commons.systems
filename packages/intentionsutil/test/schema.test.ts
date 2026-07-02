@@ -12,6 +12,7 @@ describe("validateNode", () => {
       status: "codified",
       parent: "p",
       serves: ["v1", "v2"],
+      recovers: ["d1"],
       rationale: "r",
       reading: "rd",
       gap: "g",
@@ -44,6 +45,7 @@ describe("validateNode", () => {
       status: "raw",
       parent: null,
       serves: [],
+      recovers: [],
       rationale: null,
       reading: null,
       gap: null,
@@ -135,6 +137,7 @@ describe("validateGraph", () => {
       status: partial.status ?? "raw",
       parent: partial.parent ?? null,
       serves: partial.serves ?? [],
+      recovers: partial.recovers ?? [],
       rationale: partial.rationale ?? null,
       reading: partial.reading ?? null,
       gap: partial.gap ?? null,
@@ -151,7 +154,16 @@ describe("validateGraph", () => {
       gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
       gnode({ id: "kind-virtue", kind: "kind", status: "codified" }),
       gnode({ id: "kind-tactic", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-strategy", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-delegation", kind: "kind", status: "codified" }),
       gnode({ id: "virtue-root", kind: "virtue", status: "codified", parent: null }),
+      gnode({ id: "delegation-1", kind: "delegation" }),
+      gnode({
+        id: "strategy-1",
+        kind: "strategy",
+        serves: ["virtue-root"],
+        recovers: ["delegation-1"],
+      }),
       gnode({
         id: "tactic-1",
         kind: "tactic",
@@ -192,7 +204,18 @@ describe("validateGraph", () => {
     );
   });
 
-  it("lists ALL violations in one throw (kind + parent + serves)", () => {
+  it("throws when a recovers entry does not resolve to a node", () => {
+    const nodes = [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-strategy", kind: "kind", status: "codified" }),
+      gnode({ id: "strategy-1", kind: "strategy", recovers: ["delegation-missing"] }),
+    ];
+    expect(() => validateGraph(nodes)).toThrow(
+      /strategy-1.*recovers "delegation-missing" does not resolve to a node/,
+    );
+  });
+
+  it("lists ALL violations in one throw (kind + parent + serves + recovers)", () => {
     const nodes = [
       gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
       gnode({
@@ -200,6 +223,7 @@ describe("validateGraph", () => {
         kind: "ghost",
         parent: "no-such-parent",
         serves: ["no-such-target"],
+        recovers: ["no-such-delegation"],
       }),
     ];
     let caught: unknown;
@@ -213,5 +237,6 @@ describe("validateGraph", () => {
     expect(caught.message).toContain('kind "ghost" has no kind-ghost node');
     expect(caught.message).toContain('parent "no-such-parent" does not resolve to a node');
     expect(caught.message).toContain('serves "no-such-target" does not resolve to a node');
+    expect(caught.message).toContain('recovers "no-such-delegation" does not resolve to a node');
   });
 });

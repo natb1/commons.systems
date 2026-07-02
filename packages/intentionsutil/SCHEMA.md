@@ -62,6 +62,7 @@ authoritative data.
 | `status`         | `Status` enum         | yes      | Lifecycle stage of the node. |
 | `parent`         | `string \| null`      | no       | `id` of the parent node; `null` for a root. Defaults to `null`. |
 | `serves`         | `string[]`            | no       | `id`s of the nodes this node expresses — e.g. a strategy serves one or more virtues. Defaults to `[]`. |
+| `recovers`       | `string[]`            | no       | `id`s of delegation records this node's work unwinds — meaningful on strategies. Defaults to `[]`. |
 | `rationale`      | `string \| null`      | no       | Why this intention exists. Defaults to `null`. |
 | `reading`        | `string \| null`      | no       | The current measured value of the `success_signal` observable; `null` until a sensor populates it. Defaults to `null`. |
 | `gap`            | `string \| null`      | no       | The shortfall between `reading` and `success_signal.threshold`, mechanically derived by `deriveGap`; `null` when the reading meets the threshold or no signal exists. Defaults to `null`. |
@@ -136,7 +137,8 @@ nodes as invalid.
 
 `validateGraph(nodes)` checks referential integrity across a whole node set:
 every node's `kind` has its defining `kind-<kind>` node present, and every
-non-null `parent` and every `serves` entry resolves to an existing node id. It
+non-null `parent` and every `serves` and `recovers` entry resolves to an
+existing node id. It
 throws one error listing all violations. Backfill runs it over the full store
 after regenerating the tactic leaves.
 
@@ -144,7 +146,7 @@ after regenerating the tactic leaves.
 
 `node → file → node` is lossless on the frontmatter model. `validateNode`
 returns an object with exactly the `IntentionNode` fields and all defaults
-applied (`parent: null`, `serves: []`, `rationale: null`, `reading: null`,
+applied (`parent: null`, `serves: []`, `recovers: []`, `rationale: null`, `reading: null`,
 `gap: null`, `clarifications: []`, `tooling_goals: []`, `success_signal: null`,
 `attributes: {}`), so constructing a node, writing it to frontmatter, reading
 it back, and validating yields a deep-equal node. `attributes` values must be

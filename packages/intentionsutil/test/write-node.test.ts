@@ -33,6 +33,7 @@ describe("writeNodeFromJson", () => {
     expect(read.parent).toBeNull();
     // Optional fields should be defaulted by validateNode.
     expect(read.serves).toEqual([]);
+    expect(read.recovers).toEqual([]);
     expect(read.clarifications).toEqual([]);
     expect(read.tooling_goals).toEqual([]);
     expect(read.success_signal).toBeNull();

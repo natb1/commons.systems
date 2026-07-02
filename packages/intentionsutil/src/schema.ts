@@ -67,6 +67,7 @@ export interface IntentionNode {
   // so they default rather than throw.
   parent: string | null;
   serves: string[]; // ids of the nodes this node expresses (e.g. strategy → virtue)
+  recovers: string[]; // ids of delegation records this node's work unwinds; meaningful on strategies
   rationale: string | null;
   reading: string | null; // current measured value of success_signal.observable; null until a sensor populates it
   gap: string | null;
@@ -90,6 +91,7 @@ export interface IntentionNodeInput {
   status: Status;
   parent?: string | null;
   serves?: string[];
+  recovers?: string[];
   rationale?: string | null;
   reading?: string | null;
   gap?: string | null;
@@ -150,7 +152,7 @@ function validateSuccessSignal(value: unknown, field: string): SuccessSignal {
   };
 }
 
-function validateServes(value: unknown, field: string): string[] {
+function validateIdArray(value: unknown, field: string): string[] {
   if (!Array.isArray(value)) {
     throw new IntentionSchemaError(`Expected array for ${field}, got ${typeof value}`);
   }
@@ -241,7 +243,8 @@ export function validateNode(value: unknown): IntentionNode {
     gap: optionalString(value.gap, "gap"),
 
     // Optional structured — absent/null tolerated, defaults [] / {} / null.
-    serves: value.serves == null ? [] : validateServes(value.serves, "serves"),
+    serves: value.serves == null ? [] : validateIdArray(value.serves, "serves"),
+    recovers: value.recovers == null ? [] : validateIdArray(value.recovers, "recovers"),
     clarifications:
       value.clarifications == null
         ? []
@@ -272,6 +275,7 @@ export function validateNode(value: unknown): IntentionNode {
  *      the set of committed kind nodes, not an enum in this file.
  *   2. Every non-null `parent` resolves to an existing node id.
  *   3. Every `serves` entry resolves to an existing node id.
+ *   4. Every `recovers` entry resolves to an existing node id.
  *
  * Throws a single IntentionSchemaError listing ALL problems found, so one run
  * surfaces every dangling reference rather than the first.
@@ -289,6 +293,11 @@ export function validateGraph(nodes: IntentionNode[]): void {
     for (const target of node.serves) {
       if (!ids.has(target)) {
         problems.push(`${node.id}: serves "${target}" does not resolve to a node`);
+      }
+    }
+    for (const target of node.recovers) {
+      if (!ids.has(target)) {
+        problems.push(`${node.id}: recovers "${target}" does not resolve to a node`);
       }
     }
   }

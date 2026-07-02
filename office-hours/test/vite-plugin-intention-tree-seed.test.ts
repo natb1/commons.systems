@@ -53,6 +53,7 @@ describe("officeHoursIntentionTreeSeedPlugin", () => {
         clarifications?: unknown;
         tooling_goals?: unknown;
         reading?: unknown;
+        recovers?: unknown;
       }>;
       frontierIds: string[];
       trackers: Record<string, { issue_number: number; state: string; [key: string]: unknown }>;
@@ -83,6 +84,7 @@ describe("officeHoursIntentionTreeSeedPlugin", () => {
       expect(sample.clarifications).toBeUndefined();
       expect(sample.tooling_goals).toBeUndefined();
       expect(sample.reading).toBeUndefined();
+      expect(sample.recovers).toBeUndefined();
     });
 
     it("frontierIds is an array of strings", () => {
