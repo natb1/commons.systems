@@ -1,5 +1,6 @@
-import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 import type { Firestore } from "firebase/firestore";
+import { boundedQuery } from "@commons-systems/firestoreutil/bounded-query";
 import type { User } from "firebase/auth";
 import {
   nsCollectionPath,
@@ -39,8 +40,10 @@ function requireEmail(caller: string, user: User): string {
 
 export async function getUserGroups(db: Firestore, namespace: Namespace, user: User): Promise<Group[]> {
   const email = requireEmail("getUserGroups", user);
-  const q = query(collection(db, groupsPath(namespace)), where("members", "array-contains", email)); // query-bounds-ok: authz needs the complete group set; a limit would break isInGroup semantics
-  const snapshot = await getDocs(q);
+  const snapshot = await boundedQuery(db, groupsPath(namespace))
+    .where("members", "array-contains", email)
+    .unbounded("groups per user are small and finite")
+    .getDocs(); // query-bounds-ok: bounded via .unbounded() above — groups per user are small and finite
   return snapshot.docs
     .map((docSnap) => {
       const name = docSnap.data().name;

@@ -76,7 +76,7 @@
     "budget": { "entry": ["seeds/**", "e2e/**", "scripts/**"] },
     "packages/authutil": { "entry": ["bin/**"] },
     "packages/firebaseutil": { "entry": ["bin/**"] },
-    "packages/firestoreutil": { "entry": ["bin/**"] },
+    "packages/firestoreutil": { "entry": ["bin/**", "test/*.type-check.ts"] },
     "functions": { "entry": ["scripts/**"] },
     "packages/intentionsutil": { "entry": ["scripts/**"] }
   }

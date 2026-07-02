@@ -1,113 +1,267 @@
 ---
 name: budget
-description: Convert a user's bank statement files (QFX/OFX/CSV) into a `budget.json` for the hosted budget app — runs the bundled `budget-etl` binary locally so transaction data never leaves the user's machine. Trigger on `/budget <path>`, "convert my bank statements", or "make a budget.json".
+description: Encrypted monthly statement-merge sync — ingests new bank downloads, categorizes the unhandled transactions through a dialog, and writes a fresh encrypted snapshot the hosted budget app reloads. Trigger on `/budget`, "sync my statements", or "merge this month's statements".
 ---
 
 # budget
 
-You receive a path to one or more bank statement files (QFX/OFX/CSV) and produce a plaintext `budget.json` the user can upload to the hosted budget app. Every step runs locally — see the privacy invariant below.
+This skill runs the monthly statement-merge sync entirely on the user's machine.
+Each run ingests new bank downloads into the statements archive, generates an
+inspection report, walks the user through categorizing any unhandled
+transactions, and writes a fresh encrypted snapshot that the hosted budget app
+picks up automatically.
+
+Two orchestrator scripts do the heavy lifting. You drive them and own the
+user-facing dialog:
+
+- `bash .claude/skills/budget/scripts/budget-sync` — the read-only half. It
+  resolves the per-user config, resolves the distributed binary, requires
+  `BUDGET_ETL_PASSWORD`, bootstraps the snapshot on first run, ingests new
+  downloads, and writes the inspection report to `/tmp/inspect.json`. Platform
+  detection and binary resolution are encapsulated inside this script — you no
+  longer do them yourself.
+- `bash .claude/skills/budget/scripts/budget-apply [spec]` — the mutating half.
+  It applies a patch spec (default `/tmp/budget-patch.json`), merges the
+  statements into a fresh encrypted snapshot `snapshotDir/budget-<ts>.enc.json`,
+  publishes it onto `current` with `cp -f`, and re-reports residual
+  uncategorized into `/tmp/inspect.json`.
 
 ## Privacy invariant
 
-Statement data does not leave the user's machine. You must not send transaction contents, descriptions, amounts, account numbers, the input files, or the generated `budget.json` to any network endpoint. Do not paste statement contents into web fetches, chat replies that route through external services, or any other outbound channel.
+Transaction data does not leave the user's machine. You must not send
+transaction contents, descriptions, amounts, account numbers, the input files,
+or any snapshot to a network endpoint.
 
-The only outbound network call permitted is the one-time binary download in step 2 (an HTTPS GET to `https://github.com/natb1/commons.systems/releases`), and only when no local binary is available. That request transfers no statement data.
+The snapshot written to the user-configured `snapshotDir` and `current` is
+**encrypted** (`.enc.json`). Even when those locations are inside a cloud-synced
+folder (e.g. a Google Drive mount), only the holder of `BUDGET_ETL_PASSWORD` can
+decrypt the contents — the cloud provider stores ciphertext only. The password
+lives in the environment and is never written to a snapshot or transmitted.
 
-If you would otherwise need to send statement data anywhere to complete a step, stop and surface the situation to the user instead.
+The only outbound network call permitted is the one-time binary download
+(an HTTPS GET to `https://github.com/natb1/commons.systems/releases`), and only
+when no local binary is already present. That request transfers no transaction
+data. If a step would otherwise need to send transaction data anywhere, stop and
+surface the situation to the user instead.
 
-## Step 1 — Detect the platform
+## Precondition — BUDGET_ETL_PASSWORD
 
-Run `uname -sm` and map the output to a platform tag:
-
-| `uname -sm` output | platform tag |
-| --- | --- |
-| `Darwin arm64` | `darwin-arm64` |
-| `Darwin x86_64` | `darwin-amd64` |
-| `Linux x86_64` | `linux-amd64` |
-
-Any other output is unsupported. Fail with a message like:
-
-> Your platform `<uname output>` is not in the pre-built binary set (darwin-arm64, darwin-amd64, linux-amd64). Fork the project at https://github.com/natb1/commons.systems/fork and run `/budget-parser <path>` from your fork to build the tool from source.
-
-Do not proceed to step 2.
-
-## Step 2 — Resolve the binary
-
-Check these locations in order. The first match wins. Print one line stating which path you chose so the user can audit.
-
-1. `${CLAUDE_PLUGIN_ROOT}/bin/budget-etl-<platform>` — the binary shipped with the plugin. Use it if it exists and is executable.
-2. `~/.cache/commons-systems/bin/budget-etl-<platform>` — a previously-downloaded copy. Use it if it exists and is executable (a failed download may leave a stale non-executable file here).
-3. Download from GitHub Releases:
-
-   ```bash
-   mkdir -p ~/.cache/commons-systems/bin
-   curl -fSL -o ~/.cache/commons-systems/bin/budget-etl-<platform> \
-     https://github.com/natb1/commons.systems/releases/latest/download/budget-etl-<platform>
-   chmod +x ~/.cache/commons-systems/bin/budget-etl-<platform>
-   ```
-
-   Use the downloaded path. If the download fails, surface `curl`'s error to the user and stop.
-
-Bind the resolved path to `BUDGET_ETL_BIN` for the rest of the steps below.
-
-## Step 3 — Parse arguments and stage the input
-
-The invocation is `/budget <path>` with an optional `--output <out>`.
-
-**Branch A — Directory with existing `institution/account/[period]/file` layout:**
-
-If `<path>` is a directory, check whether it already matches the required layout. Walk the directory tree to see if direct subdirectories contain an `institution` or `account` pattern (e.g., checking one level deep for folders, then one more level, to detect paths like `boa/checking/` or `boa/checking/2025-01/`). If the layout is 3–4 levels deep, use the directory as-is: bind `INPUT_DIR` to `<path>`. Skip the staging steps below and proceed directly to step 4 without `--institution` or `--account` flags.
-
-**Branch B — Single file, glob, or flat directory:**
-
-For any other input (single files, globs, flat directories), ask the user for institution and account labels. Suggest defaults based on the filename. For example, `boa-checking-jul.qfx` would suggest `institution=boa`, `account=checking-jul`. 
-
-If the files are QFX or OFX format, mention that the user can optionally `grep` for `<BANKID>` and `<ACCTID>` tags in the file to find the real institution/account codes, but do not attempt to parse the binary OFX/QFX format yourself.
-
-Create a temp directory and copy or symlink all input files in:
+Every snapshot read and write is encrypted, so the password is mandatory.
+Before running either script, the user must export it into the environment:
 
 ```bash
-INPUT_DIR="$(mktemp -d)"
-cp "<path>" "$INPUT_DIR/"
+export BUDGET_ETL_PASSWORD=...
 ```
 
-If `<path>` is a glob or multiple paths, copy each file into the same temp dir. If `<path>` is a flat directory, copy its files with `cp "<path>"/* "$INPUT_DIR/"`. Use `$INPUT_DIR` as the input dir.
+The binary reads `BUDGET_ETL_PASSWORD` from the environment itself — it is never
+passed as a flag. macOS users with a keychain entry may alternatively pass
+`--keychain <entry>` to the binary, as the binary's own help notes.
 
-**Output path:**
+If `budget-sync` exits 1 reporting a missing password, surface the message and
+have the user export the variable, then re-run.
 
-The default output is `./budget.json` in the user's current working directory. Honor `--output <out>` when given. Bind the chosen path to `OUTPUT_PATH` for step 4.
+## Step 1 — Sync
 
-## Step 4 — Run the binary
-
-**Branch A — Directory with existing layout (no flags):**
+Run the read-only half:
 
 ```bash
-"$BUDGET_ETL_BIN" --dir "$INPUT_DIR" --group personal --plaintext --output "$OUTPUT_PATH"
+bash .claude/skills/budget/scripts/budget-sync
 ```
 
-**Branch B — Flat input (with institution and account flags):**
+Branch on its exit code:
+
+- **Exit 3 (`no-config`)** — the per-user config file is absent. This is the
+  first-run signal. Go to the config interview below, then re-run `budget-sync`.
+- **Exit 1** — invalid config, a missing directory or Drive mount, an
+  unsupported platform, a binary download failure, or a missing password. The
+  script's stderr already names the offending path or variable. Surface it to
+  the user and stop; do not retry blindly.
+- **Any other non-zero exit** — a binary call failed and propagated its own exit
+  code. If its stderr names a decryption failure reading the existing `current`
+  snapshot, that is a password problem, not a config problem — go to
+  "Wrong-password handling" below. Otherwise surface the binary's stderr and
+  stop.
+- **Exit 0** — the report was produced. Read `/tmp/inspect.json` and continue to
+  step 2.
+
+### First-run config interview (exit 3 only)
+
+When `budget-sync` exits 3, walk the user through creating the config file at:
+
+```
+${XDG_CONFIG_HOME:-$HOME/.config}/commons-systems/budget-etl.json
+```
+
+It is a JSON object with four required keys, each an **absolute** path:
+
+```json
+{
+  "downloads":   "/absolute/path/to/where/bank/exports/land",
+  "statements":  "/absolute/path/to/the/statements/archive",
+  "snapshotDir": "/absolute/path/to/the/encrypted/snapshot/history",
+  "current":     "/absolute/path/to/the/current/snapshot/the/app/reads"
+}
+```
+
+- `downloads` — where your bank's exported statement files land (e.g. a browser
+  downloads folder).
+- `statements` — the archive the synced files are filed into, by
+  institution/account. This persists across runs.
+- `snapshotDir` — where each run's immutable encrypted snapshot
+  (`budget-<ts>.enc.json`) is kept as history.
+- `current` — the single snapshot the hosted app reads. Each run overwrites it
+  in place with a copy of the newest snapshot.
+
+`snapshotDir` and `current` may live in a cloud-synced folder — the snapshot is
+encrypted, so this is safe (see the privacy invariant). Also remind the user to
+export `BUDGET_ETL_PASSWORD` (or use `--keychain` on macOS) if they have not
+already. Once the file exists, re-run `budget-sync`.
+
+## Step 2 — Decide whether to categorize
+
+Read the report:
 
 ```bash
-"$BUDGET_ETL_BIN" --dir "$INPUT_DIR" --group personal --plaintext --output "$OUTPUT_PATH" \
-  --institution "<institution>" --account "<account>"
+new_statements=$(jq '.new_statements | length' /tmp/inspect.json)
+uncategorized=$(jq '.uncategorized | length' /tmp/inspect.json)
 ```
 
-In both cases, `--plaintext` is required: it tells `budget-etl` to skip the password prompt and write an unencrypted `budget.json` the hosted app can read. The binary processes the files locally. No network call is made.
+- **`uncategorized == 0` and `new_statements == 0`** — nothing changed. Report a
+  clean no-op and stop. There is no snapshot to write.
+- **`uncategorized == 0` and `new_statements > 0`** — every new transaction is
+  already covered by existing rules, but the new statements still need to merge
+  into a fresh snapshot. Skip the dialog. Write a no-op patch spec (empty `add`
+  and `remove`) to `/tmp/budget-patch.json`:
 
-Capture stderr separately so step 5 can inspect it. Do not retry on failure — diagnose before re-running.
+  ```json
+  { "remove": { "by_id": [], "by_predicate": [] }, "add": [] }
+  ```
 
-## Step 5 — Handle the result
+  Then go straight to step 4 (Apply) with this spec.
+- **`uncategorized > 0`** — enter the categorization dialog (step 3).
 
-**Success (exit 0).** Print exactly:
+## Step 3 — Categorization dialog
 
-> Wrote `<OUTPUT_PATH>`. Upload it to https://cs-budget-f920.web.app — your data stays on your machine.
+The report has three arrays:
 
-**Failure with unrecognized format.** If the exit code is non-zero and stderr contains the substring `unrecognized statement format`, the user's bank uses an export format the bundled parsers don't cover. Tell them:
+- `new_statements` — per-statement summary (institution, account, period,
+  txn_count, date_range, balance).
+- `uncategorized` — transactions no existing rule covers.
+- `new_transactions` — every newly-parsed transaction with its `doc_id` (used
+  for trip-window budget overrides).
 
-> Your bank's export format isn't recognized by the bundled parsers (QFX/OFX/CSV). To teach the tool a new format:
+**Source recommendations from history.** Dump the prior snapshot's transactions
+through the binary's `dump` subcommand, which takes the snapshot path as a
+positional argument and reads the password from the environment. `budget-sync`
+already printed the resolved binary path on its first line. budget-sync runs in
+a subprocess, so its bindings don't persist — re-bind them in your shell first:
+
+```bash
+BUDGET_ETL_BIN=$(...)   # the path from budget-sync's "using binary <path>" line
+current=$(jq -r '.current' <<<"$(.claude/skills/budget/scripts/budget-config-load)")
+"$BUDGET_ETL_BIN" dump "$current" > /tmp/dump.json
+```
+
+Use `jq` over `/tmp/dump.json` to find past transactions whose descriptions
+share a substring with each uncategorized entry, and propose the category /
+budget target that history already used.
+
+**Print the unhandled-transactions table.** Sort `uncategorized` by date so trip
+clusters appear in date order. For each row print:
+
+| institution | description | date | amount | recommended category | recommended budget |
+
+**Prompt for clusters.** Ask about lodging anchors and non-home merchant
+clusters — e.g. "These charges near a hotel stay — vacation, business, or
+regular?" Convert the answers into the patch spec below.
+
+### Patch-spec shape
+
+Write `/tmp/budget-patch.json` as a top-level object with `remove` and `add`:
+
+```json
+{
+  "remove": {
+    "by_id": ["rule-id-to-remove"],
+    "by_predicate": [
+      {"type": "budget_assignment", "matchCategory": "Travel", "target": "vacation", "pattern": ""}
+    ]
+  },
+  "add": [
+    {"id": "cat-headway", "type": "categorization", "pattern": "HEADWAY", "target": "Health:Therapy", "priority": 10},
+    {"id": "bg-trip-dogfish", "type": "budget_assignment", "transactionId": "<doc-id>", "target": "vacation"}
+  ]
+}
+```
+
+- `remove.by_id` removes rules by their id.
+- `remove.by_predicate` removes rules matching a set of fields.
+- `add[]` entries are either `categorization` rules (match a `pattern`, assign a
+  `target` category, with a `priority`) or `budget_assignment` rules (assign a
+  `target` budget). A trip override targets a single transaction by its doc-id
+  via `transactionId` (read the doc-id from `new_transactions` in the report).
+
+## Step 4 — Apply, then loop (hard cap 3 iterations)
+
+Run the mutating half with the patch spec:
+
+```bash
+bash .claude/skills/budget/scripts/budget-apply /tmp/budget-patch.json
+```
+
+It patches `current`, merges the statements into a fresh encrypted snapshot,
+publishes that onto `current` with `cp -f`, and re-reports into
+`/tmp/inspect.json`.
+
+The binary's `merge` step hard-errors if any transaction is still uncategorized
+— that gate is intentional, and it is what drives the loop. Because
+`budget-apply` runs under `set -e`, a failed `merge` exits the script before it
+publishes or re-reports: the remaining uncategorized transactions are named in
+the **merge step's stderr**, and `/tmp/inspect.json` is not refreshed on this
+path. So on a non-zero exit whose stderr names remaining uncategorized
+transactions, take the residual list from that stderr, return to the step-3
+dialog to extend the patch spec, and re-run `budget-apply`.
+
+**Hard cap: 3 iterations.** After three apply attempts without convergence,
+stop and surface the remaining uncategorized transactions to the user. Do not
+loop further.
+
+A successful `budget-apply` (exit 0) means every transaction categorized, the
+merge completed, and `current` was overwritten in place; `/tmp/inspect.json` is
+then refreshed with a zero residual.
+
+## Step 5 — Summary
+
+`budget-apply` prints the per-statement summary table on success:
+
+| institution | new txn count | first date | last date | balance |
+
+Report that table plus a "Rules: N added, M removed" line derived from the patch
+spec you applied. Name the new snapshot path
+(`snapshotDir/budget-<ts>.enc.json`, echoed by `budget-apply`) and confirm that
+`current` was overwritten in place with a fresh mtime — that fresh mtime is what
+triggers the hosted app to re-read the snapshot.
+
+## Wrong-password handling
+
+A decryption failure when reading an existing `current` snapshot is a
+**password or snapshot problem, not a config problem** — keep the two distinct
+(see `.claude/rules/code-style.md`). The config interview will not help here.
+Tell the user the snapshot at `current` could not be decrypted with the
+`BUDGET_ETL_PASSWORD` in the environment, and that they should export the same
+password used to write that snapshot (or, on macOS, point the binary at the
+keychain entry that holds it) and re-run. Do not fall back to rewriting the
+config or bootstrapping a new snapshot.
+
+## `/budget-parser` fallback — unrecognized statement format
+
+If the binary fails with stderr containing `unrecognized statement format`, the
+user's bank uses an export format the bundled parsers don't cover. Tell them:
+
+> Your bank's export format isn't recognized by the bundled parsers. To teach
+> the tool a new format:
 >
 > 1. Fork the project: https://github.com/natb1/commons.systems/fork
 > 2. Open your fork in Claude Desktop or Claude Code.
-> 3. Run `/budget-parser <path-to-your-file>` — that skill walks Claude through writing and testing a new parser for your bank.
-
-**Any other failure.** Surface the binary's stderr verbatim to the user and stop. Do not retry.
+> 3. Run `/budget-parser <path-to-your-file>` — that skill walks Claude through
+>    writing and testing a new parser for your bank.

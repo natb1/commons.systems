@@ -1,7 +1,7 @@
-import { collection, getDocs, limit, orderBy, query, where } from "firebase/firestore";
 import { db, NAMESPACE } from "./firebase.js";
 import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
 import { requireString } from "@commons-systems/firestoreutil/validate";
+import { boundedQuery } from "@commons-systems/firestoreutil/bounded-query";
 
 export interface Message {
   id: string;
@@ -20,9 +20,11 @@ export interface Note {
 
 export async function getMessages(): Promise<Message[]> {
   const path = nsCollectionPath(NAMESPACE, "messages");
-  // Bounded read; new apps should tune this limit for their expected data size.
-  const q = query(collection(db, path), orderBy("createdAt"), limit(100));
-  const snapshot = await getDocs(q);
+  // New apps: replace .unbounded(...) with .limit(n) or pagination — an unbounded scan grows reads with the collection.
+  const snapshot = await boundedQuery(db, path)
+    .orderBy("createdAt")
+    .unbounded("scaffolding template — choose a real bound or pagination when building on this")
+    .getDocs(); // query-bounds-ok: bounded via .unbounded() above — scaffolding template; replace with a real bound
   return snapshot.docs.map((doc) => {
     const data = doc.data();
     return {
@@ -36,8 +38,11 @@ export async function getMessages(): Promise<Message[]> {
 
 export async function getNotes(email: string): Promise<Note[]> {
   const path = nsCollectionPath(NAMESPACE, "notes");
-  const q = query(collection(db, path), where("memberEmails", "array-contains", email), limit(100));
-  const snapshot = await getDocs(q);
+  // New apps: replace .unbounded(...) with .limit(n) or pagination — an unbounded scan grows reads with the collection.
+  const snapshot = await boundedQuery(db, path)
+    .where("memberEmails", "array-contains", email)
+    .unbounded("scaffolding template — choose a real bound or pagination when building on this")
+    .getDocs(); // query-bounds-ok: bounded via .unbounded() above — scaffolding template; replace with a real bound
   const notes = snapshot.docs.map((doc) => {
     const data = doc.data();
     return {
