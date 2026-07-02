@@ -217,10 +217,12 @@ path the issue must **modify or remove** that is missing because it lives only o
 an as-yet-unmerged PR's branch (a **precondition** — the work cannot proceed until
 that PR merges). The second case is a sequencing dependency. When it is
 unambiguous — exactly one open PR introduces the path, and that PR closes exactly
-one issue — `/plan-issue` defers autonomously by linking `blocked_by`, instead of
-parking a mechanical decision on office-hours. Any ambiguity keeps today's
-office-hours park. Run this between the drift judgments above and the three-way
-verdict below.
+one issue, **and the deferred issue's own acceptance criteria already restore the
+greenfield end state (or can be amended to it mechanically)** — `/plan-issue`
+defers autonomously by linking `blocked_by`, instead of parking a mechanical
+decision on office-hours. Any ambiguity — including a re-alignment that needs
+design judgment — keeps today's office-hours park. Run this between the drift
+judgments above and the three-way verdict below.
 
 1. **Identify the acceptance-criteria-target absent paths (model judgment — the
    only judgment kept in prose).** From the `[ABSENT]` PATH flags, select those
@@ -239,8 +241,8 @@ verdict below.
 
    Capture stdout (one verdict token) and the exit code. A **non-zero exit** is an
    environment error — the probe produced no verdict; treat it as a not-clear park
-   (step 4 below) with a distinct "could not determine owning PR" reason. Never
-   auto-defer on an unverified probe. The verdict tokens:
+   (the not-clear path in step 3) with a distinct "could not determine owning PR"
+   reason. Never auto-defer on an unverified probe. The verdict tokens:
 
    - `proceed` — the path is on no open PR branch (a deliverable, not a
      precondition).
@@ -257,12 +259,46 @@ verdict below.
    - All verdicts `proceed` → these absent paths are deliverables, not
      preconditions → continue to the three-way verdict / normal planning.
    - One or more `defer:<B>` and **all** `defer` verdicts name the **same single**
-     blocker `B` (with no `not-clear`) → **auto-defer** (step 4).
+     blocker `B` (with no `not-clear`) → run the **greenfield re-alignment check**
+     (step 4) before deferring.
    - `defer` verdicts naming **more than one distinct** blocker → **park**
      (multi-blocker sequencing needs human judgment; blocking on one would be
      arbitrary).
 
-4. **Auto-defer when clear.** Create the `blocked_by` link from target `N` to
+4. **Greenfield re-alignment check (before deferring — model judgment).**
+   Auto-defer is safe only if the *deferred* issue (target `N`) itself restores the
+   greenfield end state once it re-plans — i.e. `N`'s acceptance criteria undo
+   whatever suboptimal direction the blocker PR introduces (the duplication,
+   workaround, or partial extraction that PR lands). Blocking must not entrench a
+   suboptimal design: the transient intermediate state on `main` is acceptable
+   **only** because `N`'s own scope corrects it later. Judge `N`'s current
+   acceptance criteria against what the blocker introduces. Your primary signal is
+   the absent precondition path(s) — you already hold those. If you need to inspect
+   the blocker's changes more closely, resolve the owning PR from `B`
+   (`gh pr list --state open --search "linked:$B"`) and read its diff
+   (`gh pr diff`), both `dangerouslyDisableSandbox: true`. Three outcomes:
+
+   - **Already re-aligns** — `N`'s acceptance criteria already remove or undo the
+     blocker's suboptimal direction (e.g. the #2668/#2670 crypto-dedup case:
+     #2668's criteria delete *both* apps' local copies, so once #2670's duplication
+     lands, #2668 removes it and the merged state is the shared package). → proceed
+     to the auto-defer (step 5).
+   - **Mechanical gap** — `N`'s criteria do not yet cover the re-alignment, but the
+     **only** missing scope is exactly "remove/undo what the blocker adds", with no
+     design judgment. → **amend `N`'s acceptance criteria** to include that
+     re-alignment, then proceed to the auto-defer (step 5). Append the re-alignment
+     criterion to `N`'s existing body — do not replace the human-authored criteria
+     (fetch the current body, add the item, write it back with
+     `gh issue edit "$N" --body-file <file>`, `dangerouslyDisableSandbox: true`).
+     The amend stays on `N`'s own body — `/plan-issue` is already planning `N`; it
+     touches no other issue's criteria.
+   - **Needs judgment** — re-aligning interacts with other design decisions, the
+     right end state is unclear, or the missing scope is more than a mechanical
+     undo. → do **not** auto-defer; **park** via the existing not-clear path
+     (Step 6's recommend-then-`dispatch-mark-deviation`). This is the
+     acceptance-criteria-mandated judgment fallback.
+
+5. **Auto-defer when clear.** Create the `blocked_by` link from target `N` to
    blocker `B`, mark the issue deferred, then **stop** — persist **no** plan and
    apply **no** `dispatch:office-hours`. Use the integer database id and guard
    against a duplicate POST (the `ref-github-issues` / `intention-emit` idempotent
@@ -288,10 +324,13 @@ verdict below.
    preserves the single-named-exit invariant — do not also write a completion
    marker or apply `dispatch:planned`.
 
-   Auto-defer is never *incorrect* — blocking is always safe; it is only possibly
-   suboptimal versus folding the extraction into the open PR. A human keeps the
-   fold / partial-now options by overriding the auto-created link before `B`
-   merges.
+   The re-alignment check (step 4) is what makes auto-defer safe *and*
+   non-suboptimal: `/plan-issue` defers only when `N`'s own scope will restore the
+   greenfield end state, so the transient intermediate state on `main` is fully
+   corrected once `N` re-plans and lands. Blocking is never the *wrong* call — it
+   is only ever a sequencing choice versus folding the extraction into the open PR
+   — and a human keeps the fold / partial-now options by overriding the
+   auto-created link before `B` merges.
 
 #### Three-way verdict
 
