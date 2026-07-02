@@ -37,18 +37,20 @@ rationale: >-
   Standing candidates, recorded as raw delegation records awaiting this
   selection: delegation-communications (interim path while unselected:
   strategy-realign-attachments), delegation-media-libraries,
-  delegation-health-records (interim path: right-of-access exports), and
-  delegation-client-income (recovery there is pipeline diversification, not
-  software). Selected
-  2026-07-02: delegation-knowledge-notes — recovery owned by
-  strategy-recover-knowledge, entered through reading annotations in print.
+  delegation-health-records (interim path: right-of-access exports), and — from
+  the 2026-07-02 completeness sweep (strategy-complete-ledger) —
+  delegation-mobile-platform, delegation-banking, delegation-connectivity, and
+  delegation-cloud-backup. Selected 2026-07-02: delegation-knowledge-notes —
+  recovery owned by strategy-recover-knowledge, entered through reading
+  annotations in print.
 
 
   The criteria above are software-shaped, and a record whose recovery is not
-  software (delegation-client-income) can never satisfy them. Such a record
-  is not scored here: it stays raw until its own review_trigger fires, and
-  then a strategy is minted for it directly rather than waiting on this
-  selection.
+  software (delegation-client-income) can never satisfy them. Such a record is
+  not scored here: it stays raw until its own review_trigger fires, and then a
+  strategy is minted for it directly rather than waiting on this selection —
+  exercised 2026-07-02: strategy-diversify-income, minted directly on
+  delegation-client-income.
 reading: null
 gap: "no reading yet (threshold: no raw record sits unscored across a review cycle)"
 serves:
