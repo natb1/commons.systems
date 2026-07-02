@@ -9,6 +9,7 @@
 import { logError } from "@commons-systems/errorutil/log";
 
 import { createFirebaseMediaSource } from "@commons-systems/mediautil/firebase";
+import type { MediaPage, MediaPageOptions } from "@commons-systems/mediautil/source";
 import { createLocalFolderMediaSource } from "@commons-systems/mediautil/local-folder";
 import type { LocalDirectoryHandleLike, LocalFolderMediaSource } from "@commons-systems/mediautil/local-folder";
 
@@ -39,8 +40,8 @@ const cloudSource = createFirebaseMediaSource<MediaItem>({
   viewerEmail: () => currentViewerEmail,
 });
 
-export async function listCloud(): Promise<MediaItem[]> {
-  return cloudSource.list();
+export async function listCloud(opts?: MediaPageOptions): Promise<MediaPage<MediaItem>> {
+  return cloudSource.list(opts);
 }
 
 /** Supported local-folder file extensions, mapped to their `MediaType`. */
@@ -109,7 +110,9 @@ export function createLocalSource(directory: FileSystemDirectoryHandle): void {
 }
 
 export async function listLocal(): Promise<MediaItem[]> {
-  return localSource ? localSource.list() : [];
+  if (!localSource) return [];
+  const { items } = await localSource.list();
+  return items;
 }
 
 export async function getLocalItem(id: string): Promise<MediaItem | null> {

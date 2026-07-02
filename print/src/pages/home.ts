@@ -7,12 +7,8 @@ import { renderLocalIntoList } from "../local-folder-ui.js";
 import type { MediaItem } from "../types.js";
 import { mediaTypeBadge } from "../media-render.js";
 
-function renderMediaList(items: MediaItem[]): string {
-  if (items.length === 0) {
-    return '<p id="media-empty">No media items available.</p>';
-  }
-
-  const rows = items
+function renderMediaRows(items: MediaItem[]): string {
+  return items
     .map((item) => {
       return `<li class="media-item" data-id="${escapeHtml(item.id)}">
         <div class="media-info">
@@ -28,8 +24,14 @@ function renderMediaList(items: MediaItem[]): string {
       </li>`;
     })
     .join("\n");
+}
 
-  return `<ul id="media-list">${rows}</ul>`;
+function renderMediaList(items: MediaItem[]): string {
+  if (items.length === 0) {
+    return '<p id="media-empty">No media items available.</p>';
+  }
+
+  return `<ul id="media-list">${renderMediaRows(items)}</ul>`;
 }
 
 async function handleDownload(button: HTMLButtonElement): Promise<void> {
@@ -68,13 +70,54 @@ async function handleDownload(button: HTMLButtonElement): Promise<void> {
 
 export async function loadMediaHtml(): Promise<string> {
   try {
-    const items = await listCloud();
-    return renderMediaList(items);
+    const page = await listCloud();
+    let html = renderMediaList(page.items);
+    if (page.nextCursor !== null) {
+      html += `<button id="load-more-btn" data-cursor="${escapeHtml(page.nextCursor)}">Load more</button>`;
+    }
+    return html;
   } catch (error) {
     if (error instanceof DataIntegrityError) throw error;
     logError(error, { operation: "load-media" });
     return '<p id="media-error">Could not load media library.</p>';
   }
+}
+
+/**
+ * Delegated "Load more" wiring: attach ONE click listener to a stable element
+ * (registered once on the persistent `#app` root in main.tsx, mirroring
+ * `wireDownloadActions`). Fetches the next cloud page via the button's stored
+ * cursor and APPENDS its rows to the END of `#media-list` — local items stay
+ * prepended at the top, cloud pages grow downward. Re-rendered buttons are
+ * handled by the same listener because it delegates rather than binding the
+ * button directly.
+ */
+export function wireLoadMore(outlet: HTMLElement): void {
+  outlet.addEventListener("click", (e) => {
+    const target = e.target as HTMLElement;
+    const btn = target.closest("#load-more-btn") as HTMLButtonElement | null;
+    if (!btn) return;
+    const cursor = btn.dataset.cursor;
+    if (!cursor) return;
+    // Guard against concurrent clicks while the fetch is in flight.
+    btn.disabled = true;
+    void (async () => {
+      try {
+        const page = await listCloud({ cursor });
+        const ul = outlet.querySelector<HTMLUListElement>("#media-list");
+        if (ul) ul.insertAdjacentHTML("beforeend", renderMediaRows(page.items));
+        if (page.nextCursor !== null) {
+          btn.dataset.cursor = page.nextCursor;
+          btn.disabled = false;
+        } else {
+          btn.remove();
+        }
+      } catch (err) {
+        logError(err, { operation: "load-more" });
+        btn.disabled = false;
+      }
+    })();
+  });
 }
 
 export function wireDownloadActions(outlet: HTMLElement): void {
