@@ -13,7 +13,8 @@ describe("writeNodeFromJson", () => {
   it("round-trips a valid root-shape JSON payload", () => {
     const dir = tempDir();
     const json = JSON.stringify({
-      id: "principle-test-x",
+      id: "virtue-test-x",
+      kind: "virtue",
       statement: "Maintain trust with users through transparency.",
       owner: "human",
       status: "codified",
@@ -21,24 +22,28 @@ describe("writeNodeFromJson", () => {
     });
 
     const written = writeNodeFromJson(dir, json);
-    const read = readNode(dir, "principle-test-x");
+    const read = readNode(dir, "virtue-test-x");
 
     expect(written).toEqual(read);
-    expect(read.id).toBe("principle-test-x");
+    expect(read.id).toBe("virtue-test-x");
+    expect(read.kind).toBe("virtue");
     expect(read.statement).toBe("Maintain trust with users through transparency.");
     expect(read.owner).toBe("human");
     expect(read.status).toBe("codified");
     expect(read.parent).toBeNull();
     // Optional fields should be defaulted by validateNode.
+    expect(read.serves).toEqual([]);
     expect(read.clarifications).toEqual([]);
     expect(read.tooling_goals).toEqual([]);
     expect(read.success_signal).toBeNull();
+    expect(read.attributes).toEqual({});
   });
 
   it("throws on a missing statement and does not write a file", () => {
     const dir = tempDir();
     const json = JSON.stringify({
-      id: "principle-no-statement",
+      id: "virtue-no-statement",
+      kind: "virtue",
       owner: "human",
       status: "codified",
       parent: null,
@@ -46,13 +51,14 @@ describe("writeNodeFromJson", () => {
 
     expect(() => writeNodeFromJson(dir, json)).toThrow();
     // File must NOT exist — the write should have been rejected before disk.
-    expect(() => readNode(dir, "principle-no-statement")).toThrow();
+    expect(() => readNode(dir, "virtue-no-statement")).toThrow();
   });
 
   it("throws on a bad enum value for owner", () => {
     const dir = tempDir();
     const json = JSON.stringify({
-      id: "principle-bad-owner",
+      id: "virtue-bad-owner",
+      kind: "virtue",
       statement: "This should fail.",
       owner: "robot",
       status: "codified",
@@ -66,6 +72,7 @@ describe("writeNodeFromJson", () => {
     const dir = tempDir();
     const json = JSON.stringify({
       id: "../evil",
+      kind: "virtue",
       statement: "This should fail on path safety.",
       owner: "human",
       status: "codified",

@@ -14,10 +14,12 @@ describe("store round-trip", () => {
     const dir = tempDir();
     const node: IntentionNode = {
       id: "root-1",
+      kind: "virtue",
       statement: "Keep the commons aligned with its charter.",
       owner: "human",
       status: "codified",
       parent: "charter",
+      serves: ["charter"],
       rationale: "Alignment is the project's reason for being.",
       reading: "See the alignment principles.",
       gap: "No automated alignment check exists yet.",
@@ -32,6 +34,7 @@ describe("store round-trip", () => {
         threshold: "0 orphans",
         is_proxy: false,
       },
+      attributes: { source: "github:natb1/commons.systems#1", weight: 3 },
     };
 
     writeNode(dir, node);
@@ -43,10 +46,12 @@ describe("store round-trip", () => {
     const dir = tempDir();
     const node: IntentionNode = {
       id: "multi-1",
+      kind: "strategy",
       statement: "Preserve multi-line content through the store round-trip.",
       owner: "human",
       status: "codified",
       parent: "root-1",
+      serves: [],
       // rationale ends with \n (trailing newline); reading does not — exercises both chomping cases
       rationale:
         "Block scalars in YAML can silently strip trailing newlines\nor fold long lines.\n\nThis test pins the guarantee that neither transformation occurs.\n",
@@ -70,6 +75,7 @@ describe("store round-trip", () => {
         threshold: "0 diff",
         is_proxy: false,
       },
+      attributes: {},
     };
 
     writeNode(dir, node);
@@ -82,6 +88,7 @@ describe("store round-trip", () => {
     // Only the required core; optional fields omitted entirely.
     writeNode(dir, {
       id: "leaf-1",
+      kind: "tactic",
       statement: "Do the small thing.",
       owner: "ai",
       status: "raw",
@@ -90,16 +97,19 @@ describe("store round-trip", () => {
 
     expect(read).toEqual({
       id: "leaf-1",
+      kind: "tactic",
       statement: "Do the small thing.",
       owner: "ai",
       status: "raw",
       parent: null,
+      serves: [],
       rationale: null,
       reading: null,
       gap: null,
       clarifications: [],
       tooling_goals: [],
       success_signal: null,
+      attributes: {},
     });
   });
 });
@@ -111,6 +121,7 @@ describe("listNodes", () => {
     for (const id of ids) {
       writeNode(dir, {
         id,
+        kind: "strategy",
         statement: `Statement for ${id}`,
         owner: "procedure",
         status: "delegated",
@@ -126,6 +137,7 @@ describe("listNodes", () => {
     const dir = tempDir();
     writeNode(dir, {
       id: "leaf-1",
+      kind: "tactic",
       statement: "Do the small thing.",
       owner: "ai",
       status: "raw",

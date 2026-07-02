@@ -133,7 +133,7 @@ export function listTrackers(dir: string): ExecutionTracker[] {
 // --- Mapping helpers --------------------------------------------------------
 
 export function nodeIdToIssue(node_id: string, trackersDir: string): number | null {
-  const match = /^issue-(\d+)$/.exec(node_id);
+  const match = /^tactic-(\d+)$/.exec(node_id);
   if (match !== null) {
     return Number(match[1]);
   }
@@ -145,11 +145,11 @@ export function nodeIdToIssue(node_id: string, trackersDir: string): number | nu
 
 export function issueToNodeId(issue_number: number, trackersDir: string): string {
   if (!existsSync(trackersDir)) {
-    return `issue-${issue_number}`;
+    return `tactic-${issue_number}`;
   }
   const found = listTrackers(trackersDir).find((r) => r.issue_number === issue_number);
   if (found !== undefined) {
     return found.node_id;
   }
-  return `issue-${issue_number}`;
+  return `tactic-${issue_number}`;
 }

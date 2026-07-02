@@ -155,9 +155,9 @@ describe("validateTracker rejection via readTracker", () => {
 });
 
 describe("mapping helpers", () => {
-  it("nodeIdToIssue resolves 'issue-N' directly without a file", () => {
+  it("nodeIdToIssue resolves 'tactic-N' directly without a file", () => {
     const dir = tempDir();
-    expect(nodeIdToIssue("issue-42", dir)).toBe(42);
+    expect(nodeIdToIssue("tactic-42", dir)).toBe(42);
   });
 
   it("nodeIdToIssue reads issue_number from a written tracker file", () => {
@@ -186,17 +186,17 @@ describe("mapping helpers", () => {
     expect(issueToNodeId(7, dir)).toBe("goal-foo");
   });
 
-  it("issueToNodeId falls back to 'issue-N' when the dir does not exist", () => {
+  it("issueToNodeId falls back to 'tactic-N' when the dir does not exist", () => {
     const nonExistentDir = join(tempDir(), "does-not-exist");
-    expect(issueToNodeId(99, nonExistentDir)).toBe("issue-99");
+    expect(issueToNodeId(99, nonExistentDir)).toBe("tactic-99");
   });
 
-  it("issueToNodeId falls back to 'issue-N' when no tracker matches the issue", () => {
+  it("issueToNodeId falls back to 'tactic-N' when no tracker matches the issue", () => {
     const emptyDir = tempDir();
-    expect(issueToNodeId(99, emptyDir)).toBe("issue-99");
+    expect(issueToNodeId(99, emptyDir)).toBe("tactic-99");
   });
 
-  it("nodeIdToIssue returns null for an unmapped non-'issue-' id with no file", () => {
+  it("nodeIdToIssue returns null for an unmapped non-'tactic-' id with no file", () => {
     const dir = tempDir();
     expect(nodeIdToIssue("goal-missing", dir)).toBeNull();
   });

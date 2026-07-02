@@ -184,18 +184,27 @@ describe("buildIssueNode", () => {
   it("sets rationale from the issue body scope section", () => {
     const body = "## Scope\nDo the work.\n## Other\nignored";
     const issue = { number: 7, title: "Add feature", body };
-    const node = buildIssueNode(issue, "issue-5");
+    const node = buildIssueNode(issue, "tactic-5");
     expect(node.rationale).toBe(extractScope(body));
     expect(node.rationale).toBe("Do the work.");
   });
 
   it("links the parent when provided", () => {
     const issue = { number: 10, title: "Child issue", body: null };
-    const node = buildIssueNode(issue, "issue-5");
-    expect(node.parent).toBe("issue-5");
-    expect(node.id).toBe("issue-10");
+    const node = buildIssueNode(issue, "tactic-5");
+    expect(node.parent).toBe("tactic-5");
+    expect(node.id).toBe("tactic-10");
     expect(node.owner).toBe("human");
     expect(node.status).toBe("raw");
+  });
+
+  it("emits kind 'tactic' and a github source attribute", () => {
+    const issue = { number: 10, title: "Child issue", body: null };
+    const node = buildIssueNode(issue, "tactic-5");
+    expect(node.kind).toBe("tactic");
+    expect(node.attributes).toEqual({
+      source: "github:natb1/commons.systems#10",
+    });
   });
 
   it("sets parent to null when no parent is provided", () => {
@@ -206,19 +215,27 @@ describe("buildIssueNode", () => {
 });
 
 describe("pruneStaleNodes", () => {
-  it("removes only the issue-leaf files, preserving principle roots, strategy roots, and README", () => {
+  it("removes tactic leaves and legacy issue leaves, preserving kind/virtue/strategy/delegation nodes and README", () => {
     const dir = mkdtempSync(join(tmpdir(), "intentions-prune-"));
     // pruneStaleNodes never reads content, so empty stub files suffice.
-    writeFileSync(join(dir, "principle-x.md"), "");
-    writeFileSync(join(dir, "issue-1.md"), "");
-    writeFileSync(join(dir, "README.md"), "");
+    writeFileSync(join(dir, "kind-tactic.md"), "");
+    writeFileSync(join(dir, "virtue-x.md"), "");
     writeFileSync(join(dir, "strategy-y.md"), "");
+    writeFileSync(join(dir, "delegation-z.md"), "");
+    writeFileSync(join(dir, "README.md"), "");
+    writeFileSync(join(dir, "tactic-1.md"), "");
+    writeFileSync(join(dir, "tactic-2.md"), "");
+    writeFileSync(join(dir, "issue-1.md"), ""); // legacy pre-rename leaf name
 
     pruneStaleNodes(dir);
 
-    expect(existsSync(join(dir, "principle-x.md"))).toBe(true);
-    expect(existsSync(join(dir, "README.md"))).toBe(true);
+    expect(existsSync(join(dir, "kind-tactic.md"))).toBe(true);
+    expect(existsSync(join(dir, "virtue-x.md"))).toBe(true);
     expect(existsSync(join(dir, "strategy-y.md"))).toBe(true);
+    expect(existsSync(join(dir, "delegation-z.md"))).toBe(true);
+    expect(existsSync(join(dir, "README.md"))).toBe(true);
+    expect(existsSync(join(dir, "tactic-1.md"))).toBe(false);
+    expect(existsSync(join(dir, "tactic-2.md"))).toBe(false);
     expect(existsSync(join(dir, "issue-1.md"))).toBe(false);
   });
 });

@@ -1,18 +1,19 @@
-// Read-only intention-tree backfill.
+// Read-only intention-graph backfill.
 //
 // Snapshots the current project state into intention nodes under the repo-root
 // `intentions/` directory. It is STRICTLY READ-ONLY toward GitHub: the only
 // GitHub calls are `gh api` GETs (open issues, an issue's /parent). It never
 // writes to GitHub.
 //
-// It produces two internally-linked layers that share one id space:
-//   (a) PRINCIPLE ROOTS — authoritative, hand-maintained, parent-less nodes
-//       that this script no longer generates; backfill manages only the
-//       issue-leaf layer, and
-//   (b) ISSUE LEAVES from open GitHub issues, linked to one another by the
-//       existing GitHub issue hierarchy (`/parent`).
-// There is intentionally NO cross-layer principle<->issue link; that is
-// deferred dialectic work in a later epic stage.
+// Backfill manages exactly one layer: the TACTIC LEAVES (`tactic-<N>.md`),
+// one per open GitHub issue, linked to one another by the existing GitHub
+// issue hierarchy (`/parent`). Every other node — kind nodes, virtues,
+// strategies, delegations — is authoritative and hand-maintained; backfill
+// neither generates nor prunes those files.
+//
+// Tactic `serves` edges (tactic → strategy) are defined by the schema but not
+// populated here: connecting tactics to the strategies they express is
+// dialectic work, not something derivable from GitHub state.
 //
 // Run from anywhere (the output dir is resolved relative to this file, not cwd):
 //   npx tsx packages/intentionsutil/scripts/backfill.ts
@@ -21,10 +22,10 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { writeNode } from "../src/store.js";
+import { writeNode, listNodes } from "../src/store.js";
 import { ghErrorText } from "../src/errors.js";
 import { paginateGhApi } from "./gh-utils.js";
-import type { IntentionNodeInput } from "../src/schema.js";
+import { validateGraph, type IntentionNodeInput } from "../src/schema.js";
 
 // --- Paths -----------------------------------------------------------------
 // The script lives at `packages/intentionsutil/scripts/backfill.ts`, so the repo
@@ -194,40 +195,49 @@ export function fetchParentNumber(issueNumber: number): number | null {
 }
 
 /**
- * Build the IntentionNodeInput for an issue leaf node. Pure function — takes
+ * Build the IntentionNodeInput for a tactic leaf node. Pure function — takes
  * the already-fetched issue and resolved parent string; does no network I/O.
  * `reading` is always null: it is sensor-populated, not backfill-populated.
+ * `attributes.source` records the GitHub issue this tactic is generated from,
+ * so the node file itself names its sync source.
  */
 export function buildIssueNode(
   issue: OpenIssue,
   parent: string | null,
 ): IntentionNodeInput {
   return {
-    id: `issue-${issue.number}`,
+    id: `tactic-${issue.number}`,
+    kind: "tactic",
     statement: issue.title.trim(),
     owner: "human",
     status: "raw", // not yet refined through the dialectic
     parent,
     rationale: extractScope(issue.body),
     reading: null, // sensor-populated measurement; null at backfill time
+    attributes: { source: `github:natb1/commons.systems#${issue.number}` },
   };
 }
 
 // --- Main ------------------------------------------------------------------
 
 /**
- * Remove the issue-leaf node files (`issue-*.md`) that main() regenerates, so
+ * Remove the tactic-leaf node files (`tactic-*.md`) that main() regenerates, so
  * a rerun is a true point-in-time snapshot of the open issues — without this,
  * a leaf whose source disappeared (a closed issue) would linger as a stale
- * orphan. Pruning is deliberately scoped to exactly what backfill
- * regenerates: principle roots (`principle-*.md`) and strategy doctrine nodes
- * (`strategy-*.md`) are authoritative and hand-maintained, and `README.md` is
- * a companion doc, so none of these match `issue-*.md` and all survive.
+ * orphan. Legacy `issue-*.md` leaves (the pre-rename name for the same
+ * generated layer) are pruned on the same terms. Pruning is deliberately
+ * scoped to exactly what backfill regenerates: kind nodes (`kind-*.md`),
+ * virtues (`virtue-*.md`), strategies (`strategy-*.md`), and delegation
+ * records (`delegation-*.md`) are authoritative and hand-maintained, and
+ * `README.md` is a companion doc, so none of these match and all survive.
  */
 export function pruneStaleNodes(dir: string): void {
   if (!existsSync(dir)) return;
   for (const name of readdirSync(dir)) {
-    if (name.startsWith("issue-") && name.endsWith(".md")) {
+    if (
+      (name.startsWith("tactic-") || name.startsWith("issue-")) &&
+      name.endsWith(".md")
+    ) {
       rmSync(join(dir, name));
     }
   }
@@ -251,13 +261,18 @@ function main(): void {
     // file, so its dangling reference is nulled rather than emitted. Every
     // non-null parent therefore points to an existing node file.
     const parent =
-      parentNum !== null && openNumbers.has(parentNum) ? `issue-${parentNum}` : null;
+      parentNum !== null && openNumbers.has(parentNum) ? `tactic-${parentNum}` : null;
 
     writeNode(intentionsDir, buildIssueNode(issue, parent));
   }
 
+  // Whole-graph integrity gate: every kind resolves to a committed kind node,
+  // every parent/serves edge resolves to a node file. Catches a hand-edit that
+  // dangled a reference as well as anything wrong with the regenerated leaves.
+  validateGraph(listNodes(intentionsDir));
+
   console.log(
-    `Backfill complete: ${openIssues.length} issue leaves → ${intentionsDir}`,
+    `Backfill complete: ${openIssues.length} tactic leaves → ${intentionsDir}`,
   );
 }
 

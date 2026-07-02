@@ -42,14 +42,22 @@ export interface ToolingGoal {
 // --- Node ------------------------------------------------------------------
 
 /**
- * A single intention node. Every node — a charter principle at the root or an
- * issue's scope at a leaf — shares this one structure. All fields are carried
- * in the file's YAML frontmatter; the markdown body is a cosmetic render of
+ * A single intention node. Every node — a virtue at a root, a strategy below
+ * it, a tactic at a leaf, a delegation record, or a kind node describing one
+ * of those classes — shares this one structure. All fields are carried in the
+ * file's YAML frontmatter; the markdown body is a cosmetic render of
  * `statement` and is not part of the validated model.
+ *
+ * The graph is self-describing: `kind` names the kind node (`kind-<kind>`)
+ * that defines the node's semantics, edge rules, and the meaning of its
+ * `attributes`. The schema therefore validates `kind` only as a non-empty
+ * string — the set of valid kinds is data (the committed kind nodes), not
+ * code. `validateGraph` enforces that every referenced kind node exists.
  */
 export interface IntentionNode {
   // Required core.
   id: string;
+  kind: string; // names the kind-<kind> node that defines this node's semantics
   statement: string;
   owner: Owner;
   status: Status;
@@ -58,12 +66,14 @@ export interface IntentionNode {
   // do not exist until the dialectic runs, and reading is sensor-populated,
   // so they default rather than throw.
   parent: string | null;
+  serves: string[]; // ids of the nodes this node expresses (e.g. strategy → virtue)
   rationale: string | null;
   reading: string | null; // current measured value of success_signal.observable; null until a sensor populates it
   gap: string | null;
   clarifications: Clarification[];
   tooling_goals: ToolingGoal[];
   success_signal: SuccessSignal | null;
+  attributes: Record<string, unknown>; // kind-specific fields; semantics defined by the kind-<kind> node
 }
 
 /**
@@ -74,16 +84,19 @@ export interface IntentionNode {
  */
 export interface IntentionNodeInput {
   id: string;
+  kind: string;
   statement: string;
   owner: Owner;
   status: Status;
   parent?: string | null;
+  serves?: string[];
   rationale?: string | null;
   reading?: string | null;
   gap?: string | null;
   clarifications?: Clarification[];
   tooling_goals?: ToolingGoal[];
   success_signal?: SuccessSignal | null;
+  attributes?: Record<string, unknown>;
 }
 
 // --- Local guards ----------------------------------------------------------
@@ -137,6 +150,26 @@ function validateSuccessSignal(value: unknown, field: string): SuccessSignal {
   };
 }
 
+function validateServes(value: unknown, field: string): string[] {
+  if (!Array.isArray(value)) {
+    throw new IntentionSchemaError(`Expected array for ${field}, got ${typeof value}`);
+  }
+  return value.map((item, i) => requireString(item, `${field}[${i}]`));
+}
+
+/**
+ * Kind-specific fields. The schema validates only that this is a plain object —
+ * the meaning (and any deeper shape) of its entries is defined by the node's
+ * kind node (`kind-<kind>`), which is data, not code. Keys and values pass
+ * through the YAML round-trip untouched.
+ */
+function validateAttributes(value: unknown, field: string): Record<string, unknown> {
+  if (!isPlainObject(value)) {
+    throw new IntentionSchemaError(`Expected object for ${field}, got ${typeof value}`);
+  }
+  return { ...value };
+}
+
 function validateClarifications(value: unknown, field: string): Clarification[] {
   if (!Array.isArray(value)) {
     throw new IntentionSchemaError(`Expected array for ${field}, got ${typeof value}`);
@@ -188,10 +221,15 @@ export function validateNode(value: unknown): IntentionNode {
   if (id === "") {
     throw new IntentionSchemaError("id must be a non-empty string");
   }
+  const kind = requireString(value.kind, "kind");
+  if (kind === "") {
+    throw new IntentionSchemaError("kind must be a non-empty string");
+  }
 
   return {
     // Required core.
     id,
+    kind,
     statement: requireString(value.statement, "statement"),
     owner: requireOneOf(value.owner, OWNERS, "owner"),
     status: requireOneOf(value.status, STATUSES, "status"),
@@ -202,7 +240,8 @@ export function validateNode(value: unknown): IntentionNode {
     reading: optionalString(value.reading, "reading"),
     gap: optionalString(value.gap, "gap"),
 
-    // Optional structured — absent/null tolerated, defaults [] / null.
+    // Optional structured — absent/null tolerated, defaults [] / {} / null.
+    serves: value.serves == null ? [] : validateServes(value.serves, "serves"),
     clarifications:
       value.clarifications == null
         ? []
@@ -215,5 +254,45 @@ export function validateNode(value: unknown): IntentionNode {
       value.success_signal == null
         ? null
         : validateSuccessSignal(value.success_signal, "success_signal"),
+    attributes:
+      value.attributes == null
+        ? {}
+        : validateAttributes(value.attributes, "attributes"),
   };
+}
+
+// --- Graph-level validation --------------------------------------------------
+
+/**
+ * Referential integrity over a whole node set. Per-node shape is `validateNode`'s
+ * job; this checks the edges BETWEEN nodes:
+ *
+ *   1. Every node's `kind` has its defining kind node present (`kind-<kind>`).
+ *      This is what makes the graph self-describing: the set of valid kinds is
+ *      the set of committed kind nodes, not an enum in this file.
+ *   2. Every non-null `parent` resolves to an existing node id.
+ *   3. Every `serves` entry resolves to an existing node id.
+ *
+ * Throws a single IntentionSchemaError listing ALL problems found, so one run
+ * surfaces every dangling reference rather than the first.
+ */
+export function validateGraph(nodes: IntentionNode[]): void {
+  const ids = new Set(nodes.map((n) => n.id));
+  const problems: string[] = [];
+  for (const node of nodes) {
+    if (!ids.has(`kind-${node.kind}`)) {
+      problems.push(`${node.id}: kind "${node.kind}" has no kind-${node.kind} node`);
+    }
+    if (node.parent !== null && !ids.has(node.parent)) {
+      problems.push(`${node.id}: parent "${node.parent}" does not resolve to a node`);
+    }
+    for (const target of node.serves) {
+      if (!ids.has(target)) {
+        problems.push(`${node.id}: serves "${target}" does not resolve to a node`);
+      }
+    }
+  }
+  if (problems.length > 0) {
+    throw new IntentionSchemaError(`Graph integrity violations:\n${problems.join("\n")}`);
+  }
 }
