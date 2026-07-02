@@ -14,15 +14,16 @@ Google Drive mount).
 This is the **dual-write** stage (#2658): the snapshot is produced locally
 alongside the hosted Firestore producers, and `--parity` validates that the local
 snapshot's SHAPE matches the live Firestore output before any cutover. The
-Nix/systemd timer that schedules this binary is sibling #2660.
+Nix/systemd timer that schedules this binary is `nix/nixos/office-hours.nix`
+(#2660).
 
 ## Entry point
 
 The binary's source is `src/main.ts` — a thin shim over `run(argv, env, io)` in
 `src/run.ts`. This package's `tsconfig` is type-check only (`noEmit`), so it does
-not itself produce a `dist/`; **compilation to a runnable artifact is provided by
-the Nix packaging in sibling #2660**, which will invoke the producer on its
-schedule.
+not itself produce a `dist/`; the producer is run directly from source via
+`npx tsx` by the Nix/systemd timer in `nix/nixos/office-hours.nix` (#2660), which
+invokes it on its hourly schedule.
 
 For local development you can run the TypeScript entry directly with `tsx`:
 
