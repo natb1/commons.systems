@@ -1,0 +1,140 @@
+#!/usr/bin/env bash
+# dispatch-find-owning-pr — decide, mechanically, whether a /plan-issue target
+# can be AUTO-DEFERRED behind an unmerged PR that owns a path it depends on.
+#
+# The /plan-issue pre-planning step asks: does this issue assume a file that
+# exists only on an open PR's branch (not yet on main)? When exactly one open PR
+# owns that path and that PR closes exactly one issue, the clean sequencing move
+# is to link this target `blocked_by` that closing issue and defer — not park to
+# office-hours. This script emits the deterministic verdict for that decision;
+# the model caller acts on it (it does NOT create the blocked_by link itself).
+#
+# Usage:
+#   dispatch-find-owning-pr <target-issue-N> <path>
+#
+#   <target-issue-N>   The issue being planned (digits only).
+#   <path>             The repo-relative path the issue depends on.
+#
+# Verdict vocabulary (EXACTLY ONE token on stdout):
+#   proceed                              no open PR owns <path> — plan normally.
+#   defer:<B>                            exactly one open PR owns <path>, it
+#                                        closes exactly one issue <B>, and
+#                                        linking <N> blocked_by <B> is clean.
+#   not-clear:pr-list-truncated          the open-PR snapshot was truncated;
+#                                        uniqueness cannot be asserted.
+#   not-clear:multiple-owning-prs        two or more open PRs own <path>.
+#   not-clear:owning-pr-closes-<c>-issues  the lone owning PR closes <c> != 1
+#                                        issues (0 or many); no clean blocker.
+#   not-clear:already-blocked            <N> is already blocked_by <B>.
+#   not-clear:would-cycle                <N> already blocks <B> (linking would
+#                                        create a direct cycle).
+#
+# Exit codes:
+#   0   a verdict token was produced (any of the above).
+#   2   usage error (missing/empty arg, or non-digit <N>).
+#   non-zero   environment/probe failure (gh hard error) — no verdict produced.
+#
+# Note: callers invoke this with dangerouslyDisableSandbox: true — it calls
+# gh (see .claude/rules/sandbox.md).
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+
+# ---- Step 0: parse arguments ------------------------------------------------
+
+N="${1:-}"
+path="${2:-}"
+
+if [[ -z "$N" || -z "$path" ]]; then
+  echo "error: usage: dispatch-find-owning-pr <target-issue-N> <path>" >&2
+  exit 2
+fi
+
+if [[ ! "$N" =~ ^[0-9]+$ ]]; then
+  echo "error: usage: dispatch-find-owning-pr <target-issue-N> <path>" >&2
+  exit 2
+fi
+
+# ---- Step 1: enumerate open PRs --------------------------------------------
+# pr_list_open prints a JSON array and returns non-zero on gh failure OR on a
+# truncated snapshot (length == DISPATCH_PR_LIST_LIMIT, with a 'truncated'-class
+# message on stderr). A truncated snapshot is a non-verdict-blocking outcome: we
+# cannot assert uniqueness, so emit not-clear:pr-list-truncated rather than fail.
+
+pr_err=$(mktemp)
+if ! pr_json=$(pr_list_open "number,headRefName" 2>"$pr_err"); then
+  if grep -qi 'truncated' "$pr_err"; then
+    echo "dispatch-find-owning-pr: open-PR list truncated; cannot assert uniqueness" >&2
+    rm -f "$pr_err"
+    echo "not-clear:pr-list-truncated"
+    exit 0
+  fi
+  cat "$pr_err" >&2
+  rm -f "$pr_err"
+  exit 1
+fi
+rm -f "$pr_err"
+
+# ---- Step 2: probe ownership ------------------------------------------------
+# For each open PR, ask whether <path> exists on that PR's head branch with one
+# REST contents call. HTTP 200 (exit 0) = the branch owns the path; 404 = not.
+# We do NOT short-circuit on the first owner — we keep probing until a SECOND
+# owner appears (uniqueness must be proven), at which point we can stop.
+
+owners=()
+while IFS=$'\t' read -r pr_num head_ref; do
+  [[ -z "$pr_num" ]] && continue
+  if gh_retry gh api "repos/{owner}/{repo}/contents/$path?ref=$head_ref" >/dev/null 2>&1; then
+    owners+=("$pr_num")
+    [[ "${#owners[@]}" -ge 2 ]] && break
+  fi
+done < <(jq -r '.[] | "\(.number)\t\(.headRefName)"' <<<"$pr_json")
+
+# ---- Step 3: verdict by owner count ----------------------------------------
+
+owner_count="${#owners[@]}"
+
+if [[ "$owner_count" -eq 0 ]]; then
+  echo "proceed"
+  exit 0
+fi
+
+if [[ "$owner_count" -ge 2 ]]; then
+  echo "not-clear:multiple-owning-prs"
+  exit 0
+fi
+
+# Exactly one owning PR. Resolve its closing issues — the only path to a clean
+# blocker is a PR that closes exactly one issue.
+P="${owners[0]}"
+
+# lint-allow: gh-rest-porcelain GraphQL-only closingIssuesReferences (no REST equivalent)
+closing_json=$(gh_retry gh pr view "$P" --json closingIssuesReferences)
+count=$(jq '.closingIssuesReferences | length' <<<"$closing_json")
+
+if [[ "$count" -ne 1 ]]; then
+  echo "not-clear:owning-pr-closes-${count}-issues"
+  exit 0
+fi
+
+B=$(jq -r '.closingIssuesReferences[0].number' <<<"$closing_json")
+
+# already-blocked guard: if <N> is already blocked_by <B>, there is nothing to do.
+existing_bb=$(gh_retry gh api "/repos/{owner}/{repo}/issues/$N/dependencies/blocked_by" --jq '.[].number')
+if grep -qx "$B" <<<"$existing_bb"; then
+  echo "not-clear:already-blocked"
+  exit 0
+fi
+
+# direct-cycle guard: if <N> already blocks <B>, linking <N> blocked_by <B>
+# would create a direct cycle.
+blocking=$(gh_retry gh api "/repos/{owner}/{repo}/issues/$N/dependencies/blocking" --jq '.[].number')
+if grep -qx "$B" <<<"$blocking"; then
+  echo "not-clear:would-cycle"
+  exit 0
+fi
+
+echo "defer:$B"
+exit 0
