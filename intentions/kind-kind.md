@@ -30,11 +30,12 @@ rationale: >-
   surface where capture is detected and recovery kept real (kind-delegation).
 
 
-  Two edge fields carry the graph. `parent` is the within-layer edge:
+  Three edge fields carry the graph. `parent` is the within-layer edge:
   constitutive between virtues, means-end between goals. `serves` is the
   cross-layer edge: a strategy serves the virtues it expresses; a tactic
   serves the strategies it advances; a delegation serves the nodes that
-  depend on it.
+  depend on it. `recovers` points a strategy at the delegation records its
+  work unwinds (kind-strategy).
 reading: null
 gap: null
 clarifications: []
@@ -49,6 +50,7 @@ attributes:
     - "status: raw | refining | delegated | codified — lifecycle stage"
     - "parent: within-layer edge; null for a root"
     - "serves: cross-layer edge — ids of the nodes this node expresses"
+    - "recovers: strategy→delegation edge — ids of the delegation records this node's work unwinds"
     - "rationale: why this node exists"
     - "attributes: kind-specific fields, defined by the kind node"
   entry_point: this node is the entry point of the graph

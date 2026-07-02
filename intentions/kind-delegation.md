@@ -36,8 +36,15 @@ rationale: >-
 
   Attachments are audited however acquired: an inherited edge (born into,
   never chosen — `origin: inherited`) gets the same two-axis review as a
-  chosen one. Delegations are records, not goals: they are reviewed on their
-  `review_trigger`, never completed.
+  chosen one. A DECLINED delegation (`origin: declined`) was deliberately
+  never entered: the record documents the standing alternative and why it is
+  refused, so the avoidance stays auditable instead of tacit. A record with
+  `status: raw` is a future-candidate capture — named before any recovery
+  strategy exists, awaiting selection (see strategy-domain-selection).
+  Delegations are records, not goals: they are reviewed on their
+  `review_trigger`, never completed. The reverse edge lives on strategies:
+  a strategy's `recovers` field names the delegation records its work
+  unwinds.
 reading: null
 gap: null
 clarifications: []
@@ -47,7 +54,7 @@ attributes:
   fields:
     - "delegatee: the entity delegated to (tool vendor, institution, industry)"
     - "delegated: the capability handed over"
-    - "origin: chosen | inherited"
+    - "origin: chosen | inherited | declined — declined records a delegation deliberately never entered"
     - "divergence: {level: low|moderate|high, imported: [virtues the delegatee makes me hold], contradictions: [virtue ids they conflict with]}"
     - "irreversibility: {recovery_path: rebuild|re-host|substitute|relearn + description, recovery_cost: bounded description, gated: whether recovery knowledge is held by the delegatee, last_exercised: date the path was last actually walked, or null}"
     - "classification: tool | platform | captured — derived from the two axes"

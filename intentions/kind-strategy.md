@@ -27,6 +27,16 @@ rationale: >-
 
   `success_signal` on a strategy names the observable that would show the
   strategy working; `reading` and `gap` are sensor-populated against it.
+
+
+  `recovers` is the strategy→delegation edge: the ids of the delegation
+  records this strategy's work unwinds, resolved by `validateGraph` like any
+  other edge. A DOMAIN STRATEGY is a strategy that recovers one domain of
+  delegated life (attention, finance, publishing); it names its artifacts —
+  the apps that do the recovering — in prose in `rationale`. Apps are not
+  nodes: the strategy is the intention, the app is its current
+  materialization, and naming it in prose keeps the graph stable while the
+  artifacts iterate.
 reading: null
 gap: null
 clarifications: []
@@ -35,5 +45,7 @@ success_signal: null
 attributes:
   fields:
     - "conditions: list of world-premises that make this strategy apt; each is a standing review trigger"
+  edges:
+    - "recovers: ids of the delegation records this strategy's work unwinds (top-level field, resolved by validateGraph)"
 ---
 # Strategy — the highest goals a virtue generates against present conditions
