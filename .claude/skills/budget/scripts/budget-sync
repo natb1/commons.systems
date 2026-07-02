@@ -3,7 +3,7 @@
 #
 # Resolves the per-user budget-etl config, prepares the distributed binary,
 # ingests new bank statements from the downloads dir into the statements
-# archive, and produces an inspection report at /tmp/inspect.json. It never
+# archive, and produces an inspection report at ${TMPDIR:-/tmp}/inspect.json. It never
 # mutates `current` (beyond a one-time first-run bootstrap when no snapshot
 # exists yet) and never patches rules, merges, or publishes a snapshot — that
 # mutating half is the sibling script budget-apply (Unit 3).
@@ -12,7 +12,7 @@
 #   - one line naming the chosen binary path (auditability)
 #   - the ingest script's "<src> to <dest>" move lines
 #   - a short human summary: new statements / new transactions / uncategorized
-# The durable signal the SKILL.md branches on is /tmp/inspect.json:
+# The durable signal the SKILL.md branches on is ${TMPDIR:-/tmp}/inspect.json:
 #   uncategorized > 0  -> run the categorization dialog, then budget-apply
 #   uncategorized == 0 -> nothing to categorize; done
 # Errors print to stderr as descriptive messages naming the offending path/var.
@@ -66,37 +66,11 @@ current=$(jq -r '.current'        <<<"$CFG")
 [[ -d "$snapshotDir" ]] || [[ -d "$(dirname "$snapshotDir")" ]] || { echo "budget-sync: Drive mount missing (snapshotDir): $snapshotDir" >&2; exit 1; }
 
 # --- Step 4: detect platform & resolve the binary ---------------------------
-# Ported from .claude/skills/budget/SKILL.md Steps 1-2.
-uname_sm="$(uname -sm)"
-case "$uname_sm" in
-  "Darwin arm64")   platform="darwin-arm64" ;;
-  "Darwin x86_64")  platform="darwin-amd64" ;;
-  "Linux x86_64")   platform="linux-amd64" ;;
-  *)
-    echo "budget-sync: your platform \`$uname_sm\` is not in the pre-built binary set (darwin-arm64, darwin-amd64, linux-amd64)." >&2
-    echo "Fork the project at https://github.com/natb1/commons.systems/fork and run /budget-parser <path> from your fork to build the tool from source." >&2
-    exit 1
-    ;;
-esac
-
-# First-match-wins binary resolution. CLAUDE_PLUGIN_ROOT may be unset.
-plugin_bin="${CLAUDE_PLUGIN_ROOT:-}/bin/budget-etl-$platform"
-cache_bin="$HOME/.cache/commons-systems/bin/budget-etl-$platform"
-
-if [[ -n "${CLAUDE_PLUGIN_ROOT:-}" && -x "$plugin_bin" ]]; then
-  BUDGET_ETL_BIN="$plugin_bin"
-elif [[ -x "$cache_bin" ]]; then
-  BUDGET_ETL_BIN="$cache_bin"
-else
-  mkdir -p "$HOME/.cache/commons-systems/bin"
-  if ! curl -fSL -o "$cache_bin" \
-      "https://github.com/natb1/commons.systems/releases/latest/download/budget-etl-$platform"; then
-    echo "budget-sync: failed to download budget-etl-$platform from GitHub Releases (see curl error above)" >&2
-    exit 1
-  fi
-  chmod +x "$cache_bin"
-  BUDGET_ETL_BIN="$cache_bin"
-fi
+# Platform detection, cache/plugin resolution, and download live in the shared
+# budget-resolve-binary helper (sibling of this script), which prints only the
+# resolved path. The "using binary" log stays here as this script's own
+# documented stdout protocol.
+BUDGET_ETL_BIN=$("$SCRIPT_DIR/budget-resolve-binary" budget-sync) || exit $?
 
 echo "budget-sync: using binary $BUDGET_ETL_BIN"
 
@@ -124,14 +98,14 @@ bash "$SCRIPT_DIR/ingest-downloads.sh" "$downloads" "$statements"
 
 # --- Step 8: report + signal ------------------------------------------------
 # The `report` subcommand implies --allow-uncategorized and does not write a
-# snapshot. /tmp/inspect.json is the durable signal the SKILL.md branches on.
-"$BUDGET_ETL_BIN" report --input "$current" --dir "$statements" --report /tmp/inspect.json
+# snapshot. ${TMPDIR:-/tmp}/inspect.json is the durable signal the SKILL.md branches on.
+"$BUDGET_ETL_BIN" report --input "$current" --dir "$statements" --report ${TMPDIR:-/tmp}/inspect.json
 
-new_statements=$(jq '.new_statements | length' /tmp/inspect.json)
-new_transactions=$(jq '.new_transactions | length' /tmp/inspect.json)
-uncategorized=$(jq '.uncategorized | length' /tmp/inspect.json)
+new_statements=$(jq '.new_statements | length' ${TMPDIR:-/tmp}/inspect.json)
+new_transactions=$(jq '.new_transactions | length' ${TMPDIR:-/tmp}/inspect.json)
+uncategorized=$(jq '.uncategorized | length' ${TMPDIR:-/tmp}/inspect.json)
 
-echo "budget-sync: report written to /tmp/inspect.json"
+echo "budget-sync: report written to ${TMPDIR:-/tmp}/inspect.json"
 echo "  new statements:    $new_statements"
 echo "  new transactions:  $new_transactions"
 echo "  uncategorized:     $uncategorized"
