@@ -207,7 +207,7 @@ export function Home(props: HomeProps) {
         ? {
             ...prev,
             items: prev.items.map((it) =>
-              it.origin === "local" && freshById.has(it.id) ? freshById.get(it.id)! : it,
+              it.origin === "local" && freshById.has(it.id) ? (freshById.get(it.id) ?? it) : it,
             ),
           }
         : prev,

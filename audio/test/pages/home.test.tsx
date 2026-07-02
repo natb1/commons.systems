@@ -571,8 +571,8 @@ describe("Home", () => {
         window.dispatchEvent(new Event("focus"));
       });
 
-      const row = container.querySelector('[data-id="local:song.mp3"]')!;
-      expect(row.querySelector(".artist")!.textContent).toBe("Real Artist");
+      const row = container.querySelector('[data-id="local:song.mp3"]')!; // type-safety-ok: element verified present by test setup (enrichment rendered it)
+      expect(row.querySelector(".artist")!.textContent).toBe("Real Artist"); // type-safety-ok: .artist is always present in the rendered row structure
       // No extra library fetch — the page is patched in place, not reloaded.
       expect(mockListLibrary.mock.calls.length).toBe(libraryCallsBefore);
 
@@ -801,7 +801,7 @@ describe("Home", () => {
       expect(container.querySelector('[data-id="a1"]')).not.toBeNull();
       expect(container.querySelector('[data-id="a2"]')).toBeNull();
 
-      const btn = container.querySelector<HTMLButtonElement>("#load-more-btn")!;
+      const btn = container.querySelector<HTMLButtonElement>("#load-more-btn")!; // type-safety-ok: button presence is a precondition of this test
       await act(async () => {
         btn.click();
       });
@@ -829,7 +829,7 @@ describe("Home", () => {
       );
 
       // Load page 2 (the local row).
-      const btn = container.querySelector<HTMLButtonElement>("#load-more-btn")!;
+      const btn = container.querySelector<HTMLButtonElement>("#load-more-btn")!; // type-safety-ok: button presence is a precondition of this test
       await act(async () => {
         btn.click();
       });
@@ -845,8 +845,8 @@ describe("Home", () => {
       });
 
       expect(container.querySelector('[data-id="a1"]')).not.toBeNull();
-      const row = container.querySelector('[data-id="local:song.mp3"]')!;
-      expect(row.querySelector(".artist")!.textContent).toBe("Real Artist");
+      const row = container.querySelector('[data-id="local:song.mp3"]')!; // type-safety-ok: element verified present by test setup (enrichment rendered it)
+      expect(row.querySelector(".artist")!.textContent).toBe("Real Artist"); // type-safety-ok: .artist is always present in the rendered row structure
 
       await cleanup(container, root);
     });

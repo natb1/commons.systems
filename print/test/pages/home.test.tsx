@@ -324,7 +324,7 @@ describe("wireLoadMore", () => {
       makeCloudPage([makeMediaItem({ id: "book-2", title: "Second" })], "cursor-2"),
     );
 
-    const btn = container.querySelector<HTMLButtonElement>("#load-more-btn")!;
+    const btn = container.querySelector<HTMLButtonElement>("#load-more-btn")!; // type-safety-ok: button presence is a precondition of this test
     btn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     // Let the async handler settle.
     await vi.waitFor(() => {
@@ -337,7 +337,7 @@ describe("wireLoadMore", () => {
     );
     // Appended at the END, after the first page's row.
     expect(ids).toEqual(["book-1", "book-2"]);
-    const stillThere = container.querySelector<HTMLButtonElement>("#load-more-btn")!;
+    const stillThere = container.querySelector<HTMLButtonElement>("#load-more-btn")!; // type-safety-ok: button presence is verified by the assertion below
     expect(stillThere.dataset.cursor).toBe("cursor-2");
     expect(stillThere.disabled).toBe(false);
   });
@@ -349,7 +349,7 @@ describe("wireLoadMore", () => {
       makeCloudPage([makeMediaItem({ id: "book-2" })], null),
     );
 
-    const btn = container.querySelector<HTMLButtonElement>("#load-more-btn")!;
+    const btn = container.querySelector<HTMLButtonElement>("#load-more-btn")!; // type-safety-ok: button presence is a precondition of this test
     btn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     await vi.waitFor(() => {
       expect(container.querySelector('[data-id="book-2"]')).not.toBeNull();
@@ -363,7 +363,7 @@ describe("wireLoadMore", () => {
 
     mockListCloud.mockRejectedValue(new Error("network"));
 
-    const btn = container.querySelector<HTMLButtonElement>("#load-more-btn")!;
+    const btn = container.querySelector<HTMLButtonElement>("#load-more-btn")!; // type-safety-ok: button presence is a precondition of this test
     btn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     await vi.waitFor(() => {
       expect(btn.disabled).toBe(false);

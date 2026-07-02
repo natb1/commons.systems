@@ -94,8 +94,8 @@ export async function loadMediaHtml(): Promise<string> {
  */
 export function wireLoadMore(outlet: HTMLElement): void {
   outlet.addEventListener("click", (e) => {
-    const target = e.target as HTMLElement;
-    const btn = target.closest("#load-more-btn") as HTMLButtonElement | null;
+    if (!(e.target instanceof HTMLElement)) return;
+    const btn = e.target.closest<HTMLButtonElement>("#load-more-btn");
     if (!btn) return;
     const cursor = btn.dataset.cursor;
     if (!cursor) return;

@@ -105,7 +105,7 @@ describe("pagedMerge", () => {
 
     // Next page: everything strictly after the cursor. Must be c, b, a — no
     // gap (d not repeated) and no skip (c not dropped).
-    const cursor = decodeCursor(page.nextCursor as string);
+    const cursor = decodeCursor(page.nextCursor as string); // type-safety-ok: nextCursor verified non-null by expect above
     expect(cursor).toEqual({ addedAt: at, id: "d" });
     const next = afterCursor(all, cursor).slice(0, pageSize);
     expect(next.map((i) => i.id)).toEqual(["c", "b", "a"]);

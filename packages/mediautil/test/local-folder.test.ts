@@ -146,8 +146,7 @@ describe("list", () => {
     // Walking every page reconstructs the full order with no gap/overlap.
     const walked: string[] = [];
     let cursor: string | null = null;
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
+    for (;;) {
       const p: { items: TestItem[]; nextCursor: string | null } = await source.list({
         pageSize,
         cursor,

@@ -25,7 +25,7 @@ export const DEFAULT_MEDIA_PAGE_SIZE = 24;
 // Base64 primitives accessed via a typed globalThis lookup so this import-free
 // module typechecks under both Node (Buffer) and browser (btoa/atob) tsconfigs
 // without depending on @types/node or the DOM lib.
-const base64Env = globalThis as unknown as {
+const base64Env = globalThis as unknown as { // type-safety-ok: typed globalThis bridge for Node/browser cross-runtime base64 access without @types/node or DOM lib
   Buffer?: {
     from(data: string, encoding: string): { toString(encoding: string): string };
   };
