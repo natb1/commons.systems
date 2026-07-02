@@ -90,6 +90,14 @@ if ! add_output=$(gh_issue_set_labels_rest "$ISSUE_NUM" "$LABEL" 2>&1); then
   exit 0
 fi
 
+# --- Office-hours snapshot: park-event `parked-only` refresh (#2661) ---------
+# The label just landed on a FRESH apply (the idempotency no-op at the top
+# already exited for a repeat), so trigger a low-latency parked-only snapshot
+# refresh — this changes exactly what the Parked Issues panel shows. Env-gated
+# OFF by default; best-effort; the `|| true` preserves the never-block-a-hook
+# contract.
+"$SCRIPT_DIR/office-hours-snapshot-launch" parked-only || true
+
 # The label is now on the issue. Post the why-comment. A comment failure is
 # non-fatal (the label still landed) — warn and exit 0.
 if ! comment_output=$(gh_issue_comment_rest "$ISSUE_NUM" --body "Parked on \`$LABEL\`. Reason: $REASON" 2>&1); then
