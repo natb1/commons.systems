@@ -9,7 +9,7 @@ Audit the project for **charter compliance**, **dependency health**, and **ratch
 
 ## Input
 
-You receive: the intention graph's principle roots (`intentions/principle-*.md`) and strategy roots (`intentions/strategy-*.md`), the active-frontier view (generated from the intention graph), open/closed issues, repo engagement stats, and any additional project context.
+You receive: the intention graph's virtue roots (`intentions/virtue-*.md`, defined by `intentions/kind-*.md`) and strategies (`intentions/strategy-*.md`), the active-frontier view (generated from the intention graph), open/closed issues, repo engagement stats, and any additional project context.
 
 ## Audit Areas
 

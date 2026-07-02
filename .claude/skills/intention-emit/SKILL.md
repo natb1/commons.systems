@@ -34,7 +34,7 @@ scriptable work (steps 1/3/4/5) into the subagent.
 ## Inputs
 
 - `<id>` — the intention node id to emit (a file `intentions/<id>.md` must
-  exist, except on the `issue-<N>` link path where no node file is required).
+  exist, except on the `tactic-<N>` link path where no node file is required).
 - `--blocked-by <B>` — OPTIONAL. An explicit GitHub issue number this emitted
   issue is blocked by. This is **not** a node field — `blocked_by` does not
   exist in the intention-node schema — it is a caller-supplied argument, applied
@@ -73,13 +73,13 @@ npx tsx -e '
 
 Decision rule:
 
-- If `<id>` matches `^issue-(\d+)$` **OR** `nodeIdToIssue(<id>, trackersDir)`
+- If `<id>` matches `^tactic-(\d+)$` **OR** `nodeIdToIssue(<id>, trackersDir)`
   returns a number (a tracker already maps it) → **link path**: the issue
   already exists. Set `N` = that number and jump to **step 4** (skip creation).
   Note these two conditions are the SAME result by construction:
-  `nodeIdToIssue` (`intentionsutil/src/tracker.ts`) applies the `^issue-(\d+)$`
+  `nodeIdToIssue` (`intentionsutil/src/tracker.ts`) applies the `^tactic-(\d+)$`
   regex itself before checking the tracker file, so a non-null return already
-  covers the `issue-<N>` case — one check, not two.
+  covers the `tactic-<N>` case — one check, not two.
 - Otherwise → **emit path**: continue to steps 2–3 to create the issue. Read
   the node with `readNode(intentionsDir, <id>)` to obtain `statement`,
   `rationale`, `reading`, and `parent` for the steps below.
@@ -173,8 +173,8 @@ returns the GraphQL node id). See `.claude/skills/ref-github-issues/SKILL.md`
 
 ### Sub-issue link from `parent`
 
-If the node's `parent` is of the form `issue-<P>` (the backfill stores parents in
-`issue-<N>` form), link `N` as a SUB-ISSUE of `P`:
+If the node's `parent` is of the form `tactic-<P>` (the backfill stores parents in
+`tactic-<N>` form), link `N` as a SUB-ISSUE of `P`:
 
 ```bash
 # dangerouslyDisableSandbox: true
@@ -183,7 +183,7 @@ gh api -X POST "/repos/{owner}/{repo}/issues/<P>/sub_issues" \
   --input - <<< "{\"sub_issue_id\": $SUB_DB_ID}"
 ```
 
-If `parent` is null or not `issue-<P>` form, wire no sub-issue link.
+If `parent` is null or not `tactic-<P>` form, wire no sub-issue link.
 
 ### `blocked_by` from the optional `--blocked-by <B>` arg
 
@@ -212,7 +212,7 @@ rather than be silently swallowed.
 
 Make the node-id↔issue mapping discoverable on the issue, and record execution
 state in the tracker store. This closes the loop for a freshly-created `N` on a
-non-`issue-N` node — the number must be persisted so a later
+non-`tactic-N` node — the number must be persisted so a later
 `nodeIdToIssue(<id>, trackersDir)` resolves it.
 
 ```bash
