@@ -41,7 +41,8 @@
   // they cannot be declared in package.json. Each entry suppresses exactly one
   // binary name.
   "ignoreBinaries": [
-    "gh" // intentionsutil/scripts/backfill.ts: `execFileSync("gh", ...)` — GitHub CLI, a system binary
+    "gh", // intentionsutil/scripts/backfill.ts: `execFileSync("gh", ...)` — GitHub CLI, a system binary
+    "claude" // office-hours-snapshot/src/produce.ts: `spawn("claude", ...)` — Claude CLI, a system binary
   ],
 
   // Internal imports inside the COPIED scaffolding templates resolve only after
@@ -76,7 +77,7 @@
     "budget": { "entry": ["seeds/**", "e2e/**", "scripts/**"] },
     "packages/authutil": { "entry": ["bin/**"] },
     "packages/firebaseutil": { "entry": ["bin/**"] },
-    "packages/firestoreutil": { "entry": ["bin/**"] },
+    "packages/firestoreutil": { "entry": ["bin/**", "test/*.type-check.ts"] },
     "functions": { "entry": ["scripts/**"] },
     "packages/intentionsutil": { "entry": ["scripts/**"] }
   }

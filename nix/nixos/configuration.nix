@@ -2,7 +2,16 @@
 #
 # This is the substance of the system config; /etc/nixos/configuration.nix is a
 # thin stub that imports this file, so the machine's configuration is managed in
-# this repo. Rebuild with `sudo nixos-rebuild switch` after editing.
+# this repo. Rebuild with `sudo nixos-rebuild switch --flake .#nixos` after
+# editing.
+#
+# The `--flake` form is required: the `wsl.*` options below (e.g. `wsl.enable`,
+# `wsl.defaultUser`) are provided by `nixos-wsl.nixosModules.default`, which the
+# flake injects into this configuration. This file no longer imports the
+# channel's `<nixos-wsl/modules>` itself, so a standalone
+# `sudo nixos-rebuild switch` (without `--flake`) — or a stub that imports this
+# file without separately importing `<nixos-wsl/modules>` — fails with an
+# undefined-option error for `wsl.enable`.
 #
 # NixOS-WSL specific options are documented on the NixOS-WSL repository:
 # https://github.com/nix-community/NixOS-WSL
@@ -11,8 +20,6 @@
 
 {
   imports = [
-    # include NixOS-WSL modules (resolved via the nixos-wsl channel)
-    <nixos-wsl/modules>
     # Tailscale VPN for secure networking
     ./tailscale.nix
     # Windows drive mounts (Google Drive G: -> /mnt/g)
@@ -59,6 +66,9 @@
     home = "/home/n8";
     extraGroups = [ "wheel" "docker" ];
     shell = pkgs.zsh;
+    # Keep the wezterm-mux-server user service alive across logins declaratively,
+    # replacing the imperative `loginctl enable-linger`.
+    linger = true;
   };
 
   # environment.systemPackages = with pkgs; [ ]; # add system packages here

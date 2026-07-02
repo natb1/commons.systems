@@ -22,8 +22,8 @@ test.describe("about page", () => {
 
     // Navigate to home via nav link — exercises the ensureHero() recreate path
     // because /about's prerendered HTML ships without .landing-hero.
-    await page.locator('app-nav a[href="/"]').click();
+    await page.locator('nav.cs-nav a[href="/"]').click();
 
-    await expect(page.locator(".landing-hero-band")).toBeVisible();
+    await expect(page.locator(".hero-band-section")).toBeVisible();
   });
 });

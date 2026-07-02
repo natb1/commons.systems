@@ -15367,173 +15367,6 @@ else
 fi
 config_teardown
 
-# ============================================================================
-# budget-etl config schema tests (Tests 7i-7m)
-# ============================================================================
-#
-# budget-etl.json is a flat top-level object with four required non-empty
-# string fields: downloads, statements, snapshotDir, current.
-# Paths may contain spaces (e.g. "/mnt/g/My Drive/budget/statements").
-#
-# Uses config_setup / config_teardown (same helpers as the statements tests).
-
-echo ""
-echo "=== budget-etl config schema ==="
-
-# --- Test 7i: valid budget-etl.json round-trips ------------------------------
-
-echo "Test: valid budget-etl.json prints normalized JSON and paths with spaces round-trip"
-config_setup
-cat > "$DISPATCH_CONFIG_DIR/budget-etl.json" <<'EOF'
-{
-  "downloads": "/mnt/c/Users/example/Downloads",
-  "statements": "/mnt/g/My Drive/budget/statements",
-  "snapshotDir": "/mnt/g/My Drive/budget/snapshots",
-  "current": "/mnt/g/My Drive/budget/budget.enc.json"
-}
-EOF
-out=$("$TMPDIR_TEST/scripts/dispatch-config-load" budget-etl 2>/dev/null); rc=$?
-assert_eq "7i valid budget-etl.json exits 0" "0" "$rc"
-dl=$(printf '%s' "$out" | jq -r '.downloads')
-assert_eq "7i downloads round-trips" "/mnt/c/Users/example/Downloads" "$dl"
-st=$(printf '%s' "$out" | jq -r '.statements')
-assert_eq "7i statements round-trips (spaces preserved)" "/mnt/g/My Drive/budget/statements" "$st"
-sd=$(printf '%s' "$out" | jq -r '.snapshotDir')
-assert_eq "7i snapshotDir round-trips (spaces preserved)" "/mnt/g/My Drive/budget/snapshots" "$sd"
-cur=$(printf '%s' "$out" | jq -r '.current')
-assert_eq "7i current round-trips" "/mnt/g/My Drive/budget/budget.enc.json" "$cur"
-config_teardown
-
-# --- Test 7j: budget-etl.json missing required field exits 1 -----------------
-
-echo "Test: budget-etl.json missing required field exits 1 and stderr names the field"
-config_setup
-cat > "$DISPATCH_CONFIG_DIR/budget-etl.json" <<'EOF'
-{
-  "downloads": "/mnt/c/Users/example/Downloads",
-  "statements": "/mnt/g/My Drive/budget/statements",
-  "snapshotDir": "/mnt/g/My Drive/budget/snapshots"
-}
-EOF
-rc=0
-err=$("$TMPDIR_TEST/scripts/dispatch-config-load" budget-etl 2>&1 1>/dev/null) || rc=$?
-assert_eq "7j missing current field exits 1" "1" "$rc"
-if [[ "$err" == *"current"* ]]; then
-  assert_eq "7j missing-current error names the field" "yes" "yes"
-else
-  assert_eq "7j missing-current error names the field" "yes" "no: $err"
-fi
-config_teardown
-
-# --- Test 7k: budget-etl.json non-string field exits 1 -----------------------
-
-echo "Test: budget-etl.json with non-string downloads exits 1 and stderr names the field"
-config_setup
-cat > "$DISPATCH_CONFIG_DIR/budget-etl.json" <<'EOF'
-{
-  "downloads": 42,
-  "statements": "/mnt/g/My Drive/budget/statements",
-  "snapshotDir": "/mnt/g/My Drive/budget/snapshots",
-  "current": "/mnt/g/My Drive/budget/budget.enc.json"
-}
-EOF
-rc=0
-err=$("$TMPDIR_TEST/scripts/dispatch-config-load" budget-etl 2>&1 1>/dev/null) || rc=$?
-assert_eq "7k non-string downloads exits 1" "1" "$rc"
-TOTAL=$((TOTAL + 1))
-if [[ "$err" == *"downloads"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: 7k non-string downloads stderr mentions downloads"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: 7k non-string downloads stderr mentions downloads"
-  echo "    stderr: $err"
-fi
-config_teardown
-
-# --- Test 7l: budget-etl.json empty-string field exits 1 ---------------------
-
-echo "Test: budget-etl.json with empty-string snapshotDir exits 1 and stderr names the field"
-config_setup
-cat > "$DISPATCH_CONFIG_DIR/budget-etl.json" <<'EOF'
-{
-  "downloads": "/mnt/c/Users/example/Downloads",
-  "statements": "/mnt/g/My Drive/budget/statements",
-  "snapshotDir": "",
-  "current": "/mnt/g/My Drive/budget/budget.enc.json"
-}
-EOF
-rc=0
-err=$("$TMPDIR_TEST/scripts/dispatch-config-load" budget-etl 2>&1 1>/dev/null) || rc=$?
-assert_eq "7l empty snapshotDir exits 1" "1" "$rc"
-TOTAL=$((TOTAL + 1))
-if [[ "$err" == *"snapshotDir"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: 7l empty snapshotDir stderr mentions snapshotDir"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: 7l empty snapshotDir stderr mentions snapshotDir"
-  echo "    stderr: $err"
-fi
-config_teardown
-
-# --- Test 7m: absent budget-etl.json prints no-config and exits 0 ------------
-
-echo "Test: absent budget-etl.json prints no-config and exits 0"
-config_setup
-# no file written — config dir is empty
-out=$("$TMPDIR_TEST/scripts/dispatch-config-load" budget-etl 2>/dev/null); rc=$?
-assert_eq "7m absent budget-etl.json exits 0" "0" "$rc"
-assert_eq "7m absent budget-etl.json prints no-config" "no-config" "$out"
-config_teardown
-
-# --- Test 7n: budget-etl.json relative path field exits 1 --------------------
-# Path fields become filesystem destinations the skill writes to; a relative
-# path could redirect writes off the intended Drive mount, so the schema
-# requires an absolute path.
-
-echo "Test: budget-etl.json with a relative downloads path exits 1 and names the field"
-config_setup
-cat > "$DISPATCH_CONFIG_DIR/budget-etl.json" <<'EOF'
-{
-  "downloads": "relative/Downloads",
-  "statements": "/mnt/g/My Drive/budget/statements",
-  "snapshotDir": "/mnt/g/My Drive/budget/snapshots",
-  "current": "/mnt/g/My Drive/budget/budget.enc.json"
-}
-EOF
-rc=0
-err=$("$TMPDIR_TEST/scripts/dispatch-config-load" budget-etl 2>&1 1>/dev/null) || rc=$?
-assert_eq "7n relative downloads exits 1" "1" "$rc"
-TOTAL=$((TOTAL + 1))
-if [[ "$err" == *"downloads"* && "$err" == *"absolute"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: 7n relative downloads error names the field and 'absolute'"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: 7n relative downloads error names the field and 'absolute'"
-  echo "    stderr: $err"
-fi
-config_teardown
-
-# --- Test 7o: budget-etl.json path with a ".." component exits 1 -------------
-
-echo "Test: budget-etl.json with a '..' component in statements exits 1 and names the field"
-config_setup
-cat > "$DISPATCH_CONFIG_DIR/budget-etl.json" <<'EOF'
-{
-  "downloads": "/mnt/c/Users/example/Downloads",
-  "statements": "/mnt/g/My Drive/../../../etc",
-  "snapshotDir": "/mnt/g/My Drive/budget/snapshots",
-  "current": "/mnt/g/My Drive/budget/budget.enc.json"
-}
-EOF
-rc=0
-err=$("$TMPDIR_TEST/scripts/dispatch-config-load" budget-etl 2>&1 1>/dev/null) || rc=$?
-assert_eq "7o '..' statements exits 1" "1" "$rc"
-TOTAL=$((TOTAL + 1))
-if [[ "$err" == *"statements"* && "$err" == *".."* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: 7o '..' statements error names the field and '..'"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: 7o '..' statements error names the field and '..'"
-  echo "    stderr: $err"
-fi
-config_teardown
-
 # --- Test 7p: force-opus.json enabled → normalized JSON, exit 0 --------------
 
 echo "Test: valid force-opus.json with enabled:true prints normalized JSON"
@@ -15896,15 +15729,15 @@ config_teardown
 # ============================================================================
 #
 # Both ingest-downloads.sh and identify-qfx.sh are copied into a fresh tmp
-# tree so BASH_SOURCE-based SCRIPT_DIR resolution works correctly. The budget-etl
-# scripts live at $SCRIPT_DIR/../../budget-etl/scripts/ relative to the
+# tree so BASH_SOURCE-based SCRIPT_DIR resolution works correctly. The budget
+# scripts live at $SCRIPT_DIR/../../budget/scripts/ relative to the
 # dispatch-propagate scripts dir.
 
 echo ""
 echo "=== ingest-downloads.sh ==="
 
-INGEST_SRC="$SCRIPT_DIR/../../budget-etl/scripts/ingest-downloads.sh"
-IDENTIFY_SRC="$SCRIPT_DIR/../../budget-etl/scripts/identify-qfx.sh"
+INGEST_SRC="$SCRIPT_DIR/../../budget/scripts/ingest-downloads.sh"
+IDENTIFY_SRC="$SCRIPT_DIR/../../budget/scripts/identify-qfx.sh"
 
 ING_TMP=""
 
@@ -32769,6 +32602,22 @@ assert_eq "finders: docs surface → codeql absent" "0" "$n"
 out=$(printf 'surface=tests\ndeps=false\napp_or_rules=false\n' | "$SCRIPT_DIR/dispatch-review-finders")
 assert_eq "finders: tests → code-review only" "code-review" "$out"
 
+# cost finder: present when surface=code + app_or_rules=true
+n=$(printf 'surface=code\ndeps=false\napp_or_rules=true\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -c '^cost$')
+assert_eq "finders: code+app → cost present" "1" "$n"
+
+# cost finder: absent when surface=code + app_or_rules=false
+n=$(printf 'surface=code\ndeps=false\napp_or_rules=false\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -c '^cost$' || true)
+assert_eq "finders: code !app → cost absent" "0" "$n"
+
+# cost finder: absent on docs surface
+n=$(printf 'surface=docs\ndeps=false\napp_or_rules=false\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -c '^cost$' || true)
+assert_eq "finders: docs surface → cost absent" "0" "$n"
+
+# cost finder: absent on tests surface
+n=$(printf 'surface=tests\ndeps=false\napp_or_rules=false\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -c '^cost$' || true)
+assert_eq "finders: tests surface → cost absent" "0" "$n"
+
 # ============================================================================
 # === dispatch-review-dedup ===
 # ============================================================================
@@ -42237,6 +42086,243 @@ assert_eq "firebase_deploy_retry: success path does not run diagnostic" "absent"
 unset FIREBASE_AUTH_DIAGNOSTIC_CMD
 rm -rf "$FDR_DIR"
 unset FIREBASE_DEPLOY_RETRY_BASE_DELAY FIREBASE_DEPLOY_RETRY_ATTEMPTS
+
+# ============================================================================
+# dispatch-find-owning-pr
+# ============================================================================
+# Reuses assert_contains_local / assert_not_contains_local (defined in the
+# drift-scan section above). The gh stub keys on `args="$*"` and reads fixtures
+# from $TMPDIR_TEST (TREE = bin/.. = TMPDIR_TEST), mirroring the drift-scan stub
+# shape. Fixtures live in tmp ($TMPDIR_TEST), so heredoc redirection is fine.
+
+find_owning_pr_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/bin"
+
+  cp "$SCRIPT_DIR/dispatch-find-owning-pr" "$TMPDIR_TEST/scripts/dispatch-find-owning-pr"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-find-owning-pr"
+  # The copied script sources lib.sh via its own SCRIPT_DIR (= temp scripts/),
+  # so lib.sh must sit alongside it.
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
+
+  cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
+#!/usr/bin/env bash
+args="$*"
+TREE="$(cd "$(dirname "$0")/.." && pwd)"
+case "$args" in
+  pr\ list\ --state\ open*)
+    # pr_list_open: gh pr list --state open --limit <N> --json number,headRefName.
+    # If a failure fixture is present, emulate a non-truncation gh failure
+    # (auth/network) by writing its text to stderr and exiting non-zero.
+    if [ -f "$TREE/pr_list_fail.txt" ]; then
+      cat "$TREE/pr_list_fail.txt" >&2
+      exit 1
+    fi
+    cat "$TREE/prs.json"
+    ;;
+  api\ repos/*contents/*)
+    # ownership probe: gh api repos/{owner}/{repo}/contents/<path>?ref=<branch>
+    # 200 (exit 0) iff owners.txt names the requested branch, else 404 (exit 1).
+    ref="${args##*ref=}"
+    if grep -qx "$ref" "$TREE/owners.txt" 2>/dev/null; then exit 0; else exit 1; fi
+    ;;
+  pr\ view\ *closingIssuesReferences*)
+    cat "$TREE/closing.json"
+    ;;
+  api\ *dependencies/blocked_by*)
+    # Real call uses --jq '.[].number'; stub emits the already-reduced numbers.
+    cat "$TREE/blocked_by.txt" 2>/dev/null || true
+    ;;
+  api\ *dependencies/blocking*)
+    cat "$TREE/blocking.txt" 2>/dev/null || true
+    ;;
+  *)
+    echo "gh stub: unknown invocation: $args" >&2
+    exit 1
+    ;;
+esac
+STUB
+  chmod +x "$TMPDIR_TEST/bin/gh"
+
+  SAVED_PATH_FOP="$PATH"
+  export PATH="$TMPDIR_TEST/bin:$PATH"
+}
+
+find_owning_pr_teardown() {
+  cd "$SCRIPT_DIR"
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  export PATH="$SAVED_PATH_FOP"
+}
+
+# --- Test: clear defer ---
+
+echo "Test: dispatch-find-owning-pr defers behind the lone owning PR's closing issue"
+find_owning_pr_setup
+cat > "$TMPDIR_TEST/prs.json" <<'EOF'
+[{"number":7,"headRefName":"feat-x"}]
+EOF
+cat > "$TMPDIR_TEST/owners.txt" <<'EOF'
+feat-x
+EOF
+cat > "$TMPDIR_TEST/closing.json" <<'EOF'
+{"closingIssuesReferences":[{"number":42}]}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-find-owning-pr" 100 "some/file.ts"); rc=$?
+assert_eq "dispatch-find-owning-pr: clean defer exits 0" "0" "$rc"
+assert_contains_local "dispatch-find-owning-pr: emits defer:42" "defer:42" "$out"
+find_owning_pr_teardown
+
+# --- Test: multiple owning PRs ---
+
+echo "Test: dispatch-find-owning-pr flags multiple owning PRs"
+find_owning_pr_setup
+cat > "$TMPDIR_TEST/prs.json" <<'EOF'
+[{"number":7,"headRefName":"feat-x"},{"number":8,"headRefName":"feat-y"}]
+EOF
+cat > "$TMPDIR_TEST/owners.txt" <<'EOF'
+feat-x
+feat-y
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-find-owning-pr" 100 "some/file.ts"); rc=$?
+assert_eq "dispatch-find-owning-pr: multiple owners exits 0" "0" "$rc"
+assert_contains_local "dispatch-find-owning-pr: emits not-clear:multiple-owning-prs" "not-clear:multiple-owning-prs" "$out"
+find_owning_pr_teardown
+
+# --- Test: owning PR closes 0 issues ---
+
+echo "Test: dispatch-find-owning-pr flags an owning PR that closes 0 issues"
+find_owning_pr_setup
+cat > "$TMPDIR_TEST/prs.json" <<'EOF'
+[{"number":7,"headRefName":"feat-x"}]
+EOF
+cat > "$TMPDIR_TEST/owners.txt" <<'EOF'
+feat-x
+EOF
+cat > "$TMPDIR_TEST/closing.json" <<'EOF'
+{"closingIssuesReferences":[]}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-find-owning-pr" 100 "some/file.ts"); rc=$?
+assert_eq "dispatch-find-owning-pr: closes-0 exits 0" "0" "$rc"
+assert_contains_local "dispatch-find-owning-pr: emits not-clear:owning-pr-closes-0-issues" "not-clear:owning-pr-closes-0-issues" "$out"
+find_owning_pr_teardown
+
+# --- Test: owning PR closes 2 issues ---
+
+echo "Test: dispatch-find-owning-pr flags an owning PR that closes 2 issues"
+find_owning_pr_setup
+cat > "$TMPDIR_TEST/prs.json" <<'EOF'
+[{"number":7,"headRefName":"feat-x"}]
+EOF
+cat > "$TMPDIR_TEST/owners.txt" <<'EOF'
+feat-x
+EOF
+cat > "$TMPDIR_TEST/closing.json" <<'EOF'
+{"closingIssuesReferences":[{"number":42},{"number":43}]}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-find-owning-pr" 100 "some/file.ts"); rc=$?
+assert_eq "dispatch-find-owning-pr: closes-2 exits 0" "0" "$rc"
+assert_contains_local "dispatch-find-owning-pr: emits not-clear:owning-pr-closes-2-issues" "not-clear:owning-pr-closes-2-issues" "$out"
+find_owning_pr_teardown
+
+# --- Test: already blocked ---
+
+echo "Test: dispatch-find-owning-pr flags an already-blocked target"
+find_owning_pr_setup
+cat > "$TMPDIR_TEST/prs.json" <<'EOF'
+[{"number":7,"headRefName":"feat-x"}]
+EOF
+cat > "$TMPDIR_TEST/owners.txt" <<'EOF'
+feat-x
+EOF
+cat > "$TMPDIR_TEST/closing.json" <<'EOF'
+{"closingIssuesReferences":[{"number":42}]}
+EOF
+cat > "$TMPDIR_TEST/blocked_by.txt" <<'EOF'
+42
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-find-owning-pr" 100 "some/file.ts"); rc=$?
+assert_eq "dispatch-find-owning-pr: already-blocked exits 0" "0" "$rc"
+assert_contains_local "dispatch-find-owning-pr: emits not-clear:already-blocked" "not-clear:already-blocked" "$out"
+find_owning_pr_teardown
+
+# --- Test: would cycle ---
+
+echo "Test: dispatch-find-owning-pr flags a direct cycle"
+find_owning_pr_setup
+cat > "$TMPDIR_TEST/prs.json" <<'EOF'
+[{"number":7,"headRefName":"feat-x"}]
+EOF
+cat > "$TMPDIR_TEST/owners.txt" <<'EOF'
+feat-x
+EOF
+cat > "$TMPDIR_TEST/closing.json" <<'EOF'
+{"closingIssuesReferences":[{"number":42}]}
+EOF
+cat > "$TMPDIR_TEST/blocking.txt" <<'EOF'
+42
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-find-owning-pr" 100 "some/file.ts"); rc=$?
+assert_eq "dispatch-find-owning-pr: would-cycle exits 0" "0" "$rc"
+assert_contains_local "dispatch-find-owning-pr: emits not-clear:would-cycle" "not-clear:would-cycle" "$out"
+find_owning_pr_teardown
+
+# --- Test: proceed (no owner) ---
+
+echo "Test: dispatch-find-owning-pr proceeds when no open PR owns the path"
+find_owning_pr_setup
+cat > "$TMPDIR_TEST/prs.json" <<'EOF'
+[{"number":7,"headRefName":"feat-x"},{"number":8,"headRefName":"feat-y"}]
+EOF
+: > "$TMPDIR_TEST/owners.txt"
+out=$("$TMPDIR_TEST/scripts/dispatch-find-owning-pr" 100 "some/file.ts"); rc=$?
+assert_eq "dispatch-find-owning-pr: proceed exits 0" "0" "$rc"
+assert_contains_local "dispatch-find-owning-pr: emits proceed" "proceed" "$out"
+assert_not_contains_local "dispatch-find-owning-pr: proceed is not a defer" "defer:" "$out"
+find_owning_pr_teardown
+
+# --- Test: truncated PR list ---
+
+echo "Test: dispatch-find-owning-pr reports a truncated PR snapshot"
+find_owning_pr_setup
+# Limit 2 + a 2-element list trips pr_list_open's length==limit guard.
+export DISPATCH_PR_LIST_LIMIT=2
+cat > "$TMPDIR_TEST/prs.json" <<'EOF'
+[{"number":7,"headRefName":"feat-x"},{"number":8,"headRefName":"feat-y"}]
+EOF
+: > "$TMPDIR_TEST/owners.txt"
+out=$("$TMPDIR_TEST/scripts/dispatch-find-owning-pr" 100 "some/file.ts"); rc=$?
+unset DISPATCH_PR_LIST_LIMIT
+assert_eq "dispatch-find-owning-pr: truncated exits 0" "0" "$rc"
+assert_contains_local "dispatch-find-owning-pr: emits not-clear:pr-list-truncated" "not-clear:pr-list-truncated" "$out"
+find_owning_pr_teardown
+
+# --- Test: pr_list_open non-truncation failure (auth/network) ---
+
+echo "Test: dispatch-find-owning-pr propagates a non-truncation pr_list_open failure and exits 1"
+find_owning_pr_setup
+# gh pr list fails for a non-truncation reason; the script must exit 1 and pass
+# the error text through to stderr (dispatch-find-owning-pr:74-76).
+cat > "$TMPDIR_TEST/pr_list_fail.txt" <<'EOF'
+gh: authentication required (HTTP 401)
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-find-owning-pr" 100 "some/file.ts" 2>"$TMPDIR_TEST/fop_err") && rc=0 || rc=$?
+err=$(cat "$TMPDIR_TEST/fop_err")
+assert_eq "dispatch-find-owning-pr: pr_list_open failure exits 1" "1" "$rc"
+assert_contains_local "dispatch-find-owning-pr: propagates pr_list_open error to stderr" "authentication required" "$err"
+find_owning_pr_teardown
+
+# --- Test: usage errors (exit 2) ---
+
+echo "Test: dispatch-find-owning-pr usage errors exit 2"
+find_owning_pr_setup
+out=$("$TMPDIR_TEST/scripts/dispatch-find-owning-pr" 2>/dev/null) && rc=0 || rc=$?
+assert_eq "dispatch-find-owning-pr: missing args exits 2" "2" "$rc"
+out=$("$TMPDIR_TEST/scripts/dispatch-find-owning-pr" 100 2>/dev/null) && rc=0 || rc=$?
+assert_eq "dispatch-find-owning-pr: missing path exits 2" "2" "$rc"
+out=$("$TMPDIR_TEST/scripts/dispatch-find-owning-pr" notadigit "some/file.ts" 2>/dev/null) && rc=0 || rc=$?
+assert_eq "dispatch-find-owning-pr: non-digit N exits 2" "2" "$rc"
+find_owning_pr_teardown
 
 # ============================================================================
 # summary

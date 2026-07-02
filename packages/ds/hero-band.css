@@ -1,0 +1,120 @@
+/* Hero band — the canonical full-width amber promo band over a 3-up card grid,
+   consumed by the <Hero> DS primitive. Ported from landing's .landing-hero* family
+   (landing/src/style/theme.css). Distinct from hero.css's unrelated .hero chip family. */
+
+/* Full-width section between the sticky header and .content-grid so the sticky
+   sidebar begins after the hero. */
+.hero-band-section {
+  margin-block: var(--space-8);
+}
+
+.hero-band {
+  background: var(--accent);
+  color: var(--bg);
+  padding: var(--space-5) var(--space-6);
+  margin-block-end: var(--space-6);
+  text-align: center;
+}
+.hero-band-headline {
+  margin: 0;
+  font-weight: var(--weight-bold);
+  font-size: clamp(1.1rem, 3vw, 1.5rem);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-heading);
+}
+.hero-band-subline {
+  margin: var(--space-1) 0 0;
+  font-size: clamp(0.85rem, 2.2vw, 1rem);
+  opacity: 0.9;
+}
+.hero-band-cta {
+  margin: var(--space-1) 0 0;
+  font-size: clamp(0.85rem, 2.2vw, 1rem);
+}
+.hero-band-cta a {
+  color: inherit;
+  text-decoration: underline;
+}
+.hero-band-cta a:hover {
+  color: var(--bg);
+  opacity: 0.75;
+}
+.hero-band-cta a:focus-visible {
+  outline: 2px solid var(--bg);
+  outline-offset: 2px;
+}
+.hero-band-cta span {
+  opacity: 0.6;
+}
+
+.hero-band-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+@media (max-width: 768px) {
+  .hero-band-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.hero-band-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.hero-band-card-name {
+  font-weight: var(--weight-bold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-heading);
+}
+.hero-band-card-problem {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+/* Media slot — an optional image/screenshot frame inside a hero card. */
+.hero-band-card-media {
+  display: block;
+  overflow: hidden;
+  border-radius: var(--radius, 4px);
+  line-height: 0;
+}
+.hero-band-card-media img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* Overflow disclosure — a <details> that reveals extra cards below the main grid. */
+.hero-band-overflow {
+  margin-block: var(--space-4) 0;
+  background: none;
+  border: 0;
+  padding: 0;
+  border-radius: 0;
+  overflow: visible;
+}
+.hero-band-overflow summary {
+  cursor: pointer;
+  padding: var(--space-2) var(--space-1);
+  color: var(--muted);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-heading);
+  transition: color var(--duration-fast) var(--ease), outline-color var(--duration-fast) var(--ease);
+  margin-inline: 0;
+  margin-block: 0;
+}
+.hero-band-overflow summary:hover {
+  color: var(--accent);
+}
+.hero-band-overflow summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.hero-band-overflow .hero-band-grid {
+  margin-block-start: var(--space-4);
+}

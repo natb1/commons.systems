@@ -19,6 +19,58 @@ export interface BlogNavProps {
   onSignOut: () => void;
 }
 
+export interface BlogNavEndProps {
+  showHomeLink: boolean;
+  showAuth: boolean;
+  user: BlogNavUser | null;
+  onSignIn: () => void;
+  onSignOut: () => void;
+}
+
+// The right-aligned `end` slot of the nav: the home link (gated by
+// showHomeLink), then the auth control (gated by showAuth). The
+// #sign-in/#sign-out/#user-display ids, the "Login"/"Logout" copy, and the
+// click→callback wiring are preserved verbatim so the driver's auth behavior
+// and any selectors survive. Exported so Units 3 and 4 (create-blog-app.ts and
+// prerender.ts) can wire it into BlogPageShell's navEnd slot.
+export function BlogNavEnd(props: BlogNavEndProps) {
+  const { showHomeLink, showAuth, user, onSignIn, onSignOut } = props;
+  return (
+    <>
+      {showHomeLink && <a href={HOME_HREF}>{HOME_LABEL}</a>}
+      {showAuth &&
+        (user ? (
+          <>
+            <span id="user-display">
+              {user.displayName || user.email || "User"}
+            </span>
+            <a
+              href="#"
+              id="sign-out"
+              onClick={(e) => {
+                e.preventDefault();
+                onSignOut();
+              }}
+            >
+              Logout
+            </a>
+          </>
+        ) : (
+          <a
+            href="#"
+            id="sign-in"
+            onClick={(e) => {
+              e.preventDefault();
+              onSignIn();
+            }}
+          >
+            Login
+          </a>
+        ))}
+    </>
+  );
+}
+
 // React replacement for the old imperative <app-nav> custom element
 // (components/src/nav.ts), composing the ds Nav. The `end` slot reproduces the
 // old right-aligned chrome in DOM order: the home link (gated by showHomeLink),
@@ -31,38 +83,13 @@ export function BlogNav(props: BlogNavProps) {
     <Nav
       links={links}
       end={
-        <>
-          {showHomeLink && <a href={HOME_HREF}>{HOME_LABEL}</a>}
-          {showAuth &&
-            (user ? (
-              <>
-                <span id="user-display">
-                  {user.displayName || user.email || "User"}
-                </span>
-                <a
-                  href="#"
-                  id="sign-out"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    onSignOut();
-                  }}
-                >
-                  Logout
-                </a>
-              </>
-            ) : (
-              <a
-                href="#"
-                id="sign-in"
-                onClick={(e) => {
-                  e.preventDefault();
-                  onSignIn();
-                }}
-              >
-                Login
-              </a>
-            ))}
-        </>
+        <BlogNavEnd
+          showHomeLink={showHomeLink}
+          showAuth={showAuth}
+          user={user}
+          onSignIn={onSignIn}
+          onSignOut={onSignOut}
+        />
       }
     />
   );

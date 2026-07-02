@@ -1,4 +1,5 @@
-import { collection, doc, getDoc, getDocs, query, where, type Firestore } from "firebase/firestore";
+import { doc, getDoc, type Firestore } from "firebase/firestore";
+import { boundedQuery } from "@commons-systems/firestoreutil/bounded-query";
 import type { User } from "firebase/auth";
 import { nsCollectionPath, type Namespace } from "@commons-systems/firestoreutil/namespace";
 import { logError } from "@commons-systems/errorutil/log";
@@ -64,8 +65,10 @@ export async function getOwnerReminders(
 ): Promise<Reminder[]> {
   if (!user.email) return [];
   const path = nsCollectionPath(namespace, "items");
-  const q = query(collection(db, path), where("memberEmails", "array-contains", user.email));
-  const snapshot = await getDocs(q);
+  const snapshot = await boundedQuery(db, path)
+    .where("memberEmails", "array-contains", user.email)
+    .unbounded("owner reminder items are few; owner-scoped read")
+    .getDocs(); // query-bounds-ok: bounded via .unbounded() above — owner-scoped; owner reminder items are few
   const reminders: Reminder[] = [];
   for (const d of snapshot.docs) {
     const reminder = toReminder(d.id, d.data());

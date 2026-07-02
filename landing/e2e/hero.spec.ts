@@ -50,7 +50,7 @@ test.describe("hero band", () => {
       const children = Array.from(pageEl.children).map(
         (c) => c.tagName.toLowerCase() + (c.className ? "." + c.className : ""),
       );
-      const heroIdx = children.findIndex((c) => c.includes("landing-hero"));
+      const heroIdx = children.findIndex((c) => c.includes("hero-band-section"));
       const headerIdx = children.findIndex((c) => c.startsWith("header"));
       const gridIdx = children.findIndex((c) => c.includes("content-grid"));
       return { heroIdx, headerIdx, gridIdx };
@@ -64,7 +64,7 @@ test.describe("hero band", () => {
   test("hero showcase content renders", async ({ page }) => {
     await page.goto("/");
 
-    await expect(page.locator(".landing-hero-band")).toContainText(
+    await expect(page.locator(".hero-band-section")).toContainText(
       "Build with commons.systems. Learn to run without.",
     );
     await expect(page.locator("a.project-card")).toHaveCount(4);

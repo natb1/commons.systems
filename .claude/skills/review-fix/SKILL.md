@@ -255,6 +255,49 @@ per-finding schema. Extract the `findings` array for `prescanned_findings`.
 Collect normalized CodeQL, npm, and erosion findings into `prescanned_findings`
 to pass to the Workflow.
 
+#### Finder agents (when `surface=code`)
+
+The Workflow fans out agent finders based on `surface` and `app_or_rules`. The
+`code-review` quality finder always runs. When `surface === 'code'`, the following
+domain finders also run. Four are gated on `surface=code` alone; four additionally
+require `app_or_rules=true` (application/functions/rules source):
+
+**`surface === 'code'`** (any code-surface diff):
+- **input-validation** — Hunt injection in the changed code: SQL/NoSQL injection, XSS,
+  command injection, path traversal. Check that external input is validated and escaped
+  at every boundary it crosses.
+- **secrets** — Hardcoded keys/tokens/credentials in the changed code, `.env` files
+  committed to git, secrets leaking into build output.
+- **red-team** — Construct concrete attack scenarios against the changed code. Pick an
+  attacker goal, trace a path through the diff to reach it, and report each viable
+  scenario as a finding. Build scenarios from the code under review, not a checklist of
+  known vulnerabilities.
+- **security-review** — Invokes the built-in `/security-review` skill for a broad
+  security pass.
+
+**`surface === 'code' && app_or_rules=true`** (app/functions/rules source):
+- **auth** — Auth and access control: Firestore rules coverage for paths the diff touches,
+  missing auth checks, privilege escalation. Confirm each new or changed Firestore path
+  has a matching rule block and that client code does not assume access the rules do not
+  grant.
+- **data-exposure** — API responses returning more fields than the caller needs, PII in
+  logs (console.log and similar), internal details (stack traces, config, paths) leaked
+  in error messages.
+- **firebase** — Firebase-specific: Firestore rules permissiveness (overly broad `allow`
+  conditions, missing field constraints), emulator-only code reachable on production
+  paths, Firebase API key or config exposure.
+- **cost** — Cost/scaling lens: flags three Firestore cost/scaling patterns introduced in
+  the diff: (1) unbounded queries — `getDocs`/collection scans with no `limit()` over a
+  collection that grows without bound; (2) new high-frequency amplifiers layered over
+  collection scans — a new interval, scheduler, polling loop, or refresh (e.g. a 5-minute
+  refresh) placed over a query that scans a growing collection (the query×amplifier
+  interaction); (3) N+1 `getDoc` loops. Reasons about the interaction between a query and
+  its amplifier (call frequency × collection growth), not just the static shape of a
+  single query — a query that is cheap per call becomes a cost/scaling risk once a new
+  refresh or interval runs it repeatedly over a growing collection. Sets Source "cost",
+  OWASP "", STRIDE "" (non-security). Findings are ADVISORY — see the cost disposition
+  note in Step 4.
+
 ### 2. Build `args` and invoke the Workflow
 
 Collect the fields for the Workflow invocation. Parse `Closes #N` from the pack's
@@ -381,6 +424,18 @@ Dismissed is for false positives, trivially wrong findings, or style preferences
 that are not actual improvements; smallness alone never qualifies (out-of-scope
 items go to Deferred, not Dismissed). When a code-review finding is
 ambiguous, default to Informational rather than inventing a code change.
+
+**`Source "cost"` findings are ADVISORY.** A confirmed cost/scaling pattern
+(unbounded collection query, a high-frequency amplifier layered over a scan, or an
+N+1 read loop) always routes to `Deferred` — filed as a non-blocking follow-up
+feeding the deterministic cost sensor (#2687). Even a cost finding that names a
+concrete pattern but is not obviously actionable still classifies `Deferred`
+(so it reaches the sensor) rather than `Informational`. Cost findings are
+**never** `Fixed` (not auto-fixed in this PR), **never** `Required`
+(not merge-blocking), and **never** verify-eligible (the adversarial-verify
+step is skipped for cost). When the classify agent returns no verdict for a cost
+finding, the Workflow falls back to `Deferred` so it is filed as a follow-up
+rather than silently dropped.
 
 ### 5. File meaningful out-of-scope findings as blocked_by follow-ups
 
