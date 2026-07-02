@@ -1,12 +1,11 @@
 ---
 id: strategy-domain-selection
 kind: strategy
-statement: Select new domains where the author's own problem is a good candidate for recovering autonomy
+statement: Select new domains where the author's own problem is a good candidate
+  for recovering autonomy
 owner: human
 status: codified
 parent: strategy-recover-author-autonomy
-serves:
-  - virtue-progressive-detachment
 rationale: >-
   When choosing a new domain, enter domains where the author has a genuine
   problem first; within a domain, prioritize depth before breadth. These
@@ -36,15 +35,26 @@ rationale: >-
 
 
   Standing candidates, recorded as raw delegation records awaiting this
-  selection: delegation-communications, delegation-media-libraries,
-  delegation-knowledge-notes.
+  selection: delegation-communications (interim path while unselected:
+  strategy-realign-attachments) and delegation-media-libraries. Selected
+  2026-07-02: delegation-knowledge-notes — recovery owned by
+  strategy-recover-knowledge, entered through reading annotations in print.
 reading: null
-gap: null
+gap: "no reading yet (threshold: no raw record sits unscored across a review cycle)"
+serves:
+  - virtue-progressive-detachment
+recovers: []
 clarifications: []
 tooling_goals: []
-success_signal: null
+success_signal:
+  observable: raw candidate records are periodically scored against these criteria
+    and either selected (minting a recovery strategy) or explicitly deferred
+  sensor: owner review at office-hours
+  threshold: no raw record sits unscored across a review cycle
+  is_proxy: true
 attributes:
   conditions:
-    - domains keep appearing where the ownership cost-benefit has flipped and the author has a genuine problem
+    - domains keep appearing where the ownership cost-benefit has flipped and
+      the author has a genuine problem
 ---
 # Select new domains where the author's own problem is a good candidate for recovering autonomy

@@ -5,15 +5,19 @@ statement: Media libraries delegated to subscription streaming and photo service
 owner: human
 status: raw
 parent: null
-serves: []
 rationale: >-
-  Music, video, photos, and personal archives held behind subscriptions —
-  access rented, catalogs curated by the vendor, formats often locked. A
-  future-candidate capture, recorded raw per kind-delegation and standing as
-  a candidate input to strategy-domain-selection. Axes below are a first
-  pass, not an assessment.
+  Music, video, photos, and personal archives held behind subscriptions — access
+  rented, catalogs curated by the vendor, formats often locked. A
+  future-candidate capture, recorded raw per kind-delegation and standing as a
+  candidate input to strategy-domain-selection. Axes below are a first pass, not
+  an assessment.
+
+  Interim path while unselected: strategy-realign-attachments — DRM-free
+  purchases over streaming rental where the format allows it.
 reading: null
 gap: null
+serves: []
+recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
