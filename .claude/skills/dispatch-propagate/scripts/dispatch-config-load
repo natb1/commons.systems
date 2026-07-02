@@ -7,7 +7,7 @@
 # the normalized result to stdout.
 #
 # Usage:
-#   dispatch-config-load <projects|jit|statements|target-workers|epic|auto-merge|force-opus|sweep|phase-model-policy|selection-lock>
+#   dispatch-config-load <projects|jit|statements|target-workers|epic|auto-merge|force-opus|strict-preflight|sweep|phase-model-policy|selection-lock>
 #
 # Config files live in <project-root>/dispatch.config/. The project root is
 # resolved via resolve_project_root (lib.sh).
