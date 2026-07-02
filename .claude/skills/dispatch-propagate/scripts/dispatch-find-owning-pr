@@ -111,7 +111,7 @@ fi
 P="${owners[0]}"
 
 # lint-allow: gh-rest-porcelain GraphQL-only closingIssuesReferences (no REST equivalent)
-closing_json=$(gh pr view "$P" --json closingIssuesReferences)
+closing_json=$(gh_retry gh pr view "$P" --json closingIssuesReferences)
 count=$(jq '.closingIssuesReferences | length' <<<"$closing_json")
 
 if [[ "$count" -ne 1 ]]; then

@@ -42248,7 +42248,7 @@ unset FIREBASE_DEPLOY_RETRY_BASE_DELAY FIREBASE_DEPLOY_RETRY_ATTEMPTS
 
 find_owning_pr_setup() {
   TMPDIR_TEST=$(mktemp -d)
-  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/bin" "$TMPDIR_TEST/tree"
+  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/bin"
 
   cp "$SCRIPT_DIR/dispatch-find-owning-pr" "$TMPDIR_TEST/scripts/dispatch-find-owning-pr"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-find-owning-pr"
@@ -42262,7 +42262,13 @@ args="$*"
 TREE="$(cd "$(dirname "$0")/.." && pwd)"
 case "$args" in
   pr\ list\ --state\ open*)
-    # pr_list_open: gh pr list --state open --limit <N> --json number,headRefName
+    # pr_list_open: gh pr list --state open --limit <N> --json number,headRefName.
+    # If a failure fixture is present, emulate a non-truncation gh failure
+    # (auth/network) by writing its text to stderr and exiting non-zero.
+    if [ -f "$TREE/pr_list_fail.txt" ]; then
+      cat "$TREE/pr_list_fail.txt" >&2
+      exit 1
+    fi
     cat "$TREE/prs.json"
     ;;
   api\ repos/*contents/*)
@@ -42440,6 +42446,21 @@ out=$("$TMPDIR_TEST/scripts/dispatch-find-owning-pr" 100 "some/file.ts"); rc=$?
 unset DISPATCH_PR_LIST_LIMIT
 assert_eq "dispatch-find-owning-pr: truncated exits 0" "0" "$rc"
 assert_contains_local "dispatch-find-owning-pr: emits not-clear:pr-list-truncated" "not-clear:pr-list-truncated" "$out"
+find_owning_pr_teardown
+
+# --- Test: pr_list_open non-truncation failure (auth/network) ---
+
+echo "Test: dispatch-find-owning-pr propagates a non-truncation pr_list_open failure and exits 1"
+find_owning_pr_setup
+# gh pr list fails for a non-truncation reason; the script must exit 1 and pass
+# the error text through to stderr (dispatch-find-owning-pr:74-76).
+cat > "$TMPDIR_TEST/pr_list_fail.txt" <<'EOF'
+gh: authentication required (HTTP 401)
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-find-owning-pr" 100 "some/file.ts" 2>"$TMPDIR_TEST/fop_err"); rc=$?
+err=$(cat "$TMPDIR_TEST/fop_err")
+assert_eq "dispatch-find-owning-pr: pr_list_open failure exits 1" "1" "$rc"
+assert_contains_local "dispatch-find-owning-pr: propagates pr_list_open error to stderr" "authentication required" "$err"
 find_owning_pr_teardown
 
 # --- Test: usage errors (exit 2) ---
