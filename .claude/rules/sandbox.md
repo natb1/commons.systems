@@ -104,7 +104,7 @@ the gpg-agent cache is cold, the command fails with
 `gpg: decryption failed: No pinentry`.
 
 For workflows that need a `pass`-managed secret (e.g. `BUDGET_ETL_PASSWORD`
-for the `budget-etl` skill):
+for the `budget` skill):
 
 1. Warm the cache once in your interactive host shell:
    `pass show <path>` (enter the GPG passphrase when pinentry prompts).

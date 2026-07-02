@@ -110,14 +110,14 @@ origin is denied before the approval popup surfaces — **retry the failed call
 once**, and the retry succeeds. If browser calls keep failing after that one
 retry, stop and ask the user rather than looping.
 
-### Non-browser user-facing functionality (a CLI such as `budget-etl`, or a slash-command skill)
+### Non-browser user-facing functionality (a slash-command skill such as `/budget`)
 
 Do **not** execute it. Instead add **numbered demo steps** to the summary so the
 user can try it themselves — the exact command and what to expect. For example:
 
 1. Run `/budget ~/Downloads/statements/` in Claude Code.
-2. The `budget-etl` binary runs locally and writes `budget.json`.
-3. Upload it to the budget app to see the new view.
+2. The `budget-etl` binary runs locally and writes a fresh encrypted snapshot (`budget-<ts>.enc.json`).
+3. The hosted budget app reloads to show the new view.
 
 ## 5. Post the summary as a comment on the digest issue
 
