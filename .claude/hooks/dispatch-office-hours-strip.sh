@@ -47,4 +47,10 @@ fi
 gh_issue_remove_label_rest "$ISSUE_NUM" dispatch:office-hours >/dev/null 2>&1 \
   || echo "[dispatch-office-hours-strip] WARNING: gh_issue_remove_label_rest failed for issue #$ISSUE_NUM" >&2
 
+# Office-hours snapshot: un-park `parked-only` refresh (#2661). Fired
+# unconditionally — this hook already runs only inside an <N>-* worktree on user
+# engagement; env-gated OFF by default + flock-serialized + best-effort, so a
+# redundant refresh is harmless. Preserves the never-block-submission contract.
+"$SCRIPTS/office-hours-snapshot-launch" parked-only || true
+
 exit 0

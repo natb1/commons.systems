@@ -295,6 +295,11 @@ strip_office_hours_label() {
   # cross-phase accumulation that is the whole point of the ceiling.
   if [ "${ISSUE_OFFICE_HOURS_PRESENT:-no}" = yes ]; then
     clear_attempt_counter
+    # Office-hours snapshot: park→unpark `parked-only` refresh (#2661). Same
+    # transition gate as the counter reset — only on a genuine unpark, not on
+    # every advance/self-close. Best-effort; the `|| true` keeps the function
+    # total (the file runs `set -uo pipefail` with a `trap … exit 0 ERR`).
+    "$SCRIPTS/office-hours-snapshot-launch" parked-only || true
   fi
 }
 
