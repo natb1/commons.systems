@@ -3100,3 +3100,115 @@ EOF
     return 1
   fi
 }
+
+# Gate a post-deploy smoke run on STABLE Firebase Hosting release propagation.
+# Firebase Hosting release propagation is not atomic across the edge: a single
+# good root response does not mean the new release has stably propagated — a
+# subsequent request can still get a 503 or a stale version. So instead of
+# breaking on the first good root document, this polls until it observes
+# REQUIRED_CONSECUTIVE good observations in a row, where each observation
+# verifies BOTH the root document AND a content-hashed asset it references.
+#
+# Arg: <base_url> — the origin to probe (e.g. a preview channel URL).
+#
+# A single observation is GOOD only when ALL hold:
+#   1. GET <base_url> returns HTTP 200, AND
+#   2. that body contains `<script type="module"` (a real app shell, not an
+#      error/placeholder page), AND
+#   3. the content-hashed entry asset referenced by that same body returns 200.
+# The asset path is re-extracted from THAT poll's fresh HTML each iteration
+# (edges can serve different releases poll-to-poll), mirroring
+# packages/config/hosting-smoke-helpers.ts: a `script src="/assets/*.js"` match,
+# then a stylesheet `href="/assets/*.css"` fallback. Any miss RESETS the
+# consecutive counter to 0 and logs a one-line reason.
+#
+# Termination is driven by a bounded POLL COUNT (not wall-clock date-diff, which
+# is awkward under a PATH-shimmed fake curl). Tunables (env, read into locals):
+#   TIMEOUT              (default 120) — seconds budget
+#   INTERVAL             (default 2)   — seconds slept between polls
+#   REQUIRED_CONSECUTIVE (default 3)   — good observations needed in a row
+# Max polls = TIMEOUT / INTERVAL when INTERVAL > 0, else TIMEOUT (so
+# `TIMEOUT=5 INTERVAL=0` runs at most 5 polls — INTERVAL=0 never spins forever).
+#
+# Returns 0 once stable propagation is confirmed. On exhausting the poll budget
+# without confirmation it prints a clear error to stderr (last root status, the
+# last failing check, and head -20 of the last root HTML) and returns 1 — no
+# silent pass. Safe under `set -euo pipefail`: grep/curl exits that are expected
+# to be non-zero on a non-match are guarded via `if`/`|| true`.
+wait_for_stable_propagation() {
+  local base_url="${1:?Usage: wait_for_stable_propagation <base_url>}"
+  local timeout="${TIMEOUT:-120}"
+  local interval="${INTERVAL:-2}"
+  local required="${REQUIRED_CONSECUTIVE:-3}"
+
+  # Bound the loop by a poll count so INTERVAL=0 cannot spin forever.
+  local max_polls
+  if [ "$interval" -gt 0 ]; then
+    max_polls=$(( timeout / interval ))
+  else
+    max_polls="$timeout"
+  fi
+  # Always allow at least one poll even for tiny/zero budgets.
+  if [ "$max_polls" -lt 1 ]; then
+    max_polls=1
+  fi
+
+  local tmphtml
+  tmphtml=$(mktemp) || { echo "ERROR: wait_for_stable_propagation: could not create temp file" >&2; return 1; }
+
+  local consecutive=0
+  local poll status asset_path asset_status last_status="(none)" last_fail="(none)"
+
+  for (( poll=1; poll<=max_polls; poll++ )); do
+    # BARE curl so a PATH shim can intercept it in the Unit 4 test. `|| true`
+    # keeps a curl failure (e.g. connection refused, empty %{http_code}) from
+    # aborting under `set -e`; an empty/non-200 status just fails the check.
+    status=$(curl -s -o "$tmphtml" -w '%{http_code}' "$base_url" || true)
+    last_status="$status"
+
+    if [[ "$status" != "200" ]]; then
+      last_fail="root returned $status (want 200)"
+      echo "wait_for_stable_propagation: $last_fail — resetting consecutive count" >&2
+      consecutive=0
+    elif ! grep -q '<script type="module"' "$tmphtml"; then
+      last_fail="root 200 but body missing <script type=\"module\""
+      echo "wait_for_stable_propagation: $last_fail — resetting consecutive count" >&2
+      consecutive=0
+    else
+      # Root looks good; extract the content-hashed entry asset from THIS poll's
+      # fresh HTML. `.js` script src first, then `.css` stylesheet href fallback.
+      asset_path=$(grep -oE 'src="/assets/[^"]+\.js"' "$tmphtml" | head -1 | sed -E 's/^src="//; s/"$//' || true)
+      if [[ -z "$asset_path" ]]; then
+        asset_path=$(grep -oE 'href="/assets/[^"]+\.css"' "$tmphtml" | head -1 | sed -E 's/^href="//; s/"$//' || true)
+      fi
+
+      if [[ -z "$asset_path" ]]; then
+        last_fail="root 200 but no /assets/* asset reference in HTML"
+        echo "wait_for_stable_propagation: $last_fail — resetting consecutive count" >&2
+        consecutive=0
+      else
+        asset_status=$(curl -s -o /dev/null -w '%{http_code}' "$base_url$asset_path" || true)
+        if [[ "$asset_status" != "200" ]]; then
+          last_fail="asset $asset_path returned $asset_status (want 200)"
+          echo "wait_for_stable_propagation: $last_fail — resetting consecutive count" >&2
+          consecutive=0
+        else
+          consecutive=$(( consecutive + 1 ))
+          echo "wait_for_stable_propagation: good observation $consecutive/$required (root 200, asset $asset_path 200)" >&2
+          if [ "$consecutive" -ge "$required" ]; then
+            echo "wait_for_stable_propagation: stable propagation confirmed ($required consecutive good observations)"
+            rm -f "$tmphtml"
+            return 0
+          fi
+        fi
+      fi
+    fi
+
+    sleep "$interval"
+  done
+
+  echo "ERROR: wait_for_stable_propagation: $base_url did not reach $required consecutive good observations within ${timeout}s (${max_polls} polls). Last root HTTP status: $last_status; last failing check: $last_fail" >&2
+  head -20 "$tmphtml" >&2
+  rm -f "$tmphtml"
+  return 1
+}
