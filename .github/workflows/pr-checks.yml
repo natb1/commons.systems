@@ -87,3 +87,10 @@ jobs:
           fetch-depth: 0
       - name: Flag net-new type-safety escape hatches
         run: .github/scripts/check-type-safety-escapes.sh
+
+  firestore-query-bounds-sensor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - name: Flag unbounded Firestore getDocs queries
+        run: .github/scripts/check-firestore-query-bounds.sh

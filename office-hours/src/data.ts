@@ -64,7 +64,7 @@ export async function getOwnerReminders(
 ): Promise<Reminder[]> {
   if (!user.email) return [];
   const path = nsCollectionPath(namespace, "items");
-  const q = query(collection(db, path), where("memberEmails", "array-contains", user.email));
+  const q = query(collection(db, path), where("memberEmails", "array-contains", user.email)); // query-bounds-ok: per-owner items scoped by membership; pagination is a product decision tracked under #2686
   const snapshot = await getDocs(q);
   const reminders: Reminder[] = [];
   for (const d of snapshot.docs) {
