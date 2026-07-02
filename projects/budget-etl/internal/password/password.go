@@ -1,8 +1,8 @@
 // Package password resolves the budget-etl decryption password from a fixed
 // precedence chain — environment variable, then macOS Keychain — and returns a
-// single self-describing error when neither source is available. All three
-// entrypoints (budget-etl, cmd/dump, cmd/patch) go through Resolve so the
-// resolution rules and failure message stay identical across them.
+// single self-describing error when neither source is available. The budget-etl
+// binary's subcommands (dump, patch) go through Resolve so the resolution
+// rules and failure message stay identical across them.
 package password
 
 import (
