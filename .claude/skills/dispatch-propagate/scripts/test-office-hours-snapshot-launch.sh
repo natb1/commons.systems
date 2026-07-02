@@ -148,4 +148,23 @@ wait_for_file "$STATE_DIR/office-hours-snapshot-parked-only.lock"
   && assert_eq "per-scope lock: parked-only.lock exists" "yes" "yes" \
   || assert_eq "per-scope lock: parked-only.lock exists" "yes" "no"
 
+# --- Case 5: caller returns fast even under same-scope contention ------------
+# This verifies the load-bearing design decision: the bounded-wait flock lives
+# INSIDE the detached child, so the CALLER never blocks even when a same-scope
+# run already holds the lock. If flock were moved into the caller, holding the
+# lock externally here would stall the launcher for the full -w 30 window.
+echo "== Case 5: caller fast under contention =="
+exec 8>"$STATE_DIR/office-hours-snapshot-full.lock"
+flock 8   # hold the full-scope lock so any in-caller flock would block
+SECONDS=0
+rc=0
+"$LAUNCH" full || rc=$?
+elapsed=$SECONDS
+flock -u 8
+exec 8>&-
+assert_eq "contention: exit 0" "0" "$rc"
+[[ "$elapsed" -lt 10 ]] \
+  && assert_eq "contention: caller returns fast (flock in child)" "fast" "fast" \
+  || assert_eq "contention: caller returns fast (flock in child)" "fast" "slow(${elapsed}s)"
+
 report_results
