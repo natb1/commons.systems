@@ -42457,7 +42457,7 @@ find_owning_pr_setup
 cat > "$TMPDIR_TEST/pr_list_fail.txt" <<'EOF'
 gh: authentication required (HTTP 401)
 EOF
-out=$("$TMPDIR_TEST/scripts/dispatch-find-owning-pr" 100 "some/file.ts" 2>"$TMPDIR_TEST/fop_err"); rc=$?
+out=$("$TMPDIR_TEST/scripts/dispatch-find-owning-pr" 100 "some/file.ts" 2>"$TMPDIR_TEST/fop_err") && rc=0 || rc=$?
 err=$(cat "$TMPDIR_TEST/fop_err")
 assert_eq "dispatch-find-owning-pr: pr_list_open failure exits 1" "1" "$rc"
 assert_contains_local "dispatch-find-owning-pr: propagates pr_list_open error to stderr" "authentication required" "$err"
