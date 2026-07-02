@@ -1,14 +1,7 @@
-import {
-  collection,
-  getDocs,
-  limit,
-  orderBy,
-  query,
-  where,
-  type Firestore,
-} from "firebase/firestore";
+import type { Firestore } from "firebase/firestore";
 import type { User } from "firebase/auth";
 import { nsCollectionPath, type Namespace } from "@commons-systems/firestoreutil/namespace";
+import { boundedQuery } from "@commons-systems/firestoreutil/bounded-query";
 import seedSamples from "virtual:office-hours-issue-seed-data";
 import { toIssueSample, type IssueSample } from "./issue-samples.js";
 
@@ -38,13 +31,11 @@ export async function getOwnerIssueSamples(
 ): Promise<IssueSample[]> {
   if (!user.email) return [];
   const path = nsCollectionPath(namespace, "issue-samples");
-  const q = query(
-    collection(db, path),
-    where("memberEmails", "array-contains", user.email),
-    orderBy("sampledAt", "desc"),
-    limit(ISSUE_SAMPLE_LIMIT),
-  );
-  const snapshot = await getDocs(q);
+  const bounded = boundedQuery(db, path)
+    .where("memberEmails", "array-contains", user.email)
+    .orderBy("sampledAt", "desc")
+    .limit(ISSUE_SAMPLE_LIMIT);
+  const snapshot = await bounded.getDocs(); // query-bounds-ok: bounded via .limit() on the builder above
   const samples: IssueSample[] = [];
   for (const d of snapshot.docs) {
     const sample = toIssueSample(d.id, d.data());

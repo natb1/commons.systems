@@ -1,14 +1,7 @@
-import {
-  collection,
-  getDocs,
-  limit,
-  orderBy,
-  query,
-  where,
-  type Firestore,
-} from "firebase/firestore";
+import type { Firestore } from "firebase/firestore";
 import type { User } from "firebase/auth";
 import { nsCollectionPath, type Namespace } from "@commons-systems/firestoreutil/namespace";
+import { boundedQuery } from "@commons-systems/firestoreutil/bounded-query";
 import { classifyError } from "@commons-systems/errorutil/classify";
 import { toTopicUsage, type TopicUsageDoc } from "./topic-usage.js";
 
@@ -19,15 +12,13 @@ export async function getOwnerTopicUsage(
 ): Promise<TopicUsageDoc[]> {
   if (!user.email) return [];
   const path = nsCollectionPath(namespace, "topic-usage");
-  const q = query(
-    collection(db, path),
-    where("memberEmails", "array-contains", user.email),
-    orderBy("date", "desc"),
-    limit(21),
-  );
+  const bounded = boundedQuery(db, path)
+    .where("memberEmails", "array-contains", user.email)
+    .orderBy("date", "desc")
+    .limit(21);
   let snap;
   try {
-    snap = await getDocs(q);
+    snap = await bounded.getDocs(); // query-bounds-ok: bounded via .limit() on the builder above
   } catch (err) {
     if (classifyError(err) === "permission-denied") return [];
     // Let failed-precondition (missing composite index) and other errors propagate.
