@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+# office-hours-snapshot-launch — reusable detached snapshot-refresh launcher (#2661)
+#
+# The shared primitive behind #2661's low-latency office-hours snapshot refresh
+# triggers: tick-start (scope=full) and park/un-park (scope=parked-only). All
+# four call sites invoke this one launcher.
+#
+# Properties:
+#   - Env-gated OFF by default. Until OFFICE_HOURS_SNAPSHOT_ENABLED=1, this is a
+#     pure no-op (exit 0) so every normal tick/hook stays byte-for-byte
+#     unchanged.
+#   - Detached + best-effort. The producer runs in a fully detached child
+#     (setsid, </dev/null, redirected to a log). This launcher never blocks and
+#     never aborts the tick/hook that invokes it: only argument misuse is a hard
+#     error; every other path exits 0.
+#   - Per-scope serialization via a bounded-wait flock INSIDE the child, so a
+#     `full` and a `parked-only` refresh may run concurrently, while two of the
+#     same scope serialize — the second waits briefly, and if the wait times out
+#     it exits quietly (the in-flight run already covers the burst).
+
+usage() {
+  echo "usage: office-hours-snapshot-launch <full|parked-only>" >&2
+}
+
+# (a) Validate args first — misuse is a hard error, always caught even when the
+#     feature is disabled (this is misuse detection, not a fallback).
+if [[ $# -ne 1 ]]; then
+  usage
+  exit 2
+fi
+SCOPE="$1"
+if [[ "$SCOPE" != "full" && "$SCOPE" != "parked-only" ]]; then
+  echo "office-hours-snapshot-launch: invalid scope '$SCOPE' (want: full|parked-only)" >&2
+  usage
+  exit 2
+fi
+
+# (b) Env-gate — OFF by default. Any value other than exactly "1" is a no-op.
+if [[ "${OFFICE_HOURS_SNAPSHOT_ENABLED:-}" != "1" ]]; then
+  exit 0
+fi
+
+# (c) Resolve the launch command. #2660 later overrides this with a compiled
+#     binary path via OFFICE_HOURS_SNAPSHOT_CMD.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$SCRIPT_DIR/../../../.."  # scripts -> dispatch-propagate -> skills -> .claude -> repo root
+if [[ -n "${OFFICE_HOURS_SNAPSHOT_CMD:-}" ]]; then
+  SNAPSHOT_CMD="$OFFICE_HOURS_SNAPSHOT_CMD"
+  CMD_IS_DEFAULT=0
+else
+  SNAPSHOT_CMD="npx tsx $REPO_ROOT/office-hours-snapshot/src/main.ts"
+  CMD_IS_DEFAULT=1
+fi
+
+# Synchronous precondition check — only for the default tsx command, which needs
+# npx (and hence node) on PATH. Backgrounding always exits 0 after the fork, so
+# this is the only place a doomed launch can be caught. When the override is set
+# (e.g. a compiled binary that needs neither), skip this guard.
+if [[ "$CMD_IS_DEFAULT" == "1" ]] && ! command -v npx >/dev/null 2>&1; then
+  echo "office-hours-snapshot-launch: WARNING: npx not found; snapshot ($SCOPE) skipped" >&2
+  exit 0
+fi
+
+STATE_DIR="${OFFICE_HOURS_SNAPSHOT_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/dispatch}"
+mkdir -p "$STATE_DIR" 2>/dev/null || true
+LOCKFILE="$STATE_DIR/office-hours-snapshot-$SCOPE.lock"  # per-scope: full and parked-only never block each other
+LOG="$STATE_DIR/office-hours-snapshot.log"
+
+# Detached, best-effort launch. The bounded-wait flock runs INSIDE the detached
+# child so the caller never waits: a same-scope run in flight makes this child
+# wait up to 30s (running the latest event's refresh rather than dropping it as
+# `-n` would); if the wait times out the child exits quietly. flock accepts the
+# bare fd number.
+#
+# shellcheck disable=SC2086  # $SNAPSHOT_CMD must word-split: the default value
+# is the multi-word `npx tsx <path>` command and must tokenize into argv.
+(
+  setsid bash -c '
+    exec 9>"$1"
+    flock -w 30 9 || exit 0   # a same-scope run holds it; that run covers this burst
+    shift
+    exec "$@"
+  ' _ "$LOCKFILE" $SNAPSHOT_CMD --scope "$SCOPE" >>"$LOG" 2>&1 </dev/null &
+)
+
+exit 0
