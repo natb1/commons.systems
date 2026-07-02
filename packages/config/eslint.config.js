@@ -53,6 +53,8 @@ export default tseslint.config(
         "error",
         { patterns: appImportPatterns },
       ],
+      // Standard TS convention: params prefixed with _ are intentionally unused.
+      "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
     },
   },
   {
