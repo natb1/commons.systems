@@ -18,7 +18,7 @@ function fakeResponse(status: number, body = INDEX_HTML): APIResponse {
   return {
     status: () => status,
     text: async () => body,
-  } as unknown as APIResponse;
+  } as unknown as APIResponse; // type-safety-ok: minimal test fake — full Playwright impl not needed in unit tests
 }
 
 type Step = APIResponse | (() => never);
@@ -47,7 +47,7 @@ function fakeRequest(steps: Step[]): {
   const request = {
     get: (_url: string, options?: unknown) => next(options, getCalls),
     head: (_url: string, options?: unknown) => next(options, headCalls),
-  } as unknown as APIRequestContext;
+  } as unknown as APIRequestContext; // type-safety-ok: minimal test fake — full Playwright impl not needed in unit tests
   return { request, getCalls, headCalls };
 }
 
@@ -178,7 +178,7 @@ describe("bounded timeout option (case 6)", () => {
     expect(getCalls).toHaveLength(1);
     const opts = getCalls[0] as { timeout?: unknown };
     expect(typeof opts.timeout).toBe("number");
-    expect(opts.timeout as number).toBeGreaterThan(0);
+    expect(opts.timeout as number).toBeGreaterThan(0); // type-safety-ok: getCalls is unknown[]; cast narrows to verify the timeout option is numeric
   });
 
   it("headWithRetry passes a positive numeric timeout to request.head", async () => {
@@ -188,7 +188,7 @@ describe("bounded timeout option (case 6)", () => {
     expect(headCalls).toHaveLength(1);
     const opts = headCalls[0] as { timeout?: unknown };
     expect(typeof opts.timeout).toBe("number");
-    expect(opts.timeout as number).toBeGreaterThan(0);
+    expect(opts.timeout as number).toBeGreaterThan(0); // type-safety-ok: headCalls is unknown[]; cast narrows to verify the timeout option is numeric
   });
 
   it("every wrapped call on retry carries the timeout option", async () => {
