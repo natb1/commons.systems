@@ -1,4 +1,4 @@
-export { validateNode, OWNERS, STATUSES, TOOLING_KINDS } from "./schema.js";
+export { validateNode, validateGraph, OWNERS, STATUSES, TOOLING_KINDS } from "./schema.js";
 export type {
   IntentionNode,
   Owner,

@@ -22,23 +22,20 @@ export type Rung = "rung-0" | "refine-workflow" | "rung-5";
  * Classify the intention graph into its current rung.
  *
  * The ladder — deepest satisfied entry-rung wins, evaluated in order:
- *   1. No principle root (no node with id starting with "principle-" and
- *      parent === null) → "rung-0": the charter has not been codified yet.
+ *   1. No virtue root (no node with kind === "virtue" and parent === null)
+ *      → "rung-0": the held virtues have not been codified yet.
  *   2. activeFrontier(nodes) is empty (roots exist but no actionable goal
- *      leaves) → "refine-workflow": the charter is present but the workflow
+ *      leaves) → "refine-workflow": the virtues are present but the workflow
  *      has not been decomposed into actionable goals.
  *   3. Otherwise → "rung-5": roots exist and there is an active goal frontier.
  *
  * Pure function: no IO, no filesystem access, no side effects.
  */
 export function detectRung(nodes: IntentionNode[]): Rung {
-  const hasPrincipleRoot = nodes.some(
-    (n) =>
-      n.id.startsWith("principle-") &&
-      n.parent === null &&
-      n.status === "codified",
+  const hasVirtueRoot = nodes.some(
+    (n) => n.kind === "virtue" && n.parent === null && n.status === "codified",
   );
-  if (!hasPrincipleRoot) {
+  if (!hasVirtueRoot) {
     return "rung-0";
   }
 

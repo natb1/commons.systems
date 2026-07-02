@@ -1,0 +1,16 @@
+{
+  "node_id": "tactic-2367",
+  "issue_number": 2367,
+  "state": "open",
+  "linked_prs": [
+    {
+      "number": 2408,
+      "state": "open"
+    }
+  ],
+  "dispatch_labels": [
+    "dispatch:attempts-4",
+    "dispatch:planned"
+  ],
+  "refreshed_at": "2026-06-23T02:52:21.786Z"
+}

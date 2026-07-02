@@ -11,16 +11,20 @@ import {
 function node(partial: Partial<IntentionNode> & { id: string }): IntentionNode {
   return {
     id: partial.id,
+    kind: partial.kind ?? "tactic",
     statement: partial.statement ?? `Statement for ${partial.id}`,
     owner: partial.owner ?? "human",
     status: partial.status ?? "raw",
     parent: partial.parent ?? null,
+    serves: partial.serves ?? [],
+    recovers: partial.recovers ?? [],
     rationale: partial.rationale ?? null,
     reading: partial.reading ?? null,
     gap: partial.gap ?? null,
     clarifications: partial.clarifications ?? [],
     tooling_goals: partial.tooling_goals ?? [],
     success_signal: partial.success_signal ?? null,
+    attributes: partial.attributes ?? {},
   };
 }
 

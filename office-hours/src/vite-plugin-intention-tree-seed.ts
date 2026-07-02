@@ -77,8 +77,8 @@ export function officeHoursIntentionTreeSeedPlugin(): Plugin {
       for (const t of trackerList) trackers[t.node_id] = t;
 
       // Slim each node to ONLY the fields the panel consumes, stripping
-      // rationale/reading/gap/clarifications/success_signal/tooling_goals
-      // (bundle size + #2371 deferral).
+      // rationale/reading/gap/clarifications/success_signal/tooling_goals/
+      // serves/recovers (bundle size + #2371 deferral).
       const slimNodes = nodes.map((n) => ({
         id: n.id,
         statement: n.statement,

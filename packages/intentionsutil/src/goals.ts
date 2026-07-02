@@ -26,12 +26,14 @@ export function realizationForOwner(owner: Owner): Realization {
  * The active frontier: the leaf nodes that still have open work.
  *
  * A node is a leaf when no other node names it as a parent; childless nodes —
- * including childless principle roots — are leaves. The predicate is
- * `status !== "codified" && <node is a leaf>`. Rationale: every issue leaf is
+ * including childless virtue roots — are leaves. The predicate is
+ * `status !== "codified" && <node is a leaf>`. Rationale: every tactic leaf is
  * currently `status: "raw"`, so gating on a `delegated`/`codified` status would
  * yield an empty frontier. Leaf-ness alone would wrongly include the childless
- * `codified` principle roots; the `!== "codified"` clause drops those. Input
- * order is preserved (filter only).
+ * `codified` virtue roots (and the kind, strategy, and delegation nodes, all
+ * hand-maintained at `codified`); the `!== "codified"` clause drops those.
+ * `serves` edges do not affect leaf-ness — only `parent` does. Input order is
+ * preserved (filter only).
  *
  * Leaf-ness is resolved against a Set of all non-null parent ids built once up
  * front, so the whole pass is O(n) rather than O(n²) (a per-node scan over all

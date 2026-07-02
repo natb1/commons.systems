@@ -33,20 +33,20 @@ fi
 # "Local-first / no-mining").
 
 sensor_principle_roots() {
-  echo "=== Intention graph: principle roots ==="
-  if ls intentions/principle-*.md 1>/dev/null 2>&1; then
-    cat intentions/principle-*.md
+  echo "=== Intention graph: virtue roots (and the kind nodes defining the graph) ==="
+  if ls intentions/virtue-*.md 1>/dev/null 2>&1; then
+    cat intentions/kind-*.md intentions/virtue-*.md
   else
-    echo "(no principle roots found)"
+    echo "(no virtue roots found)"
   fi
 }
 
 sensor_strategy_roots() {
-  echo "=== Intention graph: strategy roots ==="
+  echo "=== Intention graph: strategies ==="
   if ls intentions/strategy-*.md 1>/dev/null 2>&1; then
     cat intentions/strategy-*.md
   else
-    echo "(no strategy roots found)"
+    echo "(no strategies found)"
   fi
 }
 
