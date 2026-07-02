@@ -214,6 +214,16 @@ if [[ "${DISPATCH_TOPIC_USAGE_ENABLED:-}" == "1" ]]; then
   fi
 fi
 
+# --- Office-hours snapshot: tick-start `full` refresh (#2661) ----------------
+# Env-gated OFF by default (OFFICE_HOURS_SNAPSHOT_ENABLED); a no-op on every
+# current tick.  `full` (not `parked-only`) because the tick-start criterion
+# requires refreshing queue-metrics + parked-issues, and only `full` runs the
+# cores that carry queue-metrics (parked-only does no core runs — see
+# office-hours-snapshot/README.md).  A `full` run also runs project-signals when
+# configured; the cadence/cost of that at per-tick frequency is a #2660 concern,
+# not this PR.
+"$SCRIPT_DIR/office-hours-snapshot-launch" full || true
+
 # --- Step 0: parse the single optional positional <N> ------------------------
 ARG=""
 MANUAL=""
