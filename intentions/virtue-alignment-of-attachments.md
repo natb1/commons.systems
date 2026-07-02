@@ -23,6 +23,14 @@ rationale: >-
   the cost of buying into virtues that are not mine.
 
 
+  Management has two moves. Exit-shaped: selection, re-alignment, recovery —
+  leaving or preparing to leave. Voice-shaped: feedback, upstream
+  contribution, standards participation — pulling the delegatee toward
+  alignment while staying. Voice earns the most where exit costs the most,
+  and carries its own hazard: advocacy for the delegatee is this edge
+  inverting through a side door.
+
+
   Adopting an institution when it genuinely helps — in a crisis, when it
   improves quality of life with few compromises — is this virtue, not a lapse
   of detachment. Even aligned attachments accumulate: each import, aligned or

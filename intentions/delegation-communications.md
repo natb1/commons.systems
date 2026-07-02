@@ -6,14 +6,19 @@ owner: human
 status: raw
 parent: null
 rationale: >-
-  Email, messaging, and contacts run through ad-funded or platform providers. A
-  future-candidate capture, recorded raw per kind-delegation: the attachment is
-  named before any recovery strategy exists, and it stands as a candidate input
-  to strategy-domain-selection. Axes below are a first pass, not an assessment.
+  Email, messaging, contacts, and calendars run through ad-funded or platform
+  providers. A future-candidate capture, recorded raw per kind-delegation: the
+  attachment is named before any recovery strategy exists, and it stands as a
+  candidate input to strategy-domain-selection. Axes below are a first pass,
+  not an assessment.
 
   Interim path while unselected: strategy-realign-attachments — move email to an
   owned domain at a fee-aligned provider, which lowers the divergence now and
   stages a later recovery.
+
+  Calendar/scheduling folded into this record 2026-07-02: same delegatee
+  family, and the substitute path is the same shape — owned domain plus open
+  protocols (CalDAV/ICS alongside email's portable protocols).
 reading: null
 gap: null
 serves: []
@@ -22,8 +27,10 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attributes:
-  delegatee: ad-funded and platform communication providers (email, messaging, contacts)
-  delegated: correspondence, the address book, message history
+  delegatee: ad-funded and platform communication providers (email, messaging,
+    contacts, calendars)
+  delegated: correspondence, the address book, message history, calendars and
+    scheduling
   origin: inherited
   divergence:
     level: high

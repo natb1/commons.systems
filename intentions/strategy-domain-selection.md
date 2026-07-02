@@ -36,7 +36,10 @@ rationale: >-
 
   Standing candidates, recorded as raw delegation records awaiting this
   selection: delegation-communications (interim path while unselected:
-  strategy-realign-attachments) and delegation-media-libraries. Selected
+  strategy-realign-attachments), delegation-media-libraries,
+  delegation-health-records (interim path: right-of-access exports), and
+  delegation-client-income (recovery there is pipeline diversification, not
+  software). Selected
   2026-07-02: delegation-knowledge-notes — recovery owned by
   strategy-recover-knowledge, entered through reading annotations in print.
 reading: null

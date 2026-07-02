@@ -18,6 +18,10 @@ rationale: >-
   Respect is what forbids ever being the captor, and it dictates the shape of
   everything offered outward: transfer capability, not dependency; selection
   over conversion; migration freedom as a design requirement, not a courtesy.
+  The nearest persons are equally in scope: the household that shares
+  attachments. Respect governs inward as well as outward — moves on shared
+  delegations are made with the persons who share them, never for them, and
+  the practice is offered to family exactly as to strangers: never imposed.
   Promotion of the practice is over-determined — mobility justifies it
   instrumentally (every practitioner strengthens the recovery substrate and
   calibrates discernment), respect justifies it intrinsically — but its METHODS
