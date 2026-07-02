@@ -1,10 +1,12 @@
 import * as fs from "node:fs";
 import { join } from "node:path";
-import { createElement, type ReactNode } from "react";
+import { createElement, Fragment, type ReactNode } from "react";
 import { renderToString } from "react-dom/server";
 import { escapeHtml } from "@commons-systems/htmlutil";
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
-import { BlogNav } from "./components/BlogNav.tsx";
+import { ContextPanelToggle } from "@commons-systems/ds";
+import { BlogNav, BlogNavEnd } from "./components/BlogNav.tsx";
+import { BlogPageShell } from "./components/BlogPageShell.tsx";
 import type { InfoPanelData } from "./components/info-panel.ts";
 import { InfoPanelRegion } from "./components/InfoPanelRegion.tsx";
 import { HomeRegion } from "./pages/HomeRegion.tsx";
@@ -34,6 +36,22 @@ import type { NavLink } from "@commons-systems/ds";
 
 export type { NavLink };
 
+/** Opt-in ds-chrome seam — the SSR/prerender counterpart of create-blog-app's
+ *  client `shell` config. When present, prerender renders a SINGLE ds
+ *  `<PageShell>` root (via BlogPageShell) into `#${mount}` instead of the legacy
+ *  `#nav` / `#app` / `#info-panel` + static-markup injectors, so the prerendered
+ *  HTML byte-matches what the client hydrates. Absent (fellspiral) keeps the
+ *  legacy regex-injection path verbatim. Mirrors the client `shell` shape in
+ *  create-blog-app.ts. */
+export interface PrerenderShellConfig {
+  mount: string;
+  wordmark: ReactNode;
+  tagline?: ReactNode;
+  hero?: ReactNode;
+  panelId?: string;
+  panelAriaLabel?: string;
+}
+
 export interface PrerenderConfig {
   siteUrl: string;
   titleSuffix: string;
@@ -59,6 +77,13 @@ export interface PrerenderConfig {
    *  element (root index + every post page). Throws if the `<footer>` marker is
    *  absent. */
   footerHtml?: string;
+  /** Opt-in ds-chrome seam — see PrerenderShellConfig. When set, the root index
+   *  and every post page render through BlogPageShell into `#${mount}`; the
+   *  legacy `injectMain`/`injectInfoPanel`/`injectNav`/`injectFooter`/
+   *  `injectHomeExtra`/`stripHomeExtra` injectors are skipped (the shell already
+   *  carries nav, panel, hero, and footer). The `<head>` SEO injectors run
+   *  regardless. */
+  shell?: PrerenderShellConfig;
 }
 
 export interface StaticPageConfig {
@@ -91,6 +116,13 @@ export interface StaticPageConfig {
   /** When provided, inject this HTML into the template's `<footer></footer>`
    *  element. Throws if the `<footer>` marker is absent. */
   footerHtml?: string;
+  /** Opt-in ds-chrome seam — see PrerenderShellConfig. When set, the page renders
+   *  through BlogPageShell into `#${mount}`; the legacy injectors and
+   *  `stripHomeExtra` are skipped (the shell carries nav, panel, and footer).
+   *  Shell mode requires `aboutContent` (the panel ReactNode) — the client
+   *  hydrates a static page's panel from `infoPanelContentForPath`. The `<head>`
+   *  SEO injectors run regardless. */
+  shell?: PrerenderShellConfig;
 }
 
 export interface PostsArtifacts {
@@ -98,6 +130,11 @@ export interface PostsArtifacts {
   /** Server-rendered `HomeRegion` (the `#posts` feed) — the single body shared by
    *  the root index and every per-post page. */
   bodyHtml: string;
+  /** The same `HomeRegion` as a ReactNode (not yet rendered). The shell path
+   *  nests it — PageShell's `children` — so the whole shell renders in one
+   *  `renderToString`; reusing one element across the root + every post page is
+   *  safe (elements are immutable descriptions). */
+  homeBody: ReactNode;
   /** Server-rendered `InfoPanelRegion` — the info-panel sidebar body. */
   panelHtml: string;
   /** Per-post metadata for the SEO iteration in `prerenderPosts` (og/canonical/JSON-LD). */
@@ -155,6 +192,42 @@ function injectMain(html: string, innerHtml: string): string {
   );
   if (result === html) throw new Error('<main id="app"> marker not found in template');
   return result;
+}
+
+// Shell-path counterpart of injectMain: replace the empty
+// `<div id="${mount}"></div>` PageShell mount placeholder with the SSR-rendered
+// shell string. The template ships an empty mount div (the Unit-5 caller's
+// contract); a function replacement avoids `$`-sequence interpretation in the
+// rendered HTML.
+function injectRoot(html: string, mount: string, rendered: string): string {
+  const re = new RegExp(`<div id="${mount}">.*?</div>`, "s");
+  const result = html.replace(re, () => `<div id="${mount}">${rendered}</div>`);
+  if (result === html) throw new Error(`<div id="${mount}"> mount marker not found in template`);
+  return result;
+}
+
+// The PageShell `navEnd` slot at SSR, mirroring create-blog-app's navEndNode():
+// the legacy nav-end chrome (BlogNavEnd) then the panel toggle, wrapped in a
+// Fragment. Auth is never shown at prerender (showAuth=false, user=null), and
+// the toggle starts closed (open=false) — both matching the client's first
+// render for a non-/admin entry.
+function shellNavEnd(showHomeLink: boolean, panelId: string): ReactNode {
+  return createElement(
+    Fragment,
+    null,
+    createElement(BlogNavEnd, {
+      showHomeLink,
+      showAuth: false,
+      user: null,
+      onSignIn: () => {},
+      onSignOut: () => {},
+    }),
+    createElement(ContextPanelToggle, {
+      open: false,
+      controls: panelId,
+      onToggle: () => {},
+    }),
+  );
 }
 
 function injectInfoPanel(html: string, panelHtml: string): string {
@@ -235,18 +308,17 @@ export async function loadPostsForPrerender(args: {
   // the #posts/#post-{id}/#post-content-{id} ids, data-hydrated, <hr> placement,
   // and Card markup all match for hydration. The SSR render embeds build-time
   // content via contentMap and never calls fetchPost (the useEffect is client-only).
-  const bodyHtml = renderToString(
-    createElement(HomeRegion, {
-      posts: topPosts,
-      contentMap,
-      postLinkPrefix: "/post/",
-      fetchPost: NOOP_FETCH,
-    }),
-  );
+  const homeBody = createElement(HomeRegion, {
+    posts: topPosts,
+    contentMap,
+    postLinkPrefix: "/post/",
+    fetchPost: NOOP_FETCH,
+  });
+  const bodyHtml = renderToString(homeBody);
 
   const panelHtml = renderPanelHtml({ ...args.infoPanel, topPosts, postLinkPrefix: "/post/" });
 
-  return { topPosts, bodyHtml, panelHtml, rendered };
+  return { topPosts, bodyHtml, homeBody, panelHtml, rendered };
 }
 
 // Build-time counterpart of og-meta.ts. Generates per-post HTML files with
@@ -273,17 +345,49 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
     homeExtraHtml,
     showHomeLink,
     footerHtml,
+    shell,
   } = config;
 
   const template = fs.readFileSync(join(distDir, "index.html"), "utf-8");
 
-  const { panelHtml, bodyHtml, rendered } = await loadPostsForPrerender({
+  const { panelHtml, bodyHtml, homeBody, topPosts, rendered } = await loadPostsForPrerender({
     seed,
     postDir,
     infoPanel,
   });
 
   const navHtml = renderNavHtml(navLinks, showHomeLink);
+
+  // Shell path: render the whole ds <PageShell> (nav + hero + body + panel +
+  // footer) as ONE renderToString so the prerendered HTML byte-matches the
+  // single shell root the client hydrates. The panel data and home body mirror
+  // create-blog-app's panelElement()/homeElement() exactly. hero is gated by
+  // current === "/" — VERBATIM from the client — so only the home root carries
+  // the hero. Post pages (like /post/x) and static pages (like /about) get no
+  // hero. The same panel + body elements are reused for every page (matching
+  // the client, which hydrates the build-time metadata feed on home and post
+  // pages alike).
+  const renderShellHtml = (current: string): string => {
+    const panelId = shell!.panelId ?? "info-panel"; // type-safety-ok: renderShellHtml is only called inside if (shell) guards
+    return renderToString(
+      createElement(BlogPageShell, {
+        wordmark: shell!.wordmark, // type-safety-ok: renderShellHtml is only called inside if (shell) guards
+        tagline: shell!.tagline, // type-safety-ok: renderShellHtml is only called inside if (shell) guards
+        navLinks,
+        current,
+        navEnd: shellNavEnd(showHomeLink ?? false, panelId),
+        hero: current === "/" ? shell!.hero : undefined, // type-safety-ok: renderShellHtml is only called inside if (shell) guards
+        panelOpen: false,
+        panelId,
+        panelAriaLabel: shell!.panelAriaLabel, // type-safety-ok: renderShellHtml is only called inside if (shell) guards
+        panel: createElement(InfoPanelRegion, {
+          data: { ...infoPanel, topPosts, postLinkPrefix: "/post/" },
+          strategies: new Map(),
+        }),
+        children: homeBody,
+      }),
+    );
+  };
 
   const relMeHtml = relMe ? relMeLinkTags(relMe) : "";
 
@@ -298,14 +402,19 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
     relMeHtml,
   ]);
 
-  let rootHtml = injectMain(template, bodyHtml);
-  rootHtml = injectInfoPanel(rootHtml, panelHtml);
-  rootHtml = injectNav(rootHtml, navHtml);
-  if (footerHtml !== undefined) {
-    rootHtml = injectFooter(rootHtml, footerHtml);
-  }
-  if (homeExtraHtml !== undefined) {
-    rootHtml = injectHomeExtra(rootHtml, homeExtraHtml);
+  let rootHtml: string;
+  if (shell) {
+    rootHtml = injectRoot(template, shell.mount, renderShellHtml("/"));
+  } else {
+    rootHtml = injectMain(template, bodyHtml);
+    rootHtml = injectInfoPanel(rootHtml, panelHtml);
+    rootHtml = injectNav(rootHtml, navHtml);
+    if (footerHtml !== undefined) {
+      rootHtml = injectFooter(rootHtml, footerHtml);
+    }
+    if (homeExtraHtml !== undefined) {
+      rootHtml = injectHomeExtra(rootHtml, homeExtraHtml);
+    }
   }
   if (siteDefaults) {
     rootHtml = rootHtml.replace(/\s*<meta name="description"[^>]*>/, "");
@@ -333,14 +442,18 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
     html = html.replace(/<title>.*?<\/title>/, `<title>${escapeHtml(formatPageTitle(titleSuffix, meta.title))}</title>`);
     if (html === beforeTitle) throw new Error(`<title> tag not found in template`);
 
-    html = injectMain(html, bodyHtml);
-    html = injectInfoPanel(html, panelHtml);
-    html = injectNav(html, navHtml);
-    if (footerHtml !== undefined) {
-      html = injectFooter(html, footerHtml);
-    }
-    if (homeExtraHtml !== undefined) {
-      html = stripHomeExtra(html);
+    if (shell) {
+      html = injectRoot(html, shell.mount, renderShellHtml(`/post/${meta.id}`));
+    } else {
+      html = injectMain(html, bodyHtml);
+      html = injectInfoPanel(html, panelHtml);
+      html = injectNav(html, navHtml);
+      if (footerHtml !== undefined) {
+        html = injectFooter(html, footerHtml);
+      }
+      if (homeExtraHtml !== undefined) {
+        html = stripHomeExtra(html);
+      }
     }
 
     const outDir = join(distDir, "post", meta.id);
@@ -368,6 +481,7 @@ export function prerenderStaticPage(config: StaticPageConfig): void {
     stripHero,
     showHomeLink,
     footerHtml,
+    shell,
   } = config;
 
   const template = fs.readFileSync(join(distDir, "index.html"), "utf-8");
@@ -396,32 +510,68 @@ export function prerenderStaticPage(config: StaticPageConfig): void {
   html = injectBeforeHead(html, ogBlock, "static page template");
   html = injectBeforeHead(html, seoHead, "static page template");
 
-  // When aboutContent is set, server-render the panel through InfoPanelRegion's
-  // aboutContent branch — matching the client's panelElement(), which hydrates
-  // #info-panel with InfoPanelRegion(aboutContent=…) on a deep /about entry. The
-  // data object is ignored in that branch, so a minimal one suffices. Otherwise
-  // fall back to the caller-supplied pre-rendered panelHtml.
-  let renderedPanel: string;
-  if (aboutContent !== undefined) {
-    renderedPanel = renderPanelHtml({ linkSections: [], topPosts: [], blogRoll: [] }, aboutContent);
-  } else if (panelHtml !== undefined) {
-    renderedPanel = panelHtml;
+  if (shell) {
+    // Shell path: render the whole ds <PageShell> as ONE renderToString so the
+    // prerendered HTML byte-matches the single shell root the client hydrates.
+    // A static page's panel mirrors the client's panelElement() aboutContent
+    // branch (infoPanelContentForPath), so shell mode requires `aboutContent`.
+    // hero is gated by page.url === "/" — only the home root carries the hero;
+    // a static page like /about gets no hero, matching the client's gate and the
+    // legacy prerender. children
+    // preserves the existing <div>-wrapped body so it byte-matches the client's
+    // entry-hydration wrapper createElement("div", null, node).
+    if (aboutContent === undefined) {
+      throw new Error("prerenderStaticPage shell mode requires aboutContent for the panel");
+    }
+    const panelId = shell.panelId ?? "info-panel";
+    const shellHtml = renderToString(
+      createElement(BlogPageShell, {
+        wordmark: shell.wordmark,
+        tagline: shell.tagline,
+        navLinks,
+        current: page.url,
+        navEnd: shellNavEnd(showHomeLink ?? false, panelId),
+        hero: page.url === "/" ? shell.hero : undefined,
+        panelOpen: false,
+        panelId,
+        panelAriaLabel: shell.panelAriaLabel,
+        panel: createElement(InfoPanelRegion, {
+          data: { linkSections: [], topPosts: [], blogRoll: [] },
+          strategies: new Map(),
+          aboutContent,
+        }),
+        children: createElement("div", null, body),
+      }),
+    );
+    html = injectRoot(html, shell.mount, shellHtml);
   } else {
-    throw new Error("prerenderStaticPage requires either aboutContent or panelHtml");
-  }
+    // When aboutContent is set, server-render the panel through InfoPanelRegion's
+    // aboutContent branch — matching the client's panelElement(), which hydrates
+    // #info-panel with InfoPanelRegion(aboutContent=…) on a deep /about entry. The
+    // data object is ignored in that branch, so a minimal one suffices. Otherwise
+    // fall back to the caller-supplied pre-rendered panelHtml.
+    let renderedPanel: string;
+    if (aboutContent !== undefined) {
+      renderedPanel = renderPanelHtml({ linkSections: [], topPosts: [], blogRoll: [] }, aboutContent);
+    } else if (panelHtml !== undefined) {
+      renderedPanel = panelHtml;
+    } else {
+      throw new Error("prerenderStaticPage requires either aboutContent or panelHtml");
+    }
 
-  // Server-render the body wrapped in a <div> so it byte-matches the client's
-  // entry-hydration wrapper createElement("div", null, node) in create-blog-app.ts.
-  const bodyHtml = renderToString(createElement("div", null, body));
-  html = injectMain(html, bodyHtml);
-  html = injectInfoPanel(html, renderedPanel);
-  html = injectNav(html, renderNavHtml(navLinks, showHomeLink));
-  if (footerHtml !== undefined) {
-    html = injectFooter(html, footerHtml);
-  }
+    // Server-render the body wrapped in a <div> so it byte-matches the client's
+    // entry-hydration wrapper createElement("div", null, node) in create-blog-app.ts.
+    const bodyHtml = renderToString(createElement("div", null, body));
+    html = injectMain(html, bodyHtml);
+    html = injectInfoPanel(html, renderedPanel);
+    html = injectNav(html, renderNavHtml(navLinks, showHomeLink));
+    if (footerHtml !== undefined) {
+      html = injectFooter(html, footerHtml);
+    }
 
-  if (stripHero !== false) {
-    html = stripHomeExtra(html);
+    if (stripHero !== false) {
+      html = stripHomeExtra(html);
+    }
   }
 
   const outDir = join(distDir, page.url);

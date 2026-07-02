@@ -44,7 +44,7 @@ test.describe("info panel — desktop", () => {
   test("panel toggle button is hidden on desktop", async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop");
     await page.goto("/");
-    await expect(page.locator("#panel-toggle")).toBeHidden();
+    await expect(page.locator(".panel-toggle")).toBeHidden();
   });
 });
 
@@ -60,14 +60,14 @@ test.describe("info panel — mobile", () => {
     test.skip(testInfo.project.name !== "mobile");
     await page.goto("/");
     await page.waitForSelector("#posts", { timeout: 30000 });
-    await expect(page.locator("#panel-toggle")).toBeVisible();
+    await expect(page.locator(".panel-toggle")).toBeVisible();
   });
 
   test("clicking toggle shows and hides panel", async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== "mobile");
     await page.goto("/");
     await page.waitForSelector("#posts", { timeout: 30000 });
-    const toggle = page.locator("#panel-toggle");
+    const toggle = page.locator(".panel-toggle");
     const panel = page.locator("#info-panel");
 
     await expect(panel).toBeHidden();

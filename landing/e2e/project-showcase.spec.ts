@@ -10,10 +10,10 @@ test.describe("project showcase", () => {
   test("interstitial band shows headline and subline", async ({ page }) => {
     await page.goto("/");
 
-    const headline = page.locator(".landing-hero-band .landing-hero-band-headline");
+    const headline = page.locator(".hero-band-section .hero-band-headline");
     await expect(headline).toHaveText("Build with commons.systems. Learn to run without.");
 
-    const subline = page.locator(".landing-hero-band .landing-hero-band-subline");
+    const subline = page.locator(".hero-band-section .hero-band-subline");
     await expect(subline).toHaveText(
       "Code you understand. Data you control. A roadmap you set.",
     );
@@ -24,7 +24,7 @@ test.describe("project showcase", () => {
   }) => {
     await page.goto("/");
 
-    const cards = page.locator(".landing-hero-grid a.project-card");
+    const cards = page.locator(".hero-band-section > .hero-band-grid a.project-card");
     await expect(cards).toHaveCount(3);
 
     for (let i = 0; i < PROJECT_HREFS.length; i++) {
@@ -37,7 +37,7 @@ test.describe("project showcase", () => {
   }) => {
     await page.goto("/");
 
-    const cards = page.locator(".landing-hero-grid a.project-card");
+    const cards = page.locator(".hero-band-section > .hero-band-grid a.project-card");
     // Auto-wait for the client-mounted (React createRoot, deferred) cards
     // before the non-waiting .count() read — same reason as the focus test.
     await expect(cards).toHaveCount(3);
@@ -59,12 +59,12 @@ test.describe("project showcase", () => {
     // synchronous focus check below — mirrors the auto-waiting locators the
     // sibling tests use, and keeps the test honest against the non-prerendered
     // dev server (on a prerendered build the cards are already present at load).
-    await page.waitForSelector(".landing-hero-grid a.project-card");
+    await page.waitForSelector(".hero-band-section > .hero-band-grid a.project-card");
 
     for (let i = 0; i < 3; i++) {
       const isActive = await page.evaluate((idx) => {
         const cards = document.querySelectorAll<HTMLAnchorElement>(
-          ".landing-hero-grid a.project-card",
+          ".hero-band-section > .hero-band-grid a.project-card",
         );
         const target = cards[idx];
         if (!target) return false;
@@ -83,12 +83,12 @@ test.describe("project showcase", () => {
       // Wait for the client-mounted (React createRoot, deferred) showcase cards
       // before the synchronous geometry read below — same reason as the
       // keyboard-focus test above.
-      await page.waitForSelector(".landing-hero-grid a.project-card");
+      await page.waitForSelector(".hero-band-section > .hero-band-grid a.project-card");
 
       const xs = await page.evaluate(() => {
         const cards = Array.from(
           document.querySelectorAll<HTMLAnchorElement>(
-            ".landing-hero-grid a.project-card",
+            ".hero-band-section > .hero-band-grid a.project-card",
           ),
         );
         return cards.map((c) => Math.round(c.getBoundingClientRect().x));
@@ -117,25 +117,25 @@ test.describe("project showcase", () => {
   }) => {
     await page.goto("/");
 
-    await page.waitForSelector("details.project-showcase-overflow");
+    await page.waitForSelector("details.hero-band-overflow");
 
-    const details = page.locator("details.project-showcase-overflow");
+    const details = page.locator("details.hero-band-overflow");
     await expect(details).not.toHaveAttribute("open", /.*/);
 
     const overflowCard = page.locator(
-      '.project-showcase-overflow a.project-card[href="https://audio.commons.systems"]',
+      '.hero-band-overflow a.project-card[href="https://audio.commons.systems"]',
     );
     await expect(overflowCard).toBeHidden();
 
-    await page.locator(".project-showcase-overflow summary").click();
+    await page.locator(".hero-band-overflow summary").click();
 
     await expect(overflowCard).toBeVisible();
 
-    await expect(page.locator(".project-showcase-overflow summary")).toHaveText("more…");
+    await expect(page.locator(".hero-band-overflow summary")).toHaveText("more…");
 
     const overflowAfterGrid = await page.evaluate(() => {
-      const grid = document.querySelector(".landing-hero-grid");
-      const overflow = document.querySelector("details.project-showcase-overflow");
+      const grid = document.querySelector(".hero-band-section > .hero-band-grid");
+      const overflow = document.querySelector("details.hero-band-overflow");
       if (!grid || !overflow) return false;
       return (
         grid.compareDocumentPosition(overflow) & Node.DOCUMENT_POSITION_FOLLOWING

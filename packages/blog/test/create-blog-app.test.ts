@@ -28,9 +28,11 @@ import type { CreateBlogAppConfig } from "../src/create-blog-app.ts";
 import { getPosts } from "../src/firestore.ts";
 import { initScrollIndicator } from "@commons-systems/components/scroll-indicator";
 
-import { BlogNav } from "../src/components/BlogNav.tsx";
+import { BlogNav, BlogNavEnd } from "../src/components/BlogNav.tsx";
+import { BlogPageShell } from "../src/components/BlogPageShell.tsx";
 import { HomeRegion } from "../src/pages/HomeRegion.tsx";
 import { InfoPanelRegion } from "../src/components/InfoPanelRegion.tsx";
+import { ContextPanelToggle, Hero } from "@commons-systems/ds";
 import type { PostMeta } from "../src/post-types.ts";
 import type { PostContent } from "../src/marked-config.ts";
 import type { BlogRollEntry, BlogRollStrategy, LatestPost } from "../src/blog-roll/types.ts";
@@ -824,5 +826,235 @@ describe("createBlogApp routing and panel behavior", () => {
 
     nav.querySelector<HTMLElement>("#sign-out")!.click();
     expect(signOut).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ── Shell path (opt-in ds-chrome seam — landing) ─────────────────────────────
+//
+// When config.shell is present the renderer mounts ONE ds <PageShell> root into
+// `#${mount}` instead of the legacy three roots. These cases assert that single
+// root, the home-only hero gate, and the React panel toggle / Escape / outside-
+// click close behavior. The legacy cases above (the fellspiral regression guard)
+// are untouched — this is a separate describe with its own hooks.
+const SHELL_PANEL_ID = "info-panel";
+
+/** A recognizable hero element (ds <Hero>, so `.hero-band-section` appears) the
+ *  shell shows only on `/`. */
+function shellHero() {
+  return createElement(Hero, {
+    headline: "Build with commons.systems",
+    cards: [],
+  });
+}
+
+/** The PageShell nav `end` slot for the entry path, mirroring create-blog-app's
+ *  navEndNode(): BlogNavEnd then the closed ContextPanelToggle. */
+function shellNavEnd(config: CreateBlogAppConfig, path: string) {
+  return createElement(
+    Fragment,
+    null,
+    createElement(BlogNavEnd, {
+      showHomeLink: config.showHomeLink,
+      showAuth: path === "/admin",
+      user: null,
+      onSignIn: () => {},
+      onSignOut: () => {},
+    }),
+    createElement(ContextPanelToggle, {
+      open: false,
+      controls: SHELL_PANEL_ID,
+      onToggle: () => {},
+    }),
+  );
+}
+
+/**
+ * Server-render the SINGLE BlogPageShell root with the SAME entry-path props the
+ * driver hydrates with (mirroring prerender.ts's renderShellHtml) and inject it
+ * into a lone `<div id="root">`. renderToString emits the hydration markers so
+ * hydrateRoot reuses the prerendered nodes. `#app` (the `<main>`) and
+ * `.page > header` must exist before createBlogApp runs or it throws at setup.
+ */
+function scaffoldShellDom(config: CreateBlogAppConfig, path = window.location.pathname): void {
+  const initialSlug = path.startsWith("/post/") ? path.slice(6) : undefined;
+  const isHome = path === "/" || path.startsWith("/post/");
+  const appBody = isHome
+    ? createElement(HomeRegion, {
+        posts: config.buildTimeMetadata,
+        contentMap: config.buildTimeContent,
+        postLinkPrefix: "/post/",
+        fetchPost: () => Promise.resolve(""),
+        scrollSlug: initialSlug,
+      })
+    : createElement("div", null, undefined);
+  const shellHtml = renderToString(
+    createElement(BlogPageShell, {
+      wordmark: config.shell!.wordmark, // type-safety-ok: scaffoldShellDom is only called with a shell config
+      tagline: config.shell!.tagline, // type-safety-ok: scaffoldShellDom is only called with a shell config
+      navLinks: config.navLinks,
+      current: path,
+      navEnd: shellNavEnd(config, path),
+      hero: path === "/" ? config.shell!.hero : undefined, // type-safety-ok: scaffoldShellDom is only called with a shell config
+      panelOpen: false,
+      panelId: SHELL_PANEL_ID,
+      panelAriaLabel: config.shell!.panelAriaLabel, // type-safety-ok: scaffoldShellDom is only called with a shell config
+      panel: createElement(InfoPanelRegion, {
+        data: {
+          linkSections: config.infoPanelLinkSections,
+          topPosts: config.buildTimeMetadata,
+          blogRoll: config.blogRollEntries,
+          rssFeedUrl: "/feed.xml",
+          opmlUrl: "/blogroll.opml",
+          postLinkPrefix: "/post/",
+          buildTimeFeeds: config.buildTimeFeeds,
+        },
+        strategies: config.strategies,
+        useScrollIndicator: config.useScrollIndicator,
+      }),
+      children: appBody,
+    }),
+  );
+  document.body.innerHTML = `<div id="root">${shellHtml}</div>`;
+}
+
+describe("createBlogApp shell path", () => {
+  beforeEach(() => {
+    handle = undefined;
+    globalThis.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserver; // type-safety-ok: vitest mock cast
+  });
+
+  afterEach(() => {
+    handle?.destroy();
+    handle = undefined;
+    history.pushState({}, "", "/");
+    vi.clearAllMocks();
+  });
+
+  function shellConfig(overrides: Partial<CreateBlogAppConfig> = {}): CreateBlogAppConfig {
+    return makeConfig({
+      buildTimeMetadata: [PUBLISHED_POST],
+      buildTimeContent: PUBLISHED_CONTENT,
+      shell: {
+        mount: "root",
+        wordmark: "commons.systems",
+        tagline: "A short tagline",
+        hero: shellHero(),
+        panelAriaLabel: "Context",
+      },
+      ...overrides,
+    });
+  }
+
+  // One ds PageShell root mounts into #root — NOT the legacy three roots. The
+  // whole chrome (nav, hero, body, panel) lives under #root; the legacy `#nav`
+  // mount and `#panel-toggle` button id are absent.
+  it("mounts a single ds PageShell root into #root (no legacy three-root)", async () => {
+    history.pushState({}, "", "/");
+    const config = shellConfig();
+    scaffoldShellDom(config, "/");
+
+    handle = createBlogApp(config);
+    await settle();
+
+    const root = document.getElementById("root")!; // type-safety-ok: test DOM node mounted by scaffoldShellDom
+    expect(root.querySelector(".page")).not.toBeNull();
+    expect(root.querySelector("#app")).not.toBeNull();
+    expect(root.querySelector(".cs-nav")).not.toBeNull();
+    expect(root.querySelector("#info-panel")).not.toBeNull();
+    // Legacy three-root scaffold markers must be absent.
+    expect(document.getElementById("nav")).toBeNull();
+    expect(document.getElementById("panel-toggle")).toBeNull();
+  });
+
+  // Hero gate: present on `/`, absent off-home (/about extraRoute and /post/x).
+  it("shows the hero on / and hides it on /about and /post/x", async () => {
+    history.pushState({}, "", "/");
+    const config = shellConfig({
+      extraRoutes: [
+        {
+          path: "/about",
+          render: () => createElement("div", { "data-test": "about" }, "ABOUT"),
+        },
+      ],
+    });
+    scaffoldShellDom(config, "/");
+
+    handle = createBlogApp(config);
+    await settle();
+
+    // Home: hero present.
+    expect(document.querySelector(".hero-band-section")).not.toBeNull();
+
+    // /about: hero gone, about body shown.
+    await navigate("/about");
+    await vi.waitFor(() => {
+      expect(document.querySelector('[data-test="about"]')).not.toBeNull();
+      expect(document.querySelector(".hero-band-section")).toBeNull();
+    });
+
+    // Back home: hero returns.
+    await navigate("/");
+    await vi.waitFor(() => {
+      expect(document.querySelector(".hero-band-section")).not.toBeNull();
+    });
+
+    // /post/x: hero gone (off the exact-"/" gate).
+    await navigate("/post/first-post");
+    await vi.waitFor(() => {
+      expect(document.querySelector(".hero-band-section")).toBeNull();
+    });
+  });
+
+  // The React panel toggle flips ContextPanel's open class + the toggle's
+  // aria-expanded; Escape and an outside click both close it.
+  it("flips the panel open/closed via the toggle, Escape, and outside click", async () => {
+    history.pushState({}, "", "/");
+    const config = shellConfig();
+    scaffoldShellDom(config, "/");
+
+    handle = createBlogApp(config);
+    await settle();
+
+    const panel = () => document.getElementById("info-panel")!; // type-safety-ok: test DOM node mounted by scaffoldShellDom
+    const toggle = () => document.querySelector<HTMLElement>(".panel-toggle")!; // type-safety-ok: test DOM node mounted by scaffoldShellDom
+
+    // Starts closed.
+    expect(panel().classList.contains("open")).toBe(false);
+    expect(toggle().getAttribute("aria-expanded")).toBe("false");
+
+    // Toggle → open (re-render is async; flush before asserting).
+    await act(async () => {
+      toggle().click();
+      await Promise.resolve();
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(panel().classList.contains("open")).toBe(true);
+    expect(toggle().getAttribute("aria-expanded")).toBe("true");
+
+    // Escape → closed.
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+      await Promise.resolve();
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(panel().classList.contains("open")).toBe(false);
+    expect(toggle().getAttribute("aria-expanded")).toBe("false");
+
+    // Re-open, then click outside (the wordmark <h1>, not a home link → no
+    // scrollTo) → closed.
+    await act(async () => {
+      toggle().click();
+      await Promise.resolve();
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(panel().classList.contains("open")).toBe(true);
+
+    await act(async () => {
+      document.querySelector<HTMLElement>(".page > header h1")!.click(); // type-safety-ok: test DOM node mounted by scaffoldShellDom
+      await Promise.resolve();
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(panel().classList.contains("open")).toBe(false);
+    expect(toggle().getAttribute("aria-expanded")).toBe("false");
   });
 });
