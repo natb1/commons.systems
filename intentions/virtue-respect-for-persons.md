@@ -22,6 +22,9 @@ rationale: >-
   attachments. Respect governs inward as well as outward — moves on shared
   delegations are made with the persons who share them, never for them, and
   the practice is offered to family exactly as to strangers: never imposed.
+  Continuity is the same inward scope: shared data and the identity root stay
+  reachable by the household when the author is unavailable — an archive or a
+  root only the author can open treats them as dependents, not persons.
   Promotion of the practice is over-determined — mobility justifies it
   instrumentally (every practitioner strengthens the recovery substrate and
   calibrates discernment), respect justifies it intrinsically — but its METHODS

@@ -42,6 +42,13 @@ rationale: >-
   software). Selected
   2026-07-02: delegation-knowledge-notes — recovery owned by
   strategy-recover-knowledge, entered through reading annotations in print.
+
+
+  The criteria above are software-shaped, and a record whose recovery is not
+  software (delegation-client-income) can never satisfy them. Such a record
+  is not scored here: it stays raw until its own review_trigger fires, and
+  then a strategy is minted for it directly rather than waiting on this
+  selection.
 reading: null
 gap: "no reading yet (threshold: no raw record sits unscored across a review cycle)"
 serves:

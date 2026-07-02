@@ -12,7 +12,11 @@ rationale: >-
   per-delegation recovery drills, scaled to the delegation: for Firebase,
   actually re-host one app; for GitHub, run one export/import round-trip of the
   issue graph; for Anthropic, complete a real unit of work on open-weight local
-  inference and record the capability gap found.
+  inference and record the capability gap found; for the identity root, a zone
+  export plus a break-glass rehearsal walked by the second custodian
+  (strategy-secure-identity-root owns the standing custody practice the drill
+  exercises); for the OS substrate, provision the working environment from
+  scratch on a fresh machine — delegation-os-hardware's floor.
 
 
   Second, non-delegable-floor exercises. Each record names the meta-capability

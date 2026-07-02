@@ -18,7 +18,8 @@ rationale: >-
   forbids conscripting family into the practice exactly as it forbids
   converting users. And recovery paths for shared data must preserve the
   household's access on their terms, not just the author's: an export only
-  the author can read is not a recovered family archive.
+  the author can read is not a recovered family archive — the standing
+  durability half of that requirement is owned by strategy-durable-owned-data.
 
 
   This bounds the sibling strategies: strategy-realign-attachments and the
