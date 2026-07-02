@@ -12,6 +12,7 @@ function node(partial: Partial<IntentionNode> & { id: string }): IntentionNode {
     status: partial.status ?? "raw",
     parent: partial.parent ?? null,
     serves: partial.serves ?? [],
+    recovers: partial.recovers ?? [],
     rationale: partial.rationale ?? null,
     reading: partial.reading ?? null,
     gap: partial.gap ?? null,
