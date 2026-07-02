@@ -17,9 +17,12 @@
 #
 # Verdict vocabulary (EXACTLY ONE token on stdout):
 #   proceed                              no open PR owns <path> — plan normally.
-#   defer:<B>                            exactly one open PR owns <path>, it
-#                                        closes exactly one issue <B>, and
+#   defer:<B>:<P>                        exactly one open PR <P> owns <path>,
+#                                        it closes exactly one issue <B>, and
 #                                        linking <N> blocked_by <B> is clean.
+#                                        <P> is surfaced so the caller can fetch
+#                                        its diff directly via `gh pr diff <P>`
+#                                        without re-searching.
 #   not-clear:pr-list-truncated          the open-PR snapshot was truncated;
 #                                        uniqueness cannot be asserted.
 #   not-clear:multiple-owning-prs        two or more open PRs own <path>.
@@ -107,7 +110,8 @@ if [[ "$owner_count" -ge 2 ]]; then
 fi
 
 # Exactly one owning PR. Resolve its closing issues — the only path to a clean
-# blocker is a PR that closes exactly one issue.
+# blocker is a PR that closes exactly one issue. P is also surfaced in the
+# emitted defer:<B>:<P> token so the caller reads it directly.
 P="${owners[0]}"
 
 # lint-allow: gh-rest-porcelain GraphQL-only closingIssuesReferences (no REST equivalent)
@@ -136,5 +140,5 @@ if grep -qx "$B" <<<"$blocking"; then
   exit 0
 fi
 
-echo "defer:$B"
+echo "defer:$B:$P"
 exit 0
