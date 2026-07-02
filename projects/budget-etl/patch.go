@@ -227,6 +227,11 @@ func runPatchCmd(args []string) int {
 	input := fs.String("input", "", "Path to input snapshot (required)")
 	output := fs.String("output", "", "Path to output snapshot (required; must differ from --input)")
 	keychainAccount := fs.String("keychain", "", "macOS Keychain account name (optional when BUDGET_ETL_PASSWORD is set)")
+	fs.Usage = func() {
+		fmt.Fprintln(os.Stderr, "Usage: patch --spec <path> --input <path> --output <path> [--keychain <name>]")
+		fmt.Fprintln(os.Stderr, "  "+password.UsageNote)
+		fs.PrintDefaults()
+	}
 	fs.Parse(args) //nolint:errcheck // ExitOnError means Parse never returns non-nil
 
 	if err := runPatch(*spec, *input, *output, *keychainAccount); err != nil {
