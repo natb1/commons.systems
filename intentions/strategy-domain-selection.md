@@ -1,9 +1,12 @@
 ---
 id: strategy-domain-selection
+kind: strategy
 statement: Select new domains where the author's own problem is a good candidate for recovering autonomy
 owner: human
 status: codified
-parent: null
+parent: strategy-recover-author-autonomy
+serves:
+  - virtue-progressive-detachment
 rationale: >-
   When choosing a new domain, enter domains where the author has a genuine
   problem first; within a domain, prioritize depth before breadth. These
@@ -34,5 +37,6 @@ gap: null
 clarifications: []
 tooling_goals: []
 success_signal: null
+attributes: {}
 ---
 # Select new domains where the author's own problem is a good candidate for recovering autonomy

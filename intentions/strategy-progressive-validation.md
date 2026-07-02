@@ -1,9 +1,12 @@
 ---
 id: strategy-progressive-validation
+kind: strategy
 statement: Prioritize work by progressive validation
 owner: human
 status: codified
-parent: null
+parent: strategy-promote-progressive-detachment
+serves:
+  - virtue-alignment-of-attachments
 rationale: >-
   Work is prioritized by progressive validation. Each tier is a prerequisite for
   the next, and each tier adds ratchet teeth that resist removal; advance to the
@@ -32,5 +35,6 @@ gap: null
 clarifications: []
 tooling_goals: []
 success_signal: null
+attributes: {}
 ---
 # Prioritize work by progressive validation
