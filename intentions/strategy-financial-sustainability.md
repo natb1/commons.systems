@@ -4,9 +4,10 @@ kind: strategy
 statement: Fund the project as a managed, reversible attachment
 owner: human
 status: codified
-parent: null
+parent: strategy-reversible-institution
 serves:
   - virtue-alignment-of-attachments
+  - virtue-respect-for-persons
 rationale: >-
   Reaching beyond the author costs resources the author cannot supply alone;
   those resources come from institutions that contract for the project's
@@ -28,10 +29,14 @@ rationale: >-
   Revenue is necessary but never sufficient evidence: falling revenue is an
   honest signal to degrade; rising revenue is ambiguous (a genuine need and a
   manufactured one both produce it) and counts only alongside the tier
-  signals — above all whether buyers leave with migration freedom.
-  Sustainability is a runway rule: monthly spend is unsustainable when
-  projected runway falls below the horizon needed to reach revenue
-  self-sufficiency; the default response is to slow down, not pay more.
+  signals — above all whether buyers leave with migration freedom. That the
+  buyer leaves free — trained, holding a forkable artifact, owing nothing —
+  is respect-for-persons content, which is why this strategy serves that
+  virtue directly. Sustainability is a runway rule: monthly spend is
+  unsustainable when projected runway falls below the horizon needed to
+  reach revenue self-sufficiency; the default response is to slow down, not
+  pay more. The runway reading itself comes from the owned budgeting
+  pipeline — strategy-recover-finance supplies this strategy's sensor.
 reading: null
 gap: null
 clarifications: []
@@ -41,6 +46,9 @@ success_signal:
   sensor: the budget app's accounts plus the horizon config in the private natb1/office-hours-nate repo
   threshold: runway stays above the self-sufficiency horizon; a breach triggers reassessment before continuing at current spend
   is_proxy: true
-attributes: {}
+attributes:
+  conditions:
+    - institutions will contract for built-then-handed-over artifacts
+    - independent practitioners are available to subcontract per project, so no payroll is ever required
 ---
 # Fund the project as a managed, reversible attachment

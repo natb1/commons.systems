@@ -31,12 +31,20 @@ rationale: >-
 
   - **Where is the demonstration most legible because the author genuinely uses
   it?** The before/after of recovered autonomy should be obvious to someone who
-  has never thought about institutional capture.
+  has never thought about institutional capture — this criterion is
+  strategy-show-not-tell applied at selection time.
+
+
+  Standing candidates, recorded as raw delegation records awaiting this
+  selection: delegation-communications, delegation-media-libraries,
+  delegation-knowledge-notes.
 reading: null
 gap: null
 clarifications: []
 tooling_goals: []
 success_signal: null
-attributes: {}
+attributes:
+  conditions:
+    - domains keep appearing where the ownership cost-benefit has flipped and the author has a genuine problem
 ---
 # Select new domains where the author's own problem is a good candidate for recovering autonomy

@@ -17,7 +17,10 @@ rationale: >-
   the accepted trade: many misaligned platform delegations are swapped for
   one intensely managed vendor relationship, which makes the recovery
   substrate (open-weight models, local inference) the base case the whole
-  recovery recursion bottoms out in.
+  recovery recursion bottoms out in. Paying the vendor imports a minor
+  capture of its own — the spend promotes the vendor's growth, which is not
+  a virtue held here; the owned budgeting pipeline
+  (strategy-recover-finance) is what keeps that import visible.
 reading: null
 gap: null
 clarifications: []
@@ -33,6 +36,7 @@ attributes:
       - usage policy
       - pricing and access terms
       - model behavior defaults
+      - promote the vendor's growth via spend
     contradictions: []
   irreversibility:
     recovery_path: >-

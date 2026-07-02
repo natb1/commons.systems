@@ -32,7 +32,13 @@ reading: null
 gap: null
 clarifications: []
 tooling_goals: []
-success_signal: null
-attributes: {}
+success_signal:
+  observable: shallow-fork viability — a fork can be understood and iterated by its recipient without the author
+  sensor: fork reviews and practitioner reports at office-hours
+  threshold: each public artifact carries documentation sufficient for a shallow fork to stand alone
+  is_proxy: true
+attributes:
+  conditions:
+    - agent-assisted maintenance keeps shallow forks viable for recipients
 ---
 # Open source as gift, not offering — transfer capability, not dependency

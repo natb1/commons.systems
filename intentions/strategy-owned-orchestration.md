@@ -34,7 +34,11 @@ reading: null
 gap: null
 clarifications: []
 tooling_goals: []
-success_signal: null
+success_signal:
+  observable: forks, derivative projects, practitioners adapting the workflow independently — never revenue, never assertion
+  sensor: fork and derivative review at office-hours
+  threshold: the built-to-be-left claim is asserted only while such signals exist at the pursued tier
+  is_proxy: false
 attributes:
   conditions:
     - frontier coding agents remain accessible and economical at individual scale

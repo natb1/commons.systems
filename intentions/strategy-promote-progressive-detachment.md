@@ -8,12 +8,16 @@ parent: null
 serves:
   - virtue-progressive-detachment
   - virtue-respect-for-persons
+  - virtue-philosophical-mobility
 rationale: >-
   The second mode of exercising detachment: help others recover autonomy.
   Promotion is self-interested at one remove — every practitioner added
   strengthens the non-captured substrate my own recovery paths bottom out in,
   and a community of practitioners is the external calibration my own
-  discernment needs. It is also intrinsically required by
+  discernment needs. That is why this strategy also serves
+  virtue-philosophical-mobility: it supplies the community that
+  strategy-external-calibration draws its calibration function from. It is
+  also intrinsically required by
   virtue-respect-for-persons, which alone dictates its methods: demonstration
   over argument, selection over conversion, capability transfer over
   dependency.
@@ -34,5 +38,7 @@ success_signal:
   is_proxy: false
 attributes:
   validation_tiers: [2, 3, 4]
+  conditions:
+    - a practitioner audience for autonomy tooling exists and is reachable without engagement platforms
 ---
 # Promote the practice to users, practitioners, and collaborators

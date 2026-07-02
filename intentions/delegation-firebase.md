@@ -13,7 +13,9 @@ rationale: >-
   local-first — user data lives in user-held files, not in the backend — so
   the delegation stays shallow by design: what Firebase holds is
   deployment convenience, not user capability. The easiest of the current
-  infrastructure migrations.
+  infrastructure migrations. As with any paid vendor, the spend imports a
+  minor capture — promoting the vendor's growth, not a virtue held here —
+  kept visible by the owned budgeting pipeline (strategy-recover-finance).
 reading: null
 gap: null
 clarifications: []
@@ -28,6 +30,7 @@ attributes:
     imported:
       - Blaze billing model
       - quota and service policies
+      - promote the vendor's growth via spend
     contradictions: []
   irreversibility:
     recovery_path: >-

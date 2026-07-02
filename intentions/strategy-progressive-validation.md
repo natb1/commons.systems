@@ -4,13 +4,17 @@ kind: strategy
 statement: Prioritize work by progressive validation
 owner: human
 status: codified
-parent: strategy-promote-progressive-detachment
+parent: strategy-reversible-institution
 serves:
-  - virtue-alignment-of-attachments
+  - virtue-progressive-detachment
 rationale: >-
   Work is prioritized by progressive validation. Each tier is a prerequisite for
   the next, and each tier adds ratchet teeth that resist removal; advance to the
-  next tier only when the previous one validates the need.
+  next tier only when the previous one validates the need. Teeth that resist
+  removal are the irreversibility axis — this pacing serves
+  virtue-progressive-detachment, and it governs tier-1 work as much as
+  promotion, which is why it sits under strategy-reversible-institution
+  rather than inside the promote subtree.
 
 
   Tier-1 author-usage work — new features, new domains, performance, usability —
@@ -35,6 +39,8 @@ gap: null
 clarifications: []
 tooling_goals: []
 success_signal: null
-attributes: {}
+attributes:
+  conditions:
+    - external engagement arrives in tiers whose signals are observable before the next tier's teeth are accepted
 ---
 # Prioritize work by progressive validation

@@ -28,5 +28,7 @@ success_signal:
   is_proxy: false
 attributes:
   validation_tier: 1
+  conditions:
+    - agentic coding keeps the cost-benefit of individual software ownership flipped in the individual's favor
 ---
 # Recover the author's own autonomy, domain by domain

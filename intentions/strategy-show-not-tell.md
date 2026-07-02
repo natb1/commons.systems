@@ -30,6 +30,8 @@ gap: null
 clarifications: []
 tooling_goals: []
 success_signal: null
-attributes: {}
+attributes:
+  conditions:
+    - arguments fail to propagate; people respond to lived experience over persuasion
 ---
 # Show, not tell — demonstration over argument

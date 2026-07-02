@@ -15,7 +15,9 @@ rationale: >-
   theirs (engage): the alignment edge fully inverted, the service setting the
   problem. Software autonomy work is downstream of this specimen; recovering
   attention allocation is the same recovery pattern applied at its most
-  resonant point.
+  resonant point. The consumer-side recovery is owned by
+  strategy-recover-attention — print carries the author's daily reading;
+  audio is early and has not yet displaced platform listening.
 reading: null
 gap: null
 clarifications: []
