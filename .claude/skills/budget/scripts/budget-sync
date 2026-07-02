@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+# budget-sync — read-only-to-`current` half of the monthly merge workflow.
+#
+# Resolves the per-user budget-etl config, prepares the distributed binary,
+# ingests new bank statements from the downloads dir into the statements
+# archive, and produces an inspection report at ${TMPDIR:-/tmp}/inspect.json. It never
+# mutates `current` (beyond a one-time first-run bootstrap when no snapshot
+# exists yet) and never patches rules, merges, or publishes a snapshot — that
+# mutating half is the sibling script budget-apply (Unit 3).
+#
+# stdout protocol:
+#   - one line naming the chosen binary path (auditability)
+#   - the ingest script's "<src> to <dest>" move lines
+#   - a short human summary: new statements / new transactions / uncategorized
+# The durable signal the SKILL.md branches on is ${TMPDIR:-/tmp}/inspect.json:
+#   uncategorized > 0  -> run the categorization dialog, then budget-apply
+#   uncategorized == 0 -> nothing to categorize; done
+# Errors print to stderr as descriptive messages naming the offending path/var.
+#
+# Exit codes:
+#   0  report produced (and printed) successfully
+#   1  invalid config, missing dir/mount, unsupported platform, binary
+#      download failure, or missing password
+#   non-zero  a budget-etl binary call (bootstrap or report) failed; its own
+#      exit code propagates via set -e with its stderr surfaced
+#   3  no-config — the per-user config file is absent (first-run signal); the
+#      SKILL.md branches on this to walk the user through creating the config.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# --- Step 2: resolve config -------------------------------------------------
+# Capture budget-config-load's exit code tolerantly so we can distinguish the
+# no-config first-run signal (exit 0, stdout "no-config") from a present-but-
+# invalid config (exit 1, stderr already explained).
+set +e
+CFG=$("$SCRIPT_DIR/budget-config-load")
+cfg_rc=$?
+set -e
+
+if [[ "$CFG" == "no-config" ]]; then
+  echo "budget-sync: no per-user budget-etl config found." >&2
+  echo "Create \${XDG_CONFIG_HOME:-\$HOME/.config}/commons-systems/budget-etl.json" >&2
+  echo "with the four absolute paths: downloads, statements, snapshotDir, current." >&2
+  exit 3
+fi
+
+if [[ $cfg_rc -ne 0 ]]; then
+  echo "budget-sync: budget-config-load reported an invalid config — see the error above" >&2
+  exit 1
+fi
+
+downloads=$(jq -r '.downloads'    <<<"$CFG")
+statements=$(jq -r '.statements'  <<<"$CFG")
+snapshotDir=$(jq -r '.snapshotDir' <<<"$CFG")
+current=$(jq -r '.current'        <<<"$CFG")
+
+# --- Step 3: verify dirs / Drive mount --------------------------------------
+# Fail loudly naming the missing path before moving any file. A missing
+# statements dir means a stale/unmounted Drive. No silent fallback — see
+# .claude/rules/code-style.md. Every path stays double-quoted (paths may
+# contain spaces, e.g. "My Drive").
+[[ -d "$downloads" ]]  || { echo "budget-sync: downloads dir missing: $downloads" >&2; exit 1; }
+[[ -d "$statements" ]] || { echo "budget-sync: Drive mount missing (statements): $statements" >&2; exit 1; }
+[[ -d "$(dirname "$current")" ]] || { echo "budget-sync: Drive mount missing (parent of current): $(dirname "$current")" >&2; exit 1; }
+[[ -d "$snapshotDir" ]] || [[ -d "$(dirname "$snapshotDir")" ]] || { echo "budget-sync: Drive mount missing (snapshotDir): $snapshotDir" >&2; exit 1; }
+
+# --- Step 4: detect platform & resolve the binary ---------------------------
+# Platform detection, cache/plugin resolution, and download live in the shared
+# budget-resolve-binary helper (sibling of this script), which prints only the
+# resolved path. The "using binary" log stays here as this script's own
+# documented stdout protocol.
+BUDGET_ETL_BIN=$("$SCRIPT_DIR/budget-resolve-binary" budget-sync) || exit $?
+
+echo "budget-sync: using binary $BUDGET_ETL_BIN"
+
+# --- Step 5: require BUDGET_ETL_PASSWORD ------------------------------------
+# The password is mandatory now that plaintext output is gone. The SKILL.md
+# owns the password UX — this script never prompts.
+if [[ -z "${BUDGET_ETL_PASSWORD:-}" ]]; then
+  echo "budget-sync: BUDGET_ETL_PASSWORD is not set." >&2
+  echo "Every snapshot read/write is encrypted now that plaintext output is gone." >&2
+  echo "export BUDGET_ETL_PASSWORD=... before running budget-sync." >&2
+  exit 1
+fi
+
+# --- Step 6: first-run snapshot bootstrap -----------------------------------
+# When `current` does not yet exist, parse the statements with zero rules to
+# produce an all-uncategorized snapshot the normal report->dialog->apply loop
+# then categorizes. The binary reads BUDGET_ETL_PASSWORD from the environment.
+if [[ ! -f "$current" ]]; then
+  echo "budget-sync: no current snapshot at $current — bootstrapping a zero-rule snapshot"
+  "$BUDGET_ETL_BIN" --dir "$statements" --group personal --output "$current"
+fi
+
+# --- Step 7: ingest new downloads -------------------------------------------
+bash "$SCRIPT_DIR/ingest-downloads.sh" "$downloads" "$statements"
+
+# --- Step 8: report + signal ------------------------------------------------
+# The `report` subcommand implies --allow-uncategorized and does not write a
+# snapshot. ${TMPDIR:-/tmp}/inspect.json is the durable signal the SKILL.md branches on.
+"$BUDGET_ETL_BIN" report --input "$current" --dir "$statements" --report ${TMPDIR:-/tmp}/inspect.json
+
+new_statements=$(jq '.new_statements | length' ${TMPDIR:-/tmp}/inspect.json)
+new_transactions=$(jq '.new_transactions | length' ${TMPDIR:-/tmp}/inspect.json)
+uncategorized=$(jq '.uncategorized | length' ${TMPDIR:-/tmp}/inspect.json)
+
+echo "budget-sync: report written to ${TMPDIR:-/tmp}/inspect.json"
+echo "  new statements:    $new_statements"
+echo "  new transactions:  $new_transactions"
+echo "  uncategorized:     $uncategorized"
+
+exit 0

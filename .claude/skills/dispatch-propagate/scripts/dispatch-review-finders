@@ -20,13 +20,14 @@
 #   auth                 (surface==code AND app_or_rules==true)
 #   data-exposure        (surface==code AND app_or_rules==true)
 #   firebase             (surface==code AND app_or_rules==true)
+#   cost                 (surface==code AND app_or_rules==true)
 #   codeql               (surface==code)
 #   erosion              (surface==code)
 #   npm                  (deps==true)
 #
 # surface empty/docs/tests => exactly code-review (zero security finders).
 # surface==code       => 4 always-on security finders + codeql + erosion.
-# app_or_rules==true  => additionally auth, data-exposure, firebase (7 total).
+# app_or_rules==true  => additionally auth, data-exposure, firebase, cost (8 total).
 # deps==true          => additionally npm (independent of surface).
 #
 # No network access, no git, no gh — pure stdin → stdout classification.
@@ -68,6 +69,7 @@ if [[ "$surface" == "code" ]]; then
     echo "auth"
     echo "data-exposure"
     echo "firebase"
+    echo "cost"
   fi
 
   echo "codeql"

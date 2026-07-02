@@ -15896,15 +15896,15 @@ config_teardown
 # ============================================================================
 #
 # Both ingest-downloads.sh and identify-qfx.sh are copied into a fresh tmp
-# tree so BASH_SOURCE-based SCRIPT_DIR resolution works correctly. The budget-etl
-# scripts live at $SCRIPT_DIR/../../budget-etl/scripts/ relative to the
+# tree so BASH_SOURCE-based SCRIPT_DIR resolution works correctly. The budget
+# scripts live at $SCRIPT_DIR/../../budget/scripts/ relative to the
 # dispatch-propagate scripts dir.
 
 echo ""
 echo "=== ingest-downloads.sh ==="
 
-INGEST_SRC="$SCRIPT_DIR/../../budget-etl/scripts/ingest-downloads.sh"
-IDENTIFY_SRC="$SCRIPT_DIR/../../budget-etl/scripts/identify-qfx.sh"
+INGEST_SRC="$SCRIPT_DIR/../../budget/scripts/ingest-downloads.sh"
+IDENTIFY_SRC="$SCRIPT_DIR/../../budget/scripts/identify-qfx.sh"
 
 ING_TMP=""
 
@@ -32768,6 +32768,22 @@ assert_eq "finders: docs surface → codeql absent" "0" "$n"
 # tests surface → exactly code-review (no security finders)
 out=$(printf 'surface=tests\ndeps=false\napp_or_rules=false\n' | "$SCRIPT_DIR/dispatch-review-finders")
 assert_eq "finders: tests → code-review only" "code-review" "$out"
+
+# cost finder: present when surface=code + app_or_rules=true
+n=$(printf 'surface=code\ndeps=false\napp_or_rules=true\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -c '^cost$')
+assert_eq "finders: code+app → cost present" "1" "$n"
+
+# cost finder: absent when surface=code + app_or_rules=false
+n=$(printf 'surface=code\ndeps=false\napp_or_rules=false\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -c '^cost$' || true)
+assert_eq "finders: code !app → cost absent" "0" "$n"
+
+# cost finder: absent on docs surface
+n=$(printf 'surface=docs\ndeps=false\napp_or_rules=false\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -c '^cost$' || true)
+assert_eq "finders: docs surface → cost absent" "0" "$n"
+
+# cost finder: absent on tests surface
+n=$(printf 'surface=tests\ndeps=false\napp_or_rules=false\n' | "$SCRIPT_DIR/dispatch-review-finders" | grep -c '^cost$' || true)
+assert_eq "finders: tests surface → cost absent" "0" "$n"
 
 # ============================================================================
 # === dispatch-review-dedup ===

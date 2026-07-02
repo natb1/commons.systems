@@ -15,6 +15,7 @@
   "dependencies": {
     "@commons-systems/analyticsutil": "*",
     "@commons-systems/components": "*",
+    "@commons-systems/crypto": "*",
     "@commons-systems/ds": "*",
     "@commons-systems/errorutil": "*",
     "@commons-systems/authutil": "*",

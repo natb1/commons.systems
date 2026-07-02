@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# budget-resolve-binary — detect platform and resolve the distributed
+# budget-etl binary, printing ONLY the resolved binary path on stdout.
+#
+# Shared by budget-sync and budget-apply so the platform-detection,
+# cache/plugin resolution, and download logic live in one place instead of
+# being duplicated verbatim across both scripts.
+#
+# Argument:
+#   $1  prefix for error messages (optional; default "budget"). Callers pass
+#       their own name (e.g. budget-sync) so platform/download errors name the
+#       invoking script.
+#
+# stdout:
+#   the resolved executable binary path — and nothing else. Callers capture it
+#   with BIN=$("$SCRIPT_DIR/budget-resolve-binary" <prefix>); each caller owns
+#   its own "using binary" log line (part of that script's stdout protocol), so
+#   this helper must never print anything but the path to stdout.
+#
+# Exit codes:
+#   0  resolved (path printed to stdout)
+#   1  unsupported platform, or binary download failure (message on stderr)
+set -euo pipefail
+
+prefix="${1:-budget}"
+
+# --- detect platform --------------------------------------------------------
+uname_sm="$(uname -sm)"
+case "$uname_sm" in
+  "Darwin arm64")   platform="darwin-arm64" ;;
+  "Darwin x86_64")  platform="darwin-amd64" ;;
+  "Linux x86_64")   platform="linux-amd64" ;;
+  *)
+    echo "$prefix: your platform \`$uname_sm\` is not in the pre-built binary set (darwin-arm64, darwin-amd64, linux-amd64)." >&2
+    echo "Fork the project at https://github.com/natb1/commons.systems/fork and run /budget-parser <path> from your fork to build the tool from source." >&2
+    exit 1
+    ;;
+esac
+
+# --- resolve the binary (first-match-wins) ----------------------------------
+# CLAUDE_PLUGIN_ROOT may be unset.
+plugin_bin="${CLAUDE_PLUGIN_ROOT:-}/bin/budget-etl-$platform"
+cache_bin="$HOME/.cache/commons-systems/bin/budget-etl-$platform"
+
+if [[ -n "${CLAUDE_PLUGIN_ROOT:-}" && -x "$plugin_bin" ]]; then
+  echo "$plugin_bin"
+elif [[ -x "$cache_bin" ]]; then
+  echo "$cache_bin"
+else
+  mkdir -p "$HOME/.cache/commons-systems/bin"
+  if ! curl -fSL -o "$cache_bin" \
+      "https://github.com/natb1/commons.systems/releases/latest/download/budget-etl-$platform"; then
+    echo "$prefix: failed to download budget-etl-$platform from GitHub Releases (see curl error above)" >&2
+    exit 1
+  fi
+  chmod +x "$cache_bin"
+  echo "$cache_bin"
+fi

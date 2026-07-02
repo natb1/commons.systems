@@ -1,4 +1,5 @@
-import { collection, getDocs, orderBy, query, where, type Firestore } from "firebase/firestore";
+import type { Firestore } from "firebase/firestore";
+import { boundedQuery } from "@commons-systems/firestoreutil/bounded-query";
 import type { User } from "firebase/auth";
 import {
   nsCollectionPath,
@@ -44,10 +45,11 @@ function toPostMeta(id: string, data: Record<string, unknown>): PostMeta | null 
 export async function getPosts(db: Firestore, namespace: Namespace, user: User | null): Promise<GetPostsResult> {
   const path = nsCollectionPath(namespace, "posts");
   const admin = await isInGroup(db, namespace, user, ADMIN_GROUP_ID);
-  const q = admin
-    ? query(collection(db, path), orderBy("publishedAt", "desc"))
-    : query(collection(db, path), where("published", "==", true));
-  const snapshot = await getDocs(q); // query-bounds-ok: blog index needs all published posts; pagination is a product decision tracked under #2686
+  const builder = boundedQuery(db, path);
+  const bounded = admin
+    ? builder.orderBy("publishedAt", "desc").unbounded("blog post count is small; full list is intentional for index/sitemap/feed")
+    : builder.where("published", "==", true).unbounded("blog post count is small; full list is intentional for index/sitemap/feed");
+  const snapshot = await bounded.getDocs(); // query-bounds-ok: bounded via .unbounded() above — blog post count is small
   const posts: PostMeta[] = [];
   let skippedCount = 0;
   for (const d of snapshot.docs) {

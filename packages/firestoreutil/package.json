@@ -12,6 +12,7 @@
     "./validate": "./src/validate.ts",
     "./brand": "./src/brand.ts",
     "./media-queries": "./src/media-queries.ts",
+    "./bounded-query": "./src/bounded-query.ts",
     "./init": "./src/init.ts",
     "./paged-merge": "./src/paged-merge.ts"
   },
@@ -21,6 +22,7 @@
     "lint": "eslint src/"
   },
   "dependencies": {
+    "firebase": "^12.9.0",
     "firebase-admin": "^13.0.0"
   }
 }
