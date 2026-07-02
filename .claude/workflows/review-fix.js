@@ -88,6 +88,7 @@ const FINDING_ITEM_SCHEMA = {
         'codeql',
         'npm',
         'erosion',
+        'cost',
       ],
     },
     OWASP: { type: 'string' },
@@ -186,7 +187,7 @@ function agentFinderSet(surface, app_or_rules) {
   if (surface === 'code') {
     set.push('input-validation', 'secrets', 'red-team', 'security-review');
     if (app_or_rules) {
-      set.push('auth', 'data-exposure', 'firebase');
+      set.push('auth', 'data-exposure', 'firebase', 'cost');
     }
   }
   return set;
@@ -337,6 +338,27 @@ function finderPrompt(name, args) {
       'Once /security-review returns, continue: normalize every finding to the schema below with',
       'Source "security-review". Map its severity to Confidence (high/medium/low → high/medium/low),',
       'and infer the OWASP category and STRIDE element from each finding\'s category and description.',
+      SCHEMA_BLURB,
+    ].join('\n');
+  }
+  if (name === 'cost') {
+    return [
+      'You are a findings-only cost/scaling reviewer for Firestore-backed code.',
+      'Your findings are ADVISORY (non-blocking): surface concrete, actionable cost/scaling',
+      'patterns the diff introduces so they can be filed as follow-ups — you fix nothing.',
+      ctx,
+      'Flag these Firestore cost/scaling patterns introduced in the pending diff:',
+      '(1) unbounded or expensive Firestore queries — e.g. `getDocs`/collection scans with no',
+      '    `limit()` over a collection that grows without bound;',
+      '(2) new high-frequency amplifiers layered over collection scans — a new interval, scheduler,',
+      '    polling loop, or refresh (e.g. a 5-minute refresh) placed over a query that scans a growing',
+      '    collection (the query×amplifier interaction);',
+      '(3) N+1 `getDoc` loops — a per-item document read inside a loop over a growing set.',
+      'Reason about the INTERACTION between a query and its amplifier (call frequency × collection',
+      'growth), not just the static shape of a single query: a query that is cheap per call becomes a',
+      'cost/scaling risk once a new refresh or interval runs it repeatedly over a growing collection.',
+      'That query×amplifier interaction is the primary target of this lens.',
+      'Set Source "cost" and OWASP "" and STRIDE "" on every finding (cost is not security-classified).',
       SCHEMA_BLURB,
     ].join('\n');
   }
@@ -549,6 +571,13 @@ if (deduped.length) {
     '  verify→fix machinery as a code-review Fixed finding; it is a QUALITY concern, never a vulnerability).',
     '- Informational (erosion): an advisory complexity/duplication increase with no clear single refactor',
     '  → Informational (an FYI; no change required and nothing is filed).',
+    '- Deferred (cost): a finding with Source "cost" is an ADVISORY cost/scaling quality note,',
+    '  never a security issue. A confirmed, in-scope cost/scaling pattern (an unbounded/growing-',
+    '  collection query, a new high-frequency amplifier layered over a collection scan, or an N+1',
+    '  read loop) → Deferred: filed as a non-blocking follow-up feeding the deterministic cost sensor',
+    '  (#2687). When a cost finding names a concrete pattern but is not obviously actionable, still',
+    '  classify it Deferred (so it reaches the sensor) rather than Informational. Cost findings are',
+    '  NEVER Fixed (never auto-fixed in this PR) and NEVER Required (never merge-blocking).',
     'RULES: A finding is NEVER Dismissed merely because the change is small — if it is a real',
     'improvement within scope, classify it Fixed. When a code-review finding is ambiguous,',
     'default to Informational rather than inventing a code change.',
@@ -591,9 +620,11 @@ if (deduped.length) {
     const c = classById.get(f.id);
     // Fallback when the classify agent gave no verdict for this finding: erosion
     // sources → Informational (advisory, not filed) per the Informational-erosion
-    // design intent; security sources → Out-of-scope; code-review → Deferred
+    // design intent; security sources → Out-of-scope; code-review AND cost → Deferred
     // (NOT Informational) so an unclassified-but-real finding is filed as a follow-up
     // rather than silently dropped from both the fix set and the follow-up filings.
+    // (cost is neither erosion nor a SEC_SOURCE, so it naturally lands in the final
+    // Deferred branch — the same filed-follow-up lane as code-review.)
     const bucket = c
       ? c.bucket
       : f.Source === 'erosion'

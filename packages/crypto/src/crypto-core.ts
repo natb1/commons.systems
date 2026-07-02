@@ -25,7 +25,7 @@ export async function deriveKey(
     ["deriveKey"],
   );
   return subtleCrypto.deriveKey(
-    { name: "PBKDF2", salt: salt as Uint8Array<ArrayBuffer>, iterations: PBKDF2_ITERATIONS, hash: "SHA-256" }, // type-safety-ok: SubtleCrypto parameter requires Uint8Array<ArrayBuffer>; getRandomValues always returns Uint8Array
+    { name: "PBKDF2", salt: salt as Uint8Array<ArrayBuffer>, iterations: PBKDF2_ITERATIONS, hash: "SHA-256" },
     keyMaterial,
     { name: "AES-GCM", length: 256 },
     false,
@@ -33,8 +33,6 @@ export async function deriveKey(
   );
 }
 
-// Retained as a test-only fixture primitive used by the Unit 5 tests to build a
-// fixture .benc in-process. NOT for production write-back.
 export async function encryptData(
   subtleCrypto: SubtleCrypto,
   getRandomValues: (arr: Uint8Array) => Uint8Array,
@@ -45,7 +43,7 @@ export async function encryptData(
   const iv = getRandomValues(new Uint8Array(IV_LEN));
   const key = await deriveKey(subtleCrypto, password, salt);
   const ciphertext = await subtleCrypto.encrypt(
-    { name: "AES-GCM", iv: iv as Uint8Array<ArrayBuffer> }, // type-safety-ok: SubtleCrypto parameter requires Uint8Array<ArrayBuffer>; getRandomValues always returns Uint8Array
+    { name: "AES-GCM", iv: iv as Uint8Array<ArrayBuffer> },
     key,
     new TextEncoder().encode(plaintext),
   );

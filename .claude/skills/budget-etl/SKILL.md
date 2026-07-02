@@ -66,7 +66,7 @@ Verify the directories exist and fail loudly if not (no silent fallback to a sta
 Run from the worktree root:
 
 ```bash
-bash .claude/skills/budget-etl/scripts/ingest-downloads.sh "$downloads" "$statements"
+bash .claude/skills/budget/scripts/ingest-downloads.sh "$downloads" "$statements"
 ```
 
 The script classifies each statement file in `"$downloads"` via the sibling `identify-qfx.sh` and moves it to `"$statements"/<institution>/<account>/`, printing one `<src> to <dest>` line per move. Moving a file out of `"$downloads"` is the dedup for "new statement".
