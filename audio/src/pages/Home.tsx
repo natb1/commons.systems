@@ -21,7 +21,7 @@ export interface HomeProps {
 type LibraryState =
   | { status: "loading" }
   | { status: "error" }
-  | { status: "loaded"; items: LibraryItem[] };
+  | { status: "loaded"; items: LibraryItem[]; nextCursor: string | null };
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -162,25 +162,22 @@ export function Home(props: HomeProps) {
       });
   }, []);
 
-  // Ports home.ts:122-133. `isRescan` distinguishes the two callers:
-  //  - initial load (false): sets loading, then loaded/error (#media-error),
-  //    rethrows DataIntegrityError to the boundary.
-  //  - focus rescan (true): no loading state, swaps in the new items in place,
-  //    and on error logs {operation:"library-rescan"} leaving the region intact.
+  // First-page load (ports home.ts:122-133's initial-load branch): sets loading,
+  // then loaded/error (#media-error), and hands a DataIntegrityError to the
+  // boundary. The `loaded` state carries page 1's items plus its `nextCursor`,
+  // which drives the "Load more" affordance. Post-load enrichment no longer
+  // resets to page 1 — see `patchEnrichedLocal`, which patches enriched local
+  // rows in place so extra loaded pages and the paged position survive.
   const loadLibrary = useCallback(
-    async (isRescan: boolean, isActive: () => boolean): Promise<boolean> => {
-      if (!isRescan) setState({ status: "loading" });
+    async (isActive: () => boolean): Promise<boolean> => {
+      setState({ status: "loading" });
       try {
-        const items = await listLibrary(user);
+        const page = await listLibrary(user, undefined);
         if (!isActive()) return false;
-        setState({ status: "loaded", items });
+        setState({ status: "loaded", items: page.items, nextCursor: page.nextCursor });
         return true;
       } catch (error: unknown) {
         if (!isActive()) return false;
-        if (isRescan) {
-          logError(error, { operation: "library-rescan" });
-          return false; // leave the current region intact
-        }
         if (error instanceof DataIntegrityError) {
           setFatalError(error);
           return false;
@@ -195,6 +192,28 @@ export function Home(props: HomeProps) {
     [user],
   );
 
+  // In-place enrichment patch (replaces the old reset-to-page-1 rescan reload).
+  // After `enrichLocalTracks` populates the sidecar cache, re-list the FULL local
+  // set (overlay applied) and patch only the local rows already on screen with
+  // their freshly-tagged versions. Enrichment only rewrites local tags (ids stay
+  // `local:*`), so patching in place preserves the paged position and every extra
+  // page the user loaded, and costs zero cloud reads. Cloud rows are untouched.
+  const patchEnrichedLocal = useCallback(async (isActive: () => boolean): Promise<void> => {
+    const fresh = await listLocalTracks();
+    if (!isActive()) return;
+    const freshById = new Map(fresh.map((it) => [it.id, it]));
+    setState((prev) =>
+      prev.status === "loaded"
+        ? {
+            ...prev,
+            items: prev.items.map((it) =>
+              it.origin === "local" && freshById.has(it.id) ? freshById.get(it.id)! : it,
+            ),
+          }
+        : prev,
+    );
+  }, []);
+
   // Initial load + cache-first enrichment (ports home.ts:267-270). The first
   // load shows cached/placeholder tags immediately (cheap, no IO); the async
   // enrichment pass then extracts tags from any uncached local files, and a
@@ -208,21 +227,23 @@ export function Home(props: HomeProps) {
       // hands off to the error boundary, and a plain error already shows
       // #media-error — re-listing would just fail again (mirrors the old
       // afterRenderHome only running after a successful render).
-      const ok = await loadLibrary(false, () => !cancelled);
+      const ok = await loadLibrary(() => !cancelled);
       if (cancelled || !ok) return;
       await enrichLocalTracks();
       if (cancelled) return;
-      await loadLibrary(true, () => !cancelled);
+      await patchEnrichedLocal(() => !cancelled);
     })();
     return () => {
       cancelled = true;
     };
-  }, [loadLibrary, refreshKey]);
+  }, [loadLibrary, patchEnrichedLocal, refreshKey]);
 
   // Focus rescan (home.ts:143-154): on window focus, re-enrich (a folder the user
-  // edited while away may have new files) then re-fetch the library, behind a
-  // re-entrancy guard, leaving the region intact on error. enrichLocalTracks
-  // suppresses its sidecar write when nothing new was extracted.
+  // edited while away may have re-tagged files) then patch the enriched local
+  // tags into the current page in place, behind a re-entrancy guard. This keeps
+  // the paged position and any extra loaded pages intact rather than resetting to
+  // page 1. enrichLocalTracks suppresses its sidecar write when nothing new was
+  // extracted.
   const rescanningRef = useRef(false);
   useEffect(() => {
     const controller = new AbortController();
@@ -233,7 +254,7 @@ export function Home(props: HomeProps) {
         rescanningRef.current = true;
         void (async () => {
           await enrichLocalTracks();
-          await loadLibrary(true, () => mountedRef.current);
+          await patchEnrichedLocal(() => mountedRef.current);
         })().finally(() => {
           rescanningRef.current = false;
         });
@@ -241,7 +262,7 @@ export function Home(props: HomeProps) {
       { signal: controller.signal },
     );
     return () => controller.abort();
-  }, [loadLibrary]);
+  }, [patchEnrichedLocal]);
 
   // Cache stats: refresh on mount and on each CACHE_UPDATED_EVENT. The unmount
   // cleanup removes the listener, so a stale cache event after navigation away
@@ -258,6 +279,37 @@ export function Home(props: HomeProps) {
     );
     return () => controller.abort();
   }, [refreshCacheStats]);
+
+  // "Load more": fetch the next page (resuming from the current nextCursor) and
+  // APPEND it to the accumulated list. A ref guards against concurrent clicks;
+  // mountedRef guards a late resolution after unmount. On error the current list
+  // is left intact (mirrors the rescan error handling).
+  const loadingMoreRef = useRef(false);
+  const onLoadMore = () => {
+    if (loadingMoreRef.current) return;
+    if (state.status !== "loaded" || state.nextCursor === null) return;
+    const cursor = state.nextCursor;
+    loadingMoreRef.current = true;
+    listLibrary(user, { cursor })
+      .then((page) => {
+        if (!mountedRef.current) return;
+        setState((prev) =>
+          prev.status === "loaded"
+            ? {
+                status: "loaded",
+                items: [...prev.items, ...page.items],
+                nextCursor: page.nextCursor,
+              }
+            : prev,
+        );
+      })
+      .catch((err: unknown) => {
+        logError(err, { operation: "load-more" });
+      })
+      .finally(() => {
+        loadingMoreRef.current = false;
+      });
+  };
 
   const onClearCache = () => {
     clearCache()
@@ -324,16 +376,23 @@ export function Home(props: HomeProps) {
       state.items.length === 0 ? (
         <p id="media-empty">No audio items available.</p>
       ) : (
-        <div id="media-list">
-          {state.items.map((item) => (
-            <Row
-              key={item.id}
-              item={item}
-              player={player}
-              onQueueChange={bumpQueue}
-            />
-          ))}
-        </div>
+        <>
+          <div id="media-list">
+            {state.items.map((item) => (
+              <Row
+                key={item.id}
+                item={item}
+                player={player}
+                onQueueChange={bumpQueue}
+              />
+            ))}
+          </div>
+          {state.nextCursor !== null && (
+            <Button id="load-more-btn" onClick={onLoadMore}>
+              Load more
+            </Button>
+          )}
+        </>
       );
   }
 

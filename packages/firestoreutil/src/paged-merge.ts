@@ -22,28 +22,41 @@ export interface MediaPageOptions {
 
 export const DEFAULT_MEDIA_PAGE_SIZE = 24;
 
+// Base64 primitives accessed via a typed globalThis lookup so this import-free
+// module typechecks under both Node (Buffer) and browser (btoa/atob) tsconfigs
+// without depending on @types/node or the DOM lib.
+const base64Env = globalThis as unknown as {
+  Buffer?: {
+    from(data: string, encoding: string): { toString(encoding: string): string };
+  };
+  btoa?: (data: string) => string;
+  atob?: (data: string) => string;
+};
+
+function toBase64(json: string): string {
+  if (base64Env.Buffer) return base64Env.Buffer.from(json, "utf8").toString("base64");
+  if (base64Env.btoa) return base64Env.btoa(json);
+  throw new Error("encodeCursor: no base64 encoder available in this environment");
+}
+
+function fromBase64(s: string): string {
+  if (base64Env.Buffer) return base64Env.Buffer.from(s, "base64").toString("utf8");
+  if (base64Env.atob) return base64Env.atob(s);
+  throw new Error("decodeCursor: no base64 decoder available in this environment");
+}
+
 /**
  * Encode a cursor as base64 of a stable JSON form (fixed field order), so the
  * round-trip is deterministic. Works in both Node (vitest) and the browser:
  * uses Buffer when present, else the browser's btoa.
  */
 export function encodeCursor(k: MediaCursor): string {
-  const json = JSON.stringify([k.addedAt, k.id]);
-  if (typeof Buffer !== "undefined") {
-    return Buffer.from(json, "utf8").toString("base64");
-  }
-  return btoa(json);
+  return toBase64(JSON.stringify([k.addedAt, k.id]));
 }
 
 /** Inverse of encodeCursor. */
 export function decodeCursor(s: string): MediaCursor {
-  let json: string;
-  if (typeof Buffer !== "undefined") {
-    json = Buffer.from(s, "base64").toString("utf8");
-  } else {
-    json = atob(s);
-  }
-  const parsed = JSON.parse(json) as [string, string];
+  const parsed = JSON.parse(fromBase64(s)) as [string, string];
   return { addedAt: parsed[0], id: parsed[1] };
 }
 

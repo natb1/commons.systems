@@ -261,7 +261,7 @@ export async function listLocalTracks(): Promise<LibraryItem[]> {
   if (!currentHandle) return [];
   try {
     currentSource ??= buildSource(currentHandle);
-    const items = await currentSource.list();
+    const { items } = await currentSource.list();
     return Promise.all(
       items.map(async (item) => {
         const cached = item.localName ? await getMetadata(item.localName) : undefined;
@@ -414,7 +414,7 @@ export async function enrichLocalTracks(): Promise<void> {
   try {
     currentSource ??= buildSource(currentHandle);
     // list() also populates the source index so resolveLocalFile finds handles.
-    const items = await currentSource.list();
+    const { items } = await currentSource.list();
     await enrichLocalItems(items);
   } catch (err) {
     logError(err, { operation: "enrich-local-tracks" });
