@@ -1,0 +1,15 @@
+{
+  "name": "@commons-systems/crypto-core",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "main": "src/crypto-core.ts",
+  "exports": {
+    ".": "./src/crypto-core.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src/"
+  }
+}
