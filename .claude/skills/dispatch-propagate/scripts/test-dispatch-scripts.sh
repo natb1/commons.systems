@@ -42337,7 +42337,7 @@ cat > "$TMPDIR_TEST/closing.json" <<'EOF'
 EOF
 out=$("$TMPDIR_TEST/scripts/dispatch-find-owning-pr" 100 "some/file.ts"); rc=$?
 assert_eq "dispatch-find-owning-pr: clean defer exits 0" "0" "$rc"
-assert_contains_local "dispatch-find-owning-pr: emits defer:42" "defer:42" "$out"
+assert_contains_local "dispatch-find-owning-pr: emits defer:42:7" "defer:42:7" "$out"
 find_owning_pr_teardown
 
 # --- Test: multiple owning PRs ---
