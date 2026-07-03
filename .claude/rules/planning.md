@@ -14,7 +14,10 @@ Required sections match the `/plan-issue` plan-comment schema
 (`.claude/skills/plan-issue/SKILL.md`, "Plan-comment output schema", lines 500–527):
 
 - **Context** — why the change is being made (problem, need, intended outcome).
-- **Scope** per unit — what files/behavior change, with `path:line` anchors.
+- **Scope** per unit — what files/behavior change, what is explicitly out of
+  scope, with `path:line` anchors.
+- **Dependencies** — prior units that must complete first (omit if none), so
+  execution order is explicit in the plan text.
 - **Reuse** — existing functions/utilities to reuse, with their file paths.
 - **Verification** — how to test the change end-to-end. Auto-runnable checks
   (test suites, typechecks, builds) go in fenced ` ```verify ` blocks; manual
