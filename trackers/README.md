@@ -49,25 +49,39 @@ npx tsx intentionsutil/scripts/refresh.ts <node-id>
 
 Both forms are strictly read-only toward GitHub.
 
-## Split-authority: execution state never flows through the intention model
+## Transitional: trackers mirror the GitHub projection, read-only
 
-Tracker files are **NEVER** validated through `validateNode` or written through
-`writeNode`. The intention tree owns intention (`intentions/*.md`); GitHub owns
-execution (`trackers/*.json`). The non-import of `writeNode` in `refresh.ts` is
-the diff-checkable expression of that split.
+The graph is the authoritative source of truth for all data; GitHub is an
+optional, derived projection. During the transition, execution state still
+syncs from GitHub — the gh-derived fields via backfill, and issue open/closed,
+linked PRs, and dispatch labels via this directory. Three migration steps
+govern where that transition is headed: (1) make the graph a correct source of
+truth for all data — the current change; (2) incrementally migrate the
+dispatch router from working on GitHub to working on the graph — future work;
+(3) optionally re-establish full GitHub integration (design TBD) — future
+work.
 
-This means execution state — issue open/closed, PR states, dispatch labels — is
-always read from GitHub and mirrored here. It is never inferred from or written
-back into the intention node files.
+Today — before step (2) lands — trackers remain a derived, read-only mirror:
+tracker files are **NEVER** validated through `validateNode` or written
+through `writeNode`. The non-import of `writeNode` in `refresh.ts` is the
+diff-checkable expression of that. Execution state — issue open/closed, PR
+states, dispatch labels — is always read from GitHub and mirrored here; it is
+never inferred from or written back into the intention node files. That
+one-way-mirror mechanic is accurate today, but it is transitional scaffolding,
+not a permanent authority split — once the router works directly on the
+graph, this directory's role may shrink or disappear.
 
 ## Why a separate top-level directory
 
 Keeping trackers here rather than inside `intentions/` has two concrete reasons:
 
-1. The backfill's prune step deletes only `intentions/*.md`. A tracker file
-   living there would be orphaned by any prune run.
-2. The physical separation is the whole point: two stores, two authorities,
-   one-way mirror from GitHub into this directory.
+1. The backfill's prune step deletes only gh-backed tactics (frontmatter
+   `attributes.source: github:<owner>/<repo>#<N>`) whose issue has closed —
+   never a hand-authored tactic (no `attributes.source`). A tracker file living
+   inside `intentions/` would be orphaned whenever its node was pruned.
+2. The physical separation keeps the transitional GitHub-projection mirror out
+   of the graph's own store: one authority (the graph), with this directory
+   holding the derived, one-way mirror from GitHub.
 
 ## Reconstructibility
 

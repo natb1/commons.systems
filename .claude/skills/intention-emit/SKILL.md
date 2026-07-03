@@ -1,19 +1,24 @@
 ---
 name: intention-emit
-description: Emit a leaf intention node into a chain-compatible GitHub issue via /file-issue, then stamp a discoverable node-id↔issue mapping and record an execution tracker — reads intention node files, never rewrites them.
+description: Emit a tactic node into a chain-compatible GitHub issue via /file-issue, then stamp a discoverable node-id↔issue mapping and record an execution tracker — reads intention node files, never rewrites them.
 ---
 
 # Intention Emit
 
-The tree→GitHub **emit** path: a leaf goal intention node becomes a
-chain-compatible GitHub issue (via the existing `/file-issue` skill), gets a
-discoverable node-id↔issue stamp, and gets an execution-tracker record.
+The tree→GitHub **emit** path: a tactic node becomes a chain-compatible GitHub
+issue (via the existing `/file-issue` skill), gets a discoverable
+node-id↔issue stamp, and gets an execution-tracker record. Emission is not
+restricted to a leaf — an epic-rooted tactic (a tactic subtree whose root
+mirrors a GitHub issue hierarchy) emits the same way as any other tactic.
 
-This is the EMIT half of the asymmetric tree↔GitHub sync. Its mirror image is
-the read-only `refresh.ts` (Unit 4), which mirrors GitHub execution state back
-into `trackers/<node-id>.json`. The **split-authority** rule holds in both
-directions: emit READS intention node files (via `readNode`); it never rewrites
-them. The intention tree owns intention; GitHub owns execution.
+This is the EMIT half of the tree↔GitHub sync. Its mirror image is the
+read-only `refresh.ts` (Unit 4), which reads GitHub execution state back into
+`trackers/<node-id>.json`. The graph is the authoritative source of truth for
+all data; GitHub is an optional, derived projection that this skill emits
+into. During the transition, execution state still syncs from GitHub — the
+gh-derived fields via backfill, and issue open/closed, linked PRs, and
+dispatch labels via `refresh.ts` and `trackers/`; emit itself READS intention
+node files (via `readNode`) and never rewrites them.
 
 ## Architectural note: only one step is an agent step
 
@@ -252,7 +257,9 @@ Only step 2 is an agent/Skill step. Everything else is pure script.
 ## Out of scope
 
 - **No write to intention node files.** Emit READS them (`readNode`); it never
-  calls `writeNode` or otherwise rewrites `intentions/<id>.md`. Split-authority.
+  calls `writeNode` or otherwise rewrites `intentions/<id>.md`. The graph
+  remains the source of truth for that content; GitHub is only the derived
+  projection emit writes into.
 - **No change to `/file-issue`.** This procedure consumes `/file-issue` as-is,
   including its labeling and sentinel contract.
 - **No dispatch-chain change.** The created issue is chain-compatible by virtue
