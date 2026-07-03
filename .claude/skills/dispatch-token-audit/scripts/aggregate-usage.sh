@@ -444,14 +444,16 @@ def price(u):
 # retired Claude 3.x generation. Claude 3 cache rates are formula-derived
 # (1.25x write / 0.1x read of input), not exact historical cents.
 def ACTUAL_RATES:
-  { opus:      {input:5,    cache_creation:6.25,    cache_read:0.50,  output:25},
+  { fable:     {input:10,   cache_creation:12.50,   cache_read:1.00,  output:50},
+    opus:      {input:5,    cache_creation:6.25,    cache_read:0.50,  output:25},
     sonnet:    {input:3,    cache_creation:3.75,    cache_read:0.30,  output:15},
     haiku:     {input:1,    cache_creation:1.25,    cache_read:0.10,  output:5},
     opus_3:    {input:15,   cache_creation:18.75,   cache_read:1.50,  output:75},
     haiku_3:   {input:0.25, cache_creation:0.3125,  cache_read:0.025, output:1.25},
     haiku_3_5: {input:0.80, cache_creation:1.00,    cache_read:0.08,  output:4.00} };
 def family($m):
-  if   ($m | startswith("claude-opus") or startswith("claude-3-opus")) then "opus"
+  if   ($m | startswith("claude-fable") or startswith("claude-mythos")) then "fable"
+  elif ($m | startswith("claude-opus") or startswith("claude-3-opus")) then "opus"
   elif ($m | startswith("claude-sonnet")
          or startswith("claude-3-sonnet")
          or startswith("claude-3-5-sonnet")

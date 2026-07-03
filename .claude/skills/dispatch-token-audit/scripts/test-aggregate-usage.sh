@@ -391,6 +391,8 @@ assert_eq "price_model.input_per_mtok (proxy unchanged)" "15" \
   "$(jq '.price_model.input_per_mtok' <<<"$OUT")"
 assert_eq "price_model.actual_rates_per_mtok.opus.output" "25" \
   "$(jq '.price_model.actual_rates_per_mtok.opus.output' <<<"$OUT")"
+assert_eq "price_model.actual_rates_per_mtok.fable.output" "50" \
+  "$(jq '.price_model.actual_rates_per_mtok.fable.output' <<<"$OUT")"
 
 assert_eq "by_session_type.worker.sessions" "1" \
   "$(jq '.by_session_type.worker.sessions' <<<"$OUT")"
@@ -869,6 +871,49 @@ assert_eq 'by_model["claude-haiku-4-5"].cost_usd (haiku)' "$EXPECTED_HAIKU_COST"
   "$(jq '.by_model["claude-haiku-4-5"].cost_usd' <<<"$OUT_HAIKU")"
 
 rm -rf "$HAIKU_ROOT"
+
+# ---------------------------------------------------------------------------
+# Fable per-model cost (#2737). ISOLATED fixture: a worker session whose
+# assistant message carries `claude-fable-5` with distinct nonzero usage in
+# ALL FOUR components. This is the ONLY coverage of family()'s
+# `startswith("claude-fable")` branch and the ACTUAL_RATES.fable row — before
+# that branch existed, any fable session in the window aborted the whole
+# aggregation via the unpriceable-model guard. Distinct counts make a rate
+# swap between any two fable components visible; the expected value uses the
+# full four-term formula at fable rates (10 / 12.50 / 1.00 / 50 per Mtok).
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "--- fable per-model cost (#2737) ---"
+
+FABLE_ROOT=$(mktemp -d)
+trap 'rm -rf "$FABLE_ROOT" "$FAKE_WRITER_DIR"; teardown' EXIT INT TERM
+fable_worktree="$FABLE_ROOT/-home-x-worktrees-2737-fable"
+mkdir -p "$fable_worktree"
+fable_jsonl="$fable_worktree/sess-fable.jsonl"
+
+# line 1: first user line — classifies as worker
+printf '%s\n' '{"type":"user","message":{"content":"<command-name>/plan-issue</command-name>"}}' \
+  >> "$fable_jsonl"
+# line 2: assistant — claude-fable-5, distinct nonzero usage in all four components
+printf '%s\n' '{"type":"assistant","attributionSkill":"plan-implement","isSidechain":false,"gitBranch":"2737-fable","message":{"model":"claude-fable-5","usage":{"input_tokens":1000,"cache_creation_input_tokens":2000,"cache_read_input_tokens":4000,"output_tokens":500}}}' \
+  >> "$fable_jsonl"
+jq . "$fable_jsonl" >/dev/null
+touch "$fable_jsonl"
+
+OUT_FABLE=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$FABLE_ROOT"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
+)
+
+# Fable rates: input 10 / cache_creation 12.50 / cache_read 1.00 / output 50 per Mtok.
+EXPECTED_FABLE_COST=$(jq -n '(1000*10 + 2000*12.50 + 4000*1.00 + 500*50)/1e6')
+assert_eq "sessions[sess-fable].cost_usd (fable)" "$EXPECTED_FABLE_COST" \
+  "$(jq '[.sessions[]|select(.id=="sess-fable")][0].cost_usd' <<<"$OUT_FABLE")"
+assert_eq 'by_model["claude-fable-5"].cost_usd (fable)' "$EXPECTED_FABLE_COST" \
+  "$(jq '.by_model["claude-fable-5"].cost_usd' <<<"$OUT_FABLE")"
+
+rm -rf "$FABLE_ROOT"
 
 # ---------------------------------------------------------------------------
 # Claude 3 classification + generation-aware pricing + no-abort completeness
