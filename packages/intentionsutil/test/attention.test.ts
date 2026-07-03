@@ -25,20 +25,20 @@ function anode(partial: Partial<IntentionNode> & { id: string; kind: string }): 
   };
 }
 
-/** Shorthand for a well-formed attention injection with the given weight. */
-function attn(weight: number, extra: Partial<Attention> = {}): Attention {
-  return {
-    weight,
-    rationale: extra.rationale ?? "because",
-    subordinate_to: extra.subordinate_to ?? [],
-    review_trigger: extra.review_trigger ?? (weight === 0 ? "when unblocked" : null),
-  };
+/** A relative boost injection. */
+function boost(amount: number, rationale = "because"): Attention {
+  return { boost: amount, override: null, rationale };
+}
+
+/** An absolute branch-capping override injection. */
+function override(amount: number, rationale = "because"): Attention {
+  return { boost: null, override: amount, rationale };
 }
 
 /**
  * The kind nodes every fixture needs. Eligibility is data: kind-strategy and
  * kind-tactic set `goal_layer: true`, kind-virtue and kind-kind do not. So
- * strategies and tactics are eligible for a flow entry; virtues and kind nodes
+ * strategies and tactics are eligible for a rank entry; virtues and kind nodes
  * never are.
  */
 function kinds(): IntentionNode[] {
@@ -61,24 +61,17 @@ function kinds(): IntentionNode[] {
 }
 
 describe("resolveAttention eligibility", () => {
-  it("gives an injected node value > 0 with itself in sources, and no entry to ineligible nodes", () => {
+  it("ranks a boosted node by its boost with itself in sources; ineligible nodes get no entry", () => {
     const nodes = [
       ...kinds(),
       anode({ id: "virtue-root", kind: "virtue", status: "codified" }),
-      anode({
-        id: "strategy-1",
-        kind: "strategy",
-        serves: ["virtue-root"],
-        attention: attn(5),
-      }),
+      anode({ id: "strategy-1", kind: "strategy", serves: ["virtue-root"], attention: boost(5) }),
     ];
 
     const result = resolveAttention(nodes);
 
-    // Only the eligible, injected strategy gets an entry.
     expect(result.size).toBe(1);
     const s = result.get("strategy-1");
-    expect(s).toBeDefined();
     expect(s?.value).toBe(5);
     expect(s?.sources).toEqual(["strategy-1"]);
 
@@ -89,136 +82,136 @@ describe("resolveAttention eligibility", () => {
     expect(result.has("kind-tactic")).toBe(false);
     expect(result.has("kind-virtue")).toBe(false);
   });
+
+  it("gives an eligible node with no injection a value-0 entry with empty sources", () => {
+    const nodes = [
+      ...kinds(),
+      anode({ id: "strategy-quiet", kind: "strategy" }),
+    ];
+
+    const result = resolveAttention(nodes);
+    expect(result.get("strategy-quiet")).toEqual({ value: 0, sources: [] });
+  });
 });
 
-describe("resolveAttention flow", () => {
-  it("splits a strategy's flow evenly among its children while retaining its own rank", () => {
-    // strategy-parent (weight 6, serves a virtue → provenance 1) has 3 children:
-    // two sub-strategies via `parent` and one tactic via `serves`. Each child
-    // receives 6 / 3 = 2, while the strategy itself retains value 6.
+describe("resolveAttention boost (undecayed, undiluted)", () => {
+  it("ranks a boosted node and all its descendants at the full boost, at any depth", () => {
+    // strategy-parent boost 6 has three children (two via parent, one via
+    // serves) and one grandchild. None dilutes: every descendant reads 6.
     const nodes = [
       ...kinds(),
       anode({ id: "virtue-root", kind: "virtue", status: "codified" }),
-      anode({
-        id: "strategy-parent",
-        kind: "strategy",
-        serves: ["virtue-root"],
-        attention: attn(6),
-      }),
+      anode({ id: "strategy-parent", kind: "strategy", serves: ["virtue-root"], attention: boost(6) }),
       anode({ id: "sub-1", kind: "strategy", parent: "strategy-parent" }),
       anode({ id: "sub-2", kind: "strategy", parent: "strategy-parent" }),
       anode({ id: "tactic-1", kind: "tactic", serves: ["strategy-parent"] }),
+      anode({ id: "grand-1", kind: "strategy", parent: "sub-1" }),
     ];
 
     const result = resolveAttention(nodes);
-
-    expect(result.get("strategy-parent")?.value).toBe(6);
-    expect(result.get("sub-1")?.value).toBe(2);
-    expect(result.get("sub-2")?.value).toBe(2);
-    expect(result.get("tactic-1")?.value).toBe(2);
-    // A child's inherited share carries the parent's source.
-    expect(result.get("sub-1")?.sources).toEqual(["strategy-parent"]);
-  });
-
-  it("discounts an injection whose chain reaches no virtue by PROVENANCE_DISCOUNT (0.5)", () => {
-    const nodes = [
-      ...kinds(),
-      // No serves/parent chain to any virtue → provenance 0.5.
-      anode({ id: "strategy-orphan", kind: "strategy", attention: attn(10) }),
-    ];
-
-    const result = resolveAttention(nodes);
-    expect(result.get("strategy-orphan")?.value).toBe(5); // 10 * 0.5
-  });
-
-  it("damps an injection with a non-empty subordinate_to by SUBORDINATION_DAMP (0.25), stacking with the provenance discount", () => {
-    const nodes = [
-      ...kinds(),
-      anode({ id: "virtue-root", kind: "virtue", status: "codified" }),
-      // Reaches a virtue (provenance 1) but is subordinate → 8 * 1 * 0.25 = 2.
-      anode({
-        id: "strategy-sub",
-        kind: "strategy",
-        serves: ["virtue-root"],
-        attention: attn(8, { subordinate_to: ["virtue-root"] }),
-      }),
-      // Reaches no virtue AND subordinate → 8 * 0.5 * 0.25 = 1.
-      anode({
-        id: "strategy-both",
-        kind: "strategy",
-        attention: attn(8, { subordinate_to: ["virtue-root"] }),
-      }),
-    ];
-
-    const result = resolveAttention(nodes);
-    expect(result.get("strategy-sub")?.value).toBe(2);
-    expect(result.get("strategy-both")?.value).toBe(1);
-  });
-});
-
-describe("resolveAttention banding", () => {
-  it("bands a weight-0 (explicitly deferred) node as bottom when another node carries a positive injection", () => {
-    const nodes = [
-      ...kinds(),
-      anode({ id: "virtue-root", kind: "virtue", status: "codified" }),
-      anode({
-        id: "strategy-active",
-        kind: "strategy",
-        serves: ["virtue-root"],
-        attention: attn(5),
-      }),
-      anode({
-        id: "strategy-deferred",
-        kind: "strategy",
-        serves: ["virtue-root"],
-        attention: attn(0),
-      }),
-    ];
-
-    const result = resolveAttention(nodes);
-    const deferred = result.get("strategy-deferred");
-    expect(deferred?.value).toBe(0);
-    expect(deferred?.band).toBe("bottom");
-  });
-
-  it("bands every eligible node middle with value 0 when there are no injections anywhere", () => {
-    const nodes = [
-      ...kinds(),
-      anode({ id: "strategy-a", kind: "strategy" }),
-      anode({ id: "strategy-b", kind: "strategy" }),
-    ];
-
-    const result = resolveAttention(nodes);
-    for (const id of ["strategy-a", "strategy-b"]) {
-      expect(result.get(id)?.value).toBe(0);
-      expect(result.get(id)?.band).toBe("middle");
+    for (const id of ["strategy-parent", "sub-1", "sub-2", "tactic-1", "grand-1"]) {
+      expect(result.get(id)?.value).toBe(6);
+      expect(result.get(id)?.sources).toEqual(["strategy-parent"]);
     }
   });
 
-  it("assigns top / middle / bottom by the mean-of-nonzero-flows thresholds", () => {
-    // Five independent strategies serving the same virtue (each retains its own
-    // injection; the virtue carries zero flow). Flows {20, 2, 1, 1, 1} have
-    // mean 5, so BAND_HIGH*mean = 20 and BAND_LOW*mean = 1.25:
-    //   20 >= 20        → top
-    //   1.25 < 2 < 20   → middle
-    //   1 <= 1.25       → bottom
+  it("adds two parents' claims on a shared child", () => {
     const nodes = [
       ...kinds(),
       anode({ id: "virtue-root", kind: "virtue", status: "codified" }),
-      anode({ id: "s-top", kind: "strategy", serves: ["virtue-root"], attention: attn(20) }),
-      anode({ id: "s-mid", kind: "strategy", serves: ["virtue-root"], attention: attn(2) }),
-      anode({ id: "s-bot-1", kind: "strategy", serves: ["virtue-root"], attention: attn(1) }),
-      anode({ id: "s-bot-2", kind: "strategy", serves: ["virtue-root"], attention: attn(1) }),
-      anode({ id: "s-bot-3", kind: "strategy", serves: ["virtue-root"], attention: attn(1) }),
+      anode({ id: "s1", kind: "strategy", serves: ["virtue-root"], attention: boost(2) }),
+      anode({ id: "s2", kind: "strategy", serves: ["virtue-root"], attention: boost(6) }),
+      // child draws from s1 (parent) and s2 (serves).
+      anode({ id: "child", kind: "strategy", parent: "s1", serves: ["s2"] }),
     ];
 
     const result = resolveAttention(nodes);
-    expect(result.get("s-top")?.value).toBe(20);
-    expect(result.get("s-top")?.band).toBe("top");
-    expect(result.get("s-mid")?.value).toBe(2);
-    expect(result.get("s-mid")?.band).toBe("middle");
-    expect(result.get("s-bot-1")?.value).toBe(1);
-    expect(result.get("s-bot-1")?.band).toBe("bottom");
+    const child = result.get("child");
+    expect(child?.value).toBe(8);
+    expect(child?.sources).toEqual(["s2", "s1"]); // ordered by contribution desc
+  });
+
+  it("counts a source reached via two paths (a diamond) exactly once", () => {
+    // top boost 4 reaches bottom via mid1 (parent chain) AND mid2 (serves
+    // chain). The union dedupes by source id, so bottom reads 4, not 8.
+    const nodes = [
+      ...kinds(),
+      anode({ id: "virtue-root", kind: "virtue", status: "codified" }),
+      anode({ id: "top", kind: "strategy", serves: ["virtue-root"], attention: boost(4) }),
+      anode({ id: "mid1", kind: "strategy", parent: "top" }),
+      anode({ id: "mid2", kind: "strategy", serves: ["top"] }),
+      anode({ id: "bottom", kind: "strategy", parent: "mid1", serves: ["mid2"] }),
+    ];
+
+    const result = resolveAttention(nodes);
+    expect(result.get("bottom")?.value).toBe(4);
+    expect(result.get("bottom")?.sources).toEqual(["top"]);
+  });
+
+  it("adds a boost on a child of a boosted ancestor (relative boost)", () => {
+    const nodes = [
+      ...kinds(),
+      anode({ id: "virtue-root", kind: "virtue", status: "codified" }),
+      anode({ id: "anc", kind: "strategy", serves: ["virtue-root"], attention: boost(3) }),
+      anode({ id: "mid", kind: "strategy", parent: "anc", attention: boost(2) }),
+      anode({ id: "leaf", kind: "strategy", parent: "mid" }),
+    ];
+
+    const result = resolveAttention(nodes);
+    // mid carries the ancestor's 3 PLUS its own 2.
+    expect(result.get("mid")?.value).toBe(5);
+    expect(result.get("mid")?.sources).toEqual(["anc", "mid"]);
+    // leaf inherits both, undiluted.
+    expect(result.get("leaf")?.value).toBe(5);
+    expect(result.get("leaf")?.sources).toEqual(["anc", "mid"]);
+  });
+});
+
+describe("resolveAttention override (branch cap)", () => {
+  it("caps its own branch while a second parent's claim still adds — T reads 8, not 2", () => {
+    // S1 boosts 10; C overrides that branch down to 2 (its own rank). D hangs
+    // only off C, so D reads the capped 2. S2 boosts 6 independently. T draws
+    // from both C (capped 2) and S2 (6), so T reads 8 — the override caps its
+    // branch, it does not silence T's other parent.
+    const nodes = [
+      ...kinds(),
+      anode({ id: "virtue-root", kind: "virtue", status: "codified" }),
+      anode({ id: "s1", kind: "strategy", serves: ["virtue-root"], attention: boost(10) }),
+      anode({ id: "c", kind: "strategy", parent: "s1", attention: override(2) }),
+      anode({ id: "d", kind: "strategy", parent: "c" }),
+      anode({ id: "s2", kind: "strategy", serves: ["virtue-root"], attention: boost(6) }),
+      anode({ id: "t", kind: "strategy", parent: "c", serves: ["s2"] }),
+    ];
+
+    const result = resolveAttention(nodes);
+    // Override value is the node's own rank (s1's 10 is discarded, not summed).
+    expect(result.get("c")?.value).toBe(2);
+    expect(result.get("c")?.sources).toEqual(["c"]);
+    // Reachable only through the override branch → capped.
+    expect(result.get("d")?.value).toBe(2);
+    expect(result.get("d")?.sources).toEqual(["c"]);
+    // Two parents, one capped: 2 + 6 = 8.
+    expect(result.get("t")?.value).toBe(8);
+    expect(result.get("t")?.sources).toEqual(["s2", "c"]);
+  });
+
+  it("resolves nested overrides — the nearest override wins for the subtree below it", () => {
+    const nodes = [
+      ...kinds(),
+      anode({ id: "virtue-root", kind: "virtue", status: "codified" }),
+      anode({ id: "root", kind: "strategy", serves: ["virtue-root"], attention: boost(100) }),
+      anode({ id: "outer", kind: "strategy", parent: "root", attention: override(5) }),
+      anode({ id: "between", kind: "strategy", parent: "outer" }),
+      anode({ id: "inner", kind: "strategy", parent: "outer", attention: override(2) }),
+      anode({ id: "leaf", kind: "strategy", parent: "inner" }),
+    ];
+
+    const result = resolveAttention(nodes);
+    expect(result.get("outer")?.value).toBe(5);
+    expect(result.get("between")?.value).toBe(5); // outer's cap
+    expect(result.get("inner")?.value).toBe(2);
+    expect(result.get("leaf")?.value).toBe(2); // nearest (inner) wins
+    expect(result.get("leaf")?.sources).toEqual(["inner"]);
   });
 });
 
@@ -240,15 +233,11 @@ describe("resolveAttention determinism", () => {
     const nodes = [
       ...kinds(),
       anode({ id: "virtue-root", kind: "virtue", status: "codified" }),
-      anode({
-        id: "strategy-parent",
-        kind: "strategy",
-        serves: ["virtue-root"],
-        attention: attn(6),
-      }),
-      anode({ id: "sub-1", kind: "strategy", parent: "strategy-parent" }),
-      anode({ id: "sub-2", kind: "strategy", parent: "strategy-parent" }),
-      anode({ id: "tactic-1", kind: "tactic", serves: ["strategy-parent"] }),
+      anode({ id: "s1", kind: "strategy", serves: ["virtue-root"], attention: boost(2) }),
+      anode({ id: "s2", kind: "strategy", serves: ["virtue-root"], attention: boost(6) }),
+      anode({ id: "c", kind: "strategy", parent: "s1", attention: override(3) }),
+      anode({ id: "child", kind: "strategy", parent: "c", serves: ["s2"] }),
+      anode({ id: "tactic-1", kind: "tactic", serves: ["s2"] }),
     ];
     const shuffled = [...nodes].reverse();
 

@@ -158,8 +158,8 @@ step.
 1. **Re-prioritize by gap.** Trigger: the frontier is projected. Reads: each frontier
    node's `gap`. Output: gap-present nodes ordered ahead of gap-absent ones. Already
    realized by `intentionsutil/src/goals.ts::projectGoals`, whose primary sort key is now
-   resolved attention (the derived attention flow, descending) with gap-present
-   (`gap !== null`) first as the tie-break within equal attention. Reference it as done.
+   derived attention rank (descending) with gap-present
+   (`gap !== null`) first as the tie-break within equal rank. Reference it as done.
 
 2. **Falsify proxy goals.** Trigger: an `is_proxy` signal's reading contradicts the
    underlying intention (the proxy reads "met" while the real intention plainly is not,

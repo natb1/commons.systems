@@ -9,14 +9,8 @@ export type {
   ToolingKind,
   Attention,
 } from "./schema.js";
-export {
-  resolveAttention,
-  PROVENANCE_DISCOUNT,
-  SUBORDINATION_DAMP,
-  BAND_HIGH,
-  BAND_LOW,
-} from "./attention.js";
-export type { ResolvedAttention, AttentionBand } from "./attention.js";
+export { resolveAttention } from "./attention.js";
+export type { ResolvedAttention } from "./attention.js";
 export { IntentionSchemaError, ghErrorText } from "./errors.js";
 export { writeNode, readNode, listNodes } from "./store.js";
 export { writeTracker, readTracker, listTrackers, nodeIdToIssue, issueToNodeId } from "./tracker.js";

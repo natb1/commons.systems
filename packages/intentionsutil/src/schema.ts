@@ -40,17 +40,25 @@ export interface ToolingGoal {
 }
 
 /**
- * A user-authored attention injection: a weight plus the rationale for why
- * this node draws (or defers) attention now. Valid only on goal-layer kinds
- * (those whose kind node sets `attributes.goal_layer: true`) — enforced by
- * `validateGraph`, not here. The resolved flow this seeds is derived on read
- * by `resolveAttention` and is NEVER stored in frontmatter.
+ * A user-authored attention injection. Exactly one of `boost` / `override` is
+ * non-null (authored YAML supplies one key); the other is `null`.
+ *
+ *  - `boost` adds `(self, boost)` to this node's outgoing source set — a
+ *    RELATIVE claim that survives upstream re-weighting. Must be finite and
+ *    `> 0` (a zero boost is meaningless; use `override: 0` to explicitly zero a
+ *    branch).
+ *  - `override` REPLACES this node's outgoing set with `{(self, override)}` —
+ *    an ABSOLUTE cap on this node's own branch. Must be finite and `>= 0`.
+ *
+ * Valid only on goal-layer kinds (those whose kind node sets
+ * `attributes.goal_layer: true`) — enforced by `validateGraph`, not here. The
+ * rank this seeds is derived on read by `resolveAttention` and is NEVER stored
+ * in frontmatter.
  */
 export interface Attention {
-  weight: number; // finite, >= 0; any scale — only ratios matter
-  rationale: string;
-  subordinate_to: string[]; // node ids whose claims outrank this one
-  review_trigger: string | null; // required when weight === 0 (explicit deferral)
+  boost: number | null; // finite, > 0 when present
+  override: number | null; // finite, >= 0 when present
+  rationale: string; // required, non-empty
 }
 
 // --- Node ------------------------------------------------------------------
@@ -222,31 +230,50 @@ function validateAttention(value: unknown, field: string): Attention {
   if (!isPlainObject(value)) {
     throw new IntentionSchemaError(`Expected object for ${field}, got ${typeof value}`);
   }
-  if (typeof value.weight !== "number" || !Number.isFinite(value.weight)) {
-    throw new IntentionSchemaError(`Expected finite number for ${field}.weight`);
+
+  const hasBoost = value.boost != null;
+  const hasOverride = value.override != null;
+  if (hasBoost && hasOverride) {
+    throw new IntentionSchemaError(
+      `${field} must set exactly one of boost/override, not both`,
+    );
   }
-  if (value.weight < 0) {
-    throw new IntentionSchemaError(`${field}.weight must be >= 0, got ${value.weight}`);
+  if (!hasBoost && !hasOverride) {
+    throw new IntentionSchemaError(
+      `${field} must set exactly one of boost/override, got neither`,
+    );
   }
+
+  let boost: number | null = null;
+  let override: number | null = null;
+  if (hasBoost) {
+    if (typeof value.boost !== "number" || !Number.isFinite(value.boost)) {
+      throw new IntentionSchemaError(`Expected finite number for ${field}.boost`);
+    }
+    if (value.boost <= 0) {
+      throw new IntentionSchemaError(
+        `${field}.boost must be > 0, got ${value.boost} (use override: 0 to explicitly zero a branch)`,
+      );
+    }
+    boost = value.boost;
+  } else {
+    if (typeof value.override !== "number" || !Number.isFinite(value.override)) {
+      throw new IntentionSchemaError(`Expected finite number for ${field}.override`);
+    }
+    if (value.override < 0) {
+      throw new IntentionSchemaError(
+        `${field}.override must be >= 0, got ${value.override}`,
+      );
+    }
+    override = value.override;
+  }
+
   const rationale = requireString(value.rationale, `${field}.rationale`);
   if (rationale === "") {
     throw new IntentionSchemaError(`${field}.rationale must be a non-empty string`);
   }
-  const review_trigger = optionalString(value.review_trigger, `${field}.review_trigger`);
-  // Weight 0 is the explicit-deferral form; a deferral without a re-open
-  // condition is the old undefined "deferred for a cycle".
-  if (value.weight === 0 && review_trigger === null) {
-    throw new IntentionSchemaError(`${field}.review_trigger is required when ${field}.weight is 0`);
-  }
-  return {
-    weight: value.weight,
-    rationale,
-    subordinate_to:
-      value.subordinate_to == null
-        ? []
-        : validateIdArray(value.subordinate_to, `${field}.subordinate_to`),
-    review_trigger,
-  };
+
+  return { boost, override, rationale };
 }
 
 // --- Validator -------------------------------------------------------------
@@ -325,8 +352,7 @@ export function validateNode(value: unknown): IntentionNode {
  *   2. Every non-null `parent` resolves to an existing node id.
  *   3. Every `serves` entry resolves to an existing node id.
  *   4. Every `recovers` entry resolves to an existing node id.
- *   5. Every `attention.subordinate_to` entry resolves to an existing node id.
- *   6. `attention` appears only on nodes whose kind node sets
+ *   5. `attention` appears only on nodes whose kind node sets
  *      `attributes.goal_layer: true`. The eligible layer is data (the kind
  *      nodes), not a kind list in this file — virtues stay unranked because
  *      kind-virtue carries no goal_layer flag, not because code names it.
@@ -356,13 +382,6 @@ export function validateGraph(nodes: IntentionNode[]): void {
       }
     }
     if (node.attention !== null) {
-      for (const target of node.attention.subordinate_to) {
-        if (!ids.has(target)) {
-          problems.push(
-            `${node.id}: subordinate_to "${target}" does not resolve to a node`,
-          );
-        }
-      }
       const kindNode = byId.get(`kind-${node.kind}`);
       if (kindNode !== undefined && kindNode.attributes.goal_layer !== true) {
         problems.push(

@@ -69,7 +69,7 @@ authoritative data.
 | `clarifications` | `Clarification[]`     | no       | Q&A pairs resolved during the dialectic. Defaults to `[]`. |
 | `tooling_goals`  | `ToolingGoal[]`       | no       | Tooling the node aims to produce or change. Defaults to `[]`. |
 | `success_signal` | `SuccessSignal \| null` | no     | A measurable signal the intention is met. Defaults to `null`. |
-| `attention`      | `Attention \| null`   | no       | A user-authored attention injection (weight + rationale). Valid only on goal-layer kinds, enforced by `validateGraph`. The resolved flow it seeds is derived on read by `resolveAttention` and never stored. Defaults to `null`. |
+| `attention`      | `Attention \| null`   | no       | A user-authored attention injection (a `boost` XOR an `override`, plus a rationale). Valid only on goal-layer kinds, enforced by `validateGraph`. The rank it seeds is derived on read by `resolveAttention` and never stored. Defaults to `null`. |
 | `attributes`     | `Record<string, unknown>` | no   | Kind-specific fields (e.g. a delegation's divergence/irreversibility assessment). Validated as a plain object; the meaning of its entries is defined by the node's kind node. Defaults to `{}`. |
 
 ### `SuccessSignal`
@@ -97,15 +97,18 @@ authoritative data.
 
 ### `Attention`
 
-A user-authored injection that seeds the derived attention flow. Valid only on
-goal-layer kinds (see Graph-level validation).
+A user-authored injection that seeds the derived rank. Exactly one of `boost` /
+`override` is set (the authored YAML supplies one key; the other resolves to
+`null`). Valid only on goal-layer kinds (see Graph-level validation).
 
-| Name             | Type              | Meaning |
-| ---------------- | ----------------- | ------- |
-| `weight`         | `number`          | The injected weight. Must be finite and `>= 0`; any scale — only ratios matter. |
-| `rationale`      | `string`          | Why this node draws (or defers) attention now. Must be non-empty. |
-| `subordinate_to` | `string[]`        | `id`s of nodes whose claims outrank this one. While non-empty, the injection is damped. Defaults to `[]`. |
-| `review_trigger` | `string \| null`  | The condition that re-opens an explicit deferral. **Required when `weight` is 0** (deferral without a re-open condition is rejected); otherwise `null`. |
+| Name         | Type              | Meaning |
+| ------------ | ----------------- | ------- |
+| `boost`      | `number \| null`  | A RELATIVE claim: adds `(self, boost)` to this node's outgoing source set, surviving upstream re-weighting. Must be finite and `> 0` (a zero boost is meaningless — use `override: 0` to explicitly zero a branch). `null` when `override` is set. |
+| `override`   | `number \| null`  | An ABSOLUTE cap: replaces this node's outgoing set with `{(self, override)}`, capping its own branch only (a descendant's other parents still contribute). Must be finite and `>= 0`. `null` when `boost` is set. |
+| `rationale`  | `string`          | Why this node draws (or defers) attention now. Must be non-empty. |
+
+Setting both `boost` and `override`, or neither, is rejected by
+`validateAttention`.
 
 ## Enums
 
@@ -151,12 +154,10 @@ nodes as invalid.
 `validateGraph(nodes)` checks referential integrity across a whole node set:
 every node's `kind` has its defining `kind-<kind>` node present, and every
 non-null `parent` and every `serves` and `recovers` entry resolves to an
-existing node id. It also checks the `attention` edges: every
-`attention.subordinate_to` entry resolves to an existing node id, and
-`attention` appears only on nodes whose kind node sets
-`attributes.goal_layer: true`. The eligible layer is data (the kind nodes), not
-a kind list in this file — virtues stay unranked because `kind-virtue` carries
-no `goal_layer` flag, not because code names it. It
+existing node id. It also checks that `attention` appears only on nodes whose
+kind node sets `attributes.goal_layer: true`. The eligible layer is data (the
+kind nodes), not a kind list in this file — virtues stay unranked because
+`kind-virtue` carries no `goal_layer` flag, not because code names it. It
 throws one error listing all violations. Backfill runs it over the full store
 after regenerating the tactic leaves.
 
@@ -175,14 +176,19 @@ by design — only the frontmatter is authoritative.
 
 ## Derived attention is never stored
 
-The `attention` field is a user-authored *injection* — only the weight,
-rationale, and edges the author writes. The resolved flow and band that
-`resolveAttention` computes from it are derived on read and NEVER enter
-frontmatter. This contrasts with `gap`, which `deriveGap` computes from
-same-file inputs (`reading` vs `success_signal.threshold`): storing `gap` is
-safe because it is a local function of one node's own fields. Attention is a
-*global* function of the whole graph — a node's flow depends on every other
-node's injections and edges — so storing it would go stale on any edit
-elsewhere in the graph. It is recomputed from the authoritative injections each
-time it is read, the same intent/derivation discipline as `intentions/`
-(authored intent) vs `trackers/` (derived execution state).
+The `attention` field is a user-authored *injection* — only the `boost` or
+`override` and its rationale the author writes. The resolved rank that
+`resolveAttention` computes from it is derived on read and NEVER enters
+frontmatter. `resolveAttention` accumulates, per node, a set of
+`(source-node, amount)` pairs flowing DOWN `parent` + `serves` edges — undecayed
+and undiluted, each authored source counted once per node — and a node's rank is
+the sum of its own set (a `boost` adds `(self, boost)`; an `override` replaces
+the set with `{(self, override)}`, capping its branch). This contrasts with
+`gap`, which `deriveGap` computes from same-file inputs (`reading` vs
+`success_signal.threshold`): storing `gap` is safe because it is a local function
+of one node's own fields. Attention is a *global* function of the whole graph —
+a node's rank depends on every ancestor's injections and edges — so storing it
+would go stale on any edit elsewhere in the graph. It is recomputed from the
+authoritative injections each time it is read, the same intent/derivation
+discipline as `intentions/` (authored intent) vs `trackers/` (derived execution
+state).

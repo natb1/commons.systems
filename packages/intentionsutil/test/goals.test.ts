@@ -147,7 +147,7 @@ describe("projectGoals attention ordering", () => {
       id: "strategy-s",
       kind: "strategy",
       status: "raw",
-      attention: { weight: 10, rationale: "urgent", subordinate_to: [], review_trigger: null },
+      attention: { boost: 10, override: null, rationale: "urgent" },
     });
     // The frontier leaf that inherits the strategy's flow. Highest id, no gap —
     // so gap/id keys alone would rank it LAST.
@@ -166,7 +166,7 @@ describe("projectGoals attention ordering", () => {
       id: "t-eligible",
       kind: "tactic",
       status: "raw",
-      attention: { weight: 10, rationale: "r", subordinate_to: [], review_trigger: null },
+      attention: { boost: 10, override: null, rationale: "r" },
     });
     // kind "note" has no goal_layer flag → not eligible → no resolver entry.
     const ineligible = node({ id: "n-note", kind: "note", status: "raw" });
@@ -180,38 +180,38 @@ describe("projectGoals attention ordering", () => {
 });
 
 describe("renderFrontier attention markers", () => {
-  it("emits `[top via <id>]` for a top-band goal and no marker for a middle goal", () => {
-    // Drive renderFrontier from Goal literals directly: it reads only `band`
+  it("emits `[rank <value> via <id>]` for value > 0 and no marker for value = 0", () => {
+    // Drive renderFrontier from Goal literals directly: it reads only `value`
     // and `sources[0]`, so this decouples the marker assertion from the
-    // resolver's scale-invariant banding math.
+    // resolver's additive-rank math.
     const goals: Goal[] = [
       {
-        node: node({ id: "top-goal", status: "raw" }),
+        node: node({ id: "hi-goal", status: "raw" }),
         realization: "issue-or-pr",
-        attention: { value: 20, band: "top", sources: ["strategy-x"] },
+        attention: { value: 20, sources: ["strategy-x"] },
       },
       {
-        node: node({ id: "mid-goal", status: "raw" }),
+        node: node({ id: "lo-goal", status: "raw" }),
         realization: "issue-or-pr",
-        attention: { value: 1, band: "middle", sources: ["strategy-y"] },
+        attention: { value: 0, sources: [] },
       },
     ];
     expect(renderFrontier(goals)).toBe(
-      "- **top-goal** — Statement for top-goal _(owner: human → issue/PR)_ [top via strategy-x]\n" +
-        "- **mid-goal** — Statement for mid-goal _(owner: human → issue/PR)_\n",
+      "- **hi-goal** — Statement for hi-goal _(owner: human → issue/PR)_ [rank 20 via strategy-x]\n" +
+        "- **lo-goal** — Statement for lo-goal _(owner: human → issue/PR)_\n",
     );
   });
 
-  it("emits a bare `[bottom]` marker when sources is empty", () => {
+  it("emits a bare `[rank <value>]` marker when sources is empty and value > 0", () => {
     const goals: Goal[] = [
       {
-        node: node({ id: "b-goal", status: "raw" }),
+        node: node({ id: "r-goal", status: "raw" }),
         realization: "issue-or-pr",
-        attention: { value: 0, band: "bottom", sources: [] },
+        attention: { value: 5, sources: [] },
       },
     ];
     expect(renderFrontier(goals)).toBe(
-      "- **b-goal** — Statement for b-goal _(owner: human → issue/PR)_ [bottom]\n",
+      "- **r-goal** — Statement for r-goal _(owner: human → issue/PR)_ [rank 5]\n",
     );
   });
 

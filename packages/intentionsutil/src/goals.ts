@@ -104,16 +104,25 @@ function renderRealization(realization: Realization): string {
 }
 
 /**
+ * Format a rank value with up to 2 decimal places, trailing zeros trimmed.
+ * Examples: 20 → "20", 1.5 → "1.5", 0.25 → "0.25".
+ */
+function formatRank(value: number): string {
+  return parseFloat(value.toFixed(2)).toString();
+}
+
+/**
  * Render the projected goals as deterministic markdown, one line per goal in
  * `projectGoals` order. The output is byte-stable across repeated calls with
  * the same input: no dates, no wall-clock, no environment data. Ends with a
  * trailing newline.
  *
- * Each non-`middle` band gets a marker appended after the `_(owner: … → …)_`
- * segment and before the gap suffix: ` [<band> via <sources[0]>]` naming the
- * top contributing source, or ` [<band>]` when `sources` is empty. `middle`
- * (and no-attention) goals render unmarked, so a store with no injection
- * anywhere is byte-identical to the pre-attention render.
+ * Goals with `value > 0` get a rank marker appended after the
+ * `_(owner: … → …)_` segment and before the gap suffix:
+ * ` [rank <value> via <sources[0]>]` naming the top contributing source, or
+ * ` [rank <value>]` when `sources` is empty. Value 0 / null renders unmarked,
+ * so a store with no injection anywhere is byte-identical to the pre-attention
+ * render.
  */
 export function renderFrontier(goals: Goal[]): string {
   if (goals.length === 0) {
@@ -121,11 +130,12 @@ export function renderFrontier(goals: Goal[]): string {
   }
   const lines = goals.map(({ node, realization, attention }) => {
     let line = `- **${node.id}** — ${node.statement} _(owner: ${node.owner} → ${renderRealization(realization)})_`;
-    if (attention !== null && attention.band !== "middle") {
+    if (attention !== null && attention.value > 0) {
+      const rank = formatRank(attention.value);
       line +=
         attention.sources.length > 0
-          ? ` [${attention.band} via ${attention.sources[0]}]`
-          : ` [${attention.band}]`;
+          ? ` [rank ${rank} via ${attention.sources[0]}]`
+          : ` [rank ${rank}]`;
     }
     if (node.gap !== null) line += ` — gap: ${node.gap}`;
     return line;
