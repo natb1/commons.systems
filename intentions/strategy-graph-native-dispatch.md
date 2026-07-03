@@ -174,6 +174,35 @@ clarifications:
       lands, the hook still rejects node-id names — graph-native sessions must
       borrow a numeric anchor, which this requirement removes. Recorded
       2026-07-03 from author direction."
+  - question: Can workers execute nodes concurrently — and what stops two workers
+      claiming the same node?
+    answer: "Concurrency is a first-class requirement, not an inherited detail: the
+      router runs up to the paced worker target in parallel across eligible
+      non-parked nodes of both kinds — tactic phase sessions and strategy
+      /align-tactics sessions. Claiming and isolation are uniform by node id:
+      every launched worker enters the one claimed set / reservation ledger
+      under its node id — strategy ids included, so an in-flight /align-tactics
+      session claims its strategy and closes the duplicate-spawn window while
+      its tactics have not yet landed on origin/main — and runs in a worktree
+      keyed by that id, giving liveness detection (live session ⇔ worktree) one
+      rule for both kinds. Write safety stays the single-node rebase-retry
+      commit path (clarification 2). Recorded 2026-07-03 interview."
+  - question: Does the graph-native router keep the legacy pace function — and where
+      does its priority override live?
+    answer: "Full parity, machinery unchanged and outside the graph:
+      dispatch-target-workers' weekly cumulative pace curve stays the binary
+      spend gate (whether to spend) and the 5-hour linear ramp decides how many
+      concurrent workers (0..max_concurrent_workers); telemetry
+      (rate_limits.json) and tunables stay operational config — the graph
+      records the requirement, not the machinery, since rate-limit telemetry is
+      machine state, not intent. One pace budget spans both routers during
+      coexistence and counts strategy sessions as workers. The legacy priority
+      label maps to a first-class authored pace-exempt flag on goal-layer nodes
+      (schema home: tactic-graph-dispatch-schema), deliberately orthogonal to
+      attention ordering: it admits one gate-exempt worker past a paced-to-zero
+      budget — it bypasses the gate, not the count or the order — and never
+      overrides genuine token exhaustion (the --exhausted hard floor,
+      main-broken parity). Recorded 2026-07-03 interview."
 tooling_goals:
   - kind: actuator
     statement: /align-strategy — interview-driven strategy recording, superseding
