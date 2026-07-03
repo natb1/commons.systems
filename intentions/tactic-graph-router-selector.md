@@ -1,0 +1,109 @@
+---
+id: tactic-graph-router-selector
+kind: tactic
+statement: "router v2 (a): graph selector beside the legacy selector —
+  eligibility gates, resolved-rank order, phase ladder, node-id worktree keys"
+owner: ai
+status: codified
+parent: tactic-graph-native-dispatch
+rationale: "First half of the router migration: selection reads the graph at
+  origin/main under the existing lock, pace budget, and heartbeat; the legacy
+  selector keeps draining gh under the same lock. Emits the selection log the
+  strategy's sensor reads."
+reading: null
+gap: null
+serves:
+  - strategy-graph-native-dispatch
+recovers: []
+clarifications: []
+tooling_goals: []
+success_signal: null
+attention: null
+attributes:
+  phase: implement
+  blocked_by:
+    - tactic-graph-dispatch-schema
+    - tactic-align-tactics-skill
+---
+# router v2 (a): graph selector beside the legacy selector — eligibility gates, resolved-rank order, phase ladder, node-id worktree keys
+
+## Context
+
+Router v2, first half: selection. The graph selector runs beside the legacy
+gh selector under the same lock, pace budget, and claimed set; the
+`dispatch-spawn-tick` heartbeat is the seam — during coexistence the tick
+consults both selectors. Eligibility and ordering spec:
+`intentions/tactic-graph-native-dispatch.md` §3.1–3.2. The store is read at
+`origin/main` only, never a branch.
+
+## Unit 1 — graph-select-target
+
+**Recommended model:** opus
+
+Scope: new `.claude/skills/dispatch-propagate/scripts/graph-select-target`:
+- Strategy eligibility (spawns an `/align-tactics` session): `office_hours`
+  null; no non-draft child tactics; signal unvalidated (`gap` non-null or
+  `reading` null); fresh-reading gate (`rounds.count == 0` or a reading
+  newer than `rounds.last_completed`); `rounds.count < 2` — at the cap,
+  park the strategy instead.
+- Tactic eligibility (spawns its phase session): `office_hours` null;
+  `phase` not in {draft, done}; `blocked_by` fully complete (a pruned
+  blocker is complete — prune-on-done makes absence completion); phase
+  sensor gate satisfied (e.g. CI verdict present before fix/qa).
+- Order: resolved attention rank outermost — reuse
+  `packages/intentionsutil/scripts/rank-map.ts` exactly as
+  `.claude/skills/dispatch-propagate/scripts/dispatch-select-target:543`
+  does; within a rank level, phase ladder closest-to-done first:
+  review → fix → qa → implement → align-tactics(strategy).
+- Emit one selection-log line per invocation (jsonl in the dispatch state
+  dir alongside the phase log written by `dispatch-write-phase-log`) — the
+  input `tactic-dispatch-lifecycle-sensor` reads.
+
+## Unit 2 — tick consults both selectors
+
+**Recommended model:** opus
+
+Depends on: Unit 1.
+
+Scope: `.claude/skills/dispatch-propagate/scripts/dispatch-select-tick`
+(invoked by `dispatch-tick`): under the one selection lock, query
+graph-select-target first, fall back to the legacy
+`dispatch-select-target`; one claimed set and one reservation ledger
+spanning both keyspaces (node ids and issue numbers).
+
+## Unit 3 — node-id worktree keys
+
+**Recommended model:** sonnet
+
+Scope: `.claude/hooks/worktree-create.sh` — accept `<tactic-id>` worktree
+names alongside the `<issue-num>-<slug>` convention; gh-backed tactics keep
+numeric names during drain. (This removes the friction the 2739 session hit:
+a graph-native session needing a synthetic anchor issue just to name its
+worktree.)
+
+## Dependencies
+
+- `tactic-graph-dispatch-schema` — the fields the gates read.
+- `tactic-align-tactics-skill` — the session type a selected strategy
+  spawns.
+
+## Reuse
+
+- `rank-map.ts`, the selection lock, `dispatch-target-workers` pacing, and
+  the `dispatch-spawn-tick` heartbeat — all unchanged.
+
+## Verification
+
+```verify
+npm test --prefix packages/intentionsutil
+```
+
+Manual: dry-run graph-select-target against the live store — with this
+subtree present it selects nothing while `blocked_by` chains are incomplete
+and selects `tactic-graph-dispatch-schema` once its (empty) blocker set
+qualifies; a legacy gh issue still drains under the same lock in the same
+tick.
+
+## Implementation notes
+
+One subagent per unit, `model` per tag; constrain to working-tree edits.

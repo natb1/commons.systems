@@ -126,6 +126,9 @@ success_signal:
   is_proxy: false
 attention: null
 attributes:
+  rounds:
+    count: 0
+    last_completed: null
   conditions:
     - the legacy gh router only drains existing issues; no new work enters via
       gh once /align-strategy is live
