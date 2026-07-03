@@ -71,6 +71,13 @@ execution:
 ```yaml
 # on any goal-layer node (strategy or tactic)
 office_hours: { reason: "<why>", since: 2026-07-03 } | null
+pace_exempt: false             # authored pace-gate bypass (clarification 14):
+                               # admits one gate-exempt worker past a
+                               # paced-to-zero budget — bypasses the gate, not
+                               # the count or the order — and never overrides
+                               # genuine token exhaustion; the graph home of
+                               # the legacy priority label, orthogonal to
+                               # attention ordering
 ```
 
 ```yaml
@@ -290,6 +297,17 @@ Claimed-set, reservation ledger, concurrency pacing
 `dispatch-spawn-tick` heartbeat carry over unchanged — the heartbeat is the
 seam: the tick consults **both** selectors during coexistence.
 
+Pacing keeps full legacy parity (clarification 14): the weekly cumulative
+curve is the binary spend gate, the 5-hour linear ramp decides the
+concurrent worker count, and one pace budget spans both routers and both
+node kinds — a strategy's `/align-tactics` session counts as a worker.
+Telemetry and tunables stay operational config outside the graph. The
+legacy `priority` label's bypass maps to the authored `pace_exempt` flag:
+at a paced-to-zero budget the tick probes pace-exempt eligible nodes and
+admits one gate-exempt worker — bypassing the gate, not the count or the
+order — with `dispatch-target-workers --exhausted` as the hard floor no
+flag overrides (main-broken parity).
+
 ### 3.3 Coexistence and drain
 
 The two routers run in parallel over **disjoint state** — no gh↔graph
@@ -308,12 +326,19 @@ GitHub is a separate strategy; design TBD.)
   selector/phase-derivation scripts and the `dispatch:*` label
   conventions.
 
-### 3.4 Worktree anchoring
+### 3.4 Worktree anchoring and claiming
 
-The `<issue-num>-<slug>` branch convention is re-keyed to node ids:
-`<tactic-id>` becomes the branch/worktree/reservation/session key.
-Draining legacy gh work keeps its numeric form, so both keyspaces
-coexist.
+The `<issue-num>-<slug>` branch convention is re-keyed to node ids, and
+the rule is uniform across node kinds (clarifications 12–13): every
+launched worker — a tactic's phase session or a strategy's
+`/align-tactics` session — enters the one claimed set / reservation
+ledger under its node id and runs in a dedicated worktree keyed by that
+id. The strategy claim closes the duplicate-spawn window while an
+in-flight `/align-tactics` session's tactics have not yet landed on
+`origin/main` (the eligibility gates alone would still pass); the
+uniform worktree gives liveness detection (live session ⇔ worktree) one
+rule for both kinds. Draining legacy gh work keeps its numeric form, so
+both keyspaces coexist.
 
 ## 4. Coverage matrix
 
@@ -384,14 +409,18 @@ tactic-intentions-branch-protection (park) ┤                                 �
   reaches it, so the calculated-attention signal term demotes it at read
   time; no stored flag (clarifications 9/11). Round 1 had deferred it by
   omission.
-- **Re-evaluations (2026-07-03):** two same-day mid-flight strategy edits
-  (clarifications 8–10, then 11), each followed by the clarification-10
-  re-evaluation run inline because no router exists yet. The first added
-  the attention tactic and recorded the `/align-init` deferral; the second
-  replaced the banded backlog mechanism with calculated attention:
-  `tactic-signal-path-attention` was pruned and replaced by
-  `tactic-calculated-attention` (on-path — it hard-blocks legacy
-  removal), the `backlog` flag was removed from the store, and
-  `validates` edges were stamped on the two terminals.
+- **Re-evaluations (2026-07-03):** three same-day mid-flight strategy edits
+  (clarifications 8–10, then 11, then 12–14), each followed by the
+  clarification-10 re-evaluation run inline because no router exists yet.
+  The first added the attention tactic and recorded the `/align-init`
+  deferral; the second replaced the banded backlog mechanism with
+  calculated attention: `tactic-signal-path-attention` was pruned and
+  replaced by `tactic-calculated-attention` (on-path — it hard-blocks
+  legacy removal), the `backlog` flag was removed from the store, and
+  `validates` edges were stamped on the two terminals. The third recorded
+  worker concurrency/claiming and pace parity: `pace_exempt` added to the
+  schema tactic, strategy-id claiming, the pace-exempt probe lane, and
+  uniform node-id worktree keys added to the selector tactic, §1.1/§3.2/
+  §3.4 amended; no tactic was pruned and no `blocked_by` changed.
 - This parent is not directly executable (no `phase`); it completes when
   its last child completes, which stamps the strategy's `rounds`.

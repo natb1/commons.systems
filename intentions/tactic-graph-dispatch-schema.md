@@ -28,9 +28,11 @@ attributes:
 
 ## Context
 
-`strategy-graph-native-dispatch` (clarifications 1, 4, 5, 9, 10) makes the
-graph the state machine: tactics carry a persisted `phase` the router
-transitions, parking is a first-class `office_hours` field, strategies
+`strategy-graph-native-dispatch` (clarifications 1, 4, 5, 9, 10, 14) makes
+the graph the state machine: tactics carry a persisted `phase` the router
+transitions, parking is a first-class `office_hours` field, goal-layer
+nodes carry the authored `pace_exempt` pace-gate bypass (the legacy
+priority label's graph home, orthogonal to attention ordering), strategies
 carry `rounds` accounting, tactic bodies are authoritative plan content,
 signal-validating tactics carry a factual `validates` edge (the
 calculated-attention signal term's terminals), and executions carry the
@@ -60,13 +62,19 @@ Scope:
     11)
   - `blocked_by: string[]` (default `[]`)
   - `office_hours: { reason: string; since: string } | null`
+  - `pace_exempt: boolean` (default `false`) — authored pace-gate bypass
+    (strategy clarification 14): the selector may admit one gate-exempt
+    worker for a flagged node past a paced-to-zero budget; never
+    overrides genuine token exhaustion; deliberately a separate field
+    from `attention` (bypass ≠ ordering)
   - `rounds: { count: number; last_completed: string | null } | null`
 - `packages/intentionsutil/src/schema.ts:291` (`validateNode`): parse and
   default the new fields, strict on shape.
 - `packages/intentionsutil/src/schema.ts:378` (`validateGraph`) layer rules:
   `phase`/`execution`/`blocked_by`/`validates` valid on tactics only;
-  `office_hours` on goal-layer kinds only (same `attributes.goal_layer`
-  gate as attention, `schema.ts:401`); `rounds` on strategies only; every
+  `office_hours` and `pace_exempt` on goal-layer kinds only (same
+  `attributes.goal_layer` gate as attention, `schema.ts:401`); `rounds`
+  on strategies only; every
   `blocked_by` id must exist and be a tactic; every `validates` id must
   exist and be a strategy; reject `blocked_by` cycles.
 
