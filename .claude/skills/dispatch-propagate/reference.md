@@ -219,22 +219,38 @@ acts on the script's one output line; the mechanics below are reference, not
 per-tick action.
 
 Priority order the script implements, top to bottom: JIT scan →
-`origin/main` CI health gate → priority × topic-category × phase ladder.
-A jit-reminder surfaces even when `origin/main` is red because the JIT scan
-precedes the main-broken gate.
+`origin/main` CI health gate → attention-rank × enhancement × topic-category ×
+phase ladder. A jit-reminder surfaces even when `origin/main` is red because
+the JIT scan precedes the main-broken gate.
 
-The priority × topic-category × phase ladder is three-tier: the **priority
-bit** is the outermost axis, a topic **category** nests inside it, and the
-phase **ladder** runs innermost. The selector exhausts the entire `priority=1`
-tier — every topic category, every phase — before considering any `priority=0`
-item, so a `priority` item in a low-ranked topic outranks every non-priority
-item in a higher-ranked topic. Within one priority level, categories run
+The attention-rank × enhancement × topic-category × phase ladder nests four
+axes: the **attention rank** is the outermost (continuous) axis, the
+**enhancement** bit nests inside it (issue path only), a topic **category**
+nests inside that, and the phase **ladder** runs innermost. Attention rank is
+resolved from the intention graph by `packages/intentionsutil/scripts/rank-map.ts`
+(issue → node via the `trackers/` map or the `tactic-<N>` emitted-leaf
+convention); an issue absent from the map is rank 0 (the baseline). A PR
+inherits the **max** rank over the issues it closes. The selector drains the
+distinct rank values descending — it exhausts an entire rank level (every
+enhancement value, every topic category, every phase) before considering any
+lower-rank item, so a high-rank item in a low-ranked topic outranks every
+lower-rank item in a higher-ranked topic. Within one rank level, categories run
 highest first: `security` → `bug` → `testing infrastructure` → `dispatch` →
-`landing` → `fellspiral` → `budget` → `print` → `audio` → `other`. The
+`landing` → `fellspiral` → `budget` → `print` → `audio` → `other`.
+
+The `priority` label = **cap/pacing bypass only, no ordering effect**. It is
+de-ordered entirely: a `priority`-labeled unranked item does not jump the queue
+past a ranked non-priority item. The label survives solely as the at-cap
+`--priority-only` bypass and the dispatch-tick pace-curve exemption. The
 `priority` label is human-applied — `/file-issue` never applies it automatically.
 A PR's category is the highest-priority topic among the labels of every issue
 it closes; an issue's category is the highest-priority topic among its own
 labels; anything with no topic label is `other`.
+
+If `rank-map.ts` fails (a broken `intentions/` store or tsx error), selection
+exits loudly with an error rather than falling back to an all-zero map that
+would silently reorder the queue — the health/JIT heartbeat paths run before the
+rank map loads, so they are unaffected.
 
 Within each category the ladder is (highest first; within a tier, oldest PR
 wins; PRs and `help wanted` issues with a local worktree are skipped; a PR
@@ -246,7 +262,7 @@ ranked closest-to-done first — `review` is the closest-to-done non-QA tier;
 `help wanted` issues rank below all non-QA PRs but above QA PRs. Within the
 `help wanted` issue tier, a planned issue (carrying `dispatch:planned`,
 `implement` phase) outranks an unplanned issue (`plan` phase) in the same
-(category, priority) bucket — in-flight work advances before new planning
+(category, rank) bucket — in-flight work advances before new planning
 begins. The resolved winner is the leaf (from `dispatch-trace-leaf`), not the
 `help wanted` root; the `dispatch:planned` check is on the leaf. A queue with
 no topic-labeled items resolves entirely to `other`, reproducing the flat
@@ -483,7 +499,7 @@ baked into the script):
 | `five_hour_target_floor_pct` (`floor5`) | 50 | `used_5h` % at which workers reach max (gate open) |
 | `five_hour_target_ceiling_pct` (`ceil5`) | 80 | `used_5h` % at which workers reach zero (gate open) |
 | `max_concurrent_workers` | 8 | max worker count |
-| `exhaustion_threshold_pct` | 98 | used_% (either window) at/near 100, with resets_at in the future, treated as genuine token exhaustion — a hard stop even for priority/main-broken work |
+| `exhaustion_threshold_pct` | 98 | used_% (either window) at/near 100, with resets_at in the future, treated as genuine token exhaustion — a hard stop even for priority-labeled (gate-bypass)/main-broken work |
 
 Recalibration: raise `weekly_curve_power` to back-load spend later in the
 week — a higher `p` keeps `W` nearer the floor longer, then climbs faster to
@@ -503,7 +519,7 @@ raise `weekly_increment_cap_pct` (which also lowers the shoulder).
 
 Keep `exhaustion_threshold_pct` above `five_hour_target_ceiling_pct` (default 98
 > 80) so the 5h ramp's zero-point and the exhaustion floor stay distinct: the
-band between them (80→98) is "paced to 0", which priority/main-broken work
+band between them (80→98) is "paced to 0", which priority-labeled (gate-bypass)/main-broken work
 overrides, while only used_% at/above the threshold is genuine token exhaustion,
 a hard stop for all work. Setting the threshold at or below the ceiling would
 collapse that override band into a hard stop.
@@ -732,7 +748,7 @@ retriaged.
 
 CI-wait handling splits on available queue size, not invocation mode. In a
 multi-item fan-out run (`--gap N>1`), a `ci-waiting` target is a `skipped`
-outcome: the loop moves on to the next ready priority, and other live workers'
+outcome: the loop moves on to the next ready target, and other live workers'
 Stop-hooks bring the chain back to that target later. The single-target path —
 an explicit `/dispatch <N>`, or a `--gap 1` run whose only candidate is
 not-ready — has no "next". So instead of draining as a no-op, it calls
