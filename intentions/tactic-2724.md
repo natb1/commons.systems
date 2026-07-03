@@ -1,7 +1,7 @@
 ---
-id: tactic-515
+id: tactic-2724
 kind: tactic
-statement: Validate Nix devshell reproducibility on clean system
+statement: "qa: verify against main — qa-needs-main #2709: /"
 owner: human
 status: raw
 parent: null
@@ -15,6 +15,6 @@ tooling_goals: []
 success_signal: null
 attention: null
 attributes:
-  source: github:natb1/commons.systems#515
+  source: github:natb1/commons.systems#2724
 ---
-# Validate Nix devshell reproducibility on clean system
+# qa: verify against main — qa-needs-main #2709: /
