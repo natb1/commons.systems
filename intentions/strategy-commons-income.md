@@ -24,10 +24,10 @@ rationale: >-
   fit (reversible, no payroll, degrade by inaction). Second, income appears
   in this graph at all only because institutional capture makes it necessary
   — it serves recovery, never growth, so an income lane can never outrank the
-  recovery work it exists to fund. This subordination is recorded here as
-  prose; when the attention/priority schema lands it becomes structured
-  (subordinate to strategy-diversify-income, constrained by
-  strategy-open-source-as-gift), so it is re-derived — not defended — when
+  recovery work it exists to fund. Under the attention model this
+  subordination is expressed by weight alone: this strategy carries little or
+  no authored boost while the claims that outrank it carry more, and this
+  rationale records why — so its low rank is re-derived, not defended, when
   the dominating claims change.
 reading: null
 gap: null

@@ -28,13 +28,26 @@ serves:
 recovers: []
 clarifications:
   - question: Where do attention injections live, and what does the router consume?
-    answer: Authored attention injections live in git (frontmatter); flow is derived
-      on read by resolveAttention, never stored; the dispatch router consumes bands
-      (top / middle / bottom), not floats; v1 has two signal terms only (injection
-      and provenance). Recorded 2026-07-02.
+    answer: Authored attention injections live in git (frontmatter) as additive
+      boosts or branch-scoped overrides, each with a rationale; rank is derived
+      on read by resolveAttention — undecayed, undiluted, each authored source
+      counted once per node — and never stored. The dispatch router consumes
+      resolved ranks directly from the tree; the priority label is retired and
+      escalating any issue means authoring a boost on its tactic node. Equal
+      ranks are honest ties. Supersedes the same-day banded design (bands,
+      provenance discount, subordinate_to, emit-time projection) after the
+      2026-07-02 scenario interview.
+  - question: How are ordering constraints ("do A before B") expressed?
+    answer: Never through attention. Blocking is a separate tactic-layer
+      mechanism — a tactic subtree blocks another, and no tactic in the blocked
+      subtree begins until every tactic in the blocking subtree completes; the
+      gate releases itself as tactics close. Strategies are never blocked, and
+      strategy refinement, documentation, and emission are never gated — the
+      router is the single enforcement point. Recorded 2026-07-02.
 tooling_goals:
   - kind: actuator
-    statement: resolveAttention + emit-time band projection
+    statement: resolveAttention (additive source-set ranks) consumed directly by
+      dispatch-select-target
   - kind: sensor
     statement: frontier-view renders the resolved ranking
 success_signal:
