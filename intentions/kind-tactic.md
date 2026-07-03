@@ -36,6 +36,6 @@ attributes:
   goal_layer: true
   fields:
     - "source: sync source for generated tactics, e.g. github:natb1/commons.systems#2711; absent on hand-authored tactics"
-    - "attention: authored weight (>= 0), required rationale, optional subordinate_to ids that damp the injection, and review_trigger (required when weight is 0 as a deferral re-open condition); resolved flow and band are computed on read by resolveAttention and never stored in frontmatter"
+    - "attention: authored boost (adds to inherited rank, relative) XOR override (sets the value flowing through this branch), plus required rationale; resolved rank is computed on read by resolveAttention and never stored"
 ---
 # Tactic — a completable unit of execution

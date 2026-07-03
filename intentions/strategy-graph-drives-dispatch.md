@@ -44,6 +44,14 @@ clarifications:
       gate releases itself as tactics close. Strategies are never blocked, and
       strategy refinement, documentation, and emission are never gated — the
       router is the single enforcement point. Recorded 2026-07-02.
+  - question: What does authoring a `serves` edge imply for rank?
+    answer: It is a ranking act — a second serves edge adds a real claim to
+      the node's rank, so edge authoring deserves the same review care as
+      weights. Recorded 2026-07-03.
+  - question: What if one hot strategy's wide subtree monopolizes the queue?
+    answer: Accepted by design — hot means hot; its work drains first; the
+      remedy is re-weighting the strategy, never re-introducing fan-out
+      dilution. Recorded 2026-07-03.
 tooling_goals:
   - kind: actuator
     statement: resolveAttention (additive source-set ranks) consumed directly by
