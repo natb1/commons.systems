@@ -36,12 +36,41 @@ describe("store round-trip", () => {
         is_proxy: false,
       },
       attention: {
-        weight: 4,
+        boost: 4,
+        override: null,
         rationale: "This root draws attention this cycle.",
-        subordinate_to: ["charter"],
-        review_trigger: "Revisit when the charter changes.",
       },
       attributes: { source: "github:natb1/commons.systems#1", weight: 3 },
+    };
+
+    writeNode(dir, node);
+    const read = readNode(dir, node.id);
+    expect(read).toEqual(node);
+  });
+
+  it("round-trips a node carrying an override injection", () => {
+    const dir = tempDir();
+    const node: IntentionNode = {
+      id: "capped-1",
+      kind: "strategy",
+      statement: "A branch capped by an override.",
+      owner: "human",
+      status: "refining",
+      parent: "root-1",
+      serves: [],
+      recovers: [],
+      rationale: null,
+      reading: null,
+      gap: null,
+      clarifications: [],
+      tooling_goals: [],
+      success_signal: null,
+      attention: {
+        boost: null,
+        override: 0,
+        rationale: "Parked this branch until the blocker clears.",
+      },
+      attributes: {},
     };
 
     writeNode(dir, node);

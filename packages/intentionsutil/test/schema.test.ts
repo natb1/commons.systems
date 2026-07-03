@@ -25,10 +25,9 @@ describe("validateNode", () => {
         is_proxy: true,
       },
       attention: {
-        weight: 2,
+        boost: 2,
+        override: null,
         rationale: "Draws attention now.",
-        subordinate_to: ["p"],
-        review_trigger: "Revisit next cycle.",
       },
       attributes: { source: "github:natb1/commons.systems#1" },
     };
@@ -132,56 +131,119 @@ describe("validateNode", () => {
     ).toThrow();
   });
 
-  it("rejects an attention with a negative weight", () => {
+  it("accepts an attention with only a boost", () => {
+    const result = validateNode({
+      id: "n8a",
+      kind: "strategy",
+      statement: "Boosted.",
+      owner: "human",
+      status: "raw",
+      attention: { boost: 3, rationale: "urgent" },
+    });
+    expect(result.attention).toEqual({ boost: 3, override: null, rationale: "urgent" });
+  });
+
+  it("accepts an attention with only an override (including override 0)", () => {
+    const result = validateNode({
+      id: "n8b",
+      kind: "strategy",
+      statement: "Zeroed branch.",
+      owner: "human",
+      status: "raw",
+      attention: { override: 0, rationale: "parked" },
+    });
+    expect(result.attention).toEqual({ boost: null, override: 0, rationale: "parked" });
+  });
+
+  it("rejects an attention that sets both boost and override", () => {
     expect(() =>
       validateNode({
-        id: "n8",
+        id: "n8c",
         kind: "strategy",
-        statement: "Negative weight.",
+        statement: "Both set.",
         owner: "human",
         status: "raw",
-        attention: { weight: -1, rationale: "r" },
+        attention: { boost: 1, override: 2, rationale: "r" },
+      }),
+    ).toThrow(/exactly one of boost\/override/);
+  });
+
+  it("rejects an attention that sets neither boost nor override", () => {
+    expect(() =>
+      validateNode({
+        id: "n8d",
+        kind: "strategy",
+        statement: "Neither set.",
+        owner: "human",
+        status: "raw",
+        attention: { rationale: "r" },
+      }),
+    ).toThrow(/exactly one of boost\/override/);
+  });
+
+  it("rejects a boost of 0 (points at override: 0 for explicit zeroing)", () => {
+    expect(() =>
+      validateNode({
+        id: "n8e",
+        kind: "strategy",
+        statement: "Zero boost.",
+        owner: "human",
+        status: "raw",
+        attention: { boost: 0, rationale: "r" },
+      }),
+    ).toThrow(/boost must be > 0.*override: 0/);
+  });
+
+  it("rejects a negative boost", () => {
+    expect(() =>
+      validateNode({
+        id: "n8f",
+        kind: "strategy",
+        statement: "Negative boost.",
+        owner: "human",
+        status: "raw",
+        attention: { boost: -1, rationale: "r" },
       }),
     ).toThrow();
+  });
+
+  it("rejects a negative override", () => {
+    expect(() =>
+      validateNode({
+        id: "n9a",
+        kind: "strategy",
+        statement: "Negative override.",
+        owner: "human",
+        status: "raw",
+        attention: { override: -1, rationale: "r" },
+      }),
+    ).toThrow(/override must be >= 0/);
   });
 
   it("rejects an attention missing a rationale", () => {
     expect(() =>
       validateNode({
-        id: "n9",
+        id: "n9b",
         kind: "strategy",
         statement: "No rationale.",
         owner: "human",
         status: "raw",
-        attention: { weight: 1 },
+        attention: { boost: 1 },
       }),
     ).toThrow();
   });
 
-  it("rejects an attention with weight 0 and no review_trigger", () => {
+  it("rejects an attention with an empty-string rationale", () => {
     expect(() =>
       validateNode({
-        id: "n10",
+        id: "n9c",
         kind: "strategy",
-        statement: "Deferral without a re-open condition.",
+        statement: "Empty rationale.",
         owner: "human",
         status: "raw",
-        attention: { weight: 0, rationale: "r" },
+        attention: { boost: 1, rationale: "" },
       }),
-    ).toThrow();
-  });
-
-  it("rejects an attention with a non-array subordinate_to", () => {
-    expect(() =>
-      validateNode({
-        id: "n11",
-        kind: "strategy",
-        statement: "Bad subordinate_to.",
-        owner: "human",
-        status: "raw",
-        attention: { weight: 1, rationale: "r", subordinate_to: "not-an-array" },
-      }),
-    ).toThrow();
+    ).toThrow(/rationale must be a non-empty string/);
   });
 });
 
@@ -229,10 +291,9 @@ describe("validateGraph", () => {
         serves: ["virtue-root"],
         recovers: ["delegation-1"],
         attention: {
-          weight: 3,
+          boost: 3,
+          override: null,
           rationale: "A live strategy that draws attention.",
-          subordinate_to: [],
-          review_trigger: null,
         },
       }),
       gnode({
@@ -286,31 +347,6 @@ describe("validateGraph", () => {
     );
   });
 
-  it("throws when an attention.subordinate_to does not resolve to a node", () => {
-    const nodes = [
-      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
-      gnode({
-        id: "kind-strategy",
-        kind: "kind",
-        status: "codified",
-        attributes: { goal_layer: true },
-      }),
-      gnode({
-        id: "strategy-1",
-        kind: "strategy",
-        attention: {
-          weight: 1,
-          rationale: "r",
-          subordinate_to: ["no-such-node"],
-          review_trigger: null,
-        },
-      }),
-    ];
-    expect(() => validateGraph(nodes)).toThrow(
-      /subordinate_to "no-such-node" does not resolve to a node/,
-    );
-  });
-
   it("throws when attention is on a node whose kind lacks goal_layer", () => {
     const nodes = [
       gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
@@ -320,12 +356,7 @@ describe("validateGraph", () => {
       gnode({
         id: "virtue-1",
         kind: "virtue",
-        attention: {
-          weight: 1,
-          rationale: "r",
-          subordinate_to: [],
-          review_trigger: null,
-        },
+        attention: { boost: 1, override: null, rationale: "r" },
       }),
     ];
     expect(() => validateGraph(nodes)).toThrow(/attention is only valid on goal-layer kinds/);
@@ -347,12 +378,7 @@ describe("validateGraph", () => {
       gnode({
         id: "broken-2",
         kind: "virtue",
-        attention: {
-          weight: 1,
-          rationale: "r",
-          subordinate_to: ["no-such-node"],
-          review_trigger: null,
-        },
+        attention: { boost: 1, override: null, rationale: "r" },
       }),
     ];
     let caught: unknown;
@@ -367,7 +393,6 @@ describe("validateGraph", () => {
     expect(caught.message).toContain('parent "no-such-parent" does not resolve to a node');
     expect(caught.message).toContain('serves "no-such-target" does not resolve to a node');
     expect(caught.message).toContain('recovers "no-such-delegation" does not resolve to a node');
-    expect(caught.message).toContain('subordinate_to "no-such-node" does not resolve to a node');
     expect(caught.message).toContain("attention is only valid on goal-layer kinds");
   });
 });
