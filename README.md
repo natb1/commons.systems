@@ -110,7 +110,7 @@ The tick runs a single selection ladder, top to bottom. The ladder spans both qu
 2. **JIT scan** — surface the most-overdue jit-reminder. Bypasses the `origin/main` health gate so reminders fire even when main is red.
 3. **`origin/main` health gate** — if main is red, stop; do not start new work. [`/dispatch-diagnose-main`](.claude/skills/dispatch-diagnose-main/SKILL.md) reports the failing checks.
 4. **Sweep orphan adoption** — adopt a stray `<N>-…` worktree with no live session (see #847).
-5. **Priority × topic-category × phase ladder.** Three tiers nest from outermost to innermost. The **priority bit** is the outermost axis: the selector exhausts every `priority=1` item — across all topics and phases — before any non-priority item, so a `priority` item in a low-ranked topic outranks every non-priority item in a higher-ranked one (`priority` is human-applied; the selector never adds it automatically). Within one priority level, **topic categories**, highest first: `security` → `bug` → `testing infrastructure` → `dispatch` → `landing` → `fellspiral` → `budget` → `print` → `audio` → `other`. Within each `(priority, topic)` bucket, the **phase ladder** runs closest-to-done first: oldest `review` PR → oldest `fix-checks` PR → oldest `help wanted` issue (planned/`implement` before unplanned/`plan`) → oldest `qa` PR. The selector exhausts one bucket's full phase ladder before moving to the next.
+5. **Attention-rank × enhancement × topic-category × phase ladder.** Four axes nest from outermost to innermost. **Attention rank** is the outermost axis: a continuous rank resolved from the intention graph (an issue absent from the map is rank 0; a PR inherits the max rank over the issues it closes). The selector drains distinct rank values descending — it exhausts an entire rank level, across all topics and phases, before any lower-rank item, so a high-rank item in a low-ranked topic outranks every lower-rank item in a higher-ranked one. The **enhancement** bit nests inside rank (issue path only): within a rank level all non-enhancement work drains before any enhancement issue. Within one `(rank, enhancement)` level, **topic categories**, highest first: `security` → `bug` → `testing infrastructure` → `dispatch` → `landing` → `fellspiral` → `budget` → `print` → `audio` → `other`. Within each `(rank, enhancement, topic)` bucket, the **phase ladder** runs closest-to-done first: oldest `review` PR → oldest `fix-checks` PR → oldest `help wanted` issue (planned/`implement` before unplanned/`plan`) → oldest `qa` PR. The selector exhausts one bucket's full phase ladder before moving to the next. The `priority` label has **no ordering effect** — it survives only as the cap/pacing bypass (human-applied; the selector never adds it automatically).
 
 Concurrent worker count scales with the rate-limit window (see Section 5).
 
@@ -184,7 +184,7 @@ same; the dialectic engine synthesizes the four inputs into priorities; a
 contrarian challenges the synthesis; the engine re-synthesizes; and the open
 backlog is triaged (add `help wanted`, update body, or close as not planned for
 each unlabeled issue). Run it interactively to step back from the queue and ask
-whether the priority ladder still matches the project's direction. It also runs
+whether the attention-rank ladder still matches the project's direction. It also runs
 autonomously on a 7-day `align` jit cadence — posting the full report as a
 comment on the review issue and closing it to anchor the next cycle.
 
