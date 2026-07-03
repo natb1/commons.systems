@@ -8,8 +8,8 @@ status: refining
 parent: strategy-explicit-intent
 rationale: >-
   The plumbing between the graph and the dispatch chain exists in both
-  directions — intention-emit turns a leaf node into a chain-compatible issue,
-  backfill regenerates tactic leaves from GitHub read-only, trackers/ mirrors
+  directions — intention-emit turns a tactic node into a chain-compatible issue,
+  backfill reconciles gh-backed tactics from GitHub read-only, trackers/ mirrors
   execution state — but the loop is not yet load-bearing: tactic serves edges
   are unpopulated, readings are null, and the dispatch queue's ordering owes
   nothing to the dialectic's triage.

@@ -25,9 +25,13 @@ rationale: >-
   several roots form a forest (kind-virtue). STRATEGIES below them — the
   highest goals a virtue generates against present conditions; the one phase
   change in the graph (disposition to state) happens at this edge
-  (kind-strategy). TACTICS at the leaves — completable units of execution
-  (kind-tactic). DELEGATIONS are not goals: they are attachment records, the
-  surface where capture is detected and recovery kept real (kind-delegation).
+  (kind-strategy). TACTICS at the bottom — transient, completable units of
+  execution that may form subtrees rooted at an epic (kind-tactic).
+  DELEGATIONS are not goals: they are attachment records, the surface where
+  capture is detected and recovery kept real (kind-delegation). Lifecycle
+  differs by layer: virtues are permanent, strategies are persistent (they end
+  only by condition-expiry or deliberate retirement), tactics are transient
+  (removed from the graph on completion).
 
 
   Three edge fields carry the graph. `parent` is the within-layer edge:

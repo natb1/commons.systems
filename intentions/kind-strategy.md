@@ -9,10 +9,16 @@ serves: []
 rationale: >-
   A strategy is the first goal layer: what a virtue produces when pointed at
   the actual situation. The `serves` edge from a strategy to its virtues is
-  the graph's one phase change — disposition becomes state. Below this edge,
-  ordinary means-end logic applies: strategies are checkable in principle,
-  children complete and roll up, `parent` links strategies into sub-strategies
-  where useful.
+  the graph's one phase change — disposition becomes state. `parent` links
+  strategies into sub-strategies where useful — structural nesting, not
+  roll-up.
+
+
+  A strategy is persistent. It remains in the graph even when no tactic
+  currently serves it; dormancy is normal, not a defect. A strategy never
+  completes. It leaves the graph only two ways: a condition in
+  `attributes.conditions` fails (then re-derive it from its virtues), or the
+  human deliberately retires it.
 
 
   A strategy is conditional where a virtue is not. `attributes.conditions`
