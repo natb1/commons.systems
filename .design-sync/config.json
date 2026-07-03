@@ -17,6 +17,9 @@
   "runtimeFontPrefixes": ["Cascadia Code", "Source Code Pro"],
   "readmeHeader": ".design-sync/conventions.md",
   "overrides": {
-    "Input": { "cardMode": "column" }
+    "Input": { "cardMode": "column" },
+    "Hero": { "cardMode": "column" },
+    "OfficeHours": { "cardMode": "column" },
+    "PageShell": { "cardMode": "column" }
   }
 }
