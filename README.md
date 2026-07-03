@@ -15,9 +15,9 @@ Firebase, and Anthropic accounts.
 **Status:** the live router still runs on GitHub issues and labels (the
 projection-era implementation documented below); the graph-native router that
 replaces it is recorded in
-[`intentions/strategy-graph-native-dispatch.md`](intentions/strategy-graph-native-dispatch.md)
-and specified in
-[`packages/intentionsutil/DISPATCH.md`](packages/intentionsutil/DISPATCH.md).
+[`intentions/strategy-graph-native-dispatch.md`](intentions/strategy-graph-native-dispatch.md),
+with the build-out drafted in the graph itself on
+[`intentions/tactic-graph-native-dispatch.md`](intentions/tactic-graph-native-dispatch.md).
 The two run concurrently until the GitHub queue drains; then the legacy
 router is removed.
 
@@ -61,8 +61,8 @@ back as a sensor, never the origin.
 ## The align skill family
 
 Three skills are the human interface to the graph (superseding the
-issue-based `/file-issue` and `/plan-issue` — coverage matrix in
-[DISPATCH.md](packages/intentionsutil/DISPATCH.md)):
+issue-based `/file-issue` and `/plan-issue` — coverage matrix on the draft
+tactic [`tactic-graph-native-dispatch`](intentions/tactic-graph-native-dispatch.md)):
 
 - **`/align`** — the entrypoint for forks and consuming repos. Orients the
   user in the concepts above, validates the tooling deployment, reviews the
@@ -117,8 +117,8 @@ The projection-era mechanics that still run today — issue labels as phase
 markers, GitHub-derived phase, the selection ladder details — are documented
 in
 [.claude/skills/dispatch-propagate/reference.md](.claude/skills/dispatch-propagate/reference.md);
-their graph-native replacements are specified in
-[DISPATCH.md](packages/intentionsutil/DISPATCH.md).
+their graph-native replacements are drafted on
+[`tactic-graph-native-dispatch`](intentions/tactic-graph-native-dispatch.md).
 
 ## As a harness
 
@@ -240,8 +240,9 @@ run-all-cleanup-preview.sh <pr-number>
   showcase and overview.
 - **Graph schema** — [packages/intentionsutil/SCHEMA.md](packages/intentionsutil/SCHEMA.md):
   node format, layer rules, attention, authority doctrine.
-- **Router design** — [packages/intentionsutil/DISPATCH.md](packages/intentionsutil/DISPATCH.md):
-  the graph-native dispatch specification and migration plan.
+- **Router design** — [intentions/tactic-graph-native-dispatch.md](intentions/tactic-graph-native-dispatch.md):
+  the graph-native dispatch draft and migration plan, held in the graph as a
+  draft tactic.
 - **Design system** — [packages/ds](packages/ds/README.md): tokens,
   components, and the visual language.
 - **License** — CC-BY-SA; forking is encouraged.

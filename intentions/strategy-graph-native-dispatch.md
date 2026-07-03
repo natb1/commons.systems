@@ -20,8 +20,8 @@ rationale: "strategy-graph-drives-dispatch made the loop real — intent enters
   /file-issue and /plan-issue as the interface for intent entering execution.
   The legacy gh router runs concurrently until the gh queue drains, then it is
   removed; full /file-issue and /plan-issue coverage is mapped into the align
-  family before removal (coverage matrix in
-  packages/intentionsutil/DISPATCH.md)."
+  family before removal (coverage matrix retained as draft content on
+  tactic-graph-native-dispatch)."
 reading: null
 gap: null
 serves:
@@ -73,6 +73,19 @@ clarifications:
       implement-unit heuristic — and are too long for frontmatter; one file per
       node keeps the plan and its state atomic under the rebase-retry write
       path. Recorded 2026-07-03."
+  - question: Where does tactical content naturally produced during strategy work live?
+    answer: "In the graph, as draft tactic nodes — never in ad-hoc design docs
+      outside intentions/. /align-strategy's contract is retain, not refine:
+      when the interview or its exploration develops tactical context, the skill
+      dumps it into draft tactics (status raw, no execution phase, serves the
+      strategy) with no plan-schema or quality obligations — tactical
+      documentation stays /align-tactics's job. Draft tactics never block
+      strategy eligibility for /align-tactics; they are its input: it finalizes,
+      splits, merges, or prunes them. Until tactic-body preservation ships in
+      the store, draft bodies are hand-maintained (safe interim: backfill never
+      touches sourceless tactics). Recorded 2026-07-03; supersedes this record's
+      own first draft, which parked the design outside the graph in
+      packages/intentionsutil/DISPATCH.md."
 tooling_goals:
   - kind: actuator
     statement: /align-strategy — interview-driven strategy recording, superseding
