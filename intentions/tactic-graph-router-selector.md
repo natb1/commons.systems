@@ -42,10 +42,11 @@ consults both selectors. Eligibility and ordering spec:
 
 Scope: new `.claude/skills/dispatch-propagate/scripts/graph-select-target`:
 - Strategy eligibility (spawns an `/align-tactics` session): `office_hours`
-  null; no non-draft child tactics; signal unvalidated (`gap` non-null or
-  `reading` null); fresh-reading gate (`rounds.count == 0` or a reading
-  newer than `rounds.last_completed`); `rounds.count < 2` — at the cap,
-  park the strategy instead.
+  null; no non-draft, non-backlog child tactics (drafts are input, backlog
+  tactics linger by design — strategy clarification 9); signal unvalidated
+  (`gap` non-null or `reading` null); fresh-reading gate (`rounds.count ==
+  0` or a reading newer than `rounds.last_completed`); `rounds.count < 2` —
+  at the cap, park the strategy instead.
 - Tactic eligibility (spawns its phase session): `office_hours` null;
   `phase` not in {draft, done}; `blocked_by` fully complete (a pruned
   blocker is complete — prune-on-done makes absence completion); phase
@@ -54,7 +55,17 @@ Scope: new `.claude/skills/dispatch-propagate/scripts/graph-select-target`:
   `packages/intentionsutil/scripts/rank-map.ts` exactly as
   `.claude/skills/dispatch-propagate/scripts/dispatch-select-target:543`
   does; within a rank level, phase ladder closest-to-done first:
-  review → fix → qa → implement → align-tactics(strategy).
+  review → fix → qa → implement → align-tactics(strategy). The
+  signal-path demotion (backlog and off-path nodes one tier lower) arrives
+  inside `resolveAttention` via `tactic-signal-path-attention` — no
+  selector logic of its own.
+- Soft-freeze gate (strategy clarification 10): before selecting within a
+  subtree, recompute the serving strategy's substance fingerprint
+  (statement, clarifications, conditions, serves, success_signal,
+  tooling_goals); any open tactic stamped with a stale
+  `execution.strategy_fingerprint` → skip new selections in that subtree,
+  let in-flight phases finish, enqueue one re-evaluation `/align-tactics`
+  session for the strategy, and log the freeze to the selection log.
 - Emit one selection-log line per invocation (jsonl in the dispatch state
   dir alongside the phase log written by `dispatch-write-phase-log`) — the
   input `tactic-dispatch-lifecycle-sensor` reads.
@@ -86,6 +97,9 @@ worktree.)
 - `tactic-graph-dispatch-schema` — the fields the gates read.
 - `tactic-align-tactics-skill` — the session type a selected strategy
   spawns.
+- `tactic-signal-path-attention` — should land before the selector goes
+  live so backlog demotion is in effect from the first tick; not a hard
+  blocker (the selector functions without it, minus the demotion).
 
 ## Reuse
 

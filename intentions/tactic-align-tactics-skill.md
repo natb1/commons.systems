@@ -40,13 +40,22 @@ coverage rows are in §4 of the same body.
 
 Scope — codify the five steps:
 1. **Scope + drift review.** Read the strategy node, clarifications,
-   conditions, signal, round history, draft child tactics. A failed
-   strategy condition parks instead of planning against a dead premise.
+   conditions, signal, round history, draft child tactics. Drift review is
+   two-sided (strategy clarification 8): a failed recorded condition parks
+   instead of planning against a dead premise; AND sweep for unrecorded
+   conditions the round's plans newly depend on — a material discovery is
+   proposed as a dated clarification and parks the strategy for author
+   ratification (conditions stay human-decided); immaterial observations
+   land as clarifications without interrupting.
 2. **Decompose to the signal.** Minimum round to validate
    `success_signal`; when `reading` is null the round must include an
    instrument tactic; consume draft tactics (finalize, split, merge,
    prune); PR-sized leaves (leaf tactic = exactly one PR); larger shapes
-   become subtrees via `parent` edges; order with `blocked_by`.
+   become subtrees via `parent` edges; order with `blocked_by`. Work worth
+   recording but off the minimum path lands as a **backlog tactic**
+   (`backlog: true`, fully planned, selectable at demoted rank via the
+   signal-path attention factor) — never deferred by omission (strategy
+   clarification 9).
 3. **Plan each claude-eligible tactic.** Explore/Plan subagent fan-out as
    `/plan-issue` does today; write the full clean-session plan into the
    tactic node body — plan-comment schema (Context / units with Scope
@@ -57,7 +66,16 @@ Scope — codify the five steps:
 4. **Park non-claude-eligible tactics** born-parked, chunked to ≤30
    author-minutes.
 5. **Record.** One graph-commit per tactic (or small batch); stamp the
-   strategy's `rounds` accounting.
+   strategy's `rounds` accounting and each tactic's
+   `execution.strategy_fingerprint` (hash of the strategy's substance
+   fields — the router's soft-freeze trigger, strategy clarification 10).
+
+Re-evaluation mode (strategy clarification 10): when invoked by the router
+after a mid-flight strategy edit (fingerprint mismatch), the session does
+not decompose fresh — it amends, prunes, or confirms the open tactics
+against the edited strategy, re-stamps their fingerprints, and the subtree
+unfreezes. The 2026-07-03 second interview round executed this mode
+inline on this very subtree.
 
 Autonomy contract: parks to `office_hours` under `/plan-issue`'s conditions
 (requirement ambiguity, major scope deviation, unverifiable blockers);

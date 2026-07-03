@@ -99,6 +99,47 @@ clarifications:
       retained as draft tactic content per the retain-not-refine contract. Known
       caveat: a freshly synced component is absent from the canvas until the
       project is opened/refreshed. Recorded 2026-07-03."
+  - question: Drift review checks recorded conditions — what about conditions the
+      author never recorded?
+    answer: "Drift review is two-sided: it checks that recorded conditions still
+      hold, and it sweeps for unrecorded conditions — author circumstances or
+      repo facts the round's plans newly depend on that were not considered at
+      strategy definition. A material discovery is proposed, never ratified: the
+      session writes it as a dated clarification and parks the strategy to
+      office_hours for the author to accept into attributes.conditions or
+      reject; immaterial observations land as clarifications without
+      interrupting the round. Keeps condition substance human-decided (condition
+      4). Recorded 2026-07-03 interview."
+  - question: Round 1 deferred the /align entrypoint by omission — how do deferrals
+      stay visible without competing with signal work?
+    answer: "Deferrals are recorded, not omitted: work off the minimum path to
+      validating a signal lands as a backlog tactic — fully planned, selectable,
+      demoted. The demotion is part of calculated attention: resolveAttention
+      composes the authored boost/override with a derived signal-path factor,
+      resolving a node one rank tier lower when it is not on any
+      unvalidated-signal path. The on/off-path input is the membership
+      /align-tactics stamps at decomposition (round tactics on-path, backlog
+      tactics off-path via a backlog flag; a strategy is on-path while its own
+      signal is unvalidated); the demotion itself derives at read time, so it
+      self-corrects when signals validate. Backlog tactics, like drafts, do not
+      block their strategy's /align-tactics eligibility — the rule is no
+      non-draft, non-backlog child tactics. The graph-native analog of the
+      enhancement label. Recorded 2026-07-03 interview."
+  - question: What happens when a strategy's substance is edited while it has open
+      tactics?
+    answer: "Soft freeze plus queued re-evaluation, detected by fingerprint:
+      /align-tactics stamps the strategy's substance fingerprint (statement,
+      clarifications, conditions, serves, success_signal, tooling_goals — never
+      the state fields reading/gap/rounds/office_hours, which sensors touch
+      constantly) on each tactic it plans. When the router sees a mismatch it
+      stops new selections in that subtree, lets in-flight phases finish their
+      current phase, and queues a re-evaluation /align-tactics session that
+      amends, prunes, or confirms the open tactics and re-stamps.
+      /align-strategy warns the author at record time that editing a strategy
+      with open non-draft tactics queues this freeze. This session is the first
+      instance: these clarifications made round 1's plans stale, and the
+      re-evaluation was executed in the same change. Recorded 2026-07-03
+      interview."
 tooling_goals:
   - kind: actuator
     statement: /align-strategy — interview-driven strategy recording, superseding

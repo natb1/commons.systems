@@ -56,7 +56,10 @@ Scope — codify the five steps:
    draft tactic nodes (`status: raw`, no phase, `serves` the strategy) —
    retain, not refine: no plan schema, no quality bar.
 5. **Record** via graph-commit; the interview is the audit; the push makes
-   the strategy schedulable.
+   the strategy schedulable. When the edit touches a strategy with open
+   non-draft tactics, warn the author at record time that the edit queues
+   a soft freeze and re-evaluation of the open subtree (strategy
+   clarification 10).
 
 Coverage rows to handle visibly: multi-topic separation into independent
 strategies; duplicate detection; the 8-category quality evaluation folded

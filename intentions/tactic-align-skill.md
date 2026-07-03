@@ -1,0 +1,87 @@
+---
+id: tactic-align-skill
+kind: tactic
+statement: "/align SKILL.md: fork entrypoint — orient, validate deployment,
+  review virtues, delegate to /align-strategy"
+owner: ai
+status: codified
+parent: tactic-graph-native-dispatch
+rationale: "The first backlog tactic (strategy clarification 9): round 1
+  deferred this by omission; the re-evaluation converts the deferral into a
+  recorded, planned, selectable tactic demoted by the signal-path factor — it is
+  not on the minimum path to the strategy's success signal, but it no longer
+  disappears from selection. Does not block the strategy's /align-tactics
+  eligibility."
+reading: null
+gap: null
+serves:
+  - strategy-graph-native-dispatch
+recovers: []
+clarifications: []
+tooling_goals: []
+success_signal: null
+attention: null
+attributes:
+  phase: implement
+  backlog: true
+  blocked_by:
+    - tactic-align-strategy-skill
+---
+# /align SKILL.md: fork entrypoint — orient, validate deployment, review virtues, delegate to /align-strategy
+
+## Context
+
+The fork/plugin-consumer entrypoint (spec:
+`intentions/tactic-graph-native-dispatch.md` §2.1). **Backlog tactic** —
+off the minimum path to the strategy's success signal, selectable at
+demoted rank per the signal-path factor (`tactic-signal-path-attention`).
+Converted from round 1's deferral-by-omission by the 2026-07-03
+re-evaluation.
+
+## Unit 1 — author `.claude/skills/align/SKILL.md` (graph-native rewrite)
+
+**Recommended model:** opus
+
+Scope — codify the four steps onto the existing skill (rung-0 detection is
+retained; `refine-workflow` is superseded by `/align-strategy`; the rung-5
+dialectic remains the scheduled periodic review):
+
+1. **Orient.** One-screen description: a harness for long-horizon
+   autonomous workflows built around the intention graph — virtues
+   (permanent dispositions, roots), strategies (persistent,
+   condition-bearing, signal-carrying goals), tactics (transient,
+   completable, delegable work), delegations (attachment records).
+2. **Validate deployment.** intentionsutil installed and tests pass
+   (`npm test --prefix packages/intentionsutil`), store readable,
+   `validateGraph` clean, router heartbeat wired.
+3. **Review virtues.** Present inherited virtue roots (forks begin with
+   the upstream repo's; inherited virtues and strategies are assumed
+   preserved). Interview for additional or ambiguous virtues — Socratic,
+   one question at a time, per the existing rung-0 flow. Commit and push.
+4. **Delegate to `/align-strategy`.** Then confirm at least one new or
+   updated strategy exists; if none, tell the user the dispatch router has
+   no work until a strategy is recorded.
+
+Out of scope: `/align-strategy` and `/align-tactics` internals (sibling
+tactics).
+
+## Dependencies
+
+- `tactic-align-strategy-skill` — step 4 delegates to it.
+
+## Reuse
+
+- Rung detection and the rung-0 Socratic flow in
+  `.claude/skills/align/SKILL.md` — this is a rewrite of that skill's
+  entry flow, not a new skill file.
+
+## Verification
+
+Prose: dry-run in a fresh clone posing as a fork — orientation fits one
+screen, deployment validation catches a missing store, the virtue review
+commits, and the session hands off to `/align-strategy`; no gh issue
+created anywhere.
+
+## Implementation notes
+
+Single unit; subagent with `model: opus`; constrain to working-tree edits.

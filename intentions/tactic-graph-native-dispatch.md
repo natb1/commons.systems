@@ -29,18 +29,21 @@ attributes: {}
 
 **Subtree parent** — finalized 2026-07-03 by the trial `/align-tactics
 strategy-graph-native-dispatch` run, which consumed this node's own retained
-draft. The nine children carry the clean-session plans; this body holds the
-shared spec they reference (§1–3), the coverage matrix that gates legacy
-removal (§4), and the subtree map (§5). The four author decisions are
-binding (clarifications on the strategy node). The legacy GitHub-issue
+draft; amended the same day by the second interview round (strategy
+clarifications 8–10), whose mid-flight edit rule was executed on this very
+subtree as the first re-evaluation. The eleven children carry the
+clean-session plans; this body holds the shared spec they reference (§1–3),
+the coverage matrix that gates legacy removal (§4), and the subtree map
+(§5). The author decisions are binding (dated clarifications on the
+strategy node). The legacy GitHub-issue
 router (`.claude/skills/dispatch-propagate/scripts/`) remains the live
 implementation until its queue drains. This subtree executes step 2 of the
 migration direction in `packages/intentionsutil/SCHEMA.md`: *migrate the
 dispatch router onto the graph*.
 
 Interim note: the schema fields below do not exist first-class yet, so this
-subtree's own nodes carry `phase`, `blocked_by`, `office_hours` (and the
-strategy's `rounds`) under free-form `attributes`;
+subtree's own nodes carry `phase`, `blocked_by`, `office_hours`, `backlog`
+(and the strategy's `rounds`) under free-form `attributes`;
 `tactic-graph-dispatch-schema` promotes the fields and migrates these nodes.
 
 ## 1. State model
@@ -52,11 +55,14 @@ Schema extensions (all graph-owned; `validateNode` gates them):
 ```yaml
 # on tactic nodes only
 phase: draft | align-tactics | implement | fix | qa | review | done
+backlog: false                 # true = off-signal-path, demoted (clarification 9)
 execution:
   branch: <node-id>            # worktree/branch anchor
   pr: 2740 | null              # PR number once opened
   attempts: { fix: 0, qa: 0 }  # counters formerly dispatch:*-attempt labels
   markers: []                  # formerly dispatch:planned/qa-done/reviewed
+  strategy_fingerprint: <hash> # serving strategy's substance at plan time
+                               # (soft-freeze trigger, clarification 10)
 ```
 
 ```yaml
@@ -152,8 +158,10 @@ remains the scheduled periodic review.
    updated strategy exists; if none, tell the user the dispatch router has
    no work until a strategy is recorded.
 
-*(Deferred from round 1 — not on the minimum path to the success signal;
-remains an unmet tooling goal on the strategy.)*
+*(Off the minimum path to the success signal — recorded as the first
+backlog tactic, `tactic-align-skill`: fully planned, selectable at demoted
+rank per clarification 9. Round 1 had deferred it by omission; the
+re-evaluation converted it.)*
 
 ### 2.2 `/align-strategy <optional requirements>` — record strategy under interview
 
@@ -181,7 +189,9 @@ remains an unmet tooling goal on the strategy.)*
    the session is dumped into draft tactic nodes (`status: raw`, no
    execution phase, `serves` the strategy) — retain, not refine.
 5. **Record.** `graph-commit` the node(s). The interview is the audit; the
-   push makes the strategy schedulable.
+   push makes the strategy schedulable. Editing a strategy with open
+   non-draft tactics queues a soft freeze and re-evaluation of the open
+   subtree — warn the author at record time (clarification 10).
 
 ### 2.3 `/align-tactics <strategy-node-id>` — break a strategy into executable tactics
 
@@ -189,19 +199,28 @@ Runs autonomously; parks on office-hours under the same conditions as
 `/plan-issue` — never `AskUserQuestion` mid-run.
 
 1. **Scope.** Read the strategy node, clarifications, conditions, signal,
-   round history, and any draft child tactics. Drift review: a failed
-   condition parks the strategy back to `/align-strategy` territory.
+   round history, and any draft child tactics. Drift review is two-sided
+   (clarification 8): a failed recorded condition parks the strategy back
+   to `/align-strategy` territory; AND the session sweeps for unrecorded
+   conditions the round's plans newly depend on — a material discovery is
+   proposed as a dated clarification and parks for author ratification;
+   immaterial observations land as clarifications without interrupting.
 2. **Decompose to the signal.** Minimum work to validate the
    `success_signal` this round — including, when `reading` is null, an
    instrument tactic. Consume draft tactics: finalize, split, merge, or
    prune. PR-sized leaves; subtrees via `parent` edges; order with
-   `blocked_by`.
+   `blocked_by`. Off-path work worth recording lands as a backlog tactic
+   (`backlog: true`, fully planned, demoted) — never deferred by omission
+   (clarification 9).
 3. **Plan each claude-eligible tactic** into the node body with per-unit
    `Recommended model` (implement-unit heuristic). Lands
    `phase: implement`.
 4. **Park non-claude-eligible tactics** born-parked, ≤30 author-minutes.
 5. **Record.** One `graph-commit` per tactic (or small batch); stamp the
-   strategy's round accounting.
+   strategy's round accounting and each tactic's
+   `execution.strategy_fingerprint`. Re-evaluation mode (clarification
+   10): invoked on fingerprint mismatch, the session amends, prunes, or
+   confirms the open tactics instead of decomposing fresh, then re-stamps.
 
 ### 2.4 Execution phases
 
@@ -220,8 +239,8 @@ QA/review fan-outs, auto-merge on clean review) carry over unchanged.
 A **strategy** is eligible for an `/align-tactics` session iff:
 
 - `office_hours` is null, and
-- it has no **non-draft** child tactics (drafts are input, not blockers),
-  and
+- it has no **non-draft, non-backlog** child tactics (drafts are input,
+  not blockers; backlog tactics linger at demoted rank by design), and
 - its signal is not validated: `gap` non-null, or `reading` null, and
 - the fresh-reading gate passes: `rounds.count == 0`, or a reading exists
   newer than `rounds.last_completed`, and
@@ -231,14 +250,24 @@ A **tactic** is eligible for its phase skill iff `office_hours` is null,
 `phase` is neither `draft` nor `done`, its `blocked_by` set is fully
 complete, and its phase's sensor gate is satisfied.
 
+**Soft-freeze gate** (clarification 10): before selecting within a
+subtree, the router recomputes the serving strategy's substance
+fingerprint; any open tactic stamped with a stale
+`execution.strategy_fingerprint` freezes the subtree — no new selections,
+in-flight phases finish, one re-evaluation `/align-tactics` session is
+queued, the freeze is logged to the selection log. State writes
+(`reading`/`gap`/`rounds`/`office_hours`) never change the fingerprint.
+
 ### 3.2 Selection
 
 1. current-worktree continuation → 2. main-health gate → 3. **resolved
 attention rank, outermost** (already graph-native via `resolveAttention`;
-strategies and tactics compete in one rank order) → 4. within a rank level,
-phase ladder closest-to-done first: `review → fix → qa → implement →
-align-tactics(strategy)`. Topic categories retire — topical priority is
-authored attention on the owning strategy.
+strategies and tactics compete in one rank order; calculated attention
+composes the authored boost/override with the derived signal-path factor —
+backlog and off-path nodes resolve one tier lower, clarification 9) →
+4. within a rank level, phase ladder closest-to-done first: `review → fix
+→ qa → implement → align-tactics(strategy)`. Topic categories retire —
+topical priority is authored attention on the owning strategy.
 
 Claimed-set, reservation ledger, concurrency pacing
 (`dispatch-target-workers` curve), the selection lock, and the
@@ -300,20 +329,20 @@ drops. (Behavior inventory anchors: `.claude/skills/file-issue/SKILL.md`,
 | `dispatch:planned` label, marker-before-label ordering | Single atomic `graph-commit` landing plan + `phase: implement` together — the ordering hazard disappears |
 | Trivial-task skip | Unchanged |
 
-## 5. Subtree (round 1, recorded 2026-07-03)
+## 5. Subtree (round 1, recorded 2026-07-03; re-evaluated same day)
 
-Nine children, each a leaf = one PR unless noted. `blocked_by` (under
+Eleven children, each a leaf = one PR unless noted. `blocked_by` (under
 `attributes` until the schema tactic promotes it) encodes the order:
 
 ```
-tactic-graph-dispatch-schema ──────────────┐
+tactic-graph-dispatch-schema ──────────────┬──► tactic-signal-path-attention
 tactic-intentions-branch-protection (park) ┤
                                            ▼
                                   tactic-graph-commit
                                      │           │
               tactic-align-strategy-skill   tactic-align-tactics-skill
-                                     │           │
-                                     │   tactic-graph-router-selector ◄── also blocked_by schema
+                     │               │           │
+  tactic-align-skill (backlog) ◄─────┤   tactic-graph-router-selector ◄── also blocked_by schema
                                      │           │
                                      │   tactic-graph-router-transitions ◄── also blocked_by graph-commit
                                      │           │
@@ -326,8 +355,15 @@ tactic-intentions-branch-protection (park) ┤
   because the strategy's `reading` is null (fresh-reading gate).
 - **Born-parked:** `tactic-intentions-branch-protection` — author-only,
   ≤30 minutes.
-- **Deferred:** the `/align` fork entrypoint (§2.1) is not on the minimum
-  path to the success signal; it remains an unmet tooling goal on the
-  strategy for a later round or improvement pass.
+- **Backlog:** `tactic-align-skill` — off the minimum path to the success
+  signal, fully planned, selectable at demoted rank (clarification 9).
+  Round 1 had deferred it by omission; the re-evaluation converted it.
+- **Re-evaluation (2026-07-03):** the second interview round (strategy
+  clarifications 8–10) edited the strategy mid-flight; per clarification
+  10 the open plans were amended in the same change — the first execution
+  of the soft-freeze re-evaluation, run inline because no router exists
+  yet. Added by it: `tactic-signal-path-attention` (on-path: the router
+  being built must implement the recorded attention semantics) and
+  `tactic-align-skill` (backlog).
 - This parent is not directly executable (no `phase`); it completes when
   its last child completes, which stamps the strategy's `rounds`.
