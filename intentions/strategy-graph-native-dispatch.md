@@ -17,12 +17,11 @@ rationale: "strategy-graph-drives-dispatch made the loop real — intent enters
   being); and the align skill family — /align-init for fork onboarding and
   virtue review (retiring the legacy /align skill), /align-strategy for
   recording strategy under interview, /align-tactics for breaking a strategy
-  into executable tactic subtrees — supersedes /file-issue and /plan-issue
-  as the interface for intent entering execution.
-  The legacy gh router runs concurrently until the gh queue drains, then it is
-  removed; full /file-issue and /plan-issue coverage is mapped into the align
-  family before removal (coverage matrix retained as draft content on
-  tactic-graph-native-dispatch)."
+  into executable tactic subtrees — supersedes /file-issue and /plan-issue as
+  the interface for intent entering execution. The legacy gh router runs
+  concurrently until the gh queue drains, then it is removed; full /file-issue
+  and /plan-issue coverage is mapped into the align family before removal
+  (coverage matrix retained as draft content on tactic-graph-native-dispatch)."
 reading: null
 gap: null
 serves:
@@ -84,8 +83,8 @@ clarifications:
       strategy eligibility for /align-tactics; they are its input: it finalizes,
       splits, merges, or prunes them. Until tactic-body preservation ships in
       the store, draft bodies are hand-maintained (safe interim: no automated
-      writer touches tactic bodies). Recorded 2026-07-03; supersedes this record's
-      own first draft, which parked the design outside the graph in
+      writer touches tactic bodies). Recorded 2026-07-03; supersedes this
+      record's own first draft, which parked the design outside the graph in
       packages/intentionsutil/DISPATCH.md."
   - question: How does the /align-strategy dialectic handle requirements for UI
       design, where text questions under-specify?
@@ -111,8 +110,8 @@ clarifications:
       reject; immaterial observations land as clarifications without
       interrupting the round. Keeps condition substance human-decided (condition
       4). Recorded 2026-07-03 interview."
-  - question: Round 1 deferred the /align-init entrypoint by omission — how do deferrals
-      stay visible without competing with signal work?
+  - question: Round 1 deferred the /align-init entrypoint by omission — how do
+      deferrals stay visible without competing with signal work?
     answer: "Deferrals are recorded, not omitted: work off the minimum path to
       validating a signal lands as a backlog tactic — fully planned, selectable,
       demoted. The demotion is part of calculated attention: resolveAttention
@@ -163,6 +162,18 @@ clarifications:
       weight changes are reviewed PRs. The backlog flag is deleted; strategy
       eligibility counts only on-path children, also derived. Recorded
       2026-07-03 interview."
+  - question: Does per-issue worktree isolation carry over — where does a
+      graph-native tactic's worker execute?
+    answer: "Yes — one worktree per tactic. When the router launches a worker for a
+      tactic, it provisions a dedicated worktree keyed by the tactic's node id,
+      the same isolation the legacy router gives each issue. This is the
+      launch-side commitment behind worktree anchoring
+      (tactic-graph-native-dispatch §3.4: <tactic-id> is the
+      branch/worktree/reservation/session key) and the worktree-create.sh
+      node-id naming unit (tactic-graph-router-selector unit 3). Until that unit
+      lands, the hook still rejects node-id names — graph-native sessions must
+      borrow a numeric anchor, which this requirement removes. Recorded
+      2026-07-03 from author direction."
 tooling_goals:
   - kind: actuator
     statement: /align-strategy — interview-driven strategy recording, superseding
@@ -172,9 +183,8 @@ tooling_goals:
       nodes with clean-session plans, superseding /file-issue epic structuring
       and /plan-issue
   - kind: actuator
-    statement: "/align-init — fork entrypoint: orient, validate deployment,
-      review virtues, delegate to /align-strategy; retires the legacy
-      /align skill"
+    statement: "/align-init — fork entrypoint: orient, validate deployment, review
+      virtues, delegate to /align-strategy; retires the legacy /align skill"
   - kind: actuator
     statement: graph-native router tick — selects by resolved rank across strategies
       and tactics, transitions persisted phase, direct-push rebase-retry writes
