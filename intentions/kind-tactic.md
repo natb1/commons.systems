@@ -33,7 +33,9 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attributes:
+  goal_layer: true
   fields:
     - "source: sync source for generated tactics, e.g. github:natb1/commons.systems#2711; absent on hand-authored tactics"
+    - "attention: authored weight (>= 0), required rationale, optional subordinate_to ids that damp the injection, and review_trigger (required when weight is 0 as a deferral re-open condition); resolved flow and band are computed on read by resolveAttention and never stored in frontmatter"
 ---
 # Tactic — a completable unit of execution

@@ -43,8 +43,10 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attributes:
+  goal_layer: true
   fields:
     - "conditions: list of world-premises that make this strategy apt; each is a standing review trigger"
+    - "attention: authored weight (>= 0), required rationale, optional subordinate_to ids that damp the injection, and review_trigger (required when weight is 0 as a deferral re-open condition); resolved flow and band are computed on read by resolveAttention and never stored in frontmatter"
   edges:
     - "recovers: ids of the delegation records this strategy's work unwinds (top-level field, resolved by validateGraph)"
 ---
