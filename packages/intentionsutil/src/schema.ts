@@ -84,9 +84,8 @@ export interface IntentionNode {
   owner: Owner;
   status: Status;
 
-  // Optional — backfill has a source for some of these; the dialectic fields
-  // do not exist until the dialectic runs, and reading is sensor-populated,
-  // so they default rather than throw.
+  // Optional — the dialectic fields do not exist until the dialectic runs,
+  // and reading is sensor-populated, so they default rather than throw.
   parent: string | null;
   serves: string[]; // ids of the nodes this node expresses (e.g. strategy → virtue)
   recovers: string[]; // ids of delegation records this node's work unwinds; meaningful on strategies
@@ -103,8 +102,8 @@ export interface IntentionNode {
 /**
  * Input type for writeNode. Only the required core is mandatory; optional
  * fields may be omitted and validateNode will apply their defaults. This lets
- * backfill callers omit dialectic fields (clarifications, tooling_goals, etc.)
- * that only exist after the dialectic runs.
+ * callers omit dialectic fields (clarifications, tooling_goals, etc.) that
+ * only exist after the dialectic runs.
  */
 export interface IntentionNodeInput {
   id: string;

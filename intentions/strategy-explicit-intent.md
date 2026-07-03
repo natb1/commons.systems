@@ -13,7 +13,7 @@ rationale: >-
   conditions, the dialectic that re-derives strategies. This strategy owns the
   practice of keeping intent explicit here rather than tacit in code, chat, or
   memory. Artifacts, in prose per kind-strategy: the intentions/ store,
-  packages/intentionsutil, the align dialectic, trackers/, and the office-hours
+  packages/intentionsutil, the align dialectic, and the office-hours
   intention-tree view.
 
   Two hazards are conditions rather than footnotes. A stale graph is worse than

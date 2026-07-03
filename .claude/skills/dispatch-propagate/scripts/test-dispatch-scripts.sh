@@ -193,13 +193,13 @@ STUB
   # stays green; a reserved-skip test creates a marker file here to opt in.
   export DISPATCH_RESERVATION_DIR="$TMPDIR_TEST/reservations"
 
-  # Attention-rank map seam (Attention v2). Default to the all-zero baseline: an
-  # empty map means every candidate sits at rank 0, so the rank axis degenerates
-  # to a single level and the existing enh → topic-category → phase tie-break
-  # ladder decides everything — byte-identical to pre-rank behavior for any queue
-  # with no priority-labeled items. A rank test overrides this per-test to opt in.
-  # The seam short-circuits the `npx tsx rank-map.ts` load, so no test touches the
-  # intentions/ store or needs a git repo under TMPDIR_TEST.
+  # Attention-rank map seam. Default to the all-zero baseline: an empty map
+  # means every candidate sits at rank 0, so the rank axis degenerates to a
+  # single level and the existing enh → topic-category → phase tie-break
+  # ladder decides everything. This matches production, where the map is
+  # always empty (graph-rank interleaving retired with the node↔issue
+  # mapping); rank tests override per-test to keep exercising the inert
+  # bucket machinery until it is deleted with the legacy router.
   export DISPATCH_RANK_MAP_JSON='{}'
 
   # dispatch-select-target calls dispatch-phase as "$SCRIPT_DIR/dispatch-phase".

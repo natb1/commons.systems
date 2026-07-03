@@ -302,8 +302,8 @@ judgments above and the three-way verdict below.
 5. **Auto-defer when clear.** Create the `blocked_by` link from target `N` to
    blocker `B`, mark the issue deferred, then **stop** — persist **no** plan and
    apply **no** `dispatch:office-hours`. Use the integer database id and guard
-   against a duplicate POST (the `ref-github-issues` / `intention-emit` idempotent
-   pattern), all with `dangerouslyDisableSandbox: true`:
+   against a duplicate POST (the `ref-github-issues` idempotent pattern), all
+   with `dangerouslyDisableSandbox: true`:
 
    ```bash
    EXISTING=$(gh api "/repos/{owner}/{repo}/issues/$N/dependencies/blocked_by" --jq '.[].number')

@@ -9,10 +9,7 @@ import type { Status } from "@commons-systems/intentionsutil";
  * structure and conventions.
  *
  * The view is build-time generated (no Firestore, no owner tier) and passed in
- * as a single prop. Frontier nodes are visually emphasised; each frontier node
- * carries a per-node execution overlay drawn from the trackers map (most
- * frontier nodes are untracked today — this is surfaced as a calm affordance,
- * not an error).
+ * as a single prop. Frontier nodes are visually emphasised.
  */
 
 export interface IntentionTreePanelProps {
@@ -39,47 +36,6 @@ export function IntentionTreePanel(props: IntentionTreePanelProps) {
       .filter(Boolean)
       .join(" ");
 
-    let trackerEl: JSX.Element | null = null;
-    if (isFrontier) {
-      const tracker = view.trackers[node.id];
-      if (tracker !== undefined) {
-        const issueStateVariant: BadgeProps["variant"] =
-          tracker.state === "open" ? "accent" : "success";
-        const prChips =
-          tracker.linked_prs.length > 0
-            ? tracker.linked_prs.map((pr) => {
-                const prVariant: BadgeProps["variant"] =
-                  pr.state === "merged"
-                    ? "success"
-                    : pr.state === "open"
-                      ? "accent"
-                      : "neutral";
-                return (
-                  <span key={pr.number} className="intention-pr">
-                    <Badge variant={prVariant}>
-                      PR #{pr.number} {pr.state}
-                    </Badge>
-                  </span>
-                );
-              })
-            : null;
-        trackerEl = (
-          <div className="intention-tracker">
-            <Badge variant={issueStateVariant}>
-              issue #{tracker.issue_number} {tracker.state}
-            </Badge>
-            {prChips}
-          </div>
-        );
-      } else {
-        trackerEl = (
-          <div className="intention-tracker intention-tracker--untracked">
-            not yet tracked
-          </div>
-        );
-      }
-    }
-
     return (
       <li key={node.id} className={liClass}>
         <div className="intention-node-row">
@@ -90,7 +46,6 @@ export function IntentionTreePanel(props: IntentionTreePanelProps) {
             {isFrontier && <Badge variant="accent">frontier</Badge>}
           </span>
         </div>
-        {trackerEl}
         {node.children.length > 0 && (
           <ul className="intention-node-list">
             {node.children.map(renderNode)}

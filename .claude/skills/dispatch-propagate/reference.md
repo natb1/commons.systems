@@ -226,17 +226,16 @@ the JIT scan precedes the main-broken gate.
 The attention-rank × enhancement × topic-category × phase ladder nests four
 axes: the **attention rank** is the outermost (continuous) axis, the
 **enhancement** bit nests inside it (issue path only), a topic **category**
-nests inside that, and the phase **ladder** runs innermost. Attention rank is
-resolved from the intention graph by `packages/intentionsutil/scripts/rank-map.ts`
-(issue → node via the `trackers/` map or the `tactic-<N>` emitted-leaf
-convention); an issue absent from the map is rank 0 (the baseline). A PR
-inherits the **max** rank over the issues it closes. The selector drains the
-distinct rank values descending — it exhausts an entire rank level (every
-enhancement value, every topic category, every phase) before considering any
-lower-rank item, so a high-rank item in a low-ranked topic outranks every
-lower-rank item in a higher-ranked topic. Within one rank level, categories run
-highest first: `security` → `bug` → `testing infrastructure` → `dispatch` →
-`landing` → `fellspiral` → `budget` → `print` → `audio` → `other`.
+nests inside that, and the phase **ladder** runs innermost. The rank map is
+**empty in production**: graph-rank interleaving retired with the
+node-id↔issue mapping (the legacy router only drains its existing gh queue,
+in parallel with the graph-native router), so every item sits at the rank-0
+baseline and ordering reduces to the inner three axes. The rank-bucket
+machinery survives inert (fed by the `DISPATCH_RANK_MAP_JSON` test seam only)
+and is deleted wholesale with the legacy router. Within one rank level,
+categories run highest first: `security` → `bug` → `testing infrastructure` →
+`dispatch` → `landing` → `fellspiral` → `budget` → `print` → `audio` →
+`other`.
 
 The `priority` label = **cap/pacing bypass only, no ordering effect**. It is
 de-ordered entirely: a `priority`-labeled unranked item does not jump the queue
@@ -246,11 +245,6 @@ past a ranked non-priority item. The label survives solely as the at-cap
 A PR's category is the highest-priority topic among the labels of every issue
 it closes; an issue's category is the highest-priority topic among its own
 labels; anything with no topic label is `other`.
-
-If `rank-map.ts` fails (a broken `intentions/` store or tsx error), selection
-exits loudly with an error rather than falling back to an all-zero map that
-would silently reorder the queue — the health/JIT heartbeat paths run before the
-rank map loads, so they are unaffected.
 
 Within each category the ladder is (highest first; within a tier, oldest PR
 wins; PRs and `help wanted` issues with a local worktree are skipped; a PR

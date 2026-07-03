@@ -79,8 +79,6 @@ describe("getDemoIntentionTree", () => {
     const view = getDemoIntentionTree();
     expect(Array.isArray(view.tree)).toBe(true);
     expect(view.frontierIds).toBeInstanceOf(Set);
-    expect(typeof view.trackers).toBe("object");
-    expect(view.trackers).not.toBeNull();
   });
 
   it("tree contains nodes with the required fields", () => {
@@ -103,14 +101,6 @@ describe("getDemoIntentionTree", () => {
     expect(view.frontierIds.size).toBeGreaterThanOrEqual(0);
     for (const id of view.frontierIds) {
       expect(typeof id).toBe("string");
-    }
-  });
-
-  it("trackers is a plain object keyed by node id strings", () => {
-    const view = getDemoIntentionTree();
-    expect(Object.getPrototypeOf(view.trackers)).toBe(Object.prototype);
-    for (const key of Object.keys(view.trackers)) {
-      expect(typeof key).toBe("string");
     }
   });
 });

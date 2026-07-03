@@ -1,215 +1,174 @@
-# commons.systems: Nate's Agentic Coding Workflow
+# commons.systems: a long-horizon agent orchestrator
 
-A long-horizon coding workflow you own and run yourself — local-first, self-managed, built to be left alone for stretches and to stay aligned with your own intent. Not a platform, not a library: a reference setup for individuals who want to fork and adapt it for their own projects, built to Nate's own specification. Under the hood it is an agent harness wrapping an agent loop, with a multi-agent fan-out at the review and fix phases. The dispatch queue runs autonomously; the office hours queue handles human-driven work.
+A harness for long-horizon autonomous agent workflows, built around one data
+structure: the **intention graph**. Intent is recorded as a graph of virtues,
+strategies, and tactics in [`intentions/`](intentions/); a **dispatch router**
+reads that graph to decide what runs next, launches autonomous agent sessions
+to do the work, and writes execution state back into the graph. The human
+stays in intent — recording strategy under interview, engaging escalations at
+office hours — and the router converts that intent into merged PRs.
+
+Owned and self-managed, local-first, built to be forked: not a platform, not a
+library, but a reference setup an individual runs on their own GitHub,
+Firebase, and Anthropic accounts.
+
+**Status:** the live router still runs on GitHub issues and labels (the
+projection-era implementation documented below); the graph-native router that
+replaces it is recorded in
+[`intentions/strategy-graph-native-dispatch.md`](intentions/strategy-graph-native-dispatch.md),
+with the build-out drafted in the graph itself on
+[`intentions/tactic-graph-native-dispatch.md`](intentions/tactic-graph-native-dispatch.md).
+The two run concurrently until the GitHub queue drains; then the legacy
+router is removed.
+
+## The intention graph
+
+The graph is the orchestrator's state store and the owner's record of intent —
+one markdown file per node under [`intentions/`](intentions/), schema and
+tooling in [`packages/intentionsutil/`](packages/intentionsutil/SCHEMA.md).
+Four kinds:
+
+- **Virtues** — permanent dispositions, the roots (`parent: null`). Never
+  complete, never ranked; everything else exists to serve them.
+- **Strategies** — the first goal layer. Persistent and conditional: a
+  strategy carries the author circumstances it is contingent on
+  (`attributes.conditions`), a `success_signal` (observable, sensor,
+  threshold), the current `reading`, and the derived `gap`. Strategies
+  outlive their tactics — they keep tracking signals after all child work
+  completes, and leave the graph only when a condition fails or the author
+  retires them.
+- **Tactics** — the bottom layer: concrete, completable, delegable. A tactic
+  is PR-sized (a leaf tactic maps to exactly one PR) or a subtree of tactics
+  (the graph's epic). Tactics are transient — completion prunes them.
+- **Delegations** — attachment records for external dependencies, reviewed on
+  triggers, recoverable via strategy `recovers` edges.
+
+Two mechanisms make the graph executable:
+
+- **Attention.** Authored injections (`boost`/`override`, each with a
+  rationale) live in node frontmatter; rank is derived on read — undecayed,
+  undiluted, never stored — and is the router's outermost ordering axis.
+  Escalating work means authoring a boost, not applying a label.
+- **Signals.** A strategy that has no child tactics and an unvalidated signal
+  is itself schedulable work: the router starts a session to break it into
+  tactics. Sensors write readings back; validated signals quiet the strategy
+  until a condition or reading changes.
+
+Authority doctrine: the graph is the source of truth for all data — intent
+*and* execution state. GitHub is a projection the graph emits into and reads
+back as a sensor, never the origin.
+
+## The align skill family
+
+Three skills are the human interface to the graph (superseding the
+issue-based `/file-issue` and `/plan-issue` — coverage matrix on the draft
+tactic [`tactic-graph-native-dispatch`](intentions/tactic-graph-native-dispatch.md)):
+
+- **`/align`** — the entrypoint for forks and consuming repos. Orients the
+  user in the concepts above, validates the tooling deployment, reviews the
+  inherited virtue roots (forks start from this repo's; the harness assumes
+  inherited virtues and strategies are preserved), interviews for new or
+  clarified virtues, then hands off to `/align-strategy`. Its periodic form —
+  the scheduled dialectic review — reassesses priorities against the graph.
+- **`/align-strategy <optional requirements>`** — records new strategies or
+  edits under a dialectic interview: intent, justification by virtues or
+  parent strategies, benefit, signals, and the conditions the strategy is
+  contingent on. Disambiguation happens here — edge cases are put to the
+  author and resolutions are recorded as dated `clarifications` on the node.
+  The interview is the audit; the push to `origin/main` makes the record
+  schedulable.
+- **`/align-tactics <strategy-node-id>`** — scheduled by the router for an
+  eligible strategy (not parked, no child tactics, signal unvalidated). It
+  decomposes the strategy into the minimum PR-sized tactics that would
+  validate the signal this round, writes each tactic's full clean-session
+  plan into the node body (per-unit `sonnet`/`opus` delegation tags — the
+  cheapest model that will reliably complete the unit), and parks
+  non-claude-eligible work as office-hours tactics chunked to ≤30
+  author-minutes. Runs autonomously; parks to office hours on genuine
+  ambiguity rather than asking mid-run.
+
+## The dispatch router
+
+The router is a headless, self-perpetuating tick — bash plus systemd transient
+units, no model in the control loop. Each tick selects the highest-rank
+eligible node, spawns one worker session per selection into an isolated git
+worktree, and each worker's exit re-launches the tick. Work advances through
+phases — plan (`/align-tactics`), implement, fix, qa, review — with a
+multi-agent fan-out at the review and fix phases, and auto-merge on a clean
+terminal review.
+
+Two queues route every item:
+
+- **Dispatch queue** — autonomous work the chain advances unattended.
+- **Office-hours queue** — human-driven work: strategy interviews, judgment
+  calls, escalations. Parking is first-class node state
+  (`office_hours: {reason, since}`); an autonomous session that hits a
+  user-input boundary parks its node instead of guessing, and the item
+  returns to the dispatch queue when the human engages it.
+
+Execution state lives in the graph: a tactic node persists its `phase`,
+branch/PR anchors, attempt counters, and parking; the router reads PR/CI
+status as sensors before committing a transition, and every state change is a
+single-node commit pushed to `main` with a rebase-retry loop. Token spend is
+paced against a weekly budget curve, so the fleet spreads work across the
+rate-limit window instead of burning early and idling.
+
+The projection-era mechanics that still run today — issue labels as phase
+markers, GitHub-derived phase, the selection ladder details — are documented
+in
+[.claude/skills/dispatch-propagate/reference.md](.claude/skills/dispatch-propagate/reference.md);
+their graph-native replacements are drafted on
+[`tactic-graph-native-dispatch`](intentions/tactic-graph-native-dispatch.md).
 
 ## As a harness
 
-Birgitta Böckeler's framing splits an agent into Model + Harness — the harness is everything around the model that turns a single call into reliable work. This repo is the *outer harness* (also the *user harness*): the half you write and own, sitting on top of the *built-in harness* (the *builder harness*) that Claude Code ships. The pieces map onto real files here:
+Birgitta Böckeler's framing splits an agent into Model + Harness — the harness
+is everything around the model that turns a single call into reliable work.
+This repo is the *outer harness*: the half you write and own, on top of the
+built-in harness Claude Code ships.
 
-- **Guides (feedforward)** — what the agent is told before it acts: `.claude/rules/*.md` and the per-skill `SKILL.md` files. There is no `AGENTS.md`; the guidance lives in the rules and skills.
-- **Sensors (feedback)** — what checks the work after it acts. **Computational** sensors are CI: lint, type-check, test. **Inferential** sensors are the `/review-fix` reviewer fan-out and the QA pass — LLM-as-judge over the diff.
-- **Steering loop** — the cycle that adjusts the harness itself: lessons feed back into edits to `.claude/rules/*.md` and the `SKILL.md` files, and the two queues route each item between autonomous and human-driven work.
+- **Guides (feedforward)** — `.claude/rules/*.md` and the per-skill
+  `SKILL.md` files.
+- **Sensors (feedback)** — **computational**: CI (lint, type-check, test) and
+  the graph's registered signal sensors; **inferential**: the `/review-fix`
+  reviewer fan-out and the QA pass — LLM-as-judge over the diff.
+- **Steering loop** — the intention graph itself: strategies carry signals,
+  sensors write readings back, the dialectic re-derives priorities, and
+  lessons feed edits to the rules and skills.
 
-## Table of Contents
+## Design principles
 
-- [As a harness](#as-a-harness)
-- [Design Principles](#design-principles)
-- [Agentic Coding Workflow](#agentic-coding-workflow)
-  - [PR Control Flow](#pr-control-flow)
-  - [Two queues, two control paths](#two-queues-two-control-paths)
-  - [Dispatch Queue](#dispatch-queue)
-  - [Office Hours Queue](#office-hours-queue)
-  - [Key design decisions for adopters](#key-design-decisions-for-adopters)
-- [CI/CD](#cicd)
-- [Pre-requisites](#pre-requisites)
-- [Where to go next](#where-to-go-next)
-  - [Differentiation](#differentiation)
-- [Related work / prior art](#related-work--prior-art)
-- [Usage and Contributing](#usage-and-contributing)
+- Intent is explicit and owned: the graph is the single authority for what
+  the system is trying to do and where that work stands.
+- The system controls the agent, not the agent the workflow: the control
+  loop is headless script, phase skills are bounded sessions, and escalation
+  is fail-safe — a missing completion marker parks to a human, never to a
+  false "done."
+- Work flows through two queues — autonomous dispatch and human office
+  hours — with well-defined break points for human quality control.
+- Prefer [skills](https://code.claude.com/docs/en/skills) over other agentic
+  artifacts (system instructions, hooks, sub-agents) for portability and
+  ease of maintenance.
+- Delegate each unit to the cheapest model that will reliably complete it.
 
-## Design Principles
-
-- Work flows through two queues: the **dispatch queue** (autonomous, runs unattended) and the **office hours queue** (human-driven, for requirement changes and judgment calls).
-- Delegated workflows have well-defined break points for human quality control (QC).
-- Prefer [skills](https://code.claude.com/docs/en/skills) over other agentic artifacts (system instructions, hooks, sub-agents, agent teams, etc.) due to portability and ease of maintenance.
-- The system controls the agent, not the agent the workflow — a dispatch design principle, shared with harness-engineering practice broadly (not Fowler's or Böckeler's). Workflow state is derived from PR/CI ground truth — no external state machine required.
-
-## Agentic Coding Workflow
-
-### PR Control Flow
+## PR control flow (live implementation)
 
 | Phase | Meaning | Skill |
 |-------|---------|-------|
-| plan | No PR, unplanned issue (no `dispatch:planned`) | [plan-issue](.claude/skills/plan-issue/SKILL.md) |
-| implement | No PR, `dispatch:planned` | [implement](.claude/skills/implement/SKILL.md) |
+| plan | Unplanned work item | [plan-issue](.claude/skills/plan-issue/SKILL.md) → `/align-tactics` |
+| implement | Planned, no PR | [implement](.claude/skills/implement/SKILL.md) |
 | fix-checks | Draft PR, CI failed | [fix-checks](.claude/skills/fix-checks/SKILL.md) |
 | fix-conflicts | Draft PR, `origin/main` merge conflict | [fix-conflicts](.claude/skills/fix-conflicts/SKILL.md) |
-| waiting | Draft PR, CI in progress | (nothing — wait) |
-| qa | Draft PR, CI green, review labels absent | [qa-fix](.claude/skills/qa-fix/SKILL.md) (autonomous) or [office-hours](.claude/skills/office-hours/SKILL.md) (human-driven; see #758) |
-| review | Draft PR, QA passed — the single terminal pass: code + security review, applies in-scope fixes, flips draft→ready | [review-fix](.claude/skills/review-fix/SKILL.md) |
+| qa | Draft PR, CI green | [qa-fix](.claude/skills/qa-fix/SKILL.md) |
+| review | QA passed — terminal code + security review, flips draft→ready | [review-fix](.claude/skills/review-fix/SKILL.md) |
 
-These phases are the harness's sensor layer: `fix-checks` consumes the computational CI sensors (lint, type, test), while `qa` and `review` add the inferential LLM-as-judge sensors. The two queues plus the self-perpetuating tick — each worker's Stop-hook re-launching the next — close the steering loop around them.
-
-The `review` phase is the workflow's single terminal review pass. It consolidates
-what were three separate phases — code-review, review, and security — into one
-pass over a single diff via the [Workflow tool](.claude/skills/review-fix/SKILL.md),
-and flips the PR from draft to ready itself once the reviews are clean.
-
-### Two queues, two control paths
-
-Issues and PRs flow through two parallel queues (see #755 for the framing):
-
-- **Dispatch queue** — autonomous work, advanced by the headless `dispatch-tick` script and the phase-skill worker sessions it spawns. Once a target is selected, the chain runs unattended, one phase at a time.
-- **Office hours queue** — human-driven work. Items here wait for live human attention: requirement changes, judgment calls during QA, or deviations flagged by phase skills.
-
-The `dispatch:office-hours` label is the transition signal between the two. Input-block hooks apply it when a phase skill requests user input mid-run (see #757); phase skills apply it on a deviation (see #826). The office-hours queue surfaces labeled items for a human; the label clears once the user engages the worktree.
-
-Ground truth lives in PR state (draft vs. ready), CI status, the accumulating `dispatch:*` label set, and `claude agents --json` for the live session list. There is no persisted state machine and no side file — every tick re-derives the world from GitHub and the live agent list.
-
-JIT (just-in-time) reminders seed both queues. Each dispatch tick fires a JIT scan that creates due reminders from `dispatch.config/jit.json` (see #769); some surface as dispatch-queue work that the chain picks up next tick, while others run as office-hours sessions for a human to read.
-
-The mechanics below are documented in present tense in [.claude/skills/dispatch-propagate/reference.md](.claude/skills/dispatch-propagate/reference.md) — the companion to the now-retired `dispatch-propagate` skill. Inline issue references point at the design discussions behind each mechanism.
-
-### Dispatch Queue
-
-#### 1. Entry points
-
-- **`dispatch-tick`** — the autonomous tick. A headless bash script (`.claude/skills/dispatch-propagate/scripts/dispatch-tick`) with no model-decision seam: it runs `dispatch-select-tick` then `dispatch-materialize-spawn` and exits. `dispatch-spawn-tick` launches it as a transient `systemd-run --user` unit (fixed unit name for one-at-a-time dedup).
-- **`dispatch`** — the human entry point. Run the `dispatch` terminal command (bare, or `dispatch <N>`) to invoke one tick from a terminal; its stdout streams directly.
-- **Workers** — phase-skill sessions, one per in-flight issue, each spawned by `dispatch-launch-worker` into its `worktrees/<N>-…` worktree. A worker runs exactly one phase skill, then its Stop-hook re-launches a tick.
-
-See #839 for the original router/worker split and #849 for its replacement by the headless tick.
-
-#### 2. The chaining procedure
-
-Each tick, holding the per-repo selection lock:
-
-1. Acquires the lock.
-2. Runs the JIT engine (see Section 4) and the `origin/main` health gate.
-3. Computes the concurrency `gap = TARGET_N − effective_live` (Section 5), then selects up to `gap` targets via the selection ladder (Section 3).
-4. For each target: resolves (and, for an `implement`-phase issue, creates) its worktree, writes a reservation marker, and spawns a worker (`dispatch-launch-worker`) with `cwd` set to that worktree.
-5. Releases the lock **after** each spawned worker registers (#945) — closing the boot-gap re-selection race — and exits.
-
-This is a **seed once → fan out to `gap`** pattern, replacing the old serial "one tick, one worker, repeat."
-
-Each worker, inside its worktree:
-
-1. Derives the phase from PR/CI state via [`dispatch-phase`](.claude/skills/dispatch-propagate/scripts/dispatch-phase).
-2. Runs exactly one phase skill — the skill named in the [PR Control Flow](#pr-control-flow) table for that phase.
-3. On exit, its Stop-hook (`.claude/hooks/dispatch-stop.sh`) launches a fresh headless tick via `dispatch-spawn-tick` (deduped to one live tick unit), which fans out again to the newly freed gap. If `dispatch:office-hours` is on the PR, the worker still triggers the tick but stays visible for human review.
-
-When the chain stalls on the concurrency budget rather than a freed slot, the #725 cap-keyed re-seed re-launches the tick when the budget reopens; the #1010 continuation invariant parks a tick that would otherwise leave no continuation, so a terminal stall is visible rather than silently lost.
-
-Workers and phase skills call [`/commit-merge-push`](.claude/skills/commit-merge-push/SKILL.md) inline to commit, merge `origin/main`, and push. See #824, #826, #831 for the worker contract, deviation handling, and lock semantics.
-
-#### 3. Prioritization
-
-The tick runs a single selection ladder, top to bottom. The ladder spans both queues; the [Office Hours Queue](#office-hours-queue) spine cross-references it rather than restating it.
-
-1. **Current-worktree continuation** — if the tick was invoked against an `<N>-…` worktree on an open issue, continue there.
-2. **JIT scan** — surface the most-overdue jit-reminder. Bypasses the `origin/main` health gate so reminders fire even when main is red.
-3. **`origin/main` health gate** — if main is red, stop; do not start new work. [`/dispatch-diagnose-main`](.claude/skills/dispatch-diagnose-main/SKILL.md) reports the failing checks.
-4. **Sweep orphan adoption** — adopt a stray `<N>-…` worktree with no live session (see #847).
-5. **Attention-rank × enhancement × topic-category × phase ladder.** Four axes nest from outermost to innermost. **Attention rank** is the outermost axis: a continuous rank resolved from the intention graph (an issue absent from the map is rank 0; a PR inherits the max rank over the issues it closes). The selector drains distinct rank values descending — it exhausts an entire rank level, across all topics and phases, before any lower-rank item, so a high-rank item in a low-ranked topic outranks every lower-rank item in a higher-ranked one. The **enhancement** bit nests inside rank (issue path only): within a rank level all non-enhancement work drains before any enhancement issue. Within one `(rank, enhancement)` level, **topic categories**, highest first: `security` → `bug` → `testing infrastructure` → `dispatch` → `landing` → `fellspiral` → `budget` → `print` → `audio` → `other`. Within each `(rank, enhancement, topic)` bucket, the **phase ladder** runs closest-to-done first: oldest `review` PR → oldest `fix-checks` PR → oldest `help wanted` issue (planned/`implement` before unplanned/`plan`) → oldest `qa` PR. The selector exhausts one bucket's full phase ladder before moving to the next. The `priority` label has **no ordering effect** — it survives only as the cap/pacing bypass (human-applied; the selector never adds it automatically).
-
-Concurrent worker count scales with the rate-limit window (see Section 5).
-
-#### 4. JIT-on-dispatch
-
-Local `dispatch.config/jit.json` declares recurring "just-in-time" issues. The engine runs at every dispatch tick:
-
-1. Debounce by `lastTickAt`.
-2. Open-issue guard — skip if the previous jit issue for that key is still open.
-3. Create the next issue when its `remindAfterClose` (or `dueAfterCreate`) cadence has elapsed.
-
-Every jit issue carries a `jit:<key>` label and is tracked in its configured GitHub project. Jit-reminders that produce dispatch-queue work surface ahead of the queue ladder; jit-reminders that run as office-hours sessions are covered in the [Office Hours Queue](#office-hours-queue) spine. A jit may carry an optional `skill` field: when selected, the reminder job runs that named skill as an office-hours session instead of only summarizing; absent → summarize-and-stop (unchanged). See #769.
-
-With no `dispatch.config/jit.json` present the engine is a no-op.
-
-#### 5. Token-budget pacing
-
-The tick paces worker spawning against a cumulative weekly token-budget curve (#917, building on #845 and #878). Rather than a flat cap, the weekly target at any moment is proportional to how far through the weekly rate-limit window you are — so token spend is spread smoothly across the week instead of burning early and idling. The controller is more conservative early-week than a simple headroom check: it pauses spawning whenever actual usage runs ahead of the curve, even when the weekly total is still low. A separate 5-hour headroom ramp then maps the remaining budget into a live worker count (0..`max_concurrent_workers`).
-
-Tunables live in `dispatch.config/target-workers.json` (see `dispatch-propagate/reference.md` for the full formula and table). When no telemetry file is present, the tick falls back to spawning one worker per tick.
-
-### Office Hours Queue
-
-The office-hours queue is the human-driven counterpart to the dispatch queue.
-Items land here when work needs live human attention: an inbound idea to
-triage, a requirement that changed mid-flight, an alignment reassessment, or a
-jit-reminder that runs as a session rather than autonomously. The
-`dispatch:office-hours` label is the signal an item belongs here (see [Two
-queues, two control paths](#two-queues-two-control-paths)). Prioritization
-across both queues is the dispatch router's single selection ladder — see
-[Prioritization](#3-prioritization); office-hours items are surfaced by the
-label, not by a separate ranking.
-
-#### 1. Entry point
-
-- `office-hours` — the single user entry point to the queue (see #759). It
-  resumes a blocked live session for a `dispatch:office-hours`-labeled item if
-  one exists, or starts a fresh
-  [`/office-hours`](.claude/skills/office-hours/SKILL.md) session for a
-  sessionless labeled item.
-- [`/office-hours`](.claude/skills/office-hours/SKILL.md) — the body of a fresh
-  session. It picks up a labeled item, runs the user-input portion (plan
-  approval for an `implement` item, a judgment-call walkthrough for a `qa`
-  item, or an accept/reject deviation review for a completed-but-deviating
-  item), clears the label on completion, and hands back to the dispatch chain.
-
-#### 2. Pre-dispatch intake
-
-[`/file-issue`](.claude/skills/file-issue/SKILL.md) is the single
-issue-filing and issue-improvement chokepoint. It separates multi-topic input
-into independent issues, then per issue runs duplicate detection, an eight-category
-quality evaluation, a decomposition gate, and type/topic classification —
-applying the results directly with no approval gate. Use it to file an inbound
-idea or to bring a backlogged issue into ready shape before it competes in the
-selection ladder.
-
-#### 3. Mid-flight requirement changes
-
-[`/new-requirement`](.claude/skills/new-requirement/SKILL.md) handles a
-requirement introduced or amended mid-flight. It clarifies the change, updates
-the remote issues, syncs context, and revises the active plan — keeping the
-worktree's open work coherent with the new requirement instead of forcing a
-restart.
-
-#### 4. Periodic reassessment
-
-[`/align`](.claude/skills/align/SKILL.md) runs a structured alignment
-reassessment: financial and technical perspectives assess project state
-independently, then charter-derived product and marketing perspectives do the
-same; the dialectic engine synthesizes the four inputs into priorities; a
-contrarian challenges the synthesis; the engine re-synthesizes; and the open
-backlog is triaged (add `help wanted`, update body, or close as not planned for
-each unlabeled issue). Run it interactively to step back from the queue and ask
-whether the attention-rank ladder still matches the project's direction. It also runs
-autonomously on a 7-day `align` jit cadence — posting the full report as a
-comment on the review issue and closing it to anchor the next cycle.
-
-#### 5. Skill-running JIT reminders
-
-Most jit-reminders surface a summary for a human to read; some instead run a
-skill when selected. [`/digest`](.claude/skills/digest/SKILL.md) runs as an
-office-hours session (interactive demos require a user present);
-[`/align`](.claude/skills/align/SKILL.md) runs as an office-hours
-session with no interactive stops — it posts its report and closes the review issue. The jit engine itself
-lives in the Dispatch Queue spine's [JIT-on-dispatch](#4-jit-on-dispatch)
-subsection — this covers only the office-hours-side surfacing.
-
-### Key design decisions for adopters
-
-- **Ground truth is PR/CI + label state.** No persisted state machine; [`dispatch-phase`](.claude/skills/dispatch-propagate/scripts/dispatch-phase) derives the phase from draft state, CI status, and the accumulating `dispatch:*` labels.
-- **Per-worktree concurrency.** N issues in flight equals N concurrent worker sessions in N worktrees. The per-repo selection lock serializes router *selection* only — the worker holds no lock.
-- **Self-perpetuating headless chain.** The tick (`dispatch-tick`) is a headless script, not a model session; workers are phase-skill sessions. A worker's Stop-hook re-launches a tick via `dispatch-spawn-tick`. The #725 cap-keyed re-seed resumes the chain when it stalls on the token budget, and the #1010 continuation invariant parks a tick that would otherwise leave no continuation.
-- **Transient escalation via `dispatch:office-hours`.** One label, two writers (input-block hooks per #757, phase-skill deviation detection per #826), one reader (the office-hours queue). The label clears when the user engages the worktree.
-- **JIT is a reminder layer, not an autonomous executor.** Office-hours jit-reminders are surfaced for a human to read.
-- **Local config sits outside every worktree.** `dispatch.config/` lives beside `worktrees/main/` so it is shared across worktrees and physically cannot be committed.
+Auto-merge lands a reviewed, green, ready PR; completion prunes the tactic
+from the graph (today: closes the issue).
 
 ## CI/CD
 
-Seven workflows handle all CI/CD. Change detection determines which apps to test and deploy.
+Seven workflows handle all CI/CD. Change detection determines which apps to
+test and deploy.
 
 ### Workflows
 
@@ -228,10 +187,14 @@ Seven workflows handle all CI/CD. Change detection determines which apps to test
 `get-changed-apps.sh` determines which apps are affected by a change:
 
 - **Direct changes** to `<app>/**` mark that app
-- **Shared package changes** (e.g. `authutil/`) scan every app's `package.json` for `@commons-systems/` dependencies referencing the changed package and mark all matches
-- **Global triggers** (`firebase.json`, `firestore.rules`, `storage.rules`, `package.json`, `package-lock.json`) mark all apps
+- **Shared package changes** (e.g. `authutil/`) scan every app's
+  `package.json` for `@commons-systems/` dependencies referencing the changed
+  package and mark all matches
+- **Global triggers** (`firebase.json`, `firestore.rules`, `storage.rules`,
+  `package.json`, `package-lock.json`) mark all apps
 
-An "app" is any workspace listed in the root `package.json` `workspaces` array.
+An "app" is any workspace listed in the root `package.json` `workspaces`
+array.
 
 ### Script call chain
 
@@ -259,73 +222,61 @@ run-all-cleanup-preview.sh <pr-number>
 
 ## Pre-requisites
 
-- **Project Management** (github): Created a [project](https://github.com/users/natb1/projects/2).
-- **Version Control** (git): Created a repo.
-- **Agentic Coding Tools** (Claude Code): `nix flake update && home-manager switch --flake .#default --impure`
-  (Generic forker path — plain Linux/macOS without NixOS-WSL or nix-darwin. The author's WSL NixOS box activates home-manager atomically via `sudo nixos-rebuild switch` through `nixosConfigurations.nixos`; macOS via `darwin-rebuild switch` through `darwinConfigurations.default`.)
-- **Infrastructure** (Firebase): Hosting and storage.
+- **Version Control** (git + GitHub): a repo; during the migration period a
+  GitHub [project](https://github.com/users/natb1/projects/2) still backs the
+  legacy queue.
+- **Agentic Coding Tools** (Claude Code): `nix flake update && home-manager
+  switch --flake .#default --impure` (generic forker path — plain
+  Linux/macOS. The author's WSL NixOS box activates home-manager atomically
+  via `sudo nixos-rebuild switch`; macOS via `darwin-rebuild switch`.)
+- **Infrastructure** (Firebase): hosting and storage for the apps this
+  instance of the workflow builds.
+- **Intent**: run `/align` — it validates the deployment, walks the inherited
+  virtue roots, and records your first strategy.
 
 ## Where to go next
 
-- **Landing page** — [commons.systems](https://commons.systems): the project showcase and overview.
-- **Design system** — [packages/ds](packages/ds/README.md): tokens, components, and the visual language.
+- **Landing page** — [commons.systems](https://commons.systems): the project
+  showcase and overview.
+- **Graph schema** — [packages/intentionsutil/SCHEMA.md](packages/intentionsutil/SCHEMA.md):
+  node format, layer rules, attention, authority doctrine.
+- **Router design** — [intentions/tactic-graph-native-dispatch.md](intentions/tactic-graph-native-dispatch.md):
+  the graph-native dispatch draft and migration plan, held in the graph as a
+  draft tactic.
+- **Design system** — [packages/ds](packages/ds/README.md): tokens,
+  components, and the visual language.
 - **License** — CC-BY-SA; forking is encouraged.
 
 ### Differentiation
 
-This workflow is owned and self-managed, and it is built to be left. The measure
-of success is the practitioner's eventual independence from it — the inverse of a
-platform's retention metric. The human stays in planning and design, so intent
-is never captured: the parts worth keeping are decided by the person, not
-accumulated by the system. Everything below is support for that thesis, not a
-claim to have invented any single mechanism.
+This workflow is owned and self-managed, and it is built to be left. The
+measure of success is the practitioner's eventual independence from it — the
+inverse of a platform's retention metric. The human stays in intent, so intent
+is never captured: what is worth keeping is decided by the person, recorded in
+the graph, not accumulated by the system.
 
-The individual mechanisms have prior art. Worktree isolation, "the system
-controls the agent," the self-perpetuating tick (the "Ralph loop"),
-self-hosting, and SCM-as-state-machine are all established practice. What is
-distinctive here is the combination and the framing, not any one pattern:
+The individual mechanisms have prior art — worktree isolation, "the system
+controls the agent," the self-perpetuating tick, self-hosting. What is
+distinctive is the combination:
 
-- **The specific combination as a Claude Code harness.** Forkable and
-  self-hosted on the practitioner's own GitHub, Firebase, and Anthropic
-  accounts, with its state machine being the user's own GitHub issues and labels
-  — a multi-phase FSM (plan → implement → fix → qa → review → resolve), not a
-  coarse status flag — that self-perpetuates and has a dedicated
-  human-escalation queue. We have not seen these assembled together elsewhere.
-- **Office-hours as a symmetric peer escalation queue.** Autonomous work parks
-  into a human queue, and a human prompt is the de-escalation event that hands
-  the item back. This is a framing and design contribution, not an invented
-  capability. It differs from "open a PR and hope someone looks" and from
-  approval *gates*: a gate blocks forward progress pending sign-off, whereas
-  office-hours is a peer queue the work moves into and out of.
-- **Marker-absence-as-escalation.** Success requires a positive
-  phase-completed marker; the Stop hook fires unconditionally on every exit, so
-  any abnormal exit — crash, error, silent stall — fails safe to a human park
-  rather than to a false "done." This inverts the usual "the agent decides to
-  escalate," and it is grounded in the `dispatch-stop.sh` Stop-hook mechanics
-  above.
-- **SCM as the only control plane.** The control loop spends zero model tokens:
-  the tick is bash plus `systemd-run --user` transient units, not an LLM
-  re-prompt. We know of no other harness whose control loop runs without a model
-  in it.
-
-The two nearest artifacts differ on the same axes:
-
-- **Code Conductor** coordinates with labels and
-  worktrees, like this workflow, but runs a fully autonomous loop with no
-  in-loop human-escalation path: its `conductor:blocked` label is defined and
-  monitored but is never set by any agent, and `./conductor recover` is
-  self-remediation, not a human handoff. Its labels are coarse
-  execution-status and health markers, not a multi-phase workflow FSM.
-- **Claude Plan Orchestrator** uses human approval
-  gates and an approvals queue. Its authoritative state lives in a local SQLite
-  store; the status it commits into the git repo is a derived mirror of that
-  store. Here there is no authoritative store behind the SCM — the PR, CI, and
-  label ground truth *is* the state, re-derived every tick.
+- **Intent as the state machine.** The orchestrator's authoritative state is
+  a human-authored intention graph — virtues → strategies → tactics — in the
+  practitioner's own repo, not a task queue, a SQLite store, or a platform
+  backlog. Priorities are authored attention with rationales; escalation is a
+  graph edit; an unvalidated strategy signal *is* the work request.
+- **Office-hours as a symmetric peer escalation queue.** Autonomous work
+  parks into a human queue, and human engagement is the de-escalation event
+  that hands the item back — a peer queue, not an approval gate.
+- **Marker-absence-as-escalation.** Success requires a positive completion
+  marker; any abnormal exit fails safe to a human park rather than a false
+  "done."
+- **Zero-token control loop.** The tick is bash plus `systemd-run` transient
+  units; model tokens are spent on work, never on deciding to work.
 
 ## Related work / prior art
 
-The "harness" vocabulary this README uses comes from a body of recent writing on
-building reliable systems around coding agents.
+The "harness" vocabulary this README uses comes from a body of recent writing
+on building reliable systems around coding agents.
 
 - Birgitta Böckeler, ["Harness engineering for coding agent
   users"](https://martinfowler.com/articles/harness-engineering.html) (02 April
