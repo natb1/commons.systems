@@ -113,6 +113,36 @@ work keeps its numeric names. (This removes the friction the 2739 and
 2740 sessions hit: a graph-native session needing a synthetic numeric
 anchor just to name its worktree.)
 
+## Unit 4 — launch chain for node targets
+
+**Recommended model:** opus
+
+Depends on: Units 1–3.
+
+Scope: extend the post-selection launch chain to node-id targets, so a
+graph selection actually becomes a running worker (selection alone leaves
+the launch scripts issue-only):
+- `.claude/skills/dispatch-propagate/scripts/dispatch-materialize-spawn`
+  and `dispatch-launch-worker`: accept a `<node-id>` target alongside
+  `<issue-num>` (keyspace split: all-numeric = legacy issue, otherwise
+  node id); worktree path and spawn `--name` are the node id (Unit 3's
+  hook accepts it).
+- For node targets, `dispatch-route`'s phase *derivation* is bypassed —
+  phase is persisted (strategy clarification 1). The directive comes from
+  the node: strategy → `INVOKE /align-tactics <node-id>`; tactic by
+  `phase` → implement → `/implement`, fix → `/fix-checks`, qa →
+  `/qa-fix`, review → `/review-fix`. The deterministic provisioning
+  prelude (worktree provision + origin/main merge, CI-ready gate where a
+  PR exists) runs unchanged, preserving the merged-tree guarantee.
+- `dispatch-spawn-job` is reused as-is (generic primitive): `--name` =
+  node id, `--cwd` = the node-id worktree, prompt = the mapped skill
+  invocation.
+- Mechanical failure dispositions (provision-failed, merge conflict that
+  cannot invoke `/fix-conflicts`, wrong-worktree) park the node via the
+  `office_hours` graph write instead of an office-hours label —
+  coordinate with `tactic-graph-router-transitions`, which owns the
+  ongoing phase/marker writes, and use the `graph-commit` primitive.
+
 ## Dependencies
 
 - `tactic-graph-dispatch-schema` — the fields the gates read.
@@ -122,6 +152,9 @@ anchor just to name its worktree.)
   live so the derived terms are in effect from the first tick; not a hard
   blocker for this tactic (the selector functions without it, minus the
   derived terms), but it does hard-block `tactic-legacy-router-removal`.
+- `tactic-graph-commit` — Unit 4's failure-disposition park writes go
+  through the primitive; not a hard blocker for Units 1–3 (selection and
+  the tick wiring make no graph writes).
 
 ## Reuse
 

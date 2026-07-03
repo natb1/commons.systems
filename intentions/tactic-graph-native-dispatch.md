@@ -340,6 +340,18 @@ uniform worktree gives liveness detection (live session ⇔ worktree) one
 rule for both kinds. Draining legacy gh work keeps its numeric form, so
 both keyspaces coexist.
 
+The launch chain follows the same keyspace split: selection hands the
+node id to the legacy launch scripts
+(`dispatch-materialize-spawn` → `dispatch-launch-worker` →
+`dispatch-spawn-job`), which provision the node-id worktree and spawn the
+session — `/align-tactics <id>` for a strategy, the tactic's persisted
+`phase` mapped to its phase skill otherwise. `dispatch-route`'s
+label/PR-derived phase derivation does not apply to node targets (phase
+is persisted, clarification 1); its deterministic provisioning prelude
+carries over. Launch-failure dispositions park the node via the
+`office_hours` graph write. Scoped in `tactic-graph-router-selector`
+unit 4.
+
 ## 4. Coverage matrix
 
 Every legacy behavior maps to a home in the new family; nothing silently
@@ -419,8 +431,9 @@ tactic-intentions-branch-protection (park) ┤                                 �
   legacy removal), the `backlog` flag was removed from the store, and
   `validates` edges were stamped on the two terminals. The third recorded
   worker concurrency/claiming and pace parity: `pace_exempt` added to the
-  schema tactic, strategy-id claiming, the pace-exempt probe lane, and
-  uniform node-id worktree keys added to the selector tactic, §1.1/§3.2/
-  §3.4 amended; no tactic was pruned and no `blocked_by` changed.
+  schema tactic, strategy-id claiming, the pace-exempt probe lane,
+  uniform node-id worktree keys, and the node-target launch chain (unit
+  4) added to the selector tactic, §1.1/§3.2/§3.4 amended; no tactic was
+  pruned and no `blocked_by` changed.
 - This parent is not directly executable (no `phase`); it completes when
   its last child completes, which stamps the strategy's `rounds`.
