@@ -51,7 +51,7 @@ Every step below that calls `gh`, `npx`, or otherwise touches the network must
 run with `dangerouslyDisableSandbox: true`. `gh` fails TLS verification under the
 sandbox, and `npx tsx` may need to fetch packages; both require the live network.
 See `.claude/rules/sandbox.md`. Every `npx tsx` invocation below (step 1's node
-read and band gate, step 5's refresh.ts) needs `dangerouslyDisableSandbox: true`
+read, step 5's refresh.ts) needs `dangerouslyDisableSandbox: true`
 even when it does no network work, because the sandbox blocks tsx's IPC pipe.
 Only the step 3 sentinel parse — pure shell — does not.
 
@@ -86,31 +86,6 @@ Decision rule:
 - Otherwise → **emit path**: continue to steps 2–3 to create the issue. Read
   the node with `readNode(intentionsDir, <id>)` to obtain `statement`,
   `rationale`, `reading`, and `parent` for the steps below.
-
-### Band gate (emit path only)
-
-On the emit path, resolve the node's attention band before creating anything.
-The band is derived on read and never stored, so resolve it fresh over the whole
-graph with `resolveAttention`:
-
-```bash
-# dangerouslyDisableSandbox: true — tsx's IPC pipe is blocked by the sandbox.
-npx tsx -e '
-  import { listNodes } from "./intentionsutil/src/store.js";
-  import { resolveAttention } from "./intentionsutil/src/attention.js";
-  const id = process.argv[1];
-  const band = resolveAttention(listNodes("intentions")).get(id)?.band;
-  console.log(band ?? "none");
-' "<id>"
-```
-
-If the band is `bottom` → **STOP**: do not emit. Report to the user `node is
-bottom-band (deferred); raise its attention or clear its subordination to emit`
-and exit the skill. Any other result (`top`, `middle`, or `none` — an ineligible
-node with no entry) → continue. Carry the resolved band forward to step 5.
-
-The link path (step 1 took the shortcut) skips this gate: the issue is already
-emitted, so the band check gates only fresh emission.
 
 ---
 
@@ -244,17 +219,13 @@ non-`tactic-N` node — the number must be persisted so a later
 `nodeIdToIssue(<id>, trackersDir)` resolves it.
 
 ```bash
-# dangerouslyDisableSandbox: true (all three touch GitHub)
+# dangerouslyDisableSandbox: true (both touch GitHub)
 # 1. Discoverable mapping comment on the issue (Unit 3 script; <N> first).
 .claude/skills/dispatch-propagate/scripts/intention-stamp-node <N> <id>
 
 # 2. Create/refresh trackers/<id>.json with issue_number = N and current
 #    execution state (Unit 4 read-only refresh script).
 npx tsx intentionsutil/scripts/refresh.ts <id>
-
-# 3. If step 1 resolved the band as `top`, project the priority label. Skip
-#    otherwise (middle/none, or the link path where no band was resolved).
-gh issue edit <N> --add-label priority
 ```
 
 After this, `trackers/<id>.json` exists with `issue_number = N`, and the issue
@@ -270,11 +241,11 @@ running step 5 there is safe and keeps the tracker current.
 
 | Step | Kind | What runs it |
 |---|---|---|
-| 1. Resolve emit-or-link + band gate | **script** | `readNode` + `nodeIdToIssue` + `resolveAttention` (local) |
+| 1. Resolve emit-or-link | **script** | `readNode` + `nodeIdToIssue` (local) |
 | 2. Create the issue | **agent / Skill** | forked subagent → `/file-issue` |
 | 3. Parse sentinel block | **script** (orchestrator) | string parse of the subagent message |
 | 4. Relationships | **script** | `gh api` (network) |
-| 5. Stamp + tracker + top-band priority label | **script** | `intention-stamp-node` + `refresh.ts` + `gh issue edit` (network) |
+| 5. Stamp + tracker | **script** | `intention-stamp-node` + `refresh.ts` (network) |
 
 Only step 2 is an agent/Skill step. Everything else is pure script.
 
