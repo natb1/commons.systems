@@ -356,6 +356,21 @@ export function validateNode(value: unknown): IntentionNode {
  *      `attributes.goal_layer: true`. The eligible layer is data (the kind
  *      nodes), not a kind list in this file — virtues stay unranked because
  *      kind-virtue carries no goal_layer flag, not because code names it.
+ *   6. A non-null `parent` resolves to a node of the SAME kind — virtue→virtue,
+ *      strategy→strategy, tactic→tactic (uniform across every kind).
+ *   7. Every `serves` entry on a `kind: "tactic"` node resolves to a
+ *      `kind: "strategy"` node.
+ *   8. Every `serves` entry on a `kind: "strategy"` node resolves to a
+ *      `kind: "virtue"` node.
+ *   9. A non-empty `recovers` appears only on `kind: "strategy"` nodes, and
+ *      every entry resolves to a `kind: "delegation"` node.
+ *
+ * Rules 6-9 only judge edges whose target already resolves (rules 2-4 above
+ * report the dangling case); this avoids double-reporting the same broken
+ * edge under two different messages.
+ *
+ * Deliberately NOT enforced: `serves` on delegation or kind nodes — a
+ * delegation serves whatever depends on it, which is intentionally loose.
  *
  * Throws a single IntentionSchemaError listing ALL problems found, so one run
  * surfaces every dangling reference rather than the first.
@@ -387,6 +402,52 @@ export function validateGraph(nodes: IntentionNode[]): void {
         problems.push(
           `${node.id}: attention is only valid on goal-layer kinds — kind-${node.kind} does not set attributes.goal_layer`,
         );
+      }
+    }
+    if (node.parent !== null && byId.has(node.parent)) {
+      const parentNode = byId.get(node.parent)!;
+      if (parentNode.kind !== node.kind) {
+        problems.push(
+          `${node.id}: parent "${node.parent}" has kind "${parentNode.kind}", expected same kind "${node.kind}"`,
+        );
+      }
+    }
+    if (node.kind === "tactic") {
+      for (const target of node.serves) {
+        if (!byId.has(target)) continue;
+        const targetNode = byId.get(target)!;
+        if (targetNode.kind !== "strategy") {
+          problems.push(
+            `${node.id}: serves "${target}" must resolve to a kind "strategy" node, got kind "${targetNode.kind}"`,
+          );
+        }
+      }
+    }
+    if (node.kind === "strategy") {
+      for (const target of node.serves) {
+        if (!byId.has(target)) continue;
+        const targetNode = byId.get(target)!;
+        if (targetNode.kind !== "virtue") {
+          problems.push(
+            `${node.id}: serves "${target}" must resolve to a kind "virtue" node, got kind "${targetNode.kind}"`,
+          );
+        }
+      }
+    }
+    if (node.recovers.length > 0 && node.kind !== "strategy") {
+      problems.push(
+        `${node.id}: recovers is only valid on kind "strategy" nodes, got kind "${node.kind}"`,
+      );
+    }
+    if (node.kind === "strategy") {
+      for (const target of node.recovers) {
+        if (!byId.has(target)) continue;
+        const targetNode = byId.get(target)!;
+        if (targetNode.kind !== "delegation") {
+          problems.push(
+            `${node.id}: recovers "${target}" must resolve to a kind "delegation" node, got kind "${targetNode.kind}"`,
+          );
+        }
       }
     }
   }

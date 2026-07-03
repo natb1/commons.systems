@@ -299,8 +299,8 @@ describe("validateGraph", () => {
       gnode({
         id: "tactic-1",
         kind: "tactic",
-        parent: "virtue-root",
-        serves: ["virtue-root"],
+        parent: null,
+        serves: ["strategy-1"],
       }),
     ];
     expect(() => validateGraph(nodes)).not.toThrow();
@@ -362,12 +362,124 @@ describe("validateGraph", () => {
     expect(() => validateGraph(nodes)).toThrow(/attention is only valid on goal-layer kinds/);
   });
 
+  it("throws when a parent resolves to a node of a different kind", () => {
+    const nodes = [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-virtue", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-tactic", kind: "kind", status: "codified" }),
+      gnode({ id: "virtue-root", kind: "virtue" }),
+      gnode({ id: "tactic-1", kind: "tactic", parent: "virtue-root" }),
+    ];
+    expect(() => validateGraph(nodes)).toThrow(
+      /tactic-1: parent "virtue-root" has kind "virtue", expected same kind "tactic"/,
+    );
+  });
+
+  it("passes when a parent resolves to a node of the same kind", () => {
+    const nodes = [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-tactic", kind: "kind", status: "codified" }),
+      gnode({ id: "tactic-parent", kind: "tactic" }),
+      gnode({ id: "tactic-child", kind: "tactic", parent: "tactic-parent" }),
+    ];
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("throws when a tactic's serves entry resolves to a non-strategy node", () => {
+    const nodes = [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-virtue", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-tactic", kind: "kind", status: "codified" }),
+      gnode({ id: "virtue-root", kind: "virtue" }),
+      gnode({ id: "tactic-1", kind: "tactic", serves: ["virtue-root"] }),
+    ];
+    expect(() => validateGraph(nodes)).toThrow(
+      /tactic-1: serves "virtue-root" must resolve to a kind "strategy" node, got kind "virtue"/,
+    );
+  });
+
+  it("passes when a tactic's serves entry resolves to a strategy", () => {
+    const nodes = [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-strategy", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-tactic", kind: "kind", status: "codified" }),
+      gnode({ id: "strategy-1", kind: "strategy" }),
+      gnode({ id: "tactic-1", kind: "tactic", serves: ["strategy-1"] }),
+    ];
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("throws when a strategy's serves entry resolves to a non-virtue node", () => {
+    const nodes = [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-tactic", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-strategy", kind: "kind", status: "codified" }),
+      gnode({ id: "tactic-1", kind: "tactic" }),
+      gnode({ id: "strategy-1", kind: "strategy", serves: ["tactic-1"] }),
+    ];
+    expect(() => validateGraph(nodes)).toThrow(
+      /strategy-1: serves "tactic-1" must resolve to a kind "virtue" node, got kind "tactic"/,
+    );
+  });
+
+  it("passes when a strategy's serves entry resolves to a virtue", () => {
+    const nodes = [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-virtue", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-strategy", kind: "kind", status: "codified" }),
+      gnode({ id: "virtue-root", kind: "virtue" }),
+      gnode({ id: "strategy-1", kind: "strategy", serves: ["virtue-root"] }),
+    ];
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("throws when a non-strategy node carries a non-empty recovers", () => {
+    const nodes = [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-delegation", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-tactic", kind: "kind", status: "codified" }),
+      gnode({ id: "delegation-1", kind: "delegation" }),
+      gnode({ id: "tactic-1", kind: "tactic", recovers: ["delegation-1"] }),
+    ];
+    expect(() => validateGraph(nodes)).toThrow(
+      /tactic-1: recovers is only valid on kind "strategy" nodes, got kind "tactic"/,
+    );
+  });
+
+  it("throws when a strategy's recovers entry resolves to a non-delegation node", () => {
+    const nodes = [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-virtue", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-strategy", kind: "kind", status: "codified" }),
+      gnode({ id: "virtue-root", kind: "virtue" }),
+      gnode({ id: "strategy-1", kind: "strategy", recovers: ["virtue-root"] }),
+    ];
+    expect(() => validateGraph(nodes)).toThrow(
+      /strategy-1: recovers "virtue-root" must resolve to a kind "delegation" node, got kind "virtue"/,
+    );
+  });
+
+  it("passes when a strategy's recovers entry resolves to a delegation", () => {
+    const nodes = [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-delegation", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-strategy", kind: "kind", status: "codified" }),
+      gnode({ id: "delegation-1", kind: "delegation" }),
+      gnode({ id: "strategy-1", kind: "strategy", recovers: ["delegation-1"] }),
+    ];
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
   it("lists ALL violations in one throw (kind + parent + serves + recovers + attention)", () => {
     const nodes = [
       gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
       // kind-virtue present without goal_layer, so attention on a virtue is a
       // goal-layer violation.
       gnode({ id: "kind-virtue", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-tactic", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-strategy", kind: "kind", status: "codified" }),
+      gnode({ id: "virtue-root", kind: "virtue" }),
+      gnode({ id: "tactic-mismatch", kind: "tactic" }),
       gnode({
         id: "broken-1",
         kind: "ghost",
@@ -380,6 +492,16 @@ describe("validateGraph", () => {
         kind: "virtue",
         attention: { boost: 1, override: null, rationale: "r" },
       }),
+      // Same-kind-parent violation: a tactic parented to a virtue.
+      gnode({ id: "broken-3", kind: "tactic", parent: "virtue-root" }),
+      // Tactic-serves-strategy violation: serves a virtue instead.
+      gnode({ id: "broken-4", kind: "tactic", serves: ["virtue-root"] }),
+      // Strategy-serves-virtue violation: serves a tactic instead.
+      gnode({ id: "broken-5", kind: "strategy", serves: ["tactic-mismatch"] }),
+      // recovers-on-non-strategy violation.
+      gnode({ id: "broken-6", kind: "tactic", recovers: ["broken-2"] }),
+      // recovers-target-not-delegation violation.
+      gnode({ id: "broken-7", kind: "strategy", recovers: ["virtue-root"] }),
     ];
     let caught: unknown;
     try {
@@ -394,5 +516,20 @@ describe("validateGraph", () => {
     expect(caught.message).toContain('serves "no-such-target" does not resolve to a node');
     expect(caught.message).toContain('recovers "no-such-delegation" does not resolve to a node');
     expect(caught.message).toContain("attention is only valid on goal-layer kinds");
+    expect(caught.message).toContain(
+      'broken-3: parent "virtue-root" has kind "virtue", expected same kind "tactic"',
+    );
+    expect(caught.message).toContain(
+      'broken-4: serves "virtue-root" must resolve to a kind "strategy" node, got kind "virtue"',
+    );
+    expect(caught.message).toContain(
+      'broken-5: serves "tactic-mismatch" must resolve to a kind "virtue" node, got kind "tactic"',
+    );
+    expect(caught.message).toContain(
+      'broken-6: recovers is only valid on kind "strategy" nodes, got kind "tactic"',
+    );
+    expect(caught.message).toContain(
+      'broken-7: recovers "virtue-root" must resolve to a kind "delegation" node, got kind "virtue"',
+    );
   });
 });

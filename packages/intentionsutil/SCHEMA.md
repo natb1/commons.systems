@@ -1,9 +1,10 @@
 # Intention node schema
 
 An intention graph is a single uniform node structure. Every node is the same
-type at any altitude: a virtue at a root, a strategy below it, a tactic at a
-leaf, a delegation record, or a kind node describing one of those classes —
-the same schema describes all of them, linked by `parent` and `serves`.
+type at any altitude: a virtue at a root, a strategy below it, a tactic doing
+concrete work, a delegation record, or a kind node describing one of those
+classes — the same schema describes all of them, linked by `parent` and
+`serves`.
 
 The graph is self-describing. A node's `kind` names the kind node
 (`kind-<kind>`) that defines its semantics: its edge rules, how progress works
@@ -140,26 +141,90 @@ Setting both `boost` and `override`, or neither, is rejected by
 
 The required core — `id`, `kind`, `statement`, `owner`, `status` — is always
 present and strictly validated. The optional fields tolerate being absent or
-`null`. This split is load-bearing: read-only backfill has a real source only
-for `id`, `kind`, `parent`, `statement`, `rationale`, `owner`, `status`, and
-`attributes.source`. The dialectic fields (`clarifications`, `tooling_goals`,
-`success_signal`, `serves` on tactics) come from a dialectic that has not run
-yet, and `reading` and `gap` are sensor-populated after the dialectic runs
-(`reading` measured by the sensor, `gap` mechanically derived from it), so
-`validateNode` must accept nodes without them rather than rejecting backfilled
-nodes as invalid.
+`null`. This split is load-bearing: a node may legitimately exist before its
+optional fields are filled in. On a gh-backed tactic, backfill derives only the
+gh-derived fields — `statement`, `parent`, `rationale`, and `attributes.source`
+(see "Authority and the GitHub projection"); everything else is graph-owned. So
+a freshly generated tactic carries empty dialectic fields (`clarifications`,
+`tooling_goals`, `success_signal`, `serves`) until the dialectic populates them.
+Those dialectic fields are graph-owned: once authored on a gh-backed tactic,
+backfill preserves them across every reconcile — they no longer only await a
+dialectic run, they survive reconciliation. `reading` and `gap` are
+sensor-populated after the dialectic runs (`reading` measured by the sensor,
+`gap` mechanically derived from it). `validateNode` must therefore accept nodes
+without any of these rather than rejecting them as invalid.
+
+## Authority and the GitHub projection
+
+The graph is the authoritative source of truth for all data. GitHub is an
+optional, derived projection of it — useful for execution tooling today, but
+never the origin of intention. This supersedes the earlier split-authority
+model, in which GitHub was treated as authoritative for execution state:
+intention and execution state now both live in the graph.
+
+The move to a graph-authoritative model proceeds in three steps:
+
+1. Make the graph a correct source of truth for all data — the current change.
+2. Incrementally migrate the dispatch router to work on the graph instead of
+   GitHub — future work.
+3. Optionally re-establish a full GitHub integration on top of the graph
+   (design TBD) — future work.
+
+The dispatch fleet's ability to create new work items (deferred follow-ups)
+must survive every step. Today it files GitHub issues, which sync into the
+graph as tactics.
+
+### Per-field ownership for gh-backed tactics
+
+A tactic is *gh-backed* when its frontmatter carries
+`attributes.source: github:<owner>/<repo>#<N>`. For a gh-backed tactic, backfill
+(`npx tsx packages/intentionsutil/scripts/backfill.ts`) is a reconciler, not a
+regenerator: it syncs the gh-derived fields from the issue, preserves every
+graph-owned field, prunes gh-backed tactics whose issue has closed, and never
+touches a hand-authored tactic. Backfill is strictly read-only toward GitHub.
+
+| Field | Ownership | Source when gh-backed |
+| ----- | --------- | --------------------- |
+| `statement` | gh-derived | issue title |
+| `parent` | gh-derived | issue hierarchy (nulled if the parent issue is closed) |
+| `rationale` | gh-derived | issue body `## Scope` section |
+| `attributes.source` | gh-derived | the `github:<owner>/<repo>#<N>` reference itself |
+| `owner`, `status`, `serves`, `recovers`, `attention`, `clarifications`, `tooling_goals`, `success_signal`, `reading`, `gap`, and any other `attributes` keys | graph-owned | authored in the graph; preserved on every reconcile |
+
+A hand-authored tactic — one with no `attributes.source` — is fully
+graph-owned: backfill never reads or writes it. It is the primary form a tactic
+takes before, or without, a GitHub projection.
 
 ## Graph-level validation
 
-`validateGraph(nodes)` checks referential integrity across a whole node set:
-every node's `kind` has its defining `kind-<kind>` node present, and every
-non-null `parent` and every `serves` and `recovers` entry resolves to an
-existing node id. It also checks that `attention` appears only on nodes whose
-kind node sets `attributes.goal_layer: true`. The eligible layer is data (the
-kind nodes), not a kind list in this file — virtues stay unranked because
-`kind-virtue` carries no `goal_layer` flag, not because code names it. It
-throws one error listing all violations. Backfill runs it over the full store
-after regenerating the tactic leaves.
+`validateGraph(nodes)` checks referential integrity across a whole node set —
+the edges between nodes, not per-node shape. It enforces:
+
+1. Every node's `kind` has its defining `kind-<kind>` node present. This is
+   what makes the graph self-describing: the set of valid kinds is the set of
+   committed kind nodes, not an enum in this file.
+2. Every non-null `parent` resolves to an existing node id.
+3. Every `serves` entry resolves to an existing node id.
+4. Every `recovers` entry resolves to an existing node id.
+5. `attention` appears only on nodes whose kind node sets
+   `attributes.goal_layer: true`. The eligible layer is data (the kind nodes),
+   not a kind list in this file — virtues stay unranked because `kind-virtue`
+   carries no `goal_layer` flag, not because code names it.
+6. A non-null `parent` resolves to a node of the *same* `kind` — virtue→virtue,
+   strategy→strategy, tactic→tactic (uniform across every kind).
+7. Every `serves` entry on a `kind: "tactic"` node resolves to a
+   `kind: "strategy"` node.
+8. Every `serves` entry on a `kind: "strategy"` node resolves to a
+   `kind: "virtue"` node.
+9. A non-empty `recovers` appears only on `kind: "strategy"` nodes, and every
+   entry resolves to a `kind: "delegation"` node.
+
+Rules 6–9 judge only edges whose target already resolves (rules 2–4 report the
+dangling case), so a single broken edge is not double-reported. `serves` on
+delegation and kind nodes is deliberately unenforced — a delegation serves
+whatever depends on it, which is intentionally loose. `validateGraph` throws
+one error listing all violations. Backfill runs it over the full store after
+reconciling the gh-backed tactics.
 
 ## Round-trip guarantee
 
