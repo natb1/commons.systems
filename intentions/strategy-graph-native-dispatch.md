@@ -86,6 +86,19 @@ clarifications:
       touches sourceless tactics). Recorded 2026-07-03; supersedes this record's
       own first draft, which parked the design outside the graph in
       packages/intentionsutil/DISPATCH.md."
+  - question: How does the /align-strategy dialectic handle requirements for UI
+      design, where text questions under-specify?
+    answer: "It supplements the ask-questions tool with the design system's design
+      canvas: the skill produces canvas artifacts (mockups/variants built on
+      @commons-systems/ds, synced via DesignSync to the claude.ai/design canvas)
+      as visual aids for the dialectic — rendering competing interpretations and
+      edge cases so the author disambiguates by pointing at a variant rather
+      than parsing prose. Canvas artifacts are aids to the interview, not
+      deliverables: the resolutions they produce land in the node as
+      clarifications/conditions like any other, and surviving visual context is
+      retained as draft tactic content per the retain-not-refine contract. Known
+      caveat: a freshly synced component is absent from the canvas until the
+      project is opened/refreshed. Recorded 2026-07-03."
 tooling_goals:
   - kind: actuator
     statement: /align-strategy — interview-driven strategy recording, superseding

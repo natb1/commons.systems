@@ -163,6 +163,15 @@ remains the scheduled periodic review.
    placement); benefit; signals (`success_signal`); the author circumstances
    the strategy is contingent on (`attributes.conditions`). Present edge
    cases and consequences; resolutions recorded as dated `clarifications`.
+   For UI-design requirements, supplement the ask-questions tool with the
+   design system's design canvas: build mockup/variant artifacts on
+   `@commons-systems/ds`, sync via DesignSync to the claude.ai/design
+   canvas, and put competing interpretations and edge cases in front of the
+   author visually — disambiguation by pointing at a variant. Canvas
+   artifacts are interview aids, not deliverables: resolutions land as
+   clarifications/conditions; surviving visual context is retained as draft
+   tactic content. (Caveat: a freshly synced component is absent from the
+   canvas until the project is opened/refreshed.)
 3. **Advise on delegation and capture.** Propose `recovers` edges and
    review-trigger updates where the strategy touches a delegation; flag
    capture risk per the delegation kind's divergence/irreversibility axes.
