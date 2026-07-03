@@ -29,6 +29,7 @@ function node(partial: Partial<IntentionNode> & { id: string }): IntentionNode {
     clarifications: partial.clarifications ?? [],
     tooling_goals: partial.tooling_goals ?? [],
     success_signal: partial.success_signal ?? null,
+    attention: partial.attention ?? null,
     attributes: partial.attributes ?? {},
   };
 }

@@ -39,6 +39,20 @@ export interface ToolingGoal {
   statement: string;
 }
 
+/**
+ * A user-authored attention injection: a weight plus the rationale for why
+ * this node draws (or defers) attention now. Valid only on goal-layer kinds
+ * (those whose kind node sets `attributes.goal_layer: true`) — enforced by
+ * `validateGraph`, not here. The resolved flow this seeds is derived on read
+ * by `resolveAttention` and is NEVER stored in frontmatter.
+ */
+export interface Attention {
+  weight: number; // finite, >= 0; any scale — only ratios matter
+  rationale: string;
+  subordinate_to: string[]; // node ids whose claims outrank this one
+  review_trigger: string | null; // required when weight === 0 (explicit deferral)
+}
+
 // --- Node ------------------------------------------------------------------
 
 /**
@@ -74,6 +88,7 @@ export interface IntentionNode {
   clarifications: Clarification[];
   tooling_goals: ToolingGoal[];
   success_signal: SuccessSignal | null;
+  attention: Attention | null;
   attributes: Record<string, unknown>; // kind-specific fields; semantics defined by the kind-<kind> node
 }
 
@@ -98,6 +113,7 @@ export interface IntentionNodeInput {
   clarifications?: Clarification[];
   tooling_goals?: ToolingGoal[];
   success_signal?: SuccessSignal | null;
+  attention?: Attention | null;
   attributes?: Record<string, unknown>;
 }
 
@@ -202,6 +218,37 @@ function validateToolingGoals(value: unknown, field: string): ToolingGoal[] {
   });
 }
 
+function validateAttention(value: unknown, field: string): Attention {
+  if (!isPlainObject(value)) {
+    throw new IntentionSchemaError(`Expected object for ${field}, got ${typeof value}`);
+  }
+  if (typeof value.weight !== "number" || !Number.isFinite(value.weight)) {
+    throw new IntentionSchemaError(`Expected finite number for ${field}.weight`);
+  }
+  if (value.weight < 0) {
+    throw new IntentionSchemaError(`${field}.weight must be >= 0, got ${value.weight}`);
+  }
+  const rationale = requireString(value.rationale, `${field}.rationale`);
+  if (rationale === "") {
+    throw new IntentionSchemaError(`${field}.rationale must be a non-empty string`);
+  }
+  const review_trigger = optionalString(value.review_trigger, `${field}.review_trigger`);
+  // Weight 0 is the explicit-deferral form; a deferral without a re-open
+  // condition is the old undefined "deferred for a cycle".
+  if (value.weight === 0 && review_trigger === null) {
+    throw new IntentionSchemaError(`${field}.review_trigger is required when ${field}.weight is 0`);
+  }
+  return {
+    weight: value.weight,
+    rationale,
+    subordinate_to:
+      value.subordinate_to == null
+        ? []
+        : validateIdArray(value.subordinate_to, `${field}.subordinate_to`),
+    review_trigger,
+  };
+}
+
 // --- Validator -------------------------------------------------------------
 
 /**
@@ -257,6 +304,8 @@ export function validateNode(value: unknown): IntentionNode {
       value.success_signal == null
         ? null
         : validateSuccessSignal(value.success_signal, "success_signal"),
+    attention:
+      value.attention == null ? null : validateAttention(value.attention, "attention"),
     attributes:
       value.attributes == null
         ? {}
@@ -276,12 +325,18 @@ export function validateNode(value: unknown): IntentionNode {
  *   2. Every non-null `parent` resolves to an existing node id.
  *   3. Every `serves` entry resolves to an existing node id.
  *   4. Every `recovers` entry resolves to an existing node id.
+ *   5. Every `attention.subordinate_to` entry resolves to an existing node id.
+ *   6. `attention` appears only on nodes whose kind node sets
+ *      `attributes.goal_layer: true`. The eligible layer is data (the kind
+ *      nodes), not a kind list in this file — virtues stay unranked because
+ *      kind-virtue carries no goal_layer flag, not because code names it.
  *
  * Throws a single IntentionSchemaError listing ALL problems found, so one run
  * surfaces every dangling reference rather than the first.
  */
 export function validateGraph(nodes: IntentionNode[]): void {
-  const ids = new Set(nodes.map((n) => n.id));
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const ids = new Set(byId.keys());
   const problems: string[] = [];
   for (const node of nodes) {
     if (!ids.has(`kind-${node.kind}`)) {
@@ -298,6 +353,21 @@ export function validateGraph(nodes: IntentionNode[]): void {
     for (const target of node.recovers) {
       if (!ids.has(target)) {
         problems.push(`${node.id}: recovers "${target}" does not resolve to a node`);
+      }
+    }
+    if (node.attention !== null) {
+      for (const target of node.attention.subordinate_to) {
+        if (!ids.has(target)) {
+          problems.push(
+            `${node.id}: subordinate_to "${target}" does not resolve to a node`,
+          );
+        }
+      }
+      const kindNode = byId.get(`kind-${node.kind}`);
+      if (kindNode !== undefined && kindNode.attributes.goal_layer !== true) {
+        problems.push(
+          `${node.id}: attention is only valid on goal-layer kinds — kind-${node.kind} does not set attributes.goal_layer`,
+        );
       }
     }
   }
