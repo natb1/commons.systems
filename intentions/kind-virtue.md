@@ -20,6 +20,8 @@ rationale: >-
   (`attributes.tension_with`): they are balanced, not summed, and maximizing
   one against its partner is failure, not progress. Whatever consumes this
   graph must never total virtue children into a parent completion score.
+  Virtues never carry attention injections and are never conduits for flow;
+  the resolver reads provenance off the `serves` chain as a fact.
 
 
   A virtue applied to present conditions generates strategies (kind-strategy);

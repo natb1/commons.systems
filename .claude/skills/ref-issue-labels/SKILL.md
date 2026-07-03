@@ -147,10 +147,14 @@ alongside a topic label.
   Keyword signals: "audio", "audio app".
 
 - **`priority`** — a separate axis from the topic labels above. A
-  human-applied escalation marker that routes the issue (or any PR closing it)
-  ahead of non-priority items across all topic categories in `/dispatch-propagate` queue selection. Apply only
-  when a human explicitly asks to escalate; `/file-issue` never applies it
-  automatically. May be combined with any topic label.
+  human-sourced escalation marker that routes the issue (or any PR closing it)
+  ahead of non-priority items across all topic categories in `/dispatch-propagate` queue selection. It has two
+  legitimate sources, both human: a human explicitly asking to escalate, and the
+  intention graph's resolved `top` band, which `intention-emit` projects onto the
+  issue at emit time. The graph source stays human-sourced — the human act is
+  authoring the node's `attention` injection in git, which `resolveAttention`
+  derives the band from. `/file-issue` never applies it automatically. May be
+  combined with any topic label.
 
 - **Neither** — apply no topic label when nothing matches. There is no
   "other" sentinel label.

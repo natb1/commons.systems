@@ -52,6 +52,7 @@ attributes:
     - "serves: cross-layer edge — ids of the nodes this node expresses"
     - "recovers: strategy→delegation edge — ids of the delegation records this node's work unwinds"
     - "rationale: why this node exists"
+    - "attention: authored attention injection (weight, rationale, subordinate_to, review_trigger); valid only on nodes whose kind sets goal_layer: true; resolved flow and band are derived on read and never stored"
     - "attributes: kind-specific fields, defined by the kind node"
   entry_point: this node is the entry point of the graph
 ---
