@@ -35,6 +35,12 @@ describe("store round-trip", () => {
         threshold: "0 orphans",
         is_proxy: false,
       },
+      attention: {
+        weight: 4,
+        rationale: "This root draws attention this cycle.",
+        subordinate_to: ["charter"],
+        review_trigger: "Revisit when the charter changes.",
+      },
       attributes: { source: "github:natb1/commons.systems#1", weight: 3 },
     };
 
@@ -77,6 +83,7 @@ describe("store round-trip", () => {
         threshold: "0 diff",
         is_proxy: false,
       },
+      attention: null,
       attributes: {},
     };
 
@@ -112,6 +119,7 @@ describe("store round-trip", () => {
       clarifications: [],
       tooling_goals: [],
       success_signal: null,
+      attention: null,
       attributes: {},
     });
   });

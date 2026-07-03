@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { IntentionNode, Owner } from "../src/schema.js";
+import type { Goal } from "../src/goals.js";
 import {
   activeFrontier,
   projectGoals,
@@ -24,6 +25,7 @@ function node(partial: Partial<IntentionNode> & { id: string }): IntentionNode {
     clarifications: partial.clarifications ?? [],
     tooling_goals: partial.tooling_goals ?? [],
     success_signal: partial.success_signal ?? null,
+    attention: partial.attention ?? null,
     attributes: partial.attributes ?? {},
   };
 }
@@ -118,6 +120,112 @@ describe("projectGoals", () => {
     const byId = Object.fromEntries(goals.map((g) => [g.node.id, g.realization]));
     expect(byId.p).toBe("script-and-tests");
     expect(byId.h).toBe("issue-or-pr");
+  });
+});
+
+describe("projectGoals attention ordering", () => {
+  // Goal-layer kind nodes (codified, childless → excluded from the frontier)
+  // whose `attributes.goal_layer: true` makes strategy/tactic nodes eligible.
+  const kindStrategy = node({
+    id: "kind-strategy",
+    kind: "kind",
+    status: "codified",
+    attributes: { goal_layer: true },
+  });
+  const kindTactic = node({
+    id: "kind-tactic",
+    kind: "kind",
+    status: "codified",
+    attributes: { goal_layer: true },
+  });
+  const kindKind = node({ id: "kind-kind", kind: "kind", status: "codified" });
+
+  it("floats an injected strategy's frontier leaf above gap/id-favored siblings", () => {
+    // The injected strategy is a non-leaf (its child names it as parent), so it
+    // is not on the frontier itself — its flow inherits down to the leaf tactic.
+    const strategy = node({
+      id: "strategy-s",
+      kind: "strategy",
+      status: "raw",
+      attention: { weight: 10, rationale: "urgent", subordinate_to: [], review_trigger: null },
+    });
+    // The frontier leaf that inherits the strategy's flow. Highest id, no gap —
+    // so gap/id keys alone would rank it LAST.
+    const injected = node({ id: "z-inject-tactic", kind: "tactic", status: "raw", parent: "strategy-s" });
+    // Competing frontier leaves the pre-attention keys would rank first.
+    const gapA = node({ id: "a-tactic", kind: "tactic", status: "raw", gap: "g" });
+    const gapB = node({ id: "b-tactic", kind: "tactic", status: "raw", gap: "g" });
+
+    const goals = projectGoals([gapA, gapB, injected, strategy, kindStrategy, kindTactic, kindKind]);
+    expect(goals.map((g) => g.node.id)).toEqual(["z-inject-tactic", "a-tactic", "b-tactic"]);
+  });
+
+  it("sets Goal.attention null for non-eligible nodes and populated for eligible ones", () => {
+    const kindNote = node({ id: "kind-note", kind: "kind", status: "codified" });
+    const eligible = node({
+      id: "t-eligible",
+      kind: "tactic",
+      status: "raw",
+      attention: { weight: 10, rationale: "r", subordinate_to: [], review_trigger: null },
+    });
+    // kind "note" has no goal_layer flag → not eligible → no resolver entry.
+    const ineligible = node({ id: "n-note", kind: "note", status: "raw" });
+
+    const goals = projectGoals([kindTactic, kindKind, kindNote, eligible, ineligible]);
+    const byId = Object.fromEntries(goals.map((g) => [g.node.id, g.attention]));
+    expect(byId["t-eligible"]).not.toBeNull();
+    expect(byId["t-eligible"]?.value).toBeGreaterThan(0);
+    expect(byId["n-note"]).toBeNull();
+  });
+});
+
+describe("renderFrontier attention markers", () => {
+  it("emits `[top via <id>]` for a top-band goal and no marker for a middle goal", () => {
+    // Drive renderFrontier from Goal literals directly: it reads only `band`
+    // and `sources[0]`, so this decouples the marker assertion from the
+    // resolver's scale-invariant banding math.
+    const goals: Goal[] = [
+      {
+        node: node({ id: "top-goal", status: "raw" }),
+        realization: "issue-or-pr",
+        attention: { value: 20, band: "top", sources: ["strategy-x"] },
+      },
+      {
+        node: node({ id: "mid-goal", status: "raw" }),
+        realization: "issue-or-pr",
+        attention: { value: 1, band: "middle", sources: ["strategy-y"] },
+      },
+    ];
+    expect(renderFrontier(goals)).toBe(
+      "- **top-goal** — Statement for top-goal _(owner: human → issue/PR)_ [top via strategy-x]\n" +
+        "- **mid-goal** — Statement for mid-goal _(owner: human → issue/PR)_\n",
+    );
+  });
+
+  it("emits a bare `[bottom]` marker when sources is empty", () => {
+    const goals: Goal[] = [
+      {
+        node: node({ id: "b-goal", status: "raw" }),
+        realization: "issue-or-pr",
+        attention: { value: 0, band: "bottom", sources: [] },
+      },
+    ];
+    expect(renderFrontier(goals)).toBe(
+      "- **b-goal** — Statement for b-goal _(owner: human → issue/PR)_ [bottom]\n",
+    );
+  });
+
+  it("is byte-identical to the pre-attention format when no node carries an injection", () => {
+    // No kind nodes → nothing eligible → every Goal.attention is null → no
+    // markers. The exact expected string is the pre-change render.
+    const goals = projectGoals([
+      node({ id: "z", status: "raw", gap: "missing tooling" }),
+      node({ id: "a", status: "raw" }),
+    ]);
+    expect(renderFrontier(goals)).toBe(
+      "- **z** — Statement for z _(owner: human → issue/PR)_ — gap: missing tooling\n" +
+        "- **a** — Statement for a _(owner: human → issue/PR)_\n",
+    );
   });
 });
 

@@ -24,6 +24,12 @@ describe("validateNode", () => {
         threshold: "th",
         is_proxy: true,
       },
+      attention: {
+        weight: 2,
+        rationale: "Draws attention now.",
+        subordinate_to: ["p"],
+        review_trigger: "Revisit next cycle.",
+      },
       attributes: { source: "github:natb1/commons.systems#1" },
     };
     expect(validateNode(input)).toEqual(input);
@@ -52,6 +58,7 @@ describe("validateNode", () => {
       clarifications: [],
       tooling_goals: [],
       success_signal: null,
+      attention: null,
       attributes: {},
     });
   });
@@ -124,6 +131,58 @@ describe("validateNode", () => {
       }),
     ).toThrow();
   });
+
+  it("rejects an attention with a negative weight", () => {
+    expect(() =>
+      validateNode({
+        id: "n8",
+        kind: "strategy",
+        statement: "Negative weight.",
+        owner: "human",
+        status: "raw",
+        attention: { weight: -1, rationale: "r" },
+      }),
+    ).toThrow();
+  });
+
+  it("rejects an attention missing a rationale", () => {
+    expect(() =>
+      validateNode({
+        id: "n9",
+        kind: "strategy",
+        statement: "No rationale.",
+        owner: "human",
+        status: "raw",
+        attention: { weight: 1 },
+      }),
+    ).toThrow();
+  });
+
+  it("rejects an attention with weight 0 and no review_trigger", () => {
+    expect(() =>
+      validateNode({
+        id: "n10",
+        kind: "strategy",
+        statement: "Deferral without a re-open condition.",
+        owner: "human",
+        status: "raw",
+        attention: { weight: 0, rationale: "r" },
+      }),
+    ).toThrow();
+  });
+
+  it("rejects an attention with a non-array subordinate_to", () => {
+    expect(() =>
+      validateNode({
+        id: "n11",
+        kind: "strategy",
+        statement: "Bad subordinate_to.",
+        owner: "human",
+        status: "raw",
+        attention: { weight: 1, rationale: "r", subordinate_to: "not-an-array" },
+      }),
+    ).toThrow();
+  });
 });
 
 describe("validateGraph", () => {
@@ -144,6 +203,7 @@ describe("validateGraph", () => {
       clarifications: partial.clarifications ?? [],
       tooling_goals: partial.tooling_goals ?? [],
       success_signal: partial.success_signal ?? null,
+      attention: partial.attention ?? null,
       attributes: partial.attributes ?? {},
     };
   }
@@ -154,7 +214,12 @@ describe("validateGraph", () => {
       gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
       gnode({ id: "kind-virtue", kind: "kind", status: "codified" }),
       gnode({ id: "kind-tactic", kind: "kind", status: "codified" }),
-      gnode({ id: "kind-strategy", kind: "kind", status: "codified" }),
+      gnode({
+        id: "kind-strategy",
+        kind: "kind",
+        status: "codified",
+        attributes: { goal_layer: true },
+      }),
       gnode({ id: "kind-delegation", kind: "kind", status: "codified" }),
       gnode({ id: "virtue-root", kind: "virtue", status: "codified", parent: null }),
       gnode({ id: "delegation-1", kind: "delegation" }),
@@ -163,6 +228,12 @@ describe("validateGraph", () => {
         kind: "strategy",
         serves: ["virtue-root"],
         recovers: ["delegation-1"],
+        attention: {
+          weight: 3,
+          rationale: "A live strategy that draws attention.",
+          subordinate_to: [],
+          review_trigger: null,
+        },
       }),
       gnode({
         id: "tactic-1",
@@ -215,15 +286,73 @@ describe("validateGraph", () => {
     );
   });
 
-  it("lists ALL violations in one throw (kind + parent + serves + recovers)", () => {
+  it("throws when an attention.subordinate_to does not resolve to a node", () => {
     const nodes = [
       gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({
+        id: "kind-strategy",
+        kind: "kind",
+        status: "codified",
+        attributes: { goal_layer: true },
+      }),
+      gnode({
+        id: "strategy-1",
+        kind: "strategy",
+        attention: {
+          weight: 1,
+          rationale: "r",
+          subordinate_to: ["no-such-node"],
+          review_trigger: null,
+        },
+      }),
+    ];
+    expect(() => validateGraph(nodes)).toThrow(
+      /subordinate_to "no-such-node" does not resolve to a node/,
+    );
+  });
+
+  it("throws when attention is on a node whose kind lacks goal_layer", () => {
+    const nodes = [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      // kind-virtue is present but carries no goal_layer flag, so virtues are
+      // not a goal-layer kind and may not carry attention.
+      gnode({ id: "kind-virtue", kind: "kind", status: "codified" }),
+      gnode({
+        id: "virtue-1",
+        kind: "virtue",
+        attention: {
+          weight: 1,
+          rationale: "r",
+          subordinate_to: [],
+          review_trigger: null,
+        },
+      }),
+    ];
+    expect(() => validateGraph(nodes)).toThrow(/attention is only valid on goal-layer kinds/);
+  });
+
+  it("lists ALL violations in one throw (kind + parent + serves + recovers + attention)", () => {
+    const nodes = [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      // kind-virtue present without goal_layer, so attention on a virtue is a
+      // goal-layer violation.
+      gnode({ id: "kind-virtue", kind: "kind", status: "codified" }),
       gnode({
         id: "broken-1",
         kind: "ghost",
         parent: "no-such-parent",
         serves: ["no-such-target"],
         recovers: ["no-such-delegation"],
+      }),
+      gnode({
+        id: "broken-2",
+        kind: "virtue",
+        attention: {
+          weight: 1,
+          rationale: "r",
+          subordinate_to: ["no-such-node"],
+          review_trigger: null,
+        },
       }),
     ];
     let caught: unknown;
@@ -238,5 +367,7 @@ describe("validateGraph", () => {
     expect(caught.message).toContain('parent "no-such-parent" does not resolve to a node');
     expect(caught.message).toContain('serves "no-such-target" does not resolve to a node');
     expect(caught.message).toContain('recovers "no-such-delegation" does not resolve to a node');
+    expect(caught.message).toContain('subordinate_to "no-such-node" does not resolve to a node');
+    expect(caught.message).toContain("attention is only valid on goal-layer kinds");
   });
 });

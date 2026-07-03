@@ -69,6 +69,7 @@ authoritative data.
 | `clarifications` | `Clarification[]`     | no       | Q&A pairs resolved during the dialectic. Defaults to `[]`. |
 | `tooling_goals`  | `ToolingGoal[]`       | no       | Tooling the node aims to produce or change. Defaults to `[]`. |
 | `success_signal` | `SuccessSignal \| null` | no     | A measurable signal the intention is met. Defaults to `null`. |
+| `attention`      | `Attention \| null`   | no       | A user-authored attention injection (weight + rationale). Valid only on goal-layer kinds, enforced by `validateGraph`. The resolved flow it seeds is derived on read by `resolveAttention` and never stored. Defaults to `null`. |
 | `attributes`     | `Record<string, unknown>` | no   | Kind-specific fields (e.g. a delegation's divergence/irreversibility assessment). Validated as a plain object; the meaning of its entries is defined by the node's kind node. Defaults to `{}`. |
 
 ### `SuccessSignal`
@@ -93,6 +94,18 @@ authoritative data.
 | ----------- | -------------- | ------- |
 | `kind`      | `ToolingKind` enum | What the goal codifies. |
 | `statement` | `string`       | The tooling goal, in one sentence. |
+
+### `Attention`
+
+A user-authored injection that seeds the derived attention flow. Valid only on
+goal-layer kinds (see Graph-level validation).
+
+| Name             | Type              | Meaning |
+| ---------------- | ----------------- | ------- |
+| `weight`         | `number`          | The injected weight. Must be finite and `>= 0`; any scale — only ratios matter. |
+| `rationale`      | `string`          | Why this node draws (or defers) attention now. Must be non-empty. |
+| `subordinate_to` | `string[]`        | `id`s of nodes whose claims outrank this one. While non-empty, the injection is damped. Defaults to `[]`. |
+| `review_trigger` | `string \| null`  | The condition that re-opens an explicit deferral. **Required when `weight` is 0** (deferral without a re-open condition is rejected); otherwise `null`. |
 
 ## Enums
 
@@ -138,7 +151,12 @@ nodes as invalid.
 `validateGraph(nodes)` checks referential integrity across a whole node set:
 every node's `kind` has its defining `kind-<kind>` node present, and every
 non-null `parent` and every `serves` and `recovers` entry resolves to an
-existing node id. It
+existing node id. It also checks the `attention` edges: every
+`attention.subordinate_to` entry resolves to an existing node id, and
+`attention` appears only on nodes whose kind node sets
+`attributes.goal_layer: true`. The eligible layer is data (the kind nodes), not
+a kind list in this file — virtues stay unranked because `kind-virtue` carries
+no `goal_layer` flag, not because code names it. It
 throws one error listing all violations. Backfill runs it over the full store
 after regenerating the tactic leaves.
 
@@ -148,8 +166,23 @@ after regenerating the tactic leaves.
 returns an object with exactly the `IntentionNode` fields and all defaults
 applied (`parent: null`, `serves: []`, `recovers: []`, `rationale: null`, `reading: null`,
 `gap: null`, `clarifications: []`, `tooling_goals: []`, `success_signal: null`,
-`attributes: {}`), so constructing a node, writing it to frontmatter, reading
-it back, and validating yields a deep-equal node. `attributes` values must be
+`attention: null`, `attributes: {}`), so constructing a node, writing it to
+frontmatter, reading it back, and validating yields a deep-equal node.
+`attributes` values must be
 YAML-representable data (strings, numbers, booleans, arrays, maps) for the
 guarantee to hold. The cosmetic markdown body is excluded from this guarantee
 by design — only the frontmatter is authoritative.
+
+## Derived attention is never stored
+
+The `attention` field is a user-authored *injection* — only the weight,
+rationale, and edges the author writes. The resolved flow and band that
+`resolveAttention` computes from it are derived on read and NEVER enter
+frontmatter. This contrasts with `gap`, which `deriveGap` computes from
+same-file inputs (`reading` vs `success_signal.threshold`): storing `gap` is
+safe because it is a local function of one node's own fields. Attention is a
+*global* function of the whole graph — a node's flow depends on every other
+node's injections and edges — so storing it would go stale on any edit
+elsewhere in the graph. It is recomputed from the authoritative injections each
+time it is read, the same intent/derivation discipline as `intentions/`
+(authored intent) vs `trackers/` (derived execution state).
