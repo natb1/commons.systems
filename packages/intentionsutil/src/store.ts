@@ -46,7 +46,7 @@ export function readNode(dir: string, id: string): IntentionNode {
  * stable result.
  *
  * `README.md` is a non-node companion doc the backfill writes alongside the
- * node files (and `pruneStaleNodes` preserves) — it has no frontmatter, so it
+ * node files (and `pruneClosedOwned` preserves) — it has no frontmatter, so it
  * is excluded here to match that contract. Without this, `listNodes` on the
  * real store directory throws on the README's missing fence.
  */

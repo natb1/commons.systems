@@ -10,13 +10,16 @@ import {
   ghWithRetry,
   fetchParentNumber,
   fetchOpenIssues,
-  pruneStaleNodes,
+  pruneClosedOwned,
+  reconcileIssue,
   GhError,
   isTransientGhError,
   parseHttpStatus,
   buildIssueNode,
   extractScope,
 } from "../scripts/backfill.js";
+import { writeNode, readNode } from "../src/store.js";
+import { writeTracker } from "../src/tracker.js";
 
 const mockExec = vi.mocked(execFileSync);
 
@@ -214,28 +217,159 @@ describe("buildIssueNode", () => {
   });
 });
 
-describe("pruneStaleNodes", () => {
-  it("removes tactic leaves and legacy issue leaves, preserving kind/virtue/strategy/delegation nodes and README", () => {
+describe("pruneClosedOwned", () => {
+  it("prunes gh-backed leaves whose source issue closed, keeps open ones, and never touches hand-authored tactics", () => {
     const dir = mkdtempSync(join(tmpdir(), "intentions-prune-"));
-    // pruneStaleNodes never reads content, so empty stub files suffice.
-    writeFileSync(join(dir, "kind-tactic.md"), "");
-    writeFileSync(join(dir, "virtue-x.md"), "");
-    writeFileSync(join(dir, "strategy-y.md"), "");
-    writeFileSync(join(dir, "delegation-z.md"), "");
+    // Hand-authored slug tactic — no attributes.source → authoritative.
+    writeNode(dir, {
+      id: "tactic-populate-tactic-serves",
+      kind: "tactic",
+      statement: "Hand-authored, no gh source",
+      owner: "human",
+      status: "raw",
+      serves: ["strategy-graph-drives-dispatch"],
+    });
+    // gh-backed leaf whose issue is still open → kept.
+    writeNode(dir, {
+      id: "tactic-100",
+      kind: "tactic",
+      statement: "Open issue",
+      owner: "human",
+      status: "raw",
+      attributes: { source: "github:natb1/commons.systems#100" },
+    });
+    // gh-backed leaf whose issue closed → pruned.
+    writeNode(dir, {
+      id: "tactic-200",
+      kind: "tactic",
+      statement: "Closed issue",
+      owner: "human",
+      status: "raw",
+      attributes: { source: "github:natb1/commons.systems#200" },
+    });
+    // A hand-maintained non-tactic node (no source) survives.
+    writeNode(dir, {
+      id: "kind-tactic",
+      kind: "kind",
+      statement: "Tactic kind node",
+      owner: "human",
+      status: "codified",
+    });
+    // README companion doc and a legacy generated leaf.
     writeFileSync(join(dir, "README.md"), "");
-    writeFileSync(join(dir, "tactic-1.md"), "");
-    writeFileSync(join(dir, "tactic-2.md"), "");
     writeFileSync(join(dir, "issue-1.md"), ""); // legacy pre-rename leaf name
 
-    pruneStaleNodes(dir);
+    pruneClosedOwned(dir, new Set([100]));
 
+    expect(existsSync(join(dir, "tactic-populate-tactic-serves.md"))).toBe(true);
+    expect(existsSync(join(dir, "tactic-100.md"))).toBe(true);
+    expect(existsSync(join(dir, "tactic-200.md"))).toBe(false);
     expect(existsSync(join(dir, "kind-tactic.md"))).toBe(true);
-    expect(existsSync(join(dir, "virtue-x.md"))).toBe(true);
-    expect(existsSync(join(dir, "strategy-y.md"))).toBe(true);
-    expect(existsSync(join(dir, "delegation-z.md"))).toBe(true);
     expect(existsSync(join(dir, "README.md"))).toBe(true);
-    expect(existsSync(join(dir, "tactic-1.md"))).toBe(false);
-    expect(existsSync(join(dir, "tactic-2.md"))).toBe(false);
-    expect(existsSync(join(dir, "issue-1.md"))).toBe(false);
+    expect(existsSync(join(dir, "issue-1.md"))).toBe(false); // legacy → unconditional
+  });
+});
+
+describe("reconcileIssue", () => {
+  // fetchParentNumber's /parent GET 404s when an issue has no parent.
+  function mockNoParent(): void {
+    mockExec.mockImplementation(() => {
+      throw ghError("gh: Not Found (HTTP 404)");
+    });
+  }
+
+  it("preserves graph-owned fields while syncing gh-derived fields on an existing owned tactic", () => {
+    mockNoParent();
+    const dir = mkdtempSync(join(tmpdir(), "intentions-reconcile-"));
+    const noTrackers = join(dir, "no-trackers");
+
+    // Pre-existing gh-backed tactic carrying dialectic-populated graph-owned
+    // fields and a stale statement/parent/rationale/source.
+    writeNode(dir, {
+      id: "tactic-500",
+      kind: "tactic",
+      statement: "Stale title",
+      owner: "ai",
+      status: "delegated",
+      parent: "tactic-999",
+      rationale: "stale rationale",
+      serves: ["strategy-graph-drives-dispatch"],
+      attention: { boost: 2, override: null, rationale: "hot work" },
+      attributes: { source: "github:natb1/commons.systems#500", cost: "high" },
+    });
+
+    reconcileIssue(
+      dir,
+      noTrackers,
+      { number: 500, title: "  Fresh title  ", body: "## Scope\nNew scope.\n" },
+      new Set([500]),
+    );
+
+    const node = readNode(dir, "tactic-500");
+    // gh-derived fields synced in.
+    expect(node.statement).toBe("Fresh title");
+    expect(node.parent).toBeNull(); // parent 404 → null
+    expect(node.rationale).toBe("New scope.");
+    expect(node.attributes.source).toBe("github:natb1/commons.systems#500");
+    // graph-owned fields preserved.
+    expect(node.owner).toBe("ai");
+    expect(node.status).toBe("delegated");
+    expect(node.serves).toEqual(["strategy-graph-drives-dispatch"]);
+    expect(node.attention).toEqual({ boost: 2, override: null, rationale: "hot work" });
+    expect(node.attributes.cost).toBe("high"); // extra attributes key preserved
+  });
+
+  it("writes a fresh leaf for a new open issue, matching buildIssueNode", () => {
+    mockNoParent();
+    const dir = mkdtempSync(join(tmpdir(), "intentions-reconcile-"));
+    const noTrackers = join(dir, "no-trackers");
+    const issue = { number: 42, title: "Brand new", body: "## Scope\nDo it.\n" };
+
+    reconcileIssue(dir, noTrackers, issue, new Set([42]));
+
+    const node = readNode(dir, "tactic-42");
+    const expected = buildIssueNode(issue, null);
+    expect(node.statement).toBe(expected.statement);
+    expect(node.rationale).toBe(expected.rationale);
+    expect(node.parent).toBeNull();
+    expect(node.serves).toEqual([]);
+    expect(node.reading).toBeNull();
+    expect(node.attributes).toEqual({ source: "github:natb1/commons.systems#42" });
+  });
+
+  it("skips an issue a tracker maps to an existing hand-authored node id (no gh-shadow tactic)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "intentions-reconcile-"));
+    const trackersDir = mkdtempSync(join(tmpdir(), "trackers-reconcile-"));
+
+    // Hand-authored node the tracker points issue 900 at.
+    writeNode(dir, {
+      id: "tactic-first-sensor-pass",
+      kind: "tactic",
+      statement: "Hand-authored, tracker-mapped",
+      owner: "human",
+      status: "raw",
+    });
+    writeTracker(trackersDir, {
+      node_id: "tactic-first-sensor-pass",
+      issue_number: 900,
+      state: "open",
+      linked_prs: [],
+      dispatch_labels: [],
+      refreshed_at: "2026-01-01T00:00:00.000Z",
+    });
+
+    reconcileIssue(
+      dir,
+      trackersDir,
+      { number: 900, title: "gh title", body: null },
+      new Set([900]),
+    );
+
+    // No gh-shadow node written; the hand-authored node is untouched; gh not hit.
+    expect(existsSync(join(dir, "tactic-900.md"))).toBe(false);
+    expect(readNode(dir, "tactic-first-sensor-pass").statement).toBe(
+      "Hand-authored, tracker-mapped",
+    );
+    expect(mockExec).not.toHaveBeenCalled();
   });
 });

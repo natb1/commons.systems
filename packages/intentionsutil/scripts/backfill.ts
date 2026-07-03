@@ -1,19 +1,37 @@
-// Read-only intention-graph backfill.
+// Intention-graph reconciler.
 //
-// Snapshots the current project state into intention nodes under the repo-root
-// `intentions/` directory. It is STRICTLY READ-ONLY toward GitHub: the only
-// GitHub calls are `gh api` GETs (open issues, an issue's /parent). It never
-// writes to GitHub.
+// The `intentions/` graph is the authoritative source of truth; GitHub is a
+// derived projection. Backfill RECONCILES the gh-backed tactic leaves against
+// that projection rather than wiping and regenerating them: it syncs the
+// gh-derived fields IN and preserves every graph-owned field the dialectic (or
+// a human) authored. It is STRICTLY READ-ONLY toward GitHub — the only GitHub
+// calls are `gh api` GETs (open issues, an issue's /parent); it never writes to
+// GitHub.
 //
-// Backfill manages exactly one layer: the TACTIC LEAVES (`tactic-<N>.md`),
-// one per open GitHub issue, linked to one another by the existing GitHub
-// issue hierarchy (`/parent`). Every other node — kind nodes, virtues,
-// strategies, delegations — is authoritative and hand-maintained; backfill
-// neither generates nor prunes those files.
+// Ownership is by frontmatter, never by filename. A tactic is BACKFILL-OWNED
+// iff its `attributes.source` names a GitHub issue (`github:<owner>/<repo>#<N>`).
+//   - gh-derived (synced from the issue each run): `statement` (title),
+//     `parent` (issue hierarchy, nulled when the parent issue is closed),
+//     `rationale` (body `## Scope`), and `attributes.source`.
+//   - graph-owned (preserved untouched): everything else — `owner`, `status`,
+//     `serves`, `recovers`, `attention`, `clarifications`, `tooling_goals`,
+//     `success_signal`, `reading`, `gap`, and any other `attributes` keys.
 //
-// Tactic `serves` edges (tactic → strategy) are defined by the schema but not
-// populated here: connecting tactics to the strategies they express is
-// dialectic work, not something derivable from GitHub state.
+// Each run:
+//   1. PRUNE — delete a backfill-owned node whose source issue is no longer
+//      open (transience: a completed tactic and its edges leave the graph).
+//      Hand-authored tactics (no `attributes.source`) are NEVER touched; legacy
+//      `issue-*.md` leaves are pruned unconditionally.
+//   2. SKIP — an open issue a tracker maps to a hand-authored node id keeps
+//      that node authoritative; no duplicate gh-shadow `tactic-<N>` is written.
+//   3. RECONCILE — merge the gh-derived fields into an existing owned node, or
+//      write a fresh leaf for a new open issue.
+//
+// Every other node — kind nodes, virtues, strategies, delegations, and
+// hand-authored tactics — is authoritative and hand-maintained; backfill
+// neither generates nor prunes those files. A terminal `validateGraph` gate
+// fails loudly (rather than silently rewriting) when a hand-authored edge
+// dangles a just-pruned tactic — a human fixes the authored node.
 //
 // Run from anywhere (the output dir is resolved relative to this file, not cwd):
 //   npx tsx packages/intentionsutil/scripts/backfill.ts
@@ -22,10 +40,15 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { writeNode, listNodes } from "../src/store.js";
+import { writeNode, readNode, listNodes } from "../src/store.js";
+import { issueToNodeId } from "../src/tracker.js";
 import { ghErrorText } from "../src/errors.js";
 import { paginateGhApi } from "./gh-utils.js";
-import { validateGraph, type IntentionNodeInput } from "../src/schema.js";
+import {
+  validateGraph,
+  type IntentionNode,
+  type IntentionNodeInput,
+} from "../src/schema.js";
 
 // --- Paths -----------------------------------------------------------------
 // The script lives at `packages/intentionsutil/scripts/backfill.ts`, so the repo
@@ -34,6 +57,7 @@ import { validateGraph, type IntentionNodeInput } from "../src/schema.js";
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = dirname(dirname(dirname(scriptDir)));
 const intentionsDir = join(repoRoot, "intentions");
+const trackersDir = join(repoRoot, "trackers");
 
 // --- Helpers ---------------------------------------------------------------
 
@@ -221,58 +245,122 @@ export function buildIssueNode(
 // --- Main ------------------------------------------------------------------
 
 /**
- * Remove the tactic-leaf node files (`tactic-*.md`) that main() regenerates, so
- * a rerun is a true point-in-time snapshot of the open issues — without this,
- * a leaf whose source disappeared (a closed issue) would linger as a stale
- * orphan. Legacy `issue-*.md` leaves (the pre-rename name for the same
- * generated layer) are pruned on the same terms. Pruning is deliberately
- * scoped to exactly what backfill regenerates: kind nodes (`kind-*.md`),
- * virtues (`virtue-*.md`), strategies (`strategy-*.md`), and delegation
- * records (`delegation-*.md`) are authoritative and hand-maintained, and
- * `README.md` is a companion doc, so none of these match and all survive.
+ * The GitHub issue number a node is backfill-owned by, or null when it is not
+ * backfill-owned. Ownership is by frontmatter `attributes.source`
+ * (`github:<owner>/<repo>#<N>`), NEVER by the `tactic-` filename prefix — a
+ * hand-authored slug tactic (no `source`) returns null and is treated as
+ * authoritative. Returns the parsed `<N>`.
  */
-export function pruneStaleNodes(dir: string): void {
+export function sourceIssueNumber(node: IntentionNode): number | null {
+  const source = node.attributes.source;
+  if (typeof source !== "string") return null;
+  const m = /^github:[^/]+\/[^#]+#(\d+)$/.exec(source);
+  return m ? Number(m[1]) : null;
+}
+
+/**
+ * Prune the backfill-owned tactic leaves whose source issue is no longer open,
+ * so completion removes a tactic and its edges from the graph. Ownership is
+ * read from each node's `attributes.source` (see `sourceIssueNumber`), so
+ * hand-authored tactics — which carry no `source` — are NEVER touched, and
+ * neither are kind/virtue/strategy/delegation nodes or the `README.md`
+ * companion doc. Legacy `issue-*.md` leaves (the pre-rename generated name) are
+ * pruned unconditionally.
+ */
+export function pruneClosedOwned(dir: string, openNumbers: Set<number>): void {
   if (!existsSync(dir)) return;
   for (const name of readdirSync(dir)) {
-    if (
-      (name.startsWith("tactic-") || name.startsWith("issue-")) &&
-      name.endsWith(".md")
-    ) {
+    if (!name.endsWith(".md") || name === "README.md") continue;
+    // Legacy generated leaves predate the frontmatter source contract; prune
+    // them unconditionally before any readNode (they may not validate).
+    if (name.startsWith("issue-")) {
+      rmSync(join(dir, name));
+      continue;
+    }
+    const node = readNode(dir, name.slice(0, -".md".length));
+    const num = sourceIssueNumber(node);
+    if (num !== null && !openNumbers.has(num)) {
       rmSync(join(dir, name));
     }
   }
 }
 
+/**
+ * Reconcile one open issue into the graph.
+ *
+ * SKIP: when a tracker maps this issue to a non-`tactic-<N>` node id whose file
+ * exists, that hand-authored node is authoritative — return without writing a
+ * duplicate gh-shadow `tactic-<N>`.
+ *
+ * RECONCILE: resolve `parent` from the GitHub hierarchy (only linking a parent
+ * that is itself open, so every non-null parent points to an existing node). If
+ * `tactic-<N>.md` already exists, merge the gh-derived fields into the existing
+ * node and preserve every graph-owned field. Otherwise write a fresh leaf.
+ */
+export function reconcileIssue(
+  intentionsDir: string,
+  trackersDir: string,
+  issue: OpenIssue,
+  openNumbers: Set<number>,
+): void {
+  const tacticId = `tactic-${issue.number}`;
+  const mappedId = issueToNodeId(issue.number, trackersDir);
+  if (mappedId !== tacticId && existsSync(join(intentionsDir, `${mappedId}.md`))) {
+    return;
+  }
+
+  // Referential integrity: only link a parent that is itself an open issue (and
+  // thus has a node file). A CLOSED GitHub parent has no node file, so its
+  // dangling reference is nulled. gh hierarchy wins on gh-backed tactics during
+  // the transition; the parent id stays `tactic-<P>` even when P is slug-mapped.
+  const parentNum = fetchParentNumber(issue.number);
+  const parent =
+    parentNum !== null && openNumbers.has(parentNum) ? `tactic-${parentNum}` : null;
+
+  const source = `github:natb1/commons.systems#${issue.number}`;
+  if (existsSync(join(intentionsDir, `${tacticId}.md`))) {
+    // Reconcile in place: sync gh-derived fields, preserve graph-owned fields.
+    const existing = readNode(intentionsDir, tacticId);
+    writeNode(intentionsDir, {
+      ...existing,
+      statement: issue.title.trim(),
+      parent,
+      rationale: extractScope(issue.body),
+      attributes: { ...existing.attributes, source },
+    });
+  } else {
+    // New open issue: write a fresh tactic leaf.
+    writeNode(intentionsDir, buildIssueNode(issue, parent));
+  }
+}
+
 function main(): void {
   mkdirSync(intentionsDir, { recursive: true });
-  pruneStaleNodes(intentionsDir);
 
-  // Issue leaves — two passes.
-  // Pass 1: collect the full set of open issue numbers (PRs already excluded)
-  // so parent membership can be checked.
+  // Collect the full set of open issue numbers (PRs already excluded) so both
+  // prune and parent-membership checks can see it.
   const openIssues = fetchOpenIssues();
   const openNumbers = new Set(openIssues.map((i) => i.number));
 
-  // Pass 2: build and write each node.
-  for (const issue of openIssues) {
-    const parentNum = fetchParentNumber(issue.number);
-    // Referential integrity: only link a parent that is itself an open issue
-    // (and thus has a node file). A GitHub parent that is CLOSED has no node
-    // file, so its dangling reference is nulled rather than emitted. Every
-    // non-null parent therefore points to an existing node file.
-    const parent =
-      parentNum !== null && openNumbers.has(parentNum) ? `tactic-${parentNum}` : null;
+  // Prune backfill-owned leaves whose source issue closed; hand-authored
+  // tactics are left untouched.
+  pruneClosedOwned(intentionsDir, openNumbers);
 
-    writeNode(intentionsDir, buildIssueNode(issue, parent));
+  // Reconcile each remaining open issue: sync gh-derived fields, preserve
+  // graph-owned fields, and skip issues a tracker maps to a hand-authored node.
+  for (const issue of openIssues) {
+    reconcileIssue(intentionsDir, trackersDir, issue, openNumbers);
   }
 
   // Whole-graph integrity gate: every kind resolves to a committed kind node,
-  // every parent/serves edge resolves to a node file. Catches a hand-edit that
-  // dangled a reference as well as anything wrong with the regenerated leaves.
+  // every parent/serves/recovers edge resolves to a node file. A hand-authored
+  // node whose edge points at a just-pruned tactic fails here with a clear
+  // error — intended: a human fixes the authored node; backfill does not
+  // silently rewrite hand-authored files.
   validateGraph(listNodes(intentionsDir));
 
   console.log(
-    `Backfill complete: ${openIssues.length} tactic leaves → ${intentionsDir}`,
+    `Backfill complete: ${openIssues.length} open issues reconciled → ${intentionsDir}`,
   );
 }
 
