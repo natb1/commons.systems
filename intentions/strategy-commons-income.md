@@ -1,0 +1,59 @@
+---
+id: strategy-commons-income
+kind: strategy
+statement: Commons-derived income — the artifacts may earn, on gift terms only
+owner: human
+status: raw
+parent: null
+rationale: >-
+  Minted 2026-07-02 from the owner interview as a sibling of
+  strategy-diversify-income: income derived from the commons artifacts
+  themselves — paid hosting, support, productized versions — is a viable lane
+  of the diversified pipeline, distinct from client work because its
+  conditions differ: it depends on non-author users whose demand supports
+  paying for convenience, and on monetization shapes that never gate the
+  capability.
+
+
+  Deliberately low priority, and the reasons are the interesting part. First,
+  it sits in tension with intentions that outrank it: monetizing the
+  artifacts pulls against strategy-open-source-as-gift (an offering optimizes
+  for the user's dependency; a gift transfers capability — paying may buy
+  speed, hosting, or guidance, never the capability itself), and
+  strategy-financial-sustainability already fixes the funding shape this must
+  fit (reversible, no payroll, degrade by inaction). Second, income appears
+  in this graph at all only because institutional capture makes it necessary
+  — it serves recovery, never growth, so an income lane can never outrank the
+  recovery work it exists to fund. This subordination is recorded here as
+  prose; when the attention/priority schema lands it becomes structured
+  (subordinate to strategy-diversify-income, constrained by
+  strategy-open-source-as-gift), so it is re-derived — not defended — when
+  the dominating claims change.
+reading: null
+gap: null
+serves:
+  - virtue-alignment-of-attachments
+  - virtue-respect-for-persons
+recovers:
+  - delegation-client-income
+clarifications: []
+tooling_goals: []
+success_signal:
+  observable: commons-derived revenue appearing as an independent income source,
+    with every paid tier passing the gift test — nothing a non-paying user
+    loses except convenience
+  sensor: the owned budgeting pipeline (strategy-recover-finance) for the
+    revenue share; gift-integrity review at office-hours for the terms
+  threshold: any recurring commons-derived income exists while no artifact's
+    capability is gated behind payment
+  is_proxy: true
+attributes:
+  conditions:
+    - commons artifacts have non-author users whose demand supports paid
+      hosting, support, or productized tiers
+    - monetization can be shaped so paying buys convenience or speed, never
+      the capability — the gift stays whole
+    - strategy-diversify-income's client pipeline remains the primary income
+      lane; this lane supplements, it does not replace
+---
+# Commons-derived income — the artifacts may earn, on gift terms only
