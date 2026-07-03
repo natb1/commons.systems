@@ -72,9 +72,10 @@ Scope:
 - Capture-resolution term: walk `serves` to the strategy, its `recovers`
   to delegation records, read the capture axes from the delegation nodes'
   attributes; sum, normalized.
-- `packages/intentionsutil/scripts/rank-map.ts:24` consumes
-  `resolveAttention` — router and frontier views inherit the composition
-  with no changes of their own.
+- `resolveAttention` is consumed through `src/goals.ts` (frontier views)
+  and will be consumed by `graph-select-target` — consumers inherit the
+  composition with no changes of their own. (The retired node↔issue
+  rank-map bridge is not revived; ranks stay node-keyed.)
 - Tests in `packages/intentionsutil/test/`: off-path node ranks below an
   otherwise-identical on-path node; adding a validates edge upstream lifts
   a node with no other change; authored override unaffected by any derived
@@ -99,9 +100,10 @@ Scope:
 npm test --prefix packages/intentionsutil
 ```
 
-Manual: `npx tsx packages/intentionsutil/scripts/rank-map.ts` over the live
-store — `tactic-align-skill` (no chain to a validates-terminal) resolves
-below its on-path siblings, with no backlog flag anywhere in the store.
+Manual: `npx tsx packages/intentionsutil/scripts/frontier-view.ts` over the
+live store — `tactic-align-skill` (no chain to a validates-terminal)
+resolves below its on-path siblings, with no backlog flag anywhere in the
+store.
 
 ## Implementation notes
 

@@ -2,12 +2,10 @@ import { describe, it, expect, afterEach } from "vitest";
 import { render, cleanup } from "@testing-library/react";
 import { IntentionTreePanel } from "../src/components/IntentionTreePanel.js";
 import type { IntentionTreeNode, IntentionTreeView } from "../src/intention-tree.js";
-import type { ExecutionTracker } from "@commons-systems/intentionsutil";
 
 afterEach(() => cleanup());
 
-// Deterministic fixture: a root (non-frontier) + two frontier children,
-// one tracked and one untracked.
+// Deterministic fixture: a root (non-frontier) + two frontier children.
 const rootNode: IntentionTreeNode = {
   id: "root-1",
   statement: "Root intention statement",
@@ -17,18 +15,18 @@ const rootNode: IntentionTreeNode = {
   children: [],
 };
 
-const trackedChild: IntentionTreeNode = {
-  id: "child-tracked",
-  statement: "Tracked child statement",
+const childA: IntentionTreeNode = {
+  id: "child-a",
+  statement: "Child A statement",
   owner: "human",
   status: "delegated",
   parent: "root-1",
   children: [],
 };
 
-const untrackedChild: IntentionTreeNode = {
-  id: "child-untracked",
-  statement: "Untracked child statement",
+const childB: IntentionTreeNode = {
+  id: "child-b",
+  statement: "Child B statement",
   owner: "human",
   status: "refining",
   parent: "root-1",
@@ -36,21 +34,11 @@ const untrackedChild: IntentionTreeNode = {
 };
 
 // Wire children into the root
-rootNode.children = [trackedChild, untrackedChild];
-
-const trackerFixture: ExecutionTracker = {
-  node_id: "child-tracked",
-  issue_number: 2367,
-  state: "open",
-  linked_prs: [{ number: 999, state: "open" }],
-  dispatch_labels: ["dispatch:planned"],
-  refreshed_at: "2026-06-23T00:00:00.000Z",
-};
+rootNode.children = [childA, childB];
 
 const fixtureView: IntentionTreeView = {
   tree: [rootNode],
-  frontierIds: new Set(["child-tracked", "child-untracked"]),
-  trackers: { "child-tracked": trackerFixture },
+  frontierIds: new Set(["child-a", "child-b"]),
 };
 
 describe("IntentionTreePanel heading", () => {
@@ -114,30 +102,11 @@ describe("IntentionTreePanel badges", () => {
   });
 });
 
-describe("IntentionTreePanel tracker overlay", () => {
-  it("tracked frontier node renders .intention-tracker with issue # and PR #999", () => {
-    const { container } = render(<IntentionTreePanel view={fixtureView} />);
-    const tracker = container.querySelector(".intention-tracker:not(.intention-tracker--untracked)");
-    expect(tracker).not.toBeNull();
-    expect(tracker!.textContent).toContain("issue #"); // type-safety-ok: asserted not-null by the preceding expect()
-    expect(tracker!.textContent).toContain("2367"); // type-safety-ok: asserted not-null by the preceding expect()
-    expect(tracker!.textContent).toContain("PR #999"); // type-safety-ok: asserted not-null by the preceding expect()
-  });
-
-  it("untracked frontier node renders .intention-tracker--untracked with 'not yet tracked'", () => {
-    const { container } = render(<IntentionTreePanel view={fixtureView} />);
-    const untracked = container.querySelector(".intention-tracker--untracked");
-    expect(untracked).not.toBeNull();
-    expect(untracked!.textContent).toContain("not yet tracked"); // type-safety-ok: asserted not-null by the preceding expect()
-  });
-});
-
 describe("IntentionTreePanel empty view", () => {
   it("renders .empty with 'No intentions yet.' and zero .intention-node", () => {
     const emptyView: IntentionTreeView = {
       tree: [],
       frontierIds: new Set(),
-      trackers: {},
     };
     const { container } = render(<IntentionTreePanel view={emptyView} />);
     const empty = container.querySelector(".empty");

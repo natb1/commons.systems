@@ -82,8 +82,8 @@ clarifications:
       documentation stays /align-tactics's job. Draft tactics never block
       strategy eligibility for /align-tactics; they are its input: it finalizes,
       splits, merges, or prunes them. Until tactic-body preservation ships in
-      the store, draft bodies are hand-maintained (safe interim: backfill never
-      touches sourceless tactics). Recorded 2026-07-03; supersedes this record's
+      the store, draft bodies are hand-maintained (safe interim: no automated
+      writer touches tactic bodies). Recorded 2026-07-03; supersedes this record's
       own first draft, which parked the design outside the graph in
       packages/intentionsutil/DISPATCH.md."
   - question: How does the /align-strategy dialectic handle requirements for UI

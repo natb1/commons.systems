@@ -708,9 +708,11 @@ machinery.
   goals.
 - For any goal whose `delegability.eval.v1` returns
   `recommended_owner: procedure` (or `ai`) with a push-down `roi_verdict`, hand
-  it to the dispatch chain via `intention-emit` → `/file-issue`
-  (`.claude/skills/intention-emit/SKILL.md`). The codification then runs through
-  the normal `plan → implement → qa → review` dispatch chain.
+  it to the dispatch chain via `/file-issue`. The codification then runs through
+  the normal `plan → implement → qa → review` dispatch chain. (Once the
+  graph-native router lands, the hand-off is a graph tactic instead —
+  `intentions/tactic-graph-native-dispatch.md`; integration with an external
+  tracker such as GitHub is a separate strategy, design TBD.)
 - Attach `signal.eval.v1` success signals via `align-signal-assessor`
   (`.claude/agents/align-signal-assessor.md` +
   `.claude/docs/signal-identification.md`).

@@ -182,8 +182,8 @@ describe("listNodes", () => {
       owner: "ai",
       status: "raw",
     });
-    // The backfill writes a frontmatter-less README.md alongside the node
-    // files; listNodes must skip it rather than throw on its missing fence.
+    // A frontmatter-less README.md sits alongside the node files;
+    // listNodes must skip it rather than throw on its missing fence.
     writeFileSync(join(dir, "README.md"), "# Intentions store\n\nNot a node.\n");
 
     const nodes = listNodes(dir);

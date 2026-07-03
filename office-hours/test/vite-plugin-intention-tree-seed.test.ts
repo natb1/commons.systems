@@ -56,7 +56,6 @@ describe("officeHoursIntentionTreeSeedPlugin", () => {
         recovers?: unknown;
       }>;
       frontierIds: string[];
-      trackers: Record<string, { issue_number: number; state: string; [key: string]: unknown }>;
     };
 
     beforeAll(() => {
@@ -91,30 +90,6 @@ describe("officeHoursIntentionTreeSeedPlugin", () => {
       expect(Array.isArray(seed.frontierIds)).toBe(true);
       for (const id of seed.frontierIds) {
         expect(typeof id).toBe("string");
-      }
-    });
-
-    it("trackers is a plain object", () => {
-      expect(typeof seed.trackers).toBe("object");
-      expect(seed.trackers).not.toBeNull();
-    });
-
-    it("seed.trackers['tactic-2367'] is defined with issue_number and state (proves FS read + path resolution)", () => {
-      const tracker = seed.trackers["tactic-2367"];
-      expect(tracker).toBeDefined();
-      expect(typeof tracker.issue_number).toBe("number");
-      expect(typeof tracker.state).toBe("string");
-    });
-
-    it("most nodes are untracked — a non-tactic-2367 node id is absent from trackers", () => {
-      const untrackedId = seed.nodes.find((n) => n.id !== "tactic-2367")?.id;
-      if (untrackedId === undefined) {
-        // Only one node in the entire store and it is the tracked one — skip.
-        return;
-      }
-      // Only assert if we found a node that is definitely not in trackers.
-      if (!(untrackedId in seed.trackers)) {
-        expect(seed.trackers[untrackedId]).toBeUndefined();
       }
     });
   });

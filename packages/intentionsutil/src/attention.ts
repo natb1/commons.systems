@@ -20,9 +20,9 @@ export interface ResolvedAttention {
 /**
  * Resolve derived attention (rank) for every goal-layer node in the graph.
  *
- * Pure and deterministic: same nodes in, deep-equal map out. Derived values are
- * never written back to node frontmatter — same discipline as `trackers/`
- * (execution state) vs `intentions/` (intent).
+ * Pure and deterministic: same nodes in, deep-equal map out. Derived values
+ * are never written back to node frontmatter — `intentions/` stores intent,
+ * not derived execution state.
  *
  * v2 model — additive source sets, undecayed and undiluted. See the
  * clarifications on `intentions/strategy-graph-drives-dispatch.md` for the

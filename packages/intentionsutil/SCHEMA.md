@@ -38,7 +38,7 @@ tooling_goals:
 success_signal:
   observable: nodes validated by validateNode
   sensor: vitest
-  threshold: all backfilled nodes pass
+  threshold: all committed nodes pass
   is_proxy: false
 gap: null
 ---
@@ -142,58 +142,23 @@ Setting both `boost` and `override`, or neither, is rejected by
 The required core — `id`, `kind`, `statement`, `owner`, `status` — is always
 present and strictly validated. The optional fields tolerate being absent or
 `null`. This split is load-bearing: a node may legitimately exist before its
-optional fields are filled in. On a gh-backed tactic, backfill derives only the
-gh-derived fields — `statement`, `parent`, `rationale`, and `attributes.source`
-(see "Authority and the GitHub projection"); everything else is graph-owned. So
-a freshly generated tactic carries empty dialectic fields (`clarifications`,
-`tooling_goals`, `success_signal`, `serves`) until the dialectic populates them.
-Those dialectic fields are graph-owned: once authored on a gh-backed tactic,
-backfill preserves them across every reconcile — they no longer only await a
-dialectic run, they survive reconciliation. `reading` and `gap` are
+optional fields are filled in. A freshly authored tactic carries empty
+dialectic fields (`clarifications`, `tooling_goals`, `success_signal`,
+`serves`) until the dialectic populates them. `reading` and `gap` are
 sensor-populated after the dialectic runs (`reading` measured by the sensor,
-`gap` mechanically derived from it). `validateNode` must therefore accept nodes
-without any of these rather than rejecting them as invalid.
+`gap` mechanically derived from it). `validateNode` must therefore accept
+nodes without any of these rather than rejecting them as invalid.
 
-## Authority and the GitHub projection
+## Authority
 
-The graph is the authoritative source of truth for all data. GitHub is an
-optional, derived projection of it — useful for execution tooling today, but
-never the origin of intention. This supersedes the earlier split-authority
-model, in which GitHub was treated as authoritative for execution state:
-intention and execution state now both live in the graph.
-
-The move to a graph-authoritative model proceeds in three steps:
-
-1. Make the graph a correct source of truth for all data — the current change.
-2. Incrementally migrate the dispatch router to work on the graph instead of
-   GitHub — future work.
-3. Optionally re-establish a full GitHub integration on top of the graph
-   (design TBD) — future work.
-
-The dispatch fleet's ability to create new work items (deferred follow-ups)
-must survive every step. Today it files GitHub issues, which sync into the
-graph as tactics.
-
-### Per-field ownership for gh-backed tactics
-
-A tactic is *gh-backed* when its frontmatter carries
-`attributes.source: github:<owner>/<repo>#<N>`. For a gh-backed tactic, backfill
-(`npx tsx packages/intentionsutil/scripts/backfill.ts`) is a reconciler, not a
-regenerator: it syncs the gh-derived fields from the issue, preserves every
-graph-owned field, prunes gh-backed tactics whose issue has closed, and never
-touches a hand-authored tactic. Backfill is strictly read-only toward GitHub.
-
-| Field | Ownership | Source when gh-backed |
-| ----- | --------- | --------------------- |
-| `statement` | gh-derived | issue title |
-| `parent` | gh-derived | issue hierarchy (nulled if the parent issue is closed) |
-| `rationale` | gh-derived | issue body `## Scope` section |
-| `attributes.source` | gh-derived | the `github:<owner>/<repo>#<N>` reference itself |
-| `owner`, `status`, `serves`, `recovers`, `attention`, `clarifications`, `tooling_goals`, `success_signal`, `reading`, `gap`, and any other `attributes` keys | graph-owned | authored in the graph; preserved on every reconcile |
-
-A hand-authored tactic — one with no `attributes.source` — is fully
-graph-owned: backfill never reads or writes it. It is the primary form a tactic
-takes before, or without, a GitHub projection.
+The graph is the sole store and the authoritative source of truth for all
+intention data — every node is authored directly in the graph. This supersedes
+the earlier split-authority model, in which GitHub was treated as authoritative
+for execution state. Remaining direction: migrate the dispatch router to work
+on the graph instead of GitHub; integration with an external tracker (such as
+GitHub) is a possible future strategy whose design is TBD. The dispatch
+fleet's ability to create new work items (deferred follow-ups) must survive
+that migration.
 
 ## Graph-level validation
 
@@ -223,8 +188,7 @@ Rules 6–9 judge only edges whose target already resolves (rules 2–4 report t
 dangling case), so a single broken edge is not double-reported. `serves` on
 delegation and kind nodes is deliberately unenforced — a delegation serves
 whatever depends on it, which is intentionally loose. `validateGraph` throws
-one error listing all violations. Backfill runs it over the full store after
-reconciling the gh-backed tactics.
+one error listing all violations.
 
 ## Round-trip guarantee
 
@@ -254,6 +218,5 @@ the set with `{(self, override)}`, capping its branch). This contrasts with
 of one node's own fields. Attention is a *global* function of the whole graph —
 a node's rank depends on every ancestor's injections and edges — so storing it
 would go stale on any edit elsewhere in the graph. It is recomputed from the
-authoritative injections each time it is read, the same intent/derivation
-discipline as `intentions/` (authored intent) vs `trackers/` (derived execution
-state).
+authoritative injections each time it is read — `intentions/` stores authored
+intent, never derived global state.

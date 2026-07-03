@@ -94,7 +94,7 @@ rounds:
   and delegations, but is authoritative content for tactics — draft context
   before finalization, the full clean-session plan after. Store change
   required: `writeNode` must preserve tactic bodies (until it ships, bodies
-  are hand-maintained; backfill never touches sourceless tactics).
+  are hand-maintained; no automated writer touches tactic bodies).
 - **Blocking** stays the tactic-layer subtree mechanism recorded on
   `strategy-graph-drives-dispatch`: `blocked_by: [<tactic-id>...]`; nothing
   in a blocked subtree starts until the blocking subtree completes; the
@@ -287,22 +287,27 @@ seam: the tick consults **both** selectors during coexistence.
 
 ### 3.3 Coexistence and drain
 
+The two routers run in parallel over **disjoint state** — no gh↔graph
+mapping exists between them. (The prior migration strategy — mapping gh
+issues to/from graph tactics via `intention-emit`, `backfill`/`refresh`,
+`trackers/`, and the `rank-map.ts` ordering bridge — is superseded and its
+machinery removed. Integration with an external tracking system such as
+GitHub is a separate strategy; design TBD.)
+
 - One lock, one pace budget, one claimed set spanning both routers.
-- The legacy router only **drains**: it advances existing gh issues/PRs;
-  new work enters exclusively via `/align-strategy` → `/align-tactics`.
-  `intention-emit` retires with the legacy router; `backfill`/`refresh`
-  keep reconciling gh-backed tactics until the last one closes.
-- Rank interleaving needs no bridge: legacy selection already orders by
-  graph rank via `rank-map.ts`.
-- **Removal:** when no open gh-backed tactic remains, delete the legacy
-  selector/phase-derivation scripts, the `dispatch:*` label conventions,
-  and the emit bridge; `trackers/` shrinks to the PR/CI sensor surface.
+- The legacy router only **drains**: it advances its existing gh
+  issues/PRs, ordered by its own ladder (graph rank no longer reaches it);
+  new work enters exclusively via `/align-strategy` → `/align-tactics` as
+  graph tactics.
+- **Removal:** when the gh queue is empty, delete the legacy
+  selector/phase-derivation scripts and the `dispatch:*` label
+  conventions.
 
 ### 3.4 Worktree anchoring
 
 The `<issue-num>-<slug>` branch convention is re-keyed to node ids:
 `<tactic-id>` becomes the branch/worktree/reservation/session key.
-gh-backed tactics keep their numeric form during drain, so both keyspaces
+Draining legacy gh work keeps its numeric form, so both keyspaces
 coexist.
 
 ## 4. Coverage matrix

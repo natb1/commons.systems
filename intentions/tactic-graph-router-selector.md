@@ -53,10 +53,10 @@ Scope: new `.claude/skills/dispatch-propagate/scripts/graph-select-target`:
   `phase` not in {draft, done}; `blocked_by` fully complete (a pruned
   blocker is complete — prune-on-done makes absence completion); phase
   sensor gate satisfied (e.g. CI verdict present before fix/qa).
-- Order: resolved attention rank outermost — reuse
-  `packages/intentionsutil/scripts/rank-map.ts` exactly as
-  `.claude/skills/dispatch-propagate/scripts/dispatch-select-target:543`
-  does; within a rank level, phase ladder closest-to-done first:
+- Order: resolved attention rank outermost — node-keyed, directly from
+  `resolveAttention` (`packages/intentionsutil/src/attention.ts`, via
+  `src/goals.ts`); the retired node↔issue rank-map bridge is not revived.
+  Within a rank level, phase ladder closest-to-done first:
   review → fix → qa → implement → align-tactics(strategy). Calculated
   attention (weighted sum of authored, signal-satisfaction, and
   capture-resolution terms, strategy clarification 11) arrives inside
@@ -90,8 +90,8 @@ spanning both keyspaces (node ids and issue numbers).
 **Recommended model:** sonnet
 
 Scope: `.claude/hooks/worktree-create.sh` — accept `<tactic-id>` worktree
-names alongside the `<issue-num>-<slug>` convention; gh-backed tactics keep
-numeric names during drain. (This removes the friction the 2739 session hit:
+names alongside the `<issue-num>-<slug>` convention; draining legacy gh
+work keeps its numeric names. (This removes the friction the 2739 session hit:
 a graph-native session needing a synthetic anchor issue just to name its
 worktree.)
 
@@ -107,8 +107,9 @@ worktree.)
 
 ## Reuse
 
-- `rank-map.ts`, the selection lock, `dispatch-target-workers` pacing, and
-  the `dispatch-spawn-tick` heartbeat — all unchanged.
+- `resolveAttention`/`src/goals.ts`, the selection lock,
+  `dispatch-target-workers` pacing, and the `dispatch-spawn-tick`
+  heartbeat — all unchanged.
 
 ## Verification
 

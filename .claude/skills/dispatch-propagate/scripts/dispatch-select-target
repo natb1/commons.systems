@@ -47,9 +47,11 @@
 #   1. JIT scan (jit-reminder)
 #   2. origin/main CI health gate (main-broken)
 #   3. the attention-rank × enhancement × topic-category × phase ladder over open
-#      PRs and help-wanted issues. Attention rank (resolved from the intention
-#      graph, see RANK_MAP_JSON below) is the OUTERMOST axis: distinct rank values
-#      drain descending. The enhancement axis applies to the ISSUE path only:
+#      PRs and help-wanted issues. Attention rank is the OUTERMOST axis: distinct
+#      rank values drain descending. In production the map is empty (every item
+#      rank 0 — see RANK_MAP_JSON below), so ordering reduces to the ladder; the
+#      axis survives only as inert machinery until legacy-router removal.
+#      The enhancement axis applies to the ISSUE path only:
 #      within a rank level all non-enhancement work (PRs and non-enhancement
 #      issues) drains before any enhancement issue. PRs are never
 #      enhancement-classified, so an in-flight PR completes normally.
@@ -519,14 +521,14 @@ ISSUE_LABELS_JSON=$(printf '%s' "$ISSUE_LIST" \
 # with the existing enh → topic-category → phase ladder as tie-break WITHIN each
 # rank level. The `priority` label no longer orders anything; it survives only as
 # the cap/pacing bypass (the --priority-only probe and dispatch-tick pace-curve
-# exemption still read it). Ranks are derived from the intention graph by
-# packages/intentionsutil/scripts/rank-map.ts; a missing key means rank 0.
+# exemption still read it).
 #
-# Test seam first (DISPATCH_RANK_MAP_JSON), mirroring DISPATCH_PR_LIST_FILE /
-# DISPATCH_RESERVATION_DIR. Placed AFTER every early-exit mode (--main-broken-sha,
-# --health-only, the default-mode JIT/main-broken gates) so the heartbeat/health
-# paths never depend on the rank map — a broken intentions/ store cannot stall
-# the health re-seed.
+# The map is EMPTY in production: graph-rank interleaving retired with the
+# node-id↔issue mapping (rank-map.ts / trackers/). The legacy router only
+# drains its existing gh queue, in parallel with the graph-native router; the
+# rank-bucket machinery below stays inert (single rank-0 level) and is deleted
+# wholesale with the legacy router. Test seam (DISPATCH_RANK_MAP_JSON) kept so
+# the ordering tests keep exercising the machinery until then.
 #
 # Rank strings are OPAQUE in shell: every numeric operation (lookup, max, sort,
 # distinct) happens jq-side against the one canonicalized map below; bash only
@@ -535,16 +537,7 @@ ISSUE_LABELS_JSON=$(printf '%s' "$ISSUE_LIST" \
 # arithmetic in between, a float's textual form can never drift between the bucket
 # keys and the level list. The "|" bucket-key separator stays collision-free: rank
 # strings are jq number literals.
-if [[ -n "${DISPATCH_RANK_MAP_JSON:-}" ]]; then
-  RANK_MAP_JSON="$DISPATCH_RANK_MAP_JSON"
-else
-  RANK_ROOT=$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel) || {
-    echo "error: dispatch-select-target: cannot resolve repo root for rank-map.ts" >&2; exit 1; }
-  RANK_MAP_JSON=$(cd "$RANK_ROOT" && npx tsx packages/intentionsutil/scripts/rank-map.ts) || {
-    echo "error: dispatch-select-target: rank-map.ts failed; refusing to order the queue with unknown attention ranks" >&2
-    exit 1
-  }
-fi
+RANK_MAP_JSON=${DISPATCH_RANK_MAP_JSON:-'{}'}
 # Canonicalize + validate in ONE jq pass: every rank string downstream (bucket
 # keys AND the level list) derives from this one jq-parsed value, so float
 # formatting can never drift between sites. Fail closed (clear-errors rule): a

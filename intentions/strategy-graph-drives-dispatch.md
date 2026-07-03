@@ -7,19 +7,21 @@ owner: human
 status: refining
 parent: strategy-explicit-intent
 rationale: >-
-  The plumbing between the graph and the dispatch chain exists in both
-  directions — intention-emit turns a tactic node into a chain-compatible issue,
-  backfill reconciles gh-backed tactics from GitHub read-only, trackers/ mirrors
-  execution state — but the loop is not yet load-bearing: tactic serves edges
-  are unpopulated, readings are null, and the dispatch queue's ordering owes
-  nothing to the dialectic's triage.
+  The loop this strategy owns — intent enters execution from the graph, and
+  execution reports back as readings — is not yet load-bearing: readings are
+  null and the dispatch queue's ordering owes nothing to the dialectic's
+  triage. The first coupling attempt was a gh↔graph mapping layer
+  (intention-emit, backfill, trackers/, the rank-map ordering bridge); it is
+  superseded and removed — the child strategy-graph-native-dispatch closes the
+  loop natively instead, with the legacy gh router draining in parallel over
+  disjoint state. Integration with an external tracking system such as GitHub
+  is a separate strategy; design TBD.
 
   This strategy owns making the loop real: work enters execution because a node
-  calls for it (serves classified at emit time, backfilled by the dialectic for
-  existing tactics), sensors write readings and gaps back after execution, and
-  the next dialectic consumes that feedback when it triages.
-  strategy-autonomous-execution owns the chain itself; this node owns the
-  chain's coupling to intent.
+  calls for it (serves classified when the dialectic records a tactic), sensors
+  write readings and gaps back after execution, and the next dialectic consumes
+  that feedback when it triages. strategy-autonomous-execution owns the chain
+  itself; this node owns the chain's coupling to intent.
 reading: null
 gap: null
 serves:
@@ -55,13 +57,13 @@ clarifications:
 tooling_goals:
   - kind: actuator
     statement: resolveAttention (additive source-set ranks) consumed directly by
-      dispatch-select-target
+      the graph-native router's selector
   - kind: sensor
     statement: frontier-view renders the resolved ranking
 success_signal:
   observable: the fraction of open dispatch work traceable to a serving node, and
     readings populated by the loop rather than by hand
-  sensor: the intention store and trackers/ themselves
+  sensor: the intention store itself
   threshold: every open tactic carries a non-empty serves edge and sensor-run
     readings exist for every strategy that names a sensor
   is_proxy: false

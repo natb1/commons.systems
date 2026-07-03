@@ -1,8 +1,8 @@
 ---
 id: tactic-legacy-router-removal
 kind: tactic
-statement: "drain complete: remove the legacy gh router, dispatch:* label
-  conventions, and the intention-emit bridge"
+statement: "drain complete: remove the legacy gh router and dispatch:* label
+  conventions"
 owner: ai
 status: codified
 parent: tactic-graph-native-dispatch
@@ -30,7 +30,7 @@ attributes:
     - tactic-dispatch-lifecycle-sensor
     - tactic-calculated-attention
 ---
-# drain complete: remove the legacy gh router, dispatch:* label conventions, and the intention-emit bridge
+# drain complete: remove the legacy gh router and dispatch:* label conventions
 
 ## Context
 
@@ -60,19 +60,17 @@ the transitions layer), `office-hours-select-target` (superseded by the
 convention remaining in scripts and skill docs. Each deletion cites its
 matrix row or its graph-native replacement tactic.
 
-## Unit 2 — retire the emit bridge and shrink trackers
+## Unit 2 — retire the legacy authoring skills
 
 **Recommended model:** sonnet
 
 Depends on: Unit 1.
 
-Scope: retire `.claude/skills/intention-emit` (superseded by
-`/align-strategy` + `/align-tactics` writing nodes directly); drop
-gh-backed tactic sync from `packages/intentionsutil/scripts/backfill.ts`
-and `refresh.ts` once the last gh-backed tactic prunes; `trackers/`
-shrinks to the PR/CI sensor surface used by
-`tactic-graph-router-transitions`. Also retire `/file-issue` and
-`/plan-issue` skill docs with pointers to their successors.
+Scope: retire `/file-issue` and `/plan-issue` skill docs with pointers to
+their successors. (The gh↔graph mapping layer — `intention-emit`,
+`backfill.ts`/`refresh.ts`, `trackers/`, `rank-map.ts` — was already
+removed when the parallel-drain migration superseded the mapping strategy;
+nothing of it remains to retire here.)
 
 ## Dependencies
 
@@ -86,10 +84,10 @@ shrinks to the PR/CI sensor surface used by
 npm test --prefix packages/intentionsutil
 ```
 
-Manual: repo grep for `dispatch:` label references and intention-emit
-imports — zero hits outside git history; then one tactic completes a full
-lifecycle graph-natively (the signal observable) with the legacy scripts
-gone, and the lifecycle sensor's next reading reflects it.
+Manual: repo grep for `dispatch:` label references — zero hits outside git
+history; then one tactic completes a full lifecycle graph-natively (the
+signal observable) with the legacy scripts gone, and the lifecycle
+sensor's next reading reflects it.
 
 ## Implementation notes
 

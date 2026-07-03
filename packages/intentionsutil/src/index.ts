@@ -11,10 +11,8 @@ export type {
 } from "./schema.js";
 export { resolveAttention } from "./attention.js";
 export type { ResolvedAttention } from "./attention.js";
-export { IntentionSchemaError, ghErrorText } from "./errors.js";
+export { IntentionSchemaError } from "./errors.js";
 export { writeNode, readNode, listNodes } from "./store.js";
-export { writeTracker, readTracker, listTrackers, nodeIdToIssue, issueToNodeId } from "./tracker.js";
-export type { ExecutionTracker } from "./tracker.js";
 export { projectGoals, activeFrontier, realizationForOwner, renderFrontier } from "./goals.js";
 export type { Goal, Realization } from "./goals.js";
 export { detectRung } from "./rungs.js";
