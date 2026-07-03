@@ -101,7 +101,7 @@ npm test --prefix packages/intentionsutil
 ```
 
 Manual: `npx tsx packages/intentionsutil/scripts/frontier-view.ts` over the
-live store — `tactic-align-skill` (no chain to a validates-terminal)
+live store — `tactic-align-init-skill` (no chain to a validates-terminal)
 resolves below its on-path siblings, with no backlog flag anywhere in the
 store.
 

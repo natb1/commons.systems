@@ -14,10 +14,11 @@ rationale: "strategy-graph-drives-dispatch made the loop real — intent enters
   their execution plan in the node body and a persisted phase the router
   transitions; strategies become schedulable work in their own right (an
   unvalidated signal with no child tactics calls an /align-tactics session into
-  being); and the align skill family — /align for fork onboarding and virtue
-  review, /align-strategy for recording strategy under interview, /align-tactics
-  for breaking a strategy into executable tactic subtrees — supersedes
-  /file-issue and /plan-issue as the interface for intent entering execution.
+  being); and the align skill family — /align-init for fork onboarding and
+  virtue review (retiring the legacy /align skill), /align-strategy for
+  recording strategy under interview, /align-tactics for breaking a strategy
+  into executable tactic subtrees — supersedes /file-issue and /plan-issue
+  as the interface for intent entering execution.
   The legacy gh router runs concurrently until the gh queue drains, then it is
   removed; full /file-issue and /plan-issue coverage is mapped into the align
   family before removal (coverage matrix retained as draft content on
@@ -110,7 +111,7 @@ clarifications:
       reject; immaterial observations land as clarifications without
       interrupting the round. Keeps condition substance human-decided (condition
       4). Recorded 2026-07-03 interview."
-  - question: Round 1 deferred the /align entrypoint by omission — how do deferrals
+  - question: Round 1 deferred the /align-init entrypoint by omission — how do deferrals
       stay visible without competing with signal work?
     answer: "Deferrals are recorded, not omitted: work off the minimum path to
       validating a signal lands as a backlog tactic — fully planned, selectable,
@@ -171,8 +172,9 @@ tooling_goals:
       nodes with clean-session plans, superseding /file-issue epic structuring
       and /plan-issue
   - kind: actuator
-    statement: "/align — fork entrypoint: orient, validate deployment, review
-      virtues, delegate to /align-strategy"
+    statement: "/align-init — fork entrypoint: orient, validate deployment,
+      review virtues, delegate to /align-strategy; retires the legacy
+      /align skill"
   - kind: actuator
     statement: graph-native router tick — selects by resolved rank across strategies
       and tactics, transitions persisted phase, direct-push rebase-retry writes

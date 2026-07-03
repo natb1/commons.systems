@@ -139,12 +139,14 @@ substance the author did not decide in the interview.
 
 ## 2. The align skill family
 
-Three skills supersede `/file-issue` and `/plan-issue`. Existing `/align`
-rung detection is retained: rung-0 feeds the `/align` onboarding flow,
-`refine-workflow` is superseded by `/align-strategy`, the rung-5 dialectic
-remains the scheduled periodic review.
+Three skills supersede `/file-issue` and `/plan-issue`. The legacy `/align`
+skill is retired outright and replaced by `/align-init`: rung-0 feeds the
+`/align-init` onboarding flow, `refine-workflow` is superseded by
+`/align-strategy`, and the rung-5 dialectic carries over into
+`/align-init` unchanged as the scheduled periodic review (the `align`
+jit's skill reference updates to `align-init`).
 
-### 2.1 `/align` (no arguments) — fork entrypoint and orientation
+### 2.1 `/align-init` (no arguments) — fork entrypoint and orientation; retires legacy `/align`
 
 1. **Orient.** Concise description: a harness for long-horizon autonomous
    workflows built around the intention graph — virtues (permanent
@@ -160,12 +162,15 @@ remains the scheduled periodic review.
 4. **Delegate to `/align-strategy`.** Then confirm at least one new or
    updated strategy exists; if none, tell the user the dispatch router has
    no work until a strategy is recorded.
+5. **Retire legacy `/align`.** Delete `.claude/skills/align/` once
+   `/align-init` covers rung-0 and rung-5, so the scheduled dialectic is
+   never left without a home.
 
 *(Off the minimum path to the success signal — recorded as
-`tactic-align-skill`: fully planned and selectable, demoted at read time
-by the calculated-attention signal term (no chain to a validates-terminal
-reaches it; no stored flag — clarifications 9/11). Round 1 had deferred it
-by omission.)*
+`tactic-align-init-skill`: fully planned and selectable, demoted at read
+time by the calculated-attention signal term (no chain to a
+validates-terminal reaches it; no stored flag — clarifications 9/11).
+Round 1 had deferred it by omission.)*
 
 ### 2.2 `/align-strategy <optional requirements>` — record strategy under interview
 
@@ -358,7 +363,7 @@ tactic-intentions-branch-protection (park) ┤                                 �
                                      │           │                           │
               tactic-align-strategy-skill   tactic-align-tactics-skill       │
                      │               │           │                           │
-  tactic-align-skill (off-path) ◄────┤   tactic-graph-router-selector ◄── also blocked_by schema
+  tactic-align-init-skill (off-path) ◄┤   tactic-graph-router-selector ◄── also blocked_by schema
                                      │           │                           │
                                      │   tactic-graph-router-transitions ◄── also blocked_by graph-commit
                                      │           │                           │
@@ -375,14 +380,14 @@ tactic-intentions-branch-protection (park) ┤                                 �
   on-path by derivation.
 - **Born-parked:** `tactic-intentions-branch-protection` — author-only,
   ≤30 minutes.
-- **Off-path:** `tactic-align-skill` — no chain to a validates-terminal
+- **Off-path:** `tactic-align-init-skill` — no chain to a validates-terminal
   reaches it, so the calculated-attention signal term demotes it at read
   time; no stored flag (clarifications 9/11). Round 1 had deferred it by
   omission.
 - **Re-evaluations (2026-07-03):** two same-day mid-flight strategy edits
   (clarifications 8–10, then 11), each followed by the clarification-10
   re-evaluation run inline because no router exists yet. The first added
-  the attention tactic and recorded the `/align` deferral; the second
+  the attention tactic and recorded the `/align-init` deferral; the second
   replaced the banded backlog mechanism with calculated attention:
   `tactic-signal-path-attention` was pruned and replaced by
   `tactic-calculated-attention` (on-path — it hard-blocks legacy

@@ -65,7 +65,7 @@ Coverage rows to handle visibly: multi-topic separation into independent
 strategies; duplicate detection; the 8-category quality evaluation folded
 into interview probes (per the §4 matrix).
 
-Out of scope: `/align-tactics` and `/align` (sibling/deferred tactics);
+Out of scope: `/align-tactics` and `/align-init` (sibling/deferred tactics);
 deleting `/file-issue` (`tactic-legacy-router-removal`).
 
 ## Dependencies
@@ -74,8 +74,10 @@ deleting `/file-issue` (`tactic-legacy-router-removal`).
 
 ## Reuse
 
-- Rung detection in `.claude/skills/align/SKILL.md` — this skill supersedes
-  its `refine-workflow` outcome; rung-0 onboarding stays with `/align`.
+- Rung detection in the legacy `.claude/skills/align/SKILL.md` — this
+  skill supersedes its `refine-workflow` outcome; rung-0 onboarding moves
+  to `/align-init` (`tactic-align-init-skill`), which retires the legacy
+  skill outright rather than leaving it in place.
 - Interview convention from the prototype run: one AskUserQuestion per
   decision, recommended option first.
 
