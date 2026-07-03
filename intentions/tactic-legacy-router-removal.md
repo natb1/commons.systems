@@ -21,11 +21,14 @@ success_signal: null
 attention: null
 attributes:
   phase: implement
+  validates:
+    - strategy-graph-native-dispatch
   blocked_by:
     - tactic-align-strategy-skill
     - tactic-align-tactics-skill
     - tactic-graph-router-transitions
     - tactic-dispatch-lifecycle-sensor
+    - tactic-calculated-attention
 ---
 # drain complete: remove the legacy gh router, dispatch:* label conventions, and the intention-emit bridge
 

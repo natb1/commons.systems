@@ -140,6 +140,28 @@ clarifications:
       instance: these clarifications made round 1's plans stale, and the
       re-evaluation was executed in the same change. Recorded 2026-07-03
       interview."
+  - question: Does the backlog band scale — and does it self-correct when the graph
+      changes?
+    answer: "No on both counts — superseded on same-day author review: the backlog
+      flag was a judgment stored at plan time (stale the moment a new signal
+      justifies the deferred node, or competing work resolves) and a discrete
+      band cannot absorb new attention conditions without band arithmetic.
+      Clarification 9's principle stands — deferrals are recorded, fully
+      planned, and selectable, never omitted — but the mechanism is replaced:
+      calculated attention is an extensible weighted sum of terms, each derived
+      at read time. Terms: explicit author attention (an authored override pins
+      absolutely; a boost is a weighted term that derived terms cannot silently
+      overwhelm), signal satisfaction (structural: the tactics that validate a
+      signal — produce its reading, meet its threshold — carry a factual
+      validates edge; a node is on-path iff it reaches a validates-terminal of
+      an unvalidated signal via blocked_by/parent chains, so attention rises
+      automatically when any new signal's path includes the node), and capture
+      resolution (from the recovers edges' delegation capture axes, divergence
+      and irreversibility). New attention conditions add as terms with weights;
+      terms and weights live in code (intentionsutil's attention module), so
+      weight changes are reviewed PRs. The backlog flag is deleted; strategy
+      eligibility counts only on-path children, also derived. Recorded
+      2026-07-03 interview."
 tooling_goals:
   - kind: actuator
     statement: /align-strategy — interview-driven strategy recording, superseding

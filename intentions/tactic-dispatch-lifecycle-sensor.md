@@ -21,6 +21,8 @@ success_signal: null
 attention: null
 attributes:
   phase: implement
+  validates:
+    - strategy-graph-native-dispatch
   blocked_by:
     - tactic-graph-router-transitions
 ---

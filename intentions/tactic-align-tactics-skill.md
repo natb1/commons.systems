@@ -51,11 +51,14 @@ Scope — codify the five steps:
    `success_signal`; when `reading` is null the round must include an
    instrument tactic; consume draft tactics (finalize, split, merge,
    prune); PR-sized leaves (leaf tactic = exactly one PR); larger shapes
-   become subtrees via `parent` edges; order with `blocked_by`. Work worth
-   recording but off the minimum path lands as a **backlog tactic**
-   (`backlog: true`, fully planned, selectable at demoted rank via the
-   signal-path attention factor) — never deferred by omission (strategy
-   clarification 9).
+   become subtrees via `parent` edges; order with `blocked_by`. Stamp the
+   factual `validates: [strategy-id]` edge on the tactics that validate
+   the signal (produce its reading, meet its threshold) — the
+   calculated-attention signal term's terminals. Work worth recording but
+   off the minimum path lands as an ordinary tactic with **no flag**:
+   off-path status derives at read time from the absence of a chain to a
+   validates-terminal, demoting it via calculated attention — never
+   deferred by omission (strategy clarifications 9, 11).
 3. **Plan each claude-eligible tactic.** Explore/Plan subagent fan-out as
    `/plan-issue` does today; write the full clean-session plan into the
    tactic node body — plan-comment schema (Context / units with Scope

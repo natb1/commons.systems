@@ -32,8 +32,9 @@ attributes:
 graph the state machine: tactics carry a persisted `phase` the router
 transitions, parking is a first-class `office_hours` field, strategies
 carry `rounds` accounting, tactic bodies are authoritative plan content,
-backlog tactics carry a demotion flag, and executions carry the strategy
-substance fingerprint that triggers the mid-flight soft freeze. None of this
+signal-validating tactics carry a factual `validates` edge (the
+calculated-attention signal term's terminals), and executions carry the
+strategy substance fingerprint that triggers the mid-flight soft freeze. None of this
 exists in the schema today — the round-1 tactic nodes squat these fields
 under free-form `attributes`, and `writeNode` regenerates every body from
 `statement`, which would destroy a tactic's plan on any rewrite. Target field
@@ -52,18 +53,22 @@ Scope:
     fields — statement, clarifications, conditions, serves,
     success_signal, tooling_goals — stamped at plan time; the router's
     soft-freeze trigger, strategy clarification 10)
-  - `backlog: boolean` (default `false`) — off-signal-path tactic, demoted
-    by the derived attention factor (strategy clarification 9)
+  - `validates: string[]` (default `[]`) — factual edge on the tactics
+    that validate a strategy's signal (produce its reading, meet its
+    threshold); the calculated-attention signal term derives on-path
+    status from reachability to these terminals (strategy clarification
+    11)
   - `blocked_by: string[]` (default `[]`)
   - `office_hours: { reason: string; since: string } | null`
   - `rounds: { count: number; last_completed: string | null } | null`
 - `packages/intentionsutil/src/schema.ts:291` (`validateNode`): parse and
   default the new fields, strict on shape.
 - `packages/intentionsutil/src/schema.ts:378` (`validateGraph`) layer rules:
-  `phase`/`execution`/`blocked_by`/`backlog` valid on tactics only;
+  `phase`/`execution`/`blocked_by`/`validates` valid on tactics only;
   `office_hours` on goal-layer kinds only (same `attributes.goal_layer`
   gate as attention, `schema.ts:401`); `rounds` on strategies only; every
-  `blocked_by` id must exist and be a tactic; reject `blocked_by` cycles.
+  `blocked_by` id must exist and be a tactic; every `validates` id must
+  exist and be a strategy; reject `blocked_by` cycles.
 
 Out of scope: any router or skill consumption of the fields (sibling
 tactics own that).
@@ -81,9 +86,9 @@ Scope:
   Non-tactic kinds keep the cosmetic render (doctrine amendment, strategy
   clarification 5).
 - Migrate the squatted round-1 fields to first-class: `attributes.phase`,
-  `attributes.blocked_by`, `attributes.office_hours`, `attributes.backlog`
-  on the tactic children of `tactic-graph-native-dispatch`, and
-  `attributes.rounds` on
+  `attributes.blocked_by`, `attributes.office_hours`,
+  `attributes.validates` on the tactic children of
+  `tactic-graph-native-dispatch`, and `attributes.rounds` on
   `intentions/strategy-graph-native-dispatch.md`.
 - Tests in `packages/intentionsutil/test/`: body preserved on tactic
   rewrite, regenerated for a strategy; each validation rule accepts/rejects

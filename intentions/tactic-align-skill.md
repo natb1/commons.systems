@@ -6,12 +6,13 @@ statement: "/align SKILL.md: fork entrypoint — orient, validate deployment,
 owner: ai
 status: codified
 parent: tactic-graph-native-dispatch
-rationale: "The first backlog tactic (strategy clarification 9): round 1
-  deferred this by omission; the re-evaluation converts the deferral into a
-  recorded, planned, selectable tactic demoted by the signal-path factor — it is
-  not on the minimum path to the strategy's success signal, but it no longer
-  disappears from selection. Does not block the strategy's /align-tactics
-  eligibility."
+rationale: "Off-path tactic (strategy clarifications 9 and 11): round 1 deferred
+  this by omission; the first re-evaluation recorded it, and the second removed
+  the interim backlog flag — off-path status now derives at read time from the
+  absence of any blocked_by/parent chain to a validates-terminal, demoting it
+  via the calculated-attention signal term with zero stored judgment. It neither
+  blocks the strategy's /align-tactics eligibility nor disappears from
+  selection."
 reading: null
 gap: null
 serves:
@@ -23,7 +24,6 @@ success_signal: null
 attention: null
 attributes:
   phase: implement
-  backlog: true
   blocked_by:
     - tactic-align-strategy-skill
 ---
@@ -32,11 +32,13 @@ attributes:
 ## Context
 
 The fork/plugin-consumer entrypoint (spec:
-`intentions/tactic-graph-native-dispatch.md` §2.1). **Backlog tactic** —
-off the minimum path to the strategy's success signal, selectable at
-demoted rank per the signal-path factor (`tactic-signal-path-attention`).
-Converted from round 1's deferral-by-omission by the 2026-07-03
-re-evaluation.
+`intentions/tactic-graph-native-dispatch.md` §2.1). **Off-path tactic** —
+no `blocked_by`/`parent` chain from a validates-terminal reaches it, so
+the calculated-attention signal term (strategy clarification 11,
+`tactic-calculated-attention`) demotes it at read time; no stored flag.
+Recorded by the 2026-07-03 re-evaluations after round 1 had deferred it by
+omission: fully planned and selectable, it neither blocks the strategy's
+eligibility nor disappears from selection.
 
 ## Unit 1 — author `.claude/skills/align/SKILL.md` (graph-native rewrite)
 

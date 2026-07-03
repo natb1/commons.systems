@@ -42,11 +42,13 @@ consults both selectors. Eligibility and ordering spec:
 
 Scope: new `.claude/skills/dispatch-propagate/scripts/graph-select-target`:
 - Strategy eligibility (spawns an `/align-tactics` session): `office_hours`
-  null; no non-draft, non-backlog child tactics (drafts are input, backlog
-  tactics linger by design — strategy clarification 9); signal unvalidated
-  (`gap` non-null or `reading` null); fresh-reading gate (`rounds.count ==
-  0` or a reading newer than `rounds.last_completed`); `rounds.count < 2` —
-  at the cap, park the strategy instead.
+  null; no non-draft child tactics **on the strategy's signal path**
+  (drafts are input; off-path tactics — no `blocked_by`/`parent` chain to
+  a `validates`-terminal — linger at derived demoted rank by design,
+  strategy clarifications 9/11); signal unvalidated (`gap` non-null or
+  `reading` null); fresh-reading gate (`rounds.count == 0` or a reading
+  newer than `rounds.last_completed`); `rounds.count < 2` — at the cap,
+  park the strategy instead.
 - Tactic eligibility (spawns its phase session): `office_hours` null;
   `phase` not in {draft, done}; `blocked_by` fully complete (a pruned
   blocker is complete — prune-on-done makes absence completion); phase
@@ -55,10 +57,11 @@ Scope: new `.claude/skills/dispatch-propagate/scripts/graph-select-target`:
   `packages/intentionsutil/scripts/rank-map.ts` exactly as
   `.claude/skills/dispatch-propagate/scripts/dispatch-select-target:543`
   does; within a rank level, phase ladder closest-to-done first:
-  review → fix → qa → implement → align-tactics(strategy). The
-  signal-path demotion (backlog and off-path nodes one tier lower) arrives
-  inside `resolveAttention` via `tactic-signal-path-attention` — no
-  selector logic of its own.
+  review → fix → qa → implement → align-tactics(strategy). Calculated
+  attention (weighted sum of authored, signal-satisfaction, and
+  capture-resolution terms, strategy clarification 11) arrives inside
+  `resolveAttention` via `tactic-calculated-attention` — no selector logic
+  of its own.
 - Soft-freeze gate (strategy clarification 10): before selecting within a
   subtree, recompute the serving strategy's substance fingerprint
   (statement, clarifications, conditions, serves, success_signal,
@@ -97,9 +100,10 @@ worktree.)
 - `tactic-graph-dispatch-schema` — the fields the gates read.
 - `tactic-align-tactics-skill` — the session type a selected strategy
   spawns.
-- `tactic-signal-path-attention` — should land before the selector goes
-  live so backlog demotion is in effect from the first tick; not a hard
-  blocker (the selector functions without it, minus the demotion).
+- `tactic-calculated-attention` — should land before the selector goes
+  live so the derived terms are in effect from the first tick; not a hard
+  blocker for this tactic (the selector functions without it, minus the
+  derived terms), but it does hard-block `tactic-legacy-router-removal`.
 
 ## Reuse
 
