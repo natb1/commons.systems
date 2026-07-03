@@ -26,8 +26,17 @@ serves:
   - virtue-philosophical-mobility
   - virtue-progressive-detachment
 recovers: []
-clarifications: []
-tooling_goals: []
+clarifications:
+  - question: Where do attention injections live, and what does the router consume?
+    answer: Authored attention injections live in git (frontmatter); flow is derived
+      on read by resolveAttention, never stored; the dispatch router consumes bands
+      (top / middle / bottom), not floats; v1 has two signal terms only (injection
+      and provenance). Recorded 2026-07-02.
+tooling_goals:
+  - kind: actuator
+    statement: resolveAttention + emit-time band projection
+  - kind: sensor
+    statement: frontier-view renders the resolved ranking
 success_signal:
   observable: the fraction of open dispatch work traceable to a serving node, and
     readings populated by the loop rather than by hand
