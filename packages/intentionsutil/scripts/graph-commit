@@ -1,0 +1,481 @@
+#!/usr/bin/env bash
+#
+# graph-commit — the single write primitive that lands one or more intention
+# node edits on `main`.
+#
+# Every graph writer (skills, router, reconciler, sensors) writes a node's
+# content first via `packages/intentionsutil/scripts/write-node.ts` (the single
+# validation gate), then calls this script with the node id(s). graph-commit
+# never authors node content itself (except the office_hours parking fallback
+# below, which goes through store.ts's writeNode, not raw text): it stages
+# exactly `intentions/<id>.md` for each id, commits, stamps the commit's SHA
+# with the four required checks via a throwaway `graph/**` scratch branch, and
+# fast-forwards that SHA onto `main` directly (no PR) with a bounded
+# rebase-retry loop.
+#
+# Why the stamp step is required: `main`'s branch-protection ruleset requires
+# four status checks (`acceptance`, `preview-and-smoke`, `lint`, `unit-tests`)
+# to already be green ON THE EXACT SHA before it will accept a push of that SHA
+# — checks attach to the SHA, not the branch. A brand-new local commit has zero
+# check runs, so `git push origin HEAD:main` on it is deterministically
+# rejected. The repo's `graph/**` CI fast path
+# (.github/workflows/graph-fast-path.yml) is what stamps those four checks on an
+# intentions/-only SHA: pushing the commit to a `graph/**` branch triggers it
+# (~30-60s), after which the SAME SHA can be fast-forwarded onto `main`. So each
+# attempt of the push loop runs:
+#   commit → pull --rebase origin main → push HEAD:graph/<id>-<pid> →
+#   poll the four checks green on the SHA → push <sha>:main.
+# The scratch branch is throwaway (this process owns it, force-pushes it across
+# retries, and deletes it on every exit path).
+#
+# Usage:
+#   graph-commit [-m <message>] <node-id> [<node-id> ...]
+#   graph-commit -m 'graph: seed dispatch state' tactic-graph-commit
+#
+# Exit status:
+#   0  the edit landed on main.
+#   1  push could not land (busy main after all attempts, the required checks
+#      never stamped green within the poll window, or an unresolved
+#      concurrent-edit conflict that parked the target node); a parking write
+#      is attempted for the conflict case.
+#   2  usage error.
+#
+# Conventions: mirrors the bounded-retry shape/logging of `gh_retry` in
+# .claude/skills/dispatch-propagate/scripts/lib.sh. Per .claude/rules/code-style.md
+# it prefers clear errors over silent fallbacks. Per .claude/rules/shell-json.md
+# it never pipes a captured variable through `echo` into `jq` — it uses
+# `gh api ... --jq` (gh runs jq on its in-memory JSON) for check-run polling.
+
+set -euo pipefail
+
+# --- Paths -----------------------------------------------------------------
+# Resolve the repo root from this script's own location, never from cwd:
+# the script lives at packages/intentionsutil/scripts/graph-commit, so the repo
+# root is three directories up. All git and file operations run from there.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+INTENTIONS_DIR="$REPO_ROOT/intentions"
+# store.ts is imported by the parking fallback via tsx (.js → .ts resolution).
+STORE_MODULE="$REPO_ROOT/packages/intentionsutil/src/store.js"
+
+# Total commit → rebase → stamp → push attempts before a pure (conflict-free)
+# rejection is declared a busy-main failure. Overridable for tests.
+MAX_PUSH_ATTEMPTS="${GRAPH_COMMIT_MAX_ATTEMPTS:-5}"
+
+# Fast-path check-run polling: how often to poll and how long to wait for the
+# four required contexts to stamp green on a scratch SHA before treating this
+# attempt as failed (and rebasing/retrying). Overridable for tests.
+CHECK_POLL_SECONDS="${GRAPH_COMMIT_CHECK_POLL_SECONDS:-7}"
+CHECK_TIMEOUT_SECONDS="${GRAPH_COMMIT_CHECK_TIMEOUT_SECONDS:-180}"
+
+# --- Globals set by main() -------------------------------------------------
+# IDS         — the node ids to commit (positional args).
+# EXPECTED    — associative set of the exact staged paths we permit.
+# SNAP_DIR    — tempdir holding the on-disk node content we are trying to land.
+# CURRENT_MSG — the commit message reapply() re-commits with.
+declare -a IDS=()
+declare -A EXPECTED=()
+SNAP_DIR=""
+CURRENT_MSG=""
+# SCRATCH_BRANCH — the throwaway `graph/**` branch name used to stamp SHAs.
+# SCRATCH_PUSHED — 1 once we have pushed it at least once, so cleanup() knows to
+#                  delete it on the remote on exit.
+SCRATCH_BRANCH=""
+SCRATCH_PUSHED=0
+
+die() {
+  echo "error: graph-commit: $*" >&2
+  exit 1
+}
+
+usage() {
+  echo "usage: graph-commit [-m <message>] <node-id> [<node-id> ...]" >&2
+}
+
+# --- Cleanup (EXIT trap) ---------------------------------------------------
+# Remove the snapshot tempdir and delete the throwaway `graph/**` scratch branch
+# on the remote. Runs on every exit path (success, busy-main, parking fallback,
+# or an unexpected die). The remote delete is best-effort — a leftover scratch
+# branch is harmless and would be overwritten by the next same-PID run — so its
+# failure never masks the real exit status.
+cleanup() {
+  local rc=$?
+  [[ -n "$SNAP_DIR" ]] && rm -rf "$SNAP_DIR"
+  if [[ "$SCRATCH_PUSHED" -eq 1 && -n "$SCRATCH_BRANCH" ]]; then
+    git push origin --delete "$SCRATCH_BRANCH" >&2 || true
+  fi
+  return "$rc"
+}
+
+# --- Guard -----------------------------------------------------------------
+# Defense in depth: assert the staged set is a SUBSET of the requested
+# intentions/<id>.md paths — nothing outside intentions/, and no node file
+# other than the ones named on the command line. Its one job is to catch a
+# stray or cross-contaminated staged path; it does NOT decide whether there is
+# anything to commit. An empty staged set is tolerated here (returns cleanly) —
+# main()/reapply() gate commit_files() behind id_files_dirty(), so this guard is
+# only reached when there is genuinely something to stage. Treating "empty" as
+# an error here was the bug that broke idempotent re-invocation after a partial
+# failure (a local commit that never pushed left the tree clean, so the re-run's
+# `git add` staged nothing and this guard wrongly diagnosed "already at the
+# desired state" instead of "already committed, still needs to push").
+assert_staged_safe() {
+  local staged
+  staged="$(git diff --cached --name-only)"
+  local path
+  while IFS= read -r path; do
+    [[ -z "$path" ]] && continue
+    if [[ -z "${EXPECTED[$path]:-}" ]]; then
+      echo "error: graph-commit: refusing to commit — staged path outside the requested node set: '$path'" >&2
+      echo "       graph-commit stages exactly intentions/<id>.md for the given ids; nothing else." >&2
+      exit 1
+    fi
+  done <<<"$staged"
+}
+
+# --- Snapshot / restore ----------------------------------------------------
+# The desired on-disk content of each node (written by write-node.ts, or by the
+# parking fallback) is captured to SNAP_DIR so it survives a `git reset --hard`
+# in reapply(). restore() re-lays that captured content — the WRITER's content,
+# not origin/main's — back onto the working tree.
+snapshot() {
+  local id
+  for id in "${IDS[@]}"; do
+    cp -- "$INTENTIONS_DIR/$id.md" "$SNAP_DIR/$id.md"
+  done
+}
+
+restore() {
+  local id
+  for id in "${IDS[@]}"; do
+    cp -- "$SNAP_DIR/$id.md" "$INTENTIONS_DIR/$id.md"
+  done
+}
+
+# --- Is there anything new to commit? --------------------------------------
+# Return 0 iff at least one intentions/<id>.md differs from HEAD (either a
+# working-tree change or an already-staged one). This is the state discriminator
+# that makes graph-commit safely re-invocable after a partial failure:
+#   - dirty   → there is new content to stage → commit_files() then land().
+#   - clean   → nothing new to stage; the id file(s) already match the last
+#               commit. Either HEAD already equals origin/main (truly nothing to
+#               do) OR a prior attempt already committed the desired content and
+#               only failed to push. Both collapse to the same action: skip
+#               commit_files() and land whatever HEAD already is — try_land()
+#               trivially no-ops when HEAD == origin/main, or pushes the pending
+#               local commit(s) forward when HEAD is ahead.
+# Scoped strictly to the requested id paths, so incidental dirt elsewhere in the
+# tree (e.g. an unrelated package-lock.json diff) never flips this to "dirty".
+id_files_dirty() {
+  local id paths=()
+  for id in "${IDS[@]}"; do
+    paths+=("intentions/$id.md")
+  done
+  [[ -n "$(git status --porcelain -- "${paths[@]}")" ]]
+}
+
+# --- Commit ----------------------------------------------------------------
+# Stage exactly our id files, run the guard, then commit with CURRENT_MSG.
+commit_files() {
+  local id
+  for id in "${IDS[@]}"; do
+    git add -- "intentions/$id.md"
+  done
+  assert_staged_safe
+  git commit -q -m "$CURRENT_MSG"
+}
+
+# --- Rebase-state detection ------------------------------------------------
+# Distinguish a rebase CONFLICT from a fetch/refuse fatal after `git pull
+# --rebase` returns non-zero. This checkout is a `.bare` common-dir + worktree
+# layout where `.git` is a file and the rebase state dirs live under the
+# per-worktree git dir, so resolve them via `git rev-parse --git-path` rather
+# than hardcoding `.git/rebase-*` (which would misclassify every conflict here).
+rebase_in_progress() {
+  local rm ra
+  rm="$(git rev-parse --git-path rebase-merge)"
+  ra="$(git rev-parse --git-path rebase-apply)"
+  [[ -d "$rm" || -d "$ra" ]]
+}
+
+# --- Fast-path check stamping ----------------------------------------------
+# Poll the branch-protection ruleset's four required contexts on <sha> until all
+# report completed/success, keyed on the check-run NAME (mirrors the four jobs
+# in .github/workflows/graph-fast-path.yml). Only the fast path fires on a
+# `graph/**` push (unit-tests.yml ignores graph/**, pr-checks.yml is PR-only),
+# so there is no same-named run to race. Uses `gh api ... --jq` so gh runs jq on
+# its in-memory JSON — never an `echo "$VAR" | jq` round-trip (shell-json.md).
+# Returns:
+#   0  all four contexts green.
+#   1  a required check concluded non-success, OR the timeout elapsed before all
+#      four went green (the caller rebases and retries this whole cycle).
+await_checks() {
+  local sha="$1"
+  local deadline counts nsucc nfail
+  deadline=$(( $(date +%s) + CHECK_TIMEOUT_SECONDS ))
+  nsucc=0
+  while :; do
+    # For the four required names on this SHA, count how many are
+    # completed/success and how many are completed/non-success. Extra check runs
+    # (e.g. CodeQL `Analyze (*)`, `guard`) are ignored by the name filter.
+    counts="$(gh api "repos/{owner}/{repo}/commits/$sha/check-runs" \
+      --jq '[.check_runs[]
+             | select(.name=="acceptance" or .name=="preview-and-smoke"
+                      or .name=="lint" or .name=="unit-tests")]
+            | "\([.[]|select(.status=="completed" and .conclusion=="success")]|length) \([.[]|select(.status=="completed" and .conclusion!="success")]|length)"' \
+      2>/dev/null)" || counts=""
+    if [[ -n "$counts" ]]; then
+      read -r nsucc nfail <<<"$counts"
+      if [[ "$nsucc" -eq 4 ]]; then
+        return 0
+      fi
+      if [[ "${nfail:-0}" -gt 0 ]]; then
+        echo "graph-commit: a required check concluded non-success for $sha ($nsucc/4 green, $nfail failed)" >&2
+        return 1
+      fi
+    fi
+    if [[ "$(date +%s)" -ge "$deadline" ]]; then
+      echo "graph-commit: required checks not green within ${CHECK_TIMEOUT_SECONDS}s for $sha (last seen ${nsucc:-0}/4 green)" >&2
+      return 1
+    fi
+    sleep "$CHECK_POLL_SECONDS"
+  done
+}
+
+# --- Bounded rebase + stamp + push loop ------------------------------------
+# Runs up to MAX_PUSH_ATTEMPTS of:
+#   pull --rebase origin main → push HEAD:graph/<scratch> → await checks →
+#   push <sha>:main.
+# A fresh SHA must first carry the four required contexts (checks attach to the
+# SHA, not the branch), so each attempt stamps the SHA via the `graph/**` fast
+# path before fast-forwarding it onto main.
+# Returns:
+#   0  pushed.
+#   10 a rebase CONFLICT occurred (aborted) — the caller's concurrent-edit
+#      recovery is needed.
+#   11 every attempt failed with no conflict (busy main, or the checks never
+#      stamped/concluded green within the poll window).
+# Dies on a non-conflict rebase/fetch failure (broken environment — clear error
+# over a fallback, per code-style.md).
+try_land() {
+  local attempt sha
+  for (( attempt=1; attempt<=MAX_PUSH_ATTEMPTS; attempt++ )); do
+    if ! git pull --rebase origin main >&2; then
+      if rebase_in_progress; then
+        echo "graph-commit: rebase conflict on attempt $attempt/$MAX_PUSH_ATTEMPTS (concurrent edit to the same node); aborting" >&2
+        git rebase --abort >&2 || true
+        return 10
+      fi
+      die "'git pull --rebase origin main' failed and left no rebase in progress (dirty tree or fetch failure)"
+    fi
+
+    # The exact SHA we intend to land; the required checks stamp onto it.
+    sha="$(git rev-parse HEAD)"
+
+    # Stamp the SHA: push it to the `graph/**` scratch branch so the fast-path
+    # workflow runs and stamps the four required contexts. Plain --force (not
+    # --force-with-lease): the scratch branch is reused across attempts within
+    # this invocation and we never fetch its remote-tracking ref, so a lease
+    # expectation would go stale and spuriously reject the second push. It is a
+    # PID-scoped branch this process owns and deletes, so a blind force is safe.
+    if ! git push --force origin "HEAD:refs/heads/$SCRATCH_BRANCH" >&2; then
+      echo "graph-commit: scratch push to $SCRATCH_BRANCH failed on attempt $attempt/$MAX_PUSH_ATTEMPTS; rebasing and retrying" >&2
+      continue
+    fi
+    SCRATCH_PUSHED=1
+
+    # Wait for the fast path to stamp the four required checks green on this SHA.
+    if ! await_checks "$sha"; then
+      echo "graph-commit: checks did not go green for $sha on attempt $attempt/$MAX_PUSH_ATTEMPTS; rebasing and retrying" >&2
+      continue
+    fi
+
+    # The SHA now carries the four passing contexts — fast-forward it onto main.
+    if git push origin "$sha:main" >&2; then
+      return 0
+    fi
+    echo "graph-commit: push of $sha to main rejected (main advanced), attempt $attempt/$MAX_PUSH_ATTEMPTS; rebasing and retrying" >&2
+  done
+  echo "error: graph-commit: could not land on main after $MAX_PUSH_ATTEMPTS attempts — main busy or the required checks never stamped green; retry later" >&2
+  return 11
+}
+
+# --- Concurrent-edit recovery ----------------------------------------------
+# Abort already done by try_land. Re-apply the writer's snapshot onto a freshly
+# fetched origin/main as one fresh commit on top, so the push loop can retry.
+# NOTE (deployment): `git reset --hard` is a tree-updating op; when this script
+# is driven through the sandboxed Bash tool it needs dangerouslyDisableSandbox
+# if origin/main advanced read-only paths (.claude/skills/**, config/) — see
+# .claude/rules/sandbox.md. That is a caller concern, not resolved here.
+reapply() {
+  git fetch origin main >&2
+  git reset --hard FETCH_HEAD >&2
+  restore
+  # Only commit when the writer's content actually differs from the freshly
+  # fetched origin/main; if origin/main already carries identical content the
+  # restore leaves the tree clean and there is nothing to commit (HEAD already
+  # equals origin/main, which try_land() lands trivially).
+  if id_files_dirty; then
+    commit_files
+  fi
+}
+
+# --- Land with one concurrent-edit retry -----------------------------------
+# Returns:
+#   0  landed.
+#   11 pure rejection exhausted with NO conflict (busy main — fail loudly, do
+#      not park; this is not a semantic conflict).
+#   12 a conflict persisted after the single re-apply retry (genuine semantic
+#      conflict — the caller parks).
+land() {
+  local rc=0
+  try_land || rc=$?
+  case "$rc" in
+    0) return 0 ;;
+    11) return 11 ;;
+    10)
+      echo "graph-commit: re-applying writer content onto fresh origin/main and retrying once" >&2
+      reapply
+      local rc2=0
+      try_land || rc2=$?
+      [[ "$rc2" -eq 0 ]] && return 0
+      return 12
+      ;;
+    *)
+      die "unexpected land status $rc"
+      ;;
+  esac
+}
+
+# --- Parking fallback ------------------------------------------------------
+# A genuine semantic conflict: set office_hours on each target node via store.ts
+# (readNode → set office_hours → writeNode) so the frontmatter is serialized
+# correctly and — for a tactic — its authoritative body is preserved. Uses a
+# throwaway tsx module rather than hand-editing YAML.
+park_write() {
+  local since reason tmpts
+  since="$(date -u +%Y-%m-%d)"
+  reason="graph-commit: unresolved concurrent-edit conflict"
+  tmpts="$(mktemp --suffix=.mts)" || die "could not create temp file for the parking write"
+  cat >"$tmpts" <<'TS'
+// argv: <storeModule> <intentionsDir> <since> <reason> <id...>
+const [storePath, intentionsDir, since, reason, ...ids] = process.argv.slice(2);
+const { readNode, writeNode } = await import(storePath);
+for (const id of ids) {
+  const node = readNode(intentionsDir, id);
+  node.office_hours = { reason, since };
+  writeNode(intentionsDir, node);
+  process.stderr.write(`graph-commit: set office_hours on ${id} (since=${since})\n`);
+}
+TS
+  if ! npx tsx "$tmpts" "$STORE_MODULE" "$INTENTIONS_DIR" "$since" "$reason" "${IDS[@]}" >&2; then
+    rm -f "$tmpts"
+    die "failed to write the office_hours parking record"
+  fi
+  rm -f "$tmpts"
+}
+
+# --- Main ------------------------------------------------------------------
+main() {
+  cd "$REPO_ROOT"
+
+  local msg=""
+  # Parse [-m <msg>] and positional ids. `--` ends option parsing.
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -m|--message) [[ $# -ge 2 ]] || { usage; die "-m requires a message argument"; }
+                    msg="$2"; shift 2 ;;
+      -h|--help) usage; exit 0 ;;
+      --) shift; while [[ $# -gt 0 ]]; do IDS+=("$1"); shift; done ;;
+      -*) usage; echo "error: graph-commit: unknown option '$1'" >&2; exit 2 ;;
+      *) IDS+=("$1"); shift ;;
+    esac
+  done
+
+  if [[ "${#IDS[@]}" -eq 0 ]]; then
+    usage
+    echo "error: graph-commit: at least one node id is required" >&2
+    exit 2
+  fi
+
+  # Validate ids and confirm each node file already exists on disk.
+  local id
+  for id in "${IDS[@]}"; do
+    if [[ -z "$id" ]]; then
+      echo "error: graph-commit: empty node id" >&2; exit 2
+    fi
+    case "$id" in
+      */*|*'\'*|*..*)
+        echo "error: graph-commit: invalid node id '$id' (path separators / traversal not allowed)" >&2
+        exit 2 ;;
+    esac
+    if [[ ! -f "$INTENTIONS_DIR/$id.md" ]]; then
+      die "intentions/$id.md does not exist — write the node via write-node.ts before graph-commit"
+    fi
+    EXPECTED["intentions/$id.md"]=1
+  done
+
+  # Default commit / parking messages.
+  if [[ -z "$msg" ]]; then
+    msg="graph: ${IDS[*]}"
+  fi
+  local park_msg="graph: park ${IDS[*]} (unresolved concurrent-edit conflict)"
+
+  # The throwaway stamping branch: named for the primary id and scoped to this
+  # PID so concurrent graph-commit invocations never collide. cleanup() (the
+  # EXIT trap) deletes it on the remote on every exit path — success, busy-main,
+  # or the parking fallback — once it has been pushed at least once.
+  SCRATCH_BRANCH="graph/${IDS[0]}-$$"
+
+  SNAP_DIR="$(mktemp -d)" || die "could not create snapshot tempdir"
+  trap cleanup EXIT
+
+  # Capture the writer's on-disk content, then commit-and-land it.
+  # Three states, discriminated by id_files_dirty():
+  #   - dirty: normal case — stage + commit the new content, then land it.
+  #   - clean: nothing new to stage — either the desired content is already on
+  #     origin/main (truly nothing to do) or a prior attempt already committed it
+  #     locally and only failed to push. Both are handled by skipping
+  #     commit_files() and landing whatever HEAD already is, which makes the same
+  #     invocation safe to just retry after any partial failure between
+  #     commit_files() and a successful push.
+  CURRENT_MSG="$msg"
+  snapshot
+  if id_files_dirty; then
+    commit_files
+  else
+    echo "graph-commit: no new changes to stage for ${IDS[*]} — landing current HEAD (nothing to commit, or a prior attempt already committed but did not push)" >&2
+  fi
+
+  local rc=0
+  land || rc=$?
+  if [[ "$rc" -eq 0 ]]; then
+    echo "graph-commit: landed ${IDS[*]} on main" >&2
+    exit 0
+  fi
+  if [[ "$rc" -eq 11 ]]; then
+    # Busy main, no semantic conflict — already errored loudly. No parking.
+    exit 1
+  fi
+
+  # rc == 12: genuine semantic conflict — park the target node(s).
+  echo "graph-commit: unresolved concurrent-edit conflict on ${IDS[*]}; parking target node(s)" >&2
+  park_write
+  CURRENT_MSG="$park_msg"
+  snapshot
+  commit_files
+  local prc=0
+  land || prc=$?
+  if [[ "$prc" -eq 0 ]]; then
+    echo "graph-commit: parked ${IDS[*]} (office_hours set) and pushed the parking write to main" >&2
+  else
+    echo "error: graph-commit: could not land the parking write for ${IDS[*]} — office_hours set locally but not pushed to main" >&2
+  fi
+  exit 1
+}
+
+# Run main only when executed directly; when sourced (e.g. for unit-testing the
+# guard/snapshot helpers) the functions are defined but nothing runs.
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  main "$@"
+fi
