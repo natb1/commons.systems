@@ -19,10 +19,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-attributes:
-  phase: qa
-  blocked_by: []
-  office_hours: null
+phase: qa
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: false
+rounds: null
+attributes: {}
 ---
 # Author: permit direct-push of intentions/-only commits to main (branch protection / ruleset review, ≤30 author-minutes)
 

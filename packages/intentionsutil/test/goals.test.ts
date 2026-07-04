@@ -26,6 +26,13 @@ function node(partial: Partial<IntentionNode> & { id: string }): IntentionNode {
     tooling_goals: partial.tooling_goals ?? [],
     success_signal: partial.success_signal ?? null,
     attention: partial.attention ?? null,
+    phase: partial.phase ?? null,
+    execution: partial.execution ?? null,
+    validates: partial.validates ?? [],
+    blocked_by: partial.blocked_by ?? [],
+    office_hours: partial.office_hours ?? null,
+    pace_exempt: partial.pace_exempt ?? false,
+    rounds: partial.rounds ?? null,
     attributes: partial.attributes ?? {},
   };
 }

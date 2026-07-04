@@ -19,12 +19,16 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-attributes:
-  phase: implement
-  validates:
-    - strategy-graph-native-dispatch
-  blocked_by:
-    - tactic-graph-router-transitions
+phase: implement
+execution: null
+validates:
+  - strategy-graph-native-dispatch
+blocked_by:
+  - tactic-graph-router-transitions
+office_hours: null
+pace_exempt: false
+rounds: null
+attributes: {}
 ---
 # instrument: lifecycle sensor — phase-transition history and the selection log populate the strategy's reading
 

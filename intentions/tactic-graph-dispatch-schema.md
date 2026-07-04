@@ -20,9 +20,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-attributes:
-  phase: implement
-  blocked_by: []
+phase: implement
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: false
+rounds: null
+attributes: {}
 ---
 # intentionsutil: first-class execution state — phase, execution, blocked_by, office_hours, rounds — and tactic-body preservation in writeNode
 

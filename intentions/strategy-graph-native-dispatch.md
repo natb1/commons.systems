@@ -284,10 +284,16 @@ success_signal:
     and /plan-issue coverage matrix fully mapped to the align family
   is_proxy: false
 attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: false
+rounds:
+  count: 0
+  last_completed: null
 attributes:
-  rounds:
-    count: 0
-    last_completed: null
   conditions:
     - the legacy gh router only drains existing issues; no new work enters via
       gh once /align-strategy is live

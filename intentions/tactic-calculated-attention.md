@@ -23,10 +23,15 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-attributes:
-  phase: implement
-  blocked_by:
-    - tactic-graph-dispatch-schema
+phase: implement
+execution: null
+validates: []
+blocked_by:
+  - tactic-graph-dispatch-schema
+office_hours: null
+pace_exempt: false
+rounds: null
+attributes: {}
 ---
 # resolveAttention: calculated attention as a weighted sum of derived terms — authored, signal satisfaction, capture resolution
 

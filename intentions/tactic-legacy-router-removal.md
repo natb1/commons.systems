@@ -1,8 +1,7 @@
 ---
 id: tactic-legacy-router-removal
 kind: tactic
-statement: "drain complete: remove the legacy gh router and dispatch:* label
-  conventions"
+statement: "drain complete: remove the legacy gh router and dispatch:* label conventions"
 owner: ai
 status: codified
 parent: tactic-graph-native-dispatch
@@ -19,16 +18,20 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-attributes:
-  phase: implement
-  validates:
-    - strategy-graph-native-dispatch
-  blocked_by:
-    - tactic-align-strategy-skill
-    - tactic-align-tactics-skill
-    - tactic-graph-router-transitions
-    - tactic-dispatch-lifecycle-sensor
-    - tactic-calculated-attention
+phase: implement
+execution: null
+validates:
+  - strategy-graph-native-dispatch
+blocked_by:
+  - tactic-align-strategy-skill
+  - tactic-align-tactics-skill
+  - tactic-graph-router-transitions
+  - tactic-dispatch-lifecycle-sensor
+  - tactic-calculated-attention
+office_hours: null
+pace_exempt: false
+rounds: null
+attributes: {}
 ---
 # drain complete: remove the legacy gh router and dispatch:* label conventions
 
