@@ -104,6 +104,17 @@ clarifications:
       state; the browser never parses git history. Resolved 2026-07-03
       /align-tactics round 1 (immaterial drift: consistent with clarifications 3
       and 6)."
+  - question: Is the analytics export drop an author task?
+    answer: No — collection is automated end-to-end. The local snapshot producer
+      collects GA4/Search Console/PageSpeed/GitHub signals directly, reusing the
+      dependency-injected core of the collectProjectSignals Firebase function,
+      under a new producer scope scheduled by the repo's nix-managed systemd
+      timer (nix/nixos/office-hours.nix precedent); results fold into
+      office-hours-current.benc like every other snapshot signal. The Firestore
+      function and its capture hop retire with the hosted owner tier. No manual
+      export drop exists. Recorded 2026-07-03 /align-tactics round 1 — author
+      correction pruning the round's born-parked analytics-drop tactic in favor
+      of tactic-attention-surface-analytics-collector.
 tooling_goals:
   - kind: actuator
     statement: status page — one attention-ranked queue of typed signals, each type

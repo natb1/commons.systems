@@ -29,6 +29,7 @@ attributes:
     - tactic-attention-surface-goals-page
     - tactic-attention-surface-velocity-pace
     - tactic-attention-surface-instrument
+    - tactic-attention-surface-analytics-collector
 ---
 # retire the hosted Firestore owner tier — office-hours owner data goes fully local-first
 
@@ -59,6 +60,11 @@ Scope:
   seed plugins) stays.
 - Producer: retire `office-hours-snapshot/src/capture-firestore.ts` in
   favor of locally computed inputs, if the legacy lane has not already.
+- Functions: delete the `collectProjectSignals` scheduled function
+  (`functions/src/project-signals.ts` + its `project-signals-core.ts`
+  copy) — superseded by the local collector
+  (`tactic-attention-surface-analytics-collector`, strategy
+  clarification 8) — and its Firestore collections' owner-read wiring.
 - Out of scope: Firestore rules/functions used by other apps; deleting
   the Firebase project or billing config.
 
@@ -67,8 +73,10 @@ Scope:
 - `tactic-attention-surface-status-page`,
   `tactic-attention-surface-goals-page`,
   `tactic-attention-surface-velocity-pace`,
-  `tactic-attention-surface-instrument` — every owner data path must be
-  local-first, and the audit sensor must exist to observe the flip.
+  `tactic-attention-surface-instrument`,
+  `tactic-attention-surface-analytics-collector` — every owner data path
+  must be local-first (including analytics collection), and the audit
+  sensor must exist to observe the flip.
 
 ## Reuse
 

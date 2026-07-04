@@ -86,10 +86,12 @@ reminders → `strategy-attention-surface` (surface-owned housekeeping).
 
 Scope: marketing/analytics signal types owned by
 `strategy-promote-progressive-detachment` and `strategy-own-audience`,
-reading GA4 / Search Console / PageSpeed export files from the share
-(path convention per `tactic-attention-surface-analytics-drop`; build and
-test against fixtures until the drop exists). The attachment and its
-capture posture are recorded in `intentions/delegation-web-analytics.md`.
+reading the `projectSignals` section of `office-hours-current.benc`
+(produced locally by `tactic-attention-surface-analytics-collector`,
+which replaces the Firestore function; build and test against fixtures
+until it lands — the wire shape is
+`functions/src/project-signals-core.ts`). The attachment and its capture
+posture are recorded in `intentions/delegation-web-analytics.md`.
 
 ## Dependencies
 
