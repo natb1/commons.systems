@@ -24,7 +24,9 @@ attributes:
   blocked_by:
     - tactic-graph-dispatch-schema
   execution:
-    pr: 2748
+    pr: null
+    markers:
+      - unit-2-merged:2748
 ---
 # graph-commit primitive: validated single-node writes direct-pushed to main with rebase-retry, restricted to intentions/; CI fast path for intentions/-only pushes
 
@@ -57,9 +59,12 @@ Out of scope: converting callers (sibling tactics adopt the primitive).
 
 ## Unit 2 — CI fast path for intentions/-only pushes
 
+**Status:** merged 2026-07-04 via this PR (#2748).
+
 **Recommended model:** sonnet
 
-Independent of Unit 1 (parallel-safe).
+Independent of Unit 1 (parallel-safe) — shipped ahead of it since Unit 1
+remains blocked by `tactic-graph-dispatch-schema`.
 
 Scope (per the 2026-07-03 branch-protection decision, strategy
 clarification 16):
