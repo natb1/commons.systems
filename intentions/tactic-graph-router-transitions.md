@@ -35,6 +35,15 @@ truth to sensors consulted before a transition commits. Out-of-band gh
 events are absorbed by a reconciler sweep. Spec:
 `intentions/tactic-graph-native-dispatch.md` §1.1 and §2.4.
 
+The transition write is the scheduling mechanism (legacy parity): selection
+reads `origin/main`, so the write that ends a phase is what makes the next
+phase worker — fix, qa, review — selectable, exactly as
+`dispatch-complete-phase`'s label edits do today. Until this tactic lands,
+sessions completing a phase on a graph-native tactic apply the
+bootstrap-transition doctrine by hand (strategy clarification 15: the
+completing session writes the transition to main as a state-only commit,
+never on the work PR branch); that doctrine retires here.
+
 ## Unit 1 — phase transitions and execution state as graph writes
 
 **Recommended model:** opus
@@ -52,6 +61,12 @@ read-only gh calls (the read side of
 `.claude/skills/dispatch-propagate/scripts/dispatch-phase` survives as this
 sensor layer; its derivation-to-phase logic does not apply to graph-native
 tactics).
+
+Merge-when-ready parity: a clean review completion arms gh auto-merge on
+the PR (same config gate as today, `dispatch-auto-merge` conventions
+unchanged — spec §2.4's carried-over phase-skill internals); the merge
+itself lands out-of-band and Unit 2's sweep absorbs it into `done`. No
+graph-side merge step exists.
 
 ## Unit 2 — reconciler sweep and completion pruning
 
