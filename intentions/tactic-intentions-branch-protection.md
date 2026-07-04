@@ -19,13 +19,11 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: qa
 execution: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: author-only GitHub repo settings change; chunked to ≤30 author-minutes
-  since: 2026-07-03
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -56,8 +54,34 @@ in frontmatter) and sized to ≤30 author-minutes.
 4. Clear this node's parking by committing the outcome to the node — the
    interactive-commit-clears-park rule (strategy clarification 4).
 
+## Outcome (2026-07-03, author review in interactive session)
+
+Checklist executed. Findings and decision:
+
+1. `main` carries a single repository ruleset ("default", id 12884700):
+   no-deletion, no-force-push, and four required status checks —
+   `acceptance`, `preview-and-smoke`, `lint`, `unit-tests` (non-strict,
+   GitHub Actions). There is **no pull-request requirement**, so a direct
+   push is accepted whenever the pushed SHA already carries the four
+   passing contexts.
+2. Decision: **no settings change** (mechanism 3 from the checklist,
+   satisfied without touching the ruleset). The direct-push lane rides a
+   `graph/**` scratch-branch CI fast path: push the `intentions/`-only
+   commit to `graph/<node-id>`; a fast workflow hard-fails unless the diff
+   vs main is entirely under `intentions/`, runs graph validation, and
+   stamps the four required contexts green on the SHA; the writer then
+   fast-forwards the same SHA to main (rebase and re-run on reject). Heavy
+   CI still guards any diff touching paths outside `intentions/`.
+3. Recorded as clarification 16 on `strategy-graph-native-dispatch.md`.
+4. Parking cleared by this commit (interactive-commit-clears-park rule).
+
+Phase moves to qa: verification below stays pending until the fast-path
+workflow (`tactic-graph-commit` Unit 2) merges.
+
 ## Verification
 
 From a shell holding the worker credential: commit a whitespace-only change
-to an `intentions/` file and `git push origin HEAD:main`; follow with a
-revert commit. Success = the push is accepted without a PR.
+to an `intentions/` file, push it to `graph/verify-branch-protection`, wait
+for the fast-path checks to go green, then `git push origin <sha>:main`;
+follow with a revert commit through the same lane. Success = the push to
+main is accepted without a PR.

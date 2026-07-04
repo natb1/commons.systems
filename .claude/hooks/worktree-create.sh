@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # WorktreeCreate hook: replace Claude Code's default worktree placement with
-# <project-root>/worktrees/<branch>/. Pre-evaluate .envrc via `direnv exec`
+# <git-common-dir>/.claude/worktrees/<branch>/ — anchored at the shared common
+# dir (not a per-worktree-nested path) so it matches where Claude Code's own
+# `path:`-based re-entry validator looks, and so a session's cwd already
+# contains the `.claude/worktrees/` substring the bg-job isolation check
+# short-circuits on (skipping a redundant EnterWorktree call). Pre-evaluate
+# .envrc via `direnv exec`
 # so Claude's non-interactive subprocess shells have node on PATH (direnv's
 # shell hook only fires for interactive shells; pre-evaluating populates
 # direnv's on-disk cache keyed by .envrc hash so subsequent direnv
@@ -50,13 +55,13 @@ BRANCH=$(printf '%s' "$PAYLOAD" | jq -r '.name // empty') \
 [ -n "$BRANCH" ] || { echo "[worktree-create] ERROR: no .name in payload: $PAYLOAD" >&2; exit 1; }
 [[ "$BRANCH" =~ ^[0-9]+-[a-z0-9]+(-[a-z0-9]+)*$ ]] || { echo "[worktree-create] ERROR: invalid branch name '$BRANCH' (expected <issue-num>-<slug> where slug starts with a lowercase alphanumeric and contains only lowercase alphanumerics and single dashes)" >&2; exit 1; }
 
-# `.git` (classic) and `.bare` (bare) both sit at the project root, so the
-# parent of --git-common-dir is the project root in either layout.
+# --git-common-dir is the same absolute path from any worktree of this repo
+# (classic .git or bare .bare layout alike), so anchoring there gives every
+# worktree a consistent, non-nested registry root.
 GIT_COMMON_DIR=$(git rev-parse --path-format=absolute --git-common-dir) \
   || { echo "[worktree-create] ERROR: git rev-parse --git-common-dir failed" >&2; exit 1; }
-PROJECT_ROOT=$(dirname "$GIT_COMMON_DIR")
 
-NEW_PATH="$PROJECT_ROOT/worktrees/$BRANCH"
+NEW_PATH="$GIT_COMMON_DIR/.claude/worktrees/$BRANCH"
 
 if [ -e "$NEW_PATH" ]; then
   echo "[worktree-create] worktree $NEW_PATH already exists; refreshing identity stub" >&3

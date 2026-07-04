@@ -4,6 +4,7 @@ on:
   push:
     branches-ignore:
       - main
+      - 'graph/**'
 
 permissions:
   contents: read
