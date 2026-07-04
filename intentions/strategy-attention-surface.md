@@ -95,6 +95,26 @@ clarifications:
       signals in the status queue; parked nodes, router now/queue, and
       history/audit become goals-page projections of the graph. Recorded
       2026-07-03 interview.
+  - question: The browser cannot run git — where does the velocity series come from?
+    answer: "Host-side: the office-hours-snapshot producer derives the
+      created/closed/phase-transition series from the local clone's intentions/
+      git history (the same derivation as the graph-native lifecycle sensor) and
+      folds it into office-hours-current.benc; the surface reads it like any
+      other snapshot signal. The clone-read layer renders only current node
+      state; the browser never parses git history. Resolved 2026-07-03
+      /align-tactics round 1 (immaterial drift: consistent with clarifications 3
+      and 6)."
+  - question: Is the analytics export drop an author task?
+    answer: No — collection is automated end-to-end. The local snapshot producer
+      collects GA4/Search Console/PageSpeed/GitHub signals directly, reusing the
+      dependency-injected core of the collectProjectSignals Firebase function,
+      under a new producer scope scheduled by the repo's nix-managed systemd
+      timer (nix/nixos/office-hours.nix precedent); results fold into
+      office-hours-current.benc like every other snapshot signal. The Firestore
+      function and its capture hop retire with the hosted owner tier. No manual
+      export drop exists. Recorded 2026-07-03 /align-tactics round 1 — author
+      correction pruning the round's born-parked analytics-drop tactic in favor
+      of tactic-attention-surface-analytics-collector.
 tooling_goals:
   - kind: actuator
     statement: status page — one attention-ranked queue of typed signals, each type
@@ -120,6 +140,9 @@ success_signal:
   is_proxy: false
 attention: null
 attributes:
+  rounds:
+    count: 0
+    last_completed: null
   conditions:
     - the local clone the surface reads stays fresh enough that attention and
       rank read from it track origin/main

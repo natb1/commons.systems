@@ -23,7 +23,8 @@ attributes:
   phase: implement
   blocked_by:
     - tactic-graph-dispatch-schema
-    - tactic-intentions-branch-protection
+  execution:
+    pr: 2748
 ---
 # graph-commit primitive: validated single-node writes direct-pushed to main with rebase-retry, restricted to intentions/; CI fast path for intentions/-only pushes
 
@@ -60,16 +61,34 @@ Out of scope: converting callers (sibling tactics adopt the primitive).
 
 Independent of Unit 1 (parallel-safe).
 
-Scope: `.github/workflows/pr-checks.yml` plus the push-triggered workflows
-that run on main: when the diff touches only `intentions/**`, run graph
-validation only (`listNodes` + `validateGraph`; import pattern as in
-`packages/intentionsutil/scripts/write-node.ts`) and skip app pipelines.
+Scope (per the 2026-07-03 branch-protection decision, strategy
+clarification 16):
+- New `.github/workflows/graph-fast-path.yml`, `on: push:
+  branches: ['graph/**']`: a `guard` job that hard-fails unless `git diff
+  --name-only origin/main...HEAD` is non-empty and entirely under
+  `intentions/`, then runs graph validation (`listNodes` + `validateGraph`;
+  import pattern as in `packages/intentionsutil/scripts/write-node.ts`);
+  then four jobs named exactly `acceptance`, `preview-and-smoke`, `lint`,
+  `unit-tests`, each `needs: guard`, each a trivial success — they stamp
+  the ruleset's required contexts on the SHA so it can be fast-forwarded
+  to main.
+- `.github/workflows/unit-tests.yml`: add `graph/**` to `branches-ignore`
+  (no duplicate contexts, no wasted heavy CI on scratch pushes).
+- Push-triggered workflows on main (`prod-deploy.yml` etc.): ensure
+  `intentions/**`-only pushes trigger no deploys (`paths-ignore`).
+- `pr-checks.yml` untouched — PRs keep full CI.
 
 ## Dependencies
 
 - `tactic-graph-dispatch-schema` — parking writes the first-class
   `office_hours` field.
-- `tactic-intentions-branch-protection` — main must accept the push.
+- `tactic-intentions-branch-protection` — resolved 2026-07-03: no settings
+  change; main's ruleset (required checks only, no PR requirement) accepts
+  a direct push of any SHA carrying the four passing contexts. Unit 2 below
+  is the mechanism — the fast path runs on `graph/**` scratch branches and
+  stamps the required contexts (`acceptance`, `preview-and-smoke`, `lint`,
+  `unit-tests`) on intentions/-only SHAs, which are then fast-forwarded to
+  main. See strategy clarification 16.
 
 ## Reuse
 
