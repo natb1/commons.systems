@@ -1,0 +1,135 @@
+---
+id: strategy-attention-surface
+kind: strategy
+statement: Office hours runs on the graph — one local-first surface (status
+  signals and goals exploration) allocates the author's strategic attention
+owner: human
+status: refining
+parent: strategy-explicit-intent
+rationale: "The office-hours surface was the materialization of several
+  strategies' sensors — strategy-autonomous-execution names the dashboard as its
+  observability surface, strategy-explicit-intent names the intention-tree view
+  among its artifacts, strategy-graph-native-dispatch defines the office-hours
+  queue as a projection over parked nodes — yet no node owned the surface
+  itself. This strategy owns it: the place where the graph meets the author's
+  attention. Two pages. STATUS is one attention-ranked queue of typed signals;
+  every signal belongs to an owning graph node (a strategy's success_signal or a
+  standing condition) and the surface renders readings it does not own: runway
+  and dollar spend belong to strategy-financial-sustainability with the sensor
+  supplied by strategy-recover-finance's budget pipeline; token spend reads
+  against strategy-autonomous-execution's frontier-economy condition (pace
+  telemetry stays operational config outside the graph); velocity and backlog
+  growth belong to strategy-autonomous-execution's attention-economics signal,
+  computed from the store's own history per the graph-native lifecycle sensor;
+  marketing and adoption signals belong to
+  strategy-promote-progressive-detachment and strategy-own-audience, sensed
+  through the exports recorded in delegation-web-analytics. GOALS is direct
+  graph exploration: virtue roots and their strategies, the shape and
+  development of subtrees, where delegation and capture concentrate, where
+  attention resolves, what the router is executing and queuing, and the
+  office-hours queue. Local-first per the recovery strategies: the graph is read
+  from the local repo clone, signals from non-versioned files on local disk and
+  network shares; the surface is a read-only projection — acting on a signal
+  (clearing a park, authoring attention) stays a session act through the graph
+  write path. Artifacts in prose per kind-strategy: the office-hours app
+  (redesigned), the design-system OfficeHours template with ContextPanel and
+  BudgetPaceChart, the office-hours-snapshot local producer. The legacy
+  gh-router work already migrating office-hours off hosted Firestore drains in
+  parallel; this strategy consumes its output rather than duplicating it."
+reading: null
+gap: null
+serves:
+  - virtue-alignment-of-attachments
+recovers:
+  - delegation-firebase
+clarifications:
+  - question: Is the office-hours redesign a new strategy, or edits to the
+      strategies that already name the surface?
+    answer: A new sub-strategy of strategy-explicit-intent. The surface is the
+      cross-cutting materialization of several strategies' sensors and none
+      owned it — no single node carried its success_signal, conditions, or
+      recovers edge. Apps stay prose-named artifacts; the strategy is the
+      standing posture that attention is allocated from one graph-backed
+      surface. Recorded 2026-07-03 interview.
+  - question: What is the status page's core shape — bespoke domain cards or a
+      uniform list?
+    answer: One attention-ranked queue of typed signals. Signals are of a type; each
+      type is associated with a compact view (rendered in the list) and a
+      context view (rendered in the context panel when the signal is selected).
+      The design-system OfficeHours template's Budgets card rows generalize into
+      signal rows; BudgetPaceChart becomes the context view of the budget signal
+      types. Recorded 2026-07-03 interview.
+  - question: Where do the example status-page signals live in the graph — are new
+      strategies required?
+    answer: "No new signal strategies. Runway and dollar-spend budgets:
+      strategy-financial-sustainability's success_signal (projected runway),
+      sensor supplied by strategy-recover-finance. Velocity (tactics created vs
+      closed, backlog growth by subtree): strategy-autonomous-execution's
+      attention-economics signal, raw data from the store's phase-transition
+      history and selection log (the graph-native lifecycle sensor).
+      Marketing/analytics/performance: strategy-promote-progressive-detachment
+      (adoption with migration freedom) and strategy-own-audience (platform-free
+      reach). The surface renders these strategies' readings; it owns only its
+      own signal. Recorded 2026-07-03 interview."
+  - question: Where does the token-spend budget signal live, given pace telemetry is
+      deliberately outside the graph?
+    answer: As the sensor for strategy-autonomous-execution's standing condition
+      that frontier-agent access remains economical at individual scale.
+      Conditions are standing review triggers; the status page reads the local
+      pace telemetry files and attributes the signal to that condition.
+      Telemetry and tunables stay operational config outside the graph per
+      strategy-graph-native-dispatch clarification 14. Recorded 2026-07-03
+      interview.
+  - question: Does the surface write to the graph?
+    answer: Read-only v1. The graph is read from the local clone (File System Access
+      API over intentions/, per the existing local-first package), signals from
+      network-share files. Acting on a signal — clearing an office_hours park,
+      authoring an attention boost — stays a session/graph-commit act outside
+      the browser, keeping a single writer implementation while graph-commit
+      itself is still being built. Recorded 2026-07-03 interview.
+  - question: Where do the legacy dashboard panels (History, Audit, Reminders,
+      Queue, Parked, ProjectSignals) land in the two-page redesign?
+    answer: Everything is represented as a signal or a view of the graph; that
+      accounts for everything on the legacy second page, which ceases to exist
+      as a concept. Reminders, project signals, and queue health become typed
+      signals in the status queue; parked nodes, router now/queue, and
+      history/audit become goals-page projections of the graph. Recorded
+      2026-07-03 interview.
+tooling_goals:
+  - kind: actuator
+    statement: status page — one attention-ranked queue of typed signals, each type
+      carrying a compact list view and a context panel view
+  - kind: actuator
+    statement: "goals page — graph exploration views: virtue roots and strategies,
+      subtree shape and development, delegation and capture, resolved attention,
+      router now/queue, office-hours queue"
+  - kind: actuator
+    statement: browser graph read layer — File System Access API over the local
+      clone's intentions/, client-side tree build and resolveAttention
+  - kind: sensor
+    statement: local signal adapters mapping non-versioned files (budget .benc,
+      office-hours snapshot, pace telemetry, analytics exports) to their owning
+      strategies' signals
+success_signal:
+  observable: office-hours sessions conducted from the surface, with every
+    rendered signal tracing to a graph node (success_signal or condition) and a
+    local data source
+  sensor: owner review at office-hours plus the surface's own source-of-truth audit
+  threshold: the office-hours ritual runs on the redesigned surface and the hosted
+    Firestore owner tier is retired — all owner data local-first
+  is_proxy: false
+attention: null
+attributes:
+  conditions:
+    - the local clone the surface reads stays fresh enough that attention and
+      rank read from it track origin/main
+    - signal files on local disk and network shares stay reachable from the
+      browser host; when a source is unreachable the surface fails loudly rather
+      than rendering stale signals
+    - strategy-graph-native-dispatch holds — orchestration state (phases, parks,
+      selection log) is readable from the store, so the router and queue views
+      need no GitHub queries
+    - the File System Access API, or an equivalent local read path, remains
+      available in the author's browser
+---
+# Office hours runs on the graph — one local-first surface (status signals and goals exploration) allocates the author's strategic attention
