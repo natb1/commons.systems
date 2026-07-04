@@ -19,13 +19,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: done
 execution:
   branch: tactic-graph-commit
-  pr: null
+  pr: 2750
   attempts: {}
   markers:
-    - unit-1-script-drafted
+    - unit-1-merged:2750
+    - unit-2-merged:2748
   strategy_fingerprint: null
 validates: []
 blocked_by:
@@ -46,6 +47,15 @@ rebase-retry, restricted to `intentions/` paths. Every later writer
 `intentions/tactic-graph-native-dispatch.md` §1.2.
 
 ## Unit 1 — the graph-commit script
+
+**Status:** merged 2026-07-04 via this PR (#2750). Live-verified against the
+real repo before merge: the script landed a real commit end to end (commit
+→ stamp on a `graph/**` scratch branch → poll checks → fast-forward to
+`main`). A first live run surfaced a real idempotency gap — a local commit
+that landed but failed to push (an unrelated dirty `package-lock.json`
+blocked the rebase step) made a bare re-invocation misdiagnose "already at
+the desired state" — fixed so the script is safely re-invocable after a
+partial failure.
 
 **Recommended model:** opus
 
