@@ -1,14 +1,16 @@
 ---
 id: tactic-token-hygiene-sweep
 kind: tactic
-statement: "draft: token hygiene sweep — recurring avoidable tool errors,
-  scriptable call sequences, and oversized tool-result payloads"
+statement: read-before-edit preamble line in the fix-lane subagent prompts —
+  the one hygiene item with a repo-controlled landing spot
 owner: ai
-status: raw
+status: codified
 parent: null
-rationale: Draft retained from the 2026-07-04 strategy-token-economy interview
-  (retain, not refine). Lower measured magnitude than the routing and
-  attribution drafts; kept visible rather than dropped.
+rationale: "Finalized and narrowed from the 2026-07-04 interview draft by
+  /align-tactics round 1: the payload-discipline item is already satisfied
+  in the qa skills, the EnterWorktree item has no repo-controlled landing
+  spot, and the qa-verify item was reinterpreted and split to
+  tactic-main-qa-triage-before-provision."
 reading: null
 gap: null
 serves:
@@ -18,25 +20,83 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-attributes: {}
+attributes:
+  phase: implement
+  execution:
+    strategy_fingerprint: 10f0314e331696714d42b26313b80c5a289d68ab0e3ce4d614bf2c97a94d4a67
 ---
-# draft: token hygiene sweep — recurring avoidable tool errors, scriptable call sequences, and oversized tool-result payloads
+# read-before-edit preamble line in the fix-lane subagent prompts — the one hygiene item with a repo-controlled landing spot
 
-Notes retained from the interview session (magnitudes from the
-2026-06-26→07-03 audit):
+## Context
 
-- `File has not been read yet` edit-rejection: 143× across 126 sessions —
-  clearest scriptable win; add a read-before-first-Edit/Write line to the
-  implement/qa skill preambles.
-- `Cannot enter worktree: PATH is the current working directory`: 29× across
-  29 sessions — workers re-issuing EnterWorktree while already inside one;
-  the bg-session "skip if cwd already under the worktrees root" check is
-  being missed.
-- qa-verify polling loop: a `cd …qa-verify… > cd …` two-gram occurred 405×
-  in 39 sessions (~10 repeats/session) — should be one script with an
-  internal wait, not per-tick tool calls.
-- Payload bytes: 72.5MB total tool-result payload in the window; browser
-  screenshots ~48KB each — prefer `read_page`/targeted `find` over
-  screenshots in qa phases where the check is textual.
-- These stay report-visible through the token-audit lenses (1, 2, 8); this
-  draft exists so the fixes are schedulable rather than folklore.
+The `File has not been read yet` edit rejection fired 143 times across
+126 sessions in the 2026-06-26→07-03 window — the audit's clearest
+scriptable win. The landing spots are where implementation subagents are
+prompted, since the phase skills themselves delegate edits:
+
+- `implement-unit/SKILL.md:41-51` (Step 1 subagent launch) — the one
+  skill whose subagent performs the edits; the constraint block at lines
+  44-45 is where the line lands.
+- qa-fix's fix lane constructs `/implement-unit` invocations at
+  `qa-fix/SKILL.md:852-888`; review-fix's Workflow fix fan-out at
+  `review-fix/SKILL.md:~301` — both forward unit context into subagent
+  prompts and should carry the same line.
+
+Items examined and deliberately dropped (recorded, not silent):
+
+- **EnterWorktree double-entry (29×/29 sessions):** dispatch phase skills
+  are EnterWorktree-free by ratchet
+  (`test-dispatch-scripts.sh:27354-27394` asserts zero mentions), and the
+  offending preamble is harness-injected in background jobs — no
+  repo-controlled landing spot. Revisit if the count persists in the next
+  audit window.
+- **Screenshot/payload discipline:** already satisfied —
+  `qa-main/SKILL.md:171-181` (cheapest-read-first) and
+  `qa-fix/SKILL.md:456-468` (minimize browser payload).
+- **qa-verify boots:** reinterpreted by drift review; split to
+  `tactic-main-qa-triage-before-provision`.
+
+## Unit 1 — the preamble line
+
+**Recommended model:** sonnet
+
+Scope:
+- `implement-unit/SKILL.md` Step 1 constraint block (lines 44-45): add
+  "Read any file with the Read tool before your first Edit or Write to it
+  in this session — the edit is rejected otherwise and the retry burns
+  the tokens twice."
+- Forward the same sentence where fix-lane subagent prompts are built:
+  `qa-fix/SKILL.md:852-888` (unit prompt construction) and review-fix's
+  Workflow fix-agent prompt (`review-fix/SKILL.md` Step 2 fan-out).
+- Keep phrasing identical at all three sites so a future consolidation
+  can grep for it.
+- No test surface beyond the existing skill-prose ratchets; verify by
+  grep.
+
+## Dependencies
+
+None.
+
+## Reuse
+
+- Existing constraint block phrasing in `implement-unit/SKILL.md:44-45`.
+
+## Verification
+
+```verify
+grep -c "before your first Edit" .claude/skills/implement-unit/SKILL.md .claude/skills/qa-fix/SKILL.md .claude/skills/review-fix/SKILL.md
+```
+
+Manual: the next audit window's `tool_errors` shows the
+`File has not been read yet` signature falling from its 143×/126-session
+baseline.
+
+## Implementation notes
+
+Single unit; implement in a subagent with `model: sonnet`; supply this
+Context and Scope; constrain to working-tree edits. SKILL.md commits can
+hit the auto-mode agent-behavior gate — expect a grant prompt.
+`strategy_fingerprint` recipe (interim until tactic-graph-dispatch-schema
+lands): sha256 hex of `JSON.stringify({statement, clarifications,
+conditions, serves, success_signal, tooling_goals})` as loaded by
+intentionsutil `listNodes`.

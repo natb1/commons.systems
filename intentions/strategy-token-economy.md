@@ -77,6 +77,25 @@ clarifications:
       instead of inheriting Opus (detail retained on
       tactic-noncodegen-session-model-defaults). Recorded 2026-07-04
       interview."
+  - question: What did /align-tactics round 1's drift review find?
+    answer: "Immaterial refinements, no condition failures. (a) qa-fix's fix
+      lane already maintains a landed-fix tally (SKILL.md Step 3.7), so the
+      metric-integrity artifact is better described as metric shape than
+      missing accounting: hit_rate mismeasures a phase whose designed output
+      is triage and follow-ups (68 filed, 0 in-lane fixes in the
+      2026-06-26→07-03 window); the remedy is per-phase metric selection in
+      the policy generator, which clarification 3 already licenses. (b) The
+      audit's 'qa-verify polling loop' reading was wrong — the 405 repeated
+      cd calls are per-issue worktree and session boots for sibling main-qa
+      follow-ups, with browser-verifiability triage running only after the
+      boot; remedy is triage-before-provision
+      (tactic-main-qa-triage-before-provision). (c) A live routing bug:
+      /qa-main is absent from dispatch-launch-worker's skill→phase map, so
+      qa-main sessions inherit Opus despite the recorded main-qa→Sonnet
+      default (tactic-noncodegen-session-model-defaults unit 1). Also this
+      round: success_signal.sensor renamed to the registry name
+      token-economy for the instrument tactic; tactic fingerprints stamped
+      after that edit. Recorded 2026-07-04 /align-tactics round 1."
 tooling_goals:
   - kind: sensor
     statement: token-audit aggregate with node-id attribution — weekly
@@ -93,9 +112,7 @@ tooling_goals:
 success_signal:
   observable: weekly allowance utilization together with claude-eligible
     tactic closure velocity (created vs closed)
-  sensor: pace telemetry (rate_limits.json weekly utilization) plus the
-    office-hours velocity series (tactic-attention-surface-velocity-pace) and
-    the token-audit aggregate
+  sensor: token-economy
   threshold: utilization near 100% of the weekly allowance while open
     claude-eligible tactics are non-increasing (closure at or above arrival);
     full utilization with a growing backlog fails the signal
