@@ -224,6 +224,21 @@ clarifications:
       2026-07-03: PR #2742 opened with the schema tactic still phase: implement
       on main, leaving qa/review/merge unscheduled. The doctrine retires when
       the transitions tactic lands. Recorded 2026-07-03 from author review."
+  - question: What did the author's branch-protection review find, and what
+      mechanism lets intentions/-only commits land on main without a PR?
+    answer: "Reviewed 2026-07-03 (tactic-intentions-branch-protection): main has a
+      single repository ruleset — no-deletion, no-force-push, and four required
+      status checks (acceptance, preview-and-smoke, lint, unit-tests;
+      non-strict) — and no pull-request requirement. GitHub attaches check runs
+      to the commit SHA, so a direct push is accepted whenever the pushed SHA
+      already carries the four passing contexts. Decision: no settings change.
+      The write path rides a graph/** scratch-branch CI fast path: push the
+      intentions/-only commit to graph/<node-id>; a fast workflow hard-fails
+      unless the diff vs main is entirely under intentions/, runs graph
+      validation, and stamps the four required contexts green in about a minute;
+      the writer then fast-forwards the same SHA to main, rebasing and
+      re-running on reject. Heavy CI still guards any diff touching paths
+      outside intentions/. Implementation is tactic-graph-commit Unit 2."
 tooling_goals:
   - kind: actuator
     statement: /align-strategy — interview-driven strategy recording, superseding
