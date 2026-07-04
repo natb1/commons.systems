@@ -203,6 +203,27 @@ clarifications:
       budget — it bypasses the gate, not the count or the order — and never
       overrides genuine token exhaustion (the --exhausted hard floor,
       main-broken parity). Recorded 2026-07-03 interview."
+  - question: Before the transitions tactic lands, who advances a graph-native
+      tactic's phase on main — how do QA, review, CI-gated fix, and merge
+      workers get scheduled?
+    answer: "Bootstrap-transition doctrine. Parity with the legacy router means the
+      completing worker's state write to origin/main is what schedules the next
+      phase worker (dispatch-complete-phase parity): selection reads main, so a
+      phase that ends without the write schedules nothing. Until
+      tactic-graph-router-transitions and tactic-graph-commit are live, every
+      session completing a phase on a graph-native tactic must itself end the
+      phase with the transition write to main — phase (implement -> fix/qa ->
+      review -> done, per the CI-verdict and mergeability sensors), execution.pr
+      when the work PR opens, attempt counters, and markers. The write is a
+      state-only intentions/ commit, never part of the work PR (the work PR
+      merges at the end of the lifecycle; state must land on main while it is
+      still open): direct-pushed once tactic-intentions-branch-protection lands,
+      delivered as a state-only PR the author merges until then. Fields ride
+      squatted attributes.* until tactic-graph-dispatch-schema is on main, since
+      main's validator gates the first-class shapes. Gap observed live
+      2026-07-03: PR #2742 opened with the schema tactic still phase: implement
+      on main, leaving qa/review/merge unscheduled. The doctrine retires when
+      the transitions tactic lands. Recorded 2026-07-03 from author review."
 tooling_goals:
   - kind: actuator
     statement: /align-strategy — interview-driven strategy recording, superseding
