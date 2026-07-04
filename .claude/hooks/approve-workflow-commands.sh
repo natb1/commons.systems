@@ -86,6 +86,11 @@ is_allowed_git_c() {
   sub_cmd=$(printf '%s' "$segment" | awk '{print $4}')
   [ -n "$path_arg" ] && [ -n "$sub_cmd" ] || return 1
   resolved=$(realpath "$path_arg" 2>/dev/null) || return 1
+  # Fail closed if --git-common-dir didn't resolve: an empty root would make
+  # the "$ROOT"/* case patterns below collapse to the bare glob /*, which
+  # matches any absolute path — turning "only worktree paths" into "any path"
+  # for every allowed git subcommand (add, commit, fetch, merge, push).
+  [ -n "$LEGACY_WORKTREES_ROOT" ] && [ -n "$NEW_WORKTREES_ROOT" ] || return 1
   case "$resolved" in
     "$LEGACY_WORKTREES_ROOT"/*) ;;
     "$NEW_WORKTREES_ROOT"/*) ;;
