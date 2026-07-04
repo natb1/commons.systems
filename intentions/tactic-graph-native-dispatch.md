@@ -400,6 +400,7 @@ drops. (Behavior inventory anchors: `.claude/skills/file-issue/SKILL.md`,
 | Type/topic classification | Retired as ordering input (topics were a rank proxy); attention on the owning strategy is the ordering |
 | `blocked_by` dependency wiring | `blocked_by` tactic edges (already the recorded blocking design) |
 | `--follow-up` provenance, sentinel return block, attribution sidecars | Provenance = `serves` edge + emitting session in the commit; return contract = written node ids |
+| Review-phase deferred filings (`/review-fix` follow-up issues) | Draft tactics batched per component, finalized by a later `/align-tactics` round (strategy clarification 19); refuted/below-threshold findings live only in the PR review comment |
 | Finalize (assign, `help wanted`) | Retired — presence on `origin/main` with `phase` set *is* schedulability |
 
 ### `/plan-issue` → `/align-tactics`
@@ -419,8 +420,12 @@ drops. (Behavior inventory anchors: `.claude/skills/file-issue/SKILL.md`,
 
 ## 5. Subtree (round 1, recorded 2026-07-03; re-evaluated same day)
 
-Eleven children, each a leaf = one PR unless noted. `blocked_by` (under
-`attributes` until the schema tactic promotes it) encodes the order:
+Thirteen children: the eleven round-1 nodes below, each a leaf = one PR
+unless noted, plus two clarification-19 deferral children finalized
+2026-07-04 (`tactic-graph-commit-hardening`,
+`tactic-graph-write-validation-hardening` — off-path, outside the
+diagram). `blocked_by` (under `attributes` until the schema tactic
+promotes it) encodes the order:
 
 ```
 tactic-graph-dispatch-schema ──────────────┬──► tactic-calculated-attention ─┐
@@ -471,5 +476,20 @@ tactic-intentions-branch-protection (park) ┤                                 �
   tactic's context/unit 1 now state the write-is-scheduling parity rule,
   the by-hand interim, and explicit auto-merge arming; no tactic was
   pruned and no `blocked_by` changed.
+- **Re-evaluation (2026-07-04, clarifications 18–19):** run inline (no
+  router yet), triggered by the fix-interrupt record (18) and the
+  review-finding disposition doctrine (19). 18 was already propagated
+  (§1.1, §2.4, the transitions tactic). 19 added the §2.4 disposition
+  amendment, the review-deferral row in the §4 coverage matrix, and —
+  the doctrine's first application — finalized the two deferral drafts
+  from the same-day review of PRs #2750/#2748/#2742 into off-path
+  children with clean-session plans:
+  `tactic-graph-commit-hardening` (gated in-plan on the in-scope fix PR
+  #2751 merging) and `tactic-graph-write-validation-hardening`. All
+  `execution.strategy_fingerprint` values remain null — stamping starts
+  when the schema/attention machinery for it lands; until then the
+  freeze-on-mismatch rule is discharged by running the re-evaluation in
+  the same session as the strategy edit, as in every round above. No
+  round-1 tactic was pruned and no `blocked_by` changed.
 - This parent is not directly executable (no `phase`); it completes when
   its last child completes, which stamps the strategy's `rounds`.

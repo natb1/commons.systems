@@ -5,14 +5,15 @@ statement: "Harden graph-commit: surface gh api errors, stop retrying
   deterministic check failures, park_write rollback, id-validation
   over-rejection"
 owner: ai
-status: raw
+status: codified
 parent: tactic-graph-native-dispatch
 rationale: Deferred-finding draft per strategy-graph-native-dispatch
   clarification 19 — recorded by the 2026-07-04 independent review round of PR
   2750 (merged without review; the in-scope conflict data-loss finding shipped
   separately as PR 2751). All entries are confirmed-or-plausible robustness
-  gaps, out of the primitive's stated contract; awaiting /align-tactics
-  finalization.
+  gaps, out of the primitive's stated contract; finalized 2026-07-04 by the
+  clarification-19 /align-tactics re-evaluation; off-path (no validates chain),
+  so calculated attention demotes it below round tactics.
 reading: null
 gap: null
 serves:
@@ -22,7 +23,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: draft
+phase: implement
 execution: null
 validates: []
 blocked_by: []
@@ -33,32 +34,92 @@ attributes: {}
 ---
 # Harden graph-commit: surface gh api errors, stop retrying deterministic check failures, park_write rollback, id-validation over-rejection
 
-**Draft (retain-not-refine)** — deferred findings from the 2026-07-04
-independent review of PR #2750 (`packages/intentionsutil/scripts/graph-commit`,
-merged without review). The one in-scope finding — silent data loss in the
-conflict-recovery path — was fixed separately (PR #2751, fail-closed park).
-Everything below is out-of-contract robustness, deferred per strategy
-clarification 19. Line anchors are pre-#2751 and shift once it merges.
+**Finalized 2026-07-04** by the clarification-19 `/align-tactics`
+re-evaluation, from the deferral draft recorded by the same-day independent
+review of PR #2750. Off-path: no `validates` chain reaches this node, so
+calculated attention demotes it below round tactics at read time. One PR.
 
-Findings:
+## Context
 
-- **`await_checks()` swallows `gh api` errors** (`graph-commit:221-226`).
-  `2>/dev/null … || counts=""` collapses auth failure, rate limiting, and
-  network errors into the same bucket as "checks still running"; the script
-  times out ~180s later with a generic message and the root cause is lost.
-  Fix: capture stderr and distinguish an API error from a pending check.
-- **Deterministic check failures burn the whole retry budget**
-  (`graph-commit:288-299`). Content that genuinely fails a required check
-  (e.g. malformed frontmatter failing `lint`) reproduces the identical
-  failure on all 5 attempts, then reports "main busy … retry later" — wrong
-  advice for a content bug. Fix: when a check *concludes* non-success
-  (nfail>0, vs timing out), stop retrying and report the check failure.
-- **`park_write()` has no rollback on partial multi-id failure**
-  (`graph-commit:355-376`). A mid-loop `writeNode` throw leaves earlier ids
-  mutated on disk but uncommitted when the script dies.
-- **Id validation over-rejects `..` substrings** (`graph-commit:407-411`).
-  An id merely *containing* `..` (e.g. `v1..v2-migration`) is rejected
-  although it poses no traversal risk. Low priority.
-- **EXIT trap does not cover INT/TERM; no janitor** (`graph-commit:101-108,
-  431`). A hard kill can orphan the remote `graph/**` scratch branch and the
-  snapshot tempdir; nothing reaps them later.
+The 2026-07-04 review of `packages/intentionsutil/scripts/graph-commit`
+(merged without independent review as PR #2750) confirmed one in-scope
+contract violation — silent data loss in the conflict-recovery path — fixed
+separately by PR #2751 (fail-closed park). The remaining confirmed-or-
+plausible findings are out-of-contract robustness gaps, deferred here per
+strategy clarification 19. They make failures slower to diagnose or leave
+mess behind, but none can land wrong content on `main`.
+
+**Precondition:** PR #2751 must be merged first — it rewrites the conflict
+path this plan's line anchors sit around. Verify before starting:
+`grep -q 'fail closed' packages/intentionsutil/scripts/graph-commit` on
+`origin/main`; if absent, stop and check PR #2751's state.
+
+## Unit 1 — surface check/API errors; stop retrying deterministic failures
+
+**Recommended model:** sonnet
+
+Scope — `packages/intentionsutil/scripts/graph-commit` only:
+
+- `await_checks()` (near `gh api "repos/{owner}/{repo}/commits/$sha/check-runs"`):
+  today `2>/dev/null … || counts=""` collapses gh auth/rate-limit/network
+  errors into the "still polling" bucket and the script times out ~180s
+  later with a generic message. Capture gh's stderr; after 3 consecutive
+  gh failures, die with the captured error text (clear error over
+  fallback, `.claude/rules/code-style.md`). Distinguish return states:
+  green / a required check CONCLUDED non-success / timeout-pending.
+- `try_land()` retry loop: when `await_checks` reports a *concluded*
+  non-success (nfail>0, not a timeout), the content itself is broken —
+  every retry reproduces it. Stop the attempt loop immediately and die
+  with the check-failure message instead of burning the remaining
+  attempts and printing "main busy … retry later".
+
+Out of scope: any change to the conflict/park path (owned by PR #2751).
+
+## Unit 2 — park_write atomicity, id validation, signal traps
+
+**Recommended model:** sonnet
+
+Scope — `packages/intentionsutil/scripts/graph-commit` only:
+
+- `park_write()`: the per-id `writeNode` loop has no rollback; a mid-loop
+  throw leaves earlier ids mutated on disk, uncommitted. Make the tsx
+  helper two-pass: pass 1 `readNode` every id (fail fast before any
+  write), pass 2 write all.
+- Id validation (`case "$id" in */*|*'\'*|*..*)`): `..` as a *substring*
+  cannot traverse once `/` and `\` are banned — reject only the exact ids
+  `.` and `..`, keep the separator bans. Unblocks ids like
+  `v1..v2-migration`.
+- Traps: `trap cleanup EXIT` does not fire the scratch-branch delete on
+  INT/TERM in all shells; add `trap 'exit 130' INT TERM` so the EXIT trap
+  runs on signal death. Orphan reaping beyond that (a janitor for stale
+  `graph/**` branches) stays out of scope.
+
+## Dependencies
+
+Unit 2 is independent of Unit 1; both land in the one PR.
+
+## Reuse
+
+- `id_files_dirty()` / `snapshot()` patterns already in the script — do
+  not restructure them.
+- The functional harness pattern from PR #2751's verification (bare
+  origin + two clones, `gh`/`npx` PATH shims, `GRAPH_COMMIT_*` env
+  overrides) — commit it as
+  `packages/intentionsutil/scripts/test-graph-commit.sh` in this PR so it
+  stops living in job-scratch dirs, and extend it with: a concluded-check-
+  failure case (gh shim returns "3 1" — expect immediate die, no retry
+  burn) and a gh-hard-failure case (shim exits 1 — expect die with stderr
+  surfaced after 3 polls).
+
+## Verification
+
+```verify
+bash -n packages/intentionsutil/scripts/graph-commit
+```
+
+```verify
+bash packages/intentionsutil/scripts/test-graph-commit.sh
+```
+
+Manual: none — the harness covers the behavior end-to-end; live
+`graph-commit` use continues as the ongoing soak.
