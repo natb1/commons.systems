@@ -325,6 +325,14 @@ GitHub is a separate strategy; design TBD.)
 - **Removal:** when the gh queue is empty, delete the legacy
   selector/phase-derivation scripts and the `dispatch:*` label
   conventions.
+- **Bootstrap transitions (clarification 15):** until
+  `tactic-graph-router-transitions` lands, no machinery advances a
+  graph-native tactic's phase on `origin/main` — so a completing session
+  writes the transition itself as a state-only commit (never on the work
+  PR branch; squatted `attributes.*` until the schema tactic merges;
+  delivered as a state-only PR until `tactic-intentions-branch-protection`
+  lands). Without that write, the next phase worker — fix, qa, review —
+  is never scheduled.
 
 ### 3.4 Worktree anchoring and claiming
 
@@ -421,10 +429,10 @@ tactic-intentions-branch-protection (park) ┤                                 �
   reaches it, so the calculated-attention signal term demotes it at read
   time; no stored flag (clarifications 9/11). Round 1 had deferred it by
   omission.
-- **Re-evaluations (2026-07-03):** three same-day mid-flight strategy edits
-  (clarifications 8–10, then 11, then 12–14), each followed by the
-  clarification-10 re-evaluation run inline because no router exists yet.
-  The first added the attention tactic and recorded the `/align-init`
+- **Re-evaluations (2026-07-03):** four same-day mid-flight strategy edits
+  (clarifications 8–10, then 11, then 12–14, then 15), each followed by
+  the clarification-10 re-evaluation run inline because no router exists
+  yet. The first added the attention tactic and recorded the `/align-init`
   deferral; the second replaced the banded backlog mechanism with
   calculated attention: `tactic-signal-path-attention` was pruned and
   replaced by `tactic-calculated-attention` (on-path — it hard-blocks
@@ -434,6 +442,12 @@ tactic-intentions-branch-protection (park) ┤                                 �
   schema tactic, strategy-id claiming, the pace-exempt probe lane,
   uniform node-id worktree keys, and the node-target launch chain (unit
   4) added to the selector tactic, §1.1/§3.2/§3.4 amended; no tactic was
+  pruned and no `blocked_by` changed. The fourth recorded the
+  bootstrap-transition doctrine after the first graph-native implement PR
+  (#2742, the schema tactic) opened with no path to scheduling its own
+  qa/review/merge: §3.3 gained the bootstrap bullet, and the transitions
+  tactic's context/unit 1 now state the write-is-scheduling parity rule,
+  the by-hand interim, and explicit auto-merge arming; no tactic was
   pruned and no `blocked_by` changed.
 - This parent is not directly executable (no `phase`); it completes when
   its last child completes, which stamps the strategy's `rounds`.
