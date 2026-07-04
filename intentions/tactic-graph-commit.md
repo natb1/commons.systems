@@ -19,11 +19,16 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-attributes:
-  phase: implement
-  blocked_by:
-    - tactic-graph-dispatch-schema
-    - tactic-intentions-branch-protection
+phase: implement
+execution: null
+validates: []
+blocked_by:
+  - tactic-graph-dispatch-schema
+  - tactic-intentions-branch-protection
+office_hours: null
+pace_exempt: false
+rounds: null
+attributes: {}
 ---
 # graph-commit primitive: validated single-node writes direct-pushed to main with rebase-retry, restricted to intentions/; CI fast path for intentions/-only pushes
 

@@ -19,12 +19,16 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-attributes:
-  phase: implement
-  blocked_by: []
-  office_hours:
-    reason: author-only GitHub repo settings change; chunked to ≤30 author-minutes
-    since: 2026-07-03
+phase: implement
+execution: null
+validates: []
+blocked_by: []
+office_hours:
+  reason: author-only GitHub repo settings change; chunked to ≤30 author-minutes
+  since: 2026-07-03
+pace_exempt: false
+rounds: null
+attributes: {}
 ---
 # Author: permit direct-push of intentions/-only commits to main (branch protection / ruleset review, ≤30 author-minutes)
 

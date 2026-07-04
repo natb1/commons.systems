@@ -12,11 +12,11 @@ rationale: "Off-path tactic (strategy clarifications 9 and 11): round 1 deferred
   absence of any blocked_by/parent chain to a validates-terminal, demoting it
   via the calculated-attention signal term with zero stored judgment. It neither
   blocks the strategy's /align-tactics eligibility nor disappears from
-  selection. Renamed from tactic-align-skill (`/align`) to tactic-align-init-skill
-  (`/align-init`) so the new fork-entrypoint skill does not collide with — or
-  require an in-place rewrite of — the legacy `/align` skill
-  (rung-0/refine-workflow/rung-5 dialectic); this tactic now retires that legacy
-  skill outright instead of repurposing its file."
+  selection. Renamed from tactic-align-skill (`/align`) to
+  tactic-align-init-skill (`/align-init`) so the new fork-entrypoint skill does
+  not collide with — or require an in-place rewrite of — the legacy `/align`
+  skill (rung-0/refine-workflow/rung-5 dialectic); this tactic now retires that
+  legacy skill outright instead of repurposing its file."
 reading: null
 gap: null
 serves:
@@ -26,10 +26,15 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-attributes:
-  phase: implement
-  blocked_by:
-    - tactic-align-strategy-skill
+phase: implement
+execution: null
+validates: []
+blocked_by:
+  - tactic-align-strategy-skill
+office_hours: null
+pace_exempt: false
+rounds: null
+attributes: {}
 ---
 # /align-init SKILL.md: fork entrypoint — orient, validate deployment, review virtues, delegate to /align-strategy; retires the legacy /align skill
 

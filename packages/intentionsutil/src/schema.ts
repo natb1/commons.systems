@@ -17,6 +17,29 @@ export type ToolingKind = "actuator" | "sensor";
 
 export const TOOLING_KINDS: readonly ToolingKind[] = ["actuator", "sensor"];
 
+/**
+ * Persisted dispatch phase a tactic sits in. A future graph-native router
+ * transitions this; the schema only validates the value is one of the enum.
+ */
+export type Phase =
+  | "draft"
+  | "align-tactics"
+  | "implement"
+  | "fix"
+  | "qa"
+  | "review"
+  | "done";
+
+export const PHASES: readonly Phase[] = [
+  "draft",
+  "align-tactics",
+  "implement",
+  "fix",
+  "qa",
+  "review",
+  "done",
+];
+
 // --- Structured optional fields --------------------------------------------
 
 /** A measurable signal that a node's intention is being met. */
@@ -96,6 +119,17 @@ export interface IntentionNode {
   tooling_goals: ToolingGoal[];
   success_signal: SuccessSignal | null;
   attention: Attention | null;
+
+  // Graph-native dispatch state (see strategy-graph-native-dispatch). Layer
+  // rules — which kinds may carry each — are enforced by `validateGraph`.
+  phase: Phase | null; // persisted dispatch phase; tactics only
+  execution: Execution | null; // live in-flight record; tactics only
+  validates: string[]; // strategy ids this tactic validates (factual edge); tactics only
+  blocked_by: string[]; // tactic ids blocking this one; tactics only
+  office_hours: OfficeHours | null; // first-class parking record; goal-layer kinds only
+  pace_exempt: boolean; // authored pace-gate bypass; goal-layer kinds only
+  rounds: Rounds | null; // /align-tactics round accounting; strategies only
+
   attributes: Record<string, unknown>; // kind-specific fields; semantics defined by the kind-<kind> node
 }
 
@@ -121,6 +155,13 @@ export interface IntentionNodeInput {
   tooling_goals?: ToolingGoal[];
   success_signal?: SuccessSignal | null;
   attention?: Attention | null;
+  phase?: Phase | null;
+  execution?: Execution | null;
+  validates?: string[];
+  blocked_by?: string[];
+  office_hours?: OfficeHours | null;
+  pace_exempt?: boolean;
+  rounds?: Rounds | null;
   attributes?: Record<string, unknown>;
 }
 
@@ -275,6 +316,87 @@ function validateAttention(value: unknown, field: string): Attention {
   return { boost, override, rationale };
 }
 
+// --- Dispatch-state structured fields --------------------------------------
+
+/**
+ * Live execution record a router stamps on a tactic in flight. Valid on
+ * tactics only (enforced by `validateGraph`).
+ *
+ *  - `strategy_fingerprint` is a hash of the serving strategy's substance
+ *    fields, stamped at plan time and later compared by a router's mid-flight
+ *    soft-freeze trigger. No hashing logic lives here — only the typed field.
+ */
+export interface Execution {
+  branch: string;
+  pr: number | null;
+  attempts: Record<string, number>; // per-phase attempt counts
+  markers: string[];
+  strategy_fingerprint: string | null;
+}
+
+/** A first-class parking record: why a node is in office hours and since when. */
+export interface OfficeHours {
+  reason: string;
+  since: string;
+}
+
+/** `/align-tactics` re-evaluation round accounting; valid on strategies only. */
+export interface Rounds {
+  count: number;
+  last_completed: string | null;
+}
+
+function requireNumber(value: unknown, field: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new IntentionSchemaError(`Expected finite number for ${field}, got ${typeof value}`);
+  }
+  return value;
+}
+
+function validateAttempts(value: unknown, field: string): Record<string, number> {
+  if (!isPlainObject(value)) {
+    throw new IntentionSchemaError(`Expected object for ${field}, got ${typeof value}`);
+  }
+  const out: Record<string, number> = {};
+  for (const [key, count] of Object.entries(value)) {
+    out[key] = requireNumber(count, `${field}.${key}`);
+  }
+  return out;
+}
+
+function validateExecution(value: unknown, field: string): Execution {
+  if (!isPlainObject(value)) {
+    throw new IntentionSchemaError(`Expected object for ${field}, got ${typeof value}`);
+  }
+  return {
+    branch: requireString(value.branch, `${field}.branch`),
+    pr: value.pr == null ? null : requireNumber(value.pr, `${field}.pr`),
+    attempts: validateAttempts(value.attempts, `${field}.attempts`),
+    markers: validateIdArray(value.markers, `${field}.markers`),
+    strategy_fingerprint: optionalString(value.strategy_fingerprint, `${field}.strategy_fingerprint`),
+  };
+}
+
+function validateOfficeHours(value: unknown, field: string): OfficeHours {
+  if (!isPlainObject(value)) {
+    throw new IntentionSchemaError(`Expected object for ${field}, got ${typeof value}`);
+  }
+  return {
+    reason: requireString(value.reason, `${field}.reason`),
+    since: requireString(value.since, `${field}.since`),
+  };
+}
+
+function validateRounds(value: unknown, field: string): Rounds {
+  if (!isPlainObject(value)) {
+    throw new IntentionSchemaError(`Expected object for ${field}, got ${typeof value}`);
+  }
+  return {
+    count: requireNumber(value.count, `${field}.count`),
+    last_completed: optionalString(value.last_completed, `${field}.last_completed`),
+  };
+}
+
 // --- Validator -------------------------------------------------------------
 
 /**
@@ -332,6 +454,22 @@ export function validateNode(value: unknown): IntentionNode {
         : validateSuccessSignal(value.success_signal, "success_signal"),
     attention:
       value.attention == null ? null : validateAttention(value.attention, "attention"),
+
+    // Graph-native dispatch state — absent/null tolerated, defaults null / [] /
+    // false; when present and non-null, shape is validated strictly.
+    phase: value.phase == null ? null : requireOneOf(value.phase, PHASES, "phase"),
+    execution:
+      value.execution == null ? null : validateExecution(value.execution, "execution"),
+    validates:
+      value.validates == null ? [] : validateIdArray(value.validates, "validates"),
+    blocked_by:
+      value.blocked_by == null ? [] : validateIdArray(value.blocked_by, "blocked_by"),
+    office_hours:
+      value.office_hours == null ? null : validateOfficeHours(value.office_hours, "office_hours"),
+    pace_exempt:
+      value.pace_exempt == null ? false : requireBoolean(value.pace_exempt, "pace_exempt"),
+    rounds: value.rounds == null ? null : validateRounds(value.rounds, "rounds"),
+
     attributes:
       value.attributes == null
         ? {}
@@ -363,6 +501,15 @@ export function validateNode(value: unknown): IntentionNode {
  *      `kind: "virtue"` node.
  *   9. A non-empty `recovers` appears only on `kind: "strategy"` nodes, and
  *      every entry resolves to a `kind: "delegation"` node.
+ *  10. `phase`, `execution`, a non-empty `blocked_by`, and a non-empty
+ *      `validates` appear only on `kind: "tactic"` nodes.
+ *  11. `office_hours` and a true `pace_exempt` appear only on goal-layer kinds
+ *      (same `attributes.goal_layer` gate as `attention`, rule 5).
+ *  12. `rounds` appears only on `kind: "strategy"` nodes.
+ *  13. Every `blocked_by` entry resolves to an existing `kind: "tactic"` node.
+ *  14. Every `validates` entry resolves to an existing `kind: "strategy"` node.
+ *  15. `blocked_by` edges contain no cycle (a tactic transitively blocked by
+ *      itself is invalid).
  *
  * Rules 6-9 only judge edges whose target already resolves (rules 2-4 above
  * report the dangling case); this avoids double-reporting the same broken
@@ -449,6 +596,116 @@ export function validateGraph(nodes: IntentionNode[]): void {
         }
       }
     }
+    // Rule 10: tactic-only dispatch fields.
+    if (node.kind !== "tactic") {
+      if (node.phase !== null) {
+        problems.push(
+          `${node.id}: phase is only valid on kind "tactic" nodes, got kind "${node.kind}"`,
+        );
+      }
+      if (node.execution !== null) {
+        problems.push(
+          `${node.id}: execution is only valid on kind "tactic" nodes, got kind "${node.kind}"`,
+        );
+      }
+      if (node.blocked_by.length > 0) {
+        problems.push(
+          `${node.id}: blocked_by is only valid on kind "tactic" nodes, got kind "${node.kind}"`,
+        );
+      }
+      if (node.validates.length > 0) {
+        problems.push(
+          `${node.id}: validates is only valid on kind "tactic" nodes, got kind "${node.kind}"`,
+        );
+      }
+    }
+    // Rule 11: office_hours / pace_exempt are goal-layer-only — same gate as
+    // attention (rule 5): the kind node must set attributes.goal_layer.
+    if (node.office_hours !== null) {
+      const kindNode = byId.get(`kind-${node.kind}`);
+      if (kindNode !== undefined && kindNode.attributes.goal_layer !== true) {
+        problems.push(
+          `${node.id}: office_hours is only valid on goal-layer kinds — kind-${node.kind} does not set attributes.goal_layer`,
+        );
+      }
+    }
+    if (node.pace_exempt) {
+      const kindNode = byId.get(`kind-${node.kind}`);
+      if (kindNode !== undefined && kindNode.attributes.goal_layer !== true) {
+        problems.push(
+          `${node.id}: pace_exempt is only valid on goal-layer kinds — kind-${node.kind} does not set attributes.goal_layer`,
+        );
+      }
+    }
+    // Rule 12: rounds is strategy-only.
+    if (node.rounds !== null && node.kind !== "strategy") {
+      problems.push(
+        `${node.id}: rounds is only valid on kind "strategy" nodes, got kind "${node.kind}"`,
+      );
+    }
+    // Rule 13: every blocked_by entry resolves to an existing tactic.
+    for (const target of node.blocked_by) {
+      if (!ids.has(target)) {
+        problems.push(`${node.id}: blocked_by "${target}" does not resolve to a node`);
+        continue;
+      }
+      const targetNode = byId.get(target)!;
+      if (targetNode.kind !== "tactic") {
+        problems.push(
+          `${node.id}: blocked_by "${target}" must resolve to a kind "tactic" node, got kind "${targetNode.kind}"`,
+        );
+      }
+    }
+    // Rule 14: every validates entry resolves to an existing strategy.
+    for (const target of node.validates) {
+      if (!ids.has(target)) {
+        problems.push(`${node.id}: validates "${target}" does not resolve to a node`);
+        continue;
+      }
+      const targetNode = byId.get(target)!;
+      if (targetNode.kind !== "strategy") {
+        problems.push(
+          `${node.id}: validates "${target}" must resolve to a kind "strategy" node, got kind "${targetNode.kind}"`,
+        );
+      }
+    }
+  }
+  // Rule 15: reject cycles in the blocked_by graph. A DFS over resolved edges
+  // flags every node that participates in a cycle (a tactic transitively
+  // blocked by itself). Dangling edges are reported by rule 13, not traversed.
+  const CYCLE_WHITE = 0;
+  const CYCLE_GRAY = 1;
+  const CYCLE_BLACK = 2;
+  const color = new Map<string, number>(nodes.map((n) => [n.id, CYCLE_WHITE]));
+  const inCycle = new Set<string>();
+  const path: string[] = [];
+  const visit = (id: string): void => {
+    color.set(id, CYCLE_GRAY);
+    path.push(id);
+    const node = byId.get(id);
+    if (node !== undefined) {
+      for (const target of node.blocked_by) {
+        if (!byId.has(target)) continue; // dangling — rule 13 owns it
+        if (color.get(target) === CYCLE_GRAY) {
+          // Back edge: everything from `target` to here is on the cycle.
+          for (const member of path.slice(path.indexOf(target))) {
+            inCycle.add(member);
+          }
+        } else if (color.get(target) === CYCLE_WHITE) {
+          visit(target);
+        }
+      }
+    }
+    path.pop();
+    color.set(id, CYCLE_BLACK);
+  };
+  for (const node of nodes) {
+    if (color.get(node.id) === CYCLE_WHITE) visit(node.id);
+  }
+  for (const id of inCycle) {
+    problems.push(
+      `${id}: blocked_by forms a cycle — a tactic cannot be transitively blocked by itself`,
+    );
   }
   if (problems.length > 0) {
     throw new IntentionSchemaError(`Graph integrity violations:\n${problems.join("\n")}`);

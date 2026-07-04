@@ -19,10 +19,15 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-attributes:
-  phase: implement
-  blocked_by:
-    - tactic-graph-commit
+phase: implement
+execution: null
+validates: []
+blocked_by:
+  - tactic-graph-commit
+office_hours: null
+pace_exempt: false
+rounds: null
+attributes: {}
 ---
 # /align-tactics SKILL.md: break a strategy into PR-sized tactic subtrees with clean-session plans — supersedes /plan-issue and /file-issue epic structuring
 

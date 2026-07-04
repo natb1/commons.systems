@@ -31,7 +31,176 @@ describe("validateNode", () => {
       },
       attributes: { source: "github:natb1/commons.systems#1" },
     };
-    expect(validateNode(input)).toEqual(input);
+    expect(validateNode(input)).toEqual({
+      ...input,
+      // Graph-native dispatch fields default when absent.
+      phase: null,
+      execution: null,
+      validates: [],
+      blocked_by: [],
+      office_hours: null,
+      pace_exempt: false,
+      rounds: null,
+    });
+  });
+
+  it("parses all graph-native dispatch fields when present", () => {
+    const input = {
+      id: "n1-dispatch",
+      kind: "tactic",
+      statement: "A tactic carrying full dispatch state.",
+      owner: "ai",
+      status: "codified",
+      phase: "qa",
+      execution: {
+        branch: "123-do-the-thing",
+        pr: 456,
+        attempts: { implement: 1, qa: 2 },
+        markers: ["dispatch:qa"],
+        strategy_fingerprint: "abc123",
+      },
+      validates: ["strategy-1"],
+      blocked_by: ["tactic-2"],
+      office_hours: { reason: "needs human input", since: "2026-07-03" },
+      pace_exempt: true,
+      rounds: { count: 3, last_completed: "2026-07-02" },
+    };
+    const result = validateNode(input);
+    expect(result.phase).toBe("qa");
+    expect(result.execution).toEqual({
+      branch: "123-do-the-thing",
+      pr: 456,
+      attempts: { implement: 1, qa: 2 },
+      markers: ["dispatch:qa"],
+      strategy_fingerprint: "abc123",
+    });
+    expect(result.validates).toEqual(["strategy-1"]);
+    expect(result.blocked_by).toEqual(["tactic-2"]);
+    expect(result.office_hours).toEqual({ reason: "needs human input", since: "2026-07-03" });
+    expect(result.pace_exempt).toBe(true);
+    expect(result.rounds).toEqual({ count: 3, last_completed: "2026-07-02" });
+  });
+
+  it("defaults execution nested nullables and tolerates a bare execution", () => {
+    const result = validateNode({
+      id: "n1-exec",
+      kind: "tactic",
+      statement: "Execution with null pr and fingerprint.",
+      owner: "ai",
+      status: "raw",
+      execution: { branch: "b", pr: null, attempts: {}, markers: [], strategy_fingerprint: null },
+    });
+    expect(result.execution).toEqual({
+      branch: "b",
+      pr: null,
+      attempts: {},
+      markers: [],
+      strategy_fingerprint: null,
+    });
+  });
+
+  it("rejects a phase that is not one of the enum", () => {
+    expect(() =>
+      validateNode({
+        id: "n1-badphase",
+        kind: "tactic",
+        statement: "Bad phase.",
+        owner: "ai",
+        status: "raw",
+        phase: "shipping",
+      }),
+    ).toThrow();
+  });
+
+  it("rejects an execution with a non-object attempts", () => {
+    expect(() =>
+      validateNode({
+        id: "n1-badattempts",
+        kind: "tactic",
+        statement: "Bad attempts.",
+        owner: "ai",
+        status: "raw",
+        execution: { branch: "b", pr: null, attempts: ["nope"], markers: [], strategy_fingerprint: null },
+      }),
+    ).toThrow();
+  });
+
+  it("rejects an execution with a non-numeric attempt count", () => {
+    expect(() =>
+      validateNode({
+        id: "n1-badcount",
+        kind: "tactic",
+        statement: "Bad attempt count.",
+        owner: "ai",
+        status: "raw",
+        execution: { branch: "b", pr: null, attempts: { qa: "two" }, markers: [], strategy_fingerprint: null },
+      }),
+    ).toThrow();
+  });
+
+  it("rejects an execution missing branch", () => {
+    expect(() =>
+      validateNode({
+        id: "n1-nobranch",
+        kind: "tactic",
+        statement: "No branch.",
+        owner: "ai",
+        status: "raw",
+        execution: { pr: null, attempts: {}, markers: [], strategy_fingerprint: null },
+      }),
+    ).toThrow();
+  });
+
+  it("rejects an office_hours missing since", () => {
+    expect(() =>
+      validateNode({
+        id: "n1-noh",
+        kind: "tactic",
+        statement: "Office hours missing since.",
+        owner: "ai",
+        status: "raw",
+        office_hours: { reason: "parked" },
+      }),
+    ).toThrow();
+  });
+
+  it("rejects a rounds with a non-numeric count", () => {
+    expect(() =>
+      validateNode({
+        id: "n1-badrounds",
+        kind: "strategy",
+        statement: "Bad rounds count.",
+        owner: "ai",
+        status: "raw",
+        rounds: { count: "3", last_completed: null },
+      }),
+    ).toThrow();
+  });
+
+  it("rejects a non-boolean pace_exempt", () => {
+    expect(() =>
+      validateNode({
+        id: "n1-badpace",
+        kind: "tactic",
+        statement: "Bad pace_exempt.",
+        owner: "ai",
+        status: "raw",
+        pace_exempt: "yes",
+      }),
+    ).toThrow();
+  });
+
+  it("rejects a validates that is not a string array", () => {
+    expect(() =>
+      validateNode({
+        id: "n1-badval",
+        kind: "tactic",
+        statement: "Bad validates.",
+        owner: "ai",
+        status: "raw",
+        validates: [1, 2],
+      }),
+    ).toThrow();
   });
 
   it("accepts a valid minimal node and applies defaults", () => {
@@ -58,6 +227,13 @@ describe("validateNode", () => {
       tooling_goals: [],
       success_signal: null,
       attention: null,
+      phase: null,
+      execution: null,
+      validates: [],
+      blocked_by: [],
+      office_hours: null,
+      pace_exempt: false,
+      rounds: null,
       attributes: {},
     });
   });
@@ -266,6 +442,13 @@ describe("validateGraph", () => {
       tooling_goals: partial.tooling_goals ?? [],
       success_signal: partial.success_signal ?? null,
       attention: partial.attention ?? null,
+      phase: partial.phase ?? null,
+      execution: partial.execution ?? null,
+      validates: partial.validates ?? [],
+      blocked_by: partial.blocked_by ?? [],
+      office_hours: partial.office_hours ?? null,
+      pace_exempt: partial.pace_exempt ?? false,
+      rounds: partial.rounds ?? null,
       attributes: partial.attributes ?? {},
     };
   }
@@ -531,5 +714,231 @@ describe("validateGraph", () => {
     expect(caught.message).toContain(
       'broken-7: recovers "virtue-root" must resolve to a kind "delegation" node, got kind "virtue"',
     );
+  });
+
+  // --- Graph-native dispatch layer rules -----------------------------------
+
+  /** Base kind nodes shared by the dispatch-rule fixtures below. */
+  function kindNodes(): IntentionNode[] {
+    return [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-virtue", kind: "kind", status: "codified" }),
+      gnode({
+        id: "kind-strategy",
+        kind: "kind",
+        status: "codified",
+        attributes: { goal_layer: true },
+      }),
+      gnode({
+        id: "kind-tactic",
+        kind: "kind",
+        status: "codified",
+        attributes: { goal_layer: true },
+      }),
+    ];
+  }
+
+  it("throws when phase is set on a non-tactic", () => {
+    const nodes = [...kindNodes(), gnode({ id: "strategy-1", kind: "strategy", phase: "qa" })];
+    expect(() => validateGraph(nodes)).toThrow(
+      /strategy-1: phase is only valid on kind "tactic" nodes, got kind "strategy"/,
+    );
+  });
+
+  it("throws when execution is set on a non-tactic", () => {
+    const nodes = [
+      ...kindNodes(),
+      gnode({
+        id: "strategy-1",
+        kind: "strategy",
+        execution: { branch: "b", pr: null, attempts: {}, markers: [], strategy_fingerprint: null },
+      }),
+    ];
+    expect(() => validateGraph(nodes)).toThrow(
+      /strategy-1: execution is only valid on kind "tactic" nodes/,
+    );
+  });
+
+  it("throws when blocked_by is set on a non-tactic", () => {
+    const nodes = [
+      ...kindNodes(),
+      gnode({ id: "tactic-1", kind: "tactic" }),
+      gnode({ id: "strategy-1", kind: "strategy", blocked_by: ["tactic-1"] }),
+    ];
+    expect(() => validateGraph(nodes)).toThrow(
+      /strategy-1: blocked_by is only valid on kind "tactic" nodes/,
+    );
+  });
+
+  it("throws when validates is set on a non-tactic", () => {
+    const nodes = [
+      ...kindNodes(),
+      gnode({ id: "strategy-1", kind: "strategy" }),
+      gnode({ id: "virtue-1", kind: "virtue", validates: ["strategy-1"] }),
+    ];
+    expect(() => validateGraph(nodes)).toThrow(
+      /virtue-1: validates is only valid on kind "tactic" nodes/,
+    );
+  });
+
+  it("passes when phase/execution/blocked_by/validates sit on tactics", () => {
+    const nodes = [
+      ...kindNodes(),
+      gnode({ id: "strategy-1", kind: "strategy" }),
+      gnode({ id: "tactic-blocker", kind: "tactic" }),
+      gnode({
+        id: "tactic-1",
+        kind: "tactic",
+        phase: "implement",
+        execution: { branch: "b", pr: 1, attempts: { implement: 1 }, markers: [], strategy_fingerprint: null },
+        blocked_by: ["tactic-blocker"],
+        validates: ["strategy-1"],
+      }),
+    ];
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("throws when office_hours is on a node whose kind lacks goal_layer", () => {
+    const nodes = [
+      ...kindNodes(),
+      gnode({
+        id: "virtue-1",
+        kind: "virtue",
+        office_hours: { reason: "parked", since: "2026-07-03" },
+      }),
+    ];
+    expect(() => validateGraph(nodes)).toThrow(
+      /virtue-1: office_hours is only valid on goal-layer kinds/,
+    );
+  });
+
+  it("throws when pace_exempt is true on a node whose kind lacks goal_layer", () => {
+    const nodes = [
+      ...kindNodes(),
+      gnode({ id: "virtue-1", kind: "virtue", pace_exempt: true }),
+    ];
+    expect(() => validateGraph(nodes)).toThrow(
+      /virtue-1: pace_exempt is only valid on goal-layer kinds/,
+    );
+  });
+
+  it("passes when office_hours/pace_exempt sit on a goal-layer kind (strategy)", () => {
+    const nodes = [
+      ...kindNodes(),
+      gnode({
+        id: "strategy-1",
+        kind: "strategy",
+        office_hours: { reason: "awaiting input", since: "2026-07-03" },
+        pace_exempt: true,
+      }),
+    ];
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("throws when rounds is set on a non-strategy", () => {
+    const nodes = [
+      ...kindNodes(),
+      gnode({ id: "tactic-1", kind: "tactic", rounds: { count: 1, last_completed: null } }),
+    ];
+    expect(() => validateGraph(nodes)).toThrow(
+      /tactic-1: rounds is only valid on kind "strategy" nodes, got kind "tactic"/,
+    );
+  });
+
+  it("passes when rounds sits on a strategy", () => {
+    const nodes = [
+      ...kindNodes(),
+      gnode({ id: "strategy-1", kind: "strategy", rounds: { count: 2, last_completed: "2026-07-01" } }),
+    ];
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("throws when a blocked_by entry does not resolve to a node", () => {
+    const nodes = [
+      ...kindNodes(),
+      gnode({ id: "tactic-1", kind: "tactic", blocked_by: ["tactic-missing"] }),
+    ];
+    expect(() => validateGraph(nodes)).toThrow(
+      /tactic-1: blocked_by "tactic-missing" does not resolve to a node/,
+    );
+  });
+
+  it("throws when a blocked_by entry resolves to a non-tactic", () => {
+    const nodes = [
+      ...kindNodes(),
+      gnode({ id: "strategy-1", kind: "strategy" }),
+      gnode({ id: "tactic-1", kind: "tactic", blocked_by: ["strategy-1"] }),
+    ];
+    expect(() => validateGraph(nodes)).toThrow(
+      /tactic-1: blocked_by "strategy-1" must resolve to a kind "tactic" node, got kind "strategy"/,
+    );
+  });
+
+  it("passes when a blocked_by entry resolves to a tactic", () => {
+    const nodes = [
+      ...kindNodes(),
+      gnode({ id: "tactic-1", kind: "tactic" }),
+      gnode({ id: "tactic-2", kind: "tactic", blocked_by: ["tactic-1"] }),
+    ];
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("throws when a validates entry does not resolve to a node", () => {
+    const nodes = [
+      ...kindNodes(),
+      gnode({ id: "tactic-1", kind: "tactic", validates: ["strategy-missing"] }),
+    ];
+    expect(() => validateGraph(nodes)).toThrow(
+      /tactic-1: validates "strategy-missing" does not resolve to a node/,
+    );
+  });
+
+  it("throws when a validates entry resolves to a non-strategy", () => {
+    const nodes = [
+      ...kindNodes(),
+      gnode({ id: "virtue-1", kind: "virtue" }),
+      gnode({ id: "tactic-1", kind: "tactic", validates: ["virtue-1"] }),
+    ];
+    expect(() => validateGraph(nodes)).toThrow(
+      /tactic-1: validates "virtue-1" must resolve to a kind "strategy" node, got kind "virtue"/,
+    );
+  });
+
+  it("passes when a validates entry resolves to a strategy", () => {
+    const nodes = [
+      ...kindNodes(),
+      gnode({ id: "strategy-1", kind: "strategy" }),
+      gnode({ id: "tactic-1", kind: "tactic", validates: ["strategy-1"] }),
+    ];
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("throws on a blocked_by cycle (including a self-loop)", () => {
+    const nodes = [
+      ...kindNodes(),
+      gnode({ id: "tactic-a", kind: "tactic", blocked_by: ["tactic-b"] }),
+      gnode({ id: "tactic-b", kind: "tactic", blocked_by: ["tactic-a"] }),
+    ];
+    expect(() => validateGraph(nodes)).toThrow(/blocked_by forms a cycle/);
+  });
+
+  it("throws on a direct blocked_by self-loop", () => {
+    const nodes = [
+      ...kindNodes(),
+      gnode({ id: "tactic-a", kind: "tactic", blocked_by: ["tactic-a"] }),
+    ];
+    expect(() => validateGraph(nodes)).toThrow(
+      /tactic-a: blocked_by forms a cycle/,
+    );
+  });
+
+  it("passes on a blocked_by chain with no cycle", () => {
+    const nodes = [
+      ...kindNodes(),
+      gnode({ id: "tactic-a", kind: "tactic", blocked_by: ["tactic-b"] }),
+      gnode({ id: "tactic-b", kind: "tactic", blocked_by: ["tactic-c"] }),
+      gnode({ id: "tactic-c", kind: "tactic" }),
+    ];
+    expect(() => validateGraph(nodes)).not.toThrow();
   });
 });

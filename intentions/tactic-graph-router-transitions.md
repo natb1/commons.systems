@@ -19,11 +19,16 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-attributes:
-  phase: implement
-  blocked_by:
-    - tactic-graph-router-selector
-    - tactic-graph-commit
+phase: implement
+execution: null
+validates: []
+blocked_by:
+  - tactic-graph-router-selector
+  - tactic-graph-commit
+office_hours: null
+pace_exempt: false
+rounds: null
+attributes: {}
 ---
 # router v2 (b): persisted phase transitions, attempt counters and markers as graph writes, reconciler sweep, completion pruning
 
