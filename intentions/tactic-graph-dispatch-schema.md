@@ -21,8 +21,12 @@ tooling_goals: []
 success_signal: null
 attention: null
 attributes:
-  phase: implement
+  phase: qa
   blocked_by: []
+  execution:
+    pr: 2742
+    attempts:
+      fix: 1
 ---
 # intentionsutil: first-class execution state — phase, execution, blocked_by, office_hours, rounds — and tactic-body preservation in writeNode
 
