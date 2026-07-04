@@ -269,6 +269,34 @@ clarifications:
       (with their own attempt counters) before anything reaches CI, and those
       loops never pass through the fix phase — fix means exactly 'CI is red on
       this tactic's PR'. Recorded 2026-07-04 from author direction."
+  - question: Review findings beyond the tactic's plan — which are fixed in scope,
+      which defer, which are ignored, and how do deferrals schedule?
+    answer: "Three-way disposition by verification x contract, decided in the review
+      phase. Resolve in scope: a finding that is adversarially confirmed
+      (survives the skeptic pass with a concrete failure scenario) AND breaks
+      the tactic's own stated contract — the deliverable its plan claims, or the
+      security/integrity of what the diff itself introduced. 'No live callers
+      yet' never defers a contract violation of the delivered thing itself
+      (precedent: graph-commit's fail-closed conflict fix). The review phase
+      holds — no review -> done transition — while a confirmed in-scope finding
+      is open; its internal content-fix loop resolves them locally before CI.
+      Defer: real but out-of-contract — confirmed findings on pre-existing
+      surfaces the diff merely touched, defense-in-depth where the design
+      already fails closed, robustness under conditions no unvalidated signal
+      path exercises. Deferrals are recorded in the graph as draft tactics
+      (retain-not-refine, clarification 6), batched per component with finding
+      provenance (file:line, failure scenario, verdict, source PR) in the body;
+      they become selectable only when a later /align-tactics round finalizes
+      them, and once finalized they carry no validates edge to an unvalidated
+      signal, so calculated attention's off-path demotion (clarification 11)
+      ranks them below round tactics with no new machinery — and self-corrects
+      upward if a new signal's path later includes the component. Ignore:
+      refuted by the skeptic pass, unreachable failure scenarios, below the
+      meaningfulness threshold (legacy parity: pre-existing moderate/low
+      advisories), or fixes that would add defensive fallbacks contrary to
+      code-style. Ignored findings are not graph-recorded; every disposition
+      including refutation reasons is recorded once in the PR review comment as
+      the audit trail. Recorded 2026-07-04 interview."
 tooling_goals:
   - kind: actuator
     statement: /align-strategy — interview-driven strategy recording, superseding

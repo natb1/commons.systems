@@ -263,7 +263,14 @@ completion markers, attempt counters, and parking are `graph-commit`
 writes instead of label edits. Phase-skill internals (worktree isolation,
 `/implement-unit` delegation, `/commit-merge-push`, QA/review fan-outs
 with their own internal content-fix loops, auto-merge on clean review)
-carry over unchanged.
+carry over unchanged, with one amendment (strategy clarification 19): the
+review fan-out's finding disposition is graph-native. A confirmed finding
+that breaks the tactic's own stated contract blocks `review → done` and
+is fixed inside the phase's content-fix loop; real but out-of-contract
+findings land as draft tactics batched per component (never as gh
+follow-up issues), demoted below round tactics by calculated attention
+once a later `/align-tactics` round finalizes them; refuted or
+below-threshold findings are recorded only in the PR review comment.
 
 ## 3. The router
 
