@@ -645,11 +645,11 @@ export function validateGraph(nodes: IntentionNode[]): void {
     }
     // Rule 13: every blocked_by entry resolves to an existing tactic.
     for (const target of node.blocked_by) {
-      if (!ids.has(target)) {
+      const targetNode = byId.get(target);
+      if (targetNode === undefined) {
         problems.push(`${node.id}: blocked_by "${target}" does not resolve to a node`);
         continue;
       }
-      const targetNode = byId.get(target)!;
       if (targetNode.kind !== "tactic") {
         problems.push(
           `${node.id}: blocked_by "${target}" must resolve to a kind "tactic" node, got kind "${targetNode.kind}"`,
@@ -658,11 +658,11 @@ export function validateGraph(nodes: IntentionNode[]): void {
     }
     // Rule 14: every validates entry resolves to an existing strategy.
     for (const target of node.validates) {
-      if (!ids.has(target)) {
+      const targetNode = byId.get(target);
+      if (targetNode === undefined) {
         problems.push(`${node.id}: validates "${target}" does not resolve to a node`);
         continue;
       }
-      const targetNode = byId.get(target)!;
       if (targetNode.kind !== "strategy") {
         problems.push(
           `${node.id}: validates "${target}" must resolve to a kind "strategy" node, got kind "${targetNode.kind}"`,
