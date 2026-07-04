@@ -61,6 +61,16 @@ Scope — codify the five steps:
    a soft freeze and re-evaluation of the open subtree (strategy
    clarification 10).
 
+6. **Requirements coverage check** (added 2026-07-03 by the
+   `/align-tactics strategy-attention-surface` round): before record, map
+   every clause of the author's requirement text to a recorded element —
+   a clarification, a rationale sentence, a tooling goal, a condition, or
+   a draft-tactic bullet. An unmapped clause returns to the interview or
+   lands in a draft body; it is never dropped silently. Found live: the
+   requirement's "similar to the WIP queue visualization and metrics on
+   the existing office hours ui" anchor for the velocity signal survived
+   only in session context and had to be restored by the tactic round.
+
 Coverage rows to handle visibly: multi-topic separation into independent
 strategies; duplicate detection; the 8-category quality evaluation folded
 into interview probes (per the §4 matrix).
