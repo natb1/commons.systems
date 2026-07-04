@@ -23,6 +23,8 @@ attributes:
   phase: implement
   blocked_by:
     - tactic-graph-dispatch-schema
+  execution:
+    pr: 2748
 ---
 # graph-commit primitive: validated single-node writes direct-pushed to main with rebase-retry, restricted to intentions/; CI fast path for intentions/-only pushes
 
