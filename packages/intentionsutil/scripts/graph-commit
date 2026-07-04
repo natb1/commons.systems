@@ -34,10 +34,13 @@
 #
 # Exit status:
 #   0  the edit landed on main.
-#   1  push could not land (busy main after all attempts, the required checks
-#      never stamped green within the poll window, or an unresolved
-#      concurrent-edit conflict that parked the target node); a parking write
-#      is attempted for the conflict case.
+#   1  push could not land: busy main after all attempts, the required checks
+#      never stamped green within the poll window, or a concurrent-edit
+#      CONFLICT. The conflict case fails closed — this writer's content is NOT
+#      landed (no automatic overwrite of the other writer's already-landed
+#      edit): the node is parked via office_hours on top of fresh origin/main
+#      and this writer's unlanded content is preserved on disk for a manual
+#      merge.
 #   2  usage error.
 #
 # Conventions: mirrors the bounded-retry shape/logging of `gh_retry` in
@@ -72,10 +75,14 @@ CHECK_TIMEOUT_SECONDS="${GRAPH_COMMIT_CHECK_TIMEOUT_SECONDS:-180}"
 # IDS         — the node ids to commit (positional args).
 # EXPECTED    — associative set of the exact staged paths we permit.
 # SNAP_DIR    — tempdir holding the on-disk node content we are trying to land.
-# CURRENT_MSG — the commit message reapply() re-commits with.
+# KEEP_SNAP   — 1 when SNAP_DIR must survive exit (the fail-closed conflict
+#               path discards the writer's local commit, so the snapshot is the
+#               only remaining copy of the writer's content).
+# CURRENT_MSG — the commit message commit_files() commits with.
 declare -a IDS=()
 declare -A EXPECTED=()
 SNAP_DIR=""
+KEEP_SNAP=0
 CURRENT_MSG=""
 # SCRATCH_BRANCH — the throwaway `graph/**` branch name used to stamp SHAs.
 # SCRATCH_PUSHED — 1 once we have pushed it at least once, so cleanup() knows to
@@ -100,7 +107,9 @@ usage() {
 # failure never masks the real exit status.
 cleanup() {
   local rc=$?
-  [[ -n "$SNAP_DIR" ]] && rm -rf "$SNAP_DIR"
+  if [[ -n "$SNAP_DIR" && "$KEEP_SNAP" -eq 0 ]]; then
+    rm -rf "$SNAP_DIR"
+  fi
   if [[ "$SCRATCH_PUSHED" -eq 1 && -n "$SCRATCH_BRANCH" ]]; then
     git push origin --delete "$SCRATCH_BRANCH" >&2 || true
   fi
@@ -113,7 +122,7 @@ cleanup() {
 # other than the ones named on the command line. Its one job is to catch a
 # stray or cross-contaminated staged path; it does NOT decide whether there is
 # anything to commit. An empty staged set is tolerated here (returns cleanly) —
-# main()/reapply() gate commit_files() behind id_files_dirty(), so this guard is
+# main() gates commit_files() behind id_files_dirty(), so this guard is
 # only reached when there is genuinely something to stage. Treating "empty" as
 # an error here was the bug that broke idempotent re-invocation after a partial
 # failure (a local commit that never pushed left the tree clean, so the re-run's
@@ -133,22 +142,17 @@ assert_staged_safe() {
   done <<<"$staged"
 }
 
-# --- Snapshot / restore ----------------------------------------------------
-# The desired on-disk content of each node (written by write-node.ts, or by the
-# parking fallback) is captured to SNAP_DIR so it survives a `git reset --hard`
-# in reapply(). restore() re-lays that captured content — the WRITER's content,
-# not origin/main's — back onto the working tree.
+# --- Snapshot ----------------------------------------------------------------
+# The desired on-disk content of each node (written by write-node.ts) is
+# captured to SNAP_DIR before landing. On the fail-closed conflict path the
+# writer's local conflicting commit is discarded (reset --hard to fresh
+# origin/main), so this snapshot becomes the only surviving copy of the
+# writer's content — cleanup() keeps SNAP_DIR on that path (KEEP_SNAP=1) and
+# the park message points at it for the manual merge.
 snapshot() {
   local id
   for id in "${IDS[@]}"; do
     cp -- "$INTENTIONS_DIR/$id.md" "$SNAP_DIR/$id.md"
-  done
-}
-
-restore() {
-  local id
-  for id in "${IDS[@]}"; do
-    cp -- "$SNAP_DIR/$id.md" "$INTENTIONS_DIR/$id.md"
   done
 }
 
@@ -251,8 +255,8 @@ await_checks() {
 # path before fast-forwarding it onto main.
 # Returns:
 #   0  pushed.
-#   10 a rebase CONFLICT occurred (aborted) — the caller's concurrent-edit
-#      recovery is needed.
+#   10 a rebase CONFLICT occurred (aborted) — the caller fails closed and
+#      parks; there is no automatic resolution.
 #   11 every attempt failed with no conflict (busy main, or the checks never
 #      stamped/concluded green within the poll window).
 # Dies on a non-conflict rebase/fetch failure (broken environment — clear error
@@ -300,47 +304,25 @@ try_land() {
   return 11
 }
 
-# --- Concurrent-edit recovery ----------------------------------------------
-# Abort already done by try_land. Re-apply the writer's snapshot onto a freshly
-# fetched origin/main as one fresh commit on top, so the push loop can retry.
-# NOTE (deployment): `git reset --hard` is a tree-updating op; when this script
-# is driven through the sandboxed Bash tool it needs dangerouslyDisableSandbox
-# if origin/main advanced read-only paths (.claude/skills/**, config/) — see
-# .claude/rules/sandbox.md. That is a caller concern, not resolved here.
-reapply() {
-  git fetch origin main >&2
-  git reset --hard FETCH_HEAD >&2
-  restore
-  # Only commit when the writer's content actually differs from the freshly
-  # fetched origin/main; if origin/main already carries identical content the
-  # restore leaves the tree clean and there is nothing to commit (HEAD already
-  # equals origin/main, which try_land() lands trivially).
-  if id_files_dirty; then
-    commit_files
-  fi
-}
-
-# --- Land with one concurrent-edit retry -----------------------------------
+# --- Land: fail closed on conflict ------------------------------------------
+# A rebase conflict means a concurrent writer landed an OVERLAPPING edit to the
+# same node while this one was in flight. There is no safe automatic
+# resolution: replaying this writer's whole-file snapshot over the other
+# writer's landed content would silently discard that edit (the entire file,
+# not just the conflicting hunk) while still exiting 0 — so a conflict maps
+# directly to the parking outcome, never to a retry.
 # Returns:
 #   0  landed.
 #   11 pure rejection exhausted with NO conflict (busy main — fail loudly, do
 #      not park; this is not a semantic conflict).
-#   12 a conflict persisted after the single re-apply retry (genuine semantic
-#      conflict — the caller parks).
+#   12 a rebase CONFLICT (genuine semantic conflict — the caller parks).
 land() {
   local rc=0
   try_land || rc=$?
   case "$rc" in
     0) return 0 ;;
     11) return 11 ;;
-    10)
-      echo "graph-commit: re-applying writer content onto fresh origin/main and retrying once" >&2
-      reapply
-      local rc2=0
-      try_land || rc2=$?
-      [[ "$rc2" -eq 0 ]] && return 0
-      return 12
-      ;;
+    10) return 12 ;;
     *)
       die "unexpected land status $rc"
       ;;
@@ -355,7 +337,7 @@ land() {
 park_write() {
   local since reason tmpts
   since="$(date -u +%Y-%m-%d)"
-  reason="graph-commit: unresolved concurrent-edit conflict"
+  reason="graph-commit: concurrent-edit conflict — manual merge needed"
   tmpts="$(mktemp --suffix=.mts)" || die "could not create temp file for the parking write"
   cat >"$tmpts" <<'TS'
 // argv: <storeModule> <intentionsDir> <since> <reason> <id...>
@@ -419,7 +401,7 @@ main() {
   if [[ -z "$msg" ]]; then
     msg="graph: ${IDS[*]}"
   fi
-  local park_msg="graph: park ${IDS[*]} (unresolved concurrent-edit conflict)"
+  local park_msg="graph: park ${IDS[*]} (concurrent-edit conflict)"
 
   # The throwaway stamping branch: named for the primary id and scoped to this
   # PID so concurrent graph-commit invocations never collide. cleanup() (the
@@ -458,16 +440,32 @@ main() {
     exit 1
   fi
 
-  # rc == 12: genuine semantic conflict — park the target node(s).
-  echo "graph-commit: unresolved concurrent-edit conflict on ${IDS[*]}; parking target node(s)" >&2
+  # rc == 12: concurrent-edit conflict — fail closed. Discard this writer's
+  # local conflicting commit, park the node as it exists on fresh origin/main
+  # (the other writer's already-landed content wins), and preserve this
+  # writer's unlanded content in SNAP_DIR for the manual merge.
+  KEEP_SNAP=1
+  echo "graph-commit: concurrent-edit conflict on ${IDS[*]}; parking node(s) — this writer's content is NOT landed" >&2
+  echo "graph-commit: this writer's unlanded content is preserved at $SNAP_DIR for the manual merge" >&2
+  # Sync to fresh origin/main. The tree is clean of tracked modifications here
+  # (the conflicting rebase could only start on a clean tree and was aborted),
+  # so the reset discards exactly the local conflicting commit — nothing else.
+  # NOTE (deployment): `git reset --hard` is a tree-updating op; when this
+  # script is driven through the sandboxed Bash tool it needs
+  # dangerouslyDisableSandbox if origin/main advanced read-only paths
+  # (.claude/skills/**, config/) — see .claude/rules/sandbox.md. That is a
+  # caller concern, not resolved here.
+  git fetch origin main >&2
+  git reset --hard FETCH_HEAD >&2
   park_write
   CURRENT_MSG="$park_msg"
-  snapshot
-  commit_files
+  if id_files_dirty; then
+    commit_files
+  fi
   local prc=0
   land || prc=$?
   if [[ "$prc" -eq 0 ]]; then
-    echo "graph-commit: parked ${IDS[*]} (office_hours set) and pushed the parking write to main" >&2
+    echo "graph-commit: parked ${IDS[*]} (office_hours set on the origin/main content) and pushed the parking write to main" >&2
   else
     echo "error: graph-commit: could not land the parking write for ${IDS[*]} — office_hours set locally but not pushed to main" >&2
   fi
