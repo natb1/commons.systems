@@ -69,6 +69,17 @@ Scope: new `.claude/skills/dispatch-propagate/scripts/graph-select-target`:
   `execution.strategy_fingerprint` → skip new selections in that subtree,
   let in-flight phases finish, enqueue one re-evaluation `/align-tactics`
   session for the strategy, and log the freeze to the selection log.
+- Uniform claiming (strategy clarification 13): every selection enters the
+  claimed set / reservation ledger under its node id — strategy ids
+  included, so an in-flight `/align-tactics` session keeps its strategy
+  unselectable until its tactics land on `origin/main` (the eligibility
+  gates alone still pass mid-session).
+- Pace-exempt probe lane (strategy clarification 14, legacy `priority`
+  parity): when the paced worker target is 0, first check
+  `dispatch-target-workers --exhausted` — `exhausted` is a hard stop no
+  flag overrides; otherwise probe eligible nodes with `pace_exempt: true`
+  and admit at most one gate-exempt worker — bypassing the gate, not the
+  count or the rank order. Spec: `tactic-graph-native-dispatch` §3.2.
 - Emit one selection-log line per invocation (jsonl in the dispatch state
   dir alongside the phase log written by `dispatch-write-phase-log`) — the
   input `tactic-dispatch-lifecycle-sensor` reads.
@@ -83,17 +94,54 @@ Scope: `.claude/skills/dispatch-propagate/scripts/dispatch-select-tick`
 (invoked by `dispatch-tick`): under the one selection lock, query
 graph-select-target first, fall back to the legacy
 `dispatch-select-target`; one claimed set and one reservation ledger
-spanning both keyspaces (node ids and issue numbers).
+spanning both keyspaces (node ids and issue numbers); one pace budget
+across both, with strategy `/align-tactics` sessions counted as workers.
+The tick's existing at-cap priority bypass extends across keyspaces: the
+probe consults graph pace-exempt nodes (Unit 1's lane) alongside the
+legacy `--priority-only` probe, still admitting at most one gate-exempt
+worker total.
 
 ## Unit 3 — node-id worktree keys
 
 **Recommended model:** sonnet
 
-Scope: `.claude/hooks/worktree-create.sh` — accept `<tactic-id>` worktree
-names alongside the `<issue-num>-<slug>` convention; draining legacy gh
-work keeps its numeric names. (This removes the friction the 2739 session hit:
-a graph-native session needing a synthetic anchor issue just to name its
-worktree.)
+Scope: `.claude/hooks/worktree-create.sh` — accept `<node-id>` worktree
+names alongside the `<issue-num>-<slug>` convention: tactic ids for phase
+sessions and strategy ids for `/align-tactics` sessions (uniform node-id
+keying, strategy clarifications 12–13; spec §3.4). Draining legacy gh
+work keeps its numeric names. (This removes the friction the 2739 and
+2740 sessions hit: a graph-native session needing a synthetic numeric
+anchor just to name its worktree.)
+
+## Unit 4 — launch chain for node targets
+
+**Recommended model:** opus
+
+Depends on: Units 1–3.
+
+Scope: extend the post-selection launch chain to node-id targets, so a
+graph selection actually becomes a running worker (selection alone leaves
+the launch scripts issue-only):
+- `.claude/skills/dispatch-propagate/scripts/dispatch-materialize-spawn`
+  and `dispatch-launch-worker`: accept a `<node-id>` target alongside
+  `<issue-num>` (keyspace split: all-numeric = legacy issue, otherwise
+  node id); worktree path and spawn `--name` are the node id (Unit 3's
+  hook accepts it).
+- For node targets, `dispatch-route`'s phase *derivation* is bypassed —
+  phase is persisted (strategy clarification 1). The directive comes from
+  the node: strategy → `INVOKE /align-tactics <node-id>`; tactic by
+  `phase` → implement → `/implement`, fix → `/fix-checks`, qa →
+  `/qa-fix`, review → `/review-fix`. The deterministic provisioning
+  prelude (worktree provision + origin/main merge, CI-ready gate where a
+  PR exists) runs unchanged, preserving the merged-tree guarantee.
+- `dispatch-spawn-job` is reused as-is (generic primitive): `--name` =
+  node id, `--cwd` = the node-id worktree, prompt = the mapped skill
+  invocation.
+- Mechanical failure dispositions (provision-failed, merge conflict that
+  cannot invoke `/fix-conflicts`, wrong-worktree) park the node via the
+  `office_hours` graph write instead of an office-hours label —
+  coordinate with `tactic-graph-router-transitions`, which owns the
+  ongoing phase/marker writes, and use the `graph-commit` primitive.
 
 ## Dependencies
 
@@ -104,12 +152,16 @@ worktree.)
   live so the derived terms are in effect from the first tick; not a hard
   blocker for this tactic (the selector functions without it, minus the
   derived terms), but it does hard-block `tactic-legacy-router-removal`.
+- `tactic-graph-commit` — Unit 4's failure-disposition park writes go
+  through the primitive; not a hard blocker for Units 1–3 (selection and
+  the tick wiring make no graph writes).
 
 ## Reuse
 
 - `resolveAttention`/`src/goals.ts`, the selection lock,
-  `dispatch-target-workers` pacing, and the `dispatch-spawn-tick`
-  heartbeat — all unchanged.
+  `dispatch-target-workers` pacing (count mode and the `--exhausted`
+  hard-floor query, reused as-is by the pace-exempt lane), and the
+  `dispatch-spawn-tick` heartbeat — all unchanged.
 
 ## Verification
 

@@ -17,12 +17,11 @@ rationale: "strategy-graph-drives-dispatch made the loop real — intent enters
   being); and the align skill family — /align-init for fork onboarding and
   virtue review (retiring the legacy /align skill), /align-strategy for
   recording strategy under interview, /align-tactics for breaking a strategy
-  into executable tactic subtrees — supersedes /file-issue and /plan-issue
-  as the interface for intent entering execution.
-  The legacy gh router runs concurrently until the gh queue drains, then it is
-  removed; full /file-issue and /plan-issue coverage is mapped into the align
-  family before removal (coverage matrix retained as draft content on
-  tactic-graph-native-dispatch)."
+  into executable tactic subtrees — supersedes /file-issue and /plan-issue as
+  the interface for intent entering execution. The legacy gh router runs
+  concurrently until the gh queue drains, then it is removed; full /file-issue
+  and /plan-issue coverage is mapped into the align family before removal
+  (coverage matrix retained as draft content on tactic-graph-native-dispatch)."
 reading: null
 gap: null
 serves:
@@ -84,8 +83,8 @@ clarifications:
       strategy eligibility for /align-tactics; they are its input: it finalizes,
       splits, merges, or prunes them. Until tactic-body preservation ships in
       the store, draft bodies are hand-maintained (safe interim: no automated
-      writer touches tactic bodies). Recorded 2026-07-03; supersedes this record's
-      own first draft, which parked the design outside the graph in
+      writer touches tactic bodies). Recorded 2026-07-03; supersedes this
+      record's own first draft, which parked the design outside the graph in
       packages/intentionsutil/DISPATCH.md."
   - question: How does the /align-strategy dialectic handle requirements for UI
       design, where text questions under-specify?
@@ -111,8 +110,8 @@ clarifications:
       reject; immaterial observations land as clarifications without
       interrupting the round. Keeps condition substance human-decided (condition
       4). Recorded 2026-07-03 interview."
-  - question: Round 1 deferred the /align-init entrypoint by omission — how do deferrals
-      stay visible without competing with signal work?
+  - question: Round 1 deferred the /align-init entrypoint by omission — how do
+      deferrals stay visible without competing with signal work?
     answer: "Deferrals are recorded, not omitted: work off the minimum path to
       validating a signal lands as a backlog tactic — fully planned, selectable,
       demoted. The demotion is part of calculated attention: resolveAttention
@@ -163,6 +162,47 @@ clarifications:
       weight changes are reviewed PRs. The backlog flag is deleted; strategy
       eligibility counts only on-path children, also derived. Recorded
       2026-07-03 interview."
+  - question: Does per-issue worktree isolation carry over — where does a
+      graph-native tactic's worker execute?
+    answer: "Yes — one worktree per tactic. When the router launches a worker for a
+      tactic, it provisions a dedicated worktree keyed by the tactic's node id,
+      the same isolation the legacy router gives each issue. This is the
+      launch-side commitment behind worktree anchoring
+      (tactic-graph-native-dispatch §3.4: <tactic-id> is the
+      branch/worktree/reservation/session key) and the worktree-create.sh
+      node-id naming unit (tactic-graph-router-selector unit 3). Until that unit
+      lands, the hook still rejects node-id names — graph-native sessions must
+      borrow a numeric anchor, which this requirement removes. Recorded
+      2026-07-03 from author direction."
+  - question: Can workers execute nodes concurrently — and what stops two workers
+      claiming the same node?
+    answer: "Concurrency is a first-class requirement, not an inherited detail: the
+      router runs up to the paced worker target in parallel across eligible
+      non-parked nodes of both kinds — tactic phase sessions and strategy
+      /align-tactics sessions. Claiming and isolation are uniform by node id:
+      every launched worker enters the one claimed set / reservation ledger
+      under its node id — strategy ids included, so an in-flight /align-tactics
+      session claims its strategy and closes the duplicate-spawn window while
+      its tactics have not yet landed on origin/main — and runs in a worktree
+      keyed by that id, giving liveness detection (live session ⇔ worktree) one
+      rule for both kinds. Write safety stays the single-node rebase-retry
+      commit path (clarification 2). Recorded 2026-07-03 interview."
+  - question: Does the graph-native router keep the legacy pace function — and where
+      does its priority override live?
+    answer: "Full parity, machinery unchanged and outside the graph:
+      dispatch-target-workers' weekly cumulative pace curve stays the binary
+      spend gate (whether to spend) and the 5-hour linear ramp decides how many
+      concurrent workers (0..max_concurrent_workers); telemetry
+      (rate_limits.json) and tunables stay operational config — the graph
+      records the requirement, not the machinery, since rate-limit telemetry is
+      machine state, not intent. One pace budget spans both routers during
+      coexistence and counts strategy sessions as workers. The legacy priority
+      label maps to a first-class authored pace-exempt flag on goal-layer nodes
+      (schema home: tactic-graph-dispatch-schema), deliberately orthogonal to
+      attention ordering: it admits one gate-exempt worker past a paced-to-zero
+      budget — it bypasses the gate, not the count or the order — and never
+      overrides genuine token exhaustion (the --exhausted hard floor,
+      main-broken parity). Recorded 2026-07-03 interview."
 tooling_goals:
   - kind: actuator
     statement: /align-strategy — interview-driven strategy recording, superseding
@@ -172,9 +212,8 @@ tooling_goals:
       nodes with clean-session plans, superseding /file-issue epic structuring
       and /plan-issue
   - kind: actuator
-    statement: "/align-init — fork entrypoint: orient, validate deployment,
-      review virtues, delegate to /align-strategy; retires the legacy
-      /align skill"
+    statement: "/align-init — fork entrypoint: orient, validate deployment, review
+      virtues, delegate to /align-strategy; retires the legacy /align skill"
   - kind: actuator
     statement: graph-native router tick — selects by resolved rank across strategies
       and tactics, transitions persisted phase, direct-push rebase-retry writes
