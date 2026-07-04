@@ -20,7 +20,13 @@ tooling_goals: []
 success_signal: null
 attention: null
 phase: implement
-execution: null
+execution:
+  branch: tactic-graph-commit
+  pr: null
+  attempts: {}
+  markers:
+    - unit-1-script-drafted
+  strategy_fingerprint: null
 validates: []
 blocked_by:
   - tactic-graph-dispatch-schema
