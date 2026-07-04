@@ -58,7 +58,21 @@ for _SETTINGS_FILE in "$SETTINGS_DIR/settings.json" "$SETTINGS_DIR/settings.loca
   fi
 done
 
-WORKTREES_ROOT="$(cd "$HOOK_DIR/../../.." && pwd)"
+# Two valid worktree roots coexist during the create/remove-hook migration to
+# common-dir-anchored placement: the legacy <project-root>/worktrees (still
+# used by headless dispatch provisioning, and by every pre-migration
+# worktree), and <git-common-dir>/.claude/worktrees (worktree-create.sh's
+# current placement). Derive both from --git-common-dir, which resolves to
+# the same absolute path regardless of which worktree hosts this session —
+# unlike the old $HOOK_DIR-relative arithmetic, which only ever recovered the
+# root matching whichever convention the CURRENT worktree happens to follow.
+GIT_COMMON_DIR=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || GIT_COMMON_DIR=""
+LEGACY_WORKTREES_ROOT=""
+NEW_WORKTREES_ROOT=""
+if [ -n "$GIT_COMMON_DIR" ]; then
+  LEGACY_WORKTREES_ROOT="$(dirname "$GIT_COMMON_DIR")/worktrees"
+  NEW_WORKTREES_ROOT="$GIT_COMMON_DIR/.claude/worktrees"
+fi
 
 # --- Helper functions ----------------------------------------------------
 
@@ -73,7 +87,8 @@ is_allowed_git_c() {
   [ -n "$path_arg" ] && [ -n "$sub_cmd" ] || return 1
   resolved=$(realpath "$path_arg" 2>/dev/null) || return 1
   case "$resolved" in
-    "$WORKTREES_ROOT"/*) ;;
+    "$LEGACY_WORKTREES_ROOT"/*) ;;
+    "$NEW_WORKTREES_ROOT"/*) ;;
     *) return 1 ;;
   esac
   for _SUB in "${ALLOWED_GIT_SUBS[@]}"; do
