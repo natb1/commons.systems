@@ -53,7 +53,9 @@ attributes:
   non_delegable_floor: the ability to evaluate what the agent produces; if that
     atrophies the open source is nominal and recovery is severed
   review_trigger: runway-rule breach; open-weight capability gap widening; terms
-    gating individual-scale use
+    gating individual-scale use; plan pricing structure change (prepaid
+    allowance to metered) — the premise strategy-token-economy's throughput
+    framing rests on
   last_assessed: 2026-07-02
 ---
 # Software construction delegated to Anthropic's Claude
