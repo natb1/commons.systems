@@ -95,6 +95,15 @@ clarifications:
       signals in the status queue; parked nodes, router now/queue, and
       history/audit become goals-page projections of the graph. Recorded
       2026-07-03 interview.
+  - question: The browser cannot run git — where does the velocity series come from?
+    answer: "Host-side: the office-hours-snapshot producer derives the
+      created/closed/phase-transition series from the local clone's intentions/
+      git history (the same derivation as the graph-native lifecycle sensor) and
+      folds it into office-hours-current.benc; the surface reads it like any
+      other snapshot signal. The clone-read layer renders only current node
+      state; the browser never parses git history. Resolved 2026-07-03
+      /align-tactics round 1 (immaterial drift: consistent with clarifications 3
+      and 6)."
 tooling_goals:
   - kind: actuator
     statement: status page — one attention-ranked queue of typed signals, each type
@@ -120,6 +129,9 @@ success_signal:
   is_proxy: false
 attention: null
 attributes:
+  rounds:
+    count: 0
+    last_completed: null
   conditions:
     - the local clone the surface reads stays fresh enough that attention and
       rank read from it track origin/main

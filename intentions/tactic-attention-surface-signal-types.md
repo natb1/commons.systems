@@ -1,14 +1,16 @@
 ---
 id: tactic-attention-surface-signal-types
 kind: tactic
-statement: "draft: typed signal model — signal-type registry with compact and
-  context views, local file adapters, owning-node attribution"
+statement: typed signal model — signal-type registry with compact and context
+  views, owning-node attribution, budget/snapshot/analytics adapters
 owner: ai
-status: raw
+status: codified
 parent: null
-rationale: "Draft retained from the 2026-07-03 /align-strategy interview per the
-  retain-not-refine contract: tactical context only, no plan schema;
-  /align-tactics finalizes, splits, merges, or prunes."
+rationale: "Finalized 2026-07-03 by /align-tactics round 1, split: the velocity
+  series and pace-telemetry adapter moved to
+  tactic-attention-surface-velocity-pace (they add a producer-side deliverable);
+  this leaf carries the registry contract and the adapters whose sources already
+  exist."
 reading: null
 gap: null
 serves:
@@ -18,32 +20,98 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-attributes: {}
+attributes:
+  phase: implement
+  blocked_by:
+    - tactic-attention-surface-graph-read
 ---
-# draft: typed signal model — signal-type registry with compact and context views, local file adapters, owning-node attribution
+# typed signal model — signal-type registry with compact and context views, owning-node attribution, budget/snapshot/analytics adapters
 
-Retained draft context (2026-07-03 interview + exploration). Not a plan.
+## Context
 
-- Author decision (strategy clarification 2): signals are of a type; each
-  type carries a compact view (list row) and a context view (context
-  panel). Registry entry shape, roughly: `{ typeId, owningNode:
-  {id, signalKind: success_signal | condition}, sourceAdapter, CompactView,
-  ContextView }`.
-- Source adapters read non-versioned local/network-share files:
-  - budget `.benc` snapshots (runway + dollar spend →
-    strategy-financial-sustainability; reuse `budget/src/local-file.ts`
-    patterns and `office-hours/src/snapshot.ts` + `crypto.ts` decryption);
-  - `office-hours-current.benc` from the `office-hours-snapshot/` local
-    producer (reminders, queue metrics, project signals);
-  - pace telemetry (`rate_limits.json`, target-workers config) →
-    strategy-autonomous-execution's frontier-economy condition;
-  - analytics exports (GA4/GSC/PSI, per delegation-web-analytics) →
-    strategy-promote-progressive-detachment / strategy-own-audience.
-- Velocity (created vs closed, backlog growth by subtree) computes from the
-  store itself — phase-transition history in the `intentions/` git log and
-  the router selection log (see tactic-dispatch-lifecycle-sensor). Open
-  question for /align-tactics: the browser cannot run git; either the
-  office-hours-snapshot producer folds a velocity series into the snapshot,
-  or the clone-read layer derives it from node state alone.
-- Reminders, project signals, and queue health from the legacy dashboard
-  become signal types here (strategy clarification 6).
+Strategy clarification 2: signals are of a type; each type carries a
+compact view (list row) and a context view (context panel). This leaf
+defines the registry contract every signal plugs into, plus the adapters
+whose local sources already exist (budget `.benc`, office-hours snapshot,
+analytics exports). The velocity series and pace-telemetry adapter were
+split to `tactic-attention-surface-velocity-pace`. Sources are
+non-versioned files on local disk and network shares; an unreachable
+source fails loudly per the recorded strategy condition.
+
+## Unit 1 — registry contract
+
+**Recommended model:** opus
+
+Scope:
+- New `office-hours/src/signals/registry.ts`: `SignalType = { typeId,
+  owningNode: { id, signalKind: "success_signal" | "condition" },
+  sourceAdapter, CompactView, ContextView }`, plus a `SignalReading`
+  shape (values, timestamp, source path, freshness) returned by adapters.
+- Rank: a signal's rank is `resolveAttention` of its owning node from the
+  graph-read layer (`office-hours/src/graph-source.ts`); a non-null `gap`
+  on the owning node floats the signal within its rank tier. The
+  status-page tactic consumes this ordering — define it here, render it
+  there.
+- Owning-node attribution is validated against the loaded graph at render
+  time — an unknown node id is a loud per-signal error, not a hidden row.
+
+## Unit 2 — budget adapters
+
+**Recommended model:** sonnet
+
+Scope: runway and dollar-spend signal types owned by
+`strategy-financial-sustainability` (success_signal — "projected runway"
+is literally its observable). Adapter reads the budget `.benc` snapshots
+from the share directory handle, reusing decryption in
+`office-hours/src/snapshot.ts` + `office-hours/src/crypto.ts` and the
+read pattern of `budget/src/local-file.ts`. Compact view: current runway
+months and month-to-date spend; context view feeds
+`BudgetPaceChart` (wired by the status-page tactic).
+
+## Unit 3 — office-hours snapshot adapter
+
+**Recommended model:** sonnet
+
+Scope: reminders, project-signals, and queue-health signal types read
+from `office-hours-current.benc` via the existing
+`office-hours/src/local-snapshot-source.ts`. Owning-node attribution
+lives in one registry table (not scattered): queue health →
+`strategy-graph-native-dispatch` (condition); project signals → the
+strategy each entry names, defaulting to `strategy-attention-surface`;
+reminders → `strategy-attention-surface` (surface-owned housekeeping).
+
+## Unit 4 — analytics-exports adapter
+
+**Recommended model:** sonnet
+
+Scope: marketing/analytics signal types owned by
+`strategy-promote-progressive-detachment` and `strategy-own-audience`,
+reading GA4 / Search Console / PageSpeed export files from the share
+(path convention per `tactic-attention-surface-analytics-drop`; build and
+test against fixtures until the drop exists). The attachment and its
+capture posture are recorded in `intentions/delegation-web-analytics.md`.
+
+## Dependencies
+
+- `tactic-attention-surface-graph-read` — owning-node lookup and rank.
+
+## Reuse
+
+- `office-hours/src/snapshot.ts`, `crypto.ts`, `local-snapshot-source.ts`.
+- `budget/src/local-file.ts` read pattern.
+- `resolveAttention` via `@commons-systems/intentionsutil/graph`.
+
+## Verification
+
+```verify
+npx vitest run --project office-hours --root .
+```
+
+Manual: with real share files granted, each registered signal renders a
+reading with its owning node id and source path; unplug a source and
+confirm a loud per-signal error state rather than a stale value.
+
+## Implementation notes
+
+Four units, one PR; each unit in a subagent with its Recommended model;
+supply this Context and the unit's Scope; constrain to working-tree edits.
