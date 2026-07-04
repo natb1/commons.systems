@@ -96,6 +96,18 @@ rounds:
   relevant sensor (CI verdict, PR mergeability), and commits the transition
   as a graph write. Out-of-band events (a hand-merged PR) are absorbed by a
   reconciler sweep.
+- **`fix` is the CI-failure interrupt, not a linear step** (strategy
+  clarification 18). A tactic enters `fix` from ANY of
+  `implement`/`qa`/`review` when its PR's CI verdict is failing, and
+  returns to where it left off once CI is green — it is not a station
+  every tactic passes through between `implement` and `qa`. Legacy parity:
+  `dispatch-phase` checks mergeability/CI verdict before any phase-label
+  logic, so a PR already past qa or review routes back to the fixer on a
+  CI regression. Distinct from the qa and review phases' own internal fix
+  loops: `qa-fix`/`review-fix` repair QA- and review-content findings
+  locally (their own attempt counters) before anything reaches CI; those
+  loops never pass through the `fix` phase. `fix` means exactly "CI is red
+  on this tactic's PR".
 - **Plan lives in the tactic body.** Doctrine amendment (recorded on the
   strategy): the body remains a cosmetic render for virtues, strategies,
   and delegations, but is authoritative content for tactics — draft context
@@ -243,12 +255,15 @@ Runs autonomously; parks on office-hours under the same conditions as
 ### 2.4 Execution phases
 
 Once a tactic is on `origin/main` with `phase: implement`, the router walks
-it through the same phase skills as today — implement, fix, qa, review —
-with two changes: phase is read from and written to the node instead of
-derived from labels, and completion markers, attempt counters, and parking
-are `graph-commit` writes instead of label edits. Phase-skill internals
-(worktree isolation, `/implement-unit` delegation, `/commit-merge-push`,
-QA/review fan-outs, auto-merge on clean review) carry over unchanged.
+it through the same phase skills as today — the `implement → qa → review`
+progression, with `fix` as the CI-failure interrupt entered from any of
+them (§1.1, strategy clarification 18) — with two changes: phase is read
+from and written to the node instead of derived from labels, and
+completion markers, attempt counters, and parking are `graph-commit`
+writes instead of label edits. Phase-skill internals (worktree isolation,
+`/implement-unit` delegation, `/commit-merge-push`, QA/review fan-outs
+with their own internal content-fix loops, auto-merge on clean review)
+carry over unchanged.
 
 ## 3. The router
 

@@ -56,7 +56,13 @@ never on the work PR branch); that doctrine retires here.
 Scope: at the seams where the legacy flow edits labels —
 `.claude/skills/dispatch-propagate/scripts/dispatch-complete-phase` and
 `dispatch-finalize-phase` — graph-native tactics instead graph-commit:
-- the `phase` transition (implement → fix/qa → review → done),
+- the `phase` transition: the `implement → qa → review → done` ladder,
+  plus the `fix` interrupt — any of implement/qa/review transitions to
+  `fix` when the PR's CI verdict is failing, and back to the ladder's
+  resumption point once CI is green (spec §1.1, strategy clarification
+  18; legacy parity with dispatch-phase's CI-verdict-before-labels
+  ordering). qa-fix/review-fix content-fix loops stay internal to the qa
+  and review phases and never write a `fix` transition,
 - `execution.attempts` counters (formerly `dispatch:*-attempt` labels),
 - `execution.markers` (formerly `dispatch:planned` / `qa-done` /
   `reviewed`),
@@ -109,8 +115,11 @@ npm test --prefix packages/intentionsutil
 
 Manual staged lifecycle: on a scratch branch of the store, a synthetic
 tactic walks implement → qa → review → done, each transition one commit;
-hand-merge its PR mid-flow and confirm the sweep absorbs it; confirm the
-final commit prunes the node and stamps the strategy's rounds.
+include one `fix` interrupt (simulate a failing CI verdict at qa or
+review, confirm the transition to `fix` and the return to the interrupted
+ladder position once the verdict is green); hand-merge its PR mid-flow and
+confirm the sweep absorbs it; confirm the final commit prunes the node and
+stamps the strategy's rounds.
 
 ## Implementation notes
 

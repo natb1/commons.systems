@@ -239,25 +239,36 @@ clarifications:
       the writer then fast-forwards the same SHA to main, rebasing and
       re-running on reject. Heavy CI still guards any diff touching paths
       outside intentions/. Implementation is tactic-graph-commit Unit 2."
-  - question: Beyond the pace curve (clarification 14), does the legacy
-      router's token-optimization machinery carry over to the graph-native
-      router?
-    answer: "Yes — parity recorded 2026-07-04 (strategy-token-economy
-      interview). Two commitments. Routing parity: the graph-native launch
-      chain applies per-phase model and effort routing with the same
-      fail-closed demotable allowlist and the audit-written policy file
-      (legacy dispatch-phase-model / dispatch-phase-effort /
-      phase-model-policy.json), and align-family sessions themselves get
-      explicit routing — interview and decomposition sessions on Opus, their
-      Explore fan-out on Sonnet or Haiku. Attribution parity: every
-      graph-native session (align-family, router tick, tactic phase worker)
-      stamps its node id and phase into the transcript sidecar so the token
-      audit gains a by-node join; without it graph-native work lands in the
-      audit's unattributed bucket — already the largest spend line in the
+  - question: Beyond the pace curve (clarification 14), does the legacy router's
+      token-optimization machinery carry over to the graph-native router?
+    answer: "Yes — parity recorded 2026-07-04 (strategy-token-economy interview).
+      Two commitments. Routing parity: the graph-native launch chain applies
+      per-phase model and effort routing with the same fail-closed demotable
+      allowlist and the audit-written policy file (legacy dispatch-phase-model /
+      dispatch-phase-effort / phase-model-policy.json), and align-family
+      sessions themselves get explicit routing — interview and decomposition
+      sessions on Opus, their Explore fan-out on Sonnet or Haiku. Attribution
+      parity: every graph-native session (align-family, router tick, tactic
+      phase worker) stamps its node id and phase into the transcript sidecar so
+      the token audit gains a by-node join; without it graph-native work lands
+      in the audit's unattributed bucket — already the largest spend line in the
       2026-06-26→07-03 window — precisely as the queue migrates. The durable
-      home for the requirements and their signal is strategy-token-economy;
-      this clarification records only what the migration must carry.
-      Recorded 2026-07-04 interview."
+      home for the requirements and their signal is strategy-token-economy; this
+      clarification records only what the migration must carry. Recorded
+      2026-07-04 interview."
+  - question: Is the fix phase a linear step between implement and qa?
+    answer: "No — fix is the CI-failure interrupt (it could be called ci-fix): a
+      tactic enters fix from ANY of implement, qa, or review when its PR's CI
+      verdict is failing, and once CI is green again the router resumes the
+      ladder from where the tactic left off — it is not a station every tactic
+      passes through between implement and qa. This is legacy parity:
+      dispatch-phase checks mergeability and CI verdict BEFORE any phase-label
+      logic, so a PR already past qa or review routes back to fix-checks on a CI
+      regression. Distinct from the qa and review phases' own internal fix
+      loops: qa-fix and review-fix repair QA/review-content findings locally
+      (with their own attempt counters) before anything reaches CI, and those
+      loops never pass through the fix phase — fix means exactly 'CI is red on
+      this tactic's PR'. Recorded 2026-07-04 from author direction."
 tooling_goals:
   - kind: actuator
     statement: /align-strategy — interview-driven strategy recording, superseding
