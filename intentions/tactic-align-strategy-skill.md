@@ -24,7 +24,8 @@ execution:
   branch: 0-align-strategy-skill
   pr: 2760
   attempts: {}
-  markers: []
+  markers:
+    - reviewed
   strategy_fingerprint: null
 validates: []
 blocked_by:
