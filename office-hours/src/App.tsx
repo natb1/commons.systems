@@ -12,9 +12,11 @@ import { Dashboard } from "./Dashboard.js";
 
 export function App() {
   // App owns the single onAuthStateChanged subscription and threads `user` to
-  // both NavControls (auth control) and Dashboard (tier dispatch) — one source
-  // of truth for auth state. office-hours has no in-app nav links, so the Nav
-  // gets links={[]} and the header needs no click-interception (unlike audio).
+  // NavControls (the auth control) — one source of truth for auth state.
+  // Dashboard no longer takes `user`: it loads a read-only local snapshot rather
+  // than owner data, so Auth no longer drives its data dispatch. office-hours has
+  // no in-app nav links, so the Nav gets links={[]} and the header needs no
+  // click-interception (unlike audio).
   const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
@@ -22,8 +24,8 @@ export function App() {
     // returns a Promise, NOT a sync unsubscribe (cf. audio's createAppAuth). The
     // vanilla main.ts subscribed for the app lifetime with no unsubscribe, so we
     // mirror that: no cleanup, and .catch the init Promise. The uid dedup ports
-    // main.ts's `if (user?.uid === currentUser?.uid) return` — without it a
-    // same-uid token refresh would re-run Dashboard's five-collection load.
+    // main.ts's `if (user?.uid === currentUser?.uid) return` — it keeps a
+    // same-uid token refresh from needlessly re-setting `user` (NavControls only).
     onAuthStateChanged((next) => {
       setUser((prev) => (prev?.uid === next?.uid ? prev : next));
     }).catch((err) => {
@@ -42,7 +44,7 @@ export function App() {
       navEnd={<NavControls user={user} />}
     >
       <main id="app">
-        <Dashboard user={user} />
+        <Dashboard />
       </main>
     </PageShell>
   );
