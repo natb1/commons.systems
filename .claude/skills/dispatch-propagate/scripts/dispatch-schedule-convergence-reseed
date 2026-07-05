@@ -193,11 +193,10 @@ else
   MAIN_WORKTREE="$PROJECT_ROOT/worktrees/main"
 fi
 
-# Install the OnFailure recovery unit + durable daemon service before scheduling
-# the transient reseed timer. Both best-effort (warn + return, never exit) —
-# copied verbatim from dispatch-schedule-reseed's Step 5.
+# Install the OnFailure recovery unit before scheduling the transient reseed
+# timer. Best-effort (warn + return, never exit) — copied verbatim from
+# dispatch-schedule-reseed's Step 5.
 ensure_recover_unit "$MAIN_WORKTREE" || true
-ensure_daemon_service || true
 # Install+enable the durable periodic sweep timer so idle/drained chains still GC worktrees (#2023).
 ensure_sweep_timer "$MAIN_WORKTREE" || true
 

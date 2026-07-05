@@ -17222,11 +17222,11 @@ STUB
   chmod +x "$TMPDIR_TEST/bin/systemd-run"
   export DISPATCH_SCHEDULE_RESEED_SYSTEMD_RUN_CMD="$TMPDIR_TEST/bin/systemd-run"
 
-  # dispatch-schedule-reseed now calls ensure_recover_unit + ensure_daemon_service
-  # (lib.sh), which without isolation would write to the real
-  # ~/.config/systemd/user/ and run a real `systemctl --user`. Redirect both unit
-  # dirs into the tmp tree and point their systemctl at a no-op stub so neither
-  # function writes outside the test sandbox.
+  # dispatch-schedule-reseed now calls ensure_recover_unit (lib.sh), which
+  # without isolation would write to the real ~/.config/systemd/user/ and run a
+  # real `systemctl --user`. Redirect the unit dir into the tmp tree and point
+  # its systemctl at a no-op stub so the function writes nothing outside the
+  # test sandbox.
   cat > "$TMPDIR_TEST/bin/systemctl" <<'STUB'
 #!/usr/bin/env bash
 exit 0
@@ -17234,14 +17234,6 @@ STUB
   chmod +x "$TMPDIR_TEST/bin/systemctl"
   export DISPATCH_RECOVER_UNIT_DIR="$TMPDIR_TEST/systemd-user"
   export DISPATCH_RECOVER_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/systemctl"
-  # Stub ensure_daemon_service's three overrides. Point the daemon unit dir at a
-  # subdir of the tmp tree (so any written unit file lands there, not in
-  # ~/.config/systemd/user/), reuse the same no-op systemctl stub, and point the
-  # claude binary at the no-op systemctl so path-validation passes without needing
-  # a real claude binary (the unit is never enabled in tests).
-  export DISPATCH_DAEMON_UNIT_DIR="$TMPDIR_TEST/systemd-user"
-  export DISPATCH_DAEMON_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/systemctl"
-  export DISPATCH_DAEMON_CLAUDE_CMD="$TMPDIR_TEST/bin/systemctl"
 }
 
 sr_teardown() {
@@ -17260,7 +17252,6 @@ sr_teardown() {
   unset DISPATCH_SCHEDULE_RESEED_TARGET_WORKERS_CMD
   unset DISPATCH_SCHEDULE_RESEED_SHORT_DELAY
   unset DISPATCH_RECOVER_UNIT_DIR DISPATCH_RECOVER_SYSTEMCTL_CMD
-  unset DISPATCH_DAEMON_UNIT_DIR DISPATCH_DAEMON_SYSTEMCTL_CMD DISPATCH_DAEMON_CLAUDE_CMD
 }
 
 # sr_write_rl <file-name> <used_weekly> <resets_weekly> <used_5h> <resets_5h>
@@ -18095,10 +18086,10 @@ STUB
   chmod +x "$TMPDIR_TEST/bin/systemd-run"
   export DISPATCH_CONVERGE_RESEED_SYSTEMD_RUN_CMD="$TMPDIR_TEST/bin/systemd-run"
 
-  # ensure_recover_unit + ensure_daemon_service (lib.sh) would otherwise write to
-  # the real ~/.config/systemd/user/ and run a real `systemctl --user`. Redirect
-  # both unit dirs into the tmp tree and point their systemctl at a no-op stub
-  # so neither function writes outside the test sandbox.
+  # ensure_recover_unit (lib.sh) would otherwise write to the real
+  # ~/.config/systemd/user/ and run a real `systemctl --user`. Redirect the unit
+  # dir into the tmp tree and point its systemctl at a no-op stub so the function
+  # writes nothing outside the test sandbox.
   cat > "$TMPDIR_TEST/bin/systemctl" <<'STUB'
 #!/usr/bin/env bash
 exit 0
@@ -18106,14 +18097,6 @@ STUB
   chmod +x "$TMPDIR_TEST/bin/systemctl"
   export DISPATCH_RECOVER_UNIT_DIR="$TMPDIR_TEST/systemd-user"
   export DISPATCH_RECOVER_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/systemctl"
-  # Stub ensure_daemon_service's three overrides. Point the daemon unit dir at a
-  # subdir of the tmp tree (so any written unit file lands there, not in
-  # ~/.config/systemd/user/), reuse the same no-op systemctl stub, and point the
-  # claude binary at the no-op systemctl so path-validation passes without needing
-  # a real claude binary (the unit is never enabled in tests).
-  export DISPATCH_DAEMON_UNIT_DIR="$TMPDIR_TEST/systemd-user"
-  export DISPATCH_DAEMON_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/systemctl"
-  export DISPATCH_DAEMON_CLAUDE_CMD="$TMPDIR_TEST/bin/systemctl"
 
   export DISPATCH_CONVERGE_RESEED_MAIN_WORKTREE="$TMPDIR_TEST/main"
 
@@ -18133,7 +18116,6 @@ cr_teardown() {
   unset DISPATCH_CONVERGE_RESEED_NOW
   unset DISPATCH_CONVERGE_RESEED_DELAY
   unset DISPATCH_RECOVER_UNIT_DIR DISPATCH_RECOVER_SYSTEMCTL_CMD
-  unset DISPATCH_DAEMON_UNIT_DIR DISPATCH_DAEMON_SYSTEMCTL_CMD DISPATCH_DAEMON_CLAUDE_CMD
   unset CLAUDE_AGENTS_CMD DISPATCH_RESERVATION_DIR
 }
 
@@ -19863,9 +19845,9 @@ echo "=== ensure_sweep_timer periodic sweep timer ==="
 # systemd --user timer so idle/drained chains still GC worktrees. These two
 # halves cover (a) the install/enable idempotency of ensure_sweep_timer and
 # (b) AC#4 — the timer-fired service path reaches dispatch-sweep with no live
-# worker. The stubbing idiom mirrors the ensure_daemon_service block: a
-# recording systemctl stub whose `is-active` exit code is env-driven so the
-# steady-state hot path can be exercised.
+# worker. The stubbing idiom is the shared unit-install pattern: a recording
+# systemctl stub whose `is-active` exit code is env-driven so the steady-state
+# hot path can be exercised.
 est_tmp=$(mktemp -d)
 mkdir -p "$est_tmp/bin"
 cat > "$est_tmp/bin/systemctl" <<'STUB'
@@ -19986,7 +19968,7 @@ fi
 # — the lingering-disabled state after a user-session restart. The hot-path
 # short-circuit requires content match AND is-active=0, so it must NOT fire:
 # the call proceeds to daemon-reload + enable --now WITHOUT rewriting either
-# unit (inode stable). Mirrors the ensure_daemon_service inactive self-heal.
+# unit (inode stable). Mirrors the recover unit's inactive self-heal case.
 : > "$est_log"
 est_service_inode_heal=$(stat -c '%i' "$est_service" 2>/dev/null || echo missing)
 est_timer_inode_heal=$(stat -c '%i' "$est_timer" 2>/dev/null || echo missing)
@@ -20086,7 +20068,7 @@ rm -rf "$est_rej_tmp"
 # ============================================================================
 # daemon-reload failure and enable --now failure must each cause a non-zero
 # return with a WARNING to stderr (warn + return per the helper's contract —
-# never a hard exit). Mirrors the ensure_daemon_service degrade tests.
+# never a hard exit). Mirrors the recover unit's degrade tests.
 est_fail_tmp=$(mktemp -d)
 mkdir -p "$est_fail_tmp/bin"
 cat > "$est_fail_tmp/bin/systemctl" <<'STUB'
@@ -20285,25 +20267,12 @@ exit 0
 STUB
   chmod +x "$TMPDIR_TEST/bin/gh"
 
-  # ensure_daemon_service (lib.sh) would otherwise write to the real
-  # ~/.config/systemd/user/ and run a real `systemctl --user`. Wire a separate
-  # logging stub (distinct from the recover systemctl) so ensure_daemon_service
-  # calls land in daemon-systemctl-log and are separately assertable.
-  cat > "$TMPDIR_TEST/bin/daemon-systemctl" <<STUB
-#!/usr/bin/env bash
-echo "\$*" >> "$TMPDIR_TEST/daemon-systemctl-log"
-exit 0
-STUB
-  chmod +x "$TMPDIR_TEST/bin/daemon-systemctl"
-  export DISPATCH_DAEMON_UNIT_DIR="$TMPDIR_TEST/daemon-systemd-user"
-  export DISPATCH_DAEMON_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/daemon-systemctl"
   # ensure_heartbeat_units (called at the top of recover) would otherwise write
   # to the real ~/.config/systemd/user and run the real `systemctl --user`. Wire
-  # it to a temp unit dir and its OWN logging stub so it stays hermetic AND does
-  # not pollute daemon-systemctl-log (which the continuation-no-op / cap tests
-  # assert is empty). Note heartbeat_timer_is_armed() (the #2445 benign-mode
-  # check) uses the RECOVER systemctl ($DISPATCH_TICK_RECOVER_SYSTEMCTL_CMD, the
-  # main fake) instead, so the two heartbeat paths are independent.
+  # it to a temp unit dir and its OWN logging stub so it stays hermetic. Note
+  # heartbeat_timer_is_armed() (the #2445 benign-mode check) uses the RECOVER
+  # systemctl ($DISPATCH_TICK_RECOVER_SYSTEMCTL_CMD, the main fake) instead, so
+  # the two heartbeat paths are independent.
   cat > "$TMPDIR_TEST/bin/heartbeat-systemctl" <<STUB
 #!/usr/bin/env bash
 echo "\$*" >> "$TMPDIR_TEST/heartbeat-systemctl-log"
@@ -20312,10 +20281,6 @@ STUB
   chmod +x "$TMPDIR_TEST/bin/heartbeat-systemctl"
   export DISPATCH_HEARTBEAT_UNIT_DIR="$TMPDIR_TEST/heartbeat-systemd-user"
   export DISPATCH_HEARTBEAT_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/heartbeat-systemctl"
-  # ensure_daemon_service only needs a non-empty, newline/quote-free path; it
-  # does not execute this binary in tests — the claude stub already exists for
-  # the CLAUDE_AGENTS_CMD path, so reuse it.
-  export DISPATCH_DAEMON_CLAUDE_CMD="$TMPDIR_TEST/bin/claude"
 
   export DISPATCH_TICK_RECOVER_SYSTEMD_RUN_CMD="$TMPDIR_TEST/bin/systemd-run"
   export DISPATCH_TICK_RECOVER_SYSTEMCTL_CMD="$TMPDIR_TEST/bin/systemctl"
@@ -20346,7 +20311,6 @@ tr_teardown() {
   unset DISPATCH_TICK_RECOVER_MAX_BACKOFF
   unset DISPATCH_TICK_RECOVER_RESET_WINDOW
   unset DISPATCH_TICK_RECOVER_HEARTBEAT
-  unset DISPATCH_DAEMON_UNIT_DIR DISPATCH_DAEMON_SYSTEMCTL_CMD DISPATCH_DAEMON_CLAUDE_CMD
   unset DISPATCH_HEARTBEAT_UNIT_DIR DISPATCH_HEARTBEAT_SYSTEMCTL_CMD
   unset DISPATCH_TICK_RECOVER_BENIGN
 }
@@ -20400,27 +20364,6 @@ fi
 assert_eq "first-fail: state count == 1" "1" "$(tr_state_count)"
 tr_teardown
 
-# --- Test 1b: first failure → ensure_daemon_service ran on the arming path ---
-# Same scenario as Test 1 (first failure, no continuation). Assert that
-# ensure_daemon_service ran and called `systemctl --user enable --now
-# dispatch-claude-daemon.service` — proving the durable daemon is set up
-# before the recovery reseed is armed (#1197/#1196).
-
-echo "Test: first failure arming path calls ensure_daemon_service (daemon enabled)"
-tr_setup
-# No state file, empty timer list, 0 busy workers → arming path.
-if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
-assert_eq "first-fail-daemon: dispatch-tick-recover exits 0" "0" "$rc"
-TOTAL=$((TOTAL + 1))
-if grep -q 'enable --now dispatch-claude-daemon.service' \
-     "$TMPDIR_TEST/daemon-systemctl-log" 2>/dev/null; then
-  PASS=$((PASS + 1)); echo "  PASS: first-fail-daemon: ensure_daemon_service ran enable --now"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: first-fail-daemon: ensure_daemon_service ran enable --now"
-  echo "    daemon-systemctl-log: $(cat "$TMPDIR_TEST/daemon-systemctl-log" 2>/dev/null || echo '(absent)')"
-fi
-tr_teardown
-
 # --- Test 2: busy worker is no longer a continuation → arms heartbeat reseed ---
 # A busy worker used to short-circuit recovery (old "continuation" semantics).
 # Under the new behavior it is NOT a continuation: the count advances and a
@@ -20444,14 +20387,6 @@ else
   echo "    log: $log"
 fi
 assert_eq "busy-worker: state count advances to 3" "3" "$(tr_state_count)"
-TOTAL=$((TOTAL + 1))
-if grep -q 'enable --now dispatch-claude-daemon.service' \
-     "$TMPDIR_TEST/daemon-systemctl-log" 2>/dev/null; then
-  PASS=$((PASS + 1)); echo "  PASS: busy-worker: ensure_daemon_service ran (arming path)"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: busy-worker: ensure_daemon_service ran (arming path)"
-  echo "    daemon-systemctl-log: $(cat "$TMPDIR_TEST/daemon-systemctl-log" 2>/dev/null || echo '(absent)')"
-fi
 tr_teardown
 
 # --- Test 3: continuation present (pending dispatch-reseed* timer) → no reseed -
@@ -20466,9 +20401,6 @@ if "$SCRIPT_DIR/dispatch-tick-recover" 2>/dev/null; then rc=0; else rc=$?; fi
 assert_eq "pending-timer: dispatch-tick-recover exits 0" "0" "$rc"
 log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 assert_eq "pending-timer: no reseed armed (systemd-run log empty)" "" "$log"
-# Continuation no-op path: ensure_daemon_service must NOT have run (no arming).
-assert_eq "pending-timer: daemon service not touched (continuation no-op)" \
-  "" "$(cat "$TMPDIR_TEST/daemon-systemctl-log" 2>/dev/null || true)"
 # The timer continuation branch resets a climbed count to 0 (#2445): a pending
 # reseed genuinely carries the chain, so this failure is covered — leaving the
 # count stale would let the next failure with no pending timer re-escalate off
@@ -20513,10 +20445,6 @@ assert_eq "cap-latched: no issue create (latch already open)" \
   "0" "$([[ "$ghlog" != *"issue create"* ]] && echo 0 || echo 1)"
 log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 assert_eq "cap-latched: no reseed armed (systemd-run log empty)" "" "$log"
-# Cap-escalation path exits before the arming step: ensure_daemon_service must
-# NOT have run (mirrors the continuation no-op negative assertions above).
-assert_eq "cap: daemon service not touched (cap-escalation path)" \
-  "" "$(cat "$TMPDIR_TEST/daemon-systemctl-log" 2>/dev/null || true)"
 tr_teardown
 
 # --- Test 5: backoff grows with the consecutive-failure count ----------------
@@ -35342,332 +35270,10 @@ fi
 rm -rf "$eru5_tmp"
 
 # ============================================================================
-# ensure_daemon_service: durable daemon service install + attach paths (#1197)
-# ============================================================================
-echo ""
-echo "=== ensure_daemon_service durable supervisor service ==="
-# A recording systemctl stub: appends its argv to $STUB_LOG and returns exit
-# codes driven by env flags, so `is-active` can be made to report active /
-# inactive and `enable` can be made to fail (simulating no systemd --user).
-eds_tmp=$(mktemp -d)
-mkdir -p "$eds_tmp/bin"
-cat > "$eds_tmp/bin/systemctl" <<'STUB'
-#!/usr/bin/env bash
-printf '%s\n' "$*" >> "$STUB_LOG"
-for a in "$@"; do
-  case "$a" in
-    is-active) exit "${STUB_IS_ACTIVE_RC:-0}" ;;
-    enable) exit "${STUB_ENABLE_RC:-0}" ;;
-    daemon-reload) exit "${STUB_RELOAD_RC:-0}" ;;
-  esac
-done
-exit 0
-STUB
-chmod +x "$eds_tmp/bin/systemctl"
-# A dummy claude binary path — the unit bakes it into ExecStart; it is never run.
-eds_claude="$eds_tmp/bin/claude"
-cat > "$eds_claude" <<'STUB'
-#!/usr/bin/env bash
-exit 0
-STUB
-chmod +x "$eds_claude"
-eds_unit_dir="$eds_tmp/systemd-user"
-eds_unit="$eds_unit_dir/dispatch-claude-daemon.service"
-eds_log="$eds_tmp/systemctl.log"
-
-# --- 1. Idempotent install (cold path) --------------------------------------
-: > "$eds_log"
-if (
-  export DISPATCH_DAEMON_UNIT_DIR="$eds_unit_dir"
-  export DISPATCH_DAEMON_SYSTEMCTL_CMD="$eds_tmp/bin/systemctl"
-  export DISPATCH_DAEMON_CLAUDE_CMD="$eds_claude"
-  export STUB_LOG="$eds_log"
-  export STUB_IS_ACTIVE_RC=0 STUB_ENABLE_RC=0 STUB_RELOAD_RC=0
-  source "$SCRIPT_DIR/lib.sh"
-  ensure_daemon_service
-); then
-  if [ -f "$eds_unit" ]; then
-    TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: cold path wrote the unit file"
-    grep -q '^Type=simple$' "$eds_unit" \
-      && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: unit has Type=simple"; } \
-      || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: unit missing Type=simple"; }
-    grep -q '^Restart=always$' "$eds_unit" \
-      && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: unit has Restart=always"; } \
-      || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: unit missing Restart=always"; }
-    grep -q '^WantedBy=default.target$' "$eds_unit" \
-      && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: unit has WantedBy=default.target"; } \
-      || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: unit missing WantedBy=default.target"; }
-    eds_exec=$(grep '^ExecStart=' "$eds_unit")
-    assert_eq "ExecStart= is the claude path + daemon run" \
-      "ExecStart=\"$eds_claude\" daemon run" "$eds_exec"
-    TOTAL=$((TOTAL + 1))
-    if [[ "$eds_exec" != *"--origin service"* ]]; then
-      PASS=$((PASS + 1)); echo "  PASS: ExecStart is not --origin service"
-    else
-      FAIL=$((FAIL + 1)); echo "  FAIL: ExecStart uses --origin service: $eds_exec"
-    fi
-  else
-    TOTAL=$((TOTAL + 6)); FAIL=$((FAIL + 6))
-    echo "  FAIL: cold path did not write the unit file"
-  fi
-  grep -q 'daemon-reload' "$eds_log" \
-    && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: cold path ran daemon-reload"; } \
-    || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: cold path did not run daemon-reload"; }
-  grep -q 'enable --now dispatch-claude-daemon.service' "$eds_log" \
-    && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: cold path ran enable --now"; } \
-    || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: cold path did not run enable --now"; }
-else
-  TOTAL=$((TOTAL + 8)); FAIL=$((FAIL + 8))
-  echo "  FAIL: ensure_daemon_service (cold path) returned non-zero"
-fi
-
-# --- 2. Attach-to-existing-daemon path (steady-state no-op) ------------------
-# Unit already written (from test 1) and is-active reports active → no-op: no
-# rewrite (no daemon-reload) and no enable.
-: > "$eds_log"
-if (
-  export DISPATCH_DAEMON_UNIT_DIR="$eds_unit_dir"
-  export DISPATCH_DAEMON_SYSTEMCTL_CMD="$eds_tmp/bin/systemctl"
-  export DISPATCH_DAEMON_CLAUDE_CMD="$eds_claude"
-  export STUB_LOG="$eds_log"
-  export STUB_IS_ACTIVE_RC=0 STUB_ENABLE_RC=0 STUB_RELOAD_RC=0
-  source "$SCRIPT_DIR/lib.sh"
-  ensure_daemon_service
-); then
-  TOTAL=$((TOTAL + 1))
-  if ! grep -q 'enable' "$eds_log"; then
-    PASS=$((PASS + 1)); echo "  PASS: attach path did not re-run enable"
-  else
-    FAIL=$((FAIL + 1)); echo "  FAIL: attach path re-ran enable"
-  fi
-  TOTAL=$((TOTAL + 1))
-  if ! grep -q 'daemon-reload' "$eds_log"; then
-    PASS=$((PASS + 1)); echo "  PASS: attach path did not rewrite the unit (no daemon-reload)"
-  else
-    FAIL=$((FAIL + 1)); echo "  FAIL: attach path rewrote the unit (daemon-reload ran)"
-  fi
-else
-  TOTAL=$((TOTAL + 2)); FAIL=$((FAIL + 2))
-  echo "  FAIL: ensure_daemon_service (attach path) returned non-zero"
-fi
-
-# --- 3. Inactive self-heal --------------------------------------------------
-# Content matches but is-active reports inactive → the write branch is skipped
-# (the unit is NOT rewritten — same inode), yet daemon-reload AND enable --now
-# both run on the slow path to revive it. Running daemon-reload even on the
-# unchanged-content slow path is the stuck-state fix (see test 3b): a reload
-# that failed on a prior call left the unit on disk but unloaded, and the
-# content compare would otherwise skip it forever. So "not rewritten" is
-# asserted by inode stability, not by the absence of daemon-reload.
-: > "$eds_log"
-eds_inode_before=$(stat -c '%i' "$eds_unit")
-if (
-  export DISPATCH_DAEMON_UNIT_DIR="$eds_unit_dir"
-  export DISPATCH_DAEMON_SYSTEMCTL_CMD="$eds_tmp/bin/systemctl"
-  export DISPATCH_DAEMON_CLAUDE_CMD="$eds_claude"
-  export STUB_LOG="$eds_log"
-  export STUB_IS_ACTIVE_RC=3 STUB_ENABLE_RC=0 STUB_RELOAD_RC=0
-  source "$SCRIPT_DIR/lib.sh"
-  ensure_daemon_service
-); then
-  TOTAL=$((TOTAL + 1))
-  if grep -q 'enable --now dispatch-claude-daemon.service' "$eds_log"; then
-    PASS=$((PASS + 1)); echo "  PASS: inactive self-heal ran enable --now"
-  else
-    FAIL=$((FAIL + 1)); echo "  FAIL: inactive self-heal did not run enable --now"
-  fi
-  TOTAL=$((TOTAL + 1))
-  if grep -q 'daemon-reload' "$eds_log"; then
-    PASS=$((PASS + 1)); echo "  PASS: inactive self-heal ran daemon-reload (stuck-state retry)"
-  else
-    FAIL=$((FAIL + 1)); echo "  FAIL: inactive self-heal skipped daemon-reload"
-  fi
-  TOTAL=$((TOTAL + 1))
-  if [ "$(stat -c '%i' "$eds_unit")" = "$eds_inode_before" ]; then
-    PASS=$((PASS + 1)); echo "  PASS: inactive self-heal did not rewrite the unchanged unit (inode stable)"
-  else
-    FAIL=$((FAIL + 1)); echo "  FAIL: inactive self-heal rewrote the unchanged unit (inode changed)"
-  fi
-else
-  TOTAL=$((TOTAL + 3)); FAIL=$((FAIL + 3))
-  echo "  FAIL: ensure_daemon_service (inactive self-heal) returned non-zero"
-fi
-
-# --- 3b. daemon-reload failure must not wedge the unit -----------------------
-# Regression guard for the stuck-state bug: the first call writes the unit to
-# disk (mv succeeds) but daemon-reload fails (STUB_RELOAD_RC=1), so the call
-# returns non-zero. The unit is now on disk byte-for-byte, but systemd never
-# loaded it. A second call (with daemon-reload healthy) MUST retry daemon-reload
-# and reach enable --now — otherwise the content-compare short-circuit skips the
-# write branch forever, leaving an unloaded unit that can never activate.
-eds_reload_dir="$eds_tmp/reload-fail"
-eds_reload_unit="$eds_reload_dir/dispatch-claude-daemon.service"
-# First call: daemon-reload fails → non-zero return, but unit lands on disk.
-: > "$eds_log"
-eds_reload_rc1=0
-if (
-  export DISPATCH_DAEMON_UNIT_DIR="$eds_reload_dir"
-  export DISPATCH_DAEMON_SYSTEMCTL_CMD="$eds_tmp/bin/systemctl"
-  export DISPATCH_DAEMON_CLAUDE_CMD="$eds_claude"
-  export STUB_LOG="$eds_log"
-  export STUB_IS_ACTIVE_RC=0 STUB_ENABLE_RC=0 STUB_RELOAD_RC=1
-  source "$SCRIPT_DIR/lib.sh"
-  ensure_daemon_service
-) 2>/dev/null; then
-  eds_reload_rc1=0
-else
-  eds_reload_rc1=$?
-fi
-assert_eq "reload-fail: first call (daemon-reload fails) → non-zero return" "1" "$eds_reload_rc1"
-TOTAL=$((TOTAL + 1))
-if [ -f "$eds_reload_unit" ]; then
-  PASS=$((PASS + 1)); echo "  PASS: reload-fail first call left the unit on disk"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: reload-fail first call did not write the unit"
-fi
-TOTAL=$((TOTAL + 1))
-if ! grep -q 'enable' "$eds_log"; then
-  PASS=$((PASS + 1)); echo "  PASS: reload-fail first call did not reach enable"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: reload-fail first call reached enable despite reload failure"
-fi
-# Second call: daemon-reload healthy. is-active reports inactive (RC=3) so the
-# steady-state short-circuit cannot mask a missing retry. The call MUST retry
-# daemon-reload and reach enable --now, and must succeed.
-: > "$eds_log"
-if (
-  export DISPATCH_DAEMON_UNIT_DIR="$eds_reload_dir"
-  export DISPATCH_DAEMON_SYSTEMCTL_CMD="$eds_tmp/bin/systemctl"
-  export DISPATCH_DAEMON_CLAUDE_CMD="$eds_claude"
-  export STUB_LOG="$eds_log"
-  export STUB_IS_ACTIVE_RC=3 STUB_ENABLE_RC=0 STUB_RELOAD_RC=0
-  source "$SCRIPT_DIR/lib.sh"
-  ensure_daemon_service
-); then
-  TOTAL=$((TOTAL + 1))
-  if grep -q 'daemon-reload' "$eds_log"; then
-    PASS=$((PASS + 1)); echo "  PASS: reload-fail recovery retried daemon-reload"
-  else
-    FAIL=$((FAIL + 1)); echo "  FAIL: reload-fail recovery did not retry daemon-reload (unit wedged)"
-  fi
-  TOTAL=$((TOTAL + 1))
-  if grep -q 'enable --now dispatch-claude-daemon.service' "$eds_log"; then
-    PASS=$((PASS + 1)); echo "  PASS: reload-fail recovery reached enable --now"
-  else
-    FAIL=$((FAIL + 1)); echo "  FAIL: reload-fail recovery did not reach enable --now"
-  fi
-else
-  TOTAL=$((TOTAL + 2)); FAIL=$((FAIL + 2))
-  echo "  FAIL: ensure_daemon_service (reload-fail recovery) returned non-zero"
-fi
-
-# --- 4. Degrade safely ------------------------------------------------------
-# 4a. enable fails (simulating no systemd --user) → returns non-zero, does not
-# abort the test shell.
-: > "$eds_log"
-eds_degrade_dir="$eds_tmp/degrade"
-# Guarded with `if` so the script's `set -e` does not abort on the intended
-# non-zero return from the degrade path.
-eds_rc=0
-if (
-  export DISPATCH_DAEMON_UNIT_DIR="$eds_degrade_dir"
-  export DISPATCH_DAEMON_SYSTEMCTL_CMD="$eds_tmp/bin/systemctl"
-  export DISPATCH_DAEMON_CLAUDE_CMD="$eds_claude"
-  export STUB_LOG="$eds_log"
-  export STUB_IS_ACTIVE_RC=0 STUB_ENABLE_RC=1 STUB_RELOAD_RC=0
-  source "$SCRIPT_DIR/lib.sh"
-  ensure_daemon_service
-) 2>/dev/null; then
-  eds_rc=0
-else
-  eds_rc=$?
-fi
-assert_eq "degrade: enable failure → non-zero return" "1" "$eds_rc"
-echo "  (test shell survived the degrade path)"
-
-# 4b. claude binary not found → non-zero return. Empty CLAUDE_CMD falls back to
-# `command -v claude`, so PATH must also lack claude for "not found" to hold.
-eds_rc2=0
-(
-  source "$SCRIPT_DIR/lib.sh"
-  export DISPATCH_DAEMON_UNIT_DIR="$eds_tmp/no-claude"
-  export DISPATCH_DAEMON_SYSTEMCTL_CMD="$eds_tmp/bin/systemctl"
-  export DISPATCH_DAEMON_CLAUDE_CMD=""
-  export STUB_LOG="$eds_log"
-  export PATH="/nonexistent"
-  ensure_daemon_service
-) 2>/dev/null || eds_rc2=$?
-TOTAL=$((TOTAL + 1))
-if [[ "$eds_rc2" -ne 0 ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: empty claude path → non-zero return"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: empty claude path returned zero"
-fi
-
-# --- 5. PATH backslash is stripped from daemon Environment= (#1212) ----------
-echo ""
-echo "=== ensure_daemon_service strips backslash from Environment= PATH ==="
-eds_path_strip_dir="$eds_tmp/path-strip-systemd-user"
-eds_path_strip_rc=0
-if (
-  export DISPATCH_DAEMON_UNIT_DIR="$eds_path_strip_dir"
-  export DISPATCH_DAEMON_SYSTEMCTL_CMD="$eds_tmp/bin/systemctl"
-  export DISPATCH_DAEMON_CLAUDE_CMD="$eds_claude"
-  export STUB_LOG="$eds_log"
-  export STUB_IS_ACTIVE_RC=0 STUB_ENABLE_RC=0 STUB_RELOAD_RC=0
-  export PATH="/usr/bin:/mnt/c/win\\dows:$PATH"
-  source "$SCRIPT_DIR/lib.sh"
-  ensure_daemon_service
-); then
-  eds_path_strip_unit="$eds_path_strip_dir/dispatch-claude-daemon.service"
-  if eds_path_env_line=$(grep '^Environment=' "$eds_path_strip_unit" 2>/dev/null); then
-    TOTAL=$((TOTAL + 1))
-    if [[ "$eds_path_env_line" != *'\'* ]]; then
-      PASS=$((PASS + 1)); echo "  PASS: daemon Environment= PATH has no backslash (stripped)"
-    else
-      FAIL=$((FAIL + 1)); echo "  FAIL: daemon Environment= PATH still contains a backslash: $eds_path_env_line"
-    fi
-  else
-    TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1))
-    echo "  FAIL: daemon unit missing or lacks Environment= line: $eds_path_strip_unit"
-  fi
-else
-  TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1))
-  echo "  FAIL: ensure_daemon_service returned non-zero (path-strip test)"
-fi
-
-# --- 6. ensure_daemon_service rejects a claude path with a backslash (#1212) -
-echo ""
-echo "=== ensure_daemon_service rejects a claude path with a backslash ==="
-eds_reject_rc=0
-(
-  export DISPATCH_DAEMON_UNIT_DIR="$eds_tmp/reject-systemd-user"
-  export DISPATCH_DAEMON_SYSTEMCTL_CMD="$eds_tmp/bin/systemctl"
-  export DISPATCH_DAEMON_CLAUDE_CMD="$eds_tmp/bin/cla\\ude"
-  export STUB_LOG="$eds_log"
-  source "$SCRIPT_DIR/lib.sh"
-  ensure_daemon_service
-) 2>/dev/null || eds_reject_rc=$?
-TOTAL=$((TOTAL + 1))
-if [[ "$eds_reject_rc" -ne 0 ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: ensure_daemon_service returned non-zero for a claude path with a backslash"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: ensure_daemon_service returned zero for a claude path with a backslash"
-fi
-TOTAL=$((TOTAL + 1))
-if [[ ! -e "$eds_tmp/reject-systemd-user/dispatch-claude-daemon.service" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: no daemon unit written for a claude path with a backslash"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: daemon unit was written despite claude path containing a backslash"
-fi
-
-rm -rf "$eds_tmp"
-
-# ============================================================================
 # ensure_heartbeat_units: correct unit content + idempotency (#2022)
 # ============================================================================
 #
-# Mirrors the ensure_daemon_service recording-stub block above. A recording
+# Uses the shared unit-install recording-stub idiom: a recording
 # systemctl stub appends its argv to $ehu_log and returns exit codes driven by
 # STUB_IS_ACTIVE_RC / STUB_ENABLE_RC / STUB_RELOAD_RC env flags.  Cold path
 # (unit files absent): writes both unit files, runs daemon-reload and enable
@@ -35846,8 +35452,8 @@ else
 fi
 
 # --- 2d. Elapsed strand + enable fails → repair path returns non-zero, WARNs --
-# Parity with the cold-path degrade case (block 4a in the ensure_daemon_service
-# suite): on the elapsed/repair path, when `systemctl --user enable` fails the
+# Parity with the recover unit's cold-path degrade case: on the elapsed/repair
+# path, when `systemctl --user enable` fails the
 # function must return non-zero AND emit its WARNING to stderr (lib.sh:2864-2867,
 # RV-003 from PR #2382). Reuses the units the cold path installed in
 # $ehu_unit_dir; redirects stderr to a file so the WARNING can be asserted.

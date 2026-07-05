@@ -59,6 +59,51 @@ in
     pkgs.claude-code
   ];
 
+  # Home-manager owns the durable dispatch background supervisor daemon (#1197,
+  # #2736). ExecStart pins the CONCRETE ${pkgs.claude-code} store path (not the
+  # profile symlink), so the unit's rendered bytes change on every claude-code
+  # version bump — home-manager's sd-switch (startServices defaults to true) then
+  # restarts the daemon onto the new binary at activation. A long-running process
+  # never re-resolves the profile symlink, so without this the daemon (and every
+  # bg session it forks) would keep executing the old binary until someone ran
+  # `systemctl --user restart dispatch-claude-daemon.service` by hand.
+  #
+  # Fleet-reap consequence (accepted): the unit sets no KillMode, so it defaults
+  # to control-group, and the whole background fleet lives in the daemon's cgroup
+  # (#1197). An sd-switch restart SIGKILLs that cgroup, killing every in-flight
+  # dispatch worker at activation time. This is acceptable for a deliberate
+  # upgrade; gating the restart on an idle fleet is a possible future enhancement,
+  # out of scope here.
+  systemd.user.services.dispatch-claude-daemon = lib.mkIf pkgs.stdenv.isLinux {
+    Unit = {
+      Description = "Dispatch durable Claude background supervisor daemon";
+      After = [ "network-online.target" ];
+      StartLimitIntervalSec = 60;
+      StartLimitBurst = 10;
+    };
+    Service = {
+      Type = "simple";
+      # Concrete store path — the whole point: the unit's bytes change on every
+      # claude-code version bump, so home-manager's sd-switch restarts the daemon
+      # onto the new binary at activation. The profile SYMLINK would not (a running
+      # process never re-resolves it).
+      ExecStart = "${pkgs.claude-code}/bin/claude daemon run";
+      # The systemd USER manager's own PATH is minimal (systemd's bin only) — it
+      # does NOT contain git/jq/gh/claude. The daemon forks bg workers that run
+      # those, and they inherit the SERVICE env, so PATH must be set here. Build it
+      # ONLY from STABLE directory references (profile dirs + system paths), never
+      # per-generation store paths — otherwise unrelated activations would change
+      # the unit bytes and trigger a gratuitous fleet-reaping restart (AC4). The
+      # per-generation-varying token stays confined to ExecStart above.
+      Environment = [
+        "PATH=${config.home.profileDirectory}/bin:/etc/profiles/per-user/${config.home.username}/bin:/run/current-system/sw/bin:/run/wrappers/bin"
+      ];
+      Restart = "always";
+      RestartSec = 1;
+    };
+    Install.WantedBy = [ "default.target" ];
+  };
+
   # Symlink seccomp filter files into a global npm install path where Claude's
   # auto-detection will find them. Claude scans paths like ~/.npm-global/lib/
   # node_modules/@anthropic-ai/sandbox-runtime/vendor/seccomp/<arch>/.

@@ -80,11 +80,14 @@
         checks = forAllSystems ({ pkgs, ... }:
           let
             weztermTests = pkgs.callPackage ./nix/home/wezterm.test.nix { };
+            claudeCodeTests = pkgs.callPackage ./nix/home/claude-code.test.nix { };
           in
           {
             wezterm-test-suite = weztermTests.wezterm-test-suite;
+            claude-code-test-suite = claudeCodeTests.claude-code-test-suite;
           }
           // weztermTests.wezterm-tests
+          // claudeCodeTests.claude-code-tests
         );
       };
 
