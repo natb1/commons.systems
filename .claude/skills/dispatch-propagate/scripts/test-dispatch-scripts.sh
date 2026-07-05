@@ -40467,6 +40467,106 @@ STAMP="$SCRIPT_DIR/dispatch-stamp-session"
   rm -rf "$d"
 )
 
+# 15. Graph-native node-id branch (tactic-*): the sidecar is written with
+#     node_id == the branch name and issue == null (no numeric prefix to
+#     derive). Guards the graph-native arm of the worker-branch gate.
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b tactic-node-attribution-fixture
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  ( cd "$d" && "$STAMP" --session-id sessN --transcript-path "$d/sessN.jsonl" )
+  sc="$d/sessN.dispatch-stamp.json"
+  assert_eq "stamp: node-id branch writes sidecar" "yes" \
+    "$([ -f "$sc" ] && echo yes || echo no)"
+  assert_eq "stamp: node-id branch .node_id == branch" "tactic-node-attribution-fixture" \
+    "$(jq -r .node_id "$sc")"
+  assert_eq "stamp: node-id branch .issue is null" "null" "$(jq -r .issue "$sc")"
+  assert_eq "stamp: node-id branch .branch" "tactic-node-attribution-fixture" \
+    "$(jq -r .branch "$sc")"
+  assert_eq "stamp: node-id branch .base_sha equals HEAD" \
+    "$(git -C "$d" rev-parse HEAD)" "$(jq -r .base_sha "$sc")"
+  rm -rf "$d"
+)
+
+# 16. Graph branch (graph-<slug>) whose slug resolves via a prefixed candidate:
+#     intentions/tactic-<slug>.md exists, so node_id == "tactic-<slug>";
+#     issue == null.
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b graph-myslug
+  mkdir -p "$d/intentions"
+  : > "$d/intentions/tactic-myslug.md"
+  git -C "$d" -c user.email=t@t -c user.name=t add intentions
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init
+  ( cd "$d" && "$STAMP" --session-id sessG --transcript-path "$d/sessG.jsonl" )
+  sc="$d/sessG.dispatch-stamp.json"
+  assert_eq "stamp: graph branch writes sidecar" "yes" \
+    "$([ -f "$sc" ] && echo yes || echo no)"
+  assert_eq "stamp: graph branch .node_id resolved via intentions/tactic-<slug>.md" \
+    "tactic-myslug" "$(jq -r .node_id "$sc")"
+  assert_eq "stamp: graph branch .issue is null" "null" "$(jq -r .issue "$sc")"
+  rm -rf "$d"
+)
+
+# 16b. Graph branch whose slug IS the node id (graph-tactic-foo with
+#      intentions/tactic-foo.md): the slug-direct candidate wins.
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b graph-tactic-foo
+  mkdir -p "$d/intentions"
+  : > "$d/intentions/tactic-foo.md"
+  git -C "$d" -c user.email=t@t -c user.name=t add intentions
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init
+  ( cd "$d" && "$STAMP" --session-id sessG2 --transcript-path "$d/sessG2.jsonl" )
+  sc="$d/sessG2.dispatch-stamp.json"
+  assert_eq "stamp: graph branch slug-direct .node_id" "tactic-foo" \
+    "$(jq -r .node_id "$sc")"
+  rm -rf "$d"
+)
+
+# 17. Graph branch with NO matching intentions/<id>.md: the sidecar is still
+#     written (session stays attributable by branch) with node_id null and
+#     issue null.
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b graph-unresolved
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  ( cd "$d" && "$STAMP" --session-id sessU --transcript-path "$d/sessU.jsonl" )
+  sc="$d/sessU.dispatch-stamp.json"
+  assert_eq "stamp: unresolved graph branch writes sidecar" "yes" \
+    "$([ -f "$sc" ] && echo yes || echo no)"
+  assert_eq "stamp: unresolved graph branch .node_id is null" "null" \
+    "$(jq -r .node_id "$sc")"
+  assert_eq "stamp: unresolved graph branch .issue is null" "null" \
+    "$(jq -r .issue "$sc")"
+  rm -rf "$d"
+)
+
+# 18. Numeric worker branch keeps today's behavior AND carries the new
+#     node_id key as null (shape extension, no behavior change).
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b 999-fixture
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  ( cd "$d" && "$STAMP" --session-id sessNum --transcript-path "$d/sessNum.jsonl" )
+  sc="$d/sessNum.dispatch-stamp.json"
+  assert_eq "stamp: numeric branch .issue still numeric" "999" "$(jq -r .issue "$sc")"
+  assert_eq "stamp: numeric branch has node_id key" "true" \
+    "$(jq 'has("node_id")' "$sc")"
+  assert_eq "stamp: numeric branch .node_id is null" "null" "$(jq -r .node_id "$sc")"
+  rm -rf "$d"
+)
+
 # ============================================================================
 # dispatch-open-pr — PR backfill into the per-session sidecar (#1861)
 # ============================================================================
