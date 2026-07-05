@@ -25,7 +25,7 @@ vi.mock("firebase/firestore", () => ({
 }));
 
 import { createMediaQueries } from "../src/media-queries";
-import { encodeCursor } from "../src/paged-merge";
+import { encodeCursor, encodeMergedCursor, decodeMergedCursor } from "../src/paged-merge";
 import type { Firestore } from "firebase/firestore";
 import type { Namespace } from "../src/namespace";
 
@@ -214,5 +214,87 @@ describe("getAllAccessibleMedia", () => {
     // startAfter fired once per stream with the same decoded key.
     expect(mockStartAfter).toHaveBeenCalledTimes(2);
     expect(mockStartAfter).toHaveBeenCalledWith("2026-02-01T00:00:00Z", "mock-doc-ref");
+  });
+
+  // Global DESC order: P1,P2,P3,Ua,Ub,P4,P5,P6. The public stream holds the P*
+  // docs; the user stream holds exactly Ua,Ub, sorting BELOW page 1's cut (P3).
+  function mediaDoc(id: string, addedAt: string) {
+    return { id, data: () => ({ title: id, addedAt, publicDomain: true }) };
+  }
+  const P1 = mediaDoc("P1", "2026-01-09T00:00:00Z");
+  const P2 = mediaDoc("P2", "2026-01-08T00:00:00Z");
+  const P3 = mediaDoc("P3", "2026-01-07T00:00:00Z");
+  const Ua = mediaDoc("Ua", "2026-01-06T00:00:00Z");
+  const Ub = mediaDoc("Ub", "2026-01-05T00:00:00Z");
+  const P4 = mediaDoc("P4", "2026-01-04T00:00:00Z");
+  const P5 = mediaDoc("P5", "2026-01-03T00:00:00Z");
+  const P6 = mediaDoc("P6", "2026-01-02T00:00:00Z");
+
+  it("defers an exhausted stream's skip until its tail is within the page cut", async () => {
+    // --- Page 1 (no cursor): public [P1,P2,P3] hasMore; user [Ua,Ub] !hasMore.
+    resetMocks();
+    mockGetDocs
+      .mockResolvedValueOnce({ docs: [P1, P2, P3] })
+      .mockResolvedValueOnce({ docs: [Ua, Ub] });
+
+    const page1 = await getAllAccessibleMedia("owner@example.com", { pageSize: 3 });
+
+    // Top 3 are the public items; Ua,Ub sort below the cut (P3) and are not yet shown.
+    expect(page1.items.map((i) => i.id)).toEqual(["P1", "P2", "P3"]);
+    expect(page1.nextCursor).not.toBeNull();
+    // User NOT yet skipped — its tail (Ub) is below the cut, so nothing dropped.
+    // A naive `!hasMore` impl would wrongly emit [false, true] here.
+    expect(decodeMergedCursor(page1.nextCursor as string).exhausted).toEqual([false, false]);
+
+    // --- Page 2 (page 1 cursor): both queried; Ua,Ub now surface.
+    resetMocks();
+    mockGetDocs
+      .mockResolvedValueOnce({ docs: [P4, P5, P6] })
+      .mockResolvedValueOnce({ docs: [Ua, Ub] });
+
+    const page2 = await getAllAccessibleMedia("owner@example.com", {
+      pageSize: 3,
+      cursor: page1.nextCursor,
+    });
+
+    // Both streams queried — user not skipped (startAfter fired twice).
+    expect(mockStartAfter).toHaveBeenCalledTimes(2);
+    // Ua,Ub appear here; nothing was dropped.
+    expect(page2.items.map((i) => i.id)).toEqual(["Ua", "Ub", "P4"]);
+    expect(page2.nextCursor).not.toBeNull();
+    // Now the user tail is within the cut (P4) → user flagged exhausted.
+    expect(decodeMergedCursor(page2.nextCursor as string).exhausted[1]).toBe(true);
+
+    // --- Page 3 (page 2 cursor): user skipped — only the public stream queried.
+    resetMocks();
+    mockGetDocs.mockResolvedValueOnce({ docs: [P5, P6] });
+
+    await getAllAccessibleMedia("owner@example.com", {
+      pageSize: 3,
+      cursor: page2.nextCursor,
+    });
+
+    expect(mockGetDocs.mock.calls.length).toBe(1);
+  });
+
+  it("self-propagates an already-exhausted flag and skips that stream", async () => {
+    resetMocks();
+    // Public already exhausted; only the user stream should be queried.
+    mockGetDocs.mockResolvedValueOnce({ docs: [P4, P5, P6] });
+
+    const cursor = encodeMergedCursor(
+      { addedAt: "2026-01-07T00:00:00Z", id: "P3" },
+      [true, false],
+    );
+    const result = await getAllAccessibleMedia("owner@example.com", {
+      pageSize: 3,
+      cursor,
+    });
+
+    // Public not queried — getDocs called once (user only).
+    expect(mockGetDocs.mock.calls.length).toBe(1);
+    expect(result.nextCursor).not.toBeNull();
+    // Public stays flagged exhausted on the returned cursor.
+    expect(decodeMergedCursor(result.nextCursor as string).exhausted[0]).toBe(true);
   });
 });
