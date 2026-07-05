@@ -66,3 +66,57 @@ Ordered by how much graph doctrine each text underwrites:
 9. **Mill, Utilitarianism ch. 2 and 4** → `tradition-utilitarianism`
    (declined — verifies that what was refused is what the graph thinks it
    refused).
+
+## Questions to re-open per chunk
+
+The 2026-07-04/05 interview resolutions live as dated `clarifications` on the
+named nodes. Executing a chunk means re-opening the listed questions against
+the primary text — the resolution was made on Claude's account of the text;
+the chunk checks the account. Two standing rules apply to every chunk, both
+on `strategy-philosophical-grounding`: *"Is the borrowed articulation a
+partial capture?"* (the loop being exercised here) and *"What happens when
+personal reading contradicts a recorded articulation?"* (the reading wins).
+
+- **Chunk 1** → `virtue-philosophical-mobility`: *"Which tradition reads this
+  virtue?"* (the Cave/periagoge third of the dual attribution);
+  `strategy-external-calibration`: *"Does strategy-philosophical-grounding
+  overlap this strategy's calibration function?"* (the freed-prisoner ground
+  for external calibration); `tradition-plato` rationale: was
+  method-first/content-second the right placement?
+- **Chunk 2** → `kind-virtue`: does hexis/energeia actually say what
+  'disposition held and exercised, never completed' claims? Is the
+  tension_with machinery a fair rendering of the mean, given Aristotle's mean
+  is within one virtue, not between two? (This gap was papered over in the
+  session — a real thing to check.); `tradition-aristotle` chosen_over:
+  habituation over virtue-as-knowledge.
+- **Chunk 3** → `virtue-respect-for-persons`: *"Is this virtue a Kantian
+  constraint or an Aristotelian disposition?"* and *"A household member asks
+  not to be consulted on shared-delegation moves — honor or breach?"* — the
+  servility passage is the load-bearing citation for the irreversibility
+  split; verify it actually supports that use.
+- **Chunk 4** → `virtue-temperance`: *"Why is the scope broader than the
+  body?"* and *"Why a sibling root rather than a child of
+  philosophical-mobility?"* — check that sōphrosynē's scope in NE III really
+  covers what the broad reading claims (Aristotle limits it to bodily
+  pleasures of touch; the attention extension is OURS, and should be
+  documented as extension, not citation, if the reading confirms that).
+- **Chunk 5** → `virtue-philosophical-mobility`: *"Which tradition reads this
+  virtue?"* (the phronesis third; and does NE VI's 'vice destroys the archē'
+  support 'capture corrupts the sensor'?).
+- **Chunk 6** → both roots: *"Does the root forest conceal a tacit apex —
+  'agency as an end'?"* — the HELD-OPEN question and the round's standing
+  review trigger; NE I.3 is the recorded warrant for holding it open, so this
+  chunk decides whether that warrant is real. Capstone: after chunks 1–6,
+  revisit the apex question itself.
+- **Chunk 7** → `strategy-open-source-as-gift`: *"Which tradition names the
+  gift?"*; `strategy-tabletop-storytelling`: *"Is a game table off-mission
+  leisure for a strategy graph?"*; `strategy-join-existing-practice`: *"Which
+  tradition reads joining-over-cultivating?"* (Politics I.2).
+- **Chunk 8** → `virtue-progressive-detachment`: *"What is kept from
+  Stoicism, given the parent root's name declines it?"* — verify the
+  premeditatio/drills mapping and the dichotomy-of-control inversion.
+- **Chunk 9** → `tradition-utilitarianism` diverged list, and the
+  side-constraint reading on `virtue-respect-for-persons` (*"no sum of
+  benefits purchases a breach"*) — Mill ch. 5 on justice is the strongest
+  counter-reading; declined records deserve the strongest version of what
+  they decline.
