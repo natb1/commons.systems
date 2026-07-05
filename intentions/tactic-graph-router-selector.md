@@ -24,7 +24,6 @@ execution: null
 validates: []
 blocked_by:
   - tactic-graph-dispatch-schema
-  - tactic-align-tactics-skill
 office_hours: null
 pace_exempt: false
 rounds: null

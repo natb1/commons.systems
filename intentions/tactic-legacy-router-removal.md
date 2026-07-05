@@ -23,7 +23,6 @@ execution: null
 validates:
   - strategy-graph-native-dispatch
 blocked_by:
-  - tactic-align-tactics-skill
   - tactic-graph-router-transitions
   - tactic-dispatch-lifecycle-sensor
   - tactic-phase-skill-node-targets
