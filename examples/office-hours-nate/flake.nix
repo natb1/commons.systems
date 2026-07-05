@@ -87,6 +87,12 @@
             # Mac homeConfiguration usually has no inbound sshd, so the empty
             # default is a no-op; set real keys only if you run sshd:
             # services.sshAuthorizedKeys.keys = [ "ssh-ed25519 AAAA... you@host" ];
+
+            # Dispatch capacity sampling is off by default; most forkers won't
+            # want it. Enable it only if you run the dispatch chain and report
+            # to an office-hours group:
+            # services.dispatchUsageSamples.enable = true;
+            # services.dispatchUsageSamples.groupId = "your-group";
           }
         ];
       };
