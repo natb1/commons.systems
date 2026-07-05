@@ -35,7 +35,7 @@ Three files under `ops/`:
   exactly what that command expects.
 
 - **`ops/monitoring/budget-alert.json`** — a parameter file, **not** a native
-  gcloud policy file. `gcloud billing budgets create` has no
+  gcloud policy file. `gcloud beta billing budgets create` has no
   `--policy-from-file` mode; it takes discrete flags (`--budget-amount`,
   `--threshold-rule`, and so on). So this file is our own small schema —
   `budgetAmount`, `currencyCode`, `thresholdPercents`, `projectId` — and the
