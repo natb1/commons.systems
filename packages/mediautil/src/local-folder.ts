@@ -7,6 +7,11 @@
  * The implementation is testable with any structural fake that satisfies
  * `LocalDirectoryHandleLike` — no direct FSA globals are imported here.
  */
+import {
+  compareByAddedAtDescIdDesc,
+  decodeCursor,
+  encodeCursor,
+} from "@commons-systems/firestoreutil/paged-merge";
 import type { MediaSource } from "./source.js";
 
 export interface LocalFileHandleLike {
@@ -66,11 +71,14 @@ export function createLocalFolderMediaSource<T extends { id: string; addedAt: st
       items.set(item.id, item);
     }
 
-    results.sort((a, b) => {
-      if (a.addedAt > b.addedAt) return -1;
-      if (a.addedAt < b.addedAt) return 1;
-      return 0;
-    });
+    // Sort by the SHARED (addedAt desc, id desc) order so the paging slice
+    // boundaries in list() line up exactly with the cursor semantics.
+    results.sort((a, b) =>
+      compareByAddedAtDescIdDesc(
+        { addedAt: a.addedAt, id: a.id },
+        { addedAt: b.addedAt, id: b.id },
+      ),
+    );
 
     return results;
   }
@@ -85,8 +93,37 @@ export function createLocalFolderMediaSource<T extends { id: string; addedAt: st
   }
 
   return {
-    async list() {
-      return scan();
+    async list(opts) {
+      // FSA enumerates the whole directory; scan() is full + memoized and
+      // already sorted newest-first in the shared (addedAt desc, id desc)
+      // order. We slice that full scan by the same cursor so a local page
+      // composes into a higher cross-source merge.
+      const all = await scan();
+      const pageSize = opts?.pageSize;
+      const cursor = opts?.cursor ? decodeCursor(opts.cursor) : null;
+
+      // Start index: the first item strictly AFTER the cursor key in the
+      // shared DESC order. compareByAddedAtDescIdDesc(itemKey, cursor) > 0
+      // means itemKey sorts after cursor.
+      let start = 0;
+      if (cursor) {
+        start = all.findIndex(
+          (it) => compareByAddedAtDescIdDesc({ addedAt: it.addedAt, id: it.id }, cursor) > 0,
+        );
+        if (start === -1) start = all.length; // cursor past the end
+      }
+      const rest = all.slice(start);
+
+      // Absent pageSize => return ALL remaining, nextCursor null.
+      const items = pageSize == null ? rest : rest.slice(0, pageSize);
+      const more = pageSize != null && rest.length > pageSize && items.length > 0;
+      const nextCursor = more
+        ? encodeCursor({
+            addedAt: items[items.length - 1].addedAt,
+            id: items[items.length - 1].id,
+          })
+        : null;
+      return { items, nextCursor };
     },
 
     async metadata(id) {

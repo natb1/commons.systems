@@ -4,7 +4,7 @@ import { createHistoryRouter } from "@commons-systems/router";
 import { PageShell } from "@commons-systems/ds";
 import { classifyError } from "@commons-systems/errorutil/classify";
 import { logError } from "@commons-systems/errorutil/log";
-import { loadMediaHtml, afterRenderHome, wireDownloadActions } from "./pages/home.js";
+import { loadMediaHtml, afterRenderHome, wireDownloadActions, wireLoadMore } from "./pages/home.js";
 import { wireMarkdownActions } from "./markdown-actions.js";
 import { initLocalFolder } from "./local-folder-ui.js";
 import { renderView, getViewFrame, markViewNotFound } from "./pages/view.js";
@@ -71,6 +71,9 @@ initLocalFolder(localFolderSlot, app, () => router.navigate())
 
 wireDownloadActions(app);
 wireMarkdownActions(app);
+// Delegated on the persistent #app root ONCE (not per home render), so repeated
+// home visits never stack duplicate load-more listeners (#1280 pattern).
+wireLoadMore(app);
 
 // Generalized router→React page lifecycle. A page route renders an empty
 // `#page-root` placeholder (string), then mounts a React root into it in

@@ -8,6 +8,10 @@
 import { getDownloadURL, ref } from "firebase/storage";
 import type { FirebaseStorage } from "firebase/storage";
 import type { LruBlobCache } from "@commons-systems/idbutil/lru-blob-cache";
+import type {
+  MediaPage,
+  MediaPageOptions,
+} from "@commons-systems/firestoreutil/paged-merge";
 import type { MediaSource } from "./source.js";
 
 /**
@@ -15,8 +19,8 @@ import type { MediaSource } from "./source.js";
  * result (which also exposes `getUserMedia`) is structurally assignable.
  */
 export interface MediaQueries<T> {
-  getPublicMedia(): Promise<T[]>;
-  getAllAccessibleMedia(email: string): Promise<T[]>;
+  getPublicMedia(opts?: MediaPageOptions): Promise<MediaPage<T>>;
+  getAllAccessibleMedia(email: string, opts?: MediaPageOptions): Promise<MediaPage<T>>;
   getMediaItem(id: string): Promise<T | null>;
 }
 
@@ -54,11 +58,13 @@ export function createFirebaseMediaSource<
   }
 
   return {
-    list() {
+    list(opts) {
       const email = viewerEmail?.() ?? null;
+      // The 2-stream owner+public merge already happens inside
+      // getAllAccessibleMedia; forward opts and return its page directly.
       return email
-        ? queries.getAllAccessibleMedia(email)
-        : queries.getPublicMedia();
+        ? queries.getAllAccessibleMedia(email, opts)
+        : queries.getPublicMedia(opts);
     },
 
     metadata(id) {

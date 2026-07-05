@@ -14,6 +14,7 @@
     "lint": "eslint src/"
   },
   "dependencies": {
+    "@commons-systems/firestoreutil": "*",
     "@commons-systems/idbutil": "*",
     "firebase": "^12.9.0"
   },

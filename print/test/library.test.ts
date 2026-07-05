@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 import type { LocalDirEntryLike } from "@commons-systems/mediautil/local-folder";
+import type { MediaPage } from "@commons-systems/firestoreutil/paged-merge";
 
 // Importing library.ts transitively imports print/src/firebase.ts, which calls
 // initializeApp at module load. Mock the firebase-touching modules so the
@@ -14,10 +15,27 @@ vi.mock("../src/firestore.js", () => ({
   getMediaItem: () => Promise.resolve(null),
 }));
 
+// `listCloud()` dispatches through the Firebase MediaSource created at library.ts
+// MODULE LOAD (a top-level `const cloudSource = createFirebaseMediaSource(...)`).
+// That call fires during the hoisted `import` below, before any plain top-level
+// `const` in this file has initialized — so the mock's backing fns must be
+// declared via `vi.hoisted` to exist when the factory first runs.
+const { mockCloudList, mockCreateFirebaseMediaSource } = vi.hoisted(() => {
+  const mockCloudList = vi.fn();
+  return {
+    mockCloudList,
+    mockCreateFirebaseMediaSource: vi.fn(() => ({ list: mockCloudList })),
+  };
+});
+vi.mock("@commons-systems/mediautil/firebase", () => ({
+  createFirebaseMediaSource: (...args: unknown[]) => mockCreateFirebaseMediaSource(...args),
+}));
+
 import {
   fileToLocalItem,
   isLocalId,
   createLocalSource,
+  listCloud,
   listLocal,
   getLocalItem,
   resolveLocalBlob,
@@ -26,6 +44,13 @@ import {
   LOCAL_ID_PREFIX,
 } from "../src/library.js";
 import type { MediaItem } from "../src/types.js";
+
+function cloudPage(
+  items: MediaItem[],
+  nextCursor: string | null = null,
+): MediaPage<MediaItem> {
+  return { items, nextCursor };
+}
 
 type FakeEntry =
   | { kind: "file"; name: string; file: File }
@@ -119,6 +144,50 @@ describe("isLocalId", () => {
 
   it("returns false for a plain firestore-style id", () => {
     expect(isLocalId("abc123XYZ")).toBe(false);
+  });
+});
+
+describe("listCloud", () => {
+  beforeEach(() => {
+    mockCloudList.mockReset();
+  });
+
+  function makeCloudItem(overrides: Partial<MediaItem> = {}): MediaItem {
+    return {
+      id: "cloud-1",
+      title: "Cloud Book",
+      mediaType: "pdf",
+      tags: {},
+      publicDomain: true,
+      sourceNotes: "",
+      storagePath: "media/cloud-1.pdf",
+      markdownPath: null,
+      groupId: null,
+      memberEmails: [],
+      addedAt: "2026-01-01T00:00:00Z",
+      origin: "cloud",
+      ...overrides,
+    };
+  }
+
+  it("forwards opts to the cloud source and returns its page", async () => {
+    const items = [makeCloudItem()];
+    mockCloudList.mockResolvedValue(cloudPage(items, null));
+
+    const opts = { pageSize: 10, cursor: "opaque-cursor" };
+    const page = await listCloud(opts);
+
+    expect(mockCloudList).toHaveBeenCalledWith(opts);
+    expect(page.items).toEqual(items);
+    expect(page.nextCursor).toBeNull();
+  });
+
+  it("propagates a non-null nextCursor from the cloud source", async () => {
+    mockCloudList.mockResolvedValue(cloudPage([makeCloudItem()], "next-page-cursor"));
+
+    const page = await listCloud();
+
+    expect(page.nextCursor).toBe("next-page-cursor");
   });
 });
 

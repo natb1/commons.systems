@@ -14,7 +14,13 @@ const mockGetPlaylists = vi.fn();
 const mockSavePlaylist = vi.fn();
 
 vi.mock("../../src/library.js", () => ({
-  listLibrary: (...args: unknown[]) => mockListLibrary(...args),
+  // Normalize the legacy array-shaped mock returns into a MediaPage so tests that
+  // don't care about pagination can keep resolving plain arrays, while tests that
+  // exercise nextCursor return an explicit { items, nextCursor } page.
+  listLibrary: async (...args: unknown[]) => {
+    const result = await mockListLibrary(...args);
+    return Array.isArray(result) ? { items: result, nextCursor: null } : result;
+  },
 }));
 
 vi.mock("../../src/local-source.js", () => ({
@@ -152,7 +158,7 @@ describe("Home", () => {
       <Home user={null} player={null} refreshKey={0} />,
     );
 
-    expect(mockListLibrary).toHaveBeenCalledWith(null);
+    expect(mockListLibrary).toHaveBeenCalledWith(null, undefined);
     expect(container.querySelector("#public-notice")).not.toBeNull();
     expect(container.querySelector("#public-notice")!.textContent).toContain(
       "Sign in to see your full library",
@@ -168,7 +174,7 @@ describe("Home", () => {
       <Home user={user} player={null} refreshKey={0} />,
     );
 
-    expect(mockListLibrary).toHaveBeenCalledWith(user);
+    expect(mockListLibrary).toHaveBeenCalledWith(user, undefined);
     expect(container.querySelector("#public-notice")).toBeNull();
 
     await cleanup(container, root);
@@ -540,24 +546,35 @@ describe("Home", () => {
   });
 
   describe("interactive: window focus rescan", () => {
-    it("rescans the library on window focus and adds new rows", async () => {
-      mockListLibrary.mockResolvedValue([makeLibraryItem({ id: "x1" })]);
+    it("patches enriched local tags in place on focus without re-fetching the library", async () => {
+      mockListLibrary.mockResolvedValue([
+        makeLocalItem({ id: "local:song.mp3", artist: "Unknown artist" }),
+      ]);
+      // The initial-load enrich patch sees the placeholder tag.
+      mockListLocalTracks.mockResolvedValue([
+        makeLocalItem({ id: "local:song.mp3", artist: "Unknown artist" }),
+      ]);
       const player = makeMockPlayer();
       const { container, root } = await render(
         <Home user={null} player={player} refreshKey={0} />,
       );
 
-      // Update listLibrary to return an extra local item
-      mockListLibrary.mockResolvedValue([
-        makeLibraryItem({ id: "x1" }),
-        makeLocalItem({ id: "local:new.mp3", localName: "new.mp3" }),
+      const libraryCallsBefore = mockListLibrary.mock.calls.length;
+
+      // A folder edit while away re-tags the file; the focus re-enrich patch pulls
+      // the fresh tag from listLocalTracks and updates the row in place.
+      mockListLocalTracks.mockResolvedValue([
+        makeLocalItem({ id: "local:song.mp3", artist: "Real Artist" }),
       ]);
 
       await act(async () => {
         window.dispatchEvent(new Event("focus"));
       });
 
-      expect(container.querySelector('[data-id="local:new.mp3"]')).not.toBeNull();
+      const row = container.querySelector('[data-id="local:song.mp3"]')!; // type-safety-ok: element verified present by test setup (enrichment rendered it)
+      expect(row.querySelector(".artist")!.textContent).toBe("Real Artist"); // type-safety-ok: .artist is always present in the rendered row structure
+      // No extra library fetch — the page is patched in place, not reloaded.
+      expect(mockListLibrary.mock.calls.length).toBe(libraryCallsBefore);
 
       await cleanup(container, root);
     });
@@ -686,29 +703,30 @@ describe("Home", () => {
   });
 
   describe("cache-first enrichment", () => {
-    it("runs enrichLocalTracks and re-lists after the initial load", async () => {
+    it("runs enrichLocalTracks and patches local rows in place after the initial load", async () => {
       const { container, root } = await render(
         <Home user={null} player={null} refreshKey={0} />,
       );
 
       expect(mockEnrichLocalTracks).toHaveBeenCalledTimes(1);
-      // Two listLibrary calls: the cache-overlay first paint, then the rescan
-      // that swaps in freshly-extracted tags.
-      expect(mockListLibrary.mock.calls.length).toBe(2);
+      // Page 1 is fetched exactly once; enrichment now patches local rows in place
+      // via listLocalTracks rather than re-fetching the whole library.
+      expect(mockListLibrary.mock.calls.length).toBe(1);
+      expect(mockListLocalTracks).toHaveBeenCalled();
 
       await cleanup(container, root);
     });
 
-    it("re-renders with the enriched tags after the enrichment pass", async () => {
-      // First paint shows placeholder tags; the post-enrichment rescan shows real
-      // tags overlaid by listLocalTracks from the now-populated sidecar cache.
-      mockListLibrary
-        .mockResolvedValueOnce([
-          makeLocalItem({ id: "local:song.mp3", artist: "Unknown artist" }),
-        ])
-        .mockResolvedValueOnce([
-          makeLocalItem({ id: "local:song.mp3", artist: "Real Artist" }),
-        ]);
+    it("patches enriched local tags in place after the enrichment pass", async () => {
+      // Page 1 paints placeholder tags; after enrichment, the in-place patch pulls
+      // the freshly-tagged local row from listLocalTracks (the now-populated cache)
+      // WITHOUT a second library fetch.
+      mockListLibrary.mockResolvedValue([
+        makeLocalItem({ id: "local:song.mp3", artist: "Unknown artist" }),
+      ]);
+      mockListLocalTracks.mockResolvedValue([
+        makeLocalItem({ id: "local:song.mp3", artist: "Real Artist" }),
+      ]);
 
       const { container, root } = await render(
         <Home user={null} player={null} refreshKey={0} />,
@@ -716,6 +734,7 @@ describe("Home", () => {
 
       const row = container.querySelector('[data-id="local:song.mp3"]')!; // type-safety-ok: DOM element asserted present after render in test
       expect(row.querySelector(".artist")!.textContent).toBe("Real Artist"); // type-safety-ok: DOM element asserted present after render in test
+      expect(mockListLibrary.mock.calls.length).toBe(1);
 
       await cleanup(container, root);
     });
@@ -731,6 +750,103 @@ describe("Home", () => {
       expect(mockEnrichLocalTracks).not.toHaveBeenCalled();
       // Only the single failed load — no enrichment-triggered rescan.
       expect(mockListLibrary.mock.calls.length).toBe(1);
+
+      await cleanup(container, root);
+    });
+  });
+
+  describe("load more", () => {
+    it("hides the load-more button when nextCursor is null", async () => {
+      mockListLibrary.mockResolvedValue({
+        items: [makeLibraryItem({ id: "a1" })],
+        nextCursor: null,
+      });
+      const { container, root } = await render(
+        <Home user={null} player={null} refreshKey={0} />,
+      );
+
+      expect(container.querySelector("#load-more-btn")).toBeNull();
+
+      await cleanup(container, root);
+    });
+
+    it("shows the load-more button when nextCursor is non-null", async () => {
+      mockListLibrary.mockResolvedValue({
+        items: [makeLibraryItem({ id: "a1" })],
+        nextCursor: "cursor-1",
+      });
+      const { container, root } = await render(
+        <Home user={null} player={null} refreshKey={0} />,
+      );
+
+      expect(container.querySelector("#load-more-btn")).not.toBeNull();
+
+      await cleanup(container, root);
+    });
+
+    it("appends the next page's items when load-more is clicked", async () => {
+      mockListLibrary
+        .mockResolvedValueOnce({
+          items: [makeLibraryItem({ id: "a1" })],
+          nextCursor: "cursor-1",
+        })
+        .mockResolvedValueOnce({
+          items: [makeLibraryItem({ id: "a2" })],
+          nextCursor: null,
+        });
+      const { container, root } = await render(
+        <Home user={null} player={null} refreshKey={0} />,
+      );
+
+      expect(container.querySelector('[data-id="a1"]')).not.toBeNull();
+      expect(container.querySelector('[data-id="a2"]')).toBeNull();
+
+      const btn = container.querySelector<HTMLButtonElement>("#load-more-btn")!; // type-safety-ok: button presence is a precondition of this test
+      await act(async () => {
+        btn.click();
+      });
+
+      // Both pages now present; the button hides once nextCursor becomes null.
+      expect(container.querySelector('[data-id="a1"]')).not.toBeNull();
+      expect(container.querySelector('[data-id="a2"]')).not.toBeNull();
+      expect(container.querySelector("#load-more-btn")).toBeNull();
+
+      await cleanup(container, root);
+    });
+
+    it("keeps loaded page 2 when a focus enrich patch fires (no collapse to page 1)", async () => {
+      mockListLibrary
+        .mockResolvedValueOnce({
+          items: [makeLibraryItem({ id: "a1" })],
+          nextCursor: "cursor-1",
+        })
+        .mockResolvedValueOnce({
+          items: [makeLocalItem({ id: "local:song.mp3", artist: "Unknown artist" })],
+          nextCursor: null,
+        });
+      const { container, root } = await render(
+        <Home user={null} player={null} refreshKey={0} />,
+      );
+
+      // Load page 2 (the local row).
+      const btn = container.querySelector<HTMLButtonElement>("#load-more-btn")!; // type-safety-ok: button presence is a precondition of this test
+      await act(async () => {
+        btn.click();
+      });
+      expect(container.querySelector('[data-id="local:song.mp3"]')).not.toBeNull();
+
+      // A focus enrich patch re-tags the local row in place; page-1 and page-2
+      // items both remain (no reset to page 1).
+      mockListLocalTracks.mockResolvedValue([
+        makeLocalItem({ id: "local:song.mp3", artist: "Real Artist" }),
+      ]);
+      await act(async () => {
+        window.dispatchEvent(new Event("focus"));
+      });
+
+      expect(container.querySelector('[data-id="a1"]')).not.toBeNull();
+      const row = container.querySelector('[data-id="local:song.mp3"]')!; // type-safety-ok: element verified present by test setup (enrichment rendered it)
+      expect(row.querySelector(".artist")!.textContent).toBe("Real Artist"); // type-safety-ok: .artist is always present in the rendered row structure
 
       await cleanup(container, root);
     });
