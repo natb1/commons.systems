@@ -61,6 +61,29 @@ export function decodeCursor(s: string): MediaCursor {
 }
 
 /**
+ * Encode a merged-stream cursor: the same [addedAt, id] pair as encodeCursor,
+ * plus a third `exhausted` element recording, per input stream, whether that
+ * stream had no more rows as of this page. A strict superset of encodeCursor's
+ * format: decodeCursor still reads correctly (it ignores the third element).
+ */
+export function encodeMergedCursor(k: MediaCursor, exhausted: boolean[]): string {
+  return toBase64(JSON.stringify([k.addedAt, k.id, exhausted]));
+}
+
+/**
+ * Inverse of encodeMergedCursor. Also accepts a legacy two-element cursor
+ * produced by encodeCursor, returning `exhausted: []` in that case so the
+ * caller can default missing per-stream flags to false.
+ */
+export function decodeMergedCursor(s: string): { key: MediaCursor; exhausted: boolean[] } {
+  const parsed = JSON.parse(fromBase64(s)) as [string, string, boolean[]?];
+  return {
+    key: { addedAt: parsed[0], id: parsed[1] },
+    exhausted: Array.isArray(parsed[2]) ? parsed[2] : [],
+  };
+}
+
+/**
  * Compare two cursors by addedAt then id, both DESCENDING, using code-unit
  * `<`/`>` operators (NOT localeCompare) so ordering matches Firestore
  * `__name__` byte ordering exactly. Returns negative when `a` should sort
