@@ -127,20 +127,16 @@ export function createMediaQueries<T extends { id: string; addedAt: string }>(
         : fetchStream([where("memberEmails", "array-contains", email)], pageSize, key),
     ]);
     const streams = [publicStream, userStream];
-    const page = pagedMerge(
-      streams,
-      pageSize,
-      (item) => item.id,
-      (item) => ({ addedAt: item.addedAt, id: item.id }),
-    );
+    const keyOf = (item: T): MediaCursor => ({
+      addedAt: item.addedAt,
+      id: item.id,
+    });
+    const page = pagedMerge(streams, pageSize, (item) => item.id, keyOf);
     // pagedMerge's null nextCursor is the authoritative "no more pages" signal;
     // only when non-null do we re-wrap with per-stream exhaustion. A non-null
     // cursor guarantees page.items is non-empty, so Kcut is safe.
     if (page.nextCursor === null) return page;
-    const kcut = {
-      addedAt: page.items[page.items.length - 1].addedAt,
-      id: page.items[page.items.length - 1].id,
-    };
+    const kcut = keyOf(page.items[page.items.length - 1]);
     // A stream is exhausted for the NEXT page iff it returned all its remaining
     // docs (!hasMore) AND its returned tail is fully within the shown window
     // (its oldest returned item is at or above the page cut). Deferring the skip
@@ -151,13 +147,8 @@ export function createMediaQueries<T extends { id: string; addedAt: string }>(
       (s) =>
         !s.hasMore &&
         (s.items.length === 0 ||
-          compareByAddedAtDescIdDesc(
-            {
-              addedAt: s.items[s.items.length - 1].addedAt,
-              id: s.items[s.items.length - 1].id,
-            },
-            kcut,
-          ) <= 0),
+          compareByAddedAtDescIdDesc(keyOf(s.items[s.items.length - 1]), kcut) <=
+            0),
     );
     return { items: page.items, nextCursor: encodeMergedCursor(kcut, exhausted) };
   }
