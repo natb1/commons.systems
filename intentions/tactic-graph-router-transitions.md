@@ -56,13 +56,15 @@ never on the work PR branch); that doctrine retires here.
 Scope: at the seams where the legacy flow edits labels —
 `.claude/skills/dispatch-propagate/scripts/dispatch-complete-phase` and
 `dispatch-finalize-phase` — graph-native tactics instead graph-commit:
-- the `phase` transition: the `implement → qa → review → done` ladder,
-  plus the `fix` interrupt — any of implement/qa/review transitions to
-  `fix` when the PR's CI verdict is failing, and back to the ladder's
-  resumption point once CI is green (spec §1.1, strategy clarification
-  18; legacy parity with dispatch-phase's CI-verdict-before-labels
-  ordering). qa-fix/review-fix content-fix loops stay internal to the qa
-  and review phases and never write a `fix` transition,
+- the `phase` transition: the `implement → qa → review → [main-qa] →
+  done` ladder (`main-qa` only when needs-main residue is recorded on
+  the node — strategy clarification 22, spec §1.1), plus the `fix`
+  interrupt — any of implement/qa/review transitions to `fix` when the
+  PR's CI verdict is failing, and back to the ladder's resumption point
+  once CI is green (spec §1.1, strategy clarification 18; legacy parity
+  with dispatch-phase's CI-verdict-before-labels ordering).
+  qa-fix/review-fix content-fix loops stay internal to the qa and review
+  phases and never write a `fix` transition,
 - `execution.attempts` counters (formerly `dispatch:*-attempt` labels),
 - `execution.markers` (formerly `dispatch:planned` / `qa-done` /
   `reviewed`),
@@ -87,12 +89,17 @@ Depends on: Unit 1.
 
 Scope: graph-native analog of
 `.claude/skills/dispatch-propagate/scripts/dispatch-reconcile-merged`:
-- Sweep open graph-native tactics whose PR merged or closed out-of-band →
+- Sweep open graph-native tactics whose PR merged or closed out-of-band:
+  merged with a needs-main residue section on the node → transition to
+  `main-qa` (strategy clarification 22; `tactic-main-qa-phase` supplies
+  the phase value and handler); merged without residue, or closed →
   transition to `done`.
 - `done` prunes the node and its edges in the same commit (the
   transient-tactic rule).
 - When a strategy's last non-draft child prunes: `rounds.count += 1`,
-  `rounds.last_completed` stamped, in that same commit.
+  `rounds.last_completed` stamped, in that same commit — for a
+  residue-bearing tactic this fires only after `main-qa` completes, so
+  round accounting means verified-in-prod.
 
 ## Dependencies
 
@@ -119,7 +126,9 @@ include one `fix` interrupt (simulate a failing CI verdict at qa or
 review, confirm the transition to `fix` and the return to the interrupted
 ladder position once the verdict is green); hand-merge its PR mid-flow and
 confirm the sweep absorbs it; confirm the final commit prunes the node and
-stamps the strategy's rounds.
+stamps the strategy's rounds. Repeat with a needs-main residue section on
+the node: the sweep routes merged → `main-qa` instead of `done`, and the
+rounds stamp waits for the `main-qa → done` transition.
 
 ## Implementation notes
 

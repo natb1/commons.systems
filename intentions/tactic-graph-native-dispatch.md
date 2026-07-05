@@ -54,7 +54,7 @@ Schema extensions (all graph-owned; `validateNode` gates them):
 
 ```yaml
 # on tactic nodes only
-phase: draft | align-tactics | implement | fix | qa | review | done
+phase: draft | align-tactics | implement | fix | qa | review | main-qa | done
 validates: [<strategy-id>]     # factual: this tactic produces the signal's
                                # reading / meets its threshold — a terminal of
                                # the calculated-attention signal term
@@ -118,9 +118,22 @@ rounds:
   `strategy-graph-drives-dispatch`: `blocked_by: [<tactic-id>...]`; nothing
   in a blocked subtree starts until the blocking subtree completes; the
   router is the single enforcement point.
+- **`main-qa` is the post-merge verification phase** (strategy
+  clarification 22): the tactic's own lifecycle extends through prod — no
+  separate follow-up artifact. The qa phase records needs-main residue in
+  a body section of the node instead of filing anything; the reconciler
+  routes a merged tactic to `main-qa` when residue exists, else `done`;
+  the router maps `main-qa` to the qa-main handler session (uniform
+  node-id machinery), gated on the prod deploy landing. Outcomes keep
+  legacy qa-main parity: pass → `done` (prune), broken → an
+  implement-chain bug tactic written via `graph-commit` then `done`,
+  cannot-verify → `office_hours`.
 - **Completion prunes.** `phase: done` removes the node and its edges in
   the same commit that lands the transition; the strategy's
-  `rounds.last_completed` is stamped when the last child prunes.
+  `rounds.last_completed` is stamped when the last child prunes. For a
+  tactic with needs-main residue, `done` follows `main-qa` — pruning and
+  round accounting sit behind prod verification, so
+  `rounds.last_completed` means verified-in-prod (clarification 22).
 
 ### 1.2 Write path — direct-push with rebase-retry
 
@@ -274,21 +287,37 @@ validates the delivered behavior *independently* against the tactic's
 stated intent and real data — the live store, deployed surfaces, public
 seed data — and classifies residue on the four-class disposition axis
 (opus-fixable → the phase's bounded internal fix loop, needs-main →
-follow-up, needs-human → `office_hours` park, already-satisfied → pass),
-recording the summary on the PR. The plan's ```verify blocks are the
-floor, not the phase; reproducing the implementer's own claimed checks
-is not QA (precedent: PR #2752's capture-term bug, invisible to the
-checklist re-run, found immediately by the independent real-data pass).
-This binds bootstrap-emulating sessions (§3.3) equally: the `qa → review`
+residue recorded on the node, verified post-merge in its `main-qa` phase
+— clarification 22, §1.1; never a filed artifact, needs-human →
+`office_hours` park, already-satisfied → pass), recording the summary on
+the PR. The plan's ```verify blocks are the floor, not the phase;
+reproducing the implementer's own claimed checks is not QA (precedent:
+PR #2752's capture-term bug, invisible to the checklist re-run, found
+immediately by the independent real-data pass). This binds
+bootstrap-emulating sessions (§3.3) equally: the `qa → review`
 transition write asserts the validation happened, not that the checklist
 re-ran.
+
+The `review` phase binds the same way (strategy clarification 21): it is
+the full `/review-fix` fan-out — surface-conditional finders in parallel
+→ code dedup → classify → adversarial verify with severity-scaled
+skeptics → the Opus fix lane → disposition recorded in the PR review
+comment — not a single-agent read-through, and never skippable
+(precedent: PRs #2750/#2748/#2742 merged with no review phase at all
+under the bootstrap doctrine; the retroactive independent round's
+findings became the clarification-19 deferral drafts). The
+`review → done` transition write asserts the fan-out ran, not that CI is
+green.
 
 One further amendment (strategy clarification 19): the
 review fan-out's finding disposition is graph-native. A confirmed finding
 that breaks the tactic's own stated contract blocks `review → done` and
 is fixed inside the phase's content-fix loop; real but out-of-contract
 findings land as draft tactics batched per component (never as gh
-follow-up issues), demoted below round tactics by calculated attention
+follow-up issues — no `dispatch:review-followup` label and no
+orphan-retriage analog: drafts are inert, and the finalizing
+`/align-tactics` round validates finding provenance against what actually
+merged), demoted below round tactics by calculated attention
 once a later `/align-tactics` round finalizes them; refuted or
 below-threshold findings are recorded only in the PR review comment.
 
@@ -330,7 +359,7 @@ weighted sum of read-time-derived terms — explicit author attention (an
 `validates`-terminals of unvalidated signals), capture resolution (from
 `recovers`-edge delegation axes) — with new conditions added as terms,
 never bands; clarification 11) → 4. within a rank level, phase ladder
-closest-to-done first: `review → fix → qa → implement →
+closest-to-done first: `main-qa → review → fix → qa → implement →
 align-tactics(strategy)`. Topic categories retire — topical priority is
 authored attention on the owning strategy.
 
@@ -377,7 +406,8 @@ GitHub is a separate strategy; design TBD.)
   is never scheduled. The write asserts the phase's full semantics ran —
   an emulating session owes the phase skill's substance, not a checklist
   re-run; for `qa` that means the legacy `qa-fix` parity of §2.4
-  (clarification 20).
+  (clarification 20), and for `review` the full `/review-fix` fan-out of
+  §2.4 (clarification 21) — a review phase is never skipped past.
 
 ### 3.4 Worktree anchoring and claiming
 
@@ -424,6 +454,7 @@ drops. (Behavior inventory anchors: `.claude/skills/file-issue/SKILL.md`,
 | `blocked_by` dependency wiring | `blocked_by` tactic edges (already the recorded blocking design) |
 | `--follow-up` provenance, sentinel return block, attribution sidecars | Provenance = `serves` edge + emitting session in the commit; return contract = written node ids |
 | Review-phase deferred filings (`/review-fix` follow-up issues) | Draft tactics batched per component, finalized by a later `/align-tactics` round (strategy clarification 19); refuted/below-threshold findings live only in the PR review comment |
+| QA needs-main follow-up filing (`qa-fix` Step 3.6 → main-qa issues) | Retired as an artifact — needs-main residue rides the source tactic into its `main-qa` phase; the qa-main handler verifies against prod (strategy clarification 22, §1.1) |
 | Finalize (assign, `help wanted`) | Retired — presence on `origin/main` with `phase` set *is* schedulability |
 
 ### `/plan-issue` → `/align-tactics`
@@ -443,12 +474,13 @@ drops. (Behavior inventory anchors: `.claude/skills/file-issue/SKILL.md`,
 
 ## 5. Subtree (round 1, recorded 2026-07-03; re-evaluated same day)
 
-Fourteen children: the eleven round-1 nodes below, each a leaf = one PR
+Fifteen children: the eleven round-1 nodes below, each a leaf = one PR
 unless noted, plus two clarification-19 deferral children finalized
 2026-07-04 (`tactic-graph-commit-hardening`,
 `tactic-graph-write-validation-hardening` — off-path, outside the
 diagram), plus the clarification-20 re-evaluation child
-`tactic-phase-skill-node-targets` (on-path, in the diagram). `blocked_by`
+`tactic-phase-skill-node-targets` and the clarification-22 child
+`tactic-main-qa-phase` (both on-path, in the diagram). `blocked_by`
 (under `attributes` until the schema tactic promotes it) encodes the
 order:
 
@@ -465,6 +497,8 @@ tactic-intentions-branch-protection (park) ┤                                 �
                                      │   tactic-graph-router-transitions ◄── also blocked_by graph-commit
                                      │           │           │               │
                                      │           │  tactic-phase-skill-node-targets
+                                     │           │           │               │
+                                     │           │   tactic-main-qa-phase   │
                                      │           │           │               │
                                      │   tactic-dispatch-lifecycle-sensor [validates]
                                      │           │           │               │
@@ -537,5 +571,22 @@ tactic-intentions-branch-protection (park) ┤                                 �
   `tactic-legacy-router-removal.blocked_by`. No tactic was pruned; the
   align-skill tactics needed no amendment (their plan schema already
   mandates the Verification content qa consumes).
+- **Re-evaluation (2026-07-04, clarifications 21–22):** run inline (no
+  router yet), triggered by the author's review-parity question after the
+  clarification-20 round. 21 generalizes 20 to review — the full
+  `/review-fix` fan-out is owed, never skippable (precedent: PRs
+  #2750/#2748/#2742 merged with no review phase); §2.4 gained the
+  review-parity paragraph and §3.3 names review in the emulator
+  obligation. 22 resolves the qa needs-main output seam with the
+  extended-lifecycle design chosen over a separate child tactic, a
+  deferral draft, and a gh carve-out (rejected outright): `main-qa`
+  joins the phase enum as a phase of the source node (§1.1, §3.2 ladder,
+  §4 matrix row). Subtree changes: added `tactic-main-qa-phase`
+  (on-path; blocked_by `tactic-phase-skill-node-targets`), added Unit 3
+  (deferral/residue output seams) to `tactic-phase-skill-node-targets`,
+  amended `tactic-graph-router-transitions` Unit 2 (reconciler routes
+  merged-with-residue to `main-qa`) and `tactic-graph-router-selector`
+  (ladder + directive mapping), and wired `tactic-main-qa-phase` into
+  `tactic-legacy-router-removal.blocked_by`. No tactic was pruned.
 - This parent is not directly executable (no `phase`); it completes when
   its last child completes, which stamps the strategy's `rounds`.
