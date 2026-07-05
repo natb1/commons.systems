@@ -61,8 +61,15 @@ Scope: in `.claude/skills/dispatch-propagate/scripts/` delete or reduce:
 `dispatch-phase`'s derivation logic (its read-only sensor side survives in
 the transitions layer), `office-hours-select-target` (superseded by the
 `office_hours != null` projection), and every `dispatch:*` label
-convention remaining in scripts and skill docs. Each deletion cites its
-matrix row or its graph-native replacement tactic.
+convention remaining in scripts and skill docs. Also retire the legacy
+worktree-layout conventions (strategy clarification 23):
+`worktree-create.sh`'s `<issue-num>-<slug>` lane (git-common-dir
+anchoring and the gh identity stub) and `dispatch-materialize-spawn`'s
+sibling `$PROJECT_ROOT/worktrees/` placement — after removal, no repo
+machinery references the `.bare` common dir or the `worktrees/`
+container, and Claude Code native worktrees at
+`<project-root>/.claude/worktrees/` are the only worktree surface. Each
+deletion cites its matrix row or its graph-native replacement tactic.
 
 ## Unit 2 — retire the legacy authoring skills
 

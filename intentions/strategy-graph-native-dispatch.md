@@ -362,6 +362,26 @@ clarifications:
       sensor modeling (wrong altitude — signals measure the strategy's
       observable, not each shipped feature), and an implicit reconciler hold
       (hidden state, violates clarification 1). Recorded 2026-07-04 interview."
+  - question: The repo was re-anchored — main checked out at the project root
+      with Claude Code managing worktrees natively; do the worktree commitments
+      still target the legacy .bare + sibling worktrees/ layout?
+    answer: "No — Claude Code native worktrees are the substrate, recorded
+      2026-07-05 from author direction. main is checked out at the project root
+      (~/natb1/commons.systems) and every worker worktree is a Claude
+      Code-managed worktree at the harness default location,
+      <project-root>/.claude/worktrees/<node-id> — entered via the native
+      worktree tooling (EnterWorktree) in sessions, and provisioned by launch
+      scripts as a plain git worktree add into that same path. No graph-native
+      machinery may assume the legacy layout: the .bare shared common dir and
+      the sibling worktrees/ container persist only as backward compatibility
+      for the draining gh lane, and the WorktreeCreate hook's git-common-dir
+      anchoring, <issue-num>-<slug>-only name validation, and gh identity stub
+      are legacy-lane conventions that retire with it
+      (tactic-legacy-router-removal). This supersedes the mechanism half of
+      clarification 12 (the worktree-create.sh node-id naming unit): the
+      isolation commitment stands — one worktree per node id, liveness via
+      live session ⇔ worktree — but a node-id worktree is a plain native
+      worktree at the default location, never a hook-redirected path."
 tooling_goals:
   - kind: actuator
     statement: /align-strategy — interview-driven strategy recording, superseding
