@@ -145,6 +145,14 @@ export function Home(props: HomeProps) {
     };
   }, []);
 
+  // Per-load session token: bumped every time loadLibrary starts a fresh page-1
+  // load (a user/account switch or a folder-connect refreshKey bump both flow
+  // through loadLibrary). onLoadMore captures this at click time and discards a
+  // late "Load more" resolution whose session has since been superseded — Home
+  // does not remount on a user change (App keys the route boundary by path, not
+  // user), so mountedRef alone cannot distinguish a stale-session continuation.
+  const loadGenerationRef = useRef(0);
+
   // Ports home.ts:80-94's refreshCacheStats. Stable identity ([] deps) so the
   // cache effect registers its document listener exactly once.
   const refreshCacheStats = useCallback(() => {
@@ -170,6 +178,7 @@ export function Home(props: HomeProps) {
   // rows in place so extra loaded pages and the paged position survive.
   const loadLibrary = useCallback(
     async (isActive: () => boolean): Promise<boolean> => {
+      loadGenerationRef.current += 1;
       setState({ status: "loading" });
       try {
         const page = await listLibrary(user, undefined);
@@ -289,10 +298,15 @@ export function Home(props: HomeProps) {
     if (loadingMoreRef.current) return;
     if (state.status !== "loaded" || state.nextCursor === null) return;
     const cursor = state.nextCursor;
+    // Capture the current load session so a resolution arriving after a
+    // user/account switch (or refreshKey reload) is discarded instead of
+    // appended onto — and its cursor overwriting — the new session's page 1.
+    const generation = loadGenerationRef.current;
     loadingMoreRef.current = true;
     listLibrary(user, { cursor })
       .then((page) => {
         if (!mountedRef.current) return;
+        if (loadGenerationRef.current !== generation) return;
         setState((prev) =>
           prev.status === "loaded"
             ? {

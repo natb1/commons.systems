@@ -26,6 +26,13 @@ function renderMediaRows(items: MediaItem[]): string {
     .join("\n");
 }
 
+// Bumped on every fresh `loadMediaHtml()` render. Each in-flight "Load more"
+// fetch captures the generation live at click time and re-checks it before
+// mutating the DOM, so a fetch started under one render/viewer that resolves
+// after a fresh page-1 render has replaced `#media-list` is discarded instead
+// of splicing stale (possibly different-viewer) items into the current view.
+let renderGeneration = 0;
+
 function renderMediaList(items: MediaItem[]): string {
   if (items.length === 0) {
     return '<p id="media-empty">No media items available.</p>';
@@ -69,6 +76,7 @@ async function handleDownload(button: HTMLButtonElement): Promise<void> {
 }
 
 export async function loadMediaHtml(): Promise<string> {
+  renderGeneration++;
   try {
     const page = await listCloud();
     let html = renderMediaList(page.items);
@@ -98,12 +106,20 @@ export function wireLoadMore(outlet: HTMLElement): void {
     const btn = e.target.closest<HTMLButtonElement>("#load-more-btn");
     if (!btn) return;
     const cursor = btn.dataset.cursor;
-    if (!cursor) return;
+    if (!cursor) {
+      logError(new Error("Load more button missing data-cursor attribute"), { operation: "load-more" });
+      return;
+    }
+    // Capture the render generation live at click time. If a fresh page-1
+    // render replaces `#media-list` before this fetch resolves, the generation
+    // no longer matches and the stale results are discarded.
+    const generation = renderGeneration;
     // Guard against concurrent clicks while the fetch is in flight.
     btn.disabled = true;
     void (async () => {
       try {
         const page = await listCloud({ cursor });
+        if (generation !== renderGeneration) return;
         const ul = outlet.querySelector<HTMLUListElement>("#media-list");
         if (ul) ul.insertAdjacentHTML("beforeend", renderMediaRows(page.items));
         if (page.nextCursor !== null) {
