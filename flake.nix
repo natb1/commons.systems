@@ -32,11 +32,13 @@
       claudeUnfreePredicate =
         pkg: builtins.elem (nixpkgs.lib.getName pkg) [ "claude-code" ];
 
-      # Single composed overlay every consumer needs: claude-code-nix (provides
-      # pkgs.claude-code, required by homeManagerModules.default) then the direnv
-      # test-skip. Exported as overlays.default so instance flakes stop hand-copying
-      # the list. Composing into one function keeps it a valid overlay output
-      # (nix flake check rejects a list here).
+      # Single composed overlay every consumer needs: claude-code-nix (pins
+      # pkgs.claude-code to the sadjow fork used by homeManagerModules.default;
+      # recent nixpkgs ships its own claude-code, so without this overlay eval
+      # still succeeds but resolves to nixpkgs' build/version instead) then the
+      # direnv test-skip. Exported as overlays.default so instance flakes stop
+      # hand-copying the list. Composing into one function keeps it a valid overlay
+      # output (nix flake check rejects a list here).
       claudeOverlay = nixpkgs.lib.composeManyExtensions [
         claude-code-nix.overlays.default
         direnvSkipTestsOverlay

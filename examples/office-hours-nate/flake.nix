@@ -37,7 +37,7 @@
     };
   };
 
-  outputs = inputs@{ commons-systems, nixpkgs, home-manager, ... }:
+  outputs = inputs@{ commons-systems, home-manager, ... }:
     let
       # Select the system explicitly. This is a pure string literal — not
       # derived from the current system or the environment — so eval needs no
@@ -45,10 +45,13 @@
       system = "aarch64-darwin";
 
       # Build the fully-configured pkgs set from the framework's exported helper.
-      # mkPkgs applies the claude-code-nix overlay (so pkgs.claude-code resolves,
-      # required by commons-systems.homeManagerModules.default), applies the direnv
-      # test-skip, and allows claude-code as unfree. The framework is the single
-      # source of this wiring, so instances no longer copy it.
+      # mkPkgs applies the claude-code-nix overlay (which pins pkgs.claude-code to
+      # the sadjow fork used by commons-systems.homeManagerModules.default),
+      # applies the direnv test-skip, and allows claude-code as unfree. Recent
+      # nixpkgs ships its own claude-code, so dropping the overlay would not fail
+      # eval — it would silently swap in nixpkgs' build/version instead of the
+      # pinned fork. The framework is the single source of this wiring, so
+      # instances no longer copy it.
       pkgs = commons-systems.mkPkgs { inherit system; };
     in
     {
