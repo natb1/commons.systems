@@ -7,45 +7,16 @@ import type { Reminder } from "../src/reminders.js";
 import type { QueueMetricsSnapshot } from "../src/queue-metrics.js";
 
 // Owner data comes from a read-only on-disk snapshot: the startup restore
-// decodes it into PanelData, and a window focus re-reads + merges it. Mock the
-// local-snapshot source + snapshot decoder + isEncrypted guard so the load is
-// controllable (mirrors Dashboard.test.tsx).
+// decodes it into PanelData, and a window focus re-reads + merges it. The shared
+// helper mocks the local-snapshot source + snapshot decoder + isEncrypted guard
+// (importing it registers the vi.mock factories) so the load is controllable per
+// test via `mocks`.
 vi.mock("../src/firebase.js", () => ({
   db: {},
   NAMESPACE: { project: "office-hours", env: "test" },
 }));
 
-const mocks = vi.hoisted(() => ({
-  isSnapshotSupported: vi.fn(),
-  getSnapshotState: vi.fn(),
-  pickSnapshotFile: vi.fn(),
-  restoreSnapshotHandle: vi.fn(),
-  regrantSnapshot: vi.fn(),
-  readSnapshotBytes: vi.fn(),
-  hasExternallyChanged: vi.fn(),
-  getCurrentSnapshotHandle: vi.fn(),
-  decodeSnapshot: vi.fn(),
-  loadSnapshotPanelData: vi.fn(),
-  isEncrypted: vi.fn(),
-}));
-
-vi.mock("../src/local-snapshot-source.js", () => ({
-  isSnapshotSupported: mocks.isSnapshotSupported,
-  getSnapshotState: mocks.getSnapshotState,
-  pickSnapshotFile: mocks.pickSnapshotFile,
-  restoreSnapshotHandle: mocks.restoreSnapshotHandle,
-  regrantSnapshot: mocks.regrantSnapshot,
-  readSnapshotBytes: mocks.readSnapshotBytes,
-  hasExternallyChanged: mocks.hasExternallyChanged,
-  getCurrentSnapshotHandle: mocks.getCurrentSnapshotHandle,
-}));
-vi.mock("../src/snapshot.js", () => ({
-  decodeSnapshot: mocks.decodeSnapshot,
-  loadSnapshotPanelData: mocks.loadSnapshotPanelData,
-}));
-vi.mock("../src/crypto.js", () => ({
-  isEncrypted: mocks.isEncrypted,
-}));
+import { mocks, fakeHandle } from "./helpers/local-snapshot-mocks.js";
 
 // Render-count spy stand-ins for the two time-sensitive panels. Each is a
 // vi.fn() that bumps a counter on every render and returns a trivial section.
@@ -114,8 +85,6 @@ vi.mock("../src/components/ParkedIssuesPanel.js", () => ({
 }));
 
 import { Dashboard } from "../src/Dashboard.js";
-
-const fakeHandle = {} as FileSystemFileHandle; // type-safety-ok: readSnapshotBytes/hasExternallyChanged are mocked, so the handle is never dereferenced
 
 // The history-band chart modules read --fg via getThemeFg; happy-dom has no
 // stylesheet, so set it on the document root for the duration of each test.
@@ -345,6 +314,84 @@ describe("Dashboard focus-reload: unchanged-content re-read re-renders no panel 
     expect(paceSpy.mock.calls.length).toBe(counts.pace);
     expect(historySpy.mock.calls.length).toBe(counts.history);
     expect(backlogSpy.mock.calls.length).toBe(counts.backlog);
+    expect(topicUsageSpy.mock.calls.length).toBe(counts.topicUsage);
+    expect(queueSpy.mock.calls.length).toBe(counts.queue);
+    expect(parkedSpy.mock.calls.length).toBe(counts.parked);
+  });
+});
+
+// ── Focus-reload: discriminating per-slice reuse (#2035) ────────────────────────
+// The stronger regression guard: when a focus re-read changes exactly ONE slice
+// (issue-samples) and leaves the other five content-equal (new references),
+// mergePanelData must reuse the unchanged slices so ONLY the Backlog panel — the
+// sole consumer of issueSamples via its own useMemo([issueSamples]) dep — rebuilds
+// while the other seven panels bail. This exercises Dashboard's per-panel memo
+// wiring: a regression that collapses the per-panel dep arrays into one shared
+// array would re-render every panel here and be caught.
+
+describe("Dashboard focus-reload: an issue-samples-only change re-renders only the Backlog panel (#2035)", () => {
+  it("re-renders only Backlog when a focus re-read changes issue-samples and nothing else", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(BASE));
+
+    // Mount decode: baseline content (issueSamples empty).
+    mocks.decodeSnapshot.mockReturnValueOnce({ data: panelData(), computedAt: COMPUTED_AT });
+
+    render(<Dashboard />);
+    await flushLocalLoad();
+
+    const counts = {
+      capacity: capacitySpy.mock.calls.length,
+      reminders: remindersSpy.mock.calls.length,
+      pace: paceSpy.mock.calls.length,
+      history: historySpy.mock.calls.length,
+      backlog: backlogSpy.mock.calls.length,
+      topicUsage: topicUsageSpy.mock.calls.length,
+      queue: queueSpy.mock.calls.length,
+      parked: parkedSpy.mock.calls.length,
+    };
+
+    // Focus re-read: every slice content-equal-but-new-reference EXCEPT
+    // issueSamples, which gains a new sample. SAME computedAt, so only the
+    // issue-samples slice difference drives the re-render.
+    mocks.hasExternallyChanged.mockResolvedValueOnce(true);
+    mocks.decodeSnapshot.mockReturnValueOnce({
+      data: {
+        samples: [cloneSample(farSample)],
+        reminders: [cloneReminder(farReminder)],
+        queueMetrics: cloneQueue(queueMetricsFixture),
+        issueSamples: [
+          {
+            sampledAt: new Date(BASE - DAY),
+            openSecurity: 0,
+            openBug: 2,
+            openEnhancement: 1,
+            openOther: 0,
+            groupId: "group-abc",
+          },
+        ],
+        topicUsage: [],
+        projectSignals: null,
+      },
+      computedAt: COMPUTED_AT,
+    });
+
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Only backlogEl's dep ([issueSamples]) changed → only the Backlog panel
+    // rebuilds. mergePanelData reused every other slice by reference, so those
+    // panels' memo deps are identical and React bails.
+    expect(backlogSpy.mock.calls.length).toBeGreaterThan(counts.backlog);
+    expect(capacitySpy.mock.calls.length).toBe(counts.capacity);
+    expect(remindersSpy.mock.calls.length).toBe(counts.reminders);
+    expect(paceSpy.mock.calls.length).toBe(counts.pace);
+    expect(historySpy.mock.calls.length).toBe(counts.history);
     expect(topicUsageSpy.mock.calls.length).toBe(counts.topicUsage);
     expect(queueSpy.mock.calls.length).toBe(counts.queue);
     expect(parkedSpy.mock.calls.length).toBe(counts.parked);

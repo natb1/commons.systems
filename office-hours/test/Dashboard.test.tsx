@@ -9,50 +9,18 @@ vi.mock("../src/firebase.js", () => ({
   NAMESPACE: { project: "office-hours", env: "test" },
 }));
 
-// The dashboard's only real data path is now the read-only local snapshot:
-// the startup restore reads a persisted handle, reads its bytes, and decodes
-// them into PanelData. Mock the local-snapshot source + snapshot decoder + the
-// isEncrypted guard so the whole load is controllable per test. Declared via
-// vi.hoisted so the fns exist before any vi.mock factory runs.
-const mocks = vi.hoisted(() => ({
-  isSnapshotSupported: vi.fn(),
-  getSnapshotState: vi.fn(),
-  pickSnapshotFile: vi.fn(),
-  restoreSnapshotHandle: vi.fn(),
-  regrantSnapshot: vi.fn(),
-  readSnapshotBytes: vi.fn(),
-  hasExternallyChanged: vi.fn(),
-  getCurrentSnapshotHandle: vi.fn(),
-  decodeSnapshot: vi.fn(),
-  loadSnapshotPanelData: vi.fn(),
-  isEncrypted: vi.fn(),
-}));
-
-vi.mock("../src/local-snapshot-source.js", () => ({
-  isSnapshotSupported: mocks.isSnapshotSupported,
-  getSnapshotState: mocks.getSnapshotState,
-  pickSnapshotFile: mocks.pickSnapshotFile,
-  restoreSnapshotHandle: mocks.restoreSnapshotHandle,
-  regrantSnapshot: mocks.regrantSnapshot,
-  readSnapshotBytes: mocks.readSnapshotBytes,
-  hasExternallyChanged: mocks.hasExternallyChanged,
-  getCurrentSnapshotHandle: mocks.getCurrentSnapshotHandle,
-}));
-vi.mock("../src/snapshot.js", () => ({
-  decodeSnapshot: mocks.decodeSnapshot,
-  loadSnapshotPanelData: mocks.loadSnapshotPanelData,
-}));
-vi.mock("../src/crypto.js", () => ({
-  isEncrypted: mocks.isEncrypted,
-}));
+// The dashboard's only real data path is now the read-only local snapshot: the
+// startup restore reads a persisted handle, reads its bytes, and decodes them
+// into PanelData. The shared helper mocks the local-snapshot source + snapshot
+// decoder + isEncrypted guard (importing it registers the vi.mock factories) so
+// the whole load is controllable per test via `mocks`.
+import { mocks, fakeHandle } from "./helpers/local-snapshot-mocks.js";
 
 import { Dashboard } from "../src/Dashboard.js";
 import type { PanelData } from "../src/panel-equality.js";
 import type { UsageSample } from "../src/usage-samples.js";
 import type { Reminder } from "../src/reminders.js";
 import type { QueueMetricsSnapshot } from "../src/queue-metrics.js";
-
-const fakeHandle = {} as FileSystemFileHandle; // type-safety-ok: readSnapshotBytes/hasExternallyChanged are mocked, so the handle is never dereferenced
 
 const emptyPanelData: PanelData = {
   samples: [],

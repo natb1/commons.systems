@@ -111,7 +111,11 @@ export function Dashboard() {
         passphraseRef.current = null;
       }
     } catch (error) {
-      setState({ tier: "error" });
+      // Only surface the error tier on a first-time/startup failure. When a local
+      // view is already active, a failed re-pick/re-grant retains the last-good
+      // snapshot in place (matching the focus-reload retain-last-good catch above),
+      // so a transient re-load error does not wipe an already-rendered dashboard.
+      if (!localActiveRef.current) setState({ tier: "error" });
       throw error;
     }
     localActiveRef.current = true;

@@ -14,41 +14,12 @@ vi.mock("../src/firebase.js", () => ({
   NAMESPACE: { project: "office-hours", env: "test" },
 }));
 
-const mocks = vi.hoisted(() => ({
-  isSnapshotSupported: vi.fn(),
-  getSnapshotState: vi.fn(),
-  pickSnapshotFile: vi.fn(),
-  restoreSnapshotHandle: vi.fn(),
-  regrantSnapshot: vi.fn(),
-  readSnapshotBytes: vi.fn(),
-  hasExternallyChanged: vi.fn(),
-  getCurrentSnapshotHandle: vi.fn(),
-  decodeSnapshot: vi.fn(),
-  loadSnapshotPanelData: vi.fn(),
-  isEncrypted: vi.fn(),
-}));
-
-vi.mock("../src/local-snapshot-source.js", () => ({
-  isSnapshotSupported: mocks.isSnapshotSupported,
-  getSnapshotState: mocks.getSnapshotState,
-  pickSnapshotFile: mocks.pickSnapshotFile,
-  restoreSnapshotHandle: mocks.restoreSnapshotHandle,
-  regrantSnapshot: mocks.regrantSnapshot,
-  readSnapshotBytes: mocks.readSnapshotBytes,
-  hasExternallyChanged: mocks.hasExternallyChanged,
-  getCurrentSnapshotHandle: mocks.getCurrentSnapshotHandle,
-}));
-vi.mock("../src/snapshot.js", () => ({
-  decodeSnapshot: mocks.decodeSnapshot,
-  loadSnapshotPanelData: mocks.loadSnapshotPanelData,
-}));
-vi.mock("../src/crypto.js", () => ({
-  isEncrypted: mocks.isEncrypted,
-}));
+// The shared helper mocks the local-snapshot source + snapshot decoder +
+// isEncrypted guard (importing it registers the vi.mock factories) so the load
+// is controllable per test via `mocks`.
+import { mocks, fakeHandle } from "./helpers/local-snapshot-mocks.js";
 
 import { Dashboard } from "../src/Dashboard.js";
-
-const fakeHandle = {} as FileSystemFileHandle; // type-safety-ok: readSnapshotBytes/hasExternallyChanged are mocked, so the handle is never dereferenced
 
 // The history-band chart modules read --fg via getThemeFg; happy-dom has no
 // stylesheet, so set it on the document root for the duration of each test.
