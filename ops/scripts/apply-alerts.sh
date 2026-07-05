@@ -91,7 +91,9 @@ while IFS= read -r pct; do
   THRESHOLD_FLAGS+=("--threshold-rule=percent=$pct")
 done < <(jq -r '.thresholdPercents[]' "$BUDGET_FILE")
 
-gcloud billing budgets create \
+# `--all-updates-rule-monitoring-notification-channels` only exists on the beta
+# (and alpha) track, so budget creation must run on `gcloud beta`, not stable.
+gcloud beta billing budgets create \
   --billing-account="$BILLING_ACCOUNT" \
   --display-name="$DISPLAY_NAME" \
   --budget-amount="${AMOUNT}${CURRENCY}" \

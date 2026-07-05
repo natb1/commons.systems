@@ -1,7 +1,7 @@
 {
-  "_comment": "Params for `gcloud billing budgets create` — translated to flags by ops/scripts/apply-alerts.sh. Not a native gcloud policy file.",
+  "_comment": "Params for `gcloud beta billing budgets create` — translated to flags by ops/scripts/apply-alerts.sh. Not a native gcloud policy file.",
   "displayName": "commons-systems monthly spend (#2688)",
-  "budgetAmount": "50",
+  "budgetAmount": "10",
   "currencyCode": "USD",
   "thresholdPercents": [0.5, 0.9, 1.0],
   "projectId": "commons-systems"
