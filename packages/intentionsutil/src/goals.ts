@@ -112,17 +112,24 @@ function formatRank(value: number): string {
 }
 
 /**
- * Render a per-term breakdown suffix (e.g. ` {authored 6, signal 1}`) when
- * `terms` carries more than one nonzero contribution — the explainability
- * detail behind a composed rank (strategy clarification 11). Absent `terms`
- * (hand-built `ResolvedAttention` literals) or a single contributing term
- * (the common case: authored-only) renders nothing extra, so most output is
- * unaffected by the term registry's introduction.
+ * Render a per-term breakdown suffix (e.g. ` {authored 6, signal 1}`) — the
+ * explainability detail behind a composed rank (strategy clarification 11).
+ * Absent `terms` (hand-built `ResolvedAttention` literals) renders nothing.
+ *
+ * A single nonzero `authored` term is suppressed because a nonzero authored
+ * contribution always populates `sources`, which `renderFrontier` already
+ * surfaces as `[rank N via X]` — the breakdown would be redundant. But
+ * `signal` and `capture` never populate `sources`, so a single nonzero
+ * `signal`/`capture` term is the value's only explanation and must be shown;
+ * otherwise it renders as a bare `[rank N]` indistinguishable from a legacy
+ * anonymous boost. So render whenever more than one term is nonzero, OR the
+ * sole nonzero term is not `authored`.
  */
 function formatTermBreakdown(terms: TermContribution[] | undefined): string {
   if (terms === undefined) return "";
   const nonZero = terms.filter((t) => t.value !== 0);
-  if (nonZero.length <= 1) return "";
+  if (nonZero.length === 0) return "";
+  if (nonZero.length === 1 && nonZero[0].term === "authored") return "";
   return ` {${nonZero.map((t) => `${t.term} ${formatRank(t.value)}`).join(", ")}}`;
 }
 

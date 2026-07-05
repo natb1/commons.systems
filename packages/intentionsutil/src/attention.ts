@@ -78,7 +78,7 @@ function divergenceScore(delegation: IntentionNode): number {
   if (!isPlainObjectLike(divergence)) return 0;
   const level = divergence.level;
   if (typeof level !== "string") return 0;
-  const tokens = level.toLowerCase().match(/low|moderate|high/g);
+  const tokens = level.toLowerCase().match(/\blow\b|\bmoderate\b|\bhigh\b/g);
   if (tokens === null) return 0;
   // A compound value ("low-moderate") names two severities at once; score the
   // more severe one — understating capture risk is the wrong direction to
@@ -90,12 +90,18 @@ function irreversibilityScore(delegation: IntentionNode): number {
   const irreversibility = delegation.attributes.irreversibility;
   if (!isPlainObjectLike(irreversibility)) return 0;
   const gated = irreversibility.gated;
-  const gatedText = (typeof gated === "string" ? gated : String(gated ?? "")).trim().toLowerCase();
+  // A missing/malformed axis contributes 0 rather than partial (mirrors
+  // `divergenceScore`): an unfilled `irreversibility` object must not score
+  // HIGHER than one explicitly authored as fully open.
+  if (typeof gated !== "string") return 0;
+  const gatedText = gated.trim().toLowerCase();
+  if (gatedText === "") return 0;
   if (gatedText.startsWith("true")) return 3;
   if (gatedText.startsWith("false")) return 1;
   // The store's real middle ground ("partially — ...", "largely — ...") is
-  // real, described gating — distinct from both the fully-open and
-  // fully-closed poles, never collapsed into either.
+  // real, described gating — a present, non-empty string that names neither
+  // pole — distinct from both the fully-open and fully-closed poles, never
+  // collapsed into either.
   return 2;
 }
 
@@ -252,32 +258,54 @@ export function resolveAttention(nodes: IntentionNode[]): Map<string, ResolvedAt
   const onPathMemo = new Map<string, boolean>();
   const onPathStack = new Set<string>();
 
-  const isOnPath = (id: string): boolean => {
+  // `provisional` marks a `false` that was only reached by short-circuiting on a
+  // node still mid-DFS (a cycle formed by MIXING `parent` and `blocked_by`
+  // edges). Such a `false` saw only the truncated cycle view, not the node's
+  // true reachability, so it must NOT be memoized: caching it would permanently
+  // mis-record a node as off-path when its sole route to a terminal runs back
+  // through an ancestor that had not yet resolved, and would make the result
+  // depend on input/traversal order. It is recomputed instead — every eligible
+  // node is entered as a fresh DFS root by the compose loop, at which point its
+  // former on-stack ancestors are fully-resolved descendants. A `true` is always
+  // final (some path reached a terminal) and is always cached.
+  const resolveOnPath = (id: string): { result: boolean; provisional: boolean } => {
     const memo = onPathMemo.get(id);
-    if (memo !== undefined) return memo;
-    if (onPathStack.has(id)) return false; // cycle: this path contributes nothing, don't cache
+    if (memo !== undefined) return { result: memo, provisional: false };
+    if (onPathStack.has(id)) return { result: false, provisional: true }; // cycle short-circuit
     onPathStack.add(id);
 
     let result = terminalIds.has(id);
+    let provisional = false;
     if (!result) {
       const node = byId.get(id);
       if (node?.parent !== null && node?.parent !== undefined && byId.has(node.parent)) {
-        result = isOnPath(node.parent);
+        const parent = resolveOnPath(node.parent);
+        if (parent.result) result = true;
+        else provisional = provisional || parent.provisional;
       }
     }
     if (!result) {
       for (const blocked of reverseBlockers.get(id) ?? []) {
-        if (isOnPath(blocked)) {
+        const sub = resolveOnPath(blocked);
+        if (sub.result) {
           result = true;
           break;
         }
+        provisional = provisional || sub.provisional;
       }
     }
 
     onPathStack.delete(id);
-    onPathMemo.set(id, result);
-    return result;
+    // Cache only final answers: any `true`, or a `false` that did not depend on
+    // an unresolved cycle short-circuit. Provisional falses recompute later.
+    if (result || !provisional) {
+      onPathMemo.set(id, result);
+      return { result, provisional: false };
+    }
+    return { result, provisional: true };
   };
+
+  const isOnPath = (id: string): boolean => resolveOnPath(id).result;
 
   // --- Capture-resolution term ---------------------------------------------
 
@@ -301,7 +329,11 @@ export function resolveAttention(nodes: IntentionNode[]): Map<string, ResolvedAt
         sum += captureScore(delegation);
       }
     }
-    return sum;
+    // Cap at 1 so the capture term never exceeds CAPTURE_TERM_WEIGHT: the
+    // "Weights" invariant (derived terms max out at SIGNAL_TERM_WEIGHT +
+    // CAPTURE_TERM_WEIGHT = 2, so an authored boost still dominates) only holds
+    // if a node recovering several high-severity delegations can't sum past 1.
+    return Math.min(1, sum);
   };
 
   // --- Compose --------------------------------------------------------------
