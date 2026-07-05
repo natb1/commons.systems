@@ -141,7 +141,13 @@ lane only (legacy issue lane unchanged):
   (bodies are authoritative for tactics) and includes it in the
   state-only completion commit; the reconciler then routes the merged
   tactic to its `main-qa` phase (strategy clarification 22;
-  `tactic-main-qa-phase` owns the phase value and handler).
+  `tactic-main-qa-phase` owns the phase value and handler). Only
+  machine/browser-verifiable items become residue — verifiability is
+  triaged here at record time (the qa triage already classifies every
+  item), and a prod observation needing human judgment stays
+  `needs-human` → `office_hours`; this is what makes the legacy
+  boot-then-reject waste (`tactic-main-qa-triage-before-provision`)
+  structurally impossible on the node lane.
 
 ## Dependencies
 
