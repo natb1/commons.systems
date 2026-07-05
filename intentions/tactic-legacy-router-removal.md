@@ -27,7 +27,6 @@ blocked_by:
   - tactic-align-tactics-skill
   - tactic-graph-router-transitions
   - tactic-dispatch-lifecycle-sensor
-  - tactic-calculated-attention
   - tactic-phase-skill-node-targets
   - tactic-main-qa-phase
 office_hours: null
