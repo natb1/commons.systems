@@ -4,7 +4,7 @@ kind: tradition
 statement: Kantian respect — the humanity formula as the other-directed floor;
   heteronomy as what capture is
 owner: human
-status: codified
+status: delegated
 parent: null
 rationale: "virtue-respect-for-persons' statement is the formula of humanity
   nearly verbatim: treat every person as an end, never merely as a means
