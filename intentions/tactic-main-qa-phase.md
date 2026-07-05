@@ -55,6 +55,16 @@ Unit 2 makes the reconciler route a merged-with-residue tactic to
 `main-qa`; this tactic supplies the phase value itself and the handler
 that runs it.
 
+Verifiability is triaged at record time, not at handler boot: the qa
+phase only records machine/browser-verifiable items as `main-qa` residue
+(its triage already classifies every item — `tactic-phase-skill-node-targets`
+Unit 3); a prod observation needing human judgment is `needs-human` and
+parks via `office_hours` at qa time. This structurally solves, on the
+node lane, what `tactic-main-qa-triage-before-provision` patches on the
+legacy lane (qa-main Step 4·0 rejecting an unverifiable follow-up only
+after a worktree + session boot were paid) — an unverifiable item never
+becomes residue, so no `main-qa` session is ever provisioned for it.
+
 ## Unit 1 — Phase enum gains `main-qa`
 
 **Recommended model:** sonnet
@@ -78,6 +88,9 @@ legacy issue lane (keyspace split per `tactic-phase-skill-node-targets`
 Unit 1's convention):
 - Target: a tactic node at `phase: main-qa`; the work list is the
   needs-main residue section of the node body (not a gh issue body).
+  Residue is pre-triaged verifiable at record time (Context above), so
+  the legacy Step 4·0 verifiability pre-filter is a cheap re-assert on
+  the node lane, not a discovery step.
 - Sensor gate (consulted by the selector before spawning, and re-checked
   by the handler): the source PR is merged and the prod deploy for the
   touched app(s) has landed.
