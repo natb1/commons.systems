@@ -73,7 +73,7 @@ describe("mintInstallationToken", () => {
     expect(init.headers).toMatchObject({
       Authorization: expect.stringMatching(/^Bearer .+\..+\..+$/),
       Accept: "application/vnd.github+json",
-      "User-Agent": "office-hours-sync/1.0",
+      "User-Agent": "github-app-auth/1.0",
     });
   });
 
