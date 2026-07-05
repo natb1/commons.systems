@@ -28,6 +28,8 @@
 // swallowed fallback (`.claude/rules/code-style.md`).
 
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { listNodes, writeNode } from "../src/store.js";
@@ -92,6 +94,177 @@ const gitSensor: Sensor = {
   },
 };
 
+// --- token-economy sensor ----------------------------------------------------
+// Name `"token-economy"` — the sensor `strategy-token-economy` names in its
+// `success_signal.sensor`. The reading is dual, matching the strategy's dual
+// signal: weekly prepaid-allowance utilization plus claude-eligible tactic
+// velocity over a trailing window. Format (stable and parseable):
+//   `utilization: <p>% weekly; tactics 28d: <c> created / <d> closed (net <±n>)`
+// with either half degrading to `unknown` on a local failure — never a throw
+// (total-sensor contract above).
+
+/**
+ * Where the statusline hook (`update-rate-limits.sh`) persists harness
+ * telemetry. `TOKEN_ECONOMY_RATE_LIMITS_PATH` overrides for tests, mirroring
+ * `DISPATCH_TARGET_WORKERS_RATE_LIMITS_PATH` in `dispatch-target-workers`.
+ */
+const RATE_LIMITS_DEFAULT_PATH = join(
+  homedir(),
+  ".local",
+  "share",
+  "commons-dispatch",
+  "rate_limits.json",
+);
+
+/** Trailing window, in days, for the tactic-velocity half of the reading. */
+const VELOCITY_WINDOW_DAYS = 28;
+
+/**
+ * Utilization half: the pre-computed weekly used-percentage from the telemetry
+ * file's `.seven_day.used_percentage` — no math here, the statusline hook
+ * already computed it. Sanitization mirrors dispatch-target-workers: accept a
+ * number or a plain numeric string; anything non-numeric, negative, or above
+ * 100 is treated as missing. A missing file, field, or malformed value reads
+ * as `"unknown"`, never a throw.
+ */
+export function readWeeklyUtilization(rateLimitsPath: string): string {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(rateLimitsPath, "utf8"));
+  } catch {
+    return "unknown";
+  }
+  if (typeof parsed !== "object" || parsed === null) {
+    return "unknown";
+  }
+  const sevenDay = (parsed as Record<string, unknown>).seven_day;
+  if (typeof sevenDay !== "object" || sevenDay === null) {
+    return "unknown";
+  }
+  const used = (sevenDay as Record<string, unknown>).used_percentage;
+  const value =
+    typeof used === "number"
+      ? used
+      : typeof used === "string" && /^[0-9]+(\.[0-9]+)?$/.test(used)
+        ? Number(used)
+        : NaN;
+  if (!Number.isFinite(value) || value < 0 || value > 100) {
+    return "unknown";
+  }
+  return `${value}% weekly`;
+}
+
+/**
+ * Velocity half: claude-eligible tactic flow derived from the local clone's
+ * `intentions/` git history over a trailing window.
+ *
+ *  - Created = a commit adding an `intentions/tactic-*.md` whose frontmatter
+ *    declares `owner: ai`. Draft tactics (`status: raw`, no phase) count —
+ *    they are claude-eligible work entering the graph.
+ *  - Closed = a commit setting such a node's phase to `done` (the added
+ *    `phase: done` frontmatter line, nested under `attributes`) or deleting
+ *    the file (gated on the removed `owner: ai` line, so only claude-eligible
+ *    nodes count).
+ *
+ * Both are line-level patch heuristics over `git log -p`, deduplicated by
+ * path; a git failure (not a repo, no commits) reads as `"unknown"`.
+ */
+export function readTacticVelocity(
+  repoDir: string,
+  windowDays: number = VELOCITY_WINDOW_DAYS,
+): string {
+  let patch: string;
+  try {
+    patch = execFileSync(
+      "git",
+      [
+        "log",
+        `--since=${windowDays} days ago`,
+        "--diff-filter=AMD",
+        "--no-renames",
+        "--format=%H",
+        "-p",
+        "--",
+        "intentions/tactic-*.md",
+      ],
+      {
+        cwd: repoDir,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+        maxBuffer: 64 * 1024 * 1024,
+      },
+    );
+  } catch {
+    return "unknown";
+  }
+
+  const created = new Set<string>();
+  const closed = new Set<string>();
+  let path: string | null = null;
+  let isNewFile = false;
+  let isDeletedFile = false;
+
+  for (const line of patch.split("\n")) {
+    const header = /^diff --git a\/(\S+) b\/(\S+)$/.exec(line);
+    if (header !== null) {
+      path = header[2];
+      isNewFile = false;
+      isDeletedFile = false;
+      continue;
+    }
+    if (path === null) {
+      continue;
+    }
+    if (line.startsWith("new file mode")) {
+      isNewFile = true;
+      continue;
+    }
+    if (line.startsWith("deleted file mode")) {
+      isDeletedFile = true;
+      continue;
+    }
+    if (isNewFile && /^\+owner:\s*ai\s*$/.test(line)) {
+      created.add(path);
+      continue;
+    }
+    if (isDeletedFile && /^-owner:\s*ai\s*$/.test(line)) {
+      closed.add(path);
+      continue;
+    }
+    if (!isDeletedFile && /^\+\s*phase:\s*done\s*$/.test(line)) {
+      closed.add(path);
+    }
+  }
+
+  const net = created.size - closed.size;
+  const signedNet = net >= 0 ? `+${net}` : `${net}`;
+  return `${created.size} created / ${closed.size} closed (net ${signedNet})`;
+}
+
+/**
+ * Compose the full token-economy reading from its two halves. Exported for
+ * unit tests, which inject fixture telemetry and a fixture git repo.
+ */
+export function readTokenEconomy(
+  rateLimitsPath: string,
+  repoDir: string,
+  windowDays: number = VELOCITY_WINDOW_DAYS,
+): string {
+  return (
+    `utilization: ${readWeeklyUtilization(rateLimitsPath)}; ` +
+    `tactics ${windowDays}d: ${readTacticVelocity(repoDir, windowDays)}`
+  );
+}
+
+const tokenEconomySensor: Sensor = {
+  name: "token-economy",
+  read(): string {
+    const rateLimitsPath =
+      process.env.TOKEN_ECONOMY_RATE_LIMITS_PATH ?? RATE_LIMITS_DEFAULT_PATH;
+    return readTokenEconomy(rateLimitsPath, repoRoot);
+  },
+};
+
 /**
  * Build the default registry of local-first own-execution sensors. Exported so
  * the registration set can be unit-tested (verification deferred to #2372/QA).
@@ -100,6 +273,7 @@ export function buildDefaultRegistry(): SensorRegistry {
   const registry = new SensorRegistry();
   registry.register(vitestSensor);
   registry.register(gitSensor);
+  registry.register(tokenEconomySensor);
   return registry;
 }
 
