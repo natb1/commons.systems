@@ -195,6 +195,10 @@
             home-manager.users.n8 = {
               programs.git.settings.user.name = "Nathan Buesgens";
               programs.git.settings.user.email = "nathan@natb1.com";
+              services.sshAuthorizedKeys.keys = [
+                "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBzEPhvoentKLmUnWPI0mfPHEFNP2bj0ekvC3N5LcI58 n8@nixos"
+                "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM7rlIYWYTjLuwkOyKsO4PxewINlxA8HezSW+GTpE9os n8@Nathans-MacBook-Air.local"
+              ];
             };
 
             # Contrast with darwin: do NOT disable programs.wezterm here. Linux/WSL

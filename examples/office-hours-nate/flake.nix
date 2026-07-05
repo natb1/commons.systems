@@ -82,6 +82,11 @@
             home.homeDirectory = "/Users/youruser";
             programs.git.settings.user.name = "Your Name";
             programs.git.settings.user.email = "you@example.com";
+
+            # Authorized SSH keys are optional. A template forker's standalone
+            # Mac homeConfiguration usually has no inbound sshd, so the empty
+            # default is a no-op; set real keys only if you run sshd:
+            # services.sshAuthorizedKeys.keys = [ "ssh-ed25519 AAAA... you@host" ];
           }
         ];
       };
