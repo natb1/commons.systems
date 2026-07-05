@@ -28,6 +28,33 @@
         direnv = prev.direnv.overrideAttrs (_: { doCheck = false; });
       };
 
+      # The unfree package names the framework permits (claude-code is unfree).
+      claudeUnfreePredicate =
+        pkg: builtins.elem (nixpkgs.lib.getName pkg) [ "claude-code" ];
+
+      # Single composed overlay every consumer needs: claude-code-nix (pins
+      # pkgs.claude-code to the sadjow fork used by homeManagerModules.default;
+      # recent nixpkgs ships its own claude-code, so without this overlay eval
+      # still succeeds but resolves to nixpkgs' build/version instead) then the
+      # direnv test-skip. Exported as overlays.default so instance flakes stop
+      # hand-copying the list. Composing into one function keeps it a valid overlay
+      # output (nix flake check rejects a list here).
+      claudeOverlay = nixpkgs.lib.composeManyExtensions [
+        claude-code-nix.overlays.default
+        direnvSkipTestsOverlay
+      ];
+
+      # Build a fully-configured pkgs set for `system`: the composed overlay applied
+      # and claude-code allowed as unfree. Instance flakes call this instead of
+      # copying the `import nixpkgs { … }` block. Closes over the framework's own
+      # nixpkgs/claude-code-nix inputs, which instance flakes make follow their
+      # nixpkgs via `inputs.nixpkgs.follows`.
+      mkPkgs = { system }: import nixpkgs {
+        inherit system;
+        overlays = [ claudeOverlay ];
+        config.allowUnfreePredicate = claudeUnfreePredicate;
+      };
+
       systems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
       forAllSystems = fn: nixpkgs.lib.genAttrs systems (system: fn {
         pkgs = nixpkgs.legacyPackages.${system};
@@ -114,9 +141,8 @@
       mkIntegratedHmConfig = { hostPlatform, homeDirectory }: {
         nixpkgs.hostPlatform = hostPlatform;
 
-        nixpkgs.overlays = [ claude-code-nix.overlays.default direnvSkipTestsOverlay ];
-        nixpkgs.config.allowUnfreePredicate =
-          pkg: builtins.elem (nixpkgs.lib.getName pkg) [ "claude-code" ];
+        nixpkgs.overlays = [ claudeOverlay ];
+        nixpkgs.config.allowUnfreePredicate = claudeUnfreePredicate;
 
         home-manager.useGlobalPkgs = true;
         home-manager.useUserPackages = true;
@@ -204,5 +230,8 @@
         ];
       };
     in
-    systemOutputs // { inherit darwinConfigurations nixosConfigurations homeManagerModules darwinModules; };
+    systemOutputs // {
+      inherit darwinConfigurations nixosConfigurations homeManagerModules darwinModules mkPkgs;
+      overlays.default = claudeOverlay;
+    };
 }
