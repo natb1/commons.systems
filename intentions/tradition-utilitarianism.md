@@ -4,7 +4,7 @@ kind: tradition
 statement: "Utilitarian aggregation — declined: virtues are balanced, never
   summed; rank routes attention, it does not price value"
 owner: human
-status: codified
+status: delegated
 parent: null
 rationale: "kind-virtue refuses aggregation twice — 'balanced, not summed' and
   'whatever consumes this graph must never total virtue children into a parent

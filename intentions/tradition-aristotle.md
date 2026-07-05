@@ -4,7 +4,7 @@ kind: tradition
 statement: "Aristotelian ethics — the graph's structural chassis: virtue as
   hexis, tension as the mean, phronesis at the root"
 owner: human
-status: codified
+status: delegated
 parent: null
 rationale: "The deepest structural inheritance in the graph. kind-virtue's
   'disposition held and exercised, never completed' is nearly a direct

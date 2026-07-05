@@ -4,7 +4,7 @@ kind: tradition
 statement: Platonic method — elenchus as the align dialectic, the Cave as the
   capture doctrine; the Forms declined
 owner: human
-status: codified
+status: delegated
 parent: null
 rationale: "Method first, content second (2026-07-04 interview). The align skill
   family is Socratic elenchus in engineering dress: interview,

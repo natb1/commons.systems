@@ -4,7 +4,7 @@ kind: tradition
 statement: "Stoic detachment — declined: virtue is not sufficient and detachment
   is not the goal; the drills are kept"
 owner: human
-status: codified
+status: delegated
 parent: null
 rationale: "The root virtue's own name is the refusal: Philosophical Mobility
   OVER Detachment. Stoicism holds virtue sufficient for eudaimonia and counsels
