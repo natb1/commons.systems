@@ -862,6 +862,16 @@ WAITING_NUM=""
 while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
   [[ -z "$pr_num" ]] && continue
 
+  # Graph-native tactic branches (e.g. `tactic-align-tactics-skill`, #2764) carry
+  # no <N>-slug issue prefix — they're session-driven (/align-strategy,
+  # /align-tactics-skill), progressed and merged manually, never through this
+  # queue (confirmed via #2760's merge history: mergedBy the human, no
+  # dispatch:* labels ever applied). Skip them here, before pr_issue_num below
+  # is derived, so a `pr` decision line is never emitted for one — downstream
+  # (dispatch-tick's `${branch%%-*}` issue-number derivation) has no numeric
+  # issue to resolve for these and would otherwise hard-fail (#2765).
+  [[ "$pr_branch" =~ ^[0-9]+- ]] || continue
+
   # The branch issue-prefix (<N>-<slug>) is this PR's worktree/session key — the
   # same <N> the office-hours and --exclude checks below key on. Compute it once
   # here and reuse it (claimed skip, office-hours skip, exclude skip).
