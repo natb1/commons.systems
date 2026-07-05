@@ -28,6 +28,35 @@
         direnv = prev.direnv.overrideAttrs (_: { doCheck = false; });
       };
 
+      # The unfree package names the framework permits (claude-code is unfree).
+      claudeUnfreePredicate =
+        pkg: builtins.elem (nixpkgs.lib.getName pkg) [ "claude-code" ];
+
+      # The framework's full opinionated stack, composing claude-code-nix (pins
+      # pkgs.claude-code to the sadjow fork used by homeManagerModules.default;
+      # recent nixpkgs ships its own claude-code, so without this overlay eval
+      # still succeeds but resolves to nixpkgs' build/version instead) with the
+      # direnv test-skip. Consumed internally by mkPkgs/mkIntegratedHmConfig and
+      # exported as overlays.default; a consumer wanting only the claude-code
+      # capability (without the direnv rebuild) applies overlays.claude-code
+      # instead. Composing into one function keeps it a valid overlay output
+      # (nix flake check rejects a list here).
+      claudeOverlay = nixpkgs.lib.composeManyExtensions [
+        claude-code-nix.overlays.default
+        direnvSkipTestsOverlay
+      ];
+
+      # Build a fully-configured pkgs set for `system`: the composed overlay applied
+      # and claude-code allowed as unfree. Instance flakes call this instead of
+      # copying the `import nixpkgs { … }` block. Closes over the framework's own
+      # nixpkgs/claude-code-nix inputs, which instance flakes make follow their
+      # nixpkgs via `inputs.nixpkgs.follows`.
+      mkPkgs = { system }: import nixpkgs {
+        inherit system;
+        overlays = [ claudeOverlay ];
+        config.allowUnfreePredicate = claudeUnfreePredicate;
+      };
+
       systems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
       forAllSystems = fn: nixpkgs.lib.genAttrs systems (system: fn {
         pkgs = nixpkgs.legacyPackages.${system};
@@ -118,9 +147,8 @@
       mkIntegratedHmConfig = { hostPlatform, homeDirectory }: {
         nixpkgs.hostPlatform = hostPlatform;
 
-        nixpkgs.overlays = [ claude-code-nix.overlays.default direnvSkipTestsOverlay ];
-        nixpkgs.config.allowUnfreePredicate =
-          pkg: builtins.elem (nixpkgs.lib.getName pkg) [ "claude-code" ];
+        nixpkgs.overlays = [ claudeOverlay ];
+        nixpkgs.config.allowUnfreePredicate = claudeUnfreePredicate;
 
         home-manager.useGlobalPkgs = true;
         home-manager.useUserPackages = true;
@@ -220,5 +248,20 @@
         ];
       };
     in
-    systemOutputs // { inherit darwinConfigurations nixosConfigurations homeManagerModules darwinModules; };
+    systemOutputs // {
+      inherit darwinConfigurations nixosConfigurations homeManagerModules darwinModules mkPkgs;
+      overlays = {
+        # The only overlay homeManagerModules.default requires: pins
+        # pkgs.claude-code to the sadjow fork. A consumer wanting just the
+        # claude-code capability applies this alone.
+        claude-code = claude-code-nix.overlays.default;
+        # Optional, independent build workaround (direnv doCheck = false); not
+        # required by claude-code.
+        direnv-skip-tests = direnvSkipTestsOverlay;
+        # The framework's full opinionated stack (both composed). Applying it
+        # rebuilds direnv with doCheck = false, so a consumer wanting only
+        # claude-code should apply overlays.claude-code instead.
+        default = claudeOverlay;
+      };
+    };
 }
