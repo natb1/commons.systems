@@ -27,9 +27,10 @@
 // DROPPED — they are not in those scripts' stable output.
 //
 // Authentication:
-//   - GitHub: reuses the syncOfficeHours GitHub App auth (`mintInstallationToken`
-//     imported, not re-implemented; param NAMES shared so firebase-functions
-//     dedupes them). Stats are public; traffic needs push access, so traffic is
+//   - GitHub: reuses the shared GitHub App auth (`mintInstallationToken` from
+//     github-app-auth.ts, imported not re-implemented; param NAMES shared so
+//     firebase-functions dedupes them). Stats are public; traffic needs push
+//     access, so traffic is
 //     omitted (not an error) when the token lacks it.
 //   - GA4 + GSC: a SINGLE Google OAuth refresh-token→access-token exchange, whose
 //     access token authenticates both runReport (GA4) and searchAnalytics (GSC).
@@ -111,7 +112,7 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret, defineString } from "firebase-functions/params";
 import { getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
-import { mintInstallationToken } from "./office-hours-sync.js";
+import { mintInstallationToken } from "./github-app-auth.js";
 import {
   fetchGithubStatsLive,
   fetchGithubTrafficLive,
