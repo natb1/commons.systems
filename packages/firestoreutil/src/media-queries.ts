@@ -16,6 +16,9 @@ import type { Namespace } from "./namespace.js";
 import {
   decodeCursor,
   pagedMerge,
+  compareByAddedAtDescIdDesc,
+  encodeMergedCursor,
+  decodeMergedCursor,
   DEFAULT_MEDIA_PAGE_SIZE,
 } from "./paged-merge.js";
 import type { MediaCursor, MediaPage, MediaPageOptions } from "./paged-merge.js";
@@ -107,20 +110,47 @@ export function createMediaQueries<T extends { id: string; addedAt: string }>(
     opts?: MediaPageOptions,
   ): Promise<MediaPage<T>> {
     const pageSize = opts?.pageSize ?? DEFAULT_MEDIA_PAGE_SIZE;
-    const cursor = opts?.cursor ? decodeCursor(opts.cursor) : null;
-    // Broadcast the SAME decoded cursor and pageSize to both sub-streams — the
-    // composability point. pagedMerge then dedups, sorts, and re-slices to one
-    // page, computing the merged nextCursor.
+    const decoded = opts?.cursor ? decodeMergedCursor(opts.cursor) : null;
+    const key = decoded?.key ?? null;
+    const wasExhausted = decoded?.exhausted ?? [];
+    // Broadcast the SAME decoded cursor key and pageSize to both sub-streams —
+    // the composability point. A stream the previous page flagged exhausted is
+    // skipped (not re-queried), saving up to pageSize wasted Firestore reads.
+    // pagedMerge then dedups, sorts, and re-slices to one page.
+    const EXHAUSTED: { items: T[]; hasMore: boolean } = { items: [], hasMore: false };
     const [publicStream, userStream] = await Promise.all([
-      fetchStream([where("publicDomain", "==", true)], pageSize, cursor),
-      fetchStream([where("memberEmails", "array-contains", email)], pageSize, cursor),
+      wasExhausted[0]
+        ? Promise.resolve(EXHAUSTED)
+        : fetchStream([where("publicDomain", "==", true)], pageSize, key),
+      wasExhausted[1]
+        ? Promise.resolve(EXHAUSTED)
+        : fetchStream([where("memberEmails", "array-contains", email)], pageSize, key),
     ]);
-    return pagedMerge(
-      [publicStream, userStream],
-      pageSize,
-      (item) => item.id,
-      (item) => ({ addedAt: item.addedAt, id: item.id }),
+    const streams = [publicStream, userStream];
+    const keyOf = (item: T): MediaCursor => ({
+      addedAt: item.addedAt,
+      id: item.id,
+    });
+    const page = pagedMerge(streams, pageSize, (item) => item.id, keyOf);
+    // pagedMerge's null nextCursor is the authoritative "no more pages" signal;
+    // only when non-null do we re-wrap with per-stream exhaustion. A non-null
+    // cursor guarantees page.items is non-empty, so Kcut is safe.
+    if (page.nextCursor === null) return page;
+    const kcut = keyOf(page.items[page.items.length - 1]);
+    // A stream is exhausted for the NEXT page iff it returned all its remaining
+    // docs (!hasMore) AND its returned tail is fully within the shown window
+    // (its oldest returned item is at or above the page cut). Deferring the skip
+    // until the tail is consumed prevents dropping items that fell below the cut
+    // because the other stream contributed newer rows. A skipped stream's
+    // items.length === 0 keeps it flagged on every following page.
+    const exhausted = streams.map(
+      (s) =>
+        !s.hasMore &&
+        (s.items.length === 0 ||
+          compareByAddedAtDescIdDesc(keyOf(s.items[s.items.length - 1]), kcut) <=
+            0),
     );
+    return { items: page.items, nextCursor: encodeMergedCursor(kcut, exhausted) };
   }
 
   async function getMediaItem(id: string): Promise<T | null> {

@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   encodeCursor,
   decodeCursor,
+  encodeMergedCursor,
+  decodeMergedCursor,
   compareByAddedAtDescIdDesc,
   pagedMerge,
   DEFAULT_MEDIA_PAGE_SIZE,
@@ -41,6 +43,34 @@ describe("cursor round-trip", () => {
   it("round-trips values containing punctuation and unicode", () => {
     const k: MediaCursor = { addedAt: "2026-03-01T00:00:00.500Z", id: 'a"/\\:_-é' };
     expect(decodeCursor(encodeCursor(k))).toEqual(k);
+  });
+});
+
+describe("merged cursor round-trip", () => {
+  it("decodeMergedCursor(encodeMergedCursor(k, exhausted)) deep-equals { key: k, exhausted }", () => {
+    const k: MediaCursor = { addedAt: "2026-03-01T00:00:00Z", id: "abc123" };
+    expect(decodeMergedCursor(encodeMergedCursor(k, [false, true]))).toEqual({
+      key: k,
+      exhausted: [false, true],
+    });
+  });
+
+  it("round-trips values containing punctuation and unicode", () => {
+    const k: MediaCursor = { addedAt: "2026-03-01T00:00:00.500Z", id: 'a"/\\:_-é' };
+    expect(decodeMergedCursor(encodeMergedCursor(k, [true, false]))).toEqual({
+      key: k,
+      exhausted: [true, false],
+    });
+  });
+
+  it("decodeCursor still reads a merged cursor correctly (backward-compat)", () => {
+    const k: MediaCursor = { addedAt: "2026-03-01T00:00:00Z", id: "abc123" };
+    expect(decodeCursor(encodeMergedCursor(k, [true, false]))).toEqual(k);
+  });
+
+  it("decodeMergedCursor of a legacy two-element cursor returns exhausted: []", () => {
+    const k: MediaCursor = { addedAt: "2026-03-01T00:00:00Z", id: "abc123" };
+    expect(decodeMergedCursor(encodeCursor(k))).toEqual({ key: k, exhausted: [] });
   });
 });
 
