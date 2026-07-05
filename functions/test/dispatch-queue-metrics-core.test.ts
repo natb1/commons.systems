@@ -1,42 +1,13 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Firestore } from "firebase-admin/firestore";
-
-vi.mock("firebase-admin/app", () => ({
-  getApps: () => [{}],
-  initializeApp: vi.fn(),
-}));
-
-vi.mock("firebase-admin/firestore", () => {
-  const TimestampImpl = {
-    fromDate: (d: Date) => ({ toDate: () => d, _seconds: d.getTime() / 1000 }),
-  };
-  return {
-    getFirestore: vi.fn(),
-    Timestamp: TimestampImpl,
-    FieldValue: { serverTimestamp: () => "__server_timestamp__" },
-  };
-});
-
-vi.mock("firebase-functions/v2/scheduler", () => ({
-  onSchedule: vi.fn((_opts, _fn) => ({})),
-}));
-
-vi.mock("firebase-functions/params", () => ({
-  defineSecret: () => ({ value: () => "test-token" }),
-  defineString: (_name: string, opts?: { default?: string }) => ({
-    value: () => opts?.default ?? "test-value",
-  }),
-}));
 
 import {
   buildQueueSearchQueries,
   buildOfficeHoursQuery,
   computeQueueMetrics,
-  searchIssueCountLive,
-  searchIssueDetailsLive,
   sampleDispatchQueueCore,
-} from "../src/dispatch-queue-metrics";
-import type { ParkedIssue } from "../src/dispatch-queue-metrics";
+} from "../src/dispatch-queue-metrics-core";
+import type { ParkedIssue } from "../src/dispatch-queue-metrics-core";
 
 interface InMemoryDocRef {
   path: string;
@@ -170,173 +141,11 @@ describe("computeQueueMetrics", () => {
   });
 });
 
-describe("searchIssueCountLive", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it("posts the search/issueCount GraphQL query and returns the count", async () => {
-    const fetchMock = vi.fn(async (_url: string, init: { body: string }) => {
-      const parsed = JSON.parse(init.body) as { query: string; variables: { query: string } };
-      expect(parsed.query).toContain("search(query: $query, type: ISSUE)");
-      expect(parsed.query).toContain("issueCount");
-      expect(parsed.variables.query).toBe("repo:x/y is:issue is:open");
-      return {
-        ok: true,
-        status: 200,
-        json: async () => ({ data: { search: { issueCount: 42 } } }),
-      };
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
-    const count = await searchIssueCountLive("tok", "repo:x/y is:issue is:open");
-    expect(count).toBe(42);
-    expect(fetchMock).toHaveBeenCalledWith(
-      "https://api.github.com/graphql",
-      expect.objectContaining({ method: "POST" }),
-    );
-  });
-
-  it("throws on a non-OK HTTP response", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ({
-        ok: false,
-        status: 503,
-        text: async () => "service unavailable",
-      })),
-    );
-    await expect(searchIssueCountLive("tok", "q")).rejects.toThrow(/503/);
-  });
-
-  it("throws when GraphQL returns errors", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ({
-        ok: true,
-        status: 200,
-        json: async () => ({ errors: [{ message: "bad query" }] }),
-      })),
-    );
-    await expect(searchIssueCountLive("tok", "q")).rejects.toThrow(/bad query/);
-  });
-});
-
 describe("buildOfficeHoursQuery", () => {
   it("builds the parked dispatch:office-hours query for a repo", () => {
     expect(buildOfficeHoursQuery("natb1/commons.systems")).toBe(
       'repo:natb1/commons.systems is:issue is:open label:"dispatch:office-hours"',
     );
-  });
-});
-
-describe("searchIssueDetailsLive", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it("maps issue nodes to ParkedIssue, with createdAt a real Date and best-effort phase", async () => {
-    const fetchMock = vi.fn(async (_url: string, init: { body: string }) => {
-      const parsed = JSON.parse(init.body) as { query: string; variables: { query: string } };
-      expect(parsed.query).toContain("search(query: $query, type: ISSUE, first: 100)");
-      expect(parsed.query).toContain("nameWithOwner");
-      expect(parsed.variables.query).toBe(
-        'repo:natb1/commons.systems is:issue is:open label:"dispatch:office-hours"',
-      );
-      return {
-        ok: true,
-        status: 200,
-        json: async () => ({
-          data: {
-            search: {
-              nodes: [
-                {
-                  number: 100,
-                  title: "Parked plan item",
-                  url: "https://github.com/natb1/commons.systems/issues/100",
-                  createdAt: "2026-06-01T12:00:00Z",
-                  labels: {
-                    nodes: [
-                      { name: "dispatch:office-hours" },
-                      { name: "dispatch:plan" },
-                      { name: "help wanted" },
-                    ],
-                  },
-                  repository: { nameWithOwner: "natb1/commons.systems" },
-                },
-                {
-                  number: 101,
-                  title: "Parked with no phase",
-                  url: "https://github.com/natb1/commons.systems/issues/101",
-                  createdAt: "2026-06-02T09:30:00Z",
-                  labels: { nodes: [{ name: "dispatch:office-hours" }] },
-                  repository: { nameWithOwner: "natb1/commons.systems" },
-                },
-              ],
-            },
-          },
-        }),
-      };
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
-    const parked = await searchIssueDetailsLive(
-      "tok",
-      buildOfficeHoursQuery("natb1/commons.systems"),
-    );
-
-    expect(parked).toHaveLength(2);
-    const [a, b] = parked;
-    expect(a.number).toBe(100);
-    expect(a.title).toBe("Parked plan item");
-    expect(a.url).toBe("https://github.com/natb1/commons.systems/issues/100");
-    expect(a.repo).toBe("natb1/commons.systems");
-    // createdAt MUST be a real Date, not the raw ISO string.
-    expect(a.createdAt).toBeInstanceOf(Date);
-    expect(a.createdAt.toISOString()).toBe("2026-06-01T12:00:00.000Z");
-    // phase = first dispatch:* label other than dispatch:office-hours.
-    expect(a.phase).toBe("dispatch:plan");
-    // No dispatch:* phase label -> phase omitted entirely (Firestore-safe).
-    expect(b.phase).toBeUndefined();
-    expect("phase" in b).toBe(false);
-  });
-
-  it("throws on a non-OK HTTP response", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ({
-        ok: false,
-        status: 503,
-        text: async () => "service unavailable",
-      })),
-    );
-    await expect(searchIssueDetailsLive("tok", "q")).rejects.toThrow(/503/);
-  });
-
-  it("declares $query as a non-null String! (GitHub search requires String!)", async () => { // type-safety-ok: String! in description refers to GraphQL non-null type annotation
-    let capturedBody = "";
-    const fetchMock = vi.fn(async (_url: string, init: { body: string }) => {
-      capturedBody = init.body;
-      return {
-        ok: true,
-        status: 200,
-        json: async () => ({
-          data: {
-            search: {
-              nodes: [],
-            },
-          },
-        }),
-      };
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
-    await searchIssueDetailsLive("tok", "q");
-
-    const parsed = JSON.parse(capturedBody) as { query: string };
-    expect(parsed.query).toContain("query($query: String!)"); // type-safety-ok: GraphQL non-null type annotation in expected string
-    // Must NOT declare $query as nullable String (without !) — GitHub rejects that
-    expect(parsed.query).not.toContain("query($query: String)");
   });
 });
 

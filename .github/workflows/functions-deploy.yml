@@ -28,8 +28,8 @@ jobs:
         env:
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: .github/scripts/firebase-auth.sh
-      # syncOfficeHours's, sampleDispatchQueueMetrics's, and collectProjectSignals's
-      # non-secret defineString params come from repository Secrets, written into the
+      # collectProjectSignals's non-secret defineString params come
+      # from repository Secrets, written into the
       # dotenv firebase-tools reads at deploy time. firebase deploy resolves EVERY
       # defineString in non-interactive mode and fails if any is absent, even ones
       # with a code-level default, so every param must be written here. Params with a
@@ -40,10 +40,8 @@ jobs:
         env:
           OFFICE_HOURS_GITHUB_APP_ID: ${{ secrets.OFFICE_HOURS_GITHUB_APP_ID }}
           OFFICE_HOURS_GITHUB_APP_INSTALLATION_ID: ${{ secrets.OFFICE_HOURS_GITHUB_APP_INSTALLATION_ID }}
-          OFFICE_HOURS_GROUP_REPO: ${{ secrets.OFFICE_HOURS_GROUP_REPO }}
           OFFICE_HOURS_FIRESTORE_NAMESPACE: ${{ secrets.OFFICE_HOURS_FIRESTORE_NAMESPACE || 'office-hours/prod' }}
           OFFICE_HOURS_GROUP_ID: ${{ secrets.OFFICE_HOURS_GROUP_ID }}
-          DISPATCH_METRICS_QUEUE_REPO: ${{ secrets.DISPATCH_METRICS_QUEUE_REPO }}
           PROJECT_SIGNALS_GITHUB_REPO: ${{ secrets.PROJECT_SIGNALS_GITHUB_REPO || 'natb1/commons.systems' }}
           GOOGLE_ANALYTICS_CLIENT_ID: ${{ secrets.GOOGLE_ANALYTICS_CLIENT_ID }}
           PROJECT_SIGNALS_GA4_PROPERTY_ID: ${{ secrets.PROJECT_SIGNALS_GA4_PROPERTY_ID }}
@@ -55,10 +53,8 @@ jobs:
           cat > functions/.env.commons-systems <<EOF
           OFFICE_HOURS_GITHUB_APP_ID=${OFFICE_HOURS_GITHUB_APP_ID}
           OFFICE_HOURS_GITHUB_APP_INSTALLATION_ID=${OFFICE_HOURS_GITHUB_APP_INSTALLATION_ID}
-          OFFICE_HOURS_GROUP_REPO=${OFFICE_HOURS_GROUP_REPO}
           OFFICE_HOURS_FIRESTORE_NAMESPACE=${OFFICE_HOURS_FIRESTORE_NAMESPACE}
           OFFICE_HOURS_GROUP_ID=${OFFICE_HOURS_GROUP_ID}
-          DISPATCH_METRICS_QUEUE_REPO=${DISPATCH_METRICS_QUEUE_REPO}
           PROJECT_SIGNALS_GITHUB_REPO=${PROJECT_SIGNALS_GITHUB_REPO}
           GOOGLE_ANALYTICS_CLIENT_ID=${GOOGLE_ANALYTICS_CLIENT_ID}
           PROJECT_SIGNALS_GA4_PROPERTY_ID=${PROJECT_SIGNALS_GA4_PROPERTY_ID}
