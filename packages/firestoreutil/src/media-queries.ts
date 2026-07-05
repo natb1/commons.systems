@@ -117,7 +117,7 @@ export function createMediaQueries<T extends { id: string; addedAt: string }>(
     // the composability point. A stream the previous page flagged exhausted is
     // skipped (not re-queried), saving up to pageSize wasted Firestore reads.
     // pagedMerge then dedups, sorts, and re-slices to one page.
-    const EXHAUSTED = { items: [] as T[], hasMore: false };
+    const EXHAUSTED: { items: T[]; hasMore: boolean } = { items: [], hasMore: false };
     const [publicStream, userStream] = await Promise.all([
       wasExhausted[0]
         ? Promise.resolve(EXHAUSTED)

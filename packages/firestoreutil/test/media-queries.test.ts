@@ -244,7 +244,7 @@ describe("getAllAccessibleMedia", () => {
     expect(page1.nextCursor).not.toBeNull();
     // User NOT yet skipped — its tail (Ub) is below the cut, so nothing dropped.
     // A naive `!hasMore` impl would wrongly emit [false, true] here.
-    expect(decodeMergedCursor(page1.nextCursor as string).exhausted).toEqual([false, false]);
+    expect(decodeMergedCursor(page1.nextCursor as string).exhausted).toEqual([false, false]); // type-safety-ok: nextCursor verified non-null by expect above
 
     // --- Page 2 (page 1 cursor): both queried; Ua,Ub now surface.
     resetMocks();
@@ -263,7 +263,7 @@ describe("getAllAccessibleMedia", () => {
     expect(page2.items.map((i) => i.id)).toEqual(["Ua", "Ub", "P4"]);
     expect(page2.nextCursor).not.toBeNull();
     // Now the user tail is within the cut (P4) → user flagged exhausted.
-    expect(decodeMergedCursor(page2.nextCursor as string).exhausted[1]).toBe(true);
+    expect(decodeMergedCursor(page2.nextCursor as string).exhausted[1]).toBe(true); // type-safety-ok: nextCursor verified non-null by expect above
 
     // --- Page 3 (page 2 cursor): user skipped — only the public stream queried.
     resetMocks();
@@ -295,6 +295,6 @@ describe("getAllAccessibleMedia", () => {
     expect(mockGetDocs.mock.calls.length).toBe(1);
     expect(result.nextCursor).not.toBeNull();
     // Public stays flagged exhausted on the returned cursor.
-    expect(decodeMergedCursor(result.nextCursor as string).exhausted[0]).toBe(true);
+    expect(decodeMergedCursor(result.nextCursor as string).exhausted[0]).toBe(true); // type-safety-ok: nextCursor verified non-null by expect above
   });
 });
