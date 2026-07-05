@@ -35,36 +35,21 @@
       url = "github:nix-community/home-manager/master";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    claude-code-nix = {
-      url = "github:sadjow/claude-code-nix";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
   };
 
-  outputs = inputs@{ commons-systems, nixpkgs, home-manager, claude-code-nix, ... }:
+  outputs = inputs@{ commons-systems, nixpkgs, home-manager, ... }:
     let
       # Select the system explicitly. This is a pure string literal — not
       # derived from the current system or the environment — so eval needs no
       # --impure.
       system = "aarch64-darwin";
 
-      # direnv 2.37.1 checkPhase hangs when built from source; skip tests.
-      # The framework does not export this overlay, so define it inline.
-      direnvSkipTestsOverlay = final: prev: {
-        direnv = prev.direnv.overrideAttrs (_: { doCheck = false; });
-      };
-
-      # Build pkgs WITH the claude-code-nix overlay. This is load-bearing:
-      # commons-systems.homeManagerModules.default imports nix/home/claude-code.nix,
-      # which installs pkgs.claude-code. That attribute exists only when
-      # claude-code-nix.overlays.default is applied. Without it, eval fails with
-      # `error: attribute 'claude-code' missing in set`.
-      pkgs = import nixpkgs {
-        inherit system;
-        overlays = [ claude-code-nix.overlays.default direnvSkipTestsOverlay ];
-        config.allowUnfreePredicate =
-          pkg: builtins.elem (nixpkgs.lib.getName pkg) [ "claude-code" ];
-      };
+      # Build the fully-configured pkgs set from the framework's exported helper.
+      # mkPkgs applies the claude-code-nix overlay (so pkgs.claude-code resolves,
+      # required by commons-systems.homeManagerModules.default), applies the direnv
+      # test-skip, and allows claude-code as unfree. The framework is the single
+      # source of this wiring, so instances no longer copy it.
+      pkgs = commons-systems.mkPkgs { inherit system; };
     in
     {
       # `home-manager switch --flake .#aarch64-darwin` resolves this attribute.

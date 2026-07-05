@@ -55,8 +55,10 @@ homeConfiguration, and add the flag only if that eval actually fails.
 
 ## Do not strip the claude-code overlay
 
-The template builds `pkgs` with `claude-code-nix.overlays.default` applied. The
-framework's `homeManagerModules.default` installs `pkgs.claude-code`, which only
-exists when that overlay is present. Remove it and eval fails with
-`attribute 'claude-code' missing in set`. The template already wires it; leave
-it in place.
+The template builds `pkgs` via `commons-systems.mkPkgs { inherit system; }`,
+which applies the claude-code-nix overlay for you. The framework's
+`homeManagerModules.default` installs `pkgs.claude-code`, which only exists
+when that overlay is present. Don't replace `mkPkgs` with a hand-rolled
+`import nixpkgs { ... }` that omits the overlay — eval fails with
+`attribute 'claude-code' missing in set`. Use `mkPkgs`; it already carries
+the overlay for you.
