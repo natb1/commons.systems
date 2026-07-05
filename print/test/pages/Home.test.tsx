@@ -37,6 +37,14 @@ import { createRoot, type Root } from "react-dom/client";
 import { flushSync } from "react-dom";
 import type { User } from "../../src/auth.js";
 import type { MediaItem } from "../../src/types";
+import type { MediaPage } from "@commons-systems/firestoreutil/paged-merge";
+
+function makeCloudPage(
+  items: MediaItem[],
+  nextCursor: string | null = null,
+): MediaPage<MediaItem> {
+  return { items, nextCursor };
+}
 
 function makeMediaItem(overrides: Partial<MediaItem> = {}): MediaItem {
   return {
@@ -61,7 +69,7 @@ describe("loadMediaHtml", () => {
   });
 
   it("fetches the cloud library via listCloud", async () => {
-    mockListCloud.mockResolvedValue([]);
+    mockListCloud.mockResolvedValue(makeCloudPage([]));
 
     await loadMediaHtml();
 
@@ -69,7 +77,7 @@ describe("loadMediaHtml", () => {
   });
 
   it("renders empty state when no items are returned", async () => {
-    mockListCloud.mockResolvedValue([]);
+    mockListCloud.mockResolvedValue(makeCloudPage([]));
 
     const html = await loadMediaHtml();
 
@@ -78,10 +86,10 @@ describe("loadMediaHtml", () => {
   });
 
   it("renders media list with items", async () => {
-    mockListCloud.mockResolvedValue([
+    mockListCloud.mockResolvedValue(makeCloudPage([
       makeMediaItem({ id: "book-1", title: "First Book" }),
       makeMediaItem({ id: "book-2", title: "Second Book", mediaType: "epub" }),
-    ]);
+    ]));
 
     const html = await loadMediaHtml();
 
@@ -91,9 +99,9 @@ describe("loadMediaHtml", () => {
   });
 
   it("renders media-item elements with data-id attributes", async () => {
-    mockListCloud.mockResolvedValue([
+    mockListCloud.mockResolvedValue(makeCloudPage([
       makeMediaItem({ id: "book-1" }),
-    ]);
+    ]));
 
     const html = await loadMediaHtml();
 
@@ -102,9 +110,9 @@ describe("loadMediaHtml", () => {
   });
 
   it("renders a view link for each item", async () => {
-    mockListCloud.mockResolvedValue([
+    mockListCloud.mockResolvedValue(makeCloudPage([
       makeMediaItem({ id: "book-1" }),
-    ]);
+    ]));
 
     const html = await loadMediaHtml();
 
@@ -113,9 +121,9 @@ describe("loadMediaHtml", () => {
   });
 
   it("renders a download button for each item", async () => {
-    mockListCloud.mockResolvedValue([
+    mockListCloud.mockResolvedValue(makeCloudPage([
       makeMediaItem({ storagePath: "media/test.pdf" }),
-    ]);
+    ]));
 
     const html = await loadMediaHtml();
 
@@ -124,9 +132,9 @@ describe("loadMediaHtml", () => {
   });
 
   it("renders media type badge", async () => {
-    mockListCloud.mockResolvedValue([
+    mockListCloud.mockResolvedValue(makeCloudPage([
       makeMediaItem({ mediaType: "epub" }),
-    ]);
+    ]));
 
     const html = await loadMediaHtml();
 
@@ -144,9 +152,9 @@ describe("loadMediaHtml", () => {
   });
 
   it("renders markdown buttons when markdownPath is non-null", async () => {
-    mockListCloud.mockResolvedValue([
+    mockListCloud.mockResolvedValue(makeCloudPage([
       makeMediaItem({ markdownPath: "media/test.md" }),
-    ]);
+    ]));
 
     const html = await loadMediaHtml();
 
@@ -156,9 +164,9 @@ describe("loadMediaHtml", () => {
   });
 
   it("does not render markdown buttons when markdownPath is null", async () => {
-    mockListCloud.mockResolvedValue([
+    mockListCloud.mockResolvedValue(makeCloudPage([
       makeMediaItem(),
-    ]);
+    ]));
 
     const html = await loadMediaHtml();
 
@@ -175,7 +183,7 @@ describe("loadMediaHtml", () => {
   });
 
   it("renders an aria-label on the view link", async () => {
-    mockListCloud.mockResolvedValue([makeMediaItem({ title: "My Book" })]);
+    mockListCloud.mockResolvedValue(makeCloudPage([makeMediaItem({ title: "My Book" })]));
 
     const html = await loadMediaHtml();
 
@@ -183,7 +191,7 @@ describe("loadMediaHtml", () => {
   });
 
   it("renders an aria-label on the download button", async () => {
-    mockListCloud.mockResolvedValue([makeMediaItem({ title: "My Book" })]);
+    mockListCloud.mockResolvedValue(makeCloudPage([makeMediaItem({ title: "My Book" })]));
 
     const html = await loadMediaHtml();
 
@@ -191,9 +199,9 @@ describe("loadMediaHtml", () => {
   });
 
   it("escapes HTML special characters in item titles", async () => {
-    mockListCloud.mockResolvedValue([
+    mockListCloud.mockResolvedValue(makeCloudPage([
       makeMediaItem({ title: "<script>xss</script>" }),
-    ]);
+    ]));
 
     const html = await loadMediaHtml();
 
@@ -202,7 +210,7 @@ describe("loadMediaHtml", () => {
   });
 
   it("escapes HTML special characters in item IDs", async () => {
-    mockListCloud.mockResolvedValue([makeMediaItem({ id: "a&b" })]);
+    mockListCloud.mockResolvedValue(makeCloudPage([makeMediaItem({ id: "a&b" })]));
 
     const html = await loadMediaHtml();
 
@@ -210,9 +218,9 @@ describe("loadMediaHtml", () => {
   });
 
   it("escapes HTML special characters in storagePath", async () => {
-    mockListCloud.mockResolvedValue([
+    mockListCloud.mockResolvedValue(makeCloudPage([
       makeMediaItem({ storagePath: 'media/"<x>.pdf' }),
-    ]);
+    ]));
 
     const html = await loadMediaHtml();
 
@@ -221,9 +229,9 @@ describe("loadMediaHtml", () => {
   });
 
   it("escapes HTML special characters in markdownPath", async () => {
-    mockListCloud.mockResolvedValue([
+    mockListCloud.mockResolvedValue(makeCloudPage([
       makeMediaItem({ markdownPath: 'media/"<x>.md' }),
-    ]);
+    ]));
 
     const html = await loadMediaHtml();
 
@@ -232,11 +240,11 @@ describe("loadMediaHtml", () => {
   });
 
   it("renders items in the order returned by listCloud", async () => {
-    mockListCloud.mockResolvedValue([
+    mockListCloud.mockResolvedValue(makeCloudPage([
       makeMediaItem({ id: "first", title: "First" }),
       makeMediaItem({ id: "second", title: "Second" }),
       makeMediaItem({ id: "third", title: "Third" }),
-    ]);
+    ]));
 
     const html = await loadMediaHtml();
 
@@ -245,9 +253,9 @@ describe("loadMediaHtml", () => {
   });
 
   it("renders aria-labels on markdown buttons", async () => {
-    mockListCloud.mockResolvedValue([
+    mockListCloud.mockResolvedValue(makeCloudPage([
       makeMediaItem({ title: "My Book", markdownPath: "media/test.md" }),
-    ]);
+    ]));
 
     const html = await loadMediaHtml();
 
@@ -281,7 +289,7 @@ describe("download wiring (regression #1280)", () => {
   it("fires exactly one download per click after N home navigations", async () => {
     vi.clearAllMocks();
     vi.mocked(getMediaDownloadUrl).mockResolvedValue("https://example.com/x.pdf");
-    mockListCloud.mockResolvedValue([makeMediaItem({ storagePath: "media/x.pdf" })]);
+    mockListCloud.mockResolvedValue(makeCloudPage([makeMediaItem({ storagePath: "media/x.pdf" })]));
 
     // Mirror main.tsx: wire the persistent outlet's click delegation ONCE,
     // before the router's first navigation.
