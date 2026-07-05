@@ -40,7 +40,17 @@ reading: null
 gap: null
 serves: []
 recovers: []
-clarifications: []
+clarifications:
+  - question: What does status mean on a tradition record?
+    answer: Epistemic provenance of the doctrine detail (recorded 2026-07-05
+      interview). codified = the author has personally verified the record's
+      adopted/diverged/chosen_over content against the cited texts. delegated =
+      the detail is held on trust from delegation-philosophical-articulation
+      (Claude's authoring over the traditions' texts) — the decisions the record
+      supports are the author's, the scholarship is borrowed. Records flip
+      delegated → codified one at a time as tactic-tradition-reading-program
+      covers their texts; a still-delegated record's empty contradictions list
+      means unverified, not clean.
 tooling_goals: []
 success_signal: null
 attention: null

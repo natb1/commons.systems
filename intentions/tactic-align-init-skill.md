@@ -29,8 +29,7 @@ attention: null
 phase: implement
 execution: null
 validates: []
-blocked_by:
-  - tactic-align-strategy-skill
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null

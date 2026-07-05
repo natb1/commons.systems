@@ -45,8 +45,30 @@ gap: reading meets the 'at least one round recorded' clause; recurrence across
 serves:
   - virtue-philosophical-mobility
   - virtue-respect-for-persons
-recovers: []
-clarifications: []
+recovers:
+  - delegation-philosophical-articulation
+clarifications:
+  - question: Is the borrowed articulation from the 2026-07-04 round a partial
+      capture by Claude and the traditions?
+    answer: "Capture's shape, not its classification (recorded 2026-07-05
+      interview). The decisions were the author's — problem-setting stayed home
+      — and recovery is ungated relearn from fixed, cited texts. What is
+      impaired is the divergence axis: the detector for misarticulation is the
+      delegated understanding itself. That is the state kind-virtue forbids
+      leaving unexamined, so it is now a scoped delegation with a recovery loop:
+      this strategy carries recovers: delegation-philosophical-articulation, the
+      five tradition records run status: delegated until personally verified,
+      and each future round does double duty — calibration and recovery. It
+      becomes capture through exactly one mechanism: this cadence lapsing."
+  - question: What happens when personal reading contradicts a recorded articulation?
+    answer: "The reading wins (recorded 2026-07-05 interview). A contradiction found
+      while working tactic-tradition-reading-program is the recovery loop
+      functioning, not a defect: amend the tradition record in a correction
+      round, cascade to any virtue clarification that leaned on the
+      misarticulation, and count the event toward this strategy's signal — a
+      round that moves a node. A chunk that merely ratifies what is recorded
+      also counts: it flips trust to verification, which is what moves a record
+      from delegated to codified."
 tooling_goals: []
 success_signal:
   observable: a recorded dialectic round against a canonical tradition that
