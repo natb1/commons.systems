@@ -443,12 +443,14 @@ drops. (Behavior inventory anchors: `.claude/skills/file-issue/SKILL.md`,
 
 ## 5. Subtree (round 1, recorded 2026-07-03; re-evaluated same day)
 
-Thirteen children: the eleven round-1 nodes below, each a leaf = one PR
+Fourteen children: the eleven round-1 nodes below, each a leaf = one PR
 unless noted, plus two clarification-19 deferral children finalized
 2026-07-04 (`tactic-graph-commit-hardening`,
 `tactic-graph-write-validation-hardening` — off-path, outside the
-diagram). `blocked_by` (under `attributes` until the schema tactic
-promotes it) encodes the order:
+diagram), plus the clarification-20 re-evaluation child
+`tactic-phase-skill-node-targets` (on-path, in the diagram). `blocked_by`
+(under `attributes` until the schema tactic promotes it) encodes the
+order:
 
 ```
 tactic-graph-dispatch-schema ──────────────┬──► tactic-calculated-attention ─┐
@@ -461,9 +463,11 @@ tactic-intentions-branch-protection (park) ┤                                 �
   tactic-align-init-skill (off-path) ◄┤   tactic-graph-router-selector ◄── also blocked_by schema
                                      │           │                           │
                                      │   tactic-graph-router-transitions ◄── also blocked_by graph-commit
-                                     │           │                           │
+                                     │           │           │               │
+                                     │           │  tactic-phase-skill-node-targets
+                                     │           │           │               │
                                      │   tactic-dispatch-lifecycle-sensor [validates]
-                                     │           │                           │
+                                     │           │           │               │
                                      └──► tactic-legacy-router-removal [validates] ◄─┘
                                             + drain gate (plan step 0)
 ```
@@ -520,10 +524,18 @@ tactic-intentions-branch-protection (park) ┤                                 �
   pass re-ran the implementer's checklist and wrote `qa → review`; the
   author-directed independent pass against the real delegation records
   found a capture-term scoring bug the same day, forcing a revert and a
-  genuine re-QA. 20 added the §2.4 qa-parity paragraph. No open tactic's
-  plan changed: the selector tactic maps `phase: qa` to the legacy
-  `qa-fix` skill, which already carries the full semantics — the doctrine
-  binds the *emulating sessions* of the §3.3 bootstrap interim. No tactic
-  was pruned and no `blocked_by` changed.
+  genuine re-QA. 20 added the §2.4 qa-parity paragraph. The re-evaluation's
+  author-prompted second pass then swept the open plans against the
+  doctrine and found the seam gap the parity assumption hid: selector
+  unit 4 invokes the four legacy phase skills in node-id worktrees, but
+  every skill hard-rejects non-`<N>-…` names at Step 0 and keys context,
+  plan source, completion, and escalation to the gh issue keyspace (the
+  Stop hook resolves its park target from the `<N>-<slug>` job name), so
+  launched phase workers would exit 1 and escalations would park nothing.
+  Added the fourteenth child `tactic-phase-skill-node-targets` (on-path;
+  blocked_by transitions) and wired it into
+  `tactic-legacy-router-removal.blocked_by`. No tactic was pruned; the
+  align-skill tactics needed no amendment (their plan schema already
+  mandates the Verification content qa consumes).
 - This parent is not directly executable (no `phase`); it completes when
   its last child completes, which stamps the strategy's `rounds`.
