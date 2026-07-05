@@ -263,7 +263,27 @@ completion markers, attempt counters, and parking are `graph-commit`
 writes instead of label edits. Phase-skill internals (worktree isolation,
 `/implement-unit` delegation, `/commit-merge-push`, QA/review fan-outs
 with their own internal content-fix loops, auto-merge on clean review)
-carry over unchanged, with one amendment (strategy clarification 19): the
+carry over unchanged.
+
+The `qa` phase in particular keeps full legacy `qa-fix` parity (strategy
+clarification 20): it is the autonomous half of **user-acceptance QA**,
+never a re-run of the automated checks. The phase merges `origin/main`,
+authors a genuine QA plan from the live context (triage-classified
+items: script-verifiable / needs-browser / needs-human-judgment),
+validates the delivered behavior *independently* against the tactic's
+stated intent and real data — the live store, deployed surfaces, public
+seed data — and classifies residue on the four-class disposition axis
+(opus-fixable → the phase's bounded internal fix loop, needs-main →
+follow-up, needs-human → `office_hours` park, already-satisfied → pass),
+recording the summary on the PR. The plan's ```verify blocks are the
+floor, not the phase; reproducing the implementer's own claimed checks
+is not QA (precedent: PR #2752's capture-term bug, invisible to the
+checklist re-run, found immediately by the independent real-data pass).
+This binds bootstrap-emulating sessions (§3.3) equally: the `qa → review`
+transition write asserts the validation happened, not that the checklist
+re-ran.
+
+One further amendment (strategy clarification 19): the
 review fan-out's finding disposition is graph-native. A confirmed finding
 that breaks the tactic's own stated contract blocks `review → done` and
 is fixed inside the phase's content-fix loop; real but out-of-contract
@@ -354,7 +374,10 @@ GitHub is a separate strategy; design TBD.)
   PR branch; squatted `attributes.*` until the schema tactic merges;
   delivered as a state-only PR until `tactic-intentions-branch-protection`
   lands). Without that write, the next phase worker — fix, qa, review —
-  is never scheduled.
+  is never scheduled. The write asserts the phase's full semantics ran —
+  an emulating session owes the phase skill's substance, not a checklist
+  re-run; for `qa` that means the legacy `qa-fix` parity of §2.4
+  (clarification 20).
 
 ### 3.4 Worktree anchoring and claiming
 
@@ -491,5 +514,16 @@ tactic-intentions-branch-protection (park) ┤                                 �
   freeze-on-mismatch rule is discharged by running the re-evaluation in
   the same session as the strategy edit, as in every round above. No
   round-1 tactic was pruned and no `blocked_by` changed.
+- **Re-evaluation (2026-07-04, clarification 20):** run inline (no router
+  yet), triggered by the qa-parity doctrine recorded live from the first
+  emulated qa run on `tactic-calculated-attention` (PR #2752): the first
+  pass re-ran the implementer's checklist and wrote `qa → review`; the
+  author-directed independent pass against the real delegation records
+  found a capture-term scoring bug the same day, forcing a revert and a
+  genuine re-QA. 20 added the §2.4 qa-parity paragraph. No open tactic's
+  plan changed: the selector tactic maps `phase: qa` to the legacy
+  `qa-fix` skill, which already carries the full semantics — the doctrine
+  binds the *emulating sessions* of the §3.3 bootstrap interim. No tactic
+  was pruned and no `blocked_by` changed.
 - This parent is not directly executable (no `phase`); it completes when
   its last child completes, which stamps the strategy's `rounds`.

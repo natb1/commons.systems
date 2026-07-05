@@ -297,6 +297,28 @@ clarifications:
       code-style. Ignored findings are not graph-recorded; every disposition
       including refutation reasons is recorded once in the PR review comment as
       the audit trail. Recorded 2026-07-04 interview."
+  - question: Is the qa phase a re-run of the automated checks — and what does a
+      bootstrap-emulating session owe it?
+    answer: "No — full parity with the legacy qa-fix skill
+      (.claude/skills/qa-fix/SKILL.md), recorded 2026-07-04 from author
+      direction after the first emulated qa run. QA is the autonomous half of
+      user-acceptance QA, not an automated-test re-run: merge origin/main first;
+      author a genuine QA plan from the live context (a triage that classifies
+      ordered items script-verifiable / needs-browser / needs-human-judgment);
+      validate the delivered behavior INDEPENDENTLY against the tactic's stated
+      intent and real data — the live store, deployed surfaces, public seed data
+      — never merely reproducing the implementer's claimed checks (the plan's
+      verify blocks are the floor, not the phase); classify residue on the
+      four-class disposition axis (opus-fixable -> the phase's bounded internal
+      fix loop, needs-main -> follow-up, needs-human -> office_hours park,
+      already-satisfied -> pass); record the summary on the PR. Precedent, same
+      day: PR #2752's first qa pass re-ran the author's checklist and passed;
+      the independent pass against the real delegation records immediately found
+      the capture-term scoring bug (exact-match enum parsing vs the store's
+      actual free-text vocabulary). A bootstrap-transition session
+      (clarification 15) emulating qa owes these full semantics before writing
+      the qa -> review transition; the transition write asserts the validation
+      happened, not that the checklist re-ran."
 tooling_goals:
   - kind: actuator
     statement: /align-strategy — interview-driven strategy recording, superseding
