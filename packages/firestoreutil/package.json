@@ -13,7 +13,8 @@
     "./brand": "./src/brand.ts",
     "./media-queries": "./src/media-queries.ts",
     "./bounded-query": "./src/bounded-query.ts",
-    "./init": "./src/init.ts"
+    "./init": "./src/init.ts",
+    "./paged-merge": "./src/paged-merge.ts"
   },
   "scripts": {
     "test": "vitest run",

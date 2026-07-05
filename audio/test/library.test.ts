@@ -1,5 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { encodeCursor } from "@commons-systems/firestoreutil/paged-merge";
+import type { MediaPage } from "@commons-systems/firestoreutil/paged-merge";
 import type { AudioItem, LibraryItem } from "../src/types";
+
+function cloudPage(
+  items: AudioItem[],
+  nextCursor: string | null = null,
+): MediaPage<AudioItem> {
+  return { items, nextCursor };
+}
 
 vi.mock("../src/firebase.js", () => ({
   storage: {},
@@ -84,16 +93,16 @@ describe("listLibrary", () => {
     const cloudB = makeAudioItem({ id: "a2", addedAt: "2026-01-01T00:00:00Z" });
     const localItem = makeLocalItem({ id: "local:track.mp3", addedAt: "2026-02-01T00:00:00Z" });
 
-    mockCloudList.mockResolvedValue([cloudA, cloudB]);
+    mockCloudList.mockResolvedValue(cloudPage([cloudA, cloudB]));
     mockListLocalTracks.mockResolvedValue([localItem]);
 
     const result = await listLibrary(null);
 
-    expect(result).toHaveLength(3);
+    expect(result.items).toHaveLength(3);
 
-    const resultA1 = result.find((r) => r.id === "a1");
-    const resultA2 = result.find((r) => r.id === "a2");
-    const resultLocal = result.find((r) => r.id === "local:track.mp3");
+    const resultA1 = result.items.find((r) => r.id === "a1");
+    const resultA2 = result.items.find((r) => r.id === "a2");
+    const resultLocal = result.items.find((r) => r.id === "local:track.mp3");
 
     expect(resultA1?.origin).toBe("cloud");
     expect(resultA2?.origin).toBe("cloud");
@@ -105,16 +114,20 @@ describe("listLibrary", () => {
     const cloudJan = makeAudioItem({ id: "cloud-jan", addedAt: "2026-01-01T00:00:00Z" });
     const localFeb = makeLocalItem({ id: "local:feb.mp3", addedAt: "2026-02-01T00:00:00Z" });
 
-    mockCloudList.mockResolvedValue([cloudMarch, cloudJan]);
+    mockCloudList.mockResolvedValue(cloudPage([cloudMarch, cloudJan]));
     mockListLocalTracks.mockResolvedValue([localFeb]);
 
     const result = await listLibrary(null);
 
-    expect(result.map((r) => r.id)).toEqual(["cloud-march", "local:feb.mp3", "cloud-jan"]);
+    expect(result.items.map((r) => r.id)).toEqual([
+      "cloud-march",
+      "local:feb.mp3",
+      "cloud-jan",
+    ]);
   });
 
   it("passes viewerEmail returning the user email when signed in", async () => {
-    mockCloudList.mockResolvedValue([]);
+    mockCloudList.mockResolvedValue(cloudPage([]));
 
     await listLibrary({ uid: "u1", email: "alice@example.com" });
 
@@ -123,7 +136,7 @@ describe("listLibrary", () => {
   });
 
   it("passes viewerEmail returning null when user is null", async () => {
-    mockCloudList.mockResolvedValue([]);
+    mockCloudList.mockResolvedValue(cloudPage([]));
 
     await listLibrary(null);
 
@@ -133,13 +146,44 @@ describe("listLibrary", () => {
 
   it("returns only local items when cloud is empty", async () => {
     const localItem = makeLocalItem();
-    mockCloudList.mockResolvedValue([]);
+    mockCloudList.mockResolvedValue(cloudPage([]));
     mockListLocalTracks.mockResolvedValue([localItem]);
 
     const result = await listLibrary(null);
 
-    expect(result).toHaveLength(1);
-    expect(result[0].id).toBe("local:track.mp3");
-    expect(result[0].origin).toBe("local");
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].id).toBe("local:track.mp3");
+    expect(result.items[0].origin).toBe("local");
+  });
+
+  it("propagates a non-null nextCursor when the cloud page has more", async () => {
+    // A full cloud page reports more un-fetched rows via a non-null cloud
+    // nextCursor; pagedMerge OR's that into the merged page's nextCursor.
+    const cloudA = makeAudioItem({ id: "a1", addedAt: "2026-03-01T00:00:00Z" });
+    mockCloudList.mockResolvedValue(cloudPage([cloudA], "cloud-next"));
+    mockListLocalTracks.mockResolvedValue([]);
+
+    const result = await listLibrary(null);
+
+    expect(result.nextCursor).not.toBeNull();
+  });
+
+  it("forwards opts.cursor to cloudSource.list and slices local after the cursor", async () => {
+    // Cursor sits between the two local items in DESC (addedAt) order.
+    const cursor = encodeCursor({ addedAt: "2026-02-15T00:00:00Z", id: "z" });
+    // Newer than the cursor → belongs to an earlier page → filtered out.
+    const localNewer = makeLocalItem({ id: "local:mar.mp3", addedAt: "2026-03-01T00:00:00Z" });
+    // Older than the cursor → strictly after it → kept.
+    const localOlder = makeLocalItem({ id: "local:jan.mp3", addedAt: "2026-01-01T00:00:00Z" });
+
+    mockCloudList.mockResolvedValue(cloudPage([]));
+    mockListLocalTracks.mockResolvedValue([localNewer, localOlder]);
+
+    const result = await listLibrary(null, { cursor });
+
+    // Cursor forwarded verbatim to the cloud source.
+    expect(mockCloudList).toHaveBeenCalledWith({ pageSize: 24, cursor });
+    // Only the local item strictly after the cursor survives the slice.
+    expect(result.items.map((r) => r.id)).toEqual(["local:jan.mp3"]);
   });
 });
