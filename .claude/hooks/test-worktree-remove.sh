@@ -80,15 +80,15 @@ setup_root() {
   export TMPDIR="$ROOT"      # isolates the hook's pre-relocation log per case
 
   BRANCH="42-foo"
-  WT="$ROOT/worktrees/$BRANCH"
-  mkdir -p "$ROOT/.bare" "$ROOT/worktrees/main" "$WT"
+  WT="$ROOT/.bare/.claude/worktrees/$BRANCH"
+  mkdir -p "$ROOT/.bare" "$ROOT/.bare/.claude/worktrees/main" "$WT"
 
   REMOVED_LOG="$ROOT/removed.log"
   HOOK_LOG="$ROOT/tmp/worktree-remove.log"
 
   export STUB_GIT_COMMON_DIR="$ROOT/.bare"
   export STUB_REVPARSE_RC=0
-  export STUB_WT_LIST="worktree $ROOT/worktrees/main
+  export STUB_WT_LIST="worktree $ROOT/.bare/.claude/worktrees/main
 worktree $WT"
   export STUB_STATUS=""        # clean working tree
   export STUB_STATUS_RC=0
@@ -233,13 +233,13 @@ assert_remove_not_called  "safety: target outside worktrees/: not removed"
 assert_log                "safety: target outside worktrees/: log refuses" "not under"
 
 setup_root
-run_hook "$(jq -nc --arg p "$ROOT/worktrees/main" '{worktree_path: $p}')"
+run_hook "$(jq -nc --arg p "$ROOT/.bare/.claude/worktrees/main" '{worktree_path: $p}')"
 assert_exit0              "safety: target is main: exit 0"
 assert_remove_not_called  "safety: target is main: not removed"
 assert_log                "safety: target is main: log refuses" "is main"
 
 setup_root
-run_hook "$(jq -nc --arg p "$ROOT/worktrees/99-ghost" '{worktree_path: $p}')"
+run_hook "$(jq -nc --arg p "$ROOT/.bare/.claude/worktrees/99-ghost" '{worktree_path: $p}')"
 assert_exit0              "safety: target not registered: exit 0"
 assert_remove_not_called  "safety: target not registered: not removed"
 assert_log                "safety: target not registered: log no-ops" "not a registered worktree"

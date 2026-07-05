@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parse, stringify } from "yaml";
 import { validateNode, type IntentionNode, type IntentionNodeInput } from "./schema.js";
@@ -8,8 +8,14 @@ import { IntentionSchemaError } from "./errors.js";
  * Serialize a node to its on-disk form and write it to `<dir>/<id>.md`.
  *
  * The node is validated FIRST (defaults applied) so the written frontmatter is
- * complete and deterministic. The markdown body is a cosmetic render of
- * `statement` and is not parsed back on read.
+ * complete and deterministic. For every kind except `tactic`, the markdown
+ * body is a cosmetic render of `statement` and is not parsed back on read.
+ *
+ * `tactic` bodies are authoritative, hand-maintained plan content (see
+ * strategy-graph-native-dispatch's doctrine amendment): if `<dir>/<id>.md`
+ * already exists, its existing body is preserved verbatim across the
+ * rewrite rather than regenerated. A brand-new tactic file (no prior file on
+ * disk) still gets the generated `# ${statement}` placeholder body.
  */
 function assertPathSafeId(id: string): void {
   if (id.includes("/") || id.includes("\\") || id.includes("..")) {
@@ -23,10 +29,40 @@ export function writeNode(dir: string, node: IntentionNodeInput): void {
   const validated = validateNode(node);
   assertPathSafeId(validated.id);
   mkdirSync(dir, { recursive: true });
+  const filePath = join(dir, `${validated.id}.md`);
+  const body = readExistingTacticBody(filePath, validated) ?? `# ${validated.statement}\n`;
   // `stringify` already ends its output with a newline, so the closing fence
   // lands on its own line.
-  const content = `---\n${stringify(validated)}---\n# ${validated.statement}\n`;
-  writeFileSync(join(dir, `${validated.id}.md`), content);
+  const content = `---\n${stringify(validated)}---\n${body}`;
+  writeFileSync(filePath, content);
+}
+
+/**
+ * For a `tactic` node whose file already exists on disk, read that file's
+ * existing body (everything after the closing frontmatter fence) verbatim so
+ * a rewrite doesn't clobber hand-maintained plan content. Returns `null` for
+ * any other kind, or for a tactic with no existing file yet — callers fall
+ * back to the generated `# ${statement}` body in both cases.
+ */
+function readExistingTacticBody(filePath: string, node: IntentionNode): string | null {
+  if (node.kind !== "tactic" || !existsSync(filePath)) return null;
+  const raw = readFileSync(filePath, "utf8");
+  return extractBody(raw, node.id);
+}
+
+/**
+ * Return everything after the closing frontmatter fence, verbatim (including
+ * any trailing newline convention already on disk). Reuses `extractFrontmatter`
+ * to locate the fence boundary rather than re-deriving it.
+ */
+function extractBody(raw: string, id: string): string {
+  const frontmatter = extractFrontmatter(raw, id);
+  // `raw` is "---\n" + frontmatter + closing-fence-line + "\n" + body. The
+  // closing fence line itself is the first line of what remains after the
+  // frontmatter text, so the body starts right after that line's newline.
+  const afterFrontmatter = raw.slice("---\n".length + frontmatter.length);
+  const newlineIndex = afterFrontmatter.indexOf("\n");
+  return newlineIndex === -1 ? "" : afterFrontmatter.slice(newlineIndex + 1);
 }
 
 /**
@@ -45,10 +81,9 @@ export function readNode(dir: string, id: string): IntentionNode {
  * Read every `*.md` node file in `dir`, validating each, sorted by id for a
  * stable result.
  *
- * `README.md` is a non-node companion doc the backfill writes alongside the
- * node files (and `pruneStaleNodes` preserves) — it has no frontmatter, so it
- * is excluded here to match that contract. Without this, `listNodes` on the
- * real store directory throws on the README's missing fence.
+ * `README.md` is a non-node companion doc kept alongside the node files — it
+ * has no frontmatter, so it is excluded here. Without this, `listNodes` on
+ * the real store directory throws on the README's missing fence.
  */
 export function listNodes(dir: string): IntentionNode[] {
   return readdirSync(dir)

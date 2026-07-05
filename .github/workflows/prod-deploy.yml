@@ -16,6 +16,7 @@ on:
       - "*.md"
       - "*.nix"
       - "flake.lock"
+      - "intentions/**"
 
 permissions:
   contents: read
