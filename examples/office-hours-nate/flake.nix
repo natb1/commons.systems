@@ -12,10 +12,15 @@
 # in that command matches `homeConfigurations."aarch64-darwin"`.
 #
 # --impure nuance (darwin vs Linux/WSL):
-# This darwin example evaluates purely. A Linux/WSL instance would still need
-# `--impure`, because the framework's nix/home/wezterm-windows.nix calls
-# `builtins.fetchurl`, forced only on Linux via `lib.mkIf pkgs.stdenv.isLinux`.
-# If you adapt this template to a Linux system, keep `--impure` on the switch.
+# This darwin example evaluates purely, and a Linux/WSL instance does too. The
+# framework's Linux-only extras (e.g. nix/home/wezterm-windows.nix) reach across
+# the WSL boundary and fetch the Windows WezTerm binary at activation *runtime*
+# — a `${pkgs.curl}` call inside a home.activation script, gated on
+# `pkgs.stdenv.isLinux` — not during evaluation. No framework module reads the
+# environment or fetches over the network at eval time, so `--impure` is not
+# required on any platform. If you adapt this template and your own eval
+# genuinely needs it, confirm first with `nix eval` (without `--impure`) against
+# your homeConfiguration, and add the flag only if that eval actually fails.
 
 {
   description = "office-hours-nate — private instance of the commons.systems framework";
