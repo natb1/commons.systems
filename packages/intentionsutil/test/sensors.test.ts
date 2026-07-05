@@ -16,16 +16,28 @@ import {
 function node(partial: Partial<IntentionNode> & { id: string }): IntentionNode {
   return {
     id: partial.id,
+    kind: partial.kind ?? "tactic",
     statement: partial.statement ?? `Statement for ${partial.id}`,
     owner: partial.owner ?? "human",
     status: partial.status ?? "raw",
     parent: partial.parent ?? null,
+    serves: partial.serves ?? [],
+    recovers: partial.recovers ?? [],
     rationale: partial.rationale ?? null,
     reading: partial.reading ?? null,
     gap: partial.gap ?? null,
     clarifications: partial.clarifications ?? [],
     tooling_goals: partial.tooling_goals ?? [],
     success_signal: partial.success_signal ?? null,
+    attention: partial.attention ?? null,
+    phase: partial.phase ?? null,
+    execution: partial.execution ?? null,
+    validates: partial.validates ?? [],
+    blocked_by: partial.blocked_by ?? [],
+    office_hours: partial.office_hours ?? null,
+    pace_exempt: partial.pace_exempt ?? false,
+    rounds: partial.rounds ?? null,
+    attributes: partial.attributes ?? {},
   };
 }
 

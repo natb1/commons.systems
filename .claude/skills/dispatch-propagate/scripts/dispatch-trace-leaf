@@ -6,6 +6,12 @@
 # lowest-numbered open child first, to find the lowest-numbered reachable
 # open leaf. Prints one issue number.
 #
+# Blocking is a tactic-layer gate: while a node has ANY open blocker, ONLY the
+# blocking subtree is descended — its sub-issues stay unreachable until every
+# blocker closes (open_children returns the open blockers alone and suppresses
+# sub-issue gathering). A node's sub-issues become reachable only once all its
+# blockers close.
+#
 # The optional --exclude <n>... argument names already-processed leaves the
 # trace must never return (#1062). It is the fan-out caller's running SEEN set:
 # a multi-leaf subtree whose first leaf was already spawned (and whose worktree
@@ -209,6 +215,20 @@ open_children() {
     while IFS= read -r num; do
       [[ -n "$num" ]] && children+=("$num")
     done < <(printf '%s' "$blocker_json" | jq -r 'select(.state == "OPEN" or .state == "open") | .number' 2>/dev/null || true)
+  fi
+
+  # Blocking is a tactic-layer gate: an open blocker makes this node's WHOLE
+  # subtree unreachable until every blocker closes. If any open blocker was
+  # collected, descend ONLY the blocking subtree — print the blockers and return
+  # WITHOUT gathering sub-issues, so a sub-issue (even a lower-numbered one) can
+  # never be reached past an open blocker. Once all blockers close, `children`
+  # is empty here and the sub-issue gathering below runs normally. When the
+  # blocking subtree's startable leaves are all claimed/parked, find_leaf on this
+  # node returns 1 (nothing) rather than falling through to sub-issues — the gate
+  # holds until blockers close.
+  if [[ ${#children[@]} -gt 0 ]]; then
+    printf '%s\n' "${children[@]}" | sort -un
+    return 0
   fi
 
   # Gather open sub-issues. Same hard-error contract as the blocker lookup.

@@ -1,0 +1,59 @@
+---
+id: kind-strategy
+kind: kind
+statement: Strategy — the highest goals a virtue generates against present conditions
+owner: human
+status: codified
+parent: null
+serves: []
+rationale: >-
+  A strategy is the first goal layer: what a virtue produces when pointed at
+  the actual situation. The `serves` edge from a strategy to its virtues is
+  the graph's one phase change — disposition becomes state. `parent` links
+  strategies into sub-strategies where useful — structural nesting, not
+  roll-up.
+
+
+  A strategy is persistent. It remains in the graph even when no tactic
+  currently serves it; dormancy is normal, not a defect. A strategy never
+  completes. It leaves the graph only two ways: a condition in
+  `attributes.conditions` fails (then re-derive it from its virtues), or the
+  human deliberately retires it.
+
+
+  A strategy is conditional where a virtue is not. `attributes.conditions`
+  names the premises about the world that make the strategy apt; when a
+  condition fails, re-derive the strategy from its virtues rather than
+  defending it. This is what distinguishes a strategy that expired from a
+  virtue that eroded. Example: agentic construction is a strategy with
+  conditions, not a virtue — pivotal only while it remains the highest-impact
+  path to recovering software autonomy and while its recovery substrate
+  (open-weight models, local inference) stays viable.
+
+
+  `success_signal` on a strategy names the observable that would show the
+  strategy working; `reading` and `gap` are sensor-populated against it.
+
+
+  `recovers` is the strategy→delegation edge: the ids of the delegation
+  records this strategy's work unwinds, resolved by `validateGraph` like any
+  other edge. A DOMAIN STRATEGY is a strategy that recovers one domain of
+  delegated life (attention, finance, publishing); it names its artifacts —
+  the apps that do the recovering — in prose in `rationale`. Apps are not
+  nodes: the strategy is the intention, the app is its current
+  materialization, and naming it in prose keeps the graph stable while the
+  artifacts iterate.
+reading: null
+gap: null
+clarifications: []
+tooling_goals: []
+success_signal: null
+attributes:
+  goal_layer: true
+  fields:
+    - "conditions: list of world-premises that make this strategy apt; each is a standing review trigger"
+    - "attention: authored boost (adds to inherited rank, relative) XOR override (sets the value flowing through this branch), plus required rationale; resolved rank is computed on read by resolveAttention and never stored"
+  edges:
+    - "recovers: ids of the delegation records this strategy's work unwinds (top-level field, resolved by validateGraph)"
+---
+# Strategy — the highest goals a virtue generates against present conditions

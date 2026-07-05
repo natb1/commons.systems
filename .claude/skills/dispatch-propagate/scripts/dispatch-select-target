@@ -31,7 +31,8 @@
 #
 # --top <N> (default 1; valid in default mode and with --priority-only) emits up
 # to N distinct decision lines
-# in the existing priority order (priority axis → topic category → phase ladder),
+# in the rank order (attention-rank axis → enhancement → topic category → phase
+# ladder),
 # one per line — the fan-out caller consumes the list in a single scan instead of
 # re-invoking the selector once per slot (#1317). Each scan dedups internally: no
 # target is returned twice, and live/reserved/office-hours/excluded targets are
@@ -45,10 +46,14 @@
 # Default-mode priority, top to bottom:
 #   1. JIT scan (jit-reminder)
 #   2. origin/main CI health gate (main-broken)
-#   3. the priority × enhancement × topic-category × phase ladder over open PRs
-#      and help-wanted issues. The enhancement axis applies to the ISSUE path
-#      only: within a priority tier all non-enhancement work (PRs and
-#      non-enhancement issues) drains before any enhancement issue. PRs are never
+#   3. the attention-rank × enhancement × topic-category × phase ladder over open
+#      PRs and help-wanted issues. Attention rank is the OUTERMOST axis: distinct
+#      rank values drain descending. In production the map is empty (every item
+#      rank 0 — see RANK_MAP_JSON below), so ordering reduces to the ladder; the
+#      axis survives only as inert machinery until legacy-router removal.
+#      The enhancement axis applies to the ISSUE path only:
+#      within a rank level all non-enhancement work (PRs and non-enhancement
+#      issues) drains before any enhancement issue. PRs are never
 #      enhancement-classified, so an in-flight PR completes normally.
 #
 # --health-only mode runs the JIT scan and the origin/main CI health gate, then
@@ -65,10 +70,12 @@
 #   pr <num> <branch>           — the QA PR to work on
 #
 # --priority-only mode is the at-cap bypass selector (#1134): it runs the
-# origin/main CI health gate, then scans ONLY the `priority=1` tier of the
-# PR/issue ladder, returning the single highest-priority priority item. The JIT
-# scan is suppressed (a reminder is not priority/main-broken fix work). Every
-# default-mode skip rule is preserved (worktree ownership/reservation,
+# origin/main CI health gate, then scans ONLY the items carrying the `priority`
+# label (its ONE surviving meaning — the cap/pacing bypass, NOT an ordering
+# signal), returning the single highest-ranked priority-labeled item. Within that
+# label-filtered set the ordinary rank → enh → topic → phase ladder decides the
+# winner. The JIT scan is suppressed (a reminder is not priority/main-broken fix
+# work). Every default-mode skip rule is preserved (worktree ownership/reservation,
 # blocked_by, ready-PR-closes-issue, not-ready PR). dispatch-select-tick consults
 # it when the autonomous tick is at the worker cap but not token-exhausted, to
 # spawn a priority/main-broken item as one gate-exempt worker; its manual fan-out
@@ -76,35 +83,39 @@
 #
 # Output for the no-`--top` (TOP=1) case is exactly one line:
 #   main-broken <sha>           — origin/main's HEAD CI has a failing check
-#   pr <num> <branch> <phase>   — the highest-priority priority=1 PR
-#   issue <num>                 — the highest-priority priority=1 help-wanted issue
-#   waiting <issue#>            — a priority item exists but its draft PR's CI is
-#                                 still pending (skipped solely by dispatch-ci-ready)
-#   empty                       — no priority=1 item eligible
+#   pr <num> <branch> <phase>   — the highest-ranked priority-labeled PR
+#   issue <num>                 — the highest-ranked priority-labeled help-wanted issue
+#   waiting <issue#>            — a priority-labeled item exists but its draft PR's
+#                                 CI is still pending (skipped solely by dispatch-ci-ready)
+#   empty                       — no priority-labeled item eligible
 #
-# With --top N, --priority-only returns UP TO N eligible priority=1 decision
+# With --top N, --priority-only returns UP TO N eligible priority-labeled decision
 # lines (`pr <num> <branch> <phase>` / `issue <num>`), one per line, or `empty`.
-# The TOP>1 path has NO `waiting` branch: a priority tier whose only items are
-# CI-pending yields `empty` under `--priority-only --top N` — correct, since
-# CI-pending items are not selectable. (The single-line contract above, including
-# `waiting <issue#>` and `main-broken <sha>`, still holds for the TOP=1 case.)
+# The TOP>1 path has NO `waiting` branch: a set whose only items are CI-pending
+# yields `empty` under `--priority-only --top N` — correct, since CI-pending items
+# are not selectable. (The single-line contract above, including `waiting <issue#>`
+# and `main-broken <sha>`, still holds for the TOP=1 case.)
 #
-# Selection nests four axes for the ISSUE path: the `priority` label is the
+# Selection nests four axes for the ISSUE path: attention *rank* is the
 # *outermost* axis, the `enhancement` bit nests inside it, topic *category* nests
-# inside that, and the phase *ladder* runs innermost. The selector exhausts the
-# entire `priority=1` tier — every enhancement value, every topic category, every
-# phase — before considering any `priority=0` item, so a `priority` item in a
-# low-ranked topic still outranks every non-priority item in a higher-ranked
-# topic (a priority-escalated enhancement still jumps the queue). Within one
-# priority level, all non-enhancement work (enh=0) drains before any enhancement
-# issue (enh=1); within one (priority, enh) level, topic categories run highest
-# priority first:
+# inside that, and the phase *ladder* runs innermost. The selector exhausts an
+# entire rank level — every enhancement value, every topic category, every phase —
+# before considering any lower-rank item, so a high-rank item in a low-ranked
+# topic still outranks every lower-rank item in a higher-ranked topic. Within one
+# rank level, all non-enhancement work (enh=0) drains before any enhancement issue
+# (enh=1); within one (rank, enh) level, topic categories run highest priority
+# first:
 #   security → bug → testing infrastructure → dispatch → landing → fellspiral → budget → print → audio → other
-# and within each (priority, enh, topic) bucket the phase ladder runs innermost.
+# and within each (rank, enh, topic) bucket the phase ladder runs innermost.
+#
+# The `priority` label has NO ordering effect: it is de-ordered entirely and
+# survives only as the cap/pacing bypass (the --priority-only probe here and the
+# dispatch-tick pace-curve exemption). A priority-labeled unranked item does not
+# jump the queue past a ranked non-priority item.
 #
 # The enhancement axis applies to the ISSUE path ONLY. A PR is never
 # enhancement-classified — its bucket key stays the 3-part
-# `<category>|<priority>|<phase>` and it is drawn only on the enh=0 pass, so an
+# `<category>|<rank>|<phase>` and it is drawn only on the enh=0 pass, so an
 # enhancement issue that has already reached a PR completes normally (its PR is
 # NOT re-deprioritized). An issue's enhancement bit is 1 if its own labels carry
 # `enhancement`, else 0.
@@ -112,12 +123,13 @@
 # A PR's category is the highest-priority topic among the labels of every issue
 # it closes (closingIssuesReferences); a PR that closes no issue, or whose
 # closing issues carry no topic label, is "other". An issue's category is the
-# highest-priority topic among its own labels, else "other". A PR's priority
-# bit is 1 if any closing issue, or any open ancestor of a closing issue (up to
-# 6 levels), carries the `priority` label, else 0; an issue's priority bit is 1
-# if its own labels carry `priority`, else 0.
+# highest-priority topic among its own labels, else "other". A PR inherits the
+# MAX attention rank over the issues it closes (rank inheritance); an issue's rank
+# is its own graph-derived rank, 0 if unmapped. (The `priority` LABEL is still
+# derived — via pr_priority_bit / has_priority_in_labels — but ONLY for the
+# --priority-only bypass filter and DEBUG_CLASSIFY, never for ordering.)
 #
-# Within each (priority, topic) bucket, default-mode priority (oldest PR wins
+# Within each (rank, topic) bucket, default-mode priority (oldest PR wins
 # within a tier):
 #   1. Oldest "fix-conflicts" PR (draft, mergeable == CONFLICTING)
 #   2. Oldest "review"      PR (draft + dispatch:qa-done)
@@ -159,9 +171,9 @@
 # the flat ladder exactly.
 #
 # --qa mode priority:
-#   1. Oldest QA PR in the highest-priority (priority, topic) bucket that has
-#      one — same outer iteration as default mode (priority axis outermost,
-#      then topic category), restricted to the qa phase
+#   1. Oldest QA PR in the highest-ranked (rank, topic) bucket that has one — same
+#      outer iteration as default mode (attention-rank axis outermost, then topic
+#      category), restricted to the qa phase
 #   2. empty
 set -euo pipefail
 
@@ -504,6 +516,44 @@ ISSUE_LIST=$(gh_issue_list_rest --state open)
 ISSUE_LABELS_JSON=$(printf '%s' "$ISSUE_LIST" \
   | jq -c 'reduce .[] as $i ({}; .[$i.number | tostring] = ($i.labels // []))')
 
+# Attention-rank map: issue number (string) -> rank (number). This is the
+# OUTERMOST ordering axis — the queue drains distinct rank values descending,
+# with the existing enh → topic-category → phase ladder as tie-break WITHIN each
+# rank level. The `priority` label no longer orders anything; it survives only as
+# the cap/pacing bypass (the --priority-only probe and dispatch-tick pace-curve
+# exemption still read it).
+#
+# The map is EMPTY in production: graph-rank interleaving retired with the
+# node-id↔issue mapping (rank-map.ts / trackers/). The legacy router only
+# drains its existing gh queue, in parallel with the graph-native router; the
+# rank-bucket machinery below stays inert (single rank-0 level) and is deleted
+# wholesale with the legacy router. Test seam (DISPATCH_RANK_MAP_JSON) kept so
+# the ordering tests keep exercising the machinery until then.
+#
+# Rank strings are OPAQUE in shell: every numeric operation (lookup, max, sort,
+# distinct) happens jq-side against the one canonicalized map below; bash only
+# does string-keyed bucket lookups. Because RANK_LEVELS and pr_rank_of both derive
+# their rank strings from this single jq-parsed value via `tostring` with no
+# arithmetic in between, a float's textual form can never drift between the bucket
+# keys and the level list. The "|" bucket-key separator stays collision-free: rank
+# strings are jq number literals.
+RANK_MAP_JSON=${DISPATCH_RANK_MAP_JSON:-'{}'}
+# Canonicalize + validate in ONE jq pass: every rank string downstream (bucket
+# keys AND the level list) derives from this one jq-parsed value, so float
+# formatting can never drift between sites. Fail closed (clear-errors rule): a
+# map that is not a JSON object of numbers exits 1 loudly — never an all-zero
+# fallback that would silently reorder the queue.
+RANK_MAP_JSON=$(printf '%s' "$RANK_MAP_JSON" \
+  | jq -ce 'if type == "object" and all(.[]; type == "number") then . else empty end') || {
+  echo "error: dispatch-select-target: rank map is not a JSON object of numbers" >&2
+  exit 1
+}
+# Distinct rank levels, descending, as canonical jq strings. Always includes the
+# rank-0 baseline. A superset of candidate levels — iterating an unused level is
+# a harmless empty-bucket pass.
+mapfile -t RANK_LEVELS < <(printf '%s' "$RANK_MAP_JSON" \
+  | jq -r '([.[]] + [0]) | unique | reverse | .[] | tostring')
+
 # Planned-issue lookup: number → 1 for every open issue carrying
 # dispatch:planned (the implement-phase discriminator, per dispatch-phase).
 # Reuses the already-fetched ISSUE_LIST — no extra gh call. A leaf absent from
@@ -609,16 +659,15 @@ fi
 
 # Topic categories in priority order; "other" is the implicit fallback for any
 # label set with no topic label. `security` ranks first, so a security-labeled
-# item outranks a plain-`bug` item at the same priority level. The `priority`
-# label is the *outermost* axis: every `priority` item ranks above every
-# non-priority item, regardless of topic. Topic category nests *inside* the
-# priority axis, and the phase ladder runs innermost. TOPIC_CATEGORIES is the
-# single source of the topic ordering — category_of_labels resolves against it
-# and the default-mode loop iterates CATEGORIES within each priority level.
-# `priority` is derived alongside the category via the has_priority_in_labels
-# helper; topic category is the tie-break among items at the same priority
-# level. The companion classifier that *applies* these labels is ref-ready
-# SKILL.md Step 6; keep the two label sets in sync.
+# item outranks a plain-`bug` item at the same rank level. Attention *rank* is
+# the *outermost* axis: every higher-rank item ranks above every lower-rank item,
+# regardless of topic. Topic category nests *inside* the rank axis (below the enh
+# bit), and the phase ladder runs innermost. TOPIC_CATEGORIES is the single source
+# of the topic ordering — category_of_labels resolves against it and the
+# default-mode loop iterates CATEGORIES within each rank level. Topic category is
+# the tie-break among items at the same rank level. The companion classifier that
+# *applies* these labels is ref-ready SKILL.md Step 6; keep the two label sets in
+# sync.
 #
 # Disambiguation: the `security` *topic* label here is its own namespace, kept
 # apart from any `dispatch:*` workflow marker by exact-match resolution. A bare
@@ -634,8 +683,10 @@ TOPIC_CATEGORIES_JSON=$(printf '%s\n' "${TOPIC_CATEGORIES[@]}" | jq -Rcn '[input
 # [.[].name] itself, so callers pass the raw label array. category_of_labels /
 # has_priority_in_labels wrap these, and the ISSUE_SORTED filter below calls
 # the same defs — there is now exactly one copy of each expression.
-# has_enhancement is called only by ISSUE_SORTED (the enhancement axis is on the
-# issue-selection path only — PRs are never enhancement-classified), but lives
+# has_priority still exists but ONLY feeds the --priority-only bypass filter and
+# DEBUG_CLASSIFY — the `priority` label no longer orders the queue (attention rank
+# does). has_enhancement is called only by ISSUE_SORTED (the enhancement axis is on
+# the issue-selection path only — PRs are never enhancement-classified), but lives
 # here so the `enhancement` label expression has a single source too.
 JQ_LABEL_DEFS='
   def has_priority: [.[].name] | if index("priority") then 1 else 0 end;
@@ -683,28 +734,38 @@ pr_priority_bit() {
       | has_priority'
 }
 
-# Top-N ranked PRs per (category, priority-bit, phase): key =
-# "<category>|<priority-bit>|<phase>", value = a NEWLINE-DELIMITED list (no
+# Max attention rank over a PR's closing issues (rank inheritance): a PR inherits
+# the highest rank among the issues it closes. "0" when it closes nothing or
+# nothing maps. Canonical jq tostring — matches RANK_LEVELS by construction, since
+# both derive from the same RANK_MAP_JSON. NOTE: here `$map` is RANK_MAP_JSON (the
+# rank map), NOT ISSUE_LABELS_JSON as in pr_priority_bit / pr_combined_labels.
+pr_rank_of() {
+  printf '%s' "$1" | jq -r --argjson map "$RANK_MAP_JSON" \
+    '[ .[].number | tostring as $n | ($map[$n] // 0) ] | (max // 0) | tostring'
+}
+
+# Top-N ranked PRs per (category, rank, phase): key =
+# "<category>|<rank>|<phase>", value = a NEWLINE-DELIMITED list (no
 # leading/trailing newline) of up to TOP entries, each "<num> <branch>", oldest
-# first. The "|" separator is collision-free — priority bits are literal `0`/`1`,
-# phase names are fixed identifiers, and no TOPIC_CATEGORIES name contains "|".
-# PRs are NOT enhancement-classified: this key stays 3-part (unlike the 4-part
-# FIRST_ISSUE key) and the emission loops draw it only on the enh==0 pass, so an
-# in-flight PR completes normally rather than being deprioritized below
+# first. The "|" separator is collision-free — rank strings are jq number literals
+# (no "|"), phase names are fixed identifiers, and no TOPIC_CATEGORIES name
+# contains "|". PRs are NOT enhancement-classified: this key stays 3-part (unlike
+# the 4-part FIRST_ISSUE key) and the emission loops draw it only on the enh==0
+# pass, so an in-flight PR completes normally rather than being deprioritized below
 # enhancement issues.
 # PR_SORTED is pre-sorted oldest-first, so entries accumulate oldest-first. For
 # TOP=1 a bucket holds at most one entry — the oldest — and expands to the bare
 # entry with no trailing newline, byte-identical to the former single-entry map.
 declare -A FIRST_PR
-# Top-N ranked help-wanted issues per (category, priority-bit, enh-bit, phase):
-# key = "<category>|<priority-bit>|<enh-bit>|<phase>" where phase ∈ {implement,
+# Top-N ranked help-wanted issues per (category, rank, enh-bit, phase):
+# key = "<category>|<rank>|<enh-bit>|<phase>" where phase ∈ {implement,
 # plan}, value = a NEWLINE-DELIMITED list (no leading/trailing newline) of up to
 # TOP "<num>" entries, oldest first. The enh-bit (1 if the issue carries the
-# `enhancement` label, else 0) is an axis between priority and topic-category:
-# within a priority tier all non-enhancement issues (enh=0) drain before any
+# `enhancement` label, else 0) is an axis between rank and topic-category:
+# within a rank level all non-enhancement issues (enh=0) drain before any
 # enhancement issue (enh=1). The issue path is the ONLY enhancement-classified
 # path — PRs are never enhancement-classified, so FIRST_PR keeps the 3-part
-# "<category>|<priority-bit>|<phase>" key (a PR that has already reached a phase
+# "<category>|<rank>|<phase>" key (a PR that has already reached a phase
 # completes normally; its in-flight work is not re-deprioritized). Splitting the
 # bucket by phase lets a planned issue (implement) be selected ahead of an
 # unplanned one (plan) in the same bucket.
@@ -745,26 +806,28 @@ bucket_append() {
   return 0
 }
 
-# group_emittable_count <category> <priority-bit> <enh-bit> — total entries the
-# emission loops could draw from this (category, priority, enh) group:
-# FIRST_ISSUE across the issue ladder (ISSUE_PHASE_PRIORITY) keyed
-# cat|pri|enh|phase always, and FIRST_PR across the PR phase ladder
-# (PHASE_PRIORITY) plus qa keyed cat|pri|phase ONLY when enh==0 — matching the
-# emission order, where PRs (never enhancement-classified, so always in the
-# enh==0 pass) are drawn only on the enh==0 iteration. Drives the walk's global
-# early-exit (#1452): once the strictly-higher-rank groups already hold TOP such
-# entries combined, emission fills its TOP results from them before reaching any
-# lower-rank group, so the remaining lower-rank roots cannot change the output
-# and the walk can stop.
+# group_emittable_count <category> <rank> <enh-bit> — total entries the emission
+# loops could draw from this (category, rank, enh) group: FIRST_ISSUE across the
+# issue ladder (ISSUE_PHASE_PRIORITY) keyed cat|rank|enh|phase always, and
+# FIRST_PR across the PR phase ladder (PHASE_PRIORITY) plus qa keyed cat|rank|phase
+# ONLY when enh==0 — matching the emission order, where PRs (never
+# enhancement-classified, so always in the enh==0 pass) are drawn only on the
+# enh==0 iteration. Drives the walk's global early-exit (#1452): once the
+# strictly-higher-rank groups already hold TOP such entries combined, emission
+# fills its TOP results from them before reaching any lower-rank group, so the
+# remaining lower-rank roots cannot change the output and the walk can stop. The
+# count is exact for groups the walk visits and a conservative undercount for
+# rank levels that carry PRs but no help-wanted issue (never folded → never stops
+# early), so the early-exit stays sound.
 group_emittable_count() {
-  local _gec_cat="$1" _gec_pri="$2" _gec_enh="$3" _gec_total=0 _gec_p
+  local _gec_cat="$1" _gec_rank="$2" _gec_enh="$3" _gec_total=0 _gec_p
   if (( _gec_enh == 0 )); then
     for _gec_p in "${PHASE_PRIORITY[@]}" qa; do
-      _gec_total=$(( _gec_total + $(bucket_count FIRST_PR "$_gec_cat|$_gec_pri|$_gec_p") ))
+      _gec_total=$(( _gec_total + $(bucket_count FIRST_PR "$_gec_cat|$_gec_rank|$_gec_p") ))
     done
   fi
   for _gec_p in "${ISSUE_PHASE_PRIORITY[@]}"; do
-    _gec_total=$(( _gec_total + $(bucket_count FIRST_ISSUE "$_gec_cat|$_gec_pri|$_gec_enh|$_gec_p") ))
+    _gec_total=$(( _gec_total + $(bucket_count FIRST_ISSUE "$_gec_cat|$_gec_rank|$_gec_enh|$_gec_p") ))
   done
   echo "$_gec_total"
 }
@@ -804,10 +867,11 @@ while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
   # here and reuse it (claimed skip, office-hours skip, exclude skip).
   pr_issue_num="${pr_branch%%-*}"
 
-  # --priority-only scans only the priority=1 tier. Skip any PR whose
-  # closing-issue label union does not carry `priority` BEFORE the expensive
-  # per-PR dispatch-ci-ready / dispatch-phase gh calls — a non-priority PR is
-  # never selectable in this mode, so it pays nothing.
+  # --priority-only scans only priority-LABELED items (the bypass filter — the
+  # label's one surviving meaning). Skip any PR whose closing-issue label union
+  # (incl. ancestors) does not carry `priority` BEFORE the expensive per-PR
+  # dispatch-ci-ready / dispatch-phase gh calls — a non-priority PR is never
+  # selectable in this mode, so it pays nothing.
   if [[ "$PRIORITY_ONLY" == "true" ]] \
      && [[ "$(pr_priority_bit "$pr_closing")" != "1" ]]; then
     continue
@@ -922,19 +986,19 @@ while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
   # first-seen guard.
   pr_combined=$(pr_combined_labels "$pr_closing")
   pr_cat=$(category_of_labels "$pr_combined")
-  pr_pri=$(pr_priority_bit "$pr_closing")
-  pr_key="$pr_cat|$pr_pri|$phase"
+  pr_rank=$(pr_rank_of "$pr_closing")
+  pr_key="$pr_cat|$pr_rank|$phase"
   bucket_append FIRST_PR "$pr_key" "$pr_num $pr_branch" || true
 done <<< "$PR_SORTED"
 
 if [[ "$QA_MODE" == "true" ]]; then
-  # --qa mode: oldest QA PR in the highest-priority (priority, topic) bucket
-  # that has one — priority is the outermost axis (1 then 0), topic category
-  # nested inside — without the <phase> field. The issue queue is irrelevant
-  # here, so the leaf-resolution loop below is skipped entirely.
-  for pri in 1 0; do
+  # --qa mode: oldest QA PR in the highest-rank (rank, topic) bucket that has
+  # one — attention rank is the outermost axis (RANK_LEVELS, descending), topic
+  # category nested inside — without the <phase> field. The issue queue is
+  # irrelevant here, so the leaf-resolution loop below is skipped entirely.
+  for rank_lvl in "${RANK_LEVELS[@]}"; do
     for category in "${CATEGORIES[@]}"; do
-      qa_key="$category|$pri|qa"
+      qa_key="$category|$rank_lvl|qa"
       if [[ -n "${FIRST_PR[$qa_key]:-}" ]]; then
         echo "pr ${FIRST_PR[$qa_key]}"
         exit 0
@@ -982,22 +1046,23 @@ done < <(printf '%s' "$PR_LIST" | jq -r '
 # help-wanted issue — is what gets recorded; the category is still the
 # top-level issue's own.
 #
-# The roots are now emitted in (priority desc, enh asc, category-rank asc,
+# The roots are now emitted in (attention-rank desc, enh asc, category-rank asc,
 # createdAt asc) order — the SAME rank order the emission loops drain — so each
-# (priority, enh, category) group's roots are contiguous, enabling the walk's
-# global early-exit (#1452). The enh bit (1 if the issue carries `enhancement`,
-# else 0) nests BETWEEN priority and topic-category: within a priority tier all
-# non-enhancement issues (enh=0) sort before any enhancement issue (enh=1), and
-# enhancement issues then order by the existing topic ladder. pri/enh/catname are
-# computed by the shared JQ_LABEL_DEFS defs — the same defs category_of_labels /
-# has_priority_in_labels call — so the two sites cannot drift; cat-rank is the
-# CATEGORIES iteration order. Bucket keys are unchanged. (1 - .pri) sorts
-# priority=1 first; .enh sorts non-enhancement (0) first; jq sort_by is stable
-# and createdAt is an ISO string sorting chronologically, so within a
-# (pri, enh, cat-rank) group roots stay oldest-first — byte-identical to the old
-# order for that group. The TSV now carries the precomputed pri/enh/cat-rank/cat
-# columns.
-ISSUE_SORTED=$(printf '%s' "$ISSUE_LIST" | jq -r --argjson cats "$TOPIC_CATEGORIES_JSON" "$JQ_LABEL_DEFS"'
+# (rank, enh, category) group's roots are contiguous, enabling the walk's global
+# early-exit (#1452). The enh bit (1 if the issue carries `enhancement`, else 0)
+# nests BETWEEN rank and topic-category: within a rank level all non-enhancement
+# issues (enh=0) sort before any enhancement issue (enh=1), and enhancement issues
+# then order by the existing topic ladder. pri/enh/catname are computed by the
+# shared JQ_LABEL_DEFS defs — the same defs category_of_labels /
+# has_priority_in_labels call — so the two sites cannot drift; rank is looked up in
+# RANK_MAP_JSON (0 if unmapped); cat-rank is the CATEGORIES iteration order. Bucket
+# keys carry rank in place of the former priority bit. -.rank sorts higher ranks
+# first; .enh sorts non-enhancement (0) first; jq sort_by is stable and createdAt
+# is an ISO string sorting chronologically, so within a (rank, enh, cat-rank) group
+# roots stay oldest-first. The `pri` column is RETAINED in the TSV solely for the
+# --priority-only bypass filter and DEBUG_CLASSIFY — it no longer participates in
+# ordering. The TSV carries the precomputed pri/rank/enh/cat-rank/cat columns.
+ISSUE_SORTED=$(printf '%s' "$ISSUE_LIST" | jq -r --argjson cats "$TOPIC_CATEGORIES_JSON" --argjson map "$RANK_MAP_JSON" "$JQ_LABEL_DEFS"'
   [ .[]
     | select((.labels // []) | any(.name == "help wanted"))
     | select((.labels // []) | any(.name == "dispatch:office-hours") | not)
@@ -1005,19 +1070,22 @@ ISSUE_SORTED=$(printf '%s' "$ISSUE_LIST" | jq -r --argjson cats "$TOPIC_CATEGORI
     | ((.labels // []) | has_enhancement) as $enh
     | ((.labels // []) | category_of($cats)) as $catname
     | (($cats | index($catname)) // ($cats | length)) as $catrank
-    | { number: .number, createdAt: .createdAt, pri: $pri, enh: $enh, catrank: $catrank, catname: $catname }
+    | (($map[(.number | tostring)]) // 0) as $rank
+    | { number: .number, createdAt: .createdAt, pri: $pri, rank: $rank, enh: $enh, catrank: $catrank, catname: $catname }
   ]
-  | sort_by([ (1 - .pri), .enh, .catrank, .createdAt ])
-  | .[] | [.number, .pri, .enh, .catrank, .catname] | @tsv')
+  | sort_by([ -.rank, .enh, .catrank, .createdAt ])
+  | .[] | [.number, .pri, (.rank|tostring), .enh, .catrank, .catname] | @tsv')
 
 if [[ "$DEBUG_CLASSIFY" == "true" ]]; then
   # Emit, for each surviving issue, the REAL inline ISSUE_SORTED jq classification
   # (sorted_*) alongside the REAL shell-helper classification (helper_*), so the
   # test can prove the two classification sources agree (#1490). The TSV now
-  # carries an enh column between pri and catrank; skip it here (DEBUG_CLASSIFY
-  # checks only pri/category agreement).
+  # carries a rank column (after pri) and an enh column (between rank and
+  # catrank); skip both here (DEBUG_CLASSIFY checks only pri/category agreement —
+  # pri is still computed two ways for the bypass filter, so the assertion stays
+  # meaningful).
   # number <tab> sorted_pri <tab> sorted_cat <tab> helper_pri <tab> helper_cat
-  while IFS=$'\t' read -r dbg_num dbg_pri _dbg_enh _dbg_catrank dbg_cat; do
+  while IFS=$'\t' read -r dbg_num dbg_pri _dbg_rank _dbg_enh _dbg_catrank dbg_cat; do
     [[ -z "$dbg_num" ]] && continue
     dbg_labels=$(printf '%s' "$ISSUE_LIST" \
       | jq -c --argjson n "$dbg_num" '(.[] | select(.number == $n) | .labels) // []')
@@ -1030,14 +1098,14 @@ fi
 
 walk_prev_group=""
 walk_prev_cat=""
-walk_prev_pri=""
+walk_prev_rank=""
 walk_prev_enh=""
 walk_cum_emittable=0
-while IFS=$'\t' read -r issue_num issue_pri issue_enh issue_catrank issue_cat; do
+while IFS=$'\t' read -r issue_num issue_pri issue_rank issue_enh issue_catrank issue_cat; do
   [[ -z "$issue_num" ]] && continue
-  # Global early-exit across (priority, enh, category) groups (#1452). The walk
-  # now runs in (pri desc, enh asc, cat-rank asc, createdAt asc) order — the SAME
-  # rank order the emission loops drain. Roots of one group are contiguous, so
+  # Global early-exit across (rank, enh, category) groups (#1452). The walk now
+  # runs in (attention-rank desc, enh asc, cat-rank asc, createdAt asc) order — the
+  # SAME rank order the emission loops drain. Roots of one group are contiguous, so
   # when the group changes the previous group is fully resolved: fold its
   # emittable count (FIRST_ISSUE across all its phases, plus FIRST_PR only when
   # enh==0) into the cumulative. If the strictly-higher-rank groups already hold
@@ -1047,17 +1115,17 @@ while IFS=$'\t' read -r issue_num issue_pri issue_enh issue_catrank issue_cat; d
   # walk: each group's FIRST_ISSUE buckets are fed only by that group's own roots,
   # so the reorder leaves bucket contents byte-identical (the within-group
   # createdAt order is preserved).
-  cur_group="$issue_pri|$issue_enh|$issue_catrank"
+  cur_group="$issue_rank|$issue_enh|$issue_catrank"
   if [[ "$cur_group" != "$walk_prev_group" ]]; then
     if [[ -n "$walk_prev_group" ]]; then
-      walk_cum_emittable=$(( walk_cum_emittable + $(group_emittable_count "$walk_prev_cat" "$walk_prev_pri" "$walk_prev_enh") ))
+      walk_cum_emittable=$(( walk_cum_emittable + $(group_emittable_count "$walk_prev_cat" "$walk_prev_rank" "$walk_prev_enh") ))
     fi
     if (( walk_cum_emittable >= TOP )); then
       break
     fi
     walk_prev_group="$cur_group"
     walk_prev_cat="$issue_cat"
-    walk_prev_pri="$issue_pri"
+    walk_prev_rank="$issue_rank"
     walk_prev_enh="$issue_enh"
   fi
   # Skip an open issue already closed by a non-draft (ready) PR (#920).
@@ -1069,20 +1137,22 @@ while IFS=$'\t' read -r issue_num issue_pri issue_enh issue_catrank issue_cat; d
   if num_is_claimed "$issue_num"; then
     continue
   fi
-  # Category and priority bit both arrive precomputed from the sorted TSV
-  # (issue_cat / issue_pri), derived from the top-level help-wanted issue's own
-  # labels by the same expressions category_of_labels / has_priority_in_labels
-  # use. Once a (category, priority) bucket has a winner the remaining issues in
-  # it are skipped — including the expensive leaf trace.
-  # --priority-only scans only the priority=1 tier — skip non-priority issues
+  # Category, rank, and the priority bit all arrive precomputed from the sorted
+  # TSV (issue_cat / issue_rank / issue_pri), derived from the top-level
+  # help-wanted issue's own labels/rank by the same expressions category_of_labels
+  # / has_priority_in_labels / the rank map use. Once a (category, rank) bucket has
+  # a winner the remaining issues in it are skipped — including the expensive leaf
+  # trace. The priority bit (issue_pri) is now used ONLY for the --priority-only
+  # bypass filter below — it no longer affects ordering.
+  # --priority-only scans only priority-LABELED issues — skip non-priority issues
   # before the expensive dispatch-trace-leaf descent.
   [[ "$PRIORITY_ONLY" == "true" && "$issue_pri" != "1" ]] && continue
   # Coarse pre-trace skip: only when BOTH phase sub-buckets already hold TOP
   # entries is the expensive leaf trace pointless. If either implement or plan
   # slot is still under TOP, descend — the leaf's phase isn't known until after
   # the trace.
-  impl_bucket="$issue_cat|$issue_pri|$issue_enh|implement"
-  plan_bucket="$issue_cat|$issue_pri|$issue_enh|plan"
+  impl_bucket="$issue_cat|$issue_rank|$issue_enh|implement"
+  plan_bucket="$issue_cat|$issue_rank|$issue_enh|plan"
   if (( $(bucket_count FIRST_ISSUE "$impl_bucket") >= TOP )) \
      && (( $(bucket_count FIRST_ISSUE "$plan_bucket") >= TOP )); then
     continue
@@ -1172,7 +1242,7 @@ while IFS=$'\t' read -r issue_num issue_pri issue_enh issue_catrank issue_cat; d
       # (the cap subsumes the former first-seen guard).
       leaf_phase=plan
       [[ -n "${ISSUE_PLANNED[$leaf]:-}" ]] && leaf_phase=implement
-      leaf_bucket="$issue_cat|$issue_pri|$issue_enh|$leaf_phase"
+      leaf_bucket="$issue_cat|$issue_rank|$issue_enh|$leaf_phase"
       root_excl["$leaf"]=1
       if bucket_append FIRST_ISSUE "$leaf_bucket" "$leaf"; then
         root_recorded=$(( root_recorded + 1 ))
@@ -1204,42 +1274,43 @@ while IFS=$'\t' read -r issue_num issue_pri issue_enh issue_catrank issue_cat; d
   unset root_excl
 done <<< "$ISSUE_SORTED"
 
-# Default mode: priority is the outermost axis (1 then 0); the enhancement bit
-# nests inside it (non-enhancement enh=0 then enhancement enh=1) on the ISSUE
-# path only; topic category nests inside that; and the phase ladder runs
-# innermost (see the header for the full order). The entire priority=1 tier is
-# exhausted before any priority=0 item is considered; within one priority level
-# all non-enhancement work drains before any enhancement issue, then topic
-# category is the tie-break, and within each bucket the phase ladder runs
-# innermost. PRs are never enhancement-classified: FIRST_PR / qa buckets keep the
-# 3-part cat|pri|phase key and are drawn ONLY on the enh==0 pass, so a PR that has
-# already reached a phase completes normally rather than being re-deprioritized.
-# Resulting nesting: pri ⊃ enh ⊃ category ⊃ {PRs+qa if enh==0, then issues}.
+# Default mode: attention rank is the outermost axis (RANK_LEVELS, descending);
+# the enhancement bit nests inside it (non-enhancement enh=0 then enhancement
+# enh=1) on the ISSUE path only; topic category nests inside that; and the phase
+# ladder runs innermost (see the header for the full order). An entire rank level
+# is exhausted before any lower-rank item is considered; within one rank level all
+# non-enhancement work drains before any enhancement issue, then topic category is
+# the tie-break, and within each bucket the phase ladder runs innermost. PRs are
+# never enhancement-classified: FIRST_PR / qa buckets keep the 3-part cat|rank|phase
+# key and are drawn ONLY on the enh==0 pass, so a PR that has already reached a
+# phase completes normally rather than being re-deprioritized.
+# Resulting nesting: rank ⊃ enh ⊃ category ⊃ {PRs+qa if enh==0, then issues}.
 #
 # In --priority-only mode the scan loops above already `continue` on every
-# priority=0 item, so FIRST_PR/FIRST_ISSUE hold only priority=1 keys; the pri=0
-# pass below is then a guaranteed no-op (every lookup misses). It is left in the
-# shared loop rather than special-cased — the empty-map iteration is harmless
-# and keeps the default and --priority-only output paths identical.
+# non-priority-labeled item, so FIRST_PR/FIRST_ISSUE hold only priority-labeled
+# keys (at whatever ranks those items carry); iterating the full RANK_LEVELS below
+# simply skips the empty rank buckets. It is left in the shared loop rather than
+# special-cased — the empty-bucket iteration is harmless and keeps the default and
+# --priority-only output paths identical.
 if (( TOP == 1 )); then
   # TOP=1: emit the single highest-priority decision line and exit. Each bucket
   # holds at most one entry (no trailing newline), so the direct expansion below
   # is byte-identical to the former single-entry map's output.
-  for pri in 1 0; do
+  for rank_lvl in "${RANK_LEVELS[@]}"; do
     for enh in 0 1; do
       for category in "${CATEGORIES[@]}"; do
         # PRs (never enhancement-classified, 3-part key) are drawn only on the
         # enh==0 pass, so an in-flight PR completes ahead of any enhancement issue.
         if (( enh == 0 )); then
           for phase in "${PHASE_PRIORITY[@]}"; do
-            pr_key="$category|$pri|$phase"
+            pr_key="$category|$rank_lvl|$phase"
             if [[ -n "${FIRST_PR[$pr_key]:-}" ]]; then
               echo "pr ${FIRST_PR[$pr_key]} $phase"
               exit 0
             fi
           done
 
-          qa_key="$category|$pri|qa"
+          qa_key="$category|$rank_lvl|qa"
           if [[ -n "${FIRST_PR[$qa_key]:-}" ]]; then
             echo "pr ${FIRST_PR[$qa_key]} qa"
             exit 0
@@ -1247,7 +1318,7 @@ if (( TOP == 1 )); then
         fi
 
         for iphase in "${ISSUE_PHASE_PRIORITY[@]}"; do
-          issue_key="$category|$pri|$enh|$iphase"
+          issue_key="$category|$rank_lvl|$enh|$iphase"
           if [[ -n "${FIRST_ISSUE[$issue_key]:-}" ]]; then
             echo "issue ${FIRST_ISSUE[$issue_key]}"
             exit 0
@@ -1295,23 +1366,23 @@ else
     return 0
   }
 
-  for pri in 1 0; do
+  for rank_lvl in "${RANK_LEVELS[@]}"; do
     for enh in 0 1; do
       for category in "${CATEGORIES[@]}"; do
         # PRs (never enhancement-classified, 3-part key) are drained only on the
         # enh==0 pass, so in-flight PRs complete ahead of any enhancement issue.
         if (( enh == 0 )); then
           for phase in "${PHASE_PRIORITY[@]}"; do
-            drain_bucket FIRST_PR "$category|$pri|$phase" pr "$phase"
+            drain_bucket FIRST_PR "$category|$rank_lvl|$phase" pr "$phase"
             (( ${#results[@]} >= TOP )) && { printf '%s\n' "${results[@]}"; exit 0; }
           done
 
-          drain_bucket FIRST_PR "$category|$pri|qa" pr qa
+          drain_bucket FIRST_PR "$category|$rank_lvl|qa" pr qa
           (( ${#results[@]} >= TOP )) && { printf '%s\n' "${results[@]}"; exit 0; }
         fi
 
         for iphase in "${ISSUE_PHASE_PRIORITY[@]}"; do
-          drain_bucket FIRST_ISSUE "$category|$pri|$enh|$iphase" issue ""
+          drain_bucket FIRST_ISSUE "$category|$rank_lvl|$enh|$iphase" issue ""
           (( ${#results[@]} >= TOP )) && { printf '%s\n' "${results[@]}"; exit 0; }
         done
       done

@@ -4,11 +4,11 @@
 // getter that reads a vite virtual module.
 //
 // CRITICAL: every @commons-systems/intentionsutil symbol is imported with
-// `import type` ONLY. The runtime values listNodes/listTrackers pull in
-// node:fs + yaml, which break the browser bundle. This module must carry NO
-// runtime dependency on intentionsutil and NO node: imports.
+// `import type` ONLY. The runtime value listNodes pulls in node:fs + yaml,
+// which break the browser bundle. This module must carry NO runtime
+// dependency on intentionsutil and NO node: imports.
 
-import type { Owner, Status, ExecutionTracker } from "@commons-systems/intentionsutil";
+import type { Owner, Status } from "@commons-systems/intentionsutil";
 
 import seedIntentionTree from "virtual:office-hours-intention-tree-seed";
 
@@ -34,12 +34,11 @@ export interface IntentionTreeNode extends SlimIntentionNode {
 
 /**
  * The view object the demo getter returns: the built forest plus the frontier
- * id set and the per-node execution trackers.
+ * id set.
  */
 export interface IntentionTreeView {
   tree: IntentionTreeNode[];
   frontierIds: Set<string>;
-  trackers: Record<string, ExecutionTracker>;
 }
 
 /**
@@ -88,13 +87,12 @@ export function buildTree(nodes: SlimIntentionNode[]): IntentionTreeNode[] {
  * the vite virtual module and assembles the view.
  *
  * The serialized seed is fully JSON-safe: strings and enums only, no Date
- * fields (ExecutionTracker.refreshed_at is a string). So no Date-rehydration
- * shim is needed here (unlike queue-metrics' computedAt).
+ * fields. So no Date-rehydration shim is needed here (unlike queue-metrics'
+ * computedAt).
  */
 export function getDemoIntentionTree(): IntentionTreeView {
   return {
     tree: buildTree(seedIntentionTree.nodes),
     frontierIds: new Set(seedIntentionTree.frontierIds),
-    trackers: seedIntentionTree.trackers,
   };
 }
