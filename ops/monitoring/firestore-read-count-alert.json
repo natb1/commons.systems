@@ -5,7 +5,7 @@
     {
       "displayName": "Firestore reads > 40000/hour sustained 30m",
       "conditionThreshold": {
-        "filter": "metric.type=\"firestore.googleapis.com/document/read_count\" resource.type=\"firestore.googleapis.com/Database\"",
+        "filter": "metric.type=\"firestore.googleapis.com/document/read_count\" resource.type=\"firestore_instance\"",
         "aggregations": [
           {
             "alignmentPeriod": "3600s",
