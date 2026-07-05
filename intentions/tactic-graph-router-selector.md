@@ -107,17 +107,27 @@ probe consults graph pace-exempt nodes (Unit 1's lane) alongside the
 legacy `--priority-only` probe, still admitting at most one gate-exempt
 worker total.
 
-## Unit 3 — node-id worktree keys
+## Unit 3 — node-id worktrees at the native default location
 
 **Recommended model:** sonnet
 
-Scope: `.claude/hooks/worktree-create.sh` — accept `<node-id>` worktree
-names alongside the `<issue-num>-<slug>` convention: tactic ids for phase
-sessions and strategy ids for `/align-tactics` sessions (uniform node-id
-keying, strategy clarifications 12–13; spec §3.4). Draining legacy gh
-work keeps its numeric names. (This removes the friction the 2739 and
-2740 sessions hit: a graph-native session needing a synthetic numeric
-anchor just to name its worktree.)
+Scope: node-id worktrees — tactic ids for phase sessions and strategy
+ids for `/align-tactics` sessions (uniform node-id keying, strategy
+clarifications 12–13; substrate clarification 23; spec §3.4) — are
+Claude Code native worktrees at the harness default location,
+`<project-root>/.claude/worktrees/<node-id>`, with `main` checked out at
+the project root. `.claude/hooks/worktree-create.sh` today intercepts
+every creation, hard-rejects non-`<issue-num>-<slug>` names, anchors at
+the git common dir (the legacy `.bare` layout), and writes a gh identity
+stub — all legacy-lane conventions. Re-scope it: a `<node-id>` name is
+placed at the native default location (project-root
+`.claude/worktrees/`; keep the direnv warm-up, no gh stub, no
+git-common-dir anchoring), while `<issue-num>-<slug>` names keep the
+legacy behavior until the gh lane drains. No graph-native path may
+assume the `.bare` common dir or the sibling `worktrees/` container.
+(This removes the friction the 2739 and 2740 sessions hit: a
+graph-native session needing a synthetic numeric anchor just to name
+its worktree.)
 
 ## Unit 4 — launch chain for node targets
 
@@ -131,8 +141,11 @@ the launch scripts issue-only):
 - `.claude/skills/dispatch-propagate/scripts/dispatch-materialize-spawn`
   and `dispatch-launch-worker`: accept a `<node-id>` target alongside
   `<issue-num>` (keyspace split: all-numeric = legacy issue, otherwise
-  node id); worktree path and spawn `--name` are the node id (Unit 3's
-  hook accepts it).
+  node id); spawn `--name` is the node id and the worktree path is the
+  native default `<project-root>/.claude/worktrees/<node-id>` (Unit 3;
+  strategy clarification 23). `dispatch-materialize-spawn`'s legacy
+  `$PROJECT_ROOT/worktrees/$BRANCH` placement stays issue-lane-only
+  until the drain.
 - For node targets, `dispatch-route`'s phase *derivation* is bypassed —
   phase is persisted (strategy clarification 1). The directive comes from
   the node: strategy → `INVOKE /align-tactics <node-id>`; tactic by
