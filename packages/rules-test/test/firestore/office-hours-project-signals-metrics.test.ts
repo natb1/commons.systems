@@ -29,7 +29,7 @@ const DEMO_SNAPSHOT_DATA = {
   memberEmails: [],
 };
 
-describe("office-hours queue metrics", () => {
+describe("office-hours project-signals metrics", () => {
   let env: RulesTestEnvironment;
 
   beforeAll(async () => {
@@ -41,12 +41,12 @@ describe("office-hours queue metrics", () => {
   beforeEach(async () => {
     await adminSetDoc(
       env,
-      `office-hours/${ENV}/metrics/dispatch-queue`,
+      `office-hours/${ENV}/metrics/project-signals`,
       SNAPSHOT_DATA,
     );
     await adminSetDoc(
       env,
-      "office-hours/demo/metrics/dispatch-queue",
+      "office-hours/demo/metrics/project-signals",
       DEMO_SNAPSHOT_DATA,
     );
   });
@@ -55,7 +55,7 @@ describe("office-hours queue metrics", () => {
     const ctx = authenticatedContext(env, "owner@test.com");
     const db = ctx.firestore();
     await assertSucceeds(
-      getDoc(doc(db, `office-hours/${ENV}/metrics/dispatch-queue`)),
+      getDoc(doc(db, `office-hours/${ENV}/metrics/project-signals`)),
     );
   });
 
@@ -63,7 +63,7 @@ describe("office-hours queue metrics", () => {
     const ctx = authenticatedContext(env, "stranger@test.com");
     const db = ctx.firestore();
     await assertFails(
-      getDoc(doc(db, `office-hours/${ENV}/metrics/dispatch-queue`)),
+      getDoc(doc(db, `office-hours/${ENV}/metrics/project-signals`)),
     );
   });
 
@@ -71,7 +71,7 @@ describe("office-hours queue metrics", () => {
     const ctx = unauthenticatedContext(env);
     const db = ctx.firestore();
     await assertFails(
-      getDoc(doc(db, `office-hours/${ENV}/metrics/dispatch-queue`)),
+      getDoc(doc(db, `office-hours/${ENV}/metrics/project-signals`)),
     );
   });
 
@@ -79,7 +79,7 @@ describe("office-hours queue metrics", () => {
     const ctx = unauthenticatedContext(env);
     const db = ctx.firestore();
     await assertSucceeds(
-      getDoc(doc(db, "office-hours/demo/metrics/dispatch-queue")),
+      getDoc(doc(db, "office-hours/demo/metrics/project-signals")),
     );
   });
 
@@ -87,7 +87,7 @@ describe("office-hours queue metrics", () => {
     const ctx = authenticatedContext(env, "stranger@test.com");
     const db = ctx.firestore();
     await assertSucceeds(
-      getDoc(doc(db, "office-hours/demo/metrics/dispatch-queue")),
+      getDoc(doc(db, "office-hours/demo/metrics/project-signals")),
     );
   });
 
@@ -95,7 +95,7 @@ describe("office-hours queue metrics", () => {
     const ctx = authenticatedContext(env, "owner@test.com");
     const db = ctx.firestore();
     await assertFails(
-      setDoc(doc(db, `office-hours/${ENV}/metrics/dispatch-queue`), {
+      setDoc(doc(db, `office-hours/${ENV}/metrics/project-signals`), {
         memberEmails: ["owner@test.com"],
       }),
     );
@@ -105,7 +105,7 @@ describe("office-hours queue metrics", () => {
     const ctx = authenticatedContext(env, "owner@test.com");
     const db = ctx.firestore();
     await assertFails(
-      updateDoc(doc(db, `office-hours/${ENV}/metrics/dispatch-queue`), {
+      updateDoc(doc(db, `office-hours/${ENV}/metrics/project-signals`), {
         openHelpWanted: 99,
       }),
     );
@@ -115,7 +115,7 @@ describe("office-hours queue metrics", () => {
     const ctx = authenticatedContext(env, "owner@test.com");
     const db = ctx.firestore();
     await assertFails(
-      deleteDoc(doc(db, `office-hours/${ENV}/metrics/dispatch-queue`)),
+      deleteDoc(doc(db, `office-hours/${ENV}/metrics/project-signals`)),
     );
   });
 
@@ -123,7 +123,7 @@ describe("office-hours queue metrics", () => {
     const ctx = unauthenticatedContext(env);
     const db = ctx.firestore();
     await assertFails(
-      setDoc(doc(db, `office-hours/${ENV}/metrics/dispatch-queue`), {
+      setDoc(doc(db, `office-hours/${ENV}/metrics/project-signals`), {
         memberEmails: ["owner@test.com"],
       }),
     );
@@ -133,7 +133,7 @@ describe("office-hours queue metrics", () => {
     const ctx = authenticatedContext(env, "owner@test.com");
     const db = ctx.firestore();
     await assertFails(
-      setDoc(doc(db, "office-hours/demo/metrics/dispatch-queue"), {
+      setDoc(doc(db, "office-hours/demo/metrics/project-signals"), {
         memberEmails: [],
       }),
     );

@@ -497,52 +497,16 @@ service cloud.firestore {
         && request.auth.token.email in resource.data.memberEmails;
     }
 
-    // Office Hours reminders are the synced JIT queue, scoped to the owner via a
-    // denormalized `memberEmails` field. Client writes are denied; only the
-    // Admin-SDK sync Function (functions/src/office-hours-sync.ts) writes here.
-    // Because the read rule references resource.data.memberEmails, a list query
-    // (getDocs) must include where("memberEmails", "array-contains", <email>);
-    // Firestore rejects unfiltered list queries even when every document would pass.
-    match /office-hours/{env}/items/{itemId} {
-      allow read: if request.auth != null
-        && request.auth.token.email in resource.data.memberEmails;
-      allow write: if false;
-    }
-
-    // Usage samples are the Capacity-view time series, written by the Admin-SDK
-    // sampler. The `demo` env is world-readable for the public demo tier; every
-    // other env is owner-gated via the denormalized `memberEmails` field. Client
-    // writes are denied.
-    match /office-hours/{env}/usage-samples/{sampleId} {
-      allow get: if env == "demo"
-        || (request.auth != null
-            && request.auth.token.email in resource.data.memberEmails);
-      allow list: if request.auth != null
-        && request.auth.token.email in resource.data.memberEmails;
-      allow write: if false;
-    }
-
-    // Dispatch-queue metrics snapshot (office-hours Queue view). Group members
-    // read their env's snapshot via the denormalized memberEmails field; the
-    // demo env is world-readable for the unauthenticated demo view. Client
-    // writes are denied; only the Admin-SDK sampler (functions/, #1182) writes.
+    // Project-signals metrics snapshot doc (metrics/project-signals), written by
+    // the Admin-SDK collector collectProjectSignals
+    // (functions/src/project-signals.ts). Group members read their env's snapshot
+    // via the denormalized memberEmails field; the demo env is world-readable for
+    // the unauthenticated demo view. Client writes are denied; only the Admin-SDK
+    // collector writes.
     match /office-hours/{env}/metrics/{metricId} {
       allow read: if env == "demo"
         || (request.auth != null
             && request.auth.token.email in resource.data.memberEmails);
-      allow write: if false;
-    }
-
-    // Issue samples are the backlog-history time series, written by the Admin-SDK
-    // sampler. The `demo` env is world-readable for the public demo tier; every
-    // other env is owner-gated via the denormalized `memberEmails` field. Client
-    // writes are denied.
-    match /office-hours/{env}/issue-samples/{sampleId} {
-      allow get: if env == "demo"
-        || (request.auth != null
-            && request.auth.token.email in resource.data.memberEmails);
-      allow list: if request.auth != null
-        && request.auth.token.email in resource.data.memberEmails;
       allow write: if false;
     }
 
@@ -554,33 +518,6 @@ service cloud.firestore {
     // project-signals snapshot doc is already covered by the
     // `match /office-hours/{env}/metrics/{metricId}` wildcard above.
     match /office-hours/{env}/signal-samples/{sampleId} {
-      allow get: if env == "demo"
-        || (request.auth != null
-            && request.auth.token.email in resource.data.memberEmails);
-      allow list: if request.auth != null
-        && request.auth.token.email in resource.data.memberEmails;
-      allow write: if false;
-    }
-
-    // Audit aggregates are the cost/cache-reuse time series, written by the
-    // Admin-SDK aggregator. The `demo` env is world-readable for the public demo
-    // tier; every other env is owner-gated via the denormalized `memberEmails`
-    // field. Client writes are denied.
-    match /office-hours/{env}/audit-aggregates/{aggId} {
-      allow get: if env == "demo"
-        || (request.auth != null
-            && request.auth.token.email in resource.data.memberEmails);
-      allow list: if request.auth != null
-        && request.auth.token.email in resource.data.memberEmails;
-      allow write: if false;
-    }
-
-    // Topic-usage is the daily per-topic / per-type token-cost time series
-    // (office-hours dashboard, #2505), written by the local Admin-SDK producer
-    // (topic-usage-writer.mjs). Group members read their env's docs via the
-    // denormalized memberEmails field; the demo env is world-readable for the
-    // unauthenticated demo view. Client writes are denied.
-    match /office-hours/{env}/topic-usage/{docId} {
       allow get: if env == "demo"
         || (request.auth != null
             && request.auth.token.email in resource.data.memberEmails);
