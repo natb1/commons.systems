@@ -35,7 +35,7 @@ Three files under `ops/`:
   exactly what that command expects.
 
 - **`ops/monitoring/budget-alert.json`** — a parameter file, **not** a native
-  gcloud policy file. `gcloud billing budgets create` has no
+  gcloud policy file. `gcloud beta billing budgets create` has no
   `--policy-from-file` mode; it takes discrete flags (`--budget-amount`,
   `--threshold-rule`, and so on). So this file is our own small schema —
   `budgetAmount`, `currencyCode`, `thresholdPercents`, `projectId` — and the
@@ -83,9 +83,9 @@ the hour.
 The budget backstops the same failure from the cost side. Firestore reads price
 at about **$0.06 per 100k reads**. The project's normal monthly Firestore bill
 is near zero, so a sustained runaway would materially exceed it and trip the
-`$50/mo` budget's 50% threshold early — long before it reaches the full amount.
+`$10/mo` budget's 50% threshold early — long before it reaches the full amount.
 
-Both numbers — the **40,000 reads/hour** threshold and the **$50/mo** budget —
+Both numbers — the **40,000 reads/hour** threshold and the **$10/mo** budget —
 are tunable starting estimates. They are deliberately round first cuts. The
 owner should adjust them once real post-fix traffic gives a measured baseline;
 raise them if normal load turns out higher, lower them for a tighter tripwire.
@@ -145,7 +145,7 @@ branch of the acceptance work.
    id (without the `billingAccounts/` prefix) to `--billing-account`.
 
    Confirm the monitoring policy shows the `read_count` condition, the budget
-   shows the `$50` amount with the 50 / 90 / 100% thresholds, and both point at
+   shows the `$10` amount with the 50 / 90 / 100% thresholds, and both point at
    the owner-email channel.
 
 4. **Test-fire the alert.** Temporarily lower the policy `thresholdValue` (or
