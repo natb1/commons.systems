@@ -38,8 +38,11 @@ function freshCache() {
 
 function fakeQueries(): MediaQueries<TestItem> {
   return {
-    getPublicMedia: vi.fn(async () => [ITEM]),
-    getAllAccessibleMedia: vi.fn(async (_email: string) => [ITEM, { ...ITEM, id: "a2" }]),
+    getPublicMedia: vi.fn(async () => ({ items: [ITEM], nextCursor: null })),
+    getAllAccessibleMedia: vi.fn(async (_email: string) => ({
+      items: [ITEM, { ...ITEM, id: "a2" }],
+      nextCursor: null,
+    })),
     getMediaItem: vi.fn(async (id: string) => (id === ITEM.id ? ITEM : null)),
   };
 }
@@ -70,24 +73,38 @@ afterEach(() => {
 describe("list", () => {
   it("returns public media when no viewer email", async () => {
     const { source, queries } = makeSource();
-    const items = await source.list();
+    const page = await source.list();
     expect(queries.getPublicMedia).toHaveBeenCalledOnce();
     expect(queries.getAllAccessibleMedia).not.toHaveBeenCalled();
-    expect(items).toEqual([ITEM]);
+    expect(page.items).toEqual([ITEM]);
   });
 
   it("returns all accessible media for an authenticated viewer", async () => {
     const { source, queries } = makeSource({ viewerEmail: () => "u@test" });
-    const items = await source.list();
-    expect(queries.getAllAccessibleMedia).toHaveBeenCalledWith("u@test");
+    const page = await source.list();
+    expect(queries.getAllAccessibleMedia).toHaveBeenCalledWith("u@test", undefined);
     expect(queries.getPublicMedia).not.toHaveBeenCalled();
-    expect(items).toHaveLength(2);
+    expect(page.items).toHaveLength(2);
   });
 
   it("treats a null viewer email as public", async () => {
     const { source, queries } = makeSource({ viewerEmail: () => null });
     await source.list();
     expect(queries.getPublicMedia).toHaveBeenCalledOnce();
+  });
+
+  it("forwards paging opts to the public query", async () => {
+    const { source, queries } = makeSource();
+    const opts = { pageSize: 10, cursor: null };
+    await source.list(opts);
+    expect(queries.getPublicMedia).toHaveBeenCalledWith(opts);
+  });
+
+  it("forwards paging opts to the accessible-media query for a viewer", async () => {
+    const { source, queries } = makeSource({ viewerEmail: () => "u@test" });
+    const opts = { pageSize: 10, cursor: null };
+    await source.list(opts);
+    expect(queries.getAllAccessibleMedia).toHaveBeenCalledWith("u@test", opts);
   });
 });
 

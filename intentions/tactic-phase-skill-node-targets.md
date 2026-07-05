@@ -2,7 +2,8 @@
 id: tactic-phase-skill-node-targets
 kind: tactic
 statement: "phase skills accept node targets: target resolution, node-body plan
-  source, completion and escalation seams re-keyed for graph-native tactics"
+  source, completion, escalation, and output-filing seams re-keyed for
+  graph-native tactics"
 owner: ai
 status: codified
 parent: tactic-graph-native-dispatch
@@ -32,9 +33,10 @@ pace_exempt: false
 rounds: null
 attributes: {}
 ---
-# phase skills accept node targets: target resolution, node-body plan source, completion and escalation seams re-keyed for graph-native tactics
+# phase skills accept node targets: target resolution, node-body plan source, completion, escalation, and output-filing seams re-keyed for graph-native tactics
 
 **Recorded 2026-07-04** by the clarification-20 `/align-tactics`
+re-evaluation; Unit 3 added the same day by the clarifications-21–22
 re-evaluation. On-path (blocks `tactic-legacy-router-removal`, a
 validates-terminal). One PR.
 
@@ -43,8 +45,9 @@ validates-terminal). One PR.
 `tactic-graph-router-selector` unit 4 maps a node's persisted `phase` to
 the legacy phase skills — implement → `/implement`, fix → `/fix-checks`,
 qa → `/qa-fix`, review → `/review-fix` — invoked in a node-id worktree.
-But all four skills are hard-coupled to the gh-issue keyspace at three
-seams, so a launched phase worker exits 1 before doing anything:
+But all four skills are hard-coupled to the gh-issue keyspace at four
+seams, so a launched phase worker exits 1 before doing anything (and
+would file gh artifacts if it got further):
 
 - **Target resolution.** Every skill's Step 0 parses the worktree name as
   `<N>-…` and rejects anything else: `.claude/skills/qa-fix/SKILL.md:151`
@@ -63,10 +66,18 @@ seams, so a launched phase worker exits 1 before doing anything:
   Stop hook, which resolves its park target from the `<N>-<slug>` job name
   (`.claude/hooks/dispatch-stop.sh:150`) and applies an issue label — from
   a node-id worktree it parks nothing.
+- **Output filings.** `/review-fix` Step 5 files deferred findings as gh
+  follow-up issues via `/file-issue` with the `dispatch:review-followup`
+  label and orphan-retriage markers; `/qa-fix` Step 3.6 files `needs-main`
+  residue as gh main-qa follow-up issues. Both violate strategy
+  condition 1 for node targets (no new work enters via gh); their
+  graph-native homes are draft tactics (clarification 19/21) and the
+  source node's own `main-qa` phase (clarification 22) respectively.
 
 The adaptation changes only these seams. The phase semantics — including
 the qa phase's full user-acceptance-QA parity (strategy clarification 20)
-— carry over by construction, because the same skills run.
+and the review phase's full fan-out parity (clarification 21) — carry
+over by construction, because the same skills run.
 
 ## Unit 1 — node-target resolution, context, and completion seams
 
@@ -106,6 +117,38 @@ park branches):
   office-hours queue view is already the `office_hours != null` projection
   (`tactic-graph-native-dispatch.md` §1.3) — no view work.
 
+## Unit 3 — output-filing seams: review deferrals and qa needs-main residue
+
+**Recommended model:** sonnet
+
+Depends on: Unit 1.
+
+Scope — the two phase-skill steps that file gh artifacts, node-target
+lane only (legacy issue lane unchanged):
+- `/review-fix` Step 5 (`.claude/skills/review-fix/SKILL.md:440`): for a
+  node target, the prepared `result.deferred_filings` and
+  `result.security_followup_input` structures are written as **draft
+  tactic nodes** (`status: raw`, no phase, `serves` the strategy) batched
+  per component, finding provenance (file:line, failure scenario,
+  verdict, source PR) in the body — via `write-node.ts` + `graph-commit`
+  (strategy clarifications 19/21). Skip the `dispatch:review-followup`
+  label and orphan-retriage marker machinery entirely: drafts are inert
+  until a later `/align-tactics` round finalizes them, and that round
+  validates provenance against what actually merged.
+- `/qa-fix` Step 3.6 (`.claude/skills/qa-fix/SKILL.md:640`): for a node
+  target, `needs-main` dispositions are **not filed anywhere** — the
+  session appends a needs-main residue section to the tactic's own body
+  (bodies are authoritative for tactics) and includes it in the
+  state-only completion commit; the reconciler then routes the merged
+  tactic to its `main-qa` phase (strategy clarification 22;
+  `tactic-main-qa-phase` owns the phase value and handler). Only
+  machine/browser-verifiable items become residue — verifiability is
+  triaged here at record time (the qa triage already classifies every
+  item), and a prod observation needing human judgment stays
+  `needs-human` → `office_hours`; this is what makes the legacy
+  boot-then-reject waste (`tactic-main-qa-triage-before-provision`)
+  structurally impossible on the node lane.
+
 ## Dependencies
 
 - `tactic-graph-router-transitions` — the keyspace-aware
@@ -131,7 +174,10 @@ Manual: in a hand-provisioned node-id worktree for a synthetic tactic
 (with `execution.pr` pointing at a scratch PR), each of the four skills'
 Step 0 resolves the node target and reaches its first substantive step;
 an induced escalation lands `office_hours` on the node via `graph-commit`
-and no gh label is touched.
+and no gh label is touched; an induced review deferral writes a draft
+tactic node with provenance (no gh issue, no `dispatch:review-followup`
+label), and an induced qa needs-main disposition appends the residue
+section to the node body with no filing.
 
 ## Implementation notes
 

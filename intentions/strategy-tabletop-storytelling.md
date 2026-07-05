@@ -27,7 +27,16 @@ serves:
   - virtue-philosophical-mobility
   - virtue-respect-for-persons
 recovers: []
-clarifications: []
+clarifications:
+  - question: Is a game table off-mission leisure for a strategy graph?
+    answer: "No — it is what the recovered attention is FOR (recorded 2026-07-04
+      interview). Aristotle's schole (NE X.7, Politics VIII): leisure is not
+      rest-from-work but the space where the best activities happen, and shared
+      story around a table is philia's activity — friendship doing something
+      together, arriving without a platform, a feed, or a subscription. The
+      strategy is the graph's clearest demonstration that the target state of
+      all the recovery work is a human good, not a cleaner dependency ledger
+      (tradition-aristotle, adopted)."
 tooling_goals: []
 success_signal:
   observable: the practice stays live — game sessions happen and fellspiral posts
@@ -35,9 +44,19 @@ success_signal:
   sensor: owner review at office-hours; the fellspiral post history
   threshold: the table and the blog both remain active across review cycles
   is_proxy: true
+attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: false
+rounds: null
 attributes:
   conditions:
     - tabletop play and the game group remain part of the author's actual life —
       a dropped practice would make the demonstration performative
+  traditions:
+    - tradition-aristotle
 ---
 # Promote mobility subtly through tabletop games and storytelling

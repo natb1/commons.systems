@@ -45,10 +45,30 @@ clarifications:
       (utilities, insurance, transport, food supply); records enter the ledger
       as attachments become material (clarified 2026-07-02; intake owned by
       strategy-complete-ledger).
+  - question: Which tradition reads this virtue?
+    answer: "Kant primarily (recorded 2026-07-04 interview): a well-aligned
+      attachment is a relation between co-legislators — the kingdom of ends
+      applied to vendors — and capture, the edge running backwards, is
+      heteronomy: the delegatee legislating the will from outside. The
+      voice-shaped management moves carry an Aristotelian register: pulling a
+      delegatee toward shared virtue while staying is philia's civic form,
+      friendship among unequals conducted without becoming the client of the
+      stronger party."
 tooling_goals: []
 success_signal: null
+attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: false
+rounds: null
 attributes:
   governs: divergence
   tension_with: virtue-progressive-detachment
+  traditions:
+    - tradition-kant
+    - tradition-aristotle
 ---
 # Alignment of Attachments

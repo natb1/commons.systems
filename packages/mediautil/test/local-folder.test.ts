@@ -59,7 +59,7 @@ describe("list", () => {
     ]);
     const source = createLocalFolderMediaSource<TestItem>({ directory: dir, toItem });
 
-    const items = await source.list();
+    const items = (await source.list()).items;
 
     expect(items).toHaveLength(1);
     expect(items[0].id).toBe("id:doc.txt");
@@ -76,7 +76,7 @@ describe("list", () => {
     ]);
     const source = createLocalFolderMediaSource<TestItem>({ directory: dir, toItem });
 
-    const items = await source.list();
+    const items = (await source.list()).items;
 
     expect(items).toHaveLength(3);
     expect(items[0].id).toBe("id:newer.txt");
@@ -92,12 +92,85 @@ describe("list", () => {
     ]);
     const source = createLocalFolderMediaSource<TestItem>({ directory: dir, toItem });
 
-    const items = await source.list();
+    const items = (await source.list()).items;
 
     expect(items).toHaveLength(1);
     expect(items[0].id).toBe("id:good.txt");
   });
+
+  it("returns all items with a null nextCursor when no pageSize is given", async () => {
+    const files = makePagingFiles();
+    const dir = makeFakeDirectory(
+      files.map((file) => ({ kind: "file" as const, name: file.name, file })),
+    );
+    const source = createLocalFolderMediaSource<TestItem>({ directory: dir, toItem });
+
+    const page = await source.list();
+
+    expect(page.items).toHaveLength(files.length);
+    expect(page.nextCursor).toBeNull();
+  });
+
+  it("pages by (addedAt, id) with no gap or overlap across the cursor boundary", async () => {
+    const files = makePagingFiles();
+    const dir = makeFakeDirectory(
+      files.map((file) => ({ kind: "file" as const, name: file.name, file })),
+    );
+    const source = createLocalFolderMediaSource<TestItem>({ directory: dir, toItem });
+
+    // Full order for reference (newest-first, id-desc tiebreak). Pin the exact
+    // order literally so the same-addedAt pair proves the id-DESC tiebreak
+    // (f3b before f3a) rather than only cross-page self-consistency.
+    const full = (await source.list()).items;
+    expect(full).toHaveLength(files.length);
+    expect(full.map((i) => i.id)).toEqual([
+      "id:f1.txt",
+      "id:f2.txt",
+      "id:f3b.txt",
+      "id:f3a.txt",
+      "id:f4.txt",
+    ]);
+
+    const pageSize = 2;
+    const first = await source.list({ pageSize });
+    expect(first.items).toHaveLength(pageSize);
+    expect(first.nextCursor).not.toBeNull();
+    expect(first.items.map((i) => i.id)).toEqual(full.slice(0, pageSize).map((i) => i.id));
+
+    const second = await source.list({ pageSize, cursor: first.nextCursor });
+    // No overlap: second page starts exactly where the first ended.
+    expect(second.items.map((i) => i.id)).toEqual(
+      full.slice(pageSize, pageSize * 2).map((i) => i.id),
+    );
+
+    // Walking every page reconstructs the full order with no gap/overlap.
+    const walked: string[] = [];
+    let cursor: string | null = null;
+    for (;;) {
+      const p: { items: TestItem[]; nextCursor: string | null } = await source.list({
+        pageSize,
+        cursor,
+      });
+      for (const it of p.items) walked.push(it.id);
+      if (!p.nextCursor) break;
+      cursor = p.nextCursor;
+    }
+    expect(walked).toEqual(full.map((i) => i.id));
+  });
 });
+
+// Five files with distinct addedAt, plus a same-addedAt pair to exercise the
+// id tiebreak in the shared (addedAt desc, id desc) order.
+function makePagingFiles(): File[] {
+  return [
+    new File(["a"], "f1.txt", { lastModified: 5000 }),
+    new File(["b"], "f2.txt", { lastModified: 4000 }),
+    // Same lastModified -> same addedAt; id tiebreak decides order.
+    new File(["c"], "f3a.txt", { lastModified: 3000 }),
+    new File(["d"], "f3b.txt", { lastModified: 3000 }),
+    new File(["e"], "f4.txt", { lastModified: 1000 }),
+  ];
+}
 
 describe("metadata", () => {
   it("returns the item on a hit", async () => {
@@ -129,7 +202,7 @@ describe("resolveToBlob", () => {
     const dir = makeFakeDirectory([{ kind: "file", name: "doc.txt", file }]);
     const source = createLocalFolderMediaSource<TestItem>({ directory: dir, toItem });
 
-    const items = await source.list();
+    const items = (await source.list()).items;
     const buf = await source.resolveToBlob(items[0]);
     const text = new TextDecoder().decode(buf);
 
@@ -242,7 +315,7 @@ describe("resolveToFile", () => {
       toItem,
     });
 
-    const items = await source.list();
+    const items = (await source.list()).items;
     const result = await source.resolveToFile(items[0]);
 
     expect(result.name).toBe("doc.txt");

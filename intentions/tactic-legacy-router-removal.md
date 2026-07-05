@@ -29,6 +29,7 @@ blocked_by:
   - tactic-dispatch-lifecycle-sensor
   - tactic-calculated-attention
   - tactic-phase-skill-node-targets
+  - tactic-main-qa-phase
 office_hours: null
 pace_exempt: false
 rounds: null
@@ -80,9 +81,10 @@ nothing of it remains to retire here.)
 
 - `tactic-align-strategy-skill`, `tactic-align-tactics-skill`,
   `tactic-graph-router-transitions`, `tactic-dispatch-lifecycle-sensor`,
-  `tactic-phase-skill-node-targets` — the replacement surface must be
-  live end to end (the last one is what lets the phase skills run on node
-  targets at all).
+  `tactic-phase-skill-node-targets`, `tactic-main-qa-phase` — the
+  replacement surface must be live end to end (the node-targets tactic is
+  what lets the phase skills run on node targets at all; the main-qa
+  tactic is what lets the qa-main label machinery be deleted).
 
 ## Verification
 

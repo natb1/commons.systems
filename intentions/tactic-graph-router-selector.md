@@ -62,7 +62,8 @@ Scope: new `.claude/skills/dispatch-propagate/scripts/graph-select-target`:
   `resolveAttention` (`packages/intentionsutil/src/attention.ts`, via
   `src/goals.ts`); the retired node↔issue rank-map bridge is not revived.
   Within a rank level, phase ladder closest-to-done first:
-  review → fix → qa → implement → align-tactics(strategy). Calculated
+  main-qa → review → fix → qa → implement → align-tactics(strategy)
+  (strategy clarification 22). Calculated
   attention (weighted sum of authored, signal-satisfaction, and
   capture-resolution terms, strategy clarification 11) arrives inside
   `resolveAttention` via `tactic-calculated-attention` — no selector logic
@@ -136,7 +137,9 @@ the launch scripts issue-only):
   phase is persisted (strategy clarification 1). The directive comes from
   the node: strategy → `INVOKE /align-tactics <node-id>`; tactic by
   `phase` → implement → `/implement`, fix → `/fix-checks`, qa →
-  `/qa-fix`, review → `/review-fix`. The deterministic provisioning
+  `/qa-fix`, review → `/review-fix`, main-qa → `/qa-main` (node lane per
+  `tactic-main-qa-phase`; sensor gate: PR merged and prod deploy landed).
+  The deterministic provisioning
   prelude (worktree provision + origin/main merge, CI-ready gate where a
   PR exists) runs unchanged, preserving the merged-tree guarantee.
 - `dispatch-spawn-job` is reused as-is (generic primitive): `--name` =
@@ -145,6 +148,16 @@ the launch scripts issue-only):
   `tactic-phase-skill-node-targets` lands — until then a launched phase
   worker exits 1 at the skill's Step 0; the bootstrap-transition doctrine
   covers the interim, so this unit does not gate on it.)
+- Model and effort routing (strategy clarification 17, routing parity):
+  the node-lane spawn resolves `--model`/effort from the persisted
+  `phase` via `dispatch-phase-model` / `dispatch-phase-effort` and the
+  audit-written policy file, same fail-closed demotable allowlist — the
+  phase is already in hand (no SKILL→PHASE case map to fall through), so
+  the legacy lane's `/qa-main`-inherits-Opus routing hole
+  (`tactic-noncodegen-session-model-defaults` unit 1) cannot reproduce
+  here: `main-qa → claude-sonnet-*` per the policy, and `/align-tactics`
+  strategy sessions route per clarification 17 (interview/decomposition
+  on Opus, Explore fan-out on Sonnet or Haiku).
 - Mechanical failure dispositions (provision-failed, merge conflict that
   cannot invoke `/fix-conflicts`, wrong-worktree) park the node via the
   `office_hours` graph write instead of an office-hours label —
