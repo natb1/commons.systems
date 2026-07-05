@@ -31635,8 +31635,8 @@ tick_setup
 export TICK_DECISION="main-broken abc1234"
 out=$(run_tick) && rc=0 || rc=$?
 assert_eq "main-broken: exit 0" "0" "$rc"
-assert_eq "main-broken: spawn-job argv" \
-  "--name diagnose-main --cwd $TMPDIR_TEST /dispatch-diagnose-main abc1234" \
+assert_eq "main-broken: spawn-job argv (Sonnet — diagnosis authors no product code)" \
+  "--name diagnose-main --cwd $TMPDIR_TEST --model claude-sonnet-4-6 /dispatch-diagnose-main abc1234" \
   "$(cat "$TMPDIR_TEST/logs/spawn-job.log")"
 assert_eq "main-broken: no materialize call" "0" \
   "$([ -f "$TMPDIR_TEST/logs/materialize.log" ] && echo 1 || echo 0)"
@@ -31648,8 +31648,8 @@ tick_setup
 export TICK_DECISION="sync-failed"
 out=$(run_tick) && rc=0 || rc=$?
 assert_eq "sync-failed: exit 0" "0" "$rc"
-assert_eq "sync-failed: spawn-job argv" \
-  "--name sync-repair --cwd $TMPDIR_TEST /commit-merge-push" \
+assert_eq "sync-failed: spawn-job argv (Sonnet — conflict recovery escalates to Opus internally)" \
+  "--name sync-repair --cwd $TMPDIR_TEST --model claude-sonnet-4-6 /commit-merge-push" \
   "$(cat "$TMPDIR_TEST/logs/spawn-job.log")"
 assert_eq "sync-failed: no materialize call" "0" \
   "$([ -f "$TMPDIR_TEST/logs/materialize.log" ] && echo 1 || echo 0)"
@@ -31661,8 +31661,8 @@ tick_setup
 export TICK_DECISION="jit-reminder owner/repo 42 PVT_x ITEM_y"
 out=$(run_tick) && rc=0 || rc=$?
 assert_eq "jit-reminder: exit 0" "0" "$rc"
-assert_eq "jit-reminder: spawn-job argv" \
-  "--name jit-reminder-42 --cwd $TMPDIR_TEST /dispatch-jit-reminder owner/repo 42 PVT_x ITEM_y" \
+assert_eq "jit-reminder: spawn-job argv (Sonnet — reminder skills author no product code)" \
+  "--name jit-reminder-42 --cwd $TMPDIR_TEST --model claude-sonnet-4-6 /dispatch-jit-reminder owner/repo 42 PVT_x ITEM_y" \
   "$(cat "$TMPDIR_TEST/logs/spawn-job.log")"
 tick_teardown
 
@@ -36959,8 +36959,8 @@ echo "=== dispatch-launch-worker ==="
 #                             and exits 0.
 # dispatch-phase-model and dispatch-phase-effort are the REAL scripts (copied
 # in), so the compute-derivation assertions exercise the actual per-phase
-# policy: qa/review/fix-checks/fix-conflicts → claude-sonnet-4-6 (no effort);
-# implement → effort medium; plan → effort high (#2042).
+# policy: qa/review/fix-checks/fix-conflicts/main-qa → claude-sonnet-4-6 (no
+# effort); implement → effort medium; plan → effort high (#2042).
 #
 # The reservation ledger points at $LW_DIR/reservations via DISPATCH_RESERVATION_DIR
 # (so reservation_clear/_dir never need a git repo). Each mechanical-path test
@@ -37187,6 +37187,25 @@ sj=$(cat "$LW_DIR/spawn-job-argv" 2>/dev/null || echo "")
 assert_eq "launch INVOKE /review-fix: spawn-job argv (with model)" \
   "--no-verify --park-issue 839 --name $LW_WT_BASENAME --cwd $LW_WT --model claude-sonnet-4-6 /review-fix 839 $LW_WT" \
   "$sj"
+lw_teardown
+
+# 3a. INVOKE /qa-main → spawn-job carries --model claude-sonnet-4-6 (real
+# dispatch-phase-model main-qa policy: review-like, no product-code authoring,
+# #2274) and NO --effort. Regression guard for the routing gap where the
+# SKILL→PHASE map had no /qa-main arm, so PHASE stayed empty, dispatch-phase-model
+# was never consulted, and the spawn inherited the session default (Opus).
+echo "Test: INVOKE /qa-main → spawn-job with --model claude-sonnet-4-6, no --effort"
+lw_setup
+lw_write_marker
+lw_run "INVOKE /qa-main"
+assert_eq "launch INVOKE /qa-main: exit 0" "0" "$LW_RC"
+sj=$(cat "$LW_DIR/spawn-job-argv" 2>/dev/null || echo "")
+assert_eq "launch INVOKE /qa-main: spawn-job argv (with model)" \
+  "--no-verify --park-issue 839 --name $LW_WT_BASENAME --cwd $LW_WT --model claude-sonnet-4-6 /qa-main 839 $LW_WT" \
+  "$sj"
+assert_eq "launch INVOKE /qa-main: no --effort in argv" "no" \
+  "$([[ "$sj" == *"--effort"* ]] && echo yes || echo no)"
+assert_eq "launch INVOKE /qa-main: reservation RETAINED" "yes" "$(lw_marker_exists)"
 lw_teardown
 
 # 3b. INVOKE /plan-issue → spawn-job carries --effort high and NO --model (plan
