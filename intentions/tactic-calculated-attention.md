@@ -23,12 +23,13 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: 2751-calculated-attention
   pr: 2752
   attempts: {}
-  markers: []
+  markers:
+    - qa-done
   strategy_fingerprint: null
 validates: []
 blocked_by:
