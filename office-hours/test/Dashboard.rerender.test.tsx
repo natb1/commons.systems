@@ -1,49 +1,50 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { render, cleanup, act } from "@testing-library/react";
-import type { User } from "firebase/auth";
 
+import type { PanelData } from "../src/panel-equality.js";
 import type { UsageSample } from "../src/usage-samples.js";
 import type { Reminder } from "../src/reminders.js";
-import type { ParkedIssue } from "../src/queue-metrics.js";
+import type { QueueMetricsSnapshot } from "../src/queue-metrics.js";
 
-// Dashboard.tsx imports db/NAMESPACE from firebase.js, whose createAppContext
-// requires VITE_FIREBASE_* env at module load. A trivial stub keeps the render
-// unit isolated from Firebase config (mirrors Dashboard.test.tsx).
+// Owner data comes from a read-only on-disk snapshot: the startup restore
+// decodes it into PanelData, and a window focus re-reads + merges it. Mock the
+// local-snapshot source + snapshot decoder + isEncrypted guard so the load is
+// controllable (mirrors Dashboard.test.tsx).
 vi.mock("../src/firebase.js", () => ({
   db: {},
   NAMESPACE: { project: "office-hours", env: "test" },
 }));
 
-// The owner tier calls the five getOwner* loaders. Mock the four data modules
-// so the loaders are controllable per test, keeping the real getDemo* getters
-// via importOriginal (mirrors Dashboard.test.tsx).
-const getOwnerSamples = vi.fn();
-const getOwnerReminders = vi.fn();
-const getOwnerQueueMetrics = vi.fn();
-const getOwnerIssueSamples = vi.fn();
-const getOwnerTopicUsage = vi.fn();
-const getOwnerProjectSignals = vi.fn();
+const mocks = vi.hoisted(() => ({
+  isSnapshotSupported: vi.fn(),
+  getSnapshotState: vi.fn(),
+  pickSnapshotFile: vi.fn(),
+  restoreSnapshotHandle: vi.fn(),
+  regrantSnapshot: vi.fn(),
+  readSnapshotBytes: vi.fn(),
+  hasExternallyChanged: vi.fn(),
+  getCurrentSnapshotHandle: vi.fn(),
+  decodeSnapshot: vi.fn(),
+  loadSnapshotPanelData: vi.fn(),
+  isEncrypted: vi.fn(),
+}));
 
-vi.mock("../src/usage-data.js", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../src/usage-data.js")>()),
-  getOwnerSamples: (...args: unknown[]) => getOwnerSamples(...args),
+vi.mock("../src/local-snapshot-source.js", () => ({
+  isSnapshotSupported: mocks.isSnapshotSupported,
+  getSnapshotState: mocks.getSnapshotState,
+  pickSnapshotFile: mocks.pickSnapshotFile,
+  restoreSnapshotHandle: mocks.restoreSnapshotHandle,
+  regrantSnapshot: mocks.regrantSnapshot,
+  readSnapshotBytes: mocks.readSnapshotBytes,
+  hasExternallyChanged: mocks.hasExternallyChanged,
+  getCurrentSnapshotHandle: mocks.getCurrentSnapshotHandle,
 }));
-vi.mock("../src/data.js", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../src/data.js")>()),
-  getOwnerReminders: (...args: unknown[]) => getOwnerReminders(...args),
-  getOwnerQueueMetrics: (...args: unknown[]) => getOwnerQueueMetrics(...args),
+vi.mock("../src/snapshot.js", () => ({
+  decodeSnapshot: mocks.decodeSnapshot,
+  loadSnapshotPanelData: mocks.loadSnapshotPanelData,
 }));
-vi.mock("../src/issue-data.js", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../src/issue-data.js")>()),
-  getOwnerIssueSamples: (...args: unknown[]) => getOwnerIssueSamples(...args),
-}));
-vi.mock("../src/topic-usage-data.js", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../src/topic-usage-data.js")>()),
-  getOwnerTopicUsage: (...args: unknown[]) => getOwnerTopicUsage(...args),
-}));
-vi.mock("../src/project-signals-data.js", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../src/project-signals-data.js")>()),
-  getOwnerProjectSignals: (...args: unknown[]) => getOwnerProjectSignals(...args),
+vi.mock("../src/crypto.js", () => ({
+  isEncrypted: mocks.isEncrypted,
 }));
 
 // Render-count spy stand-ins for the two time-sensitive panels. Each is a
@@ -55,8 +56,7 @@ const capacitySpy = vi.fn();
 const remindersSpy = vi.fn();
 // Render-count stand-ins for the remaining panels too, so the #2035 unchanged-
 // refresh guard can assert ZERO additional renders of EVERY panel (not just the
-// two time-sensitive ones). These mocks are inert for the original two tests,
-// which only inspect capacitySpy/remindersSpy.
+// two time-sensitive ones).
 const paceSpy = vi.fn();
 const historySpy = vi.fn();
 const backlogSpy = vi.fn();
@@ -115,10 +115,18 @@ vi.mock("../src/components/ParkedIssuesPanel.js", () => ({
 
 import { Dashboard } from "../src/Dashboard.js";
 
+const fakeHandle = {} as FileSystemFileHandle; // type-safety-ok: readSnapshotBytes/hasExternallyChanged are mocked, so the handle is never dereferenced
+
 // The history-band chart modules read --fg via getThemeFg; happy-dom has no
 // stylesheet, so set it on the document root for the duration of each test.
 beforeEach(() => {
   document.documentElement.style.setProperty("--fg", "#e8eaed");
+  mocks.isSnapshotSupported.mockReturnValue(true);
+  mocks.getSnapshotState.mockReturnValue("granted");
+  mocks.restoreSnapshotHandle.mockResolvedValue("granted");
+  mocks.getCurrentSnapshotHandle.mockReturnValue(fakeHandle);
+  mocks.readSnapshotBytes.mockResolvedValue(new TextEncoder().encode("{}").buffer);
+  mocks.isEncrypted.mockReturnValue(false);
 });
 afterEach(() => {
   document.documentElement.style.removeProperty("--fg");
@@ -127,17 +135,12 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-const fakeUser = { uid: "owner-1", email: "owner@example.com" } as User; // type-safety-ok: test fixture; all getOwner* calls are vi-mocked so the full User shape is never accessed
-
 const DAY = 86_400_000;
 const HOUR = 3_600_000;
-// Mirrors the un-exported REFRESH_INTERVAL_MS in src/Dashboard.tsx (5 min). The
-// src const is not exported and exporting it would be an out-of-scope src
-// change, so it is re-declared here.
-const REFRESH_INTERVAL_MS = 5 * 60_000;
 // A clean fixed instant. All fixture reset/due times are derived from this so
 // the "stable across a 60s tick" reasoning holds exactly.
 const BASE = new Date("2026-06-20T12:00:00.000Z").getTime();
+const COMPUTED_AT = new Date("2026-06-30T10:00:00Z");
 
 // Resets ~5.5d out (5d 12h 30m): the day component is far from any boundary and
 // the hour component sits mid-hour (30m in), so a 60s advance does not roll the
@@ -163,7 +166,7 @@ const farReminder: Reminder = {
   dueAt: new Date(BASE + 3 * DAY + 6 * HOUR + 30 * 60_000),
 };
 
-const queueMetricsFixture = {
+const queueMetricsFixture: QueueMetricsSnapshot = {
   openHelpWanted: 12,
   closedPerDay: 3.2,
   createdPerDay: 1.7,
@@ -173,82 +176,17 @@ const queueMetricsFixture = {
   computedAt: new Date(BASE - DAY),
   groupId: "group-abc",
   memberEmails: ["owner@example.com"],
+  parked: [],
 };
 
-// Flush the mocked Promise.all load + effect-driven setState. Microtasks are
-// not faked, so awaiting an empty act() settles the owner tier deterministically
-// without RTL waitFor (which is flaky against vitest fake timers).
-async function flushOwnerLoad() {
-  await act(async () => {
-    await Promise.resolve();
-    await Promise.resolve();
-  });
-}
-
-describe("Dashboard tick: time-sensitive panels skip re-render on an unchanged tick", () => {
-  beforeEach(() => {
-    getOwnerSamples.mockResolvedValue([farSample]);
-    getOwnerReminders.mockResolvedValue([farReminder]);
-    getOwnerQueueMetrics.mockResolvedValue(queueMetricsFixture);
-    getOwnerIssueSamples.mockResolvedValue([]);
-    getOwnerTopicUsage.mockResolvedValue([]);
-    getOwnerProjectSignals.mockResolvedValue(null);
-  });
-
-  it("does not re-render capacity/reminders when a 60s tick changes no displayed output", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date(BASE));
-
-    render(<Dashboard user={fakeUser} />);
-    await flushOwnerLoad();
-
-    // Owner tier is now painted; both spies have rendered at least once.
-    expect(capacitySpy.mock.calls.length).toBeGreaterThan(0);
-    expect(remindersSpy.mock.calls.length).toBeGreaterThan(0);
-
-    const capacityBefore = capacitySpy.mock.calls.length;
-    const remindersBefore = remindersSpy.mock.calls.length;
-
-    // A 60s tick at a far-from-boundary instant changes none of the now-derived
-    // strings → the *Key is identical → the memoized element is reused → the
-    // panel does not re-render.
-    act(() => {
-      vi.advanceTimersByTime(60_000);
-    });
-
-    expect(capacitySpy.mock.calls.length).toBe(capacityBefore);
-    expect(remindersSpy.mock.calls.length).toBe(remindersBefore);
-  });
-
-  it("re-renders capacity/reminders when a tick crosses a reset/deadline boundary", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date(BASE));
-
-    render(<Dashboard user={fakeUser} />);
-    await flushOwnerLoad();
-
-    const capacityBefore = capacitySpy.mock.calls.length;
-    const remindersBefore = remindersSpy.mock.calls.length;
-
-    // Jump the wall clock well past both the reset (~5.5d) and the reminder due
-    // time (~3.5d), then fire a tick. Every now-derived string changes (the
-    // countdowns collapse to "now", the due label flips to overdue) → the *Keys
-    // change → both elements rebuild → both panels re-render.
-    vi.setSystemTime(new Date(BASE + 7 * DAY));
-    act(() => {
-      vi.advanceTimersByTime(60_000);
-    });
-
-    expect(capacitySpy.mock.calls.length).toBeGreaterThan(capacityBefore);
-    expect(remindersSpy.mock.calls.length).toBeGreaterThan(remindersBefore);
-  });
+const panelData = (): PanelData => ({
+  samples: [farSample],
+  reminders: [farReminder],
+  queueMetrics: queueMetricsFixture,
+  issueSamples: [],
+  topicUsage: [],
+  projectSignals: null,
 });
-
-// ── Periodic 5-min refresh: mergePanelData reference reuse (#2035) ──────────────
-// The 5-min REFRESH_INTERVAL_MS re-reads every collection and yields fresh Date
-// objects + fresh array/object references even when the CONTENT is unchanged.
-// mergePanelData must compare by content and reuse prev's slices so the panel
-// memo deps stay reference-identical and React bails — no panel re-renders.
 
 // Content-equal-but-new-reference clones: same field values, fresh Date objects
 // (equal getTime()), new array/object literals.
@@ -273,13 +211,7 @@ function cloneReminder(r: Reminder): Reminder {
     dueAt: new Date(r.dueAt.getTime()),
   };
 }
-// A complete queue snapshot WITH a `parked` array. The file's pre-existing
-// queueMetricsFixture omits `parked` (harmless for the 60s-tick tests, which
-// never run mergePanelData), but the refresh path calls queueMetricsEqual, which
-// reads `.parked.length` — so the merge fixtures must carry it.
-const emptyParked: ParkedIssue[] = [];
-const refreshQueueFixture = { ...queueMetricsFixture, parked: emptyParked };
-function cloneQueue(q: typeof refreshQueueFixture): typeof refreshQueueFixture {
+function cloneQueue(q: QueueMetricsSnapshot): QueueMetricsSnapshot {
   return {
     ...q,
     computedAt: new Date(q.computedAt.getTime()),
@@ -288,35 +220,89 @@ function cloneQueue(q: typeof refreshQueueFixture): typeof refreshQueueFixture {
   };
 }
 
-// Drive one full refresh cycle: advancing past REFRESH_INTERVAL_MS fires the
-// interval and advanceTimersByTimeAsync flushes the awaited getter microtasks,
-// so the merge + setState settles before assertions.
-async function advanceOneRefresh() {
+// Flush the local restore + decode + effect-driven setState. Microtasks are not
+// faked, so awaiting a few empty act() microtask hops settles the local tier
+// deterministically without RTL waitFor (which is flaky against fake timers).
+async function flushLocalLoad() {
   await act(async () => {
-    await vi.advanceTimersByTimeAsync(REFRESH_INTERVAL_MS);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
   });
 }
 
-describe("Dashboard refresh: unchanged-content refresh re-renders no panel (#2035)", () => {
-  it("renders zero additional panel renders when a refresh returns content-equal-but-new-reference data", async () => {
+describe("Dashboard tick: time-sensitive panels skip re-render on an unchanged tick", () => {
+  beforeEach(() => {
+    mocks.decodeSnapshot.mockReturnValue({ data: panelData(), computedAt: COMPUTED_AT });
+  });
+
+  it("does not re-render capacity/reminders when a 60s tick changes no displayed output", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(BASE));
 
-    // Mount cycle: baseline content.
-    getOwnerSamples.mockResolvedValueOnce([farSample]);
-    getOwnerReminders.mockResolvedValueOnce([farReminder]);
-    getOwnerQueueMetrics.mockResolvedValueOnce(refreshQueueFixture);
-    getOwnerIssueSamples.mockResolvedValueOnce([]);
-    getOwnerTopicUsage.mockResolvedValueOnce([]);
-    // Refresh cycle: same content, all-new references.
-    getOwnerSamples.mockResolvedValueOnce([cloneSample(farSample)]);
-    getOwnerReminders.mockResolvedValueOnce([cloneReminder(farReminder)]);
-    getOwnerQueueMetrics.mockResolvedValueOnce(cloneQueue(refreshQueueFixture));
-    getOwnerIssueSamples.mockResolvedValueOnce([]);
-    getOwnerTopicUsage.mockResolvedValueOnce([]);
+    render(<Dashboard />);
+    await flushLocalLoad();
 
-    render(<Dashboard user={fakeUser} />);
-    await flushOwnerLoad();
+    // Local tier is now painted; both spies have rendered at least once.
+    expect(capacitySpy.mock.calls.length).toBeGreaterThan(0);
+    expect(remindersSpy.mock.calls.length).toBeGreaterThan(0);
+
+    const capacityBefore = capacitySpy.mock.calls.length;
+    const remindersBefore = remindersSpy.mock.calls.length;
+
+    // A 60s tick at a far-from-boundary instant changes none of the now-derived
+    // strings → the *Key is identical → the memoized element is reused → the
+    // panel does not re-render.
+    act(() => {
+      vi.advanceTimersByTime(60_000);
+    });
+
+    expect(capacitySpy.mock.calls.length).toBe(capacityBefore);
+    expect(remindersSpy.mock.calls.length).toBe(remindersBefore);
+  });
+
+  it("re-renders capacity/reminders when a tick crosses a reset/deadline boundary", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(BASE));
+
+    render(<Dashboard />);
+    await flushLocalLoad();
+
+    const capacityBefore = capacitySpy.mock.calls.length;
+    const remindersBefore = remindersSpy.mock.calls.length;
+
+    // Jump the wall clock well past both the reset (~5.5d) and the reminder due
+    // time (~3.5d), then fire a tick. Every now-derived string changes (the
+    // countdowns collapse to "now", the due label flips to overdue) → the *Keys
+    // change → both elements rebuild → both panels re-render.
+    vi.setSystemTime(new Date(BASE + 7 * DAY));
+    act(() => {
+      vi.advanceTimersByTime(60_000);
+    });
+
+    expect(capacitySpy.mock.calls.length).toBeGreaterThan(capacityBefore);
+    expect(remindersSpy.mock.calls.length).toBeGreaterThan(remindersBefore);
+  });
+});
+
+// ── Focus-reload: mergePanelData reference reuse (#2035) ────────────────────────
+// A focus re-read yields fresh Date objects + fresh array/object references even
+// when the CONTENT is unchanged. mergePanelData must compare by content and reuse
+// prev's slices so the panel memo deps stay reference-identical and React bails —
+// no panel re-renders. Returning the SAME computedAt keeps the ViewState object
+// itself identical, so the component does not even re-run.
+
+describe("Dashboard focus-reload: unchanged-content re-read re-renders no panel (#2035)", () => {
+  it("renders zero additional panel renders when a focus re-read returns content-equal-but-new-reference data", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(BASE));
+
+    // Mount decode: baseline content.
+    mocks.decodeSnapshot.mockReturnValueOnce({ data: panelData(), computedAt: COMPUTED_AT });
+
+    render(<Dashboard />);
+    await flushLocalLoad();
 
     const counts = {
       capacity: capacitySpy.mock.calls.length,
@@ -329,65 +315,36 @@ describe("Dashboard refresh: unchanged-content refresh re-renders no panel (#203
       parked: parkedSpy.mock.calls.length,
     };
 
-    // The refresh produces a merged PanelData === prev (all slices reused), so
-    // setState returns prev, React bails, and no memoized element rebuilds — even
-    // for the time-sensitive panels (the 60s ticks within the 5-min advance are
-    // at far-from-boundary instants, so their *Keys are unchanged too).
-    await advanceOneRefresh();
+    // Focus re-read: same content, all-new references, SAME computedAt.
+    mocks.hasExternallyChanged.mockResolvedValueOnce(true);
+    mocks.decodeSnapshot.mockReturnValueOnce({
+      data: {
+        samples: [cloneSample(farSample)],
+        reminders: [cloneReminder(farReminder)],
+        queueMetrics: cloneQueue(queueMetricsFixture),
+        issueSamples: [],
+        topicUsage: [],
+        projectSignals: null,
+      },
+      computedAt: COMPUTED_AT,
+    });
 
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // The merge produces a PanelData === prev (all slices reused) and an equal
+    // computedAt, so setState returns prev, React bails, and no memoized element
+    // rebuilds — even for the time-sensitive panels.
     expect(capacitySpy.mock.calls.length).toBe(counts.capacity);
     expect(remindersSpy.mock.calls.length).toBe(counts.reminders);
     expect(paceSpy.mock.calls.length).toBe(counts.pace);
     expect(historySpy.mock.calls.length).toBe(counts.history);
     expect(backlogSpy.mock.calls.length).toBe(counts.backlog);
-    expect(topicUsageSpy.mock.calls.length).toBe(counts.topicUsage);
-    expect(queueSpy.mock.calls.length).toBe(counts.queue);
-    expect(parkedSpy.mock.calls.length).toBe(counts.parked);
-  });
-
-  it("re-renders only the Backlog panel when only issue-samples change on a refresh", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date(BASE));
-
-    // Mount cycle.
-    getOwnerSamples.mockResolvedValueOnce([farSample]);
-    getOwnerReminders.mockResolvedValueOnce([farReminder]);
-    getOwnerQueueMetrics.mockResolvedValueOnce(refreshQueueFixture);
-    getOwnerIssueSamples.mockResolvedValueOnce([]);
-    getOwnerTopicUsage.mockResolvedValueOnce([]);
-    // Refresh cycle: every collection unchanged (new refs) EXCEPT issueSamples,
-    // which gains content.
-    getOwnerSamples.mockResolvedValueOnce([cloneSample(farSample)]);
-    getOwnerReminders.mockResolvedValueOnce([cloneReminder(farReminder)]);
-    getOwnerQueueMetrics.mockResolvedValueOnce(cloneQueue(refreshQueueFixture));
-    getOwnerIssueSamples.mockResolvedValueOnce([
-      { sampledAt: new Date(BASE - 2 * DAY), openSecurity: 1, openBug: 2, openEnhancement: 3, openOther: 4, groupId: "group-abc" },
-    ]);
-    getOwnerTopicUsage.mockResolvedValueOnce([]);
-
-    render(<Dashboard user={fakeUser} />);
-    await flushOwnerLoad();
-
-    const counts = {
-      capacity: capacitySpy.mock.calls.length,
-      reminders: remindersSpy.mock.calls.length,
-      pace: paceSpy.mock.calls.length,
-      history: historySpy.mock.calls.length,
-      backlog: backlogSpy.mock.calls.length,
-      topicUsage: topicUsageSpy.mock.calls.length,
-      queue: queueSpy.mock.calls.length,
-      parked: parkedSpy.mock.calls.length,
-    };
-
-    await advanceOneRefresh();
-
-    // Only the Backlog panel (issueSamples) re-renders; all others' slices were
-    // reused so their memo deps stayed identical and they bailed.
-    expect(backlogSpy.mock.calls.length).toBeGreaterThan(counts.backlog);
-    expect(capacitySpy.mock.calls.length).toBe(counts.capacity);
-    expect(remindersSpy.mock.calls.length).toBe(counts.reminders);
-    expect(paceSpy.mock.calls.length).toBe(counts.pace);
-    expect(historySpy.mock.calls.length).toBe(counts.history);
     expect(topicUsageSpy.mock.calls.length).toBe(counts.topicUsage);
     expect(queueSpy.mock.calls.length).toBe(counts.queue);
     expect(parkedSpy.mock.calls.length).toBe(counts.parked);

@@ -1,25 +1,24 @@
 // React port of the vanilla app render pipeline: the ViewState tier dispatch
 // (app-view.ts), the responsive panel grid + full-width registry (app-view.ts),
-// the five-collection parallel Firestore load with auth-change race guard
-// (main.ts), and the single 60s tick that recomputes only the time-sensitive
-// panels (app-controller.ts + AppView.tick).
+// the read-only local-snapshot load (owner data now comes from an on-disk
+// snapshot, not Firestore), and the single 60s tick that recomputes only the
+// time-sensitive panels (app-controller.ts + AppView.tick).
 //
-// Auth seam for Unit 5: Dashboard takes the current `user` as a prop — exactly
-// as audio's Home page does. The `onAuthStateChanged` subscription + entry
-// wiring stay in Unit 5's App shell; this component never subscribes itself.
+// Auth no longer drives this component: the demo tier is the unauthenticated
+// default, and the owner sees their real queue by loading a local snapshot. The
+// `onAuthStateChanged` subscription + sign-in control stay in the App shell /
+// NavControls; Dashboard takes no `user` prop.
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { User } from "firebase/auth";
 
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
 import { logError } from "@commons-systems/errorutil/log";
 
-import { db, NAMESPACE } from "./firebase.js";
-import { getOwnerReminders, getOwnerQueueMetrics, getDemoReminders, getDemoQueueMetrics } from "./data.js";
+import { getDemoReminders, getDemoQueueMetrics } from "./data.js";
 import { getDemoIntentionTree } from "./intention-tree.js";
-import { getOwnerSamples, getDemoSamples } from "./usage-data.js";
-import { getOwnerIssueSamples, getDemoIssueSamples } from "./issue-data.js";
-import { getOwnerTopicUsage, getDemoTopicUsage } from "./topic-usage-data.js";
-import { getDemoProjectSignals, getOwnerProjectSignals } from "./project-signals-data.js";
+import { getDemoSamples } from "./usage-data.js";
+import { getDemoIssueSamples } from "./issue-data.js";
+import { getDemoTopicUsage } from "./topic-usage-data.js";
+import { getDemoProjectSignals } from "./project-signals-data.js";
 
 import { selectLatestSample } from "./usage-samples.js";
 import { capacityBandKey } from "./capacity-band.js";
@@ -54,40 +53,12 @@ import {
   type SnapshotSourceState,
 } from "./local-snapshot-source.js";
 
-// Read-only LOCAL snapshot tier, gated entirely behind a build-time flag.
-// Vite statically replaces `import.meta.env.VITE_OFFICE_HOURS_LOCAL`, so when it
-// is unset this constant folds to `false` and every `if (!LOCAL_ENABLED) return`
-// / `{LOCAL_ENABLED && …}` site dead-code-eliminates — prod ships zero local
-// surface and the owner/demo tiers are byte-for-byte unchanged (AC#5).
-const LOCAL_ENABLED = import.meta.env.VITE_OFFICE_HOURS_LOCAL === "1";
-
 type ViewState =
-  | { tier: "demo" } // unauthenticated → labeled demo
-  | { tier: "owner"; data: PanelData } // authenticated → real (possibly empty)
+  | { tier: "demo" } // unauthenticated default → labeled demo
   | { tier: "local"; data: PanelData; computedAt: Date } // read-only on-disk snapshot
-  | { tier: "error" }; // authenticated load failed
+  | { tier: "error" }; // snapshot decode/load failed
 
-export interface DashboardProps {
-  /**
-   * The current Firebase user, or null when signed out. Unit 5's App shell owns
-   * the onAuthStateChanged subscription and threads its result in here.
-   */
-  user: User | null;
-}
-
-// Bounded staleness ceiling for owner panel data. Producers write at most
-// ~hourly (sampleDispatchQueueMetrics) up to per-dispatch-tick (usage-samples).
-// Each refresh re-reads the FULL matching collection — the getters have no
-// limit/orderBy and the history charts render the entire accumulated history, so
-// the read set is the display set. At single-operator scale the steady-state
-// re-read cost is negligible; the interval is the only cost/staleness lever.
-// 5 min bounds worst-case staleness well under a work session while capping
-// whole-collection re-reads to 12/hour/collection. Kept separate from the 60s
-// `now` display tick — that tick is a zero-network setNow; coupling a
-// whole-collection re-read to it would 5x reads for no staleness benefit.
-const REFRESH_INTERVAL_MS = 5 * 60_000;
-
-export function Dashboard({ user }: DashboardProps) {
+export function Dashboard() {
   // "demo" is the initial state so the view is meaningful before auth resolves
   // (mirrors main.ts's immediate demo paint).
   const [state, setState] = useState<ViewState>({ tier: "demo" });
@@ -102,43 +73,46 @@ export function Dashboard({ user }: DashboardProps) {
     return () => clearInterval(id);
   }, []);
 
-  // ---- LOCAL snapshot tier (flag-gated) -----------------------------------
-  // Wiring choice: ALL local orchestration lives here in Dashboard, which
-  // already owns the owner load + refresh + mergePanelData lifecycle — the
-  // local tier is the same kind of data lifecycle, so co-locating it (rather
-  // than lifting state into App) keeps it cohesive and lets Dashboard own the
-  // `local` ViewState tier directly. Dashboard renders its own picker / re-grant
-  // controls, so App.tsx and NavControls.tsx (and their e2e auth DOM) are
-  // untouched. When LOCAL_ENABLED is false the controls, effects, and refs below
-  // all dead-code-eliminate (AC#5).
+  // ---- LOCAL snapshot tier ------------------------------------------------
+  // ALL local orchestration lives here in Dashboard: it owns the `local`
+  // ViewState tier, the startup restore, and the focus-reload merge lifecycle.
+  // Dashboard renders its own picker / re-grant controls, so App.tsx and
+  // NavControls.tsx (and their e2e auth DOM) are untouched.
   //
-  // `localActiveRef` is set imperatively alongside `setState({tier:"local"})` so
-  // the `[user]` effects below read it synchronously and never clobber an active
-  // local tier with demo/owner on a later auth change.
+  // `localActiveRef` is set imperatively alongside `setState({tier:"local"})`.
+  // The focus-reload effect below reads it synchronously to skip firing before a
+  // snapshot has been activated.
   const localActiveRef = useRef(false);
   // Session-held passphrase for focus-reload decryption. NEVER persisted — held
   // only in this ref for the lifetime of the tab, cleared on a fresh load.
   const passphraseRef = useRef<string | null>(null);
   const [localState, setLocalState] = useState<SnapshotSourceState>(() =>
-    LOCAL_ENABLED ? getSnapshotState() : "unsupported",
+    getSnapshotState(),
   );
 
   // Decode already-read snapshot bytes into PanelData + computedAt, prompting for
   // a passphrase only when the file is encrypted (snapshots are expected
   // encrypted; the unencrypted branch is a guard). On success, binds the tier and
   // remembers the passphrase for focus-reload. Returns false when the user
-  // cancels the passphrase prompt (so a restore can fall through untouched).
+  // cancels the passphrase prompt (so a restore can fall through untouched). On a
+  // decode/load THROW, flips to the error tier (so a failed load surfaces the
+  // picker / re-grant controls) and re-throws so the caller still logs it.
   async function activateLocal(handle: FileSystemFileHandle): Promise<boolean> {
-    const bytes = await readSnapshotBytes(handle);
     let result: { data: PanelData; computedAt: Date };
-    if (isEncrypted(bytes)) {
-      const pw = await promptPassword("Enter the snapshot passphrase to decrypt.");
-      if (pw === null) return false; // cancelled — leave existing tier in place
-      result = await loadSnapshotPanelData(bytes, pw);
-      passphraseRef.current = pw;
-    } else {
-      result = decodeSnapshot(new TextDecoder().decode(bytes));
-      passphraseRef.current = null;
+    try {
+      const bytes = await readSnapshotBytes(handle);
+      if (isEncrypted(bytes)) {
+        const pw = await promptPassword("Enter the snapshot passphrase to decrypt.");
+        if (pw === null) return false; // cancelled — leave existing tier in place
+        result = await loadSnapshotPanelData(bytes, pw);
+        passphraseRef.current = pw;
+      } else {
+        result = decodeSnapshot(new TextDecoder().decode(bytes));
+        passphraseRef.current = null;
+      }
+    } catch (error) {
+      setState({ tier: "error" });
+      throw error;
     }
     localActiveRef.current = true;
     setState({ tier: "local", data: result.data, computedAt: result.computedAt });
@@ -186,7 +160,6 @@ export function Dashboard({ user }: DashboardProps) {
   // affordance (no auto-prompt; permission needs a gesture). Otherwise fall
   // through to the auth/demo tiers untouched.
   useEffect(() => {
-    if (!LOCAL_ENABLED) return;
     let cancelled = false;
     void (async () => {
       try {
@@ -209,10 +182,9 @@ export function Dashboard({ user }: DashboardProps) {
   // Focus reload: when the local tier is active, a window focus re-checks the
   // on-disk file and, if it changed externally, re-reads + merges so unchanged
   // panels keep identity. Read-only — no write-back. The listener is added once
-  // (gated by the flag) and checks localActiveRef at fire-time; it reuses the
-  // session passphrase and never persists it.
+  // and checks localActiveRef at fire-time; it reuses the session passphrase and
+  // never persists it.
   useEffect(() => {
-    if (!LOCAL_ENABLED) return;
     const onFocus = (): void => {
       if (!localActiveRef.current) return;
       const handle = getCurrentSnapshotHandle();
@@ -247,102 +219,6 @@ export function Dashboard({ user }: DashboardProps) {
     return () => window.removeEventListener("focus", onFocus);
   }, []);
 
-  // Shared owner-tier fetch: the five-collection parallel Firestore read. Closes
-  // over the module-import `db`/`NAMESPACE`; re-created each render, but only ever
-  // referenced inside effects below, so the identity churn is harmless.
-  async function loadPanelData(currentUser: User): Promise<PanelData> {
-    const [samples, reminders, queueMetrics, issueSamples, topicUsage, projectSignals] = await Promise.all([
-      getOwnerSamples(db, NAMESPACE, currentUser),
-      getOwnerReminders(db, NAMESPACE, currentUser),
-      getOwnerQueueMetrics(db, NAMESPACE, currentUser),
-      getOwnerIssueSamples(db, NAMESPACE, currentUser),
-      getOwnerTopicUsage(db, NAMESPACE, currentUser),
-      getOwnerProjectSignals(db, NAMESPACE, currentUser),
-    ]);
-    return { samples, reminders, queueMetrics, issueSamples, topicUsage, projectSignals };
-  }
-
-  // Five-collection parallel Firestore load for the owner tier, with the
-  // auth-change race guard (ports main.ts's refresh()). A null user paints demo;
-  // an `ignore` flag set by cleanup keeps a stale in-flight load (success OR
-  // error) from clobbering newer state after the user changes.
-  useEffect(() => {
-    // An active local tier owns the view — never let an auth change (including a
-    // null user) overwrite it with demo/owner. Read the ref synchronously.
-    if (LOCAL_ENABLED && localActiveRef.current) return;
-    if (user === null) {
-      setState({ tier: "demo" });
-      return;
-    }
-    let ignore = false;
-    void (async () => {
-      try {
-        const data = await loadPanelData(user);
-        // Auth may have changed while the calls were in flight — skip so the
-        // in-flight result does not clobber the already-updated view.
-        if (ignore) return;
-        // The local tier may have activated while this owner load was in flight
-        // (returning user with cached auth + a granted handle). `ignore` only
-        // covers auth-change/unmount, so guard the active local tier here too.
-        if (LOCAL_ENABLED && localActiveRef.current) return;
-        setState({ tier: "owner", data });
-      } catch (error) {
-        // Same race guard on the error path.
-        if (ignore) return;
-        if (LOCAL_ENABLED && localActiveRef.current) return;
-        // Load failed — render an explicit error state rather than masking it as
-        // demo data. A non-owner's read is "permission-denied"; logError classifies it.
-        if (!deferProgrammerError(error)) {
-          logError(error, { operation: "load-owner-data" });
-        }
-        setState({ tier: "error" });
-      }
-    })();
-    return () => {
-      ignore = true;
-    };
-  }, [user]);
-
-  // Periodic owner-tier refresh. Re-reads the five collections every
-  // REFRESH_INTERVAL_MS and merges via mergePanelData (which preserves stable
-  // references for unchanged collections, so the memoized panels above only
-  // rebuild when their data actually changed). Separate from the mount load and
-  // the 60s `now` tick. Refresh error policy DIVERGES from mount: a transient
-  // failure must not blow away last-good data or flip to the error tier.
-  useEffect(() => {
-    if (LOCAL_ENABLED && localActiveRef.current) return;
-    if (user === null) return;
-    let cancelled = false;
-    let inFlight = false;
-    const id = setInterval(() => {
-      if (inFlight) return; // skip a tick while the prior fetch is unresolved
-      inFlight = true;
-      void (async () => {
-        try {
-          const next = await loadPanelData(user);
-          if (cancelled) return; // unmount or user change happened mid-fetch
-          setState((prev) => {
-            if (prev.tier !== "owner") return prev; // don't resurrect owner over demo/error
-            const merged = mergePanelData(prev.data, next);
-            return merged === prev.data ? prev : { tier: "owner", data: merged };
-          });
-        } catch (error) {
-          // Log and leave existing state in place — retain last-good.
-          if (cancelled) return;
-          if (!deferProgrammerError(error)) {
-            logError(error, { operation: "refresh-owner-data" });
-          }
-        } finally {
-          inFlight = false;
-        }
-      })();
-    }, REFRESH_INTERVAL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-    };
-  }, [user]);
-
   // Demo data getters return fresh arrays per call. Build them once so the
   // memoized panels below see stable references across ticks (otherwise every
   // 60s tick would rebuild the charts — the flicker/re-scroll the vanilla
@@ -361,9 +237,9 @@ export function Dashboard({ user }: DashboardProps) {
     [],
   );
 
-  // Resolve the active panel data for demo / owner. (The error tier returns
+  // Resolve the active panel data for demo / local. (The error tier returns
   // early below; these hooks still run unconditionally to satisfy rules-of-hooks.)
-  const data = state.tier === "owner" || state.tier === "local" ? state.data : demoData;
+  const data = state.tier === "local" ? state.data : demoData;
   const { samples, reminders, queueMetrics, issueSamples, topicUsage, projectSignals } = data;
 
   // The two time-sensitive panels (capacity, reminders) are memoized as elements
@@ -424,9 +300,9 @@ export function Dashboard({ user }: DashboardProps) {
   );
 
   // The intention tree is the project's single hierarchy — identical for every
-  // viewer, build-time data with no Firestore/owner tier and no time dependence —
-  // so it is built once here, never threaded through the owner Promise.all or
-  // PanelData. Rendered full-width like history/backlog/topic-usage.
+  // viewer, build-time data with no data tier and no time dependence — so it is
+  // built once here, never threaded through PanelData. Rendered full-width like
+  // history/backlog/topic-usage.
   const intentionTreeEl = useMemo(
     () => <IntentionTreePanel view={getDemoIntentionTree()} className="panel-grid-full" />,
     [],
@@ -434,11 +310,9 @@ export function Dashboard({ user }: DashboardProps) {
 
   // Local-snapshot controls. Rendered here (not in the Nav) so App.tsx /
   // NavControls.tsx and their e2e auth DOM stay untouched. Surfaced in BOTH the
-  // error-tier return and the main return so a signed-in non-owner (who lands in
-  // the error tier) can still load a local snapshot — the local tier bypasses the
-  // auth requirement entirely. The whole block folds away when LOCAL_ENABLED is
-  // false (AC#5).
-  const localControlsEl = LOCAL_ENABLED && isSnapshotSupported() && (
+  // error-tier return and the main return so that after a failed load the user
+  // can still re-pick or re-grant a local snapshot.
+  const localControlsEl = isSnapshotSupported() && (
     <div className="local-snapshot-controls">
       <button type="button" id="load-local-snapshot" onClick={onPickLocal}>
         Load local snapshot
@@ -462,7 +336,7 @@ export function Dashboard({ user }: DashboardProps) {
     );
   }
 
-  if (state.tier !== "demo" && state.tier !== "owner" && state.tier !== "local") {
+  if (state.tier !== "demo" && state.tier !== "local") {
     // Exhaustiveness guard (mirrors app-view.ts's `never` check).
     const _exhaustive: never = state;
     throw new Error("unhandled ViewState tier: " + String(_exhaustive));
@@ -471,7 +345,7 @@ export function Dashboard({ user }: DashboardProps) {
   return (
     <>
       {localControlsEl}
-      {LOCAL_ENABLED && state.tier === "local" && (
+      {state.tier === "local" && (
         <p className="local-snapshot-banner" role="status">
           Read-only snapshot — computed {state.computedAt.toLocaleString()}.
         </p>
