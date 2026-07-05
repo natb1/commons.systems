@@ -18,7 +18,7 @@
 # tick is launched by systemd (the #725 heartbeat) and by the worker Stop-hook in
 # a later unit; it runs bare and keeps the concurrency gate. A human-typed
 # `dispatch` runs one tick as foreground bash, passing `--manual` to spawn a
-# context-dependent SPAWN_N workers (priority-first), exempt from the pace-curve
+# context-dependent SPAWN_N workers (rank-first), exempt from the pace-curve
 # throttle but bounded by the `MAX_WORKERS` ceiling and the `--exhausted` floor.
 # The audit record is this script's journal output
 # (every captured stdout line is echoed through) plus the spawned workers'
@@ -34,7 +34,8 @@
 #   `dispatch` (bare, no argument): skips the pace-curve throttle (a budget pause
 #   to TARGET_N=0 still fans out) but honors the `MAX_WORKERS` ceiling and the
 #   `--exhausted` hard floor; spawns SPAWN_N = min(HEADROOM, max(N_PRIO, GAP, 1))
-#   workers, priority-first (the highest-priority queue targets). Emits
+#   workers, rank-first (the highest-rank queue targets; the `priority` label is
+#   the pace-curve/cap bypass, not an ordering signal). Emits
 #   `concurrency-cap` when SPAWN_N=0 (at the ceiling or exhausted).
 #
 #   Exhaustion hard floor (both autonomous and manual paths): when the 5-hour or
@@ -51,7 +52,8 @@
 #   `LIVE_COUNT >= TARGET_N` but `--exhausted` reports `ok`, the tick does NOT
 #   immediately emit `concurrency-cap`. Instead it runs
 #   `dispatch-select-target --priority-only`, which checks the main-broken health
-#   gate first, then scans only the `priority=1` queue tier. If a
+#   gate first, then scans only priority-LABELED items (the label's one surviving
+#   meaning — the cap/pacing bypass, not ordering). If a
 #   `priority`-labeled PR or help-wanted issue (including any `dispatch:main-broken`
 #   issue) is found, the tick holds the lock and spawns exactly ONE gate-exempt
 #   worker (`GAP=1`) — the same treatment as an explicit `dispatch <N>`. This also closes
@@ -171,6 +173,47 @@ else
   PROJECT_ROOT=$(resolve_project_root) \
     || { echo "dispatch-tick: not in a git repo and DISPATCH_TICK_MAIN_WORKTREE is unset" >&2; exit 2; }
   MAIN_WORKTREE="$PROJECT_ROOT/worktrees/main"
+fi
+
+# --- Topic-usage daily producer (#2505) -------------------------------------
+# Env-gated, detached, best-effort: launch topic-usage-writer.mjs once per UTC
+# day to write per-topic/per-type token cost to Firestore.  The gate is OFF by
+# default (DISPATCH_TOPIC_USAGE_ENABLED unset or not "1") so existing behaviour
+# is completely unchanged on every normal tick.
+#
+# The producer OWNS sentinel writes; the tick only READS the sentinel to decide
+# whether to launch, avoiding relaunching on every (frequent) tick.
+if [[ "${DISPATCH_TOPIC_USAGE_ENABLED:-}" == "1" ]]; then
+  _TU_GROUP_ID="${DISPATCH_TOPIC_USAGE_GROUP_ID:-}"
+  if [[ -z "$_TU_GROUP_ID" ]]; then
+    echo "dispatch-tick: WARNING: DISPATCH_TOPIC_USAGE_ENABLED=1 but DISPATCH_TOPIC_USAGE_GROUP_ID is unset; skipping topic-usage producer" >&2
+  else
+    _TU_STATE_DIR="${DISPATCH_TOPIC_USAGE_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/dispatch}"
+    _TU_SENTINEL="$_TU_STATE_DIR/topic-usage-${_TU_GROUP_ID}.last-day"
+    _TU_TODAY="$(date -u +%Y-%m-%d)"
+    _TU_ALREADY_RAN=0
+    if [[ -f "$_TU_SENTINEL" ]]; then
+      _TU_LAST="$(cat "$_TU_SENTINEL")"
+      if [[ "$_TU_LAST" == "$_TU_TODAY" ]]; then
+        _TU_ALREADY_RAN=1
+      fi
+    fi
+    if [[ "$_TU_ALREADY_RAN" == "0" ]]; then
+      WRITER="${DISPATCH_TOPIC_USAGE_WRITER:-$SCRIPT_DIR/../../dispatch-token-audit/scripts/topic-usage-writer.mjs}"
+      mkdir -p "$_TU_STATE_DIR" 2>/dev/null || true
+      # Launch detached so the producer survives tick exit and never blocks the
+      # tick (a first-run backfill can take a while).  Backgrounding with `&`
+      # inside the subshell always exits 0 after the fork, so a trailing `||`
+      # can never observe a launch failure — check the precondition (node on
+      # PATH) synchronously here and surface a missing-node error on the tick's
+      # stderr at tick time.  Errors from node itself are captured in the log.
+      if ! command -v node >/dev/null 2>&1; then
+        echo "dispatch-tick: WARNING: node not found; topic-usage producer skipped" >&2
+      else
+        ( setsid node "$WRITER" >>"$_TU_STATE_DIR/topic-usage-producer.log" 2>&1 </dev/null & )
+      fi
+    fi
+  fi
 fi
 
 # --- Step 0: parse the single optional positional <N> ------------------------

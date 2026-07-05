@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type MouseEvent } from "react";
-import { Nav } from "@commons-systems/ds";
+import { useEffect, useRef, useState } from "react";
+import { PageShell } from "@commons-systems/ds";
 import { logError } from "@commons-systems/errorutil/log";
 import { onAuthStateChanged } from "./auth.js";
 import type { User } from "./auth.js";
@@ -15,7 +15,7 @@ import { Home } from "./pages/Home.js";
 import { About } from "./pages/About.js";
 
 export function App() {
-  const { path, navigate } = useRouter();
+  const { path } = useRouter();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [open, setOpen] = useState(false);
   const [playerHandle, setPlayerHandle] = useState<PlayerHandle | null>(null);
@@ -97,42 +97,23 @@ export function App() {
     return () => controller.abort();
   }, [open]);
 
-  // Intercept clicks on in-app nav links (literal href starting with "/").
-  // The home link (https://commons.systems/) and "#" auth links are excluded by
-  // the attribute test. Respect modified / non-primary clicks so open-in-new-tab
-  // still works.
-  const onHeaderClick = (e: MouseEvent<HTMLElement>) => {
-    if (e.defaultPrevented) return;
-    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey)
-      return;
-    const anchor = (e.target as HTMLElement).closest("a");
-    if (!anchor) return;
-    const href = anchor.getAttribute("href");
-    if (!href || !href.startsWith("/") || href.startsWith("//")) return;
-    if (anchor.target && anchor.target !== "_self") return;
-    e.preventDefault();
-    navigate(href);
-  };
-
   const activePath = path === "/about" ? "/about" : "/";
 
   return (
-    <div className="page">
-      <header onClick={onHeaderClick}>
-        <h1>Audio</h1>
-        <Nav
-          links={[
-            { href: "/", label: "Library" },
-            { href: "/about", label: "About" },
-          ]}
-          current={activePath}
-          end={
-            <NavControls
-              user={currentUser}
-              onFolderConnected={() => setLibraryRefreshKey((k) => k + 1)}
-            />
-          }
+    <PageShell
+      wordmark="Audio"
+      navLinks={[
+        { href: "/", label: "Library" },
+        { href: "/about", label: "About" },
+      ]}
+      current={activePath}
+      navEnd={
+        <NavControls
+          user={currentUser}
+          onFolderConnected={() => setLibraryRefreshKey((k) => k + 1)}
         />
+      }
+      headerEnd={
         <button
           className="panel-toggle"
           id="panel-toggle"
@@ -143,55 +124,30 @@ export function App() {
         >
           ▸
         </button>
-      </header>
-      <div className="content-grid">
-        <main id="app">
-          <RouteErrorBoundary key={activePath}>
-            {activePath === "/about" ? (
-              <About />
-            ) : (
-              <Home
-                user={currentUser}
-                player={playerHandle}
-                refreshKey={libraryRefreshKey}
-              />
-            )}
-          </RouteErrorBoundary>
-        </main>
-        <aside
-          id="player-panel"
-          className={open ? "sidebar open" : "sidebar"}
-          ref={panelRef}
-        >
-          {/* PERSISTENT player — lives outside the route switch so it never
-              remounts on navigation. The imperative engine owns its DOM. */}
-          <Player onReady={setPlayerHandle} />
-        </aside>
-      </div>
-      <footer>
-        <p>
-          Created with{" "}
-          <a
-            href="https://github.com/natb1/commons.systems"
-            target="_blank"
-            rel="noopener"
-          >
-            commons.systems
-          </a>{" "}
-          | &copy; 2026 RUMOR.ML{" "}
-          <a
-            href="https://creativecommons.org/licenses/by-sa/4.0/"
-            target="_blank"
-            rel="noopener"
-          >
-            <img
-              src="https://mirrors.creativecommons.org/presskit/buttons/88x31/png/by-sa.png"
-              alt="CC-BY-SA"
-              className="cc-badge"
+      }
+    >
+      <main id="app">
+        <RouteErrorBoundary key={activePath}>
+          {activePath === "/about" ? (
+            <About />
+          ) : (
+            <Home
+              user={currentUser}
+              player={playerHandle}
+              refreshKey={libraryRefreshKey}
             />
-          </a>
-        </p>
-      </footer>
-    </div>
+          )}
+        </RouteErrorBoundary>
+      </main>
+      <aside
+        id="player-panel"
+        className={open ? "sidebar open" : "sidebar"}
+        ref={panelRef}
+      >
+        {/* PERSISTENT player — lives outside the route switch so it never
+            remounts on navigation. The imperative engine owns its DOM. */}
+        <Player onReady={setPlayerHandle} />
+      </aside>
+    </PageShell>
   );
 }

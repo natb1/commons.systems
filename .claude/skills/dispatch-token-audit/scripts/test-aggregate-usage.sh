@@ -240,7 +240,41 @@ teardown() {
   if [[ -n "$ROOT" && -d "$ROOT" ]]; then
     rm -rf "$ROOT"
   fi
+  if [[ -n "${BINDIR:-}" && -d "${BINDIR:-}" ]]; then
+    rm -rf "$BINDIR"
+  fi
 }
+
+# Global gh stub on PATH (intercepts gh_issue_view_rest → gh api repos/.../issues/<N>
+# calls from aggregate-usage.sh). Inherits into all subshell aggregator runs via
+# the exported PATH below. Cleaned up by teardown() on exit.
+BINDIR=$(mktemp -d)
+cat > "$BINDIR/gh" <<'STUB_EOF'
+#!/usr/bin/env bash
+# Stub for: gh api repos/<repo>/issues/<N>
+# Parses N from the trailing /issues/<N> path segment; exits 0 always.
+issue_num=""
+for arg in "$@"; do
+  if [[ "$arg" =~ /issues/([0-9]+) ]]; then
+    issue_num="${BASH_REMATCH[1]}"
+    break
+  fi
+done
+if [[ "$issue_num" == "999" ]]; then
+  # Two topic labels (dispatch, testing infrastructure) + one type label (enhancement)
+  # — double-counted by by_topic because total-to-all-labels attribution.
+  printf '%s\n' '{"number":999,"state":"open","labels":[{"name":"dispatch"},{"name":"testing infrastructure"},{"name":"enhancement"}]}'
+elif [[ -n "$issue_num" ]]; then
+  # Any other issue (e.g. 2268 from the sidecar-coverage fixture): no labels.
+  printf '{"number":%s,"state":"open","labels":[]}\n' "$issue_num"
+else
+  # Unexpected call shape (not an issues endpoint): return a benign empty response.
+  printf '%s\n' '{"number":0,"state":"open","labels":[]}'
+fi
+exit 0
+STUB_EOF
+chmod +x "$BINDIR/gh"
+export PATH="$BINDIR:$PATH"
 
 trap teardown EXIT
 
@@ -287,6 +321,49 @@ assert_eq 'by_phase["plan-implement"].cost_usd' "$EXPECTED_WORKER_COST" \
 assert_eq 'by_phase_model["plan-implement\tclaude-opus-4-8"].cost_usd' "$EXPECTED_WORKER_COST" \
   "$(jq '.by_phase_model["plan-implement\tclaude-opus-4-8"].cost_usd' <<<"$OUT")"
 
+# --- by_topic / by_type (#2503): issue 999 → dispatch + testing infrastructure + enhancement ---
+# All 9 topic keys and all 3 type keys are always present (seeded from zero_bucket).
+assert_eq 'by_topic keys == 9 sorted keys' \
+  '["audio","budget","dispatch","fellspiral","landing","other","print","security","testing infrastructure"]' \
+  "$(jq -c '.by_topic | keys' <<<"$OUT")"
+assert_eq 'by_type keys == ["bug","enhancement","none"]' \
+  '["bug","enhancement","none"]' \
+  "$(jq -c '.by_type | keys' <<<"$OUT")"
+
+# Same field set as by_phase: zero_bucket provides price_proxy_usd, input, cost_usd, turns.
+assert_eq 'by_topic.dispatch has price_proxy_usd' 'true' \
+  "$(jq '.by_topic.dispatch | has("price_proxy_usd")' <<<"$OUT")"
+assert_eq 'by_topic.dispatch has input' 'true' \
+  "$(jq '.by_topic.dispatch | has("input")' <<<"$OUT")"
+assert_eq 'by_topic.dispatch has cost_usd' 'true' \
+  "$(jq '.by_topic.dispatch | has("cost_usd")' <<<"$OUT")"
+assert_eq 'by_topic.dispatch has turns' 'true' \
+  "$(jq '.by_topic.dispatch | has("turns")' <<<"$OUT")"
+
+# Total-to-all-labels: sess-worker (issue 999) is counted in BOTH the dispatch and
+# the "testing infrastructure" buckets, so each bucket carries the full worker cost.
+assert_eq 'by_topic.dispatch.cost_usd == EXPECTED_WORKER_COST' "$EXPECTED_WORKER_COST" \
+  "$(jq '.by_topic.dispatch.cost_usd' <<<"$OUT")"
+assert_eq 'by_topic["testing infrastructure"].cost_usd == EXPECTED_WORKER_COST' "$EXPECTED_WORKER_COST" \
+  "$(jq '.by_topic["testing infrastructure"].cost_usd' <<<"$OUT")"
+
+# sum(by_topic.cost_usd) == totals.cost_usd + EXPECTED_WORKER_COST:
+# sess-worker is double-counted (dispatch + testing infrastructure); all other sessions
+# (subagents, router, recovery) have no artifact and resolve to "other" exactly once.
+assert_eq '(by_topic | sum cost_usd) == totals.cost_usd + EXPECTED_WORKER_COST' \
+  "$(jq -n --argjson tot "$(jq '.totals.cost_usd' <<<"$OUT")" \
+            --argjson w "$EXPECTED_WORKER_COST" '$tot + $w')" \
+  "$(jq '(.by_topic | to_entries | map(.value.cost_usd) | add)' <<<"$OUT")"
+
+# by_type: enhancement gets the worker (issue 999 carries enhancement); none gets
+# everyone without a type label (all un-stamped sessions: subagents + router + recovery).
+assert_eq 'by_type.enhancement.cost_usd == EXPECTED_WORKER_COST' "$EXPECTED_WORKER_COST" \
+  "$(jq '.by_type.enhancement.cost_usd' <<<"$OUT")"
+assert_eq 'by_type.none.cost_usd == totals.cost_usd - EXPECTED_WORKER_COST' \
+  "$(jq -n --argjson tot "$(jq '.totals.cost_usd' <<<"$OUT")" \
+            --argjson w "$EXPECTED_WORKER_COST" '$tot - $w')" \
+  "$(jq '.by_type.none.cost_usd' <<<"$OUT")"
+
 # agent-aaa: sonnet (skill <none>), usage (10,20,40,5) at sonnet rates
 # (3 / 3.75 / 0.30 / 15 per Mtok).
 EXPECTED_AAA_COST=$(jq -n '(10*3 + 20*3.75 + 40*0.30 + 5*15)/1e6')
@@ -314,6 +391,8 @@ assert_eq "price_model.input_per_mtok (proxy unchanged)" "15" \
   "$(jq '.price_model.input_per_mtok' <<<"$OUT")"
 assert_eq "price_model.actual_rates_per_mtok.opus.output" "25" \
   "$(jq '.price_model.actual_rates_per_mtok.opus.output' <<<"$OUT")"
+assert_eq "price_model.actual_rates_per_mtok.fable.output" "50" \
+  "$(jq '.price_model.actual_rates_per_mtok.fable.output' <<<"$OUT")"
 
 assert_eq "by_session_type.worker.sessions" "1" \
   "$(jq '.by_session_type.worker.sessions' <<<"$OUT")"
@@ -794,6 +873,49 @@ assert_eq 'by_model["claude-haiku-4-5"].cost_usd (haiku)' "$EXPECTED_HAIKU_COST"
 rm -rf "$HAIKU_ROOT"
 
 # ---------------------------------------------------------------------------
+# Fable per-model cost (#2737). ISOLATED fixture: a worker session whose
+# assistant message carries `claude-fable-5` with distinct nonzero usage in
+# ALL FOUR components. This is the ONLY coverage of family()'s
+# `startswith("claude-fable")` branch and the ACTUAL_RATES.fable row — before
+# that branch existed, any fable session in the window aborted the whole
+# aggregation via the unpriceable-model guard. Distinct counts make a rate
+# swap between any two fable components visible; the expected value uses the
+# full four-term formula at fable rates (10 / 12.50 / 1.00 / 50 per Mtok).
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "--- fable per-model cost (#2737) ---"
+
+FABLE_ROOT=$(mktemp -d)
+trap 'rm -rf "$FABLE_ROOT" "$FAKE_WRITER_DIR"; teardown' EXIT INT TERM
+fable_worktree="$FABLE_ROOT/-home-x-worktrees-2737-fable"
+mkdir -p "$fable_worktree"
+fable_jsonl="$fable_worktree/sess-fable.jsonl"
+
+# line 1: first user line — classifies as worker
+printf '%s\n' '{"type":"user","message":{"content":"<command-name>/plan-issue</command-name>"}}' \
+  >> "$fable_jsonl"
+# line 2: assistant — claude-fable-5, distinct nonzero usage in all four components
+printf '%s\n' '{"type":"assistant","attributionSkill":"plan-implement","isSidechain":false,"gitBranch":"2737-fable","message":{"model":"claude-fable-5","usage":{"input_tokens":1000,"cache_creation_input_tokens":2000,"cache_read_input_tokens":4000,"output_tokens":500}}}' \
+  >> "$fable_jsonl"
+jq . "$fable_jsonl" >/dev/null
+touch "$fable_jsonl"
+
+OUT_FABLE=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$FABLE_ROOT"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
+)
+
+# Fable rates: input 10 / cache_creation 12.50 / cache_read 1.00 / output 50 per Mtok.
+EXPECTED_FABLE_COST=$(jq -n '(1000*10 + 2000*12.50 + 4000*1.00 + 500*50)/1e6')
+assert_eq "sessions[sess-fable].cost_usd (fable)" "$EXPECTED_FABLE_COST" \
+  "$(jq '[.sessions[]|select(.id=="sess-fable")][0].cost_usd' <<<"$OUT_FABLE")"
+assert_eq 'by_model["claude-fable-5"].cost_usd (fable)' "$EXPECTED_FABLE_COST" \
+  "$(jq '.by_model["claude-fable-5"].cost_usd' <<<"$OUT_FABLE")"
+
+rm -rf "$FABLE_ROOT"
+
+# ---------------------------------------------------------------------------
 # Claude 3 classification + generation-aware pricing + no-abort completeness
 # (#2102). Three ISOLATED fixtures:
 #   1. claude-3-opus-20240229  — rate_class()==opus_3, ACTUAL_RATES.opus_3 prices it;
@@ -1077,6 +1199,149 @@ assert_eq "freeform: window.sidecar_eligible == 0 (other session excluded)" "0" 
   "$(jq '.window.sidecar_eligible' <<<"$OUT_FREEFORM")"
 
 rm -rf "$FREEFORM_ROOT"
+
+# ---------------------------------------------------------------------------
+# (a) --day window respects BOTH bounds (#2505). ISOLATED fixture: three worker
+# transcripts whose mtimes straddle a fixed historical target day. The find is
+# bounded below by SINCE="<day> 00:00:00" and above by "! -newermt <day+1
+# 00:00:00>", so only the within-day file is scanned. Pick a fixed past day so
+# the test is deterministic; touch -d sets whole-second (.000) mtimes clear of
+# the boundary instants.
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "--- (a) --day window respects both bounds (#2505) ---"
+
+DAY_ROOT=$(mktemp -d)
+trap 'rm -rf "$DAY_ROOT" "$FAKE_WRITER_DIR"; teardown' EXIT INT TERM
+day_worktree="$DAY_ROOT/-home-x-worktrees-2505-day"
+mkdir -p "$day_worktree"
+
+TARGET_DAY="2025-06-15"
+# Three worker sessions; each a minimal worker transcript with nonzero usage so a
+# scanned session shows up in totals.
+for s in before within after; do
+  day_jsonl="$day_worktree/sess-$s.jsonl"
+  printf '%s\n' '{"type":"user","message":{"content":"<command-name>/plan-issue</command-name>"}}' \
+    >> "$day_jsonl"
+  printf '%s\n' '{"type":"assistant","attributionSkill":"plan-implement","isSidechain":false,"gitBranch":"2505-day","message":{"model":"claude-opus-4-8","usage":{"input_tokens":100,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}}' \
+    >> "$day_jsonl"
+  jq . "$day_jsonl" >/dev/null
+done
+# mtimes: before = day-1 noon (excluded), within = day noon (included),
+# after = day+1 noon (> UNTIL = day+1 00:00:00, excluded).
+touch -d "2025-06-14 12:00:00" "$day_worktree/sess-before.jsonl"
+touch -d "2025-06-15 12:00:00" "$day_worktree/sess-within.jsonl"
+touch -d "2025-06-16 12:00:00" "$day_worktree/sess-after.jsonl"
+
+OUT_DAY=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$DAY_ROOT"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --day "$TARGET_DAY"
+)
+assert_eq "day: only within-day file scanned (files_scanned==1)" "1" \
+  "$(jq '.window.files_scanned' <<<"$OUT_DAY")"
+assert_eq "day: only within-day session counted (totals.sessions==1)" "1" \
+  "$(jq '.totals.sessions' <<<"$OUT_DAY")"
+assert_eq "day: the within session is the one scanned" "sess-within" \
+  "$(jq -r '.sessions[0].id' <<<"$OUT_DAY")"
+assert_eq "day: window.since lower bound" "2025-06-15 00:00:00" \
+  "$(jq -r '.window.since' <<<"$OUT_DAY")"
+assert_eq "day: window.until upper bound (day+1)" "2025-06-16 00:00:00" \
+  "$(jq -r '.window.until' <<<"$OUT_DAY")"
+
+rm -rf "$DAY_ROOT"
+
+# ---------------------------------------------------------------------------
+# (b) --exclude-sidecar-sessions drops a sidecar session, keeps it when the flag
+# is absent (#2505). ISOLATED fixture: two worker sessions, both with NO artifact
+# (no .dispatch-stamp.json), so each resolves to topic "other" and type "none".
+# sess-drop has a sibling .file-issue-attribution.json; sess-keep does not.
+#   WITHOUT the flag: both sessions contribute (input 1000 + 2000 = 3000).
+#   WITH    the flag: only sess-keep contributes (input 1000).
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "--- (b) --exclude-sidecar-sessions drops sidecar session (#2505) ---"
+
+SIDE_ROOT=$(mktemp -d)
+trap 'rm -rf "$SIDE_ROOT" "$FAKE_WRITER_DIR"; teardown' EXIT INT TERM
+side_worktree="$SIDE_ROOT/-home-x-worktrees-2505-sidecar"
+mkdir -p "$side_worktree"
+
+# sess-keep: input 1000 ; sess-drop: input 2000. Both workers, no artifact.
+keep_jsonl="$side_worktree/sess-keep.jsonl"
+printf '%s\n' '{"type":"user","message":{"content":"<command-name>/file-issue</command-name>"}}' \
+  >> "$keep_jsonl"
+printf '%s\n' '{"type":"assistant","attributionSkill":"plan-implement","isSidechain":false,"gitBranch":"2505-sidecar","message":{"model":"claude-opus-4-8","usage":{"input_tokens":1000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}}' \
+  >> "$keep_jsonl"
+jq . "$keep_jsonl" >/dev/null
+
+drop_jsonl="$side_worktree/sess-drop.jsonl"
+printf '%s\n' '{"type":"user","message":{"content":"<command-name>/file-issue</command-name>"}}' \
+  >> "$drop_jsonl"
+printf '%s\n' '{"type":"assistant","attributionSkill":"plan-implement","isSidechain":false,"gitBranch":"2505-sidecar","message":{"model":"claude-opus-4-8","usage":{"input_tokens":2000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}}' \
+  >> "$drop_jsonl"
+jq . "$drop_jsonl" >/dev/null
+
+# Sidecar sibling for sess-drop only — the file-issue attribution marker.
+printf '%s\n' '{"chosen_topics":["dispatch"],"session_id":"sess-drop"}' \
+  > "$side_worktree/sess-drop.file-issue-attribution.json"
+jq . "$side_worktree/sess-drop.file-issue-attribution.json" >/dev/null
+
+touch "$keep_jsonl" "$drop_jsonl"
+
+# WITHOUT the flag: both sessions land in by_topic.other / by_type.none.
+OUT_SIDE_OFF=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$SIDE_ROOT"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
+)
+assert_eq "sidecar OFF: both sessions counted (totals.sessions==2)" "2" \
+  "$(jq '.totals.sessions' <<<"$OUT_SIDE_OFF")"
+assert_eq "sidecar OFF: by_topic.other.input == 1000+2000" "3000" \
+  "$(jq '.by_topic.other.input' <<<"$OUT_SIDE_OFF")"
+assert_eq "sidecar OFF: by_type.none.input == 1000+2000" "3000" \
+  "$(jq '.by_type.none.input' <<<"$OUT_SIDE_OFF")"
+
+# WITH the flag: sess-drop excluded; only sess-keep contributes.
+OUT_SIDE_ON=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$SIDE_ROOT"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7 --exclude-sidecar-sessions
+)
+assert_eq "sidecar ON: only sess-keep counted (totals.sessions==1)" "1" \
+  "$(jq '.totals.sessions' <<<"$OUT_SIDE_ON")"
+assert_eq "sidecar ON: the kept session is sess-keep" "sess-keep" \
+  "$(jq -r '.sessions[0].id' <<<"$OUT_SIDE_ON")"
+assert_eq "sidecar ON: by_topic.other.input == 1000 (sess-drop dropped)" "1000" \
+  "$(jq '.by_topic.other.input' <<<"$OUT_SIDE_ON")"
+assert_eq "sidecar ON: by_type.none.input == 1000 (sess-drop dropped)" "1000" \
+  "$(jq '.by_type.none.input' <<<"$OUT_SIDE_ON")"
+
+rm -rf "$SIDE_ROOT"
+
+# ---------------------------------------------------------------------------
+# (c) --day / --days mutual exclusivity and bad --day format both exit 2 (#2505).
+# rc captured with the subshell idiom (a bare $(...) under set -e would abort the
+# suite on the intended non-zero exit).
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "--- (c) --day/--days mutual exclusion + bad format exit 2 (#2505) ---"
+
+if ( bash "$SCRIPT_DIR/aggregate-usage.sh" --day 2025-06-15 --days 7 >/dev/null 2>&1 ); then
+  rc_mx1=0; else rc_mx1=$?; fi
+assert_eq "mutual-exclusion: --day then --days exits 2" "2" "$rc_mx1"
+
+if ( bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7 --day 2025-06-15 >/dev/null 2>&1 ); then
+  rc_mx2=0; else rc_mx2=$?; fi
+assert_eq "mutual-exclusion: --days then --day exits 2 (other order)" "2" "$rc_mx2"
+
+if ( bash "$SCRIPT_DIR/aggregate-usage.sh" --day badformat >/dev/null 2>&1 ); then
+  rc_bad=0; else rc_bad=$?; fi
+assert_eq "bad-format: --day badformat exits 2" "2" "$rc_bad"
+
+if ( bash "$SCRIPT_DIR/aggregate-usage.sh" --day 2025-13-40 >/dev/null 2>&1 ); then
+  rc_cal=0; else rc_cal=$?; fi
+assert_eq "bad-format: --day with invalid calendar date exits 2" "2" "$rc_cal"
 
 report_results
 exit $FAIL

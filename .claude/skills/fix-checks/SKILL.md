@@ -102,7 +102,10 @@ Cross-iteration memory lives entirely in `tmp/fix-checks-summary.md` (see
         .claude/skills/dispatch-propagate/scripts/post-pr-comment.sh <pr-num> tmp/fix-checks-summary.md
         ```
 
-     3. **Write `office-hours-reason`** via `dispatch-mark-deviation`:
+     3. **Write `office-hours-reason`** via `dispatch-mark-deviation`. This is a
+        deliberate office-hours park: before the call, perform the in-session
+        recommend step — see
+        `.claude/skills/dispatch-propagate/escalation-recommend.md`.
 
         ```bash
         .claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \

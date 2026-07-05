@@ -1,12 +1,8 @@
-import { collection, doc, getDoc, getDocs, query, where, type Firestore } from "firebase/firestore";
-import type { User } from "firebase/auth";
-import { nsCollectionPath, type Namespace } from "@commons-systems/firestoreutil/namespace";
 import { logError } from "@commons-systems/errorutil/log";
-import { classifyError } from "@commons-systems/errorutil/classify";
 import seedReminders from "virtual:office-hours-seed-data";
 import seedQueueMetrics from "virtual:office-hours-queue-seed";
 import type { Reminder } from "./reminders.js";
-import { parseQueueMetrics, type QueueMetricsSnapshot } from "./queue-metrics.js";
+import { type QueueMetricsSnapshot } from "./queue-metrics.js";
 
 export function getDemoReminders(): Reminder[] {
   return seedReminders.map((s) => ({
@@ -55,41 +51,6 @@ export function getDemoQueueMetrics(): QueueMetricsSnapshot {
       },
     ],
   };
-}
-
-export async function getOwnerReminders(
-  db: Firestore,
-  namespace: Namespace,
-  user: User,
-): Promise<Reminder[]> {
-  if (!user.email) return [];
-  const path = nsCollectionPath(namespace, "items");
-  const q = query(collection(db, path), where("memberEmails", "array-contains", user.email));
-  const snapshot = await getDocs(q);
-  const reminders: Reminder[] = [];
-  for (const d of snapshot.docs) {
-    const reminder = toReminder(d.id, d.data());
-    if (reminder) reminders.push(reminder);
-  }
-  return reminders;
-}
-
-export async function getOwnerQueueMetrics(
-  db: Firestore,
-  namespace: Namespace,
-  user: User,
-): Promise<QueueMetricsSnapshot | null> {
-  if (!user.email) return null;
-  let snap;
-  try {
-    snap = await getDoc(doc(db, nsCollectionPath(namespace, "metrics"), "dispatch-queue"));
-  } catch (err) {
-    if (classifyError(err) === "permission-denied") return null;
-    throw err;
-  }
-  if (!snap.exists()) return null;
-  // parseQueueMetrics returns null and logs on bad data; null propagates to QueueMetricsPanel which shows the empty placeholder
-  return parseQueueMetrics(snap.data());
 }
 
 export function toReminder(id: string, data: Record<string, unknown>): Reminder | null {

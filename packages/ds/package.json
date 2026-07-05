@@ -13,9 +13,15 @@
   "exports": {
     ".": "./src/index.ts",
     "./navigation/nav-link": "./src/navigation/nav-link.ts",
+    "./templates/footer": "./src/templates/footer.ts",
     "./styles.css": "./styles.css",
     "./fonts.css": "./fonts.css",
     "./base.css": "./base.css",
+    "./layout.css": "./layout.css",
+    "./hero.css": "./hero.css",
+    "./charts.css": "./charts.css",
+    "./hero-band.css": "./hero-band.css",
+    "./context-panel.css": "./context-panel.css",
     "./tokens/colors.css": "./tokens/colors.css",
     "./tokens/typography.css": "./tokens/typography.css",
     "./tokens/spacing.css": "./tokens/spacing.css",
@@ -23,6 +29,9 @@
   },
   "peerDependencies": {
     "react": ">=18"
+  },
+  "dependencies": {
+    "@observablehq/plot": "^0.6.17"
   },
   "devDependencies": {
     "@storybook/addon-docs": "^10.4.6",

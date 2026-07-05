@@ -18,8 +18,8 @@ import { createLimiter } from "./concurrency.js";
 import {
   createLocalSource,
   listLocal,
+  resolveLocalFile,
   resetLocalSource,
-  resolveLocalBlob,
 } from "./library.js";
 import { extractMetadata } from "./local-metadata.js";
 import { mediaTypeBadge } from "./media-render.js";
@@ -507,13 +507,13 @@ async function enrichLocalItem(
   const { item, node } = target;
   try {
     try {
-      const buf = await resolveLocalBlob(item);
-      if (buf === null) {
+      const file = await resolveLocalFile(item);
+      if (file === null) {
         // Could not read this file — do NOT cache `{}` (that would permanently
         // suppress retry). A later focus retries.
         return;
       }
-      const meta = await extractMetadata(buf, item.mediaType);
+      const meta = await extractMetadata(file, item.mediaType);
       patchLocalRow(node, meta);
       // Persist incrementally: a single entry, written even when `meta` is `{}`.
       await cacheMetadata(item.storagePath, meta);

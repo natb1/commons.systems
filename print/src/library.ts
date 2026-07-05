@@ -6,10 +6,12 @@
  * identical; `listCloud()` just dispatches the existing public / accessible
  * queries through `createFirebaseMediaSource`.
  */
+import { logError } from "@commons-systems/errorutil/log";
+
 import { createFirebaseMediaSource } from "@commons-systems/mediautil/firebase";
+import type { MediaPage, MediaPageOptions } from "@commons-systems/mediautil/source";
 import { createLocalFolderMediaSource } from "@commons-systems/mediautil/local-folder";
-import type { LocalDirectoryHandleLike } from "@commons-systems/mediautil/local-folder";
-import type { MediaSource } from "@commons-systems/mediautil/source";
+import type { LocalDirectoryHandleLike, LocalFolderMediaSource } from "@commons-systems/mediautil/local-folder";
 
 import { getPublicMedia, getAllAccessibleMedia, getMediaItem } from "./firestore.js";
 import { storage, STORAGE_NAMESPACE } from "./firebase.js";
@@ -38,8 +40,8 @@ const cloudSource = createFirebaseMediaSource<MediaItem>({
   viewerEmail: () => currentViewerEmail,
 });
 
-export async function listCloud(): Promise<MediaItem[]> {
-  return cloudSource.list();
+export async function listCloud(opts?: MediaPageOptions): Promise<MediaPage<MediaItem>> {
+  return cloudSource.list(opts);
 }
 
 /** Supported local-folder file extensions, mapped to their `MediaType`. */
@@ -81,7 +83,7 @@ export function fileToLocalItem(file: File, name: string, folderId: string): Med
   };
 }
 
-let localSource: MediaSource<MediaItem> | null = null;
+let localSource: LocalFolderMediaSource<MediaItem> | null = null;
 
 let resolveLocalFolderReady!: () => void;
 const localFolderReadyPromise = new Promise<void>((resolve) => {
@@ -108,7 +110,9 @@ export function createLocalSource(directory: FileSystemDirectoryHandle): void {
 }
 
 export async function listLocal(): Promise<MediaItem[]> {
-  return localSource ? localSource.list() : [];
+  if (!localSource) return [];
+  const { items } = await localSource.list();
+  return items;
 }
 
 export async function getLocalItem(id: string): Promise<MediaItem | null> {
@@ -120,6 +124,27 @@ export async function resolveLocalBlob(item: MediaItem): Promise<ArrayBuffer | n
     throw new Error('No local source bound');
   }
   return localSource.resolveToBlob(item);
+}
+
+/**
+ * Resolve a local item to a live `File`, or `null` when it can no longer be
+ * read. A vanished file, an index miss, or a permission error here is a
+ * skip-and-retry-later signal, not a misconfiguration to surface: the
+ * enrichment path relies on the `null` return to avoid caching an empty `{}`
+ * (which would permanently suppress a retry). The error is still logged for
+ * observability before returning null. Mirrors the audio app's
+ * `resolveLocalFile`.
+ */
+export async function resolveLocalFile(item: MediaItem): Promise<File | null> {
+  if (!localSource) {
+    throw new Error('No local source bound');
+  }
+  try {
+    return await localSource.resolveToFile(item);
+  } catch (err) {
+    logError(err, { operation: "resolve-local-file", id: item.id });
+    return null;
+  }
 }
 
 export function hasLocalSource(): boolean {

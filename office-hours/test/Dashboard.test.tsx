@@ -1,59 +1,53 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { render, cleanup, act, waitFor } from "@testing-library/react";
-import type { User } from "firebase/auth";
 
-// Dashboard.tsx imports db/NAMESPACE from firebase.js, whose createAppContext
-// requires VITE_FIREBASE_* env at module load. The demo tier (user=null) never
-// touches them, so a trivial stub keeps the render unit isolated from Firebase
-// config (mirrors audio's home test mocking the firebase-pulling module).
+// Dashboard.tsx no longer imports firebase.js (owner Firestore reads are gone),
+// but the demo-getter data modules are still imported for the demo tier. A
+// trivial firebase stub keeps any transitive load isolated from Firebase config.
 vi.mock("../src/firebase.js", () => ({
   db: {},
   NAMESPACE: { project: "office-hours", env: "test" },
 }));
 
-// The owner / error tiers call the five getOwner* loaders. Mock the four data
-// modules so the loaders are controllable per test, while keeping the real
-// getDemo* seed getters (the demo tier and the owner-empty chart fallbacks rely
-// on them) via importActual. These mock fns are reset and configured per test.
-const getOwnerSamples = vi.fn();
-const getOwnerReminders = vi.fn();
-const getOwnerQueueMetrics = vi.fn();
-const getOwnerIssueSamples = vi.fn();
-const getOwnerAuditAggregates = vi.fn();
-const getOwnerProjectSignals = vi.fn();
-
-vi.mock("../src/usage-data.js", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../src/usage-data.js")>()),
-  getOwnerSamples: (...args: unknown[]) => getOwnerSamples(...args),
-}));
-vi.mock("../src/data.js", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../src/data.js")>()),
-  getOwnerReminders: (...args: unknown[]) => getOwnerReminders(...args),
-  getOwnerQueueMetrics: (...args: unknown[]) => getOwnerQueueMetrics(...args),
-}));
-vi.mock("../src/issue-data.js", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../src/issue-data.js")>()),
-  getOwnerIssueSamples: (...args: unknown[]) => getOwnerIssueSamples(...args),
-}));
-vi.mock("../src/audit-data.js", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../src/audit-data.js")>()),
-  getOwnerAuditAggregates: (...args: unknown[]) => getOwnerAuditAggregates(...args),
-}));
-vi.mock("../src/project-signals-data.js", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../src/project-signals-data.js")>()),
-  getOwnerProjectSignals: (...args: unknown[]) => getOwnerProjectSignals(...args),
-}));
+// The dashboard's only real data path is now the read-only local snapshot: the
+// startup restore reads a persisted handle, reads its bytes, and decodes them
+// into PanelData. The shared helper mocks the local-snapshot source + snapshot
+// decoder + isEncrypted guard (importing it registers the vi.mock factories) so
+// the whole load is controllable per test via `mocks`.
+import { mocks, fakeHandle } from "./helpers/local-snapshot-mocks.js";
 
 import { Dashboard } from "../src/Dashboard.js";
+import type { PanelData } from "../src/panel-equality.js";
 import type { UsageSample } from "../src/usage-samples.js";
 import type { Reminder } from "../src/reminders.js";
 import type { QueueMetricsSnapshot } from "../src/queue-metrics.js";
+
+const emptyPanelData: PanelData = {
+  samples: [],
+  reminders: [],
+  queueMetrics: null,
+  issueSamples: [],
+  topicUsage: [],
+  projectSignals: null,
+};
 
 // The history-band chart modules read --fg via getThemeFg; happy-dom has no
 // stylesheet, so set it on the document root for the duration of each test
 // (mirrors the vanilla app-view.test.ts withThemeFg helper).
 beforeEach(() => {
   document.documentElement.style.setProperty("--fg", "#e8eaed");
+  // Demo is the natural baseline: no persisted handle → restore returns "none"
+  // → no local activation → the component stays on the demo tier. Local-loading
+  // describes override restore/decode below.
+  mocks.isSnapshotSupported.mockReturnValue(true);
+  mocks.getSnapshotState.mockReturnValue("none");
+  mocks.restoreSnapshotHandle.mockResolvedValue("none");
+  mocks.getCurrentSnapshotHandle.mockReturnValue(fakeHandle);
+  mocks.readSnapshotBytes.mockResolvedValue(new TextEncoder().encode("{}").buffer);
+  mocks.hasExternallyChanged.mockResolvedValue(false);
+  mocks.isEncrypted.mockReturnValue(false);
+  mocks.decodeSnapshot.mockReturnValue({ data: emptyPanelData, computedAt: new Date("2026-06-30T10:00:00Z") });
+  mocks.loadSnapshotPanelData.mockResolvedValue({ data: emptyPanelData, computedAt: new Date("2026-06-30T10:00:00Z") });
 });
 afterEach(() => {
   document.documentElement.style.removeProperty("--fg");
@@ -61,13 +55,11 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-const fakeUser = { uid: "owner-1", email: "owner@example.com" } as User;
-
-// The demo tier renders with no Firebase user, so it needs no Firestore mock:
-// it reads from the synchronous getDemo* seed getters.
-describe("Dashboard demo tier (user=null)", () => {
+// The demo tier renders with no persisted snapshot: it reads from the
+// synchronous getDemo* seed getters (restore resolves "none").
+describe("Dashboard demo tier (no snapshot)", () => {
   it("renders the demo banner with the exact copy", () => {
-    const { container } = render(<Dashboard user={null} />);
+    const { container } = render(<Dashboard />);
     const banner = container.querySelector(".demo-banner");
     expect(banner).not.toBeNull();
     expect(banner!.getAttribute("role")).toBe("status");
@@ -75,21 +67,21 @@ describe("Dashboard demo tier (user=null)", () => {
   });
 
   it("renders the panel grid with all ten panels", () => {
-    const { container } = render(<Dashboard user={null} />);
+    const { container } = render(<Dashboard />);
     const grid = container.querySelector(".panel-grid");
     expect(grid).not.toBeNull();
-    // capacity, pace, history, backlog, audit, reminders, queue-metrics, parked, intention-tree, project-signals
+    // capacity, pace, history, backlog, topic-usage, reminders, queue-metrics, parked, intention-tree, project-signals
     expect(grid?.children).toHaveLength(10);
   });
 
-  it("marks the five full-width panels (history, backlog, audit, intention-tree, project-signals) as panel-grid-full", () => {
-    const { container } = render(<Dashboard user={null} />);
+  it("marks the five full-width panels (history, backlog, topic-usage, intention-tree, project-signals) as panel-grid-full", () => {
+    const { container } = render(<Dashboard />);
     const full = container.querySelectorAll(".panel-grid > .panel-grid-full");
     expect(full).toHaveLength(5);
   });
 
   it("renders the intention-tree panel full-width with INTENTION TREE heading", () => {
-    const { container } = render(<Dashboard user={null} />);
+    const { container } = render(<Dashboard />);
     const heading = container.querySelector(".intention-tree-heading");
     expect(heading).not.toBeNull();
     expect(heading!.textContent).toBe("INTENTION TREE"); // type-safety-ok: asserted not-null by the preceding expect()
@@ -103,19 +95,20 @@ describe("Dashboard demo tier (user=null)", () => {
   it("renders chart layouts from the demo samples (charts mount, no sign-in)", () => {
     // Directly verifies the DEMO-renders-every-chart invariant (ports the
     // deleted app-view.test.ts demo .chart-layout assertion).
-    const { container } = render(<Dashboard user={null} />);
+    const { container } = render(<Dashboard />);
     expect(container.querySelectorAll(".chart-layout").length).toBeGreaterThan(0);
   });
 
   it("does not render the error state", () => {
-    const { container } = render(<Dashboard user={null} />);
+    const { container } = render(<Dashboard />);
     expect(container.querySelector(".error")).toBeNull();
   });
 });
 
-// ── Owner tier ────────────────────────────────────────────────────────────────
+// ── Snapshot-loaded (local) tier ────────────────────────────────────────────
 // Ports app-view.test.ts's owner-with-data and owner-empty coverage onto the
-// React load path: a non-null user triggers the five-collection parallel load.
+// local-snapshot load path: a granted persisted handle restores and decodes a
+// snapshot into PanelData on mount.
 
 const baseSample: UsageSample = {
   sampledAt: new Date("2026-06-07T10:00:00Z"),
@@ -159,24 +152,34 @@ const queueMetricsFixture: QueueMetricsSnapshot = {
   ],
 };
 
-describe("Dashboard owner tier with data", () => {
+// Configure the local-snapshot mocks to restore + decode a given PanelData.
+function primeSnapshot(data: PanelData): void {
+  mocks.getSnapshotState.mockReturnValue("granted");
+  mocks.restoreSnapshotHandle.mockResolvedValue("granted");
+  mocks.getCurrentSnapshotHandle.mockReturnValue(fakeHandle);
+  mocks.decodeSnapshot.mockReturnValue({ data, computedAt: new Date("2026-06-30T10:00:00Z") });
+}
+
+describe("Dashboard snapshot tier with data", () => {
   beforeEach(() => {
-    getOwnerSamples.mockResolvedValue([
-      baseSample,
-      { ...baseSample, sampledAt: new Date("2026-06-08T10:00:00Z"), activeWorkers: 2, targetWorkers: 3 },
-    ]);
-    getOwnerReminders.mockResolvedValue([
-      makeReminder("weekly-review", 30 * 60_000),
-      makeReminder("overdue-task", -4 * 3_600_000),
-    ]);
-    getOwnerQueueMetrics.mockResolvedValue(queueMetricsFixture);
-    getOwnerIssueSamples.mockResolvedValue([]);
-    getOwnerAuditAggregates.mockResolvedValue([]);
-    getOwnerProjectSignals.mockResolvedValue(null);
+    primeSnapshot({
+      samples: [
+        baseSample,
+        { ...baseSample, sampledAt: new Date("2026-06-08T10:00:00Z"), activeWorkers: 2, targetWorkers: 3 },
+      ],
+      reminders: [
+        makeReminder("weekly-review", 30 * 60_000),
+        makeReminder("overdue-task", -4 * 3_600_000),
+      ],
+      queueMetrics: queueMetricsFixture,
+      issueSamples: [],
+      topicUsage: [],
+      projectSignals: null,
+    });
   });
 
   it("renders a reminder list item for each reminder and no demo banner", async () => {
-    const { container } = render(<Dashboard user={fakeUser} />);
+    const { container } = render(<Dashboard />);
     await waitFor(() =>
       expect(container.querySelectorAll("li.reminder").length).toBe(2),
     );
@@ -185,7 +188,7 @@ describe("Dashboard owner tier with data", () => {
   });
 
   it("renders a parked-issue list item for each parked issue and no empty state", async () => {
-    const { container } = render(<Dashboard user={fakeUser} />);
+    const { container } = render(<Dashboard />);
     await waitFor(() =>
       expect(container.querySelectorAll("li.parked-issue").length).toBe(
         queueMetricsFixture.parked.length,
@@ -196,20 +199,23 @@ describe("Dashboard owner tier with data", () => {
     );
     expect(texts).not.toContain("Nothing parked.");
   });
+
+  it("renders the read-only snapshot banner (not the demo banner)", async () => {
+    const { container } = render(<Dashboard />);
+    await waitFor(() =>
+      expect(container.querySelector(".local-snapshot-banner")).not.toBeNull(),
+    );
+    expect(container.querySelector(".demo-banner")).toBeNull();
+  });
 });
 
-describe("Dashboard owner tier — empty", () => {
+describe("Dashboard snapshot tier — empty", () => {
   beforeEach(() => {
-    getOwnerSamples.mockResolvedValue([]);
-    getOwnerReminders.mockResolvedValue([]);
-    getOwnerQueueMetrics.mockResolvedValue(null);
-    getOwnerIssueSamples.mockResolvedValue([]);
-    getOwnerAuditAggregates.mockResolvedValue([]);
-    getOwnerProjectSignals.mockResolvedValue(null);
+    primeSnapshot(emptyPanelData);
   });
 
   it("renders the exact empty-state strings for each panel", async () => {
-    const { container } = render(<Dashboard user={fakeUser} />);
+    const { container } = render(<Dashboard />);
     await waitFor(() =>
       expect(container.querySelector(".demo-banner")).toBeNull(),
     );
@@ -219,7 +225,6 @@ describe("Dashboard owner tier — empty", () => {
       const t = texts();
       expect(t).toContain("No reminders.");
       expect(t).toContain("No capacity data.");
-      expect(t).toContain("No usage history to chart.");
       expect(t).toContain("No worker history to chart.");
       expect(t).toContain("No queue metrics yet.");
       expect(t).toContain("Nothing parked.");
@@ -229,19 +234,20 @@ describe("Dashboard owner tier — empty", () => {
 
 describe("Dashboard error tier", () => {
   beforeEach(() => {
-    // One loader rejecting drives the whole load into the error tier (ports
-    // main.ts's catch). Silence the expected logError noise.
-    getOwnerSamples.mockResolvedValue([]);
-    getOwnerReminders.mockRejectedValue(new Error("permission-denied"));
-    getOwnerQueueMetrics.mockResolvedValue(null);
-    getOwnerIssueSamples.mockResolvedValue([]);
-    getOwnerAuditAggregates.mockResolvedValue([]);
-    getOwnerProjectSignals.mockResolvedValue(null);
+    // A granted restore that fails to decode drives the local load into the
+    // error tier (activateLocal catches the throw, flips to error, re-throws so
+    // the restore effect still logs it). Silence the expected logError noise.
+    mocks.getSnapshotState.mockReturnValue("granted");
+    mocks.restoreSnapshotHandle.mockResolvedValue("granted");
+    mocks.getCurrentSnapshotHandle.mockReturnValue(fakeHandle);
+    mocks.decodeSnapshot.mockImplementation(() => {
+      throw new Error("snapshot decode failed");
+    });
     vi.spyOn(console, "error").mockImplementation(() => {});
   });
 
   it("renders the error state with exact copy and role, hiding demo/panels", async () => {
-    const { container } = render(<Dashboard user={fakeUser} />);
+    const { container } = render(<Dashboard />);
     let error: Element | null = null;
     await waitFor(() => {
       error = container.querySelector(".error");
@@ -266,7 +272,7 @@ describe("Dashboard tick refreshes time-sensitive panels", () => {
 
   it("demo: weekly countdown text changes after advancing the 60s interval", () => {
     vi.useFakeTimers();
-    const { container } = render(<Dashboard user={null} />);
+    const { container } = render(<Dashboard />);
 
     // The SECOND .capacity-reset-countdown is the weekly reset, which counts
     // down and crosses to "now" once wall time passes the boundary. The demo

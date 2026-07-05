@@ -181,9 +181,9 @@ fi
 
 # Install the durable heartbeat timer (#2022) early — before the COUNT > CAP
 # gate — so a cold start that hits a post-cap stall still arms the heartbeat.
-# The late ensure_daemon_service call (below) is never reached on the cap-exit
-# path, so this early call is the only one that fires on that path. Best-effort:
-# a failure here is non-fatal; the chain continuation still runs via OnFailure.
+# The cap-exit path below returns before reaching the recovery reseed, so this
+# early call is the only one that fires on that path. Best-effort: a failure
+# here is non-fatal; the chain continuation still runs via OnFailure.
 ensure_heartbeat_units "$MAIN_WORKTREE" || true
 
 # ---- Step 1: NOW ------------------------------------------------------------
@@ -448,13 +448,6 @@ if (( BACKOFF <= 0 || BACKOFF > MAX )); then
 fi
 RESEED_AT=$(( NOW + BACKOFF ))
 UNIT_NAME="dispatch-reseed-${RESEED_AT}"
-
-# Install + activate the durable dispatch-claude-daemon.service (#1197) before
-# arming the recovery reseed, so the reseed's tick attaches to a daemon already
-# running in a stable cgroup rather than spawning one in the transient reseed
-# unit's cgroup. Best-effort: a failure here is non-fatal — the on-demand daemon
-# then falls back to surviving via KillMode=process (#1196).
-ensure_daemon_service || true
 
 RUN_STDERR=$(mktemp)
 trap 'rm -f "$RUN_STDERR"' EXIT

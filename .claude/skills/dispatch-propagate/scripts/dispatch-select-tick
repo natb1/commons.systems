@@ -423,8 +423,8 @@ refresh_lock
 # (claude_agents_count_busy_workers + reservation_count), not busy workers alone
 # — a reservation counts against the budget the instant it is written, with no
 # wait for worker registration. Under cap: GAP bounds how many workers a fan-out
-# run may spawn, and normal selection (Step 3) already runs priority-first, so a
-# priority item under budget is handled there. Daemon UNKNOWN (the busy-worker
+# run may spawn, and normal selection (Step 3) already runs rank-first, so a
+# high-rank item under budget is handled there. Daemon UNKNOWN (the busy-worker
 # read fails; reservation_count never fails) → fail open (GAP=1); the
 # per-worktree dedup in dispatch-spawn-job is the last-line defense.
 #
@@ -507,7 +507,8 @@ if [[ -z "$MANUAL" && -z "$ARG" ]]; then
         echo "concurrency-cap"
         exit 0
       fi
-      # Not exhausted: probe the priority tier only (JIT output suppressed). The
+      # Not exhausted: probe the priority-LABELED bypass items only (JIT output
+      # suppressed; the `priority` label = cap bypass, not ordering). The
       # main-broken health gate runs first inside --priority-only, so a main that
       # broke WHILE at cap is now surfaced (the old early-exit fired before any
       # selection ran).
@@ -587,12 +588,13 @@ elif [[ -n "$MANUAL" ]]; then
   # out) but HONORS the genuine rate-limit floor (--exhausted) and the ceiling:
   #   HEADROOM = max(0, MAX_WORKERS − LIVE_COUNT)   absolute ceiling
   #   GAP      = max(0, TARGET_N − LIVE_COUNT)      pace-curve budget gap
-  #   N_PRIO   = count of selectable priority=1 targets, capped at HEADROOM
+  #   N_PRIO   = count of selectable priority-LABELED (bypass) targets, capped at HEADROOM
   #   SPAWN_N  = min(HEADROOM, max(N_PRIO, GAP, 1))
-  # Priority and gap combine as a max (union), not additive buckets, so the
-  # total is capped at MAX_WORKERS. The fan-out itself runs priority-first
-  # through dispatch-materialize-spawn's existing --gap N machinery (the
-  # priority=1 tier is globally exhausted first). LIVE_COUNT mirrors the
+  # The priority bypass and gap combine as a max (union), not additive buckets, so
+  # the total is capped at MAX_WORKERS. The fan-out itself runs rank-first through
+  # dispatch-materialize-spawn's existing --gap N machinery (the highest rank level
+  # is globally exhausted first; the `priority` label is the cap bypass, not an
+  # ordering signal). LIVE_COUNT mirrors the
   # autonomous block's effective-live count (busy workers + reservations); the
   # manual path does NOT sweep the reservation ledger (a possibly-stale count
   # can only make manual fan-out more conservative, which is safe).
@@ -634,9 +636,9 @@ elif [[ -n "$MANUAL" ]]; then
     fi
     GAP_BUDGET=$(( TARGET_N - LIVE_COUNT ))
     (( GAP_BUDGET < 0 )) && GAP_BUDGET=0
-    # N_PRIO: count selectable priority=1 targets, capped at HEADROOM via --top.
-    # Only `pr`/`issue` lines count; `waiting` / `empty` / `main-broken` are 0
-    # (CI-pending priority items are not selectable — keeps N_PRIO consistent
+    # N_PRIO: count selectable priority-LABELED (bypass) targets, capped at HEADROOM
+    # via --top. Only `pr`/`issue` lines count; `waiting` / `empty` / `main-broken`
+    # are 0 (CI-pending priority items are not selectable — keeps N_PRIO consistent
     # with #1448's CI-cadence reseed instead of double-counting against it).
     N_PRIO=0
     PRIO_LINES=$("$SCRIPT_DIR/dispatch-select-target" --priority-only --top "$HEADROOM") || PRIO_LINES=""

@@ -11,9 +11,12 @@ import {
   Checkbox,
   Nav,
   Landing,
+  Hero,
+  ContextPanel,
+  ContextPanelToggle,
 } from "../src/index.ts";
 
-describe("all nine components importable from the barrel", () => {
+describe("all twelve components importable from the barrel", () => {
   // A renderable React component is either a function component or a
   // forwardRef/memo exotic object (those carry a `$$typeof` symbol). Button and
   // Input forward refs, so they are objects rather than bare functions.
@@ -31,6 +34,9 @@ describe("all nine components importable from the barrel", () => {
     expect(isRenderable(Checkbox)).toBe(true);
     expect(isRenderable(Nav)).toBe(true);
     expect(isRenderable(Landing)).toBe(true);
+    expect(isRenderable(Hero)).toBe(true);
+    expect(isRenderable(ContextPanel)).toBe(true);
+    expect(isRenderable(ContextPanelToggle)).toBe(true);
   });
 });
 
@@ -131,12 +137,15 @@ describe("cs-* class names", () => {
   it("Landing renders the page shell with sticky header, grid, and panel", () => {
     const html = renderToStaticMarkup(<Landing />);
     expect(html).toContain("cs-landing");
-    expect(html).toContain("cs-landing__grid");
-    expect(html).toContain("cs-landing__panel");
+    expect(html).toContain("content-grid");
+    expect(html).toContain("sidebar");
+    expect(html).toContain("panel-toggle");
     expect(html).toContain("<header");
     expect(html).toContain("<footer");
     // Composes the shared Nav primitive rather than a bespoke one.
     expect(html).toContain("cs-nav");
+    expect(html).toContain("hero-band");
+    expect(html).toContain("context-panel");
   });
 });
 
@@ -144,6 +153,49 @@ describe("resting styles from tokens", () => {
   it("primary Button markup contains var(--accent)", () => {
     const html = renderToStaticMarkup(<Button variant="primary">Go</Button>);
     expect(html).toContain("var(--accent)");
+  });
+});
+
+describe("Hero and ContextPanel primitives", () => {
+  it("Hero renders the hero-band band and grid", () => {
+    const html = renderToStaticMarkup(
+      <Hero
+        headline="Ship faster"
+        subline="A promise"
+        ctas={[{ label: "Get started", href: "#" }]}
+        cards={[{ name: "App one", problem: "Solves a thing", href: "#" }]}
+      />,
+    );
+    expect(html).toContain("hero-band-section");
+    expect(html).toContain("hero-band");
+    expect(html).toContain("hero-band-grid");
+    expect(html).toContain("Ship faster");
+    // CTA link and a card render
+    expect(html).toContain("Get started");
+    expect(html).toContain("App one");
+  });
+
+  it("ContextPanel renders an aside with sidebar context-panel classes", () => {
+    const html = renderToStaticMarkup(
+      <ContextPanel open id="panel-1" aria-label="Context">
+        <p>Panel body</p>
+      </ContextPanel>,
+    );
+    expect(html).toMatch(/<aside[^>]*>/);
+    expect(html).toContain("sidebar");
+    expect(html).toContain("context-panel");
+    expect(html).toContain("open");
+    expect(html).toContain('id="panel-1"');
+    expect(html).toContain("Panel body");
+  });
+
+  it("ContextPanelToggle renders panel-toggle with aria wiring", () => {
+    const html = renderToStaticMarkup(
+      <ContextPanelToggle open={false} onToggle={() => {}} controls="panel-1" />,
+    );
+    expect(html).toContain("panel-toggle");
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain('aria-controls="panel-1"');
   });
 });
 

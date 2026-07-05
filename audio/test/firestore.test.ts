@@ -6,6 +6,10 @@ const mockQuery = vi.fn();
 const mockWhere = vi.fn();
 const mockDoc = vi.fn();
 const mockGetDoc = vi.fn();
+const mockOrderBy = vi.fn();
+const mockLimit = vi.fn();
+const mockStartAfter = vi.fn();
+const mockDocumentId = vi.fn();
 
 vi.mock("firebase/firestore", () => ({
   collection: (...args: unknown[]) => mockCollection(...args),
@@ -14,6 +18,10 @@ vi.mock("firebase/firestore", () => ({
   where: (...args: unknown[]) => mockWhere(...args),
   doc: (...args: unknown[]) => mockDoc(...args),
   getDoc: (...args: unknown[]) => mockGetDoc(...args),
+  orderBy: (...args: unknown[]) => mockOrderBy(...args),
+  limit: (...args: unknown[]) => mockLimit(...args),
+  startAfter: (...args: unknown[]) => mockStartAfter(...args),
+  documentId: (...args: unknown[]) => mockDocumentId(...args),
 }));
 
 vi.mock("../src/firebase.js", () => ({
@@ -63,6 +71,10 @@ describe("getPublicMedia", () => {
     mockCollection.mockReturnValue("mock-collection-ref");
     mockWhere.mockReturnValue("mock-where");
     mockQuery.mockReturnValue("mock-query");
+    mockOrderBy.mockReturnValue("mock-order-by");
+    mockLimit.mockReturnValue("mock-limit");
+    mockStartAfter.mockReturnValue("mock-start-after");
+    mockDocumentId.mockReturnValue("mock-document-id");
   });
 
   it("queries the correct namespaced collection path", async () => {
@@ -97,7 +109,7 @@ describe("getPublicMedia", () => {
       ],
     });
 
-    const items = await getPublicMedia();
+    const { items } = await getPublicMedia();
 
     expect(items).toEqual([
       {
@@ -140,7 +152,7 @@ describe("getPublicMedia", () => {
   it("returns empty array when no documents exist", async () => {
     mockGetDocs.mockResolvedValue({ docs: [] });
 
-    const items = await getPublicMedia();
+    const { items } = await getPublicMedia();
 
     expect(items).toEqual([]);
   });
@@ -153,7 +165,7 @@ describe("getPublicMedia", () => {
       ],
     });
 
-    const items = await getPublicMedia();
+    const { items } = await getPublicMedia();
 
     expect(items[0].id).toBe("newer");
     expect(items[1].id).toBe("older");
@@ -221,7 +233,7 @@ describe("getPublicMedia", () => {
       docs: [validAudioDoc("nullable", { trackNumber: null, year: null })],
     });
 
-    const items = await getPublicMedia();
+    const { items } = await getPublicMedia();
 
     expect(items[0].trackNumber).toBeNull();
     expect(items[0].year).toBeNull();
@@ -234,6 +246,10 @@ describe("getUserMedia", () => {
     mockCollection.mockReturnValue("mock-collection-ref");
     mockWhere.mockReturnValue("mock-where");
     mockQuery.mockReturnValue("mock-query");
+    mockOrderBy.mockReturnValue("mock-order-by");
+    mockLimit.mockReturnValue("mock-limit");
+    mockStartAfter.mockReturnValue("mock-start-after");
+    mockDocumentId.mockReturnValue("mock-document-id");
   });
 
   it("queries the correct namespaced collection path", async () => {
@@ -264,7 +280,7 @@ describe("getUserMedia", () => {
       docs: [validAudioDoc("user-doc-1", { publicDomain: false })],
     });
 
-    const items = await getUserMedia("user@example.com");
+    const { items } = await getUserMedia("user@example.com");
 
     expect(items).toHaveLength(1);
     expect(items[0].id).toBe("user-doc-1");
@@ -278,6 +294,10 @@ describe("getAllAccessibleMedia", () => {
     mockCollection.mockReturnValue("mock-collection-ref");
     mockWhere.mockReturnValue("mock-where");
     mockQuery.mockReturnValue("mock-query");
+    mockOrderBy.mockReturnValue("mock-order-by");
+    mockLimit.mockReturnValue("mock-limit");
+    mockStartAfter.mockReturnValue("mock-start-after");
+    mockDocumentId.mockReturnValue("mock-document-id");
   });
 
   it("deduplicates items that appear in both public and user queries", async () => {
@@ -289,7 +309,7 @@ describe("getAllAccessibleMedia", () => {
         docs: [validAudioDoc("shared-doc")],
       });
 
-    const items = await getAllAccessibleMedia("user@example.com");
+    const { items } = await getAllAccessibleMedia("user@example.com");
 
     expect(items).toHaveLength(1);
     expect(items[0].id).toBe("shared-doc");
@@ -304,7 +324,7 @@ describe("getAllAccessibleMedia", () => {
         docs: [validAudioDoc("user-only", { publicDomain: false })],
       });
 
-    const items = await getAllAccessibleMedia("user@example.com");
+    const { items } = await getAllAccessibleMedia("user@example.com");
 
     expect(items).toHaveLength(2);
     const ids = items.map((i) => i.id);
@@ -325,7 +345,7 @@ describe("getAllAccessibleMedia", () => {
         ],
       });
 
-    const items = await getAllAccessibleMedia("user@example.com");
+    const { items } = await getAllAccessibleMedia("user@example.com");
 
     expect(items[0].id).toBe("newer");
     expect(items[1].id).toBe("older");
@@ -336,7 +356,7 @@ describe("getAllAccessibleMedia", () => {
       .mockResolvedValueOnce({ docs: [] })
       .mockResolvedValueOnce({ docs: [] });
 
-    const items = await getAllAccessibleMedia("user@example.com");
+    const { items } = await getAllAccessibleMedia("user@example.com");
 
     expect(items).toEqual([]);
   });

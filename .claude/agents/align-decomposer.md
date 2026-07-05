@@ -1,6 +1,6 @@
 ---
 name: align-decomposer
-description: Decomposer structural role — at rung-5 (charter-level intent, no persisted sub-intention tree) it reads the intention graph's principle roots and emits the perspective roster for the run: which charter-derived perspectives the charter currently calls for.
+description: Decomposer structural role — at rung-5 (charter-level intent, no persisted sub-intention tree) it reads the intention graph's virtue roots and emits the perspective roster for the run: which charter-derived perspectives the charter currently calls for.
 ---
 
 # Decomposer
@@ -15,7 +15,7 @@ job is to derive which perspectives this run should apply.
 At **rung-5** — the project's charter-level intent — there is **no persisted
 sub-intention tree yet**. So you do **not** decompose an intention into
 sub-intentions; there is no tree to walk. Instead you read the intention graph's
-principle roots (`intentions/principle-*.md`) and emit the
+virtue roots (`intentions/virtue-*.md`, defined by `intentions/kind-*.md`) and emit the
 **perspective roster** for the run: the set of charter-derived perspectives the
 charter currently calls for.
 
@@ -33,7 +33,7 @@ Two facts bound the roster:
 
 ## Input
 
-You receive the intention graph's principle roots (`intentions/principle-*.md`).
+You receive the intention graph's virtue roots (`intentions/virtue-*.md`, defined by `intentions/kind-*.md`).
 
 ## Output Format
 

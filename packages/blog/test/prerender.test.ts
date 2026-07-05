@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { createElement } from "react";
+import { Hero } from "@commons-systems/ds";
 import { prerenderPosts, type PrerenderConfig } from "../src/prerender";
 import * as fs from "node:fs";
 
@@ -31,6 +33,19 @@ const TEMPLATE_WITH_HERO = `<!DOCTYPE html>
   <section class="landing-hero">default hero marker</section>
   <main id="app"></main>
   <aside id="info-panel" class="sidebar"></aside>
+</body>
+</html>`;
+
+const TEMPLATE_WITH_FOOTER = `<!DOCTYPE html>
+<html>
+<head>
+  <title>My Blog</title>
+</head>
+<body>
+  <nav><app-nav id="nav"></app-nav></nav>
+  <main id="app"></main>
+  <aside id="info-panel" class="sidebar"></aside>
+  <footer></footer>
 </body>
 </html>`;
 
@@ -678,6 +693,51 @@ describe("prerenderPosts", () => {
     await expect(prerenderPosts(makeConfig())).resolves.toBeUndefined();
   });
 
+  it("injects footerHtml into <footer> on root and post pages when provided", async () => {
+    vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
+      if (String(path).endsWith("index.html")) return TEMPLATE_WITH_FOOTER;
+      return MARKDOWN_HELLO;
+    }) as typeof fs.readFileSync);
+
+    await prerenderPosts(makeConfig({ footerHtml: "<p>FOOTER MARKER</p>" }));
+
+    const rootCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+      (c) => String(c[0]) === "/dist/index.html",
+    );
+    const rootHtml = rootCall![1] as string; // type-safety-ok: vitest mock call arg; same pattern as existing tests
+    expect(rootHtml).toContain("<footer><p>FOOTER MARKER</p></footer>");
+    expect(rootHtml).not.toContain("<footer></footer>");
+
+    const perPostCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+      (c) => String(c[0]).includes("post/hello-world"),
+    );
+    const perPostHtml = perPostCall![1] as string; // type-safety-ok: vitest mock call arg; same pattern as existing tests
+    expect(perPostHtml).toContain("<footer><p>FOOTER MARKER</p></footer>");
+    expect(perPostHtml).not.toContain("<footer></footer>");
+  });
+
+  it("leaves <footer> untouched when footerHtml is not provided", async () => {
+    vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
+      if (String(path).endsWith("index.html")) return TEMPLATE_WITH_FOOTER;
+      return MARKDOWN_HELLO;
+    }) as typeof fs.readFileSync);
+
+    await prerenderPosts(makeConfig());
+
+    const rootCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+      (c) => String(c[0]) === "/dist/index.html",
+    );
+    const rootHtml = rootCall![1] as string; // type-safety-ok: vitest mock call arg; same pattern as existing tests
+    expect(rootHtml).toContain("<footer></footer>");
+  });
+
+  it("throws when footerHtml is set but <footer> is absent", async () => {
+    // The default TEMPLATE_WITH_HERO has no <footer> element.
+    await expect(
+      prerenderPosts(makeConfig({ footerHtml: "<p>FOOTER MARKER</p>" })),
+    ).rejects.toThrow("<footer> marker not found in template");
+  });
+
   it("throws when homeExtraHtml is set but <section class=\"landing-hero\"> is absent", async () => {
     vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
       if (String(path).endsWith("index.html")) return TEMPLATE;
@@ -688,4 +748,113 @@ describe("prerenderPosts", () => {
       prerenderPosts(makeConfig({ homeExtraHtml: '<div class="showcase">SHOWCASE</div>' })),
     ).rejects.toThrow('<section class="landing-hero"> marker not found in template');
   });
+
+  // ── Shell path (opt-in ds-chrome seam — landing) ───────────────────────────
+  // The template ships an empty `<div id="root">` PageShell mount; shell mode
+  // injects a renderToString(<BlogPageShell…>) there instead of the legacy
+  // injectMain/injectNav/injectInfoPanel injectors. The <head> SEO injectors run
+  // regardless. The legacy cases above are untouched (fellspiral guard).
+  describe("shell path", () => {
+    const TEMPLATE_WITH_ROOT = `<!DOCTYPE html>
+<html>
+<head>
+  <title>My Blog</title>
+</head>
+<body>
+  <div id="root"></div>
+</body>
+</html>`;
+
+    function mockRootTemplate() {
+      vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
+        if (String(path).endsWith("index.html")) return TEMPLATE_WITH_ROOT;
+        return MARKDOWN_HELLO;
+      }) as typeof fs.readFileSync);
+    }
+
+    function shellOverride(): Partial<PrerenderConfig> {
+      return {
+        shell: {
+          mount: "root",
+          wordmark: "commons.systems",
+          hero: createElement(Hero, { headline: "Build with commons.systems", cards: [] }),
+          panelAriaLabel: "Context",
+        },
+      };
+    }
+
+    it("injects the ds PageShell at the mount on the home (/) page with the hero", async () => {
+      mockRootTemplate();
+      await prerenderPosts(makeConfig(shellOverride()));
+
+      const html = getRootHtml();
+      // The PageShell chrome was injected into the #root mount.
+      expect(html).toContain('<div id="root"><div class="page">');
+      expect(html).toContain('class="content-grid"');
+      expect(html).toContain("cs-nav");
+      expect(html).toContain('<aside id="info-panel"');
+      // Hero shows on home.
+      expect(html).toContain("hero-band-section");
+      expect(html).toContain("Build with commons.systems");
+      // The empty mount placeholder is gone.
+      expect(html).not.toContain('<div id="root"></div>');
+    });
+
+    it("omits the hero from per-post pages (off the home gate)", async () => {
+      mockRootTemplate();
+      await prerenderPosts(makeConfig(shellOverride()));
+
+      const perPostCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+        (c) => String(c[0]).includes("post/hello-world"),
+      );
+      const html = perPostCall![1] as string; // type-safety-ok: find() result asserted present by test; writeFileSync arg is always string
+      // Shell chrome still injected, but no hero on a post page.
+      expect(html).toContain('<div id="root"><div class="page">');
+      expect(html).toContain('class="content-grid"');
+      expect(html).not.toContain("hero-band-section");
+    });
+
+    it("keeps the <head> SEO intact (canonical + title) on home and post pages", async () => {
+      mockRootTemplate();
+      await prerenderPosts(
+        makeConfig({
+          ...shellOverride(),
+          siteDefaults: { title: "My Site", description: "Site description", image: "/og.png" },
+          organization: { name: "Example Org", url: "https://example.com", logo: "https://example.com/logo.svg", sameAs: [] },
+          author: { name: "Alice" },
+        }),
+      );
+
+      const rootHtml = getRootHtml();
+      expect(rootHtml).toContain('<link rel="canonical" href="https://example.com/">');
+      expect(rootHtml).toContain('<meta property="og:title" content="My Site">');
+      expect(rootHtml).toContain('"@type":"Organization"');
+
+      const perPostCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+        (c) => String(c[0]).includes("post/hello-world"),
+      );
+      const perPostHtml = perPostCall![1] as string; // type-safety-ok: find() result asserted present by test; writeFileSync arg is always string
+      expect(perPostHtml).toContain('<link rel="canonical" href="https://example.com/post/hello-world">');
+      expect(perPostHtml).toContain("<title>My Blog - Hello World</title>");
+      expect(perPostHtml).toContain('"@type":"BlogPosting"');
+    });
+
+    it("throws when the #root mount marker is absent from the template", async () => {
+      vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
+        if (String(path).endsWith("index.html")) return TEMPLATE; // no #root div
+        return MARKDOWN_HELLO;
+      }) as typeof fs.readFileSync);
+
+      await expect(prerenderPosts(makeConfig(shellOverride()))).rejects.toThrow(
+        '<div id="root"> mount marker not found in template',
+      );
+    });
+  });
+
+  function getRootHtml(): string {
+    const rootCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+      (c) => String(c[0]) === "/dist/index.html",
+    );
+    return rootCall![1] as string; // type-safety-ok: find() result asserted present by test; writeFileSync arg is always string
+  }
 });

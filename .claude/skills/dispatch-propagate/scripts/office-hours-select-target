@@ -120,6 +120,12 @@
 #     actively ticking and is NOT surfaced.
 #   empty
 #     None of the above exists.
+#   empty not-in-queue <N>
+#     Single-item mode (#2538) only: the targeted <N> is not a member of the
+#     office-hours queue. The first token is still `empty`, so a consumer's
+#     bucket dispatch is unchanged; the trailing `not-in-queue <N>` lets the
+#     entry script print a precise "issue #<N> is not in the office-hours queue"
+#     message instead of the generic queue-empty one.
 #
 # Single fail-safe convention: UNKNOWN → skip. When an item's liveness cannot be
 # determined (the daemon could not be queried for some worktree, and no worktree
@@ -142,6 +148,22 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
 source "$SCRIPT_DIR/lib-claude-agents.sh"
+
+# Optional positional <N>: target a single queue item instead of enumerating the
+# whole queue (#2538). With no arg, TARGET_N stays empty and the full-queue
+# enumeration runs unchanged. With <N>, the single-item branch (added after both
+# ISSUE_LIST and WORKTREE_PATHS_BY_NUM are built, and after the per-item helpers
+# are defined) runs the SAME per-item cascade against that one item. Reject a
+# non-numeric arg with a clear error rather than silently falling back
+# (.claude/rules/code-style.md).
+TARGET_N=""
+if (( $# > 0 )); then
+  if [[ ! "$1" =~ ^[0-9]+$ ]]; then
+    echo "office-hours-select-target: invalid target '$1' — expected a numeric issue number" >&2
+    exit 2
+  fi
+  TARGET_N="$1"
+fi
 
 # emit_blocker_signal <issue-num> — surface the selected item's open-blocker
 # status to STDERR as a SIGNAL, never a gate (generalizing the main-qa #1648
@@ -334,6 +356,141 @@ IDLE_CWD=""
 IDLE_NUM=""
 IDLE_WT_PATH=""
 SESSIONLESS_NUMS=()
+
+# try_emit_idle <num> <sid> <wt_path> <cwd> — emit the idle/idle-provision
+# disposition for an attachable issue, classified by the state of its session's
+# worktree (#2241). Dual present-worktree probe: BOTH the registered <N>-* path
+# and the session cwd are checked so an attach-in-place fires whenever either is
+# on disk.
+#   Bucket 1 — worktree present (registered path OR cwd on disk) → attach in
+#              place: emit `idle <sessionId>` and exit 0.
+#   Bucket 2 — worktree swept but `origin/<branch>` (branch = cwd basename) still
+#              exists → emit `idle-provision <sessionId> <branch>` and exit 0.
+#   Bucket 3 — swept with no recoverable remote, or no cwd → return 1 so the
+#              caller routes the issue into the fresh path.
+# Emits via `exit 0` (terminates the whole script, as the inline code did), never
+# `return 0`. The remote is probed via `git -C <main>` because the selector's own
+# cwd is not guaranteed to carry `origin`.
+try_emit_idle() {
+  local num="$1" sid="$2" wt_path="$3" cwd="$4" branch
+  if [[ -d "$wt_path" || -d "$cwd" ]]; then
+    emit_blocker_signal "$num"
+    printf 'idle %s\n' "$sid"
+    exit 0
+  elif [[ -n "$cwd" ]]; then
+    # Worktree swept. Its branch is the swept worktree's basename. Check the
+    # remote via `git -C <main>`; suppress output and branch on the exit code.
+    branch=$(basename "$cwd")
+    if git -C "$(resolve_main_worktree)" ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+      emit_blocker_signal "$num"
+      printf 'idle-provision %s %s\n' "$sid" "$branch"
+      exit 0
+    fi
+  fi
+  # Bucket 3: swept with no recoverable remote branch, or no cwd → fresh path.
+  return 1
+}
+
+# try_emit_resume <num> — TRI-STATE. Try to emit the resume/resume-provision
+# disposition for ONE sessionless-but-recoverable issue (#2240):
+#   exit 0 — emitted (the helper already exited the script).
+#   rc 1   — not recoverable → caller `continue`s to the next sessionless item.
+#   rc 2   — recoverable but worktree swept AND no remote → caller `break`s; the
+#            first recoverable issue settles the class and falls to the fresh path.
+try_emit_resume() {
+  local num="$1" rec_pair rec_sid rec_branch rec_cwd
+  rec_pair=$("$SCRIPT_DIR/dispatch-recover-session-id" --issue "$num") || return 1
+  IFS=$'\t' read -r rec_sid rec_branch <<< "$rec_pair"
+  [[ -z "$rec_sid" ]] && return 1
+  rec_cwd=$(printf '%s' "${WORKTREE_PATHS_BY_NUM[$num]:-}" | head -n 1)
+  if [[ -n "$rec_cwd" && -d "$rec_cwd" ]]; then
+    emit_blocker_signal "$num"
+    printf 'resume %s %s %s\n' "$num" "$rec_sid" "$rec_cwd"
+    exit 0
+  fi
+  # Worktree swept — provision from the remote branch if it still exists. Probe
+  # via `git -C <main>` (the selector's cwd is not guaranteed to carry origin),
+  # mirroring the idle-provision swept check.
+  if git -C "$(resolve_main_worktree)" ls-remote --exit-code --heads origin "$rec_branch" >/dev/null 2>&1; then
+    emit_blocker_signal "$num"
+    printf 'resume-provision %s %s %s\n' "$num" "$rec_sid" "$rec_branch"
+    exit 0
+  fi
+  return 2   # recoverable but swept+no-remote → caller breaks, falls to fresh
+}
+
+# emit_fresh <num> — emit the fresh `office-hours <N> <worktree-path>` dispatch
+# verb (#2387) for a sessionless issue and exit 0. main-qa override (#1648): a
+# fresh item carrying the `main-qa` label is a brand-new, no-PR, NO-WORKTREE
+# issue whose review needs no worktree (pure gh: read, present, close). Surface
+# the MAIN worktree as the spawn cwd instead so the entry dispatcher's `-` guard
+# never trips. The label is detected in the already-fetched ISSUE_LIST json (no
+# extra gh call); `.labels // []` stays null-tolerant for label-less items.
+emit_fresh() {
+  local num="$1" wt_path MAIN_WORKTREE
+  # The path to this item's <N>-* worktree (newline-separated values per key;
+  # take the first), or empty when no <N>-* worktree is registered.
+  wt_path=$(printf '%s' "${WORKTREE_PATHS_BY_NUM[$num]:-}" | head -n 1)
+  if jq -e --argjson n "$num" \
+       'any(.[]; .number == $n and ((.labels // []) | any(.name == "main-qa")))' \
+       <<<"$ISSUE_LIST" >/dev/null; then
+    if ! MAIN_WORKTREE="$(resolve_main_worktree)"; then
+      exit 1
+    fi
+    wt_path="$MAIN_WORKTREE"
+  fi
+  emit_blocker_signal "$num"
+  printf 'office-hours %s %s\n' "$num" "${wt_path:--}"
+  exit 0
+}
+
+# Single-item mode (#2538): with a positional <N>, run the SAME per-item cascade
+# the no-arg enumeration uses — Unit 1's issue_live_session_id + try_emit_idle /
+# try_emit_resume / emit_fresh — against that one item, then terminate. Every path
+# below exits, so the no-arg enumeration never runs in single-item mode.
+# parked-router is target-less (no issue number; discovered by scanning dispatch-*
+# sessions under worktrees/main) and is structurally NOT a disposition for issue
+# <N>, so the non-engageable arm emits `empty` rather than falling back to it
+# (acceptance criterion #3).
+if [[ -n "$TARGET_N" ]]; then
+  # Queue-membership precondition: <N> must be a live office-hours queue item.
+  # When it is NOT, emit the richer `empty not-in-queue <N>` verb (the first
+  # token stays `empty`, so every consumer's bucket dispatch is unchanged) so the
+  # entry script can print a precise "issue #<N> is not in the office-hours queue"
+  # message instead of the generic queue-empty one — a non-member targeted <N>
+  # (e.g. a typo) must not be told the queue is empty when other members exist.
+  if ! jq -e --argjson n "$TARGET_N" 'any(.[]; .number == $n)' <<<"$ISSUE_LIST" >/dev/null; then
+    echo "empty not-in-queue $TARGET_N"
+    exit 0
+  fi
+  tgt_wt_path=$(printf '%s' "${WORKTREE_PATHS_BY_NUM[$TARGET_N]:-}" | head -n 1)
+  tgt_rc=0
+  tgt_pair=$(issue_live_session_id "$TARGET_N") || tgt_rc=$?
+  case "$tgt_rc" in
+    0)  # attachable: pair is sessionId<TAB>cwd
+      IFS=$'\t' read -r tgt_sid tgt_cwd <<< "$tgt_pair"
+      try_emit_idle "$TARGET_N" "$tgt_sid" "$tgt_wt_path" "$tgt_cwd" || emit_fresh "$TARGET_N"
+      ;;
+    1)  # sessionless: try resume (codes 1 AND 2 both collapse to fresh in single-item mode)
+      try_emit_resume "$TARGET_N" || emit_fresh "$TARGET_N"
+      ;;
+    *)  # rc 2 (UNKNOWN) or rc 3 (working/busy/unrecognized): not engageable → empty.
+        # Single-item mode never reaches the parked-router block (see design note).
+        # Still surface the open-blocker signal for the TARGETED item (#2614): the
+        # blocker status is a "signal, not a gate", independent of whether <N> is
+        # currently being worked. The `/office-hours` skill's bare-<N> path calls
+        # this in single-item mode purely for the stderr advisory, and on the
+        # primary entry-launched path <N>'s own (busy) session is the one asking —
+        # which lands here at rc 3. Without this emit it would get no signal at
+        # all. emit_blocker_signal touches only stderr, never stdout/exit, so the
+        # `empty` disposition every consumer parses stays byte-identical.
+      emit_blocker_signal "$TARGET_N"
+      echo "empty"
+      exit 0
+      ;;
+  esac
+fi
+
 while IFS= read -r issue_num; do
   [[ -z "$issue_num" ]] && continue
   if pair=$(issue_live_session_id "$issue_num"); then
@@ -367,27 +524,14 @@ done <<< "$SORTED"
 #      swept-worktree diagnostic and exits — fresh fallback with a diagnostic,
 #      never a silent failure.
 if [[ -n "$IDLE_ID" ]]; then
-  if [[ -d "$IDLE_WT_PATH" || -d "$IDLE_CWD" ]]; then
-    emit_blocker_signal "$IDLE_NUM"
-    printf 'idle %s\n' "$IDLE_ID"
-    exit 0
-  elif [[ -n "$IDLE_CWD" ]]; then
-    # Worktree swept. Its branch is the swept worktree's basename. Check the
-    # remote via `git -C <main>` — the selector's own cwd is not guaranteed to be
-    # a repo carrying `origin`. Suppress output; branch on the exit code.
-    branch=$(basename "$IDLE_CWD")
-    if git -C "$(resolve_main_worktree)" ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
-      emit_blocker_signal "$IDLE_NUM"
-      printf 'idle-provision %s %s\n' "$IDLE_ID" "$branch"
-      exit 0
-    fi
-  fi
-  # Bucket 3: swept with no recoverable remote branch, or no cwd. Route into the
-  # fresh path for the chosen issue. Guard the overwrite so an older sessionless
-  # item already recorded during the loop is not dropped for a swept-unrecoverable
-  # attachable item (code-review #2241).
-  IDLE_ID=""
-  [[ -z "$FRESH_NUM" ]] && FRESH_NUM="$IDLE_NUM"
+  try_emit_idle "$IDLE_NUM" "$IDLE_ID" "$IDLE_WT_PATH" "$IDLE_CWD" || {
+    # Bucket 3: swept with no recoverable remote branch, or no cwd. Route the
+    # chosen issue into the fresh path. Guard the overwrite so an older sessionless
+    # item already recorded during the loop is not dropped for a swept-unrecoverable
+    # attachable item (code-review #2241).
+    IDLE_ID=""
+    [[ -z "$FRESH_NUM" ]] && FRESH_NUM="$IDLE_NUM"
+  }
 fi
 
 # Priority 2: a REMOVED-but-recoverable originating session (#2240). Reached only
@@ -405,26 +549,14 @@ fi
 # settles the class (mirrors the idle classifier's first-attachable-wins).
 for rec_num in "${SESSIONLESS_NUMS[@]:-}"; do
   [[ -z "$rec_num" ]] && continue
-  rec_pair=$("$SCRIPT_DIR/dispatch-recover-session-id" --issue "$rec_num") || continue
-  IFS=$'\t' read -r rec_sid rec_branch <<< "$rec_pair"
-  [[ -z "$rec_sid" ]] && continue
-  rec_cwd=$(printf '%s' "${WORKTREE_PATHS_BY_NUM[$rec_num]:-}" | head -n 1)
-  if [[ -n "$rec_cwd" && -d "$rec_cwd" ]]; then
-    emit_blocker_signal "$rec_num"
-    printf 'resume %s %s %s\n' "$rec_num" "$rec_sid" "$rec_cwd"
-    exit 0
-  fi
-  # Worktree swept — provision from the remote branch if it still exists. Probe
-  # via `git -C <main>` (the selector's cwd is not guaranteed to carry origin),
-  # mirroring the idle-provision swept check.
-  if git -C "$(resolve_main_worktree)" ls-remote --exit-code --heads origin "$rec_branch" >/dev/null 2>&1; then
-    emit_blocker_signal "$rec_num"
-    printf 'resume-provision %s %s %s\n' "$rec_num" "$rec_sid" "$rec_branch"
-    exit 0
-  fi
-  # Swept + no remote: the first recoverable issue settles the class and falls
-  # through to the fresh path (FRESH_NUM already holds the oldest sessionless item).
-  break
+  # `|| rc=$?` consumes the helper's non-zero so `set -e` does not abort here;
+  # the helper `exit 0`'s on emit, so the 0 case is unreachable (rc stays 0).
+  rc=0
+  try_emit_resume "$rec_num" || rc=$?
+  case "$rc" in
+    1) continue ;;                                       # not recoverable → next item
+    2) break ;;                                          # recoverable but swept+no-remote → fresh
+  esac
 done
 
 # Priority 3: pick up the oldest sessionless item fresh. The fresh disposition is
@@ -433,29 +565,7 @@ done
 # call, and so no `gh pr list`): /office-hours attaches a human-driven session
 # rather than threading an autonomous workflow.
 if [[ -n "$FRESH_NUM" ]]; then
-  # The path to this item's <N>-* worktree (newline-separated values per key;
-  # take the first), or empty when no <N>-* worktree is registered.
-  wt_path=$(printf '%s' "${WORKTREE_PATHS_BY_NUM[$FRESH_NUM]:-}" | head -n 1)
-  # main-qa override (#1648): a fresh item carrying the `main-qa` label is a
-  # needs-main QA follow-up — a brand-new, no-PR, NO-WORKTREE issue whose review
-  # disposition needs no worktree (pure gh: read the issue, present it, close it).
-  # It is the first office-hours kind reaching the queue without a prior phase
-  # having provisioned an <N>-* worktree, so wt_path is empty above. Surface the
-  # MAIN worktree as the spawn cwd instead: a real existing directory means the
-  # entry dispatcher's `-` guard never trips and fresh_session (in the entry
-  # script) uses it as the spawn --cwd. Detect the label in the already-fetched ISSUE_LIST json
-  # (no extra gh call); `.labels // []` stays null-tolerant for label-less items.
-  if jq -e --argjson n "$FRESH_NUM" \
-       'any(.[]; .number == $n and ((.labels // []) | any(.name == "main-qa")))' \
-       <<<"$ISSUE_LIST" >/dev/null; then
-    if ! MAIN_WORKTREE="$(resolve_main_worktree)"; then
-      exit 1
-    fi
-    wt_path="$MAIN_WORKTREE"
-  fi
-  emit_blocker_signal "$FRESH_NUM"
-  printf 'office-hours %s %s\n' "$FRESH_NUM" "${wt_path:--}"
-  exit 0
+  emit_fresh "$FRESH_NUM"
 fi
 
 # No resumable or sessionless labeled item. Fall back to surfacing a target-less parked

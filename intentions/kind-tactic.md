@@ -1,0 +1,46 @@
+---
+id: kind-tactic
+kind: kind
+statement: Tactic — a completable unit of execution
+owner: human
+status: codified
+parent: null
+serves: []
+rationale: >-
+  Tactics are the bottom layer: concrete, completable work. A tactic is not
+  always a leaf — it may be a subtree. An epic is a tactic whose children are
+  tactics, linked by `parent` edges.
+  Tactics are also the delegable layer — delegating a tactic is expected and
+  beneficial (it buys attention at the strategic level), and doing so creates
+  or extends a delegation record (kind-delegation) where the attachment is
+  assessed.
+
+
+  Transience. A tactic is transient: when it completes it is removed from the
+  graph, and its edges go with it. Completion is marked by the author or by the
+  dispatch workflow directly in the graph.
+
+
+  Authority. The graph is the sole store: every tactic is authored here, and
+  no external system feeds or mirrors tactic state. (Integration with an
+  external tracking system such as GitHub is a separate strategy; design TBD.)
+
+
+  Edges. `parent` links a tactic to a larger tactic. `serves` links a tactic
+  to the strategies it advances; populating `serves` is dialectic work.
+
+
+  Authoring test. If fully achieving it would make you delete the node, it is a
+  tactic; if achieving everything currently under it leaves a standing,
+  condition-monitored posture, it is a strategy.
+reading: null
+gap: null
+clarifications: []
+tooling_goals: []
+success_signal: null
+attributes:
+  goal_layer: true
+  fields:
+    - "attention: authored boost (adds to inherited rank, relative) XOR override (sets the value flowing through this branch), plus required rationale; resolved rank is computed on read by resolveAttention and never stored"
+---
+# Tactic — a completable unit of execution

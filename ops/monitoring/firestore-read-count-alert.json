@@ -1,0 +1,29 @@
+{
+  "displayName": "Firestore document read_count above daily baseline (#2688)",
+  "combiner": "OR",
+  "conditions": [
+    {
+      "displayName": "Firestore reads > 40000/hour sustained 30m",
+      "conditionThreshold": {
+        "filter": "metric.type=\"firestore.googleapis.com/document/read_count\" resource.type=\"firestore_instance\"",
+        "aggregations": [
+          {
+            "alignmentPeriod": "3600s",
+            "perSeriesAligner": "ALIGN_DELTA",
+            "crossSeriesReducer": "REDUCE_SUM"
+          }
+        ],
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 40000,
+        "duration": "1800s",
+        "trigger": {
+          "count": 1
+        }
+      }
+    }
+  ],
+  "documentation": {
+    "mimeType": "text/markdown",
+    "content": "See .claude/docs/monitoring-alerts.md for rationale and the owner apply/verify runbook (issue #2688)."
+  }
+}

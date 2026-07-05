@@ -12,8 +12,6 @@ import type { Plugin } from "vite";
 // at build time, never in the browser bundle.
 import { listNodes } from "../../packages/intentionsutil/src/store.js";
 import { activeFrontier } from "../../packages/intentionsutil/src/goals.js";
-import { listTrackers } from "../../packages/intentionsutil/src/tracker.js";
-import type { ExecutionTracker } from "@commons-systems/intentionsutil";
 
 const VIRTUAL_MODULE_ID = "virtual:office-hours-intention-tree-seed";
 const RESOLVED_VIRTUAL_MODULE_ID = "\0" + VIRTUAL_MODULE_ID;
@@ -62,23 +60,13 @@ export function officeHoursIntentionTreeSeedPlugin(): Plugin {
     buildStart() {
       const repoRoot = findRepoRoot(dirname(fileURLToPath(import.meta.url)));
       const intentionsDir = join(repoRoot, "intentions");
-      const trackersDir = join(repoRoot, "trackers");
 
       const nodes = listNodes(intentionsDir);
       const frontierIds = activeFrontier(nodes).map((n) => n.id);
 
-      // Guard the trackers dir: the store is sparse, and listTrackers does a
-      // readdirSync that throws on a missing dir. A missing dir or zero
-      // trackers must serialize an empty tracker map, never throw.
-      // (listTrackers already filters non-`.json` entries, so README.md is
-      // ignored.)
-      const trackerList = existsSync(trackersDir) ? listTrackers(trackersDir) : [];
-      const trackers: Record<string, ExecutionTracker> = {};
-      for (const t of trackerList) trackers[t.node_id] = t;
-
       // Slim each node to ONLY the fields the panel consumes, stripping
-      // rationale/reading/gap/clarifications/success_signal/tooling_goals
-      // (bundle size + #2371 deferral).
+      // rationale/reading/gap/clarifications/success_signal/tooling_goals/
+      // serves/recovers (bundle size + #2371 deferral).
       const slimNodes = nodes.map((n) => ({
         id: n.id,
         statement: n.statement,
@@ -87,9 +75,9 @@ export function officeHoursIntentionTreeSeedPlugin(): Plugin {
         parent: n.parent,
       }));
 
-      // The data is fully JSON-safe (strings/enums; ExecutionTracker.refreshed_at
-      // is a string), so plain JSON.stringify suffices — no Date handling.
-      moduleCode = `export default ${JSON.stringify({ nodes: slimNodes, frontierIds, trackers })};\n`;
+      // The data is fully JSON-safe (strings/enums), so plain JSON.stringify
+      // suffices — no Date handling.
+      moduleCode = `export default ${JSON.stringify({ nodes: slimNodes, frontierIds })};\n`;
     },
     resolveId(id) {
       if (id === VIRTUAL_MODULE_ID) return RESOLVED_VIRTUAL_MODULE_ID;

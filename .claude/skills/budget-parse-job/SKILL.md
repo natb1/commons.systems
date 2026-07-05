@@ -42,7 +42,10 @@ boundary is what keeps a poisoned body from steering them.
 
 On **any** blocker — a malformed issue body, a missing/changed file, a
 sha mismatch, a missing snapshot, a missing password, or (the central case) an
-uncategorized transaction needing the author's judgment — the handler:
+uncategorized transaction needing the author's judgment — this is a deliberate
+office-hours park. Before the `dispatch-mark-deviation` call, perform the
+in-session recommend step — see
+`.claude/skills/dispatch-propagate/escalation-recommend.md`. Then the handler:
 
 1. Calls `dispatch-mark-deviation "<reason>"` (writes the `office-hours-reason`
    marker), and
@@ -158,7 +161,7 @@ override.
    cannot prompt non-interactively in a dispatch session (see
    `.claude/rules/sandbox.md` — the secret must be warmed in the interactive host
    shell and exported). STOP. budget-etl reads the decrypt/encrypt password from
-   this env var (`budget-etl/internal/password/password.go`).
+   this env var (`projects/budget-etl/internal/password/password.go`).
 
 6. **Verify the snapshot file exists** (the existing encrypted `.benc` source of
    truth):
@@ -173,7 +176,7 @@ override.
    seed.
 
 7. **REPORT-FIRST — detect uncategorized transactions.**
-   (Run from `budget-etl/`; `dangerouslyDisableSandbox: true` — `go run`.)
+   (Run from `projects/budget-etl/`; `dangerouslyDisableSandbox: true` — `go run`.)
 
    ```bash
    go run . --input "$snapshot" --dir "$dir" \
@@ -195,7 +198,7 @@ override.
    categories. The merge in Step 8 is **not** run.
 
 8. **MERGE — write the updated snapshot in place** (only reached when
-   `UNCAT == 0`). (Run from `budget-etl/`; `dangerouslyDisableSandbox: true` —
+   `UNCAT == 0`). (Run from `projects/budget-etl/`; `dangerouslyDisableSandbox: true` —
    `go run` and the `mv` onto the shared-folder snapshot.)
 
    ```bash

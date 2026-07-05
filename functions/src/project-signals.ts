@@ -81,7 +81,11 @@
 //      on your Firebase CLI version):
 //        PROJECT_SIGNALS_GITHUB_REPO          — "owner/name" of the repo to track
 //        GOOGLE_ANALYTICS_CLIENT_ID           — OAuth client ID from step 2
-//        PROJECT_SIGNALS_GA4_PROPERTY_IDS     — "app:propertyId,app:propertyId,..."
+//        PROJECT_SIGNALS_GA4_PROPERTY_ID      — the single numeric GA4 property id
+//        PROJECT_SIGNALS_GA4_HOST_APPS        — "host:app,host:app,..." mapping each
+//                                               web-stream hostName to an app label
+//                                               (e.g. commons.systems:commons,
+//                                               budget.commons.systems:budget)
 //        PROJECT_SIGNALS_GSC_SITE             — defaults to "sc-domain:commons.systems"
 //                                               (covers all commons.systems subdomains;
 //                                               one site config suffices for the whole
@@ -107,9 +111,27 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret, defineString } from "firebase-functions/params";
 import { getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
-import type { Firestore } from "firebase-admin/firestore";
 import { mintInstallationToken } from "./office-hours-sync.js";
-import { truncateForLog } from "./log-utils.js";
+import {
+  fetchGithubStatsLive,
+  fetchGithubTrafficLive,
+  fetchGoogleAccessTokenLive,
+  fetchGa4Live,
+  fetchGscLive,
+  fetchPsiLive,
+  collectProjectSignalsCore,
+  isValidOwnerName,
+  isValidGscSite,
+  isValidPsiUrl,
+  parseGa4HostApps,
+  type GithubSignals,
+  type Ga4AppSignals,
+  type GscSignals,
+  type PsiUrlSignals,
+  type CollectProjectSignalsDeps,
+} from "./project-signals-core.js";
+
+export * from "./project-signals-core.js";
 
 // Reuse the SAME param names as office-hours-sync.ts / dispatch-queue-metrics.ts
 // so firebase-functions dedupes them across modules (params are keyed by name).
@@ -128,7 +150,8 @@ const GITHUB_REPO = defineString("PROJECT_SIGNALS_GITHUB_REPO"); // owner/name; 
 const GA4_CLIENT_SECRET = defineSecret("GOOGLE_ANALYTICS_CLIENT_SECRET");
 const GA4_REFRESH_TOKEN = defineSecret("GOOGLE_ANALYTICS_REFRESH_TOKEN");
 const GA4_CLIENT_ID = defineString("GOOGLE_ANALYTICS_CLIENT_ID");
-const GA4_PROPERTY_IDS = defineString("PROJECT_SIGNALS_GA4_PROPERTY_IDS"); // "app:propertyId,app:propertyId,..."
+const GA4_PROPERTY_ID = defineString("PROJECT_SIGNALS_GA4_PROPERTY_ID"); // single numeric GA4 property id
+const GA4_HOST_APPS = defineString("PROJECT_SIGNALS_GA4_HOST_APPS"); // "host:app,host:app,..." (e.g. commons.systems:commons,budget.commons.systems:budget)
 const GSC_SITE = defineString("PROJECT_SIGNALS_GSC_SITE", { default: "sc-domain:commons.systems" });
 
 // PSI. Keyless by default; the key only raises the rate limit.
@@ -140,516 +163,6 @@ const PSI_URLS = defineString("PROJECT_SIGNALS_PSI_URLS", {
 const PSI_STRATEGY = defineString("PROJECT_SIGNALS_PSI_STRATEGY", { default: "mobile" });
 
 const adminApp = getApps().length > 0 ? getApps()[0] : initializeApp();
-
-const GA4_WINDOW = { startDate: "30daysAgo", endDate: "today" };
-const GSC_WINDOW_DAYS = 28;
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-// ---------------------------------------------------------------------------
-// Wire-shape interfaces — the source of truth for the written documents.
-// ---------------------------------------------------------------------------
-
-export interface ProjectSignalsSnapshot {
-  computedAt: Date; // required; a Firestore Timestamp on the wire
-  groupId: string; // required
-  memberEmails: string[]; // required; denormalized auth field the rules read
-  github?: GithubSignals;
-  ga4?: Ga4AppSignals[]; // per app (app:propertyId config pairs)
-  gsc?: GscSignals; // single site
-  psi?: PsiUrlSignals[]; // per deployed-app URL
-}
-
-export interface GithubSignals {
-  repo: string; // owner/name
-  stars: number;
-  forks: number;
-  watchers: number;
-  // Traffic is SEPARATELY optional from stats: stars/forks/watchers are public,
-  // but traffic needs an elevated (push-access) token. When the token lacks
-  // traffic access the traffic endpoints 403; we omit `traffic` while still
-  // emitting the public stats.
-  traffic?: {
-    clonesCount: number;
-    clonesUniques: number;
-    viewsCount: number;
-    viewsUniques: number;
-    topReferrers: Array<{ referrer: string; count: number; uniques: number }>;
-  };
-}
-
-export interface Ga4AppSignals {
-  app: string;
-  pageViews: number;
-  sessions: number;
-  bounceRate: number;
-  topReferralSources: Array<{ source: string; sessions: number }>;
-  topLandingPages: Array<{ page: string; sessions: number; views: number }>;
-  // Empty until web_vitals custom defs are registered in each GA4 property; the
-  // align script's percentile aggregation is intentionally not collected here.
-  webVitals: Array<{ metric: string; avg: number; goodPct: number }>;
-}
-
-export interface GscSignals {
-  site: string;
-  topQueries: Array<{ query: string; clicks: number; impressions: number; ctr: number; position: number }>;
-  topPages: Array<{ page: string; clicks: number; impressions: number; ctr: number; position: number }>;
-  devices: Array<{ device: string; clicks: number; impressions: number; ctr: number; position: number }>;
-}
-
-export interface PsiUrlSignals {
-  url: string;
-  strategy: "mobile" | "desktop";
-  performance: number | null; // 0–100 integer; null when the category score is absent (script's "n/a")
-  seo: number | null;
-  accessibility: number | null;
-  bestPractices: number | null;
-  lcp: string; // Lighthouse displayValue strings (e.g. "2.1 s", "0.04")
-  cls: string;
-  tbt: string;
-  fcp: string;
-}
-
-// Appended to office-hours/{env}/signal-samples/{autoId} once per run. Headline
-// scalars only — each is omitted when its source did not contribute this run.
-interface ProjectSignalSample {
-  sampledAt: Date;
-  groupId: string;
-  memberEmails: string[];
-  stars?: number;
-  forks?: number;
-  pageViews?: number; // summed across GA4 apps
-  sessions?: number; // summed across GA4 apps
-  gscClicks?: number; // summed from topPages
-  gscImpressions?: number; // summed from topPages
-  psiPerformance?: number; // first-URL mobile performance
-}
-
-// ---------------------------------------------------------------------------
-// Per-source live fetchers. Each is small and pure: it takes an injected `fetch`
-// and config, and returns the parsed sub-object. Tests stub `fetch`.
-// ---------------------------------------------------------------------------
-
-type FetchFn = typeof globalThis.fetch;
-
-interface GithubRepoResponse {
-  stargazers_count: number;
-  forks_count: number;
-  watchers_count: number;
-}
-
-interface GithubTrafficCountResponse {
-  count: number;
-  uniques: number;
-}
-
-interface GithubReferrerResponse {
-  referrer: string;
-  count: number;
-  uniques: number;
-}
-
-// Fetches the public repo stats (stars/forks/watchers) via the REST repo
-// endpoint. Mirrors gather-context.sh line 42 (`repos/$OWNER_REPO`
-// {stargazers_count, forks_count, watchers_count}).
-export async function fetchGithubStatsLive(
-  fetchFn: FetchFn,
-  token: string,
-  repo: string,
-): Promise<Pick<GithubSignals, "repo" | "stars" | "forks" | "watchers">> {
-  const res = await fetchFn(`https://api.github.com/repos/${repo}`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/vnd.github+json",
-      "User-Agent": "project-signals/1.0",
-    },
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`GitHub repo stats request failed: ${res.status} ${truncateForLog(text)}`);
-  }
-  const json = (await res.json()) as GithubRepoResponse; // type-safety-ok: cast matches documented GitHub repo schema
-  return {
-    repo,
-    stars: json.stargazers_count,
-    forks: json.forks_count,
-    watchers: json.watchers_count,
-  };
-}
-
-// Fetches the three traffic endpoints (clones, views, popular/referrers). These
-// require push access and 403 otherwise; the caller treats any throw as "no
-// traffic access" and omits the `traffic` key. Not present in the align scripts
-// (constructed here from the documented REST traffic API).
-export async function fetchGithubTrafficLive(
-  fetchFn: FetchFn,
-  token: string,
-  repo: string,
-): Promise<NonNullable<GithubSignals["traffic"]>> {
-  const headers = {
-    Authorization: `Bearer ${token}`,
-    Accept: "application/vnd.github+json",
-    "User-Agent": "project-signals/1.0",
-  };
-  const getJson = async <T>(path: string): Promise<T> => {
-    const res = await fetchFn(`https://api.github.com/repos/${repo}/traffic/${path}`, { headers });
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`GitHub traffic/${path} request failed: ${res.status} ${truncateForLog(text)}`);
-    }
-    return (await res.json()) as T; // type-safety-ok: cast matches documented GitHub traffic schema
-  };
-
-  const [clones, views, referrers] = await Promise.all([
-    getJson<GithubTrafficCountResponse>("clones"),
-    getJson<GithubTrafficCountResponse>("views"),
-    getJson<GithubReferrerResponse[]>("popular/referrers"),
-  ]);
-
-  return {
-    clonesCount: clones.count,
-    clonesUniques: clones.uniques,
-    viewsCount: views.count,
-    viewsUniques: views.uniques,
-    topReferrers: referrers.map((r) => ({
-      referrer: r.referrer,
-      count: r.count,
-      uniques: r.uniques,
-    })),
-  };
-}
-
-// Exchanges a Google OAuth refresh token for a short-lived access token. Mirrors
-// fetch-analytics.sh lines 86-101. This single token authenticates BOTH GA4
-// runReport and GSC searchAnalytics.
-export async function fetchGoogleAccessTokenLive(
-  fetchFn: FetchFn,
-  creds: { clientId: string; clientSecret: string; refreshToken: string },
-): Promise<string> {
-  const body = new URLSearchParams({
-    client_id: creds.clientId,
-    client_secret: creds.clientSecret,
-    refresh_token: creds.refreshToken,
-    grant_type: "refresh_token",
-  });
-  const res = await fetchFn("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: body.toString(),
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Google OAuth token exchange failed: ${res.status} ${truncateForLog(text)}`);
-  }
-  const json = (await res.json()) as { access_token?: string };
-  if (!json.access_token) {
-    throw new Error("Google OAuth token response missing access_token");
-  }
-  return json.access_token;
-}
-
-interface Ga4RunReportResponse {
-  rows?: Array<{
-    dimensionValues?: Array<{ value?: string }>;
-    metricValues?: Array<{ value?: string }>;
-  }>;
-}
-
-// Posts the three stable GA4 runReport queries (overview, referral sources,
-// landing pages) for one property and parses them. Mirrors fetch-analytics.sh
-// Step 3 (a)/(b)/(c); the web-vitals query (d) is intentionally not run, so
-// webVitals is always []. `app`/`propertyId` are pre-validated by the caller.
-export async function fetchGa4Live(
-  fetchFn: FetchFn,
-  accessToken: string,
-  app: string,
-  propertyId: string,
-): Promise<Ga4AppSignals> {
-  const url = `https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`;
-  const runReport = async (reportBody: Record<string, unknown>): Promise<Ga4RunReportResponse> => {
-    const res = await fetchFn(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(reportBody),
-    });
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`GA4 runReport failed for ${app}: ${res.status} ${truncateForLog(text)}`);
-    }
-    return (await res.json()) as Ga4RunReportResponse; // type-safety-ok: cast matches documented GA4 runReport schema
-  };
-
-  const num = (v: string | undefined): number => {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : 0;
-  };
-
-  // (a) Overview: page views, sessions, bounce rate (30-day window).
-  const overview = await runReport({
-    dateRanges: [GA4_WINDOW],
-    metrics: [{ name: "screenPageViews" }, { name: "sessions" }, { name: "bounceRate" }],
-  });
-  const ov = overview.rows?.[0]?.metricValues ?? [];
-
-  // (b) Top-10 referral sources by sessions.
-  const referral = await runReport({
-    dateRanges: [GA4_WINDOW],
-    dimensions: [{ name: "sessionSource" }],
-    metrics: [{ name: "sessions" }],
-    orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
-    limit: 10,
-  });
-  const topReferralSources = (referral.rows ?? []).map((r) => ({
-    source: r.dimensionValues?.[0]?.value ?? "",
-    sessions: num(r.metricValues?.[0]?.value),
-  }));
-
-  // (c) Landing-page performance.
-  const landing = await runReport({
-    dateRanges: [GA4_WINDOW],
-    dimensions: [{ name: "landingPage" }],
-    metrics: [{ name: "sessions" }, { name: "screenPageViews" }],
-    orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
-    limit: 10,
-  });
-  const topLandingPages = (landing.rows ?? []).map((r) => ({
-    page: r.dimensionValues?.[0]?.value ?? "",
-    sessions: num(r.metricValues?.[0]?.value),
-    views: num(r.metricValues?.[1]?.value),
-  }));
-
-  return {
-    app,
-    pageViews: num(ov[0]?.value),
-    sessions: num(ov[1]?.value),
-    bounceRate: num(ov[2]?.value),
-    topReferralSources,
-    topLandingPages,
-    webVitals: [],
-  };
-}
-
-interface GscQueryResponse {
-  rows?: Array<{
-    keys?: string[];
-    clicks?: number;
-    impressions?: number;
-    ctr?: number;
-    position?: number;
-  }>;
-}
-
-// Posts the three GSC searchAnalytics queries (queries, pages, devices) for one
-// site and parses them. Mirrors fetch-analytics.sh Step 4 (lines 309-384). The
-// `site` is pre-validated by the caller and percent-encoded into the URL path.
-export async function fetchGscLive(
-  fetchFn: FetchFn,
-  accessToken: string,
-  site: string,
-  now: Date,
-): Promise<GscSignals> {
-  const encodedSite = encodeURIComponent(site);
-  const url = `https://searchconsole.googleapis.com/webmasters/v3/sites/${encodedSite}/searchAnalytics/query`;
-  const startDate = new Date(now.getTime() - GSC_WINDOW_DAYS * DAY_MS).toISOString().slice(0, 10);
-  const endDate = now.toISOString().slice(0, 10);
-
-  const query = async (reportBody: Record<string, unknown>): Promise<GscQueryResponse> => {
-    const res = await fetchFn(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(reportBody),
-    });
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`Search Console query failed: ${res.status} ${truncateForLog(text)}`);
-    }
-    return (await res.json()) as GscQueryResponse; // type-safety-ok: cast matches documented GSC searchAnalytics schema
-  };
-
-  const mapRow = (key: string) => (r: NonNullable<GscQueryResponse["rows"]>[number]) => ({
-    [key]: r.keys?.[0] ?? "",
-    clicks: r.clicks ?? 0,
-    impressions: r.impressions ?? 0,
-    ctr: r.ctr ?? 0,
-    position: r.position ?? 0,
-  });
-
-  const queryReport = await query({ startDate, endDate, dimensions: ["query"], rowLimit: 25 });
-  const pageReport = await query({ startDate, endDate, dimensions: ["page"], rowLimit: 25 });
-  const deviceReport = await query({ startDate, endDate, dimensions: ["device"] });
-
-  return {
-    site,
-    topQueries: (queryReport.rows ?? []).map(mapRow("query")) as GscSignals["topQueries"], // type-safety-ok: mapRow output matches the GscSignals field shape
-    topPages: (pageReport.rows ?? []).map(mapRow("page")) as GscSignals["topPages"], // type-safety-ok: mapRow output matches the GscSignals field shape
-    devices: (deviceReport.rows ?? []).map(mapRow("device")) as GscSignals["devices"], // type-safety-ok: mapRow output matches the GscSignals field shape
-  };
-}
-
-interface PsiResponse {
-  lighthouseResult?: {
-    categories?: Record<string, { score?: number | null } | undefined>;
-    audits?: Record<string, { displayValue?: string } | undefined>;
-  };
-}
-
-// Queries the PSI / Lighthouse-lab API once for one URL+strategy and parses the
-// four category scores (0–100 integers; null when absent) and the four lab
-// metric displayValue strings. Mirrors fetch-psi.sh lines 95-140. CrUX field
-// data is intentionally not collected. `apiKey` is optional (keyless default).
-export async function fetchPsiLive(
-  fetchFn: FetchFn,
-  url: string,
-  strategy: "mobile" | "desktop",
-  apiKey: string | undefined,
-): Promise<PsiUrlSignals> {
-  const params = new URLSearchParams();
-  params.append("url", url);
-  params.append("strategy", strategy);
-  for (const c of ["performance", "seo", "accessibility", "best-practices"]) {
-    params.append("category", c);
-  }
-  if (apiKey) params.append("key", apiKey);
-
-  const res = await fetchFn(
-    `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?${params.toString()}`,
-  );
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`PSI request failed for ${url}: ${res.status} ${truncateForLog(text)}`);
-  }
-  const json = (await res.json()) as PsiResponse; // type-safety-ok: cast matches documented PSI runPagespeed schema
-  const cats = json.lighthouseResult?.categories ?? {};
-  const audits = json.lighthouseResult?.audits ?? {};
-
-  // Category score 0–1 float → 0–100 integer via round (matches Lighthouse's own
-  // rounding); null/absent → null (the script's "n/a").
-  const score = (cat: string): number | null => {
-    const s = cats[cat]?.score;
-    return s === null || s === undefined ? null : Math.round(s * 100);
-  };
-  const display = (audit: string): string => audits[audit]?.displayValue ?? "n/a";
-
-  return {
-    url,
-    strategy,
-    performance: score("performance"),
-    seo: score("seo"),
-    accessibility: score("accessibility"),
-    bestPractices: score("best-practices"),
-    lcp: display("largest-contentful-paint"),
-    cls: display("cumulative-layout-shift"),
-    tbt: display("total-blocking-time"),
-    fcp: display("first-contentful-paint"),
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Dependency-injected core — mirrors sampleDispatchQueueCore. Each source runs
-// under its own try/catch; the snapshot is assembled from whichever succeeded;
-// a failed/dormant source's key is omitted via conditional spread.
-// ---------------------------------------------------------------------------
-
-export interface CollectProjectSignalsDeps {
-  firestore: Firestore;
-  namespace: string;
-  groupId: string;
-  memberEmails: string[];
-  now: Date;
-  // Each fetcher is null when its source is unconfigured (skipped entirely).
-  fetchGithub: (() => Promise<GithubSignals>) | null;
-  fetchGa4: (() => Promise<Ga4AppSignals[]>) | null;
-  fetchGsc: (() => Promise<GscSignals>) | null;
-  fetchPsi: (() => Promise<PsiUrlSignals[]>) | null;
-}
-
-export async function collectProjectSignalsCore(deps: CollectProjectSignalsDeps): Promise<void> {
-  let github: GithubSignals | undefined;
-  let ga4: Ga4AppSignals[] | undefined;
-  let gsc: GscSignals | undefined;
-  let psi: PsiUrlSignals[] | undefined;
-
-  if (deps.fetchGithub) {
-    try {
-      github = await deps.fetchGithub();
-    } catch (err) {
-      console.error(
-        `collectProjectSignals: github source failed: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-  }
-  if (deps.fetchGa4) {
-    try {
-      ga4 = await deps.fetchGa4();
-    } catch (err) {
-      console.error(
-        `collectProjectSignals: ga4 source failed: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-  }
-  if (deps.fetchGsc) {
-    try {
-      gsc = await deps.fetchGsc();
-    } catch (err) {
-      console.error(
-        `collectProjectSignals: gsc source failed: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-  }
-  if (deps.fetchPsi) {
-    try {
-      psi = await deps.fetchPsi();
-    } catch (err) {
-      console.error(
-        `collectProjectSignals: psi source failed: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-  }
-
-  // Build the snapshot. OMIT a failed/dormant source's key (never write
-  // undefined — firebase-admin rejects it).
-  const snapshot: ProjectSignalsSnapshot = {
-    computedAt: deps.now,
-    groupId: deps.groupId,
-    memberEmails: deps.memberEmails,
-    ...(github ? { github } : {}),
-    ...(ga4 ? { ga4 } : {}),
-    ...(gsc ? { gsc } : {}),
-    ...(psi ? { psi } : {}),
-  };
-  await deps.firestore.doc(`${deps.namespace}/metrics/project-signals`).set(snapshot);
-
-  // Headline-scalar time-series sample. Each scalar is omitted when its source
-  // did not contribute this run.
-  const pageViews = ga4 ? ga4.reduce((sum, a) => sum + a.pageViews, 0) : undefined;
-  const sessions = ga4 ? ga4.reduce((sum, a) => sum + a.sessions, 0) : undefined;
-  const gscClicks = gsc
-    ? gsc.topPages.reduce((sum, p) => sum + p.clicks, 0)
-    : undefined;
-  const gscImpressions = gsc
-    ? gsc.topPages.reduce((sum, p) => sum + p.impressions, 0)
-    : undefined;
-  const psiPerformance =
-    psi && psi.length > 0 && psi[0].performance !== null ? psi[0].performance : undefined;
-
-  const sample: ProjectSignalSample = {
-    sampledAt: deps.now,
-    groupId: deps.groupId,
-    memberEmails: deps.memberEmails,
-    ...(github ? { stars: github.stars, forks: github.forks } : {}),
-    ...(pageViews !== undefined ? { pageViews } : {}),
-    ...(sessions !== undefined ? { sessions } : {}),
-    ...(gscClicks !== undefined ? { gscClicks } : {}),
-    ...(gscImpressions !== undefined ? { gscImpressions } : {}),
-    ...(psiPerformance !== undefined ? { psiPerformance } : {}),
-  };
-  await deps.firestore.collection(`${deps.namespace}/signal-samples`).add(sample);
-}
 
 // ---------------------------------------------------------------------------
 // Scheduled top-level wrapper.
@@ -751,7 +264,8 @@ export const collectProjectSignals = onSchedule(
     const ga4ClientId = GA4_CLIENT_ID.value();
     const ga4ClientSecret = GA4_CLIENT_SECRET.value();
     const ga4RefreshToken = GA4_REFRESH_TOKEN.value();
-    const ga4PropertyIds = GA4_PROPERTY_IDS.value();
+    const ga4PropertyId = GA4_PROPERTY_ID.value();
+    const ga4HostApps = parseGa4HostApps(GA4_HOST_APPS.value());
     const gscSite = GSC_SITE.value();
     if (!ga4ClientId || !ga4ClientSecret || !ga4RefreshToken) {
       console.log("collectProjectSignals: skipping ga4+gsc: Google OAuth not configured");
@@ -770,13 +284,14 @@ export const collectProjectSignals = onSchedule(
         return tokenPromise;
       };
 
-      const ga4Pairs = parseGa4Pairs(ga4PropertyIds);
-      if (ga4Pairs.length === 0) {
-        console.log("collectProjectSignals: skipping ga4: no valid app:propertyId pairs configured");
+      if (!/^\d+$/.test(ga4PropertyId)) {
+        console.log("collectProjectSignals: skipping ga4: missing/invalid PROJECT_SIGNALS_GA4_PROPERTY_ID");
+      } else if (ga4HostApps.length === 0) {
+        console.log("collectProjectSignals: skipping ga4: no valid host:app entries configured");
       } else {
         fetchGa4 = async (): Promise<Ga4AppSignals[]> => {
           const token = await googleToken();
-          return Promise.all(ga4Pairs.map((p) => fetchGa4Live(fetchFn, token, p.app, p.propertyId)));
+          return fetchGa4Live(fetchFn, token, ga4PropertyId, ga4HostApps);
         };
       }
 
@@ -785,9 +300,9 @@ export const collectProjectSignals = onSchedule(
           `collectProjectSignals: PROJECT_SIGNALS_GSC_SITE "${gscSite}" is not a valid sc-domain:/https:// site; skipping gsc.`,
         );
       } else {
-        fetchGsc = async (): Promise<GscSignals> => {
+        fetchGsc = async (now: Date): Promise<GscSignals> => {
           const token = await googleToken();
-          return fetchGscLive(fetchFn, token, gscSite, new Date());
+          return fetchGscLive(fetchFn, token, gscSite, now);
         };
       }
     }
@@ -842,38 +357,3 @@ export const collectProjectSignals = onSchedule(
     }
   },
 );
-
-// ---- Validation helpers (exported for testing) ----------------------------
-
-export function isValidOwnerName(repo: string): boolean {
-  const slash = repo.indexOf("/");
-  return slash > 0 && slash !== repo.length - 1 && repo.indexOf("/", slash + 1) === -1;
-}
-
-export function isValidGscSite(site: string): boolean {
-  return /^(sc-domain:[A-Za-z0-9.-]+|https:\/\/[A-Za-z0-9._/-]+)$/.test(site);
-}
-
-export function isValidPsiUrl(url: string): boolean {
-  return /^https:\/\/[A-Za-z0-9._/-]+$/.test(url);
-}
-
-// Parses "app:propertyId,app:propertyId,..." into validated pairs. An app name
-// must match [A-Za-z0-9_-]+ (echoed into a header), a property id must be numeric
-// (interpolated into a URL path). Invalid pairs are dropped. Mirrors
-// fetch-analytics.sh lines 120-140.
-export function parseGa4Pairs(raw: string): Array<{ app: string; propertyId: string }> {
-  return raw
-    .split(",")
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0)
-    .map((pair) => {
-      const idx = pair.indexOf(":");
-      if (idx <= 0) return null;
-      const app = pair.slice(0, idx);
-      const propertyId = pair.slice(idx + 1);
-      if (!/^[A-Za-z0-9_-]+$/.test(app) || !/^\d+$/.test(propertyId)) return null;
-      return { app, propertyId };
-    })
-    .filter((p): p is { app: string; propertyId: string } => p !== null);
-}

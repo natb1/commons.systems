@@ -22,7 +22,7 @@ import {
   SITE_URL,
 } from "../src/site-config.js";
 import { About, AboutPanel } from "../src/pages/About.js";
-import { renderShowcase } from "../src/showcase-render.js";
+import { buildShowcaseHero } from "../src/hero-config.tsx";
 
 const distDir = join(dirname(new URL(import.meta.url).pathname), "..", "dist");
 const postDir = join(distDir, "..", "post");
@@ -51,6 +51,13 @@ try {
     aboutContent: <AboutPanel />,
     jsonLdBlocks: [personJsonLd(PERSON)],
     relMe: REL_ME,
+    shell: {
+      mount: "root",
+      wordmark: "commons.systems",
+      tagline: "Know the software that runs your business.",
+      hero: buildShowcaseHero(PROJECTS, OVERFLOW_PROJECTS),
+      panelAriaLabel: "Info",
+    },
     showHomeLink: false,
   });
 } catch (err) {
@@ -76,7 +83,13 @@ try {
     author: AUTHOR,
     relMe: REL_ME,
     softwareApplications: [...PROJECTS, ...OVERFLOW_PROJECTS],
-    homeExtraHtml: renderShowcase(PROJECTS, OVERFLOW_PROJECTS),
+    shell: {
+      mount: "root",
+      wordmark: "commons.systems",
+      tagline: "Know the software that runs your business.",
+      hero: buildShowcaseHero(PROJECTS, OVERFLOW_PROJECTS),
+      panelAriaLabel: "Info",
+    },
     showHomeLink: false,
   });
 } catch (err) {

@@ -89,15 +89,15 @@ axis above: a vulnerability follow-up is `bug` type **and** `security` topic.
 Apply **at most one** topic label. The 'at most one' rule applies
 only to the topic axis — `security`, `dispatch`, `testing infrastructure`,
 `budget`, `landing`, `fellspiral`, `print`, and `audio`.
-`priority` is a separate axis (an escalation marker) and may be applied
-alongside a topic label.
+`priority` is a separate axis (a cap/pacing bypass marker, not a queue-ordering
+signal) and may be applied alongside a topic label.
 
 - **`security`** — marks a vulnerability or security-hardening follow-up, e.g.
   a CodeQL alert or npm advisory surfaced by review. Ranks first in
   `dispatch-select-target` queue selection, so a `security` item outranks a
-  plain-`bug` item at the same priority level. Orthogonal to the type axis: a
-  vulnerability fix is `bug` type + `security` topic. Keyword signals:
-  "vulnerability", "CodeQL", "advisory", "CVE", "security finding".
+  plain-`bug` item. Orthogonal to the type axis: a vulnerability fix is `bug`
+  type + `security` topic. Keyword signals: "vulnerability", "CodeQL",
+  "advisory", "CVE", "security finding".
 
 - **`dispatch`** — concerns the `/dispatch` or `/dispatch-propagate` workflow,
   one of its phase skills (`/plan-issue`, `/implement`, `/fix-checks`, `/qa-fix`,
@@ -134,7 +134,7 @@ alongside a topic label.
   queue selection. Keyword signals: "fellspiral".
 
 - **`budget`** — concerns the budget app: the `budget/` frontend or the
-  `budget-etl/` pipeline. Ranks below `fellspiral` and above `print` in
+  `projects/budget-etl/` pipeline. Ranks below `fellspiral` and above `print` in
   `dispatch-select-target` queue selection. Keyword signals: "budget",
   "budget-etl", "QFX/OFX", "bank statement", "categorization", "budget.json".
 
@@ -146,11 +146,16 @@ alongside a topic label.
   above the `other` fallback in `dispatch-select-target` queue selection.
   Keyword signals: "audio", "audio app".
 
-- **`priority`** — a separate axis from the topic labels above. A
-  human-applied escalation marker that routes the issue (or any PR closing it)
-  ahead of non-priority items across all topic categories in `/dispatch-propagate` queue selection. Apply only
-  when a human explicitly asks to escalate; `/file-issue` never applies it
-  automatically. May be combined with any topic label.
+- **`priority`** — a separate axis from the topic labels above. Means exactly
+  one thing: cap/pacing bypass in the dispatch chain — it enables the at-cap
+  `--priority-only` probe and exempts the issue from dispatch-tick pace-curve
+  throttling. It does NOT order the queue; queue ordering comes from
+  intention-graph ranks. Legitimate writers: the three chain-health escalation
+  scripts (`dispatch-diagnose-main`, `dispatch-escalate-sync-broken`,
+  `dispatch-tick-recover`) and a human deliberately requesting cap bypass.
+  Human escalation for ordering must be done by authoring an attention boost on
+  the issue's intention node in git — not by applying this label. `/file-issue`
+  never applies it automatically. May be combined with any topic label.
 
 - **Neither** — apply no topic label when nothing matches. There is no
   "other" sentinel label.

@@ -43,6 +43,38 @@
         { "fieldPath": "memberEmails", "arrayConfig": "CONTAINS" },
         { "fieldPath": "sampledAt", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "usage-samples",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "memberEmails", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "sampledAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "topic-usage",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "memberEmails", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "media",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "publicDomain", "order": "ASCENDING" },
+        { "fieldPath": "addedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "media",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "memberEmails", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "addedAt", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

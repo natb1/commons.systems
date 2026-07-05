@@ -84,10 +84,11 @@
 #       dispatch-spawn-tick IS
 #       chain-critical, so it installs dispatch-tick-recover.service to
 #       guarantee a chain continuation; the sweep needs no such guarantee.
-#   (b) NO ensure_daemon_service call. The sweep does not host the fleet — the
-#       durable-daemon ownership (#1197) is dispatch-spawn-tick's concern.
-#       KillMode=process alone suffices to protect the sweep's short-lived
-#       `claude agents --json` calls from reaping the daemon.
+#   (b) NO daemon-service install call. The sweep does not arm or host the
+#       fleet — the durable-daemon service is now owned by home-manager (nix,
+#       #2736), not by any dispatch script. KillMode=process alone suffices to
+#       protect the sweep's short-lived `claude agents --json` calls from
+#       reaping the daemon.
 #
 # Stdout protocol (exactly one word on every success path):
 #   spawned    the transient sweep unit was created (exit 0).

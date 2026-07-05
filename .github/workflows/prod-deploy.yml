@@ -10,11 +10,13 @@ on:
       - ".claude/**"
       - ".github/**"
       - "nix/**"
-      - "scaffolding/**"
+      - "projects/scaffolding/**"
+      - "packages/upload-media/**"
       - "packages/rules-test/**"
       - "*.md"
       - "*.nix"
       - "flake.lock"
+      - "intentions/**"
 
 permissions:
   contents: read

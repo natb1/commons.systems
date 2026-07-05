@@ -1,18 +1,17 @@
-// React port of the capacity history band (history-band.ts). The two history
-// charts are imperative Observable Plot cores (renderUsageHistoryChart /
-// renderWorkerHistoryChart) that build a detached element from a samples array.
-// They stay untouched — this component wraps each as a chart island: an effect
-// appends the core's returned element into a ref'd <div> and returns a teardown
-// that empties it, so React removes the prior render before re-running on a data
-// change or on unmount (mirrors budget's CategorySankey island).
+// React port of the capacity history band (history-band.ts). The worker-history
+// chart is an imperative Observable Plot core (renderWorkerHistoryChart) that
+// builds a detached element from a samples array. It stays untouched — this
+// component wraps it as a chart island: an effect appends the core's returned
+// element into a ref'd <div> and returns a teardown that empties it, so React
+// removes the prior render before re-running on a data change or on unmount
+// (mirrors budget's CategorySankey island).
 //
 // The section structure and class names match renderHistoryBand verbatim:
-// section.capacity-history > h2.capacity-history-heading ("HISTORY") + the two
-// chart islands. Each core renders its own empty-state element for an empty
+// section.capacity-history > h2.capacity-history-heading ("HISTORY") + the
+// chart island. The core renders its own empty-state element for an empty
 // samples array, so empty-state is delegated exactly as in the vanilla band.
 import { useEffect, useRef } from "react";
 import { type UsageSample } from "../usage-samples.js";
-import { renderUsageHistoryChart } from "../usage-history-chart.js";
 import { renderWorkerHistoryChart } from "../worker-history-chart.js";
 
 export interface HistoryBandProps {
@@ -53,15 +52,14 @@ function ChartIsland({
 }
 
 /**
- * The capacity history band: the usage-history chart above the worker-history
- * chart over the full usage-samples time series. Each chart is an imperative
- * Observable Plot island; empty-state is delegated to the cores.
+ * The capacity history band: the worker-history chart (active vs target
+ * workers) over the full usage-samples time series. The chart is an imperative
+ * Observable Plot island; empty-state is delegated to the core.
  */
 export function HistoryBand({ samples, className }: HistoryBandProps) {
   return (
     <section className={className ? `capacity-history ${className}` : "capacity-history"}>
       <h2 className="capacity-history-heading">HISTORY</h2>
-      <ChartIsland samples={samples} build={renderUsageHistoryChart} />
       <ChartIsland samples={samples} build={renderWorkerHistoryChart} />
     </section>
   );

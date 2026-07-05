@@ -1,4 +1,4 @@
-export { validateNode, OWNERS, STATUSES, TOOLING_KINDS } from "./schema.js";
+export { validateNode, validateGraph, OWNERS, STATUSES, TOOLING_KINDS } from "./schema.js";
 export type {
   IntentionNode,
   Owner,
@@ -7,13 +7,16 @@ export type {
   Clarification,
   ToolingGoal,
   ToolingKind,
+  Attention,
 } from "./schema.js";
-export { IntentionSchemaError, ghErrorText } from "./errors.js";
+export { resolveAttention } from "./attention.js";
+export type { ResolvedAttention, TermContribution } from "./attention.js";
+export { IntentionSchemaError } from "./errors.js";
 export { writeNode, readNode, listNodes } from "./store.js";
-export { writeTracker, readTracker, listTrackers, nodeIdToIssue, issueToNodeId } from "./tracker.js";
-export type { ExecutionTracker } from "./tracker.js";
 export { projectGoals, activeFrontier, realizationForOwner, renderFrontier } from "./goals.js";
 export type { Goal, Realization } from "./goals.js";
+export { detectRung } from "./rungs.js";
+export type { Rung } from "./rungs.js";
 export {
   SensorRegistry,
   readNodeSignal,

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createElement } from "react";
+import { Hero } from "@commons-systems/ds";
 import {
   prerenderStaticPage,
   loadPostsForPrerender,
@@ -26,6 +27,21 @@ const TEMPLATE = `<!DOCTYPE html>
   <section class="landing-hero">default hero marker</section>
   <main id="app"></main>
   <aside id="info-panel" class="sidebar"></aside>
+</body>
+</html>`;
+
+const TEMPLATE_WITH_FOOTER = `<!DOCTYPE html>
+<html>
+<head>
+  <meta name="description" content="Default site description">
+  <title>My Blog</title>
+</head>
+<body>
+  <nav><app-nav id="nav"></app-nav></nav>
+  <section class="landing-hero">default hero marker</section>
+  <main id="app"></main>
+  <aside id="info-panel" class="sidebar"></aside>
+  <footer></footer>
 </body>
 </html>`;
 
@@ -332,6 +348,36 @@ describe("prerenderStaticPage", () => {
     );
   });
 
+  it("injects footerHtml into <footer> when provided", () => {
+    vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
+      if (String(path).endsWith("index.html")) return TEMPLATE_WITH_FOOTER;
+      throw new Error(`Unexpected readFileSync: ${path}`);
+    }) as typeof fs.readFileSync);
+
+    prerenderStaticPage(makeStaticConfig({ footerHtml: "<p>FOOTER MARKER</p>" }));
+    const html = getWrittenHtml("/dist/about/index.html");
+    expect(html).toContain("<footer><p>FOOTER MARKER</p></footer>");
+    expect(html).not.toContain("<footer></footer>");
+  });
+
+  it("leaves <footer> untouched when footerHtml is not provided", () => {
+    vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
+      if (String(path).endsWith("index.html")) return TEMPLATE_WITH_FOOTER;
+      throw new Error(`Unexpected readFileSync: ${path}`);
+    }) as typeof fs.readFileSync);
+
+    prerenderStaticPage(makeStaticConfig());
+    const html = getWrittenHtml("/dist/about/index.html");
+    expect(html).toContain("<footer></footer>");
+  });
+
+  it("throws when footerHtml is set but <footer> is absent", () => {
+    // The default TEMPLATE has no <footer> element.
+    expect(() =>
+      prerenderStaticPage(makeStaticConfig({ footerHtml: "<p>FOOTER MARKER</p>" })),
+    ).toThrow("<footer> marker not found in template");
+  });
+
   it("throws when stripHero is true (default) and the landing-hero marker is absent", () => {
     vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
       if (String(path).endsWith("index.html"))
@@ -341,6 +387,91 @@ describe("prerenderStaticPage", () => {
     expect(() => prerenderStaticPage(makeStaticConfig())).toThrow(
       '<section class="landing-hero"> marker not found in template',
     );
+  });
+
+  // ── Shell path (opt-in ds-chrome seam — landing /about) ────────────────────
+  // The template ships an empty `<div id="root">` PageShell mount; shell mode
+  // injects renderToString(<BlogPageShell…>) there, requires `aboutContent` for
+  // the panel, and gates the hero off (page.url !== "/"). The <head> SEO runs
+  // regardless. The legacy cases above are untouched (fellspiral guard).
+  describe("shell path", () => {
+    const TEMPLATE_WITH_ROOT = `<!DOCTYPE html>
+<html>
+<head>
+  <meta name="description" content="Default site description">
+  <title>My Blog</title>
+</head>
+<body>
+  <div id="root"></div>
+</body>
+</html>`;
+
+    beforeEach(() => {
+      vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
+        if (String(path).endsWith("index.html")) return TEMPLATE_WITH_ROOT;
+        throw new Error(`Unexpected readFileSync: ${path}`);
+      }) as typeof fs.readFileSync);
+    });
+
+    function shellStaticConfig(overrides: Partial<StaticPageConfig> = {}): StaticPageConfig {
+      return makeStaticConfig({
+        aboutContent: createElement(
+          "section",
+          { className: "profile-card" },
+          createElement("p", { className: "profile-name" }, "Nathan Buesgens"),
+        ),
+        shell: {
+          mount: "root",
+          wordmark: "commons.systems",
+          // hero is set but must be gated OFF for an off-home static page.
+          hero: createElement(Hero, { headline: "SHOULD NOT APPEAR", cards: [] }),
+          panelAriaLabel: "Context",
+        },
+        ...overrides,
+      });
+    }
+
+    it("injects the ds PageShell at the mount with the about panel, no hero", () => {
+      prerenderStaticPage(shellStaticConfig());
+      const html = getWrittenHtml("/dist/about/index.html");
+      expect(html).toContain('<div id="root"><div class="page">');
+      expect(html).toContain('class="content-grid"');
+      expect(html).toContain("cs-nav");
+      expect(html).toContain('<aside id="info-panel"');
+      expect(html).toContain("profile-card");
+      expect(html).toContain("Nathan Buesgens");
+      // /about is off the home gate — no hero.
+      expect(html).not.toContain("hero-band-section");
+      expect(html).not.toContain("SHOULD NOT APPEAR");
+      expect(html).not.toContain('<div id="root"></div>');
+    });
+
+    it("keeps the <head> SEO intact (canonical + title + og)", () => {
+      prerenderStaticPage(shellStaticConfig());
+      const html = getWrittenHtml("/dist/about/index.html");
+      expect(html).toContain('<link rel="canonical" href="https://example.com/about">');
+      expect(html).toContain("<title>My Blog - About</title>");
+      expect(html).toContain('<meta property="og:title" content="About">');
+      // The homepage default description is stripped; the page description remains.
+      expect(html).not.toContain("Default site description");
+      expect(html).toContain('content="About this site"');
+    });
+
+    it("throws when shell mode is used without aboutContent for the panel", () => {
+      expect(() =>
+        prerenderStaticPage(shellStaticConfig({ aboutContent: undefined })),
+      ).toThrow("shell mode requires aboutContent for the panel");
+    });
+
+    it("throws when the #root mount marker is absent from the template", () => {
+      vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
+        if (String(path).endsWith("index.html")) return TEMPLATE; // no #root div
+        throw new Error(`Unexpected readFileSync: ${path}`);
+      }) as typeof fs.readFileSync);
+      expect(() => prerenderStaticPage(shellStaticConfig())).toThrow(
+        '<div id="root"> mount marker not found in template',
+      );
+    });
   });
 });
 

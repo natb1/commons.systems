@@ -38,7 +38,7 @@ test.describe("navigation", () => {
     );
     await page.goto("/");
     await expect(page.locator("header h1")).toHaveText("commons.systems");
-    await expect(page.locator("app-nav")).toBeVisible();
+    await expect(page.locator("nav.cs-nav")).toBeVisible();
     await expect(page.locator("main")).toBeVisible();
     await expect(page.locator("footer")).toBeVisible();
   });
@@ -87,7 +87,7 @@ test.describe("navigation", () => {
       route.fulfill({ body: "# Test\nContent." }),
     );
     await page.goto("/admin");
-    await page.click('app-nav a[href="/"]');
+    await page.click('nav.cs-nav a[href="/"]');
     await expect(page.locator("main h2").first()).toBeVisible();
   });
 

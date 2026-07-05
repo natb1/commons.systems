@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+
 import { getDemoIssueSamples } from "../src/issue-data.js";
 
 describe("getDemoIssueSamples", () => {

@@ -24,13 +24,13 @@
 #                                   dispatch-self-close's continuation invariant
 #                                   keeps alive. No skill is loaded.
 #   office-hours <N> <worktree-path>
-#                                 → launch a BARE `--bg` session named
+#                                 → launch a `--bg` session named
 #                                   office-hours-<N>, with cwd = that worktree
-#                                   (2nd field) — no skill loaded, no prompt, so
-#                                   it boots interactive and parks awaiting the
-#                                   human, who attaches and drives the work
-#                                   manually (#2387). Then attach the human to
-#                                   it. Born in the worktree, the session's
+#                                   (2nd field), booting the `/office-hours <N>`
+#                                   review-and-recommend skill (#2520). The skill
+#                                   reviews the item, presents best-next-steps,
+#                                   and STOPS — the human then attaches and
+#                                   drives. Born in the worktree, the session's
 #                                   branch is <N>-..., so the strip hook clears
 #                                   the dispatch:office-hours label. EXCEPTION:
 #                                   for main-qa items, cwd is the main worktree
@@ -77,6 +77,11 @@
 #   empty                         → print a queue-empty message and exit WITHOUT
 #                                   launching Claude. The empty queue is handled
 #                                   entirely in bash; no session is booted.
+#   empty not-in-queue <N>        → single-item mode (#2538): the targeted <N> is
+#                                   not a queue member. Print a precise "issue #<N>
+#                                   is not in the office-hours queue" message and
+#                                   exit WITHOUT launching. Same `empty` bucket;
+#                                   the trailing fields only refine the message.
 #
 # Open-blocker advisory: the selector may print a `NOTE —` open-blocker line to
 # STDERR for the selected item (a signal, not a gate). This script captures only
@@ -103,6 +108,17 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/lib-claude-agents.sh"
+
+# Optional positional <N>: target a specific queue item by issue number.
+if [[ $# -gt 0 ]]; then
+  if [[ ! "$1" =~ ^[0-9]+$ ]]; then
+    echo "office-hours: invalid target '$1' — expected a numeric issue number. Usage: office-hours [<N>]" >&2
+    exit 2
+  fi
+  TARGET_N="$1"
+else
+  TARGET_N=""
+fi
 
 # Launch target only. The selector reads CLAUDE_AGENTS_CMD from the environment
 # for its own liveness queries (default `claude`); this script does not set it.
@@ -208,24 +224,18 @@ resume_session() {
   attach_session_by_name "$name"
 }
 
-# fresh_session <N> <wt> — spawn a BARE fresh office-hours-<N> session (no skill,
-# no prompt) rooted in the <N>-* worktree, that parks awaiting the human, who
-# attaches and drives the work manually (#2387). Office-hours is now a pure
-# dispatcher: it selects an item and attaches a human-driven session — it loads
-# no skill and threads no phase/pr.
+# fresh_session <N> <wt> — spawn a fresh office-hours-<N> session rooted in the
+# <N>-* worktree, booting the `/office-hours <N>` review-and-recommend skill
+# (#2520). The skill reviews the item, presents best-next-steps, and STOPS —
+# the human then attaches by name and drives. This replaces the bare promptless
+# spawn (#2387): office-hours is no longer a pure dispatcher; it now boots a
+# one-shot skill so the human arrives to a ready recommendation, not a blank
+# session.
 #
-# Kick a PROMPTLESS, NON-resume --bg job named office-hours-<N>, rooted at <wt>
-# via a subshell `cd` so SessionStart-derived attributes key on the right
-# directory. Without a -p/--print prompt the --bg launch boots interactive and
-# parks awaiting input — the same promptless-parking behavior resume_session
-# documents for its resume arm — so the human can attach and drive. (This
-# promptless-parking behavior is confirmed at QA: it is a manual check that needs
-# the live Claude daemon and cannot run here/in CI. The documented fallback, if
-# the promptless kick does NOT park, is to add a minimal benign non-skill prose
-# prompt to the single kick line below — e.g. "Office-hours session for issue
-# #$N — a human will drive this; await their input." — a one-line change, NOT a
-# `/…` skill/phase prompt. Do not implement the fallback unless QA shows parking
-# does not hold.)
+# Kick a NON-resume --bg job named office-hours-<N>, rooted at <wt> via a
+# subshell `cd` so SessionStart-derived attributes key on the right directory.
+# The positional `/office-hours <N>` arg boots the review-and-recommend skill;
+# after it runs and stops the session waits for the human to attach and drive.
 #
 # A successful spawn requires BOTH a clean kick AND verified registration:
 # `claude --bg` returns BEFORE the daemon registers the session, so gate on
@@ -236,16 +246,16 @@ resume_session() {
 fresh_session() {
   local num="$1" cwd="$2" name="office-hours-$1" rc=0
   ( cd "$cwd" && "$CLAUDE_CMD" --bg --name "$name" --permission-mode auto \
-      ) >/dev/null 2>&1 || rc=$?
+      "/office-hours $num" ) >/dev/null 2>&1 || rc=$?
   if [[ "$rc" -ne 0 ]] || ! verify_agent_registered_under "$name" "$cwd"; then
-    echo "office-hours: failed to launch a fresh bare session for #$num under name $name in $cwd (the --bg kick failed to register a live session). Run 'claude agents' to inspect." >&2
+    echo "office-hours: failed to launch a fresh session for #$num under name $name in $cwd (the --bg kick failed to register a live session). Run 'claude agents' to inspect." >&2
     exit 1
   fi
   attach_session_by_name "$name"
 }
 
 # One call to the single source of truth; dispatch on the returned verb.
-directive=$("$SCRIPT_DIR/office-hours-select-target")
+directive=$("$SCRIPT_DIR/office-hours-select-target" ${TARGET_N:+"$TARGET_N"})
 read -r verb a b c d <<< "$directive"
 case "$verb" in
   idle|parked-router)
@@ -254,9 +264,10 @@ case "$verb" in
     attach_session "$a"
     ;;
   office-hours)
-    # a b = <N> <worktree-path>. Launch a BARE --bg session named office-hours-<N>,
-    # rooted in the <N>-* worktree — no skill loaded, no prompt, so it parks
-    # awaiting the human, who attaches and drives the work manually (#2387).
+    # a b = <N> <worktree-path>. Launch a --bg session named office-hours-<N>,
+    # rooted in the <N>-* worktree, booting the `/office-hours <N>`
+    # review-and-recommend skill (#2520) — the skill reviews the item, presents
+    # best-next-steps, and stops; the human then attaches and drives.
     # fresh_session does the kick, the registration gate, and the attach. Rooting
     # it in the worktree clears the dispatch:office-hours label for non-main-qa
     # items (the strip hook resolves <N> from the cwd branch); for main-qa items
@@ -303,7 +314,16 @@ case "$verb" in
     resume_session "$b" "$a" "$(resolve_project_root)/worktrees/$c"
     ;;
   empty)
-    echo "office-hours: queue is empty — nothing to resume or start."
+    # Single-item mode (#2538): the selector emits `empty not-in-queue <N>` when
+    # the targeted <N> is absent from the queue (a = not-in-queue, b = <N>). Print
+    # a precise diagnostic for that case so a non-member <N> (e.g. a typo) is not
+    # falsely told the queue is empty when other members exist. The bare `empty`
+    # (a unset) keeps the truly-empty-queue message.
+    if [[ "$a" == "not-in-queue" ]]; then
+      echo "office-hours: issue #$b is not in the office-hours queue — nothing to resume or start for it."
+    else
+      echo "office-hours: queue is empty — nothing to resume or start."
+    fi
     exit 0
     ;;
   *)

@@ -7,12 +7,8 @@ import { renderLocalIntoList } from "../local-folder-ui.js";
 import type { MediaItem } from "../types.js";
 import { mediaTypeBadge } from "../media-render.js";
 
-function renderMediaList(items: MediaItem[]): string {
-  if (items.length === 0) {
-    return '<p id="media-empty">No media items available.</p>';
-  }
-
-  const rows = items
+function renderMediaRows(items: MediaItem[]): string {
+  return items
     .map((item) => {
       return `<li class="media-item" data-id="${escapeHtml(item.id)}">
         <div class="media-info">
@@ -28,8 +24,21 @@ function renderMediaList(items: MediaItem[]): string {
       </li>`;
     })
     .join("\n");
+}
 
-  return `<ul id="media-list">${rows}</ul>`;
+// Bumped on every fresh `loadMediaHtml()` render. Each in-flight "Load more"
+// fetch captures the generation live at click time and re-checks it before
+// mutating the DOM, so a fetch started under one render/viewer that resolves
+// after a fresh page-1 render has replaced `#media-list` is discarded instead
+// of splicing stale (possibly different-viewer) items into the current view.
+let renderGeneration = 0;
+
+function renderMediaList(items: MediaItem[]): string {
+  if (items.length === 0) {
+    return '<p id="media-empty">No media items available.</p>';
+  }
+
+  return `<ul id="media-list">${renderMediaRows(items)}</ul>`;
 }
 
 async function handleDownload(button: HTMLButtonElement): Promise<void> {
@@ -67,14 +76,64 @@ async function handleDownload(button: HTMLButtonElement): Promise<void> {
 }
 
 export async function loadMediaHtml(): Promise<string> {
+  renderGeneration++;
   try {
-    const items = await listCloud();
-    return renderMediaList(items);
+    const page = await listCloud();
+    let html = renderMediaList(page.items);
+    if (page.nextCursor !== null) {
+      html += `<button id="load-more-btn" data-cursor="${escapeHtml(page.nextCursor)}">Load more</button>`;
+    }
+    return html;
   } catch (error) {
     if (error instanceof DataIntegrityError) throw error;
     logError(error, { operation: "load-media" });
     return '<p id="media-error">Could not load media library.</p>';
   }
+}
+
+/**
+ * Delegated "Load more" wiring: attach ONE click listener to a stable element
+ * (registered once on the persistent `#app` root in main.tsx, mirroring
+ * `wireDownloadActions`). Fetches the next cloud page via the button's stored
+ * cursor and APPENDS its rows to the END of `#media-list` — local items stay
+ * prepended at the top, cloud pages grow downward. Re-rendered buttons are
+ * handled by the same listener because it delegates rather than binding the
+ * button directly.
+ */
+export function wireLoadMore(outlet: HTMLElement): void {
+  outlet.addEventListener("click", (e) => {
+    if (!(e.target instanceof HTMLElement)) return;
+    const btn = e.target.closest<HTMLButtonElement>("#load-more-btn");
+    if (!btn) return;
+    const cursor = btn.dataset.cursor;
+    if (!cursor) {
+      logError(new Error("Load more button missing data-cursor attribute"), { operation: "load-more" });
+      return;
+    }
+    // Capture the render generation live at click time. If a fresh page-1
+    // render replaces `#media-list` before this fetch resolves, the generation
+    // no longer matches and the stale results are discarded.
+    const generation = renderGeneration;
+    // Guard against concurrent clicks while the fetch is in flight.
+    btn.disabled = true;
+    void (async () => {
+      try {
+        const page = await listCloud({ cursor });
+        if (generation !== renderGeneration) return;
+        const ul = outlet.querySelector<HTMLUListElement>("#media-list");
+        if (ul) ul.insertAdjacentHTML("beforeend", renderMediaRows(page.items));
+        if (page.nextCursor !== null) {
+          btn.dataset.cursor = page.nextCursor;
+          btn.disabled = false;
+        } else {
+          btn.remove();
+        }
+      } catch (err) {
+        logError(err, { operation: "load-more" });
+        btn.disabled = false;
+      }
+    })();
+  });
 }
 
 export function wireDownloadActions(outlet: HTMLElement): void {

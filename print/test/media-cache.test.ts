@@ -4,8 +4,6 @@ import {
   MAX_CACHE_BYTES,
   getFile,
   putFile,
-  getChunk,
-  putChunk,
   clearCache,
   closeDb,
 } from "../src/media-cache";
@@ -51,58 +49,6 @@ describe("putFile / getFile round-trip", () => {
 
     const result = await getFile("images/photo.jpg");
     expect(new Uint8Array(result!)).toEqual(new Uint8Array([50, 60, 70, 80]));
-  });
-});
-
-describe("putChunk / getChunk round-trip", () => {
-  it("stores and retrieves a chunk", async () => {
-    const data = new Uint8Array([10, 20, 30, 40, 50]);
-    await putChunk("archive.zip", 0, 5, data);
-
-    const result = await getChunk("archive.zip", 0, 5);
-    expect(result).not.toBeNull();
-    expect(result!).toEqual(data);
-  });
-
-  it("returns null for a chunk cache miss", async () => {
-    const result = await getChunk("archive.zip", 0, 100);
-    expect(result).toBeNull();
-  });
-
-  it("stores chunks with different offsets independently", async () => {
-    const chunk1 = new Uint8Array([1, 2, 3]);
-    const chunk2 = new Uint8Array([4, 5, 6]);
-
-    await putChunk("archive.zip", 0, 3, chunk1);
-    await putChunk("archive.zip", 3, 3, chunk2);
-
-    const result1 = await getChunk("archive.zip", 0, 3);
-    const result2 = await getChunk("archive.zip", 3, 3);
-
-    expect(result1!).toEqual(chunk1);
-    expect(result2!).toEqual(chunk2);
-  });
-
-  it("stores chunks with different lengths independently", async () => {
-    const chunk1 = new Uint8Array([1, 2]);
-    const chunk2 = new Uint8Array([1, 2, 3, 4]);
-
-    await putChunk("archive.zip", 0, 2, chunk1);
-    await putChunk("archive.zip", 0, 4, chunk2);
-
-    const result1 = await getChunk("archive.zip", 0, 2);
-    const result2 = await getChunk("archive.zip", 0, 4);
-
-    expect(result1!).toEqual(chunk1);
-    expect(result2!).toEqual(chunk2);
-  });
-
-  it("returns null when path matches but offset differs", async () => {
-    const data = new Uint8Array([1, 2, 3]);
-    await putChunk("archive.zip", 0, 3, data);
-
-    const result = await getChunk("archive.zip", 10, 3);
-    expect(result).toBeNull();
   });
 });
 
@@ -168,26 +114,6 @@ describe("LRU eviction", () => {
     vi.restoreAllMocks();
   });
 
-  it("evicts the oldest-accessed chunk entry when cache exceeds MAX_CACHE_BYTES", { timeout: 30_000 }, async () => {
-    const size = 300 * 1024 * 1024;
-    const chunk1 = new Uint8Array(size);
-    const chunk2 = new Uint8Array(size);
-
-    vi.spyOn(Date, "now").mockReturnValue(1000);
-    await putChunk("file.bin", 0, size, chunk1);
-
-    vi.mocked(Date.now).mockReturnValue(2000);
-    await putChunk("file.bin", size, size, chunk2);
-
-    const result1 = await getChunk("file.bin", 0, size);
-    const result2 = await getChunk("file.bin", size, size);
-
-    expect(result1).toBeNull();
-    expect(result2).not.toBeNull();
-
-    vi.restoreAllMocks();
-  });
-
   it("evicts multiple entries if needed to fit incoming data", { timeout: 30_000 }, async () => {
     const size = 200 * 1024 * 1024;
     const bufA = new ArrayBuffer(size);
@@ -229,13 +155,11 @@ describe("clearCache", () => {
   it("removes all file entries", async () => {
     await putFile("a.bin", new ArrayBuffer(32));
     await putFile("b.bin", new ArrayBuffer(32));
-    await putChunk("c.bin", 0, 16, new Uint8Array(16));
 
     await clearCache();
 
     expect(await getFile("a.bin")).toBeNull();
     expect(await getFile("b.bin")).toBeNull();
-    expect(await getChunk("c.bin", 0, 16)).toBeNull();
   });
 });
 

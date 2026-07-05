@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "budget",
-      "description": "Convert QFX/OFX/CSV bank statements to budget.json on your machine — no signup, no data sharing",
+      "description": "Sync your QFX/OFX/CSV bank statements into an encrypted budget snapshot on your machine — no signup, no data sharing",
       "version": "0.1.0",
       "author": {
         "name": "Nate",
@@ -17,7 +17,7 @@
       },
       "source": "./.claude-plugin/budget-bundle/budget",
       "category": "productivity",
-      "tags": ["budget", "finance", "etl", "qfx", "ofx", "csv"]
+      "tags": ["budget", "finance", "sync", "qfx", "ofx", "csv"]
     }
   ]
 }
