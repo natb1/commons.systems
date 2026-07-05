@@ -205,12 +205,17 @@ describe("bounded timeout option (case 6)", () => {
 });
 
 describe("isTransientError (case 7)", () => {
-  it.each(["HTTP 503", "ECONNRESET", "Request timed out"])(
-    "true for transient %s",
-    (msg) => {
-      expect(isTransientError(msg)).toBe(true);
-    },
-  );
+  it.each([
+    "HTTP 503",
+    "ECONNRESET",
+    "Request timed out",
+    // The real APIRequestContext per-request `{ timeout }` message shape — the
+    // exact hang signal this PR retries. Anchored on "Timeout <n>ms exceeded" so
+    // the narrowed regex still catches it without swallowing a bare "exceeded".
+    "apiRequestContext.get: Timeout 10000ms exceeded.",
+  ])("true for transient %s", (msg) => {
+    expect(isTransientError(msg)).toBe(true);
+  });
 
   it.each(["boom", "HTTP 404"])("false for non-transient %s", (msg) => {
     expect(isTransientError(msg)).toBe(false);

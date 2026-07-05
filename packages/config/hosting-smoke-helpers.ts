@@ -3,14 +3,14 @@ import type { APIRequestContext, APIResponse } from "@playwright/test";
 /**
  * True when an error/response message indicates a transient failure worth
  * retrying: HTTP 429, any HTTP 5xx, a rate-limit / availability phrase, or a
- * Playwright timeout/hang shape. Mirrors `isTransientGhError` in
- * `packages/intentionsutil/scripts/backfill.ts`, extended with the
+ * Playwright timeout/hang shape. Mirrors the retry pattern historically used by
+ * the repo's now-removed GitHub-API retry helper, extended with the
  * timeout/deadline vocabulary Playwright's request context surfaces when a
  * per-request `{ timeout }` fires. A deterministic failure (e.g. HTTP 404) is
  * NOT transient — it must fail unmasked so a real regression is not hidden.
  */
 export function isTransientError(message: string): boolean {
-  return /HTTP 429|HTTP 5\d\d|Service Unavailable|Bad Gateway|ECONNRESET|connection reset|secondary rate limit|abuse detection|retry your request|temporarily unavailable|i\/o timeout|deadline exceeded|TLS handshake|Timeout|timed out|exceeded/i.test(
+  return /HTTP 429|HTTP 5\d\d|Service Unavailable|Bad Gateway|ECONNRESET|connection reset|secondary rate limit|abuse detection|retry your request|temporarily unavailable|i\/o timeout|deadline exceeded|TLS handshake|timed out|Timeout \d+ms exceeded/i.test(
     message,
   );
 }
@@ -42,14 +42,14 @@ export interface RetryOpts {
 
 /**
  * Retry a single fetch, but ONLY on transient signals:
- *   - the RESOLVED response has a 5xx status (`[500, 600)`), or
+ *   - the RESOLVED response has a 429 or 5xx status (`[500, 600)`), or
  *   - `doFetch()` THROWS an error whose `.message` matches `isTransientError`.
  *
- * A `<500` resolved response is returned immediately (no retry) — a genuine
+ * Any other resolved response is returned immediately (no retry) — a genuine
  * 200-with-wrong-header or a 404 must fail unmasked. A non-transient throw is
  * rethrown immediately for the same reason.
  *
- * On exhaustion: the status path returns the last 5xx response (so the
+ * On exhaustion: the status path returns the last 429/5xx response (so the
  * caller's `expect(status).toBe(200)` fails downstream); the throw path
  * rethrows the last transient error, augmented with the attempt count.
  *
@@ -93,15 +93,15 @@ export async function fetchWithRetry(
     }
 
     lastResponse = response;
-    if (response.status() >= 500 && response.status() < 600) {
+    if (response.status() === 429 || (response.status() >= 500 && response.status() < 600)) {
       if (attempt < attempts) {
         await sleep(delayMs * 2 ** (attempt - 1));
         continue;
       }
-      // Budget exhausted — return the last 5xx so the caller's assertion fails.
+      // Budget exhausted — return the last 429/5xx so the caller's assertion fails.
       return response;
     }
-    // <500: return immediately, no retry.
+    // Non-transient status: return immediately, no retry.
     return response;
   }
 

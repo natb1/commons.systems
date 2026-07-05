@@ -3163,7 +3163,7 @@ wait_for_stable_propagation() {
     # BARE curl so a PATH shim can intercept it in the Unit 4 test. `|| true`
     # keeps a curl failure (e.g. connection refused, empty %{http_code}) from
     # aborting under `set -e`; an empty/non-200 status just fails the check.
-    status=$(curl -s -o "$tmphtml" -w '%{http_code}' "$base_url" || true)
+    status=$(curl -s --connect-timeout 5 --max-time 10 -o "$tmphtml" -w '%{http_code}' "$base_url" || true)
     last_status="$status"
 
     if [[ "$status" != "200" ]]; then
@@ -3187,7 +3187,7 @@ wait_for_stable_propagation() {
         echo "wait_for_stable_propagation: $last_fail — resetting consecutive count" >&2
         consecutive=0
       else
-        asset_status=$(curl -s -o /dev/null -w '%{http_code}' "$base_url$asset_path" || true)
+        asset_status=$(curl -s --connect-timeout 5 --max-time 10 -o /dev/null -w '%{http_code}' "$base_url$asset_path" || true)
         if [[ "$asset_status" != "200" ]]; then
           last_fail="asset $asset_path returned $asset_status (want 200)"
           echo "wait_for_stable_propagation: $last_fail — resetting consecutive count" >&2
