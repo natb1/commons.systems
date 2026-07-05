@@ -408,6 +408,18 @@ process_one_target() {
   # --- Step 5: resolve the worktree ------------------------------------------
   WT_DECISION=$("$SCRIPT_DIR/dispatch-resolve-worktree" "$n" "$mode") || {
     echo "dispatch-materialize-spawn: dispatch-resolve-worktree failed for #$n ($mode)" >&2
+    # Queue/fan-out rows are best-effort: a resolve failure on one selected target
+    # must SKIP that target and let the tick continue, not abort the whole
+    # fan-out. The canonical case (PR #2752): a `pr` row whose branch prefix is
+    # NOT its closing-issue number — the branch `<N>-*` → issue-number heuristic
+    # (the `%%-*` strip in the fan-out consumer) hands dispatch-resolve-worktree a
+    # number that names a PR, which the issue-keyed resolver rejects (#926). One
+    # such malformed row otherwise wedged every tick with exit 2. An
+    # explicitly-named target stays a hard error the user should see.
+    if [[ "$mode" == "queue" ]]; then
+      OUTCOME=resolve-skip
+      return 0
+    fi
     return 2
   }
   WT_ACTION="${WT_DECISION%% *}"
@@ -612,6 +624,12 @@ if [[ "$MODE" == "explicit" ]] || (( GAP <= 1 )); then
       fi
       ;;
     worktree-conflict) DLOG_DISPOSITION="drain"; DLOG_DETAIL="worktree-conflict"; echo "drain worktree-conflict" ;;
+    resolve-skip)
+      # Queue-mode dispatch-resolve-worktree failure on a single (gap<=1) target:
+      # the selected row could not be resolved to a worktree (canonical case: a
+      # `pr` row whose branch prefix names a PR, not an issue — PR #2752). Skip it
+      # rather than abort; drain re-evaluates the queue next tick.
+      DLOG_DISPOSITION="drain"; DLOG_DETAIL="resolve-skip"; echo "drain resolve-skip" ;;
     preflight-abort)
       # Pre-spawn preflight (#2041) aborted this spawn before any slot was
       # reserved. drain (autonomous) re-selects the target next tick; notify
@@ -700,6 +718,8 @@ record_outcome() {
       case "$OUTCOME" in
         worktree-conflict)
           echo "dispatch-materialize-spawn: #$cur_n $OUTCOME during fan-out (continuing to next target)" >&2 ;;
+        resolve-skip)
+          echo "dispatch-materialize-spawn: #$cur_n resolve-worktree failed during fan-out (skipping; continuing to next target)" >&2 ;;
       esac
       ;;
   esac

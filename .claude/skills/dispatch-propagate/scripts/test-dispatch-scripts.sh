@@ -30518,10 +30518,13 @@ assert_eq "trace-leaf fail: no spawn" "0" \
   "$([ -f "$TMPDIR_TEST/logs/launch-worker.log" ] && echo 1 || echo 0)"
 mat_teardown
 
-# --- resolve-worktree internal failure → exit 2, lock released, no spawn ------
-# An internal sub-script failure before dispatch-finalize-selection must release
-# the lock so a stuck holder does not wedge the next tick.
-echo "Test: materialize-spawn resolve-worktree failure → exit 2 + lock released"
+# --- queue-mode resolve-worktree failure → skip (drain), lock released --------
+# A resolve failure on a QUEUE row is best-effort: one malformed selected target
+# (canonical case: a `pr` row whose branch prefix names a PR, not an issue — the
+# `%%-*` → issue-number heuristic hands the issue-keyed resolver a PR number it
+# rejects, PR #2752) must SKIP and let the tick continue, not abort. Single
+# (gap<=1) queue target → `drain resolve-skip`, exit 0, lock released, no spawn.
+echo "Test: materialize-spawn queue resolve-worktree failure → drain resolve-skip"
 mat_setup
 cat > "$TMPDIR_TEST/dispatch-resolve-worktree" <<'STUB'
 #!/usr/bin/env bash
@@ -30530,9 +30533,30 @@ exit 1
 STUB
 chmod +x "$TMPDIR_TEST/dispatch-resolve-worktree"
 out=$(run_mat 839 queue) && rc=0 || rc=$?
-assert_eq "resolve-wt fail: exit 2" "2" "$rc"
-assert_eq "resolve-wt fail: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
-assert_eq "resolve-wt fail: no spawn" "0" \
+assert_eq "resolve-wt fail (queue): exit 0" "0" "$rc"
+assert_eq "resolve-wt fail (queue): drain resolve-skip token" "drain resolve-skip" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "resolve-wt fail (queue): lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "resolve-wt fail (queue): no spawn" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/launch-worker.log" ] && echo 1 || echo 0)"
+mat_teardown
+
+# --- explicit-mode resolve-worktree failure → still a hard exit 2 -------------
+# An explicitly-named target is strict: a resolve failure stays a loud exit 2
+# (lock released) so a directly-named bad target is never silently skipped. The
+# soft-skip above is queue-only.
+echo "Test: materialize-spawn explicit resolve-worktree failure → exit 2 + lock released"
+mat_setup
+cat > "$TMPDIR_TEST/dispatch-resolve-worktree" <<'STUB'
+#!/usr/bin/env bash
+echo "resolve-worktree gh failure" >&2
+exit 1
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-resolve-worktree"
+out=$(run_mat 839 explicit) && rc=0 || rc=$?
+assert_eq "resolve-wt fail (explicit): exit 2" "2" "$rc"
+assert_eq "resolve-wt fail (explicit): lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "resolve-wt fail (explicit): no spawn" "0" \
   "$([ -f "$TMPDIR_TEST/logs/launch-worker.log" ] && echo 1 || echo 0)"
 mat_teardown
 
