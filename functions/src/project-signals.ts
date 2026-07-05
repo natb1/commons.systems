@@ -1,7 +1,6 @@
 // collectProjectSignals — scheduled Firebase Function that gathers every
 // available project signal (GitHub stats + traffic, GA4, Google Search Console,
-// PageSpeed Insights) server-side on a schedule and persists durable snapshots,
-// mirroring the dispatch-queue-metrics.ts collector.
+// PageSpeed Insights) server-side on a schedule and persists durable snapshots.
 //
 // WIRE SHAPE IS THE SOURCE OF TRUTH. The interfaces below define exactly what is
 // written to Firestore; the office-hours app re-declares the read shape
@@ -27,9 +26,10 @@
 // DROPPED — they are not in those scripts' stable output.
 //
 // Authentication:
-//   - GitHub: reuses the syncOfficeHours GitHub App auth (`mintInstallationToken`
-//     imported, not re-implemented; param NAMES shared so firebase-functions
-//     dedupes them). Stats are public; traffic needs push access, so traffic is
+//   - GitHub: reuses the shared GitHub App auth (`mintInstallationToken` from
+//     github-app-auth.ts, imported not re-implemented; param NAMES shared so
+//     firebase-functions dedupes them). Stats are public; traffic needs push
+//     access, so traffic is
 //     omitted (not an error) when the token lacks it.
 //   - GA4 + GSC: a SINGLE Google OAuth refresh-token→access-token exchange, whose
 //     access token authenticates both runReport (GA4) and searchAnalytics (GSC).
@@ -111,7 +111,7 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret, defineString } from "firebase-functions/params";
 import { getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
-import { mintInstallationToken } from "./office-hours-sync.js";
+import { mintInstallationToken } from "./github-app-auth.js";
 import {
   fetchGithubStatsLive,
   fetchGithubTrafficLive,
@@ -133,8 +133,9 @@ import {
 
 export * from "./project-signals-core.js";
 
-// Reuse the SAME param names as office-hours-sync.ts / dispatch-queue-metrics.ts
-// so firebase-functions dedupes them across modules (params are keyed by name).
+// Identity params for the office-hours namespace. Param names are the shared
+// office-hours identity convention so firebase-functions dedupes them across
+// any modules that declare them (params are keyed by name).
 const GH_APP_PRIVATE_KEY = defineSecret("OFFICE_HOURS_GITHUB_APP_PRIVATE_KEY");
 const GH_APP_ID = defineString("OFFICE_HOURS_GITHUB_APP_ID");
 const GH_APP_INSTALLATION_ID = defineString("OFFICE_HOURS_GITHUB_APP_INSTALLATION_ID");
@@ -188,7 +189,7 @@ export const collectProjectSignals = onSchedule(
     timeoutSeconds: 300,
   },
   async () => {
-    // ---- Identity guard FIRST (mirrors dispatch-queue-metrics.ts) -----------
+    // ---- Identity guard FIRST: validate group/member/namespace before work ---
     const groupId = GROUP_ID.value();
     const memberEmailsStr = MEMBER_EMAILS.value();
     const namespace = NAMESPACE.value();
