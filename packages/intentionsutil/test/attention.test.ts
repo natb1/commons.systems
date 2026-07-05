@@ -420,6 +420,49 @@ describe("resolveAttention capture-resolution term", () => {
     expect(strategyValue).toBeGreaterThan(0);
     expect(tacticValue).toBe(strategyValue);
   });
+
+  // Both capture axes are free text, not a schema-gated enum — the live store
+  // already authors values beyond the plain low/moderate/high + true/false the
+  // kind-delegation field spec documents: delegation-anthropic-claude and
+  // delegation-banking use `low-moderate`; delegation-hosted-publishing uses
+  // `moderate — would-be`; every gated delegation with a description reads
+  // `partially — ...` or `largely — ...`, never a bare `true`. An exact-match
+  // parse silently zeroes (divergence) or under-scores (irreversibility) these
+  // real, already-recovered delegations; these cases pin the real vocabulary.
+
+  function withCaptureAxes(attributes: Record<string, unknown>): IntentionNode[] {
+    return [
+      ...kinds(),
+      anode({ id: "delegation-under-test", kind: "delegation", status: "codified", attributes }),
+      svnode({ id: "strategy-under-test", recovers: ["delegation-under-test"] }),
+    ];
+  }
+
+  it("scores a compound divergence level ('low-moderate') as its more severe component, not 0", () => {
+    const result = resolveAttention(withCaptureAxes({ divergence: { level: "low-moderate" } }));
+    // moderate (2) / 6 — not 0, and strictly above a plain "low" (1/6).
+    expect(result.get("strategy-under-test")?.value).toBeCloseTo(2 / 6);
+  });
+
+  it("scores a qualified divergence level ('moderate — would-be') by its recognized token, not 0", () => {
+    const result = resolveAttention(withCaptureAxes({ divergence: { level: "moderate — would-be" } }));
+    expect(result.get("strategy-under-test")?.value).toBeCloseTo(2 / 6);
+  });
+
+  it("scores 'partially gated' strictly between 'false' and 'true' — never collapsed onto 'false'", () => {
+    const falseValue = resolveAttention(
+      withCaptureAxes({ irreversibility: { gated: "false" } }),
+    ).get("strategy-under-test")?.value;
+    const partialValue = resolveAttention(
+      withCaptureAxes({ irreversibility: { gated: "partially — the authoritative record is the vendor's" } }),
+    ).get("strategy-under-test")?.value;
+    const trueValue = resolveAttention(
+      withCaptureAxes({ irreversibility: { gated: "true — no export path" } }),
+    ).get("strategy-under-test")?.value;
+
+    expect(partialValue).toBeGreaterThan(falseValue ?? 0);
+    expect(trueValue).toBeGreaterThan(partialValue ?? 0);
+  });
 });
 
 describe("resolveAttention term composition is modular", () => {

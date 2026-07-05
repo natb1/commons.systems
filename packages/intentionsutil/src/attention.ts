@@ -61,28 +61,42 @@ function isUnvalidated(strategy: IntentionNode): boolean {
 // defensive parsing here is boundary validation, not a fallback: a
 // missing/malformed axis simply contributes 0 rather than throwing, since
 // `attributes` shape is data (the kind node), not a code contract.
+//
+// Both axes are authored as free text, not an enum the schema gates — the live
+// store already carries compound/qualified values (`low-moderate`,
+// `moderate — would-be`) alongside the plain `low`/`moderate`/`high` the
+// kind-delegation field spec documents, so an exact-match switch silently
+// zeroes real, already-recovered delegations (e.g. delegation-hosted-publishing
+// feeds strategy-recover-publishing's capture term today). Token matching
+// against the free text is the boundary-validation move here: real authored
+// intent still parses, and only genuinely unrecognized text falls to 0.
+
+const DIVERGENCE_LEVEL_SCORES: Record<string, number> = { low: 1, moderate: 2, high: 3 };
 
 function divergenceScore(delegation: IntentionNode): number {
   const divergence = delegation.attributes.divergence;
   if (!isPlainObjectLike(divergence)) return 0;
-  switch (divergence.level) {
-    case "low":
-      return 1;
-    case "moderate":
-      return 2;
-    case "high":
-      return 3;
-    default:
-      return 0;
-  }
+  const level = divergence.level;
+  if (typeof level !== "string") return 0;
+  const tokens = level.toLowerCase().match(/low|moderate|high/g);
+  if (tokens === null) return 0;
+  // A compound value ("low-moderate") names two severities at once; score the
+  // more severe one — understating capture risk is the wrong direction to
+  // round on a term whose purpose is flagging it.
+  return Math.max(...tokens.map((t) => DIVERGENCE_LEVEL_SCORES[t]));
 }
 
 function irreversibilityScore(delegation: IntentionNode): number {
   const irreversibility = delegation.attributes.irreversibility;
   if (!isPlainObjectLike(irreversibility)) return 0;
   const gated = irreversibility.gated;
-  const gatedText = typeof gated === "string" ? gated : String(gated ?? "");
-  return gatedText.trim().toLowerCase().startsWith("true") ? 2 : 1;
+  const gatedText = (typeof gated === "string" ? gated : String(gated ?? "")).trim().toLowerCase();
+  if (gatedText.startsWith("true")) return 3;
+  if (gatedText.startsWith("false")) return 1;
+  // The store's real middle ground ("partially — ...", "largely — ...") is
+  // real, described gating — distinct from both the fully-open and
+  // fully-closed poles, never collapsed into either.
+  return 2;
 }
 
 /** One delegation's capture severity, normalized to the 1/3..1 range (max axis sum 6). */
