@@ -91,10 +91,14 @@
       #
       # The WSL box is now built in-flake as nixosConfigurations.nixos (below),
       # consuming nixos-wsl as a flake input rather than the channel — so the old
-      # channel-unresolvability caveat is gone. But a *reusable*
-      # nixosModules.default export is still NOT provided:
-      # nix/nixos/configuration.nix hardcodes wsl.* / the n8 user, and exporting a
-      # reusable, identity-parameterized module is deferred to epic #2446 / #2449.
+      # channel-unresolvability caveat is gone. nix/nixos/configuration.nix is now
+      # identity-parameterized: the host user comes from config.instance.hostUser
+      # (this instance supplies it below), so no user name is hardcoded there.
+      # But a *reusable* nixosModules.default export is still NOT provided:
+      # exporting a reusable module — with the claude-code overlay threaded through
+      # and full instance parameterization (wsl.* and the rest) — is a larger step,
+      # deliberately deferred beyond this parameterization work and out of scope
+      # here.
       homeManagerModules = { default = ./nix/home/default.nix; };
       darwinModules      = { default = ./nix/darwin/default.nix; };
 
@@ -181,6 +185,12 @@
             homeDirectory = "/home/n8";
           })
           {
+            # The NixOS host user (wsl.defaultUser, users.users.<name>, and the
+            # office-hours producer user) — the framework's nix/nixos modules read
+            # this instead of hardcoding a name. This office-hours-nate instance
+            # supplies it here.
+            instance.hostUser = "n8";
+
             # backupFileExtension makes the clobber-abort impossible: when a switch
             # meets an unmanaged file it wants to own, it backs it up (.backup)
             # instead of aborting mid-activation. This option exists only in the
