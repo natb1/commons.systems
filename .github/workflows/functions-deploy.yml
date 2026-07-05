@@ -28,7 +28,7 @@ jobs:
         env:
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: .github/scripts/firebase-auth.sh
-      # feedProxy's and collectProjectSignals's non-secret defineString params come
+      # collectProjectSignals's non-secret defineString params come
       # from repository Secrets, written into the
       # dotenv firebase-tools reads at deploy time. firebase deploy resolves EVERY
       # defineString in non-interactive mode and fails if any is absent, even ones

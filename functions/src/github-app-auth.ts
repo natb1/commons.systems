@@ -55,7 +55,7 @@ export async function mintInstallationToken(opts: {
       headers: {
         Authorization: `Bearer ${jwt}`,
         Accept: "application/vnd.github+json",
-        "User-Agent": "office-hours-sync/1.0",
+        "User-Agent": "github-app-auth/1.0",
       },
     },
   );
