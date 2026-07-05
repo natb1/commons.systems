@@ -54,6 +54,16 @@ Runs to completion without user interaction. Parks to `office_hours` — never
 - **Unverifiable blocker** — a `blocked_by` precondition or drift signal that
   cannot be resolved from the graph alone.
 
+These three are the general categories; two later steps name concrete
+instances that park under them rather than introducing separate triggers — the
+round-cap park (Step 1's eligibility sanity check, an unverifiable blocker: no
+fresh reading exists to resolve whether another round is warranted) and both
+sides of drift review (Step 1, a failed or newly material condition — scope
+deviation or an unresolvable blocker depending on which side fired). Treat
+every park in this skill as an instance of one of the three; do not read the
+list as exhaustive-by-enumeration and treat a same-category park elsewhere as
+out-of-contract.
+
 To park, set `office_hours: {reason, since}` on the affected node (the strategy
 for a strategy-wide block; the specific tactic for a tactic-local one) via
 `write-node.ts` and land it with `graph-commit`. `since` is `date -u +%Y-%m-%d`
@@ -73,13 +83,20 @@ strategy's existing non-draft child tactics. The store serializes arrays as
 YAML **block sequences**, so `serves` renders as `serves:` on its own line
 followed by `  - <strategy-id>` — an inline-flow grep for
 `serves: [<strategy-id>]` matches nothing. Find the children with
-`grep -rl '^  - <strategy-id>$' intentions/tactic-*.md` (or
-`grep -A2 '^serves:' intentions/tactic-*.md`), then read each candidate's
+`grep -rl '^  - <strategy-id>$' intentions/tactic-*.md` (or, to see the
+surrounding `serves:` block, `grep -B1 -A2 '^  - <strategy-id>$'
+intentions/tactic-*.md` — both anchor on the target id, so neither returns
+tactics serving a *different* strategy), then read each candidate's
 `phase` and keep the `phase`-set, non-`draft`/non-`done` ones. A
 tactic already at `phase: implement` with a plan in its body is done work — do
 not re-plan it. A partial prior run (some tactics landed, some not) resumes by
 planning only the missing ones. Draft tactics (`phase` absent) are **input**,
-not landed work: they are consumed in step 2.
+not landed work: they are consumed in step 2 — **but first check
+`office_hours`**: a `phase`-absent child with `office_hours` set is not an
+`/align-strategy`-retained draft, it is a **born-parked** tactic from a prior
+round (Step 4), already-decided human-owned work. Skip it (at most reconfirm it
+is still needed); never run it through the step-2 finalize/split/merge/prune
+draft path.
 
 ## Step 1 — Scope and two-sided drift review
 
@@ -92,7 +109,11 @@ carry retained tactical context from `/align-strategy`).
 **Eligibility sanity check.** Confirm the strategy is actually decomposable
 this round (`intentions/tactic-graph-native-dispatch.md` §3.1): `office_hours`
 null, signal unvalidated (`gap` non-null or `reading` null), the fresh-reading
-gate holds, and `rounds.count < 2`. If `rounds.count` is already at the cap
+gate holds (`rounds.count == 0`, or a reading exists newer than
+`rounds.last_completed` — a null `reading` never satisfies "newer than"), it
+has no non-draft child tactics already on its signal path (the
+fifth §3.1 criterion — see Idempotency, above, which reads those children), and
+`rounds.count < 2`. If `rounds.count` is already at the cap
 with no fresh reading, park the strategy (round history as the reason) instead
 of burning a third round.
 
@@ -136,9 +157,12 @@ a strategy.
    signal's sensor runnable (strategy clarification 3 — a strategy that cannot
    be measured must first buy its own instrument). Without it the round cannot
    produce a fresh reading and the strategy dead-ends at the round cap.
-2. **Consume the draft tactics.** Each draft child (`phase` absent, retained
-   by `/align-strategy`) is **finalized, split, merged, or pruned** — it is
-   input, never left dangling. Finalizing reuses the draft's retained body as
+2. **Consume the draft tactics.** Each draft child (`phase` absent **and
+   `office_hours` unset**, retained by `/align-strategy`) is **finalized,
+   split, merged, or pruned** — it is input, never left dangling. A
+   `phase`-absent child *with* `office_hours` set is a born-parked tactic from a
+   prior round, not a draft (see Idempotency): leave it alone, do not run it
+   through this path. Finalizing reuses the draft's retained body as
    the starting context for its plan (step 3); pruning drops a draft that the
    round does not need (record why in the pruning commit message).
 3. **Shape the subtree.** A leaf tactic is **exactly one PR**. Larger shapes
@@ -152,7 +176,11 @@ a strategy.
    `/plan-issue`'s open-blocker re-check: confirm each `blocked_by` id resolves
    to a real tactic (`validateGraph` rule 13) and gates only where the round
    intends — a dangling or already-satisfied edge is a decomposition error,
-   not a valid gate.
+   not a valid gate. Resolve by cause: a dangling id that is plainly a typo of
+   a real tactic — correct it silently; an edge whose target was legitimately
+   pruned or already completed — drop the edge; anything where the original
+   intent is not recoverable from the graph — park (unverifiable blocker,
+   Autonomy contract, above) rather than guessing.
 4. **Stamp the `validates` edge.** On each tactic that validates the signal —
    produces its reading or meets its threshold — set
    `validates: [<strategy-id>]` (the factual edge; `validateGraph` rule 14
@@ -280,11 +308,17 @@ Per tactic:
    `graph-commit` stages exactly `intentions/<id>.md` for each id (frontmatter
    and the body `Edit` both live there), commits, stamps the four required
    checks via the `graph/**` fast path, and fast-forwards onto `main` with a
-   bounded rebase-retry loop. If it exits 1 having printed a parking message,
-   a concurrent writer landed an overlapping edit to the same node: the node
-   landed with `office_hours` set instead of the intended content, and this
-   session's unlanded content is preserved on disk. Report it and stop — do
-   not retry automatically.
+   bounded rebase-retry loop. It has **two** distinct exit-1 cases,
+   discriminated by the presence of a parking message. If it exits 1 having
+   printed a parking message (`... parking node(s) — this writer's content is
+   NOT landed`), a concurrent writer landed an overlapping edit to the same
+   node: the node landed with `office_hours` set instead of the intended
+   content, and this session's unlanded content is preserved on disk. If it
+   exits 1 with **no** parking message — instead the busy-main exhaustion error
+   ending `... retry later` — nothing landed and no `office_hours` was set:
+   `main` stayed busy (or the required checks never stamped green) across all
+   `MAX_PUSH_ATTEMPTS`, with no semantic conflict. Either way, report it and
+   stop — do not retry automatically within this session.
 
 **Strategy round accounting.** Ensure the serving strategy carries a `rounds`
 object (`validateGraph` rule 12 — strategies only). On the first round,
