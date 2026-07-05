@@ -39,10 +39,29 @@ clarifications:
       attachments become material (clarified 2026-07-02; intake owned by
       strategy-complete-ledger). The digital tilt of the current ledger reflects
       where the work started, not a boundary."
+  - question: What is kept from Stoicism, given the parent root's name declines it?
+    answer: "The drills, not the doctrine (recorded 2026-07-04 interview). Recovery
+      drills are premeditatio malorum in engineering dress — rehearsing loss so
+      it stays affordable. Declined: detachment as telos and the sufficiency of
+      virtue; external goods matter (Aristotle, NE I.8), which is why the ledger
+      manages attachments instead of renouncing them. tradition-stoicism is the
+      tripwire record: any drift of this virtue toward 'how detached am I?' as
+      the test is the failure the parent's name warns against."
 tooling_goals: []
 success_signal: null
+attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: false
+rounds: null
 attributes:
   governs: irreversibility
   tension_with: virtue-alignment-of-attachments
+  traditions:
+    - tradition-aristotle
+    - tradition-stoicism
 ---
 # Progressive Detachment

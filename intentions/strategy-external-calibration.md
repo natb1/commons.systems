@@ -40,7 +40,18 @@ serves:
   - virtue-philosophical-mobility
   - virtue-respect-for-persons
 recovers: []
-clarifications: []
+clarifications:
+  - question: Does strategy-philosophical-grounding overlap this strategy's
+      calibration function?
+    answer: "No — division of labor (recorded 2026-07-04 interview). This strategy
+      owns live challenges from people with no stake in the graph's delegations;
+      strategy-philosophical-grounding owns the canonical-text dialectic — the
+      zero-stake source in the limit, since dead authors hold no stake at all
+      and their texts are fixed points the audited vendor's models cannot
+      rewrite. It feeds the same root while the practitioner tier reads zero,
+      and fades to a supplement when live challenges recur. The Platonic ground
+      for both is the same: the freed prisoner cannot verify the turning alone
+      (Republic VII)."
 tooling_goals: []
 success_signal:
   observable: external calibration events — a practitioner or peer challenge that
@@ -49,9 +60,19 @@ success_signal:
   threshold: calibration events occur at all, then recur across review cycles once
     a practitioner tier exists
   is_proxy: false
+attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: false
+rounds: null
 attributes:
   conditions:
     - a practitioner community can be cultivated at all — tier 3 of
       strategy-progressive-validation is reachable
+  traditions:
+    - tradition-plato
 ---
 # Source mobility's calibration from outside the audited delegations
