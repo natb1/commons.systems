@@ -69,8 +69,13 @@ contract.
 
 `/align-tactics` decomposes one strategy into N tactics, so idempotency is
 **per-tactic**, not a single strategy-level marker. Before planning, read the
-strategy's existing non-draft child tactics (grep `intentions/tactic-*.md` for
-`serves: [<strategy-id>]` with `phase` set and non-`draft`/non-`done`). A
+strategy's existing non-draft child tactics. The store serializes arrays as
+YAML **block sequences**, so `serves` renders as `serves:` on its own line
+followed by `  - <strategy-id>` — an inline-flow grep for
+`serves: [<strategy-id>]` matches nothing. Find the children with
+`grep -rl '^  - <strategy-id>$' intentions/tactic-*.md` (or
+`grep -A2 '^serves:' intentions/tactic-*.md`), then read each candidate's
+`phase` and keep the `phase`-set, non-`draft`/non-`done` ones. A
 tactic already at `phase: implement` with a plan in its body is done work — do
 not re-plan it. A partial prior run (some tactics landed, some not) resumes by
 planning only the missing ones. Draft tactics (`phase` absent) are **input**,
@@ -243,9 +248,11 @@ Per tactic:
    `phase: "implement"` (born-parked tactics: omit `phase`, set
    `office_hours`). Leave `execution: null` — the execution object is the
    router's live in-flight record, populated when it launches the worker in a
-   worktree, not plan-time state; the worked example
-   (`intentions/tactic-align-tactics-skill.md`) lands `phase: implement` with
-   `execution: null`. These are **first-class** frontmatter fields (`schema.ts`
+   worktree, not plan-time state, so a freshly planned tactic lands
+   `phase: implement` with `execution: null` (the router later populates
+   `execution` as the tactic advances, so a node already past `implement` will
+   show a populated object — that is router state, not plan-time state).
+   These are **first-class** frontmatter fields (`schema.ts`
    promoted
    `phase`/`execution`/`validates`/`blocked_by`/`office_hours`/`rounds`); write
    them at top level, not squatted under `attributes` — `validateNode`
@@ -294,8 +301,10 @@ tactics when small.
 soft-freeze trigger will record the serving strategy's substance hash
 (strategy clarification 10). In the bootstrap there is no `execution` object to
 seed and no fingerprint helper exists — so there is no fingerprint field to
-write yet (every node in `intentions/tactic-graph-native-dispatch.md` §5
-carries `execution: null` / a null fingerprint). When the hashing and router
+write yet (every node in `intentions/tactic-graph-native-dispatch.md` §5 that
+has not yet advanced carries `execution: null`, and every node's
+`strategy_fingerprint` is `null` — even those whose `execution` the router has
+since populated). When the hashing and router
 machinery lands, the router stamps `execution` — fingerprint included — at
 plan/launch time. Until then the freeze-on-mismatch rule is discharged by
 running re-evaluation in the **same session** as the strategy edit (below),
