@@ -32,6 +32,18 @@ function anode(partial: Partial<IntentionNode> & { id: string; kind: string }): 
   };
 }
 
+/**
+ * A strategy fixture whose signal already reads as validated (`reading`
+ * non-null, no `gap`) — the default in every describe block below EXCEPT the
+ * dedicated "signal-satisfaction term" block, so those tests exercise the
+ * `authored` term in isolation, undisturbed by the new `signal` term (which
+ * would otherwise treat any strategy with the schema's default
+ * `reading: null` as its own unvalidated validates-terminal).
+ */
+function svnode(partial: Partial<IntentionNode> & { id: string }): IntentionNode {
+  return anode({ reading: "measured", ...partial, kind: "strategy" });
+}
+
 /** A relative boost injection. */
 function boost(amount: number, rationale = "because"): Attention {
   return { boost: amount, override: null, rationale };
@@ -64,6 +76,7 @@ function kinds(): IntentionNode[] {
       attributes: { goal_layer: true },
     }),
     anode({ id: "kind-virtue", kind: "kind", status: "codified" }),
+    anode({ id: "kind-delegation", kind: "kind", status: "codified" }),
   ];
 }
 
@@ -72,7 +85,7 @@ describe("resolveAttention eligibility", () => {
     const nodes = [
       ...kinds(),
       anode({ id: "virtue-root", kind: "virtue", status: "codified" }),
-      anode({ id: "strategy-1", kind: "strategy", serves: ["virtue-root"], attention: boost(5) }),
+      svnode({ id: "strategy-1", serves: ["virtue-root"], attention: boost(5) }),
     ];
 
     const result = resolveAttention(nodes);
@@ -93,11 +106,13 @@ describe("resolveAttention eligibility", () => {
   it("gives an eligible node with no injection a value-0 entry with empty sources", () => {
     const nodes = [
       ...kinds(),
-      anode({ id: "strategy-quiet", kind: "strategy" }),
+      svnode({ id: "strategy-quiet" }),
     ];
 
     const result = resolveAttention(nodes);
-    expect(result.get("strategy-quiet")).toEqual({ value: 0, sources: [] });
+    const quiet = result.get("strategy-quiet");
+    expect(quiet?.value).toBe(0);
+    expect(quiet?.sources).toEqual([]);
   });
 });
 
@@ -108,11 +123,11 @@ describe("resolveAttention boost (undecayed, undiluted)", () => {
     const nodes = [
       ...kinds(),
       anode({ id: "virtue-root", kind: "virtue", status: "codified" }),
-      anode({ id: "strategy-parent", kind: "strategy", serves: ["virtue-root"], attention: boost(6) }),
-      anode({ id: "sub-1", kind: "strategy", parent: "strategy-parent" }),
-      anode({ id: "sub-2", kind: "strategy", parent: "strategy-parent" }),
+      svnode({ id: "strategy-parent", serves: ["virtue-root"], attention: boost(6) }),
+      svnode({ id: "sub-1", parent: "strategy-parent" }),
+      svnode({ id: "sub-2", parent: "strategy-parent" }),
       anode({ id: "tactic-1", kind: "tactic", serves: ["strategy-parent"] }),
-      anode({ id: "grand-1", kind: "strategy", parent: "sub-1" }),
+      svnode({ id: "grand-1", parent: "sub-1" }),
     ];
 
     const result = resolveAttention(nodes);
@@ -126,10 +141,10 @@ describe("resolveAttention boost (undecayed, undiluted)", () => {
     const nodes = [
       ...kinds(),
       anode({ id: "virtue-root", kind: "virtue", status: "codified" }),
-      anode({ id: "s1", kind: "strategy", serves: ["virtue-root"], attention: boost(2) }),
-      anode({ id: "s2", kind: "strategy", serves: ["virtue-root"], attention: boost(6) }),
+      svnode({ id: "s1", serves: ["virtue-root"], attention: boost(2) }),
+      svnode({ id: "s2", serves: ["virtue-root"], attention: boost(6) }),
       // child draws from s1 (parent) and s2 (serves).
-      anode({ id: "child", kind: "strategy", parent: "s1", serves: ["s2"] }),
+      svnode({ id: "child", parent: "s1", serves: ["s2"] }),
     ];
 
     const result = resolveAttention(nodes);
@@ -144,10 +159,10 @@ describe("resolveAttention boost (undecayed, undiluted)", () => {
     const nodes = [
       ...kinds(),
       anode({ id: "virtue-root", kind: "virtue", status: "codified" }),
-      anode({ id: "top", kind: "strategy", serves: ["virtue-root"], attention: boost(4) }),
-      anode({ id: "mid1", kind: "strategy", parent: "top" }),
-      anode({ id: "mid2", kind: "strategy", serves: ["top"] }),
-      anode({ id: "bottom", kind: "strategy", parent: "mid1", serves: ["mid2"] }),
+      svnode({ id: "top", serves: ["virtue-root"], attention: boost(4) }),
+      svnode({ id: "mid1", parent: "top" }),
+      svnode({ id: "mid2", serves: ["top"] }),
+      svnode({ id: "bottom", parent: "mid1", serves: ["mid2"] }),
     ];
 
     const result = resolveAttention(nodes);
@@ -159,9 +174,9 @@ describe("resolveAttention boost (undecayed, undiluted)", () => {
     const nodes = [
       ...kinds(),
       anode({ id: "virtue-root", kind: "virtue", status: "codified" }),
-      anode({ id: "anc", kind: "strategy", serves: ["virtue-root"], attention: boost(3) }),
-      anode({ id: "mid", kind: "strategy", parent: "anc", attention: boost(2) }),
-      anode({ id: "leaf", kind: "strategy", parent: "mid" }),
+      svnode({ id: "anc", serves: ["virtue-root"], attention: boost(3) }),
+      svnode({ id: "mid", parent: "anc", attention: boost(2) }),
+      svnode({ id: "leaf", parent: "mid" }),
     ];
 
     const result = resolveAttention(nodes);
@@ -183,11 +198,11 @@ describe("resolveAttention override (branch cap)", () => {
     const nodes = [
       ...kinds(),
       anode({ id: "virtue-root", kind: "virtue", status: "codified" }),
-      anode({ id: "s1", kind: "strategy", serves: ["virtue-root"], attention: boost(10) }),
-      anode({ id: "c", kind: "strategy", parent: "s1", attention: override(2) }),
-      anode({ id: "d", kind: "strategy", parent: "c" }),
-      anode({ id: "s2", kind: "strategy", serves: ["virtue-root"], attention: boost(6) }),
-      anode({ id: "t", kind: "strategy", parent: "c", serves: ["s2"] }),
+      svnode({ id: "s1", serves: ["virtue-root"], attention: boost(10) }),
+      svnode({ id: "c", parent: "s1", attention: override(2) }),
+      svnode({ id: "d", parent: "c" }),
+      svnode({ id: "s2", serves: ["virtue-root"], attention: boost(6) }),
+      svnode({ id: "t", parent: "c", serves: ["s2"] }),
     ];
 
     const result = resolveAttention(nodes);
@@ -206,11 +221,11 @@ describe("resolveAttention override (branch cap)", () => {
     const nodes = [
       ...kinds(),
       anode({ id: "virtue-root", kind: "virtue", status: "codified" }),
-      anode({ id: "root", kind: "strategy", serves: ["virtue-root"], attention: boost(100) }),
-      anode({ id: "outer", kind: "strategy", parent: "root", attention: override(5) }),
-      anode({ id: "between", kind: "strategy", parent: "outer" }),
-      anode({ id: "inner", kind: "strategy", parent: "outer", attention: override(2) }),
-      anode({ id: "leaf", kind: "strategy", parent: "inner" }),
+      svnode({ id: "root", serves: ["virtue-root"], attention: boost(100) }),
+      svnode({ id: "outer", parent: "root", attention: override(5) }),
+      svnode({ id: "between", parent: "outer" }),
+      svnode({ id: "inner", parent: "outer", attention: override(2) }),
+      svnode({ id: "leaf", parent: "inner" }),
     ];
 
     const result = resolveAttention(nodes);
@@ -220,14 +235,56 @@ describe("resolveAttention override (branch cap)", () => {
     expect(result.get("leaf")?.value).toBe(2); // nearest (inner) wins
     expect(result.get("leaf")?.sources).toEqual(["inner"]);
   });
+
+  it("authored override is unaffected by any derived term", () => {
+    // c overrides down to 2 despite also being on the signal path (it blocks
+    // tactic-terminal, which validates the unvalidated strategy-target) AND
+    // serving a strategy with a high-capture delegation — both derived terms
+    // would otherwise add on top, but the override pins the total absolutely.
+    const nodes = [
+      ...kinds(),
+      anode({
+        id: "delegation-x",
+        kind: "delegation",
+        status: "codified",
+        attributes: {
+          divergence: { level: "high" },
+          irreversibility: { gated: "true — no export path" },
+        },
+      }),
+      anode({ id: "strategy-target", kind: "strategy" }), // reading: null omitted → unvalidated
+      svnode({
+        id: "strategy-captured",
+        recovers: ["delegation-x"],
+      }),
+      anode({
+        id: "c",
+        kind: "tactic",
+        blocked_by: [],
+        serves: ["strategy-captured"],
+        attention: override(2),
+      }),
+      anode({
+        id: "tactic-terminal",
+        kind: "tactic",
+        blocked_by: ["c"],
+        validates: ["strategy-target"],
+      }),
+    ];
+
+    const result = resolveAttention(nodes);
+    const c = result.get("c");
+    expect(c?.value).toBe(2);
+    expect(c?.terms).toEqual([{ term: "authored", value: 2 }]);
+  });
 });
 
 describe("resolveAttention cycle guard", () => {
   it("throws IntentionSchemaError on a parent-edge cycle", () => {
     const nodes = [
       ...kinds(),
-      anode({ id: "cyc-a", kind: "strategy", parent: "cyc-b" }),
-      anode({ id: "cyc-b", kind: "strategy", parent: "cyc-a" }),
+      svnode({ id: "cyc-a", parent: "cyc-b" }),
+      svnode({ id: "cyc-b", parent: "cyc-a" }),
     ];
 
     expect(() => resolveAttention(nodes)).toThrow(IntentionSchemaError);
@@ -240,10 +297,10 @@ describe("resolveAttention determinism", () => {
     const nodes = [
       ...kinds(),
       anode({ id: "virtue-root", kind: "virtue", status: "codified" }),
-      anode({ id: "s1", kind: "strategy", serves: ["virtue-root"], attention: boost(2) }),
-      anode({ id: "s2", kind: "strategy", serves: ["virtue-root"], attention: boost(6) }),
-      anode({ id: "c", kind: "strategy", parent: "s1", attention: override(3) }),
-      anode({ id: "child", kind: "strategy", parent: "c", serves: ["s2"] }),
+      svnode({ id: "s1", serves: ["virtue-root"], attention: boost(2) }),
+      svnode({ id: "s2", serves: ["virtue-root"], attention: boost(6) }),
+      svnode({ id: "c", parent: "s1", attention: override(3) }),
+      svnode({ id: "child", parent: "c", serves: ["s2"] }),
       anode({ id: "tactic-1", kind: "tactic", serves: ["s2"] }),
     ];
     const shuffled = [...nodes].reverse();
@@ -254,5 +311,188 @@ describe("resolveAttention determinism", () => {
 
     expect(b).toEqual(a);
     expect(c).toEqual(a);
+  });
+});
+
+describe("resolveAttention signal-satisfaction term", () => {
+  it("ranks an on-path node (validates an unvalidated strategy) above an otherwise-identical off-path node", () => {
+    const nodes = [
+      ...kinds(),
+      anode({ id: "strategy-target", kind: "strategy" }), // reading: null (default) → unvalidated
+      anode({ id: "tactic-on", kind: "tactic", validates: ["strategy-target"] }),
+      anode({ id: "tactic-off", kind: "tactic", validates: [] }),
+    ];
+
+    const result = resolveAttention(nodes);
+    expect(result.get("tactic-on")?.value).toBe(1); // SIGNAL_TERM_WEIGHT
+    expect(result.get("tactic-off")?.value).toBe(0);
+  });
+
+  it("does not treat a tactic validating an already-validated strategy as a terminal", () => {
+    const nodes = [
+      ...kinds(),
+      svnode({ id: "strategy-done", reading: "the signal reads clean" }),
+      anode({ id: "tactic-done", kind: "tactic", validates: ["strategy-done"] }),
+    ];
+
+    const result = resolveAttention(nodes);
+    expect(result.get("tactic-done")?.value).toBe(0);
+  });
+
+  it("lifts an upstream blocker when a downstream tactic gains a validates edge, with no other change", () => {
+    const strategyTarget = anode({ id: "strategy-target", kind: "strategy" }); // unvalidated
+    const tacticA = anode({ id: "tactic-a", kind: "tactic", blocked_by: [] });
+    const tacticBBefore = anode({ id: "tactic-b", kind: "tactic", blocked_by: ["tactic-a"], validates: [] });
+    const tacticBAfter = anode({ id: "tactic-b", kind: "tactic", blocked_by: ["tactic-a"], validates: ["strategy-target"] });
+
+    const before = resolveAttention([...kinds(), strategyTarget, tacticA, tacticBBefore]);
+    const after = resolveAttention([...kinds(), strategyTarget, tacticA, tacticBAfter]);
+
+    expect(before.get("tactic-a")?.value).toBe(0);
+    expect(after.get("tactic-a")?.value).toBe(1); // lifted by the new downstream validates edge
+  });
+
+  it("inherits on-path status down a parent chain", () => {
+    const nodes = [
+      ...kinds(),
+      anode({ id: "strategy-target", kind: "strategy" }), // unvalidated
+      anode({ id: "epic", kind: "tactic", blocked_by: [], validates: ["strategy-target"] }),
+      anode({ id: "child", kind: "tactic", parent: "epic" }),
+    ];
+
+    const result = resolveAttention(nodes);
+    expect(result.get("child")?.value).toBe(1);
+  });
+});
+
+describe("resolveAttention capture-resolution term", () => {
+  it("orders two strategies by their recovered delegations' divergence/irreversibility axes", () => {
+    const nodes = [
+      ...kinds(),
+      anode({
+        id: "delegation-low",
+        kind: "delegation",
+        status: "codified",
+        attributes: {
+          divergence: { level: "low" },
+          irreversibility: { gated: "false — fully portable" },
+        },
+      }),
+      anode({
+        id: "delegation-high",
+        kind: "delegation",
+        status: "codified",
+        attributes: {
+          divergence: { level: "high" },
+          irreversibility: { gated: "true — no export path" },
+        },
+      }),
+      svnode({ id: "strategy-low-capture", recovers: ["delegation-low"] }),
+      svnode({ id: "strategy-high-capture", recovers: ["delegation-high"] }),
+    ];
+
+    const result = resolveAttention(nodes);
+    const low = result.get("strategy-low-capture")?.value ?? 0;
+    const high = result.get("strategy-high-capture")?.value ?? 0;
+    expect(high).toBeGreaterThan(low);
+    expect(low).toBeGreaterThan(0);
+  });
+
+  it("carries a serving tactic's capture score from its strategy's recovers edge", () => {
+    const nodes = [
+      ...kinds(),
+      anode({
+        id: "delegation-x",
+        kind: "delegation",
+        status: "codified",
+        attributes: {
+          divergence: { level: "moderate" },
+          irreversibility: { gated: "false" },
+        },
+      }),
+      svnode({ id: "strategy-x", recovers: ["delegation-x"] }),
+      anode({ id: "tactic-x", kind: "tactic", serves: ["strategy-x"] }),
+    ];
+
+    const result = resolveAttention(nodes);
+    const strategyValue = result.get("strategy-x")?.value ?? 0;
+    const tacticValue = result.get("tactic-x")?.value ?? 0;
+    expect(strategyValue).toBeGreaterThan(0);
+    expect(tacticValue).toBe(strategyValue);
+  });
+
+  // Both capture axes are free text, not a schema-gated enum — the live store
+  // already authors values beyond the plain low/moderate/high + true/false the
+  // kind-delegation field spec documents: delegation-anthropic-claude and
+  // delegation-banking use `low-moderate`; delegation-hosted-publishing uses
+  // `moderate — would-be`; every gated delegation with a description reads
+  // `partially — ...` or `largely — ...`, never a bare `true`. An exact-match
+  // parse silently zeroes (divergence) or under-scores (irreversibility) these
+  // real, already-recovered delegations; these cases pin the real vocabulary.
+
+  function withCaptureAxes(attributes: Record<string, unknown>): IntentionNode[] {
+    return [
+      ...kinds(),
+      anode({ id: "delegation-under-test", kind: "delegation", status: "codified", attributes }),
+      svnode({ id: "strategy-under-test", recovers: ["delegation-under-test"] }),
+    ];
+  }
+
+  it("scores a compound divergence level ('low-moderate') as its more severe component, not 0", () => {
+    const result = resolveAttention(withCaptureAxes({ divergence: { level: "low-moderate" } }));
+    // moderate (2) / 6 — not 0, and strictly above a plain "low" (1/6).
+    expect(result.get("strategy-under-test")?.value).toBeCloseTo(2 / 6);
+  });
+
+  it("scores a qualified divergence level ('moderate — would-be') by its recognized token, not 0", () => {
+    const result = resolveAttention(withCaptureAxes({ divergence: { level: "moderate — would-be" } }));
+    expect(result.get("strategy-under-test")?.value).toBeCloseTo(2 / 6);
+  });
+
+  it("scores 'partially gated' strictly between 'false' and 'true' — never collapsed onto 'false'", () => {
+    const falseValue = resolveAttention(
+      withCaptureAxes({ irreversibility: { gated: "false" } }),
+    ).get("strategy-under-test")?.value;
+    const partialValue = resolveAttention(
+      withCaptureAxes({ irreversibility: { gated: "partially — the authoritative record is the vendor's" } }),
+    ).get("strategy-under-test")?.value;
+    const trueValue = resolveAttention(
+      withCaptureAxes({ irreversibility: { gated: "true — no export path" } }),
+    ).get("strategy-under-test")?.value;
+
+    expect(partialValue).toBeGreaterThan(falseValue ?? 0);
+    expect(trueValue).toBeGreaterThan(partialValue ?? 0);
+  });
+});
+
+describe("resolveAttention term composition is modular", () => {
+  it("leaves an authored-only node's value untouched by a sibling's unrelated signal/capture contributions", () => {
+    const nodes = [
+      ...kinds(),
+      anode({
+        id: "delegation-heavy",
+        kind: "delegation",
+        status: "codified",
+        attributes: {
+          divergence: { level: "high" },
+          irreversibility: { gated: "true" },
+        },
+      }),
+      anode({ id: "virtue-root", kind: "virtue", status: "codified" }),
+      // Sibling with no relation to the boosted node: its own signal/capture
+      // contributions must not leak into strategy-boosted's composition.
+      anode({ id: "strategy-target", kind: "strategy" }), // unvalidated — an on-path terminal
+      svnode({ id: "strategy-captured", recovers: ["delegation-heavy"] }),
+      svnode({ id: "strategy-boosted", serves: ["virtue-root"], attention: boost(7) }),
+    ];
+
+    const result = resolveAttention(nodes);
+    const boosted = result.get("strategy-boosted");
+    expect(boosted?.value).toBe(7);
+    expect(boosted?.terms).toEqual([
+      { term: "authored", value: 7 },
+      { term: "signal", value: 0 },
+      { term: "capture", value: 0 },
+    ]);
   });
 });

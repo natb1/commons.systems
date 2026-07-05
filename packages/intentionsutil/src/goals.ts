@@ -1,4 +1,4 @@
-import type { ResolvedAttention } from "./attention.js";
+import type { ResolvedAttention, TermContribution } from "./attention.js";
 import { resolveAttention } from "./attention.js";
 import type { IntentionNode, Owner } from "./schema.js";
 
@@ -112,6 +112,28 @@ function formatRank(value: number): string {
 }
 
 /**
+ * Render a per-term breakdown suffix (e.g. ` {authored 6, signal 1}`) — the
+ * explainability detail behind a composed rank (strategy clarification 11).
+ * Absent `terms` (hand-built `ResolvedAttention` literals) renders nothing.
+ *
+ * A single nonzero `authored` term is suppressed because a nonzero authored
+ * contribution always populates `sources`, which `renderFrontier` already
+ * surfaces as `[rank N via X]` — the breakdown would be redundant. But
+ * `signal` and `capture` never populate `sources`, so a single nonzero
+ * `signal`/`capture` term is the value's only explanation and must be shown;
+ * otherwise it renders as a bare `[rank N]` indistinguishable from a legacy
+ * anonymous boost. So render whenever more than one term is nonzero, OR the
+ * sole nonzero term is not `authored`.
+ */
+function formatTermBreakdown(terms: TermContribution[] | undefined): string {
+  if (terms === undefined) return "";
+  const nonZero = terms.filter((t) => t.value !== 0);
+  if (nonZero.length === 0) return "";
+  if (nonZero.length === 1 && nonZero[0].term === "authored") return "";
+  return ` {${nonZero.map((t) => `${t.term} ${formatRank(t.value)}`).join(", ")}}`;
+}
+
+/**
  * Render the projected goals as deterministic markdown, one line per goal in
  * `projectGoals` order. The output is byte-stable across repeated calls with
  * the same input: no dates, no wall-clock, no environment data. Ends with a
@@ -122,7 +144,8 @@ function formatRank(value: number): string {
  * ` [rank <value> via <sources[0]>]` naming the top contributing source, or
  * ` [rank <value>]` when `sources` is empty. Value 0 / null renders unmarked,
  * so a store with no injection anywhere is byte-identical to the pre-attention
- * render.
+ * render. When more than one term contributes, a ` {term v, term v}`
+ * breakdown follows the rank marker for explainability.
  */
 export function renderFrontier(goals: Goal[]): string {
   if (goals.length === 0) {
@@ -136,6 +159,7 @@ export function renderFrontier(goals: Goal[]): string {
         attention.sources.length > 0
           ? ` [rank ${rank} via ${attention.sources[0]}]`
           : ` [rank ${rank}]`;
+      line += formatTermBreakdown(attention.terms);
     }
     if (node.gap !== null) line += ` — gap: ${node.gap}`;
     return line;
