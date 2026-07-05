@@ -70,10 +70,11 @@ describe("mintInstallationToken", () => {
       "https://api.github.com/app/installations/87654321/access_tokens",
     );
     expect(init.method).toBe("POST");
-    const headers = init.headers as Record<string, string>;
-    expect(headers.Authorization).toMatch(/^Bearer .+\..+\..+$/);
-    expect(headers.Accept).toBe("application/vnd.github+json");
-    expect(headers["User-Agent"]).toBe("office-hours-sync/1.0");
+    expect(init.headers).toMatchObject({
+      Authorization: expect.stringMatching(/^Bearer .+\..+\..+$/),
+      Accept: "application/vnd.github+json",
+      "User-Agent": "office-hours-sync/1.0",
+    });
   });
 
   it("throws when the token exchange returns non-OK", async () => {
