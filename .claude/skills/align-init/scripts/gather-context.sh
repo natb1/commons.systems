@@ -87,12 +87,12 @@ sensor_repo_stats() {
 
 external_sensor_analytics() {
   echo "=== Analytics (GA4 + Search Console) ==="
-  "$REPO_ROOT/.claude/skills/align/scripts/fetch-analytics.sh" || true
+  "$REPO_ROOT/.claude/skills/align-init/scripts/fetch-analytics.sh" || true
 }
 
 external_sensor_psi() {
   echo "=== Web Performance (PageSpeed Insights) ==="
-  "$REPO_ROOT/.claude/skills/align/scripts/fetch-psi.sh" || true
+  "$REPO_ROOT/.claude/skills/align-init/scripts/fetch-psi.sh" || true
 }
 
 {
