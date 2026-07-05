@@ -11,27 +11,11 @@
 # On those integrated paths, the NixOS/nix-darwin module sets
 # `home-manager.backupFileExtension` automatically.
 #
-# The standalone instructions below are for the generic forker path — plain
-# Linux/macOS without NixOS-WSL or nix-darwin.
-#
-# To activate this configuration (generic forker path):
-#   First time (requires experimental features flags):
-#     nix --extra-experimental-features 'nix-command flakes' run home-manager/master -- switch --extra-experimental-features 'nix-command flakes' --flake .#default --impure
-#
-#   After first activation (auto-detects system architecture):
-#     home-manager switch -b backup --flake .#default --impure
-#
-#   Or explicitly specify system:
-#     home-manager switch -b backup --flake .#x86_64-linux --impure
-#
-# Always pass `-b backup` on the standalone forker path: standalone home-manager
-# has no equivalent of the NixOS/nix-darwin module's
-# `home-manager.backupFileExtension`, and without it a switch aborts
-# mid-activation when it meets an unmanaged file it wants to own
-# (e.g. a stray ~/.zprofile), leaving the profile half-updated.
-#
-# Note: --impure is required because home.username and home.homeDirectory are
-# automatically detected from your environment using builtins.getEnv.
+# This module no longer sets home.username / home.homeDirectory or a git
+# identity — the framework leaves them unset so each instance flake supplies its
+# own (see nix/home/git.nix and the office-hours-nate instance). A generic
+# forker builds their own instance flake that imports homeManagerModules.default
+# and forces those values, rather than a standalone `.#default` target.
 
 {
   config,
@@ -58,47 +42,6 @@
     ./wezterm-windows.nix
     ./zsh.nix
   ];
-
-  # User identity - detect from environment or HOME directory
-  home.username = lib.mkDefault (
-    let
-      envUser = builtins.getEnv "USER";
-      homeDir = builtins.getEnv "HOME";
-      extractedUser = if homeDir != "" then builtins.baseNameOf homeDir else "";
-
-      diagnosticMsg = ''
-        Could not determine username. Environment variable diagnostics:
-          USER=${if envUser != "" then envUser else "(empty)"}
-          HOME=${if homeDir != "" then homeDir else "(empty)"}
-          Extracted from HOME=${
-            if extractedUser != "" then extractedUser else "(failed - HOME is / or invalid)"
-          }
-
-        To fix:
-          - Set USER environment variable to your username, OR
-          - Set HOME environment variable to your home directory path
-          - Ensure HOME is not set to "/" (root directory)
-      '';
-    in
-    if envUser != "" then
-      envUser
-    else if extractedUser != "" then
-      extractedUser
-    else
-      throw diagnosticMsg
-  );
-
-  home.homeDirectory = lib.mkDefault (
-    let
-      envHome = builtins.getEnv "HOME";
-    in
-    if envHome != "" then
-      envHome
-    else if pkgs.stdenv.isDarwin then
-      "/Users/${config.home.username}"
-    else
-      "/home/${config.home.username}"
-  );
 
   home.packages = [
     pkgs.jq

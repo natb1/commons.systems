@@ -90,7 +90,7 @@ in
           echo "  \$WSL_DISTRO_NAME is unset (NixOS-WSL + systemd drops it from user shells)" >&2
           echo "  and the Windows default-distro registry lookup also failed." >&2
           echo "  Workaround: prefix the command, e.g." >&2
-          echo "    WSL_DISTRO_NAME=NixOS home-manager switch --flake .#default --impure" >&2
+          echo "    WSL_DISTRO_NAME=NixOS home-manager switch --flake <your-office-hours-nate-flake>#<system> --impure" >&2
           exit $CC_ERR_DISTRO_DETECTION
         fi
 

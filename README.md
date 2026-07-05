@@ -225,10 +225,7 @@ run-all-cleanup-preview.sh <pr-number>
 - **Version Control** (git + GitHub): a repo; during the migration period a
   GitHub [project](https://github.com/users/natb1/projects/2) still backs the
   legacy queue.
-- **Agentic Coding Tools** (Claude Code): `nix flake update && home-manager
-  switch --flake .#default --impure` (generic forker path — plain
-  Linux/macOS. The author's WSL NixOS box activates home-manager atomically
-  via `sudo nixos-rebuild switch`; macOS via `darwin-rebuild switch`.)
+- **Agentic Coding Tools** (Claude Code): stand up your own `office-hours-nate` instance flake (template: [examples/office-hours-nate/flake.nix](examples/office-hours-nate/flake.nix)) that imports this framework's `homeManagerModules.default` and sets your identity, then `home-manager switch -b backup --flake <your-instance>#<system>` (evaluates purely on every platform — the `wezterm-windows` Windows binary is fetched at activation runtime via `curl`, not at eval time, so no `--impure` is needed).
 - **Infrastructure** (Firebase): hosting and storage for the apps this
   instance of the workflow builds.
 - **Intent**: run `/align` — it validates the deployment, walks the inherited

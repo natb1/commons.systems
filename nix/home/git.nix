@@ -1,16 +1,12 @@
 # Git Configuration Module
 #
-# This module writes settings into Home Manager's XDG git config
-# (~/.config/git/config). Git resolves identity by config precedence:
-# XDG config < ~/.gitconfig < command-line flags. Settings here land in the
-# XDG layer, so ~/.gitconfig values win over anything set by this module.
+# This module configures git via Home Manager. The commons.systems framework
+# no longer bakes in a personal identity, and it no longer reads identity from
+# the environment.
 #
-# Identity is set only when GIT_AUTHOR_NAME / GIT_AUTHOR_EMAIL are present at
-# eval time (requires `--impure`; builtins.getEnv returns "" under pure eval).
-# If neither env var is set, no [user] section is emitted here and git falls
-# through to whatever ~/.gitconfig provides. If ~/.gitconfig has no identity
-# either, git errors at commit time with "Author identity unknown" and directs
-# you to `git config --global user.name` / `user.email`.
+# Identity (programs.git.settings.user.name / .email) must be supplied by the
+# consuming office-hours-nate instance flake. The assertion below fails loudly
+# if git is enabled without an identity set. See issue #2448 / epic #2446.
 
 {
   config,
@@ -20,30 +16,38 @@
 }:
 
 let
-  envName = builtins.getEnv "GIT_AUTHOR_NAME";
-  envEmail = builtins.getEnv "GIT_AUTHOR_EMAIL";
+  gitSettings = config.programs.git.settings;
+  hasName = gitSettings ? user && gitSettings.user ? name && gitSettings.user.name != "";
+  hasEmail = gitSettings ? user && gitSettings.user ? email && gitSettings.user.email != "";
 in
-
 {
+  assertions = [
+    {
+      assertion = !config.programs.git.enable || (hasName && hasEmail);
+      message = ''
+        Git is enabled but no git identity is set.
+
+        The commons.systems framework no longer bakes in a personal git
+        identity. Set both of these in your office-hours-nate instance flake:
+
+          programs.git.settings.user.name  = "Your Name";
+          programs.git.settings.user.email = "you@example.com";
+
+        See issue #2448 / epic #2446 (the personal instance was split out of
+        the framework).
+      '';
+    }
+  ];
+
   programs.git = {
     enable = true;
 
-    # User identity — read from environment at eval time (requires --impure).
-    # If an env var is unset, that attribute is omitted and git's own config
-    # precedence applies (falls through to ~/.gitconfig, then errors clearly).
-    #
-    # To customize, either:
-    #   1. Export environment variables and run home-manager switch with --impure:
-    #        export GIT_AUTHOR_NAME="Your Name"
-    #        export GIT_AUTHOR_EMAIL="you@example.com"
-    #        home-manager switch --flake .#default --impure
-    #   2. Override in Home Manager: programs.git.settings.user.name = lib.mkForce "Your Name";
-    #   3. Set values directly in ~/.gitconfig (takes precedence over this XDG config)
+    # User identity (user.name / user.email) is intentionally NOT set here.
+    # The framework repo no longer bakes in a personal git identity; the
+    # consuming instance flake (office-hours-nate) supplies it via
+    # programs.git.settings.user.name / .email. The assertion below fails
+    # loudly if git is enabled without an identity. See issue #2448 / epic #2446.
     settings = {
-      user =
-        lib.optionalAttrs (envName != "") { name = lib.mkDefault envName; }
-        // lib.optionalAttrs (envEmail != "") { email = lib.mkDefault envEmail; };
-
       # Core settings
       pull = {
         rebase = true;

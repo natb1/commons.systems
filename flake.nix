@@ -65,18 +65,6 @@
             };
           });
 
-        apps = forAllSystems ({ pkgs, ... }:
-          let
-            home-manager-setup = pkgs.callPackage ./nix/apps/home-manager-setup.nix { };
-          in
-          {
-            home-manager-setup = {
-              type = "app";
-              program = "${home-manager-setup}/bin/home-manager-setup";
-            };
-          }
-        );
-
         checks = forAllSystems ({ pkgs, ... }:
           let
             weztermTests = pkgs.callPackage ./nix/home/wezterm.test.nix { };
@@ -120,9 +108,9 @@
       # modules at each call site via the module system's native merge.
       #
       # hostPlatform in-module is the current idiom (the legacy `system` arg to
-      # darwinSystem/nixosSystem is discouraged). Overlay/allowUnfree mirror
-      # mkHomeConfig so the reused nix/home/default.nix (which pulls the unfree
-      # pkgs.claude-code from the claude-code-nix overlay) builds.
+      # darwinSystem/nixosSystem is discouraged). The overlay/allowUnfree lines
+      # make the reused nix/home/default.nix (which pulls the unfree
+      # pkgs.claude-code from the claude-code-nix overlay) build.
       mkIntegratedHmConfig = { hostPlatform, homeDirectory }: {
         nixpkgs.hostPlatform = hostPlatform;
 
@@ -136,44 +124,18 @@
         home-manager.users.n8 = { lib, ... }: {
           imports = [ homeManagerModules.default ];
 
-          # nix/home/default.nix derives username/homeDirectory impurely via
-          # builtins.getEnv (fine for the standalone --impure homeConfigurations,
-          # but it would throw under the PURE acceptance eval). Force them so the
-          # getEnv/throw thunks are never evaluated and pure eval passes.
+          # The framework's nix/home/default.nix no longer assigns
+          # username/homeDirectory — it leaves them unset so each instance sets
+          # its own. lib.mkForce is load-bearing here: it overrides home-manager's
+          # nixos/common.nix, which derives homeDirectory from
+          # config.users.users.n8.home at priority 100. On darwin,
+          # nix/darwin/default.nix defines no users.users.n8, so that derivation
+          # yields null; mkForce (priority 50) ensures our values win. Do not drop
+          # mkForce as redundant — darwin CI fails without it (see the flake log,
+          # "restore lib.mkForce ... to override ... null derivation").
           home.username = lib.mkForce "n8";
           home.homeDirectory = lib.mkForce homeDirectory;
         };
-      };
-
-      # Home Manager configurations (not per-system in flake schema)
-      mkHomeConfig = system:
-        let
-          pkgs = import nixpkgs {
-            inherit system;
-            overlays = [ claude-code-nix.overlays.default direnvSkipTestsOverlay ];
-            config.allowUnfreePredicate = pkg:
-              builtins.elem (nixpkgs.lib.getName pkg) [
-                "claude-code"
-              ];
-          };
-        in
-        home-manager.lib.homeManagerConfiguration {
-          inherit pkgs;
-          modules = [
-            homeManagerModules.default
-          ];
-          extraSpecialArgs = {
-            inherit inputs;
-          };
-        };
-
-      homeConfigurations = builtins.listToAttrs (
-        map (system: {
-          name = system;
-          value = mkHomeConfig system;
-        }) systems
-      ) // {
-        default = mkHomeConfig builtins.currentSystem;
       };
 
       darwinConfigurations.default = darwin.lib.darwinSystem {
@@ -192,7 +154,16 @@
             # here. (wezterm-windows.nix is already gated on isLinux, so it is a
             # no-op on Darwin and needs no change.) This touches no shared file, so
             # the NixOS/WSL host config stays byte-identical.
+            #
+            # The framework (nix/home/default.nix, nix/home/git.nix) no longer
+            # assigns git identity — it leaves it unset so each instance supplies
+            # its own. This office-hours-nate instance sets the git identity here.
+            # mkIntegratedHmConfig already imports homeManagerModules.default and
+            # forces username/homeDirectory; this sibling users.n8 block merges in
+            # the identity and wezterm override via the module system.
             home-manager.users.n8 = { lib, ... }: {
+              programs.git.settings.user.name = "Nathan Buesgens";
+              programs.git.settings.user.email = "nathan@natb1.com";
               programs.wezterm.enable = lib.mkForce false;
             };
           }
@@ -216,6 +187,16 @@
             # NixOS/nix-darwin module, not standalone home-manager.
             home-manager.backupFileExtension = "backup";
 
+            # The framework (nix/home/git.nix) no longer assigns a git identity —
+            # it asserts loudly if git is enabled without one. This instance
+            # supplies its identity here. mkIntegratedHmConfig already imports
+            # homeManagerModules.default and forces username/homeDirectory; this
+            # sibling users.n8 block merges the identity in via the module system.
+            home-manager.users.n8 = {
+              programs.git.settings.user.name = "Nathan Buesgens";
+              programs.git.settings.user.email = "nathan@natb1.com";
+            };
+
             # Contrast with darwin: do NOT disable programs.wezterm here. Linux/WSL
             # wants wezterm and its mux-server user service; the darwin config
             # force-disables it only because macOS is out of scope there.
@@ -223,5 +204,5 @@
         ];
       };
     in
-    systemOutputs // { inherit homeConfigurations darwinConfigurations nixosConfigurations homeManagerModules darwinModules; };
+    systemOutputs // { inherit darwinConfigurations nixosConfigurations homeManagerModules darwinModules; };
 }
