@@ -148,6 +148,16 @@ the launch scripts issue-only):
   `tactic-phase-skill-node-targets` lands — until then a launched phase
   worker exits 1 at the skill's Step 0; the bootstrap-transition doctrine
   covers the interim, so this unit does not gate on it.)
+- Model and effort routing (strategy clarification 17, routing parity):
+  the node-lane spawn resolves `--model`/effort from the persisted
+  `phase` via `dispatch-phase-model` / `dispatch-phase-effort` and the
+  audit-written policy file, same fail-closed demotable allowlist — the
+  phase is already in hand (no SKILL→PHASE case map to fall through), so
+  the legacy lane's `/qa-main`-inherits-Opus routing hole
+  (`tactic-noncodegen-session-model-defaults` unit 1) cannot reproduce
+  here: `main-qa → claude-sonnet-*` per the policy, and `/align-tactics`
+  strategy sessions route per clarification 17 (interview/decomposition
+  on Opus, Explore fan-out on Sonnet or Haiku).
 - Mechanical failure dispositions (provision-failed, merge conflict that
   cannot invoke `/fix-conflicts`, wrong-worktree) park the node via the
   `office_hours` graph write instead of an office-hours label —

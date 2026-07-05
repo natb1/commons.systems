@@ -43,6 +43,17 @@ Greenfield shape: the triage criteria live in one script consulted by
 both the tick (pre-provision) and qa-main (in-session, as today's Step
 4·0 fallback for directly-invoked runs), so the two can never drift.
 
+Scope note (2026-07-04): this covers the **legacy issue lane only** —
+the gh main-qa follow-up queue that persists until the legacy router
+drains. Graph-native tactics never produce these follow-ups: the qa
+phase triages verifiability at residue-record time, so unverifiable
+items never reach a `main-qa` phase at all
+(`strategy-graph-native-dispatch` clarification 22;
+`tactic-phase-skill-node-targets` Unit 3, `tactic-main-qa-phase`). This
+tactic's surface retires with the legacy drain; the shared-script
+criteria remain the reference the graph-native record-time triage
+mirrors.
+
 ## Unit 1 — shared triage script + pre-provision gate
 
 **Recommended model:** opus
