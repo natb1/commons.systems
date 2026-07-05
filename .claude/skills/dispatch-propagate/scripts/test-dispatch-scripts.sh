@@ -193,6 +193,15 @@ STUB
   # stays green; a reserved-skip test creates a marker file here to opt in.
   export DISPATCH_RESERVATION_DIR="$TMPDIR_TEST/reservations"
 
+  # Attention-rank map seam. Default to the all-zero baseline: an empty map
+  # means every candidate sits at rank 0, so the rank axis degenerates to a
+  # single level and the existing enh → topic-category → phase tie-break
+  # ladder decides everything. This matches production, where the map is
+  # always empty (graph-rank interleaving retired with the node↔issue
+  # mapping); rank tests override per-test to keep exercising the inert
+  # bucket machinery until it is deleted with the legacy router.
+  export DISPATCH_RANK_MAP_JSON='{}'
+
   # dispatch-select-target calls dispatch-phase as "$SCRIPT_DIR/dispatch-phase".
   # Since we copied them all to TMPDIR_TEST, SCRIPT_DIR inside each copy will
   # resolve to TMPDIR_TEST correctly.
@@ -1203,6 +1212,9 @@ teardown() {
   unset DISPATCH_AGENTS_SNAPSHOT DISPATCH_TRACE_CACHE_DIR
   # The reservation-ledger override (#1046) must not leak across tests either.
   unset DISPATCH_RESERVATION_DIR
+  # The attention-rank seam (Attention v2) must not leak either — a per-test rank
+  # override would otherwise poison the next test's baseline.
+  unset DISPATCH_RANK_MAP_JSON
 }
 trap '[ -n "${TMPDIR_TEST:-}" ] && rm -rf "$TMPDIR_TEST"' EXIT
 
@@ -5204,11 +5216,13 @@ assert_eq "issue 6 not masked by 60-foo worktree" "issue 6" "$result"
 teardown
 
 # --- topic-category prioritization (issue #707) -----------------------------
-# The `priority` label is the outermost axis: every `priority` item ranks above
-# every non-priority item, regardless of topic. Topic category
-# (security → bug → testing infrastructure → dispatch → landing → fellspiral → budget → print → audio → other) nests inside the priority
-# axis, and the phase ladder runs innermost. A PR's category is resolved from
-# the labels of the issues it closes; an issue's category from its own labels.
+# Attention v2: attention rank is the outermost axis — every higher-rank item
+# ranks above every lower-rank item, regardless of topic (rank supplied via the
+# DISPATCH_RANK_MAP_JSON seam). Topic category
+# (security → bug → testing infrastructure → dispatch → landing → fellspiral → budget → print → audio → other) nests inside the rank
+# axis (below the enh bit), and the phase ladder runs innermost. A PR's category
+# is resolved from the labels of the issues it closes; an issue's category from
+# its own labels. The `priority` label no longer orders (cap/pacing bypass only).
 
 # 28. A PR closing a `bug` issue outranks a PR closing a `dispatch` issue, even
 #     when the dispatch PR is older — category beats age.
@@ -5258,75 +5272,80 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "PR with no closing issue is 'other'; bug issue wins" "issue 500" "$result"
 teardown
 
-# 30b. A PR closing a `priority`-only issue outranks a PR closing a plain `bug`
-#      issue — `priority` is the outermost axis, so a `priority` item in topic
-#      `other` ranks above a non-priority `bug` item. The priority-only-closing
-#      PR wins even though it is newer and its topic (`other`) is lower-ranked.
-echo "Test: PR closing a priority-only issue beats PR closing a bug issue"
+# 30b. A PR closing a rank-2 (untopiced) issue outranks a PR closing a plain
+#      `bug` issue — attention rank is the outermost axis, so a ranked item in
+#      topic `other` ranks above an unranked `bug` item. The ranked-closing PR
+#      wins even though it is newer and its topic (`other`) is lower-ranked.
+echo "Test: PR closing a rank-2 issue beats PR closing a bug issue"
 setup
-# PR 20 (older) closes bug issue 200; PR 10 (newer) closes priority-only issue 100.
+export DISPATCH_RANK_MAP_JSON='{"100": 2}'
+# PR 20 (older) closes bug issue 200; PR 10 (newer) closes rank-2 issue 100.
 UNION='['
 UNION+="$(make_pr_union 20 "20-bug-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
-UNION+="$(make_pr_union 10 "10-priority-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"
+UNION+="$(make_pr_union 10 "10-ranked-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"
 UNION+=']'
 setup_union_pr_list "$UNION"
-# Issues 100/200 are the closing issues — they carry the topic label that the
-# PRs inherit. No "help wanted" label, so they are not themselves queue items.
-printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
+# Issues 100/200 are the closing issues — 100 is untopiced (rank 2 via the map),
+# 200 carries `bug`. No "help wanted" label, so they are not themselves queue items.
+printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "priority-only-closing PR beats bug-closing PR" "pr 10 10-priority-pr fix-checks" "$result"
+assert_eq "rank-2-closing PR beats bug-closing PR" "pr 10 10-ranked-pr fix-checks" "$result"
 teardown
 
-# 30c. A PR closing a `(bug, priority)` issue outranks a PR closing a plain
-#      `bug` issue, even when the plain-bug PR is older — `priority` is the
-#      outermost axis, so both PRs share topic `bug` and the `priority` one
-#      wins. Topic category is the tie-break only within one priority level.
-echo "Test: PR closing a (bug, priority) issue beats PR closing a plain bug issue"
+# 30c. A PR closing a rank-2 `bug` issue outranks a PR closing an unranked `bug`
+#      issue, even when the unranked-bug PR is older — attention rank is the
+#      outermost axis, so both PRs share topic `bug` and the higher-ranked one
+#      wins. Topic category is the tie-break only within one rank level.
+echo "Test: PR closing a rank-2 bug issue beats PR closing an unranked bug issue"
 setup
-# PR 20 (older) closes plain bug issue 200; PR 10 (newer) closes (bug, priority) issue 100.
+export DISPATCH_RANK_MAP_JSON='{"100": 2}'
+# PR 20 (older) closes unranked bug issue 200; PR 10 (newer) closes rank-2 bug issue 100.
 UNION='['
 UNION+="$(make_pr_union 20 "20-bug-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
-UNION+="$(make_pr_union 10 "10-bug-priority-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"
+UNION+="$(make_pr_union 10 "10-bug-ranked-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"
 UNION+=']'
 setup_union_pr_list "$UNION"
-# Issue 100 carries both `bug` and `priority`; issue 200 carries only `bug`.
-printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"bug"},{"name":"priority"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
+# Issue 100 carries `bug` and is rank 2 via the map; issue 200 carries only `bug`.
+printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "(bug, priority)-closing PR beats plain-bug-closing PR" "pr 10 10-bug-priority-pr fix-checks" "$result"
+assert_eq "rank-2-bug-closing PR beats unranked-bug-closing PR" "pr 10 10-bug-ranked-pr fix-checks" "$result"
 teardown
 
-# 30d. A PR closing a `(dispatch, priority)` issue outranks a PR closing a plain
-#      `bug` issue — `priority` is the outermost axis, so it crosses topic
-#      boundaries: a `priority` item in topic `dispatch` lifts above a
-#      non-priority `bug` item. The (dispatch, priority)-closing PR wins.
-echo "Test: PR closing a (dispatch, priority) issue beats PR closing a plain bug issue"
+# 30d. A PR closing a rank-2 `dispatch` issue outranks a PR closing an unranked
+#      `bug` issue — attention rank is the outermost axis, so it crosses topic
+#      boundaries: a ranked item in topic `dispatch` lifts above an unranked
+#      `bug` item. The rank-2 dispatch-closing PR wins.
+echo "Test: PR closing a rank-2 dispatch issue beats PR closing an unranked bug issue"
 setup
-# PR 10 (older) closes (dispatch, priority) issue 100; PR 20 (newer) closes plain bug issue 200.
+export DISPATCH_RANK_MAP_JSON='{"100": 2}'
+# PR 10 (older) closes rank-2 dispatch issue 100; PR 20 (newer) closes unranked bug issue 200.
 UNION='['
-UNION+="$(make_pr_union 10 "10-dispatch-priority-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"','
+UNION+="$(make_pr_union 10 "10-dispatch-ranked-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"','
 UNION+="$(make_pr_union 20 "20-bug-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"
 UNION+=']'
 setup_union_pr_list "$UNION"
-# Issue 100 carries both `dispatch` and `priority`; issue 200 carries only `bug`.
-printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"dispatch"},{"name":"priority"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
+# Issue 100 carries `dispatch` and is rank 2 via the map; issue 200 carries only `bug`.
+printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"dispatch"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "(dispatch, priority) PR beats plain-bug PR — priority crosses topics" "pr 10 10-dispatch-priority-pr fix-checks" "$result"
+assert_eq "rank-2 dispatch PR beats unranked-bug PR — rank crosses topics" "pr 10 10-dispatch-ranked-pr fix-checks" "$result"
 teardown
 
-# 30e. The 2026-05-29 reproduction (#905). A queue of bug+priority PRs, all but
-#      one carrying an *orphan* worktree, alongside a lower-priority bug
-#      help-wanted issue with no worktree. Before the fix the orphan worktrees
-#      skipped every priority PR and the selector fell through to the
-#      help-wanted issue, violating the priority order. After the fix only the
-#      live-session-owned PR (#898) is skipped; the oldest remaining
-#      review-phase priority PR (#895) wins.
-echo "Test: orphan-worktree bug+priority PRs still beat a no-worktree help-wanted issue (#905)"
+# 30e. The 2026-05-29 reproduction (#905). A queue of bug PRs, all but one
+#      carrying an *orphan* worktree, alongside a bug help-wanted issue with no
+#      worktree. Before the #905 fix the orphan worktrees skipped every PR and the
+#      selector fell through to the help-wanted issue, violating phase order.
+#      After the fix only the live-session-owned PR (#898) is skipped; the oldest
+#      remaining review-phase PR (#895) wins. Attention v2: all PRs and the issue
+#      sit at rank 0 (same bucket), so the within-bucket phase ladder (review
+#      before qa before issue) decides — the #905 orphan-not-skipped behavior is
+#      what this test guards, orthogonal to rank.
+echo "Test: orphan-worktree bug PRs still beat a no-worktree help-wanted issue (#905)"
 setup
 UNION='['
 UNION+="$(make_pr_union 898 "898-review" "2026-05-20T00:00:00Z" "true" '[{"name":"dispatch:qa-done"}]' "$GREEN_ROLLUP" '[{"number":896}]')"','
@@ -5335,9 +5354,9 @@ UNION+="$(make_pr_union 893 "893-qa" "2026-05-22T00:00:00Z" "true" "$NO_LABELS" 
 UNION+="$(make_pr_union 883 "883-qa" "2026-05-23T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP" '[{"number":879}]')"
 UNION+=']'
 setup_union_pr_list "$UNION"
-# Each PR's closing issue carries bug + priority; issue 886 is a lower-priority
-# (no `priority`) bug help-wanted issue with no worktree.
-printf '%s\n' '[{"number":896,"created_at":"2026-05-01T00:00:00Z","labels":[{"name":"bug"},{"name":"priority"}]},{"number":806,"created_at":"2026-05-01T00:00:00Z","labels":[{"name":"bug"},{"name":"priority"}]},{"number":892,"created_at":"2026-05-01T00:00:00Z","labels":[{"name":"bug"},{"name":"priority"}]},{"number":879,"created_at":"2026-05-01T00:00:00Z","labels":[{"name":"bug"},{"name":"priority"}]},{"number":886,"created_at":"2026-05-02T00:00:00Z","labels":[{"name":"bug"},{"name":"help wanted"}]}]' \
+# Each PR's closing issue is a plain `bug` (rank 0); issue 886 is a `bug`
+# help-wanted issue with no worktree — all in the same rank-0 `bug` bucket.
+printf '%s\n' '[{"number":896,"created_at":"2026-05-01T00:00:00Z","labels":[{"name":"bug"}]},{"number":806,"created_at":"2026-05-01T00:00:00Z","labels":[{"name":"bug"}]},{"number":892,"created_at":"2026-05-01T00:00:00Z","labels":[{"name":"bug"}]},{"number":879,"created_at":"2026-05-01T00:00:00Z","labels":[{"name":"bug"}]},{"number":886,"created_at":"2026-05-02T00:00:00Z","labels":[{"name":"bug"},{"name":"help wanted"}]}]' \
   > "$STUB_DIR/issue-list.json"
 # Worktrees exist for all four PR branches; none for issue 886.
 printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/898-review\nHEAD a1\nbranch refs/heads/898-review\n\nworktree /worktrees/895-review\nHEAD a2\nbranch refs/heads/895-review\n\nworktree /worktrees/893-qa\nHEAD a3\nbranch refs/heads/893-qa\n\nworktree /worktrees/883-qa\nHEAD a4\nbranch refs/heads/883-qa\n\n' \
@@ -5345,7 +5364,7 @@ printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/898-review\nHEAD a1\n
 # Only #898's worktree has a live session; #895/#893/#883 are orphans.
 select_target_fake_claude "898-review"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "orphan priority PRs not skipped; oldest review priority PR wins" "pr 895 895-review review" "$result"
+assert_eq "orphan PRs not skipped; oldest review PR wins" "pr 895 895-review review" "$result"
 teardown
 
 # 30f. A PR closing a `security` issue outranks a PR closing a `bug` issue, even
@@ -5368,23 +5387,24 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "security-closing PR beats bug-closing PR" "pr 10 10-security-pr fix-checks" "$result"
 teardown
 
-# 30g. A PR closing a `(security, priority)` issue outranks a PR closing a plain
-#      `security` issue — `priority` is the outermost axis, so both PRs share
-#      topic `security` and the `priority` one wins.
-echo "Test: PR closing a (security, priority) issue beats PR closing a plain security issue"
+# 30g. A PR closing a rank-2 `security` issue outranks a PR closing an unranked
+#      `security` issue — attention rank is the outermost axis, so both PRs share
+#      topic `security` and the higher-ranked one wins.
+echo "Test: PR closing a rank-2 security issue beats PR closing an unranked security issue"
 setup
-# PR 20 (older) closes plain security issue 200; PR 10 (newer) closes (security, priority) issue 100.
+export DISPATCH_RANK_MAP_JSON='{"100": 2}'
+# PR 20 (older) closes unranked security issue 200; PR 10 (newer) closes rank-2 security issue 100.
 UNION='['
 UNION+="$(make_pr_union 20 "20-security-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
-UNION+="$(make_pr_union 10 "10-security-priority-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"
+UNION+="$(make_pr_union 10 "10-security-ranked-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"
 UNION+=']'
 setup_union_pr_list "$UNION"
-# Issue 100 carries both `security` and `priority`; issue 200 carries only `security`.
-printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"security"},{"name":"priority"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"security"}]}]\n' \
+# Issue 100 carries `security` and is rank 2 via the map; issue 200 carries only `security`.
+printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"security"}]},{"number":200,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"security"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "(security, priority)-closing PR beats plain-security-closing PR" "pr 10 10-security-priority-pr fix-checks" "$result"
+assert_eq "rank-2-security-closing PR beats unranked-security-closing PR" "pr 10 10-security-ranked-pr fix-checks" "$result"
 teardown
 
 # 30h. A help-wanted `security` issue outranks a help-wanted issue with no topic
@@ -5631,22 +5651,23 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "security+enh beats audio+enh (topic ladder within enh tier)" "issue 100" "$result"
 teardown
 
-# ENH3. Criterion 3 — cross-axis: priority is the outermost axis. A
-#       `priority`+`enhancement`+`audio` issue (pri=1, enh=1, low topic) beats
-#       a plain `security` issue (pri=0, enh=0, high topic). Priority outermost
-#       means a priority enhancement still jumps the queue over all non-priority
-#       work regardless of enhancement or topic.
-echo "Test: priority+enhancement+audio beats non-priority non-enhancement security (priority is outermost)"
+# ENH3. Criterion 3 — cross-axis: attention rank is the outermost axis. A
+#       rank-2 `enhancement`+`audio` issue (rank=2, enh=1, low topic) beats a
+#       rank-0 `security` issue (rank=0, enh=0, high topic). Rank outermost means
+#       a ranked enhancement still jumps the queue over all lower-ranked work
+#       regardless of enhancement or topic.
+echo "Test: rank-2+enhancement+audio beats rank-0 non-enhancement security (rank is outermost)"
 setup
+export DISPATCH_RANK_MAP_JSON='{"100": 2}'
 setup_union_pr_list '[]'
-# Issue 100 (older): priority+enhancement+audio (pri=1, enh=1, topic=audio).
-# Issue 200 (newer): security (pri=0, enh=0, topic=security).
-# Despite enhancement and low topic, issue 100 wins because priority is outermost.
-printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"},{"name":"enhancement"},{"name":"audio"}]},{"number":200,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"}]}]\n' \
+# Issue 100 (older): rank-2+enhancement+audio (rank=2, enh=1, topic=audio).
+# Issue 200 (newer): security (rank=0, enh=0, topic=security).
+# Despite enhancement and low topic, issue 100 wins because rank is outermost.
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"enhancement"},{"name":"audio"}]},{"number":200,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "priority+enh+audio beats non-priority security (priority outermost)" "issue 100" "$result"
+assert_eq "rank-2+enh+audio beats rank-0 security (rank outermost)" "issue 100" "$result"
 teardown
 
 # ENH4. Regression guard — bug/security ordering within non-enh tier unchanged:
@@ -5722,6 +5743,147 @@ printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"enh
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target" --qa)
 assert_eq "--qa: enh-closing PR 10 wins on age (PRs not enh-classified)" "pr 10 10-enh-qa" "$result"
+teardown
+
+# --- attention-rank ordering (Attention v2) ---------------------------------
+# Attention rank is the OUTERMOST ordering axis: distinct rank values drain
+# descending, with the existing enh → topic-category → phase ladder as the
+# tie-break WITHIN each rank level. Ranks are supplied via the DISPATCH_RANK_MAP_JSON
+# seam (issue number → rank). The `priority` label no longer orders anything; it
+# survives only as the cap/pacing bypass (--priority-only).
+
+# RANK1. A ranked issue beats an older unranked issue — rank is outermost, so age
+#        does not save the rank-0 item.
+echo "Test: RANK1 — ranked issue beats older unranked issue"
+setup
+export DISPATCH_RANK_MAP_JSON='{"100": 3}'
+setup_union_pr_list '[]'
+# Issue 200 (older) is unranked (rank 0); issue 100 (newer) is rank 3.
+printf '[{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":100,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "RANK1 — rank-3 issue 100 beats older unranked issue 200" "issue 100" "$result"
+teardown
+
+# RANK2. Float rank levels and multi-level drain. --top 3 emits the rank-4 issue,
+#        then the rank-0.25 issue, then the unranked (rank-0) issue — proving both
+#        the descending multi-level drain AND float bucket keys.
+echo "Test: RANK2 — float rank levels drain descending under --top 3"
+setup
+export DISPATCH_RANK_MAP_JSON='{"10": 4, "20": 0.25}'
+setup_union_pr_list '[]'
+# Three untopiced help-wanted issues: 10 (rank 4), 20 (rank 0.25), 30 (rank 0).
+# createdAt is irrelevant to ordering here since each sits at a distinct rank.
+printf '[{"number":10,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":20,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":30,"createdAt":"2024-01-03T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --top 3)
+assert_eq "RANK2 — float levels drain 4 → 0.25 → 0" "$(printf 'issue 10\nissue 20\nissue 30')" "$result"
+teardown
+
+# RANK3. A PR inherits the MAX rank over the issues it closes. PR 10 closes a
+#        rank-1 and a rank-5 issue (inherits 5); PR 20 (older) closes a rank-3
+#        issue. PR 10 outranks PR 20 despite being newer.
+echo "Test: RANK3 — PR inherits max rank over closing issues"
+setup
+export DISPATCH_RANK_MAP_JSON='{"100": 1, "101": 5, "200": 3}'
+UNION='['
+UNION+="$(make_pr_union 20 "20-single" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
+UNION+="$(make_pr_union 10 "10-multi" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100},{"number":101}]')"
+UNION+=']'
+setup_union_pr_list "$UNION"
+# Closing issues supply rank only (no help wanted — not queue items themselves).
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[]},{"number":101,"createdAt":"2024-01-01T00:00:00Z","labels":[]},{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "RANK3 — PR 10 (inherits max rank 5) beats older PR 20 (rank 3)" "pr 10 10-multi fix-checks" "$result"
+teardown
+
+# RANK4. Regression: the `priority` label is DE-ORDERED. A priority-labeled but
+#        unranked (rank 0) issue does NOT outrank a ranked non-priority issue.
+echo "Test: RANK4 — priority label does not outrank a ranked non-priority item"
+setup
+export DISPATCH_RANK_MAP_JSON='{"200": 2}'
+setup_union_pr_list '[]'
+# Issue 100 (older): priority label, rank 0. Issue 200 (newer): no priority, rank 2.
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"}]},{"number":200,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "RANK4 — rank-2 issue 200 beats older priority-labeled rank-0 issue 100" "issue 200" "$result"
+teardown
+
+# RANK5. Rank tie → the within-level ladder is intact: enh → topic-category →
+#        phase → oldest. Mirrors ENH5 with all four issues at an EQUAL rank, so
+#        the tie-break ladder alone decides the order.
+echo "Test: RANK5 — equal ranks fall through to the enh/category/age tie-break ladder"
+setup
+export DISPATCH_RANK_MAP_JSON='{"10":2,"20":2,"30":2,"40":2}'
+setup_union_pr_list '[]'
+# All rank 2: 30 (security, enh=0), 20 (audio, enh=0), 10 (security, enh=1),
+# 40 (audio, enh=1). Expected order 30 → 20 → 10 → 40 (all non-enh before any enh).
+printf '[{"number":30,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"}]},{"number":20,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"audio"}]},{"number":10,"createdAt":"2024-01-03T00:00:00Z","labels":[{"name":"help wanted"},{"name":"security"},{"name":"enhancement"}]},{"number":40,"createdAt":"2024-01-04T00:00:00Z","labels":[{"name":"help wanted"},{"name":"audio"},{"name":"enhancement"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --top 4)
+assert_eq "RANK5 — equal ranks → enh/category/age ladder (30 20 10 40)" "$(printf 'issue 30\nissue 20\nissue 10\nissue 40')" "$result"
+teardown
+
+# RANK6. --qa mode orders by rank: the newer QA PR wins because its closing issue
+#        outranks the older QA PR's closing issue.
+echo "Test: RANK6 — --qa orders by rank"
+setup
+export DISPATCH_RANK_MAP_JSON='{"200": 5}'
+UNION='['
+UNION+="$(make_pr_union 10 "10-qa" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP" '[{"number":100}]')"','
+UNION+="$(make_pr_union 20 "20-qa" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP" '[{"number":200}]')"
+UNION+=']'
+setup_union_pr_list "$UNION"
+# Issue 100 unranked (rank 0); issue 200 rank 5. Neither is help wanted.
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[]},{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --qa)
+assert_eq "RANK6 — --qa: rank-5 PR 20 beats older rank-0 PR 10" "pr 20 20-qa" "$result"
+teardown
+
+# RANK7. Fail closed (clear-errors rule): a rank map that is not a JSON object of
+#        numbers exits 1 loudly — never an all-zero fallback that silently reorders.
+echo "Test: RANK7 — invalid rank map → exit 1 with clear error"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+export DISPATCH_RANK_MAP_JSON='[]'
+err_out=$("$TMPDIR_TEST/dispatch-select-target" 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err_out" in
+  *"rank map is not a JSON object of numbers"*"EXIT=1") status_arr="ok" ;;
+  *) status_arr="bad: $err_out" ;;
+esac
+assert_eq "RANK7 — array rank map → exit 1" "ok" "$status_arr"
+export DISPATCH_RANK_MAP_JSON='{"5":"x"}'
+err_out=$("$TMPDIR_TEST/dispatch-select-target" 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err_out" in
+  *"rank map is not a JSON object of numbers"*"EXIT=1") status_str="ok" ;;
+  *) status_str="bad: $err_out" ;;
+esac
+assert_eq "RANK7 — non-number-valued rank map → exit 1" "ok" "$status_str"
+teardown
+
+# RANK8. --priority-only bypass is orthogonal to rank: it still returns a
+#        priority-labeled rank-0 item (the label survives as the cap bypass).
+echo "Test: RANK8 — --priority-only returns a priority-labeled rank-0 item"
+setup
+export DISPATCH_RANK_MAP_JSON='{}'
+setup_union_pr_list '[]'
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --priority-only)
+assert_eq "RANK8 — --priority-only selects priority rank-0 issue 100 (bypass orthogonal to rank)" "issue 100" "$result"
 teardown
 
 # --- blocked-issue PR skip (issue #786) -------------------------------------
@@ -6074,14 +6236,14 @@ teardown
 
 # --- --top N: single-pass multi-target selection (#1317) ---------------------
 # `--top N` emits up to N DISTINCT ranked decision lines in ONE queue scan,
-# preserving the existing priority order (priority axis 1→0, then topic category,
-# then the phase ladder), oldest-first within a bucket — replacing the old
-# once-per-slot serialized selector calls. `--top 1` is byte-identical to the
+# preserving the rank order (attention-rank desc, then enhancement, then topic
+# category, then the phase ladder), oldest-first within a bucket — replacing the
+# old once-per-slot serialized selector calls. `--top 1` is byte-identical to the
 # no-flag call. These run end-to-end through the real trace/ci-ready/phase copies.
 
-# T1. --top N returns N distinct ranked lines across buckets, in the priority-
-#     axis → topic-category → phase order. Three help-wanted issues, all
-#     priority 0, no PRs (so all in `plan` phase) but in DIFFERENT topic
+# T1. --top N returns N distinct ranked lines across buckets, in the attention-
+#     rank → topic-category → phase order. Three help-wanted issues, all
+#     rank 0, no PRs (so all in `plan` phase) but in DIFFERENT topic
 #     categories: 30 (security) → 20 (bug) → 10 (no topic = other). The category
 #     order is the only discriminator, so the output is deterministically
 #     security, bug, other regardless of issue-number or createdAt order.
@@ -6384,7 +6546,7 @@ echo "Test: default mode — done-ready leaf skipped, next eligible issue select
 setup
 UNION='['"$(make_pr_union 100 "100-foo" "2024-01-01T00:00:00Z" "false" "$NO_LABELS" "$GREEN_ROLLUP")"']'
 setup_union_pr_list "$UNION"
-printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"}]},{"number":200,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"}]}]\n' \
+printf '[{"number":100,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":200,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -6584,53 +6746,53 @@ setup_ancestor_priority_fixture() {
   fi
 }
 
-# PO-ANC1. A PR whose closing issue carries NO own `priority` label, but whose
-#           ancestor epic IS open and carries `priority`, is lifted into the
-#           priority tier via ancestor inheritance (#1914). In DEFAULT mode this
-#           PR (priority-via-ancestor) outranks an older PR whose closing issue
-#           carries `bug` but no priority. The priority axis is the outermost
-#           sort key, so the inherited-priority PR wins regardless of topic
-#           category or creation order.
+# PO-ANC1. Attention v2 converts this to a direct PR-rank-inheritance test.
+#           Historically (#1914) this proved ancestor-`priority` ORDERING
+#           inheritance; that ordering inheritance is removed — attention rank now
+#           carries ordering. Here PR 20 closes rank-2 issue 101 and inherits rank
+#           2, outranking older PR 10 (closes unranked bug issue 200).
 #
-#           Fixture:
-#             issue 100  labels: [priority]        (the open ancestor epic)
-#             issue 101  labels: [help wanted]      (leaf; child of 100 via parent-101.json)
-#             issue 200  labels: [bug]              (unrelated, non-priority issue)
-#             PR 10 (older, 2024-01-01) closes issue 200 (bug, no priority)
-#             PR 20 (newer, 2024-01-02) closes issue 101 (help wanted, no own
-#                     priority — priority only via ancestor 100)
+#           Fixture (the ancestor `priority` structure is retained but inert for
+#           ordering — it only exercises the still-present bypass machinery):
+#             issue 100  labels: [priority]        (the open ancestor epic; inert for ordering)
+#             issue 101  labels: [help wanted]      (leaf; child of 100 via parent-101.json; rank 2 via the map)
+#             issue 200  labels: [bug]              (unrelated issue; rank 0)
+#             PR 10 (older, 2024-01-01) closes issue 200 (bug, rank 0)
+#             PR 20 (newer, 2024-01-02) closes issue 101 (help wanted, rank 2)
 #           parent-101.json → 100; no parent-100.json; no parent-200.json
-#           issue-list.json: 100, 101, 200 — all open; issue 101 is help-wanted
-#             but has no own `priority` so it stays OUT of the issue priority
-#             tier (ISSUE_SORTED uses own labels only). Issues 100 and 200 lack
-#             `help wanted` and are never startable. The issue queue produces
-#             no priority-1 selection — only the PR path selects here.
+#           issue-list.json: 100, 101, 200 — all open; issues 100 and 200 lack
+#             `help wanted` and are never startable, so only the PR path selects here.
 #
-#           This is the ONLY assertion that proves ancestor-priority lifts PR 20
-#           above PR 10. Without ancestor inheritance, both PRs have pri=0 and
-#           PR 10 (older) wins. With it, PR 20 gets pri=1 and wins outright.
-echo "Test: default mode — ancestor priority lifts PR over non-priority PR"
+#           Attention v2: priority-label ORDERING inheritance is removed — the
+#           attention rank now carries ordering. This proves PR RANK inheritance:
+#           PR 20 closes rank-2 issue 101 and so inherits rank 2 (max over its
+#           closing issues), lifting it above older PR 10 (closes unranked bug
+#           issue 200). The ancestor `priority` epic in the fixture is now inert
+#           for ordering (it survives only as the cap/pacing bypass). Without rank
+#           inheritance both PRs sit at rank 0 and PR 10 (older) wins; with it PR
+#           20 gets rank 2 and wins outright.
+echo "Test: default mode — PR rank inheritance lifts PR over unranked PR"
 setup
+export DISPATCH_RANK_MAP_JSON='{"101": 2}'
 setup_ancestor_priority_fixture 1 "$FAILING_ROLLUP"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "ancestor priority lifts PR 20 over older PR 10 (default mode)" "pr 20 20-leaf-pr fix-checks" "$result"
+assert_eq "rank-2 closing issue lifts PR 20 over older PR 10 (default mode)" "pr 20 20-leaf-pr fix-checks" "$result"
 teardown
 
-# PO-ANC-TRUNC. The depth-7 truncation warning must fire WITHOUT disabling
-#           ancestor-priority evaluation across the supported window. This is a
-#           two-PR contest, not an uncontested selection: without ancestor
-#           inheritance PR 10 wins on the higher `bug` topic category (and is
-#           also older); with it, issue 95's depth-6 priority lifts PR 20 on the
-#           outermost priority axis. So a correct result REQUIRES ancestor
-#           priority to be evaluated correctly across the supported window WHILE
-#           the depth-7 chain trips the truncation warning. Placing `priority`
-#           on the depth-6 (deepest in-window) ancestor proves both happen at
-#           once.
+# PO-ANC-TRUNC. The depth-7 truncation warning must still fire — the ancestor
+#           chain is walked regardless (ANCESTOR_NUMS feeds the cap/pacing bypass).
+#           Attention v2 re-anchors the ORDERING assertion: ancestor `priority` no
+#           longer orders, so under the all-zero rank baseline this is an unranked
+#           two-PR contest where PR 10 wins on the higher `bug` topic category (and
+#           is also older). So a correct result requires BOTH the truncation warning
+#           to fire (deep chain walked) AND PR 10 to win (ancestor priority does not
+#           lift PR 20). Placing `priority` on the depth-6 ancestor exercises the
+#           deep-chain walk without affecting ordering.
 #
 #           Fixture:
-#             issue 101  labels: [help wanted]   (leaf; closed by PR 20; no own priority)
-#             issue 95   labels: [priority]       (depth-6 ancestor of 101; priority-only)
-#             issue 200  labels: [bug]            (closed by PR 10; no priority)
+#             issue 101  labels: [help wanted]   (leaf; closed by PR 20; rank 0)
+#             issue 95   labels: [priority]       (depth-6 ancestor of 101; inert for ordering)
+#             issue 200  labels: [bug]            (closed by PR 10; rank 0)
 #             PR 10 (older, 2024-01-01) closes issue 200 (bug, no priority)
 #             PR 20 (newer, 2024-01-02) closes issue 101 (help wanted, no own
 #                     priority — priority only via depth-6 ancestor 95)
@@ -6657,7 +6819,12 @@ done
 result=$("$TMPDIR_TEST/dispatch-select-target" 2>"$TMPDIR_TEST/stderr") && rc=0 || rc=$?
 stderr=$(cat "$TMPDIR_TEST/stderr")
 assert_eq "deep-chain selection still exits 0" "0" "$rc"
-assert_eq "ancestor priority lifts PR 20 over older PR 10 despite truncation" "pr 20 20-deep-chain-leaf fix-checks" "$result"
+# Attention v2: the depth-7 ancestor chain is still walked (ANCESTOR_NUMS feeds
+# the cap/pacing bypass), so the truncation warning still fires. But ancestor
+# `priority` no longer ORDERS: under the all-zero rank baseline both PRs sit at
+# rank 0, so PR 10 (topic `bug`, older) wins on the tie-break ladder. The
+# assertion is re-anchored to the warning firing + PR 10 winning.
+assert_eq "unranked default ordering: PR 10 (bug, older) wins despite deep chain" "pr 10 10-bug-pr fix-checks" "$result"
 assert_eq "truncation warning on stderr" "1" "$(grep -c 'ancestor chain deeper than supported depth (6) for issue 101' <<<"$stderr")"
 teardown
 
@@ -6713,13 +6880,16 @@ teardown
 #           Issue 102's neutral labels keep it out of the startable issue queue so
 #           it does not perturb selection. Without depth-2 recursion both PRs have
 #           pri=0 and PR 10 (older) wins; with it PR 20 gets pri=1 and wins.
-echo "Test: default mode — depth-2 ancestor priority lifts PR over non-priority PR"
+echo "Test: default mode — PR rank inheritance lifts PR over unranked PR (depth-2 fixture)"
 setup
-# Fixture written by setup_ancestor_priority_fixture 2: grandparent 100 carries
-# `priority`; neutral intermediate 102 connects 101→102→100 (see helper comment).
+# Attention v2: converted to a direct rank test (ordering inheritance removed).
+# PR 20 closes rank-2 issue 101 and inherits rank 2, winning over older unranked
+# PR 10. The depth-2 ancestor `priority` structure in the fixture is inert for
+# ordering (cap/pacing bypass only).
+export DISPATCH_RANK_MAP_JSON='{"101": 2}'
 setup_ancestor_priority_fixture 2 "$FAILING_ROLLUP"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "depth-2 ancestor priority lifts PR 20 over older PR 10 (PO-ANC3)" "pr 20 20-leaf-pr fix-checks" "$result"
+assert_eq "rank-2 closing issue lifts PR 20 over older PR 10 (PO-ANC3)" "pr 20 20-leaf-pr fix-checks" "$result"
 teardown
 
 # PO-ANC4. Depth-2 ancestor priority, --priority-only mode. Same fixture as
@@ -6976,9 +7146,10 @@ teardown
 # `empty`.
 
 # PT1. --priority-only --top 3 returns up to 3 priority lines in topic-category
-#      order. All three issues carry BOTH `help wanted` and `priority`, so the
-#      priority axis does not discriminate; topic category (security > bug >
-#      other) is the only discriminator — mirrors T1 with priority labels added.
+#      order. All three issues carry BOTH `help wanted` and `priority`, and all are
+#      rank 0, so neither the bypass filter nor the attention rank discriminates;
+#      topic category (security > bug > other) is the only discriminator — mirrors
+#      T1 with the priority (bypass) label added.
 echo "Test: --priority-only --top 3 returns 3 priority lines in topic-category order"
 setup
 setup_union_pr_list '[]'
@@ -9336,6 +9507,46 @@ assert_eq "trace-leaf transient retry → leaf 900" "900" "$result"
 assert_eq "trace-leaf transient retry → rc 0" "0" "$rc"
 hit_count=$(cat "$STUB_DIR/gh-transient-blocked_by-900.count")
 assert_eq "trace-leaf transient retry → blocked_by hit exactly 3 times" "3" "$hit_count"
+teardown
+
+# 27. Blocking is a tactic-layer gate. Node 100 has an open blocker 999 AND a
+#     lower-numbered open sub-issue 50. Pre-fix, open_children unioned {50, 999}
+#     and descended 50 first, returning the sub-issue past an open blocker. After
+#     the fix an open blocker suppresses sub-issue gathering: only the blocking
+#     subtree is descended, so the blocker leaf 999 is returned.
+echo "Test: queue mode → open blocker gates the subtree; blocker leaf returned, not lower sub-issue"
+setup
+printf '[{"number":999,"state":"open"}]\n' > "$STUB_DIR/blockers-100.json"
+printf '[{"number":50}]\n' > "$STUB_DIR/subissues-100.json"
+printf '{"title":"Issue 999","body":"","comments":[],"number":999,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-999.json"
+printf '{"title":"Issue 50","body":"","comments":[],"number":50,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-50.json"
+result=$("$TMPDIR_TEST/dispatch-trace-leaf" "100" "queue")
+assert_eq "queue: open blocker gates subtree → blocker leaf 999 (sub-issue 50 suppressed)" "999" "$result"
+teardown
+
+# 28. Same shape, but the whole blocking subtree is claimed (999 reserved). The
+#     gate holds — the descent finds no startable leaf in the blocking subtree
+#     and does NOT fall through to the sub-issue 50. Exit 2 (no startable leaf).
+echo "Test: queue mode → blocker subtree fully claimed → exit 2 (sub-issue not reachable)"
+setup
+printf '[{"number":999,"state":"open"}]\n' > "$STUB_DIR/blockers-100.json"
+printf '[{"number":50}]\n' > "$STUB_DIR/subissues-100.json"
+printf '{"title":"Issue 999","body":"","comments":[],"number":999,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-999.json"
+printf '{"title":"Issue 50","body":"","comments":[],"number":50,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-50.json"
+# No live sessions; a reservation marker claims the blocker leaf 999.
+select_target_fake_claude
+mkdir -p "$DISPATCH_RESERVATION_DIR"
+printf 'session=resv-sess\nissue=999\ntimestamp=2026-01-01T00:00:00Z\n' > "$DISPATCH_RESERVATION_DIR/999-blocker"
+err_out=$("$TMPDIR_TEST/dispatch-trace-leaf" "100" "queue" 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err_out" in
+  *"worktree-conflicted"*"EXIT=2") status="ok" ;;
+  *) status="bad: $err_out" ;;
+esac
+assert_eq "queue: blocker subtree claimed → exit 2, sub-issue 50 not returned" "ok" "$status"
 teardown
 
 # ============================================================================
@@ -38536,36 +38747,38 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "#1452 F(a) — security leaf 920 wins over audio leaf 910" "issue 920" "$result"
 teardown
 
-# F(a) case 2: a priority (pri1) root vs a pri0 root created EARLIER — priority is
-#    the outermost axis, so the priority leaf wins regardless of age.
-echo "Test: #1452 F(a) — priority root beats earlier non-priority root"
+# F(a) case 2: a rank-2 root vs a rank-0 root created EARLIER — attention rank is
+#    the outermost axis, so the higher-rank leaf wins regardless of age.
+echo "Test: #1452 F(a) — higher-rank root beats earlier lower-rank root"
 setup
+export DISPATCH_RANK_MAP_JSON='{"940": 2}'
 setup_union_pr_list '[]'
-printf '[{"number":930,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":940,"created_at":"2024-02-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"}]}]\n' \
+printf '[{"number":930,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":940,"created_at":"2024-02-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "#1452 F(a) — priority leaf 940 wins over earlier pri0 leaf 930" "issue 940" "$result"
+assert_eq "#1452 F(a) — rank-2 leaf 940 wins over earlier rank-0 leaf 930" "issue 940" "$result"
 teardown
 
-# F(b). Lower tiers not traced. R_hi (priority help-wanted root 940) traces to an
-#    emittable leaf in orphan world; R_lo (pri0/other root 950) is a strictly
+# F(b). Lower tiers not traced. R_hi (rank-2 help-wanted root 940) traces to an
+#    emittable leaf in orphan world; R_lo (rank-0/other root 950) is a strictly
 #    lower-rank group. With default TOP=1, once R_hi's group holds its one
 #    emittable entry the walk early-exits BEFORE tracing R_lo — so R_lo's
 #    blocker lookup never fires (grep count 0). R_hi and R_lo MUST sit in
-#    different (pri, cat-rank) groups for the group-boundary fold to fire, and
+#    different (rank, cat-rank) groups for the group-boundary fold to fire, and
 #    R_hi's leaf must be emittable (no ready closing PR, orphan world) so it fills
 #    TOP=1.
 echo "Test: #1452 F(b) — early-exit skips tracing the lower-rank root"
 setup
+export DISPATCH_RANK_MAP_JSON='{"940": 2}'
 setup_union_pr_list '[]'
-# 940 = priority help-wanted (pri1), its own emittable leaf. 950 = plain
-# help-wanted (pri0, other) — strictly lower rank. No worktrees, no closing PRs.
-printf '[{"number":940,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"priority"}]},{"number":950,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
+# 940 = rank-2 help-wanted, its own emittable leaf. 950 = plain help-wanted
+# (rank-0, other) — strictly lower rank. No worktrees, no closing PRs.
+printf '[{"number":940,"created_at":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"}]},{"number":950,"created_at":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' \
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "#1452 F(b) — priority leaf 940 selected" "issue 940" "$result"
+assert_eq "#1452 F(b) — rank-2 leaf 940 selected" "issue 940" "$result"
 lo_c=$(grep -c "^950$" "$STUB_DIR/issue-blocking-calls.log" 2>/dev/null || true)
 assert_eq "#1452 F(b) — lower-rank root 950 never traced (early-exit)" "0" "$lo_c"
 teardown
@@ -42170,7 +42383,7 @@ cat > "$TMPDIR_TEST/closing.json" <<'EOF'
 EOF
 out=$("$TMPDIR_TEST/scripts/dispatch-find-owning-pr" 100 "some/file.ts"); rc=$?
 assert_eq "dispatch-find-owning-pr: clean defer exits 0" "0" "$rc"
-assert_contains_local "dispatch-find-owning-pr: emits defer:42" "defer:42" "$out"
+assert_contains_local "dispatch-find-owning-pr: emits defer:42:7" "defer:42:7" "$out"
 find_owning_pr_teardown
 
 # --- Test: multiple owning PRs ---

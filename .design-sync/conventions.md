@@ -22,15 +22,28 @@ two-column main + sticky/collapsible context panel, footer) that composes the
 primitives. Render it on its own for a populated page scaffold:
 `<CommonsDS.Landing />`.
 
-`OfficeHours` is a second **template** — a populated snapshot of the office-hours
-operator dashboard, with two pages selected by the `page` prop, the way the app's
-nav header splits them. `page="status"` (the default) is the at-a-glance view
-(capacity, pace, backlog, intention tree); `page="other"` holds everything else
-(history, audit, reminders, queue, parked, project signals). Both pages are
-populated snapshots built from the same reusable primitives (sticky nav header
-carrying the Status/Other tabs, a responsive grid of `Card` panels holding
-`Metric` stat-cards, `Badge` status chips, and chart-shaped placeholders, shared
-footer). Render either for a dashboard page scaffold:
+`PageShell` is the **page chrome template** — sticky header (wordmark, tagline,
+`Nav`, optional `navEnd`/`headerEnd` slots), a `hero` slot above `children`, and
+a footer. Use it to scaffold any page layout:
+`<CommonsDS.PageShell wordmark="BRAND" navLinks={[…]} navEnd={<Button>Sign in</Button>}><main>…</main></CommonsDS.PageShell>`.
+
+`Hero` is a **hero section** — amber banner with `headline`, optional `subline`,
+`ctas` (array of `{label, href, variant?}`), and `cards` (array of
+`{title, body, href?, media?}`). Optional `overflow` + `overflowLabel` for a
+collapsed "show more" row:
+`<CommonsDS.Hero headline="…" cards={[…]} ctas={[{label:'Get started',href:'/'}]} />`.
+
+`ContextPanel` is a **sticky sidebar / collapsible overlay** — `id`, `open`
+bool, and `children`. Pair with `ContextPanelToggle` (the toggle button) on
+narrow layouts. `PageShell` uses it internally; use directly for custom shells:
+`<CommonsDS.ContextPanel id="ctx" open={open}><nav>…</nav></CommonsDS.ContextPanel>`.
+
+`Landing` is the full-page landing template (PageShell + Hero + ContextPanel
+pre-composed). `<CommonsDS.Landing />` for a one-call page scaffold.
+
+`OfficeHours` is the **office-hours operator dashboard template** — two pages
+selected by `page="status"` (default, capacity/pace/backlog) or
+`page="other"` (history/audit/queue). Render for a populated dashboard scaffold:
 `<CommonsDS.OfficeHours />` or `<CommonsDS.OfficeHours page="other" />`.
 
 ## Styling idiom — semantic props + CSS variables (NOT utility classes)

@@ -246,8 +246,9 @@ judgments above and the three-way verdict below.
 
    - `proceed` — the path is on no open PR branch (a deliverable, not a
      precondition).
-   - `defer:<B>` — a lone owning PR closes exactly one issue `<B>` and the
-     `blocked_by` link would be clean.
+   - `defer:<B>:<P>` — a lone owning PR closes exactly one issue; `<B>` is the
+     blocker issue number to set as `blocked_by`, and `<P>` is the owning PR
+     number that step 4's re-alignment check reads to fetch the PR diff.
    - `not-clear:<reason>` — `multiple-owning-prs`, `owning-pr-closes-<c>-issues`,
      `already-blocked`, `would-cycle`, or `pr-list-truncated`.
 
@@ -258,9 +259,9 @@ judgments above and the three-way verdict below.
      unchanged.
    - All verdicts `proceed` → these absent paths are deliverables, not
      preconditions → continue to the three-way verdict / normal planning.
-   - One or more `defer:<B>` and **all** `defer` verdicts name the **same single**
-     blocker `B` (with no `not-clear`) → run the **greenfield re-alignment check**
-     (step 4) before deferring.
+   - One or more `defer:<B>:<P>` and **all** `defer` verdicts name the **same single**
+     blocker `B` (the middle colon-delimited field; with no `not-clear`) → run the
+     **greenfield re-alignment check** (step 4) before deferring.
    - `defer` verdicts naming **more than one distinct** blocker → **park**
      (multi-blocker sequencing needs human judgment; blocking on one would be
      arbitrary).
@@ -274,9 +275,9 @@ judgments above and the three-way verdict below.
    **only** because `N`'s own scope corrects it later. Judge `N`'s current
    acceptance criteria against what the blocker introduces. Your primary signal is
    the absent precondition path(s) — you already hold those. If you need to inspect
-   the blocker's changes more closely, resolve the owning PR from `B`
-   (`gh pr list --state open --search "linked:$B"`) and read its diff
-   (`gh pr diff`), both `dangerouslyDisableSandbox: true`. Three outcomes:
+   the blocker's changes more closely, read `P` (the third field) directly from
+   the `defer:<B>:<P>` token and fetch its diff via `gh pr diff "$P"`,
+   `dangerouslyDisableSandbox: true`. Three outcomes:
 
    - **Already re-aligns** — `N`'s acceptance criteria already remove or undo the
      blocker's suboptimal direction (e.g. the #2668/#2670 crypto-dedup case:
@@ -301,8 +302,8 @@ judgments above and the three-way verdict below.
 5. **Auto-defer when clear.** Create the `blocked_by` link from target `N` to
    blocker `B`, mark the issue deferred, then **stop** — persist **no** plan and
    apply **no** `dispatch:office-hours`. Use the integer database id and guard
-   against a duplicate POST (the `ref-github-issues` / `intention-emit` idempotent
-   pattern), all with `dangerouslyDisableSandbox: true`:
+   against a duplicate POST (the `ref-github-issues` idempotent pattern), all
+   with `dangerouslyDisableSandbox: true`:
 
    ```bash
    EXISTING=$(gh api "/repos/{owner}/{repo}/issues/$N/dependencies/blocked_by" --jq '.[].number')

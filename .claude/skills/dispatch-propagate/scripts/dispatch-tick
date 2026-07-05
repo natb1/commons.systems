@@ -18,7 +18,7 @@
 # tick is launched by systemd (the #725 heartbeat) and by the worker Stop-hook in
 # a later unit; it runs bare and keeps the concurrency gate. A human-typed
 # `dispatch` runs one tick as foreground bash, passing `--manual` to spawn a
-# context-dependent SPAWN_N workers (priority-first), exempt from the pace-curve
+# context-dependent SPAWN_N workers (rank-first), exempt from the pace-curve
 # throttle but bounded by the `MAX_WORKERS` ceiling and the `--exhausted` floor.
 # The audit record is this script's journal output
 # (every captured stdout line is echoed through) plus the spawned workers'
@@ -34,7 +34,8 @@
 #   `dispatch` (bare, no argument): skips the pace-curve throttle (a budget pause
 #   to TARGET_N=0 still fans out) but honors the `MAX_WORKERS` ceiling and the
 #   `--exhausted` hard floor; spawns SPAWN_N = min(HEADROOM, max(N_PRIO, GAP, 1))
-#   workers, priority-first (the highest-priority queue targets). Emits
+#   workers, rank-first (the highest-rank queue targets; the `priority` label is
+#   the pace-curve/cap bypass, not an ordering signal). Emits
 #   `concurrency-cap` when SPAWN_N=0 (at the ceiling or exhausted).
 #
 #   Exhaustion hard floor (both autonomous and manual paths): when the 5-hour or
@@ -51,7 +52,8 @@
 #   `LIVE_COUNT >= TARGET_N` but `--exhausted` reports `ok`, the tick does NOT
 #   immediately emit `concurrency-cap`. Instead it runs
 #   `dispatch-select-target --priority-only`, which checks the main-broken health
-#   gate first, then scans only the `priority=1` queue tier. If a
+#   gate first, then scans only priority-LABELED items (the label's one surviving
+#   meaning — the cap/pacing bypass, not ordering). If a
 #   `priority`-labeled PR or help-wanted issue (including any `dispatch:main-broken`
 #   issue) is found, the tick holds the lock and spawns exactly ONE gate-exempt
 #   worker (`GAP=1`) — the same treatment as an explicit `dispatch <N>`. This also closes

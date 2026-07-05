@@ -49,6 +49,8 @@ Repo-specific gotchas for future re-syncs. One bullet per gotcha.
 - `Input` stories render wider than a grid cell → `cfg.overrides.Input.cardMode:
   "column"` (full card width per story). Presentation-only; targeted rebuild,
   grades carry.
+- **`Hero`, `OfficeHours`, `PageShell`** also trip `[GRID_OVERFLOW] wide` — each
+  gets `cfg.overrides.<Name>.cardMode: "column"`. Same targeted-rebuild rule.
 
 ## Verification env (WSL/Nix box)
 - **This is NixOS — the cached playwright chromium CANNOT run.** The
@@ -85,15 +87,18 @@ Repo-specific gotchas for future re-syncs. One bullet per gotcha.
 - **Fonts depend on storybook `staticDirs`**: the woff2 are under
   `.storybook/public/fonts/`. If that path moves, `cfg.extraFonts` breaks.
   `[FONT_MISSING]` for IBM Plex (not the Cascadia/Source-Code fallbacks) = real.
-- **9 components, 31 stories, all graded `match`** — the original 8 (30 stories)
-  plus the **`Landing` template** (`Templates/Landing`, 1 story `Default`), added
-  2026-06-28. No `close`, none skipped. No story caps hit (≤6 stories each). No
-  owned previews — all 9 use the generated story-module previews, so an upstream
-  story edit re-grades automatically on the next driver run.
-- **`Landing` is a full-page template** (`layout: fullscreen`): header+nav, amber
-  hero, three app cards, two-column main + sticky context panel, footer sidebar.
-  It did NOT trip `[GRID_OVERFLOW]` (renders within its cell) — no `cardMode`
-  override needed. If a future edit widens it, expect `wide` → `cardMode:column`.
+- **13 components, 39 stories, all graded `match`** — 8 core/form/nav (30 stories)
+  + 5 templates (9 stories): `Landing` (1 story), `OfficeHours` (3), `ContextPanel`
+  (1), `Hero` (2), `PageShell` (2), all updated/added 2026-07-03. No `close`, none
+  skipped. No story caps hit. No owned previews — all 13 use generated story-module
+  previews, so upstream story edits re-grade automatically on the next driver run.
+- **`Hero`, `OfficeHours`, `PageShell`** are wide templates with `cardMode:column`
+  (see Grid overflow). `Landing` and `ContextPanel` render within their cells — no
+  override needed. If future edits widen them, expect `[GRID_OVERFLOW] wide` →
+  apply `cardMode:column`.
+- **`BudgetPaceChart`** is exported from `src/index.ts` but has **no stories** —
+  it won't appear in the sync (storybook shape includes only storied components).
+  If a story is added to `packages/ds/src/charts/`, it'll appear on the next sync.
 - **Toolchain assumed**: node 22.22.3, playwright 1.60 → chromium driven via
   `DS_CHROMIUM_PATH` (nix chromium — the cached ms-playwright chromium is
   un-runnable on this NixOS box; see Verification env). Storybook 10, React 18.

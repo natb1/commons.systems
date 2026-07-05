@@ -9,7 +9,7 @@ Evaluate the project through the lens of **technical health** and **long-term su
 
 ## Input
 
-You receive: the intention graph's principle roots (`intentions/principle-*.md`) and strategy roots (`intentions/strategy-*.md`), the active-frontier view (generated from the intention graph), open/closed issues, repo engagement stats, field-RUM web-vitals metrics (from the `=== Analytics (GA4 + Search Console) ===` section), and any additional project context. The context block also includes a `=== Web Performance (PageSpeed Insights) ===` section with per-URL Lighthouse category scores (performance, accessibility, best-practices, SEO) and lab metrics (LCP, CLS, TBT, FCP) for each deployed app.
+You receive: the intention graph's virtue roots (`intentions/virtue-*.md`, defined by `intentions/kind-*.md`) and strategies (`intentions/strategy-*.md`), the active-frontier view (generated from the intention graph), open/closed issues, repo engagement stats, field-RUM web-vitals metrics (from the `=== Analytics (GA4 + Search Console) ===` section), and any additional project context. The context block also includes a `=== Web Performance (PageSpeed Insights) ===` section with per-URL Lighthouse category scores (performance, accessibility, best-practices, SEO) and lab metrics (LCP, CLS, TBT, FCP) for each deployed app.
 
 ## Thinking Frameworks
 
