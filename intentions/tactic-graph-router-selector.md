@@ -141,7 +141,10 @@ the launch scripts issue-only):
   PR exists) runs unchanged, preserving the merged-tree guarantee.
 - `dispatch-spawn-job` is reused as-is (generic primitive): `--name` =
   node id, `--cwd` = the node-id worktree, prompt = the mapped skill
-  invocation.
+  invocation. (The invoked phase skills accept node targets only once
+  `tactic-phase-skill-node-targets` lands — until then a launched phase
+  worker exits 1 at the skill's Step 0; the bootstrap-transition doctrine
+  covers the interim, so this unit does not gate on it.)
 - Mechanical failure dispositions (provision-failed, merge conflict that
   cannot invoke `/fix-conflicts`, wrong-worktree) park the node via the
   `office_hours` graph write instead of an office-hours label —

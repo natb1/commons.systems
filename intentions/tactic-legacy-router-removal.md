@@ -28,6 +28,7 @@ blocked_by:
   - tactic-graph-router-transitions
   - tactic-dispatch-lifecycle-sensor
   - tactic-calculated-attention
+  - tactic-phase-skill-node-targets
 office_hours: null
 pace_exempt: false
 rounds: null
@@ -78,8 +79,10 @@ nothing of it remains to retire here.)
 ## Dependencies
 
 - `tactic-align-strategy-skill`, `tactic-align-tactics-skill`,
-  `tactic-graph-router-transitions`, `tactic-dispatch-lifecycle-sensor` —
-  the replacement surface must be live end to end.
+  `tactic-graph-router-transitions`, `tactic-dispatch-lifecycle-sensor`,
+  `tactic-phase-skill-node-targets` — the replacement surface must be
+  live end to end (the last one is what lets the phase skills run on node
+  targets at all).
 
 ## Verification
 
