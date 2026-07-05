@@ -170,7 +170,9 @@ lane only (legacy issue lane unchanged):
 npm test --prefix packages/intentionsutil
 ```
 
-Manual: in a hand-provisioned node-id worktree for a synthetic tactic
+Manual: in a node-id worktree at the native default location
+(`<project-root>/.claude/worktrees/<node-id>`, strategy clarification 23
+— never the legacy `.bare`/`worktrees/` layout) for a synthetic tactic
 (with `execution.pr` pointing at a scratch PR), each of the four skills'
 Step 0 resolves the node target and reaches its first substantive step;
 an induced escalation lands `office_hours` on the node via `graph-commit`

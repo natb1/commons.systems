@@ -423,6 +423,18 @@ uniform worktree gives liveness detection (live session ⇔ worktree) one
 rule for both kinds. Draining legacy gh work keeps its numeric form, so
 both keyspaces coexist.
 
+**Worktree substrate (clarification 23):** `main` is checked out at the
+project root (`~/natb1/commons.systems`), and a node-id worktree is a
+Claude Code native worktree at the harness default location —
+`<project-root>/.claude/worktrees/<node-id>` — entered via the native
+worktree tooling (EnterWorktree) in sessions and provisioned by launch
+scripts as a plain `git worktree add` into that same path. No
+graph-native machinery assumes the legacy `.bare` shared-common-dir +
+sibling `worktrees/` layout: those persist only as backward
+compatibility for the draining gh lane (which keeps its numeric
+worktrees where they are) and their conventions retire with
+`tactic-legacy-router-removal`.
+
 The launch chain follows the same keyspace split: selection hands the
 node id to the legacy launch scripts
 (`dispatch-materialize-spawn` → `dispatch-launch-worker` →
@@ -588,5 +600,18 @@ tactic-intentions-branch-protection (park) ┤                                 �
   merged-with-residue to `main-qa`) and `tactic-graph-router-selector`
   (ladder + directive mapping), and wired `tactic-main-qa-phase` into
   `tactic-legacy-router-removal.blocked_by`. No tactic was pruned.
+- **Re-evaluation (2026-07-05, clarification 23):** run inline (no router
+  yet), triggered by the author's repo re-anchoring — `main` checked out
+  at the project root with Claude Code managing worktrees natively at the
+  default `.claude/worktrees/` location; `.bare` and the sibling
+  `worktrees/` container are backward compatibility for the draining gh
+  lane only. §3.4 gained the worktree-substrate paragraph;
+  `tactic-graph-router-selector` Unit 3 was re-scoped from
+  worktree-create.sh node-id naming to native default-location placement
+  (Unit 4's worktree path follows it);
+  `tactic-phase-skill-node-targets`'s manual verification names the
+  native location; and `tactic-legacy-router-removal` Unit 1 now retires
+  the legacy worktree-layout conventions with the drain. No tactic was
+  pruned and no `blocked_by` changed.
 - This parent is not directly executable (no `phase`); it completes when
   its last child completes, which stamps the strategy's `rounds`.
