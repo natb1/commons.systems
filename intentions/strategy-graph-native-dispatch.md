@@ -319,6 +319,49 @@ clarifications:
       (clarification 15) emulating qa owes these full semantics before writing
       the qa -> review transition; the transition write asserts the validation
       happened, not that the checklist re-ran."
+  - question: Does review-phase parity bind like qa parity — what does an emulating
+      session owe the review phase?
+    answer: "Yes — the clarification-20 rule generalizes: review is the full
+      /review-fix fan-out (surface-conditional finders in parallel -> code dedup
+      -> classify -> adversarial verify with severity-scaled skeptics -> the
+      Opus fix lane -> disposition per clarification 19, recorded in the PR
+      review comment), not a single-agent read-through — and never skippable.
+      Precedent: PRs #2750, #2748, and #2742 merged with no review phase at all
+      under the bootstrap doctrine; the independent review ran retroactively a
+      day later and its findings became the clarification-19 deferral drafts. A
+      bootstrap-emulating session owes the full fan-out semantics before writing
+      review -> done; the transition write asserts the review ran, not that CI
+      is green. One seam is graph-native (clarification 19): deferred findings
+      land as draft tactic nodes batched per component — never gh follow-up
+      issues, no dispatch:review-followup label, and no orphan-retriage analog
+      is needed: drafts are inert until a later /align-tactics round finalizes
+      them, and that round validates the finding provenance against what
+      actually merged. Recorded 2026-07-04 interview."
+  - question: Where does a graph-native tactic's qa needs-main residue — post-merge
+      verify-against-prod work — live?
+    answer: "In the tactic's own lifecycle: main-qa is a phase of the source node,
+      not a separate artifact (no gh carve-out — condition 1 holds absolutely).
+      The legacy follow-up issue was a workaround for gh mechanics (issues close
+      on merge, forcing a second artifact plus provenance markers plus orphan
+      retriage); a persistent node with persisted phase needs none of it.
+      Design: the Phase enum gains main-qa, between merge and done; qa records
+      needs-main residue in a body section of the node instead of filing
+      anything; the reconciler routes a merged tactic to main-qa when residue
+      exists, else done; the router maps main-qa to the qa-main handler session
+      under the uniform node-id machinery, gated on the prod deploy landing;
+      outcomes keep qa-main parity — pass -> done (prune), broken -> an
+      implement-chain bug tactic written via graph-commit then done,
+      cannot-verify -> office_hours. Completion-prunes and round accounting move
+      behind prod verification, so rounds.last_completed means verified-in-prod
+      and the fresh-reading gate reflects verified reality. The phase ladder
+      becomes main-qa -> review -> fix -> qa -> implement -> align-tactics.
+      Rejected: a separate main-qa child tactic (recreates the two-artifact
+      provenance/orphan problem and stamps rounds before verification),
+      draft-and-finalize-later (unbounded verification latency; drafts are
+      undecomposed context, this is fully-specified machine verification),
+      sensor modeling (wrong altitude — signals measure the strategy's
+      observable, not each shipped feature), and an implicit reconciler hold
+      (hidden state, violates clarification 1). Recorded 2026-07-04 interview."
 tooling_goals:
   - kind: actuator
     statement: /align-strategy — interview-driven strategy recording, superseding
