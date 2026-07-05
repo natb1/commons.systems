@@ -4541,6 +4541,31 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "non-QA PR (fix-checks) chosen first" "pr 10 10-verify-me fix-checks" "$result"
 teardown
 
+# 1b. A PR whose branch has no <N>-slug issue prefix (a graph-native tactic
+# branch, e.g. `tactic-align-tactics-skill`, #2765) is never selected — it's
+# session-driven, never queue-driven, and its `${branch%%-*}` split does not
+# yield a real issue number. Mixed with a normal numeric-prefixed PR, the
+# numeric one is chosen; alone, the scan reports empty.
+echo "Test: PR with no issue-number branch prefix (tactic-*) is skipped"
+setup
+UNION='['"$(make_pr_union 10 "tactic-align-tactics-skill" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','"$(make_pr_union 20 "20-real-issue" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "numeric-prefixed PR chosen; tactic-* branch never surfaces" "pr 20 20-real-issue fix-checks" "$result"
+teardown
+
+echo "Test: only a tactic-* branch PR open → empty (never selected)"
+setup
+UNION='['"$(make_pr_union 10 "tactic-align-tactics-skill" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "sole tactic-* branch PR → empty" "empty" "$result"
+teardown
+
 # 2. A PR whose branch worktree is owned by a live session is skipped.
 echo "Test: PR whose branch worktree has a live session is skipped"
 setup
