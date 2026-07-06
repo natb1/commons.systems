@@ -1,15 +1,15 @@
 ---
 id: tactic-token-hygiene-sweep
 kind: tactic
-statement: read-before-edit preamble line in the fix-lane subagent prompts —
-  the one hygiene item with a repo-controlled landing spot
+statement: read-before-edit preamble line in the fix-lane subagent prompts — the
+  one hygiene item with a repo-controlled landing spot
 owner: ai
 status: codified
 parent: null
 rationale: "Finalized and narrowed from the 2026-07-04 interview draft by
-  /align-tactics round 1: the payload-discipline item is already satisfied
-  in the qa skills, the EnterWorktree item has no repo-controlled landing
-  spot, and the qa-verify item was reinterpreted and split to
+  /align-tactics round 1: the payload-discipline item is already satisfied in
+  the qa skills, the EnterWorktree item has no repo-controlled landing spot, and
+  the qa-verify item was reinterpreted and split to
   tactic-main-qa-triage-before-provision."
 reading: null
 gap: null
@@ -20,10 +20,24 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours:
+  reason: "commit-denied: auto-mode denies editing .claude/workflows/review-fix.js
+    (agent-behavior config); draft PR 2782 carries the two committable sites —
+    author must apply or grant the review-fix.js preamble edit, then clear this
+    park"
+  since: 2026-07-06
+pace_exempt: false
+rounds: null
 attributes:
   phase: implement
   execution:
     strategy_fingerprint: 10f0314e331696714d42b26313b80c5a289d68ab0e3ce4d614bf2c97a94d4a67
+    branch: tactic-token-hygiene-sweep
+    pr: 2782
 ---
 # read-before-edit preamble line in the fix-lane subagent prompts — the one hygiene item with a repo-controlled landing spot
 
