@@ -17,10 +17,22 @@ import { IntentionSchemaError } from "./errors.js";
  * rewrite rather than regenerated. A brand-new tactic file (no prior file on
  * disk) still gets the generated `# ${statement}` placeholder body.
  */
+// Mirrors graph-commit's id validation exactly (packages/intentionsutil/scripts/graph-commit,
+// the `case "$id" in` block): reject path separators, and `.`/`..` as EXACT ids
+// only. `..` as a substring cannot traverse once `/` and `\` are banned (the id
+// is only ever used as the single path component `<dir>/<id>.md`), so ids like
+// `v1..v2-migration` are legal — rejecting them here would silently defeat
+// graph-commit's relaxed check, since every id passes through this gate first
+// via write-node.ts before graph-commit ever sees it.
 function assertPathSafeId(id: string): void {
-  if (id.includes("/") || id.includes("\\") || id.includes("..")) {
+  if (id.includes("/") || id.includes("\\")) {
     throw new IntentionSchemaError(
-      `Node id contains path separators or traversal sequences: "${id}"`
+      `Node id contains path separators: "${id}"`
+    );
+  }
+  if (id === "." || id === "..") {
+    throw new IntentionSchemaError(
+      `Node id is a reserved path name: "${id}"`
     );
   }
 }

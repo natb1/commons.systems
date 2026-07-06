@@ -315,3 +315,33 @@ describe("listNodes", () => {
     expect(nodes.map((n) => n.id)).toEqual(["leaf-1"]);
   });
 });
+
+describe("id path safety", () => {
+  // Mirrors graph-commit's own id validation exactly (packages/intentionsutil/
+  // scripts/graph-commit, the `case "$id" in` block): every node id passes
+  // through store.ts's assertPathSafeId via write-node.ts BEFORE graph-commit
+  // ever sees it, so the two must agree on the accept/reject boundary or
+  // graph-commit's relaxed check is unreachable in practice.
+  function node(id: string): IntentionNodeInput {
+    return { id, kind: "tactic", statement: "id safety probe", owner: "ai", status: "raw" };
+  }
+
+  it("accepts an id with a '..' substring that isn't the exact id '..'", () => {
+    const dir = tempDir();
+    writeNode(dir, node("v1..v2-migration"));
+    expect(readNode(dir, "v1..v2-migration").id).toBe("v1..v2-migration");
+  });
+
+  it("rejects the exact ids '.' and '..'", () => {
+    const dir = tempDir();
+    expect(() => writeNode(dir, node("."))).toThrow();
+    expect(() => writeNode(dir, node(".."))).toThrow();
+  });
+
+  it("rejects ids containing a path separator, including a leading '../'", () => {
+    const dir = tempDir();
+    expect(() => writeNode(dir, node("../evil"))).toThrow();
+    expect(() => writeNode(dir, node("a/b"))).toThrow();
+    expect(() => writeNode(dir, node("a\\b"))).toThrow();
+  });
+});
