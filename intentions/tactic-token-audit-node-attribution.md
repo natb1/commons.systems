@@ -7,8 +7,8 @@ statement: node-id session attribution — graph-native sessions stamp node id
 owner: ai
 status: codified
 parent: null
-rationale: Finalized from the 2026-07-04 interview draft by /align-tactics
-  round 1. Implements the attribution-parity commitment on
+rationale: Finalized from the 2026-07-04 interview draft by /align-tactics round
+  1. Implements the attribution-parity commitment on
   strategy-graph-native-dispatch and the first sensor tooling goal of
   strategy-token-economy.
 reading: null
@@ -20,10 +20,19 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: false
+rounds: null
 attributes:
-  phase: implement
+  phase: qa
   execution:
     strategy_fingerprint: 10f0314e331696714d42b26313b80c5a289d68ab0e3ce4d614bf2c97a94d4a67
+    branch: tactic-token-audit-node-attribution
+    pr: 2777
 ---
 # node-id session attribution — graph-native sessions stamp node id into the dispatch sidecar; the token audit gains a by-node join and a UTC-consistent window
 

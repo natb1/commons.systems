@@ -13,11 +13,15 @@ rationale: 'Surfaced by the 2026-07-05 review. The budget math layer is
   several blur-save handlers coerce a cleared field through Number("")->0,
   silently persisting allowance/priority/reimbursement 0. Serves
   strategy-complete-ledger: the ledger the user reads and edits must match the
-  ledger stored.'
+  ledger stored. Re-pointed strategy-complete-ledger -> strategy-recover-finance
+  2026-07-06 per the placement doctrine: complete-ledger is the
+  delegation/attachment ledger (every live delegation carries a record), not the
+  financial one; the budget app/etl artifact belongs to
+  strategy-recover-finance.'
 reading: null
 gap: null
 serves:
-  - strategy-complete-ledger
+  - strategy-recover-finance
 recovers: []
 clarifications: []
 tooling_goals: []

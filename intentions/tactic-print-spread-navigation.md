@@ -10,12 +10,14 @@ rationale: "Surfaced by the 2026-07-05 review. In spread mode, bookmark and TOC
   navigation bypass the SpreadController and render into the hidden single-page
   surface (a visual no-op), and the bookmark toggle reads renderer.position
   which spread navigation never updates. Search navigation already does it
-  correctly via controller.goToPage. Serves strategy-recover-knowledge: the
-  owned reader must actually navigate."
+  correctly via controller.goToPage. Serves strategy-recover-attention: print is
+  its named consumer-side artifact and the owned reader must actually navigate.
+  Re-pointed from strategy-recover-knowledge 2026-07-06 per the placement
+  doctrine."
 reading: null
 gap: null
 serves:
-  - strategy-recover-knowledge
+  - strategy-recover-attention
 recovers: []
 clarifications: []
 tooling_goals: []

@@ -111,9 +111,19 @@ Scope — `.claude/hooks/dispatch-stop.sh` (issue resolution at :150 and the
 park branches):
 - Recognize node-id job/worktree names (same keyspace split as Unit 1);
   the phase-completed-marker discriminators key off the node id.
-- Park path for node targets: set `office_hours` `{reason, since}` on the
-  node via the `graph-commit` primitive (reason from the existing
-  `office-hours-reason` file convention), never a gh label. The
+- Park path for node targets: set `office_hours`
+  `{reason, recommendation, since}` on the node via the `graph-commit`
+  primitive, never a gh label. `reason` comes from the existing
+  `office-hours-reason` file convention; `recommendation` is the
+  escalating session's best-next-steps for the human, written at park
+  time — the park write is the recovery artifact (strategy
+  clarification 30 / condition 6: session attach/resume is not a
+  supported recovery path, so a park whose context lives only in the
+  parking session is a defect). Schema: `office_hours.recommendation` is
+  an optional string beside `reason`/`since` — add it to
+  `packages/intentionsutil` (schema + validator) in this unit if
+  `tactic-office-hours-graph-entry` has not already landed it (shared
+  schema home; skip if present). The
   office-hours queue view is already the `office_hours != null` projection
   (`tactic-graph-native-dispatch.md` §1.3) — no view work.
 
