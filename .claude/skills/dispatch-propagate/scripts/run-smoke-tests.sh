@@ -20,25 +20,20 @@ ensure_deps
 
 cd "$REPO_ROOT/$APP_DIR"
 
-# Wait for Firebase CDN to serve the deployed content
+# Wait for Firebase CDN to STABLY serve the deployed release before testing.
+# Firebase Hosting release propagation is not atomic across the edge, so a
+# single good root response can be followed by a transient 503 or a stale
+# version. wait_for_stable_propagation gates on N consecutive good observations
+# (root doc + a hashed asset each), not "break on first 200".
+#
+# Deliberate tradeoff: this raises happy-path latency by ~(REQUIRED_CONSECUTIVE-1)
+# × INTERVAL (~4s at defaults — success returns before the final sleep) over the
+# old first-200 break — bounded and intended, in exchange for not starting tests
+# mid-propagation. Under `set -e` a non-zero
+# return aborts the script with the function's error already on stderr (the
+# desired hard-fail).
 echo "Waiting for preview to become available at $BASE_URL..."
-READY=false
-TMPHTML=$(mktemp)
-trap 'rm -f "$TMPHTML"' EXIT
-for i in $(seq 1 30); do
-  STATUS=$(curl -s -o "$TMPHTML" -w '%{http_code}' "$BASE_URL")
-  if [[ "$STATUS" == "200" ]] && grep -q '<script type="module"' "$TMPHTML"; then
-    echo "Preview is ready."
-    READY=true
-    break
-  fi
-  if [ "$i" -eq 30 ]; then
-    echo "ERROR: Preview at $BASE_URL did not serve expected content after 60s (last HTTP status: $STATUS)" >&2
-    head -20 "$TMPHTML" >&2
-    exit 1
-  fi
-  sleep 2
-done
+wait_for_stable_propagation "$BASE_URL"
 
 # Install Playwright browsers (bounded timeout+retry; skips when nix provides them)
 playwright_install_with_deps
