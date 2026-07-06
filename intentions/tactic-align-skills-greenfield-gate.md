@@ -1,19 +1,23 @@
 ---
 id: tactic-align-skills-greenfield-gate
 kind: tactic
-statement: "align skills: encode the greenfield-relevance gate, artifact-owner
-  placement rule, and graph-as-sole-tracker doctrine into the /align-strategy
-  and /align-tactics SKILL.md files"
+statement: "align skills: encode the recorded doctrines — greenfield-relevance
+  gate, artifact-owner placement, graph-as-sole-tracker, record-completeness,
+  park-time recommendation — into the /align-strategy and /align-tactics
+  SKILL.md files"
 owner: ai
 status: codified
 parent: null
-rationale: The 2026-07-06 /align-strategy round recorded three doctrines as
-  clarifications on strategy-graph-native-dispatch (greenfield-relevance gate,
-  artifact-owner placement, graph-as-sole-tracker with pointer-only TODOs). The
-  skill files that execute those doctrines do not yet state them; until they do,
-  the requirements bind only via the strategy node. This tactic carries the
-  doctrine into .claude/skills/align-strategy/SKILL.md and
-  .claude/skills/align-tactics/SKILL.md.
+rationale: "The 2026-07-06 /align-strategy rounds recorded five doctrines as
+  clarifications/conditions on strategy-graph-native-dispatch: the
+  greenfield-relevance gate (clarification 26), artifact-owner placement (27),
+  graph-as-sole-tracker with pointer-only TODOs (28), the record-completeness
+  contract binding /align-strategy (31 / condition 7), and the park-time
+  recommendation on every office_hours park (30 / condition 6). The skill files
+  that execute those doctrines do not yet state them; until they do, the
+  requirements bind only via the strategy node. This tactic carries them into
+  .claude/skills/align-strategy/SKILL.md and
+  .claude/skills/align-tactics/SKILL.md."
 reading: null
 gap: null
 serves:
@@ -32,12 +36,12 @@ pace_exempt: false
 rounds: null
 attributes: {}
 ---
-# align skills: encode the greenfield gate, placement rule, and sole-tracker doctrine
+# align skills: encode the recorded doctrines (greenfield gate, placement, sole tracker, record completeness, park recommendation)
 
 ## Context
 
-The 2026-07-06 `/align-strategy` round recorded three doctrines as dated
-clarifications on `strategy-graph-native-dispatch`:
+The 2026-07-06 `/align-strategy` rounds recorded five doctrines as dated
+clarifications/conditions on `strategy-graph-native-dispatch`:
 
 1. **Greenfield-relevance gate** — at `/align-tactics` finalization and in
    every `/align-strategy` improvement pass, each candidate and open tactic's
@@ -54,6 +58,17 @@ clarifications on `strategy-graph-native-dispatch`:
    or a unit of one; no side channels; code TODOs are pointer-only
    (`TODO(tactic-<id>)`), and a substantive TODO with no node is a
    review-phase finding.
+4. **Record completeness** (clarification 31 / condition 7) — the graph
+   record is the sole carrier from `/align-strategy` to `/align-tactics`:
+   the target router queues re-evaluation as a fresh session with only the
+   graph, so every decision, edge-case resolution, and tactical byproduct
+   lands in the node at record time; same-session execution is a bootstrap
+   safety, not a carrier.
+5. **Park-time recommendation** (clarification 30 / condition 6) — every
+   `office_hours` park writes recoverable context at park time: reason plus
+   a best-next-steps recommendation; session attach/resume is not a
+   supported recovery path, so a park whose context lives only in the
+   parking session is a defect.
 
 The SKILL.md files that execute these doctrines do not yet state them. This
 tactic carries them into the skill text so a clean session running either
@@ -100,6 +115,22 @@ Scope (`.claude/skills/align-tactics/SKILL.md`):
   cross-cutting subjects; surface gaps instead of force-fitting.
 - Recording guidance: every defect worth fixing lands as a tactic or a unit
   of an existing one (sole-tracker doctrine); TODOs pointer-only.
+- Park mechanics (Autonomy contract section and Step 4 born-parked
+  authoring): every park writes `office_hours` with reason **and** a
+  best-next-steps recommendation for the human (condition 6 / clarification
+  30) — this applies to escalation parks and born-parked tactics alike.
+  Transitional note until the first-class field lands: the
+  `office_hours.recommendation` schema addition is homed in
+  `tactic-office-hours-graph-entry` Unit 1 / `tactic-phase-skill-node-targets`
+  Unit 2 (shared, skip-if-present); while it is absent from `schema.ts`,
+  `write-node.ts` rejects the key, so the skill text must say to carry the
+  recommendation inside the `reason` string (a labelled trailing sentence)
+  and switch to the field once it validates — never to drop it.
+- Unrecorded-context park framing: when a decomposition or re-evaluation
+  cannot proceed because needed context is not in the graph, the park
+  reason names the missing context as a record-completeness defect of the
+  `/align-strategy` round that produced it (condition 7) — the fix is an
+  author `/align-strategy` pass, not guessing.
 
 ## Dependencies
 
@@ -108,10 +139,11 @@ None — the clarifications this encodes are already on `origin/main`.
 ## Verification
 
 ```verify
-grep -q "greenfield-relevance" .claude/skills/align-strategy/SKILL.md && grep -q "greenfield-relevance" .claude/skills/align-tactics/SKILL.md && grep -qi "sole.*tracker\|source-of-truth issue tracker" .claude/skills/align-tactics/SKILL.md && echo OK
+grep -q "greenfield-relevance" .claude/skills/align-strategy/SKILL.md && grep -q "greenfield-relevance" .claude/skills/align-tactics/SKILL.md && grep -qi "sole.*tracker\|source-of-truth issue tracker" .claude/skills/align-tactics/SKILL.md && grep -qi "record.completeness\|sole carrier" .claude/skills/align-strategy/SKILL.md && grep -qi "recommendation" .claude/skills/align-tactics/SKILL.md && echo OK
 ```
 
-- Prose check: a clean-session read of each SKILL.md finds the three
+- Prose check: a clean-session read of each SKILL.md finds the five
   doctrines stated where the flow applies them (improvement pass /
-  finalization), each citing strategy-graph-native-dispatch as the durable
-  home rather than restating interview provenance.
+  finalization / park mechanics / step-6 coverage walk), each citing
+  strategy-graph-native-dispatch as the durable home rather than restating
+  interview provenance.
