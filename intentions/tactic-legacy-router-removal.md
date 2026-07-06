@@ -86,6 +86,25 @@ their successors. (The gh↔graph mapping layer — `intention-emit`,
 removed when the parallel-drain migration superseded the mapping strategy;
 nothing of it remains to retire here.)
 
+## Unit 3 — prune the drain-expiry graph nodes
+
+**Recommended model:** sonnet
+
+Scope:
+- The greenfield-relevance gate (strategy clarification, 2026-07-06) names
+  this tactic as the expiry event for interim-live-risk exceptions on the
+  legacy-gh surface. At drain completion, prune the nodes that expire with
+  it: `tactic-dispatch-gh-api-interim-hardening` (demoted draft whose
+  demotion note says delete here), and sweep
+  `tactic-review-lows-automation`'s "legacy dispatch scripts" section —
+  drop the items whose subject files this tactic deletes, keep the
+  survivors (token-audit, CI wrappers, hooks, lib.sh duplication items
+  that outlive the gh lane).
+- Land the prunes through `graph-commit --prune`
+  (`tactic-graph-commit-prune-support` Unit 1) if it has shipped;
+  otherwise the hand-orchestrated `graph/**` fast-path per the prune
+  precedent (a54f4ced).
+
 ## Dependencies
 
 - `tactic-align-strategy-skill`, `tactic-align-tactics-skill`,
