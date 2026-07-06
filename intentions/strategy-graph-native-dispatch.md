@@ -362,9 +362,9 @@ clarifications:
       sensor modeling (wrong altitude — signals measure the strategy's
       observable, not each shipped feature), and an implicit reconciler hold
       (hidden state, violates clarification 1). Recorded 2026-07-04 interview."
-  - question: The repo was re-anchored — main checked out at the project root
-      with Claude Code managing worktrees natively; do the worktree commitments
-      still target the legacy .bare + sibling worktrees/ layout?
+  - question: The repo was re-anchored — main checked out at the project root with
+      Claude Code managing worktrees natively; do the worktree commitments still
+      target the legacy .bare + sibling worktrees/ layout?
     answer: "No — Claude Code native worktrees are the substrate, recorded
       2026-07-05 from author direction. main is checked out at the project root
       (~/natb1/commons.systems) and every worker worktree is a Claude
@@ -379,9 +379,54 @@ clarifications:
       are legacy-lane conventions that retire with it
       (tactic-legacy-router-removal). This supersedes the mechanism half of
       clarification 12 (the worktree-create.sh node-id naming unit): the
-      isolation commitment stands — one worktree per node id, liveness via
-      live session ⇔ worktree — but a node-id worktree is a plain native
-      worktree at the default location, never a hook-redirected path."
+      isolation commitment stands — one worktree per node id, liveness via live
+      session ⇔ worktree — but a node-id worktree is a plain native worktree at
+      the default location, never a hook-redirected path."
+  - question: The first emulated router tick ran as a Workflow-tool script — is the
+      Workflow primitive a better tick-execution substrate than the legacy shell
+      spawn chain?
+    answer: "Yes, for the execution layer only — workflow-native tick execution,
+      chosen on greenfield terms. Selection cannot move: Workflow scripts have
+      no filesystem or clock access, so eligibility gates, ordering, pacing, and
+      claiming stay in owned deterministic code that reads origin/main and hands
+      the tick a frozen selection set; transitions stay graph-commit writes.
+      What moves is the launch layer: instead of extending
+      dispatch-materialize-spawn / dispatch-launch-worker / dispatch-spawn-job
+      to node ids, a thin tick workflow fans out one agent() per selected node —
+      directive mapping (strategy → /align-tactics, tactic phase → phase skill)
+      unchanged, and per-phase model/effort routing rides agent() options
+      resolved from the persisted phase and the audit policy file. Evidence from
+      the first emulated tick (12 eligible tactics fanned out, 6 draft PRs):
+      schema-validated structured returns replace label/comment parsing,
+      pipeline dataflow ran each tactic's completion check the moment its
+      implement finished, and routing needed no plumbing. The legacy spawn chain
+      is not extended and is not kept as a fallback (author direction: no legacy
+      retained just in case) — it stays issue-lane-only and retires with the
+      drain. Ticks are phase-granular: a tick executes only currently-eligible
+      phases and exits; the transition write schedules the next phase next tick;
+      CI waits happen between ticks. Recovery is honest about the primitive's
+      limit: workflow resume is same-session only, so a dead tick is recovered
+      by the next tick re-selecting from origin/main — the same idempotent
+      re-selection semantics the legacy router has. Recorded 2026-07-06
+      interview."
+  - question: What keeps the Workflow executor — proprietary, session-bound harness
+      machinery — from making the router itself a rented runtime, against
+      strategy-owned-orchestration?
+    answer: "A thin-script condition plus a recorded capture entry, not denial.
+      Condition (attributes.conditions): workflow scripts stay thin composition
+      — selection, transition, and provisioning mechanics live in owned,
+      offline-testable code (intentionsutil tsx modules and primitive scripts
+      such as graph-commit and node-worktree provisioning) that workflow agents
+      invoke as single commands; the Workflow layer orchestrates but is never
+      the sole home of router logic. This doubles as the testability answer: a
+      workflow script cannot execute without spending tokens, so anything
+      unit-testable must live below it. The capture cost lands on
+      delegation-anthropic-claude — divergence.imported gains the
+      orchestration-runtime item and review_trigger gains incompatible
+      Workflow-semantics change or individual-scale gating — because the
+      orchestration logic remains forkable in-repo JS/tsx while only the
+      executor is rented, and the thin-script condition is what keeps re-hosting
+      that executor bounded. Recorded 2026-07-06 interview."
 tooling_goals:
   - kind: actuator
     statement: /align-strategy — interview-driven strategy recording, superseding
@@ -395,7 +440,9 @@ tooling_goals:
       virtues, delegate to /align-strategy; retires the legacy /align skill"
   - kind: actuator
     statement: graph-native router tick — selects by resolved rank across strategies
-      and tactics, transitions persisted phase, direct-push rebase-retry writes
+      and tactics in owned deterministic code, executes the tick as a thin
+      workflow fan-out (one agent per selected node), transitions persisted
+      phase via direct-push rebase-retry writes
   - kind: sensor
     statement: lifecycle telemetry from the store itself — phase transition history
       and round counts readable from node state
@@ -427,5 +474,9 @@ attributes:
       execution
     - strategy substance stays human-decided in the /align-strategy interview;
       the skill records, it does not derive
+    - workflow scripts stay thin composition — selection, transition, and
+      provisioning mechanics live in owned, offline-testable code (tsx modules
+      and primitive scripts) that workflow agents invoke; the Workflow executor
+      orchestrates but never becomes the sole home of router logic
 ---
 # Dispatch runs on the graph — orchestration state lives in intention nodes, worked through the align skill family

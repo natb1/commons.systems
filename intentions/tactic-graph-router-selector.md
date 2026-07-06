@@ -128,48 +128,56 @@ assume the `.bare` common dir or the sibling `worktrees/` container.
 graph-native session needing a synthetic numeric anchor just to name
 its worktree.)
 
-## Unit 4 — launch chain for node targets
+## Unit 4 — workflow-native tick execution for node targets
 
 **Recommended model:** opus
 
 Depends on: Units 1–3.
 
-Scope: extend the post-selection launch chain to node-id targets, so a
-graph selection actually becomes a running worker (selection alone leaves
-the launch scripts issue-only):
-- `.claude/skills/dispatch-propagate/scripts/dispatch-materialize-spawn`
-  and `dispatch-launch-worker`: accept a `<node-id>` target alongside
-  `<issue-num>` (keyspace split: all-numeric = legacy issue, otherwise
-  node id); spawn `--name` is the node id and the worktree path is the
-  native default `<project-root>/.claude/worktrees/<node-id>` (Unit 3;
-  strategy clarification 23). `dispatch-materialize-spawn`'s legacy
-  `$PROJECT_ROOT/worktrees/$BRANCH` placement stays issue-lane-only
-  until the drain.
-- For node targets, `dispatch-route`'s phase *derivation* is bypassed —
-  phase is persisted (strategy clarification 1). The directive comes from
-  the node: strategy → `INVOKE /align-tactics <node-id>`; tactic by
-  `phase` → implement → `/implement`, fix → `/fix-checks`, qa →
-  `/qa-fix`, review → `/review-fix`, main-qa → `/qa-main` (node lane per
+Scope: execute a graph selection as a thin tick workflow instead of
+extending the legacy launch chain (strategy clarifications 24–25, recorded
+2026-07-06; supersedes this unit's previous
+`dispatch-materialize-spawn`/`dispatch-launch-worker` extension — the
+legacy launch scripts stay issue-lane-only and retire with the drain,
+`tactic-legacy-router-removal`):
+- `dispatch-select-tick` hands the node-id selection set to a tick
+  workflow script (Workflow primitive) that fans out one `agent()` per
+  selected node, capped by the pace-derived worker target. The workflow
+  script is thin composition per the strategy's thin-script condition —
+  it holds no selection, transition, or provisioning logic of its own.
+- Directive mapping unchanged from the previous scope: strategy →
+  `INVOKE /align-tactics <node-id>`; tactic by persisted `phase` →
+  implement → `/implement`, fix → `/fix-checks`, qa → `/qa-fix`, review →
+  `/review-fix`, main-qa → `/qa-main` (node lane per
   `tactic-main-qa-phase`; sensor gate: PR merged and prod deploy landed).
-  The deterministic provisioning
-  prelude (worktree provision + origin/main merge, CI-ready gate where a
-  PR exists) runs unchanged, preserving the merged-tree guarantee.
-- `dispatch-spawn-job` is reused as-is (generic primitive): `--name` =
-  node id, `--cwd` = the node-id worktree, prompt = the mapped skill
-  invocation. (The invoked phase skills accept node targets only once
+  Phase derivation never runs for node targets — phase is persisted
+  (strategy clarification 1).
+- Mechanics stay owned and deterministic: a
+  `provision-node-worktree <node-id>` primitive (plain `git worktree add`
+  of `<project-root>/.claude/worktrees/<node-id>` from origin/main +
+  origin/main merge + CI-ready gate where a PR exists, preserving the
+  merged-tree guarantee; Unit 3, strategy clarification 23) that the
+  agent invokes as one command — agents never hand-roll provisioning.
+  (The invoked phase skills accept node targets only once
   `tactic-phase-skill-node-targets` lands — until then a launched phase
-  worker exits 1 at the skill's Step 0; the bootstrap-transition doctrine
+  agent exits at the skill's Step 0; the bootstrap-transition doctrine
   covers the interim, so this unit does not gate on it.)
 - Model and effort routing (strategy clarification 17, routing parity):
-  the node-lane spawn resolves `--model`/effort from the persisted
-  `phase` via `dispatch-phase-model` / `dispatch-phase-effort` and the
-  audit-written policy file, same fail-closed demotable allowlist — the
-  phase is already in hand (no SKILL→PHASE case map to fall through), so
-  the legacy lane's `/qa-main`-inherits-Opus routing hole
+  the tick resolves each `agent()`'s `model`/`effort` options from the
+  persisted `phase` via `dispatch-phase-model` / `dispatch-phase-effort`
+  and the audit-written policy file, same fail-closed demotable allowlist
+  — the phase is already in hand (no SKILL→PHASE case map to fall
+  through), so the legacy lane's `/qa-main`-inherits-Opus routing hole
   (`tactic-noncodegen-session-model-defaults` unit 1) cannot reproduce
   here: `main-qa → claude-sonnet-*` per the policy, and `/align-tactics`
   strategy sessions route per clarification 17 (interview/decomposition
   on Opus, Explore fan-out on Sonnet or Haiku).
+- Tick granularity (strategy clarification 24): the workflow executes
+  only currently-eligible phases and exits; the transition write
+  (`graph-commit`) schedules the next phase next tick; CI waits happen
+  between ticks. Workflow resume is same-session only, so a dead tick
+  recovers by the next tick's re-selection from origin/main — no journal
+  dependency.
 - Mechanical failure dispositions (provision-failed, merge conflict that
   cannot invoke `/fix-conflicts`, wrong-worktree) park the node via the
   `office_hours` graph write instead of an office-hours label —

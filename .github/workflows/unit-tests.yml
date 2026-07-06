@@ -193,6 +193,8 @@ jobs:
         run: .claude/skills/budget/scripts/test-budget-config-load.sh
       - name: Run write-phase-log tests
         run: .claude/skills/dispatch-propagate/scripts/test-write-phase-log.sh
+      - name: Run stable-propagation gate tests
+        run: .claude/skills/dispatch-propagate/scripts/test-run-smoke-tests.sh
       - name: Run prose-rule lint tests
         run: .claude/skills/dispatch-propagate/scripts/test-lint-prose-rules.sh
       - name: Run ds-drift lint tests

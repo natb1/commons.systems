@@ -1,9 +1,8 @@
 ---
 id: tactic-outcome-envelope-qa-accounting
 kind: tactic
-statement: per-phase routing metric — qa routes on actionability, not
-  hit_rate, so a triage-shaped phase is not promoted to Opus by a rate it
-  cannot move
+statement: per-phase routing metric — qa routes on actionability, not hit_rate,
+  so a triage-shaped phase is not promoted to Opus by a rate it cannot move
 owner: ai
 status: codified
 parent: null
@@ -20,10 +19,19 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: false
+rounds: null
 attributes:
-  phase: implement
+  phase: qa
   execution:
     strategy_fingerprint: 10f0314e331696714d42b26313b80c5a289d68ab0e3ce4d614bf2c97a94d4a67
+    branch: tactic-outcome-envelope-qa-accounting
+    pr: 2774
 ---
 # per-phase routing metric — qa routes on actionability, not hit_rate, so a triage-shaped phase is not promoted to Opus by a rate it cannot move
 

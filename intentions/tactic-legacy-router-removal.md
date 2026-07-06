@@ -66,7 +66,12 @@ anchoring and the gh identity stub) and `dispatch-materialize-spawn`'s
 sibling `$PROJECT_ROOT/worktrees/` placement — after removal, no repo
 machinery references the `.bare` common dir or the `worktrees/`
 container, and Claude Code native worktrees at
-`<project-root>/.claude/worktrees/` are the only worktree surface. Each
+`<project-root>/.claude/worktrees/` are the only worktree surface. The
+full legacy launch chain (`dispatch-materialize-spawn`,
+`dispatch-launch-worker`, `dispatch-spawn-job`) deletes whole — node
+targets never extended it: the tick executes graph selections as a
+workflow fan-out (strategy clarification 24,
+`tactic-graph-router-selector` unit 4). Each
 deletion cites its matrix row or its graph-native replacement tactic.
 
 ## Unit 2 — retire the legacy authoring skills

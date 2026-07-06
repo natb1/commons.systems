@@ -11,8 +11,8 @@
 #
 # After key generation:
 #   1. View your public key: cat ~/.ssh/id_ed25519.pub
-#   2. Add it to nix/ssh-keys/machines/<hostname>.pub
-#   3. Commit to repo for distribution to other machines
+#   2. Add it to services.sshAuthorizedKeys.keys in your instance flake
+#   3. Commit to your instance flake to enable SSH access from other machines
 #
 # Security:
 #   - Keys are generated locally on each machine
@@ -54,8 +54,8 @@ in
       echo ""
       echo "Next steps:"
       echo "  1. Copy the public key above"
-      echo "  2. Add it to: nix/ssh-keys/machines/$(hostname).pub"
-      echo "  3. Commit and push to enable SSH access from other machines"
+      echo "  2. Add it to services.sshAuthorizedKeys.keys in your instance flake"
+      echo "  3. Commit and push your instance flake to enable SSH access from other machines"
       echo ""
     fi
   '';
