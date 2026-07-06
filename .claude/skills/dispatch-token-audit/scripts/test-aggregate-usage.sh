@@ -1434,6 +1434,76 @@ assert_eq "sidecar ON: by_type.none.input == 1000 (sess-drop dropped)" "1000" \
 rm -rf "$SIDE_ROOT"
 
 # ---------------------------------------------------------------------------
+# (b2) --exclude-sidecar-sessions also drops the excluded session's SUBAGENT
+# transcripts (<sid>/subagents/agent-*.jsonl). The file-issue sidecar's totals
+# already include subagent usage, so leaving the subagent transcript in the
+# scan would count those tokens twice once the priced sidecar is folded back.
+# ISOLATED fixture, no artifact stamps (topic "other", type "none"):
+#   sess-fi.jsonl (input 2000) + sess-fi.file-issue-attribution.json
+#     + sess-fi/subagents/agent-x.jsonl (input 4000)   <- both must drop
+#   sess-plain.jsonl (input 1000)
+#     + sess-plain/subagents/agent-y.jsonl (input 500) <- both must stay
+#   WITHOUT the flag: all 4 transcripts contribute (input 7500).
+#   WITH    the flag: only sess-plain + its subagent contribute (input 1500).
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "--- (b2) --exclude-sidecar-sessions drops the session's subagents too ---"
+
+SUB_ROOT=$(mktemp -d)
+trap 'rm -rf "$SUB_ROOT" "$FAKE_WRITER_DIR"; teardown' EXIT INT TERM
+sub_worktree="$SUB_ROOT/-home-x-worktrees-subagent-sidecar"
+mkdir -p "$sub_worktree/sess-fi/subagents" "$sub_worktree/sess-plain/subagents"
+
+# write_min_session <path> <input-tokens>: minimal 2-line worker transcript.
+write_min_session() {
+  local f="$1" in="$2"
+  printf '%s\n' '{"type":"user","message":{"content":"<command-name>/file-issue</command-name>"}}' \
+    > "$f"
+  printf '{"type":"assistant","attributionSkill":"plan-implement","isSidechain":false,"gitBranch":"sub-sidecar","message":{"model":"claude-opus-4-8","usage":{"input_tokens":%s,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}}\n' \
+    "$in" >> "$f"
+  jq . "$f" >/dev/null
+}
+
+write_min_session "$sub_worktree/sess-fi.jsonl" 2000
+write_min_session "$sub_worktree/sess-fi/subagents/agent-x.jsonl" 4000
+write_min_session "$sub_worktree/sess-plain.jsonl" 1000
+write_min_session "$sub_worktree/sess-plain/subagents/agent-y.jsonl" 500
+printf '%s\n' '{"chosen_topics":["dispatch"],"session_id":"sess-fi"}' \
+  > "$sub_worktree/sess-fi.file-issue-attribution.json"
+jq . "$sub_worktree/sess-fi.file-issue-attribution.json" >/dev/null
+touch "$sub_worktree/sess-fi.jsonl" "$sub_worktree/sess-fi/subagents/agent-x.jsonl" \
+  "$sub_worktree/sess-plain.jsonl" "$sub_worktree/sess-plain/subagents/agent-y.jsonl"
+
+# WITHOUT the flag: all 4 transcripts scanned (control — subagents in scope).
+OUT_SUB_OFF=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$SUB_ROOT"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
+)
+assert_eq "subagent-sidecar OFF: all 4 transcripts scanned" "4" \
+  "$(jq '.window.files_scanned' <<<"$OUT_SUB_OFF")"
+assert_eq "subagent-sidecar OFF: by_topic.other.input == 7500" "7500" \
+  "$(jq '.by_topic.other.input' <<<"$OUT_SUB_OFF")"
+
+# WITH the flag: sess-fi AND its subagent drop; sess-plain and ITS subagent stay
+# (a subagent whose parent has no sidecar must not be over-excluded).
+OUT_SUB_ON=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$SUB_ROOT"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7 --exclude-sidecar-sessions
+)
+assert_eq "subagent-sidecar ON: only sess-plain + its subagent scanned" "2" \
+  "$(jq '.window.files_scanned' <<<"$OUT_SUB_ON")"
+assert_eq "subagent-sidecar ON: count-once — by_topic.other.input == 1500" "1500" \
+  "$(jq '.by_topic.other.input' <<<"$OUT_SUB_ON")"
+assert_eq "subagent-sidecar ON: excluded subagent's 4000 absent from by_type.none" "1500" \
+  "$(jq '.by_type.none.input' <<<"$OUT_SUB_ON")"
+assert_eq "subagent-sidecar ON: scanned ids are agent-y + sess-plain" \
+  '["agent-y","sess-plain"]' \
+  "$(jq -c '[.sessions[].id] | sort' <<<"$OUT_SUB_ON")"
+
+rm -rf "$SUB_ROOT"
+
+# ---------------------------------------------------------------------------
 # (c) --day / --days mutual exclusivity and bad --day format both exit 2 (#2505).
 # rc captured with the subshell idiom (a bare $(...) under set -e would abort the
 # suite on the intended non-zero exit).

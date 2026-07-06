@@ -27,7 +27,10 @@
 #     --json-out PATH write the document to PATH instead of stdout.
 #     --exclude-sidecar-sessions  opt-in (default off): skip any transcript whose
 #                     sibling <stem>.file-issue-attribution.json exists, dropping
-#                     that file-issue session from every bucket.
+#                     that file-issue session from every bucket. The session's
+#                     nested subagent transcripts (<sid>/subagents/agent-*.jsonl)
+#                     are dropped with it — the sidecar totals already include
+#                     subagent usage, so scanning them would double-count.
 #   DISPATCH_AUDIT_PROJECTS_ROOT  override the projects root (used by the test
 #                     fixture). Default: $HOME/.claude/projects.
 #   DISPATCH_AUDIT_AGGREGATES_ENABLED  opt-in persist gate: set to "1" to pipe
@@ -846,9 +849,21 @@ if [[ -d "$PROJECTS_ROOT" ]]; then
   while IFS= read -r -d '' file; do
     # --exclude-sidecar-sessions (opt-in, default off): drop a file-issue session
     # entirely when its sibling sidecar <stem>.file-issue-attribution.json exists,
-    # so it never lands in any bucket. Skip BEFORE counting/scanning.
-    if [[ "$EXCLUDE_SIDECAR" == 1 && -f "${file%.jsonl}.file-issue-attribution.json" ]]; then
-      continue
+    # so it never lands in any bucket. Skip BEFORE counting/scanning. A subagent
+    # transcript (<projectdir>/<sid>/subagents/agent-*.jsonl) has no sidecar of
+    # its own, but its PARENT session's sidecar totals already include subagent
+    # usage — so it resolves to the parent's sidecar
+    # (<projectdir>/<sid>.file-issue-attribution.json) and is excluded with the
+    # parent; keeping it in the scan would count those tokens twice once the
+    # priced sidecar is folded back.
+    if [[ "$EXCLUDE_SIDECAR" == 1 ]]; then
+      sidecar_stem="${file%.jsonl}"
+      if [[ "$file" == */subagents/*.jsonl ]]; then
+        sidecar_stem="${file%/subagents/*}"
+      fi
+      if [[ -f "$sidecar_stem.file-issue-attribution.json" ]]; then
+        continue
+      fi
     fi
     FILES_SCANNED=$((FILES_SCANNED + 1))
     # Per-session sidecar (#1861): <stem>.dispatch-stamp.json next to the
