@@ -24,15 +24,20 @@ export interface QueueMember {
  */
 export function officeHoursQueue(nodes: IntentionNode[]): QueueMember[] {
   const attention = resolveAttention(nodes);
-  return nodes
-    .filter((n) => n.office_hours !== null)
-    .map((n) => ({
+  const members: QueueMember[] = [];
+  for (const n of nodes) {
+    // A `continue` guard narrows office_hours to non-null for the body below —
+    // no cast, and `.since` type-checks.
+    if (n.office_hours === null) continue;
+    members.push({
       nodeId: n.id,
       rank: attention.get(n.id)?.value ?? 0,
-      // office_hours is non-null here (filtered above).
-      since: (n.office_hours as NonNullable<IntentionNode["office_hours"]>).since,
-    }))
-    .sort((a, b) => b.rank - a.rank || (a.nodeId < b.nodeId ? -1 : a.nodeId > b.nodeId ? 1 : 0));
+      since: n.office_hours.since,
+    });
+  }
+  return members.sort(
+    (a, b) => b.rank - a.rank || (a.nodeId < b.nodeId ? -1 : a.nodeId > b.nodeId ? 1 : 0),
+  );
 }
 
 /** An unresolved `blocked_by` edge of a parked node. */
