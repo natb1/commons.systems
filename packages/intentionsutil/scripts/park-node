@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# park-node — park one intention node to office hours via the graph write
+# (tactic-graph-router-selector, unit 4). The graph lane's replacement for the
+# legacy `dispatch:office-hours` label: mechanical failure dispositions
+# (provision-failed, an unroutable merge conflict, wrong-worktree) set the
+# node's first-class `office_hours` field and land it on main through the
+# `graph-commit` primitive. The router's eligibility gate (office_hours null)
+# then keeps the node unselectable until a human clears it.
+#
+# Content is written through store.ts's readNode → writeNode (the validated
+# writer — frontmatter serialized correctly, tactic bodies preserved); this
+# script authors no markdown. The commit/stamp/fast-forward mechanics are
+# graph-commit's. Ongoing phase/marker transition writes belong to
+# tactic-graph-router-transitions, not here — this primitive covers only the
+# park disposition.
+#
+# Usage: park-node <node-id> <reason>
+#
+# Exit codes: 0 parked and landed on main; 1 the write or graph-commit failed;
+# 2 usage error.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+INTENTIONS_DIR="$REPO_ROOT/intentions"
+STORE_MODULE="$REPO_ROOT/packages/intentionsutil/src/store.js"
+
+NODE_ID="${1:-}"
+REASON="${2:-}"
+if [[ $# -ne 2 || -z "$NODE_ID" || -z "$REASON" ]]; then
+  echo "usage: park-node <node-id> <reason>" >&2
+  exit 2
+fi
+
+SINCE="$(date -u +%Y-%m-%d)"
+TMPTS="$(mktemp --suffix=.mts)" \
+  || { echo "park-node: could not create temp file for the parking write" >&2; exit 1; }
+trap 'rm -f "$TMPTS"' EXIT
+cat >"$TMPTS" <<'TS'
+// argv: <storeModule> <intentionsDir> <since> <reason> <id>
+const [storePath, intentionsDir, since, reason, id] = process.argv.slice(2);
+const { readNode, writeNode } = await import(storePath);
+const node = readNode(intentionsDir, id);
+node.office_hours = { reason, since };
+writeNode(intentionsDir, node);
+process.stderr.write(`park-node: set office_hours on ${id} (since=${since})\n`);
+TS
+
+if ! (cd "$REPO_ROOT" && npx tsx "$TMPTS" "$STORE_MODULE" "$INTENTIONS_DIR" "$SINCE" "$REASON" "$NODE_ID" >&2); then
+  echo "park-node: failed to write the office_hours record for $NODE_ID" >&2
+  exit 1
+fi
+
+if ! "$SCRIPT_DIR/graph-commit" -m "graph: park $NODE_ID ($REASON)" "$NODE_ID"; then
+  echo "park-node: graph-commit failed for $NODE_ID; the office_hours write is on disk but not landed" >&2
+  exit 1
+fi
+
+exit 0
