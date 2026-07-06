@@ -30,7 +30,8 @@
 #     the G: drive.
 #
 # drvfs is WSL's Windows-filesystem driver (resolved via /sbin/mount.drvfs).
-# uid/gid pin ownership to n8:users (1000:100); metadata enables Linux
+# uid/gid pin ownership to the operator user / `users` group (1000:100);
+# metadata enables Linux
 # permission bits; x-mount.mkdir creates the mount point if absent. noauto
 # keeps the failed-at-boot eager mount from running; the service mounts it.
 

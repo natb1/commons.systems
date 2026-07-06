@@ -51,6 +51,14 @@ computation mixes local-TZ `date -d` (`aggregate-usage.sh:163-174`) with a
 shifting the window boundary by the local UTC offset (repro in the
 2026-07-03 findings doc).
 
+Unit 4 below folds in two adjacent, independently-verified token-audit
+correctness bugs from the 2026-07-05 code review, previously misfiled in
+`tactic-review-low-severity-sweep` at higher severity than a "low" sweep
+warrants: the daily topic-usage doc's systematic undercount (rated high)
+and a subagent double-count (rated medium). Both live in the same
+aggregation family as Units 1-3, so they land here rather than as a
+separate tactic.
+
 ## Unit 1 — sidecar node-id stamping
 
 **Recommended model:** sonnet
@@ -102,9 +110,36 @@ Scope:
   window regardless of host TZ (run the aggregator under `TZ=America/New_York`
   in the test to pin the regression).
 
+## Unit 4 — daily doc completeness and subagent double-count
+
+**Recommended model:** sonnet
+
+Scope:
+- `.claude/skills/dispatch-token-audit/scripts/topic-usage-writer.mjs:566-569`
+  + `.claude/skills/dispatch-propagate/scripts/dispatch-tick:193-201`: the
+  producer emits *today's* Firestore doc and the tick launches it only on
+  the first tick after UTC midnight, so day D's doc captures only the
+  minutes of day D before that single launch and is never revisited —
+  every normal-path daily doc systematically undercounts nearly the whole
+  day (gap-recovery days are complete, making the series inconsistent by
+  construction). Re-run (or backfill) the writer at a later point in the
+  day, or on every tick with an idempotent upsert, so day D's doc reflects
+  the full day once it has fully elapsed.
+- `topic-usage-writer.mjs:489-494` + `aggregate-usage.sh:828`: the
+  file-issue attribution exclusion matches only the top-level
+  `<sid>.jsonl`; the session's `subagents/agent-*.jsonl` transcripts stay
+  in the scan while the sidecar totals *include* subagent usage, so those
+  tokens are counted twice, breaking the file's own "each token exactly
+  once" invariant. Exclude subagent transcripts from the direct scan when
+  their parent session's sidecar total already includes them.
+- Fixture tests: a `.jsonl` set spanning UTC midnight into the next tick
+  produces a complete day-D doc once day D has elapsed; a session with a
+  `subagents/agent-*.jsonl` present is counted once, not twice.
+
 ## Dependencies
 
-Unit 2 depends on Unit 1 (sidecar shape). One tactic, one PR.
+Unit 2 depends on Unit 1 (sidecar shape). Unit 4 is independent of Units
+1-3. One tactic, one PR.
 
 ## Reuse
 
@@ -121,11 +156,14 @@ Unit 2 depends on Unit 1 (sidecar shape). One tactic, one PR.
 
 Manual: run the aggregator over the live transcripts directory after a
 graph-native session has run — the session appears with
-`artifact.node_id` set and in `by_node`, not in the `<none>` bucket.
+`artifact.node_id` set and in `by_node`, not in the `<none>` bucket. Run a
+same-day-then-next-tick fixture and confirm the completed day's doc
+reflects the full day; confirm a session with a subagent transcript is
+not double-counted.
 
 ## Implementation notes
 
-Three units, one PR; implement each in a subagent with its Recommended
+Four units, one PR; implement each in a subagent with its Recommended
 model; supply this Context and the unit's Scope; constrain to working-tree
 edits. `strategy_fingerprint` recipe (interim until
 tactic-graph-dispatch-schema lands): sha256 hex of
