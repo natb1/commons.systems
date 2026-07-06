@@ -28,7 +28,9 @@ execution: null
 validates: []
 blocked_by:
   - tactic-align-skills-greenfield-gate
-office_hours: null
+office_hours:
+  reason: "graph-commit: concurrent-edit conflict — manual merge needed"
+  since: 2026-07-06
 pace_exempt: false
 rounds: null
 attributes: {}
