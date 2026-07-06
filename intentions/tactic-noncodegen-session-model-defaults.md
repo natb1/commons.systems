@@ -1,14 +1,14 @@
 ---
 id: tactic-noncodegen-session-model-defaults
 kind: tactic
-statement: Sonnet-by-default initialization for non-codegen sessions — fix
-  the /qa-main routing gap and pass --model on the aux background-job spawns
+statement: Sonnet-by-default initialization for non-codegen sessions — fix the
+  /qa-main routing gap and pass --model on the aux background-job spawns
 owner: ai
 status: codified
 parent: null
-rationale: Finalized from the 2026-07-04 interview draft by /align-tactics
-  round 1. The round's recon found the qa-main half is a live routing bug,
-  not just an optimization.
+rationale: Finalized from the 2026-07-04 interview draft by /align-tactics round
+  1. The round's recon found the qa-main half is a live routing bug, not just an
+  optimization.
 reading: null
 gap: null
 serves:
@@ -18,10 +18,19 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: false
+rounds: null
 attributes:
-  phase: implement
+  phase: qa
   execution:
     strategy_fingerprint: 10f0314e331696714d42b26313b80c5a289d68ab0e3ce4d614bf2c97a94d4a67
+    branch: tactic-noncodegen-session-model-defaults
+    pr: 2776
 ---
 # Sonnet-by-default initialization for non-codegen sessions — fix the /qa-main routing gap and pass --model on the aux background-job spawns
 
