@@ -14,8 +14,11 @@
 #   2. Run: home-manager switch
 #   3. Your authorized_keys file is updated automatically!
 #
-# The option defaults to an empty list, which is inert: no key material, no
+# The option defaults to null (unset), which is inert: no key material, no
 # write to ~/.ssh/authorized_keys, and any pre-existing file is left untouched.
+# Setting it to an explicit list — including the empty list `[ ]` — is
+# authoritative: the file is rewritten to exactly those keys, so `[ ]` clears
+# it and revokes all access (see "Easy access revocation" above).
 #
 # Security:
 #   - Only PUBLIC keys should be supplied via this option
@@ -25,17 +28,25 @@
 { config, lib, ... }:
 
 let
-  # Filter out empty lines and comments
-  validKeys = builtins.filter (key: key != "" && !(lib.hasPrefix "#" key)) config.services.sshAuthorizedKeys.keys;
+  cfg = config.services.sshAuthorizedKeys.keys;
+
+  # Filter out empty lines and comments. Guarded so `null` (unset) does not
+  # error under builtins.filter; the activation script is gated on `cfg != null`
+  # (explicitly set), not on this list being non-empty.
+  validKeys = lib.optionals (cfg != null) (
+    builtins.filter (key: key != "" && !(lib.hasPrefix "#" key)) cfg
+  );
 in
 {
   options.services.sshAuthorizedKeys.keys = lib.mkOption {
-    type = lib.types.listOf lib.types.str;
-    default = [ ];
+    type = lib.types.nullOr (lib.types.listOf lib.types.str);
+    default = null;
     description = ''
-      Authorized public-key strings written to ~/.ssh/authorized_keys. Empty
-      (the default) leaves any pre-existing authorized_keys file untouched;
-      the instance supplies real keys.
+      Authorized public-key strings written to ~/.ssh/authorized_keys. Unset
+      (null, the default) leaves any pre-existing authorized_keys file
+      untouched. An explicit list is authoritative: the file is rewritten to
+      exactly those keys, so `[ ]` clears it and revokes all access. The
+      instance supplies real keys.
     '';
   };
 
@@ -44,7 +55,7 @@ in
     # SSH requires authorized_keys to be a real file (not a symlink) with mode 600
     # and owned by the user. We use home.activation to copy it properly.
     home.activation.updateAuthorizedKeys = lib.hm.dag.entryAfter [ "writeBoundary" ] (
-      lib.optionalString (validKeys != [ ]) ''
+      lib.optionalString (cfg != null) ''
         AUTHORIZED_KEYS="${config.home.homeDirectory}/.ssh/authorized_keys"
         TEMP_KEYS=$(mktemp)
 
