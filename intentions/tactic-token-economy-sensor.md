@@ -33,7 +33,7 @@ attributes:
   validates:
     - strategy-token-economy
   execution:
-    strategy_fingerprint: 10f0314e331696714d42b26313b80c5a289d68ab0e3ce4d614bf2c97a94d4a67
+    strategy_fingerprint: 157bc07dd1dbc4a1c7a5095f7c3094ee88accf5879271bc6d2c4cd4794029848
     branch: tactic-token-economy-sensor
     pr: 2779
     attempts:
