@@ -26,7 +26,11 @@
  *   { selections: [{ node_id, kind: "strategy"|"tactic", phase, skill,
  *       model?: string, effort?: string }],
  *     project_root: string,
- *     worker_cap?: number }
+ *     worker_cap?: number }   // default 8 — parity with the legacy router's
+ *                             // max_concurrent_workers (dispatch.config/
+ *                             // target-workers.json); the tick normally passes
+ *                             // the pace-derived target, so the default only
+ *                             // binds a direct/uncapped invocation
  *
  * return OUT:
  *   { results: [{ node_id, disposition, detail }], launched, capped }
@@ -110,11 +114,16 @@ function nodePrompt(sel, projectRoot) {
 
 // --- pipeline -------------------------------------------------------------------
 
+// Concurrent worker cap: configurable per invocation via args.worker_cap;
+// defaults to 8 for parity with the legacy router's max_concurrent_workers
+// (dispatch.config/target-workers.json). Never uncapped.
+const DEFAULT_WORKER_CAP = 8;
+
 const _a = typeof args === 'string' ? JSON.parse(args) : (args || {});
 const selections = Array.isArray(_a.selections) ? _a.selections : [];
 const projectRoot = _a.project_root || '';
 const cap =
-  typeof _a.worker_cap === 'number' && _a.worker_cap >= 0 ? _a.worker_cap : selections.length;
+  typeof _a.worker_cap === 'number' && _a.worker_cap >= 0 ? _a.worker_cap : DEFAULT_WORKER_CAP;
 
 phase('execute');
 const capped = selections.length > cap;
