@@ -63,7 +63,13 @@ export function isGraphSourceSupported(): boolean {
   return store.isSupported() && detectFsaCapabilities().directoryPicker;
 }
 
-/** The current graph-clone source state. */
+/**
+ * The current graph-clone source state.
+ *
+ * @public directory-handle lifecycle API for the page chrome that grants and
+ * shows clone access; the consumer is `tactic-attention-surface-goals-page`
+ * (`blocked_by` this tactic), not wired yet.
+ */
 export function getGraphSourceState(): GraphSourceState {
   return isGraphSourceSupported() ? state : "unsupported";
 }
@@ -72,6 +78,10 @@ export function getGraphSourceState(): GraphSourceState {
  * Prompt the user to pick the clone's root directory (read mode), persist its
  * handle, and bind it as current. Returns the handle, or null when the user
  * cancels the picker (AbortError). Must be called from within a user gesture.
+ *
+ * @public directory-handle lifecycle API for the page chrome that grants and
+ * shows clone access; the consumer is `tactic-attention-surface-goals-page`
+ * (`blocked_by` this tactic), not wired yet.
  */
 export async function pickCloneDirectory(): Promise<FileSystemDirectoryHandle | null> {
   if (window.showDirectoryPicker === undefined) {
@@ -126,7 +136,13 @@ async function restore(): Promise<GraphSourceState> {
   return state;
 }
 
-/** Restore the persisted clone handle once per session (memoized). */
+/**
+ * Restore the persisted clone handle once per session (memoized).
+ *
+ * @public directory-handle lifecycle API for the page chrome that grants and
+ * shows clone access; the consumer is `tactic-attention-surface-goals-page`
+ * (`blocked_by` this tactic), not wired yet.
+ */
 export function restoreCloneHandle(): Promise<GraphSourceState> {
   if (!restorePromise) restorePromise = restore();
   return restorePromise;
@@ -135,6 +151,10 @@ export function restoreCloneHandle(): Promise<GraphSourceState> {
 /**
  * Re-grant read permission on the persisted handle (one click). Must be called
  * from within a user gesture. Returns true iff permission ends up granted.
+ *
+ * @public directory-handle lifecycle API for the page chrome that grants and
+ * shows clone access; the consumer is `tactic-attention-surface-goals-page`
+ * (`blocked_by` this tactic), not wired yet.
  */
 export async function regrantClone(): Promise<boolean> {
   const loaded = await store.get(PURPOSE);
@@ -154,7 +174,13 @@ export async function regrantClone(): Promise<boolean> {
   return false;
 }
 
-/** The currently bound clone handle, or null when none is connected. */
+/**
+ * The currently bound clone handle, or null when none is connected.
+ *
+ * @public directory-handle lifecycle API for the page chrome that grants and
+ * shows clone access; the consumer is `tactic-attention-surface-goals-page`
+ * (`blocked_by` this tactic), not wired yet.
+ */
 export function getCurrentCloneHandle(): FileSystemDirectoryHandle | null {
   return currentHandle;
 }

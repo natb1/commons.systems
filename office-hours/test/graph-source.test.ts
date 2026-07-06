@@ -20,9 +20,9 @@ function file(content: string, lastModified = 0): FileSystemFileHandle {
   return {
     kind: "file" as const,
     async getFile() {
-      return { text: async () => content, lastModified } as unknown as File;
+      return { text: async () => content, lastModified } as unknown as File; // type-safety-ok: minimal fake FSA File implementing only the fields graph-source reads
     },
-  } as unknown as FileSystemFileHandle;
+  } as unknown as FileSystemFileHandle; // type-safety-ok: minimal fake FSA handle implementing only the surface graph-source touches
 }
 
 function dir(entries: Record<string, FileSystemHandle>): FileSystemDirectoryHandle {
@@ -45,7 +45,7 @@ function dir(entries: Record<string, FileSystemHandle>): FileSystemDirectoryHand
         yield [name, handle] as [string, FileSystemHandle];
       }
     },
-  } as unknown as FileSystemDirectoryHandle;
+  } as unknown as FileSystemDirectoryHandle; // type-safety-ok: minimal fake FSA handle implementing only the surface graph-source touches
 }
 
 /** A valid node file's markdown, `extra` spliced into the frontmatter. */
@@ -92,7 +92,7 @@ describe("readGraphNodes", () => {
     });
     const error = await readGraphNodes(root).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(GraphSourceError);
-    const message = (error as GraphSourceError).message;
+    const message = (error as GraphSourceError).message; // type-safety-ok: instanceof asserted above; cast to read the typed .message field
     expect(message).toContain("no-fence.md");
     expect(message).toContain("bad-owner.md");
     expect(message).not.toContain("good.md");
@@ -189,7 +189,7 @@ describe("loadGraphView", () => {
     // The forest: kind-tactic and t-root are roots; t-child hangs off t-root.
     const rootIds = result.view.tree.map((n) => n.id).sort();
     expect(rootIds).toEqual(["kind-tactic", "t-root"]);
-    const tRoot = result.view.tree.find((n) => n.id === "t-root")!;
+    const tRoot = result.view.tree.find((n) => n.id === "t-root")!; // type-safety-ok: fixture-controlled — "t-root" is a root in the fixed intentions map above
     expect(tRoot.children.map((c) => c.id)).toEqual(["t-child"]);
     // Rank resolved client-side for the goal-layer (tactic) nodes.
     expect(result.view.attention.get("t-root")).toBeDefined();

@@ -26,7 +26,7 @@ describe("graph subpath barrel", () => {
     const seen = new Set<string>();
     const queue = ["graph.ts"];
     while (queue.length > 0) {
-      const name = queue.pop()!;
+      const name = queue.pop()!; // type-safety-ok: pop() guarded by the while(queue.length > 0) loop condition above
       if (seen.has(name)) continue;
       seen.add(name);
       const source = readFileSync(resolve(srcDir, name), "utf8");
