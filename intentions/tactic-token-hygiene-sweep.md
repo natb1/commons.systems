@@ -24,16 +24,11 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "commit-denied: auto-mode denies editing .claude/workflows/review-fix.js
-    (agent-behavior config); draft PR 2782 carries the two committable sites —
-    author must apply or grant the review-fix.js preamble edit, then clear this
-    park"
-  since: 2026-07-06
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes:
-  phase: implement
+  phase: qa
   execution:
     strategy_fingerprint: 10f0314e331696714d42b26313b80c5a289d68ab0e3ce4d614bf2c97a94d4a67
     branch: tactic-token-hygiene-sweep
