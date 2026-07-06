@@ -143,6 +143,8 @@ phase on the metric that phase can actually move:
   Routing qa on `hit_rate` would promote it to Opus on a rate it cannot move;
   `actionability` measures the triage quality qa does control.
 
+## `subagents_launched` semantics
+
 `subagents_launched` is the **sum** of two sources:
 
 1. The phase Workflow's own fan-out count. For review-fix this includes the
