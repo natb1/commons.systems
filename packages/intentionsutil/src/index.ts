@@ -11,6 +11,8 @@ export type {
 } from "./schema.js";
 export { resolveAttention } from "./attention.js";
 export type { ResolvedAttention, TermContribution } from "./attention.js";
+export { officeHoursQueue, openBlockers, selectOfficeHours } from "./officeHours.js";
+export type { QueueMember, OpenBlocker, OfficeHoursSelection } from "./officeHours.js";
 export { IntentionSchemaError } from "./errors.js";
 export { writeNode, readNode, listNodes } from "./store.js";
 export { projectGoals, activeFrontier, realizationForOwner, renderFrontier } from "./goals.js";
