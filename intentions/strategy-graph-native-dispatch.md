@@ -427,6 +427,47 @@ clarifications:
       orchestration logic remains forkable in-repo JS/tsx while only the
       executor is rented, and the thin-script condition is what keeps re-hosting
       that executor bounded. Recorded 2026-07-06 interview."
+  - question: What keeps the graph's tactics aligned with the greenfield target —
+      what prevents accumulating work on code the critical path deletes?
+    answer: "A greenfield-relevance gate binding the align family: at /align-tactics
+      finalization and in every /align-strategy improvement pass, each candidate
+      and open tactic's subject is checked against non-draft nodes that delete
+      or supersede it (a raw draft never obsoletes live work). The check is
+      per-unit: doomed units are dropped from the plan body naming the
+      superseding node; only a fully-superseded tactic demotes to draft. A
+      tactic on doomed surface may stay selectable only as an explicit
+      interim-live-risk exception naming its expiry event (e.g. the gh-queue
+      drain). First application this round:
+      tactic-dispatch-gh-api-interim-hardening demoted to draft (expiry:
+      tactic-legacy-router-removal); tactic-dispatch-script-hardening kept,
+      per-unit — already scoped to surviving scripts. Recorded 2026-07-06
+      interview."
+  - question: Which strategy does a bug or improvement tactic serve — and are
+      'nearest fit' placements acceptable?
+    answer: "serves names the strategy that owns the changed artifact — never a
+      nearest-fit force-fit. A genuinely cross-cutting subject (shared packages
+      load-bearing for several strategies' artifacts) records an honest
+      multi-entry serves array. When no strategy owns the artifact, the session
+      surfaces the gap — an office_hours park or a proposed /align-strategy
+      round — rather than force-fitting. Draft residue follows the same rule, so
+      each strategy's /align-tactics round finds its own drafts. First
+      application this round: three print reader tactics re-pointed
+      recover-knowledge → recover-attention (print is recover-attention's named
+      artifact), tactic-analytics-vitals-delivery re-pointed attention-surface →
+      promote-progressive-detachment (the surface renders signals it does not
+      own; the GA4/vitals channel belongs to the adoption-signal owner), and the
+      mixed low-severity sweep split into per-owning-strategy draft sweeps.
+      Recorded 2026-07-06 interview."
+  - question: Is the graph also the bug tracker — where do small mechanical defects live?
+    answer: "The intentions/ graph is the sole source-of-truth issue tracker, bug
+      tracker included. Every defect worth fixing is recorded as a tactic or a
+      unit of an existing one, however small — smallness is handled by folding
+      into a sibling tactic or a per-strategy draft sweep, never by not
+      recording. No side channels: no new gh issues (condition 1, absolute
+      post-drain), no ad-hoc lists or design docs, and code TODO comments are
+      pointer-only — TODO(tactic-<id>) citing the node that holds the substance;
+      a substantive TODO with no node is a review-phase finding. Recorded
+      2026-07-06 interview."
 tooling_goals:
   - kind: actuator
     statement: /align-strategy — interview-driven strategy recording, superseding
@@ -467,7 +508,8 @@ rounds:
 attributes:
   conditions:
     - the legacy gh router only drains existing issues; no new work enters via
-      gh once /align-strategy is live
+      gh once /align-strategy is live — the graph is the sole issue tracker, bug
+      tracker included, with no side-channel work records
     - direct-push commits stay restricted to intentions/ paths and rebase-retry
       conflict cost stays negligible at fleet concurrency
     - strategy-graph-drives-dispatch holds — resolved rank from the graph orders
