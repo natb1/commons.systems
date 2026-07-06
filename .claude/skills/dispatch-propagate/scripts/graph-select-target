@@ -209,7 +209,7 @@ sensor_gate() {
       # lands with tactic-main-qa-phase; the phase enum does not carry main-qa
       # until that tactic merges, so this arm is forward-compat).
       if [[ "$pr" == "null" || -z "$pr" ]]; then echo "no-pr"; return 1; fi
-      if ! state=$(gh pr view "$pr" --json state --jq .state 2>/dev/null); then
+      if ! state=$(gh_pr_view_rest "$pr" 2>/dev/null | jq -r .state); then
         echo "pr-state-unknown"; return 1
       fi
       [[ "$state" == "MERGED" ]] && return 0

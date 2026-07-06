@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { computeSignalPath, isSignalUnvalidated, resolveAttention } from "./attention.js";
-import type { IntentionNode } from "./schema.js";
+import type { IntentionNode, Phase } from "./schema.js";
 
 // Graph router v2, first half: selection (tactic-graph-router-selector).
 //
@@ -98,8 +98,9 @@ function isDraft(tactic: IntentionNode): boolean {
   return tactic.phase === null || tactic.phase === "draft";
 }
 
-/** Open = in flight: a phase set, and neither draft nor done. */
-function isOpenTactic(tactic: IntentionNode): boolean {
+/** Open = in flight: a phase set, and neither draft nor done. (Type predicate:
+ * a passing tactic provably carries a non-null phase.) */
+function isOpenTactic(tactic: IntentionNode): tactic is IntentionNode & { phase: Phase } {
   return !isDraft(tactic) && tactic.phase !== "done";
 }
 
@@ -176,7 +177,7 @@ function ladderIndex(phase: string): number {
  * belongs to the transition writer, never to selection, which makes no graph
  * writes).
  *
- * Soft-freeze gate (strategy clarification 10): any open tactic stamped with a
+ * Soft-freeze gate (strategy clarification 10): an open tactic stamped with a
  * non-null `execution.strategy_fingerprint` differing from the serving
  * strategy's current substance fingerprint freezes the subtree — its tactics
  * are excluded from selection (in-flight phases finish on their own), one
@@ -242,7 +243,7 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
     candidates.push({
       id: t.id,
       kind: "tactic",
-      phase: t.phase as string,
+      phase: t.phase,
       rank: attention.get(t.id)?.value ?? 0,
       pace_exempt: t.pace_exempt,
       pr: t.execution?.pr ?? null,
