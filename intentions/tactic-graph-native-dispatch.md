@@ -401,19 +401,29 @@ prelude re-validates against fresh `origin/main` — node exists, persisted
 phase equals the selected phase (passed as an argument), `office_hours`
 null, strategy fingerprint unchanged where stamped; mismatch is a
 distinct exit and the next tick re-selects (a selected-but-unstarted
-worker counts as NOT started and yields to a soft freeze). On pass, the
-gate stamps the tactic's **scope fingerprint** (statement + body hash;
-state fields never included) beside the worktree. At write, the
-transition-time gate holds the transition on either a stale strategy
-fingerprint or a stale scope stamp — and arms no merge: a tactic cannot
-reach `done` or merge until the in-flight phase has completed a run
-whose fresh read postdates the last scope edit (scope-fingerprint
-clarification, 2026-07-06, superseding the earlier same-day
-"transition write stands" clause). Author edits to a claimed tactic's
-scope still land freely and bind from the next selection; park the node
-to interrupt outright. Implementation:
-`tactic-worker-start-revalidation` (stamp side) and
-`tactic-graph-router-transitions` Unit 1 (verify side).
+worker counts as NOT started and yields to a soft freeze). The same
+prelude carries the **scope chain of custody** (chain-of-custody
+clarification, 2026-07-06, superseding the same-day scope-fingerprint
+entry's stay-at-completed-phase clause): a fix/qa/review worker starts
+only if the current **scope fingerprint** (statement + body hash;
+frontmatter state fields never included) equals the previous phase's
+stamp beside the worktree (`<fingerprint> <origin-main-sha>`); on pass
+the gate re-stamps. At write, the transition-time gate compares against
+the running phase's own stamp — a stale strategy fingerprint holds the
+transition for re-evaluation; a stale scope stamp (either gate) writes
+the backward transition `phase := implement` instead of a hold, with the
+`<stamped-sha>..origin/main` node-file commit range recorded in the
+demotion commit and on the PR as the routing-back provenance. Merge
+therefore requires an unbroken implement → qa → review chain all
+executed against the merge-time scope; machinery body appends (residue)
+never break custody because the transition writer refreshes the stamp to
+its post-write fingerprint. Demotion is pre-merge only — post-merge
+staleness routes per main-qa parity (§1.1). Author edits to a claimed
+tactic's scope still land freely and bind from the next selection; park
+the node to interrupt outright. Implementation:
+`tactic-worker-start-revalidation` (detect/stamp side) and
+`tactic-graph-router-transitions` Unit 1 (verify/demote side, the
+`demote-node-to-implement` primitive).
 
 **No session keepalive** (2026-07-06 interview): the graph is the
 long-horizon substrate; sessions are disposable executors. Continuity is
@@ -455,7 +465,12 @@ GitHub is a separate strategy; design TBD.)
   interview): a reservation-ledger claim per selected node before fan-out,
   each cleared with its transition write — so a concurrent tick's budget
   and selection see the emulated workers, keeping the global worker cap
-  (§3.2) intact under overlap.
+  (§3.2) intact under overlap. And it owes the scope chain of custody
+  (§3.2): before each transition write it re-checks that no scope edit
+  landed after its phase's fresh read, and when it finds a post-read
+  edit — or a scope edit that landed after an earlier phase already
+  completed — it writes the demotion to `implement` instead of the
+  forward transition.
 
 ### 3.4 Worktree anchoring and claiming
 

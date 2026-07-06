@@ -101,25 +101,49 @@ the node's (re-evaluated) intent. (Recorded 2026-07-06 from the
 /align-strategy concurrency review.)
 
 The same gate carries a second term — the **tactic-scope fingerprint**
-(strategy scope-fingerprint clarification, 2026-07-06): before any
-forward transition write, and before arming auto-merge at clean review
-completion, recompute `tacticScopeFingerprint` (statement + body hash,
-exported by `packages/intentionsutil/src/router.ts` —
+(strategy scope-fingerprint and chain-of-custody clarifications,
+2026-07-06): before any forward transition write, and before arming
+auto-merge at clean review completion, recompute `tacticScopeFingerprint`
+(statement + body hash, exported by
+`packages/intentionsutil/src/router.ts` —
 `tactic-worker-start-revalidation` Unit 1) against current `origin/main`
 and compare it to the phase-start stamp the worker-start gate saved at
 `<project-root>/.claude/worktrees/<node-id>.scope-fingerprint`
-(`tactic-worker-start-revalidation` Unit 2). On mismatch: write no
-forward transition and arm no merge — the tactic stays at its completed
-phase and the next tick re-runs that phase against the updated scope
-(fresh read, fresh stamp). This closes the window where a tactic-only
-scope edit landing mid-review or between review-pass and merge would let
-the PR merge against pre-edit scope; state-field writes (attempts,
-markers, residue sections, parks) never change the hash, so they cannot
-hold a transition. A missing stamp file (legacy launch, hand-run phase)
-fails open with a logged warning during the bootstrap and fails closed
-once `tactic-worker-start-revalidation` lands — the arming point then
-requires the stamp. Depends on `tactic-worker-start-revalidation` Units
-1–2 for the helper and the stamp; sequencing note added 2026-07-06.
+(`tactic-worker-start-revalidation` Unit 2; format
+`<fingerprint> <origin-main-sha>`). On mismatch: write no forward
+transition and arm no merge — write the **backward transition
+`phase := implement`** instead (the demotion; supersedes the earlier
+same-day stay-at-completed-phase behavior). Together with the
+worker-start gate's chain comparison (a fix/qa/review worker starts only
+if the current scope equals the previous phase's stamp), this makes
+merge require an unbroken implement → qa → review chain all executed
+against the merge-time scope: the re-selected implement worker roots in
+the same worktree, treats the current node body as the whole target
+state, and implements only the delta, then qa and review re-run in
+order. The demotion is delivered as an owned primitive,
+**`demote-node-to-implement <node-id>`** (beside `park-node`;
+graph-commit under the hood), also invoked by tick workers on the start
+gate's exit 13 — it records provenance in the demotion commit message
+and, when `execution.pr` exists, as a PR comment: the
+`git log <stamped-sha>..origin/main -- intentions/<node-id>.md` range is
+exactly the set of scope edits being absorbed, so the routed-back worker
+opens with the delta named, not archaeology (the current body alone is
+sufficient for correctness; the range is the focus aid and audit trail).
+Demotion is pre-merge only (implement/qa/review/fix); post-merge
+staleness routes per main-qa parity (strategy clarification 22), never
+an un-merge. After every transition it writes, the writer **refreshes
+the stamp** to the post-write fingerprint of the node it just committed
+plus the new `origin/main` SHA — residue sections and other machinery
+body appends DO change the hash, and the refresh is what keeps them from
+breaking custody, leaving only author and re-evaluation edits able to
+demote. Frontmatter state writes (attempts, markers, parks) never enter
+the hash at all. A missing stamp file (legacy launch, hand-run phase,
+recreated worktree) fails open with a logged warning during the
+bootstrap and fails closed once `tactic-worker-start-revalidation`
+lands — the arming point then requires the stamp. Depends on
+`tactic-worker-start-revalidation` Units 1–2 for the helper and the
+stamp; sequencing note added 2026-07-06, chain-of-custody amendment
+2026-07-06.
 
 ## Unit 2 — reconciler sweep and completion pruning
 

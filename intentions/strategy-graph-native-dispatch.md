@@ -720,6 +720,62 @@ clarifications:
       1; the mechanical enumeration and lint support (strategy census,
       provenance lint) in tactic-align-tactics-mechanical-floor. Recorded
       2026-07-06 /align-strategy skill-evaluation round."
+  - question: The scope-fingerprint gate re-runs only the phase that was in flight —
+      implement and qa completed against pre-edit scope never re-run. Does a
+      scope edit (direct, or via a cascading strategy re-evaluation) force all
+      three of implement/qa/review to execute with the latest scope — and when a
+      phase routes back, is it clear from graph state what changed?
+    answer: "Yes to both, by amendment: scope staleness now demotes the tactic to
+      phase implement instead of holding it in place — superseding the same-day
+      scope-fingerprint clarification's 'stays at its completed phase and the
+      next tick re-runs that phase' clause (its stamp/verify mechanism and
+      everything else in that entry stand). As first recorded, the gate re-ran
+      only the held phase, so an edit landing after qa's fresh read reached
+      merge with only review re-run: review's contract check does route
+      delivered-vs-current-scope gaps to its fix lane, so the code converged,
+      but the new scope never received the qa phase's independent
+      user-acceptance validation (clarification 20), and 'implement ran with
+      latest scope' held only vicariously through fix loops. Amended rule —
+      chain of custody: a pre-merge phase beyond implement may run only against
+      the exact scope the previous phase ran against. The worker-start gate
+      compares the current tacticScopeFingerprint against the existing stamp
+      left by the previous phase before overwriting it (fix/qa/review; implement
+      skips the comparison — it always takes the latest scope and re-establishes
+      custody; main-qa is post-merge and validates against current intent by
+      design); the transition-time gate keeps comparing against the running
+      phase's own start stamp. Staleness at either point writes the backward
+      transition phase := implement — the transition writer's one owned backward
+      transition — never a hold: the re-selected implement worker roots in the
+      same worktree, reads the current node body as the whole target state, and
+      implements only the delta, after which qa and review re-run in order on
+      fresh reads. Net guarantee, strengthened from the superseded clause: merge
+      requires an unbroken implement -> qa -> review chain all executed against
+      the merge-time scope fingerprint. Machinery body writes cannot break the
+      chain: the transition writer refreshes the stamp to the post-write
+      fingerprint of the node it just committed — residue sections DO change the
+      body hash, so the superseded entry's claim that residue writes cannot trip
+      the gate was wrong as written; the writer-side refresh is what makes
+      machinery appends harmless — leaving only author and re-evaluation edits
+      able to demote. A cascading strategy edit reaches this gate through the
+      existing two stages: the strategy-substance fingerprint holds transitions
+      and queues re-evaluation (clarification 10); if the re-evaluation amends
+      the tactic's scope, that amendment trips the scope chain and demotes — if
+      it confirms without amending, nothing re-runs, which is correct. Boundary:
+      demotion is pre-merge only (implement/qa/review/fix); post-merge staleness
+      routes per main-qa parity (clarification 22) — broken-in-prod becomes an
+      implement-chain bug tactic, never an un-merge. A missing stamp fails open
+      with a logged warning during bootstrap and fails closed (demote) once the
+      stamp mechanism lands. Routing-back provenance is explicit, not
+      archaeological: the stamp records the origin/main SHA beside the
+      fingerprint, so the demoting writer names exactly what is being absorbed —
+      git log <stamped-sha>..origin/main -- intentions/<id>.md — in the demotion
+      commit message and as a comment on the node's PR when one exists; the
+      re-run phases need no delta to be correct (the node body is the full
+      target state, condition 7 — plan minus delivered worktree state is the
+      work), so the named range is a focus aid and the audit trail. Bootstrap
+      parity: an emulating session owes the chain re-check before each
+      transition it writes, and owes the demotion write when it finds a post-qa
+      scope edit (clarification 15). Recorded 2026-07-06 interview."
 tooling_goals:
   - kind: actuator
     statement: /align-strategy — interview-driven strategy recording, superseding
