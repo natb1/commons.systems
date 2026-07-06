@@ -67,7 +67,9 @@ validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
-rounds: null
+rounds:
+  count: 1
+  last_completed: 2026-07-06
 attributes:
   conditions:
     - banks keep supplying machine-readable statement exports
