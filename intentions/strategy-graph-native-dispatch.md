@@ -705,6 +705,21 @@ clarifications:
       redo cost to one checkpoint interval with zero new harness coupling.
       Skill-side encoding retained as draft tactic-phase-checkpoint-discipline.
       Recorded 2026-07-06 interview."
+  - question: Clarification 32's amendment-completeness bar names re-evaluation
+      amendments of tactics. Does the same bar bind /align-strategy edits to
+      strategy nodes?
+    answer: "Yes — the bar widens to any node amendment in any align skill. An
+      /align-strategy edit round reconciles the edited strategy's entire node —
+      statement, rationale, conditions, signal, and any clarification the edit
+      touches or contradicts — against the interview's full outcome in the same
+      round; landing one new clarification while sibling fields still contradict
+      it is the same incomplete-amendment defect clarification 32 names for
+      tactics. The interview's live author presence reduces but does not remove
+      the risk: the record, not the session, is the carrier (condition 7).
+      Skill-text encoding is homed in tactic-align-skills-greenfield-gate Unit
+      1; the mechanical enumeration and lint support (strategy census,
+      provenance lint) in tactic-align-tactics-mechanical-floor. Recorded
+      2026-07-06 /align-strategy skill-evaluation round."
 tooling_goals:
   - kind: actuator
     statement: /align-strategy — interview-driven strategy recording, superseding
@@ -737,9 +752,7 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "graph-commit: concurrent-edit conflict — manual merge needed"
-  since: 2026-07-06
+office_hours: null
 pace_exempt: false
 rounds:
   count: 0

@@ -1,19 +1,25 @@
 ---
 id: tactic-align-tactics-mechanical-floor
 kind: tactic
-statement: "mechanical floor for /align-tactics: plan-schema body lint in the
-  validate gate and a child-tactic census script"
+statement: "mechanical floor for the align skills: plan-schema body lint and
+  clarification-provenance lint in the validate gate, plus child-tactic and
+  strategy-corpus census scripts"
 owner: ai
 status: codified
 parent: null
 rationale: "Strategy clarification 32 (2026-07-06): the repeated re-refinement
   of doctrine-encoding tactics was systemic — no mechanical rule defines a
   fully-fleshed-out plan body, and the idempotency classification greps
-  false-matched a spec-carrier body during the same rounds. This tactic backs
-  the amendment-completeness doctrine with machinery: a plan-schema body lint on
-  phase-set tactics wired into the single validate gate, and a census script
-  that makes child-tactic enumeration and classification deterministic. Off-path
-  (no validates chain), so calculated attention demotes it below round tactics."
+  false-matched a spec-carrier body during the same rounds. The same-day
+  /align-strategy skill evaluation (clarification 38) extended the diagnosis to
+  the strategy side: the improvement pass hand-reads a 42-node strategy corpus
+  including a pure set-difference (unserved virtues), new-vs-edit overlap
+  detection uses keyword grep as the disposition mechanism, and the
+  clarification provenance-sentence convention is prose-only. This tactic backs
+  the amendment-completeness doctrine with machinery: plan-schema body and
+  provenance lints on the single validate gate, plus census scripts that make
+  child-tactic and strategy-corpus enumeration deterministic. Off-path (no
+  validates chain), so calculated attention demotes it below round tactics."
 reading: null
 gap: null
 serves:
@@ -28,14 +34,12 @@ execution: null
 validates: []
 blocked_by:
   - tactic-align-skills-greenfield-gate
-office_hours:
-  reason: "graph-commit: concurrent-edit conflict — manual merge needed"
-  since: 2026-07-06
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
 ---
-# mechanical floor for /align-tactics: plan-schema body lint in the validate gate and a child-tactic census script
+# mechanical floor for the align skills: plan-schema and provenance lints in the validate gate, plus child-tactic and strategy-corpus census scripts
 
 Off-path: no `validates` chain reaches this node, so calculated attention
 demotes it below round tactics at read time. One PR.
@@ -44,7 +48,9 @@ demotes it below round tactics at read time. One PR.
 
 Strategy clarification 32 (2026-07-06) diagnosed the repeated same-day
 re-refinement of `tactic-align-skills-greenfield-gate` as systemic, not
-one-off. Two of its causes have mechanical fixes:
+one-off; the same-day `/align-strategy` skill evaluation (clarification 38)
+extended the diagnosis to the strategy side. The causes with mechanical
+fixes:
 
 - **No floor for "fully fleshed out".** `validateGraph` never inspects a
   tactic's markdown body (`packages/intentionsutil/src/schema.ts:93` — the
@@ -57,12 +63,26 @@ one-off. Two of its causes have mechanical fixes:
   rounds it false-matched a spec-carrier body and shortlisted open tactics
   by keyword, missing an indirectly-affected one. A script makes step 0
   deterministic; the semantic judgment stays with the session.
+- **Hand-run strategy-corpus enumeration.** `/align-strategy`'s
+  improvement pass prescribes reading every `strategy-*.md` inline — 42
+  nodes / ~3,200 lines at evaluation time — and computing the
+  unserved-virtues listing (a pure set difference over `serves` arrays) by
+  hand; its Step 1.2 new-vs-edit overlap detection and Step 3 delegation
+  sweep use keyword grep as the disposition mechanism, the same
+  enumeration-honesty defect clarification 32 named.
+- **Unlinted provenance convention.** Every `clarifications[].answer` must
+  end with a dated provenance sentence (`"...Recorded YYYY-MM-DD ..."`),
+  but `schema.ts` validates only the `{question, answer}` shape
+  (`validateClarifications`,
+  `packages/intentionsutil/src/schema.ts:443`) — the convention is
+  prose-only.
 
 The skill-text encoding of the amendment-completeness doctrine itself
-(whole-node reconciliation, full-body re-read) is homed in
-`tactic-align-skills-greenfield-gate` Unit 2, not here.
+(whole-node reconciliation, full-body re-read, the clarification-38
+widening to strategy edits) is homed in
+`tactic-align-skills-greenfield-gate` Units 1–2, not here.
 
-## Unit 1 — plan-schema body lint in the validate gate
+## Unit 1 — plan-schema body and provenance lints in the validate gate
 
 **Recommended model:** opus
 
@@ -91,9 +111,17 @@ Scope:
   the rule. If a violation is legitimately not a plan (e.g. a spec-carrier
   tactic), bring it to a compliant shape or record the exemption as an
   explicit named rule in `planlint.ts` — never a silent skip.
+- Provenance lint, same module and same gate: a second exported rule
+  requiring every `clarifications[].answer` on **any** node kind to end
+  with a provenance sentence matching `/Recorded \d{4}-\d{2}-\d{2}/`
+  (trailing-sentence position, not merely anywhere in the string). Sweep
+  the live store the same way — fix violating entries in this PR or record
+  an explicit named exemption in `planlint.ts`, never a silent skip.
 - Tests: new `packages/intentionsutil/test/planlint.test.ts` — accepts a
   compliant body, rejects each missing marker (error names the node and
-  the marker), exempts each exempt phase.
+  the marker), exempts each exempt phase; accepts a provenance-suffixed
+  clarification and rejects an unsuffixed one (error names the node and
+  the clarification index).
 
 Out of scope: enforcing `office_hours.recommendation` presence on parks
 (condition 6) — that waits on the field landing in `schema.ts`
@@ -142,6 +170,56 @@ Landing note: `.claude/skills/**` edits are agent-behavior config —
 dispatch auto mode blocks the commit (not the edit); if the worker hits
 that denial, park for an interactive session to land the PR.
 
+## Unit 4 — strategy-corpus census script
+
+**Recommended model:** sonnet
+
+Scope: new `packages/intentionsutil/scripts/align-strategy-census.ts`,
+usage `npx tsx packages/intentionsutil/scripts/align-strategy-census.ts
+[intentionsDir]` (dir defaulting to `intentions`, matching
+`validate-graph.ts`; no strategy argument — it dumps the whole corpus).
+Using `listNodes` (`packages/intentionsutil/src/store.ts:88`), frontmatter
+only — no body reader needed:
+- For every `kind: strategy` node, print one block: id, `statement`,
+  `serves`, `office_hours` (first line of `reason` when parked),
+  `attributes.conditions`, `reading`, `gap`, and the `Recorded YYYY-MM-DD`
+  dates extracted from each clarification answer (count + date list, not
+  full text) — the improvement pass's staleness checks read this dump
+  instead of every file.
+- **Unserved virtues** section: every `kind: virtue` id appearing in no
+  strategy's `serves` — the pure set difference the skill currently asks
+  the session to compute by hand.
+- **Delegations** section: every `kind: delegation` node's id,
+  `statement`, `attributes.delegated`, `attributes.divergence.level`, and
+  `attributes.irreversibility.{gated,recovery_cost}` — the Step 3 sweep's
+  corpus.
+- Enumeration only: no staleness or overlap judgment in the script — that
+  stays with the session (same split as Unit 2).
+
+## Unit 5 — /align-strategy SKILL.md census hook
+
+**Recommended model:** sonnet
+
+Depends on: Unit 4. The tactic-level `blocked_by` on
+`tactic-align-skills-greenfield-gate` sequences this behind that tactic's
+edits to the same file (same arrangement as Unit 3).
+
+Scope: `.claude/skills/align-strategy/SKILL.md`:
+- Step 1 improvement-pass branch: replace the "read every
+  `intentions/strategy-*.md` node" enumeration prescription with the Unit 4
+  census invocation, keeping the staleness-judgment prose (which checks to
+  run against the dump, and that shortlisted nodes are read in full before
+  disposition).
+- Step 1.2 (new-vs-edit overlap): the census statement dump is the
+  disposition corpus — keyword grep only shortlists; a match still gets a
+  full-node read.
+- Step 3 (delegation advice): source the sweep from the census
+  delegations section instead of a fresh grep.
+
+Landing note: `.claude/skills/**` edits are agent-behavior config —
+dispatch auto mode blocks the commit (not the edit); if the worker hits
+that denial, park for an interactive session to land the PR.
+
 ## Reuse
 
 - `listNodes` / `readNode` — `packages/intentionsutil/src/store.ts:88` /
@@ -155,8 +233,9 @@ that denial, park for an interactive session to land the PR.
 
 ## Dependencies
 
-- `blocked_by: tactic-align-skills-greenfield-gate` — Unit 3 edits the
-  same SKILL.md that tactic rewrites; land the doctrine text first.
+- `blocked_by: tactic-align-skills-greenfield-gate` — Units 3 and 5 edit
+  the same SKILL.md files that tactic rewrites; land the doctrine text
+  first.
 - `tactic-graph-write-validation-hardening` (PR #2775, at review) touches
   `store.ts` and its tests — no scope overlap; expect at most a trivial
   rebase if it merges first.
@@ -175,9 +254,16 @@ npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions
 npx tsx packages/intentionsutil/scripts/align-tactics-census.ts strategy-graph-native-dispatch intentions | grep -q "tactic-align-tactics-mechanical-floor"
 ```
 
+```verify
+npx tsx packages/intentionsutil/scripts/align-strategy-census.ts intentions | grep -q "strategy-graph-native-dispatch"
+```
+
 Manual: in a scratch checkout, blank a planned tactic's body sections and
 confirm `validate-graph.ts` exits non-zero naming the node and the missing
-marker; confirm the census exits non-zero on an unknown strategy id.
+marker; strip a clarification's provenance sentence and confirm the same;
+confirm the child-tactic census exits non-zero on an unknown strategy id;
+confirm the strategy census's unserved-virtues section lists exactly the
+virtue ids absent from every strategy's `serves`.
 
 ## Implementation notes
 
