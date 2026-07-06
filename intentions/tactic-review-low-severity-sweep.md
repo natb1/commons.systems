@@ -34,11 +34,23 @@ attributes: {}
 
 ## Context
 
-Retained context, not selectable work. The 2026-07-05 review confirmed ~70
-low-severity findings that do not each warrant a PR-sized tactic. Recorded so
-nothing is lost; a later `/align-tactics` round (or the author) can promote
-individual items. Grouped by area — each line is a confirmed finding with an
-anchor. Not exhaustive of every nit, but covers the substantive lows.
+Retained context, not selectable work. The 2026-07-05 review confirmed
+~60 low-severity findings that do not each warrant a PR-sized tactic.
+Recorded so nothing is lost; a later `/align-tactics` round (or the
+author) can promote individual items. Grouped by area — each line is a
+confirmed finding with an anchor. Not exhaustive of every nit, but covers
+the substantive lows.
+
+A first version of this sweep (landed alongside this round) mis-sorted
+several higher-severity findings into this "low" node. Those have since
+been promoted to their own tactics or folded into existing ones:
+`tactic-token-audit-node-attribution` (day-slice undercount, subagent
+double-count), `tactic-shared-ui-correctness` (cc-badge styling,
+BudgetPaceChart freeze), `tactic-crypto-core-consolidate` (buffer-transfer
+footgun), `tactic-budget-etl-balance-history` (duplicate virtual doc IDs),
+`tactic-print-viewer-save-reliability`, `tactic-budget-week-axis-consistency`,
+and `tactic-dispatch-script-hardening`. This sweep now holds only the items
+actually rated low.
 
 ## budget app
 
@@ -51,13 +63,11 @@ anchor. Not exhaustive of every nit, but covers the substantive lows.
   silently collapse (IDB put last-wins); no uniqueness validation.
 - `balance.ts:193-259`: `computeBudgetBalance` is dead code re-implementing
   money logic already in `computeAllBudgetBalances`.
-- `balance.ts:420-432,427-428`: `computeAggregateTrend` week-axis asymmetry
-  and Sunday-credit misalignment vs `computePerBudgetTrend`.
 - `pages/account-view-model.ts:32-36,78`: all-null-timestamp accounts get
   `maxTs=0` -> "12/31/1969" sorted first.
-- `pages/budgets-hydrate.ts:185-186,240-245,371,378,393`: non-array parse
-  throws raw TypeError (skips DataIntegrityError path); module-level
-  `scrollAbort` shared across hydrators; override dedup-by-dateMs clobbers.
+- `pages/budgets-hydrate.ts:185-186,240-245,371`: non-array parse throws
+  raw TypeError (skips DataIntegrityError path); module-level
+  `scrollAbort` shared across hydrators.
 - `pages/statement-source-view.ts:222,227,241`: bare catch blocks bypass
   `classifyError`.
 - missing test: `pages/accounts-cash-flow-chart.ts` (computes its own rolling
@@ -76,19 +86,9 @@ anchor. Not exhaustive of every nit, but covers the substantive lows.
   real $0.00 with "absent" -> paid-off card gets no balance history.
 - `internal/journal/journal.go:41,306`: `centTolerance=1` can only create
   false transfer merges (amounts are exact integer cents).
-- `main.go:376`: virtual doc ID has no rule component -> two virtual rules on
-  one source transaction emit duplicate IDs (Firestore overwrite).
 
 ## print
 
-- `useViewerController.ts:260-263,268-282,537-549`: debounced position save
-  has no beforeunload/pagehide flush (drops the final page turn); records
-  `lastSavedPosition` before the save settles (no retry); opening with spread
-  pref silently rewrites the saved position to the spread's left page.
-- `viewer/pdf.ts:323-354`: `renderTextLayer` has no generation guard ->
-  stale-page selectable text overlay.
-- `viewer/epub.ts:103-109,232-241`: awaits an unreliable `relocated` event
-  (percent-goto can hang 30s); timer fires after `destroy()`.
 - `Viewer.tsx:46-49` + `useBookmarks.ts:87`: bookmarks store loads once with
   the initial cloud store; a post-mount Firestore failure forks state.
 - `local-folder-ui.ts:178-190`: "Forget folder" never calls the sidecar
@@ -142,6 +142,13 @@ anchor. Not exhaustive of every nit, but covers the substantive lows.
   last-known-good on a transient upstream blip. Use `allSettled` + merge.
 - `firestore.rules:520-527`: signal-samples demo tier can `get` but not
   `list` (the promised public time-series is unusable); no rules-test.
+- `firestore.rules:52-54` vs `:77-79`: the transactions-rule comment
+  ("updates limited to note, category, reimbursement, budget, and
+  normalization fields") drifted from the rule, which also permits
+  `statementItemId`/`journalEntryId` rewrites (type-checked only, not
+  pinned) — intentional (the reconcile flow needs it) but the comment
+  under-states the mutable surface reviewers actually read as the
+  security contract.
 - `functions/src/dispatch-queue-metrics-core.ts` / `office-hours-sync-core.ts`:
   orphaned after the #2763 decommission with stale header contracts,
   consumed cross-package via relative imports. (Note: relocation overlaps the
@@ -151,21 +158,21 @@ anchor. Not exhaustive of every nit, but covers the substantive lows.
 
 ## ops / dispatch scripts (mostly legacy — many OBE at legacy-router-removal)
 
-- token-audit: `aggregate-usage.sh:168,174,846` local-time window vs UTC find
-  (excludes recent |offset| hours); `topic-usage-writer.mjs:566-569`
-  day-slice undercount; `:489-494` subagent double-count. (UTC-window half is
-  tracked by `tactic-token-audit-node-attribution`.)
-- `identify-qfx.sh:22,37`: `set -e` + `grep|head|sed` aborts on missing
-  `<ORG>` (dead error path); CRLF leaves trailing `\r` in ORG/ACCTID.
-- `run-smoke-tests.sh:29`, `run-pr-checks-wait.sh:63-76`,
-  `run-typecheck.sh:117`, `run-lint.sh:56-59`: `set -e` / `|| true` /
-  process-substitution patterns that false-fail or false-green.
+- token-audit: `aggregate-usage.sh:168,174,846` local-time window vs UTC
+  find (excludes recent |offset| hours). (Tracked by
+  `tactic-token-audit-node-attribution`; the day-slice and double-count
+  halves of this finding were promoted out of this sweep into that same
+  tactic's Unit 4.)
+- `run-typecheck.sh:117`, `run-lint.sh:56-59`: `set -e` / process-substitution
+  patterns that can false-green a workspace.
 - `dispatch-reconcile-merged:61` creation-ordered "merged recently" window
   (misses old-PR-merged-today, the #2512 case); `dispatch-select-target:270`
   unpaginated main-broken check; `dispatch-find-owning-pr:92` treats any API
   error as 404; `dispatch-route:179,196,211,277-284` undiagnosed parks +
   stranded-push conflation; `dispatch-attempt-count` remove-then-add label
   bump; `gh_retry:125-151` retries non-idempotent POSTs (double-file risk).
+  (Mostly legacy-gh-router scoped — check survival against
+  `tactic-legacy-router-removal` before fixing.)
 - `.claude/hooks/statusline.sh:28` divide-by-zero; `worktree-remove.sh:62-63`
   resolved-vs-unresolved path compare.
 - duplication belonging in lib.sh: `gh label create` idiom x8; the four

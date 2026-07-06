@@ -40,6 +40,10 @@ virtual/merged transactions. The 2026-07-05 review found a cluster of money
 correctness bugs, several with tests asserting the wrong (shifted) values.
 Integer-cents arithmetic and UTC date parsing are otherwise sound.
 
+Unit 4 folds in an adjacent finding (duplicate virtual-transaction doc IDs)
+previously misfiled in `tactic-review-low-severity-sweep` at higher severity
+than a "low" sweep warrants.
+
 ## Unit 1 — off-by-one month anchor
 
 **Recommended model:** opus
@@ -83,8 +87,23 @@ Scope:
   (garbage + failed categorization + cross-format double count). Decode
   entities to match the XML path.
 
+## Unit 4 — unique virtual transaction doc IDs
+
+**Recommended model:** sonnet
+
+Scope:
+- `main.go:376`: `virtualDocID := "virtual-" + txnDocIDs[i]` has no rule
+  component; two virtual rules matching one source transaction emit
+  duplicate IDs, `Output.Validate()` (`internal/export/export.go:382`)
+  doesn't check uniqueness, and one Firestore doc silently overwrites the
+  other on upload. Include the matching rule's id/name in the virtual doc
+  ID, and add a uniqueness check over all doc IDs to `Output.Validate()`
+  so a future collision fails loudly instead of silently dropping data.
+
 ## Verification
 
 - Go unit tests for each unit (corrected assertions); a real multi-file merge
   preserves derived history and virtual edits; an OFX 1.x fixture with
-  entities parses identically to its XML twin.
+  entities parses identically to its XML twin; two rules matching one
+  source transaction produce two distinct virtual doc IDs, and
+  `Output.Validate()` rejects a fixture with a manufactured duplicate.
