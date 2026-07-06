@@ -11,11 +11,15 @@ rationale: "Surfaced by the 2026-07-05 review. createJournalEntry and
   mid-sequence leaves an unbalanced entry (legCount N, fewer legs) or un-stamped
   legs, which clearedBalance silently mis-computes and file-sync then bakes into
   the encrypted .benc. Multi-store transactions are already available
-  (idb.ts:78). Serves strategy-complete-ledger: durable double-entry integrity."
+  (idb.ts:78). Serves strategy-complete-ledger: durable double-entry integrity.
+  Re-pointed strategy-complete-ledger -> strategy-recover-finance 2026-07-06 per
+  the placement doctrine: complete-ledger is the delegation/attachment ledger
+  (every live delegation carries a record), not the financial one; the budget
+  app/etl artifact belongs to strategy-recover-finance."
 reading: null
 gap: null
 serves:
-  - strategy-complete-ledger
+  - strategy-recover-finance
 recovers: []
 clarifications: []
 tooling_goals: []

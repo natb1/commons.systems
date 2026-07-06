@@ -27,6 +27,7 @@ blocked_by:
   - tactic-dispatch-lifecycle-sensor
   - tactic-phase-skill-node-targets
   - tactic-main-qa-phase
+  - tactic-office-hours-graph-entry
 office_hours: null
 pace_exempt: false
 rounds: null
@@ -57,8 +58,13 @@ gate is a plan step.
 Scope: in `.claude/skills/dispatch-propagate/scripts/` delete or reduce:
 `dispatch-select-target`, the legacy path in `dispatch-select-tick`,
 `dispatch-phase`'s derivation logic (its read-only sensor side survives in
-the transitions layer), `office-hours-select-target` (superseded by the
-`office_hours != null` projection), and every `dispatch:*` label
+the transitions layer), the legacy office-hours entry surface — the
+`office-hours` shell entry script with its attach/resume/provision verbs,
+`office-hours-select-target`, and the `dispatch-office-hours-strip.sh`
+UserPromptSubmit hook — superseded by the graph-native always-launch-fresh
+entry (strategy clarification 30, `tactic-office-hours-graph-entry`; the
+queue view is the `office_hours != null` projection, and the park clears
+per clarification 4, not via a strip hook), and every `dispatch:*` label
 convention remaining in scripts and skill docs. Also retire the legacy
 worktree-layout conventions (strategy clarification 23):
 `worktree-create.sh`'s `<issue-num>-<slug>` lane (git-common-dir
@@ -85,6 +91,25 @@ their successors. (The gh↔graph mapping layer — `intention-emit`,
 `backfill.ts`/`refresh.ts`, `trackers/`, `rank-map.ts` — was already
 removed when the parallel-drain migration superseded the mapping strategy;
 nothing of it remains to retire here.)
+
+## Unit 3 — prune the drain-expiry graph nodes
+
+**Recommended model:** sonnet
+
+Scope:
+- The greenfield-relevance gate (strategy clarification, 2026-07-06) names
+  this tactic as the expiry event for interim-live-risk exceptions on the
+  legacy-gh surface. At drain completion, prune the nodes that expire with
+  it: `tactic-dispatch-gh-api-interim-hardening` (demoted draft whose
+  demotion note says delete here), and sweep
+  `tactic-review-lows-automation`'s "legacy dispatch scripts" section —
+  drop the items whose subject files this tactic deletes, keep the
+  survivors (token-audit, CI wrappers, hooks, lib.sh duplication items
+  that outlive the gh lane).
+- Land the prunes through `graph-commit --prune`
+  (`tactic-graph-commit-prune-support` Unit 1) if it has shipped;
+  otherwise the hand-orchestrated `graph/**` fast-path per the prune
+  precedent (a54f4ced).
 
 ## Dependencies
 
