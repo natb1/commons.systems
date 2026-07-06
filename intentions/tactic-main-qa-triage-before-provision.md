@@ -2,15 +2,15 @@
 id: tactic-main-qa-triage-before-provision
 kind: tactic
 statement: main-qa triage before provision — run the browser-verifiability
-  triage in the selection chain so unverifiable follow-ups never cost a
-  worktree and session boot
+  triage in the selection chain so unverifiable follow-ups never cost a worktree
+  and session boot
 owner: ai
 status: codified
 parent: null
-rationale: "Split from the hygiene draft by /align-tactics round 1: the
-  audit's 'qa-verify polling loop' n-gram (405 occurrences / 39 sessions)
-  is per-issue worktree and session boots for sibling main-qa follow-ups,
-  with triage running only after the expensive boot."
+rationale: "Split from the hygiene draft by /align-tactics round 1: the audit's
+  'qa-verify polling loop' n-gram (405 occurrences / 39 sessions) is per-issue
+  worktree and session boots for sibling main-qa follow-ups, with triage running
+  only after the expensive boot."
 reading: null
 gap: null
 serves:
@@ -20,10 +20,19 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: false
+rounds: null
 attributes:
-  phase: implement
+  phase: qa
   execution:
     strategy_fingerprint: 10f0314e331696714d42b26313b80c5a289d68ab0e3ce4d614bf2c97a94d4a67
+    branch: tactic-main-qa-triage-before-provision
+    pr: 2784
 ---
 # main-qa triage before provision — run the browser-verifiability triage in the selection chain so unverifiable follow-ups never cost a worktree and session boot
 

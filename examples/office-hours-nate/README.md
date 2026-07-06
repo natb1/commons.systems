@@ -41,6 +41,11 @@ that instead.
    aborts mid-run on any pre-existing unmanaged file it wants to own (e.g.
    `~/.zshrc` or `~/.gitconfig`), leaving the profile half-updated.
 
+## Optional: authorized SSH keys
+
+`services.sshAuthorizedKeys.keys` defaults to `[]` (a no-op); set it to your
+public-key strings only if this machine runs sshd and should accept them.
+
 ## --impure (not required on any platform)
 
 The darwin path above is pure, and a Linux or WSL instance is too. The

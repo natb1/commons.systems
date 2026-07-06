@@ -10,8 +10,8 @@ parent: null
 rationale: "Round-1 instrument tactic: the strategy's reading is null, so the
   round must include the tactic that makes the sensor runnable
   (strategy-graph-native-dispatch clarification 3 — a strategy that cannot be
-  measured must first buy its own instrument). Planned 2026-07-04
-  /align-tactics round 1."
+  measured must first buy its own instrument). Planned 2026-07-04 /align-tactics
+  round 1."
 reading: null
 gap: null
 serves:
@@ -21,12 +21,21 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: false
+rounds: null
 attributes:
-  phase: implement
+  phase: qa
   validates:
     - strategy-token-economy
   execution:
     strategy_fingerprint: 10f0314e331696714d42b26313b80c5a289d68ab0e3ce4d614bf2c97a94d4a67
+    branch: tactic-token-economy-sensor
+    pr: 2779
 ---
 # token-economy sensor — registry sensor computing weekly allowance utilization and claude-eligible tactic velocity, populating strategy-token-economy's reading
 
