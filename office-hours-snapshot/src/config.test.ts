@@ -110,6 +110,13 @@ describe("loadConfig", () => {
     ).toThrow("Google OAuth is partially configured");
   });
 
+  it("does NOT require the analytics sources on a full scope", () => {
+    // FULL_ENV configures none of the analytics sources — full still loads.
+    const c = loadConfig(FULL_ENV, FULL_OPTS);
+    expect(c.githubRepo).toBeUndefined();
+    expect(c.google).toBeNull();
+  });
+
   it("rejects an invalid PSI strategy and a non-numeric GA4 property id", () => {
     expect(() =>
       loadConfig({ ...FULL_ENV, PROJECT_SIGNALS_PSI_STRATEGY: "tablet" }, FULL_OPTS),
@@ -117,5 +124,73 @@ describe("loadConfig", () => {
     expect(() =>
       loadConfig({ ...FULL_ENV, PROJECT_SIGNALS_GA4_PROPERTY_ID: "abc" }, FULL_OPTS),
     ).toThrow("PROJECT_SIGNALS_GA4_PROPERTY_ID");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Analytics scope — every source is REQUIRED (missing key fails the scope
+// loudly; a source is never silently skipped).
+// ---------------------------------------------------------------------------
+
+/** A complete, valid environment for a real scope="analytics" run. */
+const ANALYTICS_ENV: Env = {
+  OFFICE_HOURS_GROUP_ID: "g1",
+  OFFICE_HOURS_QUEUE_REPOS: "natb1/commons.systems",
+  OFFICE_HOURS_SNAPSHOT_DIR: "/mnt/g/snap",
+  PROJECT_SIGNALS_GITHUB_REPO: "natb1/commons.systems",
+  GOOGLE_ANALYTICS_CLIENT_ID: "cid",
+  GOOGLE_ANALYTICS_CLIENT_SECRET: "csec",
+  GOOGLE_ANALYTICS_REFRESH_TOKEN: "rt",
+  PROJECT_SIGNALS_GA4_PROPERTY_ID: "123",
+  PROJECT_SIGNALS_GA4_HOST_APPS: "commons.systems:commons",
+  PAGESPEED_API_KEY: "psi-key",
+};
+
+const ANALYTICS_OPTS = { scope: "analytics" as const, dryRun: false };
+
+describe("loadConfig — scope=analytics", () => {
+  it("accepts a fully-configured analytics env (group repo NOT required)", () => {
+    const c = loadConfig(ANALYTICS_ENV, ANALYTICS_OPTS);
+    expect(c.githubRepo).toBe("natb1/commons.systems");
+    expect(c.google).toEqual({ clientId: "cid", clientSecret: "csec", refreshToken: "rt" });
+    expect(c.ga4PropertyId).toBe("123");
+    expect(c.ga4HostApps).toEqual([{ host: "commons.systems", app: "commons" }]);
+    expect(c.psiApiKey).toBe("psi-key");
+    expect(c.groupRepo).toBeUndefined();
+  });
+
+  it("fail-fast names each missing analytics source", () => {
+    for (const [drop, expected] of [
+      ["PROJECT_SIGNALS_GITHUB_REPO", "PROJECT_SIGNALS_GITHUB_REPO"],
+      ["GOOGLE_ANALYTICS_REFRESH_TOKEN", "Google OAuth is partially configured"],
+      ["PROJECT_SIGNALS_GA4_PROPERTY_ID", "PROJECT_SIGNALS_GA4_PROPERTY_ID"],
+      ["PROJECT_SIGNALS_GA4_HOST_APPS", "PROJECT_SIGNALS_GA4_HOST_APPS"],
+      ["PAGESPEED_API_KEY", "PAGESPEED_API_KEY"],
+    ] as const) {
+      const env = { ...ANALYTICS_ENV };
+      delete env[drop];
+      expect(() => loadConfig(env, ANALYTICS_OPTS), `missing ${drop}`).toThrow(expected);
+    }
+  });
+
+  it("rejects a fully-ABSENT Google triple (not just a partial one)", () => {
+    const env = { ...ANALYTICS_ENV };
+    delete env.GOOGLE_ANALYTICS_CLIENT_ID;
+    delete env.GOOGLE_ANALYTICS_CLIENT_SECRET;
+    delete env.GOOGLE_ANALYTICS_REFRESH_TOKEN;
+    expect(() => loadConfig(env, ANALYTICS_OPTS)).toThrow("GOOGLE_ANALYTICS_CLIENT_ID");
+  });
+
+  it("rejects an explicitly-emptied PSI URL list", () => {
+    expect(() =>
+      loadConfig({ ...ANALYTICS_ENV, PROJECT_SIGNALS_PSI_URLS: " , " }, ANALYTICS_OPTS),
+    ).toThrow("PROJECT_SIGNALS_PSI_URLS");
+  });
+
+  it("still requires the Drive dir on a real analytics run, but not on dry-run", () => {
+    const env = { ...ANALYTICS_ENV };
+    delete env.OFFICE_HOURS_SNAPSHOT_DIR;
+    expect(() => loadConfig(env, ANALYTICS_OPTS)).toThrow("OFFICE_HOURS_SNAPSHOT_DIR");
+    expect(loadConfig(env, { scope: "analytics", dryRun: true }).snapshotDir).toBeUndefined();
   });
 });

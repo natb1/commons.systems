@@ -4,10 +4,11 @@ import os from "node:os";
 import path from "node:path";
 
 import { parseArgs, run, defaultIo, type RunIo } from "./run.js";
-import { serializeSnapshot, type SnapshotInput } from "./snapshot.js";
+import { serializeSnapshot, type SnapshotInput, type SnapshotScope } from "./snapshot.js";
 import type { Env } from "./config.js";
 import type { UsageSample } from "../../office-hours/src/usage-samples.js";
 import type { IssueSample } from "../../office-hours/src/issue-samples.js";
+import type { ProjectSignalsSnapshot } from "../../office-hours/src/project-signals.js";
 
 const NOW = new Date("2026-06-30T12:00:00.000Z");
 
@@ -19,7 +20,26 @@ const FULL_ENV: Env = {
   OFFICE_HOURS_SNAPSHOT_PASSWORD: "pw",
 };
 
-function fakeInput(scope: "full" | "parked-only" = "full"): SnapshotInput {
+/** FULL_ENV plus every analytics source (all REQUIRED for --scope analytics). */
+const ANALYTICS_ENV: Env = {
+  ...FULL_ENV,
+  PROJECT_SIGNALS_GITHUB_REPO: "natb1/commons.systems",
+  GOOGLE_ANALYTICS_CLIENT_ID: "cid",
+  GOOGLE_ANALYTICS_CLIENT_SECRET: "csec",
+  GOOGLE_ANALYTICS_REFRESH_TOKEN: "rt",
+  PROJECT_SIGNALS_GA4_PROPERTY_ID: "123",
+  PROJECT_SIGNALS_GA4_HOST_APPS: "commons.systems:commons",
+  PAGESPEED_API_KEY: "psi-key",
+};
+
+const SIGNALS: ProjectSignalsSnapshot = {
+  computedAt: NOW,
+  groupId: "g1",
+  memberEmails: ["owner@example.com"],
+  github: { repo: "natb1/commons.systems", stars: 12, forks: 3, watchers: 7 },
+};
+
+function fakeInput(scope: SnapshotScope = "full"): SnapshotInput {
   return {
     samples: [],
     reminders: [],
@@ -37,6 +57,8 @@ function fakeInput(scope: "full" | "parked-only" = "full"): SnapshotInput {
 function makeIo(overrides: Partial<RunIo> = {}): RunIo {
   return {
     produceSnapshot: vi.fn(async (_deps, scope) => fakeInput(scope)),
+    produceProjectSignals: vi.fn(async () => SIGNALS),
+    readPriorSnapshot: vi.fn(async () => null),
     writeSnapshot: vi.fn(async () => ({
       historyPath: "/mnt/g/snap/office-hours-2026.benc",
       currentPath: "/mnt/g/snap/office-hours-current.benc",
@@ -65,6 +87,8 @@ describe("parseArgs", () => {
   it("parses --scope (space and = forms)", () => {
     expect(parseArgs(["--scope", "parked-only"]).scope).toBe("parked-only");
     expect(parseArgs(["--scope=parked-only"]).scope).toBe("parked-only");
+    expect(parseArgs(["--scope", "analytics"]).scope).toBe("analytics");
+    expect(parseArgs(["--scope=analytics"]).scope).toBe("analytics");
   });
 
   it("parses the boolean flags", () => {
@@ -200,6 +224,73 @@ describe("run", () => {
     const deps = (io.produceSnapshot as ReturnType<typeof vi.fn>).mock.calls[0][0]; // type-safety-ok: cast vi mock to access .mock.calls in the test
     expect(deps.readPriorHistory).toBeUndefined();
     expect(io.readPriorHistory).not.toHaveBeenCalled();
+  });
+});
+
+describe("run — scope=analytics", () => {
+  it("collects signals, folds into the prior snapshot, and writes (no full produce)", async () => {
+    const prior = serializeSnapshot({
+      ...fakeInput(),
+      samples: [
+        {
+          sampledAt: NOW,
+          fiveHourUsedPct: 10,
+          weeklyUsedPct: 20,
+          fiveHourResetsAt: NOW,
+          weeklyResetsAt: NOW,
+          activeWorkers: 4,
+          targetWorkers: 8,
+          groupId: "g1",
+        },
+      ],
+    });
+    const io = makeIo({ readPriorSnapshot: vi.fn(async () => prior) });
+    const code = await run(["--scope", "analytics"], ANALYTICS_ENV, io);
+    expect(code).toBe(0);
+
+    // The full pipeline is NOT run.
+    expect(io.produceSnapshot).not.toHaveBeenCalled();
+    expect(io.readPriorHistory).not.toHaveBeenCalled();
+
+    // Signals collected with the configured deps + prior read with dir/password.
+    expect(io.produceProjectSignals).toHaveBeenCalledOnce();
+    const deps = (io.produceProjectSignals as ReturnType<typeof vi.fn>).mock.calls[0][0]; // type-safety-ok: cast vi mock to access .mock.calls in the test
+    expect(deps.memberEmails).toEqual(["owner@example.com"]);
+    expect(typeof deps.fetchGithub).toBe("function");
+    expect(typeof deps.fetchGa4).toBe("function");
+    expect(typeof deps.fetchGsc).toBe("function");
+    expect(typeof deps.fetchPsi).toBe("function");
+    expect(io.readPriorSnapshot).toHaveBeenCalledWith("/mnt/g/snap", "pw");
+
+    // The written snapshot is the FOLD: prior fields verbatim + fresh signals.
+    const written = (io.writeSnapshot as ReturnType<typeof vi.fn>).mock.calls[0][0].json; // type-safety-ok: cast vi mock to access .mock.calls in the test
+    expect(written.computedAt).toBe(prior.computedAt);
+    expect(written.scope).toBe("full");
+    expect(written.samples).toBe(prior.samples);
+    expect(written.projectSignals?.github?.stars).toBe(12);
+  });
+
+  it("fail-fast: a missing analytics source returns 1 and produces nothing", async () => {
+    const env = { ...ANALYTICS_ENV };
+    delete env.PROJECT_SIGNALS_GITHUB_REPO;
+    const io = makeIo();
+    const code = await run(["--scope", "analytics"], env, io);
+    expect(code).toBe(1);
+    expect(io.produceProjectSignals).not.toHaveBeenCalled();
+    expect(io.writeSnapshot).not.toHaveBeenCalled();
+    const errs = (io.stderr as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]).join("\n"); // type-safety-ok: cast vi mock to access .mock.calls in the test
+    expect(errs).toContain("PROJECT_SIGNALS_GITHUB_REPO");
+  });
+
+  it("dry-run analytics: prints the folded skeleton, never touches Drive/Secret Manager", async () => {
+    const io = makeIo();
+    const code = await run(["--scope", "analytics", "--dry-run"], ANALYTICS_ENV, io);
+    expect(code).toBe(0);
+    expect(io.resolveMemberEmailsFromSecret).not.toHaveBeenCalled();
+    expect(io.readPriorSnapshot).not.toHaveBeenCalled();
+    expect(io.writeSnapshot).not.toHaveBeenCalled();
+    const printed = (io.stdout as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]).join("\n"); // type-safety-ok: cast vi mock to access .mock.calls in the test
+    expect(printed).toContain('"scope": "analytics"');
   });
 });
 
