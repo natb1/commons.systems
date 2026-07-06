@@ -857,6 +857,9 @@ fork site below (same discipline as the `fixes_applied_count` tally in Step 3.7)
       (`id` / `dependencies` / `resolves_ids` are for your ordering and the Step 4
       comment, not passed through; `resolves_ids` is **also** read to compute the
       `--fixes-applied` count below, but is still not passed into `/implement-unit`).
+      Fold into each unit's `context`, verbatim: "Read any file with the Read tool
+      before your first Edit or Write to it in this session — the edit is rejected
+      otherwise and the retry burns the tokens twice."
       The draft PR already exists — open **NO** new
       PR. A unit completing in this `/implement-unit` loop is mid-loop, not the end
       of the turn — continue to the next unit, then Steps 4 and 5 and the marker;
