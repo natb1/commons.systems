@@ -120,6 +120,16 @@ const RATE_LIMITS_DEFAULT_PATH = join(
 const VELOCITY_WINDOW_DAYS = 28;
 
 /**
+ * Narrows `unknown` to a plain object without an `as` cast. Mirrors the
+ * `isPlainObject`/`isPlainObjectLike` type-predicate pattern already used in
+ * `../src/schema.ts` and `../src/attention.ts` for the same JSON-narrowing
+ * need.
+ */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
  * Utilization half: the pre-computed weekly used-percentage from the telemetry
  * file's `.seven_day.used_percentage` — no math here, the statusline hook
  * already computed it. Sanitization mirrors dispatch-target-workers: accept a
@@ -134,14 +144,14 @@ export function readWeeklyUtilization(rateLimitsPath: string): string {
   } catch {
     return "unknown";
   }
-  if (typeof parsed !== "object" || parsed === null) {
+  if (!isPlainObject(parsed)) {
     return "unknown";
   }
-  const sevenDay = (parsed as Record<string, unknown>).seven_day;
-  if (typeof sevenDay !== "object" || sevenDay === null) {
+  const sevenDay = parsed.seven_day;
+  if (!isPlainObject(sevenDay)) {
     return "unknown";
   }
-  const used = (sevenDay as Record<string, unknown>).used_percentage;
+  const used = sevenDay.used_percentage;
   const value =
     typeof used === "number"
       ? used
