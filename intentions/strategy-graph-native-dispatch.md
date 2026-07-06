@@ -523,6 +523,32 @@ clarifications:
       attach/resume/provision verbs, its gh selector, and the strip hook retire
       with the drain (tactic-legacy-router-removal). Recorded 2026-07-06
       interview."
+  - question: Bootstrap rounds run /align-tactics in the same session as the
+      /align-strategy edit — is that same-session context load-bearing?
+    answer: "No — it is a bootstrap safety, never a carrier, recorded from author
+      direction. In the target design the soft-freeze re-evaluation is a fresh
+      /align-tactics session the router queues on a fingerprint mismatch
+      (clarification 10) and the tick launches (clarification 24), with the
+      transition-time fingerprint gate holding every forward transition and
+      merge arm until that session confirms or amends
+      (tactic-graph-router-transitions Unit 1) and the autonomy contract parking
+      to office_hours — reason plus recommendation — when author input is
+      required. That fresh session has only the graph, so /align-strategy owes
+      it a complete record: every fact a decomposition or re-evaluation needs —
+      the interview's decisions, rationale, edge-case resolutions, and tactical
+      byproducts — lands in the graph at record time (strategy substance:
+      statement, clarifications, conditions, success_signal; tactical context:
+      draft tactic bodies per clarification 6), never only in the recording
+      session's context. A decomposition that cannot proceed without unrecorded
+      interview context is a defect of the /align-strategy round that produced
+      it, exactly as a park whose context lives only in the parking session is a
+      defect (condition 6) — the same graph-recoverability principle applied to
+      the strategy-record write instead of the park write. The /align-strategy
+      requirements-coverage check (its step 6: every clause of the author's
+      input maps to a recorded element) is the skill-side discharge of this
+      condition. Same-session /align-tactics execution remains good practice
+      during bootstrap while no router exists to queue the re-evaluation, but
+      nothing may depend on it. Recorded 2026-07-06 from author direction."
 tooling_goals:
   - kind: actuator
     statement: /align-strategy — interview-driven strategy recording, superseding
@@ -580,5 +606,10 @@ attributes:
       (office_hours.recommendation), and any state a fresh session needs;
       session attach/resume is not a supported recovery path, so a park whose
       context lives only in the parking session is a defect
+    - /align-strategy records in the graph, at record time, all context a fresh
+      /align-tactics session needs to decompose or re-evaluate — strategy
+      substance plus draft-tactic bodies; same-session /align-tactics execution
+      is a bootstrap safety, not a carrier, and a decomposition blocked on
+      unrecorded interview context is a defect of the recording round
 ---
 # Dispatch runs on the graph — orchestration state lives in intention nodes, worked through the align skill family

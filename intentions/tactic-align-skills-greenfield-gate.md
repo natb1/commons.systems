@@ -78,6 +78,15 @@ Scope (`.claude/skills/align-strategy/SKILL.md`):
 - Out-of-scope/context prose: note the graph is the sole issue tracker,
   bug tracker included (pointer-only TODO rule), citing the
   strategy-graph-native-dispatch clarifications as the durable home.
+- Record-completeness contract (strategy clarification 31 / condition 7,
+  added by the 2026-07-06 re-evaluation): state in the skill preamble and
+  at step 6 that the graph record is the sole carrier to /align-tactics —
+  the target router queues re-evaluation as a fresh session with only the
+  graph, so every decision, edge-case resolution, and tactical byproduct
+  must land in the node (clarifications/conditions/signal + draft-tactic
+  bodies) at record time; same-session /align-tactics execution is a
+  bootstrap safety, not a carrier, and step 6's clause-coverage walk is
+  the check that discharges the condition.
 
 ## Unit 2 — /align-tactics SKILL.md
 
