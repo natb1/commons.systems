@@ -379,6 +379,42 @@ admits one gate-exempt worker — bypassing the gate, not the count or the
 order — with `dispatch-target-workers --exhausted` as the hard floor no
 flag overrides (main-broken parity).
 
+**The concurrency cap is global** (2026-07-06 interview): the
+`max_concurrent_workers` bound (config default 8) caps the TOTAL of
+dispatch-managed workers live at any moment across all ticks, workflows,
+and lanes. The enforcement point is selection — busy + reserved counted
+from the ledger and liveness against the pace target, selecting only the
+gap. Per-workflow caps (`dispatch-graph-tick`'s `worker_cap`, an emulated
+tick's semaphore) are local backstops, never the enforcement point: two
+overlapping workflows each locally capped at 8 would otherwise run 16.
+Overlapping ticks are safe via claims, not serialization — a tick's
+lifetime ends at spawn; every selected node enters the reservation ledger
+at selection under the lock; the node-id-named runner session carries the
+claim for the phase's life; the sweep reconciles dead workers; a
+concurrent tick re-selects only unclaimed nodes. A single long-lived
+multi-node workflow is never the router mode — its subagents are
+invisible to node-id liveness, so it cannot carry claims.
+
+**Worker-start re-validation** (2026-07-06 interview): two gates bracket
+every worker, with no mid-run polling. At start, the provisioning
+prelude re-validates against fresh `origin/main` — node exists, persisted
+phase equals the selected phase (passed as an argument), `office_hours`
+null, strategy fingerprint unchanged where stamped; mismatch is a
+distinct exit and the next tick re-selects (a selected-but-unstarted
+worker counts as NOT started and yields to a soft freeze). At write, the
+transition-time fingerprint gate holds the transition. Author edits to a
+claimed tactic's scope land freely and bind from the next selection —
+the in-flight phase finishes against the scope it started with; park the
+node to interrupt. Implementation:
+`tactic-worker-start-revalidation` (draft).
+
+**No session keepalive** (2026-07-06 interview): the graph is the
+long-horizon substrate; sessions are disposable executors. Continuity is
+durable state on `origin/main` re-entered by the cron heartbeat — dead
+ticks, workers, and queues recover by re-selection plus ledger sweep,
+never by resuming or keeping alive a session. A phase worker may run
+long; the ban is the router-as-session.
+
 ### 3.3 Coexistence and drain
 
 The two routers run in parallel over **disjoint state** — no gh↔graph
@@ -407,7 +443,12 @@ GitHub is a separate strategy; design TBD.)
   an emulating session owes the phase skill's substance, not a checklist
   re-run; for `qa` that means the legacy `qa-fix` parity of §2.4
   (clarification 20), and for `review` the full `/review-fix` fan-out of
-  §2.4 (clarification 21) — a review phase is never skipped past.
+  §2.4 (clarification 21) — a review phase is never skipped past. An
+  emulating session also owes the router's claiming semantics (2026-07-06
+  interview): a reservation-ledger claim per selected node before fan-out,
+  each cleared with its transition write — so a concurrent tick's budget
+  and selection see the emulated workers, keeping the global worker cap
+  (§3.2) intact under overlap.
 
 ### 3.4 Worktree anchoring and claiming
 

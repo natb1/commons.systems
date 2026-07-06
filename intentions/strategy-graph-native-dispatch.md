@@ -570,6 +570,71 @@ clarifications:
       (tactic-align-tactics-mechanical-floor); the skill-text encoding is homed
       in tactic-align-skills-greenfield-gate. Recorded 2026-07-06 from author
       direction."
+  - question: Is 'select all eligible, cap concurrent per workflow' safe under
+      overlapping ticks — and where does the concurrency cap bind?
+    answer: "No as run, and the cap is global — recorded 2026-07-06 interview after
+      the second emulated tick. The concurrency cap is a property of the one
+      claimed set, never of a workflow: max_concurrent_workers
+      (dispatch.config/target-workers.json, default 8) bounds the TOTAL of
+      dispatch-managed workers live at any moment across all ticks, workflows,
+      and lanes. The enforcement point is selection — the tick counts busy plus
+      reserved from the ledger and liveness against the pace target and selects
+      only the gap; per-workflow caps (dispatch-graph-tick's worker_cap, an
+      emulated tick's semaphore) are local backstops, never the enforcement
+      point (two overlapping workflows each locally capped at 8 would otherwise
+      run 16). What makes overlapping ticks safe is claims spanning the overlap:
+      a tick's lifetime ends at spawn — every selected node enters the
+      reservation ledger at selection under the lock, the claim is carried by
+      the node-id-named runner session for the phase's life, and a dead worker's
+      claim is reconciled by the sweep; a concurrent tick re-selects only
+      unclaimed nodes, so the global cap holds without serializing ticks. A
+      single long-lived multi-node workflow is never the router mode: its
+      subagents are invisible to node-id liveness, so it cannot carry claims —
+      the second emulated tick's 12 workers in one workflow were exactly this,
+      safe only because no overlapping tick fired. Bootstrap: an emulating
+      session owes the router's claiming semantics like any other phase
+      semantics (clarification 15) — write a ledger claim per selected node
+      before fan-out and clear each with its transition write."
+  - question: A selected node’s scope or state changes after selection — before its
+      worker starts, or while it runs. What closes the window?
+    answer: "Two gates bracket the worker; no mid-run polling. Start gate: the
+      provisioning prelude (provision-node-worktree) re-validates against fresh
+      origin/main — the node still exists, its persisted phase equals the
+      selected phase (passed as an argument; the directive is never re-derived),
+      office_hours is null, and the serving strategy's substance fingerprint is
+      unchanged where stamped — and any mismatch is a distinct exit code: the
+      worker reports skipped, its claim clears, and the next tick re-selects
+      from current state. This makes the soft freeze precise: a
+      selected-but-unstarted worker counts as not started and yields to the
+      freeze. Write gate: the transition-time fingerprint gate
+      (tactic-graph-router-transitions Unit 1) holds the transition when
+      substance moved mid-run. Changes landing mid-run are absorbed at the write
+      gate plus the re-evaluation sweep — phase skills never poll the graph
+      mid-phase. Author interactive edits to a claimed tactic's scope land
+      freely and bind from the next selection: the in-flight phase finishes
+      against the scope it started with and its transition write stands; an
+      author who needs in-flight work stopped parks the node — the start gate
+      blocks any queued or re-selected worker, and the interactive-commit rule
+      un-parks. The base-version write check (tactic-graph-commit-prune-support
+      Unit 2) keeps author and worker node-writes from clobbering each other.
+      Start-gate implementation is retained as draft
+      tactic-worker-start-revalidation (new scope — never an amendment to the
+      in-flight selector PR). Recorded 2026-07-06 interview."
+  - question: Does long-horizon graph work keep a workflow or session alive?
+    answer: "No — the graph is the long-horizon substrate; sessions are disposable
+      executors. This generalizes clarification 26 from parked work to the
+      router itself: continuity is durable state on origin/main (persisted
+      phase, claims, plans, residue sections) re-entered by the cron heartbeat;
+      dead ticks, dead workers, and dropped queues recover by re-selection plus
+      ledger sweep, never by resuming a session (workflow resume is
+      same-session-only). A kept-alive supervisor workflow or self-rescheduling
+      session is rejected as router substrate: session limits kill workflow
+      subagents mid-flight (observed on both emulated ticks), one session is a
+      single point of failure, and it concentrates the router into the rented
+      executor — the direction the thin-script condition (clarification 25)
+      exists to bound. A phase worker may legitimately run long: it lives
+      exactly as long as its one phase under its node-id claim. The ban is the
+      router-as-session, not long phases. Recorded 2026-07-06 interview."
 tooling_goals:
   - kind: actuator
     statement: /align-strategy — interview-driven strategy recording, superseding
