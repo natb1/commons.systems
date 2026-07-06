@@ -666,6 +666,45 @@ clarifications:
       this — the soft-freeze hash deliberately covers strategy substance only —
       remains by design; tactic scope gets its own local gate instead of joining
       the strategy hash. Recorded 2026-07-06 interview."
+  - question: A worker session dies mid-phase (API error, session limit, system
+      failure) while graph state and worktree survive — is the session state
+      worth recovering, by workflow-session resume or by transcript
+      reconstruction (the legacy recover-api-error pattern)?
+    answer: "No on both mechanisms — re-selection stays the only recovery path,
+      reaffirming clarifications 24/29 on greenfield re-evaluation, and the
+      residual loss is closed by a durability rule, not a session mechanism.
+      What a dead worker actually loses is reasoning-in-progress — findings not
+      yet flushed to durable state; the node body's clean-session plan
+      (condition 7), the node-id worktree with its commits and uncommitted edits
+      (the re-selected worker roots in the same worktree, so in-flight file
+      state lands in front of it per clarification 26's rule), and the PR with
+      its phase comments all survive, and the ledger sweep already keeps a dead
+      worker from blocking new selections. Workflow-session resume is
+      technically unfit twice over: resume is same-session-only, unavailable
+      exactly when the tick session is dead; and resume replays only completed
+      agent() calls from cache — a worker that died mid-flight re-runs from
+      scratch — so its best case equals re-selection at tighter coupling to the
+      rented executor. Transcript reconstruction is negative expected value as
+      router machinery: the node body already carries everything a fresh session
+      needs, so the transcript's marginal information over plan + worktree diff
+      + PR comments is small; reading a long transcript costs a significant
+      fraction of redoing the reasoning and inherits whatever confused state
+      killed the session; and it would make the harness's proprietary transcript
+      format load-bearing for the router — reversing clarification 26's demotion
+      of session persistence and running against the thin-script capture bound
+      (clarification 25). recover-api-error stays a human-invoked legacy-lane
+      tool and never becomes router substrate. The remaining gap — an expensive
+      phase dying with its findings only in conversation — is closed by the
+      checkpoint discipline (new condition 9): phase progress whose only home is
+      the session is a defect; workers flush findings to durable state at
+      natural boundaries (worktree commits for file work; PR comments for QA
+      triage and review findings as produced, not only at phase end; node body
+      sections for residue), and a re-selected worker treats pre-existing
+      worktree/PR state as resume input — diff against the branch base and read
+      prior phase comments before redoing anything. This bounds a dead worker's
+      redo cost to one checkpoint interval with zero new harness coupling.
+      Skill-side encoding retained as draft tactic-phase-checkpoint-discipline.
+      Recorded 2026-07-06 interview."
 tooling_goals:
   - kind: actuator
     statement: /align-strategy — interview-driven strategy recording, superseding
@@ -734,5 +773,11 @@ attributes:
       open child from a full-body read (keyword grep only shortlists); a
       one-bullet delta that leaves sibling sections stale is a defect of the
       amending round
+    - phase progress whose only home is the worker session is a defect — workers
+      flush findings to durable state at natural boundaries (worktree commits,
+      PR comments as produced, node body residue sections), and a re-selected
+      worker treats pre-existing worktree and PR state as resume input rather
+      than redoing the phase; session recovery (workflow resume, transcript
+      reconstruction) is never router substrate
 ---
 # Dispatch runs on the graph — orchestration state lives in intention nodes, worked through the align skill family
