@@ -6,19 +6,20 @@ statement: "firestore.rules: close the print-bookmarks cross-user existence
 owner: ai
 status: codified
 parent: null
-rationale: Surfaced by the 2026-07-05 review. firestore.rules:278 lets an
+rationale: "Surfaced by the 2026-07-05 review. firestore.rules:278 lets an
   authenticated user probe whether another user (known uid) has a given book
   bookmarked (allowed-when-absent vs denied-when-present) - the exact oracle the
   adjacent reading-position rule documents closing; the fix pattern
-  (docId.split("_")[0] == uid) is already in the file. The write rule also lacks
-  the hasOnly/type clamp every sibling rule has. Relates to
-  strategy-recover-knowledge weakly (this is the print app's Firestore data) -
-  primarily a user-privacy hardening of owned reading data; recorded here for
-  lack of a dedicated data-privacy strategy.
+  (docId.split(\"_\")[0] == uid) is already in the file. The write rule also
+  lacks the hasOnly/type clamp every sibling rule has. Serves
+  strategy-recover-attention: print is its named consumer-side artifact ('read
+  and bind your own books without a reader app that tracks your pages') and a
+  cross-user bookmark oracle betrays exactly that promise. Re-pointed from
+  strategy-recover-knowledge 2026-07-06 per the placement doctrine."
 reading: null
 gap: null
 serves:
-  - strategy-recover-knowledge
+  - strategy-recover-attention
 recovers: []
 clarifications: []
 tooling_goals: []
