@@ -9,13 +9,14 @@ status: codified
 parent: null
 rationale: "Surfaced by the 2026-07-05 code review, previously misfiled in
   tactic-review-low-severity-sweep at higher severity than a low sweep warrants
-  (all three units were rated medium). Serves strategy-recover-knowledge: the
-  owned reader must reliably save and render the reader's actual position and
-  page."
+  (all three units were rated medium). Serves strategy-recover-attention (print
+  is its named consumer-side artifact; re-pointed from
+  strategy-recover-knowledge 2026-07-06 per the placement doctrine): the owned
+  reader must reliably save and render the reader's actual position and page."
 reading: null
 gap: null
 serves:
-  - strategy-recover-knowledge
+  - strategy-recover-attention
 recovers: []
 clarifications: []
 tooling_goals: []
