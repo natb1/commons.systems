@@ -36,6 +36,9 @@ attributes:
     strategy_fingerprint: 10f0314e331696714d42b26313b80c5a289d68ab0e3ce4d614bf2c97a94d4a67
     branch: tactic-token-economy-sensor
     pr: 2779
+    attempts:
+      fix: 1
+    markers: []
 ---
 # token-economy sensor — registry sensor computing weekly allowance utilization and claude-eligible tactic velocity, populating strategy-token-economy's reading
 

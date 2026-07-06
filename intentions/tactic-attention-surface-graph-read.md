@@ -31,6 +31,9 @@ attributes:
   execution:
     branch: tactic-attention-surface-graph-read
     pr: 2780
+    attempts:
+      fix: 1
+    markers: []
 ---
 # browser graph read layer — File System Access API over the local clone, client-side tree build and resolveAttention, staleness surfaced loudly
 

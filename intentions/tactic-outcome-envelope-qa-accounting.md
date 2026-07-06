@@ -27,11 +27,15 @@ office_hours: null
 pace_exempt: false
 rounds: null
 attributes:
-  phase: qa
+  phase: review
   execution:
     strategy_fingerprint: 10f0314e331696714d42b26313b80c5a289d68ab0e3ce4d614bf2c97a94d4a67
     branch: tactic-outcome-envelope-qa-accounting
     pr: 2774
+    attempts:
+      qa: 1
+    markers:
+      - qa-done
 ---
 # per-phase routing metric — qa routes on actionability, not hit_rate, so a triage-shaped phase is not promoted to Opus by a rate it cannot move
 
@@ -115,3 +119,7 @@ agent-behavior commit gate — expect a grant prompt rather than a failure.
 lands): sha256 hex of `JSON.stringify({statement, clarifications,
 conditions, serves, success_signal, tooling_goals})` as loaded by
 intentionsutil `listNodes`.
+
+## main-qa residue (qa 2026-07-06)
+
+- dispatch.config/phase-model-policy.json is a shared project-root artifact outside all worktrees, rewritten only by the next /dispatch-token-audit skill run (step 7), not by this PR's merge. I read the current live file and confirmed it still shows the pre-fix bug live (rationale.qa = {decision: promote, hit_rate: 0, sessions: 84} -- qa currently mis-routed to claude-opus-4-8). After the next /dispatch-token-audit run (no scheduler/cron wiring found for it in this repo -- appears user/session-invoked, so may need a manual trigger), verify the freshly-written dispatch.config/phase-model-policy.json shows routes.qa == "claude-sonnet-4-6", rationale.qa.metric == "actionability", rationale.qa.decision == "keep-cheap", reverting the live Opus mis-promotion.

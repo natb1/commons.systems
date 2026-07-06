@@ -19,12 +19,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-graph-router-selector
   pr: 2785
-  attempts: {}
-  markers: []
+  attempts:
+    qa: 1
+  markers:
+    - qa-done
   strategy_fingerprint: null
 validates: []
 blocked_by:
@@ -224,3 +226,18 @@ tick.
 ## Implementation notes
 
 One subagent per unit, `model` per tag; constrain to working-tree edits.
+
+## main-qa residue (qa 2026-07-06)
+
+- dispatch-graph-tick.js's agent() call sets options.model directly from dispatch-phase-model output (full pinned IDs like claude-sonnet-4-6/claude-opus-4-8); all other Workflow-tool call sites in this repo (qa-fix.js, review-fix.js) use the short alias ('opus'/'sonnet') for that option instead. On the first live graph tick that routes a qa/review/fix-checks/main-qa node through dispatch-graph-tick.js, confirm the spawned subagent actually runs on the intended model (not just that it ran) -- check the agent's actual model, not just success. If agent() silently ignores or errors on a pinned ID, fix by mapping to the short alias in dispatch-graph-tick.js while preserving the version-pinning intent (do not blindly downgrade to a floating alias without first confirming what version the alias resolves to).
+- The worker_cap default of 8 added to dispatch-graph-tick.js (commit ca4e0257) is currently inert in the live call path: dispatch-graph-execute always invokes the workflow with a single-element selections array and worker_cap:1 (one runner session per node). This is fine as forward-compatible plumbing per the author's own framing, but has no test coverage and is unexercised -- worth a sanity check the first time a multi-node single-workflow-instance invocation is ever wired.
+
+## Amendment (2026-07-06): tick worker cap default
+
+Author-directed during the second emulated tick: the unit-4 tick workflow
+(`.claude/workflows/dispatch-graph-tick.js`) keeps its per-invocation
+`worker_cap` arg but now defaults to 8 — parity with the legacy router's
+`max_concurrent_workers` (`dispatch.config/target-workers.json`) — instead of
+running uncapped when invoked without a cap. Landed on the PR branch as
+commit ca4e0257. The pace-derived target from dispatch-select-tick remains
+the normal cap source; the default binds only a direct/uncapped invocation.

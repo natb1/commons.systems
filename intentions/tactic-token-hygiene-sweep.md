@@ -28,11 +28,15 @@ office_hours: null
 pace_exempt: false
 rounds: null
 attributes:
-  phase: qa
+  phase: review
   execution:
     strategy_fingerprint: 10f0314e331696714d42b26313b80c5a289d68ab0e3ce4d614bf2c97a94d4a67
     branch: tactic-token-hygiene-sweep
     pr: 2782
+    attempts:
+      qa: 1
+    markers:
+      - qa-done
 ---
 # read-before-edit preamble line in the fix-lane subagent prompts — the one hygiene item with a repo-controlled landing spot
 
@@ -109,3 +113,7 @@ hit the auto-mode agent-behavior gate — expect a grant prompt.
 lands): sha256 hex of `JSON.stringify({statement, clarifications,
 conditions, serves, success_signal, tooling_goals})` as loaded by
 intentionsutil `listNodes`.
+
+## main-qa residue (qa 2026-07-06)
+
+- The next dispatch-token-audit window (after 2026-07-06) should show the 'File has not been read yet' tool_errors signature falling from its 143x/126-session baseline (2026-06-26 to 2026-07-03 window), now that implement-unit/SKILL.md, qa-fix/SKILL.md, review-fix/SKILL.md (prose), and .claude/workflows/review-fix.js (the actual fix-agent prompt builder) all carry the read-before-edit line. This is the plan's own stated manual verification step and can only be observed against real future dispatch sessions, not verified pre-merge.
