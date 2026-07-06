@@ -13,13 +13,14 @@ rationale: "Surfaced by the 2026-07-05 review. web-vitals report at page-hide
   the short-session segment vitals exist to measure; the surrounding
   try/catch+logError wrappers are unreachable (the SDK swallows internally), and
   the GA4 traffic-type STORAGE_KEY is duplicated with comment-only coupling.
-  Relates to strategy-attention-surface: analytics is a signal source the
-  attention surface consumes; recorded here as the nearest signal-oriented
-  strategy."
+  Serves strategy-promote-progressive-detachment: web-vitals ride the GA4 export
+  channel (delegation-web-analytics) that senses its adoption/quality signals -
+  strategy-attention-surface only renders signals it does not own. Re-pointed
+  2026-07-06 per the placement doctrine."
 reading: null
 gap: null
 serves:
-  - strategy-attention-surface
+  - strategy-promote-progressive-detachment
 recovers: []
 clarifications: []
 tooling_goals: []

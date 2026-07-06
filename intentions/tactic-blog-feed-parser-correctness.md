@@ -66,6 +66,20 @@ Scope:
   the instance (verified against the firebase-functions wrapper) and drops
   concurrent in-flight requests. Return an explicit `res.status(500)` for the
   non-AppCheck case; update `feed-proxy.test.ts:74-80` to assert the 500.
+- `functions/src/feed-proxy.ts:122-125`: upstream Content-Type reflected
+  verbatim; force an XML content type or add `X-Content-Type-Options:
+  nosniff`. (Folded 2026-07-06 from the review lows per the placement
+  doctrine — same file as the crash guard.)
+
+## Unit 3 — xmlns-strip regex accepts any whitespace
+
+**Recommended model:** sonnet
+
+Scope:
+- `packages/blog/src/blog-roll/parse-feed.ts:41`: the xmlns-strip regex
+  requires a literal space, so a Firefox-emitted `<feed\nxmlns=...>` is
+  reported unavailable. Accept any whitespace between the tag name and
+  attributes. (Folded 2026-07-06 from the review lows.)
 
 ## Verification
 
