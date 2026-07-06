@@ -12,11 +12,15 @@ rationale: "Surfaced by the 2026-07-05 review. A cluster of money-history
   the wrong (shifted) values and so cement the bug. Serves
   strategy-complete-ledger: the ledger is only complete if the derived net-worth
   history and virtual/merged transactions are correct and survive routine
-  re-runs."
+  re-runs. Re-pointed strategy-complete-ledger -> strategy-recover-finance
+  2026-07-06 per the placement doctrine: complete-ledger is the
+  delegation/attachment ledger (every live delegation carries a record), not the
+  financial one; the budget app/etl artifact belongs to
+  strategy-recover-finance."
 reading: null
 gap: null
 serves:
-  - strategy-complete-ledger
+  - strategy-recover-finance
 recovers: []
 clarifications: []
 tooling_goals: []

@@ -11,11 +11,15 @@ rationale: "Surfaced by the 2026-07-05 code review, previously misfiled in
   tactic-review-low-severity-sweep at higher severity than a low sweep warrants
   (both units were rated medium). Serves strategy-complete-ledger: the ledger's
   aggregate trend and override history must be internally consistent, not
-  silently skewed or clobbered."
+  silently skewed or clobbered. Re-pointed strategy-complete-ledger ->
+  strategy-recover-finance 2026-07-06 per the placement doctrine:
+  complete-ledger is the delegation/attachment ledger (every live delegation
+  carries a record), not the financial one; the budget app/etl artifact belongs
+  to strategy-recover-finance."
 reading: null
 gap: null
 serves:
-  - strategy-complete-ledger
+  - strategy-recover-finance
 recovers: []
 clarifications: []
 tooling_goals: []

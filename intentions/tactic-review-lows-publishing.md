@@ -1,15 +1,18 @@
 ---
 id: tactic-review-lows-publishing
 kind: tactic
-statement: "2026-07-05 review lows: blog package + feed-proxy (retained draft context)"
+statement: "2026-07-05 review lows: blog package (retained draft context)"
 owner: ai
 status: raw
 parent: null
-rationale: Retained draft context, not selectable work. Split 2026-07-06 out of
+rationale: "Retained draft context, not selectable work. Split 2026-07-06 out of
   the deleted mixed sweep tactic-review-low-severity-sweep per the placement
   doctrine (strategy-graph-native-dispatch), so this strategy's /align-tactics
   rounds find their own residue. Findings are from the 2026-07-05 code review,
-  each verified with an anchor.
+  each verified with an anchor. The blog-roll ingestion items (parse-feed xmlns,
+  feed-proxy Content-Type) moved 2026-07-06 into
+  tactic-blog-feed-parser-correctness: strategy-recover-discovery owns the
+  blog-roll/feed-ingestion surface, per the placement doctrine."
 reading: null
 gap: null
 serves:
@@ -28,7 +31,7 @@ pace_exempt: false
 rounds: null
 attributes: {}
 ---
-# 2026-07-05 review lows: blog package + feed-proxy (retained draft context)
+# 2026-07-05 review lows: blog package (retained draft context)
 
 ## Context
 
@@ -45,10 +48,9 @@ round on `strategy-recover-publishing` finalizes, splits, merges, or prunes.
 - `packages/blog/src/create-blog-app.ts:413`; `feed.ts:26-42` vs
   `post-types.ts:14-51`: admin nav hydration mismatch; feed/sitemap use
   laxer published-post rules than the canonical validator.
-- `packages/blog/src/blog-roll/parse-feed.ts:41`: xmlns-strip regex requires
-  a literal space -> Firefox `<feed\nxmlns=...>` reported unavailable.
 
-## feed-proxy (functions, blog-roll surface)
+## moved out (2026-07-06)
 
-- `feed-proxy.ts:122-125`: upstream Content-Type reflected verbatim; force
-  XML or add `X-Content-Type-Options: nosniff`.
+- The blog-roll ingestion items (parse-feed xmlns-strip regex, feed-proxy
+  Content-Type reflection) moved into `tactic-blog-feed-parser-correctness`
+  (Units 2-3): `strategy-recover-discovery` owns the blog-roll surface.

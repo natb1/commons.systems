@@ -1,9 +1,9 @@
 ---
 id: tactic-graph-commit-prune-support
 kind: tactic
-statement: "graph-commit: add --prune support so a node deletion can land
-  through the sanctioned write path (doctrine says phase: done prunes node and
-  edges in the same commit)"
+statement: "graph-commit: add --prune support and a base-version
+  (compare-and-swap) freshness check so deletions and stale-read writes are
+  handled by the sanctioned write path"
 owner: ai
 status: codified
 parent: null
@@ -16,7 +16,11 @@ rationale: "Surfaced 2026-07-06 while splitting
   sweep split each had to hand-orchestrate the graph/** fast-path push instead.
   Recorded as its own tactic rather than a unit of tactic-graph-commit-hardening
   because that tactic is at phase qa with PR 2778 in flight — adding scope to a
-  nearly-merged PR would strand the unit."
+  nearly-merged PR would strand the unit. Extended 2026-07-06
+  (concurrency-safety clarification on strategy-graph-native-dispatch): Unit 2
+  adds the base-version check that makes read-fresh mechanical - motivated by
+  the stale-dump near-miss on tactic-graph-commit-hardening during the doctrine
+  round."
 reading: null
 gap: null
 serves:
@@ -35,7 +39,7 @@ pace_exempt: false
 rounds: null
 attributes: {}
 ---
-# graph-commit: --prune support for deletion commits
+# graph-commit: --prune support + base-version freshness check
 
 ## Context
 
@@ -69,6 +73,24 @@ Scope:
   prune case: ordinary id + prune id in one call; assert the deletion and
   the edit land in one commit and the guard rejects a prune id still
   present on disk.
+
+## Unit 2 — base-version freshness check (compare-and-swap)
+
+**Recommended model:** sonnet
+
+Scope:
+- The read-modify-write flow (readNode dump -> patch -> write-node ->
+  graph-commit) carries no record of the base the editor read; a stale dump
+  relies on textual rebase luck to avoid clobbering concurrent state (the
+  2026-07-06 near-miss: a stale dump of tactic-graph-commit-hardening vs its
+  live phase: qa). Add an optional base manifest: the dump step records each
+  node's blob SHA (git hash-object of the file read); graph-commit accepts
+  `--base <id>=<blobsha>` (repeatable, or a manifest file) and, after its
+  fetch, refuses the write if origin/main's blob for that path differs —
+  clear re-read error, fail closed, per code-style.
+- Sessions not passing --base keep today's behavior (opt-in until the align
+  skills' dump helpers pass it automatically).
+- Extend `test-graph-commit.sh`: stale base -> refusal; fresh base -> lands.
 
 ## Dependencies
 

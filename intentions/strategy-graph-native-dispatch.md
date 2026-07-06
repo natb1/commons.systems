@@ -468,6 +468,27 @@ clarifications:
       pointer-only — TODO(tactic-<id>) citing the node that holds the substance;
       a substantive TODO with no node is a review-phase finding. Recorded
       2026-07-06 interview."
+  - question: Two human-invoked align sessions ran concurrently in the shared
+      checkout during the 2026-07-06 doctrine round — is the target router safe
+      for this concurrency, and what closes the gaps?
+    answer: "Router-launched work is safe by construction — node-id claiming with
+      worktree isolation, frozen-selection ticks, single-node rebase-retry
+      writes failing closed on same-node conflict, and the substance-fingerprint
+      soft freeze. Three commitments close the human-session gaps. Claiming:
+      interactive and human-invoked bg align sessions enter the same node-id
+      reservation ledger as router workers and author in worktrees, never the
+      shared main checkout — the ledger is uniform across launch modes.
+      Freshness: the write path gains a base-version check — the editing flow
+      records the origin/main blob each node was read at, and graph-commit
+      refuses a write whose base is stale, making read-fresh mechanical rather
+      than session discipline (implementation: tactic-graph-commit-prune-support
+      Unit 2; motivating near-miss: a stale dump of
+      tactic-graph-commit-hardening nearly clobbered its live phase: qa state).
+      Semantic drift: no lock covers doctrine-vs-content races across different
+      files — the periodic /align-strategy improvement pass (now carrying the
+      greenfield gate and placement doctrine) is the reconciler, and a
+      doctrine-recording session pauses the pace curve for its audit window, as
+      this round did. Recorded 2026-07-06 interview."
 tooling_goals:
   - kind: actuator
     statement: /align-strategy — interview-driven strategy recording, superseding
