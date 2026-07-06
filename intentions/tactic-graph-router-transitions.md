@@ -25,6 +25,7 @@ validates: []
 blocked_by:
   - tactic-graph-router-selector
   - tactic-graph-commit
+  - tactic-worker-start-revalidation
 office_hours: null
 pace_exempt: false
 rounds: null
@@ -99,6 +100,27 @@ human action: Unit 2's sweep still absorbs it, main-qa verifies against
 the node's (re-evaluated) intent. (Recorded 2026-07-06 from the
 /align-strategy concurrency review.)
 
+The same gate carries a second term — the **tactic-scope fingerprint**
+(strategy scope-fingerprint clarification, 2026-07-06): before any
+forward transition write, and before arming auto-merge at clean review
+completion, recompute `tacticScopeFingerprint` (statement + body hash,
+exported by `packages/intentionsutil/src/router.ts` —
+`tactic-worker-start-revalidation` Unit 1) against current `origin/main`
+and compare it to the phase-start stamp the worker-start gate saved at
+`<project-root>/.claude/worktrees/<node-id>.scope-fingerprint`
+(`tactic-worker-start-revalidation` Unit 2). On mismatch: write no
+forward transition and arm no merge — the tactic stays at its completed
+phase and the next tick re-runs that phase against the updated scope
+(fresh read, fresh stamp). This closes the window where a tactic-only
+scope edit landing mid-review or between review-pass and merge would let
+the PR merge against pre-edit scope; state-field writes (attempts,
+markers, residue sections, parks) never change the hash, so they cannot
+hold a transition. A missing stamp file (legacy launch, hand-run phase)
+fails open with a logged warning during the bootstrap and fails closed
+once `tactic-worker-start-revalidation` lands — the arming point then
+requires the stamp. Depends on `tactic-worker-start-revalidation` Units
+1–2 for the helper and the stamp; sequencing note added 2026-07-06.
+
 ## Unit 2 — reconciler sweep and completion pruning
 
 **Recommended model:** opus
@@ -125,6 +147,9 @@ Scope: graph-native analog of
   complete.
 - `tactic-graph-commit` — every write goes through the primitive; no
   direct git in this tactic's scripts.
+- `tactic-worker-start-revalidation` — Unit 1's scope-fingerprint term
+  verifies the phase-start stamp that tactic's gate writes and uses its
+  `tacticScopeFingerprint` export (edge added 2026-07-06).
 
 ## Reuse
 

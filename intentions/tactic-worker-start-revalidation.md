@@ -49,7 +49,12 @@ supposed to make a selected-but-unstarted worker yield (soft-freeze
 precision), but nothing enforces it; an out-of-band phase advance leaves
 the worker executing a stale phase. The transition-time fingerprint gate
 (`tactic-graph-router-transitions` Unit 1) closes only the write side.
-This tactic adds the execute-side gate in the provisioning prelude.
+This tactic adds the execute-side gate in the provisioning prelude — and
+the **stamp side** of the tactic-scope fingerprint (strategy
+scope-fingerprint clarification, 2026-07-06): the gate records the scope
+hash its fresh read saw, so the transition writer can later refuse a
+forward transition or merge arm for a phase whose read predates the last
+scope edit. The verify side is `tactic-graph-router-transitions` Unit 1.
 
 Thin-script condition (strategy condition 5): the gate logic lives in an
 owned, offline-testable tsx script; the bash prelude invokes it as one
@@ -87,12 +92,24 @@ before calling — Unit 2). Checks, in order, each failing with one
    soft-freeze staleness rule (`router.ts:220-232`). A null stamp skips
    this check (stamping has not started; null is never stale).
 
+On pass, the script prints the tactic's **scope fingerprint** to stdout —
+`tacticScopeFingerprint(node)`, a new export beside `strategyFingerprint`
+in `packages/intentionsutil/src/router.ts`: sha256 over the node's
+`statement` plus its markdown body, never frontmatter state fields, so
+attempts/markers/residue/park writes cannot change it. This is the
+phase-start stamp the transition-time scope gate verifies
+(strategy scope-fingerprint clarification, 2026-07-06;
+`tactic-graph-router-transitions` Unit 1 holds the verify side).
+
 Out of scope: no graph writes, no git commands, no gh — pure read + exit
-code. **Tests:** new `packages/intentionsutil/test/check-node-selection.test.ts`
-(fixture store dirs, per the existing `router.test.ts` pattern): pass;
-pruned; phase mismatch first-class; phase mismatch squatter; parked
-first-class; parked squatter; stale fingerprint; null fingerprint passes
-despite strategy edit.
+code + fingerprint on stdout. **Tests:** new
+`packages/intentionsutil/test/check-node-selection.test.ts`
+(fixture store dirs, per the existing `router.test.ts` pattern): pass
+(and stdout is the scope fingerprint); pruned; phase mismatch
+first-class; phase mismatch squatter; parked first-class; parked
+squatter; stale fingerprint; null fingerprint passes despite strategy
+edit; scope fingerprint stable across state-field edits and changed by a
+body edit.
 
 **Recommended model:** sonnet
 
@@ -108,7 +125,12 @@ despite strategy edit.
   "$NODE_ID" "$SELECTED_PHASE" --dir "$PROJECT_ROOT/intentions"`
   (PROJECT_ROOT resolution already at lines 50-61); on exit 12, forward
   the stderr line and `exit 12` (10=ci-waiting and 11=merge-conflict are
-  taken; 2 stays usage/config).
+  taken; 2 stays usage/config). On exit 0, save the script's stdout (the
+  phase-start scope fingerprint) to
+  `$PROJECT_ROOT/.claude/worktrees/<node-id>.scope-fingerprint` —
+  adjacent to the worktree, outside every checkout, so it never dirties a
+  tree; overwritten on each provision, removed with the worktree. The
+  transition writer reads it (`tactic-graph-router-transitions` Unit 1).
 - `.claude/workflows/dispatch-graph-tick.js`: `nodePrompt` (line ~88)
   passes `${sel.phase}` as the provision command's second argument; the
   exit-code routing list gains `12 (stale-selection): report disposition

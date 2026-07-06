@@ -635,6 +635,37 @@ clarifications:
       exists to bound. A phase worker may legitimately run long: it lives
       exactly as long as its one phase under its node-id claim. The ban is the
       router-as-session, not long phases. Recorded 2026-07-06 interview."
+  - question: A tactic-only scope edit lands mid-review, or between review-pass and
+      merge — the mid-flight-edit rule lets the transition write stand, so the
+      PR merges against pre-edit scope. Is that window acceptable?
+    answer: "No — closed by a tactic-scope fingerprint, superseding the 'its
+      transition write stands' clause of the mid-flight-edit clarification
+      recorded earlier the same day. The rest of that rule stands: edits to a
+      claimed tactic land freely, bind from the next selection, and
+      park-to-interrupt remains the author's stop lever; what changes is that a
+      phase's forward transition no longer survives a scope edit that landed
+      after the phase's fresh read. Mechanism, symmetric with the
+      strategy-substance fingerprint (clarification 10) but tactic-local and
+      worktree-scoped rather than stored in the node: the worker-start
+      re-validation gate records the tactic's scope fingerprint — a hash over
+      statement plus node body, never frontmatter state fields, so
+      attempts/markers/residue/park writes cannot trip it
+      (tacticScopeFingerprint beside strategyFingerprint in intentionsutil) — as
+      part of taking its fresh read, saved beside the node's worktree, never a
+      per-launch graph write. The transition writer re-checks it at every
+      forward transition write, and specifically before arming auto-merge at
+      clean review completion, exactly where the strategy-fingerprint gate
+      already sits (tactic-graph-router-transitions Unit 1): on mismatch, no
+      forward transition is written and no merge is armed — the tactic stays at
+      its completed phase and the next tick re-runs that phase against the
+      updated scope, whose worker takes a fresh read and a fresh stamp. Net
+      guarantee: a tactic cannot reach done or merge until the phase that was in
+      flight has completed a run whose fresh read postdates the last scope edit.
+      Bootstrap parity: an emulating session owes the same scope re-check before
+      writing its transition (clarification 15). The asymmetry that motivated
+      this — the soft-freeze hash deliberately covers strategy substance only —
+      remains by design; tactic scope gets its own local gate instead of joining
+      the strategy hash. Recorded 2026-07-06 interview."
 tooling_goals:
   - kind: actuator
     statement: /align-strategy — interview-driven strategy recording, superseding

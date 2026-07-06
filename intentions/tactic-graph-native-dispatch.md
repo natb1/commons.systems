@@ -401,12 +401,19 @@ prelude re-validates against fresh `origin/main` — node exists, persisted
 phase equals the selected phase (passed as an argument), `office_hours`
 null, strategy fingerprint unchanged where stamped; mismatch is a
 distinct exit and the next tick re-selects (a selected-but-unstarted
-worker counts as NOT started and yields to a soft freeze). At write, the
-transition-time fingerprint gate holds the transition. Author edits to a
-claimed tactic's scope land freely and bind from the next selection —
-the in-flight phase finishes against the scope it started with; park the
-node to interrupt. Implementation:
-`tactic-worker-start-revalidation` (draft).
+worker counts as NOT started and yields to a soft freeze). On pass, the
+gate stamps the tactic's **scope fingerprint** (statement + body hash;
+state fields never included) beside the worktree. At write, the
+transition-time gate holds the transition on either a stale strategy
+fingerprint or a stale scope stamp — and arms no merge: a tactic cannot
+reach `done` or merge until the in-flight phase has completed a run
+whose fresh read postdates the last scope edit (scope-fingerprint
+clarification, 2026-07-06, superseding the earlier same-day
+"transition write stands" clause). Author edits to a claimed tactic's
+scope still land freely and bind from the next selection; park the node
+to interrupt outright. Implementation:
+`tactic-worker-start-revalidation` (stamp side) and
+`tactic-graph-router-transitions` Unit 1 (verify side).
 
 **No session keepalive** (2026-07-06 interview): the graph is the
 long-horizon substrate; sessions are disposable executors. Continuity is
