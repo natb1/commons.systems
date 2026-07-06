@@ -28612,6 +28612,23 @@ fi
 echo called >> "$TMPDIR_TEST/logs/select-target.log"
 echo "\${SEL_DEFAULT_TARGET:-empty}"
 FAKE
+  # Fake graph selector (tactic-graph-router-selector). The Step-3a graph-first
+  # query and the at-cap pace-exempt probe are logged separately so a test can
+  # assert which lane ran. Default `empty` keeps every legacy tick test
+  # byte-identical; a test sets SEL_GRAPH_TARGET (node lines for the normal
+  # query) or SEL_GRAPH_PACE_EXEMPT (node lines for the --pace-exempt-only
+  # probe) to drive a graph selection.
+  cat > "$TMPDIR_TEST/graph-select-target" <<FAKE
+#!/usr/bin/env bash
+if [[ " \$* " == *" --pace-exempt-only "* ]]; then
+  echo called >> "$TMPDIR_TEST/logs/graph-select-pace-exempt.log"
+  printf '%s\n' "\${SEL_GRAPH_PACE_EXEMPT:-empty}"
+  exit 0
+fi
+echo "\$*" >> "$TMPDIR_TEST/logs/graph-select.log"
+printf '%s\n' "\${SEL_GRAPH_TARGET:-empty}"
+FAKE
+  chmod +x "$TMPDIR_TEST/graph-select-target"
   # Run-scoped concurrency gate fakes (overridable per test via SEL_* env vars).
   # Arg-aware: --exhausted reports the rate-limit exhaustion floor (SEL_EXHAUSTED,
   # default ok); the no-arg query returns the worker target (SEL_TARGET_N).
@@ -28818,6 +28835,7 @@ sel_tick_teardown() {
     SEL_TARGET_N SEL_LIVE_COUNT SEL_LIVE_COUNT_FAIL \
     SEL_EXHAUSTED SEL_PRIORITY_ONLY \
     SEL_MAX_WORKERS SEL_NPRIO_AVAIL SEL_DEFAULT_TARGET \
+    SEL_GRAPH_TARGET SEL_GRAPH_PACE_EXEMPT \
     DISPATCH_RESERVATION_DIR SEL_AGENTS_TSV SEL_AGENTS_LIST_FAIL \
     DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE SEL_GIT_MERGE_LOG \
     SEL_SESSIONS_UNDER_RC SEL_SESSIONS_UNDER_TSV \
@@ -28877,6 +28895,99 @@ chmod +x "$TMPDIR_TEST/dispatch-select-target"
 out=$(run_sel_tick)
 assert_eq "issue: decision line" "issue 707 1" "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "issue: lock held" "select-tick-session" "$(cat "$DISPATCH_LOCK_FILE")"
+sel_tick_teardown
+
+# --- graph selection → reserved under the node id, lock RELEASED --------------
+# tactic-graph-router-selector: the tick consults the graph selector FIRST; a
+# selection writes one reservation-ledger marker per node under its NODE ID
+# (the durable claim), releases the lock, and emits the `graph` decision. The
+# legacy selector must NOT run (the graph lane consumed this run's budget).
+echo "Test: select-tick graph selection → graph decision, node reserved, lock released, legacy skipped"
+sel_tick_setup
+export SEL_GRAPH_TARGET="node tactic-x tactic implement"
+out=$(run_sel_tick)
+assert_eq "graph: decision line" "graph 1 tactic-x:tactic:implement" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "graph: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "graph: reservation written under the node id" "1" \
+  "$([ -f "$DISPATCH_RESERVATION_DIR/tactic-x" ] && echo 1 || echo 0)"
+assert_eq "graph: reservation issue field is the node id" "issue=tactic-x" \
+  "$(grep '^issue=' "$DISPATCH_RESERVATION_DIR/tactic-x")"
+assert_eq "graph: legacy selector not consulted" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/select-target.log" ] && echo 1 || echo 0)"
+assert_eq "graph: decision log disposition" "graph" \
+  "$(tail -n1 "$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl" | jq -r '.disposition')"
+sel_tick_teardown
+
+# --- graph selection: multi-node set within the gap ---------------------------
+echo "Test: select-tick graph multi-node selection → one decision line, both reserved"
+sel_tick_setup
+export SEL_TARGET_N=3
+export SEL_GRAPH_TARGET=$'node tactic-a tactic review\nnode strategy-s strategy align-tactics'
+out=$(run_sel_tick)
+assert_eq "graph multi: decision line" \
+  "graph 2 tactic-a:tactic:review strategy-s:strategy:align-tactics" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "graph multi: strategy id reserved too" "1" \
+  "$([ -f "$DISPATCH_RESERVATION_DIR/strategy-s" ] && echo 1 || echo 0)"
+sel_tick_teardown
+
+# --- graph empty → fall through to the legacy selector ------------------------
+echo "Test: select-tick graph empty → legacy selector drains"
+sel_tick_setup
+cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
+#!/usr/bin/env bash
+echo called >> "$TMPDIR_TEST/logs/select-target.log"
+echo "issue 707"
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-select-target"
+out=$(run_sel_tick)
+assert_eq "graph empty: graph selector consulted first" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-select.log" ] && echo 1 || echo 0)"
+assert_eq "graph empty: legacy decision line" "issue 707 1" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+sel_tick_teardown
+
+# --- at-cap: graph pace-exempt probe admits ONE gate-exempt worker -------------
+# strategy clarification 14: at the worker cap (not exhausted) the graph
+# pace-exempt probe runs BEFORE the legacy --priority-only probe; a hit admits
+# exactly one gate-exempt worker and the legacy probe must not run.
+echo "Test: select-tick at-cap graph pace-exempt probe → graph decision, legacy priority probe skipped"
+sel_tick_setup
+export SEL_TARGET_N=1 SEL_LIVE_COUNT=1
+export SEL_GRAPH_PACE_EXEMPT="node tactic-p tactic implement"
+out=$(run_sel_tick)
+assert_eq "pace-exempt: decision line" "graph 1 tactic-p:tactic:implement" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "pace-exempt: node reserved" "1" \
+  "$([ -f "$DISPATCH_RESERVATION_DIR/tactic-p" ] && echo 1 || echo 0)"
+assert_eq "pace-exempt: legacy priority probe not consulted" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/select-target-priority.log" ] && echo 1 || echo 0)"
+assert_eq "pace-exempt: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+sel_tick_teardown
+
+# --- at-cap: graph probe empty → legacy priority probe still runs --------------
+echo "Test: select-tick at-cap graph probe empty → legacy priority probe runs"
+sel_tick_setup
+export SEL_TARGET_N=1 SEL_LIVE_COUNT=1
+export SEL_PRIORITY_ONLY="issue 611"
+out=$(run_sel_tick)
+assert_eq "at-cap fallback: graph probe consulted" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-select-pace-exempt.log" ] && echo 1 || echo 0)"
+assert_eq "at-cap fallback: legacy priority decision" "issue 611 1" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+sel_tick_teardown
+
+# --- exhausted at cap: neither probe runs (hard floor) -------------------------
+echo "Test: select-tick at-cap exhausted → no graph pace-exempt probe (hard floor)"
+sel_tick_setup
+export SEL_TARGET_N=1 SEL_LIVE_COUNT=1 SEL_EXHAUSTED=exhausted
+export SEL_GRAPH_PACE_EXEMPT="node tactic-p tactic implement"
+out=$(run_sel_tick)
+assert_eq "exhausted: decision line" "concurrency-cap" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "exhausted: graph pace-exempt probe not consulted" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-select-pace-exempt.log" ] && echo 1 || echo 0)"
 sel_tick_teardown
 
 # --- main-broken → passthrough + lock RELEASED (spawned as a bg job) ---------

@@ -532,7 +532,11 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
 
   # claude_agents_count_busy_workers — emit the count of live sessions that are
   # actively working: name matches `^[0-9]+-` (the real worker `<N>-<slug>`
-  # shape) AND `status == "busy"`. `^[0-9]+-` excludes routers (named
+  # shape) or a node-id worker shape (`^tactic-` / `^strategy-`), AND
+  # `status == "busy"`. Both keyspaces count against the ONE pace budget
+  # (tactic-graph-router-selector): draining `<N>-<slug>` issue workers and
+  # graph node sessions — a strategy's `/align-tactics` session is a worker
+  # too (strategy clarification 13). The patterns exclude routers (named
   # `dispatch-<short-id>`). `status == "busy"` excludes idle / input-blocked /
   # stopped workers, because those do not consume the concurrency/token budget
   # the gate paces. An over-count from a stray busy human session is fail-safe
@@ -557,7 +561,7 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
     if ! count=$(jq -r '
       if type == "array"
       then [ .[]
-        | select(.name | type == "string" and test("^[0-9]+-"))
+        | select(.name | type == "string" and test("^[0-9]+-|^tactic-|^strategy-"))
         | select(.status == "busy") ] | length
       else error("claude agents --json output is not a JSON array")
       end' <<<"$out" 2>/dev/null); then
