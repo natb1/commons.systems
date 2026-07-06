@@ -19,8 +19,13 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-graph-router-selector
+  pr: 2785
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
 validates: []
 blocked_by:
   - tactic-graph-dispatch-schema
