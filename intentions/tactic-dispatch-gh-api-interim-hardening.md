@@ -16,7 +16,10 @@ rationale: "Surfaced by the 2026-07-05 review. gh_api_array is a single
   strategy-autonomous-execution. Caveat: much of this legacy-gh surface is
   scheduled for deletion by tactic-legacy-router-removal; scope this to the
   interim-live risks (the 30-cap and the merge SHA) and drop any unit that
-  legacy-router-removal makes moot."
+  legacy-router-removal makes moot. Demoted to draft 2026-07-06 by the
+  greenfield-relevance gate (strategy-graph-native-dispatch): the gh-queue drain
+  deletes this surface; re-promote only if the drain stalls long enough for the
+  epic-auto-close risk to matter; delete at tactic-legacy-router-removal."
 reading: null
 gap: null
 serves:
@@ -26,7 +29,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: null
 execution: null
 validates: []
 blocked_by: []
@@ -72,3 +75,10 @@ Scope:
 - A synthetic epic with >30 children is not resolved while a late child is
   open; a merge with a shifted head is rejected by the API rather than
   landing. (Validate lib.sh helpers under `bash -c`, not zsh.)
+
+## Demotion note (2026-07-06)
+
+Demoted to draft by the greenfield-relevance gate on
+`strategy-graph-native-dispatch`: the gh-queue drain deletes this surface.
+Re-promote only if the drain stalls long enough for the epic-auto-close
+risk to matter; delete at `tactic-legacy-router-removal`.

@@ -13,13 +13,18 @@ rationale: "Surfaced by the 2026-07-05 review. A cluster of shared UI-package
   role=button+tabIndex on a div with no onKeyDown (Enter/Space dead - and it is
   the reference pattern consumers copy, live in the OfficeHours template);
   components autocomplete never scrolls the highlighted option into view or sets
-  aria-selected; panel-toggle never restores focus on close. Serves
-  strategy-attention-surface: these packages render the graph-native
-  office-hours surface."
+  aria-selected; panel-toggle never restores focus on close. Serves the
+  consuming local-first app strategies (multi-serves per the placement doctrine,
+  re-pointed 2026-07-06): router/ds/components are load-bearing for office-hours
+  (strategy-attention-surface), budget (strategy-recover-finance), and
+  print/audio (strategy-recover-attention); office-hours remains the most
+  exposed consumer."
 reading: null
 gap: null
 serves:
   - strategy-attention-surface
+  - strategy-recover-finance
+  - strategy-recover-attention
 recovers: []
 clarifications: []
 tooling_goals: []

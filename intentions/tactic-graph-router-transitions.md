@@ -81,6 +81,24 @@ unchanged — spec §2.4's carried-over phase-skill internals); the merge
 itself lands out-of-band and Unit 2's sweep absorbs it into `done`. No
 graph-side merge step exists.
 
+Freshness gate at the transition write (closes the soft-freeze merge
+race): before any forward transition commit — and specifically before
+arming auto-merge at clean review completion — recompute the serving
+strategy's substance fingerprint (same derivation as the selector's,
+strategy clarification 10) and compare it against
+`execution.strategy_fingerprint`. On mismatch: write no forward
+transition and arm no merge — leave the tactic at its completed phase;
+the selector's frozen-subtree state queues the re-evaluation, and a
+confirm re-stamps the fingerprint so the held transition proceeds on the
+next tick. Without this gate the freeze binds only selection, so a
+strategy edit landing while a tactic is mid-review would let a clean
+review arm auto-merge against the outdated spec — the transition writer
+is the last graph-side actor before the merge, so the check lives here.
+A tactic hand-merged against an already-stale fingerprint is out-of-band
+human action: Unit 2's sweep still absorbs it, main-qa verifies against
+the node's (re-evaluated) intent. (Recorded 2026-07-06 from the
+/align-strategy concurrency review.)
+
 ## Unit 2 — reconciler sweep and completion pruning
 
 **Recommended model:** opus
