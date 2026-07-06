@@ -25,6 +25,14 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
+attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: false
+rounds: null
 attributes:
   delegatee: Anthropic (Claude) — vendor institution supplying a construction tool
   delegated: software construction — tactical execution of build and change work
@@ -39,6 +47,10 @@ attributes:
       - promote the vendor's growth via spend
       - drafting the intention graph's own nodes — framing risk on the
         instrument that audits the delegatee
+      - orchestration runtime semantics — the dispatch tick's fan-out executes
+        on the Claude Code Workflow primitive (agent() contracts, run journals,
+        concurrency caps), per strategy-graph-native-dispatch clarifications
+        24-25
     contradictions: []
   irreversibility:
     recovery_path: substitute — open-weight models plus local inference; artifacts
@@ -55,7 +67,9 @@ attributes:
   review_trigger: runway-rule breach; open-weight capability gap widening; terms
     gating individual-scale use; plan pricing structure change (prepaid
     allowance to metered) — the premise strategy-token-economy's throughput
-    framing rests on
+    framing rests on; Workflow-primitive semantics change incompatibly or gate
+    individual-scale use (the tick execution substrate,
+    strategy-graph-native-dispatch clarifications 24-25)
   last_assessed: 2026-07-02
 ---
 # Software construction delegated to Anthropic's Claude

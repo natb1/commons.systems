@@ -67,6 +67,14 @@ Ordered by how much graph doctrine each text underwrites:
    (declined — verifies that what was refused is what the graph thinks it
    refused).
 
+**Order revision (2026-07-06, per strategy-recovery-critical-path):** work the
+chunks in order 1, 2, 5, then 3, 4, 6, 7, 8, 9 — chunk 5 advances so the
+capture-doctrine path (Cave → hexis → phronesis) completes before the respect
+floor; NE II.5–6 stays second as the textual foundation NE VI presupposes.
+Chunk numbers stay stable as names; chunk 6's capstone rule ("revisit the apex
+after chunks 1–6") means after those six chunks are done, wherever they fall
+in the working order.
+
 ## Questions to re-open per chunk
 
 The 2026-07-04/05 interview resolutions live as dated `clarifications` on the

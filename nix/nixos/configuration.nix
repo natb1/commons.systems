@@ -18,6 +18,9 @@
 
 { config, lib, pkgs, ... }:
 
+let
+  hostUser = config.instance.hostUser;
+in
 {
   imports = [
     # Tailscale VPN for secure networking
@@ -26,21 +29,22 @@
     ./mounts.nix
     # office-hours snapshot producer (system-level hourly timer)
     ./office-hours.nix
+    # host user (instance.hostUser option; supplied by the instance flake)
+    ./host-user.nix
   ];
 
   wsl.enable = true;
-  wsl.defaultUser = "n8";
+  wsl.defaultUser = hostUser;
 
-  # Interim instance config for the office-hours snapshot producer. The forkable
-  # module (./office-hours.nix) hardcodes nothing personal; these instance values
-  # live here — the de-facto instance layer that already hardcodes the n8 user /
-  # wsl.* (see flake.nix), until #2446 moves them to a per-identity instance flake.
-  # The referenced EnvironmentFile is an operator secret provisioned out-of-band on
-  # the host (mode 0600, owner n8); it is never committed. See ./office-hours.nix
-  # for its required keys.
+  # Instance config for the office-hours snapshot producer. The forkable module
+  # (./office-hours.nix) hardcodes nothing personal; these instance values live
+  # here, reading the host user from config.instance.hostUser (set by the
+  # instance flake). The referenced EnvironmentFile is an operator secret
+  # provisioned out-of-band on the host (mode 0600, owned by the operator user);
+  # it is never committed. See ./office-hours.nix for its required keys.
   services.officeHoursProducer = {
     enable = true;
-    user = "n8";
+    user = hostUser;
     environmentFile = "/etc/office-hours/producer.env";
   };
 
@@ -76,9 +80,9 @@
   };
 
   # User configuration
-  users.users.n8 = {
+  users.users.${hostUser} = {
     isNormalUser = true;
-    home = "/home/n8";
+    home = "/home/${hostUser}";
     extraGroups = [ "wheel" "docker" ];
     shell = pkgs.zsh;
     # Keep the wezterm-mux-server user service alive across logins declaratively,

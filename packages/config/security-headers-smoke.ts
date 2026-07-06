@@ -1,4 +1,5 @@
 import { test, expect } from "./playwright-test";
+import { headWithRetry } from "./hosting-smoke-helpers";
 
 const expectedHeaders: {
   header: string;
@@ -36,7 +37,7 @@ const expectedHeaders: {
 export function describeSecurityHeadersSmoke(appName: string): void {
   test.describe(`${appName} security headers smoke`, () => {
     test(`response includes security headers @hosting`, async ({ request }) => {
-      const response = await request.head("/");
+      const response = await headWithRetry(request, "/");
       expect(response.status()).toBe(200);
 
       const headers = response.headers();
