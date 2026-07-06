@@ -489,6 +489,40 @@ clarifications:
       greenfield gate and placement doctrine) is the reconciler, and a
       doctrine-recording session pauses the pace curve for its audit window, as
       this round did. Recorded 2026-07-06 interview."
+  - question: Does the legacy office-hours entry's attach-to-parking-session
+      behavior carry over — how does a human engage a parked node?
+    answer: "No — graph recoverability replaces session recovery. Session recovery
+      is not supported usage of the greenfield router: under workflow-native
+      tick execution (clarification 24) phase workers are agent() subagents
+      inside a tick workflow, not independently attachable daemon jobs, so a
+      design premised on re-entering the parking session cannot be supported —
+      and with the park write carrying full context, session persistence (daemon
+      registry, transcripts, resume) stops being load-bearing: the owned graph,
+      not the harness's session machinery, is the recovery substrate for parked
+      work (no recovers edge recorded — the same strategy leans on the Workflow
+      executor per clarification 25, so a strategy-level unwind claim would
+      overstate). The park write is the recovery artifact: every office_hours
+      park records recoverable context in the node at park time — the reason, a
+      best-next-steps recommendation as a first-class
+      office_hours.recommendation field beside reason/since (atomic with the
+      park, cleared with the un-park; a schema follow-up, since
+      tactic-graph-dispatch-schema is done), and any state a fresh session
+      needs; a park whose context lives only in the parking session is a defect
+      (condition 6). The graph-native entry always launches, and attaches the
+      human to, a NEW session recovered from the graph: selection walks parked
+      nodes in resolved-rank order (the router's own calculated-attention
+      ordering; an explicit node-id argument targets one item); the session
+      roots in the node-id worktree when one exists — in-flight working-tree
+      state lands in front of the human, and the session claims the node id per
+      the liveness rule (clarification 13) — else the main checkout; it surfaces
+      office_hours.reason and the recorded recommendation as untrusted data,
+      generates a recommendation via a read-only review subagent only when none
+      was recorded, and stops. Read-only review-and-recommend parity holds: no
+      phase transition, no un-park, no fixes — the park clears per clarification
+      4 (an interactive-session commit touching the node). The legacy entry's
+      attach/resume/provision verbs, its gh selector, and the strip hook retire
+      with the drain (tactic-legacy-router-removal). Recorded 2026-07-06
+      interview."
 tooling_goals:
   - kind: actuator
     statement: /align-strategy — interview-driven strategy recording, superseding
@@ -541,5 +575,10 @@ attributes:
       provisioning mechanics live in owned, offline-testable code (tsx modules
       and primitive scripts) that workflow agents invoke; the Workflow executor
       orchestrates but never becomes the sole home of router logic
+    - every office_hours park writes recoverable context into the node at park
+      time — reason, a best-next-steps recommendation
+      (office_hours.recommendation), and any state a fresh session needs;
+      session attach/resume is not a supported recovery path, so a park whose
+      context lives only in the parking session is a defect
 ---
 # Dispatch runs on the graph — orchestration state lives in intention nodes, worked through the align skill family
