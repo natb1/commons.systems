@@ -435,17 +435,23 @@ compatibility for the draining gh lane (which keeps its numeric
 worktrees where they are) and their conventions retire with
 `tactic-legacy-router-removal`.
 
-The launch chain follows the same keyspace split: selection hands the
-node id to the legacy launch scripts
-(`dispatch-materialize-spawn` → `dispatch-launch-worker` →
-`dispatch-spawn-job`), which provision the node-id worktree and spawn the
-session — `/align-tactics <id>` for a strategy, the tactic's persisted
-`phase` mapped to its phase skill otherwise. `dispatch-route`'s
-label/PR-derived phase derivation does not apply to node targets (phase
-is persisted, clarification 1); its deterministic provisioning prelude
-carries over. Launch-failure dispositions park the node via the
-`office_hours` graph write. Scoped in `tactic-graph-router-selector`
-unit 4.
+**Tick execution is workflow-native (clarifications 24–25):** selection
+hands the node-id set to a thin tick workflow script (the Workflow
+primitive) that fans out one `agent()` per selected node — never to the
+legacy launch scripts, which stay issue-lane-only and retire with the
+drain. The directive per node is `/align-tactics <id>` for a strategy,
+the tactic's persisted `phase` mapped to its phase skill otherwise;
+`dispatch-route`'s label/PR-derived phase derivation does not apply to
+node targets (phase is persisted, clarification 1). Mechanics stay owned
+and deterministic per the thin-script condition: agents invoke a
+`provision-node-worktree` primitive (the deterministic provisioning
+prelude, preserving the merged-tree guarantee) and `graph-commit` as
+single commands. Ticks are phase-granular — a tick executes only
+currently-eligible phases and exits; transition writes schedule the next
+phase next tick; a dead tick recovers by the next tick's re-selection
+(workflow resume is same-session only). Launch-failure dispositions park
+the node via the `office_hours` graph write. Scoped in
+`tactic-graph-router-selector` unit 4.
 
 ## 4. Coverage matrix
 
@@ -613,5 +619,22 @@ tactic-intentions-branch-protection (park) ┤                                 �
   native location; and `tactic-legacy-router-removal` Unit 1 now retires
   the legacy worktree-layout conventions with the drain. No tactic was
   pruned and no `blocked_by` changed.
+- **Re-evaluation (2026-07-06, clarifications 24–25):** run inline (no
+  router yet), triggered by the author's substrate question after the
+  first emulated router tick ran as a Workflow-tool script (12 eligible
+  tactics fanned out concurrently, 6 draft PRs). 24 records the
+  greenfield decision: tick execution is workflow-native — selection,
+  transitions, and provisioning mechanics stay owned deterministic code;
+  the launch layer becomes a thin workflow fan-out; the legacy spawn
+  chain is never extended to node ids and retires with the drain (no
+  fallback executor); ticks are phase-granular with dead-tick recovery by
+  re-selection. 25 records the guardrails: the thin-script condition
+  (added to `attributes.conditions`) and the capture entry on
+  `delegation-anthropic-claude` (divergence import + review trigger).
+  Propagated: §3.4's launch-chain paragraph rewritten,
+  `tactic-graph-router-selector` unit 4 re-scoped from the launch-chain
+  extension to the workflow tick harness,
+  `tactic-legacy-router-removal` unit 1 now deletes the launch chain
+  whole. No tactic was pruned and no `blocked_by` changed.
 - This parent is not directly executable (no `phase`); it completes when
   its last child completes, which stamps the strategy's `rounds`.
