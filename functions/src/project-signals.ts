@@ -21,7 +21,7 @@
 // `undefined`). The collector ALWAYS writes the snapshot with whatever succeeded.
 //
 // Fetch logic is ported faithfully from the /align skill scripts
-// (.claude/skills/align/scripts/{gather-context,fetch-analytics,fetch-psi}.sh).
+// (.claude/skills/align-init/scripts/{gather-context,fetch-analytics,fetch-psi}.sh).
 // CrUX field-data and GA4 web-vitals percentile aggregation are intentionally
 // DROPPED — they are not in those scripts' stable output.
 //
