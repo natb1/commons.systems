@@ -22,8 +22,13 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-graph-write-validation-hardening
+  pr: 2775
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
 validates: []
 blocked_by: []
 office_hours: null

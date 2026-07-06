@@ -362,9 +362,9 @@ clarifications:
       sensor modeling (wrong altitude — signals measure the strategy's
       observable, not each shipped feature), and an implicit reconciler hold
       (hidden state, violates clarification 1). Recorded 2026-07-04 interview."
-  - question: The repo was re-anchored — main checked out at the project root
-      with Claude Code managing worktrees natively; do the worktree commitments
-      still target the legacy .bare + sibling worktrees/ layout?
+  - question: The repo was re-anchored — main checked out at the project root with
+      Claude Code managing worktrees natively; do the worktree commitments still
+      target the legacy .bare + sibling worktrees/ layout?
     answer: "No — Claude Code native worktrees are the substrate, recorded
       2026-07-05 from author direction. main is checked out at the project root
       (~/natb1/commons.systems) and every worker worktree is a Claude
@@ -379,9 +379,150 @@ clarifications:
       are legacy-lane conventions that retire with it
       (tactic-legacy-router-removal). This supersedes the mechanism half of
       clarification 12 (the worktree-create.sh node-id naming unit): the
-      isolation commitment stands — one worktree per node id, liveness via
-      live session ⇔ worktree — but a node-id worktree is a plain native
-      worktree at the default location, never a hook-redirected path."
+      isolation commitment stands — one worktree per node id, liveness via live
+      session ⇔ worktree — but a node-id worktree is a plain native worktree at
+      the default location, never a hook-redirected path."
+  - question: The first emulated router tick ran as a Workflow-tool script — is the
+      Workflow primitive a better tick-execution substrate than the legacy shell
+      spawn chain?
+    answer: "Yes, for the execution layer only — workflow-native tick execution,
+      chosen on greenfield terms. Selection cannot move: Workflow scripts have
+      no filesystem or clock access, so eligibility gates, ordering, pacing, and
+      claiming stay in owned deterministic code that reads origin/main and hands
+      the tick a frozen selection set; transitions stay graph-commit writes.
+      What moves is the launch layer: instead of extending
+      dispatch-materialize-spawn / dispatch-launch-worker / dispatch-spawn-job
+      to node ids, a thin tick workflow fans out one agent() per selected node —
+      directive mapping (strategy → /align-tactics, tactic phase → phase skill)
+      unchanged, and per-phase model/effort routing rides agent() options
+      resolved from the persisted phase and the audit policy file. Evidence from
+      the first emulated tick (12 eligible tactics fanned out, 6 draft PRs):
+      schema-validated structured returns replace label/comment parsing,
+      pipeline dataflow ran each tactic's completion check the moment its
+      implement finished, and routing needed no plumbing. The legacy spawn chain
+      is not extended and is not kept as a fallback (author direction: no legacy
+      retained just in case) — it stays issue-lane-only and retires with the
+      drain. Ticks are phase-granular: a tick executes only currently-eligible
+      phases and exits; the transition write schedules the next phase next tick;
+      CI waits happen between ticks. Recovery is honest about the primitive's
+      limit: workflow resume is same-session only, so a dead tick is recovered
+      by the next tick re-selecting from origin/main — the same idempotent
+      re-selection semantics the legacy router has. Recorded 2026-07-06
+      interview."
+  - question: What keeps the Workflow executor — proprietary, session-bound harness
+      machinery — from making the router itself a rented runtime, against
+      strategy-owned-orchestration?
+    answer: "A thin-script condition plus a recorded capture entry, not denial.
+      Condition (attributes.conditions): workflow scripts stay thin composition
+      — selection, transition, and provisioning mechanics live in owned,
+      offline-testable code (intentionsutil tsx modules and primitive scripts
+      such as graph-commit and node-worktree provisioning) that workflow agents
+      invoke as single commands; the Workflow layer orchestrates but is never
+      the sole home of router logic. This doubles as the testability answer: a
+      workflow script cannot execute without spending tokens, so anything
+      unit-testable must live below it. The capture cost lands on
+      delegation-anthropic-claude — divergence.imported gains the
+      orchestration-runtime item and review_trigger gains incompatible
+      Workflow-semantics change or individual-scale gating — because the
+      orchestration logic remains forkable in-repo JS/tsx while only the
+      executor is rented, and the thin-script condition is what keeps re-hosting
+      that executor bounded. Recorded 2026-07-06 interview."
+  - question: What keeps the graph's tactics aligned with the greenfield target —
+      what prevents accumulating work on code the critical path deletes?
+    answer: "A greenfield-relevance gate binding the align family: at /align-tactics
+      finalization and in every /align-strategy improvement pass, each candidate
+      and open tactic's subject is checked against non-draft nodes that delete
+      or supersede it (a raw draft never obsoletes live work). The check is
+      per-unit: doomed units are dropped from the plan body naming the
+      superseding node; only a fully-superseded tactic demotes to draft. A
+      tactic on doomed surface may stay selectable only as an explicit
+      interim-live-risk exception naming its expiry event (e.g. the gh-queue
+      drain). First application this round:
+      tactic-dispatch-gh-api-interim-hardening demoted to draft (expiry:
+      tactic-legacy-router-removal); tactic-dispatch-script-hardening kept,
+      per-unit — already scoped to surviving scripts. Recorded 2026-07-06
+      interview."
+  - question: Which strategy does a bug or improvement tactic serve — and are
+      'nearest fit' placements acceptable?
+    answer: "serves names the strategy that owns the changed artifact — never a
+      nearest-fit force-fit. A genuinely cross-cutting subject (shared packages
+      load-bearing for several strategies' artifacts) records an honest
+      multi-entry serves array. When no strategy owns the artifact, the session
+      surfaces the gap — an office_hours park or a proposed /align-strategy
+      round — rather than force-fitting. Draft residue follows the same rule, so
+      each strategy's /align-tactics round finds its own drafts. First
+      application this round: three print reader tactics re-pointed
+      recover-knowledge → recover-attention (print is recover-attention's named
+      artifact), tactic-analytics-vitals-delivery re-pointed attention-surface →
+      promote-progressive-detachment (the surface renders signals it does not
+      own; the GA4/vitals channel belongs to the adoption-signal owner), and the
+      mixed low-severity sweep split into per-owning-strategy draft sweeps.
+      Recorded 2026-07-06 interview."
+  - question: Is the graph also the bug tracker — where do small mechanical defects live?
+    answer: "The intentions/ graph is the sole source-of-truth issue tracker, bug
+      tracker included. Every defect worth fixing is recorded as a tactic or a
+      unit of an existing one, however small — smallness is handled by folding
+      into a sibling tactic or a per-strategy draft sweep, never by not
+      recording. No side channels: no new gh issues (condition 1, absolute
+      post-drain), no ad-hoc lists or design docs, and code TODO comments are
+      pointer-only — TODO(tactic-<id>) citing the node that holds the substance;
+      a substantive TODO with no node is a review-phase finding. Recorded
+      2026-07-06 interview."
+  - question: Two human-invoked align sessions ran concurrently in the shared
+      checkout during the 2026-07-06 doctrine round — is the target router safe
+      for this concurrency, and what closes the gaps?
+    answer: "Router-launched work is safe by construction — node-id claiming with
+      worktree isolation, frozen-selection ticks, single-node rebase-retry
+      writes failing closed on same-node conflict, and the substance-fingerprint
+      soft freeze. Three commitments close the human-session gaps. Claiming:
+      interactive and human-invoked bg align sessions enter the same node-id
+      reservation ledger as router workers and author in worktrees, never the
+      shared main checkout — the ledger is uniform across launch modes.
+      Freshness: the write path gains a base-version check — the editing flow
+      records the origin/main blob each node was read at, and graph-commit
+      refuses a write whose base is stale, making read-fresh mechanical rather
+      than session discipline (implementation: tactic-graph-commit-prune-support
+      Unit 2; motivating near-miss: a stale dump of
+      tactic-graph-commit-hardening nearly clobbered its live phase: qa state).
+      Semantic drift: no lock covers doctrine-vs-content races across different
+      files — the periodic /align-strategy improvement pass (now carrying the
+      greenfield gate and placement doctrine) is the reconciler, and a
+      doctrine-recording session pauses the pace curve for its audit window, as
+      this round did. Recorded 2026-07-06 interview."
+  - question: Does the legacy office-hours entry's attach-to-parking-session
+      behavior carry over — how does a human engage a parked node?
+    answer: "No — graph recoverability replaces session recovery. Session recovery
+      is not supported usage of the greenfield router: under workflow-native
+      tick execution (clarification 24) phase workers are agent() subagents
+      inside a tick workflow, not independently attachable daemon jobs, so a
+      design premised on re-entering the parking session cannot be supported —
+      and with the park write carrying full context, session persistence (daemon
+      registry, transcripts, resume) stops being load-bearing: the owned graph,
+      not the harness's session machinery, is the recovery substrate for parked
+      work (no recovers edge recorded — the same strategy leans on the Workflow
+      executor per clarification 25, so a strategy-level unwind claim would
+      overstate). The park write is the recovery artifact: every office_hours
+      park records recoverable context in the node at park time — the reason, a
+      best-next-steps recommendation as a first-class
+      office_hours.recommendation field beside reason/since (atomic with the
+      park, cleared with the un-park; a schema follow-up, since
+      tactic-graph-dispatch-schema is done), and any state a fresh session
+      needs; a park whose context lives only in the parking session is a defect
+      (condition 6). The graph-native entry always launches, and attaches the
+      human to, a NEW session recovered from the graph: selection walks parked
+      nodes in resolved-rank order (the router's own calculated-attention
+      ordering; an explicit node-id argument targets one item); the session
+      roots in the node-id worktree when one exists — in-flight working-tree
+      state lands in front of the human, and the session claims the node id per
+      the liveness rule (clarification 13) — else the main checkout; it surfaces
+      office_hours.reason and the recorded recommendation as untrusted data,
+      generates a recommendation via a read-only review subagent only when none
+      was recorded, and stops. Read-only review-and-recommend parity holds: no
+      phase transition, no un-park, no fixes — the park clears per clarification
+      4 (an interactive-session commit touching the node). The legacy entry's
+      attach/resume/provision verbs, its gh selector, and the strip hook retire
+      with the drain (tactic-legacy-router-removal). Recorded 2026-07-06
+      interview."
 tooling_goals:
   - kind: actuator
     statement: /align-strategy — interview-driven strategy recording, superseding
@@ -395,7 +536,9 @@ tooling_goals:
       virtues, delegate to /align-strategy; retires the legacy /align skill"
   - kind: actuator
     statement: graph-native router tick — selects by resolved rank across strategies
-      and tactics, transitions persisted phase, direct-push rebase-retry writes
+      and tactics in owned deterministic code, executes the tick as a thin
+      workflow fan-out (one agent per selected node), transitions persisted
+      phase via direct-push rebase-retry writes
   - kind: sensor
     statement: lifecycle telemetry from the store itself — phase transition history
       and round counts readable from node state
@@ -420,12 +563,22 @@ rounds:
 attributes:
   conditions:
     - the legacy gh router only drains existing issues; no new work enters via
-      gh once /align-strategy is live
+      gh once /align-strategy is live — the graph is the sole issue tracker, bug
+      tracker included, with no side-channel work records
     - direct-push commits stay restricted to intentions/ paths and rebase-retry
       conflict cost stays negligible at fleet concurrency
     - strategy-graph-drives-dispatch holds — resolved rank from the graph orders
       execution
     - strategy substance stays human-decided in the /align-strategy interview;
       the skill records, it does not derive
+    - workflow scripts stay thin composition — selection, transition, and
+      provisioning mechanics live in owned, offline-testable code (tsx modules
+      and primitive scripts) that workflow agents invoke; the Workflow executor
+      orchestrates but never becomes the sole home of router logic
+    - every office_hours park writes recoverable context into the node at park
+      time — reason, a best-next-steps recommendation
+      (office_hours.recommendation), and any state a fresh session needs;
+      session attach/resume is not a supported recovery path, so a park whose
+      context lives only in the parking session is a defect
 ---
 # Dispatch runs on the graph — orchestration state lives in intention nodes, worked through the align skill family

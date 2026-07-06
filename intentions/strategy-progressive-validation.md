@@ -32,13 +32,59 @@ rationale: >-
 
   Within a domain, prioritize depth (solving the author's problem well) before
   breadth (reaching new audiences).
+
+
+  The tiers are the former CHARTER.md progressive-promotion ladder, recorded
+  here as its canonical home since CHARTER.md was deleted: validate for myself
+  (tier 1), then with users (tier 2), then with practitioners (tier 3),
+  eventually with collaborators (tier 4). Entering a tier is an explicit, dated
+  author declaration recorded as a clarification on this node — no downstream
+  strategy, sensor, or router may infer entry from activity. As of 2026-07-06,
+  tier 1 is validated by daily use; tiers 2, 3, and 4 are not entered.
 reading: null
 gap: "no reading yet (threshold: no tooth is accepted without a named validating
   signal from the previous tier)"
 serves:
   - virtue-progressive-detachment
 recovers: []
-clarifications: []
+clarifications:
+  - question: Where does the CHARTER.md progressive-promotion concept live now that
+      CHARTER.md is deleted?
+    answer: Here. This node is the canonical record of the ladder — first validate
+      for myself, then with users, then with practitioners, eventually with
+      collaborators. The promote subtree
+      (strategy-promote-progressive-detachment, validation_tiers 2-4) executes
+      the outward tiers; this node owns the pacing and the tier-entry record.
+      Recorded 2026-07-06 interview.
+  - question: How is a tier declared entered, and what is the current state?
+    answer: "Tier entry is an explicit, dated author declaration recorded as a
+      clarification on this node. It is a judgment call the author makes — never
+      inferred from activity by a sensor, router, or downstream strategy. Tier
+      strategies gate their invitation-facing work with an attributes.conditions
+      entry referencing this declaration. As of 2026-07-06: tier 1 (author)
+      validated by daily use; tier 2 (users), tier 3 (practitioners), and tier 4
+      (collaborators) are NOT entered. Recorded 2026-07-06 interview."
+  - question: What exactly does the tier gate cover — is the project hiding until a
+      tier is declared?
+    answer: "No. The gate covers invitations and obligations only: onboarding chips
+      and CTAs in production apps, marketplace/npm/citation-list submissions,
+      support commitments, and practitioner-channel campaigns. It does not cover
+      openness or voice: the repo stays public, the blog keeps publishing
+      (architecture writeups included), community participation under
+      strategy-join-existing-practice continues ungated, and the landing CTA and
+      About page remain live as the service-sales path — kept relevant and
+      reflecting current capability, without focusing on origination before
+      users and practitioners are supported. Recorded 2026-07-06 interview."
+  - question: What is the tier-entry test the author checks before declaring tier 2
+      or tier 3 entered?
+    answer: "Tier 2 (users): the graph-native design is stable enough that
+      supporting a user does not churn the ground under them; the author
+      declares support bandwidth; and every onboarding surface to be re-lit is
+      QA-walked end-to-end first. Tier 3 (practitioners) adds: the practitioner
+      support boundary is written before any invitation ships, and the
+      practitioner profile and channels are identified. These are the conditions
+      checked; the declaration itself remains a judgment call, so no hard sensor
+      drives entry. Recorded 2026-07-06 interview."
 tooling_goals: []
 success_signal:
   observable: each accepted ratchet tooth has a recorded prior-tier signal that
@@ -46,6 +92,14 @@ success_signal:
   sensor: owner review at office-hours
   threshold: no tooth is accepted without a named validating signal from the previous tier
   is_proxy: true
+attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: false
+rounds: null
 attributes:
   conditions:
     - external engagement arrives in tiers whose signals are observable before
