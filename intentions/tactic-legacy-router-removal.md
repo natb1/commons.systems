@@ -27,6 +27,7 @@ blocked_by:
   - tactic-dispatch-lifecycle-sensor
   - tactic-phase-skill-node-targets
   - tactic-main-qa-phase
+  - tactic-office-hours-graph-entry
 office_hours: null
 pace_exempt: false
 rounds: null
