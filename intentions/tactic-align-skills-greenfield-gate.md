@@ -3,20 +3,21 @@ id: tactic-align-skills-greenfield-gate
 kind: tactic
 statement: "align skills: encode the recorded doctrines — greenfield-relevance
   gate, artifact-owner placement, graph-as-sole-tracker, record-completeness,
-  park-time recommendation — into the /align-strategy and /align-tactics
-  SKILL.md files"
+  park-time recommendation, amendment completeness — into the /align-strategy
+  and /align-tactics SKILL.md files"
 owner: ai
 status: codified
 parent: null
-rationale: "The 2026-07-06 /align-strategy rounds recorded five doctrines as
+rationale: "The 2026-07-06 /align-strategy rounds recorded six doctrines as
   clarifications/conditions on strategy-graph-native-dispatch: the
   greenfield-relevance gate (clarification 26), artifact-owner placement (27),
   graph-as-sole-tracker with pointer-only TODOs (28), the record-completeness
-  contract binding /align-strategy (31 / condition 7), and the park-time
-  recommendation on every office_hours park (30 / condition 6). The skill files
-  that execute those doctrines do not yet state them; until they do, the
-  requirements bind only via the strategy node. This tactic carries them into
-  .claude/skills/align-strategy/SKILL.md and
+  contract binding /align-strategy (31 / condition 7), the park-time
+  recommendation on every office_hours park (30 / condition 6), and the
+  re-evaluation amendment-completeness bar with full-body re-read (32). The
+  skill files that execute those doctrines do not yet state them; until they do,
+  the requirements bind only via the strategy node. This tactic carries them
+  into .claude/skills/align-strategy/SKILL.md and
   .claude/skills/align-tactics/SKILL.md."
 reading: null
 gap: null
@@ -36,11 +37,11 @@ pace_exempt: false
 rounds: null
 attributes: {}
 ---
-# align skills: encode the recorded doctrines (greenfield gate, placement, sole tracker, record completeness, park recommendation)
+# align skills: encode the recorded doctrines (greenfield gate, placement, sole tracker, record completeness, park recommendation, amendment completeness)
 
 ## Context
 
-The 2026-07-06 `/align-strategy` rounds recorded five doctrines as dated
+The 2026-07-06 `/align-strategy` rounds recorded six doctrines as dated
 clarifications/conditions on `strategy-graph-native-dispatch`:
 
 1. **Greenfield-relevance gate** — at `/align-tactics` finalization and in
@@ -69,6 +70,14 @@ clarifications/conditions on `strategy-graph-native-dispatch`:
    a best-next-steps recommendation; session attach/resume is not a
    supported recovery path, so a park whose context lives only in the
    parking session is a defect.
+6. **Amendment completeness** (clarification 32) — when a re-evaluation
+   amends an open tactic, the entire node — statement, rationale, context,
+   every unit, and verification — is reconciled against the full current
+   strategy substance in that same round; a one-bullet delta that leaves
+   sibling sections contradicting the amendment is an incomplete amendment,
+   the same defect class as an incomplete record. Keyword grep over open
+   tactics is a shortlisting heuristic only; disposition of each open child
+   requires a full-body re-read.
 
 The SKILL.md files that execute these doctrines do not yet state them. This
 tactic carries them into the skill text so a clean session running either
@@ -131,6 +140,15 @@ Scope (`.claude/skills/align-tactics/SKILL.md`):
   reason names the missing context as a record-completeness defect of the
   `/align-strategy` round that produced it (condition 7) — the fix is an
   author `/align-strategy` pass, not guessing.
+- Re-evaluation mode (amendment completeness, clarification 32): state
+  that an amendment is complete only when the amended tactic's whole node
+  — statement, rationale, context, all units, and verification — is
+  reconciled against the full current strategy substance in the same
+  round, and that every open child tactic's body is re-read in full before
+  disposition; keyword grep only shortlists, never disposes.
+  Cross-reference the census script
+  (`tactic-align-tactics-mechanical-floor` Unit 2) as the enumeration hook
+  once it lands — a pointer, not a dependency of this unit.
 
 ## Dependencies
 
@@ -139,11 +157,12 @@ None — the clarifications this encodes are already on `origin/main`.
 ## Verification
 
 ```verify
-grep -q "greenfield-relevance" .claude/skills/align-strategy/SKILL.md && grep -q "greenfield-relevance" .claude/skills/align-tactics/SKILL.md && grep -qi "sole.*tracker\|source-of-truth issue tracker" .claude/skills/align-tactics/SKILL.md && grep -qi "record.completeness\|sole carrier" .claude/skills/align-strategy/SKILL.md && grep -qi "recommendation" .claude/skills/align-tactics/SKILL.md && echo OK
+grep -q "greenfield-relevance" .claude/skills/align-strategy/SKILL.md && grep -q "greenfield-relevance" .claude/skills/align-tactics/SKILL.md && grep -qi "sole.*tracker\|source-of-truth issue tracker" .claude/skills/align-tactics/SKILL.md && grep -qi "record.completeness\|sole carrier" .claude/skills/align-strategy/SKILL.md && grep -qi "recommendation" .claude/skills/align-tactics/SKILL.md && grep -qi "amendment" .claude/skills/align-tactics/SKILL.md && echo OK
 ```
 
-- Prose check: a clean-session read of each SKILL.md finds the five
+- Prose check: a clean-session read of each SKILL.md finds the six
   doctrines stated where the flow applies them (improvement pass /
-  finalization / park mechanics / step-6 coverage walk), each citing
+  finalization / park mechanics / re-evaluation amendment bar / step-6
+  coverage walk), each citing
   strategy-graph-native-dispatch as the durable home rather than restating
   interview provenance.

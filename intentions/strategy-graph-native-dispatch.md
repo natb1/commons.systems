@@ -549,6 +549,27 @@ clarifications:
       condition. Same-session /align-tactics execution remains good practice
       during bootstrap while no router exists to queue the re-evaluation, but
       nothing may depend on it. Recorded 2026-07-06 from author direction."
+  - question: Repeated /align-tactics rounds kept re-refining the same
+      doctrine-encoding tactic (tactic-align-skills-greenfield-gate, four
+      touches on 2026-07-06) — one-off or process defect, and what is the
+      completeness bar for an amendment?
+    answer: "Systemic, two defects — the strategy substance legitimately changing
+      three times in one day is the soft-freeze loop working, but each amendment
+      being incomplete is not. (1) Amendment completeness: when a re-evaluation
+      amends an open tactic, the entire node — statement, rationale, context,
+      every unit, and verification — is reconciled against the full current
+      strategy substance in that same round; a one-bullet delta that leaves
+      sibling sections contradicting the amendment is an incomplete amendment,
+      the same defect class as an incomplete record (condition 7). (2)
+      Enumeration honesty: keyword grep over open tactics is a shortlisting
+      heuristic only — disposition of each open child requires a full-body
+      re-read, because doctrine-encoding tactics depend on strategy text they
+      never keyword-match. A mechanical floor backs the doctrine: the validate
+      gate gains a plan-schema body lint on phase-set tactics and a census
+      script replaces the hand-run classification greps
+      (tactic-align-tactics-mechanical-floor); the skill-text encoding is homed
+      in tactic-align-skills-greenfield-gate. Recorded 2026-07-06 from author
+      direction."
 tooling_goals:
   - kind: actuator
     statement: /align-strategy — interview-driven strategy recording, superseding
