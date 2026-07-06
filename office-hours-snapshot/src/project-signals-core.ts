@@ -99,92 +99,13 @@ interface ProjectSignalSample {
 
 type FetchFn = typeof globalThis.fetch;
 
-interface GithubRepoResponse {
-  stargazers_count: number;
-  forks_count: number;
-  watchers_count: number;
-}
-
-interface GithubTrafficCountResponse {
-  count: number;
-  uniques: number;
-}
-
-interface GithubReferrerResponse {
-  referrer: string;
-  count: number;
-  uniques: number;
-}
-
-// Fetches the public repo stats (stars/forks/watchers) via the REST repo
-// endpoint. Mirrors gather-context.sh line 42 (`repos/$OWNER_REPO`
-// {stargazers_count, forks_count, watchers_count}).
-export async function fetchGithubStatsLive(
-  fetchFn: FetchFn,
-  token: string,
-  repo: string,
-): Promise<Pick<GithubSignals, "repo" | "stars" | "forks" | "watchers">> {
-  const res = await fetchFn(`https://api.github.com/repos/${repo}`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/vnd.github+json",
-      "User-Agent": "project-signals/1.0",
-    },
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`GitHub repo stats request failed: ${res.status} ${truncateForLog(text)}`);
-  }
-  const json = (await res.json()) as GithubRepoResponse; // type-safety-ok: cast matches documented GitHub repo schema
-  return {
-    repo,
-    stars: json.stargazers_count,
-    forks: json.forks_count,
-    watchers: json.watchers_count,
-  };
-}
-
-// Fetches the three traffic endpoints (clones, views, popular/referrers). These
-// require push access and 403 otherwise; the caller treats any throw as "no
-// traffic access" and omits the `traffic` key. Not present in the align scripts
-// (constructed here from the documented REST traffic API).
-export async function fetchGithubTrafficLive(
-  fetchFn: FetchFn,
-  token: string,
-  repo: string,
-): Promise<NonNullable<GithubSignals["traffic"]>> {
-  const headers = {
-    Authorization: `Bearer ${token}`,
-    Accept: "application/vnd.github+json",
-    "User-Agent": "project-signals/1.0",
-  };
-  const getJson = async <T>(path: string): Promise<T> => {
-    const res = await fetchFn(`https://api.github.com/repos/${repo}/traffic/${path}`, { headers });
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`GitHub traffic/${path} request failed: ${res.status} ${truncateForLog(text)}`);
-    }
-    return (await res.json()) as T; // type-safety-ok: cast matches documented GitHub traffic schema
-  };
-
-  const [clones, views, referrers] = await Promise.all([
-    getJson<GithubTrafficCountResponse>("clones"),
-    getJson<GithubTrafficCountResponse>("views"),
-    getJson<GithubReferrerResponse[]>("popular/referrers"),
-  ]);
-
-  return {
-    clonesCount: clones.count,
-    clonesUniques: clones.uniques,
-    viewsCount: views.count,
-    viewsUniques: views.uniques,
-    topReferrers: referrers.map((r) => ({
-      referrer: r.referrer,
-      count: r.count,
-      uniques: r.uniques,
-    })),
-  };
-}
+// NOTE: GitHub stats/traffic are NOT fetched here via `fetch`+token, unlike the
+// Firebase-function twin (functions/src/project-signals-core.ts). The local
+// snapshot producer authenticates as the operator's own `gh` CLI session
+// instead, so its GitHub fetching lives in gh-fetchers.ts's `fetchGithub`
+// (REST via `gh api`, no injected FetchFn/token needed). Keeping a
+// fetch+token-based fetchGithubStatsLive/fetchGithubTrafficLive pair here
+// would be unreachable duplication of that function's twin.
 
 // Exchanges a Google OAuth refresh token for a short-lived access token. Mirrors
 // fetch-analytics.sh lines 86-101. This single token authenticates BOTH GA4
