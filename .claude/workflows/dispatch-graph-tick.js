@@ -41,7 +41,11 @@
  *   conflict-routed              provision exit 11 routed into /fix-conflicts.
  *   parked                       a mechanical failure parked the node via
  *                                park-node (the office_hours graph write —
- *                                never an office-hours label).
+ *                                never an office-hours label); the park reason
+ *                                carries a labelled `Next steps:` best-next-
+ *                                steps recommendation (folded into reason until
+ *                                office_hours.recommendation lands in schema —
+ *                                never a reason-only park).
  *   skill-node-target-unsupported  the phase skill exited at its Step 0 on a
  *                                node target (pre tactic-phase-skill-node-targets;
  *                                the bootstrap-transition doctrine covers the
@@ -98,13 +102,13 @@ function nodePrompt(sel, projectRoot) {
     sel.kind === 'tactic'
       ? '   - 11 (merge-conflict): work from the existing worktree and INVOKE `/fix-conflicts` for this node instead of the phase skill below, then report disposition `conflict-routed`. If /fix-conflicts cannot be invoked for this target, park instead (step 3).'
       : '   - 11 (merge-conflict): park (step 3) — a strategy session has no conflict-resolution phase.',
-    '   - any other non-zero: park (step 3) with the error output as the reason.',
+    '   - any other non-zero: park (step 3) with the error output as the reason, plus the next-steps recommendation step 3 requires.',
     '',
     `2. Work ONLY inside ${wt} (use absolute paths or git -C). INVOKE ${sel.skill} ${sel.node_id} and carry it to its own disposition. If the skill exits at its Step 0 because it does not accept node targets yet (pre tactic-phase-skill-node-targets), report disposition \`skill-node-target-unsupported\` — the bootstrap-transition doctrine covers the interim; do NOT emulate the phase ad hoc.`,
     '',
-    '3. Parking (mechanical failures only — provision-failed, an unroutable merge conflict, wrong-worktree): park via the office_hours graph write, never an office-hours label:',
+    '3. Parking (mechanical failures only — provision-failed, an unroutable merge conflict, wrong-worktree): park via the office_hours graph write, never an office-hours label. Every park MUST carry recoverable context — a short reason AND a best-next-steps recommendation (what a human should do to unblock this node). `office_hours.recommendation` is not yet a schema field, so fold the recommendation into the reason as a labelled trailing `Next steps: <...>` sentence — never a reason-only park (session attach/resume is not a recovery path, so this text is the node\'s only recoverable context):',
     '',
-    `   ${projectRoot}/packages/intentionsutil/scripts/park-node ${sel.node_id} "<short reason>"`,
+    `   ${projectRoot}/packages/intentionsutil/scripts/park-node ${sel.node_id} "<short reason>. Next steps: <best-next-steps recommendation>"`,
     '',
     '   then report disposition `parked`.',
     '',

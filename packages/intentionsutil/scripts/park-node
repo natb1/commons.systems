@@ -14,6 +14,13 @@
 # tactic-graph-router-transitions, not here — this primitive covers only the
 # park disposition.
 #
+# The park-recommendation contract: a mechanical park must carry recoverable
+# context — a reason AND a best-next-steps recommendation. Until an
+# `office_hours.recommendation` field lands in schema.ts, the caller folds the
+# recommendation into <reason> as a labelled trailing `Next steps: <...>`
+# sentence; this script writes <reason> verbatim and never emits a reason-only
+# park on the caller's behalf.
+#
 # Usage: park-node <node-id> <reason>
 #
 # Exit codes: 0 parked and landed on main; 1 the write or graph-commit failed;
