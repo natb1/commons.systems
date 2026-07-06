@@ -57,8 +57,13 @@ gate is a plan step.
 Scope: in `.claude/skills/dispatch-propagate/scripts/` delete or reduce:
 `dispatch-select-target`, the legacy path in `dispatch-select-tick`,
 `dispatch-phase`'s derivation logic (its read-only sensor side survives in
-the transitions layer), `office-hours-select-target` (superseded by the
-`office_hours != null` projection), and every `dispatch:*` label
+the transitions layer), the legacy office-hours entry surface — the
+`office-hours` shell entry script with its attach/resume/provision verbs,
+`office-hours-select-target`, and the `dispatch-office-hours-strip.sh`
+UserPromptSubmit hook — superseded by the graph-native always-launch-fresh
+entry (strategy clarification 30, `tactic-office-hours-graph-entry`; the
+queue view is the `office_hours != null` projection, and the park clears
+per clarification 4, not via a strip hook), and every `dispatch:*` label
 convention remaining in scripts and skill docs. Also retire the legacy
 worktree-layout conventions (strategy clarification 23):
 `worktree-create.sh`'s `<issue-num>-<slug>` lane (git-common-dir
