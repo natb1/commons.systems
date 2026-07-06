@@ -98,7 +98,9 @@ Unit 1's convention):
   done` transition (prune, per the transitions machinery); broken → write
   an implement-chain bug tactic (fresh node, `phase: implement`, finding
   provenance in the body) then `done`; cannot-verify → `office_hours`
-  park on the node.
+  park on the node carrying `{reason, recommendation, since}` — the
+  recommendation states what the human must verify and how (strategy
+  clarification 30 / condition 6).
 - No gh label or issue is read or written on the node lane.
 
 ## Dependencies

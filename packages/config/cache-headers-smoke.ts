@@ -1,5 +1,5 @@
 import { test, expect } from "./playwright-test";
-import { getEntryAsset } from "./hosting-smoke-helpers";
+import { getEntryAsset, headWithRetry } from "./hosting-smoke-helpers";
 
 export function describeCacheHeadersSmoke(
   appName: string,
@@ -11,7 +11,7 @@ export function describeCacheHeadersSmoke(
     }) => {
       const { entryAssetUrl } = await getEntryAsset(request);
 
-      const assetResponse = await request.head(entryAssetUrl);
+      const assetResponse = await headWithRetry(request, entryAssetUrl);
       expect(assetResponse.status()).toBe(200);
       const cacheControl = assetResponse.headers()["cache-control"];
       expect(
@@ -24,7 +24,7 @@ export function describeCacheHeadersSmoke(
     if (options?.imagePath) {
       const imagePath = options.imagePath;
       test("images have yearly cache-control @hosting", async ({ request }) => {
-        const imageResponse = await request.head(imagePath);
+        const imageResponse = await headWithRetry(request, imagePath);
         expect(imageResponse.status()).toBe(200);
         const imgCacheControl = imageResponse.headers()["cache-control"];
         expect(
