@@ -1,18 +1,22 @@
 ---
 id: tactic-tradition-reading-program
 kind: tactic
-statement: "Draft: chunked personal reading program — verify each tradition
-  record against its cited texts, load-bearing doctrine first"
+statement: Chunked personal reading program — verify each tradition record
+  against its cited texts, load-bearing doctrine first
 owner: human
-status: raw
+status: codified
 parent: null
-rationale: "Retained from the 2026-07-05 interview (retain-not-refine): the
-  recovery path of delegation-philosophical-articulation, chunked to ≤30-minute
-  author sessions and ordered by how much graph doctrine each text underwrites.
-  Finishing a chunk means re-reading the named tradition record against the text
-  — amend it where the reading contradicts it (the reading wins), ratify it
-  where it holds — and flipping the record delegated → codified once its texts
-  are covered. The chunk list lives in the node body."
+rationale: "Finalized 2026-07-06 /align-tactics round (from the 2026-07-05
+  retained draft): the recovery path of delegation-philosophical-articulation,
+  chunked to ≤30-minute author sessions and ordered by how much graph doctrine
+  each text underwrites. Finishing a chunk means re-reading the named tradition
+  record against the text — amend it where the reading contradicts it (the
+  reading wins), ratify it where it holds — and flipping the record delegated →
+  codified once its texts are covered. This node is the program record and the
+  parent of the chunk leaves. Round 1 breaks out the capture-doctrine path —
+  chunks 1, 2, 5, per the 2026-07-06 order revision from
+  strategy-recovery-critical-path — as born-parked child tactics; chunks 3, 4,
+  6–9 stay recorded in this body for later rounds to break out."
 reading: null
 gap: null
 serves:
@@ -31,7 +35,18 @@ pace_exempt: false
 rounds: null
 attributes: {}
 ---
-# Draft: chunked personal reading program — verify each tradition record against its cited texts, load-bearing doctrine first
+# Chunked personal reading program — verify each tradition record against its cited texts, load-bearing doctrine first
+
+**Round 1 decomposition (2026-07-06 /align-tactics):** the capture-doctrine
+path is broken out as born-parked child tactics, blocked_by-sequenced in the
+revised working order — `tactic-reading-chunk-1-plato-cave` →
+`tactic-reading-chunk-2-aristotle-hexis` →
+`tactic-reading-chunk-5-aristotle-phronesis`. Each is one office-hours sitting
+of at most 30 author-minutes and a validates-terminal of
+strategy-philosophical-grounding (a completed chunk counts toward the signal
+whether it amends or ratifies). Chunks 3, 4, 6–9 below are NOT yet broken out;
+a later round consumes this node again to author them, in the revised order
+3, 4, 6, 7, 8, 9.
 
 Retained context from the 2026-07-05 interview. Each chunk is ≤30 author-minutes.
 Finishing a chunk = re-read the named record against the text; amend where the

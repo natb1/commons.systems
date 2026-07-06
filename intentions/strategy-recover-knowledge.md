@@ -24,7 +24,17 @@ serves:
   - virtue-progressive-detachment
 recovers:
   - delegation-knowledge-notes
-clarifications: []
+clarifications:
+  - question: Where do print annotations persist, given cloud items currently keep
+      bookmarks and reading positions in Firestore?
+    answer: Annotations get no Firestore tier. Local-folder items persist to the
+      .commons-print/index.json sidecar (open JSON riding the author's own
+      folder); cloud and anonymous items fall back to device-local localStorage
+      — mirroring the existing store routing but deliberately skipping
+      Firestore, because reading notes are this strategy's first artifact and
+      must not accumulate in a vendor silo. Immaterial to the recorded substance
+      (it applies the statement's local-first mandate); informs the round-1
+      plans. Recorded 2026-07-06 /align-tactics round.
 tooling_goals: []
 success_signal:
   observable: notes and documents accumulate in plain-text/open formats in owned
@@ -33,6 +43,16 @@ success_signal:
   threshold: new notes default to owned storage and existing silo content has an
     exercised export path
   is_proxy: true
+attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: false
+rounds:
+  count: 0
+  last_completed: null
 attributes:
   conditions:
     - plain-text and open document formats remain sufficient for the author's

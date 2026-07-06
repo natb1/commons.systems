@@ -26,7 +26,7 @@ office_hours: null
 pace_exempt: false
 rounds: null
 attributes:
-  phase: qa
+  phase: fix
   blocked_by: []
   execution:
     branch: tactic-attention-surface-graph-read
