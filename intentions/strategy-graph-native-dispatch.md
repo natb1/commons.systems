@@ -697,5 +697,11 @@ attributes:
       substance plus draft-tactic bodies; same-session /align-tactics execution
       is a bootstrap safety, not a carrier, and a decomposition blocked on
       unrecorded interview context is a defect of the recording round
+    - a re-evaluation amendment reconciles the amended tactic's entire node —
+      statement, rationale, context, every unit, and verification — against the
+      full current strategy substance in the same round, and dispositions each
+      open child from a full-body read (keyword grep only shortlists); a
+      one-bullet delta that leaves sibling sections stale is a defect of the
+      amending round
 ---
 # Dispatch runs on the graph — orchestration state lives in intention nodes, worked through the align skill family

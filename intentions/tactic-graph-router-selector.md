@@ -190,12 +190,22 @@ legacy launch scripts stay issue-lane-only and retire with the drain,
   `office_hours` graph write instead of an office-hours label —
   coordinate with `tactic-graph-router-transitions`, which owns the
   ongoing phase/marker writes, and use the `graph-commit` primitive.
+  Every such park carries recoverable context at park time — reason
+  **and** a best-next-steps recommendation (strategy clarification 30 /
+  condition 6; session attach/resume is not a supported recovery path).
+  Until `office_hours.recommendation` lands in `schema.ts`
+  (`tactic-office-hours-graph-entry` Unit 1 /
+  `tactic-phase-skill-node-targets` Unit 2, shared skip-if-present),
+  carry the recommendation inside the `reason` string as a labelled
+  trailing sentence — never drop it. If the merged tick machinery
+  (PR #2785) writes reason-only parks, bringing it to this contract is a
+  review/main-qa finding against this amended plan.
 
 ## Dependencies
 
 - `tactic-graph-dispatch-schema` — the fields the gates read.
-- `tactic-align-tactics-skill` — the session type a selected strategy
-  spawns.
+- `tactic-align-tactics-skill` (completed and pruned) — the
+  `/align-tactics` session type a selected strategy spawns is live.
 - `tactic-calculated-attention` — should land before the selector goes
   live so the derived terms are in effect from the first tick; not a hard
   blocker for this tactic (the selector functions without it, minus the
