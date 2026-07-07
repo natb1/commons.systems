@@ -29,7 +29,7 @@ rounds: null
 attributes:
   phase: review
   execution:
-    strategy_fingerprint: 157bc07dd1dbc4a1c7a5095f7c3094ee88accf5879271bc6d2c4cd4794029848
+    strategy_fingerprint: 67ffd1e5febd2bdebb7a659e6324e8a703667c75c473111cea2808357a295124
     branch: tactic-outcome-envelope-qa-accounting
     pr: 2774
     attempts:
