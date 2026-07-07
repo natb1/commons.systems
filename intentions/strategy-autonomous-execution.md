@@ -5,36 +5,87 @@ statement: Run tactical execution through an owned autonomous dispatch chain
 owner: human
 status: codified
 parent: strategy-owned-orchestration
+rationale: >-
+  The dispatch workflow is a project in its own right and carries its intentions
+  here like any other. The autonomous chain — issue to plan to implement to
+  review to QA — converts tactical execution into strategic attention: intent
+  enters as issues, the chain does the tactical work, and the human engages at
+  escalation points rather than in every step. The office-hours app is its
+  observability surface: backlog runway, capacity band, escalations, and the
+  intention tree itself.
+
+
+  The whole chain is skills and scripts in the repo, forkable and locally run —
+  no platform runtime, per its parent strategy-owned-orchestration. That makes
+  it the artifact most distinctive for practitioner distribution: dual-tier in
+  the strategy-progressive-validation sense, the author's daily development tool
+  and the thing a practitioner would most plausibly fork.
+reading: null
+gap: null
 serves:
   - virtue-progressive-detachment
   - virtue-alignment-of-attachments
-rationale: >-
-  The dispatch workflow is a project in its own right and carries its
-  intentions here like any other. The autonomous chain — issue to plan to
-  implement to review to QA — converts tactical execution into strategic
-  attention: intent enters as issues, the chain does the tactical work, and
-  the human engages at escalation points rather than in every step. The
-  office-hours app is its observability surface: backlog runway, capacity
-  band, escalations, and the intention tree itself.
-
-
-  The whole chain is skills and scripts in the repo, forkable and locally
-  run — no platform runtime, per its parent strategy-owned-orchestration.
-  That makes it the artifact most distinctive for practitioner distribution:
-  dual-tier in the strategy-progressive-validation sense, the author's daily
-  development tool and the thing a practitioner would most plausibly fork.
-reading: null
-gap: null
-clarifications: []
+recovers: []
+clarifications:
+  - question: What makes unattended execution safe at the harness layer?
+    answer: "A composite invariant spanning two config systems that no single file
+      states: (a) Bash runs sandboxed by default with the write-allowlist
+      confined to the git substrate (.bare, worktrees) while denyWithinAllow
+      makes agent-behavior config — .claude/skills/, hooks, settings.json, .git
+      — read-only even to an approved session (.claude/settings.json); (b) the
+      PreToolUse hook auto-approves any script under .claude/skills/*/scripts/
+      by path convention (.claude/hooks/approve-workflow-commands.sh), which is
+      safe only because of (a): a session that could write that tree could mint
+      its own approvals. Neither half is safe without the other; changing either
+      requires re-checking the pair. Recorded 2026-07-07 interview."
+  - question: Why do the dispatch lifecycle hooks swallow errors (trap-all, exit 0)
+      when the code-style rule says clear errors over defensive fallbacks?
+    answer: "A deliberate, reasoned inversion of the repo's own default: a broken
+      hook must never wedge every session, block prompt submission, or halt
+      session start, so lifecycle hooks fail open to passthrough with
+      degradation recorded via stderr plus durable label/sidecar state. The one
+      exception is worktree-create, which is allowed to fail (with
+      registered-worktree rollback). The approval hook fails open only to a
+      permission prompt, never to allow. Recorded 2026-07-07 interview."
+  - question: What keeps the chain from suppressing its own failure signals?
+    answer: "Test integrity (.claude/rules/test-integrity.md): a failing test is
+      never weakened, skipped, or deleted by an autonomous session — fix the
+      code or escalate to office-hours; there is no self-serve escape hatch.
+      This is what keeps CI signal trustworthy when most merges see no human
+      review — a load-bearing condition of the chain, not a style preference.
+      Human override-merge skips only pre-merge review, never QA. Recorded
+      2026-07-07 interview."
+  - question: How do secrets reach the chain?
+    answer: "Secrets never live in the repo or Claude-readable config: they resolve
+      at runtime from the GPG-encrypted pass store, and the gpg-agent cache is
+      warmed only interactively by the human — auto-warming from within a
+      session is deliberately out of scope. Every secret-needing workflow (e.g.
+      budget parse jobs) is therefore structurally semi-autonomous. It looks
+      like a missing feature; it is a security posture, recorded so a future
+      session does not fix it. Recorded 2026-07-07 interview."
 tooling_goals: []
 success_signal:
-  observable: attention economics — the chain drains the backlog while human escalations stay bounded
+  observable: attention economics — the chain drains the backlog while human
+    escalations stay bounded
   sensor: the office-hours dashboard (backlog runway, capacity band, escalation queue)
-  threshold: backlog runway stays inside the capacity band without escalation volume exceeding office-hours capacity
+  threshold: backlog runway stays inside the capacity band without escalation
+    volume exceeding office-hours capacity
   is_proxy: true
+attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: false
+rounds: null
 attributes:
   conditions:
     - frontier-agent access remains economical at individual scale
     - escalation volume stays within office-hours capacity
+    - "the sandbox/approval-boundary coupling holds: agent-behavior config stays
+      read-only to sessions while skill scripts are auto-approved by path"
+    - "the chain cannot suppress its own failure signals: test integrity is
+      enforced — fix or escalate, never weaken"
 ---
 # Run tactical execution through an owned autonomous dispatch chain
