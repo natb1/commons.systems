@@ -34,7 +34,6 @@ execution: null
 validates: []
 blocked_by:
   - tactic-graph-router-selector
-  - tactic-graph-commit-prune-support
 office_hours: null
 pace_exempt: false
 rounds: null
