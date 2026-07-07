@@ -51,6 +51,25 @@ clarifications:
       delegated → codified one at a time as tactic-tradition-reading-program
       covers their texts; a still-delegated record's empty contradictions list
       means unverified, not clean.
+  - question: Does kind-tradition cover non-philosophical bodies of thought?
+    answer: "Yes — generalized in the 2026-07-07 /align-strategy interview
+      (strategy-complete-grounding): any examined body of thought — a research
+      field, an engineering practice, a literary or creative tradition — gets a
+      tradition record once examined; specific works live in texts. The capture
+      audit (imported vocabulary reshaping how problems are perceived) applies
+      identically to technical vocabulary. Recorded 2026-07-07 interview."
+  - question: How do nodes mark grounding or its absence, and how do unexamined
+      candidates enter?
+    answer: Grounded durable-layer nodes (virtue, strategy, kind, delegation) carry
+      attributes.traditions; ungrounded ones carry attributes.grounding — either
+      a circumstantial mark (why the node is particular to the author) or a
+      none-found mark (dated). A durable-layer node with neither is the gap
+      strategy-complete-grounding reports. Candidate traditions the author is
+      not yet deferred to enter curriculum-chunk-first
+      (attributes.curriculum.candidate on the chunk); a tradition record is
+      created only at the office-hours session that examines the candidate —
+      dismissal lands as a clarification on strategy-complete-grounding, not a
+      record. Recorded 2026-07-07 interview.
 tooling_goals: []
 success_signal: null
 attention: null
