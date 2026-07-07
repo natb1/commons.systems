@@ -18,6 +18,17 @@ This skill never files, edits, or closes anything on GitHub. Its only
 artifact is one or more `intentions/strategy-*.md` (and, incidentally,
 `intentions/tactic-*.md` draft) nodes landed on `origin/main`.
 
+**Record-completeness contract** (strategy clarification 31 / condition 7):
+the graph record is the **sole carrier** from this skill to `/align-tactics` —
+the target router queues re-evaluation as a fresh session with only the
+graph, no memory of this interview. Every decision, edge-case resolution,
+and tactical byproduct this round produces must land in the node
+(`clarifications`/`attributes.conditions`/`success_signal`, plus draft-tactic
+bodies) at record time (step 5); running `/align-tactics` in the same
+session afterward is a bootstrap safety net, not a substitute for a
+complete record. Step 6's clause-coverage walk is the check that discharges
+this condition.
+
 The interview **is** the audit (clarification 2 on
 `strategy-graph-native-dispatch`): unlike `/file-issue`, there is no
 downstream PR review step that checks the requirement was captured
@@ -70,13 +81,35 @@ conversational turn, prose reply captured as-is (same split as
      already met.
    - A `clarifications` entry contradicted by a later clarification on the
      same or a related node.
+   - **Greenfield-relevance gate** (strategy clarification 26): sweep the
+     strategy's open (non-draft, non-`done`) tactics for subjects deleted or
+     superseded by a non-draft node elsewhere in the graph (a raw draft
+     never obsoletes live work). Per-unit: a doomed unit is a candidate to
+     drop, naming the superseding node; a tactic demotes to draft only when
+     it is *fully* superseded; a tactic on doomed surface may be kept only
+     with an explicit interim-live-risk exception naming its expiry event
+     (e.g. "until the gh-queue drains"). This is the same gate
+     `/align-tactics` runs at finalization — running it here too catches
+     staleness on strategies with no pending decomposition round.
 2. Separately, list `virtue-*.md` ids that appear in **no** strategy's
    `serves` — a virtue with no strategy expressing it is a candidate for a
    brand-new strategy.
 3. Present the candidates (failing-condition strategies, stale-signal
-   strategies, contradicted-clarification strategies, unserved virtues) via
-   `AskUserQuestion` and let the author pick one or more to take into step
-   2. If the author picks none, stop here — there is nothing to record.
+   strategies, contradicted-clarification strategies, doomed-tactic
+   strategies, unserved virtues) via `AskUserQuestion` and let the author
+   pick one or more to take into step 2. If the author picks none, stop
+   here — there is nothing to record.
+
+**Mechanics.** The corpus staleness checks above (condition-vs-repo-state,
+reading/gap dating, contradicted clarifications, greenfield-relevance) may
+fan out to `Explore` subagents returning compact `path:line`-anchored
+findings — the interview dialectic itself (step 2 onward) is never
+delegated. Keyword grep (this step's corpus sweep, and step 3's delegation
+sweep) only **shortlists** candidates; it never disposes of one — disposition
+requires reading each shortlisted node in full. A strategy-corpus census
+script is planned as an enumeration hook for this sweep
+(`tactic-align-tactics-mechanical-floor` Unit 4); until it lands, sweep the
+corpus by hand as above.
 
 ## Step 2 — Interview dialectic
 
@@ -155,6 +188,15 @@ interview is **retained, never refined and never dropped** — this skill
 has no plan schema or quality bar to hold it to; that is `/align-tactics`'s
 job.
 
+**Artifact-owner placement** (strategy clarification 27): a draft's `serves`
+names the strategy that owns the artifact the byproduct touches — never the
+nearest-fit strategy just because it is the one under interview. A
+genuinely cross-cutting byproduct uses an honest multi-entry `serves`
+naming every owning strategy. When no strategy owns the artifact, do not
+force-fit one: surface the gap to the author (a candidate for a brand-new
+strategy, per the improvement-pass branch above) rather than parking the
+draft under a strategy that does not actually own it.
+
 For each such byproduct, write a draft tactic node:
 
 ```bash
@@ -176,6 +218,15 @@ survives untouched until `/align-tactics` consumes it.
 Never write this content to an ad-hoc design doc outside `intentions/` —
 the graph is the only home for tactical context, however provisional.
 
+**Graph as sole tracker** (strategy clarification 28): the `intentions/`
+graph is the source-of-truth issue tracker, bug tracker included — every
+defect worth fixing is a tactic (or a unit of one), never a side channel
+(an ad-hoc doc, a code comment thread, a chat aside). A byproduct that is a
+bug report is retained here exactly like any other tactical byproduct. Code
+`TODO`s stay pointer-only — `TODO(tactic-<id>)` — never carrying the
+substance itself; a substantive TODO with no backing node is a
+review-phase finding, not something this skill should ever produce.
+
 ## Step 5 — Record
 
 Write the full node through `write-node.ts` — never hand-edit the YAML
@@ -185,11 +236,22 @@ frontmatter:
   core plus `serves`, `rationale`, `clarifications`, `success_signal`,
   `attributes.conditions`, `recovers` from step 3) and pipe or `--file` it
   into `write-node.ts`.
-- **Edit:** read the existing node's frontmatter (`readNode` via a small
-  `tsx` one-liner, or just read the file — only the frontmatter is
-  authoritative), apply the interview's changes as a patch (e.g. `jq` over
-  the JSON), and pass the patched JSON to `write-node.ts`. Never transcribe
-  frontmatter by hand.
+- **Edit:** read the existing node's frontmatter in full (`readNode` via a
+  small `tsx` one-liner, or just read the file — only the frontmatter is
+  authoritative). **Amendment completeness** (strategy clarification 38,
+  widening clarification 32's tactic-amendment bar to any node amendment in
+  any align skill): an edit round is a **whole-node reconciliation**, never
+  a patch applied in isolation. Reconcile the edited strategy's `statement`,
+  `rationale`, `attributes.conditions`, `success_signal`, and every
+  `clarifications` entry the edit touches or contradicts against the
+  interview's full outcome before constructing the JSON to land — landing
+  one new clarification while a sibling field (an older clarification, a
+  stale condition, an unrevised rationale sentence) still contradicts it is
+  an incomplete amendment, the same defect class as an incomplete record
+  (condition 7). The author's live presence in this interview reduces but
+  does not remove the risk: the record, not the session, is the carrier.
+  Construct the fully-reconciled JSON (not a `jq` delta patch) and pass it
+  to `write-node.ts`. Never transcribe frontmatter by hand.
 
 ```bash
 npx tsx packages/intentionsutil/scripts/write-node.ts --file "$TMPDIR/strategy.json"
@@ -238,6 +300,12 @@ likely to skip, and skipping it is exactly the failure mode this step
 exists to catch (found live in the 2026-07-03 `strategy-attention-surface`
 round: a requirement anchor that survived only in session context until
 this check restored it).
+
+This walk is what discharges the record-completeness contract (strategy
+clarification 31 / condition 7, see the preamble above): `/align-tactics`
+re-evaluates from a fresh session with only the graph, so a clause that
+maps to nothing recorded is a gap this skill — not the next session — is
+responsible for closing.
 
 ## Out of scope
 
