@@ -37,9 +37,11 @@ recovers: []
 clarifications:
   - question: Is 'two directions of one commitment, agency as an end' a tacit apex
       above this root and virtue-philosophical-mobility?
-    answer: Held open — see the paired clarification on
+    answer: "Held open — see the paired clarification on
       virtue-philosophical-mobility for the full record. Recorded 2026-07-04
-      interview.
+      interview. Chunk-1 reading input recorded 2026-07-07 on the paired
+      clarification: an external, never-fully-realizable Good as candidate apex
+      outside the graph; deferred to the chunk-6 capstone."
   - question: Is this virtue a Kantian constraint or an Aristotelian disposition?
     answer: "Both, in layers (recorded 2026-07-04 interview). The PROHIBITION is
       Kantian and exceptionless: never be the captor — no lock-in, no dark

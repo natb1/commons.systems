@@ -37,11 +37,15 @@ rationale: >-
   kind-tradition and five records; the apex question held open on both roots;
   the respect floor made explicitly Kantian with Aristotelian practice; the
   consent edge split by irreversibility; virtue-temperance rooted.
-reading: "one dialectic round recorded (2026-07-04): five tradition records,
-  doctrine clarifications on both existing roots, the consent edge case
-  resolved, one new root virtue — the round moved nodes"
-gap: reading meets the 'at least one round recorded' clause; recurrence across
-  review cycles is unproven
+reading: "chunk 1 completed 2026-07-07 (/reading-review run from the graph
+  definition, tactic-reading-review-skill): tradition-plato amended —
+  corrupts→misdirects (518e-519b), agency of turning, Form of the Good affirmed
+  as external anchor (Forms divergence narrowed), descent-as-reentry — with
+  cascades to both roots and strategy-external-calibration; the
+  borrowed-articulation loop caught a real misarticulation"
+gap: two rounds recorded (2026-07-04 dialectic, 2026-07-07 chunk 1) — recurrence
+  has begun; sustained recurrence across review cycles remains the unproven
+  clause
 serves:
   - virtue-philosophical-mobility
   - virtue-respect-for-persons

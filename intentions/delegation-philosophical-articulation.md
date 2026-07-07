@@ -73,7 +73,10 @@ attributes:
         understanding
       - Claude's framing of the traditions — the instrument that audits the
         delegatee drafted the audit
-    contradictions: []
+    contradictions:
+      - tradition-plato's 'anti-Platonic about the Forms' (Claude's authoring)
+        misstated the author's position — the Form of the Good is affirmed as
+        external anchor; found and amended 2026-07-07 chunk 1, the reading wins
   irreversibility:
     recovery_path: relearn — read the cited texts against each tradition record,
       chunked in tactic-tradition-reading-program; each verified record flips
@@ -82,7 +85,9 @@ attributes:
       cited passage-by-passage on the records
     gated: false — nothing about the way back is held by either delegatee; the texts
       outlive both
-    last_exercised: null
+    last_exercised: "2026-07-07 — chunk 1 (Republic VII 514a-521b): tradition-plato
+      amended (misdirection, agency of turning, Form of the Good), cascades to
+      both roots and strategy-external-calibration"
   classification: platform — demands buy-in while unverified; decays toward tool
     as records flip to codified
   non_delegable_floor: the capacity to notice a recorded articulation

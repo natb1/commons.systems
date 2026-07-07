@@ -22,10 +22,11 @@ rationale: >-
 
   This judgment is the one capability that can never be delegated to atrophy: I
   can forget how to smelt copper, never how to notice I have been captured. And
-  it cannot fully verify itself — capture corrupts the sensor that detects
-  capture, because imported language reshapes how problems are perceived. Its
-  calibration is therefore external: adversarial review and a community of
-  fellow practitioners.
+  it cannot fully verify itself — capture misdirects the sensor that detects
+  capture — the faculty keeps its power but serves the wrong turning (Republic
+  VII 518e-519b) — because imported language reshapes how problems are
+  perceived. Its calibration is therefore external: adversarial review and a
+  community of fellow practitioners.
 
 
   Applied reflexively: this project is itself an institution and may ratchet up
@@ -50,7 +51,13 @@ clarifications:
       imperative — so an unranked forest is the graph's largest standing
       divergence from all of them, and holding the question open is itself a
       documented method choice: Aristotle's precision-only-as-the-subject-admits
-      (NE I.3) over Kant's demand for systematic unity."
+      (NE I.3) over Kant's demand for systematic unity. Chunk-1 reading input
+      (2026-07-07): the author affirmed the Form of the Good as an external,
+      never-fully-realizable anchor of which the graph is the best current
+      realization — a candidate apex OUTSIDE the graph, the forest as its
+      deliberately-unranked realization (unranked because realization is
+      imperfect). Inherited by the chunk-6 capstone; the question stays open.
+      Recorded 2026-07-07 /reading-review chunk 1."
   - question: Which tradition reads this virtue?
     answer: "Dual attribution, deliberate and conflict-free (recorded 2026-07-04):
       Kant names what capture IS — heteronomy, the will legislated from outside;
@@ -58,9 +65,16 @@ clarifications:
       Aristotle names the faculty that detects it: phronesis, with 'capture
       corrupts the sensor' as vice destroying the archē (NE VI). Plato supplies
       the phenomenology and the escape: the Cave, and recovery as periagoge — a
-      turning of the whole agent that no captured agent performs by self-audit,
-      which is why calibration is external (tradition-plato). The traditions
-      claim different aspects; no chosen_over is needed."
+      turning of the whole agent toward the good, never toward a person or
+      institution. Amended 2026-07-07 (chunk-1 reading, the reading wins):
+      capture misdirects the sensor rather than destroys it (518e-519b), so
+      agency is never lost — one is either internally compelled toward the light
+      or chooses a liberator, the choice of liberator being itself a deferral
+      the graph tracks, with the sophist as its risk; what must be external is
+      verification of the turning (untrustworthy by self-report while
+      misdirected) plus the offer of compulsion toward a good not yet seen
+      (tradition-plato). The traditions claim different aspects; no chosen_over
+      is needed."
 tooling_goals: []
 success_signal: null
 attention: null

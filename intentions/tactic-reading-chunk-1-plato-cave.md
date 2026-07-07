@@ -18,7 +18,9 @@ rationale: "Authored born-parked in the 2026-07-06 /align-tactics round: first
   whether it amends or ratifies: amendment is a round that moves a node;
   ratification flips trust to verification (strategy clarification,
   2026-07-05)."
-reading: null
+reading: completed 2026-07-07 — amended tradition-plato (misdirection, agency of
+  turning, Form of the Good as external anchor, descent-as-reentry); full
+  resolution in tradition-plato's chunk-1 clarification
 gap: null
 serves:
   - strategy-philosophical-grounding
@@ -27,21 +29,12 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
+phase: done
 execution: null
 validates:
   - strategy-philosophical-grounding
 blocked_by: []
-office_hours:
-  reason: "Personal reading, one sitting of at most 30 author-minutes: read
-    Republic VII 514a–521b against tradition-plato. Not claude-executable — the
-    chunk exists to verify the delegated articulation personally (the recovery
-    path of delegation-philosophical-articulation). At office-hours: re-open the
-    questions in the node body against the text; amend the record where the
-    reading contradicts it (the reading wins), ratify where it holds; stamp the
-    delegation's last_exercised; the completed chunk counts toward
-    strategy-philosophical-grounding's signal."
-  since: 2026-07-06
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes:
