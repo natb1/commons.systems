@@ -39,6 +39,13 @@
  *   completed                    the phase skill ran to its own disposition.
  *   ci-waiting                   provision exit 10 — retry next tick.
  *   conflict-routed              provision exit 11 routed into /fix-conflicts.
+ *   skipped                      provision exit 12 (stale-selection) — the
+ *                                directive changed after selection; the claim
+ *                                clears and the next tick re-selects from
+ *                                current state. (tactic-worker-start-revalidation)
+ *   scope-stale                  provision exit 13 — the tactic's scope changed
+ *                                after the previous phase; the node was demoted
+ *                                to `implement` and re-selects there next tick.
  *   parked                       a mechanical failure parked the node via
  *                                park-node (the office_hours graph write —
  *                                never an office-hours label); the park reason
@@ -73,6 +80,8 @@ const RESULT_SCHEMA = {
         'completed',
         'ci-waiting',
         'conflict-routed',
+        'skipped',
+        'scope-stale',
         'parked',
         'skill-node-target-unsupported',
         'failed',
@@ -93,7 +102,7 @@ function nodePrompt(sel, projectRoot) {
     '',
     `1. Provision the node worktree with ONE command (never hand-roll provisioning):`,
     '',
-    `   ${projectRoot}/.claude/skills/dispatch-propagate/scripts/provision-node-worktree ${sel.node_id}`,
+    `   ${projectRoot}/.claude/skills/dispatch-propagate/scripts/provision-node-worktree ${sel.node_id} ${sel.phase}`,
     '',
     '   (run with dangerouslyDisableSandbox: true — it uses git, gh, and direnv).',
     '   Route on its exit code:',
@@ -102,6 +111,8 @@ function nodePrompt(sel, projectRoot) {
     sel.kind === 'tactic'
       ? '   - 11 (merge-conflict): work from the existing worktree and INVOKE `/fix-conflicts` for this node instead of the phase skill below, then report disposition `conflict-routed`. If /fix-conflicts cannot be invoked for this target, park instead (step 3).'
       : '   - 11 (merge-conflict): park (step 3) — a strategy session has no conflict-resolution phase.',
+    '   - 12 (stale-selection): report disposition `skipped` and stop — the claim clears and the next tick re-selects from current state. Make NO graph write; the directive already changed.',
+    `   - 13 (scope-stale): run \`${projectRoot}/packages/intentionsutil/scripts/demote-node-to-implement ${sel.node_id}\` (tactic-graph-router-transitions Unit 1's owned primitive — until it lands, the bootstrap-transition doctrine covers the demotion write), then report disposition \`scope-stale\` and stop — the next tick re-selects the node at \`implement\` against the updated scope.`,
     '   - any other non-zero: park (step 3) with the error output as the reason, plus the next-steps recommendation step 3 requires.',
     '',
     `2. Work ONLY inside ${wt} (use absolute paths or git -C). INVOKE ${sel.skill} ${sel.node_id} and carry it to its own disposition. If the skill exits at its Step 0 because it does not accept node targets yet (pre tactic-phase-skill-node-targets), report disposition \`skill-node-target-unsupported\` — the bootstrap-transition doctrine covers the interim; do NOT emulate the phase ad hoc.`,
