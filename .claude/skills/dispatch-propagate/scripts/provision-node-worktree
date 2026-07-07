@@ -1,0 +1,117 @@
+#!/usr/bin/env bash
+# provision-node-worktree — the graph lane's one-command worktree provisioning
+# primitive (tactic-graph-router-selector, unit 4; spec §3.4 in
+# intentions/tactic-graph-native-dispatch.md, strategy clarification 23).
+# Launched phase agents invoke THIS as one command — agents never hand-roll
+# provisioning. Mechanics stay owned and deterministic:
+#
+#   1. Resolve the native location: <project-root>/.claude/worktrees/<node-id>,
+#      where the project root is the worktree with `main` checked out. No
+#      graph-native path assumes the legacy `.bare` common-dir layout.
+#   2. `git worktree add` from origin/main (reusing an existing worktree, a
+#      remote branch, or a local branch named <node-id> when present).
+#   3. Merge origin/main into the branch — the merged-tree guarantee every
+#      phase runs under. A conflict is NOT resolved here (exit 11; the caller
+#      routes /fix-conflicts or parks).
+#   4. CI-ready gate where a PR exists (dispatch-ci-ready, branch form): a
+#      draft PR whose checks have not concluded is not actionable (exit 10).
+#   5. direnv warm-up so the agent's non-interactive subshells have node on
+#      PATH (same rationale as .claude/hooks/worktree-create.sh).
+#
+# Usage: provision-node-worktree <node-id>
+#
+# Stdout: the worktree path (exit 0 only).
+# Exit codes:
+#   0   provisioned (or reused), merged clean, CI verdict actionable.
+#   10  ci-waiting: a draft PR's checks are still in progress. Retry next tick.
+#   11  merge-conflict: origin/main does not merge clean (merge aborted; the
+#       tree is left unmodified). The caller routes /fix-conflicts (a tactic
+#       with a PR) or parks the node.
+#   2   usage or mechanical error (bad node id, unresolvable project root,
+#       failed add/fetch). The caller parks the node via the office_hours
+#       graph write (park-node) — never an office-hours label.
+#
+# Requires `dangerouslyDisableSandbox: true` from a Claude session: git push
+# fetch/worktree writes, gh (inside dispatch-ci-ready), and direnv.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+NODE_ID="${1:-}"
+if [[ $# -ne 1 || -z "$NODE_ID" ]]; then
+  echo "usage: provision-node-worktree <node-id>" >&2
+  exit 2
+fi
+if [[ ! "$NODE_ID" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]] || [[ "$NODE_ID" =~ ^[0-9] ]]; then
+  echo "provision-node-worktree: invalid node id '$NODE_ID' (expected a lowercase node-id slug; numeric-prefixed names are the legacy gh lane)" >&2
+  exit 2
+fi
+
+# Project root = the worktree with `main` checked out (substrate clarification
+# 23: `main` is checked out at the project root). DISPATCH_GRAPH_MAIN_WORKTREE
+# is the test override, authoritative when set.
+if [[ -n "${DISPATCH_GRAPH_MAIN_WORKTREE:-}" ]]; then
+  PROJECT_ROOT="$DISPATCH_GRAPH_MAIN_WORKTREE"
+else
+  PROJECT_ROOT=$(git worktree list --porcelain 2>/dev/null \
+    | awk '/^worktree /{wt=substr($0,10)} /^branch refs\/heads\/main$/{print wt; exit}')
+fi
+if [[ -z "$PROJECT_ROOT" || ! -d "$PROJECT_ROOT" ]]; then
+  echo "provision-node-worktree: cannot resolve the project root (no worktree with 'main' checked out)" >&2
+  exit 2
+fi
+
+WT="$PROJECT_ROOT/.claude/worktrees/$NODE_ID"
+
+if ! git -C "$PROJECT_ROOT" fetch origin main 1>&2; then
+  echo "provision-node-worktree: git fetch origin main failed" >&2
+  exit 2
+fi
+
+if [[ ! -d "$WT" ]]; then
+  if git -C "$PROJECT_ROOT" ls-remote --heads --exit-code origin "$NODE_ID" >/dev/null 2>&1; then
+    git -C "$PROJECT_ROOT" fetch origin "$NODE_ID" 1>&2 \
+      && git -C "$PROJECT_ROOT" worktree add "$WT" "$NODE_ID" 1>&2
+  elif git -C "$PROJECT_ROOT" rev-parse --verify --quiet "$NODE_ID" >/dev/null 2>&1; then
+    git -C "$PROJECT_ROOT" worktree add "$WT" "$NODE_ID" 1>&2
+  else
+    git -C "$PROJECT_ROOT" worktree add -b "$NODE_ID" "$WT" origin/main 1>&2
+  fi
+  if [[ ! -d "$WT" ]]; then
+    echo "provision-node-worktree: git worktree add failed for $WT" >&2
+    exit 2
+  fi
+fi
+
+# Merged-tree guarantee: every phase runs on a tree that already contains
+# origin/main. A conflict is the caller's disposition, not ours — abort and
+# leave the tree clean.
+if ! git -C "$WT" merge --no-edit origin/main 1>&2; then
+  git -C "$WT" merge --abort 1>&2 || true
+  echo "provision-node-worktree: origin/main does not merge clean into $NODE_ID" >&2
+  exit 11
+fi
+
+# CI-ready gate where a PR exists. dispatch-ci-ready's branch form: `ready`
+# when no PR matches the branch (implement phase — no CI gate applies), when a
+# non-draft PR exists, or when a draft PR's checks concluded; `waiting` when a
+# draft PR's checks are still in progress.
+"$SCRIPT_DIR/dispatch-ci-ready" "$NODE_ID" >/dev/null
+CI_RC=$?
+if (( CI_RC == 1 )); then
+  echo "provision-node-worktree: CI verdict pending for $NODE_ID; not actionable yet" >&2
+  exit 10
+elif (( CI_RC != 0 )); then
+  echo "provision-node-worktree: dispatch-ci-ready failed (exit $CI_RC) for $NODE_ID" >&2
+  exit 2
+fi
+
+# direnv warm-up (best-effort ordering matches the create hook; failures are
+# hard errors — a worktree whose .envrc cannot evaluate strands the agent).
+direnv allow "$WT" 1>&2 \
+  || { echo "provision-node-worktree: direnv allow failed for $WT" >&2; exit 2; }
+direnv exec "$WT" true 1>&2 \
+  || { echo "provision-node-worktree: direnv exec failed for $WT (non-zero exit from .envrc evaluation)" >&2; exit 2; }
+
+echo "$WT"
+exit 0

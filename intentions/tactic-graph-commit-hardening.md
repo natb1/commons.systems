@@ -23,14 +23,16 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: done
 execution:
   branch: tactic-graph-commit-hardening
   pr: 2778
   attempts:
     qa: 1
+    main-qa: 1
   markers:
     - qa-done
+    - main-qa-done
   strategy_fingerprint: null
 validates: []
 blocked_by: []
@@ -134,3 +136,12 @@ Manual: none — the harness covers the behavior end-to-end; live
 ## main-qa residue (qa 2026-07-06)
 
 - Unit 1's 'concluded check failure -> immediate die, no retry' path was verified via the PR's own gh-shim harness and via my real-gh green/hard-failure checks, but a genuine CONCLUDED non-success on a real scratch SHA was not exercised against live CI in this pass (would require deliberately landing broken content on a graph/** branch). Per the plan's own Verification section naming live use as the ongoing soak: on the next real graph-commit run where a required check concludes non-success on the scratch SHA, confirm exit 1 with 'a required check concluded non-success ... not retrying' logged, and no retry-burn / no misleading 'main busy' message.
+
+## main-qa verification (2026-07-07)
+
+Verified PR #2778 (merged as commit 1f3202d9) functions correctly on origin/main HEAD (234e52e7), via a detached temp worktree (node_modules symlinked from the primary checkout; removed after use):
+
+- `packages/intentionsutil/scripts/test-graph-commit.sh`: 15/15 PASS, covering all four statement items — gh api hard-failure surfacing, no retry on a concluded/deterministic check failure, park_write rollback/atomicity (including losing-writer content preservation), and the id-validation fix (`..`-substring allowed, `a/b`/`a\b`/`.`/`..` exactly rejected).
+- `npx vitest run --project "packages/intentionsutil" --root .`: 161/161 PASS across 8 test files, including the PR's new `store.test.ts` and `schema.test.ts` coverage.
+
+No defects found. Confirmed pass on main.

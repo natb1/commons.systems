@@ -146,6 +146,50 @@ describe("validateNode", () => {
     ).toThrow();
   });
 
+  it("rejects an execution with a negative or non-integer attempt count", () => {
+    const base = {
+      id: "n1-fracattempts",
+      kind: "tactic",
+      statement: "Non-integer attempt count.",
+      owner: "ai",
+      status: "raw",
+    };
+    expect(() =>
+      validateNode({
+        ...base,
+        execution: { branch: "b", pr: null, attempts: { qa: 1.5 }, markers: [], strategy_fingerprint: null },
+      }),
+    ).toThrow(/non-negative integer for execution.attempts.qa/);
+    expect(() =>
+      validateNode({
+        ...base,
+        execution: { branch: "b", pr: null, attempts: { qa: -1 }, markers: [], strategy_fingerprint: null },
+      }),
+    ).toThrow(/non-negative integer for execution.attempts.qa/);
+  });
+
+  it("rejects an execution with a negative or non-integer pr number", () => {
+    const base = {
+      id: "n1-badpr",
+      kind: "tactic",
+      statement: "Bad pr number.",
+      owner: "ai",
+      status: "raw",
+    };
+    expect(() =>
+      validateNode({
+        ...base,
+        execution: { branch: "b", pr: -3, attempts: {}, markers: [], strategy_fingerprint: null },
+      }),
+    ).toThrow(/non-negative integer for execution.pr/);
+    expect(() =>
+      validateNode({
+        ...base,
+        execution: { branch: "b", pr: 4.2, attempts: {}, markers: [], strategy_fingerprint: null },
+      }),
+    ).toThrow(/non-negative integer for execution.pr/);
+  });
+
   it("rejects an execution missing branch", () => {
     expect(() =>
       validateNode({
@@ -211,6 +255,37 @@ describe("validateNode", () => {
         office_hours: { reason: "parked", since: "2026-07-06", recommendation: 42 },
       }),
     ).toThrow();
+  });
+
+  it("rejects an office_hours.since that is not a YYYY-MM-DD date string", () => {
+    const base = {
+      id: "n1-badsince",
+      kind: "tactic",
+      statement: "Office hours with a malformed since.",
+      owner: "ai",
+      status: "raw",
+    };
+    for (const since of ["July 3, 2026", "2026-7-3", "2026-07-03T12:00:00Z", ""]) {
+      expect(() => validateNode({ ...base, office_hours: { reason: "parked", since } })).toThrow(
+        /YYYY-MM-DD date string for office_hours.since/,
+      );
+    }
+  });
+
+  it("rejects a rounds with a negative or non-integer count", () => {
+    const base = {
+      id: "n1-fracrounds",
+      kind: "strategy",
+      statement: "Non-integer rounds count.",
+      owner: "ai",
+      status: "raw",
+    };
+    expect(() =>
+      validateNode({ ...base, rounds: { count: 2.5, last_completed: null } }),
+    ).toThrow(/non-negative integer for rounds.count/);
+    expect(() =>
+      validateNode({ ...base, rounds: { count: -1, last_completed: null } }),
+    ).toThrow(/non-negative integer for rounds.count/);
   });
 
   it("rejects a rounds with a non-numeric count", () => {

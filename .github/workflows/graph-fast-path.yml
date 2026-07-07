@@ -31,6 +31,17 @@ jobs:
             printf '%s\n' "$BAD"
             exit 1
           fi
+          # The name-only filter above says nothing about file TYPE: a committed
+          # symlink (mode 120000) or gitlink (mode 160000) at intentions/x.md
+          # passes the name check. Reject any changed intentions/ entry whose
+          # destination mode is not a regular blob, so validate-graph below only
+          # ever parses regular files.
+          NONREGULAR=$(git diff --raw origin/main...HEAD -- intentions/ | awk '$2 == "120000" || $2 == "160000"' || true)
+          if [ -n "$NONREGULAR" ]; then
+            echo "::error::graph/** fast path only accepts regular files under intentions/. Symlink/gitlink entries changed:"
+            printf '%s\n' "$NONREGULAR"
+            exit 1
+          fi
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: .node-version

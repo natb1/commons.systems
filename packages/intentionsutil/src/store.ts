@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parse, stringify } from "yaml";
-import { validateNode, type IntentionNode, type IntentionNodeInput } from "./schema.js";
+import { isPlainObject, validateNode, type IntentionNode, type IntentionNodeInput } from "./schema.js";
 import { IntentionSchemaError } from "./errors.js";
 
 /**
@@ -17,10 +17,22 @@ import { IntentionSchemaError } from "./errors.js";
  * rewrite rather than regenerated. A brand-new tactic file (no prior file on
  * disk) still gets the generated `# ${statement}` placeholder body.
  */
+// Mirrors graph-commit's id validation exactly (packages/intentionsutil/scripts/graph-commit,
+// the `case "$id" in` block): reject path separators, and `.`/`..` as EXACT ids
+// only. `..` as a substring cannot traverse once `/` and `\` are banned (the id
+// is only ever used as the single path component `<dir>/<id>.md`), so ids like
+// `v1..v2-migration` are legal — rejecting them here would silently defeat
+// graph-commit's relaxed check, since every id passes through this gate first
+// via write-node.ts before graph-commit ever sees it.
 function assertPathSafeId(id: string): void {
-  if (id.includes("/") || id.includes("\\") || id.includes("..")) {
+  if (id.includes("/") || id.includes("\\")) {
     throw new IntentionSchemaError(
-      `Node id contains path separators or traversal sequences: "${id}"`
+      `Node id contains path separators: "${id}"`
+    );
+  }
+  if (id === "." || id === "..") {
+    throw new IntentionSchemaError(
+      `Node id is a reserved path name: "${id}"`
     );
   }
 }
@@ -30,11 +42,35 @@ export function writeNode(dir: string, node: IntentionNodeInput): void {
   assertPathSafeId(validated.id);
   mkdirSync(dir, { recursive: true });
   const filePath = join(dir, `${validated.id}.md`);
+  assertNoTacticBodyLoss(filePath, validated);
   const body = readExistingTacticBody(filePath, validated) ?? `# ${validated.statement}\n`;
   // `stringify` already ends its output with a newline, so the closing fence
   // lands on its own line.
   const content = `---\n${stringify(validated)}---\n${body}`;
   writeFileSync(filePath, content);
+}
+
+/**
+ * Guard against silent plan loss on a kind change: rewriting an existing
+ * `tactic` file with `kind` changed away from `tactic` would fall through to
+ * the regenerated `# ${statement}` placeholder body and discard the
+ * hand-authored plan content that tactic bodies authoritatively carry. Throw a
+ * clear error instead — a deliberate reclassification requires deleting or
+ * rewriting the file explicitly. A tactic whose body is still the generated
+ * placeholder carries no plan content, so its kind may change freely.
+ */
+function assertNoTacticBodyLoss(filePath: string, node: IntentionNode): void {
+  if (node.kind === "tactic" || !existsSync(filePath)) return;
+  const raw = readFileSync(filePath, "utf8");
+  const existing: unknown = parse(extractFrontmatter(raw, node.id));
+  if (!isPlainObject(existing) || existing.kind !== "tactic") return;
+  const body = extractBody(raw, node.id);
+  if (body === `# ${String(existing.statement)}\n`) return;
+  throw new IntentionSchemaError(
+    `Refusing to change kind of "${node.id}" from "tactic" to "${node.kind}": ` +
+      `the rewrite would discard the existing hand-authored tactic body. ` +
+      `Delete or rewrite ${filePath} explicitly to reclassify.`
+  );
 }
 
 /**

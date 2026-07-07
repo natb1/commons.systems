@@ -26,14 +26,16 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: done
 execution:
   branch: tactic-align-init-skill
   pr: 2781
   attempts:
     qa: 1
+    main-qa: 1
   markers:
     - qa-done
+    - main-qa-done
   strategy_fingerprint: null
 validates: []
 blocked_by: []
@@ -143,3 +145,16 @@ Two units; subagents with `model: opus` (Unit 1) and `model: sonnet`
 
 - intentions/tactic-dispatch-script-hardening.md Unit 4 names the stale path '.claude/skills/align/scripts/gather-context.sh:71'; after this PR merges the file lives at '.claude/skills/align-init/scripts/gather-context.sh' (line number shifted by +1 after the frontier-view fix). Correct the path/line when that tactic is next planned or implemented.
 - The scheduled jit:align trigger (dispatch-jit-reminder invoking the renamed /align-init skill against a real jit:align review issue, posting the report, and closing it) needs verification against a live dispatch tick on deployed main -- no such issue exists to drive this in the worktree. Structurally verified instead (jit.example.json skill field, unchanged jit key/label, test-dispatch-scripts.sh fixtures all agree).
+
+## main-qa verification (2026-07-07)
+
+Verified the merged change (PR #2781, commit 11241c21) against a fresh `git archive origin/main` snapshot (not the stale local worktree branch):
+
+- Legacy `.claude/skills/align/` fully removed; `.claude/skills/align-init/` present with SKILL.md + moved scripts (gather-context, fetch-analytics, fetch-psi).
+- Reference sweep clean: no stale bare `/align`, `Skill(align)`, `"skill": "align"`, or `skills/align/` outside `intentions/`, except the deliberate instance-migration note inside align-init/SKILL.md itself.
+- `settings.json` and `jit.example.json` parse and reference `align-init` correctly.
+- `functions/src/project-signals.ts` / `packages/intentionsutil/scripts/read-sensors.ts`: comment-only path-reference edits, no compile risk.
+- Full `test-dispatch-scripts.sh` run on origin/main: 46 failures, but bracketed identical (same failure set, byte-for-byte) against the pre-merge parent commit 089ff5d7 — pre-existing environment noise in untouched scripts (dispatch-phase-model, read/write-plan), not a regression. The align-specific jit assertion (Test 2d, `skill: align-init`) passes.
+- No live `dispatch.config/jit.json` exists yet (align jit is in the "no-config" inert state) — the manual instance-migration step SKILL.md:740 documents has nothing to act on currently; not a pending gap.
+
+No deployed web-app/browser surface exists for this tooling-only change; verification was static/script-level. Outcome: main-qa-pass. Prune of this node is owed once tactic-graph-commit-prune-support (#2790) lands (joins the existing owed-prune set).

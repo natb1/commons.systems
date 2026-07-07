@@ -20,10 +20,15 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-attributes:
-  phase: implement
-  blocked_by:
-    - tactic-attention-surface-graph-read
+phase: implement
+execution: null
+validates: []
+blocked_by:
+  - tactic-attention-surface-graph-read
+office_hours: null
+pace_exempt: false
+rounds: null
+attributes: {}
 ---
 # typed signal model — signal-type registry with compact and context views, owning-node attribution, budget/snapshot/analytics adapters
 

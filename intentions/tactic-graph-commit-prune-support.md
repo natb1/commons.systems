@@ -30,8 +30,15 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: review
+execution:
+  branch: tactic-graph-commit-prune-support
+  pr: 2790
+  attempts:
+    qa: 1
+  markers:
+    - qa-done
+  strategy_fingerprint: null
 validates: []
 blocked_by: []
 office_hours: null

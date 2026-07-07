@@ -23,16 +23,35 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: fix
 execution:
   branch: tactic-office-hours-graph-entry
   pr: 2787
-  attempts: {}
-  markers: []
+  attempts:
+    qa: 1
+  markers:
+    - qa-done
   strategy_fingerprint: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "provision-node-worktree exit 11: origin/main does not merge clean into
+    branch tactic-office-hours-graph-entry — conflicts in
+    packages/intentionsutil/src/index.ts, src/schema.ts, test/schema.test.ts
+    (main advanced via schema-migration-backfill and
+    graph-write-validation-hardening, which rewrote the same files).
+    /fix-conflicts cannot be routed for this graph node: it requires a <N>-…
+    issue branch + PR and exits at Step 1 on a non-numeric branch; this node has
+    no issue number or PR. The branch's Units 1-4 implementation
+    (office_hours.recommendation schema field, queue selector,
+    office-hours-graph bash entry, graph-native office-hours SKILL mode) is
+    intact in the worktree — nothing is lost by parking. Next steps: a human
+    resolves the three-file intentionsutil conflict in the worktree so
+    provision-node-worktree merges clean, OR land a graph-native fix-conflicts
+    that accepts node targets; either way the node re-ticks from there (note
+    /review-fix also lacks node-target support, so post-merge the node rides the
+    bootstrap-transition doctrine rather than an actual review run)."
+  since: 2026-07-07
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -311,3 +330,26 @@ Unit 4 touches a SKILL.md — commits of agent-behavior config are denied
 to auto-mode dispatch sessions; if the commit is denied, park via
 `office_hours` (reason + recommendation) for a human grant rather than
 splitting the PR.
+
+## main-qa residue (qa 2026-07-07)
+
+Two observe-on-first-real-use items from independent QA on tactic-office-hours-graph-entry (PR #2787). Both are unexercised-but-correct-by-inspection code paths, not known defects — confirm on the next real office-hours use rather than filing a bug.
+
+1. **Real daemon path unexercised.** `claude --bg` flag acceptance, the 5×0.2s registration-poll timing in `office-hours-graph`, `attach <job-id>`, and `/office-hours <node-id>` actually booting and stopping cleanly with no writes were validated only against a stub `claude` written for this QA pass — it encodes the QA session's understanding of the daemon contract, not the daemon's real behavior. First genuine exercise is a human running `office-hours-graph` at a terminal (the plan's own "Manual (outside sandbox)" checklist, items 1-2).
+2. **`resolveSessionCwd` positive branch never fired against the real layout.** The launch-cwd-in-the-node's-own-worktree branch (`<repoRoot>/.claude/worktrees/<node-id>` when it exists) never executed in this QA session: QA ran from inside this PR's own worktree checkout, which has no `.claude/worktrees/` subtree at all, so every real-store selector invocation fell back to the repo-root branch. The positive branch is unit-tested only against temp dirs (`test/office-hours.test.ts`). From the main checkout in production, provisioned tactics do have a `.claude/worktrees/<id>` directory, so this branch will fire there for the first time — worth confirming on the first real office-hours launch against a provisioned tactic node.
+
+## merge-conflict repair owed (review 2026-07-07)
+
+Terminal review of PR #2787 was CLEAN (no Required findings) but the branch is
+`mergeable: CONFLICTING` / `mergeStateStatus: DIRTY` against origin/main:
+sibling PR #2775 (tactic-graph-write-validation-hardening) merged out-of-band and
+hardened `validateOfficeHours.since` to `requireDateString` on the exact lines
+this PR edits to add the `recommendation` field, conflicting in
+`packages/intentionsutil/src/schema.ts` and `test/schema.test.ts`.
+
+Routed review -> fix (conflict-repair lane), NOT a review re-run: re-reviewing hits
+the identical conflict (loop). A fix worker owes /fix-conflicts parity — merge
+origin/main, keep BOTH #2775's requireDateString hardening and this PR's
+recommendation field, re-green CI — after which a fresh review re-runs (the resolved
+schema.ts changes slightly) and arms. CI is otherwise green (22 checks). This is a
+mechanical conflict, autonomous-fixable; do not park.

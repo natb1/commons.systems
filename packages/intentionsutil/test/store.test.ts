@@ -264,6 +264,56 @@ describe("writeNode tactic body preservation", () => {
     expect(rewritten).not.toContain("Hand-authored body that should be replaced");
   });
 
+  it("throws on a kind change that would discard an existing hand-authored tactic body", () => {
+    const dir = tempDir();
+    const tactic: IntentionNodeInput = {
+      id: "tactic-reclass",
+      kind: "tactic",
+      statement: "A tactic with a real plan.",
+      owner: "ai",
+      status: "codified",
+    };
+    writeNode(dir, tactic);
+
+    // Hand-author a plan body, as the live store does for tactics.
+    const filePath = join(dir, "tactic-reclass.md");
+    const raw = readFileSync(filePath, "utf8");
+    const closeIndex = raw.indexOf("\n---\n");
+    const frontmatterAndFence = raw.slice(0, closeIndex + "\n---\n".length);
+    const handAuthoredBody = "# A real plan\n\n## Unit 1\n\nDo the thing.\n";
+    writeFileSync(filePath, frontmatterAndFence + handAuthoredBody);
+
+    // Rewriting with kind changed away from tactic would regenerate the
+    // placeholder body and silently drop the plan — it must throw instead.
+    expect(() => writeNode(dir, { ...tactic, kind: "strategy" })).toThrow(
+      /Refusing to change kind of "tactic-reclass" from "tactic" to "strategy"/,
+    );
+
+    // The file is untouched: still a tactic, plan body intact.
+    expect(readFileSync(filePath, "utf8")).toBe(frontmatterAndFence + handAuthoredBody);
+  });
+
+  it("allows a kind change when the existing tactic body is still the generated placeholder", () => {
+    const dir = tempDir();
+    const tactic: IntentionNodeInput = {
+      id: "tactic-placeholder",
+      kind: "tactic",
+      statement: "A tactic never given a plan.",
+      owner: "ai",
+      status: "raw",
+    };
+    writeNode(dir, tactic);
+
+    // The body is still the generated `# ${statement}` placeholder — no plan
+    // content exists to lose, so reclassification proceeds.
+    writeNode(dir, { ...tactic, kind: "strategy" });
+
+    const read = readNode(dir, "tactic-placeholder");
+    expect(read.kind).toBe("strategy");
+    const raw = readFileSync(join(dir, "tactic-placeholder.md"), "utf8");
+    expect(raw.endsWith("# A tactic never given a plan.\n")).toBe(true);
+  });
+
   it("generates a placeholder body for a brand-new tactic with no prior file", () => {
     const dir = tempDir();
     writeNode(dir, {
@@ -313,5 +363,35 @@ describe("listNodes", () => {
 
     const nodes = listNodes(dir);
     expect(nodes.map((n) => n.id)).toEqual(["leaf-1"]);
+  });
+});
+
+describe("id path safety", () => {
+  // Mirrors graph-commit's own id validation exactly (packages/intentionsutil/
+  // scripts/graph-commit, the `case "$id" in` block): every node id passes
+  // through store.ts's assertPathSafeId via write-node.ts BEFORE graph-commit
+  // ever sees it, so the two must agree on the accept/reject boundary or
+  // graph-commit's relaxed check is unreachable in practice.
+  function node(id: string): IntentionNodeInput {
+    return { id, kind: "tactic", statement: "id safety probe", owner: "ai", status: "raw" };
+  }
+
+  it("accepts an id with a '..' substring that isn't the exact id '..'", () => {
+    const dir = tempDir();
+    writeNode(dir, node("v1..v2-migration"));
+    expect(readNode(dir, "v1..v2-migration").id).toBe("v1..v2-migration");
+  });
+
+  it("rejects the exact ids '.' and '..'", () => {
+    const dir = tempDir();
+    expect(() => writeNode(dir, node("."))).toThrow();
+    expect(() => writeNode(dir, node(".."))).toThrow();
+  });
+
+  it("rejects ids containing a path separator, including a leading '../'", () => {
+    const dir = tempDir();
+    expect(() => writeNode(dir, node("../evil"))).toThrow();
+    expect(() => writeNode(dir, node("a/b"))).toThrow();
+    expect(() => writeNode(dir, node("a\\b"))).toThrow();
   });
 });

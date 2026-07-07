@@ -77,3 +77,24 @@ exactly this order; the graph is its single home, maintained by
 Chunk numbers in node ids are stable names from the original list, not the
 working order. Chunk 6 carries the capstone rule: after chunks 1–6 are done,
 wherever they fall in the working order, revisit the apex question itself.
+
+## Candidate batch (strategy-complete-grounding)
+
+Chunks 10–17 are *candidate* chunks (2026-07-07 /align-strategy round,
+`strategy-complete-grounding`): no tradition record exists yet for these —
+each sitting establishes relevance and author understanding first, then
+creates the record (adopted/diverged/declined), applies grounding marks, or
+records a dismissal clarification on `strategy-complete-grounding`. Marked
+`attributes.curriculum.candidate: true`; they queue after the verify chunks
+above and serve `strategy-complete-grounding`, not this node's own strategy.
+
+| Priority | Chunk node | Texts | Candidate |
+|---|---|---|---|
+| 10 | `tactic-reading-chunk-10-hirschman-exit-voice` | Exit, Voice, and Loyalty chs. 1–3, 7 | tradition-hirschman |
+| 11 | `tactic-reading-chunk-11-popper-fallibilism` | Conjectures and Refutations ch. 1 | tradition-popper |
+| 12 | `tactic-reading-chunk-12-macintyre-practice` | After Virtue chs. 14–15 | tradition-macintyre |
+| 13 | `tactic-reading-chunk-13-illich-conviviality` | Tools for Conviviality chs. 1–2 | tradition-illich |
+| 14 | `tactic-reading-chunk-14-pettit-nondomination` | Freedom as Antipower (Ethics 106) | tradition-republicanism |
+| 15 | `tactic-reading-chunk-15-ostrom-commons-gift` | Governing the Commons ch. 3; Mauss, The Gift intro, ch. 1 | tradition-ostrom (+ Mauss divergence) |
+| 16 | `tactic-reading-chunk-16-buddhism-nonattachment` | MN 22 (raft simile); SN 56.11 | tradition-buddhism (expected declined) |
+| 17 | `tactic-reading-chunk-17-confucian-household` | Great Learning; Analects 1–2 | tradition-confucianism |
