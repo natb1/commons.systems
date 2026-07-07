@@ -22,19 +22,22 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: null
 execution:
   branch: tactic-graph-write-validation-hardening
   pr: 2775
-  attempts: {}
-  markers: []
+  attempts:
+    qa: 1
+  markers:
+    - qa-done
   strategy_fingerprint: null
 validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  phase: main-qa
 ---
 # Harden graph write-path validation: symlink type check in the fast-path guard, semantic shape rules in the schema, tactic-body loss guard on kind change
 
@@ -127,3 +130,7 @@ npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions
 
 Manual: push a scratch `graph/**` branch adding an `intentions/` symlink
 and confirm the guard job fails; delete the scratch branch after.
+
+## main-qa residue (qa 2026-07-06)
+
+- Unit 1 guard job unexercised on this PR: the 'Graph Fast Path' workflow (.github/workflows/graph-fast-path.yml) only triggers on push to branches matching 'graph/**', which tactic-graph-write-validation-hardening's own branch does not match, so no CI on PR #2775 ran the guard job end-to-end. After merge to main: push a scratch graph/** branch that adds a symlink under intentions/ (e.g. intentions/x.md -> /etc/passwd committed as a real symlink), confirm the guard job fails with the '::error::graph/** fast path only accepts regular files under intentions/' message and non-zero exit, then delete the scratch branch. (A local scratch-repo test already confirmed the underlying git diff --raw / awk logic is correct; this residue is only about observing the actual GitHub Actions job run.)
