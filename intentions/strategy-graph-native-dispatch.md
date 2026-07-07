@@ -822,6 +822,22 @@ clarifications:
       strike accounting and the pre-selection breaker check like any other phase
       semantics (clarification 15). Implementation retained as draft
       tactic-router-failure-fuses. Recorded 2026-07-07 interview."
+  - question: Self-modifying tactics — scope touching agent-behavior config
+      (.claude/skills/**, .claude/hooks/**, settings) — cannot be committed by
+      auto-mode workers. Is self-modification a supported greenfield use case,
+      and how does it flow?
+    answer: "Supported and designed-for, not an error path. Primary lane:
+      /align-tactics detects self-modifying scope at decomposition time and
+      encodes the tactic born-parked — office_hours set from birth,
+      recommendation naming the self-modification office-hours skill — so it
+      never launches an auto-mode worker. Fallback lane: a self-mod tactic that
+      slips through is attempted by the worker, which completes all non-config
+      work and parks on the commit denial with the branch staged. Office-hours
+      drain for these parks is a mostly-automated session documented as a common
+      skill (draft tactic-office-hours-self-modification-skill): the session
+      executes the parked recommendation end-to-end and the human's only
+      interaction is approving the explicit self-modification permission prompt.
+      Recorded 2026-07-07 interview."
 tooling_goals:
   - kind: actuator
     statement: /align-strategy — interview-driven strategy recording, superseding
