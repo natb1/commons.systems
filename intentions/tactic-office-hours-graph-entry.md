@@ -34,7 +34,24 @@ execution:
   strategy_fingerprint: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "provision-node-worktree exit 11: origin/main does not merge clean into
+    branch tactic-office-hours-graph-entry — conflicts in
+    packages/intentionsutil/src/index.ts, src/schema.ts, test/schema.test.ts
+    (main advanced via schema-migration-backfill and
+    graph-write-validation-hardening, which rewrote the same files).
+    /fix-conflicts cannot be routed for this graph node: it requires a <N>-…
+    issue branch + PR and exits at Step 1 on a non-numeric branch; this node has
+    no issue number or PR. The branch's Units 1-4 implementation
+    (office_hours.recommendation schema field, queue selector,
+    office-hours-graph bash entry, graph-native office-hours SKILL mode) is
+    intact in the worktree — nothing is lost by parking. Next steps: a human
+    resolves the three-file intentionsutil conflict in the worktree so
+    provision-node-worktree merges clean, OR land a graph-native fix-conflicts
+    that accepts node targets; either way the node re-ticks from there (note
+    /review-fix also lacks node-target support, so post-merge the node rides the
+    bootstrap-transition doctrine rather than an actual review run)."
+  since: 2026-07-07
 pace_exempt: false
 rounds: null
 attributes: {}
