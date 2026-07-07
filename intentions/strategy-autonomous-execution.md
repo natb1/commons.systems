@@ -63,6 +63,28 @@ clarifications:
       budget parse jobs) is therefore structurally semi-autonomous. It looks
       like a missing feature; it is a security posture, recorded so a future
       session does not fix it. Recorded 2026-07-07 interview."
+  - question: Are PR preview deploys part of the autonomous chain?
+    answer: "No — preview capability is retained, but author-requested only. The
+      automatic preview-and-smoke job (.github/workflows/pr-checks.yml: per-app
+      Firebase preview channels + smoke + bot comment on every PR, with
+      merge-time cleanup in prod-deploy.yml) is to be removed from the dispatch
+      workflow; a dedicated skill performs on-demand preview deploys when the
+      author explicitly asks — for example while reproducing an
+      office-hours-parked QA finding. Every-PR previews spend deploy minutes,
+      hosting-channel quota, and credential exposure on artifacts the autonomous
+      path never looks at. Change drafted at tactic-preview-deploy-on-demand.
+      Recorded 2026-07-07 interview."
+  - question: How is CI verification kept fast enough for the autonomous chain?
+    answer: "Change-scoping is a standing requirement, not an optimization to be
+      traded away: PR verification and prod deploys run only against apps a diff
+      actually reaches (get-changed-apps.sh change detection; prod deploys diff
+      from the last-prod-deploy tag so a failed deploy retries from the last
+      successful marker, workflow_dispatch as the deploy-everything override,
+      paths-ignore skipping non-app paths). Scoping correctness is load-bearing
+      — an incomplete dirty map ships untested code — which is what
+      tactic-ci-change-detection-transitive fixes; the answer to a detection gap
+      is completing the map, never abandoning scoping for test-everything.
+      Recorded 2026-07-07 interview."
 tooling_goals: []
 success_signal:
   observable: attention economics — the chain drains the backlog while human
