@@ -32,6 +32,12 @@
 #  11. --base fresh: a --base entry matching origin/main's current blob lands
 #  12. --base stale: a --base entry pointing at a blob origin/main no longer
 #      has is refused (no commit lands, no rebase-retry burned)
+#  13. --prune alone (no positional id, IDS empty): a pure deletion lands on
+#      main and the scratch branch is cleaned up — this is the owed-prune
+#      backlog's actual shape (a done node with no accompanying edit), not
+#      exercised by case 9's mixed edit+prune
+#  14. --base manifest-file form: a file of <id>=<blobsha> lines (as opposed
+#      to the inline form used by cases 11-12) lands
 #
 # No network and no real gh/node needed; requires only bash + git.
 
@@ -78,7 +84,7 @@ seed_node() { # <id> — 12 numbered lines so distant edits rebase cleanly
   } >"$SEED/intentions/$1.md"
 }
 for id in t-happy t-merge t-conflict t-ckfail t-ghfail t-pending v1..v2-migration \
-          t-prune-edit t-prune t-prune-guard t-base; do
+          t-prune-edit t-prune t-prune-guard t-prune-solo t-base t-base-manifest; do
   seed_node "$id"
 done
 git -C "$SEED" add -A
@@ -332,6 +338,32 @@ else
   fi
 fi
 
+# Case 13: --prune alone (no positional id) — a pure deletion-only commit.
+# This is the owed-prune backlog's actual shape (a `phase: done` node with no
+# accompanying edit), distinct from case 9's mixed edit+prune: IDS is empty
+# here, so ALL_IDS[0] resolves entirely from PRUNE_IDS, exercising the
+# scratch-branch ref-name path and id_files_dirty()/commit_files() with no
+# ordinary ids at all.
+W5="$WORK/w5"
+make_clone "$W5" writer-5
+rm -f "$W5/intentions/t-prune-solo.md"
+if out="$(run_gc "$W5" -m 'test: pure prune' --prune t-prune-solo 2>&1)"; then
+  pruned_gone=1
+  git -C "$ORIGIN" cat-file -e main:intentions/t-prune-solo.md 2>/dev/null && pruned_gone=0
+  if [[ "$pruned_gone" -eq 1 ]]; then
+    ok "pure prune: a --prune-only invocation (no positional id) lands the deletion on main"
+  else
+    no "pure prune: deletion did not land"; printf '%s\n' "$out"
+  fi
+else
+  no "pure prune: expected exit 0, got $? (see below)"; printf '%s\n' "$out"
+fi
+if [[ -z "$(scratch_refs)" ]]; then
+  ok "pure prune: scratch branch cleaned up after landing"
+else
+  no "pure prune: leftover scratch branch: $(scratch_refs)"
+fi
+
 # ---------------------------------------------------------------------------
 # Cases 11-12: --base compare-and-swap
 # ---------------------------------------------------------------------------
@@ -379,6 +411,25 @@ else
   else
     no "base stale: refused but wrong error or main moved unexpectedly"; printf '%s\n' "$out"
   fi
+fi
+
+# Case 14: --base manifest-file form — a file of <id>=<blobsha> lines (as
+# opposed to cases 11-12's inline <id>=<blobsha> argument).
+W6="$WORK/w6"
+make_clone "$W6" writer-6
+manifest_sha="$(git -C "$W6" hash-object intentions/t-base-manifest.md)"
+manifest_file="$WORK/base-manifest.txt"
+printf 't-base-manifest=%s\n' "$manifest_sha" >"$manifest_file"
+echo "line13: writer6 edit" >>"$W6/intentions/t-base-manifest.md"
+if out="$(run_gc "$W6" -m 'test: base manifest' --base "$manifest_file" t-base-manifest 2>&1)"; then
+  landed="$(origin_show t-base-manifest 2>/dev/null | grep -c 'line13: writer6 edit')"
+  if [[ "$landed" -eq 1 ]]; then
+    ok "base manifest-file form: a fresh entry read from a manifest file lands"
+  else
+    no "base manifest-file form: landed but content missing"; printf '%s\n' "$out"
+  fi
+else
+  no "base manifest-file form: expected exit 0, got $? (see below)"; printf '%s\n' "$out"
 fi
 
 # --- No scratch branches left behind anywhere ------------------------------------
