@@ -7,7 +7,7 @@
  * A THIN Workflow-tool script: it holds no selection, transition, or
  * provisioning logic of its own. Selection ran in dispatch-select-tick (the
  * graph selector, under the one lock); provisioning is the owned
- * `provision-node-worktree <node-id>` primitive the launched agent invokes as
+ * `provision-node-worktree <node-id> <selected-phase>` primitive the launched agent invokes as
  * one command; transition writes (`graph-commit`) belong to the completing
  * phase / tactic-graph-router-transitions. This script only fans out one
  * `agent()` per selected node — capped by the pace-derived worker target —
