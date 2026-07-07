@@ -78,6 +78,18 @@ clarifications:
       contract, where the ds PageShell single-root path is intended to replace
       the legacy regex-injection path (drafted at
       tactic-prerender-single-injection-path). Recorded 2026-07-07 code review."
+  - question: What is the ds-bundle design-canvas artifact and why is it gitignored?
+    answer: "A derived, fully reproducible bundle built from packages/ds source by
+      .design-sync/resync.mjs for the claude.ai/design canvas — source is the
+      only canonical form, so the bundle stays out of git and a fresh sync
+      regenerates it byte-for-byte from the repo. Known fragility: the
+      converter's ts-morph component extraction keys off
+      packages/ds/package.json's types field (\"types\": \"src/index.ts\"),
+      which is inert for consumers (exports-based resolution ignores it) but
+      load-bearing for sync — removing it silently degrades the sync to 0
+      components, currently guarded only by a .design-sync/NOTES.md warning.
+      Loud-failure guard drafted at tactic-design-sync-zero-component-guard.
+      Recorded 2026-07-07 interview."
 tooling_goals:
   - kind: sensor
     statement: a dependency-justification audit over the workspace manifests — every
