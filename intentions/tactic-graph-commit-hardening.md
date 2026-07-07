@@ -23,7 +23,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: null
 execution:
   branch: tactic-graph-commit-hardening
   pr: 2778
@@ -37,7 +37,8 @@ blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  phase: main-qa
 ---
 # Harden graph-commit: surface gh api errors, stop retrying deterministic check failures, park_write rollback, id-validation over-rejection
 

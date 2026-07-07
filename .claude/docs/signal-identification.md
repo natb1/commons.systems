@@ -1,6 +1,6 @@
 # Signal Identification
 
-Signal identification is the parse-time half of `/align`'s feedback arm. For each
+Signal identification is the parse-time half of `/align-init`'s feedback arm. For each
 intention node, it decides what observable says the intention is met and how to read
 it: first which category the observable falls into (feasibility), then, when a sensor
 must be built, whether it is worth building (economics). It does not act on readings

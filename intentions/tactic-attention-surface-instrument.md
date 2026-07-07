@@ -19,13 +19,17 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-attributes:
-  phase: implement
-  validates:
-    - strategy-attention-surface
-  blocked_by:
-    - tactic-attention-surface-status-page
-    - tactic-attention-surface-goals-page
+phase: implement
+execution: null
+validates:
+  - strategy-attention-surface
+blocked_by:
+  - tactic-attention-surface-status-page
+  - tactic-attention-surface-goals-page
+office_hours: null
+pace_exempt: false
+rounds: null
+attributes: {}
 ---
 # instrument: source-of-truth audit sensor — every rendered signal traces to a graph node and a local source; populates the strategy's reading
 

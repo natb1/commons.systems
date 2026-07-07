@@ -46,7 +46,7 @@ skill's whole value is the dialectic. Reserve `AskUserQuestion` for
 bounded choices with a recommended option listed first, per the
 2026-07-03 prototype run's convention; open-ended elicitation is a normal
 conversational turn, prose reply captured as-is (same split as
-`.claude/skills/align/SKILL.md`'s rung-0 interview).
+`.claude/skills/align-init/SKILL.md`'s rung-0 intent interview).
 
 ## Step 1 — Frame
 

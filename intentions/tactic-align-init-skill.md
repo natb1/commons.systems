@@ -26,7 +26,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: null
 execution:
   branch: tactic-align-init-skill
   pr: 2781
@@ -40,7 +40,8 @@ blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  phase: main-qa
 ---
 # /align-init SKILL.md: fork entrypoint — orient, validate deployment, review virtues, delegate to /align-strategy; retires the legacy /align skill
 

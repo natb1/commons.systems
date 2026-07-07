@@ -52,7 +52,7 @@ sensor_strategy_roots() {
 
 sensor_active_frontier() {
   echo "=== Active frontier (generated from the intention graph) ==="
-  npx tsx intentionsutil/scripts/frontier-view.ts \
+  npx tsx packages/intentionsutil/scripts/frontier-view.ts \
     || echo "(frontier-view failed; active frontier context unavailable)" >&2
 }
 
@@ -87,12 +87,12 @@ sensor_repo_stats() {
 
 external_sensor_analytics() {
   echo "=== Analytics (GA4 + Search Console) ==="
-  "$REPO_ROOT/.claude/skills/align/scripts/fetch-analytics.sh" || true
+  "$REPO_ROOT/.claude/skills/align-init/scripts/fetch-analytics.sh" || true
 }
 
 external_sensor_psi() {
   echo "=== Web Performance (PageSpeed Insights) ==="
-  "$REPO_ROOT/.claude/skills/align/scripts/fetch-psi.sh" || true
+  "$REPO_ROOT/.claude/skills/align-init/scripts/fetch-psi.sh" || true
 }
 
 {
