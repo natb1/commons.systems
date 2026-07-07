@@ -50,6 +50,17 @@ clarifications:
       sidecar — there is no server-side listening log, a privacy posture most
       players get wrong, at the cost of no cross-device position sync. Recorded
       2026-07-07 interview.
+  - question: What product boundaries keep the owned reader/player tools
+      ownership-preserving?
+    answer: "Three standing rules found consistently in the code and confirmed at
+      interview: every catalog item is restricted to DRM-free open formats
+      (epub/pdf/image-archive; mp3/m4a/flac/ogg/wav) and carries a one-click
+      download of the exact original bytes; print items may carry a markdown
+      companion with download/copy actions so a plain-text form stays available;
+      and local on-disk folders are first-class equals of the cloud library
+      behind one shared MediaSource contract (paged union in a single cursor
+      space), so the cloud is optional rather than primary. Recorded 2026-07-07
+      interview."
 tooling_goals: []
 success_signal:
   observable: the share of the author's reading and listening attention carried by
