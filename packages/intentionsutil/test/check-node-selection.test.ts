@@ -1,0 +1,239 @@
+import { appendFileSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+import { readNode, writeNode } from "../src/store.js";
+import { strategyFingerprint } from "../src/router.js";
+import type { IntentionNode, Phase } from "../src/schema.js";
+import { evaluateSelection } from "../scripts/check-node-selection.js";
+
+function tempDir(): string {
+  return mkdtempSync(join(tmpdir(), "check-node-selection-"));
+}
+
+/** Minimal full IntentionNode fixture (mirrors router.test.ts's `anode`). */
+function anode(partial: Partial<IntentionNode> & { id: string; kind: string }): IntentionNode {
+  return {
+    id: partial.id,
+    kind: partial.kind,
+    statement: partial.statement ?? `Statement for ${partial.id}`,
+    owner: partial.owner ?? "ai",
+    status: partial.status ?? "codified",
+    parent: partial.parent ?? null,
+    serves: partial.serves ?? [],
+    recovers: partial.recovers ?? [],
+    rationale: partial.rationale ?? null,
+    reading: partial.reading ?? null,
+    gap: partial.gap ?? null,
+    clarifications: partial.clarifications ?? [],
+    tooling_goals: partial.tooling_goals ?? [],
+    success_signal: partial.success_signal ?? null,
+    attention: partial.attention ?? null,
+    phase: partial.phase ?? null,
+    execution: partial.execution ?? null,
+    validates: partial.validates ?? [],
+    blocked_by: partial.blocked_by ?? [],
+    office_hours: partial.office_hours ?? null,
+    pace_exempt: partial.pace_exempt ?? false,
+    rounds: partial.rounds ?? null,
+    attributes: partial.attributes ?? {},
+  } as IntentionNode;
+}
+
+function seed(dir: string, node: IntentionNode): void {
+  writeNode(dir, node);
+}
+
+describe("evaluateSelection", () => {
+  it("passes a matching directive and returns the scope fingerprint on stdout", () => {
+    const dir = tempDir();
+    seed(dir, anode({ id: "tactic-a", kind: "tactic", phase: "implement" }));
+    const r = evaluateSelection({ nodeId: "tactic-a", selectedPhase: "implement", dir, stamp: null });
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).toMatch(/^[0-9a-f]{64}$/);
+    expect(r.stderr).toEqual([]);
+  });
+
+  it("exit 12 when the node was pruned (missing file)", () => {
+    const dir = tempDir();
+    const r = evaluateSelection({ nodeId: "tactic-gone", selectedPhase: "implement", dir, stamp: null });
+    expect(r.exitCode).toBe(12);
+    expect(r.stdout).toBeNull();
+    expect(r.stderr[0]).toMatch(/exists:.*no longer in the store/);
+  });
+
+  it("exit 12 on a first-class phase mismatch", () => {
+    const dir = tempDir();
+    seed(dir, anode({ id: "tactic-a", kind: "tactic", phase: "implement" }));
+    const r = evaluateSelection({ nodeId: "tactic-a", selectedPhase: "qa", dir, stamp: null });
+    expect(r.exitCode).toBe(12);
+    expect(r.stderr[0]).toMatch(/phase: selected qa but node is now implement/);
+  });
+
+  it("exit 12 on a squatter (attributes.phase) mismatch — and reads the squatter phase", () => {
+    const dir = tempDir();
+    // phase:null first-class, real phase squatted under attributes (pre-migration subtree).
+    seed(dir, anode({ id: "tactic-sq", kind: "tactic", phase: null, attributes: { phase: "qa" } }));
+    const r = evaluateSelection({ nodeId: "tactic-sq", selectedPhase: "implement", dir, stamp: null });
+    expect(r.exitCode).toBe(12);
+    // Proves the squatter value was read, not the null first-class field.
+    expect(r.stderr[0]).toMatch(/node is now qa/);
+  });
+
+  it("passes when the selected phase matches the squatter phase", () => {
+    const dir = tempDir();
+    seed(dir, anode({ id: "tactic-sq", kind: "tactic", phase: null, attributes: { phase: "qa" } }));
+    const r = evaluateSelection({ nodeId: "tactic-sq", selectedPhase: "qa", dir, stamp: null });
+    expect(r.exitCode).toBe(0);
+  });
+
+  it("exit 12 when parked first-class (office_hours set after selection)", () => {
+    const dir = tempDir();
+    seed(
+      dir,
+      anode({
+        id: "tactic-p",
+        kind: "tactic",
+        phase: "implement",
+        office_hours: { reason: "author park", since: "2026-07-07" },
+      }),
+    );
+    const r = evaluateSelection({ nodeId: "tactic-p", selectedPhase: "implement", dir, stamp: null });
+    expect(r.exitCode).toBe(12);
+    expect(r.stderr[0]).toMatch(/not-parked:.*parked to office_hours/);
+  });
+
+  it("exit 12 when parked via the squatter convention (attributes.office_hours)", () => {
+    const dir = tempDir();
+    seed(
+      dir,
+      anode({
+        id: "tactic-ps",
+        kind: "tactic",
+        phase: "implement",
+        attributes: { office_hours: { reason: "author park", since: "2026-07-07" } },
+      }),
+    );
+    const r = evaluateSelection({ nodeId: "tactic-ps", selectedPhase: "implement", dir, stamp: null });
+    expect(r.exitCode).toBe(12);
+    expect(r.stderr[0]).toMatch(/not-parked/);
+  });
+
+  it("exit 12 on a stale strategy fingerprint (soft-freeze)", () => {
+    const dir = tempDir();
+    seed(dir, anode({ id: "strategy-x", kind: "strategy", statement: "Own the substrate." }));
+    seed(
+      dir,
+      anode({
+        id: "tactic-x",
+        kind: "tactic",
+        phase: "qa",
+        serves: ["strategy-x"],
+        execution: { branch: "b", pr: 1, attempts: {}, markers: [], strategy_fingerprint: "0".repeat(64) },
+      }),
+    );
+    const r = evaluateSelection({ nodeId: "tactic-x", selectedPhase: "qa", dir, stamp: null });
+    expect(r.exitCode).toBe(12);
+    expect(r.stderr[0]).toMatch(/fingerprint:.*strategy-x substance changed/);
+  });
+
+  it("passes when the stamped strategy fingerprint matches the current substance", () => {
+    const dir = tempDir();
+    seed(dir, anode({ id: "strategy-x", kind: "strategy", statement: "Own the substrate." }));
+    const currentFp = strategyFingerprint(readNode(dir, "strategy-x"));
+    seed(
+      dir,
+      anode({
+        id: "tactic-x",
+        kind: "tactic",
+        phase: "qa",
+        serves: ["strategy-x"],
+        execution: { branch: "b", pr: 1, attempts: {}, markers: [], strategy_fingerprint: currentFp },
+      }),
+    );
+    const r = evaluateSelection({ nodeId: "tactic-x", selectedPhase: "qa", dir, stamp: null });
+    expect(r.exitCode).toBe(0);
+  });
+
+  it("a null strategy fingerprint passes even when the serving strategy's substance would differ", () => {
+    const dir = tempDir();
+    seed(dir, anode({ id: "strategy-x", kind: "strategy", statement: "Anything." }));
+    seed(
+      dir,
+      anode({
+        id: "tactic-x",
+        kind: "tactic",
+        phase: "implement",
+        serves: ["strategy-x"],
+        execution: { branch: "b", pr: null, attempts: {}, markers: [], strategy_fingerprint: null },
+      }),
+    );
+    const r = evaluateSelection({ nodeId: "tactic-x", selectedPhase: "implement", dir, stamp: null });
+    expect(r.exitCode).toBe(0);
+  });
+
+  it("scope fingerprint is stable across state-field edits and changes on a body edit", () => {
+    const dir = tempDir();
+    seed(dir, anode({ id: "tactic-s", kind: "tactic", phase: "implement" }));
+    const fp1 = evaluateSelection({ nodeId: "tactic-s", selectedPhase: "implement", dir, stamp: null }).stdout;
+
+    // A state-field edit (phase) preserves the tactic body -> same scope fingerprint.
+    writeNode(dir, { ...readNode(dir, "tactic-s"), phase: "qa" });
+    const fp2 = evaluateSelection({ nodeId: "tactic-s", selectedPhase: "qa", dir, stamp: null }).stdout;
+    expect(fp2).toBe(fp1);
+
+    // A body edit (a residue append) changes the scope fingerprint.
+    appendFileSync(join(dir, "tactic-s.md"), "\n## residue\n\nnew plan content\n");
+    const fp3 = evaluateSelection({ nodeId: "tactic-s", selectedPhase: "qa", dir, stamp: null }).stdout;
+    expect(fp3).not.toBe(fp1);
+  });
+
+  describe("scope chain (--stamp)", () => {
+    function seedTactic(dir: string, phase: Phase): string {
+      seed(dir, anode({ id: "tactic-c", kind: "tactic", phase }));
+      return evaluateSelection({ nodeId: "tactic-c", selectedPhase: phase, dir, stamp: null }).stdout as string;
+    }
+
+    it("passes at qa when the stamp matches the current scope fingerprint", () => {
+      const dir = tempDir();
+      const fp = seedTactic(dir, "qa");
+      const stampPath = join(dir, "tactic-c.scope-fingerprint");
+      writeFileSync(stampPath, `${fp} abc1234\n`);
+      const r = evaluateSelection({ nodeId: "tactic-c", selectedPhase: "qa", dir, stamp: stampPath });
+      expect(r.exitCode).toBe(0);
+    });
+
+    it("exit 13 at qa when the stamp fingerprint no longer matches (scope changed)", () => {
+      const dir = tempDir();
+      seedTactic(dir, "qa");
+      const stampPath = join(dir, "tactic-c.scope-fingerprint");
+      writeFileSync(stampPath, `${"f".repeat(64)} abc1234\n`);
+      const r = evaluateSelection({ nodeId: "tactic-c", selectedPhase: "qa", dir, stamp: stampPath });
+      expect(r.exitCode).toBe(13);
+      expect(r.stderr[0]).toMatch(/scope-stale: scope-chain: abc1234\.\.HEAD/);
+    });
+
+    it("skips the scope-chain comparison for the implement phase (custody re-established)", () => {
+      const dir = tempDir();
+      seedTactic(dir, "implement");
+      const stampPath = join(dir, "tactic-c.scope-fingerprint");
+      // A deliberately-wrong stamp: implement must ignore it and pass.
+      writeFileSync(stampPath, `${"f".repeat(64)} abc1234\n`);
+      const r = evaluateSelection({ nodeId: "tactic-c", selectedPhase: "implement", dir, stamp: stampPath });
+      expect(r.exitCode).toBe(0);
+    });
+
+    it("warns and passes when the stamp file is missing (bootstrap policy)", () => {
+      const dir = tempDir();
+      seedTactic(dir, "review");
+      const r = evaluateSelection({
+        nodeId: "tactic-c",
+        selectedPhase: "review",
+        dir,
+        stamp: join(dir, "does-not-exist.scope-fingerprint"),
+      });
+      expect(r.exitCode).toBe(0);
+      expect(r.stderr[0]).toMatch(/warning: no scope stamp.*bootstrap policy/);
+    });
+  });
+});
