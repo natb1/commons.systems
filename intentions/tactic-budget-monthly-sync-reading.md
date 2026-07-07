@@ -26,7 +26,7 @@ execution:
   pr: null
   attempts: {}
   markers: []
-  strategy_fingerprint: fa35bb299f783f335f3ec88462c06db38747e4a2e5892dd30120ff997bfbceb1
+  strategy_fingerprint: f9e4d3f90f15fbb0bb42ccc26d71a76467641cf7aede8d74815a537ff205d0a1
 validates:
   - strategy-recover-finance
 blocked_by:
