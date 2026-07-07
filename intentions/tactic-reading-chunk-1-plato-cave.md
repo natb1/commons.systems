@@ -44,7 +44,12 @@ office_hours:
   since: 2026-07-06
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  curriculum:
+    priority: 1
+    passages:
+      - work: Plato, Republic
+        range: VII 514a-521b
 ---
 # Reading chunk 1: Republic VII 514a–521b (the Cave, periagoge) — verify tradition-plato against the text and re-open the capture/calibration questions
 

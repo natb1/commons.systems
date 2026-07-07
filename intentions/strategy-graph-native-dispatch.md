@@ -803,7 +803,13 @@ success_signal:
   threshold: legacy gh dispatch router deleted from the repo with the /file-issue
     and /plan-issue coverage matrix fully mapped to the align family
   is_proxy: false
-attention: null
+attention:
+  boost: 5
+  override: null
+  rationale: "Author-directed 2026-07-06: the graph-native dispatch router
+    migration is the current focus — lift this strategy and its tactic subtree
+    above derived-only ranks (derived terms cap at 2) so router selection works
+    the migration first."
 phase: null
 execution: null
 validates: []

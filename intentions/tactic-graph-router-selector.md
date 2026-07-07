@@ -19,7 +19,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: review
 execution:
   branch: tactic-graph-router-selector
   pr: 2785
