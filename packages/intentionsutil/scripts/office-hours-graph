@@ -1,0 +1,117 @@
+#!/usr/bin/env bash
+# office-hours-graph — the graph-native office-hours entry point.
+#
+# A thin dispatcher over the offline `office-hours-select.ts` selector (the
+# single source of truth for the parked queue) that always launches a FRESH
+# `--bg` session recovered from the graph and attaches the human. The graph is
+# the recovery artifact: a parked node's `office_hours` frontmatter carries the
+# reason and recommendation, so there is no session attach/resume path — every
+# entry boots a new `/office-hours <node-id>` review-and-recommend session.
+#
+# It sources NOTHING from `.claude/skills/dispatch-propagate/` — that lib is
+# scheduled for deletion. The registration-verify and attach-by-name helpers
+# below are inlined mirrors of that documented contract.
+#
+# Usage:
+#   office-hours-graph            # launch the queue head
+#   office-hours-graph <node-id>  # launch a specific parked node
+#
+# Selector stdout dispositions this script acts on (stderr is advisory-only —
+# a `NOTE —` open-blocker line passes straight through to the terminal; do NOT
+# redirect or suppress it):
+#   launch <node-id> <cwd>     → fresh-launch a session in <cwd>, attach
+#   empty                      → queue empty, no launch
+#   empty not-parked <node-id> → the named node is absent or not parked, no launch
+#
+# Sandbox: `claude agents --json` reaches the local daemon over a Unix socket;
+# a sandboxed call returns `[]` indistinguishable from "no sessions" (see
+# lib-claude-agents.sh:168 and `.claude/rules/sandbox.md`). Run this script with
+# `dangerouslyDisableSandbox: true`.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# The selector reads CLAUDE_AGENTS_CMD for its own liveness queries (it has
+# none — it is fully offline); this script uses CLAUDE_CMD for launch/verify/
+# attach so it can be smoke-tested against a stub.
+CLAUDE_CMD="${OFFICE_HOURS_CLAUDE_CMD:-claude}"
+
+TARGET="${1:-}"
+
+# job_id_for_name <name> — echo the daemon job id of the LIVE (non-stopped)
+# background job named <name>, or empty. --all so a just-spawned session is
+# visible regardless of its momentary state; a `stopped` row with the target
+# name must not count (mirrors verify_agent_registered_under). A direct pipe
+# (no captured-var echo) keeps zsh's echo out of the jq input.
+job_id_for_name() {
+  "$CLAUDE_CMD" agents --json --all 2>/dev/null \
+    | jq -r --arg n "$1" '
+        if type == "array"
+        then (first(.[] | select(.name == $n and .status != "stopped") | .id) // empty)
+        else empty end' 2>/dev/null || true
+}
+
+# One call to the single source of truth; dispatch on the returned verb. Capture
+# only stdout so the selector's `NOTE —` stderr advisory reaches the terminal.
+directive=$(npx tsx "$SCRIPT_DIR/office-hours-select.ts" ${TARGET:+"$TARGET"})
+read -r verb a b _ <<<"$directive"
+
+case "$verb" in
+  empty)
+    if [[ "$a" == "not-parked" ]]; then
+      echo "office-hours: node $b is not parked — nothing to launch for it."
+    else
+      echo "office-hours: queue is empty — nothing to launch."
+    fi
+    exit 0
+    ;;
+  launch)
+    node_id="$a"
+    cwd="$b"
+    name="office-hours-$node_id"
+
+    # Always-fresh launch: a live session already named office-hours-<node-id>
+    # means a duplicate name (this entry never implicitly attaches). A clear
+    # error naming the job id beats a duplicate or a forbidden implicit attach.
+    existing=$(job_id_for_name "$name")
+    if [[ -n "$existing" ]]; then
+      echo "office-hours: a live session named $name already exists (job $existing) — attach it with 'claude attach $existing' rather than launching a duplicate." >&2
+      exit 1
+    fi
+
+    # Kick a non-resume --bg job rooted at <cwd> via a subshell cd so
+    # SessionStart-derived attributes key on the right directory. The positional
+    # `/office-hours <node-id>` boots the review-and-recommend skill; it reviews,
+    # recommends, and stops, then the human attaches and drives.
+    rc=0
+    ( cd "$cwd" && "$CLAUDE_CMD" --bg --name "$name" --permission-mode auto \
+        "/office-hours $node_id" ) >/dev/null 2>&1 || rc=$?
+    if [[ "$rc" -ne 0 ]]; then
+      echo "office-hours: the --bg kick for $name in $cwd failed (rc=$rc). Run 'claude agents' to inspect." >&2
+      exit 1
+    fi
+
+    # `claude --bg` returns BEFORE the daemon registers the session; gate on a
+    # bounded-retry registration poll (5 × 0.2s, skipping stopped rows). There is
+    # NO --fork-session retry — forking is a resume-only mechanism; a fresh kick
+    # that fails to register is a hard error.
+    job_id=""
+    for _ in 1 2 3 4 5; do
+      job_id=$(job_id_for_name "$name")
+      [[ -n "$job_id" ]] && break
+      sleep 0.2
+    done
+    if [[ -z "$job_id" ]]; then
+      echo "office-hours: launched $name but it did not register a live session in time. Run 'claude agents' to inspect." >&2
+      exit 1
+    fi
+
+    # attach keys on the daemon job id, never a sessionId.
+    exec "$CLAUDE_CMD" attach "$job_id"
+    ;;
+  *)
+    echo "office-hours: unexpected directive from office-hours-select.ts: $directive" >&2
+    exit 1
+    ;;
+esac

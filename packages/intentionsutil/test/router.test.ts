@@ -94,7 +94,7 @@ describe("tactic eligibility", () => {
       tactic({
         id: "tactic-a",
         phase: "implement",
-        office_hours: { reason: "needs a human", since: "2026-07-01" },
+        office_hours: { reason: "needs a human", since: "2026-07-01", recommendation: null },
       }),
     ];
     expect(candidateIds(nodes)).toEqual([]);
@@ -155,7 +155,7 @@ describe("strategy eligibility", () => {
 
   it("skips a parked strategy", () => {
     const nodes = [
-      strategy({ id: "strategy-s", office_hours: { reason: "capped", since: "2026-07-01" } }),
+      strategy({ id: "strategy-s", office_hours: { reason: "capped", since: "2026-07-01", recommendation: null } }),
     ];
     expect(candidateIds(nodes)).toEqual([]);
   });
@@ -327,7 +327,7 @@ describe("soft-freeze gate", () => {
   it("a parked strategy emits no re-evaluation candidate even when frozen", () => {
     const nodes = frozenGraph("stale-fingerprint").map((n) =>
       n.id === "strategy-s"
-        ? { ...n, office_hours: { reason: "parked", since: "2026-07-01" } }
+        ? { ...n, office_hours: { reason: "parked", since: "2026-07-01", recommendation: null } }
         : n,
     );
     const sel = selectGraphTargets(nodes);
@@ -404,7 +404,7 @@ describe("strategyFingerprint", () => {
       strategyFingerprint({ ...base, rounds: { count: 1, last_completed: "2026-07-01" } }),
     ).toBe(fp);
     expect(
-      strategyFingerprint({ ...base, office_hours: { reason: "r", since: "2026-07-01" } }),
+      strategyFingerprint({ ...base, office_hours: { reason: "r", since: "2026-07-01", recommendation: null } }),
     ).toBe(fp);
     expect(
       strategyFingerprint({ ...base, attention: { boost: 3, override: null, rationale: "r" } }),

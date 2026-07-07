@@ -61,7 +61,11 @@ describe("validateNode", () => {
       },
       validates: ["strategy-1"],
       blocked_by: ["tactic-2"],
-      office_hours: { reason: "needs human input", since: "2026-07-03" },
+      office_hours: {
+        reason: "needs human input",
+        since: "2026-07-03",
+        recommendation: "escalate to the author",
+      },
       pace_exempt: true,
       rounds: { count: 3, last_completed: "2026-07-02" },
     };
@@ -76,7 +80,11 @@ describe("validateNode", () => {
     });
     expect(result.validates).toEqual(["strategy-1"]);
     expect(result.blocked_by).toEqual(["tactic-2"]);
-    expect(result.office_hours).toEqual({ reason: "needs human input", since: "2026-07-03" });
+    expect(result.office_hours).toEqual({
+      reason: "needs human input",
+      since: "2026-07-03",
+      recommendation: "escalate to the author",
+    });
     expect(result.pace_exempt).toBe(true);
     expect(result.rounds).toEqual({ count: 3, last_completed: "2026-07-02" });
   });
@@ -204,6 +212,47 @@ describe("validateNode", () => {
         owner: "ai",
         status: "raw",
         office_hours: { reason: "parked" },
+      }),
+    ).toThrow();
+  });
+
+  it("defaults office_hours.recommendation to null when omitted", () => {
+    const result = validateNode({
+      id: "n1-oh-norec",
+      kind: "tactic",
+      statement: "Office hours without a recommendation.",
+      owner: "ai",
+      status: "raw",
+      office_hours: { reason: "parked", since: "2026-07-06" },
+    });
+    expect(result.office_hours).toEqual({
+      reason: "parked",
+      since: "2026-07-06",
+      recommendation: null,
+    });
+  });
+
+  it("accepts an explicit null office_hours.recommendation", () => {
+    const result = validateNode({
+      id: "n1-oh-nullrec",
+      kind: "tactic",
+      statement: "Office hours with explicit null recommendation.",
+      owner: "ai",
+      status: "raw",
+      office_hours: { reason: "parked", since: "2026-07-06", recommendation: null },
+    });
+    expect(result.office_hours?.recommendation).toBeNull();
+  });
+
+  it("rejects a non-string office_hours.recommendation", () => {
+    expect(() =>
+      validateNode({
+        id: "n1-oh-badrec",
+        kind: "tactic",
+        statement: "Office hours with a non-string recommendation.",
+        owner: "ai",
+        status: "raw",
+        office_hours: { reason: "parked", since: "2026-07-06", recommendation: 42 },
       }),
     ).toThrow();
   });
@@ -879,7 +928,7 @@ describe("validateGraph", () => {
       gnode({
         id: "virtue-1",
         kind: "virtue",
-        office_hours: { reason: "parked", since: "2026-07-03" },
+        office_hours: { reason: "parked", since: "2026-07-03", recommendation: null },
       }),
     ];
     expect(() => validateGraph(nodes)).toThrow(
@@ -903,7 +952,7 @@ describe("validateGraph", () => {
       gnode({
         id: "strategy-1",
         kind: "strategy",
-        office_hours: { reason: "awaiting input", since: "2026-07-03" },
+        office_hours: { reason: "awaiting input", since: "2026-07-03", recommendation: null },
         pace_exempt: true,
       }),
     ];
