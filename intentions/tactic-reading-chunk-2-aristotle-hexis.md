@@ -43,7 +43,12 @@ office_hours:
   since: 2026-07-06
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  curriculum:
+    priority: 2
+    passages:
+      - work: Aristotle, Nicomachean Ethics
+        range: II.5-6
 ---
 # Reading chunk 2: Nicomachean Ethics II.5–6 (hexis, the mean) — verify tradition-aristotle and kind-virtue's definition
 

@@ -44,7 +44,12 @@ office_hours:
   since: 2026-07-06
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  curriculum:
+    priority: 3
+    passages:
+      - work: Aristotle, Nicomachean Ethics
+        range: VI
 ---
 # Reading chunk 5: Nicomachean Ethics VI (phronesis; vice corrupts the archē) — verify the phronesis third of virtue-philosophical-mobility's attribution
 
