@@ -31,7 +31,25 @@ serves:
   - virtue-alignment-of-attachments
 recovers:
   - delegation-attention-services
-clarifications: []
+clarifications:
+  - question: Why do the reader/player apps ship PWA manifests but no service worker?
+    answer: "The manifests exist chiefly so an installed PWA persists the File
+      System Access folder permission across browser restarts — not for offline.
+      An offline app shell is deliberately deferred: service-worker
+      precache/invalidation is a maintenance tar pit, and the ownership claim is
+      carried by the files themselves (budget data stays readable via budget-etl
+      dump without the app at all). Revisit if offline reading/listening becomes
+      a real use pattern; until then no-SW is a decision, not an omission.
+      Recorded 2026-07-07 interview."
+  - question: How do the owned tools handle cloud media and player state?
+    answer: Cloud media is fetched whole into a shared 500 MB LRU IndexedDB blob
+      cache (cleared on sign-out) rather than streamed — one egress per item and
+      offline-ish availability once cached; ranged/MediaSource streaming is the
+      known better shape if long-form file sizes demand it. Persisted queue and
+      playback position are deliberately local-only in the .commons-audio
+      sidecar — there is no server-side listening log, a privacy posture most
+      players get wrong, at the cost of no cross-device position sync. Recorded
+      2026-07-07 interview.
 tooling_goals: []
 success_signal:
   observable: the share of the author's reading and listening attention carried by
@@ -40,6 +58,14 @@ success_signal:
   threshold: reading and listening both default to owned tools; platform services
     are deliberate exceptions, not defaults
   is_proxy: true
+attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: false
+rounds: null
 attributes:
   conditions:
     - open formats (PDF, EPUB, RSS, plain audio files) remain obtainable outside
