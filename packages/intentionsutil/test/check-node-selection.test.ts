@@ -37,7 +37,7 @@ function anode(partial: Partial<IntentionNode> & { id: string; kind: string }): 
     pace_exempt: partial.pace_exempt ?? false,
     rounds: partial.rounds ?? null,
     attributes: partial.attributes ?? {},
-  } as IntentionNode;
+  };
 }
 
 function seed(dir: string, node: IntentionNode): void {
@@ -191,7 +191,9 @@ describe("evaluateSelection", () => {
   describe("scope chain (--stamp)", () => {
     function seedTactic(dir: string, phase: Phase): string {
       seed(dir, anode({ id: "tactic-c", kind: "tactic", phase }));
-      return evaluateSelection({ nodeId: "tactic-c", selectedPhase: phase, dir, stamp: null }).stdout as string;
+      const { stdout } = evaluateSelection({ nodeId: "tactic-c", selectedPhase: phase, dir, stamp: null });
+      if (stdout === null) throw new Error("seedTactic: expected a passing seed to produce a scope fingerprint");
+      return stdout;
     }
 
     it("passes at qa when the stamp matches the current scope fingerprint", () => {
