@@ -523,6 +523,259 @@ clarifications:
       attach/resume/provision verbs, its gh selector, and the strip hook retire
       with the drain (tactic-legacy-router-removal). Recorded 2026-07-06
       interview."
+  - question: Bootstrap rounds run /align-tactics in the same session as the
+      /align-strategy edit — is that same-session context load-bearing?
+    answer: "No — it is a bootstrap safety, never a carrier, recorded from author
+      direction. In the target design the soft-freeze re-evaluation is a fresh
+      /align-tactics session the router queues on a fingerprint mismatch
+      (clarification 10) and the tick launches (clarification 24), with the
+      transition-time fingerprint gate holding every forward transition and
+      merge arm until that session confirms or amends
+      (tactic-graph-router-transitions Unit 1) and the autonomy contract parking
+      to office_hours — reason plus recommendation — when author input is
+      required. That fresh session has only the graph, so /align-strategy owes
+      it a complete record: every fact a decomposition or re-evaluation needs —
+      the interview's decisions, rationale, edge-case resolutions, and tactical
+      byproducts — lands in the graph at record time (strategy substance:
+      statement, clarifications, conditions, success_signal; tactical context:
+      draft tactic bodies per clarification 6), never only in the recording
+      session's context. A decomposition that cannot proceed without unrecorded
+      interview context is a defect of the /align-strategy round that produced
+      it, exactly as a park whose context lives only in the parking session is a
+      defect (condition 6) — the same graph-recoverability principle applied to
+      the strategy-record write instead of the park write. The /align-strategy
+      requirements-coverage check (its step 6: every clause of the author's
+      input maps to a recorded element) is the skill-side discharge of this
+      condition. Same-session /align-tactics execution remains good practice
+      during bootstrap while no router exists to queue the re-evaluation, but
+      nothing may depend on it. Recorded 2026-07-06 from author direction."
+  - question: Repeated /align-tactics rounds kept re-refining the same
+      doctrine-encoding tactic (tactic-align-skills-greenfield-gate, four
+      touches on 2026-07-06) — one-off or process defect, and what is the
+      completeness bar for an amendment?
+    answer: "Systemic, two defects — the strategy substance legitimately changing
+      three times in one day is the soft-freeze loop working, but each amendment
+      being incomplete is not. (1) Amendment completeness: when a re-evaluation
+      amends an open tactic, the entire node — statement, rationale, context,
+      every unit, and verification — is reconciled against the full current
+      strategy substance in that same round; a one-bullet delta that leaves
+      sibling sections contradicting the amendment is an incomplete amendment,
+      the same defect class as an incomplete record (condition 7). (2)
+      Enumeration honesty: keyword grep over open tactics is a shortlisting
+      heuristic only — disposition of each open child requires a full-body
+      re-read, because doctrine-encoding tactics depend on strategy text they
+      never keyword-match. A mechanical floor backs the doctrine: the validate
+      gate gains a plan-schema body lint on phase-set tactics and a census
+      script replaces the hand-run classification greps
+      (tactic-align-tactics-mechanical-floor); the skill-text encoding is homed
+      in tactic-align-skills-greenfield-gate. Recorded 2026-07-06 from author
+      direction."
+  - question: Is 'select all eligible, cap concurrent per workflow' safe under
+      overlapping ticks — and where does the concurrency cap bind?
+    answer: "No as run, and the cap is global — recorded 2026-07-06 interview after
+      the second emulated tick. The concurrency cap is a property of the one
+      claimed set, never of a workflow: max_concurrent_workers
+      (dispatch.config/target-workers.json, default 8) bounds the TOTAL of
+      dispatch-managed workers live at any moment across all ticks, workflows,
+      and lanes. The enforcement point is selection — the tick counts busy plus
+      reserved from the ledger and liveness against the pace target and selects
+      only the gap; per-workflow caps (dispatch-graph-tick's worker_cap, an
+      emulated tick's semaphore) are local backstops, never the enforcement
+      point (two overlapping workflows each locally capped at 8 would otherwise
+      run 16). What makes overlapping ticks safe is claims spanning the overlap:
+      a tick's lifetime ends at spawn — every selected node enters the
+      reservation ledger at selection under the lock, the claim is carried by
+      the node-id-named runner session for the phase's life, and a dead worker's
+      claim is reconciled by the sweep; a concurrent tick re-selects only
+      unclaimed nodes, so the global cap holds without serializing ticks. A
+      single long-lived multi-node workflow is never the router mode: its
+      subagents are invisible to node-id liveness, so it cannot carry claims —
+      the second emulated tick's 12 workers in one workflow were exactly this,
+      safe only because no overlapping tick fired. Bootstrap: an emulating
+      session owes the router's claiming semantics like any other phase
+      semantics (clarification 15) — write a ledger claim per selected node
+      before fan-out and clear each with its transition write."
+  - question: A selected node’s scope or state changes after selection — before its
+      worker starts, or while it runs. What closes the window?
+    answer: "Two gates bracket the worker; no mid-run polling. Start gate: the
+      provisioning prelude (provision-node-worktree) re-validates against fresh
+      origin/main — the node still exists, its persisted phase equals the
+      selected phase (passed as an argument; the directive is never re-derived),
+      office_hours is null, and the serving strategy's substance fingerprint is
+      unchanged where stamped — and any mismatch is a distinct exit code: the
+      worker reports skipped, its claim clears, and the next tick re-selects
+      from current state. This makes the soft freeze precise: a
+      selected-but-unstarted worker counts as not started and yields to the
+      freeze. Write gate: the transition-time fingerprint gate
+      (tactic-graph-router-transitions Unit 1) holds the transition when
+      substance moved mid-run. Changes landing mid-run are absorbed at the write
+      gate plus the re-evaluation sweep — phase skills never poll the graph
+      mid-phase. Author interactive edits to a claimed tactic's scope land
+      freely and bind from the next selection: the in-flight phase finishes
+      against the scope it started with and its transition write stands; an
+      author who needs in-flight work stopped parks the node — the start gate
+      blocks any queued or re-selected worker, and the interactive-commit rule
+      un-parks. The base-version write check (tactic-graph-commit-prune-support
+      Unit 2) keeps author and worker node-writes from clobbering each other.
+      Start-gate implementation is retained as draft
+      tactic-worker-start-revalidation (new scope — never an amendment to the
+      in-flight selector PR). Recorded 2026-07-06 interview."
+  - question: Does long-horizon graph work keep a workflow or session alive?
+    answer: "No — the graph is the long-horizon substrate; sessions are disposable
+      executors. This generalizes clarification 26 from parked work to the
+      router itself: continuity is durable state on origin/main (persisted
+      phase, claims, plans, residue sections) re-entered by the cron heartbeat;
+      dead ticks, dead workers, and dropped queues recover by re-selection plus
+      ledger sweep, never by resuming a session (workflow resume is
+      same-session-only). A kept-alive supervisor workflow or self-rescheduling
+      session is rejected as router substrate: session limits kill workflow
+      subagents mid-flight (observed on both emulated ticks), one session is a
+      single point of failure, and it concentrates the router into the rented
+      executor — the direction the thin-script condition (clarification 25)
+      exists to bound. A phase worker may legitimately run long: it lives
+      exactly as long as its one phase under its node-id claim. The ban is the
+      router-as-session, not long phases. Recorded 2026-07-06 interview."
+  - question: A tactic-only scope edit lands mid-review, or between review-pass and
+      merge — the mid-flight-edit rule lets the transition write stand, so the
+      PR merges against pre-edit scope. Is that window acceptable?
+    answer: "No — closed by a tactic-scope fingerprint, superseding the 'its
+      transition write stands' clause of the mid-flight-edit clarification
+      recorded earlier the same day. The rest of that rule stands: edits to a
+      claimed tactic land freely, bind from the next selection, and
+      park-to-interrupt remains the author's stop lever; what changes is that a
+      phase's forward transition no longer survives a scope edit that landed
+      after the phase's fresh read. Mechanism, symmetric with the
+      strategy-substance fingerprint (clarification 10) but tactic-local and
+      worktree-scoped rather than stored in the node: the worker-start
+      re-validation gate records the tactic's scope fingerprint — a hash over
+      statement plus node body, never frontmatter state fields, so
+      attempts/markers/residue/park writes cannot trip it
+      (tacticScopeFingerprint beside strategyFingerprint in intentionsutil) — as
+      part of taking its fresh read, saved beside the node's worktree, never a
+      per-launch graph write. The transition writer re-checks it at every
+      forward transition write, and specifically before arming auto-merge at
+      clean review completion, exactly where the strategy-fingerprint gate
+      already sits (tactic-graph-router-transitions Unit 1): on mismatch, no
+      forward transition is written and no merge is armed — the tactic stays at
+      its completed phase and the next tick re-runs that phase against the
+      updated scope, whose worker takes a fresh read and a fresh stamp. Net
+      guarantee: a tactic cannot reach done or merge until the phase that was in
+      flight has completed a run whose fresh read postdates the last scope edit.
+      Bootstrap parity: an emulating session owes the same scope re-check before
+      writing its transition (clarification 15). The asymmetry that motivated
+      this — the soft-freeze hash deliberately covers strategy substance only —
+      remains by design; tactic scope gets its own local gate instead of joining
+      the strategy hash. Recorded 2026-07-06 interview."
+  - question: A worker session dies mid-phase (API error, session limit, system
+      failure) while graph state and worktree survive — is the session state
+      worth recovering, by workflow-session resume or by transcript
+      reconstruction (the legacy recover-api-error pattern)?
+    answer: "No on both mechanisms — re-selection stays the only recovery path,
+      reaffirming clarifications 24/29 on greenfield re-evaluation, and the
+      residual loss is closed by a durability rule, not a session mechanism.
+      What a dead worker actually loses is reasoning-in-progress — findings not
+      yet flushed to durable state; the node body's clean-session plan
+      (condition 7), the node-id worktree with its commits and uncommitted edits
+      (the re-selected worker roots in the same worktree, so in-flight file
+      state lands in front of it per clarification 26's rule), and the PR with
+      its phase comments all survive, and the ledger sweep already keeps a dead
+      worker from blocking new selections. Workflow-session resume is
+      technically unfit twice over: resume is same-session-only, unavailable
+      exactly when the tick session is dead; and resume replays only completed
+      agent() calls from cache — a worker that died mid-flight re-runs from
+      scratch — so its best case equals re-selection at tighter coupling to the
+      rented executor. Transcript reconstruction is negative expected value as
+      router machinery: the node body already carries everything a fresh session
+      needs, so the transcript's marginal information over plan + worktree diff
+      + PR comments is small; reading a long transcript costs a significant
+      fraction of redoing the reasoning and inherits whatever confused state
+      killed the session; and it would make the harness's proprietary transcript
+      format load-bearing for the router — reversing clarification 26's demotion
+      of session persistence and running against the thin-script capture bound
+      (clarification 25). recover-api-error stays a human-invoked legacy-lane
+      tool and never becomes router substrate. The remaining gap — an expensive
+      phase dying with its findings only in conversation — is closed by the
+      checkpoint discipline (new condition 9): phase progress whose only home is
+      the session is a defect; workers flush findings to durable state at
+      natural boundaries (worktree commits for file work; PR comments for QA
+      triage and review findings as produced, not only at phase end; node body
+      sections for residue), and a re-selected worker treats pre-existing
+      worktree/PR state as resume input — diff against the branch base and read
+      prior phase comments before redoing anything. This bounds a dead worker's
+      redo cost to one checkpoint interval with zero new harness coupling.
+      Skill-side encoding retained as draft tactic-phase-checkpoint-discipline.
+      Recorded 2026-07-06 interview."
+  - question: Clarification 32's amendment-completeness bar names re-evaluation
+      amendments of tactics. Does the same bar bind /align-strategy edits to
+      strategy nodes?
+    answer: "Yes — the bar widens to any node amendment in any align skill. An
+      /align-strategy edit round reconciles the edited strategy's entire node —
+      statement, rationale, conditions, signal, and any clarification the edit
+      touches or contradicts — against the interview's full outcome in the same
+      round; landing one new clarification while sibling fields still contradict
+      it is the same incomplete-amendment defect clarification 32 names for
+      tactics. The interview's live author presence reduces but does not remove
+      the risk: the record, not the session, is the carrier (condition 7).
+      Skill-text encoding is homed in tactic-align-skills-greenfield-gate Unit
+      1; the mechanical enumeration and lint support (strategy census,
+      provenance lint) in tactic-align-tactics-mechanical-floor. Recorded
+      2026-07-06 /align-strategy skill-evaluation round."
+  - question: The scope-fingerprint gate re-runs only the phase that was in flight —
+      implement and qa completed against pre-edit scope never re-run. Does a
+      scope edit (direct, or via a cascading strategy re-evaluation) force all
+      three of implement/qa/review to execute with the latest scope — and when a
+      phase routes back, is it clear from graph state what changed?
+    answer: "Yes to both, by amendment: scope staleness now demotes the tactic to
+      phase implement instead of holding it in place — superseding the same-day
+      scope-fingerprint clarification's 'stays at its completed phase and the
+      next tick re-runs that phase' clause (its stamp/verify mechanism and
+      everything else in that entry stand). As first recorded, the gate re-ran
+      only the held phase, so an edit landing after qa's fresh read reached
+      merge with only review re-run: review's contract check does route
+      delivered-vs-current-scope gaps to its fix lane, so the code converged,
+      but the new scope never received the qa phase's independent
+      user-acceptance validation (clarification 20), and 'implement ran with
+      latest scope' held only vicariously through fix loops. Amended rule —
+      chain of custody: a pre-merge phase beyond implement may run only against
+      the exact scope the previous phase ran against. The worker-start gate
+      compares the current tacticScopeFingerprint against the existing stamp
+      left by the previous phase before overwriting it (fix/qa/review; implement
+      skips the comparison — it always takes the latest scope and re-establishes
+      custody; main-qa is post-merge and validates against current intent by
+      design); the transition-time gate keeps comparing against the running
+      phase's own start stamp. Staleness at either point writes the backward
+      transition phase := implement — the transition writer's one owned backward
+      transition — never a hold: the re-selected implement worker roots in the
+      same worktree, reads the current node body as the whole target state, and
+      implements only the delta, after which qa and review re-run in order on
+      fresh reads. Net guarantee, strengthened from the superseded clause: merge
+      requires an unbroken implement -> qa -> review chain all executed against
+      the merge-time scope fingerprint. Machinery body writes cannot break the
+      chain: the transition writer refreshes the stamp to the post-write
+      fingerprint of the node it just committed — residue sections DO change the
+      body hash, so the superseded entry's claim that residue writes cannot trip
+      the gate was wrong as written; the writer-side refresh is what makes
+      machinery appends harmless — leaving only author and re-evaluation edits
+      able to demote. A cascading strategy edit reaches this gate through the
+      existing two stages: the strategy-substance fingerprint holds transitions
+      and queues re-evaluation (clarification 10); if the re-evaluation amends
+      the tactic's scope, that amendment trips the scope chain and demotes — if
+      it confirms without amending, nothing re-runs, which is correct. Boundary:
+      demotion is pre-merge only (implement/qa/review/fix); post-merge staleness
+      routes per main-qa parity (clarification 22) — broken-in-prod becomes an
+      implement-chain bug tactic, never an un-merge. A missing stamp fails open
+      with a logged warning during bootstrap and fails closed (demote) once the
+      stamp mechanism lands. Routing-back provenance is explicit, not
+      archaeological: the stamp records the origin/main SHA beside the
+      fingerprint, so the demoting writer names exactly what is being absorbed —
+      git log <stamped-sha>..origin/main -- intentions/<id>.md — in the demotion
+      commit message and as a comment on the node's PR when one exists; the
+      re-run phases need no delta to be correct (the node body is the full
+      target state, condition 7 — plan minus delivered worktree state is the
+      work), so the named range is a focus aid and the audit trail. Bootstrap
+      parity: an emulating session owes the chain re-check before each
+      transition it writes, and owes the demotion write when it finds a post-qa
+      scope edit (clarification 15). Recorded 2026-07-06 interview."
 tooling_goals:
   - kind: actuator
     statement: /align-strategy — interview-driven strategy recording, superseding
@@ -550,7 +803,13 @@ success_signal:
   threshold: legacy gh dispatch router deleted from the repo with the /file-issue
     and /plan-issue coverage matrix fully mapped to the align family
   is_proxy: false
-attention: null
+attention:
+  boost: 5
+  override: null
+  rationale: "Author-directed 2026-07-06: the graph-native dispatch router
+    migration is the current focus — lift this strategy and its tactic subtree
+    above derived-only ranks (derived terms cap at 2) so router selection works
+    the migration first."
 phase: null
 execution: null
 validates: []
@@ -580,5 +839,22 @@ attributes:
       (office_hours.recommendation), and any state a fresh session needs;
       session attach/resume is not a supported recovery path, so a park whose
       context lives only in the parking session is a defect
+    - /align-strategy records in the graph, at record time, all context a fresh
+      /align-tactics session needs to decompose or re-evaluate — strategy
+      substance plus draft-tactic bodies; same-session /align-tactics execution
+      is a bootstrap safety, not a carrier, and a decomposition blocked on
+      unrecorded interview context is a defect of the recording round
+    - a re-evaluation amendment reconciles the amended tactic's entire node —
+      statement, rationale, context, every unit, and verification — against the
+      full current strategy substance in the same round, and dispositions each
+      open child from a full-body read (keyword grep only shortlists); a
+      one-bullet delta that leaves sibling sections stale is a defect of the
+      amending round
+    - phase progress whose only home is the worker session is a defect — workers
+      flush findings to durable state at natural boundaries (worktree commits,
+      PR comments as produced, node body residue sections), and a re-selected
+      worker treats pre-existing worktree and PR state as resume input rather
+      than redoing the phase; session recovery (workflow resume, transcript
+      reconstruction) is never router substrate
 ---
 # Dispatch runs on the graph — orchestration state lives in intention nodes, worked through the align skill family

@@ -19,12 +19,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-graph-router-selector
   pr: 2785
-  attempts: {}
-  markers: []
+  attempts:
+    qa: 1
+  markers:
+    - qa-done
   strategy_fingerprint: null
 validates: []
 blocked_by:
@@ -188,12 +190,22 @@ legacy launch scripts stay issue-lane-only and retire with the drain,
   `office_hours` graph write instead of an office-hours label —
   coordinate with `tactic-graph-router-transitions`, which owns the
   ongoing phase/marker writes, and use the `graph-commit` primitive.
+  Every such park carries recoverable context at park time — reason
+  **and** a best-next-steps recommendation (strategy clarification 30 /
+  condition 6; session attach/resume is not a supported recovery path).
+  Until `office_hours.recommendation` lands in `schema.ts`
+  (`tactic-office-hours-graph-entry` Unit 1 /
+  `tactic-phase-skill-node-targets` Unit 2, shared skip-if-present),
+  carry the recommendation inside the `reason` string as a labelled
+  trailing sentence — never drop it. If the merged tick machinery
+  (PR #2785) writes reason-only parks, bringing it to this contract is a
+  review/main-qa finding against this amended plan.
 
 ## Dependencies
 
 - `tactic-graph-dispatch-schema` — the fields the gates read.
-- `tactic-align-tactics-skill` — the session type a selected strategy
-  spawns.
+- `tactic-align-tactics-skill` (completed and pruned) — the
+  `/align-tactics` session type a selected strategy spawns is live.
 - `tactic-calculated-attention` — should land before the selector goes
   live so the derived terms are in effect from the first tick; not a hard
   blocker for this tactic (the selector functions without it, minus the
@@ -224,3 +236,18 @@ tick.
 ## Implementation notes
 
 One subagent per unit, `model` per tag; constrain to working-tree edits.
+
+## main-qa residue (qa 2026-07-06)
+
+- dispatch-graph-tick.js's agent() call sets options.model directly from dispatch-phase-model output (full pinned IDs like claude-sonnet-4-6/claude-opus-4-8); all other Workflow-tool call sites in this repo (qa-fix.js, review-fix.js) use the short alias ('opus'/'sonnet') for that option instead. On the first live graph tick that routes a qa/review/fix-checks/main-qa node through dispatch-graph-tick.js, confirm the spawned subagent actually runs on the intended model (not just that it ran) -- check the agent's actual model, not just success. If agent() silently ignores or errors on a pinned ID, fix by mapping to the short alias in dispatch-graph-tick.js while preserving the version-pinning intent (do not blindly downgrade to a floating alias without first confirming what version the alias resolves to).
+- The worker_cap default of 8 added to dispatch-graph-tick.js (commit ca4e0257) is currently inert in the live call path: dispatch-graph-execute always invokes the workflow with a single-element selections array and worker_cap:1 (one runner session per node). This is fine as forward-compatible plumbing per the author's own framing, but has no test coverage and is unexercised -- worth a sanity check the first time a multi-node single-workflow-instance invocation is ever wired.
+
+## Amendment (2026-07-06): tick worker cap default
+
+Author-directed during the second emulated tick: the unit-4 tick workflow
+(`.claude/workflows/dispatch-graph-tick.js`) keeps its per-invocation
+`worker_cap` arg but now defaults to 8 — parity with the legacy router's
+`max_concurrent_workers` (`dispatch.config/target-workers.json`) — instead of
+running uncapped when invoked without a cap. Landed on the PR branch as
+commit ca4e0257. The pace-derived target from dispatch-select-tick remains
+the normal cap source; the default binds only a direct/uncapped invocation.

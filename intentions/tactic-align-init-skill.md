@@ -26,12 +26,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-align-init-skill
   pr: 2781
-  attempts: {}
-  markers: []
+  attempts:
+    qa: 1
+  markers:
+    - qa-done
   strategy_fingerprint: null
 validates: []
 blocked_by: []
@@ -136,3 +138,8 @@ that the `align` jit still fires the rung-5 dialectic, now via
 
 Two units; subagents with `model: opus` (Unit 1) and `model: sonnet`
 (Unit 2); constrain to working-tree edits.
+
+## main-qa residue (qa 2026-07-06)
+
+- intentions/tactic-dispatch-script-hardening.md Unit 4 names the stale path '.claude/skills/align/scripts/gather-context.sh:71'; after this PR merges the file lives at '.claude/skills/align-init/scripts/gather-context.sh' (line number shifted by +1 after the frontier-view fix). Correct the path/line when that tactic is next planned or implemented.
+- The scheduled jit:align trigger (dispatch-jit-reminder invoking the renamed /align-init skill against a real jit:align review issue, posting the report, and closing it) needs verification against a live dispatch tick on deployed main -- no such issue exists to drive this in the worktree. Structurally verified instead (jit.example.json skill field, unchanged jit key/label, test-dispatch-scripts.sh fixtures all agree).

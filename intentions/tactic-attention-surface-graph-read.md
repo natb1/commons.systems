@@ -26,11 +26,14 @@ office_hours: null
 pace_exempt: false
 rounds: null
 attributes:
-  phase: qa
+  phase: fix
   blocked_by: []
   execution:
     branch: tactic-attention-surface-graph-read
     pr: 2780
+    attempts:
+      fix: 1
+    markers: []
 ---
 # browser graph read layer — File System Access API over the local clone, client-side tree build and resolveAttention, staleness surfaced loudly
 
