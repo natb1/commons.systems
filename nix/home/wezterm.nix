@@ -140,7 +140,10 @@
       After = [ "default.target" ];
     };
     Service = {
-      ExecStart = "${config.programs.wezterm.package}/bin/wezterm-mux-server --daemonize=false";
+      # --daemonize is a bare boolean flag (no `=value` form accepted); its
+      # absence already means "run in the foreground", which is what a
+      # systemd-supervised process needs.
+      ExecStart = "${config.programs.wezterm.package}/bin/wezterm-mux-server";
       Restart = "on-failure";
     };
     Install.WantedBy = [ "default.target" ];
