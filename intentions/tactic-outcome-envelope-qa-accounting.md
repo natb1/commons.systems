@@ -19,23 +19,21 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
-execution: null
+phase: review
+execution:
+  branch: tactic-outcome-envelope-qa-accounting
+  pr: 2774
+  attempts:
+    qa: 1
+  markers:
+    - qa-done
+  strategy_fingerprint: 157bc07dd1dbc4a1c7a5095f7c3094ee88accf5879271bc6d2c4cd4794029848
 validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes:
-  phase: review
-  execution:
-    strategy_fingerprint: 157bc07dd1dbc4a1c7a5095f7c3094ee88accf5879271bc6d2c4cd4794029848
-    branch: tactic-outcome-envelope-qa-accounting
-    pr: 2774
-    attempts:
-      qa: 1
-    markers:
-      - qa-done
+attributes: {}
 ---
 # per-phase routing metric — qa routes on actionability, not hit_rate, so a triage-shaped phase is not promoted to Opus by a rate it cannot move
 
