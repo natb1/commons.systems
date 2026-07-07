@@ -28,16 +28,16 @@ rationale: "Motivated by the 2026-07-07 wezterm incident: tailscale on the
   resolution manual. Fully autonomous re-auth via stored reusable auth keys was
   considered and rejected: a silently stealable credential that can enroll new
   devices is a worse surface than either alternative."
-reading: router-host node key expiry at Tailscale default (enabled); no auth
-  health check exists on any machine; wezterm config fails silently to an empty
-  ssh_domains on NeedsLogin (2026-07-07 incident)
-gap: reading 'router-host node key expiry at Tailscale default (enabled); no
-  auth health check exists on any machine; wezterm config fails silently to an
-  empty ssh_domains on NeedsLogin (2026-07-07 incident)' does not meet threshold
-  'router-host node shows key expiry disabled in the admin console, an
-  interactive-shell-login check names Tailscale auth state on each machine, and
-  the next NeedsLogin incident is first diagnosed by the named check rather than
-  forensic debugging'
+reading: router-host key expiry disabled in the admin console 2026-07-07
+  (Self.KeyExpiry null); no auth health check exists yet on any machine; wezterm
+  config still fails silently to an empty ssh_domains on NeedsLogin
+gap: reading 'router-host key expiry disabled in the admin console 2026-07-07
+  (Self.KeyExpiry null); no auth health check exists yet on any machine; wezterm
+  config still fails silently to an empty ssh_domains on NeedsLogin' does not
+  meet threshold 'router-host node shows key expiry disabled in the admin
+  console, an interactive-shell-login check names Tailscale auth state on each
+  machine, and the next NeedsLogin incident is first diagnosed by the named
+  check rather than forensic debugging'
 serves:
   - virtue-progressive-detachment
   - virtue-alignment-of-attachments
