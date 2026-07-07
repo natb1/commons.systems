@@ -40,6 +40,16 @@ success_signal:
   threshold: reading and listening both default to owned tools; platform services
     are deliberate exceptions, not defaults
   is_proxy: true
+attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: false
+rounds:
+  count: 0
+  last_completed: null
 attributes:
   conditions:
     - open formats (PDF, EPUB, RSS, plain audio files) remain obtainable outside
