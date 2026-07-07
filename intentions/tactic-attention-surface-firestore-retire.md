@@ -20,16 +20,20 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-attributes:
-  phase: implement
-  validates:
-    - strategy-attention-surface
-  blocked_by:
-    - tactic-attention-surface-status-page
-    - tactic-attention-surface-goals-page
-    - tactic-attention-surface-velocity-pace
-    - tactic-attention-surface-instrument
-    - tactic-attention-surface-analytics-collector
+phase: implement
+execution: null
+validates:
+  - strategy-attention-surface
+blocked_by:
+  - tactic-attention-surface-status-page
+  - tactic-attention-surface-goals-page
+  - tactic-attention-surface-velocity-pace
+  - tactic-attention-surface-instrument
+  - tactic-attention-surface-analytics-collector
+office_hours: null
+pace_exempt: false
+rounds: null
+attributes: {}
 ---
 # retire the hosted Firestore owner tier — office-hours owner data goes fully local-first
 

@@ -22,10 +22,15 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-attributes:
-  phase: implement
-  blocked_by:
-    - tactic-attention-surface-signal-types
+phase: implement
+execution: null
+validates: []
+blocked_by:
+  - tactic-attention-surface-signal-types
+office_hours: null
+pace_exempt: false
+rounds: null
+attributes: {}
 ---
 # velocity and pace signals — host-side velocity series folded into the office-hours snapshot; pace-telemetry adapter for the frontier-economy condition
 
