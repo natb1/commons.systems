@@ -9,8 +9,10 @@ export type {
   ToolingKind,
   Attention,
 } from "./schema.js";
-export { resolveAttention } from "./attention.js";
+export { resolveAttention, computeSignalPath, isSignalUnvalidated } from "./attention.js";
 export type { ResolvedAttention, TermContribution } from "./attention.js";
+export { selectGraphTargets, strategyFingerprint, readingDate, PHASE_LADDER } from "./router.js";
+export type { GraphCandidate, GraphSelection, SelectionEvent } from "./router.js";
 export { IntentionSchemaError } from "./errors.js";
 export { writeNode, readNode, listNodes } from "./store.js";
 export { projectGoals, activeFrontier, realizationForOwner, renderFrontier } from "./goals.js";
