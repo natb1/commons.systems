@@ -23,8 +23,13 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-worker-start-revalidation
+  pr: 2792
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
 validates: []
 blocked_by:
   - tactic-graph-router-selector
