@@ -20,7 +20,7 @@
 // `.claude/docs/signal-identification.md`. External sensors (site analytics,
 // PageSpeed Insights, anything that observes activity beyond one's own
 // execution) are FLAGGED, opt-in, and deliberately NOT registered here; they
-// live in `.claude/skills/align/scripts/fetch-*.sh` behind explicit flags.
+// live in `.claude/skills/align-init/scripts/fetch-*.sh` behind explicit flags.
 //
 // A node naming a sensor that is not registered is NOT silently skipped and does
 // NOT crash the batch: it is collected and reported to stderr at the end. That

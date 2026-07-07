@@ -51,7 +51,7 @@ function isPlainObjectLike(value: unknown): value is Record<string, unknown> {
 }
 
 /** A strategy's signal is unvalidated iff it has a gap, or no reading yet. */
-function isUnvalidated(strategy: IntentionNode): boolean {
+export function isSignalUnvalidated(strategy: IntentionNode): boolean {
   return strategy.gap !== null || strategy.reading === null;
 }
 
@@ -108,6 +108,114 @@ function irreversibilityScore(delegation: IntentionNode): number {
 /** One delegation's capture severity, normalized to the 1/3..1 range (max axis sum 6). */
 function captureScore(delegation: IntentionNode): number {
   return (divergenceScore(delegation) + irreversibilityScore(delegation)) / 6;
+}
+
+// --- Signal-path reachability ----------------------------------------------------
+
+/**
+ * Compute the set of node ids on a signal path: every node that (transitively)
+ * blocks — reachable by walking `blocked_by` in reverse (who lists me as a
+ * blocker), or inherits down a `parent` chain — a validates-terminal. A
+ * validates-terminal is a tactic bearing a `validates` edge to a strategy whose
+ * signal is unvalidated, or such a strategy itself (a strategy is its own
+ * validates-terminal while unvalidated).
+ *
+ * This is `resolveAttention`'s signal-term reachability, exported so the graph
+ * router's strategy-eligibility gate ("no non-draft child tactics on the
+ * strategy's signal path") shares one implementation. The DFS does NOT throw on
+ * a cycle: a boolean OR-over-paths query is well-defined even with a cycle in
+ * the mix — a node fully enclosed in a cycle with no external escape to a
+ * terminal simply isn't on-path, which is the correct answer, not an error.
+ */
+export function computeSignalPath(nodes: IntentionNode[]): Set<string> {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+
+  const terminalIds = new Set<string>();
+  for (const n of nodes) {
+    if (n.kind === "strategy" && isSignalUnvalidated(n)) {
+      terminalIds.add(n.id);
+    } else if (n.kind === "tactic") {
+      for (const target of n.validates) {
+        const strategy = byId.get(target);
+        if (strategy !== undefined && strategy.kind === "strategy" && isSignalUnvalidated(strategy)) {
+          terminalIds.add(n.id);
+          break;
+        }
+      }
+    }
+  }
+
+  // reverseBlockers(id) = every node that lists `id` in its OWN blocked_by —
+  // i.e. the nodes `id` blocks. Walking this (plus parent, downward) is how a
+  // node reaches a validates-terminal: completing it is on the path to
+  // completing something that validates a signal.
+  const reverseBlockers = new Map<string, string[]>();
+  for (const n of nodes) {
+    for (const blocker of n.blocked_by) {
+      const list = reverseBlockers.get(blocker);
+      if (list) list.push(n.id);
+      else reverseBlockers.set(blocker, [n.id]);
+    }
+  }
+
+  const onPathMemo = new Map<string, boolean>();
+  const onPathStack = new Set<string>();
+
+  // `provisional` marks a `false` that was only reached by short-circuiting on a
+  // node still mid-DFS (a cycle formed by MIXING `parent` and `blocked_by`
+  // edges). Such a `false` saw only the truncated cycle view, not the node's
+  // true reachability, so it must NOT be memoized: caching it would permanently
+  // mis-record a node as off-path when its sole route to a terminal runs back
+  // through an ancestor that had not yet resolved, and would make the result
+  // depend on input/traversal order. It is recomputed instead — every node is
+  // entered as a fresh DFS root by the loop below, at which point its former
+  // on-stack ancestors are fully-resolved descendants. A `true` is always final
+  // (some path reached a terminal) and is always cached.
+  const resolveOnPath = (id: string): { result: boolean; provisional: boolean } => {
+    const memo = onPathMemo.get(id);
+    if (memo !== undefined) return { result: memo, provisional: false };
+    if (onPathStack.has(id)) return { result: false, provisional: true }; // cycle short-circuit
+    onPathStack.add(id);
+
+    let result = terminalIds.has(id);
+    let provisional = false;
+    if (!result) {
+      const node = byId.get(id);
+      if (node?.parent !== null && node?.parent !== undefined && byId.has(node.parent)) {
+        const parent = resolveOnPath(node.parent);
+        if (parent.result) result = true;
+        else provisional = provisional || parent.provisional;
+      }
+    }
+    if (!result) {
+      for (const blocked of reverseBlockers.get(id) ?? []) {
+        const sub = resolveOnPath(blocked);
+        if (sub.result) {
+          result = true;
+          break;
+        }
+        provisional = provisional || sub.provisional;
+      }
+    }
+
+    onPathStack.delete(id);
+    // Cache only final answers: any `true`, or a `false` that did not depend on
+    // an unresolved cycle short-circuit. Provisional falses recompute later.
+    if (result || !provisional) {
+      onPathMemo.set(id, result);
+      return { result, provisional: false };
+    }
+    return { result, provisional: true };
+  };
+
+  // Enter every node as a fresh DFS root in id order (deterministic regardless
+  // of input order), so provisional falses from an earlier root resolve.
+  const result = new Set<string>();
+  const sortedIds = nodes.map((n) => n.id).sort();
+  for (const id of sortedIds) {
+    if (resolveOnPath(id).result) result.add(id);
+  }
+  return result;
 }
 
 // --- Resolver ------------------------------------------------------------------
@@ -226,86 +334,11 @@ export function resolveAttention(nodes: IntentionNode[]): Map<string, ResolvedAt
   };
 
   // --- Signal-satisfaction term -------------------------------------------
+  // Shared with the graph router's strategy-eligibility gate — see
+  // computeSignalPath above for the reachability semantics and cycle handling.
 
-  const terminalIds = new Set<string>();
-  for (const n of nodes) {
-    if (n.kind === "strategy" && isUnvalidated(n)) {
-      terminalIds.add(n.id);
-    } else if (n.kind === "tactic") {
-      for (const target of n.validates) {
-        const strategy = byId.get(target);
-        if (strategy !== undefined && strategy.kind === "strategy" && isUnvalidated(strategy)) {
-          terminalIds.add(n.id);
-          break;
-        }
-      }
-    }
-  }
-
-  // reverseBlockers(id) = every node that lists `id` in its OWN blocked_by —
-  // i.e. the nodes `id` blocks. Walking this (plus parent, downward) is how a
-  // node reaches a validates-terminal: completing it is on the path to
-  // completing something that validates a signal.
-  const reverseBlockers = new Map<string, string[]>();
-  for (const n of nodes) {
-    for (const blocker of n.blocked_by) {
-      const list = reverseBlockers.get(blocker);
-      if (list) list.push(n.id);
-      else reverseBlockers.set(blocker, [n.id]);
-    }
-  }
-
-  const onPathMemo = new Map<string, boolean>();
-  const onPathStack = new Set<string>();
-
-  // `provisional` marks a `false` that was only reached by short-circuiting on a
-  // node still mid-DFS (a cycle formed by MIXING `parent` and `blocked_by`
-  // edges). Such a `false` saw only the truncated cycle view, not the node's
-  // true reachability, so it must NOT be memoized: caching it would permanently
-  // mis-record a node as off-path when its sole route to a terminal runs back
-  // through an ancestor that had not yet resolved, and would make the result
-  // depend on input/traversal order. It is recomputed instead — every eligible
-  // node is entered as a fresh DFS root by the compose loop, at which point its
-  // former on-stack ancestors are fully-resolved descendants. A `true` is always
-  // final (some path reached a terminal) and is always cached.
-  const resolveOnPath = (id: string): { result: boolean; provisional: boolean } => {
-    const memo = onPathMemo.get(id);
-    if (memo !== undefined) return { result: memo, provisional: false };
-    if (onPathStack.has(id)) return { result: false, provisional: true }; // cycle short-circuit
-    onPathStack.add(id);
-
-    let result = terminalIds.has(id);
-    let provisional = false;
-    if (!result) {
-      const node = byId.get(id);
-      if (node?.parent !== null && node?.parent !== undefined && byId.has(node.parent)) {
-        const parent = resolveOnPath(node.parent);
-        if (parent.result) result = true;
-        else provisional = provisional || parent.provisional;
-      }
-    }
-    if (!result) {
-      for (const blocked of reverseBlockers.get(id) ?? []) {
-        const sub = resolveOnPath(blocked);
-        if (sub.result) {
-          result = true;
-          break;
-        }
-        provisional = provisional || sub.provisional;
-      }
-    }
-
-    onPathStack.delete(id);
-    // Cache only final answers: any `true`, or a `false` that did not depend on
-    // an unresolved cycle short-circuit. Provisional falses recompute later.
-    if (result || !provisional) {
-      onPathMemo.set(id, result);
-      return { result, provisional: false };
-    }
-    return { result, provisional: true };
-  };
-
-  const isOnPath = (id: string): boolean => resolveOnPath(id).result;
+  const onPathIds = computeSignalPath(nodes);
+  const isOnPath = (id: string): boolean => onPathIds.has(id);
 
   // --- Capture-resolution term ---------------------------------------------
 

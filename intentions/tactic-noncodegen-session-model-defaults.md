@@ -18,19 +18,21 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
-execution: null
+phase: review
+execution:
+  branch: tactic-noncodegen-session-model-defaults
+  pr: 2776
+  attempts:
+    qa: 1
+  markers:
+    - qa-done
+  strategy_fingerprint: 157bc07dd1dbc4a1c7a5095f7c3094ee88accf5879271bc6d2c4cd4794029848
 validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes:
-  phase: qa
-  execution:
-    strategy_fingerprint: 10f0314e331696714d42b26313b80c5a289d68ab0e3ce4d614bf2c97a94d4a67
-    branch: tactic-noncodegen-session-model-defaults
-    pr: 2776
+attributes: {}
 ---
 # Sonnet-by-default initialization for non-codegen sessions — fix the /qa-main routing gap and pass --model on the aux background-job spawns
 
@@ -123,3 +125,9 @@ supply this Context and the unit's Scope; constrain to working-tree edits.
 lands): sha256 hex of `JSON.stringify({statement, clarifications,
 conditions, serves, success_signal, tooling_goals})` as loaded by
 intentionsutil `listNodes`.
+
+## main-qa residue (qa 2026-07-06)
+
+- After the next dispatch tick fires an aux job (sync-repair / diagnose-main / jit-reminder), check the tick's dispatch-spawn-job argv log shows --model claude-sonnet-4-6 for that spawn.
+- After the next /qa-main launch, check the dispatch-spawn-job argv carries --model claude-sonnet-4-6 and no --effort flag.
+- Run /dispatch-token-audit over a following window and confirm the <none>+Opus row has shrunk versus the 2026-06-26->07-03 baseline ($3,600 proxy / ~$1,200 real).

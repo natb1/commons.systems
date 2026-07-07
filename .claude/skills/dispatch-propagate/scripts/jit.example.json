@@ -33,7 +33,7 @@
       "remindAfterClose": "7d",
       "dueAfterClose": "14d",
       "debounce": "1h",
-      "skill": "align"
+      "skill": "align-init"
     }
   ]
 }
