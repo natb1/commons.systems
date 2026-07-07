@@ -776,6 +776,52 @@ clarifications:
       parity: an emulating session owes the chain re-check before each
       transition it writes, and owes the demotion write when it finds a post-qa
       scope edit (clarification 15). Recorded 2026-07-06 interview."
+  - question: What guards the router against failure loops — a worker that
+      repeatedly fails to make progress or park on a node, and a systemic
+      executor failure (a daemon crash-loop) that would otherwise false-trip a
+      per-node fuse across every selectable node?
+    answer: "Two fuses, both written by the reconciler sweep, each gating exactly
+      its blast radius. Per-node fuse: the sweep increments a durable
+      no-progress counter (an execution.attempts entry — frontmatter state,
+      never in the scope hash) whenever a claimed node's worker ends with
+      neither a transition write (forward or backward) nor a park — the claim
+      died silently; at 2 consecutive no-progress cycles (legacy CAP=2 parity)
+      the sweep parks that node to office_hours carrying the failure history per
+      condition 6. Any successful transition resets the counter; a start-gate
+      skipped disposition is a correct yield, never a strike; the gate is
+      node-local — a tripped node fuse blocks only that node. Systemic breaker:
+      classification runs in the NEXT tick's sweep, before selection (sweep →
+      classify → gate → fan out), because the failing tick cannot classify
+      itself — the motivating scenario is a misconfigured fan-out exceeding
+      memory and crashing the daemon or system, killing the tick and its workers
+      together, where tick-end classification and a canary probe are both blind
+      (a canary passes whenever the daemon has recovered enough to run it). When
+      the sweep finds correlated death — at least 3 simultaneously dead
+      no-progress claims constituting the prior tick's selection (all or quorum;
+      below the floor, failures strike per-node and the cap-2 fuse still catches
+      real loops) — it writes NO per-node strikes and instead trips the breaker:
+      one incident tactic written via graph-commit, born office_hours-parked,
+      serving this strategy, carrying the correlated-failure evidence and a
+      next-steps recommendation. While an unresolved breaker tactic exists,
+      selection selects nothing — the only global gate. Correlated death is also
+      the signature of the daemon-down liveness trap (a dead daemon makes every
+      claim look dead at once via the empty claude agents read), so the
+      discriminator converts exactly the false-mass-park input into a single
+      graph artifact. Reset is human-only via the normal interactive un-park
+      (clarification 4): auto-reset would resume a crash loop, and a trip is by
+      definition human-reviewed through the standard office-hours queue — no
+      side channel (clarification 28), and no breaker state in dispatch.config,
+      which keeps tunables only (quorum floor, caps); clarification 14's
+      machine-state carve-out covers telemetry and tunables, not
+      review-demanding events. Net: the crash-loop scenario is bounded to one
+      crash, and this amends the unbounded reading of re-selection recovery
+      (clarifications 24/30/34) — re-selection remains the only recovery path,
+      now fuse-bounded in both scopes. No recovers edge is added (clarification
+      26 precedent: the fuse bounds executor-failure blast radius; it does not
+      reduce executor reliance). Bootstrap parity: an emulating session owes
+      strike accounting and the pre-selection breaker check like any other phase
+      semantics (clarification 15). Implementation retained as draft
+      tactic-router-failure-fuses. Recorded 2026-07-07 interview."
 tooling_goals:
   - kind: actuator
     statement: /align-strategy — interview-driven strategy recording, superseding
@@ -856,5 +902,13 @@ attributes:
       worker treats pre-existing worktree and PR state as resume input rather
       than redoing the phase; session recovery (workflow resume, transcript
       reconstruction) is never router substrate
+    - router failure containment holds — a worker ending a claimed node with
+      neither a transition write nor a park strikes a durable no-progress
+      counter and two consecutive strikes park that node to office_hours
+      (node-local gate), while correlated dead claims (at least 3, constituting
+      the prior tick's selection) trip a graph-recorded breaker incident tactic
+      that halts all selection until a human un-parks it; no unbounded
+      re-selection loop exists in either scope, and breaker state never lives
+      outside the graph
 ---
 # Dispatch runs on the graph — orchestration state lives in intention nodes, worked through the align skill family
