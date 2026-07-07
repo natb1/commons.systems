@@ -23,7 +23,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: fix
 execution:
   branch: tactic-office-hours-graph-entry
   pr: 2787
@@ -337,3 +337,19 @@ Two observe-on-first-real-use items from independent QA on tactic-office-hours-g
 
 1. **Real daemon path unexercised.** `claude --bg` flag acceptance, the 5×0.2s registration-poll timing in `office-hours-graph`, `attach <job-id>`, and `/office-hours <node-id>` actually booting and stopping cleanly with no writes were validated only against a stub `claude` written for this QA pass — it encodes the QA session's understanding of the daemon contract, not the daemon's real behavior. First genuine exercise is a human running `office-hours-graph` at a terminal (the plan's own "Manual (outside sandbox)" checklist, items 1-2).
 2. **`resolveSessionCwd` positive branch never fired against the real layout.** The launch-cwd-in-the-node's-own-worktree branch (`<repoRoot>/.claude/worktrees/<node-id>` when it exists) never executed in this QA session: QA ran from inside this PR's own worktree checkout, which has no `.claude/worktrees/` subtree at all, so every real-store selector invocation fell back to the repo-root branch. The positive branch is unit-tested only against temp dirs (`test/office-hours.test.ts`). From the main checkout in production, provisioned tactics do have a `.claude/worktrees/<id>` directory, so this branch will fire there for the first time — worth confirming on the first real office-hours launch against a provisioned tactic node.
+
+## merge-conflict repair owed (review 2026-07-07)
+
+Terminal review of PR #2787 was CLEAN (no Required findings) but the branch is
+`mergeable: CONFLICTING` / `mergeStateStatus: DIRTY` against origin/main:
+sibling PR #2775 (tactic-graph-write-validation-hardening) merged out-of-band and
+hardened `validateOfficeHours.since` to `requireDateString` on the exact lines
+this PR edits to add the `recommendation` field, conflicting in
+`packages/intentionsutil/src/schema.ts` and `test/schema.test.ts`.
+
+Routed review -> fix (conflict-repair lane), NOT a review re-run: re-reviewing hits
+the identical conflict (loop). A fix worker owes /fix-conflicts parity — merge
+origin/main, keep BOTH #2775's requireDateString hardening and this PR's
+recommendation field, re-green CI — after which a fresh review re-runs (the resolved
+schema.ts changes slightly) and arms. CI is otherwise green (22 checks). This is a
+mechanical conflict, autonomous-fixable; do not park.
