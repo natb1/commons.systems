@@ -22,22 +22,23 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
+phase: done
 execution:
   branch: tactic-graph-write-validation-hardening
   pr: 2775
   attempts:
     qa: 1
+    main-qa: 1
   markers:
     - qa-done
+    - main-qa-done
   strategy_fingerprint: null
 validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes:
-  phase: main-qa
+attributes: {}
 ---
 # Harden graph write-path validation: symlink type check in the fast-path guard, semantic shape rules in the schema, tactic-body loss guard on kind change
 
@@ -134,3 +135,9 @@ and confirm the guard job fails; delete the scratch branch after.
 ## main-qa residue (qa 2026-07-06)
 
 - Unit 1 guard job unexercised on this PR: the 'Graph Fast Path' workflow (.github/workflows/graph-fast-path.yml) only triggers on push to branches matching 'graph/**', which tactic-graph-write-validation-hardening's own branch does not match, so no CI on PR #2775 ran the guard job end-to-end. After merge to main: push a scratch graph/** branch that adds a symlink under intentions/ (e.g. intentions/x.md -> /etc/passwd committed as a real symlink), confirm the guard job fails with the '::error::graph/** fast path only accepts regular files under intentions/' message and non-zero exit, then delete the scratch branch. (A local scratch-repo test already confirmed the underlying git diff --raw / awk logic is correct; this residue is only about observing the actual GitHub Actions job run.)
+
+## main-qa verification (2026-07-07)
+
+Verified against fresh origin/main (subject files — packages/intentionsutil/{src,test}, .github/workflows/graph-fast-path.yml — byte-identical to this worktree's HEAD at verification time). `npx vitest run --project packages/intentionsutil --root .`: **161/161 tests passed** across 8 files. Confirmed by code read that all three hardening units from this tactic are present on main: symlink/gitlink rejection in the Fast Path guard workflow, semantic-shape validation in schema.ts, and the tactic-body loss guard in store.ts (both `store.test.ts` cases covering it are in the passing set).
+
+Carried forward, still open: the prior "main-qa residue (qa 2026-07-06)" item asking for a live scratch-branch push to `graph/**` to observe the Fast Path guard job actually fail in a real GitHub Actions run. Attempted it this tick (scratch clone, real symlink commit, mode 120000 confirmed) but the push to origin was denied by the auto-mode permission classifier as scope escalation onto shared CI infrastructure. This live-CI observation needs an explicitly-permissioned or human session; it is not achievable by an autonomous main-qa worker under current permissions. The vitest-level verification above is unaffected and is sufficient for the main-qa-pass verdict per this phase's explicit scope (schema+store vitest against origin/main).

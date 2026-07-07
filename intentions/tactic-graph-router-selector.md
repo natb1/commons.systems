@@ -19,14 +19,16 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: done
 execution:
   branch: tactic-graph-router-selector
   pr: 2785
   attempts:
     qa: 1
+    review: 1
   markers:
     - qa-done
+    - reviewed
   strategy_fingerprint: null
 validates: []
 blocked_by:
