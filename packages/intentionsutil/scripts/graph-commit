@@ -35,7 +35,10 @@
 # Exit status:
 #   0  the edit landed on main.
 #   1  push could not land: busy main after all attempts, the required checks
-#      never stamped green within the poll window, or a concurrent-edit
+#      never stamped green within the poll window, a required check CONCLUDED
+#      non-success (deterministic content failure — no retry), check-run
+#      polling itself failed 3 consecutive times (gh auth/rate-limit/network,
+#      surfaced verbatim), or a concurrent-edit
 #      CONFLICT. The conflict case fails closed — this writer's content is NOT
 #      landed (no automatic overwrite of the other writer's already-landed
 #      edit): the node is parked via office_hours on top of fresh origin/main
@@ -211,31 +214,48 @@ rebase_in_progress() {
 # its in-memory JSON — never an `echo "$VAR" | jq` round-trip (shell-json.md).
 # Returns:
 #   0  all four contexts green.
-#   1  a required check concluded non-success, OR the timeout elapsed before all
-#      four went green (the caller rebases and retries this whole cycle).
+#   1  the timeout elapsed with the checks still pending (transient — the
+#      caller rebases and retries this whole cycle).
+#   2  a required check CONCLUDED non-success (deterministic — the commit
+#      content itself fails CI; the caller must not retry).
+# Dies after 3 CONSECUTIVE gh poll failures, surfacing gh's captured stderr —
+# an auth/rate-limit/network error is a broken environment, not a pending
+# check, so collapsing it into "still polling" until the generic timeout
+# would hide the real cause (clear error over fallback, code-style.md).
 await_checks() {
   local sha="$1"
-  local deadline counts nsucc nfail
+  local deadline counts nsucc nfail gh_stderr gh_fails=0
+  # gh's stderr is captured per poll inside SNAP_DIR, which already exists for
+  # the lifetime of the run and is removed by cleanup() on non-park exits.
+  local errfile="$SNAP_DIR/.gh-poll-stderr"
   deadline=$(( $(date +%s) + CHECK_TIMEOUT_SECONDS ))
   nsucc=0
   while :; do
     # For the four required names on this SHA, count how many are
     # completed/success and how many are completed/non-success. Extra check runs
     # (e.g. CodeQL `Analyze (*)`, `guard`) are ignored by the name filter.
-    counts="$(gh api "repos/{owner}/{repo}/commits/$sha/check-runs" \
+    if counts="$(gh api "repos/{owner}/{repo}/commits/$sha/check-runs" \
       --jq '[.check_runs[]
              | select(.name=="acceptance" or .name=="preview-and-smoke"
                       or .name=="lint" or .name=="unit-tests")]
             | "\([.[]|select(.status=="completed" and .conclusion=="success")]|length) \([.[]|select(.status=="completed" and .conclusion!="success")]|length)"' \
-      2>/dev/null)" || counts=""
-    if [[ -n "$counts" ]]; then
+      2>"$errfile")"; then
+      gh_fails=0
+      [[ -n "$counts" ]] || counts="0 0"
       read -r nsucc nfail <<<"$counts"
       if [[ "$nsucc" -eq 4 ]]; then
         return 0
       fi
       if [[ "${nfail:-0}" -gt 0 ]]; then
         echo "graph-commit: a required check concluded non-success for $sha ($nsucc/4 green, $nfail failed)" >&2
-        return 1
+        return 2
+      fi
+    else
+      gh_stderr="$(cat "$errfile" 2>/dev/null || true)"
+      gh_fails=$((gh_fails + 1))
+      echo "graph-commit: check-run poll failed ($gh_fails/3 consecutive) for $sha: ${gh_stderr:-<no stderr>}" >&2
+      if [[ "$gh_fails" -ge 3 ]]; then
+        die "check-run polling failed 3 consecutive times for $sha — last gh error: ${gh_stderr:-<no stderr>}"
       fi
     fi
     if [[ "$(date +%s)" -ge "$deadline" ]]; then
@@ -258,11 +278,14 @@ await_checks() {
 #   10 a rebase CONFLICT occurred (aborted) — the caller fails closed and
 #      parks; there is no automatic resolution.
 #   11 every attempt failed with no conflict (busy main, or the checks never
-#      stamped/concluded green within the poll window).
-# Dies on a non-conflict rebase/fetch failure (broken environment — clear error
-# over a fallback, per code-style.md).
+#      stamped green within the poll window).
+# Dies on a non-conflict rebase/fetch failure (broken environment), and on a
+# CONCLUDED check failure — a concluded non-success is a property of the
+# commit content, not of contention, so every retry would reproduce it; the
+# remaining attempts are not burned (clear error over a fallback, per
+# code-style.md).
 try_land() {
-  local attempt sha
+  local attempt sha ck
   for (( attempt=1; attempt<=MAX_PUSH_ATTEMPTS; attempt++ )); do
     if ! git pull --rebase origin main >&2; then
       if rebase_in_progress; then
@@ -289,7 +312,15 @@ try_land() {
     SCRATCH_PUSHED=1
 
     # Wait for the fast path to stamp the four required checks green on this SHA.
-    if ! await_checks "$sha"; then
+    ck=0
+    await_checks "$sha" || ck=$?
+    if [[ "$ck" -eq 2 ]]; then
+      # Deterministic failure: a required check CONCLUDED non-success, so the
+      # content itself is broken — rebasing and re-stamping would reproduce
+      # the same failure on every remaining attempt.
+      die "a required check concluded non-success for $sha — the commit content fails CI; not retrying (fix the content and re-run)"
+    fi
+    if [[ "$ck" -ne 0 ]]; then
       echo "graph-commit: checks did not go green for $sha on attempt $attempt/$MAX_PUSH_ATTEMPTS; rebasing and retrying" >&2
       continue
     fi
@@ -343,11 +374,15 @@ park_write() {
 // argv: <storeModule> <intentionsDir> <since> <reason> <id...>
 const [storePath, intentionsDir, since, reason, ...ids] = process.argv.slice(2);
 const { readNode, writeNode } = await import(storePath);
-for (const id of ids) {
-  const node = readNode(intentionsDir, id);
+// Two-pass for atomicity: read every node up front so an unreadable id fails
+// BEFORE any write — a single read-modify-write loop that threw mid-way would
+// leave the earlier ids mutated on disk, uncommitted.
+const nodes = ids.map((id) => readNode(intentionsDir, id));
+for (let i = 0; i < nodes.length; i++) {
+  const node = nodes[i];
   node.office_hours = { reason, since };
   writeNode(intentionsDir, node);
-  process.stderr.write(`graph-commit: set office_hours on ${id} (since=${since})\n`);
+  process.stderr.write(`graph-commit: set office_hours on ${ids[i]} (since=${since})\n`);
 }
 TS
   if ! npx tsx "$tmpts" "$STORE_MODULE" "$INTENTIONS_DIR" "$since" "$reason" "${IDS[@]}" >&2; then
@@ -386,9 +421,16 @@ main() {
     if [[ -z "$id" ]]; then
       echo "error: graph-commit: empty node id" >&2; exit 2
     fi
+    # Reject path separators, and `.`/`..` as EXACT ids. `..` as a substring
+    # cannot traverse once `/` and `\` are banned (the id is only ever used as
+    # the single path component intentions/<id>.md), so ids like
+    # `v1..v2-migration` are legal.
     case "$id" in
-      */*|*'\'*|*..*)
-        echo "error: graph-commit: invalid node id '$id' (path separators / traversal not allowed)" >&2
+      */*|*'\'*)
+        echo "error: graph-commit: invalid node id '$id' (path separators not allowed)" >&2
+        exit 2 ;;
+      .|..)
+        echo "error: graph-commit: invalid node id '$id' ('.' and '..' are reserved path names)" >&2
         exit 2 ;;
     esac
     if [[ ! -f "$INTENTIONS_DIR/$id.md" ]]; then
@@ -407,10 +449,19 @@ main() {
   # PID so concurrent graph-commit invocations never collide. cleanup() (the
   # EXIT trap) deletes it on the remote on every exit path — success, busy-main,
   # or the parking fallback — once it has been pushed at least once.
-  SCRATCH_BRANCH="graph/${IDS[0]}-$$"
+  # The id is sanitized for the ref name only (the name is cosmetic — PID
+  # provides uniqueness): valid node ids like `v1..v2-migration` contain
+  # sequences git refuses in a ref (`..`), so every non-[A-Za-z0-9-] char maps
+  # to `-`.
+  local ref_id="${IDS[0]//[!A-Za-z0-9-]/-}"
+  SCRATCH_BRANCH="graph/$ref_id-$$"
 
   SNAP_DIR="$(mktemp -d)" || die "could not create snapshot tempdir"
   trap cleanup EXIT
+  # An EXIT trap does not reliably fire on INT/TERM in all shells; convert
+  # those signals into a normal exit so cleanup() (snapshot removal, remote
+  # scratch-branch delete) always runs on signal death.
+  trap 'exit 130' INT TERM
 
   # Capture the writer's on-disk content, then commit-and-land it.
   # Three states, discriminated by id_files_dirty():
