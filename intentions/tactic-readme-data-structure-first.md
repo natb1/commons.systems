@@ -23,7 +23,8 @@ attention: null
 phase: null
 execution: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-readme-copy-approval
 office_hours: null
 pace_exempt: false
 rounds: null

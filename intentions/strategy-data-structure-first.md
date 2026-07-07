@@ -70,6 +70,16 @@ clarifications:
       orchestration-runtime semantics and graph-node drafting among the imports;
       positioning the data structure as harness-independent reduces how much of
       the project's value that import touches. Recorded 2026-07-07 interview.
+  - question: Who approves the README copy before it deploys?
+    answer: "The author, at office-hours, before implementation:
+      tactic-readme-copy-approval (owner: human, parked office_hours) gates
+      tactic-readme-data-structure-first via blocked_by. The rewrite cannot be
+      selected until the author ratifies or revises the draft headline, subline,
+      and identity sentence; the approval outcome is recorded as a dated
+      clarification here. This amends the earlier
+      draft-refines-at-implementation answer: wording is still settled at
+      README-rewrite time, but only within copy the author has approved.
+      Recorded 2026-07-07 follow-up to the interview."
 tooling_goals: []
 success_signal:
   observable: public tier-3 surfaces lead with the data-structure framing — a
