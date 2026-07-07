@@ -14838,9 +14838,9 @@ else
 fi
 config_teardown
 
-# --- Test 2d: align jit (7d/14d, skill: align) validates -----------------
+# --- Test 2d: align jit (7d/14d, skill: align-init) validates ------------
 
-echo "Test: align jit (7d/14d, skill: align) validates"
+echo "Test: align jit (7d/14d, skill: align-init) validates"
 config_setup
 cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
 {
@@ -14855,7 +14855,7 @@ cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
       "remindAfterClose": "7d",
       "dueAfterClose": "14d",
       "debounce": "1h",
-      "skill": "align"
+      "skill": "align-init"
     }
   ]
 }
@@ -14863,7 +14863,7 @@ EOF
 out=$("$TMPDIR_TEST/scripts/dispatch-config-load" jit 2>/dev/null); rc=$?
 assert_eq "align jit exits 0" "0" "$rc"
 align_skill=$(printf '%s' "$out" | jq -r '.jits[0].skill')
-assert_eq "align jit skill value" "align" "$align_skill"
+assert_eq "align jit skill value" "align-init" "$align_skill"
 align_remind=$(printf '%s' "$out" | jq -r '.jits[0].remindAfterClose')
 assert_eq "align jit remindAfterClose value" "7d" "$align_remind"
 align_due=$(printf '%s' "$out" | jq -r '.jits[0].dueAfterClose')
@@ -21949,7 +21949,7 @@ cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
       "project": "test-project",
       "remindAfterClose": "7d",
       "dueAfterClose": "14d",
-      "skill": "align"
+      "skill": "align-init"
     }
   ]
 }
@@ -22044,7 +22044,7 @@ cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
       "project": "test-project",
       "remindAfterClose": "7d",
       "dueAfterClose": "14d",
-      "skill": "align"
+      "skill": "align-init"
     }
   ]
 }
@@ -22089,7 +22089,7 @@ cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
       "project": "test-project",
       "remindAfterClose": "7d",
       "dueAfterClose": "14d",
-      "skill": "align"
+      "skill": "align-init"
     }
   ]
 }
@@ -22182,7 +22182,7 @@ cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
       "project": "test-project",
       "remindAfterClose": "7d",
       "dueAfterClose": "14d",
-      "skill": "align"
+      "skill": "align-init"
     }
   ]
 }
@@ -22230,7 +22230,7 @@ cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
       "project": "test-project",
       "remindAfterClose": "7d",
       "dueAfterClose": "14d",
-      "skill": "align"
+      "skill": "align-init"
     }
   ]
 }
@@ -22319,7 +22319,7 @@ cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
       "project": "test-project",
       "remindAfterClose": "7d",
       "dueAfterClose": "14d",
-      "skill": "align"
+      "skill": "align-init"
     }
   ]
 }
