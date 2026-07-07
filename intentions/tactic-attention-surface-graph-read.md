@@ -18,22 +18,20 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
-execution: null
+phase: fix
+execution:
+  branch: tactic-attention-surface-graph-read
+  pr: 2780
+  attempts:
+    fix: 1
+  markers: []
+  strategy_fingerprint: null
 validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes:
-  phase: fix
-  blocked_by: []
-  execution:
-    branch: tactic-attention-surface-graph-read
-    pr: 2780
-    attempts:
-      fix: 1
-    markers: []
+attributes: {}
 ---
 # browser graph read layer — File System Access API over the local clone, client-side tree build and resolveAttention, staleness surfaced loudly
 

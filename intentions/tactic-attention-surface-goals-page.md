@@ -18,10 +18,15 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-attributes:
-  phase: implement
-  blocked_by:
-    - tactic-attention-surface-graph-read
+phase: implement
+execution: null
+validates: []
+blocked_by:
+  - tactic-attention-surface-graph-read
+office_hours: null
+pace_exempt: false
+rounds: null
+attributes: {}
 ---
 # goals page — direct graph exploration views: virtues, subtree shape, delegation and capture, attention, router now/queue, office-hours queue
 

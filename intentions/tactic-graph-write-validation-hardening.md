@@ -22,7 +22,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: null
 execution:
   branch: tactic-graph-write-validation-hardening
   pr: 2775
@@ -36,7 +36,8 @@ blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  phase: main-qa
 ---
 # Harden graph write-path validation: symlink type check in the fast-path guard, semantic shape rules in the schema, tactic-body loss guard on kind change
 

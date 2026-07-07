@@ -20,23 +20,21 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
-execution: null
+phase: review
+execution:
+  branch: tactic-main-qa-triage-before-provision
+  pr: 2784
+  attempts:
+    qa: 1
+  markers:
+    - qa-done
+  strategy_fingerprint: 157bc07dd1dbc4a1c7a5095f7c3094ee88accf5879271bc6d2c4cd4794029848
 validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes:
-  phase: review
-  execution:
-    strategy_fingerprint: 157bc07dd1dbc4a1c7a5095f7c3094ee88accf5879271bc6d2c4cd4794029848
-    branch: tactic-main-qa-triage-before-provision
-    pr: 2784
-    attempts:
-      qa: 1
-    markers:
-      - qa-done
+attributes: {}
 ---
 # main-qa triage before provision — run the browser-verifiability triage in the selection chain so unverifiable follow-ups never cost a worktree and session boot
 
