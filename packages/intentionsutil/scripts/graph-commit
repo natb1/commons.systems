@@ -29,13 +29,19 @@
 # retries, and deletes it on every exit path).
 #
 # Usage:
-#   graph-commit [-m <message>] [--prune <id>]... <node-id> [<node-id> ...]
+#   graph-commit [-m <message>] [--prune <id>]... [--base <id>=<blobsha>|<manifest-file>]... <node-id> [<node-id> ...]
 #   graph-commit -m 'graph: seed dispatch state' tactic-graph-commit
 #   graph-commit -m 'graph: prune done tactics' --prune tactic-foo --prune tactic-bar
+#   graph-commit --base tactic-foo=3f1a9c... tactic-foo
 #
 # --prune <id> (repeatable, mixable with ordinary positional ids): land a
 #   deletion. The caller must have already deleted intentions/<id>.md on disk;
 #   the existence guard inverts (file absent on disk, present in HEAD).
+#
+# --base <id>=<blobsha> (repeatable) or --base <manifest-file> (one <id>=<sha>
+#   pair per line): optional compare-and-swap freshness check. If any entry's
+#   blob no longer matches origin/main after a fetch, the write is refused
+#   before any local commit is made. Omit entirely to keep pre-CAS behavior.
 #
 # Exit status:
 #   0  the edit landed on main.
@@ -84,6 +90,9 @@ CHECK_TIMEOUT_SECONDS="${GRAPH_COMMIT_CHECK_TIMEOUT_SECONDS:-180}"
 # ALL_IDS     — IDS + PRUNE_IDS, computed once in main() after validation.
 #               Every helper that needs "every id in this invocation"
 #               regardless of edit-vs-prune iterates this, not IDS directly.
+# BASE        — optional --base compare-and-swap manifest: node id -> the blob
+#               SHA the caller read it at (git hash-object at read time).
+#               Empty unless --base was passed; empty means skip the check.
 # EXPECTED    — associative set of the exact staged paths we permit.
 # SNAP_DIR    — tempdir holding the on-disk node content we are trying to land.
 # KEEP_SNAP   — 1 when SNAP_DIR must survive exit (the fail-closed conflict
@@ -93,6 +102,7 @@ CHECK_TIMEOUT_SECONDS="${GRAPH_COMMIT_CHECK_TIMEOUT_SECONDS:-180}"
 declare -a IDS=()
 declare -a PRUNE_IDS=()
 declare -a ALL_IDS=()
+declare -A BASE=()
 declare -A EXPECTED=()
 SNAP_DIR=""
 KEEP_SNAP=0
@@ -109,10 +119,10 @@ die() {
 }
 
 usage() {
-  echo "usage: graph-commit [-m <message>] [--prune <id>]... <node-id> [<node-id> ...]" >&2
+  echo "usage: graph-commit [-m <message>] [--prune <id>]... [--base <id>=<blobsha>|<manifest-file>]... <node-id> [<node-id> ...]" >&2
 }
 
-# --- Prune id helpers --------------------------------------------------------
+# --- Prune / base id helpers -------------------------------------------------
 # Shared character/traversal validation for both ordinary and --prune ids.
 validate_id_chars() {
   local id="$1"
@@ -124,6 +134,61 @@ validate_id_chars() {
       echo "error: graph-commit: invalid node id '$id' (path separators / traversal not allowed)" >&2
       exit 2 ;;
   esac
+}
+
+# Record one <id>=<blobsha> pair into BASE.
+add_base_pair() {
+  local pair="$1" id sha
+  id="${pair%%=*}"
+  sha="${pair#*=}"
+  if [[ -z "$id" || "$id" == "$pair" || -z "$sha" ]]; then
+    die "invalid --base entry '$pair' (expected <id>=<blobsha>)"
+  fi
+  BASE["$id"]="$sha"
+}
+
+# A --base argument is either a literal <id>=<blobsha> pair or, when it names
+# an existing file, a manifest of such pairs (one per line, blank lines
+# ignored) — so a caller holding a whole dump's worth of base shas can pass
+# one flag instead of one --base per node.
+parse_base_arg() {
+  local arg="$1"
+  if [[ -f "$arg" ]]; then
+    local line
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      [[ -z "$line" ]] && continue
+      add_base_pair "$line"
+    done <"$arg"
+  else
+    add_base_pair "$arg"
+  fi
+}
+
+# Refuse the write if any --base entry's blob no longer matches origin/main.
+# Runs once, before any local commit is made (and before SNAP_DIR/the EXIT
+# trap exist, so a refusal here leaves nothing to clean up) — a stale read is
+# caught before it touches the tree at all, rather than relying on the
+# rebase-retry loop's textual-conflict detection to notice (the 2026-07-06
+# near-miss: a stale dump of a live node avoided a textual conflict and nearly
+# clobbered concurrent state). Sessions that pass no --base see no change in
+# behavior (opt-in, per code-style.md: clear error over a silent fallback).
+check_base_freshness() {
+  [[ "${#BASE[@]}" -eq 0 ]] && return 0
+  echo "graph-commit: checking --base freshness for ${#BASE[@]} node(s) against origin/main" >&2
+  git fetch origin main >&2
+  local id sha origin_sha path
+  for id in "${!BASE[@]}"; do
+    sha="${BASE[$id]}"
+    path="intentions/$id.md"
+    if git cat-file -e "FETCH_HEAD:$path" 2>/dev/null; then
+      origin_sha="$(git rev-parse "FETCH_HEAD:$path")"
+    else
+      origin_sha="<absent>"
+    fi
+    if [[ "$origin_sha" != "$sha" ]]; then
+      die "stale base for '$id' — origin/main's $path is now $origin_sha, not the $sha you read; re-read the node and retry"
+    fi
+  done
 }
 
 # --- Cleanup (EXIT trap) ---------------------------------------------------
@@ -402,6 +467,8 @@ main() {
                     msg="$2"; shift 2 ;;
       --prune) [[ $# -ge 2 ]] || { usage; die "--prune requires a node id argument"; }
                PRUNE_IDS+=("$2"); shift 2 ;;
+      --base) [[ $# -ge 2 ]] || { usage; die "--base requires an <id>=<blobsha> argument or a manifest file path"; }
+              parse_base_arg "$2"; shift 2 ;;
       -h|--help) usage; exit 0 ;;
       --) shift; while [[ $# -gt 0 ]]; do IDS+=("$1"); shift; done ;;
       -*) usage; echo "error: graph-commit: unknown option '$1'" >&2; exit 2 ;;
@@ -444,6 +511,7 @@ main() {
   done
 
   ALL_IDS=("${IDS[@]}" "${PRUNE_IDS[@]}")
+  check_base_freshness
 
   # Default commit / parking messages.
   if [[ -z "$msg" ]]; then

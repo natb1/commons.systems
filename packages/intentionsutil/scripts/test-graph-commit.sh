@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# test-graph-commit.sh — functional harness for graph-commit's --prune
-# support (tactic-graph-commit-prune-support).
+# test-graph-commit.sh — functional harness for graph-commit's --prune and
+# --base support (tactic-graph-commit-prune-support).
 #
 # Sets up a throwaway bare origin plus writer clones (independent sessions),
 # a `gh` PATH shim standing in for the GitHub check-run API (always reports
@@ -15,6 +15,9 @@
 #   1. --prune: an ordinary edit id and a prune id land in ONE commit
 #   2. --prune guard: a prune id whose file is still present on disk is
 #      rejected (no commit lands)
+#   3. --base fresh: a --base entry matching origin/main's current blob lands
+#   4. --base stale: a --base entry pointing at a blob origin/main no longer
+#      has is refused (no commit lands, no rebase-retry burned)
 #
 # No network and no real gh needed; requires only bash + git.
 
@@ -51,7 +54,7 @@ seed_node() { # <id> — a few numbered lines so edits/reads have real content
     for i in $(seq 1 6); do echo "line$i: base"; done
   } >"$SEED/intentions/$1.md"
 }
-for id in t-prune-edit t-prune t-prune-guard; do seed_node "$id"; done
+for id in t-prune-edit t-prune t-prune-guard t-base; do seed_node "$id"; done
 git -C "$SEED" add -A
 git -C "$SEED" commit -qm seed
 git -C "$SEED" push -q origin main
@@ -138,6 +141,57 @@ else
     ok "prune guard: rejects a prune id still present on disk, no commit landed"
   else
     no "prune guard: rejected but wrong error or main moved: $(cat "$WORK/w2.out")"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# Tests 3-4: --base compare-and-swap
+# ---------------------------------------------------------------------------
+
+# Test 3: --base fresh — a blob matching origin/main's current content lands.
+W3="$WORK/w3"
+make_clone "$W3" writer-3
+fresh_sha="$(git -C "$W3" hash-object intentions/t-base.md)"
+echo "line7: writer3 edit" >>"$W3/intentions/t-base.md"
+if run_gc "$W3" -m 'test: base fresh' --base "t-base=$fresh_sha" t-base >"$WORK/w3.out" 2>&1; then
+  landed="$(git --git-dir="$ORIGIN" show main:intentions/t-base.md 2>/dev/null | grep -c 'line7: writer3 edit')"
+  if [[ "$landed" -eq 1 ]]; then
+    ok "base fresh: a --base matching origin/main's blob lands"
+  else
+    no "base fresh: landed but content missing (see $WORK/w3.out)"
+  fi
+else
+  no "base fresh: expected exit 0, got $? (see $WORK/w3.out): $(cat "$WORK/w3.out")"
+fi
+
+# Test 4: --base stale — a blob origin/main no longer has is refused.
+W4="$WORK/w4"
+make_clone "$W4" writer-4
+stale_sha="$(git -C "$W4" hash-object intentions/t-base.md)"
+before_sha="$(git --git-dir="$ORIGIN" rev-parse main)"
+
+# Simulate a concurrent writer landing an unrelated change to the SAME node
+# on origin/main, bypassing graph-commit (representing "another session
+# already committed" for fast test setup — the mechanism under test is the
+# blob comparison, not how the concurrent write itself lands).
+OTHER="$WORK/other"
+git clone -q "$ORIGIN" "$OTHER"
+git -C "$OTHER" config user.email other@test
+git -C "$OTHER" config user.name other
+echo "line8: concurrent edit" >>"$OTHER/intentions/t-base.md"
+git -C "$OTHER" commit -qam 'concurrent edit'
+git -C "$OTHER" push -q origin main
+
+echo "line7: writer4 edit (based on a stale read)" >>"$W4/intentions/t-base.md"
+if run_gc "$W4" -m 'test: base stale' --base "t-base=$stale_sha" t-base >"$WORK/w4.out" 2>&1; then
+  no "base stale: expected refusal, got exit 0"
+else
+  after_sha="$(git --git-dir="$ORIGIN" rev-parse main)"
+  concurrent_sha="$(git -C "$OTHER" rev-parse HEAD)"
+  if grep -q "stale base" "$WORK/w4.out" && [[ "$after_sha" == "$concurrent_sha" ]]; then
+    ok "base stale: refuses a --base whose blob no longer matches origin/main, writer4 content NOT landed"
+  else
+    no "base stale: refused but wrong error or main moved unexpectedly: $(cat "$WORK/w4.out")"
   fi
 fi
 
