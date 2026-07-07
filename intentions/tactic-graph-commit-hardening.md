@@ -23,12 +23,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-graph-commit-hardening
   pr: 2778
-  attempts: {}
-  markers: []
+  attempts:
+    qa: 1
+  markers:
+    - qa-done
   strategy_fingerprint: null
 validates: []
 blocked_by: []
@@ -128,3 +130,7 @@ bash packages/intentionsutil/scripts/test-graph-commit.sh
 
 Manual: none — the harness covers the behavior end-to-end; live
 `graph-commit` use continues as the ongoing soak.
+
+## main-qa residue (qa 2026-07-06)
+
+- Unit 1's 'concluded check failure -> immediate die, no retry' path was verified via the PR's own gh-shim harness and via my real-gh green/hard-failure checks, but a genuine CONCLUDED non-success on a real scratch SHA was not exercised against live CI in this pass (would require deliberately landing broken content on a graph/** branch). Per the plan's own Verification section naming live use as the ongoing soak: on the next real graph-commit run where a required check concludes non-success on the scratch SHA, confirm exit 1 with 'a required check concluded non-success ... not retrying' logged, and no retry-burn / no misleading 'main busy' message.

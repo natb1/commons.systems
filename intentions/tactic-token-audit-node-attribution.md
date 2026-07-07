@@ -28,11 +28,15 @@ office_hours: null
 pace_exempt: false
 rounds: null
 attributes:
-  phase: qa
+  phase: review
   execution:
-    strategy_fingerprint: 10f0314e331696714d42b26313b80c5a289d68ab0e3ce4d614bf2c97a94d4a67
+    strategy_fingerprint: 157bc07dd1dbc4a1c7a5095f7c3094ee88accf5879271bc6d2c4cd4794029848
     branch: tactic-token-audit-node-attribution
     pr: 2777
+    attempts:
+      qa: 1
+    markers:
+      - qa-done
 ---
 # node-id session attribution — graph-native sessions stamp node id into the dispatch sidecar; the token audit gains a by-node join and a UTC-consistent window
 
@@ -178,3 +182,8 @@ edits. `strategy_fingerprint` recipe (interim until
 tactic-graph-dispatch-schema lands): sha256 hex of
 `JSON.stringify({statement, clarifications, conditions, serves,
 success_signal, tooling_goals})` as loaded by intentionsutil `listNodes`.
+
+## main-qa residue (qa 2026-07-06)
+
+- Unit 4 daily-doc-completeness fix (topic-usage-writer.mjs re-finalizing yesterday's doc in arrears) can only be observed against live Firestore. After merge, on the first tick after the next UTC midnight, confirm the previous day's topic-usage Firestore doc was re-written with byTopic/byType totals reflecting the full day (not just the partial-day snapshot from the first post-midnight tick) — compare against the sentinel last-day file's prior value to confirm re-finalization ran.
+- The full production attribution loop (a graph-native dispatch phase-worker session on a node-id/graph-* branch stamping node_id and landing in aggregate-usage.sh's by_node instead of <none>) has no live occurrence on origin/main yet since this stamping code isn't deployed until merge. After merge, once a phase-worker session runs on a node-id/graph-* branch, confirm its sidecar carries node_id and it appears in by_node in the next token-audit run.

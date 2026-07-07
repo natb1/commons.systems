@@ -69,7 +69,49 @@ clarifications:
       round that moves a node. A chunk that merely ratifies what is recorded
       also counts: it flips trust to verification, which is what moves a record
       from delegated to codified."
-tooling_goals: []
+  - question: How does curriculum reading reach the author, and when is it retired?
+    answer: "Through a /sync-reader tool, not ad hoc: the curriculum is encoded in
+      the graph as per-chunk office-hours tactic nodes (tactic-reading-chunk-*,
+      ~30 author-minutes each); the tool extracts each unresolved chunk's cited
+      passages from the owned print-share epubs onto the USB reader as one
+      excerpt file per chunk, named to sort in priority order, and reports
+      missing or unlocatable references to the author rather than silently
+      falling back to whole books. Retirement is keyed to the chunk tactic's
+      lifecycle: resolution (and removal from the graph) of the chunk node
+      removes its file from the reader. The node lifecycle is the single
+      per-chunk resolution mechanism — it supersedes any done-marker inside a
+      curriculum body, which would be a second source of truth that can drift;
+      dated resolution lives on the chunk node's own record and as
+      last_exercised stamps on the delegation. One-excerpt-file-per-chunk also
+      makes retirement exact when several chunks cite the same book. Recorded
+      2026-07-06 interview."
+  - question: Does the reading-delivery tooling unwind delegation-media-libraries?
+    answer: No — no recovers edge. The tool consumes the owned DRM-free library on
+      the print share (itself strategy-realign-attachments' interim path for
+      that record); it does not unwind streaming or photo delegation, and an
+      edge here would be the false-coverage signal
+      strategy-recovery-critical-path's precedent warns about. recovers stays
+      [delegation-philosophical-articulation]. A text the share lacks is an
+      author-actionable acquisition (buy it DRM-free), surfaced by the tool's
+      missing-references report, not a tooling gap. Recorded 2026-07-06
+      interview.
+tooling_goals:
+  - kind: actuator
+    statement: "/sync-reader skill — sync the reading curriculum to the author's
+      USB-mounted e-reader: identify unresolved reading-chunk tactics from the
+      graph, extract each chunk's cited passages from the owned DRM-free epubs
+      on the print network share (directories from args or config), name the
+      excerpt files so the device sorts them in curriculum priority order,
+      retire files whose chunk node is resolved or removed, and report
+      references missing from the share or unlocatable inside an epub"
+  - kind: sensor
+    statement: "office-hours reading-review skill — run one curriculum chunk's
+      demonstration at office-hours: the author demonstrates understanding of
+      the tradition and its application to the deferral, the skill walks the
+      chunk node's re-opened questions, records amend-or-ratify outcomes on the
+      tradition record, stamps last_exercised on the delegation, and resolves
+      the chunk node — instrumenting this strategy's
+      owner-review-at-office-hours sensor"
 success_signal:
   observable: a recorded dialectic round against a canonical tradition that
     changes the graph — a dated clarification, a revised edge, a documented
@@ -84,13 +126,23 @@ validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
-rounds: null
+rounds:
+  count: 0
+  last_completed: null
 attributes:
   conditions:
     - the canonical texts remain the strongest zero-stake challenge source
       available — live external calibration (the practitioner tier) still reads
       at or near zero; when live challenges recur, this strategy fades to a
       supplement rather than a primary calibration source
+    - a USB-mountable e-reader remains the author's reading surface — if reading
+      moves elsewhere the sync tooling loses its target
+    - the print network share remains the owned, DRM-free home of the curriculum
+      texts; texts it lacks are author-actionable acquisitions surfaced by the
+      missing-references report
+    - the office-hours cadence holds — chunk resolution happens there, so a
+      lapse fills the reader without retiring anything, the same cadence-lapse
+      capture mechanism the 2026-07-05 clarification names
   traditions:
     - tradition-aristotle
     - tradition-plato

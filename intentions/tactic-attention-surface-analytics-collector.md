@@ -34,6 +34,9 @@ attributes:
   execution:
     branch: tactic-attention-surface-analytics-collector
     pr: 2783
+    attempts:
+      fix: 1
+    markers: []
 ---
 # analytics collector — local scheduled job (nix-managed timer) gathers GA4/Search Console/PageSpeed/GitHub signals into the snapshot, replacing the Firestore function
 

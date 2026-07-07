@@ -1,19 +1,25 @@
 ---
 id: tactic-align-skills-greenfield-gate
 kind: tactic
-statement: "align skills: encode the greenfield-relevance gate, artifact-owner
-  placement rule, and graph-as-sole-tracker doctrine into the /align-strategy
+statement: "align skills: encode the recorded doctrines — greenfield-relevance
+  gate, artifact-owner placement, graph-as-sole-tracker, record-completeness,
+  park-time recommendation, amendment completeness — into the /align-strategy
   and /align-tactics SKILL.md files"
 owner: ai
 status: codified
 parent: null
-rationale: The 2026-07-06 /align-strategy round recorded three doctrines as
-  clarifications on strategy-graph-native-dispatch (greenfield-relevance gate,
-  artifact-owner placement, graph-as-sole-tracker with pointer-only TODOs). The
-  skill files that execute those doctrines do not yet state them; until they do,
-  the requirements bind only via the strategy node. This tactic carries the
-  doctrine into .claude/skills/align-strategy/SKILL.md and
-  .claude/skills/align-tactics/SKILL.md.
+rationale: "The 2026-07-06 /align-strategy rounds recorded six doctrines as
+  clarifications/conditions on strategy-graph-native-dispatch: the
+  greenfield-relevance gate (clarification 26), artifact-owner placement (27),
+  graph-as-sole-tracker with pointer-only TODOs (28), the record-completeness
+  contract binding /align-strategy (31 / condition 7), the park-time
+  recommendation on every office_hours park (30 / condition 6), and the
+  amendment-completeness bar with full-body re-read (32; widened by 38 to any
+  node amendment, /align-strategy strategy edits included). The skill files that
+  execute those doctrines do not yet state them; until they do, the requirements
+  bind only via the strategy node. This tactic carries them into
+  .claude/skills/align-strategy/SKILL.md and
+  .claude/skills/align-tactics/SKILL.md."
 reading: null
 gap: null
 serves:
@@ -32,12 +38,12 @@ pace_exempt: false
 rounds: null
 attributes: {}
 ---
-# align skills: encode the greenfield gate, placement rule, and sole-tracker doctrine
+# align skills: encode the recorded doctrines (greenfield gate, placement, sole tracker, record completeness, park recommendation, amendment completeness)
 
 ## Context
 
-The 2026-07-06 `/align-strategy` round recorded three doctrines as dated
-clarifications on `strategy-graph-native-dispatch`:
+The 2026-07-06 `/align-strategy` rounds recorded six doctrines as dated
+clarifications/conditions on `strategy-graph-native-dispatch`:
 
 1. **Greenfield-relevance gate** — at `/align-tactics` finalization and in
    every `/align-strategy` improvement pass, each candidate and open tactic's
@@ -54,6 +60,32 @@ clarifications on `strategy-graph-native-dispatch`:
    or a unit of one; no side channels; code TODOs are pointer-only
    (`TODO(tactic-<id>)`), and a substantive TODO with no node is a
    review-phase finding.
+4. **Record completeness** (clarification 31 / condition 7) — the graph
+   record is the sole carrier from `/align-strategy` to `/align-tactics`:
+   the target router queues re-evaluation as a fresh session with only the
+   graph, so every decision, edge-case resolution, and tactical byproduct
+   lands in the node at record time; same-session execution is a bootstrap
+   safety, not a carrier.
+5. **Park-time recommendation** (clarification 30 / condition 6) — every
+   `office_hours` park writes recoverable context at park time: reason plus
+   a best-next-steps recommendation; session attach/resume is not a
+   supported recovery path, so a park whose context lives only in the
+   parking session is a defect.
+6. **Amendment completeness** (clarification 32; widened by 38) — when a
+   re-evaluation amends an open tactic, the entire node — statement,
+   rationale, context, every unit, and verification — is reconciled against
+   the full current strategy substance in that same round; a one-bullet
+   delta that leaves sibling sections contradicting the amendment is an
+   incomplete amendment, the same defect class as an incomplete record.
+   Keyword grep over open tactics is a shortlisting heuristic only;
+   disposition of each open child requires a full-body re-read.
+   Clarification 38 (2026-07-06 skill-evaluation round) widens the bar to
+   **any node amendment in any align skill**: an `/align-strategy` edit
+   reconciles the edited strategy's whole node — statement, rationale,
+   conditions, signal, contradicted clarifications — against the
+   interview's full outcome, never landing a delta patch alone; the live
+   author's presence reduces but does not remove the risk, because the
+   record, not the session, is the carrier (condition 7).
 
 The SKILL.md files that execute these doctrines do not yet state them. This
 tactic carries them into the skill text so a clean session running either
@@ -78,6 +110,33 @@ Scope (`.claude/skills/align-strategy/SKILL.md`):
 - Out-of-scope/context prose: note the graph is the sole issue tracker,
   bug tracker included (pointer-only TODO rule), citing the
   strategy-graph-native-dispatch clarifications as the durable home.
+- Record-completeness contract (strategy clarification 31 / condition 7,
+  added by the 2026-07-06 re-evaluation): state in the skill preamble and
+  at step 6 that the graph record is the sole carrier to /align-tactics —
+  the target router queues re-evaluation as a fresh session with only the
+  graph, so every decision, edge-case resolution, and tactical byproduct
+  must land in the node (clarifications/conditions/signal + draft-tactic
+  bodies) at record time; same-session /align-tactics execution is a
+  bootstrap safety, not a carrier, and step 6's clause-coverage walk is
+  the check that discharges the condition.
+- Edit-mode amendment completeness (clarification 38, the doctrine-6
+  widening): at Step 5's edit path, replace "apply the interview's changes
+  as a patch" framing with whole-node reconciliation — an edit round
+  re-reads and reconciles the edited strategy's statement, rationale,
+  conditions, signal, and any clarification the edit touches or
+  contradicts against the interview's full outcome before landing;
+  landing one new clarification while sibling fields still contradict it
+  is the incomplete-amendment defect.
+- Step 1 improvement-pass mechanics: the corpus staleness checks
+  (condition-vs-repo-state, reading/gap dating, contradicted
+  clarifications) may fan out to `Explore` subagents returning compact
+  `path:line`-anchored findings — the interview dialectic itself is never
+  delegated. State that keyword grep (Step 1.2 new-vs-edit overlap, Step 3
+  delegation sweep) only shortlists, never disposes — disposition reads
+  the shortlisted nodes in full. Cross-reference the strategy-corpus
+  census script (`tactic-align-tactics-mechanical-floor` Unit 4) as the
+  enumeration hook once it lands — a pointer, not a dependency of this
+  unit.
 
 ## Unit 2 — /align-tactics SKILL.md
 
@@ -91,6 +150,31 @@ Scope (`.claude/skills/align-tactics/SKILL.md`):
   cross-cutting subjects; surface gaps instead of force-fitting.
 - Recording guidance: every defect worth fixing lands as a tactic or a unit
   of an existing one (sole-tracker doctrine); TODOs pointer-only.
+- Park mechanics (Autonomy contract section and Step 4 born-parked
+  authoring): every park writes `office_hours` with reason **and** a
+  best-next-steps recommendation for the human (condition 6 / clarification
+  30) — this applies to escalation parks and born-parked tactics alike.
+  Transitional note until the first-class field lands: the
+  `office_hours.recommendation` schema addition is homed in
+  `tactic-office-hours-graph-entry` Unit 1 / `tactic-phase-skill-node-targets`
+  Unit 2 (shared, skip-if-present); while it is absent from `schema.ts`,
+  `write-node.ts` rejects the key, so the skill text must say to carry the
+  recommendation inside the `reason` string (a labelled trailing sentence)
+  and switch to the field once it validates — never to drop it.
+- Unrecorded-context park framing: when a decomposition or re-evaluation
+  cannot proceed because needed context is not in the graph, the park
+  reason names the missing context as a record-completeness defect of the
+  `/align-strategy` round that produced it (condition 7) — the fix is an
+  author `/align-strategy` pass, not guessing.
+- Re-evaluation mode (amendment completeness, clarification 32): state
+  that an amendment is complete only when the amended tactic's whole node
+  — statement, rationale, context, all units, and verification — is
+  reconciled against the full current strategy substance in the same
+  round, and that every open child tactic's body is re-read in full before
+  disposition; keyword grep only shortlists, never disposes.
+  Cross-reference the census script
+  (`tactic-align-tactics-mechanical-floor` Unit 2) as the enumeration hook
+  once it lands — a pointer, not a dependency of this unit.
 
 ## Dependencies
 
@@ -99,10 +183,13 @@ None — the clarifications this encodes are already on `origin/main`.
 ## Verification
 
 ```verify
-grep -q "greenfield-relevance" .claude/skills/align-strategy/SKILL.md && grep -q "greenfield-relevance" .claude/skills/align-tactics/SKILL.md && grep -qi "sole.*tracker\|source-of-truth issue tracker" .claude/skills/align-tactics/SKILL.md && echo OK
+grep -q "greenfield-relevance" .claude/skills/align-strategy/SKILL.md && grep -q "greenfield-relevance" .claude/skills/align-tactics/SKILL.md && grep -qi "sole.*tracker\|source-of-truth issue tracker" .claude/skills/align-tactics/SKILL.md && grep -qi "record.completeness\|sole carrier" .claude/skills/align-strategy/SKILL.md && grep -qi "recommendation" .claude/skills/align-tactics/SKILL.md && grep -qi "amendment" .claude/skills/align-tactics/SKILL.md && grep -qi "amendment\|reconcil" .claude/skills/align-strategy/SKILL.md && echo OK
 ```
 
-- Prose check: a clean-session read of each SKILL.md finds the three
+- Prose check: a clean-session read of each SKILL.md finds the six
   doctrines stated where the flow applies them (improvement pass /
-  finalization), each citing strategy-graph-native-dispatch as the durable
-  home rather than restating interview provenance.
+  finalization / park mechanics / re-evaluation amendment bar — including
+  the clarification-38 widening to /align-strategy edit rounds / step-6
+  coverage walk), each citing
+  strategy-graph-native-dispatch as the durable home rather than restating
+  interview provenance.
