@@ -71,6 +71,11 @@ inverse of `/align-tactics`' autonomy contract), and must specify:
   `office_hours` set. Read candidates via `listNodes`
   (`packages/intentionsutil/src/store.ts:88`) or by reading the files; the
   frontmatter is authoritative.
+- **Precondition check** (first-run convention, 2026-07-07): before the
+  dialectic, confirm the independent reading sitting actually happened. A
+  session run from recollection of an older reading is not a
+  demonstration — offer to stop and reconvene after the sitting rather
+  than proceed on recollection.
 - **Session flow**: (1) read the chunk node body — its `## Text`,
   `## Questions to re-open against the text`, and `## Completion` sections
   are the session script; (2) surface the text citation and questions; (3)
