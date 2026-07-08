@@ -38,16 +38,21 @@ attributes: {}
 # Chunked personal reading program — verify each tradition record against its cited texts, load-bearing doctrine first
 
 Subtree parent and index of the tradition-reading curriculum. As of the
-2026-07-06 /align-tactics round (reader-sync scope), all nine chunks are
-per-chunk born-parked office-hours tactic nodes carrying their own Text /
+2026-07-06 /align-tactics round (reader-sync scope), every chunk is a
+per-chunk born-parked office-hours tactic node carrying its own Text /
 Questions / Completion sections and machine-readable `attributes.curriculum`
 metadata (`{priority, passages: [{work, range}]}`) — the chunk nodes are the
 single home of that content; this node only indexes them.
 
-Each chunk is one office-hours sitting of at most 30 author-minutes.
-Finishing a chunk = re-read the named record against the text; amend where
-the reading contradicts it (the reading wins — see the clarification on
-`strategy-philosophical-grounding`), ratify where it holds. A record flips
+Each chunk is at most 30 author-minutes of independent reading; the review
+session around it is unbounded and may span office-hours sittings
+(2026-07-08 session-bounds clarification on
+`strategy-philosophical-grounding` — an unconverged chunk stays parked, its
+excerpt stays on the reader). Finishing a chunk = re-read the named record
+against the text; amend where the reading contradicts it (the reading wins —
+see the clarification on `strategy-philosophical-grounding`), ratify where
+it holds. Resolution includes the persistence check: durable outcomes on
+durable nodes, the chunk node prunable without loss. A record flips
 `status: delegated → codified` when all its chunks are done; the delegation's
 `last_exercised` stamps per chunk. `/sync-reader`
 (`tactic-sync-reader-skill`) delivers each chunk's cited passages to the
@@ -73,10 +78,16 @@ exactly this order; the graph is its single home, maintained by
 | 7 | `tactic-reading-chunk-7-liberality-schole` | NE IV.1; X.7; Politics I.2 | tradition-aristotle |
 | 8 | `tactic-reading-chunk-8-stoicism-drills` | Enchiridion 1; Seneca Letters 18, 91 | tradition-stoicism (declined) |
 | 9 | `tactic-reading-chunk-9-mill-justice` | Mill, Utilitarianism ch. 2, 4 (5) | tradition-utilitarianism (declined) |
+| 10 | `tactic-reading-chunk-18-dialectic-method` | Theaetetus 148e–151d; Meno 79e–86c | tradition-plato (+ interview-method deferral review) |
 
 Chunk numbers in node ids are stable names from the original list, not the
 working order. Chunk 6 carries the capstone rule: after chunks 1–6 are done,
 wherever they fall in the working order, revisit the apex question itself.
+Chunk 18 (2026-07-08 /align-strategy round) is verify-style — it deepens
+`tradition-plato`'s method entries — and additionally reviews the 2026-07-08
+interview-method deferral recorded on
+`delegation-philosophical-articulation`; it slots before the candidate batch
+because the doctrine it reviews governs how every session is conducted.
 
 ## Candidate batch (strategy-complete-grounding)
 
@@ -90,11 +101,11 @@ above and serve `strategy-complete-grounding`, not this node's own strategy.
 
 | Priority | Chunk node | Texts | Candidate |
 |---|---|---|---|
-| 10 | `tactic-reading-chunk-10-hirschman-exit-voice` | Exit, Voice, and Loyalty chs. 1–3, 7 | tradition-hirschman |
-| 11 | `tactic-reading-chunk-11-popper-fallibilism` | Conjectures and Refutations ch. 1 | tradition-popper |
-| 12 | `tactic-reading-chunk-12-macintyre-practice` | After Virtue chs. 14–15 | tradition-macintyre |
-| 13 | `tactic-reading-chunk-13-illich-conviviality` | Tools for Conviviality chs. 1–2 | tradition-illich |
-| 14 | `tactic-reading-chunk-14-pettit-nondomination` | Freedom as Antipower (Ethics 106) | tradition-republicanism |
-| 15 | `tactic-reading-chunk-15-ostrom-commons-gift` | Governing the Commons ch. 3; Mauss, The Gift intro, ch. 1 | tradition-ostrom (+ Mauss divergence) |
-| 16 | `tactic-reading-chunk-16-buddhism-nonattachment` | MN 22 (raft simile); SN 56.11 | tradition-buddhism (expected declined) |
-| 17 | `tactic-reading-chunk-17-confucian-household` | Great Learning; Analects 1–2 | tradition-confucianism |
+| 11 | `tactic-reading-chunk-10-hirschman-exit-voice` | Exit, Voice, and Loyalty chs. 1–3, 7 | tradition-hirschman |
+| 12 | `tactic-reading-chunk-11-popper-fallibilism` | Conjectures and Refutations ch. 1 | tradition-popper |
+| 13 | `tactic-reading-chunk-12-macintyre-practice` | After Virtue chs. 14–15 | tradition-macintyre |
+| 14 | `tactic-reading-chunk-13-illich-conviviality` | Tools for Conviviality chs. 1–2 | tradition-illich |
+| 15 | `tactic-reading-chunk-14-pettit-nondomination` | Freedom as Antipower (Ethics 106) | tradition-republicanism |
+| 16 | `tactic-reading-chunk-15-ostrom-commons-gift` | Governing the Commons ch. 3; Mauss, The Gift intro, ch. 1 | tradition-ostrom (+ Mauss divergence) |
+| 17 | `tactic-reading-chunk-16-buddhism-nonattachment` | MN 22 (raft simile); SN 56.11 | tradition-buddhism (expected declined) |
+| 18 | `tactic-reading-chunk-17-confucian-household` | Great Learning; Analects 1–2 | tradition-confucianism |

@@ -62,9 +62,13 @@ rounds: null
 attributes:
   delegatee: "Anthropic Claude (authoring) and the canonical traditions (content)
     — jointly: the model drafted the articulation, the fixed texts ground it"
-  delegated: the nuanced doctrinal articulation of the virtue layer — the five
+  delegated: "the nuanced doctrinal articulation of the virtue layer — the five
     tradition records' adopted/diverged/chosen_over detail and the layered
-    tradition clarifications recorded 2026-07-04
+    tradition clarifications recorded 2026-07-04 — and, since 2026-07-08, the
+    graph-wide interview-method doctrine (the periagoge scoping: where
+    turn-don't-implant binds fully versus where the visible-refusable-draft
+    convention holds), deferred by the author to Claude's judgment pending
+    personal re-derivation"
   origin: chosen
   divergence:
     level: moderate
@@ -77,6 +81,12 @@ attributes:
       - tradition-plato's 'anti-Platonic about the Forms' (Claude's authoring)
         misstated the author's position — the Form of the Good is affirmed as
         external anchor; found and amended 2026-07-07 chunk 1, the reading wins
+      - tradition-plato's capture doctrine as drafted said capture 'corrupts'
+        the sensor — Republic 518e-519b shows the faculty never loses its power
+        but becomes useful or harmful by its turning, so capture misdirects;
+        found and amended 2026-07-07 chunk 1 (the reading wins), recorded here
+        retroactively 2026-07-08 when every reading-wins catch became a required
+        contradictions entry
   irreversibility:
     recovery_path: relearn — read the cited texts against each tradition record,
       chunked in tactic-tradition-reading-program; each verified record flips
@@ -96,7 +106,9 @@ attributes:
   review_trigger: "each strategy-philosophical-grounding round; any tradition
     record still status: delegated at review is standing recovery work, and an
     empty contradictions list on a still-delegated record is unverified, not
-    clean"
-  last_assessed: 2026-07-05
+    clean; the interview-method deferral is reviewed at
+    tactic-reading-chunk-18-dialectic-method (Theaetetus midwifery, Meno
+    elenchus), added to the curriculum for that purpose"
+  last_assessed: 2026-07-08
 ---
 # Virtue-layer articulation delegated to Claude and the canonical traditions until personally re-derived

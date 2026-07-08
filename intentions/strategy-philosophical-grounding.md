@@ -126,6 +126,79 @@ clarifications:
       cited record's capstone, each reviewing the shared chunk from its own
       record's angle (precedent: chunk 4 already cites tradition-plato and
       tradition-aristotle). Recorded 2026-07-08 interview."
+  - question: How must the reading-review dialectic be conducted — what does the
+      reading itself require of the interviewer?
+    answer: "By the doctrine the first chunk verified: education is the art of
+      turning (periagoge, Republic 518b-d), not of putting sight into eyes. The
+      skill turns the author toward the text and never implants Claude's account
+      of it — an interview that implants the account is the same capture the
+      recovery loop exists to unwind. Binding rules for every session whose
+      object is the author's understanding of a fixed external thing
+      (reading-review chunks and grounding rounds alike): probes cite the text,
+      not Claude's gloss; the author articulates before any account of Claude's
+      appears; Claude's account enters only afterward, as challenge or
+      counterpoint to a position the author has committed to; a session never
+      opens with a summary of the reading; bounded verdicts may only close
+      questions the author's own articulation has already opened. Scope beyond
+      such sessions is a recorded deferral: the author deferred graph-wide
+      interview-method doctrine to Claude's judgment (2026-07-08), which is —
+      full periagoge binds only where there is a fixed object to turn toward and
+      a capacity already present; decision-forming interviews (e.g.
+      /align-strategy) keep the visible-refusable-draft convention, because
+      where no fixed text makes probing auditable, hidden framing is worse than
+      a visible draft the author can refuse on the record; fact-reporting
+      sessions are exempt from articulate-first but must separate report from
+      recommendation. That doctrine is itself Claude-drafted and held on trust:
+      it is added to delegation-philosophical-articulation's delegated scope and
+      reviewed at tactic-reading-chunk-18-dialectic-method (Theaetetus
+      midwifery, Meno elenchus), added to the curriculum for exactly this
+      review. Recorded 2026-07-08 interview."
+  - question: Are chunk verdicts one-pass, and what bounds a reading-review session?
+    answer: "No — the first run (2026-07-07, chunk 1) rejected or refined two
+      recommended options and the amendment improved both times. Verdict options
+      are drafts; the refinement loop runs until the author accepts the wording,
+      and the author's wording wins over Claude's draft. The session is
+      unbounded and may span office-hours sittings: the ~30-author-minute bound
+      applies to the author's independent work (the reading), not to the
+      dialectic. Stated generally, as the author set it: for any office-hours
+      node, the work the author must do independently is scoped to ~30 minutes;
+      the session around it is not. An unconverged chunk stays parked between
+      sittings — never weakened, never force-closed — and /sync-reader correctly
+      keeps its excerpt on the reader until the node is done. Recorded
+      2026-07-08 interview."
+  - question: Which reading-wins catches must be recorded on the delegation record?
+    answer: "All of them: every reading-wins amendment lands as a dated entry in
+      delegation-philosophical-articulation's divergence.contradictions —
+      misarticulations of the tradition (chunk 1's corrupts-to-misdirects) and
+      misstatements of the author's own position (chunk 1's 'anti-Platonic about
+      the Forms') alike — not just a last_exercised stamp. The contradictions
+      list is the recovery loop's audit trail, so entries persist after the
+      amendment lands. The first run recorded only the second catch; the
+      corrupts-to-misdirects entry was added retroactively this round. Recorded
+      2026-07-08 interview."
+  - question: Where does what the author learns in the curriculum live, and what
+      happens when an amendment cascade crosses a chunk boundary?
+    answer: "The graph is the author's knowledge map: confirmed understanding and
+      resolved deferrals must be persistently recorded on durable nodes —
+      tradition records, virtue and strategy clarifications, the delegation
+      record — never solely on chunk tactic nodes, which are transient (pruned
+      once done). Chunk resolution therefore includes a persistence check:
+      before phase: done, everything durable the sitting produced must already
+      live on a durable node, so the chunk node can be pruned without loss.
+      Chunk 1 audited 2026-07-08: passes — its full resolution lives on
+      tradition-plato and the cascaded virtue/strategy nodes; its three
+      hand-carried 'notes for later' exist only with the author, which is the
+      gap the notes rule below closes. Cross-chunk boundary rule: an amendment
+      cascade stops at claims another unresolved chunk owns — flag the discovery
+      forward onto the owning chunk node in the same graph-commit (as chunk 1
+      did with the apex question toward the chunk-6 capstone); a done chunk's
+      claims are amendable by the current session directly on the durable
+      records, since a resolved chunk node holds nothing durable. Notes rule:
+      mid-session author notes exit the session rather than dying in scrollback
+      — each exits as a self-contained follow-up prompt in the closing summary,
+      and every graph-relevant note additionally lands as a born-parked
+      office-hours draft tactic whose body is that prompt, resolved by executing
+      it. Recorded 2026-07-08 interview."
 tooling_goals:
   - kind: actuator
     statement: "/sync-reader skill — sync the reading curriculum to the author's
@@ -137,12 +210,17 @@ tooling_goals:
       references missing from the share or unlocatable inside an epub"
   - kind: sensor
     statement: "office-hours reading-review skill — run one curriculum chunk's
-      demonstration at office-hours: the author demonstrates understanding of
-      the tradition and its application to the deferral, the skill walks the
-      chunk node's re-opened questions, records amend-or-ratify outcomes on the
-      tradition record, stamps last_exercised on the delegation, and resolves
-      the chunk node — instrumenting this strategy's
-      owner-review-at-office-hours sensor"
+      demonstration at office-hours as periagoge, never implantation: probe from
+      the text before any account of Claude's appears, let the author articulate
+      and commit first, surface contradictions, and iterate verdict drafts until
+      the author's wording is accepted; the session may span sittings (the
+      ~30-minute bound is the reading, not the dialectic); record
+      amend-or-ratify outcomes on the tradition record and every reading-wins
+      catch in the delegation's divergence.contradictions, stamp last_exercised,
+      run the persistence check (durable outcomes on durable nodes, the chunk
+      node prunable without loss), exit notes-for-later as prompts plus
+      born-parked drafts, and resolve the chunk node — instrumenting this
+      strategy's owner-review-at-office-hours sensor"
 success_signal:
   observable: a recorded dialectic round against a canonical tradition that
     changes the graph — a dated clarification, a revised edge, a documented
