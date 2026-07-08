@@ -47,7 +47,7 @@ pace_exempt: false
 rounds: null
 attributes:
   curriculum:
-    priority: 10
+    priority: 13
     passages:
       - work: Plato, Theaetetus
         range: 148e-151d

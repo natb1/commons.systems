@@ -68,7 +68,9 @@ attributes:
     graph-wide interview-method doctrine (the periagoge scoping: where
     turn-don't-implant binds fully versus where the visible-refusable-draft
     convention holds), deferred by the author to Claude's judgment pending
-    personal re-derivation"
+    personal re-derivation; extended 2026-07-08 with tradition-augustine — the
+    Augustinian articulation behind the agency-of-turning account, recorded as
+    an already-live deferral (origin: chosen), verified by reading chunks 19-21"
   origin: chosen
   divergence:
     level: moderate

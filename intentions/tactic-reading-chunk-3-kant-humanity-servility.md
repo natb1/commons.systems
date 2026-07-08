@@ -41,11 +41,12 @@ office_hours:
     delegation's last_exercised; the completed chunk counts toward
     strategy-philosophical-grounding's signal."
   since: 2026-07-06
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes:
   curriculum:
-    priority: 4
+    priority: 7
     passages:
       - work: Kant, Groundwork of the Metaphysics of Morals
         range: 4:429

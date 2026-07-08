@@ -61,24 +61,30 @@ author's e-reader and retires them when the chunk node resolves
 
 ## Working order
 
-Per `strategy-recovery-critical-path` (2026-07-06 revision): 1, 2, 5, then
-3, 4, 6, 7, 8, 9 — the capture-doctrine path (Cave → hexis → phronesis)
-completes first. `attributes.curriculum.priority` on each chunk node encodes
-exactly this order; the graph is its single home, maintained by
+Per `strategy-recovery-critical-path` (2026-07-06 revision; 2026-07-08
+Augustine insertion): 1, 2, 5, then 19, 20, 21, then 3, 4, 6, 7, 8, 9, 18 —
+the capture-doctrine path (Cave → hexis → phronesis) completes first, then
+the Augustine block (verifying the agency-of-turning ground,
+capture-relevant) before the Kant floor chunk.
+`attributes.curriculum.priority` on each chunk node encodes exactly this
+order; the graph is its single home, maintained by
 `strategy-recovery-critical-path` applications.
 
 | Priority | Chunk node | Texts | Record(s) |
 |---|---|---|---|
-| 1 | `tactic-reading-chunk-1-plato-cave` | Republic VII 514a–521b | tradition-plato |
+| 1 | `tactic-reading-chunk-1-plato-cave` (done 2026-07-07) | Republic VII 514a–521b | tradition-plato |
 | 2 | `tactic-reading-chunk-2-aristotle-hexis` | NE II.5–6 | tradition-aristotle |
 | 3 | `tactic-reading-chunk-5-aristotle-phronesis` | NE VI | tradition-aristotle |
-| 4 | `tactic-reading-chunk-3-kant-humanity-servility` | Groundwork 4:429; MM 6:434–437 | tradition-kant |
-| 5 | `tactic-reading-chunk-4-sophrosyne-ordered-soul` | NE III.10–12; Republic IV | tradition-aristotle, tradition-plato |
-| 6 | `tactic-reading-chunk-6-precision-externals` | NE I.3; I.8–10 | tradition-aristotle |
-| 7 | `tactic-reading-chunk-7-liberality-schole` | NE IV.1; X.7; Politics I.2 | tradition-aristotle |
-| 8 | `tactic-reading-chunk-8-stoicism-drills` | Enchiridion 1; Seneca Letters 18, 91 | tradition-stoicism (declined) |
-| 9 | `tactic-reading-chunk-9-mill-justice` | Mill, Utilitarianism ch. 2, 4 (5) | tradition-utilitarianism (declined) |
-| 10 | `tactic-reading-chunk-18-dialectic-method` | Theaetetus 148e–151d; Meno 79e–86c | tradition-plato (+ interview-method deferral review) |
+| 4 | `tactic-reading-chunk-19-augustine-interior-teacher` | De Magistro 11.36–14.46 | tradition-augustine |
+| 5 | `tactic-reading-chunk-20-augustine-conversio` | Confessions VII.9–17 | tradition-augustine |
+| 6 | `tactic-reading-chunk-21-augustine-divided-will` | Confessions VIII.5–12 | tradition-augustine |
+| 7 | `tactic-reading-chunk-3-kant-humanity-servility` | Groundwork 4:429; MM 6:434–437 | tradition-kant |
+| 8 | `tactic-reading-chunk-4-sophrosyne-ordered-soul` | NE III.10–12; Republic IV | tradition-aristotle, tradition-plato |
+| 9 | `tactic-reading-chunk-6-precision-externals` | NE I.3; I.8–10 | tradition-aristotle |
+| 10 | `tactic-reading-chunk-7-liberality-schole` | NE IV.1; X.7; Politics I.2 | tradition-aristotle |
+| 11 | `tactic-reading-chunk-8-stoicism-drills` | Enchiridion 1; Seneca Letters 18, 91 | tradition-stoicism (declined) |
+| 12 | `tactic-reading-chunk-9-mill-justice` | Mill, Utilitarianism ch. 2, 4 (5) | tradition-utilitarianism (declined) |
+| 13 | `tactic-reading-chunk-18-dialectic-method` | Theaetetus 148e–151d; Meno 79e–86c | tradition-plato (+ interview-method deferral review) |
 
 Chunk numbers in node ids are stable names from the original list, not the
 working order. Chunk 6 carries the capstone rule: after chunks 1–6 are done,
@@ -88,6 +94,10 @@ Chunk 18 (2026-07-08 /align-strategy round) is verify-style — it deepens
 interview-method deferral recorded on
 `delegation-philosophical-articulation`; it slots before the candidate batch
 because the doctrine it reviews governs how every session is conducted.
+Chunks 19–21 (2026-07-08 /align-strategy round) are the `tradition-augustine`
+verify chunks — the record was created as an already-live deferral (status:
+delegated, origin: chosen), so its chunks are focused verify work (distance
+0), placed by doctrine load directly after the capture path.
 
 ## Candidate batch (strategy-complete-grounding)
 
@@ -101,11 +111,11 @@ above and serve `strategy-complete-grounding`, not this node's own strategy.
 
 | Priority | Chunk node | Texts | Candidate |
 |---|---|---|---|
-| 11 | `tactic-reading-chunk-10-hirschman-exit-voice` | Exit, Voice, and Loyalty chs. 1–3, 7 | tradition-hirschman |
-| 12 | `tactic-reading-chunk-11-popper-fallibilism` | Conjectures and Refutations ch. 1 | tradition-popper |
-| 13 | `tactic-reading-chunk-12-macintyre-practice` | After Virtue chs. 14–15 | tradition-macintyre |
-| 14 | `tactic-reading-chunk-13-illich-conviviality` | Tools for Conviviality chs. 1–2 | tradition-illich |
-| 15 | `tactic-reading-chunk-14-pettit-nondomination` | Freedom as Antipower (Ethics 106) | tradition-republicanism |
-| 16 | `tactic-reading-chunk-15-ostrom-commons-gift` | Governing the Commons ch. 3; Mauss, The Gift intro, ch. 1 | tradition-ostrom (+ Mauss divergence) |
-| 17 | `tactic-reading-chunk-16-buddhism-nonattachment` | MN 22 (raft simile); SN 56.11 | tradition-buddhism (expected declined) |
-| 18 | `tactic-reading-chunk-17-confucian-household` | Great Learning; Analects 1–2 | tradition-confucianism |
+| 14 | `tactic-reading-chunk-10-hirschman-exit-voice` | Exit, Voice, and Loyalty chs. 1–3, 7 | tradition-hirschman |
+| 15 | `tactic-reading-chunk-11-popper-fallibilism` | Conjectures and Refutations ch. 1 | tradition-popper |
+| 16 | `tactic-reading-chunk-12-macintyre-practice` | After Virtue chs. 14–15 | tradition-macintyre |
+| 17 | `tactic-reading-chunk-13-illich-conviviality` | Tools for Conviviality chs. 1–2 | tradition-illich |
+| 18 | `tactic-reading-chunk-14-pettit-nondomination` | Freedom as Antipower (Ethics 106) | tradition-republicanism |
+| 19 | `tactic-reading-chunk-15-ostrom-commons-gift` | Governing the Commons ch. 3; Mauss, The Gift intro, ch. 1 | tradition-ostrom (+ Mauss divergence) |
+| 20 | `tactic-reading-chunk-16-buddhism-nonattachment` | MN 22 (raft simile); SN 56.11 | tradition-buddhism (expected declined) |
+| 21 | `tactic-reading-chunk-17-confucian-household` | Great Learning; Analects 1–2 | tradition-confucianism |

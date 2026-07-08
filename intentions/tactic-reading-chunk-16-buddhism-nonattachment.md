@@ -47,7 +47,7 @@ pace_exempt: false
 rounds: null
 attributes:
   curriculum:
-    priority: 17
+    priority: 20
     candidate: true
     passages:
       - work: Alagaddupama Sutta (Majjhima Nikaya 22)

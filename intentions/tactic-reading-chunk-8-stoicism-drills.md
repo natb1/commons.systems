@@ -38,11 +38,12 @@ office_hours:
     where it holds; stamp the delegation's last_exercised; the completed chunk
     counts toward strategy-philosophical-grounding's signal."
   since: 2026-07-06
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes:
   curriculum:
-    priority: 8
+    priority: 11
     passages:
       - work: Epictetus, Enchiridion
         range: "1"

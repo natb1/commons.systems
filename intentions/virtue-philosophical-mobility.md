@@ -74,7 +74,11 @@ clarifications:
       verification of the turning (untrustworthy by self-report while
       misdirected) plus the offer of compulsion toward a good not yet seen
       (tradition-plato). The traditions claim different aspects; no chosen_over
-      is needed."
+      is needed. The Augustinian background behind those amendments is recorded
+      2026-07-08 as tradition-augustine — the interior teacher (De Magistro)
+      grounding agency-never-lost, Confessions VIII the phenomenology of the
+      choice of liberator — status: delegated until reading chunks 19-21 verify
+      it."
 tooling_goals: []
 success_signal: null
 attention: null
@@ -96,5 +100,6 @@ attributes:
     - tradition-plato
     - tradition-kant
     - tradition-stoicism
+    - tradition-augustine
 ---
 # Philosophical Mobility Over Detachment

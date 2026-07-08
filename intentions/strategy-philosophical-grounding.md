@@ -199,6 +199,25 @@ clarifications:
       and every graph-relevant note additionally lands as a born-parked
       office-hours draft tactic whose body is that prompt, resolved by executing
       it. Recorded 2026-07-08 interview."
+  - question: How did tradition-augustine enter — a further delegated record — and
+      where do its chunks sit?
+    answer: "Recorded 2026-07-08 /align-strategy round: an already-live deferral
+      recorded honestly via kind-tradition's immediate-record path — the
+      author's Augustine background informed the 2026-07-07 agency-of-turning
+      account on tradition-plato and virtue-philosophical-mobility before any
+      record existed. tradition-augustine enters status: delegated, origin:
+      chosen, extending delegation-philosophical-articulation's scope; its three
+      held-open tensions (grace vs agency-never-lost; personal God vs
+      never-toward-a-person; interior teacher vs external calibration) live as
+      clarifications on the record. Verify chunks 19-21 (De Magistro
+      11.36-14.46; Confessions VII.9-17; Confessions VIII.5-12) join the
+      curriculum at priorities 4-6 — after the contiguous Cave → hexis →
+      phronesis capture path, before the Kant floor chunk — per
+      strategy-recovery-critical-path (doctrine load; capture-relevant first),
+      shifting the remaining verify chunks (through chunk 18-dialectic-method)
+      to 7-13 and the candidate batch to 14-21. Under the same round's
+      distance-from-critical-path doctrine these are focused verify chunks,
+      distance 0. Recorded 2026-07-08 interview."
 tooling_goals:
   - kind: actuator
     statement: "/sync-reader skill — sync the reading curriculum to the author's
@@ -256,5 +275,6 @@ attributes:
     - tradition-aristotle
     - tradition-plato
     - tradition-kant
+    - tradition-augustine
 ---
 # Ground the virtue layer in recurring dialectic against the canonical traditions, keeping alignment and divergence auditable

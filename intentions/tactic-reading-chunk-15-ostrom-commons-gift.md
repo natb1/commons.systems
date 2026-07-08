@@ -47,7 +47,7 @@ pace_exempt: false
 rounds: null
 attributes:
   curriculum:
-    priority: 16
+    priority: 19
     candidate: true
     passages:
       - work: Ostrom, Governing the Commons
