@@ -79,6 +79,21 @@ clarifications:
       grounding agency-never-lost, Confessions VIII the phenomenology of the
       choice of liberator — status: delegated until reading chunks 19-21 verify
       it."
+  - question: What is ratcheting — the mechanism that makes institutions irreversible?
+    answer: "An institution ratchets when it accumulates teeth: attachment
+      mechanisms each individually reasonable to add and individually costly to
+      remove, so removal never happens by an act of will — reversal must be
+      structural or it does not occur. Growth is not the pathology; the
+      inability to reverse it is. Examples of teeth, carried from the former
+      CHARTER.md diagnosis — examples, deliberately not a formal taxonomy or
+      checklist: shared language that reshapes how problems are perceived,
+      legitimacy and standards bodies, funding and its justification demands,
+      personnel and institutional knowledge, infrastructure and legal structure,
+      cultural identity. Any recurring attachment can be a tooth; audit by the
+      mechanism (reasonable to add, costly to remove), not by membership in a
+      list. strategy-reversible-institution applies this reflexively to the
+      project itself and owns the project's own teeth inventory. Recorded
+      2026-07-08 interview."
 tooling_goals: []
 success_signal: null
 attention: null
