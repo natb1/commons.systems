@@ -21,13 +21,16 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 4
+  boost: 7
   override: null
-  rationale: "Author-directed 2026-07-08: curriculum-maintenance tooling (this
-    skill, sibling tactic-sync-reader-skill) is the second priority, after
-    strategy-graph-native-dispatch (boost 5) and ahead of derived-only ranks
-    (cap 2) — boost 4 sits below the dispatch migration and above
-    strategy-attention-surface (boost 3). Scoped to the curriculum-execution
+  rationale: "Author-directed 2026-07-08 (refined):
+    curriculum-maintenance/execution tooling (this skill, sibling
+    tactic-sync-reader-skill) ranks below tactics that directly edit the
+    /align-strategy and /align-tactics SKILL.md files (authored 8) and above the
+    rest of strategy-graph-native-dispatch's subtree (inherited 5, unboosted) —
+    boost 7. Supersedes the prior boost-4 rationale (dated 2026-07-08), which
+    only cleared strategy-attention-surface (boost 3) and did not yet clear the
+    rest of strategy-graph-native-dispatch. Scoped to curriculum-execution
     tactics only, not the reading-chunk tactics under
     strategy-philosophical-grounding, which remain unboosted."
 phase: implement
