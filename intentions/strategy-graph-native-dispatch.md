@@ -865,6 +865,42 @@ clarifications:
       unverified local state (clear error over defensive fallback). Mechanism
       retained as tactic-align-skills-latest-graph-guard. Recorded 2026-07-08
       interview."
+  - question: Do node-assigned sessions receive the node's ancestry — the decision
+      context above it — or only the node itself?
+    answer: "Both — node plus a bounded ancestry projection, injected at session
+      start for every node-assigned session uniformly: tactic phase workers,
+      strategy /align-tactics workers, main-qa handlers, office-hours entry
+      sessions, and interactive align sessions editing a node (uniform by node
+      id, like claiming and liveness). Today only the node's own context reaches
+      a session (the tick prompt carries id/kind/phase and the phase skill reads
+      the node file, whose body is the plan per condition 7); ancestry is never
+      loaded, yet phase semantics already owe ancestry facts — review
+      disposition needs unvalidated-signal-path membership (clarification 19),
+      qa validates independently against intent (clarification 20) — so a worker
+      either resolves greedily or reads the graph ad hoc, the same
+      unforced-method failure shape the read-side freshness guarantee closed.
+      Doctrinal home: strategy-explicit-intent's periagoge clarification and its
+      injection-lapse condition ('the delegatee-education claim holds only while
+      the graph is actually injected into the delegatee's harness') — this is
+      that condition's per-node materialization. Projection, per ancestor on the
+      parent + serves chain up to virtue roots: statement, rationale,
+      attributes.conditions, success_signal, and attention rationale, plus the
+      clarification questions as a titles-only index the session pulls in full
+      on demand — bounded (order-of-a-few-KB per chain) for token-economy parity
+      (clarification 17), never the full clarification histories by default.
+      Discipline, resolving the recorded steelman (complete-record purism:
+      condition 7 plus the fingerprint gates already suffice): ancestry is
+      read-only decision context for in-scope judgment calls; the node body
+      remains the sole work contract, and condition 7 is unweakened — a plan
+      that assumes the ancestry projection is still an incomplete record; a
+      perceived plan-vs-ancestry conflict routes to an office_hours park with a
+      recommendation, never self-expanded or self-reduced scope. The steelman is
+      rejected because fingerprints guard against substance changes, not against
+      judgment calls the plan under-determines at execution time, and the
+      ancestry facts qa/review already owe are otherwise unforced. Mechanism per
+      the thin-script condition (clarification 25): an owned ancestry-projection
+      primitive invoked at provisioning / session Step 0, retained as draft
+      tactic-node-ancestry-context. Recorded 2026-07-08 interview."
 tooling_goals:
   - kind: actuator
     statement: /align-strategy — interview-driven strategy recording, superseding
@@ -962,5 +998,12 @@ attributes:
       and analyzing a stale local checkout (a session tree behind origin/main)
       is a defect — distinct from, and the inverse of, the content-staleness
       hazard on strategy-explicit-intent (the graph lagging reality)
+    - every node-assigned session — router phase workers, /align-tactics
+      workers, main-qa handlers, office-hours entry, and interactive align
+      sessions editing a node — starts with the node plus a bounded ancestry
+      projection (parent + serves chain to virtue roots) injected as read-only
+      decision context; ancestry never substitutes for the node body's complete
+      plan, and a plan-vs-ancestry conflict parks to office_hours with a
+      recommendation rather than self-adjusting scope
 ---
 # Dispatch runs on the graph — orchestration state lives in intention nodes, worked through the align skill family
