@@ -44,7 +44,7 @@ pace_exempt: false
 rounds: null
 attributes:
   curriculum:
-    priority: 15
+    priority: 17
     candidate: true
     passages:
       - work: Popper, Conjectures and Refutations

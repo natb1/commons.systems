@@ -45,7 +45,7 @@ pace_exempt: false
 rounds: null
 attributes:
   curriculum:
-    priority: 14
+    priority: 16
     candidate: true
     passages:
       - work: Hirschman, Exit, Voice, and Loyalty

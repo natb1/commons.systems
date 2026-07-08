@@ -62,7 +62,8 @@ author's e-reader and retires them when the chunk node resolves
 ## Working order
 
 Per `strategy-recovery-critical-path` (2026-07-06 revision; 2026-07-08
-Augustine insertion): 1, 2, 5, then 19, 20, 21, then 3, 4, 6, 7, 8, 9, 18 —
+Augustine insertion; 2026-07-08 graph-function append): 1, 2, 5, then 19,
+20, 21, then 3, 4, 6, 7, 8, 9, 18, then 22, 23 —
 the capture-doctrine path (Cave → hexis → phronesis) completes first, then
 the Augustine block (verifying the agency-of-turning ground,
 capture-relevant) before the Kant floor chunk.
@@ -85,6 +86,8 @@ order; the graph is its single home, maintained by
 | 11 | `tactic-reading-chunk-8-stoicism-drills` | Enchiridion 1; Seneca Letters 18, 91 | tradition-stoicism (declined) |
 | 12 | `tactic-reading-chunk-9-mill-justice` | Mill, Utilitarianism ch. 2, 4 (5) | tradition-utilitarianism (declined) |
 | 13 | `tactic-reading-chunk-18-dialectic-method` | Theaetetus 148e–151d; Meno 79e–86c | tradition-plato (+ interview-method deferral review) |
+| 14 | `tactic-reading-chunk-22-republic-sun-line` | Republic VI 505a–511e | tradition-plato (+ strategy-explicit-intent function doctrine) |
+| 15 | `tactic-reading-chunk-23-protagoras-virtue-knowledge` | Protagoras 352b–358d | tradition-plato (+ kind-virtue hexis doctrine) |
 
 Chunk numbers in node ids are stable names from the original list, not the
 working order. Chunk 6 carries the capstone rule: after chunks 1–6 are done,
@@ -98,6 +101,13 @@ Chunks 19–21 (2026-07-08 /align-strategy round) are the `tradition-augustine`
 verify chunks — the record was created as an already-live deferral (status:
 delegated, origin: chosen), so its chunks are focused verify work (distance
 0), placed by doctrine load directly after the capture path.
+Chunks 22–23 (2026-07-08 /align-strategy graph-function round) verify the
+two `tradition-plato` entries the function doctrine on
+`strategy-explicit-intent` made load-bearing — the Good-as-anchor adoption
+(Republic VI) and the virtue-as-knowledge divergence (Protagoras, an
+explicit deferral: the author has not read it). Slotted at the end of the
+verify block; doctrine load argues they could pull earlier — re-prioritize
+at office-hours if desired.
 
 ## Candidate batch (strategy-complete-grounding)
 
@@ -111,11 +121,11 @@ above and serve `strategy-complete-grounding`, not this node's own strategy.
 
 | Priority | Chunk node | Texts | Candidate |
 |---|---|---|---|
-| 14 | `tactic-reading-chunk-10-hirschman-exit-voice` | Exit, Voice, and Loyalty chs. 1–3, 7 | tradition-hirschman |
-| 15 | `tactic-reading-chunk-11-popper-fallibilism` | Conjectures and Refutations ch. 1 | tradition-popper |
-| 16 | `tactic-reading-chunk-12-macintyre-practice` | After Virtue chs. 14–15 | tradition-macintyre |
-| 17 | `tactic-reading-chunk-13-illich-conviviality` | Tools for Conviviality chs. 1–2 | tradition-illich |
-| 18 | `tactic-reading-chunk-14-pettit-nondomination` | Freedom as Antipower (Ethics 106) | tradition-republicanism |
-| 19 | `tactic-reading-chunk-15-ostrom-commons-gift` | Governing the Commons ch. 3; Mauss, The Gift intro, ch. 1 | tradition-ostrom (+ Mauss divergence) |
-| 20 | `tactic-reading-chunk-16-buddhism-nonattachment` | MN 22 (raft simile); SN 56.11 | tradition-buddhism (expected declined) |
-| 21 | `tactic-reading-chunk-17-confucian-household` | Great Learning; Analects 1–2 | tradition-confucianism |
+| 16 | `tactic-reading-chunk-10-hirschman-exit-voice` | Exit, Voice, and Loyalty chs. 1–3, 7 | tradition-hirschman |
+| 17 | `tactic-reading-chunk-11-popper-fallibilism` | Conjectures and Refutations ch. 1 | tradition-popper |
+| 18 | `tactic-reading-chunk-12-macintyre-practice` | After Virtue chs. 14–15 | tradition-macintyre |
+| 19 | `tactic-reading-chunk-13-illich-conviviality` | Tools for Conviviality chs. 1–2 | tradition-illich |
+| 20 | `tactic-reading-chunk-14-pettit-nondomination` | Freedom as Antipower (Ethics 106) | tradition-republicanism |
+| 21 | `tactic-reading-chunk-15-ostrom-commons-gift` | Governing the Commons ch. 3; Mauss, The Gift intro, ch. 1 | tradition-ostrom (+ Mauss divergence) |
+| 22 | `tactic-reading-chunk-16-buddhism-nonattachment` | MN 22 (raft simile); SN 56.11 | tradition-buddhism (expected declined) |
+| 23 | `tactic-reading-chunk-17-confucian-household` | Great Learning; Analects 1–2 | tradition-confucianism |
