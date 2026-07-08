@@ -135,12 +135,10 @@ clarifications:
     answer: Only on the main branch. Staleness is expected and normal — the checkout
       is necessarily behind origin/main between syncs; a separate freshness
       requirement in the graph ensures a sync runs before executing tasks that
-      assume fresh main (cross-references
-      tactic-align-skills-latest-graph-guard's read-side freshness). Folding
-      currency into this invariant would wrongly treat an ordinary stale
-      checkout as a violation. Worktrees are exempt — they legitimately check
-      out feature branches; the invariant is scoped to the primary checkout
-      alone. Recorded 2026-07-08 interview.
+      assume fresh main. Folding currency into this invariant would wrongly
+      treat an ordinary stale checkout as a violation. Worktrees are exempt —
+      they legitimately check out feature branches; the invariant is scoped to
+      the primary checkout alone. Recorded 2026-07-08 interview.
 tooling_goals:
   - kind: sensor
     statement: a managed dispatch daemon liveness sensor that reports whether the
