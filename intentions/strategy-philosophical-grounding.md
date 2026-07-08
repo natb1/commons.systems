@@ -218,6 +218,24 @@ clarifications:
       to 7-13 and the candidate batch to 14-21. Under the same round's
       distance-from-critical-path doctrine these are focused verify chunks,
       distance 0. Recorded 2026-07-08 interview."
+  - question: Is the reading-side calcification guard this strategy owns part of a
+      single anti-dogma purpose shared with the internal re-derivation dialectic
+      — and where does that purpose now live?
+    answer: "Yes — one purpose, two homes, a division of labor recorded 2026-07-08
+      on strategy-explicit-intent. Preventing the graph's doctrine from
+      calcifying into dogma (virtue-philosophical-mobility: forced detachment is
+      dogma) is served on the reading side here — the recall-first-delta /
+      elenchus / rival-tradition-steelman guard keeps understanding gained from
+      external traditions and context from ossifying, and the ongoing curriculum
+      queue (sustained recurrence across review cycles, this strategy's
+      unproven-clause gap) is what keeps that guard fed — and on the internal
+      side by strategy-explicit-intent's recurring re-derivation dialectic,
+      which keeps the graph's own recorded doctrine from ossifying. Neither
+      strategy owns a fourth dedicated \"prevent calcification\" strategy: the
+      space was already partitioned among this strategy,
+      strategy-complete-grounding, and strategy-external-calibration, so the
+      anti-dogma purpose is named on its existing homes rather than carved into
+      a new node. Recorded 2026-07-08 interview."
 tooling_goals:
   - kind: actuator
     statement: "/sync-reader skill — sync the reading curriculum to the author's

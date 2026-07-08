@@ -121,6 +121,36 @@ clarifications:
       checkout presented already-amended doctrine (the pre-chunk-1 'Forms
       declined') as current, so the gate must read doctrine at origin/main,
       never from the working tree. Recorded 2026-07-08 interview."
+  - question: What keeps the re-derivation dialectic this graph runs from itself
+      calcifying — is preventing doctrinal calcification into dogma a named
+      purpose at the strategy layer, or only an implicit reading guard?
+    answer: "It is named here. The recurring dialectic that re-derives strategies —
+      the align rung-5 contrarian and consistency passes, the periodic grounding
+      rounds, and the standing conditions treated as review triggers — exists to
+      keep the graph's own recorded doctrine from calcifying into dogma, the
+      danger virtue-philosophical-mobility names directly (forced detachment is
+      dogma, and dogma requires power to maintain). Anti-calcification demands
+      re-challenging settled, unchanged doctrine, not only propagating changes
+      once something moves: an intention that has gone unquestioned for many
+      cycles is the calcification risk — the corrupted-sensor hazard this
+      strategy's rationale already names, reporting not-captured from old data.
+      The purpose was previously carried only implicitly —
+      strategy-philosophical-grounding's recall-first-delta / elenchus /
+      rival-tradition-steelman clarification named calcification but scoped it
+      to understanding gained from external traditions, and this strategy's
+      success signal senses re-derivation as a traceability proxy (a node
+      changed, so a decision changed) without naming why the recurrence matters.
+      This clarification names the purpose so the recurrence reads as anti-dogma
+      discipline, not bookkeeping. No new observable is added this round: the
+      existing office-hours proxy signal, plus the recurrence thresholds on the
+      grounding strategies, are the current sensors, and
+      tactic-condition-review-sweep (standing conditions swept each cycle) and
+      tactic-align-strategy-alignment-tests (per-strategy doctrinal-consistency
+      and alternatives tests at record time) are the tooling that implements it
+      — the correct layer for tooling, not a transient home for the commitment.
+      A dedicated sensor that directly reads \"settled doctrine re-challenged
+      and sometimes overturned\" is a candidate for a future round if the
+      traceability proxy proves insufficient. Recorded 2026-07-08 interview."
 tooling_goals: []
 success_signal:
   observable: decisions trace to the graph — dialectic outputs cite node ids, a
@@ -148,5 +178,10 @@ attributes:
       injected into the delegatee's harness (rules, memory, node bodies, plans
       carrying graph doctrine); an injection lapse reverts the delegatee to
       vendor defaults
+    - the re-derivation cadence actually recurs — the align rung-5 dialectic,
+      the periodic grounding rounds, and the standing-conditions sweep run on
+      their cycle; a lapse lets recorded doctrine calcify into dogma
+      unchallenged, the same cadence-lapse capture mechanism the grounding
+      strategies and the delegatee-education condition above already name
 ---
 # Govern by an explicit, self-describing intention graph
