@@ -20,6 +20,12 @@ rationale: >-
   it the artifact most distinctive for practitioner distribution: dual-tier in
   the strategy-progressive-validation sense, the author's daily development tool
   and the thing a practitioner would most plausibly fork.
+
+
+  That hand-off only holds if the chain runs unattended: the daemon must keep
+  ticking while the human is away — logged out, no interactive session — which
+  is what makes "engage only at escalation points" real rather than "engage only
+  while a terminal happens to be open".
 reading: null
 gap: null
 serves:
@@ -85,13 +91,46 @@ clarifications:
       tactic-ci-change-detection-transitive fixes; the answer to a detection gap
       is completing the map, never abandoning scoping for test-everything.
       Recorded 2026-07-07 interview."
-tooling_goals: []
+  - question: Does the backlog-drain success signal prove the autonomous chain is
+      running unattended?
+    answer: No. An interactive `claude agents` invocation spawns its own transient
+      daemon (a child of that process, tagged --origin transient) that keeps
+      background jobs running; on 2026-07-08 this masked a dead managed
+      dispatch-claude-daemon.service for roughly a day. So durability needs a
+      distinct liveness observable on the managed lingering daemon, read while
+      no interactive session is substituting for it. Recorded 2026-07-08
+      interview.
+  - question: Is running a managed daemon about pinning the chain to the latest
+      claude-code binary?
+    answer: No — the transient daemon already re-execs the current claude binary on
+      each launch, so it is never stale; it is the managed systemd daemon that
+      must be restarted onto the new store path after an upgrade (tracked
+      separately by tactic-mainqa-dispatch-daemon-restart). The reason to run a
+      managed lingering daemon is unattended durability across logout, a facet
+      distinct from version-pinning. Recorded 2026-07-08 interview.
+  - question: What must "keeps ticking while I'm away" survive?
+    answer: Logout and the absence of any interactive session — persistence via
+      systemd linger (users.users.n8.linger = true), independent of an
+      interactive claude agents process whose transient daemon dies with it.
+      Surviving host reboot and machine sleep / network drop are explicitly out
+      of scope for this requirement. Recorded 2026-07-08 interview.
+tooling_goals:
+  - kind: sensor
+    statement: a managed dispatch daemon liveness sensor that reports whether the
+      lingering dispatch-claude-daemon.service is up and ticking unattended,
+      distinguishing it from a transient (--origin transient) daemon spawned by
+      an interactive claude agents session
 success_signal:
-  observable: attention economics — the chain drains the backlog while human
-    escalations stay bounded
-  sensor: the office-hours dashboard (backlog runway, capacity band, escalation queue)
-  threshold: backlog runway stays inside the capacity band without escalation
-    volume exceeding office-hours capacity
+  observable: attention economics — the managed lingering dispatch daemon drains
+    the backlog unattended (across logout, with no interactive claude agents
+    session substituting a transient daemon) while human escalations stay
+    bounded
+  sensor: the office-hours dashboard (backlog runway, capacity band, escalation
+    queue) plus a managed-daemon liveness check that distinguishes the lingering
+    user unit from a transient interactive daemon
+  threshold: the managed daemon runs continuously across logout and backlog runway
+    stays inside the capacity band without escalation volume exceeding
+    office-hours capacity
   is_proxy: true
 attention: null
 phase: null
@@ -109,5 +148,8 @@ attributes:
       read-only to sessions while skill scripts are auto-approved by path"
     - "the chain cannot suppress its own failure signals: test integrity is
       enforced — fix or escalate, never weaken"
+    - the dispatch daemon runs as a lingering systemd user service
+      (users.users.n8.linger = true), persisting across logout — not a transient
+      daemon tied to an interactive claude agents session
 ---
 # Run tactical execution through an owned autonomous dispatch chain
