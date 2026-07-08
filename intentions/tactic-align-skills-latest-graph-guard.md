@@ -24,7 +24,18 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention: null
+attention:
+  boost: 3
+  override: null
+  rationale: "Author-directed 2026-07-08 (further refined): elevated to the same
+    tier as the tactics that directly edit
+    .claude/skills/align-strategy/SKILL.md and
+    .claude/skills/align-tactics/SKILL.md (boost 3, added on top of the
+    strategy's own boost 5, authored 8) — even though this tactic's own fix is a
+    freshness-guard mechanism rather than a SKILL.md prose edit, the author has
+    directed it ranks alongside the direct skill-edit tactics, above
+    curriculum-execution tooling (boost 7) and the rest of
+    strategy-graph-native-dispatch's subtree (inherited 5, unboosted)."
 phase: null
 execution: null
 validates: []
