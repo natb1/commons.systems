@@ -901,6 +901,42 @@ clarifications:
       the thin-script condition (clarification 25): an owned ancestry-projection
       primitive invoked at provisioning / session Step 0, retained as draft
       tactic-node-ancestry-context. Recorded 2026-07-08 interview."
+  - question: Chart, dashboard, and data-visualization requirements under-specify in
+      prose the same way general UI does (clarification 7) — is the
+      design-canvas dialectic enough, or do they need their own design-guidance
+      source?
+    answer: "Not enough — chart, dashboard, and data-visualization requirements are
+      gathered under the /dataviz built-in skill, binding the align family.
+      Extending clarification 7: whenever an /align-strategy interview or an
+      /align-tactics decomposition develops a requirement for any data
+      visualization — chart, graph, plot, dashboard, stat tile/KPI, sparkline,
+      heatmap, or the choice of whether to visualize at all — the session loads
+      /dataviz and its procedure governs the recorded design: form chosen by the
+      data's job (including /dataviz's 'is it even a chart' test, where a hero
+      number or stat tile is a valid answer), color assigned by role
+      (categorical/sequential/diverging/status) never by rank, the categorical
+      palette validated by scripts/validate_palette.js and never eyeballed, mark
+      specs and spacers, a default hover layer, and the accessibility pass (a
+      legend for ≥2 series, a table view, a selected — not auto-flipped — dark
+      mode). /dataviz and the design canvas compose, they do not compete:
+      /dataviz supplies the design method and its computable checks; the design
+      canvas (clarification 7) still supplies the author-disambiguation
+      artifacts — mockups/variants built on @commons-systems/ds, now built to
+      follow /dataviz — synced via DesignSync so the author disambiguates by
+      pointing at a variant. The retain-not-refine split (clarification 6)
+      governs where output lands: /align-strategy records the author's chart
+      design intent as clarifications/conditions, /align-tactics carries the
+      concrete per-unit chart guidance (chosen forms, the validated palette,
+      mark and interaction specs) in tactic plan/draft bodies, and the implement
+      and review phases execute and check against /dataviz downstream. Capture
+      note: /dataviz is a rented Anthropic built-in, so this leans further on
+      delegation-anthropic-claude — but its guidance is design-system-agnostic
+      and its reference files (palette.md, the validator) are forkable content
+      that can be vendored into the repo, so the capture is bounded and no
+      recovers edge is added, consistent with the Workflow-executor lean-in
+      (clarification 25). Skill-text wiring is retained as draft
+      tactic-align-skills-dataviz-guidance. Recorded 2026-07-08 /align-strategy
+      interview."
 tooling_goals:
   - kind: actuator
     statement: /align-strategy — interview-driven strategy recording, superseding
