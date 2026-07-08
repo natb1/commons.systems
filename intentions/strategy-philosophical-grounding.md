@@ -99,6 +99,33 @@ clarifications:
       author-actionable acquisition (buy it DRM-free), surfaced by the tool's
       missing-references report, not a tooling gap. Recorded 2026-07-06
       interview.
+  - question: What guards prior learnings against calcification as the curriculum
+      broadens into context?
+    answer: "Every context chunk is a re-evaluation opportunity, not additive
+      reading — skills atrophy through calcification as well as through
+      delegation. Each context-chunk sitting keeps the 30-minute chunk
+      discipline and must involve dialectic to confirm understanding, in three
+      named forms: recall-first delta (before reading, the author states from
+      memory what the prior related reading established — the gap against the
+      record is measured calcification), elenchus (the session poses the
+      strongest objection to the author's articulation and the author defends or
+      amends), and rival-tradition steelman (articulate how a rival recorded
+      tradition reads the same passage). Amend/ratify and intent-evolution
+      review run inside chunks directly touching prior outcomes, or defer to the
+      area capstone. Recorded 2026-07-08 interview."
+  - question: What closes a context area — where do the deferred audits land?
+    answer: "A per-record capstone review tactic: created once the record's first
+      context chunk resolves, an ordinary at-most-30-minute office-hours sitting
+      owning the selection-bias audit (were the delegatee-chosen excerpts
+      representative, judged against the now-read context), the deferred
+      amend/ratify pass, and the intent-evolution review — drift in
+      understanding amends the tradition record (the reading wins, per the
+      existing clarification); drift in intent lands as dated clarifications on
+      the affected virtue or strategy nodes. It recurs if the area's context
+      later deepens. A context chunk citing several records counts toward each
+      cited record's capstone, each reviewing the shared chunk from its own
+      record's angle (precedent: chunk 4 already cites tradition-plato and
+      tradition-aristotle). Recorded 2026-07-08 interview."
 tooling_goals:
   - kind: actuator
     statement: "/sync-reader skill — sync the reading curriculum to the author's

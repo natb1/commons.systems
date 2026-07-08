@@ -80,6 +80,28 @@ clarifications:
       entries on the tradition record plus dated clarifications on the deviating
       node — generalizes unchanged with kind-tradition; no new mechanism.
       Recorded 2026-07-07 interview.
+  - question: How does broader context enter the curriculum backlog?
+    answer: "As worker-drafted context chunks, selected recursively: after a reading
+      resolves, workers draft whatever broader context is most relevant for
+      deepening understanding of that reading and reinforcing the original
+      education — the full work the excerpts came from, the author's other
+      writings, contemporaries, the surrounding culture — chosen by relevance,
+      never by a fixed excerpt-then-work-then-author-then-culture tier ladder.
+      Broadening context is a capture guard, not leisure reading: the focused
+      excerpts were delegatee-selected (the 2026-07-07 chunk-1 session verified
+      Republic VII partly from 592a-b, outside the chunk's own range — the risk
+      observed live), so context reading audits that selection. Selection is
+      unrestricted at any time; only reading priority is gated, by
+      strategy-recovery-critical-path's distance ordering. Recorded 2026-07-08
+      interview."
+  - question: What keeps context-selection workers from re-importing the selection
+      bias the context guards against?
+    answer: "The Cave-educator constraint: a context chunk carries passages and
+      questions, never conclusions or summaries of what the context shows — the
+      worker's role is the educator's in Republic VII, turning the author toward
+      the graph's recorded good, not giving sight by telling facts, which is
+      exactly where delegatee bias re-enters. Context/reading/chunk-selection
+      workers run on Opus. Recorded 2026-07-08 interview."
 tooling_goals:
   - kind: sensor
     statement: "grounding gap analysis — tick-runnable: enumerate durable-layer
@@ -131,5 +153,8 @@ attributes:
     - kind-tradition's generalization holds — any examined body of thought (a
       research field, an engineering practice, a literary tradition) is
       recordable as a tradition
+    - context/reading/chunk-selection workers run on Opus — chunk selection is
+      the surface where delegatee bias enters the curriculum, so it gets the
+      strongest model
 ---
 # Keep the graph's grounding complete — every intention carries examined tradition references, or an explicit circumstantial / none-found mark, with deviations recorded
