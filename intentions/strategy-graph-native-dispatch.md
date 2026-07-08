@@ -838,6 +838,33 @@ clarifications:
       executes the parked recommendation end-to-end and the human's only
       interaction is approving the explicit self-modification permission prompt.
       Recorded 2026-07-07 interview."
+  - question: The interactive align skills read the graph before acting — what
+      guarantees they read the latest graph, not a stale local checkout?
+    answer: "A non-skippable pre-analysis freshness guarantee — the read-side
+      complement to the single-write-path discipline (the 2026-07-03
+      concurrent-edit clarification). Just as every write rebases onto
+      origin/main before it lands, every interactive graph-reading session
+      (/align-strategy, /align-tactics, /align-init, the office-hours review)
+      must see origin/main state before its first analysis read. This is a
+      distinct hazard from strategy-explicit-intent's content-staleness
+      condition (the graph lagging reality): here the graph is current but the
+      session's local checkout lags it — the inverse. The 2026-07-08
+      graph-function round hit it live, running step 1.2's overlap grep and the
+      readNode of the edited node against a 36-commit-behind tree and presenting
+      superseded doctrine as current until the author caught it. The headless
+      router tick already freshens (git fetch origin main && git merge --ff-only
+      origin/main on its worktree per dispatch-select-tick); the interactive
+      skills did not, and the failure was not an absent method but that nothing
+      forced one — a prose 'fetch first' step is skipped by the next session
+      exactly as that one skipped it. So the guarantee is structural and
+      non-skippable: greenfield, the interactive skills' worktree is cut from
+      freshly-fetched origin/main so analysis physically cannot begin on a stale
+      tree (the router's provision-node-worktree primitive is the model);
+      SKILL.md prose is a documentation backstop, not the mechanism. A fetch
+      that cannot reach origin fails the session rather than proceeding on
+      unverified local state (clear error over defensive fallback). Mechanism
+      retained as tactic-align-skills-latest-graph-guard. Recorded 2026-07-08
+      interview."
 tooling_goals:
   - kind: actuator
     statement: /align-strategy — interview-driven strategy recording, superseding
@@ -926,5 +953,14 @@ attributes:
       that halts all selection until a human un-parks it; no unbounded
       re-selection loop exists in either scope, and breaker state never lives
       outside the graph
+    - interactive graph-reading skills (/align-strategy, /align-tactics,
+      /align-init, the office-hours review) begin analysis only against
+      freshly-fetched origin/main state — cut the session worktree from
+      origin/main or hard-fail a pre-analysis freshness check, with a fetch that
+      cannot reach origin failing the session rather than proceeding on the
+      local tree; a prose-only freshening step is a backstop, not the mechanism,
+      and analyzing a stale local checkout (a session tree behind origin/main)
+      is a defect — distinct from, and the inverse of, the content-staleness
+      hazard on strategy-explicit-intent (the graph lagging reality)
 ---
 # Dispatch runs on the graph — orchestration state lives in intention nodes, worked through the align skill family
