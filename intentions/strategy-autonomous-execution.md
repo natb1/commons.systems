@@ -114,6 +114,33 @@ clarifications:
       interactive claude agents process whose transient daemon dies with it.
       Surviving host reboot and machine sleep / network drop are explicitly out
       of scope for this requirement. Recorded 2026-07-08 interview.
+  - question: What host-environment invariant must the dispatch host's primary
+      checkout maintain?
+    answer: "The primary checkout at ~/natb1/commons.systems stays on the main
+      branch — never a feature branch. Branch work happens in worktrees; the
+      primary checkout is reserved for main. This is load-bearing for two
+      unattended paths: (a) dispatch's main-sync — dispatch-select-tick's `git
+      merge --ff-only origin/main` runs on the main worktree
+      (.claude/rules/sandbox.md) and can only fast-forward a checkout that is on
+      main; (b) the worktree-create hook resolves the project root from a
+      worktree with main checked out, so a non-main primary checkout makes
+      EnterWorktree/provisioning fail with 'no worktree with main checked out;
+      cannot resolve the project root'. Enforcement is prevent-at-source — no
+      dispatch/provisioning path may leave the primary checkout on a feature
+      branch (e.g. a failed `git worktree add`+chained `cd` that drops later git
+      ops into the primary checkout and switches it off main) — drafted at
+      tactic-primary-checkout-main-guard. Recorded 2026-07-08 interview."
+  - question: Does that invariant require the primary checkout to stay current with
+      origin/main, or only to be on the main branch?
+    answer: Only on the main branch. Staleness is expected and normal — the checkout
+      is necessarily behind origin/main between syncs; a separate freshness
+      requirement in the graph ensures a sync runs before executing tasks that
+      assume fresh main (cross-references
+      tactic-align-skills-latest-graph-guard's read-side freshness). Folding
+      currency into this invariant would wrongly treat an ordinary stale
+      checkout as a violation. Worktrees are exempt — they legitimately check
+      out feature branches; the invariant is scoped to the primary checkout
+      alone. Recorded 2026-07-08 interview.
 tooling_goals:
   - kind: sensor
     statement: a managed dispatch daemon liveness sensor that reports whether the
@@ -151,5 +178,9 @@ attributes:
     - the dispatch daemon runs as a lingering systemd user service
       (users.users.n8.linger = true), persisting across logout — not a transient
       daemon tied to an interactive claude agents session
+    - the dispatch host's primary checkout (~/natb1/commons.systems) stays on
+      the main branch — never a feature branch — so dispatch's ff-only main-sync
+      and the worktree-create hook's project-root resolution both hold (currency
+      not required; a separate freshness requirement governs pre-task sync)
 ---
 # Run tactical execution through an owned autonomous dispatch chain
