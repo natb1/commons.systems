@@ -54,7 +54,7 @@ if [[ -n "${DISPATCH_GRAPH_MAIN_WORKTREE:-}" ]]; then
   PROJECT_ROOT="$DISPATCH_GRAPH_MAIN_WORKTREE"
 else
   PROJECT_ROOT=$(git worktree list --porcelain 2>/dev/null \
-    | awk '/^worktree /{wt=substr($0,10)} /^branch refs\/heads\/main$/{print wt; exit}')
+    | awk '/^worktree /{wt=substr($0,10)} /^branch refs\/heads\/main$/{if(!f){print wt; f=1}}')
 fi
 if [[ -z "$PROJECT_ROOT" || ! -d "$PROJECT_ROOT" ]]; then
   echo "provision-node-worktree: cannot resolve the project root (no worktree with 'main' checked out)" >&2
