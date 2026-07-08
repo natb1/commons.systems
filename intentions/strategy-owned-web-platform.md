@@ -90,6 +90,19 @@ clarifications:
       components, currently guarded only by a .design-sync/NOTES.md warning.
       Loud-failure guard drafted at tactic-design-sync-zero-component-guard.
       Recorded 2026-07-07 interview."
+  - question: Does this strategy own the physical projects/ + packages/ repo layout,
+      or only the logical apps-vs-libraries boundary?
+    answer: 'Both — the physical layout is the logical boundary (clarification 4:
+      apps are unscoped workspace roots, libraries are scoped @commons-systems/*
+      leaves) materialized on disk. The 2026-06 repo reorg (former GitHub epic
+      #2513) split the tree into packages/ (scoped leaves) and projects/
+      (unscoped runnable units); Tier-1 landed (all shared libs to packages/,
+      root go.work, projects/ with the low-coupling runnables). Tier-2 —
+      relocating the 6 hosting apps + functions into projects/ and collapsing
+      the workspaces glob to ["projects/*","packages/*"] — was deferred and,
+      once planning moved to the graph, tracked nowhere; it is retained as
+      tactic-projects-app-relocation under this strategy. Recorded 2026-07-08
+      interview.'
 tooling_goals:
   - kind: sensor
     statement: a dependency-justification audit over the workspace manifests — every
