@@ -21,7 +21,16 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention: null
+attention:
+  boost: 4
+  override: null
+  rationale: "Author-directed 2026-07-08: curriculum-maintenance tooling (this
+    skill, sibling tactic-sync-reader-skill) is the second priority, after
+    strategy-graph-native-dispatch (boost 5) and ahead of derived-only ranks
+    (cap 2) — boost 4 sits below the dispatch migration and above
+    strategy-attention-surface (boost 3). Scoped to the curriculum-execution
+    tactics only, not the reading-chunk tactics under
+    strategy-philosophical-grounding, which remain unboosted."
 phase: implement
 execution: null
 validates: []
