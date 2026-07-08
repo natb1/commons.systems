@@ -13,7 +13,7 @@ rationale: Surfaced in the 2026-07-08 /align-strategy interview that recorded
   That clarification is the requirement; this retains the skill-text encoding as
   draft content per retain-not-refine (clarification 6). Likely folds into
   tactic-align-skills-greenfield-gate (the align-skill-text doctrine home per
-  clarifications 32/34) when /align-tactics next finalizes that subtree, rather
+  clarifications 32/38) when /align-tactics next finalizes that subtree, rather
   than shipping standalone.
 reading: null
 gap: null
@@ -81,5 +81,5 @@ This node only retains the *skill-text encoding* of that requirement.
 ## Home note
 
 Most likely folds into `tactic-align-skills-greenfield-gate` (the align-skill
-doctrine-text home, clarifications 32/34) when `/align-tactics` next finalizes
+doctrine-text home, clarifications 32/38) when `/align-tactics` next finalizes
 that subtree, rather than shipping standalone.
