@@ -82,15 +82,35 @@ describe("readActiveChunks", () => {
     expect(() => readActiveChunks(dir)).toThrow(/priority/);
   });
 
-  it("throws on an empty passages array", () => {
+  it("treats an empty passages array as an incomplete chunk (no throw)", () => {
     write({
       id: "tactic-reading-chunk-4-sophrosyne-ordered-soul",
       attributes: { curriculum: { priority: 4, passages: [] } },
     });
+    expect(readActiveChunks(dir)).toEqual([
+      { id: "tactic-reading-chunk-4-sophrosyne-ordered-soul", priority: 4, passages: [] },
+    ]);
+  });
+
+  it("treats absent passages as an incomplete chunk (no throw)", () => {
+    write({
+      id: "tactic-reading-chunk-24-phaedrus-writing",
+      attributes: { curriculum: { priority: 16 } },
+    });
+    expect(readActiveChunks(dir)).toEqual([
+      { id: "tactic-reading-chunk-24-phaedrus-writing", priority: 16, passages: [] },
+    ]);
+  });
+
+  it("throws when passages is present but not an array", () => {
+    write({
+      id: "tactic-reading-chunk-6-precision-externals",
+      attributes: { curriculum: { priority: 6, passages: "chs. 1-2" } },
+    });
     expect(() => readActiveChunks(dir)).toThrow(/passages/);
   });
 
-  it("throws when a passage is missing work", () => {
+  it("throws when a present passage is missing work", () => {
     write({
       id: "tactic-reading-chunk-5-aristotle-phronesis",
       attributes: {

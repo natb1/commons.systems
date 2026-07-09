@@ -8,7 +8,8 @@ export type ChunkOutcome =
   | { kind: "synced"; chunkId: string; work: string; filename: string; wrote: boolean }
   | { kind: "missing"; chunkId: string; work: string }
   | { kind: "ambiguous"; chunkId: string; work: string; candidates: string[] }
-  | { kind: "unmapped"; chunkId: string; work: string; range: string; reason: string };
+  | { kind: "unmapped"; chunkId: string; work: string; range: string; reason: string }
+  | { kind: "incomplete"; chunkId: string };
 
 export interface ReportInput {
   outcomes: ChunkOutcome[];
@@ -25,6 +26,7 @@ export function renderReport(input: ReportInput): string {
   const missing = input.outcomes.filter((o) => o.kind === "missing");
   const ambiguous = input.outcomes.filter((o) => o.kind === "ambiguous");
   const unmapped = input.outcomes.filter((o) => o.kind === "unmapped");
+  const incomplete = input.outcomes.filter((o) => o.kind === "incomplete");
 
   const out: string[] = [];
   out.push("sync-reader report", "");
@@ -65,9 +67,18 @@ export function renderReport(input: ReportInput): string {
       ),
     ),
   );
+  out.push(
+    ...section(
+      "NO PASSAGES — add {work, range} passages to this chunk's curriculum",
+      incomplete.map((o) => (o.kind === "incomplete" ? o.chunkId : "")),
+    ),
+  );
   out.push(...section("DELETED (retired)", input.deleted));
 
-  if (missing.length + ambiguous.length + unmapped.length === 0 && synced.length > 0) {
+  if (
+    missing.length + ambiguous.length + unmapped.length + incomplete.length === 0 &&
+    synced.length > 0
+  ) {
     out.push("All active chunks synced.", "");
   }
 

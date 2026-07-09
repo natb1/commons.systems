@@ -7,6 +7,7 @@ describe("renderReport", () => {
     { kind: "missing", chunkId: "tactic-reading-chunk-9-mill-justice", work: "Mill, Utilitarianism" },
     { kind: "ambiguous", chunkId: "tactic-reading-chunk-2-aristotle-hexis", work: "Aristotle, Ethics", candidates: ["ne-ross.epub", "ne-irwin.epub"] },
     { kind: "unmapped", chunkId: "tactic-reading-chunk-3-kant-humanity-servility", work: "Kant, Groundwork", range: "chs. 1-3, 7", reason: 'range "chs. 1-3, 7": no recognizable book/chapter/page designator' },
+    { kind: "incomplete", chunkId: "tactic-reading-chunk-24-phaedrus-writing" },
   ];
 
   it("renders every group with its author action", () => {
@@ -21,6 +22,8 @@ describe("renderReport", () => {
     expect(text).toContain("chs. 1-3, 7");
     expect(text).toContain("DELETED (retired)");
     expect(text).toContain("04-reading-chunk-old.epub");
+    expect(text).toContain("NO PASSAGES");
+    expect(text).toContain("tactic-reading-chunk-24-phaedrus-writing");
   });
 
   it("reports an all-clear when every chunk synced", () => {

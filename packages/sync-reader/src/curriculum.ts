@@ -55,11 +55,16 @@ function parseCurriculum(id: string, raw: unknown): ActiveChunk {
     );
   }
 
+  // A chunk may be recorded before its passages are structured (the reading is
+  // still only described in the node title) — that is an incomplete chunk, not
+  // a corrupt one. Absent or empty `passages` yields an empty list (the CLI
+  // reports it for the author to fill in); a present-but-non-array, or any
+  // malformed passage element, is genuine corruption and throws — that guard is
+  // what keeps a chunk with real reading data from being silently dropped.
   const passagesRaw = c.passages;
-  if (!Array.isArray(passagesRaw) || passagesRaw.length === 0) {
-    throw new Error(
-      `${id}: attributes.curriculum.passages must be a non-empty array`,
-    );
+  if (passagesRaw === undefined) return { id, priority, passages: [] };
+  if (!Array.isArray(passagesRaw)) {
+    throw new Error(`${id}: attributes.curriculum.passages must be an array`);
   }
   const passages = passagesRaw.map((p, i) => parsePassage(id, i, p));
 
