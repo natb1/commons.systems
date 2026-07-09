@@ -219,7 +219,36 @@ clarifications:
       drafts where decision-forming — by recognizing the graph itself as such a
       fixed object: the split is now author-owned doctrine, while the platonic
       framing behind it remains delegated and reviewed at
-      tactic-reading-chunk-18-dialectic-method. Recorded 2026-07-09 interview."
+      tactic-reading-chunk-18-dialectic-method. Recorded 2026-07-09 interview.
+      Amended 2026-07-09 interview (second round): (a) depth norm, author-owned
+      — type b's object is the topic's ground: the knowledge needed to decide,
+      explored across the record at origin/main and the relevant traditions,
+      recorded and Claude-internal alike — not merely the pending decision
+      surface; a type b confined to ratifying decision mechanics is the
+      deviation this amendment names, found live in this round's first pass. (b)
+      Maieutic naming, held as a deferral — type a's elicitation limb works by
+      Theaetetus midwifery rather than periagoge: the probes deliver the
+      author's formed-but-unrecorded model, and the boldness/confirm loop is the
+      testing of the offspring (wind-egg or genuine, 150c); Claude-drafted,
+      extending delegation-philosophical-articulation's scope, reviewed at
+      tactic-reading-chunk-18-dialectic-method, whose text is the midwifery
+      passage itself. (c) Universality of the recommendation loop, author-owned,
+      re-affirmed in-session after the first pass left it visible only under
+      type a: in both interview types every question round carries a
+      recommendation, every recommendation carries its honest boldness
+      assessment (how much rests on the graph and session context versus
+      Claude-internal knowledge), and an explicit accept-as-deferral option
+      always accompanies the recommended one — the type-a limb's earlier
+      statement of these rules describes the standing feedback loop of both
+      types, not a type-a convenience. (d) Context delivery, author-owned: a
+      question round's motivating context — including each recommendation's
+      boldness — must be delivered where the author will actually read it:
+      inside the question tool itself (question text, option descriptions,
+      preview panes) or in a prior turn the author has already read and
+      responded to; the author reads neither Claude's thinking nor same-turn
+      preamble text emitted before the question call (found live this round), so
+      context living only there has not been provided, and a question must never
+      reference material the author has not seen."
   - question: What does a deferral commit the author to — and do deferrals without a
       grounding text get lighter treatment?
     answer: "Deferral is always defer-until-later-review — a conscious, temporary
@@ -234,6 +263,42 @@ clarifications:
       review sitting when the author deferred to something text-less, such as
       Claude's logical analysis of internal consistency. No deferral gets
       lighter treatment for lacking a text. Recorded 2026-07-09 interview."
+  - question: Is the author's own alignment with the record maintained by argument
+      alone — and if not, what is the human-side habituation mechanism?
+    answer: "Held as a deferral: argument alone does not maintain it. The graph
+      already diverges from virtue-as-knowledge — kind-virtue is habituated
+      hexis — yet the interview doctrine as landed is all argument. The
+      reconciliation, Claude-drafted from NE II.1-6 (we become just by doing
+      just acts; the hexis is formed and kept by practice): the recurring
+      cadence — office-hours sittings, the reading program, the re-derivation
+      rounds, standing conditions swept each cycle — is the graph's human-side
+      habituation mechanism, the practice that maintains the disposition the
+      arguments articulate. Drift between sittings is the hexis decaying;
+      recall-first-delta is its sensor; and a lapsed cadence is the same drift
+      mechanism the delegatee-education clarification records for the AI
+      delegatee (injection lapse drifts it back to vendor defaults), previously
+      recorded only on the delegatee side. Extends
+      delegation-philosophical-articulation's scope; reviewed at
+      tactic-reading-chunk-2-aristotle-hexis, whose passage range widens to NE
+      II.1-6 to carry the review. Recorded 2026-07-09 interview."
+  - question: Does the delegatee-education doctrine correspond to named methods in
+      contemporary AI-alignment practice — and should the graph record the
+      correspondence?
+    answer: "Yes, held as a deferral to Claude's internal knowledge of the field.
+      The correspondence: the graph injected into sessions functions as a
+      constitution — a written set of natural-language principles steering model
+      behavior (Constitutional AI, Bai et al. 2022, arXiv:2212.08073, sections
+      1.2 and 3); the vendor habituation the doctrine grafts onto is
+      reinforcement-based — RLHF/RLAIF (ibid. section 4); the graph's
+      adversarial bias-cancellation (parasite biases pitted against one another)
+      parallels debate (Irving, Christiano, Amodei 2018, arXiv:1805.00899); and
+      the three exits — amend / defer / diverge, compelling but never blocking —
+      are a corrigibility design (Soares, Fallenstein, Yudkowsky, Armstrong,
+      AAAI-15 workshop on AI and Ethics). No tradition node this round —
+      parsimony: tradition records are reading-verified and this correspondence
+      enters on trust; on ratification the chunk-25 reading session decides
+      whether it merits a tradition record. Reviewed at
+      tactic-reading-chunk-25-constitutional-ai. Recorded 2026-07-09 interview."
 tooling_goals: []
 success_signal:
   observable: decisions trace to the graph — dialectic outputs cite node ids, a

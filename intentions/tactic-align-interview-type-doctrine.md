@@ -2,9 +2,11 @@
 id: tactic-align-interview-type-doctrine
 kind: tactic
 statement: "Encode the two-interview-type doctrine into the /align-strategy
-  skill: per-interview type classification, type-b-first ordering, boldness
-  assessment on every recommendation, an accept-as-deferral option in every
-  question, and the deferral-creates-a-review-item rule"
+  skill: per-interview type classification, type-b-first ordering with
+  ground-depth, boldness assessment on every recommendation, an
+  accept-as-deferral option in every question, the
+  deferral-creates-a-review-item rule, and the context-delivery convention for
+  question rounds"
 owner: ai
 status: raw
 parent: null
@@ -66,25 +68,36 @@ conventions appear in `/align-tactics` if its interview surfaces exist):
    exits: amend / defer / diverge) or type a (model in the author,
    unrecorded or unformed — visible-refusable-draft rules: seams proposed
    with consequences explored).
-2. **Type-b-first ordering** — when required author knowledge is not
-   recorded in the graph, run the type-b interview before the type-a
-   seam-confirmation round.
-3. **Boldness assessment** — every recommendation states how much rests on
-   the graph and session context versus Claude-internal knowledge.
-4. **Deferral option** — every AskUserQuestion recommendation is
-   accompanied by an accept-as-deferral option.
+2. **Type-b-first ordering and ground-depth** — when required author
+   knowledge is not recorded in the graph, run the type-b interview before
+   the type-a seam-confirmation round; and type b explores the topic's
+   ground — the knowledge needed to decide, across the record and the
+   relevant traditions — not merely the pending decision surface (a type b
+   confined to ratifying decision mechanics is the named deviation).
+3. **Boldness assessment** — in both interview types, every question round
+   carries a recommendation, and every recommendation states its boldness —
+   how much rests on the graph and session context versus Claude-internal
+   knowledge — in the question round itself (option label, description, or
+   preview), where the author will read it, never only in preamble prose.
+4. **Deferral option** — in both interview types, every AskUserQuestion
+   recommendation is accompanied by an explicit accept-as-deferral option.
 5. **Deferral mechanics** — an accepted deferral lands as a dated
    held-on-trust clarification, extends
    delegation-philosophical-articulation's scope when it defers to Claude's
    articulation, and always creates an office-hours/curriculum-style review
    item (reading chunk if a text grounds it, office-hours review sitting
    otherwise).
-6. **Prose preface** — every AskUserQuestion execution is preceded by prose
-   presenting the context that motivates the interview and whatever does not
-   fit in the questions themselves (in both types). The author does not read
-   Claude's thinking: analysis that exists only there or in tool results is
-   invisible, so the motivating context must appear as ordinary message text
-   before the questions run.
+6. **Context delivery** — every AskUserQuestion execution carries the
+   context that motivates the interview where the author will actually read
+   it (in both types). The author does not read Claude's thinking, and —
+   found live 2026-07-09 (second round) — message text emitted in the same
+   turn as the AskUserQuestion call is also not rendered to the author
+   before the questions: analysis living in thinking, tool results, or
+   same-turn preamble is invisible at answer time. Motivating context must
+   therefore travel inside the question tool itself (option preview panes
+   and descriptions; question text) or in a prior turn the author has
+   already read and responded to. Questions must be self-contained — never
+   referencing unseen items ("the plan above").
 
 Coordinates with tactic-align-strategy-alignment-tests (doctrinal-consistency
 gate + steelman challenge, same SKILL.md); refines nothing in that draft.

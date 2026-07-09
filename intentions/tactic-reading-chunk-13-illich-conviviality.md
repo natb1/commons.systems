@@ -44,7 +44,7 @@ pace_exempt: false
 rounds: null
 attributes:
   curriculum:
-    priority: 20
+    priority: 21
     candidate: true
     passages:
       - work: Illich, Tools for Conviviality

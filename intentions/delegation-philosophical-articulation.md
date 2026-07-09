@@ -75,7 +75,15 @@ attributes:
     the answerable record (Phaedrus hypomnesis) of the author's considered
     internal model of the good, the ground of type-b interview authority —
     deferred by the author to Claude's drafting, verified by reading chunk 24
-    (Phaedrus 274b-278b)"
+    (Phaedrus 274b-278b); extended 2026-07-09 (second round) with three
+    articulations from the interview-types ground exploration — the maieutic
+    naming of type a's elicitation limb (reviewed at
+    tactic-reading-chunk-18-dialectic-method), the cadence-as-habituation
+    account of the author's own alignment maintenance (reviewed at
+    tactic-reading-chunk-2-aristotle-hexis, range widened to NE II.1-6), and the
+    AI-alignment correspondence on the delegatee-education doctrine (reviewed at
+    tactic-reading-chunk-25-constitutional-ai, Constitutional AI sections 1 and
+    3-4)"
   origin: chosen
   divergence:
     level: moderate

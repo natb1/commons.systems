@@ -46,7 +46,7 @@ pace_exempt: false
 rounds: null
 attributes:
   curriculum:
-    priority: 19
+    priority: 20
     candidate: true
     passages:
       - work: MacIntyre, After Virtue

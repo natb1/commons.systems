@@ -40,7 +40,10 @@ office_hours:
     texts; amend or ratify the interview-method clarification on
     strategy-philosophical-grounding and the delegated-scope entry on
     delegation-philosophical-articulation; record any reading-wins catch in
-    divergence.contradictions; stamp last_exercised."
+    divergence.contradictions; stamp last_exercised. Second deferral under
+    review since 2026-07-09: the maieutic naming of type a's elicitation limb
+    (strategy-explicit-intent types clarification) — amend or ratify it against
+    the midwife passage in the same sitting."
   since: 2026-07-08
   recommendation: null
 pace_exempt: false
@@ -96,6 +99,13 @@ made on Claude's account of dialectic; this reading checks the account.
   records): do the midwife and stingray passages deepen or amend it? Is the
   wind-egg test (150c) already the adversarial-verify pattern, or is that a
   Claude gloss?
+- `intentions/strategy-explicit-intent.md`, 2026-07-09 maieutic deferral
+  (second-round amendment to the types clarification) — does the midwife
+  passage ground naming type a's elicitation limb maieutic: probes
+  delivering the author's formed-but-unrecorded model, the wind-egg test
+  (150c) as the boldness/confirm loop? Or is midwifery inseparable from
+  anamnesis in a way that makes the borrowed name a Claude gloss? Amend or
+  ratify in the same sitting.
 
 ## Completion
 
