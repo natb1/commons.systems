@@ -246,7 +246,17 @@ clarifications:
       space was already partitioned among this strategy,
       strategy-complete-grounding, and strategy-external-calibration, so the
       anti-dogma purpose is named on its existing homes rather than carved into
-      a new node. Recorded 2026-07-08 interview."
+      a new node. Recorded 2026-07-08 interview. Amended 2026-07-09 interview:
+      the partition governs the anti-dogma purpose, which stays named on its
+      existing homes — it does not bar a standing requirement node.
+      strategy-graph-review-curriculum (sub-strategy of
+      strategy-explicit-intent, sibling of strategy-graph-integrity) now owns
+      the universal review-coverage requirement and the curriculum mechanism —
+      the entire graph enrolled, deferred/delegated content re-validated at the
+      curriculum frontier, author-owned doctrine re-confirmed as the frontier
+      recursively expands — generalizing beyond readings the curriculum
+      apparatus this strategy keeps; this strategy retains the reading-side
+      guard and the reading curriculum machinery."
 tooling_goals:
   - kind: actuator
     statement: "/sync-reader skill — sync the reading curriculum to the author's

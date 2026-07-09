@@ -164,7 +164,15 @@ clarifications:
       — the correct layer for tooling, not a transient home for the commitment.
       A dedicated sensor that directly reads \"settled doctrine re-challenged
       and sometimes overturned\" is a candidate for a future round if the
-      traceability proxy proves insufficient. Recorded 2026-07-08 interview."
+      traceability proxy proves insufficient. Recorded 2026-07-08 interview.
+      Amended 2026-07-09 interview (review-curriculum round): the dedicated-home
+      candidate this entry anticipated now exists —
+      strategy-graph-review-curriculum (sub-strategy of this node, sibling of
+      strategy-graph-integrity) owns the universal review-coverage requirement,
+      the curriculum mechanism, and a coverage-plus-motion signal; the
+      traceability proxy here stays, and the same-date successor-cadence
+      deferral is unchanged (the tactic-align-audit-legacy-review sitting still
+      ratifies)."
   - question: Does the graph record the author's present internal model or the
       considered one — and what gives a type-b interview authority over the
       author's present view?
