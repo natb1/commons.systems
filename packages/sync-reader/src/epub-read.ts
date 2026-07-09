@@ -51,7 +51,7 @@ export interface EpubSource extends EpubMeta {
 function parseXml(xml: string): Document {
   // @xmldom/xmldom does not throw on malformed XML — a missing element simply
   // isn't found by the getters below (same tolerance as the browser DOMParser).
-  return new DOMParser().parseFromString(xml, "text/xml") as unknown as Document;
+  return new DOMParser().parseFromString(xml, "text/xml") as unknown as Document; // type-safety-ok: @xmldom/xmldom's Document is structural; cast to the DOM Document the getElementsBy* helpers expect
 }
 
 /** Resolve an href against the OPF directory, splitting off any fragment. */
@@ -239,10 +239,12 @@ export async function openEpub(path: string): Promise<EpubSource> {
   if (navItem) {
     const navDir = posix.dirname(navItem.href);
     toc = parseNav(await readText(navItem.href), navDir === "." ? "" : navDir, spineItems);
-  } else if (tocNcxId && manifest.has(tocNcxId)) {
-    const ncx = manifest.get(tocNcxId)!;
-    const ncxDir = posix.dirname(ncx.href);
-    toc = parseNcx(await readText(ncx.href), ncxDir === "." ? "" : ncxDir, spineItems);
+  } else if (tocNcxId) {
+    const ncx = manifest.get(tocNcxId);
+    if (ncx) {
+      const ncxDir = posix.dirname(ncx.href);
+      toc = parseNcx(await readText(ncx.href), ncxDir === "." ? "" : ncxDir, spineItems);
+    }
   }
 
   return {

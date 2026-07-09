@@ -4,7 +4,7 @@ import { matchWork, tokenize } from "../src/matching.js";
 
 describe("tokenize", () => {
   it("lowercases, strips diacritics and punctuation, collapses whitespace", () => {
-    expect(tokenize("Émile, or On  Education!")).toEqual([
+    expect(tokenize("Émile, or On  Education!")).toEqual([ // type-safety-ok: the "!" is inside a string-literal test input, not a non-null assertion
       "emile",
       "or",
       "on",

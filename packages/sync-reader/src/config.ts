@@ -66,13 +66,14 @@ export function loadConfig(): SyncReaderConfig {
   try {
     parsed = JSON.parse(raw);
   } catch (err) {
-    throw new Error(`${path}: invalid JSON — ${(err as Error).message}`);
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(`${path}: invalid JSON — ${detail}`);
   }
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     throw new Error(`${path}: expected a JSON object`);
   }
 
-  const obj = parsed as Record<string, unknown>;
+  const obj = parsed as Record<string, unknown>; // type-safety-ok: parsed-JSON narrow after the object/array guard above
   const reader_dir = obj.reader_dir;
   const share_dir = obj.share_dir;
   if (typeof reader_dir !== "string" || reader_dir.length === 0) {

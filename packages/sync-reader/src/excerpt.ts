@@ -65,7 +65,7 @@ function resolveRef(basePath: string, ref: string): string | null {
 }
 
 function refsFromXhtml(xml: string, docPath: string): string[] {
-  const doc = new DOMParser().parseFromString(xml, "text/xml") as unknown as Document;
+  const doc = new DOMParser().parseFromString(xml, "text/xml") as unknown as Document; // type-safety-ok: @xmldom/xmldom's Document is structural; cast to the DOM Document the getElementsBy* helpers expect
   const out: string[] = [];
   const push = (ref: string | null): void => {
     if (ref !== null) out.push(ref);

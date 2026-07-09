@@ -46,7 +46,7 @@ function parseCurriculum(id: string, raw: unknown): ActiveChunk {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
     throw new Error(`${id}: attributes.curriculum must be an object`);
   }
-  const c = raw as Record<string, unknown>;
+  const c = raw as Record<string, unknown>; // type-safety-ok: narrowing attributes.curriculum after the object guard above
 
   const priority = c.priority;
   if (typeof priority !== "number" || !Number.isFinite(priority)) {
@@ -75,7 +75,7 @@ function parsePassage(id: string, index: number, raw: unknown): Passage {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
     throw new Error(`${id}: curriculum.passages[${index}] must be an object`);
   }
-  const p = raw as Record<string, unknown>;
+  const p = raw as Record<string, unknown>; // type-safety-ok: narrowing a passage entry after the object guard above
   if (typeof p.work !== "string" || p.work.length === 0) {
     throw new Error(
       `${id}: curriculum.passages[${index}].work must be a non-empty string`,
