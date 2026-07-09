@@ -74,9 +74,8 @@ attributes:
   fields:
     - "conditions: list of world-premises that make this strategy apt; each is a
       standing review trigger"
-    - "attention: authored boost (adds to inherited rank, relative) XOR override
-      (sets the value flowing through this branch), plus required rationale;
-      resolved rank is computed on read by resolveAttention and never stored"
+    - "attention: valid on this kind (goal_layer: true) — a TOP-LEVEL field, not
+      an attributes entry; canonical definition on kind-kind's field list"
     - "traditions: ids of tradition records (kind-tradition) that inform this
       strategy — set only where a philosophical choice is load-bearing for the
       strategy, not as decoration; the alignment detail lives on the tradition

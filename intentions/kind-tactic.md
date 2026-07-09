@@ -60,8 +60,7 @@ rounds: null
 attributes:
   goal_layer: true
   fields:
-    - "attention: authored boost (adds to inherited rank, relative) XOR override
-      (sets the value flowing through this branch), plus required rationale;
-      resolved rank is computed on read by resolveAttention and never stored"
+    - "attention: valid on this kind (goal_layer: true) — a TOP-LEVEL field, not
+      an attributes entry; canonical definition on kind-kind's field list"
 ---
 # Tactic — a completable unit of execution
