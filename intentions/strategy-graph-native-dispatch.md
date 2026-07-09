@@ -14,14 +14,19 @@ rationale: "strategy-graph-drives-dispatch made the loop real — intent enters
   their execution plan in the node body and a persisted phase the router
   transitions; strategies become schedulable work in their own right (an
   unvalidated signal with no child tactics calls an /align-tactics session into
-  being); and the align skill family — /align-init for fork onboarding and
-  virtue review (retiring the legacy /align skill), /align-strategy for
-  recording strategy under interview, /align-tactics for breaking a strategy
-  into executable tactic subtrees — supersedes /file-issue and /plan-issue as
-  the interface for intent entering execution. The legacy gh router runs
-  concurrently until the gh queue drains, then it is removed; full /file-issue
-  and /plan-issue coverage is mapped into the align family before removal
-  (coverage matrix retained as draft content on tactic-graph-native-dispatch)."
+  being); and the align skill family — /align, the single interactive entry
+  point to the graph's persistent layer (with a prompt: the recording interview,
+  able to record or amend virtues, strategies, traditions, and delegations; with
+  no prompt: the onboarding funnel — orientation, scripted deployment
+  validation, and a walk to crafting the prompt, which the session then
+  executes), and /align-tactics for breaking a strategy into executable tactic
+  subtrees — supersedes /file-issue and /plan-issue as the interface for intent
+  entering execution. /align consolidates the former /align-strategy and
+  /align-init (2026-07-09 consolidation clarification; implementation:
+  tactic-align-entrypoint-consolidation). The legacy gh router runs concurrently
+  until the gh queue drains, then it is removed; full /file-issue and
+  /plan-issue coverage is mapped into the align family before removal (coverage
+  matrix retained as draft content on tactic-graph-native-dispatch)."
 reading: null
 gap: null
 serves:
@@ -942,17 +947,57 @@ clarifications:
       (clarification 25). Skill-text wiring is retained as draft
       tactic-align-skills-dataviz-guidance. Recorded 2026-07-08 /align-strategy
       interview."
+  - question: What is the single interactive entry point to the persistent layer —
+      and what happens to /align-strategy and /align-init?
+    answer: "/align. The name /align-strategy is a misnomer — the persistent layer
+      the skill manipulates includes virtues, traditions, and delegations, not
+      only strategies — and the /align name was freed when
+      tactic-align-init-skill (PR #2781) deleted the legacy /align skill, its
+      collision-avoidance rationale being migration-scoped and the migration
+      complete. Consolidation, author-decided this round: (1) /align <prompt>
+      replaces /align-strategy <prompt> and may record or amend anything in the
+      persistent layer — virtue, strategy, tradition, or delegation nodes — plus
+      draft-tactic byproducts; no separate virtue-review step exists. (2)
+      /align-init is folded in and removed: /align with no prompt runs the
+      onboarding funnel — orientation, scripted deployment validation, then a
+      walk to crafting a prompt, which the session executes as /align <prompt>;
+      the entry point funnels by whether the user already knows what to pass (a
+      do-one-thing-name steelman, e.g. /align-graph, was put and rejected on
+      these grounds). (3) The scheduled align jit and its rung-5 dialectic
+      engine are retired — no scheduled periodic review remains — and the
+      /align-strategy no-prompt improvement pass is retired with them rather
+      than folded into the /align-audit draft now; both engines' content is
+      retained in tactic-align-audit-legacy-review, an office-hours review
+      sitting that decides their inclusion in /align-audit
+      (tactic-align-audit-skill, strategy-graph-integrity) at a later date, and
+      tactic-align-audit-skill itself is untouched this round. (4) /align
+      creates and maintains the review curriculum through the universal-deferral
+      mechanics on strategy-explicit-intent (reading chunks and office-hours
+      review items); the curriculum runs with the reading-review skill at office
+      hours — /align never runs a sitting. (5) Backward compatibility:
+      implementation is a single-PR atomic rename
+      (tactic-align-entrypoint-consolidation) — /align-strategy keeps working
+      until that PR merges, and the emulated dispatch tick is uninterrupted (no
+      live dispatch.config/jit.json exists; the example config and tick-script
+      fixtures update in the same PR). (6) The doctrinal-consistency gate found
+      the retirement touching strategy-explicit-intent's live
+      re-derivation-cadence condition and the tactic-condition-review-sweep
+      draft; the author accepted the successor-cadence amendments as a deferral,
+      ratified or reworked at the tactic-align-audit-legacy-review sitting.
+      Recorded 2026-07-09 interview."
 tooling_goals:
   - kind: actuator
-    statement: /align-strategy — interview-driven strategy recording, superseding
-      /file-issue requirements definition
+    statement: "/align — the single interactive entry point to the persistent layer:
+      with a prompt, the recording interview (superseding /file-issue
+      requirements definition; records or amends virtues, strategies,
+      traditions, and delegations, retaining draft-tactic byproducts); with no
+      prompt, onboarding — orientation, scripted deployment validation, and a
+      walk to crafting the prompt, which the session then executes. Consolidates
+      the former /align-strategy and /align-init"
   - kind: actuator
     statement: /align-tactics <strategy-id> — break a strategy into PR-sized tactic
       nodes with clean-session plans, superseding /file-issue epic structuring
       and /plan-issue
-  - kind: actuator
-    statement: "/align-init — fork entrypoint: orient, validate deployment, review
-      virtues, delegate to /align-strategy; retires the legacy /align skill"
   - kind: actuator
     statement: graph-native router tick — selects by resolved rank across strategies
       and tactics in owned deterministic code, executes the tick as a thin
@@ -988,14 +1033,17 @@ rounds:
 attributes:
   conditions:
     - the legacy gh router only drains existing issues; no new work enters via
-      gh once /align-strategy is live — the graph is the sole issue tracker, bug
-      tracker included, with no side-channel work records
+      gh once the /align entry point (today /align-strategy, until
+      tactic-align-entrypoint-consolidation lands) is live — the graph is the
+      sole issue tracker, bug tracker included, with no side-channel work
+      records
     - direct-push commits stay restricted to intentions/ paths and rebase-retry
       conflict cost stays negligible at fleet concurrency
     - strategy-graph-drives-dispatch holds — resolved rank from the graph orders
       execution
-    - strategy substance stays human-decided in the /align-strategy interview;
-      the skill records, it does not derive
+    - persistent-layer substance — virtues, strategies, traditions, delegations
+      — stays human-decided in the /align interview (today /align-strategy); the
+      skill records, it does not derive
     - workflow scripts stay thin composition — selection, transition, and
       provisioning mechanics live in owned, offline-testable code (tsx modules
       and primitive scripts) that workflow agents invoke; the Workflow executor
@@ -1005,11 +1053,11 @@ attributes:
       (office_hours.recommendation), and any state a fresh session needs;
       session attach/resume is not a supported recovery path, so a park whose
       context lives only in the parking session is a defect
-    - /align-strategy records in the graph, at record time, all context a fresh
-      /align-tactics session needs to decompose or re-evaluate — strategy
-      substance plus draft-tactic bodies; same-session /align-tactics execution
-      is a bootstrap safety, not a carrier, and a decomposition blocked on
-      unrecorded interview context is a defect of the recording round
+    - /align (today /align-strategy) records in the graph, at record time, all
+      context a fresh /align-tactics session needs to decompose or re-evaluate —
+      strategy substance plus draft-tactic bodies; same-session /align-tactics
+      execution is a bootstrap safety, not a carrier, and a decomposition
+      blocked on unrecorded interview context is a defect of the recording round
     - a re-evaluation amendment reconciles the amended tactic's entire node —
       statement, rationale, context, every unit, and verification — against the
       full current strategy substance in the same round, and dispositions each
@@ -1030,8 +1078,8 @@ attributes:
       that halts all selection until a human un-parks it; no unbounded
       re-selection loop exists in either scope, and breaker state never lives
       outside the graph
-    - interactive graph-reading skills (/align-strategy, /align-tactics,
-      /align-init, the office-hours review) begin analysis only against
+    - interactive graph-reading skills (/align — today /align-strategy —
+      /align-tactics, and the office-hours review) begin analysis only against
       freshly-fetched origin/main state — cut the session worktree from
       origin/main or hard-fail a pre-analysis freshness check, with a fetch that
       cannot reach origin failing the session rather than proceeding on the

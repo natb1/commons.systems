@@ -299,6 +299,21 @@ clarifications:
       enters on trust; on ratification the chunk-25 reading session decides
       whether it merits a tradition record. Reviewed at
       tactic-reading-chunk-25-constitutional-ai. Recorded 2026-07-09 interview."
+  - question: The scheduled align rung-5 dialectic is retired (2026-07-09 /align
+      consolidation on strategy-graph-native-dispatch) — what now carries the
+      re-derivation cadence this strategy's conditions demand?
+    answer: "Held as a deferral. The successor-cadence mechanism list is
+      Claude-drafted — the office-hours review sittings (including the
+      tactic-align-audit-legacy-review sitting), the periodic grounding rounds,
+      and the standing-conditions sweep pending its /align-audit rehoming — and
+      the author accepted it on trust in the question round rather than by
+      worked argument. The author-owned doctrine in the condition is untouched:
+      the cadence must actually recur or recorded doctrine calcifies into dogma.
+      Review item, per the universal deferral rule: the
+      tactic-align-audit-legacy-review office-hours sitting ratifies or reworks
+      this successor-cadence wording when it decides /align-audit inclusion of
+      the retired rung-5 dialectic and the retired /align-strategy improvement
+      pass. Recorded 2026-07-09 /align consolidation interview."
 tooling_goals: []
 success_signal:
   observable: decisions trace to the graph — dialectic outputs cite node ids, a
@@ -326,9 +341,12 @@ attributes:
       injected into the delegatee's harness (rules, memory, node bodies, plans
       carrying graph doctrine); an injection lapse reverts the delegatee to
       vendor defaults
-    - the re-derivation cadence actually recurs — the align rung-5 dialectic,
-      the periodic grounding rounds, and the standing-conditions sweep run on
-      their cycle; a lapse lets recorded doctrine calcify into dogma
+    - the re-derivation cadence actually recurs — the office-hours review
+      sittings (including tactic-align-audit-legacy-review, which decides the
+      retired align rung-5 dialectic's successor), the periodic grounding
+      rounds, and the standing-conditions sweep (rehoming from the retired
+      rung-5 consistency pass toward /align-audit, decided at that same sitting)
+      run on their cycle; a lapse lets recorded doctrine calcify into dogma
       unchallenged, the same cadence-lapse capture mechanism the grounding
       strategies and the delegatee-education condition above already name
 ---

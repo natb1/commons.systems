@@ -21,3 +21,12 @@ success_signal: null
 attributes: {}
 ---
 # Add a standing conditions sweep to the align dialectic's consistency pass
+
+## 2026-07-09 note — named home retired
+
+The scheduled align rung-5 consistency pass this draft targets was retired by
+the 2026-07-09 /align consolidation (clarification on
+strategy-graph-native-dispatch). Candidate home for the standing-conditions
+sweep: /align-audit (tactic-align-audit-skill), decided at the
+tactic-align-audit-legacy-review office-hours sitting. The sweep's substance
+is unchanged; only its host is undecided.
