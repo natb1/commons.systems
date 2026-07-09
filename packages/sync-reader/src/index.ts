@@ -13,3 +13,13 @@ export { mapRangeToSections } from "./citation.js";
 export type { MapResult } from "./citation.js";
 export { buildExcerpt } from "./excerpt.js";
 export type { ExcerptOptions } from "./excerpt.js";
+export {
+  MANAGED_SUBDIR,
+  managedDirFor,
+  desiredFilename,
+  planMirror,
+  applyMirror,
+} from "./mirror.js";
+export type { MirrorPlan } from "./mirror.js";
+export { renderReport } from "./report.js";
+export type { ChunkOutcome, ReportInput } from "./report.js";
