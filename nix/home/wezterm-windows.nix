@@ -1,18 +1,17 @@
 # Windows WezTerm Installer (WSL only)
 #
-# Downloads and installs the WezTerm Windows nightly binary to the Windows
-# user's %LOCALAPPDATA%\WezTerm\ at each home-manager activation.
+# Installs the WezTerm Windows binary to the Windows user's %LOCALAPPDATA%\WezTerm\
+# at each home-manager activation, pinned to the same nightly build as the WSL
+# wezterm-mux-server (nix/home/wezterm-pin.nix).
 #
-# Why: the Windows GUI auto-connects to the NixOS mux server over SSH; when the
-# Windows binary and the NixOS wezterm package drift in version, the mux PDU
-# protocol fails and the GUI window closes immediately. Both sides track upstream
-# nightly: the NixOS package via nixpkgs, the Windows binary via a runtime curl
-# fetch in this activation script, so each switch picks up the same rolling nightly.
-#
-# Update workflow:
-#   The Windows zip auto-tracks upstream's rolling "nightly" tag via a runtime
-#   curl fetch on each activation — no flake input / lock pin so upstream
-#   republishes are automatically picked up. Each switch re-downloads the zip.
+# Why the pin: the Windows GUI auto-connects to the WSL mux server; if the two
+# builds drift, the mux PDU handshake fails and the GUI window closes immediately.
+# Upstream distributes exactly ONE Windows nightly zip (overwritten in place), so
+# a naive "always curl the latest nightly" install drifts from the nixpkgs-pinned
+# mux server whenever their dates differ. Instead we fetch the zip content-pinned
+# by `windowsZipHash` and unpack it at build time; activation only mirrors the
+# resulting store tree to Windows. Bump both sides together with
+# nix/home/sync-wezterm.sh.
 
 {
   config,
@@ -21,8 +20,36 @@
   ...
 }:
 
+let
+  pin = import ./wezterm-pin.nix;
+
+  # Content-pinned nightly zip. The URL is upstream's rolling `nightly` asset;
+  # `windowsZipHash` locks it to the exact build recorded in the pin, so a later
+  # upstream republish cannot silently swap the binary — a hash mismatch fails
+  # loudly until the pin is refreshed via sync-wezterm.sh.
+  weztermWindowsZip = pkgs.fetchurl {
+    url = "https://github.com/wez/wezterm/releases/download/nightly/WezTerm-windows-nightly.zip";
+    sha256 = pin.windowsZipHash;
+  };
+
+  # Unpack at build time and expose the directory that holds wezterm-gui.exe, so
+  # the activation script is a pure mirror-to-Windows with no download/unzip step.
+  weztermWindowsDir = pkgs.runCommand "wezterm-windows-${pin.version}" {
+    nativeBuildInputs = [ pkgs.unzip ];
+  } ''
+    unzip -q ${weztermWindowsZip} -d unpacked
+    gui=$(find unpacked -maxdepth 3 -name 'wezterm-gui.exe' -type f | head -n1)
+    if [ -z "$gui" ]; then
+      echo "ERROR: wezterm-gui.exe not found in the nightly zip" >&2
+      find unpacked -maxdepth 3 -type f >&2
+      exit 1
+    fi
+    cp -r "$(dirname "$gui")" "$out"
+  '';
+in
+
 {
-  # WSL: download and install Windows WezTerm into the user's %LOCALAPPDATA%.
+  # WSL: mirror the pinned Windows WezTerm into the user's %LOCALAPPDATA%.
   # DAG ordering: runs after "linkGeneration" so symlinks are stable before we
   # reach across the WSL boundary.
   home.activation.installWeztermWindows = lib.mkIf pkgs.stdenv.isLinux (
@@ -31,7 +58,6 @@
       readonly WW_ERR_USERNAME_DETECTION=22
       readonly WW_ERR_INSTALL_FAILED=23
       readonly WW_ERR_FILE_LOCKED=24
-      readonly WW_ERR_DOWNLOAD_FAILED=25
 
       if [ ! -d "/mnt/c/Users" ]; then
         echo "Not running on WSL, skipping Windows WezTerm install"
@@ -79,41 +105,28 @@
         TARGET_DIR="/mnt/c/Users/$WINDOWS_USER/AppData/Local/WezTerm"
 
         if [ -z "$DRY_RUN_CMD" ]; then
-          # Download the nightly Windows zip and rsync its contents to TARGET_DIR.
-          # Re-downloads on each switch so the Windows binary stays in lockstep
-          # with the nixpkgs-managed mux server without a hash pin.
-          WW_TMPDIR=$(mktemp -d)
-          trap 'rm -rf "$WW_TMPDIR"' EXIT
-
-          ${pkgs.curl}/bin/curl -fsSL \
-            "https://github.com/wez/wezterm/releases/download/nightly/WezTerm-windows-nightly.zip" \
-            -o "$WW_TMPDIR/wezterm.zip" \
-            || { echo "ERROR: Failed to download WezTerm Windows nightly" >&2; exit $WW_ERR_DOWNLOAD_FAILED; }
-
-          ${pkgs.unzip}/bin/unzip -q "$WW_TMPDIR/wezterm.zip" -d "$WW_TMPDIR/extracted" \
-            || { echo "ERROR: Failed to extract WezTerm zip" >&2; exit $WW_ERR_INSTALL_FAILED; }
-
-          GUI_EXE=$(find "$WW_TMPDIR/extracted" -maxdepth 3 -name 'wezterm-gui.exe' -type f | head -n1)
-          if [ -z "$GUI_EXE" ]; then
-            echo "ERROR: wezterm-gui.exe not found in source" >&2
-            find "$WW_TMPDIR/extracted" -maxdepth 3 -type f >&2
-            exit $WW_ERR_INSTALL_FAILED
-          fi
-
-          SOURCE_ROOT=$(dirname "$GUI_EXE")
           ${pkgs.coreutils}/bin/mkdir -p "$TARGET_DIR"
 
+          # rsync the pre-unpacked, content-pinned store tree to Windows. No
+          # network or unzip here — the binary is fixed by wezterm-pin.nix.
+          #
           # rsync without -p/-o/-g: /mnt/c is a Windows filesystem where unix
           # permissions/ownership are not meaningful and attempting to set them
           # produces spurious errors. -rlt preserves recursion, symlinks, and
           # mtimes — enough to keep --delete idempotent across runs.
+          # Capture the exit code without tripping the activation script's `set
+          # -e`: a bare `var=$(cmd)` assignment aborts the whole switch on rsync
+          # failure BEFORE the handler below runs, turning the common
+          # locked-file case (WezTerm still open on Windows) into an opaque
+          # abort instead of the actionable message. `|| rsync_exit=$?` keeps
+          # the failure local.
+          rsync_exit=0
           rsync_error=$(${pkgs.rsync}/bin/rsync -rlt --delete \
-            "$SOURCE_ROOT/" "$TARGET_DIR/" 2>&1)
-          rsync_exit=$?
+            "${weztermWindowsDir}/" "$TARGET_DIR/" 2>&1) || rsync_exit=$?
           if [ $rsync_exit -ne 0 ]; then
             if echo "$rsync_error" | grep -qi "permission denied"; then
               echo "ERROR: Failed to install Windows WezTerm — files appear locked" >&2
-              echo "  Close WezTerm on Windows and re-run 'nixos-rebuild switch'" >&2
+              echo "  Close WezTerm on Windows and re-run 'home-manager switch'" >&2
               echo "  Details:" >&2
               echo "$rsync_error" | sed 's/^/    /' >&2
               exit $WW_ERR_FILE_LOCKED
@@ -124,10 +137,10 @@
             exit $WW_ERR_INSTALL_FAILED
           fi
         else
-          echo "Would download WezTerm nightly and install to $TARGET_DIR"
+          echo "Would install pinned WezTerm ${pin.version} to $TARGET_DIR"
         fi
 
-        echo "Installed Windows WezTerm to $TARGET_DIR"
+        echo "Installed Windows WezTerm ${pin.version} to $TARGET_DIR"
 
         # Start Menu shortcut: write only when missing. Overwriting on every
         # activation would clobber a user-pinned taskbar entry's metadata.

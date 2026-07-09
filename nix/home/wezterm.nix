@@ -20,6 +20,15 @@
   programs.wezterm = {
     enable = true;
 
+    # Build wezterm from the pinned nightly (nix/home/wezterm-pin.nix) rather than
+    # the nixpkgs snapshot, so the mux server this installs matches the Windows GUI
+    # binary that wezterm-windows.nix mirrors from the same pin. The mux-server
+    # user service below references config.programs.wezterm.package, so it follows
+    # this automatically. Harmless where wezterm is force-disabled (e.g. Darwin):
+    # the option is set but the package is never realized. Refresh with
+    # nix/home/sync-wezterm.sh.
+    package = pkgs.callPackage ./wezterm-package.nix { };
+
     # Use extraConfig to generate Lua configuration with Nix string interpolation.
     # This allows platform-specific sections via lib.optionalString.
     extraConfig = ''
