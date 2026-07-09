@@ -46,7 +46,7 @@ pace_exempt: false
 rounds: null
 attributes:
   curriculum:
-    priority: 23
+    priority: 24
     candidate: true
     passages:
       - work: The Great Learning (Daxue)

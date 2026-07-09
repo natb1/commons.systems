@@ -45,7 +45,7 @@ pace_exempt: false
 rounds: null
 attributes:
   curriculum:
-    priority: 20
+    priority: 21
     candidate: true
     passages:
       - work: Pettit, Freedom as Antipower (Ethics 106, 1996)

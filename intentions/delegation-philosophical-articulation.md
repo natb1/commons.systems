@@ -70,7 +70,12 @@ attributes:
     convention holds), deferred by the author to Claude's judgment pending
     personal re-derivation; extended 2026-07-08 with tradition-augustine — the
     Augustinian articulation behind the agency-of-turning account, recorded as
-    an already-live deferral (origin: chosen), verified by reading chunks 19-21"
+    an already-live deferral (origin: chosen), verified by reading chunks 19-21;
+    extended 2026-07-09 with the covenant/hypomnema articulation — the graph as
+    the answerable record (Phaedrus hypomnesis) of the author's considered
+    internal model of the good, the ground of type-b interview authority —
+    deferred by the author to Claude's drafting, verified by reading chunk 24
+    (Phaedrus 274b-278b)"
   origin: chosen
   divergence:
     level: moderate
@@ -111,6 +116,6 @@ attributes:
     clean; the interview-method deferral is reviewed at
     tactic-reading-chunk-18-dialectic-method (Theaetetus midwifery, Meno
     elenchus), added to the curriculum for that purpose"
-  last_assessed: 2026-07-08
+  last_assessed: 2026-07-09
 ---
 # Virtue-layer articulation delegated to Claude and the canonical traditions until personally re-derived

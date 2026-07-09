@@ -29,19 +29,24 @@ rationale: >-
   just its priority.
 
 
-  Function doctrine (recorded 2026-07-08 interview): the graph is a dual map —
-  of author intention (the goal layers, roots to leaves: virtues applied to
-  present conditions generate strategies; strategies decompose to tactics) and
-  of author knowledge (the examined-understanding apparatus on the same nodes:
-  status delegated vs codified, reading/gap, tradition records, grounding
-  marks). Taken whole it is the author's model of the good in the sense
-  tradition-plato's chunk-1 amendment fixed: one Good, external and never fully
-  realizable; the virtue forest its imperfect constituent model; strategies
-  imperfect implementations of virtues under present conditions. Three functions
-  follow — keep the author aligned with the good, keep delegatees from capturing
-  the author, and align delegatees with the good, periagoge extended to AI
-  delegatees with recorded qualifications — detailed in the 2026-07-08
-  clarifications.
+  Function doctrine (recorded 2026-07-08 interview; the indirection recorded
+  2026-07-09): the graph is a dual map — of author intention (the goal layers,
+  roots to leaves: virtues applied to present conditions generate strategies;
+  strategies decompose to tactics) and of author knowledge (the
+  examined-understanding apparatus on the same nodes: status delegated vs
+  codified, reading/gap, tradition records, grounding marks). Taken whole it is
+  a model of the author's internal model of the good — the middle term the
+  2026-07-08 record collapsed: one Good, external and never fully realizable, in
+  the sense tradition-plato's chunk-1 amendment fixed; the author's internal
+  model of it — held dispositions and considered judgments — is the best current
+  realization; and the graph is that internal model's imperfect, answerable
+  record (the covenant/hypomnema articulation, held on trust pending the
+  Phaedrus reading, per the 2026-07-09 clarifications). Three functions follow —
+  keep the author aligned with the good, including re-turning a drifted author
+  toward their own considered record (the type-b interview), keep delegatees
+  from capturing the author, and align delegatees with the good, periagoge
+  extended to AI delegatees with recorded qualifications — detailed in the
+  2026-07-08 and 2026-07-09 clarifications.
 reading: null
 gap: null
 serves:
@@ -76,7 +81,16 @@ clarifications:
       virtue-philosophical-mobility. tactic-reading-chunk-22-republic-sun-line
       queues Republic VI (the Good, sun, divided line) to verify this
       articulation, which currently rests on the chunk-1 reading of Republic VII
-      alone. Recorded 2026-07-08 interview."
+      alone. Recorded 2026-07-08 interview. Amended 2026-07-09 interview: a
+      middle term this entry collapsed is now recorded — the author's internal
+      model of the Good (held dispositions and considered judgments) is the best
+      current realization; the graph is a model of that internal model, its
+      externalized record, not itself the realization. The constituent readings
+      carry over one level down: the virtue forest is the recorded constituent
+      model of the internal model, strategies its recorded implementations under
+      present conditions. See the same-date covenant clarification (question
+      'Does the graph record the author's present internal model or the
+      considered one...') for what the indirection grounds."
   - question: Is the knowledge map propositional — are the roots the author's
       beliefs about the good?
     answer: "Held provisionally as no: kind-virtue reads roots as dispositions held
@@ -151,6 +165,75 @@ clarifications:
       A dedicated sensor that directly reads \"settled doctrine re-challenged
       and sometimes overturned\" is a candidate for a future round if the
       traceability proxy proves insufficient. Recorded 2026-07-08 interview."
+  - question: Does the graph record the author's present internal model or the
+      considered one — and what gives a type-b interview authority over the
+      author's present view?
+    answer: "The considered one, and this is recorded as a deferral. The graph
+      externalizes the author's considered internal model — committed judgments
+      and held dispositions — which the present author can drift from; that is
+      what gives a type-b interview its authority: the record compels the
+      present author by argument because it is the author's own considered
+      judgment, and it yields only to deliberate amendment through dialectic,
+      never to tacit drift. The recall-first-delta guard
+      (strategy-philosophical-grounding) already measures exactly this gap. The
+      articulation itself — the graph as covenant/hypomnema, Plato's Phaedrus
+      274b-278b on writing as reminder (hypomnesis) of living knowledge,
+      carrying the standing hazard that written doctrine gives the appearance of
+      wisdom without answering questions, compensated here by the
+      anti-calcification dialectic that keeps this record answerable — is
+      Claude-drafted and held on trust: it extends
+      delegation-philosophical-articulation's delegated scope and is reviewed at
+      tactic-reading-chunk-24-phaedrus-writing, per the universal deferral rule
+      recorded the same date. If the reading ratifies, tradition-plato gains the
+      corresponding adopted entry and its 'best current realization' phrasing is
+      reconciled to carry the indirection; if it contradicts, the reading wins.
+      Recorded 2026-07-09 interview."
+  - question: What interview types do align sessions run, and which rules bind each?
+    answer: "Two, classified by where the authoritative model currently lives; every
+      session states which type each interview is, and type b runs before type a
+      whenever required author knowledge is unrecorded. Type b — the record is
+      authoritative and the author has drifted from it or not yet internalized
+      it (author education): the full periagoge rules bind — probes cite the
+      record at origin/main as the fixed object, the author articulates before
+      Claude's account appears, and compulsion is just argument only: pressed
+      until resolved, never imposed, with three recorded exits always open to
+      the author — amend the record (the dialectic wins), defer (held on trust
+      with a review item, per the universal deferral rule), or claim authority
+      over Claude's account or a referenced tradition (an intentional
+      divergence, recorded). Claude never blocks and never withholds recording.
+      Type a — the model lives in the author, unrecorded or not yet formed
+      (Claude education and elicitation): the visible-refusable-draft rules bind
+      — Claude proposes viable seams and explores their consequences to author
+      feedback, and every recommendation carries an honest boldness assessment
+      (how much rests on the graph and session context versus Claude-internal
+      knowledge) and always offers accept-as-deferral alongside plain
+      acceptance, closing the alignment feedback loop. In either type Claude
+      must always surface graph-internal inconsistencies, inconsistencies
+      between the graph and Claude's internal knowledge (a good the author may
+      not yet have seen), and parsimony findings — redundant seams. Joint
+      inquiry where nothing is settled anywhere is folded into type a's
+      elicitation limb rather than named a third type: it resolves by the same
+      visible-draft machinery, and parsimony declines the extra seam. This
+      ratifies and completes the 2026-07-08 interview-method deferral's own
+      split — full periagoge only where a fixed object exists; visible refusable
+      drafts where decision-forming — by recognizing the graph itself as such a
+      fixed object: the split is now author-owned doctrine, while the platonic
+      framing behind it remains delegated and reviewed at
+      tactic-reading-chunk-18-dialectic-method. Recorded 2026-07-09 interview."
+  - question: What does a deferral commit the author to — and do deferrals without a
+      grounding text get lighter treatment?
+    answer: "Deferral is always defer-until-later-review — a conscious, temporary
+      choice to hold a recommendation on trust, never a quiet drop. Every
+      deferral lands as a dated clarification on the affected node naming
+      exactly what is held on trust; when it defers to Claude's articulation it
+      extends delegation-philosophical-articulation's delegated scope in the
+      same round. And every deferral — philosophical or not, text-grounded or
+      not — produces an office-hours/curriculum-style review item to educate,
+      ratify, and explore further in depth: a reading chunk when a grounding
+      text exists (most deferrals are expected to have one), an office-hours
+      review sitting when the author deferred to something text-less, such as
+      Claude's logical analysis of internal consistency. No deferral gets
+      lighter treatment for lacking a text. Recorded 2026-07-09 interview."
 tooling_goals: []
 success_signal:
   observable: decisions trace to the graph — dialectic outputs cite node ids, a

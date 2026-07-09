@@ -152,7 +152,18 @@ clarifications:
       it is added to delegation-philosophical-articulation's delegated scope and
       reviewed at tactic-reading-chunk-18-dialectic-method (Theaetetus
       midwifery, Meno elenchus), added to the curriculum for exactly this
-      review. Recorded 2026-07-08 interview."
+      review. Recorded 2026-07-08 interview. Amended 2026-07-09 interview: the
+      deferred scoping is partially converted to author-owned doctrine — the
+      two-interview-type round on strategy-explicit-intent ratified the split
+      itself (full periagoge where a fixed object exists; visible refusable
+      drafts where decision-forming) and recognized the graph at origin/main as
+      such a fixed object, so type-b interviews — re-turning the author toward
+      their own considered record — bind under the full periagoge rules even
+      inside decision-forming skills. What remains delegated is the platonic
+      framing behind the doctrine, still reviewed at
+      tactic-reading-chunk-18-dialectic-method, now joined by
+      tactic-reading-chunk-24-phaedrus-writing (the covenant/hypomnema
+      articulation that grounds type-b authority)."
   - question: Are chunk verdicts one-pass, and what bounds a reading-review session?
     answer: "No — the first run (2026-07-07, chunk 1) rejected or refined two
       recommended options and the amendment improved both times. Verdict options
