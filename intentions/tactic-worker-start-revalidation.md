@@ -33,7 +33,25 @@ execution:
 validates: []
 blocked_by:
   - tactic-graph-router-selector
-office_hours: null
+office_hours:
+  reason: "origin/main does not merge clean into this node branch: content
+    conflict in packages/intentionsutil/src/index.ts export barrel — origin/main
+    added an officeHours.js module (officeHoursQueue, openBlockers,
+    selectOfficeHours + their types) and trimmed the router.js export list to
+    selectGraphTargets, strategyFingerprint, readingDate, PHASE_LADDER, dropping
+    tacticScopeFingerprint and servingStrategyIds; this branch keeps
+    tacticScopeFingerprint and servingStrategyIds. The graph lane cannot
+    auto-route this: /fix-conflicts hard-exits on non-numeric branches and has
+    no graph-node target support yet (pre tactic-phase-skill-node-targets), so
+    there is no automated resolver for a graph-node merge conflict. Next steps:
+    a human resolves the barrel by unioning origin/main's officeHours.js exports
+    with this branch's router.js exports, first confirming whether
+    tacticScopeFingerprint and servingStrategyIds still exist in this branch's
+    router.js (keep them if so); then land tactic-phase-skill-node-targets so
+    /fix-conflicts accepts graph-node targets and this class of conflict can
+    auto-route in future."
+  since: 2026-07-09
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes: {}
