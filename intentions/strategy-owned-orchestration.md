@@ -24,9 +24,10 @@ rationale: >-
 
 
   Dual-tier: the workflow is both the author's daily development tool (recover)
-  and the most distinctive artifact for practitioner distribution (promote).
-  Deprioritizing its usability as "polish" misses that it also serves
-  distribution.
+  and the most distinctive artifact for practitioner distribution (promote) —
+  the layered claim's canonical home is strategy-data-structure-first: the graph
+  is the product, the harness its reference consumer. Deprioritizing its
+  usability as "polish" misses that it also serves distribution.
 reading: null
 gap: null
 serves:

@@ -8,7 +8,9 @@ status: refining
 parent: strategy-promote-progressive-detachment
 rationale: >-
   Two nodes agree the workflow is the most distinctive artifact for practitioner
-  distribution, and strategy-owned-orchestration's built-to-be-left claim is
+  distribution (layered claim canonically on strategy-data-structure-first: the
+  graph is the product, the harness its reference consumer and most distinctive
+  artifact), and strategy-owned-orchestration's built-to-be-left claim is
   validated only by forks and derivatives — yet promote's children contain no
   strategy for anyone actually encountering or adopting the chain. This strategy
   owns that: a standalone practitioner-facing entry point (the chain as a thing

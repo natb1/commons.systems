@@ -47,8 +47,10 @@ clarifications:
       Kantian and exceptionless: never be the captor — no lock-in, no dark
       patterns, no conversion. It is a side-constraint, not a weighable good:
       nothing in the graph is balanced against it, which is why this node
-      carries kinship but no tension_with — now explicit doctrine rather than
-      accident (see attributes.inviolable). HOW to respect well — when to
+      carries no tension_with — explicit doctrine rather than accident (see
+      attributes.inviolable); the kinship field that once marked the mobility
+      relation was retired 2026-07-09, the two-faces relation living in this
+      node's rationale, its one auditable home. HOW to respect well — when to
       promote, how hard to offer the practice to family, what counts as imposing
       — is Aristotelian phronesis. Kant for the floor, Aristotle for the
       practice; the split is recorded as chosen_over entries on both tradition
@@ -76,7 +78,6 @@ office_hours: null
 pace_exempt: false
 rounds: null
 attributes:
-  kinship: virtue-philosophical-mobility
   calibration: "external — the recipients themselves: users, buyers, and fork
     recipients who can actually leave; a self-audited claim of no lock-in is the
     captor's own report"

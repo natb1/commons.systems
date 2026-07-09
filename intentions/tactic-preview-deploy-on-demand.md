@@ -15,7 +15,13 @@ rationale: "Author directive at the 2026-07-07 /align-strategy
   run-all-preview-deploy-smoke.sh path on demand. CI verification must remain
   change-scoped for speed — the skill reuses get-changed-apps.sh scoping, it
   does not reintroduce deploy-everything. Retained as a draft for
-  /align-tactics."
+  /align-tactics. Gate recorded 2026-07-09: preview-and-smoke is one of the four
+  required status contexts on main's ruleset that the graph/** fast path stamps
+  (strategy-graph-native-dispatch's branch-protection clarification, 2026-07-03;
+  graph-commit polls exactly these four before fast-forwarding to main).
+  Removing the job must, in the same change, update the ruleset's required
+  contexts and the fast-path/graph-commit stamping list — otherwise every direct
+  graph push to main is rejected."
 reading: null
 gap: null
 serves:

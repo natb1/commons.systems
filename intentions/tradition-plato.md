@@ -114,7 +114,13 @@ attributes:
       delegation: parasite biases pitted against one another to cancel out. The
       graph's own extension, not Plato's — prospective grounding queued as the
       Popper candidate (tactic-reading-chunk-11-popper-fallibilism)"
-  chosen_over: []
+  chosen_over:
+    - "over tradition-aristotle at the capture doctrine
+      (virtue-philosophical-mobility): capture misdirects the sensor rather than
+      corrupts it, so agency is never lost — provisional (recorded 2026-07-09
+      from the 2026-07-07 chunk-1 amendment), held open until the Aristotle NE
+      VI reading resolves the matching provisional divergence on
+      tradition-aristotle"
   texts:
     - Republic IV, VII (514a-521b), 519-520
     - Apology
@@ -123,6 +129,6 @@ attributes:
     - Republic 592a-b (the paradigm)
   review_trigger: any strategy-philosophical-grounding round touching capture
     doctrine or the align interview method
-  last_assessed: 2026-07-07
+  last_assessed: 2026-07-09
 ---
 # Platonic method and the Good — elenchus as the align dialectic, the Cave as the capture doctrine, the Form of the Good as external anchor; Forms-as-blueprints declined

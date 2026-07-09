@@ -17,9 +17,11 @@ rationale: >-
 
   The whole chain is skills and scripts in the repo, forkable and locally run —
   no platform runtime, per its parent strategy-owned-orchestration. That makes
-  it the artifact most distinctive for practitioner distribution: dual-tier in
-  the strategy-progressive-validation sense, the author's daily development tool
-  and the thing a practitioner would most plausibly fork.
+  it the artifact most distinctive for practitioner distribution (a layered
+  claim — the graph is the product, the harness its reference consumer;
+  canonical home strategy-data-structure-first): dual-tier in the
+  strategy-progressive-validation sense, the author's daily development tool and
+  the thing a practitioner would most plausibly fork.
 
 
   That hand-off only holds if the chain runs unattended: the daemon must keep

@@ -8,14 +8,18 @@ status: refining
 parent: strategy-explicit-intent
 rationale: >-
   The loop this strategy owns — intent enters execution from the graph, and
-  execution reports back as readings — is not yet load-bearing: readings are
-  null and the dispatch queue's ordering owes nothing to the dialectic's triage.
-  The first coupling attempt was a gh↔graph mapping layer (intention-emit,
-  backfill, trackers/, the rank-map ordering bridge); it is superseded and
-  removed — the child strategy-graph-native-dispatch closes the loop natively
-  instead, with the legacy gh router draining in parallel over disjoint state.
-  Integration with an external tracking system such as GitHub is a separate
-  strategy; design TBD.
+  execution reports back as readings — is half real (amended 2026-07-09: the
+  child strategy-graph-native-dispatch made the entry side load-bearing — work
+  enters execution because a node calls for it, the queue's ordering comes from
+  resolved rank, and orchestration state is migrating into the nodes). The
+  feedback side stays open: readings are sensor-populated almost nowhere, and
+  this strategy's own success signal is unmet until sensor-run readings exist
+  for every strategy that names a sensor. The first coupling attempt was a
+  gh↔graph mapping layer (intention-emit, backfill, trackers/, the rank-map
+  ordering bridge); it is superseded and removed — the child
+  strategy-graph-native-dispatch closes the loop natively instead, with the
+  legacy gh router draining in parallel over disjoint state. Integration with an
+  external tracking system such as GitHub is a separate strategy; design TBD.
 
   This strategy owns making the loop real: work enters execution because a node
   calls for it (serves classified when the dialectic records a tactic), sensors

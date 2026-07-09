@@ -24,7 +24,9 @@ rationale: >-
   Work that serves multiple tiers simultaneously is high leverage: the agentic
   coding workflow (including the skill system) is both the author's daily
   development tool (tier 1) and the most distinctive artifact for practitioner
-  distribution (tier 3); performance improvements serve both author usability
+  distribution (tier 3; layered claim canonically on
+  strategy-data-structure-first — the graph is the product, the harness its
+  reference consumer); performance improvements serve both author usability
   (tier 1) and the quality of artifacts users encounter (tier 2). Recognizing
   dual-tier work prevents the error of deprioritizing author-usage improvements
   as "polish" when they also serve distribution.

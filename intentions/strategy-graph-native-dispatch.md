@@ -622,10 +622,12 @@ clarifications:
       in-flight selector PR). Recorded 2026-07-06 interview."
   - question: Does long-horizon graph work keep a workflow or session alive?
     answer: "No — the graph is the long-horizon substrate; sessions are disposable
-      executors. This generalizes clarification 26 from parked work to the
-      router itself: continuity is durable state on origin/main (persisted
-      phase, claims, plans, residue sections) re-entered by the cron heartbeat;
-      dead ticks, dead workers, and dropped queues recover by re-selection plus
+      executors. This generalizes the office-hours-entry clarification
+      (2026-07-06, 'how does a human engage a parked node' — graph
+      recoverability replaces session recovery) from parked work to the router
+      itself: continuity is durable state on origin/main (persisted phase,
+      claims, plans, residue sections) re-entered by the cron heartbeat; dead
+      ticks, dead workers, and dropped queues recover by re-selection plus
       ledger sweep, never by resuming a session (workflow resume is
       same-session-only). A kept-alive supervisor workflow or self-rescheduling
       session is rejected as router substrate: session limits kill workflow
@@ -671,40 +673,43 @@ clarifications:
       worth recovering, by workflow-session resume or by transcript
       reconstruction (the legacy recover-api-error pattern)?
     answer: "No on both mechanisms — re-selection stays the only recovery path,
-      reaffirming clarifications 24/29 on greenfield re-evaluation, and the
-      residual loss is closed by a durability rule, not a session mechanism.
+      reaffirming the workflow-tick clarification (2026-07-06, dead ticks
+      recover by re-selection) and the bootstrap-record clarification
+      (2026-07-06, re-evaluation is a fresh session with only the graph), and
+      the residual loss is closed by a durability rule, not a session mechanism.
       What a dead worker actually loses is reasoning-in-progress — findings not
       yet flushed to durable state; the node body's clean-session plan
       (condition 7), the node-id worktree with its commits and uncommitted edits
       (the re-selected worker roots in the same worktree, so in-flight file
-      state lands in front of it per clarification 26's rule), and the PR with
-      its phase comments all survive, and the ledger sweep already keeps a dead
-      worker from blocking new selections. Workflow-session resume is
-      technically unfit twice over: resume is same-session-only, unavailable
-      exactly when the tick session is dead; and resume replays only completed
-      agent() calls from cache — a worker that died mid-flight re-runs from
-      scratch — so its best case equals re-selection at tighter coupling to the
-      rented executor. Transcript reconstruction is negative expected value as
-      router machinery: the node body already carries everything a fresh session
-      needs, so the transcript's marginal information over plan + worktree diff
-      + PR comments is small; reading a long transcript costs a significant
-      fraction of redoing the reasoning and inherits whatever confused state
-      killed the session; and it would make the harness's proprietary transcript
-      format load-bearing for the router — reversing clarification 26's demotion
-      of session persistence and running against the thin-script capture bound
-      (clarification 25). recover-api-error stays a human-invoked legacy-lane
-      tool and never becomes router substrate. The remaining gap — an expensive
-      phase dying with its findings only in conversation — is closed by the
-      checkpoint discipline (new condition 9): phase progress whose only home is
-      the session is a defect; workers flush findings to durable state at
-      natural boundaries (worktree commits for file work; PR comments for QA
-      triage and review findings as produced, not only at phase end; node body
-      sections for residue), and a re-selected worker treats pre-existing
-      worktree/PR state as resume input — diff against the branch base and read
-      prior phase comments before redoing anything. This bounds a dead worker's
-      redo cost to one checkpoint interval with zero new harness coupling.
-      Skill-side encoding retained as draft tactic-phase-checkpoint-discipline.
-      Recorded 2026-07-06 interview."
+      state lands in front of it per the office-hours-entry clarification's rule
+      (2026-07-06)), and the PR with its phase comments all survive, and the
+      ledger sweep already keeps a dead worker from blocking new selections.
+      Workflow-session resume is technically unfit twice over: resume is
+      same-session-only, unavailable exactly when the tick session is dead; and
+      resume replays only completed agent() calls from cache — a worker that
+      died mid-flight re-runs from scratch — so its best case equals
+      re-selection at tighter coupling to the rented executor. Transcript
+      reconstruction is negative expected value as router machinery: the node
+      body already carries everything a fresh session needs, so the transcript's
+      marginal information over plan + worktree diff + PR comments is small;
+      reading a long transcript costs a significant fraction of redoing the
+      reasoning and inherits whatever confused state killed the session; and it
+      would make the harness's proprietary transcript format load-bearing for
+      the router — reversing the office-hours-entry clarification's (2026-07-06)
+      demotion of session persistence and running against the thin-script
+      capture bound (clarification 25). recover-api-error stays a human-invoked
+      legacy-lane tool and never becomes router substrate. The remaining gap —
+      an expensive phase dying with its findings only in conversation — is
+      closed by the checkpoint discipline (new condition 9): phase progress
+      whose only home is the session is a defect; workers flush findings to
+      durable state at natural boundaries (worktree commits for file work; PR
+      comments for QA triage and review findings as produced, not only at phase
+      end; node body sections for residue), and a re-selected worker treats
+      pre-existing worktree/PR state as resume input — diff against the branch
+      base and read prior phase comments before redoing anything. This bounds a
+      dead worker's redo cost to one checkpoint interval with zero new harness
+      coupling. Skill-side encoding retained as draft
+      tactic-phase-checkpoint-discipline. Recorded 2026-07-06 interview."
   - question: Clarification 32's amendment-completeness bar names re-evaluation
       amendments of tactics. Does the same bar bind /align-strategy edits to
       strategy nodes?

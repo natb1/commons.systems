@@ -34,6 +34,14 @@ rationale: >-
   reverse it is. The project must stay organized so that standing down is what
   happens by inaction, never an act of will that a ratcheted institution never
   performs.
+
+
+  Rooting argument (kind-virtue's requirement, recorded 2026-07-09): this root
+  is not a child of virtue-respect-for-persons for the mirrored reason respect
+  is not a child of it — the two are distinct faces of one commitment, agency as
+  an end, and neither derives from the other without remainder. The two-faces
+  argument's one auditable home is virtue-respect-for-persons' rationale; the
+  kinship field that once pointed there is retired (2026-07-09).
 reading: null
 gap: null
 serves: []
@@ -59,26 +67,24 @@ clarifications:
       imperfect). Inherited by the chunk-6 capstone; the question stays open.
       Recorded 2026-07-07 /reading-review chunk 1."
   - question: Which tradition reads this virtue?
-    answer: "Dual attribution, deliberate and conflict-free (recorded 2026-07-04):
-      Kant names what capture IS — heteronomy, the will legislated from outside;
-      'the delegatee sets the problem' is Groundwork III in vendor dress — while
-      Aristotle names the faculty that detects it: phronesis, with 'capture
-      corrupts the sensor' as vice destroying the archē (NE VI). Plato supplies
-      the phenomenology and the escape: the Cave, and recovery as periagoge — a
-      turning of the whole agent toward the good, never toward a person or
-      institution. Amended 2026-07-07 (chunk-1 reading, the reading wins):
-      capture misdirects the sensor rather than destroys it (518e-519b), so
-      agency is never lost — one is either internally compelled toward the light
-      or chooses a liberator, the choice of liberator being itself a deferral
-      the graph tracks, with the sophist as its risk; what must be external is
-      verification of the turning (untrustworthy by self-report while
-      misdirected) plus the offer of compulsion toward a good not yet seen
-      (tradition-plato). The traditions claim different aspects; no chosen_over
-      is needed. The Augustinian background behind those amendments is recorded
-      2026-07-08 as tradition-augustine — the interior teacher (De Magistro)
-      grounding agency-never-lost, Confessions VIII the phenomenology of the
-      choice of liberator — status: delegated until reading chunks 19-21 verify
-      it."
+    answer: "Dual attribution, deliberate (recorded 2026-07-04): Kant names what
+      capture IS — heteronomy, the will legislated from outside; 'the delegatee
+      sets the problem' is Groundwork III in vendor dress — while Aristotle
+      names the faculty that detects it (phronesis, NE VI) and Plato supplies
+      the phenomenology and the escape (the Cave; recovery as periagoge). The
+      capture doctrine's detail — misdirection not corruption, agency never
+      lost, the liberator deferral with the sophist as its risk, external
+      verification of the turning — lives at its one auditable home,
+      tradition-plato (amended 2026-07-07, chunk-1 reading); this entry
+      previously restated it near-verbatim, which is exactly how
+      tradition-aristotle got missed by the amendment. At the capture-doctrine
+      locus the amendment created a provisional Plato-over-Aristotle choice,
+      recorded 2026-07-09 as chosen_over on tradition-plato with the matching
+      provisional divergence on tradition-aristotle, both held open until the
+      Aristotle NE VI reading — superseding this entry's earlier 'no chosen_over
+      is needed'. The Augustinian background is recorded as tradition-augustine
+      (2026-07-08) — status: delegated until reading chunks 19-21 verify it.
+      Amended 2026-07-09 interview."
   - question: What is ratcheting — the mechanism that makes institutions irreversible?
     answer: "An institution ratchets when it accumulates teeth: attachment
       mechanisms each individually reasonable to add and individually costly to
@@ -106,7 +112,6 @@ pace_exempt: false
 rounds: null
 attributes:
   delegable: never
-  kinship: virtue-respect-for-persons
   calibration: external — adversarial review (the align contrarian pass) and the
     practitioner community; a self-audited "I am not captured" is exactly what a
     captured agent reports
