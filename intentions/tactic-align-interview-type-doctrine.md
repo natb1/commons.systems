@@ -79,6 +79,12 @@ conventions appear in `/align-tactics` if its interview surfaces exist):
    articulation, and always creates an office-hours/curriculum-style review
    item (reading chunk if a text grounds it, office-hours review sitting
    otherwise).
+6. **Prose preface** — every AskUserQuestion execution is preceded by prose
+   presenting the context that motivates the interview and whatever does not
+   fit in the questions themselves (in both types). The author does not read
+   Claude's thinking: analysis that exists only there or in tool results is
+   invisible, so the motivating context must appear as ordinary message text
+   before the questions run.
 
 Coordinates with tactic-align-strategy-alignment-tests (doctrinal-consistency
 gate + steelman challenge, same SKILL.md); refines nothing in that draft.
