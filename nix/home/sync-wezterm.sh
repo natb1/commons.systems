@@ -39,7 +39,7 @@ SHORT_SHA=${VERSION##*-}
 echo "    version:   $VERSION"
 
 echo "==> Resolving full commit for $SHORT_SHA"
-REV=$(curl -fsSL "https://api.github.com/repos/wez/wezterm/commits/$SHORT_SHA" --jq '.sha')
+REV=$(curl -fsSL "https://api.github.com/repos/wez/wezterm/commits/$SHORT_SHA" | jq -r '.sha')
 echo "    rev:       $REV"
 
 echo "==> Fetching source (fetchSubmodules) to compute srcHash — this is slow"
