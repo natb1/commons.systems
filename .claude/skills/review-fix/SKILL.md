@@ -105,6 +105,15 @@ emit, and writes the phase-completed marker. Otherwise run all steps in order.
 
 ## Steps
 
+**Resume from durable state.** A run that finds an existing review comment
+already carrying recorded dispositions (Step 6's incremental comment), or fix
+commits beyond the branch base (`git merge-base HEAD origin/main`), treats them
+as resume input, not an error: read the prior comment's dispositions and diff
+the committed fixes against the base, then continue from there — never
+re-litigate a recorded verdict and never redo a committed fix. The worktree and
+the PR survive a dead session; only reasoning-in-progress is lost, so a resumed
+run rebuilds nothing that already reached durable state.
+
 ### 1. Capture the diff context and run the inline bash scans
 
 All reviews look at the same diff — and the preamble's single
@@ -614,10 +623,28 @@ The 5a and 5b follow-up subagents touch only GitHub and the working tree never,
 so they may be fanned out in the same message as one another (Step 3's
 `/commit-merge-push` has already returned by this point).
 
-### 6. Post exactly one PR comment
+### 6. Post exactly one PR comment — composed incrementally
 
-Reuse the `PR_NUM` captured in the preamble — do not re-resolve. Post **one**
-comment covering **every** finding from `result.dispositions` and its bucket.
+Reuse the `PR_NUM` captured in the preamble — do not re-resolve. There is still
+exactly **one** comment covering **every** finding from `result.dispositions`
+and its bucket — but **compose it incrementally**, not only at phase end, so a
+dead session leaves the resolved-so-far dispositions already on the PR (condition
+9: phase progress whose only home is the session is a defect):
+
+- Give the comment body a first-line marker `<!-- dispatch:review-fix -->` (the
+  marker-comment anchor pattern `dispatch-write-plan` / `dispatch-qa-noprogress`
+  use — first line only, matched by `startswith`, never `contains`).
+- **Create** the comment as soon as the first finder/verify disposition
+  resolves, via `post-pr-comment.sh` (which returns the new comment ID). Capture
+  that ID.
+- **Edit it in place** as each subsequent disposition resolves — rewrite the
+  body file and `gh api repos/{owner}/{repo}/issues/comments/<id> -X PATCH
+  --field body=@tmp/<file>` (use `dangerouslyDisableSandbox: true`). A resumed
+  run re-finds the same comment by its marker via the `dispatch_marker_comment_id`
+  helper (`lib.sh`) rather than posting a duplicate.
+- The phase-end pass then only **finalizes** the same comment — one last
+  edit-in-place with the complete bucket set below; it does not post a second
+  comment.
 
 Write the comment body to a file under the repo's `tmp/` directory. The body file
 **must** live under `tmp/` because `post-pr-comment.sh` restricts paths to that
@@ -652,11 +679,23 @@ both quality finders died — the model was likely throttled). If every bucket i
 empty and there was no security note, the comment is still well-formed (render
 empty buckets as `_None._`).
 
-Then post it (use `dangerouslyDisableSandbox: true` — the script invokes `gh`):
+Then flush it (use `dangerouslyDisableSandbox: true` — these invoke `gh`).
+On the **first** flush, create the marker comment and capture its ID:
 
 ```bash
-.claude/skills/dispatch-propagate/scripts/post-pr-comment.sh "$PR_NUM" tmp/<file>
+CID=$(.claude/skills/dispatch-propagate/scripts/post-pr-comment.sh "$PR_NUM" tmp/<file>)
 ```
+
+On every **subsequent** flush and the phase-end finalize, edit the same comment
+in place (never a second `post-pr-comment.sh` — that would stack a duplicate):
+
+```bash
+REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+gh api "repos/${REPO}/issues/comments/${CID}" -X PATCH --field body=@tmp/<file>
+```
+
+A resumed run recovers `CID` by re-finding the `<!-- dispatch:review-fix -->`
+marker comment (`dispatch_marker_comment_id`, `lib.sh`) instead of re-creating it.
 
 ### 7. Apply the terminal label, then write the marker (or park on deviation)
 
