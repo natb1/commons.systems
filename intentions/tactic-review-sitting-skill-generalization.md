@@ -68,3 +68,24 @@ collects beforehand (strategy-graph-review-curriculum clarification 3):
 Out of scope: /reading-review's existing reading-chunk flow (unchanged);
 enrollment at record time (tactic-align-curriculum-maintenance); the coverage
 table (tactic-review-curriculum-coverage-sensor).
+
+## Round-1 disposition (2026-07-09 /align-tactics)
+
+Deliberately retained as a draft this round — not finalized, split, merged,
+or pruned — because its own recorded gate holds: `tactic-reading-review-skill`
+is still `phase: implement`, and this tactic extends the skill file that work
+is creating, so a plan authored now would anchor against surface not yet on
+`origin/main`. This is the same rule `tactic-reading-review-candidate-extension`
+records, and that node likewise remains a draft. Finalize in a later round
+once `/reading-review` is landed.
+
+Corrections for the finalizing round:
+
+1. `review_window` was retired 2026-07-09 — kind-delegation's review model is
+   event-based (`review_trigger` firings, reading-program rounds,
+   `last_exercised`/`last_assessed` stamps; see
+   `strategy-exercise-recovery-paths`' rationale). Read the
+   `tactic-delegation-review-windows` reference above as historical.
+2. `tactic-condition-review-sweep` is `owner: human`, `status: raw`, and its
+   rehoming is parked on the `tactic-align-audit-legacy-review` office-hours
+   sitting — coordinate after that sitting resolves.

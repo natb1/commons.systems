@@ -107,6 +107,22 @@ clarifications:
       as tactic-align-curriculum-maintenance, coordinating with
       tactic-align-interview-type-doctrine's deferral-mechanics clause on the
       same skill surface. Recorded 2026-07-09 interview."
+  - question: What did the 2026-07-09 /align-tactics round 1 record against the
+      machinery references (Side B, immaterial)?
+    answer: Two observations that inform but do not gate the round. First,
+      clarification 3 lists delegation review windows among mode-A machinery,
+      but review_window was retired 2026-07-09 — kind-delegation review model is
+      event-based (reading-program rounds and requirement refinement as standard
+      triggers, review_trigger firings, last_exercised/last_assessed stamps;
+      recorded in strategy-exercise-recovery-paths rationale) — so the
+      curriculum mode-A delegation path reads the event-based model, and
+      tactic-delegation-review-windows is historical. Second, the coverage-table
+      sensor ships as a standalone deterministic script
+      (packages/intentionsutil/scripts/review-coverage.ts) because the digest
+      host (tactic-graph-digest-tooling) and the audit reader
+      (tactic-align-audit-skill) are still drafts; the tooling goal named
+      location (digest / align-audit report) is the eventual home that absorbs
+      the table when those land. Recorded 2026-07-09 /align-tactics round.
 tooling_goals:
   - kind: sensor
     statement: "review-coverage table in the graph digest / align-audit report — per
@@ -134,20 +150,22 @@ attention:
     7 — the level of tactic-reading-review-skill and tactic-sync-reader-skill).
     Boosting the strategy carries the tier to its whole subtree by inheritance:
     the three tactics serving it (tactic-review-curriculum-coverage-sensor,
-    tactic-align-curriculum-maintenance, tactic-review-sitting-skill-generalization)
-    inherit authored 7 with no per-node boost. The strategy itself resolves to 8
-    (authored 7 + the structural signal term) — expected for a human-owned root
-    and left unfought. Scope is the frontier-maintenance machinery, not the
-    curriculum's per-class review mechanisms/entries (reading chunks, deferral
-    items, delegation review windows, the conditions sweep) which stay
-    unboosted."
+    tactic-align-curriculum-maintenance,
+    tactic-review-sitting-skill-generalization) inherit authored 7 with no
+    per-node boost. The strategy itself resolves to 8 (authored 7 + the
+    structural signal term) — expected for a human-owned root and left unfought.
+    Scope is the frontier-maintenance machinery, not the curriculum's per-class
+    review mechanisms/entries (reading chunks, deferral items, delegation review
+    windows, the conditions sweep) which stay unboosted."
 phase: null
 execution: null
 validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
-rounds: null
+rounds:
+  count: 0
+  last_completed: null
 attributes:
   conditions:
     - office-hours capacity bounds the cadence — ~30 author-minutes of
