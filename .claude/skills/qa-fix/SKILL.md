@@ -319,6 +319,19 @@ fork site below (same discipline as the `fixes_applied_count` tally in Step 3.7)
    After the triage subagent returns, increment `SKILL_SUBAGENTS` by 1 (the one
    bounded Opus triage fork always runs).
 
+   **Flush the triage plan as produced (condition 9).** As soon as the plan
+   returns — **before** any fixing begins — write it to a durable human-readable
+   QA-summary PR comment (a first-line `<!-- dispatch:qa-summary -->` marker; the
+   incremental marker-comment edit-in-place pattern review-fix Step 6 uses —
+   create via `post-pr-comment.sh`, capture the comment ID, then `gh api … -X
+   PATCH` to edit in place). Then update each item's verdict **as each item
+   resolves** through Step 3's lanes — not only in the Step 4 phase-end post
+   (`:1003`). Phase progress whose only home is the session is a defect: a dead
+   session must leave the plan and the resolved-so-far verdicts already on the PR.
+   This summary comment is **distinct** from the machine `<!-- dispatch:qa-residue
+   -->` id-set marker `dispatch-qa-noprogress` owns (`:837`) — that marker is
+   already flushed per attempt and is untouched here.
+
    Step 3 parses this returned list and routes each item by its `Classification`
    value (and, for `script-verifiable`, by its `Command` shape) into one of three
    execution lanes.
@@ -1006,7 +1019,10 @@ fork site below (same discipline as the `fixes_applied_count` tally in Step 3.7)
    re-resolve.
 
    Write a markdown summary to `tmp/qa-fix-summary-<n>.md` (where `<n>` is the
-   Step-0-resolved issue number `<N>`). Include:
+   Step-0-resolved issue number `<N>`) with a first line of `<!-- dispatch:qa-summary
+   -->` — the same marker the Step-2 incremental flush uses, so this phase-end
+   post **finalizes that same comment in place** rather than stacking a second.
+   Include:
    - Items executed (across all three lanes).
    - PASS / FAIL / SKIP counts.
    - **Deferred to office-hours** — each `needs-human-judgment` item **whose
@@ -1088,9 +1104,18 @@ fork site below (same discipline as the `fixes_applied_count` tally in Step 3.7)
      their acceptance criterion provably met at QA time — no code defect exists and
      no human input is needed — so they are dropped as PASS and do not park the PR.
 
-   Post via (use `dangerouslyDisableSandbox: true` — the script invokes `gh`):
+   Finalize the `<!-- dispatch:qa-summary -->` comment in place (use
+   `dangerouslyDisableSandbox: true` — these invoke `gh`). Re-find it by marker
+   via `dispatch_marker_comment_id` (`lib.sh`); edit it if it exists (the Step-2
+   flush created it), else create it once:
    ```bash
-   .claude/skills/dispatch-propagate/scripts/post-pr-comment.sh "$PR_NUM" tmp/qa-fix-summary-<n>.md
+   REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+   CID=$(dispatch_marker_comment_id "$PR_NUM" '<!-- dispatch:qa-summary -->')
+   if [ -n "$CID" ]; then
+     gh api "repos/${REPO}/issues/comments/${CID}" -X PATCH --field body=@tmp/qa-fix-summary-<n>.md
+   else
+     .claude/skills/dispatch-propagate/scripts/post-pr-comment.sh "$PR_NUM" tmp/qa-fix-summary-<n>.md
+   fi
    ```
 
    **Write the qa phase-log entry.** After the summary is posted, write a terse
@@ -1392,3 +1417,14 @@ the number of fixing passes per PR is hard-capped at `CAP` (default 2,
 `DISPATCH_QA_FIX_ATTEMPT_CAP`): at the cap the lane escalates instead of fixing.
 Together the durable commits + the attempt label bound both the work redone and
 the total number of fix attempts.
+
+**Resume contract (condition 9).** A re-selected worker rooting in the same
+worktree treats the durable state as resume input, never an error. Items the
+prior `<!-- dispatch:qa-summary -->` comment already marks resolved are **not**
+re-derived — the incremental flush (Step 2) means those verdicts survived the
+dead session (Step 3's triage already narrows on the prior summary, `:263`;
+this states it as a contract). Per-unit fix commits are already durable via
+`/commit-merge-push` (see the paragraph above; do not restate) — a resumed
+fixing pass re-QAs against the landed work rather than redoing it. Diff the
+worktree against the branch base and read the prior comment; continue from
+there.
