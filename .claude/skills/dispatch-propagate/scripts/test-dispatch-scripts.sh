@@ -41009,6 +41009,28 @@ assert_eq "resolve_dirty_apps: blog change marks blog and fellspiral only" \
 rm -rf "$TMPDIR_TEST"
 TMPDIR_TEST=""
 
+# Same transitive closure, but with the mid-tier package nested under packages/
+# (the real repo's actual layout: every internal @commons-systems/* package
+# lives at packages/<name>, never at a bare top-level <name> dir). The
+# dependency-short-name key ("blog") and the workspace app path
+# ("packages/blog") diverge here, which the flat-workspace fixture above
+# cannot exercise — a BFS that mistakenly re-keys on the full app path instead
+# of re-deriving the short name silently truncates the closure at depth 1.
+echo "Test: resolve_dirty_apps -- ds change marks transitive dependent fellspiral (nested packages/ mid-tier)"
+TMPDIR_TEST=$(mktemp -d)
+mkdir -p "$TMPDIR_TEST/fellspiral" "$TMPDIR_TEST/packages/blog" "$TMPDIR_TEST/packages/ds"
+printf '%s' '{"workspaces":["fellspiral","packages/blog","packages/ds"]}' > "$TMPDIR_TEST/package.json"
+printf '%s' '{"dependencies":{"@commons-systems/blog":"*"}}' > "$TMPDIR_TEST/fellspiral/package.json"
+printf '%s' '{"peerDependencies":{"@commons-systems/ds":"*"}}' > "$TMPDIR_TEST/packages/blog/package.json"
+printf '%s' '{}' > "$TMPDIR_TEST/packages/ds/package.json"
+
+out=$(printf '%s\n' "packages/ds/base.css" | (source "$SCRIPT_DIR/lib.sh"; resolve_dirty_apps "$TMPDIR_TEST") | sort)
+assert_eq "resolve_dirty_apps: ds change marks nested packages/blog and transitive fellspiral" \
+  $'fellspiral\npackages/blog\npackages/ds' "$out"
+
+rm -rf "$TMPDIR_TEST"
+TMPDIR_TEST=""
+
 # dispatch-review-erosion tests
 # ============================================================================
 #

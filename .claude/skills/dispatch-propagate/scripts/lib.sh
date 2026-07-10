@@ -1958,9 +1958,16 @@ resolve_dirty_apps() {
       [ -n "${_seen[$cur]+x}" ] && continue
       _seen["$cur"]=1
       # If cur is itself an internal package other apps consume, its direct
-      # dependents are transitive dependents of root_pkg too.
-      if [ -n "${direct_dependents[$cur]+x}" ]; then
-        for nxt in ${direct_dependents["$cur"]}; do
+      # dependents are transitive dependents of root_pkg too. direct_dependents
+      # is keyed on the dependency SHORT name (e.g. "blog"), but cur holds a
+      # full app/workspace path (e.g. "packages/blog") — the same short-name
+      # bridge the resolve loop below uses (`short="${ws##*/}"`). Looking up
+      # direct_dependents[$cur] directly here would silently never match for
+      # any package nested under packages/ (all of them), truncating the
+      # closure at depth 1.
+      local cur_short="${cur##*/}"
+      if [ -n "${direct_dependents[$cur_short]+x}" ]; then
+        for nxt in ${direct_dependents["$cur_short"]}; do
           _queue+=("$nxt")
         done
       fi
