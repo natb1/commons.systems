@@ -42,7 +42,51 @@ phase: implement
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "Unit 1's provenance lint is unimplementable as specified by an
+    autonomous off-path worker, and it is one plan / one PR, so the whole node
+    parks. Plan spec: every clarifications[].answer must END with a trailing
+    \"Recorded YYYY-MM-DD\" sentence (explicitly \"trailing-sentence position,
+    not merely anywhere in the string\"), then sweep the live store fixing every
+    violation or recording a named exemption. Sweep result over intentions/: 27
+    violations, ALL author-owned goal-layer nodes (virtue/strategy/kind), ZERO
+    tactics; undated=0 — every answer already carries a dated provenance clause.
+    The corpus's actual established convention front-loads provenance as a
+    parenthetical with varied verbs (Recorded / Amended / clarified / Reviewed /
+    adopted) and ends each answer with its substantive conclusion, not a
+    trailing Recorded sentence; both the align SKILL.md doctrine and this plan
+    describe a trailing-Recorded convention the corpus never followed (a
+    doctrine-vs-corpus mismatch). Enforcing the spec literally means
+    autonomously rewriting 27 rich author-owned philosophical dialectic records
+    (e.g. virtue-respect-for-persons' Kant/Aristotle clarification,
+    strategy-philosophical-grounding's periagoge answers) to append redundant
+    trailing dates — out of an off-path worker's remit; loosening the rule to
+    \"a date present anywhere\" is an align-layer doctrine decision the plan
+    explicitly forbids, not a lint tweak to slip in because it makes the sweep
+    green. The Unit 1 body lint (Context + Recommended-model + Verification
+    markers) IS sound and tractable: 15 body violations — 13 are main-qa
+    follow-up tactics missing **Recommended model:** (a distinct
+    needs-main-verification category, a named-exemption candidate) and ~2 are
+    genuinely under-specified tactic plans (e.g. tactic-budget-txn-identity
+    missing ## Verification) the lint should legitimately catch and fix in-PR.
+    Units 2-5 (child-tactic + strategy-corpus census scripts and the two
+    SKILL.md census hooks) are unaffected by the defect. Next steps: run
+    /align-tactics on tactic-align-tactics-mechanical-floor (serving
+    strategy-graph-native-dispatch) to re-spec Unit 1's provenance lint before a
+    fresh worker re-implements the whole plan — decide among (a) scope the
+    provenance rule to tactic nodes only, (b) split provenance into its own
+    tactic so the tractable body lint + census scripts (Units 2-5) ship now, (c)
+    sweep goal-layer records only under explicit author review rather than
+    autonomously; also decide the body-lint main-qa named exemption vs requiring
+    model tags on those 13 follow-ups; and flag the trailing-Recorded
+    doctrine-vs-corpus mismatch for possible align-strategy attention. Gate and
+    dependency were clean and need no re-litigation: null
+    execution.strategy_fingerprint (a null stamp is never stale) and
+    blocked_by:[] is legitimate (tactic-align-skills-greenfield-gate #2789
+    merged and pruned, dropping the inbound edge). No partial work was committed
+    and no PR was opened — the node worktree is clean."
+  since: 2026-07-09
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes: {}
