@@ -355,7 +355,7 @@ describe("Budgets overrides table interactivity — Unit 3 contract", () => {
     const c = await renderBudgets([
       budget({ overrides: [{ date: Timestamp.fromMillis(todayUTC), balance: 42 }] }),
     ]);
-    const addBtn = c.querySelector("#add-override") as HTMLButtonElement;
+    const addBtn = c.querySelector("#add-override") as HTMLButtonElement; // type-safety-ok: test DOM query cast, file convention
     addBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     await flush();
     // No second row inserted, and no clobbering save fired.
@@ -363,7 +363,7 @@ describe("Budgets overrides table interactivity — Unit 3 contract", () => {
     expect(activeDS.updateBudgetOverrides).not.toHaveBeenCalled();
     // The existing override's balance is focused for in-place editing, and its
     // value is untouched (not zeroed).
-    const balanceInput = c.querySelector("#overrides-table .edit-override-balance") as HTMLInputElement;
+    const balanceInput = c.querySelector("#overrides-table .edit-override-balance") as HTMLInputElement; // type-safety-ok: test DOM query cast, file convention
     expect(document.activeElement).toBe(balanceInput);
     expect(balanceInput.value).toBe("42");
   });
