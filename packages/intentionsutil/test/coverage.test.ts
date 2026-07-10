@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { IntentionNode } from "../src/schema.js";
+import type { IntentionNode, OfficeHours } from "../src/schema.js";
 import { computeReviewCoverage, renderCoverageTable } from "../src/coverage.js";
+
+/** A well-formed office_hours record for a parked fixture node. */
+function parked(reason: string): OfficeHours {
+  return { reason, since: "2026-07-01", recommendation: null };
+}
 
 /** Build an IntentionNode fixture, filling required/default fields. */
 function node(partial: Partial<IntentionNode> & { id: string }): IntentionNode {
@@ -106,7 +111,7 @@ describe("computeReviewCoverage — path precedence (rule 3)", () => {
       id: "tactic-parked-review",
       kind: "tactic",
       phase: "draft",
-      office_hours: { reason: "review strategy-x someday" } as never,
+      office_hours: parked("review strategy-x someday"),
     });
     const bodyById = new Map<string, string>([
       ["tactic-parked-review", "This entry reviews strategy-x in prose."],
@@ -123,8 +128,8 @@ describe("computeReviewCoverage — path precedence (rule 3)", () => {
     ]);
     const nodes = [
       subject,
-      node({ id: "entry-b", kind: "tactic", phase: "qa", office_hours: { reason: "r" } as never }),
-      node({ id: "entry-a", kind: "tactic", phase: "qa", office_hours: { reason: "r" } as never }),
+      node({ id: "entry-b", kind: "tactic", phase: "qa", office_hours: parked("r") }),
+      node({ id: "entry-a", kind: "tactic", phase: "qa", office_hours: parked("r") }),
     ];
     const rows = computeReviewCoverage(nodes, bodyById);
     expect(rowFor(rows, "strategy-x").path).toBe("frontier-entry:entry-a");
@@ -136,7 +141,7 @@ describe("computeReviewCoverage — path precedence (rule 3)", () => {
       id: "tactic-done",
       kind: "tactic",
       phase: "done",
-      office_hours: { reason: "review strategy-x" } as never,
+      office_hours: parked("review strategy-x"),
     });
     const bodyById = new Map<string, string>([["tactic-done", "reviews strategy-x"]]);
     const rows = computeReviewCoverage([subject, doneEntry], bodyById);

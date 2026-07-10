@@ -121,6 +121,11 @@ function pathOf(
   return MISSING;
 }
 
+/** A non-array, non-null object — a plain record we can enumerate by key. */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
 /**
  * Recursively collect every string value carried under an attributes key named
  * `last_assessed` or `last_exercised`, at any nesting depth. Delegations carry
@@ -132,8 +137,8 @@ function collectStampStrings(value: unknown, out: string[]): void {
     for (const element of value) collectStampStrings(element, out);
     return;
   }
-  if (value !== null && typeof value === "object") {
-    for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+  if (isRecord(value)) {
+    for (const [key, nested] of Object.entries(value)) {
       if ((key === "last_assessed" || key === "last_exercised") && typeof nested === "string") {
         out.push(nested);
       }
