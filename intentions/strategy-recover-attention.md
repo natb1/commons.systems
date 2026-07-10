@@ -76,7 +76,9 @@ validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
-rounds: null
+rounds:
+  count: 0
+  last_completed: null
 attributes:
   conditions:
     - open formats (PDF, EPUB, RSS, plain audio files) remain obtainable outside

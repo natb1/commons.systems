@@ -18,13 +18,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-attention-surface-graph-read
   pr: 2780
   attempts:
     fix: 2
-  markers: []
+  markers:
+    - qa-done
   strategy_fingerprint: null
 validates: []
 blocked_by: []
