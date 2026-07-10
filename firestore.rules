@@ -526,6 +526,14 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Received webmentions. Written only by the admin-SDK `webmention` function
+    // after it verifies the source links to the target; the client SDK never
+    // touches this store (mentions are stored, not displayed). Deny all client
+    // access — reads and writes both.
+    match /webmentions/{env}/mentions/{id} {
+      allow read, write: if false;
+    }
+
     // SCAFFOLD MARKER: deny-all catch-all. Do not edit or move this comment.
     // InsertFirestoreRules inserts new rule blocks immediately above this line.
     match /{document=**} {
