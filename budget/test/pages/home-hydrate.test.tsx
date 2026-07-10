@@ -178,7 +178,7 @@ describe("Transactions table interactivity (blur-save + infinite-scroll) — Uni
 
     it("rejects a cleared reimbursement instead of persisting 0%", async () => {
       const c = await renderTable([txn({ reimbursement: 50, budget: "budget-food" })]);
-      const input = c.querySelector(".edit-reimbursement") as HTMLInputElement;
+      const input = c.querySelector(".edit-reimbursement") as HTMLInputElement; // type-safety-ok: test DOM query
       input.value = "";
       blur(input);
       await flush();

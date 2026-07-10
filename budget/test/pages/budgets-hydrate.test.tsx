@@ -191,7 +191,7 @@ describe("Budgets table interactivity (blur/change save) — Unit 3 contract", (
 
   it("rejects a cleared allowance instead of persisting 0", async () => {
     const c = await renderBudgets([budget({ allowance: 150 })]);
-    const input = c.querySelector(".edit-allowance") as HTMLInputElement;
+    const input = c.querySelector(".edit-allowance") as HTMLInputElement; // type-safety-ok: test DOM query
     input.value = "";
     blur(input);
     await flush();

@@ -2,7 +2,7 @@
  * Format a UTC-midnight timestamp as an "M/D/YYYY" calendar date using its UTC
  * fields.
  *
- * Transaction dates are stored as UTC midnight throughout the budget math layer.
+ * Transaction dates are stored at UTC midnight throughout the budget math layer.
  * Rendering them with `toLocaleDateString()` uses the browser/process timezone,
  * so for a user west of UTC a txn dated 2025-01-22 (00:00Z) renders as the
  * previous day ("1/21/2025"). Reading the UTC fields (`getUTC*`) instead keeps

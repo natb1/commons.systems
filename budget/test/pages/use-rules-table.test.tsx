@@ -29,7 +29,7 @@ import { Rules } from "../../src/pages/Rules";
 
 function rule(overrides: Partial<Rule> = {}): Rule {
   return {
-    id: "r-cat-1" as RuleId,
+    id: "r-cat-1" as RuleId, // type-safety-ok: test fixture branded id
     type: "categorization",
     pattern: "coffee",
     target: "Food:Coffee",
@@ -42,12 +42,12 @@ function rule(overrides: Partial<Rule> = {}): Rule {
     matchCategory: null,
     groupId: null,
     ...overrides,
-  } as Rule;
+  } as Rule; // type-safety-ok: test fixture cast
 }
 
 function normRule(overrides: Partial<NormalizationRule> = {}): NormalizationRule {
   return {
-    id: "n-1" as NormalizationRuleId,
+    id: "n-1" as NormalizationRuleId, // type-safety-ok: test fixture branded id
     pattern: "amzn",
     patternType: null,
     canonicalDescription: "Amazon",
@@ -57,7 +57,7 @@ function normRule(overrides: Partial<NormalizationRule> = {}): NormalizationRule
     priority: 100,
     groupId: null,
     ...overrides,
-  } as NormalizationRule;
+  } as NormalizationRule; // type-safety-ok: test fixture cast
 }
 
 const defaultBudgets = [
@@ -93,7 +93,7 @@ async function renderRules(rules: Rule[], normRules: NormalizationRule[]): Promi
 function priorityInput(container: HTMLElement, ruleType: string): HTMLInputElement {
   const input = container.querySelector(
     `.rule-row[data-rule-type="${ruleType}"] .edit-priority`,
-  ) as HTMLInputElement | null;
+  ) as HTMLInputElement | null; // type-safety-ok: test DOM query
   if (!input) throw new Error(`no edit-priority input for ${ruleType}`);
   return input;
 }
