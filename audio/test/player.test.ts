@@ -235,6 +235,42 @@ describe("initPlayer", () => {
       expect(playlistEl.querySelector(".playlist-empty")).not.toBeNull();
       expect(audioEl.getAttribute("src")).toBeNull();
     });
+
+    it("stops (does not wrap to track 0) when removing the playing last track", async () => {
+      mockResolveAudioSource
+        .mockResolvedValueOnce("blob:http://localhost/t1-blob")
+        .mockResolvedValueOnce("blob:http://localhost/t2-blob");
+
+      const player = initPlayer(audioEl, playlistEl);
+      player.add(track1);
+      player.add(track2);
+
+      await vi.waitFor(() => {
+        expect(audioEl.play).toHaveBeenCalledTimes(1);
+      });
+
+      // Advance so the LAST track (track2) is the currently-playing one.
+      audioEl.dispatchEvent(new Event("ended"));
+      await vi.waitFor(() => {
+        expect(audioEl.play).toHaveBeenCalledTimes(2);
+      });
+      expect(playlistEl.querySelector(".playlist-active")?.textContent).toContain(
+        "Song Two",
+      );
+
+      const pauseSpy = vi.spyOn(audioEl, "pause");
+      // Remove the currently-playing last-in-queue track.
+      player.remove(track2.id);
+
+      // Playback must STOP, not wrap to index 0 and force-play track1 from 0:00.
+      expect(pauseSpy).toHaveBeenCalled();
+      expect(playlistEl.querySelector(".playlist-active")).toBeNull();
+      // No third play() — track1 was NOT force-restarted.
+      expect(audioEl.play).toHaveBeenCalledTimes(2);
+      // track1 remains queued (removal targeted only track2).
+      expect(player.isQueued(track1.id)).toBe(true);
+      expect(playlistEl.textContent).toContain("Song One");
+    });
   });
 
   describe("isQueued", () => {
@@ -724,6 +760,104 @@ describe("initPlayer", () => {
       // Dispatching loadedmetadata should be a no-op (no listener registered for pos=0)
       audioEl.dispatchEvent(new Event("loadedmetadata"));
       expect(audioEl.currentTime).toBe(0);
+    });
+  });
+
+  describe("position-persist throttle cancellation", () => {
+    // Flush the resolved-promise microtask chain (resolve → src → play) under
+    // fake timers, which fake setTimeout but not the microtask queue.
+    async function flushMicrotasks(): Promise<void> {
+      for (let i = 0; i < 6; i++) await Promise.resolve();
+    }
+
+    it("cancels a pending throttle on track change (no stale-position persist)", async () => {
+      vi.useFakeTimers();
+      try {
+        mockResolveAudioSource
+          .mockResolvedValueOnce("blob:http://localhost/t1-blob")
+          .mockResolvedValueOnce("blob:http://localhost/t2-blob");
+
+        const player = initPlayer(audioEl, playlistEl);
+        player.add(track1);
+        player.add(track2);
+        await flushMicrotasks();
+        expect(audioEl.play).toHaveBeenCalledTimes(1);
+
+        // track1 progresses to 0:90 and arms the position-persist throttle.
+        Object.defineProperty(audioEl, "currentTime", {
+          configurable: true,
+          value: 90,
+        });
+        audioEl.dispatchEvent(new Event("timeupdate"));
+
+        // Advance to track2. playTrack must cancel the throttle armed by track1.
+        audioEl.dispatchEvent(new Event("ended"));
+        await flushMicrotasks();
+        expect(audioEl.play).toHaveBeenCalledTimes(2);
+
+        const callsBefore = mockSavePlayerState.mock.calls.length;
+        // Run well past the 3000ms throttle window. Without cancellation the
+        // stale timer would fire persistState(90) against now-current track2.
+        await vi.advanceTimersByTimeAsync(4000);
+        await flushMicrotasks();
+        expect(mockSavePlayerState.mock.calls.length).toBe(callsBefore);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("cancels a pending throttle on stop (no persist against a stopped queue)", async () => {
+      vi.useFakeTimers();
+      try {
+        const player = initPlayer(audioEl, playlistEl);
+        player.add(track1);
+        await flushMicrotasks();
+        expect(audioEl.play).toHaveBeenCalledTimes(1);
+
+        Object.defineProperty(audioEl, "currentTime", {
+          configurable: true,
+          value: 90,
+        });
+        audioEl.dispatchEvent(new Event("timeupdate")); // arm the throttle
+
+        // Removing the only track calls stop(), which must cancel the throttle.
+        player.remove(track1.id);
+        await flushMicrotasks();
+
+        const callsBefore = mockSavePlayerState.mock.calls.length;
+        await vi.advanceTimersByTimeAsync(4000);
+        await flushMicrotasks();
+        expect(mockSavePlayerState.mock.calls.length).toBe(callsBefore);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("still persists live position while a single track keeps playing", async () => {
+      vi.useFakeTimers();
+      try {
+        const player = initPlayer(audioEl, playlistEl);
+        player.add(track1);
+        await flushMicrotasks();
+
+        Object.defineProperty(audioEl, "currentTime", {
+          configurable: true,
+          value: 45,
+        });
+        const callsBefore = mockSavePlayerState.mock.calls.length;
+        audioEl.dispatchEvent(new Event("timeupdate")); // arm the throttle
+
+        // No track change/stop: the throttle should fire normally.
+        await vi.advanceTimersByTimeAsync(3500);
+        await flushMicrotasks();
+        expect(mockSavePlayerState.mock.calls.length).toBe(callsBefore + 1);
+        const lastCall = mockSavePlayerState.mock.calls.at(-1)![0] as {
+          positionSeconds: number;
+        };
+        expect(lastCall.positionSeconds).toBe(45);
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 });
