@@ -23,12 +23,13 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-worker-start-revalidation
   pr: 2792
   attempts: {}
-  markers: []
+  markers:
+    - qa-done
   strategy_fingerprint: null
 validates: []
 blocked_by:
