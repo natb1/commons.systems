@@ -53,18 +53,29 @@ nonexistent) directory, with no override flag.
   (`write-node.ts:59`). (The exported `writeNodeFromJson(intentionsDir, …)`
   helper *does* take the dir — so the coupling is in the CLI entrypoint, not the
   logic.)
-- Same 3-up pattern, same hardcoded `intentions/` join, repeated in the other
-  wrapper scripts: `scripts/review-coverage.ts:28-29`,
-  `scripts/select-targets.ts:31-32` (and peers under `scripts/`).
+- Same 3-up pattern, same hardcoded `intentions/` join with no override,
+  repeated in `scripts/review-coverage.ts:28-29`,
+  `scripts/detect-rung.ts:25-26`, `scripts/dump-node.ts:34-35`,
+  `scripts/frontier-view.ts:26-27`, `scripts/office-hours-select.ts:37-38`,
+  and `scripts/read-sensors.ts:43-44`.
+- Two peers already carry the fix this gap recommends:
+  `scripts/select-targets.ts:31-45` and
+  `scripts/check-node-selection.ts:196-212` compute the identical
+  repo-relative default but accept a `--dir <intentions-dir>` flag that
+  overrides it. (An earlier pass of this audit misread `select-targets.ts` as
+  another hardcoded peer — it is not; its `--dir` flag is the pattern the
+  other six scripts above are missing.)
 
 **Adopter expectation violated:** "I can keep my graph wherever I like and run
-the tooling against it." The library honors this; the CLI wrappers do not.
+the tooling against it." The library honors this; six of the eight CLI
+wrappers surveyed do not.
 
 **Severity: DEGRADE, not blocker.** The library API (`store.ts`) is fully
-layout-agnostic, and `validate-graph.ts` already accepts a directory argument.
-An adopter can either mirror this repo's layout or call the library functions
-directly. The fix (thread a `--dir`/`INTENTIONS_DIR` override through the CLI
-entrypoints) is small and additive.
+layout-agnostic, `validate-graph.ts` already accepts a directory argument, and
+two of the wrapper scripts (`select-targets.ts`, `check-node-selection.ts`)
+already implement a `--dir` override. That in-repo precedent is direct
+evidence the fix (thread the same `--dir`/`INTENTIONS_DIR` override through
+the remaining CLI entrypoints) is small and additive, not speculative.
 
 ## Gap 2 — the package is not consumable as a normal npm dependency
 
