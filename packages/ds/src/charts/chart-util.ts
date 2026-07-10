@@ -20,7 +20,29 @@ export function mountResponsiveChart(slot: HTMLElement, render: (width: number) 
   const w = slot.clientWidth || FALLBACK_CONTAINER_WIDTH;
   slot.replaceChildren(render(w));
   let last = w;
-  if (typeof ResizeObserver === "undefined") return () => {};
+
+  // The first render can run before the slot is laid out or attached, forcing
+  // the fallback width (640) and fallback theme colors (getThemeFg -> #ddd on a
+  // detached node). The ResizeObserver correction below is gated on a >=1px
+  // delta, so a real slot width coincidentally within 1px of 640 would freeze
+  // the chart on the fallback color forever. Re-measure once after mount,
+  // unconditionally, so the corrective render always runs regardless of the
+  // delta. rAF fires after layout, so clientWidth and getComputedStyle are
+  // accurate by then.
+  let rafId = 0;
+  if (typeof requestAnimationFrame !== "undefined") {
+    rafId = requestAnimationFrame(() => {
+      if (!slot.isConnected) return;
+      const measured = slot.clientWidth || FALLBACK_CONTAINER_WIDTH;
+      last = measured;
+      slot.replaceChildren(render(measured));
+    });
+  }
+  const cancelRaf = () => {
+    if (rafId && typeof cancelAnimationFrame !== "undefined") cancelAnimationFrame(rafId);
+  };
+
+  if (typeof ResizeObserver === "undefined") return cancelRaf;
   const obs = new ResizeObserver((entries) => {
     if (!slot.isConnected) {
       obs.disconnect();
@@ -34,7 +56,10 @@ export function mountResponsiveChart(slot: HTMLElement, render: (width: number) 
     }
   });
   obs.observe(slot);
-  return () => obs.disconnect();
+  return () => {
+    cancelRaf();
+    obs.disconnect();
+  };
 }
 
 /** Reads a trimmed CSS custom property off `container` (or a provided computed style). */
