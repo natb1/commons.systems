@@ -28,13 +28,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-align-curriculum-maintenance
   pr: 2799
   attempts: {}
   markers:
     - planned
+    - qa-passed
   strategy_fingerprint: 7a69fe4c494003260413fb401128c7efcf25eb7122f2e9b7fd9adbc3b0997cdf
 validates: []
 blocked_by: []
