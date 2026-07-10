@@ -1,6 +1,19 @@
 export const AUDIO_FORMATS = ["mp3", "m4a", "flac", "ogg", "wav"] as const;
 export type AudioFormat = (typeof AUDIO_FORMATS)[number];
 
+/**
+ * The single authoritative extension→MIME map for the supported DRM-free audio
+ * formats, keyed by the closed `AudioFormat` union. Both the cloud storage path
+ * and the local-folder source key off this map, so the two can never drift.
+ */
+export const AUDIO_MIME_TYPES: Record<AudioFormat, string> = {
+  mp3: "audio/mpeg",
+  m4a: "audio/mp4",
+  flac: "audio/flac",
+  ogg: "audio/ogg",
+  wav: "audio/wav",
+};
+
 export interface AudioItem {
   readonly id: string;
   readonly title: string;
