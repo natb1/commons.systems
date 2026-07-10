@@ -26,6 +26,7 @@ execution:
     qa: 1
   markers:
     - qa-done
+    - reviewed
   strategy_fingerprint: 157bc07dd1dbc4a1c7a5095f7c3094ee88accf5879271bc6d2c4cd4794029848
 validates: []
 blocked_by: []
