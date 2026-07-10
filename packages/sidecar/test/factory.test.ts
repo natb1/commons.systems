@@ -205,6 +205,38 @@ describe("createSidecar factory", () => {
     expect(onDisk?.values).toEqual({ a: 1, b: 2 });
   });
 
+  // The read-merge-write re-reads on-disk state on every write, so it can
+  // discover corruption another tab introduced after our clean load — not
+  // just at load time. That must suppress the disk write (preserving the
+  // recoverable bytes) while still folding the patch into the in-memory
+  // model, matching the load-time corruption contract.
+  it("a write-time on-disk corruption suppresses the disk write but keeps the in-memory merge", async () => {
+    const disk: DiskCell = { content: null };
+    const { dir } = makeDir(disk);
+    const s = makeHandle();
+    s.setLocalDirectory(dir, true);
+
+    await s.enqueueWrite({ values: { a: 1 } });
+    await s.flushWrites();
+    const beforeCorruption = disk.content;
+
+    // Simulate another tab clobbering the file with garbage between our load
+    // and this write's read-merge-write.
+    disk.content = "not json{";
+
+    await s.enqueueWrite({ values: { b: 2 } });
+    await s.flushWrites();
+
+    // The disk write was suppressed: raw content is still the garbage, not a
+    // freshly-serialized model.
+    expect(disk.content).toBe("not json{");
+    expect(disk.content).not.toBe(beforeCorruption);
+
+    // The in-memory model still reflects the merge so the session stays usable.
+    const loaded = await s.ensureLoaded();
+    expect(loaded.values).toEqual({ a: 1, b: 2 });
+  });
+
   // --- Unit 2: surface persist failures ---
 
   // A failed disk write rejects the caller's promise instead of resolving.
