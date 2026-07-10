@@ -32,14 +32,9 @@ validates:
   - strategy-philosophical-grounding
 blocked_by: []
 office_hours:
-  reason: "Personal reading, one sitting of at most 30 author-minutes: read
-    Confessions VII.9-17 against tradition-augustine. Not claude-executable —
-    the chunk exists to verify the delegated articulation personally (the
-    recovery path of delegation-philosophical-articulation). At office-hours:
-    re-open the questions in the node body against the text; amend the record
-    where the reading contradicts it (the reading wins), ratify where it holds;
-    stamp the delegation's last_exercised; the completed chunk counts toward
-    strategy-philosophical-grounding's signal."
+  reason: "See tactic-tradition-reading-program → shared chunk office-hours reason
+    (verify-record). This chunk: Confessions VII.9-17 against
+    tradition-augustine."
   since: 2026-07-08
   recommendation: null
 pace_exempt: false

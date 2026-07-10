@@ -30,9 +30,7 @@ rationale: >-
   while a terminal happens to be open".
 reading: null
 gap: null
-serves:
-  - virtue-progressive-detachment
-  - virtue-alignment-of-attachments
+serves: []
 recovers: []
 clarifications:
   - question: What makes unattended execution safe at the harness layer?

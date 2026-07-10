@@ -1,8 +1,8 @@
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
 
 export type PostMeta =
-  | { id: string; title: string; published: true; publishedAt: string; filename: string; previewImage?: string; previewDescription?: string }
-  | { id: string; title: string; published: false; publishedAt: null; filename: string; previewImage?: string; previewDescription?: string };
+  | { id: string; title: string; published: true; publishedAt: string; filename: string; previewImage?: string; previewDescription?: string; syndication?: string[] }
+  | { id: string; title: string; published: false; publishedAt: null; filename: string; previewImage?: string; previewDescription?: string; syndication?: string[] };
 
 export type PublishedPost = Extract<PostMeta, { published: true }>;
 
@@ -36,6 +36,14 @@ export function validatePublishedPosts(seed: Pick<SeedSpec, "collections">): Pub
     if (data.previewDescription !== undefined && typeof data.previewDescription !== "string") {
       throw new Error(`Post "${doc.id}" has non-string previewDescription`);
     }
+    if (data.syndication !== undefined) {
+      if (!Array.isArray(data.syndication)) {
+        throw new Error(`Post "${doc.id}" has non-array syndication`);
+      }
+      if (!data.syndication.every((u): u is string => typeof u === "string")) {
+        throw new Error(`Post "${doc.id}" has non-string syndication entry`);
+      }
+    }
     published.push({
       id: doc.id,
       title: data.title,
@@ -44,6 +52,7 @@ export function validatePublishedPosts(seed: Pick<SeedSpec, "collections">): Pub
       filename: data.filename,
       previewImage: data.previewImage,
       previewDescription: data.previewDescription,
+      syndication: data.syndication,
     });
   }
 

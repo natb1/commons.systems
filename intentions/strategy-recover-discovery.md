@@ -21,9 +21,7 @@ rationale: >-
   tooling its current materialization.
 reading: null
 gap: null
-serves:
-  - virtue-progressive-detachment
-  - virtue-alignment-of-attachments
+serves: []
 recovers:
   - delegation-attention-services
 clarifications: []
@@ -64,6 +62,7 @@ office_hours:
     /align-strategy, then re-run /align-tactics; the existing draft
     tactic-feed-ingestion is the input to that round."
   since: 2026-07-07
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes:

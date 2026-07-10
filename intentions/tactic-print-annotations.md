@@ -23,13 +23,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-print-annotations
   pr: 2806
   attempts: {}
   markers:
     - planned
+    - qa-passed
   strategy_fingerprint: null
 validates:
   - strategy-recover-knowledge

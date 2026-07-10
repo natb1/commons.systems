@@ -50,8 +50,10 @@ clarifications:
       foundation-laying while the deepest captures stand open. Recorded
       2026-07-06 interview."
   - question: Why does a strategy for resolving capture carry no recovers edge?
-    answer: "Sequencing is not unwinding — the precedent is
-      strategy-realign-attachments, which abstains for the same reason. The
+    answer: "Sequencing is not unwinding (kind-delegation's abstention
+      doctrine, 2026-07-09, is the auditable home: a strategy that is not
+      unwinding an entered delegation is not a recovers target) — the precedent
+      is strategy-realign-attachments, which abstains for the same reason. The
       recovers edges stay on the strategies performing the recovery:
       strategy-recover-attention, strategy-recover-finance,
       strategy-own-audience and strategy-recover-publishing,
