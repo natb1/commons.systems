@@ -1,4 +1,5 @@
-import type { Execution, Rounds } from "./schema.js";
+import type { Execution, IntentionNode, Rounds } from "./schema.js";
+import { servingStrategyIds } from "./router.js";
 
 // Graph router v2, second half: phase transitions, execution-state writes,
 // the reconciler sweep, and completion pruning (tactic-graph-router-transitions).
@@ -274,6 +275,48 @@ export function hasNeedsMainResidue(body: string): boolean {
  */
 export function stampRound(rounds: Rounds | null, date: string): Rounds {
   return { count: (rounds?.count ?? 0) + 1, last_completed: date };
+}
+
+// --- Completion pruning graph edits (Unit 2) --------------------------------
+
+/**
+ * The ids of nodes that list `prunedId` in their `blocked_by`. When a `done`
+ * tactic is pruned, `validateGraph` Rule 13 rejects any surviving `blocked_by`
+ * that no longer resolves, so these inbound edges MUST have `prunedId` removed
+ * in the SAME commit as the prune. Absence already reads as completion to the
+ * selector (`blockersComplete`), so removal is safe and semantics-preserving.
+ */
+export function inboundBlockers(prunedId: string, nodes: readonly IntentionNode[]): string[] {
+  return nodes.filter((n) => n.blocked_by.includes(prunedId)).map((n) => n.id);
+}
+
+/**
+ * Whether a `strategy` node is a serving strategy of `tactic` and `tactic` is
+ * its LAST non-draft child — i.e. no OTHER non-draft tactic still serves that
+ * strategy once `tactic` prunes. Draft tactics are `/align-tactics` input, not
+ * children, so they never keep a round open. When true, pruning `tactic` closes
+ * a round on `strategy` (`stampRound`).
+ *
+ * `nodes` is the full store; a tactic is "non-draft" when its `phase` is set and
+ * not `draft`. `tactic` itself is excluded from the remaining-children scan (it
+ * is the one being pruned).
+ */
+export function strategiesToStamp(tactic: IntentionNode, nodes: readonly IntentionNode[]): string[] {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const serving = servingStrategyIds(tactic, byId);
+  const out: string[] = [];
+  for (const sid of serving) {
+    const others = nodes.filter(
+      (n) =>
+        n.id !== tactic.id &&
+        n.kind === "tactic" &&
+        n.phase !== null &&
+        n.phase !== "draft" &&
+        servingStrategyIds(n, byId).has(sid),
+    );
+    if (others.length === 0) out.push(sid);
+  }
+  return out.sort();
 }
 
 // --- Freshness-gate helpers --------------------------------------------------

@@ -38,6 +38,8 @@ export {
   reconcileClosedPhase,
   hasNeedsMainResidue,
   stampRound,
+  inboundBlockers,
+  strategiesToStamp,
   parseScopeStamp,
   isScopeStale,
   isStrategyStale,

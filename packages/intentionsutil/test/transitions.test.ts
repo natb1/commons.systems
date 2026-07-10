@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Execution } from "../src/schema.js";
+import type { Execution, IntentionNode } from "../src/schema.js";
 import {
   PLANNED_MARKER,
   QA_DONE_MARKER,
@@ -14,10 +14,40 @@ import {
   reconcileClosedPhase,
   hasNeedsMainResidue,
   stampRound,
+  inboundBlockers,
+  strategiesToStamp,
   parseScopeStamp,
   isScopeStale,
   isStrategyStale,
 } from "../src/transitions.js";
+
+function anode(partial: Partial<IntentionNode> & { id: string; kind: string }): IntentionNode {
+  return {
+    id: partial.id,
+    kind: partial.kind,
+    statement: partial.statement ?? `Statement for ${partial.id}`,
+    owner: partial.owner ?? "ai",
+    status: partial.status ?? "codified",
+    parent: partial.parent ?? null,
+    serves: partial.serves ?? [],
+    recovers: partial.recovers ?? [],
+    rationale: partial.rationale ?? null,
+    reading: partial.reading ?? null,
+    gap: partial.gap ?? null,
+    clarifications: partial.clarifications ?? [],
+    tooling_goals: partial.tooling_goals ?? [],
+    success_signal: partial.success_signal ?? null,
+    attention: partial.attention ?? null,
+    phase: partial.phase ?? null,
+    execution: partial.execution ?? null,
+    validates: partial.validates ?? [],
+    blocked_by: partial.blocked_by ?? [],
+    office_hours: partial.office_hours ?? null,
+    pace_exempt: partial.pace_exempt ?? false,
+    rounds: partial.rounds ?? null,
+    attributes: partial.attributes ?? {},
+  } as IntentionNode;
+}
 
 function exec(partial: Partial<Execution> = {}): Execution {
   return {
@@ -199,6 +229,46 @@ describe("stampRound", () => {
       count: 2,
       last_completed: "2026-07-10",
     });
+  });
+});
+
+describe("inboundBlockers", () => {
+  it("finds every node listing the pruned id in blocked_by", () => {
+    const nodes = [
+      anode({ id: "tactic-p", kind: "tactic", phase: "done" }),
+      anode({ id: "tactic-a", kind: "tactic", phase: "implement", blocked_by: ["tactic-p"] }),
+      anode({ id: "tactic-b", kind: "tactic", phase: "implement", blocked_by: ["tactic-p", "tactic-x"] }),
+      anode({ id: "tactic-c", kind: "tactic", phase: "implement", blocked_by: ["tactic-x"] }),
+    ];
+    expect(inboundBlockers("tactic-p", nodes)).toEqual(["tactic-a", "tactic-b"]);
+    expect(inboundBlockers("tactic-none", nodes)).toEqual([]);
+  });
+});
+
+describe("strategiesToStamp", () => {
+  it("stamps a strategy when the pruned tactic is its last non-draft child", () => {
+    const strat = anode({ id: "strategy-s", kind: "strategy" });
+    const last = anode({ id: "tactic-last", kind: "tactic", phase: "done", serves: ["strategy-s"] });
+    const draftSibling = anode({ id: "tactic-draft", kind: "tactic", phase: "draft", serves: ["strategy-s"] });
+    const nodes = [strat, last, draftSibling];
+    // Only a draft sibling remains — drafts do not keep a round open.
+    expect(strategiesToStamp(last, nodes)).toEqual(["strategy-s"]);
+  });
+
+  it("does not stamp while a non-draft sibling remains", () => {
+    const strat = anode({ id: "strategy-s", kind: "strategy" });
+    const pruned = anode({ id: "tactic-1", kind: "tactic", phase: "done", serves: ["strategy-s"] });
+    const sibling = anode({ id: "tactic-2", kind: "tactic", phase: "qa", serves: ["strategy-s"] });
+    expect(strategiesToStamp(pruned, [strat, pruned, sibling])).toEqual([]);
+  });
+
+  it("resolves serving strategies through the parent chain", () => {
+    const strat = anode({ id: "strategy-s", kind: "strategy" });
+    const root = anode({ id: "tactic-root", kind: "tactic", phase: "done", serves: ["strategy-s"] });
+    const child = anode({ id: "tactic-child", kind: "tactic", phase: "done", parent: "tactic-root" });
+    // Pruning the child: the root still serves the strategy and is non-draft,
+    // so the round is not yet complete.
+    expect(strategiesToStamp(child, [strat, root, child])).toEqual([]);
   });
 });
 
