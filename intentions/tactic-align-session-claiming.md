@@ -38,7 +38,7 @@ attention:
     strategy's own boost 5, authored 8) — above curriculum-execution tooling
     (boost 7) and above every other tactic in this strategy's subtree (inherited
     5, unboosted)."
-phase: qa
+phase: review
 execution:
   branch: tactic-align-session-claiming
   pr: 2804
