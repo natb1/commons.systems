@@ -189,7 +189,11 @@ fi
 # is completely unchanged on every normal tick.
 #
 # The producer OWNS sentinel writes; the tick only READS the sentinel to decide
-# whether to launch, avoiding relaunching on every (frequent) tick.
+# whether to launch, avoiding relaunching on every (frequent) tick. This
+# once-per-UTC-day launch still yields COMPLETE day docs because the writer
+# finalizes in arrears: each run re-produces the sentinel's last-day doc (whose
+# earlier write captured only a partial day) before writing today's provisional
+# snapshot, so day D's doc reflects the full day after the first tick of D+1.
 if [[ "${DISPATCH_TOPIC_USAGE_ENABLED:-}" == "1" ]]; then
   _TU_GROUP_ID="${DISPATCH_TOPIC_USAGE_GROUP_ID:-}"
   if [[ -z "$_TU_GROUP_ID" ]]; then
