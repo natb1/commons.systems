@@ -432,8 +432,9 @@ describe("IdbDataSource", () => {
         ds.updateJournalLegCleared("leg-2", true),
       ]);
       const legs = await ds.getJournalLegs();
-      expect(legs.find((l) => l.id === "leg-1")!.cleared).toBe(true);
-      expect(legs.find((l) => l.id === "leg-2")!.cleared).toBe(true);
+      const cleared = new Map(legs.map((l) => [l.id, l.cleared]));
+      expect(cleared.get("leg-1")).toBe(true);
+      expect(cleared.get("leg-2")).toBe(true);
     });
   });
 
