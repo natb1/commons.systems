@@ -120,6 +120,22 @@ describe("readTacticVelocity", () => {
     rmSync(repo, { recursive: true, force: true });
   });
 
+  it("does not count a phase:done transition on a non-ai-owned tactic as closed", () => {
+    const repo = initRepo();
+    writeFileSync(
+      join(repo, "intentions", "tactic-h.md"),
+      tacticFile("tactic-h", { owner: "human", phase: "implement" }),
+    );
+    commitAll(repo, "add human tactic");
+    writeFileSync(
+      join(repo, "intentions", "tactic-h.md"),
+      tacticFile("tactic-h", { owner: "human", phase: "done" }),
+    );
+    commitAll(repo, "close human tactic");
+    expect(readTacticVelocity(repo)).toBe("0 created / 0 closed (net +0)");
+    rmSync(repo, { recursive: true, force: true });
+  });
+
   it("counts deleting an owner: ai tactic as closed (negative net)", () => {
     const repo = initRepo();
     writeFileSync(join(repo, "intentions", "tactic-old.md"), tacticFile("tactic-old"));

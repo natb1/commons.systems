@@ -171,10 +171,15 @@ export function readWeeklyUtilization(rateLimitsPath: string): string {
  *  - Created = a commit adding an `intentions/tactic-*.md` whose frontmatter
  *    declares `owner: ai`. Draft tactics (`status: raw`, no phase) count —
  *    they are claude-eligible work entering the graph.
- *  - Closed = a commit setting such a node's phase to `done` (the added
- *    `phase: done` frontmatter line, nested under `attributes`) or deleting
- *    the file (gated on the removed `owner: ai` line, so only claude-eligible
- *    nodes count).
+ *  - Closed = a commit setting such a node's `phase` to `done` (the added
+ *    `phase: done` frontmatter line) or deleting the file (gated on the
+ *    removed `owner: ai` line, so only claude-eligible nodes count). The
+ *    phase-transition diff line carries no ownership context (`owner` is
+ *    rarely touched in the same commit), so that half is gated by reading
+ *    the file's content as of that commit (`git show <commit>:<path>`) and
+ *    checking it declares `owner: ai` — otherwise a human-owned tactic that
+ *    also carries a dispatch `phase` (e.g. a main-qa or reading-review node)
+ *    would inflate claude-eligible closure velocity.
  *
  * Both are line-level patch heuristics over `git log -p`, deduplicated by
  * path; a git failure (not a repo, no commits) reads as `"unknown"`.
@@ -208,13 +213,38 @@ export function readTacticVelocity(
     return "unknown";
   }
 
+  /**
+   * Whether `filePath` is an `owner: ai` node as of `commitHash`. Only
+   * called for the phase:done-transition case (see doc comment above); a
+   * failed lookup (e.g. the path is somehow unresolvable at that commit)
+   * degrades to "not ai-owned" rather than throwing, honoring the total
+   * sensor contract.
+   */
+  function isAiOwnedAt(commitHash: string, filePath: string): boolean {
+    try {
+      const content = execFileSync("git", ["show", `${commitHash}:${filePath}`], {
+        cwd: repoDir,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      });
+      return /^owner:\s*ai\s*$/m.test(content);
+    } catch {
+      return false;
+    }
+  }
+
   const created = new Set<string>();
   const closed = new Set<string>();
+  let commit: string | null = null;
   let path: string | null = null;
   let isNewFile = false;
   let isDeletedFile = false;
 
   for (const line of patch.split("\n")) {
+    if (/^[0-9a-f]{40}$/.test(line)) {
+      commit = line;
+      continue;
+    }
     const header = /^diff --git a\/(\S+) b\/(\S+)$/.exec(line);
     if (header !== null) {
       path = header[2];
@@ -241,7 +271,12 @@ export function readTacticVelocity(
       closed.add(path);
       continue;
     }
-    if (!isDeletedFile && /^\+\s*phase:\s*done\s*$/.test(line)) {
+    if (
+      !isDeletedFile &&
+      commit !== null &&
+      /^\+\s*phase:\s*done\s*$/.test(line) &&
+      isAiOwnedAt(commit, path)
+    ) {
       closed.add(path);
     }
   }
