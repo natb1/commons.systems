@@ -50,8 +50,8 @@ describe("renderQueueBand parked-only (unmeasured)", () => {
   it("reads the runway as 'not measured', not a real 'queue empty/stable'", () => {
     const section = renderQueueBand(parked);
     const state = section.querySelector(".queue-runway-state");
-    expect(state!.textContent).toBe("queue not measured (parked-only capture)");
-    expect(state!.classList.contains("unmeasured")).toBe(true);
+    expect(state!.textContent).toBe("queue not measured (parked-only capture)"); // type-safety-ok: test-only DOM query; a null match fails the assertion, not silently mistypes
+    expect(state!.classList.contains("unmeasured")).toBe(true); // type-safety-ok: test-only DOM query; a null match fails the assertion, not silently mistypes
   });
 });
 
