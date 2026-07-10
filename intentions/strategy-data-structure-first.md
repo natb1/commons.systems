@@ -80,6 +80,17 @@ clarifications:
       draft-refines-at-implementation answer: wording is still settled at
       README-rewrite time, but only within copy the author has approved.
       Recorded 2026-07-07 follow-up to the interview."
+  - question: The harness is called 'the most distinctive artifact' elsewhere — does
+      that contradict graph-as-product?
+    answer: "No — the claims layer, and this entry is the layered claim's one
+      auditable home (recorded 2026-07-09): the graph is the product; the
+      harness is its reference consumer AND remains the repo's most distinctive
+      artifact for practitioner distribution — a showcase implementation whose
+      distinctiveness serves distribution of the product, never a rival product
+      claim. The four practitioner-distribution nodes
+      (strategy-autonomous-execution, strategy-owned-orchestration,
+      strategy-progressive-validation, strategy-distribute-workflow) cite this
+      entry rather than restating the claim. Recorded 2026-07-09 interview."
 tooling_goals: []
 success_signal:
   observable: public tier-3 surfaces lead with the data-structure framing — a

@@ -39,11 +39,12 @@ office_hours:
     where it holds; stamp the delegation's last_exercised; the completed chunk
     counts toward strategy-philosophical-grounding's signal."
   since: 2026-07-06
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes:
   curriculum:
-    priority: 7
+    priority: 10
     passages:
       - work: Aristotle, Nicomachean Ethics
         range: IV.1

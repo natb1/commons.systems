@@ -12,13 +12,18 @@ rationale: "The deepest structural inheritance in the graph. kind-virtue's
   energeia; the tension machinery ('balanced, not summed; maximizing one against
   its partner is failure') is the doctrine of the mean rendered as graph
   topology; and virtue-philosophical-mobility is a phronesis-shaped root —
-  including its darkest clause, since 'capture corrupts the sensor that detects
-  capture' is Aristotle's point that vice destroys the archē of action (the
-  corrupted agent cannot perceive the corruption). The attachment ledger's
+  including its darkest clause — though the graph's capture doctrine was amended
+  2026-07-07 (tradition-plato, chunk-1 reading): capture MISDIRECTS the sensor
+  rather than destroys it, and Aristotle's reading here — vice destroys the
+  archē of action, the corrupted agent cannot perceive the corruption — is the
+  stronger corruption thesis, now a provisional divergence held open for the NE
+  VI reading (see diverged, added 2026-07-09). The attachment ledger's
   seriousness about externals is his too: eudaimonia needs external goods,
   against Stoic sufficiency. Structure is Aristotle's; method credit for the
-  dialectic itself goes to tradition-plato — the two partition cleanly, with no
-  live conflict. Recorded 2026-07-04 interview."
+  dialectic itself goes to tradition-plato — the two partition cleanly except at
+  the capture-doctrine locus, where a provisional Plato-over-Aristotle choice is
+  recorded (2026-07-09, on tradition-plato) pending the NE VI reading. Recorded
+  2026-07-04 interview."
 reading: null
 gap: null
 serves: []
@@ -42,9 +47,11 @@ attributes:
       constituent virtues'
     - "the doctrine of the mean (NE II.6) → tension_with semantics: sibling
       virtues balanced, not summed"
-    - phronesis, and vice corrupting the archē (NE VI) →
-      virtue-philosophical-mobility as non-delegable discernment; 'capture
-      corrupts the sensor'
+    - phronesis as non-delegable discernment, and vice corrupting the archē (NE
+      VI) → virtue-philosophical-mobility; the companion claim 'capture corrupts
+      the sensor' was amended 2026-07-07 to 'capture misdirects the sensor'
+      (tradition-plato, chunk-1 reading) — the corruption reading is now the
+      provisional divergence below, pending the NE VI chunk
     - external goods matter to eudaimonia (NE I.8-10) → the delegation ledger;
       attachments managed, not renounced (see tradition-stoicism, declined)
     - precision only as far as the subject admits (NE I.3) → the apex question
@@ -68,6 +75,13 @@ attributes:
       fallibilism grafted onto his psychology
     - the polis as virtue's precondition — the graph is practitioner-individual;
       community enters as calibration and gift-recipient, not as constitution
+    - "vice destroys the archē (the corruption thesis, NE VI) — vs the graph's
+      amended account that capture misdirects the sensor and agency is never
+      lost (tradition-plato, 2026-07-07 chunk-1 reading). Provisional divergence
+      recorded 2026-07-09 AHEAD of the Aristotle reading: the NE VI chunk must
+      resolve whether Aristotle's claim is truly the stronger corruption thesis
+      or compatible with misdirection; this entry retires or hardens accordingly
+      (matching provisional chosen_over on tradition-plato)"
   chosen_over:
     - "over tradition-kant at virtue-respect-for-persons' practice layer: how to
       respect well (when to promote, what counts as imposing) is phronesis, not
@@ -82,6 +96,6 @@ attributes:
   review_trigger: any strategy-philosophical-grounding round touching
     structure-level doctrine — hexis, tension semantics, phronesis, the apex
     question
-  last_assessed: 2026-07-05
+  last_assessed: 2026-07-09
 ---
 # Aristotelian ethics — the graph's structural chassis: virtue as hexis, tension as the mean, phronesis at the root

@@ -6,8 +6,9 @@ owner: human
 status: codified
 parent: null
 rationale: >-
-  virtue-philosophical-mobility cannot fully verify itself — capture corrupts
-  the sensor that detects capture — so its calibration must be external. Today
+  virtue-philosophical-mobility cannot fully verify itself — capture misdirects
+  the sensor that detects capture (Republic VII 518e-519b: the faculty keeps its
+  power, serves the wrong turning) — so its calibration must be external. Today
   the named calibration mechanism, adversarial review, runs on the audited
   vendor's own models: the align contrarian pass executes on the very delegation
   (delegation-anthropic-claude) it would have to catch. This strategy exists to
@@ -50,8 +51,13 @@ clarifications:
       and their texts are fixed points the audited vendor's models cannot
       rewrite. It feeds the same root while the practitioner tier reads zero,
       and fades to a supplement when live challenges recur. The Platonic ground
-      for both is the same: the freed prisoner cannot verify the turning alone
-      (Republic VII)."
+      for both, refined by the chunk-1 personal reading: capture misdirects the
+      sensor rather than destroys it (Republic VII 518e-519b), so the turning
+      may be self-initiated (the self-grown philosophers, 520b) but cannot be
+      trusted on self-report while the sensor is misdirected — verification is
+      what must be external, its roles being to guard the choice of liberator
+      against the sophist and to offer compulsion toward a good not yet seen.
+      Amended 2026-07-07 /reading-review chunk 1."
 tooling_goals: []
 success_signal:
   observable: external calibration events — a practitioner or peer challenge that

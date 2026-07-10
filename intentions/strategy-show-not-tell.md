@@ -29,7 +29,16 @@ gap: "no reading yet (threshold: no public artifact requires philosophical
 serves:
   - virtue-respect-for-persons
 recovers: []
-clarifications: []
+clarifications:
+  - question: What bounds the claims a demonstration may make?
+    answer: Demonstrated scale. The practice is demonstrated at individual and
+      household scale; public claims stay at that scale until a broader tier
+      validates more — the former CHARTER.md's scale-limits honesty (the
+      practice may be nothing more than lifestyle optimization for technical
+      professionals), recorded as a claims discipline here because this strategy
+      already owns per-artifact review at office-hours. The open question itself
+      is held on strategy-promote-progressive-detachment next to the privilege
+      gradient, deferred to external calibration. Recorded 2026-07-08 interview.
 tooling_goals: []
 success_signal:
   observable: public artifacts deliver value with zero philosophical framing —
@@ -37,9 +46,20 @@ success_signal:
   sensor: owner review of each public artifact at office-hours
   threshold: no public artifact requires philosophical buy-in to deliver its value
   is_proxy: true
+attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: false
+rounds: null
 attributes:
   conditions:
     - arguments fail to propagate; people respond to lived experience over
       persuasion
+    - no public claim exceeds demonstrated scale — individual and household
+      scale today; a claim of broader applicability waits for the tier whose
+      signal would validate it
 ---
 # Show, not tell — demonstration over argument

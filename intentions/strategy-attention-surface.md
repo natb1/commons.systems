@@ -153,11 +153,10 @@ validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
-rounds: null
+rounds:
+  count: 0
+  last_completed: null
 attributes:
-  rounds:
-    count: 0
-    last_completed: null
   conditions:
     - the local clone the surface reads stays fresh enough that attention and
       rank read from it track origin/main

@@ -17,9 +17,17 @@ rationale: >-
 
   The whole chain is skills and scripts in the repo, forkable and locally run —
   no platform runtime, per its parent strategy-owned-orchestration. That makes
-  it the artifact most distinctive for practitioner distribution: dual-tier in
-  the strategy-progressive-validation sense, the author's daily development tool
-  and the thing a practitioner would most plausibly fork.
+  it the artifact most distinctive for practitioner distribution (a layered
+  claim — the graph is the product, the harness its reference consumer;
+  canonical home strategy-data-structure-first): dual-tier in the
+  strategy-progressive-validation sense, the author's daily development tool and
+  the thing a practitioner would most plausibly fork.
+
+
+  That hand-off only holds if the chain runs unattended: the daemon must keep
+  ticking while the human is away — logged out, no interactive session — which
+  is what makes "engage only at escalation points" real rather than "engage only
+  while a terminal happens to be open".
 reading: null
 gap: null
 serves:
@@ -85,13 +93,71 @@ clarifications:
       tactic-ci-change-detection-transitive fixes; the answer to a detection gap
       is completing the map, never abandoning scoping for test-everything.
       Recorded 2026-07-07 interview."
-tooling_goals: []
+  - question: Does the backlog-drain success signal prove the autonomous chain is
+      running unattended?
+    answer: No. An interactive `claude agents` invocation spawns its own transient
+      daemon (a child of that process, tagged --origin transient) that keeps
+      background jobs running; on 2026-07-08 this masked a dead managed
+      dispatch-claude-daemon.service for roughly a day. So durability needs a
+      distinct liveness observable on the managed lingering daemon, read while
+      no interactive session is substituting for it. Recorded 2026-07-08
+      interview.
+  - question: Is running a managed daemon about pinning the chain to the latest
+      claude-code binary?
+    answer: No — the transient daemon already re-execs the current claude binary on
+      each launch, so it is never stale; it is the managed systemd daemon that
+      must be restarted onto the new store path after an upgrade (tracked
+      separately by tactic-mainqa-dispatch-daemon-restart). The reason to run a
+      managed lingering daemon is unattended durability across logout, a facet
+      distinct from version-pinning. Recorded 2026-07-08 interview.
+  - question: What must "keeps ticking while I'm away" survive?
+    answer: Logout and the absence of any interactive session — persistence via
+      systemd linger (users.users.n8.linger = true), independent of an
+      interactive claude agents process whose transient daemon dies with it.
+      Surviving host reboot and machine sleep / network drop are explicitly out
+      of scope for this requirement. Recorded 2026-07-08 interview.
+  - question: What host-environment invariant must the dispatch host's primary
+      checkout maintain?
+    answer: "The primary checkout at ~/natb1/commons.systems stays on the main
+      branch — never a feature branch. Branch work happens in worktrees; the
+      primary checkout is reserved for main. This is load-bearing for two
+      unattended paths: (a) dispatch's main-sync — dispatch-select-tick's `git
+      merge --ff-only origin/main` runs on the main worktree
+      (.claude/rules/sandbox.md) and can only fast-forward a checkout that is on
+      main; (b) the worktree-create hook resolves the project root from a
+      worktree with main checked out, so a non-main primary checkout makes
+      EnterWorktree/provisioning fail with 'no worktree with main checked out;
+      cannot resolve the project root'. Enforcement is prevent-at-source — no
+      dispatch/provisioning path may leave the primary checkout on a feature
+      branch (e.g. a failed `git worktree add`+chained `cd` that drops later git
+      ops into the primary checkout and switches it off main) — drafted at
+      tactic-primary-checkout-main-guard. Recorded 2026-07-08 interview."
+  - question: Does that invariant require the primary checkout to stay current with
+      origin/main, or only to be on the main branch?
+    answer: Only on the main branch. Staleness is expected and normal — the checkout
+      is necessarily behind origin/main between syncs; a separate freshness
+      requirement in the graph ensures a sync runs before executing tasks that
+      assume fresh main. Folding currency into this invariant would wrongly
+      treat an ordinary stale checkout as a violation. Worktrees are exempt —
+      they legitimately check out feature branches; the invariant is scoped to
+      the primary checkout alone. Recorded 2026-07-08 interview.
+tooling_goals:
+  - kind: sensor
+    statement: a managed dispatch daemon liveness sensor that reports whether the
+      lingering dispatch-claude-daemon.service is up and ticking unattended,
+      distinguishing it from a transient (--origin transient) daemon spawned by
+      an interactive claude agents session
 success_signal:
-  observable: attention economics — the chain drains the backlog while human
-    escalations stay bounded
-  sensor: the office-hours dashboard (backlog runway, capacity band, escalation queue)
-  threshold: backlog runway stays inside the capacity band without escalation
-    volume exceeding office-hours capacity
+  observable: attention economics — the managed lingering dispatch daemon drains
+    the backlog unattended (across logout, with no interactive claude agents
+    session substituting a transient daemon) while human escalations stay
+    bounded
+  sensor: the office-hours dashboard (backlog runway, capacity band, escalation
+    queue) plus a managed-daemon liveness check that distinguishes the lingering
+    user unit from a transient interactive daemon
+  threshold: the managed daemon runs continuously across logout and backlog runway
+    stays inside the capacity band without escalation volume exceeding
+    office-hours capacity
   is_proxy: true
 attention: null
 phase: null
@@ -109,5 +175,12 @@ attributes:
       read-only to sessions while skill scripts are auto-approved by path"
     - "the chain cannot suppress its own failure signals: test integrity is
       enforced — fix or escalate, never weaken"
+    - the dispatch daemon runs as a lingering systemd user service
+      (users.users.n8.linger = true), persisting across logout — not a transient
+      daemon tied to an interactive claude agents session
+    - the dispatch host's primary checkout (~/natb1/commons.systems) stays on
+      the main branch — never a feature branch — so dispatch's ff-only main-sync
+      and the worktree-create hook's project-root resolution both hold (currency
+      not required; a separate freshness requirement governs pre-task sync)
 ---
 # Run tactical execution through an owned autonomous dispatch chain

@@ -68,6 +68,10 @@
         packages = forAllSystems ({ pkgs, ... }: {
           dispatch = pkgs.callPackage ./nix/packages/dispatch.nix { };
           office-hours = pkgs.callPackage ./nix/packages/office-hours.nix { };
+          # WSL wezterm rebuilt from the pinned nightly (nix/home/wezterm-pin.nix).
+          # Exposed so `nix build .#wezterm` can verify the pin and so
+          # nix/home/sync-wezterm.sh can resolve the vendor hash against it.
+          wezterm = pkgs.callPackage ./nix/home/wezterm-package.nix { };
         });
 
         devShells = forAllSystems ({ pkgs, ... }:

@@ -29,7 +29,6 @@ serves:
   - virtue-respect-for-persons
 recovers:
   - delegation-social-publishing
-  - delegation-hosted-publishing
 clarifications:
   - question: Where does published content authoritatively live?
     answer: "In git: post bodies are markdown committed to the repo, and a typed TS
@@ -54,6 +53,14 @@ clarifications:
       code. The content license is a distinct decision from the code license
       recorded under strategy-open-source-as-gift. Recorded 2026-07-07
       interview.
+  - question: Why does recovers not include delegation-hosted-publishing?
+    answer: "A declined delegation is never a recovers target (kind-delegation's
+      abstention doctrine, 2026-07-09): hosted publishing was never entered, so
+      there is nothing to unwind — the guard relationship this rationale
+      describes lives in prose here and on the record itself, and the edge
+      recorded until 2026-07-09 overstated it. recovers keeps
+      delegation-social-publishing, an entered attachment this strategy's work
+      actually unwinds. Recorded 2026-07-09 interview."
 tooling_goals: []
 success_signal:
   observable: creative output lands on owned domains; platform posts are at most
