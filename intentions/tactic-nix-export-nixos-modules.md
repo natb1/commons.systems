@@ -22,12 +22,13 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: fix
+phase: qa
 execution:
   branch: tactic-nix-export-nixos-modules
   pr: 2834
   attempts: {}
-  markers: []
+  markers:
+    - fix->qa
   strategy_fingerprint: ad890cb118eee6d8398f7432525d7de820443b52bbfa6f058262157d6d07214d
 validates: []
 blocked_by: []
