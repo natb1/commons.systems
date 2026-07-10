@@ -351,8 +351,12 @@ result = {
 ```
 
 The Workflow's fix-authoring agents (non-isolated, Opus) have already edited the
-working tree by the time `result` is returned. The skill's context never holds raw
-findings — only this compact summary.
+working tree by the time `result` is returned. Their fix-agent prompts (built in
+`.claude/workflows/review-fix.js`, fix phase) carry, verbatim: "Read any file
+with the Read tool
+before your first Edit or Write to it in this session — the edit is rejected
+otherwise and the retry burns the tokens twice." The skill's context never holds
+raw findings — only this compact summary.
 
 ### 3. Commit the Workflow's working-tree edits via one commit-merge-push
 
