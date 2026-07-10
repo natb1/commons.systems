@@ -287,6 +287,38 @@ say so explicitly and prompt the author to run the re-evaluation as an
 inline `/align-tactics` pass in the same session — every round recorded on
 `strategy-graph-native-dispatch` so far has done exactly this by hand.
 
+**Curriculum enrollment (record time).** Maintaining the ever-expanding
+review curriculum is one of /align's roles
+(`strategy-graph-review-curriculum` clarification 5): every recorded node
+enrolls when it lands, and enrollment happens here, not in a later pass.
+Which mode a node enrolls in is derivable from its own record —
+held-on-trust/delegated content is mode A, author-owned content is mode B.
+
+- **Mode A — content held on trust.** When this round records a deferral or
+  a delegated/held-on-trust recording, land its born-parked re-validation
+  review item in the **same `graph-commit`** as the record it enrolls (bundle
+  it exactly like a draft tactic, step 5's bundling rule). That review item is
+  the node's curriculum-frontier entry, so its `statement` or body must
+  **name the enrolled node's id**: the coverage sensor
+  (`tactic-review-curriculum-coverage-sensor`) derives frontier linkage
+  mechanically by matching that id, so a review item that only alludes to the
+  node is invisible to it. Author the review item with the same
+  `write-node.ts --file` recipe as the step 4 draft-tactic byproduct. The
+  deferral typology — which held-on-trust content becomes a reading chunk
+  versus an office-hours sitting, and the born-parked field mechanics — is
+  owned by `tactic-align-interview-type-doctrine` on this same skill surface;
+  point there for it, do not restate it here. This clause carries only the
+  frontier-entry framing, the same-commit rule, and the id-naming requirement.
+- **Mode B — author-owned content.** Enrollment is implicit: being recorded
+  in the graph *is* enrollment, and the curriculum frontier's recursive scope
+  expansion is the recurrence mechanism that reaches the node — no action is
+  owed at record time. Never create a per-node review schedule, a standing
+  review item, or a side list for author-owned doctrine. Review items are
+  born-parked nodes derived from node status
+  (`strategy-graph-review-curriculum` condition: the curriculum stays
+  graph-encoded, never a hand-maintained side list); /align never maintains a
+  separate roster.
+
 ## Step 6 — Requirements coverage check
 
 Before finishing (requirement-text mode only): walk the author's original
