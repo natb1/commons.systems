@@ -148,6 +148,12 @@
       "target": "landing",
       "rewrites": [
         {
+          "source": "/api/webmention",
+          "function": {
+            "functionId": "webmention"
+          }
+        },
+        {
           "source": "**",
           "destination": "/index.html"
         }
@@ -423,6 +429,12 @@
           "source": "/api/feed-proxy",
           "function": {
             "functionId": "feedProxy"
+          }
+        },
+        {
+          "source": "/api/webmention",
+          "function": {
+            "functionId": "webmention"
           }
         },
         {
