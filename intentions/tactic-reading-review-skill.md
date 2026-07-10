@@ -34,12 +34,13 @@ attention:
     rest of strategy-graph-native-dispatch. Scoped to curriculum-execution
     tactics only, not the reading-chunk tactics under
     strategy-philosophical-grounding, which remain unboosted."
-phase: qa
+phase: review
 execution:
   branch: tactic-reading-review-skill
   pr: 2796
   attempts: {}
-  markers: []
+  markers:
+    - qa-done
   strategy_fingerprint: 4938e3dd607b936f594cb15964e7096ae8da08b91c2177910589282473b95a68
 validates: []
 blocked_by: []
