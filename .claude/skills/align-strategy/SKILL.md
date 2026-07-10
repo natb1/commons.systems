@@ -48,6 +48,43 @@ bounded choices with a recommended option listed first, per the
 conversational turn, prose reply captured as-is (same split as
 `.claude/skills/align-init/SKILL.md`'s rung-0 intent interview).
 
+## Step 0 — Claim and isolate
+
+Before the first write, claim the target node id and author in its
+worktree — the same uniform node-id reservation discipline the router's
+fan-out workers follow (`strategy-graph-native-dispatch`'s 2026-07-06
+concurrency-safety clarification). Never author strategy edits in the
+shared `main` checkout: a second concurrent session's dirty tracked file
+blocks your `graph-commit` rebase, and a stale read races live phase state
+(both happened live the day that clarification landed).
+
+1. **Resolve the target node id.** For an edit, an improvement pass, or a
+   doctrine round, it is the primary `strategy-*` being edited — claimed
+   before the first write. A brand-new strategy has no id until step 5
+   constructs it; author it in the worktree and claim its id as soon as the
+   id is fixed.
+2. **Check the claim.** If `<project-root>/.claude/worktrees/<node-id>`
+   already exists with a live session — `worktree_has_live_session <path>`
+   (`.claude/skills/dispatch-propagate/scripts/lib-claude-agents.sh:15`,
+   run with `dangerouslyDisableSandbox: true`) — the claim is held by
+   another session: stop and report the held claim to the author. Do
+   **not** park the node — a held claim is not a defect.
+3. **Enter the worktree.** Otherwise create or re-enter it — native
+   `EnterWorktree` with the node id as the worktree name, or the
+   `provision-node-worktree`
+   (`.claude/skills/dispatch-propagate/scripts/provision-node-worktree`)
+   primitive — and do all authoring and the step-5 `graph-commit` from
+   there. The worktree **is** the claim: the same live-session ⇔ worktree
+   liveness rule the router uses, so no separate lock is needed.
+
+**Doctrine-recording rounds pin the pace curve.** A round that records
+governing dispatch doctrine (a concurrency-safety or
+dispatch-discipline clarification) pins
+`dispatch.config/target-workers.json` to floor 0 / terminal 1 for its
+audit window so the fleet quiesces while the doctrine settles, then
+restores the standing 50 / 100 curve after — the practice the 2026-07-06
+clarification records.
+
 ## Step 1 — Frame
 
 **With requirement text:**
@@ -236,9 +273,20 @@ frontmatter:
   core plus `serves`, `rationale`, `clarifications`, `success_signal`,
   `attributes.conditions`, `recovers` from step 3) and pipe or `--file` it
   into `write-node.ts`.
-- **Edit:** read the existing node's frontmatter in full (`readNode` via a
-  small `tsx` one-liner, or just read the file — only the frontmatter is
-  authoritative). **Amendment completeness** (strategy clarification 38,
+- **Edit:** read the existing node's frontmatter in full by **dumping it
+  through `dump-node.ts`**, which captures both the JSON to reconcile and a
+  base manifest recording the blob you read — the compare-and-swap token
+  step 5's `graph-commit --base` checks (never a bare `readNode` one-liner,
+  which records no base):
+
+  ```bash
+  BASE=$(npx tsx packages/intentionsutil/scripts/dump-node.ts \
+    --out-dir "$TMPDIR/dump" <strategy-id>)
+  # reconcile from "$TMPDIR/dump/<strategy-id>.json"; pass "$BASE" to graph-commit below
+  ```
+
+  Only the frontmatter is authoritative. **Amendment completeness**
+  (strategy clarification 38,
   widening clarification 32's tactic-amendment bar to any node amendment in
   any align skill): an edit round is a **whole-node reconciliation**, never
   a patch applied in isolation. Reconcile the edited strategy's `statement`,
@@ -258,11 +306,18 @@ npx tsx packages/intentionsutil/scripts/write-node.ts --file "$TMPDIR/strategy.j
 ```
 
 Then land it — `graph-commit` is the **only** write path, never a
-hand-rolled `git commit`/`git push`:
+hand-rolled `git commit`/`git push`. For an **edit**, pass the base
+manifest from `dump-node.ts` via `--base` so a stale read is refused
+mechanically (before any commit) rather than left to rebase luck:
 
 ```bash
-packages/intentionsutil/scripts/graph-commit <strategy-id> [<draft-tactic-id> ...]
+packages/intentionsutil/scripts/graph-commit --base "$BASE" \
+  <strategy-id> [<draft-tactic-id> ...]
 ```
+
+A brand-new strategy has no origin/main blob to compare, so it takes no
+`--base` entry — omit the flag (or the id) for nodes this round creates;
+`--base` covers only the pre-existing nodes you dumped.
 
 Bundle any draft tactic nodes authored in the same pass into the same
 `graph-commit` call as their serving strategy — one call, one commit,

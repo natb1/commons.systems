@@ -42,6 +42,32 @@ On-demand or router-invoked. The sole argument is the id of the strategy to
 decompose: `/align-tactics strategy-<slug>`. With no argument, stop and report
 that a strategy id is required — this skill never selects its own target.
 
+## Step 0 — Claim and isolate
+
+Before the first write, claim the target strategy's node id and author in
+its worktree — the same uniform node-id reservation discipline the router's
+fan-out workers follow (`strategy-graph-native-dispatch`'s 2026-07-06
+concurrency-safety clarification). Never author in the shared `main`
+checkout: a concurrent session's dirty tracked file blocks this run's
+`graph-commit` rebase, and a stale read races live phase state.
+
+1. **Resolve the target node id** — the `strategy-<slug>` argument (this
+   skill never selects its own target).
+2. **Check the claim.** If `<project-root>/.claude/worktrees/<node-id>`
+   already exists with a live session — `worktree_has_live_session <path>`
+   (`.claude/skills/dispatch-propagate/scripts/lib-claude-agents.sh:15`,
+   run with `dangerouslyDisableSandbox: true`) — the claim is held by
+   another session: stop and report the held claim, then end the run. A
+   held claim is **not** an `office_hours` park (it is not one of the three
+   autonomy-contract conditions below) and **not** a defect.
+3. **Enter the worktree.** Otherwise create or re-enter it — native
+   `EnterWorktree` with the node id as the worktree name, or the
+   `provision-node-worktree`
+   (`.claude/skills/dispatch-propagate/scripts/provision-node-worktree`)
+   primitive — and do all authoring and the step-5 `graph-commit` from
+   there. The worktree **is** the claim: the same live-session ⇔ worktree
+   liveness rule the router uses, so no separate lock is needed.
+
 ## Autonomy contract
 
 Runs to completion without user interaction. Parks to `office_hours` — never
@@ -307,6 +333,19 @@ The write path mirrors `/align-strategy` Step 5 exactly — `write-node.ts` is
 the single validation gate; never hand-author YAML frontmatter, and
 `graph-commit` is the **only** landing path.
 
+**Capture a base manifest for every pre-existing node this round edits** —
+the serving strategy (a drift clarification, a `rounds` bump, a park) and any
+existing tactic finalized from a draft. Dump them through `dump-node.ts`
+*before* rewriting, then pass the manifest to `graph-commit --base` (item 3)
+so a stale read of a live node is refused mechanically rather than by rebase
+luck (the 2026-07-06 near-miss). Nodes this round **creates** have no
+origin/main blob and take no `--base` entry.
+
+```bash
+BASE=$(npx tsx packages/intentionsutil/scripts/dump-node.ts \
+  --out-dir "$TMPDIR/dump" <pre-existing-id> [<pre-existing-id> ...])
+```
+
 **Artifact-owner placement** (strategy clarification 27): `serves` names the
 strategy that actually owns the artifact the tactic changes. Normally that is
 the strategy under decomposition, but a byproduct that genuinely changes a
@@ -352,9 +391,14 @@ Per tactic:
    strategy alongside the round's tactics) in one call:
 
    ```bash
-   packages/intentionsutil/scripts/graph-commit <tactic-id> [<tactic-id> ...] [<strategy-id>]
+   packages/intentionsutil/scripts/graph-commit --base "$BASE" \
+     <tactic-id> [<tactic-id> ...] [<strategy-id>]
    ```
 
+   Pass `--base "$BASE"` (the manifest from `dump-node.ts` above) whenever the
+   call touches a pre-existing node; omit it for a round that only creates new
+   tactics. `--base` covers only the dumped pre-existing ids — newly created
+   ids in the same call are simply absent from the manifest and unchecked.
    `graph-commit` stages exactly `intentions/<id>.md` for each id (frontmatter
    and the body `Edit` both live there), commits, stamps the four required
    checks via the `graph/**` fast path, and fast-forwards onto `main` with a
