@@ -88,6 +88,16 @@ function makeDir(
   return { dir, writeCount: () => writes };
 }
 
+/** Parse the fake disk's current content, narrowing the nullable cell. */
+function readDiskModel(
+  s: ReturnType<typeof makeHandle>,
+  disk: DiskCell,
+): TestData | null {
+  const content = disk.content;
+  if (content === null) throw new Error("expected disk content, got empty cell");
+  return s.parseSidecar(content);
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -176,7 +186,7 @@ describe("createSidecar factory", () => {
 
     // On disk both survive: tab B read-merge-wrote against tab A's persisted
     // state rather than its own stale (empty) model.
-    const onDisk = tabB.parseSidecar(disk.content as string);
+    const onDisk = readDiskModel(tabB, disk);
     expect(onDisk?.values).toEqual({ a: 1, b: 2 });
   });
 
@@ -191,7 +201,7 @@ describe("createSidecar factory", () => {
     await s.enqueueWrite({ values: { b: 2 } });
     await s.flushWrites();
 
-    const onDisk = s.parseSidecar(disk.content as string);
+    const onDisk = readDiskModel(s, disk);
     expect(onDisk?.values).toEqual({ a: 1, b: 2 });
   });
 
@@ -235,7 +245,7 @@ describe("createSidecar factory", () => {
     await s.enqueueWrite({ values: { b: 2 } });
     await expect(s.flushWrites()).resolves.toBeUndefined();
 
-    const onDisk = s.parseSidecar(disk.content as string);
+    const onDisk = readDiskModel(s, disk);
     expect(onDisk?.values).toEqual({ b: 2 });
   });
 
