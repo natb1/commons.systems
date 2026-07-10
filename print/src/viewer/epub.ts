@@ -1,6 +1,7 @@
 import ePub, { type Book, type Rendition, type Location, type NavItem } from "epubjs";
-import type { OutlineEntry, SearchableRenderer, SearchResult, SearchResponse } from "./types.js";
+import type { OutlineEntry, SearchableRenderer, SearchResult, SearchResponse, SelectionAnchor } from "./types.js";
 import { MAX_SEARCH_RESULTS } from "./types.js";
+import type { Annotation } from "../annotations.js";
 
 // epubjs ships incomplete type declarations. These narrow shapes describe the
 // runtime members we use that are missing from the .d.ts, following the
@@ -24,6 +25,10 @@ interface EpubAnnotations {
 // matches the panel <mark> color (viewer.css:380); active is visually distinct.
 const BASE_STYLES = { fill: "#fde68a" };
 const ACTIVE_STYLES = { fill: "#f59e0b", "fill-opacity": "0.5" };
+// Persistent annotation highlights. A calmer, semi-transparent yellow mirrors
+// the PDF `.annotation-highlight` fill (viewer.css:141, rgba(255,235,59,0.4)) and
+// reads as distinct from search's fully-saturated base fill.
+const ANNOTATION_STYLES = { fill: "#ffeb3b", "fill-opacity": "0.4" };
 
 export function createEpubRenderer(
   onError?: (err: unknown) => void,
@@ -47,6 +52,11 @@ export function createEpubRenderer(
   let _searchCfis: string[] = []; // all base-highlighted match cfis
   let _activeCfi: string | null = null; // currently-navigated match
   let _searchEpoch = 0; // monotonic guard against overlapping search() calls
+
+  // Persistent annotation state.
+  let _annotations: Annotation[] = []; // full list, pushed in by setAnnotations
+  let _annotationCfis: string[] = []; // annotation-highlight cfis currently registered
+  let _pendingAnchor: SelectionAnchor | null = null; // last live text selection, or null
 
   // Resolve a section's TOC label, falling back to a 1-based spine index.
   // Caller must `await book.loaded.navigation` once before invoking.
@@ -86,6 +96,67 @@ export function createEpubRenderer(
     }
     _searchCfis = [];
     _activeCfi = null;
+  }
+
+  // Reconcile the epub.js annotation registry to the current `_annotations`
+  // list: remove every annotation highlight we previously registered, then
+  // re-register one per annotation. Search highlights are keyed by their own
+  // cfis (tracked separately in `_searchCfis`) and are never touched here, so
+  // search and annotation highlights coexist. epub.js re-injects registered
+  // annotations whenever a view (re)renders, so a highlight survives chapter
+  // navigation without an explicit `rendered`-event re-apply.
+  function reapplyAnnotationHighlights(): void {
+    if (!rendition) return;
+    const annotations = (rendition.annotations as unknown as EpubAnnotations);
+    for (const cfi of _annotationCfis) {
+      annotations.remove(cfi, "highlight");
+    }
+    _annotationCfis = [];
+    for (const ann of _annotations) {
+      annotations.highlight(ann.position, {}, undefined, "annotation-highlight", ANNOTATION_STYLES);
+      _annotationCfis.push(ann.position);
+    }
+  }
+
+  // epub.js emits "selected" with a CFI range when the user completes a text
+  // selection inside the (iframe) content. The quote is read asynchronously via
+  // book.getRange, so this is a closure the "selected" handler awaits. The
+  // resolved anchor is stashed in `_pendingAnchor` and the shared useAnnotations
+  // hook is nudged to re-read it — the hook listens on the TOP document's
+  // selectionchange, which never fires for an iframe-internal selection, so we
+  // re-dispatch one. EPUB anchors carry only position (the CFI range) + quote;
+  // the PDF page/offset/length anchor fields are absent (optional in
+  // SelectionAnchor).
+  async function captureSelection(cfiRange: string): Promise<void> {
+    if (!book) return;
+    let quote = "";
+    try {
+      const range = await book.getRange(cfiRange);
+      quote = range ? range.toString() : "";
+    } catch (err) {
+      reportError(new Error("EPUB selection getRange failed", { cause: err }));
+      return;
+    }
+    if (destroyed) return;
+    _pendingAnchor = { position: cfiRange, quote };
+    document.dispatchEvent(new Event("selectionchange"));
+  }
+
+  // Clear the pending selection when the content's selection collapses (the user
+  // clicked away or deselected). epub.js only emits "selected" for a NON-empty
+  // selection, so this content-document listener covers the empty case, keeping
+  // the shared capture control from lingering with a stale anchor. Re-dispatches
+  // a top-document selectionchange so the hook re-reads getSelectionAnchor.
+  function registerSelectionClear(contents: { document: Document; window: Window }): void {
+    const doc = contents.document;
+    doc.addEventListener("selectionchange", () => {
+      const sel = contents.window.getSelection?.();
+      const collapsed = !sel || sel.isCollapsed || sel.toString().trim() === "";
+      if (collapsed && _pendingAnchor) {
+        _pendingAnchor = null;
+        document.dispatchEvent(new Event("selectionchange"));
+      }
+    });
   }
 
   function mapNavItems(items: NavItem[]): OutlineEntry[] {
@@ -192,6 +263,16 @@ export function createEpubRenderer(
       rendition.on("displayerror", onError ?? ((err: unknown) => {
         reportError(new Error("EPUB display error", { cause: err }));
       }));
+
+      // Capture text selections for annotation. epub.js forwards each content
+      // iframe's non-empty selection as a "selected" (cfiRange, contents) event.
+      rendition.on("selected", (cfiRange: string) => {
+        void captureSelection(cfiRange);
+      });
+      // Clear the pending anchor when a content selection collapses.
+      rendition.hooks.content.register((contents: { document: Document; window: Window }) => {
+        registerSelectionClear(contents);
+      });
 
       await rendition.display(initialPosition ?? undefined);
       if (!initialPosition) {
@@ -390,12 +471,24 @@ export function createEpubRenderer(
       clearSearchHighlights();
     },
 
+    getSelectionAnchor(): SelectionAnchor | null {
+      return _pendingAnchor;
+    },
+
+    setAnnotations(next: Annotation[]): void {
+      _annotations = next;
+      reapplyAnnotationHighlights();
+    },
+
     destroy(): void {
       destroyed = true;
       // rendition.destroy() tears down annotations, so just reset tracking.
       _searchCfis = [];
       _activeCfi = null;
       _searchEpoch = 0;
+      _annotations = [];
+      _annotationCfis = [];
+      _pendingAnchor = null;
       if (rendition) {
         rendition.destroy();
         rendition = null;

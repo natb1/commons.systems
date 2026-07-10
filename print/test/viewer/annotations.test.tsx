@@ -317,4 +317,68 @@ describe("useAnnotations + AnnotationsPanel + AnnotationCapture", () => {
     expect(goToPosition).toHaveBeenCalledWith("7");
     expect(onPanelNavigate).toHaveBeenCalledTimes(1);
   });
+
+  // EPUB annotations carry a CFI-range `position` and NO page/offset/length
+  // anchor. This drives the shared hook + panel end-to-end on such an
+  // annotation to prove they key purely on `annotation.position` with no
+  // PDF-specific assumptions (tactic-print-annotations-epub Unit 2).
+  it("handles a CFI-positioned (EPUB) annotation end-to-end: add, list, navigate, delete", async () => {
+    const CFI = "epubcfi(/6/14!/4/2/1:0,/1:24)";
+    const cfiAnchor: SelectionAnchor = { position: CFI, quote: "a passage in chapter 7" };
+    const setAnnotations = vi.fn();
+    const goToPosition = vi.fn().mockResolvedValue(undefined);
+    const onPanelNavigate = vi.fn();
+    const renderer = makeMockRenderer({
+      getSelectionAnchor: () => cfiAnchor,
+      setAnnotations,
+      goToPosition,
+    }); // type-safety-ok: idiomatic test mock/DOM-fixture access
+    const controller = makeMockController({ getRenderer: () => renderer, onPanelNavigate });
+    const { store, state } = inMemoryStore([]);
+    await mount(controller, store);
+
+    // Add: a selection surfaces the capture control; Highlight persists it.
+    await act(async () => {
+      document.dispatchEvent(new Event("selectionchange"));
+      await flushMicrotasks();
+    });
+    const highlightBtn = container.querySelector(".viewer-annotation-highlight-btn") as HTMLButtonElement; // type-safety-ok: idiomatic test mock/DOM-fixture access
+    await act(async () => {
+      highlightBtn.click();
+      await flushMicrotasks();
+    });
+
+    // Persisted with the CFI position and NO PDF anchor fields.
+    expect(state.saveCalls.length).toBe(1);
+    const saved = state.saveCalls[0][0];
+    expect(saved).toMatchObject({ position: CFI, quote: "a passage in chapter 7", note: "" });
+    expect(saved.page).toBeUndefined();
+    expect(saved.offset).toBeUndefined();
+    expect(saved.length).toBeUndefined();
+    // Pushed into the renderer for painting.
+    expect(setAnnotations).toHaveBeenCalledWith([saved]);
+
+    // List: the panel renders the quote (a quote-only label — no page number).
+    const entry = container.querySelector(".viewer-annotation-entry") as HTMLElement; // type-safety-ok: idiomatic test mock/DOM-fixture access
+    expect(entry.dataset.position).toBe(CFI);
+    expect(container.querySelector(".viewer-annotation-quote")?.textContent).toBe("a passage in chapter 7");
+    expect(container.querySelector(".viewer-annotations")?.textContent).not.toMatch(/page/i);
+
+    // Navigate: clicking the entry drives goToPosition with the CFI string.
+    await act(async () => {
+      entry.click();
+      await flushMicrotasks();
+    });
+    expect(goToPosition).toHaveBeenCalledWith(CFI);
+    expect(onPanelNavigate).toHaveBeenCalledTimes(1);
+
+    // Delete: removes the annotation and empties the panel.
+    const del = container.querySelector(".viewer-annotation-delete") as HTMLButtonElement; // type-safety-ok: idiomatic test mock/DOM-fixture access
+    await act(async () => {
+      del.click();
+      await flushMicrotasks();
+    });
+    expect(state.saveCalls[state.saveCalls.length - 1]).toEqual([]);
+    expect(container.querySelector(".viewer-annotations")).toBeNull();
+  });
 });
