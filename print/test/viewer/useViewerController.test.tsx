@@ -24,6 +24,12 @@ function fakeStore(
 // The latest hook result, captured each render so tests read state + handlers.
 let captured: UseViewerControllerResult | null = null;
 
+// Non-null accessor for the captured result, so tests avoid a `!` on every use.
+function result(): UseViewerControllerResult {
+  if (!captured) throw new Error("hook not mounted");
+  return captured;
+}
+
 function Host(props: UseViewerControllerArgs): React.ReactElement {
   const r = useViewerController(props);
   captured = r;
@@ -560,35 +566,35 @@ describe("useViewerController spread mode", () => {
   });
 
   it("onPanelNavigate: spread → controller.goToPage(renderer.currentPage) re-renders the spread", async () => {
-    const spread = makeSpreadRenderer();
+    const renderPageInto = vi.fn().mockResolvedValue(undefined);
+    const spread = makeSpreadRenderer({ renderPageInto });
     await mount(defaultArgs({ createRenderer: () => spread }));
     await flushInit();
-    await act(async () => { captured!.toggleSpread(); });
+    await act(async () => { result().toggleSpread(); });
     await flushInit();
 
     // Simulate a bookmark/outline click moving the underlying renderer, the way
     // goToPosition / goToOutlineEntry do, then the panel calling onPanelNavigate.
     await spread.goToPage(5);
-    vi.mocked(spread.renderPageInto!).mockClear();
-    await act(async () => { captured!.onPanelNavigate(); });
+    renderPageInto.mockClear();
+    await act(async () => { result().onPanelNavigate(); });
     await flushInit();
 
     // The spread re-rendered to the renderer's new page (page 5 → spread 4–5).
-    const calls = vi.mocked(spread.renderPageInto!).mock.calls;
-    expect(calls.length).toBeGreaterThan(0);
-    expect(calls.map((c) => c[0])).toContain(4);
-    expect(calls.map((c) => c[0])).toContain(5);
+    const pages = renderPageInto.mock.calls.map((c) => c[0]);
+    expect(pages).toContain(4);
+    expect(pages).toContain(5);
   });
 
   it("onPanelNavigate: single mode does not touch a spread surface", async () => {
     const single = makeMockRenderer();
     await mount(defaultArgs({ createRenderer: () => single }));
     await flushInit();
-    const before = captured!.navSignal;
-    await act(async () => { captured!.onPanelNavigate(); });
+    const before = result().navSignal;
+    await act(async () => { result().onPanelNavigate(); });
     await flushInit();
     // syncNav still fires (navSignal bumps) but there is no spread to render.
-    expect(captured!.navSignal).toBeGreaterThan(before);
+    expect(result().navSignal).toBeGreaterThan(before);
   });
 
   it("getPosition: single reads the renderer; spread reads the controller's live page/label", async () => {
@@ -597,13 +603,13 @@ describe("useViewerController spread mode", () => {
     await flushInit();
     await renderer.goToPage(3);
 
-    expect(captured!.getPosition()).toEqual({ position: "3", label: "Page 3 / 10" });
+    expect(result().getPosition()).toEqual({ position: "3", label: "Page 3 / 10" });
 
-    await act(async () => { captured!.toggleSpread(); });
+    await act(async () => { result().toggleSpread(); });
     await flushInit();
 
     // Page 3 sits in spread 2–3; the controller reports its left page + spread label.
-    expect(captured!.getPosition()).toEqual({
+    expect(result().getPosition()).toEqual({
       position: "2",
       label: "Pages 2–3 / 10",
     });

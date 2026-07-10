@@ -319,16 +319,16 @@ describe("useBookmarks + BookmarksPanel", () => {
     });
     await mount(controller, store);
 
-    const toggle = container.querySelector(".viewer-bookmark-toggle") as HTMLButtonElement;
+    const toggle = container.querySelector<HTMLButtonElement>(".viewer-bookmark-toggle");
     await act(async () => {
-      toggle.click();
+      toggle?.click();
       await flushMicrotasks();
     });
 
     expect(state.saveCalls[0]).toEqual([{ position: "4", label: "Pages 4–5 / 10" }]);
-    const entry = container.querySelector(".viewer-bookmark-entry") as HTMLElement;
-    expect(entry.dataset.position).toBe("4");
-    expect(entry.textContent).toBe("Pages 4–5 / 10");
+    const entry = container.querySelector<HTMLElement>(".viewer-bookmark-entry");
+    expect(entry?.dataset.position).toBe("4");
+    expect(entry?.textContent).toBe("Pages 4–5 / 10");
   });
 
   it("spread mode: aria-pressed reflects the controller's live spread page", async () => {
@@ -344,8 +344,8 @@ describe("useBookmarks + BookmarksPanel", () => {
     });
     await mount(controller, store);
 
-    const toggle = container.querySelector(".viewer-bookmark-toggle") as HTMLButtonElement;
-    expect(toggle.getAttribute("aria-pressed")).toBe("true");
+    const toggle = container.querySelector<HTMLButtonElement>(".viewer-bookmark-toggle");
+    expect(toggle?.getAttribute("aria-pressed")).toBe("true");
   });
 
   it("unmount does not throw", async () => {
