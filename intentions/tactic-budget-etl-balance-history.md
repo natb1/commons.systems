@@ -26,8 +26,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
-execution: null
+phase: review
+execution:
+  branch: tactic-budget-etl-balance-history
+  pr: 2830
+  attempts: {}
+  markers:
+    - qa-done
+  strategy_fingerprint: null
 validates: []
 blocked_by: []
 office_hours: null
