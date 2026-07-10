@@ -67,16 +67,21 @@ function cloneRoot(
 // --- readGraphNodes ------------------------------------------------------------
 
 describe("readGraphNodes", () => {
-  it("reads, validates, and returns nodes in file-name order, skipping README.md, non-md files, and subdirectories", async () => {
+  it("reads, validates, and returns nodes in node-id order, skipping README.md, non-md files, and subdirectories", async () => {
     const root = cloneRoot({
       "b-node.md": file(nodeFile("b-node", "tactic")),
       "a-node.md": file(nodeFile("a-node", "tactic")),
+      // A prefix-hyphen sibling: `a-node` is a prefix of `a-node-extra`. Sorting
+      // the raw file name would put `a-node-extra.md` before `a-node.md` (`.md`'s
+      // `.` sorts after the extending `-`), diverging from the store's id-order.
+      "a-node-extra.md": file(nodeFile("a-node-extra", "tactic")),
       "README.md": file("no frontmatter here"),
       "notes.txt": file("not markdown"),
       nested: dir({ "c-node.md": file(nodeFile("c-node", "tactic")) }),
     });
     const nodes = await readGraphNodes(root);
-    expect(nodes.map((n) => n.id)).toEqual(["a-node", "b-node"]);
+    // Node-id order (matching `listNodes`), NOT raw file-name order.
+    expect(nodes.map((n) => n.id)).toEqual(["a-node", "a-node-extra", "b-node"]);
     // validateNode applied its defaults — the nodes are full IntentionNodes.
     expect(nodes[0].blocked_by).toEqual([]);
     expect(nodes[0].statement).toBe("statement for a-node");

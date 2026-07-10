@@ -258,8 +258,11 @@ function extractFrontmatter(raw: string): string {
  * Read and validate every `intentions/*.md` node file under the clone root.
  *
  * Mirrors the store's `listNodes` contract: `README.md` (a non-node companion
- * doc with no frontmatter) is excluded, files are processed in name order for
- * a stable result. Per-file problems (bad fences, YAML errors, schema
+ * doc with no frontmatter) is excluded, files are processed in node-id order
+ * (the file name minus `.md`, exactly as `listNodes` sorts) so the order tracks
+ * the host tool — sorting the raw file name would diverge whenever one id is a
+ * prefix of another (`.md`'s `.` sorts after the extending `-`). Per-file
+ * problems (bad fences, YAML errors, schema
  * violations) are collected across ALL files and thrown as one
  * `GraphSourceError` naming each offender — the graph is returned whole or
  * not at all, never partially.
@@ -278,7 +281,13 @@ export async function readGraphNodes(
     if (handle.kind !== "file" || !name.endsWith(".md") || name === "README.md") continue;
     files.push([name, handle as FileSystemFileHandle]); // type-safety-ok: kind === "file" identifies a FileSystemFileHandle
   }
-  files.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  // Sort by node id (name minus ".md"), mirroring the store's `listNodes`.
+  const idOf = (name: string) => name.slice(0, -".md".length);
+  files.sort(([a], [b]) => {
+    const ia = idOf(a);
+    const ib = idOf(b);
+    return ia < ib ? -1 : ia > ib ? 1 : 0;
+  });
 
   const nodes: IntentionNode[] = [];
   const problems: string[] = [];
