@@ -134,6 +134,15 @@ body.viewer-active {
   border-radius: var(--radius-none);
 }
 
+/* Persistent annotation highlights injected into the text layer. Like
+   .search-highlight, color is left unset so it inherits the transparent text
+   from the parent .textLayer span (no double-rendering over the canvas). A
+   calmer yellow distinguishes a saved highlight from the active search hit. */
+.textLayer .annotation-highlight {
+  background-color: rgba(255, 235, 59, 0.4);
+  border-radius: var(--radius-none);
+}
+
 /* When zoomed, switch from centered fit-to-view to scrollable overflow layout */
 .viewer-canvas-wrap.zoomed {
   width: max-content;
