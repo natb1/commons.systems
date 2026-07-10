@@ -71,7 +71,41 @@ func TestBuildTransactions_Dedupes(t *testing.T) {
 	if len(allDocIDs) != 1 {
 		t.Errorf("len(allDocIDs): got %d, want 1", len(allDocIDs))
 	}
-	want := budget.TransactionDocID(sf.StatementID(), txn.TransactionID)
+	want := budget.TransactionDocID(sf.Institution, sf.Account, txn.TransactionID)
+	if allDocIDs[0] != want {
+		t.Errorf("allDocIDs[0]: got %q, want %q", allDocIDs[0], want)
+	}
+}
+
+// TestBuildTransactions_StatementIndependentIdentity is the core Unit-1
+// regression for clarification 3: the same (institution, account, FITID) carried
+// by two overlapping exports whose inferred periods diverge must collapse to a
+// single row. Under the old statement-embedded scheme these two files minted
+// distinct doc IDs and both survived; under statement-independent identity they
+// dedupe to one.
+func TestBuildTransactions_StatementIndependentIdentity(t *testing.T) {
+	txn := parse.Transaction{
+		TransactionID: "TXN-SHARED",
+		Date:          time.Date(2025, 1, 20, 0, 0, 0, 0, time.UTC),
+		Amount:        700,
+		Description:   "SHARED PURCHASE",
+	}
+	// Same institution/account, but the two exports inferred different periods
+	// (Jan vs Feb) — so their StatementID()s differ. Identity must ignore that.
+	sfJan := parse.StatementFile{Institution: "bank", Account: "1234", Period: "2025-01"}
+	sfFeb := parse.StatementFile{Institution: "bank", Account: "1234", Period: "2025-02"}
+	if sfJan.StatementID() == sfFeb.StatementID() {
+		t.Fatalf("test setup: statement IDs should differ across periods")
+	}
+	pfJan := parsedFile{sf: sfJan, result: parse.ParseResult{Transactions: []parse.Transaction{txn}}}
+	pfFeb := parsedFile{sf: sfFeb, result: parse.ParseResult{Transactions: []parse.Transaction{txn}}}
+
+	allTxns, allDocIDs := buildTransactions([]parsedFile{pfJan, pfFeb}, 0, nil)
+
+	if len(allTxns) != 1 {
+		t.Fatalf("len(allTxns): got %d, want 1 (statement-independent collapse)", len(allTxns))
+	}
+	want := budget.TransactionDocID("bank", "1234", "TXN-SHARED")
 	if allDocIDs[0] != want {
 		t.Errorf("allDocIDs[0]: got %q, want %q", allDocIDs[0], want)
 	}

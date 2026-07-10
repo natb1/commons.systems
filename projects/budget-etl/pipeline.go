@@ -115,7 +115,7 @@ func buildTransactions(
 	allDocIDs = make([]string, 0, totalTxns)
 	for _, pf := range parsed {
 		for _, t := range pf.result.Transactions {
-			docID := budget.TransactionDocID(pf.sf.StatementID(), t.TransactionID)
+			docID := budget.TransactionDocID(pf.sf.Institution, pf.sf.Account, t.TransactionID)
 			if seen[docID] {
 				continue
 			}
