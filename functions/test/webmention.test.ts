@@ -31,7 +31,7 @@ function createInMemoryFirestore() {
 
 function useStore() {
   const store = createInMemoryFirestore();
-  vi.mocked(getFirestore).mockReturnValue(store as never);
+  vi.mocked(getFirestore).mockReturnValue(store as never); // type-safety-ok: in-memory stub stands in for the firebase-admin Firestore
   return store;
 }
 
@@ -65,7 +65,16 @@ function createMockReq(opts: {
     method,
     header: (name: string) => headers[name.toLowerCase()],
     body,
-  } as unknown as Parameters<typeof handleWebmention>[0];
+  };
+}
+
+// Drives the handler with the mock request/response doubles. The single
+// suppressed cast here keeps every call site cast-free.
+async function invoke(
+  req: ReturnType<typeof createMockReq>,
+  res: ReturnType<typeof createMockRes>,
+) {
+  await handleWebmention(req as never, res as never); // type-safety-ok: mock req/res doubles satisfy the shape the handler reads
 }
 
 const VALID = {
@@ -86,15 +95,15 @@ describe("handleWebmention", () => {
 
   it("returns 405 for non-POST methods", async () => {
     const res = createMockRes();
-    await handleWebmention(createMockReq({ method: "GET" }), res as never);
+    await invoke(createMockReq({ method: "GET" }), res);
     expect(res.statusCode).toBe(405);
   });
 
   it("returns 400 when content-type is not form-urlencoded", async () => {
     const res = createMockRes();
-    await handleWebmention(
+    await invoke(
       createMockReq({ headers: { "content-type": "application/json" }, body: VALID }),
-      res as never,
+      res,
     );
     expect(res.statusCode).toBe(400);
     expect(res.body).toContain("application/x-www-form-urlencoded");
@@ -104,12 +113,12 @@ describe("handleWebmention", () => {
     // Reaches the param stage (would 400 for a missing param) rather than
     // rejecting the content-type outright.
     const res = createMockRes();
-    await handleWebmention(
+    await invoke(
       createMockReq({
         headers: { "content-type": "application/x-www-form-urlencoded; charset=UTF-8" },
         body: {},
       }),
-      res as never,
+      res,
     );
     expect(res.statusCode).toBe(400);
     expect(res.body).toContain("Missing required form parameters");
@@ -117,32 +126,29 @@ describe("handleWebmention", () => {
 
   it("returns 400 when source is missing", async () => {
     const res = createMockRes();
-    await handleWebmention(urlencodedReq({ target: VALID.target }), res as never);
+    await invoke(urlencodedReq({ target: VALID.target }), res);
     expect(res.statusCode).toBe(400);
     expect(res.body).toContain("Missing required form parameters");
   });
 
   it("returns 400 when target is missing", async () => {
     const res = createMockRes();
-    await handleWebmention(urlencodedReq({ source: VALID.source }), res as never);
+    await invoke(urlencodedReq({ source: VALID.source }), res);
     expect(res.statusCode).toBe(400);
   });
 
   it("returns 400 when source is not a valid URL", async () => {
     const res = createMockRes();
-    await handleWebmention(
-      urlencodedReq({ source: "not-a-url", target: VALID.target }),
-      res as never,
-    );
+    await invoke(urlencodedReq({ source: "not-a-url", target: VALID.target }), res);
     expect(res.statusCode).toBe(400);
     expect(res.body).toContain("source must be an http(s) URL");
   });
 
   it("returns 400 when source uses a non-http(s) scheme", async () => {
     const res = createMockRes();
-    await handleWebmention(
+    await invoke(
       urlencodedReq({ source: "ftp://example.com/x", target: VALID.target }),
-      res as never,
+      res,
     );
     expect(res.statusCode).toBe(400);
     expect(res.body).toContain("source must be an http(s) URL");
@@ -150,9 +156,9 @@ describe("handleWebmention", () => {
 
   it("returns 400 when target uses a non-http(s) scheme", async () => {
     const res = createMockRes();
-    await handleWebmention(
+    await invoke(
       urlencodedReq({ source: VALID.source, target: "javascript:alert(1)" }),
-      res as never,
+      res,
     );
     expect(res.statusCode).toBe(400);
     expect(res.body).toContain("target must be an http(s) URL");
@@ -161,25 +167,22 @@ describe("handleWebmention", () => {
   it("returns 400 when source equals target", async () => {
     const same = "https://commons.systems/post/y";
     const res = createMockRes();
-    await handleWebmention(
-      urlencodedReq({ source: same, target: same }),
-      res as never,
-    );
+    await invoke(urlencodedReq({ source: same, target: same }), res);
     expect(res.statusCode).toBe(400);
     expect(res.body).toContain("must differ");
   });
 
   it("returns 400 when target host is not an owned publication surface", async () => {
     const res = createMockRes();
-    await handleWebmention(
+    await invoke(
       urlencodedReq({ source: VALID.source, target: "https://evil.example.com/x" }),
-      res as never,
+      res,
     );
     expect(res.statusCode).toBe(400);
     expect(res.body).toContain("commons.systems");
   });
 
-  it("accepts both owned hosts", () => {
+  it("advertises both owned hosts", () => {
     expect(OWNED_TARGET_HOSTS).toContain("commons.systems");
     expect(OWNED_TARGET_HOSTS).toContain("fellspiral.commons.systems");
   });
@@ -187,7 +190,7 @@ describe("handleWebmention", () => {
   it("returns 400 when the source fetch fails", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("DNS failure")));
     const res = createMockRes();
-    await handleWebmention(urlencodedReq(VALID), res as never);
+    await invoke(urlencodedReq(VALID), res);
     expect(res.statusCode).toBe(400);
     expect(res.body).not.toContain("DNS");
   });
@@ -198,7 +201,7 @@ describe("handleWebmention", () => {
       vi.fn().mockResolvedValue(new Response("nope", { status: 404 })),
     );
     const res = createMockRes();
-    await handleWebmention(urlencodedReq(VALID), res as never);
+    await invoke(urlencodedReq(VALID), res);
     expect(res.statusCode).toBe(400);
   });
 
@@ -210,7 +213,7 @@ describe("handleWebmention", () => {
       ),
     );
     const res = createMockRes();
-    await handleWebmention(urlencodedReq(VALID), res as never);
+    await invoke(urlencodedReq(VALID), res);
     expect(res.statusCode).toBe(400);
     expect(res.body).toContain("Source does not contain a link to target");
   });
@@ -227,7 +230,7 @@ describe("handleWebmention", () => {
       ),
     );
     const res = createMockRes();
-    await handleWebmention(urlencodedReq(VALID), res as never);
+    await invoke(urlencodedReq(VALID), res);
 
     expect(fetch).toHaveBeenCalledWith(VALID.source, {
       headers: { "User-Agent": "commons-systems-webmention/1.0" },
@@ -256,8 +259,8 @@ describe("handleWebmention", () => {
         ),
       ),
     );
-    await handleWebmention(urlencodedReq(VALID), createMockRes() as never);
-    await handleWebmention(urlencodedReq(VALID), createMockRes() as never);
+    await invoke(urlencodedReq(VALID), createMockRes());
+    await invoke(urlencodedReq(VALID), createMockRes());
     expect(store._docs.size).toBe(1);
   });
 

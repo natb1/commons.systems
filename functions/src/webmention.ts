@@ -29,7 +29,7 @@ function isHttpUrl(value: string): URL | null {
   return url;
 }
 
-/** Reads up to MAX_SOURCE_BYTES of the response body as UTF-8 text. Returns
+/** Reads up to MAX_SOURCE_BYTES of the response body, decoded UTF-8. Returns
  *  null on a null body or on a read that exceeds the cap (an over-cap source is
  *  treated as unverifiable, not truncated-and-trusted). */
 async function readCappedText(res: globalThis.Response): Promise<string | null> {
@@ -75,7 +75,9 @@ export async function handleWebmention(req: Request, res: Response) {
     return;
   }
 
-  const body = (req.body ?? {}) as Record<string, unknown>;
+  // req.body is typed `any` by express; the urlencoded body-parser populates it
+  // with the parsed form fields. Narrow each field with a runtime typeof check.
+  const body = req.body ?? {};
   const source = body.source;
   const target = body.target;
   if (typeof source !== "string" || !source || typeof target !== "string" || !target) {
