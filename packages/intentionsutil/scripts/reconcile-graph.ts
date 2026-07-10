@@ -130,7 +130,8 @@ export function reconcileGraph(args: Args): Plan {
   // not each falsely trip the last-child rule.
   const strategiesStamped = new Set<string>();
   for (const id of doneSet) {
-    const tactic = byId.get(id)!;
+    const tactic = byId.get(id);
+    if (tactic === undefined) continue;
 
     // Inbound blocked_by repair — remove the pruned id from every survivor that
     // still lists it (a co-pruned blocker is itself deleted, so skip those).

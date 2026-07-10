@@ -35,7 +35,7 @@ function node(dir: string, partial: Partial<IntentionNode> & { id: string; kind:
     pace_exempt: partial.pace_exempt ?? false,
     rounds: partial.rounds ?? null,
     attributes: partial.attributes ?? {},
-  } as IntentionNode;
+  };
   writeNode(dir, full);
   if (body !== undefined && partial.kind === "tactic") {
     // Overwrite with an explicit body (writeNode preserves an existing tactic

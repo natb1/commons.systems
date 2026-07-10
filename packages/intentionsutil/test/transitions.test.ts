@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Execution, IntentionNode } from "../src/schema.js";
+import type { CiVerdict } from "../src/transitions.js";
 import {
   PLANNED_MARKER,
   QA_DONE_MARKER,
@@ -46,7 +47,7 @@ function anode(partial: Partial<IntentionNode> & { id: string; kind: string }): 
     pace_exempt: partial.pace_exempt ?? false,
     rounds: partial.rounds ?? null,
     attributes: partial.attributes ?? {},
-  } as IntentionNode;
+  };
 }
 
 function exec(partial: Partial<Execution> = {}): Execution {
@@ -112,7 +113,13 @@ describe("resumeAfterFix", () => {
 });
 
 describe("decideTransition", () => {
-  const base = { markers: [] as string[], ci: "passing" as const, hasResidue: false, scopeStale: false, strategyStale: false };
+  const base: { markers: string[]; ci: CiVerdict; hasResidue: boolean; scopeStale: boolean; strategyStale: boolean } = {
+    markers: [],
+    ci: "passing",
+    hasResidue: false,
+    scopeStale: false,
+    strategyStale: false,
+  };
 
   it("advances implement → qa on a clean pass", () => {
     const d = decideTransition({ ...base, phase: "implement" });

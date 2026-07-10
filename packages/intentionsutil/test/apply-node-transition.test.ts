@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { readNode } from "../src/store.js";
+import type { CiVerdict } from "../src/transitions.js";
 import { applyNodeTransition } from "../scripts/apply-node-transition.js";
 
 function tempDir(): string {
@@ -42,13 +43,20 @@ function seedTactic(dir: string, phase: string, body: string): void {
   writeFileSync(join(dir, "tactic-syn.md"), frontmatter);
 }
 
-const baseArgs = {
+const baseArgs: {
+  id: string;
+  ci: CiVerdict;
+  scopeStale: boolean;
+  strategyStale: boolean;
+  setPr: number | null;
+  strategyFingerprint: string | null;
+} = {
   id: "tactic-syn",
-  ci: "unknown" as const,
+  ci: "unknown",
   scopeStale: false,
   strategyStale: false,
-  setPr: null as number | null,
-  strategyFingerprint: null as string | null,
+  setPr: null,
+  strategyFingerprint: null,
 };
 
 describe("applyNodeTransition store round-trip", () => {
