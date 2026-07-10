@@ -85,6 +85,40 @@ describe("HomeRegion", () => {
     expect(fetchPost).toHaveBeenCalledWith("hello-world.md");
   });
 
+  it("marks the content div data-hydrated after a runtime hydrate and skips a second fetch", async () => {
+    const first = vi
+      .fn<(filename: string) => Promise<string>>()
+      .mockResolvedValue("# Title\nBody one.");
+
+    const { container, rerender } = render(
+      <HomeRegion posts={[fetched]} postLinkPrefix="/post/" fetchPost={first} />,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector("#post-content-hello-world")?.innerHTML).toContain(
+        "Body one.",
+      );
+    });
+
+    // The runtime hydrate now marks the div, mirroring the SSR marker, so the
+    // guard short-circuits the re-fetch on the next effect run.
+    const content = container.querySelector("#post-content-hello-world");
+    expect(content?.hasAttribute("data-hydrated")).toBe(true);
+
+    // A fresh fetchPost triggers the effect's dep change (a re-run/re-nav). The
+    // guard sees data-hydrated and performs no second fetch.
+    const second = vi
+      .fn<(filename: string) => Promise<string>>()
+      .mockResolvedValue("# Title 2\nBody two.");
+    rerender(<HomeRegion posts={[fetched]} postLinkPrefix="/post/" fetchPost={second} />);
+
+    await waitFor(() => {
+      expect(first).toHaveBeenCalledTimes(1);
+    });
+    expect(second).not.toHaveBeenCalled();
+    expect(content?.innerHTML).toContain("Body one.");
+  });
+
   it("preserves pre-rendered content and skips fetch for hydrated posts", async () => {
     const contentMap: Record<string, PostContent> = {
       "second-post": { html: "<p>Pre-rendered body</p>", title: "Second Post" },
