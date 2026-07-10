@@ -252,5 +252,19 @@ ${ncxPoints}
     zip.file(path, await source.readBytes(path), { date: FIXED_DATE });
   }
 
+  // JSZip auto-creates an implicit entry for every intermediate directory
+  // (e.g. "OEBPS/Fonts/") the first time a nested path is added, and that
+  // auto-created entry defaults to `new Date()` — real wall-clock time —
+  // because `{ date: FIXED_DATE }` above only applies to the file entries
+  // themselves, not the parent folders JSZip synthesizes on their behalf.
+  // Left alone, that makes every rebuild with any subdirectory resource
+  // byte-different, defeating the mirror's changed-file detection (a
+  // formerly-`keep`ing file spuriously becomes a `write` on every run).
+  // Force every directory entry back to the fixed date after all files are
+  // added, once JSZip has finished synthesizing them.
+  for (const entry of Object.values(zip.files)) {
+    if (entry.dir) entry.date = FIXED_DATE;
+  }
+
   return zip.generateAsync({ type: "uint8array" });
 }

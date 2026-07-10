@@ -71,4 +71,24 @@ describe("buildExcerpt", () => {
     const b = await buildExcerpt(source, [1, 2], { title: "x" });
     expect(Buffer.from(a).equals(Buffer.from(b))).toBe(true);
   });
+
+  it("fixes the date on every entry, including JSZip's auto-created directory entries", async () => {
+    // JSZip synthesizes an implicit entry for every intermediate directory
+    // (e.g. "OEBPS/") the first time a nested path is added, and that
+    // synthesized entry defaults to the real wall clock unless corrected —
+    // silently breaking the byte-identical-rebuild guarantee this fixes
+    // (a `keep` becomes a spurious `write` on every run). A same-process
+    // double-build (the test above) can pass by timing coincidence even when
+    // this is broken, since both calls often land in the same whole-second
+    // DOS-date bucket; asserting every entry's date directly is the
+    // non-flaky check.
+    const source = await openFixture();
+    const bytes = await buildExcerpt(source, [1, 2], { title: "x" });
+    const zip = await JSZip.loadAsync(bytes);
+    const dirEntries = Object.values(zip.files).filter((f) => f.dir);
+    expect(dirEntries.length).toBeGreaterThan(0);
+    for (const entry of Object.values(zip.files)) {
+      expect(entry.date.toISOString()).toBe("2020-01-01T00:00:00.000Z");
+    }
+  });
 });
