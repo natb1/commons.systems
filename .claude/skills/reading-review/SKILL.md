@@ -185,10 +185,13 @@ automatic retry.
 
 Prose only — a SKILL.md is model instructions with no automated test surface.
 
-- Dry-run in an interactive session against
-  `tactic-reading-chunk-1-plato-cave` without landing (stop before
-  `graph-commit`): confirm the skill selects chunk 1 by priority, surfaces its
-  three questions, produces valid patched JSON that
+- Dry-run in an interactive session with no argument, without landing (stop
+  before `graph-commit`): confirm the skill selects the unresolved
+  `tactic-reading-chunk-*` node with the lowest `attributes.curriculum.priority`
+  (chunk 1, `tactic-reading-chunk-1-plato-cave`, is already `phase: done` as of
+  2026-07-07 and is no longer eligible — chunk 2,
+  `tactic-reading-chunk-2-aristotle-hexis`, is the current lowest-priority
+  unresolved chunk), surfaces its questions, produces valid patched JSON that
   `npx tsx packages/intentionsutil/scripts/validate-graph.ts` accepts, and
   plans exactly one graph-commit bundle.
 - Confirm no `gh` invocation appears anywhere in the flow.
