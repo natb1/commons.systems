@@ -549,6 +549,62 @@ describe("createImageArchiveRenderer", () => {
     expect(result.entries["image-002.png"]!.blob).toHaveBeenCalledTimes(1);
   });
 
+  it("goToPage evicts far object URLs so revisiting them re-fetches", async () => {
+    const result = mockEntries({
+      "image-001.png": new Uint8Array([1]),
+      "image-002.png": new Uint8Array([2]),
+      "image-003.png": new Uint8Array([3]),
+      "image-004.png": new Uint8Array([4]),
+      "image-005.png": new Uint8Array([5]),
+    });
+
+    const container = makeContainer();
+    const renderer = createImageArchiveRenderer();
+    await renderer.init(container, ARCHIVE_BUF);
+    // Page 1 displayed, page 2 prefetched — both have a resolved object URL.
+    expect(result.entries["image-001.png"]!.blob).toHaveBeenCalledTimes(1);
+    expect(result.entries["image-002.png"]!.blob).toHaveBeenCalledTimes(1);
+
+    // Jump far enough that pages 1 and 2 fall outside the retention window.
+    await renderer.goToPage(4);
+
+    // Revisiting page 1 must re-fetch: its object URL was revoked and cleared.
+    await renderer.goToPage(1);
+    expect(result.entries["image-001.png"]!.blob).toHaveBeenCalledTimes(2);
+  });
+
+  it("renderPageInto (spread mode) evicts far object URLs so revisiting them re-fetches", async () => {
+    const result = mockEntries({
+      "image-001.png": new Uint8Array([1]),
+      "image-002.png": new Uint8Array([2]),
+      "image-003.png": new Uint8Array([3]),
+      "image-004.png": new Uint8Array([4]),
+      "image-005.png": new Uint8Array([5]),
+      "image-006.png": new Uint8Array([6]),
+    });
+
+    const container = makeContainer();
+    const renderer = createImageArchiveRenderer();
+    await renderer.init(container, ARCHIVE_BUF);
+
+    // Render a spread on pages 2-3, as spread-controller.render() does.
+    await renderer.renderPageInto!(2, makeContainer());
+    await renderer.renderPageInto!(3, makeContainer());
+    expect(result.entries["image-002.png"]!.blob).toHaveBeenCalledTimes(1);
+    expect(result.entries["image-003.png"]!.blob).toHaveBeenCalledTimes(1);
+
+    // Advance to a spread far enough that pages 2-3 fall outside the window.
+    await renderer.renderPageInto!(5, makeContainer());
+    await renderer.renderPageInto!(6, makeContainer());
+
+    // Revisiting the 2-3 spread must re-fetch: eviction must apply on the
+    // spread-mode (renderPageInto) path, not just single-page goToPage.
+    await renderer.renderPageInto!(2, makeContainer());
+    await renderer.renderPageInto!(3, makeContainer());
+    expect(result.entries["image-002.png"]!.blob).toHaveBeenCalledTimes(2);
+    expect(result.entries["image-003.png"]!.blob).toHaveBeenCalledTimes(2);
+  });
+
   it("calls onError when prefetch fails", async () => {
     const onError = vi.fn();
     const entries = makeMockEntries({

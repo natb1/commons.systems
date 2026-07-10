@@ -103,7 +103,10 @@ export function createImageArchiveRenderer(onError?: (err: unknown) => void): Co
    * the given 1-based page. Evicted slots re-fetch lazily via getObjectUrl when
    * navigated to again. Only completed slots (resolvedUrl set) are touched, so an
    * in-flight fetch is left alone; the window keeps the current page and the
-   * prefetched next page live.
+   * prefetched next page live. Called from both single-page navigation
+   * (goToPage/init) and spread-mode rendering (renderPageInto) — spread pages
+   * are always adjacent (see spreadsForPageCount), so a window of 1 keeps both
+   * pages of a spread live across the two renderPageInto calls that render it.
    */
   function evictObjectUrlsOutsideWindow(centerPage: number): void {
     const centerIndex = centerPage - 1;
@@ -176,6 +179,7 @@ export function createImageArchiveRenderer(onError?: (err: unknown) => void): Co
         if (destroyed) { img.remove(); return; }
         img.src = url;
         prefetchNextPage(page);
+        evictObjectUrlsOutsideWindow(page);
       } catch (err) {
         // The blob fetch failed — remove the orphaned src-less placeholder so the
         // error path leaves target clean, then rethrow.
