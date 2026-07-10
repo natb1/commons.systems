@@ -230,7 +230,7 @@ describe("prerenderPosts", () => {
     const perPostCall = vi.mocked(fs.writeFileSync).mock.calls.find(
       (c) => String(c[0]).includes("post/hello-world"),
     );
-    const html = perPostCall![1] as string;
+    const html = perPostCall![1] as string; // type-safety-ok: mock.calls tuple access, matches existing tests in this file
 
     // Exactly one </head> — no `$&`-spliced copy injected mid-attribute.
     expect(html.split("</head>")).toHaveLength(2);
