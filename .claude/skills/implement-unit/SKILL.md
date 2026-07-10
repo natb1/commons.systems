@@ -41,8 +41,11 @@ The caller supplies:
 ## Steps
 
 1. **Launch an implementation subagent** via the Agent tool using the caller-supplied
-   `model`. The prompt includes `context` and `scope`, plus the explicit constraint:
-   *the subagent edits the working tree only — no commits, no pushes.*
+   `model`. The prompt includes `context` and `scope`, plus two explicit constraints:
+   *the subagent edits the working tree only — no commits, no pushes*, and,
+   verbatim: "Read any file with the Read tool
+   before your first Edit or Write to it in this session — the edit is rejected
+   otherwise and the retry burns the tokens twice."
 
    - **If the unit's `scope` touches `firestore.rules` or Firestore queries**
      (collection/query reads or writes, or security-rule code), `Read

@@ -29,12 +29,13 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-review-lows-publishing
   pr: 2824
   attempts: {}
-  markers: []
+  markers:
+    - qa-done
   strategy_fingerprint: d20db0a44e3f83b98133d241bc8915d2ef34944e9f54c6b2e0f2dfc017366328
 validates: []
 blocked_by: []
