@@ -347,14 +347,20 @@ export class IdbDataSource implements DataSource {
   }
 
   async updateJournalLegCleared(legId: string, cleared: boolean): Promise<void> {
-    const row = await get<IdbJournalLeg>("journalLegs", legId);
-    if (!row) throw new Error(`Journal leg ${legId} not found`);
-    // assertLegStateTransition reads the domain shape; only cleared/reconciledAt matter.
-    assertLegStateTransition(
-      { cleared: row.cleared, reconciledAt: row.reconciledAtMs == null ? null : Timestamp.fromMillis(row.reconciledAtMs) },
-      cleared,
-    );
-    await put("journalLegs", { ...row, cleared } as unknown as Record<string, unknown>);
+    // Read-modify-write in a single read-write transaction (see updateRecord):
+    // the get and the transition check and the put share one transaction, so a
+    // concurrent toggle of the same leg can't validate against a stale
+    // cleared/reconciledAt snapshot and then clobber the other's write.
+    await runInWriteTransaction(["journalLegs"], async (tx) => {
+      const row = await tx.get<IdbJournalLeg>("journalLegs", legId);
+      if (!row) throw new Error(`Journal leg ${legId} not found`);
+      // assertLegStateTransition reads the domain shape; only cleared/reconciledAt matter.
+      assertLegStateTransition(
+        { cleared: row.cleared, reconciledAt: row.reconciledAtMs == null ? null : Timestamp.fromMillis(row.reconciledAtMs) },
+        cleared,
+      );
+      await tx.put("journalLegs", { ...row, cleared });
+    });
   }
 
   async createReconciliationEvent(

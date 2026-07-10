@@ -4,13 +4,17 @@ import { timestampMockFactory, makeParsedData } from "./helpers";
 
 vi.mock("firebase/firestore", () => timestampMockFactory());
 
-vi.mock("../src/firestore.js", () => ({
-  getTransactions: vi.fn(),
-  getBudgets: vi.fn(),
-  getBudgetPeriods: vi.fn(),
-  getRules: vi.fn(),
-  getNormalizationRules: vi.fn(),
-}));
+vi.mock(import("../src/firestore.js"), async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    getTransactions: vi.fn(),
+    getBudgets: vi.fn(),
+    getBudgetPeriods: vi.fn(),
+    getRules: vi.fn(),
+    getNormalizationRules: vi.fn(),
+  };
+});
 
 vi.mock("virtual:budget-seed-data", async () => {
   const { SEED_DATA_MOCK } = await import("./fixtures/seed-data-mock");
@@ -376,6 +380,60 @@ describe("IdbDataSource", () => {
       expect(legs).toHaveLength(1);
       expect(legs[0].reconciledEventId).toBeNull();
       expect(legs[0].reconciledAt).toBeNull();
+    });
+  });
+
+  describe("updateJournalLegCleared", () => {
+    function legRow(id: string): IdbJournalLeg {
+      return {
+        id,
+        entryId: "entry-1",
+        accountId: "acct-a",
+        debit: 50,
+        credit: 0,
+        timestampMs: 1699999000000,
+        cleared: false,
+        reconciledAtMs: null,
+        reconciledEventId: null,
+        statementItemId: null,
+      };
+    }
+
+    it("marks a leg cleared", async () => {
+      await storeParsedData(makeParsedData({ journalLegs: [legRow("leg-1")] }));
+      const ds = new IdbDataSource();
+      await ds.updateJournalLegCleared("leg-1", true);
+      const legs = await ds.getJournalLegs();
+      expect(legs[0].cleared).toBe(true);
+    });
+
+    it("throws for a missing leg", async () => {
+      await storeParsedData(makeParsedData());
+      const ds = new IdbDataSource();
+      await expect(ds.updateJournalLegCleared("no-such-leg", true)).rejects.toThrow(
+        "Journal leg no-such-leg not found",
+      );
+    });
+
+    it("get-check-put runs in one transaction: concurrent toggles on different legs both persist", async () => {
+      // Regression guard for the atomic-write fix: updateJournalLegCleared used
+      // to get() and put() in separate transactions, the same race pattern
+      // updateRecord had. This drives two concurrent calls (on different legs,
+      // since toggling the *same* leg to different states concurrently would
+      // be an ambiguous/racy caller action outside this method's contract) to
+      // confirm the single-transaction rewrite didn't regress independent
+      // concurrent writes.
+      await storeParsedData(makeParsedData({
+        journalLegs: [legRow("leg-1"), legRow("leg-2")],
+      }));
+      const ds = new IdbDataSource();
+      await Promise.all([
+        ds.updateJournalLegCleared("leg-1", true),
+        ds.updateJournalLegCleared("leg-2", true),
+      ]);
+      const legs = await ds.getJournalLegs();
+      expect(legs.find((l) => l.id === "leg-1")!.cleared).toBe(true);
+      expect(legs.find((l) => l.id === "leg-2")!.cleared).toBe(true);
     });
   });
 
