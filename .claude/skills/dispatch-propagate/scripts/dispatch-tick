@@ -189,7 +189,11 @@ fi
 # is completely unchanged on every normal tick.
 #
 # The producer OWNS sentinel writes; the tick only READS the sentinel to decide
-# whether to launch, avoiding relaunching on every (frequent) tick.
+# whether to launch, avoiding relaunching on every (frequent) tick. This
+# once-per-UTC-day launch still yields COMPLETE day docs because the writer
+# finalizes in arrears: each run re-produces the sentinel's last-day doc (whose
+# earlier write captured only a partial day) before writing today's provisional
+# snapshot, so day D's doc reflects the full day after the first tick of D+1.
 if [[ "${DISPATCH_TOPIC_USAGE_ENABLED:-}" == "1" ]]; then
   _TU_GROUP_ID="${DISPATCH_TOPIC_USAGE_GROUP_ID:-}"
   if [[ -z "$_TU_GROUP_ID" ]]; then
@@ -517,8 +521,14 @@ case "${1:-}" in
     exit 0
     ;;
   sync-failed)
+    # Sonnet by default: none of the aux jobs below author product code
+    # (sync-repair runs /commit-merge-push, whose conflict recovery already
+    # escalates to an Opus subagent internally; diagnose-main diagnoses;
+    # jit-reminder runs reminder skills including digest). Omitting --model
+    # would inherit the session default (Opus). The force-opus config at the
+    # dispatch-spawn-job chokepoint still overrides this from above.
     "$SCRIPT_DIR/dispatch-spawn-job" --name sync-repair --cwd "$MAIN_WORKTREE" \
-      "/commit-merge-push" \
+      --model claude-sonnet-4-6 "/commit-merge-push" \
       || echo "dispatch-tick: WARNING: dispatch-spawn-job (sync-repair) failed; repair job lost" >&2
     exit 0
     ;;
@@ -529,7 +539,7 @@ case "${1:-}" in
       exit 2
     fi
     "$SCRIPT_DIR/dispatch-spawn-job" --name diagnose-main --cwd "$MAIN_WORKTREE" \
-      "/dispatch-diagnose-main $sha" \
+      --model claude-sonnet-4-6 "/dispatch-diagnose-main $sha" \
       || echo "dispatch-tick: WARNING: dispatch-spawn-job (diagnose-main) failed; diagnose job lost" >&2
     exit 0
     ;;
@@ -540,7 +550,7 @@ case "${1:-}" in
       exit 2
     fi
     "$SCRIPT_DIR/dispatch-spawn-job" --name "jit-reminder-$num" --cwd "$MAIN_WORKTREE" \
-      "/dispatch-jit-reminder $repo $num $project $item" \
+      --model claude-sonnet-4-6 "/dispatch-jit-reminder $repo $num $project $item" \
       || echo "dispatch-tick: WARNING: dispatch-spawn-job (jit-reminder-$num) failed; reminder job lost" >&2
     exit 0
     ;;
