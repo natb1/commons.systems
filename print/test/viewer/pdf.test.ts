@@ -1068,7 +1068,7 @@ describe("clearSearch()", () => {
   // reproduces a render superseded WHILE suspended inside renderTextLayer's
   // own getTextContent() await — the specific race the guard exists for.
   it("a text-layer render superseded while awaiting getTextContent() never paints stale text over a newer page", async () => {
-    const pdfjs = (await import("pdfjs-dist")) as unknown as {
+    const pdfjs = (await import("pdfjs-dist")) as unknown as { // type-safety-ok: vitest mock for pdfjs-dist internal __fakeDoc test hook, mirrors the getOutline override above
       __fakeDoc: { getPage: (i: number) => Promise<unknown> };
     };
     const originalGetPage = pdfjs.__fakeDoc.getPage;
@@ -1104,17 +1104,17 @@ describe("clearSearch()", () => {
       // Page 3 renders to completion while page 2 is still suspended, becoming
       // the winner and painting its own text layer.
       await renderer.goToPage(3);
-      expect(container.querySelector(".textLayer")!.textContent).toBe("a fish swims");
+      expect(container.querySelector(".textLayer")!.textContent).toBe("a fish swims"); // type-safety-ok: idiomatic test DOM access, .textLayer is created by init() above
 
       // Let page 2's getTextContent() resolve now that it is stale (renderGen
       // has moved to 3). The guard must self-abort before touching the shared
       // textLayerDiv; without it, this would replaceChildren() the live
       // page-3 layer and repaint page 2's stale (invisible but selectable)
       // text over it.
-      resolvePage2Text!();
+      resolvePage2Text!(); // type-safety-ok: assigned synchronously by getTextContent() above, asserted non-null at line 1102
       await p2;
 
-      expect(container.querySelector(".textLayer")!.textContent).toBe("a fish swims");
+      expect(container.querySelector(".textLayer")!.textContent).toBe("a fish swims"); // type-safety-ok: idiomatic test DOM access, .textLayer is created by init() above
     } finally {
       pdfjs.__fakeDoc.getPage = originalGetPage;
     }
