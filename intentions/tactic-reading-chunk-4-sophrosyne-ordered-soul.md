@@ -30,15 +30,9 @@ validates:
   - strategy-philosophical-grounding
 blocked_by: []
 office_hours:
-  reason: "Personal reading, one sitting of at most 30 author-minutes: read NE
-    III.10–12 and Republic IV against tradition-aristotle and tradition-plato.
-    Not claude-executable — the chunk exists to verify the delegated
-    articulation personally (the recovery path of
-    delegation-philosophical-articulation). At office-hours: re-open the
-    questions in the node body against the texts; amend the records where the
-    reading contradicts them (the reading wins), ratify where they hold; stamp
-    the delegation's last_exercised; the completed chunk counts toward
-    strategy-philosophical-grounding's signal."
+  reason: "See tactic-tradition-reading-program → shared chunk office-hours reason
+    (verify-record). This chunk: NE III.10–12 and Republic IV against
+    tradition-aristotle and tradition-plato."
   since: 2026-07-06
   recommendation: null
 pace_exempt: false

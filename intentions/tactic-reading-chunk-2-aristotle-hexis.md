@@ -35,14 +35,11 @@ validates:
   - strategy-philosophical-grounding
 blocked_by: []
 office_hours:
-  reason: "Personal reading, one sitting of at most 30 author-minutes, intended
-    after chunk 1 (blocked_by encodes the working order): read Nicomachean
-    Ethics II.1-6 against tradition-aristotle and kind-virtue. Not
-    claude-executable — the chunk exists to verify the delegated articulation
-    personally. At office-hours: re-open the questions in the node body against
-    the text — in particular whether tension_with fairly renders the mean; amend
-    where the reading contradicts (the reading wins), ratify where it holds;
-    stamp last_exercised. Second deferral under review since 2026-07-09: the
+  reason: "See tactic-tradition-reading-program → shared chunk office-hours reason
+    (verify-record). This chunk: Nicomachean Ethics II.1-6 against
+    tradition-aristotle and kind-virtue; intended after chunk 1 (blocked_by
+    encodes the order). Node-specific question: whether tension_with fairly
+    renders the mean. Second deferral under review since 2026-07-09: the
     cadence-as-habituation account on strategy-explicit-intent — does II.1-4
     ground it, or does the text place habituation's work elsewhere? The reading
     wins."

@@ -34,15 +34,13 @@ validates:
   - strategy-philosophical-grounding
 blocked_by: []
 office_hours:
-  reason: "Personal reading, ~30 author-minutes of independent reading (the
-    session may span sittings): Phaedrus 274b-278b against the 2026-07-09
-    covenant clarification on strategy-explicit-intent and the delegated-scope
-    entry on delegation-philosophical-articulation. Type-b conduct: the author
-    articulates from the text before Claude's account appears. At office-hours:
-    amend or ratify the covenant clarification; on ratification amend
-    tradition-plato (adopted entry; reconcile 'best current realization' to the
-    indirection); record any reading-wins catch in divergence.contradictions;
-    stamp last_exercised."
+  reason: "See tactic-tradition-reading-program → shared chunk office-hours reason
+    (verify-record; type-b conduct). This chunk: Phaedrus 274b-278b against the
+    2026-07-09 covenant clarification on strategy-explicit-intent and the
+    delegated-scope entry on delegation-philosophical-articulation; amend or
+    ratify the covenant clarification; on ratification amend tradition-plato
+    (adopted entry; reconcile 'best current realization' to the indirection);
+    record any reading-wins catch in divergence.contradictions."
   since: 2026-07-09
   recommendation: null
 pace_exempt: false

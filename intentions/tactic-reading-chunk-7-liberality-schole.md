@@ -30,14 +30,9 @@ validates:
   - strategy-philosophical-grounding
 blocked_by: []
 office_hours:
-  reason: "Personal reading, one sitting of at most 30 author-minutes: read NE
-    IV.1, NE X.7, and Politics I.2 against tradition-aristotle. Not
-    claude-executable — the chunk exists to verify the delegated articulation
-    personally (the recovery path of delegation-philosophical-articulation). At
-    office-hours: re-open the questions in the node body against the texts;
-    amend the record where the reading contradicts it (the reading wins), ratify
-    where it holds; stamp the delegation's last_exercised; the completed chunk
-    counts toward strategy-philosophical-grounding's signal."
+  reason: "See tactic-tradition-reading-program → shared chunk office-hours reason
+    (verify-record). This chunk: NE IV.1, NE X.7, and Politics I.2 against
+    tradition-aristotle."
   since: 2026-07-06
   recommendation: null
 pace_exempt: false
