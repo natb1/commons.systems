@@ -30,7 +30,32 @@ phase: implement
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: 'origin/main advanced by PR #2783 (attention-surface
+    analytics-collector), which added analytics functionality directly into
+    office-hours-snapshot/src/snapshot.ts, semantically conflicting with this
+    node PR #2805 that extracts that same file into the new shared module
+    office-hours/src/snapshot-wire.ts (provision exit 11; run.ts + snapshot.ts
+    conflict), and the graph-native model has no autonomous fix-conflicts lane
+    for an implement-phase node. Next steps: run /fix-conflicts against PR #2805
+    (office-hours is read-only, so a human triggers it). PRESERVE BOTH SIDES, do
+    not pick one: choosing HEAD silently drops #2783 just-merged analytics
+    feature, choosing origin/main drops this PR wire-contract extraction.
+    Resolution is to PORT #2783 analytics additions into the new shared module
+    office-hours/src/snapshot-wire.ts (keeping snapshot.ts as the thin re-export
+    shim): add "analytics" to SnapshotScope, export serializeProjectSignals, add
+    foldProjectSignals, and add the --scope=analytics fold path to
+    office-hours-snapshot/src/run.ts; the run.ts other hunk is a JSDoc-only
+    block and is trivial. PR #2805 CI is currently all-green on its own head;
+    execution.pr is null and no implement->qa transition was ever written, so
+    after the conflict is resolved the node resumes at phase=implement and the
+    next implement worker re-verifies CI and writes the transition. Ordering
+    note: this node rationale said it should land before or alongside the
+    analytics-collector rebuild, but #2783 merged first, so this conflict is
+    predictable ordering fallout, not a mystery, and needs only a fix-conflicts
+    pass, not re-planning the tactic.'
+  since: 2026-07-10
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes: {}
