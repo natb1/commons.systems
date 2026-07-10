@@ -102,8 +102,11 @@ export function useBudgetTableInteractivity(
           }
           await getActiveDataSource().updateBudget(budgetId, { name: target.value });
         } else if (target.classList.contains("edit-allowance")) {
-          const allowance = Number(target.value);
-          if (!Number.isFinite(allowance) || allowance < 0) {
+          // Number("") is 0, not NaN — guard the emptied input explicitly so a
+          // cleared field is rejected rather than silently persisting allowance 0.
+          const raw = target.value.trim();
+          const allowance = Number(raw);
+          if (raw === "" || !Number.isFinite(allowance) || allowance < 0) {
             showInputError(target, "Allowance must be a non-negative number");
             return;
           }

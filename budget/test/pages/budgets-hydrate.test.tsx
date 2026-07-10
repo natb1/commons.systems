@@ -189,6 +189,16 @@ describe("Budgets table interactivity (blur/change save) — Unit 3 contract", (
     expect(input.title).toContain("non-negative");
   });
 
+  it("rejects a cleared allowance instead of persisting 0", async () => {
+    const c = await renderBudgets([budget({ allowance: 150 })]);
+    const input = c.querySelector(".edit-allowance") as HTMLInputElement;
+    input.value = "";
+    blur(input);
+    await flush();
+    expect(activeDS.updateBudget).not.toHaveBeenCalled();
+    expect(input.classList.contains("save-error")).toBe(true);
+  });
+
   it("skips save when name value unchanged", async () => {
     const c = await renderBudgets([budget({ name: "Food" })]);
     const input = c.querySelector(".edit-name") as HTMLInputElement;

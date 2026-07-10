@@ -54,6 +54,7 @@ import {
 import { suggestClearedLegs, SUGGESTION_TOLERANCE_DAYS } from "../reconcile-hints.js";
 import { type RenderPageOptions } from "./render-options.js";
 import { parseReconcileQuery, parseReconcilePeriod } from "./account-view-model.js";
+import { formatUtcDate } from "./format-utc-date.js";
 
 // ── Query state + URL sync (parseReconcileQuery / replaceQueryParam) ───────────
 
@@ -113,7 +114,7 @@ function availablePeriods(legs: JournalLeg[], accountId: string): string[] {
 }
 
 function formatDateShort(ms: number): string {
-  return new Date(ms).toLocaleDateString();
+  return formatUtcDate(ms);
 }
 
 /**
