@@ -527,7 +527,7 @@ describe("resolveAttention backward blocked_by distribution", () => {
       anode({ id: "inner", kind: "tactic", parent: "outer" }),
     ];
 
-    let result!: ReturnType<typeof resolveAttention>;
+    let result!: ReturnType<typeof resolveAttention>; // type-safety-ok: assigned synchronously inside the expect(() => {...}) callback immediately below, before any read
     expect(() => {
       result = resolveAttention(nodes);
     }).not.toThrow();

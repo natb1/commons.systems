@@ -378,23 +378,35 @@ export function resolveAttention(nodes: IntentionNode[]): Map<string, ResolvedAt
     return false;
   };
 
+  // Both maps below are seeded/keyed from the SAME `nodes`/`sortedNodeIds`
+  // source, so a lookup by a known node id is a maintained invariant, not
+  // user input — `mustGet` turns a violation into a clear error instead of an
+  // `as`-cast that would silently paper over a real bug.
+  function mustGet<V>(map: Map<string, V>, id: string, what: string): V {
+    const value = map.get(id);
+    if (value === undefined) {
+      throw new IntentionSchemaError(`attention: expected ${what} for node id "${id}"`);
+    }
+    return value;
+  }
+
   let changed = true;
   while (changed) {
     changed = false;
     for (const id of sortedNodeIds) {
       if (isOverrideNode.has(id)) continue; // constant outgoing
-      const node = byId.get(id) as IntentionNode;
+      const node = mustGet(byId, id, "node");
       const next = new Map<string, number>();
       const attention = isEligible(node) ? node.attention : null;
       if (attention !== null && attention.boost !== null) {
         next.set(id, attention.boost); // own relative claim
       }
       for (const d of distributorIds(node)) {
-        for (const [src, amt] of authoredOutgoing.get(d) as Map<string, number>) {
+        for (const [src, amt] of mustGet(authoredOutgoing, d, "authoredOutgoing entry")) {
           next.set(src, amt); // dedupe by src; amounts identical (undiluted)
         }
       }
-      if (mapsDiffer(next, authoredOutgoing.get(id) as Map<string, number>)) {
+      if (mapsDiffer(next, mustGet(authoredOutgoing, id, "authoredOutgoing entry"))) {
         authoredOutgoing.set(id, next);
         changed = true;
       }
@@ -445,7 +457,7 @@ export function resolveAttention(nodes: IntentionNode[]): Map<string, ResolvedAt
 
   const result = new Map<string, ResolvedAttention>();
   for (const n of eligible) {
-    const authoredOut = authoredOutgoing.get(n.id) as Map<string, number>;
+    const authoredOut = mustGet(authoredOutgoing, n.id, "authoredOutgoing entry");
     let authoredValue = 0;
     for (const amt of authoredOut.values()) authoredValue += amt;
     const sources = [...authoredOut.entries()]
