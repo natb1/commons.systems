@@ -52,6 +52,18 @@ assert_eq "no policy: qa exit 0" "0" "$RC"
 run_phase "$EMPTY_DIR" review
 assert_eq "no policy: review -> sonnet" "claude-sonnet-4-6" "$OUT"
 
+run_phase "$EMPTY_DIR" fix-checks
+assert_eq "no policy: fix-checks -> sonnet" "claude-sonnet-4-6" "$OUT"
+assert_eq "no policy: fix-checks exit 0" "0" "$RC"
+
+run_phase "$EMPTY_DIR" fix-conflicts
+assert_eq "no policy: fix-conflicts -> sonnet" "claude-sonnet-4-6" "$OUT"
+assert_eq "no policy: fix-conflicts exit 0" "0" "$RC"
+
+run_phase "$EMPTY_DIR" main-qa
+assert_eq "no policy: main-qa -> sonnet" "claude-sonnet-4-6" "$OUT"
+assert_eq "no policy: main-qa exit 0" "0" "$RC"
+
 run_phase "$EMPTY_DIR" plan
 assert_eq "no policy: unmapped plan -> empty" "" "$OUT"
 assert_eq "no policy: plan exit 0" "0" "$RC"
