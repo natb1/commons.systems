@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+# dispatch-main-qa-triage <N> — shared browser-verifiability triage for a
+# main-qa follow-up (qa-main SKILL.md Step 4·0, single-sourced).
+#
+# Consulted from two seams so the criteria can never drift:
+#   - dispatch-route, PRE-provision: a not-browser-verifiable follow-up is
+#     parked to office-hours before dispatch-provision-worktree and the phase
+#     session boot are paid — previously that rejection only happened inside
+#     the booted /qa-main session, so every unverifiable sibling follow-up
+#     cost a worktree + session boot to be turned away.
+#   - /qa-main Step 4·0, in-session: directly-invoked / interactive runs
+#     delegate the same criteria here before loading browser tools.
+#
+# Criteria (Step 4·0's non-browser-verifiable class):
+#   1. No URL_PATH — the follow-up body carries no `**URL path:**` line. The
+#      dispatch-qa-needs-main-followup template omits that line entirely when
+#      url_path is empty or the literal "current", so absence covers both:
+#      there is no browser-addressable surface.
+#   2. Non-browser outcome — the title / expected outcome names a CLI or
+#      server-host result (nix flake/build, NixOS/darwin rebuild, systemd,
+#      WSL, ssh, an explicitly command-line outcome): nothing observable in a
+#      browser even when a url_path is present.
+#
+# Deploy-readiness (qa-main Step 4b) is deliberately NOT evaluated here: it is
+# a verdict-time signal that can only demote pass→cannot-verify after
+# observation (signal, not gate), it needs a second relations read, and it
+# must never block dispatch — a not-yet-deployed follow-up is gated by its
+# blocked_by link, not by this triage.
+#
+# Exit codes:
+#   0 — browser-verifiable; prints `verifiable: url_path=<path>`.
+#   3 — not browser-verifiable; prints ONE reason line
+#       (`not-browser-verifiable: <specific reason>`) that callers surface
+#       verbatim in the office-hours park comment / dispatch-mark-deviation
+#       call (qa-main's "always name the specific reason" contract).
+#   1 — gh/parse failure (clear error on stderr, no fallback routing —
+#       .claude/rules/code-style.md).
+#   2 — usage error.
+#
+# Calls gh (one gh_issue_view_rest REST read) — invoke with
+# dangerouslyDisableSandbox: true (see .claude/rules/sandbox.md).
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+
+N="${1:-}"
+if [[ -z "$N" || ! "$N" =~ ^[1-9][0-9]*$ ]]; then
+  echo "error: usage: dispatch-main-qa-triage <N> — <N> must be a positive integer" >&2
+  exit 2
+fi
+if [[ $# -gt 1 ]]; then
+  echo "error: dispatch-main-qa-triage: unexpected argument '$2'" >&2
+  exit 2
+fi
+
+ISSUE_JSON=$(gh_issue_view_rest "$N") || {
+  echo "error: dispatch-main-qa-triage: gh_issue_view_rest failed for #$N" >&2
+  exit 1
+}
+TITLE=$(jq -r '.title // ""' <<<"$ISSUE_JSON") || {
+  echo "error: dispatch-main-qa-triage: failed to parse issue JSON for #$N" >&2
+  exit 1
+}
+BODY=$(jq -r '.body // ""' <<<"$ISSUE_JSON") || {
+  echo "error: dispatch-main-qa-triage: failed to parse issue JSON for #$N" >&2
+  exit 1
+}
+
+# URL_PATH: first `**URL path:** <path>` line of the follow-up body (the
+# dispatch-qa-needs-main-followup template shape).
+URL_PATH=$(sed -nE 's/^\*\*URL path:\*\*[[:space:]]*//p' <<<"$BODY" | head -n1)
+
+# Expected-outcome text: the template's single `**Expected outcome:** …` line.
+EXPECTED=$(sed -nE 's/^\*\*Expected outcome:\*\*[[:space:]]*//p' <<<"$BODY" | head -n1)
+
+# Criterion 2 scan surface: title + expected outcome ONLY — never the finding /
+# narration text, which routinely mentions tooling (a nix-built page, an ssh'd
+# deploy) without making the outcome itself non-browser.
+SCAN="$TITLE
+$EXPECTED"
+
+# Step 4·0's non-browser outcome class as a conservative pattern list: the
+# skill's named examples (nix flake check, darwin build) plus their obvious
+# variants. A miss here is cheap — the follow-up merely falls through to the
+# in-session Step 4·0, today's behavior; a hit merely costs a human glance at
+# the office-hours queue (qa-main's cost asymmetry).
+NON_BROWSER_RE='nix[- ](flake|build|develop|run)|nixos|nix-darwin|home-manager|--pure-eval|darwin[- ](build|rebuild)|systemctl|systemd[- ](unit|service)|\bwsl\b|\bssh\b|\bcli\b|command[- ]line'
+
+MATCHED=$(grep -Eio "$NON_BROWSER_RE" <<<"$SCAN" | head -n1 || true)
+
+if [[ -z "$URL_PATH" ]]; then
+  if [[ -n "$MATCHED" ]]; then
+    echo "not-browser-verifiable: no url_path and the expected outcome names a non-browser surface ('$MATCHED')"
+  else
+    echo "not-browser-verifiable: no url_path — the follow-up has no browser-addressable surface"
+  fi
+  exit 3
+fi
+if [[ -n "$MATCHED" ]]; then
+  echo "not-browser-verifiable: expected outcome names a non-browser surface ('$MATCHED') despite url_path '$URL_PATH'"
+  exit 3
+fi
+
+echo "verifiable: url_path=$URL_PATH"
+exit 0

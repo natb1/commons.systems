@@ -21,13 +21,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-token-economy-sensor
   pr: 2779
   attempts:
     fix: 1
-  markers: []
+  markers:
+    - qa-done
   strategy_fingerprint: 157bc07dd1dbc4a1c7a5095f7c3094ee88accf5879271bc6d2c4cd4794029848
 validates:
   - strategy-token-economy

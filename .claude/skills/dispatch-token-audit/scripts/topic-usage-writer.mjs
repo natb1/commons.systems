@@ -37,12 +37,18 @@
 //   A durable per-host date sentinel under the state dir records the last day
 //   processed (the producer OWNS sentinel writes — written only after a
 //   successful real-mode run).
-//     - Normal run (sentinel last-day == yesterday): produce a doc for TODAY
-//       (UTC) only.
+//     - Normal run (sentinel last-day == yesterday): re-produce YESTERDAY's doc
+//       and produce TODAY's. Yesterday's doc was written ON yesterday (by the
+//       first tick after that day's UTC midnight), so it captured only the
+//       minutes before that run — re-producing it now that the day has fully
+//       elapsed finalizes it. Today's doc is a provisional partial-day snapshot,
+//       finalized in turn by the first run after the next UTC midnight. So every
+//       day-D doc reflects the full day once day D has elapsed.
 //     - Gap recovery (sentinel last-day > one day ago): the producer was offline
-//       for one or more days; backfill one doc per missed calendar day
-//       (lastDay+1..today) so downtime gaps are recovered, not silently skipped,
-//       bounded by the same day cap.
+//       for one or more days; re-produce lastDay (finalizing its partial-day
+//       write) plus one doc per missed calendar day (lastDay+1..today) so
+//       downtime gaps are recovered, not silently skipped, bounded by the same
+//       day cap.
 //     - First run (sentinel absent) or a corrupt sentinel: backfill one doc per
 //       available transcript UTC day (distinct days derived from transcript file
 //       mtimes), bounded by a day cap (keep the most recent N). The covered range
@@ -546,13 +552,20 @@ function capDaysToBackfill(days, cap, label) {
 }
 
 // Determine the ordered list of UTC days to produce.
-//   sentinel present, last-day == yesterday    -> [today] (normal daily run)
-//   sentinel present, last-day > one day ago   -> gap recovery: the missed days
+//   sentinel present, last-day == yesterday    -> [yesterday, today]: finalize
+//                                                 yesterday (its doc was written
+//                                                 ON yesterday, a partial-day
+//                                                 snapshot) + today's provisional.
+//   sentinel present, last-day > one day ago   -> gap recovery: lastDay
+//                                                 (finalized) + the missed days
 //                                                 lastDay+1..today, capped.
 //   sentinel present, last-day same/future     -> [today] (idempotent re-run)
 //   sentinel absent or corrupt                 -> first-run backfill of distinct
 //                                                 transcript days, capped.
-// In every backfill case the covered range and any cap drops are logged.
+// Every day-D doc is thus provisional while day D is in progress and finalized
+// by the first run after the next UTC midnight; the deterministic docId + .set()
+// make each re-write an idempotent overwrite. In every case the covered range
+// and any cap drops are logged.
 function targetDays(config) {
   const today = utcDay(config.nowEpochSeconds);
   if (fs.existsSync(sentinelPath(config))) {
@@ -563,17 +576,21 @@ function targetDays(config) {
         `sentinel last-day "${lastDay}" is not a valid YYYY-MM-DD; treating as a first run and backfilling`,
       );
       // fall through to the first-run backfill below
-    } else if (missed.length <= 1) {
-      // last-day is yesterday (missed == [today]) or a same-day/future re-run
-      // (missed empty). Either way, today only — unchanged daily behavior.
+    } else if (missed.length === 0) {
+      // Same-day (or future-sentinel) re-run: today only, idempotent.
       return [today];
     } else {
-      // The producer was offline for more than a day: backfill the missed days
-      // (lastDay+1..today) so downtime gaps are recovered, not silently skipped.
-      log(
-        `gap recovery: sentinel last-day ${lastDay} is ${missed.length} day(s) behind today ${today}; backfilling missed days`,
-      );
-      return capDaysToBackfill(missed, config.backfillCap, "gap recovery");
+      // Re-produce lastDay too: its doc was written ON lastDay, so it captured
+      // only the minutes of that day before the run. Now that the day has fully
+      // elapsed, this run finalizes it — plus any missed days and today's
+      // provisional snapshot.
+      if (missed.length > 1) {
+        log(
+          `gap recovery: sentinel last-day ${lastDay} is ${missed.length} day(s) behind today ${today}; backfilling missed days`,
+        );
+      }
+      const label = missed.length > 1 ? "gap recovery" : "daily run";
+      return capDaysToBackfill([lastDay, ...missed], config.backfillCap, label);
     }
   }
   // First run (sentinel absent) or a corrupt sentinel: backfill the distinct
