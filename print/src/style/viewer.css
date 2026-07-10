@@ -492,6 +492,110 @@ body.viewer-active {
   text-decoration: underline;
 }
 
+/* Annotations panel (mirrors the bookmarks list). */
+.viewer-annotations-heading {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+}
+
+.viewer-annotations-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 40vh;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-none);
+}
+
+.viewer-annotations-list:empty {
+  display: none;
+}
+
+.viewer-annotations-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  font-size: var(--text-micro);
+  padding: var(--space-2) var(--space-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.viewer-annotations-item:last-child {
+  border-bottom: none;
+}
+
+.viewer-annotation-entry {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.viewer-annotation-entry:hover .viewer-annotation-quote {
+  text-decoration: underline;
+}
+
+.viewer-annotation-quote {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-style: italic;
+}
+
+.viewer-annotation-note {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+.viewer-annotation-delete {
+  flex: 0 0 auto;
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0 var(--space-1);
+}
+
+/* Floating capture control shown next to a live text selection. Positioned via
+   inline `position: fixed` from the selection rect; z-index keeps it above the
+   renderer canvas. */
+.viewer-annotation-capture {
+  z-index: 20;
+  display: flex;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-none);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.viewer-annotation-capture button {
+  cursor: pointer;
+  font-size: var(--text-micro);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: inherit;
+  border-radius: var(--radius-none);
+}
+
+.viewer-annotation-note-input {
+  font-size: var(--text-micro);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-none);
+}
+
 /* Outline / TOC */
 .viewer-outline-heading {
   margin: 0;

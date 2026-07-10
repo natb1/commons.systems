@@ -229,6 +229,7 @@ export function resolveViewerProps(
   const spath = item.storagePath;
   const uid = local ? null : user?.uid ?? null;
   const store = pickPositionStore(item, local, uid);
+  const annotationsStore = pickAnnotationsStore(item, local, uid);
 
   if (local) {
     // The resolveSource closure rejects when the file is gone. It reports the
@@ -248,9 +249,9 @@ export function resolveViewerProps(
       });
     switch (item.mediaType) {
       case "pdf":
-        return { item, createRenderer: (onError) => createPdfRenderer(onError), resolveSource: resolveLocal, store, uid };
+        return { item, createRenderer: (onError) => createPdfRenderer(onError), resolveSource: resolveLocal, store, annotationsStore, uid };
       case "epub":
-        return { item, createRenderer: (onError) => createEpubRenderer(onError), resolveSource: resolveLocal, store, uid };
+        return { item, createRenderer: (onError) => createEpubRenderer(onError), resolveSource: resolveLocal, store, annotationsStore, uid };
       default:
         throw new Error(`Unsupported local mediaType in viewer: ${item.mediaType}`);
     }
@@ -260,11 +261,11 @@ export function resolveViewerProps(
 
   switch (item.mediaType) {
     case "pdf":
-      return { item, createRenderer: (onError) => createPdfRenderer(onError), resolveSource: () => resolveFileSource(url, spath), store, uid };
+      return { item, createRenderer: (onError) => createPdfRenderer(onError), resolveSource: () => resolveFileSource(url, spath), store, annotationsStore, uid };
     case "epub":
-      return { item, createRenderer: (onError) => createEpubRenderer(onError), resolveSource: () => resolveFileSource(url, spath), store, uid };
+      return { item, createRenderer: (onError) => createEpubRenderer(onError), resolveSource: () => resolveFileSource(url, spath), store, annotationsStore, uid };
     case "image-archive":
-      return { item, createRenderer: (onError) => createImageArchiveRenderer(onError), resolveSource: () => resolveFileSource(url, spath), store, uid };
+      return { item, createRenderer: (onError) => createImageArchiveRenderer(onError), resolveSource: () => resolveFileSource(url, spath), store, annotationsStore, uid };
     default: {
       const _exhaustive: never = item.mediaType;
       throw new Error(`Unsupported mediaType in viewer: ${_exhaustive}`);
