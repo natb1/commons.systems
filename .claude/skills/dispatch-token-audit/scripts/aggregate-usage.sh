@@ -27,7 +27,10 @@
 #     --json-out PATH write the document to PATH instead of stdout.
 #     --exclude-sidecar-sessions  opt-in (default off): skip any transcript whose
 #                     sibling <stem>.file-issue-attribution.json exists, dropping
-#                     that file-issue session from every bucket.
+#                     that file-issue session from every bucket. The session's
+#                     nested subagent transcripts (<sid>/subagents/agent-*.jsonl)
+#                     are dropped with it — the sidecar totals already include
+#                     subagent usage, so scanning them would double-count.
 #   DISPATCH_AUDIT_PROJECTS_ROOT  override the projects root (used by the test
 #                     fixture). Default: $HOME/.claude/projects.
 #   DISPATCH_AUDIT_AGGREGATES_ENABLED  opt-in persist gate: set to "1" to pipe
@@ -165,13 +168,17 @@ if [[ -n "$DAY" ]]; then
   # The window spans exactly one calendar day; keep window metadata self-consistent.
   DAYS=1
 else
-  SINCE=$(date -d "$DAYS days ago" '+%Y-%m-%d %H:%M:%S')
+  # Both bounds are rendered in UTC (`date -u`): the find below interprets them
+  # under TZ=UTC, so a local-TZ rendering would silently shift the window by the
+  # host's UTC offset (e.g. UNTIL landing hours in the past west of UTC,
+  # dropping a transcript whose mtime is "now").
+  SINCE=$(date -u -d "$DAYS days ago" '+%Y-%m-%d %H:%M:%S')
   # UNTIL is "now", but `date` truncates to whole seconds while file mtimes carry
   # sub-second precision; a `! -newermt "$UNTIL"` upper bound would otherwise drop
   # a transcript written in the current second (mtime > floor(now)). Use +1s so the
   # current second is included — real transcripts are never in the future, so this
   # keeps --days output unchanged in practice.
-  UNTIL=$(date -d '+1 second' '+%Y-%m-%d %H:%M:%S')
+  UNTIL=$(date -u -d '+1 second' '+%Y-%m-%d %H:%M:%S')
 fi
 
 TMP=$(mktemp -d)
@@ -274,9 +281,10 @@ def cmd_prefix(c):
            or ( [ $a[] | select(.gitBranch=="HEAD") ] | length > 0 ) ) then "router-tick"
     # Real --bg dispatch workers are spawned with a phase-skill slash command.
     # Their first user message is a <command-name>/<skill></command-name> block
-    # whose skill is one of the dispatch worker phase set. This alternation must
-    # be updated when a new dispatch worker phase skill is added.
-    elif ($firstuser_str | test("<command-name>/(plan-issue|implement|qa-fix|review-fix|fix-checks|fix-conflicts|qa-main|budget-parse-job|resolve-epic|office-hours)</command-name>")) then "worker"
+    # whose skill is one of the dispatch worker phase set (plus the graph-native
+    # align family). This alternation must be updated when a new dispatch worker
+    # phase skill is added.
+    elif ($firstuser_str | test("<command-name>/(plan-issue|implement|qa-fix|review-fix|fix-checks|fix-conflicts|qa-main|budget-parse-job|resolve-epic|office-hours|align-strategy|align-tactics|align-init)</command-name>")) then "worker"
     else "other" end ) as $type
 
 # Peak context across assistant msgs.
@@ -398,7 +406,7 @@ def cmd_prefix(c):
 | {
     type: $type,
     id: $id,
-    artifact: ( ($stamp[0] // null) | if . == null then null else {repo, issue, pr, base_sha, branch} end ),
+    artifact: ( ($stamp[0] // null) | if . == null then null else {repo, issue, pr, base_sha, branch, node_id} end ),
     file: $path,
     primary_model: $primary_model,
     models: $models,
@@ -575,6 +583,22 @@ def types_for($r): (labels_for($r)) as $L | ([ type_labels[] | select(. as $t | 
                       | .cost_usd += cost($e.value.usage; ($e.key | split("\t")[1])) )
       )
     ) ) as $by_phase_model
+
+# ---- by_node (graph-native attribution) ----
+# Keyed by the sidecar-carried artifact.node_id. Only sessions whose sidecar
+# stamps a non-null node_id are folded — legacy issue-branch sessions carry
+# node_id:null and stay attributed via by_topic/by_type. Same reduce idiom as
+# $by_phase, but per-node sums are session-grained (price/cost/turns/sessions),
+# not skill-grained.
+| ( reduce ( $rows[] | select(.artifact != null and .artifact.node_id != null) ) as $r ({};
+      ($r.artifact.node_id) as $n
+      | .[$n] = {
+          sessions:        ((.[$n].sessions        // 0) + 1),
+          turns:           ((.[$n].turns           // 0) + $r.turns),
+          price_proxy_usd: ((.[$n].price_proxy_usd // 0) + price($r.usage)),
+          cost_usd:        ((.[$n].cost_usd        // 0) + session_cost($r))
+        }
+    ) ) as $by_node
 
 # ---- by_model ----
 | ( reduce $rows[] as $r ({};
@@ -795,6 +819,7 @@ def types_for($r): (labels_for($r)) as $L | ([ type_labels[] | select(. as $t | 
     by_session_type: $by_session_type,
     by_phase: $by_phase,
     by_phase_outcome: $by_phase_outcome,
+    by_node: $by_node,
     by_model: $by_model,
     by_topic: $by_topic,
     by_type: $by_type,
@@ -824,9 +849,21 @@ if [[ -d "$PROJECTS_ROOT" ]]; then
   while IFS= read -r -d '' file; do
     # --exclude-sidecar-sessions (opt-in, default off): drop a file-issue session
     # entirely when its sibling sidecar <stem>.file-issue-attribution.json exists,
-    # so it never lands in any bucket. Skip BEFORE counting/scanning.
-    if [[ "$EXCLUDE_SIDECAR" == 1 && -f "${file%.jsonl}.file-issue-attribution.json" ]]; then
-      continue
+    # so it never lands in any bucket. Skip BEFORE counting/scanning. A subagent
+    # transcript (<projectdir>/<sid>/subagents/agent-*.jsonl) has no sidecar of
+    # its own, but its PARENT session's sidecar totals already include subagent
+    # usage — so it resolves to the parent's sidecar
+    # (<projectdir>/<sid>.file-issue-attribution.json) and is excluded with the
+    # parent; keeping it in the scan would count those tokens twice once the
+    # priced sidecar is folded back.
+    if [[ "$EXCLUDE_SIDECAR" == 1 ]]; then
+      sidecar_stem="${file%.jsonl}"
+      if [[ "$file" == */subagents/*.jsonl ]]; then
+        sidecar_stem="${file%/subagents/*}"
+      fi
+      if [[ -f "$sidecar_stem.file-issue-attribution.json" ]]; then
+        continue
+      fi
     fi
     FILES_SCANNED=$((FILES_SCANNED + 1))
     # Per-session sidecar (#1861): <stem>.dispatch-stamp.json next to the

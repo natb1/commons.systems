@@ -24,8 +24,13 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-review-lows-attention-tools
+  pr: 2823
+  attempts: {}
+  markers: []
+  strategy_fingerprint: 327e063cfde88840cf67cc44c481d15ca04af4825933bd664fa370ed807b3bc9
 validates: []
 blocked_by: []
 office_hours: null

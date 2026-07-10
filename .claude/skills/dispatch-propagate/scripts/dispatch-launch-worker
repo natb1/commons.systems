@@ -16,8 +16,8 @@
 #     worktree (the #1047 merged-tree guarantee holds because dispatch-route
 #     provisions before this exec).
 #   - every mechanical disposition (STOP done/waiting/wrong-worktree/
-#     provision-failed, PUSH-STRANDED) → handled here with NO `claude` session
-#     spawned (zero tokens).
+#     provision-failed/main-qa-unverifiable, PUSH-STRANDED) → handled here with
+#     NO `claude` session spawned (zero tokens).
 #
 # HEARTBEAT RATIONALE (decision 2 of #1391): every phase-skill worker session —
 # even one that hits a mechanical disposition — fires the Stop hook
@@ -133,7 +133,7 @@ case "$DIRECTIVE" in
     # keyed on a phase token: map the skill → the same phase token dispatch-phase
     # would return, then feed that token to BOTH dispatch-phase-model and
     # dispatch-phase-effort (#2042). Net routing:
-    #   /fix-checks /fix-conflicts /qa-fix /review-fix → Sonnet, no effort
+    #   /fix-checks /fix-conflicts /qa-fix /review-fix /qa-main → Sonnet, no effort
     #   /implement                                     → Opus + effort medium
     #   /plan-issue /budget-parse-job /resolve-epic    → Opus + effort high
     # Both emitters print empty for an unmapped value (Sonnet phases get no
@@ -148,6 +148,7 @@ case "$DIRECTIVE" in
       /review-fix)        PHASE=review ;;
       /fix-checks)        PHASE=fix-checks ;;
       /fix-conflicts)     PHASE=fix-conflicts ;;
+      /qa-main)           PHASE=main-qa ;;
       /implement)         PHASE=implement ;;
       /plan-issue|/budget-parse-job|/resolve-epic) PHASE=plan ;;
       *)                  PHASE="" ;;
@@ -183,6 +184,23 @@ case "$DIRECTIVE" in
     # dir). Park directly via the single label write path.
     "$SCRIPT_DIR/dispatch-apply-office-hours" "$N" \
       "dispatch-launch-worker: provisioning/merge of origin/main failed for #$N; parking for review" || true
+    release_and_tick
+    ;;
+  "STOP main-qa-unverifiable"*)
+    # Pre-provision Step 4·0 triage: dispatch-main-qa-triage (run inside
+    # dispatch-route BEFORE dispatch-provision-worktree) classified this
+    # main-qa follow-up as not browser-verifiable. Park it on
+    # dispatch:office-hours with the specific triage reason carried on the
+    # directive line — the same label + why-comment the in-session Step 4·0 →
+    # dispatch-mark-deviation → Branch A path applies, but with no worktree
+    # provisioning and no Claude session spawned (zero tokens).
+    TRIAGE_REASON="${DIRECTIVE#"STOP main-qa-unverifiable"}"
+    TRIAGE_REASON="${TRIAGE_REASON# }"
+    if [[ -z "$TRIAGE_REASON" ]]; then
+      TRIAGE_REASON="not-browser-verifiable: dispatch-main-qa-triage gave no reason"
+    fi
+    "$SCRIPT_DIR/dispatch-apply-office-hours" "$N" \
+      "/qa-main: ${TRIAGE_REASON} — parked pre-provision by dispatch-main-qa-triage (Step 4·0)" || true
     release_and_tick
     ;;
   "STOP done" | "STOP waiting" | "STOP wrong-worktree" | "STOP closed")
