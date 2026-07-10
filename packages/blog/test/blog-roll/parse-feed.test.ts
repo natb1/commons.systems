@@ -133,6 +133,26 @@ describe("parseXml", () => {
     });
   });
 
+  it("strips a namespace declaration separated by a newline (Firefox emission)", () => {
+    // Firefox/pretty-printers may put whitespace other than a single space
+    // between the tag name and xmlns; the strip regex must accept any
+    // whitespace or the namespace survives and every selector misses.
+    const feed = `<?xml version="1.0" encoding="UTF-8"?>
+<feed
+  xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <title>Newline Namespace Post</title>
+    <link href="https://example.com/newline-ns"/>
+    <published>2026-02-01T00:00:00Z</published>
+  </entry>
+</feed>`;
+    expect(parseXml(feed)).toEqual({
+      title: "Newline Namespace Post",
+      url: "https://example.com/newline-ns",
+      publishedAt: "2026-02-01T00:00:00Z",
+    });
+  });
+
   it("uses updated date when published is absent", () => {
     const feedWithUpdated = `<?xml version="1.0" encoding="UTF-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">

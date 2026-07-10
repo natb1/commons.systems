@@ -38,7 +38,10 @@ export function parseXml(text: string): LatestPost | null {
   // Strip default XML namespace declarations so querySelector matches element
   // local names in all browsers. Firefox requires null-namespace for unqualified
   // CSS selectors on XML documents; Chrome is lenient and ignores namespaces.
-  const cleaned = text.replace(/ xmlns=["'][^"']*["']/g, "");
+  // Match any whitespace (not just a literal space) before the attribute: a
+  // pretty-printed `<feed\n  xmlns=...>` would otherwise slip through and leave
+  // the namespace in place, making every selector miss.
+  const cleaned = text.replace(/\s+xmlns=["'][^"']*["']/g, "");
   const parser = new DOMParser();
   const doc = parser.parseFromString(cleaned, "application/xml");
   if (doc.querySelector("parsererror")) {
