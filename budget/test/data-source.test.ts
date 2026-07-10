@@ -93,6 +93,22 @@ describe("IdbDataSource", () => {
     expect(txns[0].amount).toBe(52.3);
   });
 
+  it("concurrent note and category edits to one row both persist", async () => {
+    // updateRecord reads-then-writes in a single transaction; IndexedDB
+    // serializes read-write transactions on the same store, so the second edit
+    // reads the first's committed value instead of a stale snapshot. Before the
+    // atomic-write fix these two get-then-put pairs raced and lost one field.
+    await storeParsedData(makeParsedData());
+    const ds = new IdbDataSource();
+    await Promise.all([
+      ds.updateTransaction("txn-1" as TransactionId, { note: "note-edit" }),
+      ds.updateTransaction("txn-1" as TransactionId, { category: "cat-edit" }),
+    ]);
+    const txns = await ds.getTransactions();
+    expect(txns[0].note).toBe("note-edit");
+    expect(txns[0].category).toBe("cat-edit");
+  });
+
   it("updateTransaction throws for missing transaction", async () => {
     await storeParsedData(makeParsedData());
     const ds = new IdbDataSource();
@@ -290,6 +306,74 @@ describe("IdbDataSource", () => {
       );
       expect(result.entryId).toBeTruthy();
       expect(result.legIds).toHaveLength(2);
+    });
+  });
+
+  describe("createReconciliationEvent", () => {
+    const eventFields = {
+      institution: "bankone",
+      account: "1234",
+      reconciledThroughDateMs: 1700000000000,
+      bankBalance: 100,
+      clearedBalance: 100,
+      adjustment: 0,
+      reconciledBy: "local",
+      reconciledAtMs: 1700000500000,
+      adjustmentEntryId: null,
+    };
+
+    function legRow(id: string): Record<string, unknown> {
+      return {
+        id,
+        entryId: "entry-1",
+        accountId: "acct-a",
+        debit: 50,
+        credit: 0,
+        timestampMs: 1699999000000,
+        cleared: true,
+        reconciledAtMs: null,
+        reconciledEventId: null,
+        statementItemId: null,
+      };
+    }
+
+    it("records the event and stamps every cleared leg", async () => {
+      await storeParsedData(makeParsedData({
+        journalLegs: [legRow("leg-1"), legRow("leg-2")] as never,
+      }));
+      const ds = new IdbDataSource();
+      const event = await ds.createReconciliationEvent(eventFields, ["leg-1", "leg-2"]);
+      expect(event.id).toBe("bankone_1234_2023-11-14");
+
+      const events = await ds.getReconciliationEvents();
+      expect(events).toHaveLength(1);
+      expect(events[0].legIds).toEqual(["leg-1", "leg-2"]);
+
+      const legs = await ds.getJournalLegs();
+      for (const leg of legs) {
+        expect(leg.reconciledEventId).toBe(event.id);
+        expect(leg.reconciledAt).not.toBeNull();
+        expect(leg.reconciledAt!.toMillis()).toBe(1700000500000);
+      }
+    });
+
+    it("rolls back the whole event when a leg is missing — no event, no partial stamps", async () => {
+      await storeParsedData(makeParsedData({
+        journalLegs: [legRow("leg-1")] as never,
+      }));
+      const ds = new IdbDataSource();
+      await expect(
+        ds.createReconciliationEvent(eventFields, ["leg-1", "leg-missing"]),
+      ).rejects.toThrow("Journal leg leg-missing not found");
+
+      // Atomicity: the event row must not have been persisted, and the one
+      // real leg must not carry a half-applied reconciliation stamp.
+      const events = await ds.getReconciliationEvents();
+      expect(events).toHaveLength(0);
+      const legs = await ds.getJournalLegs();
+      expect(legs).toHaveLength(1);
+      expect(legs[0].reconciledEventId).toBeNull();
+      expect(legs[0].reconciledAt).toBeNull();
     });
   });
 

@@ -161,6 +161,78 @@ export async function deleteRecord(storeName: StoreName, id: string): Promise<vo
   });
 }
 
+/**
+ * A handle to one open read-write transaction spanning one or more stores.
+ * Every read and write issued through it commits or rolls back together.
+ */
+export interface WriteTransaction {
+  get<T>(storeName: StoreName, id: string): Promise<T | undefined>;
+  put(storeName: StoreName, record: Record<string, unknown>): Promise<void>;
+  delete(storeName: StoreName, id: string): Promise<void>;
+}
+
+/**
+ * Run `fn` against a single read-write IndexedDB transaction spanning
+ * `storeNames`, so all its reads and writes commit atomically or roll back
+ * together. If `fn` throws (or any request rejects), the transaction is aborted
+ * and nothing persists.
+ *
+ * The transaction stays open across `await`s on the handle's own operations —
+ * each is backed by an in-flight IDB request, which keeps the transaction from
+ * auto-closing. Do NOT `await` an unrelated promise (a timer, a fetch, another
+ * `openDb()` call) inside `fn`: with no request in flight the transaction
+ * auto-commits and subsequent handle calls throw `TransactionInactiveError`.
+ */
+export async function runInWriteTransaction<T>(
+  storeNames: StoreName[],
+  fn: (tx: WriteTransaction) => Promise<T>,
+): Promise<T> {
+  const db = await openDb();
+  const idbTx = db.transaction(storeNames, "readwrite");
+  const handle: WriteTransaction = {
+    get<U>(storeName: StoreName, id: string): Promise<U | undefined> {
+      return new Promise<U | undefined>((resolve, reject) => {
+        const req = idbTx.objectStore(storeName).get(id);
+        req.onsuccess = () => resolve(req.result as U | undefined);
+        req.onerror = () => reject(req.error);
+      });
+    },
+    put(storeName: StoreName, record: Record<string, unknown>): Promise<void> {
+      return new Promise<void>((resolve, reject) => {
+        const req = idbTx.objectStore(storeName).put(record);
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+      });
+    },
+    delete(storeName: StoreName, id: string): Promise<void> {
+      return new Promise<void>((resolve, reject) => {
+        const req = idbTx.objectStore(storeName).delete(id);
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+      });
+    },
+  };
+  const done = new Promise<void>((resolve, reject) => {
+    idbTx.oncomplete = () => resolve();
+    idbTx.onerror = () => reject(idbTx.error ?? new Error("IndexedDB transaction failed"));
+    idbTx.onabort = () => reject(idbTx.error ?? new Error("IndexedDB transaction aborted"));
+  });
+  let result: T;
+  try {
+    result = await fn(handle);
+  } catch (err) {
+    try {
+      idbTx.abort();
+    } catch {
+      // Transaction may already be inactive/aborted; the original error wins.
+    }
+    await done.catch(() => {});
+    throw err;
+  }
+  await done;
+  return result;
+}
+
 export async function clearAll(): Promise<void> {
   const db = await openDb();
   const tx = db.transaction([...STORE_NAMES], "readwrite");
