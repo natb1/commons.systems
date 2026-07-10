@@ -22,8 +22,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
-execution: null
+phase: review
+execution:
+  branch: tactic-fellspiral-prerender-feed-parity
+  pr: 2838
+  attempts: {}
+  markers:
+    - qa-done
+  strategy_fingerprint: null
 validates: []
 blocked_by: []
 office_hours: null
