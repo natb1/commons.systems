@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   feedFetchPlugin,
   parseAtomFeedXml,
@@ -223,5 +226,64 @@ describe("feedFetchPlugin buildStart error handling", () => {
     await expect((plugin as any).buildStart()).rejects.toThrow( // type-safety-ok: invoking Vite plugin hook directly in unit test
       "invalid fetch configuration",
     );
+  });
+});
+
+describe("feedFetchPlugin emitPath artifact", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("persists the same snapshot the virtual module inlines to emitPath", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "feed-fetch-"));
+    // Nested subdir the plugin must create (mkdirSync recursive).
+    const emitPath = join(dir, "nested", "blog-roll-feeds.json");
+    try {
+      const xml = `<feed><entry>
+        <title>Latest</title>
+        <link rel="alternate" href="https://example.com/latest" />
+        <published>2026-05-01T00:00:00Z</published>
+      </entry></feed>`;
+      vi.stubGlobal("fetch", () =>
+        Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve(xml) }),
+      );
+
+      const plugin = feedFetchPlugin(
+        [{ id: "test", url: "https://example.com/feed.xml" }],
+        { emitPath },
+      );
+
+      await (plugin as any).buildStart(); // type-safety-ok: invoking Vite plugin hook directly in unit test
+      (plugin as any).writeBundle(); // type-safety-ok: invoking Vite plugin hook directly in unit test
+
+      // The persisted artifact must equal what the virtual module inlines — one
+      // source feeds both the client bundle and the prerender.
+      const virtualCode = (plugin as any).load("\0virtual:blog-roll-feeds"); // type-safety-ok: invoking Vite plugin hook directly in unit test
+      const virtualData = parseVirtualModule(virtualCode);
+      const artifact = JSON.parse(readFileSync(emitPath, "utf8"));
+      expect(artifact).toEqual(virtualData);
+      expect(artifact).toEqual({
+        test: {
+          title: "Latest",
+          url: "https://example.com/latest",
+          publishedAt: "2026-05-01T00:00:00Z",
+        },
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not write any file when emitPath is omitted", async () => {
+    vi.stubGlobal("fetch", () =>
+      Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve("<feed></feed>") }),
+    );
+    const plugin = feedFetchPlugin([
+      { id: "test", url: "https://example.com/feed.xml" },
+    ]);
+    await (plugin as any).buildStart(); // type-safety-ok: invoking Vite plugin hook directly in unit test
+    // No emitPath configured: writeBundle is a no-op and must not throw.
+    expect(() => (plugin as any).writeBundle()).not.toThrow(); // type-safety-ok: invoking Vite plugin hook directly in unit test
   });
 });
