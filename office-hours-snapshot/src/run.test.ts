@@ -30,6 +30,7 @@ function fakeInput(scope: "full" | "parked-only" = "full"): SnapshotInput {
     computedAt: NOW,
     chainHealth: {},
     scope,
+    memberEmails: [],
   };
 }
 

@@ -48,6 +48,15 @@ export interface QueueMetricsSnapshot {
   memberEmails: string[];
   /** Issues currently parked awaiting office-hours attention. */
   parked: ParkedIssue[];
+  /**
+   * Capture scope. Absent (or `"full"`) means the depth/rate/runway fields were
+   * genuinely measured. `"parked-only"` means this came from a parked-only
+   * snapshot capture that fabricates those fields as zeroed placeholders — only
+   * `parked` is real — so renderers must show them as unmeasured, not as real
+   * zeros. Only the local parked-only producer sets it; the live Firestore path
+   * never does.
+   */
+  scope?: "full" | "parked-only";
 }
 
 /**
@@ -74,6 +83,7 @@ export function serializeQueueMetrics(s: QueueMetricsSnapshot): Record<string, u
       repo: p.repo,
       ...(p.phase !== undefined ? { phase: p.phase } : {}),
     })),
+    ...(s.scope !== undefined ? { scope: s.scope } : {}),
   };
 }
 
@@ -165,6 +175,10 @@ export function parseQueueMetrics(data: Record<string, unknown>): QueueMetricsSn
     return null;
   }
 
+  // Optional capture scope — only a parked-only local snapshot sets it. Any
+  // other/absent value means fully measured; never fails the parse.
+  const scope = data.scope === "parked-only" ? "parked-only" : data.scope === "full" ? "full" : undefined;
+
   return {
     openHelpWanted,
     closedPerDay,
@@ -176,6 +190,7 @@ export function parseQueueMetrics(data: Record<string, unknown>): QueueMetricsSn
     groupId,
     memberEmails,
     parked,
+    ...(scope !== undefined ? { scope } : {}),
   };
 }
 

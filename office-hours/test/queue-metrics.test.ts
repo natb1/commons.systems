@@ -22,6 +22,24 @@ describe("serializeQueueMetrics / parseQueueMetrics", () => {
     expect(parsed).toEqual(base);
   });
 
+  it("round-trips the optional parked-only scope", () => {
+    const snapshot: QueueMetricsSnapshot = {
+      ...base,
+      netDrainPerDay: 0,
+      runwayDays: null,
+      scope: "parked-only",
+    };
+    const serialized = serializeQueueMetrics(snapshot);
+    expect(serialized.scope).toBe("parked-only");
+    expect(parseQueueMetrics(serialized)).toEqual(snapshot);
+  });
+
+  it("omits scope entirely when absent (fully-measured metrics)", () => {
+    const serialized = serializeQueueMetrics(base);
+    expect("scope" in serialized).toBe(false);
+    expect(parseQueueMetrics(serialized)).toEqual(base);
+  });
+
   it("round-trips the runwayDays: null case (queue flat or growing)", () => {
     const snapshot: QueueMetricsSnapshot = {
       ...base,

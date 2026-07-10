@@ -167,9 +167,12 @@ function deserializeIssueSample(s: OfficeHoursSnapshot["issueSamples"][number]):
  * real Dates. A MISSING file → null (first run, fine). A present-but-undecryptable
  * file (wrong password / corrupt) → THROW (no silent history reset — see
  * .claude/rules/code-style.md). The office-hours `toUsageSample`/`toIssueSample`
- * parsers are NOT reused: they require a Firestore `.toDate()` Timestamp and a
- * `memberEmails` field the serialized snapshot intentionally drops, so they would
- * reject every serialized point and silently truncate the series to one point.
+ * parsers are NOT reused here: the serialized series carries ISO-string dates,
+ * but those parsers require a Firestore `.toDate()` Timestamp, so they would
+ * reject every serialized point and silently truncate the series. (The snapshot
+ * now DOES carry the `memberEmails` those parsers also require — see snapshot-wire
+ * — but the ISO/Timestamp mismatch alone still precludes reuse.) These bespoke
+ * deserializers read the ISO strings back into Dates directly.
  */
 async function defaultReadPriorHistory(
   snapshotDir: string,

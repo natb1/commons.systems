@@ -40,13 +40,18 @@ export function fitBacklogRunway(samples: IssueSample[]): BacklogRunwayFit {
 
   const fittedLast = slope * dataDays + intercept;
 
+  // Near-zero epsilon check FIRST: a flat backlog fit carries a tiny non-zero
+  // slope from numerical noise (e.g. -1e-16). If `slope < 0` were tested first,
+  // that noise would take the draining branch and report daysUntilEmpty =
+  // -fittedLast/slope ≈ 1e16 days — a nonsense "~10000000000000000 days to clear"
+  // for a queue that is not actually draining. Classify it as stable instead.
+  if (Math.abs(slope) < 1e-9) return { state: "stable" };
+
   if (slope < 0) {
     const daysUntilEmpty = Math.max(0, -fittedLast / slope);
     const crossingAt = new Date(first.getTime() + (dataDays + daysUntilEmpty) * 86_400_000);
     return { state: "draining", daysUntilEmpty, slope, intercept, crossingAt };
   }
-
-  if (Math.abs(slope) < 1e-9) return { state: "stable" };
 
   return { state: "growing" };
 }

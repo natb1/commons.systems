@@ -12,6 +12,8 @@ import { projectSignalsEqual } from "../src/panel-equality.js";
 const fixtureSnapshot: OfficeHoursSnapshotV1 = {
   version: 1,
   computedAt: "2026-06-30T10:00:00Z",
+  scope: "full",
+  chainHealth: {},
   reminders: [
     {
       title: "Review #2659 PR",

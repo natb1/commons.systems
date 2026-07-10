@@ -25,11 +25,18 @@
 //     QueueMetricsSnapshot / ProjectSignalsSnapshot, and both serializers emit
 //     it), so the raw doc's key set matches the snapshot's.
 //   - COLLECTIONS (reminders, issueSamples, topicUsage, samples) diff against the
-//     PARSED/mapped reference, NOT the raw doc. The office-hours parsers drop
-//     write-only fields (`memberEmails`, `kind`, `updatedAt`) that the snapshot
-//     intentionally does not carry, so a raw-doc comparison would falsely report
-//     `memberEmails` as a missing key on every clean element. The parsed shape
-//     equals the snapshot's serialized shape, which is the right reference.
+//     PARSED/mapped reference, NOT the raw doc: the office-hours parsers drop
+//     write-only fields (`kind`, `updatedAt`) that the snapshot never carries, so
+//     a raw-doc comparison would falsely report them as missing keys on every
+//     clean element. But `memberEmails` is NOT such a field — the serialized
+//     SERIES samples DO carry it (the reader's toUsageSample/toIssueSample
+//     parsers reject a sample that lacks it), yet those parsers still strip it
+//     from their parsed output. So the samples/issueSamples references RE-ADD
+//     `memberEmails` from the raw doc (see `sampleRefWithMemberEmails`); without
+//     that, parity would falsely flag it as an extra key on every clean sample —
+//     and, worse, would go blind to the drift this tactic exists to catch (a
+//     producer that stops emitting memberEmails). reminders/topicUsage carry no
+//     memberEmails, so their references are the plain parsed shape.
 //
 // Parsers reused (a parser that returns null / throws on a live Firestore doc is
 // itself a shape divergence — reported as kind "parse-failure"):
@@ -296,6 +303,22 @@ function mapReminderRef(doc: Record<string, unknown>): Record<string, unknown> |
   };
 }
 
+/**
+ * Series-sample reference: run the office-hours parser (rejecting a doc that is
+ * malformed OR missing the required `memberEmails` auth field), then RE-ADD
+ * `memberEmails` from the raw doc — the serialized snapshot carries it on every
+ * sample, so the reference must too or a clean sample would report a false
+ * `extra-key` divergence (and real memberEmails drift would go undetected).
+ */
+function sampleRefWithMemberEmails(
+  parse: (id: string, doc: Record<string, unknown>) => object | null,
+  doc: Record<string, unknown>,
+): Record<string, unknown> | null {
+  const parsed = parse("parity", doc);
+  if (parsed === null) return null;
+  return { ...parsed, memberEmails: doc.memberEmails }; // type-safety-ok: parsed is a validated sample object; the shape diff reads it structurally
+}
+
 // ---------------------------------------------------------------------------
 // Per-field checks
 // ---------------------------------------------------------------------------
@@ -422,7 +445,7 @@ export async function checkParity(
     "issueSamples",
     `${ns}/issue-samples`,
     snapshot.issueSamples,
-    (d) => toIssueSample("parity", d) as Record<string, unknown> | null, // type-safety-ok: parsed IssueSample read structurally by the shape diff; cast supplies the Record index signature the interface lacks
+    (d) => sampleRefWithMemberEmails(toIssueSample, d),
     reader,
     divergences,
   );
@@ -440,7 +463,7 @@ export async function checkParity(
     "samples",
     `${ns}/usage-samples`,
     snapshot.samples,
-    (d) => toUsageSample("parity", d) as Record<string, unknown> | null, // type-safety-ok: parsed UsageSample read structurally by the shape diff; cast supplies the Record index signature the interface lacks
+    (d) => sampleRefWithMemberEmails(toUsageSample, d),
     reader,
     divergences,
   );

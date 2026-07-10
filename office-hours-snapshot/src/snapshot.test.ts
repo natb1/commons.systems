@@ -155,6 +155,7 @@ describe("serializeSnapshot", () => {
       computedAt: new Date(NOW_ISO),
       chainHealth: { liveSessions: 2, lastTickAgeSeconds: 30 },
       scope: "full",
+      memberEmails: ["nathan@natb1.com"],
       window: { samples: 500, issueSamples: 500 },
     };
   }
@@ -170,10 +171,17 @@ describe("serializeSnapshot", () => {
     expect(snap).toHaveProperty("topicUsage");
     expect(snap).toHaveProperty("projectSignals");
     // Metadata
+    expect(snap.version).toBe(1);
     expect(snap.computedAt).toBe(NOW_ISO);
     expect(snap.scope).toBe("full");
     expect(snap.chainHealth).toEqual({ liveSessions: 2, lastTickAgeSeconds: 30 });
     expect(snap.window).toEqual({ samples: 500, issueSamples: 500 });
+  });
+
+  it("stamps memberEmails onto every series sample (reader parsers require it)", () => {
+    const snap = serializeSnapshot(buildInput());
+    expect(snap.samples[0].memberEmails).toEqual(["nathan@natb1.com"]);
+    expect(snap.issueSamples[0].memberEmails).toEqual(["nathan@natb1.com"]);
   });
 
   it("normalizes every timestamp to an ISO string (no Date/Timestamp survives)", () => {

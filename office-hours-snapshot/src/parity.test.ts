@@ -103,6 +103,7 @@ function cleanSnapshot(): OfficeHoursSnapshot {
     computedAt: NOW,
     chainHealth: { liveSessions: 3 },
     scope: "full",
+    memberEmails: MEMBERS,
     window: { samples: 100, issueSamples: 100 },
   };
   return serializeSnapshot(input);
