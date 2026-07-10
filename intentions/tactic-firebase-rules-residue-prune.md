@@ -27,8 +27,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: fix
+execution:
+  branch: tactic-firebase-rules-residue-prune
+  pr: 2831
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
 validates: []
 blocked_by: []
 office_hours: null

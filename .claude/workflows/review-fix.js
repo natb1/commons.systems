@@ -807,6 +807,7 @@ if (fileGroups.size) {
       const prompt = [
         `Apply the recommended fix for each of these findings in file ${file}.`,
         'Edit the working tree ONLY — make NO commits and NO pushes (a later step commits).',
+        'Read any file with the Read tool before your first Edit or Write to it in this session — the edit is rejected otherwise and the retry burns the tokens twice.',
         'Findings to resolve:',
         findingList,
         'Return { "touched_files": [...], "fix_summary": "one-line summary of what you changed",',
