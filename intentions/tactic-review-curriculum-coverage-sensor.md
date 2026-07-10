@@ -26,8 +26,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-review-curriculum-coverage-sensor
+  pr: 2801
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: 7a69fe4c494003260413fb401128c7efcf25eb7122f2e9b7fd9adbc3b0997cdf
 validates:
   - strategy-graph-review-curriculum
 blocked_by: []
