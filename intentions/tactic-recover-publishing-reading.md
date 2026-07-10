@@ -26,8 +26,13 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
-execution: null
+phase: review
+execution:
+  branch: tactic-recover-publishing-reading
+  pr: 2807
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
 validates:
   - strategy-recover-publishing
 blocked_by: []

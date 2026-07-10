@@ -34,7 +34,7 @@ attention:
     rest of strategy-graph-native-dispatch. Scoped to curriculum-execution
     tactics only, not the reading-chunk tactics under
     strategy-philosophical-grounding, which remain unboosted."
-phase: review
+phase: done
 execution:
   branch: tactic-reading-review-skill
   pr: 2796

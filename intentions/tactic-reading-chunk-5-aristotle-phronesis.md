@@ -33,15 +33,14 @@ validates:
 blocked_by:
   - tactic-reading-chunk-2-aristotle-hexis
 office_hours:
-  reason: "Personal reading, one sitting of at most 30 author-minutes, intended
-    after chunk 2 (blocked_by encodes the working order): read Nicomachean
-    Ethics VI against tradition-aristotle and virtue-philosophical-mobility. Not
-    claude-executable — the chunk exists to verify the delegated articulation
-    personally. At office-hours: check whether NE VI's 'vice destroys the archē'
+  reason: "See tactic-tradition-reading-program → shared chunk office-hours reason
+    (verify-record). This chunk: Nicomachean Ethics VI against
+    tradition-aristotle and virtue-philosophical-mobility; intended after chunk
+    2. Node-specific question: whether NE VI's 'vice destroys the archē'
     supports 'capture corrupts the sensor' and the phronesis third of the
-    mobility attribution; amend where the reading contradicts (the reading
-    wins), ratify where it holds; stamp last_exercised."
+    mobility attribution."
   since: 2026-07-06
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes:

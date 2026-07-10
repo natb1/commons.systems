@@ -38,9 +38,7 @@ gap: reading 'router-host key expiry disabled in the admin console 2026-07-07
   console, an interactive-shell-login check names Tailscale auth state on each
   machine, and the next NeedsLogin incident is first diagnosed by the named
   check rather than forensic debugging'
-serves:
-  - virtue-progressive-detachment
-  - virtue-alignment-of-attachments
+serves: []
 recovers: []
 clarifications:
   - question: Does this strategy cover all expiring credentials in the environment

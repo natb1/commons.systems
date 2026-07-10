@@ -35,8 +35,7 @@ attention:
 phase: null
 execution: null
 validates: []
-blocked_by:
-  - tactic-graph-router-selector
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
