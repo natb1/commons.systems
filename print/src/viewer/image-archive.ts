@@ -92,6 +92,32 @@ export function createImageArchiveRenderer(onError?: (err: unknown) => void): Co
     });
   }
 
+  // Retain object URLs only for a window of pages on each side of the current
+  // page. Without this, getObjectUrl accumulates one live object URL (holding a
+  // decompressed image blob) per visited page for the whole session — a large
+  // archive would grow memory unbounded until teardown.
+  const OBJECT_URL_WINDOW = 1;
+
+  /**
+   * Revoke and clear cached object URLs for pages outside a window centered on
+   * the given 1-based page. Evicted slots re-fetch lazily via getObjectUrl when
+   * navigated to again. Only completed slots (resolvedUrl set) are touched, so an
+   * in-flight fetch is left alone; the window keeps the current page and the
+   * prefetched next page live.
+   */
+  function evictObjectUrlsOutsideWindow(centerPage: number): void {
+    const centerIndex = centerPage - 1;
+    for (let i = 0; i < pages.length; i++) {
+      if (Math.abs(i - centerIndex) <= OBJECT_URL_WINDOW) continue;
+      const slot = pages[i]!;
+      if (slot.resolvedUrl) {
+        URL.revokeObjectURL(slot.resolvedUrl);
+        slot.resolvedUrl = null;
+        slot.urlPromise = null;
+      }
+    }
+  }
+
   return {
     async init(container: HTMLElement, source: string | ArrayBuffer, initialPosition?: string): Promise<void> {
       const { entries } = await unzip(source);
@@ -124,6 +150,7 @@ export function createImageArchiveRenderer(onError?: (err: unknown) => void): Co
       container.appendChild(imgEl);
 
       prefetchNextPage(startPage);
+      evictObjectUrlsOutsideWindow(startPage);
 
       if (scrollParent) {
         resizeObserver = new ResizeObserver(() => { resetZoomState(); });
@@ -172,6 +199,7 @@ export function createImageArchiveRenderer(onError?: (err: unknown) => void): Co
       if (destroyed || gen !== renderGen) return;
       imgEl.src = url;
       prefetchNextPage(page);
+      evictObjectUrlsOutsideWindow(page);
     },
 
     async goToPosition(position: string): Promise<void> {
