@@ -1,6 +1,7 @@
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
 import { logError } from "@commons-systems/errorutil/log";
 import { isModifiedEvent, resolveInternalHref } from "./navigation";
+import { subscribe, navigate as storeNavigate } from "./location-store";
 
 export interface Route {
   /**
@@ -120,8 +121,12 @@ export function createHistoryRouter(
 ): Router {
   const nav = createNavigator(outlet, routes, parsePath, options);
 
-  const onPopState = () => void nav.navigate();
-  window.addEventListener("popstate", onPopState);
+  // Drive re-rendering off the shared location store so the vanilla router and
+  // React `useLocation` subscribers stay in sync. A store `navigate()` and a
+  // browser popstate both notify the store's listeners; this subscription
+  // re-renders the outlet in response. The store attaches its single popstate
+  // listener lazily while it has subscribers, so this covers back/forward too.
+  const unsubscribe = subscribe(() => void nav.navigate());
 
   const onClick = (e: MouseEvent) => {
     if (nav.isDestroyed()) return;
@@ -135,8 +140,9 @@ export function createHistoryRouter(
     if (path === null) return;
     if (!matchRoute(routes, path)) return;
     e.preventDefault();
-    history.pushState({}, "", href);
-    void nav.navigate();
+    // Route the vanilla navigation through the store so it pushes history AND
+    // notifies location-store listeners; the subscription above re-renders.
+    storeNavigate(href);
   };
   document.addEventListener("click", onClick);
 
@@ -144,12 +150,12 @@ export function createHistoryRouter(
 
   function teardown(): void {
     nav.setDestroyed();
-    window.removeEventListener("popstate", onPopState);
+    unsubscribe();
     document.removeEventListener("click", onClick);
   }
 
   return {
-    navigate: onPopState,
+    navigate: () => void nav.navigate(),
     destroy: teardown,
     showTerminalError(html: string) {
       teardown();
