@@ -238,6 +238,14 @@ describe("print bookmarks", () => {
       );
     });
 
+    it("denies reading another user's non-existent bookmarks doc (no existence oracle)", async () => {
+      const ctx = env.authenticatedContext("other-user");
+      const db = ctx.firestore();
+      await assertFails(
+        getDoc(doc(db, `print/${ENV}/bookmarks/${UID}_nonexistent`)),
+      );
+    });
+
     it("denies unauthenticated read", async () => {
       const ctx = unauthenticatedContext(env);
       const db = ctx.firestore();
