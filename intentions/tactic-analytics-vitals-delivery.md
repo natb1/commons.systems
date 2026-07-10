@@ -26,14 +26,34 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-analytics-vitals-delivery
+  pr: 2835
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
 validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  test_integrity_waiver:
+    pr: 2835
+    signal: 2
+    max_net: 4
+    paths:
+      - packages/analyticsutil/test/**
+    approved: 2026-07-10
+    reason: "Removing the unreachable logEvent try/catch wrappers orphans the 4
+      tests that mocked logEvent to throw (an impossible path); their subject —
+      the swallow-and-report branch — is deliberately deleted, so this is
+      dead-code cleanup, not weakening. Author explicitly approved this scoped
+      Signal-2 waiver at the 2026-07-10 office-hours round (doctrine:
+      strategy-graph-native-dispatch integrity-waiver clarification;
+      implementation: draft tactic-test-integrity-waiver). Written by the
+      interactive session after human approval; clears the 2026-07-10 park."
 ---
 # analyticsutil: reliable web-vitals delivery + remove dead wrappers
 

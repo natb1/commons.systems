@@ -31896,8 +31896,8 @@ tick_setup
 export TICK_DECISION="main-broken abc1234"
 out=$(run_tick) && rc=0 || rc=$?
 assert_eq "main-broken: exit 0" "0" "$rc"
-assert_eq "main-broken: spawn-job argv" \
-  "--name diagnose-main --cwd $TMPDIR_TEST /dispatch-diagnose-main abc1234" \
+assert_eq "main-broken: spawn-job argv (Sonnet — diagnosis authors no product code)" \
+  "--name diagnose-main --cwd $TMPDIR_TEST --model claude-sonnet-4-6 /dispatch-diagnose-main abc1234" \
   "$(cat "$TMPDIR_TEST/logs/spawn-job.log")"
 assert_eq "main-broken: no materialize call" "0" \
   "$([ -f "$TMPDIR_TEST/logs/materialize.log" ] && echo 1 || echo 0)"
@@ -31909,8 +31909,8 @@ tick_setup
 export TICK_DECISION="sync-failed"
 out=$(run_tick) && rc=0 || rc=$?
 assert_eq "sync-failed: exit 0" "0" "$rc"
-assert_eq "sync-failed: spawn-job argv" \
-  "--name sync-repair --cwd $TMPDIR_TEST /commit-merge-push" \
+assert_eq "sync-failed: spawn-job argv (Sonnet — conflict recovery escalates to Opus internally)" \
+  "--name sync-repair --cwd $TMPDIR_TEST --model claude-sonnet-4-6 /commit-merge-push" \
   "$(cat "$TMPDIR_TEST/logs/spawn-job.log")"
 assert_eq "sync-failed: no materialize call" "0" \
   "$([ -f "$TMPDIR_TEST/logs/materialize.log" ] && echo 1 || echo 0)"
@@ -31922,8 +31922,8 @@ tick_setup
 export TICK_DECISION="jit-reminder owner/repo 42 PVT_x ITEM_y"
 out=$(run_tick) && rc=0 || rc=$?
 assert_eq "jit-reminder: exit 0" "0" "$rc"
-assert_eq "jit-reminder: spawn-job argv" \
-  "--name jit-reminder-42 --cwd $TMPDIR_TEST /dispatch-jit-reminder owner/repo 42 PVT_x ITEM_y" \
+assert_eq "jit-reminder: spawn-job argv (Sonnet — reminder skills author no product code)" \
+  "--name jit-reminder-42 --cwd $TMPDIR_TEST --model claude-sonnet-4-6 /dispatch-jit-reminder owner/repo 42 PVT_x ITEM_y" \
   "$(cat "$TMPDIR_TEST/logs/spawn-job.log")"
 tick_teardown
 
@@ -37220,8 +37220,8 @@ echo "=== dispatch-launch-worker ==="
 #                             and exits 0.
 # dispatch-phase-model and dispatch-phase-effort are the REAL scripts (copied
 # in), so the compute-derivation assertions exercise the actual per-phase
-# policy: qa/review/fix-checks/fix-conflicts → claude-sonnet-4-6 (no effort);
-# implement → effort medium; plan → effort high (#2042).
+# policy: qa/review/fix-checks/fix-conflicts/main-qa → claude-sonnet-4-6 (no
+# effort); implement → effort medium; plan → effort high (#2042).
 #
 # The reservation ledger points at $LW_DIR/reservations via DISPATCH_RESERVATION_DIR
 # (so reservation_clear/_dir never need a git repo). Each mechanical-path test
@@ -37448,6 +37448,25 @@ sj=$(cat "$LW_DIR/spawn-job-argv" 2>/dev/null || echo "")
 assert_eq "launch INVOKE /review-fix: spawn-job argv (with model)" \
   "--no-verify --park-issue 839 --name $LW_WT_BASENAME --cwd $LW_WT --model claude-sonnet-4-6 /review-fix 839 $LW_WT" \
   "$sj"
+lw_teardown
+
+# 3a. INVOKE /qa-main → spawn-job carries --model claude-sonnet-4-6 (real
+# dispatch-phase-model main-qa policy: review-like, no product-code authoring,
+# #2274) and NO --effort. Regression guard for the routing gap where the
+# SKILL→PHASE map had no /qa-main arm, so PHASE stayed empty, dispatch-phase-model
+# was never consulted, and the spawn inherited the session default (Opus).
+echo "Test: INVOKE /qa-main → spawn-job with --model claude-sonnet-4-6, no --effort"
+lw_setup
+lw_write_marker
+lw_run "INVOKE /qa-main"
+assert_eq "launch INVOKE /qa-main: exit 0" "0" "$LW_RC"
+sj=$(cat "$LW_DIR/spawn-job-argv" 2>/dev/null || echo "")
+assert_eq "launch INVOKE /qa-main: spawn-job argv (with model)" \
+  "--no-verify --park-issue 839 --name $LW_WT_BASENAME --cwd $LW_WT --model claude-sonnet-4-6 /qa-main 839 $LW_WT" \
+  "$sj"
+assert_eq "launch INVOKE /qa-main: no --effort in argv" "no" \
+  "$([[ "$sj" == *"--effort"* ]] && echo yes || echo no)"
+assert_eq "launch INVOKE /qa-main: reservation RETAINED" "yes" "$(lw_marker_exists)"
 lw_teardown
 
 # 3b. INVOKE /plan-issue → spawn-job carries --effort high and NO --model (plan
@@ -40725,6 +40744,106 @@ STAMP="$SCRIPT_DIR/dispatch-stamp-session"
   assert_eq "stamp: --transcript-path trailing /.. exits 2" "2" "$rc"
   assert_eq "stamp: --transcript-path trailing /.. writes no sidecar" "no" \
     "$([ -f "$d/sub/...dispatch-stamp.json" ] && echo yes || echo no)"
+  rm -rf "$d"
+)
+
+# 15. Graph-native node-id branch (tactic-*): the sidecar is written with
+#     node_id == the branch name and issue == null (no numeric prefix to
+#     derive). Guards the graph-native arm of the worker-branch gate.
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b tactic-node-attribution-fixture
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  ( cd "$d" && "$STAMP" --session-id sessN --transcript-path "$d/sessN.jsonl" )
+  sc="$d/sessN.dispatch-stamp.json"
+  assert_eq "stamp: node-id branch writes sidecar" "yes" \
+    "$([ -f "$sc" ] && echo yes || echo no)"
+  assert_eq "stamp: node-id branch .node_id == branch" "tactic-node-attribution-fixture" \
+    "$(jq -r .node_id "$sc")"
+  assert_eq "stamp: node-id branch .issue is null" "null" "$(jq -r .issue "$sc")"
+  assert_eq "stamp: node-id branch .branch" "tactic-node-attribution-fixture" \
+    "$(jq -r .branch "$sc")"
+  assert_eq "stamp: node-id branch .base_sha equals HEAD" \
+    "$(git -C "$d" rev-parse HEAD)" "$(jq -r .base_sha "$sc")"
+  rm -rf "$d"
+)
+
+# 16. Graph branch (graph-<slug>) whose slug resolves via a prefixed candidate:
+#     intentions/tactic-<slug>.md exists, so node_id == "tactic-<slug>";
+#     issue == null.
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b graph-myslug
+  mkdir -p "$d/intentions"
+  : > "$d/intentions/tactic-myslug.md"
+  git -C "$d" -c user.email=t@t -c user.name=t add intentions
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init
+  ( cd "$d" && "$STAMP" --session-id sessG --transcript-path "$d/sessG.jsonl" )
+  sc="$d/sessG.dispatch-stamp.json"
+  assert_eq "stamp: graph branch writes sidecar" "yes" \
+    "$([ -f "$sc" ] && echo yes || echo no)"
+  assert_eq "stamp: graph branch .node_id resolved via intentions/tactic-<slug>.md" \
+    "tactic-myslug" "$(jq -r .node_id "$sc")"
+  assert_eq "stamp: graph branch .issue is null" "null" "$(jq -r .issue "$sc")"
+  rm -rf "$d"
+)
+
+# 16b. Graph branch whose slug IS the node id (graph-tactic-foo with
+#      intentions/tactic-foo.md): the slug-direct candidate wins.
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b graph-tactic-foo
+  mkdir -p "$d/intentions"
+  : > "$d/intentions/tactic-foo.md"
+  git -C "$d" -c user.email=t@t -c user.name=t add intentions
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init
+  ( cd "$d" && "$STAMP" --session-id sessG2 --transcript-path "$d/sessG2.jsonl" )
+  sc="$d/sessG2.dispatch-stamp.json"
+  assert_eq "stamp: graph branch slug-direct .node_id" "tactic-foo" \
+    "$(jq -r .node_id "$sc")"
+  rm -rf "$d"
+)
+
+# 17. Graph branch with NO matching intentions/<id>.md: the sidecar is still
+#     written (session stays attributable by branch) with node_id null and
+#     issue null.
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b graph-unresolved
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  ( cd "$d" && "$STAMP" --session-id sessU --transcript-path "$d/sessU.jsonl" )
+  sc="$d/sessU.dispatch-stamp.json"
+  assert_eq "stamp: unresolved graph branch writes sidecar" "yes" \
+    "$([ -f "$sc" ] && echo yes || echo no)"
+  assert_eq "stamp: unresolved graph branch .node_id is null" "null" \
+    "$(jq -r .node_id "$sc")"
+  assert_eq "stamp: unresolved graph branch .issue is null" "null" \
+    "$(jq -r .issue "$sc")"
+  rm -rf "$d"
+)
+
+# 18. Numeric worker branch keeps today's behavior AND carries the new
+#     node_id key as null (shape extension, no behavior change).
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b 999-fixture
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  ( cd "$d" && "$STAMP" --session-id sessNum --transcript-path "$d/sessNum.jsonl" )
+  sc="$d/sessNum.dispatch-stamp.json"
+  assert_eq "stamp: numeric branch .issue still numeric" "999" "$(jq -r .issue "$sc")"
+  assert_eq "stamp: numeric branch has node_id key" "true" \
+    "$(jq 'has("node_id")' "$sc")"
+  assert_eq "stamp: numeric branch .node_id is null" "null" "$(jq -r .node_id "$sc")"
   rm -rf "$d"
 )
 

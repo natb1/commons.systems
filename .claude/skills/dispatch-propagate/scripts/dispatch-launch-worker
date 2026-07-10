@@ -133,7 +133,7 @@ case "$DIRECTIVE" in
     # keyed on a phase token: map the skill → the same phase token dispatch-phase
     # would return, then feed that token to BOTH dispatch-phase-model and
     # dispatch-phase-effort (#2042). Net routing:
-    #   /fix-checks /fix-conflicts /qa-fix /review-fix → Sonnet, no effort
+    #   /fix-checks /fix-conflicts /qa-fix /review-fix /qa-main → Sonnet, no effort
     #   /implement                                     → Opus + effort medium
     #   /plan-issue /budget-parse-job /resolve-epic    → Opus + effort high
     # Both emitters print empty for an unmapped value (Sonnet phases get no
@@ -148,6 +148,7 @@ case "$DIRECTIVE" in
       /review-fix)        PHASE=review ;;
       /fix-checks)        PHASE=fix-checks ;;
       /fix-conflicts)     PHASE=fix-conflicts ;;
+      /qa-main)           PHASE=main-qa ;;
       /implement)         PHASE=implement ;;
       /plan-issue|/budget-parse-job|/resolve-epic) PHASE=plan ;;
       *)                  PHASE="" ;;
