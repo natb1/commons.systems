@@ -304,6 +304,31 @@ describe("print bookmarks", () => {
       );
     });
 
+    it("denies write with an extra field (hasOnly)", async () => {
+      const ctx = env.authenticatedContext(UID);
+      const db = ctx.firestore();
+      await assertFails(
+        setDoc(doc(db, `print/${ENV}/bookmarks/${DOC_ID}`), {
+          uid: UID,
+          mediaId: MEDIA_ID,
+          bookmarks: [],
+          extra: "x",
+        }),
+      );
+    });
+
+    it("denies write with a non-list bookmarks", async () => {
+      const ctx = env.authenticatedContext(UID);
+      const db = ctx.firestore();
+      await assertFails(
+        setDoc(doc(db, `print/${ENV}/bookmarks/${DOC_ID}`), {
+          uid: UID,
+          mediaId: MEDIA_ID,
+          bookmarks: "not-a-list",
+        }),
+      );
+    });
+
     it("denies write missing bookmarks field", async () => {
       const ctx = env.authenticatedContext(UID);
       const db = ctx.firestore();
