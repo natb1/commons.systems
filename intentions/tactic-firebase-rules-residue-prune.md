@@ -37,7 +37,37 @@ execution:
   strategy_fingerprint: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "test-integrity gate fires by design on a legitimate removal (dead-code
+    cleanup, not weakening) -- do not fix-loop. Proposed waiver: {pr: 2831,
+    signal: 2, max_net: 190, paths:
+    [packages/rules-test/test/firestore/budget-budgets.test.ts,
+    packages/rules-test/test/firestore/budget-journal-entries.test.ts,
+    packages/rules-test/test/firestore/budget-journal-legs.test.ts,
+    packages/rules-test/test/firestore/budget-periods.test.ts,
+    packages/rules-test/test/firestore/budget-reconciliation-events.test.ts,
+    packages/rules-test/test/firestore/budget-reconciliation-notes.test.ts,
+    packages/rules-test/test/firestore/budget-seed.test.ts,
+    packages/rules-test/test/firestore/budget-statements.test.ts,
+    packages/rules-test/test/firestore/budget-transactions.test.ts,
+    packages/rules-test/test/firestore/budget-weekly-aggregates.test.ts]}. Why
+    the firing is intentional: firestore.rules deleted the budget group-sharing
+    rule blocks (memberEmails/groupId auth) for these collections per this
+    tactics scope (budget is local-first, no runtime path reads or writes them);
+    each collections per-behavior tests were replaced with a shared
+    describeDeniedBudgetCollection() deny-assertion helper in
+    packages/rules-test/test/setup.ts, so net -190 declarations is a real
+    co-deletion of test and subject, not a weakening -- the replacement tests
+    still fail if a rule block is re-introduced. Neither existing exemption
+    applies: firestore.rules is not a TS or JS file so the import-based
+    co-deletion exemption cannot trace it, and the test files were reduced in
+    place rather than wholly deleted so the basename exemption does not fire
+    either. This matches the residual class tactic-test-integrity-waiver names.
+    Next steps: author approves this waiver at office hours, then the waiver is
+    written to the node per tactic-test-integrity-waiver and the fix/qa/review
+    ladder resumes."
+  since: 2026-07-10
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes: {}
