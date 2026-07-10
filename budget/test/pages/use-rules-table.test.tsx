@@ -136,4 +136,17 @@ describe("Rules table priority cleared-input guard", () => {
     expect(activeDS.updateNormalizationRule).not.toHaveBeenCalled();
     expect(input.classList.contains("save-error")).toBe(true);
   });
+
+  it("rejects a cleared normalization rule date window instead of persisting 0", async () => {
+    const c = await renderRules([], [normRule({ dateWindowDays: 7 })]);
+    const input = c.querySelector(
+      '.rule-row[data-rule-type="normalization"] .edit-date-window',
+    ) as HTMLInputElement | null; // type-safety-ok: test DOM query
+    if (!input) throw new Error("no edit-date-window input");
+    input.value = "";
+    blur(input);
+    await flush();
+    expect(activeDS.updateNormalizationRule).not.toHaveBeenCalled();
+    expect(input.classList.contains("save-error")).toBe(true);
+  });
 });

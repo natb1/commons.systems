@@ -93,8 +93,11 @@ export function useRulesTable(containerRef: RefObject<HTMLElement>): void {
             if (raw === "" || !Number.isFinite(priority)) { showInputError(target, "Priority must be a number"); return; }
             await ds.updateNormalizationRule(nruleId, { priority });
           } else if (target.classList.contains("edit-date-window")) {
-            const days = Number(target.value);
-            if (!Number.isFinite(days) || days < 0) { showInputError(target, "Date window must be a non-negative number"); return; }
+            // Number("") is 0, not NaN — guard the emptied input explicitly so a
+            // cleared field is rejected rather than silently persisting a 0-day window.
+            const raw = target.value.trim();
+            const days = Number(raw);
+            if (raw === "" || !Number.isFinite(days) || days < 0) { showInputError(target, "Date window must be a non-negative number"); return; }
             await ds.updateNormalizationRule(nruleId, { dateWindowDays: days });
           } else {
             return;
