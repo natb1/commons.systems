@@ -51,6 +51,10 @@ setup() {
   cp "$SCRIPT_DIR/dispatch-ci-ready" "$TMPDIR_TEST/dispatch-ci-ready"
   cp "$SCRIPT_DIR/dispatch-find-pr" "$TMPDIR_TEST/dispatch-find-pr"
   cp "$SCRIPT_DIR/dispatch-route" "$TMPDIR_TEST/dispatch-route"
+  # dispatch-route's pre-provision main-qa triage gate resolves
+  # dispatch-main-qa-triage via its SCRIPT_DIR (= TMPDIR_TEST for the copy), so
+  # the triage script must sit alongside it; it sources lib.sh (copied below).
+  cp "$SCRIPT_DIR/dispatch-main-qa-triage" "$TMPDIR_TEST/dispatch-main-qa-triage"
   cp "$SCRIPT_DIR/dispatch-resolve-arg" "$TMPDIR_TEST/dispatch-resolve-arg"
   # dispatch-route resolves the resolved-epic candidate predicate via
   # "$SCRIPT_DIR/dispatch-epic-resolved-candidate" (#1456); SCRIPT_DIR resolves
@@ -129,6 +133,7 @@ setup() {
            "$TMPDIR_TEST/dispatch-ci-ready" \
            "$TMPDIR_TEST/dispatch-find-pr" \
            "$TMPDIR_TEST/dispatch-route" \
+           "$TMPDIR_TEST/dispatch-main-qa-triage" \
            "$TMPDIR_TEST/dispatch-epic-resolved-candidate" \
            "$TMPDIR_TEST/dispatch-epic-labels" \
            "$TMPDIR_TEST/dispatch-close-resolved" \
@@ -3342,6 +3347,97 @@ esac
 teardown
 
 # ============================================================================
+# dispatch-main-qa-triage tests
+# ============================================================================
+echo ""
+echo "=== dispatch-main-qa-triage ==="
+
+# dispatch-main-qa-triage is the single-sourced qa-main Step 4·0
+# browser-verifiability triage, consulted pre-provision by dispatch-route and
+# in-session by /qa-main. One gh_issue_view_rest read (the generic
+# `api repos/*/issues/<N>` stub arm serves arg-issue-<N>.json in RAW REST
+# shape); exit 0 = verifiable, 3 = not browser-verifiable (one reason line on
+# stdout), 1 = gh failure, 2 = usage.
+triage_run() {
+  TRIAGE_OUT=$("$TMPDIR_TEST/dispatch-main-qa-triage" "$@" 2>/dev/null) && TRIAGE_RC=0 || TRIAGE_RC=$?
+}
+
+# T1. url_path present + browser outcome → exit 0, verifiable line names the path.
+echo "Test: triage: url_path + browser outcome → exit 0 (verifiable)"
+setup
+cat > "$STUB_DIR/arg-issue-61.json" <<'EOF'
+{"number":61,"title":"qa: verify against main — qa-needs-main #50: /budget","body":"**Expected outcome:** the budget page shows the new snapshot panel\n**Finding during QA:** only verifiable on prod\n**URL path:** /budget\n\nSurfaced during QA of PR #55 for issue #50.","state":"open","labels":[{"name":"main-qa"}]}
+EOF
+triage_run 61
+assert_eq "verifiable follow-up → exit 0" "0" "$TRIAGE_RC"
+assert_eq "verifiable follow-up → prints url_path" "verifiable: url_path=/budget" "$TRIAGE_OUT"
+teardown
+
+# T2. No `**URL path:**` line (the followup template omits it for empty/"current"
+# url_path) → exit 3 with a reason naming the missing url_path.
+echo "Test: triage: no url_path → exit 3 (not browser-verifiable)"
+setup
+cat > "$STUB_DIR/arg-issue-62.json" <<'EOF'
+{"number":62,"title":"qa: verify against main — qa-needs-main #50: some-behavior","body":"**Expected outcome:** the toast appears after save\n**Finding during QA:** deferred to main","state":"open","labels":[{"name":"main-qa"}]}
+EOF
+triage_run 62
+assert_eq "no url_path → exit 3" "3" "$TRIAGE_RC"
+assert_eq "no url_path → reason line" \
+  "not-browser-verifiable: no url_path — the follow-up has no browser-addressable surface" \
+  "$TRIAGE_OUT"
+teardown
+
+# T3. Non-browser outcome (Step 4·0's named example class: a nix flake check)
+# → exit 3 even though a url_path is present. The reason names the matched
+# non-browser signal so the office-hours comment is specific.
+echo "Test: triage: nix-flake expected outcome → exit 3 despite url_path"
+setup
+cat > "$STUB_DIR/arg-issue-63.json" <<'EOF'
+{"number":63,"title":"qa: verify against main — qa-needs-main #51: nix-flake-check","body":"**Expected outcome:** nix flake check --pure-eval passes on the WSL host\n**Finding during QA:** cannot run in PR CI\n**URL path:** /","state":"open","labels":[{"name":"main-qa"}]}
+EOF
+triage_run 63
+assert_eq "nix outcome → exit 3" "3" "$TRIAGE_RC"
+case "$TRIAGE_OUT" in
+  "not-browser-verifiable: expected outcome names a non-browser surface"*)
+    PASS=$((PASS + 1)); TOTAL=$((TOTAL + 1))
+    echo "  PASS: nix outcome → reason names the non-browser surface" ;;
+  *)
+    FAIL=$((FAIL + 1)); TOTAL=$((TOTAL + 1))
+    echo "  FAIL: nix outcome → reason names the non-browser surface"
+    echo "    actual: '$TRIAGE_OUT'" ;;
+esac
+teardown
+
+# T4. Criterion-2 scan surface is title + expected outcome ONLY: a finding that
+# merely narrates tooling (ssh'd deploy) must NOT trip the non-browser class
+# when the expected outcome itself is a browser observation.
+echo "Test: triage: non-browser mention in the finding only → exit 0"
+setup
+cat > "$STUB_DIR/arg-issue-64.json" <<'EOF'
+{"number":64,"title":"qa: verify against main — qa-needs-main #52: /fellspiral","body":"**Expected outcome:** the landing hero renders the new tagline\n**Finding during QA:** found while ssh tunneling to the preview; only prod serves the built asset\n**URL path:** /fellspiral","state":"open","labels":[{"name":"main-qa"}]}
+EOF
+triage_run 64
+assert_eq "tooling mention in finding only → exit 0" "0" "$TRIAGE_RC"
+teardown
+
+# T5. gh hard failure → exit 1 (clear error, no fallback routing).
+echo "Test: triage: gh failure → exit 1"
+setup
+touch "$STUB_DIR/gh-fail-issue-labels-65"
+triage_run 65
+assert_eq "gh failure → exit 1" "1" "$TRIAGE_RC"
+teardown
+
+# T6. Usage errors → exit 2 (missing / non-numeric N).
+echo "Test: triage: usage errors → exit 2"
+setup
+triage_run
+assert_eq "missing N → exit 2" "2" "$TRIAGE_RC"
+triage_run not-a-number
+assert_eq "non-numeric N → exit 2" "2" "$TRIAGE_RC"
+teardown
+
+# ============================================================================
 # dispatch-route tests
 # ============================================================================
 echo ""
@@ -3411,19 +3507,73 @@ assert_eq "no PR + dispatch:planned → INVOKE /implement (directive)" \
 assert_eq "no PR + dispatch:planned → INVOKE /implement (exit 0)" "0" "$ROUTE_RC"
 teardown
 
-# 1b-2. No PR + main-qa label → INVOKE /qa-main (#2274). dispatch-route always
-# provisions the worktree first (the unconditional dispatch-provision-worktree
-# call), then dispatch-phase returns main-qa for the issue; the router maps
-# main-qa → INVOKE /qa-main.
-echo "Test: no PR + main-qa label → INVOKE /qa-main"
+# 1b-2. No PR + main-qa label, browser-verifiable body → INVOKE /qa-main
+# (#2274). The pre-provision triage gate (dispatch-main-qa-triage) sees the
+# url_path-bearing browser outcome and exits 0, so dispatch-route provisions
+# the worktree (the dispatch-provision-worktree call), then dispatch-phase
+# returns main-qa for the issue; the router maps main-qa → INVOKE /qa-main.
+echo "Test: no PR + main-qa label (verifiable) → INVOKE /qa-main"
 setup
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
-printf '{"state":"open","labels":[{"name":"main-qa"}]}\n' > "$STUB_DIR/arg-issue-42.json"
+cat > "$STUB_DIR/arg-issue-42.json" <<'EOF'
+{"number":42,"title":"qa: verify against main — qa-needs-main #40: /budget","body":"**Expected outcome:** the budget page shows the new panel\n**Finding during QA:** only verifiable on prod\n**URL path:** /budget","state":"open","labels":[{"name":"main-qa"}]}
+EOF
 route_run 42 /wt/42-my-feature
-assert_eq "no PR + main-qa → INVOKE /qa-main (directive)" "INVOKE /qa-main" "$ROUTE_OUT"
-assert_eq "no PR + main-qa → INVOKE /qa-main (exit 0)" "0" "$ROUTE_RC"
+assert_eq "no PR + main-qa (verifiable) → INVOKE /qa-main (directive)" "INVOKE /qa-main" "$ROUTE_OUT"
+assert_eq "no PR + main-qa (verifiable) → INVOKE /qa-main (exit 0)" "0" "$ROUTE_RC"
+assert_eq "no PR + main-qa (verifiable) → provision proceeds" "1" \
+  "$([[ -f "$STUB_DIR/provision-calls.log" ]] && wc -l < "$STUB_DIR/provision-calls.log" | tr -d ' ' || echo 0)"
 teardown
+
+# 1b-3. Pre-provision triage rejection (tactic-main-qa-triage-before-provision):
+# a main-qa follow-up with no url_path is not browser-verifiable — dispatch-route
+# emits STOP main-qa-unverifiable (reason on the directive line) WITHOUT calling
+# dispatch-provision-worktree, so the rejection costs no worktree provisioning
+# and no session boot. On the PRE-FIX code this provisioned and routed to
+# INVOKE /qa-main, so both assertions genuinely guard the new behavior.
+echo "Test: no PR + main-qa label (not verifiable) → STOP main-qa-unverifiable, no provision"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo "/wt/46-qa-verify-against-main" > "$STUB_DIR/worktree-toplevel.txt"
+cat > "$STUB_DIR/arg-issue-46.json" <<'EOF'
+{"number":46,"title":"qa: verify against main — qa-needs-main #40: nixos-rebuild","body":"**Expected outcome:** nix flake check --pure-eval passes on the host\n**Finding during QA:** not runnable in PR CI","state":"open","labels":[{"name":"main-qa"}]}
+EOF
+# The triage rejection persists the reason into CLAUDE_JOB_DIR (worker-session
+# context) for the Stop hook — export a fresh test job dir so the write is
+# assertable AND so a real session's CLAUDE_JOB_DIR never leaks into the run
+# (test 18's convention: any case that exports CLAUDE_JOB_DIR must unset it).
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/job"
+mkdir -p "$CLAUDE_JOB_DIR"
+route_run 46 /wt/46-qa-verify-against-main
+assert_eq "main-qa not verifiable → STOP main-qa-unverifiable (directive)" \
+  "STOP main-qa-unverifiable not-browser-verifiable: no url_path and the expected outcome names a non-browser surface ('nixos')" \
+  "$ROUTE_OUT"
+assert_eq "main-qa not verifiable → exit 0" "0" "$ROUTE_RC"
+assert_eq "main-qa not verifiable → NO provision call" "0" \
+  "$([[ -f "$STUB_DIR/provision-calls.log" ]] && wc -l < "$STUB_DIR/provision-calls.log" | tr -d ' ' || echo 0)"
+assert_eq "main-qa not verifiable → office-hours-reason written" "yes" \
+  "$([[ -s "$CLAUDE_JOB_DIR/office-hours-reason" ]] && echo yes || echo no)"
+unset CLAUDE_JOB_DIR
+teardown
+
+# 1b-4. Non-main-qa issues must never pay the triage read: with no main-qa
+# label the gate is inert (no arg-issue fixture beyond the default empty-label
+# issue) — covered by test 1 above routing to INVOKE /plan-issue untouched.
+# Launcher-side park disposition: driving dispatch-launch-worker end-to-end is
+# out of scope for this harness (same rationale as tests 1d/1g), so assert at
+# the source that the launcher has a DEDICATED "STOP main-qa-unverifiable"* arm
+# that parks via dispatch-apply-office-hours — i.e. the same label+why-comment
+# write the in-session Step 4·0 → dispatch-mark-deviation → Branch A path
+# applies, not the benign no-park arm.
+echo "Test: dispatch-launch-worker parks STOP main-qa-unverifiable via dispatch-apply-office-hours"
+TOTAL=$((TOTAL + 1))
+if awk '/"STOP main-qa-unverifiable"\*\)/,/;;/' "$SCRIPT_DIR/dispatch-launch-worker" \
+   | grep -q 'dispatch-apply-office-hours'; then
+  PASS=$((PASS + 1)); echo "  PASS: launcher parks STOP main-qa-unverifiable to office-hours"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: launcher parks STOP main-qa-unverifiable to office-hours"
+fi
 
 # 1c. Closed issue → STOP closed (#1845). The router's closed-issue guard fires
 # AFTER the worktree cross-check and BEFORE provisioning: it fetches the issue
