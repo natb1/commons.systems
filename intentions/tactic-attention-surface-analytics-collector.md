@@ -27,7 +27,8 @@ execution:
   pr: 2783
   attempts:
     fix: 1
-  markers: []
+  markers:
+    - reviewed
   strategy_fingerprint: 900e05682e9367b9bd821dd98976ac9edf41f0ab3e1cafed10a5bdab6f91301f
 validates: []
 blocked_by: []
