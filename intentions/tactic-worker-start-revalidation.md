@@ -30,14 +30,12 @@ execution:
   attempts: {}
   markers:
     - qa-done
+    - reviewed
   strategy_fingerprint: null
 validates: []
 blocked_by:
   - tactic-graph-router-selector
-office_hours:
-  reason: "graph-commit: concurrent-edit conflict — manual merge needed"
-  since: 2026-07-10
-  recommendation: null
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
