@@ -27,12 +27,13 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-phase-checkpoint-discipline
   pr: 2797
   attempts: {}
-  markers: []
+  markers:
+    - qa-done
   strategy_fingerprint: 7964be73bb6a26bb77ec516c22d07677de94ee20965f93b02442867fff492731
 validates: []
 blocked_by:
