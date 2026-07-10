@@ -594,6 +594,21 @@ describe("useViewerController keyboard + panel", () => {
     expect(renderer.next).toHaveBeenCalled();
   });
 
+  it("modified arrow keys (alt/ctrl/meta/shift) are ignored so browser/OS shortcuts still fire", async () => {
+    const renderer = makeMockRenderer();
+    await mount(defaultArgs({ createRenderer: () => renderer }));
+    await flushInit();
+
+    for (const modifier of ["altKey", "ctrlKey", "metaKey", "shiftKey"] as const) {
+      const event = new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true, [modifier]: true });
+      Object.defineProperty(event, "target", { value: document.body });
+      await act(async () => { document.dispatchEvent(event); });
+      await flushInit();
+    }
+
+    expect(renderer.prev).not.toHaveBeenCalled();
+  });
+
   it("panelCollapsed toggles", async () => {
     const reqFs = vi.fn().mockResolvedValue(undefined);
     HTMLElement.prototype.requestFullscreen = reqFs;
