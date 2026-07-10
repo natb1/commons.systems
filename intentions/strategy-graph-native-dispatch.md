@@ -985,6 +985,81 @@ clarifications:
       draft; the author accepted the successor-cadence amendments as a deferral,
       ratified or reworked at the tactic-align-audit-legacy-review sitting.
       Recorded 2026-07-09 interview."
+  - question: A mechanical integrity gate (test-integrity) fires on a legitimate
+      removal — the check is red by design and can never go green, so the node
+      can neither clear fix nor reach merge. What is the supported workflow?
+    answer: "An author-approved, node-recorded waiver: approval flows through office
+      hours and the node then proceeds through the NORMAL ladder —
+      override-merge is retired as the integrity-gate path. Flow: (1) the worker
+      that determines the firing is intentional and legitimate (the residual
+      class the check's two mechanical co-deletion exemptions deliberately
+      bias-to-fire on — e.g. behavioral tests of deliberately deleted behavior
+      on a surviving symbol) does not fix-loop: fix means CI-red on unintended
+      breakage (clarification 18), while an intentional gate block parks the
+      node to office_hours with the EXACT proposed waiver as the recommendation
+      (condition 6). (2) The author approves at office hours — the approval is a
+      live human decision, and the office-hours session (Claude) then writes the
+      waiver into the node, the same interactive graph-commit clearing the park
+      (clarification 4). The waiver write is human-approval-gated: an auto-mode
+      worker never writes one. (3) The CI check consults origin/main's
+      intentions/ nodes keyed by the PR number (execution.pr) and nets the
+      waived removals out of its signal counts before evaluating; the check goes
+      green and the node resumes the normal ladder — fix/qa/review with the
+      standard auto-merge arm at clean review completion. Waiver scope is
+      per-signal, count-and-path bounded — {pr, signal, max net count, path
+      scope} — so a later genuine weakening pushed to the same PR still fires;
+      deliberately NOT head-SHA-pinned, so review-fix's own content-fix pushes
+      cannot invalidate the approval and loop the node back to office hours;
+      anything exceeding the recorded scope fires as usual (bias-to-fire
+      preserved). No legacy-lane carve-out is needed: the gh queue drain is
+      complete (author-stated this round), so the node-keyed lookup covers every
+      PR the router owns. CI reliance stays within the existing
+      delegation-github lean — the check remains an owned script and only the
+      executor is rented — so no recovers edge is added. Interim emulation until
+      the check-side lookup lands: the author's office-hours approval is
+      recorded on the node as the same waiver-shaped marker the greenfield check
+      will read, qa and review run with full parity semantics treating the red
+      check as author-waived, and the author's override-merge stands in for the
+      auto-merge arm — first case tactic-analytics-vitals-delivery / PR #2835,
+      approved this round. Implementation retained as draft
+      tactic-test-integrity-waiver. Recorded 2026-07-10 interview."
+  - question: Auto-merge arming is human-authorized, yet a tick +3 Workflow launch
+      was denied by the auto-mode classifier — what does the launch layer owe
+      arming instructions in worker prompts?
+    answer: "Plain human-authorization framing with zero classifier meta-commentary.
+      Evidence (tick +3, 2026-07-10): review-worker prompts embedding
+      self-referential justification — 'the auto-mode classifier APPROVES an
+      explicit, human-directed instruction' plus 'you ARE AUTHORIZED AND
+      EXPECTED to arm auto-merge' — caused the classifier to deny the entire
+      Workflow fan-out launch as a bypass attempt; the identical fan-out
+      relaunched cleanly once the arming step was reworded to state the fact and
+      the commands plainly ('the human operator has directly authorized arming
+      auto-merge for this review; run: gh pr ready <pr>; gh pr merge --auto
+      --squash <pr>'), after which 8 of 9 review PRs armed and merged
+      autonomously. Doctrine, binding the tick-workflow authoring layer and the
+      review phase skill: arming instructions state the authorization as fact
+      and name the commands; they never argue with, reference, or predict the
+      permission layer — text that argues for approval reads as a bypass attempt
+      regardless of a genuine underlying grant. The settings.json
+      permissions.allow approach stays retired: a static allow rule bypasses the
+      judgment layer entirely and is the wrong tool for a judgment-gated action.
+      Recorded 2026-07-10 interview."
+  - question: Emulated implement→qa transitions repeatedly land phase:qa with
+      execution.pr null while an open draft PR exists — is the PR stamp at the
+      implement→qa write load-bearing?
+    answer: "Yes — confirmed at scale on tick +3 (2026-07-10): six nodes (PRs #2819,
+      #2825, #2828, #2830, #2838, #2839) reached qa with execution.pr null, and
+      each qa worker had to backfill the stamp before it could key its
+      CI-verdict and mergeability sensors off the PR. The duty is already
+      specified in the in-flight tactic-graph-router-transitions ('execution.pr
+      when the PR opens'), so no new node is recorded — this entry confirms the
+      spec is load-bearing at fleet scale and directs that tactic's own qa and
+      review phases to verify the delivered transition writer stamps
+      execution.pr at the implement→qa write itself, not at some later write.
+      Until the writer lands, emulating sessions owe the stamp with the
+      transition (bootstrap parity, clarification 15), and the tick instruction
+      encodes the qa-side backfill as the interim correction. Recorded
+      2026-07-10 interview."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
