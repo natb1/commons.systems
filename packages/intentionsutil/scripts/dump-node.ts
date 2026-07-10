@@ -42,7 +42,7 @@ const USAGE =
 // --- Core helper (exported for tests) --------------------------------------
 
 /**
- * Dump each node in `ids` as JSON into `outDir` and write a base manifest of
+ * Dump each node in `ids` to JSON in `outDir` and write a base manifest of
  * `<id>=<blobsha>` lines. `blobsha` is `git hash-object` of the on-disk node
  * file — i.e. the exact content that was read — so `graph-commit --base` can
  * refuse the write if origin/main's blob has since moved.
