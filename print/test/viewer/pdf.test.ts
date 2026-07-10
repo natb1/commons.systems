@@ -1063,6 +1063,63 @@ describe("clearSearch()", () => {
     expect(restored).toBeDefined();
   });
 
+  // Targets renderTextLayer's OWN generation guard (the `shouldAbort` param),
+  // distinct from the outer canvas-stage gen check in renderPage: this
+  // reproduces a render superseded WHILE suspended inside renderTextLayer's
+  // own getTextContent() await — the specific race the guard exists for.
+  it("a text-layer render superseded while awaiting getTextContent() never paints stale text over a newer page", async () => {
+    const pdfjs = (await import("pdfjs-dist")) as unknown as {
+      __fakeDoc: { getPage: (i: number) => Promise<unknown> };
+    };
+    const originalGetPage = pdfjs.__fakeDoc.getPage;
+
+    // Page 2's getTextContent() is held open until resolved manually below, so
+    // a later render for page 3 can run to completion in full while page 2's
+    // renderTextLayer() is still suspended in its own await.
+    let resolvePage2Text: (() => void) | null = null;
+    pdfjs.__fakeDoc.getPage = (i: number) => {
+      if (i !== 2) return originalGetPage(i);
+      return Promise.resolve({
+        getTextContent: () =>
+          new Promise((resolve) => {
+            resolvePage2Text = () => resolve({ items: [{ str: "the dog ran" }] });
+          }),
+        getViewport: (_opts: unknown) => ({ width: 100, height: 100 }),
+        render: (_opts: unknown) => ({ promise: Promise.resolve(), cancel() {} }),
+      });
+    };
+
+    try {
+      const renderer = createPdfRenderer();
+      await renderer.init(container, "fake://source.pdf");
+
+      // Start page 2's render without awaiting it. It runs synchronously
+      // through the canvas stage (a real gen check that still passes, since
+      // no other render has started yet) and suspends inside renderTextLayer's
+      // getTextContent() — the controlled promise above.
+      const p2 = renderer.goToPage(2);
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+      expect(resolvePage2Text).not.toBeNull();
+
+      // Page 3 renders to completion while page 2 is still suspended, becoming
+      // the winner and painting its own text layer.
+      await renderer.goToPage(3);
+      expect(container.querySelector(".textLayer")!.textContent).toBe("a fish swims");
+
+      // Let page 2's getTextContent() resolve now that it is stale (renderGen
+      // has moved to 3). The guard must self-abort before touching the shared
+      // textLayerDiv; without it, this would replaceChildren() the live
+      // page-3 layer and repaint page 2's stale (invisible but selectable)
+      // text over it.
+      resolvePage2Text!();
+      await p2;
+
+      expect(container.querySelector(".textLayer")!.textContent).toBe("a fish swims");
+    } finally {
+      pdfjs.__fakeDoc.getPage = originalGetPage;
+    }
+  });
+
   // SEQUENTIAL (two awaited renderPageInto calls, not concurrent). Exercises a
   // DIFFERENT invariant than the adjacent "concurrent renderPageInto" test above:
   // that test uses Promise.all to verify the spreadGen cancellation guard (one
