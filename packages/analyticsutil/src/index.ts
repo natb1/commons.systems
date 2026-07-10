@@ -82,10 +82,14 @@ function reportWebVitals(analytics: Analytics): void {
       metric.name === "CLS" ? metric.value * CLS_SCALE : metric.value,
     );
     // web-vitals report at page-hide. `transport_type: "beacon"` makes gtag
-    // deliver via navigator.sendBeacon, which survives the unload — without it
-    // short/bounce sessions hidden before firebase's dynamic-config fetch
-    // resolves silently lose CLS/INP/LCP. logEvent never throws for analytics
-    // failures (the SDK swallows them internally), so there is nothing to catch.
+    // deliver via navigator.sendBeacon, which survives the teardown that would
+    // otherwise cancel the request gtag issues at page-hide. Scope note: this
+    // covers sessions whose firebase init (dynamic-config fetch) has resolved
+    // by page-hide; a tab torn down BEFORE init resolves is still lost, since
+    // logEvent suspends awaiting init before gtag ever runs — that residual
+    // segment is TODO(tactic-analytics-preinit-vitals). logEvent never throws
+    // for analytics failures (the SDK swallows them internally), so there is
+    // nothing to catch.
     logEvent(analytics, "web_vitals", {
       metric_name: metric.name,
       metric_value: metricValue,
@@ -149,10 +153,11 @@ export function initAnalytics(app: FirebaseApp): (path: string) => void {
   reportWebVitals(analytics);
 
   return (path: string) => {
-    // `transport_type: "beacon"` (see reportWebVitals) delivers the first
-    // page_view of a short/bounce session via sendBeacon so it is not dropped
-    // when the tab is hidden before firebase's config fetch resolves. logEvent
-    // does not throw for analytics failures, so there is nothing to catch.
+    // `transport_type: "beacon"` (see reportWebVitals) delivers a page_view
+    // fired at/near page-hide via sendBeacon instead of a cancellable request.
+    // Same scope note as reportWebVitals: pre-init teardown is still lost —
+    // TODO(tactic-analytics-preinit-vitals). logEvent does not throw for
+    // analytics failures, so there is nothing to catch.
     logEvent(analytics, "page_view", {
       page_path: path,
       transport_type: "beacon",
