@@ -53,7 +53,7 @@ function makeMockController(
   navSignal = 0,
 ): UseViewerControllerResult {
   const renderer = makeMockRenderer();
-  return {
+  const result = {
     getRenderer: () => renderer,
     onPanelNavigate: vi.fn(),
     navSignal,
@@ -91,6 +91,15 @@ function makeMockController(
     uid: null,
     ...overrides,
   } as UseViewerControllerResult;
+  // Default getPosition mirrors single-page mode by delegating to the current
+  // (possibly overridden) renderer; spread-mode tests override it directly.
+  if (overrides.getPosition === undefined) {
+    result.getPosition = () => {
+      const r = result.getRenderer();
+      return r ? { position: r.position, label: r.positionLabel } : null;
+    };
+  }
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -294,6 +303,49 @@ describe("useBookmarks + BookmarksPanel", () => {
     });
 
     expect(toggle.getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("spread mode: toggle records the controller's live spread page, not the stale renderer page", async () => {
+    const { store, state } = inMemoryStore([]);
+    // The single-page renderer position is stale in spread mode (spread nav
+    // never advances it); getPosition reports the live spread page instead.
+    const renderer = makeMockRenderer({
+      get position() { return "2"; },
+      get positionLabel() { return "Page 2 / 10"; },
+    });
+    const controller = makeMockController({
+      getRenderer: () => renderer,
+      getPosition: () => ({ position: "4", label: "Pages 4–5 / 10" }),
+    });
+    await mount(controller, store);
+
+    const toggle = container.querySelector(".viewer-bookmark-toggle") as HTMLButtonElement;
+    await act(async () => {
+      toggle.click();
+      await flushMicrotasks();
+    });
+
+    expect(state.saveCalls[0]).toEqual([{ position: "4", label: "Pages 4–5 / 10" }]);
+    const entry = container.querySelector(".viewer-bookmark-entry") as HTMLElement;
+    expect(entry.dataset.position).toBe("4");
+    expect(entry.textContent).toBe("Pages 4–5 / 10");
+  });
+
+  it("spread mode: aria-pressed reflects the controller's live spread page", async () => {
+    // Bookmark stored for the live spread page "4"; renderer.position is a stale "2".
+    const { store } = inMemoryStore([{ position: "4", label: "Pages 4–5 / 10" }]);
+    const renderer = makeMockRenderer({
+      get position() { return "2"; },
+      get positionLabel() { return "Page 2 / 10"; },
+    });
+    const controller = makeMockController({
+      getRenderer: () => renderer,
+      getPosition: () => ({ position: "4", label: "Pages 4–5 / 10" }),
+    });
+    await mount(controller, store);
+
+    const toggle = container.querySelector(".viewer-bookmark-toggle") as HTMLButtonElement;
+    expect(toggle.getAttribute("aria-pressed")).toBe("true");
   });
 
   it("unmount does not throw", async () => {

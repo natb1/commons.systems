@@ -558,6 +558,56 @@ describe("useViewerController spread mode", () => {
     expect(renderResult).not.toHaveBeenCalled();
     expect(spread.clearSearch).not.toHaveBeenCalled();
   });
+
+  it("onPanelNavigate: spread → controller.goToPage(renderer.currentPage) re-renders the spread", async () => {
+    const spread = makeSpreadRenderer();
+    await mount(defaultArgs({ createRenderer: () => spread }));
+    await flushInit();
+    await act(async () => { captured!.toggleSpread(); });
+    await flushInit();
+
+    // Simulate a bookmark/outline click moving the underlying renderer, the way
+    // goToPosition / goToOutlineEntry do, then the panel calling onPanelNavigate.
+    await spread.goToPage(5);
+    vi.mocked(spread.renderPageInto!).mockClear();
+    await act(async () => { captured!.onPanelNavigate(); });
+    await flushInit();
+
+    // The spread re-rendered to the renderer's new page (page 5 → spread 4–5).
+    const calls = vi.mocked(spread.renderPageInto!).mock.calls;
+    expect(calls.length).toBeGreaterThan(0);
+    expect(calls.map((c) => c[0])).toContain(4);
+    expect(calls.map((c) => c[0])).toContain(5);
+  });
+
+  it("onPanelNavigate: single mode does not touch a spread surface", async () => {
+    const single = makeMockRenderer();
+    await mount(defaultArgs({ createRenderer: () => single }));
+    await flushInit();
+    const before = captured!.navSignal;
+    await act(async () => { captured!.onPanelNavigate(); });
+    await flushInit();
+    // syncNav still fires (navSignal bumps) but there is no spread to render.
+    expect(captured!.navSignal).toBeGreaterThan(before);
+  });
+
+  it("getPosition: single reads the renderer; spread reads the controller's live page/label", async () => {
+    const renderer = makeSpreadRenderer();
+    await mount(defaultArgs({ createRenderer: () => renderer }));
+    await flushInit();
+    await renderer.goToPage(3);
+
+    expect(captured!.getPosition()).toEqual({ position: "3", label: "Page 3 / 10" });
+
+    await act(async () => { captured!.toggleSpread(); });
+    await flushInit();
+
+    // Page 3 sits in spread 2–3; the controller reports its left page + spread label.
+    expect(captured!.getPosition()).toEqual({
+      position: "2",
+      label: "Pages 2–3 / 10",
+    });
+  });
 });
 
 describe("useViewerController keyboard + panel", () => {
