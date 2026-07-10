@@ -417,6 +417,12 @@ assert_eq "sessions sess-worker artifact.issue" "999" \
   "$(jq '.sessions[] | select(.id=="sess-worker") | .artifact.issue' <<<"$OUT")"
 assert_eq "sessions sess-router artifact null" "null" \
   "$(jq '.sessions[] | select(.id=="sess-router") | .artifact' <<<"$OUT")"
+# The legacy worker sidecar carries no node_id key → projected as null, and the
+# by_node aggregate stays empty (only non-null node_id sessions are folded).
+assert_eq "sessions sess-worker artifact.node_id null (legacy sidecar)" "null" \
+  "$(jq '.sessions[] | select(.id=="sess-worker") | .artifact.node_id' <<<"$OUT")"
+assert_eq "by_node is {} when no sidecar carries node_id" "{}" \
+  "$(jq -c '.by_node' <<<"$OUT")"
 
 # sidecar-coverage metric (#2268): worker sessions are the eligible denominator.
 # The shared fixture has exactly ONE worker (sess-worker), which carries a
@@ -916,6 +922,75 @@ assert_eq 'by_model["claude-fable-5"].cost_usd (fable)' "$EXPECTED_FABLE_COST" \
 rm -rf "$FABLE_ROOT"
 
 # ---------------------------------------------------------------------------
+# Graph-native node attribution (by_node join + align-family classification).
+# ISOLATED fixture mirroring the haiku/fable structure: ONE session spawned
+# with the graph-native /align-tactics command whose sidecar carries a
+# node_id. Asserts (a) the align-family alternation classifies it as worker
+# (not "other"), (b) the sidecar's node_id survives the stage-1 artifact
+# projection, and (c) by_node carries exactly one row with the summed
+# price_proxy_usd / cost_usd / turns / sessions.
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "--- graph-native node attribution: by_node + align-family worker ---"
+
+NODE_ROOT=$(mktemp -d)
+trap 'rm -rf "$NODE_ROOT" "$FAKE_WRITER_DIR"; teardown' EXIT INT TERM
+node_worktree="$NODE_ROOT/-home-x-worktrees-tactic-node-fixture"
+mkdir -p "$node_worktree"
+node_jsonl="$node_worktree/sess-node.jsonl"
+
+# line 1: first user line — the graph-native align-family command must classify
+# as worker via the extended alternation.
+printf '%s\n' '{"type":"user","message":{"content":"<command-name>/align-tactics</command-name>"}}' \
+  >> "$node_jsonl"
+# line 2: assistant — opus, distinct nonzero usage in all four components so a
+# by_node component swap would be visible.
+printf '%s\n' '{"type":"assistant","attributionSkill":"plan-implement","isSidechain":false,"gitBranch":"tactic-node-fixture","message":{"model":"claude-opus-4-8","usage":{"input_tokens":1000,"cache_creation_input_tokens":2000,"cache_read_input_tokens":4000,"output_tokens":500}}}' \
+  >> "$node_jsonl"
+jq . "$node_jsonl" >/dev/null
+touch "$node_jsonl"
+
+# Sibling sidecar in the graph-native shape: issue null, node_id set.
+node_stamp="$node_worktree/sess-node.dispatch-stamp.json"
+printf '%s\n' '{"schema":1,"session_id":"sess-node","repo":"natb1/commons.systems","issue":null,"pr":null,"branch":"tactic-node-fixture","base_sha":"beefcafe","node_id":"tactic-node-fixture","stamped_at":"2026-01-01T00:00:00Z"}' \
+  > "$node_stamp"
+jq . "$node_stamp" >/dev/null
+
+OUT_NODE=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$NODE_ROOT"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
+)
+
+assert_eq "node: /align-tactics session classifies as worker" "worker" \
+  "$(jq -r '[.sessions[]|select(.id=="sess-node")][0].type' <<<"$OUT_NODE")"
+assert_eq "node: sessions[sess-node].artifact.node_id" "tactic-node-fixture" \
+  "$(jq -r '[.sessions[]|select(.id=="sess-node")][0].artifact.node_id' <<<"$OUT_NODE")"
+assert_eq "node: sessions[sess-node].artifact.issue null" "null" \
+  "$(jq '[.sessions[]|select(.id=="sess-node")][0].artifact.issue' <<<"$OUT_NODE")"
+
+# by_node row: proxy at uniform Opus list rates; cost at real opus rates.
+EXPECTED_NODE_PROXY=$(jq -n '(1000*15 + 2000*18.75 + 4000*1.5 + 500*75)/1e6')
+EXPECTED_NODE_COST=$(jq -n '(1000*5 + 2000*6.25 + 4000*0.50 + 500*25)/1e6')
+assert_eq "node: by_node has exactly one key" '["tactic-node-fixture"]' \
+  "$(jq -c '.by_node | keys' <<<"$OUT_NODE")"
+assert_eq 'node: by_node["tactic-node-fixture"].sessions' "1" \
+  "$(jq '.by_node["tactic-node-fixture"].sessions' <<<"$OUT_NODE")"
+assert_eq 'node: by_node["tactic-node-fixture"].turns' "1" \
+  "$(jq '.by_node["tactic-node-fixture"].turns' <<<"$OUT_NODE")"
+assert_eq 'node: by_node["tactic-node-fixture"].price_proxy_usd' "$EXPECTED_NODE_PROXY" \
+  "$(jq '.by_node["tactic-node-fixture"].price_proxy_usd' <<<"$OUT_NODE")"
+assert_eq 'node: by_node["tactic-node-fixture"].cost_usd' "$EXPECTED_NODE_COST" \
+  "$(jq '.by_node["tactic-node-fixture"].cost_usd' <<<"$OUT_NODE")"
+# A sidecar-carrying align worker also counts toward sidecar coverage.
+assert_eq "node: window.sidecar_eligible == 1" "1" \
+  "$(jq '.window.sidecar_eligible' <<<"$OUT_NODE")"
+assert_eq "node: window.sidecar_present == 1" "1" \
+  "$(jq '.window.sidecar_present' <<<"$OUT_NODE")"
+
+rm -rf "$NODE_ROOT"
+
+# ---------------------------------------------------------------------------
 # Claude 3 classification + generation-aware pricing + no-abort completeness
 # (#2102). Three ISOLATED fixtures:
 #   1. claude-3-opus-20240229  — rate_class()==opus_3, ACTUAL_RATES.opus_3 prices it;
@@ -1090,18 +1165,20 @@ rm -rf "$COV_ROOT"
 # ---------------------------------------------------------------------------
 # Alternation coverage (#2351): every phase skill in the classifier's worker
 # alternation must classify a first-message <command-name> session as "worker".
-# The #2268 cov block above exercises only 3 of the 10; a typo in any of the
-# other 7 skill names would silently misclassify those sessions as "other".
+# The #2268 cov block above exercises only 3 of the 13; a typo in any of the
+# other 10 skill names would silently misclassify those sessions as "other".
 # ISOLATED fixture: one minimal worker session per skill, each in its own root
 # so the shared totals stay untouched. Keep this list in lockstep with the
-# alternation regex in aggregate-usage.sh's classifier.
+# alternation regex in aggregate-usage.sh's classifier (10 legacy phase skills
+# + the 3 graph-native align-family skills).
 # ---------------------------------------------------------------------------
 
 echo ""
-echo "--- alternation coverage: all 10 phase skills classify as worker (#2351) ---"
+echo "--- alternation coverage: all 13 phase skills classify as worker (#2351) ---"
 
 for skill in plan-issue implement qa-fix review-fix fix-checks fix-conflicts \
-             qa-main budget-parse-job resolve-epic office-hours; do
+             qa-main budget-parse-job resolve-epic office-hours \
+             align-strategy align-tactics align-init; do
   ALT_ROOT=$(mktemp -d)
   trap 'rm -rf "$ALT_ROOT"; teardown' EXIT INT TERM
   alt_worktree="$ALT_ROOT/-home-x-worktrees-2351-alternation"
@@ -1252,6 +1329,44 @@ assert_eq "day: window.until upper bound (day+1)" "2025-06-16 00:00:00" \
 rm -rf "$DAY_ROOT"
 
 # ---------------------------------------------------------------------------
+# UTC-consistent --days window. The find consumer interprets SINCE/UNTIL under
+# TZ=UTC, so both bounds must be rendered with `date -u`. Regression: with a
+# local-TZ rendering under a west-of-UTC zone (America/New_York, UTC-4/-5),
+# UNTIL = local "now+1s" lands hours in the PAST when read as UTC, so a
+# transcript with mtime = now is silently dropped from a --days window.
+# ISOLATED fixture: one worker transcript touched to now; the aggregator runs
+# with TZ=America/New_York and must still scan it.
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "--- UTC-consistent --days window under a west-of-UTC host TZ ---"
+
+TZ_ROOT=$(mktemp -d)
+trap 'rm -rf "$TZ_ROOT" "$FAKE_WRITER_DIR"; teardown' EXIT INT TERM
+tz_worktree="$TZ_ROOT/-home-x-worktrees-utc-window"
+mkdir -p "$tz_worktree"
+tz_jsonl="$tz_worktree/sess-tz.jsonl"
+
+printf '%s\n' '{"type":"user","message":{"content":"<command-name>/plan-issue</command-name>"}}' \
+  >> "$tz_jsonl"
+printf '%s\n' '{"type":"assistant","attributionSkill":"plan-implement","isSidechain":false,"gitBranch":"1-utc-window","message":{"model":"claude-opus-4-8","usage":{"input_tokens":100,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}}' \
+  >> "$tz_jsonl"
+jq . "$tz_jsonl" >/dev/null
+touch "$tz_jsonl"
+
+OUT_TZ=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$TZ_ROOT"
+  export TZ=America/New_York
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
+)
+assert_eq "utc-window: mtime=now file scanned under TZ=America/New_York" "1" \
+  "$(jq '.window.files_scanned' <<<"$OUT_TZ")"
+assert_eq "utc-window: mtime=now session counted (totals.sessions==1)" "1" \
+  "$(jq '.totals.sessions' <<<"$OUT_TZ")"
+
+rm -rf "$TZ_ROOT"
+
+# ---------------------------------------------------------------------------
 # (b) --exclude-sidecar-sessions drops a sidecar session, keeps it when the flag
 # is absent (#2505). ISOLATED fixture: two worker sessions, both with NO artifact
 # (no .dispatch-stamp.json), so each resolves to topic "other" and type "none".
@@ -1317,6 +1432,76 @@ assert_eq "sidecar ON: by_type.none.input == 1000 (sess-drop dropped)" "1000" \
   "$(jq '.by_type.none.input' <<<"$OUT_SIDE_ON")"
 
 rm -rf "$SIDE_ROOT"
+
+# ---------------------------------------------------------------------------
+# (b2) --exclude-sidecar-sessions also drops the excluded session's SUBAGENT
+# transcripts (<sid>/subagents/agent-*.jsonl). The file-issue sidecar's totals
+# already include subagent usage, so leaving the subagent transcript in the
+# scan would count those tokens twice once the priced sidecar is folded back.
+# ISOLATED fixture, no artifact stamps (topic "other", type "none"):
+#   sess-fi.jsonl (input 2000) + sess-fi.file-issue-attribution.json
+#     + sess-fi/subagents/agent-x.jsonl (input 4000)   <- both must drop
+#   sess-plain.jsonl (input 1000)
+#     + sess-plain/subagents/agent-y.jsonl (input 500) <- both must stay
+#   WITHOUT the flag: all 4 transcripts contribute (input 7500).
+#   WITH    the flag: only sess-plain + its subagent contribute (input 1500).
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "--- (b2) --exclude-sidecar-sessions drops the session's subagents too ---"
+
+SUB_ROOT=$(mktemp -d)
+trap 'rm -rf "$SUB_ROOT" "$FAKE_WRITER_DIR"; teardown' EXIT INT TERM
+sub_worktree="$SUB_ROOT/-home-x-worktrees-subagent-sidecar"
+mkdir -p "$sub_worktree/sess-fi/subagents" "$sub_worktree/sess-plain/subagents"
+
+# write_min_session <path> <input-tokens>: minimal 2-line worker transcript.
+write_min_session() {
+  local f="$1" in="$2"
+  printf '%s\n' '{"type":"user","message":{"content":"<command-name>/file-issue</command-name>"}}' \
+    > "$f"
+  printf '{"type":"assistant","attributionSkill":"plan-implement","isSidechain":false,"gitBranch":"sub-sidecar","message":{"model":"claude-opus-4-8","usage":{"input_tokens":%s,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}}\n' \
+    "$in" >> "$f"
+  jq . "$f" >/dev/null
+}
+
+write_min_session "$sub_worktree/sess-fi.jsonl" 2000
+write_min_session "$sub_worktree/sess-fi/subagents/agent-x.jsonl" 4000
+write_min_session "$sub_worktree/sess-plain.jsonl" 1000
+write_min_session "$sub_worktree/sess-plain/subagents/agent-y.jsonl" 500
+printf '%s\n' '{"chosen_topics":["dispatch"],"session_id":"sess-fi"}' \
+  > "$sub_worktree/sess-fi.file-issue-attribution.json"
+jq . "$sub_worktree/sess-fi.file-issue-attribution.json" >/dev/null
+touch "$sub_worktree/sess-fi.jsonl" "$sub_worktree/sess-fi/subagents/agent-x.jsonl" \
+  "$sub_worktree/sess-plain.jsonl" "$sub_worktree/sess-plain/subagents/agent-y.jsonl"
+
+# WITHOUT the flag: all 4 transcripts scanned (control — subagents in scope).
+OUT_SUB_OFF=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$SUB_ROOT"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
+)
+assert_eq "subagent-sidecar OFF: all 4 transcripts scanned" "4" \
+  "$(jq '.window.files_scanned' <<<"$OUT_SUB_OFF")"
+assert_eq "subagent-sidecar OFF: by_topic.other.input == 7500" "7500" \
+  "$(jq '.by_topic.other.input' <<<"$OUT_SUB_OFF")"
+
+# WITH the flag: sess-fi AND its subagent drop; sess-plain and ITS subagent stay
+# (a subagent whose parent has no sidecar must not be over-excluded).
+OUT_SUB_ON=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$SUB_ROOT"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7 --exclude-sidecar-sessions
+)
+assert_eq "subagent-sidecar ON: only sess-plain + its subagent scanned" "2" \
+  "$(jq '.window.files_scanned' <<<"$OUT_SUB_ON")"
+assert_eq "subagent-sidecar ON: count-once — by_topic.other.input == 1500" "1500" \
+  "$(jq '.by_topic.other.input' <<<"$OUT_SUB_ON")"
+assert_eq "subagent-sidecar ON: excluded subagent's 4000 absent from by_type.none" "1500" \
+  "$(jq '.by_type.none.input' <<<"$OUT_SUB_ON")"
+assert_eq "subagent-sidecar ON: scanned ids are agent-y + sess-plain" \
+  '["agent-y","sess-plain"]' \
+  "$(jq -c '[.sessions[].id] | sort' <<<"$OUT_SUB_ON")"
+
+rm -rf "$SUB_ROOT"
 
 # ---------------------------------------------------------------------------
 # (c) --day / --days mutual exclusivity and bad --day format both exit 2 (#2505).
