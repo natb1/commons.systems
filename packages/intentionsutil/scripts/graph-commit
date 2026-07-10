@@ -29,13 +29,27 @@
 # retries, and deletes it on every exit path).
 #
 # Usage:
-#   graph-commit [-m <message>] <node-id> [<node-id> ...]
+#   graph-commit [-m <message>] [--prune <id>]... [--base <id>=<blobsha>|<manifest-file>]... <node-id> [<node-id> ...]
 #   graph-commit -m 'graph: seed dispatch state' tactic-graph-commit
+#   graph-commit -m 'graph: prune done tactics' --prune tactic-foo --prune tactic-bar
+#   graph-commit --base tactic-foo=3f1a9c... tactic-foo
+#
+# --prune <id> (repeatable, mixable with ordinary positional ids): land a
+#   deletion. The caller must have already deleted intentions/<id>.md on disk;
+#   the existence guard inverts (file absent on disk, present in HEAD).
+#
+# --base <id>=<blobsha> (repeatable) or --base <manifest-file> (one <id>=<sha>
+#   pair per line): optional compare-and-swap freshness check. If any entry's
+#   blob no longer matches origin/main after a fetch, the write is refused
+#   before any local commit is made. Omit entirely to keep pre-CAS behavior.
 #
 # Exit status:
 #   0  the edit landed on main.
 #   1  push could not land: busy main after all attempts, the required checks
-#      never stamped green within the poll window, or a concurrent-edit
+#      never stamped green within the poll window, a required check CONCLUDED
+#      non-success (deterministic content failure — no retry), check-run
+#      polling itself failed 3 consecutive times (gh auth/rate-limit/network,
+#      surfaced verbatim), or a concurrent-edit
 #      CONFLICT. The conflict case fails closed — this writer's content is NOT
 #      landed (no automatic overwrite of the other writer's already-landed
 #      edit): the node is parked via office_hours on top of fresh origin/main
@@ -72,7 +86,16 @@ CHECK_POLL_SECONDS="${GRAPH_COMMIT_CHECK_POLL_SECONDS:-7}"
 CHECK_TIMEOUT_SECONDS="${GRAPH_COMMIT_CHECK_TIMEOUT_SECONDS:-180}"
 
 # --- Globals set by main() -------------------------------------------------
-# IDS         — the node ids to commit (positional args).
+# IDS         — the node ids to commit (positional args) — ordinary edits whose
+#               new content already exists on disk.
+# PRUNE_IDS   — ids passed via --prune: tracked in HEAD, must NOT exist on
+#               disk; staging them stages a deletion.
+# ALL_IDS     — IDS + PRUNE_IDS, computed once in main() after validation.
+#               Every helper that needs "every id in this invocation"
+#               regardless of edit-vs-prune iterates this, not IDS directly.
+# BASE        — optional --base compare-and-swap manifest: node id -> the blob
+#               SHA the caller read it at (git hash-object at read time).
+#               Empty unless --base was passed; empty means skip the check.
 # EXPECTED    — associative set of the exact staged paths we permit.
 # SNAP_DIR    — tempdir holding the on-disk node content we are trying to land.
 # KEEP_SNAP   — 1 when SNAP_DIR must survive exit (the fail-closed conflict
@@ -80,6 +103,9 @@ CHECK_TIMEOUT_SECONDS="${GRAPH_COMMIT_CHECK_TIMEOUT_SECONDS:-180}"
 #               only remaining copy of the writer's content).
 # CURRENT_MSG — the commit message commit_files() commits with.
 declare -a IDS=()
+declare -a PRUNE_IDS=()
+declare -a ALL_IDS=()
+declare -A BASE=()
 declare -A EXPECTED=()
 SNAP_DIR=""
 KEEP_SNAP=0
@@ -96,7 +122,83 @@ die() {
 }
 
 usage() {
-  echo "usage: graph-commit [-m <message>] <node-id> [<node-id> ...]" >&2
+  echo "usage: graph-commit [-m <message>] [--prune <id>]... [--base <id>=<blobsha>|<manifest-file>]... <node-id> [<node-id> ...]" >&2
+}
+
+# --- Prune / base id helpers -------------------------------------------------
+# Shared character/traversal validation for both ordinary and --prune ids.
+validate_id_chars() {
+  local id="$1"
+  if [[ -z "$id" ]]; then
+    echo "error: graph-commit: empty node id" >&2; exit 2
+  fi
+  # Reject path separators, and `.`/`..` as EXACT ids. `..` as a substring
+  # cannot traverse once `/` and `\` are banned (the id is only ever used as
+  # the single path component intentions/<id>.md), so ids like
+  # `v1..v2-migration` are legal.
+  case "$id" in
+    */*|*'\'*)
+      echo "error: graph-commit: invalid node id '$id' (path separators not allowed)" >&2
+      exit 2 ;;
+    .|..)
+      echo "error: graph-commit: invalid node id '$id' ('.' and '..' are reserved path names)" >&2
+      exit 2 ;;
+  esac
+}
+
+# Record one <id>=<blobsha> pair into BASE.
+add_base_pair() {
+  local pair="$1" id sha
+  id="${pair%%=*}"
+  sha="${pair#*=}"
+  if [[ -z "$id" || "$id" == "$pair" || -z "$sha" ]]; then
+    die "invalid --base entry '$pair' (expected <id>=<blobsha>)"
+  fi
+  BASE["$id"]="$sha"
+}
+
+# A --base argument is either a literal <id>=<blobsha> pair or, when it names
+# an existing file, a manifest of such pairs (one per line, blank lines
+# ignored) — so a caller holding a whole dump's worth of base shas can pass
+# one flag instead of one --base per node.
+parse_base_arg() {
+  local arg="$1"
+  if [[ -f "$arg" ]]; then
+    local line
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      [[ -z "$line" ]] && continue
+      add_base_pair "$line"
+    done <"$arg"
+  else
+    add_base_pair "$arg"
+  fi
+}
+
+# Refuse the write if any --base entry's blob no longer matches origin/main.
+# Runs once, before any local commit is made (and before SNAP_DIR/the EXIT
+# trap exist, so a refusal here leaves nothing to clean up) — a stale read is
+# caught before it touches the tree at all, rather than relying on the
+# rebase-retry loop's textual-conflict detection to notice (the 2026-07-06
+# near-miss: a stale dump of a live node avoided a textual conflict and nearly
+# clobbered concurrent state). Sessions that pass no --base see no change in
+# behavior (opt-in, per code-style.md: clear error over a silent fallback).
+check_base_freshness() {
+  [[ "${#BASE[@]}" -eq 0 ]] && return 0
+  echo "graph-commit: checking --base freshness for ${#BASE[@]} node(s) against origin/main" >&2
+  git fetch origin main >&2
+  local id sha origin_sha path
+  for id in "${!BASE[@]}"; do
+    sha="${BASE[$id]}"
+    path="intentions/$id.md"
+    if git cat-file -e "FETCH_HEAD:$path" 2>/dev/null; then
+      origin_sha="$(git rev-parse "FETCH_HEAD:$path")"
+    else
+      origin_sha="<absent>"
+    fi
+    if [[ "$origin_sha" != "$sha" ]]; then
+      die "stale base for '$id' — origin/main's $path is now $origin_sha, not the $sha you read; re-read the node and retry"
+    fi
+  done
 }
 
 # --- Cleanup (EXIT trap) ---------------------------------------------------
@@ -154,6 +256,9 @@ snapshot() {
   for id in "${IDS[@]}"; do
     cp -- "$INTENTIONS_DIR/$id.md" "$SNAP_DIR/$id.md"
   done
+  # PRUNE_IDS are deliberately skipped: a prune id has no on-disk file to
+  # copy, and there is no writer-authored content to preserve for it — the
+  # deletion is fully recorded by the commit that lands (or fails to land).
 }
 
 # --- Is there anything new to commit? --------------------------------------
@@ -172,17 +277,20 @@ snapshot() {
 # tree (e.g. an unrelated package-lock.json diff) never flips this to "dirty".
 id_files_dirty() {
   local id paths=()
-  for id in "${IDS[@]}"; do
+  for id in "${ALL_IDS[@]}"; do
     paths+=("intentions/$id.md")
   done
   [[ -n "$(git status --porcelain -- "${paths[@]}")" ]]
 }
 
 # --- Commit ----------------------------------------------------------------
-# Stage exactly our id files, run the guard, then commit with CURRENT_MSG.
+# Stage exactly our id files (edits AND prunes — `git add -- <path>` stages a
+# deletion for a tracked file that is missing from the working tree just as
+# readily as it stages new/changed content), run the guard, then commit with
+# CURRENT_MSG.
 commit_files() {
   local id
-  for id in "${IDS[@]}"; do
+  for id in "${ALL_IDS[@]}"; do
     git add -- "intentions/$id.md"
   done
   assert_staged_safe
@@ -211,31 +319,48 @@ rebase_in_progress() {
 # its in-memory JSON — never an `echo "$VAR" | jq` round-trip (shell-json.md).
 # Returns:
 #   0  all four contexts green.
-#   1  a required check concluded non-success, OR the timeout elapsed before all
-#      four went green (the caller rebases and retries this whole cycle).
+#   1  the timeout elapsed with the checks still pending (transient — the
+#      caller rebases and retries this whole cycle).
+#   2  a required check CONCLUDED non-success (deterministic — the commit
+#      content itself fails CI; the caller must not retry).
+# Dies after 3 CONSECUTIVE gh poll failures, surfacing gh's captured stderr —
+# an auth/rate-limit/network error is a broken environment, not a pending
+# check, so collapsing it into "still polling" until the generic timeout
+# would hide the real cause (clear error over fallback, code-style.md).
 await_checks() {
   local sha="$1"
-  local deadline counts nsucc nfail
+  local deadline counts nsucc nfail gh_stderr gh_fails=0
+  # gh's stderr is captured per poll inside SNAP_DIR, which already exists for
+  # the lifetime of the run and is removed by cleanup() on non-park exits.
+  local errfile="$SNAP_DIR/.gh-poll-stderr"
   deadline=$(( $(date +%s) + CHECK_TIMEOUT_SECONDS ))
   nsucc=0
   while :; do
     # For the four required names on this SHA, count how many are
     # completed/success and how many are completed/non-success. Extra check runs
     # (e.g. CodeQL `Analyze (*)`, `guard`) are ignored by the name filter.
-    counts="$(gh api "repos/{owner}/{repo}/commits/$sha/check-runs" \
+    if counts="$(gh api "repos/{owner}/{repo}/commits/$sha/check-runs" \
       --jq '[.check_runs[]
              | select(.name=="acceptance" or .name=="preview-and-smoke"
                       or .name=="lint" or .name=="unit-tests")]
             | "\([.[]|select(.status=="completed" and .conclusion=="success")]|length) \([.[]|select(.status=="completed" and .conclusion!="success")]|length)"' \
-      2>/dev/null)" || counts=""
-    if [[ -n "$counts" ]]; then
+      2>"$errfile")"; then
+      gh_fails=0
+      [[ -n "$counts" ]] || counts="0 0"
       read -r nsucc nfail <<<"$counts"
       if [[ "$nsucc" -eq 4 ]]; then
         return 0
       fi
       if [[ "${nfail:-0}" -gt 0 ]]; then
         echo "graph-commit: a required check concluded non-success for $sha ($nsucc/4 green, $nfail failed)" >&2
-        return 1
+        return 2
+      fi
+    else
+      gh_stderr="$(cat "$errfile" 2>/dev/null || true)"
+      gh_fails=$((gh_fails + 1))
+      echo "graph-commit: check-run poll failed ($gh_fails/3 consecutive) for $sha: ${gh_stderr:-<no stderr>}" >&2
+      if [[ "$gh_fails" -ge 3 ]]; then
+        die "check-run polling failed 3 consecutive times for $sha — last gh error: ${gh_stderr:-<no stderr>}"
       fi
     fi
     if [[ "$(date +%s)" -ge "$deadline" ]]; then
@@ -258,11 +383,14 @@ await_checks() {
 #   10 a rebase CONFLICT occurred (aborted) — the caller fails closed and
 #      parks; there is no automatic resolution.
 #   11 every attempt failed with no conflict (busy main, or the checks never
-#      stamped/concluded green within the poll window).
-# Dies on a non-conflict rebase/fetch failure (broken environment — clear error
-# over a fallback, per code-style.md).
+#      stamped green within the poll window).
+# Dies on a non-conflict rebase/fetch failure (broken environment), and on a
+# CONCLUDED check failure — a concluded non-success is a property of the
+# commit content, not of contention, so every retry would reproduce it; the
+# remaining attempts are not burned (clear error over a fallback, per
+# code-style.md).
 try_land() {
-  local attempt sha
+  local attempt sha ck
   for (( attempt=1; attempt<=MAX_PUSH_ATTEMPTS; attempt++ )); do
     if ! git pull --rebase origin main >&2; then
       if rebase_in_progress; then
@@ -289,7 +417,15 @@ try_land() {
     SCRATCH_PUSHED=1
 
     # Wait for the fast path to stamp the four required checks green on this SHA.
-    if ! await_checks "$sha"; then
+    ck=0
+    await_checks "$sha" || ck=$?
+    if [[ "$ck" -eq 2 ]]; then
+      # Deterministic failure: a required check CONCLUDED non-success, so the
+      # content itself is broken — rebasing and re-stamping would reproduce
+      # the same failure on every remaining attempt.
+      die "a required check concluded non-success for $sha — the commit content fails CI; not retrying (fix the content and re-run)"
+    fi
+    if [[ "$ck" -ne 0 ]]; then
       echo "graph-commit: checks did not go green for $sha on attempt $attempt/$MAX_PUSH_ATTEMPTS; rebasing and retrying" >&2
       continue
     fi
@@ -343,14 +479,18 @@ park_write() {
 // argv: <storeModule> <intentionsDir> <since> <reason> <id...>
 const [storePath, intentionsDir, since, reason, ...ids] = process.argv.slice(2);
 const { readNode, writeNode } = await import(storePath);
-for (const id of ids) {
-  const node = readNode(intentionsDir, id);
+// Two-pass for atomicity: read every node up front so an unreadable id fails
+// BEFORE any write — a single read-modify-write loop that threw mid-way would
+// leave the earlier ids mutated on disk, uncommitted.
+const nodes = ids.map((id) => readNode(intentionsDir, id));
+for (let i = 0; i < nodes.length; i++) {
+  const node = nodes[i];
   node.office_hours = { reason, since };
   writeNode(intentionsDir, node);
-  process.stderr.write(`graph-commit: set office_hours on ${id} (since=${since})\n`);
+  process.stderr.write(`graph-commit: set office_hours on ${ids[i]} (since=${since})\n`);
 }
 TS
-  if ! npx tsx "$tmpts" "$STORE_MODULE" "$INTENTIONS_DIR" "$since" "$reason" "${IDS[@]}" >&2; then
+  if ! npx tsx "$tmpts" "$STORE_MODULE" "$INTENTIONS_DIR" "$since" "$reason" "${ALL_IDS[@]}" >&2; then
     rm -f "$tmpts"
     die "failed to write the office_hours parking record"
   fi
@@ -367,6 +507,10 @@ main() {
     case "$1" in
       -m|--message) [[ $# -ge 2 ]] || { usage; die "-m requires a message argument"; }
                     msg="$2"; shift 2 ;;
+      --prune) [[ $# -ge 2 ]] || { usage; die "--prune requires a node id argument"; }
+               PRUNE_IDS+=("$2"); shift 2 ;;
+      --base) [[ $# -ge 2 ]] || { usage; die "--base requires an <id>=<blobsha> argument or a manifest file path"; }
+              parse_base_arg "$2"; shift 2 ;;
       -h|--help) usage; exit 0 ;;
       --) shift; while [[ $# -gt 0 ]]; do IDS+=("$1"); shift; done ;;
       -*) usage; echo "error: graph-commit: unknown option '$1'" >&2; exit 2 ;;
@@ -374,43 +518,67 @@ main() {
     esac
   done
 
-  if [[ "${#IDS[@]}" -eq 0 ]]; then
+  if [[ "${#IDS[@]}" -eq 0 && "${#PRUNE_IDS[@]}" -eq 0 ]]; then
     usage
     echo "error: graph-commit: at least one node id is required" >&2
     exit 2
   fi
 
-  # Validate ids and confirm each node file already exists on disk.
+  # Validate ordinary (edit) ids: each must already exist on disk — write-node.ts
+  # is the sole place that authors node content; graph-commit only lands what's
+  # already there.
   local id
   for id in "${IDS[@]}"; do
-    if [[ -z "$id" ]]; then
-      echo "error: graph-commit: empty node id" >&2; exit 2
-    fi
-    case "$id" in
-      */*|*'\'*|*..*)
-        echo "error: graph-commit: invalid node id '$id' (path separators / traversal not allowed)" >&2
-        exit 2 ;;
-    esac
+    validate_id_chars "$id"
     if [[ ! -f "$INTENTIONS_DIR/$id.md" ]]; then
       die "intentions/$id.md does not exist — write the node via write-node.ts before graph-commit"
     fi
     EXPECTED["intentions/$id.md"]=1
   done
 
+  # Validate prune ids: the existence guard INVERTS relative to an ordinary
+  # edit — the caller has already deleted intentions/<id>.md on disk (there is
+  # no new content to author for a deletion), but the id must still name a
+  # real tracked node (present in HEAD) rather than a typo that was never
+  # landed.
+  for id in "${PRUNE_IDS[@]}"; do
+    validate_id_chars "$id"
+    if [[ -f "$INTENTIONS_DIR/$id.md" ]]; then
+      die "intentions/$id.md still exists on disk — delete the file before passing --prune $id"
+    fi
+    if ! git cat-file -e "HEAD:intentions/$id.md" 2>/dev/null; then
+      die "intentions/$id.md does not exist in HEAD — nothing to prune for '$id'"
+    fi
+    EXPECTED["intentions/$id.md"]=1
+  done
+
+  ALL_IDS=("${IDS[@]}" "${PRUNE_IDS[@]}")
+  check_base_freshness
+
   # Default commit / parking messages.
   if [[ -z "$msg" ]]; then
-    msg="graph: ${IDS[*]}"
+    msg="graph: ${ALL_IDS[*]}"
   fi
-  local park_msg="graph: park ${IDS[*]} (concurrent-edit conflict)"
+  local park_msg="graph: park ${ALL_IDS[*]} (concurrent-edit conflict)"
 
   # The throwaway stamping branch: named for the primary id and scoped to this
   # PID so concurrent graph-commit invocations never collide. cleanup() (the
   # EXIT trap) deletes it on the remote on every exit path — success, busy-main,
   # or the parking fallback — once it has been pushed at least once.
-  SCRATCH_BRANCH="graph/${IDS[0]}-$$"
+  # The id is sanitized for the ref name only (the name is cosmetic — PID
+  # provides uniqueness): valid node ids like `v1..v2-migration` contain
+  # sequences git refuses in a ref (`..`), so every non-[A-Za-z0-9-] char maps
+  # to `-`. Use ALL_IDS (not just IDS) so a pure-prune commit (no ordinary
+  # ids) still gets a valid scratch-branch name.
+  local ref_id="${ALL_IDS[0]//[!A-Za-z0-9-]/-}"
+  SCRATCH_BRANCH="graph/$ref_id-$$"
 
   SNAP_DIR="$(mktemp -d)" || die "could not create snapshot tempdir"
   trap cleanup EXIT
+  # An EXIT trap does not reliably fire on INT/TERM in all shells; convert
+  # those signals into a normal exit so cleanup() (snapshot removal, remote
+  # scratch-branch delete) always runs on signal death.
+  trap 'exit 130' INT TERM
 
   # Capture the writer's on-disk content, then commit-and-land it.
   # Three states, discriminated by id_files_dirty():
@@ -426,13 +594,13 @@ main() {
   if id_files_dirty; then
     commit_files
   else
-    echo "graph-commit: no new changes to stage for ${IDS[*]} — landing current HEAD (nothing to commit, or a prior attempt already committed but did not push)" >&2
+    echo "graph-commit: no new changes to stage for ${ALL_IDS[*]} — landing current HEAD (nothing to commit, or a prior attempt already committed but did not push)" >&2
   fi
 
   local rc=0
   land || rc=$?
   if [[ "$rc" -eq 0 ]]; then
-    echo "graph-commit: landed ${IDS[*]} on main" >&2
+    echo "graph-commit: landed ${ALL_IDS[*]} on main" >&2
     exit 0
   fi
   if [[ "$rc" -eq 11 ]]; then
@@ -445,7 +613,7 @@ main() {
   # (the other writer's already-landed content wins), and preserve this
   # writer's unlanded content in SNAP_DIR for the manual merge.
   KEEP_SNAP=1
-  echo "graph-commit: concurrent-edit conflict on ${IDS[*]}; parking node(s) — this writer's content is NOT landed" >&2
+  echo "graph-commit: concurrent-edit conflict on ${ALL_IDS[*]}; parking node(s) — this writer's content is NOT landed" >&2
   echo "graph-commit: this writer's unlanded content is preserved at $SNAP_DIR for the manual merge" >&2
   # Sync to fresh origin/main. The tree is clean of tracked modifications here
   # (the conflicting rebase could only start on a clean tree and was aborted),
@@ -465,9 +633,9 @@ main() {
   local prc=0
   land || prc=$?
   if [[ "$prc" -eq 0 ]]; then
-    echo "graph-commit: parked ${IDS[*]} (office_hours set on the origin/main content) and pushed the parking write to main" >&2
+    echo "graph-commit: parked ${ALL_IDS[*]} (office_hours set on the origin/main content) and pushed the parking write to main" >&2
   else
-    echo "error: graph-commit: could not land the parking write for ${IDS[*]} — office_hours set locally but not pushed to main" >&2
+    echo "error: graph-commit: could not land the parking write for ${ALL_IDS[*]} — office_hours set locally but not pushed to main" >&2
   fi
   exit 1
 }

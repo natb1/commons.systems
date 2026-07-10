@@ -62,9 +62,28 @@ rounds: null
 attributes:
   delegatee: "Anthropic Claude (authoring) and the canonical traditions (content)
     — jointly: the model drafted the articulation, the fixed texts ground it"
-  delegated: the nuanced doctrinal articulation of the virtue layer — the five
+  delegated: "the nuanced doctrinal articulation of the virtue layer — the five
     tradition records' adopted/diverged/chosen_over detail and the layered
-    tradition clarifications recorded 2026-07-04
+    tradition clarifications recorded 2026-07-04 — and, since 2026-07-08, the
+    graph-wide interview-method doctrine (the periagoge scoping: where
+    turn-don't-implant binds fully versus where the visible-refusable-draft
+    convention holds), deferred by the author to Claude's judgment pending
+    personal re-derivation; extended 2026-07-08 with tradition-augustine — the
+    Augustinian articulation behind the agency-of-turning account, recorded as
+    an already-live deferral (origin: chosen), verified by reading chunks 19-21;
+    extended 2026-07-09 with the covenant/hypomnema articulation — the graph as
+    the answerable record (Phaedrus hypomnesis) of the author's considered
+    internal model of the good, the ground of type-b interview authority —
+    deferred by the author to Claude's drafting, verified by reading chunk 24
+    (Phaedrus 274b-278b); extended 2026-07-09 (second round) with three
+    articulations from the interview-types ground exploration — the maieutic
+    naming of type a's elicitation limb (reviewed at
+    tactic-reading-chunk-18-dialectic-method), the cadence-as-habituation
+    account of the author's own alignment maintenance (reviewed at
+    tactic-reading-chunk-2-aristotle-hexis, range widened to NE II.1-6), and the
+    AI-alignment correspondence on the delegatee-education doctrine (reviewed at
+    tactic-reading-chunk-25-constitutional-ai, Constitutional AI sections 1 and
+    3-4)"
   origin: chosen
   divergence:
     level: moderate
@@ -73,7 +92,16 @@ attributes:
         understanding
       - Claude's framing of the traditions — the instrument that audits the
         delegatee drafted the audit
-    contradictions: []
+    contradictions:
+      - tradition-plato's 'anti-Platonic about the Forms' (Claude's authoring)
+        misstated the author's position — the Form of the Good is affirmed as
+        external anchor; found and amended 2026-07-07 chunk 1, the reading wins
+      - tradition-plato's capture doctrine as drafted said capture 'corrupts'
+        the sensor — Republic 518e-519b shows the faculty never loses its power
+        but becomes useful or harmful by its turning, so capture misdirects;
+        found and amended 2026-07-07 chunk 1 (the reading wins), recorded here
+        retroactively 2026-07-08 when every reading-wins catch became a required
+        contradictions entry
   irreversibility:
     recovery_path: relearn — read the cited texts against each tradition record,
       chunked in tactic-tradition-reading-program; each verified record flips
@@ -82,7 +110,9 @@ attributes:
       cited passage-by-passage on the records
     gated: false — nothing about the way back is held by either delegatee; the texts
       outlive both
-    last_exercised: null
+    last_exercised: "2026-07-07 — chunk 1 (Republic VII 514a-521b): tradition-plato
+      amended (misdirection, agency of turning, Form of the Good), cascades to
+      both roots and strategy-external-calibration"
   classification: platform — demands buy-in while unverified; decays toward tool
     as records flip to codified
   non_delegable_floor: the capacity to notice a recorded articulation
@@ -91,7 +121,9 @@ attributes:
   review_trigger: "each strategy-philosophical-grounding round; any tradition
     record still status: delegated at review is standing recovery work, and an
     empty contradictions list on a still-delegated record is unverified, not
-    clean"
-  last_assessed: 2026-07-05
+    clean; the interview-method deferral is reviewed at
+    tactic-reading-chunk-18-dialectic-method (Theaetetus midwifery, Meno
+    elenchus), added to the curriculum for that purpose"
+  last_assessed: 2026-07-09
 ---
 # Virtue-layer articulation delegated to Claude and the canonical traditions until personally re-derived

@@ -1,0 +1,268 @@
+#!/usr/bin/env bash
+# graph-select-target — the graph router's selection query (router v2, first
+# half: tactic-graph-router-selector). Runs BESIDE the legacy gh selector
+# (dispatch-select-target) under the same lock, pace budget, and claimed set;
+# dispatch-select-tick consults this selector first and falls back to the
+# legacy one. Spec: intentions/tactic-graph-native-dispatch.md §3.1–3.2.
+#
+# Split of responsibilities:
+#   - PURE eligibility + ordering (strategy/tactic gates, soft-freeze,
+#     resolved-attention rank outermost, phase ladder within a rank, id
+#     tiebreak) lives in packages/intentionsutil/src/router.ts, invoked via
+#     scripts/select-targets.ts on a snapshot of the store.
+#   - ENVIRONMENTAL gates live here: the origin/main store snapshot, the
+#     claimed set (reservation ledger + live node-id sessions), the per-phase
+#     sensor gates that need gh (CI verdict before fix/qa/review, PR merged
+#     before main-qa), the pace-exempt probe lane, and the selection log.
+#
+# The store is read at origin/main ONLY (never a branch, never the working
+# tree): `git archive origin/main intentions` into a temp dir. Selection makes
+# NO graph writes — parks (e.g. a strategy at the rounds cap) are events in the
+# selection log for the transition writer, never writes from here.
+#
+# Usage: graph-select-target [--top <n>] [--pace-exempt-only]
+#
+#   --top <n>            Print at most <n> selected nodes (default 1).
+#   --pace-exempt-only   The probe lane for a paced-to-zero worker target
+#                        (strategy clarification 14; legacy `priority` parity):
+#                        first consult `dispatch-target-workers --exhausted` —
+#                        genuine token exhaustion is a hard stop no flag
+#                        overrides (prints `empty`); otherwise consider ONLY
+#                        nodes authored `pace_exempt: true`. The caller admits
+#                        at most one gate-exempt worker — the flag bypasses the
+#                        pace GATE, not the worker count or the rank order.
+#
+# Stdout protocol:
+#   node <id> <kind> <phase>   zero to <top> lines, in selection order.
+#   empty                      as the only line when nothing is selectable.
+#
+# Selection log: exactly one JSONL record per invocation — the input
+# `tactic-dispatch-lifecycle-sensor` reads — appended (best-effort, non-fatal)
+# to ${DISPATCH_SELECTION_LOG_FILE:-${DISPATCH_SELECTION_LOG_DIR:-$HOME/.local/share/commons-dispatch}/graph-selection.jsonl},
+# alongside the routing-decisions log, via the shared lib-decision-log.sh
+# appender (flock + rotation).
+#
+# Claimed set (uniform node-id claiming, strategy clarification 13): a node is
+# skipped when a reservation-ledger marker named by its node id exists, or a
+# live session named by its node id is registered (worktree_has_live_session is
+# name-keyed on the worktree basename — a node-id worktree's basename IS the
+# node id). Strategy ids claim identically, so an in-flight /align-tactics
+# session keeps its strategy unselectable until its tactics land on
+# origin/main.
+#
+# Requires `dangerouslyDisableSandbox: true` when run from a Claude session —
+# the sensor gates call `gh`, and the liveness read queries the local Claude
+# daemon over a Unix socket (see .claude/rules/sandbox.md).
+#
+# Exit codes: 0 on `node`/`empty`; 2 on usage or environment errors (a broken
+# store snapshot, a failed selector run, dispatch-ci-ready env failure).
+#
+# NOT set -e: exits are handled explicitly (matching the sibling dispatch
+# scripts).
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# scripts → dispatch-propagate → skills → .claude → repo root.
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/lib-reservation-ledger.sh"
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/lib-claude-agents.sh"
+
+# The selection log reuses the decision-log appender with its own file: the lib
+# resolves its target from DISPATCH_DECISION_LOG_FILE at source time.
+DISPATCH_DECISION_LOG_FILE="${DISPATCH_SELECTION_LOG_FILE:-${DISPATCH_SELECTION_LOG_DIR:-$HOME/.local/share/commons-dispatch}/graph-selection.jsonl}"
+export DISPATCH_DECISION_LOG_FILE
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/lib-decision-log.sh" 2>/dev/null || true
+
+TOP=1
+PACE_EXEMPT_ONLY=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --top)
+      [[ $# -ge 2 && "${2:-}" =~ ^[1-9][0-9]*$ ]] \
+        || { echo "graph-select-target: --top requires a positive integer" >&2; exit 2; }
+      TOP="$2"; shift 2 ;;
+    --pace-exempt-only) PACE_EXEMPT_ONLY=1; shift ;;
+    *)
+      echo "graph-select-target: unknown argument '$1'" >&2
+      echo "usage: graph-select-target [--top <n>] [--pace-exempt-only]" >&2
+      exit 2 ;;
+  esac
+done
+
+# --- Selection-log emitter (best-effort, one record per invocation) ----------
+# Accumulators consumed by the EXIT trap. SKIPPED is a JSON array of
+# {id, reason} objects; SELECTED a JSON array of ids; EVENTS the pure
+# selector's freeze/cap/gate events (JSON array).
+MODE=$([[ -n "$PACE_EXEMPT_ONLY" ]] && echo "pace-exempt" || echo "normal")
+DISPOSITION=""
+SELECTED_JSON="[]"
+SKIPPED_JSON="[]"
+EVENTS_JSON="[]"
+ELIGIBLE_COUNT=0
+
+_selection_log_emit() {
+  local json
+  json=$(jq -c -n \
+    --arg ts "$(date -u +%FT%TZ)" \
+    --arg site "graph-select-target" \
+    --arg mode "$MODE" \
+    --arg disposition "$DISPOSITION" \
+    --arg top "$TOP" \
+    --arg eligible "$ELIGIBLE_COUNT" \
+    --argjson selected "$SELECTED_JSON" \
+    --argjson skipped "$SKIPPED_JSON" \
+    --argjson events "$EVENTS_JSON" \
+    '{ts: $ts, site: $site, mode: $mode, disposition: $disposition,
+      top: ($top | tonumber), eligible: ($eligible | tonumber),
+      selected: $selected, skipped: $skipped, events: $events}' 2>/dev/null) || return 0
+  command -v decision_log_append >/dev/null 2>&1 && decision_log_append "$json" || true
+}
+
+SNAPSHOT_DIR=""
+_cleanup() {
+  _selection_log_emit
+  [[ -n "$SNAPSHOT_DIR" ]] && rm -rf "$SNAPSHOT_DIR"
+}
+trap '_cleanup' EXIT
+
+# --- Pace-exempt probe lane: the exhaustion hard floor ------------------------
+# Genuine token exhaustion (the 5-hour or weekly window at ~100% with the reset
+# still ahead) is a hard stop NO flag overrides — distinct from "paced to 0",
+# the self-imposed throttle this lane exists to bypass. --exhausted fails open
+# on missing telemetry (reports `ok`), so absent data never suppresses the lane.
+if [[ -n "$PACE_EXEMPT_ONLY" ]]; then
+  EXHAUSTED=$("$SCRIPT_DIR/dispatch-target-workers" --exhausted 2>/dev/null) || EXHAUSTED="ok"
+  if [[ "$EXHAUSTED" == exhausted ]]; then
+    echo "graph-select-target: rate-limit window exhausted; pace-exempt lane closed" >&2
+    DISPOSITION="exhausted"
+    echo "empty"
+    exit 0
+  fi
+fi
+
+# --- Snapshot the store at origin/main ----------------------------------------
+# origin/main only, never a branch or the working tree. A repo without an
+# intentions/ store at origin/main has no graph work — a legitimate `empty`,
+# not an error.
+if ! git -C "$REPO_ROOT" cat-file -e origin/main:intentions 2>/dev/null; then
+  DISPOSITION="no-store"
+  echo "empty"
+  exit 0
+fi
+SNAPSHOT_DIR=$(mktemp -d) || { echo "graph-select-target: mktemp failed" >&2; exit 2; }
+if ! git -C "$REPO_ROOT" archive origin/main intentions | tar -x -C "$SNAPSHOT_DIR"; then
+  echo "graph-select-target: failed to snapshot intentions/ from origin/main" >&2
+  exit 2
+fi
+
+# --- Run the pure selector -----------------------------------------------------
+# select-targets.ts emits {candidates:[...], events:[...]} — eligibility and
+# ordering already applied; only environmental gates remain.
+SELECTION=$(cd "$REPO_ROOT" && npx tsx packages/intentionsutil/scripts/select-targets.ts \
+  --dir "$SNAPSHOT_DIR/intentions") \
+  || { echo "graph-select-target: select-targets.ts failed" >&2; exit 2; }
+
+EVENTS_JSON=$(jq -c '.events' <<<"$SELECTION") || EVENTS_JSON="[]"
+for evt in $(jq -r '.events[] | @base64' <<<"$SELECTION"); do
+  echo "graph-select-target: event $(base64 -d <<<"$evt")" >&2
+done
+
+# --- Environmental gates, in selection order -----------------------------------
+# The native node-id worktree location (<project-root>/.claude/worktrees/<id>;
+# main is checked out at the project root). worktree_has_live_session is
+# name-keyed on the basename, so the root resolution is presentational — the
+# basename (the node id) is what is matched against live session names.
+NATIVE_ROOT=$(git -C "$REPO_ROOT" worktree list --porcelain \
+  | awk '/^worktree /{wt=substr($0,10)} /^branch refs\/heads\/main$/{if(!f){print wt; f=1}}')
+NATIVE_ROOT="${NATIVE_ROOT:-$REPO_ROOT}"
+
+skip_note() { # <id> <reason>
+  SKIPPED_JSON=$(jq -c --arg id "$1" --arg reason "$2" '. + [{id: $id, reason: $reason}]' \
+    <<<"$SKIPPED_JSON") || true
+}
+
+# sensor_gate <id> <phase> <pr> — the phase's environmental sensor (§3.1).
+#   0 = satisfied; 1 = not satisfied (reason on stdout); 2 = environment error.
+sensor_gate() {
+  local id="$1" phase="$2" pr="$3" rc state
+  case "$phase" in
+    implement|align-tactics)
+      return 0 ;;
+    fix|qa|review)
+      # CI verdict present before fix/qa/review. The node-id branch is the PR
+      # head (§3.4), so dispatch-ci-ready's branch form applies: `waiting`
+      # means a draft PR's checks have not concluded — no actionable verdict.
+      if [[ "$pr" == "null" || -z "$pr" ]]; then echo "no-pr"; return 1; fi
+      "$SCRIPT_DIR/dispatch-ci-ready" "$id" >/dev/null 2>&1
+      rc=$?
+      case "$rc" in
+        0) return 0 ;;
+        1) echo "ci-pending"; return 1 ;;
+        *) echo "graph-select-target: dispatch-ci-ready failed (exit $rc) for $id" >&2; return 2 ;;
+      esac ;;
+    main-qa)
+      # PR merged before main-qa (the prod-deploy-landed half of the gate
+      # lands with tactic-main-qa-phase; the phase enum does not carry main-qa
+      # until that tactic merges, so this arm is forward-compat).
+      if [[ "$pr" == "null" || -z "$pr" ]]; then echo "no-pr"; return 1; fi
+      if ! state=$(gh_pr_view_rest "$pr" 2>/dev/null | jq -r .state); then
+        echo "pr-state-unknown"; return 1
+      fi
+      [[ "$state" == "MERGED" ]] && return 0
+      echo "pr-not-merged"; return 1 ;;
+    *)
+      echo "unknown-phase"; return 1 ;;
+  esac
+}
+
+SELECTED_COUNT=0
+SELECTED_LINES=""
+while IFS=$'\t' read -r id kind phase pr pace_exempt; do
+  [[ -n "$id" ]] || continue
+  ELIGIBLE_COUNT=$(( ELIGIBLE_COUNT + 1 ))
+  (( SELECTED_COUNT >= TOP )) && continue
+
+  if [[ -n "$PACE_EXEMPT_ONLY" && "$pace_exempt" != "true" ]]; then
+    continue
+  fi
+
+  # Claimed set: reservation-ledger marker or live node-id session (uniform
+  # node-id claiming — strategies included). worktree_has_live_session folds
+  # daemon-UNKNOWN into occupied (fail-safe: never double-book a node).
+  if reservation_exists "$id"; then
+    skip_note "$id" "reserved"
+    continue
+  fi
+  if worktree_has_live_session "$NATIVE_ROOT/.claude/worktrees/$id"; then
+    skip_note "$id" "live-session"
+    continue
+  fi
+
+  reason=$(sensor_gate "$id" "$phase" "$pr")
+  rc=$?
+  if (( rc == 2 )); then
+    exit 2
+  elif (( rc == 1 )); then
+    skip_note "$id" "$reason"
+    continue
+  fi
+
+  SELECTED_LINES+="node $id $kind $phase"$'\n'
+  SELECTED_JSON=$(jq -c --arg id "$id" '. + [$id]' <<<"$SELECTED_JSON") || true
+  SELECTED_COUNT=$(( SELECTED_COUNT + 1 ))
+done < <(jq -r '.candidates[] | [.id, .kind, .phase, (.pr // "null"), (.pace_exempt | tostring)] | @tsv' \
+  <<<"$SELECTION")
+
+if (( SELECTED_COUNT == 0 )); then
+  DISPOSITION="empty"
+  echo "empty"
+  exit 0
+fi
+
+DISPOSITION="selected"
+printf '%s' "$SELECTED_LINES"
+exit 0

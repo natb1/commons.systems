@@ -25,7 +25,7 @@ import { execFile } from "node:child_process";
 import { parseJitDueMarker } from "../../functions/src/office-hours-sync-core.js";
 import type { OfficeHoursItem } from "../../functions/src/office-hours-sync-core.js";
 import type { ParkedIssue } from "../../functions/src/dispatch-queue-metrics-core.js";
-import type { GithubSignals } from "../../functions/src/project-signals-core.js";
+import type { GithubSignals } from "./project-signals-core.js";
 
 // ---------------------------------------------------------------------------
 // Injectable transport boundary

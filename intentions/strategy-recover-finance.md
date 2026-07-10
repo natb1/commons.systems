@@ -52,6 +52,25 @@ clarifications:
       transactions. Migrating identity requires deterministically remapping
       doc-ID-keyed data carried in the snapshot (old IDs are recomputable from
       stored fields). Recorded 2026-07-06 interview.
+  - question: How does budget-etl resolve the snapshot decryption password?
+    answer: "Env var first, macOS Keychain as explicit opt-in fallback, hard fail
+      with guidance when neither — BUDGET_ETL_PASSWORD (sourced from pass/GPG,
+      so non-macOS hosts resolve without the macOS security tool) takes
+      precedence over --keychain, and
+      projects/budget-etl/internal/password/password.go is the single resolution
+      point all subcommands share. The requirement underneath: secrets are
+      session-scoped and never persist to disk in plaintext — no interactive
+      prompt, no config-file password, failure is fast and self-describing
+      rather than silently degraded. Recorded 2026-07-07 interview."
+  - question: Why is the budget app's statements-folder grant read-only?
+    answer: Bank statement exports are evidence the app must never mutate or upload.
+      The standing File System Access grant to the statements folder is
+      read-only by construction — mode:'read' at every permission call
+      (budget/src/statements-dir.ts) plus a path-traversal guard on file
+      resolution — a structural guarantee, not a convention. If a future feature
+      ever needs to write near the originals (archiving, renaming), it takes a
+      separate readwrite grant on a different handle; this handle is
+      deliberately never widened. Recorded 2026-07-07 interview.
 tooling_goals: []
 success_signal:
   observable: every month's financial picture assembled by the owned pipeline from

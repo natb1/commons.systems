@@ -30,6 +30,7 @@ describe("validatePublishedPosts", () => {
         filename: "post-a.md",
         previewImage: undefined,
         previewDescription: undefined,
+        syndication: undefined,
       },
     ]);
   });
@@ -101,5 +102,74 @@ describe("validatePublishedPosts", () => {
 
     expect(result[0].previewImage).toBe("/img/preview.png");
     expect(result[0].previewDescription).toBe("A short description");
+  });
+
+  it("includes optional syndication array when present", () => {
+    const seed = makeSeed([
+      {
+        id: "posse",
+        data: {
+          title: "POSSE Post",
+          published: true,
+          publishedAt: "2026-04-01T00:00:00Z",
+          filename: "posse.md",
+          syndication: ["https://mastodon.example/@me/1", "https://bsky.app/profile/me/post/2"],
+        },
+      },
+    ]);
+
+    const result = validatePublishedPosts(seed);
+
+    expect(result[0].syndication).toEqual([
+      "https://mastodon.example/@me/1",
+      "https://bsky.app/profile/me/post/2",
+    ]);
+  });
+
+  it("leaves syndication absent when the field is not present", () => {
+    const seed = makeSeed([
+      {
+        id: "plain",
+        data: { title: "Plain", published: true, publishedAt: "2026-05-01T00:00:00Z", filename: "plain.md" },
+      },
+    ]);
+
+    const result = validatePublishedPosts(seed);
+
+    expect(result[0].syndication).toBeUndefined();
+  });
+
+  it("throws when syndication is present but not an array", () => {
+    const seed = makeSeed([
+      {
+        id: "bad",
+        data: {
+          title: "Bad",
+          published: true,
+          publishedAt: "2026-01-01T00:00:00Z",
+          filename: "bad.md",
+          syndication: "https://not-an-array.example",
+        },
+      },
+    ]);
+
+    expect(() => validatePublishedPosts(seed)).toThrow('Post "bad" has non-array syndication');
+  });
+
+  it("throws when a syndication entry is not a string", () => {
+    const seed = makeSeed([
+      {
+        id: "bad",
+        data: {
+          title: "Bad",
+          published: true,
+          publishedAt: "2026-01-01T00:00:00Z",
+          filename: "bad.md",
+          syndication: ["https://ok.example", 42],
+        },
+      },
+    ]);
+
+    expect(() => validatePublishedPosts(seed)).toThrow('Post "bad" has non-string syndication entry');
   });
 });

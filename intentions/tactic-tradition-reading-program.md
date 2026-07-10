@@ -1,18 +1,22 @@
 ---
 id: tactic-tradition-reading-program
 kind: tactic
-statement: "Draft: chunked personal reading program — verify each tradition
-  record against its cited texts, load-bearing doctrine first"
+statement: Chunked personal reading program — verify each tradition record
+  against its cited texts, load-bearing doctrine first
 owner: human
-status: raw
+status: codified
 parent: null
-rationale: "Retained from the 2026-07-05 interview (retain-not-refine): the
-  recovery path of delegation-philosophical-articulation, chunked to ≤30-minute
-  author sessions and ordered by how much graph doctrine each text underwrites.
-  Finishing a chunk means re-reading the named tradition record against the text
-  — amend it where the reading contradicts it (the reading wins), ratify it
-  where it holds — and flipping the record delegated → codified once its texts
-  are covered. The chunk list lives in the node body."
+rationale: "Finalized 2026-07-06 /align-tactics round (from the 2026-07-05
+  retained draft): the recovery path of delegation-philosophical-articulation,
+  chunked to ≤30-minute author sessions and ordered by how much graph doctrine
+  each text underwrites. Finishing a chunk means re-reading the named tradition
+  record against the text — amend it where the reading contradicts it (the
+  reading wins), ratify it where it holds — and flipping the record delegated →
+  codified once its texts are covered. This node is the program record and the
+  parent of the chunk leaves. Round 1 breaks out the capture-doctrine path —
+  chunks 1, 2, 5, per the 2026-07-06 order revision from
+  strategy-recovery-critical-path — as born-parked child tactics; chunks 3, 4,
+  6–9 stay recorded in this body for later rounds to break out."
 reading: null
 gap: null
 serves:
@@ -31,100 +35,125 @@ pace_exempt: false
 rounds: null
 attributes: {}
 ---
-# Draft: chunked personal reading program — verify each tradition record against its cited texts, load-bearing doctrine first
+# Chunked personal reading program — verify each tradition record against its cited texts, load-bearing doctrine first
 
-Retained context from the 2026-07-05 interview. Each chunk is ≤30 author-minutes.
-Finishing a chunk = re-read the named record against the text; amend where the
-reading contradicts it (the reading wins — see the clarification on
-strategy-philosophical-grounding), ratify where it holds. A record flips
+Subtree parent and index of the tradition-reading curriculum. As of the
+2026-07-06 /align-tactics round (reader-sync scope), every chunk is a
+per-chunk born-parked office-hours tactic node carrying its own Text /
+Questions / Completion sections and machine-readable `attributes.curriculum`
+metadata (`{priority, passages: [{work, range}]}`) — the chunk nodes are the
+single home of that content; this node only indexes them.
+
+Each chunk is at most 30 author-minutes of independent reading; the review
+session around it is unbounded and may span office-hours sittings
+(2026-07-08 session-bounds clarification on
+`strategy-philosophical-grounding` — an unconverged chunk stays parked, its
+excerpt stays on the reader). Finishing a chunk = re-read the named record
+against the text; amend where the reading contradicts it (the reading wins —
+see the clarification on `strategy-philosophical-grounding`), ratify where
+it holds. Resolution includes the persistence check: durable outcomes on
+durable nodes, the chunk node prunable without loss. A record flips
 `status: delegated → codified` when all its chunks are done; the delegation's
-`last_exercised` stamps per chunk.
+`last_exercised` stamps per chunk. `/sync-reader`
+(`tactic-sync-reader-skill`) delivers each chunk's cited passages to the
+author's e-reader and retires them when the chunk node resolves
+(`phase: done`).
 
-Ordered by how much graph doctrine each text underwrites:
+## Working order
 
-1. **Republic VII 514a–521b** (the Cave, periagoge) → `tradition-plato` —
-   underwrites the entire capture/calibration doctrine on
-   virtue-philosophical-mobility.
-2. **Nicomachean Ethics II.5–6** (hexis, the mean) → `tradition-aristotle` —
-   underwrites kind-virtue's definition and the tension_with machinery.
-3. **Groundwork 4:429** (formula of humanity) + **Metaphysics of Morals
-   6:434–437** (servility) → `tradition-kant` — underwrites the respect floor
-   and the household-consent irreversibility split.
-4. **NE III.10–12** (sōphrosynē) + **Republic IV** (the ordered soul) →
-   `tradition-aristotle` / `tradition-plato` — underwrites virtue-temperance's
-   broad scope.
-5. **NE VI** (phronesis; vice corrupts the archē) → `tradition-aristotle` —
-   underwrites the dual Kant/Aristotle attribution on the mobility root.
-6. **NE I.3** (precision of the subject) + **I.8–10** (external goods) →
-   `tradition-aristotle` — underwrites holding the apex question open, and the
-   anti-Stoic bet on externals.
-7. **NE IV.1** (liberality) + **X.7** (schole) → `tradition-aristotle` —
-   underwrites the gift and tabletop-storytelling clarifications.
-8. **Enchiridion 1** + **Seneca, Letters 18 and 91** → `tradition-stoicism`
-   (declined — lower risk to hold on trust; verifies the drills-not-doctrine
-   split).
-9. **Mill, Utilitarianism ch. 2 and 4** → `tradition-utilitarianism`
-   (declined — verifies that what was refused is what the graph thinks it
-   refused).
+Per `strategy-recovery-critical-path` (2026-07-06 revision; 2026-07-08
+Augustine insertion; 2026-07-08 graph-function append): 1, 2, 5, then 19,
+20, 21, then 3, 4, 6, 7, 8, 9, 18, then 22, 23 —
+the capture-doctrine path (Cave → hexis → phronesis) completes first, then
+the Augustine block (verifying the agency-of-turning ground,
+capture-relevant) before the Kant floor chunk.
+`attributes.curriculum.priority` on each chunk node encodes exactly this
+order; the graph is its single home, maintained by
+`strategy-recovery-critical-path` applications.
 
-**Order revision (2026-07-06, per strategy-recovery-critical-path):** work the
-chunks in order 1, 2, 5, then 3, 4, 6, 7, 8, 9 — chunk 5 advances so the
-capture-doctrine path (Cave → hexis → phronesis) completes before the respect
-floor; NE II.5–6 stays second as the textual foundation NE VI presupposes.
-Chunk numbers stay stable as names; chunk 6's capstone rule ("revisit the apex
-after chunks 1–6") means after those six chunks are done, wherever they fall
-in the working order.
+| Priority | Chunk node | Texts | Record(s) |
+|---|---|---|---|
+| 1 | `tactic-reading-chunk-1-plato-cave` (done 2026-07-07) | Republic VII 514a–521b | tradition-plato |
+| 2 | `tactic-reading-chunk-2-aristotle-hexis` | NE II.5–6 | tradition-aristotle |
+| 3 | `tactic-reading-chunk-5-aristotle-phronesis` | NE VI | tradition-aristotle |
+| 4 | `tactic-reading-chunk-19-augustine-interior-teacher` | De Magistro 11.36–14.46 | tradition-augustine |
+| 5 | `tactic-reading-chunk-20-augustine-conversio` | Confessions VII.9–17 | tradition-augustine |
+| 6 | `tactic-reading-chunk-21-augustine-divided-will` | Confessions VIII.5–12 | tradition-augustine |
+| 7 | `tactic-reading-chunk-3-kant-humanity-servility` | Groundwork 4:429; MM 6:434–437 | tradition-kant |
+| 8 | `tactic-reading-chunk-4-sophrosyne-ordered-soul` | NE III.10–12; Republic IV | tradition-aristotle, tradition-plato |
+| 9 | `tactic-reading-chunk-6-precision-externals` | NE I.3; I.8–10 | tradition-aristotle |
+| 10 | `tactic-reading-chunk-7-liberality-schole` | NE IV.1; X.7; Politics I.2 | tradition-aristotle |
+| 11 | `tactic-reading-chunk-8-stoicism-drills` | Enchiridion 1; Seneca Letters 18, 91 | tradition-stoicism (declined) |
+| 12 | `tactic-reading-chunk-9-mill-justice` | Mill, Utilitarianism ch. 2, 4 (5) | tradition-utilitarianism (declined) |
+| 13 | `tactic-reading-chunk-18-dialectic-method` | Theaetetus 148e–151d; Meno 79e–86c | tradition-plato (+ interview-method deferral review) |
+| 14 | `tactic-reading-chunk-22-republic-sun-line` | Republic VI 505a–511e | tradition-plato (+ strategy-explicit-intent function doctrine) |
+| 15 | `tactic-reading-chunk-23-protagoras-virtue-knowledge` | Protagoras 352b–358d | tradition-plato (+ kind-virtue hexis doctrine) |
 
-## Questions to re-open per chunk
+Chunk numbers in node ids are stable names from the original list, not the
+working order. Chunk 6 carries the capstone rule: after chunks 1–6 are done,
+wherever they fall in the working order, revisit the apex question itself.
+Chunk 18 (2026-07-08 /align-strategy round) is verify-style — it deepens
+`tradition-plato`'s method entries — and additionally reviews the 2026-07-08
+interview-method deferral recorded on
+`delegation-philosophical-articulation`; it slots before the candidate batch
+because the doctrine it reviews governs how every session is conducted.
+Chunks 19–21 (2026-07-08 /align-strategy round) are the `tradition-augustine`
+verify chunks — the record was created as an already-live deferral (status:
+delegated, origin: chosen), so its chunks are focused verify work (distance
+0), placed by doctrine load directly after the capture path.
+Chunks 22–23 (2026-07-08 /align-strategy graph-function round) verify the
+two `tradition-plato` entries the function doctrine on
+`strategy-explicit-intent` made load-bearing — the Good-as-anchor adoption
+(Republic VI) and the virtue-as-knowledge divergence (Protagoras, an
+explicit deferral: the author has not read it). Slotted at the end of the
+verify block; doctrine load argues they could pull earlier — re-prioritize
+at office-hours if desired.
 
-The 2026-07-04/05 interview resolutions live as dated `clarifications` on the
-named nodes. Executing a chunk means re-opening the listed questions against
-the primary text — the resolution was made on Claude's account of the text;
-the chunk checks the account. Two standing rules apply to every chunk, both
-on `strategy-philosophical-grounding`: *"Is the borrowed articulation a
-partial capture?"* (the loop being exercised here) and *"What happens when
-personal reading contradicts a recorded articulation?"* (the reading wins).
+## Candidate batch (strategy-complete-grounding)
 
-- **Chunk 1** → `virtue-philosophical-mobility`: *"Which tradition reads this
-  virtue?"* (the Cave/periagoge third of the dual attribution);
-  `strategy-external-calibration`: *"Does strategy-philosophical-grounding
-  overlap this strategy's calibration function?"* (the freed-prisoner ground
-  for external calibration); `tradition-plato` rationale: was
-  method-first/content-second the right placement?
-- **Chunk 2** → `kind-virtue`: does hexis/energeia actually say what
-  'disposition held and exercised, never completed' claims? Is the
-  tension_with machinery a fair rendering of the mean, given Aristotle's mean
-  is within one virtue, not between two? (This gap was papered over in the
-  session — a real thing to check.); `tradition-aristotle` chosen_over:
-  habituation over virtue-as-knowledge.
-- **Chunk 3** → `virtue-respect-for-persons`: *"Is this virtue a Kantian
-  constraint or an Aristotelian disposition?"* and *"A household member asks
-  not to be consulted on shared-delegation moves — honor or breach?"* — the
-  servility passage is the load-bearing citation for the irreversibility
-  split; verify it actually supports that use.
-- **Chunk 4** → `virtue-temperance`: *"Why is the scope broader than the
-  body?"* and *"Why a sibling root rather than a child of
-  philosophical-mobility?"* — check that sōphrosynē's scope in NE III really
-  covers what the broad reading claims (Aristotle limits it to bodily
-  pleasures of touch; the attention extension is OURS, and should be
-  documented as extension, not citation, if the reading confirms that).
-- **Chunk 5** → `virtue-philosophical-mobility`: *"Which tradition reads this
-  virtue?"* (the phronesis third; and does NE VI's 'vice destroys the archē'
-  support 'capture corrupts the sensor'?).
-- **Chunk 6** → both roots: *"Does the root forest conceal a tacit apex —
-  'agency as an end'?"* — the HELD-OPEN question and the round's standing
-  review trigger; NE I.3 is the recorded warrant for holding it open, so this
-  chunk decides whether that warrant is real. Capstone: after chunks 1–6,
-  revisit the apex question itself.
-- **Chunk 7** → `strategy-open-source-as-gift`: *"Which tradition names the
-  gift?"*; `strategy-tabletop-storytelling`: *"Is a game table off-mission
-  leisure for a strategy graph?"*; `strategy-join-existing-practice`: *"Which
-  tradition reads joining-over-cultivating?"* (Politics I.2).
-- **Chunk 8** → `virtue-progressive-detachment`: *"What is kept from
-  Stoicism, given the parent root's name declines it?"* — verify the
-  premeditatio/drills mapping and the dichotomy-of-control inversion.
-- **Chunk 9** → `tradition-utilitarianism` diverged list, and the
-  side-constraint reading on `virtue-respect-for-persons` (*"no sum of
-  benefits purchases a breach"*) — Mill ch. 5 on justice is the strongest
-  counter-reading; declined records deserve the strongest version of what
-  they decline.
+Chunks 10–17 are *candidate* chunks (2026-07-07 /align-strategy round,
+`strategy-complete-grounding`): no tradition record exists yet for these —
+each sitting establishes relevance and author understanding first, then
+creates the record (adopted/diverged/declined), applies grounding marks, or
+records a dismissal clarification on `strategy-complete-grounding`. Marked
+`attributes.curriculum.candidate: true`; they queue after the verify chunks
+above and serve `strategy-complete-grounding`, not this node's own strategy.
+
+| Priority | Chunk node | Texts | Candidate |
+|---|---|---|---|
+| 16 | `tactic-reading-chunk-10-hirschman-exit-voice` | Exit, Voice, and Loyalty chs. 1–3, 7 | tradition-hirschman |
+| 17 | `tactic-reading-chunk-11-popper-fallibilism` | Conjectures and Refutations ch. 1 | tradition-popper |
+| 18 | `tactic-reading-chunk-12-macintyre-practice` | After Virtue chs. 14–15 | tradition-macintyre |
+| 19 | `tactic-reading-chunk-13-illich-conviviality` | Tools for Conviviality chs. 1–2 | tradition-illich |
+| 20 | `tactic-reading-chunk-14-pettit-nondomination` | Freedom as Antipower (Ethics 106) | tradition-republicanism |
+| 21 | `tactic-reading-chunk-15-ostrom-commons-gift` | Governing the Commons ch. 3; Mauss, The Gift intro, ch. 1 | tradition-ostrom (+ Mauss divergence) |
+| 22 | `tactic-reading-chunk-16-buddhism-nonattachment` | MN 22 (raft simile); SN 56.11 | tradition-buddhism (expected declined) |
+| 23 | `tactic-reading-chunk-17-confucian-household` | Great Learning; Analects 1–2 | tradition-confucianism |
+
+## Shared chunk office-hours reason (the single home)
+
+Every chunk node is born-parked; each carried a near-identical
+`office_hours.reason` paragraph. That reason is stated once here — each chunk's
+own reason is now a one-line pointer to this section plus the chunk's unique
+payload (its text, the record(s) it tests, and any node-specific deferral,
+cascade, capstone, or conduct note). Two variants:
+
+- **verify-record** (the tradition already exists): Personal reading, one
+  sitting of at most 30 author-minutes (the review session may span sittings).
+  Not claude-executable — the chunk exists to verify the delegated articulation
+  personally (the recovery path of `delegation-philosophical-articulation`). At
+  office-hours: re-open the node body's questions against the text; amend the
+  named record(s) where the reading contradicts them (the reading wins), ratify
+  where they hold; stamp the delegation's `last_exercised`; the completed chunk
+  counts toward `strategy-philosophical-grounding`'s signal.
+- **candidate-tradition** (chunks 10–17, no record yet): Candidate-tradition
+  reading, one sitting of at most 30 author-minutes. Not claude-executable — the
+  chunk exists to establish relevance and author understanding personally before
+  any tradition record exists. At office-hours: read the passages, work the node
+  body's relevance questions, then create the tradition record
+  (adopted/diverged/declined) or record a dismissal clarification on
+  `strategy-complete-grounding`; stamp `last_exercised` on
+  `delegation-philosophical-articulation`.
+
+Where a chunk names **type-b conduct**, the author articulates from the text
+before Claude's account appears; that note stays on the chunk.

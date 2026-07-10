@@ -9,10 +9,21 @@ export type {
   ToolingKind,
   Attention,
 } from "./schema.js";
-export { resolveAttention } from "./attention.js";
+export { resolveAttention, computeSignalPath, isSignalUnvalidated } from "./attention.js";
 export type { ResolvedAttention, TermContribution } from "./attention.js";
+export { officeHoursQueue, openBlockers, selectOfficeHours } from "./officeHours.js";
+export type { QueueMember, OpenBlocker, OfficeHoursSelection } from "./officeHours.js";
+export {
+  selectGraphTargets,
+  strategyFingerprint,
+  tacticScopeFingerprint,
+  servingStrategyIds,
+  readingDate,
+  PHASE_LADDER,
+} from "./router.js";
+export type { GraphCandidate, GraphSelection, SelectionEvent } from "./router.js";
 export { IntentionSchemaError } from "./errors.js";
-export { writeNode, readNode, listNodes } from "./store.js";
+export { writeNode, readNode, readNodeBody, listNodes } from "./store.js";
 export { projectGoals, activeFrontier, realizationForOwner, renderFrontier } from "./goals.js";
 export type { Goal, Realization } from "./goals.js";
 export { detectRung } from "./rungs.js";

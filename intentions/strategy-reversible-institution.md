@@ -22,6 +22,15 @@ rationale: >-
   strategy-progressive-validation paces when new teeth may be accepted at all,
   and strategy-financial-sustainability keeps the most dangerous tooth — funding
   — reversible.
+
+
+  The general definition of ratcheting — teeth individually reasonable to add,
+  individually costly to remove, so removal never happens by will — lives
+  canonically on virtue-philosophical-mobility; this strategy is its reflexive
+  application. The repo-wide CC-BY-SA share-alike license (recorded on
+  strategy-open-source-as-gift) is a stand-down precondition: archives remain
+  legally usable and forkable with no live licensor, so decay to referrals and
+  archives strands no one.
 reading: null
 gap: null
 serves:
@@ -35,6 +44,14 @@ success_signal:
   sensor: owner review at office-hours
   threshold: no tooth requires an act of will to stand down
   is_proxy: true
+attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: false
+rounds: null
 attributes:
   conditions:
     - the project stays payroll-free — subcontracts among independent

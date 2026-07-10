@@ -112,12 +112,16 @@ Scope:
 
 ## Dependencies
 
-- `tactic-align-strategy-skill`, `tactic-align-tactics-skill`,
-  `tactic-graph-router-transitions`, `tactic-dispatch-lifecycle-sensor`,
-  `tactic-phase-skill-node-targets`, `tactic-main-qa-phase` — the
-  replacement surface must be live end to end (the node-targets tactic is
-  what lets the phase skills run on node targets at all; the main-qa
-  tactic is what lets the qa-main label machinery be deleted).
+- `tactic-graph-router-transitions`, `tactic-dispatch-lifecycle-sensor`,
+  `tactic-phase-skill-node-targets`, `tactic-main-qa-phase`,
+  `tactic-office-hours-graph-entry` — the frontmatter `blocked_by` set:
+  the replacement surface must be live end to end (the node-targets
+  tactic is what lets the phase skills run on node targets at all; the
+  main-qa tactic is what lets the qa-main label machinery be deleted;
+  the office-hours entry is what lets the legacy office-hours surface in
+  Unit 1's deletion list go). The align-skills pair
+  (`tactic-align-strategy-skill`, `tactic-align-tactics-skill`) already
+  completed and pruned — both skills are live.
 
 ## Verification
 

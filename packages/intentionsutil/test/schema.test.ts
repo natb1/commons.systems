@@ -61,7 +61,11 @@ describe("validateNode", () => {
       },
       validates: ["strategy-1"],
       blocked_by: ["tactic-2"],
-      office_hours: { reason: "needs human input", since: "2026-07-03" },
+      office_hours: {
+        reason: "needs human input",
+        since: "2026-07-03",
+        recommendation: "escalate to the author",
+      },
       pace_exempt: true,
       rounds: { count: 3, last_completed: "2026-07-02" },
     };
@@ -76,7 +80,11 @@ describe("validateNode", () => {
     });
     expect(result.validates).toEqual(["strategy-1"]);
     expect(result.blocked_by).toEqual(["tactic-2"]);
-    expect(result.office_hours).toEqual({ reason: "needs human input", since: "2026-07-03" });
+    expect(result.office_hours).toEqual({
+      reason: "needs human input",
+      since: "2026-07-03",
+      recommendation: "escalate to the author",
+    });
     expect(result.pace_exempt).toBe(true);
     expect(result.rounds).toEqual({ count: 3, last_completed: "2026-07-02" });
   });
@@ -138,6 +146,50 @@ describe("validateNode", () => {
     ).toThrow();
   });
 
+  it("rejects an execution with a negative or non-integer attempt count", () => {
+    const base = {
+      id: "n1-fracattempts",
+      kind: "tactic",
+      statement: "Non-integer attempt count.",
+      owner: "ai",
+      status: "raw",
+    };
+    expect(() =>
+      validateNode({
+        ...base,
+        execution: { branch: "b", pr: null, attempts: { qa: 1.5 }, markers: [], strategy_fingerprint: null },
+      }),
+    ).toThrow(/non-negative integer for execution.attempts.qa/);
+    expect(() =>
+      validateNode({
+        ...base,
+        execution: { branch: "b", pr: null, attempts: { qa: -1 }, markers: [], strategy_fingerprint: null },
+      }),
+    ).toThrow(/non-negative integer for execution.attempts.qa/);
+  });
+
+  it("rejects an execution with a negative or non-integer pr number", () => {
+    const base = {
+      id: "n1-badpr",
+      kind: "tactic",
+      statement: "Bad pr number.",
+      owner: "ai",
+      status: "raw",
+    };
+    expect(() =>
+      validateNode({
+        ...base,
+        execution: { branch: "b", pr: -3, attempts: {}, markers: [], strategy_fingerprint: null },
+      }),
+    ).toThrow(/non-negative integer for execution.pr/);
+    expect(() =>
+      validateNode({
+        ...base,
+        execution: { branch: "b", pr: 4.2, attempts: {}, markers: [], strategy_fingerprint: null },
+      }),
+    ).toThrow(/non-negative integer for execution.pr/);
+  });
+
   it("rejects an execution missing branch", () => {
     expect(() =>
       validateNode({
@@ -162,6 +214,78 @@ describe("validateNode", () => {
         office_hours: { reason: "parked" },
       }),
     ).toThrow();
+  });
+
+  it("defaults office_hours.recommendation to null when omitted", () => {
+    const result = validateNode({
+      id: "n1-oh-norec",
+      kind: "tactic",
+      statement: "Office hours without a recommendation.",
+      owner: "ai",
+      status: "raw",
+      office_hours: { reason: "parked", since: "2026-07-06" },
+    });
+    expect(result.office_hours).toEqual({
+      reason: "parked",
+      since: "2026-07-06",
+      recommendation: null,
+    });
+  });
+
+  it("accepts an explicit null office_hours.recommendation", () => {
+    const result = validateNode({
+      id: "n1-oh-nullrec",
+      kind: "tactic",
+      statement: "Office hours with explicit null recommendation.",
+      owner: "ai",
+      status: "raw",
+      office_hours: { reason: "parked", since: "2026-07-06", recommendation: null },
+    });
+    expect(result.office_hours?.recommendation).toBeNull();
+  });
+
+  it("rejects a non-string office_hours.recommendation", () => {
+    expect(() =>
+      validateNode({
+        id: "n1-oh-badrec",
+        kind: "tactic",
+        statement: "Office hours with a non-string recommendation.",
+        owner: "ai",
+        status: "raw",
+        office_hours: { reason: "parked", since: "2026-07-06", recommendation: 42 },
+      }),
+    ).toThrow();
+  });
+
+  it("rejects an office_hours.since that is not a YYYY-MM-DD date string", () => {
+    const base = {
+      id: "n1-badsince",
+      kind: "tactic",
+      statement: "Office hours with a malformed since.",
+      owner: "ai",
+      status: "raw",
+    };
+    for (const since of ["July 3, 2026", "2026-7-3", "2026-07-03T12:00:00Z", ""]) {
+      expect(() => validateNode({ ...base, office_hours: { reason: "parked", since } })).toThrow(
+        /YYYY-MM-DD date string for office_hours.since/,
+      );
+    }
+  });
+
+  it("rejects a rounds with a negative or non-integer count", () => {
+    const base = {
+      id: "n1-fracrounds",
+      kind: "strategy",
+      statement: "Non-integer rounds count.",
+      owner: "ai",
+      status: "raw",
+    };
+    expect(() =>
+      validateNode({ ...base, rounds: { count: 2.5, last_completed: null } }),
+    ).toThrow(/non-negative integer for rounds.count/);
+    expect(() =>
+      validateNode({ ...base, rounds: { count: -1, last_completed: null } }),
+    ).toThrow(/non-negative integer for rounds.count/);
   });
 
   it("rejects a rounds with a non-numeric count", () => {
@@ -804,7 +928,7 @@ describe("validateGraph", () => {
       gnode({
         id: "virtue-1",
         kind: "virtue",
-        office_hours: { reason: "parked", since: "2026-07-03" },
+        office_hours: { reason: "parked", since: "2026-07-03", recommendation: null },
       }),
     ];
     expect(() => validateGraph(nodes)).toThrow(
@@ -828,7 +952,7 @@ describe("validateGraph", () => {
       gnode({
         id: "strategy-1",
         kind: "strategy",
-        office_hours: { reason: "awaiting input", since: "2026-07-03" },
+        office_hours: { reason: "awaiting input", since: "2026-07-03", recommendation: null },
         pace_exempt: true,
       }),
     ];

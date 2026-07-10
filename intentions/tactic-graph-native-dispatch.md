@@ -379,6 +379,59 @@ admits one gate-exempt worker — bypassing the gate, not the count or the
 order — with `dispatch-target-workers --exhausted` as the hard floor no
 flag overrides (main-broken parity).
 
+**The concurrency cap is global** (2026-07-06 interview): the
+`max_concurrent_workers` bound (config default 8) caps the TOTAL of
+dispatch-managed workers live at any moment across all ticks, workflows,
+and lanes. The enforcement point is selection — busy + reserved counted
+from the ledger and liveness against the pace target, selecting only the
+gap. Per-workflow caps (`dispatch-graph-tick`'s `worker_cap`, an emulated
+tick's semaphore) are local backstops, never the enforcement point: two
+overlapping workflows each locally capped at 8 would otherwise run 16.
+Overlapping ticks are safe via claims, not serialization — a tick's
+lifetime ends at spawn; every selected node enters the reservation ledger
+at selection under the lock; the node-id-named runner session carries the
+claim for the phase's life; the sweep reconciles dead workers; a
+concurrent tick re-selects only unclaimed nodes. A single long-lived
+multi-node workflow is never the router mode — its subagents are
+invisible to node-id liveness, so it cannot carry claims.
+
+**Worker-start re-validation** (2026-07-06 interview): two gates bracket
+every worker, with no mid-run polling. At start, the provisioning
+prelude re-validates against fresh `origin/main` — node exists, persisted
+phase equals the selected phase (passed as an argument), `office_hours`
+null, strategy fingerprint unchanged where stamped; mismatch is a
+distinct exit and the next tick re-selects (a selected-but-unstarted
+worker counts as NOT started and yields to a soft freeze). The same
+prelude carries the **scope chain of custody** (chain-of-custody
+clarification, 2026-07-06, superseding the same-day scope-fingerprint
+entry's stay-at-completed-phase clause): a fix/qa/review worker starts
+only if the current **scope fingerprint** (statement + body hash;
+frontmatter state fields never included) equals the previous phase's
+stamp beside the worktree (`<fingerprint> <origin-main-sha>`); on pass
+the gate re-stamps. At write, the transition-time gate compares against
+the running phase's own stamp — a stale strategy fingerprint holds the
+transition for re-evaluation; a stale scope stamp (either gate) writes
+the backward transition `phase := implement` instead of a hold, with the
+`<stamped-sha>..origin/main` node-file commit range recorded in the
+demotion commit and on the PR as the routing-back provenance. Merge
+therefore requires an unbroken implement → qa → review chain all
+executed against the merge-time scope; machinery body appends (residue)
+never break custody because the transition writer refreshes the stamp to
+its post-write fingerprint. Demotion is pre-merge only — post-merge
+staleness routes per main-qa parity (§1.1). Author edits to a claimed
+tactic's scope still land freely and bind from the next selection; park
+the node to interrupt outright. Implementation:
+`tactic-worker-start-revalidation` (detect/stamp side) and
+`tactic-graph-router-transitions` Unit 1 (verify/demote side, the
+`demote-node-to-implement` primitive).
+
+**No session keepalive** (2026-07-06 interview): the graph is the
+long-horizon substrate; sessions are disposable executors. Continuity is
+durable state on `origin/main` re-entered by the cron heartbeat — dead
+ticks, workers, and queues recover by re-selection plus ledger sweep,
+never by resuming or keeping alive a session. A phase worker may run
+long; the ban is the router-as-session.
+
 ### 3.3 Coexistence and drain
 
 The two routers run in parallel over **disjoint state** — no gh↔graph
@@ -407,7 +460,17 @@ GitHub is a separate strategy; design TBD.)
   an emulating session owes the phase skill's substance, not a checklist
   re-run; for `qa` that means the legacy `qa-fix` parity of §2.4
   (clarification 20), and for `review` the full `/review-fix` fan-out of
-  §2.4 (clarification 21) — a review phase is never skipped past.
+  §2.4 (clarification 21) — a review phase is never skipped past. An
+  emulating session also owes the router's claiming semantics (2026-07-06
+  interview): a reservation-ledger claim per selected node before fan-out,
+  each cleared with its transition write — so a concurrent tick's budget
+  and selection see the emulated workers, keeping the global worker cap
+  (§3.2) intact under overlap. And it owes the scope chain of custody
+  (§3.2): before each transition write it re-checks that no scope edit
+  landed after its phase's fresh read, and when it finds a post-read
+  edit — or a scope edit that landed after an earlier phase already
+  completed — it writes the demotion to `implement` instead of the
+  forward transition.
 
 ### 3.4 Worktree anchoring and claiming
 
@@ -491,6 +554,17 @@ drops. (Behavior inventory anchors: `.claude/skills/file-issue/SKILL.md`,
 | Trivial-task skip | Unchanged |
 
 ## 5. Subtree (round 1, recorded 2026-07-03; re-evaluated same day)
+
+**Current state (2026-07-10, self-consistency sweep):** ten of the fifteen
+round-1 children have completed and been pruned from the graph; five remain
+open, all `phase: implement` — `tactic-graph-router-transitions`,
+`tactic-phase-skill-node-targets`, `tactic-main-qa-phase`,
+`tactic-dispatch-lifecycle-sensor` (validates-terminal), and
+`tactic-legacy-router-removal` (validates-terminal). The count and diagram
+below are the historical round-1 decomposition, kept for the dependency order
+they record; pruned nodes they name (the align-skill tactics, the schema,
+graph-commit, router-selector, calculated-attention, the two hardening
+children, branch-protection) no longer exist as graph files.
 
 Fifteen children: the eleven round-1 nodes below, each a leaf = one PR
 unless noted, plus two clarification-19 deferral children finalized

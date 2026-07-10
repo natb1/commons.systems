@@ -42,6 +42,32 @@ On-demand or router-invoked. The sole argument is the id of the strategy to
 decompose: `/align-tactics strategy-<slug>`. With no argument, stop and report
 that a strategy id is required — this skill never selects its own target.
 
+## Step 0 — Claim and isolate
+
+Before the first write, claim the target strategy's node id and author in
+its worktree — the same uniform node-id reservation discipline the router's
+fan-out workers follow (`strategy-graph-native-dispatch`'s 2026-07-06
+concurrency-safety clarification). Never author in the shared `main`
+checkout: a concurrent session's dirty tracked file blocks this run's
+`graph-commit` rebase, and a stale read races live phase state.
+
+1. **Resolve the target node id** — the `strategy-<slug>` argument (this
+   skill never selects its own target).
+2. **Check the claim.** If `<project-root>/.claude/worktrees/<node-id>`
+   already exists with a live session — `worktree_has_live_session <path>`
+   (`.claude/skills/dispatch-propagate/scripts/lib-claude-agents.sh:15`,
+   run with `dangerouslyDisableSandbox: true`) — the claim is held by
+   another session: stop and report the held claim, then end the run. A
+   held claim is **not** an `office_hours` park (it is not one of the three
+   autonomy-contract conditions below) and **not** a defect.
+3. **Enter the worktree.** Otherwise create or re-enter it — native
+   `EnterWorktree` with the node id as the worktree name, or the
+   `provision-node-worktree`
+   (`.claude/skills/dispatch-propagate/scripts/provision-node-worktree`)
+   primitive — and do all authoring and the step-5 `graph-commit` from
+   there. The worktree **is** the claim: the same live-session ⇔ worktree
+   liveness rule the router uses, so no separate lock is needed.
+
 ## Autonomy contract
 
 Runs to completion without user interaction. Parks to `office_hours` — never
@@ -74,6 +100,27 @@ interactive session's later commit touching the node clears the park
 (`intentions/tactic-graph-native-dispatch.md` §1.3). Do **not** call
 `AskUserQuestion` as the escalation mechanism — parking is the whole autonomy
 contract.
+
+**Park-time recommendation** (strategy clarification 30 / condition 6): every
+park writes recoverable context **at park time** — `reason` plus a best-next-
+steps recommendation for the human — because session attach/resume is not a
+supported recovery path; a park whose full context lives only in this
+session's transcript is itself a defect. This binds every park in this skill,
+escalation and born-parked (Step 4) alike. Transitional note: a first-class
+`office_hours.recommendation` field is planned (`tactic-office-hours-graph-entry`
+Unit 1 / `tactic-phase-skill-node-targets` Unit 2 — shared, skip whichever
+lands second) but is not yet in `schema.ts`, so `write-node.ts` rejects that
+key today. Until it validates, carry the recommendation **inside** the
+`reason` string as a labelled trailing sentence (e.g. `"...Recommend: <next
+step>."`) — never drop it — and switch to the dedicated field once it lands.
+
+**Unrecorded-context park framing.** When a decomposition or re-evaluation
+cannot proceed because needed context simply is not in the graph, name the
+gap in the park reason as a **record-completeness defect** (strategy
+clarification 31 / condition 7) of the `/align-strategy` round that produced
+the strategy — not something this session should guess at. The fix is an
+author `/align-strategy` pass to complete the record, and the park reason
+should say so explicitly.
 
 ## Idempotency
 
@@ -195,6 +242,25 @@ a strategy.
    omission and never invent a flag for it — record it fully and let the
    derivation demote it.
 
+**Finalization: greenfield-relevance gate** (strategy clarification 26).
+Before finalizing any draft (item 2) or recording any newly-decomposed unit
+(item 3), run the greenfield-relevance gate: check the unit's subject against
+non-draft nodes elsewhere in the graph that delete or supersede it (a raw
+draft never obsoletes live work). Per-unit: drop a doomed unit from the plan,
+naming the superseding node in the drop; a tactic that is *fully* superseded
+demotes to draft instead of landing `phase: implement`; a tactic on doomed
+surface may be kept selectable only via an explicit interim-live-risk
+exception naming its expiry event (e.g. "until the gh-queue drains"). This is
+the same gate `/align-strategy`'s improvement pass runs across the whole
+corpus — here it runs against this round's specific decomposition.
+
+**Sole-tracker recording guidance** (strategy clarification 28). The graph
+is the source-of-truth issue tracker, bug tracker included: every defect
+worth fixing — surfaced during drift review, during decomposition, or found
+incidentally — lands as a tactic (or a unit of an existing one), never a
+side channel. Code `TODO`s stay pointer-only (`TODO(tactic-<id>)`), never
+carrying the substance themselves.
+
 ## Step 3 — Plan each claude-eligible tactic
 
 For every claude-eligible leaf tactic, produce a full clean-session plan and
@@ -267,6 +333,29 @@ The write path mirrors `/align-strategy` Step 5 exactly — `write-node.ts` is
 the single validation gate; never hand-author YAML frontmatter, and
 `graph-commit` is the **only** landing path.
 
+**Capture a base manifest for every pre-existing node this round edits** —
+the serving strategy (a drift clarification, a `rounds` bump, a park) and any
+existing tactic finalized from a draft. Dump them through `dump-node.ts`
+*before* rewriting, then pass the manifest to `graph-commit --base` (item 3)
+so a stale read of a live node is refused mechanically rather than by rebase
+luck (the 2026-07-06 near-miss). Nodes this round **creates** have no
+origin/main blob and take no `--base` entry.
+
+```bash
+BASE=$(npx tsx packages/intentionsutil/scripts/dump-node.ts \
+  --out-dir "$TMPDIR/dump" <pre-existing-id> [<pre-existing-id> ...])
+```
+
+**Artifact-owner placement** (strategy clarification 27): `serves` names the
+strategy that actually owns the artifact the tactic changes. Normally that is
+the strategy under decomposition, but a byproduct that genuinely changes a
+different strategy's artifact (e.g. a finalized draft retained here that
+touches another strategy's surface) uses an honest multi-entry `serves`
+naming every owning strategy — never a force-fit onto the strategy being
+decomposed just because it is convenient. When no strategy owns the
+artifact, surface the gap (a park, or a note for the author) instead of
+assigning ownership by proximity.
+
 Per tactic:
 
 1. **Frontmatter via `write-node.ts`.** Construct the full node JSON —
@@ -302,9 +391,14 @@ Per tactic:
    strategy alongside the round's tactics) in one call:
 
    ```bash
-   packages/intentionsutil/scripts/graph-commit <tactic-id> [<tactic-id> ...] [<strategy-id>]
+   packages/intentionsutil/scripts/graph-commit --base "$BASE" \
+     <tactic-id> [<tactic-id> ...] [<strategy-id>]
    ```
 
+   Pass `--base "$BASE"` (the manifest from `dump-node.ts` above) whenever the
+   call touches a pre-existing node; omit it for a round that only creates new
+   tactics. `--base` covers only the dumped pre-existing ids — newly created
+   ids in the same call are simply absent from the manifest and unchecked.
    `graph-commit` stages exactly `intentions/<id>.md` for each id (frontmatter
    and the body `Edit` both live there), commits, stamps the four required
    checks via the `graph/**` fast path, and fast-forwards onto `main` with a
@@ -351,11 +445,26 @@ When invoked after a mid-flight strategy edit — the router detects a stale
 re-evaluation session (strategy clarification 10) — the session does **not**
 decompose fresh. It:
 
-1. Reads the edited strategy and its open (non-draft, non-`done`) tactics.
+1. Reads the edited strategy and its open (non-draft, non-`done`) tactics —
+   **every** open child's body is read in full before disposition. Keyword
+   grep over the open tactics (e.g. to shortlist candidates touching an
+   edited term) is a shortlisting heuristic only; it never disposes of a
+   tactic — disposition of each open child requires the full-body re-read
+   (strategy clarification 32).
 2. **Amends, prunes, or confirms** each open tactic against the edited
    substance — revise a plan whose premise changed, prune a tactic the edit
    made unnecessary, confirm one still valid — rather than authoring a new
-   round.
+   round. **Amendment completeness** (clarification 32): an amendment is
+   complete only when the tactic's **whole node** — `statement`,
+   `rationale`, the `## Context` prose, every unit, and `## Verification` —
+   is reconciled against the full current strategy substance in this same
+   round. A one-bullet delta that leaves a sibling unit or a verification
+   step contradicting the amendment is an incomplete amendment — the same
+   defect class as an incomplete record (condition 7). This also applies
+   whenever this skill amends an already-landed tactic outside a formal
+   re-evaluation trigger (e.g. a drift-review Side A/B correction to an open
+   tactic): the whole-node reconciliation bar binds there too, not just at a
+   fingerprint-triggered re-evaluation.
 3. Re-stamps each surviving tactic's `execution.strategy_fingerprint` to the
    current substance (seeded `null` until the machinery lands), which unfreezes
    the subtree.
@@ -364,6 +473,11 @@ decompose fresh. It:
 Until a live router exists, re-evaluation runs **inline** in the same session
 that recorded the strategy edit — the way every round on
 `strategy-graph-native-dispatch` has executed it by hand.
+
+A strategy-corpus census script is planned as an enumeration hook for the
+open-child sweep above (`tactic-align-tactics-mechanical-floor` Unit 2);
+until it lands, enumerate open children by hand per the Idempotency section's
+`grep -rl` recipe.
 
 ## Out of scope
 

@@ -200,7 +200,7 @@ function optionalString(value: unknown, field: string): string | null {
   return value;
 }
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
+export function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -338,6 +338,7 @@ export interface Execution {
 export interface OfficeHours {
   reason: string;
   since: string;
+  recommendation: string | null;
 }
 
 /** `/align-tactics` re-evaluation round accounting; valid on strategies only. */
@@ -353,13 +354,34 @@ function requireNumber(value: unknown, field: string): number {
   return value;
 }
 
+/** PR numbers, attempt counts, and round counts are counters: whole and >= 0. */
+function requireNonNegativeInt(value: unknown, field: string): number {
+  const n = requireNumber(value, field);
+  if (!Number.isInteger(n) || n < 0) {
+    throw new IntentionSchemaError(`Expected non-negative integer for ${field}, got ${n}`);
+  }
+  return n;
+}
+
+/**
+ * The shape `graph-commit`'s park_write stamps via `date -u +%Y-%m-%d`. Shape
+ * only — semantic calendar validity (month <= 12 etc.) is not this layer's job.
+ */
+function requireDateString(value: unknown, field: string): string {
+  const s = requireString(value, field);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    throw new IntentionSchemaError(`Expected YYYY-MM-DD date string for ${field}, got "${s}"`);
+  }
+  return s;
+}
+
 function validateAttempts(value: unknown, field: string): Record<string, number> {
   if (!isPlainObject(value)) {
     throw new IntentionSchemaError(`Expected object for ${field}, got ${typeof value}`);
   }
   const out: Record<string, number> = {};
   for (const [key, count] of Object.entries(value)) {
-    out[key] = requireNumber(count, `${field}.${key}`);
+    out[key] = requireNonNegativeInt(count, `${field}.${key}`);
   }
   return out;
 }
@@ -370,7 +392,7 @@ function validateExecution(value: unknown, field: string): Execution {
   }
   return {
     branch: requireString(value.branch, `${field}.branch`),
-    pr: value.pr == null ? null : requireNumber(value.pr, `${field}.pr`),
+    pr: value.pr == null ? null : requireNonNegativeInt(value.pr, `${field}.pr`),
     attempts: validateAttempts(value.attempts, `${field}.attempts`),
     markers: validateIdArray(value.markers, `${field}.markers`),
     strategy_fingerprint: optionalString(value.strategy_fingerprint, `${field}.strategy_fingerprint`),
@@ -383,7 +405,8 @@ function validateOfficeHours(value: unknown, field: string): OfficeHours {
   }
   return {
     reason: requireString(value.reason, `${field}.reason`),
-    since: requireString(value.since, `${field}.since`),
+    since: requireDateString(value.since, `${field}.since`),
+    recommendation: optionalString(value.recommendation, `${field}.recommendation`),
   };
 }
 
@@ -392,7 +415,7 @@ function validateRounds(value: unknown, field: string): Rounds {
     throw new IntentionSchemaError(`Expected object for ${field}, got ${typeof value}`);
   }
   return {
-    count: requireNumber(value.count, `${field}.count`),
+    count: requireNonNegativeInt(value.count, `${field}.count`),
     last_completed: optionalString(value.last_completed, `${field}.last_completed`),
   };
 }

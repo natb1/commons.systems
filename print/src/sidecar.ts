@@ -15,6 +15,8 @@
 // (which embeds the folder name) would break portability and folder rename.
 
 import { createSidecar, serializeSidecar, isPlainObject } from "@commons-systems/sidecar";
+import type { Annotation, AnnotationsStore } from "./annotations.js";
+import { coerceAnnotationList } from "./annotations.js";
 
 const SIDECAR_DIR = ".commons-print";
 const SIDECAR_FILE = "index.json";
@@ -29,11 +31,17 @@ export interface SidecarData {
   metadata: Record<string, { title?: string; pageCount?: number }>;
   /** Reading positions, keyed by bare filename. */
   positions: Record<string, string>;
+  /**
+   * Reader annotations (highlights + notes), keyed by bare filename. Optional
+   * and absent-tolerated: an older sidecar without this key coerces to `{}`, so
+   * the version stays 1 (no migration needed).
+   */
+  annotations: Record<string, Annotation[]>;
 }
 
 /** A fresh, empty model. */
 function emptyModel(): SidecarData {
-  return { version: 1, metadata: {}, positions: {} };
+  return { version: 1, metadata: {}, positions: {}, annotations: {} };
 }
 
 /**
@@ -70,18 +78,34 @@ function coercePositions(raw: unknown): SidecarData["positions"] {
 }
 
 /**
+ * Coerce a raw `annotations` value into the typed per-file map, keeping only
+ * entries whose key maps to a validated annotation list (each list itself
+ * dropping malformed entries via `coerceAnnotationList`). A non-array value for
+ * a key yields an empty list rather than propagating garbage into the renderer.
+ */
+function coerceAnnotations(raw: unknown): SidecarData["annotations"] {
+  if (!isPlainObject(raw)) return {};
+  const out: SidecarData["annotations"] = {};
+  for (const [key, value] of Object.entries(raw)) {
+    out[key] = coerceAnnotationList(value);
+  }
+  return out;
+}
+
+/**
  * Return a NEW model where the patch's per-key entries win but untouched keys
  * are preserved. This is the no-clobber guarantee: merging one position never
  * drops the metadata cache or sibling positions.
  */
 export function mergeSidecar(
   existing: SidecarData,
-  patch: Partial<Pick<SidecarData, "metadata" | "positions">>,
+  patch: Partial<Pick<SidecarData, "metadata" | "positions" | "annotations">>,
 ): SidecarData {
   return {
     version: 1,
     metadata: { ...existing.metadata, ...patch.metadata },
     positions: { ...existing.positions, ...patch.positions },
+    annotations: { ...existing.annotations, ...patch.annotations },
   };
 }
 
@@ -94,7 +118,7 @@ export function mergeSidecar(
 // and the single-flight write chain. The print app supplies only its
 // schema-specific bits below — directory/file names, the empty model, the
 // per-field coercion assembled in `coerce`, and the no-clobber `mergeSidecar`.
-const sidecar = createSidecar<SidecarData, Partial<Pick<SidecarData, "metadata" | "positions">>>({
+const sidecar = createSidecar<SidecarData, Partial<Pick<SidecarData, "metadata" | "positions" | "annotations">>>({
   sidecarDirName: SIDECAR_DIR,
   sidecarFileName: SIDECAR_FILE,
   emptyModel,
@@ -102,6 +126,7 @@ const sidecar = createSidecar<SidecarData, Partial<Pick<SidecarData, "metadata" 
     version: 1,
     metadata: coerceMetadata(parsed.metadata),
     positions: coercePositions(parsed.positions),
+    annotations: coerceAnnotations(parsed.annotations),
   }),
   mergeSidecar,
 });
@@ -179,6 +204,25 @@ export function makeSidecarPositionStore(filename: string): PositionStore {
     },
     async save(pos: string): Promise<void> {
       return enqueueWrite({ positions: { [filename]: pos } });
+    },
+  };
+}
+
+/**
+ * An AnnotationsStore backed by the sidecar, keyed on the bare filename. `load`
+ * reads the in-memory model; `save` merges the full list through the serialized
+ * write chain (silently no-ops on disk when the folder is not writable, like
+ * makeSidecarPositionStore). The full list is written per save — mergeSidecar
+ * replaces this filename's entry while preserving sibling files' annotations.
+ */
+export function makeSidecarAnnotationsStore(filename: string): AnnotationsStore {
+  return {
+    async load(): Promise<Annotation[]> {
+      const model = await ensureLoaded();
+      return model.annotations[filename] ?? [];
+    },
+    async save(annotations: Annotation[]): Promise<void> {
+      return enqueueWrite({ annotations: { [filename]: annotations } });
     },
   };
 }

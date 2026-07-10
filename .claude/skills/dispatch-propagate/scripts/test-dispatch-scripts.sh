@@ -14838,9 +14838,9 @@ else
 fi
 config_teardown
 
-# --- Test 2d: align jit (7d/14d, skill: align) validates -----------------
+# --- Test 2d: align jit (7d/14d, skill: align-init) validates ------------
 
-echo "Test: align jit (7d/14d, skill: align) validates"
+echo "Test: align jit (7d/14d, skill: align-init) validates"
 config_setup
 cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
 {
@@ -14855,7 +14855,7 @@ cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
       "remindAfterClose": "7d",
       "dueAfterClose": "14d",
       "debounce": "1h",
-      "skill": "align"
+      "skill": "align-init"
     }
   ]
 }
@@ -14863,7 +14863,7 @@ EOF
 out=$("$TMPDIR_TEST/scripts/dispatch-config-load" jit 2>/dev/null); rc=$?
 assert_eq "align jit exits 0" "0" "$rc"
 align_skill=$(printf '%s' "$out" | jq -r '.jits[0].skill')
-assert_eq "align jit skill value" "align" "$align_skill"
+assert_eq "align jit skill value" "align-init" "$align_skill"
 align_remind=$(printf '%s' "$out" | jq -r '.jits[0].remindAfterClose')
 assert_eq "align jit remindAfterClose value" "7d" "$align_remind"
 align_due=$(printf '%s' "$out" | jq -r '.jits[0].dueAfterClose')
@@ -21949,7 +21949,7 @@ cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
       "project": "test-project",
       "remindAfterClose": "7d",
       "dueAfterClose": "14d",
-      "skill": "align"
+      "skill": "align-init"
     }
   ]
 }
@@ -22044,7 +22044,7 @@ cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
       "project": "test-project",
       "remindAfterClose": "7d",
       "dueAfterClose": "14d",
-      "skill": "align"
+      "skill": "align-init"
     }
   ]
 }
@@ -22089,7 +22089,7 @@ cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
       "project": "test-project",
       "remindAfterClose": "7d",
       "dueAfterClose": "14d",
-      "skill": "align"
+      "skill": "align-init"
     }
   ]
 }
@@ -22182,7 +22182,7 @@ cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
       "project": "test-project",
       "remindAfterClose": "7d",
       "dueAfterClose": "14d",
-      "skill": "align"
+      "skill": "align-init"
     }
   ]
 }
@@ -22230,7 +22230,7 @@ cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
       "project": "test-project",
       "remindAfterClose": "7d",
       "dueAfterClose": "14d",
-      "skill": "align"
+      "skill": "align-init"
     }
   ]
 }
@@ -22319,7 +22319,7 @@ cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
       "project": "test-project",
       "remindAfterClose": "7d",
       "dueAfterClose": "14d",
-      "skill": "align"
+      "skill": "align-init"
     }
   ]
 }
@@ -28612,6 +28612,23 @@ fi
 echo called >> "$TMPDIR_TEST/logs/select-target.log"
 echo "\${SEL_DEFAULT_TARGET:-empty}"
 FAKE
+  # Fake graph selector (tactic-graph-router-selector). The Step-3a graph-first
+  # query and the at-cap pace-exempt probe are logged separately so a test can
+  # assert which lane ran. Default `empty` keeps every legacy tick test
+  # byte-identical; a test sets SEL_GRAPH_TARGET (node lines for the normal
+  # query) or SEL_GRAPH_PACE_EXEMPT (node lines for the --pace-exempt-only
+  # probe) to drive a graph selection.
+  cat > "$TMPDIR_TEST/graph-select-target" <<FAKE
+#!/usr/bin/env bash
+if [[ " \$* " == *" --pace-exempt-only "* ]]; then
+  echo called >> "$TMPDIR_TEST/logs/graph-select-pace-exempt.log"
+  printf '%s\n' "\${SEL_GRAPH_PACE_EXEMPT:-empty}"
+  exit 0
+fi
+echo "\$*" >> "$TMPDIR_TEST/logs/graph-select.log"
+printf '%s\n' "\${SEL_GRAPH_TARGET:-empty}"
+FAKE
+  chmod +x "$TMPDIR_TEST/graph-select-target"
   # Run-scoped concurrency gate fakes (overridable per test via SEL_* env vars).
   # Arg-aware: --exhausted reports the rate-limit exhaustion floor (SEL_EXHAUSTED,
   # default ok); the no-arg query returns the worker target (SEL_TARGET_N).
@@ -28818,6 +28835,7 @@ sel_tick_teardown() {
     SEL_TARGET_N SEL_LIVE_COUNT SEL_LIVE_COUNT_FAIL \
     SEL_EXHAUSTED SEL_PRIORITY_ONLY \
     SEL_MAX_WORKERS SEL_NPRIO_AVAIL SEL_DEFAULT_TARGET \
+    SEL_GRAPH_TARGET SEL_GRAPH_PACE_EXEMPT \
     DISPATCH_RESERVATION_DIR SEL_AGENTS_TSV SEL_AGENTS_LIST_FAIL \
     DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE SEL_GIT_MERGE_LOG \
     SEL_SESSIONS_UNDER_RC SEL_SESSIONS_UNDER_TSV \
@@ -28877,6 +28895,99 @@ chmod +x "$TMPDIR_TEST/dispatch-select-target"
 out=$(run_sel_tick)
 assert_eq "issue: decision line" "issue 707 1" "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "issue: lock held" "select-tick-session" "$(cat "$DISPATCH_LOCK_FILE")"
+sel_tick_teardown
+
+# --- graph selection → reserved under the node id, lock RELEASED --------------
+# tactic-graph-router-selector: the tick consults the graph selector FIRST; a
+# selection writes one reservation-ledger marker per node under its NODE ID
+# (the durable claim), releases the lock, and emits the `graph` decision. The
+# legacy selector must NOT run (the graph lane consumed this run's budget).
+echo "Test: select-tick graph selection → graph decision, node reserved, lock released, legacy skipped"
+sel_tick_setup
+export SEL_GRAPH_TARGET="node tactic-x tactic implement"
+out=$(run_sel_tick)
+assert_eq "graph: decision line" "graph 1 tactic-x:tactic:implement" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "graph: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "graph: reservation written under the node id" "1" \
+  "$([ -f "$DISPATCH_RESERVATION_DIR/tactic-x" ] && echo 1 || echo 0)"
+assert_eq "graph: reservation issue field is the node id" "issue=tactic-x" \
+  "$(grep '^issue=' "$DISPATCH_RESERVATION_DIR/tactic-x")"
+assert_eq "graph: legacy selector not consulted" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/select-target.log" ] && echo 1 || echo 0)"
+assert_eq "graph: decision log disposition" "graph" \
+  "$(tail -n1 "$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl" | jq -r '.disposition')"
+sel_tick_teardown
+
+# --- graph selection: multi-node set within the gap ---------------------------
+echo "Test: select-tick graph multi-node selection → one decision line, both reserved"
+sel_tick_setup
+export SEL_TARGET_N=3
+export SEL_GRAPH_TARGET=$'node tactic-a tactic review\nnode strategy-s strategy align-tactics'
+out=$(run_sel_tick)
+assert_eq "graph multi: decision line" \
+  "graph 2 tactic-a:tactic:review strategy-s:strategy:align-tactics" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "graph multi: strategy id reserved too" "1" \
+  "$([ -f "$DISPATCH_RESERVATION_DIR/strategy-s" ] && echo 1 || echo 0)"
+sel_tick_teardown
+
+# --- graph empty → fall through to the legacy selector ------------------------
+echo "Test: select-tick graph empty → legacy selector drains"
+sel_tick_setup
+cat > "$TMPDIR_TEST/dispatch-select-target" <<FAKE
+#!/usr/bin/env bash
+echo called >> "$TMPDIR_TEST/logs/select-target.log"
+echo "issue 707"
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-select-target"
+out=$(run_sel_tick)
+assert_eq "graph empty: graph selector consulted first" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-select.log" ] && echo 1 || echo 0)"
+assert_eq "graph empty: legacy decision line" "issue 707 1" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+sel_tick_teardown
+
+# --- at-cap: graph pace-exempt probe admits ONE gate-exempt worker -------------
+# strategy clarification 14: at the worker cap (not exhausted) the graph
+# pace-exempt probe runs BEFORE the legacy --priority-only probe; a hit admits
+# exactly one gate-exempt worker and the legacy probe must not run.
+echo "Test: select-tick at-cap graph pace-exempt probe → graph decision, legacy priority probe skipped"
+sel_tick_setup
+export SEL_TARGET_N=1 SEL_LIVE_COUNT=1
+export SEL_GRAPH_PACE_EXEMPT="node tactic-p tactic implement"
+out=$(run_sel_tick)
+assert_eq "pace-exempt: decision line" "graph 1 tactic-p:tactic:implement" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "pace-exempt: node reserved" "1" \
+  "$([ -f "$DISPATCH_RESERVATION_DIR/tactic-p" ] && echo 1 || echo 0)"
+assert_eq "pace-exempt: legacy priority probe not consulted" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/select-target-priority.log" ] && echo 1 || echo 0)"
+assert_eq "pace-exempt: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+sel_tick_teardown
+
+# --- at-cap: graph probe empty → legacy priority probe still runs --------------
+echo "Test: select-tick at-cap graph probe empty → legacy priority probe runs"
+sel_tick_setup
+export SEL_TARGET_N=1 SEL_LIVE_COUNT=1
+export SEL_PRIORITY_ONLY="issue 611"
+out=$(run_sel_tick)
+assert_eq "at-cap fallback: graph probe consulted" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-select-pace-exempt.log" ] && echo 1 || echo 0)"
+assert_eq "at-cap fallback: legacy priority decision" "issue 611 1" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+sel_tick_teardown
+
+# --- exhausted at cap: neither probe runs (hard floor) -------------------------
+echo "Test: select-tick at-cap exhausted → no graph pace-exempt probe (hard floor)"
+sel_tick_setup
+export SEL_TARGET_N=1 SEL_LIVE_COUNT=1 SEL_EXHAUSTED=exhausted
+export SEL_GRAPH_PACE_EXEMPT="node tactic-p tactic implement"
+out=$(run_sel_tick)
+assert_eq "exhausted: decision line" "concurrency-cap" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "exhausted: graph pace-exempt probe not consulted" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-select-pace-exempt.log" ] && echo 1 || echo 0)"
 sel_tick_teardown
 
 # --- main-broken → passthrough + lock RELEASED (spawned as a bg job) ---------
@@ -42191,6 +42302,87 @@ assert_eq "dispatch-find-owning-pr: missing path exits 2" "2" "$rc"
 out=$("$TMPDIR_TEST/scripts/dispatch-find-owning-pr" notadigit "some/file.ts" 2>/dev/null) && rc=0 || rc=$?
 assert_eq "dispatch-find-owning-pr: non-digit N exits 2" "2" "$rc"
 find_owning_pr_teardown
+
+# ============================================================================
+# Test: graph-select-target — a human-created node-id worktree is a held claim
+# (tactic-align-session-claiming Unit 3)
+# ============================================================================
+# Uniform node-id claiming (strategy clarification 13) must cover worktrees a
+# HUMAN-invoked /align-strategy or /align-tactics session created — sessions
+# that claim by authoring in <root>/.claude/worktrees/<node-id> and never write
+# a router reservation-ledger marker. graph-select-target's claimed-set gate is
+# worktree_has_live_session, name-keyed on the worktree basename, so a live
+# session named <node-id> claims the node no matter who created the worktree.
+# Per the #1474 doctrine, worktree DIRECTORY existence alone is NOT a claim
+# (orphan worktrees fail open) — the live session is; the negative control
+# below pins that (dir present, no session -> selected). The skip<->select
+# delta also rules out a daemon-UNKNOWN fold-to-occupied false pass.
+#
+# graph-select-target reads the store via `git archive origin/main intentions`
+# and derives REPO_ROOT from its own on-disk location, so it needs a real git
+# repo with the script physically copied in (a symlink's pwd would resolve back
+# out of the fixture). select-targets.ts (the pure candidate computation) is
+# stubbed with a fake `npx` on PATH so the fixture exercises ONLY the
+# environmental claimed-set gate this unit covers; the snapshot is irrelevant.
+echo "Test: graph-select-target — live session in a human-created node-id worktree is skipped (Unit 3)"
+GSC_ROOT=$(mktemp -d)
+GSC_BARE=$(mktemp -d)
+GSC_SCRIPTS="$GSC_ROOT/.claude/skills/dispatch-propagate/scripts"
+mkdir -p "$GSC_SCRIPTS" "$GSC_ROOT/bin"
+# Copy the script under test + every sourced lib (lib.sh plus the lib-*.sh
+# helpers). REPO_ROOT is derived from the script's real location, so the copy
+# must be physical.
+cp "$SCRIPT_DIR"/graph-select-target "$SCRIPT_DIR"/lib.sh "$SCRIPT_DIR"/lib-*.sh "$GSC_SCRIPTS/"
+# Fake npx: intercept `npx tsx …/select-targets.ts …` and emit one selectable
+# implement-phase candidate. An implement candidate's sensor_gate returns 0
+# without touching gh, so no further environmental dependency is exercised.
+cat > "$GSC_ROOT/bin/npx" <<'GSCNPX'
+#!/usr/bin/env bash
+echo '{"candidates":[{"id":"tactic-fixture","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false}],"events":[]}'
+exit 0
+GSCNPX
+chmod +x "$GSC_ROOT/bin/npx"
+# A git repo whose origin/main carries an intentions/ tree, main checked out at
+# the fixture root so NATIVE_ROOT resolves there.
+git init -q -b main "$GSC_ROOT"
+git -C "$GSC_ROOT" config user.email t@t
+git -C "$GSC_ROOT" config user.name t
+mkdir -p "$GSC_ROOT/intentions"
+echo '# placeholder' > "$GSC_ROOT/intentions/placeholder.md"
+git -C "$GSC_ROOT" add -A
+git -C "$GSC_ROOT" commit -q -m seed
+git init -q --bare -b main "$GSC_BARE"
+git -C "$GSC_ROOT" remote add origin "$GSC_BARE"
+git -C "$GSC_ROOT" push -q origin main
+git -C "$GSC_ROOT" fetch -q origin
+# The human session's claim: the node-id worktree directory exists.
+mkdir -p "$GSC_ROOT/.claude/worktrees/tactic-fixture"
+# Fake `claude agents --json`: payload driven by a file the two cases rewrite.
+cat > "$GSC_ROOT/bin/claude" <<'GSCCLAUDE'
+#!/usr/bin/env bash
+_root="$(cd "$(dirname "$0")/.." && pwd)"
+cat "$_root/claude-payload.json"
+exit 0
+GSCCLAUDE
+chmod +x "$GSC_ROOT/bin/claude"
+GSC_GST="$GSC_SCRIPTS/graph-select-target"
+# Case 1 — a live session named after the node id owns the worktree -> skipped.
+printf '%s' '[{"sessionId":"s1","pid":1,"status":"busy","name":"tactic-fixture","cwd":""}]' \
+  > "$GSC_ROOT/claude-payload.json"
+gsc_skip=$(PATH="$GSC_ROOT/bin:$SAVED_PATH" \
+  CLAUDE_AGENTS_CMD="$GSC_ROOT/bin/claude" DISPATCH_RESERVATION_DIR="$GSC_ROOT/reservations" \
+  DISPATCH_SELECTION_LOG_DIR="$GSC_ROOT/seldir" "$GSC_GST" 2>/dev/null)
+assert_eq "graph-select-target: live-session-owned human node-id worktree is skipped" "empty" "$gsc_skip"
+# Case 2 (negative control) — same fixture, daemon reports NO sessions ([]).
+# The worktree dir still exists, so this pins that existence alone does not
+# claim: the node IS selected.
+echo "Test: graph-select-target — orphan node-id worktree (no live session) stays selectable (Unit 3 negative control)"
+printf '%s' '[]' > "$GSC_ROOT/claude-payload.json"
+gsc_sel=$(PATH="$GSC_ROOT/bin:$SAVED_PATH" \
+  CLAUDE_AGENTS_CMD="$GSC_ROOT/bin/claude" DISPATCH_RESERVATION_DIR="$GSC_ROOT/reservations" \
+  DISPATCH_SELECTION_LOG_DIR="$GSC_ROOT/seldir" "$GSC_GST" 2>/dev/null)
+assert_eq "graph-select-target: orphan node-id worktree (no session) is selected" "node tactic-fixture tactic implement" "$gsc_sel"
+rm -rf "$GSC_ROOT" "$GSC_BARE"
 
 # ============================================================================
 # summary

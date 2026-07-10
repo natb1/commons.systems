@@ -8,7 +8,9 @@ status: refining
 parent: strategy-promote-progressive-detachment
 rationale: >-
   Two nodes agree the workflow is the most distinctive artifact for practitioner
-  distribution, and strategy-owned-orchestration's built-to-be-left claim is
+  distribution (layered claim canonically on strategy-data-structure-first: the
+  graph is the product, the harness its reference consumer and most distinctive
+  artifact), and strategy-owned-orchestration's built-to-be-left claim is
   validated only by forks and derivatives — yet promote's children contain no
   strategy for anyone actually encountering or adopting the chain. This strategy
   owns that: a standalone practitioner-facing entry point (the chain as a thing
@@ -63,6 +65,18 @@ clarifications:
       strategy-exercise-recovery-paths. All are draft tactics (no phase):
       structurally unselectable by the router until the author declares
       readiness and runs /align-tactics. Recorded 2026-07-06 interview."
+  - question: What keeps the CI node toolchain and the nix dev shell from drifting apart?
+    answer: "Today, nothing — .node-version pins 22.22.3 for CI (chosen to dodge the
+      undici regression that broke Firebase OAuth on 22.23.0) while the nix dev
+      shell floats nodejs_22 on nixos-unstable, and the drift has already
+      produced a real cost: the Playwright browser-version mismatch that blocks
+      local acceptance runs and forces CI to be the only authority. The
+      requirement recorded here: one source of truth for the node toolchain —
+      the dev shell derives from (or asserts equality with) .node-version so CI
+      and local verification cannot silently diverge; a forkable-in-practice
+      workflow includes a dev environment that reproduces what CI runs. Fix
+      drafted at tactic-node-toolchain-single-source. Recorded 2026-07-07
+      interview."
 tooling_goals: []
 success_signal:
   observable: practitioners encountering and forking the workflow — entry-point

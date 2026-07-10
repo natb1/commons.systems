@@ -1,6 +1,6 @@
 # Delegability Evaluation
 
-The delegability evaluation is the core of `/align`'s per-intention loop. For each
+The delegability evaluation is the core of `/align-init`'s per-intention loop. For each
 intention node, it decides where execution can and should be owned along the
 human → AI → procedure continuum: first whether ownership *can* move (feasibility),
 then whether it *should* move (economics). It does not decompose intentions and it
@@ -14,7 +14,7 @@ changing this doc.
 
 ## The two axes
 
-Two axes run through `/align`, and nothing downstream should conflate them.
+Two axes run through `/align-init`, and nothing downstream should conflate them.
 
 - **Decomposition** — intention → sub-intention → goal. Breaking a broad intention
   into narrower pieces until each is concrete enough to act on. This is *not* this

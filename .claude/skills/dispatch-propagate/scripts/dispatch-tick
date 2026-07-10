@@ -99,6 +99,13 @@
 #        pr <num> <branch> <phase> <gap> → N=${branch%%-*}; dispatch-materialize-spawn <N> queue --gap <gap>
 #        issue <num> <gap>               → dispatch-materialize-spawn <num> queue --gap <gap>
 #                            then route the terminal token (step 3).
+#        graph <count> <id:kind:phase>... → dispatch-graph-execute <spec>...
+#                            (tactic-graph-router-selector: the graph lane's
+#                            workflow-native execute path — the legacy launch
+#                            chain stays issue-lane-only). The lock is already
+#                            released; the per-node reservations are the claim.
+#                            On the autonomous path a successful execute arms
+#                            the same convergence reseed as `propagate`.
 #        anything else     → diagnostic to stderr; exit 2.
 #   3. Route the materialize-spawn terminal token (its LAST stdout line). Every
 #      recognized token — `propagate`, `notify <reason>`, `drain <reason>`,
@@ -563,6 +570,37 @@ case "${1:-}" in
       exit 2
     fi
     run_materialize "$num" queue --gap "$gap"
+    ;;
+  graph)
+    # Graph-lane execute (tactic-graph-router-selector): decision shape is
+    # `graph <count> <id:kind:phase>...`. select-tick already wrote the
+    # per-node reservation markers and released the lock, so the execute path
+    # runs lock-free. dispatch-graph-execute resolves per-phase model/effort
+    # and spawns the workflow-native runner per node; its stdout is echoed
+    # through so the journal carries the launch narrative.
+    count="${2:-}"
+    if [[ -z "$count" || $# -lt 3 ]]; then
+      echo "dispatch-tick: graph decision missing <count>/<spec>s" >&2
+      exit 2
+    fi
+    shift 2
+    GRAPH_EXEC_OUT=$("$SCRIPT_DIR/dispatch-graph-execute" "$@")
+    GRAPH_EXEC_RC=$?
+    if [[ -n "$GRAPH_EXEC_OUT" ]]; then
+      printf '%s\n' "$GRAPH_EXEC_OUT"
+    fi
+    if (( GRAPH_EXEC_RC != 0 )); then
+      echo "dispatch-tick: dispatch-graph-execute exited $GRAPH_EXEC_RC" >&2
+      exit 2
+    fi
+    # Mirror the `propagate` arm's convergence safety net (#1453) on the
+    # autonomous path: re-count effective-live and arm a short-delay reseed if
+    # the fleet is still below target. Best-effort — never wedge the tick.
+    if [[ -z "$MANUAL" && -z "$ARG" ]]; then
+      "$SCRIPT_DIR/dispatch-schedule-convergence-reseed" \
+        || echo "dispatch-tick: convergence reseed arm failed (best-effort)" >&2
+    fi
+    exit 0
     ;;
   *)
     echo "dispatch-tick: unrecognized select-tick decision line '$DECISION'" >&2

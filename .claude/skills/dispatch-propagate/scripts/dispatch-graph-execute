@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+# dispatch-graph-execute — execute a graph selection set as thin tick workflows
+# (tactic-graph-router-selector, unit 4; strategy clarifications 24–25). The
+# graph lane's replacement for the legacy launch chain: the legacy scripts
+# (dispatch-materialize-spawn → dispatch-launch-worker) stay issue-lane-only
+# and retire with the drain (tactic-legacy-router-removal).
+#
+# Called by dispatch-tick on a `graph <count> <id:kind:phase>...` decision.
+# For each selected node it:
+#
+#   1. Maps the directive from the PERSISTED phase (phase derivation never
+#      runs for node targets — strategy clarification 1):
+#        strategy            → INVOKE /align-tactics <node-id>
+#        tactic implement    → /implement,  fix → /fix-checks, qa → /qa-fix,
+#               review       → /review-fix, main-qa → /qa-main
+#   2. Resolves the agent's model/effort from the persisted phase via
+#      dispatch-phase-model / dispatch-phase-effort (the audit-written policy
+#      file with its fail-closed demotable allowlist). The phase is already in
+#      hand — no SKILL→PHASE case map to fall through — so the legacy
+#      /qa-main-inherits-Opus routing hole cannot reproduce here.
+#   3. Spawns one runner session named exactly <node-id> (uniform node-id
+#      claiming: the live session name IS the worktree basename, so
+#      worktree_has_live_session and the busy-worker pace count both see it)
+#      whose only job is to invoke the Workflow tool with the
+#      dispatch-graph-tick script — the thin fan-out that launches the node's
+#      agent() with the resolved options. The runner is spawned via
+#      dispatch-spawn-job --no-verify (the budget path: reconciled by the
+#      reservation ledger + sweep).
+#   4. Clears the node's reservation-ledger marker on a successful kick — the
+#      live node-id-named session carries the claim from there (mirrors
+#      dispatch-launch-worker's release-on-resolve). On a failed kick the
+#      marker is LEFT for the sweep, so the budget still counts the slot until
+#      reconciliation.
+#
+# Usage: dispatch-graph-execute <id:kind:phase> [<id:kind:phase> ...]
+#
+# Stdout: one line per node — `launched <id> <skill>` or `failed <id> <reason>`.
+# Exit codes: 0 all nodes launched; 1 at least one node failed to launch;
+# 2 usage/configuration error (including a malformed phase-model policy, which
+# fails loudly rather than mis-routing every node).
+#
+# Requires `dangerouslyDisableSandbox: true` — dispatch-spawn-job queries the
+# local Claude daemon and spawns `claude --bg`.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/lib-reservation-ledger.sh"
+
+if [[ $# -lt 1 ]]; then
+  echo "usage: dispatch-graph-execute <id:kind:phase> [<id:kind:phase> ...]" >&2
+  exit 2
+fi
+
+# Project root = the worktree with `main` checked out (substrate clarification
+# 23). DISPATCH_GRAPH_MAIN_WORKTREE is the test override, authoritative.
+if [[ -n "${DISPATCH_GRAPH_MAIN_WORKTREE:-}" ]]; then
+  PROJECT_ROOT="$DISPATCH_GRAPH_MAIN_WORKTREE"
+else
+  PROJECT_ROOT=$(git worktree list --porcelain 2>/dev/null \
+    | awk '/^worktree /{wt=substr($0,10)} /^branch refs\/heads\/main$/{if(!f){print wt; f=1}}')
+fi
+if [[ -z "$PROJECT_ROOT" || ! -d "$PROJECT_ROOT" ]]; then
+  echo "dispatch-graph-execute: cannot resolve the project root (no worktree with 'main' checked out)" >&2
+  exit 2
+fi
+
+FAILURES=0
+
+for spec in "$@"; do
+  IFS=: read -r id kind phase <<<"$spec"
+  if [[ -z "$id" || -z "$kind" || -z "$phase" ]]; then
+    echo "failed $spec malformed-spec"
+    FAILURES=$(( FAILURES + 1 ))
+    continue
+  fi
+
+  # Directive mapping from the persisted phase (never re-derived).
+  case "$kind:$phase" in
+    strategy:*)          SKILL="/align-tactics"; MODEL_PHASE="align-tactics" ;;
+    tactic:implement)    SKILL="/implement";     MODEL_PHASE="implement" ;;
+    tactic:fix)          SKILL="/fix-checks";    MODEL_PHASE="fix-checks" ;;
+    tactic:qa)           SKILL="/qa-fix";        MODEL_PHASE="qa" ;;
+    tactic:review)       SKILL="/review-fix";    MODEL_PHASE="review" ;;
+    tactic:main-qa)      SKILL="/qa-main";       MODEL_PHASE="main-qa" ;;
+    *)
+      # An unmapped kind/phase is a selection-side defect; leave the
+      # reservation for the sweep and surface it.
+      echo "failed $id unmapped-kind-phase:$kind:$phase"
+      FAILURES=$(( FAILURES + 1 ))
+      continue
+      ;;
+  esac
+
+  # Per-phase compute. dispatch-phase-model exit 1 = a malformed policy file —
+  # a configuration error that would mis-route EVERY node: fail loudly.
+  if ! MODEL=$("$SCRIPT_DIR/dispatch-phase-model" "$MODEL_PHASE"); then
+    echo "dispatch-graph-execute: dispatch-phase-model failed for phase '$MODEL_PHASE' (malformed policy?)" >&2
+    exit 2
+  fi
+  EFFORT=$("$SCRIPT_DIR/dispatch-phase-effort" "$MODEL_PHASE") || EFFORT=""
+
+  ARGS_JSON=$(jq -c -n \
+    --arg node_id "$id" \
+    --arg kind "$kind" \
+    --arg phase "$phase" \
+    --arg skill "$SKILL" \
+    --arg model "$MODEL" \
+    --arg effort "$EFFORT" \
+    --arg project_root "$PROJECT_ROOT" \
+    '{selections: [{node_id: $node_id, kind: $kind, phase: $phase, skill: $skill,
+        model: $model, effort: $effort}],
+      project_root: $project_root, worker_cap: 1}') \
+    || { echo "failed $id args-json"; FAILURES=$(( FAILURES + 1 )); continue; }
+
+  PROMPT="You are a graph-lane dispatch runner for node ${id}. Invoke the Workflow tool with the workflow script named dispatch-graph-tick and pass it exactly these args (as a JSON object): ${ARGS_JSON}
+When the workflow returns, print its result summary and stop. Do NOT perform the phase work yourself, do not edit files, and do not invoke any other skill — the workflow's agent owns the work."
+
+  # Spawn the runner named exactly <node-id> under the project root. --model /
+  # --effort route the RUNNER; the workflow's agent() re-applies them from the
+  # args, so both the plumbing session and the working agent follow the policy.
+  SPAWN_ARGS=(--no-verify --name "$id" --cwd "$PROJECT_ROOT")
+  [[ -n "$MODEL" ]] && SPAWN_ARGS+=(--model "$MODEL")
+  [[ -n "$EFFORT" ]] && SPAWN_ARGS+=(--effort "$EFFORT")
+  if "$SCRIPT_DIR/dispatch-spawn-job" "${SPAWN_ARGS[@]}" "$PROMPT" 1>&2; then
+    # The live node-id-named session carries the claim now; release the marker
+    # (mirrors dispatch-launch-worker's release-on-resolve). Best-effort.
+    reservation_clear "$id" || true
+    echo "launched $id $SKILL"
+  else
+    # Leave the reservation for the sweep — the budget keeps counting the slot
+    # until the ledger reconciles, and the next tick may retry the node.
+    echo "failed $id spawn-failed"
+    FAILURES=$(( FAILURES + 1 ))
+  fi
+done
+
+(( FAILURES == 0 )) && exit 0 || exit 1
