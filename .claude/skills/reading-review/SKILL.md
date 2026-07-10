@@ -78,8 +78,10 @@ proceed on recollection.
 
 ## Session flow
 
-1. **Read the chunk node body.** Its `## Text`, `## Questions to re-open
-   against the text`, and `## Completion` sections are the session script.
+1. **Read the chunk node body.** Its `## Text`, agenda section (`##
+   Questions to re-open against the text` for a verify chunk, `## Questions
+   to establish relevance` for a candidate chunk), and `## Completion`
+   sections are the session script.
 2. **Surface the text citation and the questions** — the citation so the
    author has the passage in view, the questions as the agenda. Do not
    summarize the reading (periagoge).
