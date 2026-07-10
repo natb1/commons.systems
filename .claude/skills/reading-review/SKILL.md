@@ -1,6 +1,6 @@
 ---
 name: reading-review
-description: Office-hours skill that runs one tradition-reading curriculum chunk's demonstration — the author demonstrates understanding of the tradition and its application to the deferral against the primary text, the graph is amended where the reading contradicts it or ratified where it holds, and the chunk node is resolved (phase → done), which triggers /sync-reader's retirement of the chunk's excerpt from the e-reader. Interactive and unbounded; the inverse of /align-tactics' autonomy contract. Never files a GitHub issue.
+description: Office-hours skill that runs one tradition-reading curriculum chunk's demonstration — the author demonstrates understanding of the tradition and its application to the deferral against the primary text, the graph is amended where the reading contradicts it or ratified where it holds — or, for a candidate chunk with no record yet, the session resolves to a new tradition record, grounding marks, or a dismissal clarification — and the chunk node is resolved (phase → done), which triggers /sync-reader's retirement of the chunk's excerpt from the e-reader. Interactive and unbounded; the inverse of /align-tactics' autonomy contract. Never files a GitHub issue.
 user-invocable: true
 ---
 
@@ -54,6 +54,19 @@ On-demand only, human-invoked: `/reading-review [chunk-node-id]`.
   (`packages/intentionsutil/src/store.ts:124`) or by reading the files
   directly — the frontmatter is authoritative. If no unresolved chunk exists,
   say so and stop.
+
+Chunks come in two kinds, distinguished by
+`attributes.curriculum.candidate`. Selection (above) is identical for both —
+lowest-priority unresolved chunk — but the resolution differs:
+
+- **Verify chunks** (1–9, no `candidate` flag) check an *existing* tradition
+  record against its cited texts — amend-or-ratify, per the Recording rules
+  below. Their agenda section is `## Questions to re-open against the text`.
+- **Candidate chunks** (`attributes.curriculum.candidate: true`, chunks 10+)
+  have **no record yet**; their agenda section is `## Questions to establish
+  relevance`. The session establishes relevance and the author's
+  understanding, then resolves per **## Candidate chunks** below. Everything
+  else in the session frame is shared.
 
 ## Precondition — confirm the sitting happened
 
@@ -118,6 +131,12 @@ Record every edit through
 `npx tsx packages/intentionsutil/scripts/write-node.ts --file <json>` on a
 `readNode`-dumped, `jq`-patched JSON. Never hand-edit YAML frontmatter.
 
+The write-node gate, the provenance-sentence format, the delegation audit
+trail, the persistence check, the chunk resolution, and the landing below are
+shared by both chunk kinds. The amend-or-ratify resolution, record
+codification, and chunk-6 capstone are the **verify-chunk** path; candidate
+chunks resolve per **## Candidate chunks** instead.
+
 - **The reading wins.** Amend the tradition record where the reading
   contradicts it, cascading to any virtue/strategy clarification that leaned
   on the misarticulation; ratify where it holds. Every resolution lands as a
@@ -150,6 +169,68 @@ Record every edit through
 - **Chunk-6 capstone.** If chunks 1–6 are all `done` after this session,
   revisit the apex question on both root virtues and record the outcome as a
   dated clarification on each.
+
+## Candidate chunks
+
+A candidate chunk (`attributes.curriculum.candidate: true`, e.g.
+`intentions/tactic-reading-chunk-10-hirschman-exit-voice.md`) has no
+tradition record behind it yet. The whole session frame above applies
+unchanged — precondition check, periagoge, the demonstration dialectic (the
+author articulates before any account of Claude's), verdict refinement loop,
+session bounds, cross-chunk boundary rule, notes-for-later exit, the
+write-node recording gate, one-graph-commit landing, and the prohibitions.
+Only the resolution differs: rather than amend-or-ratify an existing record,
+the dialectic first establishes relevance and the author's understanding —
+the body's `## Questions to establish relevance` is the agenda — then resolves
+to **exactly one** primary outcome.
+
+### Resolution — exactly one primary outcome
+
+- **(a) adopt / diverge — create a record.** The reading is relevant and the
+  author is deferred to it (or already was): create a new `tradition-*`
+  record via `write-node` with `adopted` / `diverged` / `chosen_over` entries
+  each carrying its graph locus (field shapes: `intentions/kind-tradition.md`
+  `attributes.fields`; precedent records: `intentions/tradition-*.md`),
+  `origin` per the interview (`chosen | inherited | declined`), and
+  `status: codified` — the examining session *is* the author's personal
+  verification, so a record born here is codified, not delegated
+  (`kind-tradition`'s status clarification). Outcome (a) normally also stamps
+  `attributes.traditions` on the chunk's target nodes, pointing at the new
+  record, in the same bundle. A `declined`-origin record (deliberately refused
+  doctrine, the `tradition-stoicism` shape) is outcome (a), not a dismissal:
+  the doctrine was examined and its refusal is worth keeping auditable.
+- **(b) marks only — no record.** The reading resolves the target nodes
+  without a standing attachment worth recording: apply `attributes.grounding`
+  / `attributes.traditions` updates to those nodes as the interview resolves
+  them, and write no new record.
+- **(c) dismissal — no record.** The candidate is examined and judged
+  irrelevant: write a dated `clarifications` entry on
+  `strategy-complete-grounding` naming the candidate and why it was dismissed.
+  Write **no** tradition record — `declined` records stay reserved for refused
+  doctrine, not irrelevance (`strategy-complete-grounding`'s "What records a
+  candidate examined at office-hours and judged irrelevant?" clarification).
+
+### Either outcome — shared closing steps
+
+Whichever of (a)/(b)/(c) the session lands, bundled into the session's single
+`graph-commit`:
+
+- Stamp `attributes.irreversibility.last_exercised` on
+  `intentions/delegation-philosophical-articulation.md` — this session
+  exercised the recovery loop. A delegatee misarticulation caught during the
+  dialectic — of the tradition or of the author's own position alike — also
+  lands as a dated entry in that delegation's `divergence.contradictions`, the
+  reading-wins audit-trail rule above.
+- Every record and clarification carries its dated provenance sentence, and
+  the resolution passes the persistence check (Recording rules) before the
+  chunk resolves: the confirmed understanding must live on a durable node —
+  the new record, the target nodes' marks, or the strategy clarification —
+  never solely on the chunk, which is pruned once done.
+- Set the chunk node `phase: "done"` — the resolution `/sync-reader` keys
+  excerpt retirement on.
+- Bundle every touched node — the chunk, any new record, the marked target
+  nodes, the delegation, the strategy, and any cascaded or born-parked node —
+  into the single `graph-commit` (Landing).
 
 ## Landing
 
@@ -191,4 +272,14 @@ Prose only — a SKILL.md is model instructions with no automated test surface.
   three questions, produces valid patched JSON that
   `npx tsx packages/intentionsutil/scripts/validate-graph.ts` accepts, and
   plans exactly one graph-commit bundle.
+- Dry-run the candidate branch against
+  `tactic-reading-chunk-10-hirschman-exit-voice` without landing (stop before
+  `graph-commit`): confirm the branch detects `candidate: true`, surfaces its
+  `## Questions to establish relevance`, offers the three resolutions (a
+  record / marks only / dismissal) with the author's articulation preceding
+  any account of Claude's, and for outcome (a) produces JSON that
+  `npx tsx packages/intentionsutil/scripts/validate-graph.ts` accepts (a
+  `tradition-hirschman` record plus `attributes.traditions` stamps), with the
+  delegation stamp and the chunk resolution in the same bundle. Confirm the
+  verify-chunk flow is unchanged by the edit.
 - Confirm no `gh` invocation appears anywhere in the flow.
