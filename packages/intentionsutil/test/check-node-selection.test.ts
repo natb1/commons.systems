@@ -95,7 +95,7 @@ describe("evaluateSelection", () => {
         id: "tactic-p",
         kind: "tactic",
         phase: "implement",
-        office_hours: { reason: "author park", since: "2026-07-07" },
+        office_hours: { reason: "author park", since: "2026-07-07", recommendation: null },
       }),
     );
     const r = evaluateSelection({ nodeId: "tactic-p", selectedPhase: "implement", dir, stamp: null });
