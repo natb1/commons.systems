@@ -109,7 +109,7 @@ export function createImageArchiveRenderer(onError?: (err: unknown) => void): Co
     const centerIndex = centerPage - 1;
     for (let i = 0; i < pages.length; i++) {
       if (Math.abs(i - centerIndex) <= OBJECT_URL_WINDOW) continue;
-      const slot = pages[i]!;
+      const slot = pages[i]!; // type-safety-ok: i iterates 0..pages.length-1 so the slot exists (mirrors getObjectUrl)
       if (slot.resolvedUrl) {
         URL.revokeObjectURL(slot.resolvedUrl);
         slot.resolvedUrl = null;

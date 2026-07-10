@@ -13,7 +13,7 @@ function mimeTypeFromPath(path: string): string {
   if (!(AUDIO_FORMATS as readonly string[]).includes(ext)) {
     throw new Error(`Unsupported audio format '${ext}' in path '${path}'`);
   }
-  return AUDIO_MIME_TYPES[ext as AudioFormat];
+  return AUDIO_MIME_TYPES[ext as AudioFormat]; // type-safety-ok: the AUDIO_FORMATS.includes guard above narrows ext to an AudioFormat
 }
 
 export async function getMediaDownloadUrl(storagePath: string): Promise<string> {
