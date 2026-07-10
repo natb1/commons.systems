@@ -48,8 +48,7 @@ gap: reading "firebase is production-active across the repo (hosting for six
   office-hours/print/audio dual-source); no demo app exists (code audit,
   2026-07-07)" does not meet threshold "the demo app is deployed and green in
   CI, and zero firebase-importing modules are unreachable from a live consumer"
-serves:
-  - virtue-alignment-of-attachments
+serves: []
 recovers:
   - delegation-firebase
 clarifications:

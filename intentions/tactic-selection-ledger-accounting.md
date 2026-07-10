@@ -29,8 +29,7 @@ attention: null
 phase: implement
 execution: null
 validates: []
-blocked_by:
-  - tactic-graph-router-selector
+blocked_by: []
 office_hours:
   reason: "Tactic overtaken by its blocker's merged implementation; the 2026-07-06
     /align-tactics premise is now VOID. That premise -- neither the

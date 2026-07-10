@@ -129,3 +129,31 @@ above and serve `strategy-complete-grounding`, not this node's own strategy.
 | 21 | `tactic-reading-chunk-15-ostrom-commons-gift` | Governing the Commons ch. 3; Mauss, The Gift intro, ch. 1 | tradition-ostrom (+ Mauss divergence) |
 | 22 | `tactic-reading-chunk-16-buddhism-nonattachment` | MN 22 (raft simile); SN 56.11 | tradition-buddhism (expected declined) |
 | 23 | `tactic-reading-chunk-17-confucian-household` | Great Learning; Analects 1–2 | tradition-confucianism |
+
+## Shared chunk office-hours reason (the single home)
+
+Every chunk node is born-parked; each carried a near-identical
+`office_hours.reason` paragraph. That reason is stated once here — each chunk's
+own reason is now a one-line pointer to this section plus the chunk's unique
+payload (its text, the record(s) it tests, and any node-specific deferral,
+cascade, capstone, or conduct note). Two variants:
+
+- **verify-record** (the tradition already exists): Personal reading, one
+  sitting of at most 30 author-minutes (the review session may span sittings).
+  Not claude-executable — the chunk exists to verify the delegated articulation
+  personally (the recovery path of `delegation-philosophical-articulation`). At
+  office-hours: re-open the node body's questions against the text; amend the
+  named record(s) where the reading contradicts them (the reading wins), ratify
+  where they hold; stamp the delegation's `last_exercised`; the completed chunk
+  counts toward `strategy-philosophical-grounding`'s signal.
+- **candidate-tradition** (chunks 10–17, no record yet): Candidate-tradition
+  reading, one sitting of at most 30 author-minutes. Not claude-executable — the
+  chunk exists to establish relevance and author understanding personally before
+  any tradition record exists. At office-hours: read the passages, work the node
+  body's relevance questions, then create the tradition record
+  (adopted/diverged/declined) or record a dismissal clarification on
+  `strategy-complete-grounding`; stamp `last_exercised` on
+  `delegation-philosophical-articulation`.
+
+Where a chunk names **type-b conduct**, the author articulates from the text
+before Claude's account appears; that note stays on the chunk.

@@ -30,8 +30,13 @@ attention:
     lands, the router must manually override rank-0 ordering each tick. Raised
     by the router (bootstrap tick 2026-07-10) so it surfaces without manual
     override."
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-attention-critical-path-propagation
+  pr: 2809
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
 validates: []
 blocked_by: []
 office_hours: null
