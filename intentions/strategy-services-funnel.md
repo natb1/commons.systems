@@ -33,8 +33,7 @@ rationale: >-
   condition.
 reading: null
 gap: null
-serves:
-  - virtue-alignment-of-attachments
+serves: []
 recovers:
   - delegation-client-income
 clarifications:
@@ -85,6 +84,7 @@ office_hours:
     tactic-about-services-funnel-copy carries the interview's lane mapping for
     that pass)."
   since: 2026-07-06
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes:

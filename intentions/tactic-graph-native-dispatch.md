@@ -555,6 +555,17 @@ drops. (Behavior inventory anchors: `.claude/skills/file-issue/SKILL.md`,
 
 ## 5. Subtree (round 1, recorded 2026-07-03; re-evaluated same day)
 
+**Current state (2026-07-10, self-consistency sweep):** ten of the fifteen
+round-1 children have completed and been pruned from the graph; five remain
+open, all `phase: implement` — `tactic-graph-router-transitions`,
+`tactic-phase-skill-node-targets`, `tactic-main-qa-phase`,
+`tactic-dispatch-lifecycle-sensor` (validates-terminal), and
+`tactic-legacy-router-removal` (validates-terminal). The count and diagram
+below are the historical round-1 decomposition, kept for the dependency order
+they record; pruned nodes they name (the align-skill tactics, the schema,
+graph-commit, router-selector, calculated-attention, the two hardening
+children, branch-protection) no longer exist as graph files.
+
 Fifteen children: the eleven round-1 nodes below, each a leaf = one PR
 unless noted, plus two clarification-19 deferral children finalized
 2026-07-04 (`tactic-graph-commit-hardening`,

@@ -36,7 +36,25 @@ reading: null
 gap: null
 serves: []
 recovers: []
-clarifications: []
+clarifications:
+  - question: What must a new root record about its placement?
+    answer: "A rooting argument: every root states, in its rationale, why it is not
+      a child of its nearest existing sibling. No root is exempt — there is no
+      ranking among roots. This captures the discipline the retired kinship
+      field was accidentally providing (kinship retired 2026-07-09: it had no
+      mechanical consumer, its definition matched only one of its uses, and its
+      substance already lived in rationale prose). Where two roots share a
+      deeper commitment — virtue-philosophical-mobility and
+      virtue-respect-for-persons' 'two faces of one commitment' — that insight
+      lives as prose at one auditable home (virtue-respect-for-persons'
+      rationale); a second such pair emerging is the trigger to design structure
+      for it, and the apex question stays open on virtue-philosophical-mobility.
+      Recorded 2026-07-09 interview."
+  - question: What does a virtue node's markdown body carry?
+    answer: The extended articulation of the disposition — exposition beyond the
+      rationale's argument, per kind-kind's body-function rule (the body is
+      authoritative for its declared function, never a shadow of frontmatter).
+      Recorded 2026-07-09 interview.
 tooling_goals: []
 success_signal: null
 attention: null
@@ -54,8 +72,6 @@ attributes:
       irreversibility), when it governs one"
     - "delegable: never — set on the non-delegable core; see
       virtue-philosophical-mobility"
-    - "kinship: a sibling root this virtue shares a common commitment with,
-      where neither derives from the other"
     - "calibration: how the virtue's own judgment is checked from outside itself"
     - "traditions: ids of tradition records (kind-tradition) that inform this
       virtue; the alignment/divergence detail lives on the tradition record, not

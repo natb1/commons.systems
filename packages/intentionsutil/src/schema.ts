@@ -338,6 +338,7 @@ export interface Execution {
 export interface OfficeHours {
   reason: string;
   since: string;
+  recommendation: string | null;
 }
 
 /** `/align-tactics` re-evaluation round accounting; valid on strategies only. */
@@ -405,6 +406,7 @@ function validateOfficeHours(value: unknown, field: string): OfficeHours {
   return {
     reason: requireString(value.reason, `${field}.reason`),
     since: requireDateString(value.since, `${field}.since`),
+    recommendation: optionalString(value.recommendation, `${field}.recommendation`),
   };
 }
 

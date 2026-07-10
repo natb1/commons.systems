@@ -48,9 +48,11 @@ clarifications:
     answer: "Mobility can only ground temperance instrumentally (the body as
       recovery substrate, discernment running on sleep), and the graph already
       refused exactly that move for respect-for-persons: a virtue held as an end
-      is not derived from another without remainder. The kinship edge records
-      the genuine dependency; the null parent records that health is not held
-      for mobility's sake. Recorded 2026-07-04 interview."
+      is not derived from another without remainder. The rationale's rooting
+      argument records the genuine dependency (the kinship field was retired
+      2026-07-09 — kind-virtue's rooting-argument requirement is its successor);
+      the null parent records that health is not held for mobility's sake.
+      Recorded 2026-07-04 interview."
 tooling_goals: []
 success_signal: null
 attention: null
@@ -62,7 +64,6 @@ office_hours: null
 pace_exempt: false
 rounds: null
 attributes:
-  kinship: virtue-philosophical-mobility
   calibration: external — physicals and bloodwork, a training partner, the
     household; a self-audited 'I feel fine' is the same failure mode as a
     self-audited 'I am not captured'

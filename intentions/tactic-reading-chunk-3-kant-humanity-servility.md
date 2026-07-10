@@ -31,21 +31,16 @@ validates:
   - strategy-philosophical-grounding
 blocked_by: []
 office_hours:
-  reason: "Personal reading, one sitting of at most 30 author-minutes: read
-    Groundwork 4:429 and Metaphysics of Morals 6:434–437 against tradition-kant.
-    Not claude-executable — the chunk exists to verify the delegated
-    articulation personally (the recovery path of
-    delegation-philosophical-articulation). At office-hours: re-open the
-    questions in the node body against the texts; amend the record where the
-    reading contradicts it (the reading wins), ratify where it holds; stamp the
-    delegation's last_exercised; the completed chunk counts toward
-    strategy-philosophical-grounding's signal."
+  reason: "See tactic-tradition-reading-program → shared chunk office-hours reason
+    (verify-record). This chunk: Groundwork 4:429 and Metaphysics of Morals
+    6:434–437 against tradition-kant."
   since: 2026-07-06
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes:
   curriculum:
-    priority: 4
+    priority: 7
     passages:
       - work: Kant, Groundwork of the Metaphysics of Morals
         range: 4:429

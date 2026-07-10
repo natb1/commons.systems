@@ -26,6 +26,18 @@
 #      attempts and exits with the busy-main error
 #   8. id validation: `v1..v2-migration` lands end-to-end; `/`, `\`, and the
 #      exact ids `.` / `..` are rejected with exit 2
+#   9. --prune: an ordinary edit id and a prune id land in ONE commit
+#  10. --prune guard: a prune id whose file is still present on disk is
+#      rejected (no commit lands)
+#  11. --base fresh: a --base entry matching origin/main's current blob lands
+#  12. --base stale: a --base entry pointing at a blob origin/main no longer
+#      has is refused (no commit lands, no rebase-retry burned)
+#  13. --prune alone (no positional id, IDS empty): a pure deletion lands on
+#      main and the scratch branch is cleaned up — this is the owed-prune
+#      backlog's actual shape (a done node with no accompanying edit), not
+#      exercised by case 9's mixed edit+prune
+#  14. --base manifest-file form: a file of <id>=<blobsha> lines (as opposed
+#      to the inline form used by cases 11-12) lands
 #
 # No network and no real gh/node needed; requires only bash + git.
 
@@ -71,14 +83,15 @@ seed_node() { # <id> — 12 numbered lines so distant edits rebase cleanly
     for i in $(seq 1 12); do echo "line$i: base"; done
   } >"$SEED/intentions/$1.md"
 }
-for id in t-happy t-merge t-conflict t-ckfail t-ghfail t-pending v1..v2-migration; do
+for id in t-happy t-merge t-conflict t-ckfail t-ghfail t-pending v1..v2-migration \
+          t-prune-edit t-prune t-prune-guard t-prune-solo t-base t-base-manifest; do
   seed_node "$id"
 done
 git -C "$SEED" add -A
 git -C "$SEED" commit -qm seed
 git -C "$SEED" push -q origin main
 
-# --- Two independent writer clones -------------------------------------------
+# --- Independent writer clones -------------------------------------------
 make_clone() { # <dst> <identity>
   git clone -q "$ORIGIN" "$1"
   git -C "$1" config user.email "$2@test"
@@ -279,6 +292,145 @@ for bad in 'a/b' 'a\b' '.' '..'; do
     no "id '$bad' expected exit 2, got $rc"
   fi
 done
+
+# ---------------------------------------------------------------------------
+# Cases 9-10: --prune
+# ---------------------------------------------------------------------------
+set_mode green
+
+# Case 9: an ordinary edit id and a prune id land in ONE commit.
+W1="$WORK/w1"
+make_clone "$W1" writer-1
+echo "line13: edited" >>"$W1/intentions/t-prune-edit.md"
+rm -f "$W1/intentions/t-prune.md"
+if out="$(run_gc "$W1" -m 'test: prune + edit' t-prune-edit --prune t-prune 2>&1)"; then
+  landed_edit="$(origin_show t-prune-edit 2>/dev/null | grep -c 'line13: edited')"
+  pruned_gone=1
+  git -C "$ORIGIN" cat-file -e main:intentions/t-prune.md 2>/dev/null && pruned_gone=0
+  if [[ "$landed_edit" -eq 1 && "$pruned_gone" -eq 1 ]]; then
+    ok "prune: edit + prune land together, deletion visible on main"
+  else
+    no "prune: edit=$landed_edit pruned_gone=$pruned_gone"; printf '%s\n' "$out"
+  fi
+  # The edit and the deletion must be the SAME commit, not two commits.
+  changed_paths="$(git -C "$ORIGIN" show --name-only --format= main | sort | tr '\n' ' ')"
+  if [[ "$changed_paths" == *"intentions/t-prune-edit.md"* && "$changed_paths" == *"intentions/t-prune.md"* ]]; then
+    ok "prune: edit + prune land in the SAME commit"
+  else
+    no "prune: expected one commit touching both paths, got: $changed_paths"
+  fi
+else
+  no "prune: expected exit 0, got $? (see below)"; printf '%s\n' "$out"
+fi
+
+# Case 10: a prune id whose file is still present on disk is rejected.
+W2="$WORK/w2"
+make_clone "$W2" writer-2
+before_sha="$(origin_sha)"
+if out="$(run_gc "$W2" --prune t-prune-guard 2>&1)"; then
+  no "prune guard: expected rejection when file still present on disk, got exit 0"
+else
+  after_sha="$(origin_sha)"
+  if grep -q "still exists on disk" <<<"$out" && [[ "$before_sha" == "$after_sha" ]]; then
+    ok "prune guard: rejects a prune id still present on disk, no commit landed"
+  else
+    no "prune guard: rejected but wrong error or main moved"; printf '%s\n' "$out"
+  fi
+fi
+
+# Case 13: --prune alone (no positional id) — a pure deletion-only commit.
+# This is the owed-prune backlog's actual shape (a `phase: done` node with no
+# accompanying edit), distinct from case 9's mixed edit+prune: IDS is empty
+# here, so ALL_IDS[0] resolves entirely from PRUNE_IDS, exercising the
+# scratch-branch ref-name path and id_files_dirty()/commit_files() with no
+# ordinary ids at all.
+W5="$WORK/w5"
+make_clone "$W5" writer-5
+rm -f "$W5/intentions/t-prune-solo.md"
+if out="$(run_gc "$W5" -m 'test: pure prune' --prune t-prune-solo 2>&1)"; then
+  pruned_gone=1
+  git -C "$ORIGIN" cat-file -e main:intentions/t-prune-solo.md 2>/dev/null && pruned_gone=0
+  if [[ "$pruned_gone" -eq 1 ]]; then
+    ok "pure prune: a --prune-only invocation (no positional id) lands the deletion on main"
+  else
+    no "pure prune: deletion did not land"; printf '%s\n' "$out"
+  fi
+else
+  no "pure prune: expected exit 0, got $? (see below)"; printf '%s\n' "$out"
+fi
+if [[ -z "$(scratch_refs)" ]]; then
+  ok "pure prune: scratch branch cleaned up after landing"
+else
+  no "pure prune: leftover scratch branch: $(scratch_refs)"
+fi
+
+# ---------------------------------------------------------------------------
+# Cases 11-12: --base compare-and-swap
+# ---------------------------------------------------------------------------
+
+# Case 11: --base fresh — a blob matching origin/main's current content lands.
+W3="$WORK/w3"
+make_clone "$W3" writer-3
+fresh_sha="$(git -C "$W3" hash-object intentions/t-base.md)"
+echo "line13: writer3 edit" >>"$W3/intentions/t-base.md"
+if out="$(run_gc "$W3" -m 'test: base fresh' --base "t-base=$fresh_sha" t-base 2>&1)"; then
+  landed="$(origin_show t-base 2>/dev/null | grep -c 'line13: writer3 edit')"
+  if [[ "$landed" -eq 1 ]]; then
+    ok "base fresh: a --base matching origin/main's blob lands"
+  else
+    no "base fresh: landed but content missing"; printf '%s\n' "$out"
+  fi
+else
+  no "base fresh: expected exit 0, got $? (see below)"; printf '%s\n' "$out"
+fi
+
+# Case 12: --base stale — a blob origin/main no longer has is refused.
+W4="$WORK/w4"
+make_clone "$W4" writer-4
+stale_sha="$(git -C "$W4" hash-object intentions/t-base.md)"
+before_sha="$(origin_sha)"
+
+# Simulate a concurrent writer landing an unrelated change to the SAME node
+# on origin/main, bypassing graph-commit (representing "another session
+# already committed" for fast test setup — the mechanism under test is the
+# blob comparison, not how the concurrent write itself lands).
+OTHER="$WORK/other"
+make_clone "$OTHER" other
+echo "line14: concurrent edit" >>"$OTHER/intentions/t-base.md"
+git -C "$OTHER" commit -qam 'concurrent edit'
+git -C "$OTHER" push -q origin main
+
+echo "line13: writer4 edit (based on a stale read)" >>"$W4/intentions/t-base.md"
+if out="$(run_gc "$W4" -m 'test: base stale' --base "t-base=$stale_sha" t-base 2>&1)"; then
+  no "base stale: expected refusal, got exit 0"
+else
+  after_sha="$(origin_sha)"
+  concurrent_sha="$(git -C "$OTHER" rev-parse HEAD)"
+  if grep -q "stale base" <<<"$out" && [[ "$after_sha" == "$concurrent_sha" ]]; then
+    ok "base stale: refuses a --base whose blob no longer matches origin/main, writer4 content NOT landed"
+  else
+    no "base stale: refused but wrong error or main moved unexpectedly"; printf '%s\n' "$out"
+  fi
+fi
+
+# Case 14: --base manifest-file form — a file of <id>=<blobsha> lines (as
+# opposed to cases 11-12's inline <id>=<blobsha> argument).
+W6="$WORK/w6"
+make_clone "$W6" writer-6
+manifest_sha="$(git -C "$W6" hash-object intentions/t-base-manifest.md)"
+manifest_file="$WORK/base-manifest.txt"
+printf 't-base-manifest=%s\n' "$manifest_sha" >"$manifest_file"
+echo "line13: writer6 edit" >>"$W6/intentions/t-base-manifest.md"
+if out="$(run_gc "$W6" -m 'test: base manifest' --base "$manifest_file" t-base-manifest 2>&1)"; then
+  landed="$(origin_show t-base-manifest 2>/dev/null | grep -c 'line13: writer6 edit')"
+  if [[ "$landed" -eq 1 ]]; then
+    ok "base manifest-file form: a fresh entry read from a manifest file lands"
+  else
+    no "base manifest-file form: landed but content missing"; printf '%s\n' "$out"
+  fi
+else
+  no "base manifest-file form: expected exit 0, got $? (see below)"; printf '%s\n' "$out"
+fi
 
 # --- No scratch branches left behind anywhere ------------------------------------
 if [[ -z "$(scratch_refs)" ]]; then

@@ -23,8 +23,16 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: done
+execution:
+  branch: tactic-print-annotations
+  pr: 2806
+  attempts: {}
+  markers:
+    - planned
+    - qa-passed
+    - reviewed
+  strategy_fingerprint: null
 validates:
   - strategy-recover-knowledge
 blocked_by: []
@@ -187,3 +195,53 @@ the annotation as readable JSON; confirm a search on the same page does not
 destroy the annotation highlight. Signed-out non-folder item: the annotation
 persists across reload via localStorage, and no Firestore write occurs
 (network tab).
+
+## Implement-phase residue (2026-07-10)
+
+All three units are implemented on branch `tactic-print-annotations` (PR #2806,
+draft). Units 1-2 landed in prior sessions (commits `a1ab0c8a`, `a2d712e0`);
+Unit 3 (viewer UI: `useAnnotations` hook, `AnnotationCapture` floating control,
+`AnnotationsPanel`, `pickAnnotationsStore` wiring) landed this session (commit
+`70954de5`). The node's own `## Verification` is GREEN: full print vitest suite
+(637 passed, 1 skipped) and `tsc --noEmit --project print` (0 errors).
+
+Transitioned implement -> fix on RED CI. The `type-safety-sensor` check fails:
+63 net-new type-safety escape hatches on lines added vs origin/main, which the
+sensor flags because this branch had no prior PR (its first CI run covers all
+three units' additions at once). Breakdown:
+
+- **44 in Unit 2's `print/test/viewer/pdf.test.ts`** (39 non-null assertions
+  `foo!.bar`, 5 `as <Type>` casts) — idiomatic test DOM/renderer access,
+  committed by the Unit 2 session and never CI-checked (no PR then).
+- **18 in this session's `print/test/viewer/annotations.test.tsx`** — the same
+  idiomatic test casts (mock-controller ref fixtures, `querySelector as
+  HTMLxxx`). Note: 5 `as Partial<ContentRenderer>` casts are removable outright
+  (`getSelectionAnchor`/`setAnnotations` are on `ContentRenderer`, so the
+  override object needs no cast).
+- **1 in `print/src/viewer/useViewerController.ts:484`** — NOT a new hatch: the
+  line already carried `(e.target as HTMLElement)` on origin/main; this session
+  only appended `.viewer-annotation-note-input` to the `.closest()` selector, so
+  the edited line re-flags (sensor "accepted tradeoff D1").
+
+Fix-phase remedy (all sanctioned, none weaken a test): drop the 5 unneeded
+`as Partial<ContentRenderer>` casts; append `// type-safety-ok: <reason>` to the
+remaining net-new hatch lines (the established convention — origin/main carries
+96 such markers in print, 17 in `epub.test.ts` alone). Sensor script:
+`.github/scripts/check-type-safety-escapes.sh` (run bare to list violations).
+Other CI checks that had concluded were green; `unit-tests`, `acceptance`,
+`preview-and-smoke`, and `Analyze` were still pending at transition time and the
+fix phase must confirm them.
+
+## Fix-phase resolution (2026-07-10)
+
+Applied the sanctioned remedy in commit `cd626bf2`: removed 4 redundant
+`as Partial<ContentRenderer>` casts in `print/test/viewer/annotations.test.tsx`
+(the file had 4, not the estimated 5 — `makeMockRenderer`'s param is already
+typed `Partial<ContentRenderer>`, so the override-object casts were pure
+no-ops), and appended `// type-safety-ok: <reason>` to the remaining 59
+net-new hatch lines (test-fixture non-null assertions/casts in
+`pdf.test.ts`/`annotations.test.tsx`, plus the one re-flagged pre-existing
+cast in `useViewerController.ts:484`). `.github/scripts/check-type-safety-escapes.sh`
+now exits 0. Pushed; full CI on PR #2806 went green (all checks pass,
+including previously-pending `unit-tests`, `acceptance`, `preview-and-smoke`,
+`Analyze`). Transitioning fix -> qa.

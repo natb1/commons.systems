@@ -28,13 +28,27 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention: null
-phase: implement
-execution: null
+attention:
+  boost: 3
+  override: null
+  rationale: "Author-directed 2026-07-08 (refined): tactics that directly edit
+    .claude/skills/align-strategy/SKILL.md or
+    .claude/skills/align-tactics/SKILL.md content rank above the rest of
+    strategy-graph-native-dispatch's subtree (boost 3, added on top of the
+    strategy's own boost 5, authored 8) — above curriculum-execution tooling
+    (boost 7) and above every other tactic in this strategy's subtree (inherited
+    5, unboosted)."
+phase: done
+execution:
+  branch: tactic-align-session-claiming
+  pr: 2804
+  attempts: {}
+  markers:
+    - planned
+    - reviewed
+  strategy_fingerprint: 7964be73bb6a26bb77ec516c22d07677de94ee20965f93b02442867fff492731
 validates: []
-blocked_by:
-  - tactic-graph-router-selector
-  - tactic-graph-commit-prune-support
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null

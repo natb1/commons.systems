@@ -26,7 +26,7 @@ execution:
   pr: null
   attempts: {}
   markers: []
-  strategy_fingerprint: f9e4d3f90f15fbb0bb42ccc26d71a76467641cf7aede8d74815a537ff205d0a1
+  strategy_fingerprint: 3178ea5e04e119ed9cce5cb1e0b573e7e011aef2e70dbd39c0449a854a61a204
 validates:
   - strategy-recover-finance
 blocked_by:
@@ -78,9 +78,11 @@ Out of scope: any other change to the `/budget` flow.
 Not a repo change; run `/budget` on the operator's machine. Preconditions:
 the tactic-budget-overlap-anchor-merge fix available as a binary (build
 locally with `go -C projects/budget-etl build` into the resolver cache path —
-see `.claude/skills/budget/scripts/budget-resolve-binary`), the statement
-password from the keychain per SKILL.md's precondition step, and the cloud
-statement archive mounted. The categorization decisions from the interrupted
+see `.claude/skills/budget/scripts/budget-resolve-binary`), the snapshot
+password exported as `BUDGET_ETL_PASSWORD` per SKILL.md's precondition step
+(env-first resolution per strategy clarification 4 — sourced from pass/GPG on
+this host; macOS Keychain only as an explicit `--keychain` opt-in), and the
+cloud statement archive mounted. The categorization decisions from the interrupted
 run are preserved at `~/.config/commons-systems/budget-patch-2026-06.json`
 (operator-machine-local; contains merchant patterns — never commit or
 transmit it). Apply via the skill's Step 4 (budget-apply), publish, then
@@ -114,5 +116,6 @@ names 2026-06 and its `gap` is null.
 
 Unit 1 in a subagent with `model: sonnet` (working-tree edits only). Unit 2
 is an operational `/budget` run on the operator's machine — it needs the
-keychain secret and the mounted archive, so it cannot run in a detached CI
+operator-held `BUDGET_ETL_PASSWORD` (pass/GPG-sourced, per strategy
+clarification 4) and the mounted archive, so it cannot run in a detached CI
 context.

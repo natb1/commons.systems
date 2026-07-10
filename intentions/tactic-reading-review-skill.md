@@ -21,9 +21,28 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention: null
-phase: implement
-execution: null
+attention:
+  boost: 7
+  override: null
+  rationale: "Author-directed 2026-07-08 (refined):
+    curriculum-maintenance/execution tooling (this skill, sibling
+    tactic-sync-reader-skill) ranks below tactics that directly edit the
+    /align-strategy and /align-tactics SKILL.md files (authored 8) and above the
+    rest of strategy-graph-native-dispatch's subtree (inherited 5, unboosted) —
+    boost 7. Supersedes the prior boost-4 rationale (dated 2026-07-08), which
+    only cleared strategy-attention-surface (boost 3) and did not yet clear the
+    rest of strategy-graph-native-dispatch. Scoped to curriculum-execution
+    tactics only, not the reading-chunk tactics under
+    strategy-philosophical-grounding, which remain unboosted."
+phase: done
+execution:
+  branch: tactic-reading-review-skill
+  pr: 2796
+  attempts: {}
+  markers:
+    - qa-done
+    - reviewed
+  strategy_fingerprint: 4938e3dd607b936f594cb15964e7096ae8da08b91c2177910589282473b95a68
 validates: []
 blocked_by: []
 office_hours: null
@@ -71,6 +90,11 @@ inverse of `/align-tactics`' autonomy contract), and must specify:
   `office_hours` set. Read candidates via `listNodes`
   (`packages/intentionsutil/src/store.ts:88`) or by reading the files; the
   frontmatter is authoritative.
+- **Precondition check** (first-run convention, 2026-07-07): before the
+  dialectic, confirm the independent reading sitting actually happened. A
+  session run from recollection of an older reading is not a
+  demonstration — offer to stop and reconvene after the sitting rather
+  than proceed on recollection.
 - **Session flow**: (1) read the chunk node body — its `## Text`,
   `## Questions to re-open against the text`, and `## Completion` sections
   are the session script; (2) surface the text citation and questions; (3)
@@ -80,6 +104,37 @@ inverse of `/align-tactics`' autonomy contract), and must specify:
   (recommended option first), plain conversation for open dialectic — same
   split as `.claude/skills/align-strategy/SKILL.md`; (4) record each
   resolution.
+- **Periagoge (the design principle — Republic 518b-d, verified chunk 1;
+  2026-07-08 clarification on `strategy-philosophical-grounding`)**:
+  education is the art of turning, not of putting sight into eyes. The
+  skill turns the author toward the text; it never implants Claude's
+  account of the reading — an interview that implants the account is the
+  same capture the recovery loop exists to unwind. Concretely: probes cite
+  the text, not Claude's gloss; the author articulates before any account
+  of Claude's appears; Claude's account enters only afterward, as challenge
+  or counterpoint to a position the author has committed to; never open a
+  session with a summary of the reading; bounded verdicts may only close
+  questions the author's own articulation has already opened.
+- **Verdict refinement loop**: verdicts are not one-pass (first run,
+  2026-07-07 chunk 1: two recommended options rejected/refined, both
+  amendments improved). Verdict options are drafts; loop until the author
+  accepts the wording — the author's wording wins over Claude's draft.
+- **Session bounds**: the ~30-author-minute bound is the independent
+  reading, not the dialectic. The session is unbounded and may span
+  office-hours sittings: an unconverged chunk stays parked as-is between
+  sittings (its excerpt correctly stays on the reader until `phase: done`).
+- **Cross-chunk boundary rule**: an amendment cascade stops at claims
+  another *unresolved* chunk owns — flag the discovery forward onto the
+  owning chunk node's body in the same graph-commit (chunk 1 → chunk-6
+  capstone is the precedent). A *done* chunk's claims are amendable by the
+  current session directly on the durable records — a resolved chunk node
+  holds nothing durable.
+- **Notes-for-later exit**: mid-session author notes never die in
+  scrollback. Each exits as a self-contained follow-up prompt in the
+  closing summary, and every graph-relevant note additionally lands as a
+  born-parked office-hours draft tactic (no `phase`, `office_hours` set)
+  whose body is that prompt — resolved by executing it — bundled into the
+  same graph-commit.
 - **Recording rules** (all via
   `npx tsx packages/intentionsutil/scripts/write-node.ts --file <json>` on a
   `readNode`-dumped, jq-patched JSON — never hand-edit YAML frontmatter):
@@ -90,9 +145,20 @@ inverse of `/align-tactics`' autonomy contract), and must specify:
     provenance sentence (date via `date -u +%Y-%m-%d`), e.g.
     `"...Recorded 2026-07-20 /reading-review chunk 3."`
   - Stamp `attributes.irreversibility.last_exercised` on
-    `intentions/delegation-philosophical-articulation.md`.
+    `intentions/delegation-philosophical-articulation.md`. Required rule
+    (2026-07-08): every reading-wins catch — a misarticulation of the
+    tradition or a misstatement of the author's position alike — also lands
+    as a dated entry in that delegation's `divergence.contradictions`; the
+    list is the recovery loop's audit trail and entries persist after the
+    amendment lands.
   - When all of a tradition record's cited texts are covered across chunks,
     flip that record `status: delegated → codified`.
+  - Persistence check before `phase: done` (2026-07-08, "the graph is the
+    author's knowledge map"): confirmed understanding and resolved
+    deferrals must live on durable nodes — tradition records, virtue and
+    strategy clarifications, the delegation record — never solely on the
+    chunk tactic node, which is transient (pruned once done). The chunk
+    node must be prunable without loss before it resolves.
   - Set the chunk node `phase: "done"` — this is the resolution
     `/sync-reader` keys excerpt retirement on.
   - Refresh `strategy-philosophical-grounding`'s `reading` field with a

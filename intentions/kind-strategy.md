@@ -44,7 +44,21 @@ reading: null
 gap: null
 serves: []
 recovers: []
-clarifications: []
+clarifications:
+  - question: Does a sub-strategy re-declare its parent's serves?
+    answer: No — sub-strategies inherit. The parent edge already carries the
+      parent's claims down (resolveAttention flows rank down parent and serves
+      alike), so a child re-declaring the parent's exact virtue set adds no rank
+      information while doubling the review surface — and a serves edge is a
+      ranking act deserving weight-level care. A child authors serves only for a
+      virtue claim beyond its parent's. The seven duplicate sets existing at
+      2026-07-09 are stripped by tactic-graph-self-consistency-sweep Unit 4.
+      Recorded 2026-07-09 interview.
+  - question: What does a strategy node's markdown body carry?
+    answer: Settled design and mechanism notes — the fold-target when clarification
+      chains outgrow the dialectic record (superseded entries fold; settled
+      mechanism moves here or down to tactics/package docs), per kind-kind's
+      body-function rule. Recorded 2026-07-09 interview.
 tooling_goals: []
 success_signal: null
 attention: null
@@ -60,9 +74,8 @@ attributes:
   fields:
     - "conditions: list of world-premises that make this strategy apt; each is a
       standing review trigger"
-    - "attention: authored boost (adds to inherited rank, relative) XOR override
-      (sets the value flowing through this branch), plus required rationale;
-      resolved rank is computed on read by resolveAttention and never stored"
+    - "attention: valid on this kind (goal_layer: true) — a TOP-LEVEL field, not
+      an attributes entry; canonical definition on kind-kind's field list"
     - "traditions: ids of tradition records (kind-tradition) that inform this
       strategy — set only where a philosophical choice is load-bearing for the
       strategy, not as decoration; the alignment detail lives on the tradition

@@ -30,8 +30,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: review
+execution:
+  branch: tactic-shared-ui-correctness
+  pr: 2810
+  attempts: {}
+  markers:
+    - qa-done
+  strategy_fingerprint: null
 validates: []
 blocked_by: []
 office_hours: null

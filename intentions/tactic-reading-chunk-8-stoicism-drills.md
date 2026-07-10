@@ -29,20 +29,16 @@ validates:
   - strategy-philosophical-grounding
 blocked_by: []
 office_hours:
-  reason: "Personal reading, one sitting of at most 30 author-minutes: read
-    Enchiridion 1 and Seneca's Letters 18 and 91 against tradition-stoicism. Not
-    claude-executable — the chunk exists to verify the delegated articulation
-    personally (the recovery path of delegation-philosophical-articulation). At
-    office-hours: re-open the questions in the node body against the texts;
-    amend the record where the reading contradicts it (the reading wins), ratify
-    where it holds; stamp the delegation's last_exercised; the completed chunk
-    counts toward strategy-philosophical-grounding's signal."
+  reason: "See tactic-tradition-reading-program → shared chunk office-hours reason
+    (verify-record). This chunk: Enchiridion 1 and Seneca's Letters 18 and 91
+    against tradition-stoicism."
   since: 2026-07-06
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes:
   curriculum:
-    priority: 8
+    priority: 11
     passages:
       - work: Epictetus, Enchiridion
         range: "1"

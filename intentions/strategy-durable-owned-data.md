@@ -39,7 +39,37 @@ serves:
   - virtue-progressive-detachment
   - virtue-respect-for-persons
 recovers: []
-clarifications: []
+clarifications:
+  - question: What is the durable at-rest contract for encrypted owned data?
+    answer: "The BENC container: [magic \"BENC\" 4B][salt 16B][IV 12B][AES-256-GCM
+      ciphertext+tag], key derived via PBKDF2-HMAC-SHA256 at 600,000 iterations
+      with a per-file salt — implemented byte-for-byte in TypeScript
+      (packages/crypto-core) and Go (budget-etl internal/export). PBKDF2 over a
+      memory-hard KDF is deliberate: WebCrypto plus Go-stdlib portability keeps
+      the format decodable everywhere with zero exotic dependencies. The
+      password is the sole secret, held session-only in the browser and never
+      persisted — no key escrow by design; key continuity is
+      strategy-secure-identity-root's half of the practice. Recorded 2026-07-07
+      interview."
+  - question: What are the known hazards in that contract?
+    answer: "Two, same drift class as the tracked crypto-core duplication: the
+      header carries no format-version/KDF-params byte, so a parameter change
+      silently breaks TS-Go round-trips of financial data; and the snapshot JSON
+      schema is hand-mirrored between the Go and TS validators, mitigated only
+      by a golden fixture. Both queued at tactic-benc-format-versioning, to land
+      coordinated with tactic-crypto-core-consolidate as one format epoch.
+      Recorded 2026-07-07 interview."
+  - question: What is the on-disk write pattern for user-held files?
+    answer: "User-held files are the system of record: budget overwrites the on-disk
+      .benc via debounced FSA write-back with generation counters and
+      abort-on-failure (a truncated file never replaces the original);
+      print/audio persist app state to plain-JSON .commons-* sidecars inside the
+      user's own folder so it rides their folder sync and works unauthenticated;
+      Go writes are atomic temp+rename; validation runs only at the write
+      boundary so an older file always loads. Deliberately no replication or
+      sync engine (no CRDTs, no offline queue): your-files-on-your-disk is the
+      ownership claim, and cross-device continuity is the user's folder-sync
+      choice. Recorded 2026-07-07 interview."
 tooling_goals: []
 success_signal:
   observable: every owned-data class has a redundant off-machine copy and a
@@ -48,6 +78,14 @@ success_signal:
   threshold: no owned-data class has a single copy, a restore has been rehearsed
     within the review cycle, and the household can read the archive
   is_proxy: true
+attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: false
+rounds: null
 attributes:
   conditions:
     - storage redundancy stays affordable at individual scale (local disks plus

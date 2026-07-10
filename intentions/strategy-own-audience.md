@@ -19,9 +19,7 @@ rationale: >-
   follows and responds on terms neither party rents from an engagement platform.
 reading: null
 gap: null
-serves:
-  - virtue-progressive-detachment
-  - virtue-respect-for-persons
+serves: []
 recovers:
   - delegation-social-publishing
 clarifications:
@@ -46,6 +44,16 @@ clarifications:
       choice satisfies the signal; recorded for visibility, and webmention.io
       remains the fallback if function abuse or cost becomes a problem. Recorded
       2026-07-06 /align-tactics round."
+  - question: Does the 2026-07-06 "feeds leg fully ships" reading still hold?
+    answer: "Contradicted in part by the 2026-07-07 comprehensive code review: the
+      published blogroll OPML outlines carry htmlUrl but no xmlUrl, so a feed
+      reader importing the blogroll cannot actually subscribe to anything — the
+      artifact's whole purpose; and landing's blogroll uses StaticStrategy with
+      hand-curated latest-post entries that go stale silently, while the
+      build-time feed-fetch already built for fellspiral is strictly better and
+      available. The RSS/discovery/rel=me legs stand. Fixes drafted at
+      tactic-blogroll-opml-xmlurl and tactic-landing-blogroll-staleness.
+      Recorded 2026-07-07 code review."
 tooling_goals: []
 success_signal:
   observable: readers can follow, subscribe, and respond to the owned sites

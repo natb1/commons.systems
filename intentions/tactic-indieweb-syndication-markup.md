@@ -21,8 +21,16 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: done
+execution:
+  branch: tactic-indieweb-syndication-markup
+  pr: 2803
+  attempts: {}
+  markers:
+    - planned
+    - qa-passed
+    - reviewed
+  strategy_fingerprint: 0e82bc4f18e29664d59b99de7011753e330865a40fab038406506ff86bcf1791
 validates: []
 blocked_by: []
 office_hours: null

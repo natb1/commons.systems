@@ -29,9 +29,38 @@ attention: null
 phase: implement
 execution: null
 validates: []
-blocked_by:
-  - tactic-graph-router-selector
-office_hours: null
+blocked_by: []
+office_hours:
+  reason: "Tactic overtaken by its blocker's merged implementation; the 2026-07-06
+    /align-tactics premise is now VOID. That premise -- neither the
+    clarification-33 selection-time gap accounting nor the clarification-35
+    dead-claim sweep is carried by any open tactic -- no longer holds: both
+    mechanics are in merged main. (1) Gap accounting: dispatch-select-tick
+    computes LIVE_COUNT=BUSY+RESV (claude_agents_count_busy_workers +
+    reservation_count) and GAP=TARGET_N-LIVE_COUNT under the one selection lock,
+    with the reservation ledger shared project-root-wide across BOTH keyspaces
+    (node ids beside issue numbers). TARGET_N is already clamped to [1,
+    max_concurrent_workers] in dispatch-target-workers (awk
+    N=clamp(round(max_workers*h5/span),1,max_workers)), so Unit 1's min(pace
+    target, max_concurrent_workers) is a NO-OP. Delivered by #1070/#1478,
+    extended to node-ids by selector PR #2785. (2) Dead-claim reconciliation:
+    the live node-id-named session IS the durable claim
+    (worktree_has_live_session / claude_agents_count_busy_workers);
+    dispatch-graph-execute clears the reservation the instant the worker session
+    spawns (\"the live node-id-named session carries the claim now\"), so a dead
+    worker self-reconciles via the liveness read (clarification 35: sweep, not
+    session recovery), and the pre-registration stranded window is swept by
+    lib-reservation-ledger reservation_sweep. Unit 2's separate dead-claim
+    ledger sweep is OBVIATED -- no durable ledger claim persists
+    post-registration to sweep; adding a no-op min() or a duplicate sweep is
+    dead defensive code the code-style rule forbids. Next steps: run
+    /align-tactics on strategy-graph-native-dispatch as a two-sided drift round
+    against merged main (#2785, #1070, #1478); expected disposition is
+    close-this-node-as-delivered, or re-derive any genuine residual the drift
+    review surfaces. Do NOT force a no-op implement->qa->review PR for this
+    node."
+  since: 2026-07-09
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes: {}

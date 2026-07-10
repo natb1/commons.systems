@@ -101,7 +101,7 @@ else
   # clarification 23: `main` is checked out at the project root). Resolved from
   # the worktree registry, never from the git common dir.
   PROJECT_ROOT=$(git worktree list --porcelain \
-    | awk '/^worktree /{wt=substr($0,10)} /^branch refs\/heads\/main$/{print wt; exit}')
+    | awk '/^worktree /{wt=substr($0,10)} /^branch refs\/heads\/main$/{if(!f){print wt; f=1}}')
   [ -n "$PROJECT_ROOT" ] \
     || { echo "[worktree-create] ERROR: no worktree with 'main' checked out; cannot resolve the project root for node-id worktree '$BRANCH'" >&2; exit 1; }
   NEW_PATH="$PROJECT_ROOT/.claude/worktrees/$BRANCH"

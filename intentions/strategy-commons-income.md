@@ -4,7 +4,7 @@ kind: strategy
 statement: Commons-derived income — the artifacts may earn, on gift terms only
 owner: human
 status: raw
-parent: null
+parent: strategy-diversify-income
 rationale: >-
   Minted 2026-07-02 from the owner interview as a sibling of
   strategy-diversify-income: income derived from the commons artifacts
@@ -31,11 +31,19 @@ rationale: >-
 reading: null
 gap: null
 serves:
-  - virtue-alignment-of-attachments
   - virtue-respect-for-persons
 recovers:
   - delegation-client-income
-clarifications: []
+clarifications:
+  - question: Why re-parent under strategy-diversify-income after minting as a sibling?
+    answer: The node's own conditions already describe it as a lane of the
+      diversified pipeline ('strategy-diversify-income's client pipeline remains
+      the primary income lane; this lane supplements'), and its
+      siblings-in-function are children there — root standing contradicted the
+      recorded relationship. serves keeps only the claims beyond the parent's,
+      per kind-strategy's sub-strategy inheritance rule (2026-07-09). The
+      office_hours park and its tier-2 gate are unchanged. Recorded 2026-07-09
+      interview.
 tooling_goals: []
 success_signal:
   observable: commons-derived revenue appearing as an independent income source,
@@ -56,19 +64,20 @@ office_hours:
     condition 1 — commons artifacts have non-author users whose demand supports
     paid hosting, support, or productized tiers — does not hold against current
     author state. strategy-progressive-validation records tier 2 (validate with
-    users) as not entered as of 2026-07-06, and tier entry is an explicit dated
-    author declaration that no downstream strategy may infer from activity.
-    Every signal-path tactic (any paid tier or offering) would plan against this
-    dead premise, and the threshold (any recurring commons-derived income) is
-    unreachable without non-author users. No instrument tactic is needed
-    meanwhile: the revenue half of the sensor already exists (budget income
-    statement reports income by category, budget/src/income-statement.ts;
+    users) as not entered as of 2026-07-06; per its tier-entry rule, that entry
+    is a dated author declaration no downstream strategy may infer from
+    activity. Every signal-path tactic (any paid tier or offering) would plan
+    against this dead premise, and the threshold (any recurring commons-derived
+    income) is unreachable without non-author users. No instrument tactic is
+    needed meanwhile: the revenue half of the sensor already exists (budget
+    income statement reports income by category, budget/src/income-statement.ts;
     strategy-diversify-income rationale records the same). Decision needed at
     office-hours: keep this lane dormant until a tier-2 entry declaration lands
     on strategy-progressive-validation (clear this park then and re-run
     /align-tactics), or revise this strategy at /align-strategy if its
     conditions or signal should change."
   since: 2026-07-06
+  recommendation: null
 pace_exempt: false
 rounds:
   count: 0

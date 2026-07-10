@@ -177,7 +177,7 @@ done
 # name-keyed on the basename, so the root resolution is presentational — the
 # basename (the node id) is what is matched against live session names.
 NATIVE_ROOT=$(git -C "$REPO_ROOT" worktree list --porcelain \
-  | awk '/^worktree /{wt=substr($0,10)} /^branch refs\/heads\/main$/{print wt; exit}')
+  | awk '/^worktree /{wt=substr($0,10)} /^branch refs\/heads\/main$/{if(!f){print wt; f=1}}')
 NATIVE_ROOT="${NATIVE_ROOT:-$REPO_ROOT}"
 
 skip_note() { # <id> <reason>

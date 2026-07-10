@@ -54,8 +54,16 @@ type SerializedProjectSignals = IsoDates<ProjectSignalsSnapshot>;
 // Snapshot metadata types
 // ---------------------------------------------------------------------------
 
-/** Whether this snapshot carries the full dashboard or only parked issues. */
-export type SnapshotScope = "full" | "parked-only";
+/**
+ * What this snapshot's producing run captured:
+ *   - "full"        — all six dashboard fields.
+ *   - "parked-only" — only the parked-issues data was refreshed.
+ *   - "analytics"   — only the projectSignals section was produced; it was
+ *     folded into the prior snapshot (see foldProjectSignals), so a folded doc
+ *     keeps the PRIOR run's scope. "analytics" appears on disk only when no
+ *     prior snapshot existed at fold time.
+ */
+export type SnapshotScope = "full" | "parked-only" | "analytics";
 
 /**
  * Coarse chain-health signals. Deliberately open/optional — Unit 6 fills it in;
@@ -223,8 +231,9 @@ function serializeQueueMetricsToIso(
 /**
  * The project-signals snapshot's only Date is top-level `computedAt`; the nested
  * github/ga4/gsc/psi sub-objects carry no Date at any depth (see panel-equality.ts).
+ * Exported for the analytics-scope fold (foldProjectSignals / run.ts).
  */
-function serializeProjectSignals(
+export function serializeProjectSignals(
   p: ProjectSignalsSnapshot,
   now: string,
 ): SerializedProjectSignals {
@@ -261,5 +270,47 @@ export function serializeSnapshot(input: SnapshotInput): OfficeHoursSnapshot {
     topicUsage: input.topicUsage,
     projectSignals:
       input.projectSignals === null ? null : serializeProjectSignals(input.projectSignals, now),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Analytics fold
+// ---------------------------------------------------------------------------
+
+/**
+ * Fold a freshly-collected projectSignals section into the prior snapshot
+ * document (the `--scope analytics` write path).
+ *
+ * The fold is SURGICAL: every prior field — including top-level `computedAt`
+ * and `scope` — is preserved verbatim, and ONLY `projectSignals` is replaced.
+ * The section carries its own `computedAt` for analytics freshness; leaving the
+ * top-level watermark untouched keeps it an honest staleness signal for the
+ * full producer (a dead hourly timer must not be masked by the daily analytics
+ * fold).
+ *
+ * When no prior snapshot exists (first analytics run before any full run), the
+ * fold starts from an empty skeleton stamped `scope: "analytics"` so the reader
+ * can tell the non-signals fields were never produced.
+ */
+export function foldProjectSignals(
+  prior: OfficeHoursSnapshot | null,
+  signals: ProjectSignalsSnapshot,
+  now: Date,
+): OfficeHoursSnapshot {
+  const nowIso = now.toISOString();
+  const projectSignals = serializeProjectSignals(signals, nowIso);
+  if (prior !== null) {
+    return { ...prior, projectSignals };
+  }
+  return {
+    computedAt: nowIso,
+    scope: "analytics",
+    chainHealth: {},
+    samples: [],
+    reminders: [],
+    queueMetrics: null,
+    issueSamples: [],
+    topicUsage: [],
+    projectSignals,
   };
 }
