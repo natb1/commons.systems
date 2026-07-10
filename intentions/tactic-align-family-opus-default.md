@@ -18,7 +18,18 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention: null
+attention:
+  boost: 8
+  override: null
+  rationale: "Author-directed 2026-07-09: a direct skill-edit tactic — it pins
+    the session model default in both .claude/skills/align-strategy/SKILL.md
+    and .claude/skills/align-tactics/SKILL.md — so it belongs at the same top
+    tier as the other skill-edit tactics (tactic-align-skills-latest-graph-guard,
+    tactic-fingerprint-recipe-single-callsite: authored 8). Those sit in
+    strategy-graph-native-dispatch's subtree and reach 8 as boost 3 + inherited
+    5; this tactic serves strategy-token-economy (unboosted), so it inherits
+    nothing and takes the full boost 8 directly to reach the same authored-8
+    tier and be prioritized by the next dispatch tick."
 phase: null
 execution: null
 validates: []

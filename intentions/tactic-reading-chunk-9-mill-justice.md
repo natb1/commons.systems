@@ -41,11 +41,12 @@ office_hours:
     delegation's last_exercised; the completed chunk counts toward
     strategy-philosophical-grounding's signal."
   since: 2026-07-06
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes:
   curriculum:
-    priority: 9
+    priority: 12
     passages:
       - work: Mill, Utilitarianism
         range: ch. 2

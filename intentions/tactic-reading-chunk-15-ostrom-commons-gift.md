@@ -42,11 +42,12 @@ office_hours:
     strategy-complete-grounding; stamp last_exercised on
     delegation-philosophical-articulation."
   since: 2026-07-07
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes:
   curriculum:
-    priority: 15
+    priority: 23
     candidate: true
     passages:
       - work: Ostrom, Governing the Commons

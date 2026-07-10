@@ -41,11 +41,12 @@ office_hours:
     revisit the apex question on both roots; the completed chunk counts toward
     strategy-philosophical-grounding's signal."
   since: 2026-07-06
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes:
   curriculum:
-    priority: 6
+    priority: 9
     passages:
       - work: Aristotle, Nicomachean Ethics
         range: I.3

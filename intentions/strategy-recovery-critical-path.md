@@ -69,6 +69,20 @@ clarifications:
       strategy owns nothing but the order they are worked in; the severity
       inputs it reads are maintained by exercise-recovery-paths' portfolio
       review. Recorded 2026-07-06 interview.
+  - question: Do context chunks violate the foundations clause while the deepest
+      captures stand open?
+    answer: "No — context reading is capture work, not comfortable
+      foundation-laying: a context chunk audits the delegatee's excerpt
+      selection for the record it deepens (selection bias is a
+      borrowed-articulation capture surface, observed live in the 2026-07-07
+      chunk-1 session). But it never preempts focused reading: reading priority
+      is ordered by distance from a critical-path node — focused chunks (verify
+      and candidate) are distance 0, context chunks carry distance of at least 1
+      — with ties broken by doctrine load, and only attention and blockers
+      override the ordering. Selection and drafting of context chunks is
+      unrestricted at any time; the gate is on reading priority, not on what may
+      enter the backlog (that admission is strategy-complete-grounding's).
+      Recorded 2026-07-08 interview."
 tooling_goals: []
 success_signal:
   observable: the next recovery work selected — a curriculum chunk or
@@ -94,5 +108,8 @@ attributes:
     - recovery work's dependency structure is recorded in the graph (chunk
       order, blocked_by edges), so the critical path is computable from the
       records rather than remembered by the author
+    - distance-from-critical-path is recorded on chunk nodes
+      (attributes.curriculum.distance) so the reading order stays computable
+      from the graph, per this node's existing recorded-dependency condition
 ---
 # Sequence recovery work as a critical path to the deepest deferrals — capture sets the target, foundations come first

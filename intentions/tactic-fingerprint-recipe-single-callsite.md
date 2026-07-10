@@ -22,7 +22,16 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention: null
+attention:
+  boost: 3
+  override: null
+  rationale: "Author-directed 2026-07-08 (refined): tactics that directly edit
+    .claude/skills/align-strategy/SKILL.md or
+    .claude/skills/align-tactics/SKILL.md content rank above the rest of
+    strategy-graph-native-dispatch's subtree (boost 3, added on top of the
+    strategy's own boost 5, authored 8) — above curriculum-execution tooling
+    (boost 7) and above every other tactic in this strategy's subtree (inherited
+    5, unboosted)."
 phase: null
 execution: null
 validates: []

@@ -37,11 +37,15 @@ rationale: >-
   kind-tradition and five records; the apex question held open on both roots;
   the respect floor made explicitly Kantian with Aristotelian practice; the
   consent edge split by irreversibility; virtue-temperance rooted.
-reading: "one dialectic round recorded (2026-07-04): five tradition records,
-  doctrine clarifications on both existing roots, the consent edge case
-  resolved, one new root virtue — the round moved nodes"
-gap: reading meets the 'at least one round recorded' clause; recurrence across
-  review cycles is unproven
+reading: "chunk 1 completed 2026-07-07 (/reading-review run from the graph
+  definition, tactic-reading-review-skill): tradition-plato amended —
+  corrupts→misdirects (518e-519b), agency of turning, Form of the Good affirmed
+  as external anchor (Forms divergence narrowed), descent-as-reentry — with
+  cascades to both roots and strategy-external-calibration; the
+  borrowed-articulation loop caught a real misarticulation"
+gap: two rounds recorded (2026-07-04 dialectic, 2026-07-07 chunk 1) — recurrence
+  has begun; sustained recurrence across review cycles remains the unproven
+  clause
 serves:
   - virtue-philosophical-mobility
   - virtue-respect-for-persons
@@ -95,6 +99,164 @@ clarifications:
       author-actionable acquisition (buy it DRM-free), surfaced by the tool's
       missing-references report, not a tooling gap. Recorded 2026-07-06
       interview.
+  - question: What guards prior learnings against calcification as the curriculum
+      broadens into context?
+    answer: "Every context chunk is a re-evaluation opportunity, not additive
+      reading — skills atrophy through calcification as well as through
+      delegation. Each context-chunk sitting keeps the 30-minute chunk
+      discipline and must involve dialectic to confirm understanding, in three
+      named forms: recall-first delta (before reading, the author states from
+      memory what the prior related reading established — the gap against the
+      record is measured calcification), elenchus (the session poses the
+      strongest objection to the author's articulation and the author defends or
+      amends), and rival-tradition steelman (articulate how a rival recorded
+      tradition reads the same passage). Amend/ratify and intent-evolution
+      review run inside chunks directly touching prior outcomes, or defer to the
+      area capstone. Recorded 2026-07-08 interview."
+  - question: What closes a context area — where do the deferred audits land?
+    answer: "A per-record capstone review tactic: created once the record's first
+      context chunk resolves, an ordinary at-most-30-minute office-hours sitting
+      owning the selection-bias audit (were the delegatee-chosen excerpts
+      representative, judged against the now-read context), the deferred
+      amend/ratify pass, and the intent-evolution review — drift in
+      understanding amends the tradition record (the reading wins, per the
+      existing clarification); drift in intent lands as dated clarifications on
+      the affected virtue or strategy nodes. It recurs if the area's context
+      later deepens. A context chunk citing several records counts toward each
+      cited record's capstone, each reviewing the shared chunk from its own
+      record's angle (precedent: chunk 4 already cites tradition-plato and
+      tradition-aristotle). Recorded 2026-07-08 interview."
+  - question: How must the reading-review dialectic be conducted — what does the
+      reading itself require of the interviewer?
+    answer: "By the doctrine the first chunk verified: education is the art of
+      turning (periagoge, Republic 518b-d), not of putting sight into eyes. The
+      skill turns the author toward the text and never implants Claude's account
+      of it — an interview that implants the account is the same capture the
+      recovery loop exists to unwind. Binding rules for every session whose
+      object is the author's understanding of a fixed external thing
+      (reading-review chunks and grounding rounds alike): probes cite the text,
+      not Claude's gloss; the author articulates before any account of Claude's
+      appears; Claude's account enters only afterward, as challenge or
+      counterpoint to a position the author has committed to; a session never
+      opens with a summary of the reading; bounded verdicts may only close
+      questions the author's own articulation has already opened. Scope beyond
+      such sessions is a recorded deferral: the author deferred graph-wide
+      interview-method doctrine to Claude's judgment (2026-07-08), which is —
+      full periagoge binds only where there is a fixed object to turn toward and
+      a capacity already present; decision-forming interviews (e.g.
+      /align-strategy) keep the visible-refusable-draft convention, because
+      where no fixed text makes probing auditable, hidden framing is worse than
+      a visible draft the author can refuse on the record; fact-reporting
+      sessions are exempt from articulate-first but must separate report from
+      recommendation. That doctrine is itself Claude-drafted and held on trust:
+      it is added to delegation-philosophical-articulation's delegated scope and
+      reviewed at tactic-reading-chunk-18-dialectic-method (Theaetetus
+      midwifery, Meno elenchus), added to the curriculum for exactly this
+      review. Recorded 2026-07-08 interview. Amended 2026-07-09 interview: the
+      deferred scoping is partially converted to author-owned doctrine — the
+      two-interview-type round on strategy-explicit-intent ratified the split
+      itself (full periagoge where a fixed object exists; visible refusable
+      drafts where decision-forming) and recognized the graph at origin/main as
+      such a fixed object, so type-b interviews — re-turning the author toward
+      their own considered record — bind under the full periagoge rules even
+      inside decision-forming skills. What remains delegated is the platonic
+      framing behind the doctrine, still reviewed at
+      tactic-reading-chunk-18-dialectic-method, now joined by
+      tactic-reading-chunk-24-phaedrus-writing (the covenant/hypomnema
+      articulation that grounds type-b authority)."
+  - question: Are chunk verdicts one-pass, and what bounds a reading-review session?
+    answer: "No — the first run (2026-07-07, chunk 1) rejected or refined two
+      recommended options and the amendment improved both times. Verdict options
+      are drafts; the refinement loop runs until the author accepts the wording,
+      and the author's wording wins over Claude's draft. The session is
+      unbounded and may span office-hours sittings: the ~30-author-minute bound
+      applies to the author's independent work (the reading), not to the
+      dialectic. Stated generally, as the author set it: for any office-hours
+      node, the work the author must do independently is scoped to ~30 minutes;
+      the session around it is not. An unconverged chunk stays parked between
+      sittings — never weakened, never force-closed — and /sync-reader correctly
+      keeps its excerpt on the reader until the node is done. Recorded
+      2026-07-08 interview."
+  - question: Which reading-wins catches must be recorded on the delegation record?
+    answer: "All of them: every reading-wins amendment lands as a dated entry in
+      delegation-philosophical-articulation's divergence.contradictions —
+      misarticulations of the tradition (chunk 1's corrupts-to-misdirects) and
+      misstatements of the author's own position (chunk 1's 'anti-Platonic about
+      the Forms') alike — not just a last_exercised stamp. The contradictions
+      list is the recovery loop's audit trail, so entries persist after the
+      amendment lands. The first run recorded only the second catch; the
+      corrupts-to-misdirects entry was added retroactively this round. Recorded
+      2026-07-08 interview."
+  - question: Where does what the author learns in the curriculum live, and what
+      happens when an amendment cascade crosses a chunk boundary?
+    answer: "The graph is the author's knowledge map: confirmed understanding and
+      resolved deferrals must be persistently recorded on durable nodes —
+      tradition records, virtue and strategy clarifications, the delegation
+      record — never solely on chunk tactic nodes, which are transient (pruned
+      once done). Chunk resolution therefore includes a persistence check:
+      before phase: done, everything durable the sitting produced must already
+      live on a durable node, so the chunk node can be pruned without loss.
+      Chunk 1 audited 2026-07-08: passes — its full resolution lives on
+      tradition-plato and the cascaded virtue/strategy nodes; its three
+      hand-carried 'notes for later' exist only with the author, which is the
+      gap the notes rule below closes. Cross-chunk boundary rule: an amendment
+      cascade stops at claims another unresolved chunk owns — flag the discovery
+      forward onto the owning chunk node in the same graph-commit (as chunk 1
+      did with the apex question toward the chunk-6 capstone); a done chunk's
+      claims are amendable by the current session directly on the durable
+      records, since a resolved chunk node holds nothing durable. Notes rule:
+      mid-session author notes exit the session rather than dying in scrollback
+      — each exits as a self-contained follow-up prompt in the closing summary,
+      and every graph-relevant note additionally lands as a born-parked
+      office-hours draft tactic whose body is that prompt, resolved by executing
+      it. Recorded 2026-07-08 interview."
+  - question: How did tradition-augustine enter — a further delegated record — and
+      where do its chunks sit?
+    answer: "Recorded 2026-07-08 /align-strategy round: an already-live deferral
+      recorded honestly via kind-tradition's immediate-record path — the
+      author's Augustine background informed the 2026-07-07 agency-of-turning
+      account on tradition-plato and virtue-philosophical-mobility before any
+      record existed. tradition-augustine enters status: delegated, origin:
+      chosen, extending delegation-philosophical-articulation's scope; its three
+      held-open tensions (grace vs agency-never-lost; personal God vs
+      never-toward-a-person; interior teacher vs external calibration) live as
+      clarifications on the record. Verify chunks 19-21 (De Magistro
+      11.36-14.46; Confessions VII.9-17; Confessions VIII.5-12) join the
+      curriculum at priorities 4-6 — after the contiguous Cave → hexis →
+      phronesis capture path, before the Kant floor chunk — per
+      strategy-recovery-critical-path (doctrine load; capture-relevant first),
+      shifting the remaining verify chunks (through chunk 18-dialectic-method)
+      to 7-13 and the candidate batch to 14-21. Under the same round's
+      distance-from-critical-path doctrine these are focused verify chunks,
+      distance 0. Recorded 2026-07-08 interview."
+  - question: Is the reading-side calcification guard this strategy owns part of a
+      single anti-dogma purpose shared with the internal re-derivation dialectic
+      — and where does that purpose now live?
+    answer: "Yes — one purpose, two homes, a division of labor recorded 2026-07-08
+      on strategy-explicit-intent. Preventing the graph's doctrine from
+      calcifying into dogma (virtue-philosophical-mobility: forced detachment is
+      dogma) is served on the reading side here — the recall-first-delta /
+      elenchus / rival-tradition-steelman guard keeps understanding gained from
+      external traditions and context from ossifying, and the ongoing curriculum
+      queue (sustained recurrence across review cycles, this strategy's
+      unproven-clause gap) is what keeps that guard fed — and on the internal
+      side by strategy-explicit-intent's recurring re-derivation dialectic,
+      which keeps the graph's own recorded doctrine from ossifying. Neither
+      strategy owns a fourth dedicated \"prevent calcification\" strategy: the
+      space was already partitioned among this strategy,
+      strategy-complete-grounding, and strategy-external-calibration, so the
+      anti-dogma purpose is named on its existing homes rather than carved into
+      a new node. Recorded 2026-07-08 interview. Amended 2026-07-09 interview:
+      the partition governs the anti-dogma purpose, which stays named on its
+      existing homes — it does not bar a standing requirement node.
+      strategy-graph-review-curriculum (sub-strategy of
+      strategy-explicit-intent, sibling of strategy-graph-integrity) now owns
+      the universal review-coverage requirement and the curriculum mechanism —
+      the entire graph enrolled, deferred/delegated content re-validated at the
+      curriculum frontier, author-owned doctrine re-confirmed as the frontier
+      recursively expands — generalizing beyond readings the curriculum
+      apparatus this strategy keeps; this strategy retains the reading-side
+      guard and the reading curriculum machinery."
 tooling_goals:
   - kind: actuator
     statement: "/sync-reader skill — sync the reading curriculum to the author's
@@ -106,12 +268,17 @@ tooling_goals:
       references missing from the share or unlocatable inside an epub"
   - kind: sensor
     statement: "office-hours reading-review skill — run one curriculum chunk's
-      demonstration at office-hours: the author demonstrates understanding of
-      the tradition and its application to the deferral, the skill walks the
-      chunk node's re-opened questions, records amend-or-ratify outcomes on the
-      tradition record, stamps last_exercised on the delegation, and resolves
-      the chunk node — instrumenting this strategy's
-      owner-review-at-office-hours sensor"
+      demonstration at office-hours as periagoge, never implantation: probe from
+      the text before any account of Claude's appears, let the author articulate
+      and commit first, surface contradictions, and iterate verdict drafts until
+      the author's wording is accepted; the session may span sittings (the
+      ~30-minute bound is the reading, not the dialectic); record
+      amend-or-ratify outcomes on the tradition record and every reading-wins
+      catch in the delegation's divergence.contradictions, stamp last_exercised,
+      run the persistence check (durable outcomes on durable nodes, the chunk
+      node prunable without loss), exit notes-for-later as prompts plus
+      born-parked drafts, and resolve the chunk node — instrumenting this
+      strategy's owner-review-at-office-hours sensor"
 success_signal:
   observable: a recorded dialectic round against a canonical tradition that
     changes the graph — a dated clarification, a revised edge, a documented
@@ -147,5 +314,6 @@ attributes:
     - tradition-aristotle
     - tradition-plato
     - tradition-kant
+    - tradition-augustine
 ---
 # Ground the virtue layer in recurring dialectic against the canonical traditions, keeping alignment and divergence auditable

@@ -70,6 +70,21 @@ clarifications:
       created only at the office-hours session that examines the candidate —
       dismissal lands as a clarification on strategy-complete-grounding, not a
       record. Recorded 2026-07-07 interview.
+  - question: How does an already-live deferral enter — must it go candidate-chunk-first?
+    answer: "No — the immediate-record path: when the author discovers a body of
+      thought is ALREADY load-bearing in the graph (doctrine it informed landed
+      before any record existed), waiting for the candidate-chunk-first route
+      would leave a live attachment invisible to the audit. The record is
+      created immediately at status: delegated with verification chunks queued
+      for its texts. Candidate-chunk-first (see the unexamined-candidates
+      clarification) remains the route for bodies of thought the author is not
+      yet deferred to. First instance: tradition-augustine (2026-07-08), whose
+      citation of this path predated this entry — the doctrine now has its home.
+      Recorded 2026-07-09 interview."
+  - question: What does a tradition node's markdown body carry?
+    answer: Reading notes — passages, verified excerpts, and chunk findings backing
+      the record's adopted/diverged/chosen_over detail, per kind-kind's
+      body-function rule. Recorded 2026-07-09 interview.
 tooling_goals: []
 success_signal: null
 attention: null

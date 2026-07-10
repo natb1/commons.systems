@@ -24,7 +24,16 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention: null
+attention:
+  boost: 7
+  override: null
+  rationale: "Author-directed 2026-07-09: curriculum-frontier machinery — it
+    extends /reading-review for candidate chunks, resolving a session to a
+    tradition record, grounding marks, or a dismissal. Same tier as the other
+    curriculum tooling (tactic-reading-review-skill, tactic-sync-reader-skill:
+    boost 7). It serves strategy-complete-grounding (unboosted, and too broad to
+    boost as a whole), so it takes the full boost 7 directly rather than by
+    inheritance to reach the same authored-7 curriculum tier."
 phase: null
 execution: null
 validates: []

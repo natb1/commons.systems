@@ -26,7 +26,6 @@ execution: null
 validates: []
 blocked_by:
   - tactic-graph-commit-hardening
-  - tactic-office-hours-graph-entry
 office_hours: null
 pace_exempt: false
 rounds: null

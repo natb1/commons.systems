@@ -18,7 +18,11 @@ rationale: "Migrated 2026-07-06 from GitHub issue #2446 (the nix personalization
   remaining work needs the owner to ratify several design decisions
   (nixosModules scope, CI full-system coverage, the mkForce/criterion
   resolution) and to execute the operator-machine relocation, before it can be
-  decomposed into claude-implementable tactics."
+  decomposed into claude-implementable tactics. Edge recorded 2026-07-09: the
+  statement's first clause (export a reusable identity-free
+  nixosModules.default) is owned by tactic-nix-export-nixos-modules — this
+  tactic is blocked_by it and builds the relocation and CI coverage on the
+  exported module rather than re-implementing the export."
 reading: null
 gap: null
 serves:
@@ -31,7 +35,8 @@ attention: null
 phase: null
 execution: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-nix-export-nixos-modules
 office_hours:
   reason: Needs owner design ratification (nixosModules.default scope, CI
     full-system build coverage once the real instance leaves the public repo,
@@ -40,6 +45,7 @@ office_hours:
     claude-decidable or claude-executable as-is; once ratified, /align-tactics
     decomposes it into implement-ready tactics.
   since: 2026-07-06
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes: {}

@@ -31,9 +31,11 @@ rationale: >-
   axis, and per-record review_triggers never see the aggregate. This strategy
   reviews the whole attachment portfolio at once — both axes: aggregate
   irreversibility drift, and each record's imported virtues checked for drift
-  and fired review_triggers on the review_window cadence the records carry
-  (kind-delegation) — so aggregate drift has an owner. The divergence half is
-  why this strategy also serves virtue-alignment-of-attachments.
+  and fired review_triggers — event-based per kind-delegation's review model
+  (2026-07-09: review_window is retired; reading-program rounds and requirement
+  refinement are the standard triggers, with ad-hoc prioritization via the
+  capture-visibility surface) — so aggregate drift has an owner. The divergence
+  half is why this strategy also serves virtue-alignment-of-attachments.
 reading: null
 gap: null
 serves:
@@ -45,8 +47,17 @@ tooling_goals: []
 success_signal:
   observable: last_exercised on every delegation record in this graph
   sensor: the delegation records themselves
-  threshold: no record's last_exercised is null or older than its review window
+  threshold: no record's last_exercised is null, and no fired review_trigger is
+    left unactioned
   is_proxy: false
+attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: false
+rounds: null
 attributes:
   conditions:
     - drills stay affordable — walking a path costs days, not the price of the

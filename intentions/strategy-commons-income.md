@@ -4,7 +4,7 @@ kind: strategy
 statement: Commons-derived income — the artifacts may earn, on gift terms only
 owner: human
 status: raw
-parent: null
+parent: strategy-diversify-income
 rationale: >-
   Minted 2026-07-02 from the owner interview as a sibling of
   strategy-diversify-income: income derived from the commons artifacts
@@ -31,11 +31,19 @@ rationale: >-
 reading: null
 gap: null
 serves:
-  - virtue-alignment-of-attachments
   - virtue-respect-for-persons
 recovers:
   - delegation-client-income
-clarifications: []
+clarifications:
+  - question: Why re-parent under strategy-diversify-income after minting as a sibling?
+    answer: The node's own conditions already describe it as a lane of the
+      diversified pipeline ('strategy-diversify-income's client pipeline remains
+      the primary income lane; this lane supplements'), and its
+      siblings-in-function are children there — root standing contradicted the
+      recorded relationship. serves keeps only the claims beyond the parent's,
+      per kind-strategy's sub-strategy inheritance rule (2026-07-09). The
+      office_hours park and its tier-2 gate are unchanged. Recorded 2026-07-09
+      interview.
 tooling_goals: []
 success_signal:
   observable: commons-derived revenue appearing as an independent income source,
@@ -69,6 +77,7 @@ office_hours:
     /align-tactics), or revise this strategy at /align-strategy if its
     conditions or signal should change."
   since: 2026-07-06
+  recommendation: null
 pace_exempt: false
 rounds:
   count: 0

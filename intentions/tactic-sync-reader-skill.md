@@ -20,9 +20,26 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention: null
-phase: implement
-execution: null
+attention:
+  boost: 7
+  override: null
+  rationale: "Author-directed 2026-07-08 (refined):
+    curriculum-maintenance/execution tooling (this skill, sibling
+    tactic-sync-reader-skill) ranks below tactics that directly edit the
+    /align-strategy and /align-tactics SKILL.md files (authored 8) and above the
+    rest of strategy-graph-native-dispatch's subtree (inherited 5, unboosted) —
+    boost 7. Supersedes the prior boost-4 rationale (dated 2026-07-08), which
+    only cleared strategy-attention-surface (boost 3) and did not yet clear the
+    rest of strategy-graph-native-dispatch. Scoped to curriculum-execution
+    tactics only, not the reading-chunk tactics under
+    strategy-philosophical-grounding, which remain unboosted."
+phase: qa
+execution:
+  branch: tactic-sync-reader-skill
+  pr: 2798
+  attempts: {}
+  markers: []
+  strategy_fingerprint: 4938e3dd607b936f594cb15964e7096ae8da08b91c2177910589282473b95a68
 validates: []
 blocked_by: []
 office_hours: null
