@@ -26,29 +26,34 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-analytics-vitals-delivery
+  pr: 2835
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "Implementation complete on draft PR #2835 (beacon-transport web-vitals
-    + removal of the unreachable logEvent try/catch wrappers per Unit 2a). All
-    checks pass locally (21 analyticsutil + 39 config tests, typecheck, lint)
-    EXCEPT the blocking test-integrity gate: removing the dead wrappers orphans
-    the 4 tests that mocked logEvent to throw (an impossible path), firing
-    Signal 2 (4 net test-declaration removals). Their subject -- the
-    swallow-and-report branch -- is deliberately deleted, so restoring them
-    would contradict the node and the clear-errors rule. The mechanical gate
-    cannot distinguish this legitimate dead-code cleanup from weakening; there
-    is no self-serve fix (fix-checks would loop on it). Next steps: human
-    override-merge of PR #2835 to bypass the test-integrity required check, then
-    run /review-fix separately (override-merge skips only pre-merge review),
-    then advance the node implement -> qa."
-  since: 2026-07-10
-  recommendation: null
+office_hours: null
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  test_integrity_waiver:
+    pr: 2835
+    signal: 2
+    max_net: 4
+    paths:
+      - packages/analyticsutil/test/**
+    approved: 2026-07-10
+    reason: "Removing the unreachable logEvent try/catch wrappers orphans the 4
+      tests that mocked logEvent to throw (an impossible path); their subject —
+      the swallow-and-report branch — is deliberately deleted, so this is
+      dead-code cleanup, not weakening. Author explicitly approved this scoped
+      Signal-2 waiver at the 2026-07-10 office-hours round (doctrine:
+      strategy-graph-native-dispatch integrity-waiver clarification;
+      implementation: draft tactic-test-integrity-waiver). Written by the
+      interactive session after human approval; clears the 2026-07-10 park."
 ---
 # analyticsutil: reliable web-vitals delivery + remove dead wrappers
 
