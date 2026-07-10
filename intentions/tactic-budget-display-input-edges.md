@@ -27,8 +27,13 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-budget-display-input-edges
+  pr: 2826
+  attempts: {}
+  markers: []
+  strategy_fingerprint: 3178ea5e04e119ed9cce5cb1e0b573e7e011aef2e70dbd39c0449a854a61a204
 validates: []
 blocked_by: []
 office_hours: null
