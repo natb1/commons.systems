@@ -30,12 +30,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-review-lows-shared-infra
   pr: 2811
-  attempts: {}
-  markers: []
+  attempts:
+    qa: 1
+  markers:
+    - qa-done
   strategy_fingerprint: null
 validates: []
 blocked_by: []

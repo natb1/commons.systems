@@ -51,6 +51,10 @@ setup() {
   cp "$SCRIPT_DIR/dispatch-ci-ready" "$TMPDIR_TEST/dispatch-ci-ready"
   cp "$SCRIPT_DIR/dispatch-find-pr" "$TMPDIR_TEST/dispatch-find-pr"
   cp "$SCRIPT_DIR/dispatch-route" "$TMPDIR_TEST/dispatch-route"
+  # dispatch-route's pre-provision main-qa triage gate resolves
+  # dispatch-main-qa-triage via its SCRIPT_DIR (= TMPDIR_TEST for the copy), so
+  # the triage script must sit alongside it; it sources lib.sh (copied below).
+  cp "$SCRIPT_DIR/dispatch-main-qa-triage" "$TMPDIR_TEST/dispatch-main-qa-triage"
   cp "$SCRIPT_DIR/dispatch-resolve-arg" "$TMPDIR_TEST/dispatch-resolve-arg"
   # dispatch-route resolves the resolved-epic candidate predicate via
   # "$SCRIPT_DIR/dispatch-epic-resolved-candidate" (#1456); SCRIPT_DIR resolves
@@ -129,6 +133,7 @@ setup() {
            "$TMPDIR_TEST/dispatch-ci-ready" \
            "$TMPDIR_TEST/dispatch-find-pr" \
            "$TMPDIR_TEST/dispatch-route" \
+           "$TMPDIR_TEST/dispatch-main-qa-triage" \
            "$TMPDIR_TEST/dispatch-epic-resolved-candidate" \
            "$TMPDIR_TEST/dispatch-epic-labels" \
            "$TMPDIR_TEST/dispatch-close-resolved" \
@@ -3342,6 +3347,97 @@ esac
 teardown
 
 # ============================================================================
+# dispatch-main-qa-triage tests
+# ============================================================================
+echo ""
+echo "=== dispatch-main-qa-triage ==="
+
+# dispatch-main-qa-triage is the single-sourced qa-main Step 4·0
+# browser-verifiability triage, consulted pre-provision by dispatch-route and
+# in-session by /qa-main. One gh_issue_view_rest read (the generic
+# `api repos/*/issues/<N>` stub arm serves arg-issue-<N>.json in RAW REST
+# shape); exit 0 = verifiable, 3 = not browser-verifiable (one reason line on
+# stdout), 1 = gh failure, 2 = usage.
+triage_run() {
+  TRIAGE_OUT=$("$TMPDIR_TEST/dispatch-main-qa-triage" "$@" 2>/dev/null) && TRIAGE_RC=0 || TRIAGE_RC=$?
+}
+
+# T1. url_path present + browser outcome → exit 0, verifiable line names the path.
+echo "Test: triage: url_path + browser outcome → exit 0 (verifiable)"
+setup
+cat > "$STUB_DIR/arg-issue-61.json" <<'EOF'
+{"number":61,"title":"qa: verify against main — qa-needs-main #50: /budget","body":"**Expected outcome:** the budget page shows the new snapshot panel\n**Finding during QA:** only verifiable on prod\n**URL path:** /budget\n\nSurfaced during QA of PR #55 for issue #50.","state":"open","labels":[{"name":"main-qa"}]}
+EOF
+triage_run 61
+assert_eq "verifiable follow-up → exit 0" "0" "$TRIAGE_RC"
+assert_eq "verifiable follow-up → prints url_path" "verifiable: url_path=/budget" "$TRIAGE_OUT"
+teardown
+
+# T2. No `**URL path:**` line (the followup template omits it for empty/"current"
+# url_path) → exit 3 with a reason naming the missing url_path.
+echo "Test: triage: no url_path → exit 3 (not browser-verifiable)"
+setup
+cat > "$STUB_DIR/arg-issue-62.json" <<'EOF'
+{"number":62,"title":"qa: verify against main — qa-needs-main #50: some-behavior","body":"**Expected outcome:** the toast appears after save\n**Finding during QA:** deferred to main","state":"open","labels":[{"name":"main-qa"}]}
+EOF
+triage_run 62
+assert_eq "no url_path → exit 3" "3" "$TRIAGE_RC"
+assert_eq "no url_path → reason line" \
+  "not-browser-verifiable: no url_path — the follow-up has no browser-addressable surface" \
+  "$TRIAGE_OUT"
+teardown
+
+# T3. Non-browser outcome (Step 4·0's named example class: a nix flake check)
+# → exit 3 even though a url_path is present. The reason names the matched
+# non-browser signal so the office-hours comment is specific.
+echo "Test: triage: nix-flake expected outcome → exit 3 despite url_path"
+setup
+cat > "$STUB_DIR/arg-issue-63.json" <<'EOF'
+{"number":63,"title":"qa: verify against main — qa-needs-main #51: nix-flake-check","body":"**Expected outcome:** nix flake check --pure-eval passes on the WSL host\n**Finding during QA:** cannot run in PR CI\n**URL path:** /","state":"open","labels":[{"name":"main-qa"}]}
+EOF
+triage_run 63
+assert_eq "nix outcome → exit 3" "3" "$TRIAGE_RC"
+case "$TRIAGE_OUT" in
+  "not-browser-verifiable: expected outcome names a non-browser surface"*)
+    PASS=$((PASS + 1)); TOTAL=$((TOTAL + 1))
+    echo "  PASS: nix outcome → reason names the non-browser surface" ;;
+  *)
+    FAIL=$((FAIL + 1)); TOTAL=$((TOTAL + 1))
+    echo "  FAIL: nix outcome → reason names the non-browser surface"
+    echo "    actual: '$TRIAGE_OUT'" ;;
+esac
+teardown
+
+# T4. Criterion-2 scan surface is title + expected outcome ONLY: a finding that
+# merely narrates tooling (ssh'd deploy) must NOT trip the non-browser class
+# when the expected outcome itself is a browser observation.
+echo "Test: triage: non-browser mention in the finding only → exit 0"
+setup
+cat > "$STUB_DIR/arg-issue-64.json" <<'EOF'
+{"number":64,"title":"qa: verify against main — qa-needs-main #52: /fellspiral","body":"**Expected outcome:** the landing hero renders the new tagline\n**Finding during QA:** found while ssh tunneling to the preview; only prod serves the built asset\n**URL path:** /fellspiral","state":"open","labels":[{"name":"main-qa"}]}
+EOF
+triage_run 64
+assert_eq "tooling mention in finding only → exit 0" "0" "$TRIAGE_RC"
+teardown
+
+# T5. gh hard failure → exit 1 (clear error, no fallback routing).
+echo "Test: triage: gh failure → exit 1"
+setup
+touch "$STUB_DIR/gh-fail-issue-labels-65"
+triage_run 65
+assert_eq "gh failure → exit 1" "1" "$TRIAGE_RC"
+teardown
+
+# T6. Usage errors → exit 2 (missing / non-numeric N).
+echo "Test: triage: usage errors → exit 2"
+setup
+triage_run
+assert_eq "missing N → exit 2" "2" "$TRIAGE_RC"
+triage_run not-a-number
+assert_eq "non-numeric N → exit 2" "2" "$TRIAGE_RC"
+teardown
+
+# ============================================================================
 # dispatch-route tests
 # ============================================================================
 echo ""
@@ -3411,19 +3507,73 @@ assert_eq "no PR + dispatch:planned → INVOKE /implement (directive)" \
 assert_eq "no PR + dispatch:planned → INVOKE /implement (exit 0)" "0" "$ROUTE_RC"
 teardown
 
-# 1b-2. No PR + main-qa label → INVOKE /qa-main (#2274). dispatch-route always
-# provisions the worktree first (the unconditional dispatch-provision-worktree
-# call), then dispatch-phase returns main-qa for the issue; the router maps
-# main-qa → INVOKE /qa-main.
-echo "Test: no PR + main-qa label → INVOKE /qa-main"
+# 1b-2. No PR + main-qa label, browser-verifiable body → INVOKE /qa-main
+# (#2274). The pre-provision triage gate (dispatch-main-qa-triage) sees the
+# url_path-bearing browser outcome and exits 0, so dispatch-route provisions
+# the worktree (the dispatch-provision-worktree call), then dispatch-phase
+# returns main-qa for the issue; the router maps main-qa → INVOKE /qa-main.
+echo "Test: no PR + main-qa label (verifiable) → INVOKE /qa-main"
 setup
 echo '[]' > "$STUB_DIR/pr-list-full.json"
 echo "/wt/42-my-feature" > "$STUB_DIR/worktree-toplevel.txt"
-printf '{"state":"open","labels":[{"name":"main-qa"}]}\n' > "$STUB_DIR/arg-issue-42.json"
+cat > "$STUB_DIR/arg-issue-42.json" <<'EOF'
+{"number":42,"title":"qa: verify against main — qa-needs-main #40: /budget","body":"**Expected outcome:** the budget page shows the new panel\n**Finding during QA:** only verifiable on prod\n**URL path:** /budget","state":"open","labels":[{"name":"main-qa"}]}
+EOF
 route_run 42 /wt/42-my-feature
-assert_eq "no PR + main-qa → INVOKE /qa-main (directive)" "INVOKE /qa-main" "$ROUTE_OUT"
-assert_eq "no PR + main-qa → INVOKE /qa-main (exit 0)" "0" "$ROUTE_RC"
+assert_eq "no PR + main-qa (verifiable) → INVOKE /qa-main (directive)" "INVOKE /qa-main" "$ROUTE_OUT"
+assert_eq "no PR + main-qa (verifiable) → INVOKE /qa-main (exit 0)" "0" "$ROUTE_RC"
+assert_eq "no PR + main-qa (verifiable) → provision proceeds" "1" \
+  "$([[ -f "$STUB_DIR/provision-calls.log" ]] && wc -l < "$STUB_DIR/provision-calls.log" | tr -d ' ' || echo 0)"
 teardown
+
+# 1b-3. Pre-provision triage rejection (tactic-main-qa-triage-before-provision):
+# a main-qa follow-up with no url_path is not browser-verifiable — dispatch-route
+# emits STOP main-qa-unverifiable (reason on the directive line) WITHOUT calling
+# dispatch-provision-worktree, so the rejection costs no worktree provisioning
+# and no session boot. On the PRE-FIX code this provisioned and routed to
+# INVOKE /qa-main, so both assertions genuinely guard the new behavior.
+echo "Test: no PR + main-qa label (not verifiable) → STOP main-qa-unverifiable, no provision"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo "/wt/46-qa-verify-against-main" > "$STUB_DIR/worktree-toplevel.txt"
+cat > "$STUB_DIR/arg-issue-46.json" <<'EOF'
+{"number":46,"title":"qa: verify against main — qa-needs-main #40: nixos-rebuild","body":"**Expected outcome:** nix flake check --pure-eval passes on the host\n**Finding during QA:** not runnable in PR CI","state":"open","labels":[{"name":"main-qa"}]}
+EOF
+# The triage rejection persists the reason into CLAUDE_JOB_DIR (worker-session
+# context) for the Stop hook — export a fresh test job dir so the write is
+# assertable AND so a real session's CLAUDE_JOB_DIR never leaks into the run
+# (test 18's convention: any case that exports CLAUDE_JOB_DIR must unset it).
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/job"
+mkdir -p "$CLAUDE_JOB_DIR"
+route_run 46 /wt/46-qa-verify-against-main
+assert_eq "main-qa not verifiable → STOP main-qa-unverifiable (directive)" \
+  "STOP main-qa-unverifiable not-browser-verifiable: no url_path and the expected outcome names a non-browser surface ('nixos')" \
+  "$ROUTE_OUT"
+assert_eq "main-qa not verifiable → exit 0" "0" "$ROUTE_RC"
+assert_eq "main-qa not verifiable → NO provision call" "0" \
+  "$([[ -f "$STUB_DIR/provision-calls.log" ]] && wc -l < "$STUB_DIR/provision-calls.log" | tr -d ' ' || echo 0)"
+assert_eq "main-qa not verifiable → office-hours-reason written" "yes" \
+  "$([[ -s "$CLAUDE_JOB_DIR/office-hours-reason" ]] && echo yes || echo no)"
+unset CLAUDE_JOB_DIR
+teardown
+
+# 1b-4. Non-main-qa issues must never pay the triage read: with no main-qa
+# label the gate is inert (no arg-issue fixture beyond the default empty-label
+# issue) — covered by test 1 above routing to INVOKE /plan-issue untouched.
+# Launcher-side park disposition: driving dispatch-launch-worker end-to-end is
+# out of scope for this harness (same rationale as tests 1d/1g), so assert at
+# the source that the launcher has a DEDICATED "STOP main-qa-unverifiable"* arm
+# that parks via dispatch-apply-office-hours — i.e. the same label+why-comment
+# write the in-session Step 4·0 → dispatch-mark-deviation → Branch A path
+# applies, not the benign no-park arm.
+echo "Test: dispatch-launch-worker parks STOP main-qa-unverifiable via dispatch-apply-office-hours"
+TOTAL=$((TOTAL + 1))
+if awk '/"STOP main-qa-unverifiable"\*\)/,/;;/' "$SCRIPT_DIR/dispatch-launch-worker" \
+   | grep -q 'dispatch-apply-office-hours'; then
+  PASS=$((PASS + 1)); echo "  PASS: launcher parks STOP main-qa-unverifiable to office-hours"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: launcher parks STOP main-qa-unverifiable to office-hours"
+fi
 
 # 1c. Closed issue → STOP closed (#1845). The router's closed-issue guard fires
 # AFTER the worktree cross-check and BEFORE provisioning: it fetches the issue
@@ -31746,8 +31896,8 @@ tick_setup
 export TICK_DECISION="main-broken abc1234"
 out=$(run_tick) && rc=0 || rc=$?
 assert_eq "main-broken: exit 0" "0" "$rc"
-assert_eq "main-broken: spawn-job argv" \
-  "--name diagnose-main --cwd $TMPDIR_TEST /dispatch-diagnose-main abc1234" \
+assert_eq "main-broken: spawn-job argv (Sonnet — diagnosis authors no product code)" \
+  "--name diagnose-main --cwd $TMPDIR_TEST --model claude-sonnet-4-6 /dispatch-diagnose-main abc1234" \
   "$(cat "$TMPDIR_TEST/logs/spawn-job.log")"
 assert_eq "main-broken: no materialize call" "0" \
   "$([ -f "$TMPDIR_TEST/logs/materialize.log" ] && echo 1 || echo 0)"
@@ -31759,8 +31909,8 @@ tick_setup
 export TICK_DECISION="sync-failed"
 out=$(run_tick) && rc=0 || rc=$?
 assert_eq "sync-failed: exit 0" "0" "$rc"
-assert_eq "sync-failed: spawn-job argv" \
-  "--name sync-repair --cwd $TMPDIR_TEST /commit-merge-push" \
+assert_eq "sync-failed: spawn-job argv (Sonnet — conflict recovery escalates to Opus internally)" \
+  "--name sync-repair --cwd $TMPDIR_TEST --model claude-sonnet-4-6 /commit-merge-push" \
   "$(cat "$TMPDIR_TEST/logs/spawn-job.log")"
 assert_eq "sync-failed: no materialize call" "0" \
   "$([ -f "$TMPDIR_TEST/logs/materialize.log" ] && echo 1 || echo 0)"
@@ -31772,8 +31922,8 @@ tick_setup
 export TICK_DECISION="jit-reminder owner/repo 42 PVT_x ITEM_y"
 out=$(run_tick) && rc=0 || rc=$?
 assert_eq "jit-reminder: exit 0" "0" "$rc"
-assert_eq "jit-reminder: spawn-job argv" \
-  "--name jit-reminder-42 --cwd $TMPDIR_TEST /dispatch-jit-reminder owner/repo 42 PVT_x ITEM_y" \
+assert_eq "jit-reminder: spawn-job argv (Sonnet — reminder skills author no product code)" \
+  "--name jit-reminder-42 --cwd $TMPDIR_TEST --model claude-sonnet-4-6 /dispatch-jit-reminder owner/repo 42 PVT_x ITEM_y" \
   "$(cat "$TMPDIR_TEST/logs/spawn-job.log")"
 tick_teardown
 
@@ -37070,8 +37220,8 @@ echo "=== dispatch-launch-worker ==="
 #                             and exits 0.
 # dispatch-phase-model and dispatch-phase-effort are the REAL scripts (copied
 # in), so the compute-derivation assertions exercise the actual per-phase
-# policy: qa/review/fix-checks/fix-conflicts → claude-sonnet-4-6 (no effort);
-# implement → effort medium; plan → effort high (#2042).
+# policy: qa/review/fix-checks/fix-conflicts/main-qa → claude-sonnet-4-6 (no
+# effort); implement → effort medium; plan → effort high (#2042).
 #
 # The reservation ledger points at $LW_DIR/reservations via DISPATCH_RESERVATION_DIR
 # (so reservation_clear/_dir never need a git repo). Each mechanical-path test
@@ -37298,6 +37448,25 @@ sj=$(cat "$LW_DIR/spawn-job-argv" 2>/dev/null || echo "")
 assert_eq "launch INVOKE /review-fix: spawn-job argv (with model)" \
   "--no-verify --park-issue 839 --name $LW_WT_BASENAME --cwd $LW_WT --model claude-sonnet-4-6 /review-fix 839 $LW_WT" \
   "$sj"
+lw_teardown
+
+# 3a. INVOKE /qa-main → spawn-job carries --model claude-sonnet-4-6 (real
+# dispatch-phase-model main-qa policy: review-like, no product-code authoring,
+# #2274) and NO --effort. Regression guard for the routing gap where the
+# SKILL→PHASE map had no /qa-main arm, so PHASE stayed empty, dispatch-phase-model
+# was never consulted, and the spawn inherited the session default (Opus).
+echo "Test: INVOKE /qa-main → spawn-job with --model claude-sonnet-4-6, no --effort"
+lw_setup
+lw_write_marker
+lw_run "INVOKE /qa-main"
+assert_eq "launch INVOKE /qa-main: exit 0" "0" "$LW_RC"
+sj=$(cat "$LW_DIR/spawn-job-argv" 2>/dev/null || echo "")
+assert_eq "launch INVOKE /qa-main: spawn-job argv (with model)" \
+  "--no-verify --park-issue 839 --name $LW_WT_BASENAME --cwd $LW_WT --model claude-sonnet-4-6 /qa-main 839 $LW_WT" \
+  "$sj"
+assert_eq "launch INVOKE /qa-main: no --effort in argv" "no" \
+  "$([[ "$sj" == *"--effort"* ]] && echo yes || echo no)"
+assert_eq "launch INVOKE /qa-main: reservation RETAINED" "yes" "$(lw_marker_exists)"
 lw_teardown
 
 # 3b. INVOKE /plan-issue → spawn-job carries --effort high and NO --model (plan
@@ -40578,6 +40747,106 @@ STAMP="$SCRIPT_DIR/dispatch-stamp-session"
   rm -rf "$d"
 )
 
+# 15. Graph-native node-id branch (tactic-*): the sidecar is written with
+#     node_id == the branch name and issue == null (no numeric prefix to
+#     derive). Guards the graph-native arm of the worker-branch gate.
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b tactic-node-attribution-fixture
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  ( cd "$d" && "$STAMP" --session-id sessN --transcript-path "$d/sessN.jsonl" )
+  sc="$d/sessN.dispatch-stamp.json"
+  assert_eq "stamp: node-id branch writes sidecar" "yes" \
+    "$([ -f "$sc" ] && echo yes || echo no)"
+  assert_eq "stamp: node-id branch .node_id == branch" "tactic-node-attribution-fixture" \
+    "$(jq -r .node_id "$sc")"
+  assert_eq "stamp: node-id branch .issue is null" "null" "$(jq -r .issue "$sc")"
+  assert_eq "stamp: node-id branch .branch" "tactic-node-attribution-fixture" \
+    "$(jq -r .branch "$sc")"
+  assert_eq "stamp: node-id branch .base_sha equals HEAD" \
+    "$(git -C "$d" rev-parse HEAD)" "$(jq -r .base_sha "$sc")"
+  rm -rf "$d"
+)
+
+# 16. Graph branch (graph-<slug>) whose slug resolves via a prefixed candidate:
+#     intentions/tactic-<slug>.md exists, so node_id == "tactic-<slug>";
+#     issue == null.
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b graph-myslug
+  mkdir -p "$d/intentions"
+  : > "$d/intentions/tactic-myslug.md"
+  git -C "$d" -c user.email=t@t -c user.name=t add intentions
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init
+  ( cd "$d" && "$STAMP" --session-id sessG --transcript-path "$d/sessG.jsonl" )
+  sc="$d/sessG.dispatch-stamp.json"
+  assert_eq "stamp: graph branch writes sidecar" "yes" \
+    "$([ -f "$sc" ] && echo yes || echo no)"
+  assert_eq "stamp: graph branch .node_id resolved via intentions/tactic-<slug>.md" \
+    "tactic-myslug" "$(jq -r .node_id "$sc")"
+  assert_eq "stamp: graph branch .issue is null" "null" "$(jq -r .issue "$sc")"
+  rm -rf "$d"
+)
+
+# 16b. Graph branch whose slug IS the node id (graph-tactic-foo with
+#      intentions/tactic-foo.md): the slug-direct candidate wins.
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b graph-tactic-foo
+  mkdir -p "$d/intentions"
+  : > "$d/intentions/tactic-foo.md"
+  git -C "$d" -c user.email=t@t -c user.name=t add intentions
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init
+  ( cd "$d" && "$STAMP" --session-id sessG2 --transcript-path "$d/sessG2.jsonl" )
+  sc="$d/sessG2.dispatch-stamp.json"
+  assert_eq "stamp: graph branch slug-direct .node_id" "tactic-foo" \
+    "$(jq -r .node_id "$sc")"
+  rm -rf "$d"
+)
+
+# 17. Graph branch with NO matching intentions/<id>.md: the sidecar is still
+#     written (session stays attributable by branch) with node_id null and
+#     issue null.
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b graph-unresolved
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  ( cd "$d" && "$STAMP" --session-id sessU --transcript-path "$d/sessU.jsonl" )
+  sc="$d/sessU.dispatch-stamp.json"
+  assert_eq "stamp: unresolved graph branch writes sidecar" "yes" \
+    "$([ -f "$sc" ] && echo yes || echo no)"
+  assert_eq "stamp: unresolved graph branch .node_id is null" "null" \
+    "$(jq -r .node_id "$sc")"
+  assert_eq "stamp: unresolved graph branch .issue is null" "null" \
+    "$(jq -r .issue "$sc")"
+  rm -rf "$d"
+)
+
+# 18. Numeric worker branch keeps today's behavior AND carries the new
+#     node_id key as null (shape extension, no behavior change).
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b 999-fixture
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  ( cd "$d" && "$STAMP" --session-id sessNum --transcript-path "$d/sessNum.jsonl" )
+  sc="$d/sessNum.dispatch-stamp.json"
+  assert_eq "stamp: numeric branch .issue still numeric" "999" "$(jq -r .issue "$sc")"
+  assert_eq "stamp: numeric branch has node_id key" "true" \
+    "$(jq 'has("node_id")' "$sc")"
+  assert_eq "stamp: numeric branch .node_id is null" "null" "$(jq -r .node_id "$sc")"
+  rm -rf "$d"
+)
+
 # ============================================================================
 # dispatch-open-pr — PR backfill into the per-session sidecar (#1861)
 # ============================================================================
@@ -42302,6 +42571,87 @@ assert_eq "dispatch-find-owning-pr: missing path exits 2" "2" "$rc"
 out=$("$TMPDIR_TEST/scripts/dispatch-find-owning-pr" notadigit "some/file.ts" 2>/dev/null) && rc=0 || rc=$?
 assert_eq "dispatch-find-owning-pr: non-digit N exits 2" "2" "$rc"
 find_owning_pr_teardown
+
+# ============================================================================
+# Test: graph-select-target — a human-created node-id worktree is a held claim
+# (tactic-align-session-claiming Unit 3)
+# ============================================================================
+# Uniform node-id claiming (strategy clarification 13) must cover worktrees a
+# HUMAN-invoked /align-strategy or /align-tactics session created — sessions
+# that claim by authoring in <root>/.claude/worktrees/<node-id> and never write
+# a router reservation-ledger marker. graph-select-target's claimed-set gate is
+# worktree_has_live_session, name-keyed on the worktree basename, so a live
+# session named <node-id> claims the node no matter who created the worktree.
+# Per the #1474 doctrine, worktree DIRECTORY existence alone is NOT a claim
+# (orphan worktrees fail open) — the live session is; the negative control
+# below pins that (dir present, no session -> selected). The skip<->select
+# delta also rules out a daemon-UNKNOWN fold-to-occupied false pass.
+#
+# graph-select-target reads the store via `git archive origin/main intentions`
+# and derives REPO_ROOT from its own on-disk location, so it needs a real git
+# repo with the script physically copied in (a symlink's pwd would resolve back
+# out of the fixture). select-targets.ts (the pure candidate computation) is
+# stubbed with a fake `npx` on PATH so the fixture exercises ONLY the
+# environmental claimed-set gate this unit covers; the snapshot is irrelevant.
+echo "Test: graph-select-target — live session in a human-created node-id worktree is skipped (Unit 3)"
+GSC_ROOT=$(mktemp -d)
+GSC_BARE=$(mktemp -d)
+GSC_SCRIPTS="$GSC_ROOT/.claude/skills/dispatch-propagate/scripts"
+mkdir -p "$GSC_SCRIPTS" "$GSC_ROOT/bin"
+# Copy the script under test + every sourced lib (lib.sh plus the lib-*.sh
+# helpers). REPO_ROOT is derived from the script's real location, so the copy
+# must be physical.
+cp "$SCRIPT_DIR"/graph-select-target "$SCRIPT_DIR"/lib.sh "$SCRIPT_DIR"/lib-*.sh "$GSC_SCRIPTS/"
+# Fake npx: intercept `npx tsx …/select-targets.ts …` and emit one selectable
+# implement-phase candidate. An implement candidate's sensor_gate returns 0
+# without touching gh, so no further environmental dependency is exercised.
+cat > "$GSC_ROOT/bin/npx" <<'GSCNPX'
+#!/usr/bin/env bash
+echo '{"candidates":[{"id":"tactic-fixture","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false}],"events":[]}'
+exit 0
+GSCNPX
+chmod +x "$GSC_ROOT/bin/npx"
+# A git repo whose origin/main carries an intentions/ tree, main checked out at
+# the fixture root so NATIVE_ROOT resolves there.
+git init -q -b main "$GSC_ROOT"
+git -C "$GSC_ROOT" config user.email t@t
+git -C "$GSC_ROOT" config user.name t
+mkdir -p "$GSC_ROOT/intentions"
+echo '# placeholder' > "$GSC_ROOT/intentions/placeholder.md"
+git -C "$GSC_ROOT" add -A
+git -C "$GSC_ROOT" commit -q -m seed
+git init -q --bare -b main "$GSC_BARE"
+git -C "$GSC_ROOT" remote add origin "$GSC_BARE"
+git -C "$GSC_ROOT" push -q origin main
+git -C "$GSC_ROOT" fetch -q origin
+# The human session's claim: the node-id worktree directory exists.
+mkdir -p "$GSC_ROOT/.claude/worktrees/tactic-fixture"
+# Fake `claude agents --json`: payload driven by a file the two cases rewrite.
+cat > "$GSC_ROOT/bin/claude" <<'GSCCLAUDE'
+#!/usr/bin/env bash
+_root="$(cd "$(dirname "$0")/.." && pwd)"
+cat "$_root/claude-payload.json"
+exit 0
+GSCCLAUDE
+chmod +x "$GSC_ROOT/bin/claude"
+GSC_GST="$GSC_SCRIPTS/graph-select-target"
+# Case 1 — a live session named after the node id owns the worktree -> skipped.
+printf '%s' '[{"sessionId":"s1","pid":1,"status":"busy","name":"tactic-fixture","cwd":""}]' \
+  > "$GSC_ROOT/claude-payload.json"
+gsc_skip=$(PATH="$GSC_ROOT/bin:$SAVED_PATH" \
+  CLAUDE_AGENTS_CMD="$GSC_ROOT/bin/claude" DISPATCH_RESERVATION_DIR="$GSC_ROOT/reservations" \
+  DISPATCH_SELECTION_LOG_DIR="$GSC_ROOT/seldir" "$GSC_GST" 2>/dev/null)
+assert_eq "graph-select-target: live-session-owned human node-id worktree is skipped" "empty" "$gsc_skip"
+# Case 2 (negative control) — same fixture, daemon reports NO sessions ([]).
+# The worktree dir still exists, so this pins that existence alone does not
+# claim: the node IS selected.
+echo "Test: graph-select-target — orphan node-id worktree (no live session) stays selectable (Unit 3 negative control)"
+printf '%s' '[]' > "$GSC_ROOT/claude-payload.json"
+gsc_sel=$(PATH="$GSC_ROOT/bin:$SAVED_PATH" \
+  CLAUDE_AGENTS_CMD="$GSC_ROOT/bin/claude" DISPATCH_RESERVATION_DIR="$GSC_ROOT/reservations" \
+  DISPATCH_SELECTION_LOG_DIR="$GSC_ROOT/seldir" "$GSC_GST" 2>/dev/null)
+assert_eq "graph-select-target: orphan node-id worktree (no session) is selected" "node tactic-fixture tactic implement" "$gsc_sel"
+rm -rf "$GSC_ROOT" "$GSC_BARE"
 
 # ============================================================================
 # summary

@@ -38,13 +38,14 @@ attention:
     strategy's own boost 5, authored 8) — above curriculum-execution tooling
     (boost 7) and above every other tactic in this strategy's subtree (inherited
     5, unboosted)."
-phase: review
+phase: done
 execution:
   branch: tactic-align-session-claiming
   pr: 2804
   attempts: {}
   markers:
     - planned
+    - reviewed
   strategy_fingerprint: 7964be73bb6a26bb77ec516c22d07677de94ee20965f93b02442867fff492731
 validates: []
 blocked_by: []

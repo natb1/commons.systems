@@ -26,6 +26,10 @@
 #   STOP wrong-worktree             cross-check failed (diagnostic on stderr); exits non-zero
 #   STOP closed                     issue is CLOSED — never dispatch a closed issue to a phase
 #   STOP merged-pr-closed           open issue, but its closing PR has MERGED — self-close (no re-implement loop)
+#   STOP main-qa-unverifiable <reason>  main-qa follow-up failed the pre-provision
+#                                   browser-verifiability triage (dispatch-main-qa-triage
+#                                   exit 3); the launcher parks it WITHOUT provisioning
+#                                   or spawning — the reason rides the directive line
 #
 # Usage error (missing <N> or <worktree-path>) → stderr message, exit 2 (matches
 # the sibling-script convention).
@@ -90,13 +94,22 @@ if [[ "$ACTUAL_TOPLEVEL" != "$WORKTREE_PATH" ]]; then
 fi
 
 # Closed-issue guard (#1845): a closed issue's lingering worktree must never be
-# routed to a phase skill. Fetch state once, before provisioning. On a gh
-# failure, log and continue (do not strand the issue on a transient error) —
-# matches the gh-failure fallbacks already used below.
-ISSUE_STATE=$(gh_issue_view_rest "$N" | jq -r '.state') || {
+# routed to a phase skill. Fetch the issue once, before provisioning — the same
+# read also carries the labels the pre-provision main-qa triage gate below keys
+# on, so the triage adds no extra call here. On a gh failure, log and continue
+# (do not strand the issue on a transient error) — matches the gh-failure
+# fallbacks already used below.
+ISSUE_JSON=$(gh_issue_view_rest "$N") || {
   echo "dispatch-route: gh_issue_view_rest $N (state) failed; continuing to route" >&2
-  ISSUE_STATE=""
+  ISSUE_JSON=""
 }
+ISSUE_STATE=""
+if [[ -n "$ISSUE_JSON" ]]; then
+  ISSUE_STATE=$(jq -r '.state' <<<"$ISSUE_JSON") || {
+    echo "dispatch-route: failed to parse issue JSON for #$N; continuing to route" >&2
+    ISSUE_STATE=""
+  }
+fi
 if [[ "$ISSUE_STATE" == "CLOSED" ]]; then
   echo "STOP closed"
   exit 0
@@ -122,6 +135,42 @@ if [[ -n "$MERGED_CLOSING_PR" ]]; then
   echo "dispatch-route: #$N is OPEN but PR #$MERGED_CLOSING_PR (merged) closes it; routing to self-close" >&2
   echo "STOP merged-pr-closed"
   exit 0
+fi
+
+# Pre-provision main-qa triage (tactic-main-qa-triage-before-provision): a
+# main-qa follow-up that is not browser-verifiable must never cost worktree
+# provisioning + a phase-session boot just to reach its in-session Step 4·0
+# rejection. Gate on the main-qa label from the issue read above — a main-qa
+# follow-up never carries an open PR (the follow-up pipeline files issues, not
+# PRs), so the label is the same lane signal dispatch-phase later derives.
+# dispatch-main-qa-triage exits:
+#   0 → browser-verifiable — provision and route as before.
+#   3 → not browser-verifiable — emit the disposition directive with the triage
+#       reason on the same line; the launcher parks the issue on
+#       dispatch:office-hours exactly as the in-session Step 4·0 →
+#       dispatch-mark-deviation → Branch A park would, with no provisioning and
+#       no session spawn.
+#   other → transient gh failure — log and continue to normal routing (the
+#       in-session Step 4·0 remains the fallback; never strand the issue).
+if [[ -n "$ISSUE_JSON" ]] \
+  && jq -e '.labels | map(.name) | index("main-qa") != null' >/dev/null 2>&1 <<<"$ISSUE_JSON"; then
+  TRIAGE_RC=0
+  TRIAGE_OUT=$("$SCRIPT_DIR/dispatch-main-qa-triage" "$N") || TRIAGE_RC=$?
+  if [[ "$TRIAGE_RC" -eq 3 ]]; then
+    TRIAGE_REASON=$(head -n1 <<<"$TRIAGE_OUT")
+    # Mirror the provision-failed path: when a job dir exists (worker-session
+    # context), persist the reason for the Stop hook; the detached launcher has
+    # no job dir and reads the reason off the directive line instead.
+    if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
+      printf '%s\n' "dispatch-route: main-qa follow-up #${N} is not browser-verifiable (${TRIAGE_REASON})" \
+        > "$CLAUDE_JOB_DIR/office-hours-reason.tmp"
+      mv "$CLAUDE_JOB_DIR/office-hours-reason.tmp" "$CLAUDE_JOB_DIR/office-hours-reason"
+    fi
+    echo "STOP main-qa-unverifiable ${TRIAGE_REASON}"
+    exit 0
+  elif [[ "$TRIAGE_RC" -ne 0 ]]; then
+    echo "dispatch-route: dispatch-main-qa-triage exited $TRIAGE_RC for #$N; continuing to route (in-session Step 4·0 is the fallback)" >&2
+  fi
 fi
 
 # Provision the worktree and merge origin/main — runs here, after the cross-check
