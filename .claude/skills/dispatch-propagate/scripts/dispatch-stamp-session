@@ -14,8 +14,9 @@
 #
 # Sidecar JSON shape (always emitted via `jq -n`, so always valid JSON):
 #
-#   {"schema":1,"session_id":"<id>","repo":"<owner/name>","issue":<N>,
-#    "pr":null,"branch":"<branch>","base_sha":"<sha>","stamped_at":"<iso8601>"}
+#   {"schema":1,"session_id":"<id>","repo":"<owner/name>","issue":<N|null>,
+#    "pr":null,"branch":"<branch>","base_sha":"<sha>","node_id":<string|null>,
+#    "stamped_at":"<iso8601>"}
 #
 # Mode A — initial write (run at session start). Derives everything from git
 # only (NEVER gh, no network):
@@ -23,14 +24,24 @@
 #             trailing `.git` stripped).
 #   branch    `git rev-parse --abbrev-ref HEAD`.
 #   base_sha  `git rev-parse HEAD`.
-#   issue     the numeric prefix of the branch (leading digits before `-`), as
-#             a JSON number.
+#   issue     numeric worker branch (^[0-9]+-): the numeric prefix of the
+#             branch (leading digits before `-`), as a JSON number.
+#             Graph-native branch: null.
+#   node_id   graph-native branch: the intention-graph node id the session
+#             works on. A branch that is exactly a node id (tactic-* /
+#             strategy-*) stamps the branch name; a graph-<slug> branch stamps
+#             the slug's best-effort node id (the slug itself, then a
+#             tactic-/strategy- prefixed form, whichever has a matching
+#             intentions/<id>.md at the repo root) or null when none matches.
+#             Numeric worker branch: null.
 #   stamped_at  current UTC time, ISO-8601.
 #
-# Mode A no-ops (exit 0, writes nothing) unless the branch matches `^[0-9]+-`.
-# That single positive gate already excludes the non-worker branches `main`,
-# detached `HEAD`, and any `office-hours-*` branch. A no-op emits at most one
-# short stderr diagnostic and exits 0 — it must NEVER block session start.
+# Mode A no-ops (exit 0, writes nothing) unless the branch matches `^[0-9]+-`
+# (a numeric phase-worker branch) or is graph-native (`graph-<slug>`, or
+# exactly a node id `tactic-*` / `strategy-*`). That positive gate still
+# excludes the non-worker branches `main`, detached `HEAD`, and any
+# `office-hours-*` branch. A no-op emits at most one short stderr diagnostic
+# and exits 0 — it must NEVER block session start.
 #
 # Mode A is idempotent w.r.t. a backfilled pr and the session-start base_sha: if
 # the sidecar already exists, a non-null `.pr` and a non-empty `.base_sha` are
@@ -197,11 +208,16 @@ branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null) || {
   exit 0
 }
 
-# Worker-branch gate: only phase-worker target branches (^[0-9]+-) are stamped.
-# This single positive gate already excludes main, detached HEAD, and
-# office-hours-* — mirroring restore-dispatch-skill.sh's guard shape.
-if ! printf '%s\n' "$branch" | grep -qE '^[0-9]+-'; then
-  echo "dispatch-stamp-session: branch '$branch' is not a worker branch (^[0-9]+-); skipping stamp" >&2
+# Worker-branch gate: phase-worker target branches (^[0-9]+-) and graph-native
+# branches (graph-<slug>, or exactly a node id tactic-*/strategy-*) are stamped.
+# This positive gate still excludes main, detached HEAD, and office-hours-* —
+# mirroring restore-dispatch-skill.sh's guard shape.
+if printf '%s\n' "$branch" | grep -qE '^[0-9]+-'; then
+  branch_kind=issue
+elif printf '%s\n' "$branch" | grep -qE '^(graph|tactic|strategy)-.'; then
+  branch_kind=graph
+else
+  echo "dispatch-stamp-session: branch '$branch' is not a worker or graph-native branch (^[0-9]+- / graph-* / tactic-* / strategy-*); skipping stamp" >&2
   exit 0
 fi
 
@@ -215,8 +231,31 @@ case "$branch" in
     ;;
 esac
 
-# issue = leading digits of the branch, as a JSON number.
-issue=$(printf '%s\n' "$branch" | grep -oE '^[0-9]+')
+# issue / node_id split by branch kind (each is JSON text for --argjson below):
+#   issue branch  → issue = leading digits as a JSON number, node_id = null.
+#   graph branch  → issue = null, node_id = the node id as a JSON string
+#                   (or null when a graph-<slug> slug resolves to no node).
+issue=null
+node_id=null
+if [[ "$branch_kind" == issue ]]; then
+  issue=$(printf '%s\n' "$branch" | grep -oE '^[0-9]+')
+elif [[ "$branch" == graph-* ]]; then
+  # Best-effort node-id resolution for a graph-<slug> branch: try the slug
+  # itself, then the tactic-/strategy- prefixed forms, against
+  # intentions/<id>.md at the repo root. No match → node_id stays null.
+  slug="${branch#graph-}"
+  if toplevel=$(git rev-parse --show-toplevel 2>/dev/null); then
+    for cand in "$slug" "tactic-$slug" "strategy-$slug"; do
+      if [[ -f "$toplevel/intentions/$cand.md" ]]; then
+        node_id=$(jq -n --arg v "$cand" '$v')
+        break
+      fi
+    done
+  fi
+else
+  # The branch IS a node id (tactic-* / strategy-*).
+  node_id=$(jq -n --arg v "$branch" '$v')
+fi
 
 # base_sha = current HEAD.
 base_sha=$(git rev-parse HEAD 2>/dev/null) || {
@@ -277,8 +316,9 @@ if ! jq -n \
   --argjson pr "$pr" \
   --arg branch "$branch" \
   --arg base_sha "$base_sha" \
+  --argjson node_id "$node_id" \
   --arg stamped_at "$stamped_at" \
-  '{schema:$schema, session_id:$session_id, repo:$repo, issue:$issue, pr:$pr, branch:$branch, base_sha:$base_sha, stamped_at:$stamped_at}' \
+  '{schema:$schema, session_id:$session_id, repo:$repo, issue:$issue, pr:$pr, branch:$branch, base_sha:$base_sha, node_id:$node_id, stamped_at:$stamped_at}' \
   > "$sidecar.tmp" 2>/dev/null; then
   echo "dispatch-stamp-session: failed to build sidecar JSON for '$sidecar'; skipping stamp" >&2
   rm -f "$sidecar.tmp"
