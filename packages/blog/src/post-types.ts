@@ -40,7 +40,7 @@ export function validatePublishedPosts(seed: Pick<SeedSpec, "collections">): Pub
       if (!Array.isArray(data.syndication)) {
         throw new Error(`Post "${doc.id}" has non-array syndication`);
       }
-      if (!data.syndication.every((u) => typeof u === "string")) {
+      if (!data.syndication.every((u): u is string => typeof u === "string")) {
         throw new Error(`Post "${doc.id}" has non-string syndication entry`);
       }
     }
@@ -52,7 +52,7 @@ export function validatePublishedPosts(seed: Pick<SeedSpec, "collections">): Pub
       filename: data.filename,
       previewImage: data.previewImage,
       previewDescription: data.previewDescription,
-      syndication: data.syndication as string[] | undefined,
+      syndication: data.syndication,
     });
   }
 
