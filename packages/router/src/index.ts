@@ -90,7 +90,12 @@ function createNavigator(
         const message =
           options?.formatError?.(error) ??
           "Something went wrong. Please try again.";
-        outlet.innerHTML = `<p>${message}</p>`;
+        // Assign via textContent, not innerHTML: formatError output is
+        // app-supplied and may carry attacker-influenced text, which would
+        // otherwise execute as markup (XSS sink).
+        const p = document.createElement("p");
+        p.textContent = message;
+        outlet.replaceChildren(p);
       }
     }
   }
