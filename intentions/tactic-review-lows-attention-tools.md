@@ -104,12 +104,19 @@ the single sweep PR.
 - **Scope**: two drifted extension→MIME maps —
   `audio/src/storage.ts:7-13` (keyed by dotted extension, includes `.aac`) and
   `audio/src/local-source.ts:37-43` (keyed by `AudioFormat`, omits `aac`). A
-  `.aac` file accepted by one path is unreachable via the other. Converge them:
-  either add `aac` to the `AudioFormat` map (if `.aac` is intended to be
-  supported end-to-end) or drop it from `storage.ts` (if not) — pick the branch
-  that matches `AudioFormat`'s actual support, and prefer a single shared map if
-  both consumers can key off the same representation. Out of scope: adding new
-  formats beyond reconciling `aac`.
+  `.aac` file accepted by one path is unreachable via the other. The
+  authoritative closed union is `AUDIO_FORMATS` at `audio/src/types.ts:1`
+  (`mp3, m4a, flac, ogg, wav` — no `aac`), and the strategy's recorded
+  ownership-preserving product boundary (`strategy-recover-attention`
+  clarification on product boundaries, recorded 2026-07-07) names exactly that
+  five-format DRM-free set — so the default resolution is to drop `.aac` from
+  `storage.ts`; add `aac` to the union instead only if end-to-end aac support
+  is deliberately being adopted (a wider change than this unit intends).
+  Converge on one representation and prefer a single shared map if both
+  consumers can key off it. Out of scope: adding new formats beyond
+  reconciling `aac`. (This unit absorbs the draft
+  `tactic-audio-format-boundary`, pruned this round — the same finding
+  surfaced independently at the 2026-07-07 `/align-strategy` code review.)
 - **Recommended model**: sonnet
 
 ## Unit 6 — audio Home: remove the pre-React queue-toggle validation
