@@ -465,6 +465,95 @@ describe("resolveAttention capture-resolution term", () => {
   });
 });
 
+describe("resolveAttention backward blocked_by distribution", () => {
+  it("flows a blocked leaf's boost backward to its blocker and its blocker's blocker, undecayed", () => {
+    // tactic-hot (boost 5) is blocked by blocker-a; blocker-a is blocked by
+    // blocker-b. The boost flows backward along blocked_by, two hops, undecayed:
+    // both blockers rank at the full 5, with tactic-hot as the source.
+    const nodes = [
+      ...kinds(),
+      anode({ id: "tactic-hot", kind: "tactic", blocked_by: ["blocker-a"], attention: boost(5) }),
+      anode({ id: "blocker-a", kind: "tactic", blocked_by: ["blocker-b"] }),
+      anode({ id: "blocker-b", kind: "tactic" }),
+    ];
+
+    const result = resolveAttention(nodes);
+    expect(result.get("tactic-hot")?.value).toBe(5);
+    expect(result.get("blocker-a")?.value).toBe(5);
+    expect(result.get("blocker-a")?.sources).toEqual(["tactic-hot"]);
+    expect(result.get("blocker-b")?.value).toBe(5);
+    expect(result.get("blocker-b")?.sources).toEqual(["tactic-hot"]);
+  });
+
+  it("carries the received sources on into the blocker's own subtree (downward flow)", () => {
+    // tactic-hot (boost 5) blocked by blocker-a; blocker-a has a child via
+    // parent. The child inherits blocker-a's received source through the normal
+    // downward parent flow — the backward and downward flows interleave.
+    const nodes = [
+      ...kinds(),
+      anode({ id: "tactic-hot", kind: "tactic", blocked_by: ["blocker-a"], attention: boost(5) }),
+      anode({ id: "blocker-a", kind: "tactic" }),
+      anode({ id: "blocker-child", kind: "tactic", parent: "blocker-a" }),
+    ];
+
+    const result = resolveAttention(nodes);
+    expect(result.get("blocker-a")?.value).toBe(5);
+    expect(result.get("blocker-child")?.value).toBe(5);
+    expect(result.get("blocker-child")?.sources).toEqual(["tactic-hot"]);
+  });
+
+  it("flows an override's value backward to blockers identically to a boost", () => {
+    const nodes = [
+      ...kinds(),
+      anode({ id: "tactic-hot", kind: "tactic", blocked_by: ["blocker-a"], attention: override(5) }),
+      anode({ id: "blocker-a", kind: "tactic" }),
+    ];
+
+    const result = resolveAttention(nodes);
+    expect(result.get("tactic-hot")?.value).toBe(5);
+    expect(result.get("blocker-a")?.value).toBe(5);
+    expect(result.get("blocker-a")?.sources).toEqual(["tactic-hot"]);
+  });
+
+  it("converges a mixed parent/blocked_by cycle to a stable fixpoint instead of throwing", () => {
+    // outer (boost 4) has a child `inner` via parent (outer distributes down to
+    // inner), and outer is blocked by inner (inner distributes backward to
+    // outer): a legitimate mixed cycle — a node blocked by a tactic inside its
+    // own subtree. The old DFS threw `attention flow cycle`; the fixpoint now
+    // converges both to the full boost.
+    const nodes = [
+      ...kinds(),
+      anode({ id: "outer", kind: "tactic", blocked_by: ["inner"], attention: boost(4) }),
+      anode({ id: "inner", kind: "tactic", parent: "outer" }),
+    ];
+
+    let result!: ReturnType<typeof resolveAttention>;
+    expect(() => {
+      result = resolveAttention(nodes);
+    }).not.toThrow();
+    expect(result.get("outer")?.value).toBe(4);
+    expect(result.get("inner")?.value).toBe(4);
+    expect(result.get("inner")?.sources).toEqual(["outer"]);
+  });
+
+  it("counts a source reaching a blocker via both a serves edge and a backward blocked_by edge exactly once", () => {
+    // strategy-hot (boost 5) is served by two tactics: blocker and hot. hot is
+    // blocked by blocker, so blocker receives strategy-hot's source TWICE — once
+    // via its own serves edge, once backward from hot (which also serves
+    // strategy-hot). The union dedupes by source id: blocker reads 5, not 10.
+    const nodes = [
+      ...kinds(),
+      svnode({ id: "strategy-hot", attention: boost(5) }),
+      anode({ id: "blocker", kind: "tactic", serves: ["strategy-hot"] }),
+      anode({ id: "hot", kind: "tactic", serves: ["strategy-hot"], blocked_by: ["blocker"] }),
+    ];
+
+    const result = resolveAttention(nodes);
+    expect(result.get("blocker")?.value).toBe(5);
+    expect(result.get("blocker")?.sources).toEqual(["strategy-hot"]);
+  });
+});
+
 describe("resolveAttention term composition is modular", () => {
   it("leaves an authored-only node's value untouched by a sibling's unrelated signal/capture contributions", () => {
     const nodes = [
