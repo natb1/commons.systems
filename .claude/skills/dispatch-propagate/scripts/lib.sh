@@ -331,7 +331,7 @@ dispatch_marker_comment_id() {
 # per-tick scan was self-exhausting (#1601).
 #
 # Contract:
-#   gh_issue_list_rest --state <open|closed|all> [--repo <owner/repo>] [--label <name>] [--limit <n>] [--include-title] [--include-body]
+#   gh_issue_list_rest --state <open|closed|all> [--repo <owner/repo>] [--label <name>] [--limit <n>] [--paginate] [--include-title] [--include-body]
 #
 # Flags:
 #   --state  (required) open|closed|all. `all` is accepted — REST's
@@ -351,6 +351,15 @@ dispatch_marker_comment_id() {
 #            silently truncate to <= 100. The slice preserves the
 #            `len == limit ⇒ truncated` guard semantics: paginate-all-then-slice
 #            yields len == limit iff at least <limit> issues exist.
+#   --paginate (optional) force the paginate-then-slice path even when --limit is
+#            <= 100. Without it, a <= 100 limit fetches a SINGLE page of mixed
+#            issues+PRs, so PR-filtering silently leaves FEWER than <limit> real
+#            issues. With it (and a --limit), we --paginate at per_page=100,
+#            filter PRs, then slice to <limit> — yielding the true recent <limit>
+#            issues. Use this when a limit <= 100 must mean "up to <limit> real
+#            issues" rather than "issues among the first <limit> mixed rows"
+#            (e.g. align's recent-closed-issues context in a PR-dominated repo).
+#            A no-op without --limit (that path already paginates the full set).
 #   --include-title (optional) when present, the projected objects additionally
 #            carry a `title` field. Omitted by default so the repo-wide per-tick
 #            callers stay byte-identical and payload-lean.
@@ -372,7 +381,7 @@ dispatch_marker_comment_id() {
 # On gh failure: errors to stderr and returns 1 (clear-errors convention, no
 # fallback).
 gh_issue_list_rest() {
-  local state="" repo="" label="" limit="" include_title="" include_body=""
+  local state="" repo="" label="" limit="" include_title="" include_body="" force_paginate=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --state) state="$2"; shift 2 ;;
@@ -381,6 +390,7 @@ gh_issue_list_rest() {
       --limit) limit="$2"; shift 2 ;;
       --include-title) include_title=1; shift 1 ;;
       --include-body) include_body=1; shift 1 ;;
+      --paginate) force_paginate=1; shift 1 ;;
       *) echo "error: gh_issue_list_rest: unknown flag '$1'" >&2; return 1 ;;
     esac
   done
@@ -399,13 +409,21 @@ gh_issue_list_rest() {
   # When --limit > 100, REST clamps a single page's per_page to 100, so we must
   # --paginate at per_page=100 and slice the merged result down to <limit> in the
   # projection. A limit <= 100 fits one page (per_page=<limit>, no --paginate).
+  #
+  # The single-page <=100 optimization under-delivers ISSUES: REST returns mixed
+  # issues+PRs, so one page of per_page=<limit> mixed rows yields FEWER than
+  # <limit> real issues after the projection filters PRs out — silently, with no
+  # shortfall indicator. Callers that need up-to-<limit> real issues at a limit
+  # <= 100 pass --paginate to force the paginate-then-slice path (paginate at
+  # per_page=100, filter PRs, slice to <limit>), which returns the true recent
+  # <limit> issues instead.
   local paginate="" per_page="100" slice=""
   if [[ -n "$limit" ]]; then
     if [[ ! "$limit" =~ ^[0-9]+$ ]]; then
       echo "error: gh_issue_list_rest: --limit must be a non-negative integer (got '$limit')" >&2
       return 1
     fi
-    if (( limit > 100 )); then
+    if (( limit > 100 )) || [[ -n "$force_paginate" ]]; then
       paginate=1
       per_page="100"
       slice="$limit"
