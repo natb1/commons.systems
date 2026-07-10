@@ -8,8 +8,9 @@ import type { FirebaseApp } from "firebase/app";
 import { classifyError } from "@commons-systems/errorutil/classify";
 import { logError } from "@commons-systems/errorutil/log";
 import { onLCP, onCLS, onINP, onFCP, onTTFB, type Metric } from "web-vitals";
+import { TRAFFIC_TYPE_STORAGE_KEY } from "./traffic-type";
 
-const STORAGE_KEY = "analytics_traffic_type";
+const STORAGE_KEY = TRAFFIC_TYPE_STORAGE_KEY;
 const PARAM_KEY = "_ct";
 
 /**
@@ -80,22 +81,22 @@ function reportWebVitals(analytics: Analytics): void {
     const metricValue = Math.round(
       metric.name === "CLS" ? metric.value * CLS_SCALE : metric.value,
     );
-    try {
-      logEvent(analytics, "web_vitals", {
-        metric_name: metric.name,
-        metric_value: metricValue,
-        metric_rating: metric.rating,
-        metric_id: metric.id,
-      });
-    } catch (error) {
-      if (classifyError(error) === "programmer") throw error;
-      logError(
-        new Error(
-          `Failed to log web-vital (metric: ${metric.name}): ${error instanceof Error ? error.message : error}`,
-        ),
-        { operation: "analytics-web-vitals" },
-      );
-    }
+    // web-vitals report at page-hide. `transport_type: "beacon"` makes gtag
+    // deliver via navigator.sendBeacon, which survives the teardown that would
+    // otherwise cancel the request gtag issues at page-hide. Scope note: this
+    // covers sessions whose firebase init (dynamic-config fetch) has resolved
+    // by page-hide; a tab torn down BEFORE init resolves is still lost, since
+    // logEvent suspends awaiting init before gtag ever runs — that residual
+    // segment is TODO(tactic-analytics-preinit-vitals). logEvent never throws
+    // for analytics failures (the SDK swallows them internally), so there is
+    // nothing to catch.
+    logEvent(analytics, "web_vitals", {
+      metric_name: metric.name,
+      metric_value: metricValue,
+      metric_rating: metric.rating,
+      metric_id: metric.id,
+      transport_type: "beacon",
+    });
   }
 
   onLCP(report);
@@ -152,16 +153,14 @@ export function initAnalytics(app: FirebaseApp): (path: string) => void {
   reportWebVitals(analytics);
 
   return (path: string) => {
-    try {
-      logEvent(analytics, "page_view", { page_path: path });
-    } catch (error) {
-      if (classifyError(error) === "programmer") throw error;
-      logError(
-        new Error(
-          `Failed to log page view (path: ${path}): ${error instanceof Error ? error.message : error}`,
-        ),
-        { operation: "analytics-page-view" },
-      );
-    }
+    // `transport_type: "beacon"` (see reportWebVitals) delivers a page_view
+    // fired at/near page-hide via sendBeacon instead of a cancellable request.
+    // Same scope note as reportWebVitals: pre-init teardown is still lost —
+    // TODO(tactic-analytics-preinit-vitals). logEvent does not throw for
+    // analytics failures, so there is nothing to catch.
+    logEvent(analytics, "page_view", {
+      page_path: path,
+      transport_type: "beacon",
+    });
   };
 }
