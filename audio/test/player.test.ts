@@ -851,9 +851,7 @@ describe("initPlayer", () => {
         await vi.advanceTimersByTimeAsync(3500);
         await flushMicrotasks();
         expect(mockSavePlayerState.mock.calls.length).toBe(callsBefore + 1);
-        const lastCall = mockSavePlayerState.mock.calls.at(-1)![0] as {
-          positionSeconds: number;
-        };
+        const lastCall = mockSavePlayerState.mock.calls.at(-1)![0] as { positionSeconds: number }; // type-safety-ok: mock-call introspection in test
         expect(lastCall.positionSeconds).toBe(45);
       } finally {
         vi.useRealTimers();
