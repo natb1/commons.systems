@@ -58,7 +58,7 @@ const mockBook = {
   load: vi.fn(),
   // book.getRange(cfiRange) -> Promise<Range>; the renderer reads .toString()
   // for the annotation quote. Default resolves an empty-text range.
-  getRange: vi.fn().mockResolvedValue({ toString: () => "" }) as ReturnType<typeof vi.fn>,
+  getRange: vi.fn().mockResolvedValue({ toString: () => "" }),
   renderTo: vi.fn().mockReturnValue(mockRendition),
   spine: mockSpine,
   destroy: vi.fn(),
@@ -1157,7 +1157,7 @@ describe("createEpubRenderer", () => {
 
     it("getSelectionAnchor is null before any selection", async () => {
       const renderer = await initRenderer();
-      expect(renderer.getSelectionAnchor!()).toBeNull();
+      expect(renderer.getSelectionAnchor!()).toBeNull(); // type-safety-ok: optional ContentRenderer method present in the epub renderer under test
     });
 
     it("captures a CFI-only anchor on the rendition 'selected' event and nudges the shared hook", async () => {
@@ -1167,17 +1167,17 @@ describe("createEpubRenderer", () => {
       let fired = false;
       const onSel = () => { fired = true; };
       document.addEventListener("selectionchange", onSel);
-      selectedHandler()("epubcfi(/6/4!/4/2,/1:0,/1:5)");
+      selectedHandler()("cfi-range-selected");
       await flush();
       document.removeEventListener("selectionchange", onSel);
 
-      const anchor = renderer.getSelectionAnchor!();
-      expect(anchor).toEqual({ position: "epubcfi(/6/4!/4/2,/1:0,/1:5)", quote: "selected quote" });
+      const anchor = renderer.getSelectionAnchor!(); // type-safety-ok: optional ContentRenderer method present in the epub renderer under test
+      expect(anchor).toEqual({ position: "cfi-range-selected", quote: "selected quote" });
       // EPUB carries no PDF page/offset/length anchor.
-      expect(anchor!.page).toBeUndefined();
-      expect(anchor!.offset).toBeUndefined();
-      expect(anchor!.length).toBeUndefined();
-      expect(mockBook.getRange).toHaveBeenCalledWith("epubcfi(/6/4!/4/2,/1:0,/1:5)");
+      expect(anchor!.page).toBeUndefined(); // type-safety-ok: anchor asserted non-null by the toEqual above
+      expect(anchor!.offset).toBeUndefined(); // type-safety-ok: anchor asserted non-null by the toEqual above
+      expect(anchor!.length).toBeUndefined(); // type-safety-ok: anchor asserted non-null by the toEqual above
+      expect(mockBook.getRange).toHaveBeenCalledWith("cfi-range-selected");
       // The top-document selectionchange re-dispatch reached a listener.
       expect(fired).toBe(true);
     });
@@ -1189,13 +1189,13 @@ describe("createEpubRenderer", () => {
       selectedHandler()("epubcfi(bad)");
       await flush();
 
-      expect(renderer.getSelectionAnchor!()).toBeNull();
+      expect(renderer.getSelectionAnchor!()).toBeNull(); // type-safety-ok: optional ContentRenderer method present in the epub renderer under test
       expect(globalThis.reportError).toHaveBeenCalled();
     });
 
     it("registers a persistent annotation highlight per annotation via setAnnotations", async () => {
       const renderer = await initRenderer();
-      renderer.setAnnotations!([
+      renderer.setAnnotations!([ // type-safety-ok: optional ContentRenderer method present in the epub renderer under test
         { id: "a1", position: "cfi-1", quote: "q1", note: "", created: "2026-01-01T00:00:00.000Z" },
         { id: "a2", position: "cfi-2", quote: "q2", note: "n2", created: "2026-01-01T00:00:00.000Z" },
       ]);
@@ -1210,7 +1210,7 @@ describe("createEpubRenderer", () => {
 
     it("does not remove any highlights on the first setAnnotations (leaves search highlights intact)", async () => {
       const renderer = await initRenderer();
-      renderer.setAnnotations!([
+      renderer.setAnnotations!([ // type-safety-ok: optional ContentRenderer method present in the epub renderer under test
         { id: "a1", position: "cfi-ann", quote: "q", note: "", created: "2026-01-01T00:00:00.000Z" },
       ]);
       // First reconcile registered no prior annotation cfis, so nothing is removed —
@@ -1220,7 +1220,7 @@ describe("createEpubRenderer", () => {
 
     it("removes a deleted annotation's highlight and re-applies the survivors", async () => {
       const renderer = await initRenderer();
-      renderer.setAnnotations!([
+      renderer.setAnnotations!([ // type-safety-ok: optional ContentRenderer method present in the epub renderer under test
         { id: "a1", position: "cfi-1", quote: "q", note: "", created: "2026-01-01T00:00:00.000Z" },
         { id: "a2", position: "cfi-2", quote: "q", note: "", created: "2026-01-01T00:00:00.000Z" },
       ]);
@@ -1228,7 +1228,7 @@ describe("createEpubRenderer", () => {
       mockRendition.annotations.remove.mockClear();
 
       // Delete a1: the new list carries only a2.
-      renderer.setAnnotations!([
+      renderer.setAnnotations!([ // type-safety-ok: optional ContentRenderer method present in the epub renderer under test
         { id: "a2", position: "cfi-2", quote: "q", note: "", created: "2026-01-01T00:00:00.000Z" },
       ]);
 
@@ -1248,7 +1248,7 @@ describe("createEpubRenderer", () => {
       // Arm a pending anchor.
       selectedHandler()("cfi-sel");
       await flush();
-      expect(renderer.getSelectionAnchor!()).not.toBeNull();
+      expect(renderer.getSelectionAnchor!()).not.toBeNull(); // type-safety-ok: optional ContentRenderer method present in the epub renderer under test
 
       // The selection-clear listener is the SECOND content-hook registration
       // (the first is the stylesheet-inlining hook).
@@ -1257,19 +1257,19 @@ describe("createEpubRenderer", () => {
       const listeners: Record<string, () => void> = {};
       const fakeDoc = {
         addEventListener: (ev: string, cb: () => void) => { listeners[ev] = cb; },
-      } as unknown as Document;
+      } as unknown as Document; // type-safety-ok: minimal fake epub.js Contents object for the selection-clear content hook
       const fakeWin = {
         getSelection: () => ({ isCollapsed: true, toString: () => "" }),
-      } as unknown as Window;
+      } as unknown as Window; // type-safety-ok: minimal fake epub.js Contents object for the selection-clear content hook
       clearHook({ document: fakeDoc, window: fakeWin });
 
       let fired = false;
       const onSel = () => { fired = true; };
       document.addEventListener("selectionchange", onSel);
-      listeners["selectionchange"]!();
+      listeners["selectionchange"]!(); // type-safety-ok: selectionchange listener registered by the hook under test
       document.removeEventListener("selectionchange", onSel);
 
-      expect(renderer.getSelectionAnchor!()).toBeNull();
+      expect(renderer.getSelectionAnchor!()).toBeNull(); // type-safety-ok: optional ContentRenderer method present in the epub renderer under test
       expect(fired).toBe(true);
     });
   });

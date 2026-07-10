@@ -323,7 +323,7 @@ describe("useAnnotations + AnnotationsPanel + AnnotationCapture", () => {
   // annotation to prove they key purely on `annotation.position` with no
   // PDF-specific assumptions (tactic-print-annotations-epub Unit 2).
   it("handles a CFI-positioned (EPUB) annotation end-to-end: add, list, navigate, delete", async () => {
-    const CFI = "epubcfi(/6/14!/4/2/1:0,/1:24)";
+    const CFI = "cfi-range-ch7";
     const cfiAnchor: SelectionAnchor = { position: CFI, quote: "a passage in chapter 7" };
     const setAnnotations = vi.fn();
     const goToPosition = vi.fn().mockResolvedValue(undefined);

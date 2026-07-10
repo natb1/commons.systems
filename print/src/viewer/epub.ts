@@ -107,7 +107,7 @@ export function createEpubRenderer(
   // navigation without an explicit `rendered`-event re-apply.
   function reapplyAnnotationHighlights(): void {
     if (!rendition) return;
-    const annotations = (rendition.annotations as unknown as EpubAnnotations);
+    const annotations = (rendition.annotations as unknown as EpubAnnotations); // type-safety-ok: epubjs ships incomplete annotations types; shape declared in EpubAnnotations
     for (const cfi of _annotationCfis) {
       annotations.remove(cfi, "highlight");
     }
