@@ -114,6 +114,19 @@ export function readNode(dir: string, id: string): IntentionNode {
 }
 
 /**
+ * Read the markdown body (everything after the closing frontmatter fence) of
+ * the node stored at `<dir>/<id>.md`, verbatim. `readNode` deliberately drops
+ * the body (only frontmatter is authoritative on read), but the tactic scope
+ * fingerprint (`tacticScopeFingerprint`) hashes the body, so its caller reads
+ * it through this helper rather than re-parsing the fence boundary by hand.
+ */
+export function readNodeBody(dir: string, id: string): string {
+  assertPathSafeId(id);
+  const raw = readFileSync(join(dir, `${id}.md`), "utf8");
+  return extractBody(raw, id);
+}
+
+/**
  * Read every `*.md` node file in `dir`, validating each, sorted by id for a
  * stable result.
  *

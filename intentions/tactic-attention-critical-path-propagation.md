@@ -22,7 +22,14 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention: null
+attention:
+  boost: 5
+  override: null
+  rationale: "Bootstrap enabler: this tactic is the mechanism that gives
+    execution-critical graph-native-dispatch nodes elevated rank; until it
+    lands, the router must manually override rank-0 ordering each tick. Raised
+    by the router (bootstrap tick 2026-07-10) so it surfaces without manual
+    override."
 phase: implement
 execution: null
 validates: []

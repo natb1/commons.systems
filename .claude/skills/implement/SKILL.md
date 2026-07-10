@@ -165,6 +165,13 @@ keeps the remaining work durable and visible rather than held in the model's
 head, reinforcing the single-named-exit invariant: the turn ends only when every
 task — including the marker — is completed.
 
+**Resume from committed units (condition 9).** Commits beyond the branch base
+(`git merge-base HEAD origin/main`) are completed units: a resumed build in the
+same worktree continues from the first uncommitted unit and never re-implements
+a committed one. The re-entry branch (§ above), the durable task-list block, and
+the per-unit commit convention are already stated — this is their consequence,
+not a new mechanism.
+
 For each unit in the plan read in Step 1, in dependency order, invoke
 `/implement-unit` via the Skill tool, passing:
 
