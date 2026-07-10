@@ -21,12 +21,13 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-copy-approval-planning-rule
   pr: 2815
   attempts: {}
-  markers: []
+  markers:
+    - qa-done
   strategy_fingerprint: c24f27f4d6208c07c5844c87fc747377755784a30749a9c39c578aa9ee7f5d1c
 validates: []
 blocked_by: []
