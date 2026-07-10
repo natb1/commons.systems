@@ -5,7 +5,12 @@ function parseAtomFeed(doc: Document): LatestPost | null {
   const entry = doc.querySelector("feed > entry");
   if (!entry) return null;
   const title = entry.querySelector("title")?.textContent ?? "";
-  const linkEl = entry.querySelector('link[rel="alternate"][href]') ?? entry.querySelector("link[href]");
+  // Prefer rel="alternate" (the human-readable permalink); on a miss, fall
+  // back to any link that is NOT rel="self" — the rel="self" link is the
+  // feed's own API URL, never a post permalink. Mirrors the equivalent fix
+  // in vite-plugin-feed-fetch.ts's selectAtomLink.
+  const linkEl =
+    entry.querySelector('link[rel="alternate"][href]') ?? entry.querySelector('link[href]:not([rel="self"])');
   const url = linkEl?.getAttribute("href") ?? "";
   const rawPublished = entry.querySelector("published")?.textContent;
   const rawUpdated = entry.querySelector("updated")?.textContent;
