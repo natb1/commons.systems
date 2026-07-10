@@ -84,6 +84,10 @@ describe("Viewer", () => {
           createRenderer={() => renderer}
           resolveSource={() => Promise.resolve("https://example.com/doc.pdf")}
           store={store}
+          annotationsStore={{
+            load: () => Promise.resolve([]),
+            save: () => Promise.resolve(),
+          }}
           uid={null}
         />,
       );

@@ -104,6 +104,7 @@ import {
   createPdfRenderer,
 } from "../../src/viewer/pdf";
 import { MAX_SEARCH_RESULTS } from "../../src/viewer/types";
+import type { Annotation } from "../../src/annotations";
 
 // ---------------------------------------------------------------------------
 // A. Pure helper tests — no mock dependencies needed.
@@ -1308,5 +1309,251 @@ describe("clearSearch()", () => {
 
     renderer.clearSearch!();
     expect(container.querySelector(".search-highlight")).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// D. Annotation highlights + selection anchor (Unit 2).
+// Reuses the pdfjs-dist mock: PAGE_ITEMS page 1 = "the cat sat" (one div),
+// page 5 = "wor"+"ld" (two divs). MockTextLayer renders one span per item.
+// ---------------------------------------------------------------------------
+
+describe("annotation highlights", () => {
+  let container: HTMLElement;
+  let getContextSpy: ReturnType<typeof vi.spyOn>;
+  let scrollSpy: ReturnType<typeof vi.spyOn>;
+
+  const rect = (): DOMRect => ({
+    width: 800, height: 600, top: 0, left: 0, right: 800, bottom: 600, x: 0, y: 0,
+    toJSON() { return {}; },
+  });
+
+  function ann(overrides: Partial<Annotation>): Annotation {
+    return {
+      id: "a1", position: "1", quote: "cat", note: "", created: "2026-07-09T00:00:00Z",
+      page: 1, offset: 4, length: 3, ...overrides,
+    };
+  }
+
+  beforeEach(() => {
+    resizeObserverCallbacks = [];
+    vi.clearAllMocks();
+    container = document.createElement("div");
+    container.getBoundingClientRect = rect;
+    getContextSpy = vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(
+      {} as unknown as CanvasRenderingContext2D, // type-safety-ok: idiomatic test DOM/renderer access
+    );
+    scrollSpy = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => {});
+    if (typeof globalThis.reportError !== "function") globalThis.reportError = () => {};
+    vi.spyOn(globalThis, "reportError").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    getContextSpy.mockRestore();
+    scrollSpy.mockRestore();
+    vi.mocked(globalThis.reportError).mockRestore();
+  });
+
+  it("setAnnotations paints an .annotation-highlight span over the anchored range on the current page", async () => {
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf"); // renders page 1 "the cat sat"
+
+    renderer.setAnnotations!([ann({ offset: 4, length: 3 })]); // "cat" // type-safety-ok: idiomatic test DOM/renderer access
+
+    const highlights = container.querySelectorAll(".annotation-highlight");
+    expect(highlights.length).toBe(1);
+    expect(highlights[0].textContent).toBe("cat");
+    // The surrounding text is preserved (div.textContent unchanged).
+    const div = container.querySelector(".textLayer span")!; // type-safety-ok: idiomatic test DOM/renderer access
+    expect(div.textContent).toBe("the cat sat");
+  });
+
+  it("does not paint an annotation whose page differs from the rendered page", async () => {
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf"); // page 1
+
+    renderer.setAnnotations!([ann({ page: 2, offset: 0, length: 3 })]); // type-safety-ok: idiomatic test DOM/renderer access
+
+    expect(container.querySelector(".annotation-highlight")).toBeNull();
+  });
+
+  it("re-applies annotation highlights after a re-render (ResizeObserver)", async () => {
+    vi.useFakeTimers();
+    try {
+      const renderer = createPdfRenderer();
+      await renderer.init(container, "fake://source.pdf");
+      renderer.setAnnotations!([ann({ offset: 4, length: 3 })]); // type-safety-ok: idiomatic test DOM/renderer access
+      expect(container.querySelectorAll(".annotation-highlight").length).toBe(1);
+
+      // Fire the debounced resize re-render; the highlight must survive it.
+      resizeObserverCallbacks.forEach((cb) => cb());
+      await vi.advanceTimersByTimeAsync(200);
+
+      const highlights = container.querySelectorAll(".annotation-highlight");
+      expect(highlights.length).toBe(1);
+      expect(highlights[0].textContent).toBe("cat");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("removing an annotation via setAnnotations clears its highlight span", async () => {
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf");
+    renderer.setAnnotations!([ann({ offset: 4, length: 3 })]); // type-safety-ok: idiomatic test DOM/renderer access
+    expect(container.querySelectorAll(".annotation-highlight").length).toBe(1);
+
+    renderer.setAnnotations!([]); // type-safety-ok: idiomatic test DOM/renderer access
+    expect(container.querySelector(".annotation-highlight")).toBeNull();
+    // Div restored to pristine text.
+    expect(container.querySelector(".textLayer span")!.textContent).toBe("the cat sat"); // type-safety-ok: idiomatic test DOM/renderer access
+  });
+
+  it("spanning-div annotation on page 5 ('world' across 'wor'+'ld') paints two annotation spans", async () => {
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf");
+    await renderer.goToPosition!("5"); // page 5 = "wor"+"ld" // type-safety-ok: idiomatic test DOM/renderer access
+
+    renderer.setAnnotations!([ann({ page: 5, position: "5", offset: 0, length: 5, quote: "world" })]); // type-safety-ok: idiomatic test DOM/renderer access
+
+    const highlights = container.querySelectorAll(".annotation-highlight");
+    expect(highlights.length).toBe(2);
+    expect(Array.from(highlights).map((h) => h.textContent).join("")).toBe("world");
+  });
+
+  // COEXISTENCE: annotation and search highlight the SAME div (page 1 "the cat
+  // sat": annotation "cat", search "the"). The annotation must survive the full
+  // search lifecycle: apply → search overlays → clearSearch restores it.
+  it("annotation on a search-covered div survives a search highlight then clearSearch", async () => {
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf");
+    renderer.setAnnotations!([ann({ offset: 4, length: 3 })]); // "cat" // type-safety-ok: idiomatic test DOM/renderer access
+    expect(container.querySelector(".annotation-highlight")!.textContent).toBe("cat"); // type-safety-ok: idiomatic test DOM/renderer access
+
+    // Search "the" on page 1 and render it — search overlays the same div.
+    const { results } = await renderer.search!("the"); // type-safety-ok: idiomatic test DOM/renderer access
+    const page1 = results.find((r) => r.label === "Page 1")!; // type-safety-ok: idiomatic test DOM/renderer access
+    await renderer.goToResult!(page1); // type-safety-ok: idiomatic test DOM/renderer access
+    await renderer.renderResult!(); // type-safety-ok: idiomatic test DOM/renderer access
+    expect(container.querySelector(".search-highlight.active")!.textContent).toBe("the"); // type-safety-ok: idiomatic test DOM/renderer access
+
+    // Clear search: the annotation highlight must reappear and search be gone.
+    renderer.clearSearch!(); // type-safety-ok: idiomatic test DOM/renderer access
+    expect(container.querySelector(".search-highlight")).toBeNull();
+    const restored = container.querySelectorAll(".annotation-highlight");
+    expect(restored.length).toBe(1);
+    expect(restored[0].textContent).toBe("cat");
+    // Full div text intact.
+    expect(container.querySelector(".textLayer span")!.textContent).toBe("the cat sat"); // type-safety-ok: idiomatic test DOM/renderer access
+  });
+
+  it("an annotation on a div the search does not cover stays visible during an active search", async () => {
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf");
+    await renderer.goToPosition!("4"); // page 4 = "alpha"|"the"|"quick" (3 divs) // type-safety-ok: idiomatic test DOM/renderer access
+    renderer.setAnnotations!([ // type-safety-ok: idiomatic test DOM/renderer access
+      ann({ page: 4, position: "4", offset: 0, length: 5, quote: "alpha" }), // div 0
+    ]);
+    expect(container.querySelector(".annotation-highlight")!.textContent).toBe("alpha"); // type-safety-ok: idiomatic test DOM/renderer access
+
+    // Search "quick" (div 2) and render on page 4 — different div from the annotation.
+    const { results } = await renderer.search!("quick"); // type-safety-ok: idiomatic test DOM/renderer access
+    const page4 = results.find((r) => r.label === "Page 4")!; // type-safety-ok: idiomatic test DOM/renderer access
+    await renderer.goToResult!(page4); // type-safety-ok: idiomatic test DOM/renderer access
+    await renderer.renderResult!(); // type-safety-ok: idiomatic test DOM/renderer access
+
+    // Both live simultaneously: annotation on div0, search on div2.
+    expect(container.querySelector(".search-highlight.active")!.textContent).toBe("quick"); // type-safety-ok: idiomatic test DOM/renderer access
+    expect(container.querySelector(".annotation-highlight")!.textContent).toBe("alpha"); // type-safety-ok: idiomatic test DOM/renderer access
+  });
+});
+
+describe("getSelectionAnchor", () => {
+  let container: HTMLElement;
+  let getContextSpy: ReturnType<typeof vi.spyOn>;
+  let selectionSpy: ReturnType<typeof vi.spyOn> | null = null;
+
+  const rect = (): DOMRect => ({
+    width: 800, height: 600, top: 0, left: 0, right: 800, bottom: 600, x: 0, y: 0,
+    toJSON() { return {}; },
+  });
+
+  function stubSelection(range: Range | null): void {
+    selectionSpy = vi.spyOn(window, "getSelection").mockReturnValue(
+      range === null
+        ? ({ rangeCount: 0, isCollapsed: true, getRangeAt: () => { throw new Error("none"); } } as unknown as Selection) // type-safety-ok: idiomatic test DOM/renderer access
+        : ({ rangeCount: 1, isCollapsed: false, getRangeAt: () => range } as unknown as Selection), // type-safety-ok: idiomatic test DOM/renderer access
+    );
+  }
+
+  beforeEach(() => {
+    resizeObserverCallbacks = [];
+    vi.clearAllMocks();
+    container = document.createElement("div");
+    container.getBoundingClientRect = rect;
+    getContextSpy = vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(
+      {} as unknown as CanvasRenderingContext2D, // type-safety-ok: idiomatic test DOM/renderer access
+    );
+    if (typeof globalThis.reportError !== "function") globalThis.reportError = () => {};
+    vi.spyOn(globalThis, "reportError").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    getContextSpy.mockRestore();
+    selectionSpy?.mockRestore();
+    selectionSpy = null;
+    vi.mocked(globalThis.reportError).mockRestore();
+  });
+
+  it("returns null when there is no selection", async () => {
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf");
+    stubSelection(null);
+    expect(renderer.getSelectionAnchor!()).toBeNull(); // type-safety-ok: idiomatic test DOM/renderer access
+  });
+
+  it("maps a within-div selection to {page, offset, length, quote}", async () => {
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf"); // page 1 "the cat sat"
+
+    const div = container.querySelector(".textLayer span")!; // type-safety-ok: idiomatic test DOM/renderer access
+    const textNode = div.firstChild!; // text node "the cat sat" // type-safety-ok: idiomatic test DOM/renderer access
+    const range = document.createRange();
+    range.setStart(textNode, 4); // "cat" starts at index 4
+    range.setEnd(textNode, 7);
+    stubSelection(range);
+
+    const anchor = renderer.getSelectionAnchor!(); // type-safety-ok: idiomatic test DOM/renderer access
+    expect(anchor).not.toBeNull();
+    expect(anchor).toMatchObject({ position: "1", page: 1, offset: 4, length: 3, quote: "cat" });
+  });
+
+  it("maps a selection spanning two divs on page 5 to the correct offset/length/quote", async () => {
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf");
+    await renderer.goToPosition!("5"); // "wor" | "ld" // type-safety-ok: idiomatic test DOM/renderer access
+
+    const spans = container.querySelectorAll(".textLayer span");
+    const range = document.createRange();
+    range.setStart(spans[0].firstChild!, 0); // start of "wor" // type-safety-ok: idiomatic test DOM/renderer access
+    range.setEnd(spans[1].firstChild!, 2); // end of "ld" // type-safety-ok: idiomatic test DOM/renderer access
+    stubSelection(range);
+
+    const anchor = renderer.getSelectionAnchor!(); // type-safety-ok: idiomatic test DOM/renderer access
+    expect(anchor).toMatchObject({ page: 5, offset: 0, length: 5, quote: "world" });
+  });
+
+  it("returns null for a collapsed selection", async () => {
+    const renderer = createPdfRenderer();
+    await renderer.init(container, "fake://source.pdf");
+    const div = container.querySelector(".textLayer span")!; // type-safety-ok: idiomatic test DOM/renderer access
+    const range = document.createRange();
+    range.setStart(div.firstChild!, 2); // type-safety-ok: idiomatic test DOM/renderer access
+    range.setEnd(div.firstChild!, 2); // type-safety-ok: idiomatic test DOM/renderer access
+    // isCollapsed true path:
+    selectionSpy = vi.spyOn(window, "getSelection").mockReturnValue(
+      { rangeCount: 1, isCollapsed: true, getRangeAt: () => range } as unknown as Selection, // type-safety-ok: idiomatic test DOM/renderer access
+    );
+    expect(renderer.getSelectionAnchor!()).toBeNull(); // type-safety-ok: idiomatic test DOM/renderer access
   });
 });
