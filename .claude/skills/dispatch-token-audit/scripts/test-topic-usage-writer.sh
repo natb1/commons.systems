@@ -90,7 +90,7 @@ price_proxy() {
 }
 
 # =========================================================================
-# Cases 1-5 + count-once: single-day normal run (sentinel PRESENT -> today only).
+# Cases 1-5 + count-once: single-day run (sentinel == today -> today only).
 # =========================================================================
 R1=$(mktemp -d)
 S1=$(mktemp -d)        # state dir; pre-seed a sentinel so the run is single-day.
@@ -270,8 +270,9 @@ assert_eq "backfill cap=1: dropped day is logged (no silent truncate)" "1" \
 rm -rf "$R2" "$S2" "$ERR2" "$ERR2B"
 
 # =========================================================================
-# Case 8: normal daily run — sentinel last-day == yesterday -> [today] only.
-# Guards the unchanged daily-run behavior (acceptance criterion 1).
+# Case 8: normal daily run — sentinel last-day == yesterday -> finalize
+# yesterday (its doc was written ON yesterday, a partial-day snapshot) and
+# produce today's provisional doc: [yesterday, today].
 # =========================================================================
 R8=$(mktemp -d)
 S8=$(mktemp -d)
@@ -288,15 +289,67 @@ OUT8=$(
   export DISPATCH_TOPIC_USAGE_NOW="$NOW8"
   node "$WRITER_MJS" --dry-run 2>/dev/null
 )
-assert_eq "daily (last-day == yesterday): today only (1 element)" "1" "$(jq 'length' <<<"$OUT8")"
-assert_eq "daily (last-day == yesterday): the day is today" \
-  '["2026-06-20"]' "$(jq -c '[.[].doc.date]' <<<"$OUT8")"
+assert_eq "daily (last-day == yesterday): finalize yesterday + today (2 elements)" "2" \
+  "$(jq 'length' <<<"$OUT8")"
+assert_eq "daily (last-day == yesterday): days are [yesterday, today]" \
+  '["2026-06-19","2026-06-20"]' "$(jq -c '[.[].doc.date]' <<<"$OUT8")"
+assert_eq "daily: today's doc carries today's activity" "12" \
+  "$(jq '.[] | select(.doc.date=="2026-06-20") | .doc.byTopic.other.input' <<<"$OUT8")"
 rm -rf "$R8" "$S8"
 
 # =========================================================================
+# Case 8b: day-completeness across UTC midnight (the daily undercount fix).
+# Emulates two consecutive first-ticks-after-midnight:
+#   run 1 (00:45 on day D): only the early transcript exists -> day-D doc is
+#     a PARTIAL snapshot (this was the OLD behavior's permanent doc).
+#   run 2 (00:10 on day D+1, sentinel now D): the late transcript (23:30 on
+#     day D) exists -> day-D doc is re-produced and now reflects the FULL day.
+# =========================================================================
+R8B=$(mktemp -d)
+S8B=$(mktemp -d)
+WT8B="$R8B/-home-x-worktrees-midnight"
+mkdir -p "$WT8B"
+DAYD="2026-06-20"
+
+# Run 1: first tick after day-D midnight; only the early session exists.
+printf '2026-06-19\n' > "$S8B/topic-usage-grp-1.last-day"
+write_transcript "$WT8B/sess-early.jsonl" 11 0 0 0
+touch -d "${DAYD}T00:30:00Z" "$WT8B/sess-early.jsonl"
+NOW8B1=$(date -u -d "$DAYD 00:45:00" +%s)
+OUT8B1=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$R8B"
+  export DISPATCH_TOPIC_USAGE_STATE_DIR="$S8B"
+  export DISPATCH_TOPIC_USAGE_NOW="$NOW8B1"
+  node "$WRITER_MJS" --dry-run 2>/dev/null
+)
+assert_eq "midnight run 1: day-D doc is a partial snapshot (early only)" "11" \
+  "$(jq --arg d "$DAYD" '.[] | select(.doc.date==$d) | .doc.byTopic.other.input' <<<"$OUT8B1")"
+
+# Run 2: the rest of day D happened; first tick after day D+1 midnight.
+# Real mode would have written the sentinel = D after run 1.
+write_transcript "$WT8B/sess-late.jsonl" 22 0 0 0
+touch -d "${DAYD}T23:30:00Z" "$WT8B/sess-late.jsonl"
+printf '%s\n' "$DAYD" > "$S8B/topic-usage-grp-1.last-day"
+NOW8B2=$(date -u -d "2026-06-21 00:10:00" +%s)
+OUT8B2=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$R8B"
+  export DISPATCH_TOPIC_USAGE_STATE_DIR="$S8B"
+  export DISPATCH_TOPIC_USAGE_NOW="$NOW8B2"
+  node "$WRITER_MJS" --dry-run 2>/dev/null
+)
+assert_eq "midnight run 2: re-produces day D and today's provisional" \
+  '["2026-06-20","2026-06-21"]' "$(jq -c '[.[].doc.date]' <<<"$OUT8B2")"
+assert_eq "midnight run 2: day-D doc reflects the FULL day (11+22)" "33" \
+  "$(jq --arg d "$DAYD" '.[] | select(.doc.date==$d) | .doc.byTopic.other.input' <<<"$OUT8B2")"
+assert_eq "midnight run 2: day-D docId unchanged (idempotent overwrite)" "grp-1-${DAYD}" \
+  "$(jq -r --arg d "$DAYD" '.[] | select(.doc.date==$d) | .id' <<<"$OUT8B2")"
+rm -rf "$R8B" "$S8B"
+
+# =========================================================================
 # Case 9: N-day offline recovery — sentinel last-day > one day ago backfills
-# the missed days lastDay+1..today (acceptance criteria 2 + 4). last-day is
-# 3 days behind today, so the producer was offline for the intervening days.
+# lastDay (re-finalized: its doc was a partial-day write) plus the missed
+# days lastDay+1..today. last-day is 3 days behind today, so the producer
+# was offline for the intervening days.
 # =========================================================================
 R9=$(mktemp -d)
 S9=$(mktemp -d)
@@ -315,15 +368,15 @@ OUT9=$(
   export DISPATCH_TOPIC_USAGE_NOW="$NOW9"
   node "$WRITER_MJS" --dry-run 2>"$ERR9"
 )
-assert_eq "gap recovery: one element per missed day (lastDay+1..today)" "3" "$(jq 'length' <<<"$OUT9")"
-assert_eq "gap recovery: missed days are lastDay+1..today, ascending" \
-  '["2026-06-18","2026-06-19","2026-06-20"]' "$(jq -c '[.[].doc.date]' <<<"$OUT9")"
-assert_eq "gap recovery: docIds match the missed days" \
-  '["grp-1-2026-06-18","grp-1-2026-06-19","grp-1-2026-06-20"]' "$(jq -c '[.[].id]' <<<"$OUT9")"
+assert_eq "gap recovery: lastDay re-finalized + one element per missed day" "4" "$(jq 'length' <<<"$OUT9")"
+assert_eq "gap recovery: days are lastDay..today, ascending" \
+  '["2026-06-17","2026-06-18","2026-06-19","2026-06-20"]' "$(jq -c '[.[].doc.date]' <<<"$OUT9")"
+assert_eq "gap recovery: docIds match the days" \
+  '["grp-1-2026-06-17","grp-1-2026-06-18","grp-1-2026-06-19","grp-1-2026-06-20"]' "$(jq -c '[.[].id]' <<<"$OUT9")"
 assert_eq "gap recovery: a log line names the gap" "1" \
   "$(grep -cF 'gap recovery: sentinel last-day 2026-06-17 is 3 day(s) behind today 2026-06-20' "$ERR9" >/dev/null && echo 1 || echo 0)"
 assert_eq "gap recovery: covered-range log line" "1" \
-  "$(grep -cF 'covering 3 day(s) 2026-06-18..2026-06-20' "$ERR9" >/dev/null && echo 1 || echo 0)"
+  "$(grep -cF 'covering 4 day(s) 2026-06-17..2026-06-20' "$ERR9" >/dev/null && echo 1 || echo 0)"
 # The missed day with activity carries that activity (input=33 -> other/none).
 assert_eq "gap recovery: 2026-06-18 doc carries its day's activity (other input=33)" "33" \
   "$(jq '.[] | select(.doc.date=="2026-06-18") | .doc.byTopic.other.input' <<<"$OUT9")"
@@ -339,7 +392,7 @@ rm -rf "$R9" "$S9" "$ERR9"
 # =========================================================================
 R10=$(mktemp -d)
 S10=$(mktemp -d)
-printf '2026-06-10\n' > "$S10/topic-usage-grp-1.last-day"  # missed 06-11..06-20 = 10 days
+printf '2026-06-10\n' > "$S10/topic-usage-grp-1.last-day"  # lastDay + missed 06-11..06-20 = 11 days
 DAY10="2026-06-20"
 NOW10=$(date -u -d "$DAY10 12:00:00" +%s)
 WT10="$R10/-home-x-worktrees-gapcap"
@@ -354,10 +407,10 @@ OUT10=$(
   export DISPATCH_TOPIC_USAGE_BACKFILL_CAP="3"
   node "$WRITER_MJS" --dry-run 2>"$ERR10"
 )
-assert_eq "gap cap=3: only the 3 most-recent missed days kept" \
+assert_eq "gap cap=3: only the 3 most-recent days kept" \
   '["2026-06-18","2026-06-19","2026-06-20"]' "$(jq -c '[.[].doc.date]' <<<"$OUT10")"
 assert_eq "gap cap=3: dropped older days are logged (no silent truncate)" "1" \
-  "$(grep -cF 'cap 3 dropped 7 older day(s): 2026-06-11,2026-06-12,2026-06-13,2026-06-14,2026-06-15,2026-06-16,2026-06-17' "$ERR10" >/dev/null && echo 1 || echo 0)"
+  "$(grep -cF 'cap 3 dropped 8 older day(s): 2026-06-10,2026-06-11,2026-06-12,2026-06-13,2026-06-14,2026-06-15,2026-06-16,2026-06-17' "$ERR10" >/dev/null && echo 1 || echo 0)"
 rm -rf "$R10" "$S10" "$ERR10"
 
 # =========================================================================

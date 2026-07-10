@@ -112,12 +112,26 @@ verification in Step 4.
 
 **4·0. Triage: is this follow-up browser-verifiable?**
 
-Before loading browser tools, check for the non-browser-verifiable class:
+Before loading browser tools, run the shared triage script — the **single
+source** of the browser-verifiability criteria (no `URL_PATH`, or a non-browser
+outcome such as `nix flake check --pure-eval` or a darwin build). The
+dispatched lane already runs the same script pre-provision (`dispatch-route`
+parks a failing follow-up before any worktree or session exists), so in
+practice this step fires on directly-invoked / interactive runs
+(`dangerouslyDisableSandbox: true` — it calls `gh`):
 
-- **No `URL_PATH`** (empty or absent).
-- **Non-browser outcome**: the expected behavior requires a CLI or server host — e.g. `nix flake check --pure-eval`, a darwin build, or any outcome with no browser-observable surface.
+```bash
+.claude/skills/dispatch-propagate/scripts/dispatch-main-qa-triage "$N"
+```
 
-If either holds → skip 4a–4e and route **straight to cannot-verify (Step 5)**. Name the specific reason in the `dispatch-mark-deviation` call (e.g. `"no url_path — outcome is a nix flake check, not observable in a browser"`).
+- **Exit 0** (verifiable) → continue to 4a.
+- **Exit 3** (not browser-verifiable) → skip 4a–4e and route **straight to
+  cannot-verify (Step 5)**, quoting the script's printed reason line in the
+  `dispatch-mark-deviation` call.
+- **Any other exit** → environment barrier (gh failure) → **cannot-verify
+  (Step 5)**, naming the script failure. Do **not** re-derive the criteria by
+  hand — they are single-sourced in the script so this step and the
+  pre-provision gate can never drift.
 
 **Upstream classification note:** Ideally `/qa-fix`'s `needs-main` deferral flags non-browser-verifiable items at creation so they never route to qa-main. This is a prose note only — it does not modify `qa-fix/SKILL.md` or any deferral logic.
 
