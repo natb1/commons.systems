@@ -48,11 +48,14 @@ vi.mock("../../src/library.js", () => ({
 
 const sidecarStore = { kind: "sidecar" };
 const firestoreStore = { kind: "firestore" };
+const sidecarAnnotationsStore = { kind: "sidecar-annotations" };
 const mockMakeSidecarPositionStore = vi.fn(() => sidecarStore);
 const mockMakeFirestorePositionStore = vi.fn(() => firestoreStore);
+const mockMakeSidecarAnnotationsStore = vi.fn(() => sidecarAnnotationsStore);
 
 vi.mock("../../src/sidecar.js", () => ({
   makeSidecarPositionStore: (...args: unknown[]) => mockMakeSidecarPositionStore(...args),
+  makeSidecarAnnotationsStore: (...args: unknown[]) => mockMakeSidecarAnnotationsStore(...args),
 }));
 
 vi.mock("../../src/reading-position.js", () => ({
@@ -64,6 +67,8 @@ import {
   resolveViewerProps,
   pickPositionStore,
   makeLocalStoragePositionStore,
+  pickAnnotationsStore,
+  makeLocalStorageAnnotationsStore,
   getViewFrame,
 } from "../../src/pages/view";
 import type { ViewFrame } from "../../src/pages/view";
@@ -159,6 +164,88 @@ describe("makeLocalStoragePositionStore", () => {
     await store.save("12");
     expect(localStorage.getItem("reading-position:m1")).toBe("12");
     expect(await store.load()).toBe("12");
+  });
+});
+
+describe("pickAnnotationsStore", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+  });
+
+  it("local item: returns the sidecar annotations store keyed on the bare filename", () => {
+    const item = makeMediaItem({ id: "local:book.pdf", storagePath: "book.pdf" });
+
+    const store = pickAnnotationsStore(item, true, "user-123");
+
+    expect(store).toBe(sidecarAnnotationsStore);
+    expect(mockMakeSidecarAnnotationsStore).toHaveBeenCalledWith("book.pdf");
+  });
+
+  it("cloud item, signed in: routes to localStorage — NEVER the sidecar or Firestore (no vendor silo)", async () => {
+    const item = makeMediaItem({ id: "item-1" });
+
+    const store = pickAnnotationsStore(item, false, "user-123");
+
+    expect(mockMakeSidecarAnnotationsStore).not.toHaveBeenCalled();
+    // A signed-in cloud reader's annotations stay device-local.
+    await store.save([
+      { id: "a1", position: "3", quote: "hi", note: "", created: "2026-07-09T00:00:00Z" },
+    ]);
+    expect(localStorage.getItem("annotations:item-1")).not.toBeNull();
+  });
+
+  it("cloud item, anonymous: routes to localStorage keyed on mediaId", async () => {
+    const item = makeMediaItem({ id: "item-1" });
+
+    const store = pickAnnotationsStore(item, false, null);
+
+    expect(mockMakeSidecarAnnotationsStore).not.toHaveBeenCalled();
+    await store.save([
+      { id: "a1", position: "3", quote: "hi", note: "", created: "2026-07-09T00:00:00Z" },
+    ]);
+    const loaded = await store.load();
+    expect(loaded).toHaveLength(1);
+    expect(loaded[0].id).toBe("a1");
+  });
+});
+
+describe("makeLocalStorageAnnotationsStore", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it("round-trips annotations under the annotations:<mediaId> key", async () => {
+    const store = makeLocalStorageAnnotationsStore("m1");
+
+    expect(await store.load()).toEqual([]);
+    await store.save([
+      { id: "a1", position: "5", quote: "quote", note: "note", created: "2026-07-09T00:00:00Z", page: 5, offset: 0, length: 5 },
+    ]);
+    const loaded = await store.load();
+    expect(loaded).toHaveLength(1);
+    expect(loaded[0]).toMatchObject({ id: "a1", position: "5", page: 5, offset: 0, length: 5 });
+  });
+
+  it("coerces a malformed stored value to [] rather than crashing", async () => {
+    localStorage.setItem("annotations:m2", JSON.stringify({ not: "an array" }));
+    const store = makeLocalStorageAnnotationsStore("m2");
+    expect(await store.load()).toEqual([]);
+  });
+
+  it("drops malformed entries but keeps well-formed ones", async () => {
+    localStorage.setItem(
+      "annotations:m3",
+      JSON.stringify([
+        { id: "ok", position: "1", quote: "q", note: "", created: "2026-07-09T00:00:00Z" },
+        { id: 42, position: "1", quote: "q", note: "", created: "2026-07-09T00:00:00Z" },
+        { position: "1", quote: "q", note: "", created: "2026-07-09T00:00:00Z" },
+      ]),
+    );
+    const store = makeLocalStorageAnnotationsStore("m3");
+    const loaded = await store.load();
+    expect(loaded).toHaveLength(1);
+    expect(loaded[0].id).toBe("ok");
   });
 });
 
