@@ -359,3 +359,25 @@ jobs:
       - name: Build nixosConfigurations.nixos
         if: steps.changes.outputs.nix == 'true'
         run: .github/scripts/build-nixos-config.sh
+
+  firebase-audit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .node-version
+          cache: 'npm'
+      - name: Install workspace dependencies
+        run: .claude/skills/dispatch-propagate/scripts/npm-ci-with-retry.sh
+      # Report-only: print the current firebase-import reachability report on
+      # every PR. Do NOT gate on --strict here — pre-demo the strict run
+      # legitimately fails (that failure is the honest reading of the strategy's
+      # current gap). tactic-demo-saas-acceptance flips it strict once the demo
+      # subtree lands. continue-on-error keeps an engine crash visible without
+      # blocking the PR.
+      - name: Firebase-import reachability report (report-only)
+        continue-on-error: true
+        run: npm run audit:firebase
