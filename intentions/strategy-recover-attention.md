@@ -26,9 +26,7 @@ gap: reading "reading defaults to owned tools (print carries the author's daily
   reading); listening has not displaced platform services" does not meet
   threshold "reading and listening both default to owned tools; platform
   services are deliberate exceptions, not defaults"
-serves:
-  - virtue-progressive-detachment
-  - virtue-alignment-of-attachments
+serves: []
 recovers:
   - delegation-attention-services
 clarifications:

@@ -19,9 +19,7 @@ rationale: >-
   follows and responds on terms neither party rents from an engagement platform.
 reading: null
 gap: null
-serves:
-  - virtue-progressive-detachment
-  - virtue-respect-for-persons
+serves: []
 recovers:
   - delegation-social-publishing
 clarifications:
