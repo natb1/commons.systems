@@ -41,6 +41,15 @@ export function createEpubRenderer(
   let destroyed = false;
   let locationsReady: Promise<void> | null = null;
   const GENERATE_CHARS = 1024;
+  // Fallback timeout for waitForRelocated (next/prev/outline nav). epub.js emits
+  // 'relocated' right after next()/prev() resolve, so this only trips when the
+  // event genuinely never arrives — far below the old 30s so a missed event no
+  // longer freezes the UI for half a minute. Pending waits are tracked so
+  // destroy() can settle them: an un-cleared timer would run reportError long
+  // after teardown, and an un-resolved promise would leave a mid-flight
+  // next()/prev() hanging forever.
+  const RELOCATED_TIMEOUT_MS = 5000;
+  const pendingRelocations = new Set<{ timer: ReturnType<typeof setTimeout>; resolve: () => void }>();
   const outlineHrefMap = new WeakMap<OutlineEntry, string>();
 
   // Full-document search state.
@@ -98,14 +107,51 @@ export function createEpubRenderer(
   }
 
   // epub.js next()/prev() resolve before the relocated event fires.
-  // Callers await this to get updated position state. The 30s timeout
+  // Callers await this to get updated position state. The bounded timeout
   // prevents a permanent hang if epub.js fails to emit the event.
   function waitForRelocated(): Promise<void> {
     return new Promise<void>((resolve) => {
       if (!rendition) { resolve(); return; }
-      const timer = setTimeout(() => { reportError(new Error("waitForRelocated: timed out after 30s")); resolve(); }, 30000);
-      rendition.once("relocated", () => { clearTimeout(timer); resolve(); });
+      // `entry` is referenced inside the timer callback, which only runs after
+      // this line has assigned it — so no placeholder/cast is needed.
+      const timer = setTimeout(() => {
+        pendingRelocations.delete(entry);
+        // A timeout after destroy() is expected (teardown races the event), not
+        // a bug — only report a genuinely missed relocation on a live renderer.
+        if (!destroyed) reportError(new Error(`waitForRelocated: timed out after ${RELOCATED_TIMEOUT_MS}ms`));
+        resolve();
+      }, RELOCATED_TIMEOUT_MS);
+      const entry = { timer, resolve };
+      const settle = () => {
+        clearTimeout(entry.timer);
+        pendingRelocations.delete(entry);
+        resolve();
+      };
+      pendingRelocations.add(entry);
+      rendition.once("relocated", settle);
     });
+  }
+
+  // display(cfi) / display(percentage-cfi) does not reliably emit 'relocated'
+  // (see the note in goToPosition), so reading the settled location directly
+  // after display() resolves is the robust way to update position state — the
+  // pattern goToPosition proved. Shared by goToPosition / goToFraction /
+  // goToResult, all of which navigate via a cfi display() call. currentLocation()
+  // may return a Location or a Promise<Location> depending on epub.js
+  // version/load state — normalize with Promise.resolve. At runtime it returns a
+  // Location ({ start, atStart, atEnd }); the epubjs types declare a flat
+  // DisplayedLocation, so cast (mirroring the spine.length cast in init()).
+  async function syncLocationFromCurrent(): Promise<void> {
+    if (!rendition) return;
+    const loc = (await Promise.resolve(rendition.currentLocation())) as unknown as Location; // type-safety-ok: epubjs currentLocation() returns a Location at runtime; its types declare a flat DisplayedLocation (pre-existing cast moved from goToPosition)
+    if (loc?.start) {
+      _chapterIndex = loc.start.index;
+      _subPage = loc.start.displayed.page;
+      _subPageTotal = loc.start.displayed.total;
+      _atStart = loc.atStart;
+      _atEnd = loc.atEnd;
+      _currentCfi = loc.start.cfi;
+    }
   }
 
   // epub.js percent-based navigation requires a generated locations index,
@@ -211,22 +257,9 @@ export function createEpubRenderer(
       if (!rendition) return;
       await rendition.display(position);
       // epub.js does not reliably emit 'relocated' for display(cfi), so the
-      // persistent relocated handler may never update the position state.
-      // Read the current location directly after display() resolves.
-      // currentLocation() may return a Location or a Promise<Location>
-      // depending on epub.js version/load state — normalize with Promise.resolve.
-      // At runtime it returns a Location ({ start, atStart, atEnd }) — the same
-      // shape as the relocated event — but the epubjs types declare a flat
-      // DisplayedLocation, so cast (mirroring the spine.length cast above).
-      const loc = (await Promise.resolve(rendition.currentLocation())) as unknown as Location;
-      if (loc?.start) {
-        _chapterIndex = loc.start.index;
-        _subPage = loc.start.displayed.page;
-        _subPageTotal = loc.start.displayed.total;
-        _atStart = loc.atStart;
-        _atEnd = loc.atEnd;
-        _currentCfi = loc.start.cfi;
-      }
+      // persistent relocated handler may never update the position state. Read
+      // the settled location directly after display() resolves.
+      await syncLocationFromCurrent();
     },
 
     async goToFraction(fraction: number): Promise<void> {
@@ -235,9 +268,12 @@ export function createEpubRenderer(
       if (destroyed) return;
       const clamped = Math.max(0, Math.min(1, fraction));
       const cfi = book.locations.cfiFromPercentage(clamped);
-      const relocated = waitForRelocated();
       await rendition.display(cfi);
-      await relocated;
+      // display(cfi) does not reliably emit 'relocated'; read the settled
+      // location directly instead of awaiting the event, which would otherwise
+      // freeze "Calculating…" until the fallback timeout and then report a
+      // spurious error even though the goto succeeded.
+      await syncLocationFromCurrent();
     },
 
     async next(): Promise<void> {
@@ -367,9 +403,11 @@ export function createEpubRenderer(
         annotations.highlight(_activeCfi, {}, undefined, "viewer-search-hl", BASE_STYLES);
       }
 
-      const relocated = waitForRelocated();
       await rendition.display(result.location);
-      await relocated;
+      // display(cfi) does not reliably emit 'relocated'; sync position from the
+      // settled location instead of awaiting the event (avoids a "Calculating…"
+      // hang until the fallback timeout on the search-result nav path).
+      await syncLocationFromCurrent();
 
       // Promote the new match to the distinct active style.
       annotations.remove(result.location, "highlight");
@@ -392,6 +430,14 @@ export function createEpubRenderer(
 
     destroy(): void {
       destroyed = true;
+      // Settle any pending waitForRelocated: clear its fallback timer (so it
+      // can't run reportError after teardown) and resolve its promise (so a
+      // mid-flight next()/prev()/goToOutlineEntry() doesn't hang forever).
+      for (const entry of pendingRelocations) {
+        clearTimeout(entry.timer);
+        entry.resolve();
+      }
+      pendingRelocations.clear();
       // rendition.destroy() tears down annotations, so just reset tracking.
       _searchCfis = [];
       _activeCfi = null;

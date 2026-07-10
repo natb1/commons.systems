@@ -258,9 +258,16 @@ export function useViewerController(
     function persistPosition() {
       const pos = getSpreadPosition();
       if (!pos || pos === st.lastSavedPosition) return;
-      st.lastSavedPosition = pos;
       if (st.readFailed) return;
-      store.save(pos).catch((err) => {
+      // Record lastSavedPosition only once the write settles. Recording it
+      // up-front would suppress a retry of a transiently-failed save (e.g. an
+      // offline Firestore write): the position would be marked "saved" while
+      // the backend never received it, and a later flush/scheduleSave for the
+      // same position would dedup out. On rejection lastSavedPosition stays
+      // unchanged so the next flush retries the same position.
+      store.save(pos).then(() => {
+        st.lastSavedPosition = pos;
+      }).catch((err) => {
         reportError(new Error("Failed to save reading position", { cause: err }));
       });
     }
@@ -280,6 +287,22 @@ export function useViewerController(
         persistPosition();
       }
     }
+
+    // Flush any debounced save when the page is being hidden. Closing the tab
+    // (or backgrounding it on mobile, where the browser may discard the page)
+    // within the 500ms debounce window would otherwise drop the final page
+    // turn every time — teardown's flushSave only fires on a React unmount, not
+    // a tab close. `pagehide` covers navigation/close; `visibilitychange` to
+    // hidden covers tab-switch/backgrounding on platforms that never fire
+    // `pagehide` before discarding.
+    function handlePageHide() {
+      flushSave();
+    }
+    function handleVisibilityChange() {
+      if (document.visibilityState === "hidden") flushSave();
+    }
+    window.addEventListener("pagehide", handlePageHide);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     // --- Zoom enabled-state projection ---
     function updateZoomState() {
@@ -552,6 +575,13 @@ export function useViewerController(
       if (isSearchable(renderer)) {
         setSearchable(true);
       }
+      // Re-baseline the saved-position marker to the position init actually
+      // settled on. Entering spread mode shifts the current position to the
+      // spread's left page (a saved "3" lands on spread {2,3} whose position is
+      // "2"); without this the initial syncNav's scheduleSave would persist that
+      // shift, silently rewriting the saved position with zero user navigation.
+      // Set to the spread-aware position so scheduleSave dedups instead.
+      st.lastSavedPosition = getSpreadPosition();
       syncNav();
     })().catch((err) => {
       reportError(new Error("Viewer initialization failed", { cause: err }));
@@ -562,6 +592,8 @@ export function useViewerController(
     return () => {
       cancelled = true;
       flushSave();
+      window.removeEventListener("pagehide", handlePageHide);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       document.body.classList.remove("viewer-active");
       orientationQuery.removeEventListener("change", updateOrientation);
       document.removeEventListener("fullscreenchange", handleFullscreenChange);

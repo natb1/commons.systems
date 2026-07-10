@@ -340,10 +340,19 @@ export function createPdfRenderer(onError?: (err: unknown) => void): SearchableR
     page: PDFPageProxy,
     cssViewport: PageViewport,
     targetDiv: HTMLDivElement,
+    shouldAbort?: () => boolean,
   ): Promise<{ tl: TextLayer; layout: PageLayout } | null> {
     if (destroyed) return null;
     const textContent = await page.getTextContent();
     if (destroyed) return null;
+    // Generation guard: a newer render may have superseded this one while
+    // getTextContent() was in flight. Bail BEFORE touching the shared
+    // targetDiv — otherwise this stale render's replaceChildren() would wipe
+    // the winner's text layer and its TextLayer would paint stale-page text
+    // (invisible but selectable) over the current page. The loser's `tl` is
+    // never registered in activeTextLayer/spreadPages, so nothing else can
+    // cancel it; it must self-abort here.
+    if (shouldAbort?.()) return null;
 
     // Reconstruct the page layout from the SAME items the TextLayer renders, so
     // layout.items stays index-aligned with tl.textDivs. hasEOL is read from
@@ -364,6 +373,12 @@ export function createPdfRenderer(onError?: (err: unknown) => void): SearchableR
       // A superseding render cancelled this text layer — benign, mirrors the
       // canvas RenderingCancelledException handling in renderPageToCanvas.
       if ((e as Error).name !== "AbortException") throw e;
+      return null;
+    }
+    // Superseded during tl.render(): cancel the just-rendered layer and discard
+    // it so the winner's layer stays authoritative and no stale text lingers.
+    if (shouldAbort?.()) {
+      tl.cancel();
       return null;
     }
     return { tl, layout };
@@ -638,7 +653,7 @@ export function createPdfRenderer(onError?: (err: unknown) => void): SearchableR
 
     renderTask = result.task;
     if (textLayerDiv) {
-      const layerResult = await renderTextLayer(result.page, result.cssViewport, textLayerDiv);
+      const layerResult = await renderTextLayer(result.page, result.cssViewport, textLayerDiv, () => gen !== renderGen);
       if (gen !== renderGen) {
         layerResult?.tl.cancel();
         return;
@@ -685,7 +700,7 @@ export function createPdfRenderer(onError?: (err: unknown) => void): SearchableR
       if (!result) return;
       if (gen !== spreadGen) return;
 
-      const layerResult = await renderTextLayer(result.page, result.cssViewport, tlDiv);
+      const layerResult = await renderTextLayer(result.page, result.cssViewport, tlDiv, () => gen !== spreadGen);
       if (gen !== spreadGen) {
         // Cancel the in-flight text layer; wrapper removal is handled by finally.
         layerResult?.tl.cancel();
