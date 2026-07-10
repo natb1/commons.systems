@@ -7,7 +7,7 @@
  * A THIN Workflow-tool script: it holds no selection, transition, or
  * provisioning logic of its own. Selection ran in dispatch-select-tick (the
  * graph selector, under the one lock); provisioning is the owned
- * `provision-node-worktree <node-id>` primitive the launched agent invokes as
+ * `provision-node-worktree <node-id> <selected-phase>` primitive the launched agent invokes as
  * one command; transition writes (`graph-commit`) belong to the completing
  * phase / tactic-graph-router-transitions. This script only fans out one
  * `agent()` per selected node — capped by the pace-derived worker target —
@@ -39,6 +39,13 @@
  *   completed                    the phase skill ran to its own disposition.
  *   ci-waiting                   provision exit 10 — retry next tick.
  *   conflict-routed              provision exit 11 routed into /fix-conflicts.
+ *   skipped                      provision exit 12 (stale-selection) — the
+ *                                directive changed after selection; the claim
+ *                                clears and the next tick re-selects from
+ *                                current state. (tactic-worker-start-revalidation)
+ *   scope-stale                  provision exit 13 — the tactic's scope changed
+ *                                after the previous phase; the node was demoted
+ *                                to `implement` and re-selects there next tick.
  *   parked                       a mechanical failure parked the node via
  *                                park-node (the office_hours graph write —
  *                                never an office-hours label); the park reason
@@ -73,6 +80,8 @@ const RESULT_SCHEMA = {
         'completed',
         'ci-waiting',
         'conflict-routed',
+        'skipped',
+        'scope-stale',
         'parked',
         'skill-node-target-unsupported',
         'failed',
@@ -93,7 +102,7 @@ function nodePrompt(sel, projectRoot) {
     '',
     `1. Provision the node worktree with ONE command (never hand-roll provisioning):`,
     '',
-    `   ${projectRoot}/.claude/skills/dispatch-propagate/scripts/provision-node-worktree ${sel.node_id}`,
+    `   ${projectRoot}/.claude/skills/dispatch-propagate/scripts/provision-node-worktree ${sel.node_id} ${sel.phase}`,
     '',
     '   (run with dangerouslyDisableSandbox: true — it uses git, gh, and direnv).',
     '   Route on its exit code:',
@@ -102,6 +111,8 @@ function nodePrompt(sel, projectRoot) {
     sel.kind === 'tactic'
       ? '   - 11 (merge-conflict): work from the existing worktree and INVOKE `/fix-conflicts` for this node instead of the phase skill below, then report disposition `conflict-routed`. If /fix-conflicts cannot be invoked for this target, park instead (step 3).'
       : '   - 11 (merge-conflict): park (step 3) — a strategy session has no conflict-resolution phase.',
+    '   - 12 (stale-selection): report disposition `skipped` and stop — the claim clears and the next tick re-selects from current state. Make NO graph write; the directive already changed.',
+    `   - 13 (scope-stale): run \`${projectRoot}/packages/intentionsutil/scripts/demote-node-to-implement ${sel.node_id}\` (tactic-graph-router-transitions Unit 1's owned primitive — until it lands, the bootstrap-transition doctrine covers the demotion write), then report disposition \`scope-stale\` and stop — the next tick re-selects the node at \`implement\` against the updated scope.`,
     '   - any other non-zero: park (step 3) with the error output as the reason, plus the next-steps recommendation step 3 requires.',
     '',
     'Durability discipline (condition 9), for the phase work in step 2: flush findings to durable state at natural boundaries — worktree commits, PR comments as produced, node-body residue sections; phase progress whose only home is the session is a defect.',
