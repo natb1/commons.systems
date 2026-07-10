@@ -47,8 +47,7 @@ execution:
     - planned
   strategy_fingerprint: 7964be73bb6a26bb77ec516c22d07677de94ee20965f93b02442867fff492731
 validates: []
-blocked_by:
-  - tactic-graph-router-selector
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null

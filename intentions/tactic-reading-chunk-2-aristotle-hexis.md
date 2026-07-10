@@ -33,8 +33,7 @@ phase: null
 execution: null
 validates:
   - strategy-philosophical-grounding
-blocked_by:
-  - tactic-reading-chunk-1-plato-cave
+blocked_by: []
 office_hours:
   reason: "Personal reading, one sitting of at most 30 author-minutes, intended
     after chunk 1 (blocked_by encodes the working order): read Nicomachean
