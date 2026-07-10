@@ -234,7 +234,7 @@ async function updateRecord<T extends { id: string }>(
   await runInWriteTransaction([store], async (tx) => {
     const row = await tx.get<T>(store, id);
     if (!row) throw new Error(`${label} ${id} not found`);
-    await tx.put(store, { ...row, ...fields } as unknown as Record<string, unknown>);
+    await tx.put(store, { ...row, ...fields });
   });
 }
 
@@ -368,7 +368,7 @@ export class IdbDataSource implements DataSource {
     // transaction: a partial failure (e.g. a missing leg) rolls the whole thing
     // back, so we never persist an event whose legs are left un-stamped.
     await runInWriteTransaction(["reconciliationEvents", "journalLegs"], async (tx) => {
-      await tx.put("reconciliationEvents", record as unknown as Record<string, unknown>);
+      await tx.put("reconciliationEvents", record);
       for (const legId of legIds) {
         const leg = await tx.get<IdbJournalLeg>("journalLegs", legId);
         if (!leg) throw new Error(`Journal leg ${legId} not found`);
@@ -376,7 +376,7 @@ export class IdbDataSource implements DataSource {
           ...leg,
           reconciledAtMs: fields.reconciledAtMs,
           reconciledEventId: id,
-        } as unknown as Record<string, unknown>);
+        });
       }
     });
     return idbToReconciliationEvent(record);
@@ -422,9 +422,9 @@ export class IdbDataSource implements DataSource {
     // can no longer leave a `legCount: N` entry with fewer than N legs, which
     // clearedBalance would silently mis-compute.
     await runInWriteTransaction(["journalEntries", "journalLegs"], async (tx) => {
-      await tx.put("journalEntries", entryRecord as unknown as Record<string, unknown>);
+      await tx.put("journalEntries", entryRecord);
       for (const legRecord of legRecords) {
-        await tx.put("journalLegs", legRecord as unknown as Record<string, unknown>);
+        await tx.put("journalLegs", legRecord);
       }
     });
     return { entryId, legIds };

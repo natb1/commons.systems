@@ -22,6 +22,7 @@ vi.mock("../src/file-sync.js", () => ({ scheduleWriteBack: () => scheduleWriteBa
 
 import { Timestamp } from "firebase/firestore";
 import { storeParsedData, closeDb } from "../src/idb";
+import type { IdbJournalLeg } from "../src/idb";
 import { IdbDataSource, SeedDataSource, FileSyncingDataSource } from "../src/data-source";
 import type { DataSource } from "../src/data-source";
 import type { TransactionId, BudgetId, BudgetPeriodId, RuleId } from "../src/firestore";
@@ -100,9 +101,10 @@ describe("IdbDataSource", () => {
     // atomic-write fix these two get-then-put pairs raced and lost one field.
     await storeParsedData(makeParsedData());
     const ds = new IdbDataSource();
+    const id = "txn-1" as TransactionId; // type-safety-ok: branded-id literal, the idiom throughout this file
     await Promise.all([
-      ds.updateTransaction("txn-1" as TransactionId, { note: "note-edit" }),
-      ds.updateTransaction("txn-1" as TransactionId, { category: "cat-edit" }),
+      ds.updateTransaction(id, { note: "note-edit" }),
+      ds.updateTransaction(id, { category: "cat-edit" }),
     ]);
     const txns = await ds.getTransactions();
     expect(txns[0].note).toBe("note-edit");
@@ -322,7 +324,7 @@ describe("IdbDataSource", () => {
       adjustmentEntryId: null,
     };
 
-    function legRow(id: string): Record<string, unknown> {
+    function legRow(id: string): IdbJournalLeg {
       return {
         id,
         entryId: "entry-1",
@@ -339,7 +341,7 @@ describe("IdbDataSource", () => {
 
     it("records the event and stamps every cleared leg", async () => {
       await storeParsedData(makeParsedData({
-        journalLegs: [legRow("leg-1"), legRow("leg-2")] as never,
+        journalLegs: [legRow("leg-1"), legRow("leg-2")],
       }));
       const ds = new IdbDataSource();
       const event = await ds.createReconciliationEvent(eventFields, ["leg-1", "leg-2"]);
@@ -353,13 +355,13 @@ describe("IdbDataSource", () => {
       for (const leg of legs) {
         expect(leg.reconciledEventId).toBe(event.id);
         expect(leg.reconciledAt).not.toBeNull();
-        expect(leg.reconciledAt!.toMillis()).toBe(1700000500000);
+        expect(leg.reconciledAt?.toMillis()).toBe(1700000500000);
       }
     });
 
     it("rolls back the whole event when a leg is missing — no event, no partial stamps", async () => {
       await storeParsedData(makeParsedData({
-        journalLegs: [legRow("leg-1")] as never,
+        journalLegs: [legRow("leg-1")],
       }));
       const ds = new IdbDataSource();
       await expect(

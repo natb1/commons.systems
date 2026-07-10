@@ -167,7 +167,10 @@ export async function deleteRecord(storeName: StoreName, id: string): Promise<vo
  */
 export interface WriteTransaction {
   get<T>(storeName: StoreName, id: string): Promise<T | undefined>;
-  put(storeName: StoreName, record: Record<string, unknown>): Promise<void>;
+  // `object` (not `Record<string, unknown>`) so entity interfaces like
+  // IdbJournalEntry pass without an `as unknown as` cast — an interface is
+  // assignable to `object` but not to `Record<string, unknown>`.
+  put(storeName: StoreName, record: object): Promise<void>;
   delete(storeName: StoreName, id: string): Promise<void>;
 }
 
@@ -193,11 +196,13 @@ export async function runInWriteTransaction<T>(
     get<U>(storeName: StoreName, id: string): Promise<U | undefined> {
       return new Promise<U | undefined>((resolve, reject) => {
         const req = idbTx.objectStore(storeName).get(id);
-        req.onsuccess = () => resolve(req.result as U | undefined);
+        // req.result is typed `any` by lib.dom, so it assigns to U | undefined
+        // without a cast.
+        req.onsuccess = () => resolve(req.result);
         req.onerror = () => reject(req.error);
       });
     },
-    put(storeName: StoreName, record: Record<string, unknown>): Promise<void> {
+    put(storeName: StoreName, record: object): Promise<void> {
       return new Promise<void>((resolve, reject) => {
         const req = idbTx.objectStore(storeName).put(record);
         req.onsuccess = () => resolve();
