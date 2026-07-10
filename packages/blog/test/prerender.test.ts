@@ -214,6 +214,36 @@ describe("prerenderPosts", () => {
     expect(html).not.toContain("<title>My Blog</title>");
   });
 
+  it("does not interpret $-sequences in the post title or description as replacement patterns", async () => {
+    // Regression: prerender.ts injects the title and SEO/OG block via
+    // String.replace. A string-form replacement interprets `$&`, `$'`, `$$`
+    // in the (escapeHtml'd) title/description as replacement patterns — e.g.
+    // `$&` splices the matched `</head>` mid-attribute, corrupting the
+    // prerendered head. Function-form replacers must insert the text verbatim.
+    const config = makeConfig();
+    const doc = config.seed.collections[0].documents[0];
+    doc.data.title = "Big $& Sale";
+    doc.data.previewDescription = "Deal $& save $' now $$ end";
+
+    await prerenderPosts(config);
+
+    const perPostCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+      (c) => String(c[0]).includes("post/hello-world"),
+    );
+    const html = perPostCall![1] as string;
+
+    // Exactly one </head> — no `$&`-spliced copy injected mid-attribute.
+    expect(html.split("</head>")).toHaveLength(2);
+    // Title and description survive with their escaped-literal $-sequences.
+    expect(html).toContain("<title>My Blog - Big $&amp; Sale</title>");
+    expect(html).toContain(
+      '<meta property="og:description" content="Deal $&amp; save $&#39; now $$ end">',
+    );
+    expect(html).toContain(
+      '<meta name="description" content="Deal $&amp; save $&#39; now $$ end">',
+    );
+  });
+
   it("skips unpublished posts", async () => {
     const config = makeConfig();
     config.seed.collections[0].documents.push({
