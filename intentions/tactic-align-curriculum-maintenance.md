@@ -36,6 +36,7 @@ execution:
   markers:
     - planned
     - qa-passed
+    - reviewed
   strategy_fingerprint: 7a69fe4c494003260413fb401128c7efcf25eb7122f2e9b7fd9adbc3b0997cdf
 validates: []
 blocked_by: []

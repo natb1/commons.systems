@@ -23,7 +23,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: fix
+phase: qa
 execution:
   branch: tactic-print-annotations
   pr: 2806
@@ -229,3 +229,17 @@ remaining net-new hatch lines (the established convention — origin/main carrie
 Other CI checks that had concluded were green; `unit-tests`, `acceptance`,
 `preview-and-smoke`, and `Analyze` were still pending at transition time and the
 fix phase must confirm them.
+
+## Fix-phase resolution (2026-07-10)
+
+Applied the sanctioned remedy in commit `cd626bf2`: removed 4 redundant
+`as Partial<ContentRenderer>` casts in `print/test/viewer/annotations.test.tsx`
+(the file had 4, not the estimated 5 — `makeMockRenderer`'s param is already
+typed `Partial<ContentRenderer>`, so the override-object casts were pure
+no-ops), and appended `// type-safety-ok: <reason>` to the remaining 59
+net-new hatch lines (test-fixture non-null assertions/casts in
+`pdf.test.ts`/`annotations.test.tsx`, plus the one re-flagged pre-existing
+cast in `useViewerController.ts:484`). `.github/scripts/check-type-safety-escapes.sh`
+now exits 0. Pushed; full CI on PR #2806 went green (all checks pass,
+including previously-pending `unit-tests`, `acceptance`, `preview-and-smoke`,
+`Analyze`). Transitioning fix -> qa.

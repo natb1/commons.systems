@@ -91,6 +91,27 @@ export function strategyFingerprint(strategy: IntentionNode): string {
   return createHash("sha256").update(JSON.stringify(substance)).digest("hex");
 }
 
+/**
+ * A tactic's SCOPE fingerprint (chain-of-custody, 2026-07-06): sha256 over the
+ * node's `statement` plus its markdown body — the plan content a phase worker
+ * executes against — and NOTHING from the frontmatter state fields
+ * (`phase`/`execution`/`attempts`/`markers`/`office_hours`/`attention`), so a
+ * transition or park write never changes it. Residue sections appended to the
+ * body ARE scope and DO change it; the transition writer refreshes the stamp
+ * after such an append so machinery appends do not trip the chain-of-custody
+ * gate (see `tactic-graph-router-transitions`).
+ *
+ * Takes `(statement, body)` rather than a node because `readNode` intentionally
+ * drops the body (only frontmatter is authoritative on read); the caller reads
+ * the body verbatim via `readNodeBody` and passes both, keeping this function
+ * pure and store-independent. The pair is hashed as canonical JSON so the field
+ * boundary is unambiguous (a body starting with the statement text cannot alias
+ * a different statement/body split).
+ */
+export function tacticScopeFingerprint(statement: string, body: string): string {
+  return createHash("sha256").update(JSON.stringify({ statement, body })).digest("hex");
+}
+
 // --- Helpers -------------------------------------------------------------------
 
 /** Draft phase: `phase: draft`, or equivalently no phase set (§1.1). */
@@ -109,7 +130,7 @@ function isOpenTactic(tactic: IntentionNode): tactic is IntentionNode & { phase:
  * every `parent` ancestor (a subtree's root tactic serves the strategy; its
  * descendants belong through the chain). Cycle-safe.
  */
-function servingStrategyIds(tactic: IntentionNode, byId: Map<string, IntentionNode>): Set<string> {
+export function servingStrategyIds(tactic: IntentionNode, byId: Map<string, IntentionNode>): Set<string> {
   const result = new Set<string>();
   const visited = new Set<string>();
   let current: IntentionNode | undefined = tactic;

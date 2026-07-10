@@ -79,6 +79,15 @@ clarifications:
       read by strategy-services-funnel's lane-attributable inquiry signal
       instead. is_proxy: true records that split. Recorded 2026-07-07
       interview."
+  - question: Which Firebase project hosts the demo app?
+    answer: "The existing commons-systems project (the single project in
+      .firebaserc): clarification 3's own hosting target means a new hosting
+      site inside that project, and condition 2 reads the demo's spend through
+      the same Blaze billing the owned budget pipeline already watches. Demo
+      Firestore data lives under its own demo/{env} namespace beside the
+      production namespaces, synthetic only. Judged immaterial Side-B drift
+      (recorded-by-implication in clarification 3 and condition 2); landed
+      without interrupting the round. Recorded 2026-07-10 /align-tactics round."
 tooling_goals:
   - kind: actuator
     statement: a purpose-built demo SaaS app exercising every retained firebase
@@ -104,7 +113,9 @@ validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
-rounds: null
+rounds:
+  count: 0
+  last_completed: null
 attributes:
   conditions:
     - demand exists for SaaS-shaped client work at individual scale — the demo
