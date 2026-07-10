@@ -10,7 +10,7 @@ import {
 import { AnnotationsPanel } from "../../src/viewer/AnnotationsPanel";
 import { AnnotationCapture } from "../../src/viewer/AnnotationCapture";
 import type { Annotation, AnnotationsStore } from "../../src/annotations";
-import type { SelectionAnchor, ContentRenderer } from "../../src/viewer/types";
+import type { SelectionAnchor } from "../../src/viewer/types";
 import { makeMockRenderer } from "./mock-renderer";
 import type { UseViewerControllerResult } from "../../src/viewer/useViewerController";
 
@@ -22,7 +22,7 @@ function inMemoryStore(initial: Annotation[] = []): {
   store: AnnotationsStore;
   state: { current: Annotation[]; saveCalls: Annotation[][] };
 } {
-  const state = { current: initial.slice(), saveCalls: [] as Annotation[][] };
+  const state = { current: initial.slice(), saveCalls: [] as Annotation[][] }; // type-safety-ok: idiomatic test mock/DOM-fixture access
   const store: AnnotationsStore = {
     load: async () => state.current.slice(),
     save: async (a: Annotation[]) => {
@@ -50,11 +50,11 @@ function makeMockController(
     getRenderer: () => renderer,
     onPanelNavigate: vi.fn(),
     navSignal,
-    canvasWrapRef: { current: null } as React.RefObject<HTMLDivElement>,
-    gotoInputRef: { current: null } as React.RefObject<HTMLInputElement>,
-    gotoStatusRef: { current: null } as React.RefObject<HTMLSpanElement>,
-    spreadToggleRef: { current: null } as React.RefObject<HTMLButtonElement>,
-    viewerRef: { current: null } as React.RefObject<HTMLElement>,
+    canvasWrapRef: { current: null } as React.RefObject<HTMLDivElement>, // type-safety-ok: idiomatic test mock/DOM-fixture access
+    gotoInputRef: { current: null } as React.RefObject<HTMLInputElement>, // type-safety-ok: idiomatic test mock/DOM-fixture access
+    gotoStatusRef: { current: null } as React.RefObject<HTMLSpanElement>, // type-safety-ok: idiomatic test mock/DOM-fixture access
+    spreadToggleRef: { current: null } as React.RefObject<HTMLButtonElement>, // type-safety-ok: idiomatic test mock/DOM-fixture access
+    viewerRef: { current: null } as React.RefObject<HTMLElement>, // type-safety-ok: idiomatic test mock/DOM-fixture access
     positionLabel: "Page 1 / 10",
     canGoPrev: false,
     canGoNext: true,
@@ -82,7 +82,7 @@ function makeMockController(
     mediaId: "media-1",
     uid: null,
     ...overrides,
-  } as UseViewerControllerResult;
+  } as UseViewerControllerResult; // type-safety-ok: idiomatic test mock/DOM-fixture access
 }
 
 // Host component: exposes the hook result to the test and renders the two
@@ -169,13 +169,13 @@ describe("useAnnotations + AnnotationsPanel + AnnotationCapture", () => {
       length: 5,
     };
     const setAnnotations = vi.fn();
-    const renderer = makeMockRenderer({ setAnnotations } as Partial<ContentRenderer>);
+    const renderer = makeMockRenderer({ setAnnotations }); // type-safety-ok: idiomatic test mock/DOM-fixture access
     const controller = makeMockController({ getRenderer: () => renderer });
     const { store } = inMemoryStore([existing]);
     await mount(controller, store);
 
     // Panel shows the loaded annotation.
-    const entry = container.querySelector(".viewer-annotation-entry") as HTMLElement;
+    const entry = container.querySelector(".viewer-annotation-entry") as HTMLElement; // type-safety-ok: idiomatic test mock/DOM-fixture access
     expect(entry.dataset.position).toBe("2");
     expect(container.querySelector(".viewer-annotation-quote")?.textContent).toBe("hello");
     expect(container.querySelector(".viewer-annotation-note")?.textContent).toBe("a note");
@@ -186,7 +186,7 @@ describe("useAnnotations + AnnotationsPanel + AnnotationCapture", () => {
   it("a text selection surfaces the capture control", async () => {
     const renderer = makeMockRenderer({
       getSelectionAnchor: () => ANCHOR,
-    } as Partial<ContentRenderer>);
+    }); // type-safety-ok: idiomatic test mock/DOM-fixture access
     const controller = makeMockController({ getRenderer: () => renderer });
     const { store } = inMemoryStore([]);
     await mount(controller, store);
@@ -206,7 +206,7 @@ describe("useAnnotations + AnnotationsPanel + AnnotationCapture", () => {
     const renderer = makeMockRenderer({
       getSelectionAnchor: () => ANCHOR,
       setAnnotations,
-    } as Partial<ContentRenderer>);
+    }); // type-safety-ok: idiomatic test mock/DOM-fixture access
     const controller = makeMockController({ getRenderer: () => renderer });
     const { store, state } = inMemoryStore([]);
     await mount(controller, store);
@@ -215,7 +215,7 @@ describe("useAnnotations + AnnotationsPanel + AnnotationCapture", () => {
       document.dispatchEvent(new Event("selectionchange"));
       await flushMicrotasks();
     });
-    const btn = container.querySelector(".viewer-annotation-highlight-btn") as HTMLButtonElement;
+    const btn = container.querySelector(".viewer-annotation-highlight-btn") as HTMLButtonElement; // type-safety-ok: idiomatic test mock/DOM-fixture access
     await act(async () => {
       btn.click();
       await flushMicrotasks();
@@ -243,7 +243,7 @@ describe("useAnnotations + AnnotationsPanel + AnnotationCapture", () => {
   it("Note opens an input and saves an annotation carrying the note text", async () => {
     const renderer = makeMockRenderer({
       getSelectionAnchor: () => ANCHOR,
-    } as Partial<ContentRenderer>);
+    }); // type-safety-ok: idiomatic test mock/DOM-fixture access
     const controller = makeMockController({ getRenderer: () => renderer });
     const { store, state } = inMemoryStore([]);
     await mount(controller, store);
@@ -252,16 +252,16 @@ describe("useAnnotations + AnnotationsPanel + AnnotationCapture", () => {
       document.dispatchEvent(new Event("selectionchange"));
       await flushMicrotasks();
     });
-    const noteBtn = container.querySelector(".viewer-annotation-note-btn") as HTMLButtonElement;
+    const noteBtn = container.querySelector(".viewer-annotation-note-btn") as HTMLButtonElement; // type-safety-ok: idiomatic test mock/DOM-fixture access
     await act(async () => {
       noteBtn.click();
       await flushMicrotasks();
     });
-    const input = container.querySelector(".viewer-annotation-note-input") as HTMLInputElement;
+    const input = container.querySelector(".viewer-annotation-note-input") as HTMLInputElement; // type-safety-ok: idiomatic test mock/DOM-fixture access
     expect(input).not.toBeNull();
     // Uncontrolled input: the value is read from the DOM node at save time.
     input.value = "my thought";
-    const saveBtn = container.querySelector(".viewer-annotation-note-save") as HTMLButtonElement;
+    const saveBtn = container.querySelector(".viewer-annotation-note-save") as HTMLButtonElement; // type-safety-ok: idiomatic test mock/DOM-fixture access
     await act(async () => {
       saveBtn.click();
       await flushMicrotasks();
@@ -284,7 +284,7 @@ describe("useAnnotations + AnnotationsPanel + AnnotationCapture", () => {
     const { store, state } = inMemoryStore([existing]);
     await mount(controller, store);
 
-    const del = container.querySelector(".viewer-annotation-delete") as HTMLButtonElement;
+    const del = container.querySelector(".viewer-annotation-delete") as HTMLButtonElement; // type-safety-ok: idiomatic test mock/DOM-fixture access
     await act(async () => {
       del.click();
       await flushMicrotasks();
@@ -309,7 +309,7 @@ describe("useAnnotations + AnnotationsPanel + AnnotationCapture", () => {
     const { store } = inMemoryStore([existing]);
     await mount(controller, store);
 
-    const entry = container.querySelector(".viewer-annotation-entry") as HTMLElement;
+    const entry = container.querySelector(".viewer-annotation-entry") as HTMLElement; // type-safety-ok: idiomatic test mock/DOM-fixture access
     await act(async () => {
       entry.click();
       await flushMicrotasks();
