@@ -61,6 +61,17 @@ clarifications:
       recorded until 2026-07-09 overstated it. recovers keeps
       delegation-social-publishing, an entered attachment this strategy's work
       actually unwinds. Recorded 2026-07-09 interview."
+  - question: Is the signal reading evaluable before the born-parked essay tactics
+      publish new pieces?
+    answer: "Yes — the threshold quantifies over published pieces, so the round-1
+      instrument audits the existing owned-domain output (the landing blog and
+      fellspiral): it enumerates each surface's published pieces from its feed,
+      verifies each is publicly readable with no account, and emits the
+      platform-first attestation checklist the owner completes at office-hours.
+      The born-parked essay tactics (tactic-blog-platform-bloat,
+      tactic-blog-enshittification-response, tactic-blog-maintaining-alignment)
+      enrich later readings but do not gate the instrument. Recorded 2026-07-10
+      /align-tactics round."
 tooling_goals: []
 success_signal:
   observable: creative output lands on owned domains; platform posts are at most
@@ -75,7 +86,9 @@ validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
-rounds: null
+rounds:
+  count: 0
+  last_completed: null
 attributes:
   conditions:
     - self-hosting stays cheap and low-maintenance (static sites, the shared

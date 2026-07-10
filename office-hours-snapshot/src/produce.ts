@@ -37,13 +37,13 @@ import {
   buildOfficeHoursQuery,
 } from "../../functions/src/dispatch-queue-metrics-core.js";
 import type { ParkedIssue } from "../../functions/src/dispatch-queue-metrics-core.js";
-import { collectProjectSignalsCore } from "../../functions/src/project-signals-core.js";
+import { collectProjectSignalsCore } from "./project-signals-core.js";
 import type {
   GithubSignals,
   Ga4AppSignals,
   GscSignals,
   PsiUrlSignals,
-} from "../../functions/src/project-signals-core.js";
+} from "./project-signals-core.js";
 
 import { parseQueueMetrics } from "../../office-hours/src/queue-metrics.js";
 import type { QueueMetricsSnapshot } from "../../office-hours/src/queue-metrics.js";
@@ -52,6 +52,7 @@ import type { IssueSample } from "../../office-hours/src/issue-samples.js";
 import type { UsageSample } from "../../office-hours/src/usage-samples.js";
 import type { Reminder } from "../../office-hours/src/reminders.js";
 import { parseProjectSignals } from "../../office-hours/src/project-signals.js";
+import type { ProjectSignalsSnapshot } from "../../office-hours/src/project-signals.js";
 import { toTopicUsage } from "../../office-hours/src/topic-usage.js";
 import type { TopicUsageDoc } from "../../office-hours/src/topic-usage.js";
 
@@ -433,6 +434,80 @@ export async function produceSnapshot(
     scope,
     window: { samples: windowSize, issueSamples: windowSize },
   };
+}
+
+// ---------------------------------------------------------------------------
+// produceProjectSignals — the analytics-scope collector
+// ---------------------------------------------------------------------------
+
+/** Deps for the analytics-only collection (a strict subset of ProduceDeps). */
+export interface ProduceSignalsDeps {
+  /** Firestore-style namespace prefix, e.g. "office-hours/prod". */
+  namespace: string;
+  /** Owning group id, denormalized into the signals section. */
+  groupId: string;
+  /** Member emails, denormalized into the signals section. */
+  memberEmails: string[];
+  /** GitHub project-signals fetcher. */
+  fetchGithub: (() => Promise<GithubSignals>) | null;
+  /** GA4 fetcher. */
+  fetchGa4: (() => Promise<Ga4AppSignals[]>) | null;
+  /** GSC fetcher. */
+  fetchGsc: ((now: Date) => Promise<GscSignals>) | null;
+  /** PSI fetcher. */
+  fetchPsi: (() => Promise<PsiUrlSignals[]>) | null;
+  /** Producer clock; defaults to `() => new Date()`. */
+  now?: () => Date;
+  /** Capture-Firestore factory; defaults to the in-memory createCaptureFirestore. */
+  createFirestore?: () => CaptureFirestore;
+}
+
+/**
+ * Collect ONLY the projectSignals section (`--scope analytics`): run the
+ * unmodified collectProjectSignalsCore against the capture Firestore and read
+ * the written doc back through the office-hours parser. The caller
+ * (run.ts) folds the result into the prior snapshot via foldProjectSignals.
+ *
+ * The core keeps its per-source omit-on-failure posture (a failed source is
+ * logged and its key omitted), but a run where EVERY source came back empty
+ * throws — a daily analytics timer that silently produces an empty section
+ * would defeat its purpose (clear errors over fallbacks).
+ */
+export async function produceProjectSignals(
+  deps: ProduceSignalsDeps,
+): Promise<ProjectSignalsSnapshot> {
+  const now = (deps.now ?? (() => new Date()))();
+  const { firestore, captured } = (deps.createFirestore ?? createCaptureFirestore)();
+  const ns = deps.namespace;
+
+  await collectProjectSignalsCore({
+    firestore,
+    namespace: ns,
+    groupId: deps.groupId,
+    memberEmails: deps.memberEmails,
+    now,
+    fetchGithub: deps.fetchGithub,
+    fetchGa4: deps.fetchGa4,
+    fetchGsc: deps.fetchGsc,
+    fetchPsi: deps.fetchPsi,
+  });
+
+  const signalsDoc = captured.doc(`${ns}/metrics/project-signals`);
+  if (!signalsDoc) {
+    throw new Error("produceProjectSignals: the signals core wrote no project-signals doc");
+  }
+  const parsed = parseProjectSignals(signalsDoc);
+  if (!parsed) {
+    throw new Error(
+      "produceProjectSignals: parseProjectSignals rejected the collected doc (shape drift)",
+    );
+  }
+  if (!parsed.github && !parsed.ga4 && !parsed.gsc && !parsed.psi) {
+    throw new Error(
+      "produceProjectSignals: every analytics source failed — refusing to fold an empty projectSignals section",
+    );
+  }
+  return parsed;
 }
 
 /** Parse `topic-usage-writer.mjs --dry-run` stdout → TopicUsageDoc[] (drops nulls). */

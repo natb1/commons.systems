@@ -24,8 +24,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-copy-change-audit-instrument
+  pr: 2800
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: c24f27f4d6208c07c5844c87fc747377755784a30749a9c39c578aa9ee7f5d1c
 validates:
   - strategy-author-approved-copy
 blocked_by: []
