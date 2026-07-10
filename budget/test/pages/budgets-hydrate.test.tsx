@@ -347,6 +347,27 @@ describe("Budgets overrides table interactivity — Unit 3 contract", () => {
     expect(calledOverrides).toHaveLength(1);
   });
 
+  it("does not clobber an existing same-date override; edits it in place instead", async () => {
+    // An override already exists for today's date. Clicking "Add Override"
+    // (which would insert a today-dated $0 row and save) must not overwrite it.
+    const now = new Date();
+    const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    const c = await renderBudgets([
+      budget({ overrides: [{ date: Timestamp.fromMillis(todayUTC), balance: 42 }] }),
+    ]);
+    const addBtn = c.querySelector("#add-override") as HTMLButtonElement;
+    addBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await flush();
+    // No second row inserted, and no clobbering save fired.
+    expect(c.querySelectorAll("#overrides-table .override-row").length).toBe(1);
+    expect(activeDS.updateBudgetOverrides).not.toHaveBeenCalled();
+    // The existing override's balance is focused for in-place editing, and its
+    // value is untouched (not zeroed).
+    const balanceInput = c.querySelector("#overrides-table .edit-override-balance") as HTMLInputElement;
+    expect(document.activeElement).toBe(balanceInput);
+    expect(balanceInput.value).toBe("42");
+  });
+
   it("reverts a deleted row and flags save-error when the delete re-write fails", async () => {
     const c = await renderBudgets([overrideBudget()], [], {
       updateBudgetOverrides: vi.fn().mockRejectedValue(new Error("network error")),
