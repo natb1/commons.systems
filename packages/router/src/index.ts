@@ -137,7 +137,10 @@ export function createHistoryRouter(
     if (anchor.getAttribute("target")) return;
     const href = anchor.getAttribute("href");
     const path = resolveInternalHref(href);
-    if (path === null) return;
+    // resolveInternalHref returns null for a null/empty href, so a non-null
+    // path guarantees href is a non-empty string; the href check narrows the
+    // type for storeNavigate below.
+    if (path === null || href === null) return;
     if (!matchRoute(routes, path)) return;
     e.preventDefault();
     // Route the vanilla navigation through the store so it pushes history AND
