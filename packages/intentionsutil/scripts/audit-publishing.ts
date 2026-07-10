@@ -22,6 +22,11 @@
 
 import { pathToFileURL } from "node:url";
 
+/** Narrow an unknown thrown value to a message string without a type cast. */
+function errMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 // --- Surfaces --------------------------------------------------------------
 // Hardcoded owned surfaces. Values must match `landing/src/site-config.ts:6`
 // and `fellspiral/src/site-config.ts:6`.
@@ -130,7 +135,7 @@ export async function auditSurfaces(
       feed = await fetchText(feedUrl);
     } catch (err) {
       throw new Error(
-        `audit-publishing: failed to fetch feed ${feedUrl}: ${(err as Error).message}`,
+        `audit-publishing: failed to fetch feed ${feedUrl}: ${errMessage(err)}`,
       );
     }
     if (feed.status !== 200) {
@@ -239,7 +244,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   main().then(
     (code) => process.exit(code),
     (err) => {
-      process.stderr.write(`${(err as Error).message}\n`);
+      process.stderr.write(`${errMessage(err)}\n`);
       process.exit(1);
     },
   );
