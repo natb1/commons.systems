@@ -19,6 +19,16 @@ Cross-iteration memory lives entirely in `tmp/fix-checks-summary.md` (see
 
 ## Steps
 
+**Resume from durable state (condition 9).** This is a single-pass phase, so its
+mid-phase durable home is the **worktree-local accumulator file**
+`tmp/fix-checks-summary.md`, which persists for the worktree's life (Step 8's
+post is only the terminal flush — see [Accumulator](#accumulator)). A re-selected
+worker rooting in the same worktree treats these as resume input, never an error:
+the accumulator file's prior iterations, the `dispatch:fix-checks-attempt-<n>`
+attempt counter on the PR (Step 5), and the "main already fixed it" merge-commit
+reuse (Step 4) are all durable and carry forward — read them and continue rather
+than restarting the pass.
+
 1. **Resolve the draft PR.** Run the context pack (`dangerouslyDisableSandbox:
    true` — calls `gh`):
 
