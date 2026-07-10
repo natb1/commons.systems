@@ -21,20 +21,22 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: null
 execution:
   branch: tactic-attention-surface-analytics-collector
   pr: 2783
   attempts:
     fix: 1
-  markers: []
+  markers:
+    - reviewed
   strategy_fingerprint: 900e05682e9367b9bd821dd98976ac9edf41f0ab3e1cafed10a5bdab6f91301f
 validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  phase: main-qa
 ---
 # analytics collector — local scheduled job (nix-managed timer) gathers GA4/Search Console/PageSpeed/GitHub signals into the snapshot, replacing the Firestore function
 
