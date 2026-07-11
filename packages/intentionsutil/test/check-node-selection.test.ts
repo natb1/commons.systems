@@ -188,6 +188,100 @@ describe("evaluateSelection", () => {
     expect(fp3).not.toBe(fp1);
   });
 
+  describe("align-tactics (strategy phase:null) selection", () => {
+    it("passes a codified, phase:null strategy the selector would emit (exit 0)", () => {
+      const dir = tempDir();
+      // reading:null, gap:null => unvalidated signal => an align candidate.
+      seed(dir, anode({ id: "strategy-a", kind: "strategy", status: "codified" }));
+      const r = evaluateSelection({ nodeId: "strategy-a", selectedPhase: "align-tactics", dir, stamp: null });
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).toMatch(/^[0-9a-f]{64}$/);
+    });
+
+    it("exit 12 when the strategy was parked after selection (not-parked owns the verdict)", () => {
+      const dir = tempDir();
+      seed(
+        dir,
+        anode({
+          id: "strategy-a",
+          kind: "strategy",
+          office_hours: { reason: "author park", since: "2026-07-11", recommendation: null },
+        }),
+      );
+      const r = evaluateSelection({ nodeId: "strategy-a", selectedPhase: "align-tactics", dir, stamp: null });
+      expect(r.exitCode).toBe(12);
+      expect(r.stderr[0]).toMatch(/not-parked/);
+    });
+
+    it("exit 12 when the signal became validated (no longer align-eligible)", () => {
+      const dir = tempDir();
+      // reading set, gap null => validated signal => selector drops the strategy.
+      seed(dir, anode({ id: "strategy-a", kind: "strategy", reading: "holding at threshold" }));
+      const r = evaluateSelection({ nodeId: "strategy-a", selectedPhase: "align-tactics", dir, stamp: null });
+      expect(r.exitCode).toBe(12);
+      expect(r.stderr[0]).toMatch(/no longer align-eligible/);
+    });
+
+    it("exit 12 when the strategy gained a non-draft on-path child", () => {
+      const dir = tempDir();
+      seed(dir, anode({ id: "strategy-a", kind: "strategy" }));
+      seed(
+        dir,
+        anode({
+          id: "tactic-child",
+          kind: "tactic",
+          serves: ["strategy-a"],
+          validates: ["strategy-a"],
+          phase: "implement",
+        }),
+      );
+      const r = evaluateSelection({ nodeId: "strategy-a", selectedPhase: "align-tactics", dir, stamp: null });
+      expect(r.exitCode).toBe(12);
+      expect(r.stderr[0]).toMatch(/no longer align-eligible/);
+    });
+
+    it("exit 12 when the strategy is at the rounds cap", () => {
+      const dir = tempDir();
+      seed(
+        dir,
+        anode({
+          id: "strategy-a",
+          kind: "strategy",
+          gap: "still gapped",
+          reading: "fresh 2026-07-10",
+          rounds: { count: 2, last_completed: "2026-07-01T00:00:00Z" },
+        }),
+      );
+      const r = evaluateSelection({ nodeId: "strategy-a", selectedPhase: "align-tactics", dir, stamp: null });
+      expect(r.exitCode).toBe(12);
+      expect(r.stderr[0]).toMatch(/no longer align-eligible/);
+    });
+
+    it("exit 12 when the stored phase advanced to a non-null value", () => {
+      const dir = tempDir();
+      // A squatter phase advance stands in for any non-null stored phase.
+      seed(dir, anode({ id: "strategy-a", kind: "strategy", attributes: { phase: "implement" } }));
+      const r = evaluateSelection({ nodeId: "strategy-a", selectedPhase: "align-tactics", dir, stamp: null });
+      expect(r.exitCode).toBe(12);
+      expect(r.stderr[0]).toMatch(/phase advanced to implement/);
+    });
+
+    it("exit 12 when a tactic id is passed at align-tactics (not a strategy)", () => {
+      const dir = tempDir();
+      seed(dir, anode({ id: "tactic-a", kind: "tactic", phase: "implement" }));
+      const r = evaluateSelection({ nodeId: "tactic-a", selectedPhase: "align-tactics", dir, stamp: null });
+      expect(r.exitCode).toBe(12);
+      expect(r.stderr[0]).toMatch(/not a strategy/);
+    });
+
+    it("a normal tactic phase still round-trips unchanged at align-tactics-adjacent phases", () => {
+      const dir = tempDir();
+      seed(dir, anode({ id: "tactic-q", kind: "tactic", phase: "qa" }));
+      expect(evaluateSelection({ nodeId: "tactic-q", selectedPhase: "qa", dir, stamp: null }).exitCode).toBe(0);
+      expect(evaluateSelection({ nodeId: "tactic-q", selectedPhase: "implement", dir, stamp: null }).exitCode).toBe(12);
+    });
+  });
+
   describe("scope chain (--stamp)", () => {
     function seedTactic(dir: string, phase: Phase): string {
       seed(dir, anode({ id: "tactic-c", kind: "tactic", phase }));

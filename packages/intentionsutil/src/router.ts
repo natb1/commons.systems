@@ -351,3 +351,28 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
 
   return { candidates, events };
 }
+
+/**
+ * Would the graph selector emit `strategy` as an `align-tactics` candidate over
+ * this store snapshot right now? True iff `strategy` appears among
+ * `selectGraphTargets(nodes).candidates` as a `kind: "strategy"` candidate at
+ * the derived `align-tactics` rung — covering both a fresh align-arm-eligible
+ * strategy and the one queued soft-freeze re-evaluation session.
+ *
+ * The selector is the single source of truth for align-selectability (single-
+ * callsite doctrine): this helper is membership in its output, never a re-
+ * implementation of its per-strategy gates (child/signal/rounds/freeze). The
+ * worker-start re-validation gate (`check-node-selection.ts`) calls it so a
+ * strategy selected at `align-tactics` re-validates against exactly the
+ * selector's current verdict, closing the `null !== "align-tactics"` literal-
+ * equality regression that exit-12'd every strategy.
+ *
+ * `office_hours` gating is intentionally in scope (a parked strategy is not
+ * emitted), but the gate applies its dedicated not-parked check first, so in
+ * practice this is only reached for an unparked node.
+ */
+export function strategyAlignSelectable(strategy: IntentionNode, nodes: IntentionNode[]): boolean {
+  return selectGraphTargets(nodes).candidates.some(
+    (c) => c.id === strategy.id && c.kind === "strategy" && c.phase === "align-tactics",
+  );
+}

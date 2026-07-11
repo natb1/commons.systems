@@ -4,6 +4,7 @@ import {
   PHASE_LADDER,
   readingDate,
   selectGraphTargets,
+  strategyAlignSelectable,
   strategyFingerprint,
 } from "../src/router.js";
 
@@ -433,6 +434,63 @@ describe("strategyFingerprint", () => {
     const base = strategy({ id: "strategy-s", serves: ["virtue-a", "virtue-b"] });
     const reordered = strategy({ id: "strategy-s", serves: ["virtue-b", "virtue-a"] });
     expect(strategyFingerprint(base)).toBe(strategyFingerprint(reordered));
+  });
+});
+
+describe("strategyAlignSelectable", () => {
+  // A fixture graph exercising every strategy-selectability branch: a fresh
+  // eligible strategy, a validated (dropped) one, a soft-frozen re-evaluation
+  // one, a parked one, and a strategy blocked by a non-draft on-path child.
+  const fixture = (): IntentionNode[] => {
+    const frozenStrategy = strategy({ id: "strategy-frozen" });
+    return [
+      ...kinds(),
+      strategy({ id: "strategy-fresh" }),
+      strategy({ id: "strategy-validated", reading: "holding at threshold" }),
+      strategy({
+        id: "strategy-parked",
+        office_hours: { reason: "parked", since: "2026-07-01", recommendation: null },
+      }),
+      strategy({ id: "strategy-blocked" }),
+      tactic({
+        id: "tactic-onpath",
+        serves: ["strategy-blocked"],
+        validates: ["strategy-blocked"],
+        phase: "implement",
+      }),
+      frozenStrategy,
+      tactic({
+        id: "tactic-frozen-child",
+        serves: ["strategy-frozen"],
+        phase: "implement",
+        execution: exec({ strategy_fingerprint: "stale-fingerprint" }),
+      }),
+    ];
+  };
+
+  it("agrees with selectGraphTargets membership across the fixture graph (behavior-preserving)", () => {
+    const nodes = fixture();
+    const emitted = new Set(
+      selectGraphTargets(nodes)
+        .candidates.filter((c) => c.kind === "strategy" && c.phase === "align-tactics")
+        .map((c) => c.id),
+    );
+    for (const n of nodes) {
+      expect(strategyAlignSelectable(n, nodes)).toBe(emitted.has(n.id));
+    }
+  });
+
+  it("is true for a fresh eligible strategy and the frozen re-evaluation strategy", () => {
+    const nodes = fixture();
+    expect(strategyAlignSelectable(strategy({ id: "strategy-fresh" }), nodes)).toBe(true);
+    expect(strategyAlignSelectable(strategy({ id: "strategy-frozen" }), nodes)).toBe(true);
+  });
+
+  it("is false for validated, parked, and on-path-blocked strategies", () => {
+    const nodes = fixture();
+    expect(strategyAlignSelectable(strategy({ id: "strategy-validated" }), nodes)).toBe(false);
+    expect(strategyAlignSelectable(strategy({ id: "strategy-parked" }), nodes)).toBe(false);
+    expect(strategyAlignSelectable(strategy({ id: "strategy-blocked" }), nodes)).toBe(false);
   });
 });
 
