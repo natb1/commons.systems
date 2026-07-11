@@ -139,6 +139,19 @@ clarifications:
       treat an ordinary stale checkout as a violation. Worktrees are exempt —
       they legitimately check out feature branches; the invariant is scoped to
       the primary checkout alone. Recorded 2026-07-08 interview.
+  - question: How is the backlog/escalation reading taken now that the GitHub issue
+      queue is retired?
+    answer: "GitHub issues were disabled on the repo once the gh dispatch queue
+      drained (observed 2026-07-11): the backlog is now the graph's open tactics
+      and escalations are office_hours parks on nodes. The office-hours
+      dashboard's gh-fed queue-metrics panels
+      (functions/src/dispatch-queue-metrics-core.ts producer) no longer measure
+      the live queue; graph-derived velocity/backlog series are in-flight at
+      tactic-attention-surface-velocity-pace (strategy-attention-surface owns
+      the app surface). Until those land, a signal reading counts backlog and
+      escalations directly from the graph (open phase-set tactics; nodes with
+      office_hours set) alongside the managed-daemon liveness check. Recorded
+      2026-07-11 /align-tactics round."
 tooling_goals:
   - kind: sensor
     statement: a managed dispatch daemon liveness sensor that reports whether the
@@ -164,7 +177,9 @@ validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
-rounds: null
+rounds:
+  count: 0
+  last_completed: null
 attributes:
   conditions:
     - frontier-agent access remains economical at individual scale
