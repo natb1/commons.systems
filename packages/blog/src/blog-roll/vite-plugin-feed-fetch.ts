@@ -1,3 +1,5 @@
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import type { Plugin } from "vite";
 import { classifyError } from "@commons-systems/errorutil";
 import type { LatestPost } from "./types.ts";
@@ -8,10 +10,23 @@ export interface FeedConfig {
   url: string;
 }
 
+export interface FeedFetchPluginOptions {
+  /** When set, the fetched feed snapshot is persisted to this absolute path at
+   *  build end (`writeBundle`). The post-build tsx prerender reads the same file
+   *  and passes it as `buildTimeFeeds`, so the prerendered info-panel hydrates
+   *  from the SAME data the client's `virtual:blog-roll-feeds` bundle inlines —
+   *  closing the SSR/client parity gap (the `virtual:` module only exists inside
+   *  the vite build, so the standalone tsx prerender cannot import it). */
+  emitPath?: string;
+}
+
 const VIRTUAL_MODULE_ID = "virtual:blog-roll-feeds";
 const RESOLVED_VIRTUAL_MODULE_ID = "\0" + VIRTUAL_MODULE_ID;
 
-export function feedFetchPlugin(feeds: FeedConfig[]): Plugin {
+export function feedFetchPlugin(
+  feeds: FeedConfig[],
+  options: FeedFetchPluginOptions = {},
+): Plugin {
   let feedData: Record<string, LatestPost | null> = {};
 
   return {
@@ -67,6 +82,15 @@ export function feedFetchPlugin(feeds: FeedConfig[]): Plugin {
       if (id === RESOLVED_VIRTUAL_MODULE_ID) {
         return `export default ${JSON.stringify(feedData)};`;
       }
+    },
+    // Persist the same snapshot the virtual module inlined so the post-build tsx
+    // prerender can read it (it cannot import the `virtual:` module). Runs after
+    // the bundle is written, so `feedData` from `buildStart` is fully populated.
+    writeBundle() {
+      const { emitPath } = options;
+      if (!emitPath) return;
+      mkdirSync(dirname(emitPath), { recursive: true });
+      writeFileSync(emitPath, JSON.stringify(feedData, null, 2), "utf8");
     },
   };
 }
