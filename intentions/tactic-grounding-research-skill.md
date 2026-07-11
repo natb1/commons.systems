@@ -27,7 +27,8 @@ execution:
   branch: tactic-grounding-research-skill
   pr: 2846
   attempts: {}
-  markers: []
+  markers:
+    - reviewed
   strategy_fingerprint: null
 validates: []
 blocked_by:
