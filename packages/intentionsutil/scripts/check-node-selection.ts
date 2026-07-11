@@ -40,7 +40,12 @@
 import { pathToFileURL } from "node:url";
 import { readFileSync } from "node:fs";
 import { listNodes, readNode, readNodeBody } from "../src/store.js";
-import { servingStrategyIds, strategyFingerprint, tacticScopeFingerprint } from "../src/router.js";
+import {
+  servingStrategyIds,
+  strategyAlignSelectable,
+  strategyFingerprint,
+  tacticScopeFingerprint,
+} from "../src/router.js";
 import type { IntentionNode } from "../src/schema.js";
 import { IntentionSchemaError } from "../src/errors.js";
 
@@ -120,15 +125,48 @@ export function evaluateSelection(opts: SelectionOpts): SelectionResult {
     throw err;
   }
 
-  // 2. phase — persisted phase must equal the selected phase (never re-derived).
+  // 2. phase — the selected phase must still match the node.
+  //
+  // A strategy is selected at the derived `align-tactics` rung, a string the
+  // selector emits on the candidate but never stores on the node (strategies
+  // carry `phase: null` natively). A literal `readPhase === selectedPhase`
+  // computes `null !== "align-tactics"` and exit-12s every strategy, blocking
+  // the whole align lane. For `align-tactics` the equality is replaced by a
+  // strategy-aware gate: the node must be a strategy still at its native null
+  // phase (an advance to any non-null phase — first-class or squatter — is a
+  // stale selection). The align-eligibility re-check is deferred to below the
+  // not-parked check so a parked strategy fails with the clearer not-parked
+  // message. All other phases keep the literal stored-phase equality (tactic
+  // phases are first-class and persisted, so equality is correct there).
   const phase = readPhase(node);
-  if (phase !== selectedPhase) {
+  if (selectedPhase === "align-tactics") {
+    if (node.kind !== "strategy") {
+      return fail(EXIT_STALE_SELECTION, "phase", `selected align-tactics but ${nodeId} is a ${node.kind}, not a strategy`);
+    }
+    if (phase !== null) {
+      return fail(EXIT_STALE_SELECTION, "phase", `selected align-tactics but strategy ${nodeId} phase advanced to ${phase}`);
+    }
+  } else if (phase !== selectedPhase) {
     return fail(EXIT_STALE_SELECTION, "phase", `selected ${selectedPhase} but node is now ${phase ?? "draft/null"}`);
   }
 
   // 3. not parked — an author park landing after selection yields the worker.
   if (readParked(node)) {
     return fail(EXIT_STALE_SELECTION, "not-parked", `${nodeId} was parked to office_hours after selection`);
+  }
+
+  // 3b. align-eligibility — for an align-tactics selection, the selector must
+  //     still emit the strategy as an align candidate (signal still unvalidated,
+  //     under the rounds cap, no non-draft on-path child, not soft-frozen out).
+  //     Deferred to here so the not-parked check above owns the parked verdict;
+  //     defers wholesale to the pure selector (single source of truth).
+  if (selectedPhase === "align-tactics" && !strategyAlignSelectable(node, listNodes(dir))) {
+    return fail(
+      EXIT_STALE_SELECTION,
+      "phase",
+      `selected align-tactics but strategy ${nodeId} is no longer align-eligible ` +
+        `(signal validated, rounds cap, on-path child, or soft-frozen out)`,
+    );
   }
 
   // 4. fingerprint — a strategy substance edit after selection yields the
