@@ -216,6 +216,18 @@ func TestParseStatementDir_DiscoverError(t *testing.T) {
 	}
 }
 
+// asOf parses a YYYY-MM-DD date into a *time.Time for a StatementData
+// BalanceDate in the dedup table tests. Callers pass identical date strings to
+// get equal instants (reflect.DeepEqual on the *time.Time compares by value).
+func asOf(t *testing.T, date string) *time.Time {
+	t.Helper()
+	parsed, err := time.Parse("2006-01-02", date)
+	if err != nil {
+		t.Fatalf("asOf: parsing %q: %v", date, err)
+	}
+	return &parsed
+}
+
 func TestDedupStatementData(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -312,6 +324,88 @@ func TestDedupStatementData(t *testing.T) {
 				"bank/acct/2025-02/c.ofx",
 				"30.00",
 				"99.99",
+			},
+		},
+		{
+			name: "disagree, later as-of arrives second — later observation replaces earlier in place",
+			input: []budget.StatementData{
+				{StatementID: "STMT-6", Balance: 1000, BalanceDate: asOf(t, "2025-01-15"), SourceFile: "bank/acct/2025-01/early.ofx"},
+				{StatementID: "STMT-6", Balance: 1200, BalanceDate: asOf(t, "2025-01-28"), SourceFile: "bank/acct/2025-01/late.ofx"},
+			},
+			wantOut: []budget.StatementData{
+				{StatementID: "STMT-6", Balance: 1200, BalanceDate: asOf(t, "2025-01-28"), SourceFile: "bank/acct/2025-01/late.ofx"},
+			},
+		},
+		{
+			name: "disagree, later as-of arrives first — earlier survivor kept",
+			input: []budget.StatementData{
+				{StatementID: "STMT-7", Balance: 1200, BalanceDate: asOf(t, "2025-01-28"), SourceFile: "bank/acct/2025-01/late.ofx"},
+				{StatementID: "STMT-7", Balance: 1000, BalanceDate: asOf(t, "2025-01-15"), SourceFile: "bank/acct/2025-01/early.ofx"},
+			},
+			wantOut: []budget.StatementData{
+				{StatementID: "STMT-7", Balance: 1200, BalanceDate: asOf(t, "2025-01-28"), SourceFile: "bank/acct/2025-01/late.ofx"},
+			},
+		},
+		{
+			name: "disagree, prior has nil BalanceDate — set as-of wins",
+			input: []budget.StatementData{
+				{StatementID: "STMT-8", Balance: 1000, SourceFile: "bank/acct/2025-01/undated.ofx"},
+				{StatementID: "STMT-8", Balance: 1300, BalanceDate: asOf(t, "2025-01-20"), SourceFile: "bank/acct/2025-01/dated.ofx"},
+			},
+			wantOut: []budget.StatementData{
+				{StatementID: "STMT-8", Balance: 1300, BalanceDate: asOf(t, "2025-01-20"), SourceFile: "bank/acct/2025-01/dated.ofx"},
+			},
+		},
+		{
+			name: "disagree, later entry has nil BalanceDate — set as-of survivor kept",
+			input: []budget.StatementData{
+				{StatementID: "STMT-9", Balance: 1300, BalanceDate: asOf(t, "2025-01-20"), SourceFile: "bank/acct/2025-01/dated.ofx"},
+				{StatementID: "STMT-9", Balance: 1000, SourceFile: "bank/acct/2025-01/undated.ofx"},
+			},
+			wantOut: []budget.StatementData{
+				{StatementID: "STMT-9", Balance: 1300, BalanceDate: asOf(t, "2025-01-20"), SourceFile: "bank/acct/2025-01/dated.ofx"},
+			},
+		},
+		{
+			name: "disagree, both BalanceDate nil — still an error",
+			input: []budget.StatementData{
+				{StatementID: "STMT-10", Balance: 1000, SourceFile: "bank/acct/2025-01/a.ofx"},
+				{StatementID: "STMT-10", Balance: 2000, SourceFile: "bank/acct/2025-01/b.ofx"},
+			},
+			wantErr: true,
+			wantErrSubstrs: []string{
+				"STMT-10",
+				"bank/acct/2025-01/a.ofx",
+				"bank/acct/2025-01/b.ofx",
+				"10.00",
+				"20.00",
+			},
+		},
+		{
+			name: "disagree, identical as-of instant — still an error",
+			input: []budget.StatementData{
+				{StatementID: "STMT-11", Balance: 1000, BalanceDate: asOf(t, "2025-01-31"), SourceFile: "bank/acct/2025-01/a.ofx"},
+				{StatementID: "STMT-11", Balance: 2000, BalanceDate: asOf(t, "2025-01-31"), SourceFile: "bank/acct/2025-01/b.ofx"},
+			},
+			wantErr: true,
+			wantErrSubstrs: []string{
+				"STMT-11",
+				"bank/acct/2025-01/a.ofx",
+				"bank/acct/2025-01/b.ofx",
+				"10.00",
+				"20.00",
+			},
+		},
+		{
+			name: "reconciled replacement preserves surrounding first-seen order",
+			input: []budget.StatementData{
+				{StatementID: "STMT-P", Balance: 1000, BalanceDate: asOf(t, "2025-01-10"), SourceFile: "bank/acct/2025-01/p-early.ofx"},
+				{StatementID: "STMT-Q", Balance: 2000, SourceFile: "bank/acct/2025-01/q.ofx"},
+				{StatementID: "STMT-P", Balance: 1500, BalanceDate: asOf(t, "2025-01-25"), SourceFile: "bank/acct/2025-01/p-late.ofx"},
+			},
+			wantOut: []budget.StatementData{
+				{StatementID: "STMT-P", Balance: 1500, BalanceDate: asOf(t, "2025-01-25"), SourceFile: "bank/acct/2025-01/p-late.ofx"},
+				{StatementID: "STMT-Q", Balance: 2000, SourceFile: "bank/acct/2025-01/q.ofx"},
 			},
 		},
 	}
