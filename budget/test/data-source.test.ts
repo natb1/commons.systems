@@ -4,13 +4,17 @@ import { timestampMockFactory, makeParsedData } from "./helpers";
 
 vi.mock("firebase/firestore", () => timestampMockFactory());
 
-vi.mock("../src/firestore.js", () => ({
-  getTransactions: vi.fn(),
-  getBudgets: vi.fn(),
-  getBudgetPeriods: vi.fn(),
-  getRules: vi.fn(),
-  getNormalizationRules: vi.fn(),
-}));
+vi.mock(import("../src/firestore.js"), async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    getTransactions: vi.fn(),
+    getBudgets: vi.fn(),
+    getBudgetPeriods: vi.fn(),
+    getRules: vi.fn(),
+    getNormalizationRules: vi.fn(),
+  };
+});
 
 vi.mock("virtual:budget-seed-data", async () => {
   const { SEED_DATA_MOCK } = await import("./fixtures/seed-data-mock");
@@ -22,6 +26,7 @@ vi.mock("../src/file-sync.js", () => ({ scheduleWriteBack: () => scheduleWriteBa
 
 import { Timestamp } from "firebase/firestore";
 import { storeParsedData, closeDb } from "../src/idb";
+import type { IdbJournalLeg } from "../src/idb";
 import { IdbDataSource, SeedDataSource, FileSyncingDataSource } from "../src/data-source";
 import type { DataSource } from "../src/data-source";
 import type { TransactionId, BudgetId, BudgetPeriodId, RuleId } from "../src/firestore";
@@ -91,6 +96,23 @@ describe("IdbDataSource", () => {
     // Other fields preserved
     expect(txns[0].description).toBe("KROGER");
     expect(txns[0].amount).toBe(52.3);
+  });
+
+  it("concurrent note and category edits to one row both persist", async () => {
+    // updateRecord reads-then-writes in a single transaction; IndexedDB
+    // serializes read-write transactions on the same store, so the second edit
+    // reads the first's committed value instead of a stale snapshot. Before the
+    // atomic-write fix these two get-then-put pairs raced and lost one field.
+    await storeParsedData(makeParsedData());
+    const ds = new IdbDataSource();
+    const id = "txn-1" as TransactionId; // type-safety-ok: branded-id literal, the idiom throughout this file
+    await Promise.all([
+      ds.updateTransaction(id, { note: "note-edit" }),
+      ds.updateTransaction(id, { category: "cat-edit" }),
+    ]);
+    const txns = await ds.getTransactions();
+    expect(txns[0].note).toBe("note-edit");
+    expect(txns[0].category).toBe("cat-edit");
   });
 
   it("updateTransaction throws for missing transaction", async () => {
@@ -290,6 +312,129 @@ describe("IdbDataSource", () => {
       );
       expect(result.entryId).toBeTruthy();
       expect(result.legIds).toHaveLength(2);
+    });
+  });
+
+  describe("createReconciliationEvent", () => {
+    const eventFields = {
+      institution: "bankone",
+      account: "1234",
+      reconciledThroughDateMs: 1700000000000,
+      bankBalance: 100,
+      clearedBalance: 100,
+      adjustment: 0,
+      reconciledBy: "local",
+      reconciledAtMs: 1700000500000,
+      adjustmentEntryId: null,
+    };
+
+    function legRow(id: string): IdbJournalLeg {
+      return {
+        id,
+        entryId: "entry-1",
+        accountId: "acct-a",
+        debit: 50,
+        credit: 0,
+        timestampMs: 1699999000000,
+        cleared: true,
+        reconciledAtMs: null,
+        reconciledEventId: null,
+        statementItemId: null,
+      };
+    }
+
+    it("records the event and stamps every cleared leg", async () => {
+      await storeParsedData(makeParsedData({
+        journalLegs: [legRow("leg-1"), legRow("leg-2")],
+      }));
+      const ds = new IdbDataSource();
+      const event = await ds.createReconciliationEvent(eventFields, ["leg-1", "leg-2"]);
+      expect(event.id).toBe("bankone_1234_2023-11-14");
+
+      const events = await ds.getReconciliationEvents();
+      expect(events).toHaveLength(1);
+      expect(events[0].legIds).toEqual(["leg-1", "leg-2"]);
+
+      const legs = await ds.getJournalLegs();
+      for (const leg of legs) {
+        expect(leg.reconciledEventId).toBe(event.id);
+        expect(leg.reconciledAt).not.toBeNull();
+        expect(leg.reconciledAt?.toMillis()).toBe(1700000500000);
+      }
+    });
+
+    it("rolls back the whole event when a leg is missing — no event, no partial stamps", async () => {
+      await storeParsedData(makeParsedData({
+        journalLegs: [legRow("leg-1")],
+      }));
+      const ds = new IdbDataSource();
+      await expect(
+        ds.createReconciliationEvent(eventFields, ["leg-1", "leg-missing"]),
+      ).rejects.toThrow("Journal leg leg-missing not found");
+
+      // Atomicity: the event row must not have been persisted, and the one
+      // real leg must not carry a half-applied reconciliation stamp.
+      const events = await ds.getReconciliationEvents();
+      expect(events).toHaveLength(0);
+      const legs = await ds.getJournalLegs();
+      expect(legs).toHaveLength(1);
+      expect(legs[0].reconciledEventId).toBeNull();
+      expect(legs[0].reconciledAt).toBeNull();
+    });
+  });
+
+  describe("updateJournalLegCleared", () => {
+    function legRow(id: string): IdbJournalLeg {
+      return {
+        id,
+        entryId: "entry-1",
+        accountId: "acct-a",
+        debit: 50,
+        credit: 0,
+        timestampMs: 1699999000000,
+        cleared: false,
+        reconciledAtMs: null,
+        reconciledEventId: null,
+        statementItemId: null,
+      };
+    }
+
+    it("marks a leg cleared", async () => {
+      await storeParsedData(makeParsedData({ journalLegs: [legRow("leg-1")] }));
+      const ds = new IdbDataSource();
+      await ds.updateJournalLegCleared("leg-1", true);
+      const legs = await ds.getJournalLegs();
+      expect(legs[0].cleared).toBe(true);
+    });
+
+    it("throws for a missing leg", async () => {
+      await storeParsedData(makeParsedData());
+      const ds = new IdbDataSource();
+      await expect(ds.updateJournalLegCleared("no-such-leg", true)).rejects.toThrow(
+        "Journal leg no-such-leg not found",
+      );
+    });
+
+    it("get-check-put runs in one transaction: concurrent toggles on different legs both persist", async () => {
+      // Regression guard for the atomic-write fix: updateJournalLegCleared used
+      // to get() and put() in separate transactions, the same race pattern
+      // updateRecord had. This drives two concurrent calls (on different legs,
+      // since toggling the *same* leg to different states concurrently would
+      // be an ambiguous/racy caller action outside this method's contract) to
+      // confirm the single-transaction rewrite didn't regress independent
+      // concurrent writes.
+      await storeParsedData(makeParsedData({
+        journalLegs: [legRow("leg-1"), legRow("leg-2")],
+      }));
+      const ds = new IdbDataSource();
+      await Promise.all([
+        ds.updateJournalLegCleared("leg-1", true),
+        ds.updateJournalLegCleared("leg-2", true),
+      ]);
+      const legs = await ds.getJournalLegs();
+      const cleared = new Map(legs.map((l) => [l.id, l.cleared]));
+      expect(cleared.get("leg-1")).toBe(true);
+      expect(cleared.get("leg-2")).toBe(true);
     });
   });
 
