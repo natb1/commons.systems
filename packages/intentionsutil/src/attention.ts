@@ -231,16 +231,27 @@ export function computeSignalPath(nodes: IntentionNode[]): Set<string> {
  * clarification 11, superseding the v2 single-term additive-flow design
  * described on `intentions/strategy-graph-drives-dispatch.md`). Terms:
  *
- *   - `authored` — the v2 additive-flow algorithm unchanged: rank flows down
- *     `parent` + `serves` edges without decay or dilution ("hot means hot"),
- *     via an outgoing `Map<sourceId, amount>` per node. An `override` REPLACES
- *     a node's outgoing set with `{(self, override)}` (incoming discarded — a
- *     cap on this node's own branch, though a descendant's OTHER parents still
- *     contribute their own claims); a `boost` adds `(self, boost)` to the
- *     incoming union. This term is also the one that reports `sources` (the
- *     "via strategy-x" explainability marker) and short-circuits the whole
- *     composition on `override` — clarification 11: "an override pins the
- *     value absolutely."
+ *   - `authored` — additive-flow rank via an outgoing `Map<sourceId, amount>`
+ *     per node, without decay or dilution ("hot means hot"). A node's outgoing
+ *     set flows to its distributees along three edge relations: down `parent`
+ *     and `serves` to its subtree (the v2 downward flow), AND backward along
+ *     `blocked_by` to its blockers — every node X distributes its set to each
+ *     id in `X.blocked_by`, so a boost/override on a blocked node lifts its
+ *     whole critical path, recursively and interleaved with the downward flow
+ *     (2026-07-07 `strategy-graph-drives-dispatch` clarifications: applying
+ *     attention prioritizes the full critical path to the hot node). An
+ *     `override` REPLACES a node's outgoing set with `{(self, override)}`
+ *     (incoming discarded — a cap on this node's own branch, though a
+ *     distributee's OTHER sources still contribute their own claims); a `boost`
+ *     adds `(self, boost)` to the incoming union. Computed as a monotone
+ *     fixpoint (the widened relation admits legitimate mixed
+ *     parent/serves/blocked_by cycles — e.g. a node blocked by a tactic inside
+ *     its own subtree): each non-override node's outgoing = union of its
+ *     distributors' outgoing plus its own boost entry, iterated to convergence
+ *     (unions only grow, override outputs are constant). This term is also the
+ *     one that reports `sources` (the "via strategy-x" explainability marker)
+ *     and short-circuits the whole composition on `override` — clarification
+ *     11: "an override pins the value absolutely."
  *   - `signal` — structural: a node is on-path iff it (transitively) blocks —
  *     reachable by walking `blocked_by` in reverse (who lists me as a
  *     blocker), or inherits down a `parent` chain — a validates-terminal: a
@@ -257,9 +268,12 @@ export function computeSignalPath(nodes: IntentionNode[]): Set<string> {
  *
  * New attention conditions add as terms with weights — never bands.
  *
- * Cycle guards: the authored term's DFS surfaces a `parent`/`serves` cycle as
- * an `IntentionSchemaError` (values there are ill-defined under a cycle — see
- * below). The signal term's reachability DFS does NOT throw on a cycle: a
+ * Cycle guards: the authored term throws an `IntentionSchemaError` only on a
+ * pure `parent`-edge cycle (a node that is its own ancestor — malformed, and
+ * NOT caught by `validateGraph`, whose rule 15 rejects only `blocked_by`
+ * cycles); its values are ill-defined there. Cycles that involve a `blocked_by`
+ * edge are legitimate under the backward flow and resolve via the monotone
+ * fixpoint. The signal term's reachability DFS does NOT throw on a cycle: a
  * boolean OR-over-paths query is well-defined even with a cycle in the mix — a
  * node fully enclosed in a cycle with no external escape to a terminal simply
  * isn't on-path, which is the correct answer, not an error.
@@ -276,11 +290,29 @@ export function resolveAttention(nodes: IntentionNode[]): Map<string, ResolvedAt
     return kindNode !== undefined && kindNode.attributes.goal_layer === true;
   };
 
-  // --- Authored term (v2 algorithm, unchanged) ---------------------------
+  // --- Authored term (monotone fixpoint over the widened relation) -------
 
-  // Distribution edges. distributors(c) = { c.parent } ∪ (eligible c only)
-  // { c.serves }, each restricted to ids that resolve. Sorted for determinism.
-  const distributors = (c: IntentionNode): IntentionNode[] => {
+  // reverseBlockers(id) = every node that lists `id` in its OWN blocked_by —
+  // i.e. the nodes `id` blocks. Same construction as `computeSignalPath` above.
+  // A node X flows its outgoing set BACKWARD to each of its blockers (the ids in
+  // X.blocked_by), so a boost/override on a blocked node lifts its blockers, and
+  // their subtrees inherit via the normal downward flow. Built once.
+  const reverseBlockers = new Map<string, string[]>();
+  for (const n of nodes) {
+    for (const blocker of n.blocked_by) {
+      const list = reverseBlockers.get(blocker);
+      if (list) list.push(n.id);
+      else reverseBlockers.set(blocker, [n.id]);
+    }
+  }
+
+  // Distribution edges into c — the nodes whose outgoing set c inherits:
+  //   { c.parent } ∪ (eligible c only) { c.serves } ∪ { X : c ∈ X.blocked_by }.
+  // The first two are the v2 downward flow; the third is the backward
+  // blocked_by flow (reverseBlockers(c) = the nodes c blocks, each of which
+  // distributes its sources to c). Each restricted to ids that resolve; sorted
+  // for determinism.
+  const distributorIds = (c: IntentionNode): string[] => {
     const ids = new Set<string>();
     if (c.parent !== null && byId.has(c.parent)) ids.add(c.parent);
     if (isEligible(c)) {
@@ -288,50 +320,98 @@ export function resolveAttention(nodes: IntentionNode[]): Map<string, ResolvedAt
         if (byId.has(s)) ids.add(s);
       }
     }
-    return [...ids].sort().map((id) => byId.get(id) as IntentionNode);
+    for (const blocked of reverseBlockers.get(c.id) ?? []) {
+      if (byId.has(blocked)) ids.add(blocked);
+    }
+    return [...ids].sort();
   };
 
-  // Outgoing source set per node, memoized DFS with cycle detection.
+  // A pure `parent`-edge cycle is a malformed graph (a node that is its own
+  // ancestor) that `validateGraph` does NOT catch — rule 15 rejects only
+  // `blocked_by` cycles. `parent` is a single pointer per node, so following it
+  // from any node either reaches a root (`parent === null`) or repeats; a
+  // repeat is the cycle. Surface it as a clear error (authored values are
+  // ill-defined under a pure authored cycle) rather than let the fixpoint
+  // silently converge it to 0. Cycles that involve a `blocked_by` edge are
+  // legitimate under the backward flow and are handled by the fixpoint — this
+  // guard fires ONLY on parent-only cycles.
+  for (const start of nodes) {
+    const seen = new Set<string>();
+    let cur: IntentionNode | undefined = start;
+    while (cur !== undefined && cur.parent !== null) {
+      if (seen.has(cur.id)) {
+        throw new IntentionSchemaError(
+          `attention flow cycle: ${[...seen, cur.id].join(" -> ")}`,
+        );
+      }
+      seen.add(cur.id);
+      cur = byId.get(cur.parent);
+    }
+  }
+
+  // Outgoing source set per node, computed as a monotone fixpoint. Seed each
+  // node from its own authored field: override → the constant `{(self,
+  // override)}` (incoming discarded — a branch cap); boost → `{(self, boost)}`;
+  // else empty. Then sweep in sorted id order, recomputing every non-override
+  // node's outgoing = union of its distributors' outgoing plus its own boost
+  // entry, until a full sweep changes nothing. Unions only grow and override
+  // outputs are constant, so the iteration is monotone and convergence is
+  // guaranteed; the sorted sweep makes the result independent of input order.
   const authoredOutgoing = new Map<string, Map<string, number>>();
-  const onStack = new Set<string>();
-  const stackPath: string[] = [];
-
-  const computeAuthored = (n: IntentionNode): Map<string, number> => {
-    const memo = authoredOutgoing.get(n.id);
-    if (memo !== undefined) return memo;
-    if (onStack.has(n.id)) {
-      const cycle = [...stackPath.slice(stackPath.indexOf(n.id)), n.id];
-      throw new IntentionSchemaError(`attention flow cycle: ${cycle.join(" -> ")}`);
-    }
-    onStack.add(n.id);
-    stackPath.push(n.id);
-
-    // Union incoming from all distributors. We ALWAYS walk distributors — even
-    // for an override node whose incoming is discarded — so the cycle guard
-    // sees every edge (traverse-and-discard).
-    const incoming = new Map<string, number>();
-    for (const d of distributors(n)) {
-      for (const [src, amt] of computeAuthored(d)) {
-        incoming.set(src, amt); // dedupe by src; amounts identical (undiluted)
-      }
-    }
-
+  const isOverrideNode = new Set<string>();
+  for (const n of nodes) {
     const attention = isEligible(n) ? n.attention : null;
-    let out: Map<string, number>;
     if (attention !== null && attention.override !== null) {
-      out = new Map([[n.id, attention.override]]); // cap: incoming discarded
+      authoredOutgoing.set(n.id, new Map([[n.id, attention.override]]));
+      isOverrideNode.add(n.id);
+    } else if (attention !== null && attention.boost !== null) {
+      authoredOutgoing.set(n.id, new Map([[n.id, attention.boost]]));
     } else {
-      if (attention !== null && attention.boost !== null) {
-        incoming.set(n.id, attention.boost); // relative claim added
-      }
-      out = incoming;
+      authoredOutgoing.set(n.id, new Map());
     }
+  }
 
-    onStack.delete(n.id);
-    stackPath.pop();
-    authoredOutgoing.set(n.id, out);
-    return out;
+  const sortedNodeIds = nodes.map((n) => n.id).sort();
+  const mapsDiffer = (a: Map<string, number>, b: Map<string, number>): boolean => {
+    if (a.size !== b.size) return true;
+    for (const [k, v] of a) if (b.get(k) !== v) return true;
+    return false;
   };
+
+  // Both maps below are seeded/keyed from the SAME `nodes`/`sortedNodeIds`
+  // source, so a lookup by a known node id is a maintained invariant, not
+  // user input — `mustGet` turns a violation into a clear error instead of an
+  // `as`-cast that would silently paper over a real bug.
+  function mustGet<V>(map: Map<string, V>, id: string, what: string): V {
+    const value = map.get(id);
+    if (value === undefined) {
+      throw new IntentionSchemaError(`attention: expected ${what} for node id "${id}"`);
+    }
+    return value;
+  }
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const id of sortedNodeIds) {
+      if (isOverrideNode.has(id)) continue; // constant outgoing
+      const node = mustGet(byId, id, "node");
+      const next = new Map<string, number>();
+      const attention = isEligible(node) ? node.attention : null;
+      if (attention !== null && attention.boost !== null) {
+        next.set(id, attention.boost); // own relative claim
+      }
+      for (const d of distributorIds(node)) {
+        for (const [src, amt] of mustGet(authoredOutgoing, d, "authoredOutgoing entry")) {
+          next.set(src, amt); // dedupe by src; amounts identical (undiluted)
+        }
+      }
+      if (mapsDiffer(next, mustGet(authoredOutgoing, id, "authoredOutgoing entry"))) {
+        authoredOutgoing.set(id, next);
+        changed = true;
+      }
+    }
+  }
 
   // --- Signal-satisfaction term -------------------------------------------
   // Shared with the graph router's strategy-eligibility gate — see
@@ -374,11 +454,10 @@ export function resolveAttention(nodes: IntentionNode[]): Map<string, ResolvedAt
   // Iterate in id order for a deterministic result regardless of input order.
   const sorted = [...nodes].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const eligible = sorted.filter(isEligible);
-  for (const n of eligible) computeAuthored(n);
 
   const result = new Map<string, ResolvedAttention>();
   for (const n of eligible) {
-    const authoredOut = computeAuthored(n);
+    const authoredOut = mustGet(authoredOutgoing, n.id, "authoredOutgoing entry");
     let authoredValue = 0;
     for (const amt of authoredOut.values()) authoredValue += amt;
     const sources = [...authoredOut.entries()]
