@@ -197,6 +197,15 @@ sensor_gate() {
       # head (§3.4), so dispatch-ci-ready's branch form applies: `waiting`
       # means a draft PR's checks have not concluded — no actionable verdict.
       if [[ "$pr" == "null" || -z "$pr" ]]; then echo "no-pr"; return 1; fi
+      # Defense in depth (tactic-graph-census-recurrence Unit 1): a merge that
+      # lands between the tick's reconcile-graph-merged sweep and this selection
+      # within the same tick must NOT be re-selected as a stale review target —
+      # reconcile absorbs it to done next tick. Reuse the REST state read from
+      # the main-qa arm below. A read failure is non-fatal: fall through to the
+      # CI-verdict check rather than misclassify.
+      if state=$(gh_pr_view_rest "$pr" 2>/dev/null | jq -r .state); then
+        if [[ "$state" == "MERGED" ]]; then echo "pr-merged-awaiting-reconcile"; return 1; fi
+      fi
       "$SCRIPT_DIR/dispatch-ci-ready" "$id" >/dev/null 2>&1
       rc=$?
       case "$rc" in
