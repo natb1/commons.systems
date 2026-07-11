@@ -34,7 +34,7 @@ attention:
     boost 7). It serves strategy-complete-grounding (unboosted, and too broad to
     boost as a whole), so it takes the full boost 7 directly rather than by
     inheritance to reach the same authored-7 curriculum tier."
-phase: review
+phase: done
 execution:
   branch: tactic-reading-review-candidate-extension
   pr: 2814
