@@ -28,12 +28,13 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-fork-derivative-instrument
   pr: 2855
   attempts: {}
-  markers: []
+  markers:
+    - qa-done
   strategy_fingerprint: cdd3e771c3dc1c1953b1e8b52163c954a63bc94ce64994ad03fdd24f7a234575
 validates:
   - strategy-owned-orchestration
