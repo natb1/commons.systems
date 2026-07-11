@@ -28,7 +28,8 @@ execution:
   branch: tactic-print-annotations-epub
   pr: 2841
   attempts: {}
-  markers: []
+  markers:
+    - reviewed
   strategy_fingerprint: 9041cd3f2e7ae13e7ff4ec0430dba7348bb66ff18e90c12f3f276aa559b5bffb
 validates: []
 blocked_by:
