@@ -1956,7 +1956,10 @@ assert_eq "pr: labels narrowed to [{name}] (2 labels)" "2" "$(jq '.labels | leng
 assert_eq "pr: first label name" "enhancement" "$(jq -r '.labels[0].name' <<<"$pv")"
 assert_eq "pr: label objects carry ONLY name (no color key)" "1" "$(jq '.labels[0] | keys | length' <<<"$pv")"
 assert_eq "pr: raw REST extra field dropped" "" "$(jq -r '.extra_rest_field // empty' <<<"$pv")"
-assert_eq "pr: top-level key set" "body headRefName headRefOid labels mergeStateStatus mergeable number state title" \
+# Raw REST pull with no merged_at → mergedAt key present with value null
+# (open/closed-unmerged signal; consumers test `mergedAt != null`).
+assert_eq "pr: mergedAt null when merged_at absent" "null" "$(jq -r '.mergedAt' <<<"$pv")"
+assert_eq "pr: top-level key set" "body headRefName headRefOid labels mergeStateStatus mergeable mergedAt number state title" \
   "$(jq -r 'keys | join(" ")' <<<"$pv")"
 teardown
 
@@ -1976,8 +1979,29 @@ pv2=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_view_rest 9002)
 assert_eq "pr: mergeable boolean false → CONFLICTING" "CONFLICTING" "$(jq -r '.mergeable' <<<"$pv2")"
 assert_eq "pr: mergeStateStatus dirty → DIRTY" "DIRTY" "$(jq -r '.mergeStateStatus' <<<"$pv2")"
 assert_eq "pr: closed → CLOSED" "CLOSED" "$(jq -r '.state' <<<"$pv2")"
+assert_eq "pr: closed-unmerged mergedAt null" "null" "$(jq -r '.mergedAt' <<<"$pv2")"
 assert_eq "pr: headRefName from head.ref (9002)" "conflicting-branch" "$(jq -r '.headRefName' <<<"$pv2")"
 assert_eq "pr: single label narrowed" "bug" "$(jq -r '.labels[0].name' <<<"$pv2")"
+teardown
+
+echo "Test: gh_pr_view_rest -- merged PR (REST state closed + merged_at set) → mergedAt passthrough"
+setup
+# REST reports a merged PR as state `closed`, never MERGED; the merged signal is
+# a non-null merged_at. gh_pr_view_rest must pass it through under mergedAt so
+# graph-select-target's sensor_gate can distinguish merged from closed-unmerged.
+printf '%s\n' '{
+  "number": 9004,
+  "title": "merged pr",
+  "body": "",
+  "state": "closed",
+  "merged_at": "2026-07-11T12:00:00Z",
+  "mergeable": null,
+  "head": {"ref": "merged-branch", "sha": "feedface0004"},
+  "labels": []
+}' > "$STUB_DIR/view-pr-9004.json"
+pv4=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_view_rest 9004)
+assert_eq "pr: merged PR still reports state CLOSED (not MERGED)" "CLOSED" "$(jq -r '.state' <<<"$pv4")"
+assert_eq "pr: merged PR mergedAt passthrough" "2026-07-11T12:00:00Z" "$(jq -r '.mergedAt' <<<"$pv4")"
 teardown
 
 echo "Test: gh_pr_view_rest -- mergeable=null → UNKNOWN; absent mergeable_state → empty"

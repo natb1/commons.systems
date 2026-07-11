@@ -188,7 +188,7 @@ skip_note() { # <id> <reason>
 # sensor_gate <id> <phase> <pr> — the phase's environmental sensor (§3.1).
 #   0 = satisfied; 1 = not satisfied (reason on stdout); 2 = environment error.
 sensor_gate() {
-  local id="$1" phase="$2" pr="$3" rc state
+  local id="$1" phase="$2" pr="$3" rc merged_at
   case "$phase" in
     implement|align-tactics)
       return 0 ;;
@@ -200,11 +200,12 @@ sensor_gate() {
       # Defense in depth (tactic-graph-census-recurrence Unit 1): a merge that
       # lands between the tick's reconcile-graph-merged sweep and this selection
       # within the same tick must NOT be re-selected as a stale review target —
-      # reconcile absorbs it to done next tick. Reuse the REST state read from
-      # the main-qa arm below. A read failure is non-fatal: fall through to the
-      # CI-verdict check rather than misclassify.
-      if state=$(gh_pr_view_rest "$pr" 2>/dev/null | jq -r .state); then
-        if [[ "$state" == "MERGED" ]]; then echo "pr-merged-awaiting-reconcile"; return 1; fi
+      # reconcile absorbs it to done next tick. REST reports a merged PR as
+      # state `closed`, not MERGED; the merged signal is `mergedAt != null`
+      # (same field reconcile-graph-merged reads). A read failure is non-fatal:
+      # fall through to the CI-verdict check rather than misclassify.
+      if merged_at=$(gh_pr_view_rest "$pr" 2>/dev/null | jq -r '.mergedAt // empty'); then
+        if [[ -n "$merged_at" ]]; then echo "pr-merged-awaiting-reconcile"; return 1; fi
       fi
       "$SCRIPT_DIR/dispatch-ci-ready" "$id" >/dev/null 2>&1
       rc=$?
@@ -218,10 +219,12 @@ sensor_gate() {
       # lands with tactic-main-qa-phase; the phase enum does not carry main-qa
       # until that tactic merges, so this arm is forward-compat).
       if [[ "$pr" == "null" || -z "$pr" ]]; then echo "no-pr"; return 1; fi
-      if ! state=$(gh_pr_view_rest "$pr" 2>/dev/null | jq -r .state); then
+      # REST reports a merged PR as state `closed`, not MERGED; test the
+      # `mergedAt` field (null unless the PR merged) instead of `.state`.
+      if ! merged_at=$(gh_pr_view_rest "$pr" 2>/dev/null | jq -r '.mergedAt // empty'); then
         echo "pr-state-unknown"; return 1
       fi
-      [[ "$state" == "MERGED" ]] && return 0
+      [[ -n "$merged_at" ]] && return 0
       echo "pr-not-merged"; return 1 ;;
     *)
       echo "unknown-phase"; return 1 ;;

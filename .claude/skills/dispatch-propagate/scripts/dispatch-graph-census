@@ -50,12 +50,23 @@ GRAPH_COMMIT="$UTIL_SCRIPTS/graph-commit"
 DEFAULT_THRESHOLD=10
 
 # --- Resolve the birth threshold (config override, else baked-in default) -----
+# Mirror dispatch-sweep's loader idiom: fold dispatch-config-load's stderr into
+# CFG (2>&1) so a malformed census.json is distinguishable from an absent one.
+# The loader exits 0 and prints `no-config` when the file is absent (already
+# handled below); a non-zero exit means the file is present-but-invalid (JSON or
+# schema failure, with a diagnostic on stderr). Do NOT swallow that via
+# 2>/dev/null and silently revert to the default with no operator signal — that
+# is the code-style.md "clear error over defensive fallback" anti-pattern. Log
+# the captured diagnostic, then proceed best-effort with the default (a config
+# error must not abort the tick, per this script's best-effort doctrine).
 THRESHOLD="$DEFAULT_THRESHOLD"
-if CFG=$("$SCRIPT_DIR/dispatch-config-load" census 2>/dev/null); then
+if CFG=$("$SCRIPT_DIR/dispatch-config-load" census 2>&1); then
   if [[ "$CFG" != "no-config" ]]; then
     t=$(jq -r '.threshold // empty' <<<"$CFG")
     [[ -n "$t" ]] && THRESHOLD="$t"
   fi
+else
+  echo "dispatch-graph-census: census config load failed, using default threshold $DEFAULT_THRESHOLD: $CFG" >&2
 fi
 
 # --- Compute debt + birth decision (network-free) -----------------------------
@@ -87,13 +98,24 @@ if ! (cd "$REPO_ROOT" && node --import tsx/esm "$WRITE_NODE_TS" --file "$NODE_JS
   echo "dispatch-graph-census: write-node failed for $NODE_ID" >&2; exit 1
 fi
 
-# Append the census body (write-node preserves body across rewrites; a new node
-# starts body-less). graph-commit stages the whole intentions/<id>.md.
+# Overwrite the census body. writeNode does NOT leave a new node body-less: it
+# generates a `# <statement>` placeholder body (store.ts, readExistingTacticBody
+# returns null for a not-yet-existing file, so writeNode falls back to
+# `# ${statement}`). Appending here would produce a malformed two-heading body
+# (the placeholder H1 followed by the census body's own H1). So replace the body
+# wholesale — keep the frontmatter through the closing `---` fence, drop the
+# generated placeholder body, then write the real census body directly after the
+# fence (the store's node-file convention: body starts on the line after the
+# closing fence, no blank line). graph-commit stages the whole intentions/<id>.md.
 NODE_MD="$REPO_ROOT/intentions/$NODE_ID.md"
 if [[ ! -f "$NODE_MD" ]]; then
   echo "dispatch-graph-census: expected $NODE_MD after write-node, not found" >&2; exit 1
 fi
-{ printf '\n'; jq -r '.node_body' <<<"$OUT"; } >> "$NODE_MD"
+FRONTMATTER=$(awk '{print} /^---$/{c++; if(c==2) exit}' "$NODE_MD")
+if [[ "$(tail -n1 <<<"$FRONTMATTER")" != "---" ]]; then
+  echo "dispatch-graph-census: could not locate closing frontmatter fence in $NODE_MD" >&2; exit 1
+fi
+{ printf '%s\n' "$FRONTMATTER"; jq -r '.node_body' <<<"$OUT"; } > "$NODE_MD"
 
 if ! (cd "$REPO_ROOT" && "$GRAPH_COMMIT" \
         -m "graph: born census $NODE_ID (reconciliation debt $TOTAL)" \
