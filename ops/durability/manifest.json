@@ -1,0 +1,47 @@
+[
+  {
+    "id": "budget-benc",
+    "description": "Encrypted budget snapshots (BENC-format .benc files) that the hosted budget app loads. The household password decrypts them.",
+    "min_copies": 2,
+    "verify": "benc-magic",
+    "copies": [
+      { "path": "/mnt/g/Shared drives/budget", "off_machine": true }
+    ]
+  },
+  {
+    "id": "bank-statements",
+    "description": "Plaintext bank-statement downloads used as budget-etl input. Source records behind the budget snapshots.",
+    "min_copies": 2,
+    "verify": "exists",
+    "copies": [
+      { "path": "/mnt/g/Shared drives/budget", "off_machine": true }
+    ]
+  },
+  {
+    "id": "sidecar-print",
+    "description": "Print app sidecar state (plain JSON in a .commons-print directory inside the owner's media folder). Bookmarks and annotations.",
+    "min_copies": 2,
+    "verify": "exists",
+    "copies": [
+      { "path": "/mnt/g/Shared drives/media/.commons-print", "off_machine": true }
+    ]
+  },
+  {
+    "id": "sidecar-audio",
+    "description": "Audio app sidecar state (plain JSON in a .commons-audio directory inside the owner's media folder). Listening positions.",
+    "min_copies": 2,
+    "verify": "exists",
+    "copies": [
+      { "path": "/mnt/g/Shared drives/media/.commons-audio", "off_machine": true }
+    ]
+  },
+  {
+    "id": "repo-commons-systems",
+    "description": "The commons.systems git repository, including the intention graph under intentions/. The git verify confirms the off-machine copy: a passing origin remote (GitHub) is the redundant mirror, so min_copies is 1 (the local checkout) rather than a second on-disk clone.",
+    "min_copies": 1,
+    "verify": "git",
+    "copies": [
+      { "path": "/home/n8/natb1/commons.systems", "off_machine": false }
+    ]
+  }
+]
