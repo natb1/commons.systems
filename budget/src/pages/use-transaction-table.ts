@@ -301,8 +301,11 @@ export function useTableInteractivity(
         } else if (input.classList.contains("edit-category")) {
           await getActiveDataSource().updateTransaction(txnId, { category: input.value });
         } else if (input.classList.contains("edit-reimbursement")) {
-          const reimbursement = Number(input.value);
-          if (!Number.isFinite(reimbursement)) {
+          // Number("") is 0, not NaN — guard the emptied input explicitly so a
+          // cleared field is rejected rather than silently persisting 0%.
+          const raw = input.value.trim();
+          const reimbursement = Number(raw);
+          if (raw === "" || !Number.isFinite(reimbursement)) {
             showInputError(input);
             return;
           }
