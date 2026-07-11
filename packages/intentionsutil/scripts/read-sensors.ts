@@ -602,7 +602,7 @@ export function readDelegationRecords(dir: string): DelegationRecordReading[] {
     const reviewTrigger = requireAttrString(attrs, "review_trigger", node.id);
 
     const irreversibility = attrs.irreversibility;
-    if (typeof irreversibility !== "object" || irreversibility === null) {
+    if (!isPlainObject(irreversibility)) {
       throw new IntentionSchemaError(
         `Delegation record "${node.id}" attributes.irreversibility must be an object.`,
       );
@@ -612,7 +612,7 @@ export function readDelegationRecords(dir: string): DelegationRecordReading[] {
         `Delegation record "${node.id}" attributes.irreversibility is missing last_exercised.`,
       );
     }
-    const rawLastExercised = (irreversibility as Record<string, unknown>).last_exercised;
+    const rawLastExercised = irreversibility.last_exercised;
     if (rawLastExercised !== null && typeof rawLastExercised !== "string") {
       throw new IntentionSchemaError(
         `Delegation record "${node.id}" attributes.irreversibility.last_exercised must be a ` +
