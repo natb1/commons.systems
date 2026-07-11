@@ -28,6 +28,8 @@ function anode(partial: Partial<IntentionNode> & { id: string; kind: string }): 
     office_hours: partial.office_hours ?? null,
     pace_exempt: partial.pace_exempt ?? false,
     rounds: partial.rounds ?? null,
+    mount: partial.mount ?? null,
+    grafts: partial.grafts ?? [],
     attributes: partial.attributes ?? {},
   };
 }
@@ -113,6 +115,38 @@ describe("resolveAttention eligibility", () => {
     const quiet = result.get("strategy-quiet");
     expect(quiet?.value).toBe(0);
     expect(quiet?.sources).toEqual([]);
+  });
+
+  it("excludes a mounted node from eligibility even on a goal-layer kind", () => {
+    // A mounted strategy carries a goal-layer kind and even an authored boost,
+    // but mount structure is out of the attention flow: it gets no entry.
+    const nodes = [
+      ...kinds(),
+      anode({ id: "delegation-1", kind: "delegation" }),
+      svnode({ id: "strategy-mounted", mount: "delegation-1", attention: boost(9) }),
+    ];
+
+    const result = resolveAttention(nodes);
+    expect(result.has("strategy-mounted")).toBe(false);
+  });
+
+  it("does not flow a mounted node's boost across a graft into a native node", () => {
+    // grafts is deliberately not a distribution edge: a native strategy that
+    // grafts a mounted (boosted) node inherits nothing from it.
+    const nodes = [
+      ...kinds(),
+      anode({ id: "delegation-1", kind: "delegation" }),
+      svnode({ id: "strategy-mounted", mount: "delegation-1", attention: boost(9) }),
+      svnode({ id: "strategy-native", grafts: ["strategy-mounted"] }),
+    ];
+
+    const result = resolveAttention(nodes);
+    // The native node is eligible but the graft carries no rank across.
+    const native = result.get("strategy-native");
+    expect(native?.value).toBe(0);
+    expect(native?.sources).toEqual([]);
+    // The mounted node itself is excluded entirely.
+    expect(result.has("strategy-mounted")).toBe(false);
   });
 });
 

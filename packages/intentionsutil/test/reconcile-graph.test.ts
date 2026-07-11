@@ -34,6 +34,8 @@ function node(dir: string, partial: Partial<IntentionNode> & { id: string; kind:
     office_hours: partial.office_hours ?? null,
     pace_exempt: partial.pace_exempt ?? false,
     rounds: partial.rounds ?? null,
+    mount: partial.mount ?? null,
+    grafts: partial.grafts ?? [],
     attributes: partial.attributes ?? {},
   };
   writeNode(dir, full);

@@ -285,7 +285,15 @@ export function computeSignalPath(nodes: IntentionNode[]): Set<string> {
 export function resolveAttention(nodes: IntentionNode[]): Map<string, ResolvedAttention> {
   const byId = new Map(nodes.map((n) => [n.id, n]));
 
+  // A mounted node (one with `mount` set — the author's model of a counterparty
+  // intention) is never eligible for derived attention, and never participates
+  // in the flow: mount structure is audit structure, not attention routing. The
+  // `grafts` edge is likewise deliberately NOT a distribution edge below — it
+  // crosses the mount boundary and would leak flow between graphs. See
+  // strategy-graph-mounts (mounts stay out of attention, consistent with
+  // `serves` staying native-only).
   const isEligible = (n: IntentionNode): boolean => {
+    if (n.mount != null) return false;
     const kindNode = byId.get(`kind-${n.kind}`);
     return kindNode !== undefined && kindNode.attributes.goal_layer === true;
   };

@@ -41,6 +41,9 @@ describe("validateNode", () => {
       office_hours: null,
       pace_exempt: false,
       rounds: null,
+      // Mount fields default when absent.
+      mount: null,
+      grafts: [],
     });
   });
 
@@ -358,8 +361,62 @@ describe("validateNode", () => {
       office_hours: null,
       pace_exempt: false,
       rounds: null,
+      mount: null,
+      grafts: [],
       attributes: {},
     });
+  });
+
+  it("defaults mount to null and grafts to [] when omitted", () => {
+    const result = validateNode({
+      id: "n-mount-default",
+      kind: "tactic",
+      statement: "No mount fields.",
+      owner: "ai",
+      status: "raw",
+    });
+    expect(result.mount).toBe(null);
+    expect(result.grafts).toEqual([]);
+  });
+
+  it("preserves a non-null mount and a non-empty grafts", () => {
+    const result = validateNode({
+      id: "virtue-vendor-growth",
+      kind: "virtue",
+      statement: "A mounted virtue.",
+      owner: "human",
+      status: "codified",
+      mount: "delegation-vendor",
+      grafts: ["virtue-other-mounted"],
+    });
+    expect(result.mount).toBe("delegation-vendor");
+    expect(result.grafts).toEqual(["virtue-other-mounted"]);
+  });
+
+  it("rejects a mount that is not a string", () => {
+    expect(() =>
+      validateNode({
+        id: "n-badmount",
+        kind: "tactic",
+        statement: "Bad mount.",
+        owner: "ai",
+        status: "raw",
+        mount: 42,
+      }),
+    ).toThrow();
+  });
+
+  it("rejects a grafts that is not a string array", () => {
+    expect(() =>
+      validateNode({
+        id: "n-badgrafts",
+        kind: "tactic",
+        statement: "Bad grafts.",
+        owner: "ai",
+        status: "raw",
+        grafts: [1, 2],
+      }),
+    ).toThrow();
   });
 
   it("rejects a node missing a required field", () => {
@@ -573,6 +630,8 @@ describe("validateGraph", () => {
       office_hours: partial.office_hours ?? null,
       pace_exempt: partial.pace_exempt ?? false,
       rounds: partial.rounds ?? null,
+      mount: partial.mount ?? null,
+      grafts: partial.grafts ?? [],
       attributes: partial.attributes ?? {},
     };
   }
@@ -1062,6 +1121,146 @@ describe("validateGraph", () => {
       gnode({ id: "tactic-a", kind: "tactic", blocked_by: ["tactic-b"] }),
       gnode({ id: "tactic-b", kind: "tactic", blocked_by: ["tactic-c"] }),
       gnode({ id: "tactic-c", kind: "tactic" }),
+    ];
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  // --- Mount rules (16-18) -------------------------------------------------
+
+  /** kindNodes() plus a mount-anchor delegation kind. */
+  function mountKindNodes(): IntentionNode[] {
+    return [
+      ...kindNodes(),
+      gnode({
+        id: "kind-delegation",
+        kind: "kind",
+        status: "codified",
+        attributes: { mount_anchor: true },
+      }),
+    ];
+  }
+
+  it("rule 16: passes when a mount resolves to a mount-anchor record", () => {
+    const nodes = [
+      ...mountKindNodes(),
+      gnode({ id: "delegation-1", kind: "delegation" }),
+      gnode({ id: "virtue-vendor-1", kind: "virtue", mount: "delegation-1" }),
+    ];
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("rule 16: throws when a mount does not resolve to a node", () => {
+    const nodes = [
+      ...mountKindNodes(),
+      gnode({ id: "virtue-vendor-1", kind: "virtue", mount: "delegation-missing" }),
+    ];
+    expect(() => validateGraph(nodes)).toThrow(
+      /virtue-vendor-1: mount "delegation-missing" does not resolve to a node/,
+    );
+  });
+
+  it("rule 16: throws when a mount resolves to a non-anchor kind", () => {
+    const nodes = [
+      ...mountKindNodes(),
+      // kind-strategy carries no mount_anchor flag, so a strategy cannot anchor.
+      gnode({ id: "strategy-1", kind: "strategy" }),
+      gnode({ id: "virtue-vendor-1", kind: "virtue", mount: "strategy-1" }),
+    ];
+    expect(() => validateGraph(nodes)).toThrow(
+      /virtue-vendor-1: mount "strategy-1" resolves to kind "strategy", which is not a mount anchor/,
+    );
+  });
+
+  it("rule 16: accepts recursion — a mount anchor may itself carry mount", () => {
+    const nodes = [
+      ...mountKindNodes(),
+      gnode({ id: "delegation-outer", kind: "delegation" }),
+      gnode({ id: "delegation-inner", kind: "delegation", mount: "delegation-outer" }),
+      gnode({ id: "virtue-vendor-1", kind: "virtue", mount: "delegation-inner" }),
+    ];
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("rule 17: passes when a graft resolves to a mounted node", () => {
+    const nodes = [
+      ...mountKindNodes(),
+      gnode({ id: "delegation-1", kind: "delegation" }),
+      gnode({ id: "virtue-vendor-1", kind: "virtue", mount: "delegation-1" }),
+      gnode({ id: "strategy-1", kind: "strategy", grafts: ["virtue-vendor-1"] }),
+    ];
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("rule 17: throws when a graft does not resolve to a node", () => {
+    const nodes = [
+      ...mountKindNodes(),
+      gnode({ id: "strategy-1", kind: "strategy", grafts: ["virtue-missing"] }),
+    ];
+    expect(() => validateGraph(nodes)).toThrow(
+      /strategy-1: grafts "virtue-missing" does not resolve to a node/,
+    );
+  });
+
+  it("rule 17: throws when a graft resolves to an un-mounted node", () => {
+    const nodes = [
+      ...mountKindNodes(),
+      gnode({ id: "virtue-native-1", kind: "virtue" }),
+      gnode({ id: "strategy-1", kind: "strategy", grafts: ["virtue-native-1"] }),
+    ];
+    expect(() => validateGraph(nodes)).toThrow(
+      /strategy-1: grafts "virtue-native-1" must resolve to a mounted node/,
+    );
+  });
+
+  it("rule 18: throws when serves crosses a mount boundary", () => {
+    const nodes = [
+      ...mountKindNodes(),
+      gnode({ id: "delegation-1", kind: "delegation" }),
+      gnode({ id: "virtue-vendor-1", kind: "virtue", mount: "delegation-1" }),
+      // A native strategy may serve a virtue by kind (rule 8) but not one across
+      // a mount boundary — grafts is the relation for that.
+      gnode({ id: "strategy-1", kind: "strategy", serves: ["virtue-vendor-1"] }),
+    ];
+    expect(() => validateGraph(nodes)).toThrow(
+      /strategy-1: serves "virtue-vendor-1" crosses a mount boundary/,
+    );
+  });
+
+  it("rule 18: throws when parent crosses a mount boundary", () => {
+    const nodes = [
+      ...mountKindNodes(),
+      gnode({ id: "delegation-1", kind: "delegation" }),
+      gnode({ id: "virtue-native-1", kind: "virtue" }),
+      // A mounted virtue whose parent is a native (un-mounted) virtue.
+      gnode({
+        id: "virtue-vendor-1",
+        kind: "virtue",
+        mount: "delegation-1",
+        parent: "virtue-native-1",
+      }),
+    ];
+    expect(() => validateGraph(nodes)).toThrow(
+      /virtue-vendor-1: parent "virtue-native-1" crosses a mount boundary/,
+    );
+  });
+
+  it("rule 18: accepts same-mount internal structure (parent and serves inside one mount)", () => {
+    const nodes = [
+      ...mountKindNodes(),
+      gnode({ id: "delegation-1", kind: "delegation" }),
+      gnode({ id: "virtue-vendor-root", kind: "virtue", mount: "delegation-1" }),
+      gnode({
+        id: "virtue-vendor-child",
+        kind: "virtue",
+        mount: "delegation-1",
+        parent: "virtue-vendor-root",
+      }),
+      gnode({
+        id: "strategy-vendor-1",
+        kind: "strategy",
+        mount: "delegation-1",
+        serves: ["virtue-vendor-root"],
+      }),
     ];
     expect(() => validateGraph(nodes)).not.toThrow();
   });

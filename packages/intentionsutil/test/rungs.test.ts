@@ -27,6 +27,8 @@ function node(partial: Partial<IntentionNode> & { id: string }): IntentionNode {
     office_hours: partial.office_hours ?? null,
     pace_exempt: partial.pace_exempt ?? false,
     rounds: partial.rounds ?? null,
+    mount: partial.mount ?? null,
+    grafts: partial.grafts ?? [],
     attributes: partial.attributes ?? {},
   };
 }

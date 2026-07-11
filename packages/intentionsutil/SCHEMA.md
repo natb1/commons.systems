@@ -71,6 +71,8 @@ authoritative data.
 | `tooling_goals`  | `ToolingGoal[]`       | no       | Tooling the node aims to produce or change. Defaults to `[]`. |
 | `success_signal` | `SuccessSignal \| null` | no     | A measurable signal the intention is met. Defaults to `null`. |
 | `attention`      | `Attention \| null`   | no       | A user-authored attention injection (a `boost` XOR an `override`, plus a rationale). Valid only on goal-layer kinds, enforced by `validateGraph`. The rank it seeds is derived on read by `resolveAttention` and never stored. Defaults to `null`. |
+| `mount`          | `string \| null`      | no       | `id` of the anchoring record node this node is mounted on; `null` for a native node. A node with `mount` set is a *mounted node* — the author's model of a counterparty intention. See [Mounts](#mounts). Defaults to `null`. |
+| `grafts`         | `string[]`            | no       | `id`s of mounted nodes whose motivation this node partly carries across the mount boundary. The only relation permitted to cross the boundary. See [Mounts](#mounts). Defaults to `[]`. |
 | `attributes`     | `Record<string, unknown>` | no   | Kind-specific fields (e.g. a delegation's divergence/irreversibility assessment). Validated as a plain object; the meaning of its entries is defined by the node's kind node. Defaults to `{}`. |
 
 ### `SuccessSignal`
@@ -188,7 +190,56 @@ Rules 6–9 judge only edges whose target already resolves (rules 2–4 report t
 dangling case), so a single broken edge is not double-reported. `serves` on
 delegation and kind nodes is deliberately unenforced — a delegation serves
 whatever depends on it, which is intentionally loose. `validateGraph` throws
-one error listing all violations.
+one error listing all violations. (Rules 10–15 cover the graph-native dispatch
+fields and `blocked_by` cycles; rules 16–18 cover mounts — see below.)
+
+## Mounts
+
+Mounting makes external graphs — a delegatee's virtues, a tradition's framings,
+a person's or institution's obligations — first-class structure *grafted* onto
+this graph, rather than the write-only prose the delegation/tradition axis
+fields hold today. A mount is the author's *model* of a counterparty intention;
+it is audit structure, never work to be dispatched.
+
+- **`mount`** — a node with `mount` set (naming an anchoring record) is a
+  *mounted node*. Mounted nodes keep their **native kind**: a mounted virtue is
+  `kind: virtue`, a mounted obligation is `kind: duty`, so existing kind
+  semantics carry over inside the mount.
+- **Anchors** — a mount anchors on a *record*. A kind is a valid anchor when its
+  kind node sets `attributes.mount_anchor: true`; `kind-delegation` and
+  `kind-tradition` do so today (person/institution records join the family
+  later). This is the same kind-attribute gate `goal_layer` uses.
+- **`grafts`** — the ids of mounted nodes whose motivation a node partly carries
+  across the boundary (canonical: a strategy that grafts a mounted vendor-growth
+  virtue). "What do I hold because of a graft" is queryable by relation type; it
+  is **never** expressed as `serves`. `grafts` is the ONLY relation permitted to
+  cross the mount boundary.
+- **`kind: duty`** — a kind (`intentions/kind-duty.md`) for obligation-shaped
+  mounted content (social mounts: family, client/employer). Schema readiness
+  only this round; not goal-layer, not a mount anchor.
+- **Recursion** — an anchor record may itself carry `mount` (a vendor's record
+  modeled inside another mount). Allowed by construction; the `mount` edge is
+  not judged by the boundary rule.
+- **By-reference readiness** — `mount` is a node id resolved within the loaded
+  node set. A by-reference mount later loads an external store into the same set
+  without changing the field's shape. Not implemented here.
+- **Id naming convention** (documented, not validated) — mounted node ids read
+  `<kind>-<counterparty>-<slug>`, e.g. `virtue-attention-services-growth`.
+- **No attention across the boundary** — mounted nodes are excluded from
+  `activeFrontier` and from `resolveAttention` eligibility and flow, and
+  `grafts` edges are deliberately not traversed by the attention flow. Mount
+  structure is audit structure, not attention routing — consistent with `serves`
+  staying native-only.
+
+`validateGraph` enforces three mount rules:
+
+16. Every non-null `mount` resolves to an existing node whose kind node sets
+    `attributes.mount_anchor`.
+17. Every `grafts` entry resolves to an existing node with `mount` set (a graft
+    always lands on a mounted node).
+18. `serves` and non-null `parent` never cross a mount boundary — an un-mounted
+    node's targets are un-mounted, and a mounted node's targets carry the same
+    `mount` anchor. Rules 6–8 still apply inside a mount.
 
 ## Round-trip guarantee
 

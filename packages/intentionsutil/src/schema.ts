@@ -130,6 +130,14 @@ export interface IntentionNode {
   pace_exempt: boolean; // authored pace-gate bypass; goal-layer kinds only
   rounds: Rounds | null; // /align-tactics round accounting; strategies only
 
+  // Mount structure (see strategy-graph-mounts). A node with `mount` set is a
+  // MOUNTED node — the author's model of a counterparty intention, grafted onto
+  // this graph as explorable structure. Mounted nodes keep their NATIVE kind (a
+  // mounted virtue is `kind: virtue`). `grafts` is the ONLY relation permitted
+  // to cross the mount boundary; `serves`/`parent` never do (validateGraph).
+  mount: string | null; // id of the anchoring record node (kind-delegation/kind-tradition today); null = native
+  grafts: string[]; // ids of mounted nodes whose motivation this node partly carries across the boundary
+
   attributes: Record<string, unknown>; // kind-specific fields; semantics defined by the kind-<kind> node
 }
 
@@ -162,6 +170,8 @@ export interface IntentionNodeInput {
   office_hours?: OfficeHours | null;
   pace_exempt?: boolean;
   rounds?: Rounds | null;
+  mount?: string | null;
+  grafts?: string[];
   attributes?: Record<string, unknown>;
 }
 
@@ -493,6 +503,12 @@ export function validateNode(value: unknown): IntentionNode {
       value.pace_exempt == null ? false : requireBoolean(value.pace_exempt, "pace_exempt"),
     rounds: value.rounds == null ? null : validateRounds(value.rounds, "rounds"),
 
+    // Mount structure — absent/null tolerated, defaults null / []. `mount` is a
+    // nullable node id; `grafts` uses the same id-array validation as
+    // `validates`/`blocked_by`.
+    mount: optionalString(value.mount, "mount"),
+    grafts: value.grafts == null ? [] : validateIdArray(value.grafts, "grafts"),
+
     attributes:
       value.attributes == null
         ? {}
@@ -533,9 +549,19 @@ export function validateNode(value: unknown): IntentionNode {
  *  14. Every `validates` entry resolves to an existing `kind: "strategy"` node.
  *  15. `blocked_by` edges contain no cycle (a tactic transitively blocked by
  *      itself is invalid).
+ *  16. Every non-null `mount` resolves to an existing node whose kind node sets
+ *      `attributes.mount_anchor` (the same kind-attribute gate rule 11 uses for
+ *      `goal_layer`). A mounted node anchors on a mount-anchor record.
+ *  17. Every `grafts` entry resolves to an existing node with `mount` set — a
+ *      graft edge always lands on a mounted node.
+ *  18. `serves` and non-null `parent` never cross a mount boundary: an
+ *      un-mounted node's parent/serves targets are un-mounted, and a mounted
+ *      node's targets carry the SAME `mount` anchor (the modeled graph's own
+ *      internal structure). `grafts` (rule 17) is the only relation that may
+ *      cross. Rules 6-8 still apply inside a mount.
  *
- * Rules 6-9 only judge edges whose target already resolves (rules 2-4 above
- * report the dangling case); this avoids double-reporting the same broken
+ * Rules 6-9 and 18 only judge edges whose target already resolves (rules 2-4
+ * above report the dangling case); this avoids double-reporting the same broken
  * edge under two different messages.
  *
  * Deliberately NOT enforced: `serves` on delegation or kind nodes — a
@@ -689,6 +715,60 @@ export function validateGraph(nodes: IntentionNode[]): void {
       if (targetNode.kind !== "strategy") {
         problems.push(
           `${node.id}: validates "${target}" must resolve to a kind "strategy" node, got kind "${targetNode.kind}"`,
+        );
+      }
+    }
+    // Rule 16: a non-null mount resolves to an existing mount-anchor node (its
+    // kind node sets attributes.mount_anchor — same gate mechanism as rule 11's
+    // goal_layer). The mount edge itself may cross onto an un-mounted anchor and
+    // may even land on a node that itself carries mount (recursion) — allowed by
+    // construction; rule 18 does NOT judge the mount edge.
+    if (node.mount !== null) {
+      const anchor = byId.get(node.mount);
+      if (anchor === undefined) {
+        problems.push(`${node.id}: mount "${node.mount}" does not resolve to a node`);
+      } else {
+        const anchorKind = byId.get(`kind-${anchor.kind}`);
+        if (anchorKind !== undefined && anchorKind.attributes.mount_anchor !== true) {
+          problems.push(
+            `${node.id}: mount "${node.mount}" resolves to kind "${anchor.kind}", which is not a mount anchor — kind-${anchor.kind} does not set attributes.mount_anchor`,
+          );
+        }
+      }
+    }
+    // Rule 17: every grafts entry resolves to an existing MOUNTED node (one with
+    // mount set) — a graft edge always lands inside a mount.
+    for (const target of node.grafts) {
+      const targetNode = byId.get(target);
+      if (targetNode === undefined) {
+        problems.push(`${node.id}: grafts "${target}" does not resolve to a node`);
+        continue;
+      }
+      if (targetNode.mount === null) {
+        problems.push(
+          `${node.id}: grafts "${target}" must resolve to a mounted node (one with mount set), got an un-mounted node`,
+        );
+      }
+    }
+    // Rule 18: parent and serves never cross a mount boundary. An un-mounted
+    // node's parent/serves targets are un-mounted; a mounted node's targets
+    // carry the same mount anchor (the modeled graph's internal structure). Only
+    // judges edges whose target resolves (rules 2-3 own the dangling case).
+    // grafts (rule 17) is the ONLY relation permitted to cross.
+    if (node.parent !== null && byId.has(node.parent)) {
+      const parentNode = byId.get(node.parent)!;
+      if (parentNode.mount !== node.mount) {
+        problems.push(
+          `${node.id}: parent "${node.parent}" crosses a mount boundary — parent mount "${parentNode.mount}" does not match "${node.mount}"`,
+        );
+      }
+    }
+    for (const target of node.serves) {
+      if (!byId.has(target)) continue;
+      const targetNode = byId.get(target)!;
+      if (targetNode.mount !== node.mount) {
+        problems.push(
+          `${node.id}: serves "${target}" crosses a mount boundary — target mount "${targetNode.mount}" does not match "${node.mount}"`,
         );
       }
     }

@@ -84,6 +84,8 @@ blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
+mount: null
+grafts: []
 attributes:
   fields:
     - "delegatee: the entity delegated to (tool vendor, institution, industry)"
@@ -103,5 +105,18 @@ attributes:
       recovery path to stay real"
     - "review_trigger: what prompts reassessment"
     - "last_assessed: date of the last review"
+  mount_anchor: true
 ---
 # Delegation — an attachment record; where capture is detected and recovery kept real
+
+## Records anchor mounts
+
+A delegation record is a mount anchor (`attributes.mount_anchor: true`): every
+delegation grafts the delegatee's virtues onto this graph, and those imported
+virtues live as a mounted subgraph this record anchors — mounted nodes whose
+`mount` field names this record. That makes the graft explorable structure
+rather than the write-only prose the axis fields hold today. The prose lists
+this kind documents — `divergence.imported`, `divergence.contradictions` —
+migrate into that mounted structure over time
+(tactic-mount-delegation-migration); until the migration lands they and the
+mounted nodes coexist.
