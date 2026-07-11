@@ -183,9 +183,19 @@ function startsWithBencMagic(file: string): boolean {
   }
 }
 
+// Encrypted-snapshot file extensions in real use: `.benc` (the browser FSA
+// export/local-file flow, budget/src/local-file.ts:41) and `.enc.json` (the
+// automated budget-etl snapshotDir/current convention that actually populates
+// the shared-drive archive — .claude/skills/budget/SKILL.md, "encrypted
+// (`.enc.json`)"). Both carry the same BENC magic header; matching only
+// `.benc` would report the real archive as empty.
+function isEncryptedSnapshotFile(name: string): boolean {
+  return name.endsWith(".benc") || name.endsWith(".enc.json");
+}
+
 function verifyBencMagic(path: string): { ok: boolean; note: string } {
-  const bencFiles = collectFiles(path).filter((f) => f.endsWith(".benc"));
-  if (bencFiles.length === 0) return { ok: false, note: "no .benc files found" };
+  const bencFiles = collectFiles(path).filter((f) => isEncryptedSnapshotFile(f));
+  if (bencFiles.length === 0) return { ok: false, note: "no .benc/.enc.json files found" };
   const bad: string[] = [];
   for (const f of bencFiles) {
     try {
@@ -195,7 +205,7 @@ function verifyBencMagic(path: string): { ok: boolean; note: string } {
     }
   }
   if (bad.length > 0) return { ok: false, note: `bad BENC magic: ${bad.join(", ")}` };
-  return { ok: true, note: `${bencFiles.length} .benc file(s) valid` };
+  return { ok: true, note: `${bencFiles.length} encrypted snapshot file(s) valid` };
 }
 
 function verifyGit(path: string): { ok: boolean; note: string } {
@@ -299,12 +309,13 @@ function auditCopy(copy: CopyEntry, verify: VerifyKind): CopyResult {
   };
 }
 
-// Newest existing .benc file across a class's copies (for --decrypt-verify).
+// Newest existing encrypted snapshot file across a class's copies (for
+// --decrypt-verify).
 function newestBencFile(results: CopyResult[]): string | null {
   let newest: { file: string; mtime: number } | null = null;
   for (const r of results) {
     if (!r.exists) continue;
-    for (const f of collectFiles(r.path).filter((x) => x.endsWith(".benc"))) {
+    for (const f of collectFiles(r.path).filter((x) => isEncryptedSnapshotFile(x))) {
       try {
         const m = statSync(f).mtimeMs;
         if (newest === null || m > newest.mtime) newest = { file: f, mtime: m };

@@ -23,13 +23,15 @@ person who holds the household keys, and find it there.
 ### 1. Budget snapshots (encrypted)
 
 - **What it is:** Our budget — spending, categories, and balances — saved as
-  encrypted files ending in `.benc`.
+  encrypted files. Automatic snapshots end in `.enc.json` (named
+  `budget-<date>.enc.json`); a file exported by hand from the budget app ends
+  in `.benc`. Either kind opens the same way.
 - **Where it lives:** On the shared drive, under `budget`. There should be a copy
   on the shared drive and a working copy on the everyday computer.
 - **How to restore:**
   1. Open the hosted budget app in a web browser.
-  2. Choose to load a budget file, and pick the newest `.benc` file from the
-     shared drive.
+  2. Choose to load a budget file, and pick the newest snapshot file (by date)
+     from the shared drive.
   3. Enter the household password when asked. The budget appears.
   - A technical helper can instead run `budget-etl dump <file>` to print the
     contents; it will ask for the same password.
