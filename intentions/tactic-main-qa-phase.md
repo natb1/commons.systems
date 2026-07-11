@@ -34,7 +34,23 @@ execution:
 validates: []
 blocked_by:
   - tactic-phase-skill-node-targets
-office_hours: null
+office_hours:
+  reason: "review phase blocked: the graph-tick worker session lacks the Workflow
+    tool that /review-fix requires for its finder fan-out / dedup / classify /
+    adversarial-verify / fix pipeline (Step 2). Inline preamble scans already
+    ran clean (CodeQL: no open alerts; erosion: one trivial test-complexity
+    delta 163->164). The phase cannot be carried to disposition autonomously and
+    must not be emulated ad hoc. Next steps: run /review-fix
+    tactic-main-qa-phase in a full interactive session (which has the Workflow
+    tool); it will apply the reviewed marker and arm auto-merge via
+    transition-node on PR #2859, then MANUALLY clear this office_hours park (no
+    unpark primitive)."
+  since: 2026-07-11
+  recommendation: "Run /review-fix tactic-main-qa-phase from a full interactive
+    Claude session (not the headless graph-tick lane) so the Workflow tool is
+    available; carry the skill to its disposition on PR #2859, then manually
+    clear the office_hours field on this node since there is no unpark
+    primitive."
 pace_exempt: false
 rounds: null
 attributes: {}
