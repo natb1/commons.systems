@@ -755,18 +755,17 @@ export function validateGraph(nodes: IntentionNode[]): void {
     // carry the same mount anchor (the modeled graph's internal structure). Only
     // judges edges whose target resolves (rules 2-3 own the dangling case).
     // grafts (rule 17) is the ONLY relation permitted to cross.
-    if (node.parent !== null && byId.has(node.parent)) {
-      const parentNode = byId.get(node.parent)!;
-      if (parentNode.mount !== node.mount) {
+    if (node.parent !== null) {
+      const parentNode = byId.get(node.parent);
+      if (parentNode !== undefined && parentNode.mount !== node.mount) {
         problems.push(
           `${node.id}: parent "${node.parent}" crosses a mount boundary — parent mount "${parentNode.mount}" does not match "${node.mount}"`,
         );
       }
     }
     for (const target of node.serves) {
-      if (!byId.has(target)) continue;
-      const targetNode = byId.get(target)!;
-      if (targetNode.mount !== node.mount) {
+      const targetNode = byId.get(target);
+      if (targetNode !== undefined && targetNode.mount !== node.mount) {
         problems.push(
           `${node.id}: serves "${target}" crosses a mount boundary — target mount "${targetNode.mount}" does not match "${node.mount}"`,
         );
