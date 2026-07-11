@@ -22,8 +22,13 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-grounding-research-skill
+  pr: 2846
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
 validates: []
 blocked_by:
   - tactic-grounding-gap-analysis
