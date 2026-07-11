@@ -37,6 +37,19 @@ clarifications:
       whose virtues already align, rather than converting an audience, is
       respect's selection-over-conversion applied to oneself: entering a
       community as a co-legislator, not recruiting one as material."
+  - question: Where are participation events and community-sourced challenges
+      recorded so the office-hours sensor can read them?
+    answer: "Participation happens off-repo (events, chat, forums), so the sensor
+      needs an author-maintained durable record: attributes.participation_log on
+      this strategy node — a list of {date, venue, activity, challenge} entries
+      the author appends after each participation event (challenge null when
+      none arrived). A challenge reaches strategy-external-calibration when it
+      is also recorded there as a dated clarification and moves that strategy
+      reading off zero; the round-1 instrument
+      (tactic-participation-log-instrument) assembles the log plus that routing
+      state into the report the owner reviews. Immaterial design premise per
+      drift review Side B — it informs how the sensor reads, not what the
+      strategy means. Recorded 2026-07-11 /align-tactics round."
 tooling_goals: []
 success_signal:
   observable: sustained participation in existing practitioner communities, and
@@ -52,7 +65,9 @@ validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
-rounds: null
+rounds:
+  count: 0
+  last_completed: null
 attributes:
   conditions:
     - the existing communities (IndieWeb, local-first, self-hosting) remain
