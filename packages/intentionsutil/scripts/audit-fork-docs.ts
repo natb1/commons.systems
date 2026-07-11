@@ -89,7 +89,7 @@ export function enumerateArtifacts(fs: FsFacade): Artifact[] {
     parsed = JSON.parse(raw);
   } catch (err) {
     throw new Error(
-      `audit-fork-docs: .firebaserc is not valid JSON: ${errMessage(err)}`,
+      `audit-fork-docs: could not parse .firebaserc — invalid JSON: ${errMessage(err)}`,
     );
   }
 
