@@ -488,6 +488,9 @@ export function useViewerController(
     // --- Keyboard navigation ---
     function handleKeydown(e: KeyboardEvent) {
       if ((e.target as HTMLElement)?.closest(".viewer-search-input, .viewer-goto-input, .viewer-annotation-note-input")) return; // type-safety-ok: pre-existing cast on origin/main; this session only extended the .closest() selector
+      // Ignore modified Arrow keys so browser/OS shortcuts (e.g. Alt+ArrowLeft =
+      // back-navigation) are not also consumed as page turns.
+      if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
       if (e.key === "ArrowLeft") goPrev().catch(handleNavError);
       else if (e.key === "ArrowRight") goNext().catch(handleNavError);
     }

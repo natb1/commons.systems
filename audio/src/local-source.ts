@@ -25,7 +25,7 @@ import {
 import type { CachedMetadata } from "./sidecar.js";
 import { extractAudioMetadata } from "./local-metadata.js";
 import { mapWithConcurrency } from "./concurrency.js";
-import { AUDIO_FORMATS } from "./types.js";
+import { AUDIO_FORMATS, AUDIO_MIME_TYPES } from "./types.js";
 import type { AudioFormat, AudioTags, LibraryItem } from "./types.js";
 
 const PURPOSE = "library-folder";
@@ -34,14 +34,6 @@ const PURPOSE = "library-folder";
  * peak memory so large folders don't OOM on low-RAM (≤2GB) devices. */
 const ENRICH_READ_CONCURRENCY = 16;
 const store = createFsaHandleStore({ app: "audio" });
-
-const MIME_TYPES: Record<AudioFormat, string> = {
-  mp3: "audio/mpeg",
-  m4a: "audio/mp4",
-  flac: "audio/flac",
-  ogg: "audio/ogg",
-  wav: "audio/wav",
-};
 
 type LocalFolderState = "unsupported" | "none" | "granted" | "prompt" | "denied";
 
@@ -65,7 +57,7 @@ function formatFromName(name: string): AudioFormat | undefined {
 function mimeFromName(name: string): string {
   const fmt = formatFromName(name);
   if (!fmt) throw new Error(`Unsupported audio format for '${name}'`);
-  return MIME_TYPES[fmt];
+  return AUDIO_MIME_TYPES[fmt];
 }
 
 function titleFromName(name: string): string {
