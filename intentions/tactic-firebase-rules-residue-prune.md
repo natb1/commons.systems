@@ -27,7 +27,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: done
 execution:
   branch: tactic-firebase-rules-residue-prune
   pr: 2831
@@ -35,6 +35,7 @@ execution:
   markers:
     - planned
     - qa-done
+    - reviewed
   strategy_fingerprint: null
 validates: []
 blocked_by: []

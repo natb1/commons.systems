@@ -1,9 +1,10 @@
 ---
 id: tactic-align-gate-strategy-phase
 kind: tactic
-statement: "Worker-start-revalidation gate accepts a strategy's native phase:null
+statement: Worker-start-revalidation gate accepts a strategy's native phase:null
   when selected at align-tactics — the literal phase-equality check in
-  check-node-selection.ts exit-12s every strategy, blocking the entire align lane"
+  check-node-selection.ts exit-12s every strategy, blocking the entire align
+  lane
 owner: ai
 status: codified
 parent: tactic-graph-native-dispatch
@@ -15,8 +16,8 @@ rationale: "Regression shipped by tactic-worker-start-revalidation (PR 2792):
   EVERY strategy regardless of status. No strategy can be provisioned for
   decomposition — the align lane produces zero tactics every tick and the graph
   cannot grow new work autonomously. On the signal path for
-  strategy-graph-native-dispatch: autonomous align decomposition is a precondition
-  of a self-scheduling fleet."
+  strategy-graph-native-dispatch: autonomous align decomposition is a
+  precondition of a self-scheduling fleet."
 reading: null
 gap: null
 serves:
@@ -28,11 +29,16 @@ success_signal: null
 attention:
   boost: 1
   override: null
-  rationale: "Unblocks the entire align lane; every strategy align selection
+  rationale: Unblocks the entire align lane; every strategy align selection
     exit-12s until this gate fix merges, so no new tactic work is decomposed
-    autonomously meanwhile."
-phase: implement
-execution: null
+    autonomously meanwhile.
+phase: review
+execution:
+  branch: tactic-align-gate-strategy-phase
+  pr: 2847
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
 validates: []
 blocked_by: []
 office_hours: null

@@ -1,3 +1,5 @@
-import { describeGroupsCollection } from "../setup.js";
+import { describeDeniedBudgetCollection } from "../setup.js";
 
-describeGroupsCollection("budget");
+// budget/{env}/groups was pruned (budget is local-first, no runtime client
+// path reads or writes it) — assert the surface is now denied.
+describeDeniedBudgetCollection("groups");

@@ -49,17 +49,20 @@ export interface OutlineEntry {
 /**
  * The anchor a renderer derives from the live text selection, suitable for
  * building an Annotation. `position` restores navigation (PDF: page-number
- * string); `quote` is the selected text; `page`/`offset`/`length` locate the
- * highlighted range in the page's reconstructed text (the offset space
- * `offsetToItemRanges` consumes). A renderer returns null when there is no
- * usable selection inside a rendered text layer.
+ * string; EPUB: a CFI range); `quote` is the selected text. The
+ * `page`/`offset`/`length` fields locate the highlighted range in the page's
+ * reconstructed text (the offset space `offsetToItemRanges` consumes) — a PDF
+ * anchor carries all three, but they are OPTIONAL because an EPUB anchor
+ * (CFI-only) has no page coordinates, matching the optional PDF-anchor fields on
+ * {@link Annotation}. A renderer returns null when there is no usable selection
+ * inside a rendered text layer.
  */
 export interface SelectionAnchor {
   readonly position: string;
   readonly quote: string;
-  readonly page: number;
-  readonly offset: number;
-  readonly length: number;
+  readonly page?: number;
+  readonly offset?: number;
+  readonly length?: number;
 }
 
 export interface ContentRenderer {

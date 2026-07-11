@@ -944,6 +944,10 @@ describe("computeAggregateTrend avg12NetCredits", () => {
   });
 });
 
+// sid builds the branded StatementId from a plain string in test data.
+const sid = (s: string): Statement["statementId"] =>
+  s as unknown as Statement["statementId"]; // type-safety-ok: test-only branded StatementId construction
+
 function makeStmt(overrides: Partial<Statement> = {}): Statement {
   return {
     id: "stmt-1",
@@ -1039,6 +1043,23 @@ describe("computeNetWorth", () => {
     ];
     const result = computeNetWorth(txns, stmts, weeks);
     expect(result.divergences).toHaveLength(0);
+  });
+
+  it("handles two anchors in the same account-month (distinct as-of dates) without spurious divergence", () => {
+    // Date-keyed anchors: two observations of Bank/Checking in 2025-01 at
+    // different as-of dates. Mid-month says 500; a $20 spend on Jan-20 explains
+    // the month-end 480. Sorted by effective ms (balanceDate), the derivation
+    // flows 500 → 480 and matches, so no divergence is raised.
+    const stmts = [
+      makeStmt({ id: "s-mid", statementId: sid("Bank-Checking-2025-01-15"), period: "2025-01", balanceDate: "2025-01-15", balance: 500 }),
+      makeStmt({ id: "s-end", statementId: sid("Bank-Checking-2025-01-31"), period: "2025-01", balanceDate: "2025-01-31", balance: 480 }),
+    ];
+    const txns = [
+      makeTxn({ id: "t1", institution: "Bank", account: "Checking", amount: 20, timestamp: ts("2025-01-20"), budget: null }),
+    ];
+    const result = computeNetWorth(txns, stmts, weeks);
+    expect(result.divergences).toEqual([]);
+    expect(result.points).toHaveLength(3);
   });
 
   it("excludes non-primary normalized transactions", () => {

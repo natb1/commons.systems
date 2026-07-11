@@ -19,12 +19,13 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: done
 execution:
   branch: tactic-dispatch-lifecycle-sensor
   pr: 2843
   attempts: {}
-  markers: []
+  markers:
+    - reviewed
   strategy_fingerprint: null
 validates:
   - strategy-graph-native-dispatch
