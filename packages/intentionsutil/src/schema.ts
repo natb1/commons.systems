@@ -322,16 +322,24 @@ function validateAttention(value: unknown, field: string): Attention {
  * Live execution record a router stamps on a tactic in flight. Valid on
  * tactics only (enforced by `validateGraph`).
  *
- *  - `strategy_fingerprint` is a hash of the serving strategy's substance
- *    fields, stamped at plan time and later compared by a router's mid-flight
- *    soft-freeze trigger. No hashing logic lives here — only the typed field.
+ *  - `strategy_fingerprint` is a per-strategy map `{<strategy-id>: <hash>}` of
+ *    each serving strategy's substance-fields hash, stamped at plan/re-evaluation
+ *    time and later compared by a router's mid-flight soft-freeze trigger. A
+ *    serving strategy absent from the map is never stale (per-strategy null
+ *    semantics). The bare-string form is DEPRECATED-LEGACY: it predates
+ *    multi-serves stamping and is compared against every serving strategy (a
+ *    single string cannot equal two substance hashes, so a multi-serves tactic
+ *    was born permanently stale). Legacy strings are accepted transiently and
+ *    convert to map form by natural churn — every writer emits map form now, and
+ *    each re-stamp rewrites the field. No hashing logic lives here — only the
+ *    typed field.
  */
 export interface Execution {
   branch: string;
   pr: number | null;
   attempts: Record<string, number>; // per-phase attempt counts
   markers: string[];
-  strategy_fingerprint: string | null;
+  strategy_fingerprint: string | Record<string, string> | null;
 }
 
 /** A first-class parking record: why a node is in office hours and since when. */
@@ -386,6 +394,29 @@ function validateAttempts(value: unknown, field: string): Record<string, number>
   return out;
 }
 
+/**
+ * The soft-freeze stamp: a per-strategy fingerprint map `{<strategy-id>: <hash>}`,
+ * a bare string (deprecated-legacy, accepted transiently), or null. The map's
+ * values are substance-hash strings; a malformed non-string value is rejected.
+ */
+function validateStrategyFingerprint(
+  value: unknown,
+  field: string,
+): string | Record<string, string> | null {
+  if (value == null) return null;
+  if (typeof value === "string") return value; // deprecated-legacy bare-string form
+  if (!isPlainObject(value)) {
+    throw new IntentionSchemaError(
+      `Expected string, object, or null for ${field}, got ${typeof value}`,
+    );
+  }
+  const out: Record<string, string> = {};
+  for (const [key, fp] of Object.entries(value)) {
+    out[key] = requireString(fp, `${field}.${key}`);
+  }
+  return out;
+}
+
 function validateExecution(value: unknown, field: string): Execution {
   if (!isPlainObject(value)) {
     throw new IntentionSchemaError(`Expected object for ${field}, got ${typeof value}`);
@@ -395,7 +426,7 @@ function validateExecution(value: unknown, field: string): Execution {
     pr: value.pr == null ? null : requireNonNegativeInt(value.pr, `${field}.pr`),
     attempts: validateAttempts(value.attempts, `${field}.attempts`),
     markers: validateIdArray(value.markers, `${field}.markers`),
-    strategy_fingerprint: optionalString(value.strategy_fingerprint, `${field}.strategy_fingerprint`),
+    strategy_fingerprint: validateStrategyFingerprint(value.strategy_fingerprint, `${field}.strategy_fingerprint`),
   };
 }
 

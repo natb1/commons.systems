@@ -107,6 +107,77 @@ describe("validateNode", () => {
     });
   });
 
+  it("accepts a per-strategy strategy_fingerprint map", () => {
+    const result = validateNode({
+      id: "n1-fp-map",
+      kind: "tactic",
+      statement: "Execution with a per-strategy fingerprint map.",
+      owner: "ai",
+      status: "raw",
+      execution: {
+        branch: "b",
+        pr: null,
+        attempts: {},
+        markers: [],
+        strategy_fingerprint: { "strategy-a": "hash-a", "strategy-b": "hash-b" },
+      },
+    });
+    expect(result.execution?.strategy_fingerprint).toEqual({
+      "strategy-a": "hash-a",
+      "strategy-b": "hash-b",
+    });
+  });
+
+  it("accepts the deprecated-legacy bare-string strategy_fingerprint", () => {
+    const result = validateNode({
+      id: "n1-fp-legacy",
+      kind: "tactic",
+      statement: "Execution with a legacy bare-string fingerprint.",
+      owner: "ai",
+      status: "raw",
+      execution: { branch: "b", pr: null, attempts: {}, markers: [], strategy_fingerprint: "legacy-hash" },
+    });
+    expect(result.execution?.strategy_fingerprint).toBe("legacy-hash");
+  });
+
+  it("rejects a strategy_fingerprint map with a non-string value", () => {
+    expect(() =>
+      validateNode({
+        id: "n1-fp-bad",
+        kind: "tactic",
+        statement: "Malformed fingerprint map.",
+        owner: "ai",
+        status: "raw",
+        execution: {
+          branch: "b",
+          pr: null,
+          attempts: {},
+          markers: [],
+          strategy_fingerprint: { "strategy-a": 123 },
+        },
+      }),
+    ).toThrow(/string for execution.strategy_fingerprint.strategy-a/);
+  });
+
+  it("rejects a strategy_fingerprint that is neither string, object, nor null", () => {
+    expect(() =>
+      validateNode({
+        id: "n1-fp-array",
+        kind: "tactic",
+        statement: "Array fingerprint is not a valid stamp.",
+        owner: "ai",
+        status: "raw",
+        execution: {
+          branch: "b",
+          pr: null,
+          attempts: {},
+          markers: [],
+          strategy_fingerprint: ["nope"],
+        },
+      }),
+    ).toThrow(/Expected string, object, or null for execution.strategy_fingerprint/);
+  });
+
   it("rejects a phase that is not one of the enum", () => {
     expect(() =>
       validateNode({

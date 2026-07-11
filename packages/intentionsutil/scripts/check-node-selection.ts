@@ -20,8 +20,10 @@
 //   2. phase       — persisted phase equals <selected-phase>. exit 12
 //   3. not parked  — office_hours null.                       exit 12
 //   4. fingerprint — only when execution.strategy_fingerprint is non-null:
-//                    every serving strategy's current substance hash matches
-//                    the stamp (mirrors the selector's soft-freeze rule). exit 12
+//                    each serving strategy's current substance hash matches its
+//                    own entry in the per-strategy stamp map (mirrors the
+//                    selector's soft-freeze rule; a legacy bare-string stamp
+//                    still compares against every serving strategy).   exit 12
 //   5. scope chain — only with --stamp and a fix/qa/review phase: the stamped
 //                    scope fingerprint matches the current one.  exit 13
 //
@@ -46,6 +48,7 @@ import {
   strategyFingerprint,
   tacticScopeFingerprint,
 } from "../src/router.js";
+import { isFingerprintStale } from "../src/transitions.js";
 import type { IntentionNode } from "../src/schema.js";
 import { IntentionSchemaError } from "../src/errors.js";
 
@@ -88,14 +91,22 @@ function readParked(node: IntentionNode): boolean {
   return squat !== null && squat !== undefined;
 }
 
-/** The stamped serving-strategy fingerprint, first-class or squatter, or null. */
-function readStrategyFingerprint(node: IntentionNode): string | null {
+/**
+ * The stamped serving-strategy fingerprint, first-class or squatter, or null.
+ * Returns the per-strategy map, a legacy bare string, or null — the caller
+ * compares per-strategy via `isFingerprintStale`.
+ */
+function readStrategyFingerprint(node: IntentionNode): string | Record<string, string> | null {
   const firstClass = node.execution?.strategy_fingerprint ?? null;
   if (firstClass !== null) return firstClass;
   const squatExec = node.attributes.execution;
   if (squatExec !== null && typeof squatExec === "object" && "strategy_fingerprint" in squatExec) {
     const fp = (squatExec as { strategy_fingerprint?: unknown }).strategy_fingerprint;
-    return typeof fp === "string" ? fp : null;
+    if (typeof fp === "string") return fp;
+    if (fp !== null && typeof fp === "object" && !Array.isArray(fp)) {
+      return fp as Record<string, string>;
+    }
+    return null;
   }
   return null;
 }
@@ -177,7 +188,7 @@ export function evaluateSelection(opts: SelectionOpts): SelectionResult {
     for (const sid of servingStrategyIds(node, byId)) {
       const strategy = byId.get(sid);
       if (strategy === undefined) continue; // a dangling serves edge is validateGraph's failure, not this gate's
-      if (strategyFingerprint(strategy) !== stampedFp) {
+      if (isFingerprintStale(stampedFp, sid, strategyFingerprint(strategy))) {
         return fail(
           EXIT_STALE_SELECTION,
           "fingerprint",

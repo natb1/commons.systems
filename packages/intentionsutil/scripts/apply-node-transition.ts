@@ -16,7 +16,14 @@
 // Usage:
 //   node --import tsx/esm apply-node-transition.ts <node-id> \
 //     [--ci passing|failing|unknown] [--scope-stale] [--strategy-stale] \
-//     [--set-pr <n>] [--strategy-fingerprint <fp>] [--dir <intentions-dir>]
+//     [--set-pr <n>] [--strategy-fingerprint <strategy-id>=<hash> ...] \
+//     [--dir <intentions-dir>]
+//
+// `--strategy-fingerprint` is repeatable and takes a KEYED `<strategy-id>=<hash>`
+// value; each entry merges into the per-strategy stamp map, preserving other
+// keys. The bare hash form (no `=`) is rejected — it cannot say which serving
+// strategy the hash belongs to, and a single string freezes every other serving
+// strategy of a multi-serves tactic.
 //
 // Stdout: one JSON object
 //   { "phase": "<new-phase>", "prevPhase": "<old>", "armMerge": bool,
@@ -43,11 +50,11 @@ interface Args {
   scopeStale: boolean;
   strategyStale: boolean;
   setPr: number | null;
-  strategyFingerprint: string | null;
+  strategyFingerprint: Record<string, string> | null;
   dir: string;
 }
 
-function parseArgs(argv: string[]): Args {
+export function parseArgs(argv: string[]): Args {
   const out: Args = {
     id: "",
     ci: "unknown",
@@ -82,9 +89,20 @@ function parseArgs(argv: string[]): Args {
         out.setPr = v;
         break;
       }
-      case "--strategy-fingerprint":
-        out.strategyFingerprint = argv[++i];
+      case "--strategy-fingerprint": {
+        const entry = argv[++i];
+        const eq = entry === undefined ? -1 : entry.indexOf("=");
+        if (entry === undefined || eq <= 0 || eq === entry.length - 1) {
+          throw new Error(
+            `apply-node-transition: --strategy-fingerprint requires a '<strategy-id>=<hash>' value, got '${entry ?? ""}'` +
+              " (the bare-hash form is rejected: it cannot name the serving strategy the hash belongs to)",
+          );
+        }
+        const sid = entry.slice(0, eq);
+        const hash = entry.slice(eq + 1);
+        out.strategyFingerprint = { ...(out.strategyFingerprint ?? {}), [sid]: hash };
         break;
+      }
       case "--dir":
         out.dir = argv[++i];
         break;
@@ -132,7 +150,13 @@ export function applyNodeTransition(args: Args): ApplyResult {
   let execution = node.execution ?? defaultExecution(args.id);
   if (args.setPr !== null) execution = { ...execution, pr: args.setPr };
   if (args.strategyFingerprint !== null) {
-    execution = { ...execution, strategy_fingerprint: args.strategyFingerprint };
+    // Merge the keyed entries into the per-strategy map, preserving other keys.
+    // An existing legacy bare-string stamp carries no strategy id, so it is
+    // dropped here — the re-stamp converts the field to map form (natural churn).
+    const existing = execution.strategy_fingerprint;
+    const base: Record<string, string> =
+      existing !== null && typeof existing === "object" ? { ...existing } : {};
+    execution = { ...execution, strategy_fingerprint: { ...base, ...args.strategyFingerprint } };
   }
 
   const decision = decideTransition({

@@ -458,18 +458,22 @@ frontmatter this session does change (a drift clarification, a park, the
 `rounds` init) lands via `graph-commit <strategy-id>`, bundled with the round's
 tactics when small.
 
-**Fingerprint honesty.** `execution.strategy_fingerprint` is where the router's
-soft-freeze trigger will record the serving strategy's substance hash
-(strategy clarification 10). In the bootstrap there is no `execution` object to
-seed and no fingerprint helper exists — so there is no fingerprint field to
-write yet (every node in `intentions/tactic-graph-native-dispatch.md` §5 that
-has not yet advanced carries `execution: null`, and every node's
-`strategy_fingerprint` is `null` — even those whose `execution` the router has
-since populated). When the hashing and router
-machinery lands, the router stamps `execution` — fingerprint included — at
-plan/launch time. Until then the freeze-on-mismatch rule is discharged by
-running re-evaluation in the **same session** as the strategy edit (below),
-exactly as every recorded round has.
+**Fingerprint honesty.** `execution.strategy_fingerprint` is a **per-strategy
+map** `{<strategy-id>: <fingerprint>}` — one entry per serving strategy — that
+the router's soft-freeze trigger compares against each serving strategy's
+current substance (strategy clarification 10). At mint time this session stamps
+only the **decomposed** strategy's entry: `{<decomposed-strategy-id>:
+<fingerprint>}`, where `<fingerprint>` is `strategyFingerprint(strategy)` from
+`packages/intentionsutil/src/router.ts:82` — always that helper, never a
+hand-computed hash. A serving strategy absent from the map is never stale
+(per-strategy null), so an honest multi-serves tactic is not born frozen against
+its other serving strategies; those entries are filled by whichever session
+decomposes or re-evaluates each of them. A tactic not yet advanced still carries
+`execution: null` (no map to stamp); the map is seeded the first time an
+`execution` object exists. The bare-string form is deprecated-legacy — never
+emit it. In the bootstrap interim with no live router, the mint-time stamp is
+made by hand at completion; the freeze-on-mismatch rule is otherwise discharged
+by running re-evaluation in the **same session** as the strategy edit (below).
 
 ## Re-evaluation mode
 
@@ -498,9 +502,13 @@ decompose fresh. It:
    re-evaluation trigger (e.g. a drift-review Side A/B correction to an open
    tactic): the whole-node reconciliation bar binds there too, not just at a
    fingerprint-triggered re-evaluation.
-3. Re-stamps each surviving tactic's `execution.strategy_fingerprint` to the
-   current substance (seeded `null` until the machinery lands), which unfreezes
-   the subtree.
+3. Re-stamps **only the re-evaluated strategy's entry** in each surviving
+   tactic's `execution.strategy_fingerprint` map — set
+   `map[<re-evaluated-strategy-id>] = strategyFingerprint(strategy)`
+   (`packages/intentionsutil/src/router.ts:82`), leaving every other serving
+   strategy's entry untouched — which unfreezes the subtree against this
+   strategy without disturbing the others. (A tactic still at `execution: null`
+   has no map to re-stamp until the machinery seeds one.)
 4. Lands the amendments via `graph-commit`.
 
 Until a live router exists, re-evaluation runs **inline** in the same session
