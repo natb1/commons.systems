@@ -56,12 +56,19 @@ esac
 ```
 
 **Node-target lane (`TARGET_KIND=node`).** Every step runs unchanged except:
-the PR number is the node's `execution.pr` (feed it to the `--pr` pack directly,
-not `$N`; never `--issue`); on a clean fix (CI green after the push) the
-completion seam invokes the graph-native transition writer instead of any
-`dispatch-complete-phase` / `dispatch-mark-complete` — it consults the CI verdict
-and returns the node from `fix` to the interrupted ladder position as one
-state-only graph-commit on `origin/main`:
+the PR number is resolved by branch head — `gh pr list --head "$BRANCH" --state
+open --json number --jq '.[0].number // empty'` (the branch IS the node id, not
+an issue-prefixed name, so the issue-keyed branch-prefix lookup `dispatch-find-pr`
+performs does not apply — use `dispatch-context-pack`'s `--pr-is-number` flag
+instead, see Step 1 below. fix-checks never runs without an open PR, so an
+empty result here is a real error — write `$CLAUDE_JOB_DIR/office-hours-reason`
+per the Escalation note below and stop, never `dispatch-mark-deviation`, which
+is issue-only) — never pass `--issue`; on a clean
+fix (CI green after the push) the completion seam invokes the graph-native
+transition writer instead of any `dispatch-complete-phase` /
+`dispatch-mark-complete` — it consults the CI verdict and returns the node from
+`fix` to the interrupted ladder position as one state-only graph-commit on
+`origin/main`:
 
 ```bash
 .claude/skills/dispatch-propagate/scripts/transition-node "$N" --set-pr "$PR_NUM"
@@ -73,17 +80,29 @@ Escalation writes `$CLAUDE_JOB_DIR/office-hours-reason` (+
 **On the node lane no gh issue is ever read or written.**
 
 1. **Resolve the draft PR.** Run the context pack (`dangerouslyDisableSandbox:
-   true` — calls `gh`):
+   true` — calls `gh`). **Legacy lane** (`TARGET_KIND=issue`):
 
    ```bash
-   .claude/skills/dispatch-propagate/scripts/dispatch-context-pack <issue-N> --pr
+   .claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$N" --pr
+   ```
+
+   **Node lane** (`TARGET_KIND=node`): resolve `PR_NUM` via the branch-head
+   lookup from the Target-resolution section above, then fetch it directly
+   (never pass `--issue`):
+
+   ```bash
+   .claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$PR_NUM" --pr --pr-is-number
    ```
 
    This single call resolves the PR and captures its labels and body. From the
-   `=== PR ===` section: read `PR_NUM` from the `PR #<num>` line (or, if it
-   prints `PR: none`, fix-checks was dispatched without a PR — a router state
-   error — so call `dispatch-mark-deviation '/fix-checks: dispatched without a PR
-   — router state error'` and stop). The **labels** line and **body** captured
+   `=== PR ===` section: read `PR_NUM` from the `PR #<num>` line. **Legacy
+   lane:** if it prints `PR: none`, fix-checks was dispatched without a PR — a
+   router state error — so call `dispatch-mark-deviation '/fix-checks:
+   dispatched without a PR — router state error'` and stop. **Node lane:**
+   `PR: none` cannot occur here (Target resolution already required a
+   non-empty `PR_NUM` before this call); a pack failure here is a genuine `gh`
+   error — escalate via `office-hours-reason` per the Escalation note above and
+   stop, never `dispatch-mark-deviation` (issue-only). The **labels** line and **body** captured
    here are reused in later steps — Step 4's Flake sub-path reads the PR body for
    the `Closes #N` parse, and Step 5's attempt-counter computation reads the labels
    line — so they need not be re-fetched from GitHub. The `PR_NUM` resolved here is

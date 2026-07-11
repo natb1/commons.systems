@@ -61,14 +61,32 @@ case "$BRANCH" in
 esac
 ```
 
-On the node lane, `$N` is the node id (keys `tmp/` filenames); the PR number is
-the node's `execution.pr` — pass **it**, not `$N`, to the `--pr` pack, and never
-pass `--issue`. **On the node lane no gh issue is ever read or written.** The
+On the node lane, `$N` is the node id (keys `tmp/` filenames); never pass
+`--issue`. **On the node lane no gh issue is ever read or written.** The
 completion and output-filing seams are re-keyed below (**Node-target lane**).
 
 ```bash
-# Legacy lane: PACK_TARGET="$N". Node lane: PACK_TARGET="$PR_NUM" (execution.pr).
-.claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$N" --pr --phase-log --diff \
+case "$TARGET_KIND" in
+  issue)
+    PACK_TARGET="$N"
+    PACK_FLAGS=(--pr --phase-log --diff)
+    ;;
+  node)
+    # The branch IS the node id, not an issue-prefixed name — dispatch-find-pr's
+    # issue→PR branch-prefix lookup does not apply. Resolve the PR by branch
+    # head instead (same primitive dispatch-sweep and /office-hours use for a
+    # node-id worktree; review never runs without an open PR, so a miss here is
+    # a real error).
+    PR_NUM=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
+    if [ -z "$PR_NUM" ]; then
+      echo "/review-fix: node '$N' has no open PR — review-fix requires one" >&2
+      exit 1
+    fi
+    PACK_TARGET="$PR_NUM"
+    PACK_FLAGS=(--pr --phase-log --diff --pr-is-number)
+    ;;
+esac
+.claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$PACK_TARGET" "${PACK_FLAGS[@]}" \
   | tee "tmp/pack-$N.txt"
 ```
 

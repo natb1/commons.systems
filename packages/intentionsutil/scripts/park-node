@@ -15,13 +15,13 @@
 # park disposition.
 #
 # The park-recommendation contract: a mechanical park must carry recoverable
-# context — a reason AND a best-next-steps recommendation. Until an
-# `office_hours.recommendation` field lands in schema.ts, the caller folds the
-# recommendation into <reason> as a labelled trailing `Next steps: <...>`
-# sentence; this script writes <reason> verbatim and never emits a reason-only
-# park on the caller's behalf.
+# context — a reason AND a best-next-steps recommendation. `office_hours.
+# recommendation` is a first-class schema.ts field (landed by
+# tactic-office-hours-graph-entry); the caller passes the recommendation as the
+# optional 3rd arg below, written verbatim to that field — omitted → null. This
+# script never folds the recommendation into <reason> on the caller's behalf.
 #
-# Usage: park-node <node-id> <reason>
+# Usage: park-node <node-id> <reason> [recommendation]
 #
 # Exit codes: 0 parked and landed on main; 1 the write or graph-commit failed;
 # 2 usage error.

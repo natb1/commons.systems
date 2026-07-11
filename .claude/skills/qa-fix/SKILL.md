@@ -58,16 +58,39 @@ The QA pass covers **public data only** — documents present in both the QA ser
 
 Before running any step, resolve the PR number and its labels via
 `dispatch-context-pack` (use `dangerouslyDisableSandbox: true` — it calls `gh`).
-The branch name encodes the issue number (`<N>-…`), so derive `N` first:
+This runs before Step 0's target-resolution case statement below, so it
+performs the same keyspace split itself rather than assuming an issue-prefixed
+branch:
 
 ```bash
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
-N="${BRANCH%%-*}"
-.claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$N" --pr --phase-log
+case "$BRANCH" in
+  [0-9]*-*)
+    N="${BRANCH%%-*}"
+    .claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$N" --pr --phase-log
+    ;;
+  *)
+    # Graph-native node lane: the branch IS the node id, not an issue-prefixed
+    # name — dispatch-find-pr's issue→PR branch-prefix lookup does not apply.
+    # Resolve the PR by branch head instead (same primitive dispatch-sweep and
+    # /office-hours use for a node-id worktree), then fetch it directly via the
+    # pack's --pr-is-number mode (qa never runs without an open PR, so a miss
+    # here is a real error, not the legitimate "PR: none" plan-phase case).
+    N="$BRANCH"
+    PR_NUM=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
+    if [ -z "$PR_NUM" ]; then
+      echo "/qa-fix: node '$BRANCH' has no open PR — qa-fix requires one" >&2
+      exit 1
+    fi
+    .claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$PR_NUM" --pr --phase-log --pr-is-number
+    ;;
+esac
 ```
 
-Read `PR_NUM` and the labels line from the `=== PR ===` section of the output.
-From the `=== PHASE-LOG #N ===` section of the **same** output, read the prior
+Read `PR_NUM` and the labels line from the `=== PR ===` section of the output
+(on the node lane `PR_NUM` is already known from the `gh pr list` call above;
+the pack output still carries the same value in its `PR #<num>` line — confirm
+they agree). From the `=== PHASE-LOG #N ===` section of the **same** output, read the prior
 handoff note as `PRIOR_PHASE_LOG` — the running "what-failed / what-changed"
 digest earlier phases (implement / a prior qa attempt) wrote. Treat the sentinel
 `phase-log: none` as empty (`PRIOR_PHASE_LOG=''`). It is advisory context for the
@@ -178,8 +201,10 @@ fork site below (same discipline as the `fixes_applied_count` tally in Step 3.7)
 
    Every step runs unchanged except these re-keyed seams:
 
-   - **Context / PR.** Skip the `--issue` slices; the PR number is the node's
-     `execution.pr` — feed it to `dispatch-context-pack "$PR" --pr …` directly.
+   - **Context / PR.** Skip the `--issue` slices. `PR_NUM` is already resolved by
+     the Idempotency preamble above (via `gh pr list --head`, not the
+     issue-keyed `dispatch-find-pr` lookup `--pr` normally does) — reuse it, do
+     not re-derive.
    - **Completion.** On a clean pass do **not** apply `dispatch:qa-done` via
      `dispatch-complete-phase`, and do **not** call `dispatch-mark-complete` /
      `dispatch-finalize-phase`. Invoke the graph-native transition writer, which
@@ -269,12 +294,23 @@ fork site below (same discipline as the `fixes_applied_count` tally in Step 3.7)
 
    a. **Capture the live context pack** (use `dangerouslyDisableSandbox: true` — it
       calls `gh`; see `.claude/rules/sandbox.md`). Capture its stdout to paste into
-      the subagent prompt:
+      the subagent prompt. **Legacy lane** (`TARGET_KIND=issue`):
       ```bash
       .claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$N" --issue --pr --diff
       ```
       `--issue` gives the acceptance criteria, `--pr` the PR number/labels/CI, and
       `--diff` the changed files and hunks — the complete triage input in one call.
+
+      **Node lane** (`TARGET_KIND=node`): never pass `--issue` (no gh issue
+      exists); reuse `$PR_NUM` from the Idempotency preamble with
+      `--pr-is-number`:
+      ```bash
+      .claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$PR_NUM" --pr --diff --pr-is-number
+      ```
+      The acceptance-criteria role `--issue` plays on the legacy lane is filled
+      by `$NODE_MD` (the node body, already read at Step 0) — paste it into the
+      subagent prompt alongside this pack's output in place of the `=== ISSUE
+      ===` section.
 
    b. **Launch exactly one triage subagent** — Agent tool, `subagent_type:
       general-purpose`, **`model: opus`** (the canonical bounded-Opus pattern from
