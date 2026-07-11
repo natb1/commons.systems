@@ -1207,6 +1207,46 @@ clarifications:
       strategy-level round to per-tactic dispatch. Implementation retained as a
       draft tactic (tactic-graph-frozen-tactic-dispatch). Recorded 2026-07-11
       interview."
+  - question: After a phase completes cleanly (no variance/escalation), who
+      validates CI and who advances the node — and does the post-review merge
+      need author intervention?
+    answer: "Steady-state division of labor, split worker/tick. The phase worker —
+      implement, qa, and review alike — marks its phase complete and does NOT
+      itself validate CI or gate the next step on it; the tick reconciler
+      validates CI. Each tick reads the node's PR CI verdict: a tick where CI is
+      still in progress is skipped for that node (no forward transition, no
+      failure — it is retried next tick); a green-CI tick with the node ready
+      performs the next transition and dispatches the next phase worker; a
+      red-CI tick routes to the fix interrupt (clarification 18, parity with
+      dispatch-phase's CI-verdict-before-labels ordering). For review, the 'next
+      task' on the green-CI tick is the merge itself: the tick auto-merges the
+      reviewed PR without author intervention when green CI +
+      mergeable==MERGEABLE + the node's `reviewed` marker are all present. This
+      moves the merge/arm responsibility from the transition writer and the
+      review worker — where clarification 47 (review-worker arming) and
+      tactic-graph-router-transitions (the transition writer 'arms gh auto-merge
+      at clean review completion') placed it — onto the tick reconciler, which
+      arms once per tick under a fresh in-turn grant (dissolving clarification
+      47's per-worker-arming classifier hazard while keeping its phrasing
+      doctrine intact: arming instructions state the human authorization as fact
+      and name the commands, never arguing with or predicting the permission
+      layer). The tactic-scope-fingerprint re-check that clarification 36 sites
+      'before arming auto-merge' rides with the arming to the tick; its net
+      guarantee — no merge until the in-flight phase's fresh read postdates the
+      last scope edit — is unchanged. This is the steady state that
+      clarification 15's bootstrap-transition doctrine emulates by hand (there
+      the completing worker reads the CI/mergeability sensors at transition
+      time); it retires when tactic-graph-router-transitions and the router are
+      live. Concrete gap this records against: transition-node's node-lane arm
+      step readies the PR then calls the LABEL-gated dispatch-auto-merge, whose
+      eligibility requires the gh dispatch:reviewed label the node lane never
+      writes, so a reviewed node-lane PR is readied+mergeable but silently
+      skipped and held for human merge (observed on PR #2859, merged by hand
+      2026-07-11) — while the tick-workflow's own gh-native `gh pr merge --auto
+      --squash` path merged 8 of 9 review PRs autonomously on tick +3
+      (clarification 47). Closing that split into a single tick-owned,
+      label-free, marker-keyed merge is retained as draft tactic
+      tactic-graph-tick-node-lane-auto-merge. Recorded 2026-07-11 interview."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
