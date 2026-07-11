@@ -32,6 +32,19 @@ export interface GithubSignals {
   stars: number;
   forks: number;
   watchers: number;
+  // Fork identity + activity for the fork-and-derivative review — SEPARATELY
+  // optional from stats in the same style as `traffic` (omitted on fetch
+  // failure, public stats still emitted). The `forks` count above cannot
+  // discriminate a drive-by fork from an active derivative; this per-fork detail
+  // (created vs pushed dates) can. Local-snapshot-only: the hosted Firestore
+  // producer never emits it, so parity excludes it (see parity.ts).
+  forksDetail?: Array<{
+    owner: string;
+    repoUrl: string;
+    createdAt: string;
+    pushedAt: string;
+    stars: number;
+  }>;
   // Traffic is SEPARATELY optional from stats: stars/forks/watchers are public,
   // but traffic needs an elevated (push-access) token. When the token lacks
   // traffic access the traffic endpoints 403; we omit `traffic` while still

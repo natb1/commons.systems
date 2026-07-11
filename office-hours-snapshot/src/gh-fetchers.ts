@@ -333,6 +333,14 @@ interface GithubReferrerResponse {
   uniques: number;
 }
 
+interface GithubForkResponse {
+  owner: { login: string };
+  html_url: string;
+  created_at: string;
+  pushed_at: string;
+  stargazers_count: number;
+}
+
 /** gh adapter for collectProjectSignalsCore's `fetchGithub` dep. */
 export async function fetchGithub(
   repo: string,
@@ -340,12 +348,31 @@ export async function fetchGithub(
 ): Promise<GithubSignals> {
   // Public stats — always collected. Mirrors fetchGithubStatsLive's mapping.
   const statsJson = await ghRest<GithubRepoResponse>(`repos/${repo}`, run);
-  const stats: Pick<GithubSignals, "repo" | "stars" | "forks" | "watchers"> = {
+  const result: GithubSignals = {
     repo,
     stars: statsJson.stargazers_count,
     forks: statsJson.forks_count,
     watchers: statsJson.watchers_count,
   };
+
+  // Fork detail — one page (100) of forks, newest first; the total count already
+  // rides `forks`. Any error omits the key while keeping the public stats,
+  // mirroring the traffic error-tolerance below.
+  try {
+    const forks = await ghRest<GithubForkResponse[]>(
+      `repos/${repo}/forks?sort=newest&per_page=100`,
+      run,
+    );
+    result.forksDetail = forks.map((f) => ({
+      owner: f.owner.login,
+      repoUrl: f.html_url,
+      createdAt: f.created_at,
+      pushedAt: f.pushed_at,
+      stars: f.stargazers_count,
+    }));
+  } catch {
+    // no fork-listing access / fetch failure — omit forksDetail, keep stats.
+  }
 
   // Traffic needs push access; any error (e.g. 403) means "no access" — omit the
   // traffic key but keep the public stats. Mirrors project-signals.ts:248-256
@@ -356,23 +383,22 @@ export async function fetchGithub(
       ghRest<GithubTrafficCountResponse>(`repos/${repo}/traffic/views`, run),
       ghRest<GithubReferrerResponse[]>(`repos/${repo}/traffic/popular/referrers`, run),
     ]);
-    return {
-      ...stats,
-      traffic: {
-        clonesCount: clones.count,
-        clonesUniques: clones.uniques,
-        viewsCount: views.count,
-        viewsUniques: views.uniques,
-        topReferrers: referrers.map((r) => ({
-          referrer: r.referrer,
-          count: r.count,
-          uniques: r.uniques,
-        })),
-      },
+    result.traffic = {
+      clonesCount: clones.count,
+      clonesUniques: clones.uniques,
+      viewsCount: views.count,
+      viewsUniques: views.uniques,
+      topReferrers: referrers.map((r) => ({
+        referrer: r.referrer,
+        count: r.count,
+        uniques: r.uniques,
+      })),
     };
   } catch {
-    return stats;
+    // no traffic access — omit traffic, keep stats (+ forksDetail if collected).
   }
+
+  return result;
 }
 
 // ---------------------------------------------------------------------------
