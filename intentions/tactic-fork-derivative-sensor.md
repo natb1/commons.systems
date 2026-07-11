@@ -29,12 +29,13 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: qa
 execution:
   branch: tactic-fork-derivative-sensor
-  pr: null
+  pr: 2861
   attempts: {}
-  markers: []
+  markers:
+    - planned
   strategy_fingerprint: null
 validates:
   - strategy-distribute-workflow

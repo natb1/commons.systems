@@ -23,12 +23,13 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-decision-trace-instrument
   pr: 2852
   attempts: {}
-  markers: []
+  markers:
+    - qa-done
   strategy_fingerprint: a10d001daf8fd0335625aea2c5eb394c1216abdd4d73313c6ba3881e2f69a64b
 validates:
   - strategy-explicit-intent
