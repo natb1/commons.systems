@@ -1922,8 +1922,9 @@ resolve_dirty_apps() {
     return 1
   fi
 
-  # Build reverse dependency map: shared package -> consuming apps
-  declare -A shared_pkgs
+  # Build the DIRECT reverse dependency map: shared package -> apps that
+  # declare it directly in their package.json.
+  declare -A direct_dependents
   local app pkg dep_list dep_dir
   for app in "${!all_apps[@]}"; do
     pkg="$repo_root/$app/package.json"
@@ -1933,9 +1934,51 @@ resolve_dirty_apps() {
     fi
     while IFS= read -r dep_dir; do
       [ -z "$dep_dir" ] && continue
-      shared_pkgs["$dep_dir"]+="$app "
+      direct_dependents["$dep_dir"]+="$app "
     done <<< "$dep_list"
   done
+
+  # Compute the TRANSITIVE closure of internal-package dependents. Internal
+  # packages are themselves workspaces, so a dependent may in turn be consumed
+  # by other apps: a change to a leaf package must mark every app that depends
+  # on it transitively, not just its direct declarers. Concretely, fellspiral
+  # imports @commons-systems/blog which imports @commons-systems/ds, but
+  # fellspiral never declares ds — so a ds-only change must still test and
+  # deploy fellspiral. shared_pkgs[pkg] holds the transitive dependent set,
+  # keyed on the same leaf-dir short name the resolve loop below looks up.
+  declare -A shared_pkgs
+  local root_pkg cur nxt acc
+  for root_pkg in "${!direct_dependents[@]}"; do
+    unset _seen
+    declare -A _seen=()
+    local -a _queue=(${direct_dependents["$root_pkg"]})
+    while [ ${#_queue[@]} -gt 0 ]; do
+      cur="${_queue[0]}"
+      _queue=("${_queue[@]:1}")
+      [ -n "${_seen[$cur]+x}" ] && continue
+      _seen["$cur"]=1
+      # If cur is itself an internal package other apps consume, its direct
+      # dependents are transitive dependents of root_pkg too. direct_dependents
+      # is keyed on the dependency SHORT name (e.g. "blog"), but cur holds a
+      # full app/workspace path (e.g. "packages/blog") — the same short-name
+      # bridge the resolve loop below uses (`short="${ws##*/}"`). Looking up
+      # direct_dependents[$cur] directly here would silently never match for
+      # any package nested under packages/ (all of them), truncating the
+      # closure at depth 1.
+      local cur_short="${cur##*/}"
+      if [ -n "${direct_dependents[$cur_short]+x}" ]; then
+        for nxt in ${direct_dependents["$cur_short"]}; do
+          _queue+=("$nxt")
+        done
+      fi
+    done
+    acc=""
+    for cur in "${!_seen[@]}"; do
+      acc+="$cur "
+    done
+    shared_pkgs["$root_pkg"]="$acc"
+  done
+  unset _seen
 
   declare -A dirty_apps
   local file
@@ -1943,8 +1986,11 @@ resolve_dirty_apps() {
   while IFS= read -r file; do
     [ -z "$file" ] && continue
     case "$file" in
-      firebase.json|firestore.rules|storage.rules|package.json|package-lock.json)
-        # Root-level config changes affect all workspaces
+      firebase.json|firestore.rules|storage.rules|package.json|package-lock.json|vitest.config.ts)
+        # Root-level config changes affect all workspaces. vitest.config.ts is
+        # the root test config shared by every workspace's suite, so editing it
+        # alone must still resolve a non-empty dirty set (otherwise
+        # run-unit-tests exits 0 and a broken test config merges green).
         for app in "${!all_apps[@]}"; do
           dirty_apps["$app"]=1
         done
