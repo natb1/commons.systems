@@ -93,7 +93,7 @@ function readMergedIds(file: string | null): Set<string> {
   if (file === null) return new Set();
   const raw = readFileSync(file, "utf8").trim();
   if (raw === "") return new Set();
-  const parsed = JSON.parse(raw) as Record<string, unknown>;
+  const parsed: Record<string, unknown> = JSON.parse(raw);
   const merged = new Set<string>();
   for (const [id, state] of Object.entries(parsed)) {
     if (state === "merged") merged.add(id);
@@ -207,28 +207,48 @@ function buildCensusNode(id: string, now: string, debt: CensusDebt) {
   return { node, body };
 }
 
-function main(): void {
-  const { intentionsDir, prStatesFile, threshold, now } = parseArgs(process.argv.slice(2));
-  const nodes = listNodes(intentionsDir);
-  const mergedIds = readMergedIds(prStatesFile);
-  const debt = computeDebt(nodes, mergedIds);
+export interface CensusDecision extends CensusDebt {
+  shouldBirth: boolean;
+  node?: ReturnType<typeof buildCensusNode>["node"];
+  node_body?: string;
+}
 
-  const out: Record<string, unknown> = { ...debt, shouldBirth: false };
+/**
+ * Compute debt and, when `threshold` is non-null, decide whether to birth a
+ * census tactic. shouldBirth is true iff total debt >= threshold AND no census
+ * node is already open (the born-parked latch) AND the dated census id is not
+ * already present (never clobber an existing node). When it births, the
+ * proposed born-parked `node` and its markdown `node_body` are included.
+ */
+export function decideCensus(
+  nodes: IntentionNode[],
+  mergedIds: Set<string>,
+  threshold: number | null,
+  now: string,
+): CensusDecision {
+  const debt = computeDebt(nodes, mergedIds);
+  const decision: CensusDecision = { ...debt, shouldBirth: false };
 
   if (threshold !== null) {
     const censusId = `tactic-graph-census-${now}`;
     const idExists = nodes.some((n) => n.id === censusId);
-    const shouldBirth =
+    decision.shouldBirth =
       debt.total >= threshold && debt.openCensus.length === 0 && !idExists;
-    out.shouldBirth = shouldBirth;
-    if (shouldBirth) {
+    if (decision.shouldBirth) {
       const { node, body } = buildCensusNode(censusId, now, debt);
-      out.node = node;
-      out.node_body = body;
+      decision.node = node;
+      decision.node_body = body;
     }
   }
+  return decision;
+}
 
-  process.stdout.write(JSON.stringify(out) + "\n");
+function main(): void {
+  const { intentionsDir, prStatesFile, threshold, now } = parseArgs(process.argv.slice(2));
+  const nodes = listNodes(intentionsDir);
+  const mergedIds = readMergedIds(prStatesFile);
+  const decision = decideCensus(nodes, mergedIds, threshold, now);
+  process.stdout.write(JSON.stringify(decision) + "\n");
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
