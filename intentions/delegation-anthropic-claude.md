@@ -71,5 +71,11 @@ attributes:
     individual-scale use (the tick execution substrate,
     strategy-graph-native-dispatch clarifications 24-25)
   last_assessed: 2026-07-02
+  household:
+    shared: false
+    basis: A software-construction tool for the author's own build work; no
+      household member's access or workflow depends on it.
+    consent: []
+    preferences: []
 ---
 # Software construction delegated to Anthropic's Claude

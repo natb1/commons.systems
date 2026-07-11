@@ -21,6 +21,14 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
+attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: false
+rounds: null
 attributes:
   delegatee: retail banks and payment networks
   delegated: custody of money, payment execution, and the authoritative transaction record
@@ -45,5 +53,13 @@ attributes:
     (strategy-recover-finance's condition failing), or selection as a recovery
     domain
   last_assessed: 2026-07-02
+  household:
+    shared: true
+    basis: The record's non_delegable_floor names assembling and auditing the
+      household financial picture; household accounts, direct deposit, and
+      autopay are jointly held, so a bank move changes the household's daily
+      finances.
+    consent: []
+    preferences: []
 ---
 # Money and payment rails delegated to retail banks
