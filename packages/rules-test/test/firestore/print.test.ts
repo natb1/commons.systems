@@ -238,6 +238,14 @@ describe("print bookmarks", () => {
       );
     });
 
+    it("denies reading another user's non-existent bookmarks doc (no existence oracle)", async () => {
+      const ctx = env.authenticatedContext("other-user");
+      const db = ctx.firestore();
+      await assertFails(
+        getDoc(doc(db, `print/${ENV}/bookmarks/${UID}_nonexistent`)),
+      );
+    });
+
     it("denies unauthenticated read", async () => {
       const ctx = unauthenticatedContext(env);
       const db = ctx.firestore();
@@ -292,6 +300,31 @@ describe("print bookmarks", () => {
           uid: UID,
           mediaId: MEDIA_ID,
           bookmarks: [],
+        }),
+      );
+    });
+
+    it("denies write with an extra field (hasOnly)", async () => {
+      const ctx = env.authenticatedContext(UID);
+      const db = ctx.firestore();
+      await assertFails(
+        setDoc(doc(db, `print/${ENV}/bookmarks/${DOC_ID}`), {
+          uid: UID,
+          mediaId: MEDIA_ID,
+          bookmarks: [],
+          extra: "x",
+        }),
+      );
+    });
+
+    it("denies write with a non-list bookmarks", async () => {
+      const ctx = env.authenticatedContext(UID);
+      const db = ctx.firestore();
+      await assertFails(
+        setDoc(doc(db, `print/${ENV}/bookmarks/${DOC_ID}`), {
+          uid: UID,
+          mediaId: MEDIA_ID,
+          bookmarks: "not-a-list",
         }),
       );
     });
