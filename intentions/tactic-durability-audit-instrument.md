@@ -34,6 +34,7 @@ execution:
   markers:
     - planned
     - qa-done
+    - reviewed
   strategy_fingerprint: 68a324156abf9b4ee033c0578a9e3fcd0753a38fa70be3c3a21e996eca0525f5
 validates:
   - strategy-durable-owned-data
