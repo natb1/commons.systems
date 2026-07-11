@@ -34,7 +34,7 @@ attention:
     strategy-philosophical-grounding (unboosted, and too broad to boost as a
     whole), so it takes the full boost 7 directly rather than by inheritance to
     reach the same authored-7 curriculum tier."
-phase: implement
+phase: done
 execution:
   branch: tactic-reading-program-text-coverage
   pr: null

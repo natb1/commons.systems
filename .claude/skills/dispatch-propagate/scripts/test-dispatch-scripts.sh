@@ -38265,6 +38265,65 @@ fi
 ctxpack_teardown
 
 # ---------------------------------------------------------------------------
+# Test 4b: --pr-is-number bypasses the issue→PR branch-prefix lookup
+# (tactic-phase-skill-node-targets) — the node-target lane feeds a PR number
+# directly (from `gh pr list --head`, not an issue), so build_pr_section must
+# fetch it via gh_pr_view_rest without ever calling dispatch-find-pr.
+# ---------------------------------------------------------------------------
+echo "Test: ctxpack --pr --pr-is-number treats <N> as a PR number directly, bypassing dispatch-find-pr"
+ctxpack_setup
+
+# Deliberately WRONG/misleading pr-list.json: if build_pr_section still called
+# dispatch-find-pr under --pr-is-number, this fixture (no PR prefixed "77-")
+# would make it resolve to empty ("PR: none") — the opposite of the correct
+# result. --pr-is-number must ignore it entirely and fetch PR #77 directly.
+cat > "$CTXPACK_STUB/pr-list.json" <<'EOF'
+[]
+EOF
+cat > "$CTXPACK_STUB/issue-closing-prs-77.json" <<'EOF'
+{"closedByPullRequestsReferences":[]}
+EOF
+cat > "$CTXPACK_STUB/pr-view-77.json" <<'EOF'
+{
+  "number": 77,
+  "state": "open",
+  "labels": [{"name":"dispatch:reviewed"}],
+  "body": "Node-lane PR body.",
+  "head": {"ref": "some-node-id", "sha": "sha-node-77"}
+}
+EOF
+cat > "$CTXPACK_STUB/check-runs-sha-node-77.json" <<'EOF'
+{"check_runs": [{"status":"completed","conclusion":"success"}]}
+EOF
+
+rc=0; out=$("$CTXPACK_DIR/dispatch-context-pack" 77 --pr --pr-is-number 2>/dev/null) || rc=$?
+assert_eq "ctxpack --pr-is-number: exit 0" "0" "$rc"
+TOTAL=$((TOTAL+1))
+if [[ "$out" == *"PR #77"* && "$out" == *"Node-lane PR body."* ]]; then
+  PASS=$((PASS+1)); echo "  PASS: ctxpack --pr-is-number: fetched PR #77 directly, bypassing dispatch-find-pr"
+else
+  FAIL=$((FAIL+1)); echo "  FAIL: ctxpack --pr-is-number: fetched PR #77 directly, bypassing dispatch-find-pr"
+  echo "    actual: $out"
+fi
+ctxpack_teardown
+
+echo "Test: ctxpack --pr-is-number is incompatible with --issue and --relations"
+ctxpack_setup
+rc=0; out=$("$CTXPACK_DIR/dispatch-context-pack" 77 --pr --issue --pr-is-number 2>&1) || rc=$?
+assert_eq "ctxpack --pr-is-number + --issue: exit 2" "2" "$rc"
+TOTAL=$((TOTAL+1))
+if [[ "$out" == *"incompatible with --issue/--relations"* ]]; then
+  PASS=$((PASS+1)); echo "  PASS: ctxpack --pr-is-number + --issue: rejected with a clear error"
+else
+  FAIL=$((FAIL+1)); echo "  FAIL: ctxpack --pr-is-number + --issue: rejected with a clear error"
+  echo "    actual: $out"
+fi
+
+rc=0; out=$("$CTXPACK_DIR/dispatch-context-pack" 77 --pr --relations --pr-is-number 2>&1) || rc=$?
+assert_eq "ctxpack --pr-is-number + --relations: exit 2" "2" "$rc"
+ctxpack_teardown
+
+# ---------------------------------------------------------------------------
 # Test 5: --diff with normal cap (both files emitted, no truncation)
 # ---------------------------------------------------------------------------
 echo "Test: ctxpack --diff emits stat, file list, and hunks with no truncation"

@@ -291,7 +291,29 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "The 2026-07-11 /align-tactics round found nothing an autonomous round
+    can decompose without duplicating live or queued work: the signal sensor is
+    instrumented and proven (reading-review skill landed and post-clarification
+    updated; chunk 1 run 2026-07-07 produced the current reading), the delivery
+    actuator tactic-sync-reader-skill is in flight at phase qa, capstone
+    machinery tactic-context-capstone-review is in flight at phase qa, and the
+    entire remaining signal path — sustained recurrence across review cycles,
+    the gap unproven clause — is author office-hours reading sittings already
+    fully authored as born-parked chunk tactics (next in working order:
+    tactic-reading-chunk-2-aristotle-hexis; 31 unresolved chunks queued under
+    tactic-tradition-reading-program). Drift review: all four recorded
+    conditions checked and hold (strategy-external-calibration still reads zero
+    external calibration events; e-reader, print-share, and cadence premises
+    show no counter-evidence). Recurrence cannot be produced by an autonomous
+    tactic. Recommend: resolve by running the next chunk sitting
+    (/reading-review tactic-reading-chunk-2-aristotle-hexis) at office-hours —
+    any later interactive commit touching this node clears the park; re-run
+    /align-tactics only after a state change adds claude-executable scope (a
+    condition fails, a tooling goal is added, or sync-reader/capstone QA
+    surfaces follow-up work)."
+  since: 2026-07-11
+  recommendation: null
 pace_exempt: false
 rounds:
   count: 0

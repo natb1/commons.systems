@@ -34,10 +34,10 @@ attention:
     serves strategy-philosophical-grounding (unboosted, and too broad to boost
     as a whole), so it takes the full boost 7 directly rather than by
     inheritance to reach the same authored-7 curriculum tier."
-phase: implement
+phase: qa
 execution:
   branch: tactic-context-capstone-review
-  pr: null
+  pr: 2850
   attempts: {}
   markers: []
   strategy_fingerprint: 4938e3dd607b936f594cb15964e7096ae8da08b91c2177910589282473b95a68

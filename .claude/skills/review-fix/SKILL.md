@@ -36,14 +36,57 @@ Before running any step, hydrate the PR and diff context in **one** call. This
 single `dispatch-context-pack --pr --diff` call replaces both the old idempotency
 PR fetch and Step 1's diff capture — review-fix has no `origin/main` merge between
 the preamble and Step 1 (the dispatch tick merges `origin/main` before spawning
-this skill), so one combined call up top is correct. The branch encodes the issue
-number as `<N>-…`, so derive `N` from it first (the pack takes the issue number,
-not the branch). Use `dangerouslyDisableSandbox: true` — the pack calls `gh`:
+this skill), so one combined call up top is correct. The branch names either a
+legacy issue (`<N>-…`) or a graph-native node — split the keyspace first:
 
 ```bash
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
-N="${BRANCH%%-*}"
-.claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$N" --pr --phase-log --diff \
+case "$BRANCH" in
+  [0-9]*-*)
+    N="${BRANCH%%-*}"; TARGET_KIND=issue ;;
+  *)
+    # Graph-native node lane: worktree named after the intention node id.
+    NODE_ID="$BRANCH"
+    git fetch origin main --quiet
+    NODE_MD=$(git archive origin/main "intentions/$NODE_ID.md" 2>/dev/null | tar -xO 2>/dev/null) || {
+      echo "/review-fix: '$BRANCH' is neither a legacy '<N>-…' worktree nor a node with intentions/$NODE_ID.md at origin/main" >&2
+      exit 1
+    }
+    NODE_PHASE=$(printf '%s\n' "$NODE_MD" | sed -n 's/^phase: *//p' | head -1)
+    if [ "$NODE_PHASE" != "review" ]; then
+      echo "/review-fix: node '$NODE_ID' phase is '$NODE_PHASE' at origin/main, not 'review'" >&2
+      exit 1
+    fi
+    N="$NODE_ID"; TARGET_KIND=node ;;
+esac
+```
+
+On the node lane, `$N` is the node id (keys `tmp/` filenames); never pass
+`--issue`. **On the node lane no gh issue is ever read or written.** The
+completion and output-filing seams are re-keyed below (**Node-target lane**).
+
+```bash
+case "$TARGET_KIND" in
+  issue)
+    PACK_TARGET="$N"
+    PACK_FLAGS=(--pr --phase-log --diff)
+    ;;
+  node)
+    # The branch IS the node id, not an issue-prefixed name — dispatch-find-pr's
+    # issue→PR branch-prefix lookup does not apply. Resolve the PR by branch
+    # head instead (same primitive dispatch-sweep and /office-hours use for a
+    # node-id worktree; review never runs without an open PR, so a miss here is
+    # a real error).
+    PR_NUM=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
+    if [ -z "$PR_NUM" ]; then
+      echo "/review-fix: node '$N' has no open PR — review-fix requires one" >&2
+      exit 1
+    fi
+    PACK_TARGET="$PR_NUM"
+    PACK_FLAGS=(--pr --phase-log --diff --pr-is-number)
+    ;;
+esac
+.claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$PACK_TARGET" "${PACK_FLAGS[@]}" \
   | tee "tmp/pack-$N.txt"
 ```
 
@@ -79,6 +122,32 @@ output — do not re-resolve any of them later:
   sentinel `phase-log: none` as empty. When non-empty, feed it into the
   Workflow `args` / Step 1 review context so the review pass sees what qa-fix
   already tried. An absent note leaves the review unchanged.
+
+### Node-target lane (`TARGET_KIND=node`)
+
+Every step runs unchanged except these re-keyed seams:
+
+- **Completion.** Do **not** apply `dispatch:reviewed` via
+  `dispatch-complete-phase`, and do **not** call `dispatch-mark-complete` /
+  `dispatch-finalize-phase`. Invoke the graph-native transition writer, which
+  records the `reviewed` marker in `execution.markers` and — on a clean review —
+  arms gh auto-merge (same config gate as today), all as one state-only
+  graph-commit on `origin/main`; the reconciler sweep absorbs the out-of-band
+  merge to `done`:
+
+  ```bash
+  .claude/skills/dispatch-propagate/scripts/transition-node "$N" --set-pr "$PR_NUM"
+  ```
+
+  The graph-tick worker runs it with the reset-dance a PR-branch worktree needs;
+  the skill hands it the node id and never writes the graph directly.
+- **Deferred findings (Step 5).** On the node lane, deferred/security follow-up
+  findings become **draft tactic nodes**, not gh follow-up issues — see the
+  node-lane branch in Step 5.
+- **Escalation.** Instead of `dispatch:office-hours`, write the reason to
+  `$CLAUDE_JOB_DIR/office-hours-reason` (and best-next-steps to
+  `$CLAUDE_JOB_DIR/office-hours-recommendation`); the Stop hook parks the node via
+  `park-node`. See `.claude/hooks/dispatch-stop.sh`.
 
 Once `PR_NUM` is confirmed present, stamp it into this session's dispatch
 sidecar so the token audit can join the session to its PR (#1861). Its failure
@@ -457,6 +526,23 @@ out-of-scope findings do not evaporate when the PR merges. The Workflow has
 prepared filing structures in `result.deferred_filings` and
 `result.security_followup_input`; this skill executes the actual `gh` calls.
 Skip a path when its bucket is empty.
+
+**Node-target lane (`TARGET_KIND=node`) — supersedes 5a/5b entirely.** A node
+target files **no gh issue**: new work never enters the graph through gh
+(strategy condition 1). The prepared `result.deferred_filings` and
+`result.security_followup_input` structures are instead written as **draft
+tactic nodes** — `status: raw`, no `phase`, `serves` the same strategy this
+tactic serves — batched per component, one `write-node.ts` build plus one
+`graph-commit`. Each draft's body records the finding provenance:
+`file:line`, failure scenario, adversarial verdict, and the source PR
+(`execution.pr`). Skip the `dispatch:review-followup` label, the
+`<!-- dispatch:source-pr -->` marker, and the orphan-retriage machinery
+entirely — drafts are inert until a later `/align-tactics` round finalizes
+them, and that round re-validates the provenance against what actually merged.
+Use the worktree's own `packages/intentionsutil/scripts/write-node.ts` +
+`graph-commit` (the graph-tick worker applies the reset-dance a PR-branch
+worktree needs). Then skip to Step 6. The legacy lane (`TARGET_KIND=issue`)
+runs 5a/5b below unchanged.
 
 `result.followups_deferred` is the count of Step-5a filing subagents the Workflow queued (not yet filed); it drives the Step-5a fan-out and is NOT the value emitted to `--followups-filed`. Track instead how many Step-5a and Step-5b follow-ups were ACTUALLY filed this run — count only NEW `<disposition>` records (EXISTING records returned by `/file-issue` were not filed this phase). Use the already-captured `<N>` records from the "Capture each `<N>`" lines in 5a and 5b for this count; introduce no new tracking mechanism. Pass that count, not `result.followups_deferred`, as the `--followups-filed` total.
 
