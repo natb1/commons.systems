@@ -22,7 +22,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: qa
 execution:
   branch: tactic-budget-txn-identity
   pr: 2832
