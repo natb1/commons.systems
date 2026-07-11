@@ -6,7 +6,7 @@ statement: strip redundant serves entries graph-wide per the extended
   parent-duplicated strategy entries at the tactic layer — and state the rule on
   kind-tactic
 owner: ai
-status: raw
+status: codified
 parent: null
 rationale: "Retained from the 2026-07-09 emulated /align-audit run: 26
   strategies re-declare at least one virtue their parent already carries, 17
@@ -14,12 +14,13 @@ rationale: "Retained from the 2026-07-09 emulated /align-audit run: 26
   tactic-tradition-reading-program, and 14 dispatch tactics re-declare
   strategy-graph-native-dispatch from parent tactic-graph-native-dispatch. The
   author ratified extending kind-strategy's serves-inheritance rule to partial
-  overlaps and to the tactic layer (clarification 'Does the serves-inheritance
-  rule extend to partial overlaps and to the tactic layer?' on
-  strategy-graph-integrity, same date). Coordinates with
-  tactic-graph-self-consistency-sweep Unit 4, which strips only the seven full
-  duplicate sets — re-derive the redundancy list at execution from the digest's
-  dup-serves table (or its prototype) so the two never double-edit."
+  overlaps and to the tactic layer (strategy-graph-integrity clarification, same
+  date). Finalized and planned by the 2026-07-11 /align-tactics round:
+  tactic-graph-self-consistency-sweep is phase done (its Unit 4 seven full sets
+  are handled), so this tactic re-derives the residual list at execution from
+  the digest's DUP-SERVES table (blocked_by tactic-graph-digest-tooling) and the
+  two never double-edit. Off the minimum signal path; calculated attention
+  demotes it."
 reading: null
 gap: null
 serves:
@@ -29,10 +30,16 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
-execution: null
+phase: implement
+execution:
+  branch: tactic-serves-inheritance-full-strip
+  pr: null
+  attempts: {}
+  markers: []
+  strategy_fingerprint: ba2a6baf40da43d7217194977f7ecd4dbba424a343251236340d524b05479917
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-graph-digest-tooling
 office_hours: null
 pace_exempt: false
 rounds: null
@@ -40,37 +47,81 @@ attributes: {}
 ---
 # strip redundant serves entries graph-wide per the extended inheritance rule — partial parent-overlaps at the strategy layer and parent-duplicated strategy entries at the tactic layer — and state the rule on kind-tactic
 
-Retained draft from the 2026-07-09 emulated /align-audit run — input to a
-future /align-tactics pass; not yet a plan.
+One PR (state-only `intentions/**` edits; lands via the graph fast path).
+Off the minimum signal path — no `validates` chain reaches this node, so
+calculated attention demotes it below the round's instrument work.
+`blocked_by` tactic-graph-digest-tooling: the strip list is re-derived at
+execution from the digest's DUP-SERVES table, so this tactic and the
+completed tactic-graph-self-consistency-sweep Unit 4 (phase done — its seven
+full duplicate sets are already handled) never double-edit. Planned
+2026-07-11 /align-tactics round.
 
 ## Context
 
-kind-strategy's serves-inheritance clarification (2026-07-09) stripped only
-the seven full duplicate sets via tactic-graph-self-consistency-sweep Unit 4.
-The emulated audit found the redundancy wider, and the author ratified
-extending the rule to partial overlaps and to the tactic layer
-(strategy-graph-integrity, clarification 'Does the serves-inheritance rule
-extend to partial overlaps and to the tactic layer?').
+kind-strategy's sub-strategy inheritance clarification
+(intentions/kind-strategy.md:48) records that a child re-declaring its
+parent's virtue set adds no rank information — attention flows down parent
+and serves alike (`resolveAttention`,
+packages/intentionsutil/src/attention.ts:285) — while doubling review
+surface. The 2026-07-09 emulated audit found the redundancy far wider than
+the seven full sets the consistency sweep stripped: 26 strategies re-declare
+at least one parent virtue; 17 reading-chunk tactics re-declare
+strategy-philosophical-grounding from parent
+tactic-tradition-reading-program; 14 dispatch tactics re-declare
+strategy-graph-native-dispatch from parent tactic-graph-native-dispatch. The
+author ratified extending the rule to partial overlaps and to the tactic
+layer (strategy-graph-integrity clarification 'Does the serves-inheritance
+rule extend to partial overlaps and to the tactic layer?', 2026-07-09).
 
-## Scope (draft)
+## Unit 1 — state the rule on kind-tactic
 
-1. **State the rule on kind-tactic** — mirror kind-strategy's sub-strategy
-   inheritance clarification for tactic subtrees: a child tactic authors
-   serves only for a strategy claim beyond its parent's; re-declared entries
-   add no rank information (attention flows down parent and serves alike).
-2. **Strip redundant entries** — re-derive the list at execution from the
-   digest's DUP-SERVES table (tactic-graph-digest-tooling, or its ad-hoc
-   equivalent): at 2026-07-09, 26 strategies re-declare at least one parent
-   virtue; 17 reading-chunk tactics re-declare strategy-philosophical-grounding
-   from tactic-tradition-reading-program; 14 dispatch tactics re-declare
-   strategy-graph-native-dispatch from tactic-graph-native-dispatch. Strip
-   only the redundant entries (a node keeping additional non-parent claims
-   keeps them); done-present nodes being pruned by the sweep drop out of the
-   list naturally.
-3. **Coordinate with sweep Unit 4** — if tactic-graph-self-consistency-sweep
-   lands first its seven full sets are already gone; never double-edit.
+**Recommended model:** sonnet
 
-All edits through write-node.ts; one graph-commit.
+**Scope:** add one clarification entry to `intentions/kind-tactic.md`
+mirroring kind-strategy's sub-strategy inheritance clarification
+(intentions/kind-strategy.md:48) for tactic subtrees: a child tactic authors
+`serves` only for a strategy claim beyond its parent's; re-declared entries
+add no rank information (attention flows down parent and serves alike). Write
+via write-node.ts — read the node with `readNode`, append the clarification
+in memory, re-write the full node JSON (the body is preserved). The answer
+ends with the dated provenance sentence convention, citing the 2026-07-09
+author ratification on strategy-graph-integrity.
 
-Out of scope: changing resolveAttention; the delegation-kind's
-intentionally-loose serves.
+**Out of scope:** any other kind-tactic doctrine change.
+
+## Unit 2 — strip the redundant entries
+
+**Recommended model:** sonnet
+
+**Scope:** re-derive the redundancy list at execution time:
+`node --import tsx/esm packages/intentionsutil/scripts/graph-digest.ts --tables-only`,
+DUP-SERVES table. For each listed node, remove ONLY the `serves` entries
+duplicated in its direct parent's `serves` — a node carrying additional
+non-parent claims keeps them. Done-present nodes already pruned by then drop
+out of the list naturally. Apply every edit via write-node.ts (full node
+JSON; bodies are preserved). Land Unit 1 + Unit 2 in ONE graph-commit, with a
+dump-node.ts `--base` manifest covering every edited pre-existing node.
+
+**Out of scope:** changing `resolveAttention`; the delegation kind's
+intentionally-loose `serves`; pruning done-present nodes (owned by the
+census/owed-prune scope, not this strip).
+
+## Reuse
+
+- DUP-SERVES table — packages/intentionsutil/scripts/graph-digest.ts (landed
+  by tactic-graph-digest-tooling)
+- packages/intentionsutil/scripts/write-node.ts,
+  packages/intentionsutil/scripts/dump-node.ts,
+  packages/intentionsutil/scripts/graph-commit
+- `readNode` — packages/intentionsutil/src/store.ts:110
+
+## Verification
+
+```verify
+npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions
+```
+
+Manual: re-run the digest's DUP-SERVES table after the strip — it must be
+empty; spot-check that a node with mixed `serves` (parent-duplicated plus a
+genuine extra claim) kept the extra claim; confirm kind-tactic carries the
+new clarification.
