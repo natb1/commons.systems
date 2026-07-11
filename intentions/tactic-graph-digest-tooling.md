@@ -26,12 +26,13 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-graph-digest-tooling
   pr: 2865
   attempts: {}
-  markers: []
+  markers:
+    - qa-done
   strategy_fingerprint: ba2a6baf40da43d7217194977f7ecd4dbba424a343251236340d524b05479917
 validates: []
 blocked_by: []
