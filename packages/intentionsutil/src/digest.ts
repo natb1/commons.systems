@@ -175,7 +175,7 @@ function tableDonePresent(nodes: IntentionNode[]): string {
 }
 
 /**
- * DUP-SERVES: any node re-declaring an entry of its DIRECT parent's `serves`.
+ * DUP-SERVES: every node re-declaring an entry of its DIRECT parent's `serves`.
  * Partial overlaps included, strategy AND tactic layers. Emits the node id plus
  * only the redundant (parent-inherited) entries.
  */
@@ -374,7 +374,7 @@ function isDefaultValue(value: unknown): boolean {
   if (value === null) return true;
   if (value === false) return true;
   if (Array.isArray(value)) return value.length === 0;
-  if (typeof value === "object") return Object.keys(value as object).length === 0;
+  if (typeof value === "object" && value !== null) return Object.keys(value).length === 0;
   return false;
 }
 
@@ -400,11 +400,11 @@ function tableStoredDefaults(input: DigestInput): string {
     if (raw === undefined) continue;
     const fm = extractFrontmatterText(raw);
     if (fm === null) continue;
-    const parsed = parse(fm) as Record<string, unknown> | null;
+    const parsed: unknown = parse(fm);
     if (parsed === null || typeof parsed !== "object") continue;
     let count = 0;
-    for (const key of Object.keys(parsed)) {
-      if (isDefaultValue(parsed[key])) count++;
+    for (const value of Object.values(parsed)) {
+      if (isDefaultValue(value)) count++;
     }
     if (count > 0) {
       rows.push({ id: node.id, count });
