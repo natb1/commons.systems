@@ -19,8 +19,15 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
-execution: null
+phase: done
+execution:
+  branch: tactic-graph-separability-audit
+  pr: 2828
+  attempts: {}
+  markers:
+    - qa-done
+    - reviewed
+  strategy_fingerprint: null
 validates: []
 blocked_by: []
 office_hours: null

@@ -228,13 +228,43 @@ a strategy.
    pruned or already completed — drop the edge; anything where the original
    intent is not recoverable from the graph — park (unverifiable blocker,
    Autonomy contract, above) rather than guessing.
-4. **Stamp the `validates` edge.** On each tactic that validates the signal —
+4. **Gate in-scope copy** (`strategy-author-approved-copy`). Any tactic this
+   round mints that *produces in-scope copy* must be `blocked_by` a born-parked
+   author-approval gate, so the author ratifies the wording *before*
+   implementation runs. This applies the gate `strategy-author-approved-copy`
+   standardizes mechanically, instead of re-deriving it from the strategy text
+   each round. For every decomposed tactic:
+   - **Classify** it as copy-touching or not, by judgment against the
+     strategy's scope — the planning agent already holds full scope in hand, so
+     this is a checklist step, not mechanized scope detection. In-scope copy:
+     the landing page, the about page, app heroes and onboarding text, the
+     README, and blog posts. Explicitly **excluded**: in-app UI strings,
+     practitioner reference docs (`SCHEMA.md`, package READMEs), and GitHub
+     issue/PR prose. Exempt: mechanical fixes (typos, broken links, factual
+     corrections with no reframing and no new claims) are ungated; any doubt
+     means gated.
+   - **Mint a sibling approval gate** in the born-parked shape (Step 4;
+     `intentions/tactic-readme-copy-approval.md` is the reference instance):
+     `owner: human`, `status: delegated`, `office_hours: {reason, since}` set at
+     creation, `serves: [<the-serving-strategy>]`, and — being born-parked — no
+     implement-phase body and `phase` omitted. The gate's `office_hours.reason`
+     names the specific copy to review and folds in the ratify-or-revise ask
+     (the born-parked reason convention). Chunk each gate to ≤30 author-minutes.
+   - **Set `blocked_by: [<gate-id>]`** on the copy-producing tactic, so the
+     router cannot select the copy work until the author completes the gate.
+   - **Carry the draft copy in the copy tactic's body** (its plan), so the
+     author has concrete wording to ratify or revise at office-hours and the
+     implementing session settles only the remaining wording, within the
+     approved copy.
+   The gate tactic *is* a born-parked tactic — Step 4's shape governs it; point
+   at Step 4 rather than restating the born-park mechanics here.
+5. **Stamp the `validates` edge.** On each tactic that validates the signal —
    produces its reading or meets its threshold — set
    `validates: [<strategy-id>]` (the factual edge; `validateGraph` rule 14
    requires the target resolve to a `kind: strategy` node). These are the
    terminals of the calculated-attention signal term (strategy clarification
    11). The instrument tactic that produces the reading is a validates-terminal.
-5. **Off-path work gets no flag.** Work worth recording but off the minimum
+6. **Off-path work gets no flag.** Work worth recording but off the minimum
    signal path lands as an ordinary tactic with **no** special marker.
    Off-path status is *derived* at read time from the absence of a
    `blocked_by`/`parent` chain to a validates-terminal — calculated attention
@@ -326,6 +356,9 @@ Work that needs the author (not claude-executable) is authored **born-parked**:
 ≤30 author-minutes (`intentions/tactic-graph-native-dispatch.md` §1.3). Do not
 plan an implement-phase body for a born-parked tactic — it carries only its
 statement and the reason it needs a human.
+
+The copy-approval gate minted by Step 2 ("Gate in-scope copy") is an instance
+of this born-parked shape — this section's mechanics govern it.
 
 ## Step 5 — Record
 

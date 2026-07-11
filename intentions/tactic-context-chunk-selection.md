@@ -32,7 +32,7 @@ attention:
     strategy-complete-grounding (unboosted, and too broad to boost as a whole),
     so it takes the full boost 7 directly rather than by inheritance to reach
     the same authored-7 curriculum tier."
-phase: review
+phase: done
 execution:
   branch: tactic-context-chunk-selection
   pr: 2808
@@ -40,6 +40,7 @@ execution:
     implement: 1
   markers:
     - qa-done
+    - reviewed
   strategy_fingerprint: 1bcaff9037314f477f00aab1cf86a4cd27a4dfab2d7bed79106123a60a5a6efb
 validates: []
 blocked_by: []

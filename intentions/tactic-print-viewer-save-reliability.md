@@ -22,8 +22,15 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
-execution: null
+phase: review
+execution:
+  branch: tactic-print-viewer-save-reliability
+  pr: 2825
+  attempts: {}
+  markers:
+    - qa-done
+    - reviewed
+  strategy_fingerprint: null
 validates: []
 blocked_by: []
 office_hours: null

@@ -25,12 +25,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: done
 execution:
   branch: tactic-budget-week-axis-consistency
   pr: 2829
   attempts: {}
-  markers: []
+  markers:
+    - qa-done
+    - reviewed
   strategy_fingerprint: null
 validates: []
 blocked_by: []

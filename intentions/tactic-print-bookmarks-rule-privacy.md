@@ -25,12 +25,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: done
 execution:
   branch: tactic-print-bookmarks-rule-privacy
   pr: 2817
   attempts: {}
-  markers: []
+  markers:
+    - qa-done
+    - reviewed
   strategy_fingerprint: 327e063cfde88840cf67cc44c481d15ca04af4825933bd664fa370ed807b3bc9
 validates: []
 blocked_by: []

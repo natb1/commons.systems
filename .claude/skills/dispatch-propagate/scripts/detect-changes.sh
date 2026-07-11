@@ -45,11 +45,14 @@ if echo "$CHANGED" | grep -qE '\.(ts|tsx|js|jsx|mjs|cjs)$|^knip\.(json|jsonc|ts)
 fi
 # go-tests needs the Go toolchain. Set go=true when a changed file is under a
 # discovered Go module. list-go-modules.sh discovers module roots from go.mod
-# locations, so a new Go module needs no edit here.
+# locations, so a new Go module needs no edit here. The root go.work / go.work.sum
+# files sit under no module prefix, yet they define the workspace every module
+# builds in — a change to them must still run go-tests, so match them directly.
 GO_MODULE_PREFIXES=$("$(dirname "$0")/list-go-modules.sh" | sed 's|$|/|')
+GO_REGEX='^go\.work(\.sum)?$'
 if [ -n "$GO_MODULE_PREFIXES" ]; then
-  GO_REGEX=$(printf '%s\n' "$GO_MODULE_PREFIXES" | paste -sd'|' -)
-  if echo "$CHANGED" | grep -qE "^($GO_REGEX)"; then
-    echo "go=true" >> "$GITHUB_OUTPUT"
-  fi
+  GO_REGEX="$GO_REGEX|^($(printf '%s\n' "$GO_MODULE_PREFIXES" | paste -sd'|' -))"
+fi
+if echo "$CHANGED" | grep -qE "$GO_REGEX"; then
+  echo "go=true" >> "$GITHUB_OUTPUT"
 fi

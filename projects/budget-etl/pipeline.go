@@ -58,39 +58,83 @@ func parseStatementDir(dir string, disc parse.DiscoverOpts) (parsed []parsedFile
 }
 
 // dedupStatementData deduplicates a slice of StatementData by StatementID,
-// preserving first-seen order. When two entries share a StatementID but have
-// different Balance values, it returns an error naming both source files and
-// balances so the caller can surface a clear failure rather than emitting
-// conflicting records. Equal-balance duplicates are silently dropped.
+// preserving first-seen order. Equal-balance duplicates are silently dropped.
+//
+// When two entries share a StatementID but disagree on Balance, they are
+// overlapping observations of the same account-month anchor. The collision is
+// resolved by as-of date (BalanceDate): the later observation is kept and a
+// single reconciliation line naming both source files, both balances, and the
+// delta is logged (log output stays on the operator's machine, so amounts are
+// fine there). A nil BalanceDate loses to a non-nil one. When there is no basis
+// to choose — both BalanceDate nil, or the same instant — the disagreement
+// stays an error naming both source files and balances. When a later entry
+// replaces an earlier survivor it takes the earlier entry's output position, so
+// first-seen order is preserved.
 func dedupStatementData(stmts []budget.StatementData) ([]budget.StatementData, error) {
-	seen := make(map[string]budget.StatementData, len(stmts))
+	idx := make(map[string]int, len(stmts)) // StatementID -> index into out
 	out := make([]budget.StatementData, 0, len(stmts))
 	for _, s := range stmts {
-		prior, dup := seen[s.StatementID]
+		pos, dup := idx[s.StatementID]
 		if !dup {
-			seen[s.StatementID] = s
+			idx[s.StatementID] = len(out)
 			out = append(out, s)
 			continue
 		}
+		prior := out[pos]
 		if s.Balance == prior.Balance {
 			continue
 		}
-		srcA := prior.SourceFile
-		if srcA == "" {
-			srcA = "<derived>"
+		srcA := srcOrDerived(prior.SourceFile)
+		srcB := srcOrDerived(s.SourceFile)
+		winner, ok := laterAnchor(prior, s)
+		if !ok {
+			return nil, fmt.Errorf(
+				"statement %q: balance disagreement between %s ($%.2f) and %s ($%.2f)",
+				s.StatementID,
+				srcA, budget.DollarAmount(prior.Balance),
+				srcB, budget.DollarAmount(s.Balance),
+			)
 		}
-		srcB := s.SourceFile
-		if srcB == "" {
-			srcB = "<derived>"
-		}
-		return nil, fmt.Errorf(
-			"statement %q: balance disagreement between %s ($%.2f) and %s ($%.2f)",
+		log.Printf(
+			"statement %q: reconciling overlapping balance anchors by as-of date — %s ($%.2f) vs %s ($%.2f), delta $%.2f; keeping the later observation",
 			s.StatementID,
 			srcA, budget.DollarAmount(prior.Balance),
 			srcB, budget.DollarAmount(s.Balance),
+			budget.DollarAmount(s.Balance-prior.Balance),
 		)
+		out[pos] = winner
 	}
 	return out, nil
+}
+
+// srcOrDerived renders a StatementData.SourceFile for log/error messages,
+// substituting a placeholder for the empty path of an ETL-synthesized anchor.
+func srcOrDerived(src string) string {
+	if src == "" {
+		return "<derived>"
+	}
+	return src
+}
+
+// laterAnchor chooses between two same-statement anchors that disagree on
+// Balance by their as-of date (BalanceDate): the later observation wins, and a
+// nil BalanceDate loses to a non-nil one. ok is false when there is no basis to
+// choose — both BalanceDate nil, or the same instant.
+func laterAnchor(a, b budget.StatementData) (winner budget.StatementData, ok bool) {
+	switch {
+	case a.BalanceDate == nil && b.BalanceDate == nil:
+		return budget.StatementData{}, false
+	case a.BalanceDate == nil:
+		return b, true
+	case b.BalanceDate == nil:
+		return a, true
+	case b.BalanceDate.After(*a.BalanceDate):
+		return b, true
+	case a.BalanceDate.After(*b.BalanceDate):
+		return a, true
+	default: // identical instant — no basis to choose
+		return budget.StatementData{}, false
+	}
 }
 
 // buildTransactions iterates parsed files and deduplicates transactions by

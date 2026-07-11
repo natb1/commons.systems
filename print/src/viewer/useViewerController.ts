@@ -112,6 +112,12 @@ export interface UseViewerControllerResult {
   /** The live renderer instance (null before init resolves). Panels call
    *  search/getOutline/goToResult/goToPosition/clearSearch on it. */
   getRenderer: () => ContentRenderer | null;
+  /** Mode-aware current position + label for the bookmarks panel. In spread
+   *  mode the renderer's position/label track its single-page `_currentPage`,
+   *  which spread navigation never advances (it bumps the controller's
+   *  spreadIndex), so read the controller's live spread page/label; single-page
+   *  mode reads the renderer. Null before the renderer exists. */
+  getPosition: () => { position: string; label: string } | null;
   /** Post-search-result navigation: spread → controller.goToPage(currentPage),
    *  single → renderer.renderResult(); then syncNav. Does NOT clear search. */
   onSearchNavigate: () => void;
@@ -482,6 +488,9 @@ export function useViewerController(
     // --- Keyboard navigation ---
     function handleKeydown(e: KeyboardEvent) {
       if ((e.target as HTMLElement)?.closest(".viewer-search-input, .viewer-goto-input, .viewer-annotation-note-input")) return; // type-safety-ok: pre-existing cast on origin/main; this session only extended the .closest() selector
+      // Ignore modified Arrow keys so browser/OS shortcuts (e.g. Alt+ArrowLeft =
+      // back-navigation) are not also consumed as page turns.
+      if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
       if (e.key === "ArrowLeft") goPrev().catch(handleNavError);
       else if (e.key === "ArrowRight") goNext().catch(handleNavError);
     }
@@ -498,6 +507,14 @@ export function useViewerController(
     }
 
     function onPanelNavigate() {
+      // Bookmark/outline navigation moves the underlying renderer (goToPosition
+      // / goToOutlineEntry), which in spread mode renders into the CSS-hidden
+      // single-page element — a visual no-op. Re-sync the spread to the
+      // renderer's new page so the visible surface follows; mirrors
+      // onSearchNavigate's spread branch.
+      if (controller.enabled) {
+        controller.goToPage(renderer.currentPage).catch(handleRenderError);
+      }
       syncNav();
     }
 
@@ -622,6 +639,23 @@ export function useViewerController(
     apiRef.current?.onPanelNavigate();
   }, []);
   const getRenderer = useCallback(() => internals.current.renderer, []);
+  const getPosition = useCallback((): {
+    position: string;
+    label: string;
+  } | null => {
+    const st = internals.current;
+    if (!st.renderer) return null;
+    // Spread mode: the renderer's _currentPage is stale (spread nav bumps the
+    // controller's spreadIndex only), so read the controller's live spread
+    // page/label. Single-page mode reads the renderer directly.
+    if (st.controller?.enabled) {
+      return {
+        position: st.controller.position,
+        label: st.controller.positionLabel,
+      };
+    }
+    return { position: st.renderer.position, label: st.renderer.positionLabel };
+  }, []);
 
   return {
     canvasWrapRef,
@@ -652,6 +686,7 @@ export function useViewerController(
     toggleSpread,
     togglePanel,
     getRenderer,
+    getPosition,
     onSearchNavigate,
     onPanelNavigate,
     readFailed,

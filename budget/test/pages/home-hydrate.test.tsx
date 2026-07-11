@@ -176,6 +176,15 @@ describe("Transactions table interactivity (blur-save + infinite-scroll) — Uni
       expect(activeDS.updateTransaction).toHaveBeenCalledWith("txn-1", { reimbursement: 75 });
     });
 
+    it("rejects a cleared reimbursement instead of persisting 0%", async () => {
+      const c = await renderTable([txn({ reimbursement: 50, budget: "budget-food" })]);
+      const input = c.querySelector(".edit-reimbursement") as HTMLInputElement; // type-safety-ok: test DOM query
+      input.value = "";
+      blur(input);
+      await flush();
+      expect(activeDS.updateTransaction).not.toHaveBeenCalled();
+    });
+
     it("saves budget field on blur (resolved to its id)", async () => {
       const c = await renderTable([txn({ budget: null })]);
       const input = c.querySelector(".edit-budget") as HTMLInputElement;

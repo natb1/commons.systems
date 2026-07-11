@@ -11,8 +11,16 @@ export function initPanelToggle(
   const { signal } = controller;
 
   const close = (): void => {
+    // Restore focus to the toggle only when focus was inside the closing panel,
+    // so an Escape/outside-click close does not leave focus stranded on a
+    // now-hidden element. Skip when focus already moved elsewhere (e.g. an
+    // outside click landed on another focusable element) to avoid yanking it.
+    const restoreFocus = panel.contains(document.activeElement);
     panel.classList.remove("open");
     toggle.setAttribute("aria-expanded", "false");
+    if (restoreFocus) {
+      toggle.focus();
+    }
   };
 
   toggle.addEventListener(

@@ -540,12 +540,6 @@ svg [aria-label="tip"] text { fill: #222; /* ds-lint-disable-line: Plot tooltip 
   color: var(--error);
 }
 
-.cc-badge {
-  width: 117px;
-  height: 41px;
-  vertical-align: middle;
-}
-
 /* --- Normalized transaction groups --- */
 
 .normalized-originals {

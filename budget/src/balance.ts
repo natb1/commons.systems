@@ -393,6 +393,15 @@ export function toSundayEntry(d: Date): { label: string; ms: number } {
   return { label, ms: sun.getTime() };
 }
 
+/** Normalize a Date to the Monday 00:00 UTC starting its Mon–Sun week (the budget-period convention), returning "M/D" label and ms timestamp. */
+export function toMondayEntry(d: Date): { label: string; ms: number } {
+  if (isNaN(d.getTime())) throw new DataIntegrityError("toMondayEntry received an invalid Date");
+  const ms = weekStart(d.getTime());
+  const mon = new Date(ms);
+  const label = `${mon.getUTCMonth() + 1}/${mon.getUTCDate()}`;
+  return { label, ms };
+}
+
 /** Build ordered unique week entries and sum totals per week. Returns weeks sorted chronologically. */
 function indexPeriodsByWeek(periods: BudgetPeriod[]): {
   weeks: [number, string][];
@@ -411,22 +420,41 @@ function indexPeriodsByWeek(periods: BudgetPeriod[]): {
 
 /**
  * Compute aggregate trend data: rolling averages of credits and spending per week.
- * Weeks are derived from budget periods. Credits are transactions with negative net amounts.
+ *
+ * The week axis is Monday-start (`toMondayEntry`), matching the budget-period
+ * convention, so spending and credits share one axis: a credit is bucketed to
+ * the same Mon–Sun week as the budget period that contains its date (a
+ * weekend-dated credit no longer lands one week late). Weeks are seeded from
+ * budget periods and additionally registered for any credit that falls in a
+ * period-less week — the same asymmetry `computePerBudgetTrend` avoids by
+ * registering extra "Other" weeks — so a paycheck in a week with no budget
+ * period is not silently dropped from the credit average.
  */
 export function computeAggregateTrend(
   periods: BudgetPeriod[],
   transactions: Transaction[],
 ): AggregatePoint[] {
-  const { weeks, weeklySpending } = indexPeriodsByWeek(periods);
-  if (weeks.length === 0) return [];
+  // Seed the Monday-start week axis and per-week spending from budget periods.
+  const weekLabels = new Map<number, string>();
+  const weeklySpending = new Map<number, number>();
+  for (const p of periods) {
+    const entry = toMondayEntry(p.periodStart.toDate());
+    if (!weekLabels.has(entry.ms)) weekLabels.set(entry.ms, entry.label);
+    weeklySpending.set(entry.ms, (weeklySpending.get(entry.ms) ?? 0) + p.total);
+  }
 
-  // Weekly credits: sum credit transactions (negative net) per week, negated to positive.
+  // Weekly credits: sum credit transactions (negative net) per Monday-start
+  // week, negated to positive. Register the week if no budget period covers it.
   const creditTxns = filterCreditTransactions(transactions);
   const weeklyCredits = new Map<number, number>();
   for (const t of creditTxns) {
-    const entry = toSundayEntry(t.timestamp.toDate());
+    const entry = toMondayEntry(t.timestamp.toDate());
+    if (!weekLabels.has(entry.ms)) weekLabels.set(entry.ms, entry.label);
     weeklyCredits.set(entry.ms, (weeklyCredits.get(entry.ms) ?? 0) + (-netAmount(t)));
   }
+
+  const weeks: [number, string][] = [...weekLabels.entries()].sort((a, b) => a[0] - b[0]);
+  if (weeks.length === 0) return [];
 
   const spendingValues = weeks.map(([ms]) => weeklySpending.get(ms) ?? 0);
   const creditValues = weeks.map(([ms]) => weeklyCredits.get(ms) ?? 0);

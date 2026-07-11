@@ -14,8 +14,16 @@ import {
   AUTHOR,
   REL_ME,
 } from "../src/site-config.js";
+import { readBlogRollFeedsArtifact } from "./blog-roll-feeds-artifact.js";
 
 const distDir = join(dirname(new URL(import.meta.url).pathname), "..", "dist");
+
+// The build-time feed snapshot the vite `feedFetchPlugin` persisted, keyed by
+// FEED_REGISTRY id (the same data the client's `virtual:blog-roll-feeds` bundle
+// inlines). Passed below as `buildTimeFeeds` so the prerendered info-panel
+// hydrates from identical input — closing the SSR/client mismatch on the panel
+// root. Throws on a missing/drifted artifact (the build-time parity assertion).
+const buildTimeFeeds = readBlogRollFeedsArtifact(FEED_REGISTRY.map((f) => f.id));
 
 try {
   await prerenderPosts({
@@ -30,6 +38,7 @@ try {
       blogRoll: FEED_REGISTRY.map((f) => ({ id: f.id, name: f.name, url: f.homeUrl })),
       rssFeedUrl: "/feed.xml",
       opmlUrl: "/blogroll.opml",
+      buildTimeFeeds,
     },
     siteDefaults: SITE_DEFAULTS,
     organization: ORGANIZATION,

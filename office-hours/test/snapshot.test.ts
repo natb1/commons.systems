@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { encryptData } from "@commons-systems/crypto/core";
+import { encryptData } from "@commons-systems/crypto-core";
 import { decodeSnapshot, loadSnapshotPanelData, type OfficeHoursSnapshotV1 } from "../src/snapshot.js";
 import { projectSignalsEqual } from "../src/panel-equality.js";
 

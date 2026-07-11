@@ -787,6 +787,43 @@ describe("computeAggregateTrend", () => {
     const result = computeAggregateTrend(periods, txns);
     expect(result[0].avg12Credits).toBe(1200);
   });
+
+  it("a Sunday-dated credit aligns to the Monday-start week of its period, not one week later", () => {
+    // Period week is Mon 2025-01-06 .. Sun 2025-01-12. A credit dated Sunday
+    // 2025-01-12 falls inside that week; it must land in the same aggregate
+    // week as the period, not spill into a phantom following week.
+    const periods = [
+      makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 50 }),
+    ];
+    const txns = [
+      makeTxn({ id: "credit-sun", category: "Income:Salary", amount: -800, timestamp: ts("2025-01-12"), budget: null }),
+    ];
+    const result = computeAggregateTrend(periods, txns);
+    expect(result).toHaveLength(1);
+    expect(result[0].avg12Spending).toBe(50);
+    expect(result[0].avg12Credits).toBe(800);
+  });
+
+  it("registers a credit in a period-less week instead of dropping it from the credit average", () => {
+    // Only week 1 (Mon 2025-01-06) has a budget period. A paycheck lands in
+    // week 2 (Mon 2025-01-13), which has no period; that week must still be
+    // registered so the credit is not silently dropped.
+    const periods = [
+      makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 50 }),
+    ];
+    const txns = [
+      makeTxn({ id: "credit-w2", category: "Income:Salary", amount: -300, timestamp: ts("2025-01-13"), budget: null }),
+    ];
+    const result = computeAggregateTrend(periods, txns);
+    expect(result).toHaveLength(2);
+    // Week 1: spending 50, no credits.
+    expect(result[0].weekMs).toBe(new Date("2025-01-06").getTime());
+    expect(result[0].avg12Credits).toBe(0);
+    // Week 2 (period-less): credit registered, rolling avg of [0, 300] = 150.
+    expect(result[1].weekMs).toBe(new Date("2025-01-13").getTime());
+    expect(result[1].avg12Credits).toBe(150);
+    expect(result[1].avg12Spending).toBe(25);
+  });
 });
 
 describe("computePerBudgetTrend", () => {

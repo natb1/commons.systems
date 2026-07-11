@@ -409,10 +409,18 @@ func (o Output) Validate() error {
 			return fmt.Errorf("journalLegs[%d]: entryId %q does not reference any journal entry in journalEntries", i, l.EntryID)
 		}
 	}
+	seenTxnIDs := make(map[string]bool, len(o.Transactions))
 	for i, t := range o.Transactions {
 		if t.JournalEntryID != nil && !entryIDs[*t.JournalEntryID] {
 			return fmt.Errorf("transactions[%d]: journalEntryId %q does not reference any journal entry in journalEntries", i, *t.JournalEntryID)
 		}
+		// Doc IDs are Firestore document IDs; a collision silently overwrites one
+		// transaction's document with another on upload, dropping data. Reject a
+		// duplicate here so a future collision fails loudly at the write boundary.
+		if seenTxnIDs[t.ID] {
+			return fmt.Errorf("transactions[%d]: duplicate transaction doc id %q", i, t.ID)
+		}
+		seenTxnIDs[t.ID] = true
 	}
 	return nil
 }

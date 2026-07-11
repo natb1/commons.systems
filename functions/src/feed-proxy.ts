@@ -31,7 +31,21 @@ async function verifyAppCheck(req: Request): Promise<boolean> {
 }
 
 export async function handleFeedProxy(req: Request, res: Response) {
-  if (!(await verifyAppCheck(req))) {
+  let appCheckOk: boolean;
+  try {
+    appCheckOk = await verifyAppCheck(req);
+  } catch (err) {
+    // A non-AppCheck verification failure (e.g. an admin-SDK/network error)
+    // must not propagate out of the handler: the onRequest wrapper does not
+    // await the returned promise, so a re-thrown error becomes an unhandled
+    // rejection that crashes the instance and drops concurrent in-flight
+    // requests. Convert it to an explicit 500 instead.
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`Feed proxy: AppCheck verification error: ${message}`);
+    res.status(500).send("Internal error verifying request");
+    return;
+  }
+  if (!appCheckOk) {
     res.status(401).send("Unauthorized: invalid or missing AppCheck token");
     return;
   }
@@ -121,6 +135,10 @@ export async function handleFeedProxy(req: Request, res: Response) {
 
   const contentType = upstream.headers.get("content-type") ?? "application/xml";
   res.set("Content-Type", contentType);
+  // The upstream Content-Type is reflected verbatim; a hostile or misconfigured
+  // upstream could serve a sniffable type. Forbid MIME sniffing so the browser
+  // never reinterprets the proxied body as HTML/JS.
+  res.set("X-Content-Type-Options", "nosniff");
   res.set("Cache-Control", "public, max-age=3600");
   res.send(body);
 }
