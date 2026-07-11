@@ -27,12 +27,13 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-household-consent-instrument
   pr: 2864
   attempts: {}
-  markers: []
+  markers:
+    - qa-done
   strategy_fingerprint: d1dccff612b79832f9a7a1ef5dad00207ffc8ff8dab1e7275a2c9e4a64b639f0
 validates:
   - strategy-household-shared-attachments
