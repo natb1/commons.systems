@@ -34,32 +34,18 @@ attention:
     5; this tactic serves strategy-explicit-intent (unboosted), so it inherits
     nothing and takes the full boost 8 directly to reach the same authored-8
     tier and be prioritized by the next dispatch tick."
-phase: qa
+phase: review
 execution:
   branch: tactic-align-strategy-alignment-tests
   pr: 2867
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: a10d001daf8fd0335625aea2c5eb394c1216abdd4d73313c6ba3881e2f69a64b
 validates: []
 blocked_by: []
-office_hours:
-  reason: "qa phase cannot be carried autonomously in the graph-tick worker
-    session: /qa-fix Step 2b requires launching a bounded Opus triage subagent
-    via the Agent tool, and Step 3.5 requires the Workflow tool on
-    .claude/workflows/qa-fix.js; neither tool exists in this headless worker
-    session, and ad-hoc emulation of the phase is forbidden. Preamble ran clean:
-    origin/main merged with no conflict, CI passing, diff is prose-only
-    (.claude/skills/align-strategy/SKILL.md, +44/-8, no browser component), no
-    prior qa-done label. Next steps: run /qa-fix
-    tactic-align-strategy-alignment-tests in a full interactive session (which
-    has the Agent + Workflow tools); on a clean pass it calls transition-node
-    --set-pr 2867 to record the qa-done marker and advance qa->review (or
-    qa->main-qa if a needs-main residue section is appended), then MANUALLY
-    clear this office_hours park (no unpark primitive)."
-  since: 2026-07-11
-  recommendation: null
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}

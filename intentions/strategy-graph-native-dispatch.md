@@ -413,7 +413,26 @@ clarifications:
       limit: workflow resume is same-session only, so a dead tick is recovered
       by the next tick re-selecting from origin/main — the same idempotent
       re-selection semantics the legacy router has. Recorded 2026-07-06
-      interview."
+      interview. Amended 2026-07-11 interview: the agent()-per-node fan-out is
+      retired. Its fatal limit surfaced in practice — a workflow-spawned
+      subagent is not given the Workflow tool, so a phase whose own logic is a
+      workflow (/review-fix, /qa-fix, both `.claude/workflows/*.js`) cannot run
+      as the tick's nested agent(); it parks at its Step 2 every time (the graph
+      already carries these parks). The launch layer is revised to Shape B: an
+      owned graph-native launch-per-phase primitive spawns each selected phase
+      as its own top-level session, where the phase skill IS the orchestrator
+      and holds the Workflow tool to build its own phase-specific fan-out. This
+      walks back this clarification's own 'no legacy spawn chain kept as
+      fallback' stance deliberately — a graph-native launch-per-phase is now the
+      primary launch layer, not a fallback; the walk-back is sound because that
+      stance was premised on agent()-per-node hosting every phase, which it
+      cannot. Selection, pacing, and transitions stay in owned code
+      (clarification 25 holds, strengthened); the phase's own graph-commit
+      transition is the durable outcome, replacing the tick's schema-validated
+      agent() return; recovery stays next-tick re-selection from origin/main,
+      and a dead phase session no longer kills sibling phases. The in-tick
+      pipelining this clarification valued is subsumed by the phase-granular
+      tick it already committed to."
   - question: What keeps the Workflow executor — proprietary, session-bound harness
       machinery — from making the router itself a rented runtime, against
       strategy-owned-orchestration?
@@ -431,7 +450,19 @@ clarifications:
       Workflow-semantics change or individual-scale gating — because the
       orchestration logic remains forkable in-repo JS/tsx while only the
       executor is rented, and the thin-script condition is what keeps re-hosting
-      that executor bounded. Recorded 2026-07-06 interview."
+      that executor bounded. Recorded 2026-07-06 interview. Amended 2026-07-11
+      interview: under Shape B (clarification 24 as amended) the router/tick no
+      longer executes on the Workflow primitive at all — the launch layer is
+      owned spawn code. The Workflow executor is now used only INSIDE per-phase
+      fan-outs (/review-fix, /qa-fix). This strengthens the thin-script
+      condition rather than weakening it, and it REDUCES the imported capture
+      surface at the router level: the capture entry on
+      delegation-anthropic-claude is reconciled in the same commit —
+      divergence.imported's orchestration-runtime item and review_trigger move
+      from 'the dispatch tick's fan-out executes on Workflow' to 'per-phase
+      review/qa fan-outs execute on Workflow; the router/launch layer is owned
+      code', a net reduction in rented-runtime surface that serves
+      strategy-owned-orchestration."
   - question: What keeps the graph's tactics aligned with the greenfield target —
       what prevents accumulating work on code the critical path deletes?
     answer: "A greenfield-relevance gate binding the align family: at /align-tactics
@@ -1082,6 +1113,46 @@ clarifications:
       clarification 14. It never edits dispatch.config/target-workers.json — it
       bypasses the gate at selection, it does not change the curve. Recorded
       2026-07-11 interview."
+  - question: A phase whose own logic is a workflow (/review-fix, /qa-fix) cannot
+      run as the tick's nested agent() — how does the router launch such a
+      phase?
+    answer: "Shape B — the phase skill is its own top-level orchestrator. An owned
+      graph-native launch-per-phase primitive (a graph-lane sibling of the
+      retired dispatch-launch-worker, or an extension of the pace-independent
+      dispatch-graph-execute path) spawns each selected phase as its own
+      top-level session on sonnet; that session holds the Workflow tool and the
+      phase skill builds its own phase-specific fan-out, spawning opus subagents
+      only when the work calls for it (an implementation unit's Recommended
+      model, or an explicitly opus-instructed review such as /code-review max).
+      The dispatch-graph-tick agent()-per-node fan-out
+      (`.claude/workflows/dispatch-graph-tick.js`) is retired — it is the exact
+      structure that cannot host a workflow-phase, because a workflow-spawned
+      subagent is denied the Workflow tool (observed in every park, not
+      theorized). No structured session return is needed: the phase writes its
+      own phase transition via graph-commit (clarification 1,
+      tactic-graph-router-transitions), so durable graph state is the outcome
+      (condition 9 strengthened). Concurrency cap and pacing stay in owned
+      selection code. Recovery is next-tick re-selection from origin/main;
+      independent phase sessions mean a dead review session cannot kill sibling
+      phases. This resolves a live graph-internal contradiction: clarification
+      24 assumed 'tactic phase → phase skill' ran fine as a nested agent(), but
+      /review-fix and /qa-fix were built AS workflows requiring the Workflow
+      tool — the two could not both hold. Recorded 2026-07-11 interview."
+  - question: Does the review phase re-wrap /code-review as a findings-only finder,
+      or trust the review skills' own built-in review-and-fix?
+    answer: "Trust the built-in review+fix. The review phase runs /code-review max
+      and /security-review with their defaults, both on opus, and works with
+      whatever they output and edit — the 'You are a findings-only code-review
+      subagent' framing (`.claude/workflows/review-fix.js:324,335`) is dropped,
+      along with the findings-only wrapper and the separate adversarial-verify →
+      opus-fix pipeline FOR those two sources (they carry their own
+      verification). Only the residue those skills do not auto-fix is handled:
+      an opus subagent classifies it and files follow-ups through the
+      pre-existing classify → defer → file logic. Dedup, deferred-filing, and
+      the other review steps are untouched. This refines clarification 19's
+      disposition mechanics for the code-review/security-review sources
+      specifically; it does not change the three-way disposition doctrine
+      itself. Recorded 2026-07-11 interview."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -1144,7 +1215,10 @@ attributes:
     - workflow scripts stay thin composition — selection, transition, and
       provisioning mechanics live in owned, offline-testable code (tsx modules
       and primitive scripts) that workflow agents invoke; the Workflow executor
-      orchestrates but never becomes the sole home of router logic
+      orchestrates but never becomes the sole home of router logic; under Shape
+      B (clarification 24 amended 2026-07-11) the router/launch layer is itself
+      owned code and the Workflow executor is used only inside per-phase
+      fan-outs, never as the router substrate
     - every office_hours park writes recoverable context into the node at park
       time — reason, a best-next-steps recommendation
       (office_hours.recommendation), and any state a fresh session needs;
