@@ -29,6 +29,49 @@ attempt counter on the PR (Step 5), and the "main already fixed it" merge-commit
 reuse (Step 4) are all durable and carry forward — read them and continue rather
 than restarting the pass.
 
+**Target resolution — keyspace split.** The current worktree dictates the
+target. Split on its name before Step 1: `[0-9]*-*` is a legacy issue worktree
+(unchanged); anything else is a graph-native node id, and
+`intentions/<id>.md` must exist at `origin/main` with `phase == fix` (else exit 1).
+
+```bash
+BRANCH=$(basename "$(git rev-parse --show-toplevel)")
+case "$BRANCH" in
+  [0-9]*-*)
+    N="${BRANCH%%-*}"; TARGET_KIND=issue ;;
+  *)
+    NODE_ID="$BRANCH"
+    git fetch origin main --quiet
+    NODE_MD=$(git archive origin/main "intentions/$NODE_ID.md" 2>/dev/null | tar -xO 2>/dev/null) || {
+      echo "/fix-checks: '$BRANCH' is neither a legacy '<N>-…' worktree nor a node with intentions/$NODE_ID.md at origin/main" >&2
+      exit 1
+    }
+    NODE_PHASE=$(printf '%s\n' "$NODE_MD" | sed -n 's/^phase: *//p' | head -1)
+    if [ "$NODE_PHASE" != "fix" ]; then
+      echo "/fix-checks: node '$NODE_ID' phase is '$NODE_PHASE' at origin/main, not 'fix'" >&2
+      exit 1
+    fi
+    N="$NODE_ID"; TARGET_KIND=node ;;
+esac
+```
+
+**Node-target lane (`TARGET_KIND=node`).** Every step runs unchanged except:
+the PR number is the node's `execution.pr` (feed it to the `--pr` pack directly,
+not `$N`; never `--issue`); on a clean fix (CI green after the push) the
+completion seam invokes the graph-native transition writer instead of any
+`dispatch-complete-phase` / `dispatch-mark-complete` — it consults the CI verdict
+and returns the node from `fix` to the interrupted ladder position as one
+state-only graph-commit on `origin/main`:
+
+```bash
+.claude/skills/dispatch-propagate/scripts/transition-node "$N" --set-pr "$PR_NUM"
+```
+
+The graph-tick worker runs it with the reset-dance a PR-branch worktree needs.
+Escalation writes `$CLAUDE_JOB_DIR/office-hours-reason` (+
+`office-hours-recommendation`) for the Stop hook's `park-node`, never a gh label.
+**On the node lane no gh issue is ever read or written.**
+
 1. **Resolve the draft PR.** Run the context pack (`dangerouslyDisableSandbox:
    true` — calls `gh`):
 

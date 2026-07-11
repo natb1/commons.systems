@@ -65,6 +65,40 @@ lane, the node id on the node lane). `$TARGET_KIND` selects the lane at every
 seam below that differs between issue and node targets — context source, plan
 source, and completion. **On the node lane no gh issue is ever read or written.**
 
+### Node-target lane (`TARGET_KIND=node`)
+
+On the node lane the four issue-keyed seams below are re-keyed to the graph
+(`tactic-phase-skill-node-targets`); every other step runs byte-identically.
+
+- **Context / PR.** Skip the issue-comment slices entirely. The PR number is the
+  node's `execution.pr` (null until this phase opens it). When a slice needs the
+  PR body/diff, feed the `execution.pr` number to `dispatch-context-pack "$PR"
+  --pr …` directly (the `--pr` slice takes a number, not a branch); never pass
+  `--issue`.
+- **Plan source.** The plan is the **node body** of `intentions/<node-id>.md`
+  at `origin/main` (already read at the Step-0 gate as `$NODE_MD`), not a
+  `<!-- dispatch:plan -->` issue comment. Its ordered `## Unit N` sections with
+  their `Recommended model:` tags ARE the unit breakdown Step 2 builds.
+- **Completion.** Do not call `dispatch-complete-phase` / `dispatch-mark-complete`
+  / `dispatch-finalize-phase` — those edit issue/PR labels. After the draft PR is
+  open, invoke the graph-native transition writer instead (it consults the CI
+  verdict + freshness gates and lands the `implement → qa` advance, or the
+  `implement → fix` interrupt on red CI, plus `execution.pr`, as one state-only
+  graph-commit on `origin/main`):
+
+  ```bash
+  .claude/skills/dispatch-propagate/scripts/transition-node "$N" --set-pr "$PR_NUM"
+  ```
+
+  The graph-tick worker runs this with the reset-dance a PR-branch worktree needs
+  (same constraint as `park-node`); the skill hands it the node id and never
+  writes the graph directly.
+- **Escalation.** Instead of applying `dispatch:office-hours`, write the
+  human-facing reason to `$CLAUDE_JOB_DIR/office-hours-reason` (and the
+  best-next-steps to `$CLAUDE_JOB_DIR/office-hours-recommendation`); the Stop hook
+  parks the node via `park-node` (`office_hours` graph write) — see
+  `.claude/hooks/dispatch-stop.sh`.
+
 Then resolve whether a draft PR already exists by running the context pack (use
 `dangerouslyDisableSandbox: true` — it calls `gh`). Add `--phase-log` so the same
 call also returns any prior cross-phase handoff note:
