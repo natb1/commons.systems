@@ -2,7 +2,9 @@
 """Split a shell command string into top-level segments, respecting quotes.
 
 Reads command from stdin. Writes one segment per line to stdout.
-A segment is separated from its neighbors by an unquoted |, ;, &&, or ||.
+A segment is separated from its neighbors by an unquoted |, ;, &, &&, or ||.
+A single & backgrounds the preceding command, so the text after it is a
+separate top-level command and must be classified on its own.
 Exits 0 on success, 1 on unbalanced quotes.
 
 Quote handling:
@@ -71,7 +73,9 @@ def split_segments(cmd: str) -> list[str]:
             i += 2
             continue
 
-        if ch in ("|", ";"):
+        # A bare & (not && — that is handled above) backgrounds the preceding
+        # command; the remainder is a separate top-level command.
+        if ch in ("|", ";", "&"):
             flush()
             i += 1
             continue

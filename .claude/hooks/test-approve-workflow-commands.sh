@@ -347,6 +347,50 @@ assert_passthrough \
   "Bash" \
   "head file.txt | grep -E \"a|b\" | evil-command"
 
+# --- Command-separator bypass regressions ---
+# (tactic-approve-hook-command-separators)
+
+# Unit 1: a bare & backgrounds the preceding command; the payload after it must
+# be classified on its own, not ride inside the approved `echo` segment.
+assert_passthrough \
+  "bare & backgrounds echo then runs rm payload (Unit 1 regression)" \
+  "Bash" \
+  "echo hi & rm -rf /x"
+
+assert_approves \
+  "bare & between two allowed commands still approves" \
+  "Bash" \
+  "echo hi & echo bye"
+
+# Unit 2: the multi-line heredoc branch must apply the same separator-splitting
+# and per-segment allowlist as the single-line path. Build a worktree-scoped
+# git -C path the same way the hook derives its roots, and create it so
+# is_allowed_git_c's realpath() resolves.
+_GCD=$(git -C "$SCRIPT_DIR" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
+_DUMMY_WT="$(dirname "$_GCD")/worktrees/test-approve-hook-dummy"
+mkdir -p "$_DUMMY_WT"
+trap 'rm -rf "$_DUMMY_WT" 2>/dev/null || true' EXIT
+
+assert_approves \
+  "heredoc git -C commit to worktree (legit multi-line)" \
+  "Bash" \
+  "$(printf 'git -C %s commit -F - <<'\''EOF'\''\ncommit body\nEOF' "$_DUMMY_WT")"
+
+assert_approves \
+  "heredoc git -C commit && push (legit && chain)" \
+  "Bash" \
+  "$(printf 'git -C %s commit -F - <<'\''EOF'\'' && git -C %s push\ncommit body\nEOF' "$_DUMMY_WT" "$_DUMMY_WT")"
+
+assert_passthrough \
+  "heredoc git commit with trailing ; payload is not approved (Unit 2 regression)" \
+  "Bash" \
+  "$(printf 'git -C %s commit -F - <<'\''EOF'\'' ; rm -rf /x\ncommit body\nEOF' "$_DUMMY_WT")"
+
+assert_passthrough \
+  "heredoc git commit with trailing & payload is not approved (Unit 2 regression)" \
+  "Bash" \
+  "$(printf 'git -C %s commit -F - <<'\''EOF'\'' & rm -rf /x\ncommit body\nEOF' "$_DUMMY_WT")"
+
 # --- Other edge cases ---
 
 assert_passthrough_raw \
