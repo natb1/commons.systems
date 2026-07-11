@@ -34,12 +34,13 @@ attention:
     5; this tactic serves strategy-explicit-intent (unboosted), so it inherits
     nothing and takes the full boost 8 directly to reach the same authored-8
     tier and be prioritized by the next dispatch tick."
-phase: implement
+phase: qa
 execution:
   branch: tactic-align-strategy-alignment-tests
-  pr: null
+  pr: 2867
   attempts: {}
-  markers: []
+  markers:
+    - planned
   strategy_fingerprint: a10d001daf8fd0335625aea2c5eb394c1216abdd4d73313c6ba3881e2f69a64b
 validates: []
 blocked_by: []
