@@ -91,7 +91,7 @@ func TestExpenseLine(t *testing.T) {
 	}
 
 	// journalEntryId mapping.
-	docID := budget.TransactionDocID("stmt-1", "txn-1")
+	docID := budget.TransactionDocID("Example Bank", "Checking", "txn-1")
 	if r.EntryIDByDocID[docID] != entryID {
 		t.Errorf("EntryIDByDocID[%s]=%q, want %q", docID, r.EntryIDByDocID[docID], entryID)
 	}
@@ -214,8 +214,8 @@ func TestMatchingPairMerge(t *testing.T) {
 	}
 
 	// Both docIDs map to the merged entry.
-	docOut := budget.TransactionDocID("stmt-chk", "out-1")
-	docIn := budget.TransactionDocID("stmt-sav", "in-1")
+	docOut := budget.TransactionDocID("Example Bank", "Checking", "out-1")
+	docIn := budget.TransactionDocID("Example Credit Union", "Savings", "in-1")
 	if r.EntryIDByDocID[docOut] != r.Entries[0].ID || r.EntryIDByDocID[docIn] != r.Entries[0].ID {
 		t.Errorf("both docIDs should map to merged entry")
 	}
@@ -293,10 +293,10 @@ func TestTwoCandidatePairsNearestTime(t *testing.T) {
 		assertBalanced(t, legsByEntry(r.Legs)[e.ID])
 	}
 
-	docOutA := budget.TransactionDocID("s", "outA")
-	docInA := budget.TransactionDocID("s", "inA")
-	docOutB := budget.TransactionDocID("s", "outB")
-	docInB := budget.TransactionDocID("s", "inB")
+	docOutA := budget.TransactionDocID("Example Bank", "Checking", "outA")
+	docInA := budget.TransactionDocID("Example Credit Union", "Savings", "inA")
+	docOutB := budget.TransactionDocID("Example Bank", "Checking", "outB")
+	docInB := budget.TransactionDocID("Example Credit Union", "Savings", "inB")
 
 	// outA must pair with inA (same day), not inB.
 	if r.EntryIDByDocID[docOutA] != r.EntryIDByDocID[docInA] {
@@ -546,8 +546,8 @@ func TestOneLegTransferOneLegNot(t *testing.T) {
 	}
 
 	// Both docIDs map to the single merged entry.
-	docOut := budget.TransactionDocID("s", "out")
-	docIn := budget.TransactionDocID("s", "in")
+	docOut := budget.TransactionDocID("Example Bank", "Checking", "out")
+	docIn := budget.TransactionDocID("Example Credit Union", "Savings", "in")
 	if r.EntryIDByDocID[docOut] != r.Entries[0].ID || r.EntryIDByDocID[docIn] != r.Entries[0].ID {
 		t.Errorf("both docIDs should map to the merged entry")
 	}
@@ -588,8 +588,12 @@ func TestNonPrimaryNormalizedDuplicateSkipped(t *testing.T) {
 		},
 	}
 
-	primaryDocID := budget.TransactionDocID(primaryStmt, primaryTxn)
-	dupDocID := budget.TransactionDocID(dupStmt, dupTxn)
+	// Both rows share (institution, account) but carry distinct bank FITIDs, so
+	// identity does not collapse them — this is the normalization path (same real
+	// purchase, different FITIDs across overlapping statements), not the identity
+	// path. Doc IDs are computed from the new (institution, account, FITID) scheme.
+	primaryDocID := budget.TransactionDocID("Example Bank", "Checking", primaryTxn)
+	dupDocID := budget.TransactionDocID("Example Bank", "Checking", dupTxn)
 
 	normMap := map[string]budget.NormalizationUpdate{
 		primaryDocID: {DocID: primaryDocID, NormalizedID: primaryDocID, NormalizedPrimary: true},

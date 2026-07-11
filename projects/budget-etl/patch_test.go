@@ -85,7 +85,7 @@ func TestApplySpec_AddPatternRule(t *testing.T) {
 }
 
 func TestApplySpec_AddTransactionIDRule(t *testing.T) {
-	docID := budget.TransactionDocID("pnc-5111-2026-05", "fitid-1")
+	docID := budget.TransactionDocID("pnc", "5111", "fitid-1")
 	in := baseOutput(nil)
 	spec := Spec{Add: []export.Rule{
 		{ID: "bg-trip", Type: "budget_assignment", TransactionID: docID, Target: "vacation"},

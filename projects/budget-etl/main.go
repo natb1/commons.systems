@@ -202,7 +202,8 @@ func runOutputJSON(allTxns []budget.TransactionData, allStmts []budget.Statement
 	exportTxns := make([]export.Transaction, len(allTxns))
 	for i, txn := range allTxns {
 		exportTxns[i] = export.Transaction{
-			ID:                budget.TransactionDocID(txn.StatementID, txn.TransactionID),
+			ID:                budget.TransactionDocID(txn.Institution, txn.Account, txn.TransactionID),
+			TransactionID:     txn.TransactionID, // FITID; runOutputJSON only handles real dir-parsed transactions
 			Institution:       txn.Institution,
 			Account:           txn.Account,
 			Description:       txn.Description,
@@ -382,9 +383,19 @@ func generateVirtualTransactions(
 
 			period := txn.Timestamp.Format("2006-01")
 			stmtID := virtualStmtPrefix(rule.TargetInstitution, rule.TargetAccount) + period
-			// Fold the rule identity into the doc ID so two rules matching this
-			// same source transaction do not collide on "virtual-"+source.
-			virtualDocID := "virtual-" + budget.TransactionDocID(virtualRuleKey(rule), txnDocIDs[i])
+			// Fold the rule identity into the virtual transaction's doc ID so two
+			// rules matching this same source transaction produce distinct doc IDs
+			// instead of colliding on "virtual-"+source and silently overwriting one
+			// Firestore doc. The virtual transaction lives in the rule's target
+			// account, so it takes that account's (institution, account, FITID)
+			// identity with a synthetic FITID folding the rule key and source doc ID.
+			// Like all virtual IDs these are regenerated every run from the source
+			// set and skipped on input (they carry Virtual=true, filtered at the
+			// runInputJSON/runMerge input loops), so the shift from the old
+			// statement-embedded source scheme to (institution, account, FITID)
+			// needs no snapshot migration — no stale virtual ID is ever read back.
+			virtualDocID := "virtual-" + budget.TransactionDocID(
+				rule.TargetInstitution, rule.TargetAccount, virtualRuleKey(rule)+"\x00"+txnDocIDs[i])
 
 			vtxn := budget.TransactionData{
 				Institution:   rule.TargetInstitution,
@@ -542,13 +553,16 @@ func runInputJSON(input fileOpts, output fileOpts) error {
 		}
 		acctID := journal.AccountID(t.Institution, t.Account)
 		allTxns = append(allTxns, budget.TransactionData{
-			Institution:   t.Institution,
-			Account:       t.Account,
-			Description:   t.Description,
-			Amount:        int64(math.Round(t.Amount * 100)),
-			Timestamp:     ts,
-			StatementID:   t.StatementID,
-			TransactionID: t.ID,
+			Institution: t.Institution,
+			Account:     t.Account,
+			Description: t.Description,
+			Amount:      int64(math.Round(t.Amount * 100)),
+			Timestamp:   ts,
+			StatementID: t.StatementID,
+			// Doc ID passes through opaquely via txnDocIDs (t.ID). This field
+			// carries the stable bank FITID forward for durability; empty for
+			// snapshots written before the transactionId field existed.
+			TransactionID: t.TransactionID,
 			IsCreditCard:  priorLiabilities[acctID],
 		})
 		txnDocIDs = append(txnDocIDs, t.ID)
@@ -814,6 +828,14 @@ func buildExportTxns(allTxns []budget.TransactionData, docIDs []string, normMap 
 			NormalizedPrimary: true,
 			Virtual:           txn.Virtual,
 		}
+		// Persist the stable bank id (FITID) for real transactions so future
+		// doc-ID scheme changes can re-derive IDs from the snapshot alone.
+		// budget.TransactionData.TransactionID holds the FITID for dir-parsed
+		// transactions and the carried-forward FITID for snapshot-sourced ones;
+		// virtual transactions carry a synthetic id and are excluded.
+		if !txn.Virtual {
+			et.TransactionID = txn.TransactionID
+		}
 		if txn.Budget != "" {
 			b := txn.Budget
 			et.Budget = &b
@@ -1022,6 +1044,17 @@ func parseAndClassify(input *export.Output, dir string, disc parse.DiscoverOpts)
 	}
 	log.Printf("parsed files: %d usable, %d skipped", len(parsed), skipped)
 
+	// Migrate the input snapshot's legacy statement-embedded doc IDs to the new
+	// statement-independent scheme BEFORE computing which dir transactions are
+	// new. Without this, a transaction already present in the snapshot under a
+	// legacy ID would be misreported as new (its dir-derived new-scheme ID would
+	// not match the legacy ID in inputIDs). This mutates input in place; callers
+	// (runReport, runMerge) share the pointer, so runMerge's snapshot is migrated
+	// for the remainder of its merge pipeline as well. The remap is built from
+	// the just-parsed files, so it is idempotent (a native new-scheme ID misses
+	// the remap and passes through unchanged).
+	migrateSnapshotIDs(input, buildLegacyRemap(parsed))
+
 	// Build set of doc IDs already in input
 	inputIDs := make(map[string]bool, len(input.Transactions))
 	for _, t := range input.Transactions {
@@ -1035,7 +1068,7 @@ func parseAndClassify(input *export.Output, dir string, disc parse.DiscoverOpts)
 
 	for _, pf := range parsed {
 		for _, t := range pf.result.Transactions {
-			docID := budget.TransactionDocID(pf.sf.StatementID(), t.TransactionID)
+			docID := budget.TransactionDocID(pf.sf.Institution, pf.sf.Account, t.TransactionID)
 			if dirSeen[docID] || inputIDs[docID] {
 				continue
 			}
@@ -1297,13 +1330,16 @@ func runMerge(input fileOpts, dir, groupName string, disc parse.DiscoverOpts, ou
 		}
 		acctID := journal.AccountID(t.Institution, t.Account)
 		allTxns = append(allTxns, budget.TransactionData{
-			Institution:   t.Institution,
-			Account:       t.Account,
-			Description:   t.Description,
-			Amount:        int64(math.Round(t.Amount * 100)),
-			Timestamp:     ts,
-			StatementID:   t.StatementID,
-			TransactionID: t.ID,
+			Institution: t.Institution,
+			Account:     t.Account,
+			Description: t.Description,
+			Amount:      int64(math.Round(t.Amount * 100)),
+			Timestamp:   ts,
+			StatementID: t.StatementID,
+			// Doc ID passes through opaquely via allDocIDs (t.ID). This field
+			// carries the stable bank FITID forward for durability; empty for
+			// snapshots written before the transactionId field existed.
+			TransactionID: t.TransactionID,
 			IsCreditCard:  priorLiabilities[acctID],
 		})
 		allDocIDs = append(allDocIDs, t.ID)

@@ -111,13 +111,33 @@ type NormalizationUpdate struct {
 // DollarAmount converts int64 cents to float64 dollars.
 func DollarAmount(cents int64) float64 { return float64(cents) / 100 }
 
-// TransactionDocID generates a deterministic document ID from a statement ID
-// and transaction ID using a truncated sha256 hash (10 bytes / 20 hex characters).
-// Collision probability is negligible for the expected transaction volume
-// (< 1 million documents).
-func TransactionDocID(statementID, transactionID string) string {
+// TransactionDocID generates a deterministic document ID for a transaction from
+// its statement-independent identity — (institution, account, transactionID) —
+// using a truncated sha256 hash (10 bytes / 20 hex characters). transactionID is
+// the bank-provided FITID (OFX) or CSV transaction ID; it is stable across
+// exports, so the doc ID no longer depends on which export carried the
+// transaction (strategy clarification 3, 2026-07-06). Two overlapping exports of
+// the same account therefore give one bank transaction one doc ID rather than
+// duplicating it under divergent inferred months. Collision probability is
+// negligible for the expected transaction volume (< 1 million documents).
+func TransactionDocID(institution, account, transactionID string) string {
+	if institution == "" || account == "" || transactionID == "" {
+		panic(fmt.Sprintf("transactionDocID: empty input (institution=%q, account=%q, txn=%q)", institution, account, transactionID))
+	}
+	h := sha256.Sum256([]byte(institution + "/" + account + "/" + transactionID))
+	return fmt.Sprintf("%x", h[:10])
+}
+
+// LegacyTransactionDocID reproduces the pre-clarification-3 doc ID formula:
+// a truncated sha256 hash of `statementID + "/" + transactionID`. It embeds the
+// carrying export's inferred-month statement ID, so the same bank transaction
+// carried by two exports whose balance dates land in different months minted two
+// distinct legacy IDs. It is retained only to recover those legacy IDs during
+// snapshot migration (see buildLegacyRemap) and in tests; new transactions use
+// TransactionDocID.
+func LegacyTransactionDocID(statementID, transactionID string) string {
 	if statementID == "" || transactionID == "" {
-		panic(fmt.Sprintf("transactionDocID: empty input (statement=%q, txn=%q)", statementID, transactionID))
+		panic(fmt.Sprintf("legacyTransactionDocID: empty input (statement=%q, txn=%q)", statementID, transactionID))
 	}
 	h := sha256.Sum256([]byte(statementID + "/" + transactionID))
 	return fmt.Sprintf("%x", h[:10])
