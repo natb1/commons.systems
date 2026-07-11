@@ -80,6 +80,16 @@ clarifications:
       first while the gate still releases itself as tactics close. Amends (does
       not supersede) the 2026-07-02 ordering clarification. Recorded 2026-07-07
       interview.
+  - question: How does the intention-store instrument distinguish sensor-run
+      readings from hand-written ones?
+    answer: "Mechanically it cannot: reading provenance is not recorded in
+      frontmatter. The intention-store sensor counts a sensor-naming strategy as
+      read when its reading is non-null, and separately reports how many name a
+      sensor absent from the read-sensors registry — those readings cannot have
+      been driver-run. For owner-review sensors the owner writing the reading at
+      office-hours is itself the sensor run, so existence is the honest proxy
+      there. A first-class provenance field is deliberately out of scope this
+      round. Recorded 2026-07-11 /align-tactics round."
 tooling_goals:
   - kind: actuator
     statement: resolveAttention (additive source-set ranks) consumed directly by the
@@ -100,7 +110,9 @@ validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
-rounds: null
+rounds:
+  count: 0
+  last_completed: null
 attributes:
   conditions:
     - the dispatch chain remains the execution path for tactical work
