@@ -34,72 +34,33 @@ attention:
     5; this tactic serves strategy-explicit-intent (unboosted), so it inherits
     nothing and takes the full boost 8 directly to reach the same authored-8
     tier and be prioritized by the next dispatch tick."
-phase: qa
+phase: review
 execution:
   branch: tactic-align-strategy-alignment-tests
   pr: 2867
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: a10d001daf8fd0335625aea2c5eb394c1216abdd4d73313c6ba3881e2f69a64b
 validates: []
 blocked_by: []
 office_hours:
-  reason: "/qa-fix: item 9 (doctrinal-consistency gate prose clarity, step 2.3)
-    classified opus-fixable by the disposition workflow but the gated
-    fix-planner authored zero fix units after two independent skeptics refuted
-    the needs-human candidacy and found no defect (read-set, source restriction,
-    cross-references, and edit-path clause all verified present and consistent).
-    qa-fix has no branch for 'should have been classified already-satisfied' — a
-    zero-unit opus-fixable item routes to escalation per the
-    fix-plan-empty/planning-failed branch. All 8 mechanical checks (numbering,
-    cross-references, positioning, contract phrasing, table mapping, diff scope)
-    passed. QA summary:
-    https://github.com/natb1/commons.systems/pull/2867#issuecomment-4948503898"
+  reason: "qa phase cannot be carried autonomously in the graph-tick worker
+    session: /qa-fix Step 2b requires launching a bounded Opus triage subagent
+    via the Agent tool, and Step 3.5 requires the Workflow tool on
+    .claude/workflows/qa-fix.js; neither tool exists in this headless worker
+    session, and ad-hoc emulation of the phase is forbidden. Preamble ran clean:
+    origin/main merged with no conflict, CI passing, diff is prose-only
+    (.claude/skills/align-strategy/SKILL.md, +44/-8, no browser component), no
+    prior qa-done label. Next steps: run /qa-fix
+    tactic-align-strategy-alignment-tests in a full interactive session (which
+    has the Agent + Workflow tools); on a clean pass it calls transition-node
+    --set-pr 2867 to record the qa-done marker and advance qa->review (or
+    qa->main-qa if a needs-main residue section is appended), then MANUALLY
+    clear this office_hours park (no unpark primitive)."
   since: 2026-07-11
-  recommendation: >-
-    ## Recommendation: confirming read, then clear the park (no PR edit)
-
-
-    This item parked on a procedural gap, not a real judgment call. The QA pass
-    on #2867 flagged one subjective item — "is the doctrinal-consistency gate
-    prose clear, actionable, and non-contradictory?" — and routed it to
-    disposition. Two independent skeptic subagents both re-read the paragraph
-    and **refuted** the premise that it needs human judgment: each independently
-    confirmed every element the finding demanded is present, correct, and
-    internally consistent. Because they found no defect, the fix-planner
-    authored zero units. `/qa-fix` has no branch for "should have been
-    classified already-satisfied," so a zero-unit opus-fixable item escalated
-    here by default.
-
-
-    The one thing to do: open `.claude/skills/align-strategy/SKILL.md` on the PR
-    branch and read the doctrinal-consistency gate paragraph (new step 3, lines
-    258-277). Check that it reads clearly to you. The skeptics already verified
-    these specifics, so you can spot-check rather than rebuild their work:
-
-
-    - **Read-set** is fully named: `serves` virtues' rationales and
-    `tension_with` pairs; overlapping strategies' `clarifications` and
-    `attributes.conditions`; the tradition records those virtues cite.
-
-    - **Source restriction** is explicit and worked — read doctrine at
-    `origin/main`, never the working tree, with the failure mode called out and
-    a `git show origin/main:intentions/<id>.md` example.
-
-    - **Cross-references resolve**: the "Question mechanics" pointer and the
-    "step-2.8 provenance" convention both exist and match.
-
-    - **Edit-path clause** is present (run the gate against the revised
-    `statement`/`rationale` too).
-
-
-    Everything else on this QA pass is green: 8/8 mechanical grep checks passed,
-    the diff is confined to that one file, and there's no other residue. If the
-    paragraph reads as clear to you — which the two-skeptic evidence strongly
-    indicates — clear this office-hours park with no PR change. If you do spot a
-    genuine ambiguity the skeptics missed, note the specific line and send it
-    back for a fix.
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes: {}
