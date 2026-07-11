@@ -25,7 +25,9 @@ attention: null
 phase: null
 execution: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-tier3-entry-declaration
+  - tactic-workflow-entry-point
 office_hours: null
 pace_exempt: false
 rounds: null

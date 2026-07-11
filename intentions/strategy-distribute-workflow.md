@@ -77,6 +77,31 @@ clarifications:
       workflow includes a dev environment that reproduces what CI runs. Fix
       drafted at tactic-node-toolchain-single-source. Recorded 2026-07-07
       interview."
+  - question: How did the first /align-tactics round dispose of the migrated
+      practitioner drafts, given tier 3 is undeclared?
+    answer: "The 2026-07-11 round decomposed only the ungated minimum. Instrument
+      (reading is null): tactic-fork-derivative-sensor extends the office-hours
+      snapshot's GitHub signals with fork enumeration and renders a
+      fork-and-derivative panel, making this strategy's sensor runnable — it is
+      the round's validates-terminal. Tier-entry-test prerequisites:
+      tactic-practitioner-support-boundary is planned (phase: implement) behind
+      a born-parked copy-approval gate tactic-support-boundary-approval, and
+      tactic-practitioner-channels is born-parked as author judgment. Ungated
+      artifact work: tactic-node-toolchain-single-source is planned.
+      tactic-workflow-entry-point is split per the 2026-07-06 clarification: its
+      architecture-writeup half is minted born-parked as
+      tactic-workflow-architecture-writeup (blog voice is the author's;
+      frame/outline first), and the node itself is rewritten to the
+      entry-point-only half, still a draft. The tier-3 declaration is now a
+      first-class born-parked gate, tactic-tier3-entry-declaration (serving
+      strategy-progressive-validation, where the declaration is recorded),
+      blocked_by the two prerequisites. The four invitation-gated drafts —
+      tactic-practitioner-plugin-distribution, tactic-citation-graph-listing,
+      tactic-shallow-fork-docs, and the rewritten tactic-workflow-entry-point —
+      deliberately remain drafts per this strategy's recorded disposition (the
+      migration clarification above), now carrying explicit blocked_by edges to
+      the gate, rather than being finalized against a design still in flux.
+      Recorded 2026-07-11 /align-tactics round."
 tooling_goals: []
 success_signal:
   observable: practitioners encountering and forking the workflow — entry-point
@@ -92,7 +117,9 @@ validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
-rounds: null
+rounds:
+  count: 0
+  last_completed: null
 attributes:
   conditions:
     - a practitioner audience for autonomy tooling exists and is reachable
