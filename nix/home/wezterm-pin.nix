@@ -33,5 +33,5 @@
   cargoHash = "sha256-jY7lTOfbT74tAZ7he1xudCN7BUxZBzY+8+e1d2g2v4I=";
 
   # SHA-256 of WezTerm-windows-nightly.zip as published for this build.
-  windowsZipHash = "sha256-r2TY0YHf8u0ImBhkMvBGKz2pZMEy6MfkVC1MV/3BLWM=";
+  windowsZipHash = "sha256-Beo9PtQ5UmqdmBbagYfVoS0hglseF/1F/uUMHtGxr1c=";
 }
