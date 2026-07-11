@@ -45,7 +45,23 @@ execution:
   strategy_fingerprint: a10d001daf8fd0335625aea2c5eb394c1216abdd4d73313c6ba3881e2f69a64b
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "Graph-tick review worker cannot run the review phase: /review-fix
+    requires the Workflow tool to run its review fan-out (surface-conditional
+    finders, dedup, classify, adversarial-verify, Opus fix), and that tool is
+    not available in the headless graph-tick worker environment (confirmed: not
+    in toolset, ToolSearch finds no Workflow tool). PR #2867 CI is passing; diff
+    is docs-only (single .claude/skills/align-strategy/SKILL.md, surface=docs)
+    so the review reduces to the code-review quality finder plus a
+    no-attack-surface security note, but even that needs the Workflow. Next
+    steps: run /review-fix tactic-align-strategy-alignment-tests in a full
+    interactive session (which has the Workflow tool), carry it to disposition —
+    it applies the reviewed marker and arms auto-merge via transition-node
+    --set-pr 2867 and posts the single PR comment — then MANUALLY clear this
+    office_hours park (there is no unpark primitive) so the router can promote
+    the PR to ready once mergeable."
+  since: 2026-07-11
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes: {}

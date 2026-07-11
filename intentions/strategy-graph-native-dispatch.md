@@ -129,7 +129,15 @@ clarifications:
       self-corrects when signals validate. Backlog tactics, like drafts, do not
       block their strategy's /align-tactics eligibility — the rule is no
       non-draft, non-backlog child tactics. The graph-native analog of the
-      enhancement label. Recorded 2026-07-03 interview."
+      enhancement label. Recorded 2026-07-03 interview. Amended 2026-07-11:
+      drafts are no longer inert `/align-tactics` input only — a frozen/draft
+      tactic is itself selectable for a per-node `/align-tactics <id>` session
+      (see the 2026-07-11 frozen-tactic-dispatch clarification, clarification
+      52). The eligibility-blocking rule stated here — a strategy is
+      `/align-tactics`-eligible only with no non-draft, non-backlog on-path
+      children — is unchanged; what changes is that a draft now carries a
+      first-class selectable disposition rather than only being consumed by its
+      strategy's round."
   - question: What happens when a strategy's substance is edited while it has open
       tactics?
     answer: "Soft freeze plus queued re-evaluation, detected by fingerprint:
@@ -144,7 +152,15 @@ clarifications:
       with open non-draft tactics queues this freeze. This session is the first
       instance: these clarifications made round 1's plans stale, and the
       re-evaluation was executed in the same change. Recorded 2026-07-03
-      interview."
+      interview. Amended 2026-07-11: the queued re-evaluation is now
+      dispatchable at tactic granularity, not only a strategy-level round — a
+      soft-frozen tactic carries a ranking and is selected directly, running
+      `/align-tactics <tactic-id>` to re-plan it (see the 2026-07-11
+      frozen-tactic-dispatch clarification, clarification 52).
+      Fingerprint-mismatch detection and the 'stop new selections in the
+      subtree, let in-flight phases finish their current phase' behavior are
+      unchanged; only the re-evaluation's dispatch granularity changes
+      (highest-ranked soft-frozen node first, per the progression tiebreak)."
   - question: Does the backlog band scale — and does it self-correct when the graph
       changes?
     answer: "No on both counts — superseded on same-day author review: the backlog
@@ -1153,6 +1169,84 @@ clarifications:
       disposition mechanics for the code-review/security-review sources
       specifically; it does not change the three-way disposition doctrine
       itself. Recorded 2026-07-11 interview."
+  - question: Frozen (undecomposed or soft-frozen) tactics carry a ranking — are
+      they selectable, and what runs when the dispatch script picks one?
+    answer: "Yes — decomposition and re-evaluation are dispatchable, ranked,
+      per-node work, not a manual-only step. A frozen node is a draft/raw tactic
+      (never decomposed — the retain-not-refine byproducts of clarification 6)
+      or a soft-frozen tactic (a planned tactic whose strategy substance
+      fingerprint changed, clarification 10). Every node carries calculated
+      attention derived at read time regardless of phase (clarification 11), so
+      a frozen node is ranked exactly like an executable one — \"ranked even
+      when frozen\" is already true; what this adds is that the selector no
+      longer excludes frozen nodes from the eligible pool. When the dispatch
+      script selects a frozen node, the session runs `/align-tactics <node-id>`
+      on it — extending `/align-tactics` to accept a tactic target (today it is
+      strategy-only: \"never selects its own target\"), the decomposition-skill
+      analog of tactic-phase-skill-node-targets re-keying the execution phase
+      skills. Selection resolves over a pool of frozen nodes: a strategy is
+      selectable when it has frozen descendants (or is itself undecomposed — the
+      zero-tactic initial-decomposition case), and selecting a strategy descends
+      to its highest-ranking frozen subtree node; a frozen tactic may rank
+      higher than its parent strategy and be selected directly. The router runs
+      `/align-tactics` on the resolved highest-ranked frozen node. Ties in
+      calculated attention break toward the more-progressed node by the phase
+      ordinal (draft < align-tactics < implement < fix < qa < review < main-qa <
+      done, so review outranks implement; equivalently a concrete child tactic
+      outranks its abstract parent strategy) — finish in-flight
+      decomposition/work before opening new. Claiming and worktree isolation key
+      on the RESOLVED node the session runs on, not the selection entry: a
+      strategy-entry and a direct-tactic selection that land on the same node
+      collide on one claim and dedupe via the uniform node-id
+      live-session/worktree rule (clarification 13); a zero-tactic strategy
+      resolves to itself → `/align-tactics <strategy-id>`, the classic initial
+      decomposition, unchanged. This supersedes the \"drafts are inert
+      `/align-tactics` input only\" implication of clarification 9 (drafts stay
+      non-blocking for strategy eligibility but gain a selectable disposition)
+      and extends clarification 10's soft-freeze re-evaluation from a
+      strategy-level round to per-tactic dispatch. Implementation retained as a
+      draft tactic (tactic-graph-frozen-tactic-dispatch). Recorded 2026-07-11
+      interview."
+  - question: After a phase completes cleanly (no variance/escalation), who
+      validates CI and who advances the node — and does the post-review merge
+      need author intervention?
+    answer: "Steady-state division of labor, split worker/tick. The phase worker —
+      implement, qa, and review alike — marks its phase complete and does NOT
+      itself validate CI or gate the next step on it; the tick reconciler
+      validates CI. Each tick reads the node's PR CI verdict: a tick where CI is
+      still in progress is skipped for that node (no forward transition, no
+      failure — it is retried next tick); a green-CI tick with the node ready
+      performs the next transition and dispatches the next phase worker; a
+      red-CI tick routes to the fix interrupt (clarification 18, parity with
+      dispatch-phase's CI-verdict-before-labels ordering). For review, the 'next
+      task' on the green-CI tick is the merge itself: the tick auto-merges the
+      reviewed PR without author intervention when green CI +
+      mergeable==MERGEABLE + the node's `reviewed` marker are all present. This
+      moves the merge/arm responsibility from the transition writer and the
+      review worker — where clarification 47 (review-worker arming) and
+      tactic-graph-router-transitions (the transition writer 'arms gh auto-merge
+      at clean review completion') placed it — onto the tick reconciler, which
+      arms once per tick under a fresh in-turn grant (dissolving clarification
+      47's per-worker-arming classifier hazard while keeping its phrasing
+      doctrine intact: arming instructions state the human authorization as fact
+      and name the commands, never arguing with or predicting the permission
+      layer). The tactic-scope-fingerprint re-check that clarification 36 sites
+      'before arming auto-merge' rides with the arming to the tick; its net
+      guarantee — no merge until the in-flight phase's fresh read postdates the
+      last scope edit — is unchanged. This is the steady state that
+      clarification 15's bootstrap-transition doctrine emulates by hand (there
+      the completing worker reads the CI/mergeability sensors at transition
+      time); it retires when tactic-graph-router-transitions and the router are
+      live. Concrete gap this records against: transition-node's node-lane arm
+      step readies the PR then calls the LABEL-gated dispatch-auto-merge, whose
+      eligibility requires the gh dispatch:reviewed label the node lane never
+      writes, so a reviewed node-lane PR is readied+mergeable but silently
+      skipped and held for human merge (observed on PR #2859, merged by hand
+      2026-07-11) — while the tick-workflow's own gh-native `gh pr merge --auto
+      --squash` path merged 8 of 9 review PRs autonomously on tick +3
+      (clarification 47). Closing that split into a single tick-owned,
+      label-free, marker-keyed merge is retained as draft tactic
+      tactic-graph-tick-node-lane-auto-merge. Recorded 2026-07-11 interview."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
