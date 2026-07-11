@@ -41,6 +41,10 @@ function txn(overrides: Partial<Transaction> = {}): Transaction {
   };
 }
 
+// sid builds the branded StatementId from a plain string in test data.
+const sid = (s: string): Statement["statementId"] =>
+  s as unknown as Statement["statementId"]; // type-safety-ok: test-only branded StatementId construction
+
 function stmt(overrides: Partial<Statement> = {}): Statement {
   return {
     id: "stmt-1",
@@ -103,8 +107,8 @@ describe("buildAccountRows", () => {
     const rows = buildAccountRows(
       [],
       [
-        stmt({ id: "s-mid", statementId: "Bank-Checking-2025-02-15" as never, period: "2025-02", balance: 500, balanceDate: "2025-02-15" }),
-        stmt({ id: "s-end", statementId: "Bank-Checking-2025-02-28" as never, period: "2025-02", balance: 750, balanceDate: "2025-02-28" }),
+        stmt({ id: "s-mid", statementId: sid("Bank-Checking-2025-02-15"), period: "2025-02", balance: 500, balanceDate: "2025-02-15" }),
+        stmt({ id: "s-end", statementId: sid("Bank-Checking-2025-02-28"), period: "2025-02", balance: 750, balanceDate: "2025-02-28" }),
       ],
       [],
     );
@@ -119,7 +123,7 @@ describe("buildAccountRows", () => {
       [],
       [
         stmt({ id: "s-null", period: "2025-02", balance: 500, balanceDate: null }),
-        stmt({ id: "s-dated", statementId: "Bank-Checking-2025-02-20" as never, period: "2025-02", balance: 900, balanceDate: "2025-02-20" }),
+        stmt({ id: "s-dated", statementId: sid("Bank-Checking-2025-02-20"), period: "2025-02", balance: 900, balanceDate: "2025-02-20" }),
       ],
       [],
     );

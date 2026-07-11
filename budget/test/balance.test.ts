@@ -907,6 +907,10 @@ describe("computeAggregateTrend avg12NetCredits", () => {
   });
 });
 
+// sid builds the branded StatementId from a plain string in test data.
+const sid = (s: string): Statement["statementId"] =>
+  s as unknown as Statement["statementId"]; // type-safety-ok: test-only branded StatementId construction
+
 function makeStmt(overrides: Partial<Statement> = {}): Statement {
   return {
     id: "stmt-1",
@@ -1010,8 +1014,8 @@ describe("computeNetWorth", () => {
     // the month-end 480. Sorted by effective ms (balanceDate), the derivation
     // flows 500 → 480 and matches, so no divergence is raised.
     const stmts = [
-      makeStmt({ id: "s-mid", statementId: "Bank-Checking-2025-01-15" as any, period: "2025-01", balanceDate: "2025-01-15", balance: 500 }),
-      makeStmt({ id: "s-end", statementId: "Bank-Checking-2025-01-31" as any, period: "2025-01", balanceDate: "2025-01-31", balance: 480 }),
+      makeStmt({ id: "s-mid", statementId: sid("Bank-Checking-2025-01-15"), period: "2025-01", balanceDate: "2025-01-15", balance: 500 }),
+      makeStmt({ id: "s-end", statementId: sid("Bank-Checking-2025-01-31"), period: "2025-01", balanceDate: "2025-01-31", balance: 480 }),
     ];
     const txns = [
       makeTxn({ id: "t1", institution: "Bank", account: "Checking", amount: 20, timestamp: ts("2025-01-20"), budget: null }),
