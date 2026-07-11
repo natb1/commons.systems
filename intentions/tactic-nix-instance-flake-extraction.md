@@ -31,7 +31,24 @@ execution: null
 validates: []
 blocked_by:
   - tactic-nix-export-nixos-modules
-office_hours: null
+office_hours:
+  reason: "Implementation complete on PR #2848 (darwin-build GREEN — Unit 2
+    lib.mkForce drop validated on macOS; both host configs eval to a .drv
+    locally, home.homeDirectory resolves /Users/operator and /home/operator).
+    Blocked ONLY by nixos-build red on a pre-existing upstream WezTerm nightly
+    hash drift: nix/home/wezterm-pin.nix windowsZipHash
+    sha256-Beo9PtQ5UmqdmBbagYfVoS0hglseF/1F/uUMHtGxr1c= is stale vs upstream
+    sha256-twQWc8bNnvKVPRj0Fi2gqv5HfK1WvLD0ZtN2DsZpl8I=, a rolling-nightly
+    fixed-output derivation this diff never touches (Linux/WSL-only, so
+    darwin-build is unaffected). It also breaks origin/main and every nix PR:
+    the last nix merge #2834 passed nixos-build ~14h ago, upstream re-published
+    the nightly asset in place since. Next steps: refresh the WezTerm Windows
+    nightly pin on main via nix/home/sync-wezterm.sh (its own concern, owned by
+    #2794 — do NOT couple the hash bump into this scoped instance-flake PR),
+    then unpark/re-tick this node so nixos-build reruns green; PR #2848 is
+    otherwise ready."
+  since: 2026-07-11
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes: {}
