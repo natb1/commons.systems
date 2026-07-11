@@ -310,6 +310,234 @@ const tokenEconomySensor: Sensor = {
   },
 };
 
+// --- lifecycle sensor --------------------------------------------------------
+// Name is the exact `success_signal.sensor` string
+// `strategy-graph-native-dispatch` declares — the driver resolves a sensor by
+// that verbatim name (`token-economy` uses the same match-the-declared-name
+// contract). The reading is dual, mirroring the strategy's dual source:
+//   (a) the phase-transition history in the local `intentions/` git log, and
+//   (b) the router's own selection log (emitted by graph-select-target).
+// Format (stable and parseable):
+//   `lifecycle: <id> implement→qa→review→done (<YYYY-MM-DD>); router selections: <R> records, <D> nodes`
+// with the lifecycle half degrading to `none yet` (no completed graph-native
+// tactic lifecycle in history) and the selections half to `unknown` (missing or
+// unreadable log) — never a throw (total-sensor contract above).
+
+/** The verbatim `success_signal.sensor` name on strategy-graph-native-dispatch. */
+const LIFECYCLE_SENSOR_NAME = "the intention store and the router's selection log";
+
+/**
+ * Phases a graph-native tactic passes through; a full lifecycle observes ALL of
+ * them for one node. A graph-native lifecycle IS gh-free by construction — its
+ * phase transitions live as `intentions/*.md` commits, not gh labels — so
+ * observing a completed node in this history satisfies the observable's "no
+ * GitHub label or issue required" clause without a gh query.
+ */
+const LIFECYCLE_REQUIRED_PHASES = ["implement", "qa", "review", "done"] as const;
+
+/**
+ * Where graph-select-target appends its selection log. Mirrors that script's
+ * default (`$HOME/.local/share/commons-dispatch/graph-selection.jsonl`);
+ * `DISPATCH_SELECTION_LOG_FILE` / `DISPATCH_SELECTION_LOG_DIR` override it,
+ * matching the script's env contract and enabling fixture injection in tests.
+ */
+const SELECTION_LOG_DEFAULT_PATH = join(
+  homedir(),
+  ".local",
+  "share",
+  "commons-dispatch",
+  "graph-selection.jsonl",
+);
+
+/**
+ * Lifecycle half: the latest full graph-native tactic lifecycle observed in the
+ * local clone's `intentions/` git history. A single line-level patch pass over
+ * `git log -p` collects, per tactic path, the set of phases it transitioned
+ * through (added `+phase: <x>` lines) and the date of its latest `phase: done`
+ * transition. The `done` recognition is gated on the node declaring `owner: ai`
+ * as of that commit (`git show <commit>:<path>`), so a human-owned node that
+ * also carries a dispatch phase (a main-qa or reading-review node) cannot count
+ * — the same ownership gate `readTacticVelocity` applies to closures.
+ *
+ * A node counts as a full lifecycle only when its phase set contains every
+ * `LIFECYCLE_REQUIRED_PHASES` entry; among those, the one with the latest
+ * `done` date wins. Reads `none yet` when no node qualifies, and `unknown` when
+ * git history is unavailable (not a repo, no commits) — never a throw.
+ */
+export function readLifecyclePhaseHistory(repoDir: string): string {
+  let patch: string;
+  try {
+    patch = execFileSync(
+      "git",
+      [
+        "log",
+        "--diff-filter=AM",
+        "--no-renames",
+        "--format=%H %cI",
+        "-p",
+        "--",
+        "intentions/tactic-*.md",
+      ],
+      {
+        cwd: repoDir,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+        maxBuffer: 64 * 1024 * 1024,
+      },
+    );
+  } catch {
+    return "unknown";
+  }
+
+  /**
+   * Whether `filePath` declares `owner: ai` as of `commitHash`. A failed lookup
+   * degrades to "not ai-owned" rather than throwing, honoring the total-sensor
+   * contract (mirrors `readTacticVelocity`'s `isAiOwnedAt`).
+   */
+  function isAiOwnedAt(commitHash: string, filePath: string): boolean {
+    try {
+      const content = execFileSync("git", ["show", `${commitHash}:${filePath}`], {
+        cwd: repoDir,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      });
+      return /^owner:\s*ai\s*$/m.test(content);
+    } catch {
+      return false;
+    }
+  }
+
+  const phasesByPath = new Map<string, Set<string>>();
+  const doneDateByPath = new Map<string, string>(); // YYYY-MM-DD of latest owner:ai done
+  let commit: string | null = null;
+  let commitDate: string | null = null;
+  let path: string | null = null;
+
+  for (const line of patch.split("\n")) {
+    const commitLine = /^([0-9a-f]{40}) (\S+)$/.exec(line);
+    if (commitLine !== null) {
+      commit = commitLine[1];
+      commitDate = commitLine[2];
+      continue;
+    }
+    const header = /^diff --git a\/(\S+) b\/(\S+)$/.exec(line);
+    if (header !== null) {
+      path = header[2];
+      continue;
+    }
+    if (path === null) {
+      continue;
+    }
+    const phaseAdd = /^\+\s*phase:\s*(\S+)\s*$/.exec(line);
+    if (phaseAdd === null) {
+      continue;
+    }
+    const phase = phaseAdd[1];
+    let set = phasesByPath.get(path);
+    if (set === undefined) {
+      set = new Set<string>();
+      phasesByPath.set(path, set);
+    }
+    set.add(phase);
+    if (phase === "done" && commit !== null && isAiOwnedAt(commit, path)) {
+      const day = (commitDate ?? "").slice(0, 10);
+      const prev = doneDateByPath.get(path);
+      if (prev === undefined || day > prev) {
+        doneDateByPath.set(path, day);
+      }
+    }
+  }
+
+  let bestPath: string | null = null;
+  let bestDate = "";
+  for (const [candidatePath, day] of doneDateByPath) {
+    const set = phasesByPath.get(candidatePath);
+    if (set === undefined) {
+      continue;
+    }
+    if (!LIFECYCLE_REQUIRED_PHASES.every((ph) => set.has(ph))) {
+      continue;
+    }
+    if (bestPath === null || day > bestDate) {
+      bestPath = candidatePath;
+      bestDate = day;
+    }
+  }
+
+  if (bestPath === null) {
+    return "none yet";
+  }
+  const id = bestPath.replace(/^intentions\//, "").replace(/\.md$/, "");
+  return `${id} implement→qa→review→done (${bestDate})`;
+}
+
+/**
+ * Selections half: a summary of the router's own selection log, the JSONL file
+ * `graph-select-target` appends one record per invocation to. Counts total
+ * records and the distinct node ids across every record's `selected` array —
+ * the corroborating evidence that the router autonomously drove nodes through
+ * the lifecycle observed above. Malformed lines are skipped (best-effort log,
+ * like the appender); a missing or unreadable file reads `unknown`, never a
+ * throw.
+ */
+export function readSelectionLog(selectionLogPath: string): string {
+  let content: string;
+  try {
+    content = readFileSync(selectionLogPath, "utf8");
+  } catch {
+    return "unknown";
+  }
+  let records = 0;
+  const nodes = new Set<string>();
+  for (const line of content.split("\n")) {
+    if (line.trim() === "") {
+      continue;
+    }
+    let record: unknown;
+    try {
+      record = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (!isPlainObject(record)) {
+      continue;
+    }
+    records += 1;
+    const selected = record.selected;
+    if (Array.isArray(selected)) {
+      for (const id of selected) {
+        if (typeof id === "string") {
+          nodes.add(id);
+        }
+      }
+    }
+  }
+  return `${records} records, ${nodes.size} nodes`;
+}
+
+/**
+ * Compose the full lifecycle reading from its two halves. Exported for unit
+ * tests, which inject a fixture git repo and a fixture selection log.
+ */
+export function readLifecycleReading(repoDir: string, selectionLogPath: string): string {
+  return (
+    `lifecycle: ${readLifecyclePhaseHistory(repoDir)}; ` +
+    `router selections: ${readSelectionLog(selectionLogPath)}`
+  );
+}
+
+const lifecycleSensor: Sensor = {
+  name: LIFECYCLE_SENSOR_NAME,
+  read(): string {
+    const selectionLogPath =
+      process.env.DISPATCH_SELECTION_LOG_FILE ??
+      (process.env.DISPATCH_SELECTION_LOG_DIR !== undefined
+        ? join(process.env.DISPATCH_SELECTION_LOG_DIR, "graph-selection.jsonl")
+        : SELECTION_LOG_DEFAULT_PATH);
+    return readLifecycleReading(repoRoot, selectionLogPath);
+  },
+};
+
 /**
  * Build the default registry of local-first own-execution sensors. Exported so
  * the registration set can be unit-tested (verification deferred to #2372/QA).
@@ -319,6 +547,7 @@ export function buildDefaultRegistry(): SensorRegistry {
   registry.register(vitestSensor);
   registry.register(gitSensor);
   registry.register(tokenEconomySensor);
+  registry.register(lifecycleSensor);
   return registry;
 }
 
