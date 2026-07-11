@@ -1060,6 +1060,28 @@ clarifications:
       transition (bootstrap parity, clarification 15), and the tick instruction
       encodes the qa-side backfill as the interim correction. Recorded
       2026-07-10 interview."
+  - question: Does explicit human dispatch of a single node override the pace curve,
+      and does the graph lane have an entrypoint for it?
+    answer: "Yes — explicit human dispatch overrides the autonomous pace curve in
+      both lanes, a gate-bypass path distinct from the pace_exempt flag
+      (clarification 14). pace_exempt is a standing per-node flag the autonomous
+      selector reads to admit one exempt worker past a paced-to-zero budget;
+      explicit dispatch is an on-demand human action that skips the
+      pace/concurrency gate for one invocation of any node, regardless of that
+      flag. The issue lane already implements it: dispatch <issue-number>'s
+      explicit-arg branch (dispatch-select-tick:778-818) resolves and exits
+      before both the graph selector and the pace gate, so it skips the
+      concurrency gate (dispatch-tick:30). The graph lane has no equivalent —
+      dispatch-resolve-arg accepts positive integers only, so dispatch <node-id>
+      errors and the only explicit path is invoking dispatch-graph-execute by
+      hand. Closing that gap is tactic-graph-explicit-node-dispatch. Explicit
+      dispatch overrides the pace gate ONLY: it still respects the uniform
+      node-id live-session/worktree claim (it refuses a node already held rather
+      than force-preempting into a graph-commit conflict), and never overrides
+      genuine token exhaustion (the --exhausted hard floor), parity with
+      clarification 14. It never edits dispatch.config/target-workers.json — it
+      bypasses the gate at selection, it does not change the curve. Recorded
+      2026-07-11 interview."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
