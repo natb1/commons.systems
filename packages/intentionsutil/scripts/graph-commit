@@ -115,6 +115,15 @@ CURRENT_MSG=""
 #                  delete it on the remote on exit.
 SCRATCH_BRANCH=""
 SCRATCH_PUSHED=0
+# ORIG_HEAD / RESTORE_HEAD — set by ensure_intentions_only_base() when the
+# worktree HEAD is a far-ahead branch (a PR-branch checkout carrying commits
+# that touch non-intentions/ files). To land an intentions/-only SHA the write
+# is rebuilt on top of origin/main, which moves the worktree off its original
+# HEAD; cleanup() restores ORIG_HEAD on every exit path so the worktree returns
+# to its PR tip. Empty/0 for the common case (main checkout or a clean/
+# intentions-only worktree), where the in-place path is used unchanged.
+ORIG_HEAD=""
+RESTORE_HEAD=0
 
 die() {
   echo "error: graph-commit: $*" >&2
@@ -209,6 +218,15 @@ check_base_freshness() {
 # failure never masks the real exit status.
 cleanup() {
   local rc=$?
+  # Restore the original (far-ahead) HEAD if ensure_intentions_only_base() moved
+  # the worktree onto origin/main to land an intentions/-only SHA. The intended
+  # edit is already on main by this point (or failed to land); either way the
+  # worktree returns to the PR tip it started on. Best-effort — a restore
+  # failure must not mask the real exit status, and origin/<branch> still holds
+  # the tip regardless.
+  if [[ "$RESTORE_HEAD" -eq 1 && -n "$ORIG_HEAD" ]]; then
+    git reset --hard "$ORIG_HEAD" >&2 || true
+  fi
   if [[ -n "$SNAP_DIR" && "$KEEP_SNAP" -eq 0 ]]; then
     rm -rf "$SNAP_DIR"
   fi
@@ -259,6 +277,55 @@ snapshot() {
   # PRUNE_IDS are deliberately skipped: a prune id has no on-disk file to
   # copy, and there is no writer-authored content to preserve for it — the
   # deletion is fully recorded by the commit that lands (or fails to land).
+}
+
+# --- Far-ahead worktree: rebuild the edit on an intentions/-only base --------
+# The `graph/**` fast path stamps the four required checks only on an
+# intentions/-only SHA — its guard (.github/workflows/graph-fast-path.yml)
+# fails the scratch push if `git diff --name-only origin/main...HEAD` names any
+# path outside intentions/. When graph-commit runs inside a PR-branch worktree
+# whose HEAD carries the PR's code diff, a commit made on top of that HEAD is
+# NOT intentions/-only, so the scratch push is rejected, the checks never
+# stamp, and the land times out. Callers used to hand-roll a "reset dance"
+# around graph-commit (save HEAD, reset --hard origin/main, re-apply the node,
+# commit, restore) to avoid this; park-node and the Stop-hook node-lane
+# escalation seam did not, so an escalation-park from a far-ahead worktree
+# silently failed and the node looped.
+#
+# This makes graph-commit far-ahead-safe at the source: when HEAD is ahead of
+# origin/main with non-intentions changes, rebuild the intended edit on top of
+# fresh origin/main — reset the tree to origin/main, re-materialize the
+# snapshotted node content (edits) and deletions (prunes) — so the normal
+# commit+land flow runs on an intentions/-only base. cleanup() restores the
+# original HEAD on exit. A worktree already at/behind origin/main, or ahead
+# with only intentions/ commits, needs no rebuild and is left untouched (the
+# in-place path is unchanged for the main-checkout and clean-worktree callers).
+#
+# NOTE (deployment): `git reset --hard` is a tree-updating op; when this script
+# is driven through the sandboxed Bash tool it needs dangerouslyDisableSandbox
+# if origin/main advanced read-only paths (.claude/skills/**, config/) — see
+# .claude/rules/sandbox.md. That is a caller concern (every graph-commit caller
+# already sets it), not resolved here. Must run AFTER snapshot() so SNAP_DIR
+# holds the writer's content before the reset overwrites the working tree.
+ensure_intentions_only_base() {
+  git fetch origin main >&2
+  local base_sha nonint
+  base_sha="$(git rev-parse FETCH_HEAD)"
+  # Same diff spec the fast-path guard uses: three-dot (changes on HEAD's side
+  # of the merge-base), name-only, then drop everything under intentions/.
+  nonint="$(git diff --name-only "$base_sha"...HEAD | grep -v '^intentions/' || true)"
+  [[ -z "$nonint" ]] && return 0
+  echo "graph-commit: worktree HEAD is ahead of origin/main with non-intentions changes — rebuilding the edit on an intentions/-only base (HEAD restored on exit)" >&2
+  ORIG_HEAD="$(git rev-parse HEAD)"
+  RESTORE_HEAD=1
+  git reset --hard "$base_sha" >&2
+  local id
+  for id in "${IDS[@]}"; do
+    cp -- "$SNAP_DIR/$id.md" "$INTENTIONS_DIR/$id.md"
+  done
+  for id in "${PRUNE_IDS[@]}"; do
+    rm -f -- "$INTENTIONS_DIR/$id.md"
+  done
 }
 
 # --- Is there anything new to commit? --------------------------------------
@@ -591,6 +658,12 @@ main() {
   #     commit_files() and a successful push.
   CURRENT_MSG="$msg"
   snapshot
+  # If this is a far-ahead PR-branch worktree, rebuild the edit on an
+  # intentions/-only base so the fast path can stamp it (cleanup() restores the
+  # original HEAD). No-op for the main checkout and clean/intentions-only
+  # worktrees. Runs after snapshot() so the writer's content is captured before
+  # the reset overwrites the working tree.
+  ensure_intentions_only_base
   if id_files_dirty; then
     commit_files
   else

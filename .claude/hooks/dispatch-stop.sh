@@ -92,10 +92,48 @@ if [ ! -f "$STATE_FILE" ]; then
   exit 0
 fi
 
-# Discriminator 2: this job is a worker (name starts with <N>-). Routers named
-# `dispatch-<short-id>` MUST be skipped — they don't run phase skills.
+# Discriminator 2: this job is a worker. Two worker keyspaces:
+#   - legacy issue worker — name `<N>-<slug>` (matches ^[0-9]+-); the issue-keyed
+#     body below owns it.
+#   - graph-native node worker — name IS the intention node id, and
+#     `intentions/<id>.md` exists at this worktree's root. Its phase completion /
+#     advance is the worker's OWN transition-node write (a state-only commit on
+#     origin/main), NOT this hook, so a clean completion needs nothing here. The
+#     hook's only node-lane duty is the escalation-park BACKSTOP: if the escalating
+#     session left an office-hours-reason, park the node via the graph write
+#     (park-node → office_hours), never a gh label. No reason file → clean or bare
+#     exit; the node keeps office_hours null, so the next graph tick re-selects it.
+# Routers named `dispatch-<short-id>` are neither keyspace and MUST be skipped —
+# they don't run phase skills.
 JOB_NAME=$(jq -r '.name // empty' "$STATE_FILE" 2>/dev/null) || JOB_NAME=""
+_HOOK_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd)" || _HOOK_ROOT=""
 if ! [[ "$JOB_NAME" =~ ^[0-9]+- ]]; then
+  # Not a legacy issue worker. Node worker iff intentions/<JOB_NAME>.md exists.
+  if [[ -n "$JOB_NAME" && -n "$_HOOK_ROOT" && -f "$_HOOK_ROOT/intentions/$JOB_NAME.md" ]]; then
+    _OH_REASON_FILE="$CLAUDE_JOB_DIR/office-hours-reason"
+    if [ -s "$_OH_REASON_FILE" ]; then
+      _OH_REASON="$(cat "$_OH_REASON_FILE" 2>/dev/null || true)"
+      _OH_RECO=""
+      if [ -s "$CLAUDE_JOB_DIR/office-hours-recommendation" ]; then
+        _OH_RECO="$(cat "$CLAUDE_JOB_DIR/office-hours-recommendation" 2>/dev/null || true)"
+      fi
+      _PARK="$_HOOK_ROOT/packages/intentionsutil/scripts/park-node"
+      if [ -n "$_OH_REASON" ] && [ -x "$_PARK" ]; then
+        # Backstop park via the graph-commit primitive. Best-effort: a failure
+        # (e.g. graph-commit's PR-branch fast-path guard — the worker's own
+        # in-session park applies the reset-dance; this backstop does not) is
+        # non-fatal, matching this hook's best-effort philosophy.
+        if [ -n "$_OH_RECO" ]; then
+          "$_PARK" "$JOB_NAME" "$_OH_REASON" "$_OH_RECO" >/dev/null 2>&1 \
+            || echo "[dispatch-stop] WARNING: park-node for '$JOB_NAME' failed (non-fatal)" >&2
+        else
+          "$_PARK" "$JOB_NAME" "$_OH_REASON" >/dev/null 2>&1 \
+            || echo "[dispatch-stop] WARNING: park-node for '$JOB_NAME' failed (non-fatal)" >&2
+        fi
+      fi
+    fi
+  fi
+  # Node worker (parked or clean) and routers alike: nothing more for this hook.
   exit 0
 fi
 
