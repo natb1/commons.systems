@@ -99,6 +99,18 @@ clarifications:
       obligation to model any counterparty exhaustively; the same structure must
       hold when a mounted graph is by-reference. Recorded 2026-07-07 framing
       interview."
+  - question: How does round 1 satisfy the human-authored-substance condition while
+      agent sessions build the mounted structure?
+    answer: "By the condition's own drafting allowance: the migration tactics
+      transpose only the already-human-authored prose (divergence.imported
+      lists, adopted/diverged/chosen_over entries, and the growth-via-spend
+      capture recorded on delegation-anthropic-claude) into mounted nodes and
+      graft edges, inventing no new claims — where the prose is too thin to
+      model a node, the gap is listed for the author instead of filled. The
+      author's ratification is the born-parked tactic-mount-owner-review, which
+      amends or approves the mounted structure at office-hours and produces the
+      strategy's first reading. Informative, not gating. Recorded 2026-07-11
+      /align-tactics round."
 tooling_goals:
   - kind: actuator
     statement: mount schema — mount anchors on delegation/tradition records,
@@ -131,7 +143,9 @@ validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
-rounds: null
+rounds:
+  count: 0
+  last_completed: null
 attributes:
   conditions:
     - mounted content is the author's model of the counterparty — substance
