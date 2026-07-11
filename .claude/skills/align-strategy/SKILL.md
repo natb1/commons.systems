@@ -152,6 +152,101 @@ corpus by hand as above.
 
 Run this once per strategy target selected in step 1 (new or edit).
 
+### Interview type — classify first, and state it
+
+Every interview is one of two types, fixed by where the authoritative model of
+the subject currently lives (2026-07-09 interview-types doctrine,
+`strategy-explicit-intent` clarification "What interview types do align
+sessions run, and which rules bind each?"). State which type each interview is
+before the dialectic proper begins.
+
+- **Type b — the record is authoritative and the author has drifted from it or
+  not yet internalized it** (author education). Full periagoge rules bind:
+  probes cite the record **at `origin/main`** as the fixed object — never the
+  working tree (a stale checkout presents already-amended doctrine as current),
+  never session memory; the author articulates their own account before
+  Claude's account appears; compulsion is argument only — press until resolved,
+  never impose. Three exits stay open to the author at all times: amend the
+  record (the dialectic wins), defer (held on trust with a review item — see
+  "Deferral mechanics" below), or claim authority over Claude's account or a
+  referenced tradition (an intentional divergence, recorded). Claude never
+  blocks and never withholds recording.
+- **Type a — the model lives in the author, unrecorded or not yet formed**
+  (Claude elicitation and education). Visible-refusable-draft rules bind:
+  propose viable seams and explore their consequences to author feedback. Joint
+  inquiry where nothing is settled anywhere is type a's elicitation limb, not a
+  third type — it resolves by the same visible-draft machinery, and parsimony
+  declines the extra seam.
+
+**Run type b before type a when required author knowledge is unrecorded.**
+Type b's object is the topic's **ground** — the knowledge needed to decide,
+across the record at `origin/main` and the relevant traditions, recorded and
+Claude-internal alike — not merely the pending decision surface. A type b
+confined to ratifying decision mechanics is the named deviation; explore the
+ground first, then take the formed decision into type a.
+
+In either type, always surface graph-internal inconsistencies, inconsistencies
+between the graph and Claude's internal knowledge (a good the author may not
+yet have seen), and parsimony findings (redundant seams).
+
+### Question mechanics — every round, both types
+
+Every `AskUserQuestion` round in this step — the step-2.1 intent confirmation,
+the step-2.7 design-canvas question, and any other — carries three things (the
+standing feedback loop of both types, not a type-a convenience):
+
+1. a **recommendation** — your best answer, listed first;
+2. an honest **boldness assessment** on that recommendation — how much of it
+   rests on the graph and this session's context versus Claude-internal
+   knowledge the author has not verified;
+3. an explicit **accept-as-deferral** option alongside plain acceptance, so the
+   author can hold the recommendation on trust rather than endorse it (see
+   "Deferral mechanics" below).
+
+**Deliver a question's motivating context — including each recommendation's
+boldness — where the author will actually read it:** inside the
+`AskUserQuestion` tool itself (question text, option descriptions, preview
+panes) or in a prior turn the author has already read and responded to. The
+author reads neither Claude's thinking nor same-turn preamble emitted before
+the question call, so context living only there has not been provided — a
+boldness assessment stated only in preamble is undelivered. A question must
+never reference material the author has not seen.
+
+### Deferral mechanics
+
+This subsection is the home for the born-parked review-item typology (Step 5's
+Mode A curriculum enrollment points here for it). A deferral is always
+defer-until-later-review — a conscious, temporary choice to hold a
+recommendation on trust, never a quiet drop. When the author accepts one:
+
+- **Record it.** Land a dated clarification on the affected node naming exactly
+  what is held on trust (the ordinary step-2.6 clarification mechanics).
+- **Extend delegated scope when it defers to Claude's articulation.** When the
+  held content is Claude-drafted reasoning, the same round extends
+  `delegation-philosophical-articulation`'s delegated scope — reconcile that
+  node in this round's commit.
+- **Create exactly one review item, born-parked, in the same `graph-commit`.**
+  Every deferral — philosophical or not, text-grounded or not — produces one
+  review item; none gets lighter treatment for lacking a text. The typology:
+  - a **reading chunk** (a `tactic-reading-chunk-*` node, `parent:
+    tactic-tradition-reading-program`, `validates: [<grounding strategy>]`)
+    when a grounding text exists — the expected case;
+  - an **office-hours review sitting** (a review-item node) when the author
+    deferred to something text-less, such as Claude's logical analysis of
+    internal consistency.
+
+  **Born-parked field mechanics:** author the review item with the same
+  `write-node.ts --file` recipe as a step-4 draft tactic, but omit `phase` and
+  set `office_hours: {reason, since}` at creation (get `since` via `date -u
+  +%Y-%m-%d`) — the parked state the router never selects for a phase worker.
+  Name the enrolled node's id in the review item's `statement` or body: the
+  coverage sensor (`tactic-review-curriculum-coverage-sensor`) derives frontier
+  linkage by matching that id, so an item that only alludes to the node is
+  invisible to it. Bundle it into the same `graph-commit` as the record it
+  enrolls, exactly like a draft tactic.
+
+### Dialectic steps
+
 1. **Intent.** Elicit the one-line `statement` a plain conversational turn
    first; once you have enough to draft one, confirm it via
    `AskUserQuestion` with your best draft as the recommended option.
