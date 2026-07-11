@@ -5,6 +5,7 @@ import { computeNetAmount } from "../balance.js";
 
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import type { SerializedChartTransaction } from "./home-chart.js";
+import { formatUtcDate } from "./format-utc-date.js";
 
 /** Number of weeks loaded per scroll batch (initial load and each subsequent fetch). */
 export const SCROLL_BATCH_WEEKS = 12;
@@ -15,7 +16,7 @@ export function formatTimestamp(ts: Timestamp | null): string {
   if (isNaN(date.getTime())) {
     throw new DataIntegrityError(`Invalid Date from Timestamp: ${String(ts)}`);
   }
-  return date.toLocaleDateString();
+  return formatUtcDate(date.getTime());
 }
 
 function formatCategory(category: string): string {

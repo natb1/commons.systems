@@ -1,0 +1,182 @@
+#!/usr/bin/env bash
+# transition-node — the graph-native forward phase-transition writer
+# (tactic-graph-router-transitions Unit 1). The graph lane's replacement for the
+# legacy label edits at dispatch-complete-phase / dispatch-finalize-phase: at
+# the seam where a phase worker finishes, it consults the phase's sensors and
+# the freshness gates, then lands the phase / marker / attempt / pr write on
+# origin/main through graph-commit.
+#
+# Spec: intentions/tactic-graph-native-dispatch.md §1.1, §2.4; strategy
+# clarifications 10, 18, 22. The DECISION (ladder edge, fix interrupt + resume,
+# residue→main-qa, freshness holds) lives in the pure `transitions` module,
+# applied via apply-node-transition.ts; this wrapper owns only the environmental
+# parts: the origin/main snapshot, the CI verdict sensor, the fingerprint gates,
+# arming gh auto-merge, and refreshing the phase-start stamp.
+#
+# Doctrine: the transition is a STATE-ONLY commit on main, never on the work PR
+# branch (strategy clarification 15). Run this from a main-based checkout; from
+# a PR-branch worktree the caller applies the reset-dance graph-commit needs
+# (same constraint as park-node).
+#
+# Sensor: CI verdict via dispatch_ci_verdict_rest on the PR head sha
+# (passing/failing/pending; pending maps to the pure layer's `unknown` = not
+# a fix interrupt). No PR yet → unknown (a pre-PR implement completion advances
+# to qa without a CI gate).
+#
+# Freshness gates (compute-freshness.ts over the origin/main snapshot):
+#   - scope-stale → delegate to demote-node-to-implement (the backward
+#     transition owns its own provenance commit + PR comment).
+#   - strategy-stale → hold at the completed phase (the selector queues the
+#     re-evaluation; a confirm re-stamps and the next tick advances).
+#   - missing stamp at the review→merge ARMING point → fail closed: hold, do
+#     NOT arm merge. Elsewhere a missing stamp fails open.
+#
+# Usage: transition-node <node-id> [--set-pr <n>]
+#
+# Stdout: exactly one outcome line —
+#   transitioned <id> <prev> -> <new>
+#   armed-merge <id> (review complete)
+#   demoted <id> -> implement (scope drift)
+#   held <id> at <phase> (<reason>)
+#
+# Exit codes: 0 landed; 1 write/graph-commit failure; 2 usage/environment error.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+UTIL_SCRIPTS="$REPO_ROOT/packages/intentionsutil/scripts"
+GRAPH_COMMIT="$UTIL_SCRIPTS/graph-commit"
+
+NODE_ID="${1:-}"
+if [[ -z "$NODE_ID" ]]; then
+  echo "usage: transition-node <node-id> [--set-pr <n>]" >&2
+  exit 2
+fi
+shift || true
+SET_PR=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --set-pr)
+      SET_PR="${2:-}"
+      if [[ ! "$SET_PR" =~ ^[0-9]+$ ]]; then
+        echo "transition-node: --set-pr requires a non-negative integer" >&2
+        exit 2
+      fi
+      shift 2 ;;
+    *) echo "transition-node: unexpected argument '$1'" >&2; exit 2 ;;
+  esac
+done
+
+# Read the whole local node frontmatter as JSON once, for field extraction.
+read_node_json() {
+  (cd "$REPO_ROOT" && node --import tsx/esm -e '
+    const { readNode } = await import("./packages/intentionsutil/src/store.js");
+    process.stdout.write(JSON.stringify(readNode("./intentions", process.argv[1])));
+  ' "$NODE_ID")
+}
+
+# Refresh the phase-start stamp to the post-write scope fingerprint + the new
+# origin/main sha, so machinery body appends do not later trip the custody gate.
+refresh_stamp() {
+  local stamp_file="$REPO_ROOT/.claude/worktrees/$NODE_ID.scope-fingerprint"
+  local sha fp
+  sha="$( (cd "$REPO_ROOT" && git rev-parse origin/main 2>/dev/null) )" || return 0
+  fp="$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
+    const { readNode, readNodeBody } = await import("./packages/intentionsutil/src/store.js");
+    const { tacticScopeFingerprint } = await import("./packages/intentionsutil/src/router.js");
+    const id = process.argv[1];
+    process.stdout.write(tacticScopeFingerprint(readNode("./intentions", id).statement, readNodeBody("./intentions", id)));
+  ' "$NODE_ID" 2>/dev/null) )" || return 0
+  [[ -n "$fp" && -n "$sha" ]] || return 0
+  mkdir -p "$(dirname "$stamp_file")" 2>/dev/null || true
+  printf '%s %s\n' "$fp" "$sha" > "$stamp_file" 2>/dev/null || true
+}
+
+# --- Read the current phase + PR --------------------------------------------
+NODE_JSON="$(read_node_json)" || { echo "transition-node: could not read node $NODE_ID" >&2; exit 2; }
+PHASE="$(jq -r '.phase // "implement"' <<<"$NODE_JSON")"
+PR="$SET_PR"
+[[ -z "$PR" ]] && PR="$(jq -r '.execution.pr // empty' <<<"$NODE_JSON")"
+
+# --- CI verdict sensor -------------------------------------------------------
+CI="unknown"
+if [[ -n "$PR" ]]; then
+  HEAD_SHA="$(gh_pr_view_rest "$PR" 2>/dev/null | jq -r '.headRefOid // empty')" || true
+  if [[ -n "$HEAD_SHA" ]]; then
+    case "$(dispatch_ci_verdict_rest "$HEAD_SHA" 2>/dev/null || echo pending)" in
+      failing) CI="failing" ;;
+      passing) CI="passing" ;;
+      *) CI="unknown" ;;
+    esac
+  fi
+fi
+
+# --- Freshness gates over an origin/main snapshot ----------------------------
+SNAP_DIR="$(mktemp -d)" || { echo "transition-node: mktemp failed" >&2; exit 2; }
+trap 'rm -rf "$SNAP_DIR"' EXIT
+if ! (cd "$REPO_ROOT" && git archive origin/main intentions 2>/dev/null | tar -x -C "$SNAP_DIR"); then
+  mkdir -p "$SNAP_DIR/intentions"
+fi
+STAMP_FILE="$REPO_ROOT/.claude/worktrees/$NODE_ID.scope-fingerprint"
+FRESH="$( (cd "$REPO_ROOT" && node --import tsx/esm "$UTIL_SCRIPTS/compute-freshness.ts" \
+  "$NODE_ID" --snapshot "$SNAP_DIR/intentions" --stamp "$STAMP_FILE") )" || {
+  echo "transition-node: freshness gate computation failed for $NODE_ID" >&2; exit 2; }
+SCOPE_STALE="$(jq -r '.scopeStale' <<<"$FRESH")"
+STRATEGY_STALE="$(jq -r '.strategyStale' <<<"$FRESH")"
+STAMP_MISSING="$(jq -r '.stampMissing' <<<"$FRESH")"
+
+# --- Scope-stale → delegate to the demotion primitive ------------------------
+if [[ "$SCOPE_STALE" == "true" ]]; then
+  if "$UTIL_SCRIPTS/demote-node-to-implement" "$NODE_ID"; then
+    echo "demoted $NODE_ID -> implement (scope drift)"
+    exit 0
+  fi
+  echo "transition-node: demotion of $NODE_ID failed" >&2
+  exit 1
+fi
+
+# --- Apply the forward/hold/fix decision to the local store ------------------
+APPLY_FLAGS=("$NODE_ID" "--ci" "$CI")
+[[ "$STRATEGY_STALE" == "true" ]] && APPLY_FLAGS+=("--strategy-stale")
+[[ -n "$SET_PR" ]] && APPLY_FLAGS+=("--set-pr" "$SET_PR")
+if ! RESULT="$( (cd "$REPO_ROOT" && node --import tsx/esm "$UTIL_SCRIPTS/apply-node-transition.ts" "${APPLY_FLAGS[@]}") )"; then
+  echo "transition-node: apply-node-transition failed for $NODE_ID" >&2
+  exit 1
+fi
+NEW_PHASE="$(jq -r '.phase' <<<"$RESULT")"
+ARM_MERGE="$(jq -r '.armMerge' <<<"$RESULT")"
+HOLD="$(jq -r '.hold' <<<"$RESULT")"
+
+# Missing-stamp fail-closed at the arming point (worker-start has landed).
+if [[ "$ARM_MERGE" == "true" && "$STAMP_MISSING" == "true" ]]; then
+  echo "transition-node: $NODE_ID review complete but the phase-start stamp is missing — holding (arming requires the stamp)" >&2
+  echo "held $NODE_ID at review (missing-stamp)"
+  exit 0
+fi
+
+# --- Land the state-only write on main ---------------------------------------
+if ! "$GRAPH_COMMIT" -m "graph: transition $NODE_ID to $NEW_PHASE" "$NODE_ID"; then
+  echo "transition-node: graph-commit failed for $NODE_ID" >&2
+  exit 1
+fi
+
+refresh_stamp
+
+# --- Arm auto-merge at clean review completion -------------------------------
+if [[ "$ARM_MERGE" == "true" ]]; then
+  if [[ -n "$PR" ]]; then
+    gh pr ready "$PR" >/dev/null 2>&1 || true
+    "$SCRIPT_DIR/dispatch-auto-merge" >/dev/null 2>&1 || true
+  fi
+  echo "armed-merge $NODE_ID (review complete)"
+  exit 0
+fi
+
+if [[ "$HOLD" == "true" ]]; then
+  echo "held $NODE_ID at $NEW_PHASE (strategy-fingerprint freeze)"
+  exit 0
+fi
+
+echo "transitioned $NODE_ID $PHASE -> $NEW_PHASE"
+exit 0

@@ -57,13 +57,17 @@ export function createLocalFolderMediaSource<T extends { id: string; addedAt: st
 
       const fileHandle = entry as unknown as LocalFileHandleLike;
 
-      let item: T | null;
+      let file: File;
       try {
-        const file = await fileHandle.getFile();
-        item = config.toItem(file, entry.name);
+        file = await fileHandle.getFile();
       } catch {
+        // Expected I/O failure (file removed or permission revoked between
+        // enumeration and read): skip this entry. The catch is deliberately
+        // narrowed to getFile() so a bug thrown by the consumer's toItem mapper
+        // surfaces instead of silently dropping the file from the library.
         continue;
       }
+      const item = config.toItem(file, entry.name);
       if (item === null) continue;
 
       results.push(item);

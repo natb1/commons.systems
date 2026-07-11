@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+# demote-node-to-implement — the chain-of-custody backward transition
+# (tactic-graph-router-transitions Unit 1). Beside park-node: the graph lane's
+# owned primitive for routing a scope-stale tactic back to `implement` so its
+# ladder re-runs against the merge-time scope.
+#
+# Invoked in two places (both hand this script a node whose current scope no
+# longer matches the phase-start stamp):
+#   1. The transition writer (transition-node) when its scope-fingerprint gate
+#      trips at a forward-transition point.
+#   2. A tick worker on the worker-start gate's exit 13 (stale-selection).
+#
+# What it writes (through the validated writeNode, via apply-node-transition's
+# `--scope-stale` demotion path): `phase := implement` and `execution.markers
+# := []` (the completed-phase record no longer holds against the new scope, so
+# the re-selected implement worker re-runs implement→qa→review). branch, pr,
+# attempts, and strategy_fingerprint are preserved.
+#
+# Provenance: the demotion commit message names the exact set of scope edits
+# being absorbed — `git log <stamped-sha>..origin/main -- intentions/<id>.md` —
+# so the routed-back worker opens with the delta named, not archaeology. The
+# stamped sha is read from the worker-start gate's stamp file
+# (<project-root>/.claude/worktrees/<node-id>.scope-fingerprint, format
+# `<fingerprint> <origin-main-sha>`). When the stamp is missing (legacy launch,
+# recreated worktree) the range is omitted with a logged note — the current
+# body alone is sufficient for correctness; the range is a focus aid. When
+# `execution.pr` exists the same provenance is posted as a PR comment.
+#
+# Usage: demote-node-to-implement <node-id>
+#
+# Exit codes: 0 demoted and landed on main; 1 the write or graph-commit failed;
+# 2 usage error.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+APPLY="$SCRIPT_DIR/apply-node-transition.ts"
+
+NODE_ID="${1:-}"
+if [[ $# -ne 1 || -z "$NODE_ID" ]]; then
+  echo "usage: demote-node-to-implement <node-id>" >&2
+  exit 2
+fi
+
+# --- Provenance range from the phase-start stamp -----------------------------
+STAMP_FILE="$REPO_ROOT/.claude/worktrees/$NODE_ID.scope-fingerprint"
+PROVENANCE=""
+if [[ -r "$STAMP_FILE" ]]; then
+  STAMPED_SHA="$(awk 'NR==1{print $2}' "$STAMP_FILE")"
+  if [[ -n "$STAMPED_SHA" ]]; then
+    # The range of scope edits absorbed since the phase started. Best-effort:
+    # a missing/unfetched sha just yields no range (never blocks the demotion).
+    if RANGE="$(git -C "$REPO_ROOT" log --no-merges --format='  %h %s' \
+        "$STAMPED_SHA..origin/main" -- "intentions/$NODE_ID.md" 2>/dev/null)" \
+        && [[ -n "$RANGE" ]]; then
+      PROVENANCE="Scope edits absorbed since phase start ($STAMPED_SHA..origin/main):"$'\n'"$RANGE"
+    fi
+  fi
+else
+  echo "demote-node-to-implement: no phase-start stamp at $STAMP_FILE — omitting the scope-edit range (the current node body is authoritative regardless)" >&2
+fi
+
+# --- Apply the demotion write ------------------------------------------------
+# apply-node-transition's --scope-stale path sets phase=implement and clears
+# markers regardless of the (unused here) CI verdict.
+if ! RESULT="$(cd "$REPO_ROOT" && node --import tsx/esm "$APPLY" "$NODE_ID" --scope-stale)"; then
+  echo "demote-node-to-implement: failed to write the demotion for $NODE_ID" >&2
+  exit 1
+fi
+echo "$RESULT" >&2
+
+# --- Land it on main ---------------------------------------------------------
+MSG="graph: demote $NODE_ID to implement (scope drift)"
+if [[ -n "$PROVENANCE" ]]; then
+  MSG="$MSG"$'\n\n'"$PROVENANCE"
+fi
+if ! "$SCRIPT_DIR/graph-commit" -m "$MSG" "$NODE_ID"; then
+  echo "demote-node-to-implement: graph-commit failed for $NODE_ID; the demotion write is on disk but not landed" >&2
+  exit 1
+fi
+
+# --- PR comment (best-effort) ------------------------------------------------
+# The routed-back worker sees the delta on the PR too, not only in the commit.
+PR="$(jq -r 'try .pr // empty' <<<"$RESULT" 2>/dev/null || true)"
+# apply-node-transition prints the phase result, not execution.pr; re-read the
+# landed node for the PR number instead.
+PR="$(cd "$REPO_ROOT" && node --import tsx/esm -e '
+  const { readNode } = await import("./packages/intentionsutil/src/store.js");
+  const n = readNode("./intentions", process.argv[1]);
+  process.stdout.write(String(n.execution && n.execution.pr !== null ? n.execution.pr : ""));
+' "$NODE_ID" 2>/dev/null || true)"
+if [[ -n "$PR" ]]; then
+  COMMENT="Scope drift demoted this tactic to \`implement\` — its \`implement→qa→review\` chain re-runs against the current node scope (chain-of-custody, tactic-graph-router-transitions)."
+  if [[ -n "$PROVENANCE" ]]; then
+    COMMENT="$COMMENT"$'\n\n'"$PROVENANCE"
+  fi
+  gh pr comment "$PR" --body "$COMMENT" >/dev/null 2>&1 \
+    || echo "demote-node-to-implement: PR #$PR comment failed (non-fatal); the demotion landed and its commit carries the provenance" >&2
+fi
+
+exit 0

@@ -117,7 +117,7 @@ fi
 # patch reads the current snapshot's rules+transactions, applies the JSON spec,
 # and writes a new staged snapshot. Output MUST differ from input (the binary
 # errors otherwise), hence a distinct /tmp path.
-"$BUDGET_ETL_BIN" patch --input "$current" --spec "$SPEC" --output ${TMPDIR:-/tmp}/stage1.enc.json
+"$BUDGET_ETL_BIN" patch --input "$current" --spec "$SPEC" --output "${TMPDIR:-/tmp}/stage1.enc.json"
 
 # --- Step 7: merge statements into a fresh immutable snapshot ----------------
 # merge HARD-ERRORS if any transaction is still uncategorized — that is the
@@ -125,7 +125,7 @@ fi
 # binary's own exit code with its stderr explaining which transactions remain.
 TS=$(date +%Y-%m-%dT%H-%M-%S)
 OUT="$snapshotDir/budget-$TS.enc.json"
-"$BUDGET_ETL_BIN" merge --input ${TMPDIR:-/tmp}/stage1.enc.json --dir "$statements" --output "$OUT"
+"$BUDGET_ETL_BIN" merge --input "${TMPDIR:-/tmp}/stage1.enc.json" --dir "$statements" --output "$OUT"
 
 # --- Step 8: publish onto `current` -----------------------------------------
 # cp -f, NOT mv and NOT ln -s: the merged snapshot stays in snapshotDir as
@@ -140,7 +140,7 @@ cp -f "$OUT" "$current"
 # budget-etl source: the SKILL.md loop branches on this residual to decide
 # whether to iterate the categorization dialog. report exits 0 even with
 # uncategorized and writes no snapshot.
-"$BUDGET_ETL_BIN" report --input ${TMPDIR:-/tmp}/stage1.enc.json --dir "$statements" --report ${TMPDIR:-/tmp}/inspect.json
+"$BUDGET_ETL_BIN" report --input "${TMPDIR:-/tmp}/stage1.enc.json" --dir "$statements" --report "${TMPDIR:-/tmp}/inspect.json"
 
 # --- Step 10: summary table -------------------------------------------------
 # One row per new statement: institution | new txn count | first date | last
@@ -152,11 +152,11 @@ jq -r '
   .new_statements[]
   | [.institution, (.txn_count | tostring), .date_range[0], .date_range[1], (.balance | tostring)]
   | @tsv
-' ${TMPDIR:-/tmp}/inspect.json | while IFS=$'\t' read -r inst txns first last bal; do
+' "${TMPDIR:-/tmp}/inspect.json" | while IFS=$'\t' read -r inst txns first last bal; do
   printf '%-24s %10s %-12s %-12s %12s\n' "$inst" "$txns" "$first" "$last" "$bal"
 done
 
-residual=$(jq '.uncategorized | length' ${TMPDIR:-/tmp}/inspect.json)
+residual=$(jq '.uncategorized | length' "${TMPDIR:-/tmp}/inspect.json")
 echo ""
 echo "  residual uncategorized: $residual"
 echo "  new snapshot:           $OUT"

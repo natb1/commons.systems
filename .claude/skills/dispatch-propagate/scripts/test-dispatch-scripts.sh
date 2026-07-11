@@ -294,6 +294,12 @@ case "$args" in
         cat "$STUB_DIR/rest-bigpage-1.json"
         cat "$STUB_DIR/rest-bigpage-2.json"
         ;;
+      dispatch-test-limit-force-paginate)
+        # --paginate-at-limit-<=100 fixture: two pages of MIXED issues+PRs so a
+        # single page would under-deliver real issues after PR-filtering.
+        cat "$STUB_DIR/rest-forcepage-1.json"
+        cat "$STUB_DIR/rest-forcepage-2.json"
+        ;;
       dispatch-test-limit-exact)
         # Exactly-<limit> fixture: serve a single array of exactly limit items so
         # a caller's `len == limit ⇒ truncated` guard fires.
@@ -1480,6 +1486,45 @@ if grep -q -- '--paginate' "$STUB_DIR/gh-issue-list-rest-calls.log"; then
   assert_eq "limit: log does not contain --paginate" "no" "yes"
 else
   assert_eq "limit: log does not contain --paginate" "no" "no"
+fi
+teardown
+
+echo "Test: --paginate flag at limit <= 100 -- forces paginate-then-slice (up to <limit> real issues)"
+setup
+# Page 1: one real issue, one PR object, one real issue (mixed). A single page of
+# per_page=3 would yield only 2 real issues after PR-filtering -- the bug this
+# flag fixes.
+printf '%s\n' '[
+  {"number":401,"created_at":"2024-02-01T00:00:00Z","closed_at":null,"labels":[]},
+  {"number":402,"created_at":"2024-02-02T00:00:00Z","closed_at":null,"labels":[],"pull_request":{"merged_at":null}},
+  {"number":403,"created_at":"2024-02-03T00:00:00Z","closed_at":null,"labels":[]}
+]' > "$STUB_DIR/rest-forcepage-1.json"
+# Page 2: two more real issues -- reachable ONLY if --paginate was passed.
+printf '%s\n' '[
+  {"number":404,"created_at":"2024-02-04T00:00:00Z","closed_at":null,"labels":[]},
+  {"number":405,"created_at":"2024-02-05T00:00:00Z","closed_at":null,"labels":[]}
+]' > "$STUB_DIR/rest-forcepage-2.json"
+: > "$STUB_DIR/gh-issue-list-rest-calls.log"
+actual_fp=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state closed --limit 3 --paginate --label dispatch-test-limit-force-paginate)
+# Merged both pages, filtered PR 402, then sliced to the first 3 real issues:
+# 401, 403, 404 (405 is beyond the slice).
+assert_eq "force-paginate: result length == limit (3)" "3" "$(jq 'length' <<<"$actual_fp")"
+assert_eq "force-paginate: issue 401 present" "true" "$(jq 'any(.[]; .number == 401)' <<<"$actual_fp")"
+assert_eq "force-paginate: issue 403 present (page-1, after filtered PR)" "true" "$(jq 'any(.[]; .number == 403)' <<<"$actual_fp")"
+assert_eq "force-paginate: issue 404 present (page-2 -- proves pagination)" "true" "$(jq 'any(.[]; .number == 404)' <<<"$actual_fp")"
+assert_eq "force-paginate: PR object 402 filtered out" "false" "$(jq 'any(.[]; .number == 402)' <<<"$actual_fp")"
+assert_eq "force-paginate: issue 405 sliced off (beyond limit)" "false" "$(jq 'any(.[]; .number == 405)' <<<"$actual_fp")"
+# The call log must contain --paginate (the forced path was taken) ...
+if grep -q -- '--paginate' "$STUB_DIR/gh-issue-list-rest-calls.log"; then
+  assert_eq "force-paginate: log contains --paginate" "yes" "yes"
+else
+  assert_eq "force-paginate: log contains --paginate" "yes" "no"
+fi
+# ... at per_page=100 (paginate clamp), NOT per_page=3 (the single-page value).
+if grep -q 'per_page=100[^0-9]' "$STUB_DIR/gh-issue-list-rest-calls.log"; then
+  assert_eq "force-paginate: log contains per_page=100" "yes" "yes"
+else
+  assert_eq "force-paginate: log contains per_page=100" "yes" "no"
 fi
 teardown
 
@@ -40968,6 +41013,65 @@ echo "Test: resolve_dirty_apps -- root-config fan-out marks all workspaces"
 out=$(printf '%s\n' "package.json" | (source "$SCRIPT_DIR/lib.sh"; resolve_dirty_apps "$TMPDIR_TEST") | sort)
 assert_eq "resolve_dirty_apps: root-config fan-out marks all workspaces" \
   $'blog\nlanding\npackages/ds' "$out"
+
+# vitest.config.ts is the shared root test config: editing it alone must fan out
+# to every workspace, otherwise a broken test config resolves an empty dirty set
+# and run-unit-tests exits green. (#tactic-ci-change-detection-transitive Unit 2)
+echo "Test: resolve_dirty_apps -- vitest.config.ts fan-out marks all workspaces"
+out=$(printf '%s\n' "vitest.config.ts" | (source "$SCRIPT_DIR/lib.sh"; resolve_dirty_apps "$TMPDIR_TEST") | sort)
+assert_eq "resolve_dirty_apps: vitest.config.ts fan-out marks all workspaces" \
+  $'blog\nlanding\npackages/ds' "$out"
+
+rm -rf "$TMPDIR_TEST"
+TMPDIR_TEST=""
+
+# Transitive internal-dep closure (#tactic-ci-change-detection-transitive Unit 1).
+# fellspiral -> @commons-systems/blog -> @commons-systems/ds, but fellspiral
+# never declares ds. A ds-only change must still mark fellspiral dirty via the
+# transitive closure, not just blog (its direct declarer).
+echo ""
+echo "=== resolve_dirty_apps: transitive internal-dep closure ==="
+
+echo "Test: resolve_dirty_apps -- ds change marks transitive dependent fellspiral"
+TMPDIR_TEST=$(mktemp -d)
+mkdir -p "$TMPDIR_TEST/fellspiral" "$TMPDIR_TEST/blog" "$TMPDIR_TEST/packages/ds"
+printf '%s' '{"workspaces":["fellspiral","blog","packages/ds"]}' > "$TMPDIR_TEST/package.json"
+printf '%s' '{"dependencies":{"@commons-systems/blog":"*"}}' > "$TMPDIR_TEST/fellspiral/package.json"
+printf '%s' '{"dependencies":{"@commons-systems/ds":"*"}}' > "$TMPDIR_TEST/blog/package.json"
+printf '%s' '{}' > "$TMPDIR_TEST/packages/ds/package.json"
+
+out=$(printf '%s\n' "packages/ds/base.css" | (source "$SCRIPT_DIR/lib.sh"; resolve_dirty_apps "$TMPDIR_TEST") | sort)
+assert_eq "resolve_dirty_apps: ds change marks blog and transitive fellspiral" \
+  $'blog\nfellspiral\npackages/ds' "$out"
+
+# A change to the mid-tier package (blog) marks only blog and its dependent
+# fellspiral, never the leaf ds it consumes (dependents propagate up, not down).
+echo "Test: resolve_dirty_apps -- blog change marks fellspiral but not ds"
+out=$(printf '%s\n' "blog/index.ts" | (source "$SCRIPT_DIR/lib.sh"; resolve_dirty_apps "$TMPDIR_TEST") | sort)
+assert_eq "resolve_dirty_apps: blog change marks blog and fellspiral only" \
+  $'blog\nfellspiral' "$out"
+
+rm -rf "$TMPDIR_TEST"
+TMPDIR_TEST=""
+
+# Same transitive closure, but with the mid-tier package nested under packages/
+# (the real repo's actual layout: every internal @commons-systems/* package
+# lives at packages/<name>, never at a bare top-level <name> dir). The
+# dependency-short-name key ("blog") and the workspace app path
+# ("packages/blog") diverge here, which the flat-workspace fixture above
+# cannot exercise — a BFS that mistakenly re-keys on the full app path instead
+# of re-deriving the short name silently truncates the closure at depth 1.
+echo "Test: resolve_dirty_apps -- ds change marks transitive dependent fellspiral (nested packages/ mid-tier)"
+TMPDIR_TEST=$(mktemp -d)
+mkdir -p "$TMPDIR_TEST/fellspiral" "$TMPDIR_TEST/packages/blog" "$TMPDIR_TEST/packages/ds"
+printf '%s' '{"workspaces":["fellspiral","packages/blog","packages/ds"]}' > "$TMPDIR_TEST/package.json"
+printf '%s' '{"dependencies":{"@commons-systems/blog":"*"}}' > "$TMPDIR_TEST/fellspiral/package.json"
+printf '%s' '{"peerDependencies":{"@commons-systems/ds":"*"}}' > "$TMPDIR_TEST/packages/blog/package.json"
+printf '%s' '{}' > "$TMPDIR_TEST/packages/ds/package.json"
+
+out=$(printf '%s\n' "packages/ds/base.css" | (source "$SCRIPT_DIR/lib.sh"; resolve_dirty_apps "$TMPDIR_TEST") | sort)
+assert_eq "resolve_dirty_apps: ds change marks nested packages/blog and transitive fellspiral" \
+  $'fellspiral\npackages/blog\npackages/ds' "$out"
 
 rm -rf "$TMPDIR_TEST"
 TMPDIR_TEST=""

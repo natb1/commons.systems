@@ -281,20 +281,29 @@ func selectPrimary(group []budget.NormTxn) budget.NormTxn {
 	return best
 }
 
-// autoNormKey is the grouping key for auto-normalization.
+// autoNormKey is the grouping key for auto-normalization. Institution and
+// account are part of the key so two distinct same-day, same-amount,
+// same-description charges on different accounts are not collapsed into one
+// (which would silently drop a real transaction); auto-normalization only
+// dedups the same account's transactions across overlapping statement periods.
 type autoNormKey struct {
+	institution string
+	account     string
 	description string // lowercased
 	amount      int64
 	day         string // "2006-01-02" in UTC
 }
 
-// autoNormalize groups transactions with matching description (case-insensitive),
-// amount, and date from different statements. These are exact duplicates from
-// overlapping statement periods that don't require a rule.
+// autoNormalize groups transactions with matching institution, account,
+// description (case-insensitive), amount, and date from different statements.
+// These are exact duplicates from overlapping statement periods that don't
+// require a rule.
 func autoNormalize(txns []budget.NormTxn, normalized map[string]bool) []budget.NormalizationUpdate {
 	groups := make(map[autoNormKey][]budget.NormTxn)
 	for _, txn := range txns {
 		key := autoNormKey{
+			institution: txn.Institution,
+			account:     txn.Account,
 			description: strings.ToLower(txn.Description),
 			amount:      txn.Amount,
 			day:         txn.Timestamp.UTC().Truncate(24 * time.Hour).Format("2006-01-02"),

@@ -189,6 +189,16 @@ describe("Budgets table interactivity (blur/change save) — Unit 3 contract", (
     expect(input.title).toContain("non-negative");
   });
 
+  it("rejects a cleared allowance instead of persisting 0", async () => {
+    const c = await renderBudgets([budget({ allowance: 150 })]);
+    const input = c.querySelector(".edit-allowance") as HTMLInputElement; // type-safety-ok: test DOM query
+    input.value = "";
+    blur(input);
+    await flush();
+    expect(activeDS.updateBudget).not.toHaveBeenCalled();
+    expect(input.classList.contains("save-error")).toBe(true);
+  });
+
   it("skips save when name value unchanged", async () => {
     const c = await renderBudgets([budget({ name: "Food" })]);
     const input = c.querySelector(".edit-name") as HTMLInputElement;
@@ -345,6 +355,27 @@ describe("Budgets overrides table interactivity — Unit 3 contract", () => {
     const [calledBudgetId, calledOverrides] = (activeDS.updateBudgetOverrides as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(calledBudgetId).toBe("food");
     expect(calledOverrides).toHaveLength(1);
+  });
+
+  it("does not clobber an existing same-date override; edits it in place instead", async () => {
+    // An override already exists for today's date. Clicking "Add Override"
+    // (which would insert a today-dated $0 row and save) must not overwrite it.
+    const now = new Date();
+    const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    const c = await renderBudgets([
+      budget({ overrides: [{ date: Timestamp.fromMillis(todayUTC), balance: 42 }] }),
+    ]);
+    const addBtn = c.querySelector("#add-override") as HTMLButtonElement; // type-safety-ok: test DOM query cast, file convention
+    addBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await flush();
+    // No second row inserted, and no clobbering save fired.
+    expect(c.querySelectorAll("#overrides-table .override-row").length).toBe(1);
+    expect(activeDS.updateBudgetOverrides).not.toHaveBeenCalled();
+    // The existing override's balance is focused for in-place editing, and its
+    // value is untouched (not zeroed).
+    const balanceInput = c.querySelector("#overrides-table .edit-override-balance") as HTMLInputElement; // type-safety-ok: test DOM query cast, file convention
+    expect(document.activeElement).toBe(balanceInput);
+    expect(balanceInput.value).toBe("42");
   });
 
   it("reverts a deleted row and flags save-error when the delete re-write fails", async () => {

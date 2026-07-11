@@ -60,10 +60,12 @@ if [[ -n "$output_file" ]]; then
   fi
 fi
 
-# Wait for all checks to complete (--watch blocks until done)
+# Wait for all checks to complete (--watch blocks until done). A non-zero exit
+# here only means some check ended non-green; the authoritative verdict is parsed
+# from --json below, so watch's exit status is deliberately ignored.
 gh pr checks "$pr_number" --watch > /dev/null 2>&1 || true
 
-# Capture final status of all checks (gh pr checks exits non-zero on failure)
+# Capture the human-readable table for the log / output file (display only).
 results=$(gh pr checks "$pr_number" 2>&1) || true
 
 if [[ -n "$output_file" ]]; then
@@ -72,7 +74,19 @@ else
   printf '%s\n' "$results"
 fi
 
-# Exit non-zero if any check failed
-if printf '%s\n' "$results" | grep -q 'fail'; then
+# Authoritative verdict: parse the check-run conclusions as structured JSON
+# rather than grepping the human-readable text. gh's `bucket` field is the
+# normalized category (pass|fail|pending|skipping|cancel), so a check NAMED
+# `fail-fast` or a `failed to…` diagnostic no longer forces red, and a
+# gh/network failure that produces no JSON is treated as an error (exit 2), not
+# as a false green.
+checks_json=$(gh pr checks "$pr_number" --json bucket,state,name 2>/dev/null) || checks_json=""
+if [[ -z "$checks_json" ]] || ! printf '%s' "$checks_json" | jq -e . >/dev/null 2>&1; then
+  echo "Error: could not retrieve check-run status as JSON for PR $pr_number" >&2
+  exit 2
+fi
+
+# Exit non-zero if any check landed in the 'fail' bucket.
+if printf '%s' "$checks_json" | jq -e 'any(.[]; .bucket == "fail")' >/dev/null; then
   exit 1
 fi

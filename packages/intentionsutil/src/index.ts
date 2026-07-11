@@ -22,6 +22,29 @@ export {
   PHASE_LADDER,
 } from "./router.js";
 export type { GraphCandidate, GraphSelection, SelectionEvent } from "./router.js";
+export {
+  PLANNED_MARKER,
+  QA_DONE_MARKER,
+  REVIEWED_MARKER,
+  PHASE_COMPLETION_MARKER,
+  LADDER,
+  forwardPhase,
+  fixInterrupt,
+  resumeAfterFix,
+  decideTransition,
+  addMarker,
+  incrementAttempt,
+  reconcileMergedPhase,
+  reconcileClosedPhase,
+  hasNeedsMainResidue,
+  stampRound,
+  inboundBlockers,
+  strategiesToStamp,
+  parseScopeStamp,
+  isScopeStale,
+  isStrategyStale,
+} from "./transitions.js";
+export type { CiVerdict, TransitionDecision, ScopeStamp } from "./transitions.js";
 export { IntentionSchemaError } from "./errors.js";
 export { writeNode, readNode, readNodeBody, listNodes } from "./store.js";
 export { projectGoals, activeFrontier, realizationForOwner, renderFrontier } from "./goals.js";

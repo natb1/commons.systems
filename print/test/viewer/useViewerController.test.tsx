@@ -24,10 +24,10 @@ function fakeStore(
 // The latest hook result, captured each render so tests read state + handlers.
 let captured: UseViewerControllerResult | null = null;
 
-// Non-null accessor for the captured hook result. Newer tests use this instead
-// of a `captured!` non-null assertion (a type-safety escape hatch); the leading
-// `!` guard here is not one.
-function cap(): UseViewerControllerResult {
+// Non-null accessor for the captured hook result. Tests use this instead of a
+// `captured!` non-null assertion (a type-safety escape hatch); the leading `!`
+// guard here is not one.
+function result(): UseViewerControllerResult {
   if (!captured) throw new Error("hook result not captured — mount() first");
   return captured;
 }
@@ -228,7 +228,7 @@ describe("useViewerController persistence", () => {
     await mount(defaultArgs({ store }));
     await flushInit();
 
-    await act(async () => { cap().goNext(); });
+    await act(async () => { result().goNext(); });
     await flushInit();
 
     // Fire pagehide before the 500ms debounce elapses — the save must flush now,
@@ -245,7 +245,7 @@ describe("useViewerController persistence", () => {
     await mount(defaultArgs({ store }));
     await flushInit();
 
-    await act(async () => { cap().goNext(); });
+    await act(async () => { result().goNext(); });
     await flushInit();
 
     const original = Object.getOwnPropertyDescriptor(Document.prototype, "visibilityState");
@@ -268,7 +268,7 @@ describe("useViewerController persistence", () => {
     await mount(defaultArgs({ store }));
     await flushInit();
 
-    await act(async () => { cap().goNext(); }); // to page 2
+    await act(async () => { result().goNext(); }); // to page 2
     await flushInit();
     await act(async () => { await vi.runAllTimersAsync(); }); // first save("2") rejects
 
@@ -279,7 +279,7 @@ describe("useViewerController persistence", () => {
     // have recorded "2" as saved, this fires a fresh (successful) retry. If the
     // code marked lastSavedPosition before the write settled, this would dedup
     // out and never retry the lost position.
-    await act(async () => { cap().goToPage(2); });
+    await act(async () => { result().goToPage(2); });
     await flushInit();
     await act(async () => { await vi.runAllTimersAsync(); });
 
@@ -654,6 +654,56 @@ describe("useViewerController spread mode", () => {
     expect(renderResult).not.toHaveBeenCalled();
     expect(spread.clearSearch).not.toHaveBeenCalled();
   });
+
+  it("onPanelNavigate: spread → controller.goToPage(renderer.currentPage) re-renders the spread", async () => {
+    const renderPageInto = vi.fn().mockResolvedValue(undefined);
+    const spread = makeSpreadRenderer({ renderPageInto });
+    await mount(defaultArgs({ createRenderer: () => spread }));
+    await flushInit();
+    await act(async () => { result().toggleSpread(); });
+    await flushInit();
+
+    // Simulate a bookmark/outline click moving the underlying renderer, the way
+    // goToPosition / goToOutlineEntry do, then the panel calling onPanelNavigate.
+    await spread.goToPage(5);
+    renderPageInto.mockClear();
+    await act(async () => { result().onPanelNavigate(); });
+    await flushInit();
+
+    // The spread re-rendered to the renderer's new page (page 5 → spread 4–5).
+    const pages = renderPageInto.mock.calls.map((c) => c[0]);
+    expect(pages).toContain(4);
+    expect(pages).toContain(5);
+  });
+
+  it("onPanelNavigate: single mode does not touch a spread surface", async () => {
+    const single = makeMockRenderer();
+    await mount(defaultArgs({ createRenderer: () => single }));
+    await flushInit();
+    const before = result().navSignal;
+    await act(async () => { result().onPanelNavigate(); });
+    await flushInit();
+    // syncNav still fires (navSignal bumps) but there is no spread to render.
+    expect(result().navSignal).toBeGreaterThan(before);
+  });
+
+  it("getPosition: single reads the renderer; spread reads the controller's live page/label", async () => {
+    const renderer = makeSpreadRenderer();
+    await mount(defaultArgs({ createRenderer: () => renderer }));
+    await flushInit();
+    await renderer.goToPage(3);
+
+    expect(result().getPosition()).toEqual({ position: "3", label: "Page 3 / 10" });
+
+    await act(async () => { result().toggleSpread(); });
+    await flushInit();
+
+    // Page 3 sits in spread 2–3; the controller reports its left page + spread label.
+    expect(result().getPosition()).toEqual({
+      position: "2",
+      label: "Pages 2–3 / 10",
+    });
+  });
 });
 
 describe("useViewerController keyboard + panel", () => {
@@ -688,6 +738,21 @@ describe("useViewerController keyboard + panel", () => {
     await flushInit();
 
     expect(renderer.next).toHaveBeenCalled();
+  });
+
+  it("modified arrow keys (alt/ctrl/meta/shift) are ignored so browser/OS shortcuts still fire", async () => {
+    const renderer = makeMockRenderer();
+    await mount(defaultArgs({ createRenderer: () => renderer }));
+    await flushInit();
+
+    for (const modifier of ["altKey", "ctrlKey", "metaKey", "shiftKey"] as const) {
+      const event = new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true, [modifier]: true });
+      Object.defineProperty(event, "target", { value: document.body });
+      await act(async () => { document.dispatchEvent(event); });
+      await flushInit();
+    }
+
+    expect(renderer.prev).not.toHaveBeenCalled();
   });
 
   it("panelCollapsed toggles", async () => {

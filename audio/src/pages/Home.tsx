@@ -43,9 +43,12 @@ function Row({
     const checked = e.currentTarget.checked;
     try {
       const { id, title, artist, album, origin, storagePath, localName } = item;
+      // The item fields are typed, not DOM-scraped, so only the source locator
+      // can genuinely be absent: a local item without a localName, or a cloud
+      // item without a storagePath, has nothing for the player to resolve.
       const locatorOk = origin === "local" ? !!localName : !!storagePath;
-      if (!id || !title || !artist || !album || !origin || !locatorOk) {
-        logError(new Error("Queue toggle: missing data attributes on audio row"), {
+      if (!locatorOk) {
+        logError(new Error("Queue toggle: audio item is missing its source locator"), {
           operation: "queue-toggle",
         });
         return;

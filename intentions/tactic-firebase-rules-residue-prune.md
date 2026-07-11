@@ -27,20 +27,48 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: fix
+phase: review
 execution:
   branch: tactic-firebase-rules-residue-prune
   pr: 2831
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
 validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  test_integrity_waiver:
+    pr: 2831
+    signal: 2
+    max_net: 190
+    paths:
+      - packages/rules-test/test/firestore/budget-budgets.test.ts
+      - packages/rules-test/test/firestore/budget-journal-entries.test.ts
+      - packages/rules-test/test/firestore/budget-journal-legs.test.ts
+      - packages/rules-test/test/firestore/budget-periods.test.ts
+      - packages/rules-test/test/firestore/budget-reconciliation-events.test.ts
+      - packages/rules-test/test/firestore/budget-reconciliation-notes.test.ts
+      - packages/rules-test/test/firestore/budget-seed.test.ts
+      - packages/rules-test/test/firestore/budget-statements.test.ts
+      - packages/rules-test/test/firestore/budget-transactions.test.ts
+      - packages/rules-test/test/firestore/budget-weekly-aggregates.test.ts
+    approved: 2026-07-10
+    reason: "Author approved at office hours 2026-07-10 (human present,
+      in-conversation grant). rules-test co-deletion: firestore.rules budget
+      group-sharing blocks (memberEmails/groupId auth) removed with their
+      per-collection tests, replaced by the shared
+      describeDeniedBudgetCollection() deny-assertion helper in test/setup.ts;
+      net -190 test declarations is dead-code co-deletion, not weakening (the
+      replacement still fails if a rule block is re-introduced). Neither
+      existing exemption traces it (firestore.rules is not TS/JS; tests reduced
+      in place, not wholly deleted). Doctrine: strategy-graph-native-dispatch
+      integrity-waiver clarification; interim home
+      attributes.test_integrity_waiver per draft tactic-test-integrity-waiver."
 ---
 # Prune dead Firebase rules surface: budget's legacy group-sharing collections in firestore.rules
 

@@ -44,6 +44,9 @@ import type { PostContent } from "./marked-config.ts";
 import type { LinkSection } from "./components/info-panel.ts";
 import type { BlogRollEntry, BlogRollStrategy, LatestPost } from "./blog-roll/types.ts";
 
+/** Whether a path shows the auth controls. Single source for both nav render sites. */
+const isAdminPath = (p: string): boolean => p === "/admin";
+
 /**
  * A blog-local extra SPA route. Distinct from the shared router's `Route`: its
  * `render` returns a ReactNode (React renders it into `#app`), whereas the
@@ -222,7 +225,7 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
     return createElement(BlogNav, {
       links: config.navLinks,
       showHomeLink: config.showHomeLink,
-      showAuth: path === "/admin",
+      showAuth: isAdminPath(path),
       user: currentUser,
       onSignIn: () => void config.firebase.signIn(),
       onSignOut: () => void config.firebase.signOut(),
@@ -312,7 +315,7 @@ export function createBlogApp(config: CreateBlogAppConfig): BlogAppHandle {
       null,
       createElement(BlogNavEnd, {
         showHomeLink: config.showHomeLink,
-        showAuth: currentPath === "/admin",
+        showAuth: isAdminPath(currentPath),
         user: currentUser,
         onSignIn: () => void config.firebase.signIn(),
         onSignOut: () => void config.firebase.signOut(),

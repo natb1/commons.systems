@@ -19,9 +19,3 @@
   .content-grid { max-width: none; }
   main { max-inline-size: none; }
 }
-
-.cc-badge {
-  width: 117px;
-  height: 41px;
-  vertical-align: middle;
-}

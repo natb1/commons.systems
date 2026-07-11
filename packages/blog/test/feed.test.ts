@@ -12,6 +12,7 @@ function makeSeed(
         title: "Hello World",
         published: true,
         publishedAt: "2026-01-01T00:00:00Z",
+        filename: "hello-world.md",
         previewDescription: "A first post.",
       },
     },
@@ -56,7 +57,7 @@ describe("generateFeedXml", () => {
   it("filters unpublished posts", () => {
     const xml = setup({
       seed: makeSeed([
-        { id: "pub", data: { title: "Published", published: true, publishedAt: "2026-01-01T00:00:00Z" } },
+        { id: "pub", data: { title: "Published", published: true, publishedAt: "2026-01-01T00:00:00Z", filename: "pub.md" } },
         { id: "draft", data: { title: "Draft", published: false, publishedAt: "2026-02-01T00:00:00Z" } },
       ]),
     });
@@ -67,9 +68,9 @@ describe("generateFeedXml", () => {
   it("sorts newest-first, NaN dates to end", () => {
     const xml = setup({
       seed: makeSeed([
-        { id: "older", data: { title: "Older", published: true, publishedAt: "2026-01-01T00:00:00Z" } },
-        { id: "bad-date", data: { title: "Bad Date", published: true, publishedAt: "not-a-date" } },
-        { id: "newer", data: { title: "Newer", published: true, publishedAt: "2026-02-01T00:00:00Z" } },
+        { id: "older", data: { title: "Older", published: true, publishedAt: "2026-01-01T00:00:00Z", filename: "older.md" } },
+        { id: "bad-date", data: { title: "Bad Date", published: true, publishedAt: "not-a-date", filename: "bad-date.md" } },
+        { id: "newer", data: { title: "Newer", published: true, publishedAt: "2026-02-01T00:00:00Z", filename: "newer.md" } },
       ]),
     });
     const newerIdx = xml.indexOf("Newer");
@@ -96,6 +97,34 @@ describe("generateFeedXml", () => {
         }),
       ),
     ).toThrow('Post "no-title" is missing a title');
+  });
+
+  it("rejects a published post missing publishedAt, matching the sitemap validator", () => {
+    // buildFeedXml now reuses the canonical validatePublishedPosts (the same gate
+    // sitemap.ts uses), which requires publishedAt on every published post. A post
+    // the sitemap rejects can no longer slip into the RSS feed and drift the sets.
+    tmpDir = mkdtempSync(join(tmpdir(), "feed-test-"));
+    expect(() =>
+      generateFeedXml(
+        makeConfig({
+          distDir: tmpDir,
+          seed: makeSeed([
+            { id: "no-date", data: { title: "No Date", published: true, filename: "no-date.md" } },
+          ]),
+        }),
+      ),
+    ).toThrow('Post "no-date" is missing a publishedAt');
+  });
+
+  it("renders a fully-valid published set", () => {
+    const xml = setup({
+      seed: makeSeed([
+        { id: "a", data: { title: "Post A", published: true, publishedAt: "2026-03-01T00:00:00Z", filename: "a.md" } },
+        { id: "b", data: { title: "Post B", published: true, publishedAt: "2026-03-02T00:00:00Z", filename: "b.md" } },
+      ]),
+    });
+    expect(xml).toContain("<title>Post A</title>");
+    expect(xml).toContain("<title>Post B</title>");
   });
 
   it("writes feed.xml to distDir", () => {
