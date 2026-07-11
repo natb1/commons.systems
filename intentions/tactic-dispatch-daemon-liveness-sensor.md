@@ -26,12 +26,13 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-dispatch-daemon-liveness-sensor
   pr: 2853
   attempts: {}
-  markers: []
+  markers:
+    - qa-done
   strategy_fingerprint: f51f76ac14405b0ccbb0e47f33e0fae1e341c60a45ec9ae6b329170b7227ae05
 validates:
   - strategy-autonomous-execution
