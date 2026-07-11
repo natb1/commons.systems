@@ -67,6 +67,18 @@ clarifications:
       instead of cd &&, and CI polling uses gh run watch instead of sleep loops.
       Recorded so the wrappers are not mistaken for domain logic if the
       harness's matcher improves. Recorded 2026-07-07 code review."
+  - question: Where do dispatch.config/'s files land in the instance-repo migration?
+    answer: "Decided at decomposition: human-edited fleet-behavior config
+      (target-workers.json, auto-merge.json, epic.json, and any
+      operator-authored optional configs from the dispatch-config-load set)
+      migrates into natb1/office-hours-nate's dispatch.config/ under version
+      control, so pace-curve pins and auto-merge gating get reviewable history;
+      machine-written control artifacts (phase-model-policy.json from the token
+      audit, *.bak.* backups) stay in the same directory but gitignored there —
+      regenerable, delete-to-revert, no auto-commit machinery; the monorepo
+      locates the copies via a host symlink of <project-root>/dispatch.config to
+      the instance checkout, so dispatch-config-load and its DISPATCH_CONFIG_DIR
+      test seam are unchanged. Recorded 2026-07-11 /align-tactics round."
 tooling_goals: []
 success_signal:
   observable: forks, derivative projects, practitioners adapting the workflow
@@ -82,7 +94,9 @@ validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
-rounds: null
+rounds:
+  count: 0
+  last_completed: null
 attributes:
   conditions:
     - frontier coding agents remain accessible and economical at individual scale
