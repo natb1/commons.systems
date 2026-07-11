@@ -27,10 +27,10 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: qa
 execution:
   branch: tactic-household-consent-instrument
-  pr: null
+  pr: 2864
   attempts: {}
   markers: []
   strategy_fingerprint: d1dccff612b79832f9a7a1ef5dad00207ffc8ff8dab1e7275a2c9e4a64b639f0
