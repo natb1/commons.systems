@@ -15,13 +15,13 @@
 # park disposition.
 #
 # The park-recommendation contract: a mechanical park must carry recoverable
-# context — a reason AND a best-next-steps recommendation. Until an
-# `office_hours.recommendation` field lands in schema.ts, the caller folds the
-# recommendation into <reason> as a labelled trailing `Next steps: <...>`
-# sentence; this script writes <reason> verbatim and never emits a reason-only
-# park on the caller's behalf.
+# context — a reason AND a best-next-steps recommendation. `office_hours.
+# recommendation` is a first-class schema.ts field (landed by
+# tactic-office-hours-graph-entry); the caller passes the recommendation as the
+# optional 3rd arg below, written verbatim to that field — omitted → null. This
+# script never folds the recommendation into <reason> on the caller's behalf.
 #
-# Usage: park-node <node-id> <reason>
+# Usage: park-node <node-id> <reason> [recommendation]
 #
 # Exit codes: 0 parked and landed on main; 1 the write or graph-commit failed;
 # 2 usage error.
@@ -34,8 +34,12 @@ STORE_MODULE="$REPO_ROOT/packages/intentionsutil/src/store.js"
 
 NODE_ID="${1:-}"
 REASON="${2:-}"
-if [[ $# -ne 2 || -z "$NODE_ID" || -z "$REASON" ]]; then
-  echo "usage: park-node <node-id> <reason>" >&2
+# Optional 3rd arg: the human-facing best-next-steps recommendation. Now that
+# `office_hours.recommendation` is a first-class schema field (schema.ts), the
+# caller passes it separately instead of folding it into <reason>; omitted → null.
+RECOMMENDATION="${3:-}"
+if [[ $# -lt 2 || $# -gt 3 || -z "$NODE_ID" || -z "$REASON" ]]; then
+  echo "usage: park-node <node-id> <reason> [recommendation]" >&2
   exit 2
 fi
 
@@ -44,16 +48,16 @@ TMPTS="$(mktemp --suffix=.mts)" \
   || { echo "park-node: could not create temp file for the parking write" >&2; exit 1; }
 trap 'rm -f "$TMPTS"' EXIT
 cat >"$TMPTS" <<'TS'
-// argv: <storeModule> <intentionsDir> <since> <reason> <id>
-const [storePath, intentionsDir, since, reason, id] = process.argv.slice(2);
+// argv: <storeModule> <intentionsDir> <since> <reason> <recommendation> <id>
+const [storePath, intentionsDir, since, reason, recommendation, id] = process.argv.slice(2);
 const { readNode, writeNode } = await import(storePath);
 const node = readNode(intentionsDir, id);
-node.office_hours = { reason, since };
+node.office_hours = { reason, since, recommendation: recommendation || null };
 writeNode(intentionsDir, node);
 process.stderr.write(`park-node: set office_hours on ${id} (since=${since})\n`);
 TS
 
-if ! (cd "$REPO_ROOT" && npx tsx "$TMPTS" "$STORE_MODULE" "$INTENTIONS_DIR" "$SINCE" "$REASON" "$NODE_ID" >&2); then
+if ! (cd "$REPO_ROOT" && npx tsx "$TMPTS" "$STORE_MODULE" "$INTENTIONS_DIR" "$SINCE" "$REASON" "$RECOMMENDATION" "$NODE_ID" >&2); then
   echo "park-node: failed to write the office_hours record for $NODE_ID" >&2
   exit 1
 fi

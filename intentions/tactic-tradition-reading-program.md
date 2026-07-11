@@ -109,6 +109,35 @@ explicit deferral: the author has not read it). Slotted at the end of the
 verify block; doctrine load argues they could pull earlier — re-prioritize
 at office-hours if desired.
 
+### Coverage-completion chunks (2026-07-11)
+
+Added by `tactic-reading-program-text-coverage`: a coverage audit found five
+tradition records citing texts no chunk covered, so their `delegated →
+codified` flip could not complete as encoded. These verify chunks cover the
+load-bearing uncovered texts; their `attributes.curriculum.priority` is
+appended after the pre-existing queue maximum (25), so none jumps the queue —
+they read last, after both the verify block and the candidate batch below.
+
+| Priority | Chunk node | Texts | Record(s) |
+|---|---|---|---|
+| 26 | `tactic-reading-chunk-26-aristotle-philia-friendship` | NE VIII (friendship) | tradition-aristotle |
+| 27 | `tactic-reading-chunk-27-aristotle-philia-self-love` | NE IX (friendship) | tradition-aristotle |
+| 28 | `tactic-reading-chunk-28-aristotle-schole-leisure` | Politics VIII (leisure, education) | tradition-aristotle |
+| 29 | `tactic-reading-chunk-29-plato-apology-examined-life` | Apology (the examined life) | tradition-plato |
+| 30 | `tactic-reading-chunk-30-plato-paradigm-heaven` | Republic IX 591c–592b (the paradigm) | tradition-plato |
+| 31 | `tactic-reading-chunk-31-kant-autonomy-heteronomy` | Groundwork section III (4:446–463) | tradition-kant |
+| 32 | `tactic-reading-chunk-32-bentham-felicific-calculus` | Bentham, IPML ch. 4 (felicific calculus) | tradition-utilitarianism (declined) |
+
+**Provenance exclusion** (keeps a flip criterion honest, not machine-enforced —
+the `/reading-review` session reads it): `tradition-stoicism` cites Marcus
+Aurelius, *Meditations* ("apatheia in practice") as illustration; no
+adopted/diverged entry leans on it beyond that, and the Stoic doctrine the
+graph engages is grounded in chunk 8 (Epictetus, Seneca). Its `delegated →
+codified` flip excludes *Meditations* by record — see the dated exclusion
+clarification on `tradition-stoicism`; the text stays in that record's
+`attributes.texts`. `tradition-augustine` was already fully covered (chunks
+19–21); no action.
+
 ## Candidate batch (strategy-complete-grounding)
 
 Chunks 10–17 are *candidate* chunks (2026-07-07 /align-strategy round,

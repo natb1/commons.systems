@@ -38,6 +38,13 @@
 #      exercised by case 9's mixed edit+prune
 #  14. --base manifest-file form: a file of <id>=<blobsha> lines (as opposed
 #      to the inline form used by cases 11-12) lands
+#  15. far-ahead worktree (PR branch with a non-intentions code commit): the
+#      edit is rebuilt on origin/main, ONLY the intentions/ change lands (the
+#      code commit is excluded), exit 0, and the worktree HEAD is restored to
+#      the PR tip
+#  16. far-ahead worktree + --prune: a deletion issued from a far-ahead PR
+#      branch lands on main (the node is removed) without landing the code
+#      commit, HEAD restored
 #
 # No network and no real gh/node needed; requires only bash + git.
 
@@ -84,7 +91,8 @@ seed_node() { # <id> — 12 numbered lines so distant edits rebase cleanly
   } >"$SEED/intentions/$1.md"
 }
 for id in t-happy t-merge t-conflict t-ckfail t-ghfail t-pending v1..v2-migration \
-          t-prune-edit t-prune t-prune-guard t-prune-solo t-base t-base-manifest; do
+          t-prune-edit t-prune t-prune-guard t-prune-solo t-base t-base-manifest \
+          t-farahead t-farahead-prune; do
   seed_node "$id"
 done
 git -C "$SEED" add -A
@@ -430,6 +438,53 @@ if out="$(run_gc "$W6" -m 'test: base manifest' --base "$manifest_file" t-base-m
   fi
 else
   no "base manifest-file form: expected exit 0, got $? (see below)"; printf '%s\n' "$out"
+fi
+
+# --- Case 15: far-ahead worktree (PR branch) — rebuild on origin/main -----------
+# A PR-branch checkout whose HEAD carries a non-intentions code commit. A commit
+# made on top of it is NOT intentions/-only, so the pre-fix graph-commit's
+# scratch push would fail the fast-path guard and never land. The fix rebuilds
+# the edit on origin/main: only the intentions/ change lands (never the code
+# commit), and the worktree HEAD is restored to the PR tip.
+set_mode green
+W7="$WORK/w7"
+make_clone "$W7" writer-7
+mkdir -p "$W7/src"
+echo "console.log('pr feature code')" >"$W7/src/feature.js"
+git -C "$W7" add src/feature.js
+git -C "$W7" commit -qm 'pr: non-intentions code change (simulated PR branch)'
+far_tip="$(git -C "$W7" rev-parse HEAD)"
+edit_line "$W7" t-farahead 1 farahead-edit
+out="$(run_gc "$W7" -m 'test: far-ahead edit' t-farahead 2>&1)"; rc=$?
+landed="$(origin_show t-farahead 2>/dev/null || true)"
+main_tree="$(git -C "$ORIGIN" ls-tree -r --name-only main)"
+restored="$(git -C "$W7" rev-parse HEAD)"
+if [[ $rc -eq 0 ]] \
+   && grep -q 'line1: farahead-edit' <<<"$landed" \
+   && ! grep -q 'src/feature.js' <<<"$main_tree" \
+   && [[ "$restored" == "$far_tip" ]]; then
+  ok "far-ahead worktree: intentions edit lands, code commit excluded, HEAD restored to PR tip"
+else
+  no "far-ahead worktree (rc=$rc restored=$restored far_tip=$far_tip code-on-main=$(grep -c 'src/feature.js' <<<"$main_tree"))"; printf '%s\n' "$out"
+fi
+
+# --- Case 16: far-ahead worktree + --prune --------------------------------------
+# A prune issued from the same far-ahead PR branch: the node is removed from
+# main, the code commit is still excluded, and HEAD is restored.
+set_mode green
+git -C "$W7" fetch -q origin main
+rm -f "$W7/intentions/t-farahead-prune.md"
+far_tip2="$(git -C "$W7" rev-parse HEAD)"   # still the code-commit tip
+out="$(run_gc "$W7" -m 'test: far-ahead prune' --prune t-farahead-prune 2>&1)"; rc=$?
+restored2="$(git -C "$W7" rev-parse HEAD)"
+main_tree2="$(git -C "$ORIGIN" ls-tree -r --name-only main)"
+if [[ $rc -eq 0 ]] \
+   && ! grep -q 'intentions/t-farahead-prune.md' <<<"$main_tree2" \
+   && ! grep -q 'src/feature.js' <<<"$main_tree2" \
+   && [[ "$restored2" == "$far_tip2" ]]; then
+  ok "far-ahead worktree + --prune: node removed from main, code commit excluded, HEAD restored"
+else
+  no "far-ahead prune (rc=$rc restored2=$restored2 far_tip2=$far_tip2)"; printf '%s\n' "$out"
 fi
 
 # --- No scratch branches left behind anywhere ------------------------------------

@@ -35,19 +35,101 @@ worktree; this skill never switches.
 ```bash
 BRANCH=$(basename "$(git rev-parse --show-toplevel)")
 case "$BRANCH" in
-  [0-9]*-*) N="${BRANCH%%-*}" ;;
+  [0-9]*-*)
+    # Legacy issue lane: worktree named `<N>-…`.
+    N="${BRANCH%%-*}"
+    TARGET_KIND=issue
+    ;;
   *)
-    echo "/implement: current branch '$BRANCH' is not a target worktree (expected '<N>-…')" >&2
-    exit 1
+    # Graph-native node lane: worktree named after the intention node id.
+    # The node file must exist at origin/main with phase matching this skill.
+    NODE_ID="$BRANCH"
+    git fetch origin main --quiet
+    NODE_MD=$(git archive origin/main "intentions/$NODE_ID.md" 2>/dev/null | tar -xO 2>/dev/null) || {
+      echo "/implement: '$BRANCH' is neither a legacy '<N>-…' worktree nor a node with intentions/$NODE_ID.md at origin/main" >&2
+      exit 1
+    }
+    NODE_PHASE=$(printf '%s\n' "$NODE_MD" | sed -n 's/^phase: *//p' | head -1)
+    if [ "$NODE_PHASE" != "implement" ]; then
+      echo "/implement: node '$NODE_ID' phase is '$NODE_PHASE' at origin/main, not 'implement'" >&2
+      exit 1
+    fi
+    N="$NODE_ID"
+    TARGET_KIND=node
     ;;
 esac
 ```
 
-`<N>` is the issue number used by the remaining steps for their `tmp/` filenames.
+`$N` keys the remaining steps' `tmp/` filenames (the issue number on the legacy
+lane, the node id on the node lane). `$TARGET_KIND` selects the lane at every
+seam below that differs between issue and node targets — context source, plan
+source, and completion. **On the node lane no gh issue is ever read or written.**
 
-Then resolve whether a draft PR already exists by running the context pack (use
-`dangerouslyDisableSandbox: true` — it calls `gh`). Add `--phase-log` so the same
-call also returns any prior cross-phase handoff note:
+### Node-target lane (`TARGET_KIND=node`)
+
+On the node lane the four issue-keyed seams below are re-keyed to the graph
+(`tactic-phase-skill-node-targets`); every other step runs byte-identically.
+
+- **Context / PR.** Skip the issue-comment slices entirely; never pass `--issue`.
+  The node's `execution.pr` is null until this phase's completion writes it (see
+  Completion below), so it is NOT a reliable resume-detection signal — a crash
+  between opening the PR (Step 4) and the completion transition-node write
+  (Step 5) leaves `execution.pr` null even though a PR now exists. Resolve the
+  PR the same way `dispatch-sweep` and `/office-hours` do for a node-id
+  worktree: `gh pr list --head "$BRANCH" --state open --json number` (the
+  branch name IS the node id on this lane — see the Step-0 resume-detection
+  block below for the concrete call).
+- **Plan source.** The plan is the **node body** of `intentions/<node-id>.md`
+  at `origin/main` (already read at the Step-0 gate as `$NODE_MD`), not a
+  `<!-- dispatch:plan -->` issue comment. Its ordered `## Unit N` sections with
+  their `Recommended model:` tags ARE the unit breakdown Step 2 builds.
+- **Completion.** Do not call `dispatch-complete-phase` / `dispatch-mark-complete`
+  / `dispatch-finalize-phase` — those edit issue/PR labels. After the draft PR is
+  open, invoke the graph-native transition writer instead (it consults the CI
+  verdict + freshness gates and lands the `implement → qa` advance, or the
+  `implement → fix` interrupt on red CI, plus `execution.pr`, as one state-only
+  graph-commit on `origin/main`):
+
+  ```bash
+  .claude/skills/dispatch-propagate/scripts/transition-node "$N" --set-pr "$PR_NUM"
+  ```
+
+  The graph-tick worker runs this with the reset-dance a PR-branch worktree needs
+  (same constraint as `park-node`); the skill hands it the node id and never
+  writes the graph directly.
+- **Escalation.** Instead of applying `dispatch:office-hours`, write the
+  human-facing reason to `$CLAUDE_JOB_DIR/office-hours-reason` (and the
+  best-next-steps to `$CLAUDE_JOB_DIR/office-hours-recommendation`); the Stop hook
+  parks the node via `park-node` (`office_hours` graph write) — see
+  `.claude/hooks/dispatch-stop.sh`.
+
+Then resolve whether a draft PR already exists (use `dangerouslyDisableSandbox:
+true` — both calls hit `gh`).
+
+**Node lane (`TARGET_KIND=node`):** the legacy `<N>-…` branch-prefix PR lookup
+below does not apply — the branch IS the node id, not an issue-prefixed name.
+Discover the PR by branch head instead:
+
+```bash
+PR_NUM=$(gh pr list --head "$N" --state open --json number --jq '.[0].number // empty')
+```
+
+Empty `PR_NUM` means no PR exists yet (first run) — skip the context-pack call
+below entirely (there is nothing to read: no PR, and no phase-log home without
+one) and run all steps. A non-empty `PR_NUM` is the re-entry branch — fetch its
+PR/phase-log via the pack's PR-number mode:
+
+```bash
+.claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$PR_NUM" --pr --phase-log --pr-is-number
+```
+
+Read the `=== PR ===` and `=== PHASE-LOG #$PR_NUM ===` sections as described
+below (the re-entry / `PRIOR_PHASE_LOG` handling is identical to the legacy
+lane once `PR_NUM` is known).
+
+**Legacy lane (`TARGET_KIND=issue`):** run the context pack directly with the
+issue number. Add `--phase-log` so the same call also returns any prior
+cross-phase handoff note:
 
 ```bash
 .claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$N" --pr --phase-log
