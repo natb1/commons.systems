@@ -24,7 +24,8 @@ execution:
   branch: tactic-dispatch-lifecycle-sensor
   pr: 2843
   attempts: {}
-  markers: []
+  markers:
+    - reviewed
   strategy_fingerprint: null
 validates:
   - strategy-graph-native-dispatch
