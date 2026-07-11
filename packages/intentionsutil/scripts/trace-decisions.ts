@@ -69,6 +69,10 @@ export interface TraceEvent {
 
 // --- Patch heuristics ------------------------------------------------------
 
+/** Unit-separator sentinel between the hash and date in the git `--format`.
+ * A diff never contains this control character, so a header line is unambiguous. */
+const COMMIT_SEP = String.fromCharCode(0x1f);
+
 const STRATEGY_PATH = /^intentions\/strategy-[^/]+\.md$/;
 const STRATEGY_OR_VIRTUE_PATH = /^intentions\/(strategy|virtue)-[^/]+\.md$/;
 const NODE_PATH = /^intentions\/[^/]+\.md$/;
@@ -113,8 +117,9 @@ export function scanDecisionTrace(repoDir: string, since = "30 days ago"): Trace
       `--since=${since}`,
       "--no-renames",
       // Distinctive sentinel per commit: hash <US> author-ISO-date. The unit
-      // separator (\x1f) never appears in a diff, so the header is unambiguous.
-      "--format=%H\x1f%aI",
+      // separator (COMMIT_SEP) never appears in a diff, so the header is
+      // unambiguous.
+      `--format=%H${COMMIT_SEP}%aI`,
       "-p",
       "--",
       "intentions/",
@@ -146,13 +151,13 @@ export function scanDecisionTrace(repoDir: string, since = "30 days ago"): Trace
   };
 
   for (const line of patch.split("\n")) {
-    // The \x1f unit-separator sentinel is deliberate — a git diff never
-    // contains it, so the commit header is unambiguous.
-    // eslint-disable-next-line no-control-regex
-    const commitHeader = /^([0-9a-f]{40})\x1f(.+)$/.exec(line);
-    if (commitHeader !== null) {
-      commit = commitHeader[1];
-      date = commitHeader[2];
+    // A commit header is `<40-hex><COMMIT_SEP><iso-date>` — detect it by the
+    // separator at offset 40 with a 40-hex prefix. Using a string separator
+    // (not a control char in a regex literal) keeps the hash check clean.
+    const sepIdx = line.indexOf(COMMIT_SEP);
+    if (sepIdx === 40 && /^[0-9a-f]{40}$/.test(line.slice(0, 40))) {
+      commit = line.slice(0, 40);
+      date = line.slice(41);
       continue;
     }
 
