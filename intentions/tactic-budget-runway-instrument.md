@@ -25,12 +25,13 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-budget-runway-instrument
   pr: 2851
   attempts: {}
-  markers: []
+  markers:
+    - qa-done
   strategy_fingerprint: 15d0c769ef9971a30ad06f2af1d2c682874e0da4c5d42cbd74c1fe22a322fe85
 validates:
   - strategy-financial-sustainability

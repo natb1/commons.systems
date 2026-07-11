@@ -22,12 +22,13 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-exercised-paths-reading
   pr: 2857
   attempts: {}
-  markers: []
+  markers:
+    - qa-done
   strategy_fingerprint: 4ee635b8acf77f2cb701ca3625baa5edf2209e23bf04d30e72650eb7b94f36fa
 validates:
   - strategy-exercise-recovery-paths
@@ -142,3 +143,44 @@ Landing the written `reading`/`gap` on `origin/main` goes via
 `packages/intentionsutil/scripts/graph-commit strategy-exercise-recovery-paths`
 (state-only fast path). Run `--report` and confirm the per-record table
 renders every delegation record.
+
+## Needs-main residue (qa 2026-07-11)
+
+The delivered sensor, report, and tests are correct and verified working:
+running `node --import tsx/esm packages/intentionsutil/scripts/read-sensors.ts`
+against the live graph independently reproduces the expected counts (2 of 21
+delegation records exercised, 1 declined-origin — cross-checked against
+`--report`'s raw per-record table) and correctly writes `reading`/`gap` onto
+`strategy-realign-attachments`, the sibling strategy that names the identical
+`success_signal.sensor` string `"the delegation records themselves"` and
+sits on the active frontier.
+
+However, `strategy-exercise-recovery-paths` itself — the strategy this
+tactic's own statement names as the target — never receives that automated
+`reading` update. `activeFrontier`
+(`packages/intentionsutil/src/goals.ts:49`: `status !== "codified" && <is
+leaf>`) permanently excludes it because its `status` is `codified`, and
+`readFrontierSensors` only walks `activeFrontier` nodes
+(`packages/intentionsutil/scripts/read-sensors.ts`,
+`projectGoals(listNodes(dir))`). Confirmed by direct observation: after
+running `read-sensors.ts` against the live graph, `reading: null` and
+`gap: null` are unchanged on `intentions/strategy-exercise-recovery-paths.md`
+even though the strategy no longer appears in the run's "unregistered
+sensor" list.
+
+Currently harmless: `rounds.count` is `0`, and `router.ts`'s fresh-reading
+gate (`selectGraphTargets`, around line 319-334) only checks `s.reading`
+`if (count > 0)` — round 1 selection is unconditionally fresh regardless of
+`reading`. But once this round's sibling tactics (the five drills, the
+portfolio review) land and `rounds.count` increments past 0, any further
+round would require a `reading` dated newer than `rounds.last_completed`,
+which `strategy-exercise-recovery-paths` can never receive through the
+automated path while `status: codified` — stalling its own future rounds
+indefinitely. This is a general `activeFrontier`/router design question
+(affects any `codified`-status strategy naming a sensor, not unique to this
+one), out of this tactic's Unit 1/2 scope (`read-sensors.ts` only). Needs a
+design decision before `strategy-exercise-recovery-paths` reaches
+`rounds.count >= 1`: exempt strategy `reading` refresh from the
+`activeFrontier` filter, add a targeted read at round-completion time, or
+have the portfolio review manually copy `read-sensors.ts --report`'s
+aggregate into the strategy's `reading` each round.
