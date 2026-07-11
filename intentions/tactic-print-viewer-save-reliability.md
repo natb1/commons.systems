@@ -22,7 +22,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: done
 execution:
   branch: tactic-print-viewer-save-reliability
   pr: 2825
