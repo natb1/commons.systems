@@ -39,7 +39,7 @@ export function createDbConnection(config: DbConnectionConfig): {
 
   function openDb(): Promise<IDBDatabase> {
     if (!dbPromise) {
-      dbPromise = new Promise((resolve, reject) => {
+      const thisPromise: Promise<IDBDatabase> = new Promise((resolve, reject) => {
         let upgradeError: unknown;
         let blockedTimer: ReturnType<typeof setTimeout> | undefined;
         let settledByTimeout = false;
@@ -77,8 +77,17 @@ export function createDbConnection(config: DbConnectionConfig): {
             }, blockedTimeoutMs);
           }
         };
-        request.onerror = () => { clearTimeout(blockedTimer); dbPromise = null; reject(upgradeError ?? request.error); };
+        request.onerror = () => {
+          clearTimeout(blockedTimer);
+          // Only clear the memoized promise if it still points at THIS request's
+          // promise. A late/stale error must not null out a promise a subsequent
+          // openDb() already memoized (mirrors the identity discipline the
+          // settledByTimeout guard relies on).
+          if (dbPromise === thisPromise) dbPromise = null;
+          reject(upgradeError ?? request.error);
+        };
       });
+      dbPromise = thisPromise;
     }
     return dbPromise;
   }

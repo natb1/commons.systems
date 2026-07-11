@@ -55,27 +55,32 @@ export interface BoundedQuery {
 class QueryBuilder implements UnboundedQuery, BoundedQuery {
   private readonly db: Firestore;
   private readonly path: string;
-  private readonly constraints: QueryConstraint[];
+  private readonly constraints: readonly QueryConstraint[];
 
-  constructor(db: Firestore, path: string, constraints: QueryConstraint[] = []) {
+  constructor(db: Firestore, path: string, constraints: readonly QueryConstraint[] = []) {
     this.db = db;
     this.path = path;
-    this.constraints = constraints;
+    // Copy on construction so the builder never mutates a caller-supplied array,
+    // and each derived builder owns an independent constraint list.
+    this.constraints = [...constraints];
+  }
+
+  // Each constraining call returns a NEW builder carrying a fresh constraint
+  // list, so two queries branched off one base do not cross-contaminate.
+  private with(constraint: QueryConstraint): QueryBuilder {
+    return new QueryBuilder(this.db, this.path, [...this.constraints, constraint]);
   }
 
   where(field: string | FieldPath, opStr: WhereFilterOp, value: unknown): this {
-    this.constraints.push(whereConstraint(field, opStr, value));
-    return this;
+    return this.with(whereConstraint(field, opStr, value)) as this;
   }
 
   orderBy(field: string | FieldPath, direction?: OrderByDirection): this {
-    this.constraints.push(orderByConstraint(field, direction));
-    return this;
+    return this.with(orderByConstraint(field, direction)) as this;
   }
 
   limit(n: number): BoundedQuery {
-    this.constraints.push(limitConstraint(n));
-    return this;
+    return this.with(limitConstraint(n));
   }
 
   unbounded(reason: string): BoundedQuery {

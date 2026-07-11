@@ -22,5 +22,13 @@ export const firebaseConfig = {
   storageBucket: `${import.meta.env.VITE_FIREBASE_PROJECT_ID ?? "commons-systems"}.firebasestorage.app`,
 } satisfies FirebaseOptions;
 
-/** reCAPTCHA Enterprise site key for Firebase AppCheck (shared across all apps in this project). */
-export const RECAPTCHA_SITE_KEY = requireEnv("VITE_RECAPTCHA_SITE_KEY");
+/**
+ * reCAPTCHA Enterprise site key for Firebase AppCheck (shared across all apps in
+ * this project). Exposed as a function rather than a module-scope constant so
+ * importing this config does not `requireEnv` the key at load time: an app that
+ * never enables App Check can import `firebaseConfig` without throwing. The
+ * requirement is deferred to the App Check init site, which calls this on use.
+ */
+export function getRecaptchaSiteKey(): string {
+  return requireEnv("VITE_RECAPTCHA_SITE_KEY");
+}

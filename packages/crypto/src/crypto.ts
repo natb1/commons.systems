@@ -57,6 +57,9 @@ export function createBencCrypto(opts: { validationError: (message: string) => E
           p.reject(new Error(e.message || "Worker error"));
         }
         pending.clear();
+        // Terminate the worker before dropping the reference so the PBKDF2
+        // thread is reclaimed; nulling alone leaks it.
+        worker?.terminate();
         worker = null;
       };
       return worker;
