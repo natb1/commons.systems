@@ -29,8 +29,7 @@ phase: null
 execution: null
 validates:
   - strategy-financial-sustainability
-blocked_by:
-  - tactic-budget-runway-instrument
+blocked_by: []
 office_hours:
   reason: "Human sensor: with the runway readout merged, load the real snapshot in
     the budget app and take the strategy's first reading — read the Projected
