@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+# dispatch-graph-census — the standing per-tick reconciliation-debt duty
+# (tactic-graph-census-recurrence Unit 2). Computes the graph's owed
+# reconciliation debt cheaply each tick and, when the debt crosses a threshold
+# and no open census node already exists, births exactly ONE born-parked census
+# tactic naming the batch to drain — landed via graph-commit. Zero-debt ticks
+# birth nothing; the born-parked node IS the recurrence latch (idempotency).
+#
+# Debt = union of: owed prunes (done-but-present nodes), unverified PR-merges,
+# and orphans (dangling parent/serves). The DECISION is computed by the
+# network-free graph-census-debt.ts (the testable half); this script owns the
+# LANDING half (write-node.ts + graph-commit), mirroring the decision/land split
+# between reconcile-graph.ts and reconcile-graph-merged.
+#
+# Cheapness: the standing duty runs GRAPH-ONLY by default — no --pr-states, so
+# it makes no network call (the clarification's "per-tick duty is near-free"
+# rationale). The dominant, network-free owed-prune signal (done-but-present) is
+# exactly what the tick +3 (2026-07-10) observation flagged. The
+# unverified-PR-merge component is supported by graph-census-debt.ts when a
+# caller supplies --pr-states, but the tick's call omits it.
+#
+# Threshold: read from dispatch.config/census.json (`threshold`, a single
+# integer); a baked-in default applies when the file is absent. This is the ONLY
+# dispatch.config tunable — the debt and the census node are graph state, never
+# config (parity with the fuse-breaker doctrine).
+#
+# Doctrine/sandbox mirror reconcile-graph-merged: run from a main-based checkout
+# (graph-commit lands state on main); the CALLER wraps invocation with
+# dangerouslyDisableSandbox (node --import tsx/esm needs the npm cache, and a
+# birth's graph-commit needs gh + network). Best-effort — a failure here must
+# not abort the tick.
+#
+# Stdout protocol (one line, caller prefixes it with `census: `):
+#   born <id> (debt <n> >= threshold <t>)   — a census tactic was born + landed.
+#   latched <id> (debt <n>)                 — debt present but a census is open.
+#   debt <n> < threshold <t>                — below threshold; nothing born.
+#
+# Exit codes: 0 (including a no-birth tick); 1 if the debt computation or a
+# birth's write/land hard-errored.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+UTIL_SCRIPTS="$REPO_ROOT/packages/intentionsutil/scripts"
+DEBT_TS="$UTIL_SCRIPTS/graph-census-debt.ts"
+WRITE_NODE_TS="$UTIL_SCRIPTS/write-node.ts"
+GRAPH_COMMIT="$UTIL_SCRIPTS/graph-commit"
+
+DEFAULT_THRESHOLD=10
+
+# --- Resolve the birth threshold (config override, else baked-in default) -----
+THRESHOLD="$DEFAULT_THRESHOLD"
+if CFG=$("$SCRIPT_DIR/dispatch-config-load" census 2>/dev/null); then
+  if [[ "$CFG" != "no-config" ]]; then
+    t=$(jq -r '.threshold // empty' <<<"$CFG")
+    [[ -n "$t" ]] && THRESHOLD="$t"
+  fi
+fi
+
+# --- Compute debt + birth decision (network-free) -----------------------------
+OUT=$( (cd "$REPO_ROOT" && node --import tsx/esm "$DEBT_TS" --threshold "$THRESHOLD") ) || {
+  echo "dispatch-graph-census: debt computation failed" >&2; exit 1; }
+
+SHOULD=$(jq -r '.shouldBirth' <<<"$OUT")
+TOTAL=$(jq -r '.total' <<<"$OUT")
+
+if [[ "$SHOULD" != "true" ]]; then
+  OPEN=$(jq -r '.openCensus[0] // empty' <<<"$OUT")
+  if [[ -n "$OPEN" ]]; then
+    echo "latched $OPEN (debt $TOTAL)"
+  else
+    echo "debt $TOTAL < threshold $THRESHOLD"
+  fi
+  exit 0
+fi
+
+# --- Birth: write the born-parked census node, then land it as one graph-commit
+NODE_ID=$(jq -r '.node.id' <<<"$OUT")
+
+NODE_JSON_FILE=$(mktemp) || { echo "dispatch-graph-census: mktemp failed" >&2; exit 1; }
+trap 'rm -f "$NODE_JSON_FILE"' EXIT
+jq -c '.node' <<<"$OUT" > "$NODE_JSON_FILE"
+
+# write-node.ts is the single validation gate; it lands frontmatter only.
+if ! (cd "$REPO_ROOT" && node --import tsx/esm "$WRITE_NODE_TS" --file "$NODE_JSON_FILE") >/dev/null; then
+  echo "dispatch-graph-census: write-node failed for $NODE_ID" >&2; exit 1
+fi
+
+# Append the census body (write-node preserves body across rewrites; a new node
+# starts body-less). graph-commit stages the whole intentions/<id>.md.
+NODE_MD="$REPO_ROOT/intentions/$NODE_ID.md"
+if [[ ! -f "$NODE_MD" ]]; then
+  echo "dispatch-graph-census: expected $NODE_MD after write-node, not found" >&2; exit 1
+fi
+{ printf '\n'; jq -r '.node_body' <<<"$OUT"; } >> "$NODE_MD"
+
+if ! (cd "$REPO_ROOT" && "$GRAPH_COMMIT" \
+        -m "graph: born census $NODE_ID (reconciliation debt $TOTAL)" \
+        "$NODE_ID"); then
+  echo "dispatch-graph-census: graph-commit failed for $NODE_ID (content on disk, not landed)" >&2
+  exit 1
+fi
+
+echo "born $NODE_ID (debt $TOTAL >= threshold $THRESHOLD)"
+exit 0
