@@ -1,4 +1,5 @@
 import { getActiveDataSource } from "../active-data-source.js";
+import type { Statement } from "../firestore.js";
 import {
   isDirectoryAccessSupported,
   getStoredDirectoryHandle,
@@ -10,6 +11,37 @@ import {
   type DirHandleLike,
   type FileHandleLike,
 } from "../statement-file-resolver.js";
+
+/**
+ * Pick the statement whose recorded source file to open for a transaction.
+ *
+ * A transaction's `statementId` is month-keyed ("{inst}-{acct}-{YYYY-MM}"),
+ * whereas balance anchors are now keyed by as-of date
+ * ("{inst}-{acct}-{YYYY-MM-DD}"). So an exact match is tried first (a legacy
+ * month-keyed statement or a virtual anchor keeps a matching id); otherwise the
+ * transaction's month maps to one or more date-keyed observations found by the
+ * `"{txnStatementId}-"` prefix. Among those, prefer one that actually records a
+ * `sourceFile`, and among equals the latest `balanceDate` (ISO strings sort
+ * chronologically; a null/empty balanceDate loses). Exported for unit testing.
+ */
+export function pickSourceStatement(
+  statements: Statement[],
+  txnStatementId: string,
+): Statement | undefined {
+  const exact = statements.find((s) => s.statementId === txnStatementId);
+  if (exact) return exact;
+
+  const prefix = txnStatementId + "-";
+  const candidates = statements.filter((s) => s.statementId.startsWith(prefix));
+  if (candidates.length === 0) return undefined;
+
+  return candidates.reduce((best, s) => {
+    const bestHasSrc = best.sourceFile != null && best.sourceFile !== "";
+    const sHasSrc = s.sourceFile != null && s.sourceFile !== "";
+    if (sHasSrc !== bestHasSrc) return sHasSrc ? s : best;
+    return (s.balanceDate ?? "") > (best.balanceDate ?? "") ? s : best;
+  });
+}
 
 /**
  * READ-ONLY source-statement viewer.
@@ -189,9 +221,10 @@ export async function openStatementSource(statementId: string): Promise<void> {
       return;
     }
 
-    // 2. Look up the statement and its recorded source file.
+    // 2. Look up the statement and its recorded source file. The transaction's
+    // month-keyed statementId may map to one or more date-keyed anchors.
     const statements = await getActiveDataSource().getStatements();
-    const statement = statements.find((s) => s.statementId === statementId);
+    const statement = pickSourceStatement(statements, statementId);
     if (!statement || !statement.sourceFile) {
       renderMessage(
         dlg.body,

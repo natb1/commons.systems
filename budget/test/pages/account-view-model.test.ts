@@ -41,6 +41,10 @@ function txn(overrides: Partial<Transaction> = {}): Transaction {
   };
 }
 
+// sid builds the branded StatementId from a plain string in test data.
+const sid = (s: string): Statement["statementId"] =>
+  s as unknown as Statement["statementId"]; // type-safety-ok: test-only branded StatementId construction
+
 function stmt(overrides: Partial<Statement> = {}): Statement {
   return {
     id: "stmt-1",
@@ -95,6 +99,35 @@ describe("buildAccountRows", () => {
     );
     expect(rows[0].balance).toBe(750);
     expect(rows[0].latestPeriod).toBe("2025-02");
+  });
+
+  it("breaks a same-period tie by balanceDate, showing the newest observation's balance", () => {
+    // Two date-keyed anchors in the same month: the later as-of date wins,
+    // regardless of input order.
+    const rows = buildAccountRows(
+      [],
+      [
+        stmt({ id: "s-mid", statementId: sid("Bank-Checking-2025-02-15"), period: "2025-02", balance: 500, balanceDate: "2025-02-15" }),
+        stmt({ id: "s-end", statementId: sid("Bank-Checking-2025-02-28"), period: "2025-02", balance: 750, balanceDate: "2025-02-28" }),
+      ],
+      [],
+    );
+    expect(rows[0].balance).toBe(750);
+    expect(rows[0].latestPeriod).toBe("2025-02");
+  });
+
+  it("prefers a dated same-period anchor over one with a null balanceDate", () => {
+    // A null balanceDate sorts earliest, so the dated observation wins even when
+    // it arrives second.
+    const rows = buildAccountRows(
+      [],
+      [
+        stmt({ id: "s-null", period: "2025-02", balance: 500, balanceDate: null }),
+        stmt({ id: "s-dated", statementId: sid("Bank-Checking-2025-02-20"), period: "2025-02", balance: 900, balanceDate: "2025-02-20" }),
+      ],
+      [],
+    );
+    expect(rows[0].balance).toBe(900);
   });
 
   it("flags hasDiscrepancy and surfaces derivedBalance from derived balances", () => {

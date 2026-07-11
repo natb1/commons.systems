@@ -42,6 +42,85 @@ func TestStatementDocID(t *testing.T) {
 	}
 }
 
+func TestAnchorID(t *testing.T) {
+	mustDate := func(s string) *time.Time {
+		d, err := time.Parse("2006-01-02", s)
+		if err != nil {
+			t.Fatalf("parsing %q: %v", s, err)
+		}
+		return &d
+	}
+
+	cases := []struct {
+		name        string
+		institution string
+		account     string
+		balanceDate *time.Time
+		period      string
+		want        string
+	}{
+		{
+			name:        "balanceDate present keys by as-of date",
+			institution: "bank",
+			account:     "1234",
+			balanceDate: mustDate("2025-01-15"),
+			period:      "2025-01",
+			want:        "bank-1234-2025-01-15",
+		},
+		{
+			name:        "nil balanceDate falls back to last day of period (31-day month)",
+			institution: "bank",
+			account:     "1234",
+			balanceDate: nil,
+			period:      "2025-01",
+			want:        "bank-1234-2025-01-31",
+		},
+		{
+			name:        "nil balanceDate fallback for February (non-leap)",
+			institution: "bank",
+			account:     "1234",
+			balanceDate: nil,
+			period:      "2025-02",
+			want:        "bank-1234-2025-02-28",
+		},
+		{
+			name:        "nil balanceDate fallback for February (leap year)",
+			institution: "bank",
+			account:     "1234",
+			balanceDate: nil,
+			period:      "2024-02",
+			want:        "bank-1234-2024-02-29",
+		},
+		{
+			// Two observations of one account-month at different as-of dates
+			// produce different anchor IDs — the keep-all-distinct contract.
+			name:        "same month different as-of date yields distinct ID",
+			institution: "bank",
+			account:     "1234",
+			balanceDate: mustDate("2025-01-28"),
+			period:      "2025-01",
+			want:        "bank-1234-2025-01-28",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := AnchorID(tc.institution, tc.account, tc.balanceDate, tc.period)
+			if got != tc.want {
+				t.Errorf("AnchorID = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestAnchorIDPanicsOnMalformedPeriod(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected panic on malformed period, got none")
+		}
+	}()
+	AnchorID("bank", "1234", nil, "not-a-period")
+}
+
 func TestTransactionDocID(t *testing.T) {
 	tests := []struct {
 		statementID   string
