@@ -35,6 +35,7 @@ execution:
   markers:
     - planned
     - qa-done
+    - reviewed
   strategy_fingerprint: null
 validates: []
 blocked_by: []
