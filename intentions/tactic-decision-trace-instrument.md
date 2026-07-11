@@ -30,6 +30,7 @@ execution:
   attempts: {}
   markers:
     - qa-done
+    - reviewed
   strategy_fingerprint: a10d001daf8fd0335625aea2c5eb394c1216abdd4d73313c6ba3881e2f69a64b
 validates:
   - strategy-explicit-intent
