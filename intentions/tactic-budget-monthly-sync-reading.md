@@ -31,7 +31,27 @@ validates:
   - strategy-recover-finance
 blocked_by:
   - tactic-budget-overlap-anchor-merge
-office_hours: null
+office_hours:
+  reason: 'qa 2026-07-11: Unit 1 (PR #2842, the /budget skill reading-stamp
+    sub-step) verified end-to-end -- dump-node.ts -> edit reading/gap ->
+    write-node.ts -> graph-commit --base round-trip exercised against
+    strategy-recover-finance in the QA worktree (change reverted, not
+    committed): dump-node.ts writes the exact JSON shape write-node.ts consumes
+    plus base-manifest.txt; write-node.ts touches only reading/gap; graph-commit
+    supports --base <manifest-file>; budget-apply echoes "new snapshot: $OUT"
+    confirming the "echoed by budget-apply" claim; the existing Privacy
+    invariant section is unchanged. Unit 2 (finish the interrupted 2026-06 sync)
+    is explicitly operational and needs the human operator: BUDGET_ETL_PASSWORD
+    (pass/GPG-sourced per strategy clarification 4), the mounted cloud statement
+    archive, and the preserved categorization patch spec at
+    ~/.config/commons-systems/budget-patch-2026-06.json (merchant patterns,
+    never committed) -- no automated worker can supply these. Next steps: run
+    /budget locally to apply the preserved patch spec via budget-apply, publish
+    the fresh snapshot, confirm strategy-recover-finance reading names 2026-06
+    with gap null (Unit 1 stamp sub-step fires automatically as the last step of
+    that run); once confirmed this tactic transitions qa to review then done.'
+  since: 2026-07-11
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes: {}
