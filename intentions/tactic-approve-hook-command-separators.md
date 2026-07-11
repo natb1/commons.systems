@@ -28,6 +28,7 @@ execution:
   attempts: {}
   markers:
     - qa-done
+    - reviewed
   strategy_fingerprint: bb618bf03a20a12d37ecdf8770a5bb917ab5c38176fdbb795db237aabf8ac55f
 validates: []
 blocked_by: []
