@@ -30,6 +30,7 @@ execution:
   attempts: {}
   markers:
     - qa-done
+    - reviewed
   strategy_fingerprint: null
 validates: []
 blocked_by:
@@ -205,39 +206,41 @@ to auto-mode dispatch sessions (agent-behavior config); if the commit is
 denied, park via `office_hours` for a human grant rather than splitting
 the PR.
 
-## Review findings — gate-hold (2026-07-11)
+## Review history (PR #2844)
 
-Terminal review (PR #2844) held at `review`, HOLD mode. One confirmed
-correctness finding; not certified clean. Custody intact (last code commit
-precedes the qa clean-pass transition; all CI green). Disposition comment on
-PR #2844.
+### Round 1 — gate-hold (2026-07-11), RESOLVED
 
-### Node-lane escalation park does not land from PR-branch phase workers
+The first terminal review held at `review` on one confirmed correctness
+finding: **node-lane escalation park does not land from PR-branch phase
+workers**. A qa/review/fix worker escalates by writing only
+`$CLAUDE_JOB_DIR/office-hours-reason`; the `dispatch-stop.sh` node-lane
+backstop calls `park-node` → `graph-commit`, which had no reset-dance. A
+qa/review/fix worktree's HEAD is far ahead of `origin/main` (it carries the
+PR's code commits), so `graph-commit` could not produce an intentions-only
+SHA, the `graph/**` fast-path never stamped, the push was rejected,
+`park-node` exited 1, and the hook swallowed it as "non-fatal" — `office_hours`
+stayed null and the node silently looped.
 
-A qa/review/fix node worker that escalates writes only
-`$CLAUDE_JOB_DIR/office-hours-reason` and stops; the `dispatch-stop.sh`
-node-lane backstop then calls `park-node`, which runs `graph-commit` with no
-reset-dance. A qa/review/fix worktree's HEAD is far ahead of `origin/main` (it
-carries the PR's code commits), so `graph-commit` cannot produce an
-intentions-only SHA — the `graph/**` fast-path never stamps, the push to main
-is rejected, `park-node` exits 1, and the hook swallows it as "non-fatal".
-`office_hours` stays null, the escalation never surfaces to a human, and the
-next tick re-selects and re-runs the failing phase (silent loop).
+**Resolved at the source** (commit `9cb3dfad`): `graph-commit` now detects a
+HEAD ahead of `origin/main` with non-intentions changes and rebuilds the edit
+on a fresh intentions/-only base (`ensure_intentions_only_base`), restoring the
+original HEAD on exit (`cleanup`). Every caller — `park-node`, the Stop-hook
+backstop, and each phase skill's completion seam — inherits far-ahead safety;
+no caller hand-rolls a reset-dance. New `test-graph-commit.sh` cases 15/16
+cover the far-ahead worktree (plain edit and `--prune`). The node was then
+demoted → `implement` and re-ran `implement→qa→review` against the fixed scope;
+the second qa clean-pass landed its own transition through a genuinely
+far-ahead worktree — the exact failure mode, now passing end-to-end.
 
-`park-node` was designed for near-main dispositions (provision-failed /
-unroutable-conflict / wrong-worktree). This PR newly invokes it from the Stop
-hook for PR-branch node workers — outside that envelope. The hook comment
-anticipates the failure ("the worker's own in-session park applies the
-reset-dance; this backstop does not"), but no SKILL performs an in-session
-reset-dance park, so nothing supplies the reset-dance the comment assumes. This
-fails Unit 2's own intent ("the park write is the recovery artifact",
-clarification 30 / condition 6) and this node's Manual verification ("an
-induced escalation lands office_hours on the node via graph-commit") for the
-realistic PR-branch case; the synthetic near-main verification worktree masks
-it.
+### Round 2 — clean, held for human merge (2026-07-11)
 
-Resolution is a design choice (preferred: `park-node` internalizes the
-reset-dance so it is safe from any worktree; alternatives: the graph-tick
-launcher wraps the escalation park like it wraps `transition-node`, or the
-SKILLs perform an in-session reset-dance park before Stop). Re-work before this
-node advances past review.
+Second terminal review (PR #2844): **CLEAN**, no Required/correctness findings.
+Both freshness gates green; custody intact (last delivered-surface edit
+`9cb3dfad` precedes the second qa clean-pass; the provisioning merge touched no
+delivered code; all CI green). The round-1 finding independently re-verified
+resolved (`test-graph-commit.sh` 25/25, including cases 15/16). One
+non-blocking Low: the `dispatch-stop.sh` backstop comment (~L110) still asserts
+"this backstop does not [apply the reset-dance]" and treats a park failure as
+expected — stale now that `graph-commit` is far-ahead-safe; cosmetic, no
+runtime effect. Held at `review` under HOLD mode (no in-chat human merge grant);
+`reviewed` marker applied, phase kept `review`. Disposition comment on PR #2844.
