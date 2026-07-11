@@ -37,7 +37,8 @@ execution:
   branch: tactic-align-gate-strategy-phase
   pr: 2847
   attempts: {}
-  markers: []
+  markers:
+    - reviewed
   strategy_fingerprint: null
 validates: []
 blocked_by: []
