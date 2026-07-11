@@ -26,10 +26,10 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: qa
 execution:
   branch: tactic-intention-store-sensor
-  pr: null
+  pr: 2863
   attempts: {}
   markers: []
   strategy_fingerprint: d998d5c0754b51cfc489ee784db11b77d9b40eb91777ee0215076b0ad1a6bb69
