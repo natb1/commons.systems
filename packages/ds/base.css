@@ -58,6 +58,17 @@ footer {
   color: var(--text-muted);
 }
 
+/* CC-BY-SA badge in the shared footer (FOOTER_HTML in
+   src/templates/footer.ts). Single source: the badge image is 88x31 intrinsic
+   and must render at its intended 117x41. Apps that import this file via
+   @commons-systems/style/default.css inherit it; standalone stylesheets that
+   do not (e.g. packages/blog) keep their own copy. */
+.cc-badge {
+  width: 117px;
+  height: 41px;
+  vertical-align: middle;
+}
+
 *,
 *::before,
 *::after {
