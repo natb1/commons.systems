@@ -26,7 +26,8 @@ attention: null
 phase: null
 execution: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-nontactic-body-durability
 office_hours: null
 pace_exempt: false
 rounds: null

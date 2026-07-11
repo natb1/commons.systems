@@ -29,18 +29,80 @@ attempt counter on the PR (Step 5), and the "main already fixed it" merge-commit
 reuse (Step 4) are all durable and carry forward — read them and continue rather
 than restarting the pass.
 
+**Target resolution — keyspace split.** The current worktree dictates the
+target. Split on its name before Step 1: `[0-9]*-*` is a legacy issue worktree
+(unchanged); anything else is a graph-native node id, and
+`intentions/<id>.md` must exist at `origin/main` with `phase == fix` (else exit 1).
+
+```bash
+BRANCH=$(basename "$(git rev-parse --show-toplevel)")
+case "$BRANCH" in
+  [0-9]*-*)
+    N="${BRANCH%%-*}"; TARGET_KIND=issue ;;
+  *)
+    NODE_ID="$BRANCH"
+    git fetch origin main --quiet
+    NODE_MD=$(git archive origin/main "intentions/$NODE_ID.md" 2>/dev/null | tar -xO 2>/dev/null) || {
+      echo "/fix-checks: '$BRANCH' is neither a legacy '<N>-…' worktree nor a node with intentions/$NODE_ID.md at origin/main" >&2
+      exit 1
+    }
+    NODE_PHASE=$(printf '%s\n' "$NODE_MD" | sed -n 's/^phase: *//p' | head -1)
+    if [ "$NODE_PHASE" != "fix" ]; then
+      echo "/fix-checks: node '$NODE_ID' phase is '$NODE_PHASE' at origin/main, not 'fix'" >&2
+      exit 1
+    fi
+    N="$NODE_ID"; TARGET_KIND=node ;;
+esac
+```
+
+**Node-target lane (`TARGET_KIND=node`).** Every step runs unchanged except:
+the PR number is resolved by branch head — `gh pr list --head "$BRANCH" --state
+open --json number --jq '.[0].number // empty'` (the branch IS the node id, not
+an issue-prefixed name, so the issue-keyed branch-prefix lookup `dispatch-find-pr`
+performs does not apply — use `dispatch-context-pack`'s `--pr-is-number` flag
+instead, see Step 1 below. fix-checks never runs without an open PR, so an
+empty result here is a real error — write `$CLAUDE_JOB_DIR/office-hours-reason`
+per the Escalation note below and stop, never `dispatch-mark-deviation`, which
+is issue-only) — never pass `--issue`; on a clean
+fix (CI green after the push) the completion seam invokes the graph-native
+transition writer instead of any `dispatch-complete-phase` /
+`dispatch-mark-complete` — it consults the CI verdict and returns the node from
+`fix` to the interrupted ladder position as one state-only graph-commit on
+`origin/main`:
+
+```bash
+.claude/skills/dispatch-propagate/scripts/transition-node "$N" --set-pr "$PR_NUM"
+```
+
+The graph-tick worker runs it with the reset-dance a PR-branch worktree needs.
+Escalation writes `$CLAUDE_JOB_DIR/office-hours-reason` (+
+`office-hours-recommendation`) for the Stop hook's `park-node`, never a gh label.
+**On the node lane no gh issue is ever read or written.**
+
 1. **Resolve the draft PR.** Run the context pack (`dangerouslyDisableSandbox:
-   true` — calls `gh`):
+   true` — calls `gh`). **Legacy lane** (`TARGET_KIND=issue`):
 
    ```bash
-   .claude/skills/dispatch-propagate/scripts/dispatch-context-pack <issue-N> --pr
+   .claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$N" --pr
+   ```
+
+   **Node lane** (`TARGET_KIND=node`): resolve `PR_NUM` via the branch-head
+   lookup from the Target-resolution section above, then fetch it directly
+   (never pass `--issue`):
+
+   ```bash
+   .claude/skills/dispatch-propagate/scripts/dispatch-context-pack "$PR_NUM" --pr --pr-is-number
    ```
 
    This single call resolves the PR and captures its labels and body. From the
-   `=== PR ===` section: read `PR_NUM` from the `PR #<num>` line (or, if it
-   prints `PR: none`, fix-checks was dispatched without a PR — a router state
-   error — so call `dispatch-mark-deviation '/fix-checks: dispatched without a PR
-   — router state error'` and stop). The **labels** line and **body** captured
+   `=== PR ===` section: read `PR_NUM` from the `PR #<num>` line. **Legacy
+   lane:** if it prints `PR: none`, fix-checks was dispatched without a PR — a
+   router state error — so call `dispatch-mark-deviation '/fix-checks:
+   dispatched without a PR — router state error'` and stop. **Node lane:**
+   `PR: none` cannot occur here (Target resolution already required a
+   non-empty `PR_NUM` before this call); a pack failure here is a genuine `gh`
+   error — escalate via `office-hours-reason` per the Escalation note above and
+   stop, never `dispatch-mark-deviation` (issue-only). The **labels** line and **body** captured
    here are reused in later steps — Step 4's Flake sub-path reads the PR body for
    the `Closes #N` parse, and Step 5's attempt-counter computation reads the labels
    line — so they need not be re-fetched from GitHub. The `PR_NUM` resolved here is
