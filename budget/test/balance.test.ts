@@ -1255,7 +1255,7 @@ describe("computeProjectedRunway", () => {
     const points = [{ weekLabel: "1/5", weekMs: 1000, netWorth: -2000, isStatementAnchored: false }];
     const result = computeProjectedRunway(points, 100);
     expect(result).toBeCloseTo(-2000 / ((100 * 52) / 12), 6);
-    expect(result! < 0).toBe(true);
+    expect(result).toBeLessThan(0);
   });
 });
 

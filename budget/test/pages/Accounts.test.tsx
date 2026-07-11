@@ -235,13 +235,18 @@ describe("Accounts (renderAccounts markup parity)", () => {
     expect(html).toContain("Net change");
   });
 
+  // Two months of transactions so the income report (and thus the headline
+  // card) is non-null vs. today's date; ids default (report keys on
+  // normalizedId, not id).
+  const reportTxns = () => [
+    txn({ category: "Salary", amount: -3000, timestamp: ts("2025-02-10") }),
+    txn({ category: "Food", amount: 500, timestamp: ts("2025-02-12") }),
+    txn({ category: "Salary", amount: -2800, timestamp: ts("2025-01-10") }),
+  ];
+
   it("renders the Projected runway metric when net worth and trailing spend both exist", async () => {
     const html = await renderAccounts(localOptions({
-      getTransactions: vi.fn().mockResolvedValue([
-        txn({ id: "i1" as never, category: "Salary", amount: -3000, timestamp: ts("2025-02-10") }),
-        txn({ id: "e1" as never, category: "Food", amount: 500, timestamp: ts("2025-02-12") }),
-        txn({ id: "i0" as never, category: "Salary", amount: -2800, timestamp: ts("2025-01-10") }),
-      ]),
+      getTransactions: vi.fn().mockResolvedValue(reportTxns()),
       getStatements: vi.fn().mockResolvedValue([stmt({ period: "2025-02", lastTransactionDate: ts("2025-02-12") })]),
       getBudgetPeriods: vi.fn().mockResolvedValue([
         {
@@ -262,11 +267,7 @@ describe("Accounts (renderAccounts markup parity)", () => {
 
   it("omits the Projected runway metric when there are no statements (no net-worth points)", async () => {
     const html = await renderAccounts(localOptions({
-      getTransactions: vi.fn().mockResolvedValue([
-        txn({ id: "i1" as never, category: "Salary", amount: -3000, timestamp: ts("2025-02-10") }),
-        txn({ id: "e1" as never, category: "Food", amount: 500, timestamp: ts("2025-02-12") }),
-        txn({ id: "i0" as never, category: "Salary", amount: -2800, timestamp: ts("2025-01-10") }),
-      ]),
+      getTransactions: vi.fn().mockResolvedValue(reportTxns()),
       getStatements: vi.fn().mockResolvedValue([]),
       getBudgetPeriods: vi.fn().mockResolvedValue([]),
     }));
