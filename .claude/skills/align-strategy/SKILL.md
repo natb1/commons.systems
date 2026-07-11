@@ -192,7 +192,7 @@ yet have seen), and parsimony findings (redundant seams).
 ### Question mechanics — every round, both types
 
 Every `AskUserQuestion` round in this step — the step-2.1 intent confirmation,
-the step-2.8 design-canvas question, and any other — carries three things (the
+the step-2.9 design-canvas question, and any other — carries three things (the
 standing feedback loop of both types, not a type-a convenience):
 
 1. a **recommendation** — your best answer, listed first;
@@ -220,7 +220,7 @@ defer-until-later-review — a conscious, temporary choice to hold a
 recommendation on trust, never a quiet drop. When the author accepts one:
 
 - **Record it.** Land a dated clarification on the affected node naming exactly
-  what is held on trust (the ordinary step-2.7 clarification mechanics).
+  what is held on trust (the ordinary step-2.8 clarification mechanics).
 - **Extend delegated scope when it defers to Claude's articulation.** When the
   held content is Claude-drafted reasoning, the same round extends
   `delegation-philosophical-articulation`'s delegated scope — reconcile that
@@ -271,27 +271,43 @@ recommendation on trust, never a quiet drop. When the author accepts one:
    and that doctrine as an interview question, following the "Question
    mechanics" subsection above (recommendation + boldness +
    accept-as-deferral, context delivered inside the `AskUserQuestion` tool).
-   Each resolution lands as a dated `clarifications` entry in the step-2.7
+   Each resolution lands as a dated `clarifications` entry in the step-2.8
    provenance convention. On the **edit** path (step 1.2 classified the
    target as an edit of an existing strategy), run the gate against the
    revised `statement`/`rationale` as well.
 4. **Benefit.** Talk through why this strategy is worth running now versus
    later or not at all — this is conversational, not a gated question,
    but its conclusion should be visible in the eventual `rationale`.
-5. **Signal.** Draft a `success_signal` — `{observable, sensor, threshold,
+5. **Steelman-alternative challenge.** Test the strategy against the
+   strongest rival conception of its intent before recording it — the
+   alternatives test otherwise lives only in
+   `strategy-philosophical-grounding`'s periodic rounds, so a strategy
+   recorded between rounds would enter untested. Articulate the strongest
+   rival framing of the strategy's intent — a different end it could be
+   serving, a different shape the same end could take — sourced from the
+   tradition records the `serves` virtues cite (their `adopted` /
+   `diverged` / `chosen_over` entries) or a named candidate tradition you
+   can defend. Put that rival framing to the author via `AskUserQuestion`,
+   following the "Question mechanics" subsection above (recommendation +
+   boldness + accept-as-deferral, context delivered inside the tool). Record
+   the resolution as a dated `clarifications` entry in the adopt/diverge
+   shape — either the strategy adopts the rival framing, or it diverges
+   from it with the reason stated — ending with a provenance sentence in the
+   step-2.8 convention.
+6. **Signal.** Draft a `success_signal` — `{observable, sensor, threshold,
    is_proxy}` — and confirm it names something a sensor can actually read.
    A strategy with no plausible sensor is a sign the intent is still too
    abstract; push back before recording one.
-6. **Conditions.** Ask the author to state the circumstances this strategy
+7. **Conditions.** Ask the author to state the circumstances this strategy
    is contingent on (`attributes.conditions`) — author availability,
    architectural assumptions, another strategy holding, etc.
-7. **Edge cases and consequences.** For each of the above, surface at
+8. **Edge cases and consequences.** For each of the above, surface at
    least one edge case or downstream consequence and resolve it with the
    author. Every resolution becomes a dated `clarifications` entry —
    `{question, answer}` where `answer` ends with a provenance sentence in
    the existing convention, e.g. `"...Recorded 2026-07-05 interview."`
    (get the date via `date -u +%Y-%m-%d`, never hand-guessed).
-8. **Design-canvas support (UI-design requirements only).** When a
+9. **Design-canvas support (UI-design requirements only).** When a
    decision is about UI shape and text underspecifies it, supplement
    `AskUserQuestion` with visual aids: build mockup/variant artifacts on
    `@commons-systems/ds` and sync them to the claude.ai/design canvas via
@@ -310,7 +326,7 @@ recommendation on trust, never a quiet drop. When the author accepts one:
 | Duplicates | Step 1.2 overlap detection |
 | Compliance | Step 2.2 — does intent trace to a real virtue |
 | Clarity | Step 2.1 — a muddled composite statement is a step-1.1 multi-topic split, not a vague one-liner accepted as-is |
-| Correctness | Step 2.5 — does the signal actually measure the stated intent |
+| Correctness | Step 2.6 — does the signal actually measure the stated intent |
 | Relevance | Step 1 improvement-pass branch (edit mode only) |
 | Decomposition | Deliberately **not** this skill's job — a strategy is never broken into PR leaves here; that is `/align-tactics` |
 | Recommendations | The interview's own resolutions, recorded live as clarifications — there is no separate recommendations pass |
