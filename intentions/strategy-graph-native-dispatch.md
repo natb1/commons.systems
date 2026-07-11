@@ -129,7 +129,15 @@ clarifications:
       self-corrects when signals validate. Backlog tactics, like drafts, do not
       block their strategy's /align-tactics eligibility — the rule is no
       non-draft, non-backlog child tactics. The graph-native analog of the
-      enhancement label. Recorded 2026-07-03 interview."
+      enhancement label. Recorded 2026-07-03 interview. Amended 2026-07-11:
+      drafts are no longer inert `/align-tactics` input only — a frozen/draft
+      tactic is itself selectable for a per-node `/align-tactics <id>` session
+      (see the 2026-07-11 frozen-tactic-dispatch clarification, clarification
+      52). The eligibility-blocking rule stated here — a strategy is
+      `/align-tactics`-eligible only with no non-draft, non-backlog on-path
+      children — is unchanged; what changes is that a draft now carries a
+      first-class selectable disposition rather than only being consumed by its
+      strategy's round."
   - question: What happens when a strategy's substance is edited while it has open
       tactics?
     answer: "Soft freeze plus queued re-evaluation, detected by fingerprint:
@@ -144,7 +152,15 @@ clarifications:
       with open non-draft tactics queues this freeze. This session is the first
       instance: these clarifications made round 1's plans stale, and the
       re-evaluation was executed in the same change. Recorded 2026-07-03
-      interview."
+      interview. Amended 2026-07-11: the queued re-evaluation is now
+      dispatchable at tactic granularity, not only a strategy-level round — a
+      soft-frozen tactic carries a ranking and is selected directly, running
+      `/align-tactics <tactic-id>` to re-plan it (see the 2026-07-11
+      frozen-tactic-dispatch clarification, clarification 52).
+      Fingerprint-mismatch detection and the 'stop new selections in the
+      subtree, let in-flight phases finish their current phase' behavior are
+      unchanged; only the re-evaluation's dispatch granularity changes
+      (highest-ranked soft-frozen node first, per the progression tiebreak)."
   - question: Does the backlog band scale — and does it self-correct when the graph
       changes?
     answer: "No on both counts — superseded on same-day author review: the backlog
@@ -1153,6 +1169,44 @@ clarifications:
       disposition mechanics for the code-review/security-review sources
       specifically; it does not change the three-way disposition doctrine
       itself. Recorded 2026-07-11 interview."
+  - question: Frozen (undecomposed or soft-frozen) tactics carry a ranking — are
+      they selectable, and what runs when the dispatch script picks one?
+    answer: "Yes — decomposition and re-evaluation are dispatchable, ranked,
+      per-node work, not a manual-only step. A frozen node is a draft/raw tactic
+      (never decomposed — the retain-not-refine byproducts of clarification 6)
+      or a soft-frozen tactic (a planned tactic whose strategy substance
+      fingerprint changed, clarification 10). Every node carries calculated
+      attention derived at read time regardless of phase (clarification 11), so
+      a frozen node is ranked exactly like an executable one — \"ranked even
+      when frozen\" is already true; what this adds is that the selector no
+      longer excludes frozen nodes from the eligible pool. When the dispatch
+      script selects a frozen node, the session runs `/align-tactics <node-id>`
+      on it — extending `/align-tactics` to accept a tactic target (today it is
+      strategy-only: \"never selects its own target\"), the decomposition-skill
+      analog of tactic-phase-skill-node-targets re-keying the execution phase
+      skills. Selection resolves over a pool of frozen nodes: a strategy is
+      selectable when it has frozen descendants (or is itself undecomposed — the
+      zero-tactic initial-decomposition case), and selecting a strategy descends
+      to its highest-ranking frozen subtree node; a frozen tactic may rank
+      higher than its parent strategy and be selected directly. The router runs
+      `/align-tactics` on the resolved highest-ranked frozen node. Ties in
+      calculated attention break toward the more-progressed node by the phase
+      ordinal (draft < align-tactics < implement < fix < qa < review < main-qa <
+      done, so review outranks implement; equivalently a concrete child tactic
+      outranks its abstract parent strategy) — finish in-flight
+      decomposition/work before opening new. Claiming and worktree isolation key
+      on the RESOLVED node the session runs on, not the selection entry: a
+      strategy-entry and a direct-tactic selection that land on the same node
+      collide on one claim and dedupe via the uniform node-id
+      live-session/worktree rule (clarification 13); a zero-tactic strategy
+      resolves to itself → `/align-tactics <strategy-id>`, the classic initial
+      decomposition, unchanged. This supersedes the \"drafts are inert
+      `/align-tactics` input only\" implication of clarification 9 (drafts stay
+      non-blocking for strategy eligibility but gain a selectable disposition)
+      and extends clarification 10's soft-freeze re-evaluation from a
+      strategy-level round to per-tactic dispatch. Implementation retained as a
+      draft tactic (tactic-graph-frozen-tactic-dispatch). Recorded 2026-07-11
+      interview."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
