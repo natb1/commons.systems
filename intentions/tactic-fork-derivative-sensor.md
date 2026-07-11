@@ -35,7 +35,7 @@ execution:
   pr: null
   attempts: {}
   markers: []
-  strategy_fingerprint: eba54509bcf50288fd06dd7b30c182cfbf2fb51a12cccdb42b230c0a53b3f2d0
+  strategy_fingerprint: null
 validates:
   - strategy-distribute-workflow
 blocked_by: []

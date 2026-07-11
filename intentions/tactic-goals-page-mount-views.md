@@ -29,7 +29,7 @@ execution:
   pr: null
   attempts: {}
   markers: []
-  strategy_fingerprint: 04aa02adec88a3145460aa90242ca47578f633087667aba014c921593e28d1b3
+  strategy_fingerprint: null
 validates:
   - strategy-graph-mounts
 blocked_by:
