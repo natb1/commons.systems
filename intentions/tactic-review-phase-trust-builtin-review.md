@@ -21,7 +21,17 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
-attention: null
+attention:
+  boost: 4
+  override: null
+  rationale: "Author-directed 2026-07-11: top-ranks this draft above every
+    existing tactic (current max authored 8) so it decomposes first once
+    /align-tactics runs — own boost 4 added to strategy-graph-native-dispatch's
+    inherited boost 5 resolves to authored 9. Companion nodes
+    tactic-graph-phase-launch-per-phase,
+    tactic-review-phase-trust-builtin-review, and
+    tactic-graph-frozen-tactic-dispatch were boosted together in the same round
+    to the same tier."
 phase: null
 execution: null
 validates: []
