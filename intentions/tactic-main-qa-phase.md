@@ -22,13 +22,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-main-qa-phase
   pr: 2859
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
 validates: []
 blocked_by:
