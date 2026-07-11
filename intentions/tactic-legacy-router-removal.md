@@ -26,7 +26,39 @@ blocked_by:
   - tactic-graph-router-transitions
   - tactic-dispatch-lifecycle-sensor
   - tactic-phase-skill-node-targets
-office_hours: null
+office_hours:
+  reason: "implement phase cannot run in the headless graph-tick worker:
+    /implement (and its /implement-unit delegate) structurally require launching
+    implementation subagents via the Agent/Task subagent tool ('the main thread
+    never edits files; every code change happens in a subagent'), and that tool
+    is absent from this worker environment (only task-list Task* tools,
+    SendMessage, Cron, Monitor, WebFetch, and MCP tools are present — no
+    general-purpose subagent-launch). Same class of limitation as the
+    review-phase park (graph-tick lacks the Workflow tool /review-fix needs).
+    Emulating the phase ad hoc is forbidden and would be especially reckless
+    here (a ~4750-line deletion of the LIVE dispatch system across 8+ core
+    scripts plus a surgical dispatch-phase reduction). Preconditions are ALL
+    satisfied so a resumer need not re-verify: every blocker is done/live —
+    tactic-graph-router-transitions, tactic-dispatch-lifecycle-sensor,
+    tactic-phase-skill-node-targets are phase=done; tactic-main-qa-phase (PR
+    #2859) and tactic-office-hours-graph-entry (PR #2787) are merged; and the
+    plan's Step-0 drain gate PASSES (GitHub issues are disabled so the legacy
+    help-wanted queue is structurally empty; zero dispatch:*-labeled PRs; all 14
+    open PRs are graph-native-lane tactic-* branches or one human ad-hoc PR
+    #2786, none legacy-router-owned). Worktree is provisioned clean at
+    .claude/worktrees/tactic-legacy-router-removal with no commits beyond base —
+    nothing lost. Next steps: run /implement tactic-legacy-router-removal in a
+    full interactive session that HAS the Agent/Task subagent-launch tool; it
+    will build Units 1-3 via /implement-unit (opus for Unit 1, sonnet for 2-3),
+    run the verify (npm test --prefix packages/intentionsutil), open the draft
+    PR, and land implement->qa via transition-node --set-pr; NOTE Unit 3 does
+    LIVE graph-commit --prune writes outside the PR working tree
+    (tactic-dispatch-gh-api-interim-hardening + sweep
+    tactic-review-lows-automation). After that session opens the PR and
+    transitions the node, MANUALLY clear this office_hours park (there is no
+    unpark primitive) so the router can advance it."
+  since: 2026-07-11
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes: {}
