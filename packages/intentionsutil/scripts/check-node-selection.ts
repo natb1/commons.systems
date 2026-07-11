@@ -104,7 +104,14 @@ function readStrategyFingerprint(node: IntentionNode): string | Record<string, s
     const fp = (squatExec as { strategy_fingerprint?: unknown }).strategy_fingerprint;
     if (typeof fp === "string") return fp;
     if (fp !== null && typeof fp === "object" && !Array.isArray(fp)) {
-      return fp as Record<string, string>;
+      // Coerce the squatter map to Record<string,string> by keeping string
+      // values — no cast, and non-string entries (malformed) are dropped rather
+      // than mis-typed.
+      const out: Record<string, string> = {};
+      for (const [key, value] of Object.entries(fp)) {
+        if (typeof value === "string") out[key] = value;
+      }
+      return out;
     }
     return null;
   }
