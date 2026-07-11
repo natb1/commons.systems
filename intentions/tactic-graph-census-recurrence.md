@@ -43,7 +43,7 @@ clarifications:
 tooling_goals: []
 success_signal: null
 attention: null
-phase: fix
+phase: qa
 execution:
   branch: tactic-graph-census-recurrence
   pr: 2866
