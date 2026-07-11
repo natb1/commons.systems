@@ -26,10 +26,10 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: qa
 execution:
   branch: tactic-graph-digest-tooling
-  pr: null
+  pr: 2865
   attempts: {}
   markers: []
   strategy_fingerprint: ba2a6baf40da43d7217194977f7ecd4dbba424a343251236340d524b05479917
