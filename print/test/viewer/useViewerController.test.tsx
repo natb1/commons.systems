@@ -24,9 +24,11 @@ function fakeStore(
 // The latest hook result, captured each render so tests read state + handlers.
 let captured: UseViewerControllerResult | null = null;
 
-// Non-null accessor for the captured result, so tests avoid a `!` on every use.
+// Non-null accessor for the captured hook result. Tests use this instead of a
+// `captured!` non-null assertion (a type-safety escape hatch); the leading `!`
+// guard here is not one.
 function result(): UseViewerControllerResult {
-  if (!captured) throw new Error("hook not mounted");
+  if (!captured) throw new Error("hook result not captured — mount() first");
   return captured;
 }
 
@@ -219,6 +221,94 @@ describe("useViewerController persistence", () => {
     await act(async () => { await vi.runAllTimersAsync(); });
 
     expect(globalThis.reportError).toHaveBeenCalled();
+  });
+
+  it("pagehide flushes the pending debounced save before the timer fires", async () => {
+    const store = fakeStore();
+    await mount(defaultArgs({ store }));
+    await flushInit();
+
+    await act(async () => { result().goNext(); });
+    await flushInit();
+
+    // Fire pagehide before the 500ms debounce elapses — the save must flush now,
+    // not be dropped. Without a flush-on-hide listener, closing the tab within
+    // the debounce window loses the final page turn.
+    await act(async () => { window.dispatchEvent(new Event("pagehide")); });
+    await flushInit();
+
+    expect(store.save).toHaveBeenCalledWith("2");
+  });
+
+  it("visibilitychange to hidden flushes the pending debounced save", async () => {
+    const store = fakeStore();
+    await mount(defaultArgs({ store }));
+    await flushInit();
+
+    await act(async () => { result().goNext(); });
+    await flushInit();
+
+    const original = Object.getOwnPropertyDescriptor(Document.prototype, "visibilityState");
+    Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+    try {
+      await act(async () => { document.dispatchEvent(new Event("visibilitychange")); });
+      await flushInit();
+    } finally {
+      if (original) Object.defineProperty(document, "visibilityState", original);
+    }
+
+    expect(store.save).toHaveBeenCalledWith("2");
+  });
+
+  it("a transiently failed save is retried on the next flush (position not marked saved)", async () => {
+    const save = vi.fn<(pos: string) => Promise<void>>()
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValue(undefined);
+    const store = fakeStore(null, { save });
+    await mount(defaultArgs({ store }));
+    await flushInit();
+
+    await act(async () => { result().goNext(); }); // to page 2
+    await flushInit();
+    await act(async () => { await vi.runAllTimersAsync(); }); // first save("2") rejects
+
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(save).toHaveBeenCalledWith("2");
+
+    // Re-issue a save for the SAME position. Because the failed save must not
+    // have recorded "2" as saved, this fires a fresh (successful) retry. If the
+    // code marked lastSavedPosition before the write settled, this would dedup
+    // out and never retry the lost position.
+    await act(async () => { result().goToPage(2); });
+    await flushInit();
+    await act(async () => { await vi.runAllTimersAsync(); });
+
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(save).toHaveBeenNthCalledWith(2, "2");
+  });
+
+  it("opening with spread preference does not persist an init-only position shift", async () => {
+    // Saved position "3"; spread preference on. Init enters spread {2,3} whose
+    // position is the left page "2". That shift is init-only (zero user
+    // navigation) and must NOT be persisted, or it silently rewrites "3"→"2".
+    localStorage.setItem("spread-mode:m1", "true");
+    const store = fakeStore("3");
+    let cp = 1;
+    const renderer: ContentRenderer = {
+      ...makeMockRenderer({ renderPageInto: vi.fn().mockResolvedValue(undefined) }),
+      init: vi.fn().mockImplementation(async (_el: HTMLElement, _src: unknown, pos?: string) => {
+        cp = pos ? Number(pos) : 1;
+      }),
+      goToPage: vi.fn().mockImplementation(async (p: number) => { cp = p; }),
+      get currentPage() { return cp; },
+      get position() { return String(cp); },
+      get pageCount() { return 10; },
+    };
+    await mount(defaultArgs({ createRenderer: () => renderer, store }));
+    await flushInit();
+    await act(async () => { await vi.runAllTimersAsync(); });
+
+    expect(store.save).not.toHaveBeenCalled();
   });
 
   it("cleanup flushes pending save synchronously and calls renderer.destroy", async () => {

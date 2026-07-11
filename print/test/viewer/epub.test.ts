@@ -354,6 +354,29 @@ describe("createEpubRenderer", () => {
 
       expect(mockBook.locations.cfiFromPercentage).toHaveBeenCalledWith(0);
     });
+
+    it("settles from currentLocation() without awaiting the relocated event", async () => {
+      const renderer = createEpubRenderer();
+      await renderer.init(container, "https://example.com/book.epub");
+
+      // Simulate epub.js NOT emitting 'relocated' for display(cfi) — the
+      // documented unreliable path. once() is a no-op, so if goToFraction still
+      // awaited the event it would hang until the fallback timeout; instead it
+      // must settle immediately from currentLocation(). No fake timers are used,
+      // so this test would time out if the event-wait were still in place.
+      mockRendition.once.mockImplementation(() => {});
+      // Plain sentinel (no '!' — an epubcfi's '!' trips the type-safety string
+      // heuristic); only its round-trip through currentLocation() matters here.
+      const resolvedCfi = "resolved-location-cfi";
+      mockRendition.currentLocation.mockReturnValue(
+        makeLocation(4, 3, 9, false, false, resolvedCfi),
+      );
+
+      await renderer.goToFraction!(0.5); // type-safety-ok: optional renderer API method present in this epub harness
+
+      expect(mockRendition.display).toHaveBeenCalled();
+      expect(renderer.position).toBe(resolvedCfi);
+    });
   });
 
   describe("destroy", () => {
@@ -369,6 +392,36 @@ describe("createEpubRenderer", () => {
       expect(mockRendition.destroy).toHaveBeenCalled();
       expect(mockBook.destroy).toHaveBeenCalled();
       expect(container.querySelector(".viewer-epub-container")).toBeNull();
+    });
+
+    it("clears a pending relocated fallback timer so it never reports after teardown", async () => {
+      const renderer = createEpubRenderer();
+      await renderer.init(container, "https://example.com/book.epub");
+
+      // Move off atStart so next() proceeds into waitForRelocated.
+      const relocatedCb = mockRendition.on.mock.calls.find(
+        (c: unknown[]) => c[0] === "relocated",
+      )![1] as RelocatedCallback; // type-safety-ok: 'relocated' handler is registered in init(), so find() is present; cast mirrors the next()/prev() tests
+      relocatedCb(makeLocation(0, 1, 3, true, false));
+
+      vi.useFakeTimers();
+      try {
+        // relocated never fires: the fallback timer would be the only settler.
+        mockRendition.once.mockImplementation(() => {});
+        const p = renderer.next();
+
+        // destroy() must settle the pending wait (resolve the promise so next()
+        // completes) AND clear the timer (so it can't fire reportError later).
+        renderer.destroy();
+        await p;
+
+        // Advance well past both the old 30s and new fallback windows: a cleared
+        // timer fires nothing, so no spurious "timed out" report after teardown.
+        await vi.advanceTimersByTimeAsync(31000);
+        expect(globalThis.reportError).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 
