@@ -23,13 +23,12 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: implement
 execution:
   branch: tactic-phase-skill-node-targets
   pr: 2844
   attempts: {}
-  markers:
-    - qa-done
+  markers: []
   strategy_fingerprint: null
 validates: []
 blocked_by:
