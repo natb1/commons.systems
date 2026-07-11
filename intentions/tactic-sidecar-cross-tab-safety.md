@@ -21,13 +21,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: done
 execution:
   branch: tactic-sidecar-cross-tab-safety
   pr: 2839
   attempts: {}
   markers:
     - qa-done
+    - reviewed
   strategy_fingerprint: null
 validates: []
 blocked_by: []

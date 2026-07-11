@@ -30,8 +30,12 @@
     "packages/sidecar",
     "packages/router",
     "packages/style",
-    "packages/rules-test"
+    "packages/rules-test",
+    "packages/firebase-audit"
   ],
+  "scripts": {
+    "audit:firebase": "tsx packages/firebase-audit/src/cli.ts"
+  },
   "overrides": {
     "@xmldom/xmldom": "^0.8.13",
     "fast-xml-builder": "^1.2.0",

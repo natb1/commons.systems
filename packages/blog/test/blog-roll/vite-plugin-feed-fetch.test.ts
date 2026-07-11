@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   feedFetchPlugin,
   parseAtomFeedXml,
@@ -108,6 +111,76 @@ describe("parseAtomFeedXml", () => {
     const result = parseAtomFeedXml(xml);
     expect(result?.title).toBe("Tom & Jerry's 'Adventure'");
     expect(result?.url).toBe("https://example.com/post?a=1&b=2");
+  });
+
+  it("decodes WordPress numeric entities (right-quote, ellipsis)", () => {
+    const xml = `<feed>
+        <entry>
+          <title>It&#8217;s here&#8230;</title>
+          <link rel="alternate" href="https://example.com/wp-post" />
+          <published>2026-04-01T00:00:00Z</published>
+        </entry>
+      </feed>`;
+    expect(parseAtomFeedXml(xml)?.title).toBe("It’s here…");
+  });
+
+  it("does not double-decode a single-encoded &amp;lt; sequence", () => {
+    const xml = `<feed>
+        <entry>
+          <title>a &amp;lt; b</title>
+          <link rel="alternate" href="https://example.com/amp" />
+        </entry>
+      </feed>`;
+    expect(parseAtomFeedXml(xml)?.title).toBe("a &lt; b");
+  });
+
+  it("strips CDATA wrappers from title", () => {
+    const xml = `<feed>
+        <entry>
+          <title><![CDATA[Raw & Unescaped <title>]]></title>
+          <link rel="alternate" href="https://example.com/cdata" />
+          <published>2026-05-01T00:00:00Z</published>
+        </entry>
+      </feed>`;
+    expect(parseAtomFeedXml(xml)?.title).toBe("Raw & Unescaped <title>");
+  });
+
+  it("matches rel=alternate with reversed attribute order (href before rel)", () => {
+    const xml = `<feed>
+        <entry>
+          <title>Reversed Attrs</title>
+          <link href="https://example.com/reversed" rel="alternate" />
+          <published>2026-06-01T00:00:00Z</published>
+        </entry>
+      </feed>`;
+    expect(parseAtomFeedXml(xml)?.url).toBe("https://example.com/reversed");
+  });
+
+  it("never returns a rel=self API URL as the post link", () => {
+    const xml = `<feed>
+        <entry>
+          <title>Self-first Entry</title>
+          <link rel="self" href="https://example.com/feeds/posts/default/1" />
+          <link rel="alternate" href="https://example.com/2026/07/real-post.html" />
+        </entry>
+      </feed>`;
+    expect(parseAtomFeedXml(xml)?.url).toBe(
+      "https://example.com/2026/07/real-post.html",
+    );
+  });
+
+  it("skips rel=self when no rel=alternate link is present", () => {
+    const xml = `<feed>
+        <entry>
+          <title>Only Self and Replies</title>
+          <link rel="self" href="https://example.com/feeds/posts/default/2" />
+          <link rel="replies" href="https://example.com/2026/07/with-replies.html" />
+        </entry>
+      </feed>`;
+    // Falls back to the first non-self link rather than the rel=self API URL.
+    expect(parseAtomFeedXml(xml)?.url).toBe(
+      "https://example.com/2026/07/with-replies.html",
+    );
   });
 });
 
@@ -223,5 +296,64 @@ describe("feedFetchPlugin buildStart error handling", () => {
     await expect((plugin as any).buildStart()).rejects.toThrow( // type-safety-ok: invoking Vite plugin hook directly in unit test
       "invalid fetch configuration",
     );
+  });
+});
+
+describe("feedFetchPlugin emitPath artifact", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("persists the same snapshot the virtual module inlines to emitPath", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "feed-fetch-"));
+    // Nested subdir the plugin must create (mkdirSync recursive).
+    const emitPath = join(dir, "nested", "blog-roll-feeds.json");
+    try {
+      const xml = `<feed><entry>
+        <title>Latest</title>
+        <link rel="alternate" href="https://example.com/latest" />
+        <published>2026-05-01T00:00:00Z</published>
+      </entry></feed>`;
+      vi.stubGlobal("fetch", () =>
+        Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve(xml) }),
+      );
+
+      const plugin = feedFetchPlugin(
+        [{ id: "test", url: "https://example.com/feed.xml" }],
+        { emitPath },
+      );
+
+      await (plugin as any).buildStart(); // type-safety-ok: invoking Vite plugin hook directly in unit test
+      (plugin as any).writeBundle(); // type-safety-ok: invoking Vite plugin hook directly in unit test
+
+      // The persisted artifact must equal what the virtual module inlines — one
+      // source feeds both the client bundle and the prerender.
+      const virtualCode = (plugin as any).load("\0virtual:blog-roll-feeds"); // type-safety-ok: invoking Vite plugin hook directly in unit test
+      const virtualData = parseVirtualModule(virtualCode);
+      const artifact = JSON.parse(readFileSync(emitPath, "utf8"));
+      expect(artifact).toEqual(virtualData);
+      expect(artifact).toEqual({
+        test: {
+          title: "Latest",
+          url: "https://example.com/latest",
+          publishedAt: "2026-05-01T00:00:00Z",
+        },
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not write any file when emitPath is omitted", async () => {
+    vi.stubGlobal("fetch", () =>
+      Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve("<feed></feed>") }),
+    );
+    const plugin = feedFetchPlugin([
+      { id: "test", url: "https://example.com/feed.xml" },
+    ]);
+    await (plugin as any).buildStart(); // type-safety-ok: invoking Vite plugin hook directly in unit test
+    // No emitPath configured: writeBundle is a no-op and must not throw.
+    expect(() => (plugin as any).writeBundle()).not.toThrow(); // type-safety-ok: invoking Vite plugin hook directly in unit test
   });
 });

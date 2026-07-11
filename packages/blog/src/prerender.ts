@@ -273,7 +273,7 @@ function stripHomeExtra(html: string): string {
 }
 
 function injectBeforeHead(html: string, block: string, context: string): string {
-  const result = html.replace("</head>", `    ${block}\n  </head>`);
+  const result = html.replace("</head>", () => `    ${block}\n  </head>`);
   if (result === html) throw new Error(`</head> marker not found in ${context}`);
   return result;
 }
@@ -439,7 +439,7 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
     html = injectBeforeHead(html, ogBlock, "post template");
     html = injectBeforeHead(html, postSeoHead, "post template");
     const beforeTitle = html;
-    html = html.replace(/<title>.*?<\/title>/, `<title>${escapeHtml(formatPageTitle(titleSuffix, meta.title))}</title>`);
+    html = html.replace(/<title>.*?<\/title>/, () => `<title>${escapeHtml(formatPageTitle(titleSuffix, meta.title))}</title>`);
     if (html === beforeTitle) throw new Error(`<title> tag not found in template`);
 
     if (shell) {
@@ -503,7 +503,7 @@ export function prerenderStaticPage(config: StaticPageConfig): void {
   const beforeTitle = html;
   html = html.replace(
     /<title>.*?<\/title>/,
-    `<title>${escapeHtml(formatPageTitle(titleSuffix, page.title))}</title>`,
+    () => `<title>${escapeHtml(formatPageTitle(titleSuffix, page.title))}</title>`,
   );
   if (html === beforeTitle) throw new Error(`<title> tag not found in template`);
 

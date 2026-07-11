@@ -25,13 +25,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: done
 execution:
   branch: tactic-budget-idb-atomic-writes
   pr: 2827
   attempts: {}
   markers:
     - qa-done
+    - reviewed
   strategy_fingerprint: 3178ea5e04e119ed9cce5cb1e0b573e7e011aef2e70dbd39c0449a854a61a204
 validates: []
 blocked_by: []

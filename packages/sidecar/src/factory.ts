@@ -24,6 +24,23 @@ export function serializeSidecar<TData>(data: TData): string {
   return JSON.stringify(data, null, 2);
 }
 
+/**
+ * Run `fn` while holding a cross-tab exclusive Web Lock named `name`, so the
+ * read-merge-write it performs is atomic against every other tab on the same
+ * origin holding the same-named lock — the cross-tab no-clobber guarantee.
+ *
+ * Web Locks is a progressive enhancement: where `navigator.locks` is
+ * unavailable (older engines, non-window contexts, the test runner) the
+ * callback runs directly. The per-tab single-flight write chain still
+ * serializes writes within the tab, so correctness degrades only to the
+ * pre-existing single-tab guarantee, never below it.
+ */
+async function withWriteLock<T>(name: string, fn: () => Promise<T>): Promise<T> {
+  const locks = globalThis.navigator?.locks;
+  if (!locks) return fn();
+  return locks.request(name, fn);
+}
+
 // ---------------------------------------------------------------------------
 // B. Factory options + return shape
 // ---------------------------------------------------------------------------
@@ -92,10 +109,19 @@ export function createSidecar<TData, TPatch>(
   let corruptOnDisk = false;
 
   // Single-flight write chain: every mutation appends to this promise so
-  // concurrent saves cannot race or interleave on the file. Each link merges its
-  // patch against the result of the prior link, then persists (disk write gated
-  // by `writable`).
+  // concurrent saves cannot race or interleave on the file within this tab. Each
+  // link read-merge-writes against on-disk state under a cross-tab Web Lock, so
+  // the no-clobber guarantee also holds across tabs. The chain is kept recovered
+  // (never rejects) so one failed write cannot poison the next link; a failure
+  // is surfaced to the caller through the promise `enqueueWrite` returns and,
+  // for a drain, through `pendingFailure` below.
   let writeChain: Promise<void> = Promise.resolve();
+
+  // The error from the most recently *settled* queued write, or null when the
+  // latest settled write succeeded. `flushWrites` throws it so a drain reflects
+  // a persist failure; a later successful write (which read-merge-wrote the disk
+  // into a consistent state) clears it.
+  let pendingFailure: unknown = null;
 
   // Incremented on every setLocalDirectory / clearLocalDirectory so in-memory
   // assignments can be guarded against writes that started before the switch.
@@ -166,6 +192,17 @@ export function createSidecar<TData, TPatch>(
   }
 
   /**
+   * Name of the cross-tab Web Lock guarding writes to a folder's sidecar. Keyed
+   * by the sidecar dir name and the folder handle's name so two tabs on the same
+   * folder contend (the case that must serialize) while unrelated folders mostly
+   * do not. A name collision only over-serializes (always safe); it never lets
+   * two writers to the same folder run concurrently.
+   */
+  function writeLockName(handle: FileSystemDirectoryHandle): string {
+    return `commons-sidecar-write:${sidecarDirName}:${handle.name}`;
+  }
+
+  /**
    * Store the retained directory handle and writable flag (called after the
    * folder is picked / permission resolved). Invalidates the cached model so the
    * next access re-reads lazily from the new handle.
@@ -178,6 +215,7 @@ export function createSidecar<TData, TPatch>(
     loadPromise = null;
     corruptOnDisk = false;
     writeChain = Promise.resolve();
+    pendingFailure = null;
   }
 
   /**
@@ -194,6 +232,7 @@ export function createSidecar<TData, TPatch>(
     loadPromise = null;
     corruptOnDisk = false;
     writeChain = Promise.resolve();
+    pendingFailure = null;
   }
 
   /**
@@ -235,46 +274,97 @@ export function createSidecar<TData, TPatch>(
   }
 
   /**
-   * Queue a merge-and-persist onto the single-flight write chain. The merge runs
-   * inside the task (after ensureLoaded) so each link merges against the prior
-   * link's result — the no-clobber serialization guarantee. The in-memory model
-   * is ALWAYS updated so the current session stays consistent; the disk write is
-   * gated by `writable` (work happens in-memory even when the folder is not
-   * writable, and the disk save silently no-ops). The per-link catch keeps one
-   * failed write from poisoning the chain.
+   * Queue a merge-and-persist onto the single-flight write chain. The in-memory
+   * model is ALWAYS updated so the current session stays consistent.
+   *
+   * When the folder is writable and not known-corrupt, the persist is a
+   * read-merge-write against the CURRENT on-disk state, run under a cross-tab
+   * Web Lock: the patch is merged onto whatever is on disk right now (including
+   * entries another tab has since persisted) rather than onto this tab's
+   * possibly-stale in-memory model, so two tabs on one folder no longer clobber
+   * each other. When the folder is not writable, work happens in-memory only.
+   *
+   * The returned promise REJECTS if the disk persist fails, so a caller learns a
+   * save did not reach disk (against silent data loss). The single-flight chain
+   * itself is kept recovered so one failed write cannot poison the next.
    */
   function enqueueWrite(patch: TPatch): Promise<void> {
     const snapshotHandle = dirHandle;
     const snapshotWritable = writable;
     const snapshotGen = generation;
-    writeChain = writeChain
-      .then(async () => {
-        // TOCTOU guard: if the bound directory changed between enqueue and
-        // execution (rapid disconnect/reconnect), this patch was issued for the
-        // previous folder — skip it entirely so it neither persists to the new
-        // folder nor contaminates the new folder's in-memory model.
-        if (dirHandle !== snapshotHandle) return;
-        const model = await ensureLoaded();
+    const work = writeChain.then(async () => {
+      // TOCTOU guard: if the bound directory changed between enqueue and
+      // execution (rapid disconnect/reconnect), this patch was issued for the
+      // previous folder — skip it entirely so it neither persists to the new
+      // folder nor contaminates the new folder's in-memory model.
+      if (dirHandle !== snapshotHandle) return;
+      const model = await ensureLoaded();
+
+      // In-memory-only path: no writable disk, or the disk is known-corrupt
+      // (logged once at load time; stay silent here so repeated saves don't spam
+      // the log). Fold the patch into the in-memory model and stop.
+      if (!snapshotWritable || snapshotHandle === null || corruptOnDisk) {
         const merged = mergeSidecar(model, patch);
         if (generation === snapshotGen) cachedModel = merged;
-        // Corruption was logged once at load time; return silently here so
-        // repeated saves don't spam the error log.
-        if (corruptOnDisk) return;
-        // Persist to the SNAPSHOT handle (not the live global), so a switch that
-        // races in after the guard still writes to the folder this patch was for.
-        if (snapshotWritable && snapshotHandle !== null) {
-          await writeSidecar(snapshotHandle, merged);
+        return;
+      }
+
+      // Read-merge-write against on-disk state under a cross-tab lock. Persist
+      // to the SNAPSHOT handle (not the live global) so a switch that races in
+      // after the guard still writes to the folder this patch was for.
+      await withWriteLock(writeLockName(snapshotHandle), async () => {
+        // Re-guard inside the lock: a folder switch may have landed while we
+        // waited to acquire it.
+        if (dirHandle !== snapshotHandle) return;
+        const onDisk = await readSidecar(snapshotHandle);
+        if (onDisk === null) {
+          // The on-disk file became corrupt (e.g. a concurrent tab wrote
+          // garbage) after our clean load. Suppress the write to preserve the
+          // recoverable bytes — same contract as load-time corruption — and
+          // fold the patch into the in-memory model so the session stays usable.
+          corruptOnDisk = true;
+          logError(
+            new Error(
+              "sidecar corrupt on disk at write time; suppressing write to preserve recoverable user data",
+            ),
+            { operation: "enqueueWrite" },
+          );
+          const merged = mergeSidecar(model, patch);
+          if (generation === snapshotGen) cachedModel = merged;
+          return;
         }
-      })
-      .catch((err) => {
-        logError(err, { operation: "sidecarWrite" });
+        const merged = mergeSidecar(onDisk, patch);
+        await writeSidecar(snapshotHandle, merged);
+        if (generation === snapshotGen) cachedModel = merged;
       });
-    return writeChain;
+    });
+    // Recover the single-flight chain and record the latest write's outcome so a
+    // later `flushWrites` drain reflects it; a subsequent success clears it.
+    writeChain = work.then(
+      () => {
+        pendingFailure = null;
+      },
+      (err) => {
+        pendingFailure = err;
+      },
+    );
+    // Surface the failure to the caller (logging centrally, as before) while the
+    // recovered chain above keeps the queue alive.
+    return work.catch((err) => {
+      logError(err, { operation: "sidecarWrite" });
+      throw err;
+    });
   }
 
-  /** Drain the pending write chain. Tests await this to assert persistence. */
+  /**
+   * Drain the pending write chain, then reflect a persist failure: if the most
+   * recently settled queued write failed, reject with its error. Tests await
+   * this to assert persistence.
+   */
   function flushWrites(): Promise<void> {
-    return writeChain;
+    return writeChain.then(() => {
+      if (pendingFailure !== null) throw pendingFailure;
+    });
   }
 
   return {

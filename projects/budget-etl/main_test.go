@@ -1074,25 +1074,28 @@ func TestDeriveMonthlyStatements(t *testing.T) {
 			}
 		}
 
-		// Verify 2025-12 balance: known balance + all txns from Dec onward
-		// txns from 2025-12-01 onward: 10000 + (-5000) + 20000 + 15000 + 8000 = 48000
-		// derived = -431299 + 48000 = -383299 (-$3832.99)
-		if derived[0].Balance != -383299 {
-			t.Errorf("derived[0].Balance = %d, want %d", derived[0].Balance, -383299)
-		}
+		// Each anchor is the balance at the END of its month: reverse only the
+		// transactions dated AFTER that month (first of the next month onward).
 
-		// Verify 2026-01 balance: known balance + txns from Jan onward
+		// Verify 2025-12 end-of-month balance: reverse txns from 2026-01 onward
 		// txns from 2026-01-01 onward: 20000 + 15000 + 8000 = 43000
 		// derived = -431299 + 43000 = -388299 (-$3882.99)
-		if derived[1].Balance != -388299 {
-			t.Errorf("derived[1].Balance = %d, want %d", derived[1].Balance, -388299)
+		if derived[0].Balance != -388299 {
+			t.Errorf("derived[0].Balance = %d, want %d", derived[0].Balance, -388299)
 		}
 
-		// Verify 2026-02 balance: known balance + txns from Feb onward
+		// Verify 2026-01 end-of-month balance: reverse txns from 2026-02 onward
 		// txns from 2026-02-01 onward: 15000 + 8000 = 23000
 		// derived = -431299 + 23000 = -408299 (-$4082.99)
-		if derived[2].Balance != -408299 {
-			t.Errorf("derived[2].Balance = %d, want %d", derived[2].Balance, -408299)
+		if derived[1].Balance != -408299 {
+			t.Errorf("derived[1].Balance = %d, want %d", derived[1].Balance, -408299)
+		}
+
+		// Verify 2026-02 end-of-month balance: reverse txns from 2026-03 onward
+		// txns from 2026-03-01 onward: 8000
+		// derived = -431299 + 8000 = -423299 (-$4232.99)
+		if derived[2].Balance != -423299 {
+			t.Errorf("derived[2].Balance = %d, want %d", derived[2].Balance, -423299)
 		}
 
 		// Verify balance dates are last day of each month
@@ -1290,7 +1293,7 @@ func TestMergeStatementsPreservesRealOverDerivedAnchor(t *testing.T) {
 
 	maxDates := map[string]*time.Time{} // no transactions; LastTransactionDate stays nil
 
-	result := mergeStatements(dirStmts, inputStmts, maxDates)
+	result := mergeStatements(dirStmts, inputStmts, maxDates, nil)
 
 	// Index the result by StatementID for easy lookup.
 	byStmtID := make(map[string]export.Statement, len(result))
@@ -1404,7 +1407,7 @@ func TestMergeStatementsMigrationNoDoubling(t *testing.T) {
 		},
 	}
 
-	result := mergeStatements(dirStmts, inputStmts, map[string]*time.Time{})
+	result := mergeStatements(dirStmts, inputStmts, map[string]*time.Time{}, nil)
 
 	byStmtID := make(map[string]export.Statement, len(result))
 	for _, s := range result {
@@ -1437,6 +1440,83 @@ func TestMergeStatementsMigrationNoDoubling(t *testing.T) {
 	// two same-month March input docs collapsed away, no doubling.
 	if len(result) != 2 {
 		t.Fatalf("expected 2 statements (March dir + Feb legacy), got %d: %+v", len(result), result)
+	}
+}
+
+// TestMergeStatementsPreservesDerivedInputAnchor guards the multi-file
+// regression: once a second file joins an account, deriveMonthlyStatements
+// stops re-deriving that account's anchors (single-file only), so the input
+// snapshot's stored derived anchors are the only surviving balance history.
+// mergeStatements must retain a derived (non-generated) virtual input anchor
+// for a period no real statement covers, while still dropping a generated
+// virtual input statement (recomputed from the rules) and letting a real
+// statement win its own period.
+func TestMergeStatementsPreservesDerivedInputAnchor(t *testing.T) {
+	// vrules whose generated statements use the "synchrony-virtual-" prefix.
+	vrules := []export.VirtualTransactionRule{
+		{TargetInstitution: "synchrony", TargetAccount: "virtual"},
+	}
+
+	// A real dir statement for 2026-03 (the account's newest, joined file).
+	bdMar := time.Date(2026, 3, 31, 0, 0, 0, 0, time.UTC)
+	dirStmts := []budget.StatementData{
+		{
+			StatementID: "bank-acct-2026-03",
+			Institution: "bank",
+			Account:     "acct",
+			Balance:     30000,
+			Period:      "2026-03",
+			BalanceDate: &bdMar,
+			Virtual:     false,
+		},
+	}
+
+	inputStmts := []export.Statement{
+		// A derived monthly anchor for 2026-01 that dir no longer produces.
+		{
+			ID:          budget.StatementDocID("bank-acct-2026-01"),
+			StatementID: "bank-acct-2026-01",
+			Institution: "bank",
+			Account:     "acct",
+			Balance:     10000,
+			Period:      "2026-01",
+			Virtual:     true,
+		},
+		// A generated virtual statement recomputed elsewhere — must be dropped.
+		{
+			ID:          budget.StatementDocID("synchrony-virtual-2026-01"),
+			StatementID: "synchrony-virtual-2026-01",
+			Institution: "synchrony",
+			Account:     "virtual",
+			Balance:     0,
+			Period:      "2026-01",
+			Virtual:     true,
+		},
+	}
+
+	maxDates := map[string]*time.Time{}
+	result := mergeStatements(dirStmts, inputStmts, maxDates, vrules)
+
+	byStmtID := make(map[string]export.Statement, len(result))
+	for _, s := range result {
+		byStmtID[s.StatementID] = s
+	}
+
+	if _, ok := byStmtID["bank-acct-2026-03"]; !ok {
+		t.Error("real dir statement bank-acct-2026-03 missing from merge result")
+	}
+	anchor, ok := byStmtID["bank-acct-2026-01"]
+	if !ok {
+		t.Fatal("derived input anchor bank-acct-2026-01 dropped — balance history lost")
+	}
+	if !anchor.Virtual || anchor.Balance != 10000 {
+		t.Errorf("derived input anchor changed: Virtual=%v Balance=%v, want true/10000", anchor.Virtual, anchor.Balance)
+	}
+	if _, ok := byStmtID["synchrony-virtual-2026-01"]; ok {
+		t.Error("generated virtual input statement was retained; it must be dropped and recomputed")
+	}
+	if len(result) != 2 {
+		t.Errorf("expected 2 statements (real + derived anchor), got %d", len(result))
 	}
 }
 
@@ -2044,16 +2124,19 @@ func TestGenerateVirtualTransactions(t *testing.T) {
 			t.Error("expected StatementID synchrony-virtual-2025-03")
 		}
 
-		// Verify TransactionIDs are "virtual-" + source docID
+		// Verify TransactionIDs fold the rule identity into the source docID so
+		// each (rule, source) pair yields a distinct, stable doc ID.
 		txnIDSet := make(map[string]bool)
 		for _, vt := range res.transactions {
 			txnIDSet[vt.TransactionID] = true
 		}
-		if !txnIDSet["virtual-doc-sync-1"] {
-			t.Error("expected TransactionID virtual-doc-sync-1")
+		wantID1 := "virtual-" + budget.TransactionDocID(virtualRuleKey(synchronyRule), "doc-sync-1")
+		wantID2 := "virtual-" + budget.TransactionDocID(virtualRuleKey(synchronyRule), "doc-sync-2")
+		if !txnIDSet[wantID1] {
+			t.Errorf("expected TransactionID %q", wantID1)
 		}
-		if !txnIDSet["virtual-doc-sync-2"] {
-			t.Error("expected TransactionID virtual-doc-sync-2")
+		if !txnIDSet[wantID2] {
+			t.Errorf("expected TransactionID %q", wantID2)
 		}
 
 		// Verify 2 statements with correct fields
@@ -2153,8 +2236,9 @@ func TestGenerateVirtualTransactions(t *testing.T) {
 		if !strings.HasPrefix(vt.StatementID, "amazonstore-virtual-") {
 			t.Errorf("StatementID %q does not have prefix %q", vt.StatementID, "amazonstore-virtual-")
 		}
-		if vt.TransactionID != "virtual-doc-amz-1" {
-			t.Errorf("TransactionID: got %q, want %q", vt.TransactionID, "virtual-doc-amz-1")
+		wantID := "virtual-" + budget.TransactionDocID(virtualRuleKey(amazonRule), "doc-amz-1")
+		if vt.TransactionID != wantID {
+			t.Errorf("TransactionID: got %q, want %q", vt.TransactionID, wantID)
 		}
 
 		// 1 statement for the single matched period
@@ -2171,8 +2255,10 @@ func TestGenerateVirtualTransactions(t *testing.T) {
 		}
 	})
 
-	t.Run("per-rule dedup by date and amount", func(t *testing.T) {
-		// Two txns with same date and amount under the synchrony rule -> only 1 virtual txn
+	t.Run("same-day same-amount split payment yields two virtual txns", func(t *testing.T) {
+		// A same-day split payment is two DISTINCT source transactions (distinct
+		// FITIDs / doc IDs) that happen to share a date and amount. Dedup keys on
+		// the source doc ID (FITID), not (date, amount), so both survive.
 		allTxns := []budget.TransactionData{
 			{
 				Institution:   "pnc",
@@ -2199,8 +2285,87 @@ func TestGenerateVirtualTransactions(t *testing.T) {
 
 		res := generateVirtualTransactions(allTxns, docIDs, []export.VirtualTransactionRule{synchronyRule})
 
+		if len(res.transactions) != 2 {
+			t.Errorf("expected 2 virtual transactions for a split payment, got %d", len(res.transactions))
+		}
+		ids := make(map[string]bool, len(res.transactions))
+		for _, vt := range res.transactions {
+			if ids[vt.TransactionID] {
+				t.Errorf("duplicate virtual TransactionID %q", vt.TransactionID)
+			}
+			ids[vt.TransactionID] = true
+		}
+	})
+
+	t.Run("same source doc id matched twice per rule dedups", func(t *testing.T) {
+		// A genuine duplicate — the same source transaction (same doc ID)
+		// appearing twice — is deduped to a single virtual transaction per rule.
+		allTxns := []budget.TransactionData{
+			{
+				Institution:   "pnc",
+				Account:       "5111",
+				Description:   "Online Payment To SYNCHRONY BANK",
+				Amount:        50000,
+				Timestamp:     time.Date(2025, 2, 15, 0, 0, 0, 0, time.UTC),
+				StatementID:   "pnc-5111-2025-02",
+				TransactionID: "txn-dup",
+				Category:      "Transfer:CardPayment",
+			},
+			{
+				Institution:   "pnc",
+				Account:       "5111",
+				Description:   "Online Payment To SYNCHRONY BANK",
+				Amount:        50000,
+				Timestamp:     time.Date(2025, 2, 15, 0, 0, 0, 0, time.UTC),
+				StatementID:   "pnc-5111-2025-02",
+				TransactionID: "txn-dup",
+				Category:      "Transfer:CardPayment",
+			},
+		}
+		docIDs := []string{"doc-dup", "doc-dup"}
+
+		res := generateVirtualTransactions(allTxns, docIDs, []export.VirtualTransactionRule{synchronyRule})
+
 		if len(res.transactions) != 1 {
-			t.Errorf("expected 1 transaction after per-rule dedup, got %d", len(res.transactions))
+			t.Errorf("expected 1 transaction after per-source-doc-id dedup, got %d", len(res.transactions))
+		}
+	})
+
+	t.Run("two rules matching one source yield distinct doc ids", func(t *testing.T) {
+		// Two distinct rules that both match the single source transaction must
+		// emit two virtual transactions with distinct doc IDs — previously they
+		// collided on "virtual-"+source, silently overwriting one Firestore doc.
+		ruleA := export.VirtualTransactionRule{
+			Institution: "pnc", Account: "5111", Category: "Transfer:CardPayment",
+			TargetInstitution: "synchrony", TargetAccount: "virtual",
+			TargetCategory: "Pet:Veterinarian", TargetBudget: "pet", BudgetID: "pet",
+		}
+		ruleB := export.VirtualTransactionRule{
+			Institution: "pnc", Account: "5111", Category: "Transfer:CardPayment",
+			TargetInstitution: "synchrony", TargetAccount: "virtual",
+			TargetCategory: "Shopping:Online", TargetBudget: "shopping", BudgetID: "shopping",
+		}
+		allTxns := []budget.TransactionData{
+			{
+				Institution:   "pnc",
+				Account:       "5111",
+				Description:   "Online Payment To SYNCHRONY BANK",
+				Amount:        50000,
+				Timestamp:     time.Date(2025, 2, 15, 0, 0, 0, 0, time.UTC),
+				StatementID:   "pnc-5111-2025-02",
+				TransactionID: "txn-x",
+				Category:      "Transfer:CardPayment",
+			},
+		}
+		docIDs := []string{"doc-x"}
+
+		res := generateVirtualTransactions(allTxns, docIDs, []export.VirtualTransactionRule{ruleA, ruleB})
+
+		if len(res.transactions) != 2 {
+			t.Fatalf("expected 2 virtual transactions from 2 rules, got %d", len(res.transactions))
+		}
+		if res.transactions[0].TransactionID == res.transactions[1].TransactionID {
+			t.Errorf("doc IDs collide: both %q", res.transactions[0].TransactionID)
 		}
 	})
 

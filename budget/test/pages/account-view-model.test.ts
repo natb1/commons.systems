@@ -172,9 +172,10 @@ describe("formatDate", () => {
   it("returns empty string for null", () => {
     expect(formatDate(null)).toBe("");
   });
-  it("formats a timestamp via toLocaleDateString", () => {
-    const ms = new Date("2025-02-15").getTime();
-    expect(formatDate(ms)).toBe(new Date(ms).toLocaleDateString());
+  it("formats a UTC-midnight timestamp using its UTC calendar date", () => {
+    // Account timestamps are stored as UTC midnight; render the UTC date so a
+    // viewer west of UTC does not see the previous day.
+    expect(formatDate(Date.UTC(2025, 1, 15))).toBe("2/15/2025");
   });
 });
 

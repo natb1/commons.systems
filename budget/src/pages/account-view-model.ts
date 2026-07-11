@@ -8,6 +8,7 @@
 import type { Transaction, Statement } from "../firestore.js";
 import { formatCurrency } from "../format.js";
 import { accountKey, splitAccountKey, type DerivedAccountBalance } from "../balance.js";
+import { formatUtcDate } from "./format-utc-date.js";
 
 export interface AccountRow {
   institution: string;
@@ -104,7 +105,7 @@ export function buildAccountRows(
 
 export function formatDate(ms: number | null): string {
   if (ms === null) return "";
-  return new Date(ms).toLocaleDateString();
+  return formatUtcDate(ms);
 }
 
 export function formatSignedCurrency(n: number): string {
