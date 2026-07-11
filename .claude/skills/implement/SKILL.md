@@ -35,15 +35,35 @@ worktree; this skill never switches.
 ```bash
 BRANCH=$(basename "$(git rev-parse --show-toplevel)")
 case "$BRANCH" in
-  [0-9]*-*) N="${BRANCH%%-*}" ;;
+  [0-9]*-*)
+    # Legacy issue lane: worktree named `<N>-…`.
+    N="${BRANCH%%-*}"
+    TARGET_KIND=issue
+    ;;
   *)
-    echo "/implement: current branch '$BRANCH' is not a target worktree (expected '<N>-…')" >&2
-    exit 1
+    # Graph-native node lane: worktree named after the intention node id.
+    # The node file must exist at origin/main with phase matching this skill.
+    NODE_ID="$BRANCH"
+    git fetch origin main --quiet
+    NODE_MD=$(git archive origin/main "intentions/$NODE_ID.md" 2>/dev/null | tar -xO 2>/dev/null) || {
+      echo "/implement: '$BRANCH' is neither a legacy '<N>-…' worktree nor a node with intentions/$NODE_ID.md at origin/main" >&2
+      exit 1
+    }
+    NODE_PHASE=$(printf '%s\n' "$NODE_MD" | sed -n 's/^phase: *//p' | head -1)
+    if [ "$NODE_PHASE" != "implement" ]; then
+      echo "/implement: node '$NODE_ID' phase is '$NODE_PHASE' at origin/main, not 'implement'" >&2
+      exit 1
+    fi
+    N="$NODE_ID"
+    TARGET_KIND=node
     ;;
 esac
 ```
 
-`<N>` is the issue number used by the remaining steps for their `tmp/` filenames.
+`$N` keys the remaining steps' `tmp/` filenames (the issue number on the legacy
+lane, the node id on the node lane). `$TARGET_KIND` selects the lane at every
+seam below that differs between issue and node targets — context source, plan
+source, and completion. **On the node lane no gh issue is ever read or written.**
 
 Then resolve whether a draft PR already exists by running the context pack (use
 `dangerouslyDisableSandbox: true` — it calls `gh`). Add `--phase-log` so the same
