@@ -338,7 +338,9 @@ validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
-rounds: null
+rounds:
+  count: 0
+  last_completed: null
 attributes:
   conditions:
     - graph maintenance stays cheap enough that nodes track reality rather than
