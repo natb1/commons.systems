@@ -159,6 +159,58 @@ describe("scanDecisionTrace", () => {
     expect(condition[0].summary).toBe("strategy file deleted");
   });
 
+  it("does not attribute a schema-backfill of a previously-absent attention field to class 3", () => {
+    const repo = initRepo();
+    // Baseline: an existing node whose file predates the `attention` field
+    // being part of the schema at all (no `attention:` line present).
+    writeNodeFile(
+      repo,
+      "tactic-zeta",
+      ["---", "id: tactic-zeta", "kind: tactic", "statement: t", "owner: ai", "status: raw", "parent: null", "---", "# tactic-zeta", ""].join("\n"),
+    );
+    commitAll(repo, "add tactic-zeta", "2026-07-01T12:00:00Z");
+
+    // A later commit backfills the field onto the existing file at its
+    // default/absent-equivalent value (`null`) alongside unrelated schema
+    // catch-up — this is field materialization, not a calibration challenge,
+    // and must not be attributed to class 3.
+    writeNodeFile(
+      repo,
+      "tactic-zeta",
+      ["---", "id: tactic-zeta", "kind: tactic", "statement: t", "owner: ai", "status: raw", "parent: null", "attention: null", "phase: null", "---", "# tactic-zeta", ""].join("\n"),
+    );
+    commitAll(repo, "backfill schema fields on tactic-zeta", "2026-07-02T12:00:00Z");
+
+    const events = scanDecisionTrace(repo, "2026-06-01");
+    expect(ofClass(events, "calibration-moves-node")).toHaveLength(0);
+  });
+
+  it("attributes a real attention value transition to class 3 with the boost as summary", () => {
+    const repo = initRepo();
+    writeNodeFile(
+      repo,
+      "tactic-eta",
+      ["---", "id: tactic-eta", "kind: tactic", "statement: t", "owner: ai", "status: raw", "parent: null", "attention: null", "---", "# tactic-eta", ""].join("\n"),
+    );
+    commitAll(repo, "add tactic-eta", "2026-07-01T12:00:00Z");
+
+    // A genuine transition: `attention: null` is replaced by a populated
+    // block — this is a real value change (paired add+remove of the
+    // top-level key within the same commit), unlike the backfill case above.
+    writeNodeFile(
+      repo,
+      "tactic-eta",
+      ["---", "id: tactic-eta", "kind: tactic", "statement: t", "owner: ai", "status: raw", "parent: null", "attention:", "  boost: 6", "  override: null", "  rationale: real challenge", "---", "# tactic-eta", ""].join("\n"),
+    );
+    commitAll(repo, "boost tactic-eta", "2026-07-02T12:00:00Z");
+
+    const events = scanDecisionTrace(repo, "2026-06-01");
+    const calibration = ofClass(events, "calibration-moves-node");
+    expect(calibration).toHaveLength(1);
+    expect(calibration[0].node).toBe("tactic-eta");
+    expect(calibration[0].summary).toBe("boost: 6");
+  });
+
   it("does not attribute a plain tactic conditions/statement edit to class 2 (strategy-only)", () => {
     const repo = initRepo();
     writeNodeFile(

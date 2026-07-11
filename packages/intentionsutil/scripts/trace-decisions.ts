@@ -142,6 +142,25 @@ export function scanDecisionTrace(repoDir: string, since = "30 days ago"): Trace
   let isDeletedFile = false;
   let isNewFile = false;
 
+  // Class 3 needs a genuine before/after value transition, not a field merely
+  // materializing. A multi-field commit that backfills a previously-absent
+  // `attention: null` onto an existing file (e.g. a schema catch-up alongside
+  // unrelated edits) shows only an added line with no removed counterpart —
+  // that is field creation, not a calibration challenge moving a node. Buffer
+  // attention-line signs per (commit, path) and only emit once BOTH an added
+  // and a removed attention-related line have been seen for that file within
+  // the current commit, flushing at each file/commit boundary.
+  let attentionAdded = false;
+  let attentionRemoved = false;
+  // The added ("after") line is the more useful summary for a reviewer — it
+  // shows what the value became, not what it stopped being. Fall back to the
+  // removed line only if no added line matched (kept for defensive coverage;
+  // not expected given the add+remove pairing this class requires).
+  let attentionAddedSummary: string | null = null;
+  let attentionRemovedSummary: string | null = null;
+  let attentionAddedSummaryIsNested = false;
+  let attentionRemovedSummaryIsNested = false;
+
   const emit = (node: string, eventClass: TraceClass, summary: string): void => {
     if (commit === null || date === null) return;
     const key = `${commit}\x00${node}\x00${eventClass}`;
@@ -150,12 +169,26 @@ export function scanDecisionTrace(repoDir: string, since = "30 days ago"): Trace
     events.push({ date, commit: commit.slice(0, 7), node, eventClass, summary });
   };
 
+  const flushAttention = (): void => {
+    if (path !== null && NODE_PATH.test(path) && attentionAdded && attentionRemoved) {
+      const summary = attentionAddedSummary ?? attentionRemovedSummary ?? "attention changed";
+      emit(nodeIdFromPath(path), "calibration-moves-node", summary);
+    }
+    attentionAdded = false;
+    attentionRemoved = false;
+    attentionAddedSummary = null;
+    attentionRemovedSummary = null;
+    attentionAddedSummaryIsNested = false;
+    attentionRemovedSummaryIsNested = false;
+  };
+
   for (const line of patch.split("\n")) {
     // A commit header is `<40-hex><COMMIT_SEP><iso-date>` — detect it by the
     // separator at offset 40 with a 40-hex prefix. Using a string separator
     // (not a control char in a regex literal) keeps the hash check clean.
     const sepIdx = line.indexOf(COMMIT_SEP);
     if (sepIdx === 40 && /^[0-9a-f]{40}$/.test(line.slice(0, 40))) {
+      flushAttention();
       commit = line.slice(0, 40);
       date = line.slice(41);
       continue;
@@ -163,6 +196,7 @@ export function scanDecisionTrace(repoDir: string, since = "30 days ago"): Trace
 
     const fileHeader = /^diff --git a\/(\S+) b\/(\S+)$/.exec(line);
     if (fileHeader !== null) {
+      flushAttention();
       path = fileHeader[2];
       isDeletedFile = false;
       isNewFile = false;
@@ -208,10 +242,31 @@ export function scanDecisionTrace(repoDir: string, since = "30 days ago"): Trace
     }
 
     // Class 3 — a calibration challenge moves a node (attention injection).
+    // Buffered: only a paired add+remove within this (commit, path) is a real
+    // value transition (see flushAttention above); a lone addition is a field
+    // materializing (e.g. schema backfill), not a challenge.
     if (ATTENTION_LINE.test(line)) {
-      emit(node, "calibration-moves-node", summarize(line));
+      // A nested `boost:`/`override:` line carries the actual value and is a
+      // more useful summary than the bare top-level `attention:` line; prefer
+      // it if one appears (in either position), but don't require it — a
+      // bare `attention:` line alone is still a valid fallback summary.
+      const isNested = /^[+-]\s+(boost|override):/.test(line);
+      if (line.startsWith("+")) {
+        attentionAdded = true;
+        if (attentionAddedSummary === null || (isNested && !attentionAddedSummaryIsNested)) {
+          attentionAddedSummary = summarize(line);
+          attentionAddedSummaryIsNested = isNested;
+        }
+      } else {
+        attentionRemoved = true;
+        if (attentionRemovedSummary === null || (isNested && !attentionRemovedSummaryIsNested)) {
+          attentionRemovedSummary = summarize(line);
+          attentionRemovedSummaryIsNested = isNested;
+        }
+      }
     }
   }
+  flushAttention();
 
   return events;
 }
