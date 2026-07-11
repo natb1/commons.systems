@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { Timestamp } from "firebase/firestore";
-import { weekStart, computeNetAmount, findPeriodForTimestamp, computeBudgetBalance, computeAllBudgetBalances, computePeriodBalances, findOverrideInPeriod, computeAverageWeeklyCredits, computeRollingAverage, computeAggregateTrend, computePerBudgetTrend, computeAverageWeeklySpending, computeNetWorth, computeCashFlow, computeDerivedBalances, periodAllowance, weeklyEquivalent, periodEquivalent, computeBudgetStatsAndVariances, MATERIALITY_THRESHOLD } from "../src/balance";
+import { weekStart, computeNetAmount, findPeriodForTimestamp, computeBudgetBalance, computeAllBudgetBalances, computePeriodBalances, findOverrideInPeriod, computeAverageWeeklyCredits, computeRollingAverage, computeAggregateTrend, computePerBudgetTrend, computeAverageWeeklySpending, computeNetWorth, computeCashFlow, computeProjectedRunway, computeDerivedBalances, periodAllowance, weeklyEquivalent, periodEquivalent, computeBudgetStatsAndVariances, MATERIALITY_THRESHOLD } from "../src/balance";
 import type { BudgetDiff, PerBudgetStats } from "../src/balance";
 import type { Budget, BudgetOverride, BudgetPeriod, Statement, Transaction, WeeklyAggregate } from "../src/firestore";
 
@@ -1227,6 +1227,35 @@ describe("computeCashFlow", () => {
     ];
     const result = computeCashFlow(points);
     expect(result[0].cashFlow).toBe(-200);
+  });
+});
+
+describe("computeProjectedRunway", () => {
+  it("divides latest net worth by trailing monthly spend", () => {
+    const points = [
+      { weekLabel: "1/5", weekMs: 1000, netWorth: 5000, isStatementAnchored: false },
+      { weekLabel: "1/12", weekMs: 2000, netWorth: 12000, isStatementAnchored: true },
+    ];
+    // avg weekly spend 100 -> monthly 100 * 52 / 12 ≈ 433.33 -> 12000 / 433.33 ≈ 27.69
+    const result = computeProjectedRunway(points, 100);
+    expect(result).not.toBeNull();
+    expect(result).toBeCloseTo(12000 / ((100 * 52) / 12), 6);
+  });
+
+  it("returns null for empty points (no data yields no metric)", () => {
+    expect(computeProjectedRunway([], 100)).toBeNull();
+  });
+
+  it("returns null for zero spending (no Infinity/NaN)", () => {
+    const points = [{ weekLabel: "1/5", weekMs: 1000, netWorth: 5000, isStatementAnchored: false }];
+    expect(computeProjectedRunway(points, 0)).toBeNull();
+  });
+
+  it("returns the raw negative quotient for negative net worth (no clamp)", () => {
+    const points = [{ weekLabel: "1/5", weekMs: 1000, netWorth: -2000, isStatementAnchored: false }];
+    const result = computeProjectedRunway(points, 100);
+    expect(result).toBeCloseTo(-2000 / ((100 * 52) / 12), 6);
+    expect(result! < 0).toBe(true);
   });
 });
 
