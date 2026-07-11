@@ -61,6 +61,11 @@ function fatal(message: string): never {
   process.exit(2);
 }
 
+// Extract a message from an unknown catch binding without an `as` cast.
+function errMsg(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 function parseArgs(argv: string[]): Args {
   let manifest: string | null = null;
   let decryptVerify = false;
@@ -86,25 +91,25 @@ function loadManifest(path: string): ClassEntry[] {
   try {
     raw = readFileSync(path, "utf8");
   } catch (err) {
-    fatal(`cannot read manifest ${path}: ${(err as Error).message}`);
+    fatal(`cannot read manifest ${path}: ${errMsg(err)}`);
   }
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch (err) {
-    fatal(`manifest ${path} is not valid JSON: ${(err as Error).message}`);
+    fatal(`manifest ${path} is not valid JSON: ${errMsg(err)}`);
   }
   if (!Array.isArray(parsed)) {
     fatal(`manifest ${path} must be a JSON array of class entries`);
   }
   parsed.forEach((entry, i) => validateClass(entry, i, path));
-  return parsed as ClassEntry[];
+  return parsed as ClassEntry[]; // type-safety-ok: narrowed by validateClass on every element above
 }
 
 function validateClass(entry: unknown, index: number, path: string): void {
   const where = `manifest ${path} entry ${index}`;
   if (typeof entry !== "object" || entry === null) fatal(`${where} is not an object`);
-  const e = entry as Record<string, unknown>;
+  const e = entry as Record<string, unknown>; // type-safety-ok: untrusted JSON manifest edge; guarded object above
   if (typeof e.id !== "string" || e.id.length === 0) fatal(`${where} missing string "id"`);
   if (typeof e.description !== "string") fatal(`${where} (${e.id}) missing string "description"`);
   if (e.verify !== "benc-magic" && e.verify !== "git" && e.verify !== "exists") {
@@ -118,7 +123,7 @@ function validateClass(entry: unknown, index: number, path: string): void {
   }
   e.copies.forEach((c, j) => {
     if (typeof c !== "object" || c === null) fatal(`${where} (${e.id}) copy ${j} is not an object`);
-    const cc = c as Record<string, unknown>;
+    const cc = c as Record<string, unknown>; // type-safety-ok: untrusted JSON manifest edge; guarded object above
     if (typeof cc.path !== "string" || cc.path.length === 0) {
       fatal(`${where} (${e.id}) copy ${j} missing string "path"`);
     }
@@ -186,7 +191,7 @@ function verifyBencMagic(path: string): { ok: boolean; note: string } {
     try {
       if (!startsWithBencMagic(f)) bad.push(f);
     } catch (err) {
-      bad.push(`${f} (${(err as Error).message})`);
+      bad.push(`${f} (${errMsg(err)})`);
     }
   }
   if (bad.length > 0) return { ok: false, note: `bad BENC magic: ${bad.join(", ")}` };
@@ -331,9 +336,9 @@ function decryptVerify(
       stdio: ["ignore", "pipe", "pipe"],
     });
     JSON.parse(out);
-    return { ok: true, skipped: false, note: `decrypted ${file}, output parses as JSON` };
+    return { ok: true, skipped: false, note: `decrypted ${file}, output is valid JSON` };
   } catch (err) {
-    return { ok: false, skipped: false, note: `decrypt failed for ${file}: ${(err as Error).message}` };
+    return { ok: false, skipped: false, note: `decrypt failed for ${file}: ${errMsg(err)}` };
   }
 }
 
