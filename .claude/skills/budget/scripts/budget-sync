@@ -99,11 +99,11 @@ bash "$SCRIPT_DIR/ingest-downloads.sh" "$downloads" "$statements"
 # --- Step 8: report + signal ------------------------------------------------
 # The `report` subcommand implies --allow-uncategorized and does not write a
 # snapshot. ${TMPDIR:-/tmp}/inspect.json is the durable signal the SKILL.md branches on.
-"$BUDGET_ETL_BIN" report --input "$current" --dir "$statements" --report ${TMPDIR:-/tmp}/inspect.json
+"$BUDGET_ETL_BIN" report --input "$current" --dir "$statements" --report "${TMPDIR:-/tmp}/inspect.json"
 
-new_statements=$(jq '.new_statements | length' ${TMPDIR:-/tmp}/inspect.json)
-new_transactions=$(jq '.new_transactions | length' ${TMPDIR:-/tmp}/inspect.json)
-uncategorized=$(jq '.uncategorized | length' ${TMPDIR:-/tmp}/inspect.json)
+new_statements=$(jq '.new_statements | length' "${TMPDIR:-/tmp}/inspect.json")
+new_transactions=$(jq '.new_transactions | length' "${TMPDIR:-/tmp}/inspect.json")
+uncategorized=$(jq '.uncategorized | length' "${TMPDIR:-/tmp}/inspect.json")
 
 echo "budget-sync: report written to ${TMPDIR:-/tmp}/inspect.json"
 echo "  new statements:    $new_statements"

@@ -294,6 +294,12 @@ case "$args" in
         cat "$STUB_DIR/rest-bigpage-1.json"
         cat "$STUB_DIR/rest-bigpage-2.json"
         ;;
+      dispatch-test-limit-force-paginate)
+        # --paginate-at-limit-<=100 fixture: two pages of MIXED issues+PRs so a
+        # single page would under-deliver real issues after PR-filtering.
+        cat "$STUB_DIR/rest-forcepage-1.json"
+        cat "$STUB_DIR/rest-forcepage-2.json"
+        ;;
       dispatch-test-limit-exact)
         # Exactly-<limit> fixture: serve a single array of exactly limit items so
         # a caller's `len == limit ⇒ truncated` guard fires.
@@ -1480,6 +1486,45 @@ if grep -q -- '--paginate' "$STUB_DIR/gh-issue-list-rest-calls.log"; then
   assert_eq "limit: log does not contain --paginate" "no" "yes"
 else
   assert_eq "limit: log does not contain --paginate" "no" "no"
+fi
+teardown
+
+echo "Test: --paginate flag at limit <= 100 -- forces paginate-then-slice (up to <limit> real issues)"
+setup
+# Page 1: one real issue, one PR object, one real issue (mixed). A single page of
+# per_page=3 would yield only 2 real issues after PR-filtering -- the bug this
+# flag fixes.
+printf '%s\n' '[
+  {"number":401,"created_at":"2024-02-01T00:00:00Z","closed_at":null,"labels":[]},
+  {"number":402,"created_at":"2024-02-02T00:00:00Z","closed_at":null,"labels":[],"pull_request":{"merged_at":null}},
+  {"number":403,"created_at":"2024-02-03T00:00:00Z","closed_at":null,"labels":[]}
+]' > "$STUB_DIR/rest-forcepage-1.json"
+# Page 2: two more real issues -- reachable ONLY if --paginate was passed.
+printf '%s\n' '[
+  {"number":404,"created_at":"2024-02-04T00:00:00Z","closed_at":null,"labels":[]},
+  {"number":405,"created_at":"2024-02-05T00:00:00Z","closed_at":null,"labels":[]}
+]' > "$STUB_DIR/rest-forcepage-2.json"
+: > "$STUB_DIR/gh-issue-list-rest-calls.log"
+actual_fp=$(source "$TMPDIR_TEST/lib.sh"; gh_issue_list_rest --state closed --limit 3 --paginate --label dispatch-test-limit-force-paginate)
+# Merged both pages, filtered PR 402, then sliced to the first 3 real issues:
+# 401, 403, 404 (405 is beyond the slice).
+assert_eq "force-paginate: result length == limit (3)" "3" "$(jq 'length' <<<"$actual_fp")"
+assert_eq "force-paginate: issue 401 present" "true" "$(jq 'any(.[]; .number == 401)' <<<"$actual_fp")"
+assert_eq "force-paginate: issue 403 present (page-1, after filtered PR)" "true" "$(jq 'any(.[]; .number == 403)' <<<"$actual_fp")"
+assert_eq "force-paginate: issue 404 present (page-2 -- proves pagination)" "true" "$(jq 'any(.[]; .number == 404)' <<<"$actual_fp")"
+assert_eq "force-paginate: PR object 402 filtered out" "false" "$(jq 'any(.[]; .number == 402)' <<<"$actual_fp")"
+assert_eq "force-paginate: issue 405 sliced off (beyond limit)" "false" "$(jq 'any(.[]; .number == 405)' <<<"$actual_fp")"
+# The call log must contain --paginate (the forced path was taken) ...
+if grep -q -- '--paginate' "$STUB_DIR/gh-issue-list-rest-calls.log"; then
+  assert_eq "force-paginate: log contains --paginate" "yes" "yes"
+else
+  assert_eq "force-paginate: log contains --paginate" "yes" "no"
+fi
+# ... at per_page=100 (paginate clamp), NOT per_page=3 (the single-page value).
+if grep -q 'per_page=100[^0-9]' "$STUB_DIR/gh-issue-list-rest-calls.log"; then
+  assert_eq "force-paginate: log contains per_page=100" "yes" "yes"
+else
+  assert_eq "force-paginate: log contains per_page=100" "yes" "no"
 fi
 teardown
 
