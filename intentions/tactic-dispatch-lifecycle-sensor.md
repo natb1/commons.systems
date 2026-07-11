@@ -19,7 +19,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: done
 execution:
   branch: tactic-dispatch-lifecycle-sensor
   pr: 2843
