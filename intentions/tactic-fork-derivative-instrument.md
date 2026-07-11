@@ -35,6 +35,7 @@ execution:
   attempts: {}
   markers:
     - qa-done
+    - reviewed
   strategy_fingerprint: cdd3e771c3dc1c1953b1e8b52163c954a63bc94ce64994ad03fdd24f7a234575
 validates:
   - strategy-owned-orchestration
