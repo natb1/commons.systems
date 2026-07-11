@@ -120,6 +120,18 @@ describe("validateNode", () => {
     ).toThrow();
   });
 
+  it("accepts the main-qa phase", () => {
+    const result = validateNode({
+      id: "n1-main-qa",
+      kind: "tactic",
+      statement: "A tactic in post-merge main-qa verification.",
+      owner: "ai",
+      status: "codified",
+      phase: "main-qa",
+    });
+    expect(result.phase).toBe("main-qa");
+  });
+
   it("rejects an execution with a non-object attempts", () => {
     expect(() =>
       validateNode({
