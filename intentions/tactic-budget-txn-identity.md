@@ -22,7 +22,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: null
 execution:
   branch: tactic-budget-txn-identity
   pr: 2832
@@ -35,7 +35,8 @@ blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  phase: main-qa
 ---
 # budget-etl: statement-independent transaction identity — (institution, account, FITID) doc IDs, with legacy-ID migration and edit remapping
 

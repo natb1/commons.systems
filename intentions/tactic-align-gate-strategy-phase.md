@@ -32,7 +32,7 @@ attention:
   rationale: Unblocks the entire align lane; every strategy align selection
     exit-12s until this gate fix merges, so no new tactic work is decomposed
     autonomously meanwhile.
-phase: review
+phase: done
 execution:
   branch: tactic-align-gate-strategy-phase
   pr: 2847
