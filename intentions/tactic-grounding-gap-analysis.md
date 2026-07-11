@@ -31,6 +31,7 @@ execution:
   attempts: {}
   markers:
     - qa-done
+    - reviewed
   strategy_fingerprint: 1bcaff9037314f477f00aab1cf86a4cd27a4dfab2d7bed79106123a60a5a6efb
 validates:
   - strategy-complete-grounding
