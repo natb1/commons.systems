@@ -43,12 +43,13 @@ clarifications:
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-graph-census-recurrence
   pr: 2866
   attempts: {}
-  markers: []
+  markers:
+    - qa-done
   strategy_fingerprint: null
 validates: []
 blocked_by: []
