@@ -87,16 +87,15 @@ export function useBookmarks(
   }, []); // intentional: load once on mount; store identity is stable per mount
 
   const currentBookmarked = useMemo(() => {
-    const pos = controller.getRenderer()?.position;
+    const pos = controller.getPosition()?.position;
     return pos != null && bookmarks.some((b) => b.position === pos);
-    // navSignal is the signal that renderer.position has changed.
+    // navSignal is the signal that the current position has changed.
   }, [controller.navSignal, bookmarks]);
 
   function toggleBookmark() {
-    const r = controller.getRenderer();
-    if (!r) return;
-    const pos = r.position;
-    const label = r.positionLabel;
+    const current = controller.getPosition();
+    if (!current) return;
+    const { position: pos, label } = current;
     const next = bookmarks.some((b) => b.position === pos)
       ? bookmarks.filter((b) => b.position !== pos)
       : [...bookmarks, { position: pos, label }];
