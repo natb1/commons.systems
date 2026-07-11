@@ -54,23 +54,7 @@ execution:
   strategy_fingerprint: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "review phase not executable in graph-tick worker: /review-fix ran its
-    node-lane preamble cleanly (PR #2866, CI green, surface=code, no
-    CodeQL/npm/erosion findings) but its sanctioned review fan-out (finders ->
-    dedup -> classify -> adversarial-verify -> Opus fix) requires the Workflow
-    tool, which is not present in this graph-tick agent worker's toolset (no
-    Workflow primitive, no subagent launcher), and the phase must not be
-    emulated ad hoc. The skill DOES accept node targets, so this is not
-    skill-node-target-unsupported. Next steps: run /review-fix for PR #2866 from
-    a full interactive/dispatch session where the Workflow tool is available (it
-    resumes from durable state -- worktree and PR are intact, dispatch:reviewed
-    not yet applied), OR wire the Workflow primitive into graph-tick agent
-    workers so the graph-native review phase is executable in-tick. The diff is
-    low-risk config plumbing plus a network-free TS debt computer with tests; CI
-    is already passing."
-  since: 2026-07-11
-  recommendation: null
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
