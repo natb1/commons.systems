@@ -687,13 +687,14 @@ func TestRunMerge(t *testing.T) {
 		t.Errorf("expected 4 rules in output, got %d", len(out.Rules))
 	}
 
-	// Statements: one from dir (test_bank-1234-2025-01) with balance from CSV metadata
+	// Statements: one from dir, keyed by as-of date (test_bank-1234-2025-01-31,
+	// the CSV metadata toDate) with balance from CSV metadata
 	if len(out.Statements) != 1 {
 		t.Fatalf("expected 1 statement, got %d", len(out.Statements))
 	}
 	stmt := out.Statements[0]
-	if stmt.StatementID != "test_bank-1234-2025-01" {
-		t.Errorf("statement.statementId = %q, want %q", stmt.StatementID, "test_bank-1234-2025-01")
+	if stmt.StatementID != "test_bank-1234-2025-01-31" {
+		t.Errorf("statement.statementId = %q, want %q", stmt.StatementID, "test_bank-1234-2025-01-31")
 	}
 	if stmt.Balance != 50.00 {
 		t.Errorf("statement.balance = %v, want 50.00", stmt.Balance)
@@ -822,12 +823,13 @@ func TestRunMergeDedupOverlappingFiles(t *testing.T) {
 		t.Errorf("TXN-UNIQUE: expected 1 occurrence, got %d", ids[docUnique])
 	}
 
-	// Both overlapping CSV files share the same statementId; they must collapse
+	// Both overlapping CSV files carry the same as-of date (2025-01-31) and the
+	// same ending balance, so they share one date-keyed anchor ID and collapse
 	// to exactly one deduped statement record.
 	if len(out.Statements) != 1 {
 		t.Fatalf("expected 1 statement (deduped), got %d", len(out.Statements))
 	}
-	wantStmtID := "test_bank-1234-2025-01"
+	wantStmtID := "test_bank-1234-2025-01-31"
 	if out.Statements[0].StatementID != wantStmtID {
 		t.Errorf("statement.statementId = %q, want %q", out.Statements[0].StatementID, wantStmtID)
 	}
@@ -837,13 +839,15 @@ func TestRunMergeDedupOverlappingFiles(t *testing.T) {
 	}
 }
 
-func TestRunMergeErrorsOnBalanceDisagreement(t *testing.T) {
+func TestRunMergeReconcilesBalanceDisagreementBySourceFile(t *testing.T) {
 	tmp := t.TempDir()
 
-	// Two overlapping CSV files for the same institution/account/period — same
-	// statementId — but with different ending balances. dedupStatementData must
-	// detect the balance disagreement and return an error.
-	stmtID := "test_bank-1234-2025-01"
+	// Two overlapping CSV files for the same institution/account, both with the
+	// same as-of date (2025-01-31) — hence the same date-keyed anchor ID — but
+	// with different ending balances. This is no longer an error: dedup resolves
+	// the collision deterministically by keeping the lexicographically-later
+	// SourceFile (download2.csv), whose balance is $75.00.
+	wantStmtID := "test_bank-1234-2025-01-31"
 	csv1 := filepath.Join(tmp, "statements", "test_bank", "1234", "2025-01", "download1.csv")
 	writeCSVFixtureBalance(t, csv1, "50.00", [][6]string{
 		{"2025/01/10", "5.00", "SHARED PURCHASE", "", "TXN-OVERLAP", "DEBIT"},
@@ -867,15 +871,27 @@ func TestRunMergeErrorsOnBalanceDisagreement(t *testing.T) {
 	}
 
 	outputPath := filepath.Join(tmp, "output.json")
-	err := runMerge(fileOpts{path: inputPath}, filepath.Join(tmp, "statements"), "", parse.DiscoverOpts{}, fileOpts{path: outputPath})
-	if err == nil {
-		t.Fatal("runMerge: expected error for balance disagreement, got nil")
+	if err := runMerge(fileOpts{path: inputPath}, filepath.Join(tmp, "statements"), "", parse.DiscoverOpts{}, fileOpts{path: outputPath}); err != nil {
+		t.Fatalf("runMerge: unexpected error (disagreement should reconcile, not error): %v", err)
 	}
-	if !strings.Contains(err.Error(), stmtID) {
-		t.Errorf("error %q does not mention statementId %q", err.Error(), stmtID)
+
+	data, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("reading output: %v", err)
 	}
-	if !strings.Contains(err.Error(), "balance disagreement") {
-		t.Errorf("error %q does not contain 'balance disagreement'", err.Error())
+	var out export.Output
+	if err := json.Unmarshal(data, &out); err != nil {
+		t.Fatalf("parsing output: %v", err)
+	}
+
+	if len(out.Statements) != 1 {
+		t.Fatalf("expected 1 reconciled statement, got %d", len(out.Statements))
+	}
+	if out.Statements[0].StatementID != wantStmtID {
+		t.Errorf("statement.statementId = %q, want %q", out.Statements[0].StatementID, wantStmtID)
+	}
+	if out.Statements[0].Balance != 75.00 {
+		t.Errorf("statement.balance = %.2f, want 75.00 (later-sorting download2.csv wins)", out.Statements[0].Balance)
 	}
 }
 
@@ -1207,27 +1223,32 @@ func TestDeriveMonthlyStatementsVirtual(t *testing.T) {
 }
 
 // TestMergeStatementsPreservesRealOverDerivedAnchor asserts the three-way merge
-// priority: real dir > real input > derived/virtual anchor.
+// priority: real dir > real input > derived/virtual anchor, with anchors keyed
+// by as-of date.
 //
-//  1. Core criterion: a real input statement is preserved when a derived
-//     (Virtual=true) dir anchor exists for the same StatementID.
-//  2. Gap-fill: a derived anchor IS emitted for a period that has no real
+//  1. Migration: a real input statement carrying an old month-keyed anchor ID is
+//     re-keyed to its as-of date ("testbank-acct-2026-01-28").
+//  2. Core criterion: the real input statement is preserved even though a
+//     derived (Virtual=true) dir anchor covers the same account-month.
+//  3. Gap-fill: a derived anchor IS emitted for an account-month with no real
 //     statement in either dir or input.
 func TestMergeStatementsPreservesRealOverDerivedAnchor(t *testing.T) {
-	// Two derived dir anchors:
-	//   anchor-A: "testbank-acct-2026-01" (Virtual=true, balance=$10 estimate)
-	//   anchor-B: "testbank-acct-2026-02" (Virtual=true, balance=$20 estimate — gap month)
+	// Two derived dir anchors (date-keyed, as buildStatementData now produces):
+	//   anchor-A: "testbank-acct-2026-01-31" (Virtual, $10 estimate — Jan)
+	//   anchor-B: "testbank-acct-2026-02-28" (Virtual, $20 estimate — Feb gap)
 	//
-	// One real input statement:
-	//   real-A: "testbank-acct-2026-01" (Virtual=false, balance=$99 real value)
+	// One real input statement carrying the OLD month-keyed ID (as a prior
+	// snapshot would): "testbank-acct-2026-01" (Virtual=false, $99, DTASOF
+	// 2026-01-28). mergeStatements migrates it to "testbank-acct-2026-01-28".
 	//
-	// After merge, the result for "testbank-acct-2026-01" must be the $99 real
-	// input statement (not the $10 derived estimate), and "testbank-acct-2026-02"
-	// must still appear (gap-fill preserved).
+	// After merge, the real Jan input ($99) must win over the derived Jan anchor
+	// ($10) for that account-month, and the Feb derived anchor must still appear.
 
 	const (
-		stmtIDJanuary  = "testbank-acct-2026-01"
-		stmtIDFebruary = "testbank-acct-2026-02"
+		derivedJanID     = "testbank-acct-2026-01-31"
+		derivedFebID     = "testbank-acct-2026-02-28"
+		migratedJanID    = "testbank-acct-2026-01-28"
+		legacyInputJanID = "testbank-acct-2026-01"
 	)
 
 	bdJan := time.Date(2026, 1, 31, 0, 0, 0, 0, time.UTC)
@@ -1235,7 +1256,7 @@ func TestMergeStatementsPreservesRealOverDerivedAnchor(t *testing.T) {
 
 	dirStmts := []budget.StatementData{
 		{
-			StatementID: stmtIDJanuary,
+			StatementID: derivedJanID,
 			Institution: "testbank",
 			Account:     "acct",
 			Balance:     1000, // $10.00 — derived estimate
@@ -1244,7 +1265,7 @@ func TestMergeStatementsPreservesRealOverDerivedAnchor(t *testing.T) {
 			Virtual:     true,
 		},
 		{
-			StatementID: stmtIDFebruary,
+			StatementID: derivedFebID,
 			Institution: "testbank",
 			Account:     "acct",
 			Balance:     2000, // $20.00 — derived estimate, gap month
@@ -1256,8 +1277,8 @@ func TestMergeStatementsPreservesRealOverDerivedAnchor(t *testing.T) {
 
 	inputStmts := []export.Statement{
 		{
-			ID:          budget.StatementDocID(stmtIDJanuary),
-			StatementID: stmtIDJanuary,
+			ID:          budget.StatementDocID(legacyInputJanID),
+			StatementID: legacyInputJanID,
 			Institution: "testbank",
 			Account:     "acct",
 			Balance:     99.00, // $99.00 — real measured balance
@@ -1280,33 +1301,208 @@ func TestMergeStatementsPreservesRealOverDerivedAnchor(t *testing.T) {
 		byStmtID[s.StatementID] = s
 	}
 
-	// 1. Core criterion: real input wins — $99 balance, Virtual=false.
-	jan, ok := byStmtID[stmtIDJanuary]
+	// 1 + 2. Migration + core criterion: the real input, re-keyed to its as-of
+	// date, wins over the derived Jan anchor — $99 balance, Virtual=false, and
+	// its doc ID is recomputed from the migrated anchor ID.
+	jan, ok := byStmtID[migratedJanID]
 	if !ok {
-		t.Fatalf("StatementID %q missing from merge result", stmtIDJanuary)
+		t.Fatalf("migrated StatementID %q missing from merge result", migratedJanID)
 	}
 	if jan.Virtual {
-		t.Errorf("result for %q has Virtual=true, want false (real input should win)", stmtIDJanuary)
+		t.Errorf("result for %q has Virtual=true, want false (real input should win)", migratedJanID)
 	}
 	if jan.Balance != 99.00 {
-		t.Errorf("result for %q has Balance=%.2f, want 99.00 (real input balance)", stmtIDJanuary, jan.Balance)
+		t.Errorf("result for %q has Balance=%.2f, want 99.00 (real input balance)", migratedJanID, jan.Balance)
+	}
+	if wantDoc := budget.StatementDocID(migratedJanID); jan.ID != wantDoc {
+		t.Errorf("result for %q has doc ID %q, want %q (recomputed from migrated anchor ID)", migratedJanID, jan.ID, wantDoc)
+	}
+	// The old month-keyed ID and the derived Jan anchor must NOT appear.
+	if _, present := byStmtID[legacyInputJanID]; present {
+		t.Errorf("legacy month-keyed ID %q leaked into result (should be migrated)", legacyInputJanID)
+	}
+	if _, present := byStmtID[derivedJanID]; present {
+		t.Errorf("derived Jan anchor %q leaked into result (real input covers that month)", derivedJanID)
 	}
 
-	// 2. Gap-fill preserved: derived anchor for February still appears.
-	feb, ok := byStmtID[stmtIDFebruary]
+	// 3. Gap-fill preserved: derived anchor for February still appears.
+	feb, ok := byStmtID[derivedFebID]
 	if !ok {
-		t.Fatalf("StatementID %q missing from merge result — gap-fill regressed", stmtIDFebruary)
+		t.Fatalf("StatementID %q missing from merge result — gap-fill regressed", derivedFebID)
 	}
 	if !feb.Virtual {
-		t.Errorf("result for %q has Virtual=false, want true (should be the derived anchor)", stmtIDFebruary)
+		t.Errorf("result for %q has Virtual=false, want true (should be the derived anchor)", derivedFebID)
 	}
 	if feb.Balance != 20.00 {
-		t.Errorf("result for %q has Balance=%.2f, want 20.00 (derived anchor balance)", stmtIDFebruary, feb.Balance)
+		t.Errorf("result for %q has Balance=%.2f, want 20.00 (derived anchor balance)", derivedFebID, feb.Balance)
 	}
 
-	// 3. Exactly the two expected statements — no extras.
+	// Exactly the two expected statements — no extras.
 	if len(result) != 2 {
 		t.Errorf("expected 2 statements in merge result, got %d", len(result))
+	}
+}
+
+// TestMergeStatementsMigrationNoDoubling covers the two migration collapse cases
+// that keep a re-parsed file from doubling a prior-snapshot monthly anchor:
+//
+//  1. A dated prior-snapshot doc whose DTASOF matches the re-parsed dir file
+//     migrates to the same date-keyed anchor ID and is dropped in favor of dir.
+//  2. A legacy prior-snapshot doc lacking a balanceDate migrates to the
+//     last-day-of-month fallback ID; even when that fallback ID does not match
+//     the dir observation's real as-of date, it is dropped because a real dir
+//     observation already covers that account-month.
+//
+// A legacy doc for a month the dir does NOT cover is retained (migrated by
+// fallback), so genuine history is not lost.
+func TestMergeStatementsMigrationNoDoubling(t *testing.T) {
+	bdMar20 := time.Date(2026, 3, 20, 0, 0, 0, 0, time.UTC)
+
+	// One real dir observation for March, as-of 2026-03-20.
+	dirStmts := []budget.StatementData{
+		{
+			StatementID: budget.AnchorID("bank", "acct", &bdMar20, "2026-03"),
+			Institution: "bank",
+			Account:     "acct",
+			Balance:     30000, // $300.00 — the re-parsed real value
+			Period:      "2026-03",
+			BalanceDate: &bdMar20,
+			SourceFile:  "bank/acct/2026-03/stmt.qfx",
+		},
+	}
+
+	inputStmts := []export.Statement{
+		// (1) dated prior-snapshot doc, same DTASOF as the dir re-parse.
+		{
+			ID:          budget.StatementDocID("bank-acct-2026-03"), // old month-keyed doc ID
+			StatementID: "bank-acct-2026-03",                        // old month-keyed anchor ID
+			Institution: "bank",
+			Account:     "acct",
+			Balance:     250.00, // stale value from the old snapshot
+			Period:      "2026-03",
+			BalanceDate: "2026-03-20",
+		},
+		// (2) legacy prior-snapshot doc for the same month, NO balanceDate.
+		{
+			ID:          budget.StatementDocID("bank-acct-2026-03-legacy"),
+			StatementID: "bank-acct-2026-03-legacy",
+			Institution: "bank",
+			Account:     "acct",
+			Balance:     123.00,
+			Period:      "2026-03",
+			BalanceDate: "", // legacy monthly representation, no as-of date
+		},
+		// (3) legacy doc for a month the dir does NOT cover — must be retained.
+		{
+			ID:          budget.StatementDocID("bank-acct-2026-02"),
+			StatementID: "bank-acct-2026-02",
+			Institution: "bank",
+			Account:     "acct",
+			Balance:     200.00,
+			Period:      "2026-02",
+			BalanceDate: "", // no as-of date → last-day fallback on migration
+		},
+	}
+
+	result := mergeStatements(dirStmts, inputStmts, map[string]*time.Time{})
+
+	byStmtID := make(map[string]export.Statement, len(result))
+	for _, s := range result {
+		byStmtID[s.StatementID] = s
+	}
+
+	// The dir March observation survives; both March input docs are dropped.
+	marID := budget.AnchorID("bank", "acct", &bdMar20, "2026-03") // bank-acct-2026-03-20
+	mar, ok := byStmtID[marID]
+	if !ok {
+		t.Fatalf("dir March anchor %q missing from result", marID)
+	}
+	if mar.Balance != 300.00 {
+		t.Errorf("March balance = %.2f, want 300.00 (re-parsed dir value, not the stale snapshot)", mar.Balance)
+	}
+	// The February legacy doc is migrated by fallback to the month's last day and retained.
+	febID := "bank-acct-2026-02-28"
+	feb, ok := byStmtID[febID]
+	if !ok {
+		t.Fatalf("legacy February doc missing — should be migrated to %q and retained", febID)
+	}
+	if feb.Balance != 200.00 {
+		t.Errorf("February balance = %.2f, want 200.00", feb.Balance)
+	}
+	if wantDoc := budget.StatementDocID(febID); feb.ID != wantDoc {
+		t.Errorf("February doc ID = %q, want %q (recomputed on migration)", feb.ID, wantDoc)
+	}
+
+	// Exactly two statements: the dir March anchor and the retained Feb doc — the
+	// two same-month March input docs collapsed away, no doubling.
+	if len(result) != 2 {
+		t.Fatalf("expected 2 statements (March dir + Feb legacy), got %d: %+v", len(result), result)
+	}
+}
+
+// TestRunMergeDistinctDTASOFTwoAnchors is the end-to-end acceptance that two
+// overlapping exports of one account-month with DIFFERENT as-of dates export as
+// two separate balance anchors (no collapse), the core greenfield behavior of
+// date-keyed anchors.
+func TestRunMergeDistinctDTASOFTwoAnchors(t *testing.T) {
+	tmp := t.TempDir()
+
+	// Two files, same institution/account, both in January but different toDates
+	// (2025/01/15 and 2025/01/31) → distinct as-of dates → distinct anchor IDs.
+	csvMid := filepath.Join(tmp, "statements", "test_bank", "1234", "2025-01", "mid.csv")
+	writeCSVFixtureMeta(t, csvMid, "0000000000,2025/01/01,2025/01/15,100.00,60.00", [][6]string{
+		{"2025/01/05", "5.00", "PURCHASE A", "", "TXN-A", "DEBIT"},
+	})
+	csvEnd := filepath.Join(tmp, "statements", "test_bank", "1234", "2025-01", "end.csv")
+	writeCSVFixtureMeta(t, csvEnd, "0000000000,2025/01/01,2025/01/31,100.00,40.00", [][6]string{
+		{"2025/01/05", "5.00", "PURCHASE A", "", "TXN-A", "DEBIT"},
+		{"2025/01/20", "15.00", "PURCHASE B", "", "TXN-B", "DEBIT"},
+	})
+
+	inputJSON := export.Output{
+		Version:      1,
+		GroupName:    "test-group",
+		Transactions: []export.Transaction{},
+		Rules: []export.Rule{
+			{ID: "cat-all", Type: "categorization", Pattern: "PURCHASE", Target: "Test:General", Priority: 10},
+		},
+	}
+	inputPath := filepath.Join(tmp, "input.json")
+	if err := export.WriteFile(inputPath, inputJSON, ""); err != nil {
+		t.Fatalf("writing input JSON: %v", err)
+	}
+
+	outputPath := filepath.Join(tmp, "output.json")
+	if err := runMerge(fileOpts{path: inputPath}, filepath.Join(tmp, "statements"), "", parse.DiscoverOpts{}, fileOpts{path: outputPath}); err != nil {
+		t.Fatalf("runMerge: %v", err)
+	}
+
+	data, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("reading output: %v", err)
+	}
+	var out export.Output
+	if err := json.Unmarshal(data, &out); err != nil {
+		t.Fatalf("parsing output: %v", err)
+	}
+
+	byID := make(map[string]export.Statement, len(out.Statements))
+	for _, s := range out.Statements {
+		byID[s.StatementID] = s
+	}
+	mid, okMid := byID["test_bank-1234-2025-01-15"]
+	end, okEnd := byID["test_bank-1234-2025-01-31"]
+	if !okMid || !okEnd {
+		t.Fatalf("expected both distinct-DTASOF anchors present; got statements: %+v", out.Statements)
+	}
+	if mid.Balance != 60.00 {
+		t.Errorf("mid anchor balance = %.2f, want 60.00", mid.Balance)
+	}
+	if end.Balance != 40.00 {
+		t.Errorf("end anchor balance = %.2f, want 40.00", end.Balance)
+	}
+	if len(out.Statements) != 2 {
+		t.Errorf("expected exactly 2 anchors (one per as-of date), got %d", len(out.Statements))
 	}
 }
 

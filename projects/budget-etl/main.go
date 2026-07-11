@@ -190,10 +190,7 @@ func runDirJSON(dir, groupName string, disc parse.DiscoverOpts, output fileOpts)
 	maxDates := maxTransactionDates(allTxns)
 	allStmts := buildStatementData(parsed, maxDates)
 	allStmts = append(allStmts, deriveMonthlyStatements(parsed)...)
-	allStmts, err = dedupStatementData(allStmts)
-	if err != nil {
-		return fmt.Errorf("statements: %w", err)
-	}
+	allStmts = dedupStatementData(allStmts)
 
 	return runOutputJSON(allTxns, allStmts, groupName, output)
 }
@@ -1230,10 +1227,7 @@ func runMerge(input fileOpts, dir, groupName string, disc parse.DiscoverOpts, ou
 	// Build statements from dir-parsed files (maxDates computed later after merge)
 	dirStmts := buildStatementData(parsed, nil)
 	dirStmts = append(dirStmts, deriveMonthlyStatements(parsed)...)
-	dirStmts, err = dedupStatementData(dirStmts)
-	if err != nil {
-		return fmt.Errorf("statements: %w", err)
-	}
+	dirStmts = dedupStatementData(dirStmts)
 
 	// Build input lookup by doc ID
 	inputByID := make(map[string]export.Transaction, len(inp.Transactions))
@@ -1369,12 +1363,22 @@ func runMerge(input fileOpts, dir, groupName string, disc parse.DiscoverOpts, ou
 }
 
 // mergeStatements merges dir-parsed statements with input statements.
-// Merge priority by statementID: real dir > real input > derived/virtual anchor.
-// A real dir statement overrides the stale snapshot copy of the same ID. A
+// Merge priority: real dir > real input > derived/virtual anchor. A real dir
+// statement overrides the stale snapshot copy of the same anchor ID. A
 // derived/virtual anchor never shadows a real statement (dir or input); it
-// gap-fills only — emitted solely for a period with no real statement. Virtual
-// input statements (stale prior-snapshot anchors) are skipped and recomputed.
-// Uses maxDates to set LastTransactionDate on all statements (dir and input-only).
+// gap-fills only — emitted solely for an account-month with no real statement.
+// Virtual input statements (stale prior-snapshot anchors) are skipped and
+// recomputed. Uses maxDates to set LastTransactionDate on all statements.
+//
+// Anchors are now keyed by as-of date (budget.AnchorID). Two consequences:
+//   - Real (non-virtual) input statements are migrated to the new keying on
+//     read — their anchor ID and doc ID are recomputed from BalanceDate (or the
+//     last day of Period when absent) — so a re-parsed file with the same
+//     DTASOF collides to the same ID as its dir counterpart and dir wins.
+//   - Coverage (which drives derived-anchor gap-fill and the legacy-drop guard)
+//     is tracked per (institution, account, period), NOT per anchor ID, since a
+//     real mid-month observation and a month-end virtual anchor no longer share
+//     an ID.
 func mergeStatements(dirStmts []budget.StatementData, inputStmts []export.Statement, maxDates map[string]*time.Time) []export.Statement {
 	for i := range dirStmts {
 		key := accountKey(dirStmts[i].Institution, dirStmts[i].Account)
@@ -1382,17 +1386,22 @@ func mergeStatements(dirStmts []budget.StatementData, inputStmts []export.Statem
 	}
 	dirExport := buildExportStatements(dirStmts)
 
-	// realDirByStmtID tracks the IDs of non-virtual (real) dir statements so a
-	// stale input copy of the same ID is dropped in favor of the real dir one.
+	// realDirByStmtID tracks the anchor IDs of non-virtual (real) dir statements
+	// so a stale input copy of the same ID is dropped in favor of the real dir
+	// one. realDirByMonth tracks the account-months a real dir observation
+	// covers, so a legacy input observation lacking a balanceDate can be dropped
+	// when the dir already has a real observation for that month.
 	realDirByStmtID := make(map[string]bool, len(dirExport))
+	realDirByMonth := make(map[string]bool, len(dirExport))
 	for _, s := range dirExport {
 		if !s.Virtual {
 			realDirByStmtID[s.StatementID] = true
+			realDirByMonth[accountMonthKey(s.Institution, s.Account, s.Period)] = true
 		}
 	}
 
-	// covered tracks IDs already emitted by a real statement (dir or input), so
-	// a derived anchor only fills periods with no real statement.
+	// covered tracks account-months already emitted by a real statement (dir or
+	// input), so a derived anchor only fills months with no real statement.
 	covered := make(map[string]bool, len(dirExport))
 
 	// Seed result with the real (non-virtual) dir statements.
@@ -1402,13 +1411,28 @@ func mergeStatements(dirStmts []budget.StatementData, inputStmts []export.Statem
 			continue
 		}
 		result = append(result, s)
-		covered[s.StatementID] = true
+		covered[accountMonthKey(s.Institution, s.Account, s.Period)] = true
 	}
 
-	// Real input statements: skip virtual ones and those overridden by a real
-	// dir statement; otherwise retain and update LastTransactionDate.
+	// Real input statements: migrate to date-keyed anchor IDs, then skip those
+	// overridden by a real dir statement or superseded as a stale monthly
+	// representation of a re-parsed file; otherwise retain and update
+	// LastTransactionDate.
 	for _, s := range inputStmts {
-		if s.Virtual || realDirByStmtID[s.StatementID] {
+		if s.Virtual {
+			continue
+		}
+		bd := parseBalanceDate(s.BalanceDate)
+		s.StatementID = budget.AnchorID(s.Institution, s.Account, bd, s.Period)
+		s.ID = budget.StatementDocID(s.StatementID)
+		if realDirByStmtID[s.StatementID] {
+			continue
+		}
+		// Drop a legacy input observation lacking a balanceDate when a real dir
+		// observation already covers the same account-month: it is a stale
+		// monthly representation of a re-parsed file, and keeping it would double
+		// the month's anchors.
+		if bd == nil && realDirByMonth[accountMonthKey(s.Institution, s.Account, s.Period)] {
 			continue
 		}
 		// Update input-only statement's LastTransactionDate from merged transactions
@@ -1418,25 +1442,47 @@ func mergeStatements(dirStmts []budget.StatementData, inputStmts []export.Statem
 			s.LastTransactionDate = &v
 		}
 		result = append(result, s)
-		covered[s.StatementID] = true
+		covered[accountMonthKey(s.Institution, s.Account, s.Period)] = true
 	}
 
 	// Derived/virtual dir anchors gap-fill only: emit one solely when no real
-	// statement (dir or input) already covers its period.
+	// statement (dir or input) already covers its account-month.
 	for _, s := range dirExport {
-		if !s.Virtual || covered[s.StatementID] {
+		mk := accountMonthKey(s.Institution, s.Account, s.Period)
+		if !s.Virtual || covered[mk] {
 			continue
 		}
 		result = append(result, s)
-		covered[s.StatementID] = true
+		covered[mk] = true
 	}
 
 	return result
 }
 
+// parseBalanceDate parses an export.Statement.BalanceDate ("YYYY-MM-DD"; empty
+// when absent) into a *time.Time, returning nil for the empty string. It panics
+// on a non-empty malformed date — a corrupt prior-snapshot balanceDate is an
+// unrecoverable input error, not a state to paper over with a fallback.
+func parseBalanceDate(s string) *time.Time {
+	if s == "" {
+		return nil
+	}
+	t, err := time.Parse("2006-01-02", s)
+	if err != nil {
+		panic(fmt.Sprintf("mergeStatements: malformed balanceDate %q: %v", s, err))
+	}
+	return &t
+}
+
 // accountKey returns a composite map key for an (institution, account) pair.
 func accountKey(institution, account string) string {
 	return institution + "\x00" + account
+}
+
+// accountMonthKey returns a composite map key for an (institution, account,
+// period) triple, identifying one account-month.
+func accountMonthKey(institution, account, period string) string {
+	return institution + "\x00" + account + "\x00" + period
 }
 
 // maxTransactionDates computes the latest transaction date per (institution, account)
@@ -1526,7 +1572,10 @@ func deriveMonthlyStatements(parsed []parsedFile) []budget.StatementData {
 			lastDay := m.AddDate(0, 1, -1)
 			bd := lastDay
 
-			stmtID := k.inst + "-" + k.acct + "-" + period
+			// Key the virtual anchor by its month-end as-of date via the same
+			// helper real observations use, so a real mid-month observation and
+			// this month-end anchor no longer share an ID.
+			stmtID := budget.AnchorID(k.inst, k.acct, &bd, period)
 
 			derived = append(derived, budget.StatementData{
 				StatementID: stmtID,
@@ -1556,7 +1605,10 @@ func buildStatementData(parsed []parsedFile, maxDates map[string]*time.Time) []b
 			balanceDate = &bd
 		}
 		out[i] = budget.StatementData{
-			StatementID:         pf.sf.StatementID(),
+			// Anchors are keyed by as-of date (budget.AnchorID), not month, so
+			// overlapping observations of one account-month export separately.
+			// Period stays "YYYY-MM" for display/grouping.
+			StatementID:         budget.AnchorID(pf.sf.Institution, pf.sf.Account, balanceDate, pf.sf.Period),
 			Institution:         pf.sf.Institution,
 			Account:             pf.sf.Account,
 			Balance:             pf.result.Balance,

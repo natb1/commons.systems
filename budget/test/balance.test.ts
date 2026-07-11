@@ -1004,6 +1004,23 @@ describe("computeNetWorth", () => {
     expect(result.divergences).toHaveLength(0);
   });
 
+  it("handles two anchors in the same account-month (distinct as-of dates) without spurious divergence", () => {
+    // Date-keyed anchors: two observations of Bank/Checking in 2025-01 at
+    // different as-of dates. Mid-month says 500; a $20 spend on Jan-20 explains
+    // the month-end 480. Sorted by effective ms (balanceDate), the derivation
+    // flows 500 → 480 and matches, so no divergence is raised.
+    const stmts = [
+      makeStmt({ id: "s-mid", statementId: "Bank-Checking-2025-01-15" as any, period: "2025-01", balanceDate: "2025-01-15", balance: 500 }),
+      makeStmt({ id: "s-end", statementId: "Bank-Checking-2025-01-31" as any, period: "2025-01", balanceDate: "2025-01-31", balance: 480 }),
+    ];
+    const txns = [
+      makeTxn({ id: "t1", institution: "Bank", account: "Checking", amount: 20, timestamp: ts("2025-01-20"), budget: null }),
+    ];
+    const result = computeNetWorth(txns, stmts, weeks);
+    expect(result.divergences).toEqual([]);
+    expect(result.points).toHaveLength(3);
+  });
+
   it("excludes non-primary normalized transactions", () => {
     const txns = [
       makeTxn({ id: "t-primary", institution: "Bank", account: "Checking", amount: 50,

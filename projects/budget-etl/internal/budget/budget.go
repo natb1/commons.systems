@@ -38,6 +38,42 @@ func StatementDocID(statementID string) string {
 	return fmt.Sprintf("%x", h[:10])
 }
 
+// AnchorID returns the identifier for a balance-anchor observation, keyed by
+// as-of date: "{institution}-{account}-{YYYY-MM-DD}". The date is balanceDate
+// (the statement's LEDGERBAL DTASOF, or the last day of the month for a derived
+// anchor) when present; otherwise it falls back to the last day of period
+// ("YYYY-MM"), a deterministic stand-in for source formats that carry no as-of
+// date. Keying by as-of date means multiple observations of one account-month
+// (overlapping exports at different DTASOF) carry distinct IDs and all export
+// as separate anchors, rather than collapsing to one per month.
+//
+// This is deliberately distinct from parse.StatementFile.StatementID, which
+// stays month-keyed ("{institution}-{account}-{YYYY-MM}") and remains the seed
+// for a transaction's statementId field — see that method's doc comment. Do not
+// unify the two: transaction identity is owned separately.
+func AnchorID(institution, account string, balanceDate *time.Time, period string) string {
+	var asOf string
+	if balanceDate != nil {
+		asOf = balanceDate.Format("2006-01-02")
+	} else {
+		asOf = lastDayOfPeriod(period)
+	}
+	return fmt.Sprintf("%s-%s-%s", institution, account, asOf)
+}
+
+// lastDayOfPeriod returns the last calendar day of the month named by period
+// ("YYYY-MM") formatted as "YYYY-MM-DD". It panics on a malformed period — an
+// unparseable period is a programming error upstream, not a recoverable state,
+// and a silent fallback would emit a corrupt anchor ID.
+func lastDayOfPeriod(period string) string {
+	t, err := time.Parse("2006-01", period)
+	if err != nil {
+		panic(fmt.Sprintf("AnchorID: malformed period %q: %v", period, err))
+	}
+	lastDay := t.AddDate(0, 1, -1)
+	return lastDay.Format("2006-01-02")
+}
+
 // TransactionData holds the fields for a parsed transaction in a budget snapshot.
 type TransactionData struct {
 	Institution   string
