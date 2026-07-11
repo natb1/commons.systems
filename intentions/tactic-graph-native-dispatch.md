@@ -113,7 +113,7 @@ rounds:
   and delegations, but is authoritative content for tactics — draft context
   before finalization, the full clean-session plan after. Store change
   required: `writeNode` must preserve tactic bodies (until it ships, bodies
-  are hand-maintained; no automated writer touches tactic bodies).
+  are hand-maintained; no automated writer touches tactic bodies). (Correction, tick +6 2026-07-11: tactic-body preservation HAS shipped (`readExistingTacticBody` in store.ts), but NON-tactic bodies — strategy, kind, delegation, virtue — are REGENERATED from `statement` on every `writeNode`, so they are cosmetic and cannot durably hold content: reconcile-graph, read-sensors, park, and transition writes all clobber them. `writeNode` does NOT unconditionally preserve a node body — only a tactic's. The kind-strategy body-function rule (2026-07-09) and its consumers conflict with this; the contract is under decision at `tactic-nontactic-body-durability`, on which calibration-event-registry, mount-schema, and graph-native-dispatch-fold are blocked.)
 - **Blocking** stays the tactic-layer subtree mechanism recorded on
   `strategy-graph-drives-dispatch`: `blocked_by: [<tactic-id>...]`; nothing
   in a blocked subtree starts until the blocking subtree completes; the

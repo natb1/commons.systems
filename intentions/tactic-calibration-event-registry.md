@@ -34,7 +34,8 @@ execution:
   strategy_fingerprint: 62d71ed52ab675485474ed69e3c22ced46d2c99ecece2cfec92f79236fa6b89b
 validates:
   - strategy-external-calibration
-blocked_by: []
+blocked_by:
+  - tactic-nontactic-body-durability
 office_hours:
   reason: "Plan/scope defect: the tactic home and its prescribed reading-update
     mechanism are mutually incompatible under tooling the tactic forbids
