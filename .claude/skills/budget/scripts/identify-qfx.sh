@@ -19,7 +19,11 @@ exit_code=0
 for file in "$@"; do
   # Extract ORG: handles both XML (<ORG>X</ORG>) and SGML (<ORG>X\n or <ORG>X<...).
   # The regex <ORG>[^<\n]* matches both formats; sed strips the tag prefix.
-  org=$(grep -oE '<ORG>[^<\n]*' "$file" | head -1 | sed 's/<ORG>//')
+  # `|| true` keeps grep's exit-1 on a no-match (any non-OFX file in the ingest
+  # set) from aborting the whole script under `set -euo pipefail` — the intended
+  # empty-org `continue` below is otherwise dead code. `tr -d '\r'` strips the
+  # trailing CR left by CRLF-formatted OFX exports so the ORG_MAP lookup matches.
+  org=$(grep -oE '<ORG>[^<\n]*' "$file" | head -1 | sed 's/<ORG>//' | tr -d '\r' || true)
   if [[ -z "$org" ]]; then
     echo "could not extract ORG from $file" >&2
     exit_code=1
@@ -33,8 +37,8 @@ for file in "$@"; do
     continue
   fi
 
-  # Extract ACCTID: same dual-format handling.
-  raw_acct=$(grep -oE '<ACCTID>[^<\n]*' "$file" | head -1 | sed 's/<ACCTID>//')
+  # Extract ACCTID: same dual-format handling, same no-match guard and CR strip.
+  raw_acct=$(grep -oE '<ACCTID>[^<\n]*' "$file" | head -1 | sed 's/<ACCTID>//' | tr -d '\r' || true)
   if [[ -z "$raw_acct" ]]; then
     echo "could not extract ACCTID from $file" >&2
     exit_code=1

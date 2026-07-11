@@ -25,6 +25,7 @@ import { extractMetadata } from "./local-metadata.js";
 import { mediaTypeBadge } from "./media-render.js";
 import {
   cacheMetadata,
+  clearLocalDirectory,
   ensureLoaded,
   getMetadata,
   setLocalDirectory,
@@ -178,6 +179,9 @@ export async function initLocalFolder(
           void (async () => {
             await store.remove(PURPOSE);
             resetLocalSource();
+            // Drop the sidecar's cached in-memory local-directory model so the
+            // forgotten folder leaves no stale handle/model behind.
+            clearLocalDirectory();
             // Drop the focus rescan so it cannot re-scan the forgotten folder.
             if (focusCleanup) {
               focusCleanup();

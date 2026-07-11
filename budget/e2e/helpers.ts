@@ -3,7 +3,7 @@ import fs from "node:fs";
 import crypto from "node:crypto";
 import { fileURLToPath } from "url";
 import type { Download, Page } from "@commons-systems/config/playwright-test";
-import { SALT_LEN, IV_LEN, PBKDF2_ITERATIONS, KEY_LEN } from "@commons-systems/crypto/core";
+import { SALT_LEN, IV_LEN, PBKDF2_ITERATIONS, KEY_LEN } from "@commons-systems/crypto-core";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const fixturePath = path.join(__dirname, "fixtures", "test-budget.json");

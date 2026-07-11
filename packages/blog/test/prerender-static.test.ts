@@ -98,6 +98,28 @@ describe("prerenderStaticPage", () => {
     expect(html).not.toContain("<title>My Blog</title>");
   });
 
+  it("does not interpret $-sequences in the page title or description as replacement patterns", () => {
+    // Regression: the static <title> and SEO/OG block are injected via
+    // String.replace. A string-form replacement interprets `$&`, `$'`, `$$`
+    // in the (escapeHtml'd) title/description as replacement patterns — e.g.
+    // `$&` splices the matched `</head>` mid-attribute. Function-form
+    // replacers must insert the text verbatim.
+    prerenderStaticPage(
+      makeStaticConfig({}, { title: "Big $& Sale", description: "Deal $& save $' now $$ end" }),
+    );
+    const html = getWrittenHtml("/dist/about/index.html");
+
+    // Exactly one </head> — no `$&`-spliced copy injected mid-attribute.
+    expect(html.split("</head>")).toHaveLength(2);
+    expect(html).toContain("<title>My Blog - Big $&amp; Sale</title>");
+    expect(html).toContain(
+      '<meta property="og:description" content="Deal $&amp; save $&#39; now $$ end">',
+    );
+    expect(html).toContain(
+      '<meta name="description" content="Deal $&amp; save $&#39; now $$ end">',
+    );
+  });
+
   it("injects canonical link pointing at siteUrl + path", () => {
     prerenderStaticPage(makeStaticConfig());
     const html = getWrittenHtml("/dist/about/index.html");

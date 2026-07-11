@@ -71,12 +71,18 @@ describe("handleFeedProxy", () => {
     );
   });
 
-  it("throws on infrastructure error in verifyAppCheck", async () => {
+  it("returns 500 (not an unhandled rejection) on infrastructure error in verifyAppCheck", async () => {
+    // A non-AppCheck verification error must be converted to an explicit 500,
+    // not re-thrown: the onRequest wrapper never awaits the handler promise, so
+    // a throw would become an unhandled rejection that crashes the instance.
     verifyTokenMock.mockRejectedValue(new Error("network timeout"));
     const res = createMockRes();
     await expect(
       handleFeedProxy(createMockReq({}), res as never),
-    ).rejects.toThrow("network timeout");
+    ).resolves.toBeUndefined();
+    expect(res.statusCode).toBe(500);
+    expect(res.body).toBe("Internal error verifying request");
+    expect(res.body).not.toContain("network timeout");
   });
 
   it("returns 400 when url query parameter is missing", async () => {
@@ -128,6 +134,9 @@ describe("handleFeedProxy", () => {
     expect(res.body).toBe(feedXml);
     expect(res.headers["Content-Type"]).toBe("application/atom+xml");
     expect(res.headers["Cache-Control"]).toBe("public, max-age=3600");
+    // MIME sniffing is forbidden so a sniffable upstream body can never be
+    // reinterpreted as HTML/JS by the browser.
+    expect(res.headers["X-Content-Type-Options"]).toBe("nosniff");
   });
 
   it("defaults content-type to application/xml when upstream omits it", async () => {

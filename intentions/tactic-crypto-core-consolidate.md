@@ -23,13 +23,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: done
 execution:
   branch: tactic-crypto-core-consolidate
   pr: 2836
   attempts: {}
   markers:
     - qa-done
+    - reviewed
   strategy_fingerprint: 3d1c7f880d5ae36ab6f4348c6abfbaa5cd6adea7a52e6d970d9bc95f87c7a99e
 validates: []
 blocked_by: []

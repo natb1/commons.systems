@@ -1,3 +1,5 @@
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import type { Plugin } from "vite";
 import { classifyError } from "@commons-systems/errorutil";
 import type { LatestPost } from "./types.ts";
@@ -8,10 +10,23 @@ export interface FeedConfig {
   url: string;
 }
 
+export interface FeedFetchPluginOptions {
+  /** When set, the fetched feed snapshot is persisted to this absolute path at
+   *  build end (`writeBundle`). The post-build tsx prerender reads the same file
+   *  and passes it as `buildTimeFeeds`, so the prerendered info-panel hydrates
+   *  from the SAME data the client's `virtual:blog-roll-feeds` bundle inlines —
+   *  closing the SSR/client parity gap (the `virtual:` module only exists inside
+   *  the vite build, so the standalone tsx prerender cannot import it). */
+  emitPath?: string;
+}
+
 const VIRTUAL_MODULE_ID = "virtual:blog-roll-feeds";
 const RESOLVED_VIRTUAL_MODULE_ID = "\0" + VIRTUAL_MODULE_ID;
 
-export function feedFetchPlugin(feeds: FeedConfig[]): Plugin {
+export function feedFetchPlugin(
+  feeds: FeedConfig[],
+  options: FeedFetchPluginOptions = {},
+): Plugin {
   let feedData: Record<string, LatestPost | null> = {};
 
   return {
@@ -68,6 +83,15 @@ export function feedFetchPlugin(feeds: FeedConfig[]): Plugin {
         return `export default ${JSON.stringify(feedData)};`;
       }
     },
+    // Persist the same snapshot the virtual module inlined so the post-build tsx
+    // prerender can read it (it cannot import the `virtual:` module). Runs after
+    // the bundle is written, so `feedData` from `buildStart` is fully populated.
+    writeBundle() {
+      const { emitPath } = options;
+      if (!emitPath) return;
+      mkdirSync(dirname(emitPath), { recursive: true });
+      writeFileSync(emitPath, JSON.stringify(feedData, null, 2), "utf8");
+    },
   };
 }
 
@@ -80,17 +104,49 @@ export function feedFetchPlugin(feeds: FeedConfig[]): Plugin {
 function xmlText(xml: string, tag: string): string | undefined {
   const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`, "i");
   const m = xml.match(re);
-  return m ? decodeXmlEntities(m[1].trim()) : undefined;
+  return m ? decodeXmlEntities(stripCdata(m[1].trim()).trim()) : undefined;
+}
+
+// Strip `<![CDATA[...]]>` wrappers, keeping their literal contents. WordPress
+// and many other feeds wrap titles/links in CDATA; without this the wrapper
+// markup ships verbatim into the rendered post title.
+function stripCdata(text: string): string {
+  return text.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1");
 }
 
 function decodeXmlEntities(text: string): string {
-  return text
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&#39;/g, "'");
+  return (
+    text
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'")
+      // Numeric entities: hex (&#x2019;) and decimal (&#8217;, &#39;). WordPress
+      // emits &#8217; (right single quote) and &#8230; (ellipsis) routinely.
+      .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) =>
+        String.fromCodePoint(parseInt(hex, 16)),
+      )
+      .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(parseInt(dec, 10)))
+      // Decode &amp; LAST so an already-single-encoded `&amp;lt;` becomes
+      // `&lt;`, not `<` — decoding it first would double-decode.
+      .replace(/&amp;/g, "&")
+  );
+}
+
+// Select the canonical post link from an Atom entry's <link> elements.
+// Prefers rel="alternate" (the human-readable permalink) in either attribute
+// ordering, then falls back to the first link that is not rel="self" — the
+// rel="self" link is the feed's own API URL, never a post permalink.
+function selectAtomLink(entry: string): string {
+  const linkTags = entry.match(/<link\b[^>]*?\/?>/gi) ?? [];
+  const links = linkTags.map((tag) => ({
+    href: tag.match(/href=["']([^"']*)["']/i)?.[1] ?? "",
+    rel: tag.match(/rel=["']([^"']*)["']/i)?.[1],
+  }));
+  const alternate = links.find((l) => l.rel === "alternate" && l.href);
+  if (alternate) return alternate.href;
+  const nonSelf = links.find((l) => l.href && l.rel !== "self");
+  return nonSelf?.href ?? "";
 }
 
 export function parseAtomFeedXml(xml: string): LatestPost | null {
@@ -99,12 +155,7 @@ export function parseAtomFeedXml(xml: string): LatestPost | null {
   const entry = entryMatch[1];
 
   const title = xmlText(entry, "title") ?? "";
-  // Prefer link[rel="alternate"] when rel precedes href in element attributes.
-  // Falls back to any link with href if alternate match fails (e.g., reversed attribute order).
-  // Both single and double quoted attributes accepted (Blogger uses single quotes).
-  const altLinkMatch = entry.match(/<link[^>]*rel=["']alternate["'][^>]*href=["']([^"']*)["'][^>]*\/?>/i);
-  const anyLinkMatch = entry.match(/<link[^>]*href=["']([^"']*)["'][^>]*\/?>/i);
-  const url = decodeXmlEntities((altLinkMatch ?? anyLinkMatch)?.[1] ?? "");
+  const url = decodeXmlEntities(selectAtomLink(entry));
   const published = xmlText(entry, "published") ?? xmlText(entry, "updated");
 
   if (!title || !url) return null;

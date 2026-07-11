@@ -131,7 +131,7 @@ const sidecar = createSidecar<SidecarData, Partial<Pick<SidecarData, "metadata" 
   mergeSidecar,
 });
 
-const { writeSidecar, setLocalDirectory, ensureLoaded, enqueueWrite, flushWrites } = sidecar;
+const { writeSidecar, setLocalDirectory, clearLocalDirectory, ensureLoaded, enqueueWrite, flushWrites } = sidecar;
 
 // Restore the original non-nullable SidecarData contracts: the factory's parseSidecar
 // returns TData | null on parse failure, but print's original parseSidecar always
@@ -148,10 +148,11 @@ async function readSidecar(dir: FileSystemDirectoryHandle): Promise<SidecarData>
 // Re-export the shared surface the rest of the app (and the Unit 7 tests)
 // consume. `ensureLoaded` is also imported by local-folder-ui.ts, so it is
 // re-exported. `enqueueWrite` stays private — it backs only the accessors and
-// the position store below. (print never exported `clearLocalDirectory`, so it
-// is not re-exported here — no behavior change.)
+// the position store below. `clearLocalDirectory` is re-exported so the
+// "Forget folder" handler can drop the sidecar's cached local-directory model
+// when the folder is forgotten (otherwise the stale model survives the reset).
 export { serializeSidecar };
-export { parseSidecar, readSidecar, writeSidecar, setLocalDirectory, ensureLoaded, flushWrites };
+export { parseSidecar, readSidecar, writeSidecar, setLocalDirectory, clearLocalDirectory, ensureLoaded, flushWrites };
 
 // ---------------------------------------------------------------------------
 // C. Accessors for Units 5 & 6

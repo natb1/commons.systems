@@ -195,6 +195,29 @@ extract_and_validate_subst() {
   return 0
 }
 
+# validate_segments — split a command string into top-level segments (respecting
+# quotes) via split-command.py, and require every segment to be an allowed
+# command or an allowed worktree-scoped `git -C`. Returns 0 if all segments are
+# safe, 1 otherwise. Shared by the single-line path and the multi-line heredoc
+# path so both enforce the same separator set and per-segment allowlist.
+# The helper treats unquoted |, ;, &, &&, || as segment separators so that a
+# payload hidden after any separator is classified on its own, while regex
+# alternations like grep -E "foo|bar" stay intact inside quotes.
+validate_segments() {
+  local cleaned="$1"
+  local _SEGMENTS
+  _SEGMENTS=$(printf '%s' "$cleaned" | "$HOOK_DIR/split-command.py") || return 1
+  while IFS= read -r _SEG; do
+    [ -z "$_SEG" ] && continue
+    local cmd_token
+    cmd_token=$(printf '%s' "$_SEG" | awk '{print $1}' | sed "s/^[\"'(]*//; s/[)]*$//")
+    if ! is_allowed_cmd "$cmd_token" && ! is_allowed_git_c "$_SEG"; then
+      return 1
+    fi
+  done <<< "$_SEGMENTS"
+  return 0
+}
+
 # validate_command — validate a full command string (may contain pipes, semicolons, $()).
 # First extracts and validates $() substitutions, then splits on | and ; and checks
 # each segment for allowed commands.
@@ -224,18 +247,7 @@ validate_command() {
   fi
 
   # Split into top-level segments (respecting quotes) and validate each.
-  # The helper treats unquoted |, ;, &&, || as segment separators so that
-  # regex alternations like grep -E "foo|bar" stay intact.
-  local _SEGMENTS
-  _SEGMENTS=$(printf '%s' "$cleaned" | "$HOOK_DIR/split-command.py") || return 1
-  while IFS= read -r _SEG; do
-    [ -z "$_SEG" ] && continue
-    local cmd_token
-    cmd_token=$(printf '%s' "$_SEG" | awk '{print $1}' | sed "s/^[\"'(]*//; s/[)]*$//")
-    if ! is_allowed_cmd "$cmd_token" && ! is_allowed_git_c "$_SEG"; then
-      return 1
-    fi
-  done <<< "$_SEGMENTS"
+  validate_segments "$cleaned" || return 1
   return 0
 }
 
@@ -245,26 +257,18 @@ validate_command() {
 JOINED=$(printf '%s' "$COMMAND" | sed -e ':a' -e '/\\$/{N;s/\\\n/ /;ba}')
 FIRST_LINE=$(printf '%s' "$JOINED" | head -n 1)
 
-# Multi-line commands are rejected unless every command in the first line is an
-# approved git -C command and the line contains a heredoc (<<) explaining why
-# there are extra lines. Split on && and || to validate each part independently.
+# Multi-line commands are rejected unless every top-level segment of the first
+# line is allowed and the line contains a heredoc (<<) explaining why there are
+# extra lines. Route the first line through validate_segments — the same
+# separator-splitting (|, ;, &, &&, ||) and per-segment allowlist the
+# single-line path uses — so a payload hidden after any separator (e.g. a
+# trailing `; rm -rf /x` after the heredoc redirect) is classified on its own
+# instead of riding inside the git -C prefix that is_allowed_git_c only reads
+# fields $1-$4 of. validate_command itself is unusable here because its <>
+# rejection would reject the heredoc's own << redirect operator.
 if [ "$JOINED" != "$FIRST_LINE" ]; then
   if printf '%s\n' "$FIRST_LINE" | grep -qF '<<'; then
-    local_approved=true
-    # Split first line on && and || to validate each command independently
-    IFS_SAVE="$IFS"
-    # Replace && and || with a delimiter we can split on
-    _parts=$(printf '%s' "$FIRST_LINE" | sed 's/ *&& */ \n /g; s/ *|| */ \n /g')
-    while IFS= read -r _part; do
-      _part=$(printf '%s' "$_part" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-      [ -z "$_part" ] && continue
-      if ! is_allowed_git_c "$_part"; then
-        local_approved=false
-        break
-      fi
-    done <<< "$_parts"
-    IFS="$IFS_SAVE"
-    if [ "$local_approved" = true ]; then
+    if validate_segments "$FIRST_LINE"; then
       printf '%s\n' "$APPROVE"
     fi
   fi

@@ -86,12 +86,18 @@ export function useRulesTable(containerRef: RefObject<HTMLElement>): void {
           } else if (target.classList.contains("edit-canonical")) {
             await ds.updateNormalizationRule(nruleId, { canonicalDescription: target.value });
           } else if (target.classList.contains("edit-priority")) {
-            const priority = Number(target.value);
-            if (!Number.isFinite(priority)) { showInputError(target, "Priority must be a number"); return; }
+            // Number("") is 0 (top precedence), not NaN — guard the emptied
+            // input explicitly so a cleared field is rejected, not saved as 0.
+            const raw = target.value.trim();
+            const priority = Number(raw);
+            if (raw === "" || !Number.isFinite(priority)) { showInputError(target, "Priority must be a number"); return; }
             await ds.updateNormalizationRule(nruleId, { priority });
           } else if (target.classList.contains("edit-date-window")) {
-            const days = Number(target.value);
-            if (!Number.isFinite(days) || days < 0) { showInputError(target, "Date window must be a non-negative number"); return; }
+            // Number("") is 0, not NaN — guard the emptied input explicitly so a
+            // cleared field is rejected rather than silently persisting a 0-day window.
+            const raw = target.value.trim();
+            const days = Number(raw);
+            if (raw === "" || !Number.isFinite(days) || days < 0) { showInputError(target, "Date window must be a non-negative number"); return; }
             await ds.updateNormalizationRule(nruleId, { dateWindowDays: days });
           } else {
             return;
@@ -102,8 +108,11 @@ export function useRulesTable(containerRef: RefObject<HTMLElement>): void {
           } else if (target.classList.contains("edit-target")) {
             await ds.updateRule(ruleId, { target: target.value });
           } else if (target.classList.contains("edit-priority")) {
-            const priority = Number(target.value);
-            if (!Number.isFinite(priority)) { showInputError(target, "Priority must be a number"); return; }
+            // Number("") is 0 (top precedence), not NaN — guard the emptied
+            // input explicitly so a cleared field is rejected, not saved as 0.
+            const raw = target.value.trim();
+            const priority = Number(raw);
+            if (raw === "" || !Number.isFinite(priority)) { showInputError(target, "Priority must be a number"); return; }
             await ds.updateRule(ruleId, { priority });
           } else if (target.classList.contains("edit-institution")) {
             await ds.updateRule(ruleId, { institution: target.value || null });

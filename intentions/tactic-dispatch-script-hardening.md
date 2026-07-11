@@ -28,13 +28,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: done
 execution:
   branch: tactic-dispatch-script-hardening
   pr: 2840
   attempts: {}
   markers:
     - qa-done
+    - reviewed
   strategy_fingerprint: null
 validates: []
 blocked_by: []
