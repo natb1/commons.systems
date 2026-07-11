@@ -32,6 +32,11 @@ function errMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+/** Type guard: a non-null, non-array object indexable by string. */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 // --- IO contract -----------------------------------------------------------
 // A tiny injected fs facade so the pure core never touches the real tree. All
 // paths are repo-root-relative. `readText` returns `null` for a missing file.
@@ -84,15 +89,12 @@ export function enumerateArtifacts(fs: FsFacade): Artifact[] {
     parsed = JSON.parse(raw);
   } catch (err) {
     throw new Error(
-      `audit-fork-docs: cannot parse .firebaserc as JSON: ${errMessage(err)}`,
+      `audit-fork-docs: .firebaserc is not valid JSON: ${errMessage(err)}`,
     );
   }
 
-  const targets =
-    parsed && typeof parsed === "object"
-      ? (parsed as Record<string, unknown>).targets
-      : undefined;
-  if (!targets || typeof targets !== "object") {
+  const targets = isRecord(parsed) ? parsed.targets : undefined;
+  if (!isRecord(targets)) {
     throw new Error(
       "audit-fork-docs: .firebaserc has no `targets` object — cannot enumerate hosting targets",
     );
@@ -100,25 +102,22 @@ export function enumerateArtifacts(fs: FsFacade): Artifact[] {
 
   // Fork-friendly: a fork changes the Firebase project id, so do not hardcode
   // `commons-systems`. Require exactly one project entry under `targets`.
-  const projectKeys = Object.keys(targets as Record<string, unknown>);
+  const projectKeys = Object.keys(targets);
   if (projectKeys.length !== 1) {
     throw new Error(
       `audit-fork-docs: expected exactly one project under .firebaserc \`targets\`, found ${projectKeys.length} (${projectKeys.join(", ") || "none"})`,
     );
   }
 
-  const project = (targets as Record<string, unknown>)[projectKeys[0]];
-  const hosting =
-    project && typeof project === "object"
-      ? (project as Record<string, unknown>).hosting
-      : undefined;
-  if (!hosting || typeof hosting !== "object") {
+  const project = targets[projectKeys[0]];
+  const hosting = isRecord(project) ? project.hosting : undefined;
+  if (!isRecord(hosting)) {
     throw new Error(
       `audit-fork-docs: .firebaserc project \`${projectKeys[0]}\` has no \`hosting\` map`,
     );
   }
 
-  const targetNames = Object.keys(hosting as Record<string, unknown>);
+  const targetNames = Object.keys(hosting);
   if (targetNames.length === 0) {
     throw new Error(
       `audit-fork-docs: .firebaserc project \`${projectKeys[0]}\` has an empty \`hosting\` map — nothing to enumerate`,
