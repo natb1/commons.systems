@@ -21,9 +21,9 @@ import type { IntentionNode, Phase } from "./schema.js";
  * The phase ladder, closest-to-done first (strategy clarification 22). Within
  * one resolved-attention rank level, candidates drain in this order; the
  * `align-tactics` rung is where eligible strategies (an `/align-tactics`
- * session) sort. `main-qa` is listed ahead of the schema's current `Phase`
- * enum adopting it (tactic-main-qa-phase owns the enum change); until then no
- * stored node can carry it, so the rung is inert.
+ * session) sort. `main-qa` (adopted into the schema `Phase` enum by
+ * tactic-main-qa-phase) sorts closest-to-done: a merged tactic carrying
+ * needs-main residue drains its main-qa verification before `done`.
  */
 export const PHASE_LADDER: readonly string[] = [
   "main-qa",

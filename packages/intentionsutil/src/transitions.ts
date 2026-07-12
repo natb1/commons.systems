@@ -52,10 +52,9 @@ export type CiVerdict = "passing" | "failing" | "unknown";
  * The linear success ladder (strategy clarification 22, spec §1.1),
  * closest-to-start first. `fix` is NOT on it — it is the CI-failure interrupt
  * (`fixInterrupt`), and `main-qa` is inserted only when needs-main residue is
- * present (`forwardPhase`). `main-qa` is a forward reference to the phase value
- * `tactic-main-qa-phase` adopts into the schema enum; until then no node can
- * carry it, so the residue branch is inert (same doctrine as
- * `router.ts`'s `PHASE_LADDER`).
+ * present (`forwardPhase`). `main-qa` is the phase value `tactic-main-qa-phase`
+ * adopted into the schema enum; a node carrying needs-main residue drains it
+ * before `done` (same doctrine as `router.ts`'s `PHASE_LADDER`).
  */
 export const LADDER: readonly string[] = ["implement", "qa", "review", "done"];
 

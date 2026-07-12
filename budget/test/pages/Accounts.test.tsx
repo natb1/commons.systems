@@ -235,6 +235,47 @@ describe("Accounts (renderAccounts markup parity)", () => {
     expect(html).toContain("Net change");
   });
 
+  // Two months of transactions so the income report (and thus the headline
+  // card) is non-null vs. today's date; ids default (report keys on
+  // normalizedId, not id).
+  const reportTxns = () => [
+    txn({ category: "Salary", amount: -3000, timestamp: ts("2025-02-10") }),
+    txn({ category: "Food", amount: 500, timestamp: ts("2025-02-12") }),
+    txn({ category: "Salary", amount: -2800, timestamp: ts("2025-01-10") }),
+  ];
+
+  it("renders the Projected runway metric when net worth and trailing spend both exist", async () => {
+    const html = await renderAccounts(localOptions({
+      getTransactions: vi.fn().mockResolvedValue(reportTxns()),
+      getStatements: vi.fn().mockResolvedValue([stmt({ period: "2025-02", lastTransactionDate: ts("2025-02-12") })]),
+      getBudgetPeriods: vi.fn().mockResolvedValue([
+        {
+          id: "food-w1", budgetId: "food",
+          periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"),
+          total: 200, count: 2, categoryBreakdown: {}, groupId: null,
+        },
+        {
+          id: "food-w2", budgetId: "food",
+          periodStart: ts("2025-01-20"), periodEnd: ts("2025-01-27"),
+          total: 300, count: 3, categoryBreakdown: {}, groupId: null,
+        },
+      ]),
+    }));
+    expect(html).toContain("Projected runway");
+    expect(html).toMatch(/[\d.]+ months/);
+  });
+
+  it("omits the Projected runway metric when there are no statements (no net-worth points)", async () => {
+    const html = await renderAccounts(localOptions({
+      getTransactions: vi.fn().mockResolvedValue(reportTxns()),
+      getStatements: vi.fn().mockResolvedValue([]),
+      getBudgetPeriods: vi.fn().mockResolvedValue([]),
+    }));
+    // The headline card still renders (report is non-null) but no runway metric.
+    expect(html).toContain("Net income");
+    expect(html).not.toContain("Projected runway");
+  });
+
   it("keeps the three period labels word-bounded in the income-table header text", async () => {
     // Regression guard for the React port: the legacy string renderer separated
     // header <th> cells with whitespace, so accounts-income-statement.spec.ts can

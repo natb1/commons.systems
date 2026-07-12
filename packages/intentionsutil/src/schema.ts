@@ -28,6 +28,7 @@ export type Phase =
   | "fix"
   | "qa"
   | "review"
+  | "main-qa"
   | "done";
 
 export const PHASES: readonly Phase[] = [
@@ -37,6 +38,7 @@ export const PHASES: readonly Phase[] = [
   "fix",
   "qa",
   "review",
+  "main-qa",
   "done",
 ];
 

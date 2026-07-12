@@ -729,6 +729,27 @@ export function computeCashFlow(points: NetWorthPoint[]): CashFlowPoint[] {
   }));
 }
 
+/**
+ * Projected runway in months: latest liquid net worth divided by trailing
+ * monthly spend. Points arrive in ascending week order, so the last point is
+ * the latest reading. Monthly spend converts the trailing weekly average
+ * (`computeAverageWeeklySpending`) at 52 weeks / 12 months.
+ *
+ * Returns `null` when there is no data to divide (no net-worth points) or the
+ * denominator is non-positive (no spend) — no metric, never `Infinity`/`NaN`.
+ * A negative net worth returns its raw negative quotient (the UI shows it).
+ */
+export function computeProjectedRunway(
+  netWorthPoints: NetWorthPoint[],
+  averageWeeklySpending: number,
+): number | null {
+  if (netWorthPoints.length === 0) return null;
+  const monthlySpend = (averageWeeklySpending * 52) / 12;
+  if (monthlySpend <= 0) return null;
+  const latestNetWorth = netWorthPoints[netWorthPoints.length - 1].netWorth;
+  return latestNetWorth / monthlySpend;
+}
+
 interface BalanceDivergence {
   readonly institution: string;
   readonly account: string;

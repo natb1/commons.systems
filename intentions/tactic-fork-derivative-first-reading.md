@@ -28,8 +28,7 @@ phase: null
 execution: null
 validates:
   - strategy-owned-orchestration
-blocked_by:
-  - tactic-fork-derivative-instrument
+blocked_by: []
 office_hours:
   reason: "Human sensor: with fetch-forks.sh merged, run the digest and take the
     strategy's first built-to-be-left reading — review the fork set,
