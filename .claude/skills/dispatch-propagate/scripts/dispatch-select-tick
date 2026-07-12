@@ -330,10 +330,14 @@ if [[ "$BRANCH" == "main" ]]; then
 
   if [[ "$merge_ok" == 1 ]]; then
     # SUCCESS — local main ff-merges clean. ALWAYS reset the attempt counter and
-    # close any open dispatch:sync-broken latch (Decision B: a clean probe means
-    # a human resolved the tree, so the chain auto-recovers). Then fall through
-    # to Step 1c — do NOT exit.
+    # clear the sync-broken latch (Decision B: a clean probe means a human
+    # resolved the tree, so the chain auto-recovers). The LATCH STATE now lives in
+    # the repo-health sensor's durable label-free record — clear it there. The
+    # gh-labeled dispatch:sync-broken issue stays as the human-visibility
+    # announcement, so it is still closed here (kept in sync with the durable
+    # clear). Then fall through to Step 1c — do NOT exit.
     sync_repair_reset_attempts
+    "$SCRIPT_DIR/repo-health" --clear-sync-broken 1>&2 || true
     OPEN_SB=$(gh_issue_list_rest --state open --label "dispatch:sync-broken" | jq -r '.[].number')
     for n in $OPEN_SB; do
       gh_issue_close_rest "$n" \
@@ -341,9 +345,11 @@ if [[ "$BRANCH" == "main" ]]; then
     done
   else
     # FAILURE — local main is dirty or diverged. The latch is checked only AFTER
-    # a failed merge (Decision B); the probe itself is never suppressed.
-    OPEN_SB=$(gh_issue_list_rest --state open --label "dispatch:sync-broken" | jq -r '.[0].number // empty')
-    if [[ -n "$OPEN_SB" ]]; then
+    # a failed merge (Decision B); the probe itself is never suppressed. The
+    # "already latched?" state is read from the repo-health sensor's durable
+    # label-free record (no gh, no dispatch:sync-broken label query) — the latch
+    # state has moved off the legacy label surface.
+    if [[ "$("$SCRIPT_DIR/repo-health" --sync-broken-latched)" == "latched" ]]; then
       # a. Already latched — a human owns the tree. Spawn nothing.
       release_lock
       "$SCRIPT_DIR/dispatch-schedule-reseed" 1>&2 || true
@@ -354,12 +360,17 @@ if [[ "$BRANCH" == "main" ]]; then
     fi
     N=$(sync_repair_read_attempts)
     if [[ "$N" -ge 3 ]]; then
-      # b. Attempt cap hit — escalate to the find-or-create latch issue and stop
-      # respawning. The escalate script reads the captured merge stderr on stdin.
+      # b. Attempt cap hit — set the durable label-free latch (repo-health) AND
+      # file the find-or-create human-visibility issue (dispatch-escalate-sync-broken),
+      # then stop respawning. The durable latch is the state the "already latched?"
+      # read above consults; the labeled issue is the announcement kept in sync
+      # with it. The escalate script reads the captured merge stderr on stdin.
       # This branch is terminal; it does NOT bump the counter.
       if [[ "$fetch_ok" == 0 ]]; then
+        "$SCRIPT_DIR/repo-health" --set-sync-broken --reason fetch-failed 1>&2 || true
         "$SCRIPT_DIR/dispatch-escalate-sync-broken" --reason fetch-failed <<<"$FETCH_STDERR" 1>&2 || true
       else
+        "$SCRIPT_DIR/repo-health" --set-sync-broken --reason merge-failed 1>&2 || true
         "$SCRIPT_DIR/dispatch-escalate-sync-broken" --reason merge-failed <<<"$MERGE_STDERR" 1>&2 || true
       fi
       release_lock
@@ -390,7 +401,7 @@ refresh_lock
 # next red episode re-fires the gate on first detection. Closing an issue is a
 # side effect, so it lives here in the lock-holding orchestrator, not in the pure
 # selector. The open-issue query is cheap and gates the extra CI read (via
-# dispatch-select-target --main-broken-sha) to the red/recovering window only;
+# repo-health --main-broken-sha) to the red/recovering window only;
 # this runs every tick — independent of the local branch — including a capped
 # tick, so recovery is observed even when no worker is spawned.
 OPEN_MB=$(gh_issue_list_rest --label "dispatch:main-broken" --state open \
@@ -399,10 +410,16 @@ OPEN_MB=$(gh_issue_list_rest --label "dispatch:main-broken" --state open \
   OPEN_MB=UNKNOWN
 }
 if [[ -n "$OPEN_MB" && "$OPEN_MB" != "UNKNOWN" ]]; then
-  # Use explicit exit-code capture: a failed --main-broken-sha would produce empty
+  # Use explicit exit-code capture: a failed probe would produce empty
   # output, which -z would treat as "green" and incorrectly close the latch.
+  # The probe now lives in the standalone repo-health sensor (rewire-then-delete
+  # off the legacy selector surface): repo-health --main-broken-sha runs the same
+  # two-source CI aggregation and, as a side effect, reconciles its durable
+  # label-free latch record. The gh-labeled dispatch:main-broken issue below stays
+  # as the human-visibility announcement (OPEN_MB); the durable record is the
+  # label-free latch state a graph-native reader consults.
   MB_SHA=""
-  if ! MB_SHA=$("$SCRIPT_DIR/dispatch-select-target" --main-broken-sha); then
+  if ! MB_SHA=$("$SCRIPT_DIR/repo-health" --main-broken-sha); then
     MB_SHA="UNKNOWN"
   fi
   if [[ -z "$MB_SHA" ]]; then
