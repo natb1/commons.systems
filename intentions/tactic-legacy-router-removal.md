@@ -31,7 +31,7 @@ office_hours:
     completed - several 'legacy' scripts are still live-wired into the
     graph-native tick and general harness; remaining scope needs a re-plan. See
     office-hours-recommendation for the full checklist."
-  since: 2026-07-11
+  since: 2026-07-12
   recommendation: >-
     ## Recommended next steps — `tactic-legacy-router-removal`
 
