@@ -1,6 +1,6 @@
 ---
 name: reading-review
-description: Office-hours skill that runs one tradition-reading curriculum chunk's demonstration — the author demonstrates understanding of the tradition and its application to the deferral against the primary text, the graph is amended where the reading contradicts it or ratified where it holds — or, for a candidate chunk with no record yet, the session resolves to a new tradition record, grounding marks, or a dismissal clarification — and the chunk node is resolved (phase → done), which triggers /sync-reader's retirement of the chunk's excerpt from the e-reader. Interactive and unbounded; the inverse of /align-tactics' autonomy contract. Never files a GitHub issue.
+description: Office-hours skill that runs one tradition-reading curriculum chunk's demonstration — the author demonstrates understanding of the tradition and its application to the deferral against the primary text, the graph is amended where the reading contradicts it or ratified where it holds — or, for a candidate chunk with no record yet, the session resolves to a new tradition record, grounding marks, or a dismissal clarification; it also mints and runs per-record context capstones (selection-bias audit, deferred amend/ratify, intent-evolution review) — and the chunk or capstone node is resolved (phase → done), which triggers /sync-reader's retirement of the chunk's excerpt from the e-reader. Interactive and unbounded; the inverse of /align-tactics' autonomy contract. Never files a GitHub issue.
 user-invocable: true
 ---
 
@@ -67,6 +67,18 @@ lowest-priority unresolved chunk — but the resolution differs:
   relevance`. The session establishes relevance and the author's
   understanding, then resolves per **## Candidate chunks** below. Everything
   else in the session frame is shared.
+
+`/reading-review` also runs **capstone sittings** — an office-hours review of
+one tradition record's broader context, targeted by a
+`tactic-context-capstone-*` node (that id prefix, **not**
+`tactic-reading-chunk-*`, and no `attributes.curriculum`). This skill mints
+capstones born-parked when a context chunk resolves (Recording rules →
+**Context-chunk capstone minting**) and runs them per **## Capstone sittings**
+below. With an argument naming a `tactic-context-capstone-*` id, take it as the
+target directly; with no argument, a parked capstone (`phase` ≠ `done`,
+`office_hours` set) is selectable alongside the chunks — it carries no
+`attributes.curriculum.priority`, so it sorts after them (run an area's
+capstone once its context chunks have surfaced it).
 
 ## Precondition — confirm the sitting happened
 
@@ -171,6 +183,36 @@ chunks resolve per **## Candidate chunks** instead.
 - **Chunk-6 capstone.** If chunks 1–6 are all `done` after this session,
   revisit the apex question on both root virtues and record the outcome as a
   dated clarification on each.
+- **Context-chunk capstone minting.** When this session resolves a **context
+  chunk** — a selected `tactic-reading-chunk-*` node carrying
+  `attributes.curriculum.distance >= 1` and a non-empty
+  `attributes.curriculum.deepens` — mint a per-record capstone for each record
+  the chunk deepens, in this session's same `graph-commit`. For each id in
+  `deepens` that has **no unresolved capstone** (no `tactic-context-capstone-*`
+  node for that record whose `phase` ≠ `done`), create
+  `tactic-context-capstone-<record-slug>` via `write-node`, where the slug is
+  the record id minus its `tradition-` prefix (`tradition-plato` →
+  `tactic-context-capstone-plato`). Mint it **born-parked**:
+  - `owner: human`, `status: codified`, `parent: null`, `phase` **absent** (the
+    born-parked convention), `serves: [strategy-philosophical-grounding]`,
+    `validates: []`.
+  - `office_hours: {reason, since, recommendation}` — `reason` names the record,
+    the resolved context chunk(s) this capstone will review, and the three
+    duties (selection-bias audit, deferred amend/ratify, intent-evolution
+    review); `since` via `date -u +%Y-%m-%d`; `recommendation` a best-next-step
+    sentence for the author (`office_hours.recommendation` is a first-class
+    schema field — write it directly, not folded into `reason`).
+  - **No `attributes.curriculum`** — a capstone has no reader excerpt, and the
+    `tactic-context-capstone-*` id (not `tactic-reading-chunk-*`) keeps
+    `/sync-reader` from retiring an excerpt for it.
+
+  A context chunk whose `deepens` names several records counts toward **each**
+  record's capstone (precedent: a chunk citing two records). **Recurrence:** if
+  the record's capstone is already `done` when a later context chunk resolves,
+  mint a fresh one with a numeric suffix (`tactic-context-capstone-plato-2`,
+  `-3`, …) — the deepened area gets a new sitting. Minting is bundled into the
+  chunk session's single `graph-commit`; it does not run the capstone, which is
+  a later office-hours sitting.
 
 ## Candidate chunks
 
@@ -234,6 +276,64 @@ Whichever of (a)/(b)/(c) the session lands, bundled into the session's single
   nodes, the delegation, the strategy, and any cascaded or born-parked node —
   into the single `graph-commit` (Landing).
 
+## Capstone sittings
+
+A capstone node (`tactic-context-capstone-*`, e.g.
+`tactic-context-capstone-plato`) is an office-hours review of one tradition
+record's **broader context** — minted born-parked by the Context-chunk capstone
+minting rule (Recording rules) once the record's first context chunk resolves,
+and recurring whenever the area later deepens. It is detected by its id prefix
+(`tactic-context-capstone-`), not by `attributes.curriculum`, which it does not
+carry. The whole session frame above applies **unchanged** — precondition
+check, periagoge (the author articulates before any account of Claude's),
+verdict refinement loop, session bounds, cross-chunk boundary rule,
+notes-for-later exit, the write-node recording gate, the persistence check,
+one-graph-commit landing, and the prohibitions. Only the agenda differs: rather
+than a chunk's `## Questions` script, the capstone runs the three standing
+duties over the record and the resolved context chunk(s) named in its
+`office_hours.reason`.
+
+### The three duties
+
+- **Selection-bias audit.** Were the delegatee-chosen focused excerpts
+  representative of the record's tradition, judged against the now-read broader
+  context? (The 2026-07-07 chunk-1 session observed the risk live: *Republic*
+  VII was verified partly from 592a-b, outside the chunk's own range.) Where an
+  excerpt misled, the reading wins — amend the record.
+- **Deferred amend/ratify pass.** Re-open the record's earlier amend/ratify
+  outcomes against the broader context now in view; the reading wins over the
+  prior verdict (the standing clarification on
+  `strategy-philosophical-grounding`). Context chunks defer their amend/ratify
+  to this sitting when it does not fit the chunk itself
+  (`.claude/skills/context-chunks/SKILL.md`).
+- **Intent-evolution review.** Drift in *understanding* amends the tradition
+  record; drift in *intent* lands as dated `clarifications` on the affected
+  virtue / strategy nodes.
+
+### Closing steps
+
+As for the other chunk kinds, bundled into the sitting's single `graph-commit`:
+
+- Stamp `attributes.irreversibility.last_exercised` on
+  `intentions/delegation-philosophical-articulation.md` — this sitting
+  exercised the recovery loop. Every reading-wins catch — a misarticulation of
+  the tradition or a misstatement of the author's position alike — also lands as
+  a dated entry in that delegation's `divergence.contradictions`.
+- Every amended record and clarification carries its dated provenance sentence
+  (e.g. `"...Recorded 2026-07-20 /reading-review capstone tradition-plato."`),
+  and the resolution passes the persistence check (Recording rules): the
+  confirmed understanding lives on durable nodes — the record, the virtue /
+  strategy clarifications, the delegation — never solely on the capstone node,
+  which is pruned once done.
+- Refresh `strategy-philosophical-grounding`'s `reading` field to a one-line
+  fresh reading naming the capstone round.
+- Set the capstone node `phase: "done"` — the resolution `/sync-reader` keys on
+  (a capstone carries no excerpt, so nothing is retired; resolution still clears
+  its `office_hours` park via the graph-commit).
+- Bundle every touched node — the capstone, the amended record(s), any cascaded
+  virtue / strategy clarifications, the delegation, the strategy, and any
+  born-parked note-for-later draft — into the single `graph-commit`.
+
 ## Landing
 
 ONE `packages/intentionsutil/scripts/graph-commit <id> [<id> ...]` call
@@ -284,4 +384,18 @@ Prose only — a SKILL.md is model instructions with no automated test surface.
   `tradition-hirschman` record plus `attributes.traditions` stamps), with the
   delegation stamp and the chunk resolution in the same bundle. Confirm the
   verify-chunk flow is unchanged by the edit.
+- Dry-run the capstone path without landing. Construct a synthetic resolved
+  context chunk (`attributes.curriculum` `{priority: 99, distance: 1, deepens:
+  ["tradition-plato"], passages: […]}`) and confirm the Recording rules plan
+  minting `tactic-context-capstone-plato` born-parked — `owner: human`,
+  `status: codified`, `parent: null`, no `phase`, `serves:
+  [strategy-philosophical-grounding]`, `validates: []`, no
+  `attributes.curriculum`, and an `office_hours.reason` naming the record, the
+  chunk, and the three duties — producing JSON that
+  `npx tsx packages/intentionsutil/scripts/validate-graph.ts` accepts; with
+  `deepens` naming two records, two capstones are planned. Then dry-run a
+  `tactic-context-capstone-*` target and confirm the **## Capstone sittings**
+  branch surfaces the three-duty agenda with the author articulating before any
+  account of Claude's, and that the verify- and candidate-chunk flows are
+  unchanged by the edit.
 - Confirm no `gh` invocation appears anywhere in the flow.
