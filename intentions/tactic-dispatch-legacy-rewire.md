@@ -27,7 +27,39 @@ phase: implement
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "graph-tick implement lane cannot execute this 3-unit plan: the tick
+    executor has no Agent/Task subagent-spawn tool, so /implement per-unit
+    subagent delegation (/implement-unit) cannot run, and the plan
+    Implementation notes explicitly require one opus subagent per unit. Ad-hoc
+    main-thread emulation is forbidden by the tick contract and unsafe here: the
+    plan guts the live dispatch orchestrators (dispatch-select-tick ~900 lines,
+    dispatch-tick) and deletes six legacy scripts, and the only verify check
+    (npm test --prefix packages/intentionsutil) does not exercise these bash
+    scripts. Provisioning and node-lane detection succeeded (phase=implement, no
+    PR yet, clean worktree); nothing was partially built. This mirrors the
+    established graph-tick review-phase handling: the tick cannot fan out, so a
+    human completes it in a full session. Next steps: run /implement
+    tactic-dispatch-legacy-rewire in a full interactive session that has
+    subagent (Agent/Task) tools, delegating one opus subagent per unit exactly
+    as the plan specifies (Unit 1 extract the repo-health main-broken plus
+    sync-broken latch into a label-free sensor and rewire dispatch-select-tick
+    ~line 405 --main-broken-sha call site; Unit 2 audit each dispatch:* label
+    consumer and rewire the still-needed ones onto persisted graph phase /
+    job-dir markers; Unit 3 reduce dispatch-tick and dispatch-select-tick to
+    graph+aux+latch-only, delete the dead legacy scripts, remove residual
+    dispatch:* label ops, sweep test-dispatch-scripts.sh; keep
+    dispatch-spawn-job)."
+  since: 2026-07-12
+  recommendation: Run /implement tactic-dispatch-legacy-rewire in a full
+    interactive session that has Agent/Task subagent tools; delegate one opus
+    subagent per unit as the plan Implementation notes require (Unit 1
+    repo-health/latch extraction + rewire dispatch-select-tick ~L405; Unit 2
+    dispatch:* label-consumer audit/rewire onto graph phase + job-dir markers;
+    Unit 3 orchestrator reduction + dead-script deletion + test sweep, keeping
+    dispatch-spawn-job). Do NOT emulate in a graph-tick worker (no subagent
+    fan-out; blast radius = live dispatch harness). Provision already succeeded;
+    worktree clean at phase=implement.
 pace_exempt: false
 rounds: null
 attributes: {}
