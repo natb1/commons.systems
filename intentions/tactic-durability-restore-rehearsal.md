@@ -29,7 +29,6 @@ execution: null
 validates:
   - strategy-durable-owned-data
 blocked_by:
-  - tactic-durability-audit-instrument
   - tactic-durability-redundancy-design
 office_hours:
   reason: "Owner rehearsal (about 30 minutes), runs after
