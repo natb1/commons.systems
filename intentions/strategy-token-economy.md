@@ -129,6 +129,22 @@ clarifications:
       align-family session actually ran on Opus. The enforcement mechanism is
       retained as draft tactic-align-family-opus-default. Recorded 2026-07-06
       interview."
+  - question: Under graph-native phase execution (Shape B), what is the standing
+      model-routing default?
+    answer: "The top-level phase orchestrator session runs on sonnet; workflow
+      subagents run on opus only when the work calls for it — an implementation
+      unit whose Recommended model is opus, or an explicitly opus-instructed
+      review such as /code-review max and /security-review. Default subagents
+      (finders, classifiers, verifiers) stay on sonnet. This generalizes the
+      existing sonnet-default node (tactic-noncodegen-session-model-defaults)
+      and opus-when-instructed node (tactic-align-family-opus-default) into the
+      standing rule for the phase-orchestrator architecture recorded on
+      strategy-graph-native-dispatch (Shape B, clarification 24 amended
+      2026-07-11). It is a throughput lever, not a spend cut: an opus token
+      draws the prepaid weekly allowance several times faster than a sonnet
+      token, so pinning orchestrators to sonnet and reserving opus for the
+      subagents whose yield justifies it converts the same allowance into more
+      closed tactics. Recorded 2026-07-11 interview."
 tooling_goals:
   - kind: sensor
     statement: token-audit aggregate with node-id attribution — weekly allowance

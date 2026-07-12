@@ -61,7 +61,11 @@
     ".claude/**",
     // Firebase scaffolding templates are COPIED into new app scaffolds, not
     // imported. Their internal exports/types/imports resolve only post-copy.
-    "projects/scaffolding/firebase/templates/**"
+    "projects/scaffolding/firebase/templates/**",
+    // Operational scripts run by path (e.g. `node --import tsx/esm
+    // ops/durability/audit.ts`), not statically imported — same rationale as
+    // .claude/** above. The ops/ tree is invoked by operators/CI, never bundled.
+    "ops/**"
   ],
 
   "workspaces": {

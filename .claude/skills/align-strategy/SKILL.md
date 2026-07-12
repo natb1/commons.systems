@@ -152,6 +152,101 @@ corpus by hand as above.
 
 Run this once per strategy target selected in step 1 (new or edit).
 
+### Interview type — classify first, and state it
+
+Every interview is one of two types, fixed by where the authoritative model of
+the subject currently lives (2026-07-09 interview-types doctrine,
+`strategy-explicit-intent` clarification "What interview types do align
+sessions run, and which rules bind each?"). State which type each interview is
+before the dialectic proper begins.
+
+- **Type b — the record is authoritative and the author has drifted from it or
+  not yet internalized it** (author education). Full periagoge rules bind:
+  probes cite the record **at `origin/main`** as the fixed object — never the
+  working tree (a stale checkout presents already-amended doctrine as current),
+  never session memory; the author articulates their own account before
+  Claude's account appears; compulsion is argument only — press until resolved,
+  never impose. Three exits stay open to the author at all times: amend the
+  record (the dialectic wins), defer (held on trust with a review item — see
+  "Deferral mechanics" below), or claim authority over Claude's account or a
+  referenced tradition (an intentional divergence, recorded). Claude never
+  blocks and never withholds recording.
+- **Type a — the model lives in the author, unrecorded or not yet formed**
+  (Claude elicitation and education). Visible-refusable-draft rules bind:
+  propose viable seams and explore their consequences to author feedback. Joint
+  inquiry where nothing is settled anywhere is type a's elicitation limb, not a
+  third type — it resolves by the same visible-draft machinery, and parsimony
+  declines the extra seam.
+
+**Run type b before type a when required author knowledge is unrecorded.**
+Type b's object is the topic's **ground** — the knowledge needed to decide,
+across the record at `origin/main` and the relevant traditions, recorded and
+Claude-internal alike — not merely the pending decision surface. A type b
+confined to ratifying decision mechanics is the named deviation; explore the
+ground first, then take the formed decision into type a.
+
+In either type, always surface graph-internal inconsistencies, inconsistencies
+between the graph and Claude's internal knowledge (a good the author may not
+yet have seen), and parsimony findings (redundant seams).
+
+### Question mechanics — every round, both types
+
+Every `AskUserQuestion` round in this step — the step-2.1 intent confirmation,
+the step-2.9 design-canvas question, and any other — carries three things (the
+standing feedback loop of both types, not a type-a convenience):
+
+1. a **recommendation** — your best answer, listed first;
+2. an honest **boldness assessment** on that recommendation — how much of it
+   rests on the graph and this session's context versus Claude-internal
+   knowledge the author has not verified;
+3. an explicit **accept-as-deferral** option alongside plain acceptance, so the
+   author can hold the recommendation on trust rather than endorse it (see
+   "Deferral mechanics" below).
+
+**Deliver a question's motivating context — including each recommendation's
+boldness — where the author will actually read it:** inside the
+`AskUserQuestion` tool itself (question text, option descriptions, preview
+panes) or in a prior turn the author has already read and responded to. The
+author reads neither Claude's thinking nor same-turn preamble emitted before
+the question call, so context living only there has not been provided — a
+boldness assessment stated only in preamble is undelivered. A question must
+never reference material the author has not seen.
+
+### Deferral mechanics
+
+This subsection is the home for the born-parked review-item typology (Step 5's
+Mode A curriculum enrollment points here for it). A deferral is always
+defer-until-later-review — a conscious, temporary choice to hold a
+recommendation on trust, never a quiet drop. When the author accepts one:
+
+- **Record it.** Land a dated clarification on the affected node naming exactly
+  what is held on trust (the ordinary step-2.8 clarification mechanics).
+- **Extend delegated scope when it defers to Claude's articulation.** When the
+  held content is Claude-drafted reasoning, the same round extends
+  `delegation-philosophical-articulation`'s delegated scope — reconcile that
+  node in this round's commit.
+- **Create exactly one review item, born-parked, in the same `graph-commit`.**
+  Every deferral — philosophical or not, text-grounded or not — produces one
+  review item; none gets lighter treatment for lacking a text. The typology:
+  - a **reading chunk** (a `tactic-reading-chunk-*` node, `parent:
+    tactic-tradition-reading-program`, `validates: [<grounding strategy>]`)
+    when a grounding text exists — the expected case;
+  - an **office-hours review sitting** (a review-item node) when the author
+    deferred to something text-less, such as Claude's logical analysis of
+    internal consistency.
+
+  **Born-parked field mechanics:** author the review item with the same
+  `write-node.ts --file` recipe as a step-4 draft tactic, but omit `phase` and
+  set `office_hours: {reason, since}` at creation (get `since` via `date -u
+  +%Y-%m-%d`) — the parked state the router never selects for a phase worker.
+  Name the enrolled node's id in the review item's `statement` or body: the
+  coverage sensor (`tactic-review-curriculum-coverage-sensor`) derives frontier
+  linkage by matching that id, so an item that only alludes to the node is
+  invisible to it. Bundle it into the same `graph-commit` as the record it
+  enrolls, exactly like a draft tactic.
+
+### Dialectic steps
+
 1. **Intent.** Elicit the one-line `statement` a plain conversational turn
    first; once you have enough to draft one, confirm it via
    `AskUserQuestion` with your best draft as the recommended option.
@@ -160,23 +255,59 @@ Run this once per strategy target selected in step 1 (new or edit).
    strategy id (same-kind only — `validateGraph` rule 6). For an edit:
    confirm placement is still correct given the revision. Recommend your
    best guess first.
-3. **Benefit.** Talk through why this strategy is worth running now versus
+3. **Doctrinal-consistency gate.** Test the drafted strategy for internal
+   consistency with the recorded model of the good before it enters that
+   model — the function doctrine (`strategy-explicit-intent`, 2026-07-08
+   clarifications) requires every strategy be tested against the model it
+   joins, and `validateGraph` rule 8 (checked at step 2.2) covers only
+   referential integrity, not consistency of intent. Read the relevant
+   doctrine **at `origin/main`, never the working tree** — a stale checkout
+   presents already-amended doctrine as current, the live failure mode the
+   2026-07-08 round caught (e.g. `git show
+   origin/main:intentions/<id>.md`). Read: the `serves` virtues' rationales
+   and `tension_with` pairs; overlapping strategies' `clarifications` and
+   `attributes.conditions`; and the tradition records those virtues cite.
+   Surface every contradiction between the drafted `statement`/`rationale`
+   and that doctrine as an interview question, following the "Question
+   mechanics" subsection above (recommendation + boldness +
+   accept-as-deferral, context delivered inside the `AskUserQuestion` tool).
+   Each resolution lands as a dated `clarifications` entry in the step-2.8
+   provenance convention. On the **edit** path (step 1.2 classified the
+   target as an edit of an existing strategy), run the gate against the
+   revised `statement`/`rationale` as well.
+4. **Benefit.** Talk through why this strategy is worth running now versus
    later or not at all — this is conversational, not a gated question,
    but its conclusion should be visible in the eventual `rationale`.
-4. **Signal.** Draft a `success_signal` — `{observable, sensor, threshold,
+5. **Steelman-alternative challenge.** Test the strategy against the
+   strongest rival conception of its intent before recording it — the
+   alternatives test otherwise lives only in
+   `strategy-philosophical-grounding`'s periodic rounds, so a strategy
+   recorded between rounds would enter untested. Articulate the strongest
+   rival framing of the strategy's intent — a different end it could be
+   serving, a different shape the same end could take — sourced from the
+   tradition records the `serves` virtues cite (their `adopted` /
+   `diverged` / `chosen_over` entries) or a named candidate tradition you
+   can defend. Put that rival framing to the author via `AskUserQuestion`,
+   following the "Question mechanics" subsection above (recommendation +
+   boldness + accept-as-deferral, context delivered inside the tool). Record
+   the resolution as a dated `clarifications` entry in the adopt/diverge
+   shape — either the strategy adopts the rival framing, or it diverges
+   from it with the reason stated — ending with a provenance sentence in the
+   step-2.8 convention.
+6. **Signal.** Draft a `success_signal` — `{observable, sensor, threshold,
    is_proxy}` — and confirm it names something a sensor can actually read.
    A strategy with no plausible sensor is a sign the intent is still too
    abstract; push back before recording one.
-5. **Conditions.** Ask the author to state the circumstances this strategy
+7. **Conditions.** Ask the author to state the circumstances this strategy
    is contingent on (`attributes.conditions`) — author availability,
    architectural assumptions, another strategy holding, etc.
-6. **Edge cases and consequences.** For each of the above, surface at
+8. **Edge cases and consequences.** For each of the above, surface at
    least one edge case or downstream consequence and resolve it with the
    author. Every resolution becomes a dated `clarifications` entry —
    `{question, answer}` where `answer` ends with a provenance sentence in
    the existing convention, e.g. `"...Recorded 2026-07-05 interview."`
    (get the date via `date -u +%Y-%m-%d`, never hand-guessed).
-7. **Design-canvas support (UI-design requirements only).** When a
+9. **Design-canvas support (UI-design requirements only).** When a
    decision is about UI shape and text underspecifies it, supplement
    `AskUserQuestion` with visual aids: build mockup/variant artifacts on
    `@commons-systems/ds` and sync them to the claude.ai/design canvas via
@@ -195,7 +326,7 @@ Run this once per strategy target selected in step 1 (new or edit).
 | Duplicates | Step 1.2 overlap detection |
 | Compliance | Step 2.2 — does intent trace to a real virtue |
 | Clarity | Step 2.1 — a muddled composite statement is a step-1.1 multi-topic split, not a vague one-liner accepted as-is |
-| Correctness | Step 2.4 — does the signal actually measure the stated intent |
+| Correctness | Step 2.6 — does the signal actually measure the stated intent |
 | Relevance | Step 1 improvement-pass branch (edit mode only) |
 | Decomposition | Deliberately **not** this skill's job — a strategy is never broken into PR leaves here; that is `/align-tactics` |
 | Recommendations | The interview's own resolutions, recorded live as clarifications — there is no separate recommendations pass |

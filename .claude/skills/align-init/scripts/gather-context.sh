@@ -98,6 +98,11 @@ external_sensor_psi() {
   "$REPO_ROOT/.claude/skills/align-init/scripts/fetch-psi.sh" || true
 }
 
+external_sensor_forks() {
+  echo "=== Fork & Derivative Digest ==="
+  "$REPO_ROOT/.claude/skills/align-init/scripts/fetch-forks.sh" || true
+}
+
 {
 sensor_principle_roots
 echo ""
@@ -116,6 +121,8 @@ echo ""
 external_sensor_analytics
 echo ""
 external_sensor_psi
+echo ""
+external_sensor_forks
 } > "$OUTPUT"
 
 echo "$OUTPUT"

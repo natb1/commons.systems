@@ -1063,13 +1063,18 @@ gh_commit_is_ancestor_rest() {
 # gh_issue_view_rest.
 # Args: $1 = <N> (PR number, required); --repo owner/repo (optional).
 # Output: one JSON object on stdout matching the porcelain shape — an EXPLICIT
-#   named projection: {number, title, body, state, mergeable, mergeStateStatus,
-#   headRefName, headRefOid, labels:[{name}]}.
+#   named projection: {number, title, body, state, mergedAt, mergeable,
+#   mergeStateStatus, headRefName, headRefOid, labels:[{name}]}.
 # Byte-compat bridges over the raw REST shape:
 #   - state: lowercase `open`/`closed` → UPPERCASE via `ascii_upcase`. (REST has
 #     no distinct MERGED state — a merged PR is state `closed` — so a consumer
-#     that distinguishes the porcelain `MERGED` state must not migrate to this
-#     helper without handling that.)
+#     that distinguishes the porcelain `MERGED` state must test the `mergedAt`
+#     field below rather than string-comparing `state`.)
+#   - mergedAt: REST's `merged_at` (ISO timestamp, or null for open and for
+#     closed-unmerged PRs) passed through under the porcelain camelCase key,
+#     mirroring gh_prs_involving_rest's projection and how reconcile-graph-merged
+#     reads `.mergedAt`. This is the merged signal REST exposes: a PR is merged
+#     iff `mergedAt != null`.
 #   - mergeable: REST returns a BOOLEAN (true/false/null); the porcelain emits
 #     the GraphQL enum string `MERGEABLE`/`CONFLICTING`/`UNKNOWN` that dispatch
 #     call sites string-compare. Mapped explicitly: true→MERGEABLE,
@@ -1123,6 +1128,7 @@ gh_pr_view_rest() {
     title,
     body: (.body // ""),
     state: (.state | ascii_upcase),
+    mergedAt: .merged_at,
     mergeable: (
       if .mergeable == true then "MERGEABLE"
       elif .mergeable == false then "CONFLICTING"

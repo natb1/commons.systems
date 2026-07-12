@@ -26,12 +26,13 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-intention-store-sensor
   pr: 2863
   attempts: {}
-  markers: []
+  markers:
+    - qa-done
   strategy_fingerprint: d998d5c0754b51cfc489ee784db11b77d9b40eb91777ee0215076b0ad1a6bb69
 validates:
   - strategy-graph-drives-dispatch

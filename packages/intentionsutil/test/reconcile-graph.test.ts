@@ -83,14 +83,18 @@ describe("reconcileGraph", () => {
     expect(plan.prune).toEqual(["tactic-abandoned"]);
   });
 
-  it("defers a merged residue-bearing tactic (main-qa not yet in schema)", () => {
+  it("routes a merged residue-bearing tactic to main-qa (schema now carries the phase)", () => {
     const dir = tempDir();
     node(dir, { id: "kind-tactic", kind: "kind" });
     node(dir, { id: "tactic-residue", kind: "tactic", phase: "review" }, "# body\n\n## needs-main\n\nverify prod\n");
     const plan = reconcileGraph({ dir, prStatesFile: prStates(dir, { "tactic-residue": "merged" }), date: "2026-07-10" });
     expect(plan.prune).toEqual([]);
-    expect(plan.deferred).toEqual([{ id: "tactic-residue", reason: "main-qa phase not yet in schema (tactic-main-qa-phase)" }]);
+    expect(plan.deferred).toEqual([]);
+    expect(plan.reconciled).toContainEqual({ id: "tactic-residue", target: "main-qa" });
+    expect(plan.edit).toContain("tactic-residue");
+    // Not pruned — the node persists into its main-qa phase for post-merge verification.
     expect(existsSync(join(dir, "tactic-residue.md"))).toBe(true);
+    expect(readNode(dir, "tactic-residue").phase).toBe("main-qa");
   });
 
   it("stamps a strategy once when two sibling children are pruned in the same sweep", () => {

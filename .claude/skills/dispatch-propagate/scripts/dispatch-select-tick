@@ -451,6 +451,38 @@ if [[ -n "$RECONCILE_MERGED_OUT" ]]; then
   done <<< "$RECONCILE_MERGED_OUT"
 fi
 
+# Graph-lane analog: absorb out-of-band PR events for open graph-native tactics
+# into graph state (tactic-graph-census-recurrence Unit 1). Without this the
+# graph-native reconciler reconcile-graph-merged has no call-site, so a merged
+# graph-native node is never moved to done and the selector re-selects it every
+# tick as a stale review target. Runs unconditionally like its issue-lane
+# sibling above (it only absorbs already-merged work, safe during a main-broken
+# episode) and best-effort (a reconcile error must not abort the tick). This
+# whole script runs with the sandbox disabled (see the header note), so
+# reconcile-graph-merged's gh (TLS) + node --import tsx/esm (npm cache) needs
+# are covered without an extra wrapper.
+RECONCILE_GRAPH_OUT=$("$SCRIPT_DIR/reconcile-graph-merged") || true
+if [[ -n "$RECONCILE_GRAPH_OUT" ]]; then
+  while IFS= read -r graph_line; do
+    [[ -n "$graph_line" ]] && echo "reconcile-graph: $graph_line"
+  done <<< "$RECONCILE_GRAPH_OUT"
+fi
+
+# Standing per-tick reconciliation-debt duty (tactic-graph-census-recurrence
+# Unit 2). Runs right after the same-tick reconciler above absorbs what it can,
+# so what remains is the persistent owed-prune / orphan debt a census must
+# drain. Graph-only (no network — the per-tick duty is near-free), best-effort
+# (a failure must not abort the tick). When accumulated debt crosses the
+# configured threshold and no census node is already open, it births exactly one
+# born-parked census tactic naming the batch and lands it via graph-commit; the
+# born-parked node is the recurrence latch, so it births at most one at a time.
+CENSUS_OUT=$("$SCRIPT_DIR/dispatch-graph-census") || true
+if [[ -n "$CENSUS_OUT" ]]; then
+  while IFS= read -r census_line; do
+    [[ -n "$census_line" ]] && echo "census: $census_line"
+  done <<< "$CENSUS_OUT"
+fi
+
 # Heartbeat: refresh after the auto-merge and reconcile-merged sub-steps complete (#2104, #2512).
 refresh_lock
 

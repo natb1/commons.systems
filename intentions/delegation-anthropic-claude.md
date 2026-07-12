@@ -47,10 +47,11 @@ attributes:
       - promote the vendor's growth via spend
       - drafting the intention graph's own nodes — framing risk on the
         instrument that audits the delegatee
-      - orchestration runtime semantics — the dispatch tick's fan-out executes
+      - orchestration runtime semantics — per-phase review/qa fan-outs execute
         on the Claude Code Workflow primitive (agent() contracts, run journals,
-        concurrency caps), per strategy-graph-native-dispatch clarifications
-        24-25
+        concurrency caps); the router/launch layer is owned in-repo code (Shape
+        B, strategy-graph-native-dispatch clarifications 24-25 as amended
+        2026-07-11) — a reduction from the earlier tick-on-Workflow design
     contradictions: []
   irreversibility:
     recovery_path: substitute — open-weight models plus local inference; artifacts
@@ -68,8 +69,8 @@ attributes:
     gating individual-scale use; plan pricing structure change (prepaid
     allowance to metered) — the premise strategy-token-economy's throughput
     framing rests on; Workflow-primitive semantics change incompatibly or gate
-    individual-scale use (the tick execution substrate,
-    strategy-graph-native-dispatch clarifications 24-25)
+    individual-scale use (the per-phase fan-out substrate,
+    strategy-graph-native-dispatch clarifications 24-25 as amended 2026-07-11)
   last_assessed: 2026-07-02
   household:
     shared: false
