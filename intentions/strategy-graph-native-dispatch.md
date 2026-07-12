@@ -129,7 +129,15 @@ clarifications:
       self-corrects when signals validate. Backlog tactics, like drafts, do not
       block their strategy's /align-tactics eligibility — the rule is no
       non-draft, non-backlog child tactics. The graph-native analog of the
-      enhancement label. Recorded 2026-07-03 interview."
+      enhancement label. Recorded 2026-07-03 interview. Amended 2026-07-11:
+      drafts are no longer inert `/align-tactics` input only — a frozen/draft
+      tactic is itself selectable for a per-node `/align-tactics <id>` session
+      (see the 2026-07-11 frozen-tactic-dispatch clarification, clarification
+      52). The eligibility-blocking rule stated here — a strategy is
+      `/align-tactics`-eligible only with no non-draft, non-backlog on-path
+      children — is unchanged; what changes is that a draft now carries a
+      first-class selectable disposition rather than only being consumed by its
+      strategy's round."
   - question: What happens when a strategy's substance is edited while it has open
       tactics?
     answer: "Soft freeze plus queued re-evaluation, detected by fingerprint:
@@ -144,7 +152,15 @@ clarifications:
       with open non-draft tactics queues this freeze. This session is the first
       instance: these clarifications made round 1's plans stale, and the
       re-evaluation was executed in the same change. Recorded 2026-07-03
-      interview."
+      interview. Amended 2026-07-11: the queued re-evaluation is now
+      dispatchable at tactic granularity, not only a strategy-level round — a
+      soft-frozen tactic carries a ranking and is selected directly, running
+      `/align-tactics <tactic-id>` to re-plan it (see the 2026-07-11
+      frozen-tactic-dispatch clarification, clarification 52).
+      Fingerprint-mismatch detection and the 'stop new selections in the
+      subtree, let in-flight phases finish their current phase' behavior are
+      unchanged; only the re-evaluation's dispatch granularity changes
+      (highest-ranked soft-frozen node first, per the progression tiebreak)."
   - question: Does the backlog band scale — and does it self-correct when the graph
       changes?
     answer: "No on both counts — superseded on same-day author review: the backlog
@@ -413,7 +429,26 @@ clarifications:
       limit: workflow resume is same-session only, so a dead tick is recovered
       by the next tick re-selecting from origin/main — the same idempotent
       re-selection semantics the legacy router has. Recorded 2026-07-06
-      interview."
+      interview. Amended 2026-07-11 interview: the agent()-per-node fan-out is
+      retired. Its fatal limit surfaced in practice — a workflow-spawned
+      subagent is not given the Workflow tool, so a phase whose own logic is a
+      workflow (/review-fix, /qa-fix, both `.claude/workflows/*.js`) cannot run
+      as the tick's nested agent(); it parks at its Step 2 every time (the graph
+      already carries these parks). The launch layer is revised to Shape B: an
+      owned graph-native launch-per-phase primitive spawns each selected phase
+      as its own top-level session, where the phase skill IS the orchestrator
+      and holds the Workflow tool to build its own phase-specific fan-out. This
+      walks back this clarification's own 'no legacy spawn chain kept as
+      fallback' stance deliberately — a graph-native launch-per-phase is now the
+      primary launch layer, not a fallback; the walk-back is sound because that
+      stance was premised on agent()-per-node hosting every phase, which it
+      cannot. Selection, pacing, and transitions stay in owned code
+      (clarification 25 holds, strengthened); the phase's own graph-commit
+      transition is the durable outcome, replacing the tick's schema-validated
+      agent() return; recovery stays next-tick re-selection from origin/main,
+      and a dead phase session no longer kills sibling phases. The in-tick
+      pipelining this clarification valued is subsumed by the phase-granular
+      tick it already committed to."
   - question: What keeps the Workflow executor — proprietary, session-bound harness
       machinery — from making the router itself a rented runtime, against
       strategy-owned-orchestration?
@@ -431,7 +466,19 @@ clarifications:
       Workflow-semantics change or individual-scale gating — because the
       orchestration logic remains forkable in-repo JS/tsx while only the
       executor is rented, and the thin-script condition is what keeps re-hosting
-      that executor bounded. Recorded 2026-07-06 interview."
+      that executor bounded. Recorded 2026-07-06 interview. Amended 2026-07-11
+      interview: under Shape B (clarification 24 as amended) the router/tick no
+      longer executes on the Workflow primitive at all — the launch layer is
+      owned spawn code. The Workflow executor is now used only INSIDE per-phase
+      fan-outs (/review-fix, /qa-fix). This strengthens the thin-script
+      condition rather than weakening it, and it REDUCES the imported capture
+      surface at the router level: the capture entry on
+      delegation-anthropic-claude is reconciled in the same commit —
+      divergence.imported's orchestration-runtime item and review_trigger move
+      from 'the dispatch tick's fan-out executes on Workflow' to 'per-phase
+      review/qa fan-outs execute on Workflow; the router/launch layer is owned
+      code', a net reduction in rented-runtime surface that serves
+      strategy-owned-orchestration."
   - question: What keeps the graph's tactics aligned with the greenfield target —
       what prevents accumulating work on code the critical path deletes?
     answer: "A greenfield-relevance gate binding the align family: at /align-tactics
@@ -1060,6 +1107,146 @@ clarifications:
       transition (bootstrap parity, clarification 15), and the tick instruction
       encodes the qa-side backfill as the interim correction. Recorded
       2026-07-10 interview."
+  - question: Does explicit human dispatch of a single node override the pace curve,
+      and does the graph lane have an entrypoint for it?
+    answer: "Yes — explicit human dispatch overrides the autonomous pace curve in
+      both lanes, a gate-bypass path distinct from the pace_exempt flag
+      (clarification 14). pace_exempt is a standing per-node flag the autonomous
+      selector reads to admit one exempt worker past a paced-to-zero budget;
+      explicit dispatch is an on-demand human action that skips the
+      pace/concurrency gate for one invocation of any node, regardless of that
+      flag. The issue lane already implements it: dispatch <issue-number>'s
+      explicit-arg branch (dispatch-select-tick:778-818) resolves and exits
+      before both the graph selector and the pace gate, so it skips the
+      concurrency gate (dispatch-tick:30). The graph lane has no equivalent —
+      dispatch-resolve-arg accepts positive integers only, so dispatch <node-id>
+      errors and the only explicit path is invoking dispatch-graph-execute by
+      hand. Closing that gap is tactic-graph-explicit-node-dispatch. Explicit
+      dispatch overrides the pace gate ONLY: it still respects the uniform
+      node-id live-session/worktree claim (it refuses a node already held rather
+      than force-preempting into a graph-commit conflict), and never overrides
+      genuine token exhaustion (the --exhausted hard floor), parity with
+      clarification 14. It never edits dispatch.config/target-workers.json — it
+      bypasses the gate at selection, it does not change the curve. Recorded
+      2026-07-11 interview."
+  - question: A phase whose own logic is a workflow (/review-fix, /qa-fix) cannot
+      run as the tick's nested agent() — how does the router launch such a
+      phase?
+    answer: "Shape B — the phase skill is its own top-level orchestrator. An owned
+      graph-native launch-per-phase primitive (a graph-lane sibling of the
+      retired dispatch-launch-worker, or an extension of the pace-independent
+      dispatch-graph-execute path) spawns each selected phase as its own
+      top-level session on sonnet; that session holds the Workflow tool and the
+      phase skill builds its own phase-specific fan-out, spawning opus subagents
+      only when the work calls for it (an implementation unit's Recommended
+      model, or an explicitly opus-instructed review such as /code-review max).
+      The dispatch-graph-tick agent()-per-node fan-out
+      (`.claude/workflows/dispatch-graph-tick.js`) is retired — it is the exact
+      structure that cannot host a workflow-phase, because a workflow-spawned
+      subagent is denied the Workflow tool (observed in every park, not
+      theorized). No structured session return is needed: the phase writes its
+      own phase transition via graph-commit (clarification 1,
+      tactic-graph-router-transitions), so durable graph state is the outcome
+      (condition 9 strengthened). Concurrency cap and pacing stay in owned
+      selection code. Recovery is next-tick re-selection from origin/main;
+      independent phase sessions mean a dead review session cannot kill sibling
+      phases. This resolves a live graph-internal contradiction: clarification
+      24 assumed 'tactic phase → phase skill' ran fine as a nested agent(), but
+      /review-fix and /qa-fix were built AS workflows requiring the Workflow
+      tool — the two could not both hold. Recorded 2026-07-11 interview."
+  - question: Does the review phase re-wrap /code-review as a findings-only finder,
+      or trust the review skills' own built-in review-and-fix?
+    answer: "Trust the built-in review+fix. The review phase runs /code-review max
+      and /security-review with their defaults, both on opus, and works with
+      whatever they output and edit — the 'You are a findings-only code-review
+      subagent' framing (`.claude/workflows/review-fix.js:324,335`) is dropped,
+      along with the findings-only wrapper and the separate adversarial-verify →
+      opus-fix pipeline FOR those two sources (they carry their own
+      verification). Only the residue those skills do not auto-fix is handled:
+      an opus subagent classifies it and files follow-ups through the
+      pre-existing classify → defer → file logic. Dedup, deferred-filing, and
+      the other review steps are untouched. This refines clarification 19's
+      disposition mechanics for the code-review/security-review sources
+      specifically; it does not change the three-way disposition doctrine
+      itself. Recorded 2026-07-11 interview."
+  - question: Frozen (undecomposed or soft-frozen) tactics carry a ranking — are
+      they selectable, and what runs when the dispatch script picks one?
+    answer: "Yes — decomposition and re-evaluation are dispatchable, ranked,
+      per-node work, not a manual-only step. A frozen node is a draft/raw tactic
+      (never decomposed — the retain-not-refine byproducts of clarification 6)
+      or a soft-frozen tactic (a planned tactic whose strategy substance
+      fingerprint changed, clarification 10). Every node carries calculated
+      attention derived at read time regardless of phase (clarification 11), so
+      a frozen node is ranked exactly like an executable one — \"ranked even
+      when frozen\" is already true; what this adds is that the selector no
+      longer excludes frozen nodes from the eligible pool. When the dispatch
+      script selects a frozen node, the session runs `/align-tactics <node-id>`
+      on it — extending `/align-tactics` to accept a tactic target (today it is
+      strategy-only: \"never selects its own target\"), the decomposition-skill
+      analog of tactic-phase-skill-node-targets re-keying the execution phase
+      skills. Selection resolves over a pool of frozen nodes: a strategy is
+      selectable when it has frozen descendants (or is itself undecomposed — the
+      zero-tactic initial-decomposition case), and selecting a strategy descends
+      to its highest-ranking frozen subtree node; a frozen tactic may rank
+      higher than its parent strategy and be selected directly. The router runs
+      `/align-tactics` on the resolved highest-ranked frozen node. Ties in
+      calculated attention break toward the more-progressed node by the phase
+      ordinal (draft < align-tactics < implement < fix < qa < review < main-qa <
+      done, so review outranks implement; equivalently a concrete child tactic
+      outranks its abstract parent strategy) — finish in-flight
+      decomposition/work before opening new. Claiming and worktree isolation key
+      on the RESOLVED node the session runs on, not the selection entry: a
+      strategy-entry and a direct-tactic selection that land on the same node
+      collide on one claim and dedupe via the uniform node-id
+      live-session/worktree rule (clarification 13); a zero-tactic strategy
+      resolves to itself → `/align-tactics <strategy-id>`, the classic initial
+      decomposition, unchanged. This supersedes the \"drafts are inert
+      `/align-tactics` input only\" implication of clarification 9 (drafts stay
+      non-blocking for strategy eligibility but gain a selectable disposition)
+      and extends clarification 10's soft-freeze re-evaluation from a
+      strategy-level round to per-tactic dispatch. Implementation retained as a
+      draft tactic (tactic-graph-frozen-tactic-dispatch). Recorded 2026-07-11
+      interview."
+  - question: After a phase completes cleanly (no variance/escalation), who
+      validates CI and who advances the node — and does the post-review merge
+      need author intervention?
+    answer: "Steady-state division of labor, split worker/tick. The phase worker —
+      implement, qa, and review alike — marks its phase complete and does NOT
+      itself validate CI or gate the next step on it; the tick reconciler
+      validates CI. Each tick reads the node's PR CI verdict: a tick where CI is
+      still in progress is skipped for that node (no forward transition, no
+      failure — it is retried next tick); a green-CI tick with the node ready
+      performs the next transition and dispatches the next phase worker; a
+      red-CI tick routes to the fix interrupt (clarification 18, parity with
+      dispatch-phase's CI-verdict-before-labels ordering). For review, the 'next
+      task' on the green-CI tick is the merge itself: the tick auto-merges the
+      reviewed PR without author intervention when green CI +
+      mergeable==MERGEABLE + the node's `reviewed` marker are all present. This
+      moves the merge/arm responsibility from the transition writer and the
+      review worker — where clarification 47 (review-worker arming) and
+      tactic-graph-router-transitions (the transition writer 'arms gh auto-merge
+      at clean review completion') placed it — onto the tick reconciler, which
+      arms once per tick under a fresh in-turn grant (dissolving clarification
+      47's per-worker-arming classifier hazard while keeping its phrasing
+      doctrine intact: arming instructions state the human authorization as fact
+      and name the commands, never arguing with or predicting the permission
+      layer). The tactic-scope-fingerprint re-check that clarification 36 sites
+      'before arming auto-merge' rides with the arming to the tick; its net
+      guarantee — no merge until the in-flight phase's fresh read postdates the
+      last scope edit — is unchanged. This is the steady state that
+      clarification 15's bootstrap-transition doctrine emulates by hand (there
+      the completing worker reads the CI/mergeability sensors at transition
+      time); it retires when tactic-graph-router-transitions and the router are
+      live. Concrete gap this records against: transition-node's node-lane arm
+      step readies the PR then calls the LABEL-gated dispatch-auto-merge, whose
+      eligibility requires the gh dispatch:reviewed label the node lane never
+      writes, so a reviewed node-lane PR is readied+mergeable but silently
+      skipped and held for human merge (observed on PR #2859, merged by hand
+      2026-07-11) — while the tick-workflow's own gh-native `gh pr merge --auto
+      --squash` path merged 8 of 9 review PRs autonomously on tick +3
+      (clarification 47). Closing that split into a single tick-owned,
+      label-free, marker-keyed merge is retained as draft tactic
+      tactic-graph-tick-node-lane-auto-merge. Recorded 2026-07-11 interview."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -1122,7 +1309,10 @@ attributes:
     - workflow scripts stay thin composition — selection, transition, and
       provisioning mechanics live in owned, offline-testable code (tsx modules
       and primitive scripts) that workflow agents invoke; the Workflow executor
-      orchestrates but never becomes the sole home of router logic
+      orchestrates but never becomes the sole home of router logic; under Shape
+      B (clarification 24 amended 2026-07-11) the router/launch layer is itself
+      owned code and the Workflow executor is used only inside per-phase
+      fan-outs, never as the router substrate
     - every office_hours park writes recoverable context into the node at park
       time — reason, a best-next-steps recommendation
       (office_hours.recommendation), and any state a fresh session needs;

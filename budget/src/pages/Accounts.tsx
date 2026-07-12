@@ -29,6 +29,8 @@ import {
   computeAggregateTrend,
   computeNetWorth,
   computeCashFlow,
+  computeAverageWeeklySpending,
+  computeProjectedRunway,
   computeDerivedBalances,
   type AggregatePoint,
   type NetWorthPoint,
@@ -285,7 +287,7 @@ function tone(n: number): "favorable" | "unfavorable" | undefined {
   return undefined;
 }
 
-function HeadlineMetrics({ report }: { report: IncomeStatementReport }) {
+function HeadlineMetrics({ report, runwayMonths }: { report: IncomeStatementReport; runwayMonths: number | null }) {
   const net = report.netIncome.current;
   const netChange = report.cashFlow.current.netChange;
   return (
@@ -293,6 +295,7 @@ function HeadlineMetrics({ report }: { report: IncomeStatementReport }) {
       <Metric label="Net income" value={formatCurrency(net)} delta={report.currentLabel} deltaTone={tone(net)} />
       <Metric label="Savings rate" value={formatPercent(report.savingsRate.current)} delta={report.currentLabel} />
       <Metric label="Net change" value={formatSignedCurrency(netChange)} delta={report.currentLabel} deltaTone={tone(netChange)} />
+      {runwayMonths !== null ? <Metric label="Projected runway" value={runwayMonths.toFixed(1) + " months"} /> : null}
     </Card>
   );
 }
@@ -440,6 +443,7 @@ interface LoadedData {
   derivedBalances: DerivedAccountBalance[];
   report: IncomeStatementReport | null;
   chartData: ChartData | null; // null → render chart-error fallback
+  runwayMonths: number | null; // null → no runway metric (no data / chart fallback)
 }
 
 type LoadState =
@@ -484,22 +488,25 @@ function useAccountsData(options: RenderPageOptions): LoadState {
         const report = computeIncomeStatementReport(transactions, Date.now());
 
         let chartData: ChartData | null;
+        let runwayMonths: number | null = null;
         try {
           const aggregateTrend = computeAggregateTrend(periods, transactions);
           const trendWeeks = aggregateTrend.map(p => ({ label: p.weekLabel, ms: p.weekMs }));
           const { points: netWorthPoints } = computeNetWorth(transactions, statements, trendWeeks);
           const cashFlowPoints = computeCashFlow(netWorthPoints);
           chartData = { aggregateTrend, netWorthPoints, cashFlowPoints };
+          runwayMonths = computeProjectedRunway(netWorthPoints, computeAverageWeeklySpending(periods));
         } catch (chartError) {
           const kind = classifyError(chartError);
           if (kind === "programmer" || kind === "data-integrity" || kind === "range") throw chartError;
           reportError(chartError);
           logError(chartError, { operation: "compute-chart" });
           chartData = null; // → <p className="chart-error">Chart unavailable.</p>
+          runwayMonths = null;
         }
 
         if (cancelled) return;
-        setState({ status: "loaded", data: { rows, derivedBalances, report, chartData } });
+        setState({ status: "loaded", data: { rows, derivedBalances, report, chartData, runwayMonths } });
       } catch (error) {
         if (cancelled) return;
         if (!deferProgrammerError(error)) logError(error, { operation: "router-render" });
@@ -516,7 +523,7 @@ function useAccountsData(options: RenderPageOptions): LoadState {
 function LoadedAccounts({ data }: { data: LoadedData }) {
   return (
     <>
-      {data.report !== null ? <HeadlineMetrics report={data.report} /> : null}
+      {data.report !== null ? <HeadlineMetrics report={data.report} runwayMonths={data.runwayMonths} /> : null}
       {data.report !== null ? <IncomeStatement report={data.report} /> : null}
       {data.report !== null ? <CashFlowSummaryTable report={data.report} /> : null}
       <DivergenceWarning derivedBalances={data.derivedBalances} />

@@ -25,8 +25,7 @@ phase: null
 execution: null
 validates:
   - strategy-autonomous-execution
-blocked_by:
-  - tactic-dispatch-daemon-liveness-sensor
+blocked_by: []
 office_hours:
   reason: "Needs the author: the unattended-drain reading requires a real logout
     window — log out (no interactive claude session), leave the managed daemon

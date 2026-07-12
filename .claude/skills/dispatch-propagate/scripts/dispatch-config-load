@@ -7,7 +7,7 @@
 # the normalized result to stdout.
 #
 # Usage:
-#   dispatch-config-load <projects|jit|statements|target-workers|epic|auto-merge|force-opus|strict-preflight|sweep|phase-model-policy|selection-lock>
+#   dispatch-config-load <projects|jit|statements|target-workers|epic|auto-merge|force-opus|strict-preflight|sweep|phase-model-policy|selection-lock|census>
 #
 # Config files live in <project-root>/dispatch.config/. The project root is
 # resolved via resolve_project_root (lib.sh).
@@ -318,6 +318,27 @@
 #     "max_hold_seconds": 300
 #   }
 #
+# ---- Schema: census.json ----------------------------------------------------
+#
+# Top-level object with one optional tunable for the standing per-tick
+# reconciliation-debt duty (`dispatch-graph-census`). This config type follows
+# the GENERIC absent→inert convention (see "Stdout protocol" above): when the
+# file is absent, no-config is emitted and dispatch-graph-census uses its
+# baked-in default threshold. Only the birth THRESHOLD is config — the debt and
+# the census node itself are graph state (parity with the fuse-breaker
+# doctrine).
+#
+#   threshold               number (optional, must be a non-negative integer) —
+#                           the accumulated reconciliation debt at or above which
+#                           the duty births a born-parked census tactic. The
+#                           default (10) is baked into dispatch-graph-census, not
+#                           here. Absent → dispatch-graph-census uses its default.
+#
+# Example (see census.example.json):
+#   {
+#     "threshold": 10
+#   }
+#
 set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
@@ -326,9 +347,9 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
 CONFIG_TYPE="${1:-}"
 case "$CONFIG_TYPE" in
-  projects|jit|statements|target-workers|epic|auto-merge|force-opus|strict-preflight|sweep|phase-model-policy|selection-lock) ;;
+  projects|jit|statements|target-workers|epic|auto-merge|force-opus|strict-preflight|sweep|phase-model-policy|selection-lock|census) ;;
   *)
-    echo "error: usage: dispatch-config-load <projects|jit|statements|target-workers|epic|auto-merge|force-opus|strict-preflight|sweep|phase-model-policy|selection-lock>" >&2
+    echo "error: usage: dispatch-config-load <projects|jit|statements|target-workers|epic|auto-merge|force-opus|strict-preflight|sweep|phase-model-policy|selection-lock|census>" >&2
     exit 2
     ;;
 esac
@@ -739,6 +760,34 @@ case "$CONFIG_TYPE" in
           # the dispatch-acquire-lock bash `(( age > MAX_HOLD_SECONDS ))` integer
           # comparison, raise an arithmetic error, and break the staleness check.
           "max_hold_seconds must be a whole number (integer), got \($cfg.max_hold_seconds)"
+        else
+          empty
+        end)
+      end
+    ' "$CONFIG_FILE")
+    ;;
+  census)
+    # top-level value must be an object; the single tunable is optional.
+    # `dispatch-graph-census` substitutes a baked-in default (10) when the field
+    # is absent, so absence is silent — only the type of a present field is
+    # checked. threshold is a debt count, so a non-negative integer.
+    ERRORS=$(jq -r '
+      if type != "object" then
+        "top-level value must be a JSON object, got \(type)"
+      else
+        . as $cfg |
+        (if ($cfg | has("threshold")) | not then
+          empty
+        elif ($cfg.threshold | type) != "number" then
+          "threshold must be a number if present, got \($cfg.threshold | type)"
+        elif $cfg.threshold < 0 then
+          "threshold must be >= 0 if present, got \($cfg.threshold)"
+        elif ($cfg.threshold | tostring | test("^[0-9]+$") | not) then
+          # Mirror the env-override contract (^[0-9]+$): reject any value whose
+          # rendered form is not a plain integer. This catches fractions (0.5)
+          # and scientific notation (1e6 -> jq renders "1E+6"); both would reach
+          # the graph-census-debt.ts integer threshold check and be rejected there.
+          "threshold must be a whole number (integer), got \($cfg.threshold)"
         else
           empty
         end)

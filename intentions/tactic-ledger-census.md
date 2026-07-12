@@ -23,12 +23,13 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-ledger-census
   pr: 2860
   attempts: {}
-  markers: []
+  markers:
+    - qa-done
   strategy_fingerprint: 7e5a9be9d1d3720fc204d6e801cc3f20cb1f3c409011a9ff700944db7b525268
 validates: []
 blocked_by: []
