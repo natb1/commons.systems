@@ -125,5 +125,11 @@ attributes:
     tactic-reading-chunk-18-dialectic-method (Theaetetus midwifery, Meno
     elenchus), added to the curriculum for that purpose"
   last_assessed: 2026-07-09
+  household:
+    shared: false
+    basis: The author's virtue-layer doctrinal articulation held on trust until
+      re-derived; no household attachment.
+    consent: []
+    preferences: []
 ---
 # Virtue-layer articulation delegated to Claude and the canonical traditions until personally re-derived

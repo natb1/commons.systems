@@ -21,6 +21,14 @@ recovers: []
 clarifications: []
 tooling_goals: []
 success_signal: null
+attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: false
+rounds: null
 attributes:
   delegatee: subscription streaming and photo/archive services
   delegated: music, video, photo, and personal-archive libraries
@@ -40,5 +48,11 @@ attributes:
   non_delegable_floor: unassessed
   review_trigger: selection as a recovery domain (strategy-domain-selection)
   last_assessed: 2026-07-02
+  household:
+    shared: true
+    basis: Household music, video, and family photo/archive libraries; a recovery
+      move changes family members' access to shared media.
+    consent: []
+    preferences: []
 ---
 # Media libraries delegated to subscription streaming and photo services

@@ -65,5 +65,12 @@ attributes:
   review_trigger: the local-first migration removing an app's auth surface; GitHub
     OAuth policy changes hostile to individual-scale or household use
   last_assessed: 2026-07-07
+  household:
+    shared: true
+    basis: The rationale states sign-in is the only path to household-shared media
+      and author drafts, and every household member needs a GitHub account to
+      reach family attachments.
+    consent: []
+    preferences: []
 ---
 # App sign-in identity delegated to GitHub OAuth via Firebase Auth
