@@ -1247,6 +1247,41 @@ clarifications:
       (clarification 47). Closing that split into a single tick-owned,
       label-free, marker-keyed merge is retained as draft tactic
       tactic-graph-tick-node-lane-auto-merge. Recorded 2026-07-11 interview."
+  - question: What replaces the dispatch:main-broken gh-issue latch when origin/main
+      goes red — and does the announcement surface stay gh-based?
+    answer: "One graph node carries latch, announcement, and work item. The tick
+      gains a repo-health gate: on detecting red it find-or-creates a single
+      tactic node (tactic-main-red-<shortsha> shape) with the redacted diagnosis
+      in its body and pace-exempt priority attention — composing with the
+      recorded pace-exempt doctrine (bypasses the pace gate, never the
+      --exhausted floor) — selectable by the router like any tactic, so the
+      fleet fixes main autonomously. Node open ⇔ gate latched (the queue flows
+      during the red episode); the sensor observing green completes the node and
+      re-arms the gate. No gh issue, no label, no re-enabled features. This
+      supersedes tactic-dispatch-legacy-rewire Unit 1 recorded latitude
+      (announcement surface: implementer choice, may stay gh-based for human
+      visibility): the steelman — keep a gh issue as the notification mirror —
+      was considered and diverged from, because re-enabling issues for
+      announcements re-imports exactly the dependency this strategy recovers
+      (recovers: delegation-github); red-main visibility is owned surfaces job.
+      Sequencing hazard: dispatch-select-tick step 1c reads the open
+      dispatch:main-broken issue as the live latch, so closing the 2026-07-12
+      latch issue or re-disabling has_issues before the graph latch replaces
+      that reader freezes the queue mid-red or makes diagnose-main refile —
+      legacy-latch cleanup is gated on the graph flow landing. Mechanics
+      retained in draft tactic-graph-main-self-heal. Recorded 2026-07-12
+      interview."
+  - question: "The 2026-07-12 red-main episode: dispatch-diagnose-main found repo
+      issues disabled and re-enabled has_issues to satisfy its own gh-issue spec
+      — what does it teach?"
+    answer: The legacy drain state is a ratchet, and a legacy skill spec is never
+      license to unwind it. The drain proof included issues-disabled; the
+      diagnose job re-enabling the feature (then filing the latch issue)
+      regressed that proof and violated the existing condition that no new work
+      enters via gh. Recorded as a standing drain-state-monotonicity condition
+      alongside this clarification; the graph-native self-heal flow (same-date
+      clarification) removes the spec pressure that caused the deviation.
+      Recorded 2026-07-12 interview.
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -1359,5 +1394,8 @@ attributes:
       decision context; ancestry never substitutes for the node body's complete
       plan, and a plan-vs-ancestry conflict parks to office_hours with a
       recommendation rather than self-adjusting scope
+    - the legacy drain state is monotonic — no dispatch surface re-enables a
+      disabled GitHub feature (has_issues included); a skill whose spec requires
+      a disabled feature is a defect of the skill, never license to re-enable
 ---
 # Dispatch runs on the graph — orchestration state lives in intention nodes, worked through the align skill family
