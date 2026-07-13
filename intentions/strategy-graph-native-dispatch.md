@@ -1247,6 +1247,92 @@ clarifications:
       (clarification 47). Closing that split into a single tick-owned,
       label-free, marker-keyed merge is retained as draft tactic
       tactic-graph-tick-node-lane-auto-merge. Recorded 2026-07-11 interview."
+  - question: What replaces the dispatch:main-broken gh-issue latch when origin/main
+      goes red — and does the announcement surface stay gh-based?
+    answer: "Main health is a sensor, and the self-heal flows through the general
+      sensor machinery, not bespoke tick gating. Author-dictated encoding: (1)
+      main-health is a registered sensor (SensorRegistry, local-first —
+      own-pipeline CI status per read-sensors.ts doctrine) reading origin/main
+      HEAD check conclusions; (2) the graph tick — the greenfield workflow
+      automation — runs it each tick, and on a failing read find-or-creates the
+      fix tactic (tactic-main-red-<shortsha> shape, one open node per episode,
+      redacted diagnosis in the body); (3) the standing signal owner is
+      strategy-main-health (kind: strategy, parent:
+      strategy-autonomous-execution), created 2026-07-13 as the persistent home
+      of success_signal {sensor: main-health, threshold: green} — a strategy per
+      the same-date persistent-layer doctrine (standing structure never lives on
+      transient tactics); the fix tactic carries serves + validates edges to
+      strategy-main-health and its own success_signal {sensor: main-health,
+      threshold: green}, so the same sensor that detected the episode validates
+      the fix: threshold-met completes the tactic, re-arming detection (the
+      one-success_signal-per-node limit binds per node; two nodes may reference
+      one sensor); (4) rank by inheritance: strategy-main-health carries a
+      standing authored boost 100 the fix tactic inherits undecayed through the
+      normal downward attention flow — superseding the earlier-same-date
+      creation-time recompute-graph-max machine-authored boost (no
+      machine-authored boosts remain in the model); the automation still sets
+      pace_exempt: true on the fix tactic at creation (bypasses the pace gate,
+      never the --exhausted floor). The former accepted edge — blocked_by
+      compounding overtaking mid-episode — dissolves: blocking is orthogonal to
+      boosting per the same-date clarification on strategy-graph-drives-dispatch
+      (authored rank never flows backward; blockers serialize by max-based
+      precedence). Dominance of the 100 boost is maintained by the write-path
+      guard condition recorded alongside, never by recompute. Scope: a
+      main-specific instance of the general signal-ranking rule (same-date
+      signal-ranking clarification); strategy-signal failures keep routing to
+      /align-tactics. No gh issue, no label, no re-enabled features. Supersedes
+      tactic-dispatch-legacy-rewire Unit 1 recorded latitude on the announcement
+      surface (steelman — a gh-issue notification mirror — considered and
+      diverged from: re-enabling issues re-imports the dependency this strategy
+      recovers; visibility is owned surfaces job). Sequencing hazard:
+      dispatch-select-tick step 1c reads the open dispatch:main-broken issue as
+      the live latch, so legacy-latch cleanup (close the latch issue, re-disable
+      has_issues) is gated on the sensor flow replacing that reader. Mechanics
+      retained in draft tactic-graph-main-self-heal. Recorded 2026-07-12
+      interview; encoding refined and dictated by the author, recorded
+      2026-07-13 interview; signal ownership moved to strategy-main-health with
+      boost inheritance and the write-path guard (superseding the
+      fix-tactic-only signal home and the recompute-max machine boost), recorded
+      in a later 2026-07-13 interview."
+  - question: "The 2026-07-12 red-main episode: dispatch-diagnose-main found repo
+      issues disabled and re-enabled has_issues to satisfy its own gh-issue spec
+      — what does it teach?"
+    answer: The legacy drain state is a ratchet, and a legacy skill spec is never
+      license to unwind it. The drain proof included issues-disabled; the
+      diagnose job re-enabling the feature (then filing the latch issue)
+      regressed that proof and violated the existing condition that no new work
+      enters via gh. Recorded as a standing drain-state-monotonicity condition
+      alongside this clarification; the graph-native self-heal flow (same-date
+      clarification) removes the spec pressure that caused the deviation.
+      Recorded 2026-07-12 interview.
+  - question: How is resolution work for a failing signal ranked — does each signal
+      carry ranking configuration?
+    answer: "Yes, implicitly: a signal's resolution-ranking configuration IS the
+      owning node's authored boost. Resolution work created for a failing signal
+      attaches under the owner (serves/parent) and inherits the owner's boost
+      through the existing undecayed downward attention flow — no new rank
+      machinery and no per-signal rank field (steelman — an explicit
+      resolution_rank field on success_signal — considered and diverged from: it
+      would create a second ranking currency beside the attention model).
+      Default: no automatic elevation — a failing signal's resolution ranks
+      wherever the owning node's existing boost and position put it (often near
+      0), deliberately lower priority; strategy-signal failures keep routing to
+      /align-tactics, whose tactics inherit via serves, so the existing flow is
+      the default implementation. Main-health is the one signal whose owner
+      (strategy-main-health) carries a standing very-high boost (100), kept
+      dominant by the write-path guard condition recorded alongside. Recorded
+      2026-07-13 interview (author-dictated)."
+  - question: May standing graph structure — a signal owner, a standing boost
+      carrier — live on a tactic?
+    answer: "No. Tactics are transient by definition; persistent structure lives on
+      strategy (or virtue) nodes. This is why the main-health signal home is
+      strategy-main-health rather than the auto-created fix tactic or a standing
+      tactic: the fix tactic exists only per episode, and a standing tactic
+      would put permanent structure on a transient kind. The constraint is to be
+      encoded into the align-strategy skill itself so it stays visible whenever
+      the persistent layer is modified (draft
+      tactic-align-persistent-layer-doctrine). Recorded 2026-07-13 interview
+      (author-dictated)."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -1359,5 +1445,14 @@ attributes:
       decision context; ancestry never substitutes for the node body's complete
       plan, and a plan-vs-ancestry conflict parks to office_hours with a
       recommendation rather than self-adjusting scope
+    - the legacy drain state is monotonic — no dispatch surface re-enables a
+      disabled GitHub feature (has_issues included); a skill whose spec requires
+      a disabled feature is a defect of the skill, never license to re-enable
+    - "strategy-main-health's standing boost (100) stays the graph's top
+      authored rank, enforced at the write path rather than by ranking logic
+      (parsimony — the node is simply boosted, no specialized rank treatment):
+      validate-graph/graph-commit refuses a commit that authors another boost or
+      override at or above it, or that reduces it, unless the commit carries an
+      explicit author override"
 ---
 # Dispatch runs on the graph — orchestration state lives in intention nodes, worked through the align skill family

@@ -172,6 +172,85 @@ describe("evaluateSelection", () => {
     expect(r.exitCode).toBe(0);
   });
 
+  it("a per-strategy map fresh against BOTH serving strategies passes", () => {
+    const dir = tempDir();
+    seed(dir, anode({ id: "strategy-a", kind: "strategy", statement: "Strategy A." }));
+    seed(dir, anode({ id: "strategy-b", kind: "strategy", statement: "Strategy B." }));
+    const fpA = strategyFingerprint(readNode(dir, "strategy-a"));
+    const fpB = strategyFingerprint(readNode(dir, "strategy-b"));
+    seed(
+      dir,
+      anode({
+        id: "tactic-x",
+        kind: "tactic",
+        phase: "qa",
+        serves: ["strategy-a", "strategy-b"],
+        execution: {
+          branch: "b",
+          pr: 1,
+          attempts: {},
+          markers: [],
+          strategy_fingerprint: { "strategy-a": fpA, "strategy-b": fpB },
+        },
+      }),
+    );
+    const r = evaluateSelection({ nodeId: "tactic-x", selectedPhase: "qa", dir, stamp: null });
+    expect(r.exitCode).toBe(0);
+  });
+
+  it("exit 12 when the map entry for ONE serving strategy is stale (naming that strategy)", () => {
+    const dir = tempDir();
+    seed(dir, anode({ id: "strategy-a", kind: "strategy", statement: "Strategy A." }));
+    seed(dir, anode({ id: "strategy-b", kind: "strategy", statement: "Strategy B." }));
+    const fpA = strategyFingerprint(readNode(dir, "strategy-a"));
+    seed(
+      dir,
+      anode({
+        id: "tactic-x",
+        kind: "tactic",
+        phase: "qa",
+        serves: ["strategy-a", "strategy-b"],
+        // Fresh against strategy-a, deliberately stale against strategy-b.
+        execution: {
+          branch: "b",
+          pr: 1,
+          attempts: {},
+          markers: [],
+          strategy_fingerprint: { "strategy-a": fpA, "strategy-b": "0".repeat(64) },
+        },
+      }),
+    );
+    const r = evaluateSelection({ nodeId: "tactic-x", selectedPhase: "qa", dir, stamp: null });
+    expect(r.exitCode).toBe(12);
+    expect(r.stderr[0]).toMatch(/fingerprint:.*strategy-b substance changed/);
+  });
+
+  it("a serving strategy ABSENT from the map is never stale (per-strategy null)", () => {
+    const dir = tempDir();
+    seed(dir, anode({ id: "strategy-a", kind: "strategy", statement: "Strategy A." }));
+    seed(dir, anode({ id: "strategy-b", kind: "strategy", statement: "Strategy B." }));
+    const fpA = strategyFingerprint(readNode(dir, "strategy-a"));
+    seed(
+      dir,
+      anode({
+        id: "tactic-x",
+        kind: "tactic",
+        phase: "qa",
+        serves: ["strategy-a", "strategy-b"],
+        // Only strategy-a is stamped; strategy-b, absent from the map, cannot freeze.
+        execution: {
+          branch: "b",
+          pr: 1,
+          attempts: {},
+          markers: [],
+          strategy_fingerprint: { "strategy-a": fpA },
+        },
+      }),
+    );
+    const r = evaluateSelection({ nodeId: "tactic-x", selectedPhase: "qa", dir, stamp: null });
+    expect(r.exitCode).toBe(0);
+  });
+
   it("scope fingerprint is stable across state-field edits and changes on a body edit", () => {
     const dir = tempDir();
     seed(dir, anode({ id: "tactic-s", kind: "tactic", phase: "implement" }));

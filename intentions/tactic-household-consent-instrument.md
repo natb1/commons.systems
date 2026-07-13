@@ -34,33 +34,12 @@ execution:
   attempts: {}
   markers:
     - qa-done
+    - reviewed
   strategy_fingerprint: d1dccff612b79832f9a7a1ef5dad00207ffc8ff8dab1e7275a2c9e4a64b639f0
 validates:
   - strategy-household-shared-attachments
 blocked_by: []
-office_hours:
-  reason: "Graph-tick review worker cannot run /review-fix: the skill Step 2
-    requires the Workflow tool (fans out finder/verify/Opus-fix agents over
-    .claude/workflows/review-fix.js) and that tool is absent from the graph-tick
-    execution context (not in base toolset, deferred list, or ToolSearch). The
-    skill DOES accept node targets, so this is not
-    skill-node-target-unsupported; it is a mechanical tooling-environment gap.
-    Inline scans already ran clean: CodeQL 0 open alerts, erosion 0 findings,
-    deps=false (no dep audit), surface=code app_or_rules=true. PR #2864, CI
-    passing; diff = delegation-record frontmatter household markings + new
-    packages/intentionsutil/scripts/household-consent-report.ts + tests. Next
-    steps: run /review-fix tactic-household-consent-instrument in a full
-    interactive session (which has the Workflow tool), then run
-    dispatch-propagate/scripts/transition-node
-    tactic-household-consent-instrument --set-pr 2864, then MANUALLY clear this
-    office_hours block (no unpark primitive exists)."
-  since: 2026-07-12
-  recommendation: "Complete the review in a full interactive session that provides
-    the Workflow tool: invoke /review-fix tactic-household-consent-instrument,
-    let it run its finder/classify/verify/fix fan-out and post its PR comment,
-    then it (or you) runs transition-node --set-pr 2864 to record the reviewed
-    marker. Finally clear office_hours by hand (edit via graph-commit) since
-    there is no unpark primitive."
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}

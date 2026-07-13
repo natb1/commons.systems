@@ -19,6 +19,22 @@ const githubFixture: GithubSignals = {
   stars: 42,
   forks: 7,
   watchers: 15,
+  forksDetail: [
+    {
+      owner: "active-derivative",
+      repoUrl: "https://github.com/active-derivative/commons.systems",
+      createdAt: "2026-02-10T00:00:00Z",
+      pushedAt: "2026-06-28T00:00:00Z",
+      stars: 4,
+    },
+    {
+      owner: "drive-by-forker",
+      repoUrl: "https://github.com/drive-by-forker/commons.systems",
+      createdAt: "2026-03-05T00:00:00Z",
+      pushedAt: "2026-03-05T00:00:00Z",
+      stars: 0,
+    },
+  ],
   traffic: {
     clonesCount: 18,
     clonesUniques: 6,
@@ -138,6 +154,30 @@ describe("ProjectSignalsPanel — full snapshot", () => {
     const texts = container.textContent ?? "";
     expect(texts).toContain("18"); // clonesCount
     expect(texts).toContain("312"); // viewsCount
+  });
+
+  it("renders the forks & derivatives list with each fork's owner linked to its repo", () => {
+    const { container } = render(<ProjectSignalsPanel snapshot={fullSnapshot} />);
+    const texts = container.textContent ?? "";
+    expect(texts).toContain("Forks & derivatives");
+    expect(texts).toContain("active-derivative");
+    expect(texts).toContain("drive-by-forker");
+    const links = Array.from(container.querySelectorAll(".project-signals-fork-owner")).map((a) =>
+      a.getAttribute("href"),
+    );
+    expect(links).toContain("https://github.com/active-derivative/commons.systems");
+    expect(links).toContain("https://github.com/drive-by-forker/commons.systems");
+  });
+
+  it("marks a fork active when pushedAt > createdAt and drive-by otherwise", () => {
+    const { container } = render(<ProjectSignalsPanel snapshot={fullSnapshot} />);
+    const activity = Array.from(container.querySelectorAll(".project-signals-fork-activity")).map((el) => ({
+      text: el.textContent,
+      active: el.classList.contains("is-active"),
+    }));
+    // active-derivative pushed after created → active; drive-by-forker pushed == created → drive-by.
+    expect(activity).toContainEqual({ text: "active", active: true });
+    expect(activity).toContainEqual({ text: "drive-by", active: false });
   });
 
   it("renders each GA4 app name with its page views and sessions", () => {
@@ -346,5 +386,11 @@ describe("ProjectSignalsPanel — GitHub without traffic", () => {
     expect(texts).toContain("2");  // forks
     expect(texts).not.toContain("clones"); // no traffic labels
     expect(texts).not.toContain("views (14d)");
+  });
+
+  it("renders no forks & derivatives list when forksDetail is absent", () => {
+    const { container } = render(<ProjectSignalsPanel snapshot={snapshotNoTraffic} />);
+    expect(container.querySelector(".project-signals-forks")).toBeNull();
+    expect(container.textContent ?? "").not.toContain("Forks & derivatives");
   });
 });

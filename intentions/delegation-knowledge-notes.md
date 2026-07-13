@@ -49,5 +49,11 @@ attributes:
   review_trigger: recovery progress under strategy-recover-knowledge; the full
     two-axis assessment is due as its first step
   last_assessed: 2026-07-02
+  household:
+    shared: false
+    basis: Scoped to the author's personal notes, documents, and their organizing
+      structure; not a household-shared corpus.
+    consent: []
+    preferences: []
 ---
 # Notes and documents delegated to vendor knowledge silos

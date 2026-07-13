@@ -33,25 +33,12 @@ execution:
   attempts: {}
   markers:
     - qa-done
+    - reviewed
   strategy_fingerprint: d998d5c0754b51cfc489ee784db11b77d9b40eb91777ee0215076b0ad1a6bb69
 validates:
   - strategy-graph-drives-dispatch
 blocked_by: []
-office_hours:
-  reason: "graph-tick review worker cannot run the review phase: /review-fix
-    requires the Workflow tool for its finder fan-out / classify /
-    adversarial-verify / fix pipeline, and that tool is not available in the
-    headless graph-tick executor; the skill forbids emulating the phase ad hoc.
-    PR #2863 is CI-passing and mergeable; inline scans already ran clean
-    (CodeQL: no open alerts; erosion: one medium advisory on read-sensors.ts
-    complexity 87->103). Next steps: a human runs /review-fix
-    tactic-intention-store-sensor in a full interactive session (which has the
-    Workflow tool), letting it carry the review to its dispatch:reviewed /
-    transition-node --set-pr 2863 completion, then manually clears this
-    office_hours field (no unpark primitive) so the router can resolve the node
-    to done."
-  since: 2026-07-12
-  recommendation: null
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}

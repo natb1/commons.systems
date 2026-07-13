@@ -27,6 +27,13 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: false
+rounds: null
 attributes:
   delegatee: Google (Analytics 4, Search Console, PageSpeed Insights)
   delegated: audience, traffic, and search-performance measurement for the owned sites
@@ -49,5 +56,11 @@ attributes:
   review_trigger: analytics signals begin driving publishing or marketing
     decisions (framing risk), or export/API access narrows
   last_assessed: 2026-07-03
+  household:
+    shared: false
+    basis: Audience and search telemetry for the author's owned sites; project-side
+      measurement, not household.
+    consent: []
+    preferences: []
 ---
 # Site analytics and search telemetry delegated to Google (GA4, Search Console, PageSpeed)

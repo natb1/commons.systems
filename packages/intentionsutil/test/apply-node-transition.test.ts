@@ -2,9 +2,9 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { readNode } from "../src/store.js";
+import { readNode, writeNode } from "../src/store.js";
 import type { CiVerdict } from "../src/transitions.js";
-import { applyNodeTransition } from "../scripts/apply-node-transition.js";
+import { applyNodeTransition, parseArgs } from "../scripts/apply-node-transition.js";
 
 function tempDir(): string {
   return mkdtempSync(join(tmpdir(), "transitions-"));
@@ -49,7 +49,7 @@ const baseArgs: {
   scopeStale: boolean;
   strategyStale: boolean;
   setPr: number | null;
-  strategyFingerprint: string | null;
+  strategyFingerprint: Record<string, string> | null;
 } = {
   id: "tactic-syn",
   ci: "unknown",
@@ -110,5 +110,49 @@ describe("applyNodeTransition store round-trip", () => {
     const r = applyNodeTransition({ ...baseArgs, dir, ci: "passing" });
     expect(r.hasResidue).toBe(true);
     expect(r.armMerge).toBe(true);
+  });
+
+  it("merges a keyed strategy_fingerprint into the map, preserving other keys", () => {
+    const dir = tempDir();
+    seedTactic(dir, "implement", "# body\n");
+    // First stamp: strategy-a. Then stamp strategy-b — a must survive.
+    applyNodeTransition({ ...baseArgs, dir, strategyFingerprint: { "strategy-a": "hash-a" } });
+    expect(readNode(dir, "tactic-syn").execution?.strategy_fingerprint).toEqual({ "strategy-a": "hash-a" });
+    applyNodeTransition({ ...baseArgs, dir, strategyFingerprint: { "strategy-b": "hash-b" } });
+    expect(readNode(dir, "tactic-syn").execution?.strategy_fingerprint).toEqual({
+      "strategy-a": "hash-a",
+      "strategy-b": "hash-b",
+    });
+  });
+
+  it("converts a legacy bare-string stamp to map form on the next keyed re-stamp", () => {
+    const dir = tempDir();
+    seedTactic(dir, "implement", "# body\n");
+    // Seed a legacy bare-string stamp, then re-stamp with a keyed entry: the
+    // string carries no strategy id, so it is dropped and the field becomes map.
+    const seeded = readNode(dir, "tactic-syn");
+    seeded.execution = { branch: "b", pr: null, attempts: {}, markers: [], strategy_fingerprint: "legacy" };
+    writeNode(dir, seeded);
+    applyNodeTransition({ ...baseArgs, dir, strategyFingerprint: { "strategy-a": "hash-a" } });
+    expect(readNode(dir, "tactic-syn").execution?.strategy_fingerprint).toEqual({ "strategy-a": "hash-a" });
+  });
+});
+
+describe("apply-node-transition parseArgs --strategy-fingerprint", () => {
+  it("parses a keyed entry into the map and merges repeats", () => {
+    const args = parseArgs([
+      "tactic-syn",
+      "--strategy-fingerprint",
+      "strategy-a=hash-a",
+      "--strategy-fingerprint",
+      "strategy-b=hash-b",
+    ]);
+    expect(args.strategyFingerprint).toEqual({ "strategy-a": "hash-a", "strategy-b": "hash-b" });
+  });
+
+  it("rejects the bare-hash form (no strategy id)", () => {
+    expect(() => parseArgs(["tactic-syn", "--strategy-fingerprint", "barehash"])).toThrow(
+      /requires a '<strategy-id>=<hash>' value/,
+    );
   });
 });
