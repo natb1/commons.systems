@@ -90,6 +90,15 @@ export function parseHousehold(node: IntentionNode): Household | null {
         `${where}.consent[${i}] must carry string date, move, and decision fields`,
       );
     }
+    // Empty strings are as malformed as a missing field: an empty date/move/
+    // decision would render a garbled `— consent : ` line and count as full
+    // consent coverage, so reject them (matching the non-empty `basis` check
+    // above and the clear-errors-over-fallbacks rule).
+    if (entry.date.trim() === "" || entry.move.trim() === "" || entry.decision.trim() === "") {
+      throw new Error(
+        `${where}.consent[${i}] date, move, and decision must be non-empty`,
+      );
+    }
     return { date: entry.date, move: entry.move, decision: entry.decision };
   });
   if (!Array.isArray(raw.preferences)) {
@@ -141,10 +150,21 @@ export function buildReport(nodes: IntentionNode[]): ReportModel {
   const delegations = nodes.filter((n) => n.kind === "delegation");
   const strategies = nodes.filter((n) => n.kind === "strategy");
 
+  // Index each delegation id to the strategy ids that recover it, in a single
+  // pass — mirrors router.ts's `childrenOf` cross-reference map rather than
+  // re-filtering the whole strategy list once per shared record.
+  const recoversIndex = new Map<string, string[]>();
+  for (const strategy of strategies) {
+    for (const delegationId of strategy.recovers) {
+      const list = recoversIndex.get(delegationId);
+      if (list === undefined) recoversIndex.set(delegationId, [strategy.id]);
+      else list.push(strategy.id);
+    }
+  }
+
   const shared: SharedRecordReport[] = [];
   const notShared: { id: string; basis: string }[] = [];
   const unassessed: string[] = [];
-  let uncoveredMoveCount = 0;
 
   for (const record of delegations) {
     const household = parseHousehold(record);
@@ -157,19 +177,25 @@ export function buildReport(nodes: IntentionNode[]): ReportModel {
       continue;
     }
 
-    // Moves touching this shared record: every strategy that recovers it.
-    const moves: Move[] = strategies
-      .filter((s) => s.recovers.includes(record.id))
-      .map((s) => s.id)
+    // Moves touching this shared record: every strategy that recovers it,
+    // sorted for deterministic output, each matched to its consent entry.
+    const moves: Move[] = (recoversIndex.get(record.id) ?? [])
+      .slice()
       .sort()
-      .map((strategyId) => {
-        const consent = household.consent.find((c) => c.move === strategyId) ?? null;
-        if (consent === null) uncoveredMoveCount++;
-        return { strategyId, consent };
-      });
+      .map((strategyId) => ({
+        strategyId,
+        consent: household.consent.find((c) => c.move === strategyId) ?? null,
+      }));
 
     shared.push({ id: record.id, basis: household.basis, moves, preferences: household.preferences });
   }
+
+  // Derive the uncovered-move count from the built model rather than mutating a
+  // counter inside the map above, so the summary can never desync from the
+  // moves it summarizes.
+  const uncoveredMoveCount = shared
+    .flatMap((r) => r.moves)
+    .filter((m) => m.consent === null).length;
 
   return { shared, notShared, unassessed, uncoveredMoveCount };
 }

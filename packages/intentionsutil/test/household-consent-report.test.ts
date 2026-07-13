@@ -2,7 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import type { IntentionNodeInput } from "../src/schema.js";
+import type { IntentionNode, IntentionNodeInput } from "../src/schema.js";
 import { listNodes, writeNode } from "../src/store.js";
 import {
   buildReport,
@@ -13,6 +13,16 @@ import {
 
 function tempDir(): string {
   return mkdtempSync(join(tmpdir(), "household-report-"));
+}
+
+/** Round-trip a single node through a fresh temp store and return the read-back
+ * node, so tests exercise a real written-then-read record (the same fixture
+ * shape `reportOver` provides for the multi-node cases). */
+function readBack(node: IntentionNodeInput): IntentionNode {
+  const dir = tempDir();
+  writeNode(dir, node);
+  const [read] = listNodes(dir);
+  return read;
 }
 
 /** A delegation record with the given attributes, defaults filled in. */
@@ -48,26 +58,22 @@ function reportOver(fixtures: IntentionNodeInput[]): ReportModel {
 
 describe("parseHousehold", () => {
   it("returns null for a record with no household block (unassessed)", () => {
-    const node = delegation("delegation-x", { delegatee: "vendor" });
-    // writeNode/readNode round-trip through a temp dir so we exercise a real node.
-    const dir = tempDir();
-    writeNode(dir, node);
-    const [read] = listNodes(dir);
+    // readBack round-trips through a temp dir so we exercise a real node.
+    const read = readBack(delegation("delegation-x", { delegatee: "vendor" }));
     expect(parseHousehold(read)).toBeNull();
   });
 
   it("narrows a well-formed block", () => {
-    const node = delegation("delegation-x", {
-      household: {
-        shared: true,
-        basis: "family photos",
-        consent: [{ date: "2026-07-11", move: "strategy-a", decision: "approved" }],
-        preferences: ["keep iCloud"],
-      },
-    });
-    const dir = tempDir();
-    writeNode(dir, node);
-    const [read] = listNodes(dir);
+    const read = readBack(
+      delegation("delegation-x", {
+        household: {
+          shared: true,
+          basis: "family photos",
+          consent: [{ date: "2026-07-11", move: "strategy-a", decision: "approved" }],
+          preferences: ["keep iCloud"],
+        },
+      }),
+    );
     expect(parseHousehold(read)).toEqual({
       shared: true,
       basis: "family photos",
@@ -77,39 +83,51 @@ describe("parseHousehold", () => {
   });
 
   it("throws naming the record when shared is not a boolean", () => {
-    const node = delegation("delegation-bad", {
-      household: { shared: "yes", basis: "x", consent: [], preferences: [] },
-    });
-    const dir = tempDir();
-    writeNode(dir, node);
-    const [read] = listNodes(dir);
+    const read = readBack(
+      delegation("delegation-bad", {
+        household: { shared: "yes", basis: "x", consent: [], preferences: [] },
+      }),
+    );
     expect(() => parseHousehold(read)).toThrow("delegation-bad");
     expect(() => parseHousehold(read)).toThrow("shared must be a boolean");
   });
 
   it("throws when consent is not an array", () => {
-    const node = delegation("delegation-bad", {
-      household: { shared: true, basis: "x", consent: {}, preferences: [] },
-    });
-    const dir = tempDir();
-    writeNode(dir, node);
-    const [read] = listNodes(dir);
+    const read = readBack(
+      delegation("delegation-bad", {
+        household: { shared: true, basis: "x", consent: {}, preferences: [] },
+      }),
+    );
     expect(() => parseHousehold(read)).toThrow("consent must be an array");
   });
 
   it("throws when a consent entry is missing required fields", () => {
-    const node = delegation("delegation-bad", {
-      household: {
-        shared: true,
-        basis: "x",
-        consent: [{ date: "2026-07-11", move: "strategy-a" }],
-        preferences: [],
-      },
-    });
-    const dir = tempDir();
-    writeNode(dir, node);
-    const [read] = listNodes(dir);
+    const read = readBack(
+      delegation("delegation-bad", {
+        household: {
+          shared: true,
+          basis: "x",
+          consent: [{ date: "2026-07-11", move: "strategy-a" }],
+          preferences: [],
+        },
+      }),
+    );
     expect(() => parseHousehold(read)).toThrow("string date, move, and decision");
+  });
+
+  it("throws when a consent entry has an empty date, move, or decision", () => {
+    const read = readBack(
+      delegation("delegation-bad", {
+        household: {
+          shared: true,
+          basis: "x",
+          consent: [{ date: "2026-07-11", move: "", decision: "approved" }],
+          preferences: [],
+        },
+      }),
+    );
+    expect(() => parseHousehold(read)).toThrow("delegation-bad");
+    expect(() => parseHousehold(read)).toThrow("must be non-empty");
   });
 });
 
