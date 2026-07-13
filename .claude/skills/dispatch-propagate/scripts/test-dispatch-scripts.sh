@@ -18721,7 +18721,7 @@ statements_teardown
 # the stub's own remap-jq fails on the TLS string and exits nonzero, driving the
 # helper's "gh api failed" path.
 
-echo "Test: dispatch-statements-scan surfaces hard error on malformed gh issue list output, does not file"
+echo "Test: dispatch-statements-scan surfaces hard error on malformed gh-issue-list output, does not file"
 statements_setup
 statements_write_projects
 statements_write_config
