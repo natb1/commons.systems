@@ -37,28 +37,7 @@ execution:
   strategy_fingerprint: ba2a6baf40da43d7217194977f7ecd4dbba424a343251236340d524b05479917
 validates: []
 blocked_by: []
-office_hours:
-  reason: "review phase cannot run in the graph-tick worker harness: the Workflow
-    tool that /review-fix depends on for its
-    finder->dedup->classify->verify->fix fan-out is unavailable here (and no
-    Task/Agent subagent-spawn tool exists either), and doctrine forbids
-    emulating the phase ad hoc. This is the known graph-tick review limitation,
-    not skill-node-target-unsupported (the skill accepts node targets fine).
-    Next steps: complete /review-fix tactic-graph-digest-tooling in a full
-    interactive session that has the Workflow tool, then run transition-node
-    --set-pr 2865 to record the reviewed marker (and arm auto-merge), then
-    manually clear this office_hours park (no unpark primitive). Inline
-    pre-scans already done this pass: CodeQL 0 open alerts on PR #2865, npm
-    audit skipped (deps unchanged), erosion = 1 low-confidence finding (5
-    duplicated lines at test/digest.test.ts:359, non-blocking). CI is passing;
-    surface=code."
-  since: 2026-07-12
-  recommendation: "Run /review-fix tactic-graph-digest-tooling in a full
-    interactive session (Workflow tool present); on a clean review it records
-    the reviewed marker via transition-node --set-pr 2865 and arms auto-merge,
-    then manually clear office_hours (no unpark primitive). PR #2865, CI
-    passing. Pre-scans: CodeQL clean, no dep changes, one low erosion finding at
-    test/digest.test.ts:359."
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
