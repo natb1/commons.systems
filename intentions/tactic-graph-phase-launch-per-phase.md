@@ -24,16 +24,24 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 4
+  boost: 10
   override: null
-  rationale: "Author-directed 2026-07-11: top-ranks this draft above every
-    existing tactic (current max authored 8) so it decomposes first once
-    /align-tactics runs — own boost 4 added to strategy-graph-native-dispatch's
-    inherited boost 5 resolves to authored 9. Companion nodes
-    tactic-graph-phase-launch-per-phase,
-    tactic-review-phase-trust-builtin-review, and
-    tactic-graph-frozen-tactic-dispatch were boosted together in the same round
-    to the same tier."
+  rationale: "Re-boosted 2026-07-12: the 2026-07-11 boost:4/authored:9 tier was
+    overtaken by tactic-reading-review-skill's authored 14 — a
+    blocked_by-critical-path compounding effect (its own boost 7 plus 7
+    inherited backward from tactic-reading-review-candidate-extension), not an
+    explicit author priority decision. This tactic resolves the review/qa-phase
+    Workflow-tool gap that has repeatedly parked graph-tick review workers
+    (e.g. tactic-household-consent-instrument, tactic-ledger-census,
+    tactic-intention-store-sensor, tactic-graph-digest-tooling all parked
+    office_hours on this same blocker). Own boost 10 added to
+    strategy-graph-native-dispatch's inherited boost 5 resolves to authored 15,
+    restoring top rank above the current graph max of 14. Re-boosted alone,
+    not with its 2026-07-11 companions (tactic-review-phase-trust-builtin-review,
+    tactic-graph-frozen-tactic-dispatch): this is the only one of the three
+    whose fix directly resolves the Workflow-tool-unavailable park; the
+    companions address separate, unrelated concerns from the same interview
+    round and were left at their original tier."
 phase: null
 execution: null
 validates: []
