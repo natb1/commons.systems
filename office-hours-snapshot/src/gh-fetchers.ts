@@ -334,7 +334,9 @@ interface GithubReferrerResponse {
 }
 
 interface GithubForkResponse {
-  owner: { login: string };
+  // GitHub returns `owner: null` for a fork whose owning account was later
+  // deleted — the per-entry transform must tolerate it, not assume a login.
+  owner: { login: string } | null;
   html_url: string;
   created_at: string;
   pushed_at: string;
@@ -355,48 +357,76 @@ export async function fetchGithub(
     watchers: statsJson.watchers_count,
   };
 
+  // Fork detail and traffic each only need `repo` — independent of each other
+  // and of the stats fetch above. Fire them concurrently (below) so total
+  // latency is max(forks, traffic), not their sum. Each branch tolerates its own
+  // failure (resolving to undefined) so a missing scope on one never voids the
+  // other or the public stats.
+
   // Fork detail — one page (100) of forks, newest first; the total count already
-  // rides `forks`. Any error omits the key while keeping the public stats,
-  // mirroring the traffic error-tolerance below.
-  try {
-    const forks = await ghRest<GithubForkResponse[]>(
-      `repos/${repo}/forks?sort=newest&per_page=100`,
-      run,
+  // rides `forks`. The try/catch guards ONLY the network fetch; the per-entry
+  // transform uses flatMap to drop a single malformed fork (e.g. `owner` null for
+  // a since-deleted account) while keeping the rest — mirroring the read-side
+  // parseGithubSignals, rather than voiding the whole list on one bad entry.
+  const collectForksDetail = async (): Promise<GithubSignals["forksDetail"]> => {
+    let forks: GithubForkResponse[];
+    try {
+      forks = await ghRest<GithubForkResponse[]>(
+        `repos/${repo}/forks?sort=newest&per_page=100`,
+        run,
+      );
+    } catch {
+      // no fork-listing access / fetch failure — omit forksDetail, keep stats.
+      return undefined;
+    }
+    return forks.flatMap((f) =>
+      f.owner?.login
+        ? [
+            {
+              owner: f.owner.login,
+              repoUrl: f.html_url,
+              createdAt: f.created_at,
+              pushedAt: f.pushed_at,
+              stars: f.stargazers_count,
+            },
+          ]
+        : [],
     );
-    result.forksDetail = forks.map((f) => ({
-      owner: f.owner.login,
-      repoUrl: f.html_url,
-      createdAt: f.created_at,
-      pushedAt: f.pushed_at,
-      stars: f.stargazers_count,
-    }));
-  } catch {
-    // no fork-listing access / fetch failure — omit forksDetail, keep stats.
-  }
+  };
 
   // Traffic needs push access; any error (e.g. 403) means "no access" — omit the
   // traffic key but keep the public stats. Mirrors project-signals.ts:248-256
   // and fetchGithubTrafficLive's three-endpoint mapping.
-  try {
-    const [clones, views, referrers] = await Promise.all([
-      ghRest<GithubTrafficCountResponse>(`repos/${repo}/traffic/clones`, run),
-      ghRest<GithubTrafficCountResponse>(`repos/${repo}/traffic/views`, run),
-      ghRest<GithubReferrerResponse[]>(`repos/${repo}/traffic/popular/referrers`, run),
-    ]);
-    result.traffic = {
-      clonesCount: clones.count,
-      clonesUniques: clones.uniques,
-      viewsCount: views.count,
-      viewsUniques: views.uniques,
-      topReferrers: referrers.map((r) => ({
-        referrer: r.referrer,
-        count: r.count,
-        uniques: r.uniques,
-      })),
-    };
-  } catch {
-    // no traffic access — omit traffic, keep stats (+ forksDetail if collected).
-  }
+  const collectTraffic = async (): Promise<GithubSignals["traffic"]> => {
+    try {
+      const [clones, views, referrers] = await Promise.all([
+        ghRest<GithubTrafficCountResponse>(`repos/${repo}/traffic/clones`, run),
+        ghRest<GithubTrafficCountResponse>(`repos/${repo}/traffic/views`, run),
+        ghRest<GithubReferrerResponse[]>(`repos/${repo}/traffic/popular/referrers`, run),
+      ]);
+      return {
+        clonesCount: clones.count,
+        clonesUniques: clones.uniques,
+        viewsCount: views.count,
+        viewsUniques: views.uniques,
+        topReferrers: referrers.map((r) => ({
+          referrer: r.referrer,
+          count: r.count,
+          uniques: r.uniques,
+        })),
+      };
+    } catch {
+      // no traffic access — omit traffic, keep stats.
+      return undefined;
+    }
+  };
+
+  const [forksDetail, traffic] = await Promise.all([
+    collectForksDetail(),
+    collectTraffic(),
+  ]);
+  if (forksDetail !== undefined) result.forksDetail = forksDetail;
+  if (traffic !== undefined) result.traffic = traffic;
 
   return result;
 }
