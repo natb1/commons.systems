@@ -23,8 +23,13 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: fix
+execution:
+  branch: tactic-dispatch-legacy-rewire
+  pr: 2869
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
 validates: []
 blocked_by: []
 office_hours: null
