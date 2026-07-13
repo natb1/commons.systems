@@ -6420,7 +6420,7 @@ select_target_fake_claude   # sessionless: explicit liveness check (#837) procee
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
 assert_eq "no PR → enter" "enter /worktrees/42-my-feature" "$result"
 pr_view_called=$([[ -f "$STUB_DIR/gh-pr-view-headref.log" ]] && echo yes || echo no)
-assert_eq "no PR → gh pr view not called" "no" "$pr_view_called"
+assert_eq "no PR → gh-pr-view not called" "no" "$pr_view_called"
 checkout_logged=$([[ -f "$STUB_DIR/git-checkout.log" ]] && echo yes || echo no)
 assert_eq "no PR → no checkout" "no" "$checkout_logged"
 teardown
@@ -6452,7 +6452,7 @@ result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 queue)
 assert_eq "queue live-session + wrong branch → conflict" \
   "conflict /worktrees/42-my-feature" "$result"
 pr_view_called=$([[ -f "$STUB_DIR/gh-pr-view-headref.log" ]] && echo yes || echo no)
-assert_eq "queue live-session + wrong branch → gh pr view not called" "no" "$pr_view_called"
+assert_eq "queue live-session + wrong branch → gh-pr-view not called" "no" "$pr_view_called"
 checkout_logged=$([[ -f "$STUB_DIR/git-checkout.log" ]] && echo yes || echo no)
 assert_eq "queue live-session + wrong branch → no checkout" "no" "$checkout_logged"
 teardown
@@ -7205,7 +7205,7 @@ sweep_teardown
 # A sibling in-sync MERGED worktree in the same run must still be removed to prove
 # the sweep continues past the failure.
 
-echo "Test: gh issue view fails → isolated log+continue+exit 0, sibling still removed"
+echo "Test: gh-issue-view fails → isolated log+continue+exit 0, sibling still removed"
 sweep_setup
 # Failing worktree: no pr-state fixture (stub returns '[]') → issue path → gh issue view fails.
 WT_PATH="$TMPDIR_TEST/project/worktrees/60-closed-feature"
@@ -7222,7 +7222,7 @@ key_60b=$(sweep_path_key "$WT_PATH_60B")
 echo "0" > "$STUB_DIR/revlist${key_60b}.txt"
 
 out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
-assert_eq "gh issue view fail → exit 0 (isolated, not fatal)" "0" "$rc"
+assert_eq "gh-issue-view fail → exit 0 (isolated, not fatal)" "0" "$rc"
 
 calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
