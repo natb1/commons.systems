@@ -3,6 +3,7 @@ import type { IntentionNode } from "../src/schema.js";
 import {
   buildRows,
   renderCensus,
+  parseEntryDate,
   UNRECORDED,
   COMPLETENESS_QUESTION,
   CATEGORY_PROMPTS,
@@ -98,6 +99,25 @@ describe("buildRows", () => {
     const full = rows.find((r) => r.id === "delegation-full");
     expect(full?.lastAssessed).toBe("2026-07-02");
     expect(full?.origin).toBe("chosen");
+  });
+});
+
+describe("parseEntryDate", () => {
+  it("returns the last line as the earliest add (git lists newest-first)", () => {
+    // Newest-first: the record was re-added at 2026-07-09, first added 2026-07-01.
+    expect(parseEntryDate("2026-07-09\n2026-07-05\n2026-07-01\n")).toBe("2026-07-01");
+  });
+
+  it("returns the single line when there is only one add", () => {
+    expect(parseEntryDate("2026-07-01\n")).toBe("2026-07-01");
+  });
+
+  it("returns UNRECORDED for empty output", () => {
+    expect(parseEntryDate("")).toBe(UNRECORDED);
+  });
+
+  it("ignores trailing/blank lines when picking the last date", () => {
+    expect(parseEntryDate("2026-07-09\n2026-07-01\n\n")).toBe("2026-07-01");
   });
 });
 

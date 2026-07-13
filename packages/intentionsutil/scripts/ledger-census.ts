@@ -15,7 +15,7 @@
 
 import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { listNodes } from "../src/store.js";
 import type { IntentionNode } from "../src/schema.js";
 
@@ -128,20 +128,48 @@ export function renderCensus(rows: CensusRow[]): string {
 }
 
 /**
+ * Parse `git log --format=%as` output into an entry date: git lists newest-first,
+ * so the LAST non-blank line is the earliest (first) add. An empty result
+ * (untracked) is `UNRECORDED`. Pure string → date; separated from the
+ * `execFileSync` call so the last-line-wins rule is unit-testable without a git
+ * fixture.
+ */
+export function parseEntryDate(out: string): string {
+  const dates = out.split("\n").filter((l) => l.length > 0);
+  return dates.length === 0 ? UNRECORDED : dates[dates.length - 1];
+}
+
+/**
  * Git-derived entry date for a record: the first commit that added
  * `intentions/<id>.md`. `--diff-filter=A` selects add events; `--follow` tracks
  * across renames; the LAST line of `%as` output is the earliest (first) add. No
  * fallback on a real git failure — a nonzero exit throws with git's own message
  * (`.claude/rules/code-style.md`); an empty result (untracked) is `UNRECORDED`.
+ *
+ * Refuses to run against a shallow checkout: with a truncated history the
+ * boundary commit has no parent to diff against, so `--diff-filter=A` reports
+ * every path present there as newly Added — silently yielding a plausible but
+ * wrong (too-recent) date. Fail loudly instead (`.claude/rules/code-style.md`).
  */
 export function gitEntryDate(root: string, id: string): string {
+  const isShallow = execFileSync(
+    "git",
+    ["rev-parse", "--is-shallow-repository"],
+    { cwd: root, encoding: "utf8" },
+  ).trim();
+  if (isShallow === "true") {
+    throw new Error(
+      `Cannot derive entry dates from a shallow checkout (${root}): ` +
+        "the shallow boundary makes --diff-filter=A report wrong add dates. " +
+        "Re-run from a full clone (e.g. `git fetch --unshallow`).",
+    );
+  }
   const out = execFileSync(
     "git",
     ["log", "--follow", "--diff-filter=A", "--format=%as", "--", `intentions/${id}.md`],
     { cwd: root, encoding: "utf8" },
   );
-  const dates = out.split("\n").filter((l) => l.length > 0);
-  return dates.length === 0 ? UNRECORDED : dates[dates.length - 1];
+  return parseEntryDate(out);
 }
 
 function main(): void {
@@ -151,6 +179,6 @@ function main(): void {
 }
 
 // Run only when invoked directly, not when imported by tests.
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main();
 }
