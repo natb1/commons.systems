@@ -1,9 +1,9 @@
 ---
 id: tactic-graph-main-self-heal
 kind: tactic
-statement: "graph-native red-main self-heal: tick repo-health gate +
-  find-or-create latch/work node, diagnose-main rewritten graph-native, legacy
-  issue-latch cleanup"
+statement: "graph-native red-main self-heal: main-health sensor, auto-created
+  high-rank fix tactic, diagnose-main rewritten graph-native, legacy issue-latch
+  cleanup"
 owner: ai
 status: raw
 parent: null
@@ -14,7 +14,11 @@ rationale: "Retained from the 2026-07-12 /align-strategy interview triggered by
   decided the greenfield shape: one graph node is latch, announcement, and work
   item; no gh issue, no label. Supersedes tactic-dispatch-legacy-rewire Unit 1
   latitude on the announcement surface (see the strategy's 2026-07-12
-  clarifications)."
+  clarifications). Encoding refined 2026-07-13 (author-dictated): main health is
+  a registered sensor; the tick auto-creates the fix tactic on a failing read;
+  the fix tactic carries the main-health success_signal and completes on green;
+  rank via creation-time recomputed attention boost + pace_exempt. See the
+  strategy 2026-07-13-refined clarification."
 reading: null
 gap: null
 serves:
@@ -33,31 +37,48 @@ pace_exempt: false
 rounds: null
 attributes: {}
 ---
-# graph-native red-main self-heal: tick repo-health gate + find-or-create latch/work node, diagnose-main rewritten graph-native, legacy issue-latch cleanup
+# graph-native red-main self-heal: main-health sensor, auto-created high-rank fix tactic, diagnose-main rewritten graph-native, legacy issue-latch cleanup
 
 Draft — retained interview context per the retain-not-refine contract.
 /align-tactics finalizes, splits, or merges; nothing below is a plan schema.
 
-## Decided shape (2026-07-12 interview, authoritative)
+## Decided shape (2026-07-12 interview; encoding refined and author-dictated 2026-07-13, authoritative)
 
-One graph node carries latch, announcement, and work item:
+Main health is a **sensor**, and the self-heal flows through the general
+sensor machinery — not bespoke tick gating:
 
-- The graph tick gains a **repo-health gate**: on detecting a red
-  `origin/main` HEAD it **find-or-creates a single tactic node**
-  (`tactic-main-red-<shortsha>` shape) via the normal `graph-commit` write
-  path. Find-or-create keeps one open node per red episode — a re-detection
-  during the same episode updates the body, never duplicates.
-- The node body carries the **redacted diagnosis** (failing check/step name,
-  high-level error category, likely cause — same redaction bar the legacy
-  `dispatch-diagnose-main` skill documents: no raw log lines, no secrets, no
-  CI internals).
-- The node is **pace-exempt with priority attention** — composes with the
-  recorded pace-exempt doctrine (bypasses the pace gate, never the
-  `--exhausted` hard floor). The router selects it like any tactic; the
-  fleet fixes main autonomously. That selection is the self-heal.
-- **Node open ⇔ gate latched**: the tick's health gate treats an open
-  main-red node as "episode already being handled" and lets the queue flow.
-  The sensor observing green **completes the node** and re-arms the gate.
+- **Sensor:** `main-health` is a registered sensor (`SensorRegistry`,
+  `packages/intentionsutil/src/sensors.ts`) reading `origin/main` HEAD's
+  check conclusions. It qualifies for the default local-first registry —
+  `read-sensors.ts` explicitly classes own-pipeline CI status as
+  local-first.
+- **Automation:** the graph tick (the greenfield workflow automation) runs
+  the sensor each tick. On a failing read it **find-or-creates the fix
+  tactic** (`tactic-main-red-<shortsha>` shape) via the normal
+  `graph-commit` write path — one open node per red episode; a re-detection
+  during the same episode updates the body, never duplicates. The node body
+  carries the **redacted diagnosis** (failing check/step name, high-level
+  error category, likely cause — same redaction bar the legacy
+  `dispatch-diagnose-main` skill documents: no raw log lines, no secrets,
+  no CI internals).
+- **Signal home:** the fix tactic itself carries
+  `success_signal {sensor: main-health, threshold: green}` — the same
+  sensor that detected the episode validates its fix. The reading lands on
+  the tactic; threshold-met **completes it**, re-arming detection. No
+  standing signal-home node (a node carries exactly one `success_signal`,
+  and both natural strategy slots are occupied).
+- **Rank:** at creation the automation recomputes the current
+  resolved-rank graph max and authors an **attention boost topping it**,
+  with a rationale naming the failing main signal (machine authorship stays
+  inside the authored-boost model because the rationale requirement is
+  met), plus `pace_exempt: true` — bypasses the pace gate, never the
+  `--exhausted` hard floor. The router then selects it like any tactic;
+  the fleet fixes main autonomously. Accepted edge: `blocked_by`
+  compounding could overtake mid-episode (episodes are short; revisit if
+  it bites).
+- **Scope:** a main-specific instance of the general pattern (mechanical
+  failing signal → auto-created fix tactic → very high rank);
+  strategy-signal failures keep routing to `/align-tactics`.
 - No gh issue, no `dispatch:*` label, no re-enabled GitHub features
   (`has_issues` stays disabled — drain-state monotonicity condition on
   `strategy-graph-native-dispatch`).

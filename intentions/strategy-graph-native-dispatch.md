@@ -1249,28 +1249,39 @@ clarifications:
       tactic-graph-tick-node-lane-auto-merge. Recorded 2026-07-11 interview."
   - question: What replaces the dispatch:main-broken gh-issue latch when origin/main
       goes red — and does the announcement surface stay gh-based?
-    answer: "One graph node carries latch, announcement, and work item. The tick
-      gains a repo-health gate: on detecting red it find-or-creates a single
-      tactic node (tactic-main-red-<shortsha> shape) with the redacted diagnosis
-      in its body and pace-exempt priority attention — composing with the
-      recorded pace-exempt doctrine (bypasses the pace gate, never the
-      --exhausted floor) — selectable by the router like any tactic, so the
-      fleet fixes main autonomously. Node open ⇔ gate latched (the queue flows
-      during the red episode); the sensor observing green completes the node and
-      re-arms the gate. No gh issue, no label, no re-enabled features. This
-      supersedes tactic-dispatch-legacy-rewire Unit 1 recorded latitude
-      (announcement surface: implementer choice, may stay gh-based for human
-      visibility): the steelman — keep a gh issue as the notification mirror —
-      was considered and diverged from, because re-enabling issues for
-      announcements re-imports exactly the dependency this strategy recovers
-      (recovers: delegation-github); red-main visibility is owned surfaces job.
-      Sequencing hazard: dispatch-select-tick step 1c reads the open
-      dispatch:main-broken issue as the live latch, so closing the 2026-07-12
-      latch issue or re-disabling has_issues before the graph latch replaces
-      that reader freezes the queue mid-red or makes diagnose-main refile —
-      legacy-latch cleanup is gated on the graph flow landing. Mechanics
-      retained in draft tactic-graph-main-self-heal. Recorded 2026-07-12
-      interview."
+    answer: "Main health is a sensor, and the self-heal flows through the general
+      sensor machinery, not bespoke tick gating. Author-dictated encoding: (1)
+      main-health is a registered sensor (SensorRegistry, local-first —
+      own-pipeline CI status per read-sensors.ts doctrine) reading origin/main
+      HEAD check conclusions; (2) the graph tick — the greenfield workflow
+      automation — runs it each tick, and on a failing read find-or-creates the
+      fix tactic (tactic-main-red-<shortsha> shape, one open node per episode,
+      redacted diagnosis in the body); (3) the fix tactic itself carries
+      success_signal {sensor: main-health, threshold: green} — the same sensor
+      that detected the episode validates its fix: the reading lands on the
+      tactic and threshold-met completes it, re-arming detection (no standing
+      signal-home node; both natural strategy signal slots are occupied and a
+      node carries exactly one success_signal); (4) at creation the automation
+      recomputes the current resolved-rank graph max and authors an attention
+      boost topping it, with a rationale naming the failing main signal (machine
+      authorship stays inside the authored-boost model because the rationale
+      requirement is met), plus pace_exempt: true — bypasses the pace gate,
+      never the --exhausted floor; accepted edge: blocked_by compounding could
+      overtake mid-episode (episodes are short; revisit if it bites). Scope: a
+      main-specific instance of the general pattern (mechanical failing signal →
+      auto-created fix tactic → very high rank); strategy-signal failures keep
+      routing to /align-tactics. No gh issue, no label, no re-enabled features.
+      Supersedes tactic-dispatch-legacy-rewire Unit 1 recorded latitude on the
+      announcement surface (steelman — a gh-issue notification mirror —
+      considered and diverged from: re-enabling issues re-imports the dependency
+      this strategy recovers; visibility is owned surfaces job). Sequencing
+      hazard: dispatch-select-tick step 1c reads the open dispatch:main-broken
+      issue as the live latch, so legacy-latch cleanup (close the latch issue,
+      re-disable has_issues) is gated on the sensor flow replacing that reader.
+      Mechanics retained in draft tactic-graph-main-self-heal. Recorded
+      2026-07-12 interview; encoding refined and dictated by the author,
+      recorded 2026-07-13 interview (also correcting the prior provenance stamp,
+      which hand-guessed 2026-07-12 while date -u read 2026-07-13)."
   - question: "The 2026-07-12 red-main episode: dispatch-diagnose-main found repo
       issues disabled and re-enabled has_issues to satisfy its own gh-issue spec
       — what does it teach?"
