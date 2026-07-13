@@ -34,6 +34,7 @@ execution:
   attempts: {}
   markers:
     - qa-done
+    - reviewed
   strategy_fingerprint: d1dccff612b79832f9a7a1ef5dad00207ffc8ff8dab1e7275a2c9e4a64b639f0
 validates:
   - strategy-household-shared-attachments
