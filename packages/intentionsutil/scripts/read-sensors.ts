@@ -1,8 +1,9 @@
-// Read the local-first default sensors over the active frontier and write each
-// node's fresh `reading` + derived `gap` back to the local `intentions/` store.
+// Read the local-first default sensors over every node in the store and write
+// each node's fresh `reading` + derived `gap` back to the local `intentions/`
+// store.
 //
-// This is the batch driver for the feedback arm's READ step: for every active
-// frontier node that names a `success_signal.sensor`, it resolves that sensor in
+// This is the batch driver for the feedback arm's READ step: for every node in
+// the store that names a `success_signal.sensor`, it resolves that sensor in
 // a registry, reads the current measurement, derives the mechanical gap, and
 // persists `{ ...node, reading, gap }` — preserving every other field. It reads
 // only the local store and runs only local own-execution commands (no gh API,
@@ -33,9 +34,9 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { listNodes, writeNode } from "../src/store.js";
-import { projectGoals } from "../src/goals.js";
 import { SensorRegistry, deriveGap, type Sensor } from "../src/sensors.js";
 import { IntentionSchemaError } from "../src/errors.js";
+import type { IntentionNode } from "../src/schema.js";
 
 // --- Paths -----------------------------------------------------------------
 // The script lives at `packages/intentionsutil/scripts/read-sensors.ts`, so the
@@ -538,6 +539,119 @@ const lifecycleSensor: Sensor = {
   },
 };
 
+// --- intention-store sensor --------------------------------------------------
+// The verbatim `success_signal.sensor` name strategy-graph-drives-dispatch
+// declares, and the store's self-measuring sensor: it counts how many open
+// tactics carry a serves edge and how many sensor-naming strategies have a
+// reading — the two quantities that strategy's threshold names ("every open
+// tactic carries a non-empty serves edge and sensor-run readings exist for
+// every strategy that names a sensor"). Per strategy clarification 7
+// (2026-07-11): a sensor-naming strategy counts as read when its `reading` is
+// non-null — reading provenance is not recorded in frontmatter, so existence is
+// the deliberate mechanical proxy for a sensor-run — and the sensor separately
+// reports how many name a sensor absent from the registry.
+
+/** The verbatim `success_signal.sensor` name strategy-graph-drives-dispatch declares. */
+export const INTENTION_STORE_SENSOR_NAME = "the intention store itself";
+
+/**
+ * Open-tactic serves coverage: over `kind === "tactic"` nodes carrying an open
+ * dispatch phase (`phase !== null && phase !== "done"`), count how many carry a
+ * non-empty `serves` edge. Exported (like `readTokenEconomy`) for unit testing
+ * over fixture node arrays.
+ */
+export function openTacticServesCoverage(nodes: IntentionNode[]): {
+  withServes: number;
+  open: number;
+} {
+  let withServes = 0;
+  let open = 0;
+  for (const node of nodes) {
+    if (node.kind !== "tactic") {
+      continue;
+    }
+    if (node.phase === null || node.phase === "done") {
+      continue;
+    }
+    open += 1;
+    if (node.serves.length > 0) {
+      withServes += 1;
+    }
+  }
+  return { withServes, open };
+}
+
+/**
+ * Sensor-reading coverage: over `kind === "strategy"` nodes that name a success
+ * signal (`success_signal !== null`), return `{ read, total, unregistered }`:
+ * `read` counts nodes whose `reading` is non-null (the clarification-7 proxy for
+ * a sensor-run); `total` counts all sensor-naming strategies; `unregistered`
+ * counts nodes whose `success_signal.sensor` is not in `registeredNames`.
+ * Exported for unit testing over fixture node arrays.
+ */
+export function sensorReadingCoverage(
+  nodes: IntentionNode[],
+  registeredNames: ReadonlySet<string>,
+): { read: number; total: number; unregistered: number } {
+  let read = 0;
+  let total = 0;
+  let unregistered = 0;
+  for (const node of nodes) {
+    if (node.kind !== "strategy") {
+      continue;
+    }
+    if (node.success_signal === null) {
+      continue;
+    }
+    total += 1;
+    if (node.reading !== null) {
+      read += 1;
+    }
+    if (!registeredNames.has(node.success_signal.sensor)) {
+      unregistered += 1;
+    }
+  }
+  return { read, total, unregistered };
+}
+
+/**
+ * Build the intention-store sensor — the store measuring itself. `read()` is
+ * total (never throws — degrades to `"unknown"` on a load failure, per the
+ * total-sensor contract above) and returns the stable format:
+ *   `serves: <a>/<b> open tactic(s); readings: <c>/<d> sensor-naming strateg(y/ies) (<e> unregistered sensor(s))`
+ * with each counted noun singular/plural to match its count. `getRegisteredNames`
+ * yields the set of sensor names the driver's registry knows (including this
+ * sensor's own name); it is queried at `read()` time so the set can never drift
+ * from the actual registry membership. `loadNodes` reads the store — injected so
+ * unit tests can supply fixture arrays without touching the live store.
+ */
+export function makeIntentionStoreSensor(
+  getRegisteredNames: () => ReadonlySet<string>,
+  loadNodes: () => IntentionNode[],
+): Sensor {
+  return {
+    name: INTENTION_STORE_SENSOR_NAME,
+    read(): string {
+      let nodes: IntentionNode[];
+      try {
+        nodes = loadNodes();
+      } catch {
+        return "unknown";
+      }
+      const serves = openTacticServesCoverage(nodes);
+      const readings = sensorReadingCoverage(nodes, getRegisteredNames());
+      const openNoun = serves.open === 1 ? "tactic" : "tactics";
+      const strategyNoun = readings.total === 1 ? "strategy" : "strategies";
+      const sensorNoun = readings.unregistered === 1 ? "sensor" : "sensors";
+      return (
+        `serves: ${serves.withServes}/${serves.open} open ${openNoun}; ` +
+        `readings: ${readings.read}/${readings.total} sensor-naming ${strategyNoun} ` +
+        `(${readings.unregistered} unregistered ${sensorNoun})`
+      );
+    },
+  };
+}
+
 /**
  * Build the default registry of local-first own-execution sensors. Exported so
  * the registration set can be unit-tested (verification deferred to #2372/QA).
@@ -548,29 +662,58 @@ export function buildDefaultRegistry(): SensorRegistry {
   registry.register(gitSensor);
   registry.register(tokenEconomySensor);
   registry.register(lifecycleSensor);
+  // Register the intention-store sensor last and have it derive the set of
+  // registered sensor names from the registry itself at read() time — by then
+  // the registry holds every sensor, including this one. Deriving the set (vs
+  // hand-listing it) means the unregistered-sensor count can never drift from
+  // the true registry membership if a future sensor is added above.
+  registry.register(
+    makeIntentionStoreSensor(
+      () => registry.names(),
+      () => listNodes(intentionsDir),
+    ),
+  );
   return registry;
 }
 
 // --- Core driver -----------------------------------------------------------
 
-/** Summary of one frontier-sensor pass, returned for testability and printing. */
+/** Summary of one store-sensor pass, returned for testability and printing. */
 export interface ReadSummary {
   read: number; // nodes whose sensor was read and written back
-  skippedNoSignal: number; // frontier nodes with no success_signal (nothing to read)
+  skippedNoSignal: number; // store nodes with no success_signal (nothing to read)
   unregistered: { id: string; sensor: string }[]; // named a sensor not in the registry
 }
 
 /**
- * Walk the active frontier and, for each node that names a registered sensor,
+ * Walk EVERY node in the store and, for each that names a registered sensor,
  * read the sensor, derive the gap against the FRESH reading, and write the node
  * back preserving all other fields. Nodes with no signal are skipped silently;
  * nodes naming an unregistered sensor are collected for reporting (never crash,
  * never silently skipped). Exported for later unit testing.
+ *
+ * The scope is the whole store (`listNodes`), NOT the active frontier: the
+ * strategy threshold quantifies over "every strategy that names a sensor", and
+ * `activeFrontier` drops `status: "codified"` nodes and any node that is a
+ * `parent` of another (goals.ts) — so a frontier scope could never write the
+ * readings of codified or parent strategies (e.g. strategy-graph-drives-dispatch
+ * is a parent; strategy-exercise-recovery-paths is codified). Frontier filtering
+ * stays correct for goal projection; it was only wrong as the READ scope.
  */
-export function readFrontierSensors(dir: string, registry: SensorRegistry): ReadSummary {
+export function readStoreSensors(dir: string, registry: SensorRegistry): ReadSummary {
   const summary: ReadSummary = { read: 0, skippedNoSignal: 0, unregistered: [] };
 
-  for (const { node } of projectGoals(listNodes(dir))) {
+  // READ pass: compute every node's fresh reading against a single consistent
+  // pre-run store snapshot, accumulating the updated nodes without writing any.
+  // Deferring all writes to a second pass is what keeps a whole-store sensor
+  // honest: the intention-store sensor re-reads the store while computing its
+  // reading, and if writes happened inline here it would observe a store
+  // partially mutated by earlier iterations — its serves/readings counts would
+  // be an artifact of node iteration order rather than a clean snapshot. With
+  // no writes during this pass, every such re-read sees the same unmutated
+  // pre-run store.
+  const updates: IntentionNode[] = [];
+  for (const node of listNodes(dir)) {
     if (node.success_signal === null) {
       // No signal named — there is genuinely nothing to read. Not reported.
       summary.skippedNoSignal += 1;
@@ -592,7 +735,12 @@ export function readFrontierSensors(dir: string, registry: SensorRegistry): Read
 
     const reading = sensor.read(node);
     const gap = deriveGap({ ...node, reading });
-    writeNode(dir, { ...node, reading, gap });
+    updates.push({ ...node, reading, gap });
+  }
+
+  // WRITE pass: persist every updated node now that all readings are computed.
+  for (const updated of updates) {
+    writeNode(dir, updated);
     summary.read += 1;
   }
 
@@ -603,7 +751,7 @@ export function readFrontierSensors(dir: string, registry: SensorRegistry): Read
 
 function main(): void {
   const registry = buildDefaultRegistry();
-  const summary = readFrontierSensors(intentionsDir, registry);
+  const summary = readStoreSensors(intentionsDir, registry);
 
   process.stdout.write(
     `read-sensors: ${summary.read} read/written, ` +
