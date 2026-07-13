@@ -49,6 +49,7 @@ import {
   tacticScopeFingerprint,
 } from "../src/router.js";
 import { isFingerprintStale } from "../src/transitions.js";
+import { isPlainObject } from "../src/schema.js";
 import type { IntentionNode } from "../src/schema.js";
 import { IntentionSchemaError } from "../src/errors.js";
 
@@ -103,7 +104,7 @@ function readStrategyFingerprint(node: IntentionNode): string | Record<string, s
   if (squatExec !== null && typeof squatExec === "object" && "strategy_fingerprint" in squatExec) {
     const fp = (squatExec as { strategy_fingerprint?: unknown }).strategy_fingerprint;
     if (typeof fp === "string") return fp;
-    if (fp !== null && typeof fp === "object" && !Array.isArray(fp)) {
+    if (isPlainObject(fp)) {
       // Coerce the squatter map to Record<string,string> by keeping string
       // values — no cast, and non-string entries (malformed) are dropped rather
       // than mis-typed.

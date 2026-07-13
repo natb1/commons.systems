@@ -464,7 +464,7 @@ the router's soft-freeze trigger compares against each serving strategy's
 current substance (strategy clarification 10). At mint time this session stamps
 only the **decomposed** strategy's entry: `{<decomposed-strategy-id>:
 <fingerprint>}`, where `<fingerprint>` is `strategyFingerprint(strategy)` from
-`packages/intentionsutil/src/router.ts:82` — always that helper, never a
+`packages/intentionsutil/src/router.ts` — always that helper, never a
 hand-computed hash. A serving strategy absent from the map is never stale
 (per-strategy null), so an honest multi-serves tactic is not born frozen against
 its other serving strategies; those entries are filled by whichever session
@@ -505,7 +505,7 @@ decompose fresh. It:
 3. Re-stamps **only the re-evaluated strategy's entry** in each surviving
    tactic's `execution.strategy_fingerprint` map — set
    `map[<re-evaluated-strategy-id>] = strategyFingerprint(strategy)`
-   (`packages/intentionsutil/src/router.ts:82`), leaving every other serving
+   (`packages/intentionsutil/src/router.ts`), leaving every other serving
    strategy's entry untouched — which unfreezes the subtree against this
    strategy without disturbing the others. (A tactic still at `execution: null`
    has no map to re-stamp until the machinery seeds one.)

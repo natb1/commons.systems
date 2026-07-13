@@ -370,7 +370,7 @@ export function isFingerprintStale(
 ): boolean {
   if (stamp === null) return false;
   if (typeof stamp === "string") return stamp !== currentFingerprint;
-  if (!(strategyId in stamp)) return false;
+  if (!Object.hasOwn(stamp, strategyId)) return false;
   return stamp[strategyId] !== currentFingerprint;
 }
 
