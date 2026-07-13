@@ -14,11 +14,15 @@ rationale: "Retained from the 2026-07-12 /align-strategy interview triggered by
   decided the greenfield shape: one graph node is latch, announcement, and work
   item; no gh issue, no label. Supersedes tactic-dispatch-legacy-rewire Unit 1
   latitude on the announcement surface (see the strategy's 2026-07-12
-  clarifications). Encoding refined 2026-07-13 (author-dictated): main health is
-  a registered sensor; the tick auto-creates the fix tactic on a failing read;
-  the fix tactic carries the main-health success_signal and completes on green;
-  rank via creation-time recomputed attention boost + pace_exempt. See the
-  strategy 2026-07-13-refined clarification."
+  clarifications). Encoding refined and author-dictated 2026-07-13 across two
+  interviews: main health is a registered sensor; the tick auto-creates the fix
+  tactic on a failing read; the standing owner strategy-main-health (created
+  2026-07-13) carries the signal and a standing boost 100 the fix tactic
+  inherits via serves; the fix tactic carries its own main-health success_signal
+  and completes on green; boost dominance is guard-maintained at the write path
+  (author override required to out-boost or reduce it); blocking is orthogonal
+  to boosting (strategy-graph-drives-dispatch same-date clarification). See the
+  strategy's 2026-07-13 clarifications."
 reading: null
 gap: null
 serves:
@@ -61,24 +65,44 @@ sensor machinery — not bespoke tick gating:
   error category, likely cause — same redaction bar the legacy
   `dispatch-diagnose-main` skill documents: no raw log lines, no secrets,
   no CI internals).
-- **Signal home:** the fix tactic itself carries
+- **Signal home:** the standing owner is `strategy-main-health` (created
+  2026-07-13, `parent: strategy-autonomous-execution`) — a **strategy**,
+  per the persistent-layer doctrine (standing structure never lives on
+  transient tactics; see `tactic-align-persistent-layer-doctrine`). It
+  carries `success_signal {sensor: main-health, threshold: green}`. The
+  auto-created fix tactic carries `serves` + `validates` edges to
+  `strategy-main-health` and **its own**
   `success_signal {sensor: main-health, threshold: green}` — the same
-  sensor that detected the episode validates its fix. The reading lands on
-  the tactic; threshold-met **completes it**, re-arming detection. No
-  standing signal-home node (a node carries exactly one `success_signal`,
-  and both natural strategy slots are occupied).
-- **Rank:** at creation the automation recomputes the current
-  resolved-rank graph max and authors an **attention boost topping it**,
-  with a rationale naming the failing main signal (machine authorship stays
-  inside the authored-boost model because the rationale requirement is
-  met), plus `pace_exempt: true` — bypasses the pace gate, never the
-  `--exhausted` hard floor. The router then selects it like any tactic;
-  the fleet fixes main autonomously. Accepted edge: `blocked_by`
-  compounding could overtake mid-episode (episodes are short; revisit if
-  it bites).
-- **Scope:** a main-specific instance of the general pattern (mechanical
-  failing signal → auto-created fix tactic → very high rank);
-  strategy-signal failures keep routing to `/align-tactics`.
+  sensor that detected the episode validates its fix: threshold-met
+  completes the tactic, re-arming detection (the one-signal-per-node limit
+  binds per node; two nodes may reference one sensor). Supersedes the
+  earlier fix-tactic-only signal home.
+- **Rank:** by inheritance — `strategy-main-health` carries a standing
+  authored **boost 100**; the fix tactic inherits it undecayed through the
+  normal downward attention flow (`serves`). Supersedes the creation-time
+  recompute-graph-max machine-authored boost: no machine-authored boosts
+  remain in the model. The automation still sets `pace_exempt: true` on
+  the fix tactic at creation — bypasses the pace gate, never the
+  `--exhausted` hard floor. The former accepted edge (`blocked_by`
+  compounding overtake) dissolves: blocking is orthogonal to boosting
+  (`strategy-graph-drives-dispatch` 2026-07-13 clarifications,
+  implementation in `tactic-attention-blocking-orthogonal`).
+- **Guard (unit):** boost dominance is maintained mechanically at the
+  write path, not by ranking logic (parsimony — author-dictated):
+  `validate-graph`/`graph-commit` refuses a commit that authors another
+  boost/override at or above `strategy-main-health`'s, or that reduces it,
+  unless the commit carries an explicit author override. Implementation
+  detail (override marker shape, which script hosts the check) is
+  /align-tactics's call.
+- **Strategy-lane edge:** `strategy-main-health`'s boost 100 also tops the
+  router's strategy lane, but it needs no interactive decomposition — its
+  tactics are auto-created. The lane must not treat its rank as a
+  decomposition request; guard detail lands with this tactic's
+  finalization. Until then selector align skips for it are expected.
+- **Scope:** a main-specific instance of the general signal-ranking rule
+  (a failing signal's resolution inherits the owning node's boost; default
+  = no elevation); strategy-signal failures keep routing to
+  `/align-tactics`.
 - No gh issue, no `dispatch:*` label, no re-enabled GitHub features
   (`has_issues` stays disabled — drain-state monotonicity condition on
   `strategy-graph-native-dispatch`).
