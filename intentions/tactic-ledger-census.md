@@ -30,10 +30,25 @@ execution:
   attempts: {}
   markers:
     - qa-done
+    - reviewed
   strategy_fingerprint: 7e5a9be9d1d3720fc204d6e801cc3f20cb1f3c409011a9ff700944db7b525268
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "review phase cannot run in the graph-tick worker: /review-fix Step 2
+    requires the Workflow tool to execute .claude/workflows/review-fix.js, which
+    this background worker session lacks (Workflow tool absent, not deferrable).
+    The node lane preamble validated cleanly (phase=review, PR #2860, CI
+    passing, labels none) and all inline scans ran: surface=code, deps=false,
+    CodeQL=0 open alerts, erosion=0 findings — only the Workflow fan-out is
+    blocked. Same class as the tactic-multiserve-fingerprint-stamp park (commit
+    35096513). Next steps: run /review-fix tactic-ledger-census from a full
+    interactive/office-hours session that HAS the Workflow tool; let it complete
+    the review fan-out and apply the reviewed marker via transition-node
+    tactic-ledger-census --set-pr 2860; then manually clear this office_hours
+    park (no unpark primitive exists)."
+  since: 2026-07-12
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes: {}
