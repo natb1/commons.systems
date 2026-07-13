@@ -23,7 +23,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: fix
+phase: implement
 execution:
   branch: tactic-dispatch-legacy-rewire
   pr: 2869
