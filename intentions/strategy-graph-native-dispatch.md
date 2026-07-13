@@ -321,7 +321,12 @@ clarifications:
       advisories), or fixes that would add defensive fallbacks contrary to
       code-style. Ignored findings are not graph-recorded; every disposition
       including refutation reasons is recorded once in the PR review comment as
-      the audit trail. Recorded 2026-07-04 interview."
+      the audit trail. Recorded 2026-07-04 interview. (Amended 2026-07-13: cost
+      now enters the resolve/defer boundary — a confirmed out-of-contract
+      finding cheaper to fix than to defer is resolved in scope rather than
+      deferred, and only expensive out-of-contract findings become draft
+      tactics; the contract trigger and the ignore category are unchanged. See
+      the fix-everything-cheap clarification of that date.)"
   - question: Is the qa phase a re-run of the automated checks — and what does a
       bootstrap-emulating session owe it?
     answer: "No — full parity with the legacy qa-fix skill
@@ -1176,7 +1181,11 @@ clarifications:
       the other review steps are untouched. This refines clarification 19's
       disposition mechanics for the code-review/security-review sources
       specifically; it does not change the three-way disposition doctrine
-      itself. Recorded 2026-07-11 interview."
+      itself. Recorded 2026-07-11 interview. (Amended 2026-07-13: the three-way
+      disposition doctrine this clarification leaves intact was itself refined
+      that day — the unfixed residue is now classified into cheap findings fixed
+      in scope versus expensive out-of-contract findings deferred, not filed
+      wholesale. See the fix-everything-cheap clarification.)"
   - question: Frozen (undecomposed or soft-frozen) tactics carry a ranking — are
       they selectable, and what runs when the dispatch script picks one?
     answer: "Yes — decomposition and re-evaluation are dispatchable, ranked,
@@ -1390,6 +1399,49 @@ clarifications:
       Implementation is retained as draft tactics
       tactic-graph-commit-auto-serialization and tactic-claim-dedup-only.
       Recorded 2026-07-13 interview."
+  - question: Clarification 19 disposes review findings by verification × contract
+      alone — every confirmed out-of-contract finding defers to a draft tactic.
+      Does the cost of the fix versus the cost of deferring it also bear on the
+      disposition?
+    answer: "Yes — cost is a second resolve-in-scope trigger, refining clarification
+      19's resolve/defer boundary (the 'fix everything cheap' doctrine). A
+      confirmed finding is resolved in the review phase's content-fix loop when
+      it EITHER breaks the tactic's contract (clarification 19's original
+      trigger, unchanged) OR is cheaper to fix than to defer; only a confirmed
+      out-of-contract finding that is expensive to fix — a real refactor —
+      defers to a draft tactic. Cheaper-to-fix-than-to-defer is the line:
+      deferral carries real overhead (a draft-tactic body, a later
+      /align-tactics finalization round, a separate PR and its review), so a
+      localized low-risk edit whose diff and risk are smaller than that overhead
+      — reuse an existing helper, consolidate a read, add input validation,
+      tighten a regex — is fixed now; a fix that introduces new structure or is
+      cross-cutting (an algorithmic rewrite, a memoization architecture) defers,
+      its in-PR risk and scope exceeding the deferral overhead. Cost refines
+      ONLY the resolve↔defer boundary: it never moves a finding out of the
+      ignore category — refuted findings, unreachable scenarios, below-threshold
+      pre-existing advisories, and fixes that would add defensive fallbacks
+      contrary to code-style stay ignored however cheap, because fixing a
+      non-finding is waste and a defensive fallback violates code-style
+      regardless of cost. A finding fixed in scope is still recorded, satisfying
+      the graph-as-sole-tracker rule (clarification 30) and clarification 19's
+      own audit trail: the disposition and the fix land in the PR review
+      comment, so 'fixed cheaply in-PR' drops nothing. Steelman resolved as
+      divergence: strict contract-scoping — defer every out-of-contract finding,
+      keeping the PR to its exact deliverable (clarification 19 as first
+      recorded) — was put and diverged from: it pays the full deferral overhead
+      for a sub-overhead fix and accumulates debt on surfaces the diff already
+      touched, against the greenfield lens (fix it right, now) and the
+      fold-don't-drop smallness doctrine (clarification 30). This refines
+      clarification 19's disposition and the residue-handling of the
+      trust-builtin clarification (the review skills' unfixed residue is now
+      classified into fix-cheap / defer-expensive, not filed wholesale); the
+      three-way structure and its adversarial-confirm requirement are otherwise
+      unchanged. First application: PR #2865 (tactic-graph-digest-tooling) fixed
+      4 confirmed correctness/hardening findings plus cheap
+      reuse/efficiency/convention improvements in scope and deferred two large
+      refactors (a near-duplicate O(n²) inverted index, closure memoization) to
+      tactic-graph-digest-quality-followups. Implementation retained as draft
+      tactic-review-cheap-fix-disposition. Recorded 2026-07-13 interview."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
