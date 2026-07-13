@@ -4,7 +4,7 @@ kind: tactic
 statement: Budget migration guide from hosted budgeting tools, plus an honest
   'how this is different' section — documentation, not positioning
 owner: ai
-status: raw
+status: codified
 parent: null
 rationale: "Retained from gh #516 during the 2026-07-06 tier-gate round. A
   migration guide courts users at their moment of highest intent — actively
@@ -29,7 +29,19 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "Gated on the tier-2 (user) entry declaration on
+    strategy-progressive-validation, not yet declared (tier 1 validated; tiers
+    2-4 not entered as of 2026-07-06). A migration guide from hosted budgeting
+    tools courts users at their moment of highest intent (actively leaving an
+    incumbent), so it is an invitation and strategy-user-onboarding condition 1
+    gates it on tier-2 entry. This is author-owned: the author must declare
+    tier-2 before it is planned. Recommend: when tier-2 is declared, run
+    /align-tactics strategy-user-onboarding to finalize this into an
+    implement-phase plan (retained gh #516 scope is in this node body); until
+    then leave parked."
+  since: 2026-07-13
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes: {}
