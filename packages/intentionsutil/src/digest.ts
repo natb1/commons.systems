@@ -18,6 +18,8 @@ import { parse } from "yaml";
 import type { IntentionNode } from "./schema.js";
 import { validateGraph } from "./schema.js";
 import { IntentionSchemaError } from "./errors.js";
+import { extractFrontmatter } from "./frontmatter.js";
+import { readingDate } from "./router.js";
 
 /**
  * Inputs the CLI gathers for the digest. Kept as plain data so the module
@@ -42,17 +44,11 @@ export interface DigestInput {
 
 // --- Section 1: per-node digest lines --------------------------------------
 
-const ISO_DATE = /\b(\d{4}-\d{2}-\d{2})\b/g;
-
 /** Latest `YYYY-MM-DD` appearing across a node's clarification answers, or "-". */
 function latestClarificationDate(node: IntentionNode): string {
-  let latest = "";
-  for (const c of node.clarifications) {
-    for (const m of c.answer.matchAll(ISO_DATE)) {
-      if (m[1] > latest) latest = m[1]; // ISO dates sort lexically
-    }
-  }
-  return latest === "" ? "-" : latest;
+  // Reuse router's shared ISO-date extractor over the joined answers rather than
+  // re-deriving the date regex here (avoids drift between two implementations).
+  return readingDate(node.clarifications.map((c) => c.answer).join("\n")) ?? "-";
 }
 
 /** `attributes.conditions` length, or 0 when absent / not an array. */
@@ -120,8 +116,7 @@ function tableValidate(nodes: IntentionNode[]): string {
  * targets reaches one. An empty-`serves` strategy whose parent chain reaches a
  * virtue root is closed (the sub-strategy inheritance case).
  */
-function tableClosure(nodes: IntentionNode[]): string {
-  const byId = new Map(nodes.map((n) => [n.id, n]));
+function tableClosure(nodes: IntentionNode[], byId: Map<string, IntentionNode>): string {
   const memo = new Map<string, boolean>();
   const stack = new Set<string>();
 
@@ -179,8 +174,7 @@ function tableDonePresent(nodes: IntentionNode[]): string {
  * Partial overlaps included, strategy AND tactic layers. Emits the node id plus
  * only the redundant (parent-inherited) entries.
  */
-function tableDupServes(nodes: IntentionNode[]): string {
-  const byId = new Map(nodes.map((n) => [n.id, n]));
+function tableDupServes(nodes: IntentionNode[], byId: Map<string, IntentionNode>): string {
   const rows: string[] = [];
   for (const node of nodes) {
     if (node.parent === null) continue;
@@ -255,16 +249,15 @@ function tableNearDup(nodes: IntentionNode[], threshold = 0.6): string {
 
 // --- DANGLING-REFS ---------------------------------------------------------
 
-// An id-shaped token: a kind prefix seen in the graph followed by >=1 slug
-// segments. Kind prefixes are DERIVED from the vocabulary (never a hardcoded
-// kind list), so the extractor tracks whatever kinds the graph actually holds.
-function idShapeRegexp(prefixes: Set<string>): RegExp {
-  const alt = sortedIds(prefixes)
+// The kind-prefix alternation, regex-escaped and id-sorted. Kind prefixes are
+// DERIVED from the vocabulary (never a hardcoded kind list), so the extractor
+// tracks whatever kinds the graph actually holds. Shared by every
+// prefix-derived matcher so escaping and ordering never drift between them (ids
+// are only path-safety validated, so a prefix can contain a regex metacharacter).
+function escapedPrefixAlt(prefixes: Set<string>): string {
+  return sortedIds(prefixes)
     .map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
     .join("|");
-  // Boundaries reject [\w-] on either side so a real id inside a longer compound
-  // (e.g. `tactic-x` inside `tactic-x-v2`) does not match.
-  return new RegExp(`(?<![\\w-])(?:${alt})-[a-z0-9]+(?:-[a-z0-9]+)*(?![\\w-])`, "g");
 }
 
 interface DanglingRef {
@@ -291,11 +284,17 @@ function tableDanglingRefs(input: DigestInput): string {
   const deletedIds = new Set(input.deletedIds);
   const vocab = new Set<string>([...storeIds, ...deletedIds]);
   const prefixes = new Set([...vocab].map((id) => id.split("-")[0]).filter((p) => p.length > 0));
-  const idShape = idShapeRegexp(prefixes);
+  const alt = escapedPrefixAlt(prefixes);
+  // Boundaries reject [\w-] on either side so a real id inside a longer compound
+  // (e.g. `tactic-x` inside `tactic-x-v2`) does not match.
+  const idShape = new RegExp(`(?<![\\w-])(?:${alt})-[a-z0-9]+(?:-[a-z0-9]+)*(?![\\w-])`, "g");
   // Backtick-quoted content: `...` on a single line.
   const backtickRe = /`([^`\n]+)`/g;
   // Family wildcard inside backticks: <prefix>-...-*
-  const wildcardRe = new RegExp(`^(?:${[...prefixes].join("|")})-[a-z0-9-]+-\\*$`);
+  const wildcardRe = new RegExp(`^(?:${alt})-[a-z0-9-]+-\\*$`);
+  // Anchored id-shape test for a whole backtick span, built once from the same
+  // escaped alternation (hoisted out of the per-match loop below).
+  const anchoredIdShape = new RegExp(`^(?:${alt})-[a-z0-9]+(?:-[a-z0-9]+)*$`);
 
   const classify = (ref: string): "live" | "pruned" | "missing" =>
     storeIds.has(ref) ? "live" : deletedIds.has(ref) ? "pruned" : "missing";
@@ -311,13 +310,15 @@ function tableDanglingRefs(input: DigestInput): string {
     for (const m of body.matchAll(backtickRe)) {
       const t = m[1].trim();
       if (wildcardRe.test(t)) {
+        if (seen.has(t)) continue; // same wildcard quoted twice in one body — dedup
+        seen.add(t);
         const prefix = t.slice(0, -1); // drop trailing '*'
         const members = [...storeIds].filter((id) => id.startsWith(prefix)).length;
         wildcardRows.push(`  ${node.id} -> ${t} (${members} member${members === 1 ? "" : "s"})`);
         continue;
       }
-      // id-shaped? reuse the prefix/shape test via a fresh anchored regexp.
-      if (new RegExp(`^(?:${[...prefixes].join("|")})-[a-z0-9]+(?:-[a-z0-9]+)*$`).test(t)) {
+      // id-shaped? reuse the anchored test built once above.
+      if (anchoredIdShape.test(t)) {
         if (t !== node.id && !seen.has(t)) {
           seen.add(t);
           refs.push({ ref: t, referencedBy: node.id, klass: classify(t) });
@@ -341,10 +342,13 @@ function tableDanglingRefs(input: DigestInput): string {
   // body mention a missing ref? The planned-vs-violation judgment stays with the
   // audit; the digest only flags the heuristic.
   const openTactics = input.nodes.filter((n) => n.kind === "tactic" && n.phase !== "done");
-  const mentionsRef = (ref: string): boolean =>
-    openTactics.some(
-      (t) => t.statement.includes(ref) || (input.bodies.get(t.id) ?? "").includes(ref),
-    );
+  const mentionsRef = (ref: string): boolean => {
+    // Match the ref as a whole id token (same [\w-] boundaries as idShape), so a
+    // missing `tactic-x` is not falsely "planned" by an unrelated `tactic-x-v2`.
+    const escaped = ref.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp(`(?<![\\w-])${escaped}(?![\\w-])`);
+    return openTactics.some((t) => re.test(t.statement) || re.test(input.bodies.get(t.id) ?? ""));
+  };
 
   const missing = refs.filter((r) => r.klass === "missing");
   const pruned = refs.filter((r) => r.klass === "pruned");
@@ -398,9 +402,9 @@ function tableStoredDefaults(input: DigestInput): string {
   for (const node of input.nodes) {
     const raw = input.rawTexts.get(node.id);
     if (raw === undefined) continue;
-    const fm = extractFrontmatterText(raw);
-    if (fm === null) continue;
-    const parsed: unknown = parse(fm);
+    // Shared frontmatter parser throws on a malformed fence — a corrupted node
+    // surfaces loudly rather than silently vanishing from the audit.
+    const parsed: unknown = parse(extractFrontmatter(raw, node.id));
     if (parsed === null || typeof parsed !== "object") continue;
     let count = 0;
     for (const value of Object.values(parsed)) {
@@ -420,24 +424,18 @@ function tableStoredDefaults(input: DigestInput): string {
   return `[STORED-DEFAULTS] ${total} default-valued keys across ${rows.length} nodes (top ${shown.length} shown)\n${lines.join("\n")}`;
 }
 
-/** Extract the raw frontmatter text (between the first two `---` fences), or null. */
-function extractFrontmatterText(raw: string): string | null {
-  if (!raw.startsWith("---\n")) return null;
-  const body = raw.slice("---\n".length);
-  const closeIndex = body.search(/^---$/m);
-  if (closeIndex === -1) return null;
-  return body.slice(0, closeIndex);
-}
-
 // --- Assembly --------------------------------------------------------------
 
 /** Section 2 — the derived check tables, in a fixed order. */
 export function renderTables(input: DigestInput): string {
+  // Built once and shared by the tables that need id lookup (tableValidate
+  // builds its own inside validateGraph).
+  const byId = new Map<string, IntentionNode>(input.nodes.map((n) => [n.id, n]));
   return [
     tableValidate(input.nodes),
-    tableClosure(input.nodes),
+    tableClosure(input.nodes, byId),
     tableDonePresent(input.nodes),
-    tableDupServes(input.nodes),
+    tableDupServes(input.nodes, byId),
     tableNearDup(input.nodes),
     tableDanglingRefs(input),
     tableStoredDefaults(input),
