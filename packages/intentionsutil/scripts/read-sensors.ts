@@ -618,13 +618,15 @@ export function sensorReadingCoverage(
  * Build the intention-store sensor — the store measuring itself. `read()` is
  * total (never throws — degrades to `"unknown"` on a load failure, per the
  * total-sensor contract above) and returns the stable format:
- *   `serves: <a>/<b> open tactics; readings: <c>/<d> sensor-naming strategies (<e> unregistered sensors)`
- * `registeredNames` is the set of sensor names the driver's registry knows
- * (including this sensor's own name); `loadNodes` reads the store — injected so
+ *   `serves: <a>/<b> open tactic(s); readings: <c>/<d> sensor-naming strateg(y/ies) (<e> unregistered sensor(s))`
+ * with each counted noun singular/plural to match its count. `getRegisteredNames`
+ * yields the set of sensor names the driver's registry knows (including this
+ * sensor's own name); it is queried at `read()` time so the set can never drift
+ * from the actual registry membership. `loadNodes` reads the store — injected so
  * unit tests can supply fixture arrays without touching the live store.
  */
 export function makeIntentionStoreSensor(
-  registeredNames: ReadonlySet<string>,
+  getRegisteredNames: () => ReadonlySet<string>,
   loadNodes: () => IntentionNode[],
 ): Sensor {
   return {
@@ -637,11 +639,14 @@ export function makeIntentionStoreSensor(
         return "unknown";
       }
       const serves = openTacticServesCoverage(nodes);
-      const readings = sensorReadingCoverage(nodes, registeredNames);
+      const readings = sensorReadingCoverage(nodes, getRegisteredNames());
+      const openNoun = serves.open === 1 ? "tactic" : "tactics";
+      const strategyNoun = readings.total === 1 ? "strategy" : "strategies";
+      const sensorNoun = readings.unregistered === 1 ? "sensor" : "sensors";
       return (
-        `serves: ${serves.withServes}/${serves.open} open tactics; ` +
-        `readings: ${readings.read}/${readings.total} sensor-naming strategies ` +
-        `(${readings.unregistered} unregistered sensors)`
+        `serves: ${serves.withServes}/${serves.open} open ${openNoun}; ` +
+        `readings: ${readings.read}/${readings.total} sensor-naming ${strategyNoun} ` +
+        `(${readings.unregistered} unregistered ${sensorNoun})`
       );
     },
   };
@@ -657,17 +662,16 @@ export function buildDefaultRegistry(): SensorRegistry {
   registry.register(gitSensor);
   registry.register(tokenEconomySensor);
   registry.register(lifecycleSensor);
-  // The intention-store sensor names all registry members (including itself) so
-  // its unregistered-sensor count is computed against the true registry.
-  const registeredNames = new Set<string>([
-    vitestSensor.name,
-    gitSensor.name,
-    tokenEconomySensor.name,
-    lifecycleSensor.name,
-    INTENTION_STORE_SENSOR_NAME,
-  ]);
+  // Register the intention-store sensor last and have it derive the set of
+  // registered sensor names from the registry itself at read() time — by then
+  // the registry holds every sensor, including this one. Deriving the set (vs
+  // hand-listing it) means the unregistered-sensor count can never drift from
+  // the true registry membership if a future sensor is added above.
   registry.register(
-    makeIntentionStoreSensor(registeredNames, () => listNodes(intentionsDir)),
+    makeIntentionStoreSensor(
+      () => registry.names(),
+      () => listNodes(intentionsDir),
+    ),
   );
   return registry;
 }
@@ -699,6 +703,16 @@ export interface ReadSummary {
 export function readStoreSensors(dir: string, registry: SensorRegistry): ReadSummary {
   const summary: ReadSummary = { read: 0, skippedNoSignal: 0, unregistered: [] };
 
+  // READ pass: compute every node's fresh reading against a single consistent
+  // pre-run store snapshot, accumulating the updated nodes without writing any.
+  // Deferring all writes to a second pass is what keeps a whole-store sensor
+  // honest: the intention-store sensor re-reads the store while computing its
+  // reading, and if writes happened inline here it would observe a store
+  // partially mutated by earlier iterations — its serves/readings counts would
+  // be an artifact of node iteration order rather than a clean snapshot. With
+  // no writes during this pass, every such re-read sees the same unmutated
+  // pre-run store.
+  const updates: IntentionNode[] = [];
   for (const node of listNodes(dir)) {
     if (node.success_signal === null) {
       // No signal named — there is genuinely nothing to read. Not reported.
@@ -721,7 +735,12 @@ export function readStoreSensors(dir: string, registry: SensorRegistry): ReadSum
 
     const reading = sensor.read(node);
     const gap = deriveGap({ ...node, reading });
-    writeNode(dir, { ...node, reading, gap });
+    updates.push({ ...node, reading, gap });
+  }
+
+  // WRITE pass: persist every updated node now that all readings are computed.
+  for (const updated of updates) {
+    writeNode(dir, updated);
     summary.read += 1;
   }
 

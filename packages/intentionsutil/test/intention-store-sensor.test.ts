@@ -119,7 +119,7 @@ describe("makeIntentionStoreSensor", () => {
   const registered = new Set<string>(["vitest", INTENTION_STORE_SENSOR_NAME]);
 
   it("names itself the verbatim declared sensor string", () => {
-    const sensor = makeIntentionStoreSensor(registered, () => []);
+    const sensor = makeIntentionStoreSensor(() => registered, () => []);
     expect(sensor.name).toBe("the intention store itself");
     expect(INTENTION_STORE_SENSOR_NAME).toBe("the intention store itself");
   });
@@ -133,14 +133,14 @@ describe("makeIntentionStoreSensor", () => {
       node({ id: "s-unread", kind: "strategy", success_signal: signal("vitest"), reading: null }),
       node({ id: "s-unreg", kind: "strategy", success_signal: signal("nowhere"), reading: "y" }),
     ];
-    const sensor = makeIntentionStoreSensor(registered, () => nodes);
+    const sensor = makeIntentionStoreSensor(() => registered, () => nodes);
     expect(sensor.read(nodes[0])).toBe(
-      "serves: 1/2 open tactics; readings: 2/3 sensor-naming strategies (1 unregistered sensors)",
+      "serves: 1/2 open tactics; readings: 2/3 sensor-naming strategies (1 unregistered sensor)",
     );
   });
 
   it("is total — degrades to 'unknown' when loadNodes throws", () => {
-    const sensor = makeIntentionStoreSensor(registered, () => {
+    const sensor = makeIntentionStoreSensor(() => registered, () => {
       throw new Error("store unreadable");
     });
     expect(sensor.read(node({ id: "any" }))).toBe("unknown");
