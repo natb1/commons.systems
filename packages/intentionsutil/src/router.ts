@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { computeSignalPath, isSignalUnvalidated, resolveAttention } from "./attention.js";
+import { isStrategyStale } from "./transitions.js";
 import type { IntentionNode, Phase } from "./schema.js";
 
 // Graph router v2, first half: selection (tactic-graph-router-selector).
@@ -236,13 +237,12 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
   for (const s of strategies) {
     const fp = strategyFingerprint(s);
     const children = childrenOf.get(s.id) ?? [];
-    const stale = children.filter(
-      (t) =>
-        isOpenTactic(t) &&
-        t.execution !== null &&
-        t.execution.strategy_fingerprint !== null &&
-        t.execution.strategy_fingerprint !== fp,
-    );
+    // Per-strategy staleness: a child freezes THIS strategy only if its stamp
+    // carries an entry for `s.id` that differs from `s`'s current fingerprint
+    // (or a legacy bare-string stamp differing from it). A multi-serves tactic
+    // whose map is fresh against `s.id` does not freeze `s`, even if another of
+    // its serving strategies has since drifted.
+    const stale = children.filter((t) => isOpenTactic(t) && isStrategyStale(t.execution, s.id, fp));
     if (stale.length === 0) continue;
     frozenStrategyIds.add(s.id);
     for (const t of children) frozenTacticIds.add(t.id);

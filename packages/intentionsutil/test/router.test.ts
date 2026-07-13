@@ -337,6 +337,65 @@ describe("soft-freeze gate", () => {
       expect.objectContaining({ event: "freeze", strategy: "strategy-s" }),
     ]);
   });
+
+  // Multi-serves: the per-strategy map stamp must not false-freeze siblings.
+  // An honest tactic serving two strategies carries one fingerprint per serving
+  // strategy; a single legacy string cannot equal two substance hashes, which is
+  // the class of freeze this map form fixes.
+  const multiServes = (
+    fingerprint: string | Record<string, string> | null,
+  ): { nodes: IntentionNode[]; sA: IntentionNode; sB: IntentionNode } => {
+    const sA = strategy({ id: "strategy-a", reading: "validated" });
+    const sB = strategy({ id: "strategy-b", reading: "validated" });
+    const nodes = [
+      sA,
+      sB,
+      tactic({
+        id: "tactic-multi",
+        serves: ["strategy-a", "strategy-b"],
+        validates: ["strategy-a", "strategy-b"],
+        phase: "implement",
+        execution: exec({ strategy_fingerprint: fingerprint }),
+      }),
+    ];
+    return { nodes, sA, sB };
+  };
+
+  it("a map stamp fresh against BOTH serving strategies produces no freeze", () => {
+    const { nodes, sA, sB } = multiServes(null);
+    const stamped = {
+      "strategy-a": strategyFingerprint(sA),
+      "strategy-b": strategyFingerprint(sB),
+    };
+    const withStamp = nodes.map((n) =>
+      n.id === "tactic-multi" ? { ...n, execution: exec({ strategy_fingerprint: stamped }) } : n,
+    );
+    const sel = selectGraphTargets(withStamp);
+    expect(sel.events.filter((e) => e.event === "freeze")).toEqual([]);
+    expect(sel.candidates.map((c) => c.id)).toContain("tactic-multi");
+  });
+
+  it("a map entry stale against ONE serving strategy freezes only that strategy", () => {
+    const { nodes, sA } = multiServes(null);
+    // Fresh against strategy-a, deliberately stale against strategy-b.
+    const stamped = { "strategy-a": strategyFingerprint(sA), "strategy-b": "stale-b" };
+    const withStamp = nodes.map((n) =>
+      n.id === "tactic-multi" ? { ...n, execution: exec({ strategy_fingerprint: stamped }) } : n,
+    );
+    const sel = selectGraphTargets(withStamp);
+    const frozen = sel.events.filter((e) => e.event === "freeze").map((e) => e.strategy);
+    expect(frozen).toEqual(["strategy-b"]);
+    expect(frozen).not.toContain("strategy-a");
+  });
+
+  it("a legacy bare-string stamp freezes every serving strategy (compare-against-all)", () => {
+    const { nodes } = multiServes("legacy-single-string");
+    const sel = selectGraphTargets(nodes);
+    const frozen = sel.events.filter((e) => e.event === "freeze").map((e) => e.strategy).sort();
+    // One string cannot match two substance hashes, so both strategies freeze —
+    // the legacy behavior this migration preserves until a re-stamp converts it.
+    expect(frozen).toEqual(["strategy-a", "strategy-b"]);
+  });
 });
 
 describe("ordering", () => {

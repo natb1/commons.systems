@@ -90,15 +90,15 @@ export function computeFreshness(args: Args): FreshnessResult {
   const stamp = parseScopeStamp(stampContent);
   const scopeStale = isScopeStale(stamp, scopeFp);
 
-  // Strategy fingerprint gate: compare against EVERY serving strategy — a
-  // mismatch on any one freezes the subtree. `execution.strategy_fingerprint`
-  // is a single stamp, so a mismatch against any serving strategy's current
-  // substance is stale.
+  // Strategy fingerprint gate: check each serving strategy against its OWN entry
+  // in the per-strategy stamp map — a mismatch on any one freezes the subtree.
+  // A serving strategy absent from the map is not stale (per-strategy null); a
+  // legacy bare-string stamp still compares against every serving strategy.
   let strategyStale = false;
   for (const sid of servingStrategyIds(tactic, byId)) {
     const strategy = byId.get(sid);
     if (strategy === undefined) continue;
-    if (isStrategyStale(tactic.execution, strategyFingerprint(strategy))) {
+    if (isStrategyStale(tactic.execution, sid, strategyFingerprint(strategy))) {
       strategyStale = true;
       break;
     }
