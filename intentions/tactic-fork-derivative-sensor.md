@@ -37,25 +37,12 @@ execution:
   markers:
     - planned
     - qa-done
+    - reviewed
   strategy_fingerprint: null
 validates:
   - strategy-distribute-workflow
 blocked_by: []
-office_hours:
-  reason: "review-fix cannot execute in this graph-lane worker: the Workflow tool
-    it requires to run the finder/verify/fix fan-out
-    (.claude/workflows/review-fix.js) is not available in this background
-    execution context, and ad-hoc emulation of the review phase is explicitly
-    forbidden. PR #2861 is CI-passing with a small, well-tested diff (adds an
-    optional forksDetail field through the office-hours snapshot producer +
-    dashboard). Next steps: run /review-fix tactic-fork-derivative-sensor in a
-    full interactive session (which has the Workflow tool) so it can fan out
-    finders, apply any fixes via commit-merge-push, post the PR comment, and run
-    transition-node to record the reviewed marker and arm auto-merge; then,
-    because this park set office_hours, manually clear the node's office_hours
-    field afterward (no unpark primitive)."
-  since: 2026-07-12
-  recommendation: null
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
