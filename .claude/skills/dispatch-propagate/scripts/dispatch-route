@@ -2,6 +2,13 @@
 # Runs the deterministic phase-launch prelude consumed by dispatch-launch-worker.
 # Usage: dispatch-route <N> <worktree-path>
 #
+# tactic-dispatch-legacy-rewire (Unit 2 audit) — DEFER-TO-UNIT-3 (legacy-lane-only,
+#   delete): issue-lane routing keyed on <N> and dispatch:* / dispatch-phase.
+#   Confirmed callers are all legacy-lane (dispatch-launch-worker, dispatch-provision-worktree,
+#   dispatch-materialize-spawn, dispatch-tick, dispatch-main-qa-triage, dispatch-merge-main,
+#   dispatch-recover-dispatched-phase); NO graph-lane caller. The graph lane routes
+#   via dispatch-graph-execute + provision-node-worktree. Unit 3 deletes this script.
+#
 # Runs the entire deterministic prelude — the worktree cross-check, the
 # worktree provisioning + origin/main merge, the dispatch-ci-ready gate, and
 # dispatch-phase — in a single invocation, so the launcher script receives one

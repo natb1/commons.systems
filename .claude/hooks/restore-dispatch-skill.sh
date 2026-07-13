@@ -2,6 +2,16 @@
 # Context-clear recovery hook: if this is a dispatch worker session, emit a
 # reload instruction. Bound to SessionStart:clear.
 # Always exits 0 — never blocks session recovery.
+#
+# tactic-dispatch-legacy-rewire (Unit 2 audit) — DEFER-TO-UNIT-3 (delete-with-the-lane):
+#   Every restore path here keys on the legacy `^[0-9]+-` issue-worker name/branch
+#   (primary path and the git-branch fallback below); the phase it restores comes
+#   from dispatch-phase (a gh dispatch:* label read). A graph-lane node-id session
+#   matches neither and exits 0 (restores nothing). This hook is thus entirely
+#   issue-lane, and its dispatch-phase caller is issue-lane-only. It dies with the
+#   legacy issue lane in Unit 3. (Graph-lane context-clear skill-restoration is a
+#   separate, not-yet-built concern — out of scope for the rewire; do NOT bolt a
+#   node-phase branch on here.)
 set -uo pipefail
 trap 'echo "[restore-dispatch-skill] WARNING: unexpected error on line $LINENO" >&2; exit 0' ERR
 

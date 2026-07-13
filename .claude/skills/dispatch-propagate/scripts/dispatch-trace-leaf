@@ -2,6 +2,12 @@
 # Trace from issue N to the deepest open leaf (no open children).
 # Usage: dispatch-trace-leaf <issue-num> <queue|explicit> [--exclude <n>...]
 #
+# tactic-dispatch-legacy-rewire (Unit 2 audit) — DEFER-TO-UNIT-3 (legacy-lane-only,
+#   delete): legacy issue-lane leaf selection over GitHub sub-issue/blocker graph.
+#   Confirmed callers are all legacy-lane (dispatch-select-target, dispatch-materialize-spawn,
+#   issue-sub-issues, dispatch-tick); NO graph-lane caller. The graph lane selects
+#   via the intention graph (select-targets.ts). Unit 3 deletes this script.
+#
 # Walks open blockers and open sub-issues depth-first, visiting the
 # lowest-numbered open child first, to find the lowest-numbered reachable
 # open leaf. Prints one issue number.

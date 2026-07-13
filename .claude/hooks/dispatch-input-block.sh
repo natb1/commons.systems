@@ -1,6 +1,16 @@
 #!/usr/bin/env bash
 # dispatch-input-block: worker input-block handler.
 #
+# tactic-dispatch-legacy-rewire (Unit 2 audit) — DEFER-TO-UNIT-3 (delete-with-the-lane):
+#   This hook fires ONLY for a legacy `<N>-` issue/parse-job worker (Discriminator 2,
+#   ^[0-9]+- on the job name). A graph-lane node-id worker does NOT match, so it
+#   exits early and never applies a dispatch:office-hours label — graph-lane input
+#   blocks are the graph tick's / park-node's concern, not this hook's. The
+#   dispatch-apply-office-hours label-write below is therefore issue-lane-only.
+#   The legacy issue lane is still live-wired (dispatch-tick → dispatch-materialize-spawn),
+#   so removing the label-apply now would break live issue-lane parking. Unit 3
+#   deletes this hook (and its settings.json wiring) when it removes the lane.
+#
 # Wired to three harness events through which a session can block on user
 # input:
 #   PreToolUse  matching ExitPlanMode and AskUserQuestion

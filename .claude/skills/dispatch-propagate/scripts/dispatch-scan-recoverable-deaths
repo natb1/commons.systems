@@ -3,6 +3,16 @@
 # phase-worker deaths the Stop hook never saw, arming the EXISTING resume
 # machinery (dispatch-schedule-rate-limit-resume) at most once per issue N.
 #
+# tactic-dispatch-legacy-rewire (Unit 2 audit) — DEFER-TO-UNIT-3 (delete-with-the-lane):
+#   This scan is entirely legacy issue-lane: it enumerates `^[0-9]+-` worker
+#   sessions (Step 5 name filter), reads the dispatch:office-hours label (guard b),
+#   and derives phase/model via dispatch-phase (Step 6). Graph-lane node-id
+#   workers are filtered out and its resume target (dispatch-schedule-rate-limit-resume
+#   → dispatch-resume-worker) is the issue-lane worker machinery. The graph lane
+#   (dispatch-graph-execute) has its own lock-free death handling and does NOT
+#   want this issue-keyed scan. It dies with the legacy lane in Unit 3, which also
+#   drops the dispatch-tick call site (dispatch-tick line ~409).
+#
 # Issue #2454. The Claude harness does NOT fire the Stop hook on an
 # API/stream error, so dispatch-stop.sh Branch A's transient-death self-heal
 # (#1733) never runs for those deaths — the session strands `failed`, its

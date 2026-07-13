@@ -2,6 +2,18 @@
 # Print the current workflow phase for an issue or branch.
 # Usage: dispatch-phase <issue-num|branch>
 #
+# tactic-dispatch-legacy-rewire (Unit 2 audit) — legacy dispatch:* label-derivation
+#   sensor; DELETE gated on Unit 3. Not deletable yet: live survivors remain, and
+#   ALL are legacy issue-lane callers removed with the lane in Unit 3 —
+#   dispatch-route, dispatch-select-target, dispatch-materialize-spawn,
+#   dispatch-scan-recoverable-deaths, dispatch-stop.sh (`<N>-` branch only), and
+#   restore-dispatch-skill.sh (`<N>-` branch only). The one NON-legacy consumer,
+#   statusline.sh, was rewired in Unit 2 off this sensor onto the persisted graph
+#   `phase:` (intentions/<branch>.md frontmatter). Graph-lane phase state is the
+#   node's persisted `phase` field — no consumer should derive it from labels via
+#   this script. Once Unit 3 removes the legacy lane, this script has zero
+#   survivors and is deleted.
+#
 # Prints exactly one actionable phase name to stdout:
 #   plan | implement | fix-conflicts | fix-checks | qa | review | main-qa | done
 #

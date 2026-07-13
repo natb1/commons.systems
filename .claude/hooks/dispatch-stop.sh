@@ -1,6 +1,19 @@
 #!/usr/bin/env bash
 # dispatch-stop: phase-skill worker session phase-completion + propagation handler.
 #
+# tactic-dispatch-legacy-rewire (Unit 2 audit) — dispatch:office-hours + dispatch-phase:
+#   The GRAPH-LANE node worker is ALREADY on the greenfield seam: a node-id job
+#   (intentions/<JOB_NAME>.md exists) parks via park-node → graph office_hours
+#   using the job-dir office-hours-reason / office-hours-recommendation markers,
+#   with NO gh label and NO dispatch-phase call (see the `^[0-9]+-` discriminator
+#   below and the node-park block right after it). NOTHING to rewire there.
+#   The remaining dispatch:office-hours label-apply (Branch A, dispatch-apply-office-hours)
+#   and the dispatch-phase call (CURRENT_PHASE) below are reached ONLY on the
+#   LEGACY `<N>-` issue-worker path. That path is DEFER-TO-UNIT-3: it dies with
+#   the legacy issue lane (still live-wired via dispatch-tick → dispatch-materialize-spawn),
+#   so removing it now would break live issue-lane parking. Unit 3 deletes the
+#   legacy `<N>-` branch (label-apply + dispatch-phase) when it removes the lane.
+#
 # Wired to the Stop event. Owns the post-phase disposition: read the
 # phase-completed marker, decide whether
 # the phase advanced or stalled, manage the dispatch:office-hours label,
