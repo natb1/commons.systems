@@ -43,6 +43,7 @@ export {
   parseScopeStamp,
   isScopeStale,
   isStrategyStale,
+  isFingerprintStale,
 } from "./transitions.js";
 export type { CiVerdict, TransitionDecision, ScopeStamp } from "./transitions.js";
 export { IntentionSchemaError } from "./errors.js";

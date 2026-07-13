@@ -102,6 +102,16 @@ const GITHUB: GithubSignals = {
   stars: 12,
   forks: 3,
   watchers: 7,
+  // forksDetail must survive produceSnapshot's parseProjectSignals round-trip.
+  forksDetail: [
+    {
+      owner: "forker",
+      repoUrl: "https://github.com/forker/commons.systems",
+      createdAt: "2026-01-01T00:00:00Z",
+      pushedAt: "2026-06-01T00:00:00Z",
+      stars: 2,
+    },
+  ],
 };
 
 /** A full set of deps with every external seam mocked. */

@@ -351,12 +351,41 @@ export function isScopeStale(stamp: ScopeStamp | null, currentFingerprint: strin
 }
 
 /**
- * The strategy-fingerprint gate result (soft-freeze, strategy clarification
- * 10): the serving strategy's current substance fingerprint differs from the
- * one stamped on `execution.strategy_fingerprint`. A null stamp is never
- * stale (stamping starts when the align machinery lands).
+ * Per-strategy staleness against a raw stamp value (soft-freeze, strategy
+ * clarification 10). The stamp is one of:
+ *   - `null` — never stale (stamping starts when the align machinery lands).
+ *   - a `Record<strategy-id, fingerprint>` map — stale iff the map carries a key
+ *     for `strategyId` AND its value differs from `currentFingerprint`; a
+ *     serving strategy ABSENT from the map is never stale (per-strategy null).
+ *   - a bare string (deprecated-legacy) — stale iff it differs from
+ *     `currentFingerprint`, ignoring `strategyId`. This preserves the legacy
+ *     compare-against-every-serving-strategy semantics: one string cannot equal
+ *     two substance hashes, so a legacy multi-serves stamp stays frozen until a
+ *     re-stamp converts it to map form.
  */
-export function isStrategyStale(execution: Execution | null, currentFingerprint: string): boolean {
-  if (execution === null || execution.strategy_fingerprint === null) return false;
-  return execution.strategy_fingerprint !== currentFingerprint;
+export function isFingerprintStale(
+  stamp: string | Record<string, string> | null,
+  strategyId: string,
+  currentFingerprint: string,
+): boolean {
+  if (stamp === null) return false;
+  if (typeof stamp === "string") return stamp !== currentFingerprint;
+  if (!Object.hasOwn(stamp, strategyId)) return false;
+  return stamp[strategyId] !== currentFingerprint;
+}
+
+/**
+ * The strategy-fingerprint gate result for a specific serving strategy: the
+ * strategy's current substance fingerprint differs from the entry stamped on
+ * `execution.strategy_fingerprint`. A null execution or null stamp is never
+ * stale. Delegates to `isFingerprintStale` — the single home of the per-strategy
+ * staleness rule.
+ */
+export function isStrategyStale(
+  execution: Execution | null,
+  strategyId: string,
+  currentFingerprint: string,
+): boolean {
+  if (execution === null) return false;
+  return isFingerprintStale(execution.strategy_fingerprint, strategyId, currentFingerprint);
 }

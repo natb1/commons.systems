@@ -123,6 +123,23 @@ clarifications:
       (tactic-align-audit-skill) are still drafts; the tooling goal named
       location (digest / align-audit report) is the eventual home that absorbs
       the table when those land. Recorded 2026-07-09 /align-tactics round.
+  - question: What did the 2026-07-12 /align-tactics round record (round-1 continuation)?
+    answer: "Finalized the sole retained draft,
+      tactic-review-sitting-skill-generalization, to phase: implement now that
+      its round-1 gate cleared (tactic-reading-review-skill landed, phase:
+      done). Scope: extend /reading-review with (1) mode-B context-broadening
+      confirmation sittings for author-owned durable nodes and (2) mode-A
+      delegation-exercise sittings on the event-based delegation review model —
+      the two runnable sittings the coverage sensor already projects
+      (frontier-reachable, event-based-review) but no skill ran; it validates
+      the strategy signal (curriculum motion). Mode-A world-state/condition
+      sittings were held out of scope this round (Side B, immaterial): the
+      standing-conditions sweep home is undecided, tracked on
+      tactic-condition-review-sweep (blocked_by
+      tactic-align-audit-legacy-review, both parked), and a later round mints
+      that branch once the sitting resolves the home. rounds.count stays 0 — the
+      round final tactic is at phase: implement, not yet done. Recorded
+      2026-07-13 /align-tactics round."
 tooling_goals:
   - kind: sensor
     statement: "review-coverage table in the graph digest / align-audit report — per

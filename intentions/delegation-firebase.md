@@ -94,5 +94,11 @@ attributes:
     files are the source of truth
   review_trigger: pricing or quota changes that break the runway rule; service deprecations
   last_assessed: 2026-07-02
+  household:
+    shared: false
+    basis: Deployment convenience for the author's deployed apps; project
+      infrastructure, not household-shared.
+    consent: []
+    preferences: []
 ---
 # App hosting and backend delegated to Firebase

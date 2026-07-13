@@ -20,6 +20,7 @@ import {
   parseScopeStamp,
   isScopeStale,
   isStrategyStale,
+  isFingerprintStale,
 } from "../src/transitions.js";
 
 function anode(partial: Partial<IntentionNode> & { id: string; kind: string }): IntentionNode {
@@ -297,10 +298,33 @@ describe("scope stamp parsing + gates", () => {
     expect(isScopeStale({ fingerprint: "a", sha: "s" }, "b")).toBe(true);
   });
 
-  it("isStrategyStale: null execution or null stamp is never stale; mismatch is stale", () => {
-    expect(isStrategyStale(null, "fp")).toBe(false);
-    expect(isStrategyStale(exec({ strategy_fingerprint: null }), "fp")).toBe(false);
-    expect(isStrategyStale(exec({ strategy_fingerprint: "fp" }), "fp")).toBe(false);
-    expect(isStrategyStale(exec({ strategy_fingerprint: "old" }), "fp")).toBe(true);
+  it("isStrategyStale (legacy string): null execution or null stamp is never stale; mismatch is stale", () => {
+    // The legacy bare string ignores the strategy id — it compares against every
+    // serving strategy (a single string cannot equal two substance hashes).
+    expect(isStrategyStale(null, "strategy-a", "fp")).toBe(false);
+    expect(isStrategyStale(exec({ strategy_fingerprint: null }), "strategy-a", "fp")).toBe(false);
+    expect(isStrategyStale(exec({ strategy_fingerprint: "fp" }), "strategy-a", "fp")).toBe(false);
+    expect(isStrategyStale(exec({ strategy_fingerprint: "old" }), "strategy-a", "fp")).toBe(true);
+  });
+
+  it("isStrategyStale (map): stale only when THIS strategy's entry differs; absent key is never stale", () => {
+    const stamp = { "strategy-a": "fp-a", "strategy-b": "fp-b" };
+    // Fresh against both mapped strategies.
+    expect(isStrategyStale(exec({ strategy_fingerprint: stamp }), "strategy-a", "fp-a")).toBe(false);
+    expect(isStrategyStale(exec({ strategy_fingerprint: stamp }), "strategy-b", "fp-b")).toBe(false);
+    // strategy-b drifted: stale against b, but a stays fresh (no false-freeze).
+    expect(isStrategyStale(exec({ strategy_fingerprint: stamp }), "strategy-b", "fp-b-new")).toBe(true);
+    expect(isStrategyStale(exec({ strategy_fingerprint: stamp }), "strategy-a", "fp-a")).toBe(false);
+    // A serving strategy absent from the map is never stale (per-strategy null).
+    expect(isStrategyStale(exec({ strategy_fingerprint: stamp }), "strategy-c", "anything")).toBe(false);
+  });
+
+  it("isFingerprintStale: raw-stamp predicate — null, string, and map forms", () => {
+    expect(isFingerprintStale(null, "strategy-a", "fp")).toBe(false);
+    expect(isFingerprintStale("fp", "strategy-a", "fp")).toBe(false);
+    expect(isFingerprintStale("old", "strategy-a", "fp")).toBe(true);
+    expect(isFingerprintStale({ "strategy-a": "fp" }, "strategy-a", "fp")).toBe(false);
+    expect(isFingerprintStale({ "strategy-a": "old" }, "strategy-a", "fp")).toBe(true);
+    expect(isFingerprintStale({ "strategy-b": "old" }, "strategy-a", "fp")).toBe(false);
   });
 });
