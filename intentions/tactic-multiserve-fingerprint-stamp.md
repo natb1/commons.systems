@@ -44,7 +44,20 @@ execution:
   strategy_fingerprint: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "review phase cannot run in the graph-tick worker: /review-fix requires
+    the Workflow tool to execute .claude/workflows/review-fix.js, which this
+    background worker session does not have (Workflow tool absent; not
+    deferrable). Skill accepted the node target fine and all inline scans ran
+    (surface=code, deps=false, CodeQL=0 alerts, erosion=10 advisory
+    complexity/dup findings) — only the Workflow fan-out is blocked. PR #2862,
+    CI passing, no dispatch:reviewed label yet. Next steps: run /review-fix
+    tactic-multiserve-fingerprint-stamp from a full interactive/office-hours
+    session that has the Workflow tool; let it complete the review fan-out,
+    apply dispatch:reviewed, and run transition-node --set-pr 2862; then
+    manually clear this office_hours park (no unpark primitive exists)."
+  since: 2026-07-12
+  recommendation: null
 pace_exempt: false
 rounds: null
 attributes: {}
