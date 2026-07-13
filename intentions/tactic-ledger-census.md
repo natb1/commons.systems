@@ -30,6 +30,7 @@ execution:
   attempts: {}
   markers:
     - qa-done
+    - reviewed
   strategy_fingerprint: 7e5a9be9d1d3720fc204d6e801cc3f20cb1f3c409011a9ff700944db7b525268
 validates: []
 blocked_by: []
