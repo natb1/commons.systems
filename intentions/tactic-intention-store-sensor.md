@@ -33,6 +33,7 @@ execution:
   attempts: {}
   markers:
     - qa-done
+    - reviewed
   strategy_fingerprint: d998d5c0754b51cfc489ee784db11b77d9b40eb91777ee0215076b0ad1a6bb69
 validates:
   - strategy-graph-drives-dispatch
