@@ -37,15 +37,18 @@ rationale: >-
   kind-tradition and five records; the apex question held open on both roots;
   the respect floor made explicitly Kantian with Aristotelian practice; the
   consent edge split by irreversibility; virtue-temperance rooted.
-reading: "chunk 1 completed 2026-07-07 (/reading-review run from the graph
-  definition, tactic-reading-review-skill): tradition-plato amended —
-  corrupts→misdirects (518e-519b), agency of turning, Form of the Good affirmed
-  as external anchor (Forms divergence narrowed), descent-as-reentry — with
-  cascades to both roots and strategy-external-calibration; the
-  borrowed-articulation loop caught a real misarticulation"
-gap: two rounds recorded (2026-07-04 dialectic, 2026-07-07 chunk 1) — recurrence
-  has begun; sustained recurrence across review cycles remains the unproven
-  clause
+reading: "chunk 2 completed 2026-07-13 (/reading-review live sitting, NE
+  II.1-7): tradition-aristotle ratified on habituation (the teacher turns the
+  practice, virtue of character as social act, the II.4 circle entered by chance
+  or guidance) and requalified on the mean (intra-virtue; tension_with recorded
+  as graph-native cross-guard divergence); kind-virtue's hexis definition
+  ratified; the cadence-as-habituation deferral amended (synchronization drift,
+  three-scenario adjudication) — a double reading-wins catch; the
+  comprehension-then-ratify conduct rule recorded; three new deferrals homed on
+  chunks 4, 5, 6"
+gap: three rounds recorded (2026-07-04 dialectic, 2026-07-07 chunk 1, 2026-07-13
+  chunk 2) — recurrence holding; sustained recurrence across review cycles
+  remains the unproven clause
 serves:
   - virtue-philosophical-mobility
   - virtue-respect-for-persons
@@ -257,6 +260,18 @@ clarifications:
       recursively expands — generalizing beyond readings the curriculum
       apparatus this strategy keeps; this strategy retains the reading-side
       guard and the reading curriculum machinery."
+  - question: How is a review sitting staged — where does the comprehension test sit
+      relative to the ratification interview?
+    answer: "Author-directed 2026-07-13 at the chunk-2 sitting, standing for all
+      review sittings: two explicitly separated stages, in order — first a
+      comprehension test of the reading (dialectic probes citing the text, the
+      author articulates first, no verdict or draft-wording content enters),
+      then a ratification interview on the graph verdicts. The author: 'always
+      follow this position during review. First test my comprehension, then
+      interview to ratify.' Mixing the stages lets draft verdicts leak into and
+      bias the comprehension test; the periagoge conduct rules above assume this
+      separation and it is now explicit. Recorded 2026-07-13 /reading-review
+      chunk 2."
 tooling_goals:
   - kind: actuator
     statement: "/sync-reader skill — sync the reading curriculum to the author's
@@ -291,29 +306,7 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "The 2026-07-11 /align-tactics round found nothing an autonomous round
-    can decompose without duplicating live or queued work: the signal sensor is
-    instrumented and proven (reading-review skill landed and post-clarification
-    updated; chunk 1 run 2026-07-07 produced the current reading), the delivery
-    actuator tactic-sync-reader-skill is in flight at phase qa, capstone
-    machinery tactic-context-capstone-review is in flight at phase qa, and the
-    entire remaining signal path — sustained recurrence across review cycles,
-    the gap unproven clause — is author office-hours reading sittings already
-    fully authored as born-parked chunk tactics (next in working order:
-    tactic-reading-chunk-2-aristotle-hexis; 31 unresolved chunks queued under
-    tactic-tradition-reading-program). Drift review: all four recorded
-    conditions checked and hold (strategy-external-calibration still reads zero
-    external calibration events; e-reader, print-share, and cadence premises
-    show no counter-evidence). Recurrence cannot be produced by an autonomous
-    tactic. Recommend: resolve by running the next chunk sitting
-    (/reading-review tactic-reading-chunk-2-aristotle-hexis) at office-hours —
-    any later interactive commit touching this node clears the park; re-run
-    /align-tactics only after a state change adds claude-executable scope (a
-    condition fails, a tooling goal is added, or sync-reader/capstone QA
-    surfaces follow-up work)."
-  since: 2026-07-11
-  recommendation: null
+office_hours: null
 pace_exempt: false
 rounds:
   count: 0

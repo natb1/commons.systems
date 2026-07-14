@@ -71,6 +71,19 @@ text; this chunk checks the account.
   citation, if the reading confirms that.
 - `intentions/tradition-aristotle.md` / `intentions/tradition-plato.md` — do
   the records' accounts of these passages hold up?
+- Deferral from chunk 2 (2026-07-13): temperance breadth — does "regular
+  exercise as the practice of temperance"
+  (`intentions/strategy-physical-training.md` → `intentions/virtue-temperance.md`)
+  survive NE III.10–12's technical definition? Strict Aristotle names
+  temperance's deficiency vice insensibility and files the exercise-lapse
+  under softness (malakia), not intemperance — if the reading confirms that,
+  the exercise→temperance trace is OURS, to be documented as extension rather
+  than citation (same disposition as the attention extension above).
+- Deferral from chunk 2 (2026-07-13): III.1 voluntary/involuntary — does
+  habituation under another's direction (the II.4 circle entry, 1105a22–23)
+  stay voluntary, and does "compulsion" (bia) belong anywhere in the circle's
+  entry? No current chunk covers III.1; read it alongside if the sitting has
+  room, or record where the question moves.
 
 Two standing rules from `intentions/strategy-philosophical-grounding.md`
 clarifications apply: the borrowed-articulation capture question (this loop is
