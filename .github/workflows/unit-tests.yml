@@ -189,6 +189,8 @@ jobs:
         run: .claude/hooks/test-approve-workflow-commands.sh
       - name: Run dispatch script tests
         run: .claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh
+      - name: Run dispatch-graph-execute tests
+        run: .claude/skills/dispatch-propagate/scripts/test-dispatch-graph-execute.sh
       - name: Run dispatch-daemon-liveness sensor tests
         run: .claude/skills/dispatch-propagate/scripts/test-dispatch-daemon-liveness.sh
       - name: Run budget-config-load tests
