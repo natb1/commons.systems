@@ -40,7 +40,67 @@ execution:
 validates:
   - strategy-graph-review-curriculum
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: '/qa-fix: scope-deviation on opus-fixable residue item 9 ("do the two
+    new reading-review SKILL.md sections read coherently as executable session
+    instructions") — the bounded Opus fix-planner found no concrete code defect
+    to fix, only a subjective ratification call; escalating to office-hours for
+    human judgment. All 8 script-verifiable QA items passed cleanly. A separate
+    planned-deferral item (10) was already recorded as `## needs-main residue`
+    on the node body and landed on origin/main via graph-commit (commit
+    1ab71de7) — no action needed on it now.'
+  since: 2026-07-14
+  recommendation: >-
+    **Ratify the two new `reading-review` sitting sections — a readability
+    judgment, not a bug hunt**
+
+
+    Everything mechanically checkable on PR #2871 already passed: all 8
+    script-verified acceptance checks (structural completeness of both new
+    sections, correct `review_trigger` usage, no stray `review_window`, no
+    accidental world-state/condition-sweep branch, unchanged
+    chunk/candidate/capstone flows, no `gh` invocation, frontier-linkage + dedup
+    rule present), plus the project's own `review-coverage.ts` (92 durable
+    nodes, 0 missing a review path) and `validate-graph.ts` (377 nodes, ok).
+    This escalation exists for exactly one reason: a subjective call that no
+    script can settle.
+
+
+    **The decision in front of you:** read the two new sections and judge
+    whether a future Claude session could execute them without ambiguity — do
+    they read as coherent, executable session instructions, and do they
+    contradict neither the reused `/reading-review` session frame nor each
+    other?
+
+
+    - `## Mode-B confirmation sittings`
+
+    - `## Mode-A delegation-exercise sittings`
+
+
+    **Fast path:** read `.claude/skills/reading-review/SKILL.md` lines ~383–563
+    directly, or view PR #2871's diff. The one point worth a careful eye:
+    whether the shared "cross-chunk boundary rule" text genuinely transfers to
+    the non-chunk mode-A/mode-B contexts, or reads as a leftover from the chunk
+    flow.
+
+
+    **If it reads clearly** (the likely outcome — both new sections are
+    structurally parallel to the existing chunk/candidate/capstone sections):
+    there is no code to fix. Confirm/ratify and mark the QA pass resolved so the
+    PR proceeds toward review/merge.
+
+
+    **If something is actually unclear or contradictory:** that is a real, small
+    textual edit to `.claude/skills/reading-review/SKILL.md` before the PR
+    proceeds — an actual change, not just a sign-off.
+
+
+    **Note, no action needed:** a separate planned-deferral (item 10 — dry-run
+    both branches in a real future sitting) is already recorded as `##
+    needs-main residue` on the tactic's node body and landed on `origin/main`
+    (commit `1ab71de7`). It's just a durable marker to route this tactic to its
+    `main-qa` phase later; do nothing with it now.
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -269,15 +329,3 @@ verify by dry-run in an interactive office-hours session, stopping before
 npx tsx packages/intentionsutil/scripts/review-coverage.ts >/dev/null
 npx tsx packages/intentionsutil/scripts/validate-graph.ts
 ```
-
-## needs-main residue
-
-Recorded 2026-07-14 by `/qa-fix` (PR #2871). One QA plan item is a planned
-deferral, not verifiable at merge time — it needs an actual future
-office-hours sitting to exercise the two new branches end-to-end:
-
-- **id:** 10
-- **title:** Dry-run both new branches in a real office-hours sitting (stop before graph-commit)
-- **url_path:** current
-- **expected_outcome:** Each branch selects the right target and produces the described agenda, stamps, and valid-JSON record plan, confirming the instructions execute correctly in practice.
-- **finding:** End-to-end behavior is only assertable by a future actual office-hours sitting exercising the mode-B confirmation branch and the mode-A delegation-exercise branch; not scriptable at merge time. All 8 script-verifiable QA items (structural completeness of both new sections, `review_trigger`/`review_window` usage, absence of a world-state/condition branch, unchanged existing chunk/candidate/capstone flows, absence of any `gh` invocation, frontier-linkage/dedup rule presence, and both `review-coverage.ts`/`validate-graph.ts` passing) PASSed in this qa-fix pass.
