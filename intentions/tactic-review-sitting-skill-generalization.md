@@ -29,8 +29,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-review-sitting-skill-generalization
+  pr: 2871
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
 validates:
   - strategy-graph-review-curriculum
 blocked_by: []
